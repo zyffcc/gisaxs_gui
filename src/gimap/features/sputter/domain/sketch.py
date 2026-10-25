@@ -122,7 +122,9 @@ def _window_sketch(row: dict) -> WindowSketch:
     if row.get("spacing_disorder"):
         s.disorder, s.disorder_measured = float(row["spacing_disorder"]), True
     D, check, direct = row.get("D_nm"), row.get("D_direct_check"), row.get("D_corr_nm")
-    if D and check == "consistent":
+    if D and row.get("D_grade") == "Lit":  # the literature method's D is the direct 2π/q* itself
+        s.spacing, s.spacing_source = D, SOURCE_DIRECT
+    elif D and check == "consistent":
         s.spacing, s.spacing_source = D, SOURCE_MODEL_D.format(grade=row.get("D_grade") or "?")
     elif direct:
         s.spacing, s.spacing_source = direct, SOURCE_DIRECT

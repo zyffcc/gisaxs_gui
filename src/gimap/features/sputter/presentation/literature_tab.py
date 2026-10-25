@@ -9,8 +9,8 @@ values; (4) the network's mass balance η = t_eq/δ. The published percolation b
 literature-method percolation with its interval (the scatter of the windows and the errors of the rate and t0) are
 marked on every panel; a percolation that is not determined is hatched from the earliest δ it may come at to the
 end of the peak phase. The TS onset of the network's path is marked too. After the end of the deposition t_end (when
-it is given) δ stays at rate × (t_end − t0): later windows are drawn at that δ, and the header says so. The method is a
-check of the network's physical path (the page's default explanation). Below: the checks with their verdicts
+it is given) δ stays at rate × (t_end − t0): later windows are drawn at that δ, and the header says so. The method is the
+page's default explanation when it has values; the network's physical path is the second view. Below: the checks with their verdicts
 and references, the caveats and the references with their DOI. Without a deposition rate the tab says how to
 enter one. Texts are in the interface language (``refresh_language``); the page redraws on a theme switch.
 """

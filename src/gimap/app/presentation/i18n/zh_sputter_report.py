@@ -6,6 +6,7 @@ these translated templates with the same values. Grades, symbols and numbers sta
 
 SPUTTER_REPORT_ZH = {
     "{name}: how reliable are the sizes?": "{name}：这些尺寸有多可靠？",
+    "{windows} time windows.": "{windows} 个时间窗。",
     "{windows} time windows; {film} late windows use the TS film model (characteristic length L instead of island "
     "R/D).": "{windows} 个时间窗；其中 {film} 个后期时间窗用 TS 膜模型（用特征长度 L 代替岛的 R/D）。",
     "Windows with a value": "有值的时间窗",

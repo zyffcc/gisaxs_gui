@@ -183,11 +183,10 @@ class SputterService:
 
     # -- reading --------------------------------------------------------------------------------------
     def open(self, folder: Path, variant: Optional[str] = None) -> StructureResult:
-        """The default when ``variant`` is None or absent: ``physical`` (the network's physical path: one stage
-        path, network sizes), always when the folder has it. Also ``literature`` (a check of the network: R from the
-        nominal thickness and 2π/q*, when a deposition rate was given and enough windows show the metal's peak),
-        ``window`` (per-window choice), ``selected`` (learned selector) and ``sequence`` (time-consistent path,
-        exploratory)."""
+        """The default when ``variant`` is None or absent is the folder's first: ``literature`` (R from the nominal
+        thickness and 2π/q* by mass balance) when a deposition rate was given and enough windows show the metal's
+        peak, else ``physical`` (the network's physical path: one stage path, network sizes). Also ``window``
+        (per-window choice), ``selected`` (learned selector) and ``sequence`` (time-consistent path, exploratory)."""
         folder = Path(folder)
         available = self.reader.available(folder)
         if not available:
@@ -264,7 +263,7 @@ class SputterService:
                          t_end_s: Optional[float] = None) -> StructureResult:
         """New deposition rate, t0 or end of the deposition: only the physical files are written again (no frame
         is read). ``variant`` is kept when the folder still offers it (the literature method needs a rate), else the
-        default explanation (the physical path) is opened."""
+        folder's default explanation is opened."""
         folder = Path(folder)
         self.runner.physical(folder, rate_nm_s, t0_s, on_line, t_end_s=t_end_s)
         return self.open(folder, variant)

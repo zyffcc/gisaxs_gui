@@ -50,10 +50,10 @@ SPUTTER_ZH = {
     "optional": "可选填",
     "end of the scan": "扫描结束时",
     "Deposition rate (for example from a quartz balance): the nominal thickness rate × (t − t0) is drawn with the "
-    "metal thickness, and the literature method (a check of the network) and the Literature tab use it. Changing it "
-    "later does not read the frames again.":
-        "沉积速率（例如来自石英晶体微天平）：名义厚度 速率 × (t − t0) 画在金属厚度图里，文献方法（对网络的核对）和“文献对照”页"
-        "也用它。之后修改它不会重新读帧。",
+    "metal thickness, and the literature method (the default explanation when a rate is given) and the Literature "
+    "tab use it. Changing it later does not read the frames again.":
+        "沉积速率（例如来自石英晶体微天平）：名义厚度 速率 × (t − t0) 画在金属厚度图里，文献方法（给出速率时为默认解释）和"
+        "“文献对照”页也用它。之后修改它不会重新读帧。",
     "Time (s) of the scan at which the deposition started (the nominal thickness is 0 there).":
         "扫描中沉积开始的时间（s）（名义厚度在此为 0）。",
     "Time (s) of the scan at which the deposition ended (the shutter was closed): the nominal thickness stays at "
@@ -68,16 +68,16 @@ SPUTTER_ZH = {
     "Merge physical-refinement windows (one JSON per window, e.g. from the cluster) into the current result.":
         "把物理精修的时间窗（每窗一个 JSON，例如来自集群）合并进当前结果。",
     "Explanation": "解释",
-    "Which explanation of the windows is shown.\nPhysical path (network; the default): one path of stages through "
-    "time, network sizes in every island window, no switching between sources (grade P).\nLiterature method (a check "
-    "of the network; needs a deposition rate): R from the nominal thickness and D = 2π/q* by mass balance, as in the "
-    "P03 in-situ GISAXS studies (grade Lit).\nPer window: highest network weight, or the "
+    "Which explanation of the windows is shown.\nLiterature method (the default; needs a deposition rate): R from "
+    "the nominal thickness and D = 2π/q* by mass balance, as in the P03 in-situ GISAXS studies (grade Lit).\nPhysical "
+    "path (network): one path of stages through time, network sizes in every island window, no switching between "
+    "sources (grade P).\nPer window: highest network weight, or the "
     "converged refinement (grades A/B/C).\nLearned selector: trained on simulated growth series (grade L; its tested "
     "accuracy is on the Reliability tab).\nTime-consistent path (exploratory): registered physical rules; not more "
     "accurate in simulation (grades S/T).":
-        "显示时间窗的哪一种解释。\n物理路径（网络；默认）：随时间只走一条阶段路径，每个岛时间窗都用网络尺寸，不在来源之间切换"
-        "（等级 P）。\n文献方法（对网络的核对；需要沉积速率）：与 P03 原位 GISAXS 研究相同，由名义厚度和 D = 2π/q* 按质量守恒"
-        "算出 R（等级 Lit）。\n"
+        "显示时间窗的哪一种解释。\n文献方法（默认；需要沉积速率）：与 P03 原位 GISAXS 研究相同，由名义厚度和 D = 2π/q* 按质量守恒"
+        "算出 R（等级 Lit）。\n物理路径（网络）：随时间只走一条阶段路径，每个岛时间窗都用网络尺寸，不在来源之间切换"
+        "（等级 P）。\n"
         "逐窗：网络权重最高的解，或收敛的精修（等级 A/B/C）。\n学习选择器：在模拟生长序列上训练（等级 L；测试准确率见“可靠性”页）。\n"
         "时间一致路径（探索性）：按登记的物理规则；在模拟中并不更准（等级 S/T）。",
     "Physical path (network)": "物理路径（网络）",
@@ -91,11 +91,11 @@ SPUTTER_ZH = {
     "Windows": "时间窗",
     "Reliability": "可靠性",
     "<p>Choose a scan folder and press Predict, or open a results folder (More options). Each R and D value gets a "
-    "grade: <b>P</b> network estimate on the physical path (the default), <b>Lit</b> literature method (R from the "
-    "nominal thickness and 2π/q*; a check of the network that needs a deposition rate), <b>A</b> refined (unique), "
+    "grade: <b>Lit</b> literature method (R from the nominal thickness and 2π/q*; the default when a deposition rate "
+    "is given), <b>P</b> network estimate on the physical path, <b>A</b> refined (unique), "
     "<b>B</b> refined (an equally good alternative exists), <b>C</b> network estimate only.</p>":
-        "<p>选择扫描文件夹并按“预测”，或打开一个结果文件夹（更多选项）。每个 R 和 D 值都有等级：<b>P</b> 物理路径上的网络估计"
-        "（默认），<b>Lit</b> 文献方法（由名义厚度和 2π/q* 算出 R；对网络的核对，需要沉积速率），<b>A</b> 精修（唯一），<b>B</b> "
+        "<p>选择扫描文件夹并按“预测”，或打开一个结果文件夹（更多选项）。每个 R 和 D 值都有等级：<b>Lit</b> 文献方法（由名义厚度和 "
+        "2π/q* 算出 R；给出沉积速率时为默认），<b>P</b> 物理路径上的网络估计，<b>A</b> 精修（唯一），<b>B</b> "
         "精修（存在同样好的另一解），<b>C</b> 仅网络估计。</p>",
     # -- the folder, the sources of the values ------------------------------------------------------------------
     "Choose the Scan Folder": "选择扫描文件夹",
@@ -223,6 +223,8 @@ SPUTTER_ZH = {
     "film from {onset} s": "从 {onset} s 起成膜",
     " ({low}–{high} s)": "（{low}–{high} s）",
     "no film window": "没有膜时间窗",
+    ", not established: no film fits about as well": "，未确立：不成膜也同样相容",
+    "no film window; an onset from {time} s or later is not excluded": "没有膜时间窗；不排除在 {time} s 或更晚开始成膜",
     "intensity modulation period ≈ {period} s (sample stage translation?)":
         "强度调制周期 ≈ {period} s（可能来自样品台平移）",
     "beam may be off the sample in {count} windows (stage translation)":

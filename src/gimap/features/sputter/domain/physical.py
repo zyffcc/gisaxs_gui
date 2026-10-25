@@ -77,6 +77,13 @@ def film_onset(summary: dict) -> tuple[Optional[float], Optional[tuple[float, fl
     return onset, interval
 
 
+def film_onset_established(summary: dict) -> bool:
+    """The physical path's film onset is established: a path without any film window fits clearly worse (the
+    toolkit's ``film_onset_no_TS_within_slack`` is not true). Without an onset there is nothing established."""
+    onset, _interval = film_onset(summary)
+    return onset is not None and summary.get("film_onset_no_TS_within_slack") is not True
+
+
 def deposition_end(summary: dict) -> Optional[float]:
     """The end of the deposition t_end (s) the physical files were drawn with (None: not given, the deposition
     lasts to the end of the scan)."""
@@ -217,4 +224,4 @@ TEMPLATES = (NOMINAL, NOMINAL_ENDED, MODULATION, BEAM_OFF, BEAM_OFF_EXTREME, BEA
 
 __all__ = ["BEAM_OFF", "BEAM_OFF_EXTREME", "BEAM_ON", "BEAM_ON_EXTREME", "FILM_NOT_DETERMINED", "MODULATION",
            "NOMINAL", "NOMINAL_ENDED", "REVERSAL_ROWS", "TEMPLATES", "beam_off_count", "beam_off_record",
-           "deposition_end", "film_onset", "modulation_period", "physical_paragraphs"]
+           "deposition_end", "film_onset", "film_onset_established", "modulation_period", "physical_paragraphs"]

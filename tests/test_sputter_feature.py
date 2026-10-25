@@ -139,10 +139,10 @@ def test_the_sketch_does_not_stand_a_window_off_the_sample_for_the_film():
     assert storyboard_indices(alone, 2) == [0]  # nothing else to draw: it is still shown, with its note
 
 
-def test_the_physical_path_stays_the_default_and_a_rate_offers_the_literature_method_as_its_check(tmp_path):
+def test_with_a_rate_the_literature_method_is_the_default_and_the_physical_path_follows(tmp_path):
     reader = StructureFolderReader()
     folder = literature_folder(tmp_path / "lit")
-    assert reader.available(folder) == ["physical", "literature", "window"]
+    assert reader.available(folder) == ["literature", "physical", "window"]
     result = reader.read(folder, "literature")
     assert [r["R_nm"] for r in result.rows] == [None, 1.84, 2.3, None]
     assert [r["R_grade"] for r in result.rows] == [None, "Lit", "Lit", None] and result.counts("D")["Lit"] == 3
@@ -153,27 +153,27 @@ def test_the_physical_path_stays_the_default_and_a_rate_offers_the_literature_me
     assert result.rows[1]["sigma_log"] is None and result.rows[3]["L_TS_nm"] is None  # no network shape values
     assert result.column("R_trend_nm").value == [1.84, 2.3] and result.column("delta_nm").value == [0.1, 0.2, 0.3, 0.4]
     html = reliability_report(result)
-    for words in ("Literature method (mass balance), a check of the network", "by construction",
+    for words in ("Literature method (mass balance), the default view", "by construction",
                   "Percolation (2R/D = 1) at δ = 0.35 nm, t = "
                   "1.75 s (68% interval 0.32–0.38 nm from the scatter of the windows, the rate ±10% and t0 ±2 s",
                   "1 consistent, 1 inconsistent, 1 not testable",
                   "Physical path of the network", "<b>Lit</b> literature method (mass balance)"):
         assert words in html, words
-    # The physical path keeps the network's values, and the service opens it by default.
+    # The physical path keeps the network's values; the service opens the literature method by default.
     physical = reader.read(folder, "physical")
     assert physical.counts("R")["P"] == 3 and physical.rows[1]["R_lit_nm"] == 1.84
     from src.gimap.features.sputter.bootstrap import create_sputter_service
 
     service = create_sputter_service(reader=reader)
-    assert service.open(folder).variant == "physical" and service.open(folder, "literature").variant == "literature"
-    # Without a rate the literature method is not offered; a result of an older toolkit that still says
-    # default_ready does not change the order.
+    assert service.open(folder).variant == "literature" and service.open(folder, "physical").variant == "physical"
+    # Without a rate the literature method is not offered (the physical path is the default); a result of an older
+    # toolkit that still says default_ready does not change the order.
     assert reader.available(literature_folder(tmp_path / "none", rate=False)) == ["physical", "window"]
     old = literature_folder(tmp_path / "old")
     summary = __import__("json").loads((old / "structure_physical_summary.json").read_text(encoding="utf-8"))
     summary["literature"]["default_ready"] = True
     (old / "structure_physical_summary.json").write_text(__import__("json").dumps(summary), encoding="utf-8")
-    assert reader.available(old) == ["physical", "literature", "window"]
+    assert reader.available(old) == ["literature", "physical", "window"]
 
 
 def test_the_checks_and_the_references_are_written_for_the_tab(tmp_path):

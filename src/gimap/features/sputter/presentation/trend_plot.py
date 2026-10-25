@@ -1,6 +1,6 @@
 """Size Trend tab: R, D (and the TS length L) over time, and the metal thickness.
 
-The physical path (default) draws every window's network value as a faint point and the smoothed trend as a
+The physical path (the network) draws every window's network value as a faint point and the smoothed trend as a
 line, so a single window's jump is visible but does not pull the eye. The other explanations draw each value
 with its simulation-based error bar, coloured by grade. The Metal thickness panel shows the island-volume
 equivalent thickness t_eq as a band (conditional: hemispheres h = R on a hexagonal arrangement), the nominal
@@ -32,7 +32,8 @@ from PyQt5.QtWidgets import QLabel, QSizePolicy
 from src.gimap.app.presentation.i18n import tr
 
 from ..application import (FILM_NOT_DETERMINED, GRADES, LITERATURE_GRADE, StructureResult, beam_off_record,
-                           deposition_end, onset_of, percolation_errors, percolation_last_time)
+                           deposition_end, film_onset_established, onset_of, percolation_errors,
+                           percolation_last_time)
 from .texts import text
 
 COLORS = {"A": "#1f5fa8", "B": "#7fa3d6", "C": "#d07a10", "S": "#2a8a3e", "T": "#c0392b", "L": "#6a3d9a",
@@ -46,6 +47,9 @@ ONSET_COLOR = "#d62728"
 AFTER_PERCOLATION = "after percolation: D = 2π/q* goes on, R is not given (film)"
 INTERVAL_LABEL = "68% interval of the percolation (scatter, rate ±{rate_error}%, t0 ±{t0_error} s)"
 UNDETERMINED_LABEL = "percolation not determined: from {time} s or later"
+FILM_INTERVAL_LABEL = "network path: film onsets about as consistent as this one"
+FILM_LATE_LABEL = "network path: no film onset; one from {time} s or later is not excluded"
+FILM_UNSURE_LABEL = "network path: onset not established (no film fits about as well)"
 BY_CONSTRUCTION = "literature method: the islands hold δ by construction"
 DEPOSITION_END = "deposition ended {time} s"
 ENDED_AFTER = "deposition ended {time} s, after the last window"
@@ -169,8 +173,14 @@ class TrendPlot:
         """The onset's interval; an open end runs to ``end`` (a percolation that is not determined has no onset,
         only the earliest time it may come at: it is hatched to the end of the peak phase)."""
         low, high = interval
-        if kind != "percolation":
-            ax.axvspan(low, high if high is not None else end, color=ONSET_COLOR, alpha=.08, lw=0, zorder=0)
+        if kind != "percolation":  # the network's path: onsets within the toolkit's slack of the best one
+            established = film_onset_established(result.summary)
+            if onset is None:
+                label = text(FILM_LATE_LABEL, time=f"{low:.1f}")
+            else:
+                label = tr(FILM_INTERVAL_LABEL if established else FILM_UNSURE_LABEL)
+            ax.axvspan(low, high if high is not None else end, color=ONSET_COLOR, alpha=.08, lw=0, zorder=0,
+                       hatch=None if established else "//", label=label if first else None)
             return
         if onset is None:
             label = text(UNDETERMINED_LABEL, time=f"{low:.1f}")
@@ -332,7 +342,7 @@ def _positive(ax) -> bool:
 
 
 TEMPLATES = (AFTER_PERCOLATION, BEAM_OFF_INTERRUPTED, BEAM_OFF_LABEL, BY_CONSTRUCTION, DEPOSITION_END, ENDED_AFTER, ENDED_BEFORE,
-             INTERVAL_LABEL, UNDETERMINED_LABEL)
+             FILM_INTERVAL_LABEL, FILM_LATE_LABEL, FILM_UNSURE_LABEL, INTERVAL_LABEL, UNDETERMINED_LABEL)
 """Texts the trend says from a name (the interface translates them)."""
 
 __all__ = ["AFTER_PERCOLATION", "BEAM_OFF_INTERRUPTED", "BEAM_OFF_LABEL", "BY_CONSTRUCTION", "COLORS", "DEPOSITION_END", "ENDED_AFTER",

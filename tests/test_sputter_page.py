@@ -472,8 +472,9 @@ def test_the_end_of_the_deposition_draws_a_plateau_and_belongs_to_its_scan(tmp_p
     _settle(lambda: not page.running())
     assert runner.calls[-1] == ("physical", page.result.folder, 0.2, 0.0, 1.7)
     assert preferences.get("sputter_page")["folders"][folder_key(scan)]["t_end"] == 1.7
-    # The literature check uses the δ of the end after it, also for the TS onset of the network's path.
-    assert page.result.variant == "physical" and page.choice_box.findData("literature") == 1
+    # The literature check uses the δ of the end after it, also for the TS onset of the network's path; with the
+    # literature method's values the folder's default opens (the physical path was shown only for want of them).
+    assert page.result.variant == "literature" and page.choice_box.findData("physical") == 1
     assert "deposition ended at t_end = 1.7 s: later windows stay at δ = 0.34 nm" in page.literature.message.text()
     labels = [t.get_text() for t in page.literature.figure.axes[0].get_legend().get_texts()]
     assert "TS onset of the network path δ = 0.34 nm" in labels
@@ -510,6 +511,8 @@ def test_an_end_outside_the_windows_keeps_the_time_axis_on_them(tmp_path):
     page.t_end.editingFinished.emit()
     _settle(lambda: not page.running())
     assert runner.calls[-1] == ("physical", folder, 0.2, 0.0, 500.0)
+    assert page.result.variant == "literature"  # its values are there now: the folder's default
+    page.choice_box.setCurrentIndex(page.choice_box.findData("physical"))  # the network's thickness panel
     page.trend.canvas.draw()
     assert figure.axes[-1].get_xlim() == pytest.approx(before)
     assert "deposition ended 500.0 s, after the last window" in legend()
@@ -853,17 +856,15 @@ def test_the_literature_method_leaves_out_the_peak_of_a_window_off_the_sample(tm
 # -- the literature method ---------------------------------------------------------------------------------
 
 
-def test_with_a_rate_the_physical_path_is_shown_first_and_the_literature_method_checks_it(tmp_path):
+def test_with_a_rate_the_literature_method_is_shown_first_and_the_physical_path_follows(tmp_path):
     from tests.sputter_fixtures import literature_folder
 
     page = _page(tmp_path)
     page.open_results(literature_folder(tmp_path / "res"))
-    assert page.result.variant == "physical" and "film from 2.0 s" in page.result_label.text()
-    assert [page.choice_box.itemText(i) for i in range(page.choice_box.count())] == [
-        "Physical path (network)", "Literature method (mass balance)", "Per window (network / refined)"]
-    assert len(page.literature.figure.axes) == 4  # the Literature tab checks the network's path
-    page.choice_box.setCurrentIndex(page.choice_box.findData("literature"))
     assert page.result.variant == "literature"
+    assert [page.choice_box.itemText(i) for i in range(page.choice_box.count())] == [
+        "Literature method (mass balance)", "Physical path (network)", "Per window (network / refined)"]
+    assert len(page.literature.figure.axes) == 4  # the Literature tab compares the method with the network's path
     assert "percolation (literature method) at δ = 0.35 nm, t = 1.75 s" in page.result_label.text()
     # Size Trend: the method's R and D, δ on the top axis, only δ in the thickness panel, the percolation marked.
     axes = page.trend.figure.axes
@@ -890,9 +891,10 @@ def test_with_a_rate_the_physical_path_is_shown_first_and_the_literature_method_
         assert words in report, words
     labels = [t.get_text() for t in tab.figure.axes[0].get_legend().get_texts()]
     assert "68% interval (scatter, rate ±10%, t0 ±2 s)" in labels and "2π/q* after the percolation" in labels
-    # Back on the physical path; its tab shows the same comparison.
+    # The network's physical path, second; its tab shows the same comparison and the line its film onset.
     page.choice_box.setCurrentIndex(page.choice_box.findData("physical"))
     assert page.result.variant == "physical" and len(tab.figure.axes) == 4
+    assert "film from 2.0 s" in page.result_label.text()
     page.choice_box.setCurrentIndex(page.choice_box.findData("window"))
     assert tab.figure.axes == [] and "More options ▸ Explanation" in tab.message.text()
     _close(page)
@@ -941,7 +943,32 @@ def test_a_percolation_that_is_not_determined_is_shaded_from_its_earliest_time(t
     _close(page)
 
 
-def test_without_a_rate_the_literature_tab_says_how_to_give_one_and_a_rate_keeps_the_physical_path(tmp_path):
+def test_the_network_onset_interval_says_whether_the_onset_is_established(tmp_path):
+    import json
+
+    from tests.sputter_fixtures import literature_folder
+
+    folder = literature_folder(tmp_path / "res")
+    summary_file = folder / "structure_physical_summary.json"
+    summary = json.loads(summary_file.read_text(encoding="utf-8"))
+    page = _page(tmp_path)
+    cases = ((2.0, False, "network path: film onsets about as consistent as this one", "film from 2.0 s (1.5–2.0 s)"),
+             (2.0, True, "network path: onset not established (no film fits about as well)",
+              "film from 2.0 s (1.5–2.0 s), not established: no film fits about as well"),
+             (None, True, "network path: no film onset; one from 1.5 s or later is not excluded",
+              "no film window; an onset from 1.5 s or later is not excluded"))
+    for onset, no_film_as_good, label, line in cases:
+        summary.update(film_onset_s=onset, film_onset_interval_s=[1.5, 2.0], film_onset_no_TS_within_slack=no_film_as_good)
+        summary_file.write_text(json.dumps(summary), encoding="utf-8")
+        page.open_results(folder, "physical")
+        legend = [t.get_text() for t in page.trend.figure.axes[0].get_legend().get_texts()]
+        assert label in legend and line in page.result_label.text(), (legend, page.result_label.text())
+        hatched = [patch for patch in page.trend.figure.axes[0].patches if patch.get_hatch() == "//"]
+        assert bool(hatched) == no_film_as_good  # plain only when the onset is established
+    _close(page)
+
+
+def test_without_a_rate_the_literature_tab_says_how_to_give_one_and_a_rate_opens_the_literature_method(tmp_path):
     from tests.sputter_fixtures import literature_folder
 
     runner = FakeRunner(literature=True)
@@ -952,12 +979,12 @@ def test_without_a_rate_the_literature_tab_says_how_to_give_one_and_a_rate_keeps
     message = page.literature.message.text()
     assert "needs the deposition rate" in message and "More options ▸ Deposition rate (nm/s)" in message
     assert page.literature.figure.axes == [] and "not testable" in page.literature.report.toPlainText()
-    # A rate: the physical path stays the explanation shown, the literature method is offered second as its check.
+    # A rate: the physical path was shown only for want of one, so the folder's default opens, the literature method.
     page.rate.setText("0.2")
     page.rate.editingFinished.emit()
     _settle(lambda: not page.running())
-    assert runner.calls == [("physical", folder, 0.2, None, None)] and page.result.variant == "physical"
-    assert page.choice_box.findData("literature") == 1 and len(page.literature.figure.axes) == 4
+    assert runner.calls == [("physical", folder, 0.2, None, None)] and page.result.variant == "literature"
+    assert page.choice_box.findData("physical") == 1 and len(page.literature.figure.axes) == 4
     # A new rate keeps the literature method when it is shown; taking the rate away returns to the physical path.
     page.choice_box.setCurrentIndex(page.choice_box.findData("literature"))
     page.rate.setText("0.3")
@@ -985,7 +1012,7 @@ def test_the_literature_tab_speaks_chinese(tmp_path):
         assert "不一致" in report and "δ = 0.35 nm，t = 1.75 s（68% 区间 0.32-0.38 nm，含噪声、速率 ±10% 和 t0 ±2 s）" in report
         assert "早于该区间内所有已发表数值" in report and "参考文献" in report
         assert "PS 上的 Ag" in page.literature.message.text()
-        assert page.choice_box.itemText(0) == "物理路径（网络）" and page.choice_box.itemText(1) == "文献方法（质量守恒）"
+        assert page.choice_box.itemText(0) == "文献方法（质量守恒）" and page.choice_box.itemText(1) == "物理路径（网络）"
         assert "文献方法（质量守恒）" in page.report.toPlainText()
         # The Reliability tab says the toolkit's notes with numbers in Chinese too, with δ.
         reliability = page.report.toPlainText()

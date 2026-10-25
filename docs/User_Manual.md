@@ -2057,14 +2057,16 @@ results in**); the code is made from the scan, every value the analysis depends 
 model. The same request reuses its folder — a stopped run goes on where it stopped — and another geometry, or a
 GIMaP with another model, gets a new one (section 11).
 
-- The default explanation is always the model's own method, **the physical path (network)**: one path of stages
-  through time — pre-nucleation, islands, coalescence, film — in which a film does not revert to islands. R and D
-  are the network estimate in every island window (grade **P**), so a value does not jump between a refined and a
-  network source from window to window; refined values stay in the Windows table. Once a deposition rate is given
-  and enough windows show the metal's correlation peak, **Explanation** offers **the literature method (mass
-  balance)** second: a check of the network, never the default (see *The literature method* below). It also offers
-  the per-window choice (grades A, B, C), the learned selector (L) and the time-consistent path (S, T) when the
-  folder holds them.
+- Once a deposition rate is given and enough windows (at least 10) show the metal's correlation peak, the default
+  explanation is **the literature method (mass balance)** of the P03 studies (grade **Lit**; see *The literature
+  method* below). **Explanation** offers the model's own method second, **the physical path (network)**: one path
+  of stages through time — pre-nucleation, islands, coalescence, film — in which a film does not revert to islands.
+  R and D are the network estimate in every island window (grade **P**), so a value does not jump between a refined
+  and a network source from window to window; refined values stay in the Windows table. Without a rate (or with too
+  few peak windows) the physical path is the default. **Explanation** also offers the per-window choice (grades A,
+  B, C), the learned selector (L) and the time-consistent path (S, T) when the folder holds them. On the physical
+  path the film onset's interval is shaded: plain when the onset is established, hatched when a path without film
+  fits about as well (*onset not established*) or when the path has no onset but a later one is not excluded.
 - **Size Trend**: each window's R and D as faint points and the smoothed trend as a line; × marks the direct
   2π/q*, a red circle a D that disagrees with it. The **Metal thickness** panel shows the island-volume equivalent
   thickness t_eq as a band — the metal in the visible islands, for hemispheres on a hexagonal arrangement; a
@@ -2122,8 +2124,8 @@ spacing D = 2π/q* of the direct correlation peak, and compute R by mass balance
 on a hexagonal lattice: δ = 2.418·R³/D², coverage θ = (2π/√3)(R/D)². Percolation is the first δ where 2R = D.
 Those studies go on reporting D, R and 2R/D after it; the page keeps D = 2π/q* after the percolation but gives no R
 there — its own choice, after molecular dynamics (Abraham 2016) that finds R loses its island meaning once a network
-forms. With a deposition rate the page does what the studies do (grade **Lit**), as a check of the network's physical
-path:
+forms. With a deposition rate the page does what the studies do (grade **Lit**), and shows it by default; the network's
+physical path is the second view and the Literature tab compares the two:
 
 - δ = rate × (t − t0). Without **t0** the first frame is taken as the start of the deposition (an assumption, said
   in the notes): δ is then an upper bound if the deposition started at or after the first frame. After the

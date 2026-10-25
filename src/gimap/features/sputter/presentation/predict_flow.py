@@ -12,7 +12,8 @@ deposition rate, t0 or end of the deposition (also without a rate: the files rec
 files of the result shown (``rebuild_physical``: no frame is read again) — when that result is of the scan in the
 picker; otherwise the fields are what the next Predict uses. Add Refined Windows… refuses the same values a change of
 the fields refuses. The explanation shown stays; when the rate is taken away the literature
-method (it needs one) gives way to the default, the physical path. Predict pressed while those files are rewritten
+method (it needs one) gives way to the network's physical path, and a rate given to a result shown without one opens
+the literature method (the default once it has values). Predict pressed while those files are rewritten
 follows them.
 """
 
@@ -283,7 +284,8 @@ class SputterPredictMixin:
     def _thickness_changed(self) -> None:
         """A rate, t0 or end of the deposition other than the one the result shown was drawn with: rewrite its
         physical files (fast) and show them — when it is the result of the scan in the picker. The explanation shown
-        stays (the service opens the physical path when the literature method lost its rate)."""
+        stays (the service opens the physical path when the literature method lost its rate), except the physical path
+        shown only for want of a rate: the folder's default opens, the literature method once it has values."""
         result = self.result
         if result is None or self._busy is not None:
             return
@@ -297,6 +299,8 @@ class SputterPredictMixin:
             self._status("idle", [(OTHER_SCAN, {})], 0.0)
             return
         folder, variant = result.folder, self.choice_box.currentData()
+        if variant == "physical" and self.choice_box.findData("literature") < 0:
+            variant = None  # shown only because there was no rate: the folder's default opens (literature, once given)
         self._remember_thickness(result.scan_folder, values["rate"], values["t0"], values["t_end"])
         self._rebuild_values = wanted
         self._set_busy("physical")

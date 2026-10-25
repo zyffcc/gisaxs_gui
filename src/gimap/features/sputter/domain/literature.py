@@ -9,8 +9,9 @@ spacing D = 2π/q* of the direct peak by mass balance for hemispheres (h = R) on
 agrees with the literature by construction; the independent tests are D(δ), the percolation δ against the published
 band and the network's coverage and mass balance.
 
-The page's method is the network: its physical path is always the default explanation. The ``literature``
-explanation is a check of it, offered second (and in the Literature tab), never the default. It shows these values
+The ``literature`` explanation is the page's default when it has values (a deposition rate and enough windows
+with the metal's peak); the network's physical path is the second view and the Literature tab compares the two. It
+shows these values
 as R and D (grade ``Lit``); after the percolation the windows count as film: D = 2π/q* stays, R is not given. That
 is this page's choice (molecular dynamics, Abr16, finds that R
 loses its island meaning once a network forms); the P03 studies go on reporting R and 2R/D after it. The
@@ -33,7 +34,7 @@ LITERATURE_COLUMNS = {"R_nm": "R_lit_nm", "D_nm": "D_lit_nm", "R_trend_nm": "R_l
 NOT_LITERATURE = ("film", "L_TS_nm", "burial_nm_conditional", "thickness_nm_conditional", "sigma_log", "spacing_disorder",
                   "D_over_direct", "D_direct_check")
 METHOD_PARAGRAPH = (
-    "<b>Literature method (mass balance), a check of the network.</b> As in the P03 in-situ GISAXS studies, R is not "
+    "<b>Literature method (mass balance), the default view.</b> As in the P03 in-situ GISAXS studies, R is not "
     "fitted: it follows from the nominal thickness δ = rate × (t − t0) (constant after the end of the deposition) and "
     "the spacing D = 2π/q* of the direct peak by mass balance for hemispheres (h = R) on a hexagonal lattice, "
     "δ = 2.418·R³/D² (grade <b>Lit</b>). It agrees with the literature by "
@@ -71,8 +72,8 @@ def block(summary: dict) -> dict:
 
 
 def literature_available(summary: dict) -> bool:
-    """The literature method has values (a rate was given and enough windows show the metal's peak): it is offered
-    as a check of the network, after the physical path."""
+    """The literature method has values (a rate was given and enough windows show the metal's peak): it is the
+    default explanation, before the network's physical path."""
     return block(summary).get("status") == "ok"
 
 
@@ -118,7 +119,8 @@ def percolation(summary: dict) -> tuple[Optional[float], Optional[tuple]]:
 def literature_rows(rows: list, summary: Optional[dict] = None) -> list:
     """The rows of ``structure_physical.csv`` as the literature explanation shows them: R_lit/D_lit as R/D (grade
     Lit), film after the percolation (every window after its time, also one without a peak or with a peak the
-    method does not use), no network shape values (the method knows none)."""
+    method does not use), no network shape values (the method knows none), and the method's own stage
+    (``stage_path``: film after the percolation, islands where it gives values, else none)."""
     when, _interval = percolation(summary or {})
     out = []
     for r in rows:
@@ -139,6 +141,9 @@ def literature_rows(rows: list, summary: Optional[dict] = None) -> list:
             when is not None and time is not None and time > when and r.get("lit_status") != "no_data")
         if row["D_nm"] is not None:
             row["D_direct_check"] = "consistent"  # D is the direct 2π/q* itself
+        # the method's own stage (not the network's path): film after the percolation, islands where it gives values
+        row["stage_path"] = "film" if row["film"] else (
+            "islands" if row["R_nm"] is not None or row["D_nm"] is not None else "")
         out.append(row)
     return out
 

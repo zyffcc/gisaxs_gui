@@ -42,8 +42,8 @@
    （`deposition_end_ok`），重写期间按下的“预测”排在它之后。显示的解释不变（传当前的 `variant`；去掉速率后文献方法不再提供，
    `SputterService.open` 退回 `physical`）。**加入精修时间窗…**：先按同样的规则检查字段（`_thickness_refused`），再 `table`
    和 `physical`。
-5. **结果**：`StructureFolderReader.available`（`physical` 始终第一，是默认解释；`literature` 在摘要
-   `literature.status == "ok"` 时紧跟其后，作为对网络的核对，从不作为默认；然后 `window` → `selected` → `sequence`）→
+5. **结果**：`StructureFolderReader.available`（摘要 `literature.status == "ok"` 时 `literature` 排第一，是默认解释，
+   `physical` 紧跟其后；否则 `physical` 第一；然后 `window` → `selected` → `sequence`）→
    `show_result`：结果行（成膜起点或文献方法
    的渗流、“强度调制周期（可能来自样品台平移）”——读 `modulation_period_s`，旧结果读 `rotation_period_s`（`modulation_period`）——、
    光斑可能移出样品的时间窗数（`beam_off_count`；`beam_off_record` 的 `rule` 为 `extreme_dip_only`、即没有调制时说

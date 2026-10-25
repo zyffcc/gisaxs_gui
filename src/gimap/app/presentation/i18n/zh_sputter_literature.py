@@ -39,6 +39,9 @@ SPUTTER_LITERATURE_ZH = {
     "68% interval of the percolation (scatter, rate ±{rate_error}%, t0 ±{t0_error} s)":
         "渗流的 68% 区间（离散、速率 ±{rate_error}%、t0 ±{t0_error} s）",
     "percolation not determined: from {time} s or later": "渗流无法确定：在 {time} s 或更晚",
+    "network path: film onsets about as consistent as this one": "网络路径：与此起点同样相容的成膜起点",
+    "network path: onset not established (no film fits about as well)": "网络路径：起点未确立（不成膜也同样相容）",
+    "network path: no film onset; one from {time} s or later is not excluded": "网络路径：没有成膜起点；不排除在 {time} s 或更晚开始",
     "literature method: the islands hold δ by construction": "文献方法：按构造岛中的金属就是 δ",
     "percolation {time} s (literature method)": "渗流 {time} s（文献方法）",
     "δ, nominal thickness (nm)": "δ，名义厚度（nm）",
@@ -91,7 +94,7 @@ SPUTTER_LITERATURE_ZH = {
     "percolation (literature method) δ = {delta} nm": "渗流（文献方法）δ = {delta} nm",
     "TS onset of the network path δ = {delta} nm": "网络路径的 TS 起点 δ = {delta} nm",
     # -- the report and the checks table (domain/literature.py) ------------------------------------------------
-    "<b>Literature method (mass balance), a check of the network.</b> As in the P03 in-situ GISAXS studies, R is not "
+    "<b>Literature method (mass balance), the default view.</b> As in the P03 in-situ GISAXS studies, R is not "
     "fitted: it follows from the nominal thickness δ = rate × (t − t0) (constant after the end of the deposition) and "
     "the spacing D = 2π/q* of the direct peak by mass balance for hemispheres (h = R) on a hexagonal lattice, "
     "δ = 2.418·R³/D² (grade <b>Lit</b>). It agrees with the literature by "
@@ -99,7 +102,7 @@ SPUTTER_LITERATURE_ZH = {
     "band, the network's 2R/D and mass balance). The simulation-based typical errors do not apply: D = 2π/q* can "
     "be off by more than 40% for D &gt; 10 nm once coalescence starts, and R follows D as D^(2/3) and the rate as "
     "rate^(1/3).":
-        "<b>文献方法（质量守恒），对网络的核对。</b>与 P03 原位 GISAXS 研究相同，R 不是拟合出来的：它由名义厚度 "
+        "<b>文献方法（质量守恒），默认视图。</b>与 P03 原位 GISAXS 研究相同，R 不是拟合出来的：它由名义厚度 "
         "δ = 速率 × (t − t0)（沉积结束后保持不变）和直接峰的"
         "间距 D = 2π/q* 按六角排列半球（h = R）的质量守恒算出，δ = 2.418·R³/D²（等级 <b>Lit</b>）。它按构造与文献一致；"
         "“文献对照”页给出独立的检验（D 随 δ、渗流与已发表区间、网络的 2R/D 和质量守恒）。基于模拟的典型误差不适用于这些值："

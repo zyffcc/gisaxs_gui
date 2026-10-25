@@ -29,13 +29,13 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 - The **Sputter** workspace predicts an in-situ sputter series from its scan folder: choose the folder, check
   the geometry (each value says where it comes from: this folder's last values, a geometry preset of the
   beamtime, the file header, or the values used last — please check), press **Predict**. The model is part of
-  GIMaP and runs in GIMaP's own Python; the first Predict installs PyTorch there (about 1.2 GB). The default
-  explanation — always, also with a deposition rate: the page's method is the model — is a physical path of
-  stages through time with the network's sizes in every island window, so values no longer flip between sources
-  from window to window. The metal thickness is given where it can be stated: the island-volume equivalent t_eq
+  GIMaP and runs in GIMaP's own Python; the first Predict installs PyTorch there (about 1.2 GB). With a
+  deposition rate the default explanation is the literature method (below); the model's own explanation, shown
+  first without a rate, is a physical path of stages through time with the network's sizes in every island window,
+  so values no longer flip between sources from window to window. The metal thickness is given where it can be stated: the island-volume equivalent t_eq
   and, from a deposition rate, the nominal thickness. The period of a periodic intensity modulation is found (see
   below). Cu is accepted and labelled as approximated with the Ag model.
-- With a deposition rate, **Explanation** offers second, as a check of the network and never as the default, the
+- With a deposition rate (and at least 10 windows with the metal's peak), the default explanation is the
   **literature method (mass balance)** of the P03 in-situ GISAXS studies: D = 2π/q* of the direct peak, R from
   the nominal thickness δ = rate × (t − t0) by mass balance for hemispheres (grade Lit), and the percolation where
   2R/D reaches 1. Its interval holds the scatter of the

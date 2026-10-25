@@ -217,7 +217,8 @@ def _grades_table(result: StructureResult, text: Text) -> list:
         if errors and errors[0] != errors[-1]:
             typical = f"±{_pct(errors[0])} – ±{_pct(errors[-1])}"
         order = _pct(orders[len(orders) // 2]) if orders else "–"
-        scatter = (s.get(name) or {}).get("window_to_window_scatter")
+        # the summary's scatter is the network's: it does not describe the literature method's values
+        scatter = None if result.variant == "literature" else (s.get(name) or {}).get("window_to_window_scatter")
         lines.append(f"<tr><td>{text(label)}</td><td>{sum(c[g] for g in GRADES)}</td><td>{by_grade}</td>"
                      f"<td>{typical}</td><td>{order}</td><td>{_pct(scatter)}</td></tr>")
     lines.append("</table>")
@@ -235,10 +236,14 @@ def reliability_report(result: StructureResult, text: Optional[Text] = None,
     text = text or english
     note = note or as_is
     s = result.summary; rel = (s.get("reliability") or {}).get("parameters", {})
+    literature = result.variant == "literature"
     lines = [f"<h3>{text('{name}: how reliable are the sizes?', name=result.folder.name)}</h3>"]
-    lines.append("<p>" + text("{windows} time windows; {film} late windows use the TS film model (characteristic "
-                              "length L instead of island R/D).", windows=len(result.rows),
-                              film=s.get("TS_windows", 0)) + "</p>")
+    if literature:  # the TS film windows are the network's; the method's film starts at its percolation
+        lines.append("<p>" + text("{windows} time windows.", windows=len(result.rows)) + "</p>")
+    else:
+        lines.append("<p>" + text("{windows} time windows; {film} late windows use the TS film model (characteristic "
+                                  "length L instead of island R/D).", windows=len(result.rows),
+                                  film=s.get("TS_windows", 0)) + "</p>")
     lines += _grades_table(result, text)
     lines.append("<p>" + text("Grades:") + " " + "; ".join(f"<b>{g}</b> {text(t)}" for g, t in GRADES.items()) + ".</p>")
     if result.variant == "literature":
@@ -250,15 +255,16 @@ def reliability_report(result: StructureResult, text: Optional[Text] = None,
     if result.variant == "selected":
         lines += selector_paragraphs(result, text)
     d = s.get("D") or {}
-    if d.get("checked_against_direct"):
+    if d.get("checked_against_direct") and not literature:  # in the literature view D is 2π/q* itself
         band = (rel.get("D_over_direct") or {}).get("band_90", [0.59, 1.75])
         lines.append("<p>" + text(
             "<b>Check against the data.</b> {outside} of {checked} D values differ from the direct 2π/q* by more than "
             "the simulated 90% range (D/(2π/q*) outside {low}–{high}); they are circled in red and should not be used.",
             outside=d.get("outside_direct_band", 0), checked=d["checked_against_direct"], low=f"{band[0]:.2f}",
             high=f"{band[1]:.2f}") + "</p>")
-    lines.append("<p>" + text(READ_POINTS if result.variant in ("physical", "literature") else READ_ERROR_BARS) + " "
-                 + text(READ_COMMON) + "</p>")
+    if not literature:  # the simulation-based errors do not apply to the literature method (its paragraph says so)
+        lines.append("<p>" + text(READ_POINTS if result.variant == "physical" else READ_ERROR_BARS) + " "
+                     + text(READ_COMMON) + "</p>")
     lines.append("<p>" + text(
         "<b>Model conditions.</b> R is the base radius of a flat-based hemisphere (height h = R). Real clusters may "
         "be taller (h/R between 1 and 2); absolute R depends on this condition, trends much less. D is given only "

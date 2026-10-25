@@ -1,8 +1,8 @@
 """Showing a result: the explanation chosen, the line under Predict, the trend, the table, the report and the
 sketch (a mixin of ``SputterPage``).
 
-The default explanation is the folder's first (``StructureFolderReader.available``): always the network's physical
-path. The literature method is a check of it, offered second when a deposition rate makes it possible (More options ▸
+The default explanation is the folder's first (``StructureFolderReader.available``): the literature method when a
+deposition rate makes it possible, else the network's physical path; the other is offered second (More options ▸
 Explanation, with the per-window choice and the exploratory ones); the Literature tab compares the series with
 published growth. A result knows the scan it was predicted from (``gimap_request.json``); the deposition fields
 (rate, t0, end) say what it was drawn with only while that scan is the one in the picker (a result of unknown scan:
@@ -21,9 +21,10 @@ from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem
 
 from src.gimap.app.presentation.i18n import tr
 
-from ..application import (GRADES, StructureResult, beam_off_count, beam_off_record, folder_key, modulation_period,
-                           onset_of, percolation_short, reliability_report)
+from ..application import (GRADES, StructureResult, beam_off_count, beam_off_record, film_onset_established,
+                           folder_key, modulation_period, onset_of, percolation_short, reliability_report)
 from .texts import message_text, note_text, stage_name, text
+from .views.sputter_page_view import REPORT_EMPTY
 
 CHOICES = {"physical": "Physical path (network)", "literature": "Literature method (mass balance)",
            "window": "Per window (network / refined)", "selected": "Learned selector",
@@ -216,7 +217,11 @@ class SputterResultsMixin:
         elif result.variant == "physical":
             if onset is not None:
                 parts.append(text("film from {onset} s", onset=f"{onset:.1f}") + (
-                    text(" ({low}–{high} s)", low=f"{interval[0]:.1f}", high=f"{interval[1]:.1f}") if interval else ""))
+                    text(" ({low}–{high} s)", low=f"{interval[0]:.1f}", high=f"{interval[1]:.1f}") if interval else "")
+                    + ("" if film_onset_established(result.summary) else tr(", not established: no film fits about as well")))
+            elif interval is not None:
+                parts.append(text("no film window; an onset from {time} s or later is not excluded",
+                                  time=f"{interval[0]:.1f}"))
             else:
                 parts.append(tr("no film window"))
         else:
@@ -262,6 +267,8 @@ class SputterResultsMixin:
             self.choice_box.setItemText(index, tr(CHOICES.get(key, key)))
         if self.result is not None:
             self.show_result(self.result)
+        else:
+            self.report.setHtml(tr(REPORT_EMPTY))
 
 
 __all__ = ["CHOICES", "SputterResultsMixin", "TABLE_COLUMNS", "table_columns", "thickness_values"]

@@ -2,7 +2,8 @@
 
 from ..domain import (FILM_NOT_DETERMINED, GRADES, LITERATURE_GRADE, LITERATURE_TEMPLATES, PHYSICAL_TEMPLATES,
                       SKETCH_TEMPLATES, VERDICT_COLOURS, VERDICT_MARKS, Particle, Series, Sketcher, StructureResult,
-                      WindowSketch, beam_off_count, beam_off_record, checks_html, deposition_end, film_onset, is_film,
+                      WindowSketch, beam_off_count, beam_off_record, checks_html, deposition_end, film_onset,
+                      film_onset_established, is_film,
                       literature_available, modulation_period, onset_of, percolation, percolation_errors,
                       percolation_last_time, percolation_sentence, percolation_short, reliability_report,
                       series_extent, smoothed_rows, storyboard_indices, window_sketch)
@@ -27,7 +28,7 @@ __all__ = [
     "SputterService", "Stopped", "StructureResult", "TOOLKIT_FAILED", "TOOLKIT_MISSING", "ToolkitFailed",
     "ToolkitMissing", "ToolkitRunner", "VARIANTS", "VERDICT_COLOURS", "VERDICT_MARKS",
     "WindowSketch", "add_preset", "beam_off_count", "beam_off_record", "checks_html", "deposition_end",
-    "deposition_end_ok", "energy_kev", "film_onset",
+    "deposition_end_ok", "energy_kev", "film_onset", "film_onset_established",
     "folder_key", "install_message", "is_film",
     "literature_available", "make_preset", "matching_preset", "modulation_period", "onset_of", "overall_fraction",
     "parse_progress", "percolation", "percolation_errors", "percolation_last_time", "percolation_sentence", "percolation_short", "prefill", "reliability_report",

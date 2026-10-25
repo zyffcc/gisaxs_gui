@@ -1,9 +1,10 @@
 """Read a toolkit result folder: ``structure*.csv`` and ``structure*_summary.json``.
 
-``physical`` and ``literature`` both come from ``structure_physical.csv``. The network's physical path is always
-the default explanation (first); the literature method (R from the nominal thickness and 2π/q*) is a check of it,
-offered second when the summary says it has values (a deposition rate was given), never the default. The scan a
-result was predicted from is read from ``gimap_request.json`` (written by GIMaP before the model runs).
+``physical`` and ``literature`` both come from ``structure_physical.csv``. The literature method (R from the
+nominal thickness and 2π/q* by mass balance) is the default explanation (first) when the summary says it has values
+(a deposition rate was given and enough windows show the metal's peak); the network's physical path comes right after
+it, and is the default when the literature method has no values. The scan a result was predicted from is read from
+``gimap_request.json`` (written by GIMaP before the model runs).
 """
 
 from __future__ import annotations
@@ -36,13 +37,13 @@ def _summary(path: Path) -> dict:
 
 class StructureFolderReader:
     def available(self, folder: Path) -> list[str]:
-        """Variants present in a result folder, in display order: the physical path (the default), the literature
-        method right after it when it has values (a check of the network), then the per-window choice, the learned
-        selector and the time-consistent path."""
+        """Variants present in a result folder, in display order (the first is the default): the literature method
+        when it has values, the network's physical path, then the per-window choice, the learned selector and the
+        time-consistent path."""
         folder = Path(folder)
         present = [v for v, (table, _) in VARIANTS.items() if v != "literature" and (folder / table).is_file()]
         if "physical" in present and literature_available(_summary(folder / VARIANTS["physical"][1])):
-            present.insert(present.index("physical") + 1, "literature")
+            present.insert(present.index("physical"), "literature")
         return present
 
     def read(self, folder: Path, variant: str = "physical") -> StructureResult:

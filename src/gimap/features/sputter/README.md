@@ -28,7 +28,8 @@ stated, window by window, for an in-situ sputter series on a polymer, and how fa
   without frames. A new deposition rate, t0 or deposition end redraws the result shown only when it is of the
   picker's scan. The beam centre is entered in GIMaP's pixel coordinates and converted to the toolkit's pixel-centre
   indices in `toolkit.py`.
-- **Explanations** (`StructureFolderReader`): `physical` (always the default: the network's method — one stage path,
+- **Explanations** (`StructureFolderReader`): `literature` first — the default — when the summary's literature block
+  has values (see below), then `physical` (the default without them: the network's method — one stage path,
   network R/D in every island window, grade P, trends, t_eq, nominal thickness, film onset, intensity modulation
   period — `modulation_period_s`, `rotation_period_s` in older results, called *intensity modulation period (sample
   stage translation?)*: the stage is translated back and forth during the deposition — and the windows where the beam
@@ -36,7 +37,7 @@ stated, window by window, for an in-situ sputter series on a polymer, and how fa
   the result line and the report (without a modulation: "or interrupted"), hollow grey points in Size Trend (R, D,
   L, t_eq), a column of the Windows table; a whole dip is flagged, its core below 50 % of the level and the sides
   below 80 %; they keep their values but are left out of the stage votes, the trends, the back-and-forth counts, the
-  mass check at the film onset, the literature D trend and network checks, and the sketch's medians and storyboard), `literature` (second, when a deposition rate gives it values: a check of the network, never the default —
+  mass check at the film onset, the literature D trend and network checks, and the sketch's medians and storyboard), `literature` (first and the default when a deposition rate gives it values —
   R_lit/D_lit of `structure_physical.csv` as R/D, grade Lit, film after its percolation (D = 2π/q* goes on, R is not
   given), a percolation interval with the rate and t0 errors and a *not determined* state; `domain/literature.py`),
   `window`, `selected`, `sequence`. A new deposition rate, t0 or deposition end calls the toolkit's `physical` command

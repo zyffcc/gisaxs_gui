@@ -4,7 +4,7 @@ from .literature import (LITERATURE_GRADE, TEMPLATES as LITERATURE_TEMPLATES, VE
                          checks_html, literature_available, literature_rows, onset_of, percolation,
                          percolation_errors, percolation_last_time, percolation_sentence, percolation_short)
 from .physical import (FILM_NOT_DETERMINED, TEMPLATES as PHYSICAL_TEMPLATES, beam_off_count, beam_off_record,
-                       deposition_end, film_onset, modulation_period)
+                       deposition_end, film_onset, film_onset_established, modulation_period)
 from .sketch import (TEMPLATES as SKETCH_TEMPLATES, Particle, Sketcher, WindowSketch, series_extent, smoothed_rows,
                      storyboard_indices, window_sketch)
 from .structure import GRADES, Series, StructureResult, english, flag, is_film, number, parse_row, reliability_report
@@ -12,7 +12,7 @@ from .structure import GRADES, Series, StructureResult, english, flag, is_film, 
 __all__ = ["FILM_NOT_DETERMINED", "GRADES", "LITERATURE_GRADE", "LITERATURE_TEMPLATES", "PHYSICAL_TEMPLATES", "Particle",
            "SKETCH_TEMPLATES", "beam_off_count", "beam_off_record", "modulation_period",
            "Series", "Sketcher", "StructureResult", "VERDICT_COLOURS", "VERDICT_MARKS", "WindowSketch", "checks_html",
-           "deposition_end", "english", "film_onset", "flag", "is_film", "literature_available", "literature_rows",
+           "deposition_end", "english", "film_onset", "film_onset_established", "flag", "is_film", "literature_available", "literature_rows",
            "number", "onset_of", "parse_row", "percolation", "percolation_errors", "percolation_last_time",
            "percolation_sentence",
            "percolation_short",
