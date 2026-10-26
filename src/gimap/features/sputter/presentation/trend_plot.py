@@ -91,7 +91,9 @@ class TrendPlot:
         # The page redraws on a theme switch (``SputterPage._theme_changed``): a connection of its own, which Qt
         # removes with the page (``theme_figure``'s connection to the canvas crashed when the page was deleted).
 
-    def draw(self, result, *, log_scale: bool) -> None:
+    def draw(self, result, *, log_scale: bool, detailed: bool = True) -> None:
+        """``detailed`` False: R and D of the explanation, their trends and the onset only (the result to use);
+        True: also the thickness and TS-length panels, the direct 2π/q* with its checks and the flagged windows."""
         if self.canvas is None:
             return
         from src.gimap.app.presentation.theme.figures import restyle_figure
@@ -100,19 +102,19 @@ class TrendPlot:
         fig = self.figure
         fig.clear()
         if result is not None and result.rows:
-            self._panels(fig, result, log_scale)
+            self._panels(fig, result, log_scale, detailed)
         restyle_figure(fig)
         cjk_fallback(fig)  # Chinese labels in a font that has them
         self.canvas.draw_idle()
 
     # -- panels -----------------------------------------------------------------------------------------
-    def _panels(self, fig, result: StructureResult, log_scale: bool) -> None:
+    def _panels(self, fig, result: StructureResult, log_scale: bool, detailed: bool = True) -> None:
         physical = result.variant in SMOOTHED
         panels = [("R", "R (nm)", tr("R, equivalent hemisphere radius")),
                   ("D", "D (nm)", tr("D, centre-to-centre spacing (peak windows)"))]
-        if result.ts_length().time:
+        if detailed and result.ts_length().time:
             panels.append(("L", "L (nm)", tr("TS length L (film windows)")))
-        if physical or result.has("t_eq_nm") or result.has("nominal_thickness_nm"):
+        if detailed and (physical or result.has("t_eq_nm") or result.has("nominal_thickness_nm")):
             panels.append(("thickness", tr("Metal thickness (nm)"), ""))
         axes = fig.subplots(len(panels), 1, sharex=True)
         axes = list(axes) if len(panels) > 1 else [axes]
@@ -136,9 +138,9 @@ class TrendPlot:
             elif name == "thickness":
                 self._thickness(ax, result, spans, off_label)
             elif physical:
-                self._physical(ax, result, name, off_label)
+                self._physical(ax, result, name, off_label, detailed)
             else:
-                self._graded(ax, result, name)
+                self._graded(ax, result, name, detailed)
             if name == "thickness" and ended is not None:  # the nominal thickness stays constant after it
                 _deposition_end(ax, ended, times)
             first = name == panels[0][0]
@@ -190,21 +192,21 @@ class TrendPlot:
                    hatch="//" if high is None else None, label=label if first else None)
 
     @staticmethod
-    def _physical(ax, result: StructureResult, name: str, off_label: str) -> None:
+    def _physical(ax, result: StructureResult, name: str, off_label: str, detailed: bool = True) -> None:
         points = result.column(f"{name}_nm", where=_on_sample)
         grade = LITERATURE_GRADE if result.variant == "literature" else "P"
         if points.time:
             ax.plot(points.time, points.value, "o", ms=2.6, alpha=.3, color=COLORS[grade], lw=0,
                     label=text("{grade}: {meaning}", grade=grade, meaning=tr(GRADES[grade])))
-        # The literature method uses no peak of such a window: its 2π/q* stands for it on the D panel.
-        off = result.column("D_corr_nm" if result.variant == "literature" and name == "D" else f"{name}_nm",
-                            where=_beam_off)
-        _beam_off_points(ax, off, off_label)
+        if detailed:  # the literature method uses no peak of such a window: its 2π/q* stands for it on the D panel
+            off = result.column("D_corr_nm" if result.variant == "literature" and name == "D" else f"{name}_nm",
+                                where=_beam_off)
+            _beam_off_points(ax, off, off_label)
         trend = result.column(f"{name}_trend_nm")
         if trend.time:
             ax.plot(trend.time, trend.value, "-", lw=1.7, color=TREND_COLORS[name], label=tr("trend (smoothed)"))
-        if name == "D":
-            _direct(ax, result)
+        if name == "D" and (detailed or result.variant != "literature"):  # the method's D is 2π/q* itself
+            _direct(ax, result, checks=detailed)
 
     @staticmethod
     def _delta_only(ax, result: StructureResult, spans: list) -> None:
@@ -221,7 +223,7 @@ class TrendPlot:
                     ha="center", va="center", fontsize=7.5, color="#555555", bbox=dict(facecolor="white", alpha=.65, lw=0))
 
     @staticmethod
-    def _graded(ax, result: StructureResult, name: str) -> None:
+    def _graded(ax, result: StructureResult, name: str, detailed: bool = True) -> None:
         for grade in ("C", "B", "A", "S", "T", "L", "P", LITERATURE_GRADE):
             s = result.series(name, grade)
             if not s.time:
@@ -231,7 +233,7 @@ class TrendPlot:
             ax.errorbar(s.time, s.value, yerr=[low, high], fmt="o", ms=2.6, lw=.5, color=COLORS[grade], alpha=.85,
                         label=text("{grade}: {meaning}", grade=grade, meaning=tr(GRADES[grade])))
         if name == "D":
-            _direct(ax, result)
+            _direct(ax, result, checks=detailed)
 
     @staticmethod
     def _thickness(ax, result: StructureResult, spans: list, off_label: str) -> None:
@@ -279,9 +281,10 @@ def _beam_off_points(ax, points, label: str) -> None:
         ax.plot(points.time, points.value, "o", ms=4.2, mfc="none", mec=BEAM_OFF_COLOR, mew=.9, lw=0, label=label)
 
 
-def _direct(ax, result: StructureResult) -> None:
-    bad = result.inconsistent_spacing()
-    if bad.time:
+def _direct(ax, result: StructureResult, checks: bool = True) -> None:
+    """The direct 2π/q* as grey crosses; ``checks``: also the red circles of a D outside the simulated range."""
+    bad = result.inconsistent_spacing() if checks else None
+    if bad is not None and bad.time:
         ax.plot(bad.time, bad.value, "o", ms=7, mfc="none", mec="#d62728", mew=.9,
                 label=tr("D vs 2π/q* outside simulated 90% range"))
     direct = result.direct_spacing()

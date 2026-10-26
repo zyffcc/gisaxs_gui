@@ -86,6 +86,16 @@ SPUTTER_ZH = {
     "Learned selector": "学习选择器",
     "Time-consistent path (exploratory)": "时间一致路径（探索性）",
     "Logarithmic size axis": "尺寸轴取对数",
+    "Show details (network checks, thickness, flagged windows)": "显示细节（网络对照、厚度、标记的时间窗）",
+    "Off: R and D of the explanation shown, their trends and the percolation (or film onset). On: also the thickness "
+    "panel, the direct 2π/q* with its checks, and the windows where the beam may be off the sample.":
+        "关：只显示当前解释的 R 和 D、它们的趋势和渗流（或成膜起点）。开：另外显示厚度栏、直接的 2π/q* 及其检验，"
+        "以及光斑可能移出样品的时间窗。",
+    "Show details (network, published curves, coverage, mass balance)": "显示细节（网络、已发表曲线、覆盖率、质量守恒）",
+    "Off: the literature method's D and 2R/D against δ with the published percolation band. On: also the network's "
+    "values, the published D(δ) curves, the coverage and the network's mass balance.":
+        "关：只显示文献方法的 D 和 2R/D 随 δ 的变化，以及已发表的渗流区间。开：另外显示网络的值、已发表的 D(δ) 曲线、"
+        "覆盖率和网络的质量守恒。",
     "Size Trend": "尺寸趋势",
     "Structure Sketch": "结构示意",
     "Windows": "时间窗",

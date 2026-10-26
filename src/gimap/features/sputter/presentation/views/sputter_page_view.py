@@ -248,7 +248,15 @@ class SputterPageView:
         layout.setContentsMargins(4, 4, 4, 4)
         self.log_scale = QCheckBox("Logarithmic size axis", trend)
         self.log_scale.setChecked(True)
-        layout.addWidget(self.log_scale)
+        self.trend_details = QCheckBox("Show details (network checks, thickness, flagged windows)", trend)
+        self.trend_details.setToolTip("Off: R and D of the explanation shown, their trends and the percolation (or "
+                                      "film onset). On: also the thickness panel, the direct 2π/q* with its checks, "
+                                      "and the windows where the beam may be off the sample.")
+        controls = QHBoxLayout()
+        controls.addWidget(self.log_scale)
+        controls.addWidget(self.trend_details)
+        controls.addStretch(1)
+        layout.addLayout(controls)
         self.trend_layout = layout
         self.tabs.addTab(trend, "Size Trend")
         self.table = QTableWidget(0, 0)

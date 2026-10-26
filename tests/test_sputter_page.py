@@ -36,7 +36,9 @@ def _settle(condition=lambda: False, seconds: float = 10.0) -> None:
     QApplication.processEvents()
 
 
-def _page(tmp_path, *, runner=None, installer=None, inspector=None, preferences=None):
+def _page(tmp_path, *, runner=None, installer=None, inspector=None, preferences=None, details=True):
+    """``details``: the Size Trend and the Literature tab with their details shown (what most tests look at; the
+    page opens without them, see test_the_trend_and_the_literature_tab_open_simple)."""
     from src.gimap.features.sputter.bootstrap import create_sputter_service
     from src.gimap.features.sputter.presentation.page import SputterPage
 
@@ -45,7 +47,46 @@ def _page(tmp_path, *, runner=None, installer=None, inspector=None, preferences=
                                      results_root=lambda: tmp_path / "results")
     page = SputterPage(service, task_runner=TaskRunner(), preferences=preferences)
     page.resize(1400, 900)
+    page.trend_details.setChecked(details)
+    page.literature.details.setChecked(details)
     return page
+
+
+def test_the_trend_and_the_literature_tab_open_simple(tmp_path):
+    from src.gimap.features.sputter.bootstrap import create_sputter_service
+    from src.gimap.features.sputter.presentation.page import SputterPage
+    from tests.sputter_fixtures import literature_folder
+
+    service = create_sputter_service(runner=FakeRunner(), installer=FakeInstaller(), inspector=FakeInspector(),
+                                     results_root=lambda: tmp_path / "results")
+    fresh = SputterPage(service, task_runner=TaskRunner())
+    assert not fresh.trend_details.isChecked() and not fresh.literature.details.isChecked()  # the default
+    _close(fresh)
+    page = _page(tmp_path, details=False)
+    page.open_results(literature_folder(tmp_path / "res"))
+    assert page.result.variant == "literature"
+    # Size Trend: R and D of the method with their trends and the percolation; no thickness panel, no checks.
+    axes = page.trend.figure.axes
+    assert [ax.get_ylabel() for ax in axes[:2]] == ["R (nm)", "D (nm)"] and len([a for a in axes if a.get_ylabel()]) == 2
+    legend = [t.get_text() for t in axes[1].get_legend().get_texts()]
+    assert "2π/q* (direct)" not in legend and "D vs 2π/q* outside simulated 90% range" not in legend
+    assert any(t.startswith("Lit: ") for t in legend) and "trend (smoothed)" in legend
+    # Literature tab: D and 2R/D of the method against the published band, without the network or curves.
+    tab = page.literature
+    assert len(tab.figure.axes) == 2
+    labels = [t.get_text() for ax in tab.figure.axes if ax.get_legend() for t in ax.get_legend().get_texts()]
+    assert "D of the network" not in labels and "network" not in labels and "Gen19 Ag/PS RF" not in labels
+    assert "percolation: 2R = D" in labels and any(label.startswith("published percolation") for label in labels)
+    # Details on: everything the page showed before.
+    page.trend_details.setChecked(True)
+    tab.details.setChecked(True)
+    assert page.trend.figure.axes[2].get_ylabel() == "Metal thickness (nm)" and len(tab.figure.axes) == 4
+    # The physical path keeps the direct 2π/q* for comparison, without its checks.
+    page.trend_details.setChecked(False)
+    page.choice_box.setCurrentIndex(page.choice_box.findData("physical"))
+    legend = [t.get_text() for t in page.trend.figure.axes[1].get_legend().get_texts()]
+    assert "2π/q* (direct)" in legend and "D vs 2π/q* outside simulated 90% range" not in legend
+    _close(page)
 
 
 def _fill(page, folder) -> None:
