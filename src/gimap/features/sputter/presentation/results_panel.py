@@ -9,7 +9,8 @@ published growth. A result knows the scan it was predicted from (``gimap_request
 until another folder is chosen). Windows where the beam may be off the sample (the toolkit's ``beam_off_sample``: an
 intensity dip of the back-and-forth stage translation; without a modulation only an extreme dip, where the beam may
 also have been interrupted, and the line says so) are counted in the line under Predict and have a column of their
-own in the Windows table.
+own in the Windows table. The island height H from the q_z fringes (``fringe_flow.py``) adds a panel to Size Trend, two
+columns to Windows (the time group nearest to each window) and a paragraph to Reliability once it is measured.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from src.gimap.app.presentation.i18n import tr
 
 from ..application import (GRADES, StructureResult, beam_off_count, beam_off_record, film_onset_established,
                            folder_key, modulation_period, onset_of, percolation_short, reliability_report)
+from .fringe_panel import height_cells
 from .texts import message_text, note_text, stage_name, text
 from .views.sputter_page_view import REPORT_EMPTY
 
@@ -49,6 +51,11 @@ TABLE_COLUMNS = (
     ("selector_choice", "Component"), ("R_reason", "R note"), ("D_reason", "D note"), ("lit_reason", "Literature note"),
     ("beam_off_reason", "Beam note"),
 )
+FRINGE_COLUMNS = (("H_fringes_nm", "H fringes (nm)"), ("H_fringes_range", "H fringes 68% (nm)"))
+"""The island height from the q_z fringes of the time group nearest to each window (when H is measured)."""
+FRINGES_AFTER = ("D_trend_nm", "D_nm", "R_nm", "time_s")
+"""The fringe columns come after the first of these the table has."""
+FRINGE_KEYS = {key for key, _label in FRINGE_COLUMNS}
 LITERATURE_HIDDEN = {"R_lit_nm", "D_lit_nm", "D_direct_check", "D_over_direct"}
 """Columns the literature explanation shows as R and D already (or that do not apply to it)."""
 LIT_STATUS = {"islands": "islands", "after_percolation": "after percolation", "host_peak": "host peak",
@@ -104,15 +111,27 @@ def _cell(row: dict, key: str) -> tuple[str, str]:
     return value, ""
 
 
-def table_columns(result: StructureResult) -> list:
-    """The columns that hold a value in this result (the time always)."""
+def table_columns(result: StructureResult, fringes=None) -> list:
+    """The columns that hold a value in this result (the time always), with H from the q_z fringes when it is
+    measured."""
     def present(key):
         if key == "t_eq_range":
             return result.has("t_eq_lo_nm")
         if result.variant == "literature" and key in LITERATURE_HIDDEN:
             return False
         return result.has(key)
-    return [(key, label) for key, label in TABLE_COLUMNS if key == "time_s" or present(key)]
+    columns = [(key, label) for key, label in TABLE_COLUMNS if key == "time_s" or present(key)]
+    if fringes is not None and fringes.measured():
+        keys = [key for key, _label in columns]
+        after = next(key for key in FRINGES_AFTER if key in keys)
+        index = keys.index(after) + 1
+        columns[index:index] = list(FRINGE_COLUMNS)
+    return columns
+
+
+def _fringe_cell(fringes, row: dict, key: str) -> tuple:
+    height, interval = height_cells(fringes, row.get("time_s"))
+    return height if key == "H_fringes_nm" else interval
 
 
 class SputterResultsMixin:
@@ -195,14 +214,21 @@ class SputterResultsMixin:
         self._fill_choices(self.service.variants(result.folder) or [result.variant], result.variant)
         self._show_thickness_fields()
         self._show_result_line()
+        self._update_fringes(result)
         self._draw_trend()
         self._fill_table()
-        self.report.setHtml(reliability_report(result, text, note=note_text))
+        self._show_report()
         self.sketch.set_result(result)
         self.literature.set_result(result)
 
     def _draw_trend(self) -> None:
-        self.trend.draw(self.result, log_scale=self.log_scale.isChecked(), detailed=self.trend_details.isChecked())
+        self.trend.draw(self.result, log_scale=self.log_scale.isChecked(), detailed=self.trend_details.isChecked(),
+                        fringes=self.fringes)
+
+    def _show_report(self) -> None:
+        """The Reliability tab: the model's report and the paragraph on H from the q_z fringes (when measured)."""
+        if self.result is not None:
+            self.report.setHtml(reliability_report(self.result, text, note=note_text) + self.fringe_report())
 
     def _show_result_line(self) -> None:
         result = self.result
@@ -248,14 +274,14 @@ class SputterResultsMixin:
     def _fill_table(self) -> None:
         result = self.result
         rows = result.rows if result is not None else []
-        columns = table_columns(result) if result is not None else []
+        columns = table_columns(result, self.fringes) if result is not None else []
         self.table.clear()
         self.table.setColumnCount(len(columns))
         self.table.setHorizontalHeaderLabels([tr(label) for _key, label in columns])
         self.table.setRowCount(len(rows))
         for i, row in enumerate(rows):
             for j, (key, _label) in enumerate(columns):
-                shown, tip = _cell(row, key)
+                shown, tip = _fringe_cell(self.fringes, row, key) if key in FRINGE_KEYS else _cell(row, key)
                 item = QTableWidgetItem(shown)
                 if tip and tip != shown:
                     item.setToolTip(tip)
@@ -272,4 +298,4 @@ class SputterResultsMixin:
             self.report.setHtml(tr(REPORT_EMPTY))
 
 
-__all__ = ["CHOICES", "SputterResultsMixin", "TABLE_COLUMNS", "table_columns", "thickness_values"]
+__all__ = ["CHOICES", "FRINGE_COLUMNS", "SputterResultsMixin", "TABLE_COLUMNS", "table_columns", "thickness_values"]

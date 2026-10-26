@@ -74,6 +74,14 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
   (Sum = their number), with αi — and a beam centre given for Predict — as in Sputter. Distance and wavelength come
   from an instrument profile within 0.5 mm and 0.1% of the Sputter values; without one the notice says which values
   to enter (no profile is created).
+- **Island height H from the q_z fringes**: after a result is shown, the minima that move to lower q_z in the
+  vertical cuts at low q_y are measured in the background (`utils/sputter_fringes`): Size Trend gets the panel
+  **H, island height from q_z fringes (nm)** (also in the simple view) with 68% intervals and the nominal thickness
+  for comparison, Windows the columns **H fringes (nm)** and **H fringes 68% (nm)**, Reliability a paragraph. H is
+  the vertical size of the islands or the layer (refraction-corrected, αc fitted to the fringes or the bulk value);
+  it is the film thickness only once a continuous film has formed, and it is given only while a minimum is in the
+  detector's q_z range and its order is known. Known limitation: the height of a uniform layer — a constant offset
+  of about 1 nm is possible, and up to 8% with one fringe period or less in range.
 
 ### Analyze
 

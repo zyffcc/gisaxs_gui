@@ -2079,6 +2079,24 @@ GIMaP with another model, gets a new one (section 11).
   grey points, *beam may be off the sample (stage translation)* (without a modulation *beam may be off the sample or
   interrupted*), on R, D, the TS length L and t_eq: the faint points, the trend lines and the t_eq line leave them
   out. With the literature method, which does not use their peak, the hollow point on the D panel is their 2π/q*.
+- **Island height H from the q_z fringes.** While the metal grows, the vertical cuts at low q_y (0.05–0.15 nm⁻¹)
+  show minima that move to lower q_z: the fringes of the islands' (or the layer's) vertical form factor. When a
+  result is shown, GIMaP measures them in the background (`utils/sputter_fringes`, numpy and scipy only; a few
+  seconds to half a minute; the messages are under **Details**) and adds the panel **H, island height from q_z
+  fringes (nm)** to Size Trend — also without **Show details**, since it is a direct measurement — with each time
+  group's H (groups of 1 s) and its 68% interval (hollow: seen on one side of the beam only), the nominal thickness
+  δ for comparison when a deposition rate is given, and, before the first minimum enters the detector's q_z range,
+  the bound H stays below (*below the range: H < … nm*). H = 2π n / Q with Q = kz(αi) + kz(αf) inside the metal: the
+  vertical size of the islands or the layer, which equals the film thickness only once a continuous film has
+  formed. The order n is counted from the first minimum that enters the top of the range, taken from a phase-locked
+  fit of the whole cut when several fringe periods are in range, or from minima of known order seen at the same
+  time. αc of the metal is fitted to the fringes when enough time groups allow it, else its bulk value (from the
+  electron density; Cu 2.46, Ag 2.77, Au 4.66 e/Å³) is used with ±0.02°. The detector's module gaps are read from the
+  data; minima that stay at one αf for 20 s or longer (detector rows, a film's own fringes) and windows where the
+  beam may be off the sample are left out. Without moving minima, or when their order cannot be told, no H is given.
+  The outputs, `fringe_heights.csv` and `fringe_summary.json`, go to the result folder's `fringes_v1/` (or to
+  `sputter_fringes/<result folder>/` in the user data folder when the result folder cannot be written) and are
+  measured again when the binned frames, the metal or the tool change.
 - The result line under Predict gives the windows, the film onset (with the literature method: its percolation)
   and, when the intensity is modulated periodically, the *intensity modulation period (sample stage translation?)*.
   During the deposition the sample stage is translated back and forth so that the beam does not damage one spot;
@@ -2103,9 +2121,11 @@ GIMaP with another model, gets a new one (section 11).
   such a window with its own values and says so; its storyboard and its medians leave it out.
 - **Windows**: every window with its stage (by the rule and on the path), the values, grades and typical errors,
   t_eq, the nominal thickness, *Beam may be off the sample* (the reason as its tooltip and in *Beam note*) and the
-  notes; `Ctrl+C` copies rows.
+  notes; once H from the q_z fringes is measured, also **H fringes (nm)** and **H fringes 68% (nm)** of the time
+  group nearest to each window (*< bound* before the range; the status as the tooltip); `Ctrl+C` copies rows.
 - **Literature**: the series against published growth, over δ (below).
-- **Reliability**: what the grades mean, the typical errors from simulation, the physical path's assumptions,
+- **Reliability** (once H from the q_z fringes is measured, a paragraph says what H is, the q_z range it can be
+  measured in, αc and its source, and the straight-line growth rate dH/dt): what the grades mean, the typical errors from simulation, the physical path's assumptions,
   the back-and-forth changes before and after it, the intensity modulation period, how many windows may have the
   beam off the sample and what the thickness values mean; with the literature method also its definition, the
   percolation and how many checks agree.
@@ -2748,6 +2768,7 @@ folder is `%APPDATA%\GIMaP` on Windows (or the folder in `GIMAP_HOME`; **Help �
 | Compare ▸ **Change Plot… / Paths Plot… / End States Plot…** | `compare_*.png` or `.svg` | as above | none |
 | Sputter ▸ **Predict** | a folder per scan and request: `structure_physical.csv` + `structure_physical_summary.json` (the physical path), `structure.csv` + `structure_summary.json` (per window), the model's `intake/` and `binned/` | user data folder: `sputter/<scan>-<code>/` (or **More options ▸ Save results in**); the same request reuses its folder | `gimap_request.json` (the request, the Python, PyTorch's version) |
 | Sputter ▸ Structure Sketch ▸ **Save Image… / Save Storyboard…** | PNG, PDF or SVG | the result folder | none |
+| Sputter, in the background after a result is shown | `fringe_heights.csv` (H from the q_z fringes per time group) + `fringe_summary.json` | the result folder's `fringes_v1/`; when it cannot be written, the user data folder: `sputter_fringes/<result folder>/` | the summary: SHA-256 of `binned/run.json`, the chunks and `structure_physical.csv`, the tool's version, αc and its source, the settings |
 | XRR Series Extractor ▸ **Export CSV…** | `<source>_xrr.csv` + `.json` | next to the source file; for a CBF folder inside it | the JSON (every value that determines qz and its origin; `center_convention`; `source_layout` with every file read) |
 | Format Converter | converted frames, by default `<source>_<frame, 6 digits>.<ext>` (or one `converted_images.h5`) | `converted/` next to the first input | `conversion_report.json`, `conversion_metadata.json` (or one JSON per frame) |
 | SEM Particle Analysis ▸ **Export SEM results…** | the files of section 8.3 | a new `SEM_analysis_<date>_<time>/` in the folder you choose; never overwrites | `sem_analysis.json`; `#` header line in the CSVs |
@@ -2800,6 +2821,7 @@ Version 0.1.0 is a pre-release. These limitations are known; each comes with wha
 | 1D Predict writes its run folders into the folder GIMaP was started from; they are not removed. | Delete old `AI_Fitting_Output/v5_…` folders yourself. |
 | **Sputter does not determine the thickness of a continuous film**, and a film with particles on it is not modelled (section 7.4). | Read the island-volume equivalent t_eq (island windows, conditional) and the nominal thickness from a deposition rate; compare with XRR, a quartz balance or a cross-section. |
 | **Sputter reads Cu with the Ag model** (the networks were trained for Ag and Au). | Use Cu results for reference only. |
+| **Sputter's island height H from the q_z fringes is the height of a uniform layer** (minima at H Q = 2π n): for islands of another shape and with the refraction model it may be off by a constant of about 1 nm; with one fringe period or less in the range it carries a systematic error of up to 8% (inside its interval). It is not given while no minimum is in the detector's q_z range, while a minimum crosses a module gap, or when the order cannot be told. | Read the trend; compare with XRR, AFM or a cross-section; the summary names αc and where it comes from. |
 | **Sputter flags windows where the beam may be off the sample from the intensity alone** (a dip below half of the level of the neighbouring windows within one modulation period, or below 20% within 10 s without a modulation, with its sides down to 80%; section 7.4). The stage position and the range of its translation are not read: a dip that never falls below half of the level is not flagged, however long, nor is a slower drift off the sample; a dip with another cause (a drop of the beam, the shutter) is flagged alike, and the first and last windows are not judged. When the footprint reaches the sample edge, edge scattering or streaks can raise the intensity in the analysed region instead of lowering it: such windows are not flagged. | Compare the flagged windows with the stage log of the beamtime when you have it; their values stay in the Windows table. |
 | **Sputter's literature method rests on the deposition rate, t0 and deposition end you give** (GISAXS measures none of them) and on D = 2π/q*. Its percolation interval assumes the rate within ±10% and t0 within ±2 s (±0.5 s when t0 is given) — engineering choices the page does not change — takes the deposition end as exact, and leaves out the systematic error of 2π/q* (more than 40% for D > 10 nm once coalescence starts). Without a deposition end the deposition is taken to last to the end of the scan. PNO, PSBMA and PEO have no published percolation data: the band of all polymers of the metal is used (section 7.4). | Give the rate at the sample position, and t0 and the deposition end when you know them; for other errors run the toolkit's `physical` command with `--rate-error` and `--t0-error`. Read a *not determined* percolation as not determined, and compare with other chambers' thresholds as a comparison, not a prediction. |
 | **Sputter's first Predict downloads PyTorch** (about 1.2 GB, needs the internet); the model runs on the CPU. | Without internet, install PyTorch by hand (section 13.7). |

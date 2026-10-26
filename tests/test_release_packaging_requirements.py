@@ -75,7 +75,10 @@ def code():
             if parts[:2] == ("utils", "gisaxs1d_gui_kit"):
                 continue  # frozen external kit; required host dependencies are EXTERNAL_RUNTIME above
             if parts[:2] == ("utils", "sputter_toolkit"):
-                continue  # external Sputter toolkit, run as a subprocess; its packages: requirements-sputter.txt
+                # external Sputter toolkit, run as a subprocess; its packages: requirements-sputter.txt. Its own
+                # package (``sputtergisaxs``) is the program's: the fringe tool imports the toolkit's grid from it.
+                own.update(parts[2:-1])
+                continue
             if path.relative_to(ROOT).as_posix() in ISOLATED_RUNTIMES:
                 continue  # checked against its own runtime manifest below
             if parts[0] != "src":

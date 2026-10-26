@@ -59,6 +59,13 @@ stated, window by window, for an in-situ sputter series on a polymer, and how fa
   `binned/chunk_NNNNN.json`, its `raw_members` in the scan folder of `gimap_request.json`, the geometry of the request,
   the model's own beam-centre estimate of `intake/geometry.json`; problems from `domain/windows.py`) → the target the
   composition root sets (`app/sputter_handover.py`), which shows the frames summed in Analyze.
+- **Island height H from the q_z fringes** (`domain/fringes.py`, `application/fringes.py` `FringeService`,
+  `infrastructure/fringes.py` `FringeTool` + `FringeFolderStore`, `presentation/fringe_flow.py` + `fringe_panel.py`):
+  after a result is shown, fresh outputs of `utils/sputter_fringes` (`fringe_heights.csv`, `fringe_summary.json`; in
+  the result's `fringes_v1/`, else `<user data>/sputter_fringes/<result>/`; fresh = the same tool sources, `binned/
+  run.json`, metal and off-sample windows) are read at once, else the tool runs in the background (a subprocess of
+  GIMaP's Python, numpy/scipy only; `FRINGES_KEY`). Measured H adds a Size Trend panel (also in the simple view), two
+  Windows columns (the nearest time group) and a Reliability paragraph; a failure goes to the log only.
 - Film windows: the thickness is not determined (the model's estimate equals its prior); the sketch draws a
   continuous film without particles. Cu is read with the Ag model and labelled “for reference only”.
 
@@ -69,5 +76,6 @@ of a window), `application` (`SputterService`, `AnalyzeRequest`, progress, envir
 `geometry.py`, `predict_flow.py`, `results_panel.py`, `window_menu.py`, `trend_plot.py`, `literature_tab.py`,
 `sketch_view.py`, `texts.py`, `toolkit_texts.py`, `preset_dialog.py`), `bootstrap.py`. Chinese texts:
 `app/presentation/i18n/zh_sputter.py`, `zh_sputter_report.py`, `zh_sputter_literature.py`, `zh_sputter_toolkit.py`,
-`zh_sputter_handover.py`. Tests: `tests/test_sputter_feature.py`, `tests/test_sputter_page.py`,
-`tests/test_sputter_show_in_analyze.py` (fakes in `tests/sputter_fixtures.py`). Page: `docs/ui/workspaces/sputter.md`.
+`zh_sputter_handover.py`, `zh_sputter_fringes.py`. Tests: `tests/test_sputter_feature.py`, `tests/test_sputter_page.py`,
+`tests/test_sputter_show_in_analyze.py` (fakes in `tests/sputter_fixtures.py`), `tests/test_sputter_fringes.py`,
+`tests/test_sputter_fringes_page.py` (synthetic cuts in `tests/sputter_fringe_data.py`). Page: `docs/ui/workspaces/sputter.md`.

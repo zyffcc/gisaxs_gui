@@ -1,14 +1,17 @@
 # 溅射（Sputter）
 
 - **Status**: Current（2026-10-22 重新设计：模型随仓库提供，选文件夹后按“预测”即可；2026-10-23 加入文献方法和“文献对照”页；
-  同日改为物理路径始终是默认解释、文献方法作为对网络的核对，并加入可选的沉积结束时间）
+  同日改为物理路径始终是默认解释、文献方法作为对网络的核对，并加入可选的沉积结束时间；2026-10-26 加入由 q_z 干涉条纹
+  得到的岛高度 H，显示结果后在后台测量）
 - **Scope**: 原位溅射序列（聚合物上的 Ag、Au；Cu 用 Ag 模型近似）逐时间窗的颗粒尺寸 R、间距 D、生长阶段、金属厚度
   的替代量，以及它们的可靠性
 - **Related code**: [`src/gimap/features/sputter/`](../../../src/gimap/features/sputter/)（说明见其 `README.md`）、
   `app/main_window.py`（`_create_sputter_page`、`running_jobs`、`_language_pages`、`shutdown`）、
   `app/sputter_handover.py`（在分析中查看，经 `HandoverMixin`）、
   `app/presentation/i18n/zh_sputter.py`、`zh_sputter_report.py`、`zh_sputter_literature.py`、`zh_sputter_toolkit.py`、
-  `zh_sputter_handover.py`；
+  `zh_sputter_handover.py`、`zh_sputter_fringes.py`；
+  由 q_z 干涉条纹得到的岛高度：`domain/fringes.py`、`application/fringes.py`、`infrastructure/fringes.py`、
+  `presentation/fringe_flow.py`、`presentation/fringe_panel.py`，工具 `utils/sputter_fringes/`（numpy/scipy，子进程）；
   模型 `utils/sputter_toolkit/`（GUI 只按路径以子进程调用；文献方法在 `sputtergisaxs/sputter_literature.py`，已发表数值在
   `configs/literature_reference_v1.json`）
 - **Related tests**: [`tests/test_sputter_feature.py`](../../../tests/test_sputter_feature.py)、
@@ -16,7 +19,10 @@
   [`tests/sputter_fixtures.py`](../../../tests/sputter_fixtures.py)）、
   [`tests/test_sputter_toolkit_bundle.py`](../../../tests/test_sputter_toolkit_bundle.py)（工具包，含文献方法）、
   [`tests/test_sputter_show_in_analyze.py`](../../../tests/test_sputter_show_in_analyze.py)（在分析中查看：读时间窗、菜单、
-  交接；真实分析页上用编造的 TIFF 帧核对求和）
+  交接；真实分析页上用编造的 TIFF 帧核对求和）、
+  [`tests/test_sputter_fringes.py`](../../../tests/test_sputter_fringes.py)（干涉条纹工具：合成的生长层、无条纹的切线、
+  命令行；数据：[`tests/sputter_fringe_data.py`](../../../tests/sputter_fringe_data.py)）、
+  [`tests/test_sputter_fringes_page.py`](../../../tests/test_sputter_fringes_page.py)（页面：H 栏、时间窗列、可靠性段落、后台测量）
 - **Last verified**: 2026-10-23（离线测试；编造的扫描名与数值；文献方法另在本机真实结果的副本上核对过，数值不进仓库）
 
 ## 调用链
@@ -76,6 +82,15 @@
    （`analyze/presentation/bindings/frame_import.py`：清空列表 → 非交互导入 → 列出后设求和 N = 帧数、αi、给出时的光束中心
    （对所有形状）、配置，再显示第一帧：一次分析就是全部帧之和）→ 通知（时间窗、求和帧数、几何、是否替换了原先的帧；没有配置时
    一直显示，写出应输入的距离和波长）。
+
+7. **由 q_z 干涉条纹得到的岛高度**（`presentation/fringe_flow.py`）：`show_result` → `_update_fringes` →
+   `FringeService.cached`（结果文件夹的 `fringes_v1/`，再看用户数据文件夹的 `sputter_fringes/<结果文件夹>/`；
+   `FringeFolderStore.fresh`：工具源码的 SHA-256、`binned/run.json` 的 SHA-256、金属、光斑可能移出样品的时间窗都相同）→
+   没有新鲜的输出而结果有 `binned/run.json` 时，TaskRunner 键 `sputter_fringes` 提交 `FringeService.measure` →
+   `FringeTool`（控制台版 `sys.executable` 运行 `utils/sputter_fringes/fringes.py --folder --out --group-seconds 1.0
+   --toolkit --metal`，`run_streaming`，新的结果或关闭页面时停止）→ 完成时若仍显示同一结果，重画尺寸趋势（`TrendPlot.draw`
+   的 `fringes`：`fringe_panel.draw_heights`，简单视图也显示）、时间窗表（`table_columns(result, fringes)` 在 D 列之后插入
+   两列，`height_cells` 取时间上最近的时间组）和可靠性报告（`fringe_paragraph`）。失败只写进“详情”的日志。
 
 ## 文献方法（`domain/literature.py`、`presentation/literature_tab.py`）
 

@@ -5,7 +5,8 @@ The user chooses the scan folder and presses Predict; the model bundled with GIM
 Python (PyTorch is installed there on the first Predict). Left: Data, Sample and geometry, Predict with its
 job status, the model's environment, the result line and More options. Right: Size Trend (faint per-window points
 and the trend lines; the metal thickness), Literature (the series against published growth over the nominal
-thickness), Structure Sketch, Windows and Reliability.
+thickness; the island height H from the q_z fringes, measured in the background), Structure Sketch, Windows and
+Reliability.
 The layout is in ``views/sputter_page_view.py``; the folder and the form in ``geometry.py``, Predict in
 ``predict_flow.py``, showing a result in ``results_panel.py``, Show in Analyze (a window's frames, summed) in
 ``window_menu.py``.
@@ -24,6 +25,7 @@ from src.gimap.app.presentation.task_runner import TaskRunner
 from src.gimap.app.presentation.theme.engine import theme_manager
 
 from ..application import DOWNLOAD_SIZE, SputterService
+from .fringe_flow import FRINGES_KEY, FringeFlowMixin
 from .geometry import INSPECT_KEY, SputterGeometryMixin
 from .literature_tab import LiteratureTab
 from .predict_flow import PREDICT_KEY, SputterPredictMixin
@@ -40,8 +42,8 @@ ENVIRONMENT_MISSING = ("Model: bundled with GIMaP · Python: {python} · PyTorch
 ENVIRONMENT_UNKNOWN = "Model: bundled with GIMaP · Python: {python} · PyTorch is checked when you press Predict"
 
 
-class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin, WindowMenuMixin, QWidget,
-                  SputterPageView):
+class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin, FringeFlowMixin, WindowMenuMixin,
+                  QWidget, SputterPageView):
     eventReceived = pyqtSignal(object)
 
     def __init__(self, service: SputterService, *, task_runner: Optional[TaskRunner] = None, preferences=None,
@@ -52,6 +54,7 @@ class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin
         self.tasks = task_runner or TaskRunner(self)
         self.preferences = preferences
         self.result = None
+        self._init_fringes()
         self.scan_info = None
         self.sources: dict = {}
         self._edited: set = set()
@@ -148,6 +151,8 @@ class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin
 
     def dispose(self) -> None:
         SputterPredictMixin.dispose(self)
+        self._stop_fringes()
+        self.tasks.cancel(FRINGES_KEY)
         self.tasks.cancel(INSPECT_KEY)
         try:
             theme_manager().changed.disconnect(self._theme_changed)

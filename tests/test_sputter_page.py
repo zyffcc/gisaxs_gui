@@ -776,9 +776,14 @@ def test_every_text_of_the_page_is_in_the_chinese_table():
     from src.gimap.features.sputter.presentation.sketch_view import CU_NOTE
     from src.gimap.features.sputter.presentation.texts import TOOLKIT_TEMPLATES
     from src.gimap.features.sputter.presentation.trend_plot import TEMPLATES as TREND_TEMPLATES
+    from src.gimap.features.sputter.application import FRINGE_TEMPLATES
+    from src.gimap.features.sputter.presentation.fringe_flow import TEMPLATES as FRINGE_FLOW_TEMPLATES
+    from src.gimap.features.sputter.presentation.fringe_panel import TEMPLATES as FRINGE_PANEL_TEMPLATES
+    from src.gimap.features.sputter.presentation.results_panel import FRINGE_COLUMNS
 
     held = (READ_COMMON, READ_ERROR_BARS, READ_POINTS, *PHYSICAL_TEMPLATES, OTHER_SCAN, WAITING_FOR_HEADER, D_OUTSIDE,
-            CU_NOTE,
+            CU_NOTE, *FRINGE_TEMPLATES, *FRINGE_FLOW_TEMPLATES, *FRINGE_PANEL_TEMPLATES,
+            *(label for _key, label in FRINGE_COLUMNS),
             *D_CHECKS.values(), *LIT_STATUS.values(), *CHOICES.values(), *GRADES.values(), *LITERATURE_TEMPLATES,
             *TAB_TEMPLATES, *TOOLKIT_TEMPLATES, *TREND_TEMPLATES, "Literature",
             "percolation {time} s (literature method)", "film onset {time} s")  # translated from a name

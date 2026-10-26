@@ -1,5 +1,7 @@
 """Pure description of a sputter size/structure series, its reliability and a real-space sketch."""
 
+from .fringes import (FRINGE_FOLDER, HEIGHTS_FILE, STATUS_NAMES as FRINGE_STATUS_NAMES, SUMMARY_FILE,
+                      TEMPLATES as FRINGE_TEMPLATES, FringeGroup, FringeHeights, fringe_paragraph, parse_heights)
 from .literature import (LITERATURE_GRADE, TEMPLATES as LITERATURE_TEMPLATES, VERDICT_COLOURS, VERDICT_MARKS,
                          checks_html, literature_available, literature_rows, onset_of, percolation,
                          percolation_errors, percolation_last_time, percolation_sentence, percolation_short)
@@ -11,7 +13,9 @@ from .structure import GRADES, Series, StructureResult, english, flag, is_film, 
 from .windows import (FRAMES_MISSING, NO_MEMBERS, NO_SCAN, NO_WINDOWS, SCAN_MISSING, UNKNOWN_WINDOW, WINDOW_TEMPLATES,
                       SputterGeometry, WindowFrames, geometry_of, window_frames)
 
-__all__ = ["FRAMES_MISSING", "NO_MEMBERS", "NO_SCAN", "NO_WINDOWS", "SCAN_MISSING", "SputterGeometry", "UNKNOWN_WINDOW",
+__all__ = ["FRINGE_FOLDER", "FRINGE_STATUS_NAMES", "FRINGE_TEMPLATES", "FringeGroup", "FringeHeights", "HEIGHTS_FILE",
+           "SUMMARY_FILE", "fringe_paragraph", "parse_heights",
+           "FRAMES_MISSING", "NO_MEMBERS", "NO_SCAN", "NO_WINDOWS", "SCAN_MISSING", "SputterGeometry", "UNKNOWN_WINDOW",
            "WINDOW_TEMPLATES", "WindowFrames", "geometry_of", "window_frames",
            "FILM_NOT_DETERMINED", "GRADES", "LITERATURE_GRADE", "LITERATURE_TEMPLATES", "PHYSICAL_TEMPLATES", "Particle",
            "SKETCH_TEMPLATES", "beam_off_count", "beam_off_record", "modulation_period",

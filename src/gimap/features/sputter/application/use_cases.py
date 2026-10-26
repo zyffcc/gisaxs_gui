@@ -184,10 +184,13 @@ class WindowReader(Protocol):
 
 class SputterService:
     def __init__(self, runner: ToolkitRunner, reader: ResultReader, installer: EnvironmentInstaller,
-                 inspector: ScanInspector, results_root: Callable[[], Path], windows: Optional[WindowReader] = None):
+                 inspector: ScanInspector, results_root: Callable[[], Path], windows: Optional[WindowReader] = None,
+                 fringes=None):
         self.runner, self.reader, self.installer, self.inspector = runner, reader, installer, inspector
         self.results_root = results_root
         self.windows = windows
+        self.fringes = fringes
+        """``FringeService`` (island height from the q_z fringes), None without it."""
 
     # -- reading --------------------------------------------------------------------------------------
     def open(self, folder: Path, variant: Optional[str] = None) -> StructureResult:

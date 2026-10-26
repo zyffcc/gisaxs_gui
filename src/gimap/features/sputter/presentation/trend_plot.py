@@ -1,4 +1,5 @@
-"""Size Trend tab: R, D (and the TS length L) over time, and the metal thickness.
+"""Size Trend tab: R, D (and the TS length L) over time, the island height H from the q_z fringes, and the metal
+thickness.
 
 The physical path (the network) draws every window's network value as a faint point and the smoothed trend as a
 line, so a single window's jump is visible but does not pull the eye. The other explanations draw each value
@@ -13,6 +14,9 @@ deposition t_end is given (the shutter is closed by hand; a scan can go on after
 rate·(t_end − t0) after it (a plateau) and t_end is marked on the thickness panel — when it falls within the
 windows; an end after the last window (or before the first) is only named in the legend, and the time axis keeps to
 the windows.
+
+The island height H from the q_z fringes (``fringe_panel.py``) has a panel of its own after D whenever it is
+measured, in the simple view too.
 
 The literature explanation draws R and D of the literature method the same way (grade Lit: R from the nominal
 thickness δ and 2π/q* by mass balance); its thickness panel shows δ only (the islands hold it by construction), the
@@ -34,6 +38,7 @@ from src.gimap.app.presentation.i18n import tr
 from ..application import (FILM_NOT_DETERMINED, GRADES, LITERATURE_GRADE, StructureResult, beam_off_record,
                            deposition_end, film_onset_established, onset_of, percolation_errors,
                            percolation_last_time)
+from .fringe_panel import H_TITLE, draw_heights, has_heights
 from .texts import text
 
 COLORS = {"A": "#1f5fa8", "B": "#7fa3d6", "C": "#d07a10", "S": "#2a8a3e", "T": "#c0392b", "L": "#6a3d9a",
@@ -91,9 +96,10 @@ class TrendPlot:
         # The page redraws on a theme switch (``SputterPage._theme_changed``): a connection of its own, which Qt
         # removes with the page (``theme_figure``'s connection to the canvas crashed when the page was deleted).
 
-    def draw(self, result, *, log_scale: bool, detailed: bool = True) -> None:
+    def draw(self, result, *, log_scale: bool, detailed: bool = True, fringes=None) -> None:
         """``detailed`` False: R and D of the explanation, their trends and the onset only (the result to use);
-        True: also the thickness and TS-length panels, the direct 2π/q* with its checks and the flagged windows."""
+        True: also the thickness and TS-length panels, the direct 2π/q* with its checks and the flagged windows.
+        ``fringes``: the island height H from the q_z fringes, a panel of its own in both views when it is measured."""
         if self.canvas is None:
             return
         from src.gimap.app.presentation.theme.figures import restyle_figure
@@ -102,16 +108,18 @@ class TrendPlot:
         fig = self.figure
         fig.clear()
         if result is not None and result.rows:
-            self._panels(fig, result, log_scale, detailed)
+            self._panels(fig, result, log_scale, detailed, fringes)
         restyle_figure(fig)
         cjk_fallback(fig)  # Chinese labels in a font that has them
         self.canvas.draw_idle()
 
     # -- panels -----------------------------------------------------------------------------------------
-    def _panels(self, fig, result: StructureResult, log_scale: bool, detailed: bool = True) -> None:
+    def _panels(self, fig, result: StructureResult, log_scale: bool, detailed: bool = True, fringes=None) -> None:
         physical = result.variant in SMOOTHED
         panels = [("R", "R (nm)", tr("R, equivalent hemisphere radius")),
                   ("D", "D (nm)", tr("D, centre-to-centre spacing (peak windows)"))]
+        if has_heights(fringes):
+            panels.append(("H", "H (nm)", tr(H_TITLE)))
         if detailed and result.ts_length().time:
             panels.append(("L", "L (nm)", tr("TS length L (film windows)")))
         if detailed and (physical or result.has("t_eq_nm") or result.has("nominal_thickness_nm")):
@@ -133,6 +141,8 @@ class TrendPlot:
                 if ts.time:
                     ax.plot(ts.time, ts.value, "o", ms=2.5, color="#5a8a2a", label=tr("TS length L (network)"))
                 _beam_off_points(ax, result.column("L_TS_nm", where=_beam_off), off_label)
+            elif name == "H":
+                draw_heights(ax, fringes, result)
             elif name == "thickness" and result.variant == "literature":
                 self._delta_only(ax, result, spans)
             elif name == "thickness":
@@ -150,7 +160,7 @@ class TrendPlot:
             if onset is not None:
                 ax.axvline(onset, color=ONSET_COLOR, lw=1, ls=":",
                            label=text(onset_label, time=f"{onset:.1f}") if first else None)
-            if log_scale and _positive(ax):
+            if log_scale and name != "H" and _positive(ax):  # H keeps a linear axis (δ starts at 0)
                 ax.set_yscale("log")
                 _plain_ticks(ax)
             ax.set_ylabel(label)
