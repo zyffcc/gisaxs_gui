@@ -22,7 +22,7 @@ import warnings
 from typing import Optional
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QLabel, QSizePolicy, QSplitter, QTextBrowser, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QCheckBox, QLabel, QSizePolicy, QSplitter, QTextBrowser, QVBoxLayout, QWidget
 
 from src.gimap.app.presentation.i18n import tr
 
@@ -104,6 +104,12 @@ class LiteratureTab(QWidget):
         self.message.setWordWrap(True)
         self.message.setTextFormat(Qt.RichText)
         layout.addWidget(self.message)
+        self.details = QCheckBox("Show details (network, published curves, coverage, mass balance)", self)
+        self.details.setToolTip("Off: the literature method's D and 2R/D against δ with the published percolation "
+                                "band. On: also the network's values, the published D(δ) curves, the coverage and the "
+                                "network's mass balance.")
+        self.details.toggled.connect(lambda _on: self.redraw())
+        layout.addWidget(self.details)
         self.splitter = QSplitter(Qt.Vertical, self)
         self.canvas = self.figure = None
         try:
@@ -186,26 +192,33 @@ class LiteratureTab(QWidget):
             warnings.filterwarnings("ignore", message="Attempt to set non-positive xlim")
             fig.clear()
         if result is not None:
-            axes = fig.subplots(2, 2, sharex=True)
-            panels = (self._spacing, self._ratio, self._coverage, self._mass)
+            detailed = self.details.isChecked()
+            if detailed:
+                axes = fig.subplots(2, 2, sharex=True)
+                panels = (self._spacing, self._ratio, self._coverage, self._mass)
+                bottom = axes[1]
+            else:  # the method's D and 2R/D against the published band: the comparison to read first
+                axes = fig.subplots(1, 2, sharex=True)
+                panels = (self._spacing, self._ratio)
+                bottom = axes
             for ax, panel in zip(axes.ravel(), panels):
                 ax.set_xscale("log")
-                panel(ax, result.rows, lit)
-                self._marks(ax, result, lit, first=panel is self._spacing)
+                panel(ax, result.rows, lit, detailed=detailed)
+                self._marks(ax, result, lit, first=panel is self._spacing, detailed=detailed)
                 ax.grid(alpha=.25)
                 legend = ax.legend(fontsize=6.5, loc="best")
                 if legend is not None:
                     legend.get_frame().set_alpha(.7)
             for ax in axes.ravel():
                 _plain(ax)
-            for ax in axes[1]:
+            for ax in bottom:
                 ax.set_xlabel(tr("δ, nominal thickness (nm)"))
         restyle_figure(fig)
         cjk_fallback(fig)
         self.canvas.draw_idle()
 
     @staticmethod
-    def _spacing(ax, rows: list, lit: dict) -> None:
+    def _spacing(ax, rows: list, lit: dict, detailed: bool = True) -> None:
         after = lambda r: r.get("lit_status") == "after_percolation"  # noqa: E731
         x, y = _points(rows, "D_lit_nm", when=lambda r: not after(r))
         ax.plot(x, y, "o", ms=2.6, alpha=.35, color=LIT_COLOUR, lw=0, label=tr("D = 2π/q* (literature method)"))
@@ -214,6 +227,11 @@ class LiteratureTab(QWidget):
             ax.plot(x, y, "x", ms=3, color=LIT_COLOUR, alpha=.6, lw=0, label=tr("2π/q* after the percolation"))
         x, y = _points(rows, "D_lit_trend_nm")
         ax.plot(x, y, "-", lw=1.6, color=LIT_COLOUR, label=tr("trend of D (non-decreasing)"))
+        ax.set_yscale("log")
+        ax.set_ylabel("D (nm)")
+        ax.set_title(tr("Spacing D against δ"), fontsize=8, loc="left")
+        if not detailed:
+            return
         x, y = _points(rows, "D_corr_nm",
                        when=lambda r: r.get("lit_status") in ("host_peak", "outlier", "late_peak", "beam_off"))
         if x:
@@ -228,12 +246,9 @@ class LiteratureTab(QWidget):
                 cx, cy = zip(*points)
                 ax.plot(cx, cy, "s--", ms=3, lw=1, color=colour,
                         label=f"{curve.get('ref', '')} {curve.get('label', '')}".strip())
-        ax.set_yscale("log")
-        ax.set_ylabel("D (nm)")
-        ax.set_title(tr("Spacing D against δ"), fontsize=8, loc="left")
 
     @staticmethod
-    def _ratio(ax, rows: list, lit: dict) -> None:
+    def _ratio(ax, rows: list, lit: dict, detailed: bool = True) -> None:
         for band in lit.get("two_R_over_D_bands") or []:
             low, high = (band.get("range") or [None, None])[:2]
             if band.get("kind") == "mass balance" and low is not None and high is not None and high > low \
@@ -246,13 +261,14 @@ class LiteratureTab(QWidget):
         ax.plot(x, y, "o", ms=2.6, alpha=.35, color=LIT_COLOUR, lw=0, label=tr("literature method"))
         x, y = _points(rows, "two_R_over_D_lit_trend")
         ax.plot(x, y, "-", lw=1.6, color=LIT_COLOUR, label=tr("literature method, trend"))
-        x, y = _points(rows, "two_R_over_D_net")
-        ax.plot(x, y, "o", ms=2.4, alpha=.4, color=NET_COLOUR, lw=0, label=tr("network"))
+        if detailed:
+            x, y = _points(rows, "two_R_over_D_net")
+            ax.plot(x, y, "o", ms=2.4, alpha=.4, color=NET_COLOUR, lw=0, label=tr("network"))
         ax.set_ylabel("2R/D")
         ax.set_title(tr("2R/D against δ"), fontsize=8, loc="left")
 
     @staticmethod
-    def _coverage(ax, rows: list, lit: dict) -> None:
+    def _coverage(ax, rows: list, lit: dict, detailed: bool = True) -> None:
         at = (lit.get("coverage_at_percolation") or {}).get("range") or []
         if len(at) == 2:
             ax.axhspan(at[0], at[1], color=BAND_COLOUR, alpha=.1, lw=0,
@@ -275,7 +291,7 @@ class LiteratureTab(QWidget):
         ax.set_title(tr("Coverage against δ"), fontsize=8, loc="left")
 
     @staticmethod
-    def _mass(ax, rows: list, lit: dict) -> None:
+    def _mass(ax, rows: list, lit: dict, detailed: bool = True) -> None:
         ax.axhline(1.0, color=LIT_COLOUR, lw=1.2, label=tr("literature method: 1 by construction"))
         threshold = _num(lit.get("eta_warning"))
         if threshold is not None:
@@ -288,7 +304,7 @@ class LiteratureTab(QWidget):
         ax.set_title(tr("Share of the nominal metal in the network's islands"), fontsize=8, loc="left")
 
     @staticmethod
-    def _marks(ax, result: StructureResult, lit: dict, *, first: bool) -> None:
+    def _marks(ax, result: StructureResult, lit: dict, *, first: bool, detailed: bool = True) -> None:
         band = lit.get("band") or {}
         low, high = _num(band.get("low_nm")), _num(band.get("high_nm"))
         if low is not None and high is not None:
@@ -309,7 +325,7 @@ class LiteratureTab(QWidget):
             ax.axvline(at, color=PERC_COLOUR, lw=1, ls="--",
                        label=text("percolation (literature method) δ = {delta} nm", delta=_fmt(at)) if first else None)
         rate, t0, t_end = _num(lit.get("rate_nm_s")), _num(lit.get("t0_s")) or 0.0, _num(lit.get("t_end_s"))
-        onset, _interval = film_onset(result.summary)
+        onset, _interval = film_onset(result.summary) if detailed else (None, None)  # the network's own onset
         if rate and onset is not None and onset > t0:
             delta = rate * ((onset if t_end is None else min(onset, t_end)) - t0)  # δ stays after the deposition
             ax.axvline(delta, color=ONSET_COLOUR, lw=1, ls=":",

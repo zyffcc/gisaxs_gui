@@ -120,6 +120,7 @@ class SputterResultsMixin:
         self.open_button.clicked.connect(self._choose_results)
         self.choice_box.currentIndexChanged.connect(self._choice_changed)
         self.log_scale.toggled.connect(lambda _on: self._draw_trend())
+        self.trend_details.toggled.connect(lambda _on: self._draw_trend())
 
     def _choose_results(self) -> None:
         start = str(self.result.folder) if self.result is not None else str(self.service.results_root())
@@ -201,7 +202,7 @@ class SputterResultsMixin:
         self.literature.set_result(result)
 
     def _draw_trend(self) -> None:
-        self.trend.draw(self.result, log_scale=self.log_scale.isChecked())
+        self.trend.draw(self.result, log_scale=self.log_scale.isChecked(), detailed=self.trend_details.isChecked())
 
     def _show_result_line(self) -> None:
         result = self.result
