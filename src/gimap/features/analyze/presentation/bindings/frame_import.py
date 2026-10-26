@@ -1,4 +1,7 @@
-"""Responsive metadata import and the uniform, virtual frame list in Data."""
+"""Responsive metadata import and the uniform, virtual frame list in Data.
+
+``show_summed``: frames of another workspace (Sputter ▸ Show in Analyze: the raw frames of one time window) replace
+the frames listed and are shown as one sum, Sum = their number."""
 from pathlib import Path
 from threading import Event
 from PyQt5.QtCore import QObject, QSignalBlocker, Qt, pyqtSignal
@@ -13,6 +16,13 @@ from ..frame_selection import FrameSelection
 from ..source_texts import row_tooltip
 from ..texts import message_text
 from .file_list import DELETE_KEYS
+
+SUMMED_LOCKED = {
+    "automatic": "The automatic analysis works on the frame in Analyze: stop it first.",
+    "batch": "A batch (Batch Export or a Series map) is running in Analyze: wait until it is done.",
+    "watch": "Analyze is watching a folder: stop watching first.",
+}
+"""Why the frames listed cannot be replaced by another workspace's now (``summed_locked``)."""
 
 
 class _ImportSignals(QObject):
@@ -164,6 +174,63 @@ class FrameImportMixin:
             on_done=lambda sources: self._frame_import_ready(sources, paths, interactive, selections, cancelled, on_imported),
             on_error=lambda message, _details: self._frame_import_failed(message, cancelled))
         return True
+
+    def summed_locked(self):
+        """Why the frames listed cannot be replaced by frames of another workspace now (``show_summed``), in the
+        interface language; "" when they can."""
+        if getattr(self, "_automatic_busy", False):
+            return tr(SUMMED_LOCKED["automatic"])
+        if self.batch_running():
+            return tr(SUMMED_LOCKED["batch"])
+        if self.view_model.watch.active:
+            return tr(SUMMED_LOCKED["watch"])
+        return ""
+
+    def show_summed(self, paths, *, incidence_deg=None, beam_center=None, profile_name=None, on_imported=None):
+        """Frames of another workspace as one sum (Sputter ▸ Show in Analyze): the frames listed are replaced by
+        ``paths`` (single-frame files, in their order), Sum is set to their number and the first is shown, so the
+        image and the curves are those of the sum of all of them. ``incidence_deg``: αi as if typed (marked as set
+        by you); ``beam_center``: ``(x, y)`` in GIMaP pixel coordinates for this session; ``profile_name``: the
+        instrument profile chosen — each ``None``: as it is. ``on_imported`` is called once the frames are listed
+        (before they are read). ``False``: nothing given, or refused (``summed_locked`` says why, as the status
+        line does)."""
+        paths = [str(path) for path in paths]
+        locked = self.summed_locked()
+        if locked:
+            self._status(locked, "warning")
+        if not paths or locked:
+            return False
+        self.clear_files()
+        count = len(paths)
+
+        def listed():
+            self._set_summed(count, incidence_deg, beam_center, profile_name)
+            if on_imported is not None:
+                on_imported()
+
+        return self.import_paths(paths, interactive=False, on_imported=listed)
+
+    def _set_summed(self, count, incidence_deg, beam_center, profile_name):
+        """Sum, αi, beam centre and profile of ``show_summed``, before the first frame is read (one analysis)."""
+        with QSignalBlocker(self.sum_spin):
+            self.sum_spin.setValue(int(count))
+        self.view_model.set_sum_count(int(count))
+        if incidence_deg is not None:
+            with QSignalBlocker(self.incidence_spin):
+                self.incidence_spin.setValue(float(incidence_deg))
+            self.view_model.set_incidence(float(incidence_deg))
+            self._incidence_notice_pending = False
+            self._show_incidence_state()
+        if beam_center is not None:
+            self.view_model.set_beam_center(*beam_center, shape=None)
+        if profile_name is not None:
+            self._refresh_profiles()
+            index = self.profile_combo.findData(profile_name)
+            if index >= 0:
+                with QSignalBlocker(self.profile_combo):
+                    self.profile_combo.setCurrentIndex(index)
+                self.view_model.set_profile(profile_name)
+        self._remember()
 
     def _frame_import_progress(self, cancelled, n, total, name):
         if self._importing and cancelled is self._import_cancelled and not cancelled.is_set():

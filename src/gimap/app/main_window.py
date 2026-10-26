@@ -148,6 +148,7 @@ class MainWindowComponents(HandoverMixin):
         from src.gimap.features.sputter.presentation.page import SputterPage
 
         page = SputterPage(create_sputter_service(), task_runner=self.task_runner, preferences=self.preferences)
+        page.set_analyze_target(self._show_sputter_window)  # Show in Analyze: a window's frames, summed
         self.ui.mainWindowWidget.addWidget(page)
         self.ui.sputterPage = page
         return page

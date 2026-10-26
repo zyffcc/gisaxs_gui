@@ -6,13 +6,17 @@
   的替代量，以及它们的可靠性
 - **Related code**: [`src/gimap/features/sputter/`](../../../src/gimap/features/sputter/)（说明见其 `README.md`）、
   `app/main_window.py`（`_create_sputter_page`、`running_jobs`、`_language_pages`、`shutdown`）、
-  `app/presentation/i18n/zh_sputter.py`、`zh_sputter_report.py`、`zh_sputter_literature.py`、`zh_sputter_toolkit.py`；
+  `app/sputter_handover.py`（在分析中查看，经 `HandoverMixin`）、
+  `app/presentation/i18n/zh_sputter.py`、`zh_sputter_report.py`、`zh_sputter_literature.py`、`zh_sputter_toolkit.py`、
+  `zh_sputter_handover.py`；
   模型 `utils/sputter_toolkit/`（GUI 只按路径以子进程调用；文献方法在 `sputtergisaxs/sputter_literature.py`，已发表数值在
   `configs/literature_reference_v1.json`）
 - **Related tests**: [`tests/test_sputter_feature.py`](../../../tests/test_sputter_feature.py)、
   [`tests/test_sputter_page.py`](../../../tests/test_sputter_page.py)（假的安装器、模型与文件头读取：
   [`tests/sputter_fixtures.py`](../../../tests/sputter_fixtures.py)）、
-  [`tests/test_sputter_toolkit_bundle.py`](../../../tests/test_sputter_toolkit_bundle.py)（工具包，含文献方法）
+  [`tests/test_sputter_toolkit_bundle.py`](../../../tests/test_sputter_toolkit_bundle.py)（工具包，含文献方法）、
+  [`tests/test_sputter_show_in_analyze.py`](../../../tests/test_sputter_show_in_analyze.py)（在分析中查看：读时间窗、菜单、
+  交接；真实分析页上用编造的 TIFF 帧核对求和）
 - **Last verified**: 2026-10-23（离线测试；编造的扫描名与数值；文献方法另在本机真实结果的副本上核对过，数值不进仓库）
 
 ## 调用链
@@ -60,6 +64,18 @@
    可靠性报告（领域层按英文模板写，界面用 `texts.text` 翻译；工具包自己的句子用 `texts.note_text` 按
    `toolkit_texts.TOOLKIT_TEMPLATES` 匹配后翻译）、结构示意（膜时间窗画连续膜，不画颗粒；`beam_off_sample` 的时间窗
    按自己的数值画并加说明，`smoothed_rows` 的中位数和 `storyboard_indices` 不用它们）。
+6. **在分析中查看**（`presentation/window_menu.py`）：时间窗表一行（`customContextMenuRequested`，表格原有的复制行／复制表格
+   留在同一菜单）、结构示意（`SketchView.windowMenuRequested`：显示的时间窗）、尺寸趋势（画布的右键位置经
+   `mouseEventCoords` 换成时间，取时间上最近的时间窗）的右键菜单 → `show_window_in_analyze(frame)` →
+   `SputterService.window` → `BinnedWindowReader`（`infrastructure/windows.py`：在 `binned/chunk_NNNNN.json` 里按 `frame`
+   找到这一行，`raw_members` 只接受纯文件名，帧在 `gimap_request.json` 的 `scan_folder` 里；`intake/geometry.json` 的
+   `db_col/db_row` 是模型自己估计的光束中心，+0.5 px 换成 GIMaP 坐标，只写进通知；问题用 `domain/windows.py` 的模板，
+   在溅射页上说）→ 组合根注入的 `set_analyze_target` = `SputterHandoverMixin._show_sputter_window`
+   （`app/sputter_handover.py`）：`AnalyzePage.summed_locked()`（自动分析、批处理、监视文件夹时拒绝，通知说明原因）→
+   `matching_profile`（距离 ±0.5 mm、波长 ±0.1%，同探测器优先；不新建配置）→ `AnalyzePage.show_summed`
+   （`analyze/presentation/bindings/frame_import.py`：清空列表 → 非交互导入 → 列出后设求和 N = 帧数、αi、给出时的光束中心
+   （对所有形状）、配置，再显示第一帧：一次分析就是全部帧之和）→ 通知（时间窗、求和帧数、几何、是否替换了原先的帧；没有配置时
+   一直显示，写出应输入的距离和波长）。
 
 ## 文献方法（`domain/literature.py`、`presentation/literature_tab.py`）
 

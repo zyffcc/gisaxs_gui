@@ -18,11 +18,11 @@ from src.gimap.app.presentation.i18n import tr, trf
 
 from ..application import (HINT_TEXT, INSTALL_MESSAGES, INSTALL_STAGES, NO_FRAMES, NO_TABLE, PROBLEMS,
                            SKETCH_TEMPLATES, SOURCE_TEXT, STOPPED, SUMMARY_HINT, TOOLKIT_FAILED, TOOLKIT_MISSING,
-                           InstallProgress, Source)
+                           WINDOW_TEMPLATES, InstallProgress, Source)
 from .toolkit_texts import TOOLKIT_TEMPLATES
 
 TEMPLATES = (*INSTALL_MESSAGES.values(), TOOLKIT_MISSING, TOOLKIT_FAILED, STOPPED, NO_FRAMES, NO_TABLE,
-             *SKETCH_TEMPLATES, *PROBLEMS)
+             *SKETCH_TEMPLATES, *WINDOW_TEMPLATES, *PROBLEMS)
 LABEL_TEMPLATES = (*SOURCE_TEXT.values(), *HINT_TEXT.values(), *SUMMARY_HINT.values())
 """Where a value comes from and what the files say about the energy (shown beside the fields)."""
 STAGE_NAMES = {

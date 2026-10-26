@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Protocol
 
-from ..domain import StructureResult
+from ..domain import NO_WINDOWS, StructureResult, WindowFrames
 from .environment import EnvironmentInstaller, EnvironmentStatus, InstallError, install_message
 from .scan import ScanInfo
 
@@ -175,11 +175,19 @@ class ScanInspector(Protocol):
     def inspect(self, folder: Path) -> ScanInfo: ...
 
 
+class WindowReader(Protocol):
+    def read(self, folder: Path, window: str) -> WindowFrames:
+        """The raw frames of window ``window`` of the result in ``folder`` and the result's geometry; raises
+        ``OSError`` / ``ValueError`` with a message of ``WINDOW_TEMPLATES``."""
+        ...
+
+
 class SputterService:
     def __init__(self, runner: ToolkitRunner, reader: ResultReader, installer: EnvironmentInstaller,
-                 inspector: ScanInspector, results_root: Callable[[], Path]):
+                 inspector: ScanInspector, results_root: Callable[[], Path], windows: Optional[WindowReader] = None):
         self.runner, self.reader, self.installer, self.inspector = runner, reader, installer, inspector
         self.results_root = results_root
+        self.windows = windows
 
     # -- reading --------------------------------------------------------------------------------------
     def open(self, folder: Path, variant: Optional[str] = None) -> StructureResult:
@@ -196,6 +204,13 @@ class SputterService:
 
     def variants(self, folder: Path) -> list[str]:
         return self.reader.available(Path(folder))
+
+    def window(self, folder: Path, window: str) -> WindowFrames:
+        """The raw frames one time window of a result summed, in order, and the geometry the result was made with
+        (Show in Analyze)."""
+        if self.windows is None:
+            raise FileNotFoundError(NO_WINDOWS.format(folder=folder))
+        return self.windows.read(Path(folder), str(window))
 
     def inspect(self, folder: Path) -> ScanInfo:
         return self.inspector.inspect(Path(folder))
@@ -271,5 +286,5 @@ class SputterService:
 
 __all__ = ["AnalyzeRequest", "METALS", "NO_TABLE", "PROBLEMS", "PredictStep", "ResultReader", "STEP_ANALYZE", "STEP_ANALYZE_ONLY",
            "STEP_CHECK", "STOPPED", "ScanInspector", "SputterService", "Stopped", "TOOLKIT_FAILED", "TOOLKIT_MISSING",
-           "ToolkitFailed", "ToolkitMissing", "ToolkitRunner", "VARIANTS", "deposition_end_ok", "results_folder",
-           "scan_label"]
+           "ToolkitFailed", "ToolkitMissing", "ToolkitRunner", "VARIANTS", "WindowReader", "deposition_end_ok",
+           "results_folder", "scan_label"]

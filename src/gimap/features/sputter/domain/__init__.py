@@ -8,8 +8,12 @@ from .physical import (FILM_NOT_DETERMINED, TEMPLATES as PHYSICAL_TEMPLATES, bea
 from .sketch import (TEMPLATES as SKETCH_TEMPLATES, Particle, Sketcher, WindowSketch, series_extent, smoothed_rows,
                      storyboard_indices, window_sketch)
 from .structure import GRADES, Series, StructureResult, english, flag, is_film, number, parse_row, reliability_report
+from .windows import (FRAMES_MISSING, NO_MEMBERS, NO_SCAN, NO_WINDOWS, SCAN_MISSING, UNKNOWN_WINDOW, WINDOW_TEMPLATES,
+                      SputterGeometry, WindowFrames, geometry_of, window_frames)
 
-__all__ = ["FILM_NOT_DETERMINED", "GRADES", "LITERATURE_GRADE", "LITERATURE_TEMPLATES", "PHYSICAL_TEMPLATES", "Particle",
+__all__ = ["FRAMES_MISSING", "NO_MEMBERS", "NO_SCAN", "NO_WINDOWS", "SCAN_MISSING", "SputterGeometry", "UNKNOWN_WINDOW",
+           "WINDOW_TEMPLATES", "WindowFrames", "geometry_of", "window_frames",
+           "FILM_NOT_DETERMINED", "GRADES", "LITERATURE_GRADE", "LITERATURE_TEMPLATES", "PHYSICAL_TEMPLATES", "Particle",
            "SKETCH_TEMPLATES", "beam_off_count", "beam_off_record", "modulation_period",
            "Series", "Sketcher", "StructureResult", "VERDICT_COLOURS", "VERDICT_MARKS", "WindowSketch", "checks_html",
            "deposition_end", "english", "film_onset", "film_onset_established", "flag", "is_film", "literature_available", "literature_rows",

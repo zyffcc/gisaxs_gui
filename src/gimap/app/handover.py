@@ -8,6 +8,7 @@
 * Analyze ▸ Send Series to Fitting — the folder of curves a batch wrote, listed in Fitting ▸ In-situ series.
 * Analyze ▸ Series ▸ Send to Compare — the map joins the comparison, and Compare is shown.
 * The Start page's series entry — the frames open in Analyze with its Series tab in view.
+* Sputter ▸ Show in Analyze — the raw frames of one time window, summed, in Analyze (``sputter_handover.py``).
 
 What Fitting says about a curve that is no GISAXS cut is Fitting's own (``FittingWorkspace``); which curves
 of a folder are one series is Compare's.
@@ -22,6 +23,7 @@ from PyQt5.QtGui import QDesktopServices
 
 from .presentation.components import dismiss_toasts, show_toast, visible_toasts
 from .presentation.i18n import tr, trf
+from .sputter_handover import SputterHandoverMixin
 
 SERIES_TASKS = {"series": "open_folder", "series_folder": "open_folder", "series_files": "open_files"}
 """The Start page's series entry: its card (``series``) and its two links (a folder of frames; chosen frames,
@@ -39,7 +41,7 @@ def short_folder(folder) -> str:
     return str(folder) if len(parts) <= 3 else str(Path("…", *parts[-2:]))
 
 
-class HandoverMixin:
+class HandoverMixin(SputterHandoverMixin):
     """Needs the composed window: ``ui``, ``analyze_page``, ``compare_page``, ``fitting_workspace``,
     ``show_page``, ``current_page_key`` and ``_page_requested``."""
 

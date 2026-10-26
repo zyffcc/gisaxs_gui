@@ -8,6 +8,9 @@ film — a film with particles on it is not modelled — and its thickness is no
 determined. Unreliable quantities (burial depth) are drawn only when asked and
 are marked as such. A Cu series says on the picture (and on the saved image and
 storyboard) that it was read with the Ag model. Texts are in the interface language.
+A right click on the picture, the time slider or the description asks for the
+window shown (``windowMenuRequested``: its row of the result, the place on the
+screen); the page offers Show in Analyze there.
 """
 
 from __future__ import annotations
@@ -15,7 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QPoint, Qt, pyqtSignal
 from PyQt5.QtWidgets import (QCheckBox, QFileDialog, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QSlider,
                              QVBoxLayout, QWidget)
 
@@ -150,6 +153,9 @@ def draw_window(ax_side, ax_top, s, width: float, height: float, metal: str, *, 
 
 
 class SketchView(QWidget):
+    windowMenuRequested = pyqtSignal(int, QPoint)
+    """A right click on the window shown: its row of ``result.rows`` and the global position of the click."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.result: Optional[StructureResult] = None
@@ -193,6 +199,11 @@ class SketchView(QWidget):
         self.story_button.clicked.connect(self._save_storyboard)
         for b in (self.save_button, self.story_button):
             b.setEnabled(False)
+        for widget in (self.canvas, self.slider, self.info):
+            if widget is not None:
+                widget.setContextMenuPolicy(Qt.CustomContextMenu)
+                widget.customContextMenuRequested.connect(
+                    lambda position, widget=widget: self._menu_requested(widget, position))
 
     def set_result(self, result: StructureResult) -> None:
         self.result = result
@@ -221,6 +232,15 @@ class SketchView(QWidget):
         if not self.drawable:
             return None
         return self.sketches[self.drawable[self.slider.value()]]
+
+    def current_row(self) -> Optional[int]:
+        """The row of ``result.rows`` the sketch shows (None: nothing drawn)."""
+        return self.drawable[self.slider.value()] if self.drawable else None
+
+    def _menu_requested(self, widget, position) -> None:
+        row = self.current_row()
+        if row is not None:
+            self.windowMenuRequested.emit(row, widget.mapToGlobal(position))
 
     def redraw(self) -> None:
         s = self.current()

@@ -54,14 +54,20 @@ stated, window by window, for an in-situ sputter series on a polymer, and how fa
   published values the toolkit copies into the summary, the checks with verdicts and references, the caveats.
   Without a rate it says how to give one. The toolkit's sentences are translated by matching them against
   `presentation/toolkit_texts.py` (`texts.note_text`; a test keeps the copy equal to the bundled toolkit).
+- **Show in Analyze** (`presentation/window_menu.py`; right-click a Windows row, the Structure Sketch or a point of
+  Size Trend): `SputterService.window` → `BinnedWindowReader` (`infrastructure/windows.py`: the window's row of
+  `binned/chunk_NNNNN.json`, its `raw_members` in the scan folder of `gimap_request.json`, the geometry of the request,
+  the model's own beam-centre estimate of `intake/geometry.json`; problems from `domain/windows.py`) → the target the
+  composition root sets (`app/sputter_handover.py`), which shows the frames summed in Analyze.
 - Film windows: the thickness is not determined (the model's estimate equals its prior); the sketch draws a
   continuous film without particles. Cu is read with the Ag model and labelled “for reference only”.
 
-Layers: `domain` (rows, series, reliability report from translatable templates, literature method, sketch), `application`
-(`SputterService`, `AnalyzeRequest`, progress, environment and scan ports), `infrastructure` (`BundledToolkit`,
-`PipInstaller` + `pip_output`, `process`, `CbfHeaderInspector`, `StructureFolderReader`), `presentation`
-(`SputterPage` = `views/sputter_page_view.py` + `geometry.py`, `predict_flow.py`, `results_panel.py`,
-`trend_plot.py`, `literature_tab.py`, `sketch_view.py`, `texts.py`, `toolkit_texts.py`, `preset_dialog.py`),
-`bootstrap.py`. Chinese texts: `app/presentation/i18n/zh_sputter.py`, `zh_sputter_report.py`,
-`zh_sputter_literature.py`, `zh_sputter_toolkit.py`. Tests: `tests/test_sputter_feature.py`,
-`tests/test_sputter_page.py` (fakes in `tests/sputter_fixtures.py`). Page: `docs/ui/workspaces/sputter.md`.
+Layers: `domain` (rows, series, reliability report from translatable templates, literature method, sketch, the frames
+of a window), `application` (`SputterService`, `AnalyzeRequest`, progress, environment, scan and window ports),
+`infrastructure` (`BundledToolkit`, `PipInstaller` + `pip_output`, `process`, `CbfHeaderInspector`,
+`StructureFolderReader`, `BinnedWindowReader`), `presentation` (`SputterPage` = `views/sputter_page_view.py` +
+`geometry.py`, `predict_flow.py`, `results_panel.py`, `window_menu.py`, `trend_plot.py`, `literature_tab.py`,
+`sketch_view.py`, `texts.py`, `toolkit_texts.py`, `preset_dialog.py`), `bootstrap.py`. Chinese texts:
+`app/presentation/i18n/zh_sputter.py`, `zh_sputter_report.py`, `zh_sputter_literature.py`, `zh_sputter_toolkit.py`,
+`zh_sputter_handover.py`. Tests: `tests/test_sputter_feature.py`, `tests/test_sputter_page.py`,
+`tests/test_sputter_show_in_analyze.py` (fakes in `tests/sputter_fixtures.py`). Page: `docs/ui/workspaces/sputter.md`.

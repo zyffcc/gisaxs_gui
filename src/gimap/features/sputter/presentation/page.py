@@ -7,7 +7,8 @@ job status, the model's environment, the result line and More options. Right: Si
 and the trend lines; the metal thickness), Literature (the series against published growth over the nominal
 thickness), Structure Sketch, Windows and Reliability.
 The layout is in ``views/sputter_page_view.py``; the folder and the form in ``geometry.py``, Predict in
-``predict_flow.py``, showing a result in ``results_panel.py``.
+``predict_flow.py``, showing a result in ``results_panel.py``, Show in Analyze (a window's frames, summed) in
+``window_menu.py``.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from .sketch_view import SketchView
 from .texts import message_text, text
 from .trend_plot import TrendPlot
 from .views.sputter_page_view import SputterPageView
+from .window_menu import WindowMenuMixin
 
 ENVIRONMENT_READY = "Model: bundled with GIMaP · Python: {python} · PyTorch {version}: ready"
 ENVIRONMENT_MISSING = ("Model: bundled with GIMaP · Python: {python} · PyTorch is installed on the first Predict "
@@ -38,7 +40,8 @@ ENVIRONMENT_MISSING = ("Model: bundled with GIMaP · Python: {python} · PyTorch
 ENVIRONMENT_UNKNOWN = "Model: bundled with GIMaP · Python: {python} · PyTorch is checked when you press Predict"
 
 
-class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin, QWidget, SputterPageView):
+class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin, WindowMenuMixin, QWidget,
+                  SputterPageView):
     eventReceived = pyqtSignal(object)
 
     def __init__(self, service: SputterService, *, task_runner: Optional[TaskRunner] = None, preferences=None,
@@ -79,6 +82,7 @@ class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin
         self._connect_geometry()
         self._connect_predict()
         self._connect_results()
+        self._connect_window_menu()
         self._restore()
         self._metal_changed()
         self._show_status()

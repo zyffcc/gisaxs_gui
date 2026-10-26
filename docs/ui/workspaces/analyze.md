@@ -10,7 +10,8 @@
   `series_fit_view.py`（Series 下的批量拟合预览）。
 - 行为（mixin，`presentation/page.py` 组合）：`bindings/workspace.py`（步骤、反馈、来源与掩膜叠加、自动分析）、
   `display.py`、`beam_center.py`、`options.py`、`data_step.py`（源的说明、帧条）、`file_list.py`、`batch_watch.py`（导出、监视文件夹）、
-  `watch_series.py`（完整新帧追加到序列热图）、`frame_import.py`（后台检查源、虚拟帧列表）、
+  `watch_series.py`（完整新帧追加到序列热图）、`frame_import.py`（后台检查源、虚拟帧列表；`show_summed` / `summed_locked`：
+  溅射页“在分析中查看”把一个时间窗的帧换进列表并按全部帧求和显示，见 `docs/ui/workspaces/sputter.md`）、
   `fit_handover.py`（Send to Fitting）、`batch_export.py` / `batch_run.py`、`profile_actions.py`、`series.py`（及 `series_display.py`、
   `series_pick.py`、`series_exports.py`、`series_stages.py`、`series_fit_results.py`）。视图模型的帧与源：
   `frames_model.py`、`sources_model.py`、`frame_selection.py`、`frame_sequences.py`、`folder_watch.py`。

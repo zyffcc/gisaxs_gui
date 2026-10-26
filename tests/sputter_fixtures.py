@@ -198,6 +198,42 @@ def scan_folder(root: Path, name: str = "zz_invented_scan_00001", frames: int = 
     return folder
 
 
+WINDOW_REQUEST = dict(sdd_mm=1000.0, alpha_i_deg=0.35, metal="Ag", energy_ev=None, wavelength_nm=0.1,
+                      polymer_type="PS", beam_col=None, beam_row=None, sample_roll_deg=0.0, mask_file=None,
+                      bin_seconds=0.5, beam_centre_convention="GIMaP pixel coordinates (corners)")
+"""An invented request as GIMaP records it in ``gimap_request.json`` (beam centre estimated by the model)."""
+
+
+def windows_folder(folder: Path, scan: Path, frames: list, *, per_window=(2, 3, 3, 2), beam=None,
+                   estimated=(11.0, 21.0), request: dict | None = None) -> Path:
+    """A physical result whose binned files (two chunks, as the toolkit writes them) say which of ``frames`` (files of
+    ``scan``, in order) each window ``bin_00000k`` summed, with its ``gimap_request.json`` and the model's own beam-centre
+    estimate (``estimated``: 0-based pixel centres; None: none written). ``beam``: a beam centre given for Predict."""
+    result_folder(folder, physical=True)
+    values = dict(WINDOW_REQUEST, **(request or {}), scan_folder=str(scan))
+    if beam is not None:
+        values.update(beam_col=beam[0], beam_row=beam[1])
+    (folder / "gimap_request.json").write_text(json.dumps({"scan_folder": str(scan), "request": values}),
+                                               encoding="utf-8")
+    rows, start, period = [], 0, 0.05
+    for index, count in enumerate(per_window):
+        members = [Path(name).name for name in frames[start:start + count]]
+        rows.append(dict(frame=f"bin_{index:06d}", frame_id=index, time_s=(start + (count - 1) / 2) * period,
+                         first_time_s=start * period, last_time_s=(start + count - 1) * period,
+                         first_raw_frame=members[0], last_raw_frame=members[-1], raw_frames=count, raw_members=members))
+        start += count
+    binned = folder / "binned"
+    binned.mkdir(parents=True, exist_ok=True)
+    (binned / "chunk_00000.json").write_text(json.dumps({"rows": rows[:2]}), encoding="utf-8")
+    (binned / "chunk_00001.json").write_text(json.dumps({"rows": rows[2:]}), encoding="utf-8")
+    (binned / "chunk_00000_features.json.npz").write_bytes(b"not a table of windows")
+    if estimated is not None:
+        (folder / "intake").mkdir(exist_ok=True)
+        (folder / "intake" / "geometry.json").write_text(json.dumps({"db_col": estimated[0], "db_row": estimated[1]}),
+                                                         encoding="utf-8")
+    return folder
+
+
 def cbf_header(*, serial: str = "99-0001", stamp: str = "2030-01-02T03:04:05.678", flat: str = "FF_x99_E9000_T4500.tif",
                extra: str = "") -> str:
     return ("###CBF: VERSION 1.5\n\ndata_invented\n\n_array_data.header_convention \"PILATUS_1.2\"\n"

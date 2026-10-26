@@ -69,6 +69,11 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
   after the last window (or before the first) is named in the legend and leaves the time axis on the windows.
   Without a rate a new t0 or end is also applied and remembered. A rate that is not positive or an end not after t0
   is refused, also by **Add Refined Windows…**, and the toolkit's command line refuses them before reading frames.
+- **Show in Analyze** (right-click a row of Windows, the Structure Sketch or a point of Size Trend): the raw
+  detector frames of that time window open in Analyze in place of the frames listed there and are shown as one sum
+  (Sum = their number), with αi — and a beam centre given for Predict — as in Sputter. Distance and wavelength come
+  from an instrument profile within 0.5 mm and 0.1% of the Sputter values; without one the notice says which values
+  to enter (no profile is created).
 
 ### Analyze
 

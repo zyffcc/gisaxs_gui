@@ -2112,6 +2112,17 @@ GIMaP with another model, gets a new one (section 11).
 - **Structure Sketch**: a picture of the fitted model of one window (side and top view, one ruler for the
   series); film windows are drawn as a continuous film, without particles. A Cu result says on the picture, the
   saved image and the storyboard that it was read with the Ag model.
+- **Show in Analyze** (right-click a row of **Windows**, the **Structure Sketch** — the window it shows — or a point
+  of **Size Trend** — the window nearest in time): the detector frames of that window in Analyze, as the model
+  summed them. The frames listed in Analyze are replaced by the window's raw frames (named in the result's
+  `binned/chunk_*.json`, read from the scan folder of `gimap_request.json`), **Sum** is set to their number and the
+  first is shown, so the image and the cuts are of the sum of all of them. αi is set as in Sputter (marked as set
+  by you), and so is the beam centre when one was given for Predict; a centre the model estimated itself is only
+  named. Distance and wavelength come from Analyze's instrument profiles: a profile within 0.5 mm and 0.1% of the
+  Sputter values is chosen; none is created — without one the notice says which values to enter (Geometry step ▸
+  **Geometry…**). The notice names the window (its time span and the frames summed) and says when frames listed
+  before were replaced. While Analyze's automatic analysis or a batch runs, or a folder is watched, nothing changes
+  and the notice says why; a moved scan folder or missing frames are said on the Sputter page.
 - A new **Deposition rate**, **t0** or **Deposition end** after a run (also without a rate) rewrites only the
   physical files of the result shown: no frame is read again. A rate that is not positive, or an end not after t0,
   is refused, also by **Add Refined Windows…**. When that result is of another scan than the one under **Data**, the values are
