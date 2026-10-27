@@ -9,6 +9,7 @@ from .ai_model_registry import (
     default_ai_fitting_model_base_dirs,
     discover_ai_fitting_models,
     discover_model_in_path,
+    resolve_model_path,
 )
 
 
@@ -23,8 +24,11 @@ class AiFittingCatalogAdapter:
     def profile(self, name):
         return profile_registry.get(name)
 
-    def default_model_directories(self, root: Path):
+    def default_model_directories(self, root: Path | None = None):
         return tuple(default_ai_fitting_model_base_dirs(root))
+
+    def resolve_model_directory(self, path):
+        return resolve_model_path(path)
 
     def discover_models(self, directories):
         return tuple(discover_ai_fitting_models(directories))

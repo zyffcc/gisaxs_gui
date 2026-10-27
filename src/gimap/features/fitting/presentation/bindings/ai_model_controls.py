@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
-
 from pathlib import Path
 
 
@@ -73,7 +70,7 @@ class AiModelControlsMixin:
         folder = QFileDialog.getExistingDirectory(
             self.main_window or self.ui,
             "Select AI Fitting Model Folder",
-            os.path.join(os.getcwd(), "modules", "Fitting_1D_Model"),
+            str(_ai_catalog(self).default_model_directories()[0]),
         )
         if not folder:
             return

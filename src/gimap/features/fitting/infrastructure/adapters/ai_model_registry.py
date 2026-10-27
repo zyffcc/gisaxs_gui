@@ -53,8 +53,20 @@ class ModelInfo:
         return self.contract.version
 
 
+APP_ROOT = Path(__file__).resolve().parents[6]
+"""The GIMaP folder (beside main.py). Models are looked up here, not in the folder GIMaP was started from."""
+
+
+def resolve_model_path(path: Path | str, root: Path | None = None) -> Path:
+    """A stored model folder as an absolute path: a relative one is taken inside the GIMaP folder."""
+    path = Path(path).expanduser()
+    if path.is_absolute():
+        return path
+    return (APP_ROOT if root is None else Path(root)) / path
+
+
 def default_ai_fitting_model_base_dirs(root: Path | None = None) -> List[Path]:
-    root = Path.cwd() if root is None else Path(root)
+    root = APP_ROOT if root is None else Path(root)
     return [
         root / "modules" / "Fitting_1D_Model",
         root / "modules" / "Fitting_1D_model",

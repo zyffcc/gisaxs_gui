@@ -9,6 +9,11 @@ import sys
 from pathlib import Path
 import time
 
+# Before PyQt5: find Qt's platform plugin even when GIMaP is started without Start_GIMaP.bat.
+from src.gimap.app.qt_plugins import ensure_qt_platform_plugin_path
+
+ensure_qt_platform_plugin_path()
+
 from PyQt5.QtCore import QByteArray, Qt, QTimer
 from PyQt5.QtGui import QFont, QGuiApplication
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox

@@ -203,15 +203,18 @@ class AiSettingsMixin:
                 widget.blockSignals(False)
 
     def _ai_fitting_base_dirs(self) -> list:
+        # Relative folders (settings.json keeps "modules/Fitting_1D_Model") are inside the GIMaP folder,
+        # whatever folder GIMaP was started from.
+        catalog = _ai_catalog(self)
         settings = self._ai_fitting_settings()
         stored = settings.get("model_base_dirs")
         dirs = []
         if isinstance(stored, list):
-            dirs.extend(Path(p) for p in stored if isinstance(p, str) and p.strip())
-        dirs.extend(_ai_catalog(self).default_model_directories(Path.cwd()))
+            dirs.extend(catalog.resolve_model_directory(p) for p in stored if isinstance(p, str) and p.strip())
+        dirs.extend(catalog.default_model_directories())
         extra = settings.get("extra_model_paths")
         if isinstance(extra, list):
-            dirs.extend(Path(p) for p in extra if isinstance(p, str) and p.strip())
+            dirs.extend(catalog.resolve_model_directory(p) for p in extra if isinstance(p, str) and p.strip())
         unique = []
         seen = set()
         for path in dirs:
