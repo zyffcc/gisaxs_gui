@@ -184,7 +184,21 @@ QT_QPA_PLATFORM=offscreen python -m pytest tests/test_display_artist_reuse.py te
 - Every version gets an entry in `CHANGELOG.md`: what a user gets, and the known limitations. The first
   paragraph of `README.md` and the preface and section 13.12 of `docs/User_Manual.md` (and `docs/User_Manual_zh.md`) name the version too.
 - The portable Windows version is built with `tools/build_portable_release.ps1`: it packs a Conda
-  environment with `conda-pack` together with the application files. When the ZIP is larger than one
+  environment with `conda-pack` together with the application files. The environment is
+  `gimap-release` (the default of `-EnvironmentName`), kept apart from the one you develop in, with
+  Python 3.10 from conda and only `requirements.txt` from pip. Create it once:
+
+  ```powershell
+  conda create -n gimap-release python=3.10 -y
+  conda run -n gimap-release python -m pip install -r requirements.txt
+  ```
+
+  Do not upgrade conda's pip or setuptools in it and do not add torch (Sputter installs it on the first
+  Predict): conda-pack refuses an environment where pip replaced files of conda packages, and every
+  extra package would reach the users. After `requirements.txt` changes, run the pip line again; when
+  conda-pack reports files "deleted/overwritten", remove the environment
+  (`conda env remove -n gimap-release`) and create it again. pip's leftover `~name` folders are left
+  out of the package. When the ZIP is larger than one
   GitHub asset may be, the script also writes the part files and
   `00_Download_and_Install_GIMaP-<version>.bat`, the file users download from the GitHub Release tagged
   `v<version>`.

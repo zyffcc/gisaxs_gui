@@ -17,11 +17,23 @@
 # With -ListOnly the standard output is the list alone (one path per line); the summary and any
 # problem go to the error stream, and the exit code is 1 when there is a problem.
 #
+# The packed environment is "gimap-release": Python 3.10 from conda and everything else from
+# requirements.txt through pip, nothing more. It is kept apart from the environment you develop in:
+# conda-pack refuses an environment where pip replaced files of conda packages, and every extra
+# package (numpy 2, BornAgain 21, test or research tools) would reach the users. Create it once:
+#   conda create -n gimap-release python=3.10 -y
+#   conda run -n gimap-release python -m pip install -r requirements.txt
+# Do not upgrade conda's pip or setuptools inside it, and do not add torch (the Sputter workspace
+# installs it on the first Predict). After requirements.txt changes, run the pip line again; when
+# conda-pack reports files "deleted/overwritten", remove the environment
+# (conda env remove -n gimap-release) and create it again.
+#
 # Keep this file ASCII: Windows PowerShell 5.1 reads a script without a byte-order mark in the
 # system code page.
 [CmdletBinding()]
 param(
-    [string]$EnvironmentName = "GUI",
+    # The conda environment that becomes runtime\ (see above for how to create it).
+    [string]$EnvironmentName = "gimap-release",
     # Default: the version the program reports (src/gimap/shared/version.py).
     [string]$Version = "",
     [string]$OutputDirectory = "release",
@@ -305,7 +317,9 @@ $EnvironmentPath = $EnvironmentJson.envs | Where-Object {
     (Split-Path $_ -Leaf) -eq $EnvironmentName
 } | Select-Object -First 1
 if (-not $EnvironmentPath) {
-    throw "Conda environment '$EnvironmentName' was not found."
+    throw ("Conda environment '$EnvironmentName' was not found. Create it with: " +
+        "conda create -n $EnvironmentName python=3.10 -y; " +
+        "conda run -n $EnvironmentName python -m pip install -r requirements.txt")
 }
 if ($Fit1DKitPaths.Count) {
     # The packed runtime must control BLAS even after the host imported NumPy. Do not install or
@@ -483,4 +497,5 @@ if ($ArchiveFile.Length -gt $PartSize) {
 }
 
 # Check the list:  powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_portable_release.ps1 -ListOnly
-# Build:           powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_portable_release.ps1 -EnvironmentName GUI
+# Build:           powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_portable_release.ps1
+#                  (packs the conda environment gimap-release; -EnvironmentName <name> for another one)
