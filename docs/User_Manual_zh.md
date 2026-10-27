@@ -189,7 +189,13 @@ GIWAXS 的标定（见 1.1 节），并把它存成了这个探测器的配置�
    `GIMaP-<version>-windows-x64-portable`，然后启动一次 GIMaP。
 
 **以后启动 GIMaP。** 双击 `GIMaP-<version>-windows-x64-portable` 文件夹里的 `Start_GIMaP.bat`；
-在桌面上为它建一个快捷方式会很方便。第一次启动时要为这个文件夹准备自带的 Python 环境，需要一点时间。
+在桌面上为它建一个快捷方式会很方便。第一次启动时要为这个文件夹准备自带的 Python 环境，需要几分钟。
+
+**路径与内存。** 文件夹路径只能用英文字母（例如 `D:\GIMaP`，不要放在“下载”这类中文名的文件夹里）：
+Qt 无法从含中文的路径加载插件，`Start_GIMaP.bat` 发现这种路径时会说明并停下。第一次启动的准备步骤
+（`tools\portable_unpack.py`）只占很少内存；它没有成功时，GIMaP 不会启动，窗口里写着原因。
+如果提到内存不足（“内存资源不足，无法处理此命令”）：重启电脑、关闭其他程序，确认虚拟内存已打开
+（系统 ▸ 关于 ▸ 高级系统设置 ▸ 性能“设置” ▸ 高级 ▸ 虚拟内存：自动管理），再双击 `Start_GIMaP.bat`。
 
 安装程序和启动程序是批处理文件，没有签名。Windows 运行前可能要求确认，单位的杀毒软件也可能拦截。
 只运行 GIMaP 的 GitHub Releases 页面上的文件；否则请从源码运行 GIMaP（2.2 节）。
@@ -200,6 +206,7 @@ GIWAXS 的标定（见 1.1 节），并把它存成了这个探测器的配置�
 （GitHub 上 **Code ▸ Download ZIP**，解压到路径较短、可写的位置）里，双击 `Start_GIMaP.bat`。第一次启动会在
 文件夹里的 `.gimap` 中建立一个专用环境：下载 uv（一个小的 Python 安装工具，固定版本，并核对 SHA-256）、
 Python 3.10 以及 `requirements.txt` 里的包（约 2 GB，3–20 分钟），然后打开 GIMaP。以后的启动是即时的。
+安装包失败时（例如空闲内存不够），它会自动改为一次只装一个包再试一次，占内存少得多，只是慢一些。
 文件夹以外的东西都不会被改动；删掉 `.gimap` 就去掉了这个环境。溅射（Sputter）工作区的模型是 GIMaP 的一部分
 （`utils\sputter_toolkit`）；它需要的 PyTorch（`requirements-sputter.txt`，约 1.2 GB）由 `Start_GIMaP.bat` 装好，
 缺少时在第一次**预测**（Predict）时安装（7.4 节）。

@@ -213,7 +213,16 @@ No Python is needed; the package brings its own.
 
 **Starting GIMaP later.** Double-click `Start_GIMaP.bat` in the folder
 `GIMaP-<version>-windows-x64-portable`; a desktop shortcut to that file is convenient. The first
-start prepares the bundled Python environment for the folder, which takes a moment.
+start prepares the bundled Python environment for the folder, which takes a few minutes.
+
+**Path and memory.** The folder path must use English letters only (for example `D:\GIMaP`, not a
+folder with a Chinese name such as a localised "Downloads"): Qt cannot load its plugins from such a
+path, and `Start_GIMaP.bat` says so and stops. The preparation at the first start
+(`tools\portable_unpack.py`) needs little memory; when it does not succeed, GIMaP is not started and
+the window gives the reason. If it mentions memory ("Not enough memory resources are available to
+process this command"): restart the computer, close other programs, check that virtual memory is on
+(System ▸ About ▸ Advanced system settings ▸ Performance Settings ▸ Advanced ▸ Virtual memory:
+automatic), and double-click `Start_GIMaP.bat` again.
 
 The installer and the launcher are batch files and are not signed. Windows may ask for confirmation
 before it runs one, and an institution's antivirus may block it. Only run files from the GitHub
@@ -226,7 +235,8 @@ clone of the repository, or of a ZIP of it (**Code ▸ Download ZIP** on GitHub,
 path that you may write to). The first start sets up a private environment in the folder `.gimap`:
 it downloads uv (a small Python installer, pinned version, checked against its SHA-256), Python 3.10
 and the packages of `requirements.txt` (about 2 GB, 3-20 minutes), then opens GIMaP. Later starts are
-immediate. Nothing outside the folder is changed; deleting `.gimap` removes the environment. The
+immediate. When installing the packages fails (for example for lack of free memory), it tries again
+one package at a time, which needs much less memory and takes longer. Nothing outside the folder is changed; deleting `.gimap` removes the environment. The
 model of the Sputter workspace is part of GIMaP (`utils\sputter_toolkit`); the PyTorch it needs
 (`requirements-sputter.txt`, about 1.2 GB) is set up by `Start_GIMaP.bat`, or installed on the first
 **Predict** when it is missing (section 7.4).

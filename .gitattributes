@@ -1,3 +1,8 @@
+# Windows launchers end their lines with CRLF in every checkout, ZIP and release: cmd.exe misreads
+# blocks and labels of an LF-only .bat (the portable 0.0.2 shipped Start_GIMaP.bat with LF only).
+# The two folder rules below come later and win for their own files.
+*.bat text eol=crlf
+*.cmd text eol=crlf
 # The bundled 1D Predict model (Workflow V5) is checked file by file against SHA-256 manifests
 # (conditional_v2/conditional_fast_manifest_v2.json and stable_blue_rc_v1/MANIFEST.json) before it
 # runs. The checksums were taken from the bytes on disk, where some files end their lines with

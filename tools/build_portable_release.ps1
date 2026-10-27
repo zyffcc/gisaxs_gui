@@ -323,7 +323,13 @@ if (Test-Path $ArchivePath) {
 }
 
 Write-Host "Packing Conda environment '$EnvironmentName'..."
-& python -c "from conda_pack.cli import main; main()" -p $EnvironmentPath -o $ArchivePath --format zip --arcroot "$PackageName/runtime" --n-threads -1 --force --quiet
+# pip leaves "~name" folders behind when an uninstall or upgrade is interrupted (0.0.2 shipped two old
+# copies of TensorFlow this way, 1.4 GB, each rewritten at the first start). They are never imported.
+$Leftovers = @(Get-ChildItem -LiteralPath (Join-Path $EnvironmentPath "Lib\site-packages") -Directory -Filter "~*" -ErrorAction SilentlyContinue)
+if ($Leftovers) {
+    Write-Host "  leaving out pip leftovers: $(($Leftovers | ForEach-Object Name) -join ', ')"
+}
+& python -c "from conda_pack.cli import main; main()" -p $EnvironmentPath -o $ArchivePath --format zip --arcroot "$PackageName/runtime" --exclude "Lib/site-packages/~*" --n-threads -1 --force --quiet
 if ($LASTEXITCODE -ne 0) {
     throw "conda-pack failed with exit code $LASTEXITCODE."
 }

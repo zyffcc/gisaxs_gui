@@ -96,11 +96,38 @@ function Get-RequirementsStamp {
     return ($Lines -join "`n")
 }
 
-function Invoke-Uv([string]$Uv, [string[]]$Arguments, [string]$What) {
+function Invoke-UvCode([string]$Uv, [string[]]$Arguments) {
     # uv writes its progress to stderr; with "Stop" Windows PowerShell would end at the first line.
+    # Out-Host: uv's output goes to the window, not into this function's return value.
     $ErrorActionPreference = "Continue"
-    & $Uv @Arguments
-    if ($LASTEXITCODE -ne 0) { Fail "$What (uv exit code $LASTEXITCODE). See the messages above." }
+    & $Uv @Arguments | Out-Host
+    return $LASTEXITCODE
+}
+
+function Invoke-Uv([string]$Uv, [string[]]$Arguments, [string]$What) {
+    $Code = Invoke-UvCode $Uv $Arguments
+    if ($Code -ne 0) { Fail "$What (uv exit code $Code). See the messages above." }
+}
+
+function Install-Packages([string]$Uv, [string[]]$Arguments) {
+    # uv downloads and unpacks several large packages (TensorFlow, PyQt5, ...) at the same time. On a
+    # computer with little free memory that fails ("Not enough memory resources are available to process
+    # this command", a MemoryError, a broken download): try again one package at a time, which needs
+    # much less memory. Packages already downloaded stay in the cache and are not fetched again.
+    $Code = Invoke-UvCode $Uv $Arguments
+    if ($Code -eq 0) { return }
+    Say "Installing the packages failed (uv exit code $Code). Trying again one package at a time, which"
+    Say "needs less memory and takes longer. Closing other programs helps."
+    $env:UV_CONCURRENT_DOWNLOADS = "1"
+    $env:UV_CONCURRENT_INSTALLS = "1"
+    $env:UV_CONCURRENT_BUILDS = "1"
+    $Code = Invoke-UvCode $Uv $Arguments
+    if ($Code -ne 0) {
+        Fail ("the packages could not be installed (uv exit code $Code). See the messages above.`n" +
+              "[GIMaP] If they mention memory: restart the computer, close other programs, check that virtual " +
+              "memory is on (System - About - Advanced system settings - Performance - Advanced - Virtual " +
+              "memory: automatic), keep a few GB free on this drive, and run Start_GIMaP.bat again.")
+    }
 }
 
 try {
@@ -109,6 +136,13 @@ try {
         if (-not (Test-Path -LiteralPath (Join-Path $Root $Required) -PathType Leaf)) {
             Fail "$Required was not found next to the tools folder: this is not a GIMaP source folder."
         }
+    }
+    # Qt cannot load its plugins from a path with non-English letters ("no Qt platform plugin could be
+    # initialized"): say so before downloading anything. GIMAP_ALLOW_NON_ASCII=1 skips the check.
+    if ($env:GIMAP_ALLOW_NON_ASCII -ne "1" -and $Root -match '[^\u0000-\u007F]') {
+        Fail ("this folder path contains non-English characters: $Root`n" +
+              "[GIMaP] Qt cannot start from such a folder. Move the whole GIMaP folder to a short English path " +
+              "such as D:\GIMaP, delete its .gimap folder there, and run Start_GIMaP.bat again.")
     }
     # Everything uv downloads stays in this checkout.
     $env:UV_PYTHON_INSTALL_DIR = Join-Path $Base "python"
@@ -145,7 +179,7 @@ try {
             $Path = Join-Path $Root $Name
             if (Test-Path -LiteralPath $Path -PathType Leaf) { $InstallArgs += @("-r", $Path) }
         }
-        Invoke-Uv $Uv $InstallArgs "the packages could not be installed"
+        Install-Packages $Uv $InstallArgs
         Set-Content -LiteralPath $StampFile -Value $Wanted -Encoding ASCII
         # The downloaded package files are no longer needed: the environment holds copies.
         if (Test-Path -LiteralPath $env:UV_CACHE_DIR) {
