@@ -7,12 +7,15 @@ cd /d "%~dp0"
 rem Qt (the window library) cannot load its plugins from a folder whose path has non-English letters
 rem (for example a Chinese "Downloads" folder): it stops with "no Qt platform plugin could be initialized".
 rem The path goes to PowerShell through a variable, so this file stays ASCII. GIMAP_ALLOW_NON_ASCII=1 skips it.
+rem Inside ( ... ) blocks every path is written in quotes: cmd expands %variables% before it reads a block,
+rem and a ")" in a folder name such as "gisaxs_gui-main (1)" would end the block there ("... was unexpected
+rem at this time"), and cmd would close the window at once.
 set "GIMAP_ROOT=%~dp0"
 if not "%GIMAP_ALLOW_NON_ASCII%"=="1" (
     powershell -NoProfile -Command "if ($env:GIMAP_ROOT -match '[^\u0000-\u007F]') { exit 3 } else { exit 0 }"
     if errorlevel 3 (
         echo [GIMaP] This folder path contains non-English characters:
-        echo %GIMAP_ROOT%
+        echo "%GIMAP_ROOT%"
         echo.
         echo Qt cannot start from such a folder. Move the whole GIMaP folder to a short English path,
         echo for example D:\GIMaP or C:\GIMaP. For a source folder, also delete its .gimap folder there,
@@ -29,9 +32,13 @@ set "CONDA_UNPACK_SCRIPT=%~dp0runtime\Scripts\conda-unpack-script.py"
 set "FIRST_RUN_MARKER=%~dp0runtime\.gimap_unpacked"
 
 if not exist "%PYTHON_EXE%" if exist "%~dp0main.py" if exist "%~dp0tools\setup_source_env.ps1" (
-    rem A source folder (git clone or ZIP of the repository): set up its own environment once, then start.
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\setup_source_env.ps1"
-    if errorlevel 1 (
+    rem A source folder, a git clone or a ZIP of the repository: set up its own environment once, then start.
+    rem "||" also catches PowerShell failing to start at all, which sets no error code for "if errorlevel".
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\setup_source_env.ps1" || (
+        echo.
+        echo [GIMaP] GIMaP could not be set up or started: the reason is above.
+        echo If it says there is not enough memory: restart the computer, close other programs,
+        echo check that virtual memory is on, and start Start_GIMaP.bat again.
         echo.
         pause
         exit /b 1
@@ -41,7 +48,7 @@ if not exist "%PYTHON_EXE%" if exist "%~dp0main.py" if exist "%~dp0tools\setup_s
 
 if not exist "%PYTHON_EXE%" (
     echo [GIMaP] Portable Python was not found:
-    echo %PYTHON_EXE%
+    echo "%PYTHON_EXE%"
     echo.
     echo Please download the complete portable release and extract all files.
     pause
