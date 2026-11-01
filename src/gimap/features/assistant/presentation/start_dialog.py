@@ -47,7 +47,7 @@ GOAL_LABELS = {
     "ring_orientation": "Orientation distribution of one ring",
     "crystallite_size": "Crystallite size (Scherrer)",
     "gisaxs_cut": "Horizontal cut at Yoneda, centred, halves chosen",
-    "in_plane_spacing": "In-plane distance 2π/q*",
+    "in_plane_spacing": "Length scale 2π/q* of the cut",
     "gisaxs_fit": "Fit of I(qy): shape, radius, distance",
 }
 """Short labels; the full description of each result is the tooltip."""
@@ -110,7 +110,8 @@ class AssistantStartDialog(QDialog):
             ))
         gisaxs = status.get("measurement") == "gisaxs" or status.get("mode") == "gisaxs"
         if gisaxs:
-            explanation.append(tr("GISAXS: the horizontal cut at the Yoneda band, its halves, the spacing and a fit."))
+            explanation.append(tr("GISAXS: the horizontal cut at the Yoneda band, its halves, the length scale 2π/q* "
+                                  "and a fit."))
         layout.addWidget(_muted(" ".join(explanation), self))
 
         goals_box = QGroupBox(tr("Results"), self)

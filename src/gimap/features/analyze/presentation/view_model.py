@@ -267,6 +267,10 @@ class AnalyzeViewModel(
             head, f"D = {geometry.distance_m * 1e3:.1f} mm", f"λ = {geometry.wavelength_angstrom:.4f} Å",
             f"αi = {geometry.incidence_deg:.3f}°", (analysis.kind or "").upper(), origin,
         ]
+        flat = getattr(analysis, "flat_detector", None)  # a .poni tilt the flat geometry leaves out
+        if flat is not None and flat.needs_attention and flat.q_error_max is not None:
+            parts.append(translate("tilt {tilt}° left out: |q| up to {error} % off").format(
+                tilt=f"{flat.tilt_deg:.2f}", error=f"{100 * flat.q_error_max:.2g}"))
         return " · ".join(part for part in parts if part)
 
     @staticmethod

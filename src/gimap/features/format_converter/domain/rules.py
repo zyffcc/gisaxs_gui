@@ -228,20 +228,30 @@ def build_jobs(
     return jobs
 
 
-def convert_dtype(data: np.ndarray, mode: str) -> np.ndarray:
+UINT16_NO_DATA = 65535
+"""What the uint16 choices write on a pixel without data: the largest uint16, "no data" as NeXus writes it."""
+
+
+def convert_dtype(data: np.ndarray, mode: str, invalid: np.ndarray | None = None) -> np.ndarray:
+    """The values of ``mode``: ``float32``; ``scale_uint16`` (the range of the pixels with data onto 0–65534);
+    ``clip_uint16`` (0–65535: a value at or above the top is cut to 65535); anything else (``original``)
+    returns ``data``. ``invalid``: the pixels without data — the uint16 choices leave them out of the range and
+    write 65535 there (``UINT16_NO_DATA``)."""
     array = np.asarray(data)
     if mode == "float32":
         return array.astype(np.float32, copy=False)
+    if mode not in ("scale_uint16", "clip_uint16"):
+        return array
+    without = ~np.isfinite(array) if array.dtype.kind in "fc" else np.zeros(array.shape, dtype=bool)
+    if invalid is not None:
+        without = without | np.asarray(invalid, dtype=bool)
     if mode == "scale_uint16":
-        finite = array[np.isfinite(array)]
-        if finite.size == 0:
-            return np.zeros(array.shape, dtype=np.uint16)
-        low, high = float(np.min(finite)), float(np.max(finite))
-        if high <= low:
-            return np.zeros(array.shape, dtype=np.uint16)
-        scaled = (np.nan_to_num(array, nan=low, posinf=high, neginf=low) - low) / (high - low)
-        return np.rint(np.clip(scaled, 0, 1) * 65535).astype(np.uint16)
-    if mode == "clip_uint16":
-        clean = np.nan_to_num(array, nan=0.0, posinf=65535.0, neginf=0.0)
-        return np.clip(clean, 0, 65535).astype(np.uint16)
-    return array
+        values = array[~without]
+        low, high = (float(np.min(values)), float(np.max(values))) if values.size else (0.0, 0.0)
+        span = high - low if high > low else 1.0
+        scaled = (np.where(without, low, array) - low) / span
+        out = np.rint(np.clip(scaled, 0, 1) * (UINT16_NO_DATA - 1)).astype(np.uint16)
+    else:
+        out = np.clip(np.where(without, 0.0, array), 0, UINT16_NO_DATA).astype(np.uint16)
+    out[without] = UINT16_NO_DATA
+    return out

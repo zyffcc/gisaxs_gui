@@ -42,7 +42,7 @@ from src.gimap.shared.signed_cut import fit_halves
 
 from ..domain import GISAXS, PeakFit, fit_peak, q_from_two_theta
 from ..domain.regions import window_profile
-from .frame_preprocessing import floating
+from .frame_preprocessing import photon_counts
 from .models import FrameAnalysis
 from .ports import CurveWriter
 from .use_cases import SOFTWARE, fit_input_curve
@@ -153,7 +153,7 @@ def peak_inputs(analysis: FrameAnalysis, *, maps=None) -> list[PeakInput]:
     without them, the region's own I(q) curve.
     """
     inputs = []
-    counts = not floating(analysis.metadata) and not analysis.corrections.background_path
+    counts = photon_counts(analysis.metadata, analysis.corrections, mirror_filled=analysis.filled_pixels is not None)
     if counts and analysis.intensity_scale is not None:
         counts = analysis.intensity_scale  # corrected counts: their variance is scaled too
     for target in peak_targets(analysis):
@@ -219,7 +219,7 @@ def _made_of(rows: Sequence[dict], halves: str) -> tuple[str, Any, dict]:
 
 def model_row(label: str, rows: Sequence[dict], *, error: str = "", halves: str = "mean") -> dict[str, Any]:
     """One row of the model table: the halves and the number of points the frame was fitted on, then the best
-    solution (model, χ², log RMSE, parameters in nm); without a solution the reason as the note."""
+    solution (model, χ²/N as ``chi2``, log RMSE, parameters in nm); without a solution the reason as the note."""
     used, points, _ = _made_of(rows, halves)
     row: dict[str, Any] = {"frame": label, "halves": used, "points": points}
     if not rows:

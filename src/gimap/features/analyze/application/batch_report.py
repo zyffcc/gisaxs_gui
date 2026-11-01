@@ -6,7 +6,8 @@ in ``"files"``; a kind that was chosen and has no file is named as such), the fr
 reasons, a batch that was stopped and how far it got, where the cut of every frame was taken, sums of
 different sizes, and what became of an earlier export in the same folder.
 
-Keys of the record (``RECORD_FORMAT``): ``title``, ``format``, ``started``, ``finished``, ``seconds``,
+Keys of the record (``RECORD_FORMAT``): ``title``, ``format``, ``software_version`` (the release that wrote
+it, ``shared.version.SOFTWARE``; the README says it too), ``started``, ``finished``, ``seconds``,
 ``choices``, ``requested``, ``frames``, ``frame_numbers``, ``failed`` (``[{frame, why}]``), ``stopped``,
 ``not_started``, ``summary`` (``{requested, exported, failed, fits_failed, stopped, seconds, files}``), ``files``,
 ``cuts`` (one entry per frame), ``series_cut`` and ``series_cut_text`` (what was held for every frame),
@@ -25,6 +26,7 @@ from typing import Any, Collection, Mapping, Optional, Sequence
 
 from src.gimap.shared.export_text import export_text
 from src.gimap.shared.signed_cut import fit_halves
+from src.gimap.shared.version import SOFTWARE as RELEASE
 
 from ..domain import GISAXS
 from .batch_export import BATCH_TITLE, FOLDERS, BatchChoices, CurveTables, output_names
@@ -125,6 +127,10 @@ _MEANING = {
     "fit_plot": "the fitted values against the frame number",
     "fit_curves": "per frame and fitted peak: q (1/A), the data and the fit",
     "model_curves": "per frame: |q| in 1/nm (q in 1/A = q in 1/nm / 10), the points fitted, their sigma and the model",
+    "model_fit": "the model fit of every frame, one row per frame: the halves and points it was fitted on, the best "
+                 "model, chi2 = chi2/N (the mean of the squared sigma-normalised residuals over the points fitted; no "
+                 "degrees-of-freedom correction, not Fitting's reduced chi2), log RMSE, each component's weight and "
+                 "parameters in nm, and a note (the reason when a frame has no solution)",
     "record": "the choices, every frame with its cuts, the frames that failed, every file written and the full "
               "settings of the first frame",
 }
@@ -256,7 +262,9 @@ def readme_text(choices: BatchChoices, *, batch: str, frame: str, frames: int, c
     meaning = dict(_MEANING)
     if choices.fit == FIT_MODEL:
         meaning["fit_curves"] = meaning["model_curves"]
-    lines = [f"{BATCH_TITLE} - {batch}" + (f" - {started}" if started else ""), f"{frames} frames."]
+        meaning["fit"] = meaning["model_fit"]  # its chi2 is chi2/N, not a reduced chi2 (batch_model.py's header)
+    lines = [f"{BATCH_TITLE} - {batch}" + (f" - {started}" if started else ""), f"{frames} frames.",
+             f"Written by {RELEASE}."]
     if run is not None:
         lines += result_lines(run, names) + earlier_lines(run, names)
     lines += ["", "Files (<frame> is the name of each frame, <curve> the curve key):", ""]
@@ -299,6 +307,7 @@ def batch_record(run: BatchRun, files: Sequence[Path]) -> dict[str, Any]:
     record: dict[str, Any] = {
         "title": BATCH_TITLE,
         "format": RECORD_FORMAT,
+        "software_version": RELEASE,
         "started": run.started,
         "finished": time.strftime("%Y-%m-%d %H:%M"),
         "seconds": round(float(run.seconds), 1),

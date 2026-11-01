@@ -139,11 +139,11 @@ def test_a_write_that_fails_leaves_no_empty_file_and_the_other_frames_are_writte
     source = LocalSourceRepository().inspect_source(_stack(tmp_path / "stack.nxs"))
     real = local_files.write_frame
 
-    def failing(path, data, fmt, metadata=None):
+    def failing(path, data, fmt, metadata=None, **options):
         if Path(path).name.endswith("000002.tif"):
             Path(path).write_bytes(b"")  # what a writer leaves when it fails after opening its file
             raise OSError("disk says no")
-        return real(path, data, fmt, metadata)
+        return real(path, data, fmt, metadata, **options)
 
     monkeypatch.setattr(local_files, "write_frame", failing)
     report = _convert([source], tmp_path / "out", "TIFF")
@@ -156,7 +156,7 @@ def test_a_failed_write_does_not_remove_a_file_that_was_there_and_is_still_whole
     before = tmp_path / "kept.tif"
     before.write_bytes(b"an older frame")
 
-    def failing(path, data, fmt, metadata=None):
+    def failing(path, data, fmt, metadata=None, **options):
         raise ValueError("refused before opening")
 
     monkeypatch.setattr(local_files, "write_frame", failing)
@@ -237,7 +237,7 @@ def test_the_converter_writes_cbf_through_the_shared_writer(tmp_path: Path, monk
     """No writer of its own beside the shared one: what the shared writer stores is what the converter stores."""
     calls = []
     real = local_files.write_frame
-    monkeypatch.setattr(local_files, "write_frame", lambda *args: (calls.append(args[2]), real(*args))[1])
+    monkeypatch.setattr(local_files, "write_frame", lambda *args, **options: (calls.append(args[2]), real(*args, **options))[1])
     source = LocalSourceRepository().inspect_source(_stack(tmp_path / "数据" / "stack.nxs", 2))
     assert not _convert([source], tmp_path / "out", "CBF").failed
     assert calls == ["cbf", "cbf"]

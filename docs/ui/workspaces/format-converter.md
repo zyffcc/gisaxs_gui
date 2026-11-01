@@ -55,6 +55,16 @@ NeXus / HDF5 输入（2026-10-14）：经共用的读取器（`shared/detector_i
 写 CBF、EDF、TIFF 时文件头里的元数据是 ASCII JSON（`\uXXXX` 转义，`json.loads` 可原样读回）；文件名不是 ASCII 的 CBF
 先用 ASCII 名写再改名；写失败不留下空文件（`shared/detector_io/writing.py`）。
 
+没有数据的像素（2026-11-01）：读取器把每帧都给成 32 位浮点数；以前转换照这样写、不带读取器的掩膜，Pilatus CBF 的缝隙码
+（−1、−2）读回来就成了浮点帧里的数据。现在 `LocalSourceRepository.read_frame` 给出数据、没有数据的像素和元数据（规则与
+Analyze 的 `valid_pixels` 相同：读取器的掩膜、非有限值、整数计数里的负值，`shared/detector_io/output_values.invalid_pixels`），
+`LocalConversionExecutor._output_frame` 经 `output_frame` 按文件存储的类型写：缝隙码原样保留；读取器已剔除的像素写 −1
+（无符号帧需要时改用能容纳所有值的有符号类型；HDF5 里保留原类型，写该类型的最大值）；浮点帧写 NaN；CBF 只存整数，写 −1；
+uint16 选项写 65535。HDF5 输出和容器文件另在 `/entry/instrument/detector/pixel_mask` 里标记（NeXus 第 0 位）；容器里帧的
+尺寸不一时去掉这个掩膜，只靠数值标记。每帧元数据的 `pixel_values` 写明存储类型、写出的类型和写法。Analyze ▸ Batch Export ▸
+Converted frames 用同一个函数（`batch_export._write_converted_frame`）。测试：`tests/test_converted_frames_invalid_pixels.py`
+（公开的 TestSAXSdata CBF 写成每种格式后，无数据像素的个数和位置不变）。
+
 ## 控件映射
 
 | 功能/控件区域 | Python View object / feature-owned 位置 | 行为 |

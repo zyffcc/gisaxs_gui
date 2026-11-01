@@ -166,7 +166,7 @@ class FormatConverterTranslations:
             )
         )
         self.data_mode.setItemText(
-            0, _translate("FormatConverterDialog", "Preserve / use loader data type")
+            0, _translate("FormatConverterDialog", "Keep the stored data type")
         )
         self.data_mode.setItemText(1, _translate("FormatConverterDialog", "Save as 32-bit float"))
         self.data_mode.setItemText(

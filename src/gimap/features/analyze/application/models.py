@@ -9,6 +9,7 @@ from typing import Optional
 import numpy as np
 
 from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile
+from src.gimap.shared.geometry.detector_tilt import FlatDetectorError
 
 from ..domain import BadPixels, Corrections, GisaxsCutSettings, GiwaxsSettings, Reduction
 
@@ -118,6 +119,9 @@ class FrameAnalysis:
     detected_kind: Optional[str] = None
     """GISAXS or GIWAXS as Auto would classify the frame from its geometry, whatever the mode chosen
     (``kind`` is the reduction used); ``None`` without a geometry."""
+    flat_detector: Optional[FlatDetectorError] = None
+    """A ``.poni`` tilt the flat geometry leaves out, and how far |q| is off for it on this frame's valid pixels
+    (``flat_detector.py``); ``None`` when the profile names no tilt."""
 
     @property
     def shape(self) -> tuple[int, int]:

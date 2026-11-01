@@ -2,29 +2,15 @@
 
 from __future__ import annotations
 
-from PyQt5.QtGui import QKeySequence
-from PyQt5.QtWidgets import QShortcut
-
 from ..binding_primitives import is_matplotlib_available
 
 
 class FittingUiLifecycleMixin:
-    """Initialize the curve controls and restore them from a session."""
+    """Initialize the curve controls and restore them from a session.
 
-    def _setup_meta_debug_shortcut(self):
-        """Ctrl+Alt+M prints the parameter-trigger metadata to the fitting log."""
-        try:
-            shortcut = QShortcut(QKeySequence("Ctrl+Alt+M"), self.ui)
-
-            def _dump():
-                snapshot = self.param_trigger_manager.debug_dump_meta(verbose=False)
-                self._add_fitting_message("==== META SNAPSHOT ====", "INFO")
-                for widget_id, data in snapshot.items():
-                    self._add_fitting_message(f"{widget_id}: {data}", "INFO")
-
-            shortcut.activated.connect(_dump)
-        except Exception as exc:
-            print(f"Failed to register meta debug shortcut: {exc}")
+    There is no window-wide debug key: the parameter-trigger metadata stays available to code and tests as
+    ``param_trigger_manager.debug_dump_meta()`` (a Ctrl+Alt+M shortcut would catch AltGr+M, the µ of German
+    and Polish keyboards)."""
 
     def _initialize_ui(self):
         self._initialize_fit_checkboxes()

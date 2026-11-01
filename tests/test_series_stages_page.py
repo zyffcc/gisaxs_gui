@@ -73,6 +73,7 @@ def test_a_built_map_shows_its_stages_odd_frames_and_what_changes(tmp_path: Path
         assert rows[0].startswith("frame,file,stage,odd,why") and len(rows) == 25
         record = json.loads(written.with_suffix(".json").read_text(encoding="utf-8"))
         assert record["odd_frames"][0]["frame"] == 7 and record["stages_suggested"] == stages.suggested
+        assert record["software_version"].startswith("GIMaP v")
         # Batch Export can leave the odd frame out.
         requests = page.view_model.batch_requests()
         assert len(page._without_odd_frames(requests)) == 24

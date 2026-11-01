@@ -20,7 +20,8 @@ fit (``batch_fit``)   ``<batch>_peak_fits.<txt>`` / ``_model_fits``       one ro
 
 ``<txt>`` is ``csv`` (comma), ``txt`` (tab) or ``dat`` (space); ``<img>`` ``png``, ``tif``, ``svg`` or
 ``pdf``; the frame format ``tiff``, ``edf``, ``npy`` or ``hdf5`` (``shared.detector_io.write_frame``,
-values as read: modules stitched, frames summed). Curve tables: frames of one geometry share their x
+values as read: modules stitched, frames summed; in the type they were stored in, pixels without data marked
+so that they read back as such — ``shared.detector_io.output_frame``). Curve tables: frames of one geometry share their x
 exactly; frames whose points are the same up to rounding (another cut row, other masked columns, another
 range) are matched point by point, nothing interpolated; only frames on really different grids are
 interpolated linearly onto a common one, never across a hole or beyond their range — and the header of the
@@ -40,7 +41,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 import numpy as np
 
-from src.gimap.shared.detector_io import frame_suffix, write_frame
+from src.gimap.shared.detector_io import frame_suffix, output_frame, write_frame
 from src.gimap.shared.signed_cut import FIT_HALVES, fit_halves
 
 from ..domain import GISAXS, PROFILES, Curve
@@ -226,19 +227,32 @@ def export_frame(
     if choices.cake and cake is not None and analysis.kind != GISAXS:
         written.append(export.cake(analysis, cake, destination / FOLDERS["cake"] / f"{stem}_cake.{text}"))
     if choices.frames:
-        data = analysis.raw_data if analysis.raw_data is not None else analysis.data
-        source = {"source_file": str(analysis.path), "frame_index": int(analysis.frame_index),
-                  "frame_count": int(analysis.frame_count)}
-        if analysis.summed_frames:
-            source["summed_frames"] = [{"file": str(path), "frame_index": int(index)} for path, index in analysis.summed_frames]
-        files = source_files(analysis.path, analysis.metadata)
-        if files:
-            source["source_files"] = files
-        written.append(write_frame(
-            destination / FOLDERS["frames"] / f"{stem}{frame_suffix(choices.frame_format)}", data,
-            choices.frame_format, source,
+        written.append(_write_converted_frame(
+            analysis, destination / FOLDERS["frames"] / f"{stem}{frame_suffix(choices.frame_format)}", choices.frame_format,
         ))
     return written
+
+
+def _write_converted_frame(analysis: FrameAnalysis, path: Path, fmt: str) -> Path:
+    """The frame as read (modules stitched, frames summed), in the type it was stored in: counts stay counts,
+    gap codes stay, and every pixel the reading found without data reads back as such (``output_frame``)."""
+    data = analysis.raw_data if analysis.raw_data is not None else analysis.data
+    # The detector's own validity: hot and dead pixels found and masks drawn are the person's settings, and
+    # their values stay in the frame (``raw_valid`` is kept whenever they changed ``valid``).
+    valid = analysis.raw_valid if analysis.raw_valid is not None else analysis.valid
+    frame = output_frame(
+        data, fmt, invalid=None if valid is None else ~np.asarray(valid, dtype=bool),
+        stored_dtype=(analysis.metadata or {}).get("stored_dtype", ""),
+    )
+    source = {"source_file": str(analysis.path), "frame_index": int(analysis.frame_index),
+              "frame_count": int(analysis.frame_count)}
+    if analysis.summed_frames:
+        source["summed_frames"] = [{"file": str(name), "frame_index": int(index)} for name, index in analysis.summed_frames]
+    files = source_files(analysis.path, analysis.metadata)
+    if files:
+        source["source_files"] = files
+    source["pixel_values"] = frame.record
+    return write_frame(path, frame.data, fmt, source, invalid=frame.invalid)
 
 
 def fit_curve_rows(analysis: FrameAnalysis, fits) -> list[tuple[str, list[str], list[list[float]]]]:

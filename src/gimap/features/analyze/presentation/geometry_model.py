@@ -111,6 +111,7 @@ class GeometryModelMixin:
             detector_name=profile.detector_name,
             shape=profile.detector_shape,
             source="beam centre set in Analyze",
+            dropped_tilt=profile.dropped_tilt,  # the detector is as tilted as before
         )
         self.clear_beam_center()
         return saved
@@ -164,11 +165,12 @@ class GeometryModelMixin:
             return None
         return geometry_from_fitting_settings(self._read_setting, analysis.shape[0])
 
-    def save_profile(self, name: str, geometry: DetectorGeometry, *, source: str) -> InstrumentProfile:
+    def save_profile(self, name: str, geometry: DetectorGeometry, *, source: str, dropped_tilt=None) -> InstrumentProfile:
         """Save ``geometry`` as the profile of the frame shown. The geometry just saved is then the one used:
         a beam centre set earlier in this session for frames of this shape (dragged, typed, or refined by an
         automatic analysis) is forgotten, or it would silently replace the centre saved here. A session
-        centre set on another detector (another frame shape) stays: it is not used for this frame."""
+        centre set on another detector (another frame shape) stays: it is not used for this frame. ``dropped_tilt``:
+        the tilt of the ``.poni`` the geometry was read from (``shared/geometry/detector_tilt.DetectorTilt``)."""
         analysis = self.state.analysis
         profile = self._save_profile(
             name,
@@ -176,6 +178,7 @@ class GeometryModelMixin:
             detector_name=analysis.detector_name if analysis else None,
             shape=analysis.shape if analysis else None,
             source=source,
+            dropped_tilt=dropped_tilt,
         )
         self.state.profile_name = None  # let the new profile match automatically
         held = self.state.beam_center_shape

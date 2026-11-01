@@ -14,9 +14,8 @@
 # git stash and put back on top of the new version; a copy stays in the stash. When they do not fit
 # the new version, the new version is left complete and the script says what to do. When git cannot
 # replace a file (another program has it open), the version you had is put back whole.
-# Files git does not track or ignores (settings, data, notes) are never changed. When the new version
-# brings a file to a place where you have a different file of your own, the script stops before it
-# changes anything.
+# Files git does not track or ignores (settings, data, notes) are never changed. When the new version brings
+# a file to a place where you have a different file of your own, the script stops before it changes anything.
 # Tracked files the repository wants byte for byte (.gitattributes: -text - the model files of
 # 1D Predict) and that an older checkout holds with converted line endings are written again, also
 # when there is nothing to update. Files you modified are left alone.
@@ -27,8 +26,7 @@
 #            1  not updated, or not completely (the reason is printed)
 #            2  updated, but your modifications could not be put back: they wait in the stash
 #
-# Keep this file ASCII: Windows PowerShell 5.1 reads a script without a byte-order mark in the
-# system code page.
+# Keep this file ASCII: Windows PowerShell 5.1 reads a script without a byte-order mark in the system code page.
 [CmdletBinding()]
 param(
     # Report what was found and what an update would do; change nothing.
@@ -234,8 +232,7 @@ try { $PreviousEncoding = [Console]::OutputEncoding } catch { }
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }
 
 try {
-    if ($DryRun) { Say "GIMaP source update - dry run: it reports, and changes nothing" }
-    else { Say "GIMaP source update" }
+    if ($DryRun) { Say "GIMaP source update - dry run: it reports, and changes nothing" } else { Say "GIMaP source update" }
 
     # ---- Can this folder be updated at all?
     $GitCommand = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -253,8 +250,10 @@ try {
     }
     if (-not (Test-Path -LiteralPath (Join-Path $Root ".git"))) {
         Stop-NotUpdated @(
-            "This folder is not a git checkout (it has no .git): $Root",
-            "A copy from the portable ZIP is updated by downloading the new release, not with this script.")
+            "This folder is not a git checkout (it has no .git), so this script cannot update it: $Root",
+            "- Portable GIMaP (from the installer or the portable ZIP): run the installer of the new version.",
+            "- A folder from GitHub's 'Download ZIP': download the ZIP again, or clone the repository with Git,",
+            "  which this script updates from then on:  git clone https://github.com/zyffcc/gisaxs_gui.git")
     }
     $Inside = Invoke-Git @("rev-parse", "--is-inside-work-tree")
     if ($Inside.Code -ne 0 -or $Inside.Out -notcontains "true") {
@@ -469,8 +468,7 @@ try {
         if ($Updated.Contains(".gitattributes") -or $Converted.Count -gt 0) {
             Say "  - write again the files whose line endings an older checkout converted (1D Predict checks them)"
         }
-        Say "", "DRY RUN: nothing was changed. To update:"
-        Say "    $RunAgain"
+        Say "", "DRY RUN: nothing was changed. To update:", "    $RunAgain"
         exit 0
     }
 
@@ -568,14 +566,17 @@ try {
         Say "  They are on the backup branch, not on ${Branch}. To bring your own over to the new history, oldest first:"
         Say "    git cherry-pick $Which"
     }
-    if (@(Get-GitLines @("diff", "--name-only", $Head, $Target, "--", "requirements.txt")).Count -gt 0) {
-        Say "", "The list of Python packages changed. In the environment you run GIMaP from:"
-        Say "    python -m pip install -r requirements.txt"
+    $Lists = @(@("requirements.txt", "requirements-sputter.txt") | Where-Object { $Updated.Contains($_) })
+    if ($Lists.Count -gt 0) {
+        Say "", "The Python packages GIMaP needs changed: $(($Lists -join ', ').Replace('-sputter.txt', '-sputter.txt (PyTorch, for Sputter)'))."
+        Say "  Started with Start_GIMaP.bat: nothing to do, its next start adds the new packages itself."
+        Say "  Run from an environment you set up yourself (conda, venv): in that environment run"
+        if ($Lists -contains "requirements.txt") { Say "    python -m pip install -r requirements.txt" }
+        if ($Lists -contains "requirements-sputter.txt") { Say "    python -m pip install -r requirements-sputter.txt" }
     }
 
     Say "", "To go back to what you had"
-    if ($Backup) { Say "    git reset --hard $Backup" }
-    else { Say "    git reset --hard $Short" }
+    if ($Backup) { Say "    git reset --hard $Backup" } else { Say "    git reset --hard $Short" }
     if ($Stash) { Say "    git stash pop" }
     if ($Stash -and $NeedsYou.Count -eq 0) { Say "  (the first command drops uncommitted modifications of tracked files, the second puts yours back)" }
     elseif ($Plain -and $Changed.Count -gt 0) { Say "  (it drops uncommitted modifications of tracked files: run 'git stash' first to keep yours)" }

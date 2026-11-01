@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..domain import (
+    FAR_FOLDER,
     GIMAP_CALIBRATION,
     LOG,
     POINT_OF_NORMAL_INCIDENCE,
@@ -31,6 +32,7 @@ from ..domain import (
     compare_verdict,
     energy_kev,
     file_name_mentions,
+    folder_place,
     line_quality,
     module_series,
     name_preference,
@@ -63,6 +65,10 @@ OPEN_LEVELS = 2
 
 class CalibrationToolsMixin:
     """Tool handlers mixed into ``ToolCatalog`` (which provides the ports and results)."""
+
+    actor = "assistant"
+    """Who chose a geometry, for the instrument profile's source: the AI, or "automatic analysis" (no AI) while the
+    standard pipeline runs (``StandardPipeline.run``)."""
 
     def _setup_calibration(self) -> None:
         self._known_files: set[str] = set()
@@ -307,6 +313,14 @@ class CalibrationToolsMixin:
                 return (1e9,)
             return (abs(hours) * (1.0 if hours <= 0 else 3.0),)  # measured before the frame is preferred
 
+        frame_folder = file_key(Path(frame_path).resolve().parent) if frame_path else None
+
+        def nearest(record: dict) -> tuple:
+            """The folder first, then the time: a copied or downloaded folder has no telling file times, and
+            a calibration beside the frame belongs to it more likely than one of the data set next door."""
+            place = folder_place(frame_folder, file_key(record["path"])) if frame_folder else FAR_FOLDER
+            return (*place, *closeness(record))
+
         def rank(record: dict) -> tuple:
             name = record["path"].lower()
             return (
@@ -318,13 +332,15 @@ class CalibrationToolsMixin:
             )
 
         limit = max(5, min(int(max_results), 80))
-        results = sorted(groups[POINT_OF_NORMAL_INCIDENCE] + groups[GIMAP_CALIBRATION], key=closeness)
+        results = sorted(groups[POINT_OF_NORMAL_INCIDENCE] + groups[GIMAP_CALIBRATION], key=nearest)
         images = sorted(groups[STANDARD_IMAGE], key=rank)
         logs = sorted(groups[LOG], key=closeness)
         payload = {
             "calibration_results": results[:limit],
             "standard_images": images[:limit],
             "ranking": (
+                "calibration files are ranked by folder (the frame's folder, its subfolders, the parent folder, "
+                "sibling folders, then further up), then closeness in time (before the frame preferred); "
                 "standard images are ranked: GIMaP can fit the standard, same detector kind as the frame "
                 "(file type and module series), 'giwaxs'/'waxs' in the name, 'final'/'redone' names, then "
                 "closeness in time (before the frame preferred); a multi-module NeXus series is listed once "
@@ -358,6 +374,8 @@ class CalibrationToolsMixin:
                 "pixel_size_x_m": geometry.pixel_size_x_m,
                 "pixel_size_y_m": geometry.pixel_size_y_m,
             }
+            if geometry.tilt is not None:  # dropped by the flat geometry: Analyze says what that costs in |q|
+                values["detector_tilt"] = geometry.tilt.to_dict()
             self._file_geometries[key] = values
             payload = {
                 "kind": "pyFAI calibration (.poni)", **values,
@@ -492,6 +510,8 @@ class CalibrationToolsMixin:
                 "pixel_size_x_m": result["pixel_size_um"][0] * 1e-6,
                 "pixel_size_y_m": result["pixel_size_um"][1] * 1e-6,
             }
+            if result.get("detector_tilt"):  # a .poni reused for the next frame of a batch (``file_geometry``)
+                values["detector_tilt"] = dict(result["detector_tilt"])
             origin = (
                 f"the saved calibration {Path(result.get('source_image', '')).name}" if result.get("from_file") else
                 f"{result.get('standard')} calibration of {Path(result.get('source_image', '')).name} "
@@ -517,6 +537,9 @@ class CalibrationToolsMixin:
                 "beam_center_y_px": float(arguments["beam_center_y_px"]),
                 "wavelength_angstrom": float(wavelength),
             }
+            known = self._file_geometries.get(file_key(arguments["path"])) if arguments.get("path") else None
+            if known and known.get("detector_tilt"):  # a .poni's distance and centre at another energy: same tilt
+                values["detector_tilt"] = dict(known["detector_tilt"])
             origin = arguments.get("note") or "values given to the assistant"
         if values.get("wavelength_angstrom") is None:
             wavelength = arguments.get("wavelength_A") or wavelength_angstrom(arguments.get("energy_kev"))
@@ -533,7 +556,7 @@ class CalibrationToolsMixin:
 
     def _tool_use_geometry(self, source: str, **arguments) -> ToolOutcome:
         values, origin = self._geometry_values({"source": source, **arguments})
-        status = self.workbench.use_geometry(values, arguments.get("profile_name"), f"assistant: {origin}")
+        status = self.workbench.use_geometry(values, arguments.get("profile_name"), f"{self.actor}: {origin}")
         self.results.geometry_used = {**values, "source": origin}
         self.results.status = status
         kind = (status.get("measurement") or "no reduction").upper()
@@ -546,8 +569,8 @@ class CalibrationToolsMixin:
             return f"Use a geometry for this detector ({exc})"
         return (
             f"Save the geometry from {origin} as the instrument profile of this detector and re-analyse: "
-            f"distance {values['distance_mm']:.1f} mm, beam centre ({values['beam_center_x_px']:.1f}, "
-            f"{values['beam_center_y_px']:.1f}) px, λ {values['wavelength_angstrom']:.4f} Å."
+            f"distance {values['distance_mm']:.1f} mm, beam centre ({values['beam_center_x_px']:.2f}, "
+            f"{values['beam_center_y_px']:.2f}) px, λ {values['wavelength_angstrom']:.4f} Å."
         )
 
 
@@ -565,6 +588,7 @@ def file_geometry(path: str, info: dict, pixel_um: Optional[float]) -> dict:
         "source_image": path,
         "shape": None,
         "from_file": True,
+        "detector_tilt": info.get("detector_tilt"),
     }
 
 

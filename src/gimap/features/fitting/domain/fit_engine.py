@@ -28,9 +28,9 @@ from .fit_model import LINEAR, FitModel, component_form, evaluate, resolution_sh
 TINY = 1e-300
 CORRELATED = 0.95
 EDGE = 1e-3
+"""A non-linear parameter within this fraction of its range from a bound is reported as at the bound."""
 LOCAL_STEP = 0.02
 """First steps of a local fit, as a fraction of each parameter's range (log range when log-scaled)."""
-"""A non-linear parameter within this fraction of its range from a bound is reported as at the bound."""
 SOLVING, SEARCHING, REFINING = PHASES = ("Solving the scales", "Searching the ranges", "Refining")
 PROGRESS_LINE = "{phase} — {evaluations} evaluations, best χ²ᵣ {chi2}"
 """What a running fit says of itself (``progress(fraction, line)``): ``PROGRESS_LINE`` with one of ``PHASES``.

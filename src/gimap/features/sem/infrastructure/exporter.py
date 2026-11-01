@@ -11,6 +11,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from src.gimap.shared.version import SOFTWARE
+
 from ..application import SemParticle
 from .figures import export_distribution_figures, export_overlay, overlay_rgba
 
@@ -35,7 +37,8 @@ class LocalSemExporter:
             raise FileExistsError("SEM output files already exist. Choose a new output directory.")
         out_dir.mkdir(parents=True, exist_ok=True)
         paths = []
-        record = {"schema_version": 1, "created_utc": datetime.now(timezone.utc).isoformat(),
+        record = {"schema_version": 1, "software_version": SOFTWARE,
+                  "created_utc": datetime.now(timezone.utc).isoformat(),
                   "source": dict(measurements.source), "measurement_settings": dict(measurements.settings),
                   "measurement_summary": dict(measurements.summary),
                   "comparison": dict(comparison.metadata) if comparison is not None else None,

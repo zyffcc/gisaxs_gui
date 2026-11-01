@@ -15,6 +15,14 @@ from src.gimap.features.trainset.domain.physical_background import (
     PHYSICAL_BACKGROUND_PARAMETERS,
 )
 
+SIMULATION_ENGINE = "bornagain"
+# The engine name earlier versions wrote. The form-factor grid cache still hashes the engine under it
+# (grid_cache._payload), so grids built before the rename keep their file names.
+DIGEST_ENGINE_NAME = "bornagain_yuxin"
+# Engine names that earlier versions wrote into saved projects; read as SIMULATION_ENGINE and
+# written back under that name.
+FORMER_ENGINE_NAMES = frozenset({DIGEST_ENGINE_NAME})
+
 
 def default_physical_background_step() -> Dict[str, Any]:
     step: Dict[str, Any] = {"plugin": "physical_background", "enabled": False}
@@ -55,6 +63,10 @@ def synchronize_parameter_specs(config: Dict[str, Any]) -> Dict[str, Any]:
         particle_key = "spherical_segment"
         particle["plugin"] = particle_key
         particle_plugin = REGISTRY.get("particle", particle_key)
+
+    simulation = config.get("simulation")
+    if isinstance(simulation, dict) and simulation.get("engine") in FORMER_ENGINE_NAMES:
+        simulation["engine"] = SIMULATION_ENGINE
 
     legacy_parameters = copy.deepcopy(config.get("parameters", {}))
     if "spacing_nm" in legacy_parameters and "D_nm" not in legacy_parameters:
@@ -183,7 +195,7 @@ def default_project_config() -> Dict[str, Any]:
             },
         },
         "simulation": {
-            "engine": "bornagain_yuxin",
+            "engine": SIMULATION_ENGINE,
             "image_size": [256, 256],
             "resolution_sigma_phi_deg": 0.01,
             "resolution_sigma_alpha_deg": 0.01,
@@ -423,7 +435,7 @@ def validate_project_config(
             errors.append("Constraint D > 2R has no feasible values in the selected D/radius ranges.")
 
     if (
-        config.get("simulation", {}).get("engine") == "bornagain_yuxin"
+        config.get("simulation", {}).get("engine") == SIMULATION_ENGINE
         and simulation_available is False
     ):
         warnings.append("BornAgain is not installed locally; simulation preview and local physical generation are unavailable.")

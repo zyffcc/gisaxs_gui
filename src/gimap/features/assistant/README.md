@@ -21,7 +21,7 @@
 
 在 Analyze 打开并分析一帧后，点命令栏的 **Ask AI…**（或 Tools ▸ Process with AI…）：选择要得到的结果
 （GIWAXS：峰位表、面内 / 面外取向、单个环的取向分布、晶粒尺寸；GISAXS：Yoneda 处的水平切线与两半、
-面内间距 2π/q*、I(qy) 的拟合），写下样品说明和权限，AI 通过工具调用操作 Analyze（切换模式、改扇区、
+特征长度 2π/q*（不一定是粒子间距）、I(qy) 的拟合），写下样品说明和权限，AI 通过工具调用操作 Analyze（切换模式、改扇区、
 设 I(χ) 窗口……），GUI 实时跟随；右侧面板显示思考摘要、每一步工具调用和最后的报告。做不到的项目标成 `not_available` 并写清原因
 （信号不足、覆盖缺失、缺少几何、缺少工具）。
 
@@ -33,7 +33,8 @@
 上两级及其子文件夹、上三级中名字像 calib / log / standard 的文件夹；有条目数与时间上限）和
 `search_files`（任一上级文件夹或用户给的文件夹，可按名字过滤）列出 `.poni`、GIMaP 标定 `.json`、
 标样图像（按文件名 / 文件夹名识别 AgBH、LaB6、CeO₂；Si、Al₂O₃、Cr₂O₃ 只识别不拟合，作衬底时
-不误判）和日志。读取规则（`calibration_tools.py`）：帧往上两级内、搜索找到的、用户点名的文件
+不误判）和日志。现成的标定文件先按文件夹排（`domain.folder_place`：帧所在文件夹、子文件夹、上一级、同级文件夹、
+再往上），同一类里再按时间（帧之前的优先）。读取规则（`calibration_tools.py`）：帧往上两级内、搜索找到的、用户点名的文件
 直接读；更远的文件确认模式下先问、全自动模式直接读；隐藏 / 系统文件夹（.ssh、AppData、Windows…，
 只看与帧共有的上级以下部分）和非图像 / 标定 / 文本类型永不读。`inspect_file` 读图像头、`.poni`
 （pyFAI 的 Fit2D 换算得到直射束中心）、标定 JSON 和日志里与几何有关的行；
@@ -124,7 +125,7 @@ Results 标签页（Start 页在 `app/presentation/home_page.py`）。
 
 | 层 | 内容 |
 |---|---|
-| `domain/` | 纯 numpy / scipy 的 GIWAXS 指标：`find_peaks`（SNIP 背景、高斯 + 线性拟合、SNR 与标记）、`compare_sectors`（面内 / 面外净强度）、`ring_orientation`（I(χ) 覆盖、极大、Herman 因子 ± MC 误差）、`scherrer_size`（相干长度下限） |
+| `domain/` | 纯 numpy / scipy 的 GIWAXS 指标：`find_peaks`（SNIP 背景、高斯 + 线性拟合、SNR 与标记）、`compare_sectors`（面内 / 面外净强度）、`ring_orientation`（I(χ) 覆盖、极大、Hermans 因子 ± MC 误差）、`scherrer_size`（相干长度下限） |
 | `application/` | `RunAssistantTask`（API：自有模型循环、提醒、重试、停止）、`RunAgentTask`（Claude Code：它负责循环，GIMaP 逐个回答工具调用）、`ToolCatalog`（工具校验、写操作确认、结果收集）、`tool_specs`、固定 system prompt、ports（`AssistantLlm`、`AgentRuntime`、`AnalysisWorkbench`、`Confirmer`、`ResultStore`、`RunEvents`） |
 | `infrastructure/` | `ClaudeCodeAgent`（找 CLI：PATH、`~/.local/bin`、Claude 桌面版自带的 `%APPDATA%\Claude\claude-code\<版本>\claude.exe`、npm；`status()` 读版本与登录状态、`open_login()`）、`LocalMcpServer`（MCP Streamable HTTP，JSON 响应，只监听本机、校验 token 与 Origin）、`AnthropicAssistantLlm`（官方 SDK，流式、adaptive thinking + 摘要、prompt caching、`fallbacks="default"`）、`ApiKeyStore`、`JsonResultStore`（表格、运行记录、缺失能力清单） |
 | `presentation/` | `AssistantController`（守护线程运行、Dock 面板、Brain 检查、保存报告）、`GuiBridge` / `GuiWorkbench`（跨线程操作 Analyze）、开始对话框、面板、设置页（`code_section.py`：Claude Code 程序、模型、登录）、报告 HTML |

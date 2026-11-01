@@ -129,8 +129,9 @@ CONVERTER_ZH = {
     "The frame range is empty.": "帧范围为空。",
     "Choose output folder": "选择输出文件夹",
     "Invalid naming template": "命名模板无效",
-    "CBF encoders may not preserve NaN values or every floating-point representation. A metadata sidecar is recommended.":
-        "CBF 编码可能无法保留 NaN 值或某些浮点表示。建议同时写出元数据文件。",
+    "CBF holds integers: a floating-point frame is truncated to int32, NaN becomes −1, and its negative values "
+    "read back as gap codes (no data). Use TIFF or HDF5 to keep them; a metadata sidecar is recommended.":
+        "CBF 只存整数：浮点帧会被截断为 int32，NaN 变为 −1，负值读回时成为缝隙码（无数据）。要保留它们，请用 TIFF 或 HDF5；建议同时写出元数据文件。",
     "Add at least one input file.": "请至少添加一个输入文件。",
     "Select at least one image or frame to convert.": "请至少选择一张要转换的图像或一帧。",
     "Output settings": "输出设置",

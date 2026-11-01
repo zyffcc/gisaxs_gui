@@ -10,11 +10,15 @@ be expressed exactly while the physics exists only once:
    vector in the sample frame (``qx`` along the beam, ``qy`` in the surface
    plane perpendicular to it, ``qz`` along the surface normal).
 
-:class:`ExitAngleModel` names the formulas in use.  ``EXACT`` is the rigorous
-result for a flat detector perpendicular to the direct beam and a sample tilted
-by alpha_i.  The three others reproduce, unchanged, the approximations that the
-Fitting, Trainset and WAXS features have historically used; they exist so those
-features can share this code without changing a single computed value.
+:class:`ExitAngleModel` names the formulas.  ``EXACT`` is the rigorous result for
+a flat detector perpendicular to the direct beam and a sample tilted by alpha_i;
+it is the only one Analyze uses (and so Fitting, which fits Analyze's curves).
+``SUBTRACT_INCIDENCE`` reproduces, unchanged, the approximation Trainset's
+training data were made with (``legacy_conventions``).  ``HORIZON_SHIFT`` and
+``NO_INCIDENCE_OFFSET`` are the approximations of the former Cut & Fitting
+detector part and WAXS page, both removed: no feature uses them, and they are
+kept so the tests can state how far those approximations were from ``EXACT``
+(docs/architecture/geometry.md).
 """
 
 from __future__ import annotations
@@ -34,14 +38,15 @@ class ExitAngleModel(str, Enum):
     """Rigorous: ray direction ``(D, X, Y)/R`` rotated into the tilted sample frame."""
 
     HORIZON_SHIFT = "horizon_shift"
-    """Fitting (legacy): alpha_f = atan((Y − D·tan alpha_i)/D), 2θf = atan(X/D)."""
+    """Former Cut & Fitting detector part (removed; tests only):
+    alpha_f = atan((Y − D·tan alpha_i)/D), 2θf = atan(X/D)."""
 
     SUBTRACT_INCIDENCE = "subtract_incidence"
-    """Trainset (legacy): alpha_f = atan(Y/D) − alpha_i, 2θf = atan(X/D)."""
+    """Trainset (legacy, still used by ``legacy_conventions``): alpha_f = atan(Y/D) − alpha_i, 2θf = atan(X/D)."""
 
     NO_INCIDENCE_OFFSET = "no_incidence_offset"
-    """WAXS (legacy): alpha_f = atan(Y/√(D² + X²)), 2θf = atan(X/D); the beam centre
-    is treated as the horizon, alpha_i only enters through k_i."""
+    """Former WAXS page (removed; tests only): alpha_f = atan(Y/√(D² + X²)), 2θf = atan(X/D);
+    the beam centre is treated as the horizon, alpha_i only enters through k_i."""
 
 
 @dataclass(frozen=True)
@@ -208,7 +213,11 @@ def grazing_q_region(
 
 
 def transmission_map(shape: tuple[int, int], geometry: DetectorGeometry) -> TransmissionMap:
-    """|q|, 2θ and χ for transmission SAXS/WAXS, in Å⁻¹ and degrees."""
+    """|q|, 2θ and χ for transmission SAXS/WAXS, in Å⁻¹ and degrees.
+
+    χ is the azimuth on the detector, 0° to the right and 90° up; it is not the GIWAXS χ of Analyze
+    (``analyze/domain/giwaxs.py``: 0° along the surface normal).
+    """
     x, y = pixel_center_displacements(shape, geometry)
     two_theta = np.arctan2(np.hypot(x, y), geometry.distance_m)
     q = 2.0 * geometry.wavevector_inv_angstrom * np.sin(two_theta / 2.0)

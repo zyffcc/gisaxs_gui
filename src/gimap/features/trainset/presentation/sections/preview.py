@@ -163,7 +163,7 @@ class PreviewMixin:
         background_layout = QVBoxLayout(background_page)
         background_enable = self._check("pre.background.enabled", False, "Add physical background")
         background_enable.setToolTip(
-            "Synthetic GISAXS background based on the former Yuxin_train model. Every component can be ranged and inspected below."
+            "Synthetic GISAXS background modelled on the generator of the original training data. Every component can be ranged and inspected below."
         )
         background_layout.addWidget(background_enable)
         background_groups = (

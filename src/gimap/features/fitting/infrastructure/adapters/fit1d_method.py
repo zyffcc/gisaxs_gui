@@ -32,7 +32,7 @@ import time
 
 import numpy as np
 
-from ...application.workflow_v5 import FIT1D_SHAPES, fit1d_kit_home
+from ...application.workflow_v5 import FIT1D_SHAPES, fit1d_kit_available, fit1d_kit_home
 
 TYPES = {"sphere": (1, "sphere"), "vertical_cylinder": (3, "vertical_cylinder")}
 """The kit's shape → (component id, the name of the type in a row)."""
@@ -66,7 +66,7 @@ STATUS_TEXT = {
 def load_kit():
     """``gisaxs1d_kit.core`` with its code and tables ready; a message that says what to do when it is not there."""
     home = fit1d_kit_home()
-    if not (home / "gisaxs1d_kit" / "core.py").is_file():
+    if not fit1d_kit_available(home):
         raise FileNotFoundError(KIT_MISSING.format(home=home))
     for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
         os.environ.setdefault(name, "1")  # for processes the kit starts: many BLAS threads each made them far slower

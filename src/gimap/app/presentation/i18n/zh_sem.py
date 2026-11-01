@@ -44,7 +44,7 @@ SEM_ZH = {
     "Measure labeled particles": "测量标签颗粒",
     "No particles passed the filters. Review the outlines, detection settings, and image ROI.":
         "没有颗粒通过筛选。请检查分割轮廓、检测设置和图像 ROI。",
-    "&SEM Particle Analysis…": "SEM 粒径分析…",
+    "SE&M Particle Analysis…": "SEM 粒径分析(&M)…",
     "SEM Particle Analysis": "SEM 粒径分析",
     "SEM comparison…": "SEM 对比…",
     "Extract particle sizes from SEM images or compare SEM data with a radius prediction":

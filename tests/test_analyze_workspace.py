@@ -190,6 +190,11 @@ def test_page_shows_curves_after_opening_a_cbf_with_zero_clicks(tmp_path: Path) 
         f"{stem}_vertical.csv",
     ]
     record = json.loads((tmp_path / "gimap_analysis" / f"{stem}_analysis.json").read_text("utf-8"))
+    from src.gimap.shared.version import SOFTWARE
+
+    assert record["software"] == "GIMaP Analyze 1" and record["software_version"] == SOFTWARE  # format; release
+    # Every file the export wrote beside the record, the curve for Fitting too (it listed the curves only).
+    assert sorted(record["files"]) == [name for name in exported if name != f"{stem}_analysis.json"]
     assert record["instrument_profile"]["name"] == "P03 Pilatus"
     assert record["measurement"] == "gisaxs"
     data = np.loadtxt(tmp_path / "gimap_analysis" / f"{stem}_horizontal.csv", delimiter=",", skiprows=6)

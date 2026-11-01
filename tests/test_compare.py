@@ -106,6 +106,7 @@ def test_curve_folders_are_read_in_counting_order_and_the_tables_written(tmp_pat
     assert rows[0].startswith("series,frames,odd_frames,stages,half_of_change_frame") and len(rows) == 3
     record = json.loads(table.with_suffix(".json").read_text(encoding="utf-8"))
     assert record["series"][1]["name"] == "sample_B" and "Ward" in record["method"]
+    assert record["software_version"].startswith("GIMaP v")  # the release that wrote it
     frames = service.export_frames_table([a, b], comparison, tmp_path / "out" / "frames.csv")
     assert len([line for line in frames.read_text(encoding="utf-8").splitlines() if not line.startswith("#")]) == 25
 

@@ -182,7 +182,7 @@ def test_a_mixed_batch_keeps_the_results_of_its_gisaxs_frames() -> None:
     assert giwaxs < gisaxs < rest < text.index("Open questions")
     assert "| film.tif | needs input | 1 | agbh.poni | 0.899, 1.409* | 0.899: 0.61 | incidence angle αi |" in text[giwaxs:gisaxs]
     # Halves, spacing and best fit of the GISAXS frame: they were dropped from a table of GIWAXS columns.
-    row = "| dots.tif | needs input | mean | 53.5 (shoulder) | sphere R 9.4, D 53.4 nm, χ² 1.31 | incidence angle αi |"
+    row = "| dots.tif | needs input | mean | 53.5 (shoulder) | sphere R 9.40, D 53.4 nm, χ²/N 1.31 | incidence angle αi |"
     assert row in text[gisaxs:rest]
     assert "| missing.tif | error: No such file: missing.tif | — | — |" in text[rest:]
     # αi is asked once for each procedure, in its words, with the flag that answers it.

@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 
 from src.gimap.shared.geometry import InstrumentProfile
+from src.gimap.shared.version import SOFTWARE as RELEASE
 
 from ..domain import (
     Corrections,
@@ -80,6 +81,7 @@ def settings_record(settings: AnalyzeSettings) -> dict[str, Any]:
         "format": SETTINGS_FORMAT,
         "version": SETTINGS_VERSION,
         "software": SOFTWARE,
+        "software_version": RELEASE,  # the release that wrote it; ``software`` names the record format
         "mode": settings.mode,
         "profile_name": settings.profile_name,
         "profile": settings.profile.to_dict() if settings.profile is not None else None,

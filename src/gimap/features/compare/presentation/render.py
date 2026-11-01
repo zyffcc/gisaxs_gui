@@ -337,10 +337,13 @@ class CompareRenderMixin:
     # -- saving -------------------------------------------------------------------------------------
 
     def _folder(self) -> str:
-        for item in self.series:
-            if item.source and item.source != "Analyze":
-                return item.source
-        return self._remembered("folder") or ""
+        """Where the save dialogs start: the folder of the first series read from files, else the folder curves
+        were last read from, else the home folder (never a bare name, which would land in the working folder)."""
+        folders = [item.source for item in self.series if item.source and item.source != "Analyze"]
+        for folder in (*folders, self._remembered("folder")):
+            if isinstance(folder, str) and folder and Path(folder).is_dir():
+                return folder
+        return str(Path.home())
 
     def save_series_table(self, path=None) -> Optional[Path]:
         return self._save_table(path, "compare_series.csv", tr("Save Table of Every Series"), self.service.export_series_table)

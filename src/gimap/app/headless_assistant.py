@@ -328,7 +328,7 @@ def write_outputs(session: HeadlessSession, report: dict, folder: Path) -> list[
 
 
 def _write_fit(fit: Optional[dict], folder: Path) -> list[Path]:
-    """GISAXS: the fitted curve (data and best fit) and the solutions table."""
+    """GISAXS: the fitted curve (data and the fit the run reports) and the solutions table."""
     import numpy as np
 
     if not fit:
@@ -457,7 +457,8 @@ MCP_INSTRUCTIONS = (
     "(calibrations the notes name first), the frames of a series, then the procedure of the technique "
     "GIMaP's Auto detection gives once the geometry is applied (technique='giwaxs' or 'gisaxs' forces "
     "one) — GIWAXS: peaks, sectors, ring orientation and sizes; GISAXS: the Yoneda cut, the symmetry "
-    "axis, the halves, the in-plane spacing and a fit. Each decision comes with its reason; "
+    "axis, the halves, the length scale 2π/q* (not necessarily the particle spacing) and a fit. Each "
+    "decision comes with its reason; "
     "needs_attention lists values only the notes or the person know (with the argument that supplies "
     "them) and judgements left open, such as the GISAXS model. The baseline's choices are defaults: "
     "investigate further with the other tools when the question needs it — other frames of a series, "

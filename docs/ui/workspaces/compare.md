@@ -53,7 +53,7 @@ Build Map（或填满热图的 Batch Export）结束后在后台计算（几百�
 - 右下图 *Change along the series*：主成分 1 对帧，按阶段着色，异常帧为红 ×；
 - Export ▸ **Stages as Table…**：每帧的阶段、是否异常及原因、主成分得分、整体强度，旁边 JSON 记录（方法、各阶段、变化、异常帧）；
   变化和异常帧的原因用热图自己的横轴（χ、qy 或 q）表述；阶段寻找失败时清掉旧的阶段，导出给出失败的原因；
-- **Send to Compare**：把这张热图加入 Compare。
+- **Send to Compare**（菜单栏 Analyze ▸ Send Series to Compare 也是它）：把这张热图加入 Compare。
 
 ## Fitting ▸ In-situ series
 

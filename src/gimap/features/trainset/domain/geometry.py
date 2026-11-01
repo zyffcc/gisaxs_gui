@@ -12,8 +12,8 @@ from src.gimap.shared.geometry.legacy_conventions import trainset_q_vectors
 def roi_to_spherical_ranges(config: Dict[str, Any]) -> Dict[str, float]:
     """Convert a rectangular detector ROI to BornAgain phi/alpha limits.
 
-    This follows the conversion used by ML_GISAXS_Yuxin/simulate_tool.ipynb,
-    but uses an explicit ROI (x, y, width, height) instead of ambiguous edge crops.
+    This follows the conversion of the simulation notebook that generated the original training
+    data, but uses an explicit ROI (x, y, width, height) instead of ambiguous edge crops.
     """
     detector = config["detector"]
     roi = config["roi"]

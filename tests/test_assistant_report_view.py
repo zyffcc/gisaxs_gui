@@ -67,11 +67,13 @@ def test_gisaxs_results_have_readable_headings() -> None:
     )
     outcome = RunOutcome(RUN_COMPLETED, "Report submitted.", [], results, LlmUsage())
     page = report_html(outcome)
-    for title in ("GISAXS cut", "In-plane spacing", "GISAXS fit"):
+    # 2π/q* is a length scale of the cut, not necessarily the particle spacing: the heading says so.
+    for title in ("GISAXS cut", "Length scale 2π/q*", "GISAXS fit"):
         assert f"<h4>{title} " in page
     assert "gisaxs_cut" not in page and "in_plane_spacing" not in page and "gisaxs_fit" not in page
+    assert "In-plane spacing" not in page
     chinese = report_html(outcome, language="中文")
-    assert "GISAXS 水平切线" in chinese and "面内间距" in chinese and "GISAXS 拟合" in chinese
+    assert "GISAXS 水平切线" in chinese and "特征长度 2π/q*" in chinese and "GISAXS 拟合" in chinese
 
 
 def test_halves_are_named_in_words() -> None:

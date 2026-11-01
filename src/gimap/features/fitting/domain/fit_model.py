@@ -60,7 +60,10 @@ class ParameterInfo:
 
 
 INFO = {
-    "Int": ParameterInfo("Scale", "", 1.0, 0.0, INF, tip="Intensity of this component (the form factor is 1 at q = 0)"),
+    "Int": ParameterInfo("Scale", "", 1.0, 0.0, INF, tip=(
+        "Intensity of this component (sphere and random cylinder: the form factor is 1 at q = 0; "
+        "vertical cylinder: 10⁻⁶·⟨R⁴⟩/4 at q = 0, R in nm)"
+    )),
     "R": ParameterInfo("R", "nm", 5.0, 0.3, 500.0, tip="Mean radius"),
     "sigma_R": ParameterInfo("σR/R", "", 0.2, 0.01, 1.0, tip="Relative spread of the radius (Gaussian)"),
     "h": ParameterInfo("h", "nm", 10.0, 0.5, 1000.0, tip="Mean height (length) of the cylinders"),

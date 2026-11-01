@@ -1,8 +1,11 @@
 """Bragg peaks of an I(q) profile: position, d-spacing, width, height and significance.
 
 The background under the peaks is a SNIP baseline; each candidate is then
-fitted with a Gaussian on a local linear background, weighted by the Poisson
-errors.  A peak must rise ``min_snr`` standard errors *and* ``min_relative_height``
+fitted with a Gaussian on a local linear background, weighted by the bins' own
+errors (Poisson for photon counts as measured, else the scatter of each bin's
+pixels).  At most ``max_peaks`` candidates (``MAX_PEAKS``), the most prominent, are
+fitted; the search records how many qualified (``PeakSearch.candidates``), so a
+report can say when the list was cut.  A peak must rise ``min_snr`` standard errors *and* ``min_relative_height``
 above the background (many pixels per bin make tiny ripples statistically
 "significant").  When nothing qualifies, the search says why, with the
 strongest feature it saw.
@@ -25,6 +28,8 @@ from .profiles import Profile, estimate_background
 DEFAULT_BACKGROUND_WINDOW = 0.15
 """Å⁻¹: half width of the widest SNIP step; broader features count as background."""
 MIN_POINTS = 12
+MAX_PEAKS = 12
+"""Candidates fitted by default, the most prominent first: each fit takes time, and a run fits them all."""
 FWHM_PER_SIGMA = 2.0 * math.sqrt(2.0 * math.log(2.0))
 GAUSS_AREA = math.sqrt(math.pi / (4.0 * math.log(2.0)))
 """Gaussian area = height × FWHM × GAUSS_AREA."""
@@ -97,6 +102,16 @@ class PeakSearch:
     data_y: np.ndarray = field(default_factory=lambda: np.zeros(0))
     data_sigma: np.ndarray = field(default_factory=lambda: np.zeros(0))
     """The measured profile on ``baseline_x`` (to draw a fit)."""
+    candidates: int = 0
+    """Maxima that passed the thresholds (SNR, relative height, width), before the cap."""
+    max_peaks: int = MAX_PEAKS
+    """The cap: at most this many candidates, the most prominent, were fitted."""
+
+    @property
+    def truncated(self) -> bool:
+        """More candidates qualified than were fitted: the peak list (and its series hints) is the
+        ``max_peaks`` most prominent of ``candidates``."""
+        return self.candidates > self.max_peaks
 
     def background_at(self, q: float) -> Optional[float]:
         if self.baseline_x.size == 0:
@@ -234,6 +249,17 @@ def caveat(peak: "Peak") -> str:
     return ""
 
 
+AT_EDGE = "at the end of the data: check"
+"""What a report says of a peak flagged ``at_edge`` (within 1.5 widths of the end of the searched q range): its shape,
+position and width may be cut off."""
+
+
+def reliable(peak: "Peak") -> bool:
+    """A peak the analysis builds on (rings, sizes, series hints): no caveat, and not cut off at the end of the
+    data (``at_edge``, ``AT_EDGE``)."""
+    return not caveat(peak) and "at_edge" not in peak.flags
+
+
 def _series_hints(qs: list[float]) -> tuple[str, ...]:
     hints: list[str] = []
     for base in qs[:3]:
@@ -257,9 +283,11 @@ def find_peaks(
     min_snr: float = 3.0,
     min_relative_height: float = 0.02,
     background_window: Optional[float] = None,
-    max_peaks: int = 12,
+    max_peaks: int = MAX_PEAKS,
 ) -> PeakSearch:
-    """Peaks of ``profile`` (x = q in Å⁻¹) inside ``x_range``, sorted by q."""
+    """Peaks of ``profile`` (x = q in Å⁻¹) inside ``x_range``, sorted by q; at most ``max_peaks`` candidates,
+    the most prominent, are fitted."""
+    max_peaks = max(1, int(max_peaks))
     from scipy.ndimage import gaussian_filter1d
     from scipy.signal import find_peaks as scipy_peaks
 
@@ -277,7 +305,7 @@ def find_peaks(
             (), span, data.size, data.step(), window_q, min_snr, min_relative_height, None,
             f"Only {data.size} measured bins in q = {span[0]:.4g}–{span[1]:.4g} Å⁻¹; "
             f"at least {MIN_POINTS} are needed.",
-            (), empty, empty,
+            (), empty, empty, max_peaks=max_peaks,
         )
     step = data.step()
     window_points = int(np.clip(round(window_q / step), 3, max(3, data.size // 3)))
@@ -298,7 +326,7 @@ def find_peaks(
             candidates.append((float(properties["prominences"][position]), int(index), width_points, snr, half_maximum))
     candidates.sort(reverse=True)
     peaks: list[Peak] = []
-    for _prominence, index, width_points, candidate_snr, half_maximum in candidates[: int(max_peaks)]:
+    for _prominence, index, width_points, candidate_snr, half_maximum in candidates[:max_peaks]:
         fitted = _fit_candidate(data, index, width_points, half_maximum, baseline, min_snr)
         flags: list[str] = []
         if fitted is None:
@@ -355,9 +383,10 @@ def find_peaks(
     return PeakSearch(
         tuple(finished), span, data.size, step, window_q, min_snr, min_relative_height,
         # Series from halos, spikes or failed fits would suggest an order the data do not show.
-        strongest, reason, _series_hints([peak.q for peak in finished if not caveat(peak)]), data.x, baseline,
-        data_y=data.y, data_sigma=data.sigma,
+        strongest, reason, _series_hints([peak.q for peak in finished if reliable(peak)]), data.x, baseline,
+        data_y=data.y, data_sigma=data.sigma, candidates=len(candidates), max_peaks=max_peaks,
     )
 
 
-__all__ = ["BROAD_RELATIVE_WIDTH", "DEFAULT_BACKGROUND_WINDOW", "GAUSS_AREA", "Peak", "PeakSearch", "caveat", "find_peaks"]
+__all__ = ["AT_EDGE", "BROAD_RELATIVE_WIDTH", "DEFAULT_BACKGROUND_WINDOW", "GAUSS_AREA", "MAX_PEAKS", "Peak", "PeakSearch",
+           "caveat", "find_peaks", "reliable"]

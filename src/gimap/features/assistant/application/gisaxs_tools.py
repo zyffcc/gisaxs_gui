@@ -11,6 +11,7 @@ import math
 from typing import Optional
 
 from ..domain import Profile, choose_halves, find_peaks, fit_curve, spacing_from_peaks
+from .gisaxs_choice import bounds_text, chosen_index
 from .models import ToolInputError, ToolOutcome
 
 MIN_SHIFT_PX = 0.0001
@@ -37,11 +38,19 @@ def _solution(row: dict) -> dict:
         "log_rmse": round(float(row.get("best_log_rmse", math.nan)), 4),
         "converged": bool(row.get("converged")),
         "warnings": list(row.get("warnings") or ()),
+        # The values that ended on a search bound ({"parameter": "D", "bound": "upper", "component": 0}).
+        "at_bounds": [dict(item) for item in row.get("at_bounds") or ()],
         "evaluations": row.get("nfev"),
         "seconds": None if row.get("seconds") is None else round(float(row["seconds"]), 2),
         "algorithm": row.get("algorithm"),
         "screen": row.get("conditions_source"),
     }
+
+
+def _brief(solution: dict) -> str:
+    params = solution["components"][0] if solution["components"] else {}
+    return (f"{solution['model']}, R = {params.get('R', math.nan):.3g} nm, D = {params.get('D', math.nan):.3g} nm, "
+            f"χ²/N = {solution['chi2']:.3g}")
 
 
 def _curve(row: dict) -> dict:
@@ -85,7 +94,7 @@ class GisaxsToolsMixin:
         before = "unavailable" if found["loss_before"] is None else f"{found['loss_before']:.3g}"
         return self._ok(
             {**record, "changed": True},
-            f"centre x {found['initial_x_px']:.4f} → {found['x_px']:.4f} px "
+            f"centre x {found['initial_x_px']:.2f} → {found['x_px']:.2f} px "
             f"(asymmetry {before} → {found['loss_after']:.3g})",
         )
 
@@ -156,7 +165,8 @@ class GisaxsToolsMixin:
         }
         if spacing is None:
             return self._ok(data, "no side maximum or shoulder away from qy = 0")
-        return self._ok(data, f"{spacing.kind} at |qy| = {spacing.q:.4g} Å⁻¹ → D ≈ {spacing.distance_nm:.3g} nm")
+        return self._ok(data, f"{spacing.kind} of the cut at |qy| = {spacing.q:.4g} Å⁻¹ → 2π/q* = "
+                              f"{spacing.distance_nm:.3g} nm (a length scale, not necessarily the particle spacing)")
 
     def _tool_fit_horizontal_cut(self, side: Optional[str] = None, components=None, distance_nm=None) -> ToolOutcome:
         if self.fitter is None:
@@ -170,23 +180,25 @@ class GisaxsToolsMixin:
         if not rows:
             raise ToolInputError("The fit found no solution.")
         solutions = [_solution(row) for row in rows]
-        best = rows[0]
+        index = chosen_index(solutions)  # the best-ranked close solution with no non-linear value at a search bound
         self.results.gisaxs["fit"] = {
             "side": side, "curve": note, "points": int(x.size), "q_range_inv_angstrom": [float(x.min()), float(x.max())],
             "distance_start_nm": distance_nm,
             "solutions": solutions,
-            "best_curve": _curve(best),
+            "chosen": index,
+            "best_curve": _curve(rows[index]),  # the reported (chosen) solution's curve: fit_curve.csv's I_fit
             "curves": [_curve(row) for row in rows],
             "native": [_native(row) for row in rows],
             "data": {"q_inv_angstrom": x.tolist(), "intensity": y.tolist(), "sigma": sigma.tolist()},
         }
         head = solutions[0]
-        params = head["components"][0] if head["components"] else {}
-        summary = (
-            f"best: {head['model']}, R = {params.get('R', math.nan):.3g} nm, D = {params.get('D', math.nan):.3g} nm, "
-            f"χ² = {head['chi2']:.3g}"
-        )
-        return self._ok({"side": side, "curve": note, "points": int(x.size), "solutions": solutions[:TOP_SOLUTIONS]}, summary)
+        summary = f"best: {_brief(head)}" + (f" ({bounds_text(head)})" if bounds_text(head) else "")
+        if index:
+            summary = (f"rank 1: {_brief(head)} ({bounds_text(head) or 'not converged'}); chosen: rank "
+                       f"{solutions[index]['rank']}, {_brief(solutions[index])}, the best-ranked close solution with "
+                       "no non-linear value at a search bound")
+        return self._ok({"side": side, "curve": note, "points": int(x.size), "solutions": solutions[:TOP_SOLUTIONS],
+                         "chosen": solutions[index]}, summary)
 
 
 __all__ = ["GisaxsToolsMixin"]

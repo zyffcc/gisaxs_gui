@@ -173,7 +173,10 @@ def test_a_module_set_is_listed_once_and_each_stitched_frame_is_written_once(tmp
     assert len(report.succeeded) == 4 and not report.failed
     for frame in range(4):
         expected = np.asarray(load_detector_image(modules[0], frame_idx=frame).data)
-        np.testing.assert_array_equal(np.load(tmp_path / "out" / f"scan_00007_{frame + 1:06d}.npy"), expected)
+        written_frame = np.load(tmp_path / "out" / f"scan_00007_{frame + 1:06d}.npy")
+        # In the stored type (int32): the gaps between the modules, NaN as read, are −1 — no data in counts.
+        assert written_frame.dtype == np.int32
+        np.testing.assert_array_equal(written_frame, np.where(np.isnan(expected), -1, expected))
     # Every module is in each frame, and the record names every module file.
     frame = np.load(tmp_path / "out" / "scan_00007_000003.npy")
     assert {100 + 2, 200 + 2, 300 + 2} <= set(np.unique(frame[np.isfinite(frame)]).astype(int))

@@ -24,11 +24,14 @@ from pathlib import Path
 import pytest
 
 from test_fit1d_release_manifest import install_kit
+from test_release_packaging_licenses import make_environment
+from tools.collect_licenses import collect
 from tools.list_fit1d_release_files import KIT, MANIFEST, release_files
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "tools" / "build_portable_release.ps1"
 KIT_HELPER = ROOT / "tools" / "list_fit1d_release_files.py"
+LICENSE_HELPER = ROOT / "tools" / "collect_licenses.py"
 V5 = "modules/Fitting_1D_Model/Workflow_v5"
 
 pytestmark = pytest.mark.skipif(
@@ -58,6 +61,13 @@ TRACKED = {
     "src/gimap/shared/version.py": '__version__ = "9.8.7"\n',
     "config/detectors.json": "{}\n",
     "docs/User_Manual.md": "# Manual\n",
+    "docs/User_Manual_zh.md": "# Manual (zh)\n",
+    "docs/Physics_Manual.md": "# Physics\n",
+    "docs/Physics_Manual_zh.md": "# Physics (zh)\n",
+    "CITATION.cff": "cff-version: 1.2.0\n",
+    "tests/data/external/manifest.json": "{}\n",
+    "LICENSE": "MIT License\n",
+    "THIRD_PARTY_NOTICES.md": "# Third-party notices\n",
     f"{V5}/conditional_v2/predict.py": "print('predict')\r\n",
     f"{V5}/stable_blue_rc_v1/protocol.json": "{}\r\n",
 }
@@ -93,7 +103,7 @@ MANIFESTS = {
     f"{V5}/stable_blue_rc_v1/MANIFEST.json": ("protocol.json", "network.npz"),
 }
 PACKED = set(TRACKED) | set(MODEL) | set(MANIFESTS) | {
-    "tools/build_portable_release.ps1", "tools/list_fit1d_release_files.py",
+    "tools/build_portable_release.ps1", "tools/list_fit1d_release_files.py", "tools/collect_licenses.py",
 }
 
 
@@ -139,10 +149,12 @@ def developer_folder(tmp_path):
     (root / "tools").mkdir()
     shutil.copy2(SCRIPT, root / "tools" / SCRIPT.name)
     shutil.copy2(KIT_HELPER, root / "tools" / KIT_HELPER.name)
+    shutil.copy2(LICENSE_HELPER, root / "tools" / LICENSE_HELPER.name)
     _git(root, "init", "--quiet")
     # ``git add`` with paths: the ignored files stay out, and so does the untracked ``_handoff``.
     _git(root, "add", "--", ".gitignore", "main.py", "Start_GIMaP.bat", "src", "config", "docs",
-         "work", "GISAXS_HANDOFF_20260909.md", "modules", "tools")
+         "work", "GISAXS_HANDOFF_20260909.md", "modules", "tools", "LICENSE", "THIRD_PARTY_NOTICES.md",
+         "CITATION.cff", "tests")
     # As in this repository: tracked although ``research/`` is ignored.
     _git(root, "add", "--force", "--", "docs/research/outline.md")
     return root
@@ -190,23 +202,40 @@ def test_the_package_holds_the_list_and_nothing_else(developer_folder, tmp_path,
         "        packed.writestr(runtime + '/pythonw.exe', 'python')\n",
         encoding="utf-8")
     (stand_ins / "python.cmd").write_text(f'@"{sys.executable}" "{conda_pack}" %*\r\n')
-    (stand_ins / "conda.cmd").write_text('@echo {"envs": ["C:/stand-in/gimap-stand-in"]}\r\n')
+    # The stand-in environment holds a few licence files, which the build collects into licenses/.
+    environment = make_environment(tmp_path / "envs" / "gimap-stand-in")
+    (stand_ins / "conda.cmd").write_text('@echo {"envs": ["%s"]}\r\n' % environment.as_posix())
     monkeypatch.setenv("PATH", str(stand_ins), prepend=";")
+    temporary = tmp_path / "temp"  # where the build stages licenses/ (and must clean up)
+    temporary.mkdir()
+    monkeypatch.setenv("TMP", str(temporary))
+    monkeypatch.setenv("TEMP", str(temporary))
 
     # Only the stand-in conda knows this environment: a real one would stop the script here.
     build = _builder(developer_folder, "-EnvironmentName", "gimap-stand-in")
     assert build.returncode == 0, build.stdout + build.stderr
     package = "GIMaP-9.8.7-windows-x64-portable"
-    with zipfile.ZipFile(developer_folder / "release" / f"{package}.zip") as archive:
+    zip_path = developer_folder / "release" / f"{package}.zip"
+    with zipfile.ZipFile(zip_path) as archive:
         names = {name[len(package) + 1:] for name in archive.namelist()}
         predict = archive.read(f"{package}/{V5}/conditional_v2/predict.py")
+        pyqt_gpl = archive.read(f"{package}/licenses/python/PyQt5-5.15.11/GPL-3.0.txt")
+        notices = archive.read(f"{package}/licenses/THIRD_PARTY_NOTICES.md")
         if with_fit1d:
             subset = json.loads(archive.read(f"{package}/{KIT}/{MANIFEST}"))
             assert subset == release_files(developer_folder)["manifest"]
             archive.extractall(tmp_path / "extracted")
-    assert names == PACKED | kit_paths | {"runtime/pythonw.exe"}
+    licences = {f"licenses/{name}" for name in collect(environment, tmp_path / "expected")["written"]}
+    licences |= {"licenses/THIRD_PARTY_NOTICES.md", "licenses/GIMaP/LICENSE"}
+    assert names == PACKED | kit_paths | {"runtime/pythonw.exe"} | licences
     assert not [name for name in names - {"runtime/pythonw.exe"} if _personal(name)]
     assert predict == b"print('predict')\r\n"  # the bytes on disk: the manifests are made from them
+    assert b"GNU GENERAL PUBLIC LICENSE" in pyqt_gpl  # the PyQt5 wheel has no text of its own
+    assert notices == (developer_folder / "THIRD_PARTY_NOTICES.md").read_bytes()
+    assert not list(temporary.glob("gimap-licenses-*"))  # the staging folder is gone
+    # SHA256SUMS.txt beside the ZIP, in the format of sha256sum (the ZIP is small: one part, no installer).
+    sums = (developer_folder / "release" / "SHA256SUMS.txt").read_bytes()
+    assert sums == f"{hashlib.sha256(zip_path.read_bytes()).hexdigest()}  {package}.zip\n".encode("ascii")
     if with_fit1d:
         assert release_files(tmp_path / "extracted" / package) == release_files(developer_folder)
 
@@ -283,6 +312,31 @@ def test_a_source_file_git_does_not_know_stops_the_build_unless_allowed(develope
     assert code == 0, said
     assert "WARNING: 1 file(s) in the program folders are not tracked by git" in said
     assert set(listed) == PACKED
+
+
+@pytest.mark.parametrize("name", ["docs/Physics_Manual.md", "CITATION.cff", "docs/manual_images/en/99_new.png"])
+def test_a_document_git_does_not_know_stops_the_build_unless_allowed(developer_folder, name):
+    """Help opens the manuals and CITATION.cff; the manuals show their pictures: untracked, they would be missing."""
+    path = developer_folder / name
+    if path.exists():
+        _git(developer_folder, "rm", "--cached", "--quiet", "--", name)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"new screenshot")
+    code, listed, said = _list(developer_folder)
+    assert code == 1 and name in said and "not tracked by git" in said and "Help or the manuals" in said, said
+    assert name not in listed
+    code, listed, said = _list(developer_folder, "-AllowUntracked")
+    assert code == 0, said
+    assert "WARNING: 1 document file(s) that Help or the manuals use are not tracked by git" in said
+
+
+def test_a_file_help_opens_that_is_missing_is_a_problem(developer_folder):
+    (developer_folder / "docs" / "Physics_Manual_zh.md").unlink()
+    _git(developer_folder, "rm", "--cached", "--quiet", "--", "docs/Physics_Manual_zh.md")
+    code, _listed, said = _list(developer_folder)
+    assert code == 1
+    assert "Help opens this file, and it is not in the package: docs/Physics_Manual_zh.md" in said
 
 
 def test_a_model_file_that_is_missing_or_was_changed_is_a_problem(developer_folder):

@@ -212,7 +212,18 @@ def _unsigned_file(tmp_path, name="half.dat"):
     return path
 
 
-def test_one_method_choice_recommends_predict_for_an_unfitted_gisaxs_cut(tmp_path):
+KIT_LOOKED_FOR = "src.gimap.features.fitting.presentation.single.fit1d_review.fit1d_kit_available"
+"""Where the page asks whether the optional fit1d kit is installed (patched: the tests do not need the kit)."""
+
+
+def _method_tip(page, method: str) -> str:
+    from PyQt5.QtCore import Qt
+
+    return page.method_combo.itemData(page.method_combo.findData(method), Qt.ToolTipRole)
+
+
+def test_one_method_choice_recommends_predict_for_an_unfitted_gisaxs_cut(tmp_path, monkeypatch):
+    monkeypatch.setattr(KIT_LOOKED_FOR, lambda: True)  # the kit is installed: Predict is recommended
     page = _page()
     runner = _Recorder()
     page.view_model.context.jobs = runner
@@ -221,7 +232,8 @@ def test_one_method_choice_recommends_predict_for_an_unfitted_gisaxs_cut(tmp_pat
         assert page.recommended_method() == "fit1d" and page.method() == "fit1d"
         assert page.step_stack.currentWidget() is page.step_pages["fit"]
         assert page.fit_step_button.text() == "Predict parameters (fit1d)"
-        assert page.method_hint.text().startswith("Recommended for this curve")
+        assert page.method_hint.text().startswith("Recommended for this curve: a GISAXS cut not fitted yet. Finds")
+        assert _method_tip(page, "fit1d").endswith("The first step for a GISAXS cut.")
         assert page.fit1d_row.isVisibleTo(page) and not page.families_row.isVisibleTo(page)
         assert page.fit1d_composition.currentData() == "auto:sphere,vc:3"  # no particles of the user's yet
         page.fit_button.click()  # the command bar's Fit runs the method chosen
@@ -258,6 +270,53 @@ def test_one_method_choice_recommends_predict_for_an_unfitted_gisaxs_cut(tmp_pat
     try:
         assert page.open_curve(_unsigned_file(tmp_path))  # a curve that is not known to be a GISAXS cut
         assert page.recommended_method() == "" and page.method() != "fit1d"
+    finally:
+        page.dispose()
+
+
+def test_without_the_fit1d_kit_the_shape_search_is_recommended_and_predict_says_it_is_an_add_on(tmp_path,
+                                                                                                monkeypatch):
+    """fit1d is not distributed with GIMaP: without its kit an unfitted GISAXS cut gets Find the particle shape (no
+    AI), and Predict's tooltip says that it is an optional add-on and where it goes."""
+    from src.gimap.app.presentation.i18n import apply_language, tr
+
+    monkeypatch.setattr(KIT_LOOKED_FOR, lambda: False)
+    page = _page(quick_fit=lambda *args, **kwargs: [])
+    try:
+        assert page.open_curve(_signed_file(tmp_path))
+        assert page.recommended_method() == "shapes" and page.method() == "shapes"
+        assert page.step_stack.currentWidget() is page.step_pages["fit"]
+        assert page.fit_step_button.text() == "Find the particle shape"
+        assert page.method_hint.text().startswith(
+            "Recommended for this curve: a GISAXS cut not fitted yet (Predict parameters needs the optional fit1d "
+            "add-on, which is not installed). Fits sphere")
+        tip = _method_tip(page, "fit1d")
+        assert "An optional add-on, not distributed with GIMaP" in tip and "utils/gisaxs1d_gui_kit" in tip
+        assert "GISAXS1D_KIT_HOME" in tip and "The first step for a GISAXS cut" not in tip
+        page.set_method("fit1d")  # still there to choose: its line says the same
+        assert page.method_hint.text() == tip and "add-on" in page.fit_step_button.toolTip()
+        try:
+            apply_language("zh", [page])
+            page.set_method("shapes")
+            assert page.method_hint.text().startswith("推荐用于这条曲线") and "fit1d 附加组件" in page.method_hint.text()
+            assert tr(tip) != tip
+        finally:
+            apply_language("en", [page])
+    finally:
+        page.dispose()
+    page = _page()  # no shape search on this page: nothing to recommend
+    try:
+        assert page.open_curve(_signed_file(tmp_path))
+        assert page.recommended_method() == "" and page.method() not in ("fit1d", "shapes")
+        assert not page.method_hint.text().startswith("Recommended")
+    finally:
+        page.dispose()
+    monkeypatch.setattr(KIT_LOOKED_FOR, lambda: True)  # the kit copied in: the next curve gets Predict again
+    page = _page(quick_fit=lambda *args, **kwargs: [])
+    try:
+        assert page.open_curve(_signed_file(tmp_path))
+        assert page.recommended_method() == "fit1d" and page.method() == "fit1d"
+        assert "The first step for a GISAXS cut" in _method_tip(page, "fit1d")
     finally:
         page.dispose()
 

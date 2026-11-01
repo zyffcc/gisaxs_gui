@@ -6,6 +6,8 @@ from typing import Optional
 
 import numpy as np
 
+from .gisaxs_choice import chosen
+
 A_TO_NM = 10.0
 """q in Å⁻¹ × 10 = q in nm⁻¹ (the fit works in nm⁻¹)."""
 
@@ -23,7 +25,8 @@ def fit_on(q_inv_angstrom, best_curve: Optional[dict]) -> np.ndarray:
 
 
 def fit_curve_table(fit: dict) -> tuple[str, np.ndarray]:
-    """``(header, columns)``: q (Å⁻¹), I, σ of the fitted curve and the best fit at the same q."""
+    """``(header, columns)``: q (Å⁻¹), I, σ of the fitted curve and the fit the run reports (``best_curve``: the
+    chosen solution, ``gisaxs_choice``) at the same q."""
     data = fit.get("data") or {}
     q = np.asarray(data.get("q_inv_angstrom") or (), dtype=float)
     columns = np.column_stack([
@@ -34,22 +37,31 @@ def fit_curve_table(fit: dict) -> tuple[str, np.ndarray]:
 
 
 def fit_solutions_csv(fit: dict) -> str:
-    """One line per component of each solution: rank, model, χ², parameters (R, h, D in nm; the σ columns are
-    relative widths σ/value, without a unit). Two ``#`` lines come first: what the table is (with the curve
-    that was fitted) and the units; then the column names."""
+    """One line per component of each solution: rank, model, χ²/N, parameters (R, h, D in nm; the σ columns are
+    relative widths σ/value, without a unit), then ``at_bounds`` (the values that ended on a search bound, as
+    ``name:upper`` or ``name:lower``, a component's number after the name when there are several) and ``chosen``
+    (the solution the run reports). Two ``#`` lines come first: what the table is (with the curve that was fitted)
+    and the units; then the column names."""
     rows = fit.get("solutions") or []
+    index, _solution = chosen(fit)
     keys = sorted({key for row in rows for component in row["components"] for key in component if key != "type"})
     lines = [
         f"# GISAXS fit solutions [{' '.join(str(fit.get('curve')).split())}]: one line per component of each solution",
         "# units: R, h, D in nm; sigma_R, sigma_h, sigma_D are relative widths (sigma/value, no unit); "
-        "chi2, log_rmse, amplitude and weight have no unit",
-        "rank,model,chi2,log_rmse,converged,component," + ",".join(keys),
+        "chi2 (chi^2/N: the mean of the squared sigma-normalised residuals), log_rmse, amplitude and weight have no unit; "
+        "at_bounds: values that ended on a search bound (not determined by the curve); chosen: the solution reported",
+        "rank,model,chi2,log_rmse,converged,component," + ",".join(keys) + ",at_bounds,chosen",
     ]
-    for row in rows:
+    for number, row in enumerate(rows):
+        many = len(row["components"] or ()) > 1
+        ended = " ".join(
+            f"{item.get('parameter')}{'' if not many or item.get('component') is None else int(item['component']) + 1}"
+            f":{item.get('bound')}" for item in row.get("at_bounds") or ())
         for component in row["components"] or [{"type": ""}]:
             values = ",".join("" if component.get(key) is None else str(component[key]) for key in keys)
             lines.append(
-                f"{row['rank']},{row['model']},{row['chi2']},{row['log_rmse']},{row['converged']},{component['type']},{values}"
+                f"{row['rank']},{row['model']},{row['chi2']},{row['log_rmse']},{row['converged']},{component['type']},{values},"
+                f"{ended},{number == index}"
             )
     return "\n".join(lines) + "\n"
 

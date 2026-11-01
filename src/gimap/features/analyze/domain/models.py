@@ -17,9 +17,18 @@ class Curve:
     """One reduced 1D curve with the region it came from.
 
     ``x`` is in the unit named by ``x_label``; ``intensity`` is the mean pixel
-    value per bin (detector counts unless the frame was normalised upstream);
-    ``sigma`` is the Poisson standard error of that mean, ``pixels`` the number
+    value per bin (detector counts unless the frame was normalised upstream or
+    divided by the GIWAXS intensity-correction factor); ``pixels`` is the number
     of pixels averaged in each bin.
+
+    ``sigma`` is the standard error of that mean, by one of three models chosen
+    once per frame (the application's ``photon_counts``): Poisson for photon
+    counts, ``√max(sum, 1)/n`` (at least one count, so a bin of zeros never gets
+    σ = 0) for both fixed-edge bins and GISAXS detector lines; Poisson carried
+    through the factor when GIWAXS intensity corrections are on, with at least
+    one count at the bin's mean factor (Physics Manual 5.10); the scatter of the bin's pixels (``binning.scatter_sigma``)
+    for frames that are not photon counts — floating-point, background-subtracted
+    or mirror-filled ones.
     """
 
     key: str

@@ -21,6 +21,7 @@ import h5py
 import numpy as np
 
 from .models import DetectorImage
+from .nexus_datasets import CHUNK_NAME
 from .nexus_files import FRAME_BEYOND, NO_IMAGE
 from .nexus_layout import P03_LAMBDA, NexusLayout, open_nexus
 from .nexus_modules import lambda_layout, module_position
@@ -42,6 +43,18 @@ def nxs_invalid_pixel_mask(raw_mask: Any) -> np.ndarray:
     return (values & NXS_REJECT_MASK_BITS) != 0
 
 
+def _family_row(image: h5py.Dataset, frame: int, rows: int) -> int:
+    """The row of a 3-D ``pixel_mask`` for ``image``: a 2-D ``image_NNNNNN`` of a numbered family with one mask
+    row per member (a Format Converter container) takes the row of its place in the family, also when it is
+    read on its own (frame 0); otherwise row ``frame``."""
+    match = CHUNK_NAME.match(image.name.rsplit("/", 1)[-1]) if image.ndim == 2 and image.name else None
+    if match is None or image.parent is None:
+        return frame
+    numbers = sorted(int(member.group("number")) for key in image.parent
+                     if (member := CHUNK_NAME.match(key)) and member.group("prefix") == match.group("prefix"))
+    return numbers.index(int(match.group("number"))) if len(numbers) == rows else frame
+
+
 def _pixel_mask(group: Any, frame: int, shape: tuple[int, int], image: h5py.Dataset) -> Optional[np.ndarray]:
     """The invalid pixels the file marks next to the data (``pixel_mask``, Dectris: ``detectorSpecific/``)."""
     if group is None:
@@ -51,7 +64,8 @@ def _pixel_mask(group: Any, frame: int, shape: tuple[int, int], image: h5py.Data
         if not isinstance(node, h5py.Dataset) or node == image:  # a mask read as the image is not masked by itself
             continue
         if node.ndim == 3 and node.shape[0] > 0 and tuple(node.shape[1:]) == shape:
-            return nxs_invalid_pixel_mask(node[min(frame, node.shape[0] - 1)])
+            row = _family_row(image, frame, node.shape[0])
+            return nxs_invalid_pixel_mask(node[min(row, node.shape[0] - 1)])
         if node.ndim == 2 and tuple(node.shape) == shape:
             return nxs_invalid_pixel_mask(node[()])
     return None

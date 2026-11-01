@@ -19,7 +19,16 @@ SENTENCES = (
     "{texture} — but the strongest measured |χ| ({chi}°) borders an unmeasured range, so the true maximum may lie "
     "inside it",
     "no single preferred orientation: maxima of similar height at |χ| ≈ {a}° and {b}°",
-    "weak or no preferred orientation (f = {f}): the ring is strongest at |χ| ≈ {chi}° but nearly as intense elsewhere",
+    "no clear preferred orientation (f − f_iso = {f}, within ±{margin}): the ring is strongest at |χ| ≈ {chi}° but "
+    "nearly as intense elsewhere",
+    "no single preferred orientation: strongest at |χ| ≈ {chi}°, but f − f_iso = {f} puts most of the intensity "
+    "nearer the sample plane",
+    "no single preferred orientation: strongest at |χ| ≈ {chi}°, but f − f_iso = {f} puts most of the intensity "
+    "nearer the surface normal",
+    "Leaving out |χ| ≥ {chi}°, next to the sample horizon, changes f − f_iso from {a} to {b} ({n}σ_f): f depends on "
+    "those bins. There the exit angle αf is smallest, and absorption in the film, the transmission function or a "
+    "shadow can lower the intensity; GIMaP corrects none of them.",
+    "Without those bins the texture rule (|f − f_iso| against {margin}) would give another verdict.",
     "tilted: maximum at χ ≈ ±{chi}°",
     "The radial background under the ring ({background} counts/pixel) was subtracted.",
     "|χ| {where} is shadowed: the intensity there is below {fraction} of the diffuse background at this q (a shadow, "
@@ -29,7 +38,7 @@ SENTENCES = (
     "A random (isotropic) ring measured over the same |χ| would give f = {f}: compare f with that, not with 0.",
     "Only {n} measured χ bins in this ring.",
     "The ring is not above the radial background: at most {snr}σ in any 1° χ bin.",
-    "Only {covered} of the orientation range Herman's f weighs (sin χ) is measured at this q (|χ| {where}); f and the "
+    "Only {covered} of the orientation range Hermans f weighs (sin χ) is measured at this q (|χ| {where}); f and the "
     "orientation distribution need most of it, above all near the sample plane. Within the measured part the ring is "
     "strongest at |χ| ≈ {chi}°.",
     # The halves of a GISAXS cut (domain/gisaxs_cut.py) and the curve that was fitted.
@@ -51,10 +60,20 @@ SENTENCES = (
     "half has no points)",  # gisaxs_cut.HOLES_SENTENCE, character for character
     # The points a GISAXS run asks a person to look at (application/gisaxs_procedure.py).
     "cut of the series (rows {rows})",
-    "{n} solutions of {families} particle families fit within {percent} of the best χ²: the curve alone does not "
-    "decide the model.",
-    "Solutions whose D agrees with the observed spacing: {solutions}. Choose the particle shape you expect and refine "
-    "that model in Fitting; compare the fitted curves.",
+    "{n} solutions of {families} particle families fit within {percent} of the first solution's χ²/N: the curve alone "
+    "does not decide the model.",
+    "The run reports rank {rank} ({solution}), the best-ranked of them with no non-linear value at a search bound: "
+    "rank 1 ({first}) has {bounds}.",
+    "The reported solution ({model}) has χ²/N = {chi2}, above {limit}: it misses the curve by far more than the σ of "
+    "its points, so none of the particle families of the quick fit describes this cut, and its R and D are not "
+    "measurements.",  # gisaxs_procedure.POOR_FIT, character for character
+    "Solutions whose D is within {percent} of 2π/q* of the cut: {solutions} (2π/q* is a length scale, not necessarily "
+    "the particle spacing).",
+    "The first-ranked solution ({model}) has {bounds}, and no solution within {percent} of its χ²/N is free of search "
+    "bounds: those values are not determined by the curve.",
+    # A value of a fit solution at a bound of its search range (application/gisaxs_choice.py).
+    "{name} at its upper bound",
+    "{name} at its lower bound",
     "The symmetry axis is {shift} px from the calibrated centre: check the calibration or the sample alignment.",
     # Why a run could not go on (application/pipeline.py, pipeline_progress.py).
     "No calibration file and no image of a standard GIMaP can fit was found ({n} folders searched).",
@@ -94,6 +113,8 @@ SENTENCES = (
     "made for {shape} pixels, the frame has {frame}",
     # Calibrations, calibrants and the pixel size the person gave (application/pipeline_geometry.py).
     "the notes name {n}: {names}",
+    "from given; it replaces the {value}° set in Analyze's command bar",
+    "from the notes; it replaces the {value}° set in Analyze's command bar",
     "compared ({name})",
     "the notes name {noted}, the file name {from_name}",
     "given; the image header says {header} µm, the given value is used",
@@ -109,6 +130,12 @@ SENTENCES = (
     "sibling folder {name}",
     "folder {name} two levels up",
     "folder {name} three levels up",
+    # A .poni tilt the flat geometry leaves out (application/pipeline_geometry.py: TILT_WHY, TILT_SMALL).
+    "The calibration describes a detector tilted by {tilt}°; GIMaP's geometry is a flat detector perpendicular to "
+    "the beam, so the tilt is left out and |q| is off by up to {error} % over the valid detector area.",
+    "GIMaP's geometry is a flat detector perpendicular to the beam; leaving the tilt out changes |q| by at most "
+    "{error} % over the valid detector area (an open point above {limit_deg}° or {limit_error} %)",
+    "{tilt}° left out",
 )
 """English templates of the sentences a run writes; ``{name}`` is a value written as it is (or ``NESTED``).
 The fixed sentences (no values) are plain keys of the table. The form with the most fixed text is tried first,
@@ -116,7 +143,11 @@ so a short form never takes a sentence of a longer one ("clear: … beats …").
 NESTED = frozenset({"texture", "agree", "extend", "now", "place"})
 """Values that are sentences themselves (a texture, whether the halves agree, how far one goes on, "no frame",
 where the search found a file)."""
+LISTS = frozenset({"bounds"})
+"""Values that are lists of such sentences joined by ", " (the values of a fit solution at a search bound)."""
 _FIELD = re.compile(r"\{(\w+)\}")
+_SENTENCE_BREAK = re.compile(r"(?<=[.。])\s+(?=[A-Z])")
+"""Between two sentences of a text that has no form of its own (a hint made of several sentences)."""
 
 
 @lru_cache(maxsize=1)
@@ -133,19 +164,40 @@ def _pattern(template: str) -> re.Pattern:
 
 def words(text) -> str:
     """A sentence of a run in the interface language: its own translation, else that of its form
-    (``SENTENCES``) with the values as written; else the sentence as it is."""
+    (``SENTENCES``) with the values as written; else, for a text of several sentences, each sentence so;
+    else the sentence as it is."""
     text = str(text or "")
     if not text or current_language() == DEFAULT_LANGUAGE:
         return text
     exact = tr(text)
     if exact != text:
         return exact
+    pieces = _SENTENCE_BREAK.split(text)
+    if len(pieces) > 1:  # a hint of several sentences, each of a known form (a Chinese text needs no spaces);
+        shown = [_sentence(piece) for piece in pieces]  # first, so a form's last value cannot swallow the rest
+        if all(piece is not None for piece in shown):
+            return ("" if current_language() == "zh" else " ").join(shown)
+    whole = _sentence(text)
+    return text if whole is None else whole
+
+
+def _sentence(text: str):
+    """The translation of one sentence (its own, or its form's), or ``None`` when it has neither."""
+    exact = tr(text)
+    if exact != text:
+        return exact
     for template in _ordered():
         found = _pattern(template).fullmatch(text)
         if found is not None:
-            values = {name: words(value) if name in NESTED else value for name, value in found.groupdict().items()}
+            values = {name: _value(name, value) for name, value in found.groupdict().items()}
             return trf(template, **values)
-    return text
+    return None
+
+
+def _value(name: str, value: str) -> str:
+    if name in LISTS:
+        return ("、" if current_language() == "zh" else ", ").join(words(piece) for piece in value.split(", "))
+    return words(value) if name in NESTED else value
 
 
 def parts(text, separator: str = "; ") -> str:
@@ -155,4 +207,4 @@ def parts(text, separator: str = "; ") -> str:
     return joiner.join(pieces)
 
 
-__all__ = ["NESTED", "SENTENCES", "parts", "words"]
+__all__ = ["LISTS", "NESTED", "SENTENCES", "parts", "words"]

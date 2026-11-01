@@ -37,7 +37,8 @@ features/
     xrr/
 ```
 
-应用壳（`app/`）：`main.py` → `app/main_window.py`（页面与侧栏）、`app/menus.py`（菜单命令）、
+应用壳（`app/`）：`main.py` → `app/main_window.py`（页面与侧栏）、`app/menus.py`（菜单命令；Edit、Analyze、Fitting
+菜单的命令在 `app/workspace_commands.py`，Help 菜单里要读文件和页面的命令在 `app/help_commands.py`）、
 `app/runtime.py`（feature 运行时与按 key 导航）；`app/presentation/theme/` 为唯一的样式来源
 （浅色 / 深色 token），缩放交给 Qt high-DPI。用户数据（设置、偏好、仪器配置、会话、模型参数）
 统一保存在用户数据目录（`integrations/state/user_store.py`）。

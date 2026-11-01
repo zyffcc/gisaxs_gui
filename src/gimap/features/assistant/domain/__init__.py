@@ -1,6 +1,7 @@
 """Framework-neutral GIWAXS metrics the assistant reports, and calibration-file recognition."""
 
 from .calibration_files import (
+    FAR_FOLDER,
     GIMAP_CALIBRATION,
     LOG,
     POINT_OF_NORMAL_INCIDENCE,
@@ -13,6 +14,7 @@ from .calibration_files import (
     classify,
     energy_kev,
     file_name_mentions,
+    folder_place,
     module_series,
     name_preference,
     parse_poni,
@@ -37,8 +39,11 @@ from .calibration_quality import (
 )
 from .gisaxs_cut import HalvesChoice, Spacing, choose_halves, fit_curve, spacing_from_peaks
 from .notes import energy_from_notes, incidence_from_notes, pixel_size_from_notes
-from .orientation import RingOrientation, SectorComparison, compare_sectors, ring_orientation
-from .peaks import BROAD_RELATIVE_WIDTH, DEFAULT_BACKGROUND_WINDOW, GAUSS_AREA, Peak, PeakSearch, caveat, find_peaks
+from .orientation import RingOrientation, SectorComparison, compare_sectors, herman_decimals, ring_orientation, signed
+from .peaks import (
+    AT_EDGE, BROAD_RELATIVE_WIDTH, DEFAULT_BACKGROUND_WINDOW, GAUSS_AREA, MAX_PEAKS, Peak, PeakSearch, caveat, find_peaks,
+    reliable,
+)
 from .profiles import Profile, downsample, significant, snip_background
 from .size import DEFAULT_SHAPE_FACTOR, CrystalliteSize, scherrer_size
 
@@ -48,6 +53,7 @@ __all__ = [
     "choose_halves",
     "fit_curve",
     "spacing_from_peaks",
+    "FAR_FOLDER",
     "GIMAP_CALIBRATION",
     "LOG",
     "POINT_OF_NORMAL_INCIDENCE",
@@ -60,6 +66,7 @@ __all__ = [
     "classify",
     "energy_kev",
     "file_name_mentions",
+    "folder_place",
     "module_series",
     "name_preference",
     "parse_poni",
@@ -79,11 +86,13 @@ __all__ = [
     "compare_verdict",
     "line_quality",
     "rms_px",
+    "AT_EDGE",
     "BROAD_RELATIVE_WIDTH",
     "CrystalliteSize",
     "DEFAULT_BACKGROUND_WINDOW",
     "DEFAULT_SHAPE_FACTOR",
     "GAUSS_AREA",
+    "MAX_PEAKS",
     "Peak",
     "PeakSearch",
     "Profile",
@@ -94,10 +103,13 @@ __all__ = [
     "downsample",
     "energy_from_notes",
     "find_peaks",
+    "herman_decimals",
     "incidence_from_notes",
     "pixel_size_from_notes",
+    "reliable",
     "ring_orientation",
     "scherrer_size",
+    "signed",
     "significant",
     "snip_background",
 ]

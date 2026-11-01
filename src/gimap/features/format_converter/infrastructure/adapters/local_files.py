@@ -16,14 +16,19 @@ import numpy as np
 from src.gimap.shared.detector_io import (
     HDF5_SUFFIXES,
     NexusLayout,
+    OutputFrame,
     cached_layout,
     group_sources,
+    invalid_pixels,
     load_detector_image,
+    output_frame,
     scan_stem,
     write_frame,
 )
 from src.gimap.shared.detector_io.nexus_layout import DATASET_NOT_FOUND
+from src.gimap.shared.detector_io.writing import nexus_detector, pixel_mask_values
 from src.gimap.shared.file_paths import normalize_path
+from src.gimap.shared.version import SOFTWARE
 
 from ...application.ports import ProgressCallback
 from ...domain.models import (
@@ -36,6 +41,8 @@ from ...domain.models import (
 from ...domain.rules import build_jobs, convert_dtype
 
 NO_IMAGE = "{name} holds no detector image."
+WRITER_FORMATS = {"NumPy": "npy", "HDF5": "hdf5", "TIFF": "tiff", "CBF": "cbf", "EDF": "edf"}
+"""The converter's output formats as the shared writer names them."""
 
 
 def _json_safe(value: Any) -> Any:
@@ -192,6 +199,17 @@ class LocalSourceRepository:
         )
         return np.asarray(detector_image.data), dict(detector_image.metadata or {})
 
+    def read_frame(
+        self,
+        source: InputSource,
+        frame_index: int,
+    ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
+        """``(data, pixels without data, metadata)`` of a frame to convert: the reader's mask, what is not
+        finite and, in integer counts, the negative gap codes (``invalid_pixels``, Analyze's rule)."""
+        detector_image = load_detector_image(source.path, frame_idx=frame_index, dataset_path=source.dataset_path)
+        data, metadata = np.asarray(detector_image.data), dict(detector_image.metadata or {})
+        return data, invalid_pixels(data, detector_image.mask, metadata.get("stored_dtype", "")), metadata
+
 
 class LocalConversionExecutor:
     """同步执行转换；调用方可将其放入 worker thread。"""
@@ -245,25 +263,27 @@ class LocalConversionExecutor:
                 try:
                     if job.source.status != "Failed":
                         job.source.status = "Converting"
-                    data, raw_metadata = self.source_repository.load_frame(
+                    data, invalid, raw_metadata = self.source_repository.read_frame(
                         job.source,
                         job.frame_index,
                     )
-                    data = convert_dtype(data, options.data_mode)
+                    frame = self._output_frame(data, invalid, raw_metadata, options)
                     metadata = _json_safe(raw_metadata)
                     metadata.update(
                         {
                             "source": job.source.path,
                             "frame_number": job.frame_index + 1,
                             "output": job.output_path,
-                            "shape": list(data.shape),
-                            "dtype": str(data.dtype),
+                            "shape": list(frame.data.shape),
+                            "dtype": str(frame.data.dtype),
+                            "pixel_values": frame.record,  # the type written, and how pixels without data are
+                            "software_version": SOFTWARE,  # the release that converted the frame
                         }
                     )
                     if container is not None:
-                        self._write_container_frame(container, data, metadata, position, options)
+                        self._write_container_frame(container, frame.data, metadata, position, options, frame.invalid)
                     else:
-                        self._write_frame(Path(job.output_path), data, metadata, options)
+                        self._write_frame(Path(job.output_path), frame.data, metadata, options, frame.invalid)
                     metadata_records.append(metadata)
                     report.succeeded.append(
                         {
@@ -307,10 +327,29 @@ class LocalConversionExecutor:
         report_path = destination / "conversion_report.json"
         report.report_path = str(report_path)
         report_path.write_text(
-            json.dumps(report.as_dict(), indent=2, ensure_ascii=False),
+            json.dumps({"software_version": SOFTWARE, **report.as_dict()}, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
         return report
+
+    @staticmethod
+    def _output_frame(
+        data: np.ndarray,
+        invalid: np.ndarray,
+        metadata: dict[str, Any],
+        options: ConversionOptions,
+    ) -> OutputFrame:
+        """The values to write: by default the frame in the type it was stored in, its gap codes kept and every
+        pixel without data marked so that GIMaP reads it as such again (``output_values``)."""
+        fmt = "hdf5" if options.container else WRITER_FORMATS.get(options.output_format)
+        if fmt is None:
+            raise ValueError(f"Unsupported output format: {options.output_format}")
+        stored = metadata.get("stored_dtype", "")
+        if options.data_mode in ("scale_uint16", "clip_uint16"):
+            converted = convert_dtype(data, options.data_mode, invalid)
+            return output_frame(converted, fmt, invalid=invalid, stored_dtype=stored, chosen_dtype="uint16")
+        chosen = "float32" if options.data_mode == "float32" else None
+        return output_frame(data, fmt, invalid=invalid, stored_dtype=stored, chosen_dtype=chosen)
 
     @staticmethod
     def _write_frame(
@@ -318,16 +357,17 @@ class LocalConversionExecutor:
         data: np.ndarray,
         metadata: dict[str, Any],
         options: ConversionOptions,
+        invalid: np.ndarray | None = None,
     ) -> None:
-        formats = {"NumPy": "npy", "HDF5": "hdf5", "TIFF": "tiff", "CBF": "cbf", "EDF": "edf"}
-        if options.output_format not in formats:
+        if options.output_format not in WRITER_FORMATS:
             raise ValueError(f"Unsupported output format: {options.output_format}")
-        fmt = formats[options.output_format]
+        fmt = WRITER_FORMATS[options.output_format]
         kept = metadata if options.preserve_metadata else None
         was_there = path.exists()
         try:
-            # (The shared writer keeps the record of a CBF or EDF frame as ASCII JSON: it reads back exactly.)
-            write_frame(path, data, fmt, kept)
+            # (The shared writer keeps the record of a CBF or EDF frame as ASCII JSON: it reads back exactly;
+            # an HDF5 file gets the pixels without data in its NeXus pixel_mask.)
+            write_frame(path, data, fmt, kept, invalid=invalid)
         except Exception:
             discard_failed_output(path, was_there)
             raise
@@ -339,9 +379,11 @@ class LocalConversionExecutor:
         metadata: dict[str, Any],
         index: int,
         options: ConversionOptions,
+        invalid: np.ndarray | None = None,
     ) -> None:
         group = handle["entry"].require_group("data")
         group.attrs["NX_class"] = "NXdata"
+        earlier = [tuple(node.shape) for node in group.values() if isinstance(node, h5py.Dataset)]
         dataset = group.create_dataset(
             f"image_{index:06d}",
             data=data,
@@ -350,6 +392,30 @@ class LocalConversionExecutor:
         )
         if options.preserve_metadata:
             dataset.attrs["metadata_json"] = json.dumps(metadata, ensure_ascii=False)
+        _container_mask(handle["entry"], tuple(data.shape), earlier, invalid)
+
+
+def _container_mask(entry: h5py.Group, shape: tuple, earlier: list[tuple], invalid: np.ndarray | None) -> None:
+    """The NeXus ``pixel_mask`` of the container: row k for its frame k, while every frame has one size (a
+    reader takes row k for frame k of a series of one size). With frames of several sizes the rows would not
+    be theirs: the mask goes, and the values alone mark the pixels without data (−1, NaN)."""
+    existing = entry.get("instrument/detector/pixel_mask")
+    if any(size != shape for size in earlier):
+        if existing is not None:
+            del entry["instrument/detector/pixel_mask"]
+        return
+    marked = invalid is not None and bool(np.any(invalid))
+    if existing is None and not marked:
+        return
+    rows = len(earlier) + 1
+    if existing is None:
+        existing = nexus_detector(entry).create_dataset(
+            "pixel_mask", shape=(rows, *shape), maxshape=(None, *shape), dtype=np.uint32,
+            chunks=(1, *shape), compression="gzip", shuffle=True, fillvalue=0,
+        )
+    else:
+        existing.resize(rows, axis=0)
+    existing[rows - 1] = pixel_mask_values(invalid) if marked else 0
 
 
 class ConversionEngine:

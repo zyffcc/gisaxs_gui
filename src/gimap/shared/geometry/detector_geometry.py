@@ -32,7 +32,9 @@ class DetectorGeometry:
       downward.  This is the pixel-corner convention used by pyFAI and by an
       ``imshow(..., extent=(0, width, height, 0))`` display.
     * ``beam_center_x_px`` / ``beam_center_y_px`` locate the *direct* (transmitted)
-      beam in those coordinates, i.e. pyFAI's PONI expressed in pixels.
+      beam in those coordinates.  For an untilted detector that is pyFAI's PONI
+      expressed in pixels; for a tilted one it is not (a ``.poni`` file is converted
+      to the direct beam when read, ``assistant/domain/calibration_files.parse_poni``).
     * ``incidence_deg`` is the grazing angle alpha_i between beam and sample surface;
       0 means transmission geometry.
     * Lengths are metres, the wavelength is in Å, so q comes out in Å⁻¹.

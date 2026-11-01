@@ -8,10 +8,15 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
     Batch Export。
   - **Fitting**：一维模型拟合，可以拟合单条曲线或原位序列。
   - **Compare**：多个序列或样品的阶段、异常帧、谁和谁相像。
+  - **Sputter**：原位溅射序列逐时间窗的颗粒尺寸、间距、生长阶段（工具包在子进程里运行）。
 - **Labs**：2D Prediction、Trainset Build。
 - **Tools 菜单**：Geometry Calibration、Format Converter（含 Convert Current File）、XRR Series Extractor、
   SEM Particle Analysis（SEM 图像粒径分析；2D Prediction 结果区的 SEM comparison… 也打开它）、
   1D Predict — Fit Many Curves（机器学习一维拟合，调用研究代码）、Process with AI、Settings。
+- **其他菜单**：Edit（Undo / Redo）、Analyze、Fitting 列出这两个工作区的命令，键仍归页面
+  （`app/presentation/workspace_menus.py`，命令由 `app/workspace_commands.py` 注入）；Help 有 User Manual（F1）、
+  Physics and Methods、Keyboard Shortcuts、Example Data、Report a Problem、错误日志和用户数据文件夹、GitHub、
+  Check for Updates、How to Cite GIMaP、Third-party Notices、About。
 - 入口 `main.py`；开发解释器 `D:\conda\envs\GUI\python.exe`。
 
 ## 先知道的几件事
@@ -50,8 +55,9 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
   - `bootstrap.py`。
 
   现有功能：analyze、fitting、compare、assistant（自动分析与 AI）、calibration、format_converter、xrr、
-  sem、prediction、trainset。
-- **组合根**在 `src/gimap/app/`：`main_window.py`、`menus.py`、`runtime.py`、`bootstrap.py`、`headless_assistant.py`。
+  sem、sputter、prediction、trainset。
+- **组合根**在 `src/gimap/app/`：`main_window.py`、`menus.py`、`workspace_commands.py`、`help_commands.py`、`runtime.py`、
+  `bootstrap.py`、`headless_assistant.py`。
   功能之间不互相导入，需要组合时由组合根注入。例如：
   - Fitting 的快速物理拟合经 `create_quick_fit()` 交给 assistant；
   - Run Automatic Analysis 写在 assistant 里，由 `main_window` 放进 Analyze 的 Results 步骤。
@@ -88,7 +94,9 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
     一处写错，整张样式表都会被丢掉。
 - **惯用写法**：静态布局放在 `presentation/views/*_view.py`，行为写成 mixin（Analyze 在 `bindings/`）。照着相邻代码写。
 - **文档**：`docs/architecture/overview.md`、`scientific-data-flow.md`、`dependency-rules.md`；
-  各工作区的调用链、文件和测试见 `docs/ui/workspaces/<名称>.md`。
+  各工作区的调用链、文件和测试见 `docs/ui/workspaces/<名称>.md`。方法、公式、默认值和阈值的科学说明在
+  `docs/Physics_Manual.md`（中文 `Physics_Manual_zh.md`，Help ▸ Physics and Methods 打开）；第三方许可证在
+  `THIRD_PARTY_NOTICES.md`，引用信息在 `CITATION.cff`，发布步骤在 `docs/releasing.md`。
 - **用户手册**：英文 `docs/User_Manual.md`、中文 `docs/User_Manual_zh.md`，截图在 `docs/manual_images/en|zh/`
   （两份同名）。Help ▸ User Manual（F1）按界面语言打开对应的一份，没有中文版时退回英文。
 
@@ -163,6 +171,8 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
 界面文字和按钮名、操作步骤、默认值、导出的文件和位置、文件格式、依赖和安装、已知限制、新增或删掉的功能。
 
 - 中英两份一起改，内容保持一致；中文版里的界面名用 `i18n/zh_*.py` 里实际显示的译文，第一次出现时括号注英文。
+- 改了方法、公式、默认值或阈值，物理与方法参考（`docs/Physics_Manual.md` 和 `_zh.md`）也在同一次改动里改好，
+  中英两份一起改；它是论文方法部分的依据。
 - 窗口明显变了，就重拍对应的截图（中英各一张，同名），按上面“测试之外的截图脚本”的做法，只用公开数据或合成图。
 - 已知限制写进手册的“已知限制”一章和 `CHANGELOG.md`；修好了就从两处删掉。
 - `tests/test_release_docs_contents.py`、`tests/test_release2_docs_decisions.py` 把手册里的一些说法和代码绑在一起；
@@ -193,7 +203,12 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
     几何和许可证见 `tests/data/external/README.md`；
   - `TestSAXSdata/`（P03 的 Pilatus CBF、Lambda NXS 帧和几条一维曲线）也在仓库里。
 - **测试之外的截图脚本**，要做 `main()` 和 conftest 做的事：
-  - 设临时的 `GIMAP_HOME`；
+  - 设临时的 `GIMAP_HOME`；只设它还不够：空的用户文件夹第一次打开时会把源码目录里被 git 忽略的旧文件
+    （`config/user_settings.json`、`user_parameters.json`、`instrument_profiles.json`）迁移进来
+    （`integrations/state/user_store.py`），截图就带上了这台电脑的模式、αi、最近文件和仪器配置。
+    先在临时文件夹里写好空的 `settings.json`（`{"schema_version": 1, "settings": {}, "preferences": {}}`）和
+    `instrument_profiles.json`（`{"schema_version": 1, "profiles": []}`），再建窗口。`tests/conftest.py` 只设临时文件夹，
+    所以在有这些旧文件的电脑上测试也会读到它们；
   - offscreen 下设 `QT_QPA_FONTDIR=C:/Windows/Fonts`，并载入一个中文字体；
   - `app.setFont(QFont("Segoe UI"))`、`apply_theme(mode, 9.0)`；
   - 然后浅色、深色、中文、英文都看一遍。

@@ -191,8 +191,19 @@ def normalize_prediction_output(
         maximum = values.get("max")
         low = float(minimum) if isinstance(minimum, (int, float)) else 0.05
         high = float(maximum) if isinstance(maximum, (int, float)) else 15.0
+        # "declared": the module itself gave this axis its key, unit and range. Otherwise the axis is
+        # only a display placeholder (0.05-15 nm) and must not be read as a physical scale.
+        declared_key = str(values.get("key") or "").strip().casefold()
+        declared = bool(
+            declared_key
+            and declared_key != "hr"
+            and str(values.get("unit") or "").strip()
+            and isinstance(minimum, (int, float))
+            and isinstance(maximum, (int, float))
+        )
         if not np.isfinite(low) or not np.isfinite(high) or high <= low:
             low, high = 0.05, 15.0
+            declared = False
         edges = np.linspace(low, high, count + 1, dtype=np.float32)
         centers = ((edges[:-1] + edges[1:]) / 2.0).astype(np.float32)
         return (
@@ -203,6 +214,7 @@ def normalize_prediction_output(
                 "unit": unit,
                 "min": low,
                 "max": high,
+                "declared": declared,
             },
             centers,
         )

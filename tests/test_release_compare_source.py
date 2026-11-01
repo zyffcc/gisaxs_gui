@@ -36,3 +36,37 @@ def test_the_from_column_names_the_workspace_in_the_interface_language(tmp_path:
     finally:
         apply_language(DEFAULT_LANGUAGE)
         _close(page)
+
+
+class _Preferences(dict):
+    def set(self, key, value):
+        self[key] = value
+
+
+def test_the_save_dialogs_start_in_the_home_folder_when_no_series_came_from_a_folder(tmp_path: Path, monkeypatch) -> None:
+    """Only series sent from Analyze and no folder remembered: the dialog proposes the home folder, never a bare
+    name (which would land in the working folder)."""
+    from src.gimap.features.compare.presentation import render
+
+    proposed = []
+    monkeypatch.setattr(render.QFileDialog, "getSaveFileName",
+                        staticmethod(lambda _parent, _title, start, _filters: proposed.append(start) or ("", "")))
+    page = _shown_page()
+    try:
+        page.add_map(_map(1), "a")
+        page.add_map(_map(2), "b")
+        assert page._folder() == str(Path.home())
+        _wait(page, lambda: _idle(page) and page.comparison is not None and len(page.comparison.results) == 2)
+        assert page.save_series_table() is None  # the dialog was cancelled: nothing written
+        assert proposed == [str(Path.home() / "compare_series.csv")]
+        # A remembered folder that is gone is passed over; one that is there is proposed.
+        page.preferences = _Preferences()
+        page._remember(folder=str(tmp_path / "gone"))
+        assert page._folder() == str(Path.home())
+        page._remember(folder=str(tmp_path))
+        assert page._folder() == str(tmp_path)
+        _write_curves(tmp_path / "run_A", _run(60, seed=2))
+        page.add_folder(tmp_path / "run_A")
+        assert page._folder() == str(tmp_path / "run_A")
+    finally:
+        _close(page)

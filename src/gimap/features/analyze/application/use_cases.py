@@ -10,6 +10,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 import numpy as np
 
 from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile
+from src.gimap.shared.geometry.detector_tilt import DetectorTilt
 from src.gimap.shared.geometry.conventions import (
     canonical_from_fitting_center,
     canonical_from_index_center,
@@ -45,7 +46,8 @@ from .export_record import (  # noqa: F401 - the record of an export; these name
     fit_input_metadata as _fit_input_metadata,
     fit_input_observation,
 )
-from .frame_preprocessing import FramePreprocessingMixin, FrameSum, floating
+from .flat_detector import flat_detector_error, flat_detector_message
+from .frame_preprocessing import FramePreprocessingMixin, FrameSum, floating, photon_counts
 from .geometry_resolution import ResolveGeometry, center_not_used_message
 from .ports import CurveWriter, FrameSource, InstrumentProfileStore
 
@@ -183,8 +185,11 @@ class AnalyzeFrame(FramePreprocessingMixin):
         kind = None if geometry is None else (request.mode if request.mode != AUTO else detected)
         mirror_x = geometry.beam_center_x_px if geometry is not None and kind == GIWAXS else None
         common.update(self._preprocess(raw_data, raw_valid, request.corrections, common["metadata"], mirror_x))
-        # Errors from counting statistics only for photon counts; otherwise from the scatter of the pixels.
-        counting = not floating(common["metadata"]) and not request.corrections.background_path
+        # Errors from counting statistics only for photon counts as measured (not dark- or background-
+        # subtracted, nothing filled from the mirror side); otherwise from the scatter of the pixels.
+        counting = photon_counts(
+            common["metadata"], request.corrections, mirror_filled=common.get("filled_pixels") is not None
+        )
         if kind == GIWAXS and geometry is not None and has_intensity_corrections(request.corrections):
             self._correct_intensity(common, raw_data, raw_valid, geometry, request.corrections, counting)
         data, valid = common["data"], common["valid"]
@@ -202,6 +207,9 @@ class AnalyzeFrame(FramePreprocessingMixin):
         unused_center = center_not_used_message(resolution, shape)
         if unused_center:
             messages.append(unused_center)
+        flat = flat_detector_error(resolution.profile, geometry, shape, valid)  # a .poni tilt left out
+        if flat_detector_message(flat):
+            messages.append(flat_detector_message(flat))
         profile_shape = resolution.profile.detector_shape if resolution.profile else None
         if profile_shape is not None and tuple(profile_shape) != shape:
             messages.append(
@@ -227,6 +235,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
             kind=kind,
             messages=tuple(messages),
             detected_kind=detected,
+            flat_detector=flat,
         )
 
 
@@ -362,10 +371,12 @@ class ExportAnalysis:
         metadata = analysis_metadata(analysis)
         if extra_metadata:
             metadata.update(_plain(dict(extra_metadata)))
-        written = self.writer.write(curves, Path(destination), export_stem(analysis), metadata)
         fit_curve = fit_input_curve(analysis)
+        path = Path(destination) / f"{export_stem(analysis)}_fit_input.dat"
+        # The record's "files" lists every file of the export: the curves and the curve for Fitting written after it.
+        written = self.writer.write(curves, Path(destination), export_stem(analysis), metadata,
+                                    also=() if fit_curve is None else (path.name,))
         if fit_curve is not None:
-            path = Path(destination) / f"{export_stem(analysis)}_fit_input.dat"
             written.append(
                 self.writer.write_xy(fit_curve, path, _fit_input_metadata(analysis, metadata, halves))
             )
@@ -384,12 +395,14 @@ class SaveInstrumentProfile:
         detector_name: Optional[str],
         shape: Optional[tuple[int, int]],
         source: str,
+        dropped_tilt: Optional[DetectorTilt] = None,
     ) -> InstrumentProfile:
+        """``dropped_tilt``: the tilt of the ``.poni`` the geometry comes from, which the flat geometry leaves out."""
         if self.profiles is None:
             raise ValueError("Instrument profiles are not available in this session.")
         existing = self.profiles.find(name)
         if existing is not None:
-            profile = existing.updated(geometry, source=source)
+            profile = existing.updated(geometry, source=source, dropped_tilt=dropped_tilt)
         else:
             profile = InstrumentProfile(
                 name=name,
@@ -397,6 +410,7 @@ class SaveInstrumentProfile:
                 detector_name=detector_name,
                 detector_shape=shape,
                 source=source,
+                dropped_tilt=dropped_tilt,
             )
         self.profiles.save(profile)
         return profile

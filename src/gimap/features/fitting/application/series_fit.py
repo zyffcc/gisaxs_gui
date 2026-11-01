@@ -352,7 +352,7 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
     failed = [{"frame": frame.index + 1, "file": file_name(frame.path, folder), "why": frame.error}
               for frame in ordered if not frame.ok]
     record = {
-        "schema": "gimap_series_fit_v2", "software": SOFTWARE,
+        "schema": "gimap_series_fit_v2", "software": SOFTWARE, "software_version": SOFTWARE,
         "saved": saved or datetime.now().astimezone().isoformat(timespec="seconds"),
         "folder": folder, "pattern": pattern, "q_unit_of_files": q_unit,
         "start_model": model_to_dict(model),

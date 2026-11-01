@@ -53,7 +53,7 @@ ZH_TEST = {
     "a spike one or two bins wide far above the background: hot pixels, a module edge or a zinger rather than "
     "diffraction (check whether the calibration image shows it too)": "一个只有一两个 bin 宽、远高于背景的尖峰",
     "halves: {halves}": "两半：{halves}", "(shoulder)": "（肩峰）",
-    "best fit {model} R {radius} nm (χ² {chi2})": "最佳拟合 {model} R {radius} nm（χ² {chi2}）",
+    "best fit {model} R {radius} nm (χ²/N {chi2})": "最佳拟合 {model} R {radius} nm（χ²/N {chi2}）",
     "Only you can answer these — then run again:": "只有你能回答这些问题 —— 然后再运行：",
 }
 
@@ -185,7 +185,7 @@ def test_the_gisaxs_outcome_uses_the_chinese_comma(zh) -> None:
     report = {"gisaxs": {"halves": {"side": "mean"}, "spacing": {"distance_nm": 53.5, "kind": "shoulder"},
                          "fit": {"solutions": [{"model": "random_cylinder", "chi2": 1.22, "components": [{"R": 6.13}]}]}}}
     line = outcome_summary(report)
-    assert ", " not in line and "D ≈ 53.5 nm（肩峰）" in line and line.count("，") == 2
+    assert ", " not in line and "2π/q* = 53.5 nm（肩峰）" in line and line.count("，") == 2
 
 
 # -- widgets ------------------------------------------------------------------------------------------------

@@ -743,6 +743,7 @@ def test_advanced_export_retains_instance_provenance_and_original_labels(tmp_pat
     output = tmp_path / "advanced_export"
     service.export(measurements, comparison, output)
     record = json.loads((output / "sem_analysis.json").read_text())
+    assert record["software_version"].startswith("GIMaP v") and record["schema_version"] == 1
     recorded = record["measurement_settings"]
     assert recorded["method"] == "stardist"
     assert recorded["roi_xyxy"] == [8, 5, 30, 25]

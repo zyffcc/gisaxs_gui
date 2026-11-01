@@ -51,7 +51,7 @@ from .gui_workbench import GuiConfirmer, GuiWorkbench
 from .guided_text import ask_save_path, save_failed_toast, saved_toast
 from .panel import AssistantPanel
 from .provider_section import chosen_provider, describe_provider
-from .report_view import report_html
+from .report_view import report_html, report_title
 from .services import AssistantServices
 from .settings_page import AssistantSettingsPage
 from .start_dialog import AssistantStartDialog
@@ -464,7 +464,7 @@ class AssistantController(QObject):
         cost = self._cost(outcome)
         return (
             "<!DOCTYPE html><html><head><meta charset='utf-8'>"
-            f"<title>Claude report – {html.escape(name)}</title></head>"
+            f"<title>{html.escape(report_title(name, self._language()))}</title></head>"
             f"<body style='font-family: sans-serif; max-width: 60em'><h2>{html.escape(name)}</h2>"
             f"{report_html(outcome, cost=cost, language=self._language())}</body></html>\n"
         )

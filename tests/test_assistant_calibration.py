@@ -247,7 +247,7 @@ def test_the_tools_find_rank_read_and_use_calibration_material(tmp_path: Path) -
     assert fitted["calibration_index"] == 0 and fitted["assessment"].startswith("good")
     used = catalog.execute(call("use_geometry", source="calibration", incidence_deg=0.2))
     assert not used.is_error
-    assert "distance 100.2 mm" in confirmer.questions[0] and "(200.1, 249.8) px" in confirmer.questions[0]
+    assert "distance 100.2 mm" in confirmer.questions[0] and "(200.10, 249.80) px" in confirmer.questions[0]  # 0.01 px
     _name, values, profile, source = workbench.calls[-1]
     assert values["distance_mm"] == 100.2 and values["incidence_deg"] == 0.2 and profile is None
     assert "agbh calibration of AgBH_00001.tif (12 rings" in source

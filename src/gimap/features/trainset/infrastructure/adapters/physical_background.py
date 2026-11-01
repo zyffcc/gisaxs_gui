@@ -35,7 +35,7 @@ def generate_physical_background(
     overrides: Optional[Dict[str, float]] = None,
     trace: Optional[Dict[str, float]] = None,
 ) -> np.ndarray:
-    """Generate the configurable Yuxin-style physical GISAXS background.
+    """Generate the configurable physical GISAXS background of the original training-data generator.
 
     Coordinates are normalized to the selected ROI, which makes the controls
     meaningful for both small local previews and full-resolution datasets.

@@ -36,9 +36,11 @@ class BinnedMean:
 
     Values exactly on the last edge fall into the last bin; values outside the
     edges or non-finite are ignored.  ``sigma`` is the Poisson standard error
-    of the mean, ``sqrt(sum)/n``, which is exact for photon counts; with
-    ``counts=False`` it is the standard error from the scatter of the bin's
-    values (``scatter_sigma``), for frames that are not photon counts.
+    of the mean, ``sqrt(max(sum, 1))/n`` — at least one count, as the GISAXS
+    cuts (``native_profile``), so a bin of zeros never gets σ = 0, which a
+    weighted fit cannot use; with ``counts=False`` it is the standard error
+    from the scatter of the bin's values (``scatter_sigma``), for frames that
+    are not photon counts.
     """
 
     def __init__(self, edges: np.ndarray):
@@ -52,6 +54,9 @@ class BinnedMean:
         self._counts = np.zeros(size, dtype=np.int64)
         self._variances: np.ndarray | None = None
         """Σ scale × value per bin, once values with a ``scale`` were added (else the Poisson sum)."""
+        self._scales: np.ndarray | None = None
+        """Σ scale per bin (1 for a value added without one), kept with ``_variances``: the variance of one
+        count at the bin's mean factor, (Σ scale / n)², is the least variance a bin of counts is given."""
 
     @classmethod
     def linear(cls, low: float, high: float, bins: int) -> "BinnedMean":
@@ -76,16 +81,20 @@ class BinnedMean:
         index = np.searchsorted(self.edges, x, side="right") - 1
         index[x == self.edges[-1]] = size - 1
         keep = (index >= 0) & (index < size)
+        added = np.bincount(index[keep], minlength=size)
         self._sums += np.bincount(index[keep], weights=values[keep], minlength=size)
         self._squares += np.bincount(index[keep], weights=values[keep] ** 2, minlength=size)
-        self._counts += np.bincount(index[keep], minlength=size)
+        self._counts += added
         if scale is not None:
             scale = np.asarray(scale, dtype=np.float64).ravel()[finite][keep]
             if self._variances is None:
                 self._variances = self._sums - np.bincount(index[keep], weights=values[keep], minlength=size)
+                self._scales = (self._counts - added).astype(np.float64)  # the values so far: a factor of 1
             self._variances += np.bincount(index[keep], weights=values[keep] * scale, minlength=size)
+            self._scales += np.bincount(index[keep], weights=scale, minlength=size)
         elif self._variances is not None:
             self._variances += np.bincount(index[keep], weights=values[keep], minlength=size)
+            self._scales += added
 
     def result(self, *, counts: bool = True) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """``(centres, mean, sigma, pixels)`` for the bins that received data."""
@@ -95,8 +104,13 @@ class BinnedMean:
         sums = self._sums[filled]
         mean = sums / pixels
         if counts:
-            variance = sums if self._variances is None else self._variances[filled]
-            sigma = np.sqrt(np.clip(variance, 0.0, None)) / pixels
+            # At least the variance of one count (``native_profile``: sqrt(max(sum, 1))/n); after intensity
+            # corrections, of one count at the bin's mean factor.
+            if self._variances is None:
+                variance, least = sums, 1.0
+            else:
+                variance, least = self._variances[filled], (self._scales[filled] / pixels) ** 2
+            sigma = np.sqrt(np.maximum(variance, least)) / pixels
         else:
             sigma = scatter_sigma(sums, self._squares[filled], pixels)
         return centres[filled], mean, sigma, pixels
@@ -115,9 +129,10 @@ def merge_sparse_bins(
     """Join consecutive sparse bins until each point has enough pixels.
 
     A point made of several bins has the pixel-weighted mean of their ``x`` and of their means
-    (the mean of all its pixels), the Poisson error ``sqrt(sum)/n`` of all its pixels, and their
-    pixel count. Bins are only joined with a neighbour no further than two bin steps away, so a
-    real gap in the data stays a gap. A curve whose bins all have enough pixels is returned as is.
+    (the mean of all its pixels), the error ``sqrt(Σ n²σ²)/Σn`` of those independent means (for
+    photon counts the Poisson error ``sqrt(sum)/n`` of all its pixels), and their pixel count. Bins
+    are only joined with a neighbour no further than 2.5 bin steps (the median step) away, so a real
+    gap in the data stays a gap. A curve whose bins all have enough pixels is returned as is.
     """
     x, mean, sigma, pixels = (np.asarray(value) for value in (x, mean, sigma, pixels))
     if pixels.size < 3:

@@ -119,6 +119,17 @@ class ResultsStateMixin:
         if self._stop_pipeline is not None:
             self._stop_pipeline()
 
+    def automatic_running(self) -> bool:
+        """An automatic analysis works on the frame shown (until it has ended, also after Stop was asked for)."""
+        return bool(self._automatic_busy)
+
+    def stop_automatic(self) -> bool:
+        """Stop as the Stop button does (the Analyze menu); ``False`` when no run can be stopped now."""
+        if not self._automatic_busy or self._stop_pipeline is None or not self.stop_pipeline_button.isEnabled():
+            return False
+        self._stop_clicked()
+        return True
+
     def automatic_finished(self, state: str, detail: str, *, show_results: bool = True, path=None,
                            frames: Optional[dict] = None) -> None:
         """``state``: ``ok`` or ``warn`` (questions only a person can answer). ``path``: the file the results

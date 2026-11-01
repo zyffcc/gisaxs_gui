@@ -194,14 +194,145 @@ def test_rival_maxima_or_f_near_zero_are_not_called_an_orientation() -> None:
         return 1.0 + 0.2 * np.exp(-0.5 * ((chi - 4.0) / 6.0) ** 2)
 
     weak = ring_orientation(_ring(weak_bump), q_window=(1.6, 1.8), background=10.0)
-    assert abs(weak.herman) < 0.1
-    assert weak.texture.startswith("weak or no preferred orientation"), weak.texture
+    assert abs(weak.herman_excess) < weak.texture_margin == pytest.approx(0.1)
+    assert weak.texture.startswith("no clear preferred orientation (f − f_iso = +0.00"), weak.texture
 
     def normal(chi):
         return np.exp(-0.5 * (chi / 12.0) ** 2)
 
     oriented = ring_orientation(_ring(normal), q_window=(0.35, 0.37), background=10.0)
     assert oriented.herman > 0.5 and oriented.texture.startswith("oriented along the surface normal")
+
+
+def test_the_texture_sentence_compares_f_with_a_random_ring_over_the_same_bins() -> None:
+    # Measured only up to |χ| = 80° (the sample plane cut off), a random ring already gives f_iso ≈ +0.10: a weak bump
+    # at the normal then makes |f| > 0.1, which the rule on |f| alone called "oriented along the surface normal".
+    def weak_bump(chi):
+        return 1.0 + 0.25 * np.exp(-0.5 * ((chi - 4.0) / 8.0) ** 2)
+
+    ring = _ring(weak_bump)
+    cut = Profile.of(ring.x, ring.y, ring.sigma, np.where(np.abs(ring.x) >= 80.0, 0.0, 300.0))
+    partial = ring_orientation(cut, q_window=(1.6, 1.8), background=10.0)
+    assert partial.herman > 0.1 and partial.herman_isotropic == pytest.approx(0.10, abs=0.01)
+    assert partial.herman_excess == pytest.approx(partial.herman - partial.herman_isotropic)
+    assert abs(partial.herman_excess) < 0.1 and partial.texture.startswith("no clear preferred orientation"), partial.texture
+    assert partial.texture_margin == pytest.approx(max(0.1, 3.0 * partial.herman_err))
+
+    def normal(chi):
+        return np.exp(-0.5 * (chi / 12.0) ** 2)
+
+    oriented = ring_orientation(_ring(normal), q_window=(0.35, 0.37), background=10.0)
+    assert oriented.herman_excess > oriented.texture_margin and oriented.texture.startswith("oriented along the surface normal")
+
+
+def test_f_says_when_it_depends_on_the_bins_next_to_the_sample_horizon() -> None:
+    # An isotropic ring whose intensity falls to the background within 5° of the sample plane (absorption at small αf,
+    # a shadow): the sin χ weight of those bins makes f look like orientation towards the normal (≈ +0.05).
+    drop = ring_orientation(_ring(lambda chi: np.where(chi >= 85.0, 0.0, 1.0), pixels=3000.0), q_window=(1.6, 1.8),
+                            background=10.0)
+    assert drop.herman_excess == pytest.approx(0.047, abs=0.005) and abs(drop.horizon_excess) < 0.005
+    (note,) = [note for note in drop.notes if "next to the sample horizon" in note]
+    assert note.startswith("Leaving out |χ| ≥ 85°, next to the sample horizon, changes f − f_iso from +0.047 to +0.000")
+    assert not any("another verdict" in note for note in drop.notes)  # both below the margin: the same sentence
+    from src.gimap.features.assistant.application.giwaxs_decisions import horizon_decision
+
+    decision = horizon_decision([drop])
+    assert decision["decision"] == "f includes the bins next to the sample horizon (|χ| ≥ 85°)"
+    assert "q = 1.7 (+0.047 → +0.000" in decision["why"] and "no exit-angle correction" in decision["why"]
+    flat = ring_orientation(_ring(lambda chi: np.ones_like(chi), pixels=3000.0), q_window=(1.6, 1.8), background=10.0)
+    assert not any("sample horizon" in note for note in flat.notes) and horizon_decision([flat]) is None
+
+
+def test_a_peak_list_cut_at_the_cap_says_how_many_candidates_there_were() -> None:
+    from src.gimap.features.assistant.application.giwaxs_decisions import peak_cap_decision
+
+    centres = np.linspace(0.45, 3.8, 16)
+    q = np.linspace(0.3, 4.0, 1800)
+    truth = 50.0 + sum(_gaussian(q, centre, 0.019, 30.0) for centre in centres)
+    counts = np.random.default_rng(3).poisson(truth * 400.0) / 400.0
+    profile = Profile.of(q, counts, np.sqrt(truth / 400.0), np.full_like(q, 400.0))
+    capped = find_peaks(profile)
+    assert capped.max_peaks == 12 and capped.candidates == 16 and capped.truncated and len(capped.peaks) <= 12
+    decision = peak_cap_decision(capped)
+    assert decision["decision"] == "16 candidate peaks found; the 12 most prominent were fitted"
+    assert "--max-peaks N" in decision["why"] and "series hints" in decision["why"]
+    free = find_peaks(profile, max_peaks=40)
+    assert not free.truncated and len(free.peaks) == 16 and peak_cap_decision(free) is None
+    assert peak_cap_decision(free, 40)["decision"] == "at most 40 candidates fitted"
+
+
+def test_a_peak_at_the_end_of_the_data_builds_no_ring_size_or_series() -> None:
+    # The third lamellar order sits where the measured q range ends (2.6 Å⁻¹), half of it cut off: the report called
+    # such a peak one of "the strongest reliable peaks", gave it a Scherrer size and printed its raw flag.
+    from src.gimap.features.assistant.application.pipeline_report import peak_markers, pipeline_markdown
+    from src.gimap.features.assistant.domain import AT_EDGE, reliable
+
+    search = find_peaks(_profile(((0.86, 0.03, 20.0), (1.72, 0.03, 12.0), (2.58, 0.04, 10.0))))
+    edge = min(search.peaks, key=lambda peak: abs(peak.q - 2.58))
+    assert "at_edge" in edge.flags and not caveat(edge) and not reliable(edge)
+    assert not any("lamellar" in hint for hint in search.series), search.series  # 0.86 and 1.72 alone are no series
+    peaks = [
+        {"q": 0.86012, "d_A": 7.30502, "fwhm": 0.030012, "snr": 25.04, "flags": [], "caveat": "", "size_nm": 29.348,
+         "size_is_lower_bound": True},
+        {"q": 1.9000004, "d_A": 3.306939, "fwhm": 0.024, "snr": 18.0, "flags": ["overlap"], "caveat": ""},
+        {"q": 2.57991, "d_A": 2.435448, "fwhm": 0.0517, "snr": 7.03, "flags": ["at_edge"], "caveat": ""},
+    ]
+    report = {"ok": True, "procedure": "giwaxs", "frame": "film.tif", "peaks": peaks, "rings": [], "decisions": [],
+              "steps": [], "geometry": {"distance_mm": 811.8, "beam_center_px": [545.458310126973, 1826.94747674757],
+                                        "wavelength_A": 0.6888, "incidence_deg": 0.075}}
+    text = pipeline_markdown(report)
+    # One precision per column, each number rounded once from its full value (29.348: 29.3, not 29.35 → 29.4).
+    assert "| 0.8601 | 7.305 | 0.0300 | 25.0 | — | ≥ 29.3 |  |" in text
+    assert "| 1.9000 | 3.307 | 0.0240 | 18.0 | — | — | overlaps a neighbouring peak |" in text
+    assert f"| 2.5799 | 2.435 | 0.0517 | 7.0 | — | — | {AT_EDGE} |" in text and "at_edge" not in text
+    assert "beam centre (545.46, 1826.95) px" in text  # to 0.01 px, as the cuts and decisions give it
+    assert [marker["reliable"] for marker in peak_markers(report)] == [True, True, False]
+
+
+def test_a_ring_line_gives_f_its_uncertainty_and_f_iso_with_the_same_decimals() -> None:
+    from src.gimap.features.assistant.application.pipeline_report import pipeline_markdown
+    from src.gimap.features.assistant.domain import herman_decimals, signed
+
+    assert (herman_decimals(0.0027), herman_decimals(0.018), herman_decimals(0.2), herman_decimals(None)) == (4, 3, 2, 2)
+    assert signed(-0.0055, 4) == "−0.0055" and signed(0.141, 3, plus=True) == "+0.141"
+    assert signed(-0.0004, 3, plus=True) == "+0.000"  # no "−0.000"
+    ring = {"q": 0.9972, "coverage": 0.9667, "herman": 0.13921, "herman_err": 0.002696, "herman_isotropic": -0.001357,
+            "herman_excess": 0.140567, "texture": "oriented along the surface normal (out-of-plane, χ ≈ 0°)"}
+    full = {**ring, "q": 1.989, "coverage": 1.0, "herman_isotropic": 0.0, "herman_excess": 0.13921}
+    text = pipeline_markdown({"ok": True, "procedure": "giwaxs", "peaks": [], "rings": [ring, full], "decisions": [],
+                              "steps": [], "geometry": {"distance_mm": 811.8}})
+    assert ("- q ≈ 0.9972 Å⁻¹, |χ| coverage 0.97: f = 0.1392 ± 0.0027 (a random ring over the same |χ|: "
+            "f_iso = −0.0014), f − f_iso = +0.1406 — oriented") in text  # it was f = 0.139 ± 0.0027, no f_iso
+    assert "coverage 1.00: f = 0.1392 ± 0.0027 (a random ring over the same |χ|: f_iso = 0.0000)" in text  # every ring
+    # The note of a ring with a missing wedge: f_iso with those decimals and the Unicode minus (it read f = -0.00).
+    ring = _ring(lambda chi: np.ones_like(chi))
+    cut = ring_orientation(Profile.of(ring.x, ring.y, ring.sigma, np.where(np.abs(ring.x) < 6.0, 0.0, 300.0)),
+                           q_window=(1.6, 1.8), background=10.0)
+    (note,) = [note for note in cut.notes if note.startswith("A random (isotropic) ring")]
+    value = signed(cut.herman_isotropic, herman_decimals(cut.herman_err))
+    assert value.startswith("−0.0") and f"would give f = {value}: compare" in note and "-" not in value
+
+
+def test_a_ring_with_a_few_chi_bins_says_which_part_was_measured() -> None:
+    # Four bins next to the sample plane: "coverage 0" and the unmeasured range 0–90° said that nothing was measured.
+    chi = np.array([-88.5, -87.5, 86.5, 89.2])
+    few = ring_orientation(Profile.of(chi, np.full(4, 50.0), np.ones(4), np.full(4, 10.0)), q_window=(2.85, 2.9))
+    assert few.reason == "Only 4 measured χ bins in this ring." and few.herman is None
+    assert few.coverage == pytest.approx(4 / 90) and few.missing == ((0.0, 86.0),)
+
+
+def test_the_texture_rule_says_that_a_tilted_ring_is_named_from_its_maximum() -> None:
+    # A weak bump at |χ| = 45°: |f − f_iso| is far below the margin, yet the ring is called tilted — the margin of the
+    # texture rule applies to "along the surface normal" and "in the sample plane" only, as the Decisions line says.
+    from src.gimap.features.assistant.application.giwaxs_decisions import texture_rule_decision
+
+    tilted = ring_orientation(_ring(lambda chi: 1.0 + 0.3 * np.exp(-0.5 * ((chi - 45.0) / 8.0) ** 2)),
+                              q_window=(1.6, 1.8), background=10.0)
+    assert tilted.texture.startswith("tilted: maximum at χ ≈ ±4") and abs(tilted.herman_excess) < tilted.texture_margin
+    decision = texture_rule_decision([tilted])
+    assert decision["decision"] == ("\"along the surface normal\" or \"in the sample plane\" is named only when "
+                                    "|f − f_iso| ≥ max(0.1, 3σ_f)")
+    assert "between 20° and 70° is called tilted at that |χ| from its maximum alone, without this margin" in decision["why"]
 
 
 def test_a_shadowed_part_of_the_ring_is_unmeasured_and_f_is_not_faked() -> None:

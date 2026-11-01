@@ -541,7 +541,7 @@ def fit_summary(result, choices: BatchChoices) -> tuple[str, str]:
         params = component.get("params") or {}
         parts.append(", ".join(f"{key} = {float(value):.3g}" for key, value in params.items()
                                if isinstance(value, (int, float)) and key in ("R", "h", "D", "sigma_R", "pdi")))
-    text = tr("Best: {model}, {params} nm, χ² = {chi}").format(
+    text = tr("Best: {model}, {params} nm, χ²/N = {chi}").format(  # χ²/N: mean r², no dof correction
         model=best.get("combination", ""), params="; ".join(part for part in parts if part),
         chi=f"{float(best.get('best_chi2_weighted', math.nan)):.3g}",
     )

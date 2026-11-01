@@ -67,7 +67,7 @@ def _trend_panels(table: FitTable, kind: str) -> list:
         return [(label, table.trend(suffix, error)) for label, suffix, error in (
             ("q (1/A)", " q (1/A)", " q err"), ("FWHM (1/A)", " FWHM (1/A)", " FWHM err"), ("area", " area", " area err"),
         )]
-    panels = [("chi2", table.trend("chi2"))]
+    panels = [("χ²/N", table.trend("chi2"))]  # the quick fit's mean r² (no degrees-of-freedom correction)
     for label, suffix in (("R (nm)", " R"), ("D (nm)", " D"), ("h (nm)", " h")):
         panels.append((label, table.trend(suffix)))
     return [panel for panel in panels if panel[1]]
@@ -244,7 +244,7 @@ class BatchModelMixin:
         run.fit_table.add(values, outcome.number)
         self._remember_batch_preview(run, model_preview(outcome, rows, values, error=error))
         run.fit_frames.append(model_fit_frame(label, rows, error=error, halves=halves))  # a failed fit is counted
-        run.last_fit = f"{rows[0].get('combination', '')}, χ² {float(rows[0].get('best_chi2_weighted', float('nan'))):.3g}" if rows else error
+        run.last_fit = f"{rows[0].get('combination', '')}, χ²/N {float(rows[0].get('best_chi2_weighted', float('nan'))):.3g}" if rows else error
         if rows and choices.fit_curves:  # the points that were fitted (the mean or the one half) and the model
             path = run.destination / FOLDERS["fit_curves"] / f"{stem}_model_fit.{text}"
             written.append(self._export.writer.write_table(path, *model_fit_curve(label, rows, halves=halves)))
@@ -335,6 +335,9 @@ class BatchModelMixin:
                 comments.append(
                     f"halves of the cut: {HALVES_WORDS[chosen]} ({chosen}); the columns halves "
                     "and points say what each frame was fitted on (a frame without a fit: its reason in note)")
+                comments.append(
+                    "chi2: chi2/N, the mean of the squared sigma-normalised residuals over the points fitted "
+                    "(no degrees-of-freedom correction; not Fitting's reduced chi2)")
             written.append(run.fit_table.write(writer, destination / names["fit"], comments))
             panels = _trend_panels(run.fit_table, choices.fit)
             if panels and self.figures is not None:

@@ -1,9 +1,11 @@
-"""The GISAXS part of the report as Markdown: the cut, the halves, the spacing and the fit."""
+"""The GISAXS part of the report as Markdown: the cut, the halves, the length scale 2π/q* and the fit."""
 
 from __future__ import annotations
 
 import math
 from pathlib import Path
+
+from .gisaxs_choice import LENGTH_SCALE, POOR_CHI2, bounds_text, chosen
 
 
 def pixel_span(band, limit=None, pixels=None) -> str:
@@ -56,24 +58,42 @@ def _number(value, digits: int = 4) -> str:
     return str(value)
 
 
+def _pixel(value) -> str:
+    """A detector position to 0.01 px, as the decisions say it (four significant digits would round a column
+    such as 597.263 to 597.3, and 1234.56 to 1235)."""
+    return "—" if value is None else f"{float(value):.2f}"
+
+
+FIT_DECIMALS = {"R": 2, "h": 2, "D": 1, "sigma_R": 3, "sigma_h": 3, "sigma_D": 3, "chi2": 2, "distance_nm": 1}
+"""The decimals of each fitted quantity in the tables, the same in every row (R 8.60 next to R 9.44, not R 8.6)."""
+
+
+def _fixed(value, key: str) -> str:
+    return "—" if value is None else f"{float(value):.{FIT_DECIMALS[key]}f}"
+
+
 def _parameters(component: dict) -> str:
     names = (("R", "R"), ("sigma_R", "σR/R"), ("h", "h"), ("sigma_h", "σh/h"), ("D", "D"), ("sigma_D", "σD/D"))
     units = {"R": " nm", "h": " nm", "D": " nm"}
     return ", ".join(
-        f"{label} {_number(component[key], 3)}{units.get(key, '')}" for key, label in names if component.get(key) is not None
+        f"{label} {_fixed(component[key], key)}{units.get(key, '')}" for key, label in names if component.get(key) is not None
     )
 
 
 def fit_rows(fit: dict) -> list[str]:
-    """The solutions as a Markdown table (units in the header)."""
+    """The solutions as a Markdown table (units in the header); the values at a search bound named in the note,
+    the solution the run reports marked "(chosen)"."""
     solutions = fit.get("solutions") or []
     if not solutions:
         return ["No fit solution."]
-    lines = ["| rank | model | parameters | χ² | note |", "|---|---|---|---|---|"]
-    for row in solutions:
+    index, _solution = chosen(fit)
+    lines = ["| rank | model | parameters | χ²/N | note |", "|---|---|---|---|---|"]
+    for number, row in enumerate(solutions):
         component = (row.get("components") or [{}])[0]
-        note = "; ".join(row.get("warnings") or ()) or ("" if row.get("converged") else "not converged")
-        lines.append(f"| {row['rank']} | {row['model']} | {_parameters(component)} | {_number(row['chi2'], 3)} | {note} |")
+        notes = [bounds_text(row)] + list(row.get("warnings") or ()) + ([] if row.get("converged", True) else ["not converged"])
+        rank = f"{row['rank']} (chosen)" if number == index else row["rank"]
+        lines.append(f"| {rank} | {row['model']} | {_parameters(component)} | {_fixed(row['chi2'], 'chi2')} | "
+                     f"{'; '.join(note for note in notes if note)} |")
     return lines
 
 
@@ -96,19 +116,21 @@ def gisaxs_sections(report: dict) -> list[str]:
     symmetry = gisaxs.get("symmetry")
     if symmetry:
         lines.append(
-            f"- symmetry axis x = {_number(symmetry.get('x_px'))} px (calibrated {_number(symmetry.get('initial_x_px'))} px; "
+            f"- symmetry axis x = {_pixel(symmetry.get('x_px'))} px (calibrated {_pixel(symmetry.get('initial_x_px'))} px; "
             f"asymmetry {_number(symmetry.get('loss_before'), 3)} → {_number(symmetry.get('loss_after'), 3)})"
         )
     halves = gisaxs.get("halves")
     if halves:
         lines.append(f"- halves: **{halves['side']}** — {halves['reason']}")
     spacing = gisaxs.get("spacing")
-    lines += ["", "## 间距 / In-plane spacing", ""]
+    lines += ["", "## 特征长度 / Length scale 2π/q*", ""]
     if spacing is None:
-        lines.append("No side maximum or shoulder away from qy = 0: no dominant in-plane distance in the q range.")
+        lines.append("No side maximum or shoulder away from qy = 0: the cut gives no length scale 2π/q* in the q range.")
     else:
-        kind = "side maximum" if spacing.get("kind") == "maximum" else "shoulder (a hint, not a resolved peak)"
-        lines.append(f"- {kind} at |qy| = {_number(spacing['q'])} Å⁻¹ → D ≈ 2π/q = {_number(spacing['distance_nm'], 3)} nm")
+        where = ("at the peak of the cut" if spacing.get("kind") == "maximum"
+                 else "at a shoulder of the cut (a change of slope, not a resolved peak)")
+        lines.append(f"- 2π/q* = {_number(spacing['distance_nm'], 3)} nm {where}, |qy| = {_number(spacing['q'])} Å⁻¹: "
+                     f"{LENGTH_SCALE}.")
     fit = gisaxs.get("fit")
     lines += ["", "## 拟合 / Fit of I(qy)", ""]
     if not fit:
@@ -120,29 +142,39 @@ def gisaxs_sections(report: dict) -> list[str]:
             "",
             *fit_rows(fit),
             "",
-            "Numerical fits of single particle families with size dispersity and a paracrystal distance D. χ² close to "
-            "each other means the curve alone does not decide the model: choose it from what is known of the sample.",
+            "Numerical fits of single particle families with size dispersity and a paracrystal distance D, ranked by "
+            "the mean Huber loss (δ = 2) of the σ-normalised residuals r; χ²/N is the mean of r² over the points (no "
+            "degrees-of-freedom correction). χ²/N close to each other means the curve alone does not decide the "
+            "model: choose it from what is known of the sample. A non-linear value at a search bound (the note "
+            "column) is not determined by the curve: among the solutions within 10 % of the first-ranked χ²/N the "
+            "run reports (chosen) the best-ranked one that converged with no non-linear value at a bound. The "
+            "particle amplitudes, the background and the beam-tail amplitude are solved non-negative and are not "
+            f"counted; one at 0 is named in the Decisions (fit caveat). A reported solution with χ²/N above "
+            f"{POOR_CHI2:g} is a poor fit (Needs attention). A screening fit: confirm the model in Fitting.",
         ]
     return lines + [""]
 
 
 def gisaxs_batch_row(report: dict) -> tuple[str, str, str]:
-    """(halves, spacing, best fit) of one frame for the batch table."""
+    """(halves, 2π/q*, the fit the run reports) of one frame for the batch table."""
     gisaxs = report.get("gisaxs") or {}
     halves = (gisaxs.get("halves") or {}).get("side") or "—"
     spacing = gisaxs.get("spacing")
-    spacing_text = "—" if not spacing else f"{spacing['distance_nm']:.3g}" + ("" if spacing.get("kind") == "maximum" else " (shoulder)")
-    solutions = (gisaxs.get("fit") or {}).get("solutions") or []
-    if not solutions:
+    spacing_text = "—" if not spacing else _fixed(spacing["distance_nm"], "distance_nm") + (
+        "" if spacing.get("kind") == "maximum" else " (shoulder)")
+    index, best = chosen(gisaxs.get("fit"))
+    if best is None:
         return halves, spacing_text, "—"
-    best = solutions[0]
     component = (best.get("components") or [{}])[0]
-    return halves, spacing_text, f"{best['model']} R {_number(component.get('R'), 3)}, D {_number(component.get('D'), 3)} nm, χ² {_number(best['chi2'], 3)}"
+    text = (f"{best['model']} R {_fixed(component.get('R'), 'R')}, D {_fixed(component.get('D'), 'D')} nm, "
+            f"χ²/N {_fixed(best['chi2'], 'chi2')}")
+    return halves, spacing_text, text + (f" (rank {best['rank']})" if index else "") + (
+        f" ⚠ {bounds_text(best)}" if bounds_text(best) else "")
 
 
 def gisaxs_batch_table(reports: list[dict], state_of) -> list[str]:
     lines = [
-        "| frame | status | halves | spacing D (nm) | best fit | open questions |",
+        "| frame | status | halves | 2π/q* (nm) | chosen fit | open questions |",
         "|---|---|---|---|---|---|",
     ]
     for report in reports:

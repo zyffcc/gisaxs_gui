@@ -81,6 +81,8 @@ from .operations import (
     inverse_arguments,
     setting_state,
 )
+from .gisaxs_choice import CLOSE_CHI2, LENGTH_SCALE, bound_phrases
+from .gisaxs_choice import chosen as chosen_solution
 from .gisaxs_export import fit_curve_table, fit_on, fit_solutions_csv
 from .gisaxs_report import cut_spans, pixel_span
 from .pipeline import SERIES_SUM, PipelineOptions, StandardPipeline, compact_report
@@ -99,8 +101,10 @@ from .pipeline_report import (
     batch_markdown,
     common_peaks,
     found_by_search,
+    herman_texts,
     peak_markers,
     pipeline_markdown,
+    reliable_row,
     ring_overlays,
     series_changes,
     series_markdown,
@@ -216,11 +220,17 @@ __all__ = [
     "compact_report",
     "cut_spans",
     "pixel_span",
+    "CLOSE_CHI2",
+    "LENGTH_SCALE",
+    "bound_phrases",
+    "chosen_solution",
     "fit_curve_table",
     "fit_on",
     "fit_solutions_csv",
     "found_by_search",
+    "herman_texts",
     "pipeline_markdown",
+    "reliable_row",
     "provider",
     "provider_url",
     "results_payload",

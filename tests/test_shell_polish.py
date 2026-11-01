@@ -532,3 +532,22 @@ def test_the_sidebar_keeps_its_language_and_shows_one_logo_when_collapsed() -> N
         apply_language("en", [sidebar])
     assert sidebar.toggle_button.text() == "«  Collapse"
     sidebar.close()
+
+
+def test_every_sidebar_tooltip_is_translated() -> None:
+    """The tooltip is “title\\ndescription” as one text: each workspace needs that whole key (Sputter had none)."""
+    from src.gimap.app.presentation.i18n import apply_language, apply_to
+    from src.gimap.app.presentation.navigation import NAVIGATION_ITEMS, NavigationSidebar
+
+    sidebar = NavigationSidebar()
+    try:
+        apply_language("zh")
+        apply_to(sidebar, "zh")
+        for item in NAVIGATION_ITEMS:
+            tip = sidebar.findChild(QWidget, f"navigation_{item.key}").toolTip()
+            assert item.description not in tip and "\n" in tip, item.key
+        sputter = sidebar.findChild(QWidget, "navigation_sputter").toolTip()
+        assert sputter == "溅射\n原位溅射序列：颗粒尺寸和间距随时间的变化，以及它们有多可靠"
+    finally:
+        apply_language("en", [sidebar])
+    sidebar.close()

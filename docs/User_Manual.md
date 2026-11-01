@@ -5,11 +5,17 @@ detector frames into calibrated curves (I(q), I(qy), I(χ)), finds peaks, orient
 fits particle models to 1D curves, follows in-situ series and compares runs. Every curve keeps a
 record of where it came from and with which settings.
 
-This manual describes version 0.1.0, a pre-release: treat it as beta scientific software and check
-results that matter. The workspaces (Analyze, Fitting, Compare) are meant for daily work; the Labs
-pages and 1D Predict are experimental. **Help ▸ About GIMaP** shows the version you are running.
+This manual describes version 0.2.0, a pre-release: treat it as beta scientific software and check
+results that matter. The workspaces (Analyze, Fitting, Compare, Sputter) are meant for daily work;
+Sputter's model covers Ag and Au sputtered onto polymers (chapter 8). The Labs pages and 1D Predict are
+experimental. **Help ▸ About GIMaP** shows the version you are running.
 What changed since 0.0.2, and the known limitations of this version, are in `CHANGELOG.md` in the
-program folder (chapter 12 collects the limitations).
+program folder (chapter 13 collects the limitations).
+
+This manual says what to do and what you get. How GIMaP computes what it shows — the formulas,
+thresholds, error models and their limits — is in a separate reference, Physics and Methods
+([`docs/Physics_Manual.md`](Physics_Manual.md), **Help ▸ Physics and Methods**); where a method matters for
+what you decide, this manual names its section there.
 
 New to GIMaP? Start with chapter 1: two walk-throughs of about ten minutes each, on public data.
 
@@ -22,12 +28,13 @@ New to GIMaP? Start with chapter 1: two walk-throughs of about ten minutes each,
 5. Analyze
 6. Fitting
 7. Compare and stages
-8. Tool windows
-9. AI assistant
-10. Labs
-11. Output files
-12. Known limitations
-13. Troubleshooting, FAQ, version and contact
+8. Sputter
+9. Tool windows
+10. AI assistant
+11. Labs
+12. Output files
+13. Known limitations
+14. Troubleshooting, FAQ, version and contact
 
 ## 1. Quick start
 
@@ -37,7 +44,8 @@ results, send the curve to Fitting. No AI is used.
 
 ### 1.1 Before you start
 
-The two data sets are in the GIMaP repository, folder `tests/data/external/`:
+The two data sets come with GIMaP, in the portable version as in a source checkout: they are in the
+folder `tests/data/external/` of the program folder:
 
 | Folder | Files | What it is |
 |---|---|---|
@@ -46,16 +54,21 @@ The two data sets are in the GIMaP repository, folder `tests/data/external/`:
 
 `tests/data/external/README.md` gives their sources, licences and documented geometry.
 
-1. Get the files. In a source checkout they are already there. The portable version does not
-   include them: download the two folders from the GitHub repository (folder `tests/data/external`).
-2. Copy the GIWAXS folder to a place of your own, for example `C:\GIMaP-demo\giwaxs`. GIMaP writes
-   its results next to the data, in a folder `gimap_analysis/`; working on a copy keeps the program
-   folder clean.
-3. Copy the GISAXS folder only when you come to section 1.3, and not next to the GIWAXS copy: delete
-   that copy first, or use another drive. **Find Calibration Automatically** also searches the folders
-   beside and above the frame, and with the GIWAXS copy close by it takes
-   `LaB6_2021_12_DESY_P08.poni` for the GISAXS frame.
-4. Start GIMaP (chapter 2). The **Start** page opens.
+1. Start GIMaP (chapter 2). The **Start** page opens.
+2. **Help ▸ Example Data ▸ GIWAXS — MAPbI₃ Film (DESY P08)…** copies the GIWAXS example (the frame
+   and its `.poni`) to a folder of your choice, by default `Documents\GIMaP examples\giwaxs_p08_mapi`,
+   and opens the frame in Analyze: step 1 of section 1.2 is then done. GIMaP writes its results next
+   to the data, in a folder `gimap_analysis/`; working on a copy keeps the program folder clean.
+   (You can also copy the folder yourself and open the frame from the Start page, as section 1.2 says.)
+3. For section 1.3, take **Help ▸ Example Data ▸ GISAXS — Ag Nanoparticles (GALAXI)…** the same way.
+   Keep each example in a folder of its own, as the default folders do. **Find Calibration
+   Automatically** also looks in the folders beside and above the frame, but it takes a calibration
+   file in the frame's own folder first (section 4.2): each frame gets the `.poni` of its own example,
+   not the one of the example next to it.
+
+**Help ▸ Example Data** also has a silver behenate calibrant (pyFAI) and a GIWAXS frame taken with a
+tilted detector (Xeuss). The tooltip of each entry names its source and licence, and the copy comes
+with `SOURCE_AND_LICENCE.md`.
 
 ![The Start page](manual_images/en/01_start.png)
 *The Start page: drop data or open it, choose what you want to know (the series card has its own
@@ -90,7 +103,9 @@ calibration of your measurement.
 **3. Run the automatic analysis.** Press **Run Automatic Analysis** in the command bar. It takes a
 few seconds; the **Results** tab shows each step as it is done. When it ends, the Results step
 asks one question: the incidence angle. Type `0.075` in **Incidence angle αi (°)** and press
-**Run Again with These Answers**.
+**Run Again with These Answers**. **Geometry** now shows `αi 0.075°`, and the αi field in the command
+bar shows `αi 0.075 °` in orange: a value you set, used for every frame you show, also the next one you
+open, until you go back to the profile's αi (section 4.1).
 
 **4. Read the results.** The Results tab begins with a line such as
 *GIWAXS — 12 peaks (12 reliable), 3 rings analysed*. Below it:
@@ -99,7 +114,7 @@ asks one question: the incidence angle. Type `0.075` in **Incidence angle αi (�
   is out-of-plane (OOP) or in-plane (IP). Here you find peaks near q = 0.90, 1.00, 1.41, 1.99 and
   2.22 Å⁻¹. The data's README names 0.899 Å⁻¹ as PbI₂ (001) and 0.999 Å⁻¹ as MAPbI₃ (110).
   GIMaP does not assign phases: compare q with the lines of your material.
-- The three rings with the largest peak area (and no warning), with their orientation (Herman's f)
+- The three rings with the largest peak area (and no warning), with their orientation (Hermans f)
   and where their maximum lies.
 - **Checks**: shadowed and unmeasured χ ranges (the missing wedge next to qz) that bias f.
 - **Geometry**: the profile, distance, beam centre, wavelength and αi used.
@@ -128,26 +143,39 @@ other programs.
 The source of these data describes the sample as Ag spheres with a radial paracrystal of peak
 distance 53.6 nm (BornAgain's example *experiment_at_galaxi*).
 
-**1. Open the frame.** **File ▸ Open Data…** (`Ctrl+O`), choose `galaxi_data.tif`. (If the GIWAXS
-frame is still in the file list, click the new file there to show it, or press **Clear** in the step
-Data first.) Analyze shows `1043×981 px` (rows × columns). **Mask & corrections** leaves out `1.4 %` of the pixels: the gaps
+**1. Open the frame.** First clear what section 1.2 left in Analyze: press **Clear** in the step Data
+(this also forgets the answers given there), then right-click the αi field in the command bar ▸
+**Back to Profile αi**. Otherwise the αi of the perovskite film, 0.075°, would be used for this frame too, and the run
+would not ask for αi. Then take the GISAXS example (**Help ▸ Example Data ▸ GISAXS — Ag Nanoparticles
+(GALAXI)…**, section 1.1), or **File ▸ Open Data…** (`Ctrl+O`) and choose `galaxi_data.tif`. Analyze
+shows `1043×981 px` (rows × columns). **Mask & corrections** leaves out `1.4 %` of the pixels: the gaps
 between the Pilatus modules. The banner asks for a geometry, as before.
 
-**2. Give it a geometry.** Press **Find Calibration Automatically**. It finds `galaxi_bornagain.poni`:
-**Geometry** shows `1730.0 mm · λ 1.34 Å · αi 0°`, and **Cuts** shows *Yoneda cut*. The mode stays
-**Auto**: frames whose largest scattering angle is at most 20° are treated as GISAXS.
+**2. Give it a geometry.** Press **Find Calibration Automatically**. The search finds
+`galaxi_bornagain.poni` in the frame's folder and takes it before the GIWAXS calibration of section 1.2
+in the folder beside it: a calibration file in the frame's own folder comes first (section 4.2). Check:
 
-If **Geometry** shows `811.8 mm` instead and the Results step names `LaB6_2021_12_DESY_P08.poni`,
-the search has taken the GIWAXS calibration from a folder nearby (section 1.1) and saved it as the
-profile of this detector. Press **Geometry…** in the step Geometry, then **Delete profile**; move
-the GIWAXS copy away and press **Find Calibration Automatically** again.
+- **Geometry** is ✓ with `1730.0 mm · λ 1.34 Å · αi 0°`;
+- **Cuts** shows *Yoneda cut*. The mode stays **Auto**: frames whose largest scattering angle is at
+  most 20° are treated as GISAXS;
+- the Results step says *a saved calibration file (not re-checked against a standard image); found
+  by the search: galaxi_bornagain.poni*, and *1 question(s)*.
+
+You can also name the calibration before you press the button: type `galaxi_bornagain.poni` in
+**Beamtime notes** of the step **Results** (the file lies in the frame's folder, so its name is
+enough). A calibration named there is tried before the instrument profile and the search, in every
+run.
 
 **3. Run the automatic analysis.** Press **Run Automatic Analysis**. This takes about half a minute
 (the model fits are the slow part). The Results step then asks for αi. Type `0.463` in
 **Incidence angle αi (°)** and press **Run Again with These Answers**.
 
 The answer matters: with αi = 0° the Yoneda band was quoted at αf = 0.639°, with the right αi at
-αf = 0.176°. The αi field in the command bar now shows `0.463 °` in orange: a value you set, which holds for every frame until you go back to the profile's αi (section 4.1).
+αf = 0.176°. **Geometry** now shows `1730.0 mm · λ 1.34 Å · αi 0.463°`, and the αi field shows
+`αi 0.463 °` in orange, as in section 1.2: the run kept the instrument profile saved in step 2 and
+used your αi with it. Had you named the calibration in the notes, the run would have applied that file
+again and saved your αi with it in the instrument profile of this detector, and the field would not be
+orange (section 4.1).
 
 **4. Read the results.**
 
@@ -156,26 +184,33 @@ The answer matters: with αi = 0° the Yoneda band was quoted at αf = 0.639°, 
 | **Horizontal cut** | At the Yoneda band, rows 605–609 | The orange band on the image lies on the Yoneda band |
 | Beam centre | x moved to the symmetry axis, x = 597.26 px | The documented direct beam is x = 597.1 px |
 | Halves | *Mean of both halves*, with the reason | Both halves agree; otherwise the usable one is taken |
-| **In-plane spacing** | A shoulder at \|qy\| ≈ 0.0113 Å⁻¹ (2π/q ≈ 55.6 nm): *a hint, not a resolved peak* | Close to the documented 53.6 nm |
-| **Fit of I(qy)** | A table of solutions: model, R, h, D (nm), χ² | Several models may fit about equally well |
+| **Length scale 2π/q\*** | *2π/q\* = 55.6 nm at a shoulder of the cut (\|qy\| = 0.0113 Å⁻¹, no resolved peak): a length scale, not necessarily the particle spacing; check it with a model fit.* | It is not the particle spacing: near the documented 53.6 nm by coincidence (a BornAgain simulation of the same particles without interference shows a shoulder too) |
+| **Fit of I(qy)** | A table of solutions: model, R, h, D (nm), χ²/N; a value at a search bound is marked ⚠ (*500 ⚠*) and listed under the table (*1: D at its upper bound, σh/h at its upper bound; …*) | Several models may fit about equally well |
 
-Here the Results tab also shows *1 point(s) to check*: **Model choice**. A random cylinder (χ² 1.26)
-and a sphere (χ² 1.36) fit within 10 % of each other, so the curve alone does not decide the model.
-GIMaP names the solutions whose D agrees with the measured spacing and leaves the choice to you. For
-this sample you know the particles are spheres.
+Here the Results tab also shows *1 point(s) to check*: **Model choice**. The first-ranked solution, a
+random cylinder (χ²/N 1.26), has D at its upper bound (500 nm), and the second also has a value at a
+bound. The run reports rank 3, a sphere (R = 9.44 nm, D = 48.3 nm, χ²/N 1.36): the best-ranked
+solution within 10 % of the first's χ²/N with no non-linear value at a search bound. The table selects it, and the
+line under it says so. Several families fit within those 10 %, so the curve alone does not decide the
+model: GIMaP names the solutions whose D is within 15 % of 2π/q\* (a coincidence of two lengths, not
+evidence) and leaves the choice to you. For this sample you know the particles are spheres. The quick
+fit is a screening step: confirm the model in Fitting (step 5).
 
 ![GISAXS results](manual_images/en/08_gisaxs_results.png)
-*The Results tab of a GISAXS frame: the cut, the spacing, the fitted curve and the table of solutions.*
+*The Results tab of a GISAXS frame: the cut, the length scale 2π/q\*, the fitted curve and the table of solutions.*
 
 **5. Send to Fitting.** Press **Send to Fitting**. GIMaP writes
 `gimap_analysis/galaxi_data_fit_input.dat` (the halves as chosen in the Cuts step, here the mean;
 q in Å⁻¹) and opens it in **Fitting ▸ Single analysis**: **Curve** ✓ `599 points fitted`, **Model**
 `Sphere · 9 free`, **Fit** *Choose a method, then Fit*. Fitting shows q in nm⁻¹.
 
-The Fit step has chosen **Predict parameters (fit1d)** for this curve (*Recommended for this curve: a
-GISAXS cut not fitted yet*). It needs the fit1d kit (section 2.3). Without the kit, choose **Find the
-particle shape (no AI)** in **Method** and press **Find the particle shape**. After about 15 s the
-status line says *5 solutions; the best, Sphere (χ²ᵣ 1.39), is in Model*. Results lists the other
+The Fit step has chosen **Find the particle shape (no AI)** for this curve, and the line under
+**Method** says why: *Recommended for this curve: a GISAXS cut not fitted yet (Predict parameters needs
+the optional fit1d add-on, which is not installed).* With the fit1d kit installed (section 2.3) it
+chooses **Predict parameters (fit1d)** instead (*Recommended for this curve: a GISAXS cut not fitted
+yet.*); to follow this walkthrough, choose **Find the particle shape (no AI)** in **Method** then. Press
+**Find the particle shape**. After about 15 s the status line says *5 solutions; the best, Sphere (χ²ᵣ
+1.39), is in Model*. Results lists the other
 solutions under **Other solutions**; press **Refine These Values** to refine the sphere and get its
 errors. The same curve opens with **Refine in Fitting** in Analyze's Results tab.
 
@@ -194,8 +229,9 @@ distribution of radii, GIMaP's models another one: compare radii with care.
 | Draw masks, choose cut regions, follow a series, export many frames | Chapter 5 |
 | Fit a model properly, or a whole in-situ series | Chapter 6 |
 | Compare runs or samples | Chapter 7 |
-| Let an AI do the analysis while you watch | Chapter 9 |
-| Know what each exported file contains | Chapter 11 |
+| Follow the islands of an in-situ sputter series | Chapter 8 |
+| Let an AI do the analysis while you watch | Chapter 10 |
+| Know what each exported file contains | Chapter 12 |
 
 ## 2. Installation and updating
 
@@ -204,12 +240,28 @@ distribution of radii, GIMaP's models another one: compare radii with care.
 No Python is needed; the package brings its own.
 
 1. Open the [GitHub Releases](https://github.com/zyffcc/gisaxs_gui/releases) page and choose the
-   latest release.
-2. Download `00_Download_and_Install_GIMaP-<version>.bat` into an empty folder with a short path that
-   you may write to (for example `C:\GIMaP`).
-3. Double-click it. It downloads the package parts, verifies each one (SHA-256), joins and extracts
-   them into the folder `GIMaP-<version>-windows-x64-portable` beside the installer, and starts
-   GIMaP once.
+   latest release. It offers the package in one of two forms: one file,
+   `GIMaP-<version>-windows-x64-portable.zip`, or, when that file would be larger than GitHub allows
+   (1900 MiB), its parts `GIMaP-<version>-windows-x64-portable.zip.part01`, `.part02` … with the
+   installer `00_Download_and_Install_GIMaP-<version>.bat`.
+2. Choose a folder with a short path that uses English letters only and that you may write to (for
+   example `C:\GIMaP`).
+   - **One ZIP:** download it, extract the whole ZIP into that folder, and double-click
+     `Start_GIMaP.bat` in the folder `GIMaP-<version>-windows-x64-portable`.
+   - **Parts:** download only `00_Download_and_Install_GIMaP-<version>.bat` into that folder (an empty
+     one) and double-click it. It downloads the parts, verifies each one (SHA-256), joins and extracts
+     them into the folder `GIMaP-<version>-windows-x64-portable` beside the installer, and starts
+     GIMaP once. (`Install_GIMaP_parts.bat` joins and extracts parts you downloaded yourself, without
+     checking them.)
+3. To check a download yourself, compare its SHA-256 with the line for it in `SHA256SUMS.txt` on the
+   release page. PowerShell prints it with `Get-FileHash -Algorithm SHA256` followed by the file name.
+
+**What is in the folder.** `runtime\` (the bundled Python with all the packages GIMaP needs), the
+program, `Start_GIMaP.bat`, the example data of section 1.1 (`tests\data\external\`), and `licenses\`:
+the licence texts of everything in `runtime\`, with GIMaP's own `LICENSE` and `THIRD_PARTY_NOTICES.md`
+(also **Help ▸ Third-party Notices**). PyTorch is not in the package: the Sputter workspace installs it
+at its first **Predict** (section 2.3). `Update_GIMaP.bat` is there too, but it updates only git
+clones (section 2.4).
 
 **Starting GIMaP later.** Double-click `Start_GIMaP.bat` in the folder
 `GIMaP-<version>-windows-x64-portable`; a desktop shortcut to that file is convenient. The first
@@ -217,12 +269,13 @@ start prepares the bundled Python environment for the folder, which takes a few 
 
 **Path and memory.** The folder path must use English letters only (for example `D:\GIMaP`, not a
 folder with a Chinese name such as a localised "Downloads"): Qt cannot load its plugins from such a
-path, and `Start_GIMaP.bat` says so and stops. The preparation at the first start
-(`tools\portable_unpack.py`) needs little memory; when it does not succeed, GIMaP is not started and
-the window gives the reason. If it mentions memory ("Not enough memory resources are available to
-process this command"): restart the computer, close other programs, check that virtual memory is on
-(System ▸ About ▸ Advanced system settings ▸ Performance Settings ▸ Advanced ▸ Virtual memory:
-automatic), and double-click `Start_GIMaP.bat` again.
+path, and `Start_GIMaP.bat` says so and stops. Move the whole folder to such a path and start it again.
+The preparation at the first start (`tools\portable_unpack.py`) needs little memory; when it does not
+succeed, GIMaP is not started and the window gives the reason. If it mentions memory ("Not enough
+memory resources are available to process this command"): restart the computer, close other programs,
+check that virtual memory is on (System ▸ About ▸ Advanced system settings ▸ Performance Settings ▸
+Advanced ▸ Virtual memory: automatic), keep a few GB free on that drive, and double-click
+`Start_GIMaP.bat` again. If it still fails, extract the release ZIP again into an empty folder.
 
 The installer and the launcher are batch files and are not signed. Windows may ask for confirmation
 before it runs one, and an institution's antivirus may block it. Only run files from the GitHub
@@ -230,16 +283,24 @@ Releases page of GIMaP; otherwise run GIMaP from source (section 2.2).
 
 ### 2.2 Running from source
 
-**The simple way on Windows (no Python needed).** Double-click `Start_GIMaP.bat` in the folder of a
-clone of the repository, or of a ZIP of it (**Code ▸ Download ZIP** on GitHub, extracted to a short
-path that you may write to). The first start sets up a private environment in the folder `.gimap`:
-it downloads uv (a small Python installer, pinned version, checked against its SHA-256), Python 3.10
-and the packages of `requirements.txt` (about 2 GB, 3-20 minutes), then opens GIMaP. Later starts are
-immediate. When installing the packages fails (for example for lack of free memory), it tries again
-one package at a time, which needs much less memory and takes longer. Nothing outside the folder is changed; deleting `.gimap` removes the environment. The
-model of the Sputter workspace is part of GIMaP (`utils\sputter_toolkit`); the PyTorch it needs
-(`requirements-sputter.txt`, about 1.2 GB) is set up by `Start_GIMaP.bat`, or installed on the first
-**Predict** when it is missing (section 7.4).
+**The simple way on Windows (no Python needed).** Double-click `Start_GIMaP.bat` in the folder that
+holds `main.py`: a clone of the repository, or a ZIP of it (**Code ▸ Download ZIP** on GitHub; Windows
+may extract it into a folder `gisaxs_gui-main` that holds another `gisaxs_gui-main`, the one with
+`main.py`). As for the portable version, the folder path must use English letters only, and it
+should be short and writable (section 2.1). The first start sets up a private environment in the
+folder `.gimap`: it downloads uv (a small Python installer, pinned version, checked against its
+SHA-256), Python 3.10, the packages of `requirements.txt` (about 2 GB) and PyTorch for the Sputter
+workspace (`requirements-sputter.txt`, about 1.2 GB more), which takes 3-20 minutes depending on the
+connection, then opens GIMaP. Later starts are immediate. When installing the packages fails (for
+example for lack of free memory), it tries again one package at a time, which needs much less memory
+and takes longer. When an update changes `requirements.txt` or `requirements-sputter.txt`, the next
+start adds the missing packages first. Nothing outside the folder is changed; deleting `.gimap`
+removes the environment.
+
+**Moving the folder.** The environment in `.gimap` belongs to the place where it was set up. After
+you move or rename the folder, delete its `.gimap` folder and double-click `Start_GIMaP.bat`: the
+environment is set up again for the new place. To build it again in place (for example when it was
+damaged), run `powershell -NoProfile -ExecutionPolicy Bypass -File tools\setup_source_env.ps1 -Reinstall`.
 
 **By hand.** Install Python 3.10 or 3.11, then in the folder of the checkout:
 
@@ -261,6 +322,9 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
+Start GIMaP from such an environment with `python main.py`. `Start_GIMaP.bat` never uses it: it always
+uses its own `.gimap` environment and would set one up beside yours.
+
 The Sputter workspace's model is in the repository (`utils/sputter_toolkit`) and runs on PyTorch (CPU): its
 first **Predict** installs PyTorch into the Python GIMaP runs in. To install it beforehand, run
 `python -m pip install -r requirements-sputter.txt` in the same environment.
@@ -275,19 +339,22 @@ GIMaP runs without these. Each is needed only for the function named.
 
 | Part | Needed for | How |
 |---|---|---|
-| An AI account or a local model | **Ask AI…**, **Tools ▸ Process with AI…** | The Python packages come with `requirements.txt`; set up the AI in **Tools ▸ Settings… ▸ Assistant** (chapter 9) |
+| An AI account or a local model | **Ask AI…**, **Tools ▸ Process with AI…** | The Python packages come with `requirements.txt`; set up the AI in **Tools ▸ Settings… ▸ Assistant** (chapter 10) |
 | The fit1d kit (`gisaxs1d_gui_kit`) | **Predict parameters (fit1d)** in Fitting (also for every frame of an In-situ series) and the method *fit1d* in 1D Predict | Put it in `utils/gisaxs1d_gui_kit`, or name its folder in the environment variable `GISAXS1D_KIT_HOME` (chapter 6) |
-| StarDist | Separating touching particles in **Tools ▸ SEM Particle Analysis…** | A separate Python environment with `requirements-sem-stardist.txt`, and a local model folder (chapter 8) |
-| PyTorch (CPU) | **Predict** in the Sputter workspace | Installed into GIMaP's Python on the first Predict (about 1.2 GB, needs the internet) or by `Start_GIMaP.bat`; by hand `python -m pip install -r requirements-sputter.txt` (section 7.4) |
+| StarDist | Separating touching particles in **Tools ▸ SEM Particle Analysis…** | A separate Python environment with `requirements-sem-stardist.txt`, and a local model folder (chapter 9) |
+| PyTorch (CPU) | **Predict** in the Sputter workspace | Not in the portable package: installed into GIMaP's Python on the first Predict (about 1.2 GB, needs the internet). In a source folder, the first start of `Start_GIMaP.bat` installs it (section 2.2). By hand: `python -m pip install -r requirements-sputter.txt` (section 8.1) |
 
 TensorFlow runs on the CPU; a GPU set-up is not configured.
 
 ### 2.4 Updating
 
-**Portable version.** Run the installer of the new version in the same way. It extracts into its own
-folder; start the new `Start_GIMaP.bat` and delete the old folder when you no longer need it.
+**Portable version.** Get the new version as in section 2.1, the installer or the ZIP. It goes into a
+folder of its own; start the new `Start_GIMaP.bat` and delete the old folder when you no longer need
+it. `Update_GIMaP.bat` cannot update a portable folder: it has no `.git`, and the script says so and
+changes nothing.
 
-**Source checkout.** Double-click `Update_GIMaP.bat` in the folder (it needs Git), or run:
+**Source checkout (a git clone).** Double-click `Update_GIMaP.bat` in the folder (it needs Git 2.16 or
+newer), or run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\update_source.ps1
@@ -298,8 +365,17 @@ uncommitted edits aside and back on top of the new version, leaves your data and
 stops before it would overwrite a file of yours. An edit that does not fit the new version stays put
 aside, and the script says so. Commits of your own that are not on GitHub are kept on a backup branch
 when the branch has to be moved to a rewritten history; `README.md` explains how to get them back. Add `-DryRun` to see what it would do without changing
-anything. When it says the list of Python packages changed, run
-`python -m pip install -r requirements.txt` again.
+anything. When it says a list of Python packages changed (`requirements.txt`, or
+`requirements-sputter.txt`: PyTorch, for Sputter), there is nothing to do if you start GIMaP with
+`Start_GIMaP.bat`: its next start adds the new packages itself. In an environment you set up
+yourself (conda, venv), run the command the script prints for each changed list, such as
+`python -m pip install -r requirements.txt`.
+
+A folder from **Code ▸ Download ZIP** has no `.git` and is not a checkout: the script says so and
+changes nothing. Download the ZIP again, or clone the repository with Git
+(`git clone https://github.com/zyffcc/gisaxs_gui.git`), which the script updates from then on.
+Extract the new ZIP into a new folder (moving `.gimap` over does not work, section 2.2): its first
+`Start_GIMaP.bat` sets up the environment again. Your settings stay in the user data folder.
 
 A checkout last updated before 2026-10-13 does not have the script yet. The history of `main` was
 rewritten on that day: do not run `git pull`, merge or push from such a checkout. Move it first with
@@ -327,9 +403,12 @@ beside the curves. GIMaP follows the display scaling of the operating system (fo
 Frames… below it), the image in the middle, the curves on the right.*
 
 - **The sidebar** (left) holds the pages. *Workspaces*: **Start**, **Analyze**, **Fitting**,
-  **Compare**. *Labs*: **2D Prediction**, **Trainset Build**, the experimental machine-learning
-  tools. **« Collapse** at its foot (or `Ctrl+B`) reduces it to icons. `Ctrl+1` … `Ctrl+6` switch pages.
-- **The menu bar**: **File, View, Tools, Help** (section 3.6). The tool windows open from **Tools**.
+  **Compare**, **Sputter**. *Labs*: **2D Prediction**, **Trainset Build**, the experimental machine-learning
+  tools. **« Collapse** at its foot (or `Ctrl+B`) reduces it to icons. `Ctrl+1` … `Ctrl+7` switch pages
+  in this order: Start, Analyze, Fitting, Compare, Sputter, 2D Prediction, Trainset Build (so Sputter
+  is `Ctrl+5`).
+- **The menu bar**: **File, Edit, View, Analyze, Fitting, Tools, Help** (section 3.6). The tool windows
+  open from **Tools**; **Analyze** and **Fitting** hold the commands of those two pages.
 - **The page.** Analyze and Fitting share one layout: a command bar at the top, the steps of the work
   on the left, the plots on the right.
 - **Messages** appear as short notes at the bottom right. A note about a written file has an
@@ -341,8 +420,8 @@ The window title names the frame shown, and the project when one is open.
 window. A curve file (`.dat`, `.txt`) dropped while Fitting is shown opens there.
 
 **Closing.** Closing GIMaP while something still runs — Batch Export, a Series map, the automatic
-analysis, an AI analysis, a fit, an In-situ series, a 2D prediction, an SEM Particle Analysis — asks
-first and lists what runs. **Yes** stops them and quits; **Cancel** keeps working. An SEM analysis
+analysis, an AI analysis, a fit, an In-situ series, a 2D prediction, an SEM Particle Analysis, a
+Sputter prediction — asks first and lists what runs. **Yes** stops them and quits; **Cancel** keeps working. An SEM analysis
 that is still finishing may ask you to close the window again once it has stopped.
 
 ### 3.2 The Start page
@@ -358,7 +437,7 @@ that is still finishing may ask you to close the window again once it has stoppe
   chosen. The series card has two links of its own: **Open Folder…** (a folder of frames: one file per
   frame, or the module files of one scan) and **Open Files…** (chosen frames, or one NeXus/HDF5 file that
   holds the whole series); both end on Analyze's Series tab.
-- **Or ask the AI**: describe your data and question, then **Ask the AI…** (chapter 9).
+- **Or ask the AI**: describe your data and question, then **Ask the AI…** (chapter 10).
 
 ### 3.3 Steps and command bars
 
@@ -408,38 +487,77 @@ spreadsheet.
 | Menu | Entries |
 |---|---|
 | File | Open Data… (`Ctrl+O`), Open Folder… (`Ctrl+Shift+O`), Open Recent, Open Project… (`Ctrl+Shift+P`), Save Project (`Ctrl+S`), Save Project As… (`Ctrl+Shift+S`), Labs Parameters ▸ Load… / Save As…, Exit |
-| View | the workspaces (`Ctrl+1`…`Ctrl+7`), Collapse Sidebar (`Ctrl+B`), Full Screen (`F11`), Theme ▸ Light / Dark, Font Size ▸ Larger (`Ctrl++`) / Smaller (`Ctrl+-`) / Reset (`Ctrl+0`), Language ▸ English / 中文 |
+| Edit | Undo (`Ctrl+Z`), Redo (`Ctrl+Y`; `Ctrl+Shift+Z` also works): the set-up in Analyze, the model in Fitting's Single analysis |
+| View | *Workspaces* and *Labs*: the pages (`Ctrl+1`…`Ctrl+7`), Collapse Sidebar (`Ctrl+B`), Full Screen (`F11`), Theme ▸ Light / Dark, Font Size ▸ Larger (`Ctrl++`) / Smaller (`Ctrl+-`) / Reset (`Ctrl+0`), Language ▸ English / 中文 |
+| Analyze | Run Automatic Analysis, Stop Automatic Analysis, Repeat Analysis (`F5`), Export Curves… (`Ctrl+E`), Batch Export… (`Ctrl+Shift+E`), Batch Export a Folder…, Send to Fitting, Send Series to Fitting…, Send Series to Compare, Set-up Files ▸ Save Settings… / Load Settings… / Save Cuts… / Load Cuts… / Save Masks… / Load Masks…, Figures ▸ Save Image… / Save q-Map Data… / Save View Data…, Clear Frame List |
+| Fitting | Open Curve…, Fit a Folder of Curves…, Fit (`Ctrl+Return`), Stop Fit, Load Model…, Save Model…, Save Data and Fit…, Save Plot…, In-situ Series ▸ Start / Stop, 1D Predict — Fit Many Curves… |
 | Tools | Geometry Calibration… (`Ctrl+Shift+G`), Format Converter… (`Ctrl+Shift+C`), Convert Current File…, XRR Series Extractor… (`Ctrl+Shift+R`), SEM Particle Analysis…, 1D Predict — Fit Many Curves…, Process with AI… (`Ctrl+Shift+L`), Settings… (`Ctrl+,`) |
-| Help | User Manual (`F1`), GitHub Repository, Open User Data Folder, About GIMaP |
+| Help | User Manual (`F1`), Physics and Methods, Keyboard Shortcuts…, Example Data ▸ GISAXS — Ag Nanoparticles (GALAXI)… / SAXS — AgBh Calibrant (pyFAI)… / GIWAXS — MAPbI₃ Film (DESY P08)… / GIWAXS — PbTe, Tilted Detector (Xeuss)…, Report a Problem…, Open Error Log Folder, Open User Data Folder, GitHub Repository, Check for Updates…, How to Cite GIMaP…, Third-party Notices, About GIMaP |
+
+![The Analyze menu open over the Analyze workspace](manual_images/en/23_analyze_menu.png)
+*The Analyze menu with one frame open in Analyze. Entries that cannot run now are greyed out; their tooltip says
+why.*
+
+![The Help menu](manual_images/en/24_help_menu.png)
+*The Help menu: the two manuals, the keyboard shortcuts, the example data (a submenu), where to report a problem,
+the folders GIMaP keeps, and the links to GitHub, the citation, the notices and the version.*
 
 - While Fitting's Single analysis is shown, **File ▸ Open Data…** opens a curve and says so
   (*Open Curve…*).
-- *Labs Parameters* are the settings of 2D Prediction and Trainset Build. Analyze keeps its own
-  set-up in settings files (**Export ▸ Save Settings… / Load Settings…**, also used by Batch Export).
-  A project keeps everything of one sample (section 3.8).
+- **Edit ▸ Undo** and **Redo** act on the page shown: Analyze, or Fitting's Single analysis. On
+  Analyze the entry names what it would change (for example *Undo: cut regions*). On the other pages
+  they are greyed out.
+- Every entry of **Analyze** and **Fitting** first shows its page (in Fitting the Single analysis, or
+  the In-situ series for Fit a Folder of Curves… and In-situ Series ▸ Start / Stop), then does what
+  the page's own button does. An entry that cannot run now is greyed out, and its tooltip says why
+  (for example *Open a frame first.*).
+- The keys shown next to Undo, Redo, Repeat Analysis, Export Curves…, Batch Export… and Fit belong to
+  the page: they act while that page has the keyboard focus (section 3.7). The menu entries work from
+  any page.
+- *Labs Parameters* are the settings of 2D Prediction and Trainset Build. The file also holds Fitting's
+  model (the particles and global parameters of the Single analysis): **Load…** replaces Fitting's model
+  with the one in the file and keeps it as the stored model, without asking. Save a project first if you
+  need the model you have. Analyze keeps its own set-up in settings files (**Analyze ▸ Set-up Files ▸ Save Settings… / Load Settings…**, also in the
+  page's **Export** menu and used by Batch Export). A project keeps everything of one sample (section 3.8).
 - **Tools ▸ 1D Predict — Fit Many Curves…** fits a list of curve files with the experimental neural
-  model (chapter 6). The other tool windows are described in chapters 4 and 8.
+  model (chapter 6). The other tool windows are described in chapters 4 and 9.
 - **Help ▸ User Manual** opens this manual in your web browser; in the Chinese interface it opens the
-  Chinese edition.
+  Chinese edition. **Physics and Methods** (how GIMaP computes what it shows) and **Third-party
+  Notices** open the same way; a link from one of these documents to another opens the other one at
+  that section. **Keyboard Shortcuts…** lists every key of the menus and of the pages
+  in a table you can copy (`Ctrl+C`).
+- **Help ▸ Example Data** copies one of the public examples that come with GIMaP to a folder you
+  choose (by default `Documents\GIMaP examples\<example>`) and opens its frame in Analyze (section 1.1).
+- **Help ▸ Report a Problem…** copies the versions of GIMaP, the operating system, Python, Qt, PyQt
+  and numpy (no paths, no data) to the clipboard and opens a new issue on GitHub in your browser:
+  paste them there. **Check for Updates…** opens the releases page on GitHub in your browser (newest
+  first, pre-releases included); GIMaP itself makes no network request.
 
 ### 3.7 Keyboard shortcuts
 
-Besides the shortcuts in the menus:
+The keys of the File, View and Tools menus work on every page. The keys below belong to a page or a
+window: they act while it has the keyboard focus. After switching pages with `Ctrl+1` … `Ctrl+7` or the
+sidebar, click into the page first. The page keys marked *menu* are also shown in the Edit, Analyze and
+Fitting menus (section 3.6); those entries work from any page. **Help ▸ Keyboard Shortcuts…** shows
+the keys of the menus and this table in the program.
 
 | Where | Keys | What it does |
 |---|---|---|
 | Analyze | `Page Up` / `Page Down` | Previous / next imported frame (through the frames of a source, then on to the next source) |
-| Analyze | `Ctrl+Z`, `Ctrl+Shift+Z` or `Ctrl+Y` | Undo / redo a change of the set-up |
-| Analyze | `Ctrl+E` | Export the curves of this frame |
-| Analyze | `Ctrl+Shift+E` | Batch Export… |
-| Analyze | `F5` | Analyse the frame again |
-| Analyze | `Delete` (in the frame list also `Backspace`) | Remove the selected source (all its frames), mask or cut region from its list (the files themselves are not touched) |
+| Analyze | `Ctrl+Z`, `Ctrl+Shift+Z` or `Ctrl+Y` | Undo / redo a change of the set-up (*menu*: Edit ▸ Undo / Redo) |
+| Analyze | `Ctrl+E` | Export the curves of this frame (*menu*: Analyze ▸ Export Curves…) |
+| Analyze | `Ctrl+Shift+E` | Batch Export… (*menu*: Analyze ▸ Batch Export…) |
+| Analyze | `F5` | Analyse the frame again (*menu*: Analyze ▸ Repeat Analysis) |
+| Analyze | `Delete` or `Backspace` | Remove the selected source (all its frames), mask or cut region from its list (the files themselves are not touched) |
 | Analyze | `Esc` | Stop picking the beam centre on the image; cancel drawing a mask |
-| Fitting | `Ctrl+Return` | Fit |
-| Fitting | `Ctrl+Z`, `Ctrl+Shift+Z` or `Ctrl+Y` | Undo / redo a change of the model |
+| Analyze, drawing a polygon mask | `Return` (or `Enter`) / `Backspace` | Close the polygon (from three points on) / take back the last point |
+| Fitting | `Ctrl+Return` | Fit (*menu*: Fitting ▸ Fit) |
+| Fitting | `Ctrl+Z`, `Ctrl+Shift+Z` or `Ctrl+Y` | Undo / redo a change of the model (*menu*: Edit ▸ Undo / Redo) |
 | Compare | `Delete` | Remove the selected series from the table |
 | Tables | `Ctrl+C` | Copy the selected rows with their column names |
 | Geometry Calibration | `Esc` | Close the window (it asks first while a calibration runs) |
+| XRR Series Extractor | `Esc` | Stop picking the direct-beam centre on the preview; when not picking, close the window |
+| Trainset Build (the image) | `Esc` | Leave the drawing mode: picking the direct beam, the ROI or a mask shape |
 
 ### 3.8 Projects
 
@@ -449,6 +567,10 @@ A project (`.gimap`, a JSON file) reopens a sample as it was left:
   cuts), the frames chosen for import (section 5.1) and whether one cut is held for a series;
 - the curve, halves, fitting range, left-out points and model of Fitting;
 - the folder and choices of the In-situ series, and the series of Compare.
+
+Sputter and the Labs pages are not part of a project. Sputter keeps the values of each scan folder
+itself (section 3.9); the settings of the Labs pages go, together with Fitting's model, into their own
+files with **File ▸ Labs Parameters ▸ Save As…**.
 
 **File ▸ Save Project** (`Ctrl+S`) writes it; the first time it asks where (next to the first frame
 by default). **Open Project…**, the Start page's **Open Project…**, **Open Recent** (projects first)
@@ -487,11 +609,14 @@ or dropping a `.gimap` file on the window opens it.
 
 An unexpected error does not close GIMaP. A window says what happened: **Show Details** shows the
 technical report, **Copy Details** copies it for a bug report, and the work goes on. Every error is
-written to `logs/errors.log` in the user data folder (**Open Log Folder**).
+written to `logs/errors.log` in the user data folder. **Open Log Folder** in that window, or
+**Help ▸ Open Error Log Folder** at any time, opens the folder; when no error has been logged yet,
+the menu entry says so. To report a problem, **Help ▸ Report a Problem…** (section 3.6) copies the
+versions to paste into the report.
 
 Files that cannot be read say why in words: empty (still being written?), not a detector image, a
 damaged or incomplete NeXus file, a NeXus/HDF5 file another program is still writing, no permission.
-Chapter 13 has more.
+Chapter 14 has more.
 
 ### 3.11 Settings and the user data folder
 
@@ -503,19 +628,21 @@ are stored with their own **Save** button.
 | **Appearance** | Light or dark theme, the font size, the interface language (English by default, or 中文). Values, units and file names are never translated. |
 | **Analyze** | **Use the beam centre written in the file header** (CBF `Beam_xy`, NeXus `beam_center_x/y`): off by default, because many beamlines never update it, so the calibrated profile centre is kept. **Send horizontal cut to Fitting**: which half of the GISAXS horizontal cut Send to Fitting passes on (by default both halves on \|qy\| in two colours). |
 | **Data** | Where the user data folder is (**Open**), and **Reset All Settings…** (instrument profiles are kept; restart GIMaP afterwards) |
-| **Assistant** | The AI: which one, its standing instructions, models, keys and permissions (chapter 9) |
+| **Assistant** | The AI: which one, its standing instructions, models, keys and permissions (chapter 10) |
 
 ![Settings](manual_images/en/19_settings.png)
 *Tools ▸ Settings…: the Appearance page.*
 
 All settings, preferences, instrument profiles, the session and the fitting model are kept in one
-user data folder outside the program:
+user data folder outside the program, together with the error log (section 3.10), the result folders
+of the Sputter workspace (chapter 8) and the records of the AI assistant's runs (chapter 10):
 
 - Windows: `%APPDATA%\GIMaP`;
 - elsewhere: `~/.config/gimap` (`$XDG_CONFIG_HOME/gimap` when that variable is set);
 - or the folder named in the environment variable `GIMAP_HOME`.
 
-**Help ▸ Open User Data Folder** opens it. Updating the program never overwrites it.
+**Help ▸ Open User Data Folder** opens it. Updating the program never overwrites it, and deleting the
+program folder does not remove it.
 
 ## 4. Geometry and calibration
 
@@ -548,7 +675,17 @@ instead.
 **αi** is part of the profile, but the command bar has its own field. It shows the profile's αi
 (*αi from profile* while no frame is shown). A value you type is shown in orange and is used for
 every frame; it is also remembered for the next session, and a note at the first frame then says
-so. Right-click the field ▸ **Back to Profile αi** to drop it.
+so. Right-click the field ▸ **Back to Profile αi** to drop it; **Clear** in the step Data does not.
+
+- An αi answered in the Results step (**Run Again with These Answers**) is set the same way, in orange,
+  when the run keeps the profile the detector has (section 1.2).
+- When the run applies a calibration instead — one named in the beamtime notes, or one it found for a
+  detector without a profile — the answered αi is saved with it in the instrument profile (section 1.3).
+- Sputter ▸ **Show in Analyze** sets αi as if you had typed it, and may set the beam centre and choose
+  a profile (section 8.6).
+
+How a profile is chosen and what each override replaces is in
+[Physics and Methods, section 1.4](Physics_Manual.md#14-where-the-geometry-of-a-frame-comes-from).
 
 **The beam centre in file headers** is not used by default: the calibrated profile centre is kept,
 because many beamlines never update the header. **Tools ▸ Settings… ▸ Analyze ▸ Use the beam centre
@@ -566,20 +703,43 @@ place of **Enter Geometry…**.
 1. a calibration you named in the beamtime notes of the **Results** step: by path, or by file name
    alone when the file lies in the frame's folder or in a folder the notes name;
 2. the instrument profile this detector already has;
-3. ready calibration files (`.poni`, an exported `.json`) in the folders around the frame, up to
-   three levels up, the one written closest in time to the frame first;
+3. ready calibration files (`.poni`, an exported `.json`) in the frame's folder and the folders around
+   it (beside it, and up to three levels up). They are ranked by folder first: the frame's own
+   folder, then its subfolders, the parent folder, the folders beside the frame's, and further up.
+   Within one of these, the file written closest in time to the frame comes first, one written before
+   the frame is preferred;
 4. images of a standard there (AgBh, LaB₆, CeO₂), fitted and accepted when the standard's lines land
    within 0.5 % of their q.
 
 The step **Results** says which calibration was used and where it was found. A `.poni` or `.json`
-file is taken as it is: it is not checked against a standard image, and in this version not even
-against the detector — a calibration of another detector (other pixel size, other frame size) in a
-neighbouring folder can be applied. The result is saved as the instrument profile of the detector.
+file is taken as it is: it is not checked against a standard image. It is skipped when it states a
+pixel size that differs from the frame's by more than 1 %, or a frame size that differs. But a TIFF
+often states no pixel size and a `.poni` often no frame size, and then nothing tells two detectors
+apart: the calibration of another detector in a neighbouring folder can be applied when the frame's
+own folder holds none. The GIWAXS `.poni` of section 1.1, for example, fits the GALAXI TIFF as far
+as the search can tell; only its folder puts it after `galaxi_bornagain.poni`. The result is saved
+as the instrument profile of the detector.
 
-The search may pick the calibration of another experiment, for example in a folder that was copied
-in one go (the file times then say nothing). Check the file named and the distance shown in
-**Geometry**, or name the right one in the notes, or use one of the two other ways. A wrong profile
-is removed with **Geometry…** ▸ **Delete profile**.
+**A tilted detector.** GIMaP's geometry is a flat detector perpendicular to the beam. A `.poni` with a
+tilt (pyFAI's `Rot1`, `Rot2`) is converted to the direct beam and its distance, and the tilt is left out;
+the instrument profile keeps it, and for every frame GIMaP compares |q| of the tilted geometry with that of the
+flat geometry made from the same `.poni` on the valid pixels ([Physics and Methods, section 3.7](Physics_Manual.md#37-what-a-poni-tilt-left-out-costs-in-q)).
+The estimate is what the tilt alone costs: a beam centre moved afterwards (by the GISAXS symmetry axis of the
+automatic analysis, or by hand) does not change it.
+When the tilt exceeds 1° or |q| is off by more than 0.5 %, Analyze's status line and the step **Geometry**
+(marked with a warning) say so (*tilt 6.06° left out: |q| up to 6.3 % off*), and the automatic analysis lists **Detector
+tilt** among the points to check (`tools/gimap_agent.py`: under *Needs attention*, exit code 2). Below both
+limits the decision **Detector tilt** says how much it changes |q|. The tilt and the error are written into
+`<stem>_analysis.json` (chapter 12). The Xeuss example of **Help ▸ Example Data** is such a case: its 6.06°
+tilt puts |q| off by up to 6.3 % at the corner farthest from the beam. For exact q of a tilted detector,
+reduce the frame with the full `.poni` geometry (pyFAI, for example).
+
+The search may pick the calibration of another experiment: one in a folder beside or above the
+frame's when the frame's own folder holds none, or, among several in one folder that was copied in
+one go, the wrong one (the file times then say nothing). Check the file named and the distance shown in
+**Geometry**, or name the right one in the notes (a calibration named there is tried before the
+profile and the search), or use one of the two other ways. A wrong profile is removed with
+**Geometry…** ▸ **Delete profile**.
 
 **Enter Geometry…** opens the dialog **Detector geometry**: **Profile name**,
 **Sample–detector distance**, **Pixel size x** / **y**, **Wavelength**, **Beam centre x** / **y**
@@ -663,7 +823,8 @@ Calibration…** start in the folder of the image shown, else in the folder used
 theoretical rings, dotted cyan lines are detected experimental radii, and pink lines cross at the
 beam centre; the legend above the image names each style. Partial WAXS arcs and centres outside the active detector area are
 supported. A low-confidence result or a one-ring result should be treated as ambiguous and reviewed
-by hand.
+by hand. How the rings are fitted, and what the RMS residual and the confidence measure, is in
+[Physics and Methods, chapter 3](Physics_Manual.md#3-calibration).
 
 ![The Geometry Calibration window](manual_images/en/03_calibration.png)
 *Geometry Calibration: the fitted rings over the standard, the selected solution and the candidates.*
@@ -718,12 +879,15 @@ records of the XRR Series Extractor count pixel centres from 0, half a pixel low
 show, as earlier versions did. Each file says so (`metadata.center_convention` in the calibration
 file, `center_convention` in the XRR record). Importing such a file shows the window's numbers again.
 
-Trainset Build (Labs) keeps the conventions of the training data it was made for (chapter 10).
+Trainset Build (Labs) keeps the conventions of the training data it was made for (chapter 11). The
+conventions and the conversion between them are defined in
+[Physics and Methods, sections 1.2 and 1.3](Physics_Manual.md#12-canonical-pixel-coordinates).
 
 ### 4.5 The beam centre in Analyze
 
 The profile's beam centre is used unless you change it. The step **Geometry** shows it on the button
-**Beam centre** (`Beam x, y px · source`, to four decimal places); its menu has:
+**Beam centre**, to four decimal places, with where it comes from: `Beam x, y px · profile`,
+`· this session` or `· file header`. Its menu has:
 
 | Entry | What it does |
 |---|---|
@@ -738,7 +902,8 @@ You can also drag the cyan cross on the image. A centre set in any of these ways
 session and for every frame of the same detector size (rows × columns); frames of another size go
 back to their profile's centre (or the header centre, when the setting above is on), and a note says
 so. It is also kept in settings files and projects. **Save to Profile**
-keeps it for good.
+keeps it for good. Sputter ▸ **Show in Analyze** sets a centre for this session in the same way when
+one was given for its Predict (section 8.6).
 
 **Geometry…** and **Enter Coordinates…** open small windows that stay open while you work, so you
 can adjust the centre and watch the curves:
@@ -763,12 +928,13 @@ the two halves of I(qy) do not match. **Make Left and Right Symmetric** (step **
 the centre column onto the symmetry axis of the cut:
 
 1. a coarse search over the whole horizontal cut finds the axis;
-2. a refinement compares the column means of the valid pixels, as the curve shows them, left and
-   right of the trial axis. Each pair is weighted by 1 / distance from the axis, so every factor of
-   distance counts about the same and the many far pixels do not outweigh the low-q structure.
-   Columns without measured pixels (gaps, masked columns) stay out, values are not interpolated
-   across gaps, and points closer than 1 px to the axis are not used.
+2. a fine search, a few pixels around it, compares the column means of the valid pixels left and
+   right of the trial axis. Only columns measured on both sides count (gaps and masked columns stay
+   out, nothing is bridged across a gap). Each pair is weighted by 1 / distance from the axis, so
+   the many far columns do not outweigh the low-q structure.
 
+The scores, weights and acceptance rules are in
+[Physics and Methods, section 8.2](Physics_Manual.md#82-beam-centre-column-from-mirror-symmetry).
 Only x changes; y is kept. The result is shown in a note (*coarse … → refined … px*). 0.0001 px is
 the numerical stopping tolerance, not a measured uncertainty. When the data do not cover enough, or
 several axes fit equally well, the centre stays as it was and the note says why.
@@ -789,7 +955,7 @@ The page has five parts (the picture in section 3.1 shows them with a GIWAXS fra
 | Part | What it holds |
 |---|---|
 | Command bar | **Open…** (its arrow: **Open Folder…**), ↶ ↷ (Undo / Redo), ‹ › (previous / next frame, when more than one frame is listed), the mode **Auto / GISAXS / GIWAXS**, αi, **Run Automatic Analysis** (with **Stop** while it runs), **Ask AI…**, **Export** ▾, **Batch Export…** (when more than one frame is listed), **Send to Fitting** ▾ |
-| Steps (left) | **Data**, **Geometry**, **Mask & corrections**, **Cuts**, **Results**, **Export**. Each shows its state (✓, !, ✕ or running) and one line of what it found; click a step for its controls. Rarely used options are folded away. |
+| Steps (left) | **Data**, **Geometry**, **Mask & corrections**, **Cuts**, **Results**, **Export**. Each shows its state (✓, !, × or …, as in 3.3) and one line of what it found; click a step for its controls. Rarely used options are folded away. |
 | Image (middle) | **Detector**, **q map** or **Cake** (GIWAXS), **Log**, the colour map, **Levels**, **Marks**, Zoom, **Fit view**, **Sources**, **Save** ▾; the values under the cursor below the image |
 | Tabs (right) | **Curves** (an upper and a lower plot), **Results** (what the automatic analysis or the AI found, with its evidence), **Series** (every frame as intensity against frame and q) |
 | Status line | What is happening, a progress bar and **Cancel**. A note at the bottom right says when a file was written, with **Open Folder**. |
@@ -815,7 +981,8 @@ a master is read with its data files, and every frame of a multi-frame file is a
 (*NeXus and HDF5 files* below).
 
 1. Open frames in one of these ways:
-   - **Open…** in the command bar (`Ctrl+O`), or its arrow ▸ **Open Folder…** (`Ctrl+Shift+O`);
+   - **Open…** in the command bar or **File ▸ Open Data…** (`Ctrl+O`), or the arrow of **Open…** ▸
+     **Open Folder…** or **File ▸ Open Folder…** (`Ctrl+Shift+O`);
    - drop files or a folder anywhere on the window;
    - the Start page or **File ▸ Open Recent**.
 2. Analyze opens at once and looks at the sources in the background (**Cancel Import** stops a slow
@@ -845,15 +1012,15 @@ or from a NeXus stack:
 - To take a source off the list, right-click one of its rows — **Remove Source from List**, **Show in
   Folder**, **Copy Path** — or select it and press `Delete` or `Backspace`. All its frames go; the files
   themselves are not touched, and the rest of the list, the Series map and Batch Export go on without it.
-- **Clear** empties the list (and the Series map with it).
+- **Clear** (or **Analyze ▸ Clear Frame List**) empties the list, and the Series map with it.
 - **Frames ▸ Sum** (folded under the list) adds consecutive frames for better statistics: the
   frame shown plus the next ones (the following files, or the following frames of a NeXus file).
   Batch Export and watching sum groups of the same size.
 - Above the list the Data step says what the source shown consists of (for example *11 module files ·
   240 frames · stitched*), how its frames are oriented, and — in the warning colour — what is missing
   from it. **File header** gives the energy, distance and exposure (in s) the file states.
-- When the files of a frame change (name, time or size), **F5**, showing the frame again and watching
-  read it again; otherwise it is not read again.
+- When the files of a frame change (name, time or size), **F5** (**Analyze ▸ Repeat Analysis**), showing
+  the frame again and watching read it again; otherwise it is not read again.
 
 **Watch** (next to **Clear**) watches a folder during a measurement: choose the folder, and it is
 looked at every 2 s. New frames are listed and the newest is shown as soon as it is completely
@@ -867,8 +1034,11 @@ written. Press **Watch** again to stop.
   reading: such a file is listed as being written and read once it is closed.
 - With **Export ▾ ▸ Export New Frames While Watching** ticked, each complete new frame is exported
   once (next to the data, in `gimap_analysis/`; with **Sum**, only complete groups). A set of module
-  files is exported once it is whole and has rested about 10 s; a module file missing is said in the
-  status line.
+  files is exported once it is whole: at once when it has as many module files as another set of the
+  folder, otherwise after its files have stayed unchanged for about 10 s. A set with fewer module files
+  than another set waits about 30 s and is then exported as it is (a detector may have had a module
+  switched off). A module file that is missing or cannot be read is named in the status line, and the
+  set waits until it is there.
 - A Series map that is built already grows with the new frames, without a new **Build Map** (when
   export is on and there is no map yet, one is built with the chosen curve). Picking a row stops the map
   from following the newest frame; **Show the newest frame** under the Series options turns it back on.
@@ -934,17 +1104,12 @@ and are left out. On a floating-point frame (dark- or background-subtracted) neg
 data and are kept.
 
 **Bad pixels** — **Leave out hot and dead pixels** (on by default, remembered). In every frame
-GIMaP leaves out:
-
-- isolated hot pixels: brighter than all eight neighbours, by a factor of 5 and by 10 standard
-  deviations (Poisson for counting detectors, a robust frame-wide noise for floating-point frames);
-- dead pixels (counting detectors only): reading 0 while every neighbour has at least 20 counts;
-- scattered bright pixels along a defective detector row or column, which the single-pixel test
-  misses when they come in pairs.
-
-Anything wider than one pixel — a Bragg spot, a streak, the beam-stop edge, a Yoneda band — is kept.
-Whole rows or columns are never removed. The numbers go into the export record
-(`bad_pixels_left_out`). Turn the option off to put these pixels back into the curves.
+GIMaP leaves out isolated hot pixels, dead pixels (counting detectors only) and scattered bright
+pixels along a defective detector row or column; the criteria are in
+[Physics and Methods, section 4.4](Physics_Manual.md#44-bad-pixels-found-in-the-frame). Anything wider
+than one pixel — a Bragg spot, a streak, the beam-stop edge, a Yoneda band — is kept, and whole rows
+or columns are never removed. The numbers go into the export record (`bad_pixels_left_out`). Turn the
+option off to put these pixels back into the curves.
 
 **Masks you draw:**
 
@@ -960,7 +1125,9 @@ Whole rows or columns are never removed. The numbers go into the export record
 **Fill gaps from the mirror side (GIWAXS)** (off by default). A GIWAXS pattern is symmetric in
 ±q∥. A pixel without data (module gap, mask, hot pixel) takes the value at its mirror position
 about the beam-centre column, interpolated between two columns that both have data. Where the
-mirror has no data either, the gap stays. The record counts the filled pixels, and Fitting is told
+mirror has no data either, the gap stays. A filled pixel repeats photons measured on the other side,
+so while this is on the error bars of every GIWAXS curve come from the scatter of the pixels, not
+from counting statistics (section 5.4). The record counts the filled pixels, and Fitting is told
 that the counting statistics no longer hold.
 
 **Corrections** (folded): a background frame (**Choose…**, with **Scale** and, for NeXus, **Frame**),
@@ -971,20 +1138,20 @@ The order is fixed: invalid detector pixels → hot and dead pixels → masks �
 → intensity range → mirror fill → intensity corrections. Curves, q map, cake and exports all use
 the corrected frame.
 
-**Intensity corrections (GIWAXS)** (folded, off by default). They divide each pixel by a factor;
-q does not change:
+**Intensity corrections (GIWAXS)** (folded, off by default). They divide each pixel by a geometric
+factor; q does not change:
 
-| Correction | Factor | Enter |
-|---|---|---|
-| **Solid angle of each pixel (cos³2θ)** | cos³2θ for a flat detector, 1 at the beam | — |
-| **Polarisation, factor** | pyFAI's formula with factor f | f (default 0.99): 0.95–0.99 at a synchrotron (horizontal), 0 for an unpolarised laboratory source, −1 vertical |
-| **Absorption in the film** | the path in the film at exit angle αf, relative to αf = αi | **Thickness** (nm), **Attenuation length** 1/µ (µm, from tables such as CXRO or NIST) |
+| Correction | Enter |
+|---|---|
+| **Solid angle of each pixel (cos³2θ)** | — |
+| **Polarisation, factor** | f (default 0.99): 0.95–0.99 at a synchrotron (horizontal), 0 for an unpolarised laboratory source, −1 vertical |
+| **Absorption in the film** | **Thickness** (nm), **Attenuation length** 1/µ (µm, from tables such as CXRO or NIST) |
 
-Peak positions do not change. Intensities compared across χ or q do — orientation, pole figures,
-crystallinity ratios. Refraction is not included in the film absorption, so it is valid well above
-the critical angle; with it on, pixels at or below the sample horizon are left out. For photon counts the error is propagated: a corrected pixel's variance is its
-value divided by the factor. The JSON record (`intensity_corrections`) gives the formulas and
-parameters.
+Peak positions do not change; intensities compared across χ or q do — orientation, pole figures,
+crystallinity ratios. The film absorption leaves out refraction, so it holds well above the critical
+angle; with it on, pixels at or below the sample horizon are left out. The factors, and how the error
+bars follow them, are in [Physics and Methods, chapter 5](Physics_Manual.md#5-intensity-corrections-for-giwaxs);
+the JSON record (`intensity_corrections`) gives the formulas and parameters.
 
 ### 5.3 Cuts
 
@@ -1071,13 +1238,15 @@ and I(q∥). The lower plot's drop-down chooses **I(χ) of the regions**, **q bo
 
 ### 5.4 Curves and results
 
-**Where the points come from.** Each point is the mean intensity of the valid pixels in one bin.
-A bin is never finer than one pixel. Bins with very few pixels (near the beam, at region edges) are
-merged with their neighbours along q, never across a gap; I(χ) is not merged. Bins with no pixel —
-gaps, masked χ ranges, the missing wedge — have no point, and the curve is broken there. The error
-bar σ is √sum / n for integer counts without background; for floating-point frames, after
-background subtraction or mirror fill it is the scatter of the pixels, s / √n. GIMaP never smooths
-a curve: for smoother curves widen the region's χ range or lower **Radial bins**.
+**Where the points come from.** Each point is the mean intensity of the valid pixels in one bin,
+never finer than one pixel. Bins with very few pixels (near the beam, at region edges) are merged
+with their neighbours along q, never across a gap; I(χ) is not merged. Bins with no pixel — gaps,
+masked χ ranges, the missing wedge — have no point, and the curve is broken there. The error bar σ is
+the counting error for raw photon counts (a bin of zero counts gets the error of one count, so σ is never
+0), and the scatter of the pixels for floating-point frames,
+after background subtraction or with mirror fill ([Physics and Methods, sections 6.4 and
+6.5](Physics_Manual.md#64-the-three-error-models) define both and the merging). GIMaP never smooths a
+curve: for smoother curves widen the region's χ range or lower **Radial bins**.
 
 **Sources.** Press **Sources** to see on the detector image which pixels each curve comes from, in
 the colours of the plots. Click a curve to see only its region.
@@ -1128,7 +1297,9 @@ instrument profiles are not undone this way.
 works for GIWAXS and GISAXS.
 
 Before running, you can type **Beamtime notes** in the **Results** step: αi, the energy, the
-pixel size, where the calibration is — whatever you know.
+pixel size, where the calibration is — whatever you know. An αi you set in the command bar is the αi the run
+uses: it is not asked for again, and the report's *Decisions* say it came from the command bar. A value from the
+notes or an answer that differs from it replaces it there, so the αi reported is always the one used.
 
 **GIWAXS.** The run:
 
@@ -1145,6 +1316,22 @@ The Results tab shows **Peaks**, **Checks** (shadows, artefacts, unmeasured rang
 Start of the Series**) and **Report**. Sizes are Scherrer lower bounds. Phases are not assigned
 automatically.
 
+What the numbers are is said in the report's *Decisions* (**Show the Full Text**): q is kinematic, without a
+refraction correction, and the line gives how far refraction can shift q_z near or below the film's critical
+angle at your αi (up to about k·sin αi); the uncertainties are statistical only, from Poisson counting statistics
+or, for a floating-point, background-subtracted or mirror-filled frame, from the pixel scatter, without the
+geometry. At most 12 candidate peaks, the most prominent, are fitted: when more qualify, *Decisions* says how many,
+and the peak table, the rings and the series hints are those of the 12 (the command line's `--max-peaks` fits
+more). The orientation sentence compares f with f_iso, the value of a random ring over the same measured |χ|: it
+says *along the surface normal* or *in the sample plane* only when the I(χ) maximum lies below 20° or above 70°
+and |f − f_iso| reaches max(0.1, 3σ_f); a ring whose maximum lies between 20° and 70° is called *tilted* at that
+|χ| from its maximum alone, without that margin. Every ring line gives f ± σ_f, f_iso and f − f_iso with the
+decimals of σ_f. When f changes by more than that statistical uncertainty once the bins next to the sample horizon
+(|χ| ≥ 85°) are left out, the ring's notes and *Decisions* say so: there the exit angle is smallest, and absorption
+or a shadow can lower the intensity, which GIMaP does not correct. A peak within 1.5 widths of the end of the data
+(*at the end of the data: check*) is not used for the rings, the sizes or the series hints: its shape may be cut
+off.
+
 ![Results of the automatic analysis of a GIWAXS frame](manual_images/en/07_giwaxs_results.png)
 
 *The peak table (q, d, FWHM, trust, Scherrer size L, OOP/IP); **Fit details** below it opens the fit of the selected peak.*
@@ -1156,19 +1343,43 @@ automatically.
 3. moves the beam-centre column to the symmetry axis;
 4. chooses the halves: their average when both are usable and agree, otherwise the usable one,
    with the reason (a half shadowed, cut by a gap, too short);
-5. gives the in-plane distance 2π/q* (a shoulder only is reported as a hint);
+5. gives the length scale 2π/q\* of a side maximum, or else of a shoulder, of the cut: *a length
+   scale, not necessarily the particle spacing; check it with a model fit*. A form factor or the tail
+   of the direct beam makes a shoulder too, so 2π/q\* is never reported as the spacing (the report
+   section is **Length scale 2π/q\***; the decision **length scale** says where, and once what it is);
 6. fits I(qy) with physical models: spheres, vertical cylinders and random cylinders, with size
-   spread and a distance D.
+   spread and a distance D. This quick fit is a screening step (chapter 13): confirm the model in
+   Fitting.
 
-When several models fit within 10 % of the best χ², the curve alone does not decide the model: the
-Results tab asks which one you expect and names the one that agrees with the measured spacing.
-**Save Fitted Curve…** (q in Å⁻¹, I, σ and the best fit), **Save Fit Table…** (every solution with
-its parameters in nm and χ²) and **Save Plot…** save the results; **Refine in Fitting** opens the
-prepared curve (the halves chosen) in Fitting.
+The solutions are ranked by a robust misfit, the mean Huber loss of the σ-normalised residuals r, so
+that a few outlying points do not decide the order. The table's χ²/N is the mean of r² over
+the points, with no correction for the number of free values (unlike Fitting's χ²ᵣ). A non-linear value
+that ended on a bound of its search range (for example D at 500 nm) is not determined by the curve: the
+table marks it ⚠ and the line under the table names it by rank (*1: D at its upper bound, …*), as do
+**Fit details** and the report's note column. Among the solutions within 10 % of the first solution's χ²/N, the run reports the
+best-ranked one that converged with no non-linear value at a bound; the table selects it, and the line under the
+table says so when it is not the first. When none of them is free of a bound, the first is reported
+and a point to check (**Fit**) says that it sits at a bound. The amplitudes, the background and the
+beam-tail amplitude are fitted non-negative and are not counted as values at a bound; one that ends at
+0 is named among the report's *Decisions* (*fit caveat: background BG at 0, the non-negativity limit*).
+A reported solution with χ²/N above 10 — the limit of Fitting's poor fits (section 6.6) — misses the
+curve by far more than its noise: a point to check (**Fit**) says that its R and D are not measurements
+(the AgBh calibrant of **Help ▸ Example Data** gives χ²/N = 472: Bragg rings, no particles). When several models fit within those
+10 %, the curve alone does not decide the model: the Results tab asks which one you expect and names
+the solutions whose D is within 15 % of 2π/q\*. **Save Fitted Curve…** (q in Å⁻¹, I, σ and the fit
+the run reports), **Save Fit Table…** (every solution with its parameters in nm, χ²/N, the values at a
+bound in `at_bounds` and the reported one in `chosen`) and **Save Plot…** save the results; **Refine
+in Fitting** opens the prepared curve (the halves chosen) in Fitting.
+
+As for GIWAXS, the report's *Decisions* (**Show the Full Text**) say what the numbers are: q is kinematic,
+and near the critical angle refraction mostly shifts q_z — that of the Yoneda band most — by an amount of
+the order of k·sin αi, which the line gives for your frame (q_y and 2π/q\* barely change); the σ of the
+cuts, by which χ²/N is normalised, are statistical only, from Poisson counting statistics or the pixel
+scatter, without the geometry, and the quick fit gives no ± for R, h or D.
 
 ![Results of the automatic analysis of a GISAXS frame](manual_images/en/08_gisaxs_results.png)
 
-*The cut with its halves, the spacing, the fit (Log q / Log I) and the table of solutions.*
+*The cut with its halves, the length scale 2π/q\*, the fit (Log q / Log I) and the table of solutions.*
 
 **Fit details** (closed under the peak table or the fit table until you open it; it then stays
 open for later reports) follows the selected row:
@@ -1177,7 +1388,7 @@ open for later reports) follows the selected row:
   FWHM with errors; height, area, background and slope; S/N, χ²ᵣ, the fit window, the Scherrer
   size, how peaks are found, and where the ring is measured, shadowed or missing on the q map;
 - a model solution: every parameter (R, σR/R, h, D, σD/D, weight, amplitude, background,
-  resolution), χ², convergence, evaluations and time, the q range, the start of D, the algorithm,
+  resolution), χ²/N, convergence, evaluations and time, the q range, the start of D, the algorithm,
   its warnings, and **Show in Fitting**, which opens the curve in Fitting with that solution drawn.
 
 **Questions only you can answer** (αi, the energy, the pixel size, the calibration file and its
@@ -1198,7 +1409,7 @@ The sum the automatic analysis sets is for the frame it analyses. A Series map, 
 Series to Fitting do not use it (their dialog and the Series tab say so); to sum there, set **Data ▸
 Frames ▸ Sum** yourself.
 
-**Ask AI…** lets an AI do the same with the same tools while you watch (chapter 9).
+**Ask AI…** lets an AI do the same with the same tools while you watch (chapter 10).
 
 ### 5.6 Series map and stages
 
@@ -1209,12 +1420,13 @@ shows one curve of every frame as an intensity map against frame and q.
 
 *Drag the horizontal band to pick a frame and the vertical band to pick a q window. The line above the map
 names the curve, the frames and the cut held for every frame; the box beside it (±) chooses the halves of the
-cut, and the frame axis counts from 1. Here a synthetic run of 40 frames: “3 stages: frames 1–17, 18–24, 25–40 ·
+cut, and the frame axis counts from 1. Here a synthetic run of 40 frames: “3 stages: frames 1–17, 18–22, 23–40 ·
 1 odd frame”. The odd frame is frame 34, where a few detector columns are hot (the short bright mark near
 qy 0.05 Å⁻¹); the red arrow beside the map marks it, and it does not make a stage of its own.*
 
 1. Choose the **Curve** (GISAXS: the horizontal cut by default; GIWAXS: I(q); every region's I(q)
-   and I(χ) are in the list). Set **every n frame** for a first look at a long series.
+   and I(χ) are in the list). For a first look at a long series, set the box beside **Curve** to
+   *every n frame* (for example *every 5 frame*).
 2. Press **Build Map**. Every imported frame (or group of summed frames) is reduced with the current
    settings; the map grows as frames are done. Long series use several low-priority processes;
    progress, time left, **Pause** and **Stop** are shown, and rows already done stay.
@@ -1252,7 +1464,8 @@ set yourself is the same for every frame anyway.
 **Options: frames, cut, axes** (folded under the plots):
 
 - **Frames** first **to** last (*the last*: the last frame listed): the frames a map takes; the line under
-  the buttons says so when they are not all. **Clear** goes back to all.
+  the buttons says so when they are not all. To take every frame again, set the first frame to 1 and the
+  last to *the last*.
 - **Find the cut again in every frame**: each frame is cut anew instead of where the frame on screen is.
 - **Frame axis**: **Frame number**, or **Time (s)** when the frames carry a time (their time stamps, or
   frame × exposure). In a saved picture every row has the same height, so the picture of skipped or
@@ -1263,7 +1476,7 @@ set yourself is the same for every frame anyway.
 
 The map is an image like the detector: Log, colour map and Levels work there too. The readout shows
 frame, file, x and intensity. The map belongs to the list it was built from: list more files and it
-stays, marked as the map of the earlier list; **Clear** removes it.
+stays, marked as the map of the earlier list; **Clear** under the frame list removes it.
 
 **Names of the exports.** Every file is named after the series, its curve and halves —
 `<series>_<curve>[_<halves>]_map.csv`, `…_map.png`, `…_trace_<value>.csv`, `…_peaks.csv`, `…_stages.csv`
@@ -1281,8 +1494,9 @@ a new batch fit or another import selection.
 **Stages.** As soon as the map is built, GIMaP cuts the series into stages and marks odd frames
 (coloured stage bar, dashed boundaries, red arrows; the **Stages** row; folded *What changes, and
 the odd frames*; **Change along the series** in the drop-down of the plot under the map). **Leave the odd frames out of
-Batch Export** skips them in the next Batch Export of this list. **Send to Compare** puts the
-series beside others. How stages and odd frames are found, and how to read them, is in chapter 7.
+Batch Export** skips them in the next Batch Export of this list. **Send to Compare** (or **Analyze ▸
+Send Series to Compare**) puts the series beside others. How stages and odd frames are found, and how to
+read them, is in chapter 7.
 
 ### 5.7 Batch Export
 
@@ -1294,9 +1508,10 @@ Set up one frame (geometry, mask, cuts), then export all of them the same way.
 *Every option shows the file it writes. The Cuts row names the cut every frame gets; the Summary says how many
 frames, which curves and about how big and how long the export is.*
 
-**Where to start it:** **Batch Export…** in the command bar (`Ctrl+Shift+E`), **Batch Export N
-Frames…** under the file list, **Batch Export…** in the Series tab, the Export step, **Export ▾**,
-or the Start page with a folder of raw frames.
+**Where to start it:** **Batch Export…** in the command bar or **Analyze ▸ Batch Export…**
+(`Ctrl+Shift+E`), **Batch Export N Frames…** under the file list, **Batch Export…** in the Series tab, the
+Export step or **Export ▾**. For a folder of raw frames, **Analyze ▸ Batch Export a Folder…** or the Start
+page opens the folder and then the dialog, once its first frame is analysed.
 
 **The dialog:**
 
@@ -1309,13 +1524,13 @@ or the Start page with a folder of raw frames.
 |---|---|---|
 | **Data (numbers)** — CSV (comma), TXT (tab) or DAT (space) | **All frames in one table per curve** (x first, one column per frame); **Each frame: its curves, with error bars and pixel counts**; **Each frame: the curve for Fitting**; **Each frame: the q map as numbers**; **Each frame: the unwrapped χ–q map as numbers** | `<name>_<curve>_frames.csv`, `curves/<frame>_<curve>.csv` (+ `_analysis.json`), `fit_input/<frame>_fit_input.dat`, `maps/<frame>_qmap.csv`, `maps/<frame>_cake.csv` |
 | **Pictures** — PNG, TIFF, SVG or PDF | **Each frame: picture of the detector image**; **Each frame: picture of the q map**; **Colour scale**: each frame its own limits (1–99.7 %), or the limits on screen for every frame (comparable pictures) | `images/<frame>_detector.png`, `images/<frame>_qmap.png` |
-| **Converted detector frames** — TIFF, EDF, NumPy or HDF5 | **Each frame: the detector data in another format** (values as read: modules stitched, frames summed) | `frames/<frame>.tif` |
+| **Converted detector frames** — TIFF, EDF, NumPy or HDF5 | **Each frame: the detector data in another format** (values as read: modules stitched, frames summed; in the type the file stores, with the gap codes and the pixels without data marked as the Format Converter writes them, section 9.1; pixels left out only by the hot-pixel test or a drawn mask keep their values) | `frames/<frame>.tif` |
 | **Curve for Fitting** (GISAXS) | **Halves of the cut**: **Mean of both halves**, **q > 0 half** or **q < 0 half** — what the model fit takes in every frame | (named in the curves for Fitting) |
 | **Fitting (optional)** | see below | `<name>_peak_fits.csv` or `<name>_model_fits.csv`, with a `.png` |
 
 - Bottom: **Save to** (**Browse…**; the first time `gimap_analysis/` next to the data, then the last
   folder used; **Next to the Data** goes back to the folder beside the files, and a folder used last for
-  other data is marked so) and **In a subfolder named “<name>”** (on by default). The line below says
+  other data is marked so) and **In a subfolder named “`<name>`”** (on by default). The line below says
   where the files go; **Export N Frames** starts the batch.
 
 **Before it starts**, the **Summary** says how many frames, which curves, which cut and halves, and about
@@ -1349,7 +1564,7 @@ scan, without `_m01`.
 - **Particle model of the horizontal cut** (GISAXS): the half or the mean chosen in **Halves of the
   cut** fitted with spheres, random or vertical cylinders, with size spread and distance D (**Model**:
   automatic comparison or one; a cut of more than 1000 points is merged first). The two halves are
-  never fitted together. One row per frame: `halves`, `points`, model, χ² and the parameters in nm.
+  never fitted together. One row per frame: `halves`, `points`, model, `chi2` (χ²/N, as in section 5.5) and the parameters in nm.
   About half a minute per frame. The choice starts on the Cuts step's halves when they are the mean or
   one half, else on the last batch's. A frame without counts, or without points on the chosen half
   (*No points on the q > 0 half*), is not fitted and its reason is listed. The curves for Fitting still
@@ -1367,8 +1582,11 @@ scan, without `_m01`.
 run (substrate, internal standard) corrects drifts. Give **Reference peak q** and **Search ±**
 (Å⁻¹); the strongest point in that window is the peak. **Align the detector distance so the peak
 sits at this q** scales each frame's distance; **Normalise the intensity to the peak height**
-scales the intensities, with **One factor for the whole series (from the first frame)** or
-**Every frame to its own peak**.
+scales the intensities so that the reference peak has the height in **Peak height after** (1 by
+default), with **One factor for the whole series (from the first frame)** (the default) or **Every
+frame to its own peak**. Both are off by default; `<name>_batch.json` keeps these settings
+(`series_correction`). The formulas are in
+[Physics and Methods, section 6.10](Physics_Manual.md#610-reference-peak-corrections-of-a-series).
 
 **Speed:**
 
@@ -1395,16 +1613,16 @@ are written for the frames done. The number of frames at once can be lowered whi
 Series tab shows the map of the frames done so far, growing as they come; **Show the newest frame**
 makes the curve below follow the newest frame (click a row to look at another one).
 
-The choices and the folder are remembered for next time. **Save Settings…** / **Load Settings…**
-keep the whole set-up (mode, instrument profile with its geometry, αi, centre, sum, masks,
+The choices and the folder are remembered for next time. **Save Settings…** / **Load Settings…** (in the
+dialog, in **Export ▾** and in **Analyze ▸ Set-up Files**) keep the whole set-up (mode, instrument profile with its geometry, αi, centre, sum, masks,
 corrections, cut regions, export choices) as a file: the next raw data need only **Batch Export…**
 → folder → **Export N Frames**. A mask or background file named in it that cannot be found is
 listed and ignored.
 
 ### 5.8 Export and Send to Fitting
 
-**Export** (command bar, `Ctrl+E`; **Export Curves…** in the Export step) writes, next to the data
-in `gimap_analysis/`:
+**Export** (command bar, `Ctrl+E`; **Export Curves…** in the Export step and in the **Analyze** menu)
+writes, next to the data in `gimap_analysis/`:
 
 - one CSV per curve (`x, I, sigma, pixels`), named `<stem>_<curve>.csv`;
 - `<stem>_analysis.json`: the source, geometry, where the beam centre came from, corrections, the
@@ -1417,14 +1635,18 @@ in `gimap_analysis/`:
 If that folder cannot be written, GIMaP asks for another one. A note at the bottom right names
 what was written, with **Open Folder**.
 
-The **Export** step and **Export ▾** also have:
+Figures, map data and settings files:
 
-| Entry | Writes |
-|---|---|
-| **Save Image…** | the detector image or q map as shown, with a colour bar (PNG, TIFF, SVG, PDF) |
-| **Save q-Map Data…** | the intensity on a regular q grid (qy–qz or q∥–qz) as a CSV table with its axes |
-| **Save Plots…** (**Save Upper Plot…** / **Save Lower Plot…**) | the plots as figures, one column wide |
-| **Save Settings…** / **Load Settings…** | the set-up as a file (5.7) |
+| Entry | Where | Writes |
+|---|---|---|
+| **Save Image…** | Export step, **Export ▾**, **Analyze ▸ Figures** | the detector image or q map as shown, with a colour bar (PNG, TIFF, SVG, PDF) |
+| **Save q-Map Data…** | Export step, **Export ▾**, **Analyze ▸ Figures** | the intensity on a regular q grid (qy–qz or q∥–qz) as a CSV table with its axes |
+| **Save Plots…** | Export step | the upper and lower plots as figures, one column wide |
+| **Save Upper Plot…** / **Save Lower Plot…** | **Export ▾** | one of the two plots |
+| **Save Settings…** / **Load Settings…** | **Export ▾**, **Analyze ▸ Set-up Files**, the Batch Export dialog | the set-up as a file (section 5.7) |
+
+The image's own **Save ▾** (section 5.3) and **Analyze ▸ Figures ▸ Save View Data…** save the q map or
+the cake as a table with its axes.
 
 Saved figures always use the light colours, whatever the theme on screen.
 
@@ -1436,7 +1658,7 @@ mean or one half is also written in the file); GIWAXS sends I(q), and Fitting op
 that its models are particle form factors, not peaks. Fitting shows q in nm⁻¹ and says so. When the
 folder next to the data cannot be written, GIMaP asks for another one and keeps it for the session.
 
-**Send Series to Fitting…** (in the arrow ▾ and the Export step) opens the Batch Export dialog with
+**Send Series to Fitting…** (in the arrow ▾, the Export step and the **Analyze** menu) opens the Batch Export dialog with
 only the curve for Fitting of each frame: choose **Every** n-th frame, the folder and, for GISAXS, the
 **Halves of the cut**, then **Export and Open in Fitting** writes `fit_input/<frame>_fit_input.dat` for
 every imported frame (or sum of frames) into a folder of its own, `<name>_fitting/` (next to any Batch
@@ -1453,8 +1675,8 @@ The **Fitting** page fits 1D curves with particle models. It has two modes, swit
 
 Switching between the two keeps each side's curve, model and results. With no curve open, the Curve step
 offers both ways in side by side: **Open Curve…** and **Fit a Folder of Curves…**. For a series or a batch
-of samples the usual way is: fit one representative curve here (predict, then refine), then press **Fit
-Every Curve in This Folder…** in Results.
+of samples the usual way is: fit one representative curve here (find its particle shape, then refine), then
+press **Fit Every Curve in This Folder…** in Results.
 
 Fitting works in nm⁻¹ and labels every axis and field with its unit. Analyze works in Å⁻¹; the curve files it
 writes for Fitting are in Å⁻¹ and are converted when they are opened.
@@ -1518,8 +1740,9 @@ Three ways to get a curve in:
 ![Fitting, Single analysis](manual_images/en/11_fitting_single.png)
 
 *The step rail on the left, here with the Results step open: the quality, the next steps (Fit Again, Fit Every
-Curve in This Folder…), what was done automatically at the edges of the ranges, the warnings and every value ± its
-error; on the right the curve with the model, the orange fitting range and the residuals below.*
+Curve in This Folder…), what was done automatically at the edges of the ranges and the warnings (when there are any,
+none for this fit), and every value ± its error; on the right the curve with the model, the orange fitting range and
+the residuals below.*
 
 The page is laid out like Analyze: the steps on the left, each saying where it stands, and the plots on the right.
 
@@ -1559,12 +1782,17 @@ The page is laid out like Analyze: the steps on the left, each saying where it s
 - **Add Particle** adds one card per particle: **Sphere**, **Random cylinder** or **Vertical cylinder**.
 - Each card has **Distance D** on or off (the paracrystal interference between neighbours) and its values:
   scale, R and **σR/R**, h and **σh/h** for random cylinders, D and **σD/D**. Spreads are relative everywhere
-  (as in Analyze's results and in 1D Predict).
+  (as in Analyze's results and in 1D Predict). The scale multiplies the form factor, which is 1 at q = 0 for
+  spheres and random cylinders but 10⁻⁶·⟨R⁴⟩/4 (R in nm) for vertical cylinders: compare scales only within
+  one family.
 - **fit** ticked: the fit may change the value. Unticked: the value stays fixed.
 - **Ranges** shows each value's min – max. The fit keeps the value inside it; *Search the ranges* searches
   across it. A value typed outside its range widens the range.
-- **Background and resolution peak**: I(q) = BG + k·[Σ particles + A/(1 + (|q|/w)^ν)]. The peak describes the
-  tail of the direct and reflected beam and the resolution near q = 0. The factor k is fixed at 1 by default.
+- **Background and resolution peak**: a constant background, and a peak at q = 0 for the tail of the direct and
+  reflected beam and the resolution there; an overall factor k, fixed at 1 by default, multiplies the particles and
+  the peak. The model as a formula, and how **σD/D** relates to the usual paracrystal spread, are in Physics and
+  Methods, [section 9.2](Physics_Manual.md#92-the-intensity-model) and
+  [section 9.5](Physics_Manual.md#95-structure-factor-one-dimensional-paracrystal).
 - After a fit every value shows its ± error, or *at a bound* when it stopped at the edge of its range and was
   not resolved (section 6.3, *Values at the edge of their range*).
 
@@ -1573,18 +1801,28 @@ sizes for your sample, or let the Fit step find them.
 
 **3. Fit** — one **Method** drop-down and one button:
 
-- When a curve is opened the page chooses the method for it. An unfitted GISAXS horizontal cut gets **Predict
-  parameters (fit1d)**, and the line under the method says *Recommended for this curve: a GISAXS cut not fitted
-  yet.* Another curve with a model not yet edited gets **Find the particle shape (no AI)**; otherwise the choice
-  stays as it was (a GIWAXS I(q) never gets a particle search). After a prediction or a shape search the method
-  turns to **Refine the values in Model**.
+- When a curve is opened the page chooses the method for it. Another curve with a model not yet edited gets
+  **Find the particle shape (no AI)**, which needs nothing beyond GIMaP; otherwise the choice stays as it was (a
+  GIWAXS I(q) never gets a particle search). After a prediction or a shape search the method turns to **Refine the
+  values in Model**.
+- An unfitted GISAXS horizontal cut gets a recommended method, and the line under **Method** says why. Which one
+  depends on the fit1d kit, an optional add-on that does not come with GIMaP (section 6.4):
+  - without the kit (as GIMaP is distributed), **Find the particle shape (no AI)**, also when you have edited the
+    model: *Recommended for this curve: a GISAXS cut not fitted yet (Predict parameters needs the optional fit1d
+    add-on, which is not installed).* It fits the cut with Fitting's own models. The tooltip of **Predict
+    parameters (fit1d)** then says that it is an optional add-on and where to put it;
+  - with the kit installed, **Predict parameters (fit1d)**: *Recommended for this curve: a GISAXS cut not fitted
+    yet.*
+
+  GIMaP looks for the kit again whenever a curve is opened.
 - Under the method, only what it needs: **Particles** for Predict (section 6.4), **Families** for the shape search
   (*Try every family* or *The families in Model*).
 - Press **Fit** in the command bar (`Ctrl+Return`) or the button below, which carries the method's name (for
   example **Refine**). A progress bar and **Stop** appear while it runs.
 - **Resolve values at the edge of their range automatically** (on by default, remembered; the In-situ series
   follows it): see section 6.3.
-- **Options** (folded): the settings of Predict (network, search, curve type, qz, systematic error; section 6.4),
+- **Options** (folded): the settings of Predict (fit1d) (network, search, curve type, qz, systematic error;
+  section 6.4),
   **Evaluations at most (Refine, Search)** (automatic by default) and **1D Predict Batch Window…** (section 6.5).
 
 **4. Results**, from the top:
@@ -1603,7 +1841,8 @@ sizes for your sample, or let the Fit step find them.
   **Fix**, **Let It Fit** or **Range…** (or right-click): the next **Fit Again** uses them. **Range…** shows the
   value's min – max in Model.
 - **Other solutions** (folded): the solutions of *Find the particle shape* or of the AI proposal, each with its
-  χ²ᵣ on these points. **Use This Solution** puts one into Model (Undo brings the previous model back). After
+  χ²ᵣ on these points; a solution from **Show in Fitting** shows Analyze's χ²/N (section 5.5) until you fit it.
+  **Use This Solution** puts one into Model (Undo brings the previous model back). After
   Predict with several compositions, **Other compositions** instead (section 6.4).
 - **Constraints and ranges** (folded, after Predict): every constraint passed to fit1d and where it came from.
 - **Save Data and Fit…** writes a CSV — q (nm⁻¹ and Å⁻¹), I, σ, the model, the residuals and every term — with a
@@ -1628,10 +1867,10 @@ One **Fit** button runs the method chosen in **Method**:
 
 | Method | What it does | When to use it |
 |---|---|---|
-| **Predict parameters (fit1d)** | A separate kit: network proposals and its own physical fit, for spheres and vertical cylinders, with errors and equivalent solutions (section 6.4). | The first step for a GISAXS cut (recommended). Needs the fit1d kit. |
+| **Predict parameters (fit1d)** | A separate kit: network proposals and its own physical fit, for spheres and vertical cylinders, with errors and equivalent solutions (section 6.4). | Only with the fit1d kit, an optional add-on (section 6.4): a start for a GISAXS cut, with its errors and equivalent solutions. Chosen for an unfitted GISAXS cut when the kit is installed. |
 | **Refine the values in Model** | Bounded least squares from the values in Model, with Fitting's own model; stays near them. | The model is close: after a prediction or a solution, after Analyze, or to get errors. |
 | **Search the ranges, then refine** | Differential evolution across the ranges of the free values (log scale when a range spans 10× or more), then refinement from the three best starts. | The start is poor but you know the family and sensible ranges. Slower. |
-| **Find the particle shape (no AI)** | The numerical fit of sphere, random cylinder and vertical cylinder from several starts, as in Analyze's automatic analysis. The solutions go to Results, the best into Model. | A first look at a new curve without the kit. Uses no network. |
+| **Find the particle shape (no AI)** | The numerical fit of sphere, random cylinder and vertical cylinder from several starts, as in Analyze's automatic analysis. The solutions go to Results, the best into Model. | The first look at a new curve, a GISAXS cut included: chosen for an unfitted GISAXS cut when the fit1d kit is not installed. Needs no add-on and uses no network. |
 | **AI proposal (1D Predict)** | The experimental V5 network proposes compositions and parameters, then corrects them numerically. Its solutions go to Results. | A second opinion on the family. Check and refine its solutions; do not report them as results. |
 
 - The scales (every particle's scale, the background, the peak A) are solved exactly (non-negative least
@@ -1641,36 +1880,41 @@ One **Fit** button runs the method chosen in **Method**:
 - The AI proposal also writes a run folder in `AI_Fitting_Output/` (section 6.5).
 
 **Values at the edge of their range.** With **Resolve values at the edge of their range automatically** on,
-a value that stops at the edge of its range after Predict, Refine or Search is dealt with by the fit itself;
-Results lists what was done under *Done automatically*:
-
-1. The range is widened on that side (sizes, distances and the peak width ×2 or ÷2; your own ranges are widened
-   like the default ones; values you fixed are never touched) and the curve is fitted again, at most twice. The
-   new fit is kept only when its χ² is not more than 2 % worse; otherwise the first fit stays and Results says
-   why.
-2. A value still at the edge after that — or one that cannot be widened, such as a size spread at its lower limit
-   or D = 2R — means the curve is flat in that direction and gives only a bound. The fit moves the value inwards
-   step by step, fixes it and refits the rest, as long as χ² stays within its 1σ tolerance, and reports the least
-   extreme value as a one-sided bound (for example *≥ 0.549*). When even one step is clearly worse and the edge is
-   a limit of the model itself (σR/R at 0.6), the curve wants a value beyond the model: the model may lack
-   something.
-
-Turn the box off to leave such values at their edge, with a warning.
+a value that stops at the edge of its range after Predict, Refine or Search is dealt with by the fit itself, and
+Results lists what was done under *Done automatically*: the range is widened on that side and the curve fitted
+again (kept only when χ² is at most 2 % worse; values you fixed are never touched); a value still at the edge, or
+one that cannot be widened (a spread at its lower limit, D = 2R), gives only a bound and is reported as one-sided
+(for example *≥ 0.549*). When even that is clearly worse at a limit of the model itself (σR/R at 0.6), the curve
+wants a value beyond the model: the model may lack something. The steps and tolerances are in
+[Physics and Methods, section 9.8](Physics_Manual.md#98-refine-search-goodness-of-fit-and-the-errors). Turn the
+box off to leave such values at their edge, with a warning.
 
 ### 6.4 fit1d
 
-fit1d is a separate kit with its own networks and physics; in the Fit step it is the method **Predict
-parameters (fit1d)**. It fits all the populations of one curve together. A good fit does not prove that the
-composition is the true one.
+fit1d is an optional add-on: a separate kit with its own networks and physics. It is not distributed with
+GIMaP and is not publicly available, so this section is for those who have a copy. Everything else in Fitting
+works without it; for a first fit of a GISAXS cut use **Find the particle shape (no AI)** (section 6.3).
+
+**Where the kit goes.** Put the folder `gisaxs1d_gui_kit` (it holds `gisaxs1d_kit/`, `app/`, `models/` and
+`tables_packed/`) in `utils/gisaxs1d_gui_kit` in the program folder, or set the environment variable
+`GISAXS1D_KIT_HOME` to its folder, then start GIMaP again. It needs numpy and scipy only, no TensorFlow and no
+V5 files. Without the kit, an unfitted GISAXS cut gets **Find the particle shape (no AI)** instead of Predict
+(section 6.2), the tooltip of **Predict parameters (fit1d)** says that it is an optional add-on and where it goes,
+and choosing it anyway stops with a message that names the folder where GIMaP looked.
+
+In the Fit step the kit is the method **Predict parameters (fit1d)**. It fits all the populations of one curve
+together. A good fit does not prove that the composition is the true one.
 
 **What to enter**
 
-1. In **Fit**, select **Predict parameters (fit1d)** (preselected for an unfitted GISAXS cut). Under it,
-   **Particles** chooses what it fits:
+1. In **Fit**, select **Predict parameters (fit1d)** (preselected for an unfitted GISAXS cut when the kit is
+   installed). Under it,
+   **Particles** chooses what it fits — **The particles in Model**, **Try 1–3 vertical cylinders** or **Try
+   spheres and vertical cylinders (1–3)**:
    - **Try spheres and vertical cylinders (1–3)** or **Try 1–3 vertical cylinders**: the kit fits every
-     composition of these shapes and ranks them (by BIC); the best is shown. A Model not yet edited starts on the
-     first of these for a GISAXS cut. The Model's values and ranges are not passed, since the populations differ
-     between compositions.
+     composition of these shapes and ranks them (by BIC); the best is shown. For a GISAXS cut whose Model is not
+     yet edited, **Particles** starts on **Try spheres and vertical cylinders (1–3)**. The Model's values and
+     ranges are not passed, since the populations differ between compositions.
    - **The particles in Model**: the 1–4 **Sphere** / **Vertical cylinder** particles you put in Model (repeated
      families are allowed), with Model's constraints (below). Random cylinders are not offered by fit1d.
 2. Its settings are folded under **Options** in the Fit step:
@@ -1712,13 +1956,10 @@ brings the previous model back).
   the previous result, the plot shows the manual starting model, and exporting the stale fit is refused. Fit
   again, or restore its conditions.
 
-Physics note: fit1d uses number-weighted truncated Gaussian sizes (relative widths), a Hosemann paracrystal with
-w = w_rel·D, q in nm⁻¹ and lengths in nm. Spheres on a Yoneda cut are evaluated at |q| = √(q∥² + qz²), vertical
-cylinders at q∥. Its widths and forward curve differ from the manual model's.
-
-**Installing the kit**: put the folder `gisaxs1d_gui_kit` in `utils/gisaxs1d_gui_kit` in the program folder, or
-set the environment variable `GISAXS1D_KIT_HOME` to its folder, then start GIMaP again. It needs numpy and scipy
-only, no TensorFlow and no V5 files. Without the kit, the method fails with a message that says where to put it.
+fit1d has its own physics (number-weighted truncated Gaussian sizes, a Hosemann paracrystal with w = w_rel·D,
+spheres on a Yoneda cut evaluated at |q| = √(q∥² + qz²) and vertical cylinders at q∥), so its widths and forward curve are not those of
+Fitting's model, which [Physics and Methods, chapter 9](Physics_Manual.md#9-model-fitting-of-1d-curves-fitting)
+describes.
 
 ### 6.5 1D Predict
 
@@ -1746,12 +1987,15 @@ refine, not as results.
    one in their header**. A file whose header states both Å⁻¹ and nm⁻¹ is not fitted and is named there.
 2. **Parameters…** sets:
    - **Fit method**: *General V5 (experimental)* (default), *Single RC specialist (experimental)*,
-     *Physical fit (numerical)*, which uses no network, or *fit1d (network + physical fit)* (section 6.4).
+     *Physical fit (numerical)*, which uses no network, or *fit1d (network + physical fit)*, only with the optional
+     fit1d kit (section 6.4); fit1d needs the **Complete composition** (spheres and vertical cylinders only).
    - **Complete composition**: the particle families when you know them.
    - **q unit of files without one in their header**: nm⁻¹ by default. A file whose header states its unit of q is
      read in that unit, whatever is set here; Analyze's `_fit_input.dat` files state Å⁻¹ and need no setting. A
      header states the unit with `q in <unit>` in a `#` line or in the name of the first column (`q (1/A)`,
      `q_nm^-1`, `# columns: qy (1/A) …`, `# q [1/nm]  I`). **Use current cut** is converted automatically.
+     *Note:* this default differs from Fitting's (Å⁻¹, section 6.1), so a curve without a unit in its header is read
+     10× apart in q in the two places. Check the line under the buttons, or give the file a header with its unit.
    - **q sides**: *Each half separately*, *q > 0 half* or *q < 0 half*.
    - For fit1d: its search (**Fast** by default in this window), curve type, network, qz and systematic error.
 
@@ -1774,7 +2018,7 @@ with native detector counts (Analyze's horizontal cut). Otherwise it falls back 
 Selecting a fit1d row keeps its original curve and components visible; a manual model is copied only as a starting
 point.
 
-**Where the results go.** Each run writes a new folder `AI_Fitting_Output/v5_<date>_<time>/` in the folder GIMaP
+**Where the results go.** Each run writes a new folder `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the folder GIMaP
 was started from (for the portable version: the program folder). It holds `request.json`, `batch_summary.json`,
 `top20_candidates.json`, `fitting_run_summary.json` and, for every curve and half, `solutions.json` (parameters,
 units, the stage that ran and why), `display.npz` and `fitting_curves.csv` (*General V5* also writes
@@ -1787,7 +2031,7 @@ where you choose.
 portable version and in the Git repository, so 1D Predict runs from a source checkout too. Each network checks its
 files against their checksums before it is used. With a changed or missing file *General V5* does not start, and
 the message names the file. *Single RC specialist* goes on with its numerical fit and gives *Fast model
-unavailable* as the reason (section 13.3). fit1d uses its separately installed kit.
+unavailable* as the reason (section 14.3). fit1d does not use these files: it uses the optional kit (section 6.4).
 
 ### 6.6 In-situ series
 
@@ -1845,7 +2089,8 @@ Every curve of a folder, fitted with the model of Single analysis. The command b
     afresh where the curves change course.
 - **Method**: **Refine (fast)**, **Search the ranges, then refine (slow)** or **Predict each frame (fit1d)**.
 - **Predict each frame (fit1d)** runs Predict on every frame, with the particles, fixed values and ranges of
-  Single's model and the settings of Single's Fit step (it needs the fit1d kit). The table holds fit1d's values and
+  Single's model and the settings of Single's Fit step (only with the optional fit1d kit, section 6.4). The table
+  holds fit1d's values and
   errors, and the frame plot fit1d's own curve. **Prefer the solution that continues the previous frame** (on by
   default): each frame is fitted once more with every value held near the previous frame's; when that fit is as
   good as the free one within the kit's tolerance, it is taken (the smoothest of equally good solutions), otherwise
@@ -1885,8 +2130,8 @@ Stages and Compare answer what a series of scattering frames needs, without labe
 - which runs or samples are alike.
 
 Everything uses Analyze's curves, with the same geometry, masks and cuts. They replace the Classification page of
-version 0.0.2. Section 7.4 describes the Sputter workspace, which follows the stages of an in-situ sputter series
-with a trained model.
+version 0.0.2. Stages here are segments of a series found from its curves alone; the growth stages of a sputter
+series (islands, coalescence, film) are a different thing, described in chapter 8.
 
 ### 7.1 Stages and odd frames
 
@@ -1904,8 +2149,11 @@ with a trained model.
 3. The main components of the other frames.
 4. Stages: the components are cut into straight pieces in frame order (at least 5 frames per stage, at most 8
    stages). A stage is added only while it explains at least 5 % of the remaining change and more than noise
-   would.
+   would. A series of more than 1,500 frames (odd frames left out) is first averaged in blocks of consecutive
+   frames, so a stage boundary is then known only to within one block.
 5. Progress: the frame by which half and 90 % of the change along the main component had happened.
+
+The criteria and the stopping rule are in [Physics and Methods, chapter 11](Physics_Manual.md#11-series).
 
 **How to read them**
 
@@ -1940,7 +2188,7 @@ with a trained model.
 *Three steps on the left, here with the Results step open; on the right how far each series has changed, their paths
 and their end states. Two synthetic runs of 40 frames, 3 stages each: A has one odd frame (frame 34, × on the change
 plot), left out of its end state, so A's end-state curve has no spike from its hot columns near qy 0.05 Å⁻¹. A and B:
-end states 13 % apart (8 % at the start).*
+end states 8 % apart (5 % at the start).*
 
 Typical use: open one sample in Analyze, build its map in the Series tab, press **Send to Compare**; repeat for
 every sample. Two or more series are compared with each other; one alone is described.
@@ -1954,7 +2202,7 @@ every sample. Two or more series are compared with each other; one alone is desc
 - A folder written by Analyze (a Batch Export folder, its `curves/`, or `gimap_analysis/`) holds several kinds of
   curves. One kind is one series: when there are several, a question asks which one (the curves for Fitting are
   named *the curve for Fitting*, files that are not Analyze's *other files*), and the series is named
-  *<sample or batch> · <curve>*. A Batch Export table of all frames (`<name>_<curve>_frames.csv`) can be added as
+  *`<sample or batch>` · `<curve>`*. A Batch Export table of all frames (`<name>_<curve>_frames.csv`) can be added as
   a series too.
 - A folder or curve files can also be dropped on the page. The same map or folder is not added twice.
 - Double-click a name to rename the series. **Remove Selected** (or `Delete`) and **Remove All** (the note that
@@ -1971,11 +2219,15 @@ every sample. Two or more series are compared with each other; one alone is desc
 - **End state**: the mean of the last N frames of a series (10 by default; odd frames left out).
 - Every change compares again after a moment, in the background. When a comparison fails (for example no common
   points in the range), Results says why and what to change.
+- The series must share their x axis (qy, q or χ). Series on different axes — say a GISAXS qy map and a GIWAXS
+  q map — are not compared, and Results names the axes (*The series have different x axes: …*).
 
 **3. Results**
 
-- Groups (three or more series): split where the end states clearly separate; no groups when they differ by less
-  than 2 %.
+- Groups (three or more series): the series are joined step by step by how alike their end states are, and the
+  groups are cut at the largest jump in that joining distance. There are no groups when that jump is less than
+  twice the step before it, or when no two series differ by more than 2 %
+  ([Physics and Methods, section 11.10](Physics_Manual.md#1110-compare)).
 - The series that differs most at the end and at the start.
 - Per series: frames, odd frames, stages, the frame by which half and 90 % of its change had happened.
 - A table of how different the series are, **At the end** or **At the start**, in percent of intensity.
@@ -2009,230 +2261,207 @@ every sample. Two or more series are compared with each other; one alone is desc
 - **Look at both tables.** Check the differences **At the start** as well as **At the end**: series may differ
   where they began rather than where they ended.
 
-### 7.4 Sputter: size, spacing and thickness of a sputter series
+## 8. Sputter
 
-The **Sputter** workspace (sidebar) reads an in-situ sputter series — CBF frames of a metal sputtered on a
-polymer — with a trained model that is part of GIMaP (`utils/sputter_toolkit`). Window by window it gives the
-particle size R (the base radius of a flat-based hemisphere, h = R), the centre-to-centre spacing D where a
-correlation peak is resolved, the stage of the growth, the metal thickness that can be stated, and how far each
-value can be trusted.
+The **Sputter** workspace (sidebar, `Ctrl+5`) follows an in-situ sputter deposition: the PILATUS CBF frames of
+one scan, taken while Ag or Au is sputtered onto a polymer (Cu is read with the Ag model, for reference only).
+For every time window it gives the particle size R (the base radius of a flat-based hemisphere, h = R), the
+spacing D, the island height H, the growth stage, the metal thickness where it can be stated, and how far each
+value can be trusted. How each value is computed is in [Physics and Methods, chapter 12](Physics_Manual.md#12-sputter).
 
-**Predict in three steps.**
+### 8.1 Predict in three steps
 
-1. **Data ▸ Choose…**: the folder of one scan — the folder of its CBF frames, or the scan folder whose one
-   subfolder holds them (`p2m/`). The page reads the header of the first frame (a few kB, no pixels) and says in
-   one line how many frames there are, the detector and its serial number, the pixel size, the exposure and the
-   time.
-2. **Sample and geometry**: check what is filled in. Beside each value the page says where it comes from:
-   - *from the file header* or *from the scan's NeXus file*: the X-ray energy, from a `Wavelength` line of the
-     header or the `beam_energy` of a NeXus file of the same scan — check it. The `E<eV>` in the flat-field file
-     name is the detector's calibration energy, not necessarily the beam's: it is only named beside the field
-     (*the flat-field file name says E = … keV*), never filled in;
-   - *as last used for this folder*: the values of this folder's last Predict (a different energy of the header
-     is named beside it);
-   - *from preset <name>*: a geometry preset you saved that matches the scan (below);
-   - *last used — please check*: the values of the last Predict of any folder — not the sample roll or the mask,
-     which belong to one set-up;
-   - *not in the files — please enter*: nothing is known. A PILATUS header holds neither the distance nor the
-     incidence angle;
-   - *not in the files: 0 assumed — please check*: the sample roll, when neither this folder nor a preset gives
-     one.
+1. **Data ▸ Choose…**: the folder of one scan (its CBF frames, or a scan folder with them in one subfolder such
+   as `p2m/`). One line then sums up the frames, the detector, the exposure and the time.
+2. **Sample and geometry**: **Metal** (Ag, Au, or Cu, approximated with the Ag model), **X-rays** (**Energy
+   (keV)** or **Wavelength (nm)**), **Distance (mm)**, **Incidence αi (°)** and **Beam centre (px)** (col, row).
+   Check every value. Beside each, the page says where it comes from — this folder's last Predict, a preset, for
+   the energy a `Wavelength` line of the header or the scan's NeXus file, or the last Predict of any folder
+   (*please check*) — or asks for it: a PILATUS header holds neither the distance nor the incidence angle. The
+   `E<eV>` in a flat-field file name is the detector's calibration energy, not necessarily the beam's: it is shown
+   beside the field and never filled in. An empty **Beam centre (px)** is estimated from the frames; a centre you
+   give is in Analyze's pixel coordinates (section 4.4).
+3. **Predict**. The first time, PyTorch is installed into GIMaP's Python (*Step 1 of 2*, about 1.2 GB, needs the
+   internet). Then the frames are read and summed into time windows, and the model runs (*Step 2 of 2*).
+   **Cancel** stops at once; **Details** shows the messages; the line under the job status names the Python used.
 
-   An empty beam centre is estimated from the frames; a beam centre you give is in the pixel coordinates of
-   Analyze (section 4.4). **Metal**: Ag, Au, or Cu — approximated with the Ag model, for reference only (the
-   networks were trained for Ag and Au).
-3. **Predict**. The first time, PyTorch is installed into GIMaP's own Python (*Step 1 of 2*, about 1.2 GB, needs
-   the internet; the bar follows the download). Then the frames are read (the bar follows the frames read),
-   summed into time windows (0.5 s; 0.1 s in the first 5 s) and the model runs (*Step 2 of 2*). **Cancel** stops
-   at once, together with the processes that read the frames; the installation can be stopped until pip starts
-   writing the packages. **Details** shows the messages of pip and of the model. Damaged frames are left out and
-   counted. Pressed while the header of a newly chosen folder is still read, Predict starts once the form is filled
-   from it; a folder without CBF frames is refused.
+![The Sputter workspace with a scan folder chosen, before Predict](manual_images/en/22_sputter.png)
+*Sputter with a folder chosen, before Predict. Here three PILATUS CBF frames from the repository's `TestSAXSdata/`
+folder stand in for a scan (they are not a sputter series, so no result is shown): the line under **Data** sums up the frames, the detector, the exposure and
+the time. The energy, distance and incidence angle are not in the files, so the page asks for them (the flat-field
+energy is shown beside the energy, not filled in); an empty beam centre is estimated from the frames. The line under
+the job status says that PyTorch is installed on the first Predict.*
 
-The line under the job status names the Python that runs the model and whether PyTorch is ready.
+**Save Geometry as Preset…** fills in later scans of this detector and flat field within one beamtime (a week either
+side of the scan, to start with). Section 3.9 says what else is remembered.
 
-**Save Geometry as Preset…** keeps the geometry on the page for every scan of this detector (serial number) and
-flat field taken in a range of days (one beamtime; it starts a week either side of the scan): such scans are then
-filled in from the preset. The values of each folder and the presets are kept in GIMaP's settings (section 3.9).
+### 8.2 More options
 
-**More options**: the polymer, the sample roll, a detector mask (`.npy`; taken only from this folder's last
-Predict), the time window, the **Deposition rate (nm/s)**, the **Start of deposition t0 (s)** and the **Deposition
-end (s)** (all optional), **Save results in**, **Open Results Folder…**, **Add Refined Windows…** (physical-refinement
-windows computed elsewhere) and **Explanation**. The shutter is closed by hand, and a scan can go on after the
-deposition: give the time the deposition ended, and the nominal thickness stays at rate × (t_end − t0) after it.
-Empty, the deposition lasts to the end of the scan (the notes say so).
+| Field | What it is for |
+|---|---|
+| **Polymer** | The host: **PSBMA**, **PS**, **PEO**, or *polymer* when it is none of these (you can also type a name). It chooses the published values of the Literature tab. |
+| **Sample roll (°)** | 0 when neither this folder nor a preset gives one (the page says so). |
+| **Mask** | A detector mask (`.npy`, optional), remembered for this folder only. |
+| **Time window (s)** | 0.5 s by default; the first 5 s are always cut into 0.1 s. |
+| **Deposition rate (nm/s)** | Optional, for example from a quartz balance: gives the nominal thickness and the literature method. |
+| **Start of deposition t0 (s)** | Empty: the first frame, an assumption the notes state; δ is then too large if the deposition began later. |
+| **Deposition end (s)** | When the shutter was closed. Empty: the end of the scan. |
+| **Save results in** | Where the result folders go (default: the folder `sputter` in the user data folder). |
+| **Open Results Folder…** | Shows an earlier result. |
+| **Add Refined Windows…** | Once a result is shown: merges physical-refinement windows computed elsewhere (one JSON each). |
+| **Explanation** | Which explanation is shown (section 8.3); it can be changed once a result offers more than one. |
 
-**Results.** Each request gets its own folder, `sputter/<scan>-<code>` in the user data folder (or in **Save
-results in**); the code is made from the scan, every value the analysis depends on and the version of the
-model. The same request reuses its folder — a stopped run goes on where it stopped — and another geometry, or a
-GIMaP with another model, gets a new one (section 11).
+The rate, t0 and end are remembered for this scan folder only; the polymer and the time window are taken over
+from the last Predict.
 
-- Once a deposition rate is given and enough windows (at least 10) show the metal's correlation peak, the default
-  explanation is **the literature method (mass balance)** of the P03 studies (grade **Lit**; see *The literature
-  method* below). **Explanation** offers the model's own method second, **the physical path (network)**: one path
-  of stages through time — pre-nucleation, islands, coalescence, film — in which a film does not revert to islands.
-  R and D are the network estimate in every island window (grade **P**), so a value does not jump between a refined
-  and a network source from window to window; refined values stay in the Windows table. Without a rate (or with too
-  few peak windows) the physical path is the default. **Explanation** also offers the per-window choice (grades A,
-  B, C), the learned selector (L) and the time-consistent path (S, T) when the folder holds them. On the physical
-  path the film onset's interval is shaded: plain when the onset is established, hatched when a path without film
-  fits about as well (*onset not established*) or when the path has no onset but a later one is not excluded.
-- **Size Trend**: each window's R and D as faint points and the smoothed trend as a line; × marks the direct
-  2π/q*, a red circle a D that disagrees with it. The **Metal thickness** panel shows the island-volume equivalent
-  thickness t_eq as a band — the metal in the visible islands, for hemispheres on a hexagonal arrangement; a
-  conditional value, uncertain by about a factor 2–3 — and, when a deposition rate is given, the nominal thickness
-  rate × (t − t0); after the **Deposition end** it stays at rate × (t_end − t0), a plateau, and the end is marked
-  (*deposition ended … s*; an end after the last window, or before the first, is only named in the legend, and the
-  time axis keeps to the windows). Without a rate the end is still marked. Film windows are shaded: *film: thickness not determined*. The film onset of the path is
-  marked with its interval. With a deposition rate the top axis also gives the nominal thickness δ = rate × (t − t0),
-  with ticks only up to the end of the deposition. Windows where the beam may be off the sample (below) are hollow
-  grey points, *beam may be off the sample (stage translation)* (without a modulation *beam may be off the sample or
-  interrupted*), on R, D, the TS length L and t_eq: the faint points, the trend lines and the t_eq line leave them
-  out. With the literature method, which does not use their peak, the hollow point on the D panel is their 2π/q*.
-- **Island height H from the q_z fringes.** While the metal grows, the vertical cuts at low q_y (0.05–0.15 nm⁻¹)
-  show minima that move to lower q_z: the fringes of the islands' (or the layer's) vertical form factor. When a
-  result is shown, GIMaP measures them in the background (`utils/sputter_fringes`, numpy and scipy only; a few
-  seconds to half a minute; the messages are under **Details**) and adds the panel **H, island height from q_z
-  fringes (nm)** to Size Trend — also without **Show details**, since it is a direct measurement — with each time
-  group's H (groups of 1 s) and its 68% interval (hollow: seen on one side of the beam only), the nominal thickness
-  δ for comparison when a deposition rate is given, and, before the first minimum enters the detector's q_z range,
-  the bound H stays below (*below the range: H < … nm*). H = 2π n / Q with Q = kz(αi) + kz(αf) inside the metal: the
-  vertical size of the islands or the layer, which equals the film thickness only once a continuous film has
-  formed. The order n is counted from the first minimum that enters the top of the range, taken from a phase-locked
-  fit of the whole cut when several fringe periods are in range, or from minima of known order seen at the same
-  time. αc of the metal is fitted to the fringes when enough time groups allow it, else its bulk value (from the
-  electron density; Cu 2.46, Ag 2.77, Au 4.66 e/Å³) is used with ±0.02°. The detector's module gaps are read from the
-  data; minima that stay at one αf for 20 s or longer (detector rows, a film's own fringes) and windows where the
-  beam may be off the sample are left out. Without moving minima, or when their order cannot be told, no H is given.
-  The outputs, `fringe_heights.csv` and `fringe_summary.json`, go to the result folder's `fringes_v1/` (or to
-  `sputter_fringes/<result folder>/` in the user data folder when the result folder cannot be written) and are
-  measured again when the binned frames, the metal or the tool change.
-- The result line under Predict gives the windows, the film onset (with the literature method: its percolation)
-  and, when the intensity is modulated periodically, the *intensity modulation period (sample stage translation?)*.
-  During the deposition the sample stage is translated back and forth so that the beam does not damage one spot;
-  near the ends of its travel the beam footprint (millimetres long at grazing incidence) can reach the sample edge
-  or leave the sample, and the intensity dips once or twice per cycle. The data alone do not prove the source, so
-  the page asks rather than asserts. The path and the trend lines average over the modulation. When windows look as
-  if the beam left the sample, the line counts them: *beam may be off the sample in … windows (stage translation)*
-  (without a modulation: *beam may be off the sample or interrupted in … windows*).
-- **Beam off the sample.** A dip is flagged when its intensity falls below half of its level within one modulation
-  period before and after (the level is the 90% quantile of the neighbouring windows on each side, the lower of the
-  two, so a steady rise or fall during the growth is never a dip): more than half of the scattering is missing, as
-  when more than half of the footprint has left the sample. The whole dip is flagged, not only its bottom: the
-  windows next to it that stay below 80% of their level go with it, since the footprint leaves the sample and comes
-  back over several windows. Without a periodic modulation only an extreme dip is flagged — below 20% of the level
-  within 10 s on each side, with its sides (the beam was probably off the sample or interrupted); a single moderate
-  dip is not attributed to the stage. The first and last windows, without enough neighbours on both sides, are not
-  judged. When the Yoneda ridge is missing in such a window but found in most others, its reason says so. These
-  windows keep their values in the Windows table, but they cast no stage vote (the path carries the stage of their
-  neighbours), and the trend lines, the back-and-forth counts (the R and D zig-zags are counted between them), the
-  mass check at the film onset and the literature method's trend of D and checks of the network leave them out (the
-  literature method marks their peak *beam may be off the sample* and does not use it). The Structure Sketch draws
-  such a window with its own values and says so; its storyboard and its medians leave it out.
-- **Windows**: every window with its stage (by the rule and on the path), the values, grades and typical errors,
-  t_eq, the nominal thickness, *Beam may be off the sample* (the reason as its tooltip and in *Beam note*) and the
-  notes; once H from the q_z fringes is measured, also **H fringes (nm)** and **H fringes 68% (nm)** of the time
-  group nearest to each window (*< bound* before the range; the status as the tooltip); `Ctrl+C` copies rows.
-- **Literature**: the series against published growth, over δ (below).
-- **Reliability** (once H from the q_z fringes is measured, a paragraph says what H is, the q_z range it can be
-  measured in, αc and its source, and the straight-line growth rate dH/dt): what the grades mean, the typical errors from simulation, the physical path's assumptions,
-  the back-and-forth changes before and after it, the intensity modulation period, how many windows may have the
-  beam off the sample and what the thickness values mean; with the literature method also its definition, the
-  percolation and how many checks agree.
-- **Structure Sketch**: a picture of the fitted model of one window (side and top view, one ruler for the
-  series); film windows are drawn as a continuous film, without particles. A Cu result says on the picture, the
-  saved image and the storyboard that it was read with the Ag model.
-- **Show in Analyze** (right-click a row of **Windows**, the **Structure Sketch** — the window it shows — or a point
-  of **Size Trend** — the window nearest in time): the detector frames of that window in Analyze, as the model
-  summed them. The frames listed in Analyze are replaced by the window's raw frames (named in the result's
-  `binned/chunk_*.json`, read from the scan folder of `gimap_request.json`), **Sum** is set to their number and the
-  first is shown, so the image and the cuts are of the sum of all of them. αi is set as in Sputter (marked as set
-  by you), and so is the beam centre when one was given for Predict; a centre the model estimated itself is only
-  named. Distance and wavelength come from Analyze's instrument profiles: a profile within 0.5 mm and 0.1% of the
-  Sputter values is chosen; none is created — without one the notice says which values to enter (Geometry step ▸
-  **Geometry…**). The notice names the window (its time span and the frames summed) and says when frames listed
-  before were replaced. While Analyze's automatic analysis or a batch runs, or a folder is watched, nothing changes
-  and the notice says why; a moved scan folder or missing frames are said on the Sputter page.
-- A new **Deposition rate**, **t0** or **Deposition end** after a run (also without a rate) rewrites only the
-  physical files of the result shown: no frame is read again. A rate that is not positive, or an end not after t0,
-  is refused, also by **Add Refined Windows…**. When that result is of another scan than the one under **Data**, the values are
-  kept for that scan's next **Predict** instead. The explanation shown stays; taking the rate away returns from the
-  literature method (it needs a rate) to the physical path.
+Each request gets its own folder, `sputter/<scan>-<code>`, named from the scan and every value the result depends
+on: the same request reuses it (a stopped run goes on), another geometry or model gets a new one.
 
-**The literature method.** The in-situ GISAXS studies of sputter growth at P03 (Schwartzkopf 2015, Bulut 2024,
-Gensch 2019/2021) do not fit R. They take the nominal thickness δ from a deposition rate (a quartz balance) and the
-spacing D = 2π/q* of the direct correlation peak, and compute R by mass balance for flat-based hemispheres (h = R)
-on a hexagonal lattice: δ = 2.418·R³/D², coverage θ = (2π/√3)(R/D)². Percolation is the first δ where 2R = D.
-Those studies go on reporting D, R and 2R/D after it; the page keeps D = 2π/q* after the percolation but gives no R
-there — its own choice, after molecular dynamics (Abraham 2016) that finds R loses its island meaning once a network
-forms. With a deposition rate the page does what the studies do (grade **Lit**), and shows it by default; the network's
-physical path is the second view and the Literature tab compares the two:
+### 8.3 Two explanations, and the grades
 
-- δ = rate × (t − t0). Without **t0** the first frame is taken as the start of the deposition (an assumption, said
-  in the notes): δ is then an upper bound if the deposition started at or after the first frame. After the
-  **Deposition end** δ stays at rate × (t_end − t0): the windows after it use that δ (the notes say how many, or
-  that the deposition ended after the last window), and the **Literature** tab draws them at that δ.
-- D is 2π/q* only in windows with a resolved peak. Peaks that probably belong to the polymer (a peak before the
-  deposition starts, a peak more than twice every published D at that δ, a jump or outlier at the polymer's
-  spacing), peaks more than a factor 2 from the trend of D, jumps of more than a factor 2 above the preceding peaks
-  (more than the growth since t0 allows) and peaks after a long stretch without one are marked in the Windows table
-  (*Literature method*: host peak, outlier, late peak) and not used. The trend of D never decreases. The D check
-  counts every peak not used and compares the late peaks with the end of the trend, so a drop of D after a gap is
-  seen. The peaks of windows where the beam may be off the sample are not used either (*beam may be off the sample*;
-  a note counts them).
-- The percolation is the first δ after nucleation (δ > 0.4 nm) where the trend of 2R/D reaches 1. Its 68% interval
-  holds the scatter of the windows and the errors of the rate and t0: the lower end with the rate 10% higher and t0
-  2 s earlier, the upper end the other way round (±0.5 s instead of ±2 s when **t0** is given). These errors are
-  engineering choices; the page does not change them (the toolkit's `physical` command does, with `--rate-error`
-  and `--t0-error`). A systematic error of 2π/q* is not in the interval. When 2R/D may reach 1 within these errors
-  but need not — its trend stays close to 1 — the percolation is *not determined*: the page says from which δ it
-  may come, gives R throughout, and **Size Trend** hatches the interval to the end of the peak phase. When the peak is
-  lost before 2R/D reaches 1, even with the higher rate and the earlier t0, only a lower bound is given. After a
-  percolation the windows count as film: D = 2π/q* goes on, R is not given.
-- This R agrees with the literature **by construction** — it is the same mass balance. The independent tests are the
-  shape of D(δ), the percolation δ against the published thresholds, and the network's own 2R/D (the coverage
-  follows from it, so the two are one check) and mass balance (which shares the network's R and D).
+**More options ▸ Explanation** chooses how the windows are explained:
 
-**Literature** tab: four panels over δ (logarithmic): D (2π/q* per window, its trend, the peaks not used, the
-network's D and the published D(δ) of the metal — Au/PS from Bulut 2024 and Schwartzkopf 2015, Ag/PS and Ag/PMMA
-from Gensch 2019/2021, Cu/graphene from Hodas 2017 — each labelled with its citation key); 2R/D of the literature
-method and of the network with the published range and the line 2R = D; the coverage of both with the published
-values; and η = t_eq/δ, the share of the nominal metal in the islands the network sees (1 by construction in the
-literature; values below 0.5 are flagged, an engineering choice). The published percolation band of the metal and
-host is shaded; the percolation of the literature method with its interval (hatched when it is not determined)
-and the TS onset of the network's path are marked. Below, each check says *consistent*, *inconsistent* or *not
-testable*, what was measured, what the literature reports and its references (with DOI): D does not decrease with
-δ after nucleation; the percolation δ and the TS onset against the published band; the network's 2R/D with its
-coverage, and its mass balance; the TS film thickness against δ (not testable while the model cannot determine the
-film thickness). Each published threshold counts with its printed ± (±10% where none is printed), so a class with
-one published value — Au on Si — is a band, not a single number. For Cu the percolation is compared with
-hemispheres (f = 1) and with the published f = 2.75; when the two give different verdicts the comparison is not
-decided. The host class comes from **Polymer** (an unknown polymer uses the band of all polymers of the metal and
-says so; PNO, PSBMA and PEO have no published data). Without a deposition rate the tab says how to give one (**More options
-▸ Deposition rate (nm/s)**); only the monotony of D is tested then.
+- **Literature method (mass balance)**, the default when a deposition rate is given and at least 10 windows show
+  the metal's correlation peak. As in the in-situ GISAXS studies at P03, D = 2π/q\* of the peak, δ comes from the
+  rate, and R from mass balance for hemispheres; this R agrees with the literature by construction, so the
+  **Literature** tab holds the independent tests. After the percolation D goes on, R is not given.
+- **Physical path (network)**, the default without a rate: one path of stages through time (pre-nucleation,
+  islands, coalescence, film) that never turns back from film to islands, with the network's R and D in every
+  island window.
 
-**Before you conclude.**
+**Explanation** also offers **Per window (network / refined)**, **Learned selector** and **Time-consistent path
+(exploratory)** when the folder holds them. Each R and D carries a grade:
 
-- The thickness of a continuous film is not determined: in simulation the model's estimate equals its prior. The
-  page gives t_eq (island windows only) and the nominal thickness instead; a model of a film with particles on it
-  is planned.
-- A film with particles on it is not modelled: with a resolved peak such a window counts as islands, without one
-  the film model takes the particles in.
-- Absolute R depends on the hemisphere condition (h = R); trends are more reliable than single values. In the
-  literature method R scales as f^(−1/3) with the shape factor f = H/R: the literature reports flatter Ag on oxides
-  and f ≈ 2.75 for Cu on PS-b-PEO.
-- The literature comparison depends on the deposition rate (GISAXS does not measure it; a QCM rate at another
-  position must be scaled to the sample), on t0, on the sticking of the metal on the polymer (not known for these
-  polymers; the literature assumes 1) and on D = 2π/q*, which can be off by more than 40% for D > 10 nm once
-  coalescence starts. Published thresholds come from other chambers and rates: the rate dependence (δc ∝ F^−χ,
-  χ ≈ 0.07–0.17) is weaker than the differences between chambers, so a band is a comparison, not a prediction.
+| Grade | Source |
+|---|---|
+| **Lit** | literature method |
+| **P** | network, on the physical path |
+| **A** | physical refinement, converged, unique (from **Add Refined Windows…**) |
+| **B** | as A, but an equally good alternative exists |
+| **C** | network only, window by window |
+| **L** | learned selector (exploratory) |
+| **S** | time-consistent path, supported by the data (exploratory) |
+| **T** | time-consistent path, driven by its constraints (exploratory) |
 
-## 8. Tool windows
+Terms on the page:
 
-Three windows of the **Tools** menu work beside the workspaces: they open over the page you are on and
-leave it as it is. Each window remembers its size and position.
+- **q\***: the position of the correlation peak; 2π/q\* is the spacing it implies.
+- **δ**: the nominal thickness, rate × (t − t0).
+- **t_eq**: the metal in the islands the network sees, spread as a layer (uncertain by a factor of about 2–3).
+- **η = t_eq/δ**: the share of the deposited metal found in those islands.
+- **Percolation**: where the islands touch (2R = D), given as δ with its 68% interval, or *not determined*.
+- **Film onset**: the first window the physical path gives to the film network, with its interval (*not
+  established* when a path without film fits about as well).
+- **TS**: the network of the late, film-like windows, named after the Teubner–Strey-type scattering it was trained
+  on; its **TS length L** is a lateral texture length, not an island spacing.
 
-### 8.1 Format Converter
+Physics and Methods defines [the physical path](Physics_Manual.md#126-the-physical-path),
+[the literature method](Physics_Manual.md#1210-the-literature-method-mass-balance-for-hemispheres) and
+[the grades](Physics_Manual.md#1213-grades).
+
+### 8.4 The tabs
+
+The tabs on the right are **Size Trend**, **Literature**, **Structure Sketch**, **Windows** and **Reliability**.
+
+**Size Trend** opens in a simple view: R and D of the explanation shown (a faint point per window), their smoothed
+trends, and the percolation or film onset with its interval; film windows are shaded grey on every panel. With the
+physical path the D panel also marks the direct 2π/q\* (grey ×). Tick **Show details (network checks, thickness,
+flagged windows)** to add:
+
+- the **Metal thickness** panel: t_eq as a band, the nominal thickness and the deposition end (with the literature
+  method only the nominal thickness δ, which the islands hold by construction);
+- the panel **TS length L (film windows)**;
+- the direct 2π/q\* with its check (red circle: a D outside the simulated 90 % range of 2π/q\*);
+- the windows where the beam may be off the sample (hollow grey points, section 8.5).
+
+**Logarithmic size axis** (on by default) puts the sizes and thicknesses on a log axis; H always stays linear.
+With a rate, the top axis also gives δ.
+
+The panel **H, island height from q_z fringes (nm)** appears in both views once GIMaP has measured H in the
+background, seconds to half a minute after a result is shown: minima in the vertical cuts that move to lower q_z
+give H per 1 s group with its 68% interval (hollow: seen on one side of the beam only; before the first minimum is
+in range, only a bound). H is the vertical size of the islands, the film thickness only once a continuous film has
+formed ([Physics and Methods, section 12.12](Physics_Manual.md#1212-island-height-ht-from-moving-q_z-fringes)).
+
+**Literature** compares the series with published growth, over δ. It opens with two panels, the literature
+method's D = 2π/q\* with its trend and 2R/D with the line 2R = D, both against the published percolation band of
+the metal on its **Polymer**. **Show details (network, published curves, coverage, mass balance)** adds the peaks
+not used, the network's values, the published D(δ) curves, the coverage and η. Below, each check says *consistent*,
+*inconsistent* or *not testable*, with references and DOI; without a rate only whether D decreases is tested
+([Physics and Methods, section 12.11](Physics_Manual.md#1211-checks-against-published-growth)). The tab needs
+the explanation **Physical path (network)** or **Literature method (mass balance)**; with another one it says
+so.
+
+**Structure Sketch** draws the fitted model of one window (side and top view, one ruler for the series). **Time**
+chooses the window. **Median of ±5 windows** (on by default) draws the median of the neighbouring windows (about
+±2.5 s); untick it for each window's own values. **Show model burial depth (unreliable)** adds the model's burial
+depth. **Save Image…** saves the picture, **Save Storyboard…** six windows across the series, drawn with the same
+two choices (PNG, PDF or SVG; the save dialog starts in the result folder). Film windows are drawn without
+particles.
+
+**Windows** lists every window with its stage, values, grades and typical errors, thicknesses, *Beam may be off the
+sample*, whether the literature method used its peak (not a *host peak*, *outlier* or *late peak*), notes and, once
+measured, **H fringes (nm)**. `Ctrl+C` copies rows.
+
+**Reliability** says in words what the grades and the typical errors mean, what the path assumes and what the
+thickness values are; with the literature method also how many checks agree.
+
+### 8.5 The result line and its flags
+
+The line under **Predict** names the windows, how many have R and D, and the film onset (with the literature method:
+the percolation). Two flags may follow:
+
+- *intensity modulation period ≈ … s (sample stage translation?)*: the intensity dips periodically, most likely
+  because the sample stage moves back and forth and the long grazing-incidence footprint reaches the sample edge.
+  The data do not prove it, so the page asks.
+- *beam may be off the sample in … windows (stage translation)*, or *beam may be off the sample or interrupted in
+  … windows* when there is no modulation: windows far below the intensity of their neighbours. They keep their values in **Windows** but are left out of the stage path, the
+  trends, the checks and H ([Physics and Methods, section 12.9](Physics_Manual.md#129-windows-where-the-beam-may-be-off-the-sample)).
+
+### 8.6 Show in Analyze
+
+Right-click a row of **Windows**, the **Structure Sketch** or a point of **Size Trend** and choose **Show in
+Analyze**: Analyze's frame list is replaced by the raw frames of that window, summed (**Sum**), so its image and
+cuts show what the model read. αi and a beam centre you gave are taken over; distance and wavelength come from an
+instrument profile within 0.5 mm and 0.1% of the Sputter values, or the notice says what to enter. Nothing changes
+while Analyze is busy.
+
+### 8.7 Changing the rate, t0 or end after a run
+
+A new **Deposition rate**, **t0** or **Deposition end** rewrites the files of the result shown without reading the
+frames again (a rate must be positive, an end after t0). For a result of another scan than the one under **Data**,
+the values are kept for the next **Predict** of the folder under **Data**. Without a rate, the literature method gives way to the physical
+path.
+
+### 8.8 Before you conclude
+
+- The thickness of a continuous film is not determined (in simulation the model returns its prior), and a film with
+  particles on it is not modelled. Use t_eq and the nominal thickness; compare with XRR, a quartz balance or a
+  cross-section.
+- Absolute R rests on the hemisphere shape (h = R): trust trends more than single values.
+- The literature comparison rests on the rate (scale a quartz-balance rate to the sample position), t0 and the end
+  you give, on all the metal sticking, and on D = 2π/q\*, which can be off by more than 40% for D > 10 nm once
+  coalescence starts. A *not determined* percolation is not determined.
+- Published thresholds come from other chambers and rates: a band is a comparison, not a prediction.
+
+Every stated limit: [Physics and Methods, section 12.14](Physics_Manual.md#1214-stated-limits).
+
+### 8.9 Output files
+
+Each result folder holds the model's tables (`structure_physical.csv`, `structure.csv`) with their summaries, the
+binned frames, `gimap_request.json`, the island heights (`fringes_v1/`) and the pictures you save; chapter 12 lists
+them all.
+
+## 9. Tool windows
+
+This chapter describes three windows of the **Tools** menu: Format Converter, XRR Series Extractor and SEM
+Particle Analysis. The other entries of that menu are described with their work: Geometry Calibration
+(section 4.3), 1D Predict (section 6.5) and Process with AI (chapter 10). The windows work beside the
+workspaces: they open over the page you are on and leave it as it is. Each window remembers its size and
+position. What each tool computes, in which units and pixel coordinates, and what it does not correct is in
+[Physics and Methods, chapter 13](Physics_Manual.md#13-tool-windows-and-labs).
+
+### 9.1 Format Converter
 
 Open **Tools ▸ Format Converter…** (`Ctrl+Shift+C`) to write detector frames in another format.
 **Tools ▸ Convert Current File…** opens it with the file shown in the active workspace. The source files
@@ -2258,13 +2487,38 @@ The window has three steps; **Next** and **Back** move between them.
 
    | Setting | Choices |
    |---|---|
-   | **Output format** | TIFF, CBF, HDF5 or NumPy (`.npy`) |
-   | Destination | by default a folder `converted` next to the first input |
-   | File names | a template for multi-frame sources, by default `{source}_{frame:06d}` (for example `scan_001_000123.tif`); **Add suffix automatically when names collide** (on by default) adds `_001`, `_002` … instead of stopping |
-   | **Advanced output options** | the data type (the original values and type are kept by default; CBF may not keep NaN or floating-point values); the metadata JSON — by default one `conversion_metadata.json` for the whole conversion, or one JSON beside each image; **Export as one NeXus/HDF5 container** (`converted_images.h5`) |
+   | **Output format** | TIFF, CBF, HDF5 or NumPy (`.npy`). A format that every input already has is not offered (HDF5 is, for the container) |
+   | **Destination** | by default a folder `converted` next to the first input |
+   | File names | a frame of a single-frame source keeps the source's name (`<source>.tif`). For multi-frame sources the **Multi-frame template**, by default `{source}_{frame:06d}` (or `{source}_img_{frame:06d}`), for example `scan_001_000123.tif`. The frame number counts from 1, unlike Batch Export's names, where `_frame0003` counts from 0. **Add suffix automatically when names collide** (on by default) adds `_001`, `_002` … instead of stopping |
+   | **Advanced output options** | the data type (the stored values and type are kept by default, see below; CBF holds integers: it keeps neither NaN nor fractional or negative floating-point values); **Write metadata sidecar JSON** (on by default): **One metadata file for the whole conversion** (`conversion_metadata.json`, the default) or **One JSON file beside each output image**; **Export as one NeXus/HDF5 container** (`converted_images.h5`, or `converted_images_001.h5` … when that file exists) |
 
-   In a CBF, EDF or TIFF header the metadata is written as ASCII JSON (`json.loads` reads it back exactly, paths
-   outside ASCII included). **Review & Convert** shows what will be written and its size before it starts.
+   In a CBF or TIFF header the metadata is written as ASCII JSON (`json.loads` reads it back exactly, paths
+   outside ASCII included). On the third step the button reads **Review & Convert**: it shows what will be
+   written and its size, and **Convert** there starts the conversion.
+
+**Pixels without data.** A converted frame reads back in GIMaP as its source does: the same pixels without data
+(module gaps, bad pixels, masked or not covered by a module), the same values elsewhere, and integer counts stay
+counts (counting errors, the dead-pixel test). The exception is a floating-point frame written as CBF, which
+holds integers: fractional parts are cut, and a negative value (−1 or less) reads back as a gap code, a pixel
+without data. Use TIFF or HDF5 for such frames. By default (**Keep the stored data type**) a frame is written
+in the type its file stores — the preview's **Data type** — not as the reader's 32-bit float:
+
+| Source | Written as |
+|---|---|
+| Integer counts (Pilatus CBF or TIFF, NeXus) | the stored type; gap codes as stored (Pilatus −1, −2). A pixel the reader had set aside (a NeXus `pixel_mask` pixel, a gap between stitched modules) is −1. An unsigned frame that needs −1 is written in a signed type that holds every value (uint32 → int32); in HDF5 it keeps its type and the largest value of the type marks the pixel |
+| Floating-point frames | as stored, NaN on every pixel without data (CBF holds integers: −1 there; values truncated, negative values read back as gap codes) |
+| **Save as 32-bit float** | 32-bit float, NaN on every pixel without data (CBF: −1) |
+| **Convert to uint16 …** / **Clip to the uint16 range** | uint16 from the pixels with data (scaled onto 0–65534, or cut at 65535); 65535 on the pixels without data |
+
+An HDF5 output (and the container) also marks every pixel without data in the NeXus
+`/entry/instrument/detector/pixel_mask` (bit 0), which GIMaP and other NeXus readers honour. Each frame's
+metadata says what was done under `pixel_values`: the stored and written types, how many pixels have no data and
+how they are written; for a floating-point frame in CBF also how many pixels read back without data
+(`pixels_read_back_without_data`), how many negative values become gap codes (`negative_data_read_as_gap_codes`)
+and how many values were truncated (`values_truncated`). GIMaP does not open `.npy` files as frames: there, −1 or NaN is the mark. The uint16
+modes keep the mark only in HDF5: a TIFF or CBF carries no mask, so a pixel without data reads back from it as a
+valid pixel of 65535 (chapter 13). The rules are in
+[Physics and Methods, section 13.3](Physics_Manual.md#133-format-converter).
 
 While it runs, a window shows the progress with **Pause** and **Cancel** (the image being written is
 finished first). Afterwards use **Open output folder** and **View report**. The report,
@@ -2276,7 +2530,7 @@ the window without it and says why under the input list. To convert EDF frames �
 Analyze reads it, with modules stitched and frames summed — use **Analyze ▸ Batch Export ▸ Converted
 detector frames** (TIFF, EDF, NumPy or HDF5; section 5.7).
 
-### 8.2 XRR Series Extractor
+### 9.2 XRR Series Extractor
 
 Open **Tools ▸ XRR Series Extractor…** (`Ctrl+Shift+R`) to obtain an XRR curve from a GIWAXS/GISAXS
 detector angle series. One point of the curve comes from each detector frame.
@@ -2310,13 +2564,17 @@ detector angle series. One point of the curve comes from each detector frame.
    but never changes the tab. **Export CSV…** saves θ (°), qz (Å⁻¹), intensity, ROI position and
    valid-pixel count.
 
-The CSV goes by default to `<source folder>/<source name>_xrr.csv`; for a CBF folder it goes into that
-folder, named after it. A `.json` record beside it keeps every value that determines qz (series, θ,
+The CSV goes by default to `<source folder>/<source name>_xrr.csv`; for a folder chosen with **Folder…** (CBF
+or NeXus files) it goes into that folder, named after it. A `.json` record beside it keeps every value that determines qz (series, θ,
 distance, energy, pixels, centre, direction, ROI) and where each came from, and under `source_layout` what the
 series consists of, every file read and the reader's warnings (the status line after a run repeats them).
 
 **What is not corrected.** The extractor reports the raw ROI sum or mean. It does not apply monitor/flux
-normalisation, footprint correction, background subtraction or resolution correction.
+normalisation, footprint correction, background subtraction or resolution correction, and θ gets no offset.
+A θ motor dataset is converted only when its unit is `mrad` or `rad`; any other unit, µrad included, is read as
+degrees. The ROI uses the pixels the reader marks as valid: Analyze's bad-pixel search, masks and value limits
+are not applied, and negative values of a signed-integer NeXus/HDF5 frame enter the sum. The formulas are in
+[Physics and Methods, section 13.1](Physics_Manual.md#131-xrr-series-extractor).
 
 **Pixel coordinates.** The direct-beam centre is shown and entered in the same pixel coordinates as in
 Analyze and Geometry Calibration: pixel corners lie on whole numbers, so the centre of the
@@ -2344,13 +2602,13 @@ turn, but the window still counts the header numbers half a pixel differently fr
 the extraction, check on the preview that the cross lies on the direct beam, or use **Pick direct-beam
 center**. CBF series are not affected.
 
-### 8.3 SEM Particle Analysis
+### 9.3 SEM Particle Analysis
 
 Open **Tools ▸ SEM Particle Analysis…** to measure particle sizes in an SEM image, or to load sizes
 measured elsewhere from a CSV file. The window works on its own: it needs no prediction model, no
 TensorFlow and no scattering data. A radius distribution predicted in **Labs ▸ 2D Prediction** can be
 compared with it: **SEM comparison…** there opens this window with a copy of the prediction attached
-(section 10.1).
+(section 11.1).
 
 ![The SEM Particle Analysis window after an extraction](manual_images/en/17_sem.png)
 *Check the outlines first: cyan particles are kept, orange ones were rejected (the table says why), the yellow box is the ROI.*
@@ -2364,7 +2622,9 @@ D_nm  = 2 × R_nm
 ```
 
 `A_px` is the number of pixels of the particle. A particle that is not round is also given the radius
-of the circle of the same area. The distribution is drawn against R; the table gives R and D.
+of the circle of the same area. The distribution is drawn against R; the table gives R and D. The
+segmentation, the filters and the comparison with a prediction are defined in
+[Physics and Methods, section 13.2](Physics_Manual.md#132-sem-particle-analysis).
 
 #### Measuring an image
 
@@ -2495,7 +2755,7 @@ Reading, extracting, updating the distribution and exporting run in the backgrou
 the pending result; a file already being written may still be completed, and nothing already written is
 deleted.
 
-## 9. AI assistant
+## 10. AI assistant
 
 **Ask AI…** in Analyze's command bar, or **Tools ▸ Process with AI…** (`Ctrl+Shift+L`), lets an AI
 analyse the frame shown in Analyze — GIWAXS or GISAXS — with the same tools you use. It switches the
@@ -2506,7 +2766,7 @@ the standard results without it (section 5.5).
 During a run a panel shows a summary of the AI's reasoning, each tool call (hover for its arguments and
 result), the change cards and, at the end, the report.
 
-### 9.1 The three brains and their set-up
+### 10.1 The three brains and their set-up
 
 Choose the brain in **Tools ▸ Settings… ▸ Assistant**, or under *Brain* in the start dialog (**Set Up
 AI…** opens the settings).
@@ -2514,30 +2774,37 @@ AI…** opens the settings).
 | Brain | Billing | Set-up |
 |---|---|---|
 | **Claude Code — your Claude plan** (default) | counts against your Claude Pro or Max plan; no API key | Claude Code must be installed (the Claude desktop app includes it) and signed in once: **Sign In…** opens a window running `claude auth login`; choose your account, then press **Check**. Model and effort are set in Settings (empty model = Claude Code's default). |
-| **Claude API — API key** | per token | `pip install anthropic` once; add a key in Settings (or set `ANTHROPIC_API_KEY`); **Test Connection** checks key and model. Default model `claude-opus-5`, effort *high*. |
+| **Claude API — API key** | per token | `pip install anthropic` once; type the key under **API key** in Settings and press **Save** (or set `ANTHROPIC_API_KEY`); **Test Connection** checks key and model. Default model `claude-opus-5`, effort *high*. |
 | **Other AI providers — OpenAI-compatible API** | as the provider bills | `pip install openai` once. Under **Other AI providers** pick the provider (the address is filled in; change it for a local server or Azure), save its key or set its environment variable (e.g. `DEEPSEEK_API_KEY`, `DASHSCOPE_API_KEY`), choose a model (typed, suggested, or **Get List**) and press **Test Connection**. |
 
 The other providers include DeepSeek, Qwen (Alibaba Cloud Model Studio), OpenAI, Kimi, Zhipu GLM, Google
 Gemini, OpenRouter, SiliconFlow, Azure OpenAI and a model on your own computer or lab server (Ollama, LM
 Studio, vLLM …). The model must support tool calling: **Test Connection** sends one tiny request with a
-tool. Keys are kept in the user data folder, one per provider.
+tool.
+
+**Where the keys are kept.** A key saved with **Save** is written **in plain text**, not encrypted, into the
+user data folder: `claude_api_key.txt` for the Claude API, `assistant_provider_keys.json` for the other
+providers (one entry each). The files are meant for your user account only, but anyone who can read that folder
+— an administrator, a backup, a `GIMAP_HOME` on a shared drive — can read the keys. A saved key takes precedence
+over the environment variable; **Remove** deletes it. On a shared computer, set the environment variable
+instead, or remove the key when you are done.
 
 Claude Code gets only the GIMaP tools — no shell, files or web — and no API key is passed to it.
 
 **Standing instructions for the AI** (**Tools ▸ Settings… ▸ Assistant**) are added to every run, for example where
 your calibrations are kept or the energy of your beamline.
 
-### 9.2 Starting a run
+### 10.2 Starting a run
 
 ![The start dialog of Process with AI](manual_images/en/18_ask_ai.png)
-*The start dialog: results to report, notes, brain, permissions, report language. The line above the buttons says whether the brain is ready — here Claude Code, signed in with a Claude plan — and what is sent.*
+*The start dialog: results to report, notes, brain, permissions, report language. The line above the buttons says whether the brain is ready and what is sent. Here Claude Code is not installed on this computer, so the line says where to get it (or to choose `claude.exe` in Settings ▸ Assistant) and **Start** stays greyed out; with Claude Code signed in, the line names the plan and the model instead.*
 
 1. Open a frame in Analyze and press **Ask AI…**.
 2. Tick the results you want:
    - GIWAXS: *Peak table (q, d, FWHM, intensity)*, *Orientation: in-plane vs out-of-plane*,
-     *Orientation distribution of one ring* (I(χ), maxima, Herman's orientation factor; pick the ring
+     *Orientation distribution of one ring* (I(χ), maxima, Hermans orientation factor; pick the ring
      or let the AI choose), *Crystallite size (Scherrer)*;
-   - GISAXS: *Horizontal cut at Yoneda, centred, halves chosen*, *In-plane distance 2π/q\**, *Fit of
+   - GISAXS: *Horizontal cut at Yoneda, centred, halves chosen*, *Length scale 2π/q\* of the cut*, *Fit of
      I(qy): shape, radius, distance*.
 3. Optionally write notes in **Sample and instructions (optional)**: the sample, what you want to know,
    where the calibration is.
@@ -2564,7 +2831,7 @@ the AI then follows what your question needs — the start of an in-situ series,
 peak ratios, a peak the baseline skipped — and marks interpretations as hypotheses, with the numbers
 behind them.
 
-### 9.3 Change cards: preview, apply, undo
+### 10.3 Change cards: preview, apply, undo
 
 Every change the AI makes to Analyze (sector widths, a custom sector, a q box, the frame, the mode, αi,
 the radial bins, the valid intensity range) is recorded; the AI can also suggest changes without making
@@ -2576,13 +2843,13 @@ In *Preview first* the AI's own exploration is restored at the end. A setting th
 for shows only that proposal; otherwise the net change of each setting remains as a card. Changes that
 ended where they started, or changed nothing visible, are left out.
 
-### 9.4 Follow-up questions
+### 10.4 Follow-up questions
 
 When a run has finished, type a question in the field under the report (e.g. “Why is there almost no
 signal in the in-plane sector?”) and press **Ask**. A new run on the same frame and settings answers it,
 knowing what the previous run found, and can bring new cards.
 
-### 9.5 A frame without geometry
+### 10.5 A frame without geometry
 
 When no instrument profile matches the frame, the AI does not stop; it looks for the geometry.
 
@@ -2600,10 +2867,12 @@ When no instrument profile matches the frame, the AI does not stop; it looks for
      fitted yet); a multi-module NeXus series (`*_m01.nxs` … `*_m11.nxs`) counts as one image;
    - logs and parameter files (`.log`, `.fio`, `.txt` …) that state the energy, distance, beam centre or
      incidence angle.
-3. **The choice.** It prefers a calibration of the same kind of detector file taken before the frame,
-   with *giwaxs*/*waxs* and *final*/*redone* in its name. Standard images are fitted with GIMaP's
+3. **The choice.** Ready calibration files are listed by folder first (the frame's own folder, then
+   its subfolders, the parent folder, the folders beside it, further up), then by file time. Of the
+   standard images it prefers one of the same kind of detector file taken before the frame, with
+   *giwaxs*/*waxs* and *final*/*redone* in its name. Standard images are fitted with GIMaP's
    calibration and judged by where the standard's lines land in q: within 0.2 % on average is good,
-   within 0.5 % usable. When the name does not say which standard an image shows, every standard is
+   within 0.5 % usable ([Physics and Methods, section 3.4](Physics_Manual.md#34-quality-measures)). When the name does not say which standard an image shows, every standard is
    fitted and compared the same way.
 4. **Asking you.** Only when the numbers cannot decide, or the energy is nowhere to be found, a dialog
    **The AI asks** lists the options with their file times and folders, or asks you to type the value.
@@ -2613,9 +2882,9 @@ read after you agree (*Ask me before…*) or with a note in the panel (the other
 folders (`.ssh`, `AppData`, `Windows` …) are never read. The chosen geometry is saved as the instrument
 profile of the detector — with *Ask me before…* only after you approve it — and the report states which file,
 standard and values it came from. **Check it**: a calibration found by the search can belong to another
-experiment (chapter 12).
+experiment (chapter 13).
 
-### 9.6 What is sent, and what is kept
+### 10.6 What is sent, and what is kept
 
 - **Sent to the AI**: the frame's status (file name, geometry, settings) and the reduced curves as
   numbers. The detector file itself is never sent; the small q-map image only when you allowed it. With
@@ -2623,15 +2892,21 @@ experiment (chapter 12).
 - **Shown**: the tokens of each run; with Claude Code also the plan's usage-limit warnings and the cost
   at API prices (for comparison only — a plan is not billed per token); with an API the estimated cost.
 - **Kept on your computer**: every run in `assistant_runs/` of the user data folder; analyses the AI
-  found missing in `assistant_feature_requests.jsonl` there.
+  found missing in `assistant_feature_requests.jsonl` there; a key you saved, in plain text (section 10.1).
 
-**How to read the numbers.**
+**How to read the numbers.** The rules behind them are in Physics and Methods:
+[section 7.7](Physics_Manual.md#77-ring-orientation-and-the-hermans-orientation-factor) (Hermans),
+[section 7.8](Physics_Manual.md#78-crystallite-size-scherrer) (Scherrer) and
+[chapter 8](Physics_Manual.md#8-gisaxs-automatic-analysis) (GISAXS).
 
 - Scherrer sizes are lower bounds of the coherence length unless the instrumental width is known; broad
   halos (FWHM above 15 % of q) get none.
-- Herman's factor assumes a film that is isotropic in its plane and weighs each |χ| by sin χ. It is
-  given only when at least 80 % of that weight is measured. With a partly measured ring, the report also
-  gives f of a random ring over the same |χ| — the value to compare with.
+- The Hermans factor assumes a film that is isotropic in its plane and weighs each |χ| by sin χ. It is
+  given only when at least 80 % of that weight is measured. The report also gives f_iso, the f of a random
+  ring over the same |χ|, and f − f_iso: *along the surface normal* or *in the sample plane* is named only when
+  |f − f_iso| reaches max(0.1, 3σ_f), while a ring whose I(χ) maximum lies between 20° and 70° is called *tilted*
+  from that maximum alone. f weighs the bins next to the sample horizon most; when it depends on them beyond its
+  statistical uncertainty, the ring's notes say so.
 - Regions far below the diffuse background at the same q (under 20 %: a shadow, an absorber, an
   insensitive detector area) count as unmeasured, and a sector lying in one is not compared. Intensity
   next to the qz axis may be unmeasured (missing wedge).
@@ -2640,25 +2915,25 @@ experiment (chapter 12).
 - Crystallographic labels such as (100) or edge-on are used only when the sample notes or the data make
   the assignment clear.
 
-### 9.7 Without the window
+### 10.7 Without the window
 
 `tools/gimap_agent.py` runs the same standard procedure without the window, for scripts and other
 agents: `python tools/gimap_agent.py auto <frames> --notes "…" --out <folder>` writes a `report.md` per
 frame with every decision and what needs your answer. A series is analysed in its final state: the last
 fifth of its frames summed, at most 10 (below ten frames the last frame alone); `--frame N` and `--sum K`
-choose other frames. The module files of one detector are analysed once, however many of them are given,
+choose other frames; `--max-peaks N` fits more than the 12 most prominent candidate peaks. The module files of one detector are analysed once, however many of them are given,
 in a folder named by the scan (a part missing is an open item of its report); `--series` takes files that
 hold one frame each as one series. Its options, exit codes, where its defaults may
 not fit your question, and how to check it on a GIWAXS measurement you know (`tools/eval_giwaxs_agent.py`;
 a case built on your own data goes in `docs/agents/eval/local/`, which Git ignores) are described in
 `docs/agents/giwaxs-playbook.md` and `docs/agents/gisaxs-playbook.md`.
 
-## 10. Labs
+## 11. Labs
 
 The **Labs** pages (sidebar ▸ Labs) are experimental. Their settings are the *Labs parameters*: **File ▸
 Labs Parameters ▸ Load… / Save As…** reads and writes them, together with Fitting's model.
 
-### 10.1 2D Prediction
+### 11.1 2D Prediction
 
 **2D Prediction** runs a trained prediction module on GISAXS detector frames. Three steps on the left,
 the canvas on the right.
@@ -2673,10 +2948,17 @@ the canvas on the right.
      prediction**; a line under the fields says how many files and predictions that makes.
 
    Prediction reads CBF frames (`.cbf`) only.
-2. **Import model.** Choose the **Prediction setup** — a module from `modules/` (section 10.3) — and
+2. **Import model.** Choose the **Prediction setup** — a module from `modules/` (section 11.3) — and
    press **Import model...**; the line below says whether the model is loaded. Folded: **Advanced model
    configuration** (the framework check, **Reload Config**, **Edit Config**) and **Advanced model
    sources** (the model library).
+   - The shipped modules come without a model. The first **Import model...** asks for the folder of the
+     trained model (a TensorFlow SavedModel folder). GIMaP remembers that folder for you in the user data
+     folder (section 3.11), not in the module's `module.yaml`, so the program files stay unchanged; the
+     next **Import model...** loads it without asking.
+   - Press **Import model...** again once the model is loaded to choose another folder.
+   - The Activity log says when a module has no model yet, and names a remembered folder that no longer
+     exists. **Reset All Settings…** also forgets the remembered folders.
 3. **Predict.** Three states — *Input*, *Model*, *Framework* — say what is still missing; **Predict** is
    enabled when all three are ready. A prediction runs in the background; **Stop** ends it.
 
@@ -2690,9 +2972,10 @@ it large).
 - A folder batch lists its results under **Batch results**, with filter, sorting and export.
 - The **Activity log** is folded at the bottom.
 
-**SEM comparison…** (above the canvas) opens **SEM Particle Analysis** (section 8.3) with the current
-prediction attached, when the result has a radius axis in nm; otherwise the tool opens without a
-prediction. Then open the SEM image or the sizes CSV there. What is attached is a copy: the radius distribution with its source (input files, module, model,
+**SEM comparison…** (above the canvas) opens **SEM Particle Analysis** (section 9.3) with the current
+prediction attached, when the module declares a radius axis in nm in its `module.yaml` (section 11.3);
+otherwise the tool opens without a prediction and the Activity log says why. Of the shipped modules
+only `Au_Silicon_15nm` declares its axes. Then open the SEM image or the sizes CSV there. What is attached is a copy: the radius distribution with its source (input files, module, model,
 preprocessing, runtime). Changing the input or model on the prediction page afterwards does not change
 an open comparison, and an outdated result is not attached again. Opening the SEM tool from the Tools
 menu removes a prediction attached earlier.
@@ -2702,7 +2985,7 @@ a small field of view, counted per particle. The prediction gives the radius dis
 model, from the scattering of the illuminated area. Read a difference as a result to discuss, not as an
 error of either.
 
-### 10.2 Trainset Build
+### 11.2 Trainset Build
 
 **This feature is under development.**
 
@@ -2721,13 +3004,17 @@ the training. Five steps on the left, each with its state:
 3. **Model Design** — the training settings and the layers of the network.
 4. **Local Run** — the job package, a local generation and training run with progress and **Stop
    safely**. Submission to the Maxwell cluster is disabled in this version.
-5. **Monitor & Results** — the log, the metrics and the registration of the best model.
+5. **Monitor & Results** — the log, the metrics and **Register best model in 2D Prediction**. It writes a
+   module `generated_<project>/` (`module.yaml` and `preprocessing.py`) into `modules/` of the program folder
+   and opens 2D Prediction with it chosen as **Prediction setup**; its `module.yaml` names the trained model by
+   its full path on this computer. In a git clone, git ignores these `modules/generated_*/` folders, so a
+   registered model is never committed.
 
 **Remember changes** keeps the design for the next session; **Reset defaults** restores the built-in
 values (the note that follows offers Undo); **Load** and **Save** read and write a project file. In the
 Chinese interface many texts of this page are still English.
 
-### 10.3 Prediction modules
+### 11.3 Prediction modules
 
 A prediction module is a folder under `modules/` with a `module.yaml`. Its main fields:
 
@@ -2735,63 +3022,100 @@ A prediction module is a folder under `modules/` with a `module.yaml`. Its main 
 |---|---|
 | `id`, `name`, `version` | internal identifier, the name shown, the version |
 | `framework` | the model framework, for example TensorFlow/Keras |
-| `model.model_path` | path to the trained model |
+| `model.model_path` | the default model: empty, or a path relative to the module folder. A folder chosen with **Import model...** is kept in your user data folder and takes precedence |
 | `preprocess.entry`, `preprocess.steps`, `preprocess.params` | the preprocessing entry point, steps and parameters |
 | `io.input_type`, `io.stack_axis`, `io.input_shape` | the input type (for example `cbf`), the stack axis, the model's input shape |
-| `outputs` | the outputs: parameter names, ranges or output type |
+| `outputs` | the outputs: parameter names, ranges or output type; for a distribution, `axes: row` and `axes: column` with `key`, `label`, `unit`, `min`, `max` |
 
-When you add a module, make sure the model path, the input type, the preprocessing code and the output
-definition match the trained model. A path to a machine-specific location must be changed on another
-computer. For the SEM comparison, the radius output needs an axis in nm.
+When you add a module, make sure the input type, the preprocessing code and the output definition match
+the trained model. Leave `model_path` empty rather than writing a folder of your computer: each user
+chooses the model with **Import model...**, which never writes into `module.yaml`. A path that a
+`module.yaml` already names is still used when no folder was chosen. The one exception is a module that
+Trainset Build registers (section 11.2): its `module.yaml` names the model file of this computer. What 2D
+Prediction does with a frame, and what it does not correct, is in
+[Physics and Methods, section 13.4](Physics_Manual.md#134-2d-prediction-labs).
+
+For the SEM comparison, the module must declare the radius axis: `outputs: axes: row` with `key: r`,
+`unit: nm`, `min` and `max`, as in `Au_Silicon_15nm`. A distribution whose module declares no axes is
+drawn on a placeholder axis (0.05–15 nm on both axes), which is not a physical scale, and is not attached
+to the SEM comparison.
 
 The V5 methods of 1D Predict use their bundled model in `modules/Fitting_1D_Model/Workflow_v5`; fit1d
 uses its installed `gisaxs1d_gui_kit` instead (section 6.4).
 
-## 11. Output files
+## 12. Output files
 
 GIMaP never changes your data files. Exports from Analyze go by default into a folder
-**`gimap_analysis/` next to the data**; most other exports ask for a place and propose one. The user data
-folder is `%APPDATA%\GIMaP` on Windows (or the folder in `GIMAP_HOME`; **Help ▸ Open User Data Folder**).
+**`gimap_analysis/` next to the data**; most other exports ask for a place and propose one. Some propose a place
+beside the data too (the XRR CSV, the Format Converter's `converted/`, a calibration, a project): on a read-only
+data share, choose another folder. The user data folder is `%APPDATA%\GIMaP` on Windows and `~/.config/gimap`
+elsewhere, or the folder in `GIMAP_HOME` (section 3.11; **Help ▸ Open User Data Folder**). The table lists every
+file GIMaP writes; the paragraphs below it, what the user data folder and the Windows package hold.
 
 | Action | Files written | Default location | Record that comes with it |
 |---|---|---|---|
-| Analyze ▸ **Export** (`Ctrl+E`), **Export Curves…** | `<stem>_<curve>.csv` per curve, `<stem>_fit_input.dat`, `<stem>_analysis.json` (`_frameNNNN` added for a frame of a multi-frame file, `_sumN` when frames are summed) | `gimap_analysis/` next to the data, without a dialog; a folder dialog if it cannot be written | `<stem>_analysis.json` (settings, geometry, corrections, pixels left out) and `#` header lines |
+| Analyze ▸ **Export** (`Ctrl+E`), **Export Curves…** | `<stem>_<curve>.csv` per curve, `<stem>_fit_input.dat`, `<stem>_analysis.json` (`_frameNNNN` added for a frame of a multi-frame file, `_sumN` when frames are summed) | `gimap_analysis/` next to the data, without a dialog; a folder dialog if it cannot be written | `<stem>_analysis.json` (settings, geometry and a `.poni` tilt left out, corrections, pixels left out, error model, binning, UTC time of writing) and `#` header lines |
 | Analyze plots ▸ **Save ▸ Curves as Data…** | the CSV files of that plot and `_analysis.json` | folder dialog in `gimap_analysis/` | as Export |
-| Analyze plots and images ▸ figures (**Plot as Figure…**, **View as Figure…** …) | PNG, TIFF, SVG or PDF, light colours | dialog in `gimap_analysis/` | none |
-| Analyze ▸ **Save q-Map Data…**, **View Data as CSV…** | `<stem>_qmap.csv`, `<stem>_cake.csv` | dialog in `gimap_analysis/` | `#` header lines (source, frame, axes) |
-| Analyze ▸ Series ▸ **Export** (**Map as CSV Table…**, **Map as Figure…**, **Stages as Table…**, **Trace as Table…**, **Peak Table of Every Frame…**, the selected frame's curve) | `<series>_<curve>[_<halves>]_map.csv`, `…_map.png`, `…_stages.csv`, `…_trace_<value>.csv`, `…_peaks.csv`; the frame picked as `<frame>_<curve>[_<halves>].csv` | dialog in `gimap_analysis/` | `#` header lines (curve, halves, frames, cut) and a `.json` of the settings next to each table |
+| Analyze plots and images ▸ figures (**Plot as Figure…**, **View as Figure…**, **Analyze ▸ Figures ▸ Save Image…** …) | PNG, TIFF, SVG or PDF, light colours | dialog in `gimap_analysis/` | none |
+| Analyze ▸ **Save q-Map Data…**, **View Data as CSV…** (also **Analyze ▸ Figures**) | `<stem>_qmap.csv`, `<stem>_cake.csv` | dialog in `gimap_analysis/` | `#` header lines (source, frame, axes) |
+| Analyze ▸ Series ▸ **Export** (**Map as CSV Table…**, **Map as Figure…**, **Stages as Table…**, **Selected Frame's Curve as Figure…** / **as Table…**, **Trace as Figure…** / **Trace as Table…**, **Peak Table of Every Frame…**) | `<series>_<curve>[_<halves>]_map.csv`, `…_map.png`, `…_stages.csv`, `…_trace_<value>.csv` and `….png`, `…_peaks.csv`; the frame picked as `<frame>_<curve>[_<halves>].csv` and `.png` (figures also as TIFF, SVG or PDF) | dialog in `gimap_analysis/` | `#` header lines (curve, halves, frames, cut) and a `.json` of the settings next to each table; none for the figures |
 | Analyze ▸ **Send to Fitting** | `<stem>_fit_input.dat` (q in Å⁻¹) | `gimap_analysis/` next to the data; a folder you choose (kept for the session) when that cannot be written | `#` header lines (source, frame, sum, curve, observation with the halves) |
-| Analyze ▸ **Batch Export…** | per-curve tables `<batch>_<curve>_frames.csv` (or `.txt`, `.dat`), a fit table if you chose fitting, and subfolders `curves/`, `fit_input/`, `maps/`, `images/`, `frames/`, `fits/` after your choices; frame names keep the 0-based index (`…_frame0003_sum3_…`) | the last batch folder, else `gimap_analysis/` next to the data; by default in a subfolder named after the frames' folder (one file: its name; several folders: `batch`); **Keep Both** writes into a new subfolder | `README.txt` and `<batch>_batch.json` (every file written, the cut of every frame, failed frames and why); `curves/` also gets an `_analysis.json` per frame |
+| Analyze ▸ **Batch Export…** | per-curve tables `<batch>_<curve>_frames.csv` (or `.txt`, `.dat`); if you chose fitting, a fit table `<batch>_peak_fits.csv` (or `<batch>_model_fits.csv`) with its trend plot `<batch>_peak_fits.png` (`_model_fits.png`) and, if chosen, the fitted curves `fits/<frame>_<peak or model>_fit.csv`; subfolders `curves/`, `fit_input/`, `maps/`, `images/`, `frames/` after your choices; frame names keep the 0-based index (`…_frame0003_sum3_…`) | the last batch folder, else `gimap_analysis/` next to the data; by default in a subfolder named after the frames' folder (one file: its name; several folders: `batch`); **Keep Both** writes into a new subfolder | `README.txt` and `<batch>_batch.json` (every file written, the cut of every frame, failed frames and why); `curves/` also gets an `_analysis.json` per frame |
 | Analyze ▸ **Send Series to Fitting…** | `fit_input/<frame>_fit_input.dat`, `README.txt`, `<batch>_batch.json` | a folder of its own, `<name>_fitting/`, next to any Batch Export of the same data | `README.txt`, batch JSON |
-| Analyze ▸ **Export New Frames While Watching** | as Export, for each new frame | `gimap_analysis/` next to the frame | as Export |
+| Analyze ▸ **Export New Frames While Watching** | as Export, for each new frame | `gimap_analysis/` next to the frame; when it cannot be written, a folder you choose once (kept for the session); with none, the export is switched off and the status line says why | as Export |
 | Analyze ▸ **Save Settings…**; Mask step ▸ **Save…**; Regions ▸ **Add ▸ Save Cuts…** | `analyze_settings.json`; `masks.json`; `cuts.json` | dialog in `gimap_analysis/` | the file is the record |
-| Run Automatic Analysis ▸ **Save Report…** | `<stem>_report.html` (with pictures) or `.md` | the folder you chose last for frames of the same folder, else `gimap_analysis/` if it exists, else next to the frame | the report itself (no JSON) |
+| Run Automatic Analysis ▸ **Save Report…** | `<stem>_report.html` (with pictures) or `.md` | the folder you chose last in this session for frames of the same folder, else `gimap_analysis/` if it exists, else next to the frame | the report itself (no JSON) |
 | Process with AI ▸ **Save Report…** | `<stem>_ai_report.html` + `<stem>_ai_report.json` | as above | the JSON |
 | Process with AI (automatic) | a record of every run; missing analyses | user data folder: `assistant_runs/`, `assistant_feature_requests.jsonl` | — |
 | Process with AI, when the AI exports | the curves as Export, and `<stem>_assistant.json` | `gimap_analysis/` next to the data | `<stem>_analysis.json`, `<stem>_assistant.json` |
 | Fitting ▸ Single analysis ▸ **Save ▸ Data and Fit…** | `<curve>_fit.csv` + `<curve>_fit.json` (written as a pair) | the folder saved to last, else the folder a curve was last opened from, else the curve's folder | the JSON (model, method, range, left-out points; fit1d keeps its own curves and warnings) |
 | Fitting ▸ **Save ▸ Plot…**, **Save ▸ Model…** | `<curve>_fit.png` / `.svg`; `<curve>_model.json` | as above | none; the model file |
 | Fitting ▸ In-situ series ▸ **Save ▸ Table of Every Frame…** | `series_fit.csv` + `series_fit.json` | the series folder | the JSON (`gimap_series_fit_v2`: start model, halves and where they came from, every frame's state and reason; for detector frames Analyze's settings) |
-| Fitting ▸ In-situ series ▸ **Trend Plot…**, **Selected Frame's Plot…** | `series_trend.png`, `series_frame.png` | the series folder | none |
+| Fitting ▸ In-situ series ▸ **Trend Plot…**, **Selected Frame's Plot…** | `series_trend_<value>.png` (the table column of the value, for example `series_trend_chi2_reduced.png`) and `series_frame_<NNNNN>.png` (the frame counted from 1, five digits), or `.svg`; `series_trend.png`, `series_frame.png` while nothing is fitted | the series folder | none (the title in the picture names the value or frame) |
 | **Tools ▸ 1D Predict — Fit Many Curves…**, and Fitting's *AI proposal (1D Predict)* | a run folder: `request.json`, `batch_summary.json` …, a subfolder per curve with `solutions.json`, `fitting_curves.csv` … | `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the folder GIMaP was started from (portable version: the program folder); never removed automatically | `request.json` |
-| Compare ▸ **Save ▸ Table of Every Series… / Table of Every Frame…** | `compare_series.csv` / `compare_frames.csv` + `.json` | the folder of the first series added from files, else the folder a series was last added from | `#` header lines and the JSON |
+| Compare ▸ **Save ▸ Table of Every Series… / Table of Every Frame…** | `compare_series.csv` / `compare_frames.csv` + `.json` | the folder of the first series added from files, else the folder a series was last added from (while it is there), else your home folder | `#` header lines and the JSON |
 | Compare ▸ **Change Plot… / Paths Plot… / End States Plot…** | `compare_*.png` or `.svg` | as above | none |
-| Sputter ▸ **Predict** | a folder per scan and request: `structure_physical.csv` + `structure_physical_summary.json` (the physical path), `structure.csv` + `structure_summary.json` (per window), the model's `intake/` and `binned/` | user data folder: `sputter/<scan>-<code>/` (or **More options ▸ Save results in**); the same request reuses its folder | `gimap_request.json` (the request, the Python, PyTorch's version) |
-| Sputter ▸ Structure Sketch ▸ **Save Image… / Save Storyboard…** | PNG, PDF or SVG | the result folder | none |
+| Sputter ▸ **Predict** | a folder per scan and request: `structure_physical.csv` + `structure_physical_summary.json` (the physical path), `structure.csv` + `structure_summary.json` (per window) with the model's own trend figure `structure_trend.png`, and the frames as the model read them (`intake/`) and summed into windows (`binned/`). `structure_selected.csv` and `structure_sequence.csv` (each with its summary and `_trend.png`) are there only when made with the toolkit's `select` and `sequence` commands | user data folder: `sputter/<scan>-<code>/` (or **More options ▸ Save results in**); the same request reuses its folder | `gimap_request.json` (the request, the Python, PyTorch's version) |
+| Sputter ▸ a new **Deposition rate**, **t0** or **Deposition end** after a run (section 8.7) | `structure_physical.csv` + `structure_physical_summary.json` written again (no frame is read) | the result folder | the summary |
+| Sputter ▸ **More options ▸ Add Refined Windows…** | `structure.csv`, `structure_summary.json`, `structure_trend.png` and the physical files written again with the refined windows | the result folder | the summaries |
+| Sputter ▸ Structure Sketch ▸ **Save Image… / Save Storyboard…** | `sketch_<time>s.png` / `storyboard.png`, or PDF, SVG | the result folder | none |
 | Sputter, in the background after a result is shown | `fringe_heights.csv` (H from the q_z fringes per time group) + `fringe_summary.json` | the result folder's `fringes_v1/`; when it cannot be written, the user data folder: `sputter_fringes/<result folder>/` | the summary: SHA-256 of `binned/run.json`, the chunks and `structure_physical.csv`, the tool's version, αc and its source, the settings |
-| XRR Series Extractor ▸ **Export CSV…** | `<source>_xrr.csv` + `.json` | next to the source file; for a CBF folder inside it | the JSON (every value that determines qz and its origin; `center_convention`; `source_layout` with every file read) |
-| Format Converter | converted frames, by default `<source>_<frame, 6 digits>.<ext>` (or one `converted_images.h5`) | `converted/` next to the first input | `conversion_report.json`, `conversion_metadata.json` (or one JSON per frame) |
-| SEM Particle Analysis ▸ **Export SEM results…** | the files of section 8.3 | a new `SEM_analysis_<date>_<time>/` in the folder you choose; never overwrites | `sem_analysis.json`; `#` header line in the CSVs |
+| XRR Series Extractor ▸ **Export CSV…** | `<source>_xrr.csv` + `.json` | next to the source file; for a folder chosen with **Folder…**, inside it, named after it | the JSON (every value that determines qz and its origin; `center_convention`; `source_layout` with every file read) |
+| Format Converter | converted frames: `<source>.<ext>` for a single-frame source; for a multi-frame source by default `<source>_<frame counted from 1, 6 digits>.<ext>`; `_001` … added on a name collision; or one `converted_images.h5` (`converted_images_001.h5` … when it exists) | `converted/` next to the first input | `conversion_report.json`, `conversion_metadata.json` (or one JSON per frame) |
+| SEM Particle Analysis ▸ **Export SEM results…** | the files of section 9.3 | a new `SEM_analysis_<date>_<time>/` in the folder you choose; never overwrites | `sem_analysis.json`; `#` header line in the CSVs |
 | 2D Prediction ▸ **Export input...** / **Export result...** | `<input>_input.png` + `.json`; `<input>_prediction.png` + `.json` (+ `.txt` when the result has a curve or map) | the export folder used last, else the input's folder | the JSON |
 | 2D Prediction ▸ **Export result...** with several files | your choice of `prediction_results_<time>.jsonl`; `prediction_curves_<time>.txt` (or `prediction_parameters_<time>.txt`); images in `prediction_images_<time>/` | a folder you choose (starts at the export folder used last) | `#` header lines in the `.txt` |
 | Trainset Build ▸ **Prepare job package** | a job folder (`config.yaml`, scripts, `manifest.json` …) | `trainset_jobs/<project>/` in the program folder (the workspace can be changed) | `manifest.json` (checksums) |
 | Trainset Build ▸ **Save** | `<project>.yaml` | the project folder used last, else the program folder | the file |
+| Trainset Build ▸ Monitor & Results ▸ **Register best model in 2D Prediction** | `generated_<project>/module.yaml` + `preprocessing.py` | `modules/` in the program folder | the `module.yaml` (it names the model file by its full path) |
 | Geometry Calibration ▸ **Export Calibration…** | `<image>.gimap-calibration.json` | next to the calibrant image | the file (beam centre counted from pixel centres at 0, 0.5 px lower than the windows show; `metadata.center_convention`) |
 | Geometry Calibration ▸ **Apply** | the instrument profile | user data folder: `instrument_profiles.json` | — |
-| **File ▸ Save Project** | `<name>.gimap`; `<name>.compare.npz` when Compare holds maps from Analyze | next to the first frame | the project (data referenced by path) |
+| **Tools ▸ Settings… ▸ Assistant** ▸ **API key** ▸ **Save** | `claude_api_key.txt` (Claude API), `assistant_provider_keys.json` (other providers), in plain text; **Remove** deletes the key | user data folder | — |
+| **File ▸ Save Project** | `<name>.gimap`; `<name>.compare.npz` when Compare holds maps from Analyze | next to the first frame | the project (data referenced by path). Sputter results are not part of it: they stay in their result folder |
 | **File ▸ Labs Parameters ▸ Save As…** | `gimap_parameters.json` | dialog in the folder GIMaP was started from | — |
 | Errors (automatic) | `logs/errors.log` (moved to `errors.old.log` above 2 MB) | user data folder | — |
+| **Help ▸ Example Data** | the example's frame with its `.poni` (and mask), and `SOURCE_AND_LICENCE.md` | a folder you choose, by default `Documents/GIMaP examples/<example>/`; files already there are kept | `SOURCE_AND_LICENCE.md` (source and licence of the data) |
 | `tools/gimap_agent.py` | a subfolder per frame (a set of module files: per scan; `--series`: `<name>_series/`) with `report.md`, `report.json`, curves, q map; `summary.md` + `summary.json` | `--out`; without it `assistant_runs/cli/<time>/` in the user data folder; never next to the data | `report.json` |
+
+**Which release wrote a file.** The records of Analyze (`_analysis.json`, the settings file, the series and
+stages tables' JSON), of Batch Export and Send Series to Fitting (`<batch>_batch.json`; `README.txt` says *Written by
+GIMaP v…*), of Fitting (`<curve>_fit.json`, `series_fit.json`), Compare, Geometry Calibration, the XRR Series
+Extractor, SEM Particle Analysis, 2D Prediction and the Format Converter name the GIMaP release that wrote them:
+`software_version`, for example `GIMaP v0.2.0`. In Analyze's records `software` stays `GIMaP Analyze 1`, the name
+of the record format. The records of Sputter, the AI assistant, `tools/gimap_agent.py` and 1D Predict's run
+folders do not name the release yet ([Physics and Methods, section 14.5](Physics_Manual.md#145-version-of-the-software)).
+
+**What `<stem>_analysis.json` says besides the settings.** `created` is the UTC time the record was written
+(ISO 8601). `error_model` says how the σ of the points were computed: `poisson` (photon counts),
+`pixel_scatter` (values that are not counts as measured: a dark- or background-subtracted frame, pixels
+filled from the mirror side) or `scaled_poisson` (GIWAXS intensity corrections on counts). `binning` gives,
+for GIWAXS, the number, q range and width of the radial bins, how many points the I(q) kept after sparse
+bins were joined and the rule for joining them; for GISAXS, one point per detector column or row. In
+`geometry`, `dropped_tilt_deg`, `dropped_rotations_deg` and `flat_detector_q_error_max` / `_rms` give the
+tilt of a `.poni` that the flat detector leaves out and the largest and RMS relative error in |q| it causes
+(`null` when no tilt is known; section 4.2). The instrument profile's `source` says who chose the geometry:
+`automatic analysis: <file>` for Run Automatic Analysis and `tools/gimap_agent.py`, `assistant: <file>` for
+Process with AI; profiles saved before 0.2.0 say `assistant:` for both ([Physics and Methods, section 14.2](Physics_Manual.md#142-the-record-stem_analysisjson)).
 
 A save dialog for one file asks before it replaces that file; the record written beside it (for
 example a `.json`) is replaced without a question. Exports without a file dialog — Export, **Curves as
@@ -2799,7 +3123,9 @@ Data…** (a folder dialog), Send to Fitting, watching, Batch Export, Send Serie
 exports, the converter's report and metadata JSON — replace files of the same name in their folder. Batch
 Export and Send Series to Fitting first ask about an earlier export of the same data (**Replace**, **Keep Both
 in a New Subfolder**, **Cancel**; section 5.7). The Format Converter never overwrites converted images (it adds
-`_001` … or stops), and SEM Particle Analysis never overwrites its results.
+`_001` … or stops), and SEM Particle Analysis never overwrites its results. Sputter writes the tables of a
+result folder again when you change the rate, t0 or end or add refined windows, and **Register best model in 2D
+Prediction** replaces the module of the same project.
 
 **Text files.** Every text file GIMaP writes (CSV, TXT, DAT, the curves for Fitting, `README.txt`) is UTF-8
 without a byte-order mark. GIMaP's own symbols are written in ASCII — `1/A`, `deg`, `2theta`, `alpha_i`, `chi`,
@@ -2808,53 +3134,83 @@ script should read the files with `encoding="utf-8"` (for example `numpy.loadtxt
 name outside ASCII may be shown wrongly when a CSV is opened in Excel by a double-click; the numbers are not
 affected.
 
-## 12. Known limitations
+**In the user data folder.** Besides the files of the table, GIMaP keeps there `settings.json` (the settings
+and what the pages remember, section 3.9), `instrument_profiles.json`, `session.json`, `model_parameters.json`
+(Fitting's model), `last_analyze_setup.json` and `logs/`; the AI assistant's `assistant_runs/`,
+`assistant_feature_requests.jsonl` and saved keys (`claude_api_key.txt`, `assistant_provider_keys.json`, plain
+text); and Sputter's result folders in `sputter/` (and `sputter_fringes/`), which are never removed. Delete old
+result folders yourself, or choose **More options ▸ Save results in** on a data disk for long scans. Outside
+that folder, `Start_GIMaP.bat` keeps Matplotlib's font cache in `%LOCALAPPDATA%\GIMaP\matplotlib`, and on
+Windows whether a few cards of Fitting and 2D Prediction are folded is kept in the registry, under
+`HKEY_CURRENT_USER\Software\GIMaP`.
 
-Version 0.1.0 is a pre-release. These limitations are known; each comes with what to do.
+**The Windows package.** Besides the program, the ZIP holds `licenses\`: the licence files of every component of
+the package, listed in `licenses\README.txt`, with `THIRD_PARTY_NOTICES.md` (**Help ▸ Third-party Notices**)
+and `LICENSE`. The release page lists the SHA-256 of every file to download in `SHA256SUMS.txt`: check a
+download with `Get-FileHash -Algorithm SHA256 <file>` in PowerShell, or `sha256sum -c --ignore-missing
+SHA256SUMS.txt` (it checks the files you downloaded).
+
+## 13. Known limitations
+
+Version 0.2.0 is a pre-release. These limitations are known; each comes with what to do. This chapter is the complete list for this version. What the methods themselves leave out (scattering physics, instrument, statistics) is in [Physics and Methods, chapter 15](Physics_Manual.md#15-what-gimap-does-not-model).
 
 | Limitation | What to do |
 |---|---|
 | **Fitting does not read `.csv` curves**, although Analyze exports its curves as CSV. | Use **Send to Fitting**, or open the `<name>_fit_input.dat` that Analyze writes; `.dat` and `.txt` files with columns `q I [σ]` open too. |
 | **Geometry Calibration can put a wrong solution first.** With the standard on **Auto Detect** and no estimated distance, another standard can come first; a wrong **Estimated distance** misleads also with the right standard, and the field can hold a distance you did not type (section 4.3). | Choose the standard yourself when you know it. Leave **Estimated distance** on *Optional* or type the approximate distance of your set-up; set a number you did not type back to 0 unless it is that distance. Before **Apply**, check the distance and that the drawn rings lie on the rings of the image. |
-| **An instrument profile is matched by detector name and frame size only**, and **a calibration found by the automatic search may belong to another experiment** (file times say nothing in a folder copied in one go) — or even to another detector: a `.poni` or `.json` is applied without checking its pixel size or frame size (section 4.2). | Read which file the report names and check the distance in **Geometry**. Name the calibration in the notes, or give it yourself; remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
-| **XRR Series Extractor can place a beam centre from a NeXus header wrongly** (files of the Lambda server, section 8.2). | Check on the preview that the cross lies on the direct beam, or use **Pick direct-beam center**. CBF series are not affected. |
+| **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them (section 10.5). | Calibrate such an image with pyFAI and give GIMaP the `.poni`: name it in the notes, or put it beside the frames (section 4.2). |
+| **An instrument profile is matched by detector name and frame size only**, and **a calibration found by the automatic search may belong to another experiment** (one beside or above the frame's folder is taken when that folder holds none; file times say nothing in a folder copied in one go) — or even to another detector: a `.poni` or `.json` is applied without checking its pixel size or frame size (section 4.2). | Read which file the report names and check the distance in **Geometry**. Name the calibration in the notes, or give it yourself; remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
+| **GIMaP's detector is flat and perpendicular to the beam**: the tilt of a `.poni` (`Rot1`, `Rot2`) is left out, and so are `Rot3` and its `orientation` entry; Geometry Calibration fits no tilt. On a tilted detector \|q\| is off away from the beam: by up to 6.3 % on the Xeuss example (6.06°). Above 1° of tilt or 0.5 % in \|q\| the automatic analysis says so (section 4.2). | Read the error in the report or in `<stem>_analysis.json` (`flat_detector_q_error_max`). For exact q, reduce such frames with the full `.poni` geometry (pyFAI), or calibrate with the detector perpendicular to the beam. |
+| **Run Automatic Analysis (GIWAXS) fits at most 12 candidate peaks**, the most prominent; the window has no setting for more. The others are left out of the peak table, the sector comparison, the rings and the series hints; *Decisions* says how many candidates there were (section 5.5). | Run `tools/gimap_agent.py auto … --max-peaks N` (section 10.7), or ask the AI to run `find_peaks` with `max_peaks`, when you need the full list. |
+| **The GIWAXS and GISAXS q are kinematic: no refraction correction.** Near or below the film's critical angle, the q_z of a peak can be off by up to about k·sin αi, and in GISAXS that of the Yoneda band most, by an amount of that order (the report's *Decisions* give the number for your frame); the ± and σ of the report contain neither that nor the geometry's uncertainty ([Physics and Methods, sections 7.9 and 8.6](Physics_Manual.md#79-what-the-report-states)). | Measure above the critical angle for positions, or correct q_z yourself for the material; quote the systematic error separately from the statistical ±. |
+| **Hermans f and the texture sentence are not corrected for the exit angle.** f weighs the bins next to the sample horizon most, where absorption in the film or a shadow can lower the intensity; on the public P08 frame leaving out the bins within 5° of the sample plane moves f − f_iso by 17–27 σ_f ([Physics and Methods, section 7.7](Physics_Manual.md#77-ring-orientation-and-the-hermans-orientation-factor)). | Read the ring's notes and the *ring orientation* line of *Decisions*; when they name the ring, check I(χ) near χ = ±90° before reading f as texture. |
+| **XRR Series Extractor can place a beam centre from a NeXus header wrongly** (files of the Lambda server, section 9.2). | Check on the preview that the cross lies on the direct beam, or use **Pick direct-beam center**. CBF series are not affected. |
 | **NeXus/HDF5 files not written by the Lambda server are now read as stored** (earlier versions transposed and flipped them). A geometry or mask made on such a file with an earlier version no longer fits it (section 5.1). | Check the beam centre and masks of such data; calibrate again if needed. |
-| **XRR intensities are raw**: no monitor normalisation, footprint, background or resolution correction. | Apply these corrections yourself to the exported CSV. |
+| **XRR intensities are raw**: no monitor normalisation, footprint, background or resolution correction, and no θ offset. A θ motor dataset in µrad is read as degrees (only `mrad` and `rad` are converted). Analyze's bad-pixel search and masks are not applied, and negative values of a signed-integer NeXus/HDF5 frame enter the sum (section 9.2). | Apply these corrections yourself to the exported CSV. Give θ in degrees, mrad or rad, and keep the ROI off module gaps and hot pixels; check the valid-pixel count of each point. |
 | **Format Converter does not read EDF.** | Use **Analyze ▸ Batch Export ▸ Converted detector frames**. |
+| **The uint16 modes of the Format Converter mark pixels without data only in HDF5**: in a TIFF or CBF such a pixel holds 65535 and reads back as a valid value (section 9.1). | Keep the stored data type (the default), or write HDF5, when the gaps and bad pixels matter. |
 | **SEM sizes depend on the segmentation**, and the default StarDist weights are trained on cell nuclei, not SEM. The scale is never read from the image. | Enter the calibration from the scale bar; check every outline; prefer a model trained on SEM images. |
 | **fit1d** (Predict parameters) offers spheres and vertical cylinders only, not random cylinders; with **Try …** compositions the Model's values and ranges are not passed. It needs the separately installed kit. | Use **The particles in Model** to pass fixed values and ranges; treat the result as a start for **Refine These Values**. Without the kit, use *Find the particle shape (no AI)*. |
 | **2D Prediction reads CBF frames only.** | Convert other frames to CBF with the Format Converter. |
-| **Trainset Build** is under development; submission to the Maxwell cluster is disabled. | Use the local run. |
+| **2D Prediction applies no geometry and no correction to a frame**: the module's own preprocessing is all that runs (section 11.3). | Use a module only for data of the set-up it was trained for. |
+| **The Ag and Cu distribution modules of 2D Prediction declare no axes**: their maps and curves are drawn on a placeholder axis (0.05–15 nm), which is not a physical scale, and they are not attached to the SEM comparison (section 11.3). | Read only the shape of these distributions. When you know the axes of the trained model, add them to the module's `module.yaml`. |
+| **Trainset Build** is under development; submission to the Maxwell cluster is disabled. Its BornAgain grid cache stores images as float16, which overflows above 65504: with the default design, part of the pixels of a training image can come out not finite ([Physics and Methods, section 13.5](Physics_Manual.md#135-trainset-build-labs)). | Use the local run; check the local preview for pixels that are not finite. |
 | **Trainset Build (Labs) is not fully translated**: in the Chinese interface many texts are still English; 2D Prediction has a few such texts too. | — |
 | After the interface language is switched in a session, a few texts keep the old language (e.g. the outcome line of a finished automatic analysis). | Run the analysis again, or restart. |
 | Quitting GIMaP during a Batch Export keeps the files of the frames done, but the batch tables, `README.txt` and the batch's JSON record are not written. | End a batch with **Stop**: it writes them. |
 | 1D Predict writes its run folders into the folder GIMaP was started from; they are not removed. | Delete old `AI_Fitting_Output/v5_…` folders yourself. |
-| **Sputter does not determine the thickness of a continuous film**, and a film with particles on it is not modelled (section 7.4). | Read the island-volume equivalent t_eq (island windows, conditional) and the nominal thickness from a deposition rate; compare with XRR, a quartz balance or a cross-section. |
+| **The quick model fit of a GISAXS cut** (Run Automatic Analysis; *Find the particle shape (no AI)* in Fitting) **is a screening step, not a size measurement.** On 14 BornAgain simulations of cuts of Ag spheres with known radius, distance and disorder (the GALAXI model, Poisson noise at the data's count level), the fit ranked a random cylinder first in 12 and a sphere in 1, 10 first-ranked solutions had a value at a search bound, and the best sphere solution's R was a median 11 % above the R⁶-weighted mean radius of the simulation (from −29 % to +26 %); D and its disorder were not recovered. 2π/q\* of a peak or shoulder was within 10 % of the true distance in 1 of 10 simulations with interference, and a peak or shoulder appeared in all 4 without (sections 1.3 and 5.5; [Physics and Methods, section 8.5](Physics_Manual.md#85-the-quick-model-fit-and-how-the-solution-is-chosen)). | Choose the model from what you know of the sample and confirm it in **Fitting** (refine it, judge the residuals). Do not quote 2π/q\* or the quick fit's D as the particle spacing. |
+| **1D Predict (Workflow V5) is validated on simulated curves only**, with the composition and resolution given; finding the composition (none given in **Complete composition**), an unknown resolution and measured data are not validated ([Physics and Methods, section 10.8](Physics_Manual.md#108-validation-status)). | Treat its solutions as a second opinion: refine them in Fitting and judge them by the residuals. |
+| **No record holds the random seeds, and pixels left out are counted, not located.** The records of Sputter, the AI assistant, `tools/gimap_agent.py` and 1D Predict's run folders do not name the GIMaP version; the other export records do (`software_version`, chapter 12) ([Physics and Methods, section 14.9](Physics_Manual.md#149-what-the-records-do-not-yet-contain)). | Note the version (**Help ▸ About GIMaP**) with results from those, and name it when you cite GIMaP (section 14.12). |
+| **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`, `assistant_provider_keys.json`; section 10.1): whoever can read that folder can read them. | On a shared computer, or with `GIMAP_HOME` on a shared drive, set the key as an environment variable instead, or **Remove** it after use. |
+| **Sputter does not determine the thickness of a continuous film**, and a film with particles on it is not modelled (section 8.8). | Read the island-volume equivalent t_eq (island windows, conditional) and the nominal thickness from a deposition rate; compare with XRR, a quartz balance or a cross-section. |
 | **Sputter reads Cu with the Ag model** (the networks were trained for Ag and Au). | Use Cu results for reference only. |
+| **Sputter reads folders of CBF frames only**, and its networks were trained for Ag and Au on polymer substrates (chapter 8). | For NeXus series or another substrate use Analyze's series map (section 5.6) and Fitting's in-situ series (section 6.6); converting frames to CBF does not make another substrate valid. |
+| **Sputter keeps every result folder**, with the frames as the model read them (`intake/`, `binned/`), in the user data folder unless you chose another place; nothing removes them, and **File ▸ Save Project** does not hold Sputter results. | For long scans choose **More options ▸ Save results in** on a data disk; delete old folders yourself; open a result again with **More options ▸ Open Results Folder…**. |
 | **Sputter's island height H from the q_z fringes is the height of a uniform layer** (minima at H Q = 2π n): for islands of another shape and with the refraction model it may be off by a constant of about 1 nm; with one fringe period or less in the range it carries a systematic error of up to 8% (inside its interval). It is not given while no minimum is in the detector's q_z range, while a minimum crosses a module gap, or when the order cannot be told. | Read the trend; compare with XRR, AFM or a cross-section; the summary names αc and where it comes from. |
-| **Sputter flags windows where the beam may be off the sample from the intensity alone** (a dip below half of the level of the neighbouring windows within one modulation period, or below 20% within 10 s without a modulation, with its sides down to 80%; section 7.4). The stage position and the range of its translation are not read: a dip that never falls below half of the level is not flagged, however long, nor is a slower drift off the sample; a dip with another cause (a drop of the beam, the shutter) is flagged alike, and the first and last windows are not judged. When the footprint reaches the sample edge, edge scattering or streaks can raise the intensity in the analysed region instead of lowering it: such windows are not flagged. | Compare the flagged windows with the stage log of the beamtime when you have it; their values stay in the Windows table. |
-| **Sputter's literature method rests on the deposition rate, t0 and deposition end you give** (GISAXS measures none of them) and on D = 2π/q*. Its percolation interval assumes the rate within ±10% and t0 within ±2 s (±0.5 s when t0 is given) — engineering choices the page does not change — takes the deposition end as exact, and leaves out the systematic error of 2π/q* (more than 40% for D > 10 nm once coalescence starts). Without a deposition end the deposition is taken to last to the end of the scan. PNO, PSBMA and PEO have no published percolation data: the band of all polymers of the metal is used (section 7.4). | Give the rate at the sample position, and t0 and the deposition end when you know them; for other errors run the toolkit's `physical` command with `--rate-error` and `--t0-error`. Read a *not determined* percolation as not determined, and compare with other chambers' thresholds as a comparison, not a prediction. |
-| **Sputter's first Predict downloads PyTorch** (about 1.2 GB, needs the internet); the model runs on the CPU. | Without internet, install PyTorch by hand (section 13.7). |
+| **Sputter flags windows where the beam may be off the sample from the intensity alone** (a dip below half of the level of the neighbouring windows within one modulation period, or below 20% within 10 s without a modulation, with its sides down to 80%; section 8.5). The stage position and the range of its translation are not read: a dip that never falls below half of the level is not flagged, however long, nor is a slower drift off the sample; a dip with another cause (a drop of the beam, the shutter) is flagged alike, and the first and last windows are not judged. When the footprint reaches the sample edge, edge scattering or streaks can raise the intensity in the analysed region instead of lowering it: such windows are not flagged. | Compare the flagged windows with the stage log of the beamtime when you have it; their values stay in the Windows table. |
+| **Sputter's literature method rests on the deposition rate, t0 and deposition end you give** (GISAXS measures none of them) and on D = 2π/q*. Its percolation interval assumes the rate within ±10% and t0 within ±2 s (±0.5 s when t0 is given) — engineering choices the page does not change — takes the deposition end as exact, and leaves out the systematic error of 2π/q* (more than 40% for D > 10 nm once coalescence starts). Without a deposition end the deposition is taken to last to the end of the scan. PNO, PSBMA and PEO have no published percolation data: the band of all polymers of the metal is used (section 8.4). | Give the rate at the sample position, and t0 and the deposition end when you know them; for other errors run the toolkit's `physical` command with `--rate-error` and `--t0-error`. Read a *not determined* percolation as not determined, and compare with other chambers' thresholds as a comparison, not a prediction. |
+| **Sputter's first Predict downloads PyTorch** (about 1.2 GB, needs the internet); the model runs on the CPU. | Without internet, install PyTorch by hand (section 14.7). |
 | Windows is the platform GIMaP is developed and tested on. TensorFlow runs on the CPU; a GPU set-up is not configured. | — |
 
-## 13. Troubleshooting, FAQ, version and contact
+## 14. Troubleshooting, FAQ, version and contact
 
-### 13.1 A file cannot be loaded
+### 14.1 A file cannot be loaded
 
 The message under the image says why in words: an empty file (still being written?), not a detector
 image, a damaged or incomplete NeXus file, no permission. A NeXus/HDF5 file that another program is still
 writing cannot be read until it is closed; one left open by a program that ended can be read after
 `h5clear -s` on a copy; one compressed with a filter this installation cannot read needs the Python package
 `hdf5plugin` (section 5.1, *NeXus and HDF5 files*). Otherwise check that the format is supported:
-`.cbf` needs `fabio`, HDF5/NeXus files need `h5py` and the dataset where the reader expects it. For
-another file format, contact the author (section 13.12).
+`.cbf` needs `fabio`, HDF5/NeXus files need `h5py` and the dataset where the reader expects it. To ask
+for another file format, use **Help ▸ Report a Problem…** or write to the author (section 14.12).
 
-### 13.2 A `.csv` curve does not open in Fitting
+### 14.2 A `.csv` curve does not open in Fitting
 
 Fitting reads `.dat` and `.txt` curves. For a curve from Analyze use **Send to Fitting**, or open the
 `_fit_input.dat` written next to the CSV.
 
-### 13.3 1D Predict Does Not Start
+### 14.3 1D Predict Does Not Start
 
 *General V5* checks its model files (`modules/Fitting_1D_Model/Workflow_v5/`) against their checksums
 before it runs, and does not start when one is missing or was changed: the message names the file.
@@ -2876,13 +3232,15 @@ particle shape (no AI)*) use no model files: the check does not concern them. *P
 needs its own kit under `utils/gisaxs1d_gui_kit` (or `GISAXS1D_KIT_HOME`); without it the method says where to
 put the folder.
 
-### 13.4 Predict is disabled, or the model is not imported (2D Prediction)
+### 14.4 Predict is disabled, or the model is not imported (2D Prediction)
 
 The three states above **Predict** say what is missing: *Input* (a CBF frame or a folder), *Model*
 (press **Import model...**) and *Framework* (the framework the module needs is installed). When the model
-does not load, check the module's `model.model_path`: a path to another computer must be changed.
+does not load, read the Activity log: it names the folder that was tried. A folder that is gone, or one
+named in `module.yaml` that belongs to another computer, is asked for again by **Import model...**; when
+the model is loaded, press **Import model...** again to choose another folder.
 
-### 13.5 SEM Particle Analysis does not extract
+### 14.5 SEM Particle Analysis does not extract
 
 - The run button stays disabled until a positive **Image calibration** is set for this file.
 - **StarDist (local AI)**: press **Check local resources**. It needs a Python with StarDist and
@@ -2893,21 +3251,43 @@ does not load, check the module's `model.model_path`: a path to another computer
 - No particle passes the filters: look at the rejected outlines and their reasons, then change the
   threshold, contrast, area limits or ROI.
 
-### 13.6 The AI assistant does not start
+### 14.6 The AI assistant does not start
 
 The start dialog says whether the chosen brain is ready. Claude Code: install it, then **Sign In…** and
 **Check** in **Tools ▸ Settings… ▸ Assistant**. Claude API: `pip install anthropic`, a key, **Test Connection**.
 Other providers: `pip install openai`, a key, a model that supports tool calling, **Test Connection**.
+A key saved in GIMaP takes precedence over the environment variable: when the saved one is wrong or
+expired, replace it, or **Remove** it to use the variable.
 
-### 13.7 TensorFlow / PyTorch not available, or a dependency is missing
+### 14.7 Sputter does not predict, or TensorFlow / PyTorch is missing
 
-`requirements.txt` asks for TensorFlow 2.15–2.16 (`tensorflow-intel` on Windows); 2.15.1 is the tested
-version. For a missing package, activate the right Python environment and run
-`pip install -r requirements.txt`.
+**TensorFlow and other packages.** `requirements.txt` asks for TensorFlow `>=2.15,<=2.16` (`tensorflow-intel`
+on Windows), which in practice installs a 2.15 release; 2.15.1 is the tested version. For a missing package,
+activate the right Python environment and run `pip install -r requirements.txt`.
 
-PyTorch is needed by the Sputter workspace only: its first **Predict** installs it into the Python GIMaP runs
-in (`requirements-sputter.txt`, keeping the installed NumPy). When that fails, the job status says why and gives
-the command to run by hand:
+**Sputter.** The job status under **Predict** says what stopped it:
+
+- *The Sputter model is not in this GIMaP folder: … is missing or incomplete.* The model is part of GIMaP, in
+  `utils/sputter_toolkit/` of the program folder, and the message says what each kind of installation does
+  (section 2.4). The portable version comes with the model, so its folder is incomplete: install or extract
+  the release again. Update a git clone with `Update_GIMaP.bat`; download a folder from **Code ▸ Download
+  ZIP** again.
+- *No CBF frames in this folder.* Choose the folder that holds the scan's CBF frames, or the scan folder with
+  them in one subfolder (section 8.1). Sputter reads CBF frames only (chapter 13).
+- *Give the photon energy or the wavelength*, *Give the sample-detector distance and the incidence angle (both
+  positive)* and the like: a value of **Sample and geometry** or **More options** is missing or out of range —
+  both beam-centre coordinates or neither, a positive time window and rate, an end after t0.
+- *The Sputter model stopped with an error (exit code …)*: press **Details**, whose last lines say why. Steps
+  that were finished stay in the result folder and are reused by the next **Predict**. When the lines do not
+  help, send them with **Help ▸ Report a Problem…**.
+- *… has no `structure_physical.csv` (press Predict, or choose a results folder)*: the folder chosen with
+  **Open Results Folder…** holds no finished result.
+- **Show in Analyze** says *No instrument profile has the Sputter geometry*: enter the distance and λ it names in
+  Analyze (Geometry step ▸ **Geometry…**), then show the window again (section 8.6).
+
+**PyTorch.** It is needed by the Sputter workspace only: its first **Predict** downloads it from pypi.org and
+installs it into the Python GIMaP runs in (`requirements-sputter.txt`, keeping the installed NumPy). When that
+fails, the job status says why and gives the command to run by hand:
 
 - no connection to pypi.org (proxy, SSL, firewall): connect, or set the proxy (`HTTPS_PROXY`);
 - no permission to write into the environment: start GIMaP from a folder you can write to (`Start_GIMaP.bat`), or
@@ -2923,51 +3303,77 @@ the command to run by hand:
 By hand: `python -m pip install -r requirements-sputter.txt` with the Python named under **Predict**. The
 environment variable `GIMAP_SPUTTER_NO_INSTALL=1` switches the automatic installation off.
 
-### 13.8 Windows warns about the installer
+### 14.8 Windows warns about the installer
 
 The installer and the launcher are batch files (`.bat`) and are not signed, so Windows may ask before it
 runs a downloaded one, and an institution's antivirus or application control may block it. Only run
-files downloaded from the GitHub Releases page of GIMaP. Otherwise run GIMaP from source in a local
-Python environment (section 2.2).
+files downloaded from the GitHub Releases page of GIMaP, and check them against `SHA256SUMS.txt` of the
+release (chapter 12, *The Windows package*). Otherwise run GIMaP from source in a local Python environment
+(section 2.2).
 
-### 13.9 An export is empty or fails
+### 14.9 An export is empty or fails
 
 - **Empty**: check the q or frame range, the masks, the cut, and that the frame has valid data. In
   Fitting, also the fitting range, the parameter bounds and the scale and background. In 2D Prediction,
   the stack and whether the module fits the data.
 - **Fails**: check that the folder exists and can be written; do not export into protected system
   folders. When `gimap_analysis/` next to the data cannot be written (a read-only data share), Export
-  asks for another folder.
+  asks for another folder. The tools that propose a place beside the data (the XRR CSV, the Format
+  Converter, Geometry Calibration's export, a project) need another folder there too.
 
-### 13.10 The window is too large for the screen
+### 14.10 The window is too large for the screen
 
 GIMaP follows the display scaling of the operating system and fits a 1280 × 720 screen. If text is too
 large or too small, use **View ▸ Font Size** or **Tools ▸ Settings… ▸ Appearance**; dense panels scroll
 instead of being clipped. The window size and position are restored at the next start.
 
-### 13.11 FAQ
+### 14.11 FAQ
 
-**Is GIMaP production-ready?** No. Version 0.1.0 is a pre-release: treat it as beta scientific software
+**Is GIMaP production-ready?** No. Version 0.2.0 is a pre-release: treat it as beta scientific software
 and check results that matter.
 
 **Can I use my own trained model?** For 2D Prediction, yes, if it can be described by a module
-configuration with a supported loader (section 10.3). For SEM Particle Analysis, any local StarDist model
+configuration with a supported loader (section 11.3). For SEM Particle Analysis, any local StarDist model
 folder. 1D Predict's V5 methods use their bundled model; fit1d offers the *General network* and *Au
-nanoparticles on Si (adapted)* networks in its settings.
+nanoparticles on Si (adapted)* networks in its settings. Sputter uses the model that comes with GIMaP in
+`utils/sputter_toolkit/`; a new model comes with a GIMaP update.
 
 **Where are the results of 1D Predict saved?** In `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the
 folder GIMaP was started from (for the portable version: the program folder). Fits you save yourself
-(**Save**) go where you choose. Chapter 11 lists every output.
+(**Save**) go where you choose. Chapter 12 lists every output.
 
-**Does anything leave my computer?** Only when you use the AI assistant with a remote brain: then the
-frame's status and the reduced curves are sent as numbers, never the detector file (section 9.6).
-StarDist runs locally and downloads nothing.
+**Where are Sputter's results saved?** In `sputter/<scan>-<code>/` of the user data folder, or in the folder
+set with **More options ▸ Save results in** (section 8.2; chapter 12). They are kept until you delete them.
 
-### 13.12 Version and Contact
+**Does anything leave my computer?** Your data leave it only when you use the AI assistant with a remote
+brain (Claude Code, the Claude API or another provider's server): then the frame's status and the reduced
+curves are sent as numbers, never the detector file, and the small q-map image only when you allow it
+(section 10.6). With a model on your own computer or lab server, nothing leaves that network. GIMaP itself
+goes online in one case: Sputter's first **Predict** downloads PyTorch from pypi.org with pip (section 14.7);
+nothing of your data is sent. **Help ▸ GitHub Repository**, **Check for Updates…**, **Report a Problem…** and
+the model library of 2D Prediction open a page in your browser. **Report a Problem…** puts the versions of
+GIMaP and of your system (no paths, no data) on the clipboard and opens a new issue on GitHub: nothing is sent
+until you paste it there and submit the issue yourself. StarDist, the V5 methods of 1D Predict and 2D
+Prediction run on your computer and download nothing.
 
-This manual describes **GIMaP 0.1.0** (pre-release). **Help ▸ About GIMaP** shows the version of the
+### 14.12 Version and Contact
+
+This manual describes **GIMaP 0.2.0** (pre-release). **Help ▸ About GIMaP** shows the version of the
 program you are running. `CHANGELOG.md` in the program folder lists what changed since 0.0.2 — the pages
 that were replaced, where the settings are kept now — the changes not yet released, and the known
 limitations of this version.
+
+- **Help ▸ Check for Updates…** opens the releases page on GitHub in your browser (newest first,
+  pre-releases included): compare the newest number with the one About shows. The check itself sends no request from GIMaP. Section 2.4 says how
+  to update.
+- **Help ▸ How to Cite GIMaP…** gives the reference to cite when you publish results obtained with
+  GIMaP, read from `CITATION.cff` in the program folder, with **Copy** and **Copy BibTeX**. Name the
+  version you used: the export records write it as `software_version` (chapter 12); for results from a
+  record without it (one written before 0.2.0, or one of those chapter 13 names) note it from **Help ▸
+  About GIMaP**. The reference names a DOI only when `CITATION.cff` gives one.
+- **Licence.** GIMaP is released under the MIT licence (`LICENSE` in the program folder). The Windows
+  package also contains components under other licences (PyQt5, for one, under the GPL-3.0), and the
+  example data keep their own licences: **Help ▸ Third-party Notices** lists them all.
+  **Help ▸ About GIMaP** names the licence and the versions of Python, Qt, PyQt and numpy, with **Copy**.
 
 Contact: [yufeng.zhai@desy.de](mailto:yufeng.zhai@desy.de)

@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Optional
 
 from .detector_geometry import DetectorGeometry
+from .detector_tilt import DetectorTilt
 
 SCHEMA_VERSION = 1
 
@@ -29,6 +30,9 @@ class InstrumentProfile:
     detector_shape: Optional[tuple[int, int]] = None
     source: str = ""
     updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    dropped_tilt: Optional[DetectorTilt] = None
+    """The tilt of the ``.poni`` the geometry was read from, which the flat ``geometry`` leaves out (``None``: none
+    known). Analyze estimates from it how far |q| is off on each frame (``detector_tilt.flat_detector_q_error``)."""
 
     def __post_init__(self) -> None:
         if not str(self.name).strip():
@@ -56,16 +60,21 @@ class InstrumentProfile:
             score += 2
         return score
 
-    def updated(self, geometry: DetectorGeometry, *, source: str) -> "InstrumentProfile":
+    def updated(
+        self, geometry: DetectorGeometry, *, source: str, dropped_tilt: Optional[DetectorTilt] = None
+    ) -> "InstrumentProfile":
+        """The profile with a new geometry; its ``dropped_tilt`` is the one given (a new geometry from elsewhere has
+        none known)."""
         return replace(
             self,
             geometry=geometry,
             source=source,
             updated_at=datetime.now(timezone.utc).isoformat(),
+            dropped_tilt=dropped_tilt,
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        values = {
             "name": self.name,
             "detector_name": self.detector_name,
             "detector_shape": list(self.detector_shape) if self.detector_shape else None,
@@ -73,6 +82,9 @@ class InstrumentProfile:
             "source": self.source,
             "updated_at": self.updated_at,
         }
+        if self.dropped_tilt is not None:  # written only when there is one: older files stay as they were
+            values["dropped_tilt"] = self.dropped_tilt.to_dict()
+        return values
 
     @classmethod
     def from_dict(cls, values: Mapping[str, Any]) -> "InstrumentProfile":
@@ -84,6 +96,7 @@ class InstrumentProfile:
             detector_shape=tuple(shape) if shape else None,
             source=str(values.get("source", "")),
             updated_at=str(values.get("updated_at", "")),
+            dropped_tilt=DetectorTilt.from_dict(values.get("dropped_tilt")),
         )
 
 

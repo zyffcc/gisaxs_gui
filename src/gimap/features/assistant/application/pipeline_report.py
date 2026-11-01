@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from ..domain import assessment
+from ..domain import AT_EDGE, assessment, herman_decimals, signed
 from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
 from .pipeline_geometry import SEARCHED
 
@@ -65,6 +65,45 @@ def _number(value, digits: int = 4) -> str:
     return str(value)
 
 
+def _fixed(value, decimals: int) -> str:
+    """A number with a fixed number of decimals ("—" when there is none): one precision per table column."""
+    return "—" if value is None else f"{float(value):.{decimals}f}"
+
+
+PIXEL_DECIMALS = 2
+"""A detector position (the beam centre) to 0.01 px, as the cuts and decisions give it."""
+PEAK_DECIMALS = {"q": 4, "d_A": 3, "fwhm": 4, "snr": 1, "size_nm": 1}
+"""The decimals of each column of the peak table, the same in every row (1.9000 next to 0.2236, not 1.9)."""
+FLAG_WORDS = {
+    "at_edge": AT_EDGE,
+    "resolution_limited": "narrower than 3 bins (its width is set by the binning)",
+    "overlap": "overlaps a neighbouring peak",
+}
+"""A flag without a caveat in the words of the peak table (report.json keeps the flags themselves)."""
+
+
+def reliable_row(peak: dict) -> bool:
+    """A peak row the analysis builds on: no caveat and not at the end of the data (``domain.reliable``)."""
+    return not peak.get("caveat") and "at_edge" not in (peak.get("flags") or ())
+
+
+def herman_texts(ring: dict) -> Optional[dict]:
+    """f ± σ_f, f_iso and f − f_iso of a ring row as text, each with the decimals that show σ_f to two significant
+    digits and the Unicode minus: ``{"f": "0.1392 ± 0.0027", "iso": "−0.0014", "excess": "+0.1405", "decimals": 4}``
+    (``None`` without an f)."""
+    if ring.get("herman") is None:
+        return None
+    sigma = ring.get("herman_err")
+    decimals = herman_decimals(sigma)
+    texts = {"f": signed(ring["herman"], decimals) + (f" ± {float(sigma):.{decimals}f}" if sigma else ""),
+             "decimals": decimals}
+    if ring.get("herman_isotropic") is not None:
+        texts["iso"] = signed(ring["herman_isotropic"], decimals)
+    if ring.get("herman_excess") is not None:
+        texts["excess"] = signed(ring["herman_excess"], decimals, plus=True)
+    return texts
+
+
 def found_by_search(report: dict) -> Optional[dict]:
     """The decision that says the run's calibration was found by the automatic search (``decision``: its full
     path, ``why``: where it lies seen from the frame); ``None`` when the person named it or a profile was kept."""
@@ -78,10 +117,18 @@ def _geometry_lines(report: dict) -> list[str]:
     centre = geometry.get("beam_center_px") or [None, None]
     lines = [
         f"- source: {geometry.get('source') or 'instrument profile'}",
-        f"- distance {_number(geometry.get('distance_mm'))} mm, beam centre ({_number(centre[0])}, "
-        f"{_number(centre[1])}) px, λ {_number(geometry.get('wavelength_A'))} Å, "
+        f"- distance {_number(geometry.get('distance_mm'))} mm, beam centre ({_fixed(centre[0], PIXEL_DECIMALS)}, "
+        f"{_fixed(centre[1], PIXEL_DECIMALS)}) px, λ {_number(geometry.get('wavelength_A'))} Å, "
         f"αi {_number(geometry.get('incidence_deg'))}°",
     ]
+    flat = geometry.get("flat_detector")
+    if flat:  # a .poni tilt the flat geometry leaves out (Needs attention or Decisions says whether it matters)
+        error = flat.get("q_error_max")
+        lines.append(
+            f"- detector tilt left out: {_number(flat.get('dropped_tilt_deg'), 3)}° (GIMaP's detector is flat and "
+            f"perpendicular to the beam); |q| off by up to {'—' if error is None else _number(100 * error, 2)} % "
+            "over the valid detector area"
+        )
     searched = found_by_search(report)
     if searched:  # nobody named it: the quality below says it fits its own standard, not whose measurement it is
         lines.insert(1, f"- found by the automatic search, named by nobody: `{searched['decision']}` ({searched['why']})")
@@ -102,18 +149,19 @@ def _peak_table(peaks: list[dict]) -> list[str]:
         "| q (Å⁻¹) | d (Å) | FWHM (Å⁻¹) | SNR | in-/out-of-plane | size (nm) | caveat |",
         "|---|---|---|---|---|---|---|",
     ]
+    decimals = PEAK_DECIMALS
     for peak in peaks:
         size = peak.get("size_nm")
-        size_text = "—" if size is None else ("≥ " if peak.get("size_is_lower_bound") else "") + _number(size, 3)
+        size_text = "—" if size is None else ("≥ " if peak.get("size_is_lower_bound") else "") + _fixed(size, decimals["size_nm"])
         if size is None and peak.get("size_note"):
             size_text = "n/a"
+        flags = "; ".join(FLAG_WORDS.get(flag, flag) for flag in peak.get("flags") or () if flag in FLAG_WORDS)
         lines.append(
-            f"| {_number(peak.get('q'))} | {_number(peak.get('d_A'))} | {_number(peak.get('fwhm'), 3)} | "
-            f"{_number(peak.get('snr'), 3)} | {peak.get('orientation') or '—'} | {size_text} | "
-            f"{peak.get('caveat') or ', '.join(peak.get('flags') or ()) or ''} |"
+            "| " + " | ".join(_fixed(peak.get(key), decimals[key]) for key in ("q", "d_A", "fwhm", "snr")) + " | "
+            f"{peak.get('orientation') or '—'} | {size_text} | {peak.get('caveat') or flags} |"
         )
     notes = [
-        f"- q = {_number(peak.get('q'))}: {peak['size_note']}" for peak in peaks if peak.get("size_note")
+        f"- q = {_fixed(peak.get('q'), decimals['q'])}: {peak['size_note']}" for peak in peaks if peak.get("size_note")
     ]
     return lines + ([""] + notes if notes else [])
 
@@ -123,18 +171,33 @@ def _ring_lines(rings: list[dict]) -> list[str]:
         return ["No ring analysed."]
     lines = []
     for ring in rings:
-        head = f"- q ≈ {_number(ring.get('q'))} Å⁻¹, |χ| coverage {_number(ring.get('coverage'), 2)}: "
-        if ring.get("herman") is None:
+        head = f"- q ≈ {_number(ring.get('q'))} Å⁻¹, |χ| coverage {_fixed(ring.get('coverage'), 2)}: "
+        texts = herman_texts(ring)
+        if texts is None:
             lines.append(head + (ring.get("reason") or ring.get("texture") or "no result"))
             lines += [f"  - {note}" for note in ring.get("notes") or () if "shadowed" in note]
             continue
-        reference = ring.get("herman_isotropic")
-        compare = f" (a random ring over the same |χ|: {_number(reference, 2)})" if reference is not None and abs(reference) > 0.005 else ""
-        lines.append(head + f"f = {_number(ring.get('herman'), 3)}{compare} — {ring.get('texture')}")
+        # f ± σ_f, f_iso and f − f_iso on every ring (Physics and Methods 7.7), with the decimals of σ_f.
+        compare = f" (a random ring over the same |χ|: f_iso = {texts['iso']})" if "iso" in texts else ""
+        excess = f", f − f_iso = {texts['excess']}" if "excess" in texts else ""
+        lines.append(head + f"f = {texts['f']}{compare}{excess} — {ring.get('texture')}")
         for note in ring.get("notes") or ():
-            if "missing wedge" in note or "shadowed" in note:
+            if any(word in note for word in RING_NOTES_SHOWN):
                 lines.append(f"  - {note}")
     return lines
+
+
+RING_NOTES_SHOWN = ("missing wedge", "shadowed", "next to the sample horizon", "Without those bins")
+"""The notes of a ring report.md lists under it (all are in report.json)."""
+
+
+def _hints_title(report: dict) -> str:
+    """What the series hints were taken from: the reliable peaks, of a list cut at the cap when it was."""
+    search = report.get("peak_search") or {}
+    if search.get("truncated"):
+        return (f"Series hints (reliable peaks among the {search.get('max_peaks')} most prominent of "
+                f"{search.get('candidates')} candidates only)")
+    return "Series hints (reliable peaks only)"
 
 
 def pipeline_markdown(report: dict, *, title: Optional[str] = None) -> str:
@@ -168,9 +231,13 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None) -> str:
         lines += gisaxs_sections(report)
     elif report.get("ok") and report.get("procedure") != "geometry":
         lines += ["## 峰 / Peaks (radial I(q))", "", *_peak_table(report.get("peaks") or []), ""]
+        search = report.get("peak_search") or {}
+        if search.get("truncated"):
+            lines += [f"Only the {search.get('max_peaks')} most prominent of {search.get('candidates')} candidate peaks "
+                      "were fitted (see Decisions: peak search).", ""]
         hints = report.get("series_hints") or []
         if hints:
-            lines += ["Series hints (reliable peaks only): " + "; ".join(hints), ""]
+            lines += [_hints_title(report) + ": " + "; ".join(hints), ""]
         lines += ["## 取向 / Ring orientation", "", *_ring_lines(report.get("rings") or []), ""]
     lines += ["## 决策 / Decisions", ""]
     lines += [f"- **{item['what']}**: {item['decision']} — {item['why']}" for item in report.get("decisions") or []]
@@ -254,7 +321,7 @@ def _giwaxs_batch_table(reports: list[dict]) -> list[str]:
     ]
     for report in reports:
         peaks = ", ".join(
-            f"{peak['q']:.3f}" + ("*" if peak.get("caveat") else "") for peak in report.get("peaks") or [] if peak.get("q")
+            f"{peak['q']:.3f}" + ("" if reliable_row(peak) else "*") for peak in report.get("peaks") or [] if peak.get("q")
         ) or "—"
         rings = "; ".join(
             f"{ring['q']:.3g}: {ring['herman']:.2f}" for ring in report.get("rings") or [] if ring.get("herman") is not None
@@ -263,7 +330,16 @@ def _giwaxs_batch_table(reports: list[dict]) -> list[str]:
             f"| {Path(report.get('frame') or '').name} | {_state(report)} | {_frames_text(report)} | "
             f"{(report.get('geometry') or {}).get('source') or '—'} | {peaks} | {rings} | {_asked(report)} |"
         )
-    lines += ["", "Peaks marked * have a caveat (spike, halo, failed fit or weak): see that frame's report.md.", ""]
+    lines += ["", "Peaks marked * have a caveat (spike, halo, failed fit or weak) or lie at the end of the data: see that "
+              "frame's report.md.", ""]
+    cut = [report for report in reports if (report.get("peak_search") or {}).get("truncated")]
+    if cut:
+        lines += [
+            "Peak lists cut at the cap (the most prominent candidates fitted; their series hints use these only): "
+            + ", ".join(f"{Path(report.get('frame') or '').name} ({report['peak_search'].get('max_peaks')} of "
+                        f"{report['peak_search'].get('candidates')})" for report in cut)
+            + ". `--max-peaks N` fits more.", "",
+        ]
     shared = common_peaks(reports)
     if shared:
         listed = ", ".join(f"{peak['q']:.4g}" + (f" ({peak['caveat'].split(':')[0]})" if peak.get("caveat") else "") for peak in shared)
@@ -340,7 +416,7 @@ NEARBY_Q = 0.01
 def series_changes(start: dict, end: dict, tolerance: float = SAME_Q) -> list[dict]:
     """How the lines change from the start to the end of a series, sorted by q.
 
-    Only reliable peaks count as present.  Two peaks are the same line when they are closer than
+    Only reliable peaks (``reliable_row``) count as present.  Two peaks are the same line when they are closer than
     half the wider one's FWHM (at least ``tolerance`` in relative q); one that moved further than
     ``tolerance`` is "shifted".  A weak (tentative) peak on the other side makes a line "grew" or
     "faded" rather than "appeared" or "disappeared"; a line gone next to a new one (within
@@ -349,7 +425,7 @@ def series_changes(start: dict, end: dict, tolerance: float = SAME_Q) -> list[di
     def pick(report: dict, weak: bool) -> list[dict]:
         return [
             peak for peak in report.get("peaks") or [] if peak.get("q")
-            and (str(peak.get("caveat") or "").startswith("weak") if weak else not peak.get("caveat"))
+            and (str(peak.get("caveat") or "").startswith("weak") if weak else reliable_row(peak))
         ]
 
     def nearest(peak: dict, others: list[dict]) -> Optional[dict]:
@@ -419,7 +495,7 @@ def series_markdown(start: dict, end: dict) -> str:
 def peak_markers(report: dict) -> list[dict]:
     """The report's peaks as I(q) markers (``curve_png(markers=…)``): reliable ones and flagged ones."""
     return [
-        {"q": peak["q"], "label": f"{peak['q']:.3g}", "reliable": not peak.get("caveat")}
+        {"q": peak["q"], "label": f"{peak['q']:.3g}", "reliable": reliable_row(peak)}
         for peak in report.get("peaks") or () if peak.get("q")
     ]
 
@@ -433,6 +509,7 @@ def ring_overlays(report: dict) -> list[dict]:
 
 
 __all__ = [
-    "OPTION_FLAGS", "SAME_Q", "batch_markdown", "calibration_quality", "common_peaks", "compact_report", "found_by_search",
-    "peak_markers", "pipeline_markdown", "ring_overlays", "series_changes", "series_markdown", "technique_run",
+    "FLAG_WORDS", "OPTION_FLAGS", "PEAK_DECIMALS", "SAME_Q", "batch_markdown", "calibration_quality", "common_peaks",
+    "compact_report", "found_by_search", "herman_texts", "peak_markers", "pipeline_markdown", "reliable_row", "ring_overlays",
+    "series_changes", "series_markdown", "technique_run",
 ]

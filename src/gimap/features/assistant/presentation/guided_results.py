@@ -27,7 +27,7 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.presentation.components import AdvancedSection
 from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_to, current_language, tr, trf
 
-from ..application import found_by_search, ring_overlays, series_changes
+from ..application import found_by_search, reliable_row, ring_overlays, series_changes
 from .guided_details import PeakDetails, SolutionDetails
 from .guided_gisaxs import GisaxsResults, outcome_summary
 from .guided_report import report_markdown
@@ -54,7 +54,7 @@ Q_MAP_PX = 520
 GEOMETRY_DECISIONS = {
     "geometry": "Geometry", "calibration": "Calibration", "calibration candidates": "Calibration candidates",
     "calibration standard": "Calibration standard", "energy": "X-ray energy", "incidence angle": "Incidence angle αi",
-    "pixel size": "Pixel size",
+    "pixel size": "Pixel size", "detector tilt": "Detector tilt",
 }
 """The decisions about the geometry shown under it: the report's key and its title (in the interface language)."""
 FRAME_ACTIONS = ("guidedRefineFit", "guidedSaveReport", "guidedCompareButton")
@@ -78,7 +78,7 @@ SEARCHED_ABOVE = "The geometry is from a calibration the automatic search found 
 
 def giwaxs_summary(report: dict) -> str:
     peaks, rings = report.get("peaks") or [], report.get("rings") or []
-    reliable = sum(1 for peak in peaks if not peak.get("caveat"))
+    reliable = sum(1 for peak in peaks if reliable_row(peak))  # a peak at the end of the data is not one
     return tr("{peaks} peaks ({reliable} reliable), {rings} rings analysed").format(
         peaks=len(peaks), reliable=reliable, rings=len(rings))
 
@@ -395,7 +395,8 @@ class GuidedResultsPanel(QWidget):
             assessment = str(quality.get("assessment") or "")
             color = GOOD if assessment.startswith(("good", "a saved")) or not assessment else NOTE if assessment.startswith("usable") else WARN
             self.layout_.addWidget(badge(words(assessment) or tr("Instrument profile of this detector"), color, self))
-            centre = geometry.get("beam_center_px") or [None, None]
+            # To 0.01 px, as the report and the cuts give it (the record keeps the coordinates applied).
+            centre = ["—" if value is None else f"{float(value):.2f}" for value in (geometry.get("beam_center_px") or [None, None])]
             form = QFormLayout()
             for name, value in (
                 ("From", source_text(geometry.get("source"))),

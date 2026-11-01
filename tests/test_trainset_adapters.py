@@ -107,3 +107,30 @@ def test_model_registration_adapter_preserves_module_yaml_contract(tmp_path):
     assert payload["io"]["input_shape"] == [1, 32, 32, 1]
     assert payload["outputs"]["parameter_names"]
     assert (registered.module_dir / "preprocessing.py").is_file()
+
+
+def test_a_registered_model_is_ignored_by_git(tmp_path):
+    """The module names this computer's weights by their full path: it is the user's own, never committed."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    import pytest
+
+    config = _preview_config()
+    config["project"]["name"] = "Invented Ag islands"
+    model = tmp_path / "best_model.keras"
+    model.write_bytes(b"fake model")
+    registered = LocalTrainsetModelRegistrationAdapter().register(
+        RegisterTrainsetModelRequest(copy.deepcopy(config), model, tmp_path / "modules")
+    )
+    root = Path(__file__).resolve().parents[1]
+    assert "/modules/generated_*/" in (root / ".gitignore").read_text(encoding="utf-8").splitlines()
+    if shutil.which("git") is None or not (root / ".git").exists():
+        pytest.skip("not a git checkout")
+    for name in ("module.yaml", "preprocessing.py"):
+        probe = subprocess.run(["git", "check-ignore", "-q", f"modules/{registered.module_dir.name}/{name}"],
+                               cwd=root, timeout=120)
+        assert probe.returncode == 0, name
+    kept = subprocess.run(["git", "check-ignore", "-q", "modules/Au_Silicon_15nm/module.yaml"], cwd=root, timeout=120)
+    assert kept.returncode == 1  # the modules that come with GIMaP stay tracked

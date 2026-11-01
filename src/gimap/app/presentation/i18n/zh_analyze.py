@@ -324,7 +324,7 @@ ANALYZE_ZH = {
     'Files go to {folder} — README.txt there says what each file is': '文件将写入 {folder} —— 其中的 README.txt 说明每个文件是什么',
     'Fitting the frame on screen …': '正在拟合当前帧 …',
     'No solution.': '没有解。',
-    'Best: {model}, {params} nm, χ² = {chi}': '最佳：{model}，{params} nm，χ² = {chi}',
+    'Best: {model}, {params} nm, χ²/N = {chi}': '最佳：{model}，{params} nm，χ²/N = {chi}',
     ' (fitting the peaks)': '（拟合峰）',
     ' (fitting the particle model)': '（拟合颗粒模型）',
     '{name}: q = {q} ± {dq} Å⁻¹ (d = {d} Å), FWHM {w} Å⁻¹, area {a}, χ²ᵣ {chi}': '{name}：q = {q} ± {dq} Å⁻¹（d = {d} Å），FWHM {w} Å⁻¹，面积 {a}，χ²ᵣ {chi}',
@@ -493,8 +493,8 @@ ANALYZE_ZH = {
     'crystallite size': '晶粒尺寸',
     'out-of-plane / in-plane': '面外 / 面内',
     'Gaussian on a local linear background': '局部线性背景上的高斯峰',
-    '{model}, least squares weighted by the Poisson error of each bin; errors × √χ²ᵣ when χ²ᵣ > 1. Found in the radial I(q) of the whole detector: a SNIP background (window {window} Å⁻¹), at least {snr}σ and {height} % above it. Size: Scherrer, L = 2π·0.9 / FWHM (instrument broadening not removed).':
-        '{model}，按每个区间的泊松误差加权的最小二乘；χ²ᵣ > 1 时误差乘以 √χ²ᵣ。在整个探测器的径向 I(q) 中寻峰：SNIP 背景（窗口 {window} Å⁻¹），至少高出背景 {snr}σ 且 {height} %。尺寸：Scherrer，L = 2π·0.9 / FWHM（未扣除仪器展宽）。',
+    '{model}, least squares weighted by the {errors} of each bin; errors × √χ²ᵣ when χ²ᵣ > 1. Found in the radial I(q) of the whole detector: a SNIP background (window {window} Å⁻¹), at least {snr}σ and {height} % above it. Size: Scherrer, L = 2π·0.9 / FWHM (instrument broadening not removed).':
+        '{model}，按每个区间的{errors}加权的最小二乘；χ²ᵣ > 1 时误差乘以 √χ²ᵣ。在整个探测器的径向 I(q) 中寻峰：SNIP 背景（窗口 {window} Å⁻¹），至少高出背景 {snr}σ 且 {height} %。尺寸：Scherrer，L = 2π·0.9 / FWHM（未扣除仪器展宽）。',
     'No warnings for this peak.': '这个峰没有警告。',
     'Show in Fitting': '在拟合中查看',
     'Open the fitted curve in Fitting with this solution drawn; Export Data… there saves the fit with its parameters':
@@ -504,7 +504,6 @@ ANALYZE_ZH = {
     'amplitude': '振幅',
     'constant background': '常数背景',
     'resolution amplitude': '分辨率振幅',
-    'χ² (weighted)': 'χ²（加权）',
     'converged': '收敛',
     'evaluations': '计算次数',
     'time': '用时',

@@ -13,7 +13,7 @@ from pathlib import Path
 from ..application import SeriesMap, settings_record
 from ..application.series_map import export_series_curve, export_series_trace
 
-VOLATILE = ("software", "format", "version", "export")
+VOLATILE = ("software", "software_version", "format", "version", "export")
 """Fields of a settings record that do not change what a map holds."""
 PROFILE_VOLATILE = ("source", "updated_at")
 """… and of its instrument profile: when and how it was saved (its geometry does change every q)."""

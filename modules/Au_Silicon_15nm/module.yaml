@@ -4,8 +4,9 @@ framework: tensorflow
 version: "1.15.0"
 model:
   format: keras
-  # model_path: 允许为空，首次使用需要选择
-  model_path: '/Users/zhaiyf/Downloads/Au_ff_h2_0to15_savedmodel'
+  # Empty: choose the model folder with Import model... on the 2D Prediction page. GIMaP keeps
+  # that choice in your user data folder; this file is not changed.
+  model_path: ""
 preprocess:
   entry: preprocess:run
   # Ordered steps for modular preprocessing; you can change order as needed.

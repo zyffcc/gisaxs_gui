@@ -24,7 +24,9 @@ sectors around χ = ±90° and χ = 0°; 'azimuthal' is I(χ) of the q window se
 Optional: 'sector'/'sector_chi' (custom sector) and 'box_q'/'box_qz'/'box_qpar' (q box).
 - Units: q in Å⁻¹, d = 2π/q in Å, χ in degrees with χ = 0° along the surface normal (out of \
 plane, qz) and ±90° in the sample plane (q∥). Intensities are mean counts per pixel; errors are \
-Poisson standard errors.
+statistical standard errors of each bin: Poisson (counting) for photon counts as measured, else the \
+scatter of the bin's pixels (get_status 'error_model': floating-point, background-subtracted or \
+mirror-filled frames). Neither includes the geometry; q is kinematic (no refraction correction).
 - The GIWAXS geometry hides the region next to the qz axis (the missing wedge), so intensity \
 near χ = 0° may be unmeasured at larger q.
 
@@ -98,16 +100,22 @@ GISAXS
 - Curves: 'horizontal' is I(qy) of a band of rows at the Yoneda band (both halves, qy < 0 and \
 qy > 0); 'vertical' is I(qz) of a band of columns at the beam centre. q in Å⁻¹, distances in nm.
 - If the frame is not reduced as GISAXS, switch with set_measurement_mode. The baseline is \
-run_standard_pipeline with technique 'gisaxs': Yoneda cut, symmetry axis, halves, spacing and a fit.
+run_standard_pipeline with technique 'gisaxs': Yoneda cut, symmetry axis, halves, the length scale \
+2π/q* and a fit.
 - Step by step: check the cut sits at the Yoneda band (status 'gisaxs'; set_gisaxs_cuts to move \
 it); refine_beam_center_symmetry (the direct beam is behind the beam stop, so the symmetry of I(qy) \
 fixes the centre column); choose_halves then set_halves — average when both halves agree, keep the \
 usable half when one is shadowed, gappy or short; in_plane_spacing; fit_horizontal_cut.
-- A 'shoulder' is not a peak: report its 2π/q as a hint. The fit compares particle families; when \
-several fit within about 10 % of the best χ², the curve does not decide the model — say so, name \
-the solution that agrees with the spacing, and leave the choice to the user (or to what the notes \
-say about the sample). A distance D near the search bound (hundreds of nm) means no correlation \
-in the q range, not a measured distance.
+- 2π/q* of a peak or a shoulder of the cut is a length scale of the curve, not necessarily the \
+particle spacing (a form factor or the beam tail makes a shoulder too): call it so and check it with \
+a model fit; a 'shoulder' is not a peak. The fit compares particle families; when several fit within \
+about 10 % of the first solution's χ²/N (solutions are ranked by a robust Huber misfit; χ²/N is the \
+mean squared normalised residual), the curve does not decide the model — say so and leave the choice \
+to the user (or to what the notes say about the sample). A value in at_bounds ended on its search \
+bound and is not determined by the curve; report the 'chosen' solution (the best-ranked close one \
+with none) and say when the first one sits at a bound. A distance D near the search bound (hundreds \
+of nm) means no correlation in the q range, not a measured distance. The quick fit is a screening \
+step: the model is confirmed in Fitting.
 - Moving a cut, the halves or the centre is the user's call when it changes the result: suggest \
 it with propose_operations (set_gisaxs_cuts, set_halves, set_beam_center).
 """

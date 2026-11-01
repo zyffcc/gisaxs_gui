@@ -171,6 +171,9 @@ def test_a_solution_from_analyze_becomes_the_model(tmp_path) -> None:
     assert model.get((0, "R")).value == 6.0 and model.get((0, "sigma_R")).value == pytest.approx(0.15)
     assert "draws the same curve" in page.status_label.text()
     assert page.solutions_table.rowCount() == 1
+    # Analyze's number is the quick fit's χ²/N (mean r², no degrees-of-freedom correction), not a χ²ᵣ of this page.
+    assert page.solutions_table.horizontalHeaderItem(4).text() == "χ²/N"
+    assert page.solutions_table.item(0, 4).text() == "1.1" and "χ²/N" in page.solutions_table.item(0, 4).toolTip()
     page.dispose()
 
 
@@ -508,8 +511,9 @@ def test_the_methods_that_take_one_curve_go_over_to_the_mean_when_both_halves_ar
 
     page = _page(quick_fit=quick_fit)
     page.open_curve(_curve_file(tmp_path, signed=True), "both_abs")
-    assert page.session.side == "both" and page._data().q.size == 480 and page.recommended_method() == "fit1d"
-    page.set_method("shapes")  # a signed cut recommends fit1d; the shape search is chosen here
+    assert page.session.side == "both" and page._data().q.size == 480
+    assert page.recommended_method() == ("fit1d" if page._fit1d_kit else "shapes")  # without the optional kit: shapes
+    page.set_method("shapes")  # a signed cut recommends fit1d when its kit is installed; the shape search is chosen here
     page.run_fit()
     _wait(page)
     assert len(asked) == 1 and np.allclose(asked[0], Q_NM / 10.0)  # one measurement per |q|: the 240 points of the mean
@@ -608,6 +612,7 @@ def test_a_fit1d_result_of_a_cut_opened_on_both_halves_is_recorded_as_the_mean(t
         assert page.export_data_dialog(target) == target
         record = json.loads(target.with_suffix(".json").read_text(encoding="utf-8"))
         assert record["selection"]["side"] == "mean" and record["native_result"]["summary"]["n_points"] == 240
+        assert record["software_version"].startswith("GIMaP v")  # also the record of a fit1d result
         assert np.loadtxt(target, delimiter=",", skiprows=1).shape[0] == 240
         # Back on both halves the result is of other points: it is stale, and is not saved as theirs.
         page.set_side("both")

@@ -32,8 +32,22 @@
 - `navigation.py`：`NAVIGATION_ITEMS`（key、标题、图标、分组）与 `NavigationSidebar`（图标 + 文字，可折叠为图标栏；
   发出 `pageRequested(key)`）。Workspaces：Start、Analyze、Fitting、Compare；Labs：2D Prediction、Trainset Build。
 - `home_page.py`：Start 页面（打开数据、选任务卡片、问 AI），只发出请求，由主窗口决定打开哪个工作区。
-- `menu_bar.py`：`MainMenuBar`（File / View / Tools / Help）只认识 `MenuCommands` 中注入的可调用对象；缺少的命令不显示。
-  `ToolWindows` 管理单实例非模态工具窗口（Geometry Calibration、Format Converter、XRR Series Extractor）。命令的组合在 `app/menus.py`。
+- `menu_bar.py`：`MainMenuBar`（File / Edit / View / Analyze / Fitting / Tools / Help）只认识 `MenuCommands` 中注入的可调用对象；
+  缺少的命令不显示，一个命令都没有的菜单不加进菜单栏。命令的组合在 `app/menus.py`。
+- `workspace_menus.py`：Edit、Analyze、Fitting 三个菜单的条目（按 key）。每次打开菜单（`aboutToShow`）按页面状态启用或禁用，
+  禁用时提示说明原因；页面自己的快捷键（`Ctrl+Z`、`F5`、`Ctrl+E`、`Ctrl+Shift+E`、`Ctrl+Return`）用 `Qt.WidgetShortcut`
+  只显示、不接管，所以不会出现两个同键的快捷键（Qt 会两个都不执行）。条目做什么在 `app/workspace_commands.py`：先显示页面，
+  再调用页面自己的方法。
+- `tool_windows.py`：`ToolWindows` 管理单实例非模态工具窗口（Geometry Calibration、Format Converter、XRR Series Extractor），
+  `menu_bar.py` 转出这些名字。
+- `help_documents.py`：Help ▸ User Manual、Physics and Methods、Third-party Notices 的渲染器：Markdown → `QTextDocument` → HTML
+  写到临时文件夹 → 默认浏览器。`setMarkdown` 之前把代码之外的每个 `<`（自动链接除外）转义，否则一个裸的 `<placeholder>`
+  会让后面的内容全部变空；`toHtml()` 之后给每个标题加上 GitHub 的锚点，相对链接和图片改成绝对的 `file:` URL。
+  链到另一份 Markdown 文档的链接（如 `Physics_Manual.md#…`）改指那份文档的网页（`page_path`，同样带锚点）：被链到的文档
+  也一并渲染，它们的 `.md` 没变时沿用临时文件夹里已有的网页。
+- `help_dialogs.py`：Keyboard Shortcuts（菜单的快捷键从菜单实时读出，页面的快捷键在 `PAGE_KEYS` 一张表里，测试拿它对照窗口的
+  每个 `QShortcut`）、How to Cite、About、Example Data 的文件夹对话框，以及 Report a Problem 复制的 `system_summary()`。
+  读文件、复制示例的部分在 `app/help_commands.py`。
 - `settings_dialog.py` + `views/settings_dialog_view.py`：Appearance / Analyze / Data 三页，外加 feature 提供的页（如 Assistant），改动立即生效。
 - `app_dialogs.py`：shell 用的文件选择与提示框（`QFileDialog` / `QMessageBox` 只允许出现在 presentation）。
 - `task_runner.py`：`TaskRunner`，线程池上的后台任务，同一 key 只保留最新结果。

@@ -1,34 +1,44 @@
-"""Main menu bar: File, View, Tools and Help.
+"""Main menu bar: File, Edit, View, Analyze, Fitting, Tools and Help.
 
 The menus only know commands (plain callables); the composition root in
 ``src.gimap.app.menus`` decides what each command does.  A command that is
-not provided hides its action, so the builder has no feature imports.
+not provided hides its action, and a menu left without any is not added, so the
+builder has no feature imports. Edit, Analyze and Fitting are built by
+``workspace_menus.py``; the tool windows live in ``tool_windows.py``; the documents of Help are rendered by
+``help_documents.py`` and its windows are in ``help_dialogs.py``.
 """
 
 from __future__ import annotations
 
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
-from PyQt5.QtCore import QEvent, QObject, QRect, Qt, QUrl
-from PyQt5.QtGui import QDesktopServices, QKeySequence, QTextDocument
-from PyQt5.QtWidgets import QAction, QActionGroup, QApplication, QMainWindow, QMenu, QMessageBox, QWidget
+from PyQt5.QtCore import QObject, QUrl
+from PyQt5.QtGui import QDesktopServices, QKeySequence
+from PyQt5.QtWidgets import QAction, QActionGroup, QMainWindow, QMenu, QWidget
 
-from .assets import app_colored_logo_pixmap, app_icon
-from .i18n import LANGUAGES, current_language, tr
-from .layout_metrics import available_geometry
+from .help_dialogs import show_about_dialog, show_citation, show_keyboard_shortcuts
+from .help_documents import (  # noqa: F401 - USER_MANUAL, USER_MANUAL_ZH, manual_for_language: re-exported
+    USER_MANUAL,
+    USER_MANUAL_ZH,
+    manual_for_language,
+    open_physics_manual,
+    open_third_party_notices,
+    open_user_manual,
+)
+from .i18n import LANGUAGES, tr, trf
 from .navigation import NavigationItem
 from .recent_items import recent_label
-from .theme import theme_manager
-from src.gimap.shared.version import APP_NAME, __version__
+from .tool_windows import SCREEN_SHARE, TOOL_GEOMETRY_KEY, ToolWindows, clamp_to_screen
+from .workspace_menus import ANALYZE_MENU, EDIT_MENU, FITTING_MENU, WorkspaceMenus
+from src.gimap.shared.version import APP_NAME, PRE_RELEASE, __version__
 
 APP_VERSION = __version__  # written once, in shared/version.py
 GITHUB_URL = "https://github.com/zyffcc/gisaxs_gui"
-USER_MANUAL = Path(__file__).resolve().parents[4] / "docs" / "User_Manual.md"
-USER_MANUAL_ZH = USER_MANUAL.with_name("User_Manual_zh.md")
-"""The Chinese edition: Help ▸ User Manual opens it when the interface is in Chinese."""
+ISSUES_URL = GITHUB_URL + "/issues/new"
+RELEASES_URL = GITHUB_URL + "/releases"  # newest first, pre-releases too: GitHub's /releases/latest never shows one
+"""Check for Updates opens this page; GIMaP itself makes no network request (beamline computers are often offline)."""
 
 Command = Optional[Callable[[], object]]
 
@@ -70,7 +80,15 @@ class MenuCommands:
     claude_assistant: Command = None
     settings: Command = None
     open_data_folder: Command = None
-    extra: dict = field(default_factory=dict)
+    examples: Sequence = ()
+    """Help ▸ Example Data: ``(key, text, tip)`` of each example GIMaP comes with (``app/help_commands.py``)."""
+    open_example: Optional[Callable[[str], object]] = None
+    report_problem: Command = None
+    open_error_log: Command = None
+    citation: Optional[Callable[[], object]] = None
+    """How to Cite: an object with ``text``, ``bibtex`` and ``doi`` (read from ``CITATION.cff``)."""
+    page_entries: dict = field(default_factory=dict)
+    """The entries of Edit, Analyze and Fitting: ``workspace_menus.MenuEntry`` by key (``workspace_menus.py``)."""
 
 
 class MainMenuBar(QObject):
@@ -90,16 +108,29 @@ class MainMenuBar(QObject):
         self._submenus: list[QMenu] = []
         menubar = window.menuBar()
         menubar.clear()
-        self.file_menu = menubar.addMenu("&File")
-        self.view_menu = menubar.addMenu("&View")
-        self.tools_menu = menubar.addMenu("&Tools")
-        self.help_menu = menubar.addMenu("&Help")
+        self.file_menu = QMenu("&File", menubar)
+        self.edit_menu = QMenu("&Edit", menubar)
+        self.view_menu = QMenu("&View", menubar)
+        self.analyze_menu = QMenu("&Analyze", menubar)
+        self.fitting_menu = QMenu("F&itting", menubar)  # I: F is File's key
+        self.tools_menu = QMenu("&Tools", menubar)
+        self.help_menu = QMenu("&Help", menubar)
+        self.workspace_menus = WorkspaceMenus(window, commands.page_entries, self.actions, self._submenus)
         self._build_file()
+        self.workspace_menus.fill(self.edit_menu, EDIT_MENU)
         self._build_view()
+        self.workspace_menus.fill(self.analyze_menu, ANALYZE_MENU)
+        self.workspace_menus.fill(self.fitting_menu, FITTING_MENU)
         self._build_tools()
         self._build_help()
+        # A menu with no command provided is not shown (an empty menu would only say that nothing is there).
+        self.menus = (self.file_menu, self.edit_menu, self.view_menu, self.analyze_menu, self.fitting_menu,
+                      self.tools_menu, self.help_menu)
+        for menu in self.menus:
+            if any(not action.isSeparator() for action in menu.actions()):
+                menubar.addMenu(menu)
         # The status bar is hidden on most pages: the descriptions show as tooltips in the menus.
-        for menu in (self.file_menu, self.view_menu, self.tools_menu, self.help_menu, *self._submenus):
+        for menu in (*self.menus, *self._submenus):
             menu.setToolTipsVisible(True)
 
     # -- helpers ------------------------------------------------------------
@@ -151,12 +182,14 @@ class MainMenuBar(QObject):
         menu.addSeparator()
         if c.load_parameters is not None or c.save_parameters is not None:
             labs = self.labs_menu = menu.addMenu("&Labs Parameters")
-            labs.setToolTip("The settings of 2D Prediction and Trainset Build")
+            # On the entry in File (a QMenu's own tooltip is never shown there).
+            labs.menuAction().setToolTip("The settings of 2D Prediction and Trainset Build, and Fitting's model")
             self._submenus.append(labs)
             self._add(labs, "load_parameters", "&Load…", c.load_parameters,
-                      tip="Load the settings of the Labs pages (2D Prediction, Trainset Build) from a JSON file")
+                      tip="Load the settings of the Labs pages (2D Prediction, Trainset Build) and Fitting's model from a "
+                          "JSON file; Fitting's model is replaced")
             self._add(labs, "save_parameters", "&Save As…", c.save_parameters,
-                      tip="Save the settings of the Labs pages to a JSON file")
+                      tip="Save the settings of the Labs pages and Fitting's model to a JSON file")
             menu.addSeparator()
         self._add(menu, "quit", "E&xit", c.quit, shortcut=QKeySequence.Quit)
 
@@ -195,7 +228,11 @@ class MainMenuBar(QObject):
     def _build_view(self) -> None:
         c, menu = self.commands, self.view_menu
         if c.show_workspace is not None:
+            section = None
             for number, item in enumerate(self.workspaces, start=1):
+                if item.section and item.section != section:  # "Workspaces", "Labs": as in the sidebar
+                    section = item.section
+                    menu.addSection(section)
                 self._add(
                     menu,
                     f"workspace_{item.key}",
@@ -264,7 +301,7 @@ class MainMenuBar(QObject):
                   tip="Open the converter with the file shown in the active workspace")
         self._add(menu, "xrr_extractor", "&XRR Series Extractor…", c.xrr_extractor,
                   shortcut="Ctrl+Shift+R", tip="Extract XRR intensity from NXS or CBF series")
-        self._add(menu, "sem_analysis", "&SEM Particle Analysis…", c.sem_analysis,
+        self._add(menu, "sem_analysis", "SE&M Particle Analysis…", c.sem_analysis,  # S is Settings' key
                   tip="Extract particle sizes from SEM images or compare SEM data with a radius prediction")
         menu.addSeparator()
         self._add(menu, "ai_fitting_workspace", "1D &Predict — Fit Many Curves…", c.ai_fitting_workspace,
@@ -275,18 +312,58 @@ class MainMenuBar(QObject):
                       "with the same tools; its changes come back as cards you can preview, apply or undo")
         menu.addSeparator()
         self._add(menu, "settings", "&Settings…", c.settings, shortcut="Ctrl+,",
-                  tip="Appearance, analysis defaults and the user data folder")
+                  tip="Appearance, analysis defaults, the AI assistant and the user data folder")
 
     def _build_help(self) -> None:
-        c, menu = self.commands, self.help_menu
-        self._add(menu, "user_manual", "&User Manual", lambda: open_user_manual(self.window),
-                  shortcut=QKeySequence.HelpContents)
-        self._add(menu, "github", "&GitHub Repository",
-                  lambda: QDesktopServices.openUrl(QUrl(GITHUB_URL)))
+        c, menu, window = self.commands, self.help_menu, self.window
+        self._add(menu, "user_manual", "&User Manual", lambda: open_user_manual(window),
+                  shortcut=QKeySequence.HelpContents, tip="The manual of GIMaP, opened in your web browser")
+        self._add(menu, "physics_manual", "&Physics and Methods", lambda: open_physics_manual(window),
+                  tip="How GIMaP computes what it shows: geometry, q, corrections, cuts and models (in your web browser)")
+        self._add(menu, "keyboard_shortcuts", "&Keyboard Shortcuts…", lambda: show_keyboard_shortcuts(window),
+                  tip="Every key of the menus and of the pages, in a table you can copy")
+        if c.open_example is not None and c.examples:
+            examples = self.examples_menu = menu.addMenu("E&xample Data")
+            examples.menuAction().setToolTip(
+                "Public example frames that come with GIMaP: one is copied to a folder of your choice and opened in Analyze")
+            self._submenus.append(examples)
+            for key, text, tip in c.examples:
+                self._add(examples, f"example_{key}", text, lambda key=key: c.open_example(key), tip=tip)
+        menu.addSeparator()
+        self._add(menu, "report_problem", "&Report a Problem…", c.report_problem,
+                  tip="Copies the versions of GIMaP and of your system (no paths, no data) and opens a new issue "
+                      "on GitHub in your browser")
+        self._add(menu, "error_log", "Open Error &Log Folder", c.open_error_log,
+                  tip="The folder of errors.log, where every unexpected error is written")
         self._add(menu, "open_data_folder", "Open User &Data Folder", c.open_data_folder,
                   tip="Settings, instrument profiles and the session are kept here")
         menu.addSeparator()
-        self._add(menu, "about", f"&About {APP_NAME}", lambda: show_about(self.window))
+        self._add(menu, "github", "&GitHub Repository",
+                  lambda: QDesktopServices.openUrl(QUrl(GITHUB_URL)))
+        self._add(menu, "check_updates", "Check for Upda&tes…", lambda: QDesktopServices.openUrl(QUrl(RELEASES_URL)))
+        if c.citation is not None:
+            self._add(menu, "cite", "How to &Cite GIMaP…", self._show_citation,
+                      tip="The reference to give when you publish results obtained with GIMaP")
+        self._add(menu, "third_party_notices", "Third-party &Notices", lambda: open_third_party_notices(window),
+                  tip="What GIMaP and its Windows package contain that is not GIMaP's own work, and the licences")
+        menu.addSeparator()
+        self._add(menu, "about", f"&About {APP_NAME}", lambda: show_about(window))
+        menu.aboutToShow.connect(self._sync_help)
+        self._sync_help()
+
+    def _show_citation(self):
+        citation = self.commands.citation()
+        return show_citation(self.window, citation.text, citation.bibtex, doi=citation.doi)
+
+    def _sync_help(self) -> None:
+        """Check for Updates names the version running (composed: in the interface language)."""
+        action = self.actions.get("check_updates")
+        if action is not None:
+            tip = trf("You are running {name} {version}. This opens the releases page on GitHub in your browser "
+                      "(newest first, pre-releases included); GIMaP itself makes no network request.",
+                      name=APP_NAME, version=APP_VERSION)
+            action.setToolTip(tip)
+            action.setStatusTip(tip)
 
     # -- state sync ---------------------------------------------------------
 
@@ -309,192 +386,28 @@ class MainMenuBar(QObject):
         action = self.actions.get("collapse_sidebar")
         if action is not None:
             action.setText(self._sidebar_text())
+        self._sync_help()
 
 
-TOOL_GEOMETRY_KEY = "tool_windows.{name}.geometry"
-"""Preference: ``[x, y, width, height]`` of a tool window as it was last closed (``name``: calibration, converter …)."""
-SCREEN_SHARE = 0.9
-"""A tool window takes at most this share of the screen's available width and height."""
-TITLE_ROOM = 32
-"""Room above a window for its title bar, so it can always be grabbed and moved."""
-_TOOL_NAME = "gimapToolWindow"
+def release_text() -> str:
+    """``GIMaP v<version> (Pre-release)`` while ``shared/version.PRE_RELEASE`` says so, else ``GIMaP v<version>``
+    (``<version>``: ``shared/version.__version__``)."""
+    if PRE_RELEASE:
+        return tr("{name} v{version} (Pre-release)").format(name=APP_NAME, version=APP_VERSION)
+    return tr("{name} v{version}").format(name=APP_NAME, version=APP_VERSION)
 
 
-def clamp_to_screen(rect: QRect, area: QRect, *, share: float = SCREEN_SHARE) -> QRect:
-    """``rect`` at most ``share`` of ``area`` wide and high, moved (not shrunk further) to lie inside ``area`` with
-    room for the title bar above it."""
-    width = max(1, min(rect.width(), int(area.width() * share)))
-    height = max(1, min(rect.height(), int(area.height() * share)))
-    left = min(max(rect.x(), area.left()), area.right() + 1 - width)
-    top = area.top() + min(TITLE_ROOM, max(0, area.height() - height))
-    return QRect(left, min(max(rect.y(), top), area.bottom() + 1 - height), width, height)
-
-
-class ToolWindows(QObject):
-    """Single-instance modeless tool windows, created on demand.
-
-    A new window opens where it was last closed (``preferences``), else at its own size; either way at most
-    about 90 % of the screen and on it (a 1280 × 820 window on a 1366 × 768 laptop would put its buttons
-    under the task bar)."""
-
-    def __init__(self, parent: QWidget, preferences=None):
-        super().__init__(parent)
-        self.owner = parent
-        self.preferences = preferences
-        self._open: dict[str, QWidget] = {}
-
-    def get(self, name: str) -> QWidget | None:
-        return self._open.get(name)
-
-    def windows(self) -> list[QWidget]:
-        """The tool windows open now (shown or waiting hidden for a job to end)."""
-        return list(self._open.values())
-
-    def show(self, name: str, factory: Callable[[QWidget], QWidget], *, reuse=None) -> QWidget:
-        window = self._open.get(name)
-        if window is None:
-            window = factory(self.owner)
-            # The dict, not self: as the main window goes, this object may be deleted before its tool windows.
-            window.destroyed.connect(lambda *_args, key=name, opened=self._open: opened.pop(key, None))
-            self._open[name] = window
-            self.place(name, window)
-        elif reuse is not None:
-            reuse(window)
-        if window.isMinimized():
-            window.showNormal()
-        else:
-            window.show()
-        self.keep_on_screen(window)
-        window.raise_()
-        window.activateWindow()
-        return window
-
-    # -- geometry -----------------------------------------------------------
-
-    def place(self, name: str, window: QWidget) -> None:
-        """Before ``window`` is first shown: its last geometry, or its own size, clamped to the screen; and
-        remembered when it is hidden or closed."""
-        window.setProperty(_TOOL_NAME, name)
-        window.installEventFilter(self)
-        saved = self._saved(name)
-        if saved is not None:
-            screen = QApplication.screenAt(saved.center())
-            area = screen.availableGeometry() if screen is not None else available_geometry(self.owner)
-            window.setGeometry(clamp_to_screen(saved, area))
-            return
-        area = available_geometry(self.owner)
-        size = clamp_to_screen(QRect(area.topLeft(), window.size()), area).size()
-        window.resize(size)  # a dialog is centred on the main window as it is shown, inside its screen
-
-    def keep_on_screen(self, window: QWidget) -> None:
-        """Move a shown window back inside its screen (title bar included) when it lies partly outside."""
-        frame = window.frameGeometry()
-        screen = QApplication.screenAt(frame.center()) or window.screen()
-        if screen is None:
-            return
-        area = screen.availableGeometry()
-        if area.contains(frame):
-            return
-        # move() places the frame; one larger than the screen (a large minimum size) keeps its top left corner.
-        x = min(max(frame.x(), area.left()), max(area.left(), area.right() + 1 - frame.width()))
-        y = min(max(frame.y(), area.top()), max(area.top(), area.bottom() + 1 - frame.height()))
-        window.move(x, y)
-
-    def remember(self, name: str, window: QWidget) -> None:
-        if self.preferences is None:
-            return
-        rect = window.normalGeometry() if window.isMaximized() or window.isFullScreen() else window.geometry()
-        if rect.isValid() and not rect.isEmpty():
-            self.preferences.set(TOOL_GEOMETRY_KEY.format(name=name),
-                                 [rect.x(), rect.y(), rect.width(), rect.height()])
-
-    def remember_all(self) -> None:
-        """The geometry of every tool window still shown (as the main window closes, before preferences are saved)."""
-        for name, window in list(self._open.items()):
-            try:
-                if window.isVisible():
-                    self.remember(name, window)
-            except RuntimeError:  # already gone
-                continue
-
-    def _saved(self, name: str) -> QRect | None:
-        if self.preferences is None:
-            return None
-        value = self.preferences.get(TOOL_GEOMETRY_KEY.format(name=name))
-        if not isinstance(value, (list, tuple)):
-            return None
-        try:
-            x, y, width, height = (int(part) for part in value)
-        except (TypeError, ValueError):
-            return None
-        return QRect(x, y, width, height) if width > 0 and height > 0 else None
-
-    def eventFilter(self, watched, event):  # noqa: N802 - Qt API
-        # Not when the window system hides it (minimised): its geometry then is not the one to come back to.
-        if event.type() == QEvent.Hide and not event.spontaneous() and isinstance(watched, QWidget):
-            name = watched.property(_TOOL_NAME)
-            if name:
-                self.remember(str(name), watched)
-        return False
-
-
-def manual_for_language(language: str) -> Path:
-    """The edition of the manual for an interface language: Chinese when there is one, else English."""
-    return USER_MANUAL_ZH if language == "zh" and USER_MANUAL_ZH.is_file() else USER_MANUAL
-
-
-def open_user_manual(parent: QWidget | None = None) -> None:
-    """Render the Markdown manual to HTML and open it in the default browser.
-
-    The page is written to the temporary folder; ``<base>`` points at ``docs/`` so that the screenshots,
-    linked as ``manual_images/...`` in the manual, are found there."""
-    manual = manual_for_language(current_language())
-    if not manual.is_file():
-        QMessageBox.warning(parent, tr("User Manual"),
-                            tr("The user manual was not found:\n{path}").format(path=manual))
-        return
-    document = QTextDocument()
-    document.setMarkdown(manual.read_text(encoding="utf-8"))
-    html_path = Path(tempfile.gettempdir()) / f"GIMaP_{manual.stem}.html"
-    base = QUrl.fromLocalFile(str(manual.parent) + "/").toString()
-    html_path.write_text(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><title>GIMaP User Manual</title>"
-        f"<base href=\"{base}\">"
-        "<style>body{max-width:980px;margin:32px auto;padding:0 24px;line-height:1.58;"
-        "font-family:'Segoe UI','Microsoft YaHei',sans-serif;color:#1f2933}code,pre{background:#f4f6f8;"
-        "border-radius:4px}pre{padding:12px;overflow-x:auto}a{color:#0b63ce}"
-        "img{max-width:100%;height:auto;border:1px solid #d9dee4;border-radius:6px}"
-        "table{border-collapse:collapse}td,th{border:1px solid #d9dee4;padding:4px 8px}</style>"
-        f"</head><body>{document.toHtml()}</body></html>",
-        encoding="utf-8",
-    )
-    QDesktopServices.openUrl(QUrl.fromLocalFile(str(html_path)))
-
-
-def show_about(parent: QWidget | None = None) -> None:
-    dialog = QMessageBox(parent)
-    dialog.setWindowTitle(tr("About {name}").format(name=APP_NAME))
-    dialog.setWindowIcon(app_icon())
-    dialog.setTextFormat(Qt.RichText)
-    # The coloured logo is a dark blue G: on the dark theme the application icon (a white G) stands out instead.
-    logo = app_icon().pixmap(88, 88) if theme_manager().mode == "dark" else app_colored_logo_pixmap(88, 88)
-    if not logo.isNull():
-        dialog.setIconPixmap(logo)
-    release = tr("{name} v{version} (Pre-release)").format(name=APP_NAME, version=APP_VERSION)
-    summary = tr("Desktop analysis of GISAXS / GIWAXS data: detector geometry, cuts, "
-                 "fitting and machine-learning assisted workflows.")
-    dialog.setText(
-        f"<b style='font-size:16pt'>{APP_NAME}</b><br>{release}<br><br>{summary}<br><br>"
-        f"<a href='{GITHUB_URL}'>{GITHUB_URL}</a>"
-    )
-    dialog.setStandardButtons(QMessageBox.Close)  # nothing to agree to: the box is read and closed
-    dialog.exec_()
+def show_about(parent: QWidget | None = None):
+    """Help ▸ About GIMaP: the release, the licence, the versions it runs on, with Copy (``help_dialogs.py``)."""
+    return show_about_dialog(parent, release_text, GITHUB_URL)
 
 
 __all__ = [
     "APP_NAME",
     "APP_VERSION",
     "GITHUB_URL",
+    "ISSUES_URL",
+    "RELEASES_URL",
     "MainMenuBar",
     "MenuCommands",
     "SCREEN_SHARE",
@@ -503,5 +416,6 @@ __all__ = [
     "clamp_to_screen",
     "manual_for_language",
     "open_user_manual",
+    "release_text",
     "show_about",
 ]

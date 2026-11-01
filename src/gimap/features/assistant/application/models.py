@@ -41,10 +41,10 @@ GOAL_GISAXS_FIT = "gisaxs_fit"
 GOALS = {
     GOAL_PEAKS: "Peak table: q, d-spacing, FWHM and intensity of every peak (full, in-plane and out-of-plane curves)",
     GOAL_ORIENTATION: "Orientation: for each peak, in-plane versus out-of-plane intensity (face-on / edge-on / isotropic)",
-    GOAL_RING: "Orientation distribution of one ring: I(χ), maxima and Herman's orientation factor",
+    GOAL_RING: "Orientation distribution of one ring: I(χ), maxima and Hermans orientation factor",
     GOAL_SIZE: "Crystallite size (Scherrer coherence length) of the resolved peaks",
     GOAL_GISAXS_CUT: "GISAXS horizontal cut I(qy): at the Yoneda band, centred on the symmetry axis, halves chosen with the reason",
-    GOAL_SPACING: "GISAXS in-plane distance: 2π/q* of a side maximum (or shoulder) of I(qy)",
+    GOAL_SPACING: "GISAXS length scale 2π/q* of a side maximum (or shoulder) of I(qy), not necessarily the particle spacing",
     GOAL_GISAXS_FIT: "GISAXS fit of I(qy): particle family, radius, size spread and distance D, with the close alternatives",
 }
 """The results a user can ask for, in dialog order."""

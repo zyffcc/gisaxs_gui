@@ -273,4 +273,3 @@ class FittingViewBinding(
         self._sync_fitting_workflow()
         self._initialized = True
         self._initializing = False
-        self._setup_meta_debug_shortcut()

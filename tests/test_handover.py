@@ -481,6 +481,9 @@ def test_a_giwaxs_curve_or_series_in_fitting_is_said_to_be_one_and_no_particle_f
     from tests.test_fit_series import _answer
     from tests.test_fitting_presentation import _fitting_window
 
+    # The optional fit1d kit is installed here (without it, a GISAXS cut gets Find the particle shape instead).
+    monkeypatch.setattr("src.gimap.features.fitting.presentation.single.fit1d_review.fit1d_kit_available",
+                        lambda: True)
     app, window = _fitting_window()
     try:
         components = window.components

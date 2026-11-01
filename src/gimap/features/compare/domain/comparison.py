@@ -32,7 +32,8 @@ END_FRAMES = 10
 SPLIT_RATIO = 2.0
 """Groups are split where a merge distance is at least this many times the one before …"""
 SPLIT_FLOOR = 2.0
-"""… and the series it separates differ by more than this percentage."""
+"""… and the two most different series (the largest distance over all pairs, %) differ by at least this
+percentage; below it every series is one group."""
 
 # Why a comparison cannot be made: the English of each error (``str(exc)``), from these templates so that the
 # page can say it in the interface language (exact keys, or a template whose values it fills in again).

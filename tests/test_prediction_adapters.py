@@ -33,8 +33,8 @@ def test_existing_module_yaml_files_are_discovered_with_legacy_contracts():
         "A_AgIUPAC_FF_256",
         "G_AgPNO_FF_256",
         "Au_Silicon_15nm",
-        "Yuxin_CuPolymer_FF_256",
-        "Yuxin_CuPolymer_SF_4Para",
+        "CuPolymer_FF_256",
+        "CuPolymer_SF_4Para",
     } <= set(by_id)
     assert by_id["Au_Silicon_15nm"].input_shape == (1, 256, 256, 1)
     assert by_id["Au_Silicon_15nm"].preprocess.params["resize"] == {
@@ -52,13 +52,14 @@ def test_existing_module_yaml_files_are_discovered_with_legacy_contracts():
     assert by_id["Au_Silicon_15nm"].outputs.column_axis.key == "h"
     assert by_id["Au_Silicon_15nm"].outputs.column_axis.label == "H"
     assert by_id["Au_Silicon_15nm"].outputs.column_axis.maximum == 30.0
-    sf = by_id["Yuxin_CuPolymer_SF_4Para"]
+    sf = by_id["CuPolymer_SF_4Para"]
     assert sf.input_shape == (1, 256, 256, 2)
     assert sf.outputs.parameter_names == ("t_Cu", "t_polymer", "D", "sigma")
-    assert sf.model.path.startswith("C:\\Users\\")
+    # The shipped files name no model folder: each user imports one (kept in the user data folder).
+    assert all(module.model.path == "" for module in modules)
 
 
-def test_legacy_module_mapping_resolves_assets_but_preserves_windows_model_path():
+def test_legacy_module_mapping_resolves_assets_and_keeps_the_model_path():
     module = YamlModuleRepository(PROJECT_ROOT / "modules").load(
         PROJECT_ROOT / "modules" / "Au_Silicon_15nm" / "module.yaml"
     )
@@ -72,7 +73,7 @@ def test_legacy_module_mapping_resolves_assets_but_preserves_windows_model_path(
     assert legacy["output_axes"]["column"]["label"] == "H"
 
 
-def test_model_path_update_changes_only_model_path_line(tmp_path):
+def test_model_path_update_leaves_module_yaml_byte_for_byte_unchanged(tmp_path):
     folder = tmp_path / "module"
     folder.mkdir()
     source = (
@@ -81,15 +82,14 @@ def test_model_path_update_changes_only_model_path_line(tmp_path):
     )
     yaml_path = folder / "module.yaml"
     yaml_path.write_text(source, encoding="utf-8")
+    before = yaml_path.read_bytes()
     repository = YamlModuleRepository(tmp_path)
     module = repository.load(yaml_path)
 
     repository.update_model_path(module, tmp_path / "new model.keras")
 
-    updated = yaml_path.read_text(encoding="utf-8")
-    assert "id: sample" in updated
-    assert "entry: preprocess:run" in updated
-    assert f"model_path: '{tmp_path / 'new model.keras'}'" in updated
+    assert yaml_path.read_bytes() == before
+    assert repository.load(yaml_path).model.path == str(tmp_path / "new model.keras")
 
 
 def test_fabio_repository_sums_stack_as_float32(tmp_path, monkeypatch):

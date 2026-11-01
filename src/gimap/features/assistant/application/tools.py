@@ -20,13 +20,16 @@ import numpy as np
 from ..domain import (
     DEFAULT_BACKGROUND_WINDOW,
     DEFAULT_SHAPE_FACTOR,
+    MAX_PEAKS,
     Profile,
     caveat,
     compare_sectors,
     downsample,
     find_peaks,
+    herman_decimals,
     ring_orientation,
     scherrer_size,
+    signed,
     significant,
 )
 from .gisaxs_tools import GisaxsToolsMixin
@@ -364,7 +367,9 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
         }
         return self._ok(payload, f"{curve}: {reduced.size} points")
 
-    def _tool_find_peaks(self, curve: str, q_min=None, q_max=None, min_snr: float = 3.0, background_window=None) -> ToolOutcome:
+    def _tool_find_peaks(
+        self, curve: str, q_min=None, q_max=None, min_snr: float = 3.0, background_window=None, max_peaks=None,
+    ) -> ToolOutcome:
         _data, profile = self._profile(curve)
         span = None
         if q_min is not None or q_max is not None:
@@ -378,15 +383,18 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
             x_range=span,
             min_snr=max(1.0, float(min_snr)),
             background_window=background_window or DEFAULT_BACKGROUND_WINDOW,
+            max_peaks=int(max_peaks) if max_peaks else MAX_PEAKS,
         )
         self.results.peak_searches[curve] = search
         payload = {
             "curve": curve,
             "q_range": search.x_range,
-            "bins": search.points,
+            "points": search.points,  # the I(q) points searched (sparse bins are joined into one point)
             "bin_width": search.step,
             "background_window": search.background_window,
             "min_snr": search.min_snr,
+            "candidates": search.candidates,
+            "max_peaks": search.max_peaks,
             "peaks": [
                 {
                     "index": index + 1, "q": peak.q, "q_err": peak.q_err, "d_A": peak.d, "d_err_A": peak.d_err,
@@ -401,8 +409,14 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
             payload["strongest_feature"] = search.strongest
         if search.reason:
             payload["reason"] = search.reason
+        if search.truncated:  # the list (and its series hints) is not every peak the search saw
+            payload["truncated"] = (
+                f"{search.candidates} candidate peaks found; the {search.max_peaks} most prominent were fitted "
+                "(max_peaks for more)"
+            )
+        cut = f" (the {search.max_peaks} most prominent of {search.candidates} candidates)" if search.truncated else ""
         summary = (
-            f"{len(search.peaks)} peak(s) on {curve}: " + ", ".join(f"{peak.q:.3g}" for peak in search.peaks[:6])
+            f"{len(search.peaks)} peak(s) on {curve}{cut}: " + ", ".join(f"{peak.q:.3g}" for peak in search.peaks[:6])
             if search.peaks else f"no peaks on {curve}"
         )
         return self._ok(payload, summary)
@@ -476,8 +490,10 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
                 payload["analysed"] = (
                     f"no peak at q = {q_center:g} Å⁻¹ in this frame: the nearest feature, at {peak.q:.4g} Å⁻¹, was analysed"
                 )
+        decimals = herman_decimals(result.herman_err)  # f with the decimals of its σ_f, as the report gives it
         summary = (
-            f"q = {center:.3g}: {result.texture}, f = {result.herman:.2f}"
+            f"q = {center:.3g}: {result.texture}, f = {signed(result.herman, decimals)}"
+            + (f" ± {result.herman_err:.{decimals}f}" if result.herman_err else "")
             if result.herman is not None else f"q = {center:.3g}: {result.reason or result.texture}"
         )
         if peak is not None and caveat(peak):

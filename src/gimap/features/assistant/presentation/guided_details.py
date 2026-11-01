@@ -24,10 +24,14 @@ from src.gimap.app.presentation.components import CurvePlot
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.theme import theme_manager
 
+from ..application import bound_phrases
 from .guided_text import ScaledPixmapLabel, label
 from .guided_words import words
 
 FIT_PLOT_HEIGHT = 190
+ERROR_WORDS = {"poisson": "Poisson (counting) error", "scaled_poisson": "Poisson (counting) error",
+               "pixel_scatter": "pixel-scatter error (statistical, not counting noise)"}
+"""The errors the peaks were fitted with, by the frame's error model (the report's ``error_model``)."""
 NAME_WIDTH = 64
 """The narrowest a name of Fit details wraps to (px): a few words or Chinese characters per line."""
 NM_PER_A = 10.0
@@ -177,10 +181,11 @@ class PeakDetails(QWidget):
         self.values.set_values(pairs)
         search = report.get("peak_search") or {}
         self.method.setText(tr(
-            "{model}, least squares weighted by the Poisson error of each bin; errors × √χ²ᵣ when χ²ᵣ > 1. Found in "
+            "{model}, least squares weighted by the {errors} of each bin; errors × √χ²ᵣ when χ²ᵣ > 1. Found in "
             "the radial I(q) of the whole detector: a SNIP background (window {window} Å⁻¹), at least {snr}σ and "
             "{height} % above it. Size: Scherrer, L = 2π·0.9 / FWHM (instrument broadening not removed)."
         ).format(model=tr(fit.get("model") or "Gaussian on a local linear background"),
+                 errors=tr(ERROR_WORDS.get(str(report.get("error_model") or ""), "statistical error")),
                  window=_number(search.get("background_window"), 3), snr=_number(search.get("min_snr"), 3),
                  height=_number(100 * float(search.get("min_relative_height") or 0.02), 3)))
         caveat = str(peak.get("caveat") or "")
@@ -265,7 +270,7 @@ class SolutionDetails(QWidget):
             value = (solution.get("globals") or {}).get(key)
             if value is not None:
                 pairs.append((name, f"{_number(value)} {unit}".strip()))
-        pairs += [("χ² (weighted)", _number(solution.get("chi2"))), ("log RMSE", _number(solution.get("log_rmse"))),
+        pairs += [("χ²/N", _number(solution.get("chi2"))), ("log RMSE", _number(solution.get("log_rmse"))),
                   ("converged", tr("yes") if solution.get("converged") else tr("no")),
                   ("evaluations", _number(solution.get("evaluations"), 6)),
                   ("time", "—" if solution.get("seconds") is None else f"{solution['seconds']:.1f} s")]
@@ -280,10 +285,11 @@ class SolutionDetails(QWidget):
             "amplitude, not a volume fraction."
         ).format(points=fit.get("points", "—"), low=_number(low), high=_number(high),
                  low_nm=_number(NM_PER_A * low), high_nm=_number(NM_PER_A * high),
-                 screen=screen, start=tr("the in-plane spacing, {d} nm").format(d=_number(start)) if start else tr("free"),
+                 screen=screen, start=tr("2π/q* of the cut, {d} nm").format(d=_number(start)) if start else tr("free"),
                  algorithm=words(solution.get("algorithm")) or tr("Bounded least squares")))
-        notes = list(solution.get("warnings") or ()) + ([] if solution.get("converged") else ["not converged"])
-        self.warnings.setText("\n".join("⚠ " + tr(note) for note in notes) if notes else tr("No warnings for this solution."))
+        notes = [tr(note) for note in list(solution.get("warnings") or ()) + ([] if solution.get("converged") else ["not converged"])]
+        notes += [words(phrase) for phrase in bound_phrases(solution)]  # which values ended on a search bound
+        self.warnings.setText("\n".join("⚠ " + note for note in notes) if notes else tr("No warnings for this solution."))
         self.show_button.setEnabled(self.allowed and candidate_row(fit, self._index) is not None)
 
     def _show_in_fitting(self) -> None:

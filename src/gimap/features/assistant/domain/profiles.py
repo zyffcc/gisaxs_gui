@@ -1,7 +1,8 @@
 """Reduced 1D profiles as the assistant sees them, and the helpers every metric shares.
 
 A profile is one Analyze curve: ``x`` (q in Å⁻¹, or χ in degrees), ``y`` the
-mean counts per pixel of each bin, ``sigma`` its Poisson standard error and
+mean counts per pixel of each bin, ``sigma`` its statistical standard error (Poisson
+for photon counts as measured, else the scatter of the bin's pixels) and
 ``pixels`` the number of pixels averaged.  Bins without pixels are not
 measurements and are dropped before any metric sees them.
 """

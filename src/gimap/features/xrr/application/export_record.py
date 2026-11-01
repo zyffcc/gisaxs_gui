@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.gimap.shared.version import SOFTWARE
+
 from ..domain import HC_KEV_ANGSTROM
 from .models import ExportXrrCurveRequest
 
@@ -63,6 +65,7 @@ def xrr_export_record(
     record: dict[str, Any] = {
         "format": RECORD_FORMAT,
         "format_version": RECORD_VERSION,
+        "software_version": SOFTWARE,
         CENTER_CONVENTION_KEY: dict(INDEX_CENTER_CONVENTION),
         "created": created or datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "csv": Path(csv_path).name,

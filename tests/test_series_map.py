@@ -92,6 +92,8 @@ def test_the_series_map_grows_frame_by_frame_and_its_rows_open_and_export(tmp_pa
         assert header.startswith("frame \\ q") and sum(1 for line in lines if not line.startswith("#")) == len(heights) + 1
         record = json.loads(written.with_suffix(".json").read_text(encoding="utf-8"))  # the settings, next to the table
         assert record["curve"] == "radial" and record["settings"]["mode"] == "giwaxs" and len(record["rows"]) == 6
+        assert record["software"] == "GIMaP Analyze 1" and record["software_version"].startswith("GIMaP v")
+        assert f"# software_version: {record['software_version']}" in lines
         assert record["rows"][3]["file"] == str(paths[3]) and record["rows"][3]["frame"] == 4
         figure = page.export_series_figure(tmp_path / "map.png")
         assert figure is not None and figure.stat().st_size > 1000

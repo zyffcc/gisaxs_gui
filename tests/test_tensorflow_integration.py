@@ -214,8 +214,10 @@ np.savez(sys.argv[3], **outputs)
     with np.load(output_path) as archive:
         direct = {key: archive[key] for key in archive.files}
     assert set(direct).issubset(isolated)
+    # Two processes may run the float32 graph with a different oneDNN operation order (thread count, CPU
+    # load): the outputs then differ by a few float32 steps (~6e-6 seen), not by a different model.
     for key, expected in direct.items():
-        np.testing.assert_allclose(isolated[key], expected, rtol=1e-6, atol=1e-6)
+        np.testing.assert_allclose(isolated[key], expected, rtol=1e-5, atol=2e-5)
 
 
 def test_importing_main_does_not_import_native_runtimes():

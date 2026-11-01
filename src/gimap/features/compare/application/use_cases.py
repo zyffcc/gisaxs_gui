@@ -15,6 +15,8 @@ from typing import Callable, Optional, Protocol, Sequence
 
 import numpy as np
 
+from src.gimap.shared.version import SOFTWARE
+
 from ..domain import COMPARE_ERRORS, Comparison, SeriesData, compare
 from .sources import (
     KIND_IN_NAME,
@@ -217,7 +219,8 @@ class CompareService:
     @staticmethod
     def record(series: Sequence[SeriesData], comparison: Comparison) -> dict:
         return {
-            "software": "GIMaP", "title": "Compare", "method": METHOD, "x_label": comparison.x_label,
+            "software": "GIMaP", "software_version": SOFTWARE, "title": "Compare", "method": METHOD,
+            "x_label": comparison.x_label,
             "x_compared": [float(comparison.compared.min()), float(comparison.compared.max())],
             "shape_only": comparison.shape_only, "end_frames": comparison.end_frames,
             "components_explained": [round(float(value), 5) for value in comparison.explained[:5]],

@@ -12,6 +12,8 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
+from src.gimap.shared.geometry.detector_tilt import DetectorTilt
+
 HC_KEV_ANGSTROM = 12.398419843320026
 
 STANDARD_NAMES = {
@@ -106,6 +108,28 @@ def name_preference(name: str) -> int:
     return 1 if "redone" in lowered or "redo" in lowered else 0
 
 
+FAR_FOLDER = (99, 1)
+"""``folder_place`` of a file with no folder in common with the frame (another drive)."""
+
+
+def folder_place(frame_folder: str, path: str) -> tuple[int, int]:
+    """Where the folder of ``path`` lies seen from ``frame_folder``, as ``(up, below)``: the levels up from
+    the frame's folder to the folder both lie in, and 1 when ``path`` lies in a folder below that one, else 0.
+    Sorted, nearest first: (0, 0) the frame's folder, (0, 1) a subfolder of it, (1, 0) the parent folder,
+    (1, 1) a sibling folder (or a folder in one), (2, 0) two levels up, (2, 1) a folder there … Both paths
+    absolute and spelled alike (``os.path.normcase``); nothing is read."""
+    here = [part for part in re.split(r"[\\/]+", frame_folder) if part]
+    there = [part for part in re.split(r"[\\/]+", path) if part][:-1]
+    common = 0
+    for mine, theirs in zip(here, there):
+        if mine != theirs:
+            break
+        common += 1
+    if common == 0:
+        return FAR_FOLDER
+    return len(here) - common, int(len(there) > common)
+
+
 def _single_standard(name: str) -> Optional[str]:
     words = tokens(name)
     context = any(word in _CONTEXT_TOKENS or word.startswith("calib") for word in words)
@@ -178,6 +202,9 @@ class PoniGeometry:
     tilt_deg: float
     detector: str
     notes: tuple[str, ...]
+    tilt: Optional[DetectorTilt] = None
+    """What the flat geometry above leaves out (the ``.poni``'s own distance, PONI, rotations and pixel sizes);
+    ``None`` when the file has no rotation. Analyze estimates from it how far |q| is off (``detector_tilt``)."""
 
 
 def _float(value) -> Optional[float]:
@@ -226,16 +253,19 @@ def parse_poni(text: str) -> PoniGeometry:
         raise ValueError("The .poni file lacks Distance, Poni1, Poni2 or the pixel size.")
     rot1 = _float(values.get("rot1")) or 0.0
     rot2 = _float(values.get("rot2")) or 0.0
-    cos_tilt = math.cos(rot1) * math.cos(rot2)
-    center_x = (poni2 - distance * math.tan(rot1)) / pixel2
-    center_y = (poni1 + distance * math.tan(rot2) / math.cos(rot1)) / pixel1
-    tilt = math.degrees(math.acos(max(-1.0, min(1.0, cos_tilt))))
+    rot3 = _float(values.get("rot3")) or 0.0
+    # The conversion is the tilt's own (``DetectorTilt.direct_beam_px``), so Analyze's estimate of what the tilt
+    # costs compares the .poni with exactly this flat geometry.
+    poni = DetectorTilt(distance, poni1, poni2, rot1, rot2, rot3, pixel1, pixel2)
+    center_x, center_y = poni.direct_beam_px()
+    tilt = poni.tilt_deg
     wavelength = _float(values.get("wavelength"))
     notes = []
     if tilt > 0.5:
         notes.append(f"The detector is tilted by {tilt:.2f}°; GIMaP's geometry is flat, so q is approximate far from the beam.")
+    dropped = poni if (rot1 or rot2 or rot3) else None
     return PoniGeometry(
-        distance_mm=distance / cos_tilt * 1e3,
+        distance_mm=poni.beam_distance_m * 1e3,
         beam_center_x_px=center_x,
         beam_center_y_px=center_y,
         pixel_size_x_m=pixel2,
@@ -244,6 +274,7 @@ def parse_poni(text: str) -> PoniGeometry:
         tilt_deg=tilt,
         detector=values.get("detector", ""),
         notes=tuple(notes),
+        tilt=dropped,
     )
 
 
@@ -371,8 +402,10 @@ __all__ = [
     "SUPPORTED_STANDARDS",
     "TEXT_SUFFIXES",
     "WEAK_STANDARDS",
+    "FAR_FOLDER",
     "classify",
     "energy_kev",
+    "folder_place",
     "looks_like_log",
     "mentions_calibration",
     "module_series",

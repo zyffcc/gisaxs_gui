@@ -14,6 +14,7 @@ from typing import Any, Mapping, Optional
 
 import numpy as np
 
+from src.gimap.shared.detector_io.output_values import floating as _floating_dtype
 from src.gimap.shared.geometry import DetectorGeometry
 
 from ..domain import (
@@ -30,8 +31,21 @@ from ..domain import (
 
 
 def floating(metadata: Optional[Mapping[str, Any]]) -> bool:
-    """A floating-point frame (dark- or background-subtracted): negative values are data, not gap codes."""
-    return str((metadata or {}).get("stored_dtype", "")).startswith("float")
+    """A floating-point frame (dark- or background-subtracted): negative values are data, not gap codes.
+    The one rule of ``shared/detector_io/output_values.floating`` (a big-endian ``>f4`` is float too)."""
+    return _floating_dtype((metadata or {}).get("stored_dtype", ""))
+
+
+def photon_counts(metadata: Optional[Mapping[str, Any]], corrections: Corrections, *, mirror_filled: bool) -> bool:
+    """Whether the frame's values are photon counts as measured, so a bin's σ is Poisson (√Σ / n).
+
+    The one place this is decided (the cuts, the peak fits of a batch, the fit-input record). Not for a
+    floating-point (dark-subtracted) frame, a background-subtracted one, or one with pixels filled from the
+    mirror side (``mirror_filled``: mirror filling was applied — GIWAXS with a geometry): a filled pixel
+    repeats photons measured on the other side, and a bin that holds both (every I(q) bin does) would count
+    them twice, so Poisson σ would be too small. σ then comes from the scatter of the bin's pixels.
+    """
+    return not floating(metadata) and not corrections.background_path and not mirror_filled
 
 
 class FrameSum:
@@ -199,4 +213,4 @@ class FramePreprocessingMixin:
                 common["intensity_scale"] = (1.0 / factor).astype(np.float32)
 
 
-__all__ = ["FramePreprocessingMixin", "FrameSum", "floating"]
+__all__ = ["FramePreprocessingMixin", "FrameSum", "floating", "photon_counts"]

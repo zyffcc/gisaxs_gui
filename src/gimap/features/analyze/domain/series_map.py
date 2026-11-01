@@ -186,9 +186,11 @@ class PeakTrack:
 def track_peak(series: SeriesMap, low: float, high: float) -> PeakTrack:
     """Centroid, width, area and height of the peak in ``[low, high]`` for every row.
 
-    The background is the straight line through the mean of the first and of the last three
-    points of the window, so a sloping background does not move the centroid. Rows with less
-    than five points in the window, or nothing above the background, give NaN.
+    The background is the straight line through the mean of the first and of the last ``edge``
+    finite points of the row in the window, ``edge = max(1, min(3, n // 5))`` with ``n`` the points
+    of the window: one point for windows of 5–9 points, two for 10–14, three from 15. A sloping
+    background therefore does not move the centroid. A window with fewer than five points, a row
+    with fewer than five finite values in it, or a row with nothing above the background gives NaN.
     """
     low, high = sorted((float(low), float(high)))
     window = (series.x >= low) & (series.x <= high)

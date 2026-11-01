@@ -11,6 +11,7 @@ import numpy as np
 
 from ...application.simulation import _simulate_pattern_once, apply_interference
 from ...application.ports import SimulationPort
+from .configuration import DIGEST_ENGINE_NAME, FORMER_ENGINE_NAMES, SIMULATION_ENGINE
 
 
 ProgressCallback = Optional[Callable[[int, int, str], None]]
@@ -58,16 +59,15 @@ def cache_compatible(config: Dict[str, Any]) -> bool:
 
 def _payload(config: Dict[str, Any], axes: Dict[str, np.ndarray]) -> Dict[str, Any]:
     sample = config.get("sample", {})
+    resolution = {key: value for key, value in config.get("simulation", {}).items() if key != "grid_cache"}
+    if resolution.get("engine") == SIMULATION_ENGINE or resolution.get("engine") in FORMER_ENGINE_NAMES:
+        resolution["engine"] = DIGEST_ENGINE_NAME  # the name grids were built under before the rename
     return {
         "format": 1,
         "beam": config.get("beam", {}),
         "detector": config.get("detector", {}),
         "roi": config.get("roi", {}),
-        "resolution": {
-            key: value
-            for key, value in config.get("simulation", {}).items()
-            if key != "grid_cache"
-        },
+        "resolution": resolution,
         "particle": next(iter(sample.get("particles", [])), {}),
         "layers": sample.get("layers", []),
         "substrate": sample.get("substrate", {}),

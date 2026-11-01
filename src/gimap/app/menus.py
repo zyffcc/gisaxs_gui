@@ -24,57 +24,13 @@ from .presentation.navigation import NAVIGATION_ITEMS
 from .presentation.settings_dialog import SettingsDialog
 from .presentation.theme import theme_manager
 from .presentation.theme.appearance import Appearance
+from .help_commands import HelpCommands
 from .project import PROJECT_SUFFIX
+from .project_notice import NOTE_CHARS, SHOWN_NAMES, SHOWN_NOTES, opened_notice  # noqa: F401 - re-exported
+from .workspace_commands import WorkspaceCommands
 from src.gimap.shared.file_paths import normalize_path
 
 RECENT_PROJECTS_KEY = "recent_projects"
-SHOWN_NAMES = 3
-"""How many of the files a project no longer finds its notice names; the others are counted."""
-SHOWN_NOTES = 2
-NOTE_CHARS = 120
-"""A note in the notice is one line of at most this many characters; the whole of it is in Details…"""
-
-
-def _short(note: str) -> str:
-    line = " ".join(str(note).split())
-    return line if len(line) <= NOTE_CHARS else line[: NOTE_CHARS - 1].rstrip() + "…"
-
-
-def _by_folder(paths) -> str:
-    """``paths`` as their folders, each with the names in it (the order kept): a beamtime folder that moved
-    is one line, not the same long path in front of every file."""
-    folders: dict[str, list[str]] = {}
-    for item in paths:
-        folders.setdefault(str(Path(item).parent), []).append(Path(item).name)
-    return "\n".join("\n".join([folder, *(f"    {name}" for name in names)]) for folder, names in folders.items())
-
-
-def opened_notice(name: str, missing, notes) -> tuple[str, str, str]:
-    """What is said after the project ``name`` opened with files gone (``missing``: their paths) or parts not
-    restored (``notes``, as the pages wrote them): the short notice, and for Details… its summary and the
-    whole list — every missing file under its folder, every note in full."""
-    missing, notes = [str(item) for item in missing], [str(note) for note in notes]
-    if len(missing) == 1:
-        text = trf("Opened the project {name}. {file} is no longer there.", name=name, file=Path(missing[0]).name)
-    elif missing:
-        names = ", ".join(Path(item).name for item in missing[:SHOWN_NAMES])
-        if len(missing) > SHOWN_NAMES:
-            names = trf("{names} and {n} more", names=names, n=len(missing) - SHOWN_NAMES)
-        text = trf("Opened the project {name}. {count} files or folders it names are no longer there: {names}",
-                   name=name, count=len(missing), names=names)
-    else:
-        shown = "; ".join(_short(note) for note in notes[:SHOWN_NOTES])
-        if len(notes) > SHOWN_NOTES:
-            shown = trf("{notes} … and {n} more", notes=shown, n=len(notes) - SHOWN_NOTES)
-        text = trf("Opened the project {name}: {notes}", name=name, notes=shown)
-    summary, parts = text, []
-    if missing:
-        summary += "\n\n" + tr("The project keeps the paths as they were saved. If the data moved, open it from its new "
-                               "place and save the project; saving now would write the project without what is missing.")
-        parts.append(trf("No longer there ({count}):", count=len(missing)) + "\n" + _by_folder(missing))
-    if notes:
-        parts.append(tr("What the pages could not restore:") + "\n" + "\n".join(notes))
-    return text, summary, "\n\n".join(parts)
 
 
 def _geometry_calibration_dialog(parent):
@@ -105,6 +61,7 @@ class ApplicationMenus:
         self.tools = ToolWindows(window, window.app_context.preferences)  # each tool window where it was left
         self.appearance = Appearance(window.app_context.preferences)
         components = window.components
+        self.help = HelpCommands(self)  # Example Data, Report a Problem, the error log, How to Cite
         commands = MenuCommands(
             open_files=self.open_files,
             open_files_label=self.open_files_label,
@@ -137,6 +94,13 @@ class ApplicationMenus:
             claude_assistant=components.ask_ai,  # as Analyze's Ask AI: with the notes of the Results step
             settings=self.open_settings,
             open_data_folder=self.open_data_folder,
+            examples=self.help.examples(),
+            open_example=self.help.open_example,
+            report_problem=self.help.report_problem,
+            open_error_log=self.help.open_error_log,
+            citation=self.help.citation,
+            # Edit, Analyze and Fitting: each entry shows its workspace first, then runs the page's command.
+            page_entries=WorkspaceCommands(self).entries(),
         )
         self.menu_bar = MainMenuBar(window, commands, NAVIGATION_ITEMS)
         # View ▸ Theme and View ▸ Language show what is applied, however it was chosen (Settings, or the saved
@@ -206,7 +170,7 @@ class ApplicationMenus:
     def open_files_label(self) -> tuple[str, str]:
         """(text, tip) of File ▸ Open Data as the File menu opens: it says what Ctrl+O does on this page."""
         if self._curve_page_shown():
-            return tr("Open Curve…"), tr("Open a 1D curve (q, I, σ) — Analyze ▸ Send to Fitting opens its cut here")
+            return tr("&Open Curve…"), tr("Open a 1D curve (q, I, σ) — Analyze ▸ Send to Fitting opens its cut here")
         return tr("&Open Data…"), tr("Open detector frames (CBF, NeXus/HDF5, TIFF, EDF) in Analyze")
 
     def open_recent(self, path: str) -> bool:
@@ -490,4 +454,4 @@ class ApplicationMenus:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
 
-__all__ = ["ApplicationMenus", "opened_notice"]
+__all__ = ["ApplicationMenus", "NOTE_CHARS", "SHOWN_NAMES", "SHOWN_NOTES", "opened_notice"]

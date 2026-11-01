@@ -12,6 +12,7 @@ from typing import Optional, Sequence
 import numpy as np
 
 from src.gimap.shared.series_stages import SHORTEST, SeriesStages, find_stages
+from src.gimap.shared.version import SOFTWARE as RELEASE
 
 from .ports import CurveWriter
 from .series_map import SeriesMap, axis_name, series_header, view_words
@@ -70,7 +71,8 @@ def stages_record(series: SeriesMap, stages: SeriesStages) -> dict:
     built = series.built_with
     axis = axis_name(series)
     return {
-        "software": "GIMaP", "title": "Stages of a series", "curve": series.curve, "curve_title": series.title,
+        "software": "GIMaP", "software_version": RELEASE, "title": "Stages of a series", "curve": series.curve,
+        "curve_title": series.title,
         "x_label": series.x_label, "halves": series.view, "halves_in_words": view_words(series),
         "series": built.get("name"), "cut_of_the_series": built.get("cut"), "cut_in_words": built.get("cut_text"),
         "method": METHOD,

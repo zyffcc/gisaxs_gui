@@ -202,6 +202,8 @@ def test_a_rewritten_history_is_followed_and_the_old_state_is_kept(lab):
     assert f"git reset --hard {backup}" in done.stdout
     assert f"git branch -D {backup}" in done.stdout
     assert "python -m pip install -r requirements.txt" in done.stdout   # the list changed
+    assert "Started with Start_GIMaP.bat: nothing to do" in done.stdout
+    assert "requirements-sputter.txt" not in done.stdout                # that one did not
     assert lab.stashes(other) == []
     _personal_files_are_untouched(other)
 
@@ -494,6 +496,36 @@ def test_a_folder_that_is_not_a_checkout_is_refused(lab):
 
     assert done.returncode == 1, _report(done)
     assert "NOT UPDATED" in done.stdout and "not a git checkout" in done.stdout
+    # A portable folder and a folder from GitHub's "Download ZIP" both have no .git: each is told its way.
+    assert "Portable GIMaP" in done.stdout and "run the installer of the new version" in done.stdout
+    assert "'Download ZIP': download the ZIP again" in done.stdout
+    assert "git clone https://github.com/zyffcc/gisaxs_gui.git" in done.stdout
+
+
+def test_a_changed_list_of_packages_is_reported_for_both_ways_of_starting_gimap(lab):
+    """``Start_GIMaP.bat`` adds the packages of a changed list at its next start
+    (``tools/setup_source_env.ps1`` compares their SHA-256); an environment of your own needs pip.
+    ``requirements-sputter.txt`` (PyTorch, for Sputter) counts as much as ``requirements.txt``."""
+    lab.publish(more={"requirements-sputter.txt": "torch>=2.3,<3\n"})
+    other = lab.computer()
+    lab.commit(lab.author, "newer torch", {"requirements-sputter.txt": "torch>=2.4,<3\n"})
+    lab.git(lab.author, "push", "--quiet", "origin", "HEAD:main")
+
+    done = lab.update(other)
+
+    assert done.returncode == 0, _report(done)
+    assert "packages GIMaP needs changed: requirements-sputter.txt (PyTorch, for Sputter)." in done.stdout
+    assert "Started with Start_GIMaP.bat: nothing to do, its next start adds the new packages itself." in done.stdout
+    assert "Run from an environment you set up yourself" in done.stdout
+    assert "python -m pip install -r requirements-sputter.txt" in done.stdout
+    assert "python -m pip install -r requirements.txt" not in done.stdout     # that list did not change
+
+    lab.advance()       # no list changes
+
+    done = lab.update(other)
+
+    assert done.returncode == 0, _report(done)
+    assert "UPDATED: main is now at" in done.stdout and "pip install" not in done.stdout
 
 
 def test_a_computer_without_git_is_told_so(lab):

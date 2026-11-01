@@ -98,7 +98,8 @@ def region_curves(
         key, f"{region.name}: I(q), {chi_text}", "q (Å⁻¹)", maps.q, values, inside,
         low=low, high=high, bins=q_bins, region=record, counts=counts,
     )
-    # One χ bin no narrower than a pixel at this q (a ring near the beam spans few pixels per degree).
+    # One χ bin no narrower than 2·δq/q (δq: the pixel q step), about two pixels along the ring at this q
+    # (a ring near the beam spans few pixels per degree).
     pixel_deg = np.degrees(2.0 * getattr(maps, "q_step", 0.0) / max(0.5 * (low + high), 1e-9))
     chi_step = max(CHI_STEP_DEG, float(pixel_deg))
     chi_bins = max(MIN_CHI_BINS, int(round((chi_high - chi_low) / chi_step)))

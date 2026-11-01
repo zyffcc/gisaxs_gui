@@ -19,6 +19,7 @@ from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import GISAXS, FrameAnalysis, export_stem, source_labels
+from ...application.frame_preprocessing import floating
 from ..texts import message_text
 from .display import PLOT_SIDES, VIEW_DETECTOR, cut_lines
 from .results_state import RESULTS_INTRO
@@ -267,6 +268,14 @@ class WorkspaceMixin:
         profile = analysis.resolution.profile if analysis.resolution is not None else None
         name = profile.name if profile is not None else tr("instrument profile")
         detail = f"{geometry.distance_m * 1e3:.1f} mm · λ {geometry.wavelength_angstrom:.4g} Å · αi {geometry.incidence_deg:g}°"
+        flat = getattr(analysis, "flat_detector", None)  # a .poni tilt the flat geometry leaves out, when it matters
+        if flat is not None and flat.needs_attention and flat.q_error_max is not None:
+            tilt = trf("tilt {tilt}° left out: |q| up to {error} % off", tilt=f"{flat.tilt_deg:.2f}",
+                       error=f"{100 * flat.q_error_max:.2g}")
+            state = " · ".join((detail, tilt))  # numbers, and a sentence translated above
+            self.set_step_state("geometry", "warn", state)
+            self._intro("geometry", "Geometry from “{name}”: {detail}; {tilt}.", name=name, detail=detail, tilt=tilt)
+            return
         self.set_step_state("geometry", "ok", detail)
         self._intro("geometry", "Geometry from “{name}”: {detail}.", name=name, detail=detail)
 
@@ -295,7 +304,7 @@ class WorkspaceMixin:
             lines.append(tr("· filled from the mirror side: {pixels} (now used)").format(
                 pixels=_pixels(int(analysis.filled_pixels.sum()), total)
             ))
-        if analysis.metadata and str(analysis.metadata.get("stored_dtype", "")).startswith("float"):
+        if analysis.metadata and floating(analysis.metadata):
             lines.append(tr("· floating-point frame: negative values are kept as data; error bars from the pixel scatter"))
         if extra:
             parts = []
@@ -511,6 +520,14 @@ class WorkspaceMixin:
     def _run_pipeline_clicked(self) -> None:
         if self._run_pipeline is not None and not self._needs_frame():
             self._run_pipeline()
+
+    def run_automatic(self) -> bool:
+        """Run Automatic Analysis as its button does (the Analyze menu): ``False`` when it cannot start now (none
+        is set, one runs, or no frame is open — the status line then says so)."""
+        if self._run_pipeline is None or not self.run_pipeline_button.isEnabled() or self._needs_frame():
+            return False
+        self._run_pipeline()
+        return True
 
 
 __all__ = ["EvenSplit", "IMAGE_KEEPS", "MASK_COLOR", "WorkspaceMixin", "fit_stack_to_page"]

@@ -301,6 +301,8 @@ def reduce_giwaxs(
         "beam_center": (geometry.beam_center_x_px, geometry.beam_center_y_px),
         "horizon_row": geometry.horizon_row(),
         "chi_q_window": window,
+        # the bins of every I(q) before sparse ones are joined (the records' ``binning``): edges low…high in q, Å⁻¹
+        "radial_bins": {"bins": bins, "q_range": (q_low, q_high), "chosen": "set" if settings.bins else "auto"},
     }
     return Reduction(GIWAXS, tuple(curves), markers, tuple(warnings_out), rsm)
 

@@ -33,8 +33,11 @@ PROBLEMS = (
     "The deposition rate must be positive (or empty).",
     "The end of the deposition must be after its start t0 (or empty).",
 )
-TOOLKIT_MISSING = ("The Sputter model is not in this GIMaP folder: {folder} is missing or incomplete. Update GIMaP "
-                   "(Update_GIMaP.bat or a new download); the model is part of it.")
+TOOLKIT_MISSING = ("The Sputter model is not in this GIMaP folder: {folder} is missing or incomplete. The model is part "
+                   "of GIMaP. Portable version: it comes with the package, so this folder is incomplete; install or "
+                   "extract the release again. Git clone: run Update_GIMaP.bat. Folder from Download ZIP: download "
+                   "it again.")
+"""Said whatever the installation is (none is detected): what each kind of installation does about it."""
 STOPPED = "Stopped. Finished steps are kept in the results folder and are reused on the next run."
 TOOLKIT_FAILED = "The Sputter model stopped with an error (exit code {code}); its last lines are under Details."
 NO_TABLE = "{folder} has no {table} (press Predict, or choose a results folder)."

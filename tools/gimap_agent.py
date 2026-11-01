@@ -7,7 +7,7 @@ The usual call is one command:
 
 It runs the procedure of the technique GIMaP's Auto detection gives each frame once its
 geometry is applied (GIWAXS: peaks, orientation, sizes; GISAXS: Yoneda cut, halves,
-spacing, fit); --technique giwaxs|gisaxs forces one.  Each FRAME file is analysed on
+the length scale 2π/q*, fit); --technique giwaxs|gisaxs forces one.  Each FRAME file is analysed on
 its own, except that the module files of one detector (..._m01.nxs ... ..._m11.nxs) are
 one stitched series, analysed once however many of them are given (a glob is fine),
 and that --series takes the files given as one series stored as one frame per file.
@@ -98,7 +98,7 @@ def command_auto(arguments) -> int:
         calibration=arguments.calibration, standard=arguments.standard, energy_kev=arguments.energy_kev,
         incidence_deg=arguments.incidence_deg, pixel_size_um=arguments.pixel_size_um, frame=arguments.frame,
         sum_frames=arguments.sum,
-        rings=arguments.rings, recalibrate=arguments.recalibrate, notes=_notes(arguments),
+        rings=arguments.rings, max_peaks=arguments.max_peaks, recalibrate=arguments.recalibrate, notes=_notes(arguments),
         technique=arguments.technique, follow_detection=arguments.technique is None, fit=not arguments.no_fit,
     )
     out = Path(arguments.out) if arguments.out else default_output_folder()
@@ -242,6 +242,11 @@ def parser() -> argparse.ArgumentParser:
              "one report on its final state, like a multi-frame file -- --frame and --sum choose files by position",
     )
     auto.add_argument("--rings", type=int, default=3, help="strongest reliable peaks analysed for orientation and size")
+    auto.add_argument(
+        "--max-peaks", type=int, default=12,
+        help="candidate peaks fitted at most, the most prominent first (default 12, for speed); when more qualify, "
+             "Decisions says how many and the peak table and series hints are the ones fitted",
+    )
     auto.add_argument("--recalibrate", action="store_true", help="calibrate even when a saved profile exists")
     auto.add_argument(
         "--technique", choices=("giwaxs", "gisaxs"),

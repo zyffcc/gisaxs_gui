@@ -80,15 +80,15 @@ ASSISTANT_RUNTIME_ZH = {
     "{ranges} at q {q}": "{ranges}（q {q}）",
     "Shadow (orange on the map): |χ| {where} Å⁻¹. The intensity there is far below the diffuse background, so these pixels count as unmeasured.":
         "阴影（图上橙色）：|χ| {where}（q 以 Å⁻¹ 计）。那里的强度远低于漫散射背景，因此这些像素按未测量处理。",
-    "Missing wedge (red dashed next to qz): |χ| {where} Å⁻¹ is not measured, so orientations closest to the surface normal are missing and Herman's f is biased low.":
-        "缺失楔形区（qz 旁的红色虚线）：|χ| {where}（q 以 Å⁻¹ 计）未测量，因此最接近表面法线的取向缺失，Herman 取向因子 f 偏低。",
+    "Missing wedge (red dashed next to qz): |χ| {where} Å⁻¹ is not measured, so orientations closest to the surface normal are missing and Hermans f is biased low.":
+        "缺失楔形区（qz 旁的红色虚线）：|χ| {where}（q 以 Å⁻¹ 计）未测量，因此最接近表面法线的取向缺失，Hermans 取向因子 f 偏低。",
     "Ring q ≈ {q} Å⁻¹: f = {f} (a random ring would give {random} here) — {texture}":
         "环 q ≈ {q} Å⁻¹：f = {f}（随机取向的环在这里会给出 {random}）—— {texture}",
     "Ring q ≈ {q} Å⁻¹: f = {f} — {texture}": "环 q ≈ {q} Å⁻¹：f = {f} —— {texture}",
-    "Ring q ≈ {q} Å⁻¹: orientation not determined — only {covered} of the range Herman's f needs is measured ({gaps}). Hover for details.":
-        "环 q ≈ {q} Å⁻¹：取向无法确定 —— Herman 取向因子 f 所需的范围只测到了 {covered}（{gaps}）。鼠标悬停可看详情。",
-    "Ring q ≈ {q} Å⁻¹: orientation not determined — only {covered} of the range Herman's f needs is measured. Hover for details.":
-        "环 q ≈ {q} Å⁻¹：取向无法确定 —— Herman 取向因子 f 所需的范围只测到了 {covered}。鼠标悬停可看详情。",
+    "Ring q ≈ {q} Å⁻¹: orientation not determined — only {covered} of the range Hermans f needs is measured ({gaps}). Hover for details.":
+        "环 q ≈ {q} Å⁻¹：取向无法确定 —— Hermans 取向因子 f 所需的范围只测到了 {covered}（{gaps}）。鼠标悬停可看详情。",
+    "Ring q ≈ {q} Å⁻¹: orientation not determined — only {covered} of the range Hermans f needs is measured. Hover for details.":
+        "环 q ≈ {q} Å⁻¹：取向无法确定 —— Hermans 取向因子 f 所需的范围只测到了 {covered}。鼠标悬停可看详情。",
     "Ring q ≈ {q} Å⁻¹: {reason}": "环 q ≈ {q} Å⁻¹：{reason}",
     "in a shadow at |χ| {ranges}": "|χ| {ranges} 在阴影中",
     "missing wedge below {angle}°": "{angle}° 以下为缺失楔形区",
@@ -123,11 +123,20 @@ ASSISTANT_RUNTIME_ZH = {
     "moved? {move}: one line shifting further than its width, or one line replacing another":
         "可能移动 {move}：一条线移动得比它的宽度更远，或一条线取代了另一条",
     "Beam centre on the symmetry axis: x = {x} px ({shift} px).": "对称轴上的光束中心：x = {x} px（{shift} px）。",
-    "D ≈ 2π/q* = {d} nm (maximum at |qy| = {q} Å⁻¹).": "D ≈ 2π/q* = {d} nm（极大值位于 |qy| = {q} Å⁻¹）。",
-    "A shoulder at |qy| = {q} Å⁻¹ (2π/q ≈ {d} nm): a hint, not a resolved peak.":
-        "|qy| = {q} Å⁻¹ 处有一个肩峰（2π/q ≈ {d} nm）：只是提示，不是分辨出的峰。",
-    "Fitted: {curve} ({points} points); R, h and D in nm. Numerical fits of single particle families with size dispersity and a paracrystal distance D; choose the model from what you know of the sample.":
-        "已拟合：{curve}（{points} 个点）；R、h 和 D 的单位为 nm。对单一粒子类型做数值拟合，含尺寸分布和次晶距离 D；请根据你对样品的了解选择模型。",
+    "2π/q* = {d} nm at the peak of the cut (|qy| = {q} Å⁻¹): a length scale, not necessarily the particle spacing; check it with a model fit.":
+        "2π/q* = {d} nm，位于切线的峰处（|qy| = {q} Å⁻¹）：这是一个特征长度，不一定是粒子间距；请用模型拟合检验。",
+    "2π/q* = {d} nm at a shoulder of the cut (|qy| = {q} Å⁻¹, no resolved peak): a length scale, not necessarily the particle spacing; check it with a model fit.":
+        "2π/q* = {d} nm，位于切线的肩峰处（|qy| = {q} Å⁻¹，没有分辨出的峰）：这是一个特征长度，不一定是粒子间距；请用模型拟合检验。",
+    "Fitted: {curve} ({points} points); R, h and D in nm. Numerical fits of single particle families with size dispersity and a paracrystal distance D, a screening step: choose the model from what you know of the sample and confirm it in Fitting.":
+        "已拟合：{curve}（{points} 个点）；R、h 和 D 的单位为 nm。对单一粒子类型做数值拟合（含尺寸分布和次晶距离 D），只是一次筛选：请根据你对样品的了解选择模型，并在拟合中确认。",
+    "The run reports rank {rank} ({model}), selected above: the best-ranked solution within {percent} of the first's χ²/N that converged with no non-linear value at a search bound.":
+        "本次运行报告第 {rank} 名（{model}，已在上表中选中）：它是 χ²/N 在排第一的解的 {percent} 以内、已收敛且没有非线性参数处于搜索边界的解中排名最靠前的一个。",
+    "Every solution within {percent} of the first's χ²/N has a value at a search bound or did not converge: the first is reported, and its values at a bound are not determined by the curve.":
+        "χ²/N 在排第一的解的 {percent} 以内的每个解都有数值处于搜索边界，或者没有收敛：报告的是排第一的解，它处于边界的数值不由曲线确定。",
+    "Values at a search bound, not determined by the curve — {rows}.": "处于搜索边界、不由曲线确定的数值——{rows}。",
+    "{rank}: {bounds}": "第 {rank} 名：{bounds}",
+    "{name} at its upper bound": "{name} 处于搜索上界",
+    "{name} at its lower bound": "{name} 处于搜索下界",
     "R (nm): the particle radius.": "R (nm)：粒子半径。",
     "One or more shape/resolution parameters reached a search bound; values may be unidentifiable.":
         "有形状 / 分辨率参数到达了搜索边界；这些数值可能无法确定。",
@@ -138,8 +147,8 @@ ASSISTANT_RUNTIME_ZH = {
     "Check that GIMaP can read this file.": "请检查 GIMaP 能否读取这个文件。",
     "Show that file in Analyze again and run the analysis again.": "请在分析中重新显示那个文件，然后再运行一次分析。",
     "Check the frame in the GUI.": "请在界面中检查这一帧。",
-    "Neither the options, the notes nor an instrument profile give αi, so 0° is used. Ring positions |q| barely change, but qz shifts by about k·sin αi (≈0.02 Å⁻¹ at 0.2° and 12 keV) and the missing wedge moves.":
-        "选项、笔记和仪器配置都没有给出 αi，因此使用 0°。环的位置 |q| 几乎不变，但 qz 会偏移约 k·sin αi（0.2°、12 keV 时约 0.02 Å⁻¹），缺失楔形区也会移动。",
+    "Neither the options, the notes, Analyze's command bar nor an instrument profile give αi, so 0° is used. Ring positions |q| barely change, but qz shifts by about k·sin αi (≈0.02 Å⁻¹ at 0.2° and 12 keV) and the missing wedge moves.":
+        "选项、笔记、分析的命令栏和仪器配置都没有给出 αi，因此使用 0°。环的位置 |q| 几乎不变，但 qz 会偏移约 k·sin αi（0.2°、12 keV 时约 0.02 Å⁻¹），缺失楔形区也会移动。",
     "Beamtime notes, the logbook or the slides usually state it (typically 0.1–0.5°); otherwise ask.":
         "实验笔记、记录本或幻灯片通常会写明（一般为 0.1–0.5°）；否则请询问。",
     "The person declined saving the geometry, so nothing is in q.": "你没有同意保存几何参数，因此无法换算到 q。",
@@ -168,15 +177,17 @@ ASSISTANT_RUNTIME_ZH = {
         "请检查 αi（地平线随它移动），或在图像上把黄色条带拖到 Yoneda 所在的行。",
     "The best fit did not converge.": "最佳拟合没有收敛。",
     "Open the curve in Fitting (Send to Fitting) and refine it with a chosen model.": "在拟合中打开这条曲线（发送到拟合），用选定的模型精修。",
+    "The reported solution ({model}) has χ²/N = {chi2}, above {limit}: it misses the curve by far more than the σ of its points, so none of the particle families of the quick fit describes this cut, and its R and D are not measurements.":
+        "报告的解（{model}）的 χ²/N = {chi2}，大于 {limit}：它与曲线的偏差远大于数据点的 σ，快速拟合的粒子类型没有一种能描述这条切线，它的 R 和 D 不是测量值。",
+    "Look at the fit over the curve (the Results tab, fit_curve.csv): Bragg rings of a powder or a calibrant, a cut off the Yoneda band or a second population give such a misfit. Refine a model you expect in Fitting.":
+        "请对照曲线查看拟合（结果标签页、fit_curve.csv）：粉末或标样的布拉格环、偏离 Yoneda 带的切线或第二种颗粒群都会造成这样的失配。请在拟合中精修你预期的模型。",
     "{texture} — but the strongest measured |χ| ({chi}°) borders an unmeasured range, so the true maximum may lie inside it":
         "{texture} —— 但测得的最强处（|χ| = {chi}°）紧邻未测量的范围，真正的极大值可能就在其中",
     "no single preferred orientation: maxima of similar height at |χ| ≈ {a}° and {b}°":
         "没有单一的择优取向：在 |χ| ≈ {a}° 和 {b}° 处有高度相近的极大值",
-    "weak or no preferred orientation (f = {f}): the ring is strongest at |χ| ≈ {chi}° but nearly as intense elsewhere":
-        "择优取向很弱或没有（f = {f}）：环在 |χ| ≈ {chi}° 处最强，但在其他位置几乎同样强",
     "tilted: maximum at χ ≈ ±{chi}°": "倾斜取向：极大值位于 χ ≈ ±{chi}°",
-    "Herman's f is sin χ weighted: it assumes the film is isotropic in its plane (fibre texture).":
-        "Herman 取向因子 f 以 sin χ 加权：它假定薄膜在其平面内各向同性（纤维织构）。",
+    "Hermans f is sin χ weighted: it assumes the film is isotropic in its plane (fibre texture).":
+        "Hermans 取向因子 f 以 sin χ 加权：它假定薄膜在其平面内各向同性（纤维织构）。",
     "The radial background under the ring ({background} counts/pixel) was subtracted.":
         "已扣除环下方的径向背景（{background} counts/pixel）。",
     "|χ| {where} is shadowed: the intensity there is below {fraction} of the diffuse background at this q (a shadow, absorber or insensitive detector area), so it counts as unmeasured.":
@@ -188,8 +199,8 @@ ASSISTANT_RUNTIME_ZH = {
     "Only {n} measured χ bins in this ring.": "这个环中只有 {n} 个测得的 χ 区间。",
     "The ring is not above the radial background: at most {snr}σ in any 1° χ bin.":
         "这个环没有高出径向背景：任一 1° 的 χ 区间中最多 {snr}σ。",
-    "Only {covered} of the orientation range Herman's f weighs (sin χ) is measured at this q (|χ| {where}); f and the orientation distribution need most of it, above all near the sample plane. Within the measured part the ring is strongest at |χ| ≈ {chi}°.":
-        "此 q 处只测到了 Herman 取向因子 f 所加权（sin χ）的取向范围的 {covered}（|χ| {where}）；f 和取向分布需要其中的大部分，尤其是靠近样品平面的部分。在测得的部分中，环在 |χ| ≈ {chi}° 处最强。",
+    "Only {covered} of the orientation range Hermans f weighs (sin χ) is measured at this q (|χ| {where}); f and the orientation distribution need most of it, above all near the sample plane. Within the measured part the ring is strongest at |χ| ≈ {chi}°.":
+        "此 q 处只测到了 Hermans 取向因子 f 所加权（sin χ）的取向范围的 {covered}（|χ| {where}）；f 和取向分布需要其中的大部分，尤其是靠近样品平面的部分。在测得的部分中，环在 |χ| ≈ {chi}° 处最强。",
     "Only the {where} half is on the detector.": "探测器上只有 {where} 这一半。",
     "The {side} half reaches only |qy| = {reach} Å⁻¹ (the {other} half {other_reach} Å⁻¹), so the {used} half is used.":
         "{side} 这一半只到 |qy| = {reach} Å⁻¹（{other} 这一半到 {other_reach} Å⁻¹），因此使用 {used} 这一半。",
@@ -207,10 +218,16 @@ ASSISTANT_RUNTIME_ZH = {
     "then the {side} half alone to {q} Å⁻¹": "之后只用 {side} 这一半，至 {q} Å⁻¹",
     "the {side} half": "{side} 这一半",
     "{group} neighbouring points merged ({count} points for the fit)": "每 {group} 个相邻点合并为一个（拟合用 {count} 个点）",
-    "{n} solutions of {families} particle families fit within {percent} of the best χ²: the curve alone does not decide the model.":
-        "{n} 个解（{families} 种粒子类型）的 χ² 都在最佳值的 {percent} 以内：仅凭这条曲线无法确定模型。",
-    "Solutions whose D agrees with the observed spacing: {solutions}. Choose the particle shape you expect and refine that model in Fitting; compare the fitted curves.":
-        "D 与观测到的间距一致的解：{solutions}。请选择你预期的粒子形状，在拟合中精修这个模型，并比较拟合曲线。",
+    "{n} solutions of {families} particle families fit within {percent} of the first solution's χ²/N: the curve alone does not decide the model.":
+        "{n} 个解（{families} 种粒子类型）的 χ²/N 都在排第一的解的 {percent} 以内：仅凭这条曲线无法确定模型。",
+    "The run reports rank {rank} ({solution}), the best-ranked of them with no non-linear value at a search bound: rank 1 ({first}) has {bounds}.":
+        "本次运行报告第 {rank} 名（{solution}），它是其中没有非线性参数处于搜索边界的排名最靠前的解；第 1 名（{first}）：{bounds}。",
+    "Solutions whose D is within {percent} of 2π/q* of the cut: {solutions} (2π/q* is a length scale, not necessarily the particle spacing).":
+        "D 与切线的 2π/q* 相差在 {percent} 以内的解：{solutions}（2π/q* 是一个特征长度，不一定是粒子间距）。",
+    "The first-ranked solution ({model}) has {bounds}, and no solution within {percent} of its χ²/N is free of search bounds: those values are not determined by the curve.":
+        "排第一的解（{model}）：{bounds}；χ²/N 在它的 {percent} 以内的解没有一个不碰搜索边界：这些数值不由曲线确定。",
+    "Refine the model you expect in Fitting (Send to Fitting), with the value at the bound fixed or its range changed.":
+        "在拟合中精修你预期的模型（发送到拟合），把处于边界的数值固定，或改变它的范围。",
     "Choose the particle shape you expect and refine that model in Fitting; compare the fitted curves.":
         "请选择你预期的粒子形状，在拟合中精修这个模型，并比较拟合曲线。",
     "The symmetry axis is {shift} px from the calibrated centre: check the calibration or the sample alignment.":
@@ -265,8 +282,9 @@ ASSISTANT_RUNTIME_ZH = {
     "made for {shape} pixels, the frame has {frame}": "为 {shape} 像素制作，而这一帧是 {frame}",
     "no standard fitted": "没有拟合出标样",
     "ranked by the search": "按搜索的顺序",
-    "standard images are ranked: GIMaP can fit the standard, same detector kind as the frame (file type and module series), 'giwaxs'/'waxs' in the name, 'final'/'redone' names, then closeness in time (before the frame preferred); a multi-module NeXus series is listed once (modules = number of files)":
-        "标样图像的排序依据：GIMaP 能拟合这种标样，与这一帧是同类探测器（文件类型和模块系列），文件名含 'giwaxs'/'waxs'，文件名含 'final'/'redone'，然后是时间上的接近程度（优先选这一帧之前的）；多模块 NeXus 序列只列一次（modules = 文件数）",
+    "calibration files are ranked by folder (the frame's folder, its subfolders, the parent folder, sibling folders, then further up), then closeness in time (before the frame preferred); standard images are ranked: GIMaP can fit the standard, same detector kind as the frame (file type and module series), 'giwaxs'/'waxs' in the name, 'final'/'redone' names, then closeness in time (before the frame preferred); a multi-module NeXus series is listed once (modules = number of files)":
+        "标定文件先按所在的文件夹排序（帧所在的文件夹、它的子文件夹、上一级文件夹、同一级的其他文件夹，再往上），"
+        "然后按时间上的接近程度（优先选这一帧之前的）；标样图像的排序依据：GIMaP 能拟合这种标样，与这一帧是同类探测器（文件类型和模块系列），文件名含 'giwaxs'/'waxs'，文件名含 'final'/'redone'，然后是时间上的接近程度（优先选这一帧之前的）；多模块 NeXus 序列只列一次（modules = 文件数）",
     "from given": "由你给出",
     "from the notes": "来自笔记",
     "from the image header": "来自图像头信息",
@@ -335,8 +353,8 @@ ASSISTANT_RUNTIME_ZH = {
     "three levels up": "往上三层的文件夹",
     "folder {name} three levels up": "往上三层里的文件夹 {name}",
     "near the frame": "这一帧附近",
-    "Neither the options, the notes nor an instrument profile give αi, so 0° is used. qy and the in-plane spacing barely change, but the sample horizon is then put at the direct beam: the exit angle αf of every row, the one quoted for the Yoneda band too, is too large by αi, and the rows between the direct beam and the real horizon count as above the sample.":
-        "选项、笔记和仪器配置都没有给出 αi，因此使用 0°。qy 和面内间距几乎不变，但样品地平线会被放在直射束处：每一行的出射角 αf（包括 Yoneda 带标出的 αf）都偏大 αi，直射束和真实地平线之间的那些行也被算作样品上方。",
+    "Neither the options, the notes, Analyze's command bar nor an instrument profile give αi, so 0° is used. qy and the in-plane spacing barely change, but the sample horizon is then put at the direct beam: the exit angle αf of every row, the one quoted for the Yoneda band too, is too large by αi, and the rows between the direct beam and the real horizon count as above the sample.":
+        "选项、笔记、分析的命令栏和仪器配置都没有给出 αi，因此使用 0°。qy 和面内间距几乎不变，但样品地平线会被放在直射束处：每一行的出射角 αf（包括 Yoneda 带标出的 αf）都偏大 αi，直射束和真实地平线之间的那些行也被算作样品上方。",
     "fitting spheres and cylinders to I(qy) (about half a minute)…": "正在用球和圆柱模型拟合 I(qy)（大约半分钟）…",
     "no side maximum or shoulder away from qy = 0": "在 qy = 0 之外没有侧峰或肩峰",
 }

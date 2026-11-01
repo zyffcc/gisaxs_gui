@@ -213,10 +213,12 @@ NIGHT_ZH = {
     "Needs your answers below before it can give results.": "需要你先回答下面的问题才能给出结果。",
     "Open the prepared curve (the halves chosen) in Fitting and fit it with a model you choose.": "在拟合中打开准备好的曲线（按所选的两半），用你选的模型拟合。",
     "The plot as shown: PNG (image) or SVG (vector).": "当前显示的图：PNG（图片）或 SVG（矢量）。",
-    "CSV: q (Å⁻¹), I, σ of the fitted curve and the best fit at the same q.": "CSV：拟合曲线的 q（Å⁻¹）、I、σ，以及同一 q 上的最佳拟合。",
-    "CSV: every solution with its parameters (nm) and χ².": "CSV：每个解及其参数（nm）和 χ²。",
-    "Particle family; ⚠: a warning of the fit (Fit details below: every parameter).": "颗粒类型；⚠：拟合有警告（下面的拟合细节里有每个参数）。",
-    "Weighted mean squared residual: close values do not decide between models.": "加权均方残差：数值接近时不能据此区分模型。",
+    "CSV: q (Å⁻¹), I, σ of the fitted curve and the fit the run reports at the same q.": "CSV：拟合曲线的 q（Å⁻¹）、I、σ，以及同一 q 上运行报告的那个拟合。",
+    "CSV: every solution with its parameters (nm) and χ²/N.": "CSV：每个解及其参数（nm）和 χ²/N。",
+    "Particle family; ⚠: a warning of the fit. A value marked ⚠ ended on a search bound, which the curve does not determine (listed under the table; Fit details below: every parameter).":
+        "颗粒类型；⚠：拟合有警告。标有 ⚠ 的数值停在了搜索边界上，不由曲线确定（表下列出；下面的拟合细节里有每个参数）。",
+    "χ²/N: the mean squared σ-normalised residual, with no degrees-of-freedom correction. The solutions are ranked by a robust misfit (mean Huber loss); close values do not decide between models.":
+        "χ²/N：按 σ 归一化的残差的均方，未做自由度修正。各个解按稳健的失配量（平均 Huber 损失）排序；数值接近时不能据此区分模型。",
     "could not be read": "无法读取",
     "{count} solutions below; the best is in Model. Fit (Refine) gives its quality and the error of every value.":
         "下面有 {count} 个解；最好的已放入模型。点“拟合”（精修）会给出它的质量和每个值的误差。",

@@ -18,7 +18,7 @@
     "wavelength_angstrom": 1.0,
     "beam_center_px": [180.0, 263.9],
     "ring_distance_mm_at_stated_wavelength": 1635.0,
-    "source": "pyFAI test images (MIT)"
+    "source": "pyFAI test images, http://www.silx.org/pub/pyFAI/testimages/ (MIT for pyFAI; licence of the image files to be confirmed)"
   },
   "giwaxs_p08_mapi": {
     "frame": "giwaxs_p08_mapi/S121_MAI_A2_00841.tif",

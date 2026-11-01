@@ -110,7 +110,7 @@ python tools/eval_giwaxs_agent.py baseline --case <案例>     # 案例文件的
 | `peak_tolerance` | `reliable_peaks` 的相对容差，默认 0.01（即 1 %）。 |
 | `spike` | 一个 q：它 0.1 % 以内的峰在每一帧都带有 `spike` 标记（是伪影，没有被当成峰）。 |
 | `no_series_hints` | 为 `true` 时：任何一帧都没有给出晶面序列的提示。 |
-| `ring` | 一个环的取向：`q`（2 % 以内的环）；同时给 `f_min` 和 `f_max` 时 Herman f 必须给出并落在其间，都不给时 f 必须不给出；`note_contains` 是环的说明或理由里必须出现的文字。 |
+| `ring` | 一个环的取向：`q`（2 % 以内的环）；同时给 `f_min` 和 `f_max` 时 Hermans f 必须给出并落在其间，都不给时 f 必须不给出；`note_contains` 是环的说明或理由里必须出现的文字。 |
 | `sector_note_contains` | 每一帧至少有一个峰的取向说明里含有这段文字。 |
 | `open_questions` | 每一帧 Needs attention 里问题数的上限。 |
 

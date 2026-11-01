@@ -25,6 +25,8 @@ SHELL_ZH = {
     "Fitting\nFit 1D curves with particle models: one curve or an in-situ series": "拟合\n用颗粒模型拟合一维曲线：单条曲线或原位序列",
     "Compare\nRuns or samples side by side: odd frames, stages, how fast each changed, which are alike":
         "比较\n把多次测量或多个样品放在一起：异常帧、阶段、各自变化多快、哪些相似",
+    "Sputter\nIn-situ sputter series: particle size and spacing over time, and how reliable they are":
+        "溅射\n原位溅射序列：颗粒尺寸和间距随时间的变化，以及它们有多可靠",
     "2D Prediction\nMachine-learning prediction from 2D patterns": "二维预测\n由二维图样进行机器学习预测",
     "Trainset Build\nSimulate training sets": "训练集构建\n模拟训练集",
     "Opened the project {name}": "已打开项目 {name}",

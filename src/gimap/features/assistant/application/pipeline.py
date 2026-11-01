@@ -21,9 +21,17 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-from ..domain import caveat, energy_from_notes, incidence_from_notes, pixel_size_from_notes
+from ..domain import AT_EDGE, MAX_PEAKS, caveat, energy_from_notes, incidence_from_notes, pixel_size_from_notes
+from ..domain import reliable as is_reliable
 from ..domain.notes import calibrants_in_notes
 from .gisaxs_procedure import GisaxsProcedureMixin
+from .giwaxs_decisions import (
+    horizon_decision,
+    peak_cap_decision,
+    refraction_decision,
+    texture_rule_decision,
+    uncertainty_decision,
+)
 from .models import ToolCall
 from .pipeline_geometry import GeometryStepsMixin
 from .pipeline_progress import FrameChanged, PipelineStopped, frame_changed, same_file
@@ -44,12 +52,21 @@ DETECTED = "detected: GIMaP's Auto detection classified the frame once the geome
 CHOSEN = "the mode chosen in Analyze"
 DEFAULT = "the default while Analyze is on Auto"
 FALLBACK = "Auto could not classify the frame, so GIWAXS was assumed"
+AUTOMATIC = "automatic analysis"
+"""Who chose the geometry of a run of the standard procedure (the instrument profile's source): code, not the AI."""
 NO_GEOMETRY = "no geometry: Auto tells GISAXS from GIWAXS only once a geometry is applied"
 """Why the ``technique`` decision is what it is (the report's Decisions)."""
 SWITCHED = (
     "the automatic detection chose otherwise; this is the GIWAXS procedure (choose GISAXS in Analyze, "
     "or --technique gisaxs, for the GISAXS one)"
 )
+FROM_COMMAND_BAR = "from Analyze's command bar (the αi set there holds for every frame until it is changed)"
+REPLACES_COMMAND_BAR = {
+    "given": "from given; it replaces the {value}° set in Analyze's command bar",
+    "the notes": "from the notes; it replaces the {value}° set in Analyze's command bar",
+}
+"""Why αi is what it is when Analyze already has one set by hand (or by ``set_incidence_angle``): Analyze uses a
+value set there instead of the instrument profile's, so the run takes it, or sets the value it was given there."""
 
 
 def default_sum(total: int) -> int:
@@ -101,6 +118,8 @@ class PipelineOptions:
     """Frames summed from ``frame`` on; None: ``default_sum`` (the last fifth of the series, at most ten)."""
     rings: int = 3
     """How many of the strongest reliable peaks get an orientation distribution and a size."""
+    max_peaks: int = MAX_PEAKS
+    """Candidate peaks fitted at most, the most prominent first (a Decisions line says when more qualified)."""
     ring_q: Optional[float] = None
     """A ring the person asked about (Å⁻¹): analysed as well, whatever its strength."""
     recalibrate: bool = False
@@ -231,7 +250,10 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
 
     def run(self) -> dict:
         """The whole procedure; a stop request ends it between two steps with what was found so far, and a
-        frame that changed (Analyze shows another file than the run's) ends it as a failure (``failed``)."""
+        frame that changed (Analyze shows another file than the run's) ends it as a failure (``failed``). A geometry
+        it applies is saved as made by the "automatic analysis", not by the AI (``CalibrationToolsMixin.actor``)."""
+        actor = getattr(self.catalog, "actor", None)
+        self.catalog.actor = AUTOMATIC
         try:
             return self._procedure_run()
         except PipelineStopped as stopped:
@@ -244,6 +266,8 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
             self._decide("frame", "the run ended", f"{changed}; nothing more was done")
             self._attention("frame", f"{changed}.", None, "Show that file in Analyze again and run the analysis again.")
             return self._report()
+        finally:
+            self.catalog.actor = actor or "assistant"
 
     def _procedure_run(self) -> dict:
         status = self._call("get_status") or {}
@@ -260,6 +284,8 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
             if options.technique is None and options.follow_detection and not options.stop_after_geometry:
                 self._decide("technique", "none", NO_GEOMETRY)
             return self._report()
+        self._incidence_in_use()
+        self._flat_detector()
         if self.options.stop_after_geometry:
             self._incidence_worded_for((self.catalog.results.status or {}).get("measurement"))  # what Auto reads it as
             self._run.ok = True
@@ -315,10 +341,18 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
                 self._energy = float(value)
                 self._decide("energy", f"{self._energy:g} keV", f"from {source}")
                 break
-        for value, source in ((options.incidence_deg, "given"), (incidence_from_notes(options.notes), "the notes")):
+        # αi set in Analyze's command bar (by hand, or set_incidence_angle) is what Analyze uses instead of the
+        # profile's: the run takes it when neither the options nor the notes give one, and never asks for αi then.
+        override = status.get("incidence_override")
+        for value, source in (
+            (options.incidence_deg, "given"), (incidence_from_notes(options.notes), "the notes"), (override, None),
+        ):
             if value is not None:
                 self._incidence = float(value)
-                self._decide("incidence angle", f"αi = {self._incidence:g}°", f"from {source}")
+                why = FROM_COMMAND_BAR if source is None else f"from {source}"
+                if source is not None and override is not None and abs(float(override) - self._incidence) > 1e-9:
+                    why = REPLACES_COMMAND_BAR[source].format(value=f"{float(override):g}")
+                self._decide("incidence angle", f"αi = {self._incidence:g}°", why)
                 break
         header_pixel = (header.get("pixel_size_um") or [None])[0]
         noted = pixel_size_from_notes(options.notes)
@@ -354,16 +388,24 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
         self._decide("frames", self._run.steps[-1]["summary"], why)
 
     def _analyse(self) -> None:
-        self._call("find_peaks", {"curve": "radial"})
+        status = self.catalog.results.status or {}
+        self._run.decisions.append(refraction_decision(status.get("geometry"), given=self._incidence is not None))
+        cap = max(1, int(self.options.max_peaks))
+        self._call("find_peaks", {"curve": "radial"} if cap == MAX_PEAKS else {"curve": "radial", "max_peaks": cap})
         search = self.catalog.results.peak_searches.get("radial")
+        capped = peak_cap_decision(search, cap)
+        if capped is not None:
+            self._run.decisions.append(capped)
         if search is None or not search.peaks:
             reason = search.reason if search is not None else "the radial curve could not be searched"
             self._decide("peaks", "none", reason)
             return
+        self._run.decisions.append(uncertainty_decision(status.get("error_model")))
         self._call("compare_sectors")
-        reliable = [peak for peak in search.peaks if not caveat(peak)]
+        reliable = [peak for peak in search.peaks if is_reliable(peak)]  # no caveat, not cut off at the end of the data
         chosen = sorted(reliable, key=lambda peak: -peak.area)[: max(0, int(self.options.rings))]
-        skipped = [f"{peak.q:.4g} ({caveat(peak).split(':')[0]})" for peak in search.peaks if caveat(peak)]
+        skipped = [f"{peak.q:.4g} ({(caveat(peak) or AT_EDGE).split(':')[0]})" for peak in search.peaks
+                   if not is_reliable(peak)]
         self._decide(
             "rings analysed", ", ".join(f"{peak.q:.4g}" for peak in sorted(chosen, key=lambda item: item.q)) or "none",
             "the strongest reliable peaks by area" + (f"; not analysed: {', '.join(skipped)}" if skipped else ""),
@@ -377,10 +419,15 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
             self._call("ring_orientation", {"q_center": q})
             if any(abs(peak.q - q) <= 0.5 * peak.fwhm for peak in reliable):
                 self._call("crystallite_size", {"q_center": q})
+        rings = self.catalog.results.rings
+        for decision in (texture_rule_decision(rings), horizon_decision(rings)):
+            if decision is not None:
+                self._run.decisions.append(decision)
 
     # -- report ----------------------------------------------------------------------
 
     def _report(self) -> dict:
+        self._flat_detector_as_reported()  # the tilt's line says the estimate of the status reported below
         results, run = self.catalog.results, self._run
         status = results.status or {}
         geometry = clean(status.get("geometry") or {})
@@ -404,6 +451,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
             "peak_search": _peak_search(results),
             "rings": [_ring_row(ring) for ring in results.rings],
             "series_hints": list(getattr(results.peak_searches.get("radial"), "series", ()) or ()),
+            "error_model": status.get("error_model"),
             "decisions": run.decisions,
             "needs_attention": run.attention,
             "steps": run.steps,

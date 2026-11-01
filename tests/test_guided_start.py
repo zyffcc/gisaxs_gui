@@ -148,20 +148,24 @@ def test_the_check_step_says_once_where_the_rings_are_shadowed_or_unmeasured() -
 def test_a_ring_says_in_one_line_why_its_orientation_is_not_determined() -> None:
     from src.gimap.features.assistant.presentation.guided_text import ring_summary
 
-    reason = ("Only 65% of the orientation range Herman's f weighs (sin χ) is measured at this q (|χ| 8–40°, "
+    reason = ("Only 65% of the orientation range Hermans f weighs (sin χ) is measured at this q (|χ| 8–40°, "
               "43–72°); f and the orientation distribution need most of it. Within the measured part the ring is "
               "strongest at |χ| ≈ 20°.")
     text, detail = ring_summary({  # a ring cut by a shadow near the sample plane and by the missing wedge
         "q": 1.40, "herman": None, "weighted_coverage": 0.65, "reason": reason,
         "missing": [[0.0, 8.0], [40.0, 43.0], [72.0, 90.0]], "shadowed": [[72.0, 90.0]], "notes": ["|χ| 72–90° is shadowed"],
     })
-    assert text == ("Ring q ≈ 1.4 Å⁻¹: orientation not determined — only 65% of the range Herman's f needs is measured "
+    assert text == ("Ring q ≈ 1.4 Å⁻¹: orientation not determined — only 65% of the range Hermans f needs is measured "
                     "(in a shadow at |χ| 72–90°; missing wedge below 8°). Hover for details.")
     assert detail.startswith(reason) and "shadowed" in detail
     text, _detail = ring_summary({"q": 0.36, "herman": 0.52, "herman_isotropic": -0.03,
                                   "texture": "oriented along the surface normal (out-of-plane, χ ≈ 0°)"})
-    assert text == ("Ring q ≈ 0.36 Å⁻¹: f = 0.52 (a random ring would give -0.03 here) — oriented along the surface "
-                    "normal (out-of-plane, χ ≈ 0°)")
+    assert text == ("Ring q ≈ 0.36 Å⁻¹: f = 0.52 (a random ring would give −0.03 here) — oriented along the surface "
+                    "normal (out-of-plane, χ ≈ 0°)")  # the Unicode minus; two decimals while σ_f is not known
+    # With σ_f, f and f_iso have the decimals that show it (0.0027: four), and f_iso is given unless it is 0 there.
+    text, _detail = ring_summary({"q": 0.9972, "herman": 0.13921, "herman_err": 0.002696, "herman_isotropic": -0.001357,
+                                  "texture": "oriented along the surface normal (out-of-plane, χ ≈ 0°)"})
+    assert text.startswith("Ring q ≈ 0.9972 Å⁻¹: f = 0.1392 ± 0.0027 (a random ring would give −0.0014 here) — ")
 
 
 def test_a_peak_at_the_end_of_the_data_is_not_called_reliable() -> None:

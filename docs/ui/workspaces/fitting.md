@@ -53,6 +53,11 @@ Fitting
     └── 右：选中帧的曲线与模型；下面是一个值随帧的变化（点 ± 1σ 误差棒，或 χ²ᵣ）
 ```
 
+菜单栏的 **Fitting** 菜单列出两页的命令：Open Curve…、Fit a Folder of Curves…、Fit（Ctrl+Return）、Stop Fit、Load Model… /
+Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start / Stop、1D Predict — Fit Many Curves…；
+**Edit ▸ Undo / Redo** 撤销 Single analysis 里模型的改动。条目在 `app/presentation/workspace_menus.py`（`FITTING_MENU`、
+`EDIT_MENU`），由组合根 `app/workspace_commands.py` 注入；从别的页打开时先切到 Fitting，键仍归页面所有。
+
 - **Curve**：文件、点数、q 范围（nm⁻¹ 与 Å⁻¹）、有无 σ；切线两半（Mean of both halves / Both halves on |q| / q > 0 half /
   q < 0 half，`single_fit.SIDES`）。平均（`shared/signed_cut.py`）只在另一半两侧 2.5 个步长内都有测量点处求平均，其余处
   （另一半的缺口、另一半到头之后）用这一半原样，不跨缺口插值。Find the particle shape、AI proposal、fit1d 只能拟合一条曲线：
@@ -78,8 +83,10 @@ Fitting
   再拟合整个文件夹。
 - **Fit**（`views/fit_step_view.py`，行为在 `single/run.py`）：一个 Method 下拉、一个按钮。方法：Predict parameters
   (fit1d)、Refine the values in Model（局部有界最小二乘）、Search the ranges, then refine（差分进化 + 三个起点精修）、
-  Find the particle shape (no AI)、AI proposal (1D Predict)。打开曲线时页面替它选好：未拟合的 GISAXS 线切选 Predict 并在
-  下面一行写 “Recommended for this curve”；其余曲线保持原来的选择（GIWAXS I(q) 从不选粒子搜索）；Predict 或寻找形状
+  Find the particle shape (no AI)、AI proposal (1D Predict)。打开曲线时页面替它选好：未拟合的 GISAXS 线切在装了 fit1d
+  工具包时选 Predict，没装时（`workflow_v5.fit1d_kit_available()`，每打开一条曲线查一次；`single/fit1d_review.py`）选寻找形状，
+  并把 Predict 的提示换成 `FIT1D_MISSING_TIP`（可选附加组件、放在哪里）；两种情况下面一行都写 “Recommended for this curve”；
+  其余曲线保持原来的选择（GIWAXS I(q) 从不选粒子搜索）；Predict 或寻找形状
   之后自动换成 Refine。Predict 下面只多一行 Particles（尝试组成 / 模型中的粒子），寻找形状下面一行 Families。
   **Resolve values at the edge of their range automatically**（默认勾选，记住；In-situ series 跟随它）：见下面“边界”。
   进度条与 Stop：精修 / 范围搜索保留目前最好的值，取消寻找解或 fit1d 不产生新结果。不常用的都在折叠的 *Options*：
@@ -139,7 +146,7 @@ Fitting
   （R ∈ [0.5/q_max, 5/q_min]、D ∈ [2R, 40R]）。范围超出曲线能分辨的 R / D 时拟合前提示。Constraints and ranges 与导出的
   JSON（`native_result.fit1d_constraints`：`given`、`used`、来源 model / widened / limit）写出用到的每个约束；
   `native_result.fit1d_bounds`：`measurable`、`actions`（自动做了什么）、`edges`（仍在边上的）、`refits`。
-  v2 为数目加权截断高斯尺寸分布（相对宽度）和 Hosemann 准晶 w = w_rel·D，q 用 nm⁻¹、长度 nm；
+  v2 为数目加权截断高斯尺寸分布（相对宽度）和 Hosemann 次晶 w = w_rel·D，q 用 nm⁻¹、长度 nm；
   球用 |q| = √(q∥² + qz²)，竖直圆柱用 q∥。手动模型的正演与宽度约定不同，映射只作为后续手动精修的起点。
 - **原结果保留**：图上的总曲线、Terms 各群分量、残差、Results 的 χ²/点及参数误差 / 状态来自原 v2 结果。
   σ 使用文件误差与系统误差下限的平方和；无 σ 时明确提示 Poisson 假设。状态表与悬停范围说明等价解、弱约束、
@@ -195,18 +202,18 @@ Fitting
   - Parameters… 里 fit1d 的设置：search（`fit1d_policy`：fast / auto / robust）、curve type（`fit1d_mode`：
     gisaxs / saxs）、network（`fit1d_model`：general / au_np_si）、Cut qz（`fit1d_qz`，nm⁻¹；不勾选时为 0，
     含球时行的 warnings 里注明）、systematic error（`fit1d_sigma_floor`，相对值）。
-  - 每个 q 半边一行（rank 1）。物理是工具包的 v2：数目加权的尺寸分布、Hosemann 准晶 w = w_rel·D、球按
+  - 每个 q 半边一行（rank 1）。物理是工具包的 v2：数目加权的尺寸分布、Hosemann 次晶 w = w_rel·D、球按
     |q| = √(q∥² + qz²)。`native_fit` / `display_fit` 是工具包自己在测量点上的曲线；`params.sigma_D` 是
-    `legacy_sigma_D = w_rel/√(2π)`（在手动模型里给出相同准晶阻尼的值），工具包自己的值、1σ 误差、等价解范围和
+    `legacy_sigma_D = w_rel/√(2π)`（在手动模型里给出相同次晶阻尼的值），工具包自己的值、1σ 误差、等价解范围和
     每个参数的状态在 `components[i].fit1d` 与行的 `fit1d`。多解 / 触边界 / 弱约束 / 模型未在误差内描述曲线都写进
     `warnings`（Stage 列悬停可见）。选中 fit1d 行后保留原 v2 总曲线与分量；复制到 Components 的模型只是
     手动精修初值，不用它重画替代原结果。批量窗口默认 fast，主单页默认 auto。
   - 代码：`infrastructure/adapters/fit1d_method.py`（只在 job 进程里导入工具包）；测试 `tests/test_fit1d_method.py`
     （没有工具包时跳过拟合部分）。
 - 单条曲线的 AI 建议在新页面 Fit 步骤里（AI proposal），它的解进 Results 的 Solutions 表。
-- `Fit ▸ Options ▸ 1D Predict Batch Window…`（菜单 Tools ▸ 1D Predict — Fit Many Curves…）打开 1D Predict 窗口：
+- `Fit ▸ Options ▸ 1D Predict Batch Window…`（菜单 Tools ▸ 1D Predict — Fit Many Curves…，Fitting 菜单里同名的一项也是它）打开 1D Predict 窗口：
   Add curves…（若干曲线文件）、Use current cut、Parameters…（方法、组分、q 单位与两半）、Fit curve、Cancel、
-  Open results。每次运行写到启动 GIMaP 的文件夹下的 `AI_Fitting_Output/v5_<日期>_<时间>/`。
+  Open results。每次运行写到启动 GIMaP 的文件夹下的 `AI_Fitting_Output/v5_<日期>_<时间>_<微秒>/`。
   - **q 的单位**：文件头写明单位的文件按写明的单位读（Analyze 的 `_fit_input.dat` 首行 `(q in 1/A)`、
     `# columns: qy (1/A) …`）；设置 *q unit of files without one in their header* 只用于没写明的文件。识别在
     `infrastructure/adapters/curve_units.py`（`LocalCurveRepository.stated_q_unit` → `LoadCurve.stated_q_unit` →

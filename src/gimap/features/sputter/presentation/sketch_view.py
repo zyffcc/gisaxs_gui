@@ -23,6 +23,7 @@ from PyQt5.QtWidgets import (QCheckBox, QFileDialog, QHBoxLayout, QLabel, QPushB
                              QVBoxLayout, QWidget)
 
 from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.theme.figures import exported_colors
 from src.gimap.shared.figures import cjk_fallback
 
 from ..application import Sketcher, StructureResult, series_extent, smoothed_rows, storyboard_indices, window_sketch
@@ -30,6 +31,8 @@ from .texts import message_text, note_text, stage_name, text
 
 METAL_COLOURS = {"Ag": ("#b8c0c8", "#5f6b76"), "Au": ("#e3b23c", "#8a6512"), "Cu": ("#d08a5c", "#7a4220")}
 POLYMER = "#f3e3c3"; POLYMER_EDGE = "#c9a86a"; SUBSTRATE = "#9aa0a8"
+INK = "black"
+"""Rulers and words drawn inside a view: on its white face in either theme (``fg`` is for the titles around it)."""
 CU_NOTE = "Cu: approximated with the Ag model, for reference only."
 
 
@@ -111,13 +114,14 @@ def draw_window(ax_side, ax_top, s, width: float, height: float, metal: str, *, 
                      fontsize=6.5, color="#7a4b00")
     else:
         ax_side.add_patch(Rectangle((0, -poly_depth), side_w, poly_depth, facecolor=POLYMER, edgecolor=POLYMER_EDGE, lw=.6))
-        ax_side.text(side_w / 2, height * .4, tr("no size estimate"), ha="center", va="center", fontsize=8, color=fg)
+        ax_side.text(side_w / 2, height * .4, tr("no size estimate"), ha="center", va="center", fontsize=8, color=INK)
     ax_side.set_xlim(0, side_w); ax_side.set_ylim(-poly_depth - .18 * height, height)
     ax_side.set_aspect("equal", adjustable="box")
     if not compact:  # the storyboard's top view carries the same ruler
         bar = _nice_bar(side_w)
-        ax_side.plot([side_w * .03, side_w * .03 + bar], [height * .88] * 2, color=fg, lw=2)
-        ax_side.text(side_w * .03 + bar / 2, height * .93, f"{bar:g} nm", ha="center", va="bottom", fontsize=6.5, color=fg)
+        ax_side.plot([side_w * .03, side_w * .03 + bar], [height * .88] * 2, color=INK, lw=2)
+        ax_side.text(side_w * .03 + bar / 2, height * .93, f"{bar:g} nm", ha="center", va="bottom", fontsize=6.5, color=INK,
+                     bbox=dict(facecolor="white", alpha=.6, lw=0, pad=1))  # may reach above the view's face
         ax_side.set_title(tr("side view (cut)"), fontsize=8, color=fg, loc="left")
         ax_side.text(side_w * .99, -poly_depth * .9 - .18 * height * .5, tr("polymer (thickness not to scale)"),
                      ha="right", va="center", fontsize=6, color="#5a4520")
@@ -270,8 +274,12 @@ class SketchView(QWidget):
         s = self.current(); stamp = "" if s is None or s.time_s is None else f"_{s.time_s:.1f}s"
         path, _ = QFileDialog.getSaveFileName(self, tr("Save Sketch"), str(self.result.folder / f"sketch{stamp}.png"),
                                               "PNG (*.png);;PDF (*.pdf);;SVG (*.svg)")
-        if path:
-            self.figure.savefig(path, dpi=200, facecolor="white")
+        if path:  # the light palette of every exported figure, then the screen's colours again
+            try:
+                with exported_colors(self.figure):
+                    self.figure.savefig(path, dpi=200, facecolor="white")
+            finally:
+                self.redraw()
 
     def _save_storyboard(self):
         if self.result is None:

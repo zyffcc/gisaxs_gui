@@ -727,7 +727,14 @@ def test_a_missing_toolkit_is_said_with_its_folder(tmp_path):
 
     assert LOCAL_TOOLKIT == Path(__file__).resolve().parents[1] / "utils" / "sputter_toolkit"
     service = create_sputter_service(runner=BundledToolkit(tmp_path / "nothing"))
-    assert str(tmp_path / "nothing") in service.toolkit_problem() and "Update GIMaP" in service.toolkit_problem()
+    said = service.toolkit_problem()
+    assert str(tmp_path / "nothing") in said
+    # Update_GIMaP.bat updates git clones only: each kind of installation is told what to do.
+    assert "Portable version" in said and "Git clone: run Update_GIMaP.bat" in said and "Download ZIP" in said
+    from src.gimap.app.presentation.i18n import translate
+    from src.gimap.features.sputter.application import TOOLKIT_MISSING
+
+    assert "便携版" in translate(TOOLKIT_MISSING, "zh") and "{folder}" in translate(TOOLKIT_MISSING, "zh")
 
 
 def test_the_model_runs_in_the_console_python_of_this_environment():

@@ -1,11 +1,12 @@
-id: Yuxin_CuPolymer_FF_256
+id: CuPolymer_FF_256
 name: "Copper on Silicon (DESY P03) - Sputter"
 framework: tensorflow
 version: "2.x"
 model:
   format: keras
-  # model_path: 允许为空，首次使用需要选择
-  model_path: 'C:\Users\zhaiyufe\Downloads\yuxin_saved_model\yuxin_saved_model'
+  # Empty: choose the model folder with Import model... on the 2D Prediction page. GIMaP keeps
+  # that choice in your user data folder; this file is not changed.
+  model_path: ""
 preprocess:
   entry: preprocess:run
   # Keep consistent with FF_test.ipynb experimental preprocessing and

@@ -17,8 +17,10 @@ import numpy as np
 from PyQt5.QtCore import QSignalBlocker
 
 from src.gimap.shared.geometry import DetectorGeometry
+from src.gimap.shared.geometry.detector_tilt import DetectorTilt
 
 from ..application import q_from_two_theta, refine_center_by_symmetry, regions_from_dicts
+from ..application.export_record import binning, error_model
 from .bindings.batch_watch import exported_text
 from .geometry_dialog import geometry_defaults
 from .views.analyze_page_view import INCIDENCE_FROM_PROFILE
@@ -126,6 +128,9 @@ class AnalyzeAutomation:
             measurement=analysis.kind,
         )
         info["header"] = header_values(analysis.metadata or {})
+        info["error_model"] = error_model(analysis)  # what the curves' σ are, as the record says
+        info["binning"] = {key: value for key, value in (binning(analysis) or {}).items()  # as the record says
+                           if key in ("radial_bins", "radial_points", "bin_width")} or None
         geometry = analysis.geometry
         profile = analysis.resolution.profile
         info["geometry"] = None if geometry is None else {
@@ -135,6 +140,7 @@ class AnalyzeAutomation:
             "beam_center_px": [geometry.beam_center_x_px, geometry.beam_center_y_px],
             "pixel_size_um": [geometry.pixel_size_x_m * 1e6, geometry.pixel_size_y_m * 1e6],
             "instrument_profile": profile.name if profile else None,
+            "flat_detector": analysis.flat_detector.to_dict() if analysis.flat_detector is not None else None,
         }
         corrections = state.corrections
         info["corrections"] = {
@@ -438,7 +444,8 @@ class AnalyzeAutomation:
             done(False, f"The geometry is not valid: {exc}")
             return
         profile_name = (name or "").strip() or page.view_model.suggested_profile_name()
-        page.view_model.save_profile(profile_name, geometry, source=source)
+        tilt = DetectorTilt.from_dict(values.get("detector_tilt"))  # a .poni's tilt the flat geometry leaves out
+        page.view_model.save_profile(profile_name, geometry, source=source, dropped_tilt=tilt)
         self._waiting.append(done)
         page._profile_saved(profile_name)
 

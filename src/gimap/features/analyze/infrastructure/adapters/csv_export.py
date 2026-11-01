@@ -199,7 +199,10 @@ class CsvCurveWriter:
         stem: str,
         metadata: Mapping[str, Any],
         text_format: str = "csv",
+        also: Sequence[str] = (),
     ) -> list[Path]:
+        """``also``: the names of the other files the same export writes next to these (the curve for Fitting),
+        listed with the curves in the record's ``files``."""
         destination = Path(destination)
         destination.mkdir(parents=True, exist_ok=True)
         written: list[Path] = []
@@ -222,7 +225,7 @@ class CsvCurveWriter:
             written.append(path)
         sidecar = destination / f"{stem}_analysis.json"
         payload = dict(metadata)
-        payload["files"] = [path.name for path in written]
+        payload["files"] = [path.name for path in written] + [str(name) for name in also]
         sidecar.write_text(
             json.dumps(_jsonable(payload), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )

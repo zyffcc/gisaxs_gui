@@ -138,3 +138,58 @@ def test_the_frame_pipeline_applies_drawn_masks_and_mirror_filling(tmp_path) -> 
     assert filled.valid[:, 60:66].mean() > 0.9
     again = analyze(replace(request, corrections=Corrections()), loaded=filled)
     assert not again.valid[:, 60:66].any() and again.filled_pixels is None  # back to the detector's own mask
+
+
+def test_mirror_filled_frames_take_their_errors_from_the_pixel_scatter(tmp_path) -> None:
+    """A filled pixel repeats photons measured on the other side; a bin holding both would count them twice,
+    so Poisson σ would be too small. With mirror filling, σ comes from the scatter of the bin's pixels — in the
+    cuts, in the peak fits of a batch — and the fit-input record says the counting model does not hold."""
+    from src.gimap.features.analyze.application import AnalysisRequest, AnalyzeFrame, fit_input_observation
+    from src.gimap.features.analyze.application.batch_fit import peak_inputs
+    from src.gimap.features.analyze.application.frame_preprocessing import photon_counts
+    from src.gimap.features.analyze.domain import Corrections
+    from src.gimap.features.analyze.domain.regions import window_profile
+    from src.gimap.integrations.state import InMemoryInstrumentProfileRepository
+    from src.gimap.shared.geometry import InstrumentProfile
+    from tests.test_analyze_giwaxs_options import FakeFrames
+
+    image = np.random.default_rng(11).poisson(200.0, SHAPE).astype(np.float32)  # photon counts, flat
+    image[:, 60:66] = -1  # a module gap on the left, under the ring at 1.10 Å⁻¹
+    path = tmp_path / "counts.tif"
+    path.write_bytes(b"x")
+    profile = InstrumentProfile("Test", GEOMETRY, "Test", SHAPE)
+    analyze = AnalyzeFrame(FakeFrames({str(path): image}), InMemoryInstrumentProfileRepository([profile]))
+    ring = GiwaxsSettings(regions=(CutRegion("Ring", (1.05, 1.15), (0.0, 90.0), True),))
+    request = AnalysisRequest(path, mode="giwaxs", giwaxs=ring)
+    plain = analyze(request)
+    filled = analyze(replace(request, corrections=Corrections(mirror_fill=True)))
+    assert filled.filled_pixels is not None and filled.filled_pixels[:, 60:66].mean() > 0.9
+
+    measured = plain.reduction.curve("radial")
+    poisson = np.sqrt(measured.intensity / measured.pixels)  # √Σ / n
+    np.testing.assert_allclose(measured.sigma, poisson, rtol=1e-5)
+    assert fit_input_observation(plain)["counting_model_valid"] is True
+
+    radial = filled.reduction.curve("radial")
+    scatter = reduce_giwaxs(
+        filled.data, filled.valid, GEOMETRY, ring, maps=giwaxs_maps(SHAPE, GEOMETRY), with_map=False, counts=False,
+    ).curve("radial")
+    np.testing.assert_allclose(radial.sigma, scatter.sigma, rtol=1e-6)
+    assert not np.allclose(radial.sigma, np.sqrt(radial.intensity / radial.pixels), rtol=1e-3)
+    assert fit_input_observation(filled)["counting_model_valid"] is False
+
+    maps = giwaxs_maps(SHAPE, GEOMETRY)
+    (peak,) = peak_inputs(filled, maps=maps)  # the batch's peak fit of the ring
+    usable = np.asarray(filled.valid, dtype=bool) & maps.above_horizon
+    target = peak.target
+    _x, _y, expected = window_profile(maps, filled.data, usable, target.fit_window, target.chi_range,
+                                      target.both_sides, counts=False)
+    np.testing.assert_allclose(peak.sigma, expected, rtol=1e-6)
+
+    gisaxs = analyze(replace(request, mode="gisaxs", corrections=Corrections(mirror_fill=True)))
+    assert gisaxs.filled_pixels is None  # mirror filling is GIWAXS only: the GISAXS cut keeps Poisson σ
+    assert fit_input_observation(gisaxs)["counting_model_valid"] is True
+    assert photon_counts({}, Corrections(), mirror_filled=False)
+    assert not photon_counts({}, Corrections(), mirror_filled=True)
+    assert not photon_counts({"stored_dtype": "float32"}, Corrections(), mirror_filled=False)
+    assert not photon_counts({}, Corrections(background_path="dark.tif"), mirror_filled=False)

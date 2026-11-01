@@ -80,19 +80,20 @@ FITTING_ZH = {
     "1σ error of the last fit": "上次拟合的 1σ 误差",
     "Distance D": "间距 D",
     "Interference between neighbours: a paracrystal of distance D and disorder σD/D":
-        "相邻颗粒之间的干涉：间距 D、无序度 σD/D 的准晶模型",
+        "相邻颗粒之间的干涉：间距 D、无序度 σD/D 的次晶模型",
     "Remove this component": "删除这个组分",
     "No particle yet: add one above, or let Fit ▸ Find the particle shape choose.":
         "还没有颗粒：在上面添加一个，或让 拟合 ▸ 寻找颗粒形状 来选择。",
     "Background and resolution peak": "背景与分辨率峰",
     "I(q) = BG + k·[Σ particles + A/(1 + (|q|/w)^ν)]: the peak is the direct and reflected beam's tail and the resolution near q = 0":
         "I(q) = BG + k·[Σ 颗粒 + A/(1 + (|q|/w)^ν)]：这个峰是直射束和反射束的尾部以及 q = 0 附近的分辨率",
-    "Intensity of this component (the form factor is 1 at q = 0)": "这个组分的强度（形状因子在 q = 0 处为 1）",
+    "Intensity of this component (sphere and random cylinder: the form factor is 1 at q = 0; vertical cylinder: 10⁻⁶·⟨R⁴⟩/4 at q = 0, R in nm)":
+        "这个组分的强度（球和随机取向圆柱：形状因子在 q = 0 处为 1；竖直圆柱：q = 0 处为 10⁻⁶·⟨R⁴⟩/4，R 以 nm 计）",
     "Mean radius": "平均半径",
     "Relative spread of the radius (Gaussian)": "半径的相对分布宽度（高斯）",
     "Mean height (length) of the cylinders": "圆柱的平均高度（长度）",
     "Relative spread of the height (Gaussian)": "高度的相对分布宽度（高斯）",
-    "Mean distance between neighbours (paracrystal)": "相邻颗粒的平均间距（准晶）",
+    "Mean distance between neighbours (paracrystal)": "相邻颗粒的平均间距（次晶）",
     "Relative disorder of the distance": "间距的相对无序度",
     "Constant added to the whole curve": "加在整条曲线上的常数",
     "Peak A": "峰 A",
@@ -172,6 +173,10 @@ FITTING_ZH = {
     "χ²ᵣ well above 1: the model misses features of the curve, or σ is underestimated.": "χ²ᵣ 远大于 1：模型没描述出曲线的某些特征，或 σ 估计偏小。",
     "fixed": "固定",
     "From {source}.": "来自 {source}。",
+    "χ²/N: Analyze's quick fit, the mean squared σ-normalised residual over the points Analyze fitted "
+    "(no degrees-of-freedom correction). Fit (Refine) gives χ²ᵣ here.":
+        "χ²/N：分析工作区快速拟合的值，即分析工作区所拟合的那些点上按 σ 归一化的残差的均方（未做自由度修正）。"
+        "点“拟合”（精修）会在这里给出 χ²ᵣ。",
     "shape search": "形状搜索",
     "This model differs from the solution by up to {percent} %.": "这个模型与该解最多相差 {percent} %。",
     "{model} is in Model (Undo brings the previous one back).": "{model} 已放入模型（撤销可恢复之前的模型）。",
@@ -261,7 +266,7 @@ FITTING_ZH = {
     "spheres at |q| = sqrt(q∥² + qz²). The curve shown is fit1d's own.":
         "fit1d 是外部工具包（文件夹 utils/gisaxs1d_gui_kit，或环境变量 GISAXS1D_KIT_HOME）。它需要“完整组成”"
         "（球 / 竖直圆柱；没有随机取向圆柱）：一条曲线无法识别组成。它的物理模型与手动模型不同：数目加权的尺寸分布、"
-        "Hosemann 准晶、球按 |q| = sqrt(q∥² + qz²) 计算。显示的曲线是 fit1d 自己的曲线。",
+        "Hosemann 次晶、球按 |q| = sqrt(q∥² + qz²) 计算。显示的曲线是 fit1d 自己的曲线。",
     "fit1d: the out-of-plane q of the horizontal cut; spheres are evaluated at |q| = sqrt(q∥² + qz²). "
     "Unticked: qz = 0, and the result says so.":
         "fit1d：水平线切所在的面外 q；球按 |q| = sqrt(q∥² + qz²) 计算。不勾选：qz = 0，结果里会注明。",
@@ -272,7 +277,7 @@ FITTING_ZH = {
     "{percent} % (fit1d has its own physics: number-weighted sizes, Hosemann paracrystal, qz for spheres). "
     "Refine it here.":
         "{model} 已作为起点放进 Components 和 Global：拟合页的模型与 fit1d 的曲线最多相差 {percent} %"
-        "（fit1d 有自己的物理模型：数目加权的尺寸分布、Hosemann 准晶、球带 qz）。请在这里精修。",
+        "（fit1d 有自己的物理模型：数目加权的尺寸分布、Hosemann 次晶、球带 qz）。请在这里精修。",
     "General V5 proposes multiple compositions but remains experimental. The specialist requires Complete composition = one Random cylinder and eligible native CBF counts. Other inputs, fixed resolution and poor curve agreement use numerical fallback; that fallback does not make the specialist a general model. Scores are not probabilities. fit1d is an external kit with its own physics and needs the Complete composition (Sphere / Vertical cylinder).":
         "通用 V5 会给出多种组成，但仍是实验性的。专用模型要求“完整组成”只有一个随机取向圆柱，并且输入是符合条件的原始 CBF 计数。其他输入、固定的分辨率或曲线吻合较差时会改用数值回退；这种回退并不会让专用模型变成通用模型。得分不是概率。fit1d 是外部工具包，有自己的物理模型，需要“完整组成”（球 / 竖直圆柱）。",
     "Fix σ res (nm⁻¹)": "固定 σ res（nm⁻¹）",

@@ -3,6 +3,7 @@ fit, the constraints it used and the compositions it tried (``auto:``)."""
 
 from __future__ import annotations
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QTableWidgetItem
 
 from src.gimap.app.presentation.i18n import tr, trf
@@ -17,11 +18,17 @@ from ...application.single_fit1d import (
     is_auto,
     prefit_notes,
 )
+from ...application.workflow_v5 import fit1d_kit_available
+from ..views.fit_step_view import FIT1D_MISSING_TIP, METHODS
 from ..views.step_widgets import fit_to_rows
 
 GISAXS_CUT = "native_detector_columns"
 """``observation["source"]`` of a GISAXS horizontal cut sent from Analyze."""
 RECOMMENDED = "Recommended for this curve: a GISAXS cut not fitted yet."
+RECOMMENDED_NO_KIT = ("Recommended for this curve: a GISAXS cut not fitted yet (Predict parameters needs the optional "
+                      "fit1d add-on, which is not installed).")
+"""… when the shape search is recommended because the fit1d kit is not installed (``recommended_method``)."""
+FIT1D_TIP = dict((key, description) for key, _title, description in METHODS)["fit1d"]
 SOURCES = {"model": " (Model)", "widened": " (widened here)", "follow": " (near the previous frame)",
            "bound_upper": " (a bound: every larger value fits as well)",
            "bound_lower": " (a bound: every smaller value fits as well)"}
@@ -69,30 +76,46 @@ class Fit1DReviewMixin:
         self.fit1d_candidates_table.itemSelectionChanged.connect(self._fit1d_candidate_chosen)
         self.fit1d_candidates_table.cellDoubleClicked.connect(lambda _row, _column: self.use_fit1d_candidate())
         self.fit1d_use_candidate_button.clicked.connect(self.use_fit1d_candidate)
+        self._look_for_fit1d_kit()
+
+    def _look_for_fit1d_kit(self) -> None:
+        """Whether the optional fit1d kit is installed (looked for again with every curve opened), and the
+        tooltip of Predict parameters that says so: without the kit, that it is an add-on and where it goes."""
+        self._fit1d_kit = fit1d_kit_available()
+        index = self.method_combo.findData("fit1d")
+        if index >= 0:
+            self.method_combo.setItemData(index, FIT1D_TIP if self._fit1d_kit else FIT1D_MISSING_TIP, Qt.ToolTipRole)
 
     # -- before a fit ------------------------------------------------------------------------
 
     def recommended_method(self) -> str:
-        """fit1d for a GISAXS horizontal cut that has not been fitted yet; else empty (no recommendation)."""
+        """For a GISAXS horizontal cut that has not been fitted yet: fit1d when its kit is installed, else the shape
+        search (when the page has it); else empty (no recommendation)."""
         session = self.session
         unfitted = session.result is None and session.native_result is None and not session.solutions
-        return "fit1d" if session.curve is not None and self._gisaxs_cut and unfitted else ""
+        if session.curve is None or not self._gisaxs_cut or not unfitted:
+            return ""
+        if getattr(self, "_fit1d_kit", False):
+            return "fit1d"
+        return "shapes" if self.quick_fit is not None else ""
 
     def _curve_opened_step(self, observation) -> None:
         """After a curve is opened: the method recommended for it and the step to show."""
         curve = self.session.curve
         self._gisaxs_cut = (observation or {}).get("source") == GISAXS_CUT or (not observation and curve.signed)
         self._fit1d_candidates = []
-        if self.recommended_method() == "fit1d":
+        self._look_for_fit1d_kit()
+        recommended = self.recommended_method()
+        if recommended == "fit1d":
             if not self.session.edited:  # no particles of the user's: let fit1d try the compositions
                 self.fit1d_composition.setCurrentIndex(self.fit1d_composition.findData("auto:sphere,vc:3"))
             self.set_method("fit1d")
             self.show_step("fit")
-        elif not self.session.edited and self.quick_fit is not None:
+        elif recommended == "shapes" or (not self.session.edited and self.quick_fit is not None):
             self.set_method("shapes")  # a first curve: find the family first
             self.show_step("fit")
         else:
-            if self.method() == "fit1d":  # chosen for the curve before; this one is not known to be a GISAXS cut
+            if self.method() == "fit1d":  # chosen before; this curve is not known to be a GISAXS cut, or no kit
                 self.set_method("local")
             self.show_step("model")
         self._refresh_fit1d_action()
@@ -104,7 +127,7 @@ class Fit1DReviewMixin:
         method = self.method()
         hint = tr(self.method_combo.itemData(self.method_combo.currentIndex(), 3) or "")  # Qt.ToolTipRole
         if method and method == self.recommended_method():
-            hint = tr(RECOMMENDED) + " " + hint
+            hint = tr(RECOMMENDED if method == "fit1d" else RECOMMENDED_NO_KIT) + " " + hint
         self.method_hint.setText(hint)
         for index, (_value, text) in enumerate(COMPOSITIONS):
             self.fit1d_composition.setItemText(index, tr(text))

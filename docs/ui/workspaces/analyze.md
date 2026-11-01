@@ -31,6 +31,7 @@
 | 中：图像 | Detector / q map、Log、色图、Auto levels、Zoom、Fit view、Sources（每条曲线来自图上的哪里，可点曲线只看它的来源）；光标读数（过长时截断，完整内容在提示中，不会改变视图大小） |
 | 右：标签页 | Curves（两个曲线图）· Results（自动分析或 AI 的结果与证据）· Series（帧 × q 热图） |
 | 状态行 | 文字 + 进度条 + Cancel；写出文件时右下角 toast，可直接打开文件夹 |
+| 菜单栏 | **Analyze** 菜单列出本页的命令：Run / Stop Automatic Analysis、Repeat Analysis（F5）、Export Curves…（Ctrl+E）、Batch Export…（Ctrl+Shift+E）、Batch Export a Folder…、Send to Fitting、Send Series to Fitting…、Send Series to Compare、Set-up Files ▸（设置、切线区域、掩膜的保存与载入）、Figures ▸（Save Image… / q-Map Data… / View Data…）、Clear Frame List；**Edit ▸ Undo / Redo** 撤销设置的改动。条目在 `app/presentation/workspace_menus.py`（`ANALYZE_MENU`、`EDIT_MENU`），做什么、能不能用由组合根 `app/workspace_commands.py` 注入；每次打开菜单按页面状态启用，禁用的条目在提示里说原因；键仍归页面所有 |
 
 ## 默认流程（零点击）
 
@@ -94,8 +95,9 @@ Run Automatic Analysis（Results 步骤可写束线时笔记：αi、能量、�
   自动分析在 Data 步骤设的 Sum N 不带进 Series 热图、Batch Export 和 Send Series（对话框和 Series 标签页说明已关掉；
   要相加就自己在 Data ▸ Sum N 设）。
 - GISAXS：几何 → Yoneda 切线（找不到时提示检查 αi）→ 按左右对称移动中心列 → 选择两半（都可用且一致就平均，
-  一半被遮挡 / 有缝隙 / 太短就用另一半，并写出理由）→ 面内间距 2π/q*（只有 shoulder 时标为提示）→ 数值物理拟合
-  （球、竖直圆柱、随机圆柱，含尺寸分布与间距 D，也从间距起步）。多个模型 χ² 相差 10 % 以内时，结果里会问你选哪个模型，
+  一半被遮挡 / 有缝隙 / 太短就用另一半，并写出理由）→ 特征长度 2π/q*（侧峰或 shoulder；写明不一定是粒子间距）→ 数值物理拟合
+  （球、竖直圆柱、随机圆柱，含尺寸分布与距离 D，也从 2π/q* 起步；`at_bounds` 标出停在搜索边界的数值，报告的解 `chosen`
+  是 χ²/N 在第一个的 10 % 以内、已收敛且没有边界值的排名最靠前的解，`application/gisaxs_choice.py`）。多个模型 χ² 相差 10 % 以内时，结果里会问你选哪个模型，
   并指出与间距一致的解。
 - Results 标签页：GISAXS 为切线与两半、间距、拟合图（数据 + 选中的解，Log q / Log I）与解的表格；Save Fitted Curve…、
   Save Fit Table…、Refine in Fitting。GIWAXS 为峰表、检查、几何、序列对比。两者都有 Save Report…（网页或 Markdown）。
@@ -223,7 +225,7 @@ Send to Fitting（命令栏和 Export 步骤的按钮都走 `bindings/fit_handov
 - Intensity corrections (GIWAXS)（折叠区，只在 GIWAXS 显示，默认关，`domain/intensity.py`）：立体角 cos³2θ、偏振（pyFAI 公式，因子 f）、
   薄膜吸收（厚度 t、衰减长度 L，相对 αf = αi，不含折射）；I / factor，q 不变。计数帧的方差按 value / factor 传递
   （`BinnedMean.add(..., scale)`），导出记录的 `intensity_corrections` 写明公式与参数，Fitting 的计数模型标记为不成立。
-- Undo / Redo（命令栏 ↶ ↷，Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y，`setup_history.py`）：设置的每次改动是一步，同类快速改动合并
+- Undo / Redo（命令栏 ↶ ↷ 或 Edit ▸ Undo / Redo，Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y，`setup_history.py`）：设置的每次改动是一步，同类快速改动合并
   （但抵消上一步的改动——比如刚加上又删掉——单独成一步）。
 - 色阶（`components/levels.py`）：图像旁是显示值的直方图，两个手柄是绝对位置（拖动快速调整，滚轮放大色标做精细调整）；
   Levels ▾：每帧自动（规则 1–99.7 % / 0.1–99.9 % / 5–95 % / 最小–最大 / 均值 ± 3σ）、输入 Min / Max（强度单位）、自动一次；
@@ -299,7 +301,7 @@ Send to Fitting（命令栏和 Export 步骤的按钮都走 `bindings/fit_handov
   | | 每帧：拟合用曲线 | `fit_input/<帧>_fit_input.dat` |
   | | 每帧：q 图数值 / χ–q 展开图数值 | `maps/<帧>_qmap.csv`、`maps/<帧>_cake.csv` |
   | 图片，格式 PNG / TIFF / SVG / PDF | 每帧：探测器图像的图片；每帧：q 图的图片（分别勾选） | `images/<帧>_detector.png`、`images/<帧>_qmap.png` |
-  | 转换格式的探测器帧，格式 TIFF 32 位 / EDF / NumPy / HDF5 | 每帧：探测器数据（按读取原样：模块拼接、帧求和）——即格式转换 | `frames/<帧>.tif` |
+  | 转换格式的探测器帧，格式 TIFF 32 位 / EDF / NumPy / HDF5 | 每帧：探测器数据（按读取原样：模块拼接、帧求和；按存储类型写，没有数据的像素照格式转换的写法标记，`shared/detector_io/output_values.py`）——即格式转换 | `frames/<帧>.tif` |
   | 拟合（可选） | 见下 | `<名称>_peak_fits.csv` / `_model_fits.csv` + 同名 `.png` |
 
   选表格与逐帧曲线时，在列表中勾选要哪些曲线（All / None）。表格（`application/batch_tables.common_x`，8 位有效数字）：
@@ -379,7 +381,8 @@ Send to Fitting（命令栏和 Export 步骤的按钮都走 `bindings/fit_handov
 
 1. 开始页 ▸ Open Files…：选完文件立即跳到 Analyze，Data 步骤显示文件名、探测器、帧数，图像随后出现。
 2. GISAXS 帧（例如 `tests/data/external/gisaxs_galaxi/`，配 `galaxi_bornagain.poni` 的几何）▸ Run Automatic Analysis：
-   Results 显示 Yoneda 切线、两半的理由、间距（约 55.6 nm，shoulder）、拟合表，并提示选择模型；Save Fitted Curve… 有 toast。
+   Results 显示 Yoneda 切线、两半的理由、特征长度 2π/q*（约 55.6 nm，shoulder）、拟合表（第 1 名 D 在上界标 ⚠，选中报告的
+   第 3 名球解），并提示选择模型；Save Fitted Curve… 有 toast。
 3. Sources 打开后点击某条曲线：图上只显示它的来源区域。
 4. Mask 步骤：P03 Pilatus 帧显示找到的热像素数；取消 Leave out hot and dead pixels 后这些像素回到曲线里。
 5. 列出一个文件夹 ▸ Series ▸ Build Map：热图逐步生成，Cancel 后保留已有行；拖动竖直带，右下图更新；Export ▸ Map as CSV Table…。

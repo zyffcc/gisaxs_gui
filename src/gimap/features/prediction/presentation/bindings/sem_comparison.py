@@ -7,16 +7,26 @@ from pathlib import Path
 
 import numpy as np
 
+RADIUS_AXIS_NOT_DECLARED = (
+    "The prediction was not attached to the SEM comparison: the module's module.yaml does not declare "
+    "the radius axis (outputs: axes: row with key r, unit nm, min and max)."
+)
+
 
 class SemComparisonMixin:
     def _capture_sem_prediction(self, outputs) -> None:
         self._sem_snapshot = None
         self._sem_snapshot_context = None
+        self._sem_snapshot_refusal = None
         image = getattr(self, "_current_image", None)
         module = self._typed_prediction_module()
         axes = outputs.get("distribution_axes", {})
         row = axes.get("row", {}) if isinstance(axes, dict) else {}
         if module is None or image is None or row.get("key") != "r" or row.get("unit") != "nm":
+            return
+        if row.get("declared") is not True:
+            # A radius axis the module never declared is a placeholder range, not a physical scale.
+            self._sem_snapshot_refusal = (outputs, RADIUS_AXIS_NOT_DECLARED)
             return
         radius = outputs.get("r_x")
         probability = outputs.get("r")
@@ -73,4 +83,8 @@ class SemComparisonMixin:
         return deepcopy(snapshot) if valid else None
 
     def _on_sem_comparison_clicked(self) -> None:
-        self.sem_comparison_requested.emit(self._sem_prediction_for_comparison())
+        prediction = self._sem_prediction_for_comparison()
+        refusal = getattr(self, "_sem_snapshot_refusal", None)
+        if prediction is None and refusal is not None and refusal[0] is self.prediction_results:
+            self._append_status_message(refusal[1], level="WARN")
+        self.sem_comparison_requested.emit(prediction)

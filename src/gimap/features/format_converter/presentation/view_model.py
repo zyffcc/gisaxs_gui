@@ -188,8 +188,9 @@ class FormatConverterViewModel:
         warning = ""
         if output_may_lose_float_values(options.output_format, options.data_mode):
             warning = (
-                "CBF encoders may not preserve NaN values or every floating-point "
-                "representation. A metadata sidecar is recommended."
+                "CBF holds integers: a floating-point frame is truncated to int32, NaN becomes −1, and its negative "
+                "values read back as gap codes (no data). Use TIFF or HDF5 to keep them; a metadata sidecar is "
+                "recommended."
             )
         return OutputPreviewState(
             example=example,
@@ -231,7 +232,7 @@ class FormatConverterViewModel:
         labels = {1: ("",), 2: ("First", "Last")}.get(len(picks), ("First", "Middle", "Last"))
         payload = []
         for label, frame in zip(labels, picks):
-            data, _metadata = self._load_preview(source, frame)
+            data, metadata = self._load_preview(source, frame)
             array = np.asarray(data)
             finite = array[np.isfinite(array)]
             minimum = float(np.min(finite)) if finite.size else None
@@ -243,7 +244,8 @@ class FormatConverterViewModel:
                     "frame": frame + 1,
                     "data": array,
                     "shape": tuple(array.shape),
-                    "dtype": str(array.dtype),
+                    # The type the file stores (and the conversion keeps), not the reader's 32-bit float.
+                    "dtype": str((metadata or {}).get("stored_dtype") or array.dtype),
                     "minimum": minimum,
                     "maximum": maximum,
                     "nan_count": int(np.count_nonzero(~np.isfinite(array))),

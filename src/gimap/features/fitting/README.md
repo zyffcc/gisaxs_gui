@@ -26,7 +26,7 @@ Fit 中选择 fit1d，所有群在同一条曲线上共同拟合；general = `co
 `infrastructure/adapters/single_fit1d.py`，无 V5 / TensorFlow 资产依赖。`FitSession.native_result` 保存原 v2
 总曲线、分量、effective σ、参数误差 / 状态和提示，绘图、Results 与 CSV / JSON 导出均使用这些原值。
 无 σ 时明确提示 Poisson 假设；相对系统误差下限与 σ 按平方和合并。v2 是数目加权截断高斯尺寸分布与
-Hosemann 准晶（w = w_rel·D），q 用 nm⁻¹，长度 nm；与手动模型的正演和宽度约定不同，映射只用作手动初值。
+Hosemann 次晶（w = w_rel·D），q 用 nm⁻¹，长度 nm；与手动模型的正演和宽度约定不同，映射只用作手动初值。
 改 Model、曲线选择或 fit1d 设置会使原结果过期：旧 χ² / 表注明 previous fit1d，图显示手动起点，拒绝导出过期结果；
 恢复原条件或重拟合后可保存。测试在 `tests/test_fit_page_fit1d.py`。
 

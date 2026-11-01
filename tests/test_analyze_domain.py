@@ -67,6 +67,28 @@ def test_binned_mean_reports_mean_poisson_error_and_pixel_count() -> None:
     np.testing.assert_array_equal(pixels, [2, 1, 1])
 
 
+def test_a_bin_of_zero_counts_gets_the_error_of_one_count_as_a_gisaxs_line_does() -> None:
+    """σ = √max(Σ, 1)/n, as ``native_profile`` gives a GISAXS line: σ = 0 would make a weighted fit divide by
+    zero or give the point infinite weight. Values with a factor (intensity corrections): at least the variance of
+    one count at the bin's mean factor."""
+    from src.gimap.features.analyze.domain.binning import native_profile
+
+    accumulator = BinnedMean(np.array([0.0, 1.0, 2.0]))
+    accumulator.add(np.array([0.2, 0.4, 0.6, 0.8, 1.5]), np.array([0, 0, 0, 0, 9]))
+    _centres, mean, sigma, pixels = accumulator.result()
+    np.testing.assert_allclose(mean, [0.0, 9.0])
+    np.testing.assert_allclose(sigma, [1 / 4, 3.0])
+    assert np.all(sigma > 0) and np.all(pixels == [4, 1])
+    zeros = np.zeros((4, 1))
+    _x, _mean, line_sigma, _pixels = native_profile(zeros, np.ones_like(zeros, bool), np.full((4, 1), 0.5), axis=0)
+    assert line_sigma[0] == pytest.approx(sigma[0])  # the same 1/n for a GIWAXS bin and a GISAXS line
+    scaled = BinnedMean(np.array([0.0, 1.0, 2.0]))
+    scaled.add(np.array([0.2, 0.4, 1.5]), np.array([0.0, 0.0, 3.0]), np.array([0.5, 0.25, 0.5]))
+    _centres, _mean, sigma, _pixels = scaled.result()
+    np.testing.assert_allclose(sigma, [math.sqrt(0.375**2) / 2, math.sqrt(1.5)])  # one count at the mean 0.375
+    assert BinnedMean(np.array([0.0, 1.0])).result()[2].size == 0  # no pixels: still no point
+
+
 def test_binned_mean_2d_places_low_y_in_row_zero_and_leaves_empty_cells_nan() -> None:
     grid = binned_mean_2d(
         np.array([0.1, 0.9, 0.9]),

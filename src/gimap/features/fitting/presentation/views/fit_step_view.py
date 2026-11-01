@@ -29,6 +29,13 @@ METHODS = (
     ("ai", "AI proposal (1D Predict)",
      "The V5 model proposes compositions and parameters, then corrects them numerically."),
 )
+FIT1D_MISSING_TIP = (
+    "Finds the particles and their sizes from the curve (network proposals and a physical fit), with errors and "
+    "equivalent solutions. An optional add-on, not distributed with GIMaP and not installed here: put the folder "
+    "gisaxs1d_gui_kit in utils/gisaxs1d_gui_kit of the GIMaP folder, or set the environment variable "
+    "GISAXS1D_KIT_HOME to its folder, then start GIMaP again. Without it, use Find the particle shape (no AI)."
+)
+"""The tooltip of Predict parameters (fit1d) when its kit is not installed (``single/fit1d_review.py``)."""
 QUICK_FAMILIES = (("Try every family", "auto"), ("The families in Model", "model"))
 RESOLVE_TIP = ("When a value stops at the edge of its range, widen that side (or fix a size spread at its lower "
                "limit), fit again and keep it if the fit is not worse. Results lists what was done.")
@@ -111,4 +118,4 @@ def build_fit_step(owner, page: QWidget, layout) -> None:
     layout.addWidget(options)
 
 
-__all__ = ["METHODS", "QUICK_FAMILIES", "RESOLVE_TIP", "build_fit_step"]
+__all__ = ["FIT1D_MISSING_TIP", "METHODS", "QUICK_FAMILIES", "RESOLVE_TIP", "build_fit_step"]

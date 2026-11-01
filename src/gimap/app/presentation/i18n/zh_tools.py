@@ -162,7 +162,7 @@ TOOLS_ZH = {
     "Data type conversion, metadata layout and container options.": "数据类型转换、元数据布局和容器选项。",
     "Pixel values and data type": "像素值与数据类型",
     "Preserve original values and data type when supported": "在支持时保留原始数值和数据类型",
-    "Preserve / use loader data type": "保留 / 使用读取器的数据类型",
+    "Keep the stored data type": "保留存储的数据类型",
     "Save as 32-bit float": "保存为 32 位浮点数",
     "Convert to uint16 using the original data range": "按原始数据范围转换为 uint16",
     "Clip to the uint16 range": "截断到 uint16 范围",
@@ -377,8 +377,9 @@ TOOLS_ZH = {
     "The frame range is empty.": "帧范围为空。",
     "Choose output folder": "选择输出文件夹",
     "Invalid naming template": "命名模板无效",
-    "CBF encoders may not preserve NaN values or every floating-point representation. A metadata sidecar is recommended.":
-        "CBF 编码可能无法保留 NaN 值或某些浮点表示。建议同时写出元数据文件。",
+    "CBF holds integers: a floating-point frame is truncated to int32, NaN becomes −1, and its negative values "
+    "read back as gap codes (no data). Use TIFF or HDF5 to keep them; a metadata sidecar is recommended.":
+        "CBF 只存整数：浮点帧会被截断为 int32，NaN 变为 −1，负值读回时成为缝隙码（无数据）。要保留它们，请用 TIFF 或 HDF5；建议同时写出元数据文件。",
     "Add at least one input file.": "请至少添加一个输入文件。",
     "Select at least one image or frame to convert.": "请至少选择一张要转换的图像或一帧。",
     "Output settings": "输出设置",

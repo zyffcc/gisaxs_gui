@@ -1,7 +1,8 @@
-"""The GISAXS results of the automatic analysis: the cut and its halves, the spacing, the fit.
+"""The GISAXS results of the automatic analysis: the cut and its halves, the length scale 2π/q*, the fit.
 
 The fit is shown as a plot (the curve that was fitted and the solution selected in the table)
-and a table of the solutions; **Fit details** (closed until opened) give every number of the
+and a table of the solutions, the one the run reports selected first and the values at a search
+bound named in the model column; **Fit details** (closed until opened) give every number of the
 selected solution and how it was fitted, and open it in Fitting. The curve, the fitted curve and
 the table can be saved, and the prepared curve opened in Fitting to refine it with a chosen model.
 """
@@ -17,7 +18,16 @@ from PyQt5.QtWidgets import QPushButton, QToolButton, QVBoxLayout, QWidget
 from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, FlowLayout
 from src.gimap.app.presentation.i18n import current_language, tr, trf
 
-from ..application import cut_spans, fit_curve_table, fit_on, fit_solutions_csv, pixel_span
+from ..application import (
+    CLOSE_CHI2,
+    bound_phrases,
+    chosen_solution,
+    cut_spans,
+    fit_curve_table,
+    fit_on,
+    fit_solutions_csv,
+    pixel_span,
+)
 from ..application.operations import halves_label
 from .guided_details import SolutionDetails
 from .guided_text import GOOD, NOTE, WARN, ask_save_path, badge, label, listed, save_failed_toast, saved_toast, table
@@ -26,14 +36,17 @@ from .guided_words import parts, words
 NM_PER_A = 10.0
 FIT_PLOT_HEIGHT = 300
 COLUMNS = (("R", "R (nm)"), ("h", "h (nm)"), ("D", "D (nm)"))
-FIT_HEADERS = (("model", "Particle family; ⚠: a warning of the fit (Fit details below: every parameter)."),
+FIT_HEADERS = (("model", "Particle family; ⚠: a warning of the fit. A value marked ⚠ ended on a search bound, which the "
+                          "curve does not determine (listed under the table; Fit details below: every parameter)."),
                ("R", "R (nm): the particle radius."), ("h", "h (nm): the cylinder height (— for a sphere)."),
                ("D", "D (nm): the paracrystal distance between particles."),
-               ("χ²", "Weighted mean squared residual: close values do not decide between models."))
+               ("χ²/N", "χ²/N: the mean squared σ-normalised residual, with no degrees-of-freedom correction. The "
+                      "solutions are ranked by a robust misfit (mean Huber loss); close values do not decide between "
+                      "models."))
 """The fit table's columns: short, so it fits the Results tab (the unit in the tooltip and the line under it; the
 model names in it are names, never translated)."""
 FIT_NUMBERS = (1, 2, 3, 4)
-FIT_COPY_HEADERS = ("model", "R (nm)", "h (nm)", "D (nm)", "χ²")
+FIT_COPY_HEADERS = ("model", "R (nm)", "h (nm)", "D (nm)", "χ²/N")
 """The fit table's columns with their units, for copied rows."""
 DETAILS = (("R", "R", " nm"), ("sigma_R", "σR/R", ""), ("h", "h", " nm"), ("sigma_h", "σh/h", ""), ("D", "D", " nm"),
            ("sigma_D", "σD/D", ""), ("weight", "weight", ""))
@@ -48,7 +61,17 @@ def _details(row: dict) -> str:
     component = (row.get("components") or [{}])[0]
     values = ", ".join(f"{tr(name)} {_number(component[key])}{unit}" for key, name, unit in DETAILS if component.get(key) is not None)
     notes = list(row.get("warnings") or ()) + ([] if row.get("converged") else ["not converged"])
-    return f"{model_name(row['model'])}: {values}; χ² {_number(row['chi2'])}" + "".join(f"\n⚠ {tr(note)}" for note in notes)
+    return (f"{model_name(row['model'])}: {values}; χ²/N {_number(row['chi2'])}" + "".join(f"\n⚠ {tr(note)}" for note in notes)
+            + "".join(f"\n⚠ {phrase}" for phrase in bound_words(row)))
+
+
+def bound_words(row: dict) -> list[str]:
+    """The values of a solution at a search bound (``D at its upper bound``), in the interface language."""
+    return [words(phrase) for phrase in bound_phrases(row)]
+
+
+def _joined(items) -> str:
+    return ("、" if current_language() == "zh" else ", ").join(items)
 
 
 def _number(value, digits: int = 3) -> str:
@@ -68,7 +91,7 @@ def halves_text(side: str) -> str:
 
 
 def outcome_summary(report: dict) -> str:
-    """Which halves, the spacing and the best fit, in one line (no technique, no full stop)."""
+    """Which halves, the length scale 2π/q* and the fit the run reports, in one line (no technique, no full stop)."""
     gisaxs = report.get("gisaxs") or {}
     parts = []
     halves = gisaxs.get("halves")
@@ -77,13 +100,15 @@ def outcome_summary(report: dict) -> str:
     spacing = gisaxs.get("spacing")
     if spacing:
         gap = "" if current_language() == "zh" else " "  # a Chinese full-width bracket needs no space before it
-        parts.append(f"D ≈ {spacing['distance_nm']:.3g} nm" + ("" if spacing.get("kind") == "maximum" else gap + tr("(shoulder)")))
-    solutions = (gisaxs.get("fit") or {}).get("solutions") or []
-    if solutions:
-        best = solutions[0]
+        parts.append(f"2π/q* = {spacing['distance_nm']:.3g} nm" + ("" if spacing.get("kind") == "maximum" else gap + tr("(shoulder)")))
+    index, best = chosen_solution(gisaxs.get("fit"))
+    if best is not None:
         component = (best.get("components") or [{}])[0]
-        parts.append(tr("best fit {model} R {radius} nm (χ² {chi2})").format(
-            model=model_name(best["model"]), radius=_number(component.get("R")), chi2=_number(best["chi2"])))
+        values = {"model": model_name(best["model"]), "radius": _number(component.get("R")), "chi2": _number(best["chi2"])}
+        parts.append(trf("chosen fit {model} R {radius} nm (rank {rank}, χ²/N {chi2})", rank=best.get("rank"), **values)
+                     if index else trf("best fit {model} R {radius} nm (χ²/N {chi2})", **values))
+        if bound_words(best):  # the first solution, at a bound, as no close solution is free of one
+            parts[-1] += " ⚠ " + _joined(bound_words(best))
     return listed(parts) if parts else tr("the horizontal cut is ready")  # Chinese: its own comma
 
 
@@ -145,7 +170,8 @@ class GisaxsResults(QWidget):
         if symmetry:
             shift = float(symmetry.get("shift_px") or 0.0)
             layout.addWidget(label(trf("Beam centre on the symmetry axis: x = {x} px ({shift} px).",
-                                       x=_number(symmetry.get("x_px"), 5), shift=f"{shift:+.2f}"), self))
+                                       x="—" if symmetry.get("x_px") is None else f"{float(symmetry['x_px']):.2f}",
+                                       shift=f"{shift:+.2f}"), self))
         halves = gisaxs.get("halves")
         if halves:
             layout.addWidget(label(tr("Halves: {halves} — {reason}").format(
@@ -157,16 +183,20 @@ class GisaxsResults(QWidget):
 
     def _spacing(self, layout: QVBoxLayout) -> None:
         spacing = (self.report.get("gisaxs") or {}).get("spacing")
-        self._heading("In-plane spacing", layout)
+        self._heading("Length scale 2π/q*", layout)
         if spacing is None:
             layout.addWidget(label(tr("No side maximum or shoulder away from qy = 0 in the measured range."), self))
             return
         values = {"d": f"{spacing['distance_nm']:.3g}", "q": f"{spacing['q']:.4g}"}
+        # A note either way: a length the curve shows, which a form factor or the beam tail makes as well.
         if spacing.get("kind") == "maximum":
-            layout.addWidget(badge(trf("D ≈ 2π/q* = {d} nm (maximum at |qy| = {q} Å⁻¹).", **values), GOOD, self))
+            layout.addWidget(badge(trf(
+                "2π/q* = {d} nm at the peak of the cut (|qy| = {q} Å⁻¹): a length scale, not necessarily the particle "
+                "spacing; check it with a model fit.", **values), NOTE, self))
         else:
-            layout.addWidget(badge(
-                trf("A shoulder at |qy| = {q} Å⁻¹ (2π/q ≈ {d} nm): a hint, not a resolved peak.", **values), NOTE, self))
+            layout.addWidget(badge(trf(
+                "2π/q* = {d} nm at a shoulder of the cut (|qy| = {q} Å⁻¹, no resolved peak): a length scale, not "
+                "necessarily the particle spacing; check it with a model fit.", **values), NOTE, self))
 
     def _fit(self, layout: QVBoxLayout) -> None:
         self._heading("Fit of I(qy)", layout)
@@ -190,31 +220,54 @@ class GisaxsResults(QWidget):
         save_plot.clicked.connect(lambda: self.save_plot())
         self.fit_plot.header_layout.insertWidget(1, save_plot)
         layout.addWidget(self.fit_plot)
-        rows = []
+        rows, bounded = [], []
         for row in solutions:
             component = (row.get("components") or [{}])[0]
             details = _details(row)
-            flagged = bool(row.get("warnings")) or not row.get("converged")
+            bounds = bound_words(row)  # a value at a bound is not determined by the curve: ⚠ on its cell too
+            ended = {item.get("parameter") for item in row.get("at_bounds") or () if item.get("component") in (0, None)}
+            flagged = bool(row.get("warnings")) or not row.get("converged") or bool(bounds)
             rows.append([(model_name(row["model"]) + (" ⚠" if flagged else ""), details),
-                         *((_number(component.get(key)), details) for key, _name in COLUMNS), (_number(row["chi2"]), details)])
+                         *((_number(component.get(key)) + (" ⚠" if key in ended else ""), details) for key, _name in COLUMNS),
+                         (_number(row["chi2"]), details)])
+            if bounds:
+                bounded.append(trf("{rank}: {bounds}", rank=row.get("rank"), bounds=_joined(bounds)))
         self.fit_table = table(FIT_HEADERS, rows, self, "guidedFitTable", numbers=FIT_NUMBERS,  # Fit details follow the row
                                copy_headers=FIT_COPY_HEADERS)
         self.fit_table.setMinimumHeight(min(260, 60 + 30 * len(rows)))
         self.fit_table.itemSelectionChanged.connect(self._show_solution)
         layout.addWidget(self.fit_table)
+        if bounded:  # the values at a bound by rank, in words (the table is too narrow for them)
+            bounds_label = label(trf("Values at a search bound, not determined by the curve — {rows}.",
+                                     rows=("；" if current_language() == "zh" else "; ").join(bounded)), self, role="muted")
+            bounds_label.setObjectName("guidedFitBounds")
+            layout.addWidget(bounds_label)
+        index, best = chosen_solution(self.fit)
+        percent = f"{CLOSE_CHI2 - 1:.0%}"
+        if index:
+            layout.addWidget(badge(trf(
+                "The run reports rank {rank} ({model}), selected above: the best-ranked solution within {percent} of "
+                "the first's χ²/N that converged with no non-linear value at a search bound.",
+                rank=best.get("rank"), model=model_name(best["model"]), percent=percent), NOTE, self))
+        elif bound_words(best) or not best.get("converged", True):
+            layout.addWidget(badge(trf(
+                "Every solution within {percent} of the first's χ²/N has a value at a search bound or did not "
+                "converge: the first is reported, and its values at a bound are not determined by the curve.",
+                percent=percent), WARN, self))
         layout.addWidget(label(trf(
             "Fitted: {curve} ({points} points); R, h and D in nm. Numerical fits of single particle families with size "
-            "dispersity and a paracrystal distance D; choose the model from what you know of the sample.",
+            "dispersity and a paracrystal distance D, a screening step: choose the model from what you know of the "
+            "sample and confirm it in Fitting.",
             curve=parts(self.fit.get("curve")), points=self.fit.get("points")), self, role="muted",
         ))
         buttons = FlowLayout()
         save_curve = QPushButton(tr("Save Fitted Curve…"), self)
         save_curve.setObjectName("guidedSaveFitCurve")
-        save_curve.setToolTip(tr("CSV: q (Å⁻¹), I, σ of the fitted curve and the best fit at the same q."))
+        save_curve.setToolTip(tr("CSV: q (Å⁻¹), I, σ of the fitted curve and the fit the run reports at the same q."))
         save_curve.clicked.connect(self.save_curve)
         save_table = QPushButton(tr("Save Fit Table…"), self)
         save_table.setObjectName("guidedSaveFitTable")
-        save_table.setToolTip(tr("CSV: every solution with its parameters (nm) and χ²."))
+        save_table.setToolTip(tr("CSV: every solution with its parameters (nm) and χ²/N."))
         save_table.clicked.connect(self.save_table)
         for button in (save_curve, save_table, refine):
             buttons.addWidget(button)
@@ -226,7 +279,7 @@ class GisaxsResults(QWidget):
             self.solution_details.showRequested.connect(self.solutionRequested)
             self.fit_details.add_widget(self.solution_details)
             layout.addWidget(self.fit_details)
-        self.fit_table.selectRow(0)
+        self.fit_table.selectRow(index)  # the solution the run reports
 
     # -- interaction -------------------------------------------------------------------
 

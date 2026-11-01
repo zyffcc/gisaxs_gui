@@ -5,16 +5,22 @@
   显示状态与科学数据的边界
 - **Related code**: `src/gimap/shared/detector_io/`（NeXus / HDF5：`nexus_layout.py`、`nexus_modules.py`、`nexus_datasets.py`、
   `nexus_reading.py`、`nexus_metadata.py`、`nexus_files.py`）、`src/gimap/shared/signed_cut.py`、`src/gimap/shared/geometry/`、
-  `src/gimap/features/analyze/domain/`（`validity.py`、`corrections.py`、`binning.py`、`gisaxs.py`、
-  `giwaxs.py`、`symmetry.py`）、`src/gimap/features/analyze/application/use_cases.py`、
+  `src/gimap/features/analyze/domain/`（`validity.py`、`bad_pixels.py`、`preprocess.py`、`corrections.py`、`intensity.py`、
+  `binning.py`、`gisaxs.py`、`giwaxs.py`、`symmetry.py`）、`src/gimap/features/analyze/application/frame_preprocessing.py`、
+  `use_cases.py`、`export_record.py`、
   `src/gimap/features/analyze/infrastructure/adapters/csv_export.py`、
   `src/gimap/features/fitting/infrastructure/adapters/local_files.py`、
   `src/gimap/features/fitting/presentation/bindings/workflow_v5_binding.py`、
   `src/gimap/features/prediction/infrastructure/adapters/module_preprocessing.py`
 - **Related tests**: `tests/test_analyze_domain.py`、`tests/test_analyze_frames_and_center.py`、
   `tests/test_analyze_fit_input_contract.py`、`tests/test_analyze_workspace.py`、
-  `tests/test_stable_metadata_ui.py`、`tests/test_prediction_adapters.py`
-- **Last verified**: 2026-10-14（读取、帧、导出与交接、两半各节对照代码；其余沿用 2026-09-28）
+  `tests/test_stable_metadata_ui.py`、`tests/test_prediction_adapters.py`、`tests/test_bad_pixels.py`、
+  `tests/test_intensity_corrections.py`、`tests/test_curve_quality.py`
+- **Last verified**: 2026-11-01（帧的准备、曲线的 σ 两节对照 `frame_preprocessing.py`、`binning.py`、`export_record.py`）；
+  读取、帧、导出与交接、两半各节 2026-10-14；其余沿用 2026-09-28
+- **科学说明**：公式、阈值、误差模型和它们的假设写在 [Physics and Methods Reference](../Physics_Manual.md)
+  （中文 [`Physics_Manual_zh.md`](../Physics_Manual_zh.md)）第 4–6 章；本文只写数据的所有权、顺序、谱系、模块边界与测试门禁。
+  方法、公式、默认值或阈值改了，两份参考和本文在同一次改动里一起改。
 
 ## 目的
 
@@ -27,7 +33,7 @@ flowchart LR
     A["文件<br/>CBF / NeXus·HDF5 / TIFF / EDF"] --> B["Frame<br/>float32 数据 + loader mask<br/>规范方向（第 0 行在上）"]
     B --> C["valid = 有限 ∧ ¬mask；整数计数帧另需 ≥ 0，浮点负值保留"]
     C --> D["Sum N frames（可选）"]
-    D --> E["校正：背景 → gap guard → 有效范围"]
+    D --> E["帧的准备：坏像素 → 掩膜 → 背景 → gap guard → 有效范围<br/>→ 镜像补齐、强度校正（GIWAXS，可选）"]
     E --> F["几何：instrument profile<br/>+ 会话 / 文件头中心、αi"]
     F --> G["GISAXS：Yoneda 带的原生列平均<br/>+ 束流中心列的原生行平均"]
     F --> H["GIWAXS：径向 bins、扇区、q 框、I(χ)"]
@@ -44,8 +50,8 @@ flowchart LR
 ## 帧与有效像素
 
 - `shared/detector_io` 返回规范方向的帧：像素 `(行 i, 列 j)` 覆盖 `[j, j+1] × [i, i+1]`，第 0 行在
-  顶部（与 `DetectorGeometry` 一致，见 [`geometry.md`](geometry.md)）。不再有 Flip UD、mirror fill 或 threshold
-  这类会改写数据的预处理。
+  顶部（与 `DetectorGeometry` 一致，见 [`geometry.md`](geometry.md)）。读取器不做 Flip UD 或 threshold 这类改写数据的
+  预处理；改写数值的只有下一节的可选步骤（背景、GIWAXS 的镜像补齐与强度校正），原始帧另存。
 - NeXus / HDF5（后缀 `.nxs .nx .nx5 .h5 .hdf5 .hdf`）：`inspect_nexus` / `cached_layout` 先按内容判断源的组成
   （`NexusLayout.kind`：`single_frame`、`stack`、`module_set`、`chunked_master`、`no_image`），文件名只作提议；
   模块组要求数据集路径、模块尺寸相同且模块位置（`translation/distance`）两两不同。每一帧都读，帧号超出抛
@@ -65,16 +71,32 @@ flowchart LR
   坏点）无效，浮点帧（扣暗场、减背景）的负值是数据（`negatives_valid=True`）。NeXus loader 把拒绝的像素变成 NaN，
   两者在这里统一。正常零计数保留。
 - `sum_frames`：Sum N frames 逐像素相加，像素只有在所有帧中都有效才有效（不用部分帧外推）。
+- 写出帧（Format Converter、Batch Export ▸ Converted frames）：`shared/detector_io/output_values.output_frame` 按存储类型
+  写（读取器给的是 32 位浮点数），使写出的文件读回时无数据的像素、其余数值和类型都与源相同：缝隙码原样保留，读取器已剔除的
+  像素写 −1（无符号帧必要时改用有符号类型；HDF5 里写该类型最大值），浮点帧写 NaN；HDF5 另写 NeXus `pixel_mask`（第 0 位）。
+  判断无数据用与 `valid_pixels` 相同的规则（`invalid_pixels`）；每帧元数据的 `pixel_values` 写明做法。
 
-## 校正（顺序固定，均为可选或可设为 0）
+## 帧的准备（顺序固定，`application/frame_preprocessing.py`）
 
-1. 背景：`frame − scale × background`，两帧都有效的像素才有效；背景帧按文件版本缓存一次。
-2. gap guard：`guard_invalid(valid, N)` 把探测器无效像素周围 N px（方形邻域，默认 3，0 关闭，最多 20）
-   也视为无效；帧边界不算无效。它只针对探测器无效像素，不针对后续的有效范围。
-3. 有效原始强度范围 Min / Max（饱和、热像素）。
+每一步的公式与假设见 Physics Manual §4.4–4.9 与第 5 章。顺序：
 
-校正从原始帧重新计算，不在上一版结果上累加；改变校正不重新读取文件。原始 `raw_data / raw_valid`
-与校正后的 `data / valid` 分开保存在 `FrameAnalysis` 中。
+1. 探测器自己的无效像素（读取器掩膜、缝隙码；`valid_pixels`）。
+2. 帧中找到的坏像素（`domain/bad_pixels.py`：孤立的热像素、死像素（只在计数帧上判断）、缺陷行 / 列上零散的亮像素；
+   Mask 步骤或设置 `analyze.bad_pixels` 可关）。
+3. 画的掩膜与掩膜文件（`domain/preprocess.rasterize`、`_file_mask`）。
+4. 背景：`frame − scale × background`，两帧都有效的像素才有效；背景帧按文件版本缓存一次。
+5. gap guard：`guard_invalid(valid, N)` 把**此时所有**无效像素周围 N px（方形邻域）也视为无效——读取器掩膜与缝隙码、
+   坏像素、画的与文件掩膜、背景帧中无效的像素；帧边界不算无效，之后的有效范围也不算。窗口里默认 3 px（记在
+   `analyze.gap_guard_px`），`Corrections` 和不含该键的设置文件默认 0；0 关闭，最多 20。
+6. 有效原始强度范围 Min / Max（饱和、热像素）。
+7. 镜像补齐（GIWAXS 且有几何时，默认关）：`domain/preprocess.mirror_fill` 按束流中心列在同一行补无效像素，
+   补了哪些记在 `filled_pixels`。
+8. 强度校正（GIWAXS 且几何已知时，默认关）：立体角、偏振、薄膜吸收，`I / factor`（`domain/intensity.py`，
+   `_correct_intensity`）；计数帧另记每像素的 `1 / factor`（`intensity_scale`），σ 由它传递（见“曲线”）。
+
+第 1–3 步是帧的有效性，第 4–7 步只在至少一步打开时运行（`Corrections.is_identity`），第 8 步在几何已知后、
+分析里运行（不属于 `is_identity`）。准备总是从原始帧重新计算，不在上一版结果上累加；改变设置不重新读取文件。
+原始 `raw_data / raw_valid` 与准备后的 `data / valid` 分开保存在 `FrameAnalysis` 中。
 
 ## 几何与 q
 
@@ -86,14 +108,23 @@ Refine x by Symmetry 只在当前水平带内求左右对称轴并改会话中�
 ## 曲线
 
 - GISAXS 水平切线：Yoneda 带（自动定位或用户拖动的行区间）中**每个探测器列**一个点——该列有效
-  像素的平均强度、Poisson 标准误差 `σ = √max(Σ, 1) / n`、有效像素数 `n`、有效像素的平均 qy。
+  像素的平均强度、σ（计数帧为 Poisson `√max(Σ, 1) / n`，其他帧见下面的三种模型）、有效像素数 `n`、有效像素的平均 qy。
   不插值、不重采样，缝隙保持为缝隙。竖直切线同理（每行一个点）。
 - GIWAXS：径向 bins、扇区、q 框和 I(χ) 为 bin 平均（`pixels` 为 bin 内有效像素数）。自动 bins 不比
   像素的 q 步长细；沿 q 的曲线把像素太少（< max(8, 中位数 10 %)）的相邻 bin 合并（像素加权的 x 与均值，
   不跨越 > 2.5 个 bin 的空隙）；I(χ) 不合并。
-- σ 的两种模型：计数帧（非浮点、未减背景）为上面的 Poisson 误差；浮点（扣暗场）帧或减背景后为 bin 内
-  像素离散度的标准误差 `s / √n`（单像素 bin 取其余 bin 的中位方差）。合并 bin 的 σ 为
-  `√(Σ nᵢ² σᵢ²) / Σ nᵢ`，对计数帧等于 `√Σ / n`。此时 `counting_model_valid` 为 false。
+- σ 的三种模型（公式见 Physics Manual §6.4、§5.5；是不是计数只在 `frame_preprocessing.photon_counts` 里决定）：
+  - 计数帧（存储类型不是浮点、未减背景、没有镜像补齐）：Poisson，GISAXS 的原生行 / 列和 GIWAXS 的固定边界 bin
+    （`BinnedMean`）都是 `√max(Σ, 1) / n`：全为 0 的行或 bin 的 σ 为 1/n，不为 0（加权拟合不能用 σ = 0）。
+  - 浮点（扣暗场）帧、减背景后、GIWAXS 镜像补齐后（补齐的像素重复另一侧的光子）：bin 内像素离散度的标准误差
+    `s / √n`（`binning.scatter_sigma`；单像素 bin 取其余 bin 的中位方差）。
+  - 计数帧开了 GIWAXS 强度校正：Poisson 按校正传递，每像素方差 `I′ / factor`（`I′ = I / factor`），
+    `σ = √max(Σ(I′ / factor), f̄²) / n`，f̄ 为 bin 内 1 / factor 的平均（一个计数在平均因子下的方差；
+    `BinnedMean.add` 的 `scale`）。
+
+  合并 bin 的 σ 为 `√(Σ nᵢ² σᵢ²) / Σ nᵢ`，对计数帧等于 `√Σ / n`。`# observation:` 的 `counting_model_valid` 只在第一种
+  且没有强度校正时为 true（`export_record.fit_input_observation`）：浮点帧、减背景、镜像补齐、GIWAXS 强度校正都使它为 false。
+  选哪种看存储类型而不是单位：以浮点存的原始计数得到离散度 σ，以整数存的处理后数据得到 Poisson σ。
 - 每条曲线的 `x` 带符号（qy < 0 在直射束左侧）；“送哪一半”只是 Fitting 的显示与选择，不改文件。
 
 ## 导出与交接
@@ -190,6 +221,12 @@ mask 和 column cut；随后使用排除指定 detector bands 后的正最大值
 沿与该声明正交的维度计算 marginal，presentation 不得硬编码或猜测轴方向。Au SavedModel 的 matrix
 row 是 `R=0.05–15 nm`，column 在训练 bundle 中是半高度 `h=0.05–15 nm`；对用户和论文图展示时转换为
 完整高度 `H=2h=0.1–30 nm`，但不得 transpose 或修改模型输出概率。
+
+没有声明的轴只是显示占位（0.05–15 nm），轴记录里为 `declared: false`；SEM 对比只接受 module 声明了
+`key: r`、`unit: nm`、`min` 和 `max` 的 row 轴（`array_contracts.normalize_prediction_output`、
+`presentation/bindings/sem_comparison.py`）。`module.yaml` 是程序文件，运行时只读：用户用 Import model...
+选的模型文件夹记在用户偏好 `prediction.model_paths`（按 module id，没有 id 时按文件夹名），载入时优先于
+`model.model_path`（`infrastructure/adapters/model_paths.py`）。
 
 ## XRR
 

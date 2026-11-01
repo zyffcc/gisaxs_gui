@@ -14,6 +14,7 @@ from ...domain import (
     PreprocessSpec,
 )
 from ...application.module_descriptions import describe_prediction_module
+from .model_paths import InMemoryModelPathStore
 
 
 def _load_yaml_mapping(text: str) -> dict[str, Any]:
@@ -52,9 +53,21 @@ def _distribution_axis(value: object) -> DistributionAxisSpec:
     )
 
 
+def module_model_key(module_id: str, folder: Path | None) -> str:
+    """What a user's model folder is remembered by: the module's id, else its folder name."""
+    return str(module_id or "").strip() or (Path(folder).name if folder is not None else "")
+
+
 class YamlModuleRepository:
-    def __init__(self, modules_root: Path):
+    """Modules from ``<root>/<module>/module.yaml``; the program files are only read.
+
+    ``model_paths`` holds the model folder each user chose (``Import model...``); it wins over
+    ``model.model_path`` of ``module.yaml``, which stays the default.
+    """
+
+    def __init__(self, modules_root: Path, model_paths=None):
         self.modules_root = Path(modules_root)
+        self.model_paths = model_paths if model_paths is not None else InMemoryModelPathStore()
 
     def discover(self) -> tuple[PredictionModule, ...]:
         if not self.modules_root.is_dir():
@@ -102,8 +115,10 @@ class YamlModuleRepository:
             if isinstance(raw_shape, list) and raw_shape
             else None
         )
+        module_id = str(data.get("id", "") or "")
+        chosen_model = self.model_paths.get(module_model_key(module_id, path.parent))
         return PredictionModule(
-            id=str(data.get("id", "")),
+            id=module_id,
             name=str(data.get("name", "") or path.parent.name),
             framework=str(data.get("framework", "")),
             version=str(data.get("version", "")),
@@ -111,7 +126,7 @@ class YamlModuleRepository:
             yaml_path=path.resolve(),
             model=ModelSpec(
                 format=str(model.get("format", "")),
-                path=str(model.get("model_path", "")),
+                path=chosen_model or str(model.get("model_path", "") or ""),
             ),
             preprocess=PreprocessSpec(
                 entry=str(preprocess.get("entry", "")),
@@ -125,22 +140,11 @@ class YamlModuleRepository:
         )
 
     def update_model_path(self, module: PredictionModule, model_path: Path) -> None:
-        if module.yaml_path is None:
-            raise ValueError("Prediction module has no module.yaml path")
-        path = Path(module.yaml_path)
-        text = path.read_text(encoding="utf-8")
-        quoted = "'" + str(model_path).replace("'", "''") + "'"
-        pattern = re.compile(r"(?m)^(\s*model_path\s*:\s*).*$")
-        if pattern.search(text):
-            updated = pattern.sub(lambda match: match.group(1) + quoted, text, count=1)
-        else:
-            model_match = re.search(r"(?m)^(\s*)model\s*:\s*$", text)
-            if model_match is None:
-                raise ValueError("module.yaml has no model section")
-            insertion = model_match.end()
-            indent = model_match.group(1) + "  "
-            updated = text[:insertion] + f"\n{indent}model_path: {quoted}" + text[insertion:]
-        path.write_text(updated, encoding="utf-8")
+        """Remember ``model_path`` as this user's model of ``module``; ``module.yaml`` is not written."""
+        key = module_model_key(module.id, module.folder)
+        if not key:
+            raise ValueError("Prediction module has no id or folder to remember its model by")
+        self.model_paths.set(key, str(model_path))
 
 
 # Backward-compatible import for callers that previously obtained this mapper

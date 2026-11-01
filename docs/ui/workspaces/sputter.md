@@ -1,8 +1,10 @@
 # 溅射（Sputter）
 
-- **Status**: Current（2026-10-22 重新设计：模型随仓库提供，选文件夹后按“预测”即可；2026-10-23 加入文献方法和“文献对照”页；
-  同日改为物理路径始终是默认解释、文献方法作为对网络的核对，并加入可选的沉积结束时间；2026-10-26 加入由 q_z 干涉条纹
-  得到的岛高度 H，显示结果后在后台测量）
+- **Status**: Current（2026-10-22 重新设计：模型随仓库提供，选文件夹后按“预测”即可；2026-10-23 加入文献方法和“文献对照”页，
+  并加入可选的沉积结束时间；文献方法有数值（有沉积速率、金属峰的时间窗足够）时是默认解释，网络的物理路径是第二个解释，
+  “文献对照”页比较两者；2026-10-26 加入由 q_z 干涉条纹得到的岛高度 H，显示结果后在后台测量）
+- **科学说明**：各量的定义、规则和阈值见 [Physics and Methods Reference](../../Physics_Manual.md) 第 12 章；本文写调用链、
+  文件与界面约定。
 - **Scope**: 原位溅射序列（聚合物上的 Ag、Au；Cu 用 Ag 模型近似）逐时间窗的颗粒尺寸 R、间距 D、生长阶段、金属厚度
   的替代量，以及它们的可靠性
 - **Related code**: [`src/gimap/features/sputter/`](../../../src/gimap/features/sputter/)（说明见其 `README.md`）、
@@ -23,7 +25,7 @@
   [`tests/test_sputter_fringes.py`](../../../tests/test_sputter_fringes.py)（干涉条纹工具：合成的生长层、无条纹的切线、
   命令行；数据：[`tests/sputter_fringe_data.py`](../../../tests/sputter_fringe_data.py)）、
   [`tests/test_sputter_fringes_page.py`](../../../tests/test_sputter_fringes_page.py)（页面：H 栏、时间窗列、可靠性段落、后台测量）
-- **Last verified**: 2026-10-23（离线测试；编造的扫描名与数值；文献方法另在本机真实结果的副本上核对过，数值不进仓库）
+- **Last verified**: 2026-11-01（状态行、默认解释、工作进程数和光斑移出样品的规则对照代码）；其余 2026-10-23（离线测试；编造的扫描名与数值；文献方法另在本机真实结果的副本上核对过，数值不进仓库）
 
 ## 调用链
 
@@ -37,7 +39,8 @@
    记住各值（`remember`）→ TaskRunner 键 `sputter_predict` 只提交一个任务 `SputterService.predict`：
    `installer.verify()`（子进程 `import torch`，`PYTHONNOUSERSITE=1`）→ 缺少时 `installer.install()`（pip，见下）→
    再验证 → `runner.analyze()`（`BundledToolkit`：控制台版 `sys.executable`、`--device cpu`、
-   `--workers max(1, min(8, 核数−1))`、光束中心 −0.5 px 换成工具包的像素中心索引、`--rate-nm-s/--t0-s/--t-end-s`；先写
+   `--workers`：`toolkit.default_workers()` = max(1, min(8, 核数−1))，并且不多于空闲内存装得下的个数
+   （(可用内存 − 1 GB) / 0.4 GB，没有 psutil 时只看核数）、光束中心 −0.5 px 换成工具包的像素中心索引、`--rate-nm-s/--t0-s/--t-end-s`；先写
    `gimap_request.json`）→ 读结果（默认 `physical`）。事件经 `eventReceived` 信号回到界面线程：`PredictStep`、
    `InstallProgress`、工具包的输出行（`ProgressTracker`：`SPUTTER_PROGRESS`、`INTAKE_PLAN`、`INTAKE_CHUNK`、
    `INTAKE_EXCLUDED`）。失败包装成 `Failure`（消息 + pip 或模型的最后几行，放进“详情”）。
@@ -149,8 +152,11 @@
   不会重用旧模型的网络输出；`gimap_request.json` 记 `model_id` 和所选的 `scan_folder`。
 - 物理路径不在相邻时间窗之间切换精修值和网络值（等级 P）；精修值留在表里。强度的周期性调制称“强度调制周期（可能来自样品台
   平移）”：沉积时样品台来回平移（防止光束损伤同一处），行程两端光斑可能到达样品边缘或移出样品；只凭数据不能证明来源，所以用问句。
-- 光斑可能移出样品（工具包 `sputter_offsample.py`）：只凭强度判断——有调制时低于前后各一个调制周期内水平（相邻时间窗的 90% 分位数，
-  取较低一侧）的 50%，没有调制时只标低于前后各 10 s 内水平 20% 的极深下凹；不读样品台位置。这些时间窗保留数值，但不参与阶段投票，
-  不进趋势线、来回变化计数和文献方法的 D 趋势；页面把它们画成空心灰点、在结果行计数、在可靠性报告里说明（`physical.BEAM_OFF*`）。
+- 光斑可能移出样品（工具包 `sputter_offsample.py`）：只凭强度判断——有调制时，下凹的核心是低于前后各 max(调制周期, 2 s) 内水平
+  （相邻时间窗 ln 强度的 90% 分位数，取较低一侧）50% 的时间窗；没有调制时只有低于前后各 10 s 内水平 20% 的极深下凹才算核心。
+  从核心向两侧延伸到仍低于各自水平 80% 的相邻时间窗，整个下凹都标出（只延伸有核心的下凹）；每侧要有至少 3 个有数据的时间窗，
+  序列首尾不判断；不读样品台位置。这些时间窗保留数值，但不参与阶段投票，不进趋势线、来回变化计数、质量守恒、文献方法的 D 趋势和
+  对网络的检验；页面把它们画成空心灰点、在结果行计数、在可靠性报告里说明（`physical.BEAM_OFF*`）。
 - 文献对照的已发表数值都带引用键、DOI 和来源类型（正文/表、图读、计算、综述、摘要）；用户的速率只来自界面输入，不写进仓库。
-- 页面的方法是网络：物理路径始终是默认解释；文献方法只作为对它的核对（第二个选择和“文献对照”页），按构造与文献一致。
+- 默认解释：文献方法有数值时是它（`StructureFolderReader.available` 把 `literature` 排在 `physical` 前面），否则是网络的物理路径；
+  文献方法的 R 按构造与文献一致，独立的检验是 D(δ)、渗流与已发表区间、网络的 2R/D 和质量守恒（“文献对照”页）。

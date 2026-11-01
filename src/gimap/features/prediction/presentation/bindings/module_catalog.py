@@ -25,6 +25,11 @@ from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import set_role
 from src.gimap.shared.file_paths import normalize_path
 
+NO_MODEL_IMPORTED = "No model imported for this module yet. Use Import model... to choose its folder."
+MODEL_FOLDER_MISSING = "Model folder not found: {path}. Use Import model... to choose it again."
+MODEL_FOLDER_REMEMBERED = "Model folder remembered for {name} in your user data; module.yaml is unchanged."
+MODEL_FOLDER_NOT_REMEMBERED = "Could not remember the model folder: {error}"
+
 
 class ModuleCatalogMixin:
     """Own module catalog presentation behavior."""
@@ -235,9 +240,12 @@ class ModuleCatalogMixin:
         if not model_path or not os.path.exists(model_path):
             self._load_module_mask(self._current_module)
             self._persist_parameters()
-            self._append_status_message(
-                "Module selected. Use Import Model to choose and load a model.", level="INFO"
-            )
+            if model_path:  # remembered, or named by module.yaml, but not on this computer
+                self._append_status_message(
+                    trf(MODEL_FOLDER_MISSING, path=model_path), level="WARN"
+                )
+            else:
+                self._append_status_message(NO_MODEL_IMPORTED, level="INFO")
             self._refresh_predict_readiness()
             return
 
@@ -412,16 +420,23 @@ class ModuleCatalogMixin:
             QMessageBox.information(self.main_window, "No Module", "Please select a module first.")
             return
         model_path = (spec.get("model_path") or "") if isinstance(spec, dict) else ""
-        if not model_path or not os.path.exists(model_path):
-            model_path = self._select_model_folder(
-                spec.get("folder", "") if isinstance(spec, dict) else ""
-            )
+        known = bool(model_path) and os.path.exists(model_path)
+        # Pressed again once this model is loaded: choose another folder (module.yaml no longer decides).
+        loaded = (
+            known
+            and self._current_model is not None
+            and os.path.abspath(model_path)
+            == os.path.abspath(str(self.current_parameters.get("module_model_path") or ""))
+        )
+        if not known or loaded:
+            start = os.path.dirname(os.path.abspath(model_path)) if loaded else spec.get("folder", "")
+            model_path = self._select_model_folder(str(start or ""))
             if not model_path:
                 return
             self.current_parameters["module_model_path"] = model_path
             self._current_module = spec
             self._current_module["model_path"] = model_path
-            self._write_model_path_to_yaml(self._current_module, model_path)
+            self._remember_model_path(self._current_module, model_path)
             self.refresh_framework_options_for_current_module()
         else:
             model_path = os.path.abspath(model_path)
@@ -548,16 +563,17 @@ class ModuleCatalogMixin:
         if disclosure is not None:
             disclosure.set_expanded(True)
 
-    def _write_model_path_to_yaml(self, spec: Dict[str, object], model_path: str) -> None:
+    def _remember_model_path(self, spec: Dict[str, object], model_path: str) -> None:
+        """Keep the chosen folder in the user data folder; module.yaml, a program file, is not written."""
         module = spec.get("_prediction_module") if isinstance(spec, dict) else None
         if module is None:
             return
         if self.prediction_view_model.update_model_path(module, Path(model_path)):
-            yaml_path = spec.get("yaml_path", "module.yaml")
-            self._append_status_message(trf("Updated model_path in {name}", name=os.path.basename(str(yaml_path))))
+            name = str(spec.get("name") or getattr(module, "name", "") or "")
+            self._append_status_message(trf(MODEL_FOLDER_REMEMBERED, name=name))
             return
         self._append_status_message(
-            self.prediction_view_model.state.error_message or "Failed to update module.yaml",
+            trf(MODEL_FOLDER_NOT_REMEMBERED, error=self.prediction_view_model.state.error_message or ""),
             level="ERROR",
         )
 

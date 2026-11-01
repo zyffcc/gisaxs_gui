@@ -37,8 +37,8 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
   几个大面阵探测器的原位序列（每个几百帧）一起跑要几分钟。
 - 退出码：
   - **0**：全部分析完，没有待回答的问题。
-  - **2**：至少一个样品有 “Needs attention”。可能是缺一个值（会写出补这个值的选项）、一个选项定不了的判断，
-    或者没找到几何、什么也没分析。
+  - **2**：至少一个样品有 “Needs attention”。可能是缺一个值（会写出补这个值的选项）、一个选项定不了的判断
+    （例如略去的探测器倾斜，见下表的 detector tilt），或者没找到几何、什么也没分析。
   - **1**：至少一帧失败，比如读不了的文件；其他帧照样有报告。1 优先于 2：有失败也有待回答的问题时退出码是 1，
     仍要读其他样品的 Needs attention。
 
@@ -48,10 +48,12 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
 | Decision | 默认 | 什么时候不合适 | 怎么改 |
 |---|---|---|---|
 | technique | GIMaP 应用几何后自动识别：探测器任一角超过 2θ = 20° 就是 GIWAXS，否则 GISAXS | 小探测器或长距离的 GIWAXS 会被认成 GISAXS | `--technique giwaxs` |
-| geometry | 依次尝试：`--calibration` → 笔记里点名的标定文件（完整路径；只写文件名时，取帧所在文件夹或笔记里点名的文件夹中同名的那个，不会为一个名字去搜索） → 已保存的仪器配置 → 在附近搜索（同目录及子目录、父目录和兄弟目录、往上两三层；2 个标定文件 + 3 张标样图） | 仪器配置只按探测器名和图像尺寸匹配，不管是哪次束线实验；搜索也可能挑到别的实验的标定，“quality: good” 只说明标定和它自己的标样一致。搜索在现成的标定文件之间只看修改时间离帧多近：整个文件夹是一次拷贝或下载来的时候，时间说明不了什么，这时要点名。搜索采用的标定在 Decisions 里另有一行 “calibration found by the search”：完整路径，以及从帧所在文件夹看它在哪里（只是说明，不会提问），转述结果前先看这一行；`.poni` 和 GIMaP 的 `.json` 直接采用，不再用标样核对 | `--calibration <文件>`、`--no-saved-profiles`、`--recalibrate` |
+| geometry | 依次尝试：`--calibration` → 笔记里点名的标定文件（完整路径；只写文件名时，取帧所在文件夹或笔记里点名的文件夹中同名的那个，不会为一个名字去搜索） → 已保存的仪器配置 → 在附近搜索（同目录及子目录、父目录和兄弟目录、往上两三层；2 个标定文件 + 3 张标样图） | 仪器配置只按探测器名和图像尺寸匹配，不管是哪次束线实验；搜索也可能挑到别的实验的标定，“quality: good” 只说明标定和它自己的标样一致。搜索在现成的标定文件之间先看所在的文件夹（帧所在文件夹 → 它的子目录 → 父目录 → 兄弟目录 → 更上层），同一类里再看修改时间离帧多近：帧所在文件夹里没有标定时会取旁边或上面的；同一文件夹里有几个标定、整个文件夹又是一次拷贝或下载来的时候，时间说明不了什么。这两种情况要点名。搜索采用的标定在 Decisions 里另有一行 “calibration found by the search”：完整路径，以及从帧所在文件夹看它在哪里（只是说明，不会提问），转述结果前先看这一行；`.poni` 和 GIMaP 的 `.json` 直接采用，不再用标样核对 | `--calibration <文件>`、`--no-saved-profiles`、`--recalibrate` |
+| detector tilt | GIMaP 的探测器是垂直于光束的平板：`.poni` 的倾斜（`Rot1`、`Rot2`）换算成直射束和距离后略去（`Rot3` 和 `orientation` 也不用）。GIMaP 在帧的有效像素上（离直射束 10 px 以内的除外）比较倾斜几何和由同一个 `.poni` 换算的平板几何的 \|q\|（之后移动的光束中心不计入）：倾斜 > 1° 或最大相对误差 > 0.5 % 时列进 Needs attention（“detector tilt”，没有选项能补），否则 Decisions 里写一行 “detector tilt: X° left out” 和误差。数值在 `report.json` 的 `geometry.flat_detector`（`q_error_max` 是分数） | 实验室 GIWAXS（Xeuss、SAXSpoint、Ganesha）常把探测器倾斜放置：公开 Xeuss 帧倾斜 6.06°，离光束最远的角上 \|q\| 偏 6.3 %（RMS 4.2 %），峰位都带这个误差；P08 的 0.31° 只差 0.2 % | 没有选项能修正（不建模倾斜）。转述峰位时写明误差和它随离光束的距离增大；要准确的 q 就用完整的 `.poni` 几何（如 pyFAI）约化 |
 | frames | 序列取最后五分之一的帧求和，至多 10 帧（终态）；不到 10 帧只取最后一帧 | 问题关心的是过程，或者开头 | `--frame N --sum K`（负数从末尾数；只给 `--frame` 时从该帧起求和同样的默认帧数，单帧用 `--sum 1`；求和块不会越过最后一帧，所以和覆盖整个序列时 Decisions 会写明它是整个序列而不是一个状态） |
+| peak search | 最多拟合 12 个最显著的候选峰（为了快）；候选更多时 Decisions 的 peak search 一行写 “N candidate peaks found; the 12 most prominent were fitted”，峰表、扇区比较、环和序列提示都只来自这 12 个（序列提示的标题也这样写）。候选峰是拟合前的极大，全部拟合得到的峰比候选少（公开 P08 帧：115 个候选，全部拟合是 32 个峰） | 用户要完整的峰表、某个弱一些的峰，或序列提示 | `--max-peaks N`；`find_peaks` / `run_standard_pipeline` 的 `max_peaks` |
 | rings | 面积最大的 3 个没有警告的峰算取向和尺寸 | 用户问的是别的环 | `--rings N`；指定某个 q 要用 `call` 或 MCP 的 `ring_orientation`、`crystallite_size` |
-| 能量 / αi / 像素 | 能量：选项 > 头文件 > 笔记（只认 “12.4 keV” 这种写法；波长要自己换算后传 `--energy-kev`）> 标定文件的波长（这时 Decisions 里没有 energy 一行，能量来源就是几何来源）。αi：选项 > 笔记 > 仪器配置（只在几何也取自仪器配置时），都没有时先用 0° 并提问。像素：选项 > 头文件 > 笔记。笔记里的值只有唯一时才取 | 笔记里有两个不同的值，或者有效值只在幻灯片、日志里 | `--energy-kev`、`--incidence-deg`、`--pixel-size-um` |
+| 能量 / αi / 像素 | 能量：选项 > 头文件 > 笔记（只认 “12.4 keV” 这种写法；波长要自己换算后传 `--energy-kev`）> 标定文件的波长（这时 Decisions 里没有 energy 一行，能量来源就是几何来源）。αi：选项 > 笔记 > 分析命令栏里设定的 αi（手动或之前的 `set_incidence_angle`；分析用它代替仪器配置的值，Decisions 写 “from Analyze's command bar”）> 仪器配置（只在几何也取自仪器配置时），都没有时先用 0° 并提问；选项或笔记的值与命令栏不同时会替换命令栏里的值，报告的 αi 就是实际用的。像素：选项 > 头文件 > 笔记。笔记里的值只有唯一时才取 | 笔记里有两个不同的值，或者有效值只在幻灯片、日志里 | `--energy-kev`、`--incidence-deg`、`--pixel-size-um` |
 | 标样 | `--standard` > 笔记里唯一点名的标样 > 文件名 > 所有标样拟合比较（笔记和文件名不一致时也比较） | 混合标样的写法：`LaB6+CeO2` 是混合，`LaB6, CeO2` 是两种 | `--standard` |
 
 标定验收看的是标样的线落在的 q：平均误差 ≤ 0.2 % 为好，≤ 0.5 % 可用（需要至少 3 条线）。测到 3 条以上线时不看
@@ -71,6 +73,9 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
   αi 主要移动 qz，几乎不改 |q|。用户给了材料时，把测到的 q 和已知线逐条比较。
 - **峰的比值是晶系的线索。** 基线只检查层状和六方序列（2 % 以内），从不判定物相。
   只用可靠峰，并写出算式：写出测到的 q₂ / q₁，再和已知的比值相比（例如 bcc (200)/(110) 的 √2 ≈ 1.414）。
+- **q 是运动学值，± 只是统计误差。** Decisions 的 q 一行写出这一帧的 k·sin αi：在薄膜临界角附近或以下，折射使 q_z 偏移至多
+  这么多（P08 公开帧 αi = 0.075° 时 0.0119 Å⁻¹，远大于峰位的统计 ±）；uncertainties 一行写出误差模型（泊松计数，或浮点、扣背景、
+  镜像填补的帧用像素离散）。转述峰位或 d 时把这些系统误差和统计 ± 分开写，不要把像素离散的 σ 叫计数误差。
 - **Scherrer 尺寸是下限**：基线没有扣除仪器展宽。有标样的峰宽时，用 `crystallite_size(q_center, instrumental_fwhm=…)`
   扣除（高斯平方相减），并写出宽度从哪里来。
 - **缺失楔边上的极大值**：真正的极大可能落在测不到的 χ 里。
@@ -91,13 +96,16 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
 | a spike-like artefact (flat top …) | 平顶宽 ≥ 15 个 bin，至少一侧边缘在 1 个 bin 内陡升 | 探测器的一行或一列、模块边缘；同上处理。窄于 15 个 bin 的方块不会被识别 |
 | a broad halo | FWHM > q 的 15 % | 非晶有序；不给晶粒尺寸 |
 | shadowed | 强度低于同一 q 漫散射背景的 20 % | 这些 χ 算作没测到；扇区落在阴影里就不比较 |
-| Only …% of the orientation range | sin χ 加权覆盖 < 80 % | 不给 Herman f，只给测到的范围 |
+| Only …% of the orientation range | sin χ 加权覆盖 < 80 % | 不给 Hermans f，只给测到的范围 |
 | not measured (missing wedge) | 靠近 qz 的 \|χ\| 没有像素 | f 偏低，照实写 |
 | no single preferred orientation | 两个极大高度差在 15 % 以内、相距 ≥ 30° | 不说取向 |
-| weak or no preferred orientation | \|f\| < 0.1 | — |
+| no clear preferred orientation | \|f − f_iso\| < max(0.1, 3σ_f)，最强处在 0° 或 90° 的 20° 以内（f_iso：同样测到的 \|χ\| 上随机环的 f） | 不说取向 |
+| no single preferred orientation: strongest at …, but f − f_iso … | 最强处在法线附近而 f − f_iso < 0，或在平面附近而 f − f_iso > 0 | 不说取向 |
+| tilted: maximum at χ ≈ ±… | 最强处在 20°–70° 之间（且没有高度相近的第二个极大） | 只凭极大命名，不比较 \|f − f_iso\| 和裕量：f − f_iso 小时要写出它，别当成强织构 |
+| Leaving out \|χ\| ≥ 85°, next to the sample horizon … | 去掉这些分箱后 f − f_iso 的变化同时超过 0.01 和 3σ_f；“Without those bins … another verdict” 表示结论会变 | 不排除；Decisions 的 ring orientation 一行点名这些环。出射角最小处的吸收、透射函数或阴影没有校正：先看 ±90° 附近的 I(χ)，再把 f 当织构 |
 | mainly in-plane / out-of-plane | 两个扇区之比 ≥ 2 | — |
 | its shape could not be fitted | 高斯拟合失败，但信号 ≥ 2 × min_snr（默认 6σ） | 不算可靠峰；看图像上这个 q（模块缝隙、探测器边缘、重叠） |
-| `at_edge`（GUI 显示 “at the end of the data: check”） | 峰在 q 范围末端 1.5 个峰宽以内 | 不排除：仍算可靠峰，可能被选去算环和尺寸；形状、位置和宽度可能被截断，要自己核对 |
+| `at_edge`（报告和 GUI 显示 “at the end of the data: check”） | 峰在 q 范围末端 1.5 个峰宽以内 | 不算可靠峰：不选去算环和尺寸，也不进序列提示（Decisions 的 rings analysed 写 “not analysed: … (at the end of the data)”）；仍在峰表里，形状、位置和宽度可能被截断，要用它就自己核对 |
 
 所问的 q 处没有峰时：`ring_orientation` 的结果里 `analysed` 字段写 “no peak at q = … the nearest feature … was
 analysed”；`crystallite_size` 不提示，直接用 2 个峰宽内最近的峰，要核对它返回的 q。两者分析的都可能不是所问的峰。
@@ -133,18 +141,20 @@ python tools/gimap_agent.py call <图像> steps.json   # 按顺序执行 [{"tool
 再放 `find_peaks`、`ring_orientation`、`crystallite_size`；`crystallite_size` 需要同一会话里先对同一条曲线跑过
 `find_peaks`。MCP 的会话在两次 `open_frame` 之间一直保持。
 
-- **MCP**：Codex 写在 `~/.codex/config.toml`，或用 `claude mcp add`：
+- **MCP**：Codex 写在 `~/.codex/config.toml`，或用 `claude mcp add`。`<python>` 是运行 GIMaP 的解释器
+  （便携包里是 `<GIMaP folder>\runtime\python.exe`，源码安装时是你那个环境的 python）；`<GIMaP folder>`
+  是 GIMaP 所在的文件夹：
 
   ```toml
   [mcp_servers.gimap]
-  command = 'D:\conda\envs\GUI\python.exe'
-  args = ['E:\PythonCode\gisaxs_gui\tools\gimap_agent.py', 'mcp']
+  command = '<python>'
+  args = ['<GIMaP folder>\tools\gimap_agent.py', 'mcp']
   startup_timeout_sec = 60
   tool_timeout_sec = 900   # 标定一个大的 NeXus 要一分钟以上
   ```
 
   ```bash
-  claude mcp add gimap -- D:/conda/envs/GUI/python.exe E:/PythonCode/gisaxs_gui/tools/gimap_agent.py mcp
+  claude mcp add gimap -- <python> <GIMaP folder>/tools/gimap_agent.py mcp
   ```
 
   （在 bash 里用正斜杠：反斜杠会被吞掉。长调用超时时，调大 `MCP_TOOL_TIMEOUT`，单位毫秒。）

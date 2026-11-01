@@ -164,9 +164,13 @@ SPUTTER_ZH = {
     "Model: bundled with GIMaP · Python: {python} · PyTorch is checked when you press Predict":
         "模型：随 GIMaP 提供 · Python：{python} · 按“预测”时检查 PyTorch",
     "about 1.2 GB": "约 1.2 GB",
-    "The Sputter model is not in this GIMaP folder: {folder} is missing or incomplete. Update GIMaP "
-    "(Update_GIMaP.bat or a new download); the model is part of it.":
-        "这个 GIMaP 文件夹里没有溅射模型：{folder} 不存在或不完整。请更新 GIMaP（Update_GIMaP.bat 或重新下载）；模型是它的一部分。",
+    "The Sputter model is not in this GIMaP folder: {folder} is missing or incomplete. The model is part "
+    "of GIMaP. Portable version: it comes with the package, so this folder is incomplete; install or "
+    "extract the release again. Git clone: run Update_GIMaP.bat. Folder from Download ZIP: download "
+    "it again.":
+        "这个 GIMaP 文件夹里没有溅射模型：{folder} 不存在或不完整。模型是 GIMaP 的一部分。便携版：模型随安装包提供，"
+        "所以是这个文件夹不完整，请重新安装或重新解压发布包。Git 克隆：运行 Update_GIMaP.bat。"
+        "从 Download ZIP 得到的文件夹：请重新下载。",
     "Checking PyTorch…": "正在检查 PyTorch…",
     "Step 1 of 2: installing PyTorch ({size}, the first time only)…": "第 1/2 步：正在安装 PyTorch（{size}，只在第一次）…",
     "Step 2 of 2: predicting the structure…": "第 2/2 步：正在预测结构…",

@@ -8,8 +8,9 @@
   fails when it is corrected, so the texts follow. The window no longer fills the estimate with a built-in
   distance: the rule it follows is checked here on the window itself.
 - A case built on private data is not in the repository, and no document names one.
-- Fitting starts a new user with a neutral model and stores one block of values per shape; 0.1.0 is still a
-  pre-release.
+- Fitting starts a new user with a neutral model and stores one block of values per shape.
+- The documents say whether the version running is a pre-release, as ``PRE_RELEASE`` in ``shared/version.py``
+  does.
 
 As in ``test_release_docs_contents.py``, a statement that can be read from the code is checked against it.
 """
@@ -108,7 +109,13 @@ def test_the_update_script_does_what_the_documents_say() -> None:
         "puts modifications aside and back": '"stash", "push"' in script and '"stash", "apply"' in script,
         "stops before it overwrites a file of yours": "different files of your own" in script,
         "reports only with -DryRun": "[switch]$DryRun" in script,
-        "says when the packages changed": "python -m pip install -r requirements.txt" in script,
+        # Both lists, and both ways of starting: Start_GIMaP.bat adds the packages itself at its next start.
+        "says when the packages changed": (
+            "python -m pip install -r requirements.txt" in script
+            and "python -m pip install -r requirements-sputter.txt" in script
+            and "Started with Start_GIMaP.bat: nothing to do" in script),
+        "says what a folder without .git needs": (
+            "run the installer of the new version" in script and "'Download ZIP': download the ZIP again" in script),
         "prints how to go back": "To go back to what you had" in script,
         "prints how to delete the backup": "Once things look right, delete what was kept" in script,
         # ``git ls-files --eol`` finds the files a checkout holds converted although .gitattributes says -text.
@@ -370,7 +377,7 @@ def test_the_documents_say_the_xrr_window_shows_the_pixels_of_analyze() -> None:
                  "keep their numbers (pixel centres counted from 0)"):
         assert said in fixed, said
 
-    section = " ".join(_part(_text(MANUAL), "### 8.2 XRR Series Extractor", "### ").split())
+    section = " ".join(_part(_text(MANUAL), "### 9.2 XRR Series Extractor", "### ").split())
     for stale in ("still counts pixel centres from 0", "subtract 0.5 px", "half a pixel to the right of and below the point"):
         assert stale not in section, stale
     for said in ("same pixel coordinates as in Analyze and Geometry Calibration", "(0.5, 0.5)",
@@ -455,7 +462,7 @@ def test_the_nexus_header_limitation_of_the_xrr_window_is_still_true(tmp_path: P
     stored, so the XRR window, which takes the two header numbers as column and row of the frame it shows,
     marks them "from file", lets them replace the centre of the last calibration, and reads the marked pixel.
     When this fails, the reading of other NeXus files changed: check the limitation in CHANGELOG.md,
-    docs/User_Manual.md (section 8.2) and docs/ui/workspaces/xrr.md.
+    docs/User_Manual.md (section 9.2) and docs/ui/workspaces/xrr.md.
     """
     from types import SimpleNamespace
 
@@ -478,7 +485,7 @@ def test_the_nexus_header_limitation_of_the_xrr_window_is_still_true(tmp_path: P
     from src.gimap.shared.detector_io import load_detector_image
 
     limitations = " ".join(_part(_text(CHANGELOG), "### Known limitations", "### ").split())
-    section = " ".join(_part(_text(MANUAL), "### 8.2 XRR Series Extractor", "### ").split())
+    section = " ".join(_part(_text(MANUAL), "### 9.2 XRR Series Extractor", "### ").split())
     for text in (limitations, section):
         assert "without the turn (transpose and flip) the frame gets when it is loaded" in text
         assert "*from file*" in text and "replaces the centre of the last calibration" in text
@@ -530,7 +537,7 @@ def test_the_nexus_header_limitation_of_the_xrr_window_is_still_true(tmp_path: P
         shown = (window.center_x_spin.value(), window.center_y_spin.value())
         assert shown == (along_fast + 0.5, along_slow + 0.5), (
             "the XRR window no longer takes a NeXus header centre as column and row of the frame it shows: "
-            "remove the limitation from CHANGELOG.md, docs/User_Manual.md (section 11) and "
+            "remove the limitation from CHANGELOG.md, docs/User_Manual.md (sections 9.2 and 13) and "
             "docs/ui/workspaces/xrr.md"
         )
         # Read as stored, the header's column and row are those of the frame shown: a one-pixel ROI reads the mark.
@@ -608,7 +615,7 @@ def test_the_estimated_distance_is_filled_in_as_the_documents_say(tmp_path: Path
     "It is never filled with a built-in value: on a new installation it stays on *Optional*. But each time an
     image is opened it takes the distance the image file states, or else the distance of the calibration
     applied last, also when you had typed another value or cleared the field; with neither, a value you typed
-    stays." When this fails the rule changed: change section 9 of docs/User_Manual.md, the limitation and the
+    stays." When this fails the rule changed: change section 4.3 of docs/User_Manual.md, the limitation and the
     fix in CHANGELOG.md and docs/ui/workspaces/calibration.md (the rule itself is tested, case by case, in
     tests/test_release2_calibration_estimate.py).
     """
@@ -706,7 +713,7 @@ def test_the_auto_detect_limitation_is_still_true(tmp_path: Path) -> None:
     shorter distance first; with the standard chosen and no estimated distance the distance is right; with the
     standard chosen and a wrong estimate typed in (2000 mm) a solution near 1830 mm comes first. When one of
     these is corrected this test fails: change the limitation in CHANGELOG.md, docs/User_Manual.md
-    (section 9) and docs/ui/workspaces/calibration.md, and turn that part of this test into the regression
+    (sections 4.3 and 13) and docs/ui/workspaces/calibration.md, and turn that part of this test into the regression
     test. What helps is checked too: an approximate distance puts the right standard first for Auto Detect.
     """
     if not PUBLIC_AGBH.is_file():
@@ -735,7 +742,7 @@ def test_the_auto_detect_limitation_is_still_true(tmp_path: Path) -> None:
     first = automatic.selected_candidate
     assert not (first.standard_key == "agbh" and abs(first.distance_mm - expected_mm) <= 0.03 * expected_mm), (
         "Auto Detect now ranks the right standard first on this image: remove the known limitation from "
-        "CHANGELOG.md, docs/User_Manual.md (section 9) and docs/ui/workspaces/calibration.md"
+        "CHANGELOG.md, docs/User_Manual.md (sections 4.3 and 13) and docs/ui/workspaces/calibration.md"
     )
     # What the documents say was seen: another standard, at a much shorter distance; silver behenate last.
     assert first.standard_key == "lab6" and first.distance_mm < 0.25 * expected_mm
@@ -746,7 +753,7 @@ def test_the_auto_detect_limitation_is_still_true(tmp_path: Path) -> None:
                                     estimated_distance_mm=2000.0), None, None).selected_candidate
     assert not abs(misled.distance_mm - expected_mm) <= 0.03 * expected_mm, (
         "an estimate of 2000 mm no longer misleads the search on this image: change the second "
-        "case of the limitation in CHANGELOG.md, docs/User_Manual.md (section 9) and "
+        "case of the limitation in CHANGELOG.md, docs/User_Manual.md (sections 4.3 and 13) and "
         "docs/ui/workspaces/calibration.md"
     )
     assert misled.standard_key == "agbh" and round(misled.distance_mm, -1) == 1830.0
@@ -764,7 +771,7 @@ def test_the_auto_detect_limitation_is_still_true(tmp_path: Path) -> None:
 
 
 def test_the_documents_say_what_each_network_does_with_a_changed_model_file(tmp_path: Path) -> None:
-    """README, section 4 and section 13 of the manual: *General V5* does not start and names the file,
+    """README, sections 6.5 and 14.3 of the manual: *General V5* does not start and names the file,
     *Single RC specialist* goes on with its numerical fit and gives "Fast model unavailable" as the reason."""
     for path in (README, MANUAL):
         text = _flat(path)
@@ -797,7 +804,7 @@ def test_the_documents_say_what_each_network_does_with_a_changed_model_file(tmp_
     dialog = _text(ROOT / "src" / "gimap" / "features" / "fitting" / "presentation" / "workflow_v5_dialog.py")
     assert 'trf("Reason: {reason}", reason=r["fallback_reason"])' in dialog
 
-    section = " ".join(_part(_part(_text(MANUAL), "## 13. Troubleshooting"), "### 13.3 1D Predict Does Not Start", "### ").split())
+    section = " ".join(_part(_part(_text(MANUAL), "## 14. Troubleshooting"), "### 14.3 1D Predict Does Not Start", "### ").split())
     for said in ("tools\\update_source.ps1", "converted line endings", "`git status` does not show it",
                  "git checkout -- modules/Fitting_1D_Model/Workflow_v5", "also when there is nothing new to download"):
         assert said in section, said
@@ -954,17 +961,73 @@ def test_a_vertical_cylinder_is_stored_as_the_changelog_says(tmp_path: Path) -> 
     assert "vertical cylinder" not in blocks() and blocks()["vertical_cylinder"]["radius"] == 8.5
 
 
-def test_version_0_1_0_is_still_called_a_pre_release() -> None:
-    from src.gimap.shared.version import __version__
+def _numbered(text: str, title: str, level: str) -> str:
+    """The section ``<level> N. title`` or ``<level> N.M title`` (whatever its number) up to the next heading of
+    ``level``; ``""`` when the document has no such heading."""
+    found = re.search(rf"^{re.escape(level)}\d+(?:\.\d+)?\.? {re.escape(title)}[ \t]*$", text, flags=re.M)
+    if found is None:
+        return ""
+    end = text.find(f"\n{level}", found.end())
+    return text[found.start():] if end < 0 else text[found.start():end]
 
-    if __version__ != "0.1.0":
-        pytest.skip("another version: its documents say what kind of release it is")
-    assert "version is 0.1.0, a pre-release" in _text(README)
-    assert re.search(r"^## 0\.1\.0 — \d{4}-\d{2}-\d{2} \(pre-release\)$", _text(CHANGELOG), flags=re.M)
-    manual = _text(MANUAL)
-    assert "version 0.1.0, a pre-release" in _part(manual, "# GIMaP User Manual")
-    assert "**GIMaP 0.1.0** (pre-release)" in _part(manual, "### 13.12 Version and Contact", "### ")
-    assert "Version 0.1.0 is a pre-release" in _part(manual, "### 13.11 FAQ", "### ")
-    about = _text(ROOT / "src" / "gimap" / "app" / "presentation" / "menu_bar.py")
-    assert "(Pre-release)" in about
-    assert "0.1.0 is a pre-release" in _text(DEVELOPMENT)
+
+def _release_stage_statements(version: str) -> list[tuple[str, str, str]]:
+    """Where the documents say what kind of release ``version`` is: (where, the text read there, the words that
+    call it a pre-release)."""
+    manual, chinese = _text(MANUAL), _text(MANUAL.with_name("User_Manual_zh.md"))
+    return [
+        ("README.md, first paragraph", _text(README), f"version is {version}, a pre-release"),
+        ("User_Manual.md, introduction", _part(manual, "# GIMaP User Manual"), f"version {version}, a pre-release"),
+        ("User_Manual.md, Known limitations", _numbered(manual, "Known limitations", "## "),
+         f"Version {version} is a pre-release"),
+        ("User_Manual.md, FAQ", _numbered(manual, "FAQ", "### "), f"Version {version} is a pre-release"),
+        ("User_Manual.md, Version and Contact", _numbered(manual, "Version and Contact", "### "),
+         f"**GIMaP {version}** (pre-release)"),
+        ("User_Manual_zh.md, 前言", _part(chinese, "# GIMaP 用户手册"), f"本手册对应 {version} 版，这是预发布版"),
+        ("User_Manual_zh.md, 已知限制", _numbered(chinese, "已知限制", "## "), f"{version} 是预发布版本"),
+        ("User_Manual_zh.md, 常见问题", _numbered(chinese, "常见问题", "### "), f"{version} 是预发布版本"),
+        ("User_Manual_zh.md, 版本与联系", _numbered(chinese, "版本与联系", "### "), f"**GIMaP {version}**（预发布版）"),
+        ("docs/development.md", _text(DEVELOPMENT), f"{version} is a pre-release"),
+    ]
+
+
+def test_the_documents_say_whether_this_version_is_a_pre_release(monkeypatch) -> None:
+    """``PRE_RELEASE`` in ``shared/version.py`` decides; README, both manuals, CHANGELOG, docs/development.md and
+    the About box follow it. When it changes, the documents change with it (``docs/releasing.md``, step 2)."""
+    from PyQt5.QtWidgets import QApplication
+
+    from src.gimap.app.presentation import help_dialogs, menu_bar
+    from src.gimap.shared.version import PRE_RELEASE, __version__
+
+    version = re.escape(__version__)
+    statements = _release_stage_statements(__version__)
+    missing = [where for where, text, _words in statements if not text]
+    assert not missing, f"no such section any more: {missing}"
+    heading = re.search(rf"^## {version} — (.+)$", _text(CHANGELOG), flags=re.M)
+    assert heading, f"CHANGELOG.md needs a heading '## {__version__} — …'"
+    QApplication.instance() or QApplication([])
+    if PRE_RELEASE:
+        unsaid = [where for where, text, words in statements if words not in " ".join(text.split())]
+        assert not unsaid, f"{__version__} is a pre-release (PRE_RELEASE = True); these do not say so: {unsaid}"
+        assert heading.group(1).endswith(" (pre-release)"), heading.group(0)
+        assert "(Pre-release)" in _text(ROOT / "src" / "gimap" / "app" / "presentation" / "menu_bar.py")
+    else:
+        # No sentence may call this version a pre-release, wherever it stands in these documents.
+        english = re.compile(rf"\b{version}\b[^.\n]{{0,40}}pre-release", flags=re.I)
+        chinese = re.compile(rf"{version}[^。\n]{{0,20}}预发布")
+        documents = {"README.md": _text(README), "User_Manual.md": _text(MANUAL),
+                     "User_Manual_zh.md": _text(MANUAL.with_name("User_Manual_zh.md")),
+                     "docs/development.md": _text(DEVELOPMENT)}
+        said = [name for name, text in documents.items()
+                if english.search(" ".join(text.split())) or chinese.search(" ".join(text.split()))]
+        assert not said, f"{__version__} is a release (PRE_RELEASE = False), but these call it a pre-release: {said}"
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", heading.group(1)), \
+            f"a release names the day it was published: '## {__version__} — YYYY-MM-DD', not {heading.group(0)!r}"
+    # The About box and Help ▸ Report a Problem read the stage from version.py, both ways.
+    assert ("(Pre-release)" in menu_bar.release_text()) == PRE_RELEASE
+    assert help_dialogs.system_summary().splitlines()[0] == \
+        f"GIMaP {__version__}" + (" (pre-release)" if PRE_RELEASE else "")
+    for stage in (True, False):
+        monkeypatch.setattr(menu_bar, "PRE_RELEASE", stage)
+        assert ("(Pre-release)" in menu_bar.release_text()) == stage
+        assert __version__ in menu_bar.release_text()

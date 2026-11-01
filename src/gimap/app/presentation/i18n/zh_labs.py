@@ -122,7 +122,9 @@ LABS_ZH = {
     "Ignored stale model load result from: {path}": "已忽略过时的模型载入结果：{path}",
     "Ignored model load result because no module model is selected: {path}": "没有选中模块模型，已忽略模型载入结果：{path}",
     "Model load failed: {error}": "模型载入失败：{error}",
-    "Updated model_path in {name}": "已更新 {name} 中的 model_path",
+    "Model folder remembered for {name} in your user data; module.yaml is unchanged.":
+        "已在你的用户数据中记住 {name} 的模型文件夹；module.yaml 没有改动。",
+    "Could not remember the model folder: {error}": "无法记住模型文件夹：{error}",
     "Could not load image for preprocessing display: {error}": "无法载入图像来显示预处理：{error}",
     "Displaying results for: {name}": "正在显示结果：{name}",
     "No prediction data available for: {name}": "没有预测数据：{name}",
@@ -190,7 +192,10 @@ LABS_ZH = {
     "Watching module.yaml for saved edits...": "正在监视 module.yaml 中保存的修改…",
     "module.yaml saved; module settings reloaded.": "module.yaml 已保存；模块设置已重新载入。",
     "Loading model (this may take a while)...": "正在载入模型（可能需要一些时间）…",
-    "Module selected. Use Import Model to choose and load a model.": "已选择模块。用“导入模型”选择并载入模型。",
+    "No model imported for this module yet. Use Import model... to choose its folder.":
+        "这个模块还没有导入模型。用“导入模型...”选择模型文件夹。",
+    "Model folder not found: {path}. Use Import model... to choose it again.":
+        "找不到模型文件夹：{path}。用“导入模型...”重新选择。",
     "Module config reload failed: selected module not found after scan.": "模块配置重新载入失败：扫描后找不到所选模块。",
     "Model load canceled.": "已取消模型载入。",
     "Model loaded successfully.": "模型载入成功。",
@@ -492,6 +497,14 @@ LABS_ZH = {
     "Clear Results": "清除结果",
     "Are you sure you want to clear all results?": "确定要清除全部结果吗？",
     "No results selected for export.": "没有选中要导出的结果。",
+    # -- release 0.2.0: SEM radius axis, Trainset background (2026-11-01) ---------------------------
+    "The prediction was not attached to the SEM comparison: the module's module.yaml does not declare "
+    "the radius axis (outputs: axes: row with key r, unit nm, min and max).":
+        "预测没有附带到 SEM 对比：这个模块的 module.yaml 没有声明半径轴"
+        "（outputs: axes: row，含 key r、unit nm、min 和 max）。",
+    "Synthetic GISAXS background modelled on the generator of the original training data. "
+    "Every component can be ranged and inspected below.":
+        "合成的 GISAXS 背景，仿照原始训练数据的生成程序。下面每个分量都可以设定范围并查看。",
 }
 
 __all__ = ["LABS_ZH"]

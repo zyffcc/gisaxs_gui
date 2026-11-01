@@ -21,6 +21,7 @@ from typing import Mapping, Optional
 import numpy as np
 
 from src.gimap.shared.signed_cut import MISSING_HALF, MissingHalf, local_steps, mean_of_halves
+from src.gimap.shared.version import SOFTWARE
 
 from ..domain.fit_engine import (
     PHASES,
@@ -257,6 +258,7 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
     """What the export writes next to the table: the model, the fit and how it was made."""
     made_of = None if curve is None else prepare_points(curve, side, q_range, excluded)
     record = {
+        "software_version": SOFTWARE,
         "model": model_to_dict(model),
         "equation": "I(q) = BG + k * [sum_i Int_i * P_i(q) * S_i(q; D_i, sigma_D_i/D_i) + A / (1 + (|q|/w)^nu)]",
         "curve": None if curve is None else {"name": curve.name, "path": curve.path, "q_unit_of_file": curve.source_unit,

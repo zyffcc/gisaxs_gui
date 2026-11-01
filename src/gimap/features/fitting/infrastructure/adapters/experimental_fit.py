@@ -20,6 +20,34 @@ MAX_NFEV = 150
 evaluates the model at most ``MAX_NFEV * (free values + 1)`` times: the ``budget`` given to ``evaluated``."""
 
 
+SHAPE_VALUES = ("R", "sigma_R", "D", "sigma_D")
+"""The fitted values of every component, in the order of the fit vector (D through η: η = 0 is D_min, 1 is 500 nm)."""
+CYLINDER_VALUES = ("h", "sigma_h")
+"""… followed by these for a random cylinder."""
+BOUND_TOLERANCE = 1e-4
+"""A fitted value closer to a bound than this fraction of its range ended on the bound."""
+
+
+def ended_on_bounds(z, lower, upper, types, options):
+    """The fitted values that ended on a bound of their search range, as ``(j, name, "lower" | "upper")``: ``j`` the
+    component in the order of ``types`` (``None`` for the beam-tail values ``sigma_Res``, ``nu_Res``), ``name`` as
+    the solution names it (``R``, ``sigma_R``, ``D``, ``sigma_D``, ``h``, ``sigma_h``). Such a value is not
+    determined by the curve: the condition of the "reached a search bound" warning."""
+    names = []
+    for j, typ in enumerate(types):
+        names += [(j, name) for name in SHAPE_VALUES + (CYLINDER_VALUES if typ == 2 else ())]
+    names += [(None, name) for key, name in (("sigma_res", "sigma_Res"), ("nu_res", "nu_Res")) if options[key] is None]
+    z, lower, upper = (np.asarray(values, dtype=float) for values in (z, lower, upper))
+    tolerance = BOUND_TOLERANCE * (upper - lower)
+    ended = []
+    for (j, name), value, low, high, tol in zip(names, z, lower, upper, tolerance):
+        if abs(value - low) < tol:
+            ended.append((j, name, "lower"))
+        elif abs(value - high) < tol:
+            ended.append((j, name, "upper"))
+    return ended
+
+
 def component_function():
     root = str(bundled_workflow())
     if root not in sys.path:
@@ -173,7 +201,14 @@ def fit_candidates(item, options, report, cancelled, evaluated=None):
                     weight=float(amplitude / total) if total > 0 else 0.0,
                     structure_factor=True,
                 )
+            ended = ended_on_bounds(optimum.x, lower, upper, types, options)
+            owners = list(cs)  # the components in the order of ``types``, before they are sorted
             cs.sort(key=lambda c: (c["type_id"], c["params"]["R"], c["params"].get("h", 0)))
+            at_bounds = [
+                dict(parameter=name, bound=side,
+                     component=None if j is None else next(k for k, c in enumerate(cs) if c is owners[j]))
+                for j, name, side in ended
+            ]
             globals_ = dict(
                 background=float(coefficients[-2]),
                 resolution_amplitude=float(coefficients[-1]),
@@ -190,9 +225,7 @@ def fit_candidates(item, options, report, cancelled, evaluated=None):
             )
             render_q = np.linspace(q[0], q[-1], options["render_points"])
             warnings = []
-            if np.any(np.abs(optimum.x - lower) < 1e-4 * (np.array(upper) - lower)) or np.any(
-                np.abs(optimum.x - upper) < 1e-4 * (np.array(upper) - lower)
-            ):
+            if ended:
                 warnings.append(
                     "One or more shape/resolution parameters reached a search bound; values may be unidentifiable."
                 )
@@ -231,6 +264,7 @@ def fit_candidates(item, options, report, cancelled, evaluated=None):
                         amplitudes="input intensity units",
                     ),
                     warnings=warnings,
+                    at_bounds=at_bounds,
                     nfev=int(optimum.nfev),
                     converged=bool(optimum.success),
                     seconds=time.perf_counter() - tick,

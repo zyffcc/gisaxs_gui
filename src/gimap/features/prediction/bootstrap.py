@@ -34,6 +34,7 @@ from .infrastructure import (
     LocalPredictionExportRepository,
     ModuleEntryPreprocessor,
     NumpyPredictionMaskRepository,
+    PreferencesModelPathStore,
     YamlModuleRepository,
 )
 from .presentation import PredictionViewModel
@@ -45,7 +46,8 @@ def create_prediction_view_model(
     if context.jobs is None:
         raise ValueError("PredictionViewModel requires AppContext.jobs")
     root = modules_root or Path(__file__).resolve().parents[4] / "modules"
-    modules = YamlModuleRepository(root)
+    # The model folder a user imports is kept in the user preferences, never in module.yaml.
+    modules = YamlModuleRepository(root, PreferencesModelPathStore(context.preferences))
     files = LocalPredictionFileCatalog()
     images = FabioPredictionImageRepository()
     masks = NumpyPredictionMaskRepository()

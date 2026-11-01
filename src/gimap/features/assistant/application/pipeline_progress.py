@@ -16,7 +16,7 @@ from typing import Any, Callable, Mapping, Optional
 
 READ, GEOMETRY, FRAMES = "Reading the frame", "Geometry", "Frames of the series"
 PEAKS, SECTORS, RINGS = "Peaks", "In-plane and out-of-plane", "Orientation and size of the rings"
-YONEDA, SPACING, MODEL = "Yoneda cut and symmetry", "Spacing", "Model fit"
+YONEDA, SPACING, MODEL = "Yoneda cut and symmetry", "Length scale 2π/q*", "Model fit"
 PHASES = {
     "giwaxs": (READ, GEOMETRY, FRAMES, PEAKS, SECTORS, RINGS),
     "gisaxs": (READ, GEOMETRY, FRAMES, YONEDA, SPACING, MODEL),
@@ -56,7 +56,7 @@ TOOL_TEXT = {
     "refine_beam_center_symmetry": "Finding the symmetry axis of the horizontal cut",
     "choose_halves": "Checking both halves of the horizontal cut",
     "set_halves": "Choosing the halves of the cut",
-    "in_plane_spacing": "In-plane spacing from the correlation peak",
+    "in_plane_spacing": "Length scale 2π/q* of the cut",
     "fit_horizontal_cut": "Fitting form-factor models to the horizontal cut",
 }
 SLOW = {

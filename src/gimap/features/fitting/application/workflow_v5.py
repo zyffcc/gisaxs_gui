@@ -45,6 +45,12 @@ def fit1d_kit_home() -> Path:
     return Path(__file__).resolve().parents[5] / "utils/gisaxs1d_gui_kit"
 
 
+def fit1d_kit_available(home: Path | None = None) -> bool:
+    """Whether the optional fit1d kit is installed in ``home`` (default ``fit1d_kit_home()``): its
+    ``gisaxs1d_kit/core.py`` is there. It is not distributed with GIMaP; nothing is imported here."""
+    return ((fit1d_kit_home() if home is None else Path(home)) / "gisaxs1d_kit" / "core.py").is_file()
+
+
 def default_options() -> dict:
     return dict(
         method="model",

@@ -2,20 +2,30 @@
 
 - **Status**：Current
 - **Scope**：Fitting 一维散射模型、分量累加、q 单位和绘图数据对齐
-- **Related code**：`src/gimap/features/fitting/domain/scattering_model.py`、
-  `src/gimap/features/fitting/domain/curve_transformations.py`、
-  `src/gimap/features/fitting/domain/manual_refinement.py`、
-  `src/gimap/features/fitting/presentation/bindings/detector_display.py`、
-  `utils/ML_Fitting_1D_GISAXS/Training/prediction_curve_io.py`
-- **Related tests**：`tests/test_fitting_domain_scattering_model.py`、
+- **Related code**：`src/gimap/features/fitting/domain/scattering_model.py`（公式与手动模型）、
+  `fit_model.py`（当前页面的模型）、`fit_engine.py`（Refine 与 Search）、`native_solution.py`（快速物理拟合与
+  1D Predict 的解 → 手动模型）、`curve_transformations.py`、`manual_refinement.py`（旧页面的 Local Refine /
+  Global Search）、`utils/ML_Fitting_1D_GISAXS/Training/prediction_curve_io.py`
+- **Related tests**：`tests/test_fitting_domain_scattering_model.py`、`tests/test_fit_engine.py`、
+  `tests/test_native_solution.py`、
   `tests/test_fitting_curve_rendering.py`、
   `tests/test_fitting_domain_constraints_scoring.py`、
   `tests/test_fitting_domain_manual_refinement.py`、
   `tests/test_ai_curve_loader.py`
-- **Last verified**：2026-09-04
+- **Last verified**：2026-11-01（范围、两套参数存储、竖直圆柱、结构因子与两节旧方法的定位对照代码）；其余 2026-09-04
 
-本文是 GIMaP Fitting 科学模型的权威说明。修改公式、参数顺序、单位、采样方式、分量缩放
-或 q–intensity 对齐行为前，必须同步更新本文并增加固定数值回归测试。
+公式、参数、默认值和拟合方法的科学说明（给用户与论文）在 [Physics and Methods Reference](../Physics_Manual.md)
+（中文 [`Physics_Manual_zh.md`](../Physics_Manual_zh.md)）第 9 章（Fitting）与第 10 章（1D Predict）。本文保留开发者契约：
+单位与参数顺序、分量累加、q–intensity 对齐、修改门禁和训练数据的版本约定。修改公式、参数顺序、单位、采样方式、
+分量缩放或 q–intensity 对齐行为前，必须同步更新本文和两份参考，并增加固定数值回归测试。
+
+**两套参数存储，同一套公式。** 显示的页面（Single analysis、In-situ series）用 `fit_model.FitModel`：每个族的分布宽度
+都是**相对**的（σR/R、σh/h、σD/D），拟合在 `fit_engine.py`。下文的参数顺序、Local Refine / Global Search 说的是
+`scattering_model` 的手动模型（旧的单曲线页与用户数据目录的 `model_parameters.json`）：Sphere / Cylinder 的 σR、σh
+和所有 σD 是绝对宽度（nm），Vertical Cylinder 的 σR 是相对的。两者公式与采样相同，`fit_model.to_manual` /
+`from_manual` 换算宽度；快速物理拟合与 1D Predict 的正演（`modules/Fitting_1D_Model/Workflow_v5/conditional_v2/numpy_forward64.py`）
+另有约定（竖直圆柱归一化为 (2J₁(x)/x)²，背景与分辨率峰的幅度相对粒子曲线），它们的解经 `native_solution.py`
+换成手动模型，并报告与原解曲线的差别。
 
 ## 单位与参数顺序
 
@@ -119,8 +129,9 @@ P_vertical(q)
 ```
 
 该分量当前把 `sigma_R` 解释为相对宽度，并使用 `R × sigma_R` 作为高斯采样的绝对标准差。
-这是现有参数语义，除非有独立科学变更任务和回归基线，否则不得与 Sphere/Cylinder 的
-绝对宽度语义合并。
+这是手动模型现有的参数语义，除非有独立科学变更任务和回归基线，否则不得与 Sphere/Cylinder 的
+绝对宽度语义合并（`FitModel` 对所有族都用相对宽度，只在 `to_manual` / `from_manual` 换算）。
+它在 q = 0 处为 10⁻⁶·⟨R⁴⟩/4（R 以 nm 计），不像 Sphere 和 Cylinder 那样为 1，所以它的 `Int` 与它们的不可直接比较。
 
 ## 一维结构因子
 
@@ -134,6 +145,9 @@ S(q) = (1 - phi²)
 ```
 
 分母绝对值小于 `1e-15` 时使用 `1e-15`，这是当前数值稳定约定。
+
+这里的 `sigma_D` 不是相邻距离高斯分布的标准差 w：同一个 φ 写成 exp(−q² w²/2) 时 w = √(2π)·sigma_D ≈ 2.51·sigma_D
+（Physics Manual §9.5）。`FitModel` 的参数是相对的 σD/D，求值时传 `D × σD/D`（`fit_model.component_form`）。
 
 ## q–intensity 对齐契约
 
@@ -168,6 +182,11 @@ Fold overlay 可以让 `+q` 与 `−q` 共享相同的 `|q|` 横坐标，但必�
 
 ## AI proposal 与传统优化交接
 
+> 本节写的是更早的 AI 路径：旧单曲线页（仍建、不显示）的 `Fast Predict`（`presentation/ai_controls.py`、
+> `bindings/ai_job_execution.py`）。显示的页面上的 AI 是 1D Predict（Workflow V5 `conditional_v2`）：Single analysis 的
+> Fit 步骤 ▸ AI proposal (1D Predict)，以及 Tools ▸ / Fitting ▸ 1D Predict — Fit Many Curves…；它的排序分数没有校准成
+> 概率（候选的 `probability_status` 为 “Not calibrated”），方法见 Physics Manual 第 10 章。下面的契约只约束旧路径。
+
 `Fast Predict` 只执行神经网络 proposal、后验采样和物理 forward verification，用于给出模型拓扑与
 initial parameters；它本身不执行数值精修。其输入源与手动 fitting 完全一致：勾选
 `Use current cut` 时只使用当前 cut（原生 nm⁻¹），未勾选时只使用 imported 1D data，并在 AI
@@ -191,6 +210,12 @@ residual calls 计数，并在相同 optimization q grid 上比较初始值和�
 `x0 is infeasible` 而完全跳过 fitting。此初始化修复不扩大权重 logit 的 `[-20, 20]` 搜索范围。
 
 ## Global Search 与 Local Refine
+
+> 本节说的是手动模型的 `manual_refinement.py`（旧单曲线页的两个弹窗）。显示的页面的 Refine 与 Search 在
+> `fit_engine.py`，做法不同：σ 已知时残差为 (I − m)/σ，否则 ln(I/m)；跨度 ≥ 10 倍且为正的范围按对数搜索；
+> Search 默认共 4000 次计算（约 3/4 给差分进化，其余分给最好的 3 个起点的局部精修）；线性幅度（Int、BG、分辨率峰 A）
+> 每步用 NNLS 求解，只要求非负；局部精修的范围就是参数自己的上下限（`fit_model.INFO`）。公式与误差见
+> Physics Manual §9.7–9.8。
 
 `Global Search` 与 `Local Refine` 是两个明确分开的入口。勾选
 `Use current cut` 时输入来自当前 cut；未勾选时只使用已导入的 1D data，不在两者之间隐式

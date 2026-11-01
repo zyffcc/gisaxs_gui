@@ -7,6 +7,7 @@ import numpy as np
 from PyQt5.QtWidgets import QHeaderView, QTableWidgetItem
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.version import SOFTWARE
 
 from ...application.single_fit import FitModel, model_from_solution
 from ...application.single_fit1d import (
@@ -222,7 +223,7 @@ class Fit1DPageMixin:
         native = self.session.native_result
         names, table = native_export(native)
         curve = self.session.curve
-        record = dict(backend="fit1d_physics_v2", native_result=native,
+        record = dict(software_version=SOFTWARE, backend="fit1d_physics_v2", native_result=native,
                       curve=None if curve is None else dict(name=curve.name, path=curve.path,
                                                            q_unit_of_file=curve.source_unit,
                                                            q_unit_from=curve.unit_from),

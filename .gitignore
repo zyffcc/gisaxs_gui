@@ -196,7 +196,7 @@ plots/
 *.rar
 *.7z
 
-* Raman临时处理
+# Raman临时处理
 raman_*
 raman_*/
 
@@ -204,6 +204,9 @@ raman_*/
 research/
 validation/
 modules/Fitting_1D_Model/Workflow_v5/development/
+
+# 个人笔记与交接报告（本地保留，不进仓库，也不进发布包）
+_handoff/
 
 # 分析输出（写在数据旁边）
 gimap_analysis/
@@ -216,3 +219,7 @@ utils/gisaxs1d_gui_kit/
 
 # Local prediction replay bundle: private weights and experimental examples
 /modules/Au_PhotonScience_Replay/
+
+# Models registered by Trainset Build (modules/generated_<name>/module.yaml, with the absolute path of the
+# user's weights): the user's own, never committed
+/modules/generated_*/

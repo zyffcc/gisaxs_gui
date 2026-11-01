@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: >-
+  If you use GIMaP in work that you publish, please cite it as below. Name the version you used:
+  the export records of GIMaP write it (software_version).
+type: software
+title: "GIMaP: Grazing-Incidence Mapping Package"
+abstract: >-
+  GIMaP is a desktop application for grazing-incidence small- and wide-angle X-ray scattering
+  (GISAXS, GIWAXS). It reduces detector frames to curves at the exact scattering vector,
+  analyses them without AI (peak tables, orientation and crystallite size for GIWAXS; the Yoneda
+  cut, the in-plane spacing and particle-model fits for GISAXS), fits 1D curves and in-situ series,
+  finds stages and odd frames in series, and records where every number came from.
+authors:
+  - family-names: Zhai
+    given-names: Yufeng
+    email: yufeng.zhai@desy.de
+    affiliation: Deutsches Elektronen-Synchrotron DESY
+version: 0.2.0
+license: MIT
+repository-code: "https://github.com/zyffcc/gisaxs_gui"
+url: "https://github.com/zyffcc/gisaxs_gui"
+keywords:
+  - GISAXS
+  - GIWAXS
+  - grazing-incidence X-ray scattering
+  - data reduction
+  - small-angle scattering
+  - thin films
+  - in-situ series

@@ -8,7 +8,20 @@
 - **Related tests**：`utils/ML_Fitting_1D_GISAXS/tests/test_posterior_v8_*.py`
 - **Related research**：`docs/research/multisolution-inversion-literature.md`、
   `docs/research/multisolution-inversion-paper-outline.md`
-- **Last verified**：2026-09-06
+- **Last verified**：2026-09-06；与发布版本的关系：2026-11-01
+
+> **与 GIMaP 发布版本的关系（先读）。** 本文是研究流水线 **PosteriorV8**（`utils/ML_Fitting_1D_GISAXS/PosteriorV8/`）
+> 的方法模板，不描述 GIMaP 里的 1D Predict。`src/gimap` 不导入 PosteriorV8。随 GIMaP 发布、界面上用的 1D Predict
+> （Fitting ▸ Fit 步骤的 AI proposal、Tools ▸ / Fitting ▸ 1D Predict — Fit Many Curves…）是 **Workflow_v5
+> `conditional_v2`**（`modules/Fitting_1D_Model/Workflow_v5/conditional_v2/`：proposal 网络、校正网络、update 网络和
+> 4 步阻尼 Gauss–Newton），它的方法、排序分数（σ 归一化残差的 Huber 平均）和验证状态写在
+> [Physics and Methods Reference](../Physics_Manual.md) 第 10 章。因此：
+>
+> - 下文的打分（`RMS((log I_pred − log I_obs)/σ_log)`）、分支枚举、聚类与门禁都只属于 PosteriorV8，不是发布版本的行为；
+> - 下文说正向模型“以 `fitting-scientific-model.md` 为唯一权威”：发布的 V5 与快速物理拟合用自己的正演
+>   （`numpy_forward64.py`，约定见 `fitting-scientific-model.md` 开头），解经 `fitting/domain/native_solution.py` 换成 GUI 模型；
+> - “Sphere 和 Cylinder 的 sigma 为绝对宽度”只对手动模型的参数存储成立，当前的 `FitModel` 全部用相对宽度；
+> - 下文的阈值是协议要求，相应的 run、模型与 holdout artifact 没有冻结，不能当作结果引用。
 
 本文定义“一键多解”的科学目标和必须在 holdout 前冻结的设计。它不是已经完成的实验注册，也不表示
 具体 run/model/reference artifact 已经冻结。它不复制具体散射公式；正向模型、单位和参数顺序仍以
@@ -1350,7 +1363,7 @@ contract ID、随机 seed、Slurm job ID、CPU/GPU 型号与数量、软件/CUDA
 和 emission-factor provenance。没有可靠能耗计量时明确记为 missing，不用 GPU TDP 乘时长冒充实测值。
 
 Maxwell 正式任务不得直接从一个可变 working tree 运行。每轮先生成内容寻址、逐文件 SHA256 验证的源码
-快照，上传到 `/data/dust/user/zhaiyufe/` 下新的版本目录，远端复核 archive 与 manifest 后只读解包；run
+快照，上传到集群项目存储（`/data/dust/user/<user>/`）下新的版本目录，远端复核 archive 与 manifest 后只读解包；run
 manifest 同时记录源码快照 SHA、环境和 Slurm job ID。快照必须包含当前 untracked 的 PosteriorV8 新源码，
 因此不能使用只收集 Git index 的 archive。旧数据、模型、日志和源码目录一律不覆盖。
 Phase-A 模型目录发布时先把每个文件冻结为只读，再在仍为 job-private 的可写 staging 目录中移动目录项；

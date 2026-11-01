@@ -130,7 +130,7 @@ def test_open_data_says_open_curve_on_fittings_single_analysis(window) -> None:
     components.fitting_workspace.show_context("single")
     _settle()
     menu_bar.file_menu.aboutToShow.emit()
-    assert action.text() == "Open Curve…" and "1D curve" in action.toolTip()
+    assert action.text() == "&Open Curve…" and "1D curve" in action.toolTip()  # Alt+F, O still opens it
     components.fitting_workspace.show_context("insitu")
     _settle()
     menu_bar.file_menu.aboutToShow.emit()

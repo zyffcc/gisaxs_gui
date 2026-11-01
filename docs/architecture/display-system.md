@@ -1,10 +1,11 @@
 # Display system
 
 - **Status**: Current
-- **Scope**: detector and curve views of Analyze (pyqtgraph) and of the classic Fitting page (Matplotlib)
+- **Scope**: detector and curve views of Analyze and Fitting (pyqtgraph), and the Matplotlib views that remain
 - **Owners**: `src/gimap/app/presentation/components/detector_view.py`,
-  `curve_plot.py`, `scientific_image_viewer.py`; Fitting's `curve_rendering.py`
-- **Last verified**: 2026-09-28
+  `curve_plot.py`; Fitting's `curve_rendering.py` (Matplotlib)
+- **Last verified**: 2026-11-01 (Fitting section and `ScientificImageViewer` checked against the code; the rest
+  2026-09-28)
 
 ## Analyze (pyqtgraph)
 
@@ -24,13 +25,25 @@ and its styling to the figure exporter.
 Both views must be disposed (`dispose()`) before their parent is deleted: pyqtgraph views torn
 down with a parent that Python still references can abort the interpreter.
 
-## Fitting (Matplotlib)
+## Fitting
 
-The classic Fitting page keeps one canvas, image axes and colour bar alive across refreshes;
-curve plots reuse their artists (`render_curve_plot`). `ScientificImageViewer` is the shared
-interactive detector window used by Fitting.
+The pages shown — Single analysis (`single/page.py`, layout `views/fit_page_view.py`) and In-situ series
+(`single/series_page.py`, layout `views/fit_series_view.py`) — draw their curves, residuals and trends with the
+shared pyqtgraph `CurvePlot`, like Analyze.
+
+Matplotlib remains where the older views still are: the 1D Predict window (`workflow_v5_dialog.py`), the classic
+single-curve page and the former in-situ page, which are still built but never shown
+(`fitting/presentation/workspace.py`; the in-situ heatmap with its colour bar is in
+`bindings/insitu_monitoring.py`), and the independent curve windows. Their curve plots go through one
+specification and renderer, `render_curve_plot` (`curve_rendering.py`), which reuses its artists across refreshes.
+
+`ScientificImageViewer` (`components/scientific_image_viewer.py`) is exported by the components package and has
+its own test (`tests/test_scientific_image_viewer.py`), but no feature uses it now.
 
 ## Figures
 
 Publication figures (PNG/TIFF 600 dpi, SVG/PDF) are rendered by the Analyze infrastructure
-adapter `MatplotlibFigureWriter` without pyplot state, from what the views show.
+adapter `MatplotlibFigureWriter` without pyplot state, from what the views show. Exported figures
+use the light colours whatever the theme (`components/plot_export.export_plot` for pyqtgraph,
+`theme.figures.exported_colors` for themed Matplotlib figures, `shared/figures.save_figure` for new
+publication figures).

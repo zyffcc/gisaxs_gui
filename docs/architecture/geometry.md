@@ -4,7 +4,12 @@
 >
 > **Scope**：像素 → q 的唯一实现、坐标约定、各页面历史约定与已知偏差
 >
-> **Last verified**：2026-09-28；NeXus 的方向与头中心：2026-10-14（对照 `shared/detector_io/nexus_reading.py`）
+> **Last verified**：2026-09-28；NeXus 的方向与头中心：2026-10-14（对照 `shared/detector_io/nexus_reading.py`）；
+> 束流中心与 PONI、`transmission_map`、探测器倾斜、历史近似表：2026-11-01（对照代码，GISAXS 一行复算）
+>
+> **科学说明**：坐标约定、精确掠入射 q、特征行、标定与 `.poni` 的换算写在
+> [Physics and Methods Reference](../Physics_Manual.md)（中文 [`Physics_Manual_zh.md`](../Physics_Manual_zh.md)）第 1–3 章。
+> 本文保留开发者需要的部分：模块分工、各页面的历史约定、等价门槛、标定结果写到哪里。改公式或约定时两处一起改。
 
 像素到 q 的换算现在只有一份实现：`src/gimap/shared/geometry`。Analyze（GISAXS 与 GIWAXS，
 包括原 WAXS 页面与原 Cut & Fitting 探测器部分的全部功能）直接使用下面的规范约定和精确公式；
@@ -20,7 +25,7 @@ Cut & Fitting 的探测器部分已下线：Fitting 只接收 Analyze 写出的�
 |---|---|
 | 像素位置 | 像素 `(行 i, 列 j)` 覆盖连续区域 `[j, j+1] × [i, i+1]`，中心在 `(j+0.5, i+0.5)`；与 pyFAI 及 `imshow(extent=(0, W, H, 0))` 相同 |
 | 行方向 | 第 0 行在图像顶部，y 向下增大 |
-| 束流中心 | `beam_center_x_px / beam_center_y_px` 是**直射束**在上述坐标中的位置（pyFAI 的 PONI，以像素计） |
+| 束流中心 | `beam_center_x_px / beam_center_y_px` 是**直射束**在上述坐标中的位置。探测器无倾斜时它等于 pyFAI 的 PONI（以像素计）；有倾斜时两者不同：读 `.poni`（`assistant/domain/calibration_files.parse_poni`）按 pyFAI 的 `getFit2D` 由 PONI、rot1、rot2 求直射束位置，距离换成沿直射束的距离，倾斜本身不建模，但不丢掉：`PoniGeometry.tilt` / `InstrumentProfile.dropped_tilt` 保留 .poni 的距离、PONI、三个旋转角和像素尺寸，分析工作区每帧在有效像素上比较倾斜几何与平板几何的 \|q\|（`shared/geometry/detector_tilt.py`，`analyze/application/flat_detector.py`）：超过 1° 或 0.5 % 时是一条消息和自动分析的 Needs attention，数值写进 `_analysis.json` 的 `geometry` |
 | 掠入射角 | `incidence_deg`，0 表示透射几何 |
 | 单位 | 长度 m，波长 Å，q 为 Å⁻¹ |
 | qy 符号 | 与探测器列方向同号：图像中直射束右侧的像素 qy > 0，左侧 qy < 0 |
@@ -28,7 +33,9 @@ Cut & Fitting 的探测器部分已下线：Fitting 只接收 Analyze 写出的�
 
 `grazing_q_map(shape, geometry)` 用精确公式给出样品坐标系中的 `qx, qy, qz` 和带符号的
 `q∥`：散射方向 `(D, X, Y)/R` 按样品倾角 αi 旋转后得到出射方向，`q = k_f − k_i`。
-`transmission_map` 给出透射 SAXS/WAXS 的 `|q|`、2θ 和方位角 χ（0° 向右，90° 向上）。
+`transmission_map` 给出透射 SAXS/WAXS 的 `|q|`、2θ 和方位角 χ（0° 向右，90° 向上）；`src/` 里目前没有调用方，
+只有测试用它核对（`tests/test_shared_geometry.py`、`tests/test_release2_calibration_window.py`）。用户看到的 χ 是
+GIWAXS 的另一套约定（`analyze/domain/giwaxs.py`：0° 沿表面法线、±90° 在样品面内、符号随 qy），两者不要混用。
 `DetectorGeometry.horizon_row()`、`specular_row()`、`row_for_exit_angle()` 给出样品水平线、
 镜面反射和任一出射角（如 Yoneda）在束流中心列上的行位置。
 
@@ -37,7 +44,7 @@ Cut & Fitting 的探测器部分已下线：Fitting 只接收 Analyze 写出的�
 | 模块 | 职责 |
 |---|---|
 | `shared/geometry/detector_geometry.py` | `DetectorGeometry`：校验、单位、裁剪、特征行位置 |
-| `shared/geometry/q_mapping.py` | 位移 → q 的物理计算；`ExitAngleModel` 列出精确公式和三种历史近似；`grazing_q_region` / `region_displacements` 只计算一个像素矩形（大探测器按块计算） |
+| `shared/geometry/q_mapping.py` | 位移 → q 的物理计算；`ExitAngleModel` 列出精确公式和三种历史近似（只有 Trainset 还用 `SUBTRACT_INCIDENCE`；`HORIZON_SHIFT`、`NO_INCIDENCE_OFFSET` 只留给测试量化差距）；`grazing_q_region` / `region_displacements` 只计算一个像素矩形（大探测器按块计算） |
 | `shared/geometry/legacy_conventions.py` | Trainset 的历史像素约定，物理部分调用上面的实现 |
 | `shared/geometry/conventions.py` | 已存数据中的束流中心约定（numpy 下标；旧 Cut & Fitting 的“行从底部数”）↔ 规范约定 |
 | `shared/geometry/instrument_profile.py` | 仪器配置：命名的几何 + 探测器名称/尺寸，用于加载文件时自动匹配 |
@@ -62,7 +69,10 @@ Cut & Fitting 的探测器部分已下线：Fitting 只接收 Analyze 写出的�
 
 ## 历史近似与精确公式的差距
 
-同一几何下，用历史模型与精确模型计算整幅探测器 q，取最大偏差（未计入上表中的像素位置差异）：
+同一几何下，用历史模型与精确模型计算整幅探测器 q，取最大偏差（未计入上表中的像素位置差异）。GISAXS 三行用
+`tests/test_shared_geometry.py` 的 `_geometry()`（中心 737.5、1400.5 px，帧 1679×1475）于 2026-11-01 复算，一致；
+GIWAXS 三行的束流中心当时没有记下，未复核。测试只核对 GISAXS 下两种平板近似小于 1e-4·k、`NO_INCIDENCE_OFFSET`
+整体偏 ≈ k·sin αi（`test_legacy_models_deviate_from_exact_by_documented_amounts`）：
 
 | 场景 | 模型 | max \|Δqz\| | 约合像素 |
 |---|---|---|---|
@@ -117,7 +127,9 @@ Analyze 只在 设置 ▸ Analyze ▸ “Use the beam centre written in the file
 - 标定写入：应用标定结果时，`RecordInstrumentProfile` 以 “探测器名 行×列”（如
   `PILATUS 2M 1679×1475`）创建或更新配置；中心按 numpy 下标 +0.5 换到规范坐标，距离 mm → m。
   标定是透射几何，不知道 αi：更新已有配置时保留它原来的 αi，新配置为 0。探测器倾斜
-  （`detector_rotation_deg`）不在 `DetectorGeometry` 中建模，超过 0.05° 时记在 `source` 里。
+  （`detector_rotation_deg`）不在 `DetectorGeometry` 中建模，超过 0.05° 时记在 `source` 里
+  （`calibration/domain/instrument_profile.py`）。标定引擎只精修中心与距离，`CalibrationCandidate` 的倾斜总是默认的 0，
+  所以这条说明目前不会出现。
 - 读取匹配：Analyze 按探测器名（前缀匹配，忽略大小写与多余空格）和帧尺寸挑选配置；尺寸不同的
   配置不会被自动选中。也可以在 Analyze 顶栏手动指定配置、输入几何；旧版 Cut & Fitting 保存过
   几何时，提示条的 Use Previous Geometry… 可把它（行号从底部数，“上下翻转”时不换算）保存为配置。

@@ -15,6 +15,8 @@ from typing import Any, Mapping, Optional, Sequence
 
 import numpy as np
 
+from src.gimap.shared.version import SOFTWARE as RELEASE
+
 from ..domain import SeriesMap, q_from_two_theta, series_map
 from ..domain.series_map import VIEW_BOTH, VIEW_FOLDED, VIEW_MEAN, VIEW_NEGATIVE, VIEW_POSITIVE, RowFacts
 from .models import FrameAnalysis
@@ -272,7 +274,8 @@ def row_words(series: SeriesMap, row: int) -> str:
 def series_header(series: SeriesMap) -> list[str]:
     """The lines every export of a series starts with, after its own first line."""
     built = series.built_with
-    lines = [f"software: {SOFTWARE}", f"curve: {series.curve}" + (f" - {series.title}" if series.title else "")]
+    lines = [f"software: {SOFTWARE}", f"software_version: {RELEASE}",
+             f"curve: {series.curve}" + (f" - {series.title}" if series.title else "")]
     halves = view_words(series)
     if halves:
         lines.append(f"halves: {halves}")
@@ -298,7 +301,8 @@ def series_record(series: SeriesMap) -> dict[str, Any]:
     built = series.built_with
     times = None if series.times is None else [float(value) for value in series.times]
     return {
-        "software": SOFTWARE, "title": "Series map", "curve": series.curve, "curve_title": series.title,
+        "software": SOFTWARE, "software_version": RELEASE, "title": "Series map", "curve": series.curve,
+        "curve_title": series.title,
         "x_label": series.x_label, "halves": series.view, "halves_in_words": view_words(series),
         "series": built.get("name"), "listed_frames": built.get("listed"), "every": built.get("every"),
         "cut_of_the_series": built.get("cut"), "cut_in_words": built.get("cut_text"),

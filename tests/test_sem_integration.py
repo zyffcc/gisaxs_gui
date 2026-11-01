@@ -146,7 +146,7 @@ def _prediction_bridge():
         preprocess=PreprocessSpec(steps=("crop",), params={"crop": {"left": 2}}),
     )
     outputs = {
-        "distribution_axes": {"row": {"key": "r", "unit": "nm", "label": "R"}},
+        "distribution_axes": {"row": {"key": "r", "unit": "nm", "label": "R", "declared": True}},
         "r_x": np.array([1.0, 2.0, 3.0]), "r": np.array([0.2, 0.5, 0.3]),
     }
     bridge = SimpleNamespace(

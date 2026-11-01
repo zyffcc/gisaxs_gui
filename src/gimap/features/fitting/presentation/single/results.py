@@ -152,6 +152,8 @@ def value_cells(key: str, value: float, error, free: bool) -> tuple[str, str]:
 
 CORRELATED_SHOWN = 2
 MORE_PAIRS = "and {count} more (hover)"
+ANALYZE_CHI2 = ("χ²/N: Analyze's quick fit, the mean squared σ-normalised residual over the points Analyze fitted "
+                "(no degrees-of-freedom correction). Fit (Refine) gives χ²ᵣ here.")
 
 
 class FitResultsMixin:
@@ -275,7 +277,8 @@ class FitResultsMixin:
         self.solutions_table.setVisible(bool(solutions))
         self.use_solution_button.setVisible(bool(solutions))
         curve = self.session.curve
-        chi = "var ln I" if curve is not None and curve.sigma is None else "χ²ᵣ"
+        searched = self.session.solutions_searched()  # its χ²ᵣ computed here (run.py); else Analyze's quick fit
+        chi = "χ²/N" if not searched else "var ln I" if curve is not None and curve.sigma is None else "χ²ᵣ"
         self.solutions_table.setHorizontalHeaderLabels(["#", tr("model"), "R (nm)", "D (nm)", chi])
         shown = tuple(solutions)
         fresh = shown != getattr(self, "_solutions_shown", None)
@@ -284,6 +287,8 @@ class FitResultsMixin:
         for line, solution in enumerate(solutions):
             component = solution.model.components[0] if solution.model.components else None
             tip = tr("From {source}.").format(source=tr(solution.source))
+            if not searched:
+                tip += " " + tr(ANALYZE_CHI2)
             if solution.deviation > 0.01:
                 tip += " " + tr("This model differs from the solution by up to {percent} %.").format(
                     percent=f"{100 * solution.deviation:.3g}")

@@ -12,17 +12,30 @@
 # data folder on the first start, so a shipped profile would be applied to that person's frames.
 # The script stops when such a path is in the list.
 #
+# The package also carries licenses\: the licence texts of everything in runtime\ (the dist-info
+# licence files of every installed Python package, the conda package licences, the GPL-3.0 text for
+# PyQt5, whose wheel has none) plus THIRD_PARTY_NOTICES.md and LICENSE. tools/collect_licenses.py
+# (standard-library Python) writes them at build time, before anything is packed; a GPL-3.0 or
+# LGPL-3.0 package without its licence text stops the build, and so does a conda package that is not
+# from conda-forge (THIRD_PARTY_NOTICES.md says the runtime's conda packages are). A package under
+# another GPL or LGPL version is not checked for a full text: the build warns, check it by hand.
+# Next to the produced files, SHA256SUMS.txt lists the checksums of the files to upload (the ZIP, or,
+# when it is split, its parts and the two installers): sha256sum -c SHA256SUMS.txt, or Get-FileHash.
+#
 # Check the list without building the environment (about 5 GB):
 #   powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_portable_release.ps1 -ListOnly
 # With -ListOnly the standard output is the list alone (one path per line); the summary and any
 # problem go to the error stream, and the exit code is 1 when there is a problem.
 #
-# The packed environment is "gimap-release": Python 3.10 from conda and everything else from
+# The packed environment is "gimap-release": Python 3.10 from conda-forge and everything else from
 # requirements.txt through pip, nothing more. It is kept apart from the environment you develop in:
 # conda-pack refuses an environment where pip replaced files of conda packages, and every extra
-# package (numpy 2, BornAgain 21, test or research tools) would reach the users. Create it once:
-#   conda create -n gimap-release python=3.10 -y
+# package (numpy 2, BornAgain 21, test or research tools) would reach the users. Create it once
+# (conda-forge only: packages from Anaconda's "defaults" channel come under Anaconda's terms):
+#   conda create -n gimap-release -c conda-forge --override-channels python=3.10 -y
 #   conda run -n gimap-release python -m pip install -r requirements.txt
+# Do not run "conda clean --all" before a build: the conda package licences are read from the
+# package cache (pkgs\<package>\info\licenses).
 # Do not upgrade conda's pip or setuptools inside it, and do not add torch (the Sputter workspace
 # installs it on the first Predict). After requirements.txt changes, run the pip line again; when
 # conda-pack reports files "deleted/overwritten", remove the environment
@@ -42,7 +55,8 @@ param(
     [string]$ReleaseTag = "",
     # Print the application file list and stop: nothing is packed, nothing is written.
     [switch]$ListOnly,
-    # Build although the program folders hold files git does not track (they are left out).
+    # Build although the program folders or the shipped documents hold files git does not track
+    # (they are left out).
     [switch]$AllowUntracked
 )
 
@@ -127,10 +141,17 @@ $Forbidden = @(
     @{ Pattern = '(^|/)(__pycache__|\.pytest_cache|\.ruff_cache|\.mypy_cache|\.gimap_cache|\.ipynb_checkpoints)/'; Why = "a cache" },
     @{ Pattern = '\.py[co]$'; Why = "a cache" },
     @{ Pattern = '(^|/)(gimap_analysis|AI_Fitting_Output|trainset_jobs|test_output|test_results)/'; Why = "analysis output" },
-    @{ Pattern = '^(runtime|release)/'; Why = "the folder of the packed environment or of the releases" }
+    @{ Pattern = '^(runtime|release)/'; Why = "the folder of the packed environment or of the releases" },
+    @{ Pattern = '^licenses/'; Why = "the folder the build writes the licence texts into" }
 )
 # Folders the program is loaded from: a file here that git does not track would be missing.
 $ProgramPaths = @("src", "modules", "utils", "assets", "config", "main.py")
+# Documents the program opens (Help: User Manual, Physics and Methods, How to Cite, Example Data) and
+# the manuals' images and links: a file here that git does not track would be missing as well.
+$DocumentPaths = @("docs", "CITATION.cff", "README.md", "CHANGELOG.md", "tests/data/external")
+# The files Help opens: each one must be in the package.
+$HelpFiles = @("docs/User_Manual.md", "docs/User_Manual_zh.md", "docs/Physics_Manual.md",
+    "docs/Physics_Manual_zh.md", "CITATION.cff", "tests/data/external/manifest.json")
 # The model manifests the program checks, file by file (SHA-256), before 1D Predict runs.
 $ModelManifests = @(
     "modules/Fitting_1D_Model/Workflow_v5/conditional_v2/conditional_fast_manifest_v2.json",
@@ -263,6 +284,36 @@ if ($Untracked) {
         $Problems.Add("$Message. Commit them (or remove them) first, or pass -AllowUntracked to build without them.")
     }
 }
+$UntrackedDocs = @(Get-GitPaths (@("ls-files", "--others", "--exclude-standard", "--") + $DocumentPaths) |
+    Where-Object { -not (Test-AnyPattern $_ $NotShipped) })
+if ($UntrackedDocs) {
+    $Shown = (@($UntrackedDocs | Select-Object -First 10) -join ", ")
+    if ($UntrackedDocs.Count -gt 10) { $Shown += ", ..." }
+    $Message = "$($UntrackedDocs.Count) document file(s) that Help or the manuals use are not tracked by git " +
+        "and are NOT packed: $Shown"
+    if ($AllowUntracked) {
+        $Warnings.Add($Message)
+    }
+    else {
+        $Problems.Add("$Message. Commit them (or remove them) first, or pass -AllowUntracked to build without them.")
+    }
+}
+$UntrackedDocSet = [System.Collections.Generic.HashSet[string]]::new(
+    [string[]]@($UntrackedDocs), [System.StringComparer]::OrdinalIgnoreCase)
+foreach ($Needed in $HelpFiles) {
+    if (-not $Listed.Contains($Needed) -and -not $UntrackedDocSet.Contains($Needed)) {
+        $Problems.Add("Help opens this file, and it is not in the package: $Needed")
+    }
+}
+# What licenses\ is made from (see the top of this file).
+foreach ($Needed in @("THIRD_PARTY_NOTICES.md", "LICENSE", "tools/collect_licenses.py")) {
+    if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot $Needed) -PathType Leaf)) {
+        $Problems.Add("Missing, and needed for the licence texts of the package: $Needed")
+    }
+    elseif (-not $Listed.Contains($Needed)) {
+        $Warnings.Add("$Needed is not tracked by git, so it is not among the application files (the build still reads it from the disk).")
+    }
+}
 $Changed = @(Get-GitPaths @("--no-optional-locks", "status", "--porcelain", "--untracked-files=no"))
 if ($Changed) {
     $Warnings.Add("$($Changed.Count) tracked file(s) differ from the last commit: the package takes them as they are on disk.")
@@ -318,7 +369,7 @@ $EnvironmentPath = $EnvironmentJson.envs | Where-Object {
 } | Select-Object -First 1
 if (-not $EnvironmentPath) {
     throw ("Conda environment '$EnvironmentName' was not found. Create it with: " +
-        "conda create -n $EnvironmentName python=3.10 -y; " +
+        "conda create -n $EnvironmentName -c conda-forge --override-channels python=3.10 -y; " +
         "conda run -n $EnvironmentName python -m pip install -r requirements.txt")
 }
 if ($Fit1DKitPaths.Count) {
@@ -329,6 +380,35 @@ if ($Fit1DKitPaths.Count) {
     if ($LASTEXITCODE -ne 0) {
         throw "The fit1d host runtime is incomplete or incompatible. Install requirements.txt in '$EnvironmentName' before building. Nothing was packed."
     }
+}
+
+# The licence texts of the environment, collected into a temporary folder before anything is packed;
+# they go into the ZIP as licenses\ (see the top of this file).
+$LicenseStaging = Join-Path ([System.IO.Path]::GetTempPath()) ("gimap-licenses-" + [guid]::NewGuid().ToString("N"))
+function Remove-LicenseStaging {
+    if (Test-Path -LiteralPath $LicenseStaging) {
+        Remove-Item -LiteralPath $LicenseStaging -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+Write-Host "Collecting the licence texts of '$EnvironmentName'..."
+$LicenseHelper = Join-Path $ProjectRoot "tools/collect_licenses.py"
+$LicenseLines = & python $LicenseHelper --root $ProjectRoot --prefix $EnvironmentPath --out $LicenseStaging
+$LicenseExitCode = $LASTEXITCODE
+$LicenseResult = $null
+try { $LicenseResult = ($LicenseLines -join "`n") | ConvertFrom-Json } catch { $LicenseResult = $null }
+if ($LicenseExitCode -ne 0 -or -not $LicenseResult -or -not $LicenseResult.ok) {
+    Remove-LicenseStaging
+    $Why = "exit code $LicenseExitCode, no result"
+    if ($LicenseResult -and $LicenseResult.problems) { $Why = ($LicenseResult.problems -join "; ") }
+    throw "The licence texts could not be collected ($Why). Nothing was packed."
+}
+$LicenseFiles = @($LicenseResult.written)
+Write-Host ("  $($LicenseResult.python) Python distributions, $($LicenseResult.conda) conda packages, " +
+    "$($LicenseFiles.Count) files")
+foreach ($Line in @($LicenseResult.filled)) { Write-Host "  licence text added: $Line" }
+foreach ($Line in @($LicenseResult.without_text)) { Write-Host "  WARNING: no licence file: $Line" }
+foreach ($Line in @($LicenseResult.unchecked_copyleft)) {
+    Write-Host "  WARNING: a GPL/LGPL version the build does not check for its full text: $Line"
 }
 
 New-Item -ItemType Directory -Force -Path $OutputRoot | Out-Null
@@ -345,6 +425,7 @@ if ($Leftovers) {
 }
 & python -c "from conda_pack.cli import main; main()" -p $EnvironmentPath -o $ArchivePath --format zip --arcroot "$PackageName/runtime" --exclude "Lib/site-packages/~*" --n-threads -1 --force --quiet
 if ($LASTEXITCODE -ne 0) {
+    Remove-LicenseStaging
     throw "conda-pack failed with exit code $LASTEXITCODE."
 }
 
@@ -368,14 +449,26 @@ try {
             [System.IO.Compression.CompressionLevel]::Optimal
         ) | Out-Null
     }
+    foreach ($RelativePath in $LicenseFiles) {
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $Archive,
+            (Join-Path $LicenseStaging $RelativePath),
+            "$PackageName/licenses/$RelativePath",
+            [System.IO.Compression.CompressionLevel]::Optimal
+        ) | Out-Null
+    }
 }
 finally {
     $Archive.Dispose()
+    Remove-LicenseStaging
 }
 
 Write-Host "Portable release created: $ArchivePath"
 Write-Host "Test it on a clean Windows computer by extracting the whole ZIP and double-clicking Start_GIMaP.bat."
 
+# Every file to upload, for SHA256SUMS.txt at the end: the ZIP, or, when it is split, its parts and
+# the two installers (the ZIP itself is then not uploaded; the installers delete the joined copy).
+$Produced = [System.Collections.Generic.List[string]]::new()
 $ArchiveFile = Get-Item -LiteralPath $ArchivePath
 $PartSize = [int64]$ReleasePartSizeMiB * 1MB
 if ($ArchiveFile.Length -gt $PartSize) {
@@ -494,7 +587,22 @@ if ($ArchiveFile.Length -gt $PartSize) {
     ) | ForEach-Object { $OnlineInstallerLines.Add($_) }
     [System.IO.File]::WriteAllLines($OnlineInstallerPath, $OnlineInstallerLines, [System.Text.Encoding]::ASCII)
     Write-Host "GitHub assets created: $PackageName.zip.part01 ..., Install_GIMaP_parts.bat, and $($OnlineInstallerPath | Split-Path -Leaf)"
+    foreach ($PartFile in $PartFiles) { $Produced.Add($PartFile.FullName) }
+    $Produced.Add($InstallerPath)
+    $Produced.Add($OnlineInstallerPath)
 }
+else {
+    $Produced.Add($ArchivePath)
+}
+
+# SHA256SUMS.txt next to the files to upload: one "<sha256>  <file name>" line each (lower-case hex,
+# LF line ends), so "sha256sum -c SHA256SUMS.txt" checks them; upload it with the release assets.
+$SumLines = foreach ($File in $Produced) {
+    (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLowerInvariant() + "  " + (Split-Path $File -Leaf)
+}
+$SumsPath = Join-Path $OutputRoot "SHA256SUMS.txt"
+[System.IO.File]::WriteAllText($SumsPath, ((@($SumLines) -join "`n") + "`n"), [System.Text.Encoding]::ASCII)
+Write-Host "Checksums written: $SumsPath ($($Produced.Count) files)"
 
 # Check the list:  powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_portable_release.ps1 -ListOnly
 # Build:           powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_portable_release.ps1

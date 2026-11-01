@@ -537,6 +537,8 @@ def test_the_ai_report_is_saved_next_to_the_data(analyze, tmp_path: Path, monkey
     assert controller.run(AnalysisGoals(goals=("peaks",), permission=PERMISSION_AUTO))
     _wait(lambda: controller.outcome is not None)
     assert controller.save_report() == str(target) and target.with_suffix(".json").exists()
+    saved = target.read_text(encoding="utf-8")  # the title does not name one provider: any AI may have run
+    assert "<title>AI report – " in saved and "Claude report" not in saved
     assert Path(proposed[0]) == tmp_path / "film_giwaxs_ai_report.html"  # the frame's folder (no gimap_analysis yet)
     toast = visible_toasts(window)[-1]
     assert toast.property("level") == "ok" and toast.action_button.text() == "Open Folder"

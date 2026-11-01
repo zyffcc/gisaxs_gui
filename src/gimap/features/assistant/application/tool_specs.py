@@ -75,7 +75,7 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
             "calibration found, fitted and checked nearby), the last frames of a series summed, then for "
             "GIWAXS peaks, in-/out-of-plane, ring orientation and size of the strongest reliable peaks (and "
             "of the ring the user asked about); for GISAXS the horizontal cut at the Yoneda band, the beam "
-            "centre on the symmetry axis, the halves, the in-plane spacing and a physical fit of I(qy) when "
+            "centre on the symmetry axis, the halves, the length scale 2π/q* and a physical fit of I(qy) when "
             "a fitter is available. technique 'giwaxs' or 'gisaxs' forces that procedure; without it the "
             "mode chosen in Analyze is used, and with Analyze on Auto a session without a window (command "
             "line, MCP) follows what Auto detects once the geometry is applied (GIWAXS in the GUI). Returns "
@@ -95,6 +95,7 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
                     "frame": {"type": ["integer", "null"]},
                     "sum_frames": {"type": ["integer", "null"]},
                     "rings": {"type": ["integer", "null"]},
+                    "max_peaks": {"type": ["integer", "null"]},
                     "recalibrate": {"type": ["boolean", "null"]},
                     "technique": {"type": ["string", "null"], "enum": ["gisaxs", "giwaxs", None]},
                     "fit": {"type": ["boolean", "null"]},
@@ -190,9 +191,11 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
         ),
         ToolSpec(
             "in_plane_spacing",
-            "GISAXS: peaks of the curve for fitting (|qy|, the halves chosen or 'side') and the dominant "
-            "in-plane distance D = 2π/q* of the strongest side maximum — or of a shoulder, marked as such "
-            "(a hint, not a measurement). Side maxima closer to qy = 0 than min_points bins are ignored.",
+            "GISAXS: peaks of the curve for fitting (|qy|, the halves chosen or 'side') and the length scale "
+            "2π/q* of the strongest side maximum — or of a shoulder, marked as such — of the cut "
+            "(distance_nm: 2π/q* in nm). It is a length the curve shows, not necessarily the particle spacing: "
+            "a form factor or the beam tail makes a shoulder too; check it with a model fit (fit_horizontal_cut). "
+            "Side maxima closer to qy = 0 than min_points bins are ignored.",
             _object({
                 "side": {"type": "string", "enum": ["mean", "negative", "positive"]},
                 "min_points": {"type": "integer"}, "background_window": NUMBER,
@@ -203,8 +206,12 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
             "GISAXS: a numerical physical fit of the horizontal cut (the halves chosen, or 'side'): spheres, "
             "vertical and random cylinders with size dispersity and an interparticle distance D, or the "
             "composition given (1 = sphere, 2 = random cylinder, 3 = vertical cylinder). Returns the distinct "
-            "solutions, best first, with R, D (nm), χ² and warnings. Also starts from the distance "
-            "in_plane_spacing found (or distance_nm). Takes 10–60 s.",
+            "solutions, best first, with R, D (nm), χ²/N (chi2: mean squared σ-normalised residual), warnings and "
+            "at_bounds (non-linear values that ended on a search bound, not determined by the curve; the amplitudes "
+            "and background are solved non-negative and not listed), and 'chosen': the best-ranked solution within "
+            "10 % of the first's χ²/N that converged with no non-linear value at a bound (else the first) — the one "
+            "the standard procedure reports. Also starts D from the 2π/q* in_plane_spacing "
+            "found (or distance_nm). A screening fit: confirm the model in Fitting. Takes 10–60 s.",
             _object({
                 "side": {"type": "string", "enum": ["mean", "negative", "positive"]},
                 "components": {"type": "array", "items": {"type": "integer", "enum": [1, 2, 3]}, "maxItems": 4},
@@ -294,7 +301,9 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
             "reliable peaks. When nothing "
             "qualifies it says why. Run it on 'radial' first, then on 'in_plane'/'out_of_plane' "
             "when sector-specific peaks matter. Raise background_window (Å⁻¹, default 0.15) when a "
-            "broad peak (e.g. π–π stacking) is absorbed into the background.",
+            "broad peak (e.g. π–π stacking) is absorbed into the background. At most max_peaks candidates "
+            "(default 12), the most prominent, are fitted; 'candidates' says how many qualified, and "
+            "'truncated' is there when that was more (raise max_peaks for the rest).",
             _object(
                 {
                     "curve": {"type": "string", "enum": Q_CURVES},
@@ -302,6 +311,7 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
                     "q_max": NUMBER_OR_NULL,
                     "min_snr": NUMBER,
                     "background_window": NUMBER,
+                    "max_peaks": {"type": "integer"},
                 },
                 ("curve",),
             ),
@@ -319,7 +329,7 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
             "ring_orientation",
             "Orientation distribution of one ring: sets the I(χ) window of Analyze to "
             "q_center ± q_half_width (default from the fitted FWHM), then reports the measured χ "
-            "coverage (missing wedge), maxima, anisotropy and Herman's orientation factor relative "
+            "coverage (missing wedge), maxima, anisotropy and Hermans orientation factor relative "
             "to the surface normal (1 along the normal, 0 random, −0.5 in plane). The GUI shows the I(χ).",
             _object({"q_center": NUMBER, "q_half_width": NUMBER_OR_NULL}, ("q_center",)),
         ),

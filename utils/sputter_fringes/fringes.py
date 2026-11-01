@@ -3,7 +3,7 @@
 Usage::
 
     python utils/sputter_fringes/fringes.py --folder RESULT --out OUTDIR [--metal Ag|Au|Cu] [--alpha-c DEG]
-        [--group-seconds 1.0] [--qy-band 0.05 0.30] [--toolkit DIR] [--seed 0]
+        [--group-seconds 1.0] [--qy-band 0.05 0.15] [--toolkit DIR] [--seed 0]
 
 RESULT is a Sputter result folder (it holds ``binned/run.json``); it is only read. OUTDIR receives
 ``fringe_heights.csv`` (one row per time group) and ``fringe_summary.json``; it may not be RESULT itself or one of the

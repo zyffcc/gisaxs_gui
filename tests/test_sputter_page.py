@@ -150,8 +150,8 @@ def test_missing_values_and_a_missing_model_are_said_before_anything_runs(tmp_pa
     _fill(page, scan_folder(tmp_path))
     page.energy_value.setText("9")
     page.predict()
-    assert not page.running() and "Update GIMaP" in page.job_status.message_label.text()
-    assert "Update GIMaP" in page.environment_label.text()
+    assert not page.running() and "Git clone: run Update_GIMaP.bat" in page.job_status.message_label.text()
+    assert "Portable version" in page.environment_label.text()
     _close(page)
 
 
@@ -661,6 +661,40 @@ def test_a_cu_result_says_on_its_pictures_that_it_was_read_with_the_ag_model(tmp
     save_storyboard(page.result, tmp_path / "board.png")
     assert (tmp_path / "board.png").stat().st_size > 0
     _close(page)
+
+
+def test_save_image_of_the_sketch_writes_the_light_palette_in_the_dark_theme(tmp_path, monkeypatch):
+    from matplotlib.colors import to_rgb
+    from PyQt5.QtWidgets import QFileDialog
+
+    from src.gimap.app.presentation.theme import apply_theme
+
+    def dark(colour) -> bool:
+        return sum(to_rgb(colour)) / 3 < 0.5
+
+    apply_theme("dark", 9.0)
+    page = _page(tmp_path)
+    try:
+        page.open_results(result_folder(tmp_path / "res", physical=True))
+        view = page.sketch
+        figure = view.figure
+        words = lambda: [t for ax in figure.axes for t in (ax._left_title, *ax.texts) if t.get_text()]  # noqa: E731
+        assert not dark(view.figure.axes[0]._left_title.get_color())  # on screen: the dark theme's light titles
+        seen = {}
+
+        def savefig(path, **kwargs):
+            seen["face"] = figure.get_facecolor()
+            seen["words"] = {t.get_text(): t.get_color() for t in words()}
+
+        monkeypatch.setattr(figure, "savefig", savefig)
+        monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(lambda *_a, **_k: (str(tmp_path / "s.png"), "")))
+        view._save_image()
+        assert seen["words"] and all(dark(colour) for colour in seen["words"].values()), seen["words"]  # no white on white
+        assert not dark(seen["face"])
+        assert not dark(view.figure.axes[0]._left_title.get_color())  # the screen has the theme's colours again
+    finally:
+        apply_theme("light", 9.0)
+        _close(page)
 
 
 def test_the_sketch_draws_a_film_without_particles(tmp_path):

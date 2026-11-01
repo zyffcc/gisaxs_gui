@@ -178,6 +178,11 @@ def _number(value) -> str:
     return "auto" if value is None else f"{float(value):g}"
 
 
+def _pixel(value) -> str:
+    """A detector position to 0.01 px."""
+    return "auto" if value is None else f"{float(value):.2f}"
+
+
 HALVES_NAMES = {
     "mean": ("两半平均", "Mean of both halves"), "negative": ("只用 qy < 0 一半", "Only the qy < 0 half"),
     "positive": ("只用 qy > 0 一半", "Only the qy > 0 half"), "both_abs": ("两半都保留（|qy|）", "Both halves on |qy|"),
@@ -198,7 +203,7 @@ def describe(tool: str, arguments: dict, language: str = "English") -> str:
     chinese = language.startswith("中")
     a = arguments
     if tool == "set_beam_center":
-        where = f"x = {_number(a.get('x_px'))}, y = {_number(a.get('y_px'))} px"
+        where = f"x = {_pixel(a.get('x_px'))}, y = {_pixel(a.get('y_px'))} px"  # to 0.01 px, as the report gives it
         return f"光束中心 {where}" if chinese else f"Beam centre {where}"
     if tool == "set_halves":
         return halves_label(str(a.get("side")), language)

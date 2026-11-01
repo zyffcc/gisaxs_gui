@@ -67,6 +67,7 @@ def _read_cbf(path: Path) -> DetectorImage:
     data = np.asarray(cbf.data, dtype=np.float32)
     invalid = ~np.isfinite(data) | (data < 0)
     metadata = extract_cbf_metadata(cbf.header, data.shape)
+    metadata["stored_dtype"] = str(np.asarray(cbf.data).dtype)  # Pilatus: int32 counts, −1/−2 gap codes
     # Beam_xy is (column, row) in pixels of the stored image, which is also
     # the canonical frame here (row 0 at the top, origin at the pixel corner,
     # as pyFAI reads it).  Headers are often stale; Analyze uses this centre

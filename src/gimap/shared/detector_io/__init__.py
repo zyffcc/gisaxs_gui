@@ -28,6 +28,7 @@ from .nexus_layout import (
 )
 from .nexus_metadata import extract_nexus_metadata
 from .nexus_reading import read_nexus_frame
+from .output_values import OutputFrame, invalid_pixels, output_frame
 from .writing import FRAME_FORMATS, frame_suffix, write_frame
 
 __all__ = [
@@ -36,6 +37,9 @@ __all__ = [
     "HDF5_SUFFIXES",
     "frame_suffix",
     "write_frame",
+    "OutputFrame",
+    "invalid_pixels",
+    "output_frame",
     "AmbiguousDatasetError",
     "BeingWritten",
     "DetectorImage",

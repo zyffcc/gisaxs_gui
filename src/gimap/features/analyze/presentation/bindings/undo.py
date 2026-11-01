@@ -1,4 +1,5 @@
-"""Undo / Redo of the set-up in Analyze: the ↶ ↷ buttons of the command bar, Ctrl+Z and Ctrl+Shift+Z (Ctrl+Y).
+"""Undo / Redo of the set-up in Analyze: the ↶ ↷ buttons of the command bar, Ctrl+Z and Ctrl+Shift+Z (Ctrl+Y),
+and Edit ▸ Undo / Redo of the main menu (``undo_names`` gives it what each would change).
 
 Every manual change — a mask drawn, a region added or moved, a band dragged, the profile, αi or the
 mode chosen, a settings file loaded, an AI card applied — ends in ``run_analysis``, which first lets
@@ -58,6 +59,12 @@ class UndoMixin:
 
     def redo_setup(self) -> bool:
         return self._step(self.setup_history.redo(), tr("Redone: {what}"), (tr("Undo"), self.undo_setup))
+
+    def undo_names(self) -> tuple[str, str]:
+        """What the next Undo and Redo change, in the interface language (``""``: nothing): Edit ▸ Undo / Redo."""
+        history = self.setup_history
+        undo, redo = history.next_undo(), history.next_redo()
+        return (_what(undo) if undo else "", _what(redo) if redo else "")
 
     def _step(self, step, message: str, action) -> bool:
         if step is None:

@@ -15,6 +15,8 @@ from typing import Any, Mapping
 
 import numpy as np
 
+from src.gimap.shared.version import SOFTWARE
+
 from .ports import PredictionExportRepository
 
 RECORD_SCHEMA = "gimap.prediction-export/1"
@@ -89,6 +91,7 @@ class ExportPredictionRecord:
     def record(request: PredictionRecordRequest) -> dict[str, Any]:
         record: dict[str, Any] = {
             "schema": RECORD_SCHEMA,
+            "software_version": SOFTWARE,
             "written": datetime.now().isoformat(timespec="seconds"),
             "kind": request.kind,
             "outputs": [Path(path).name for path in request.outputs],

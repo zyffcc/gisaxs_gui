@@ -19,6 +19,7 @@ from src.gimap.app.presentation.components.table_copy import enable_table_copy
 from src.gimap.app.presentation.i18n import current_language, tr, trf
 from src.gimap.app.presentation.theme import theme_manager
 
+from ..application import herman_texts
 from .guided_words import words
 
 PEAK_COLUMNS = (
@@ -180,7 +181,7 @@ def coverage_notes(rings) -> list[tuple[str, str]]:
         where = _ranges(wedge, lambda ring: f"< {ring['missing'][0][1]:.0f}°")
         notes.append((
             trf("Missing wedge (red dashed next to qz): |χ| {where} Å⁻¹ is not measured, so orientations closest "
-                "to the surface normal are missing and Herman's f is biased low.", where=where),
+                "to the surface normal are missing and Hermans f is biased low.", where=where),
             "\n".join(words(note) for ring in wedge for note in ring.get("notes") or () if "missing wedge" in note),
         ))
     return notes
@@ -191,11 +192,12 @@ def ring_summary(ring: dict) -> tuple[str, str]:
     q = f"{ring.get('q'):.4g}"
     detail = "\n".join(words(text) for text in (ring.get("reason"), ring.get("texture"), *(ring.get("notes") or ())) if text)
     texture = words(ring.get("texture"))
-    if ring.get("herman") is not None:
-        random, f = ring.get("herman_isotropic"), f"{ring['herman']:.2f}"
-        if random is not None and abs(random) >= 0.005:
+    texts = herman_texts(ring)  # f ± σ_f with the decimals of σ_f and the Unicode minus, as the report gives them
+    if texts is not None:
+        random, f = ring.get("herman_isotropic"), texts["f"]
+        if random is not None and round(float(random), texts["decimals"]) != 0:  # f_iso unless 0 at those decimals
             return trf("Ring q ≈ {q} Å⁻¹: f = {f} (a random ring would give {random} here) — {texture}",
-                       q=q, f=f, random=f"{random:.2f}", texture=texture), detail
+                       q=q, f=f, random=texts["iso"], texture=texture), detail
         return trf("Ring q ≈ {q} Å⁻¹: f = {f} — {texture}", q=q, f=f, texture=texture), detail
     covered = ring.get("weighted_coverage")
     if covered is not None and "is measured at this q" in str(ring.get("reason") or ""):
@@ -207,9 +209,9 @@ def ring_summary(ring: dict) -> tuple[str, str]:
             gaps.append(trf("missing wedge below {angle}°", angle=f"{missing[0][1]:.0f}"))
         values = {"q": q, "covered": f"{covered:.0%}"}
         if gaps:
-            return trf("Ring q ≈ {q} Å⁻¹: orientation not determined — only {covered} of the range Herman's f needs "
+            return trf("Ring q ≈ {q} Å⁻¹: orientation not determined — only {covered} of the range Hermans f needs "
                        "is measured ({gaps}). Hover for details.", gaps=listed(gaps, "; "), **values), detail
-        return trf("Ring q ≈ {q} Å⁻¹: orientation not determined — only {covered} of the range Herman's f needs "
+        return trf("Ring q ≈ {q} Å⁻¹: orientation not determined — only {covered} of the range Hermans f needs "
                    "is measured. Hover for details.", **values), detail
     return trf("Ring q ≈ {q} Å⁻¹: {reason}", q=q, reason=words(ring.get("reason")) or texture), detail
 

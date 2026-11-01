@@ -10,7 +10,7 @@
 
 ## 硬约束
 
-- 大数据、模型、checkpoint、缓存、日志只写 `/data/dust/user/zhaiyufe/`。
+- 大数据、模型、checkpoint、缓存、日志只写 `/data/dust/user/<user>/`。
 - 旧模型、版本根、日志、失败证据和用户数据不可删除、覆盖或重新用于晋级。现有已发布 balanced 数据允许作为新流水线的只读输入；不得复用 Phase-A 模型权重。
 - 绝不修改或取消用户作业 24373458–24373464。
 - 登录节点只做轻量检查、文件管理和 Slurm；生成、训练、批量哈希/重放和评估在 worker。
@@ -38,14 +38,14 @@
 
 ## 远端路径
 
-以下 BASE 为 `/data/dust/user/zhaiyufe/MaxwellRuns/GISAXS_ONE_CLICK_PAPER_V5_20260903_V5_2_R2`。
+以下 BASE 为 `/data/dust/user/<user>/MaxwellRuns/GISAXS_ONE_CLICK_PAPER_V5_20260903_V5_2_R2`。
 
 - balanced：BASE/`k1_balanced_all12_dataset_dag_v3`
 - holdout：BASE/`k1_phase_c_holdout_dataset_dag_v1`
 - calibration：BASE/`k1_iid_calibration_dag_v2/artifacts/k1-iid-compatibility-v2.json`
 - Sobol schedule：BASE/`k1_exact_search_schedule_dag_v1/artifacts/k1-paper-full-b4096-local-sobol-v1.gvd5`
 - Sphere 结果：BASE/`k1_phase_b_v5_2_dag_v13`
-- 专用环境：`/data/dust/user/zhaiyufe/conda/envs/gisaxs-v5-r2`。
+- 专用环境：`/data/dust/user/<user>/conda/envs/gisaxs-v5-r2`。
 
 关键 file SHA256（仍须从正式 completion/receipt 重放验证）：
 
@@ -59,13 +59,13 @@
 最后远端冻结 archive SHA256：
 `a3b4227ccef9a0d6319ffef731efb557df2ab5c3eb98143fcab40c9e54ca12bf`
 
-archive：`/data/dust/user/zhaiyufe/source-archives/gisaxs-posterior-v8-r2-a3b4227ccef9a0d6319ffef731efb557df2ab5c3eb98143fcab40c9e54ca12bf.tar`
+archive：`/data/dust/user/<user>/source-archives/gisaxs-posterior-v8-r2-a3b4227ccef9a0d6319ffef731efb557df2ab5c3eb98143fcab40c9e54ca12bf.tar`
 
-snapshot：`/data/dust/user/zhaiyufe/source-snapshots/gisaxs-posterior-v8-r2-a3b4227ccef9a0d6319ffef731efb557df2ab5c3eb98143fcab40c9e54ca12bf`
+snapshot：`/data/dust/user/<user>/source-snapshots/gisaxs-posterior-v8-r2-a3b4227ccef9a0d6319ffef731efb557df2ab5c3eb98143fcab40c9e54ca12bf`
 
 manifest SHA=0d45b58c7baffc061b9f7cecbca1bd5a387735ab45d5d8ee8353dfbc7081f7b0；tree SHA=dc49cffadfb97343e13e2630980a14ae9a098fe09c1f73463304b150c22706e0。1157 files，11980800 bytes，已验证只读和无 symlink。
 
-对应 Mac reference：`/data/dust/user/zhaiyufe/reference-manifests/sobol-cross-platform-r2-37791b11095eac3ca95d315e71964ccc75a19a71e20228aea57383608415b8e5.json`。
+对应 Mac reference：`/data/dust/user/<user>/reference-manifests/sobol-cross-platform-r2-37791b11095eac3ca95d315e71964ccc75a19a71e20228aea57383608415b8e5.json`。
 
 计划生成 v1 作业24453902 因 CLI 参数到 config 字段映射错误失败，已在上面冻结源码修复。随后 v2 作业 **24455508 FAILED 1:0**，22 秒，节点 max-ferrari020；在首次路径检查因 PurePosixPath 没有 resolve 方法失败。尚无 candidate plan 或 plan-author completion，未进入正式搜索。
 
@@ -82,7 +82,7 @@ manifest SHA=0d45b58c7baffc061b9f7cecbca1bd5a387735ab45d5d8ee8353dfbc7081f7b0；
 
 ## 恢复后的具体执行顺序
 
-1. 核对迁移后的代码和上述 v3 改动，读取相关源码，不直接复制旧启动命令。重新建立 FS 登录，遇 OTP 再向用户请求。用户指定的入口为 `zhaiyufe@max-fs-display.desy.de`。
+1. 核对迁移后的代码和上述 v3 改动，读取相关源码，不直接复制旧启动命令。重新建立 FS 登录，遇 OTP 再向用户请求。用户指定的入口为 `<user>@max-fs-display.desy.de`。
 2. 旧电脑曾使用 `/tmp/codex_maxwell_fs_v1_20260907.sock`，master17722/keepalive19397；这些只作历史记录，在新电脑不能使用其 PID 或声称保活仍健康。避免重复建立常驻 keepalive；不删除旧连接。
 3. 为 v3 增加足够的入口/路径回归，运行 focused/full/Sobol/ruff/compileall/全部 sbatch bash-n/diff-check。科学定义和门禁不变。
 4. 新 source 双归档、新 reference、新 content-addressed snapshot；旧 archive/snapshot 只读保留。用全新 authoring 根和日志提交 worker，held-readback 后 release。

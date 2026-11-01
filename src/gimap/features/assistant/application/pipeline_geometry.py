@@ -10,10 +10,11 @@ fitted and accepted when the standard's lines land within 0.5 % of their q (``go
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Iterable, Iterator, Optional
 
 from ..domain import READABLE_IMAGE_SUFFIXES, STANDARD_NAMES, assessment, standard_from_name, suffix
 from .calibration_tools import file_geometry, file_key
+from .tools import clean
 
 MAX_FILES = 2
 MAX_IMAGES = 3
@@ -29,18 +30,48 @@ SEEN_FROM_OTHER = "{place}, seen from the folder of {frame}, the frame it was se
 INCIDENCE_ITEM = "incidence angle αi"
 INCIDENCE_MISSING = {
     "giwaxs": (
-        "Neither the options, the notes nor an instrument profile give αi, so 0° is used. Ring "
+        "Neither the options, the notes, Analyze's command bar nor an instrument profile give αi, so 0° is used. Ring "
         "positions |q| barely change, but qz shifts by about k·sin αi (≈0.02 Å⁻¹ at 0.2° and 12 keV) "
         "and the missing wedge moves."
     ),
     "gisaxs": (
-        "Neither the options, the notes nor an instrument profile give αi, so 0° is used. qy and the "
+        "Neither the options, the notes, Analyze's command bar nor an instrument profile give αi, so 0° is used. qy and the "
         "in-plane spacing barely change, but the sample horizon is then put at the direct beam: the exit "
         "angle αf of every row, the one quoted for the Yoneda band too, is too large by αi, and the rows "
         "between the direct beam and the real horizon count as above the sample."
     ),
 }
 """What a missing αi changes, said for the technique that ran (the GIWAXS words while none is known)."""
+TILT_ITEM = "detector tilt"
+TILT_WHY = (
+    "The calibration describes a detector tilted by {tilt}°; GIMaP's geometry is a flat detector perpendicular to "
+    "the beam, so the tilt is left out and |q| is off by up to {error} % over the valid detector area."
+)
+TILT_HINT = (
+    "Peak positions carry this error, which grows away from the beam. GIMaP does not model a detector tilt: for "
+    "exact q, reduce the frame with the full .poni geometry (e.g. pyFAI) or calibrate with an untilted detector."
+)
+TILT_SMALL = (
+    "GIMaP's geometry is a flat detector perpendicular to the beam; leaving the tilt out changes |q| by at most "
+    "{error} % over the valid detector area (an open point above {limit_deg}° or {limit_error} %)"
+)
+"""A tilt the geometry leaves out (a ``.poni``'s rotations; Analyze's estimate, ``shared/geometry/detector_tilt``)."""
+
+
+def tilt_entry(status: Optional[dict]) -> Optional[tuple[str, dict]]:
+    """``("attention" | "decision", entry)`` for the tilt in ``status`` (``geometry.flat_detector``), ``None``
+    without one. The numbers are read as the report keeps them (``clean``), so the line says the percentage the
+    report's Geometry section and ``report.json`` give, and the verdict is Analyze's (``needs_attention``)."""
+    flat = clean(((status or {}).get("geometry") or {}).get("flat_detector"))
+    if not flat:
+        return None
+    tilt, error, limits = float(flat.get("dropped_tilt_deg") or 0.0), flat.get("q_error_max"), flat.get("limits") or {}
+    percent = "?" if error is None else f"{100 * float(error):.2g}"
+    if flat.get("needs_attention"):
+        return "attention", {"item": TILT_ITEM, "why": TILT_WHY.format(tilt=f"{tilt:.2f}", error=percent), "option": None,
+                             "hint": TILT_HINT}
+    return "decision", {"what": TILT_ITEM, "decision": f"{tilt:.2f}° left out", "why": TILT_SMALL.format(
+        error=percent, limit_deg=f"{limits.get('tilt_deg', 1.0):g}", limit_error=f"{100 * limits.get('q_error', 0.005):g}")}
 
 
 class GeometryStepsMixin:
@@ -61,6 +92,41 @@ class GeometryStepsMixin:
         for item in self._run.attention:
             if why and item["item"] == INCIDENCE_ITEM:
                 item["why"] = why
+
+    def _incidence_in_use(self) -> None:
+        """The αi decided is the αi Analyze uses once the geometry is applied. A value set in Analyze's command bar
+        beats the profile's there, so a value given or noted that differs from it is set there too (as for a kept
+        profile). The value set there is one of the run's sources (``_values``): it is never asked for again."""
+        used = ((self.catalog.results.status or {}).get("geometry") or {}).get("incidence_deg")
+        if self._incidence is not None and used is not None and abs(float(used) - self._incidence) > 1e-9:
+            self._call("set_incidence_angle", {"degrees": self._incidence})
+
+    def _flat_detector(self) -> None:
+        """A tilt the applied geometry leaves out: an open point above the limits (1°, 0.5 % in |q|), else a decision
+        that says how much it changes |q|. Analyze compares the tilted .poni with the flat geometry made from it on the
+        frame's valid pixels, so a centre moved later (the GISAXS symmetry axis) does not change the estimate."""
+        said = tilt_entry(self.catalog.results.status)
+        if said is not None:
+            (self._run.attention if said[0] == "attention" else self._run.decisions).append(said[1])
+
+    def _flat_detector_as_reported(self) -> None:
+        """The tilt said again from the status the report describes, in the place where it was said: the frames
+        summed since, or a reduction that fills a half from its mirror, change the valid pixels the estimate is taken
+        over, so the Decisions or Needs attention give the number and the verdict of ``geometry.flat_detector``."""
+        run = self._run
+        places = {"decision": next((i for i, item in enumerate(run.decisions) if item.get("what") == TILT_ITEM), None),
+                  "attention": next((i for i, item in enumerate(run.attention) if item.get("item") == TILT_ITEM), None)}
+        if places["decision"] is None and places["attention"] is None:
+            return  # no tilt was said (no geometry applied): nothing to bring in line
+        if places["decision"] is not None:
+            del run.decisions[places["decision"]]
+        if places["attention"] is not None:
+            del run.attention[places["attention"]]
+        said = tilt_entry(self.catalog.results.status)
+        if said is not None:
+            items = run.attention if said[0] == "attention" else run.decisions
+            place = places[said[0]]
+            items.insert(len(items) if place is None else place, said[1])
 
     def _geometry(self, status: dict) -> bool:
         """The calibration of an earlier frame of the batch; else the calibrations the person named (option,
@@ -323,7 +389,7 @@ class GeometryStepsMixin:
         if self._energy and file_energy and abs(file_energy - self._energy) > 2e-3 * self._energy:
             # Measured at another energy: the distance and centre hold, the frame's energy is used.
             arguments = {
-                "source": "values", "distance_mm": values["distance_mm"],
+                "source": "values", "distance_mm": values["distance_mm"], "path": path,  # path: the file's tilt
                 "beam_center_x_px": values["beam_center_px"][0], "beam_center_y_px": values["beam_center_px"][1],
                 "energy_kev": self._energy, "note": f"{name} (made at {file_energy:g} keV; the frame's {self._energy:g} keV used)",
             }
@@ -342,4 +408,5 @@ class GeometryStepsMixin:
         return True
 
 
-__all__ = ["ACCEPTED", "GeometryStepsMixin", "MAX_FILES", "MAX_IMAGES", "SEARCHED"]
+__all__ = ["ACCEPTED", "GeometryStepsMixin", "MAX_FILES", "MAX_IMAGES", "SEARCHED", "TILT_HINT", "TILT_ITEM", "TILT_SMALL",
+           "TILT_WHY", "tilt_entry"]

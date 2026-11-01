@@ -19,7 +19,15 @@ from typing import Callable, Optional
 import numpy as np
 from PyQt5.QtGui import QTextDocument
 
-from ..application import fit_on, peak_markers, pipeline_markdown, ring_overlays, series_markdown
+from ..application import (
+    bound_phrases,
+    chosen_solution,
+    fit_on,
+    peak_markers,
+    pipeline_markdown,
+    ring_overlays,
+    series_markdown,
+)
 
 STYLE = """
 body { font-family: system-ui, "Segoe UI", sans-serif; max-width: 980px; margin: 24px auto; padding: 0 16px;
@@ -41,7 +49,8 @@ CAPTIONS = {
     ),
     "gisaxs": (
         "The q map (q∥–qz, log intensity) of the analysed frames.",
-        "The fitted horizontal cut I(|qy|) on log–log axes: the data (points) and the best fit (line).",
+        "The fitted horizontal cut I(|qy|) on log–log axes: the data (points) and the fit the run reports, the best "
+        "fit free of search bounds (line).",
     ),
     "geometry": ("The q map of the frame with the geometry found.", ""),
 }
@@ -149,8 +158,9 @@ def fit_png(report: dict, width: int = 1000) -> Optional[bytes]:
         return None
     order = np.argsort(q)
     q, intensity = q[order], intensity[order]
-    best = (fit.get("curves") or [None])[0] or fit.get("best_curve")
-    model = fit_on(q, best)
+    index, top = chosen_solution(fit)  # the solution the run reports, as the Results tab selects it
+    curves = fit.get("curves") or []
+    model = fit_on(q, (curves[index] if index < len(curves) else None) or fit.get("best_curve"))
     shown = np.isfinite(q) & np.isfinite(intensity) & (q > 0) & (intensity > 0)
     if not shown.any():
         return None
@@ -161,13 +171,15 @@ def fit_png(report: dict, width: int = 1000) -> Optional[bytes]:
     axes.loglog(q[shown], intensity[shown], ".", color=FIT_COLOURS[0], markersize=2.5, label="data")
     fitted = shown & np.isfinite(model) & (model > 0)
     if fitted.any():
-        top = solutions[0]
         component = (top.get("components") or [{}])[0]
         radius = component.get("R")
         name = str(top.get("model") or "").replace("_", " ")
         detail = f" R {float(radius):.3g} nm" if radius is not None else ""
+        which = f"chosen fit (rank {top.get('rank')})" if index else "best fit"
+        bounds = ", ".join(bound_phrases(top))
         axes.loglog(q[fitted], model[fitted], "-", color=FIT_COLOURS[1], linewidth=1.4,
-                    label=f"best fit: {name}{detail} (χ² {float(top.get('chi2') or 0):.3g})")
+                    label=f"{which}: {name}{detail} (χ²/N {float(top.get('chi2') or 0):.3g})"
+                    + (f" ⚠ {bounds}" if bounds else ""))
     axes.set_xlabel("|qy| (Å⁻¹)")
     axes.set_ylabel("Intensity")
     axes.set_title(str(fit.get("curve") or "horizontal cut"), fontsize=9)

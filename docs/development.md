@@ -179,17 +179,20 @@ QT_QPA_PLATFORM=offscreen python -m pytest tests/test_display_artist_reuse.py te
 
 ## Version and release
 
+The maintainer's checklist for a release, from choosing the version to the published GitHub release,
+Zenodo DOI and paper submission, is [docs/releasing.md](releasing.md).
+
 - The version is written once, in `src/gimap/shared/version.py` (`__version__`). The About box and the
   export records that name the software read it from there.
 - Every version gets an entry in `CHANGELOG.md`: what a user gets, and the known limitations. The first
-  paragraph of `README.md` and the preface and section 13.12 of `docs/User_Manual.md` (and `docs/User_Manual_zh.md`) name the version too.
+  paragraph of `README.md` and the preface and section 14.12 of `docs/User_Manual.md` (and `docs/User_Manual_zh.md`) name the version too.
 - The portable Windows version is built with `tools/build_portable_release.ps1`: it packs a Conda
   environment with `conda-pack` together with the application files. The environment is
   `gimap-release` (the default of `-EnvironmentName`), kept apart from the one you develop in, with
-  Python 3.10 from conda and only `requirements.txt` from pip. Create it once:
+  Python 3.10 from conda-forge and only `requirements.txt` from pip. Create it once:
 
   ```powershell
-  conda create -n gimap-release python=3.10 -y
+  conda create -n gimap-release -c conda-forge --override-channels python=3.10 -y
   conda run -n gimap-release python -m pip install -r requirements.txt
   ```
 
@@ -204,6 +207,15 @@ QT_QPA_PLATFORM=offscreen python -m pytest tests/test_display_artist_reuse.py te
   `v<version>`.
 - `-ListOnly` prints the application files the package would hold, without packing anything: check
   the list before a release.
+- Before it packs, the build runs `tools/collect_licenses.py` (standard library only). It writes
+  `licenses/` into the package: the licence files of every Python distribution and conda package of the
+  environment, the GPL-3.0 text for PyQt5 (its wheel has none), `THIRD_PARTY_NOTICES.md` and `LICENSE`.
+  A GPL-3.0 or LGPL-3.0 package without its text stops the build, and so does a conda package that is not
+  from conda-forge; a package under another GPL or LGPL version is listed with a warning, for a check by
+  hand against `THIRD_PARTY_NOTICES.md`. The conda licences are read from the package cache, so do not run
+  `conda clean --all` before a build. Next to the files to upload (the ZIP, or its parts and the two
+  installers) the build writes `SHA256SUMS.txt` (`sha256sum -c SHA256SUMS.txt`; `--ignore-missing` for a
+  part of them).
 - The trained weights of 1D Predict (eight `*.h5` / `*.npz` files under
   `modules/Fitting_1D_Model/Workflow_v5/`, about 56 MB) are tracked by Git, so a clone runs 1D Predict and
   its tests. `.gitignore` still ignores `*.h5`, `*.npz` and every `results/` folder: a new or renamed
@@ -213,8 +225,9 @@ QT_QPA_PLATFORM=offscreen python -m pytest tests/test_display_artist_reuse.py te
   were taken from the bytes on disk. A checkout made on Windows before that rule (2026-10-13) holds part
   of these files with converted line endings, and Git does not notice it: `tools/update_source.ps1`
   writes them again.
-- 0.1.0 is a pre-release: the About box, `README.md`, the manual and `CHANGELOG.md` say so. Change them
-  together when a version is released as final.
+- 0.2.0 is a pre-release: `PRE_RELEASE` in `src/gimap/shared/version.py` (the About box), `README.md`, the
+  manual (introduction, Known limitations, FAQ, Version and Contact) and `CHANGELOG.md` say so. Change them
+  together when a version is released as final (see [releasing.md](releasing.md)).
 
 - When `utils/gisaxs1d_gui_kit/` is installed, the builder also validates its `FILES_SHA256.json`
   with `tools/list_fit1d_release_files.py` (standard-library Python, including for `-ListOnly`). It
@@ -229,8 +242,9 @@ QT_QPA_PLATFORM=offscreen python -m pytest tests/test_display_artist_reuse.py te
   from `requirements.txt`, so fit1d limits BLAS even when NumPy was loaded before the job begins.
   The builder checks NumPy/SciPy compatibility and threadpoolctl inside the selected Conda
   environment before creating a ZIP; it does not install dependencies or modify the environment.
-- New GUI source files still need to be tracked before a normal release. `-AllowUntracked` leaves
-  them out; it does not make an incomplete application releasable. Modified tracked files are
+- New GUI source files, and new documents that Help or the manuals use (`docs/`, `CITATION.cff`,
+  screenshots), still need to be tracked before a normal release. `-AllowUntracked` leaves them out; it
+  does not make an incomplete application releasable. Modified tracked files are
   included as they are on disk: review the warnings and intended changes before building. During
   an integration in a dirty user checkout, deliver the isolated update patch rather than publish
   that entire checkout.

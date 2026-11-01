@@ -1,10 +1,12 @@
-id: Yuxin_CuPolymer_SF_4Para
+id: CuPolymer_SF_4Para
 name: "Copper on Silicon SF 4-Parameter"
 framework: tensorflow
 version: "2.x"
 model:
   format: keras
-  model_path: 'C:\Users\zhaiyufe\Downloads\yuxin_sf_model\yuxin_sf_model'
+  # Empty: choose the model folder with Import model... on the 2D Prediction page. GIMaP keeps
+  # that choice in your user data folder; this file is not changed.
+  model_path: ""
 preprocess:
   entry: preprocess:run
   steps:

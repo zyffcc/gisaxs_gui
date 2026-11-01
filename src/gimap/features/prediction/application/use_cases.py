@@ -9,6 +9,8 @@ from pathlib import Path
 
 import numpy as np
 
+from src.gimap.shared.version import SOFTWARE
+
 from .models import (
     FilePredictionResult,
     ImagePredictionResult,
@@ -107,6 +109,7 @@ class ExportPredictionJsonl:
                 json.dumps(
                     {
                         "index": index,
+                        "software_version": SOFTWARE,
                         "filename": item.filename,
                         "filepath": item.filepath,
                         "stack_count": max(1, int(item.stack_count)),
@@ -172,6 +175,7 @@ class ExportPredictionAscii:
             lines = [
                 "# Prediction 1D Curves Export",
                 f"# Generated: {timestamp}",
+                f"# Software: {SOFTWARE}",
                 "# Columns: " + " | ".join(headers),
                 "# Index\t" + "\t".join(headers),
             ]
@@ -191,6 +195,7 @@ class ExportPredictionAscii:
             lines = [
                 "# Prediction Parameters Export",
                 f"# Generated: {timestamp}",
+                f"# Software: {SOFTWARE}",
                 "filename\t" + "\t".join(parameter_names),
             ]
             for filename, values in parameter_rows:
@@ -250,6 +255,8 @@ class LoadPredictionModule:
 
 
 class UpdatePredictionModelPath:
+    """Remember the model folder the user chose for a module (in the user data, not in module.yaml)."""
+
     def __init__(self, repository: ModuleRepository):
         self._repository = repository
 

@@ -19,7 +19,7 @@ def parameter_label(column: str) -> str:
     text = column.replace("(1/A)", "(Å⁻¹)")
     if column.split()[-1:] and column.split()[-1] in ("R", "D", "h"):
         text += " (nm)"
-    return {"chi2": "χ²", "log rmse": "log RMSE"}.get(text, text)
+    return {"chi2": "χ²/N", "log rmse": "log RMSE"}.get(text, text)  # χ²/N: mean r² of the quick fit
 
 
 def _number(value) -> str:

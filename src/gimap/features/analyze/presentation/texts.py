@@ -16,6 +16,7 @@ from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.shared.detector_io.nexus_layout import ERROR_TEMPLATES, FRAME_BEYOND, LEFT_UNFINISHED
 
 from ..application import RECTANGLE
+from ..application.flat_detector import FLAT_DETECTOR_MESSAGE
 from ..application.geometry_resolution import CENTER_NOT_USED, CENTER_NOT_USED_HEADER
 
 NO_PROFILE = "No instrument profile for {detector} ({shape}). Calibrate once or enter the geometry to get q curves."
@@ -79,6 +80,7 @@ TEMPLATES: tuple[tuple[str, dict[str, Callable[[str], str]]], ...] = (
     (PROFILE_SHAPE, {}),
     (CENTER_NOT_USED, {}),
     (CENTER_NOT_USED_HEADER, {}),
+    (FLAT_DETECTOR_MESSAGE, {}),
     (EMPTY_CUT, {"title": curve_title}),
     (EMPTY_SECTOR, {"title": curve_title}),
     (PROFILE_ADDED, {}),

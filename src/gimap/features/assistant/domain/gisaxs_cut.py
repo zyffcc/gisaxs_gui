@@ -1,8 +1,9 @@
-"""The horizontal GISAXS cut I(qy): which halves to use, the curve to fit, the dominant spacing.
+"""The horizontal GISAXS cut I(qy): which halves to use, the curve to fit, the length scale 2π/q*.
 
 Which halves and the curve of a fit are decided in ``shared/signed_cut.py`` — Fitting and Analyze prepare
 their cuts with the same functions — and are named here as before (``choose_halves``, ``fit_curve``,
-``HalvesChoice``). The spacing of the side maximum is the automatic analysis' own.
+``HalvesChoice``). The length 2π/q* of the side maximum (``Spacing``, a name kept for the records) is the
+automatic analysis' own.
 """
 
 from __future__ import annotations
@@ -55,7 +56,9 @@ class Spacing:
     q: float
     """|qy| of the side maximum (Å⁻¹)."""
     distance_nm: float
-    """2π / q: the dominant in-plane distance."""
+    """2π / q* in nm: a length scale of the cut, not necessarily the particle spacing (a form factor or the beam
+    tail makes a shoulder too; BornAgain simulations without interference show one). The name is kept for the
+    records that store it."""
     snr: float
     kind: str = "maximum"
     """``maximum`` (a resolved side peak) or ``shoulder`` (a change of slope only: a hint, not a measurement)."""
@@ -65,7 +68,7 @@ SHOULDER_MIN_SNR = 5.0
 
 
 def spacing_from_peaks(peaks, *, q_min: float) -> Optional[Spacing]:
-    """The strongest side maximum away from qy = 0 as a distance 2π/q; else the strongest shoulder."""
+    """The strongest side maximum away from qy = 0 as a length 2π/q*; else the strongest shoulder."""
     side = [peak for peak in peaks if abs(peak.q) >= q_min and "spike" not in peak.flags]
     resolved = [peak for peak in side if "broad" not in peak.flags and "fit_failed" not in peak.flags]
     if resolved:

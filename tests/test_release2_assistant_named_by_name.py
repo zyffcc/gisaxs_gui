@@ -1,9 +1,10 @@
 """A calibration the notes name by its file name alone is the one used (release 2).
 
 Notes often say ``calibration LaB6_take2.poni`` without a path. That file used to be left to the automatic
-search, which ranks ready calibration files by how close in time they are to the frame: in a folder that was
-copied or cloned all files are a few milliseconds apart, and a calibration of a neighbouring data set could
-win. A name is now looked up in the frame's folder and in the folders the notes name, nowhere else.
+search, which then ranked ready calibration files by how close in time they are to the frame alone (now by
+folder first, ``test_assistant_calibration_folders.py``): in a folder that was copied or cloned all files are a
+few milliseconds apart, and a calibration of a neighbouring data set could win. A name is now looked up in the
+frame's folder and in the folders the notes name, nowhere else.
 """
 
 from __future__ import annotations

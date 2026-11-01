@@ -130,6 +130,12 @@ FIT1D_ZH = {
         '从模型中的数值出发，用拟合页自己的模型做最小二乘：快，找到最近的好拟合。',
     'Recommended for this curve: a GISAXS cut not fitted yet.':
         '推荐用于这条曲线：尚未拟合的 GISAXS 线切。',
+    'Recommended for this curve: a GISAXS cut not fitted yet (Predict parameters needs the optional fit1d add-on, which is not installed).':
+        '推荐用于这条曲线：尚未拟合的 GISAXS 线切（预测参数需要可选的 fit1d 附加组件，这里没有安装）。',
+    'Finds the particles and their sizes from the curve (network proposals and a physical fit), with errors and equivalent solutions. An optional add-on, not distributed with GIMaP and not installed here: put the folder gisaxs1d_gui_kit in utils/gisaxs1d_gui_kit of the GIMaP folder, or set the environment variable GISAXS1D_KIT_HOME to its folder, then start GIMaP again. Without it, use Find the particle shape (no AI).':
+        '从曲线找出粒子及其尺寸（网络给初值，再做物理拟合），给出误差和等价解。这是一个可选的附加组件，不随 GIMaP 分发，这里没有安装：'
+        '把文件夹 gisaxs1d_gui_kit 放到 GIMaP 文件夹的 utils/gisaxs1d_gui_kit，或者把环境变量 GISAXS1D_KIT_HOME 设为它所在的文件夹，'
+        '然后重新启动 GIMaP。没有它时，请用“寻找颗粒形状（不用 AI）”。',
     'Particles':
         '粒子',
     'Try …: fit1d fits every composition of these shapes and lists them as candidates, best first. The particles in Model: fit1d fits these, keeping the values you fixed and the ranges you set.':

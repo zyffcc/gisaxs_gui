@@ -17,8 +17,20 @@ def pytest_configure(config) -> None:
     of a paint deleted Qt objects of earlier tests and crashed the suite with an access violation (as main.py
     collects on a timer for the same reason)."""
     del config
-    os.environ["GIMAP_HOME"] = tempfile.mkdtemp(prefix="gimap-test-home-")
+    home = Path(tempfile.mkdtemp(prefix="gimap-test-home-"))
+    _seed_empty_user_store(home)
+    os.environ["GIMAP_HOME"] = str(home)
     gc.disable()
+
+
+def _seed_empty_user_store(home: Path) -> None:
+    """An empty settings store and profile list in the temporary user folder, so that the first opening does not
+    import the git-ignored files a source checkout may hold from older versions (``config/user_settings.json``,
+    ``config/user_parameters.json``, ``config/instrument_profiles.json``; ``integrations/state/user_store.py``):
+    the tests then see on this computer what they see on a fresh clone. Tests of that import use folders of their
+    own."""
+    (home / "settings.json").write_text('{"schema_version": 1, "settings": {}, "preferences": {}}', encoding="utf-8")
+    (home / "instrument_profiles.json").write_text('{"schema_version": 1, "profiles": []}', encoding="utf-8")
 
 
 @pytest.hookimpl(hookwrapper=True)

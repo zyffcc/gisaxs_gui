@@ -9,13 +9,13 @@ ASSISTANT_ZH = {
         "AI 在这一帧上操作分析工具，你可以看着每一步，然后报告下面勾选的每个结果。无法确定的内容会连同原因一起报告（例如没有高于噪声的信号）。",
     "This frame has no geometry yet: the AI looks for calibration files (standard images, .poni) and logs around it, fits or reads the geometry, and asks you when it cannot tell which calibration is right.":
         "这一帧还没有几何参数：AI 会在它附近查找标定文件（标样图像、.poni）和日志，拟合或读取几何参数，无法判断哪个标定正确时会问你。",
-    "GISAXS: the horizontal cut at the Yoneda band, its halves, the spacing and a fit.":
-        "GISAXS：Yoneda 带处的水平切线、它的两半、间距和一次拟合。",
+    "GISAXS: the horizontal cut at the Yoneda band, its halves, the length scale 2π/q* and a fit.":
+        "GISAXS：Yoneda 带处的水平切线、它的两半、特征长度 2π/q* 和一次拟合。",
     "Peak table (q, d, FWHM, intensity)": "峰位表（q、d、FWHM、强度）",
     "Orientation: in-plane vs out-of-plane": "取向：面内 vs 面外",
     "Orientation distribution of one ring": "单个环的取向分布",
     "Horizontal cut at Yoneda, centred, halves chosen": "Yoneda 处的水平切线，已居中，已选好两半",
-    "In-plane distance 2π/q*": "面内距离 2π/q*",
+    "Length scale 2π/q* of the cut": "切线的特征长度 2π/q*",
     "Fit of I(qy): shape, radius, distance": "I(qy) 拟合：形状、半径、距离",
     "choose automatically": "自动选择",
     "Ring at q =": "环的位置 q =",
@@ -233,7 +233,10 @@ ASSISTANT_ZH = {
     "halves: {halves}": "两半：{halves}",
     "Halves: {halves} — {reason}": "两半：{halves} —— {reason}",
     "(shoulder)": "（肩峰）",
-    "best fit {model} R {radius} nm (χ² {chi2})": "最佳拟合 {model} R {radius} nm（χ² {chi2}）",
+    "best fit {model} R {radius} nm (χ²/N {chi2})": "最佳拟合 {model} R {radius} nm（χ²/N {chi2}）",
+    "chosen fit {model} R {radius} nm (rank {rank}, χ²/N {chi2})": "选定的拟合 {model} R {radius} nm（第 {rank} 名，χ²/N {chi2}）",
+    "Length scale 2π/q*": "特征长度 2π/q*",
+    "2π/q* of the cut, {d} nm": "切线的 2π/q*，{d} nm",
     "the horizontal cut is ready": "水平切线已就绪",
     "The cut is drawn on the image in Analyze: Sources ▸ on the canvas shows where each curve comes from.":
         "切线画在分析的图像上：画布上的“来源”显示每条曲线来自哪里。",
@@ -259,12 +262,13 @@ ASSISTANT_ZH = {
         "峰位表：每个峰的 q、d 间距、FWHM 和强度（全部、面内和面外曲线）",
     "Orientation: for each peak, in-plane versus out-of-plane intensity (face-on / edge-on / isotropic)":
         "取向：每个峰的面内与面外强度对比（face-on / edge-on / 各向同性）",
-    "Orientation distribution of one ring: I(χ), maxima and Herman's orientation factor":
-        "单个环的取向分布：I(χ)、极大值和 Herman 取向因子",
+    "Orientation distribution of one ring: I(χ), maxima and Hermans orientation factor":
+        "单个环的取向分布：I(χ)、极大值和 Hermans 取向因子",
     "Crystallite size (Scherrer coherence length) of the resolved peaks": "已分辨峰的晶粒尺寸（Scherrer 相干长度）",
     "GISAXS horizontal cut I(qy): at the Yoneda band, centred on the symmetry axis, halves chosen with the reason":
         "GISAXS 水平切线 I(qy)：位于 Yoneda 带，以对称轴居中，并说明选择两半的理由",
-    "GISAXS in-plane distance: 2π/q* of a side maximum (or shoulder) of I(qy)": "GISAXS 面内距离：I(qy) 侧峰（或肩峰）的 2π/q*",
+    "GISAXS length scale 2π/q* of a side maximum (or shoulder) of I(qy), not necessarily the particle spacing":
+        "GISAXS 特征长度：I(qy) 侧峰（或肩峰）的 2π/q*，不一定是粒子间距",
     "GISAXS fit of I(qy): particle family, radius, size spread and distance D, with the close alternatives":
         "GISAXS I(qy) 拟合：粒子类型、半径、尺寸分布和距离 D，以及相近的备选解",
     "Instrument profile of this detector": "该探测器的仪器配置",

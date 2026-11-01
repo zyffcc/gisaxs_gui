@@ -84,8 +84,11 @@ def test_the_manual_numbers_its_sections_once_and_refers_to_sections_that_exist(
 def menus():
     from PyQt5.QtWidgets import QApplication, QMainWindow
 
+    from src.gimap.app.help_commands import EXAMPLES
     from src.gimap.app.presentation.menu_bar import MainMenuBar, MenuCommands
     from src.gimap.app.presentation.navigation import NAVIGATION_ITEMS
+    from src.gimap.app.presentation.workspace_menus import (
+        ANALYZE_MENU, EDIT_MENU, FITTING_MENU, MenuEntry, menu_keys)
 
     QApplication.instance() or QApplication([])
 
@@ -93,6 +96,7 @@ def menus():
         return None
 
     window = QMainWindow()
+    pages = {key: MenuEntry(nothing) for layout in (EDIT_MENU, ANALYZE_MENU, FITTING_MENU) for key in menu_keys(layout)}
     commands = MenuCommands(
         open_files=nothing, open_folder=nothing, open_recent=nothing, clear_recent=nothing,
         save_parameters=nothing, load_parameters=nothing, open_project=nothing, save_project=nothing,
@@ -100,7 +104,9 @@ def menus():
         change_font_size=nothing, reset_font_size=nothing, set_sidebar_collapsed=nothing,
         toggle_full_screen=nothing, geometry_calibration=nothing, format_converter=nothing,
         convert_current_file=nothing, xrr_extractor=nothing, ai_fitting_workspace=nothing,
-        claude_assistant=nothing, settings=nothing, open_data_folder=nothing,
+        claude_assistant=nothing, settings=nothing, open_data_folder=nothing, page_entries=pages,
+        examples=tuple((example.key, example.text, example.tip) for example in EXAMPLES),
+        open_example=nothing, report_problem=nothing, open_error_log=nothing, citation=nothing,
     )
     yield MainMenuBar(window, commands, NAVIGATION_ITEMS)
     window.close()
@@ -112,24 +118,39 @@ def _row(manual: str, menu: str) -> str:
     return next(line for line in manual.splitlines() if line.startswith(f"| {menu} |"))
 
 
+MENU_ROWS = ("File", "Edit", "View", "Analyze", "Fitting", "Tools", "Help")
+
+
+def _entries(menu):
+    """The actions of ``menu`` and of its submenus (Open Recent is filled only as it opens)."""
+    for action in menu.actions():
+        yield action
+        if action.menu() is not None:
+            yield from _entries(action.menu())
+
+
 def test_the_manual_lists_the_entries_of_the_real_menus(menus) -> None:
     from src.gimap.app.presentation.navigation import NAVIGATION_ITEMS
 
     manual = _text(MANUAL)
     workspaces = {item.title for item in NAVIGATION_ITEMS}
-    for name, menu in (("File", menus.file_menu), ("View", menus.view_menu), ("Tools", menus.tools_menu),
-                       ("Help", menus.help_menu)):
+    shown = [action.text() for action in menus.window.menuBar().actions()]
+    assert [title.replace("&", "") for title in shown] == list(MENU_ROWS)
+    for name, menu in zip(MENU_ROWS, menus.menus):
         row = _row(manual, name)
-        for action in menu.actions():
-            title = action.text().replace("&", "")
+        for action in _entries(menu):
+            title = action.text().split("\t")[0].replace("&", "")
             if action.isSeparator() or title in workspaces:
                 continue
             assert title in row, f"{name} ▸ {title} is not in the manual's Menus table"
     assert f"`Ctrl+{len(NAVIGATION_ITEMS)}`" in _row(manual, "View")  # one shortcut per page
-    table = "\n".join(_row(manual, name) for name in ("File", "View", "Tools", "Help"))
+    table = "\n".join(_row(manual, name) for name in MENU_ROWS)
     for name in ("open_folder", "open_project", "save_project_as", "collapse_sidebar", "font_reset",
-                 "geometry_calibration", "format_converter", "xrr_extractor", "claude_assistant", "settings"):
-        shortcut = menus.actions[name].shortcut().toString()
+                 "geometry_calibration", "format_converter", "xrr_extractor", "claude_assistant", "settings",
+                 # the keys of the pages, shown in the menus (as text after a tab: the page owns the key)
+                 "edit_undo", "edit_redo", "analyze_repeat", "analyze_export", "analyze_batch", "fitting_fit"):
+        action = menus.actions[name]
+        shortcut = action.shortcut().toString() or action.text().partition("\t")[2]
         assert shortcut and f"`{shortcut}`" in table, (name, shortcut)
 
 
@@ -178,13 +199,19 @@ def test_the_readme_counts_the_pages_of_the_smoke_check() -> None:
 
 
 def test_where_1d_predict_writes_is_what_the_documents_say() -> None:
-    """Every run goes to ``AI_Fitting_Output/v5_<time>`` under the working folder (two call sites)."""
+    """Every run goes to ``AI_Fitting_Output/v5_<date>_<time>_<µs>`` under the working folder (three call sites)."""
     fitting = ROOT / "src" / "gimap" / "features" / "fitting" / "presentation"
-    for source in (fitting / "workflow_v5_dialog.py", fitting / "single" / "run.py"):
+    for source in (fitting / "workflow_v5_dialog.py", fitting / "single" / "run.py",
+                   fitting / "bindings" / "ai_job_execution.py"):
         code = _text(source)
-        assert '"AI_Fitting_Output"' in code and '"v5_"' in code and "Path.cwd()" in code, source.name
+        assert '"AI_Fitting_Output"' in code and "Path.cwd()" in code, source.name
+        assert '("v5_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f"))' in code, source.name
+    zh = MANUAL.with_name("User_Manual_zh.md")
     for path in (README, MANUAL, CHANGELOG):
-        assert "AI_Fitting_Output/v5_<date>_<time>/" in _text(path), path.name
+        assert "AI_Fitting_Output/v5_<date>_<time>_<µs>/" in _text(path), path.name
+    assert "AI_Fitting_Output/v5_<日期>_<时间>_<微秒>/" in _text(zh)
+    for path in (README, MANUAL, zh):  # the name without the microseconds is not the folder's
+        assert not re.search(r"v5_<(date|日期)>_<(time|时间)>/", _text(path)), path.name
 
 
 def test_the_files_of_a_1d_predict_run_are_the_ones_the_documents_list() -> None:
@@ -207,11 +234,21 @@ def test_the_files_of_a_1d_predict_run_are_the_ones_the_documents_list() -> None
         assert said == only_general, f"{path.name}: which method writes candidates.npz changed"
 
 
-def test_the_documents_say_where_the_manual_opens() -> None:
+def test_the_documents_say_where_the_manual_opens(monkeypatch) -> None:
     """Help ▸ User Manual writes the manual as a web page and hands it to the default browser."""
+    from PyQt5.QtWidgets import QApplication
+
+    from src.gimap.app.presentation import help_documents
+
+    QApplication.instance() or QApplication([])
+    opened = []
+    monkeypatch.setattr(help_documents.QDesktopServices, "openUrl", lambda url: opened.append(url) or True)
+    monkeypatch.setattr(help_documents, "warn", lambda *_args: pytest.fail("the manual was not found"))
     code = _text(ROOT / "src" / "gimap" / "app" / "presentation" / "menu_bar.py")
-    opener = code[code.index("def open_user_manual"):code.index("def show_about")]
-    in_browser = "QDesktopServices.openUrl" in opener
+    assert "open_user_manual(window)" in code  # Help ▸ User Manual calls this opener
+    page = help_documents.open_user_manual()
+    in_browser = len(opened) == 1 and opened[0].isLocalFile() and opened[0].toLocalFile().endswith(".html")
+    assert in_browser and page is not None and page.is_file()
     for path in (README, CHANGELOG):
         text = _text(path)
         assert ("manual in your browser" in text) == in_browser, path.name
@@ -221,7 +258,9 @@ def test_the_documents_say_where_the_manual_opens() -> None:
 def test_the_links_of_the_release_documents_resolve() -> None:
     """Relative links (and the screenshots of both manuals) point at files that exist; ``#section`` links at a
     heading of the same document."""
-    for path in (README, CHANGELOG, MANUAL, MANUAL.with_name("User_Manual_zh.md")):
+    later = [path for path in (MANUAL.with_name("Physics_Manual.md"), MANUAL.with_name("Physics_Manual_zh.md"),
+                               ROOT / "THIRD_PARTY_NOTICES.md") if path.is_file()]  # Help opens these too
+    for path in (README, CHANGELOG, MANUAL, MANUAL.with_name("User_Manual_zh.md"), *later):
         text = _text(path)
         anchors = {
             re.sub(r"[^\w\- ]", "", heading.strip().lower()).replace(" ", "-")
@@ -244,7 +283,7 @@ def test_statements_about_removed_things_are_gone() -> None:
         text = _text(path)
         assert not [phrase for phrase in stale if phrase in text], path.name
     manual = _text(MANUAL)
-    assert "### 8.1 Format Converter" in manual and "Remove Source from List" in manual and "Copy Table" in manual
+    assert "### 9.1 Format Converter" in manual and "Remove Source from List" in manual and "Copy Table" in manual
 
 
 V5 = "modules/Fitting_1D_Model/Workflow_v5"

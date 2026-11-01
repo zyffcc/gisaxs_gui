@@ -20,7 +20,7 @@ ITEM_TITLES = {
     "ring_orientation": "Ring orientation distribution",
     "crystallite_size": "Crystallite size",
     "gisaxs_cut": "GISAXS cut",
-    "in_plane_spacing": "In-plane spacing",
+    "in_plane_spacing": "Length scale 2π/q*",
     "gisaxs_fit": "GISAXS fit",
     "other": "Other",
 }
@@ -30,7 +30,7 @@ CHINESE = {
     "Ring orientation distribution": "单个环的取向分布",
     "Crystallite size": "晶粒尺寸",
     "GISAXS cut": "GISAXS 水平切线",
-    "In-plane spacing": "面内间距",
+    "Length scale 2π/q*": "特征长度 2π/q*",
     "GISAXS fit": "GISAXS 拟合",
     "Other": "其他",
     "done": "完成",
@@ -45,8 +45,15 @@ CHINESE = {
     "Suggestions": "建议",
     "Missing capabilities noted": "记录的缺失功能",
     "Files written": "写出的文件",
+    "AI report": "AI 报告",
 }
 """Fixed headings of a report requested in 中文; tables keep their units and symbols."""
+
+
+def report_title(name: str, language: str = "English") -> str:
+    """The saved report's title: the same whichever AI provider ran (the footer names the model)."""
+    words = CHINESE if language == "中文" else {}
+    return f"{words.get('AI report', 'AI report')} – {name}"
 
 
 def _e(text) -> str:
@@ -92,10 +99,12 @@ def _peak_tables(results) -> str:
             for index, peak in enumerate(search.peaks)
         ]
         hints = "".join(f"<li>{_e(hint)}</li>" for hint in search.series)
+        cut = (f"<p>{search.candidates} candidate peaks found; the {search.max_peaks} most prominent were fitted, and "
+               "the series hints use these only.</p>") if search.truncated else ""
         parts.append(
             title
             + _table(["#", "q (Å⁻¹)", "d (Å)", "FWHM (Å⁻¹)", "height", "area", "SNR", "flags"], rows)
-            + (f"<ul>{hints}</ul>" if hints else "")
+            + cut + (f"<ul>{hints}</ul>" if hints else "")
         )
     return "".join(parts)
 
@@ -128,7 +137,7 @@ def _ring_tables(results) -> str:
         ) or "none above the noise"
         missing = ", ".join(f"{_n(a, 3)}–{_n(b, 3)}°" for a, b in ring.missing) or "none"
         parts.append(title + _table(
-            ["texture", "Herman's f", "⟨cos²χ⟩", "maxima", "χ coverage", "unmeasured |χ|"],
+            ["texture", "Hermans f", "⟨cos²χ⟩", "maxima", "χ coverage", "unmeasured |χ|"],
             [[_e(ring.texture), _pm(ring.herman, ring.herman_err, 3), _n(ring.cos2, 3), _e(maxima),
               f"{ring.coverage:.0%}", _e(missing)]],
         ))
@@ -243,4 +252,4 @@ def requested_titles(goals) -> list[str]:
     return [GOALS[goal] for goal in goals]
 
 
-__all__ = ["CHINESE", "ITEM_TITLES", "report_html", "requested_titles"]
+__all__ = ["CHINESE", "ITEM_TITLES", "report_html", "report_title", "requested_titles"]
