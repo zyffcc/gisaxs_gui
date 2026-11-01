@@ -8,12 +8,15 @@ abstract: >-
   GIMaP is a desktop application for grazing-incidence small- and wide-angle X-ray scattering
   (GISAXS, GIWAXS). It reduces detector frames to curves at the exact scattering vector,
   analyses them without AI (peak tables, orientation and crystallite size for GIWAXS; the Yoneda
-  cut, the in-plane spacing and particle-model fits for GISAXS), fits 1D curves and in-situ series,
+  cut, the length scale 2π/q* and particle-model fits for GISAXS), fits 1D curves and in-situ series,
   finds stages and odd frames in series, and records where every number came from.
 authors:
   - family-names: Zhai
     given-names: Yufeng
     email: yufeng.zhai@desy.de
+    affiliation: Deutsches Elektronen-Synchrotron DESY
+  - family-names: Roth
+    given-names: Stephan V.
     affiliation: Deutsches Elektronen-Synchrotron DESY
 version: 0.2.0
 license: MIT

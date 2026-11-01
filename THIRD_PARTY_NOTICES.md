@@ -63,12 +63,16 @@ redistribute them. `tests/data/external/README.md` gives their sources and geome
   Hinderhofer, A., Lapkin, D. & Schreiber, F. (2025). *pygid: Fast Preprocessing of Grazing Incidence
   Diffraction Data (GID). Usage examples.* Zenodo. https://doi.org/10.5281/zenodo.17466183
 
+### The authors' own example data
+
+- `TestSAXSdata/`: Pilatus CBF frames, Lambda NeXus module files and 1D curves measured by the GIMaP authors.
+  They are GIMaP's own data and are released with it under the MIT License (`LICENSE`).
+
 ### Other example data
 
 The following files come with no licence or source of their own. Their provenance is **to be confirmed
 by the authors**:
 
-- `TestSAXSdata/`: Pilatus CBF frames, Lambda NeXus module files and 1D curves;
 - `utils/ML_Fitting_1D_GISAXS/Training/Cut_Data_unmasked.txt`: a 1D curve used by the research code;
 - `WAXS/n4_glass_0cl_air_0_vd_00001-00002.jpg`: an image the program does not use.
 
@@ -85,7 +89,7 @@ licence and attribution of their source above:
   (CC BY 4.0; cite as given above; adapted: rendered, masked and integrated by GIMaP);
 - `03_calibration.png`: the pyFAI silver behenate image (licence to be confirmed);
 - `15_format_converter.png`, `16_xrr.png`, `20_prediction.png`, `22_sputter.png`: frames of
-  `TestSAXSdata/` (provenance to be confirmed).
+  `TestSAXSdata/` (the authors' own data, MIT License).
 
 The other screenshots show synthetic data or no data.
 

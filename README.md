@@ -249,7 +249,7 @@ are in [CITATION.cff](CITATION.cff) (GitHub's **Cite this repository**); **Help 
 the program shows the reference for the version you run, with **Copy** and **Copy BibTeX**. GIMaP has no
 DOI yet, so cite the repository and the version:
 
-> Zhai, Y. GIMaP: Grazing-Incidence Mapping Package (version 0.2.0) [Computer software].
+> Zhai, Y., & Roth, S. V. GIMaP: Grazing-Incidence Mapping Package (version 0.2.0) [Computer software].
 > https://github.com/zyffcc/gisaxs_gui
 
 Where you rely on a method or a data set that GIMaP builds on, cite it as well: the
@@ -313,9 +313,9 @@ python tools/check.py
 
 This runs the test suite (about 14 minutes), an offscreen start-and-close check of the real main window
 with its seven pages, and the deliberately narrow Ruff baseline, without formatting unrelated code. The
-tests use only data that are in the repository: the public data in `tests/data/external/` and the example
-frames and curves in `TestSAXSdata/` (sources and licences, or the lack of them, are in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). Configuration is in
+tests use only data that are in the repository: the public data in `tests/data/external/` (sources and
+licences in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)) and the example frames and curves in
+`TestSAXSdata/`, the authors' own measurements, released with GIMaP under its MIT License. Configuration is in
 `pyproject.toml`; details are in [docs/development.md](docs/development.md), and the rules for
 contributors and coding agents (in Chinese) are in [AGENTS.md](AGENTS.md).
 

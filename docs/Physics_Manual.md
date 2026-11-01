@@ -214,7 +214,7 @@ The table lists the symbols that occur in more than one chapter. Every other sym
 - A "valid pixel" is defined in section 4.1. A "usable pixel" is valid and above the sample horizon (section 2.3).
 - Each method ends with a line "Implementation:" that names the modules, with paths relative to the root of the repository. Paths under `utils/` and `modules/` are research code and prediction modules that GIMaP runs in separate processes.
 - Defaults and thresholds are those of GIMaP 0.2.0.
-- Numbers in the examples come from the public data in `tests/data/external` (with the geometry in its README), from the example frames in `TestSAXSdata` (provenance in THIRD_PARTY_NOTICES.md), or they are invented and marked as such.
+- Numbers in the examples come from the public data in `tests/data/external` (with the geometry in its README), from the example frames in `TestSAXSdata` (the authors' own measurements), or they are invented and marked as such.
 - Numerical routines named `scipy.…` are those of SciPy (Virtanen et al., 2020).
 
 ## 1. Detector geometry and pixel coordinates

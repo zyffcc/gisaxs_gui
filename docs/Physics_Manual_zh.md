@@ -214,7 +214,7 @@
 - “有效像素”（valid pixel）在 4.1 节定义。“可用像素”（usable pixel）是有效且位于样品地平线以上的像素（2.3 节）。
 - 每种方法最后有一行“实现：”（Implementation），列出相应模块，路径相对于仓库根目录。`utils/` 和 `modules/` 下的路径是研究代码和预测模块，GIMaP 在单独的进程中运行它们。
 - 默认值和阈值都是 GIMaP 0.2.0 的。
-- 示例中的数字来自 `tests/data/external` 中的公开数据（几何见其中的 README）、`TestSAXSdata` 的示例帧（来源见 THIRD_PARTY_NOTICES.md），或者是编造的并且注明。
+- 示例中的数字来自 `tests/data/external` 中的公开数据（几何见其中的 README）、`TestSAXSdata` 的示例帧（作者自己的测量数据），或者是编造的并且注明。
 - 名为 `scipy.…` 的数值例程是 SciPy 的（Virtanen et al., 2020）。
 
 ## 1. 探测器几何与像素坐标
