@@ -249,7 +249,7 @@ are in [CITATION.cff](CITATION.cff) (GitHub's **Cite this repository**); **Help 
 the program shows the reference for the version you run, with **Copy** and **Copy BibTeX**. GIMaP has no
 DOI yet, so cite the repository and the version:
 
-> Zhai, Y., & Roth, S. V. GIMaP: Grazing-Incidence Mapping Package (version 0.2.0) [Computer software].
+> Zhai, Y. GIMaP: Grazing-Incidence Mapping Package (version 0.2.0) [Computer software].
 > https://github.com/zyffcc/gisaxs_gui
 
 Where you rely on a method or a data set that GIMaP builds on, cite it as well: the

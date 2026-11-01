@@ -15,9 +15,6 @@ authors:
     given-names: Yufeng
     email: yufeng.zhai@desy.de
     affiliation: Deutsches Elektronen-Synchrotron DESY
-  - family-names: Roth
-    given-names: Stephan V.
-    affiliation: Deutsches Elektronen-Synchrotron DESY
 version: 0.2.0
 license: MIT
 repository-code: "https://github.com/zyffcc/gisaxs_gui"
