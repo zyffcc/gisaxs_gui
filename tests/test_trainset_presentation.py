@@ -99,7 +99,6 @@ def test_feature_page_preserves_steps_sections_signals_and_status_offscreen() ->
     )
     for object_name in (
         "pageTitle",
-        "pageSubtitle",
         "validationBadge",
         "trainsetStepList",
         "designStageTabs",
@@ -157,11 +156,13 @@ def test_trainset_modern_workflow_groups_design_and_contextual_actions() -> None
     page = TrainsetBuildPage()
 
     assert page.pageTitle.text() == "Trainset builder"
+    # What the page is for is the title's tooltip; no subtitle, no footer hint repeating the buttons.
+    assert page.pageTitle.toolTip().startswith("Design a simulated GISAXS dataset")
+    assert page.findChild(QObject, "pageSubtitle") is None and page.findChild(QObject, "trainsetActionHint") is None
     assert [
         page.dataset_configuration_tabs.tabText(index)
         for index in range(page.dataset_configuration_tabs.count())
     ] == ["Geometry + ROI", "Particle population", "Sampling + files"]
-    assert page.trainset_action_hint.text().startswith("Validate the detector")
     assert page.validate_button.property("trainsetPrimaryAction") is True
     assert page.prepare_button.isHidden()
 
@@ -170,9 +171,6 @@ def test_trainset_modern_workflow_groups_design_and_contextual_actions() -> None
     assert not page.prepare_button.isHidden()
     assert page.prepare_button.property("trainsetPrimaryAction") is True
     assert page.validate_button.isHidden()
-    assert page.trainset_action_hint.text() == (
-        "Run locally or export a portable job package."
-    )
     page.close()
 
 

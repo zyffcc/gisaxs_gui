@@ -941,8 +941,11 @@ def test_a_curve_that_is_gone_when_its_turn_comes_says_so_in_the_interface_langu
 
 def test_the_hint_names_fit_input_and_a_chosen_gimap_analysis_folder_finds_it(tmp_path) -> None:
     single, series = _pages()
-    assert "gimap_analysis/fit_input folder" in series.step_intro["curves"].text()
+    assert series.step_intro["curves"].isHidden()  # which folders: Choose Folder…'s tooltip, not a line
     assert "gimap_analysis/fit_input folder" in series.folder_button.toolTip()
+    assert series.folder_chip.text() == "" and not series.frame_plot.empty_overlay.label.isHidden()
+    assert series.frame_plot.empty_overlay.label.text().startswith("No curves listed — choose a folder")
+    assert series.trend_plot.empty_overlay.label.text() == "Shown after Start" and series.results_card.isHidden()
     chosen = tmp_path / "gimap_analysis"
     folder = chosen / "fit_input"
     folder.mkdir(parents=True)

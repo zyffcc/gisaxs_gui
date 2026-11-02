@@ -26,7 +26,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from .levels import LevelControl, auto_levels, level_bar
+from .detector_display import _colormap, _image_item_class, display_array, display_levels
+from .levels import LevelControl, level_bar
 from .marks import DETECTOR_MARKS, MarkLayers
 from .box_zoom import zoom_button
 from .curve_plot_extras import IconTools, roomy_ticks
@@ -36,58 +37,8 @@ COMPACT_WIDTH = 520
 """Below this width the toolbar shows icons, the colour bar is slim and the x axis has fewer labels."""
 COLORMAPS = ("viridis", "inferno", "magma", "plasma", "cividis", "turbo", "gray")
 LEVEL_PERCENTILES = (1.0, 99.7)
-
-
-_IMAGE_ITEM_CLASS = None
-
-
-def _image_item_class():
-    """``pg.ImageItem`` whose NaN mask follows the current down-sampling factor.
-
-    pyqtgraph 0.13 caches the NaN positions of the first rendered (possibly
-    down-sampled) image and reuses them after zooming changes the factor,
-    which raises IndexError.  Dropping the cache before each render keeps NaN
-    pixels transparent at every zoom level.
-    """
-    global _IMAGE_ITEM_CLASS
-    if _IMAGE_ITEM_CLASS is None:
-        import pyqtgraph as pg
-
-        class NanSafeImageItem(pg.ImageItem):
-            def render(self):
-                self._imageNanLocations = None
-                super().render()
-
-        _IMAGE_ITEM_CLASS = NanSafeImageItem
-    return _IMAGE_ITEM_CLASS
-
-
-def _colormap(name: str):
-    import pyqtgraph as pg
-
-    if name == "gray":
-        return pg.ColorMap([0.0, 1.0], [(0, 0, 0), (255, 255, 255)])
-    try:
-        return pg.colormap.get(name)
-    except Exception:
-        return pg.colormap.getFromMatplotlib(name)
-
-
-def display_levels(values: np.ndarray) -> Optional[tuple[float, float]]:
-    """Robust colour limits (1–99.7 % of a sample of the finite displayed values)."""
-    return auto_levels(values)
-
-
-def display_array(data: np.ndarray, valid: Optional[np.ndarray], log_scale: bool) -> np.ndarray:
-    """float32 array to draw: NaN where invalid (drawn transparent), log10 if asked."""
-    array = np.asarray(data, dtype=np.float32)
-    shown = np.array(array, dtype=np.float32, copy=True)
-    if valid is not None:
-        shown[~np.asarray(valid, dtype=bool)] = np.nan
-    if log_scale:
-        with np.errstate(divide="ignore", invalid="ignore"):
-            shown = np.where(shown > 0, np.log10(shown), np.nan).astype(np.float32)
-    return shown
+READOUT_IDLE = "\u00a0"  # the readout while the cursor is not over the image (keeps the line height)
+READOUT_HINT = "Move the cursor over the image to read values"
 
 
 class DetectorView(QWidget):
@@ -215,8 +166,11 @@ class DetectorView(QWidget):
         self.beam_target.setZValue(20)
         layout.addWidget(self.graphics, 1)
 
-        self.readout_label = QLabel("Open a detector frame", self)
+        # Empty until the cursor is over the image (the how-to is its tooltip): a sentence that is the same
+        # every time would only be read once. A no-break space keeps the line's height, so nothing jumps.
+        self.readout_label = QLabel(READOUT_IDLE, self)
         self.readout_label.setObjectName("detectorViewReadout")
+        self.readout_label.setToolTip(READOUT_HINT)
         self.readout_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         # The readout changes with every mouse move: it must never change the size of the view
         # (a longer text would widen the panel, and the image would jump). Too long: cut, whole in the tooltip.
@@ -271,9 +225,7 @@ class DetectorView(QWidget):
         self.plot.setLabel("left", y_label)
         self._axis_values(True)
         self.title_label.setText(title)
-        from ..i18n import tr
-
-        self.readout_label.setText(tr("Move the cursor over the image to read values"))
+        self._idle_readout()
         self._redraw(keep_view=keep_view)
 
     def clear(self) -> None:
@@ -285,9 +237,14 @@ class DetectorView(QWidget):
         self.clear_overlays()
         self.hide_labels()
         self.title_label.setText("")
+        self._idle_readout()
+
+    def _idle_readout(self) -> None:
+        """No value while the cursor is not over the image; the tooltip says how to read one."""
         from ..i18n import tr
 
-        self.readout_label.setText(tr("Open a detector frame"))
+        self.readout_label.setText(READOUT_IDLE)
+        self.readout_label.setToolTip(tr(READOUT_HINT))
 
     def _axis_values(self, shown: bool) -> None:
         for side in ("left", "bottom"):
@@ -565,7 +522,11 @@ class DetectorView(QWidget):
         return value if np.isfinite(value) else None
 
     def _mouse_moved(self, position) -> None:
-        if self._data is None or not self.plot.sceneBoundingRect().contains(position):
+        if self._data is None:
+            return
+        if not self.plot.sceneBoundingRect().contains(position):
+            if self.readout_label.text() != READOUT_IDLE:
+                self._idle_readout()  # the value of a pixel the cursor has left would be read as current
             return
         point = self.view_box.mapSceneToView(position)
         x, y = float(point.x()), float(point.y())
@@ -582,7 +543,12 @@ class DetectorView(QWidget):
         room = max(40, self.readout_label.width() - 4)
         shown = self.readout_label.fontMetrics().elidedText(text, Qt.ElideRight, room)
         self.readout_label.setText(shown)
-        self.readout_label.setToolTip(text if shown != text else "")
+        if shown != text:
+            self.readout_label.setToolTip(text)
+        else:
+            from ..i18n import tr
+
+            self.readout_label.setToolTip(tr(READOUT_HINT))
 
     def _mouse_clicked(self, event) -> None:
         if self._data is None or event.button() != Qt.LeftButton or self._drawing:

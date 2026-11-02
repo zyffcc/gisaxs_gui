@@ -59,7 +59,7 @@ class SemPlotPresenter:
                                              fill=False, edgecolor="#ef9b20", linewidth=1.5))
                 axis.set_title(tr("Cyan: accepted   Orange: rejected   Yellow: ROI"))
             else:
-                axis.set_title(tr("SEM image — set calibration and exclude annotations using the ROI"))
+                axis.set_title(tr("SEM image"))  # what to do next is the status line
             axis.set_xlabel(tr("Image x (pixel)"))
             axis.set_ylabel(tr("Image y (pixel)"))
             self.image_panel.show_plot()

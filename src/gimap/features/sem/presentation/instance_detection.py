@@ -86,8 +86,8 @@ class SemInstanceDetectionMixin:
         if not image:
             self.instance_status_label.clear()
             return True
-        if threshold:
-            self.instance_status_label.setText(tr("Threshold / watershed uses the stored image intensities."))
+        if threshold:  # nothing to say: the combo's tooltip says what it works on
+            self.instance_status_label.clear()
             return True
         if ai and self.normalize_low_spin.value() >= self.normalize_high_spin.value():
             self.instance_status_label.setText(tr("Normalization low percentile must be less than high percentile."))

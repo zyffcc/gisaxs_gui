@@ -26,6 +26,7 @@ from PyQt5.QtWidgets import (
 )
 
 from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.theme import set_role
 
 from ...application.single_fit import FAMILIES, GLOBALS, INFO, LINEAR, Component, FitModel, new_component, parameter_text
 from ..layout_primitives import ScientificDoubleSpinBox
@@ -116,8 +117,10 @@ class _Row:
         self.free.setChecked(parameter.free)
         self.free.blockSignals(False)
         error = errors.get(self.path)
+        # A value at a bound has no error and may be wrong: a warning, not a muted note beside the errors.
+        set_role(self.error, "warning" if self.path in at_bounds else "muted")
         if self.path in at_bounds:
-            self.error.setText(tr("at a bound"))
+            self.error.setText("⚠ " + tr("at a bound"))
             self.error.setToolTip(tr("The fit stopped at a bound of the range: widen the range or fix this value"))
         elif error is not None:
             shown = parameter_text(self.path[1], parameter.value, error)

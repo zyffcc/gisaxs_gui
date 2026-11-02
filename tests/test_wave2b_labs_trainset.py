@@ -93,6 +93,8 @@ def test_the_steps_are_the_shared_step_rail_addressed_by_row():
     assert page.step_states() == ["Reference loaded", "Not started", "Not started", "Failed", "Job 4711"]
     assert [rail.state(key) for key in rail.keys()] == ["ok", "pending", "pending", "error", "busy"]
     assert rail.detail("monitor") == "Job 4711"
+    # A step not started shows its grey mark only (the state stays "Not started"); the line comes with a state.
+    assert rail.detail("preview") == "" and rail.detail("model") == "" and rail.detail("dataset") == "Reference loaded"
     assert (rail_state("Running"), rail_state("Completed"), rail_state("Timed out")) == ("busy", "ok", "error")
     page.close()
 
@@ -128,7 +130,7 @@ def test_run_time_texts_follow_the_language_and_are_composed_again_after_a_switc
         assert rail.detail("dataset") == ZH[page.step_states()[0]]  # e.g. ROI ready / Mask ready, in Chinese
         assert rail.findChild(QWidget, "gimapStep_dataset").title.text() == ZH["Dataset Design"]
         assert page.validation_badge.text() == ZH[page.validation_text()]
-        assert page.trainset_action_hint.text() == ZH["Validate the detector, ROI, particle and sampling design."]
+        assert rail.detail("model") == ""  # not started: no line, in either language
         for label, english in ((page.threshold_summary, threshold_en), (page.design_info, info_en),
                                (page.roi_range_label, roi_en), (page.cache_grid_summary, matrix_en)):
             assert label.text() != english and not label.text().startswith(english.split(":")[0])

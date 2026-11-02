@@ -100,7 +100,9 @@ def test_the_series_table_copies_and_its_headers_are_short_with_the_full_name_on
 
 
 def test_the_fit_step_says_what_to_do() -> None:
-    page = _page()
-    assert page.step_intro["fit"].text() == ("Choose a method and press Fit; values that stop at an edge of their "
-                                             "range are dealt with by the fit.")
+    page = _page()  # once, on the rail; the check box on the step says what is done at the edges (its tooltip how)
+    assert page.step_rail.detail("fit") == "Choose a method, then Fit"
+    assert page.step_intro["fit"].text() == "" and page.step_intro["fit"].isHidden()
+    assert page.resolve_edges_check.text() == "Resolve values at the edge of their range automatically"
+    assert page.resolve_edges_check.toolTip().startswith("When a value stops at the edge of its range")
     _close(page)

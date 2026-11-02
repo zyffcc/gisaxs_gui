@@ -22,6 +22,9 @@ UNIT_TIP = ("A file whose header states the unit of q is read in that unit, what
             "by itself.")
 STATED = "q in {unit}, as their header states: {names}"
 SETTING = "q in {unit}, no unit in their header (Parameters…): {names}"
+STATED_ALL = "q in {unit}, as their header states"
+SETTING_ALL = "q in {unit}, no unit in their header (Parameters…)"
+"""… when every listed file is read by the same rule: the names are on the line above, not again."""
 UNCLEAR = "Not fitted, the unit of q cannot be read: {name} — {reason}"
 RULE = "q in the unit a file's header states, else in {unit} (Parameters…)."
 NAMES_SHOWN = 4
@@ -68,6 +71,9 @@ class WorkflowV5UnitsMixin:
                 unclear.append((path, read["error"]))
             else:
                 groups.setdefault((read["q_unit_from"] == FROM_FILE, read["q_unit_read"]), []).append(path)
+        if len(groups) == 1 and not unclear:  # one rule for every file: the line above names them
+            (stated, unit), = groups
+            return [trf(STATED_ALL if stated else SETTING_ALL, unit=UNIT_SHOWN[unit])]
         lines = [trf(STATED if stated else SETTING, unit=UNIT_SHOWN[unit], names=names_text(paths))
                  for (stated, unit), paths in sorted(groups.items(), key=lambda item: (not item[0][0], item[0][1]))]
         lines += [trf(UNCLEAR, name=Path(path).name, reason=tr(reason)) for path, reason in unclear[:UNCLEAR_SHOWN]]

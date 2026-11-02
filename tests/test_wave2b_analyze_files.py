@@ -102,7 +102,7 @@ def test_removing_files_keeps_the_frame_shown_and_every_count(tmp_path: Path) ->
     assert page.view_model.state.analysis is shown and page.file_list.currentRow() == 1
     assert _names(page) == ["film_0.tif", "film_1.tif", "film_2.tif"]
     assert page.status_text() == "Removed film_3.tif from the list" and page.status_level() == "ok"
-    assert "Files listed: 3" in page.data_info_label.text()
+    assert page.frame_listing_model.rowCount() == 3 and page.frames_imported_label.text() == "3 frames imported"
     assert page.data_batch_button.text() == "Batch Export 3 Frames…"
     assert page.file_position_label.text() == "2 / 3"
     assert len(page.view_model.batch_requests()) == 3
@@ -233,7 +233,7 @@ def test_the_series_map_loses_the_rows_of_a_removed_file(tmp_path: Path) -> None
     series = page._series_map
     assert series.rows == 3 and all("film_2" not in label for label in series.labels)
     assert [Path(path).name for path, _frame in series.refs] == ["film_0.tif", "film_1.tif", "film_3.tif"]
-    assert "3 frames ×" in page.series_info_label.text()
+    assert page.series_map_view.toolTip().startswith("3 frames ×")  # the map's how-to: its tooltip
     assert page.remove_file(1)
     _done(page)
     assert page._series_map.rows == 2

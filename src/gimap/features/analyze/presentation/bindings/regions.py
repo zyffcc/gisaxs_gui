@@ -224,7 +224,7 @@ class RegionsMixin:
         )]
         if row.key == "full":
             self.region_note_label.setText(tr(
-                "The whole pattern above the horizon, every χ. Its bins and the q or 2θ axis are under More cut settings."
+                "Every χ above the horizon; its bins and the q or 2θ axis: More cut settings."
             ))
         elif row.editor == "width":
             in_plane = row.key == "in_plane"

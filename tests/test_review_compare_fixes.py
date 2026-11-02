@@ -113,7 +113,7 @@ def test_a_failed_comparison_says_why_where_the_plots_were(monkeypatch) -> None:
         page.clear_all()
         assert page.empty_state.title_label.text() == "Nothing to compare yet"
         assert not page.empty_state.action_button.isHidden()
-        assert page.step_rail.detail("results") == "After a series is added"
+        assert page.step_rail.detail("results") == "" and page.step_rail.detail("compare") == "After a series is added"
     finally:
         _close(page)
 

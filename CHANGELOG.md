@@ -330,6 +330,23 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   Cite GIMaP…**).
 - `README.md` is shorter: what GIMaP does, how to install it, a quick start, and where the documents are.
 
+### Fewer small texts on screen
+
+- The grey explanatory lines were reviewed screen by screen. What is needed every time stays on screen: the state
+  of each step, results, failures, missing or guessed values, where a value comes from, and what an AI run sends.
+  How to use a control, why a default is what it is, and the description of a section are now the tooltip of
+  that control or of the section's title (the pointer shows a question mark there). A result is written once per
+  screen, not in the step list, the status line and the results box at once.
+- A step in the step list keeps its line to one row, cut with “…” when longer; the whole line is its tooltip.
+- The value readout under the image is empty while the cursor is not over the image. An idle job shows only
+  **IDLE**, without “Ready”.
+- Texts that warn are shown as warnings (⚠, warning colour): a fit value at a bound of its range, a curve file
+  without σ, the warnings of a solution in Geometry Calibration, guessed values in XRR Series Extractor, the
+  flat-field energy in Sputter, and 1D Predict's “the candidates are a starting point”.
+- Compare's saved JSON records now hold, for every series, the stages' changes shown in the tooltip of *Odd
+  frames and stages of every series* (`stage_details`: from which stage to which, the q that grew and fell most,
+  in percent).
+
 ### Names and labels
 
 - Quick fits show **χ²/N** where they showed χ²: Run Automatic Analysis (GISAXS) and its saved report and fit
@@ -352,6 +369,10 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Fixed
 
+- Analyze said “1 frames imported”; the tooltip of the file name in Analyze's command bar stayed at “reading…”
+  after the file was read; the Export step said that everything is written next to the data, although Batch
+  Export and saved images go where you choose (each button's tooltip now says where it writes). Sputter asked to
+  enter a Sample roll, although an empty roll is used as 0: it now says *0 assumed — please check*.
 - **Odd frames** (Analyze ▸ Series, Fitting ▸ In-situ series, Compare): a frame that differs from its neighbours
   in only a few points — such as a few hot detector columns in one frame — is now marked odd ("probably the
   detector"), even when it is too small to show over the whole curve. Before, such a frame could become a stage

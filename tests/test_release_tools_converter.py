@@ -344,7 +344,7 @@ def test_a_current_frame_the_converter_cannot_read_is_refused_in_words(tmp_path,
     dialog = _dialog(current_file=str(edf))
     try:
         assert dialog.sources == [] and boxes == []
-        assert dialog.input_note.text() == reason  # not "No input files yet."
+        assert dialog.input_note.text() == reason  # not "No input files yet — …"
         assert dialog.input_note.property("gimapRole") == "warning"
         assert not dialog.current_button.isEnabled()
         assert dialog.current_button.toolTip() == reason
@@ -404,7 +404,11 @@ def test_a_current_frame_the_converter_reads_becomes_an_input(tmp_path, boxes) -
         _dispose(dialog)
     without = _dialog()
     try:
-        assert not without.current_button.isEnabled() and without.input_note.text() == "No input files yet."
+        assert not without.current_button.isEnabled()
+        assert without.input_note.text() == "No input files yet — add NXS, CBF or TIFF files or a folder."
+        # what the sources may be is the tooltip of both Add buttons (the line under the title until 2026-11)
+        assert without.add_files_button.toolTip() == without.add_folder_button.toolTip()
+        assert "never changed" in without.add_files_button.toolTip()
     finally:
         _dispose(without)
 

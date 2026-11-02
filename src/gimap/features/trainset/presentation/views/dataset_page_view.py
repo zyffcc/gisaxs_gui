@@ -132,14 +132,6 @@ class TrainsetDatasetPageView(object):
         self.designPreviewContentLayout.setContentsMargins(0, 0, 0, 0)
         self.designPreviewContentLayout.setSpacing(8)
         self.designPreviewContentLayout.setObjectName("designPreviewContentLayout")
-        self.designPreviewHint = QtWidgets.QLabel(self.designPreviewCard)
-        self.designPreviewHint.setWordWrap(True)
-        self.designPreviewHint.setProperty("cardBody", True)
-        self.designPreviewHint.setObjectName("designPreviewHint")
-        # The card has a rounded 1 px border and its layout no margins (the tabs below need the whole
-        # width): the hint keeps its own distance, or the border runs through its first line.
-        self.designPreviewHint.setContentsMargins(10, 8, 10, 0)
-        self.designPreviewContentLayout.addWidget(self.designPreviewHint)
         self.trainsetDesignPreviewPanelLayout.addWidget(self.designPreviewCard)
         self.datasetPageLayout.addWidget(self.dataset_splitter)
 
@@ -149,11 +141,7 @@ class TrainsetDatasetPageView(object):
     def retranslateUi(self, trainsetDatasetPage):
         _translate = QtCore.QCoreApplication.translate
         self.trainsetInputTitle.setText(_translate("TrainsetDatasetPage", "Input"))
-        self.trainsetInputDescription.setText(_translate("TrainsetDatasetPage", "Load an experimental reference for geometry guidance. Generated training images remain simulation-based."))
         self.trainsetConfigureTitle.setText(_translate("TrainsetDatasetPage", "Configure"))
-        self.trainsetConfigureDescription.setText(_translate("TrainsetDatasetPage", "Define the detector, ROI, particle population and dataset sampling used by the training workflow."))
         self.trainsetAdvancedToggle.setText(_translate("TrainsetDatasetPage", "Advanced configuration"))
         self.trainsetAdvancedDescription.setText(_translate("TrainsetDatasetPage", "Mask geometry, interference and layer composition are retained without changing their values."))
         self.trainsetDesignPreviewTitle.setText(_translate("TrainsetDatasetPage", "Preview"))
-        self.trainsetDesignPreviewDescription.setText(_translate("TrainsetDatasetPage", "Inspect the detector, ROI and mask before generating any training data."))
-        self.designPreviewHint.setText(_translate("TrainsetDatasetPage", "Hover for detector coordinates and intensity. Pick the beam center, then draw a rectangular ROI and inspect its mask."))

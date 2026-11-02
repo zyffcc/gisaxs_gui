@@ -64,8 +64,12 @@ it starts at the halves chosen for Fitting, then is the plot's own."""
 TOP_SIDES_TIP = "The halves shown in this plot (display only): the halves for Fitting are chosen in the Cuts step"
 INCIDENCE_FROM_PROFILE_TEXT = "αi from profile"
 """What the αi field shows at its minimum: Qt draws no prefix there, so the name is in the text."""
-NO_FRAME_TEXT = "Open a detector frame"
-"""What both curve plots say before the first file and after Clear (the image's readout says the same)."""
+NO_FRAME_TEXT = " "
+"""What both curve plots show before the first file, after Clear and for a frame without geometry: nothing, on a plot
+without ticks (``CurvePlot.set_empty_text`` with a blank: the plot is bare). The Data step says what to open; the
+banner and the Geometry step what a frame lacks."""
+NO_DATA_TEXT = "No data yet"
+"""The command bar's file name while nothing is open (the Data step says how to open frames)."""
 
 
 def _separator(parent: QWidget) -> QFrame:
@@ -176,7 +180,7 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         for widget in (self.previous_file_button, self.next_file_button, self.file_position_label):
             widget.setProperty("gimapWanted", False)  # shown (“3 / 40”) once more than one file is listed
             widget.hide()
-        self.file_chip = ElidedLabel("No data yet — open or drop detector frames", bar)
+        self.file_chip = ElidedLabel(NO_DATA_TEXT, bar)
         self.file_chip.setObjectName("analyzeFileChip")
         self.file_chip.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.file_meta = ElidedLabel("", bar)  # takes the room that is left; “…” rather than a cut-off word
@@ -421,7 +425,7 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         self.bottom_plot = CurvePlot("", curves, log_x=False)
         for plot in (self.top_plot, self.bottom_plot):
             plot.add_save_menu()
-            plot.set_empty_text(NO_FRAME_TEXT)  # a sentence, not an empty grid, until a frame has curves
+            plot.set_empty_text(NO_FRAME_TEXT)  # no ticks that mean nothing until a frame has curves
         self.lower_choice = QComboBox(curves)
         self.lower_choice.setObjectName("analyzeLowerProfile")
         self.lower_choice.setToolTip("Which GIWAXS profile the lower plot shows")
@@ -468,7 +472,7 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
     def _status_row(self, page: QWidget) -> QHBoxLayout:
         row = QHBoxLayout()
         row.setSpacing(8)
-        self.status_label = QLabel("Ready", page)
+        self.status_label = QLabel("", page)  # idle: nothing to say (progress, warnings, failures, files written)
         self.status_label.setObjectName("analyzeStatus")
         self.status_label.setWordWrap(True)
         self.status_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -496,6 +500,7 @@ __all__ = [
     "INCIDENCE_FROM_PROFILE",
     "INCIDENCE_TIP",
     "MODE_ITEMS",
+    "NO_DATA_TEXT",
     "NO_FRAME_TEXT",
     "RIGHT_TABS",
     "STEPS",

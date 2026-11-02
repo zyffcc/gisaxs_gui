@@ -32,6 +32,12 @@ SIGN_IN_HINT = (
     "tools — no shell, files or web. Meant for your own use: someone else needs their own "
     "sign-in or an API key."
 )
+"""The tooltip of Sign In…; the line under the section keeps the one sentence about what Claude Code may use."""
+TOOLS_ONLY_NOTE = "Claude Code gets only the GIMaP tools — no shell, files or web."
+PROGRAM_TIP = (
+    "Program: claude.exe of Claude Code. The Claude desktop app keeps one under "
+    "%LOCALAPPDATA%\\Packages\\Claude_…\\LocalCache\\Roaming\\Claude\\claude-code."
+)
 
 
 ROW_SPACING = 6
@@ -85,6 +91,8 @@ class ClaudeCodeSection(QGroupBox):
         self.cli_edit = QLineEdit(str(preferences.read(settings, "code_cli")), self)
         self.cli_edit.setObjectName("assistantCodeCliEdit")
         self.browse_button = QPushButton(tr("Browse…"), self)
+        for widget in (self.cli_edit, self.browse_button):
+            widget.setToolTip(tr(PROGRAM_TIP))
         cli_row.addWidget(self.cli_edit, 1)
         cli_row.addWidget(self.browse_button)
         form.addRow(tr("Program"), cli_row)
@@ -105,6 +113,7 @@ class ClaudeCodeSection(QGroupBox):
         self.check_button.setObjectName("assistantCodeCheckButton")
         self.login_button = QPushButton(tr("Sign In…"), self)
         self.login_button.setObjectName("assistantCodeLoginButton")
+        self.login_button.setToolTip(tr(SIGN_IN_HINT))
         account_row.addWidget(self.check_button)
         account_row.addWidget(self.login_button)
         account_row.addStretch(1)
@@ -113,7 +122,7 @@ class ClaudeCodeSection(QGroupBox):
         # it one line, so a longer answer — where to find Claude Code — was cut off in the middle. A row that
         # spans the form gets the height its wrapped text needs at any width.
         form.addRow(self.account_label)
-        hint = QLabel(tr(SIGN_IN_HINT), self)
+        hint = QLabel(tr(TOOLS_ONLY_NOTE), self)
         hint.setWordWrap(True)
         hint.setProperty("gimapRole", "muted")
         form.addRow(hint)

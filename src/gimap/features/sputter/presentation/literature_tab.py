@@ -104,7 +104,7 @@ class LiteratureTab(QWidget):
         self.message.setWordWrap(True)
         self.message.setTextFormat(Qt.RichText)
         layout.addWidget(self.message)
-        self.details = QCheckBox("Show details (network, published curves, coverage, mass balance)", self)
+        self.details = QCheckBox("Show details", self)
         self.details.setToolTip("Off: the literature method's D and 2R/D against δ with the published percolation "
                                 "band. On: also the network's values, the published D(δ) curves, the coverage and the "
                                 "network's mass balance.")

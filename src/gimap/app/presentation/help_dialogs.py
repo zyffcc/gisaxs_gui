@@ -207,9 +207,8 @@ class KeyboardShortcutsDialog(QDialog):
 
     def refresh_language(self, *_args) -> None:
         self.setWindowTitle(tr("Keyboard Shortcuts"))
-        self.note.setText(tr("The keys of the menus work on every page. The keys of a page or a window act while it "
-                             "has the keyboard focus: after switching pages, click into the page first. Ctrl+C "
-                             "copies the selected rows."))
+        self.note.setText(tr("Menu keys work on every page; page keys only while the page has the focus (click into "
+                             "it first). Ctrl+C copies the selected rows."))
         self.table.setHorizontalHeaderLabels([tr(text) for text in self.HEADERS])
         rows = self.rows()
         self.table.setRowCount(len(rows))
@@ -307,9 +306,8 @@ def show_citation(parent: Optional[QWidget], text: str, bibtex: str, *, doi: str
 
     def retranslate() -> None:
         dialog.setWindowTitle(tr("How to Cite GIMaP"))
-        intro = tr("If you publish results obtained with GIMaP, please cite it as below and name the version you "
-                   "used (the export records of GIMaP write it as software_version).")
-        label.setText(intro if doi else intro + " " + tr("GIMaP has no DOI yet: cite the repository and the version."))
+        # (no “no DOI yet” sentence: the reference below names the repository and the version; a DOI it has)
+        label.setText(tr("Please cite GIMaP as below, with the version you used (software_version in the export records)."))
         status.clear()
 
     retranslate()

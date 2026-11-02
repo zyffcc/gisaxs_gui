@@ -107,8 +107,6 @@ class TrainsetPreviewPageView(object):
     def retranslateUi(self, trainsetPreviewPage):
         _translate = QtCore.QCoreApplication.translate
         self.previewRunTitle.setText(_translate("TrainsetPreviewPage", "Run"))
-        self.previewRunDescription.setText(_translate("TrainsetPreviewPage", "Generate a cached BornAgain comparison or refresh only the stochastic preprocessing realization."))
         self.previewAdvancedToggle.setText(_translate("TrainsetPreviewPage", "Advanced preprocessing"))
-        self.previewAdvancedDescription.setText(_translate("TrainsetPreviewPage", "Physical background, noise, masking and transforms apply exactly as before."))
         self.previewPanelTitle.setText(_translate("TrainsetPreviewPage", "Preview"))
         self.previewPanelDescription.setText(_translate("TrainsetPreviewPage", "Orientation: detector x increases to the right and detector y downward; exit angle/qz is higher at the top. BornAgain is flipped vertically once to match the experimental detector display."))

@@ -227,7 +227,14 @@ def test_the_results_panel_shows_the_fit_and_saves_it(galaxi_run, tmp_path: Path
     texts = [item.text() for item in panel.findChildren(QLabel)]
     assert texts[0].startswith("GISAXS — halves: mean of both halves") and not any("question" in text for text in texts)
     assert "1 point(s) to check — see below" in texts and any(text.startswith("Model choice: ") for text in texts)
-    assert any(text.startswith("Halves: Mean of both halves — ") for text in texts)
+    # The decision on the line, its reason in the tooltip (2026-11 small-text review).
+    halves = panel.findChild(QLabel, "guidedHalves")
+    assert halves.text() == "Halves: Mean of both halves" and halves.toolTip() and " — " not in halves.text()
+    model = next(label for label in panel.findChildren(QLabel) if label.text().startswith("Model choice: "))
+    hint = model.toolTip()  # the hint: its details are said in the sections below
+    assert hint.endswith("Choose the particle shape you expect and refine that model in Fitting; compare the fitted curves.")
+    assert hint not in texts  # … not as a paragraph of its own
+    assert not any(text.startswith("The cut is drawn on the image") for text in texts)  # (Sources' tooltip says it)
     panel.gisaxs.dispose()
     panel.deleteLater()
 
@@ -554,12 +561,19 @@ def test_the_results_tab_selects_the_reported_solution_and_names_the_bounds(boun
     assert section.fit_table.currentRow() == 2  # the solution the run reports, drawn on the plot
     assert section.fit_table.item(0, 0).text() == "random cylinder ⚠" and section.fit_table.item(0, 3).text() == "500 ⚠"
     assert section.fit_table.item(2, 0).text() == "sphere" and section.fit_table.item(2, 3).text() == "48.3"
-    bounds = section.findChild(QLabel, "guidedFitBounds").text()
-    assert bounds.startswith("Values at a search bound, not determined by the curve — 1: D at its upper bound, σh/h at "
-                             "its upper bound; 2: σh/h at its lower bound; 4: ν_Res at its upper bound.")
+    bounds = section.findChild(QLabel, "guidedFitBounds")  # values the curve does not determine: a warning
+    assert bounds.text() == "⚠ Not determined by the curve (at a search bound) — 1: D, σh/h; 2: σh/h; 4: ν_Res"
+    assert bounds.property("gimapRole") == "warning"
+    assert bounds.toolTip() == ("Values at a search bound, not determined by the curve — 1: D at its upper bound, σh/h at "
+                                "its upper bound; 2: σh/h at its lower bound; 4: ν_Res at its upper bound.")
     texts = [item.text() for item in panel.findChildren(QLabel)]
-    assert any(text.startswith("The run reports rank 3 (sphere), selected above") for text in texts), texts
-    assert any(text.startswith("2π/q* = ") and "not necessarily the particle spacing" in text for text in texts)
+    assert any(text.startswith("Reported: rank 3 (sphere), the best-ranked converged solution within 10%")
+               for text in texts), texts
+    assert any(text.startswith("2π/q* = ") and text.endswith("not necessarily the particle spacing.") for text in texts)
+    fitted = next(text for text in texts if text.startswith("Fitted: "))
+    assert fitted.endswith(" · R, h and D in nm.")  # (what the fits are: the tooltip of “Fit of I(qy)”)
+    heading = next(label for label in panel.findChildren(QLabel) if label.text() == "Fit of I(qy)")
+    assert heading.toolTip().startswith("Numerical fits of single particle families")
     section.fit_table.selectRow(0)
     assert "⚠ D at its upper bound" in section.solution_details.warnings.text()
     assert "chosen fit sphere R 9.44 nm (rank 3, χ²/N 1.36)" in automatic_outcome(report)[1]

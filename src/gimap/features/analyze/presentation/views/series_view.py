@@ -82,10 +82,7 @@ SERIES_PLOTS_HEIGHT = (180, 200)
 """The legacy responsive-pair heights; Series uses the second value for each vertically stacked plot.
 The picture and curves keep readable heights and scroll when the window is shorter."""
 SERIES_EMPTY_TITLE = "One frame"
-SERIES_EMPTY_TEXT = (
-    "List several files, open a folder, or open a multi-frame NeXus series: Build Map then shows the chosen "
-    "curve of every frame as intensity against frame and q."
-)
+SERIES_EMPTY_TEXT = "Several frames needed: list more files, open a folder or a multi-frame NeXus file."
 SERIES_WAITING_TITLE = "No map yet"
 SERIES_WAITING_TEXT = (
     "The map shows the chosen curve of every frame as intensity against frame and q. A Batch Export fills it "

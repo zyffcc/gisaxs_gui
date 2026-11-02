@@ -6,12 +6,8 @@
 #freshTrainsetBuildPage QLabel,
 #freshTrainsetBuildPage QCheckBox,
 #freshTrainsetBuildPage QRadioButton { color: @text@; }
+#freshTrainsetBuildPage QLabel[gimapRole="warning"] { color: @warning@; }
 #pageTitle { color: @text@; font-size: @font_display_pt@; font-weight: 700; }
-#pageSubtitle { color: @text_muted@; font-size: @font_pt@; }
-#trainsetActionHint {
-    color: @text_muted@;
-    padding: 4px 8px;
-}
 #validationBadge, #jobState {
     background: @info_soft@;
     color: @info@;

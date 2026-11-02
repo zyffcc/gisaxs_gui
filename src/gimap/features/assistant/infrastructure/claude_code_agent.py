@@ -44,10 +44,10 @@ EXIT_WAIT_S = 15.0
 WINDOWS = sys.platform.startswith("win")
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if WINDOWS else 0
 INSTALL_HINT = (
-    "Claude Code was not found. Install it (claude.com/claude-code), or use Browse… in "
-    "Settings ▸ Assistant to choose claude.exe (the Claude desktop app keeps one under "
-    "%LOCALAPPDATA%\\Packages\\Claude_…\\LocalCache\\Roaming\\Claude\\claude-code)."
+    "Claude Code was not found. Install it (claude.com/claude-code) or choose claude.exe with Browse… in "
+    "Settings ▸ Assistant."
 )
+"""Where the Claude desktop app keeps a claude.exe is the tooltip of Program there (and in the manual)."""
 
 
 def child_environment(base: Mapping[str, str]) -> dict[str, str]:

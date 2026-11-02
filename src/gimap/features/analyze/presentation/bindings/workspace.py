@@ -22,7 +22,6 @@ from ...application import GISAXS, FrameAnalysis, export_stem, source_labels
 from ...application.frame_preprocessing import floating
 from ..texts import message_text
 from .display import PLOT_SIDES, VIEW_DETECTOR, cut_lines
-from .results_state import RESULTS_INTRO
 
 MASK_COLOR = "#ef4444"
 BAD_PIXEL_COLOR = "#f59e0b"
@@ -35,6 +34,12 @@ CUT_SOURCES = {"yoneda": "Yoneda cut", "manual": "Cut set by hand", "horizon": "
                "series": "Cut of the series (the cut of one frame, held for every frame)"}
 """The Cuts step's detail: where the horizontal GISAXS cut is (``markers["horizontal_source"]``; ``series``: a frame
 of a series run or opened from a map row, cut where the series is — ``use_cases.held_cut``)."""
+
+
+def show_card(label, text: str) -> None:
+    """An info card says ``text``; with nothing to say it is hidden (no empty frame on the step)."""
+    label.setText(text)
+    label.parentWidget().setVisible(bool(text))
 
 
 def _pixels(count: int, total: int) -> str:
@@ -218,10 +223,14 @@ class WorkspaceMixin:
 
     # -- what each step found ----------------------------------------------------------
 
-    def _intro(self, key: str, template: str, **values) -> None:
-        """One sentence of what the step found, in the interface language: ``template`` is the English (a key
-        of the table), ``values`` fill it after the translation (numbers, names: never translated)."""
-        self.step_intro[key].setText(trf(template, **values) if values else tr(template))
+    def _intro(self, key: str, template: str = "", **values) -> None:
+        """The sentence under the step's title, in the interface language: ``template`` is the English (a key
+        of the table), ``values`` fill it after the translation (numbers, names: never translated). Only what the
+        step rail and the cards do not say already (the empty Data step, whose results the Results step shows):
+        without a template the line is hidden."""
+        text = (trf(template, **values) if values else tr(template)) if template else ""
+        self.step_intro[key].setText(text)
+        self.step_intro[key].setVisible(bool(text))
 
     def _refresh_workspace(self, analysis: Optional[FrameAnalysis]) -> None:
         if analysis is None:
@@ -229,15 +238,9 @@ class WorkspaceMixin:
             for key in ("geometry", "mask", "cuts", "results", "export"):
                 self.set_step_state(key, "pending")
             self.set_step_state("data", "pending")
-            self._intro("geometry", "The geometry turns pixels into q: distance, beam centre, wavelength, αi.")
-            self._intro("mask", "Detector gaps and bad pixels are left out of every curve.")
-            self._intro("cuts", "Where the curves are taken from on the detector.")
-            self._intro("results", RESULTS_INTRO)
-            self._intro(
-                "export",
-                "Everything is written next to the data in gimap_analysis/, with a JSON record of how it was made.",
-            )
-            self.mask_summary_label.setText(tr("No frame yet."))
+            for key in ("geometry", "mask", "cuts", "export"):  # (Results: ``results_state.py``)
+                self._intro(key)
+            show_card(self.mask_summary_label, "")  # nothing is left out of no frame
             self.cuts_info_label.setText("")
             return
         self._show_step_states(analysis)
@@ -252,21 +255,10 @@ class WorkspaceMixin:
 
     def _show_geometry_state(self, analysis: FrameAnalysis) -> None:
         geometry = analysis.geometry
+        self._intro("geometry")  # the step rail, the card and (without a geometry) the banner say it
         if geometry is None:
-            detector = analysis.detector_name or tr("this detector")
             self.set_step_state("geometry", "warn", tr("No geometry yet"))
-            self._intro(
-                "geometry",
-                "No geometry for {detector} ({shape}) yet. Find a calibration automatically, calibrate from an image "
-                "of a standard, or enter the values once: they are saved as an instrument profile and used for every "
-                "such frame." if self._find_geometry else
-                "No geometry for {detector} ({shape}) yet. Calibrate from an image of a standard, or enter the values "
-                "once: they are saved as an instrument profile and used for every such frame.",
-                detector=detector, shape=f"{analysis.shape[0]}×{analysis.shape[1]}",
-            )
             return
-        profile = analysis.resolution.profile if analysis.resolution is not None else None
-        name = profile.name if profile is not None else tr("instrument profile")
         detail = f"{geometry.distance_m * 1e3:.1f} mm · λ {geometry.wavelength_angstrom:.4g} Å · αi {geometry.incidence_deg:g}°"
         flat = getattr(analysis, "flat_detector", None)  # a .poni tilt the flat geometry leaves out, when it matters
         if flat is not None and flat.needs_attention and flat.q_error_max is not None:
@@ -274,10 +266,8 @@ class WorkspaceMixin:
                        error=f"{100 * flat.q_error_max:.2g}")
             state = " · ".join((detail, tilt))  # numbers, and a sentence translated above
             self.set_step_state("geometry", "warn", state)
-            self._intro("geometry", "Geometry from “{name}”: {detail}; {tilt}.", name=name, detail=detail, tilt=tilt)
             return
         self.set_step_state("geometry", "ok", detail)
-        self._intro("geometry", "Geometry from “{name}”: {detail}.", name=name, detail=detail)
 
     def _show_mask_state(self, analysis: FrameAnalysis) -> None:
         valid = np.asarray(analysis.valid, dtype=bool)
@@ -315,41 +305,29 @@ class WorkspaceMixin:
             if corrections is not None and corrections.background_path:
                 parts.append(tr("background"))
             lines.append(f"· {tr(' and ').join(parts) or tr('corrections')}: {_pixels(extra, total)}")
-        self.mask_summary_label.setText("\n".join(lines))
+        show_card(self.mask_summary_label, "\n".join(lines))
         share = 100.0 * (total - int(valid.sum())) / max(total, 1)
         self.set_step_state("mask", "ok", tr("{share} % of the pixels left out").format(share=f"{share:.2g}"))
-        self._intro(
-            "mask", "Pixels without data are left out of every curve before any cut; corrections below apply to the frame."
-        )
+        self._intro("mask")
 
     def _show_cut_state(self, analysis: FrameAnalysis) -> None:
         reduction = analysis.reduction
         gisaxs = analysis.kind == GISAXS
         self.gisaxs_cuts.setVisible(gisaxs)
         self.giwaxs_section.setVisible(not gisaxs)
-        if reduction is None:
-            self.set_step_state("cuts", "pending", tr("Needs a geometry"))
-            self._intro("cuts", "The cuts need a geometry (step 2).")
+        self._intro("cuts")  # what the cuts give and how to move them: the tooltips of the card and the region list
+        if reduction is None:  # the Geometry step and the banner say why
+            self.set_step_state("cuts", "pending")
             return
         markers = reduction.markers
         if gisaxs:
             source = markers.get("horizontal_source")
             self.cuts_info_label.setText("\n".join(cut_lines(analysis)))
             self.set_step_state("cuts", "ok", tr(CUT_SOURCES.get(source, "Cut {source}")).format(source=source))
-            self._intro(
-                "cuts",
-                "GISAXS: the horizontal cut at the Yoneda band gives the in-plane structure, the vertical cut the "
-                "out-of-plane one. Make left and right symmetric before averaging the halves.",
-            )
         else:
             regions = len(self.view_model.state.giwaxs.regions)
             self.set_step_state(
                 "cuts", "ok", tr("Ring, bands and {n} region(s)").format(n=regions) if regions else tr("Ring and bands")
-            )
-            self._intro(
-                "cuts",
-                "GIWAXS: every region is cut along q (upper plot) and along χ (lower plot). Add regions, "
-                "then move them on the Cake view or change them below.",
             )
 
     # -- halves of the horizontal cut --------------------------------------------------
@@ -530,4 +508,4 @@ class WorkspaceMixin:
         return True
 
 
-__all__ = ["EvenSplit", "IMAGE_KEEPS", "MASK_COLOR", "WorkspaceMixin", "fit_stack_to_page"]
+__all__ = ["EvenSplit", "IMAGE_KEEPS", "MASK_COLOR", "WorkspaceMixin", "fit_stack_to_page", "show_card"]

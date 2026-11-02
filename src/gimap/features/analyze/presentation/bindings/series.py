@@ -143,7 +143,7 @@ class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, Serie
         language, kept so a switch of the language says it again (``_series_language``). ``cut``: followed by
         where the frames of the series are cut (``view_model.series_cut_text``)."""
         self._series_info = (template, values, bool(cut))
-        self.series_info_label.set_one_line(template in (HOW_TO, HOW_TO_SUMS))  # the how-to of a map; a notice: whole
+        self.series_info_label.set_one_line(template in (HOW_TO, HOW_TO_SUMS))  # (the how-to: now the map's tooltip)
         self._series_show_info()
 
     def _series_show_info(self) -> None:
@@ -201,6 +201,7 @@ class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, Serie
         self._series_describe()
         self._series_pick_row(self._series_row + 0.5, move_band=False)
         self._series_redraw_trace()
+        self._series_show_how()
         done = self._series_done_text
         if done is not None and self.status_text() == done[0]:  # still the line of this map: in the new language
             text = done[1]()
@@ -315,6 +316,7 @@ class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, Serie
         if stretch is not None and stretch.spacerItem() is not None:
             self.series_host.setStretch(self.series_stretch_index, 1)
         self._series_say("")
+        self._series_show_how()  # (no map: no tooltip)
         # The tab as the list is now: no file (Clear) — the first explanation again, no controls, no curve of
         # the files cleared to choose; files still listed — what Build Map would stack.
         self._refresh_series_curves(self.view_model.state.analysis)
@@ -382,8 +384,9 @@ class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, Serie
 
         text = said()
         level = "warning" if failures or note else "ok"
-        self._status(text, level)
-        self._series_done_text = (text, said)
+        # The line above the map says what it holds: the status line says the map only when something went wrong.
+        self._status(text if level == "warning" else "", level if level == "warning" else "info")
+        self._series_done_text = (self.status_text(), said) if level == "warning" else None
         show_toast(self.window(), text, level=level, action=(tr("Export CSV…"), self.export_series_csv))
         self._find_stages()
 

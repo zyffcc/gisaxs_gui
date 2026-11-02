@@ -20,13 +20,12 @@ from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import DiscoverInSituFramesRequest
 from ...application.series_fit import file_name
-from ..views.fit_series_view import NO_FOLDER
+from ..views.fit_series_view import FOLDER_HINT, NO_FOLDER
 from .series_frames import FRAMES_LISTED
 from .series_text import FIT_INPUT_FOLDER, series_name, short_names
 
-CURVES_HINT = ("A folder of curves, e.g. the gimap_analysis/fit_input folder of Analyze's Batch Export or Send "
-               "Series to Fitting, or a folder of detector frames (CBF, TIFF, EDF, NeXus): each frame is then cut "
-               "as Analyze cuts it.")
+CURVES_HINT = FOLDER_HINT
+"""Which folders the series takes: the tooltip of Choose Folder… (no longer a line of the Curves step)."""
 
 
 class FitSeriesListingMixin:
@@ -59,7 +58,7 @@ class FitSeriesListingMixin:
 
     def _folder_name(self) -> str:
         """What the series is called where the whole path has no room (``series_text.series_name``): in the
-        line about the curves, the status line and the title of a saved trend. The whole path is on the chip."""
+        status line and the titles of the trend (shown and saved). The whole path is on the chip."""
         return series_name(self.folder)
 
     def _show_folder(self) -> None:

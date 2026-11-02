@@ -134,14 +134,14 @@ class PredictionWorkbenchLayout:
         self.workflow_header = PredictionWorkflowHeader(left_contents)
         layout.addWidget(self.workflow_header)
 
+        # No description under 1 and 2: the mode selector and the canvas empty state say what to
+        # choose; the Prediction setup field and the Import model tooltip say the model.
         self.workspace_ui.predictionInputTitle.setText("1. Import data")
-        self.workspace_ui.predictionInputDescription.setText(
-            "Choose one detector file or switch to Folder batch for a numbered sequence."
-        )
+        self.workspace_ui.predictionInputDescription.setText("")
+        self.workspace_ui.predictionInputDescription.hide()
         self.workspace_ui.predictionConfigureTitle.setText("2. Import model")
-        self.workspace_ui.predictionConfigureDescription.setText(
-            "Select a prediction setup, then import its compatible trained model."
-        )
+        self.workspace_ui.predictionConfigureDescription.setText("")
+        self.workspace_ui.predictionConfigureDescription.hide()
         self.workspace_ui.predictionRunTitle.setText("3. Predict")
         self.workspace_ui.predictionRunDescription.setText(
             "Check readiness and start the single-file or folder prediction job."
@@ -199,7 +199,7 @@ class PredictionWorkbenchLayout:
         _detach_from_parent_layout(self.results_card)
         self.plot_panel = PlotPanel(
             "Prediction canvas",
-            "Inspect the detector input, generated 2D output and prediction curves.",
+            "",  # the tabs (Input preview, Prediction result) say what the canvas shows
             right_contents,
             empty_title=EMPTY_TITLE,
             empty_message=EMPTY_MESSAGE,
@@ -226,7 +226,8 @@ class PredictionWorkbenchLayout:
         self.canvas_busy_bar.setFixedSize(56, 6)
         self.canvas_busy_bar.hide()
         self.plot_panel.add_toolbar_widget(self.canvas_busy_bar)
-        self.canvas_status_label = QLabel("No input loaded", self.plot_panel.toolbar_widget)
+        # Only while predicting and once a prediction is ready: the chips under 3. Predict say the rest.
+        self.canvas_status_label = QLabel("", self.plot_panel.toolbar_widget)
         self.canvas_status_label.setObjectName("predictionCanvasStatusLabel")
         self.canvas_status_label.setProperty("cardMeta", True)
         # A long status wraps instead of widening the canvas column past the window.
@@ -421,12 +422,10 @@ class PredictionWorkbenchLayout:
             # The empty state keeps its "Choose CBF frame…" button (show_empty without text keeps it).
             self._show_empty_content()
             self.plot_panel.show_empty()
-            self.canvas_status_label.setText(tr("No input loaded"))
+            self.canvas_status_label.setText("")
         else:
             self.plot_panel.show_plot()
-            self.canvas_status_label.setText(
-                tr("Prediction ready" if result_ready else "Input ready · model/prediction pending")
-            )
+            self.canvas_status_label.setText(tr("Prediction ready") if result_ready else "")
         if getattr(self, "_busy_text", None):
             self.canvas_status_label.setText(tr(self._busy_text))
         self.ui.gisaxsImageParametersWidget.setVisible(input_ready)

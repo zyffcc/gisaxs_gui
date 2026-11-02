@@ -26,7 +26,7 @@ from src.gimap.app.presentation.theme.engine import theme_manager
 
 from ..application import DOWNLOAD_SIZE, SputterService
 from .fringe_flow import FRINGES_KEY, FringeFlowMixin
-from .geometry import INSPECT_KEY, SputterGeometryMixin
+from .geometry import INSPECT_KEY, SputterGeometryMixin, warning_style
 from .literature_tab import LiteratureTab
 from .predict_flow import PREDICT_KEY, SputterPredictMixin
 from .results_panel import SputterResultsMixin
@@ -36,10 +36,10 @@ from .trend_plot import TrendPlot
 from .views.sputter_page_view import SputterPageView
 from .window_menu import WindowMenuMixin
 
-ENVIRONMENT_READY = "Model: bundled with GIMaP · Python: {python} · PyTorch {version}: ready"
-ENVIRONMENT_MISSING = ("Model: bundled with GIMaP · Python: {python} · PyTorch is installed on the first Predict "
-                       "({size}, needs the internet)")
-ENVIRONMENT_UNKNOWN = "Model: bundled with GIMaP · Python: {python} · PyTorch is checked when you press Predict"
+ENVIRONMENT_READY = "PyTorch {version}: ready"
+ENVIRONMENT_MISSING = "⚠ PyTorch is installed on the first Predict ({size}, needs the internet)"
+ENVIRONMENT_UNKNOWN = "PyTorch is checked when you press Predict"
+ENVIRONMENT_TIP = "Model: bundled with GIMaP · Python: {python}"
 
 
 class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin, FringeFlowMixin, WindowMenuMixin,
@@ -71,7 +71,7 @@ class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin
         self._drawn: Optional[tuple] = None   # (rate, t0, end) the result's physical files were drawn with
         self._rebuild_values: Optional[tuple] = None
         self._thickness_typed = False     # the rate, t0 or end was typed while the model ran
-        self._status_parts = ("idle", [("Ready", {})], 0.0, True)
+        self._status_parts = ("idle", [], 0.0, True)  # at rest the chip says it
         self.trend = TrendPlot(self.trend_layout)
         self.sketch = SketchView()
         self.literature = LiteratureTab()
@@ -90,6 +90,7 @@ class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin
         self._metal_changed()
         self._show_status()
         self._show_environment()
+        self._draw_trend()  # the empty state until there is a result
         theme_manager().changed.connect(self._theme_changed)
         last = self._stored().get("last_result")
         if last:
@@ -117,13 +118,14 @@ class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin
         missing = self.service.toolkit_problem()
         status = self.service.environment()
         if status.ready:
-            words = text(ENVIRONMENT_READY, python=status.python, version=status.torch_version)
+            words = text(ENVIRONMENT_READY, version=status.torch_version)
         elif status.problem == "unknown":
-            words = text(ENVIRONMENT_UNKNOWN, python=status.python)
-        else:
-            words = text(ENVIRONMENT_MISSING, python=status.python, size=tr(DOWNLOAD_SIZE))
+            words = text(ENVIRONMENT_UNKNOWN)
+        else:  # the first Predict downloads PyTorch: a consequence of pressing it
+            words = text(ENVIRONMENT_MISSING, size=tr(DOWNLOAD_SIZE))
         self.environment_label.setText(message_text(missing) if missing else words)
-        self.environment_label.setToolTip(status.python)
+        self.environment_label.setToolTip(text(ENVIRONMENT_TIP, python=status.python))
+        warning_style(self.environment_label, bool(missing) or not (status.ready or status.problem == "unknown"))
 
     def _notify(self, message: str, *, error: bool = False) -> None:
         try:

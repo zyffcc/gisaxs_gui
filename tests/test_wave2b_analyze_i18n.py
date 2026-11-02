@@ -136,13 +136,15 @@ def test_the_data_step_and_the_command_bar_follow_the_language(english, monkeypa
     page.add_paths([str(GALAXI)])
     _done(page)
     card = page.data_info_label.text()
-    meta = page.file_meta.text()
+    detail = page.step_rail.detail("data")
     assert "Detector:" not in card  # the TIFF names no detector: not “Detector: Detector”
-    assert card.splitlines()[0] == "Frame: 1043 × 981 pixels, 172 µm pixels" and "Files listed: 1" in card
-    assert meta == "GALAXI Pilatus 1M · 1043×981 px"  # the profile it matched names the detector
-    assert page.step_rail.detail("data") == meta
-    assert page.step_intro["data"].text() == "galaxi_data.tif: GALAXI Pilatus 1M, 1043×981 px."
-    english_texts = (card, page.step_intro["geometry"].text(), page.summary_label.text(), page.fit_button.toolTip(),
+    # The card says only what the step's detail does not (2026-11 small-text review): the size, one frame, one
+    # file are said elsewhere; the command bar names the file, the detail the detector and the size.
+    assert card == "Pixel size 172 µm"
+    assert detail == "GALAXI Pilatus 1M · 1043×981 px"  # the profile it matched names the detector
+    assert page.file_meta.text() == "" and page.file_chip.full_text() == "galaxi_data.tif"
+    assert page.step_intro["data"].isHidden() and page.step_intro["geometry"].isHidden()  # no line repeats the rail
+    english_texts = (card, page.step_rail.detail("geometry"), page.summary_label.text(), page.fit_button.toolTip(),
                      page.status_text(), page.top_plot.title_label.text())
     assert "Detector" not in page.summary_label.text()
     assert "the horizontal cut, both halves on |qy| (two colours);" in page.fit_button.toolTip()
@@ -152,10 +154,9 @@ def test_the_data_step_and_the_command_bar_follow_the_language(english, monkeypa
     apply_language("zh", [page])
     page.refresh_language()
     card = page.data_info_label.text()
-    assert card.splitlines()[0] == "帧：1043 × 981 像素，像素尺寸 172 µm" and "列表中的文件：1" in card
-    assert page.file_meta.text() == meta  # a name and a size: the same in every language
-    assert page.step_intro["data"].text() == "galaxi_data.tif：GALAXI Pilatus 1M，1043×981 px。"
-    assert page.step_intro["geometry"].text().startswith("几何来自“GALAXI Pilatus 1M”：1730.0 mm")
+    assert card == "像素尺寸 172 µm"
+    assert page.step_rail.detail("data") == detail  # a name and a size: the same in every language
+    assert page.step_intro["data"].isHidden() and page.step_intro["geometry"].isHidden()
     assert page.summary_label.text().endswith("配置 “GALAXI Pilatus 1M”（自动匹配）")
     assert page.fit_button.toolTip().startswith("在拟合中打开曲线") and i18n.ZH["Both halves on |qy| (two colours)"] in \
         page.fit_button.toolTip()
@@ -163,7 +164,7 @@ def test_the_data_step_and_the_command_bar_follow_the_language(english, monkeypa
 
     apply_language("en", [page])
     page.refresh_language()
-    assert (page.data_info_label.text(), page.step_intro["geometry"].text(), page.summary_label.text(),
+    assert (page.data_info_label.text(), page.step_rail.detail("geometry"), page.summary_label.text(),
             page.fit_button.toolTip(), page.status_text(), page.top_plot.title_label.text()) == english_texts
     page.dispose()
     page.close()
@@ -187,14 +188,13 @@ def test_a_frame_without_a_geometry_says_so_in_the_interface_language(tmp_path: 
     page.run_analysis()
     _done(page)
     assert page.step_rail.detail("geometry") == "还没有几何"
-    assert page.step_rail.detail("cuts") == "需要几何"
-    assert page.file_meta.text() == "64×64 px · 第 3 帧，共 12 帧，3 帧求和"
-    assert page.data_info_label.text().splitlines() == [
-        "帧：64 × 64 像素", "文件中的帧数：12（显示从第 3 帧起 3 帧之和）", "列表中的文件：1"]
-    assert page.step_intro["geometry"].text().startswith("此探测器（64×64）还没有几何。")
+    assert page.step_rail.detail("cuts") == ""  # (the Geometry step and the banner say what is missing)
+    assert page.step_rail.detail("data") == "64×64 px · 第 3 帧，共 12 帧，3 帧求和" and page.file_meta.text() == ""
+    assert page.data_info_label.text().splitlines() == ["文件中的帧数：12（显示从第 3 帧起 3 帧之和）"]
+    assert page.step_intro["geometry"].isHidden()
     assert page.banner_label.text() == "此探测器（64×64）没有仪器配置。标定一次或输入几何，即可得到 q 曲线。"
-    # said over the empty plot (no axes of an earlier frame), not in the title
-    assert page.top_plot.empty_overlay.label.text() == "还没有曲线：这一帧需要几何（第 2 步）"
+    # said by the banner: the plots stay bare (no axes of an earlier frame), with no sentence and no title
+    assert page.top_plot.empty_overlay.bare and not page.top_plot.empty_overlay.label.text().strip()
     assert page.top_plot.title_label.text() == ""
     assert page.summary_label.text() == "64×64 · 没有几何"
     page.dispose()
@@ -235,10 +235,12 @@ def test_the_series_tab_is_composed_again_after_a_switch(tmp_path: Path, english
         _wait(page, lambda: page._series_map is not None and page._series_map.rows == 3 and not page.batch_running())
         _done(page)
         english_texts = (page.series_profile_plot.title_label.text(), page.series_map_view.title_label.text(),
-                         page.series_trace_plot.title_label.text(), page.series_info_label.text())
+                         page.series_trace_plot.title_label.text(), page.series_map_view.toolTip())
         row, labels = page._series_row, page._series_map.labels
         assert english_texts[0] == f"Frame {row + 1}: {labels[row]}" and english_texts[1] == "I(q) — 3 frames"
+        # How to pick a frame and a window: the map's tooltip (the line above it says what it holds).
         assert english_texts[3].startswith("3 frames × ") and "to pick a q window" in english_texts[3]
+        assert page.series_info_label.text() == ""
         titles = [page.series_curve_combo.itemText(index) for index in range(page.series_curve_combo.count())]
         assert "In-plane sector I(q)" in titles
 
@@ -249,14 +251,14 @@ def test_the_series_tab_is_composed_again_after_a_switch(tmp_path: Path, english
         assert page.series_profile_plot.title_label.text() == f"第 {row + 1} 帧：{labels[row]}"
         assert page.series_map_view.title_label.text() == "I(q) — 3 帧"
         assert page.series_trace_plot.title_label.text().endswith("处的 I")
-        assert "选择 q 窗口" in page.series_info_label.text()
+        assert "选择 q 窗口" in page.series_map_view.toolTip()
         titles = [page.series_curve_combo.itemText(index) for index in range(page.series_curve_combo.count())]
         assert "面内扇区 I(q)" in titles and page.series_curve_combo.currentData() == "radial"
 
         apply_language("en", [page])
         page.refresh_language()
         assert (page.series_profile_plot.title_label.text(), page.series_map_view.title_label.text(),
-                page.series_trace_plot.title_label.text(), page.series_info_label.text()) == english_texts
+                page.series_trace_plot.title_label.text(), page.series_map_view.toolTip()) == english_texts
     finally:
         page.dispose()
         page.close()

@@ -11,7 +11,6 @@ list sets its centre and half width exactly. Behaviour: ``bindings/regions.py`` 
 
 from __future__ import annotations
 
-from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -32,6 +31,12 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.presentation.components import FlowLayout
 
 EDITOR_PAGES = ("note", "width", "ring", "generic")
+REGION_LIST_TIP = (
+    "Every region is cut along q (upper plot) and along χ (lower plot). Tick a region to show its curves and outline; "
+    "select it to change it below. Delete removes a region you added. Drag a region on the Cake view (χ against q) "
+    "to move or resize it; the q map shows it in the same colour, Sources shows its pixels on the detector."
+)
+"""What a region gives and how to change it: the list's tooltip (the same every time, so no line under the editor)."""
 PICK_BUTTONS = (
     ("ring", "Ring", "Click a peak: its ring at every χ, for I(χ) (orientation). The q window is fitted to the peak."),
     ("sector", "Sector", "Click a direction: every q within a few degrees of that χ, for I(q) along it."),
@@ -127,9 +132,7 @@ class RegionsView:
         self.region_list.setObjectName("analyzeRegionList")
         self.region_list.setSelectionMode(QAbstractItemView.SingleSelection)
         self.region_list.setWordWrap(True)
-        self.region_list.setToolTip(
-            "Tick a region to show its curves and outline; select it to change it below. Delete removes a region "
-            "you added")
+        self.region_list.setToolTip(REGION_LIST_TIP)
         layout.addWidget(self.region_list)
 
         self.region_editor = QStackedWidget(panel)
@@ -206,15 +209,7 @@ class RegionsView:
             self.region_editor.addWidget(page)
             self.region_editor_pages[key] = page
         layout.addWidget(self.region_editor)
-        hint = QLabel(
-            "Drag a region on the Cake view (χ against q) to move or resize it. The q map shows it in the "
-            "same colour, Sources shows its pixels on the detector.", panel,
-        )
-        hint.setWordWrap(True)
-        hint.setProperty("gimapRole", "muted")
-        hint.setAlignment(Qt.AlignLeft)
-        layout.addWidget(hint)
         return panel
 
 
-__all__ = ["EDITOR_PAGES", "PICK_BUTTONS", "RegionsView"]
+__all__ = ["EDITOR_PAGES", "PICK_BUTTONS", "REGION_LIST_TIP", "RegionsView"]

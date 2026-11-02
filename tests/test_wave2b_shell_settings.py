@@ -44,7 +44,9 @@ def test_settings_opens_wide_enough_for_its_widest_page(tmp_path) -> None:
         scroll = wide.pages.currentWidget()
         assert not scroll.horizontalScrollBar().isVisible()
         assert wide.first_size.width() <= QApplication.primaryScreen().availableGeometry().width()  # on screen
-        assert plain.data_folder_edit.toolTip() == str(tmp_path)
+        # the whole path first, then what the folder holds (the note under the field until the small-text review)
+        assert plain.data_folder_edit.toolTip().splitlines()[0] == str(tmp_path)
+        assert "GIMAP_HOME" in plain.data_folder_edit.toolTip()
     finally:
         plain.close()
         wide.close()

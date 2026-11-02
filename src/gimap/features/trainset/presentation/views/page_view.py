@@ -25,15 +25,6 @@ class TrainsetPageView(object):
         self.pageTitle.setSizePolicy(sizePolicy)
         self.pageTitle.setObjectName("pageTitle")
         self.trainsetTitleLayout.addWidget(self.pageTitle)
-        self.pageSubtitle = QtWidgets.QLabel(freshTrainsetBuildPage)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.pageSubtitle.sizePolicy().hasHeightForWidth())
-        self.pageSubtitle.setSizePolicy(sizePolicy)
-        self.pageSubtitle.setWordWrap(True)
-        self.pageSubtitle.setObjectName("pageSubtitle")
-        self.trainsetTitleLayout.addWidget(self.pageSubtitle)
         self.trainsetHeaderLayout.addLayout(self.trainsetTitleLayout, 0, 0, 1, 4)
         self.projectNameLabel = QtWidgets.QLabel(freshTrainsetBuildPage)
         self.projectNameLabel.setObjectName("projectNameLabel")
@@ -198,7 +189,6 @@ class TrainsetPageView(object):
     def retranslateUi(self, freshTrainsetBuildPage):
         _translate = QtCore.QCoreApplication.translate
         self.pageTitle.setText(_translate("TrainsetPage", "2D Trainset & Model Workspace"))
-        self.pageSubtitle.setText(_translate("TrainsetPage", "Design locally · validate with real scattering data · run a lightweight test · export for Maxwell later"))
         self.projectNameLabel.setText(_translate("TrainsetPage", "Project"))
         self.project_name.setText(_translate("TrainsetPage", "gisaxs_2d_project"))
         self.project_name.setPlaceholderText(_translate("TrainsetPage", "Project name"))

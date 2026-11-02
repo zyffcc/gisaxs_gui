@@ -295,18 +295,51 @@ def test_a_shortened_label_gives_its_whole_text_so_the_language_follows(chinese)
 def test_the_empty_command_bar_is_chinese_at_a_laptop_width(chinese) -> None:
     page = _page(_context())
     try:
-        page.resize(1070, 700)  # the page of a 1280 px window: the sentence does not fit and is shortened
+        page.resize(1070, 700)  # the page of a 1280 px window
         page.show()
         _app().processEvents()
         apply_language("zh", [page])
         page.refresh_language()
-        assert page.file_chip.full_text() == "还没有数据——打开或拖入探测器帧"
+        assert page.file_chip.full_text() == "还没有数据"  # (how to open frames: the Data step's sentence)
         page.clear_files()
-        assert page.file_chip.full_text() == "还没有数据——打开或拖入探测器帧"
+        assert page.file_chip.full_text() == "还没有数据"
         apply_language("en", [page])
-        assert page.file_chip.full_text() == "No data yet — open or drop detector frames"
+        assert page.file_chip.full_text() == "No data yet"
     finally:
         _close(page)
+
+
+def test_a_shortened_label_s_tooltip_follows_its_text() -> None:
+    """The command bar's meta said “reading…” while a file was read; shortened, its tooltip stayed “reading…” for
+    good (the label set it only while it had none). Its own tooltip is now the text whole while shortened, none
+    while the text fits; a tooltip the caller set (the file's path) stays."""
+    _app()
+    apply_language("en")
+    host = QWidget()
+    label = ElidedLabel("reading…", host)
+    label.setMinimumWidth(0)  # as the command bar's meta
+    label.setGeometry(0, 0, 10, 30)  # narrow: “reading…” is shortened, the tooltip has it whole
+    host.show()
+    _app().processEvents()
+    assert QLabel.text(label) != "reading…" and label.toolTip() == "reading…"
+    label.setText("could not be read")
+    assert label.toolTip() == "could not be read"  # not the earlier text
+    label.setGeometry(0, 0, 400, 30)
+    _app().processEvents()
+    assert QLabel.text(label) == "could not be read" and label.toolTip() == ""  # it fits: nothing more to say
+    label.setText("")
+    assert label.toolTip() == ""
+    chip = ElidedLabel("film_0001_m01_with_a_long_name.tif", host)
+    chip.setToolTip("D:/data/film_0001_m01_with_a_long_name.tif")  # the caller's: the whole path
+    chip.setGeometry(0, 0, 40, 30)
+    _app().processEvents()
+    chip.setText("film_0002_m01_with_a_long_name.tif")
+    assert chip.toolTip() == "D:/data/film_0001_m01_with_a_long_name.tif"  # kept until the caller changes it
+    chip.setToolTip("")
+    chip.setText("film_0003_m01_with_a_long_name.tif")
+    assert chip.toolTip() == "film_0003_m01_with_a_long_name.tif"  # shortened, none from the caller: the text
+    host.close()
+    host.deleteLater()
 
 
 def test_the_short_button_texts_come_back_exactly_after_a_switch_from_chinese(chinese) -> None:

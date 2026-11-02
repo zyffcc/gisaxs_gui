@@ -1,4 +1,4 @@
-"""Section containers for workspace information hierarchy。"""
+"""Section containers for workspace information hierarchy."""
 
 from __future__ import annotations
 
@@ -14,15 +14,29 @@ from PyQt5.QtWidgets import (
 )
 
 
+def describe_title(title_label: QLabel, description: str) -> None:
+    """``description`` as the tooltip of a section title, with the pointer that says there is one."""
+    title_label.setToolTip(description)
+    if description:
+        title_label.setCursor(Qt.WhatsThisCursor)
+    else:
+        title_label.unsetCursor()
+
 
 class ParameterSection(QFrame):
-    """Titled, documented container for one cohesive parameter group。"""
+    """Titled container for one cohesive parameter group.
+
+    The description is what the section is for: it is needed once, so it is the title's tooltip and not a
+    line on screen. ``show_description`` keeps it as a line for the rare text needed every time (where a
+    value comes from when that changes how far it can be trusted)."""
 
     def __init__(
         self,
         title: str,
         description: str = "",
         parent: QWidget | None = None,
+        *,
+        show_description: bool = False,
     ) -> None:
         super().__init__(parent)
         self.setProperty("gimapSection", True)
@@ -44,11 +58,12 @@ class ParameterSection(QFrame):
         header.addLayout(self.header_actions)
         root.addLayout(header)
 
-        self.description_label = QLabel(description, self)
+        self._show_description = bool(show_description)
+        self.description_label = QLabel("", self)
         self.description_label.setProperty("gimapSectionDescription", True)
         self.description_label.setWordWrap(True)
-        self.description_label.setVisible(bool(description))
         root.addWidget(self.description_label)
+        self.set_description(description)
 
         self.content = QWidget(self)
         self.content_layout = QVBoxLayout(self.content)
@@ -61,7 +76,8 @@ class ParameterSection(QFrame):
 
     def set_description(self, description: str) -> None:
         self.description_label.setText(description)
-        self.description_label.setVisible(bool(description))
+        self.description_label.setVisible(bool(description) and self._show_description)
+        describe_title(self.title_label, "" if self._show_description else description)
 
     def add_header_action(self, widget: QWidget) -> None:
         self.header_actions.addWidget(widget)
@@ -74,7 +90,7 @@ class ParameterSection(QFrame):
 
 
 class AdvancedSection(QFrame):
-    """Collapsible low-frequency parameter container preserving child state。"""
+    """Collapsible low-frequency parameter container preserving child state."""
 
     expandedChanged = pyqtSignal(bool)
 
@@ -109,10 +125,11 @@ class AdvancedSection(QFrame):
         self.toggle_button.setToolTip(description or tr("Show or hide this section"))
         root.addWidget(self.toggle_button)
 
+        # The description is the button's tooltip only: a line under the title would repeat it word for word.
         self.description_label = QLabel(description, self)
         self.description_label.setProperty("gimapSectionDescription", True)
         self.description_label.setWordWrap(True)
-        self.description_label.setVisible(bool(description) and expanded)
+        self.description_label.hide()
         root.addWidget(self.description_label)
 
         self.content = QWidget(self)
@@ -136,7 +153,6 @@ class AdvancedSection(QFrame):
             Qt.DownArrow if expanded else Qt.RightArrow
         )
         self.content.setVisible(expanded)
-        self.description_label.setVisible(bool(self.description_label.text()) and expanded)
         self.expandedChanged.emit(expanded)
 
     def add_widget(self, widget: QWidget, stretch: int = 0) -> None:

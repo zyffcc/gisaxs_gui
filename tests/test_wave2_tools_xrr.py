@@ -331,10 +331,12 @@ def test_load_first_frame_keeps_a_typed_beam_center_and_reports_each_source():
         assert sources["pixel_x"] == "default"
         summary = dialog.series_summary.text()
         assert "3 frame(s) · first: f_00001.cbf · shape 81 × 101" in summary
-        assert "From the file: distance, energy" in summary
-        assert "Image center (the file has no beam center): beam center Y" in summary
-        assert "Defaults, check them: pixel size" in summary
+        # What the file gave is the tag beside each field (small-text review): no line of the summary. The
+        # values that are not in the file — defaults, the image centre — are one warning line.
+        assert "From the file" not in summary
+        assert "⚠ Not in the file — check: pixel size (defaults), beam center Y (image center)" in summary
         assert "Kept as typed: beam center X" in summary
+        assert dialog.geometry_source_labels["distance"].text() == "from file"
         assert dialog.geometry_source_labels["center_y"].text() == "image center"
     finally:
         _dispose(dialog)
@@ -373,7 +375,7 @@ def test_a_file_value_equal_to_the_calibration_is_not_reported_as_replaced():
     try:
         dialog._on_inspected(_inspection(metadata={"energy_kev": 10.0, "distance_m": 2.0}))
         summary = dialog.series_summary.text()
-        assert "From the file: distance, energy" in summary
+        assert dialog.geometry_sources()["distance"] == dialog.geometry_sources()["energy"] == "file"
         assert "The last calibration says: distance 1575.480 mm" in summary
         assert "energy 10" not in summary
     finally:
@@ -552,9 +554,10 @@ def test_the_summary_is_composed_again_in_the_new_language_as_it_was_when_read(m
     from src.gimap.app.presentation import i18n
 
     for english, chinese in (
-        ("From the file: {fields}", "来自文件：{fields}"),
+        ("Not in the file — check: {fields}", "文件里没有，请核对：{fields}"),
+        ("{fields} (defaults)", "{fields}（默认值）"),
+        ("distance", "距离"),
         ("The file says: {values}", "文件中的值：{values}"),
-        ("energy", "能量"),
         ("beam center Y", "光束中心 Y"),
     ):
         monkeypatch.setitem(i18n.ZH, english, chinese)
@@ -568,7 +571,7 @@ def test_the_summary_is_composed_again_in_the_new_language_as_it_was_when_read(m
         before = dialog.series_summary.text()
         i18n.apply_language("zh")
         summary = dialog.series_summary.text()
-        assert "来自文件：能量" in summary
+        assert "⚠ 文件里没有，请核对：距离" in summary and "（默认值）" in summary
         assert "文件中的值：光束中心 Y 500.50 px" in summary  # the pixel with index 500, in the window's pixels
         i18n.apply_language("en")
         assert dialog.series_summary.text() == before  # the distance typed later is not in it

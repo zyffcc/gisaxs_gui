@@ -35,7 +35,8 @@ HALVES_NOTES = {halves: f"{fitted} {HALVES_KEPT}" for halves, fitted in HALVES_F
 """Under the combo when the curve for Fitting is written: also that its file holds both halves whatever is chosen
 (one entry of the Chinese table each, as a whole)."""
 HALVES_UNUSED = "Used when the curve for Fitting is saved (Data, above) or a particle model is fitted (below)."
-"""Under the combo of a batch that neither writes fit inputs nor fits a model."""
+"""When the halves count (the end of the combo's tooltip): a batch that neither writes fit inputs nor fits a model
+says nothing under the combo, which is off."""
 MODEL_LINES = {
     "mean": "Each frame: the model is fitted to the mean of both halves of the horizontal cut (Halves of the cut, "
             "above); up to half a minute per frame.",

@@ -687,7 +687,7 @@ def test_with_a_sum_the_frames_on_screen_end_at_the_newest_complete_one(tmp_path
                               page.view_model.followed_frame(path)))
         assert len(shown) >= 4
         assert all(summed == (newest - 2, newest - 1, newest) for summed, newest in shown)
-        assert page.view_model.growing(path) and "sum of 3 frames" in page.file_meta.text()
+        assert page.view_model.growing(path) and "sum of 3 frames" in page.step_rail.detail("data")
     finally:
         page.stop_watch()
         _close(page)

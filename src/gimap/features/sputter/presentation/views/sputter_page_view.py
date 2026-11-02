@@ -1,8 +1,9 @@
 """Static layout of the Sputter page (behaviour in ``presentation/page.py`` and its mixins).
 
-Left, from the top: the title; Data (the scan folder and one line about it); Sample and geometry (metal,
-X-rays, distance, incidence, beam centre, each with where its value comes from); the Predict button with its
-job status and the log under Details; a line about the model's Python and PyTorch; the result in one line;
+Left, from the top: the title (what the page gives, in its tooltip); Data (the scan folder and one line about it);
+Sample and geometry (metal, X-rays, distance, incidence, beam centre, each with where its value comes from); the
+Predict button with its job status and the log under Details; a line about PyTorch (the model's Python in its tooltip);
+the result in one line (once there is one: before, the Size Trend tab says how to get one);
 More options (collapsed): polymer, sample roll, mask, time window, deposition rate, its start t0 and its end, the
 results folder,
 Open Results Folder…, Add Refined Windows… and the explanation shown. Right: Size Trend, Literature (added by the
@@ -26,8 +27,11 @@ METAL_CHOICES = (("Ag", "Ag"), ("Au", "Au"), ("Cu — approximated with the Ag m
 CU_NOTE = ("Cu is read with the Ag model (the networks were trained for Ag and Au): its sizes are for reference "
            "only.")
 POLYMERS = ("PSBMA", "PS", "PEO", "polymer")
-TITLE = ("<b>Sputter series</b><br>Particle size R and spacing D over time, the metal thickness where it can be "
-         "stated (island-volume equivalent; nominal, from a deposition rate), and how far each value can be trusted.")
+TITLE = "Sputter series"
+TITLE_TIP = ("Particle size R and spacing D over time, the metal thickness where it can be stated (island-volume "
+             "equivalent; nominal, from a deposition rate), and how far each value can be trusted.")
+SCAN_FOLDER_TIP = ("The folder of one scan (its CBF frames, or a scan folder with them in one subfolder such as p2m/): "
+                   "its first frame tells the detector, the exposure and the time.")
 RESULT_EMPTY = "No result yet: choose a scan folder and press Predict."
 REPORT_EMPTY = ("<p>Choose a scan folder and press Predict, or open a results folder (More options). Each R and D "
                 "value gets a grade: <b>Lit</b> literature method (R from the nominal thickness and 2π/q*; the default "
@@ -54,10 +58,38 @@ def _narrow(combo: QComboBox, characters: int = 12) -> QComboBox:
     return combo
 
 
+class _Line(QLabel):
+    """A wrapped line as tall as its text at its width. In a form inside a scroll area Qt sizes a wrapped label for
+    a guessed, narrower width: a one-line source would get an empty second line under it."""
+
+    def setText(self, text: str) -> None:  # noqa: N802 - Qt API
+        super().setText(text)
+        self._fit()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().resizeEvent(event)
+        self._fit()
+
+    def _fit(self) -> None:
+        """The text measured at the width it has (``QLabel.heightForWidth`` would count the height set before)."""
+        if not self.text() or self.width() <= 1:
+            if self.maximumHeight() != 16777215:
+                self.setMinimumHeight(0)
+                self.setMaximumHeight(16777215)
+            return
+        margins = self.contentsMargins()
+        room = max(1, self.width() - margins.left() - margins.right() - 2 * self.margin())
+        text = self.fontMetrics().boundingRect(0, 0, room, 100_000, int(Qt.AlignLeft | Qt.TextWordWrap), self.text())
+        needed = text.height() + margins.top() + margins.bottom() + 2 * self.margin()
+        if (self.minimumHeight(), self.maximumHeight()) != (needed, needed):
+            self.setFixedHeight(needed)
+
+
 def _meta(parent: QWidget) -> QLabel:
-    label = QLabel("", parent)
+    label = _Line("", parent)
     label.setProperty("gimapMeta", True)
     label.setWordWrap(True)
+    label.setAlignment(Qt.AlignLeft | Qt.AlignTop)  # right under its field when the form row is taller than one line
     return label
 
 
@@ -86,7 +118,9 @@ class SputterPageView:
         column = QVBoxLayout(left)
         column.setSpacing(10)
         title = QLabel(TITLE, left)
-        title.setWordWrap(True)
+        title.setObjectName("sputterTitle")
+        title.setProperty("gimapRole", "strong")
+        title.setToolTip(TITLE_TIP)
         column.addWidget(title)
         column.addWidget(self._data_section(left))
         column.addWidget(self._geometry_section(left))
@@ -101,8 +135,10 @@ class SputterPageView:
         self.scan_picker = FilePicker(section, placeholder="Folder with the CBF frames of one scan",
                                       browse_text="Choose…", clearable=False)
         self.scan_picker.setObjectName("sputterScanFolder")
-        self.scan_summary = _meta(section)
-        self.scan_summary.setText("Choose the folder of a scan: its first frame tells the detector and the time.")
+        self.scan_picker.setToolTip(SCAN_FOLDER_TIP)
+        self.scan_picker.path_edit.setToolTip(SCAN_FOLDER_TIP)
+        self.scan_summary = _meta(section)  # one line about the scan once a folder is chosen
+        self.scan_summary.setVisible(False)
         section.add_widget(self.scan_picker)
         section.add_widget(self.scan_summary)
         return section
@@ -170,9 +206,10 @@ class SputterPageView:
         self.log.setVisible(False)
         self.environment_label = _meta(block)
         self.environment_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.result_label = QLabel(RESULT_EMPTY, block)
+        self.result_label = QLabel("", block)  # one line once there is a result (before: the Size Trend tab says it)
         self.result_label.setWordWrap(True)
         self.result_label.setTextFormat(Qt.RichText)
+        self.result_label.setVisible(False)
         for widget in (self.predict_button, self.job_status, self.log, self.environment_label, self.result_label):
             layout.addWidget(widget)
         return block
@@ -248,7 +285,7 @@ class SputterPageView:
         layout.setContentsMargins(4, 4, 4, 4)
         self.log_scale = QCheckBox("Logarithmic size axis", trend)
         self.log_scale.setChecked(True)
-        self.trend_details = QCheckBox("Show details (network checks, thickness, flagged windows)", trend)
+        self.trend_details = QCheckBox("Show details", trend)
         self.trend_details.setToolTip("Off: R and D of the explanation shown, their trends and the percolation (or "
                                       "film onset). On: also the thickness panel, the direct 2π/q* with its checks, "
                                       "and the windows where the beam may be off the sample.")
@@ -270,4 +307,5 @@ class SputterPageView:
         return self.tabs
 
 
-__all__ = ["CU_NOTE", "METAL_CHOICES", "REPORT_EMPTY", "RESULT_EMPTY", "SputterPageView", "TITLE"]
+__all__ = ["CU_NOTE", "METAL_CHOICES", "REPORT_EMPTY", "RESULT_EMPTY", "SCAN_FOLDER_TIP", "SputterPageView", "TITLE",
+           "TITLE_TIP"]

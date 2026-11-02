@@ -34,6 +34,9 @@ FAILED_TITLE = "Could not compare these series"
 FAILED_HINT = ("Remove the series that does not fit (Series step) or widen the range (Whole Range, Compare step): "
                "the series are compared again by themselves.")
 WAITING_TEXT = "The comparison appears here when it is ready."
+METHOD_LINE = "Method: log I on the shared q range, odd frames left out"
+"""The Compare step's one line on the method; the whole of it (``METHOD``, also in every record) is its tooltip."""
+ODD_LEFT_OUT = ("1 odd frame left out (below).", "{n} odd frames left out (below).")
 START_MARK = Marker("o", 9.0, hollow=True)
 """Where a path starts: the series' first kept frame."""
 END_MARK = Marker("s", 9.0)
@@ -80,7 +83,8 @@ class CompareRenderMixin:
 
     def _render(self) -> None:
         comparison = self.comparison
-        self.method_label.setText(tr(METHOD))
+        self.method_label.setText(tr(METHOD_LINE))
+        self.method_label.setToolTip(tr(METHOD))
         has = comparison is not None
         self.plot_stack.setCurrentWidget(self.plots_page if has else self.empty_page)
         for combo in (self.x_axis_combo, self.component_combo):
@@ -99,16 +103,19 @@ class CompareRenderMixin:
             self.distance_row.hide()
             self.distance_table.hide()
             self.details_label.setText("")
+            self.details_label.setToolTip("")
             for plot in (self.change_plot, self.paths_plot, self.end_plot):
                 plot.set_curves([])
                 plot.reset_view()
             self.component_combo.clear()
             return
         self._shown_names = display_names(comparison.names)
+        self.summary_card.show()
         self.summary_label.setText(self._summary())
         self._fill_results()
         self._fill_distances()
         self.details_label.setText(self._details())
+        self.details_label.setToolTip(self._stage_changes())  # where each stage changed most (also in the record)
         with_signals_blocked = self.component_combo.blockSignals(True)
         current = max(0, self.component_combo.currentIndex())
         self.component_combo.clear()
@@ -132,9 +139,10 @@ class CompareRenderMixin:
         elif self.series:
             self.empty_state.set_content(tr("Comparing …"), tr(WAITING_TEXT), "")
             self.summary_label.setText(tr(WAITING_TEXT))
-        else:
+        else:  # no series: the empty state on the right and the rail's “Add a series” say it, not a third line
             self.empty_state.set_content(tr(EMPTY_TITLE), tr(EMPTY_TEXT), tr("Add Series"))
-            self.summary_label.setText(tr("Add a series: the comparison appears here."))
+            self.summary_label.setText("")
+        self.summary_card.setVisible(bool(failure) or bool(self.series))
 
     def _shown(self, index: int) -> str:
         """The name shown for series ``index`` of the comparison (short when the names are long)."""
@@ -173,12 +181,10 @@ class CompareRenderMixin:
             if len(set(comparison.groups)) > 1:
                 lines.append(self._apart_line(comparison.distance, names, start=False))
             lines.append(self._apart_line(comparison.start_distance, names, start=True))
-        share = 100.0 * float(comparison.explained[0])
-        lines.append(tr("The first main change carries {share:.0f} % of all the change between frames.").format(share=share))
+        # (The share of the first main change: the change plot's “Component 1 (… %)”.)
         odd = sum(len(result.odd) for result in comparison.results)
         if odd:
-            lines.append(trf("1 odd frame left out (Odd frames and stages, below)." if odd == 1
-                             else "{n} odd frames left out (Odd frames and stages, below).", n=odd))
+            lines.append(trf(ODD_LEFT_OUT[0] if odd == 1 else ODD_LEFT_OUT[1], n=odd))
         return "\n".join(lines)
 
     def _group_lines(self, names: list[str]) -> list[str]:
@@ -276,11 +282,17 @@ class CompareRenderMixin:
                 ranges = ", ".join(f"{self._label(index, first)}–{self._label(index, last)}" for first, last in stages.ranges())
                 lines.append(tr("{name}: {count} stages ({ranges})").format(name=result.name, count=stages.count, ranges=ranges)
                              if stages.count > 1 else tr("{name}: one stage").format(name=result.name))
-                lines += ["   " + change_text(change, axis) for change in stages.stage_changes()]
             for frame in result.odd:
                 lines.append("   " + tr("odd: {label} — {why}").format(label=self._label(index, frame.row),
                                                                        why=odd_reason(frame, axis)))
         return "\n".join(lines)
+
+    def _stage_changes(self) -> str:
+        """“film_A — Stage 1 → 2: grows most at qy …”: what changed most from one stage to the next, every series
+        (the tooltip of the folded details, as In-situ series does for its stages line)."""
+        axis = axis_symbol(self.comparison.x_label)
+        return "\n".join(f"{result.name} — {change_text(change, axis)}" for result in self.comparison.results
+                         if result.stages is not None for change in result.stages.stage_changes())
 
     # -- plots ------------------------------------------------------------------------------------
 

@@ -135,13 +135,7 @@ class RunMonitorMixin:
         tabs = QTabWidget()
         local = QWidget()
         local_form = QFormLayout(local)
-        local_intro = QLabel(
-            "Local physical workflow: choose an output folder/Python, prepare the reproducible package, "
-            "generate a small BornAgain test first, then generate the full dataset and train."
-        )
-        local_intro.setWordWrap(True)
-        local_form.addRow(local_intro)
-        # Each path: its label, the field, and a Browse… button right beside the field it fills.
+        # The numbered buttons below give the order (manual: Trainset Build). Each path: its label, the field, and a Browse… button right beside the field it fills.
         self.local_folder_button = self._path_row(
             local_form, "Output folder", "project.workspace", "Choose output folder…"
         )
@@ -151,18 +145,23 @@ class RunMonitorMixin:
         self.local_results_folder_button = self._path_row(
             local_form, "Training results folder", "runtime.results_output_dir", "Choose training results folder…"
         )
+        # Empty means the folder in the package (validation_files._dataset_output_dir): the placeholder says which.
+        for path, placeholder, tip in (
+            ("runtime.dataset_output_dir", "<output>/<project name>/dataset",
+             "Where generation writes the HDF5 shards. Empty: <output>/<project name>/dataset."),
+            ("runtime.results_output_dir", "<output>/<project name>/results",
+             "Where training writes its results. Empty: <output>/<project name>/results."),
+        ):
+            self.fields[path].setPlaceholderText(placeholder)
+            self.fields[path].setToolTip(tip)
         self.local_python_button = self._path_row(
             local_form, "Python executable", "training.local_python", "Choose Python executable…"
         )
         cache_group = QGroupBox("BornAgain form-factor grid cache")
         cache_form = QFormLayout(cache_group)
-        cache_form.addRow(
-            self._check(
-                "simulation.grid_cache.enabled",
-                True,
-                "Use the precomputed particle-parameter matrix during dataset generation",
-            )
-        )
+        grid_cache = self._check("simulation.grid_cache.enabled", True, "Use the precomputed matrix")
+        grid_cache.setToolTip("Use the precomputed particle-parameter matrix during dataset generation.")
+        cache_form.addRow(grid_cache)
         self.local_cache_folder_button = self._path_row(
             cache_form, "Cache folder", "simulation.grid_cache.directory", "Choose cache folder…",
             value="_bornagain_cache",
@@ -204,7 +203,7 @@ class RunMonitorMixin:
             cancel=False,
             details=False,
         )
-        self.trainset_job_status.set_state("idle", "Idle", progress=0.0)
+        self.trainset_job_status.set_state("idle", "", progress=0.0)  # at rest the chip says it
         self.local_activity = self.trainset_job_status.message_label
         self.local_activity.setWordWrap(True)
         self.local_progress = self.trainset_job_status.progress_bar
@@ -220,11 +219,6 @@ class RunMonitorMixin:
         local_controls.addStretch(1)
         local_form.addRow(self.trainset_job_status)
         local_form.addRow(local_controls)
-        output_help = QLabel(
-            "Generation writes HDF5 shards under <output>/<project name>/dataset. Progress and errors appear in Monitor & Results."
-        )
-        output_help.setWordWrap(True)
-        local_form.addRow(output_help)
         tabs.addTab(local, "Local")
 
         maxwell = QWidget()

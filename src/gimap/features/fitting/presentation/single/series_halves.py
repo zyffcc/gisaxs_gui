@@ -5,7 +5,8 @@ both halves together. Which one is decided in this order (``application/series_f
 the person chose here for the series that is listed (or a project brought); the halves the first listed fit
 input was sent with (Analyze writes them into the file: ``"halves"`` of its ``# observation:`` line); the
 halves of Single analysis unless they are “both on |q|”; the mean. A choice that was not made here says
-where it comes from. Curves with q on one side only have no halves: the choice is switched off and says so.
+where it comes from. Curves with q on one side only have no halves: the choice is switched off and its tooltip
+says so.
 
 Changing it draws the selected frame again, finds the stages again and, after a run, marks the results as
 no longer those of the points shown (``_results_stale``). It is kept in a project, written into the series
@@ -148,8 +149,9 @@ class FitSeriesHalvesMixin:
             note = tr(BOTH_IN_SINGLE)
         else:
             note = tr(SOURCE_TEXT[source]) if source in SOURCE_TEXT else ""
-        self.halves_note.setText(note)
-        self.halves_note.setVisible(bool(note))
+        shown = "" if one_sided else note  # one side only: the box is switched off, its tooltip says why
+        self.halves_note.setText(shown)
+        self.halves_note.setVisible(bool(shown))
         tip = tr(HALVES_TIP) + ("\n" + note if note else "")
         for widget in (combo, self.side_label):
             widget.setToolTip(tip)

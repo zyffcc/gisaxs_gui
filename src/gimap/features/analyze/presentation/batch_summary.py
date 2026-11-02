@@ -239,8 +239,7 @@ class BatchFolderMixin:
             more = len(titles) - CURVES_SHOWN
             names = ", ".join(titles[:CURVES_SHOWN]) + (" " + trf("+ {n} more", n=more) if more > 0 else "")
             parts.append(trf("curves: {names}", names=names))
-        if self._cut_text is not None and self.cut_label.text():
-            parts.append(self.cut_label.text())
+        # (the cut every frame gets: the Cuts row above says it)
         if self._gisaxs and (self._for_fitting or choices.fit_input or choices.fit != "none"):
             parts.append(trf("a fit takes: {halves}", halves=halves_text(choices.fit_halves)))
         lines = [" · ".join(parts)]
@@ -251,9 +250,7 @@ class BatchFolderMixin:
                 cost.insert(0, trf("about {size} per frame, {total} in all", size=size_text(per_frame), total=size_text(total)))
             elif total > 0:  # the tables of every frame alone
                 cost.insert(0, trf("about {total} in all", total=size_text(total)))
-            lines.append(" · ".join(cost) + " · " + tr("README.txt in the folder says what each file is"))
-        else:
-            lines.append(tr("README.txt in the folder says what each file is"))
+            lines.append(" · ".join(cost))  # (what each file is: README.txt in the folder — the summary's tooltip)
         self.summary_label.setText("\n".join(lines))
 
     # -- Export ----------------------------------------------------------------------------

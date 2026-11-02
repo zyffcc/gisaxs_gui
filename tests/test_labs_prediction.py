@@ -250,7 +250,8 @@ def test_readiness_chips_are_muted_while_pending_and_error_only_after_a_failed_l
     assert window.gisaxsPredictModelReadyLabel.text() == "Model: Not loaded"
     assert window.gisaxsPredictModelReadyLabel.property("gimapRole") == "muted"
     assert not window.gisaxsPredictPredictButton.isEnabled()
-    assert not window.gisaxsPredictReadinessHint.isHidden()
+    assert not hasattr(window, "gisaxsPredictReadinessHint")  # the chips say what Predict waits for
+    assert window.predictionCanvasStatusLabel.text() == ""  # and the canvas does not say it a third time
     assert window.gisaxsPredictRunLogTitle.isHidden()
 
     model_path = str(tmp_path / "broken_model")

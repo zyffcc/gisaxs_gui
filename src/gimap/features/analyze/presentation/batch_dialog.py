@@ -42,7 +42,7 @@ from ..application import (
     output_names,
 )
 from .batch_summary import BatchFolderMixin, Cost
-from .batch_texts import HALVES_FITTED, HALVES_NOTES, HALVES_UNUSED, MODEL_LINES, SENT_GIWAXS, SENT_TO_FITTING
+from .batch_texts import HALVES_FITTED, HALVES_NOTES, MODEL_LINES, SENT_GIWAXS, SENT_TO_FITTING
 from .views.batch_export_view import (
     CURVE_LIST_HEIGHT,
     FILE_MARGIN,
@@ -126,7 +126,7 @@ class BatchExportDialog(BatchFolderMixin, QDialog, BatchExportView):
         else:
             what = (tr("{frames} frames from {files} files") if files > 1 else tr("{frames} frames from 1 file")).format(
                 frames=frames, files=files)
-        self.frames_label.setText(what + " — " + tr("each reduced with the settings below."))
+        self.frames_label.setText(what)  # (each reduced with the settings below: what the dialog is)
         self.settings_label.setText(settings_text)
         for combo, options in ((self.text_format_combo, TEXT_FORMATS), (self.image_format_combo, IMAGE_FORMATS),
                                (self.frame_format_combo, FRAME_FORMATS)):
@@ -149,7 +149,8 @@ class BatchExportDialog(BatchFolderMixin, QDialog, BatchExportView):
         self.halves_group.setVisible(gisaxs or for_fitting)
         for widget in (self.halves_caption, self.halves_combo):
             widget.setVisible(gisaxs)  # an I(q) has no halves
-        self.halves_note.setVisible(gisaxs or for_fitting)  # (a GIWAXS series sent: what Fitting fits it with)
+        self.halves_note.setVisible((gisaxs or for_fitting) and bool(self.halves_note.text()))  # (a GIWAXS series
+        # sent: what Fitting fits it with; halves not used: nothing — the combo is off, its tooltip says when it counts)
         self.sent_label.setVisible(for_fitting)
         self.every_spin.valueChanged.connect(self._sync)
         for check in self.output_checks.values():
@@ -408,7 +409,9 @@ class BatchExportDialog(BatchFolderMixin, QDialog, BatchExportView):
         for widget in (self.halves_caption, self.halves_combo):
             widget.setEnabled(used)
         note = (HALVES_NOTES if written else HALVES_FITTED)[choices.fit_halves]
-        self.halves_note.setText(tr(note if used else HALVES_UNUSED) if self._gisaxs else tr(SENT_GIWAXS))
+        said = (tr(note) if used else "") if self._gisaxs else tr(SENT_GIWAXS)
+        self.halves_note.setText(said)
+        self.halves_note.setVisible(bool(said) and (self._gisaxs or self._for_fitting))
         line = self.width() - LINE_MARGIN
         self.sent_label.setText(tr(SENT_TO_FITTING).format(
             file=self.sent_label.fontMetrics().elidedText(names["fit_input"], Qt.ElideMiddle, max(FILE_MIN_WIDTH, line))))

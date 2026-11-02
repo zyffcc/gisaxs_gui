@@ -16,15 +16,33 @@ from functools import lru_cache
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ..application import (FRINGES_FAILED, FRINGES_MISSING, HINT_TEXT, INSTALL_MESSAGES, INSTALL_STAGES, NO_FRAMES,
-                           NO_TABLE, PROBLEMS,
-                           SKETCH_TEMPLATES, SOURCE_TEXT, STOPPED, SUMMARY_HINT, TOOLKIT_FAILED, TOOLKIT_MISSING,
+from ..application import (CHECK_SOURCES, FRINGES_FAILED, FRINGES_MISSING, HINT_TEXT, INSTALL_MESSAGES, INSTALL_STAGES,
+                           NO_FRAMES, NO_TABLE, PROBLEMS,
+                           SKETCH_TEMPLATES, SOURCE_TEXT, STOPPED, TOOLKIT_FAILED, TOOLKIT_MISSING,
                            WINDOW_TEMPLATES, InstallProgress, Source)
 from .toolkit_texts import TOOLKIT_TEMPLATES
 
 TEMPLATES = (*INSTALL_MESSAGES.values(), TOOLKIT_MISSING, TOOLKIT_FAILED, STOPPED, NO_FRAMES, NO_TABLE,
              *SKETCH_TEMPLATES, *WINDOW_TEMPLATES, *PROBLEMS, FRINGES_FAILED, FRINGES_MISSING)
-LABEL_TEMPLATES = (*SOURCE_TEXT.values(), *HINT_TEXT.values(), *SUMMARY_HINT.values())
+SOURCE_TIPS = {
+    "missing": "Not in the frame headers or the scan's files: enter it.",
+    "auto": "Empty: the beam centre is estimated from the frames. A centre you give is in Analyze's pixel coordinates.",
+    "last": "The value used last, for another folder: check that it holds for this scan.",
+    "assumed": "Not in the files: 0 is used. Enter the sample roll if it was not 0.",
+}
+"""The rest of a source line, in its tooltip (and in the tooltip of its field)."""
+HINT_TIPS = {
+    "header": "The frame header gives {energy} keV, which differs from the value used: check which is the beam's energy.",
+    "nexus": "The scan's NeXus file gives {energy} keV, which differs from the value used: check which is the beam's "
+             "energy.",
+    "flat_field": "The E in the flat-field file name is the detector's calibration energy, not necessarily the beam's: "
+                  "it is never filled in. Enter the beam energy.",
+}
+"""Why an energy of the files is shown beside the value used."""
+SUMMARY_TIPS = ("S/N {serial}", "{pixel} µm pixels", "first frame {first_frame}", "flat field {flat_field}")
+"""The parts of the scan's line needed once (matching a preset): its tooltip."""
+LABEL_TEMPLATES = (*SOURCE_TEXT.values(), *HINT_TEXT.values(), *SOURCE_TIPS.values(), *HINT_TIPS.values(),
+                   *SUMMARY_TIPS)
 """Where a value comes from and what the files say about the energy (shown beside the fields)."""
 STAGE_NAMES = {
     "pre_nucleation": "pre-nucleation", "islands": "islands", "coalescence": "coalescence", "film": "film",
@@ -113,12 +131,29 @@ def symbols(sentence: str) -> str:
 
 
 def source_text(source: Source) -> str:
-    """Where a geometry value comes from (“from preset …”), with a different energy of the files."""
+    """Where a geometry value comes from (“from preset …”), with a different energy of the files; a value to check
+    starts with ⚠."""
     words = text(SOURCE_TEXT.get(source.kind, ""), name=source.name) if source.kind in SOURCE_TEXT else ""
+    if words and source.kind in CHECK_SOURCES:
+        words = "⚠ " + words
     if source.hint_kev:
         hint = HINT_TEXT.get(source.hint_source or "header", HINT_TEXT["header"])
         words += " · " + text(hint, energy=f"{source.hint_kev:.4g}")
     return words
+
+
+def source_warns(source: Source) -> bool:
+    """The source line is a warning: a guessed value to check, or an energy of the files that differs."""
+    return source.kind in CHECK_SOURCES or bool(source.hint_kev)
+
+
+def source_tip(source: Source) -> str:
+    """The tooltip of a source line: what it means and what to do (the line itself when it says it all)."""
+    tips = [tr(SOURCE_TIPS[source.kind])] if source.kind in SOURCE_TIPS else []
+    if source.hint_kev:
+        hint = HINT_TIPS.get(source.hint_source or "header", HINT_TIPS["header"])
+        tips.append(text(hint, energy=f"{source.hint_kev:.4g}"))
+    return "\n".join(tips) or source_text(source)
 
 
 def stage_name(stage) -> str:
@@ -131,5 +166,6 @@ def install_text(progress: InstallProgress) -> str:
     return text(template, **progress.fields()) if template else ""
 
 
-__all__ = ["LABEL_TEMPLATES", "STAGE_NAMES", "TEMPLATES", "TOOLKIT_TEMPLATES", "install_text", "message_text",
-           "note_text", "source_text", "stage_name", "symbols", "text"]
+__all__ = ["HINT_TIPS", "LABEL_TEMPLATES", "SOURCE_TIPS", "STAGE_NAMES", "SUMMARY_TIPS", "TEMPLATES", "TOOLKIT_TEMPLATES",
+           "install_text", "message_text", "note_text", "source_text", "source_tip", "source_warns", "stage_name",
+           "symbols", "text"]

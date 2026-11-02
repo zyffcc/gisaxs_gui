@@ -145,7 +145,7 @@ class ResultActionsMixin:
         if native is not None:
             self.fit1d_constraints_label.setText(self.fit1d_constraints_text(native))
         has_values = bool(self._row_paths) and fitted
-        for widget in (self.fix_button, self.free_button, self.range_button, self.values_hint):
+        for widget in (self.fix_button, self.free_button, self.range_button):  # how: the table's tooltip
             widget.setVisible(has_values)
         self._values_selected()
 

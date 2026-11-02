@@ -49,6 +49,19 @@ def _number(value, digits: int = 4) -> str:
     return "—" if not math.isfinite(value) else f"{value:.{digits}g}"
 
 
+def method_text(peak: dict, report: dict) -> str:
+    """How a GIWAXS peak was fitted and found, with the thresholds of the run (the tooltip of Fit details)."""
+    fit, search = peak.get("fit") or {}, report.get("peak_search") or {}
+    return tr(
+        "{model}, least squares weighted by the {errors} of each bin; errors × √χ²ᵣ when χ²ᵣ > 1. Found in "
+        "the radial I(q) of the whole detector: a SNIP background (window {window} Å⁻¹), at least {snr}σ and "
+        "{height} % above it. Size: Scherrer, L = 2π·0.9 / FWHM (instrument broadening not removed)."
+    ).format(model=tr(fit.get("model") or "Gaussian on a local linear background"),
+             errors=tr(ERROR_WORDS.get(str(report.get("error_model") or ""), "statistical error")),
+             window=_number(search.get("background_window"), 3), snr=_number(search.get("min_snr"), 3),
+             height=_number(100 * float(search.get("min_relative_height") or 0.02), 3))
+
+
 def _plus_minus(value, error, unit: str = "", digits: int = 5) -> str:
     text = _number(value, digits)
     if error is not None and _number(error) != "—":
@@ -136,9 +149,7 @@ class PeakDetails(QWidget):
         layout.addWidget(self.plot)
         self.values = _Values(self)
         layout.addWidget(self.values)
-        self.method = label("", self, role="muted")
-        layout.addWidget(self.method)
-        self.warnings = label("", self)
+        self.warnings = label("", self)  # (how it was fitted and found: the section's tooltip, ``method_text``)
         layout.addWidget(self.warnings)
         self.where = ScaledPixmapLabel(self)  # shrinks with a narrow panel instead of pushing it wider
         self.where.setObjectName("guidedPeakMap")
@@ -179,15 +190,6 @@ class PeakDetails(QWidget):
             ("out-of-plane / in-plane", _number(peak.get("ratio_out_in"), 3)),
         ]
         self.values.set_values(pairs)
-        search = report.get("peak_search") or {}
-        self.method.setText(tr(
-            "{model}, least squares weighted by the {errors} of each bin; errors × √χ²ᵣ when χ²ᵣ > 1. Found in "
-            "the radial I(q) of the whole detector: a SNIP background (window {window} Å⁻¹), at least {snr}σ and "
-            "{height} % above it. Size: Scherrer, L = 2π·0.9 / FWHM (instrument broadening not removed)."
-        ).format(model=tr(fit.get("model") or "Gaussian on a local linear background"),
-                 errors=tr(ERROR_WORDS.get(str(report.get("error_model") or ""), "statistical error")),
-                 window=_number(search.get("background_window"), 3), snr=_number(search.get("min_snr"), 3),
-                 height=_number(100 * float(search.get("min_relative_height") or 0.02), 3)))
         caveat = str(peak.get("caveat") or "")
         self.warnings.setText("⚠ " + tr(caveat) if caveat else tr("No warnings for this peak."))
         ring = min(report.get("rings") or (), key=lambda item: abs(item["q"] - peak["q"]), default=None)
@@ -298,4 +300,4 @@ class SolutionDetails(QWidget):
             self.showRequested.emit(row)
 
 
-__all__ = ["PeakDetails", "SolutionDetails", "candidate_row"]
+__all__ = ["PeakDetails", "SolutionDetails", "candidate_row", "method_text"]

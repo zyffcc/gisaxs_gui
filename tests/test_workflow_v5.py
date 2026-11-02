@@ -125,7 +125,13 @@ def test_completed_job_reports_observed_residual_without_mandatory_cutoff(tmp_pa
     row = dict(file="test", side="positive", rank=1, combination="sphere", best_log_rmse=.05, signed_weighted_rms=1, best_source="experimental_physical", native_q=[1,2], observed=[1,1], sigma=[.1,.1], display_q=[1,2], display_fit=[1,1])
     result = SimpleNamespace(succeeded=True, value=dict(candidates=[row], output_dir=str(tmp_path), records=[dict(status="complete")], summary=dict(runtime_seconds=1)))
     dialog._completed(result)
-    assert "Review curve shape and residuals" in dialog.status.text()
+    # The status line says what finished; what the candidates are worth is the warning under the title, how to
+    # judge one the tooltip of its score.
+    assert dialog.status.text() == "Finished in 1.00 s · 0 failed files · 1 candidates saved."
+    from PyQt5.QtWidgets import QLabel
+
+    warning = dialog.findChild(QLabel, "workflowV5Experimental")
+    assert warning.isVisibleTo(dialog) and "not calibrated probabilities" in warning.toolTip()
     assert "no mandatory cutoff" in dialog.table.item(0, 3).toolTip()
     assert "measurement noise" in dialog.table.item(0, 3).toolTip()
     dialog.close()

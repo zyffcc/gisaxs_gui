@@ -152,13 +152,13 @@ class SeriesDisplayMixin:
         if stretch is not None and stretch.spacerItem() is not None:
             self.series_host.setStretch(self.series_stretch_index, 0)
         self.series_export_button.show()
-        # (the map is the thing now: its how-to takes one line, see ``_series_say``); rows of sums are no frames
+        # The map is the thing now: its size and how to pick a frame or a window are its tooltip (the line above it
+        # says what it holds); rows of sums are no frames.
         group = map_group(series)
         values = dict(rows=series.rows, points=series.x.size, axis=axis_symbol(series.x_label))
-        if group > 1:
-            self._series_say(HOW_TO_SUMS, n=group, **values)
-        else:
-            self._series_say(HOW_TO, **values)
+        self._series_how = (HOW_TO_SUMS, dict(n=group, **values)) if group > 1 else (HOW_TO, values)
+        self._series_show_how()
+        self._series_say("")
         self._series_describe()
         self._series_pick_row(min(self._series_row, series.rows - 1) + 0.5)
         if not (keep_view if keep_q is None else keep_q) or not hasattr(self, "_series_q"):  # where the series changes most
@@ -166,6 +166,11 @@ class SeriesDisplayMixin:
             self._series_pick_q(centre - self._series_step(), centre + self._series_step())
         else:
             self._series_pick_q(*self._series_q)
+
+    def _series_show_how(self) -> None:
+        """The map's tooltip: its rows and points, how to pick a row and an x window (again after a language switch)."""
+        template, values = getattr(self, "_series_how", ("", {})) if self._series_map is not None else ("", {})
+        self.series_map_view.setToolTip(trf(template, **values) if template else "")
 
     def _series_step(self) -> float:
         x = self._series_map.x

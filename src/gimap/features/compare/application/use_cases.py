@@ -51,6 +51,9 @@ UNREAD_FILE = "{name} ({error})"
 DIFFERENT_FILE_AXES = "The files have different x axes: {axes}"
 TOO_FEW_IN_FOLDER = "Fewer than two curve files ({suffixes}) in {folder}."
 TOO_FEW_IN_TABLE = "The table {name} holds fewer than two frames."
+STAGE_PERCENT = ("change of I from the stage before, relative to the rest of the curve (the mean change of log I "
+                 "over the compared range removed), in %")
+"""What ``percent`` of a series' ``stage_details`` means (the record says it next to the numbers)."""
 ERRORS = (TOO_FEW_FILES, TOO_FEW_READ, DIFFERENT_FILE_AXES, TOO_FEW_IN_FOLDER, TOO_FEW_IN_TABLE, SEVERAL_KINDS,
           NO_SUCH_KIND, NO_TABLE, NOT_NUMBERS, *COMPARE_ERRORS)
 """Every error template of Compare's files and comparison (a template without values is an exact text)."""
@@ -231,6 +234,7 @@ class CompareService:
                                 for frame in result.odd],
                  "stages": None if result.stages is None else [
                      {"first": item.labels[first], "last": item.labels[last]} for first, last in result.stages.ranges()],
+                 "stage_details": None if result.stages is None else stage_details(result.stages, comparison.x_label),
                  "half_of_change": None if result.half_row is None else item.labels[result.half_row],
                  "ninety_percent": None if result.ninety_row is None else item.labels[result.ninety_row],
                  "differs_at_the_end_percent": {other: round(float(value), 3) for other, value in
@@ -242,5 +246,26 @@ class CompareService:
         }
 
 
+def stage_details(stages, x_label: str) -> dict:
+    """Where a series changed most from one stage to the next, as the page's tooltip of its stages says it: for
+    every boundary the x where the curve grows most and falls most (``x`` on ``x_label``, with its unit) and by how
+    much (``percent``, ``STAGE_PERCENT``), and the same as an English sentence."""
+    axis = str(x_label).split(" (")[0].split(" or ")[0].strip().strip("|") or "x"  # “qy (Å⁻¹)” → “qy”
+
+    def places(found) -> list:
+        return [{"x": float(f"{x:.6g}"), "percent": round(float(percent), 1)} for x, percent in found]
+
+    def sentence(change) -> str:
+        grows = ", ".join(f"{x:.4g} (+{percent:.0f} %)" for x, percent in change.rises)
+        drops = ", ".join(f"{x:.4g} ({percent:.0f} %)" for x, percent in change.falls)
+        parts = [f"grows most at {axis} {grows}" if grows else "", f"falls most at {axis} {drops}" if drops else ""]
+        return f"Stage {change.stage - 1} → {change.stage}: " + "; ".join(part for part in parts if part)
+
+    return {"x_label": str(x_label), "percent": STAGE_PERCENT, "changes": [
+        {"from_stage": change.stage - 1, "to_stage": change.stage, "grows_most": places(change.rises),
+         "falls_most": places(change.falls), "text": sentence(change)} for change in stages.stage_changes()]}
+
+
 __all__ = ["CURVE_SUFFIXES", "ERRORS", "CompareService", "CompareSettings", "CurveReader", "METHOD", "PROGRESS_EVERY",
-           "Progress", "TOO_FEW_IN_TABLE", "TOO_FEW_READ", "TableWriter", "UNREAD_FILE", "curve_files", "natural_key"]
+           "Progress", "STAGE_PERCENT", "TOO_FEW_IN_TABLE", "TOO_FEW_READ", "TableWriter", "UNREAD_FILE", "curve_files",
+           "natural_key", "stage_details"]

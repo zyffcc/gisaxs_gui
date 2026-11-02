@@ -1,6 +1,7 @@
 """The Data step: what the file shown is, which of its frames is on screen, and what is wrong with it.
 
-* **The frame** — the command bar (name and “frame 4 of 12”), the Data step's detail, card and sentence.
+* **The frame** — the command bar (its name), the Data step's detail (detector, size, “frame 4 of 12”) and card
+  (only what the detail does not say: the pixel size, the frames of a multi-frame file, the file header).
 * **The source** — above the file list, for a NeXus / HDF5 source: what it consists of (“11 module files ·
   240 frames · stitched”), how its frames are oriented, and every warning of its layout. Warnings that mean
   data are left out put the Data step in the warning state and are said with the frame's messages. While the
@@ -34,18 +35,17 @@ from ..source_texts import (
     frame_text,
     names_text,
     orientation_text,
-    short_name,
     summary_text,
     warning_texts,
 )
 from ..texts import detector_text
+from .workspace import show_card
 
-OPEN_HINT = ("Open or drop detector frames (CBF, NeXus/HDF5, TIFF, EDF) or a folder. Files that belong together open "
-             "as one row: module files (…_m01.nxs … _m11.nxs) are stitched, a master is read with its data files. "
-             "Every frame in them is a frame of the series.")
-"""The Data step's sentence while nothing is open. A fixed sentence, no value is filled in: while no frame is
-shown nothing is composed again after a switch of the interface language, so it has to be a key of the table as
-it stands."""
+OPEN_HINT = "Open or drop detector frames (CBF, NeXus/HDF5, TIFF, EDF) or a folder."
+"""The Data step's sentence while nothing is open: the one place the empty page says what to do (how files that
+belong together are read is in the manual, and said of a source once it is open). A fixed sentence, no value is
+filled in: while no frame is shown nothing is composed again after a switch of the interface language, so it has
+to be a key of the table as it stands."""
 NOTHING_FOUND = "No new detector frames ({formats}) found."
 SENTENCE = "{text}."
 """A warning of a layout (the reader ends none with a full stop) among the messages of a frame."""
@@ -75,9 +75,9 @@ class DataStepMixin:
         self.set_step_state("data", "busy", trf("Reading {name} …", name=name))
 
     def _data_empty(self) -> None:
-        """No frame is shown: the sentence of the empty step, no source."""
+        """No frame is shown: the sentence of the empty step, no card, no source."""
         self._intro("data", OPEN_HINT)
-        self.data_info_label.setText(tr("No file yet."))
+        show_card(self.data_info_label, "")
         self._show_source(None)
 
     def frames_now(self, analysis: FrameAnalysis) -> int:
@@ -85,36 +85,36 @@ class DataStepMixin:
         return max(int(analysis.frame_count), self.view_model.frame_count(analysis.path))
 
     def _show_data_info(self, analysis: FrameAnalysis, files: int) -> None:
-        """The command-bar meta, the Data step's detail, card and intro. The detector is the name the file gives
-        it (else the instrument profile it matched); without either, nothing is said of it."""
+        """The command bar's file name, the Data step's detail and card. The detail is the one place for the
+        detector (the name the file gives it, else the instrument profile it matched; without either, nothing is
+        said of it), the frame size — once, when the detector's name holds it already — and the frame shown of a
+        multi-frame file. The card says only what the detail does not."""
         rows, columns = analysis.shape
-        shape = f"{rows}×{columns} px"
+        size = f"{rows}×{columns}"
         detector = detector_text(analysis)
         layout = self.view_model.describe(analysis.path)
         name = source_name(analysis.path, layout)
         frames, shown, total = self.frames_now(analysis), analysis.frame_index + 1, analysis.frame_total
-        meta = [part for part in (detector, shape) if part]  # a name and a size: the same in every language
+        shape = "" if detector and size in detector else f"{size} px"  # “Detector 2048×2048”: the size once
+        detail = [part for part in (detector, shape) if part]  # a name and a size: the same in every language
         if frames > 1:
-            meta.append(trf("frame {i} of {n}, sum of {total} frames", i=shown, n=frames, total=total)
-                        if analysis.summed_frames else frame_text(analysis.frame_index, frames))
-        meta = " · ".join(meta)
+            detail.append(trf("frame {i} of {n}, sum of {total} frames", i=shown, n=frames, total=total)
+                          if analysis.summed_frames else frame_text(analysis.frame_index, frames))
+        detail = " · ".join(detail)
         self.file_chip.setText(name)
         self.file_chip.setToolTip(str(analysis.path))
-        self.file_meta.setText(meta)
+        self.file_meta.setText("")  # (“reading…” until now): the name is the command bar's; the rest is the step's
         expected = self._expected(analysis.path)
-        self.set_step_state("data", "warn" if warning_texts(layout, notes=False, without=expected) else "ok", meta)
+        self.set_step_state("data", "warn" if warning_texts(layout, notes=False, without=expected) else "ok", detail)
         metadata = analysis.metadata or {}
-        lines = [trf("Detector: {name}", name=analysis.detector_name)] if analysis.detector_name else []
+        lines = []
         geometry = analysis.geometry
         pixel = geometry.pixel_size_x_m if geometry is not None else metadata.get("pixel_size_x_m")
-        lines.append(trf("Frame: {rows} × {columns} pixels, {size} µm pixels", rows=rows, columns=columns,
-                         size=f"{pixel * 1e6:g}") if pixel else
-                     trf("Frame: {rows} × {columns} pixels", rows=rows, columns=columns))
-        if frames <= 1:
-            lines.append(trf("Frames in the file: {n}", n=frames))
-        elif analysis.summed_frames:
+        if pixel:
+            lines.append(trf("Pixel size {size} µm", size=f"{pixel * 1e6:g}"))
+        if frames > 1 and analysis.summed_frames:  # (one frame: nothing beyond the step's detail)
             lines.append(trf("Frames in the file: {n} (showing {i}, sum of {total} frames)", n=frames, i=shown, total=total))
-        else:
+        elif frames > 1:
             lines.append(trf("Frames in the file: {n} (showing {i})", n=frames, i=shown))
         header = []
         if metadata.get("energy_kev"):
@@ -125,18 +125,12 @@ class DataStepMixin:
             header.append(trf("exposure {value} s", value=f"{float(metadata['exposure_time_s']):g}"))
         if header:
             lines.append(trf("File header: {items}", items=", ".join(header)))
-        lines.append(trf("Files listed: {n}", n=files))
         listed = self.view_model.listed_frames()
-        if files > 1 and listed > files:  # the total Batch Export and the Series map work on
+        if files > 1 and listed > files:  # the total Batch Export and the Series map work on (files: the list says)
             lines.append(trf("Frames listed: {n}", n=listed))
-        self.data_info_label.setText("\n".join(lines))
+        show_card(self.data_info_label, "\n".join(lines))
         self.frame_total_label.setText(trf(FRAMES_TOTAL, n=frames))  # (again after a switch of the language)
-        values = dict(name=short_name(name), detector=detector, shape=shape, frames=frames)
-        if detector:
-            self._intro("data", "{name}: {detector}, {shape}, {frames} frames." if frames > 1 else
-                        "{name}: {detector}, {shape}.", **values)
-        else:
-            self._intro("data", "{name}: {shape}, {frames} frames." if frames > 1 else "{name}: {shape}.", **values)
+        self._intro("data")  # the command bar names the file, the step's detail says the rest
         self._show_source(layout, analysis.path)
         shown = self.view_model.current_path  # its row says the same (frames, files, warnings) as the step
         if shown is not None and str(shown).casefold() == str(analysis.path).casefold():

@@ -120,7 +120,7 @@ def test_empty_plots_say_what_appears_there(tmp_path) -> None:
     page = _page()
     assert page.plot.empty_overlay.label.text().startswith("Open a curve (q, I, σ)")
     assert not page.plot.empty_overlay.label.isHidden()
-    assert page.residual_plot.empty_overlay.label.text() == "Open a curve: the residuals of the model appear here."
+    assert page.residual_plot.empty_overlay.label.isHidden()  # said once, over the curve plot above it
     _close(page)
     single, series = _pages()
     folder = _series(tmp_path)

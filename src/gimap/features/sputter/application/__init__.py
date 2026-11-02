@@ -14,7 +14,7 @@ from .fringes import (FALLBACK_FOLDER, FRINGES_FAILED, FRINGES_MISSING, FringeRu
                       FringesFailed)
 from .progress import (EXCLUDED_FRAMES, FRAMES_READ, STAGE_TEXT, Excluded, Progress, ProgressTracker,
                        overall_fraction, parse_progress)
-from .scan import (FILLING_HINTS, GROUPS, HINT_TEXT, NO_FRAMES, SOURCE_TEXT, SUMMARY_HINT, Prefill, ScanInfo, Source,
+from .scan import (CHECK_SOURCES, FILLING_HINTS, GROUPS, HINT_TEXT, NO_FRAMES, SOURCE_TEXT, Prefill, ScanInfo, Source,
                    add_preset, energy_kev, folder_key, make_preset, matching_preset, prefill, remember)
 from .use_cases import (METALS, NO_TABLE, PROBLEMS, STEP_ANALYZE, STEP_ANALYZE_ONLY, STEP_CHECK, STOPPED, TOOLKIT_FAILED,
                         TOOLKIT_MISSING, VARIANTS, AnalyzeRequest, PredictStep, ResultReader, ScanInspector,
@@ -24,11 +24,11 @@ from .use_cases import (METALS, NO_TABLE, PROBLEMS, STEP_ANALYZE, STEP_ANALYZE_O
 __all__ = [
     "FALLBACK_FOLDER", "FRINGES_FAILED", "FRINGES_MISSING", "FRINGE_STATUS_NAMES", "FRINGE_TEMPLATES", "FringeGroup",
     "FringeHeights", "FringeRunner", "FringeService", "FringeStore", "FringesFailed", "fringe_paragraph",
-    "AnalyzeRequest", "DOWNLOAD_SIZE", "EXCLUDED_FRAMES", "EnvironmentInstaller", "EnvironmentStatus", "Excluded",
+    "AnalyzeRequest", "CHECK_SOURCES", "DOWNLOAD_SIZE", "EXCLUDED_FRAMES", "EnvironmentInstaller", "EnvironmentStatus", "Excluded",
     "FILLING_HINTS", "FILM_NOT_DETERMINED", "FRAMES_READ", "GRADES", "GROUPS", "HINT_TEXT", "INSTALL_MESSAGES", "INSTALL_STAGES",
     "INSTALL_STEP", "InstallError", "InstallProgress", "LITERATURE_GRADE", "LITERATURE_TEMPLATES", "METALS", "NO_FRAMES", "NO_TABLE", "PHYSICAL_TEMPLATES", "PROBLEMS", "Particle", "PredictStep", "Prefill",
     "Progress", "ProgressTracker", "ResultReader", "SKETCH_TEMPLATES", "SOURCE_TEXT", "STAGE_TEXT", "STEP_ANALYZE",
-    "STEP_ANALYZE_ONLY", "STEP_CHECK", "STOPPED", "STOP_NOW", "SUMMARY_HINT", "ScanInfo", "ScanInspector", "Series",
+    "STEP_ANALYZE_ONLY", "STEP_CHECK", "STOPPED", "STOP_NOW", "ScanInfo", "ScanInspector", "Series",
     "Sketcher", "Source", "SputterGeometry",
     "SputterService", "Stopped", "StructureResult", "TOOLKIT_FAILED", "TOOLKIT_MISSING", "ToolkitFailed",
     "ToolkitMissing", "ToolkitRunner", "VARIANTS", "VERDICT_COLOURS", "VERDICT_MARKS", "WINDOW_TEMPLATES",

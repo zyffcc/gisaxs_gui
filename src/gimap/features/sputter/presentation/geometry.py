@@ -18,10 +18,11 @@ from PyQt5.QtCore import QDate
 from PyQt5.QtWidgets import QFileDialog
 
 from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.theme import set_role, set_state
 
-from ..application import (GROUPS, SUMMARY_HINT, AnalyzeRequest, Prefill, ScanInfo, Source, add_preset, folder_key,
-                           make_preset, prefill, remember)
-from .texts import message_text, source_text, text
+from ..application import (GROUPS, AnalyzeRequest, Prefill, ScanInfo, Source, add_preset, folder_key, make_preset,
+                           prefill, remember)
+from .texts import SUMMARY_TIPS, message_text, source_text, source_tip, source_warns, text
 
 PREFERENCES_KEY = "sputter_page"
 INSPECT_KEY = "sputter_inspect"
@@ -43,6 +44,17 @@ def _shown(value) -> str:
         return f"{float(value):.6g}"
     except (TypeError, ValueError):
         return str(value)
+
+
+def _empty_source(group: str) -> Source:
+    """The source of a field left empty: the beam centre is estimated, the sample roll is 0 (``_values``)."""
+    return Source({"beam": "auto", "roll": "assumed"}.get(group, "missing"))
+
+
+def warning_style(label, warns: bool) -> None:
+    """A muted line, or the same line in the warning colour (``gimapMeta`` would win over the role)."""
+    set_state(label, "gimapMeta", not warns)
+    set_role(label, "warning" if warns else None)
 
 
 class SputterGeometryMixin:
@@ -91,7 +103,7 @@ class SputterGeometryMixin:
         self._apply(Prefill(values=dict(last), sources={g: Source("last") for g in GROUPS}), set())
         for group in GROUPS:
             if group not in self.sources or not any(self._field_text(group)):
-                self.sources[group] = Source("missing") if group not in ("beam",) else Source("auto")
+                self.sources[group] = _empty_source(group)
         self._show_sources()
 
     # -- the folder ------------------------------------------------------------------------------------------
@@ -151,26 +163,34 @@ class SputterGeometryMixin:
             return message_text(values["error"]) if "error" in values else text(template, **values)
         info = self.scan_info
         if info is None:
-            return tr("Choose the folder of a scan: its first frame tells the detector and the time.")
+            return ""  # the folder field's tooltip says what to choose
         if info.problem:
             return message_text(info.problem)
         parts = [text("{count} frames", count=info.frames)]
         if info.detector:
-            parts.append(info.detector + (f" (S/N {info.serial})" if info.serial else ""))
-        if info.pixel_um:
-            parts.append(f"{info.pixel_um:.4g} µm")
+            parts.append(info.detector)
         if info.exposure_s is not None:
             parts.append(text("exposure {exposure} s", exposure=f"{info.exposure_s:.4g}") + (
                 text(" every {period} s", period=f"{info.period_s:.4g}") if info.period_s else ""))
         if info.timestamp:
             parts.append(info.timestamp[:19].replace("T", " "))
-        if info.energy_kev_hint:
-            hint = SUMMARY_HINT.get(info.energy_hint_source or "header", SUMMARY_HINT["header"])
-            parts.append(text(hint, energy=f"{info.energy_kev_hint:.4g}"))
-        return " · ".join(parts)
+        return " · ".join(parts)  # the energy the files give is said beside the X-rays field
+
+    def _summary_tip(self) -> str:
+        """What is needed once (matching a preset): serial number, pixel size, first frame, flat field."""
+        info = self.scan_info
+        if self._summary is not None or info is None or info.problem:
+            return ""
+        values = (("serial", info.serial), ("pixel", f"{info.pixel_um:.4g}" if info.pixel_um else ""),
+                  ("first_frame", info.first_frame), ("flat_field", info.flat_field))
+        return " · ".join(text(template, **{key: value}) for template, (key, value) in zip(SUMMARY_TIPS, values)
+                          if value)
 
     def _show_scan_summary(self) -> None:
-        self.scan_summary.setText(self._summary_text())
+        words = self._summary_text()
+        self.scan_summary.setText(words)
+        self.scan_summary.setToolTip(self._summary_tip())
+        self.scan_summary.setVisible(bool(words))
 
     # -- the fields ------------------------------------------------------------------------------------------
     def _field_text(self, group: str) -> tuple:
@@ -208,14 +228,21 @@ class SputterGeometryMixin:
     def _entered(self, group: str) -> None:
         self._edited.add(group)
         filled = any(self._field_text(group))
-        self.sources[group] = Source("entered") if filled else Source("auto" if group == "beam" else "missing")
+        self.sources[group] = Source("entered") if filled else _empty_source(group)
         self._show_sources()
 
     def _show_sources(self) -> None:
+        """One line under each field; a value to check, and an energy of the files that differs, as a warning; the
+        rest in the tooltip of the line and of its field (the beam centre's fields keep their own)."""
+        fields = {"xray": self.energy_value, "sdd": self.sdd, "alpha": self.alpha, "roll": self.roll}
         for group, label in self.source_labels.items():
             source = self.sources.get(group)
             label.setText(source_text(source) if source is not None else "")
-            label.setToolTip(label.text())
+            tip = source_tip(source) if source is not None else ""
+            label.setToolTip(tip)
+            warning_style(label, source is not None and source_warns(source))
+            if group in fields:
+                fields[group].setToolTip(tip if tip != label.text() else "")
 
     def _metal_changed(self, _index: int = 0) -> None:
         self.cu_note.setVisible(self.metal.currentData() == "Cu")

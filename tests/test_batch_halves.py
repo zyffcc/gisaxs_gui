@@ -364,10 +364,11 @@ def test_the_dialog_has_one_combo_with_three_halves_for_gisaxs_and_none_for_giwa
     assert [combo.itemText(index) for index in range(combo.count())] == ["Mean of both halves", "q > 0 half", "q < 0 half"]
     assert not dialog.halves_group.isHidden() and not combo.isHidden() and dialog.sent_label.isHidden()
     assert dialog.halves() == "mean" == dialog.choices().fit_halves
-    # tables only: the choice would change nothing, and the dialog says when it does
-    assert not combo.isEnabled() and dialog.halves_note.text() == HALVES_UNUSED
+    # tables only: the choice would change nothing — the combo is off, and its tooltip says when it counts
+    assert not combo.isEnabled() and dialog.halves_note.text() == "" and dialog.halves_note.isHidden()
+    assert combo.toolTip().endswith(HALVES_UNUSED)
     dialog.output_checks["fit_input"].setChecked(True)
-    assert combo.isEnabled() and dialog.halves_note.text() == HALVES_NOTES["mean"]
+    assert combo.isEnabled() and dialog.halves_note.text() == HALVES_NOTES["mean"] and not dialog.halves_note.isHidden()
     assert "mean of both halves" in HALVES_NOTES["mean"] and "keeps both halves, with signed qy" in HALVES_NOTES["mean"]
     dialog.output_checks["fit_input"].setChecked(False)
     dialog.fit_model_radio.setChecked(True)

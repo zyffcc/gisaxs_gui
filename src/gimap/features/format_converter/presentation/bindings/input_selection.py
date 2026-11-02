@@ -171,7 +171,7 @@ class InputSelectionMixin:
         files = sum(max(1, len(source.members)) for source in self.sources)
         set_role(self.input_note, "muted")
         if not self.sources:
-            self.input_note.setText(tr("No input files yet."))
+            self.input_note.setText(tr("No input files yet — add NXS, CBF or TIFF files or a folder."))
         elif files == len(self.sources):
             self.input_note.setText(trf(INPUTS_NOTE, files=files, frames=f"{total_frames:,}"))
         else:

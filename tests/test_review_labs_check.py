@@ -86,30 +86,34 @@ def _panel():
     holder.pages = QStackedWidget()
     for _ in range(2):
         holder.pages.addWidget(QWidget())
-    holder.hint = QLabel()
     holder.summary = QLabel()
     holder.mode_changed = _Signal()
     return PredictionInputModePanel, holder
 
 
 def test_the_batch_hint_and_the_empty_plan_follow_the_language():
+    from src.gimap.features.prediction.presentation.workflow_components import range_field_tip
+
     panel, holder = _panel()
     batch_hint = "Use an inclusive file-number range and choose how many files form one prediction."
-    single_hint = "Stack controls how many consecutive detector files contribute to this prediction."
+    single_hint = "How many consecutive detector files contribute to this prediction."
     empty = "No detector files selected by the current folder and range."
     holder.ui.gisaxsPredictMultiFilesRadioButton.setChecked(True)
     panel.sync_mode(holder)
     panel.set_batch_summary(holder, files=0, jobs=0)
-    assert (holder.hint.text(), holder.summary.text()) == (batch_hint, empty)  # English unchanged
+    assert holder.summary.text() == empty  # English unchanged
+    # What Range / Stack means is the field's tooltip, above the file numbers found.
+    assert range_field_tip(True, [3, 9]) == batch_hint + "\nAvailable index range: 3 - 9"
+    assert range_field_tip(False) == single_hint + "\nNo valid indices detected yet"
     try:
         apply_language("zh")
         panel.sync_mode(holder)
-        assert holder.hint.text() == ZH[batch_hint]
+        assert range_field_tip(True).splitlines()[0] == ZH[batch_hint]
         panel.set_batch_summary(holder, files=0, jobs=0)
         assert holder.summary.text() == ZH[empty]
         holder.ui.gisaxsPredictMultiFilesRadioButton.setChecked(False)
         panel.sync_mode(holder)
-        assert holder.hint.text() == ZH[single_hint]
+        assert range_field_tip(False).splitlines()[0] == ZH[single_hint]
         assert holder.mode_changed.sent[-2:] == ["multi_files", "single_file"]
     finally:
         apply_language("en")

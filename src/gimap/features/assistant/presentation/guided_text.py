@@ -54,7 +54,13 @@ GISAXS_NOTE = (
 EXPORT_FOLDER = "gimap_analysis"
 _SAVE_FOLDERS: dict[str, str] = {}
 """The folder chosen last for the data of a folder, for this session."""
-IDLE_TEXT = "No AI needed: the standard procedure, each decision with its reason."
+IDLE_TEXT = ""
+"""The line under Run before a run: nothing (Run's tooltip says what the run does; the line says its progress and
+outcome)."""
+NOTES_LABEL = "Beamtime notes (optional)"
+NOTES_TIP = "αi, energy, pixel size and where the calibration is — whatever you know."
+"""The beamtime notes of the Results step: a short label; what to write in the field's tooltip (and its example
+in the placeholder)."""
 NO_FRAME_TEXT = "Open a frame first."
 """Run or Find Geometry with no frame open (the sentence Analyze uses for every action that needs a frame)."""
 RUN_MESSAGE = "Working… (finding a calibration can take a minute)"
@@ -363,8 +369,8 @@ def save_failed_toast(widget: QWidget, path, error) -> None:
 
 __all__ = [
     "ATTENTION_TITLES", "BADGE_ROLES", "CHANGE_TEXTS", "EXPORT_FOLDER", "GEOMETRY_MESSAGE", "GISAXS_NOTE", "GOOD",
-    "IDLE_TEXT", "NOTE", "NO_FRAME_TEXT", "OPTION_FIELDS", "OTHER_FRAMES_TEXT", "PEAK_COLUMNS", "RUN_ANYWAY_TEXT",
-    "RUN_MESSAGE", "RUN_TEXT", "START_MESSAGE", "STEPS", "WARN", "ScaledPixmapLabel", "answerable", "ask_save_path",
+    "IDLE_TEXT", "NOTE", "NOTES_LABEL", "NOTES_TIP", "NO_FRAME_TEXT", "OPTION_FIELDS", "OTHER_FRAMES_TEXT",
+    "PEAK_COLUMNS", "RUN_ANYWAY_TEXT", "RUN_MESSAGE", "RUN_TEXT", "START_MESSAGE", "STEPS", "WARN", "ScaledPixmapLabel", "answerable", "ask_save_path",
     "attention_title", "badge", "changes_summary", "clear_layout", "coverage_notes", "detected_technique", "label",
     "listed", "live_summary", "notes_found", "other_frames", "peak_rows", "proposed_save_path",
     "remember_save_folder", "ring_summary", "run_status", "save_failed_toast", "saved_toast", "short_orientation",

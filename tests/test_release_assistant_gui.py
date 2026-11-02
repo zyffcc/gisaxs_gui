@@ -38,8 +38,7 @@ from tests.test_assistant_providers_gui import FakeProviders, _with
 NOT_FOUND_AT = "Claude Code was not found at {cli}."
 ZH_NEW = {
     # What the Chinese table gets for this release (the integrator merges these entries).
-    INSTALL_HINT: "找不到 Claude Code。请先安装（claude.com/claude-code），或在 设置 ▸ AI 助手 中点“浏览…”选择 claude.exe"
-                  "（Claude 桌面版自带一份，位于 %LOCALAPPDATA%\\Packages\\Claude_…\\LocalCache\\Roaming\\Claude\\claude-code）。",
+    INSTALL_HINT: "找不到 Claude Code。请安装它（claude.com/claude-code），或在 设置 ▸ AI 助手 中用“浏览…”选择 claude.exe。",
     NOT_FOUND_AT: "在 {cli} 找不到 Claude Code。",
     "DeepSeek": "DeepSeek（深度求索）",
     "Qwen (Alibaba Cloud Model Studio)": "通义千问 Qwen（阿里云百炼）",
@@ -382,7 +381,11 @@ def test_claude_code_not_found_is_said_in_chinese_in_the_start_dialog_and_the_se
     _app()
     ready, text = describe_code_status({"error": INSTALL_HINT})
     assert not ready and text.startswith("找不到 Claude Code。") and "Install it" not in text
-    assert "claude.com/claude-code" in text and "%LOCALAPPDATA%\\Packages\\Claude_…" in text  # names and paths stay
+    assert "claude.com/claude-code" in text and "claude.exe" in text  # names and paths stay
+    # where the desktop app keeps one is the tooltip of Program (Settings ▸ Assistant), not part of the line
+    from src.gimap.features.assistant.presentation.code_section import PROGRAM_TIP
+
+    assert "%LOCALAPPDATA%\\Packages\\Claude_…" in PROGRAM_TIP
     assert describe_code_status({"error": "Claude Code was not found at D:/tools/claude.exe."})[1] == "在 D:/tools/claude.exe 找不到 Claude Code。"
     assert code_error_text("exit code 3: something else") == "exit code 3: something else"  # not ours: as given
 
@@ -420,7 +423,9 @@ def test_the_set_up_dialog_shows_the_whole_answer_and_fits_the_screen(tmp_path: 
     answer = page.code_section.account_label
     assert answer.text() == INSTALL_HINT
     needed = answer.heightForWidth(answer.width())
-    assert needed >= 2 * answer.fontMetrics().height()  # the hint wraps: more than the one line it used to get
+    # (The hint is shorter since the small-text review — where the desktop app keeps claude.exe is the tooltip of
+    # Program — so it may fit on one line; it must never be cut off.)
+    assert needed >= answer.fontMetrics().height()
     assert answer.height() >= needed  # every line of it
     screen = dialog.screen().availableGeometry()
     assert dialog.height() <= screen.height() and dialog.width() >= 640

@@ -1,7 +1,8 @@
 """A vertical list of process steps with their state, for workspaces that guide a flow.
 
 Each step shows a number (or a mark when done), a title and one line of what was found
-("PILATUS 2M · 1 frame", "No geometry yet"). The state colours the mark: ``pending``,
+("PILATUS 2M · 1 frame", "No geometry yet"); a longer line is cut with "…" and is whole in the step's
+tooltip, so a step never pushes the next ones down. The state colours the mark: ``pending``,
 ``ok``, ``warn``, ``error`` or ``busy``. Clicking a step emits ``stepChosen(key)``; the
 current step is highlighted.
 """
@@ -41,9 +42,11 @@ class _Step(QWidget):
         self.title.setProperty("gimapStepTitle", True)
         self.detail = QLabel("", self)
         self.detail.setProperty("gimapStepDetail", True)
-        self.detail.setWordWrap(True)
+        self.detail.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)  # a long line never widens the rail
+        self.detail.setMinimumWidth(0)
         self.detail.hide()
         self.detail.installEventFilter(self)
+        self.full_detail = ""
         text.addWidget(self.title)
         text.addWidget(self.detail)
         layout.addWidget(self.mark, 0, Qt.AlignTop)
@@ -72,19 +75,16 @@ class _Step(QWidget):
         return False
 
     def fit_detail(self) -> None:
-        """Room for every line of the wrapped detail at the width it has (a fixed-height row cuts it otherwise).
-
-        The height of the text itself: ``QLabel.heightForWidth`` includes the minimum height set here, so a
-        minimum from an earlier, narrower width would stay."""
+        """The detail on one line at the width it has: cut with "…" when longer (whole in the tooltip)."""
         detail = self.detail
-        height = 0
-        if not detail.isHidden() and detail.text():
-            margins = detail.contentsMargins()
-            room = max(1, detail.width() - margins.left() - margins.right() - 2 * detail.margin())
-            text = detail.fontMetrics().boundingRect(0, 0, room, 100_000, int(Qt.AlignLeft | Qt.TextWordWrap), detail.text())
-            height = text.height() + margins.top() + margins.bottom() + 2 * detail.margin()
-        if height != detail.minimumHeight():
-            detail.setMinimumHeight(height)
+        text = self.full_detail
+        if detail.isHidden() or not text:
+            return
+        margins = detail.contentsMargins()
+        room = max(1, detail.width() - margins.left() - margins.right() - 2 * detail.margin())
+        shown = detail.fontMetrics().elidedText(text, Qt.ElideRight, room) if detail.width() > 1 else text
+        if shown != detail.text():
+            detail.setText(shown)
 
     def restyle(self) -> None:
         for widget in (self, self.mark, self.title, self.detail):
@@ -138,6 +138,7 @@ class StepRail(QWidget):
         step.setProperty("state", state)
         step.mark.setProperty("state", state)
         step.mark.setText(MARKS.get(state, str(step.number)))
+        step.full_detail = detail
         step.detail.setText(detail)
         step.detail.setVisible(bool(detail))
         step.setToolTip(detail)
@@ -150,7 +151,7 @@ class StepRail(QWidget):
 
     def detail(self, key: str) -> str:
         step = self._steps.get(key)
-        return step.detail.text() if step is not None else ""
+        return step.full_detail if step is not None else ""  # the whole line, also when it is cut on screen
 
 
 __all__ = ["StepRail"]

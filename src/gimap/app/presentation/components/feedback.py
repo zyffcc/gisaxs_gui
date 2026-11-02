@@ -150,7 +150,7 @@ class JobStatus(QFrame):
         top = QHBoxLayout()
         self.state_label = QLabel("IDLE", self)
         self.state_label.setProperty("gimapJobState", "idle")
-        self.message_label = QLabel("Ready", self)
+        self.message_label = QLabel("", self)  # idle: the chip says it; a message is what happened
         self.message_label.setWordWrap(True)
         self.message_label.setProperty("gimapMeta", True)
         top.addWidget(self.state_label)
@@ -172,7 +172,7 @@ class JobStatus(QFrame):
         self.pause_button.toggled.connect(self._pause_toggled)
         self.cancel_button.clicked.connect(self.cancelRequested)
         self.details_button.clicked.connect(self.detailsRequested)
-        self.set_state("idle", "Ready", progress=0.0)
+        self.set_state("idle", "", progress=0.0)
         # The chip is made from the state, not from a text the language walker knows (“IDLE” is not in the
         # table): it is redrawn after each switch of the language, also one made after this was built.
         language_changed().connect(self._language_changed)

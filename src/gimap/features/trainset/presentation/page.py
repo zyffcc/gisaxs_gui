@@ -87,13 +87,12 @@ class TrainsetBuildPage(
         self._bind_shell()
 
     def refresh_language(self) -> None:
-        """After a switch of the interface language: compose the step lines, the badge, the hint, the
-        design tabs and every run-time text again in the new language (the walker knows exact keys only)."""
+        """After a switch of the interface language: compose the step lines, the badge, the design tabs
+        and every run-time text again in the new language (the walker knows exact keys only)."""
         for index in range(len(self.STEPS)):
             self._show_step(index)
         self.validation_badge.setText(tr(self._validation_text))
         for index, ready in enumerate(self._design_stage_ready):
             self.set_design_stage_ready(index, ready)
-        self._show_action_hint(max(0, self.stack.currentIndex()))
         self._show_pipeline_tab()
         self.texts.refresh()

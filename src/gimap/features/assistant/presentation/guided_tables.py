@@ -43,9 +43,9 @@ PEAK_HEADERS = ("q", "d", "FWHM", "trust", "L", "OOP/IP")
 ``PEAK_LEGEND`` the units under the table (with units in the headers the table is wider than the Results tab)."""
 PEAK_NUMBERS = (0, 1, 2, 4)
 """Columns of the peak table that hold numbers (right-aligned)."""
-PEAK_LEGEND = ("q and FWHM in Å⁻¹, d in Å, L (Scherrer size, a lower bound) in nm. OOP: out-of-plane (χ ≈ 0°), "
-               "IP: in-plane (χ ≈ ±90°), *: one sector only. Hover a cell for the whole sentence; the saved report "
-               "has the full table.")
+PEAK_LEGEND = "q, FWHM in Å⁻¹ · d in Å · L in nm (Scherrer, a lower bound)"
+"""The units under the peak table, needed at every reading (OOP / IP / * are explained in their column's tooltip;
+that a cell's tooltip has its whole sentence and the saved report the full table: the Peaks title's tooltip)."""
 EDGE_VERDICT = "at the end of the data: check"
 EDGE_NOTE = ("The peak lies within 1.5 widths of the end of the measured q range: its shape and position may be "
              "cut off. Look at I(q) before using it.")
@@ -180,8 +180,8 @@ def coverage_notes(rings) -> list[tuple[str, str]]:
     if wedge:
         where = _ranges(wedge, lambda ring: f"< {ring['missing'][0][1]:.0f}°")
         notes.append((
-            trf("Missing wedge (red dashed next to qz): |χ| {where} Å⁻¹ is not measured, so orientations closest "
-                "to the surface normal are missing and Hermans f is biased low.", where=where),
+            trf("Missing wedge (red dashed next to qz): |χ| {where} Å⁻¹ not measured — Hermans f is biased low.",
+                where=where),
             "\n".join(words(note) for ring in wedge for note in ring.get("notes") or () if "missing wedge" in note),
         ))
     return notes
@@ -196,8 +196,9 @@ def ring_summary(ring: dict) -> tuple[str, str]:
     if texts is not None:
         random, f = ring.get("herman_isotropic"), texts["f"]
         if random is not None and round(float(random), texts["decimals"]) != 0:  # f_iso unless 0 at those decimals
-            return trf("Ring q ≈ {q} Å⁻¹: f = {f} (a random ring would give {random} here) — {texture}",
-                       q=q, f=f, random=texts["iso"], texture=texture), detail
+            why = trf("A random ring would give f = {random} here.", random=texts["iso"])
+            return trf("Ring q ≈ {q} Å⁻¹: f = {f} (random ring: {random}) — {texture}",
+                       q=q, f=f, random=texts["iso"], texture=texture), "\n".join(part for part in (why, detail) if part)
         return trf("Ring q ≈ {q} Å⁻¹: f = {f} — {texture}", q=q, f=f, texture=texture), detail
     covered = ring.get("weighted_coverage")
     if covered is not None and "is measured at this q" in str(ring.get("reason") or ""):

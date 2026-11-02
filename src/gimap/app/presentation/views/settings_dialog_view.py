@@ -88,7 +88,15 @@ class SettingsDialogView(object):
         font_row.addWidget(self.font_size_spin)
         font_row.addWidget(self.font_reset_button)
         font_row.addStretch(1)
-        form.addRow("Font size", font_row)
+        font_label = QtWidgets.QLabel("Font size", page)
+        for widget in (font_label, self.font_size_spin):
+            widget.setToolTip(
+                "The interface follows the display scaling of the operating system "
+                "(for example 125 % or 150 % in Windows), so it looks the same on "
+                "every monitor. Use the font size for larger or smaller text; "
+                "Ctrl + / Ctrl − / Ctrl 0 do the same from anywhere."
+            )
+        form.addRow(font_label, font_row)
         self.language_combo = QtWidgets.QComboBox(page)
         self.language_combo.setObjectName("languageCombo")
         self.language_combo.setToolTip(
@@ -102,39 +110,36 @@ class SettingsDialogView(object):
         language_row.addStretch(1)
         form.addRow("Language", language_row)
         layout.addLayout(form)
-        layout.addWidget(_hint(page, (
-            "The interface follows the display scaling of the operating system "
-            "(for example 125 % or 150 % in Windows), so it looks the same on "
-            "every monitor. Use the font size for larger or smaller text; "
-            "Ctrl + / Ctrl − / Ctrl 0 do the same from anywhere."
-        )))
         layout.addStretch(1)
 
         # Analyze ----------------------------------------------------------
-        page, layout = _page(self.pages, "Analyze", "Defaults for opening detector frames.")
+        page, layout = _page(self.pages, "Analyze", "")
         self.header_center_check = QtWidgets.QCheckBox(
             "Use the beam centre written in the file header", page
         )
         self.header_center_check.setObjectName("headerBeamCenterCheck")
-        layout.addWidget(self.header_center_check)
-        layout.addWidget(_hint(page, (
+        self.header_center_check.setToolTip(
             "Off (recommended): every new frame keeps the beam centre of the "
             "instrument profile — the one you calibrated — even if the CBF "
             "(Beam_xy) or NeXus header says otherwise; many beamlines never "
             "update the header. On: a centre found in the header replaces the "
             "profile centre for that file. Either way the centre can be changed "
             "in Analyze at any time."
-        )))
+        )
+        layout.addWidget(self.header_center_check)
+        layout.addWidget(_hint(page, "Off (recommended): new frames keep the beam centre of your calibrated instrument profile."))
         fit_form = QtWidgets.QFormLayout()
         fit_form.setHorizontalSpacing(16)
         self.fit_side_combo = QtWidgets.QComboBox(page)
         self.fit_side_combo.setObjectName("fitSideCombo")
-        fit_form.addRow("Send horizontal cut to Fitting", self.fit_side_combo)
+        fit_label = QtWidgets.QLabel("Send horizontal cut to Fitting", page)
+        for widget in (fit_label, self.fit_side_combo):
+            widget.setToolTip(
+                "Which half of the horizontal cut Analyze ▸ Send to Fitting passes on. The default keeps "
+                "both halves as |qy| in two colours, so an asymmetry stays visible."
+            )
+        fit_form.addRow(fit_label, self.fit_side_combo)
         layout.addLayout(fit_form)
-        layout.addWidget(_hint(page, (
-            "Which half of the horizontal cut Analyze ▸ Send to Fitting passes on. The default keeps "
-            "both halves as |qy| in two colours, so an asymmetry stays visible."
-        )))
         layout.addStretch(1)
 
         # Data -------------------------------------------------------------
@@ -151,12 +156,6 @@ class SettingsDialogView(object):
         data_form.setHorizontalSpacing(16)
         data_form.addRow("User data folder", folder_row)
         layout.addLayout(data_form)
-        layout.addWidget(_hint(page, (
-            "settings.json (all settings and preferences), instrument_profiles.json, "
-            "session.json and model_parameters.json live here, outside the "
-            "program folder, so updates never overwrite them. Set the GIMAP_HOME "
-            "environment variable to use another folder."
-        )))
         self.migration_label = _hint(page, "")
         layout.addWidget(self.migration_label)
         reset_row = QtWidgets.QHBoxLayout()

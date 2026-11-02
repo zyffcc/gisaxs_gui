@@ -56,10 +56,14 @@ BRAINS = (
     (BACKEND_API, "Claude API — API key, billed per token"),
     (BACKEND_PROVIDER, "Other AI provider — DeepSeek, Qwen, OpenAI, Kimi, GLM, Gemini, Ollama … (Set Up AI…)"),
 )
-PRIVACY_NOTE = (
-    "The frame's status and reduced curves are sent to the AI as numbers; the detector file is "
-    "not (only a small q-map image, if allowed above)."
+PRIVACY_NOTE = "Sent to the AI: the frame's status and reduced curves as numbers, never the detector file."
+"""What leaves the computer, after the brain's status on the same line (kept on screen)."""
+START_TIP = (
+    "The AI operates the Analyze tools on this frame while you watch each step, then reports every result "
+    "ticked above; what cannot be determined is reported with the reason (e.g. no signal above the noise)."
 )
+"""What a run does: the tooltip of Start (after “Open and analyse a frame in Analyze first.” with no frame)."""
+NO_FRAME_TIP = "Open and analyse a frame in Analyze first."
 
 
 def _muted(text: str, parent: QWidget) -> QLabel:
@@ -90,18 +94,18 @@ class AssistantStartDialog(QDialog):
         self._configure = configure
         self._has_frame = status.get("file") is not None
         layout = QVBoxLayout(self)
-        frame = status.get("file") or tr("no frame")
-        if status.get("file") and status.get("geometry") is None:
-            kind = tr("NO GEOMETRY YET")
+        if not self._has_frame:
+            layout.addWidget(QLabel(tr("No frame open — open one in Analyze first."), self))
         else:
-            measurement = status.get("measurement")
-            kind = str(measurement).upper() if measurement else tr("NOT ANALYSED")
-        layout.addWidget(QLabel(f"<b>{html.escape(frame)}</b> · {html.escape(kind)}", self))
-        explanation = [tr(
-            "The AI operates the Analyze tools on this frame while you watch each step, then "
-            "reports every result you tick below. What cannot be determined is reported with the "
-            "reason (e.g. no signal above the noise)."
-        )]
+            frame = status.get("file") or tr("no frame")
+            if status.get("file") and status.get("geometry") is None:
+                kind = tr("NO GEOMETRY YET")
+            else:
+                measurement = status.get("measurement")
+                kind = str(measurement).upper() if measurement else tr("NOT ANALYSED")
+            layout.addWidget(QLabel(f"<b>{html.escape(frame)}</b> · {html.escape(kind)}", self))
+        self._start_tip = tr(START_TIP) if self._has_frame else f"{tr(NO_FRAME_TIP)} {tr(START_TIP)}"
+        explanation = []
         if status.get("file") and status.get("geometry") is None:
             explanation.append(tr(
                 "This frame has no geometry yet: the AI looks for calibration files (standard "
@@ -112,7 +116,8 @@ class AssistantStartDialog(QDialog):
         if gisaxs:
             explanation.append(tr("GISAXS: the horizontal cut at the Yoneda band, its halves, the length scale 2π/q* "
                                   "and a fit."))
-        layout.addWidget(_muted(" ".join(explanation), self))
+        if explanation:  # what is missing (the geometry) stays on screen; what a run does is the tooltip of Start
+            layout.addWidget(_muted(" ".join(explanation), self))
 
         goals_box = QGroupBox(tr("Results"), self)
         goals_layout = QVBoxLayout(goals_box)
@@ -167,12 +172,14 @@ class AssistantStartDialog(QDialog):
         self.brain_combo.currentIndexChanged.connect(self._brain_chosen)
         options.addRow(tr("Brain"), self.brain_combo)
         permission_row = QVBoxLayout()
-        self.preview_radio = QRadioButton(tr(
-            "Preview first — the AI's changes come back as cards: look at the picture, then apply or dismiss"
-        ), self)
+        # the same words as Settings ▸ Assistant ▸ Permissions
+        self.preview_radio = QRadioButton(tr("Preview first — changes come back as cards to apply"), self)
         self.preview_radio.setObjectName("assistantPermissionPreview")
-        self.confirm_radio = QRadioButton(tr("Ask me before writing files or changing corrections"), self)
-        self.auto_radio = QRadioButton(tr("Fully automatic (everything is logged and can be undone)"), self)
+        self.preview_radio.setToolTip(tr(
+            "The AI's changes come back as cards: look at the picture, then apply or dismiss each one."
+        ))
+        self.confirm_radio = QRadioButton(tr("Ask before writing files or changing corrections"), self)
+        self.auto_radio = QRadioButton(tr("Fully automatic — everything logged and undoable"), self)
         group = QButtonGroup(self)
         radios = {PERMISSION_PREVIEW: self.preview_radio, PERMISSION_CONFIRM: self.confirm_radio, PERMISSION_AUTO: self.auto_radio}
         for radio in radios.values():
@@ -180,7 +187,11 @@ class AssistantStartDialog(QDialog):
             permission_row.addWidget(radio)
         radios.get(preferences.read(settings, "permission"), self.preview_radio).setChecked(True)
         options.addRow(tr("Permissions"), permission_row)
-        self.images_check = QCheckBox(tr("Let the AI see a small image of the q map (qualitative only; Claude brains)"), self)
+        self.images_check = QCheckBox(tr("Send a small q-map image (qualitative; Claude only)"), self)
+        self.images_check.setToolTip(tr(
+            "The AI gets a small picture of the q map to judge it by eye; every number still comes from the "
+            "tools. Only the Claude brains read images."
+        ))
         self.images_check.setChecked(bool(preferences.read(settings, "allow_images")))
         options.addRow(tr("Images"), self.images_check)
         self.language_combo = QComboBox(self)
@@ -230,7 +241,7 @@ class AssistantStartDialog(QDialog):
     def set_status(self, ready: bool, text: str) -> None:
         """Whether the chosen brain can start, and what to tell the person about it."""
         self._ready = bool(ready)
-        self.credentials_label.setText(f"{text} {tr(PRIVACY_NOTE)}".strip())
+        self.credentials_label.setText(f"{text} — {tr(PRIVACY_NOTE)}" if text else tr(PRIVACY_NOTE))
         self._sync_start()
         if self.isVisible():  # a longer answer (e.g. where to find Claude Code) needs more height, not squeezed rows
             QTimer.singleShot(0, self._fit_height)
@@ -243,8 +254,7 @@ class AssistantStartDialog(QDialog):
     def _sync_start(self, *_args) -> None:
         chosen = any(check.isChecked() for check in self.goal_checks.values())
         self.start_button.setEnabled(self._ready and self._has_frame and chosen)
-        if not self._has_frame:
-            self.start_button.setToolTip(tr("Open and analyse a frame in Analyze first."))
+        self.start_button.setToolTip(self._start_tip)
 
     def _set_up(self) -> None:
         if self._configure is not None:

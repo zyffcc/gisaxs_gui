@@ -40,6 +40,9 @@ class SemInstanceView:
         ):
             self.detection_method_combo.addItem(text, value)
         self.detection_method_combo.setCurrentIndex(1)
+        self.detection_method_combo.setToolTip(
+            "Threshold / watershed works on the stored image intensities (no rescaling)."
+        )
         self.detection_section.add_widget(self.detection_method_combo)
 
         self.ai_resources_widget = QWidget(self.detection_section)

@@ -214,9 +214,10 @@ class BatchExportView:
         for row, item in enumerate(DATA_OUTPUTS, start=1):
             self._output_row(data, row, item, self.data_group)
         curves = QVBoxLayout()
-        curves.addWidget(_muted("Curves to save (tables and per-frame curves):", self.data_group))
+        curves.addWidget(_muted("Curves to save:", self.data_group))
         self.curve_list = QListWidget(self.data_group)
         self.curve_list.setObjectName("batchCurveList")
+        self.curve_list.setToolTip("For the tables of all frames and the per-frame curves")
         self.curve_list.setSelectionMode(QAbstractItemView.NoSelection)
         self.curve_list.setMaximumHeight(CURVE_LIST_HEIGHT)  # as tall as its rows, up to this (``batch_dialog.py``)
         curves.addWidget(self.curve_list)
@@ -271,7 +272,8 @@ class BatchExportView:
             self.halves_combo.addItem(text, key)
         self.halves_combo.setToolTip(
             "A fit takes one curve on |qy|: the mean of the two halves of the horizontal cut, or one half — "
-            "never both halves together. Fitting ▸ In-situ series starts with this choice."
+            "never both halves together. Fitting ▸ In-situ series starts with this choice. Used when the curve for "
+            "Fitting is saved (Data, above) or a particle model is fitted (below)."
         )
         halves_row.addWidget(self.halves_caption)
         halves_row.addWidget(self.halves_combo)
@@ -432,8 +434,9 @@ class BatchExportView:
         bottom.addWidget(self.folder_note, 3, 1)
         self.summary_caption = QLabel("Summary", self)
         bottom.addWidget(self.summary_caption, 4, 0, Qt.AlignRight | Qt.AlignTop)
-        self.summary_label = _muted("", self)  # how many frames, which curves, which cut, how big, how long
+        self.summary_label = _muted("", self)  # how many frames, which curves, how big, how long (the cut: its row)
         self.summary_label.setObjectName("batchSummary")
+        self.summary_label.setToolTip("README.txt in the folder says what each file is")
         self.summary_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         bottom.addWidget(self.summary_label, 4, 1)
         bottom.setColumnStretch(1, 1)

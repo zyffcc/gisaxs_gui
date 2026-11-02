@@ -29,11 +29,16 @@ CHI_PROFILES = ("azimuthal", "sector_chi")
 BOX_COLOR = "#facc15"
 MASK_OUTLINE = "#f43f5e"
 VIEW_DETECTOR, VIEW_Q_MAP, VIEW_CAKE = range(3)
-NO_GEOMETRY_TEXT = "No curves yet: the frame needs a geometry (step 2)"
+NO_GEOMETRY_TEXT = "\u00a0"
+"""Both curve plots of a frame without geometry: bare, with nothing to say (no ticks either). The banner over the
+image and the Geometry step say what the frame lacks and what to do (as ``NO_FRAME_TEXT`` of the view before the
+first file)."""
 NOT_ANALYSED_TEXT = "No curves: this frame could not be analysed"
-"""What both curve plots say while they have nothing to draw: a frame without geometry, a frame that could not
-be read or reduced (``CurvePlot.set_empty_text``: shown in the interface language). Before the first file:
-``NO_FRAME_TEXT`` of the view."""
+"""What both curve plots say for a frame that could not be read or reduced (``CurvePlot.set_empty_text``: shown in
+the interface language): a failure is said where the curves would be."""
+TOP_TITLE_GIWAXS = "I(q) of the regions"
+TOP_TIP_GIWAXS = "I(q) of the regions — drag the purple band to move the ring of I(χ)"
+"""The upper plot of a GIWAXS frame: a short title, how to move the ring of I(χ) in its tooltip."""
 PLOT_SIDES ={"both_abs": "folded", "mean": "folded", "positive": "positive", "negative": "negative"}
 """The halves chosen for Fitting (Cuts step) → what the upper plot of a GISAXS frame shows first."""
 
@@ -94,8 +99,8 @@ class DisplayMixin:
     def _empty_views(self, sentence: str) -> None:
         """No frame is shown: no image, no mask or region outlines, no curves (forgotten too: a theme or Log
         change does not draw them again), no axis names of the frame before, no ring band, no banner. Both
-        plots say ``sentence`` (English, a key of the table) instead of an empty grid with ticks that mean
-        nothing."""
+        plots say ``sentence`` (English, a key of the table; a blank: nothing) instead of an empty grid with
+        ticks that mean nothing."""
         self.detector_view.clear()
         self.shape_layer.clear()
         for plot in (self.top_plot, self.bottom_plot):
@@ -253,7 +258,7 @@ class DisplayMixin:
             bottom.set_title(tr("I(qz) · columns {columns}").format(columns=pixel_range(*vertical.region["columns"])))
             bottom.title_label.setToolTip(lines[-1])
             bottom.set_labels(vertical.x_label, vertical.y_label)
-            bottom.set_curves([("I(qz)", vertical.x, vertical.intensity)])
+            bottom.set_curves([("I(qz)", vertical.x, vertical.intensity)], legend=[False])  # the title names it
             return
         self._show_giwaxs_curves(analysis)
 
@@ -292,7 +297,8 @@ class DisplayMixin:
         if reduction.curve("box_q") is not None:
             q_keys.append("box_q")
         family = self._region_curves(reduction, q_keys)
-        top.set_title("I(q) of the regions — drag the purple band to move the ring of I(χ)")
+        top.set_title(TOP_TITLE_GIWAXS)
+        top.title_label.setToolTip(tr(TOP_TIP_GIWAXS))
         x_label = family[0][1].x_label if family else "q (Å⁻¹)"
         top.set_labels(x_label, "I (counts/pixel)")
         top.set_curves(
@@ -350,7 +356,8 @@ class DisplayMixin:
             return
         bottom.set_title(curve_title(curve.title))
         bottom.set_labels(curve.x_label, curve.y_label)
-        bottom.set_curves([(curve.title.split(",")[0], curve.x, curve.intensity)], [BOX_COLOR])  # a key: translated
+        bottom.set_curves([(curve.title.split(",")[0], curve.x, curve.intensity)], [BOX_COLOR],  # a key: translated
+                          legend=[False])  # one curve, named by the title
         self._plot_keys["bottom"] = [curve.key]
 
     # -- q ↔ 2θ for the I(χ) window ------------------------------------------------------
@@ -388,6 +395,6 @@ class DisplayMixin:
 
 
 __all__ = [
-    "DisplayMixin", "LOWER_PROFILES", "NOT_ANALYSED_TEXT", "NO_GEOMETRY_TEXT", "PLOT_SIDES", "VIEW_CAKE", "VIEW_DETECTOR",
-    "VIEW_Q_MAP", "cake_title", "cut_lines", "pixel_range",
+    "DisplayMixin", "LOWER_PROFILES", "NOT_ANALYSED_TEXT", "NO_GEOMETRY_TEXT", "PLOT_SIDES", "TOP_TIP_GIWAXS",
+    "TOP_TITLE_GIWAXS", "VIEW_CAKE", "VIEW_DETECTOR", "VIEW_Q_MAP", "cake_title", "cut_lines", "pixel_range",
 ]

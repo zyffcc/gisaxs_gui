@@ -23,6 +23,14 @@ SUMMED_LOCKED = {
     "watch": "Analyze is watching a folder: stop watching first.",
 }
 """Why the frames listed cannot be replaced by another workspace's now (``summed_locked``)."""
+FRAMES_IMPORTED = "{n} frames imported"
+FRAME_IMPORTED = "1 frame imported"
+"""Under the frame list: how many frames it holds (nothing while it is empty: the Data step says what to open)."""
+
+
+def imported_text(count: int) -> str:
+    """“1 frame imported”, “40 frames imported”; empty for none."""
+    return "" if count <= 0 else tr(FRAME_IMPORTED) if count == 1 else trf(FRAMES_IMPORTED, n=count)
 
 
 class _ImportSignals(QObject):
@@ -64,10 +72,14 @@ class FrameImportMixin:
         with QSignalBlocker(self.frame_list.selectionModel()):
             self.frame_listing_model.reset_sources(spans)
             self._sync_frame_list()
-        count = self.frame_listing_model.rowCount()
-        self.frames_imported_label.setText(trf("{n} frames imported", n=count))
+        self._show_imported()
         self.choose_frames_button.setEnabled(bool(model.state.files) and not self._importing)
         self._show_file_position()
+
+    def _show_imported(self):
+        text = imported_text(self.frame_listing_model.rowCount())
+        self.frames_imported_label.setText(text)
+        self.frames_imported_label.setVisible(bool(text))
 
     def _frame_list_model_changed(self, *_args):
         self.refresh_frame_list()
@@ -350,7 +362,7 @@ class FrameImportMixin:
 
     def _frame_import_language(self):
         self.frame_listing_model.language_changed()
-        self.frames_imported_label.setText(trf("{n} frames imported", n=self.frame_listing_model.rowCount()))
+        self._show_imported()
         if self._importing:
             if self._import_progress is None:
                 self.import_status_label.setText(tr("Inspecting detector sources…"))

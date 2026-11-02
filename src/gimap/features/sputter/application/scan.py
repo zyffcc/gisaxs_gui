@@ -47,22 +47,23 @@ SOURCE_TEXT = {
     "folder": "as last used for this folder",
     "preset": "from preset {name}",
     "last": "last used — please check",
-    "missing": "not in the files — please enter",
+    "missing": "not in the files",
     "assumed": "not in the files: 0 assumed — please check",
-    "auto": "empty: estimated from the frames",
+    "auto": "estimated from the frames",
     "entered": "entered",
 }
+"""One line under each field (the page says the rest in its tooltip; "please check" ones as a warning)."""
+CHECK_SOURCES = ("last", "assumed")
+"""Sources whose value is a guess the user should check (shown as a warning)."""
 HINT_TEXT = {
-    "header": "the file header suggests {energy} keV",
-    "nexus": "the scan's NeXus file suggests {energy} keV",
-    "flat_field": ("the flat-field file name says E = {energy} keV: the detector's calibration energy, not "
-                   "necessarily the beam's"),
+    "header": "⚠ header says {energy} keV",
+    "nexus": "⚠ NeXus file says {energy} keV",
+    "flat_field": "⚠ flat-field file name: E = {energy} keV",
 }
-"""What the files say about the energy, beside the value used (by ``ScanInfo.energy_hint_source``)."""
+"""What the files say about the energy, beside the value used (by ``ScanInfo.energy_hint_source``): a warning,
+the page's tooltip says why (a flat-field file name gives the detector's calibration energy, not the beam's)."""
 FILLING_HINTS = ("header", "nexus")
 """Energy hints that fill the field; a flat-field file name is only shown beside it."""
-SUMMARY_HINT = {"header": "header: {energy} keV", "nexus": "NeXus file: {energy} keV",
-                "flat_field": "flat field: E = {energy} keV"}
 NO_FRAMES = "No CBF frames in this folder."
 
 
@@ -241,6 +242,6 @@ def add_preset(memory: dict, preset: dict) -> dict:
     return memory
 
 
-__all__ = ["FILLING_HINTS", "GROUPS", "GROUP_KEYS", "HINT_TEXT", "NO_FRAMES", "Prefill", "SOURCE_TEXT", "SUMMARY_HINT",
+__all__ = ["CHECK_SOURCES", "FILLING_HINTS", "GROUPS", "GROUP_KEYS", "HINT_TEXT", "NO_FRAMES", "Prefill", "SOURCE_TEXT",
            "ScanInfo", "Source", "add_preset", "energy_kev", "folder_key", "make_preset", "matching_preset", "prefill",
            "remember"]

@@ -79,10 +79,10 @@ Open Folder… and Open Files… links), or ask the AI. Files opened before are 
 **1. Open the frame.** On the Start page press **Open Files…** and choose `S121_MAI_A2_00841.tif`
 (or drag the file onto the window). **Analyze** opens. Check:
 
-- the command bar names the file and its size, `2048×2048 px`;
+- the command bar names the file, and the step **Data** its size, `2048×2048 px`;
 - the step **Data** is ✓ and **Mask & corrections** says how many pixels are left out
   (`0.0058 % of the pixels left out`: isolated hot and dead pixels);
-- **Geometry** shows **!** *No geometry yet*, and **Cuts** says *Needs a geometry*;
+- **Geometry** shows **!** *No geometry yet*;
 - a yellow banner says *No instrument profile for this detector (2048×2048)* and offers
   **Find Calibration Automatically**, **Enter Geometry…** and **Calibrate…**.
 
@@ -130,7 +130,7 @@ orientation; the checks follow further down.*
 **5. Send to Fitting.** Press **Send to Fitting**. GIMaP writes
 `gimap_analysis/S121_MAI_A2_00841_fit_input.dat` next to the frame (columns q, I, σ, pixels; q in
 Å⁻¹; the `#` header lines say where the points come from) and opens **Fitting ▸ Single analysis**
-with it. The step **Curve** says `S121_MAI_A2_00841_fit_input.dat · 2050 points fitted`.
+with it. The step **Curve** says `2050 points fitted` (the file's name is in the command bar).
 
 For GIWAXS, I(q) is what is sent. Fitting's models are particle models (chapter 6), and a note at the
 top of the Fitting page says so: they are particle form factors, not peaks, so for crystalline peaks the
@@ -183,9 +183,9 @@ orange (section 4.1).
 |---|---|---|
 | **Horizontal cut** | At the Yoneda band, rows 605–609 | The orange band on the image lies on the Yoneda band |
 | Beam centre | x moved to the symmetry axis, x = 597.26 px | The documented direct beam is x = 597.1 px |
-| Halves | *Mean of both halves*, with the reason | Both halves agree; otherwise the usable one is taken |
-| **Length scale 2π/q\*** | *2π/q\* = 55.6 nm at a shoulder of the cut (\|qy\| = 0.0113 Å⁻¹, no resolved peak): a length scale, not necessarily the particle spacing; check it with a model fit.* | It is not the particle spacing: near the documented 53.6 nm by coincidence (a BornAgain simulation of the same particles without interference shows a shoulder too) |
-| **Fit of I(qy)** | A table of solutions: model, R, h, D (nm), χ²/N; a value at a search bound is marked ⚠ (*500 ⚠*) and listed under the table (*1: D at its upper bound, σh/h at its upper bound; …*) | Several models may fit about equally well |
+| Halves | *Halves: Mean of both halves*, the reason in its tooltip | Both halves agree; otherwise the usable one is taken |
+| **Length scale 2π/q\*** | *2π/q\* = 55.6 nm at a shoulder of the cut (\|qy\| = 0.0113 Å⁻¹, no resolved peak): not necessarily the particle spacing.* | It is not the particle spacing: near the documented 53.6 nm by coincidence (a BornAgain simulation of the same particles without interference shows a shoulder too) |
+| **Fit of I(qy)** | A table of solutions: model, R, h, D (nm), χ²/N; a value at a search bound is marked ⚠ (*500 ⚠*) and named under the table in a warning (*⚠ Not determined by the curve (at a search bound) — 1: D, σh/h; …*; which bound: its tooltip) | Several models may fit about equally well |
 
 Here the Results tab also shows *1 point(s) to check*: **Model choice**. The first-ranked solution, a
 random cylinder (χ²/N 1.26), has D at its upper bound (500 nm), and the second also has a value at a
@@ -451,8 +451,14 @@ In Analyze and Fitting each step on the left says where it stands, with one line
 | … | Running |
 | a number | Not done yet |
 
+A line longer than the step list is wide is cut with “…”; rest the pointer on the step for the whole line.
+
 Click a step to see its controls. The controls used most are shown; rare options are folded under a
 heading you can open.
+
+The screen keeps what you need each time you look: states, results, failures, missing or guessed values and
+where a value comes from. How to use a control and what a section is for are in tooltips: rest the pointer on
+the control, or on the title of the section (the pointer shows a question mark where a title has one).
 
 When Analyze's command bar is narrow, the long button texts are shortened (*Run Analysis*, *Batch…*,
 *Fitting*); the full text stays in the tooltip.
@@ -798,7 +804,8 @@ Start page (*Calibrate the detector*).
 6. Click **Auto Calibration**. The calculation runs in the background; **Cancel** stops it after the
    current step.
 7. Review the result: beam centre, distance, matched rings, RMS residual, confidence and warning of
-   the **Selected solution**, and the **Candidate solutions** below. Selecting a candidate draws its
+   the **Selected solution** (a warning is marked ⚠; its tooltip says why it matters), and the
+   **Candidate solutions** below. The line above the preview names only the image and its size. Selecting a candidate draws its
    rings. **Clean image** temporarily hides all overlays, **Reset view** restores the complete
    detector mosaic after zooming or panning, and **Focus image** hides the result panels to give tall
    WAXS mosaics more room. The horizontal divider can be dragged.
@@ -1355,8 +1362,9 @@ The solutions are ranked by a robust misfit, the mean Huber loss of the σ-norma
 that a few outlying points do not decide the order. The table's χ²/N is the mean of r² over
 the points, with no correction for the number of free values (unlike Fitting's χ²ᵣ). A non-linear value
 that ended on a bound of its search range (for example D at 500 nm) is not determined by the curve: the
-table marks it ⚠ and the line under the table names it by rank (*1: D at its upper bound, …*), as do
-**Fit details** and the report's note column. Among the solutions within 10 % of the first solution's χ²/N, the run reports the
+table marks it ⚠ and a warning under the table names it by rank (*⚠ Not determined by the curve (at a search
+bound) — 1: D, …*; which bound, *D at its upper bound*, is in its tooltip), as do **Fit details** and the report's
+note column. Among the solutions within 10 % of the first solution's χ²/N, the run reports the
 best-ranked one that converged with no non-linear value at a bound; the table selects it, and the line under the
 table says so when it is not the first. When none of them is free of a bound, the first is reported
 and a point to check (**Fit**) says that it sits at a bound. The amplitudes, the background and the
@@ -1386,7 +1394,8 @@ open for later reports) follows the selected row:
 
 - a peak: the points it was fitted to, with the Gaussian and its local linear background; q, d and
   FWHM with errors; height, area, background and slope; S/N, χ²ᵣ, the fit window, the Scherrer
-  size, how peaks are found, and where the ring is measured, shadowed or missing on the q map;
+  size, and where the ring is measured, shadowed or missing on the q map (how the peak was fitted and how
+  peaks are found, with the thresholds of the run, is the tooltip of **Fit details**);
 - a model solution: every parameter (R, σR/R, h, D, σD/D, weight, amplitude, background,
   resolution), χ²/N, convergence, evaluations and time, the q range, the start of D, the algorithm,
   its warnings, and **Show in Fitting**, which opens the curve in Fitting with that solution drawn.
@@ -1533,8 +1542,9 @@ page opens the folder and then the dialog, once its first frame is analysed.
   other data is marked so) and **In a subfolder named “`<name>`”** (on by default). The line below says
   where the files go; **Export N Frames** starts the batch.
 
-**Before it starts**, the **Summary** says how many frames, which curves, which cut and halves, and about
-how big and how long the export will be. While the frame on screen is read again without the sum of the
+**Before it starts**, the **Summary** says how many frames, which curves and halves, and about
+how big and how long the export will be (the cut is said by the Cuts row; what each file is, by `README.txt` in the
+folder). While the frame on screen is read again without the sum of the
 automatic analysis, the Cuts row says so and Export waits. A folder that cannot be written is said at
 once, with Export off. When the folder holds an earlier export of the same data (or curves for Fitting),
 Export asks **Replace**, **Keep Both in a New Subfolder** or **Cancel**; the question names what Replace
@@ -1757,9 +1767,13 @@ The page is laid out like Analyze: the steps on the left, each saying where it s
 
 **1. Curve**
 
-- The file, its points, its q range in nm⁻¹ and Å⁻¹, the unit its q was read in and where that came from (*q read in
-  Å⁻¹: stated in the file*, or *… not stated in the file: the setting for files without one*), and whether σ is in
-  the file. The fit weights each point by 1/σ; without σ every point gets the same relative weight.
+- The card: its points, its q range in nm⁻¹ (in Å⁻¹ in the card's tooltip), *σ from the file*, and the unit its q
+  was read in and where that came from (*q read in Å⁻¹: stated in the file*, or *… not stated in the file: the
+  setting for files without one*). The fit weights each point by 1/σ; without σ every point gets the same relative
+  weight, and a warning says so in the card and again in the Fit step (*⚠ No σ in the file: every point weighted
+  alike*; hover for what that means for each method).
+- How to set the fitting range, what Add Particle offers, what each method does and how to fix values are the
+  tooltips of those controls; the steps themselves only say where things stand.
 - **Halves of the cut**, for a cut through the beam (q < 0 and q > 0): **Mean of both halves** (averaged where
   both halves were measured; across a gap of one half, and beyond its end, the other half alone — never
   interpolated), **Both halves on |q|**, **q > 0 half** or **q < 0 half**. *Predict parameters*, *Find the
@@ -1793,8 +1807,8 @@ The page is laid out like Analyze: the steps on the left, each saying where it s
   the peak. The model as a formula, and how **σD/D** relates to the usual paracrystal spread, are in Physics and
   Methods, [section 9.2](Physics_Manual.md#92-the-intensity-model) and
   [section 9.5](Physics_Manual.md#95-structure-factor-one-dimensional-paracrystal).
-- After a fit every value shows its ± error, or *at a bound* when it stopped at the edge of its range and was
-  not resolved (section 6.3, *Values at the edge of their range*).
+- After a fit every value shows its ± error, or *⚠ at a bound* (orange) when it stopped at the edge of its range and
+  was not resolved (section 6.3, *Values at the edge of their range*).
 
 A new installation starts with a neutral model, not with the values of an earlier fit. Set the particle and its
 sizes for your sample, or let the Fit step find them.
@@ -1966,7 +1980,7 @@ describes.
 ![The 1D Predict window](manual_images/en/13_1d_predict.png)
 
 *The candidates of every curve on the left (with their Stage); the selected candidate's fit and parameters on the right.
-The second line under the buttons, “q in Å⁻¹, as their header states: …”, says how the three Analyze curve files
+The second line under the buttons, “q in Å⁻¹, as their header states”, says how the three Analyze curve files
 (`_fit_input.dat`) are read, with no unit set by hand; **Curve / side** repeats it after each name (“· Å⁻¹”).*
 
 **1D Predict** is the experimental neural model (Workflow V5). It proposes compositions and parameters for a curve
@@ -2071,8 +2085,9 @@ Every curve of a folder, fitted with the model of Single analysis. The command b
 - **Halves of the cut**: every frame is fitted on one curve — **Mean of both halves**, **q > 0 half** or **q < 0
   half**, never on both halves together. Until you choose, it takes the halves Analyze sent the curves with, else
   those of Single analysis unless they are both on |q|, else the mean; the line under it says where the value comes
-  from. Curves with q on one side only have no halves, and the box says so. A frame without points on the chosen
-  half fails with *No points on the q > 0 half* (or *q < 0*); it is never fitted on the other half instead.
+  from. Curves with q on one side only have no halves: the box is switched off, and its tooltip says why. A frame
+  without points on the chosen half fails with *No points on the q > 0 half* (or *q < 0*); it is never fitted on the
+  other half instead.
 - Once the curves are listed, they are compared in the background (section 7.1). The step says how many stages
   and odd frames there are, and the list is coloured by stage. **Leave out the odd frames** is on by default.
 
@@ -2231,7 +2246,9 @@ every sample. Two or more series are compared with each other; one alone is desc
 - The series that differs most at the end and at the start.
 - Per series: frames, odd frames, stages, the frame by which half and 90 % of its change had happened.
 - A table of how different the series are, **At the end** or **At the start**, in percent of intensity.
-- **Odd frames and stages of every series** (folded): each series' stages and its odd frames with their reasons.
+- **Odd frames and stages of every series** (folded): each series' stages and its odd frames with their reasons;
+  where each stage changed most from the one before (the q that grew and fell most, in %) is its tooltip and is in
+  the JSON record.
 
 **The plots on the right**
 
@@ -2245,7 +2262,11 @@ every sample. Two or more series are compared with each other; one alone is desc
 **Saving**
 
 - **Save** appears once there is a comparison (it waits while the series are being compared again).
-  **Save ▸ Table of Every Series…** or **Table of Every Frame…** writes a CSV with a JSON record.
+  **Save ▸ Table of Every Series…** or **Table of Every Frame…** writes a CSV with a JSON record: the method and
+  settings, and per series its source, odd frames with their reasons, stages, half / 90 % of the change, the
+  differences at the end and at the start and `stage_details` — for every boundary between stages the x where the
+  curve grew and fell most (`grows_most`, `falls_most`: `x` on the record's `x_label`, `percent` relative to the rest
+  of the curve) and the same as a sentence.
 - **Change Plot…**, **Paths Plot…**, **End States Plot…** save the figures, always in the light colours.
 - The tables on the page can be copied (`Ctrl+C`, or right-click), with their column names.
 - A project keeps the settings and the series: curve files by path, Analyze maps in `<project>.compare.npz`.
@@ -2272,18 +2293,21 @@ value can be trusted. How each value is computed is in [Physics and Methods, cha
 ### 8.1 Predict in three steps
 
 1. **Data ▸ Choose…**: the folder of one scan (its CBF frames, or a scan folder with them in one subfolder such
-   as `p2m/`). One line then sums up the frames, the detector, the exposure and the time.
+   as `p2m/`). One line then sums up the frames, the detector, the exposure and the time (its tooltip adds the
+   serial number, the pixel size, the first frame and the flat field).
 2. **Sample and geometry**: **Metal** (Ag, Au, or Cu, approximated with the Ag model), **X-rays** (**Energy
    (keV)** or **Wavelength (nm)**), **Distance (mm)**, **Incidence αi (°)** and **Beam centre (px)** (col, row).
    Check every value. Beside each, the page says where it comes from — this folder's last Predict, a preset, for
    the energy a `Wavelength` line of the header or the scan's NeXus file, or the last Predict of any folder
    (*please check*) — or asks for it: a PILATUS header holds neither the distance nor the incidence angle. The
    `E<eV>` in a flat-field file name is the detector's calibration energy, not necessarily the beam's: it is shown
-   beside the field and never filled in. An empty **Beam centre (px)** is estimated from the frames; a centre you
-   give is in Analyze's pixel coordinates (section 4.4).
+   beside the field and never filled in. A value to check and an energy of the files that differs from the one used
+   are shown as a warning (⚠); the tooltip of the line says why. An empty **Beam centre (px)** is estimated from
+   the frames; a centre you give is in Analyze's pixel coordinates (section 4.4).
 3. **Predict**. The first time, PyTorch is installed into GIMaP's Python (*Step 1 of 2*, about 1.2 GB, needs the
    internet). Then the frames are read and summed into time windows, and the model runs (*Step 2 of 2*).
-   **Cancel** stops at once; **Details** shows the messages; the line under the job status names the Python used.
+   **Cancel** stops at once; **Details** shows the messages; the tooltip of the line under the job status names the
+   Python used.
 
 ![The Sputter workspace with a scan folder chosen, before Predict](manual_images/en/22_sputter.png)
 *Sputter with a folder chosen, before Predict. Here three PILATUS CBF frames from the repository's `TestSAXSdata/`
@@ -2365,8 +2389,8 @@ The tabs on the right are **Size Trend**, **Literature**, **Structure Sketch**, 
 
 **Size Trend** opens in a simple view: R and D of the explanation shown (a faint point per window), their smoothed
 trends, and the percolation or film onset with its interval; film windows are shaded grey on every panel. With the
-physical path the D panel also marks the direct 2π/q\* (grey ×). Tick **Show details (network checks, thickness,
-flagged windows)** to add:
+physical path the D panel also marks the direct 2π/q\* (grey ×). Before there is a result, the tab says how to get
+one. Tick **Show details** to add:
 
 - the **Metal thickness** panel: t_eq as a band, the nominal thickness and the deposition end (with the literature
   method only the nominal thickness δ, which the islands hold by construction);
@@ -2385,7 +2409,7 @@ formed ([Physics and Methods, section 12.12](Physics_Manual.md#1212-island-heigh
 
 **Literature** compares the series with published growth, over δ. It opens with two panels, the literature
 method's D = 2π/q\* with its trend and 2R/D with the line 2R = D, both against the published percolation band of
-the metal on its **Polymer**. **Show details (network, published curves, coverage, mass balance)** adds the peaks
+the metal on its **Polymer**. **Show details** adds the peaks
 not used, the network's values, the published D(δ) curves, the coverage and η. Below, each check says *consistent*,
 *inconsistent* or *not testable*, with references and DOI; without a rate only whether D decreases is tested
 ([Physics and Methods, section 12.11](Physics_Manual.md#1211-checks-against-published-growth)). The tab needs
@@ -2408,8 +2432,8 @@ thickness values are; with the literature method also how many checks agree.
 
 ### 8.5 The result line and its flags
 
-The line under **Predict** names the windows, how many have R and D, and the film onset (with the literature method:
-the percolation). Two flags may follow:
+The line under **Predict** (shown once there is a result) names the windows, how many have R and D, and the film
+onset (with the literature method: the percolation). Two flags may follow:
 
 - *intensity modulation period ≈ … s (sample stage translation?)*: the intensity dips periodically, most likely
   because the sample stage moves back and forth and the long grazing-incidence footprint reaches the sample edge.
@@ -2536,7 +2560,7 @@ Open **Tools ▸ XRR Series Extractor…** (`Ctrl+Shift+R`) to obtain an XRR cur
 detector angle series. One point of the curve comes from each detector frame.
 
 ![The XRR Series Extractor with the first frame of a CBF series loaded](manual_images/en/16_xrr.png)
-*Left: the series (**Browse…** for a file, **Folder…** for the folder of the series; below, what the series consists of and where each value comes from), θ (the geometry is further down) and the ROI. Right: the frame with the direct-beam cross and the ROI circle on the specular beam; the **XRR points** tab holds the curve.*
+*Left: the series (**Browse…** for a file, **Folder…** for the folder of the series; below, what the series consists of and which values are not in the file), θ (the geometry is further down) and the ROI. Right: the frame with the direct-beam cross and the ROI circle on the specular beam; the **XRR points** tab holds the curve.*
 
 1. **Choose the series.** **Browse…** selects one NeXus/HDF5 file or a CBF file, **Folder…** the folder of the
    series; a file or folder can also be dropped on the window.
@@ -2552,9 +2576,10 @@ detector angle series. One point of the curve comes from each detector frame.
    in **Reflection direction** whether the specular reflection moves up or down in detector y.
    - The window starts from the last applied Geometry Calibration, marked *from last calibration*. When
      that calibration was of frames of another size, only its energy is taken.
-   - **Load first frame** never overwrites a value you typed. A tag beside each field, and the summary,
-     say whether a value comes from the file, the last calibration, the image centre or the built-in
-     defaults.
+   - **Load first frame** never overwrites a value you typed. A tag beside each field says whether a value
+     comes from the file, the last calibration, the image centre or the built-in defaults; the summary under
+     **Load first frame** warns only of the values that are not in the file and need checking
+     (*⚠ Not in the file — check: …*).
    - **Pick direct-beam center** lets you click the centre on the frame.
 4. **Set the ROI.** An ROI radius and `Sum` or `Mean`. Radius 0 reads one pixel; a larger radius
    integrates a circle around the calculated specular beam.
@@ -2726,7 +2751,7 @@ Rows that are empty, not numbers, not finite or not positive are rejected, with 
 | **Histogram bins**, **Minimum radius (nm)**, **Maximum radius (nm)** | the bins; the maximum defaults to *From data and prediction* |
 | **Display** ▸ **Probability (same bins)** (default) | SEM and prediction rebinned to the same edges, each normalised to a sum of 1 within the range; what falls outside is reported |
 | **Display** ▸ **Paper display (independent peak scaling)** | 60 SEM bins; the prediction on its own radius axis, minimum subtracted, scaled to the SEM peak — the heights are then no comparable probabilities |
-| **SEM radius scale** | 1 by default; scales the SEM radii for the comparison only — the measured radii stay in the particle table |
+| **SEM radius scale** | 1 by default; scales the SEM radii for the comparison only — the measured radii stay in the particle table. Any other value is shown as a warning under the tabs (*⚠ SEM radius scale: …*) |
 
 After a change, press **Update distribution**; an export needs an up-to-date distribution. **Remove
 prediction** keeps the SEM measurement and shows it alone. Opening the window again from the **Tools**
@@ -2773,7 +2798,7 @@ AI…** opens the settings).
 
 | Brain | Billing | Set-up |
 |---|---|---|
-| **Claude Code — your Claude plan** (default) | counts against your Claude Pro or Max plan; no API key | Claude Code must be installed (the Claude desktop app includes it) and signed in once: **Sign In…** opens a window running `claude auth login`; choose your account, then press **Check**. Model and effort are set in Settings (empty model = Claude Code's default). |
+| **Claude Code — your Claude plan** (default) | counts against your Claude Pro or Max plan; no API key | Claude Code must be installed (the Claude desktop app includes it: `claude.exe` under `%LOCALAPPDATA%\Packages\Claude_…\LocalCache\Roaming\Claude\claude-code`, found by itself or chosen with **Browse…** beside **Program**) and signed in once: **Sign In…** opens a window running `claude auth login`; choose your account, then press **Check**. Model and effort are set in Settings (empty model = Claude Code's default). |
 | **Claude API — API key** | per token | `pip install anthropic` once; type the key under **API key** in Settings and press **Save** (or set `ANTHROPIC_API_KEY`); **Test Connection** checks key and model. Default model `claude-opus-5`, effort *high*. |
 | **Other AI providers — OpenAI-compatible API** | as the provider bills | `pip install openai` once. Under **Other AI providers** pick the provider (the address is filled in; change it for a local server or Azure), save its key or set its environment variable (e.g. `DEEPSEEK_API_KEY`, `DASHSCOPE_API_KEY`), choose a model (typed, suggested, or **Get List**) and press **Test Connection**. |
 
@@ -2813,11 +2838,12 @@ your calibrations are kept or the energy of your beamline.
    | Permission | What happens |
    |---|---|
    | **Preview first** (recommended for new users) | every settings change the AI makes is undone when it finishes and comes back as a card to apply |
-   | **Ask me before writing files or changing corrections** | a dialog asks for each such action; a refusal is respected |
+   | **Ask before writing files or changing corrections** | a dialog asks for each such action; a refusal is respected |
    | **Fully automatic** | everything is done, logged and can be undone |
 
-5. Choose whether the AI may see a small image of the q map (qualitative only; Claude brains) and the
-   **Report language**, then press **Start**.
+5. Choose whether to **Send a small q-map image (qualitative; Claude only)** — the AI then judges the map by
+   eye, every number still comes from the tools — and the **Report language**, then press **Start**. What a
+   run does is the tooltip of **Start**.
 
 **Stop** ends a run at any time. The report lists each requested result as *done*, *partial* or *not
 available* with the reason (for example “no peak above 3σ between 0.2 and 2.0 Å⁻¹”). The tables below it
@@ -2878,9 +2904,9 @@ When no instrument profile matches the frame, the AI does not stop; it looks for
    **The AI asks** lists the options with their file times and folders, or asks you to type the value.
 
 Files within two folders above the frame and files you named are read without asking; other files are
-read after you agree (*Ask me before…*) or with a note in the panel (the other two permissions). Hidden and system
+read after you agree (*Ask before…*) or with a note in the panel (the other two permissions). Hidden and system
 folders (`.ssh`, `AppData`, `Windows` …) are never read. The chosen geometry is saved as the instrument
-profile of the detector — with *Ask me before…* only after you approve it — and the report states which file,
+profile of the detector — with *Ask before…* only after you approve it — and the report states which file,
 standard and values it came from. **Check it**: a calibration found by the search can belong to another
 experiment (chapter 13).
 
@@ -2949,7 +2975,7 @@ the canvas on the right.
 
    Prediction reads CBF frames (`.cbf`) only.
 2. **Import model.** Choose the **Prediction setup** — a module from `modules/` (section 11.3) — and
-   press **Import model...**; the line below says whether the model is loaded. Folded: **Advanced model
+   press **Import model...**; the *Model* state under 3. Predict says whether it is loaded. Folded: **Advanced model
    configuration** (the framework check, **Reload Config**, **Edit Config**) and **Advanced model
    sources** (the model library).
    - The shipped modules come without a model. The first **Import model...** asks for the folder of the
@@ -2990,7 +3016,7 @@ error of either.
 **This feature is under development.**
 
 **Trainset Build** designs a simulated GISAXS training set (BornAgain), checks it locally and prepares
-the training. Five steps on the left, each with its state:
+the training. Five steps on the left; a step shows its state once it has one:
 
 ![Trainset Build](manual_images/en/21_trainset.png)
 *Step 1, Dataset Design. The five steps and their states are on the left; the preview on the right shows the detector, region of interest and masks once a reference file is loaded.*
@@ -3253,8 +3279,9 @@ the model is loaded, press **Import model...** again to choose another folder.
 
 ### 14.6 The AI assistant does not start
 
-The start dialog says whether the chosen brain is ready. Claude Code: install it, then **Sign In…** and
-**Check** in **Tools ▸ Settings… ▸ Assistant**. Claude API: `pip install anthropic`, a key, **Test Connection**.
+The start dialog says whether the chosen brain is ready. Claude Code: install it (or choose the `claude.exe` of
+the Claude desktop app, under `%LOCALAPPDATA%\Packages\Claude_…\LocalCache\Roaming\Claude\claude-code`, with
+**Browse…** beside **Program**), then **Sign In…** and **Check** in **Tools ▸ Settings… ▸ Assistant**. Claude API: `pip install anthropic`, a key, **Test Connection**.
 Other providers: `pip install openai`, a key, a model that supports tool calling, **Test Connection**.
 A key saved in GIMaP takes precedence over the environment variable: when the saved one is wrong or
 expired, replace it, or **Remove** it to use the variable.

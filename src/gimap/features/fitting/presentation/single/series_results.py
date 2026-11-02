@@ -302,8 +302,9 @@ class FitSeriesResultsMixin:
         started = self._start_model is not None
         self.save_button.setVisible(bool(self.fits))
         self.to_single_button.setVisible(bool(self.fits))
+        self.results_card.setVisible(started)  # before the first Start the rail's “After Start” says it
         if not started:
-            self.results_summary.setText(tr("Choose the curves, check the start, then Start."))
+            self.results_summary.setText("")
             self.step_rail.set_state("results", "pending", tr("After Start"))
             return
         counts = series_counts(frames)

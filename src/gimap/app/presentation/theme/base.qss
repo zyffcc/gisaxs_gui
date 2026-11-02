@@ -1105,6 +1105,19 @@ QLabel[gimapMeta="true"] {
     border: none;
 }
 
+/* A secondary line that warns keeps the colour of its role: set_role(label, "warning") is enough. */
+QLabel[gimapMeta="true"][gimapRole="warning"] {
+    color: @warning@;
+}
+
+QLabel[gimapMeta="true"][gimapRole="error"] {
+    color: @danger@;
+}
+
+QLabel[gimapMeta="true"][gimapRole="success"] {
+    color: @success@;
+}
+
 QToolButton[gimapAdvancedToggle="true"] {
     color: @text@;
     font-weight: 600;

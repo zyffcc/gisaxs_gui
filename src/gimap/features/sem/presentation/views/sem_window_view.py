@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.presentation.components import (
     AdvancedSection, JobStatus, ParameterSection, PlotPanel, ResultTable,
 )
+from src.gimap.app.presentation.components.sections import describe_title
 from src.gimap.app.presentation.components.table_copy import enable_table_copy
 from src.gimap.app.presentation.i18n import DATA_HEADERS, DATA_VALUES
 
@@ -40,13 +41,6 @@ class SemWindowView(SemInstanceView):
         window.setWindowTitle("SEM Particle Analysis")
         root = QVBoxLayout(window)
         root.setContentsMargins(12, 12, 12, 12)
-        self.description_label = QLabel(
-            "Extract particle sizes from an SEM image, or import measured sizes from CSV. "
-            "Prediction comparison is optional.", window,
-        )
-        self.description_label.setWordWrap(True)
-        self.description_label.setProperty("gimapMeta", True)
-        root.addWidget(self.description_label)
         split = QSplitter(Qt.Horizontal, window)
         root.addWidget(split, 1)
         scroll = QScrollArea(split)
@@ -76,10 +70,11 @@ class SemWindowView(SemInstanceView):
         output_layout = QVBoxLayout(output)
         output_layout.setContentsMargins(4, 0, 0, 0)
         toolbar = QHBoxLayout()
-        self.summary_label = QLabel("No SEM measurements yet", output)
+        self.summary_label = QLabel("", output)  # the counts once there are measurements (the panels say what to do)
         self.summary_label.setWordWrap(True)
         toolbar.addWidget(self.summary_label, 1)
         self.export_button = QPushButton("Export SEM results…", output)
+        self.export_button.setToolTip("Original measurements and every comparison setting are included in the export.")
         self.export_button.setEnabled(False)
         toolbar.addWidget(self.export_button)
         output_layout.addLayout(toolbar)
@@ -87,7 +82,7 @@ class SemWindowView(SemInstanceView):
         self.image_panel = PlotPanel(
             "Segmentation review", parent=output,
             empty_title="No SEM image yet",
-            empty_message="Open an SEM image. Review the retained particle outlines after extraction.",
+            empty_message="Open an SEM image or a particle-size CSV to begin.",
         )
         self.distribution_panel = PlotPanel(
             "Particle size distribution", parent=output,
@@ -105,6 +100,12 @@ class SemWindowView(SemInstanceView):
         self.result_tabs.addTab(self.distribution_panel, "Distribution / comparison")
         self.result_tabs.addTab(self.particles_table, "Particle measurements")
         output_layout.addWidget(self.result_tabs, 1)
+        # A scale on the SEM radii other than 1 (Distribution / comparison): said as a warning while it applies.
+        self.radius_scale_label = QLabel("", output)
+        self.radius_scale_label.setWordWrap(True)
+        self.radius_scale_label.setProperty("gimapRole", "warning")
+        self.radius_scale_label.hide()
+        output_layout.addWidget(self.radius_scale_label)
         self.notes_label = QLabel("", output)
         self.notes_label.setWordWrap(True)
         self.notes_label.setProperty("gimapMeta", True)
@@ -136,8 +137,15 @@ class SemWindowView(SemInstanceView):
         layout.addWidget(section)
 
     def _calibration_controls(self, layout, parent):
+        # Where the scale comes from decides how far every size can be trusted: the one description kept on screen.
         self.calibration_section = ParameterSection(
-            "Image calibration", "Enter a known scale. Image annotations are not used automatically.", parent,
+            "Image calibration", "Scale from these values only — never read from the image.", parent,
+            show_description=True,
+        )
+        describe_title(
+            self.calibration_section.title_label,
+            "Enter nm per pixel, or a scale-bar length in nm and in pixels. Scale-bar text, magnification or DPI "
+            "in the image are never used.",
         )
         form = QFormLayout()
         self.calibration_mode_combo = QComboBox(parent)

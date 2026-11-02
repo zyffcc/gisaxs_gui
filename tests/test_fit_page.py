@@ -73,7 +73,9 @@ def test_a_curve_opens_on_the_first_step_that_needs_the_person(tmp_path) -> None
     assert page.step_rail.state("curve") == "pending" and not page.fit_button.isEnabled()
     assert page.open_curve(_curve_file(tmp_path))
     assert page.step_rail.state("curve") == "ok" and page.fit_button.isEnabled()
-    assert "240 points" in page.curve_info.text() and "σ from the file" in page.sigma_note.text()
+    assert "240 points" in page.curve_info.text() and "σ from the file" in page.curve_info.text()
+    assert page.sigma_warning.isHidden() and page.weighting_note.isHidden()  # σ there: nothing to warn of
+    assert "1/σ from the file" in page.residual_plot.toolTip()
     assert page.side_combo.isHidden()  # one half only: nothing to choose
     model = page.session.model
     assert model.components[0].family == "sphere" and not page.session.edited
@@ -108,6 +110,56 @@ def test_refine_finds_the_values_with_errors_and_undo_brings_the_start_back(tmp_
     page.redo()
     assert page.session.model == fitted
     page.dispose()
+
+
+def test_each_thing_is_said_once_and_a_missing_sigma_or_a_bound_is_a_warning(tmp_path) -> None:
+    """The small-text review: the rail has the points and the quality, the Results box all of it, the status line
+    only confirms; a file without σ and a value at a bound are warnings where they are seen, never folded away."""
+    from src.gimap.app.presentation.i18n import apply_language
+
+    page = _page()
+    try:
+        assert page.curve_chip.text() == "" and page.curve_card.isHidden()  # no curve: the plot says what to do
+        assert page.step_intro["curve"].isHidden() and page.residual_plot.empty_overlay.label.isHidden()
+        assert page.step_intro["model"].text() == "Starting model, not set up yet"
+        assert page.quality_label.text() == "No fit yet." and page.step_intro["results"].isHidden()
+        assert page.open_curve(_curve_file(tmp_path, sigma=False))
+        fitted = page._data().q.size  # (without σ the points I ≤ 0 cannot be fitted on ln I)
+        assert page.step_rail.detail("curve") == f"{fitted} points fitted"  # the file's name: on the chip
+        assert page.curve_chip.text() == "sample_fit_input.dat" and "σ from the file" not in page.curve_info.text()
+        assert not page.sigma_warning.isHidden() and page.sigma_warning.property("gimapRole") == "warning"
+        assert page.sigma_warning.text() == "⚠ No σ in the file: every point weighted alike (ln I fitted)"
+        assert "Poisson" in page.sigma_warning.toolTip() and page.weighting_note.toolTip() == page.sigma_warning.toolTip()
+        assert page.weighting_note.text() == "⚠ No σ in the file: every point weighted alike"
+        assert not page.weighting_note.isHidden()
+        assert "Å⁻¹" in page.curve_card.toolTip() and "Å⁻¹" not in page.curve_info.text().splitlines()[0]
+        assert page.range_min_spin.toolTip().startswith("Only the points inside the fitting range are fitted")
+        apply_language("zh", [page])
+        page.refresh_language()
+        assert page.sigma_warning.text() == "⚠ 文件里没有 σ：每个点权重相同（拟合 ln I）"
+        assert page.step_rail.detail("curve") == f"拟合 {fitted} 个点"
+        apply_language("en", [page])
+        page.refresh_language()
+        page.set_model(page.session.model.with_values({(0, "R"): 5.3, (0, "D"): 44.0}))
+        assert page.step_intro["model"].isHidden()  # set up: the rail's “Sphere · n free” says the rest
+        page.set_method("local")
+        page.run_fit()
+        _wait(page)
+        result = page.session.result
+        state = "converged" if result.converged else "not converged"
+        assert page.step_rail.detail("fit") == f"var ln I {result.chi2_reduced:.3g} · {state}"
+        assert page.status_label.text() == f"Fit finished: {state}."
+        assert page.quality_label.text().startswith(f"var ln I {result.chi2_reduced:.3g} · {result.points} points")
+        assert page.step_intro["results"].isHidden()
+        row = page.model_editor.row((0, "R"))
+        row.refresh({}, ((0, "R"),))  # as after a fit that stopped R at a bound of its range
+        assert row.error.text() == "⚠ at a bound" and row.error.property("gimapRole") == "warning"
+        assert row.error.toolTip().startswith("The fit stopped at a bound")
+        row.refresh({(0, "R"): 0.1}, ())
+        assert row.error.text().startswith("± ") and row.error.property("gimapRole") == "muted"
+    finally:
+        apply_language("en", [page])
+        page.dispose()
 
 
 def test_the_range_and_the_halves_choose_the_points(tmp_path) -> None:

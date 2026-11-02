@@ -25,8 +25,10 @@ from PyQt5.QtCore import QSignalBlocker
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-RESULTS_INTRO = "Run the standard procedure: geometry, mask, cuts and results, each with its reason."
-"""The Results step before any run."""
+RESULTS_INTRO = ""
+"""The Results step before any run says nothing under its title: Run Automatic Analysis (its tooltip) says what it
+does, and after a run the step rail and the Results tab say what it found. Only whose results the step shows, when
+they are another file's or other frames', is said there (``RESULTS_ELSEWHERE``, ``RESULTS_OTHER_FRAMES``)."""
 RESULTS_ELSEWHERE = "Results are for {name}; run again for this frame"
 """The same text as the automatic analysis's own line (one translation for both)."""
 RESULTS_OTHER_FRAMES = "Results are for frames {a}–{b}; run again for this frame"
@@ -161,13 +163,14 @@ class ResultsStateMixin:
             self._status(trf(RESULTS_OTHER_FRAMES, a=other[0], b=other[1]), "info")
             return
         if key is None or shown == key:  # this frame's results (or a run that names no file, e.g. none open)
-            self.set_step_state("results", state, detail)
-            self._intro("results", detail)
+            self.set_step_state("results", state, detail)  # (the whole line: the step's tooltip)
+            self._intro("results")  # the step rail and the Results tab say what it found
             if show_results:
                 self.show_right("results")
             if state != "ok":
                 self.show_step("results")
-            self._status(detail, "ok" if state == "ok" else "warning")
+            # The status line: a run that needs a person is said there too; one that went through, not again.
+            self._status(*((detail, "warning") if state != "ok" else ("", "info")))
             return
         if shown is None:  # nothing on screen: the step as before any run; the file gets them back when shown
             self.set_step_state("results", "pending")
@@ -270,7 +273,7 @@ class ResultsStateMixin:
             elif moved or self._results_elsewhere:  # re-reductions of the same frames leave the step as it is
                 _path, state, detail, _frames = kept
                 self.set_step_state("results", state, detail)
-                self._intro("results", detail)
+                self._intro("results")
                 self._results_elsewhere = False
             return
         if moved or not self._results_elsewhere:
@@ -280,6 +283,7 @@ class ResultsStateMixin:
         """The Results step says ``text`` (whose results they are) instead of results of the frame shown."""
         self.set_step_state("results", "pending", text)
         self.step_intro["results"].setText(text)
+        self.step_intro["results"].show()  # said nowhere else on the step
         self._results_elsewhere = True
 
     def _say_other_frames(self, frames: tuple[int, int]) -> None:

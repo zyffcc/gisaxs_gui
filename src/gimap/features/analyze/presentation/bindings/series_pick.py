@@ -63,7 +63,10 @@ class SeriesPickMixin:
         self.series_profile_plot.set_title(frame_title(series, row))
         self.series_profile_plot.title_label.setToolTip(str(series.labels[row]))
         self.series_profile_plot.set_labels(series.x_label, "Intensity")
-        self.series_profile_plot.set_curves([(trf(FRAME_NAME, n=series.number(row)), series.x, series.profile(row))])
+        # One curve, named by the title: no legend — unless a signed cut may be drawn as two halves (+ and −).
+        signed = series.x.size > 1 and float(np.nanmin(series.x)) < 0.0 < float(np.nanmax(series.x))
+        self.series_profile_plot.set_curves([(trf(FRAME_NAME, n=series.number(row)), series.x, series.profile(row))],
+                                            legend=[signed])
         if by_hand and self.series_follow_check.isChecked():
             self._series_follow_timer.start()
 

@@ -297,7 +297,7 @@ class FitRunMixin:
             self._status(lambda: tr("Stopped: the best values so far are kept ({quality}).").format(
                 quality=self._quality_text(result)), "warning")
         else:
-            self._status(lambda: tr("Fitted: {quality}.").format(quality=self._quality_text(result)),
+            self._status(lambda: trf("Fit finished: {state}.", state=self._state_text(result)),  # the rest: Results
                          "ok" if result.converged else "warning")
         self.show_step("results")
 

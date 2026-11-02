@@ -16,6 +16,12 @@ from ..center_controls import make_center_step
 
 PROFILE_NAME_WIDTH = 260
 """Room to read a detector profile name and its frame size."""
+PIXEL_NOTE = "Beam centre in pixel-edge coordinates: the first pixel's centre is 0.5."
+"""Seen at once: a centre typed in the other convention would be half a pixel off (the whole rule: the fields' tooltip)."""
+CENTER_TIP = "Beam centre = direct beam in pixels, pixel j spanning [j, j+1] (the centre of the first pixel is 0.5)."
+APPLY_TIP = "Use this centre for this session and redraw the curves"
+SAVE_TIP = ("Save all geometry values for this detector: the profile is used for every frame from this detector with "
+            "this size")
 
 
 def _spin(parent, low, high, decimals, value, suffix, step=1.0) -> QDoubleSpinBox:
@@ -36,22 +42,10 @@ class GeometryDialogView:
         self.setWindowTitle("Detector geometry")
         self.setObjectName("analyzeGeometryDialog")
         layout = QVBoxLayout(self)
-        note = QLabel(
-            "Beam centre = direct beam in pixels, pixel j spanning [j, j+1] "
-            "(the centre of the first pixel is 0.5). The profile is used for every frame "
-            "from this detector with this size.",
-            self,
-        )
+        note = QLabel(PIXEL_NOTE, self)
+        note.setObjectName("analyzeGeometryPixelNote")
         note.setWordWrap(True)
         layout.addWidget(note)
-        self.apply_note = QLabel(
-            "Apply Centre updates the curves for this session. "
-            "Save Profile saves all geometry values for this detector.",
-            self,
-        )
-        self.apply_note.setWordWrap(True)
-        self.apply_note.setProperty("gimapRole", "muted")
-        layout.addWidget(self.apply_note)
         form = QFormLayout()
         self.name_edit = QLineEdit(name, self)
         self.name_edit.setMinimumWidth(PROFILE_NAME_WIDTH)
@@ -62,6 +56,8 @@ class GeometryDialogView:
         self.wavelength_spin = _spin(self, 0.01, 50.0, 5, defaults["wavelength_angstrom"], " Å", 0.01)
         self.center_x_spin = _spin(self, -1e5, 1e5, 4, defaults["center_x"], " px")
         self.center_y_spin = _spin(self, -1e5, 1e5, 4, defaults["center_y"], " px")
+        for spin in (self.center_x_spin, self.center_y_spin):
+            spin.setToolTip(CENTER_TIP)
         self.center_step_spin = make_center_step(
             self, self.center_x_spin, self.center_y_spin, center_step_px,
         )
@@ -94,8 +90,10 @@ class GeometryDialogView:
         self.apply_button.setAutoDefault(True)
         self.apply_button.setDefault(True)
         self.apply_button.setProperty("gimapRole", "primary")
+        self.apply_button.setToolTip(APPLY_TIP)
         self.save_button = buttons.addButton("Save Profile", QDialogButtonBox.ActionRole)
         self.save_button.setAutoDefault(False)
+        self.save_button.setToolTip(SAVE_TIP)
         self.delete_button = None
         if allow_delete:
             self.delete_button = buttons.addButton("Delete profile", QDialogButtonBox.DestructiveRole)
@@ -105,4 +103,4 @@ class GeometryDialogView:
         layout.addWidget(buttons)
 
 
-__all__ = ["GeometryDialogView", "PROFILE_NAME_WIDTH"]
+__all__ = ["APPLY_TIP", "CENTER_TIP", "GeometryDialogView", "PIXEL_NOTE", "PROFILE_NAME_WIDTH", "SAVE_TIP"]

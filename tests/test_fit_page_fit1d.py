@@ -46,9 +46,9 @@ def test_main_fit_runs_without_tf_and_preserves_native_result(tmp_path, monkeypa
         page.fit1d_use_qz.setChecked(count != 2)
         page.fit1d_qz.setValue(0.42)
         page.fit1d_sigma_floor.setValue(3.0)
-        assert "fit1d uses σ from the file" in page.sigma_note.text() or count == 3
-        if count == 3:
-            assert "Poisson errors" in page.sigma_note.text()
+        assert "added to σ in quadrature" in page.fit1d_sigma_floor.toolTip()  # what fit1d does with σ
+        if count == 3:  # no σ: a warning in the Fit step, what each action does then in its tooltip
+            assert "Poisson errors" in page.weighting_note.toolTip() and not page.weighting_note.isHidden()
         # This path must not even ask for the old V5 model directory.
         monkeypatch.setattr("src.gimap.features.fitting.presentation.single.run.bundled_workflow",
                             lambda: pytest.fail("fit1d must not require V5/TensorFlow assets"))
@@ -232,7 +232,7 @@ def test_one_method_choice_recommends_predict_for_an_unfitted_gisaxs_cut(tmp_pat
         assert page.recommended_method() == "fit1d" and page.method() == "fit1d"
         assert page.step_stack.currentWidget() is page.step_pages["fit"]
         assert page.fit_step_button.text() == "Predict parameters (fit1d)"
-        assert page.method_hint.text().startswith("Recommended for this curve: a GISAXS cut not fitted yet. Finds")
+        assert page.method_hint.text() == "Recommended for this curve: a GISAXS cut not fitted yet."  # only why
         assert _method_tip(page, "fit1d").endswith("The first step for a GISAXS cut.")
         assert page.fit1d_row.isVisibleTo(page) and not page.families_row.isVisibleTo(page)
         assert page.fit1d_composition.currentData() == "auto:sphere,vc:3"  # no particles of the user's yet
@@ -263,7 +263,7 @@ def test_one_method_choice_recommends_predict_for_an_unfitted_gisaxs_cut(tmp_pat
         assert "not passed" in page.fit1d_notes.text()
         page.set_method("local")
         assert not page.fit1d_row.isVisibleTo(page) and not page.fit1d_notes.isVisibleTo(page)
-        assert not page.method_hint.text().startswith("Recommended")
+        assert page.method_hint.text() == "" and page.method_hint.isHidden()  # what Refine does: its tooltip
     finally:
         page.dispose()
     page = _page()
@@ -287,13 +287,13 @@ def test_without_the_fit1d_kit_the_shape_search_is_recommended_and_predict_says_
         assert page.recommended_method() == "shapes" and page.method() == "shapes"
         assert page.step_stack.currentWidget() is page.step_pages["fit"]
         assert page.fit_step_button.text() == "Find the particle shape"
-        assert page.method_hint.text().startswith(
+        assert page.method_hint.text() == (
             "Recommended for this curve: a GISAXS cut not fitted yet (Predict parameters needs the optional fit1d "
-            "add-on, which is not installed). Fits sphere")
+            "add-on, which is not installed).")
         tip = _method_tip(page, "fit1d")
         assert "An optional add-on, not distributed with GIMaP" in tip and "utils/gisaxs1d_gui_kit" in tip
         assert "GISAXS1D_KIT_HOME" in tip and "The first step for a GISAXS cut" not in tip
-        page.set_method("fit1d")  # still there to choose: its line says the same
+        page.set_method("fit1d")  # still there to choose: its line says that the add-on is missing, and where it goes
         assert page.method_hint.text() == tip and "add-on" in page.fit_step_button.toolTip()
         try:
             apply_language("zh", [page])

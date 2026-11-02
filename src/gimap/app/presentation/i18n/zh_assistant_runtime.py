@@ -326,8 +326,8 @@ ASSISTANT_RUNTIME_ZH = {
         "类似尖峰的伪影（顶部平坦、边缘比一个 bin 还陡）：更可能来自探测器的一行或一列、模块边缘或参与平均的像素中的缝隙，而不是衍射（请在图像上查看这个 q 处）",
     "a spike-like artefact (flat top, edges sharper than one bin)": "类似尖峰的伪影（顶部平坦、边缘比一个 bin 还陡）",
     # -- release 0.1.0 (2026-10-12) ----------------------------------------------------------------
-    "Claude Code was not found. Install it (claude.com/claude-code), or use Browse… in Settings ▸ Assistant to choose claude.exe (the Claude desktop app keeps one under %LOCALAPPDATA%\\Packages\\Claude_…\\LocalCache\\Roaming\\Claude\\claude-code).":
-        "找不到 Claude Code。请先安装（claude.com/claude-code），或在 设置 ▸ AI 助手 中点“浏览…”选择 claude.exe（Claude 桌面版自带一份，位于 %LOCALAPPDATA%\\Packages\\Claude_…\\LocalCache\\Roaming\\Claude\\claude-code）。",
+    "Claude Code was not found. Install it (claude.com/claude-code) or choose claude.exe with Browse… in Settings ▸ Assistant.":
+        "找不到 Claude Code。请安装它（claude.com/claude-code），或在 设置 ▸ AI 助手 中用“浏览…”选择 claude.exe。",
     "Claude Code was not found at {cli}.": "在 {cli} 找不到 Claude Code。",
     "DeepSeek": "DeepSeek（深度求索）",
     "Qwen (Alibaba Cloud Model Studio)": "通义千问 Qwen（阿里云百炼）",

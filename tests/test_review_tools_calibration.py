@@ -117,7 +117,7 @@ def test_reset_and_finish_manual_restore_an_imported_solution(calibration_json, 
     assert dialog.manual_x.value() == pytest.approx(shown_x, abs=1e-3)
     assert result.selected_candidate is selected  # never swapped for candidate 0
     assert _geometry(selected) == imported
-    assert dialog.result_warning.text() == (" ".join(imported[3]) or "None")
+    assert dialog.result_warning.text() == ("⚠ " + " ".join(imported[3]) if imported[3] else "None")
 
     # Committed again, then 'Finish manual' and Apply's commit: still the imported solution.
     dialog.manual_x.setValue(shown_x + 25.0)

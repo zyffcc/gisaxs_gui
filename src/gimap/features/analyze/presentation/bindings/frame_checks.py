@@ -25,6 +25,7 @@ from ...application import AUTO, GISAXS, GIWAXS, MODES
 from ..texts import message_text
 from .data_step import SENTENCE
 from .display import NOT_ANALYSED_TEXT
+from .workspace import show_card
 
 MODE_NAMES = {AUTO: "Auto", GISAXS: "GISAXS", GIWAXS: "GIWAXS"}
 MODE_MISMATCH = "This frame looks like {detected} but {mode} is selected"
@@ -134,7 +135,7 @@ class FrameChecksMixin:
         self.file_meta.setText(tr("could not be read"))
         self.set_step_state("data", "error", shown)
         if forgotten:  # the card described the frame before
-            self.data_info_label.setText(shown)
+            show_card(self.data_info_label, shown)
             path = self.view_model.current_path  # what is known of the file asked for (its files, its warnings)
             self._show_source(self.view_model.describe(path) if path is not None else None, path)
 
@@ -153,7 +154,7 @@ class FrameChecksMixin:
         self.view_model.forget_analysis()
         self._shown_status = None
         self._empty_views(NOT_ANALYSED_TEXT)
-        self.summary_label.setText(self.view_model.geometry_summary(tr))
+        show_card(self.summary_label, self.view_model.geometry_summary(tr))
         self._refresh_workspace(None)  # Geometry, Mask and Cuts no longer describe the frame before
         self._refresh_series_curves(None)  # nor does the Series tab offer its curves
         if self._automatic_busy:  # a run goes on: its step stays as it was

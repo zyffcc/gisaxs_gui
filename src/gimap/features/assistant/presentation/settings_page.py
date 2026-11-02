@@ -35,8 +35,16 @@ from src.gimap.app.presentation.i18n import tr
 
 from . import preferences
 from .code_section import ROW_SPACING, ClaudeCodeSection
-from .provider_section import ProviderSection
+from .provider_section import PLAIN_TEXT_KEYS, ProviderSection
 from .services import AssistantServices
+
+
+SENT_NOTE = ("Each run sends the frame's status and reduced curves (numbers) to the chosen provider — "
+             "never the detector file.")
+"""What leaves the computer: the page's first line (kept on screen)."""
+EFFORT_NOTE = ("Higher effort lets Claude think longer per step: slower, and more of your plan's usage or more "
+               "tokens (other providers use their model's own setting).")
+SINGLE_RUN_NOTE = "The start dialog can change the brain and the permission for a single run."
 
 
 def _muted(text: str, parent: QWidget) -> QLabel:
@@ -56,27 +64,22 @@ class AssistantSettingsPage(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
-        layout.addWidget(_muted(tr(
-            "“Process with AI” in Analyze lets an AI run the analysis tools on the open frame and "
-            "report what it finds. Each run sends the frame's status and reduced curves (numbers, "
-            "never the detector file) to the chosen provider."), self,
-        ))
+        layout.addWidget(_muted(tr(SENT_NOTE), self))
 
         form = QFormLayout()
         form.setHorizontalSpacing(16)
         form.setVerticalSpacing(8)
         brain_row = QVBoxLayout()
-        self.code_radio = QRadioButton(tr("Claude Code — uses your Claude plan (Pro / Max), no API key"), self)
+        self.code_radio = QRadioButton(tr("Claude Code — your Claude plan (Pro / Max), no API key"), self)
         self.code_radio.setObjectName("assistantBrainCode")
         self.api_radio = QRadioButton(tr("Claude API — API key, billed per token"), self)
         self.api_radio.setObjectName("assistantBrainApi")
-        self.provider_radio = QRadioButton(tr(
-            "Other AI provider — DeepSeek, Qwen, OpenAI, Kimi, GLM, Gemini, Ollama … (see below)"), self
-        )
+        self.provider_radio = QRadioButton(tr("Other AI provider — DeepSeek, Qwen, OpenAI, Ollama … (below)"), self)
         self.provider_radio.setObjectName("assistantBrainProvider")
         brains = QButtonGroup(self)
         self._brains = {BACKEND_CLAUDE_CODE: self.code_radio, BACKEND_API: self.api_radio, BACKEND_PROVIDER: self.provider_radio}
         for radio in self._brains.values():
+            radio.setToolTip(tr(SINGLE_RUN_NOTE))
             brains.addButton(radio)
             brain_row.addWidget(radio)
         chosen = preferences.read(settings, "backend")
@@ -87,6 +90,7 @@ class AssistantSettingsPage(QWidget):
         for effort in EFFORTS:  # the names are the setting itself: never translated
             self.effort_combo.addItem(effort, effort)
         self.effort_combo.setCurrentIndex(max(0, self.effort_combo.findData(str(preferences.read(settings, "effort")))))
+        self.effort_combo.setToolTip(tr(EFFORT_NOTE))
         form.addRow(tr("Effort"), self.effort_combo)
         self.turns_spin = QSpinBox(self)
         self.turns_spin.setObjectName("assistantTurnsSpin")
@@ -102,13 +106,9 @@ class AssistantSettingsPage(QWidget):
         ):
             self.permission_combo.addItem(tr(text), value)
         self.permission_combo.setCurrentIndex(max(0, self.permission_combo.findData(preferences.read(settings, "permission"))))
+        self.permission_combo.setToolTip(tr(SINGLE_RUN_NOTE))
         form.addRow(tr("Permissions"), self.permission_combo)
         layout.addLayout(form)
-        layout.addWidget(_muted(tr(
-            "Higher effort lets Claude think longer per step: slower, and more of your plan's "
-            "usage or more tokens (other providers use their model's own setting). The start dialog "
-            "can change the brain and the permission for a single run."), self,
-        ))
 
         standing = QGroupBox(tr("Standing instructions for the AI"), self)
         standing_layout = QVBoxLayout(standing)
@@ -120,11 +120,13 @@ class AssistantSettingsPage(QWidget):
         ))
         self.standing_edit.setPlainText(str(preferences.read(settings, "standing_instructions") or ""))
         self.standing_edit.setFixedHeight(84)
-        standing_layout.addWidget(self.standing_edit)
-        standing_layout.addWidget(_muted(tr(
+        self.standing_edit.setToolTip(tr(
             "Added to every run, with the notes of the start dialog. Paths written here or in the notes can "
-            "be read and searched by the AI directly."), standing,
+            "be read and searched by the AI directly."
         ))
+        standing_layout.addWidget(self.standing_edit)
+        standing_layout.addWidget(_muted(tr("Added to every run; the AI can read and search the paths you write here."),
+                                         standing))
         layout.addWidget(standing)
         self._standing_timer = QTimer(self)
         self._standing_timer.setSingleShot(True)
@@ -178,6 +180,12 @@ class AssistantSettingsPage(QWidget):
         self.key_edit.setEchoMode(QLineEdit.Password)
         self.key_edit.setPlaceholderText("sk-ant-…")
         self.save_key_button = QPushButton(tr("Save"), box)
+        for widget in (self.key_edit, self.save_key_button):
+            widget.setToolTip(tr(
+                "An API key is billed per token and is separate from a Claude plan. A key saved here takes "
+                "precedence over the ANTHROPIC_API_KEY environment variable. The panel shows the tokens and the "
+                "estimated cost of every run."
+            ))
         self.remove_key_button = QPushButton(tr("Remove"), box)
         key_row.addWidget(self.key_edit, 1)
         key_row.addWidget(self.save_key_button)
@@ -196,12 +204,7 @@ class AssistantSettingsPage(QWidget):
         test_row.addWidget(self.test_button)
         test_row.addWidget(self.test_label, 1)
         form.addRow("", test_row)
-        form.addRow(_muted(tr(
-            "An API key is billed per token and is separate from a Claude plan. A key saved here "
-            "is kept in the user data folder (plain text, readable by your user account only) and "
-            "takes precedence over the ANTHROPIC_API_KEY environment variable. The panel shows the "
-            "tokens and the estimated cost of every run."), box,
-        ))
+        form.addRow(_muted(tr(PLAIN_TEXT_KEYS), box))
         return box
 
     def _remember_standing(self) -> None:

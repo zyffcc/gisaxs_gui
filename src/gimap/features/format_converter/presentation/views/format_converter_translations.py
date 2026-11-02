@@ -16,21 +16,17 @@ class FormatConverterTranslations:
         self.step_output_label.setText(
             _translate("FormatConverterDialog", "3  Run, Results & Export")
         )
+        # Input, Configure and Preview have no description: what they hold is in their titles, buttons and columns.
         self.formatInputTitle.setText(_translate("FormatConverterDialog", "Input"))
-        self.formatInputDescription.setText(
-            _translate(
-                "FormatConverterDialog",
-                "Add detector files or folders. Sources are inspected without changing them.",
-            )
-        )
-        self.input_intro.setText(
-            _translate(
-                "FormatConverterDialog",
-                "Add any combination of NXS, CBF, and TIFF files. GIMaP detects single images and multi-frame inputs automatically.",
-            )
-        )
         self.add_files_button.setText(_translate("FormatConverterDialog", "Add files"))
         self.add_folder_button.setText(_translate("FormatConverterDialog", "Add folder"))
+        sources_tip = _translate(
+            "FormatConverterDialog",
+            "NXS / HDF5, CBF or TIFF detector files, in any combination; single images and multi-frame files "
+            "are recognised automatically. The sources are only read, never changed.",
+        )
+        self.add_files_button.setToolTip(sources_tip)
+        self.add_folder_button.setToolTip(sources_tip)
         self.current_button.setText(
             _translate("FormatConverterDialog", "Use currently opened file")
         )
@@ -45,14 +41,10 @@ class FormatConverterTranslations:
         self.dataset_note.setText(
             _translate("FormatConverterDialog", "Recommended dataset is selected automatically.")
         )
-        self.input_note.setText(_translate("FormatConverterDialog", "No input files yet."))
-        self.formatConfigureTitle.setText(_translate("FormatConverterDialog", "Configure"))
-        self.formatConfigureDescription.setText(
-            _translate(
-                "FormatConverterDialog",
-                "Choose sources and frame ranges. Existing selection semantics are preserved.",
-            )
+        self.input_note.setText(
+            _translate("FormatConverterDialog", "No input files yet — add NXS, CBF or TIFF files or a folder.")
         )
+        self.formatConfigureTitle.setText(_translate("FormatConverterDialog", "Configure"))
         self.select_all_button.setText(_translate("FormatConverterDialog", "Select all"))
         self.select_none_button.setText(_translate("FormatConverterDialog", "Select none"))
         self.remove_selected_button.setText(_translate("FormatConverterDialog", "Remove selected"))
@@ -73,10 +65,10 @@ class FormatConverterTranslations:
         self.frameAdvancedToggle.setText(
             _translate("FormatConverterDialog", "Advanced frame selection")
         )
-        self.frameAdvancedDescription.setText(
+        self.frameAdvancedDescription.setText(  # the tooltip of the toggle (bind_advanced_section)
             _translate(
                 "FormatConverterDialog",
-                "Use ranges, custom expressions or Every N for multi-frame NXS inputs.",
+                "Ranges, custom expressions (e.g. 1, 5, 8–20) or every Nth frame, for multi-frame NXS inputs.",
             )
         )
         self.frame_group.setTitle(
@@ -95,9 +87,6 @@ class FormatConverterTranslations:
         self.nthLabel.setText(_translate("FormatConverterDialog", "Every N:"))
         self.apply_frames.setText(_translate("FormatConverterDialog", "Apply selection"))
         self.formatPreviewTitle.setText(_translate("FormatConverterDialog", "Preview"))
-        self.formatPreviewDescription.setText(
-            _translate("FormatConverterDialog", "Inspect representative frames before conversion.")
-        )
         self.first_preview_caption.setText(_translate("FormatConverterDialog", "First"))
         self.first_preview_label.setText(_translate("FormatConverterDialog", "No preview"))
         self.middle_preview_caption.setText(_translate("FormatConverterDialog", "Middle"))

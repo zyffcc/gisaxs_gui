@@ -76,12 +76,6 @@ class ResponsiveStyleMixin:
         first = self.dataset_splitter.widget(0)
         second = self.dataset_splitter.widget(1)
         stacked = self.dataset_splitter.orientation() == Qt.Vertical
-        ui = getattr(self, "_dataset_page_ui", None)
-        for name in ("trainsetDesignPreviewDescription", "designPreviewHint"):
-            # Stacked (narrow window): the preview keeps its image; the canvas strip says what to do.
-            label = getattr(ui, name, None)
-            if label is not None:
-                label.setVisible(not stacked)
         if stacked:
             first.setMinimumSize(0, 120)
             second.setMinimumSize(0, 220)

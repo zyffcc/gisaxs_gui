@@ -50,6 +50,8 @@ from .guided_text import (
     GEOMETRY_MESSAGE,
     IDLE_TEXT,
     NO_FRAME_TEXT,
+    NOTES_LABEL,
+    NOTES_TIP,
     RUN_MESSAGE,
     START_MESSAGE,
     ask_save_path,
@@ -117,7 +119,7 @@ class GuidedAnalysis(GuidedFramesMixin, QObject):
         self.report: Optional[dict] = None
         self.start_report: Optional[dict] = None
         self.results_record: Optional[RunResults] = None
-        self._saying: Callable[[], str] = lambda: tr(IDLE_TEXT)
+        self._saying: Callable[[], str] = lambda: tr(IDLE_TEXT) if IDLE_TEXT else ""
         """What the line under Run says, composed again after a switch of the interface language (``_say``)."""
         self._before_notice: Optional[Callable[[], str]] = None
         """What the line said before “Open a frame first.”: said again when a frame is shown (``_no_frame``)."""
@@ -154,13 +156,11 @@ class GuidedAnalysis(GuidedFramesMixin, QObject):
         layout = QVBoxLayout(box)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
-        layout.addWidget(label(
-            "Beamtime notes (optional): αi, energy, pixel size and where the calibration is — whatever you know.",
-            box, role="muted",
-        ))
+        layout.addWidget(label(NOTES_LABEL, box, role="muted"))
         self.notes_edit = QPlainTextEdit(box)
         self.notes_edit.setObjectName("guidedNotes")
         self.notes_edit.setPlaceholderText("e.g. GIWAXS, alpha_i = 0.2 deg, 12.4 keV, calibration in D:\\beamtime\\calib")
+        self.notes_edit.setToolTip(NOTES_TIP)
         self.notes_edit.setFixedHeight(74)
         layout.addWidget(self.notes_edit)
         self.notes_found = label("", box, role="muted")
@@ -172,8 +172,9 @@ class GuidedAnalysis(GuidedFramesMixin, QObject):
                                    "with what it found")
         self.run_button.setProperty("gimapRole", "primary")
         layout.addWidget(self.run_button, 0, Qt.AlignLeft)
-        self.status_label = label(IDLE_TEXT, box, role="muted")
+        self.status_label = label(IDLE_TEXT, box, role="muted")  # the progress and outcome of a run; idle: nothing
         self.status_label.setObjectName("guidedStatus")
+        self.status_label.setVisible(bool(IDLE_TEXT))
         layout.addWidget(self.status_label)
         self.questions = AnswerForm(self._frame_folder, box)  # Run Again, or Enter in a field
         self.again_button, self.answers_label = self.questions.again_button, self.questions.answers_label
@@ -435,12 +436,15 @@ class GuidedAnalysis(GuidedFramesMixin, QObject):
         self._saying = compose
         text = compose()
         self.status_label.setText(text)
+        self.status_label.setVisible(bool(text))
         return text
 
     def refresh_language(self) -> None:
         """After a switch of the interface language: the line under Run, what the notes give, the questions
         (what is typed stays), the progress panel and the Results tab (the rows selected stay)."""
-        self.status_label.setText(self._saying())
+        said = self._saying()
+        self.status_label.setText(said)
+        self.status_label.setVisible(bool(said))
         self._read_notes()
         self.questions.refresh_language()
         self.progress_panel.refresh_language()

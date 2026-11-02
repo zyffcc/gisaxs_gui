@@ -8,6 +8,9 @@ COMPOSITION_TIP = (
     "The particles in Model: fit1d fits these, keeping the values you fixed and the ranges you set."
 )
 
+SIGMA_FLOOR_TIP = ("fit1d: a relative systematic error added to σ in quadrature (without σ in the file, to Poisson "
+                   "errors). 2–5 % suits bright measured curves.")
+
 
 def setup_fit1d_choice(owner, parent, layout) -> QWidget:
     """Under the method, for Predict only: which particles fit1d fits."""
@@ -61,6 +64,8 @@ def setup_fit1d_options(owner, section) -> QWidget:
     owner.fit1d_sigma_floor.setRange(0, 50)
     owner.fit1d_sigma_floor.setDecimals(2)
     owner.fit1d_sigma_floor.setSuffix(" %")
+    owner.fit1d_sigma_floor.setObjectName("fit1dSigmaFloor")
+    owner.fit1d_sigma_floor.setToolTip(SIGMA_FLOOR_TIP)
     form.addRow("fit1d network", owner.fit1d_network)
     form.addRow("fit1d search", owner.fit1d_policy)
     form.addRow("fit1d curve type", owner.fit1d_mode)

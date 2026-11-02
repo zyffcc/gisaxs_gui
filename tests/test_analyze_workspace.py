@@ -709,7 +709,7 @@ def test_the_results_step_and_tab_follow_the_frame_shown(tmp_path: Path) -> None
     paths = [save_tiff(tmp_path / f"film_{index}.tif", _ring_frame(200.0, seed=index)) for index in range(3)]
     geometry = DetectorGeometry(PIXEL, PIXEL, DISTANCE_M, CENTER[0], CENTER[1], WAVELENGTH, 0.2)
     page = _page(_context(InMemoryInstrumentProfileRepository([InstrumentProfile("synthetic", geometry, None, SHAPE)])))
-    assert page.step_intro["results"].text() == RESULTS_INTRO  # before any run
+    assert page.step_intro["results"].text() == RESULTS_INTRO == "" and page.step_intro["results"].isHidden()  # before any run
     page.add_paths([str(path) for path in paths])
     _done(page)
     assert page.file_list.currentRow() == 0
@@ -725,6 +725,8 @@ def test_the_results_step_and_tab_follow_the_frame_shown(tmp_path: Path) -> None
     page.automatic_finished("ok", "Two rings in film_0.tif")
     assert page.results_for() == paths[0].resolve() or page.results_for().name == "film_0.tif"
     assert page.current_right() == "results"
+    # The outcome is said by the step rail and the Results tab: neither under the step's title nor in the status line.
+    assert page.step_intro["results"].isHidden() and page.status_text() == ""
 
     page.file_list.setCurrentRow(1)
     _done(page)
@@ -736,16 +738,17 @@ def test_the_results_step_and_tab_follow_the_frame_shown(tmp_path: Path) -> None
     page.file_list.setCurrentRow(0)
     _done(page)
     assert page.step_rail.state("results") == "ok" and page.step_rail.detail("results") == "Two rings in film_0.tif"
-    assert page.step_intro["results"].text() == "Two rings in film_0.tif"
+    assert page.step_intro["results"].text() == "" and page.step_intro["results"].isHidden()
 
     # Each file keeps its results, as the automatic analysis keeps a report per file and restores it.
     page.file_list.setCurrentRow(1)
     _done(page)
     page.automatic_started("Automatic analysis …")
     page.automatic_finished("warn", "One question about film_1.tif")
+    assert page.status_text() == "One question about film_1.tif" and page.status_level() == "warning"  # said there too
     page.file_list.setCurrentRow(0)
     _done(page)
-    assert page.step_rail.state("results") == "ok" and page.step_intro["results"].text() == "Two rings in film_0.tif"
+    assert page.step_rail.state("results") == "ok" and page.step_intro["results"].text() == ""
     assert page.current_right() == "results"  # the results put back in the tab stay in view
     page.file_list.setCurrentRow(1)
     _done(page)
@@ -890,8 +893,10 @@ def test_the_cuts_card_and_the_plots_name_the_same_pixels() -> None:
     top = page.top_plot.title_label.text()
     assert re.fullmatch(rf"I\(qy\) · rows {rows[0]}–{rows[1] - 1} · Yoneda αf 0\.\d{{3}}°", top), top
     assert page.top_plot.title_label.toolTip() == card.splitlines()[0]  # the whole sentence
-    hints = [label.text() for label in page.gisaxs_cuts.findChildren(QLabel) if "band on the image" in label.text()]
-    assert hints and "orange" in hints[0] and "double-click" in hints[0]
+    # How to move the cuts: the card's tooltip (the same every time, so no line of its own under the controls).
+    assert not [label for label in page.gisaxs_cuts.findChildren(QLabel) if "band on the image" in label.text()]
+    tip = page.cuts_info_label.toolTip()
+    assert tip.startswith("The horizontal cut at the Yoneda band") and "orange" in tip and "double-click" in tip
 
     # The halves for Fitting are what the upper plot shows first; the plot's own control stays free.
     page.halves_combo.setCurrentIndex(page.halves_combo.findData("mean"))

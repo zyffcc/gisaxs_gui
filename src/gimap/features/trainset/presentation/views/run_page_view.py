@@ -74,6 +74,4 @@ class TrainsetRunPageView(object):
     def retranslateUi(self, trainsetRunPage):
         _translate = QtCore.QCoreApplication.translate
         self.runTitle.setText(_translate("TrainsetRunPage", "Run"))
-        self.runDescription.setText(_translate("TrainsetRunPage", "Prepare and execute the local workflow, or export the same reproducible package for Maxwell."))
         self.exportTitle.setText(_translate("TrainsetRunPage", "Export"))
-        self.exportDescription.setText(_translate("TrainsetRunPage", "The package manifest and generated job files appear here."))

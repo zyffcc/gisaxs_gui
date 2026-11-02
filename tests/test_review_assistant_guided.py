@@ -144,7 +144,7 @@ def test_clear_forgets_the_reports_and_the_answers() -> None:
     guided.files_cleared()
     assert guided.report is None and guided.results.isHidden() and guided.questions.isHidden()
     assert not guided.progress_panel.save_button.isEnabled() and guided.save_report() is None
-    assert guided.status_label.text() == "No AI needed: the standard procedure, each decision with its reason."
+    assert guided.status_label.text() == "" and guided.status_label.isHidden()  # idle: Run's tooltip says what it does
     assert guided.options().incidence_deg is None  # a project's own αi is not overridden by an old answer
     guided.frame_shown(frame)  # the same file opened again: its old report does not come back
     assert guided.report is None and guided.results.isHidden()

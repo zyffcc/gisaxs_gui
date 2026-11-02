@@ -196,7 +196,8 @@ def test_compare_layout_is_steps_and_plots_with_every_command_explained():
     assert actions == ["The Series Map of Analyze", "Folder of Curves…", "Curve Files…"]
     assert all(action.toolTip() for action in page.add_button.menu().actions())
     assert page.save_button.isHidden() and page.remove_button.isHidden()  # nothing to save or remove yet
-    assert not page.series_hint.isHidden()
+    assert page.add_button.toolTip().startswith("Add a series: Analyze's Series map")  # how to add: the tooltip
+    assert page.chip.text() == "" and not page.empty_state.action_button.isHidden()
     for plot in (page.change_plot, page.paths_plot, page.end_plot):
         assert plot.parent() is not None
     page.dispose()

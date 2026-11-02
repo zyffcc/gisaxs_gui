@@ -27,15 +27,6 @@ LAYER_KINDS = (
     "conv2d", "maxpool2d", "batch_normalization", "dropout", "global_average_pooling2d", "flatten", "dense",
 )
 
-# What to do on each workflow step (under the step pages, beside Back).
-ACTION_HINTS = (
-    "Validate the detector, ROI, particle and sampling design.",
-    "Generate a small BornAgain comparison before scaling up.",
-    "Define and validate the model contract for this dataset.",
-    "Run locally or export a portable job package.",
-    "Inspect progress, logs, metrics and registered models.",
-)
-
 
 class DesignStateMixin:
     """Own the design state section."""
@@ -66,12 +57,6 @@ class DesignStateMixin:
         for button in visibility:
             button.style().unpolish(button)
             button.style().polish(button)
-
-        self._show_action_hint(index)
-
-    def _show_action_hint(self, index: int) -> None:
-        if 0 <= index < len(ACTION_HINTS):
-            self.trainset_action_hint.setText(tr(ACTION_HINTS[index]))
 
     def add_mask_shape(self, shape: Dict[str, Any]) -> None:
         row = self.mask_shape_table.rowCount()
@@ -165,22 +150,17 @@ class DesignStateMixin:
         roi = config.get("roi", {})
         estimated_gib = nodes * int(roi.get("width", 0)) * int(roi.get("height", 0)) * 2 / (1024**3)
         max_files = int(config.get("simulation", {}).get("grid_cache", {}).get("max_files", 5))
+        # How many files are kept is the Maximum cache files field right above (not said again here).
         if not axes:
-            self.texts.set(
-                self.cache_grid_summary,
-                "Matrix: no particle-parameter axes yet. Least-recently-used retention: {files} file(s).",
-                files=max_files,
-            )
+            self.texts.set(self.cache_grid_summary, "Matrix: no particle-parameter axes yet")
             return
         self.texts.set(
             self.cache_grid_summary,
-            "Matrix: {shape} = {nodes:,} BornAgain basis images ({names}). Estimated float16 cache: "
-            "{gib:.2f} GiB/file. Least-recently-used retention: {files} file(s).",
+            "Matrix: {shape} = {nodes:,} BornAgain basis images ({names}) · float16 cache ≈ {gib:.2f} GiB per file",
             shape=" × ".join(str(points) for _name, points in axes),
             nodes=nodes,
             names=", ".join(name for name, _points in axes),
             gib=estimated_gib,
-            files=max_files,
         )
 
     def _add_layer_row(self) -> None:

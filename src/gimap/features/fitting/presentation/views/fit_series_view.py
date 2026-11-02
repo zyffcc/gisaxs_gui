@@ -40,13 +40,19 @@ from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, Fl
 from .fit_steps_view import info_card, muted, read_only_table
 
 SERIES_STEPS = (("curves", "Curves"), ("start", "Start"), ("results", "Results"))
-TREND_EMPTY = "The trend of the chosen value appears here after Start"
-"""Shown over the trend plot while it has no points."""
-FRAME_EMPTY = "The selected frame and its fit appear here."
-"""Shown over the frame plot while it has no points (the page says why a frame cannot be drawn)."""
-FOLDER_HINT = "The folder of the curves, e.g. the gimap_analysis/fit_input folder Analyze writes"
-NO_FOLDER = "No folder yet — choose one, or Send Series to Fitting in Analyze"
-"""What the bar says with no folder."""
+TREND_EMPTY = "Shown after Start"
+"""Shown over the trend plot while it has no points (which value: the drop-down above it)."""
+FRAME_EMPTY = "No curves listed — choose a folder, or Send Series to Fitting in Analyze"
+"""Shown over the frame plot while no curves are listed: the page's one call to action (the page says why a
+listed frame cannot be drawn)."""
+FOLDER_HINT = ("A folder of curves, e.g. the gimap_analysis/fit_input folder of Analyze's Batch Export or Send "
+               "Series to Fitting, or a folder of detector frames (CBF, TIFF, EDF, NeXus): each frame is then cut "
+               "as Analyze cuts it.")
+"""The tooltip of Choose Folder…: which folders it takes."""
+NO_FOLDER = ""
+"""What the bar says with no folder: nothing (the frame plot says what to do, ``FRAME_EMPTY``)."""
+RESULTS_TIP = ("Every frame: the quality of its fit and each value ± 1σ. Click a row to see that frame; the plot "
+               "below follows a value through the series.")
 RESULTS_WIDTH = 560
 """The steps panel is at least this wide while the Results step is shown (the table of every frame)."""
 
@@ -163,6 +169,7 @@ class FitSeriesView:
             intro = QLabel("", content)
             intro.setProperty("gimapInspectorIntro", True)
             intro.setWordWrap(True)
+            intro.hide()  # what the rail and the controls do not say, when there is anything (``show_line``)
             page_layout.addWidget(heading)
             page_layout.addWidget(intro)
             getattr(self, f"_series_{key}_step")(content, page_layout)
@@ -333,11 +340,14 @@ class FitSeriesView:
 
     def _series_results_step(self, page: QWidget, layout: QVBoxLayout) -> None:
         self.results_card, self.results_summary = info_card(page)
+        self.results_card.setObjectName("fitSeriesResultsCard")
+        self.results_card.hide()  # shown once a series was started (the rail says “After Start” until then)
         layout.addWidget(self.results_card)
         self.results_table = read_only_table(("#", "χ²ᵣ", "parameter"), page, "fitSeriesTable",
                                              QAbstractItemView.ExtendedSelection)  # rows to copy; the current one is shown
         self.results_table.setProperty("gimapDataHeaders", True)  # parameter names with units
         self.results_table.setMinimumHeight(200)
+        self.results_table.setToolTip(RESULTS_TIP)
         # Columns as wide as their text, set by the page when rows arrive: a header that sizes itself to the
         # contents measures every cell again at each new cell (minutes for a few hundred frames).
         header = self.results_table.horizontalHeader()
@@ -404,4 +414,5 @@ class FitSeriesView:
         return panel
 
 
-__all__ = ["FOLDER_HINT", "FRAME_EMPTY", "FitSeriesView", "NO_FOLDER", "RESULTS_WIDTH", "SERIES_STEPS", "TREND_EMPTY"]
+__all__ = ["FOLDER_HINT", "FRAME_EMPTY", "FitSeriesView", "NO_FOLDER", "RESULTS_TIP", "RESULTS_WIDTH", "SERIES_STEPS",
+           "TREND_EMPTY"]

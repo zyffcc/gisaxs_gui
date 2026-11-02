@@ -25,6 +25,7 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import set_state
 
+from ..step_rail import NOT_STARTED
 from ..value_combos import fill_values
 
 # Numbers and choices keep a natural width; only text fields (paths, hosts) stretch with the form.
@@ -89,7 +90,8 @@ class ShellLayoutMixin:
     def _polish_workflow_shell(self) -> None:
         """Clarify project actions without changing their connected commands."""
         self.pageTitle.setText("Trainset builder")
-        self.pageSubtitle.setText(
+        # What the page is for, needed once: the title's tooltip (the five steps on the left say it in order).
+        self.pageTitle.setToolTip(
             "Design a simulated GISAXS dataset, validate it locally, then prepare training jobs."
         )
         self.validate_button.setText("Validate design")
@@ -99,17 +101,13 @@ class ShellLayoutMixin:
         self.prepare_button.setText("Prepare job package")
         self.submit_button.setText("Maxwell (unavailable)")
 
-        self.trainset_action_hint = QLabel("Start by validating the dataset design.", self)
-        self.trainset_action_hint.setObjectName("trainsetActionHint")
-        self.trainset_action_hint.setWordWrap(True)
         self.back_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
         while self.trainsetActionsLayout.count():
             self.trainsetActionsLayout.takeAt(0)
+        # Back at the left, the step's buttons at the right (their names and tooltips say what to do).
         self.trainsetActionsLayout.addWidget(self.back_button)
-        # The hint takes the free width (a word-wrapped label beside a stretch got a narrow column and broke
-        # its sentence into two lines next to an empty stretch); the buttons stay at the right.
-        self.trainsetActionsLayout.addWidget(self.trainset_action_hint, 1)
+        self.trainsetActionsLayout.addStretch(1)
         self.trainsetActionsLayout.addLayout(self.trainsetActionGrid)
 
         while self.trainsetActionGrid.count():
@@ -136,8 +134,12 @@ class ShellLayoutMixin:
         self._show_step(index)
 
     def _show_step(self, index: int) -> None:
+        """A step not started shows its grey mark only; the line appears once it has a state."""
         template, values = self._step_values[index] or (self._step_states[index], {})
-        shown = trf(template, **values) if values else tr(template)
+        if self._step_states[index] == NOT_STARTED:
+            shown = ""
+        else:
+            shown = trf(template, **values) if values else tr(template)
         self.step_list.set_row_state(index, self._step_states[index], shown)
 
     def set_validation_state(self, text: str, state: str) -> None:

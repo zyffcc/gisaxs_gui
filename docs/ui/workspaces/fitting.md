@@ -58,7 +58,9 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
 **Edit ▸ Undo / Redo** 撤销 Single analysis 里模型的改动。条目在 `app/presentation/workspace_menus.py`（`FITTING_MENU`、
 `EDIT_MENU`），由组合根 `app/workspace_commands.py` 注入；从别的页打开时先切到 Fitting，键仍归页面所有。
 
-- **Curve**：文件、点数、q 范围（nm⁻¹ 与 Å⁻¹）、有无 σ；切线两半（Mean of both halves / Both halves on |q| / q > 0 half /
+- **Curve**：卡片（`single/curve_info.py`）写点数、q 范围（nm⁻¹；Å⁻¹ 在卡片提示里）、“σ from the file”；没有 σ 时卡片里和
+  Fit 步骤里各一行警告（“⚠ No σ in the file: every point weighted alike …”，提示里是对 Refine 与 fit1d 的含义）。文件名只在命令栏。
+  步骤标题下的说明行只在步骤栏和控件没说的时候出现（`show_line`，空时隐藏），用法写在控件提示里；切线两半（Mean of both halves / Both halves on |q| / q > 0 half /
   q < 0 half，`single_fit.SIDES`）。平均（`shared/signed_cut.py`）只在另一半两侧 2.5 个步长内都有测量点处求平均，其余处
   （另一半的缺口、另一半到头之后）用这一半原样，不跨缺口插值。Find the particle shape、AI proposal、fit1d 只能拟合一条曲线：
   选着 Both halves on |q| 时 Fit 先把下拉换成平均，并说 “Both halves on |q| cannot be fitted by this method: the mean of
@@ -249,7 +251,7 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   → 列出的第一个拟合输入 `# observation:` 里的 `"halves"`（Analyze 写的）→ Single analysis 的两半（不是 Both halves on
   |q| 时）→ 平均；不是自己选的时下面一行写出来源（“from the fit inputs written by Analyze” / “as Analyze sends cuts to Fitting”（直接读的探测器帧） / “as in Single analysis” /
   “as saved in the project”）。打开另一个文件夹时自己的选择作废，同一文件夹重新列出时保留。曲线只有一侧 q 时下拉
-  不可用并说 “These curves have q on one side only: there are no halves to choose.”。所选的一半没有点的帧失败，原因为
+  不可用，它（和它的标签）的提示说 “These curves have q on one side only: there are no halves to choose.”。所选的一半没有点的帧失败，原因为
   “No points on the q > 0 half” / “No points on the q < 0 half”，不会改用另一半（`MissingHalf`，预览也这样画）。
   两半随项目保存，写进记录（`settings.side`、`side_from`），并写在 Start 的摘要里。
 - **Start**：Single analysis 的模型、拟合范围和排除的点，以及上面的两半（摘要写在这里，Edit in Single

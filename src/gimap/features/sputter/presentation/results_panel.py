@@ -270,6 +270,7 @@ class SputterResultsMixin:
             line += "<br><b>" + tr("Cu: approximated with the Ag model, for reference only.") + "</b>"
         self.result_label.setText(line)
         self.result_label.setToolTip(str(result.folder))
+        self.result_label.setVisible(True)
 
     def _fill_table(self) -> None:
         result = self.result
@@ -296,6 +297,7 @@ class SputterResultsMixin:
             self.show_result(self.result)
         else:
             self.report.setHtml(tr(REPORT_EMPTY))
+            self._draw_trend()  # the empty state in the new language
 
 
 __all__ = ["CHOICES", "FRINGE_COLUMNS", "SputterResultsMixin", "TABLE_COLUMNS", "table_columns", "thickness_values"]

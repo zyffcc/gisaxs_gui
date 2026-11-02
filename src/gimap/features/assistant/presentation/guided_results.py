@@ -28,7 +28,7 @@ from src.gimap.app.presentation.components import AdvancedSection
 from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_to, current_language, tr, trf
 
 from ..application import found_by_search, reliable_row, ring_overlays, series_changes
-from .guided_details import PeakDetails, SolutionDetails
+from .guided_details import PeakDetails, SolutionDetails, method_text
 from .guided_gisaxs import GisaxsResults, outcome_summary
 from .guided_report import report_markdown
 from .guided_tables import PEAK_LEGEND, peak_table, selected_row
@@ -74,6 +74,19 @@ SEARCHED_NOTE = "Found by the automatic search, not named by you: {path} — {wh
 """Under the geometry, when nobody named the calibration the run used: its full path and where it lies."""
 SEARCHED_ABOVE = "The geometry is from a calibration the automatic search found ({name}): see Geometry below."
 """Under the outcome of an analysis: the Geometry section, with the path, is the last one of a long tab."""
+PEAKS_TIP = ("Phases are not assigned automatically: ask the AI or compare q with the lines of your material. Hover a "
+             "cell for the whole sentence; the saved report has the full table.")
+Q_MAP_TIP = ("The analysed rings on the q map: solid white = measured, orange = in a shadow, red dashed = not measured "
+             "(detector gaps, the missing wedge next to qz).")
+DETAILS_TIP = ("How the selected row was fitted: the fit on its points, every parameter with its error, the settings "
+               "and warnings")
+HINT_IN_TIP = ("model",)
+"""Points to check whose hint is their tooltip: the model choice (rank, bounds, 2π/q*, what to do) is said item by
+item in the fit table, the line of values at a bound and the line of the solution reported."""
+REASON_IN_TIP = ("detector tilt",)
+"""Decisions about the geometry whose reason is the line's tooltip (the line says what was decided); a kept
+profile's too (``KEPT_PROFILE``). The others keep it on the line: where a value comes from decides how far it can be
+trusted (αi from the notes, an energy from the file header)."""
 
 
 def giwaxs_summary(report: dict) -> str:
@@ -164,6 +177,17 @@ def decision_text(decision) -> str:
     if decision.startswith(start) and decision.endswith(end) and len(decision) > len(start) + len(end):
         return trf("kept the instrument profile “{name}” this detector already has", name=decision[len(start):-len(end)])
     return words(decision)
+
+
+def decision_line(item: dict) -> tuple[str, str]:
+    """(“• what: decision”, its tooltip) of a decision about the geometry: the reason on the line, or in the
+    tooltip for the decisions of ``REASON_IN_TIP`` and a kept profile."""
+    what, decision, why = tr(GEOMETRY_DECISIONS[item["what"]]), decision_text(item["decision"]), words(item["why"])
+    start, end = KEPT_PROFILE
+    raw = str(item.get("decision") or "")
+    if item["what"] in REASON_IN_TIP or (raw.startswith(start) and raw.endswith(end)):
+        return "• " + trf("{what}: {decision}", what=what, decision=decision), why
+    return "• " + trf("{what}: {decision} — {why}", what=what, decision=decision, why=why), ""
 
 
 def _point(item: dict) -> str:
@@ -288,8 +312,11 @@ class GuidedResultsPanel(QWidget):
             if points:
                 self.layout_.addWidget(label(tr("{n} point(s) to check — see below").format(n=len(points)), self, role="muted"))
             for item in points:
-                self.layout_.addWidget(badge(_point(item), NOTE, self))
-                if item.get("hint"):
+                point = badge(_point(item), NOTE, self)
+                self.layout_.addWidget(point)
+                if item.get("hint") and item.get("item") in HINT_IN_TIP:  # its details are in the sections below
+                    point.setToolTip(words(item["hint"]))
+                elif item.get("hint"):
                     self.layout_.addWidget(label(words(item["hint"]), self, role="muted"))
         else:
             self.layout_.addWidget(badge(tr(
@@ -301,7 +328,9 @@ class GuidedResultsPanel(QWidget):
 
     def _peaks(self, report: dict) -> None:
         peaks = report.get("peaks") or []
-        self.layout_.addWidget(_heading("Peaks", self))
+        heading = _heading("Peaks", self)
+        heading.setToolTip(tr(PEAKS_TIP))
+        self.layout_.addWidget(heading)
         self.peak_table = peak_table(peaks, self)  # compact: fits the narrow Results tab; tooltips say the rest
         self.peak_table.setMinimumHeight(min(360, 60 + 30 * len(peaks)))
         self.layout_.addWidget(self.peak_table)
@@ -313,32 +342,36 @@ class GuidedResultsPanel(QWidget):
         self.layout_.addWidget(self.peak_details)
         self.peak_table.itemSelectionChanged.connect(lambda: self._show_peak(self.peak_table.currentRow(), report))
         self.peak_details.expandedChanged.connect(lambda _open: self._show_peak(self.peak_table.currentRow(), report))
-        self.peak_table.selectRow(next((index for index, peak in enumerate(peaks) if not peak.get("caveat")), 0))
+        first = next((index for index, peak in enumerate(peaks) if not peak.get("caveat")), 0)
+        self._details_tip(peaks[first] if peaks else {}, report)  # how the peaks were found and fitted
+        self.peak_table.selectRow(first)
         for ring in report.get("rings") or ():
             text, detail = ring_summary(ring)
             line = label(text, self)
             line.setToolTip(detail)
             self.layout_.addWidget(line)
-        self.layout_.addWidget(label(tr(
-            "Sizes are Scherrer lower bounds. Phases are not assigned automatically: ask the AI or compare "
-            "q with the lines of your material."), self, role="muted",
-        ))
 
     def _details_section(self, name: str) -> AdvancedSection:
         """Fit details of the selected row: closed until opened, then open for the next reports too."""
         section = AdvancedSection(tr("Fit details"), "", self, expanded=GuidedResultsPanel.details_open)
         section.setObjectName(name)
-        section.toggle_button.setToolTip(tr("How the selected row was fitted: the fit on its points, every parameter "
-                                            "with its error, the settings and warnings"))
+        section.toggle_button.setToolTip(tr(DETAILS_TIP))
         section.expandedChanged.connect(lambda on: setattr(GuidedResultsPanel, "details_open", bool(on)))
         return section
 
     def _show_peak(self, row: int, report: dict) -> None:
         """Fit details of the selected peak (drawn only while they are open: the q map takes a moment)."""
         peaks = report.get("peaks") or []
-        if self.peak_details is None or not self.peak_details.is_expanded() or not 0 <= row < len(peaks):
+        if self.peak_details is None or not 0 <= row < len(peaks):
             return
-        self.peak_details.findChild(PeakDetails).show_peak(peaks[row], report, map_width=PEAK_MAP_PX)
+        self._details_tip(peaks[row], report)
+        if self.peak_details.is_expanded():
+            self.peak_details.findChild(PeakDetails).show_peak(peaks[row], report, map_width=PEAK_MAP_PX)
+
+    def _details_tip(self, peak: dict, report: dict) -> None:
+        """Fit details' tooltip: what they show, then how the peak was found and fitted (the thresholds of the run)."""
+        gap = "" if current_language() == "zh" else " "
+        self.peak_details.toggle_button.setToolTip(sentence(tr(DETAILS_TIP)) + gap + method_text(peak, report))
 
     def _picture(self, target: QLabel, rings: list, width: int) -> bool:
         try:
@@ -377,11 +410,8 @@ class GuidedResultsPanel(QWidget):
         self.q_map.setObjectName("guidedQMap")
         self.q_map.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         if self._picture(self.q_map, ring_overlays(report), Q_MAP_PX):
+            self.q_map.setToolTip(tr(Q_MAP_TIP))  # (the map has its own measured / not measured legend)
             self.layout_.addWidget(self.q_map)
-            self.layout_.addWidget(label(tr(
-                "The analysed rings on the q map: solid white = measured, orange = in a shadow, red dashed = "
-                "not measured (detector gaps, the missing wedge next to qz)."), self, role="muted",
-            ))
         else:  # outside the layout it would be drawn over the outcome line at the top
             self.q_map.hide()
 
@@ -419,9 +449,10 @@ class GuidedResultsPanel(QWidget):
                 self.layout_.addWidget(label(trf(template, warning=tr(str(warning))), self, role="muted"))
         for item in report.get("decisions") or ():
             if item["what"] in GEOMETRY_DECISIONS:
-                self.layout_.addWidget(label("• " + trf("{what}: {decision} — {why}", what=tr(GEOMETRY_DECISIONS[item["what"]]),
-                                                        decision=decision_text(item["decision"]), why=words(item["why"])),
-                                             self, role="muted"))
+                text, tip = decision_line(item)
+                line = label(text, self, role="muted")
+                line.setToolTip(tip)
+                self.layout_.addWidget(line)
 
     def _series(self, report: dict) -> None:
         self.layout_.addWidget(_heading("Series", self))
@@ -484,4 +515,4 @@ class GuidedResultsPanel(QWidget):
             toggle.setChecked(True)
 
 
-__all__ = ["GuidedResultsPanel", "automatic_outcome"]
+__all__ = ["GuidedResultsPanel", "automatic_outcome", "decision_line"]

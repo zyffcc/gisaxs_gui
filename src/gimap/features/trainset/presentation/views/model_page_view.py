@@ -68,10 +68,6 @@ class TrainsetModelPageView(object):
         self.modelAdvancedContentLayout = QtWidgets.QVBoxLayout(self.modelAdvancedContent)
         self.modelAdvancedContentLayout.setContentsMargins(4, 2, 4, 4)
         self.modelAdvancedContentLayout.setObjectName("modelAdvancedContentLayout")
-        self.modelIntro = QtWidgets.QLabel(self.modelAdvancedContent)
-        self.modelIntro.setWordWrap(True)
-        self.modelIntro.setObjectName("modelIntro")
-        self.modelAdvancedContentLayout.addWidget(self.modelIntro)
         self.model_layer_table = QtWidgets.QTableWidget(self.modelAdvancedContent)
         self.model_layer_table.setMinimumSize(QtCore.QSize(0, 280))
         self.model_layer_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
@@ -169,10 +165,8 @@ class TrainsetModelPageView(object):
     def retranslateUi(self, trainsetModelPage):
         _translate = QtCore.QCoreApplication.translate
         self.modelConfigureTitle.setText(_translate("TrainsetModelPage", "Configure"))
-        self.modelConfigureDescription.setText(_translate("TrainsetModelPage", "Set the training controls independently of the model architecture."))
         self.modelAdvancedToggle.setText(_translate("TrainsetModelPage", "Advanced model architecture"))
-        self.modelAdvancedDescription.setText(_translate("TrainsetModelPage", "Edit, remove and reorder the feature-extractor layers."))
-        self.modelIntro.setText(_translate("TrainsetModelPage", "Build the feature extractor row by row. The regression output size is added automatically from the variable physics parameters."))
+        self.model_layer_table.setToolTip(_translate("TrainsetModelPage", "The feature extractor, one layer per row. The regression output, sized by the variable physics parameters, is added automatically."))
         item = self.model_layer_table.horizontalHeaderItem(0)
         item.setText(_translate("TrainsetModelPage", "Layer type"))
         item = self.model_layer_table.horizontalHeaderItem(1)
@@ -188,7 +182,6 @@ class TrainsetModelPageView(object):
         self.move_model_layer_up_button.setText(_translate("TrainsetModelPage", "Move up"))
         self.move_model_layer_down_button.setText(_translate("TrainsetModelPage", "Move down"))
         self.modelPreviewTitle.setText(_translate("TrainsetModelPage", "Preview"))
-        self.modelPreviewDescription.setText(_translate("TrainsetModelPage", "Review the tensor contract before starting a local run."))
         self.model_summary.setPlainText(_translate("TrainsetModelPage", "Add, remove and reorder layers, then validate the real tensor contract.\n"
 "\n"
 "Supported: Conv2D, MaxPool2D, BatchNormalization, Dropout, GlobalAveragePooling2D, Flatten and Dense."))

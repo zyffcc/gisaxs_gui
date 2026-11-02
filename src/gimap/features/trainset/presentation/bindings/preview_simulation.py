@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
 )
 
 from src.gimap.app.presentation.i18n import trf
+from src.gimap.app.presentation.theme import set_role
 from src.gimap.features.trainset.application import (
     TrainsetPreviewRequest,
     TrainsetWhatIfRequest,
@@ -142,6 +143,7 @@ class PreviewSimulationMixin:
         )
         cache_hits = int(result["cache_hits"])
         cache_misses = int(result["cache_misses"])
+        set_role(self.page.preview_cache_status, None)  # BornAgain ran: no warning on this line any more
         self.page.texts.set(
             self.page.preview_cache_status,
             "BornAgain cache: {size} image(s) · last update {hits} hit / {misses} rerun",

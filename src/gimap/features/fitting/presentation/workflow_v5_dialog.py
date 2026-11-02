@@ -64,6 +64,14 @@ STAGE_LABELS = {
 }
 RMSE_TIP = ("Natural-log RMSE over the measured curve, including measurement noise. "
             "Review peak positions, overall shape and residuals; no mandatory cutoff is applied.")
+EXPERIMENTAL = "Experimental: candidates are starts to check, not results."
+"""The warning under the title (the window's one caveat; the details are its tooltip, ``EXPERIMENTAL_TIP``)."""
+EXPERIMENTAL_TIP = ("General V5 proposes several compositions; the single-RC specialist needs a known single random "
+                    "cylinder. Both are experimental. logRMSE and RMS/σ include the measurement noise and are not "
+                    "calibrated probabilities. The model is chosen in Parameters… ▸ Fit method.")
+CURRENT_CUT = "Input: the current cut of Fitting (q in nm⁻¹); each side fitted separately"
+"""The input line for Use current cut (Fitting converts its q to nm⁻¹; the halves are fitted one by one)."""
+FINISHED = "Finished in {seconds} s · {failures} failed files · {count} candidates saved."
 UNITS_NOTE = ("Lengths: nm. sigma_R/h/D: relative standard deviations.\nMixture weights are not posterior "
               "probabilities.\nResolution sigma: nm^-1; nu: dimensionless.")
 
@@ -130,11 +138,11 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
         title = QLabel("1D Predict", self)
         set_role(title, "display")
         root.addWidget(title)
-        hint = QLabel(
-            "Load curves → Fit → compare candidates. General V5 proposes multiple compositions. "
-            "The single-RC specialist requires a known single random cylinder and is experimental."
-        )
+        hint = QLabel(EXPERIMENTAL)  # one warning line: what the candidates are worth
+        hint.setObjectName("workflowV5Experimental")
         hint.setWordWrap(True)
+        set_role(hint, "warning")
+        hint.setToolTip(EXPERIMENTAL_TIP)
         root.addWidget(hint)
         actions = QHBoxLayout()
         self.load_button = QPushButton("Add curves…")
@@ -154,9 +162,7 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
         for b in (self.run_button, self.cancel_button, self.export_button):
             actions.addWidget(b)
         root.addLayout(actions)
-        self.input_label = QLabel(
-            "Current cut — original measured points; positive and negative sides are fitted separately."
-        )
+        self.input_label = QLabel(CURRENT_CUT)
         self.input_label.setWordWrap(True)
         root.addWidget(self.input_label)
         self.settings_panel = self._build_settings()
@@ -169,6 +175,8 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
             hint.setText(
                 "Save creates a new settings snapshot for future frames. Completed frames are unchanged."
             )
+            set_role(hint, None)  # a plain note here, not the warning about candidates
+            hint.setToolTip("")
             for button in (
                 self.load_button,
                 self.current_button,
@@ -218,8 +226,7 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
         root.addWidget(split, 1)
         self.status = QLabel()
         self.status.setWordWrap(True)
-        self._say(self.status, lambda: tr(
-            "Ready. Automatic conditions are estimates; candidates are not calibrated probabilities."))
+        self._say(self.status, lambda: tr("Ready."))  # the caveat: the warning under the title
         root.addWidget(self.status)
         self.progress = QProgressBar()
         root.addWidget(self.progress)
@@ -310,8 +317,7 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
 
     def _use_current(self):
         self.files = []
-        self._say(self.input_label, lambda: tr(
-            "Current cut — native points, q converted to nm⁻¹ by the fitting workspace."))
+        self._say(self.input_label, lambda: tr(CURRENT_CUT))
         self._say(self.run_button, lambda: tr("Fit curve"))
 
     # -- the run --------------------------------------------------------------------------------
@@ -395,12 +401,10 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
             return
         value = result.value
         self.set_results(value["candidates"], value["output_dir"])
-        saved = self._texts.get(self.status)
-        quality = saved if saved is not None else (lambda text=self.status.text(): text)
         failures = sum(r["status"] == "failed" for r in value["records"])
         seconds = f"{value['summary']['runtime_seconds']:.2f}"
-        self.show_status(lambda: trf("Finished in {seconds} s · {failures} failed files. {quality}",
-                                     seconds=seconds, failures=failures, quality=quality()))
+        count = len(value["candidates"])  # (what they are worth: the warning under the title)
+        self.show_status(lambda: trf(FINISHED, seconds=seconds, failures=failures, count=count))
         self.log.append(json.dumps(value["records"], indent=2))
 
     def _finished(self):

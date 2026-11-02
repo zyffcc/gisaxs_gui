@@ -75,7 +75,7 @@ def _nothing_of_before(window, chip: str) -> None:
     # The In-situ series has its own halves: those of the series that went are not the next one's.
     assert series._halves_chosen is None and series.series_side() == "mean" and series.halves_source() == "default"
     assert series.side_combo.currentData() == "mean" and series.halves_note.isHidden()
-    assert single.curve_chip.text().startswith("No curve yet") and single.status_label.text() == ""
+    assert single.curve_chip.text() == "" and single.status_label.text() == ""  # no curve: its plot says what to do
     # ... and each page is where it starts: not on the Results of what went, no range of that curve in the fields
     assert single.step_rail.current() == "curve" and series.step_rail.current() == "curves"
     assert single.range_min_spin.value() == single.range_max_spin.value() == 0.0

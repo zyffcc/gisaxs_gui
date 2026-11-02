@@ -971,17 +971,18 @@ def test_the_dialog_says_the_cut_of_every_frame_and_finds_it_again_on_demand() -
                   cost=lambda choices, frames: (28_000_000, 28_000_000 * frames, 150.0 * frames))
     try:
         dialog.show()
-        assert dialog.frames_label.text().startswith("3 sums of 3 frames (8 frames; the last sum has only 2) — ")
+        assert dialog.frames_label.text() == "3 sums of 3 frames (8 frames; the last sum has only 2)"  # (no sentence)
         assert dialog.notes_label.text() == "Sum 10 of the automatic analysis was switched off." and not dialog.notes_label.isHidden()
         assert dialog.cut_label.text() == "horizontal cut: rows 1170–1175 for every frame" and not dialog.pin_check.isChecked()
         assert dialog.export_button.text() == "Export 8 Sums"  # eight requests here: what is exported is sums
         assert dialog.every_label.text() == "sum(s): 8 of 8"
         summary = dialog.summary_label.text().splitlines()
-        assert summary[0] == ("8 sums of 3 frames · curves: Horizontal cut I(qy) · horizontal cut: rows 1170–1175 for every frame")
-        assert summary[1] == "about 28 MB per frame, 224 MB in all · about 20 min · README.txt in the folder says what each file is"
+        assert summary[0] == "8 sums of 3 frames · curves: Horizontal cut I(qy)"  # the cut: its own row, above
+        assert summary[1] == "about 28 MB per frame, 224 MB in all · about 20 min"
+        assert dialog.summary_label.toolTip() == "README.txt in the folder says what each file is"
         dialog.pin_check.setChecked(True)  # find the cut again in every frame
         assert state["calls"] == [False] and dialog.cut_label.text() == "horizontal cut: found again in each frame"
-        assert "found again in each frame" in dialog.summary_label.text() and dialog.finds_cut_again()
+        assert "found again" not in dialog.summary_label.text() and dialog.finds_cut_again()
         dialog.every_spin.setValue(4)
         dialog.output_checks["fit_input"].setChecked(True)
         assert dialog.summary_label.text().startswith("2 of 8 sums of 3 frames (Every 4) · ")
@@ -1067,7 +1068,7 @@ def test_a_sum_is_called_a_sum_and_a_last_sum_of_fewer_frames_is_marked(tmp_path
 
         monkeypatch.setattr(BatchExportDialog, "exec_", look)
         page.batch_export_dialog()
-        assert seen["frames"].startswith("3 sums of 3 frames (8 frames; the last sum has only 2) — ")
+        assert seen["frames"] == "3 sums of 3 frames (8 frames; the last sum has only 2)"
         assert seen["button"] == "Export 3 Sums" and seen["file"] == "→ curves/film_frame0000_sum3_radial.csv"
         target = tmp_path / "out"
         page.run_batch(target, BatchChoices(tables=True, per_frame=True, fit_input=True), stem="film")
@@ -1139,9 +1140,9 @@ def test_the_dialog_says_the_cut_of_the_frame_read_again_without_the_automatic_s
     page.batch_export_dialog()
     _wait(page)
     assert seen["first"] == "the frame on screen is read again without the sum …" and seen["enabled"] is False
-    assert seen["first"] in seen["summary"] and seen["early"] == QDialog.Rejected
+    assert seen["first"] not in seen["summary"] and seen["early"] == QDialog.Rejected  # (said once: the Cuts row)
     single = page._batch_cut_text()
-    assert seen["then"] == single and single.startswith("I(χ) ring: q ") and single in seen["summary_then"]
+    assert seen["then"] == single and single.startswith("I(χ) ring: q ") and single not in seen["summary_then"]
     record = _record(tmp_path / "out" / "run_09")
     assert record["series_cut_text"] == single and len(record["frames"]) == 6
     assert all(cut["chi_q_window"] == list(model.series_cut()["chi_q_window"]) for cut in record["cuts"])

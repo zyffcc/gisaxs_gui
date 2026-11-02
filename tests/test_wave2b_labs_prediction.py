@@ -74,8 +74,11 @@ def test_the_import_card_says_cbf_only_and_keeps_its_fields_beside_their_labels(
     try:
         ui = window
         assert ui.gisaxsPredictChooseGisaxsFileButton.text() == "Choose CBF frame…"
+        # The format limit is the button's tooltip (no line under it, no caption repeating the button).
+        assert "prediction reads CBF frames only" in ui.gisaxsPredictChooseGisaxsFileButton.toolTip()
+        assert "CBF frames (.cbf)" in ui.gisaxsPredictChooseFolderButton.toolTip()
         hints = [label.text() for label in ui.predictionInputModePanel.findChildren(QLabel)]
-        assert "Prediction reads CBF frames (.cbf) only." in hints
+        assert not {"Prediction reads CBF frames (.cbf) only.", "Detector frame", "Choose data folder"} & set(hints)
         grid = ui.gisaxsPredictStackLabel.parentWidget().layout()
         assert (grid.columnStretch(1), grid.columnStretch(2)) == (0, 1)  # the free width is an empty column
         assert ui.gisaxsPredictStackLabel.alignment() & Qt.AlignLeft
@@ -217,11 +220,13 @@ def test_run_time_texts_follow_a_switch_of_the_language_both_ways():
             window.predictionPlotPanel.empty_state.message_label.text(),
             window.gisaxsPredictModelStatusTextLabel.text(),
         )
-        assert english[1] == "Available index range: 3 - 9" and english[2] == "Show or hide: Activity log"
+        stack_tip = "How many consecutive detector files contribute to this prediction."
+        assert english[1] == stack_tip + "\nAvailable index range: 3 - 9"
+        assert english[2] == "Show or hide: Activity log"
         apply_language("zh", [window])
         assert window.gisaxsPredictInputReadyLabel.text() == ZH["Input: Missing"]
-        assert window.gisaxsPredictStackLabel.toolTip() == ZH["Available index range: {first} - {last}"].format(
-            first=3, last=9)
+        assert window.gisaxsPredictStackLabel.toolTip() == ZH[stack_tip] + "\n" + ZH[
+            "Available index range: {first} - {last}"].format(first=3, last=9)
         assert disclosure.toggle.toolTip() == ZH["Show or hide: {title}"].format(title=ZH["Activity log"])
         assert window.predictionPlotPanel.empty_state.action_button.text() == ZH[EMPTY_ACTION]
         assert window.gisaxsPredictModelStatusTextLabel.text() == ZH["Not loaded"]

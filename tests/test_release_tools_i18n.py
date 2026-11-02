@@ -39,13 +39,10 @@ CALIBRATION_ZH = {
     "Calibration cancelled.": "标定已取消。",
     "Calibration failed. Adjust the inputs and try again.": "标定失败。请调整输入后重试。",
     "Failed to load image.": "图像读取失败。",
-    "Loaded {name} — {width} × {height} pixels{notes}. Click Auto Calibration.":
-        "已载入 {name} — {width} × {height} 像素{notes}。请点击“自动标定”。",
+    "Image loaded{notes}. Click Auto Calibration.": "已载入图像{notes}。请点击“自动标定”。",
     "energy from companion NXS": "能量来自同组的 NXS 文件",
     "multiple standard names found; comparing patterns automatically": "找到多个标样名称；将自动比较衍射图样",
     "{x} × {y} µm (metadata)": "{x} × {y} µm（来自元数据）",
-    "{image}  ·  {standard}  ·  {distance} mm  ·  {rings} matched rings  ·  {confidence} confidence":
-        "{image}  ·  {standard}  ·  {distance} mm  ·  匹配 {rings} 个环  ·  置信度：{confidence}",
     "High": "高",
     "Medium": "中",
     "Low": "低",
@@ -55,6 +52,9 @@ CALIBRATION_ZH = {
     "Only one ring is matched; center and distance remain ambiguous.": "只匹配到一个环；中心和距离仍不确定。",
     "Matched rings have very limited azimuthal coverage; verify the overlay before applying.":
         "匹配的环在方位角上覆盖很少；应用之前请核对叠加图。",
+    "Few azimuths carry matched ring points, so the centre and the distance are poorly constrained. Check that the "
+    "matched (yellow) rings lie on the rings of the image before Apply.":
+        "匹配到的环点只覆盖很少的方位角，中心和距离约束不足。应用之前请核对匹配的（黄色）环是否落在图像的环上。",
     "Matched rings are partial GISAXS arcs; verify the overlay before applying.": "匹配的环只是 GISAXS 的部分弧段；应用之前请核对叠加图。",
     "A strong inner radial peak is unexplained by this harmonic assignment.": "内侧有一个较强的径向峰，这种级次指认无法解释它。",
     "Too few experimental ring points were available for joint refinement.": "实验环上可用的点太少，无法做联合精修。",
@@ -229,7 +229,7 @@ def test_every_entry_is_a_text_of_the_code() -> None:
 def test_a_sentence_that_names_a_button_names_its_chinese_label(chinese) -> None:
     for english, label in (
         ("Calibration complete. Review the selected candidate, then Apply.", "Apply"),
-        ("Loaded {name} — {width} × {height} pixels{notes}. Click Auto Calibration.", "Auto Calibration"),
+        ("Image loaded{notes}. Click Auto Calibration.", "Auto Calibration"),
         ("Pixel size could not be determined. Select the detector model or enter the pixel size under "
          "Advanced configuration.", "Advanced configuration"),
     ):

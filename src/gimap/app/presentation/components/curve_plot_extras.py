@@ -403,13 +403,14 @@ class EmptyOverlay(_Overlay):
 
         super().__init__(plot, "curvePlotEmpty")
         self.text = ""
-        self.bare = False  # the plot shows the empty text, without ticks and grid
+        self.bare_frame = False  # without curves: no ticks and grid, also without a sentence
+        self.bare = False  # the plot shows the empty text (or a bare frame), without ticks and grid
         self.label.setAlignment(Qt.AlignCenter)
         self.label.setWordWrap(True)
         language_changed().connect(self.refresh)
 
-    def set_text(self, text: str) -> None:
-        self.text = str(text or "")
+    def set_text(self, text: str, bare: bool = False) -> None:
+        self.text, self.bare_frame = str(text or ""), bool(bare)
         self.refresh()
 
     @pyqtSlot()
@@ -421,10 +422,11 @@ class EmptyOverlay(_Overlay):
         if not self.alive():
             return
         shown = bool(self.text) and not self.plot.has_curves()
-        if shown != self.bare:  # an empty frame: no 0–1 ticks, values or grid that mean nothing yet
-            self.bare = shown
+        bare = shown or (self.bare_frame and not self.plot.has_curves())
+        if bare != self.bare:  # an empty frame: no 0–1 ticks, values or grid that mean nothing yet
+            self.bare = bare
             for side in ("left", "bottom"):
-                self.plot.plot.getAxis(side).setTicks([] if shown else None)  # ``None``: pyqtgraph's own again
+                self.plot.plot.getAxis(side).setTicks([] if bare else None)  # ``None``: pyqtgraph's own again
         if shown:
             self.label.setText(tr(self.text))
             self.label.raise_()

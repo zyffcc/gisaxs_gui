@@ -167,7 +167,7 @@ def test_the_map_keeps_the_name_of_its_curve_when_the_combo_changes(tmp_path: Pa
         combo, title = page.series_curve_combo, page.series_map_view.title_label
         built = combo.currentText()
         assert title.text() == f"{built} — 3 frames" and page._series_curve_name() == built
-        assert page.status_text() == f"Series map: 3 frames of {built}"
+        assert page.series_title_label.text().startswith(f"{built} · 3 frames of ")  # (the status line repeats nothing)
         other = next(index for index in range(combo.count()) if combo.itemData(index) != "radial")
         combo.setCurrentIndex(other)  # another curve chosen, not built
         assert combo.currentText() != built and page._series_map.curve == "radial"

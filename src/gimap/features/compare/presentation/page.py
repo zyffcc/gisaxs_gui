@@ -22,7 +22,7 @@ from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import QShortcut, QTableWidgetItem, QWidget
 
 from src.gimap.app.presentation.components import Toast, show_toast, visible_toasts
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.stage_text import axis_symbol
 from src.gimap.app.presentation.task_runner import TaskRunner
 from src.gimap.app.presentation.theme import theme_manager
@@ -365,14 +365,10 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
         has = bool(self.series)
         self.remove_button.setVisible(has)
         self.clear_button.setVisible(has)
-        self.series_hint.setVisible(len(self.series) < 2)
-        self.chip.setText(tr("{n} series · {frames} frames").format(n=len(self.series), frames=frames) if has
-                          else tr("Nothing to compare yet — add a series"))
+        # No series: the chip is empty and the empty state on the right says what to do (Add Series' tooltip: how).
+        self.chip.setText(tr("{n} series · {frames} frames").format(n=len(self.series), frames=frames) if has else "")
         self.step_rail.set_state("series", "ok" if has else "pending",
                                  tr("{n} series").format(n=len(self.series)) if has else tr("Add a series"))
-        self.step_intro["series"].setText(tr(
-            "Each series is one run or one sample: its frames in order. Two or more are compared with each other; "
-            "one alone is described (odd frames, stages)."))
         comparison = self.comparison
         x_label = comparison.x_label if comparison is not None else (self.series[0].x_label if self.series else "q (Å⁻¹)")
         axis = axis_symbol(x_label)
@@ -383,9 +379,9 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
             elif has:  # a comparison is on its way (one is always scheduled after a change)
                 self.step_rail.set_state("compare", "pending", tr("Comparing …"))
                 self.step_rail.set_state("results", "busy", tr("Comparing …"))
-            else:
-                for key in ("compare", "results"):
-                    self.step_rail.set_state(key, "pending", tr("After a series is added"))
+            else:  # said once, on the Compare row (the grey number of Results says it waits too)
+                self.step_rail.set_state("compare", "pending", tr("After a series is added"))
+                self.step_rail.set_state("results", "pending", "")
             self._show_waiting()
         else:
             span = f"{comparison.compared.min():.4g}–{comparison.compared.max():.4g}"
@@ -401,12 +397,7 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
         shape_only = comparison.shape_only if comparison is not None else self.shape_check.isChecked()
         self.distance_label.setText(tr("How different (percent of intensity, shape):") if shape_only else
                                     tr("How different (percent of intensity, shape and level):"))
-        self.step_intro["compare"].setText(tr(
-            "The curves are compared on the q range every series covers. Odd frames are found first and left out."))
-        self.step_intro["results"].setText(tr(
-            "Every series: its odd frames, its stages, by which frame half and 90 % of its change had happened, and "
-            "how far its end state is from the others."))
-        self._sync_save()
+        self._sync_save()  # (what the steps do: the method line, the tables' tooltips)
 
     def _sync_save(self) -> None:
         """Save: shown once there is a comparison, and waiting (disabled) while the series have changed
@@ -416,8 +407,11 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
 
     @staticmethod
     def _results_detail(comparison) -> str:
-        """The Results step's one line: the groups from three series on."""
+        """The Results step's one line: what came out — how far two end states are apart, the groups from three
+        series on (one series: that it was described)."""
         count, groups = len(comparison.results), len(set(comparison.groups))
+        if count == 2:
+            return trf("End states {end} % apart", end=f"{float(comparison.distance[0, 1]):.0f}")
         if count < 3:
             return tr("{n} series compared").format(n=count)
         return tr("{n} groups").format(n=groups) if groups > 1 else tr("All alike")

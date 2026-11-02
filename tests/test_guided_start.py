@@ -78,6 +78,12 @@ def test_one_click_gives_results_with_their_evidence_without_any_model(analyze) 
     for expected in (0.40, 0.80):  # the synthetic film's lamellar orders
         assert min(abs(q - expected) for q in found) < 0.02, found
     assert results.q_map is not None and not results.q_map.pixmap().isNull()  # see what was and was not measured
+    assert results.q_map.toolTip().startswith("The analysed rings on the q map: solid white = measured")  # its legend
+    labels = [item.text() for item in results.findChildren(QLabel)]
+    assert "q, FWHM in Å⁻¹ · d in Å · L in nm (Scherrer, a lower bound)" in labels  # the units, one line
+    assert not any(text.startswith(("Sizes are Scherrer", "The analysed rings")) for text in labels)
+    peaks_title = next(item for item in results.findChildren(QLabel) if item.text() == "Peaks")
+    assert peaks_title.toolTip().startswith("Phases are not assigned automatically")
     assert "GIWAXS" in results.report_view.toPlainText()
     # Each peak can be seen on the map, and every column says how it was obtained.
     assert "2π / q" in peaks.horizontalHeaderItem(1).toolTip() and "Scherrer" in peaks.horizontalHeaderItem(4).toolTip()
@@ -90,7 +96,9 @@ def test_one_click_gives_results_with_their_evidence_without_any_model(analyze) 
     assert details.plot.curve_count() == 3  # the points fitted, the Gaussian + background, the background
     shown_values = [item.text() for item in details.values.findChildren(QLabel)]
     assert "q" in shown_values and any("±" in text and "Å⁻¹" in text for text in shown_values)
-    assert "SNIP" in details.method.text() and "√χ²ᵣ" in details.method.text()
+    method = results.peak_details.toggle_button.toolTip()  # how it was fitted and found: Fit details' tooltip
+    assert method.startswith("How the selected row was fitted") and "SNIP" in method and "√χ²ᵣ" in method
+    assert not any("SNIP" in item.text() for item in details.findChildren(QLabel))  # (no paragraph in the section)
     GuidedResultsPanel.details_open = False
     # Running again replaces the whole panel (nested layouts too).
     guided.report = None
@@ -158,14 +166,15 @@ def test_a_ring_says_in_one_line_why_its_orientation_is_not_determined() -> None
     assert text == ("Ring q ≈ 1.4 Å⁻¹: orientation not determined — only 65% of the range Hermans f needs is measured "
                     "(in a shadow at |χ| 72–90°; missing wedge below 8°). Hover for details.")
     assert detail.startswith(reason) and "shadowed" in detail
-    text, _detail = ring_summary({"q": 0.36, "herman": 0.52, "herman_isotropic": -0.03,
-                                  "texture": "oriented along the surface normal (out-of-plane, χ ≈ 0°)"})
-    assert text == ("Ring q ≈ 0.36 Å⁻¹: f = 0.52 (a random ring would give −0.03 here) — oriented along the surface "
+    text, detail = ring_summary({"q": 0.36, "herman": 0.52, "herman_isotropic": -0.03,
+                                 "texture": "oriented along the surface normal (out-of-plane, χ ≈ 0°)"})
+    assert text == ("Ring q ≈ 0.36 Å⁻¹: f = 0.52 (random ring: −0.03) — oriented along the surface "
                     "normal (out-of-plane, χ ≈ 0°)")  # the Unicode minus; two decimals while σ_f is not known
+    assert detail.startswith("A random ring would give f = −0.03 here.")  # what the short note means
     # With σ_f, f and f_iso have the decimals that show it (0.0027: four), and f_iso is given unless it is 0 there.
     text, _detail = ring_summary({"q": 0.9972, "herman": 0.13921, "herman_err": 0.002696, "herman_isotropic": -0.001357,
                                   "texture": "oriented along the surface normal (out-of-plane, χ ≈ 0°)"})
-    assert text.startswith("Ring q ≈ 0.9972 Å⁻¹: f = 0.1392 ± 0.0027 (a random ring would give −0.0014 here) — ")
+    assert text.startswith("Ring q ≈ 0.9972 Å⁻¹: f = 0.1392 ± 0.0027 (random ring: −0.0014) — ")
 
 
 def test_a_peak_at_the_end_of_the_data_is_not_called_reliable() -> None:

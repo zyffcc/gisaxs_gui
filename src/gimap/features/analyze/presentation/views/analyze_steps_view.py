@@ -46,6 +46,31 @@ FIT_SIDE_ITEMS = (
     ("negative", "qy < 0 half"),
     ("positive", "qy > 0 half"),
 )
+PROFILE_TIP = "Instrument profile: the detector geometry used for q — distance, beam centre, wavelength, αi"
+CENTER_TIP = ("Drag the cyan cross on the image to move the centre; the change holds for every file of this detector "
+              "until Back to Profile Centre (Save to Profile keeps it).")
+MASK_TIP = ("Pixels without data — detector gaps, bad pixels, your masks — are left out of every curve before any cut; "
+            "the corrections below apply to the whole frame.")
+GISAXS_CUTS_TIP = ("The horizontal cut at the Yoneda band gives the in-plane structure, the vertical cut the out-of-plane "
+                   "one. Make left and right symmetric before averaging the halves. Drag the orange band on the image to "
+                   "move the horizontal cut (its edges change its height), or double-click a column to move the "
+                   "vertical cut.")
+"""Explanations that are the same every time, in the tooltips of what they are about (2026-11 small-text review):
+the profile list, the beam-centre button, the Mask step's card and the GISAXS Cuts card."""
+EXPORT_TIPS = (
+    ("export_all_button", "Every listed frame with the current settings, to a folder you choose: a table per curve with "
+                          "every frame a column, and per-frame files. Settings can be saved for the next data set."),
+    ("export_curves_button", "One CSV per curve (q, I, σ, pixels) and a JSON record of the settings, next to the data "
+                             "(gimap_analysis/)."),
+    ("export_image_button", "The detector image or q map as shown, with a colour bar (PNG, TIFF, SVG, PDF), to a file "
+                            "you choose."),
+    ("export_map_button", "The intensity on a regular q grid (qy–qz or q∥–qz) as a CSV table with its axes, to a file "
+                          "you choose."),
+    ("export_plots_button", "The upper and lower plots as figures, one column wide, to a file you choose."),
+    ("export_fit_button", "The horizontal cut (GISAXS) or I(q) (GIWAXS) opened in Fitting."),
+    ("export_series_button", "Every listed frame exported and opened in Fitting ▸ In-situ series."),
+)
+"""The Export step: one button per product, what it writes and where in its tooltip."""
 
 
 def muted(text: str, parent: QWidget) -> QLabel:
@@ -65,19 +90,6 @@ def info_card(parent: QWidget) -> tuple[QFrame, QLabel]:
     label.setTextInteractionFlags(Qt.TextSelectableByMouse)
     layout.addWidget(label)
     return card, label
-
-
-def action_row(button: QPushButton, description: str, parent: QWidget, tip: str = "") -> QWidget:
-    """A button with one short line saying what it produces (the Export step); the details in its tooltip."""
-    if tip or not button.toolTip():
-        button.setToolTip(tip or description)
-    row = QWidget(parent)
-    layout = QVBoxLayout(row)
-    layout.setContentsMargins(0, 0, 0, 2)
-    layout.setSpacing(2)
-    layout.addWidget(button, 0, Qt.AlignLeft)
-    layout.addWidget(muted(description, row))
-    return row
 
 
 class AnalyzeStepsView:
@@ -118,6 +130,7 @@ class AnalyzeStepsView:
             intro.setProperty("gimapInspectorIntro", True)
             intro.setWordWrap(True)
             intro.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            intro.hide()  # shown when the page has something to say there (``bindings/workspace.py`` ``_intro``)
             page_layout.addWidget(heading)
             page_layout.addWidget(intro)
             getattr(self, f"_{key}_step")(content, page_layout)
@@ -243,6 +256,7 @@ class AnalyzeStepsView:
         layout.addWidget(self.data_batch_button)
         card, self.data_info_label = info_card(page)
         self.data_info_label.setObjectName("analyzeDataInfo")
+        card.hide()  # shown when it has something the step rail does not say (``bindings/data_step.py``)
         layout.addWidget(card)
         self.frames_section.set_expanded(False)
         layout.addWidget(self.frames_section)
@@ -254,12 +268,12 @@ class AnalyzeStepsView:
         self.profile_combo.setObjectName("analyzeProfileCombo")
         self.profile_combo.setMinimumContentsLength(14)
         self.profile_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-        self.profile_combo.setToolTip("Instrument profile: the detector geometry used for q")
+        self.profile_combo.setToolTip(PROFILE_TIP)
         layout.addWidget(muted("Instrument profile", page))
         layout.addWidget(self.profile_combo)
         card, self.summary_label = info_card(page)
         self.summary_label.setObjectName("analyzeGeometrySummary")
-        self.summary_label.setText("Open or drop detector files (CBF, NeXus/HDF5, TIFF, EDF) to start")
+        card.hide()  # shown with a frame
         layout.addWidget(card)
         self.find_geometry_button = QPushButton("Find Calibration Automatically", page)
         self.find_geometry_button.setObjectName("analyzeFindGeometryButton")
@@ -282,12 +296,12 @@ class AnalyzeStepsView:
         buttons.addWidget(self.calibrate_button)
         buttons.addStretch(1)
         layout.addLayout(buttons)
-        layout.addWidget(muted("Beam centre", page))
         self.center_button = QToolButton(page)
         self.center_button.setObjectName("analyzeCenterButton")
         self.center_button.setPopupMode(QToolButton.InstantPopup)
         self.center_button.setToolButtonStyle(Qt.ToolButtonTextOnly)
         self.center_button.setText("Beam centre")
+        self.center_button.setToolTip(CENTER_TIP)
         self.center_button.setEnabled(False)
         self.center_menu = QMenu(self.center_button)
         self.pick_center_action = QAction("Pick on Image", page)
@@ -315,10 +329,6 @@ class AnalyzeStepsView:
         self.center_menu.addAction(self.save_center_action)
         self.center_button.setMenu(self.center_menu)
         layout.addWidget(self.center_button, 0, Qt.AlignLeft)
-        layout.addWidget(muted(
-            "Drag the cyan cross on the image to move the centre; the change holds for every file "
-            "of this detector until you go back to the profile centre.", page,
-        ))
         layout.addStretch(1)
 
     # -- 3 mask and corrections ----------------------------------------------------------
@@ -326,6 +336,8 @@ class AnalyzeStepsView:
     def _mask_step(self, page: QWidget, layout: QVBoxLayout) -> None:
         card, self.mask_summary_label = info_card(page)
         self.mask_summary_label.setObjectName("analyzeMaskSummary")
+        self.mask_summary_label.setToolTip(MASK_TIP)
+        card.hide()  # shown with a frame
         layout.addWidget(card)
         self.bad_pixels_check = QCheckBox("Leave out hot and dead pixels", page)
         self.bad_pixels_check.setObjectName("analyzeBadPixelsCheck")
@@ -400,6 +412,7 @@ class AnalyzeStepsView:
         gisaxs.setSpacing(6)
         card, self.cuts_info_label = info_card(self.gisaxs_cuts)
         self.cuts_info_label.setObjectName("analyzeCutsInfo")
+        self.cuts_info_label.setToolTip(GISAXS_CUTS_TIP)
         gisaxs.addWidget(card)
         self.symmetry_button = QPushButton("Make Left and Right Symmetric", self.gisaxs_cuts)
         self.symmetry_button.setObjectName("analyzeSymmetryButton")
@@ -416,10 +429,6 @@ class AnalyzeStepsView:
             self.halves_combo.addItem(title, key)
         self.halves_combo.setToolTip("Which half of I(qy) the curve for Fitting uses (also in Send to Fitting ▾)")
         gisaxs.addWidget(self.halves_combo)
-        gisaxs.addWidget(muted(
-            "Drag the orange band on the image to move the horizontal cut, or double-click a column to "
-            "move the vertical cut.", self.gisaxs_cuts,
-        ))
         layout.addWidget(self.gisaxs_cuts)
         layout.addWidget(self.setup_regions_panel(page))
         layout.addWidget(self.giwaxs_section)
@@ -454,24 +463,14 @@ class AnalyzeStepsView:
         self.export_fit_button = QPushButton("Send to Fitting", page)
         self.export_series_button = QPushButton("Send Series to Fitting…", page)
         self.export_all_button.setProperty("gimapRole", "primary")
-        for button, text, tip in (
-            (self.export_all_button, "Every listed frame, to a folder you choose.",
-             "Every listed frame with the current settings, to a folder you choose: a table per curve with every frame a column, and per-frame files. Settings can be saved for the next data set."),
-            (self.export_curves_button, "This frame's curves as CSV, next to the data.",
-             "One CSV per curve (q, I, σ, pixels) and a JSON record of the settings, next to the data (gimap_analysis/)."),
-            (self.export_image_button, "The image as shown, with its colour bar.",
-             "The detector image or q map as shown, with a colour bar (PNG, TIFF, SVG, PDF)."),
-            (self.export_map_button, "The q map as a table.",
-             "The intensity on a regular q grid (qy–qz or q∥–qz) as a CSV table with its axes."),
-            (self.export_plots_button, "The two plots as figures.", "The upper and lower plots as figures, one column wide."),
-            (self.export_fit_button, "The cut, fitted in Fitting.", "The horizontal cut (GISAXS) or I(q) (GIWAXS) opened in Fitting."),
-            (self.export_series_button, "Every frame, fitted in Fitting ▸ In-situ series.",
-             "Every listed frame exported and opened in Fitting ▸ In-situ series."),
-        ):
-            layout.addWidget(action_row(button, text, page, tip))
+        for name, tip in EXPORT_TIPS:  # the button names say what each writes; the tooltips say how and where
+            button = getattr(self, name)
+            button.setToolTip(tip)
+            layout.addWidget(button, 0, Qt.AlignLeft)
         self.export_extra_host = QVBoxLayout()
         layout.addLayout(self.export_extra_host)
         layout.addStretch(1)
 
 
-__all__ = ["AnalyzeStepsView", "FIT_SIDE_ITEMS", "STEPS"]
+__all__ = ["AnalyzeStepsView", "CENTER_TIP", "EXPORT_TIPS", "FIT_SIDE_ITEMS", "GISAXS_CUTS_TIP", "MASK_TIP", "PROFILE_TIP",
+           "STEPS"]

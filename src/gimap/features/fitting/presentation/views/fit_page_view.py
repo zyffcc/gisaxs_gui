@@ -89,7 +89,7 @@ class FitPageView(FitStepsView):
         self.redo_button.setText("Redo")
         self.redo_button.setAutoRaise(True)
         self.redo_button.setToolTip("Redo (Ctrl+Shift+Z)")
-        self.curve_chip = QLabel("No curve yet — open one, or send a cut from Analyze", bar)
+        self.curve_chip = QLabel("", bar)  # the curve's name; empty without one (the plot says how to open one)
         self.curve_chip.setObjectName("fitCurveChip")
         self.curve_chip.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.curve_chip.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -149,7 +149,8 @@ class FitPageView(FitStepsView):
         self.residual_plot.log_check.hide()
         self.residual_plot.setFixedHeight(RESIDUAL_HEIGHT)
         self.residual_plot.set_labels("|q| (nm⁻¹)", "Δ/σ")  # the formula is in the tooltip (the page sets it)
-        self.residual_plot.set_empty_text("Open a curve: the residuals of the model appear here.")
+        self.residual_plot.set_empty_text("", bare=True)  # no curve: the plot above says what to open
+        # No empty text of its own: the curve plot right above says how to open a curve.
         layout.addWidget(self.residual_plot)
         return panel
 

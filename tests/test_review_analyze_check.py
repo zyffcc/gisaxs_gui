@@ -52,8 +52,8 @@ def test_clear_forgets_the_frame_the_status_named() -> None:
     assert page._shown_status is not None and page._shown_status[0] is page.view_model.state.analysis
     page.clear_files()
     assert page._shown_status is None
-    page.refresh_language()  # nothing shown: no error, the status stays as Clear left it
-    assert page.status_text() == "Ready"
+    page.refresh_language()  # nothing shown: no error, the status stays as Clear left it (idle: empty)
+    assert page.status_text() == ""
     page.dispose()
     page.close()
 

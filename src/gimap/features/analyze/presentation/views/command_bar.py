@@ -24,14 +24,21 @@ FULL_AGAIN = 12
 
 
 class ElidedLabel(QLabel):
-    """A label that shows as much of its text as fits, with “…” in the middle; the tooltip has it all."""
+    """A label that shows as much of its text as fits, with “…” in the middle; the tooltip has it all. A tooltip
+    the caller set (the file's path) stays; the label's own follows the text — it is the text whole while the
+    text is shortened, none while it fits (it never keeps an earlier text such as “reading…”)."""
 
     def __init__(self, text: str = "", parent: Optional[QWidget] = None):
         super().__init__(parent)
         self._full = ""
+        self._own_tip = ""  # the tooltip this label set itself ("" : none, or the caller's)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         self.setMinimumWidth(60)
         self.setText(text)
+
+    def setToolTip(self, text: str) -> None:  # noqa: N802 - Qt API
+        self._own_tip = ""  # the caller's from now on
+        super().setToolTip(text)
 
     def setText(self, text: str) -> None:  # noqa: N802 - Qt API
         self._full = str(text)
@@ -58,8 +65,11 @@ class ElidedLabel(QLabel):
         room = max(20, self.width() - 16)
         shown = self.fontMetrics().elidedText(self._full, Qt.ElideMiddle, room)
         super().setText(shown)
-        if shown != self._full and not self.toolTip():
-            self.setToolTip(self._full)
+        if self.toolTip() and self.toolTip() != self._own_tip:
+            return  # the caller's tooltip (the whole path) says more than the text
+        tip = self._full if shown != self._full else ""
+        self._own_tip = tip
+        super().setToolTip(tip)
 
 
 def least_width(widget: QWidget) -> int:

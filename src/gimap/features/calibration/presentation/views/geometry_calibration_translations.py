@@ -9,13 +9,8 @@ class GeometryCalibrationTranslations:
         GeometryCalibrationDialog.setWindowTitle(
             _translate("GeometryCalibrationDialog", "Geometry Calibration")
         )
+        # The sections of this window have no description: their titles, groups and buttons say what they hold.
         self.calibrationInputTitle.setText(_translate("GeometryCalibrationDialog", "Input"))
-        self.calibrationInputDescription.setText(
-            _translate(
-                "GeometryCalibrationDialog",
-                "Choose a calibration image and the essential experiment metadata.",
-            )
-        )
         self.calibration_file_group.setTitle(
             _translate("GeometryCalibrationDialog", "Calibration image")
         )
@@ -78,10 +73,10 @@ class GeometryCalibrationTranslations:
         self.calibrationAdvancedToggle.setText(
             _translate("GeometryCalibrationDialog", "Advanced configuration")
         )
-        self.calibrationAdvancedDescription.setText(
+        self.calibrationAdvancedDescription.setText(  # the tooltip of the toggle (bind_advanced_section)
             _translate(
                 "GeometryCalibrationDialog",
-                "Detector overrides, custom search bounds and preview overlays.",
+                "Detector overrides (pixel size), custom distance bounds for the search, and preview overlays.",
             )
         )
         self.advanced_group.setTitle(
@@ -103,21 +98,9 @@ class GeometryCalibrationTranslations:
         self.rings_check.setText(_translate("GeometryCalibrationDialog", "Show ring overlays"))
         self.center_check.setText(_translate("GeometryCalibrationDialog", "Show beam centre lines"))
         self.calibrationRunTitle.setText(_translate("GeometryCalibrationDialog", "Run"))
-        self.calibrationRunDescription.setText(
-            _translate(
-                "GeometryCalibrationDialog",
-                "Run automatic calibration, monitor the current stage, or cancel safely.",
-            )
-        )
         self.calibrate_button.setText(_translate("GeometryCalibrationDialog", "Auto Calibration"))
         self.cancel_button.setText(_translate("GeometryCalibrationDialog", "Cancel"))
         self.calibrationPreviewTitle.setText(_translate("GeometryCalibrationDialog", "Preview"))
-        self.calibrationPreviewDescription.setText(
-            _translate(
-                "GeometryCalibrationDialog",
-                "Inspect the detector image, detected rings and candidate overlays.",
-            )
-        )
         self.fit_image_button.setText(_translate("GeometryCalibrationDialog", "Reset view"))
         self.clean_preview_button.setText(_translate("GeometryCalibrationDialog", "Clean image"))
         self.expand_preview_button.setText(_translate("GeometryCalibrationDialog", "Focus image"))
@@ -129,12 +112,6 @@ class GeometryCalibrationTranslations:
             _translate("GeometryCalibrationDialog", "Open a .nxs, .cbf, .tif or .edf calibration image")
         )
         self.calibrationResultsTitle.setText(_translate("GeometryCalibrationDialog", "Results"))
-        self.calibrationResultsDescription.setText(
-            _translate(
-                "GeometryCalibrationDialog",
-                "Review the selected solution and alternative candidates before applying it.",
-            )
-        )
         self.result_group.setTitle(_translate("GeometryCalibrationDialog", "Selected solution"))
         self.resultCenterXTitle.setText(_translate("GeometryCalibrationDialog", "Beam center X:"))
         self.result_center_x.setText(_translate("GeometryCalibrationDialog", "—"))
@@ -172,10 +149,11 @@ class GeometryCalibrationTranslations:
         self.calibrationManualToggle.setText(
             _translate("GeometryCalibrationDialog", "Advanced manual refinement")
         )
-        self.calibrationManualDescription.setText(
+        self.calibrationManualDescription.setText(  # the tooltip of the toggle (bind_advanced_section)
             _translate(
                 "GeometryCalibrationDialog",
-                "Fine-tune the selected center, distance or ring correspondence.",
+                "Fine-tune the selected solution: centre, distance or which detected ring belongs to which "
+                "theoretical peak.",
             )
         )
         self.manual_group.setTitle(_translate("GeometryCalibrationDialog", "Use manual values"))

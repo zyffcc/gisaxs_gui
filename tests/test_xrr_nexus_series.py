@@ -311,7 +311,8 @@ def test_the_summary_says_which_kind_of_series_was_found(tmp_path: Path) -> None
         lines = _inspect(dialog, modules[1])
         assert lines[0].startswith("3 frame(s) · first: scan_00001 · frame 1 · shape ")
         assert lines[1] == "3 module files · 3 frames · stitched"
-        assert not any(line.startswith("⚠") for line in lines)
+        # no warning of the reader (the one line of values not in the file is about the geometry)
+        assert not any(line.startswith("⚠") and not line.startswith("⚠ Not in the file") for line in lines)
     finally:
         _dispose(dialog)
 

@@ -788,13 +788,15 @@ def test_the_cleared_detector_view_speaks_the_language() -> None:
     try:
         apply_language("zh")
         view.clear()
-        assert view.readout_label.text() == i18n.ZH["Open a detector frame"]
+        # No frame: the readout is empty (the data step says what to open); how to read a value is its tooltip.
+        assert not view.readout_label.text().strip()
+        assert view.readout_label.toolTip() == i18n.ZH["Move the cursor over the image to read values"]
     finally:
         apply_language(DEFAULT_LANGUAGE)
         view.dispose()
 
 
-def test_a_step_shows_every_line_of_its_detail_and_tab_reaches_it() -> None:
+def test_a_step_keeps_its_detail_on_one_line_and_tab_reaches_it() -> None:
     from src.gimap.app.presentation.components.step_rail import StepRail
 
     _app()
@@ -809,21 +811,24 @@ def test_a_step_shows_every_line_of_its_detail_and_tab_reaches_it() -> None:
     host.show()
     host.activateWindow()
     QApplication.setActiveWindow(host)
-    rail.set_state("data", "ok", "PILATUS 2M · 1 frame · galaxi_data.tif, from the GALAXI beamline")
+    line = "PILATUS 2M · 1 frame · galaxi_data.tif, from the GALAXI beamline"
+    rail.set_state("data", "ok", line)
     _settle()
     try:
         step = rail._steps["data"]
         detail = step.detail
-        needed = detail.heightForWidth(detail.width())
-        assert needed >= 3 * detail.fontMetrics().lineSpacing() - 2  # three lines (or more) at this width
-        assert detail.height() >= needed
-        narrow = detail.height()
-        host.resize(600, 400)
+        one_line = detail.fontMetrics().lineSpacing()
+        # Narrow: one line cut with "…" (the next step is not pushed down); the whole line is the tooltip.
+        assert detail.text().endswith("…") and detail.text() != line
+        assert detail.height() < 2 * one_line
+        assert step.toolTip() == line and rail.detail("data") == line
+        geometry_top = rail._steps["geometry"].y()
+        host.resize(900, 400)
         _settle()
-        assert detail.height() < narrow and detail.height() >= detail.heightForWidth(detail.width())  # no gap left
+        assert detail.text() == line  # room enough: the whole line
         host.resize(220, 400)
         _settle()
-        assert detail.height() == narrow
+        assert detail.text().endswith("…") and rail._steps["geometry"].y() == geometry_top
         QTest.mouseClick(step, Qt.LeftButton)
         _settle(3)
         assert not step.hasFocus() and step.focusPolicy() == Qt.TabFocus
@@ -865,7 +870,7 @@ def test_job_status_texts_follow_the_language(monkeypatch) -> None:
     try:
         apply_language("zh")
         job = JobStatus()
-        assert job.state_label.text() == i18n.ZH["Idle"] and job.message_label.text() == i18n.ZH["Ready"]
+        assert job.state_label.text() == i18n.ZH["Idle"] and job.message_label.text() == ""  # idle: the chip says it
         for state in JobStatus.STATES:
             job.set_state(state)
             assert job.state_label.text() == i18n.ZH[JobStatus.STATE_TEXT[state]]
@@ -876,3 +881,22 @@ def test_job_status_texts_follow_the_language(monkeypatch) -> None:
         assert job.pause_button.text() == i18n.ZH["Pause"]
     finally:
         apply_language(DEFAULT_LANGUAGE)
+
+
+def test_an_empty_plot_can_be_a_bare_frame_without_a_sentence() -> None:
+    """A plot whose empty state is said elsewhere (the residuals under the curve plot): no 0–1 ticks, no text."""
+    from src.gimap.app.presentation.components import CurvePlot
+
+    _app()
+    plot = CurvePlot("")
+    try:
+        plot.set_empty_text("", bare=True)
+        assert plot.empty_overlay.bare and plot.empty_overlay.label.isHidden()
+        plot.set_curves([("data", np.array([1.0, 2.0]), np.array([3.0, 4.0]))])
+        assert not plot.empty_overlay.bare  # curves: pyqtgraph's own ticks again
+        plot.clear_curves()
+        assert plot.empty_overlay.bare
+        plot.set_empty_text("")
+        assert not plot.empty_overlay.bare  # the default: an empty plot without a sentence keeps its ticks
+    finally:
+        plot.deleteLater()

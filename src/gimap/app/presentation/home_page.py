@@ -35,14 +35,19 @@ from .theme import set_role, set_state
 
 TASKS = (
     ("giwaxs", "Crystals and orientation", "GIWAXS",
+     "Peaks, orientation, crystallite size — no AI needed.",
      "Peaks, in-plane / out-of-plane, ring orientation, crystallite size — a guided analysis, no AI needed."),
     ("gisaxs", "Nanostructure", "GISAXS",
+     "Yoneda cut, spacing and a model fit — no AI needed.",
      "Yoneda cut, symmetric halves, spacing and a model fit — automatic, no AI needed."),
     ("series", "In-situ or batch series", "Series",
+     "Frame × q map, stages, odd frames, Batch Export — and Compare.",
      "A frame × q map of the run with its stages and odd frames, peaks followed through it, Batch Export of every frame — and Compare for several runs."),
     ("calibrate", "Calibrate the detector", "Calibration",
+     "Distance and beam centre from a standard (AgBh, LaB6, CeO2).",
      "Distance and beam centre from an image of a standard (AgBh, LaB6, CeO2, LaB6 + CeO2)."),
 )
+"""``(key, title, tag, the line on the card, the card's tooltip: the whole of what it does)``."""
 TASK_LINKS = {
     "series": (
         ("series_folder", "Open Folder…", "The frames of a folder: one file per frame, or the module files of one scan"),
@@ -74,10 +79,13 @@ class TaskCard(QFrame):
 
     clicked = pyqtSignal(str)
 
-    def __init__(self, key: str, title: str, tag: str, text: str, parent: Optional[QWidget] = None, *, links=()):
+    def __init__(self, key: str, title: str, tag: str, text: str, parent: Optional[QWidget] = None, *, links=(),
+                 tip: str = ""):
         super().__init__(parent)
         self.key = key
         self.setObjectName(f"homeTask_{key}")
+        if tip:
+            self.setToolTip(tip)
         self.setProperty("card", True)
         self.setProperty("homeTask", True)
         self.setAttribute(Qt.WA_Hover, True)
@@ -183,18 +191,17 @@ class HomePage(QWidget):
         column = QVBoxLayout(column_host)
         column.setSpacing(16)
         column.addWidget(_label("GIMaP", column_host, size=2.0, bold=True))
-        column.addWidget(_label(
-            "Grazing-incidence scattering, step by step: open your data, say what you want to know, "
-            "and every result comes with how it was found.", column_host, role="muted", size=1.1,
-        ))
 
         self.drop_zone = DropZone(column_host)
+        self.drop_zone.setToolTip(
+            "CBF, TIFF, EDF, NeXus / HDF5 — one file per frame, or a whole series in one file; the module files of a "
+            "scan are stitched"
+        )
         drop = QVBoxLayout(self.drop_zone)
         drop.setContentsMargins(20, 18, 20, 18)
         for text, role, size, bold in (
             ("Drag detector images or a folder here", "", 1.2, True),
-            ("CBF, TIFF, EDF, NeXus / HDF5 — one file per frame, or a whole series in one file; the module files of a "
-             "scan are stitched", "muted", 0.0, False),
+            ("CBF, TIFF, EDF, NeXus / HDF5 — single frames or whole series", "muted", 0.0, False),
         ):
             label = _label(text, self.drop_zone, role=role, size=size, bold=bold)
             label.setAlignment(Qt.AlignHCenter)  # centred text in a full-width label: nothing is clipped
@@ -238,8 +245,8 @@ class HomePage(QWidget):
         grid = QGridLayout()
         grid.setSpacing(12)
         self.cards: dict[str, TaskCard] = {}
-        for index, (key, title, tag, text) in enumerate(TASKS):
-            card = TaskCard(key, title, tag, text, column_host, links=TASK_LINKS.get(key, ()))
+        for index, (key, title, tag, text, tip) in enumerate(TASKS):
+            card = TaskCard(key, title, tag, text, column_host, links=TASK_LINKS.get(key, ()), tip=tip)
             card.clicked.connect(self.taskRequested)
             grid.addWidget(card, index // 2, index % 2)
             self.cards[key] = card
@@ -254,15 +261,12 @@ class HomePage(QWidget):
         )
         self.ask_button = QPushButton("Ask the AI…", column_host)
         self.ask_button.setObjectName("homeAskButton")
-        self.ask_button.setToolTip("The AI works with the same tools as you, with what you wrote as its task; "
-                                   "its changes come back as cards to preview, apply or undo")
+        self.ask_button.setToolTip("The AI (Claude, DeepSeek, Qwen, OpenAI, a local model … — chosen in Settings) "
+                                   "works with the same tools as you, with what you wrote as its task; its changes "
+                                   "come back as cards to preview, apply or undo.")
         ask.addWidget(self.ask_edit, 1)
         ask.addWidget(self.ask_button)
         column.addLayout(ask)
-        column.addWidget(_label(
-            "The AI (Claude, DeepSeek, Qwen, OpenAI, a local model …, chosen in Settings) uses the same "
-            "tools; its changes come back as cards you can preview, apply or undo.", column_host, role="muted",
-        ))
         column.addStretch(1)
 
         self.open_button.clicked.connect(self.openRequested)

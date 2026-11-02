@@ -16,6 +16,12 @@ def muted(text: str, parent: QWidget) -> QLabel:
     return label
 
 
+def show_line(label: QLabel, text: str) -> None:
+    """``text`` on ``label``, hidden while it has nothing to say (a step's intro, a note under a control)."""
+    label.setText(text)
+    label.setVisible(bool(text))
+
+
 def info_card(parent: QWidget) -> tuple[QFrame, QLabel]:
     card = QFrame(parent)
     card.setProperty("gimapInfoCard", True)
@@ -70,4 +76,4 @@ def fit_to_rows(table: QTableWidget) -> None:
     table.setFixedHeight(top + table.verticalHeader().length() + bottom + 2 * table.frameWidth())
 
 
-__all__ = ["fit_to_rows", "info_card", "muted", "read_only_table"]
+__all__ = ["fit_to_rows", "info_card", "muted", "read_only_table", "show_line"]

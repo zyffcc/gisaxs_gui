@@ -1,7 +1,8 @@
 """The steps of fitting one curve and the controls of each (static layout; behaviour in ``single/``).
 
-Curve → Model → Fit → Results, as in Analyze: each step page has a title, one sentence of where
-it stands (``step_intro[key]``, filled by the page), the controls used most, and the rest folded.
+Curve → Model → Fit → Results, as in Analyze: each step page has a title, a line of where it stands only when
+the step rail and the controls do not say it already (``step_intro[key]``, filled by the page, hidden while
+empty), the controls used most, and the rest folded. How to use a control is its tooltip.
 """
 
 from __future__ import annotations
@@ -29,9 +30,9 @@ from .fit_step_view import METHODS, QUICK_FAMILIES, build_fit_step
 from .step_widgets import fit_to_rows, info_card, muted, read_only_table
 
 STEPS = (("curve", "Curve"), ("model", "Model"), ("fit", "Fit"), ("results", "Results"))
-STEP_INTROS = {"fit": "Choose a method and press Fit; values that stop at an edge of their range are dealt with by the "
-                      "fit."}
-"""The intro of a step whose sentence does not change (the others are written by the page)."""
+RANGE_TIP = "Only the points inside the fitting range are fitted. Type the limits, or drag the orange band on the plot."
+ADD_PARTICLE_TIP = ("Add a particle family to the model. Not sure which? Fit ▸ Find the particle shape (no AI) tries "
+                    "every family.")
 
 
 class FitStepsView:
@@ -66,10 +67,11 @@ class FitStepsView:
             page_layout.setSpacing(8)
             heading = QLabel(title, content)
             heading.setProperty("gimapInspectorTitle", True)
-            intro = QLabel(STEP_INTROS.get(key, ""), content)
+            intro = QLabel("", content)
             intro.setProperty("gimapInspectorIntro", True)
             intro.setWordWrap(True)
             intro.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            intro.hide()  # shown by the page when there is something the rail does not say (``show_line``)
             page_layout.addWidget(heading)
             page_layout.addWidget(intro)
             getattr(self, f"_{key}_step")(content, page_layout)
@@ -86,6 +88,14 @@ class FitStepsView:
 
     def _curve_step(self, page: QWidget, layout: QVBoxLayout) -> None:
         self.curve_card, self.curve_info = info_card(page)
+        self.curve_card.setObjectName("fitCurveCard")
+        self.curve_card.hide()  # shown once there is a curve: until then the plot says how to open one
+        self.sigma_warning = QLabel("", self.curve_card)  # no σ in the file: said in the card, not folded away
+        self.sigma_warning.setObjectName("fitSigmaWarning")
+        self.sigma_warning.setWordWrap(True)
+        self.sigma_warning.setProperty("gimapRole", "warning")
+        self.sigma_warning.hide()
+        self.curve_card.layout().addWidget(self.sigma_warning)
         layout.addWidget(self.curve_card)
         self.open_curve_step_button = QPushButton("Open Curve…", page)
         self.open_curve_step_button.setObjectName("fitOpenCurveStep")
@@ -128,6 +138,7 @@ class FitStepsView:
             spin.setDecimals(6)
             spin.setSuffix(" nm⁻¹")
             spin.setKeyboardTracking(False)
+            spin.setToolTip(RANGE_TIP)
         row.addWidget(self.range_min_spin, 1)
         row.addWidget(QLabel("–", page))
         row.addWidget(self.range_max_spin, 1)
@@ -136,7 +147,6 @@ class FitStepsView:
         self.whole_range_button.setObjectName("fitWholeRange")
         self.whole_range_button.setToolTip("Fit every point of the curve")
         layout.addWidget(self.whole_range_button, 0, Qt.AlignLeft)
-        layout.addWidget(muted("Or drag the orange band on the plot. Only the points inside it are fitted.", page))
         self.excluded_row = QWidget(page)
         excluded = QHBoxLayout(self.excluded_row)
         excluded.setContentsMargins(0, 0, 0, 0)
@@ -165,8 +175,6 @@ class FitStepsView:
             "_fit_input.dat files state 1/A. This unit is for files that state none, here and in In-situ series.")
         unit_row.addWidget(self.unit_combo)
         more.add_layout(unit_row)
-        self.sigma_note = muted("", more)
-        more.add_widget(self.sigma_note)
         layout.addWidget(more)
 
     # -- 2 model -----------------------------------------------------------------------
@@ -178,7 +186,7 @@ class FitStepsView:
         self.add_component_button.setObjectName("fitAddComponent")
         self.add_component_button.setText("Add Particle")  # the menu arrow is drawn by the button
         self.add_component_button.setPopupMode(QToolButton.InstantPopup)
-        self.add_component_button.setToolTip("Add a particle family to the model")
+        self.add_component_button.setToolTip(ADD_PARTICLE_TIP)  # (each “fit” box says what ticking it does)
         self.show_ranges_check = QCheckBox("Ranges", page)
         self.show_ranges_check.setObjectName("fitShowRanges")
         self.show_ranges_check.setToolTip(
@@ -192,10 +200,6 @@ class FitStepsView:
         self.model_host = QVBoxLayout()
         self.model_host.setSpacing(8)
         layout.addLayout(self.model_host)
-        layout.addWidget(muted(
-            "Tick “fit” for the values the fit may change. Not sure which particle? Fit ▸ Find the "
-            "particle shape tries every family.", page,
-        ))
 
     # -- 3 fit and 4 results (``fit_step_view``, ``fit_results_view``) ------------------------------------
 
@@ -206,5 +210,5 @@ class FitStepsView:
         build_results_step(self, page, layout)
 
 
-__all__ = ["FitStepsView", "METHODS", "QUICK_FAMILIES", "STEPS", "STEP_INTROS", "fit_to_rows", "info_card", "muted",
-           "read_only_table"]
+__all__ = ["ADD_PARTICLE_TIP", "FitStepsView", "METHODS", "QUICK_FAMILIES", "RANGE_TIP", "STEPS", "fit_to_rows",
+           "info_card", "muted", "read_only_table"]

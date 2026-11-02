@@ -205,11 +205,7 @@ class ImageLoadingMixin:
         self._graphics_scene.setSceneRect(QRectF(pixmap.rect()))
         self._current_pixmap = pixmap
         self._zoom_reset()
-
-        cmap_name = self.current_parameters.get("colormap", "")
-        self.status_updated.emit(trf(
-            "Display complete (vmin={vmin:.3f}, vmax={vmax:.3f}, cmap={cmap})", vmin=vmin, vmax=vmax, cmap=cmap_name
-        ))
+        # No status message: the frame is shown, its colour map and range are in the Display box.
         self._persist_parameters()
 
     def _auto_scale_values(self, image: np.ndarray) -> Tuple[float, float]:

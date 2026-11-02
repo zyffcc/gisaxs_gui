@@ -682,7 +682,7 @@ def test_the_data_step_says_what_a_module_set_is(tmp_path: Path) -> None:
         assert page.source_label.text().splitlines() == [
             "3 module files · 5 frames · stitched", "P03 Lambda: transposed and flipped (rotated by 90°)"]
         assert not page.source_label.isHidden() and page.source_warning_label.isHidden()
-        assert page.file_meta.text().endswith("frame 1 of 5") and page.step_rail.state("data") == "ok"
+        assert page.step_rail.detail("data").endswith("frame 1 of 5") and page.step_rail.state("data") == "ok"
         assert not page.frame_bar.isHidden() and page.frame_spin.maximum() == 5
         assert page.frame_total_label.text() == "of 5" and page.data_batch_button.text() == "Batch Export 5 Frames…"
         assert page.file_position_label.text() == "frame 1 / 5"  # beside ‹ › (which step its frames)
@@ -692,7 +692,7 @@ def test_the_data_step_says_what_a_module_set_is(tmp_path: Path) -> None:
         assert page.file_position_label.text() == "第 1 / 5 帧"
         assert _rows(page) == ["scan_00007 · 5 帧"] and page.file_list.item(0).toolTip().splitlines()[1] == ZH_PINS["summary"]
         assert page.source_label.text().splitlines() == [ZH_PINS["summary"], ZH_PINS["orientation"]]
-        assert page.frame_total_label.text() == "共 5 帧" and page.file_meta.text().endswith("第 1 帧，共 5 帧")
+        assert page.frame_total_label.text() == "共 5 帧" and page.step_rail.detail("data").endswith("第 1 帧，共 5 帧")
         apply_language("en", [page])
         page.refresh_language()
         assert _rows(page) == ["scan_00007 · 5 frames"] and page.frame_total_label.text() == "of 5"
@@ -753,7 +753,8 @@ def test_files_read_on_their_own_say_so_without_a_warning_state(tmp_path: Path) 
         assert page.source_warning_label.isHidden() and page.step_rail.state("data") == "ok"
         assert page.status_level() != "warning" or "named like" not in page.status_text()
         card = page.data_info_label.text().splitlines()
-        assert "Files listed: 2" in card and "Frames listed: 4" in card  # the total the batch works on
+        assert "Frames listed: 4" in card  # the total the batch works on (the files: the list itself shows them)
+        assert not any(line.startswith("Files listed") for line in card)
         assert page.data_batch_button.text() == "Batch Export 4 Frames…"
     finally:
         _close(page)
@@ -777,13 +778,13 @@ def test_a_long_file_name_does_not_push_the_buttons_out_of_the_data_step(tmp_pat
             assert button.visibleRegion().boundingRect().width() == button.width() > 0
             assert button.mapTo(viewport, button.rect().topRight()).x() < viewport.width()
         assert page.frame_spin.visibleRegion().boundingRect().width() == page.frame_spin.width() > 0
-        intro = page.step_intro["data"].text()
-        assert name not in intro and intro.startswith(short_name(name) + ":")  # shortened in the sentence …
-        assert page.file_chip.full_text() == name and name in page.file_list.item(0).toolTip()  # … whole elsewhere
+        assert page.step_intro["data"].isHidden()  # the command bar names the file (no sentence repeats it) …
+        assert page.file_chip.full_text() == name and name in page.file_list.item(0).toolTip()  # … whole
         assert page.file_list.item(0).text() == f"{name} · 12 frames"  # (the list shortens it in the middle itself)
         # Whatever else the sentence holds that cannot break (a detector name from a file header, a larger
         # font): it is cut at the edge of the panel and never widens it.
         page.step_intro["data"].setText(f"{short_name(name)}: {'Lambda_9M_GaAs_' * 5}, 24×36 px.")
+        page.step_intro["data"].show()
         for _turn in range(3):
             _app().processEvents()
         assert page.step_intro["data"].minimumSizeHint().width() > viewport.width()
@@ -816,7 +817,7 @@ def test_the_stepper_and_the_keys_step_through_the_frames_of_the_series(tmp_path
         page.next_file_button.click()
         _done(page)
         assert page.view_model.state.frame_index == 1 and page.frame_spin.value() == 2 and label.text() == "frame 2 / 3"
-        assert page.file_meta.text().endswith("frame 2 of 3") and page.view_model.state.analysis.frame_index == 1
+        assert page.step_rail.detail("data").endswith("frame 2 of 3") and page.view_model.state.analysis.frame_index == 1
         assert page.frame_list.currentIndex().row() == 1
         assert page.view_model.state.analysis.frame_count == 3 and _as_on_disk(page.view_model.state.analysis)
 
@@ -829,13 +830,13 @@ def test_the_stepper_and_the_keys_step_through_the_frames_of_the_series(tmp_path
         assert page.frame_listing_model.rowCount() == page.view_model.listed_frames() == 5
         assert [page.frame_listing_model.ref(row) for row in range(5)] == [
             *((first, index) for index in range(3)), *((second, index) for index in range(2))]
-        assert label.text() == "3 / 5" and page.file_meta.text().endswith("frame 3 of 3")
+        assert label.text() == "3 / 5" and page.step_rail.detail("data").endswith("frame 3 of 3")
         assert page.frame_list.currentIndex().row() == 2
         assert label.toolTip().startswith("Frame 3 of 3 of run_1.nxs")
         page._step_frame(+1)  # Page Down at the last frame of a file: the next file, at its first frame
         _done(page)
         assert (page.file_list.currentRow(), page.view_model.state.frame_index) == (1, 0)
-        assert label.text() == "4 / 5" and page.file_meta.text().endswith("frame 1 of 2")
+        assert label.text() == "4 / 5" and page.step_rail.detail("data").endswith("frame 1 of 2")
         assert page.frame_list.currentIndex().row() == 3
         assert page.view_model.state.analysis.frame_count == 2 and _as_on_disk(page.view_model.state.analysis)
         page._step_frame(-1)  # Page Up at the first frame: the file before, at its last frame
@@ -853,7 +854,7 @@ def test_the_stepper_and_the_keys_step_through_the_frames_of_the_series(tmp_path
         apply_language("zh", [page])
         page.refresh_language()
         assert label.text() == "1 / 5" and label.toolTip().startswith("run_1.nxs 的第 1 帧，共 3 帧")
-        assert page.next_file_button.toolTip() == "下一帧（Page Down）" and page.file_meta.text().endswith("第 1 帧，共 3 帧")
+        assert page.next_file_button.toolTip() == "下一帧（Page Down）" and page.step_rail.detail("data").endswith("第 1 帧，共 3 帧")
     finally:
         _close(page)
 
@@ -876,7 +877,7 @@ def test_the_frame_bar_stays_visible_on_every_step(tmp_path: Path) -> None:
         assert page.frame_total_label.text() == "of 4" and page.frame_spin.toolTip().startswith("The frame shown")
         page.frame_spin.setValue(3)  # on the Export step: the frame changes all the same
         _done(page)
-        assert page.view_model.state.analysis.frame_index == 2 and page.file_meta.text().endswith("frame 3 of 4")
+        assert page.view_model.state.analysis.frame_index == 2 and page.step_rail.detail("data").endswith("frame 3 of 4")
         page.add_paths([str(single)])
         _done(page)
         assert not page.frame_bar.isVisible()  # one frame: nothing to step
@@ -894,13 +895,13 @@ def test_a_frame_shown_again_knows_the_frames_added_since(tmp_path: Path) -> Non
         assert page.frame_spin.maximum() == 6 and _rows(page) == ["insitu_00001.nxs · 6 frames"]
         _grow(path, 9)
         page.refresh_language()  # what is said of the frame is written again (no frame is read): the count is that of now
-        assert "Frames in the file: 9 (showing 1)" in page.data_info_label.text() and page.file_meta.text().endswith("frame 1 of 9")
+        assert "Frames in the file: 9 (showing 1)" in page.data_info_label.text() and page.step_rail.detail("data").endswith("frame 1 of 9")
         assert page.view_model.state.analysis.frame_count == 6  # (the frame in memory was read when there were six)
         _grow(path, 12)
         page.run_analysis()  # F5
         _done(page)
         assert page.frame_spin.maximum() == 12 and page.frame_total_label.text() == "of 12"
-        assert page.file_meta.text().endswith("frame 1 of 12") and page.data_batch_button.text() == "Batch Export 12 Frames…"
+        assert page.step_rail.detail("data").endswith("frame 1 of 12") and page.data_batch_button.text() == "Batch Export 12 Frames…"
         assert "Frames in the file: 12 (showing 1)" in page.data_info_label.text()
     finally:
         _close(page)
@@ -1354,7 +1355,7 @@ def test_a_master_met_after_its_data_files_takes_all_their_rows(tmp_path: Path) 
         assert page.file_chip.full_text() == "series_7_master.h5"
         # … and the frame on screen is the same frame of the series: the fifth (three in the first data file).
         assert model.state.analysis.frame_index == 4 and page.frame_spin.value() == 5 and page.frame_spin.maximum() == 8
-        assert float(np.nanmax(model.state.analysis.data)) == 2.0 and page.file_meta.text().endswith("frame 5 of 8")
+        assert float(np.nanmax(model.state.analysis.data)) == 2.0 and page.step_rail.detail("data").endswith("frame 5 of 8")
     finally:
         _close(page)
 
@@ -1741,7 +1742,7 @@ def test_the_sentence_of_the_empty_data_step_follows_the_interface_language(tmp_
     try:
         english = page.step_intro["data"].text()
         chinese = "打开或拖入探测器帧（CBF、NeXus/HDF5、TIFF、EDF）或文件夹。"
-        assert english.startswith("Open or drop detector frames (CBF, NeXus/HDF5, TIFF, EDF) or a folder. Files that belong")
+        assert english == "Open or drop detector frames (CBF, NeXus/HDF5, TIFF, EDF) or a folder."  # (the rest: the manual)
         apply_language("zh", [page])
         page.refresh_language()
         assert page.step_intro["data"].text().startswith(chinese)
@@ -1756,7 +1757,7 @@ def test_the_sentence_of_the_empty_data_step_follows_the_interface_language(tmp_
         assert page.step_intro["data"].text().startswith(chinese)
         page.clear_files()
         assert page.step_intro["data"].text().startswith(chinese)
-        assert page.summary_label.text() == "打开或拖入探测器文件（CBF、NeXus/HDF5、TIFF、EDF）开始"
+        assert page.summary_label.text() == "" and page.summary_label.parentWidget().isHidden()  # said once, in Data
     finally:
         _close(page)
 

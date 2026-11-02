@@ -24,7 +24,7 @@ from ...application.single_fit import (
     model_to_dict,
     parameter_text,
 )
-from ..views.step_widgets import fit_to_rows
+from ..views.step_widgets import fit_to_rows, show_line
 from .fit1d_review import note_text
 from .session import path_name
 
@@ -177,11 +177,25 @@ class FitResultsMixin:
     # -- render -----------------------------------------------------------------------------
 
     @staticmethod
-    def _quality_text(result) -> str:
-        chi = "χ²ᵣ" if result.weighting == "sigma" else "var ln I"
-        state = tr("converged") if result.converged else tr("stopped") if result.stopped else tr("not converged")
+    def _state_text(result) -> str:
+        return tr("converged") if result.converged else tr("stopped") if result.stopped else tr("not converged")
+
+    @staticmethod
+    def _chi_name(result) -> str:
+        return "χ²ᵣ" if result.weighting == "sigma" else "var ln I"
+
+    @classmethod
+    def _quality_text(cls, result) -> str:
+        """The whole of it, said once: in the Results box (the rail has the points and free values on their rows)."""
         return tr("{chi} {value} · {points} points · {free} free · {state}").format(
-            chi=chi, value=f"{result.chi2_reduced:.3g}", points=result.points, free=result.free, state=state)
+            chi=cls._chi_name(result), value=f"{result.chi2_reduced:.3g}", points=result.points, free=result.free,
+            state=cls._state_text(result))
+
+    @classmethod
+    def _rail_quality(cls, result) -> str:
+        """The Fit row of the rail: “χ²ᵣ 1.39 · converged”."""
+        return trf("{chi} {value} · {state}", chi=cls._chi_name(result), value=f"{result.chi2_reduced:.3g}",
+                   state=cls._state_text(result))
 
     def render_results(self) -> None:
         if not self._render_fit1d_results():
@@ -204,13 +218,13 @@ class FitResultsMixin:
             self.warnings_label.setText("\n".join(search_note))
             self.warnings_label.setToolTip("")
             stale = tr("Changed after the fit: Fit again") + " · " if old_search else ""
-            self.step_intro["results"].setText(
-                stale + tr("{count} solutions to compare.").format(count=len(session.solutions)))
+            show_line(self.step_intro["results"],
+                      stale + tr("{count} solutions to compare.").format(count=len(session.solutions)))
         elif result is None:
-            self.quality_label.setText(tr("No fit yet: Fit shows here how good it is and the error of every value."))
+            self.quality_label.setText(tr("No fit yet."))
             self.warnings_label.setText("")
             self.warnings_label.setToolTip("")
-            self.step_intro["results"].setText(tr("After a fit: its quality, the errors and the solutions to compare."))
+            show_line(self.step_intro["results"], "")  # the box below and the rail's “After a fit” say it
         else:
             self.quality_label.setText(tr(
                 "{quality}\nlog RMSE {rmse} · {evaluations} evaluations · {seconds} s · {method}"
@@ -219,8 +233,7 @@ class FitResultsMixin:
             self._correlated_tip = ""
             self.warnings_label.setText("\n".join(self._warnings(result) + search_note))
             self.warnings_label.setToolTip(self._correlated_tip)
-            stale = "" if session.result_is_current() else tr("Changed after the fit: Fit again") + " · "
-            self.step_intro["results"].setText(stale + self._quality_text(result) + ".")
+            show_line(self.step_intro["results"], "")  # the box right below has it all (and a stale fit: its warnings)
         self._fill_parameters(result if session.result_is_current() else None)
         self._fill_solutions()
 

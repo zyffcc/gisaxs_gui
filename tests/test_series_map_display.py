@@ -504,7 +504,8 @@ def test_the_title_line_says_what_the_map_is_and_when_it_no_longer_is(tmp_path: 
         assert title.isHidden() and stale.isHidden()
         _build(page, 6)
         assert not title.isHidden() and title.text() == "I(q) · 6 frames of film" and stale.isHidden()
-        assert page.series_info_label.text().startswith("6 frames × ")  # the how-to: one line, whole in its tooltip
+        assert page.series_map_view.toolTip().startswith("6 frames × ")  # the how-to: the map's tooltip
+        assert page.series_info_label.text() == "" and page.status_text() == ""  # (the title line says what it is)
         other = combo.findText("In-plane sector I(q)")
         combo.setCurrentIndex(other)  # another curve chosen, not built
         assert not stale.isHidden() and stale.text() == (
@@ -538,17 +539,22 @@ def test_the_title_line_says_what_the_map_is_and_when_it_no_longer_is(tmp_path: 
 
 
 def test_the_line_of_a_finished_map_follows_the_language(tmp_path: Path) -> None:
+    """A map that went through is said by the line above it (the status line stays quiet); one with frames that
+    failed is said in the status line too, in the interface language."""
     page, _paths = _giwaxs_page(tmp_path, 3)
     try:
         _build(page, 3)
-        assert page.status_text() == "Series map: 3 frames of I(q)"
+        assert page.status_text() == "" and page.series_title_label.text() == "I(q) · 3 frames of film"
+        page._series_finished(["film_9.tif"])
+        assert page.status_text() == "Series map: 3 frames of I(q); 1 failed: film_9.tif"
+        assert page.status_level() == "warning"
         apply_language("zh", [page])
         page.refresh_language()
-        assert page.status_text() == "序列热图：I(q)，3 帧"
+        assert page.status_text() == "序列热图：I(q)，3 帧；1 帧失败：film_9.tif"
         assert page.series_stages_label.text() == "寻找阶段至少需要 5 帧（这张热图只有 3 帧）。"
         apply_language("en", [page])
         page.refresh_language()
-        assert page.status_text() == "Series map: 3 frames of I(q)"
+        assert page.status_text() == "Series map: 3 frames of I(q); 1 failed: film_9.tif"
     finally:
         _close(page)
 

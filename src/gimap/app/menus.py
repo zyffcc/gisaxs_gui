@@ -434,9 +434,9 @@ class ApplicationMenus:
             data_dir=context.data_dir,
             migrated_from=getattr(store, "migrated_from", None),
             extra_pages=(
-                (
+                (  # no description: the page's own first line says what each run sends
                     "Assistant",
-                    "The AI runs the Analyze tools on the open frame (GIWAXS or GISAXS) and reports what it finds.",
+                    "",
                     lambda parent: self.window.components.assistant().settings_page(parent),
                 ),
             ),

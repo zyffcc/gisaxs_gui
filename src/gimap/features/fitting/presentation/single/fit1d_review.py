@@ -20,7 +20,7 @@ from ...application.single_fit1d import (
 )
 from ...application.workflow_v5 import fit1d_kit_available
 from ..views.fit_step_view import FIT1D_MISSING_TIP, METHODS
-from ..views.step_widgets import fit_to_rows
+from ..views.step_widgets import fit_to_rows, show_line
 
 GISAXS_CUT = "native_detector_columns"
 """``observation["source"]`` of a GISAXS horizontal cut sent from Analyze."""
@@ -121,14 +121,17 @@ class Fit1DReviewMixin:
         self._refresh_fit1d_action()
 
     def _refresh_fit1d_action(self) -> None:
-        """The sentence under the method (what it does, whether it is the one recommended) and fit1d's notes."""
+        """The line under the method — only why it is recommended for this curve, or, for Predict without its kit,
+        that the add-on is missing and where it goes (what a method does is its tooltip) — and fit1d's notes."""
         if not hasattr(self, "fit1d_composition") or not hasattr(self, "method_combo"):
             return
         method = self.method()
-        hint = tr(self.method_combo.itemData(self.method_combo.currentIndex(), 3) or "")  # Qt.ToolTipRole
+        hint = ""
         if method and method == self.recommended_method():
-            hint = tr(RECOMMENDED if method == "fit1d" else RECOMMENDED_NO_KIT) + " " + hint
-        self.method_hint.setText(hint)
+            hint = tr(RECOMMENDED if method == "fit1d" else RECOMMENDED_NO_KIT)
+        elif method == "fit1d" and not getattr(self, "_fit1d_kit", False):  # chosen although it is not installed
+            hint = tr(FIT1D_MISSING_TIP)
+        show_line(self.method_hint, hint)
         for index, (_value, text) in enumerate(COMPOSITIONS):
             self.fit1d_composition.setItemText(index, tr(text))
         notes = []

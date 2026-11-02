@@ -20,16 +20,22 @@ from src.gimap.app.presentation.layout_primitives import CARD_SPACING
 
 from .workflow_state import PredictionWorkflowSnapshot
 
-CBF_ONLY_HINT = "Prediction reads CBF frames (.cbf) only."
-CBF_FOLDER_HINT = "The numbered CBF frames (.cbf) in this folder are used."
+CBF_FILE_TIP = (
+    "A CBF detector frame (.cbf), or the first of a numbered series, to predict from: "
+    "prediction reads CBF frames only."
+)
+CBF_FOLDER_TIP = "A folder of numbered CBF frames (.cbf): those in the range below are used."
+STACK_TIP = "How many consecutive detector files contribute to this prediction."
+RANGE_TIP = "Use an inclusive file-number range and choose how many files form one prediction."
 
 
-def _mode_hint(is_batch: bool) -> str:
-    return (
-        "Use an inclusive file-number range and choose how many files form one prediction."
-        if is_batch
-        else "Stack controls how many consecutive detector files contribute to this prediction."
-    )
+def range_field_tip(is_batch: bool, indices=()) -> str:
+    """Tooltip of Stack (single file) or Range (folder batch): what the field means, then the file numbers found."""
+    if indices:
+        found = trf("Available index range: {first} - {last}", first=indices[0], last=indices[-1])
+    else:
+        found = tr("No valid indices detected yet")
+    return tr(RANGE_TIP if is_batch else STACK_TIP) + "\n" + found
 
 
 class PredictionDisclosure(QWidget):
@@ -204,19 +210,18 @@ class PredictionInputModePanel(QWidget):
 
         self.pages = QStackedWidget(self)
         self.pages.setObjectName("predictionInputModePages")
-        # Prediction reads CBF frames only: the button and a hint line say so before anything is picked.
+        # Prediction reads CBF frames only: the button says so, its tooltip says it in full (a dropped
+        # file that is not CBF is refused with a message).
         ui.gisaxsPredictChooseGisaxsFileButton.setText("Choose CBF frame…")
+        ui.gisaxsPredictChooseGisaxsFileButton.setToolTip(CBF_FILE_TIP)
+        ui.gisaxsPredictChooseFolderButton.setToolTip(CBF_FOLDER_TIP)
         single_page = self._make_picker_page(
-            "Detector frame",
             ui.gisaxsPredictChooseGisaxsFileButton,
             ui.gisaxsPredictChooseGisaxsFileValue,
-            CBF_ONLY_HINT,
         )
         batch_page = self._make_picker_page(
-            "Choose data folder",
             ui.gisaxsPredictChooseFolderButton,
             ui.gisaxsPredictChooseFolderValue,
-            CBF_FOLDER_HINT,
         )
         self.pages.addWidget(single_page)
         self.pages.addWidget(batch_page)
@@ -237,12 +242,7 @@ class PredictionInputModePanel(QWidget):
         # The free width goes to an empty third column: each field stays right beside its label.
         range_layout.setColumnStretch(2, 1)
         layout.addWidget(range_panel)
-
-        self.hint = QLabel(self)
-        self.hint.setObjectName("gisaxsPredictRangeHintLabel")
-        self.hint.setProperty("cardMeta", True)
-        self.hint.setWordWrap(True)
-        layout.addWidget(self.hint)
+        # What Stack / Range means is the tooltip of the field (``range_field_tip``, set by the binding).
         self._summary_values = None  # the last batch plan shown (set_batch_summary)
         self.summary = QLabel("Choose a folder to calculate the batch plan.", self)
         self.summary.setObjectName("predictionBatchPlanSummary")
@@ -260,39 +260,29 @@ class PredictionInputModePanel(QWidget):
         ui.gisaxsPredictMultiFilesRadioButton.toggled.connect(self.sync_mode)
         self.sync_mode()
 
-    def _make_picker_page(self, title: str, button, value, hint: str = "") -> QWidget:
+    def _make_picker_page(self, button, value) -> QWidget:
+        """The chooser button and its field (the button names what to choose)."""
         page = QWidget(self.pages)
         page_layout = QVBoxLayout(page)
         page_layout.setContentsMargins(0, 0, 0, 0)
         page_layout.setSpacing(6)
-        label = QLabel(title, page)
-        label.setProperty("predictionFieldLabel", True)
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(8)
         row.addWidget(button)
         row.addWidget(value, 1)
-        page_layout.addWidget(label)
         page_layout.addLayout(row)
-        if hint:
-            note = QLabel(hint, page)
-            note.setObjectName("predictionCbfOnlyHint")
-            note.setProperty("cardMeta", True)
-            note.setWordWrap(True)
-            page_layout.addWidget(note)
         return page
 
     def sync_mode(self) -> None:
         is_batch = self.ui.gisaxsPredictMultiFilesRadioButton.isChecked()
         self.pages.setCurrentIndex(1 if is_batch else 0)
-        self.hint.setText(tr(_mode_hint(is_batch)))
         self.summary.setVisible(is_batch)
         self.ui.gisaxsPredictShowMultiFileResultsButton.setVisible(is_batch)
         self.mode_changed.emit("multi_files" if is_batch else "single_file")
 
     def refresh_language(self) -> None:
-        """The hint and the batch plan in the interface language (after a switch)."""
-        self.hint.setText(tr(_mode_hint(self.ui.gisaxsPredictMultiFilesRadioButton.isChecked())))
+        """The batch plan in the interface language (after a switch)."""
         if getattr(self, "_summary_values", None) is not None:
             self.set_batch_summary(**self._summary_values)
 
@@ -346,6 +336,11 @@ class PredictionCanvasEmptyState(QLabel):
 
 
 __all__ = [
+    "CBF_FILE_TIP",
+    "CBF_FOLDER_TIP",
+    "RANGE_TIP",
+    "STACK_TIP",
+    "range_field_tip",
     "PredictionCanvasEmptyState",
     "PredictionDisclosure",
     "PredictionInputModePanel",

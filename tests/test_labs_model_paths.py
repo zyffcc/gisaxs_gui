@@ -156,7 +156,7 @@ def test_a_module_without_a_model_says_no_model_is_imported(window, page):
 
     assert page.current_parameters["module_model_path"] == ""
     assert f"[INFO] {module_catalog.NO_MODEL_IMPORTED}" in lines
-    assert window.gisaxsPredictModelStatusTextLabel.text() == "Not loaded"
+    assert window.gisaxsPredictModelStatusTextLabel.isHidden()  # the Model chip under 3. Predict says it
     assert window.gisaxsPredictModelReadyLabel.text() == "Model: Not loaded"
     assert not window.gisaxsPredictPredictButton.isEnabled()
 
@@ -205,7 +205,7 @@ def test_import_model_remembers_the_folder_and_leaves_module_yaml_unchanged(
         remembered = module_catalog.MODEL_FOLDER_REMEMBERED.format(name=GOLD_NAME)
         assert f"[INFO] {remembered}" in _new_log_lines(window, log_before)
         assert page._current_model is not None
-        assert window.gisaxsPredictModelStatusTextLabel.text() == "Loaded"
+        assert window.gisaxsPredictModelReadyLabel.text() == "Model: Loaded"
 
         # The stored folder wins when the modules are read again (module.yaml still names none).
         page._refresh_modules()

@@ -194,6 +194,19 @@ def test_the_window_says_the_unit_of_each_file_before_and_after_the_run(tmp_path
         _close(dialog)
 
 
+def test_files_read_by_one_rule_are_not_named_twice(tmp_path, monkeypatch) -> None:
+    """Every file read by the same rule: the unit line does not repeat the names of the line above it."""
+    dialog = _dialog(options=dict(q_unit="nm^-1"), stated_q_unit=LocalCurveRepository().stated_q_unit)
+    try:
+        _add(dialog, monkeypatch, [_analyze_curve(tmp_path)])
+        assert dialog.input_label.text().splitlines() == ["1 file(s): film_B7_fit_input.dat",
+                                                          "q in Å⁻¹, as their header states"]
+        _add(dialog, monkeypatch, [_plain_curve(tmp_path)])
+        assert dialog.input_label.text().splitlines()[1] == "q in nm⁻¹, no unit in their header (Parameters…)"
+    finally:
+        _close(dialog)
+
+
 def test_a_file_whose_unit_cannot_be_told_is_named(tmp_path, monkeypatch) -> None:
     clash = tmp_path / "contradicting.dat"
     clash.write_text("# q in 1/A\nq (nm^-1) I\n0.1 2\n", encoding="utf-8")

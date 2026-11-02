@@ -26,7 +26,7 @@ class SemWindow(SemInstanceDetectionMixin, QWidget, SemWindowView):
         self._runner = TaskRunner(self, max_threads=2)
         self._close_pending = False
         self._disposed = False
-        self._status = ("idle", "Open an SEM image or a particle-size CSV to begin.", {}, 0.0)
+        self._status = ("idle", "", {}, 0.0)  # the empty image panel says how to begin
         self.setupUi(self)
         self._init_instance_detection()
         self.setWindowIcon(app_icon())
@@ -223,8 +223,8 @@ class SemWindow(SemInstanceDetectionMixin, QWidget, SemWindowView):
         self._render_results()
         if len(measurements.radius_nm):
             self.result_tabs.setCurrentIndex(1)
-            self._set_status("succeeded", "Measured {count} accepted particle(s). Review the outlines and particle table.",
-                             count=len(measurements.radius_nm), progress=1.0)
+            # the counts are the summary above the tabs
+            self._set_status("succeeded", "Measured. Review the outlines and the particle table.", progress=1.0)
         else:
             self.result_tabs.setCurrentIndex(0)
             self._set_status("succeeded", "No particles passed the filters. Review the outlines, detection settings, and image ROI.", progress=1.0)
@@ -263,22 +263,28 @@ class SemWindow(SemInstanceDetectionMixin, QWidget, SemWindowView):
     def _refresh_summary(self):
         state = self.view_model.state
         if state.measurements is None:
-            self.summary_label.setText(tr("No SEM measurements yet"))
+            self.summary_label.setText("")
         else:
             total = len(state.measurements.particles)
             count = len(state.measurements.radius_nm)
             self.summary_label.setText(trf("{accepted} accepted / {total} measured particles", accepted=count, total=total))
+        # What R is: the tooltip of the distribution's title and of the radius column.
+        definition = tr(
+            "CSV sizes are converted to radius in nm using the selected column, quantity, and unit."
+            if state.source_kind == "csv" else "R is the equivalent-circle radius of the projected area."
+        )
+        self.distribution_panel.title_label.setToolTip(definition)
+        self.particles_table.horizontalHeaderItem(2).setToolTip(definition)
+        scale = 1.0 if state.comparison is None else float(state.comparison.metadata.get("sem_radius_scale", 1) or 1)
+        self.radius_scale_label.setText(
+            "⚠ " + trf("SEM radius scale: {scale}.", scale=f"{scale:.6g}") if scale != 1.0 else ""
+        )
+        self.radius_scale_label.setVisible(scale != 1.0)
         if state.comparison is None:
             self.notes_label.clear()
         else:
-            definition = (
-                "R is the equivalent-circle radius. Original measurements and every comparison setting are included in the export."
-                if state.source_kind == "image" else
-                "CSV sizes are converted to radius in nm using the selected column, quantity, and unit. Original measurements and comparison settings are included in the export."
-            )
-            notes = [tr(definition)]
+            notes = []
             metadata = state.comparison.metadata
-            notes.append(trf("SEM radius scale: {scale}.", scale=f"{metadata.get('sem_radius_scale', 1):.6g}"))
             excluded = metadata.get("sem_count_outside_range", 0)
             prediction_outside = metadata.get("prediction_probability_outside_range")
             if excluded or (prediction_outside is not None and prediction_outside > 1e-12):
@@ -287,6 +293,7 @@ class SemWindow(SemInstanceDetectionMixin, QWidget, SemWindowView):
             if metadata.get("display_mode") == "paper":
                 notes.append(tr("Paper display uses 60 SEM bins and a minimum-subtracted, peak-scaled prediction; amplitudes are not directly comparable probabilities."))
             self.notes_label.setText(" ".join(notes))
+        self.notes_label.setVisible(bool(self.notes_label.text()))
 
     def _invalidate_measurements(self, *_args):
         self._cancel_current(show_status=False)

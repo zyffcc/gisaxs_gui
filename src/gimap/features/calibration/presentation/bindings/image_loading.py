@@ -170,28 +170,31 @@ class ImageLoadingMixin:
             notes += " | " + tr("energy from companion NXS")
         if len(detected_standards) > 1:
             notes += " | " + tr("multiple standard names found; comparing patterns automatically")
-        self.stage_label.setText(
-            trf(
-                "Loaded {name} — {width} × {height} pixels{notes}. Click Auto Calibration.",
-                name=self.view_model.source_name(image.source_path),
-                width=image.data.shape[1],
-                height=image.data.shape[0],
-                notes=notes,
-            )
-        )
+        # The file and its size are the line above the preview (``_show_image_caption``).
+        self.stage_label.setText(trf("Image loaded{notes}. Click Auto Calibration.", notes=notes))
         self.job_status.set_state(
             "succeeded",
             self.stage_label.text(),
             progress=1.0,
         )
-        self.preview_info_label.setText(
-            f"{self.view_model.source_name(image.source_path)}  ·  "
-            f"{image.data.shape[1]} × {image.data.shape[0]} px" + (f"  ·  {frames}" if frames else "")
-        )
+        self._show_image_caption()
         self.candidate_table.setRowCount(0)
         self._clear_result_labels()
         self.redraw_preview()
         self._set_running(False)
+
+    def _show_image_caption(self) -> None:
+        """The line above the preview: ``file · W × H px`` (and its frames) of the image shown, whatever the result."""
+        image = self.image
+        if image is None:  # an imported calibration whose image is not open: the image it was made on
+            source = getattr(getattr(self, "result", None), "source_image", "") or ""
+            self.preview_info_label.setText(self.view_model.source_name(source) if source else "")
+            return
+        frames = frames_text(image)
+        self.preview_info_label.setText(
+            f"{self.view_model.source_name(image.source_path)}  ·  "
+            f"{image.data.shape[1]} × {image.data.shape[0]} px" + (f"  ·  {frames}" if frames else "")
+        )
 
     def _prefill_estimated_distance(self, image: DetectorImage) -> None:
         """Estimated distance for the image just read: a number that has a source, or none.

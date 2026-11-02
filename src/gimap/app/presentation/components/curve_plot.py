@@ -260,10 +260,12 @@ class CurvePlot(QWidget):
             for _name, x, y in self._curves
         )
 
-    def set_empty_text(self, text: str) -> None:
+    def set_empty_text(self, text: str, *, bare: bool = False) -> None:
         """A muted sentence centred on the plot area while the plot has no curves (``""``: none). Give the
-        English: it is shown in the interface language (``tr`` when shown and after a switch of the language)."""
-        self.empty_overlay.set_text(text)
+        English: it is shown in the interface language (``tr`` when shown and after a switch of the language).
+        ``bare``: without curves the frame has no ticks and grid also when there is no sentence (a plot whose
+        empty state is said elsewhere on the page). Only for plots drawn with ``set_curves``."""
+        self.empty_overlay.set_text(text, bare)
 
     def _log_toggled(self, _checked: bool) -> None:
         self.plot.setLogMode(x=self.log_x_check.isChecked(), y=self.log_check.isChecked())

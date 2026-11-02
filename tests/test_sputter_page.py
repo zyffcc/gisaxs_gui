@@ -352,10 +352,50 @@ def test_the_header_fills_the_form_and_each_value_says_where_it_comes_from(tmp_p
     assert page.energy_value.text() == "9" and page.energy_kind.currentData() == "energy"
     assert page.source_labels["xray"].text() == "from the file header"
     assert page.sdd.text() == "1500" and page.source_labels["sdd"].text() == "entered"
-    assert page.source_labels["alpha"].text() == "not in the files — please enter"
-    assert page.source_labels["beam"].text() == "empty: estimated from the frames"
+    assert page.source_labels["alpha"].text() == "not in the files"
+    assert "enter it" in page.source_labels["alpha"].toolTip() and "enter it" in page.alpha.toolTip()
+    assert page.source_labels["beam"].text() == "estimated from the frames"
+    assert "pixel coordinates" in page.source_labels["beam"].toolTip()
+    assert page.source_labels["alpha"].property("gimapRole") is None  # a plain source line, not a warning
     summary = page.scan_summary.text()
-    assert "3 frames" in summary and "PILATUS 1M (S/N 99-0001)" in summary and "2030-01-02 03:04:05" in summary
+    assert "3 frames" in summary and "PILATUS 1M" in summary and "2030-01-02 03:04:05" in summary
+    assert "S/N" not in summary and "keV" not in summary  # needed once: the tooltip; the energy beside X-rays
+    tip = page.scan_summary.toolTip()
+    assert "S/N 99-0001" in tip and "172 µm pixels" in tip and "flat field FF_x99_E9000_T4500.tif" in tip
+    _close(page)
+
+
+def test_an_empty_sample_roll_says_that_0_is_assumed(tmp_path):
+    """The roll is optional and 0 is used when it is empty: the line says so (as a value to check), not "enter"."""
+    page = _page(tmp_path)
+    label = page.source_labels["roll"]
+    assert page.roll.text() == "" and page._values()["roll"] == 0.0
+    assert label.text() == "⚠ not in the files: 0 assumed — please check"
+    assert label.property("gimapRole") == "warning" and not label.property("gimapMeta")
+    page.roll.setText("0.5")
+    page.roll.textEdited.emit("0.5")
+    assert label.text() == "entered" and label.property("gimapRole") is None and label.property("gimapMeta")
+    page.roll.setText("")
+    page.roll.textEdited.emit("")
+    assert label.text() == "⚠ not in the files: 0 assumed — please check" and page._values()["roll"] == 0.0
+    _close(page)
+
+
+def test_a_one_line_source_has_no_empty_line_under_it(tmp_path):
+    """In the scroll area Qt would size a wrapped line for a narrower width: a one-line source got an empty second
+    line, and a height set once never shrank again when the panel was wider."""
+    page = _page(tmp_path, inspector=FakeInspector(energy_hint_source="flat_field"))
+    page.show()
+    page.set_scan_folder(tmp_path / "zz_invented_scan")
+    _settle(lambda: page.scan_info is not None)
+    _settle(seconds=0.3)
+    label = page.source_labels["xray"]
+    one_line = label.fontMetrics().lineSpacing()
+    assert label.text() and label.height() < 2 * one_line
+    label.resize(60, label.height())  # narrow: the warning wraps and the line grows ...
+    assert label.height() >= 2 * one_line
+    label.resize(400, label.height())  # ... and wide again: back to one line
+    assert label.height() < 2 * one_line
     _close(page)
 
 
@@ -364,9 +404,11 @@ def test_a_flat_field_energy_is_shown_beside_an_empty_field(tmp_path):
     page.set_scan_folder(tmp_path / "zz_invented_scan")
     _settle(lambda: page.scan_info is not None)
     assert page.energy_value.text() == ""
-    label = page.source_labels["xray"].text()
-    assert label.startswith("not in the files — please enter") and "calibration energy" in label
-    assert "flat field: E = 9 keV" in page.scan_summary.text()
+    label = page.source_labels["xray"]
+    assert label.text() == "not in the files · ⚠ flat-field file name: E = 9 keV"  # one line, a warning
+    assert label.property("gimapRole") == "warning"
+    assert "calibration energy" in label.toolTip() and "calibration energy" in page.energy_value.toolTip()
+    assert "keV" not in page.scan_summary.text()  # said once, beside the field
     _close(page)
 
 
@@ -402,13 +444,15 @@ def test_a_folder_gets_its_own_values_back_and_another_one_last_used(tmp_path):
     _settle(lambda: not page.running())
     page.set_scan_folder(second)
     _settle(lambda: page.scan_info is not None and Path(page.scan_info.folder) == second)
-    assert page.sdd.text() == "1000" and page.source_labels["sdd"].text() == "last used — please check"
+    assert page.sdd.text() == "1000" and page.source_labels["sdd"].text() == "⚠ last used — please check"
+    assert page.source_labels["sdd"].property("gimapRole") == "warning"
     assert page.energy_value.text() == "9" and page.rate.text() == ""  # the header's hint; a rate is per folder
     page.set_scan_folder(first)
     _settle(lambda: page.scan_info is not None and Path(page.scan_info.folder) == first)
     assert page.energy_kind.currentData() == "wavelength" and page.energy_value.text() == "0.11"
     assert page.source_labels["xray"].text().startswith("as last used for this folder")
-    assert "the file header suggests 9 keV" in page.source_labels["xray"].text()
+    assert "⚠ header says 9 keV" in page.source_labels["xray"].text()
+    assert "differs from the value used" in page.source_labels["xray"].toolTip()
     assert page.rate.text() == "0.25"
     stored = preferences.get("sputter_page")
     assert set(stored) >= {"folders", "last", "last_scan", "last_result"} and "python" not in stored
@@ -762,7 +806,8 @@ def test_the_page_speaks_chinese_after_a_switch(tmp_path):
         assert kept == []  # every fixed text of the page has its Chinese
         assert page.predict_button.text() == "预测" and "物理路径" in page.report.toPlainText()
         assert "强度调制周期 ≈ 7 s（可能来自样品台平移）" in page.result_label.text()
-        assert page.source_labels["sdd"].text() == "文件中没有——请填写"
+        assert page.source_labels["sdd"].text() == "文件中没有"
+        assert page.source_labels["roll"].text() == "⚠ 文件中没有：假定为 0——请核对"
         assert page.tabs.tabText(page.tabs.indexOf(page.literature)) == "文献对照"
         assert page.trend.figure.axes[-1].get_ylabel() == "金属厚度（nm）"
         headers = [page.table.horizontalHeaderItem(i).text() for i in range(page.table.columnCount())]

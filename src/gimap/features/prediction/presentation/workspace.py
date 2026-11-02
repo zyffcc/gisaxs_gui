@@ -263,10 +263,13 @@ class GisaxsPredictWorkspace:
             _detach_from_parent_layout(widget)
         self.ui.widget_4.hide()
 
+        # The bindings keep the model state on this label; it is not shown: the Model chip under
+        # 3. Predict says the same (Loaded, Loading…, Load failed, Canceled, Not loaded).
         self.ui.gisaxsPredictModelStatusTextLabel = QLabel("Not loaded", form)
         self.ui.gisaxsPredictModelStatusTextLabel.setObjectName("gisaxsPredictModelStatusTextLabel")
         self.ui.gisaxsPredictModelStatusTextLabel.setProperty("predictionModelStatus", True)
         self.ui.gisaxsPredictModelStatusTextLabel.setProperty("modelState", "idle")
+        self.ui.gisaxsPredictModelStatusTextLabel.hide()
         self.ui.gisaxsPredictFrameworkStatusLabel = QLabel("Framework: checking...", form)
         self.ui.gisaxsPredictFrameworkStatusLabel.setObjectName("gisaxsPredictFrameworkStatusLabel")
         self.ui.gisaxsPredictFrameworkStatusLabel.setProperty("cardMeta", True)
@@ -282,7 +285,6 @@ class GisaxsPredictWorkspace:
         grid.addWidget(self.ui.gisaxsPredictModuleSelectLabel, 0, 0)
         grid.addWidget(self.ui.gisaxsPredictModuleSelectCombox, 0, 1)
         grid.addWidget(self.ui.gisaxsPredictModelImportButton, 1, 0, 1, 2)
-        grid.addWidget(self.ui.gisaxsPredictModelStatusTextLabel, 2, 0, 1, 2)
         grid.setColumnStretch(1, 1)
         card.add_content(form)
 
@@ -344,18 +346,9 @@ class GisaxsPredictWorkspace:
 
         self.ui.gisaxsPredictPredictButton.setProperty("gimapPrimaryAction", True)
         self.ui.gisaxsPredictStopButton.setProperty("gimapDangerAction", True)
-        # Shown only while Predict is disabled (InputParametersMixin._refresh_predict_readiness),
-        # beside the button so the sticky card stays one row shorter.
-        readiness_hint = QLabel(
-            "Prediction becomes available when input, model and framework are ready.", run
-        )
-        readiness_hint.setObjectName("gisaxsPredictReadinessHint")
-        readiness_hint.setProperty("cardMeta", True)
-        readiness_hint.setWordWrap(True)
-        self.ui.gisaxsPredictReadinessHint = readiness_hint
+        # The chips above say what Predict waits for; the button's tooltip names the three.
         button_row = QHBoxLayout()
         button_row.setSpacing(8)
-        button_row.addWidget(readiness_hint, 1)
         button_row.addWidget(self.ui.gisaxsPredictPredictButton, 1)
         button_row.addWidget(self.ui.gisaxsPredictStopButton)
 

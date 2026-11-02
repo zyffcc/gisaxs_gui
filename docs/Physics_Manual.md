@@ -2361,7 +2361,7 @@ and stop at the first `M` that fails; there is no look-ahead. The 5 % is of the 
 change in percent = 100 · (10^{Δ_b} − 1)                                                        (11.50)
 ```
 
-Up to 3 q of the largest positive `Δ` ("grows most") and of the most negative ("falls most") are listed, each more than 2 % of the compared q span from the others. The change is relative to the rest of the curve. The representative frame of a stage is its kept frame nearest (least squares) to the stage's mean `x`.
+Up to 3 q of the largest positive `Δ` ("grows most") and of the most negative ("falls most") are listed, each more than 2 % of the compared q span from the others. The change is relative to the rest of the curve. Compare shows them in the tooltip of its folded *Odd frames and stages of every series* and writes them into its JSON record (`stage_details`: each `x` with its `percent` of (11.50)). The representative frame of a stage is its kept frame nearest (least squares) to the stage's mean `x`.
 
 A stage is a description, not a phase: a smooth change is also cut where its pace bends. What grows or falls between stages says whether a boundary is structural. Boundaries have no uncertainty attached.
 
@@ -2428,7 +2428,7 @@ otherwise cut the tree at (g_{m*} + g_{m*+1}) / 2                               
 
 Groups are numbered in series order. So "alike" and "different" are read from a jump of the merge heights, not from a fixed threshold; the 2 % floor keeps series that differ by less than about 2 % of intensity in one group (an RMS log10 difference of 0.0086). Below three series every series is in group 1.
 
-**What the results say.** For two series: their end-state and start-state distances. For three or more: the groups and the series that differs most, the one with the largest mean of its row of `δ`. "The first main change carries … %" is `γ_1` of (11.40), the share of the variance of all kept frames about their common mean that the first component explains.
+**What the results say.** For two series: their end-state and start-state distances. For three or more: the groups and the series that differs most, the one with the largest mean of its row of `δ`. The share shown with the first main change, "Component 1 (… %)" above the change plot, is `γ_1` of (11.40), the share of the variance of all kept frames about their common mean that the first component explains.
 
 Implementation: `src/gimap/features/compare/domain/comparison.py`, `src/gimap/features/compare/application/use_cases.py`
 
@@ -3402,7 +3402,9 @@ these angles (1/cos 0.4° = 1.00002).
   `SphericalSegment(R, 0, max(10⁻⁶ nm, 2R − H))`: a sphere of radius R cut to height H.
 - Roughness, when `σ > 0`: `SelfAffineFractalModel(σ, Hurst 0.3, lateral correlation 5 nm)`, `TanhTransient`,
   `CommonDepthCrosscorrelation(10 nm)`.
-- The image is flipped up–down once, so that large α_f is at the top.
+- The image is flipped up–down once, so that large α_f is at the top. The training images then have the orientation
+  of the experimental detector display: detector x increases to the right and detector y downward, and the exit
+  angle (and q_z) is higher at the top.
 
 **Materials: a fixed table of δ and β.** The refractive index n = 1 − δ + iβ of each material comes from a table:
 

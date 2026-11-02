@@ -41,6 +41,7 @@ from ..views import (
     TrainsetPreviewPageView,
 )
 
+from ..composed_text import ShownWhenSet
 from ..visualization_widgets import ArrayCanvas, HistogramWidget, ParameterCoverageWidget
 
 
@@ -76,17 +77,19 @@ class PreviewMixin:
             ui.previewPanelContent,
             ui.previewPanelContentLayout,
         )
-        intro = QLabel(
-            "Simulation-first preview: BornAgain creates the scattering pattern. Choose any sampled physics, background or noise range "
-            "to compare its minimum, midpoint and maximum without using the experimental image as training data."
-        )
-        intro.setWordWrap(True)
         controls_widget = QWidget()
         controls = QVBoxLayout(controls_widget)
         controls.setContentsMargins(0, 0, 0, 0)
         selection_controls = QGridLayout()
-        selection_controls.addWidget(QLabel("Compare range"), 0, 0)
+        compare_tip = (
+            "The sampled physics, background or noise range to compare: BornAgain simulates its minimum, midpoint "
+            "and maximum. The experimental image is never used as training data."
+        )
+        compare_label = QLabel("Compare range")
+        compare_label.setToolTip(compare_tip)
+        selection_controls.addWidget(compare_label, 0, 0)
         self.impact_parameter_combo = QComboBox()
+        self.impact_parameter_combo.setToolTip(compare_tip)
         self.impact_parameter_combo.setMinimumWidth(180)
         self.impact_parameter_combo.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         selection_controls.addWidget(self.impact_parameter_combo, 0, 1)
@@ -135,7 +138,7 @@ class PreviewMixin:
         action_controls.setColumnStretch(0, 1)
         action_controls.setColumnStretch(1, 1)
         controls.addLayout(action_controls)
-        self.preview_cache_status = QLabel("BornAgain cache: empty")
+        self.preview_cache_status = ShownWhenSet("BornAgain cache: empty")
         self.preview_cache_status.setWordWrap(True)
         controls.addWidget(self.preview_cache_status)
         self.preview_job_status = JobStatus()
@@ -436,7 +439,6 @@ class PreviewMixin:
         diagnostics_layout.addWidget(self.storage_accept_check)
         diagnostics_layout.addWidget(self.preview_gate_table)
         self.preview_views.addTab(diagnostics, "Diagnostics")
-        ui.previewRunContentLayout.addWidget(intro)
         ui.previewRunContentLayout.addWidget(controls_widget)
         ui.previewAdvancedContentLayout.addWidget(self.preprocessing_tabs)
         ui.previewPanelContentLayout.addWidget(self.preview_views, 1)

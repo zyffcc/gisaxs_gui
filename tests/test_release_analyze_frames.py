@@ -4,7 +4,8 @@ A mask image of another detector size is refused when it is loaded (it used to b
 analysis failed while the curves of the analysis before stayed on screen); a masks file that is no masks file
 says so. A frame that cannot be read takes the frame shown before off the screen: its image, curves and green
 steps must not stay under the new file's name, and nothing of it can be exported or sent to Fitting. With no
-file, and for such a frame, both curve plots show a sentence instead of an empty grid.
+file, both curve plots are bare (no ticks that mean nothing, no sentence: the Data step says what to open); for
+such a frame they say that it could not be analysed.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
+from PyQt5.QtWidgets import QLabel
 
 from src.gimap.app.presentation.i18n import apply_language
 from src.gimap.features.analyze.presentation.bindings.display import NO_GEOMETRY_TEXT, NOT_ANALYSED_TEXT
@@ -166,6 +168,7 @@ def test_a_frame_that_cannot_be_read_takes_the_frame_before_off_the_screen(tmp_p
             "Could not analyse the frame: broken_frame.cbf ")
         assert page.data_info_label.text().startswith("broken_frame.cbf ")  # not the frame before's card
         assert "film_0.tif" not in page.step_intro["data"].text()
+        assert not page.data_info_label.parentWidget().isHidden()  # the card says why (the step was empty before)
         assert not page.fit_button.isEnabled() and not page.center_button.isEnabled()
         assert page.banner.isHidden()
         # … and nothing of it is written: Export has no frame.
@@ -320,21 +323,31 @@ def test_a_broken_first_file_and_a_removed_file_leave_no_picture_behind(tmp_path
         _close(page)
 
 
-# -- what the curve plots say with nothing to draw (R26) ---------------------------------------------------------------
+# -- what the curve plots say with nothing to draw (R26; 2026-11 small-text review) ----------------------------------
 
 
-def test_the_curve_plots_say_a_sentence_instead_of_showing_an_empty_grid(tmp_path: Path) -> None:
+def _blank(plot) -> bool:
+    """Bare (no ticks) and saying nothing: no visible character over the plot."""
+    return plot.empty_overlay.bare and not plot.empty_overlay.label.text().strip()
+
+
+def test_the_curve_plots_stay_bare_instead_of_showing_an_empty_grid(tmp_path: Path) -> None:
+    """With nothing to draw the plots have no ticks that mean nothing; they repeat no “open a frame” (the Data step
+    says it once) and no “needs a geometry” (the banner and the Geometry step say it). A frame that could not be
+    read still says so where its curves would be (``test_a_frame_that_cannot_be_read…``)."""
     page = _page(_context())  # no instrument profile: a frame has no geometry
     try:
-        assert _empty_texts(page) == [NO_FRAME_TEXT, NO_FRAME_TEXT] == ["Open a detector frame"] * 2
-        for plot in (page.top_plot, page.bottom_plot):  # before the first file: no ticks that mean nothing
-            assert plot.empty_overlay.bare and not plot.empty_overlay.label.isHidden()
-            assert plot.empty_overlay.label.text() == "Open a detector frame"
+        assert _empty_texts(page) == [NO_FRAME_TEXT, NO_FRAME_TEXT]
+        assert all(_blank(plot) for plot in (page.top_plot, page.bottom_plot))  # before the first file
+        assert page.step_intro["data"].text().startswith("Open or drop detector frames")  # … said once, here
         paths = _frames(tmp_path, 1)
         page.add_paths([str(paths[0])])
         _done(page)
         assert page.view_model.state.analysis.reduction is None
         assert _empty_texts(page) == [NO_GEOMETRY_TEXT, NO_GEOMETRY_TEXT]
+        assert all(_blank(plot) for plot in (page.top_plot, page.bottom_plot))
+        assert not page.banner.isHidden() and page.step_rail.state("geometry") == "warn"  # where it is said
+        assert page.step_rail.detail("cuts") == ""  # (not “Needs a geometry” a third time)
         page.clear_files()
         assert _empty_texts(page) == [NO_FRAME_TEXT, NO_FRAME_TEXT]
         assert not page.top_plot.has_curves() and page.top_plot.empty_overlay.bare
@@ -351,10 +364,62 @@ def test_the_curve_plots_say_a_sentence_instead_of_showing_an_empty_grid(tmp_pat
         _close(page)
 
 
-def test_the_views_are_made_with_the_sentence() -> None:
+def test_the_empty_page_says_what_to_open_once() -> None:
+    """Before the first file: the Data step's sentence and “No data yet” where the file name goes; the readout under
+    the image, the plots, the status line and the cards of the other steps say nothing."""
     _app()
     page = _page(_context())
     try:
-        assert page.detector_view.readout_label.text() == "Open a detector frame"  # the image says the same
+        assert page.detector_view.readout_label.text().strip() == ""  # (how to read values: its tooltip)
+        assert page.file_chip.full_text() == "No data yet" and page.status_text() == ""
+        assert page.step_intro["data"].text() == "Open or drop detector frames (CBF, NeXus/HDF5, TIFF, EDF) or a folder."
+        for key in ("geometry", "mask", "cuts", "results", "export"):
+            assert page.step_intro[key].isHidden() and page.step_intro[key].text() == "", key
+        for label in (page.data_info_label, page.summary_label, page.mask_summary_label):
+            assert label.parentWidget().isHidden()  # no empty cards
+        assert page.frames_imported_label.isHidden()  # (no “0 frames imported”)
+    finally:
+        _close(page)
+
+
+def test_one_frame_imported_is_said_in_the_singular(tmp_path: Path) -> None:
+    """It said “1 frames imported”."""
+    from src.gimap.features.analyze.presentation.bindings.frame_import import imported_text
+
+    assert (imported_text(0), imported_text(1), imported_text(40)) == ("", "1 frame imported", "40 frames imported")
+    page, _paths = _open(tmp_path, 1)
+    try:
+        assert page.frames_imported_label.text() == "1 frame imported" and not page.frames_imported_label.isHidden()
+        apply_language("zh", [page])
+        page.refresh_language()
+        assert page.frames_imported_label.text() == "已导入 1 帧"
+        apply_language("en", [page])
+        page.refresh_language()
+        page.add_paths([str(path) for path in _frames(tmp_path / "more", 2)])
+        _done(page)
+        assert page.frames_imported_label.text() == "3 frames imported"
+        page.clear_files()
+        assert page.frames_imported_label.isHidden()
+    finally:
+        _close(page)
+
+
+def test_the_export_step_says_nothing_untrue_about_where_files_go() -> None:
+    """It said “Everything is written next to the data in gimap_analysis/” — Batch Export and the pictures go where
+    the person chooses. Each button's tooltip says what it writes and where; the step has no sentence of its own."""
+    _app()
+    page = _page(_context())
+    try:
+        intro = page.step_intro["export"]
+        assert intro.isHidden() and intro.text() == ""
+        tips = {button.text(): button.toolTip() for button in (
+            page.export_curves_button, page.export_all_button, page.export_image_button, page.export_map_button,
+            page.export_plots_button)}
+        assert tips["Export Curves…"].endswith("next to the data (gimap_analysis/).")
+        assert "to a folder you choose" in tips["Batch Export…"]
+        for name in ("Save Image…", "Save q-Map Data…", "Save Plots…"):
+            assert tips[name].endswith("to a file you choose."), name
+        labels = [label.text() for label in page.step_pages["export"].widget().findChildren(QLabel)]
+        assert not any("gimap_analysis" in text for text in labels)  # (no line under the buttons repeats them)
     finally:
         _close(page)

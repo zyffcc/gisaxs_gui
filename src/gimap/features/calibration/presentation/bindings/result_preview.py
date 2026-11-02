@@ -13,7 +13,8 @@ from matplotlib.patches import Ellipse
 
 from PyQt5.QtCore import QSignalBlocker, QTimer
 
-from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.theme import set_role
 from src.gimap.app.presentation.theme.figures import restyle_figure
 
 from ...application import (
@@ -32,6 +33,12 @@ from ..preview_style import (
 LOGGER = logging.getLogger(__name__)
 # Two-column selected solution only while the candidate table keeps at least this width.
 CANDIDATES_MIN_WIDTH = 260
+WARNING_TIPS = {
+    "Matched rings have very limited azimuthal coverage; verify the overlay before applying.":
+        "Few azimuths carry matched ring points, so the centre and the distance are poorly constrained. Check "
+        "that the matched (yellow) rings lie on the rings of the image before Apply.",
+}
+"""Why an engine warning matters (the tooltip of the Warning row); the warning itself is the engine's English."""
 
 
 class ResultPreviewMixin:
@@ -84,12 +91,14 @@ class ResultPreviewMixin:
     def _result_language_changed(self, _language: str = "") -> None:
         """Other title widths and line heights: refit once the texts are swapped.
 
-        The legend is rich text, which the language walker does not know: it is written again.
-        The result itself is not composed again (that would reset the manual fields); it follows
-        the next candidate shown.
+        The legend is rich text, which the language walker does not know: it is written again, and so is the
+        Warning row (its “⚠ ” is not in the table). The rest of the result is not composed again (that would
+        reset the manual fields); it follows the next candidate shown.
         """
         try:
             self._show_overlay_legend()
+            if getattr(self, "_shown_warnings", None):
+                self._show_warnings(self._shown_warnings)
         except RuntimeError:  # the dialog is being destroyed
             return
         QTimer.singleShot(0, self._refit_results)
@@ -131,9 +140,7 @@ class ResultPreviewMixin:
         self.result_labels["RMS residual"].setText(f"{candidate.rms_residual_px:.3f} px")
         # Confidence and warnings are the engine's English (also in the exported record), shown translated.
         self.result_labels["Confidence"].setText(tr(candidate.confidence))
-        self.result_labels["Warning"].setText(
-            " ".join(tr(warning) for warning in candidate.warnings) or tr("None")
-        )
+        self._show_warnings(candidate.warnings)
         blockers = [
             QSignalBlocker(widget)
             for widget in (
@@ -146,25 +153,28 @@ class ResultPreviewMixin:
         self.manual_y.setValue(center_y)
         self.manual_distance.setValue(candidate.distance_mm)
         del blockers
-        standard_name = self.view_model.standard_display_name(candidate.standard_key)
-        self.preview_info_label.setText(
-            trf(
-                "{image}  ·  {standard}  ·  {distance} mm  ·  {rings} matched rings  ·  "
-                "{confidence} confidence",
-                image=self.view_model.source_name(self.image.source_path) if self.image else "",
-                standard=tr(standard_name),
-                distance=f"{candidate.distance_mm:.2f}",
-                rings=candidate.matched_ring_count,
-                confidence=tr(candidate.confidence),
-            )
-        )
+        # The line above the preview names the image only: the result is in the Selected solution box.
+        self._show_image_caption()
         self._populate_manual_rings(candidate)
         self.redraw_preview()
         self._fit_results_height()
 
+    def _show_warnings(self, warnings) -> None:
+        """The Warning row: the engine's warnings (translated) in the warning style, why they matter as its
+        tooltip; “None” plain."""
+        label = self.result_labels["Warning"]
+        warnings = [str(warning) for warning in warnings or ()]
+        self._shown_warnings = warnings
+        label.setText("⚠ " + " ".join(tr(warning) for warning in warnings) if warnings else tr("None"))
+        set_role(label, "warning" if warnings else None)
+        label.setToolTip(" ".join(tr(WARNING_TIPS[warning]) for warning in warnings if warning in WARNING_TIPS))
+
     def _clear_result_labels(self) -> None:
         for label in self.result_labels.values():
             label.setText("—")
+        set_role(self.result_labels["Warning"], None)
+        self.result_labels["Warning"].setToolTip("")
+        self._shown_warnings = []
 
     def _display_candidate(self) -> Optional[CalibrationCandidate]:
         """The selected candidate, with the manual values while manual mode is on (as the fit holds a

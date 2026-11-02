@@ -244,7 +244,9 @@ def test_a_tilted_poni_is_a_point_to_check_with_exit_code_2_and_in_the_record(xe
     assert record["instrument_profile"]["source"] == "automatic analysis: AgBe_250403_XENOCS.poni"
     assert any("tilted by 6.06°" in message for message in record["messages"])  # Analyze's status line says it
     assert "tilt 6.06° left out" in session.page.summary_label.text()
-    assert "tilt 6.06° left out" in session.page.step_intro["geometry"].text()  # the Geometry step warns
+    # The Geometry step warns in the step rail (its line under the title said the same and is gone).
+    assert "tilt 6.06° left out" in session.page.step_rail.detail("geometry")
+    assert session.page.step_rail.state("geometry") == "warn"
     assert datetime.fromisoformat(record["created"]).utcoffset().total_seconds() == 0
     assert record["error_model"] == "poisson"
     binning = record["binning"]

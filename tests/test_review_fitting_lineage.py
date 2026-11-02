@@ -75,7 +75,7 @@ def test_results_warn_when_the_fit_no_longer_holds(tmp_path) -> None:
     page.set_range((0.5, 1.5))
     assert page.step_rail.state("results") == "warn" and page.step_rail.detail("results") == STALE
     page.set_range(None)
-    assert page.step_rail.state("results") == "ok" and page.step_rail.detail("results") == "Errors, solutions, Save"
+    assert page.step_rail.state("results") == "ok" and page.step_rail.detail("results") == ""  # ✓: the results hold
     page.dispose()
 
 

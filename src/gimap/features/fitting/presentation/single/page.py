@@ -26,7 +26,6 @@ from ...application import CURVE_SUFFIXES, LoadCurveRequest
 from ...application.single_fit import (
     ANALYZE_SIDES,
     FAMILIES,
-    NM_PER_A,
     SIDES,
     Curve,
     evaluate,
@@ -38,6 +37,8 @@ from ...application.single_fit import (
     residuals,
 )
 from ..views.fit_page_view import FitPageView
+from ..views.step_widgets import show_line
+from .curve_info import CurveInfoMixin
 from .curve_unit import SETTING_KEY, CurveUnitMixin
 from .drops import CurveDropMixin, SplitterMemoryMixin
 from .exclusion import FitExclusionMixin
@@ -55,10 +56,12 @@ CURVE_FILTER = "Curves ({});;All files (*)".format(" ".join(f"*{suffix}" for suf
 MODEL_POINTS = 600
 PREFERENCES_KEY = "fitting_single_page"
 DATA_COLOR, OUTSIDE_COLOR, MODEL_COLOR, LEFT_OUT_COLOR = "#2563eb", "#94a3b8", "#f97316", "#dc2626"
+STARTING_MODEL = "Starting model, not set up yet"
+"""The Model step while its model is the starting guess (nobody set it up, nor was it fitted)."""
 
 
 class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunMixin, FitResultsMixin,
-              FitExclusionMixin, Fit1DPageMixin, Fit1DReviewMixin, ResultActionsMixin, CurveUnitMixin):
+              FitExclusionMixin, Fit1DPageMixin, Fit1DReviewMixin, ResultActionsMixin, CurveUnitMixin, CurveInfoMixin):
     curveOpened = pyqtSignal(str)
     """The file of the curve now on the page (In-situ series takes its set-up from it)."""
     batchRequested = pyqtSignal()
@@ -134,21 +137,17 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
     def _refresh_steps(self) -> None:
         session, data = self.session, self._data()
         curve = session.curve
+        # The rail says where each step stands; a step's own line only what it does not (the curve's name: the chip).
         if curve is None:
             self.step_rail.set_state("curve", "pending", tr("Open a curve"))
-            self.step_intro["curve"].setText(tr("Open a curve (q, I, σ), or send a cut from Analyze ▸ Send to Fitting."))
         else:
-            detail = tr("{name} · {points} points fitted").format(name=curve.name, points=0 if data is None else data.q.size)
-            self.step_rail.set_state("curve", "ok", detail)
-            self.step_intro["curve"].setText(detail + ".")
+            self.step_rail.set_state("curve", "ok", tr("{points} points fitted").format(
+                points=0 if data is None else data.q.size))
         count = len(session.model.components)
         names = model_label(session.model)
         free = sum(1 for _path, parameter in session.model.parameters() if parameter.free)
         self.step_rail.set_state("model", "ok" if count else "warn", f"{names} · " + tr("{free} free").format(free=free))
-        self.step_intro["model"].setText(
-            tr("{names}; {free} values are fitted.").format(names=names, free=free) if session.edited else
-            tr("A starting model: set values you know, or let Fit ▸ Find the particle shape choose the family.")
-        )
+        show_line(self.step_intro["model"], "" if session.edited else tr(STARTING_MODEL))  # its values: only a start
         result, solutions = session.result, session.solutions
         # Solutions count as a fit only when searched here, and only on the points they were searched on.
         searched, current = session.solutions_searched(), session.solutions_are_current()
@@ -164,7 +163,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         elif result is not None and result.stopped:
             self.step_rail.set_state("fit", "warn", tr("Stopped: the best values so far are kept"))
         elif result is not None:
-            self.step_rail.set_state("fit", "ok" if result.converged else "warn", self._quality_text(result))
+            self.step_rail.set_state("fit", "ok" if result.converged else "warn", self._rail_quality(result))
         elif searched and not current:
             self.step_rail.set_state("fit", "warn", stale)
         elif searched:
@@ -178,11 +177,10 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             self.step_rail.set_state("fit", "pending", tr("Choose a method, then Fit"))
         if session.native_result is not None and result is None:
             self.step_rail.set_state("results", "ok" if session.native_is_current() else "warn",
-                                     tr("Errors, solutions, Save") if session.native_is_current() else stale)
+                                     "" if session.native_is_current() else stale)  # ✓: the results are there
         elif result is not None:
             current_result = session.result_is_current()
-            self.step_rail.set_state("results", "ok" if current_result else "warn",
-                                     tr("Errors, solutions, Save") if current_result else stale)
+            self.step_rail.set_state("results", "ok" if current_result else "warn", "" if current_result else stale)
         elif searched:
             self.step_rail.set_state("results", "ok" if current else "warn",
                                      tr("{count} solutions to compare").format(count=len(solutions)) if current else stale)
@@ -352,7 +350,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
     def _render_all(self) -> None:
         session = self.session
         curve = session.curve
-        self.curve_chip.setText(curve.name if curve is not None else tr("No curve yet — open one, or send a cut from Analyze"))
+        self.curve_chip.setText(curve.name if curve is not None else "")  # none: the plot says how to open one
         self._show_left_out()
         self.side_combo.setCurrentIndex(max(0, self.side_combo.findData(session.side)))
         signed = curve is not None and curve.signed
@@ -366,36 +364,6 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self._redraw()
         self._refresh_steps()
         self.render_results()
-
-    def _fill_curve_card(self) -> None:
-        curve, data = self.session.curve, self._data()
-        full = None if curve is None else self.session.all_points()
-        if curve is None or full is None or not full.q.size:
-            self.curve_info.setText(tr("No curve yet."))
-            self.sigma_note.setText("")
-            return
-        low, high = float(full.q.min()), float(full.q.max())
-        for spin, value in ((self.range_min_spin, low), (self.range_max_spin, high)):
-            spin.blockSignals(True)
-            spin.setRange(0.0, high * 10)
-        chosen = self.session.q_range or (low, high)
-        self.range_min_spin.setValue(chosen[0])
-        self.range_max_spin.setValue(chosen[1])
-        for spin in (self.range_min_spin, self.range_max_spin):
-            spin.blockSignals(False)
-        fitted = 0 if data is None else data.q.size
-        self.curve_info.setText(tr(
-            "{name}\n{points} points, |q| {low}–{high} nm⁻¹ ({low_a}–{high_a} Å⁻¹); {fitted} in the fitting range."
-        ).format(name=curve.name, points=full.q.size, low=f"{low:.4g}", high=f"{high:.4g}",
-                 low_a=f"{low / NM_PER_A:.4g}", high_a=f"{high / NM_PER_A:.4g}", fitted=fitted)
-            + "".join(f"\n{line}" for line in [self._unit_line()] if line))  # where its unit of q came from
-        self.sigma_note.setText("\n".join((  # both actions of the Fit step: Refine (and the others) and fit1d
-            tr("σ from the file: the fit weights each point by 1/σ.") if curve.sigma is not None else
-            tr("No σ in the file: every point gets the same relative weight (ln I is fitted)."),
-            tr("fit1d uses σ from the file with the selected systematic error floor.") if curve.sigma is not None
-            else tr("No σ in the file: fit1d assumes Poisson errors; the selected systematic error floor is added "
-                    "in quadrature."))))
-        self.weighting_note.setText(self.sigma_note.text())
 
     def _redraw(self) -> None:
         session = self.session
@@ -462,7 +430,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             values = np.full(data.q.size, np.nan)
         weighted = data.sigma is not None
         self.residual_plot.set_labels("|q| (nm⁻¹)", "Δ/σ" if weighted else "Δ ln I")  # short: the plot is low
-        tip = tr("Residuals: {formula}").format(formula="Δ/σ = (I − model)/σ" if weighted else "Δ ln I = ln(I / model)")
+        tip = self._residuals_tip(weighted)  # with σ, how the points are weighted (``curve_info``)
         self.residual_plot.setToolTip(tip)
         self.residual_plot.plot.getAxis("left").setToolTip(tip)
         self.residual_plot.set_curves([("0", data.q[[0, -1]], np.zeros(2)), (tr("residual"), data.q, values)],

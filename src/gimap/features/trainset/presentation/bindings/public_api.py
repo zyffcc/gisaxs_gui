@@ -9,6 +9,7 @@ from typing import Any, Dict
 
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.theme import set_role
 
 from .detector_design import NO_REFERENCE_THRESHOLD
 
@@ -17,13 +18,11 @@ class PublicApiMixin:
     """Own public api presentation behavior."""
 
     def _update_capabilities(self) -> None:
+        """Said only when BornAgain is missing (a warning); with it, the line waits for the cache of a preview."""
         available = self.simulation_port.is_available()
-        self.page.texts.set(
-            self.page.preview_capability,
-            "BornAgain local simulation available"
-            if available
-            else "BornAgain not installed locally · reference preview only",
-        )
+        label = self.page.preview_capability
+        self.page.texts.set(label, "" if available else "⚠ BornAgain not installed locally · reference preview only")
+        set_role(label, None if available else "warning")
 
     def get_parameters(self) -> Dict[str, Any]:
         return self._collect_config()
@@ -134,7 +133,7 @@ class PublicApiMixin:
         self._invalidate_design_checks()
         self.page.design_tabs.setCurrentIndex(0)
         self.page.set_validation_state("Not validated", "pending")
-        self.page.texts.set(self.page.design_info, "No reference loaded")  # not the file just dropped
+        self.page.texts.set(self.page.design_info, "")  # not the file just dropped (the canvas says to load one)
         self.page.texts.set(self.page.design_info, "", setter="setToolTip")
         self.page.texts.set(self.page.threshold_summary, NO_REFERENCE_THRESHOLD)
         self._update_capabilities()

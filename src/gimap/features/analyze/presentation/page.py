@@ -36,10 +36,10 @@ from .bindings.series_stages import SeriesStagesMixin
 from .bindings.batch_run import BatchRunMixin
 from .bindings.session_memory import SessionMemoryMixin
 from .bindings.undo import UndoMixin
-from .bindings.workspace import WorkspaceMixin
+from .bindings.workspace import WorkspaceMixin, show_card
 from .source_texts import FILE_FILTER, FORMATS
 from .view_model import AnalyzeViewModel
-from .views.analyze_page_view import FIT_SIDE_ITEMS, NO_FRAME_TEXT, AnalyzePageView
+from .views.analyze_page_view import FIT_SIDE_ITEMS, NO_DATA_TEXT, NO_FRAME_TEXT, AnalyzePageView
 WATCH_INTERVAL_MS = 2000
 STATUS_LEVELS = ("info", "ok", "warning", "error")
 FIT_TIP_GIWAXS = ("Open the I(q) in Fitting (q in Å⁻¹). Fitting's models are particle form factors for the horizontal "
@@ -293,8 +293,8 @@ class AnalyzePage(
             self.file_list.clear()
         self._failed = None
         self._empty_views(NO_FRAME_TEXT)
-        self.summary_label.setText(tr("Open or drop detector files (CBF, NeXus/HDF5, TIFF, EDF) to start"))
-        self.file_chip.setText(tr("No data yet — open or drop detector frames"))
+        show_card(self.summary_label, "")  # the Data step says what to open
+        self.file_chip.setText(tr(NO_DATA_TEXT))
         self.file_chip.setToolTip("")
         self.file_meta.setText("")
         self._refresh_workspace(None)
@@ -308,7 +308,7 @@ class AnalyzePage(
             self.batch_panel.hide()
         self._clear_results()
         self.refresh_batch_entry()
-        self._status(tr("Ready"))
+        self._status("")  # idle: nothing to say
         self.filesCleared.emit()
 
     def dragEnterEvent(self, event) -> None:
@@ -376,7 +376,7 @@ class AnalyzePage(
         previous = self.view_model.state.analysis
         self.view_model.accept(analysis)
         self._failed = None
-        self.summary_label.setText(self.view_model.geometry_summary(tr))
+        show_card(self.summary_label, self.view_model.geometry_summary(tr))
         self._update_frame_controls(analysis)
         self._update_incidence(analysis)
         same_frame_shape = previous is not None and previous.shape == analysis.shape
@@ -434,8 +434,9 @@ class AnalyzePage(
         mismatch = self._mode_mismatch(analysis)
         if mismatch is not None:
             return " · ".join([mismatch, *messages]), "warning"
-        if analysis.reduction is None:
-            return (messages[0] if messages else tr("No geometry.")), "warning"
+        if analysis.reduction is None:  # the banner says what the frame lacks and what to do; the line, its source
+            source = messages[:len(messages) - len(analysis.messages)]
+            return (" · ".join(source), "warning") if source else ("", "info") if messages else (tr("No geometry."), "warning")
         if messages:
             return " · ".join(messages), "warning"
         curves = sum(not curve.is_empty for curve in analysis.reduction.curves)
@@ -471,7 +472,7 @@ class AnalyzePage(
             self._series_language(None)  # a map built before a frame that could not be read is still there
             self._stages_language()
             return  # nothing else composed on screen: the fixed texts are the walker's
-        self.summary_label.setText(self.view_model.geometry_summary(tr))
+        show_card(self.summary_label, self.view_model.geometry_summary(tr))
         if analysis.reduction is None:  # the no-geometry banner says what the frame lacks
             self.banner_label.setText(" ".join(self._frame_messages(analysis)))
         self._show_step_states(analysis)

@@ -178,7 +178,7 @@ class SputterPredictMixin:
         if self._predict_queued:
             self._predict_queued = False
             if self._busy is None:
-                self._status("idle", [("Ready", {})], 0.0)
+                self._status("idle", [], 0.0)  # at rest the chip says it
 
     def stop(self) -> None:
         if self._busy is None or self._stop:

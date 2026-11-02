@@ -38,10 +38,8 @@ ZH_ENTRIES = {
         "每个序列沿所选主要变化逐帧变化了多少；× 标出异常帧（不参与比较），颜色与其序列相同",
     "Each series through the first two main changes: ○ its first kept frame, ■ its last; odd frames are left out":
         "每个序列在前两个主要变化上的路径：○ 为第一个保留的帧，■ 为最后一个；异常帧不计入",
-    "Add the Series map of a sample from Analyze (Series ▸ Send to Compare), a folder of curve files or chosen curve "
-    "files (or drop them here). Two or more series are compared with each other; one alone is described.":
-        "从分析页添加一个样品的序列热图（序列 ▸ 发送到比较），或一个曲线文件夹、若干选中的曲线文件（也可以直接拖放到这里）。"
-        "两个或更多序列相互比较；只有一个时给出它的描述。",
+    "Send a Series map from Analyze, or add or drop curve files. One series is described; two or more are compared.":
+        "从分析页发送序列热图，或添加、拖放曲线文件。一个序列给出描述；两个或更多相互比较。",
     "In Analyze, open a sample and build its map in the Series tab, then Send to Compare; repeat for every sample. "
     "Curve files (q and I columns, e.g. a Batch Export) can be added as a folder too, or dropped on this page.":
         "在分析页打开一个样品，在序列标签页生成热图，再点“发送到比较”；每个样品重复一次。曲线文件（q、I 两列，例如批量导出的结果）"
@@ -100,7 +98,7 @@ def test_this_rounds_texts_have_their_chinese(chinese) -> None:
 
     page = _shown_page()
     try:
-        for text in (CHANGE_TIP, PATHS_TIP, PATHS_EMPTY, EMPTY_TEXT, page.series_hint.text()):
+        for text in (CHANGE_TIP, PATHS_TIP, PATHS_EMPTY, EMPTY_TEXT, page.add_button.toolTip()):
             assert _zh(text) != text, text
         apply_language("zh", [page])
         page.refresh_language()

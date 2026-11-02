@@ -144,17 +144,20 @@ def test_the_english_result_texts_are_unchanged(tmp_path) -> None:
     try:
         _show(dialog, _result(tmp_path / "scan_agbh.cbf"))
         assert dialog.result_confidence.text() == "Medium"
-        assert dialog.result_warning.text() == "None"
-        assert dialog.preview_info_label.text() == (
-            "  ·  Silver behenate (AgBH)  ·  1456.70 mm  ·  3 matched rings  ·  Medium confidence"
-        )  # no image is open: the name is empty
+        assert dialog.result_warning.text() == "None" and dialog.result_warning.property("gimapRole") is None
+        # The line above the preview names the image only (small-text review G9): the result is in the
+        # Selected solution box. No image is open: the image the result was made on.
+        assert dialog.preview_info_label.text() == "scan_agbh.cbf"
         # The centre of the fit (index 123.5, 234.5) in the pixels of Analyze: + 0.5.
         assert [dialog.candidate_table.item(0, column).text() for column in range(6)] == [
             "Silver behenate (AgBH)", "1456.70 mm", "124.0, 235.0", "3", "1.25 px", "Medium",
         ]
         assert _legend(dialog) == "━━ Center ┄┄┄ Detected ━━ Matched ╌╌╌ Other theoretical"
         _show(dialog, _result(tmp_path / "scan_agbh.cbf", warnings=[ONE_RING_WARNING, COVERAGE_WARNING]))
-        assert dialog.result_warning.text() == f"{ONE_RING_WARNING} {COVERAGE_WARNING}"
+        # A warning looks like one (the engine's sentences unchanged), and its tooltip says why it matters.
+        assert dialog.result_warning.text() == f"⚠ {ONE_RING_WARNING} {COVERAGE_WARNING}"
+        assert dialog.result_warning.property("gimapRole") == "warning"
+        assert "poorly constrained" in dialog.result_warning.toolTip()
     finally:
         _dispose(dialog)
 
@@ -171,9 +174,10 @@ def test_the_line_of_a_loaded_image_follows_the_language(language, chinese) -> N
         assert dialog.stage_label.text() == {"en": "Reading image...", "zh": "正在读取图像…"}[language]
         _wait(app, lambda: dialog._load_thread is None and dialog.image is not None)
         assert dialog.stage_label.text() == {
-            "en": "Loaded Pilatus1M.edf — 981 × 1043 pixels. Click Auto Calibration.",
-            "zh": "已载入 Pilatus1M.edf — 981 × 1043 像素。请点击“自动标定”。",
+            "en": "Image loaded. Click Auto Calibration.",
+            "zh": "已载入图像。请点击“自动标定”。",
         }[language]
+        assert dialog.preview_info_label.text() == "Pilatus1M.edf  ·  981 × 1043 px"  # the file and its size
         assert dialog.pixel_label.text() == {
             "en": "172.000 × 172.000 µm (metadata)",
             "zh": "172.000 × 172.000 µm（来自元数据）",
@@ -193,10 +197,9 @@ def test_a_result_is_shown_in_chinese_and_kept_in_english(tmp_path, chinese) -> 
         result = _result(tmp_path / "scan_agbh.cbf", warnings=[ONE_RING_WARNING, COVERAGE_WARNING])
         _show(dialog, result)
         assert dialog.result_confidence.text() == "中"
-        assert dialog.result_warning.text() == f"{ZH[ONE_RING_WARNING]} {ZH[COVERAGE_WARNING]}"
-        assert dialog.preview_info_label.text() == (
-            "  ·  山嵛酸银（AgBH）  ·  1456.70 mm  ·  匹配 3 个环  ·  置信度：中"
-        )
+        assert dialog.result_warning.text() == f"⚠ {ZH[ONE_RING_WARNING]} {ZH[COVERAGE_WARNING]}"
+        assert dialog.result_warning.toolTip().startswith("匹配到的环点只覆盖很少的方位角")
+        assert dialog.preview_info_label.text() == "scan_agbh.cbf"
         assert dialog.candidate_table.item(0, 0).text() == "山嵛酸银（AgBH）"
         assert dialog.candidate_table.item(0, 5).text() == "中"
         assert dialog.candidate_table.item(0, 1).text() == "1456.70 mm"  # values and units stay
@@ -212,6 +215,11 @@ def test_a_result_is_shown_in_chinese_and_kept_in_english(tmp_path, chinese) -> 
 
         _show(dialog, _result(tmp_path / "scan_agbh.cbf", confidence="High"))
         assert dialog.result_confidence.text() == "高" and dialog.result_warning.text() == "无"
+        assert dialog.result_warning.property("gimapRole") is None and dialog.result_warning.toolTip() == ""
+        # after a switch of the language the Warning row follows (its “⚠ ” is not a text of the table)
+        _show(dialog, result)
+        apply_language("en", [dialog])
+        assert dialog.result_warning.text() == f"⚠ {ONE_RING_WARNING} {COVERAGE_WARNING}"
     finally:
         _dispose(dialog)
 

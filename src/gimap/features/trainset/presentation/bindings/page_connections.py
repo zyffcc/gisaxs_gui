@@ -131,7 +131,8 @@ class PageConnectionsMixin:
         remembered = self.trainset_view_model.load_settings()
         if not isinstance(remembered, dict) or int(remembered.get("schema_version", 0)) < 2:
             remembered = self.trainset_view_model.load_settings(reload=True)
-        if isinstance(remembered, dict) and int(remembered.get("schema_version", 0)) >= 2:
+        restored = isinstance(remembered, dict) and int(remembered.get("schema_version", 0)) >= 2
+        if restored:
             self.config = self.trainset_view_model.merge_config_with_defaults(remembered)
         self._apply_config_to_page(self.config)
         self._update_capabilities()
@@ -145,9 +146,5 @@ class PageConnectionsMixin:
                 "Remembered reference is unavailable. Choose a new file to restore "
                 "the ROI and threshold-mask preview.",
             )
-        if self.page.auto_remember_check.isChecked():
-            self.status_updated.emit(
-                "Trainset workspace ready · remembered settings restored automatically"
-            )
-        else:
-            self.status_updated.emit("Trainset workspace ready · automatic memory is off")
+        if restored:  # where the values on the page come from (the Remember check box shows the rest)
+            self.status_updated.emit("Remembered settings restored")

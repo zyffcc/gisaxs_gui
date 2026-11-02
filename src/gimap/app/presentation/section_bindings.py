@@ -12,11 +12,19 @@ def bind_parameter_section(
     content,
     content_layout,
 ) -> None:
-    """Expose the standard section contract on a Python View-owned frame."""
+    """Expose the standard section contract on a Python View-owned frame.
+
+    As in ``ParameterSection``, the description is the title's tooltip and not a line on screen."""
+    from .components.sections import describe_title
+
     section.title_label = title_label
     section.description_label = description_label
     section.content = content
     section.content_layout = content_layout
+    if description_label is not None:
+        if description_label.text() and not title_label.toolTip():
+            describe_title(title_label, description_label.text())
+        description_label.hide()
 
 
 def bind_advanced_section(
@@ -26,7 +34,13 @@ def bind_advanced_section(
     content,
     content_layout,
 ) -> None:
-    """Bind collapsible behavior without rebuilding the Python View layout."""
+    """Bind collapsible behavior without rebuilding the Python View layout.
+
+    As in ``AdvancedSection``, the description is the button's tooltip and not a line under it."""
+    if description_label is not None:
+        if description_label.text() and not toggle_button.toolTip():
+            toggle_button.setToolTip(description_label.text())
+        description_label.hide()
     section.toggle_button = toggle_button
     section.description_label = description_label
     section.content = content
@@ -39,7 +53,6 @@ def bind_advanced_section(
         toggle_button.blockSignals(False)
         toggle_button.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
         content.setVisible(expanded)
-        description_label.setVisible(bool(description_label.text()) and expanded)
 
     section.is_expanded = toggle_button.isChecked
     section.set_expanded = set_expanded

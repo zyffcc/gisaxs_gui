@@ -33,6 +33,13 @@ FIT_SIDES = (
 )
 """The same words as Analyze's halves choice (``FIT_SIDE_ITEMS`` of its Cuts step), copied: the
 application shell does not import a feature's views."""
+DATA_FOLDER_NOTE = (
+    "settings.json (all settings and preferences), instrument_profiles.json, "
+    "session.json and model_parameters.json live here, outside the "
+    "program folder, so updates never overwrite them. Set the GIMAP_HOME "
+    "environment variable to use another folder."
+)
+"""What the user data folder holds: the tooltip of its field, under the folder's whole path."""
 FIRST_SIZE = QSize(920, 700)
 """The size the dialog opens at (wider when a page needs it), clamped to the screen."""
 
@@ -98,8 +105,6 @@ class SettingsDialog(QDialog, SettingsDialogView):
             self.fit_side_combo.setCurrentIndex(max(0, index))
         for widget in (self.header_center_check, self.fit_side_combo):
             widget.setEnabled(self.settings is not None)
-        if self.data_dir is not None:  # a long path shows its end (the folder); the whole of it on hover
-            self.data_folder_edit.setToolTip(str(self.data_dir))
         self.open_folder_button.setEnabled(self.data_dir is not None)
         self._migrated = [Path(f).name for f in (migrated_from or {}).get("files") or []]
         self.migration_label.setVisible(bool(self._migrated))
@@ -109,6 +114,9 @@ class SettingsDialog(QDialog, SettingsDialogView):
     def _compose_texts(self) -> None:
         """The texts made here rather than taken from the table: again after the language is chosen here."""
         self.data_folder_edit.setText(str(self.data_dir) if self.data_dir else tr("(not saved: in-memory session)"))
+        # a long path shows its end (the folder): the whole of it on hover, with what the folder holds
+        note = tr(DATA_FOLDER_NOTE)
+        self.data_folder_edit.setToolTip(f"{self.data_dir}\n\n{note}" if self.data_dir is not None else note)
         self.migration_label.setText(
             tr("Imported once from the previous version: {files}").format(files=", ".join(self._migrated))
             if self._migrated else ""

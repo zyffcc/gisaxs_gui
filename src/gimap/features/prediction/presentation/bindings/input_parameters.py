@@ -20,6 +20,8 @@ from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import set_role
 from src.gimap.shared.file_paths import normalize_path
 
+from ..workflow_components import range_field_tip
+
 
 class InputParametersMixin:
     """Own input parameters presentation behavior."""
@@ -279,14 +281,10 @@ class InputParametersMixin:
     def _extract_index(self, file_name: str) -> Optional[int]:
         return self.prediction_view_model.files.file_index(file_name)
 
-    def _update_range_tooltip(self) -> None:
-        if not self._available_indices:
-            tooltip = tr("No valid indices detected yet")
-        else:
-            tooltip = trf(
-                "Available index range: {first} - {last}",
-                first=self._available_indices[0], last=self._available_indices[-1],
-            )
+    def _update_range_tooltip(self, mode: Optional[str] = None) -> None:
+        """Stack (single file) or Range (folder batch): what the field means, then the file numbers found."""
+        mode = mode or self.current_parameters.get("mode", "single_file")
+        tooltip = range_field_tip(mode == "multi_files", self._available_indices)
 
         label = getattr(self.ui, "gisaxsPredictStackLabel", None)
         line_edit = getattr(self.ui, "gisaxsPredictStackValue", None)
@@ -315,6 +313,7 @@ class InputParametersMixin:
         every_value = getattr(self.ui, "gisaxsPredictEveryValue", None)
 
         self._show_range_labels(mode)
+        self._update_range_tooltip(mode)
         if stack_edit:
             text = (
                 self.current_parameters.get("range_value", "")
@@ -522,6 +521,8 @@ class InputParametersMixin:
             model_text, model_role = "Model: Loading…", "muted"
         elif load_error:
             model_text, model_role = "Model: Load failed", "error"
+        elif getattr(self, "_model_status_text", "") == "Canceled":
+            model_text, model_role = "Model: Canceled", "muted"
         else:
             model_text, model_role = "Model: Not loaded", "muted"
         # Pending steps are muted; "error" only for a missing framework or a failed model load.
@@ -552,9 +553,7 @@ class InputParametersMixin:
         if btn is not None:
             btn.setEnabled(input_ready and model_ready and framework_ready and not running)
             btn.setText(tr("Stopping…" if stopping else "Predicting..." if running else "Predict"))
-        hint = getattr(self.ui, "gisaxsPredictReadinessHint", None)
-        if hint is not None:
-            hint.setVisible(btn is not None and not btn.isEnabled() and not running)
+        # The three chips beside the button say what is missing (no sentence repeats them).
         stop_btn = getattr(self.ui, "gisaxsPredictStopButton", None)
         if stop_btn is not None:
             stop_btn.setEnabled(running and not stopping)

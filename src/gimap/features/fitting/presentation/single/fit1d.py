@@ -19,7 +19,7 @@ from ...application.single_fit1d import (
     native_export,
 )
 from .fit1d_review import note_text, number
-from ..views.step_widgets import fit_to_rows
+from ..views.step_widgets import fit_to_rows, show_line
 
 FINISHED = ("fit1d finished: χ²/point {chi2}. Its original v2 curve and errors are in Results; Model is a starting "
             "point for manual refinement.")
@@ -183,8 +183,8 @@ class Fit1DPageMixin:
         shown.extend("⚠ " + note_text(edge["note"]) for edge in (native.get("fit1d_bounds") or {}).get("edges") or ())
         self.warnings_label.setText("\n".join(shown))
         self.warnings_label.setToolTip("\n".join(warnings))
-        self.step_intro["results"].setText(tr("Predicted by fit1d.") if current else
-                                           tr("Changed after the fit: Fit again"))
+        show_line(self.step_intro["results"], tr("Predicted by fit1d.") if current else
+                  tr("Changed after the fit: Fit again"))
         self.parameters_table.setHorizontalHeaderLabels(["", tr("value"), tr("state")])
         header = self.parameters_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # short names; the state takes the rest

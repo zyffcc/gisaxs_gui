@@ -38,7 +38,7 @@ from .drops import FolderDropMixin, SplitterMemoryMixin
 from .series_fit1d import FitSeriesFit1DMixin
 from .series_frames import FitSeriesFramesMixin
 from .series_halves import FitSeriesHalvesMixin
-from .series_listing import CURVES_HINT, FitSeriesListingMixin
+from .series_listing import FitSeriesListingMixin
 from .series_preview import FitSeriesPreviewMixin
 from .series_results import UNTOUCHED, FitSeriesResultsMixin
 from .series_stages import NO_STAGES_AT_START, FitSeriesStagesMixin
@@ -49,8 +49,8 @@ from .session import model_label
 
 PREFERENCES_KEY = "fitting_series_page"
 NOT_SET_UP = "Model not set up yet: fit one frame in Single analysis"
-NOT_SET_UP_NOTE = ("The model is still the starting guess: nothing was set up or fitted in Single analysis. "
-                   "Start would fit this guess to every frame.")
+NOT_SET_UP_NOTE = "Start would fit this starting guess to every frame."
+"""Under the Start step's model while it is the starting guess (the rail says that nothing was set up)."""
 END_SENTENCES = {
     (False, False): "Series done: {count} frames fitted, {failed} failed.",
     (True, False): "Series stopped: {count} frames fitted, {failed} failed.",
@@ -153,13 +153,12 @@ class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin,
         self._show_halves()
         self._show_units()
         self._schedule_stages()
+        # The rail and the chip say it (the folders it takes: Choose Folder…'s tooltip, ``CURVES_HINT``).
         if not self.paths:
             self.step_rail.set_state("curves", "pending", tr("Choose the folder of the curves"))
-            self.step_intro["curves"].setText(tr(CURVES_HINT))
         else:
-            detail = tr("{listed} of {total} curves").format(listed=len(listed), total=len(self.paths))
-            self.step_rail.set_state("curves", "ok", detail)
-            self.step_intro["curves"].setText(detail + " · " + self._folder_name())  # the whole path: on the chip
+            self.step_rail.set_state("curves", "ok", tr("{listed} of {total} curves").format(
+                listed=len(listed), total=len(self.paths)))
         session = self.single.session
         model = session.model
         free = sum(1 for _path, parameter in model.parameters() if parameter.free)
@@ -174,10 +173,7 @@ class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin,
                                  tr(NOT_SET_UP) if untouched else f"{model_label(model)} · {start}")
         self.setup_note.setText(tr(NOT_SET_UP_NOTE) if untouched else "")
         self.setup_note.setVisible(untouched)
-        self._show_set_up()
-        self.step_intro["start"].setText(tr("The model of Single analysis, fitted to every frame."))
-        self.step_intro["results"].setText(tr("Every frame: the quality of its fit and each value ± 1σ. Click a row "
-                                              "to see that frame; the plot below follows a value through the series."))
+        self._show_set_up()  # (what Start does: its tooltip; how to read the table of every frame: the table's)
         self._refresh_results(listed)
         self.start_button.setVisible(not self.running)
         self.start_button.setEnabled(bool(listed) and bool(model.components))

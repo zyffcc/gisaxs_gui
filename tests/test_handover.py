@@ -109,9 +109,12 @@ def test_every_place_that_opens_detector_frames_names_the_formats_the_reader_tak
     host = QWidget()
     view = AnalyzePageView()
     view.setup_ui(host)
-    said = [view.open_files_button.toolTip(), view.summary_label.text()]
+    from src.gimap.features.analyze.presentation.bindings.data_step import OPEN_HINT
+
+    said = [view.open_files_button.toolTip(), OPEN_HINT]  # (the Data step's sentence while nothing is open)
     assert said == ["Open detector frames (CBF, NeXus/HDF5, TIFF, EDF) — Ctrl+O. You can also drop files or folders here.",
-                    "Open or drop detector files (CBF, NeXus/HDF5, TIFF, EDF) to start"]
+                    "Open or drop detector frames (CBF, NeXus/HDF5, TIFF, EDF) or a folder."]
+    assert view.summary_label.text() == "" and view.summary_label.parentWidget().isHidden()  # no card before a frame
     for text in said:
         assert i18n.ZH.get(text) and "NeXus/HDF5" in i18n.ZH[text]
     assert not [key for key in i18n.ZH if "(CBF, NXS, TIFF, EDF)" in key]  # the sentences of before are gone
@@ -772,11 +775,13 @@ def test_the_start_pages_series_entry_takes_a_folder_or_files_and_ends_on_the_se
         card.click()
         assert components.current_page_key() == "analyze" and page.current_right() == "curves"
         # What the page says about the formats, in both languages
-        said = "CBF, TIFF, EDF, NeXus / HDF5 — one file per frame, or a whole series in one file; the module files of a scan are stitched"
+        said = "CBF, TIFF, EDF, NeXus / HDF5 — single frames or whole series"
+        whole = "CBF, TIFF, EDF, NeXus / HDF5 — one file per frame, or a whole series in one file; the module files of a scan are stitched"
         from PyQt5.QtWidgets import QLabel
 
         assert said in [label.text() for label in home.drop_zone.findChildren(QLabel)]
-        for text in (said, *(button.toolTip() for button in card.link_buttons)):
+        assert home.drop_zone.toolTip() == whole  # the whole sentence when the pointer rests on the box
+        for text in (said, whole, *(button.toolTip() for button in card.link_buttons)):
             assert i18n.ZH.get(text), text
     finally:
         window.close()

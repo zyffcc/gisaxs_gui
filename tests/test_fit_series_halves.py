@@ -202,8 +202,9 @@ def test_curves_with_one_side_have_no_halves_to_choose(tmp_path) -> None:
     assert series.open_series(folder)
     assert not series.curves_signed() and series.series_side() == "mean" and series.halves_source() == "one-sided"
     assert not series.side_combo.isEnabled() and series.side_combo.currentData() == "mean"
-    assert series.halves_note.text() == "These curves have q on one side only: there are no halves to choose."
-    assert not series.halves_note.isHidden() and "one side only" in series.side_combo.toolTip()
+    assert series.halves_note.isHidden()  # the box is switched off; its tooltip (and its label's) says why
+    assert series.side_combo.toolTip().endswith("These curves have q on one side only: there are no halves to choose.")
+    assert series.side_label.toolTip() == series.side_combo.toolTip()
     assert series.set_series_side("negative") and series.series_side() == "mean"  # nothing to choose from
     assert series.frame_note.text() == "200 points"  # no word about halves for such a curve
     _stages(series)

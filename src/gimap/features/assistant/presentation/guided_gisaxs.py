@@ -50,6 +50,13 @@ FIT_COPY_HEADERS = ("model", "R (nm)", "h (nm)", "D (nm)", "χ²/N")
 """The fit table's columns with their units, for copied rows."""
 DETAILS = (("R", "R", " nm"), ("sigma_R", "σR/R", ""), ("h", "h", " nm"), ("sigma_h", "σh/h", ""), ("D", "D", " nm"),
            ("sigma_D", "σD/D", ""), ("weight", "weight", ""))
+BOUNDS_WARNING = "Not determined by the curve (at a search bound) — {rows}"
+BOUNDS_WHOLE = "Values at a search bound, not determined by the curve — {rows}."
+"""The values of the solutions that ended on a search bound: a warning with their names by rank, which bound in its
+tooltip."""
+FIT_TIP = ("Numerical fits of single particle families with size dispersity and a paracrystal distance D, a screening "
+           "step: choose the model from what you know of the sample and confirm it in Fitting.")
+"""The tooltip of “Fit of I(qy)”: what the fits are and are not."""
 
 
 def model_name(model: str) -> str:
@@ -68,6 +75,11 @@ def _details(row: dict) -> str:
 def bound_words(row: dict) -> list[str]:
     """The values of a solution at a search bound (``D at its upper bound``), in the interface language."""
     return [words(phrase) for phrase in bound_phrases(row)]
+
+
+def bound_names(row: dict) -> list[str]:
+    """The names of a solution's values at a search bound (``D``, ``σh/h``: names, never translated)."""
+    return [phrase.rsplit(" at its ", 1)[0] for phrase in bound_phrases(row)]
 
 
 def _joined(items) -> str:
@@ -146,10 +158,11 @@ class GisaxsResults(QWidget):
 
     # -- sections ----------------------------------------------------------------------
 
-    def _heading(self, text: str, layout: QVBoxLayout) -> None:
+    def _heading(self, text: str, layout: QVBoxLayout):
         heading = label(tr(text), self)
         heading.setProperty("gimapInspectorTitle", True)
         layout.addWidget(heading)
+        return heading
 
     def _cut(self, layout: QVBoxLayout) -> None:
         gisaxs = self.report.get("gisaxs") or {}
@@ -173,13 +186,12 @@ class GisaxsResults(QWidget):
                                        x="—" if symmetry.get("x_px") is None else f"{float(symmetry['x_px']):.2f}",
                                        shift=f"{shift:+.2f}"), self))
         halves = gisaxs.get("halves")
-        if halves:
-            layout.addWidget(label(tr("Halves: {halves} — {reason}").format(
-                halves=halves_label(halves["side"], current_language()), reason=words(halves["reason"])), self, role="muted"))
-        layout.addWidget(label(tr(
-            "The cut is drawn on the image in Analyze: Sources ▸ on the canvas shows where each curve comes from."),
-            self, role="muted",
-        ))
+        if halves:  # the decision on the line, its reason in the tooltip
+            chosen = label(trf("Halves: {halves}", halves=halves_label(halves["side"], current_language())), self,
+                           role="muted")
+            chosen.setObjectName("guidedHalves")
+            chosen.setToolTip(words(halves["reason"]))
+            layout.addWidget(chosen)
 
     def _spacing(self, layout: QVBoxLayout) -> None:
         spacing = (self.report.get("gisaxs") or {}).get("spacing")
@@ -191,15 +203,15 @@ class GisaxsResults(QWidget):
         # A note either way: a length the curve shows, which a form factor or the beam tail makes as well.
         if spacing.get("kind") == "maximum":
             layout.addWidget(badge(trf(
-                "2π/q* = {d} nm at the peak of the cut (|qy| = {q} Å⁻¹): a length scale, not necessarily the particle "
-                "spacing; check it with a model fit.", **values), NOTE, self))
+                "2π/q* = {d} nm at the peak of the cut (|qy| = {q} Å⁻¹): not necessarily the particle spacing.",
+                **values), NOTE, self))
         else:
             layout.addWidget(badge(trf(
-                "2π/q* = {d} nm at a shoulder of the cut (|qy| = {q} Å⁻¹, no resolved peak): a length scale, not "
-                "necessarily the particle spacing; check it with a model fit.", **values), NOTE, self))
+                "2π/q* = {d} nm at a shoulder of the cut (|qy| = {q} Å⁻¹, no resolved peak): not necessarily the "
+                "particle spacing.", **values), NOTE, self))
 
     def _fit(self, layout: QVBoxLayout) -> None:
-        self._heading("Fit of I(qy)", layout)
+        self._heading("Fit of I(qy)", layout).setToolTip(tr(FIT_TIP))
         refine = QPushButton(tr("Refine in Fitting"), self)
         refine.setObjectName("guidedRefineFit")
         refine.setToolTip(tr("Open the prepared curve (the halves chosen) in Fitting and fit it with a model you choose."))
@@ -220,7 +232,7 @@ class GisaxsResults(QWidget):
         save_plot.clicked.connect(lambda: self.save_plot())
         self.fit_plot.header_layout.insertWidget(1, save_plot)
         layout.addWidget(self.fit_plot)
-        rows, bounded = [], []
+        rows, bounded, named = [], [], []
         for row in solutions:
             component = (row.get("components") or [{}])[0]
             details = _details(row)
@@ -232,22 +244,24 @@ class GisaxsResults(QWidget):
                          (_number(row["chi2"]), details)])
             if bounds:
                 bounded.append(trf("{rank}: {bounds}", rank=row.get("rank"), bounds=_joined(bounds)))
+                named.append(trf("{rank}: {bounds}", rank=row.get("rank"), bounds=_joined(bound_names(row))))
         self.fit_table = table(FIT_HEADERS, rows, self, "guidedFitTable", numbers=FIT_NUMBERS,  # Fit details follow the row
                                copy_headers=FIT_COPY_HEADERS)
         self.fit_table.setMinimumHeight(min(260, 60 + 30 * len(rows)))
         self.fit_table.itemSelectionChanged.connect(self._show_solution)
         layout.addWidget(self.fit_table)
-        if bounded:  # the values at a bound by rank, in words (the table is too narrow for them)
-            bounds_label = label(trf("Values at a search bound, not determined by the curve — {rows}.",
-                                     rows=("；" if current_language() == "zh" else "; ").join(bounded)), self, role="muted")
+        if bounded:  # the values at a bound by rank (the table is too narrow for them): a warning; which bound: its tooltip
+            separator = "；" if current_language() == "zh" else "; "
+            bounds_label = label("⚠ " + trf(BOUNDS_WARNING, rows=separator.join(named)), self, role="warning")
             bounds_label.setObjectName("guidedFitBounds")
+            bounds_label.setToolTip(trf(BOUNDS_WHOLE, rows=separator.join(bounded)))
             layout.addWidget(bounds_label)
         index, best = chosen_solution(self.fit)
         percent = f"{CLOSE_CHI2 - 1:.0%}"
         if index:
             layout.addWidget(badge(trf(
-                "The run reports rank {rank} ({model}), selected above: the best-ranked solution within {percent} of "
-                "the first's χ²/N that converged with no non-linear value at a search bound.",
+                "Reported: rank {rank} ({model}), the best-ranked converged solution within {percent} of the first's "
+                "χ²/N with no non-linear value at a search bound.",
                 rank=best.get("rank"), model=model_name(best["model"]), percent=percent), NOTE, self))
         elif bound_words(best) or not best.get("converged", True):
             layout.addWidget(badge(trf(
@@ -255,9 +269,7 @@ class GisaxsResults(QWidget):
                 "converge: the first is reported, and its values at a bound are not determined by the curve.",
                 percent=percent), WARN, self))
         layout.addWidget(label(trf(
-            "Fitted: {curve} ({points} points); R, h and D in nm. Numerical fits of single particle families with size "
-            "dispersity and a paracrystal distance D, a screening step: choose the model from what you know of the "
-            "sample and confirm it in Fitting.",
+            "Fitted: {curve} ({points} points) · R, h and D in nm.",
             curve=parts(self.fit.get("curve")), points=self.fit.get("points")), self, role="muted",
         ))
         buttons = FlowLayout()
@@ -350,4 +362,5 @@ class GisaxsResults(QWidget):
             self.fit_plot.dispose()
 
 
-__all__ = ["GisaxsResults", "cut_rows", "outcome_text", "pixel_span"]
+__all__ = ["BOUNDS_WARNING", "BOUNDS_WHOLE", "FIT_TIP", "GisaxsResults", "bound_names", "cut_rows", "outcome_text",
+           "pixel_span"]

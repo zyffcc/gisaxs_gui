@@ -66,12 +66,13 @@ NOTE_LINES = (
     ("calibration", "The last calibration says: {values}"),
 )
 SUMMARY_LINES = (
-    ("file", "From the file: {fields}"),
     ("calibration", "From the last calibration: {fields}"),
-    ("image center", "Image center (the file has no beam center): {fields}"),
-    ("default", "Defaults, check them: {fields}"),
     ("typed", "Kept as typed: {fields}"),
 )
+"""What the summary says of the sources. A value from the file has its tag beside the field and no line here;
+the values that are not in the file and were guessed are the one warning line (``GUESSED``)."""
+GUESSED = (("default", "{fields} (defaults)"), ("image center", "{fields} (image center)"))
+GUESSED_LINE = "Not in the file — check: {fields}"
 
 
 def frame_label(ref) -> str:
@@ -253,7 +254,13 @@ class GeometrySourcesMixin:
                 continue
             name = joined[key][1] if key in joined else FIELD_NAMES[key]
             named.setdefault(sources.get(key, "default"), []).append(name)
-        lines = [
+        guessed = [
+            trf(template, fields=", ".join(tr(name) for name in named[source]))
+            for source, template in GUESSED
+            if named.get(source)
+        ]
+        lines = ["⚠ " + trf(GUESSED_LINE, fields=", ".join(guessed))] if guessed else []
+        lines += [
             trf(template, fields=", ".join(tr(name) for name in named[source]))
             for source, template in SUMMARY_LINES
             if named.get(source)

@@ -25,8 +25,9 @@ PROJECT_FORMAT = "gimap-project"
 PROJECT_VERSION = 1
 PROJECT_SUFFIX = ".gimap"
 PROJECT_FILTER = "GIMaP project (*.gimap);;All files (*)"
-NO_SERIES_FOLDER = "No folder yet — choose one, or Send Series to Fitting in Analyze"
-"""What In-situ series says in its bar with no folder (the text its view starts with)."""
+NO_SERIES_FOLDER = ""
+"""What In-situ series says in its bar with no folder (the text its view starts with): nothing — its frame plot
+says what to do."""
 
 
 def collect(components, page: str = "", path=None) -> dict:

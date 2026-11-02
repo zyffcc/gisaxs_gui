@@ -111,6 +111,32 @@ def test_curve_folders_are_read_in_counting_order_and_the_tables_written(tmp_pat
     assert len([line for line in frames.read_text(encoding="utf-8").splitlines() if not line.startswith("#")]) == 25
 
 
+def test_the_record_carries_where_each_stage_changed_most(tmp_path: Path) -> None:
+    """What the page shows in the tooltip of its folded stages (the q that grew and fell most from one stage to the
+    next) is in the JSON record too, with the x it is on and what its percent means; the other keys stay."""
+    service = create_compare_service()
+    a, b = _series("A", _run(60, seed=1)), _series("B", _run(60, seed=2, extra=1.0))
+    comparison = service.compare([a, b], CompareSettings())
+    for export in (service.export_series_table, service.export_frames_table):
+        table = export([a, b], comparison, tmp_path / f"{export.__name__}.csv")
+        record = json.loads(table.with_suffix(".json").read_text(encoding="utf-8"))
+        assert "Ward" in record["method"] and record["software"] == "GIMaP" and record["end_frames"] == 10
+        for item, result in zip(record["series"], comparison.results):
+            assert {"name", "source", "frames", "group", "odd_frames", "stages", "half_of_change"} <= set(item)
+            details = item["stage_details"]
+            assert details["x_label"] == "q (Å⁻¹)" and "relative to the rest of the curve" in details["percent"]
+            changes = result.stages.stage_changes()
+            assert len(details["changes"]) == len(changes) == result.stages.count - 1 >= 1
+            first, change = details["changes"][0], changes[0]
+            assert (first["from_stage"], first["to_stage"]) == (change.stage - 1, change.stage)
+            assert [place["x"] for place in first["grows_most"]] == pytest.approx([x for x, _p in change.rises], rel=1e-5)
+            assert [place["percent"] for place in first["falls_most"]] == pytest.approx(
+                [p for _x, p in change.falls], abs=0.05)
+            assert first["text"] == change.text()  # the page's words (on q), in English
+    single = compare([_series("short", _run(4, seed=1))])  # too short to cut: no stages, no details
+    assert service.record([_series("short", _run(4, seed=1))], single)["series"][0]["stage_details"] is None
+
+
 def _wait(page, condition, timeout: float = 60.0) -> None:
     from PyQt5.QtWidgets import QApplication
 
@@ -225,6 +251,42 @@ def test_the_summary_says_what_the_distances_support() -> None:
         assert page.comparison.group_text() == "A, B alike; C different"
     finally:
         page.dispose()
+
+
+def test_each_step_says_its_thing_once() -> None:
+    """The small-text review: no chip, step lines or summary card without a series (the empty state says what to
+    do); the method on one line with the whole of it in its tooltip; for two series the rail says the result; what
+    changed between stages in the tooltip of the folded details; the first main change's share only on the plot."""
+    from src.gimap.features.compare.application import METHOD
+    from src.gimap.features.compare.domain import Comparison
+
+    page = _shown_page()
+    try:
+        assert page.chip.text() == "" and page.summary_card.isHidden()
+        assert all(page.step_intro[key].isHidden() for key in ("series", "compare", "results"))
+        assert page.step_rail.detail("results") == "" and page.step_rail.detail("compare") == "After a series is added"
+        assert page.method_label.text() == "Method: log I on the shared q range, odd frames left out"
+        assert page.method_label.toolTip() == METHOD
+        assert page.series_table.toolTip().endswith("Double-click a name to rename the series.")
+        assert page.results_table.toolTip().startswith("Every series: its odd frames, its stages")
+        page.add_map(_map(1), "a")
+        page.add_map(_map(2, extra=1.0), "b")
+        _wait(page, lambda: _idle(page) and page.comparison is not None and len(page.comparison.results) == 2)
+        end = f"{float(page.comparison.distance[0, 1]):.0f}"
+        assert page.step_rail.detail("results") == f"End states {end} % apart"
+        assert not page.summary_card.isHidden() and "main change carries" not in page.summary_label.text()
+        assert page.component_combo.itemText(0).startswith("Component 1 (")  # the share: on the change plot
+        assert "grows most" not in page.details_label.text() and "a: 2 stages" in page.details_label.text()
+        assert page.details_label.toolTip().splitlines()[0].startswith("a — Stage 1 → 2: grows most at q ")
+        odd = (SimpleNamespace(name="A", odd=(object(),)), SimpleNamespace(name="B", odd=()))
+        page.comparison = Comparison(q=Q, compared=Q, x_label="q (Å⁻¹)", explained=np.array([0.9, 0.1]), results=odd,
+                                     distance=np.array([[0, 8.2], [8.2, 0]]), start_distance=np.array([[0, 5], [5, 0]]),
+                                     groups=(1, 1), end_frames=10, shape_only=True)
+        page._shown_names = []
+        assert page._summary() == "A and B: end states 8 % apart (5 % at the start).\n1 odd frame left out (below)."
+    finally:
+        page.comparison = None
+        _close(page)
 
 
 def test_stage_texts_name_the_axis_and_keep_q_by_default() -> None:
@@ -470,7 +532,7 @@ def test_pasted_names_fonts_ranges_and_stale_comparisons_keep_the_page_right() -
         page.clear_all()
         _wait(page, lambda: _idle(page))
         assert page.comparison is None and page.step_rail.state("results") == "pending"
-        assert page.step_rail.detail("results") == "After a series is added"
+        assert page.step_rail.detail("results") == "" and page.step_rail.detail("compare") == "After a series is added"
         # A comparison that fails after Remove All is about series no longer there: no error.
         def broken(series, settings):
             time.sleep(0.5)

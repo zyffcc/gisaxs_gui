@@ -26,6 +26,7 @@ from .step_widgets import fit_to_rows, info_card, muted, read_only_table
 
 CANDIDATE_COLUMNS = ("#", "composition", "χ²/point", "ΔBIC", "note")
 DETAIL_COLUMNS = ("parameter", "value ± error", "equivalent range", "state")
+VALUES_TIP = "Select values, then Fix, Let It Fit or Range… (or right-click); Fit Again uses them."
 
 
 def _label(parent: QWidget, name: str, role: str) -> QLabel:
@@ -74,6 +75,7 @@ def build_results_step(owner, page: QWidget, layout) -> None:
 
     owner.parameters_table = _stretching(read_only_table(("", "value", "±"), page, "fitParametersTable",
                                                          QAbstractItemView.ExtendedSelection), 0)
+    owner.parameters_table.setToolTip(VALUES_TIP)
     layout.addWidget(owner.parameters_table)
     tools = QHBoxLayout()
     tools.setSpacing(6)
@@ -90,9 +92,6 @@ def build_results_step(owner, page: QWidget, layout) -> None:
         tools.addWidget(button)
     tools.addStretch(1)
     layout.addLayout(tools)
-    owner.values_hint = muted("Select values to fix them or let them fit, then Fit Again; right-click for the same.",
-                              page)
-    layout.addWidget(owner.values_hint)
 
     owner.alternatives = AdvancedSection("Other solutions", "", page)
     owner.alternatives.setObjectName("fitAlternatives")
@@ -156,4 +155,4 @@ def build_results_step(owner, page: QWidget, layout) -> None:
     layout.addWidget(log)
 
 
-__all__ = ["CANDIDATE_COLUMNS", "DETAIL_COLUMNS", "build_results_step"]
+__all__ = ["CANDIDATE_COLUMNS", "DETAIL_COLUMNS", "VALUES_TIP", "build_results_step"]

@@ -75,7 +75,7 @@ def test_the_automatic_analysis_keeps_the_frame_it_works_on(tmp_path: Path) -> N
     assert page.file_list.currentRow() == 0 and page.status_text() == RUN_KEEPS_FRAME
 
     page.automatic_finished("ok", "Two rings in film_0.tif", path=paths[0])
-    assert page.step_rail.state("results") == "ok" and page.status_level() == "ok"
+    assert page.step_rail.state("results") == "ok" and page.status_text() == ""  # said by the step and the Results tab
     controls = _file_controls(page)
     assert controls.pop("previous") is False and all(controls.values())  # row 0: no previous file
     page.file_list.setCurrentRow(1)
@@ -117,11 +117,11 @@ def test_clear_stops_a_running_analysis_and_drops_its_results(tmp_path: Path) ->
     assert _file_controls(page)["list"] and _file_controls(page)["open"]  # nothing is left to keep
     assert not page.run_pipeline_button.isEnabled()  # until the run has ended
     page.automatic_progress("Fitting form-factor models — R = 6.13 nm")  # its step in progress ends
-    assert page.status_text() == "Ready"
+    assert page.status_text() == ""  # idle: nothing to say
     page.automatic_finished("ok", "GISAXS — R 6.13 nm", path=paths[0])  # the stopped run ends later
     assert page.run_pipeline_button.isEnabled() and page.stop_pipeline_button.isHidden()
     assert page.step_rail.state("results") == "pending" and page.step_intro["results"].text() == RESULTS_INTRO
-    assert page.status_text() == "Ready" and page.results_for() is None
+    assert page.status_text() == "" and page.results_for() is None
     page.add_paths([str(paths[0])])
     _done(page)
     assert page.step_rail.state("results") == "pending"  # opened again: nothing of the dropped run

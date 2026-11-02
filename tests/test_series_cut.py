@@ -457,12 +457,16 @@ def test_a_sum_the_person_set_is_said_in_groups_and_its_short_last_group_is_mark
         assert "12 frames in 3 sums of 5" in info and "the last sums only 2" in info
         _build(page, 3)
         series = page._series_map
-        # Rows that are sums are called rows, not frames (review: “3 frames × …”, “Series map: 3 frames of …”).
-        assert page.series_info_label.text().startswith("3 rows (sums of 5 frames) × ")
-        assert page.status_text() == "Series map: 3 rows (sums of 5 frames) of I(q)"
+        # Rows that are sums are called rows, not frames (review: “3 frames × …”, “Series map: 3 frames of …”):
+        # in the map's tooltip and the line above it (the status line does not repeat that line).
+        assert page.series_map_view.toolTip().startswith("3 rows (sums of 5 frames) × ")
+        assert "3 rows of stack" in page.series_title_label.text() and "Series map" not in page.status_text()
+        page._series_finished(["stack.h5 frame 13"])  # a map with a frame that failed: said in the status line
+        assert page.status_text() == "Series map: 3 rows (sums of 5 frames) of I(q); 1 failed: stack.h5 frame 13"
         apply_language("zh", [page])
         page.refresh_language()
-        assert page.status_text() == "序列热图：I(q)，3 行（每行 5 帧之和）"
+        assert page.status_text() == "序列热图：I(q)，3 行（每行 5 帧之和）；1 行失败：stack.h5 frame 13"
+        assert page.series_map_view.toolTip().startswith("3 行（每行 5 帧之和）× ")  # (again after the switch)
         apply_language("en", [page])
         page.refresh_language()
         assert [fact.incomplete for fact in series.facts] == [False, False, True] and series.numbers == (1, 6, 11)

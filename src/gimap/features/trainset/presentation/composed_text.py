@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Tuple
 
+from PyQt5.QtWidgets import QLabel
+
 from src.gimap.app.presentation.i18n import tr, trf
 
 
@@ -42,4 +44,16 @@ class ComposedTexts:
                 self._texts.pop(key, None)
 
 
-__all__ = ["ComposedTexts", "compose"]
+class ShownWhenSet(QLabel):
+    """A line shown only while it says something (an empty one takes no room, an info panel no empty box)."""
+
+    def __init__(self, text: str = "", parent=None) -> None:
+        super().__init__(text, parent)
+        self.setVisible(bool(text))
+
+    def setText(self, text: str) -> None:  # noqa: N802 - Qt API
+        super().setText(text)
+        self.setVisible(bool(text))
+
+
+__all__ = ["ComposedTexts", "ShownWhenSet", "compose"]

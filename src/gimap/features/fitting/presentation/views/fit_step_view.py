@@ -1,7 +1,7 @@
 """The Fit step of the single-curve page (static layout; behaviour in ``single/run.py`` and ``single/fit1d*.py``).
 
-One choice and one button: the method (the page selects the one recommended for the curve and says why), what it
-needs right under it (the particles for Predict, the families for the shape search), then Fit. Parameters that
+One choice and one button: the method (the page selects the one recommended for the curve and says why; what each
+method does is its tooltip), what it needs right under it (the particles for Predict, the families for the shape search), then Fit. Parameters that
 stop at an edge of their range are dealt with by the fit itself (the check box). Everything changed rarely is in
 Options: fit1d's network, search, curve type, qz and systematic error; the evaluation budget; many curves.
 """
@@ -54,8 +54,9 @@ def build_fit_step(owner, page: QWidget, layout) -> None:
     owner.method_combo.setMinimumContentsLength(14)
     row.addWidget(owner.method_combo, 1)
     layout.addLayout(row)
-    owner.method_hint = muted("", page)
+    owner.method_hint = muted("", page)  # only why a method is recommended, or that its add-on is missing
     owner.method_hint.setObjectName("fitMethodHint")
+    owner.method_hint.hide()
     layout.addWidget(owner.method_hint)
 
     setup_fit1d_choice(owner, page, layout)
@@ -93,13 +94,15 @@ def build_fit_step(owner, page: QWidget, layout) -> None:
     owner.resolve_edges_check.setToolTip(RESOLVE_TIP)
     owner.resolve_edges_check.setChecked(True)
     layout.addWidget(owner.resolve_edges_check)
-    owner.weighting_note = muted("", page)
+    owner.weighting_note = muted("", page)  # a warning when the file has no σ (with σ: the residuals' tooltip)
+    owner.weighting_note.setObjectName("fitWeightingNote")
+    owner.weighting_note.setProperty("gimapRole", "warning")
+    owner.weighting_note.hide()
     layout.addWidget(owner.weighting_note)
 
     options = AdvancedSection("Options", "", page)
     options.setObjectName("fitAdvanced")
-    options.add_widget(muted("Predict (fit1d)", options))
-    setup_fit1d_options(owner, options)
+    setup_fit1d_options(owner, options)  # (each of its rows is named “fit1d …”)
     budget = QHBoxLayout()
     budget.addWidget(QLabel("Evaluations at most (Refine, Search)", options))
     owner.budget_spin = QSpinBox(options)

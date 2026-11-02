@@ -29,6 +29,11 @@ from .code_section import ROW_SPACING
 from .services import ProviderServices
 
 
+PLAIN_TEXT_KEYS = "Saved keys are kept in plain text in the user data folder (readable by your account only)."
+"""The line under both key sections (Claude API and the other providers): both files are plain text (``storage.py``)."""
+TOOL_CALLING_NOTE = "The model must support tool calling (function calling): the test sends one tiny request with a tool."
+
+
 def _muted(text: str, parent: QWidget) -> QLabel:
     label = QLabel(text, parent)
     label.setWordWrap(True)
@@ -65,6 +70,8 @@ class ProviderSection(QGroupBox):
         self.key_edit.setPlaceholderText("sk-…")
         self.save_key_button = QPushButton(tr("Save"), self)
         self.remove_key_button = QPushButton(tr("Remove"), self)
+        for widget in (self.key_edit, self.save_key_button):
+            widget.setToolTip(tr("A key saved here takes precedence over the provider's environment variable."))
         key_row.addWidget(self.key_edit, 1)
         key_row.addWidget(self.save_key_button)
         key_row.addWidget(self.remove_key_button)
@@ -79,6 +86,7 @@ class ProviderSection(QGroupBox):
         self.model_combo = QComboBox(self)
         self.model_combo.setObjectName("assistantProviderModel")
         self.model_combo.setEditable(True)
+        self.model_combo.setToolTip(tr(TOOL_CALLING_NOTE))
         self.fetch_button = QPushButton(tr("Get List"), self)
         self.fetch_button.setObjectName("assistantProviderFetch")
         self.fetch_button.setToolTip(tr("Ask the provider which models this key can use"))
@@ -90,6 +98,7 @@ class ProviderSection(QGroupBox):
         test_row.setSpacing(ROW_SPACING)
         self.test_button = QPushButton(tr("Test Connection"), self)
         self.test_button.setObjectName("assistantProviderTest")
+        self.test_button.setToolTip(tr(TOOL_CALLING_NOTE))
         self.test_label = QLabel("", self)
         self.test_label.setObjectName("assistantProviderTestResult")
         self.test_label.setWordWrap(True)
@@ -98,12 +107,7 @@ class ProviderSection(QGroupBox):
         form.addRow("", test_row)
         self.notes_label = _muted("", self)
         form.addRow(self.notes_label)
-        form.addRow(_muted(tr(
-            "The model must support tool calling (function calling): the test sends one tiny request "
-            "with a tool. Keys saved here stay in the user data folder (readable by your account only) "
-            "and take precedence over the provider's environment variable. Runs send the frame's status "
-            "and reduced curves as numbers, never the detector file."), self,
-        ))
+        form.addRow(_muted(tr(PLAIN_TEXT_KEYS), self))
 
         current = str(preferences.read(settings, "provider"))
         self.provider_combo.setCurrentIndex(max(0, self.provider_combo.findData(current)))
@@ -276,4 +280,4 @@ def describe_provider(settings, providers: ProviderServices | None) -> tuple[boo
     return True, tr("{label} · credentials: {source}.").format(label=label, source=source or tr("none needed")), label
 
 
-__all__ = ["ProviderSection", "chosen_provider", "describe_provider"]
+__all__ = ["PLAIN_TEXT_KEYS", "ProviderSection", "chosen_provider", "describe_provider"]

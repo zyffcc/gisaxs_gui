@@ -50,9 +50,15 @@ LEAST_NAME_WIDTH = 48
 COLUMNS_PROPERTY = "compareColumns"
 """The English titles of a result table's columns (its headers are made from them, on one line or two)."""
 EMPTY_TITLE = "Nothing to compare yet"
-EMPTY_TEXT = ("Add the Series map of a sample from Analyze (Series ▸ Send to Compare), a folder of curve files or "
-              "chosen curve files (or drop them here). Two or more series are compared with each other; one alone "
-              "is described.")
+EMPTY_TEXT = ("Send a Series map from Analyze, or add or drop curve files. One series is described; two or more are "
+              "compared.")
+ADD_TIP = ("Add a series: Analyze's Series map (Analyze ▸ Series ▸ Send to Compare, once per sample), a folder of curve "
+           "files (x and I columns; a folder Analyze wrote asks which kind of curve) or chosen curve files. Folders and "
+           "files can also be dropped on the page.")
+SERIES_TIP = ("Each series is one run or one sample: its frames in order. Two or more are compared with each other; "
+              "one alone is described (odd frames, stages). Double-click a name to rename the series.")
+RESULTS_TIP = ("Every series: its odd frames, its stages, and the frame by which half / 90 % of its change had happened "
+               "(Half done / 90 % done). How far the end states are apart: the table below.")
 CHANGE_TIP = ("How far each series has changed, frame by frame, along the chosen main change; × marks an odd frame "
               "(left out of the comparison) in the colour of its series")
 PATHS_TIP = ("Each series through the first two main changes: ○ its first kept frame, ■ its last; odd frames are "
@@ -222,7 +228,7 @@ class ComparePageView:
         self.add_button = QToolButton(bar)
         self.add_button.setObjectName("compareAdd")
         self.add_button.setText("Add Series")
-        self.add_button.setToolTip("Add a series: Analyze's Series map, a folder of curve files, or curve files")
+        self.add_button.setToolTip(ADD_TIP)  # how to add one: here, not as a paragraph on the page
         self.add_button.setPopupMode(QToolButton.InstantPopup)
         self.add_button.setProperty("gimapPrimaryAction", True)
         menu = QMenu(self.add_button)
@@ -233,7 +239,7 @@ class ComparePageView:
         self.add_files_action = menu.addAction("Curve Files…")
         self.add_files_action.setToolTip("Chosen curve files (q, I columns), in counting order: one series")
         self.add_button.setMenu(menu)
-        self.chip = QLabel("Nothing to compare yet — add a series", bar)
+        self.chip = QLabel("", bar)  # what is loaded; empty without a series (the empty state says what to do)
         self.chip.setObjectName("compareChip")
         self.chip.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.save_button = QToolButton(bar)
@@ -291,6 +297,7 @@ class ComparePageView:
             intro = QLabel("", content)
             intro.setProperty("gimapInspectorIntro", True)
             intro.setWordWrap(True)
+            intro.hide()  # no step needs a line the rail and the tooltips do not say
             page_layout.addWidget(heading)
             page_layout.addWidget(intro)
             getattr(self, f"_{key}_step")(content, page_layout)
@@ -304,7 +311,7 @@ class ComparePageView:
 
     def _series_step(self, parent: QWidget, layout: QVBoxLayout) -> None:
         self.series_table = _table(("Series", "Frames", "From"), parent, "compareSeriesTable", editable=True)
-        self.series_table.setToolTip("Double-click a name to rename the series")
+        self.series_table.setToolTip(SERIES_TIP)
         self.series_table.setMinimumHeight(160)
         layout.addWidget(self.series_table)
         row = QHBoxLayout()
@@ -317,13 +324,7 @@ class ComparePageView:
         row.addWidget(self.remove_button)
         row.addWidget(self.clear_button)
         row.addStretch(1)
-        layout.addLayout(row)
-        self.series_hint = _muted(
-            "In Analyze, open a sample and build its map in the Series tab, then Send to Compare; repeat for every "
-            "sample. A Batch Export folder of Analyze, or any folder of curve files (x and I columns), can be added "
-            "too, or dropped on this page: one kind of curve is one series, and a folder with several asks which.",
-            parent)
-        layout.addWidget(self.series_hint)
+        layout.addLayout(row)  # (how to add a series: Add Series' tooltip, ``ADD_TIP``)
 
     def _compare_step(self, parent: QWidget, layout: QVBoxLayout) -> None:
         form = QFormLayout()
@@ -375,15 +376,16 @@ class ComparePageView:
             "Each frame's mean level removed: a brighter beam, a thicker film or a longer exposure is not a new "
             "structure. Off: the overall intensity counts too")
         layout.addWidget(self.shape_check)
-        self.method_label = _muted("", parent)
+        self.method_label = _muted("", parent)  # one line; the whole method in its tooltip (and in every record)
         self.method_label.setObjectName("compareMethod")
         layout.addWidget(self.method_label)
 
     def _results_step(self, parent: QWidget, layout: QVBoxLayout) -> None:
-        card, self.summary_label = _card(parent, "compareSummary")
-        layout.addWidget(card)
+        self.summary_card, self.summary_label = _card(parent, "compareSummary")
+        self.summary_card.hide()  # shown with something to say: the comparison, that it is on its way, or why not
+        layout.addWidget(self.summary_card)
         self.results_table = _table(RESULT_COLUMNS, parent, "compareResultsTable", fitted=True)
-        self.results_table.setToolTip("Half / 90 % done: the frame by which half / 90 % of the series' change had happened")
+        self.results_table.setToolTip(RESULTS_TIP)
         self.results_table.setColumnHidden(GROUP_COLUMN, True)  # groups exist from three series on
         layout.addWidget(self.results_table)
         self.distance_row = QWidget(parent)  # hidden below two series
@@ -486,6 +488,6 @@ class ComparePageView:
         return frame
 
 
-__all__ = ["CHANGE_TIP", "COMPARE_STEPS", "ComparePageView", "FOLDER_TIP", "GROUP_COLUMN", "PATHS_EMPTY", "PATHS_TIP",
-           "RANGE_DECIMALS",
+__all__ = ["ADD_TIP", "CHANGE_TIP", "COMPARE_STEPS", "ComparePageView", "FOLDER_TIP", "GROUP_COLUMN", "PATHS_EMPTY",
+           "PATHS_TIP", "RANGE_DECIMALS", "RESULTS_TIP", "SERIES_TIP",
            "RANGE_LIMITS", "RESULT_COLUMNS", "X_AXES", "fit_columns", "fit_to_rows", "two_lines"]

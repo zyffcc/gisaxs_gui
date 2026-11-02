@@ -134,7 +134,8 @@ def test_the_results_step_follows_the_frames_the_run_analysed(tmp_path: Path) ->
     _show(page, 0, 1)  # frame 1 of the same file: the results are not this frame's
     assert page.step_rail.state("results") == "pending"
     assert page.step_rail.detail("results") == "Results are for frames 3–12; run again for this frame"
-    assert page.step_intro["results"].text() == page.step_rail.detail("results")
+    assert page.step_intro["results"].text() == page.step_rail.detail("results")  # said nowhere else on the step
+    assert not page.step_intro["results"].isHidden()
     assert page.current_right() == "results"  # the report stays in the tab, saying the same
     page.run_analysis()  # a re-reduction of frame 1 says the same
     _done(page)
@@ -142,7 +143,7 @@ def test_the_results_step_follows_the_frames_the_run_analysed(tmp_path: Path) ->
 
     _show(page, 2, 10)  # the run's frames again: the step comes back
     assert page.step_rail.state("results") == "ok" and page.step_rail.detail("results") == "12 peaks"
-    assert page.step_intro["results"].text() == "12 peaks"
+    assert page.step_intro["results"].isHidden()  # the step rail says it (and the Results tab)
 
     # A run that ends while other frames are shown keeps its results for its frames.
     _show(page, 5, 1)

@@ -19,7 +19,6 @@ ZH_ENTRIES = {
     # -- Single analysis --------------------------------------------------------------------------------
     "Undo the last change of the model, the fitting range or the left-out points, or the last fit (Ctrl+Z)":
         "撤销模型、拟合范围或被排除点的上一次修改，或上一次拟合（Ctrl+Z）",
-    "Open a curve: the residuals of the model appear here.": "打开曲线后，这里显示模型的残差。",
     "Choose a method; the button below runs it (Ctrl+Return).": "选择一种方法；用下面的按钮运行（Ctrl+Return）。",
     "One curve at a time here: {name} is open. Fit ▸ Advanced ▸ Fit Many Curves… takes several.":
         "这里一次只打开一条曲线：已打开 {name}。拟合 ▸ 高级 ▸ 拟合多条曲线… 可以处理多条。",
@@ -30,7 +29,8 @@ ZH_ENTRIES = {
     "No (q, I[, σ]) rows could be read.": "没有读取到任何 (q, I[, σ]) 数据行。",
     "Too few valid points (fewer than 2).": "有效数据点太少（少于 2 个）。",
     # -- In-situ series ---------------------------------------------------------------------------------
-    "The selected frame and its fit appear here.": "所选帧及其拟合会显示在这里。",
+    "No curves listed — choose a folder, or Send Series to Fitting in Analyze":
+        "还没有列出曲线——选择一个文件夹，或在分析中点“把序列发送到拟合”",
     # -- 1D Predict ------------------------------------------------------------------------------------
     "1D Predict · fit curves & batch": "一维预测 · 拟合曲线与批处理",
     "Prediction settings — saved for single curves and future batch / in-situ runs":
@@ -97,8 +97,10 @@ ZH_ENTRIES = {
     "Select one or more 1D curves": "选择一条或多条一维曲线",
     "{count} file(s): {names}": "{count} 个文件：{names}",
     "Fit {count} files": "拟合 {count} 个文件",
-    "Current cut — native points, q converted to nm⁻¹ by the fitting workspace.":
-        "当前切线——原始数据点，q 由拟合工作区换算为 nm⁻¹。",
+    "Input: the current cut of Fitting (q in nm⁻¹); each side fitted separately":
+        "输入：拟合页的当前切线（q 为 nm⁻¹）；两侧分别拟合",
+    "Experimental: candidates are starts to check, not results.": "实验性：候选只是待检查的起点，不是结果。",
+    "Ready.": "就绪。",
     "A fitting / in-situ job is already running. Finish or cancel it first.": "已有拟合 / 原位任务在运行。请先等它完成或取消。",
     "Load a curve or select files first": "请先载入曲线或选择文件",
     "Starting the experimental single-RC specialist… Checking the known composition and input scope.":
@@ -106,7 +108,8 @@ ZH_ENTRIES = {
     "Starting numerical physical fitting…": "正在开始数值物理拟合…",
     "Loading experimental General V5… First run includes loading and compilation.":
         "正在载入实验性的通用 V5…第一次运行包括载入和编译。",
-    "Finished in {seconds} s · {failures} failed files. {quality}": "用时 {seconds} s 完成 · {failures} 个文件失败。{quality}",
+    "Finished in {seconds} s · {failures} failed files · {count} candidates saved.":
+        "用时 {seconds} s 完成 · {failures} 个文件失败 · 保存了 {count} 个候选。",
     "{count} candidates saved. Review curve shape and residuals; observed-data scores include noise and are not "
     "probabilities.": "已保存 {count} 个候选。请检查曲线形状和残差；基于观测数据的得分包含噪声，不是概率。",
     "Settings saved. Existing in-situ recipes keep their captured settings.": "设置已保存。已有的原位配方保留它们记录时的设置。",
@@ -242,12 +245,12 @@ def test_run_time_texts_are_in_the_interface_language_and_follow_a_switch(chines
                                                             records=[dict(status="complete")],
                                                             summary=dict(runtime_seconds=1.5)))
         dialog._completed(result)
-        assert dialog.status.text().startswith("用时 1.50 s 完成") and "已保存 1 个候选" in dialog.status.text()
+        assert dialog.status.text() == "用时 1.50 s 完成 · 0 个文件失败 · 保存了 1 个候选。"
         assert dialog.table.item(0, 0).text() == "当前 / +" and dialog.table.item(0, 5).text() == "数值回退"
         assert dialog.table.item(0, 5).toolTip().startswith("阶段：stable_numerical_fallback\n原因：poor agreement")
         assert dialog.parameters.toPlainText().startswith("长度：nm。")
         chinese.apply_language("en")  # the window follows a switch while open
-        assert dialog.status.text().startswith("Finished in 1.50 s") and "1 candidates saved" in dialog.status.text()
+        assert dialog.status.text() == "Finished in 1.50 s · 0 failed files · 1 candidates saved."
         assert dialog.table.item(0, 5).text() == "Numerical fallback" and dialog.table.currentRow() == 0
         assert dialog.table.horizontalHeaderItem(0).text() == "Curve / side"
         assert dialog.table.horizontalHeaderItem(3).toolTip().startswith("Natural-log RMSE")
@@ -276,6 +279,22 @@ def test_add_curves_opens_where_the_last_curves_were(tmp_path, monkeypatch) -> N
     assert dialog.input_label.text().splitlines()[0] == "2 file(s): a.dat, b.dat"  # then the unit of q of each
     dialog._use_current()
     assert dialog.run_button.text() == "Fit curve" and dialog.files == []
+    assert dialog.input_label.text() == "Input: the current cut of Fitting (q in nm⁻¹); each side fitted separately"
+    _close(dialog)
+
+
+def test_the_window_says_once_that_it_is_experimental() -> None:
+    """One warning line under the title (the details in its tooltip); the status line only says where things are."""
+    dialog = _dialog()
+    hint = dialog.findChild(QLabel, "workflowV5Experimental")
+    assert hint.text() == "Experimental: candidates are starts to check, not results."
+    assert hint.property("gimapRole") == "warning" and "not calibrated probabilities" in hint.toolTip()
+    assert dialog.status.text() == "Ready."
+    assert dialog.input_label.text() == "Input: the current cut of Fitting (q in nm⁻¹); each side fitted separately"
+    _close(dialog)
+    dialog = _dialog(settings_only=True)  # the in-situ settings window: a plain note there, not the warning
+    hint = dialog.findChild(QLabel, "workflowV5Experimental")
+    assert hint.text().startswith("Save creates a new settings snapshot") and hint.property("gimapRole") is None
     _close(dialog)
 
 

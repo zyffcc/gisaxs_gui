@@ -40,6 +40,7 @@ from ..application import (FILM_NOT_DETERMINED, GRADES, LITERATURE_GRADE, Struct
                            percolation_last_time)
 from .fringe_panel import H_TITLE, draw_heights, has_heights
 from .texts import text
+from .views.sputter_page_view import RESULT_EMPTY
 
 COLORS = {"A": "#1f5fa8", "B": "#7fa3d6", "C": "#d07a10", "S": "#2a8a3e", "T": "#c0392b", "L": "#6a3d9a",
           "P": "#159a9c", LITERATURE_GRADE: "#b0651c"}
@@ -109,6 +110,8 @@ class TrendPlot:
         fig.clear()
         if result is not None and result.rows:
             self._panels(fig, result, log_scale, detailed, fringes)
+        elif result is None:  # the empty state: how to get a result
+            fig.text(.5, .5, tr(RESULT_EMPTY), ha="center", va="center", fontsize=10, wrap=True)
         restyle_figure(fig)
         cjk_fallback(fig)  # Chinese labels in a font that has them
         self.canvas.draw_idle()

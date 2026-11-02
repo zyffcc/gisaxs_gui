@@ -510,7 +510,7 @@ def test_the_page_and_a_saved_trend_name_the_series_of_analyze(tmp_path, monkeyp
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
     assert series.open_series(folder)
-    assert series.step_intro["curves"].text() == "3 of 3 curves · sampleA"
+    assert series.step_rail.detail("curves") == "3 of 3 curves" and series.step_intro["curves"].isHidden()
     assert series.folder_chip.toolTip() == str(folder)  # the whole path stays where it was
     series.watch_check.setChecked(True)
     series.start()

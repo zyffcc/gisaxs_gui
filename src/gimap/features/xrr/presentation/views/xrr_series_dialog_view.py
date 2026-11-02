@@ -31,14 +31,10 @@ class XrrSeriesDialogView:
 
         self.heading = QtWidgets.QLabel("XRR series extractor", dialog)
         self.heading.setProperty("gimapPageTitle", True)
-        self.subtitle = QtWidgets.QLabel(
-            "Stream GIWAXS/GISAXS detector frames and extract the moving specular reflection.",
-            dialog,
+        self.heading.setToolTip(
+            "Stream GIWAXS/GISAXS detector frames and extract the moving specular reflection."
         )
-        self.subtitle.setProperty("gimapSectionDescription", True)
-        self.subtitle.setWordWrap(True)
         self.root_layout.addWidget(self.heading)
-        self.root_layout.addWidget(self.subtitle)
 
         self.main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal, dialog)
         self.main_splitter.setObjectName("xrrMainSplitter")
@@ -76,18 +72,18 @@ class XrrSeriesDialogView:
         self._build_extraction_section()
 
     def _build_input_section(self) -> None:
-        self.input_section = ParameterSection(
-            "Series data",
-            "Choose one NXS / HDF5 file, a CBF file, or the folder of the series. Module files are stitched "
-            "per frame; a file holding one frame stands for the series of files numbered like it.",
-            self.controls,
-        )
+        self.input_section = ParameterSection("Series data", "", self.controls)
         self.source_picker = FilePicker(
             self.input_section.content,
             placeholder="NXS / HDF5 file, CBF file, or folder…",
         )
         self.source_picker.setObjectName("xrrSourcePicker")
         self.source_picker.clear_button.hide()
+        for widget in (self.source_picker.path_edit, self.source_picker.browse_button):
+            widget.setToolTip(
+                "One NXS / HDF5 file, a CBF file, or the folder of the series. Module files are stitched per "
+                "frame; a file holding one frame stands for the series of files numbered like it."
+            )
         # Browse… asks for a file (for a CBF series: its folder); a folder of NeXus / HDF5 files is a
         # series too, and the only way to name one whose files are not numbered at the end.
         self.source_folder_button = QtWidgets.QPushButton("Folder…", self.source_picker)
@@ -110,22 +106,21 @@ class XrrSeriesDialogView:
         self.inspect_button = QtWidgets.QPushButton("Load first frame", self.input_section.content)
         self.inspect_button.setObjectName("xrrInspectButton")
         self.input_section.add_widget(self.inspect_button)
-        self.series_summary = QtWidgets.QLabel("No series inspected", self.input_section.content)
+        # Empty until a series is read (the empty preview says what to do first).
+        self.series_summary = QtWidgets.QLabel("", self.input_section.content)
         self.series_summary.setProperty("gimapMeta", True)
         self.series_summary.setWordWrap(True)
         self.input_section.add_widget(self.series_summary)
         self.controls_layout.addWidget(self.input_section)
 
     def _build_angle_section(self) -> None:
-        self.angle_section = ParameterSection(
-            "Sample-angle series",
-            "Theta is the sample-table angle; the beam and detector remain fixed.",
-            self.controls,
-        )
+        theta_note = "Theta is the sample-table angle; the beam and the detector stay fixed."
+        self.angle_section = ParameterSection("Sample-angle series", theta_note, self.controls)  # the title's tooltip
         form = QtWidgets.QFormLayout()
         form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
         self.angle_mode_combo = SafeWheelComboBox(self.angle_section.content)
         self.angle_mode_combo.setObjectName("xrrAngleModeCombo")
+        self.angle_mode_combo.setToolTip(theta_note)
         self.angle_mode_combo.addItems(["Linear start + step", "NXS motor dataset"])
         self.theta_start_spin = self._double(0.0, -10.0, 10.0, 5, 0.01)
         self.theta_start_spin.setObjectName("xrrThetaStartSpin")
@@ -194,16 +189,15 @@ class XrrSeriesDialogView:
             "Pick direct-beam center", self.geometry_section.content
         )
         self.pick_center_button.setObjectName("xrrPickCenterButton")
+        self.pick_center_button.setToolTip(
+            "The center is the direct-beam position at theta = 0. Pick it on the preview if needed."
+        )
         self.pick_center_button.setCheckable(True)
         self.geometry_section.add_widget(self.pick_center_button)
         self.controls_layout.addWidget(self.geometry_section)
 
     def _build_extraction_section(self) -> None:
-        self.run_section = ParameterSection(
-            "Extract XRR",
-            "Radius 0 reads one pixel; larger radii integrate a circular neighborhood.",
-            self.controls_rail,
-        )
+        self.run_section = ParameterSection("Extract XRR", "", self.controls_rail)
         form = QtWidgets.QFormLayout()
         form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
         self.radius_spin = SafeWheelSpinBox(self.run_section.content)
@@ -213,7 +207,12 @@ class XrrSeriesDialogView:
         self.aggregation_combo = SafeWheelComboBox(self.run_section.content)
         self.aggregation_combo.addItems(["Sum", "Mean"])
         self.aggregation_combo.setObjectName("xrrAggregationCombo")
-        form.addRow("ROI radius (px)", self.radius_spin)
+        radius_label = QtWidgets.QLabel("ROI radius (px)", self.run_section.content)
+        for widget in (radius_label, self.radius_spin):
+            widget.setToolTip(
+                "Radius 0 reads one pixel; a larger radius integrates a circle around the calculated specular beam."
+            )
+        form.addRow(radius_label, self.radius_spin)
         form.addRow("Intensity", self.aggregation_combo)
         self.run_section.add_layout(form)
         actions = QtWidgets.QHBoxLayout()
@@ -245,10 +244,12 @@ class XrrSeriesDialogView:
             empty_title="No detector frame",
             empty_message="Load the first frame or start extraction.",
         )
+        # The caption of the frame shown (its name; during a run “n/N · name · θ”): the title drawn over the
+        # preview, not a second line in the toolbar.
         self.live_frame_label = QtWidgets.QLabel("", self.live_panel.content)
         self.live_frame_label.setProperty("gimapMeta", True)
-        self.live_panel.add_toolbar_widget(self.live_frame_label)
-        self.live_panel.add_toolbar_stretch()
+        self.live_frame_label.hide()
+        self.live_panel.toolbar_widget.hide()  # nothing else in it
         live_layout.addWidget(self.live_panel)
         self.preview_tabs.addTab(self.live_tab, "Live frame")
 
