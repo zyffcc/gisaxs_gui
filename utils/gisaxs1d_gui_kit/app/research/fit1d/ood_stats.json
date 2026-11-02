@@ -1,0 +1,250 @@
+{
+ "version": 2,
+ "built": "make_ood_stats.py",
+ "dev_file": "dev_v1.npz",
+ "dev_sha256": "89e3e54815b81522bcc85bfaa75a2e5fcde1c483d3abf5f0d2f83e607f08d042",
+ "n_dev": 2000,
+ "ood": {
+  "feature_names": [
+   "log10_q_range",
+   "log10_n_points",
+   "log10_dynamic_range",
+   "log10_median_relative_sigma",
+   "fraction_invalid_or_nonpositive"
+  ],
+  "mean": [
+   2.590255862946496,
+   2.745508361765847,
+   2.189507035104955,
+   -1.2364089226593211,
+   0.09972318976118107
+  ],
+  "scale": [
+   0.536260583710831,
+   0.21291932439012737,
+   1.097419917355451,
+   0.7023305725122401,
+   0.22909917864715063
+  ],
+  "scale_floor": 0.02,
+  "inverse_correlation": [
+   [
+    1.0986681252119983,
+    -0.3053082228442138,
+    -0.06166935309411881,
+    0.017686033297654422,
+    -0.0762309891403767
+   ],
+   [
+    -0.3053082228442137,
+    1.119802516629502,
+    0.10748610413947315,
+    -0.18078805692031605,
+    -0.040229483078525696
+   ],
+   [
+    -0.06166935309411883,
+    0.10748610413947318,
+    1.31257876374158,
+    -0.5399318563827679,
+    -0.15907744933743154
+   ],
+   [
+    0.0176860332976544,
+    -0.18078805692031616,
+    -0.5399318563827677,
+    1.7008279481476252,
+    -0.7467037535285412
+   ],
+   [
+    -0.07623098914037668,
+    -0.04022948307852559,
+    -0.15907744933743156,
+    -0.7467037535285415,
+    1.4880946062268363
+   ]
+  ],
+  "threshold_d2": 17.60082299245243,
+  "percentile": 99.5,
+  "n_curves": 2000,
+  "n_nonfinite": 0,
+  "dev_d2_percentiles": {
+   "50": 4.188148242941131,
+   "90": 9.203379554776543,
+   "99": 16.92011994638976,
+   "99.5": 17.60082299245243,
+   "100": 21.10830101423255
+  },
+  "feature_min": [
+   1.339124679794725,
+   2.1760912590556813,
+   0.051067486611482284,
+   -2.941314912975085,
+   0.0
+  ],
+  "feature_max": [
+   3.545813975086945,
+   3.073351702386901,
+   5.807150134887951,
+   0.0,
+   0.9959183673469387
+  ]
+ },
+ "quality": {
+  "version": 2,
+  "stratify_by": "log10_median_relative_sigma",
+  "edges": [
+   -2.169596427816807,
+   -1.804205124212689,
+   -1.4923434836661544,
+   -1.2186636367598003,
+   -0.9488135456452208,
+   -0.6712113404111031,
+   -0.3494850021680094
+  ],
+  "chi2_per_point_threshold": [
+   142.47901104768965,
+   12.337121729310857,
+   5.456275547938553,
+   3.5775405960252478,
+   2.1218013398827456,
+   1.3821427302922116,
+   1.4061249764022965,
+   1.1770988732831253
+  ],
+  "runs_z_threshold": [
+   -22.818603576398175,
+   -12.03168881841622,
+   -8.965780739350157,
+   -4.995732956876096,
+   -3.9961578575654,
+   -3.090232306167813,
+   -3.090232306167813,
+   -3.090232306167813
+  ],
+  "n_reference": [
+   209,
+   209,
+   209,
+   209,
+   208,
+   206,
+   205,
+   217
+  ],
+  "fallback": {
+   "chi2_per_point_threshold": 40.30171199905043,
+   "runs_z_threshold": -14.973601902866127
+  },
+  "percentile": 99.0,
+  "runs_p_threshold": 0.001,
+  "runs_selection": {
+   "min_expected": 10.0,
+   "smooth_window": 21,
+   "min_points": 20
+  },
+  "reference": "product physics started from the DEV truth, 40 LM function evaluations, nu fixed at 2 (GISAXS), qz and mode from DEV; thresholds from the model-matched curves only (SAXS, and GISAXS with true nu = 2)",
+  "n_matched": 1672,
+  "n_unmatched": 328,
+  "dev_chi2_per_point_percentiles_matched": {
+   "50": 1.0575616688139946,
+   "90": 3.5211764864221373,
+   "95": 9.297716839381565,
+   "99": 40.30171199905043,
+   "100": 387.9336868028389
+  },
+  "rates_at_reference": {
+   "all": {
+    "n": 2000,
+    "chi2_high": 0.0485,
+    "runs_fail": 0.041,
+    "flag": 0.0595,
+    "runs_test_applicable": 0.9645,
+    "runs_fail_fixed_p_selected_points": 0.149,
+    "runs_fail_fixed_p_all_points": 0.2595,
+    "chi2_per_point_median": 1.0669512743461804
+   },
+   "matched": {
+    "n": 1672,
+    "chi2_high": 0.014354066985645933,
+    "runs_fail": 0.009569377990430622,
+    "flag": 0.02033492822966507,
+    "runs_test_applicable": 0.9635167464114832,
+    "runs_fail_fixed_p_selected_points": 0.11244019138755981,
+    "runs_fail_fixed_p_all_points": 0.22188995215311005,
+    "chi2_per_point_median": 1.0575616688139946
+   },
+   "unmatched_nu_not_2": {
+    "n": 328,
+    "chi2_high": 0.2225609756097561,
+    "runs_fail": 0.20121951219512196,
+    "flag": 0.25914634146341464,
+    "runs_test_applicable": 0.9695121951219512,
+    "runs_fail_fixed_p_selected_points": 0.3353658536585366,
+    "runs_fail_fixed_p_all_points": 0.45121951219512196,
+    "chi2_per_point_median": 1.1803844426368657
+   },
+   "gisaxs_matched": {
+    "n": 1278,
+    "chi2_high": 0.009389671361502348,
+    "runs_fail": 0.009389671361502348,
+    "flag": 0.01564945226917058,
+    "runs_test_applicable": 0.9726134585289515,
+    "runs_fail_fixed_p_selected_points": 0.10485133020344288,
+    "runs_fail_fixed_p_all_points": 0.18231611893583724,
+    "chi2_per_point_median": 1.0620835468975978
+   },
+   "saxs": {
+    "n": 394,
+    "chi2_high": 0.030456852791878174,
+    "runs_fail": 0.01015228426395939,
+    "flag": 0.03553299492385787,
+    "runs_test_applicable": 0.934010152284264,
+    "runs_fail_fixed_p_selected_points": 0.13705583756345177,
+    "runs_fail_fixed_p_all_points": 0.350253807106599,
+    "chi2_per_point_median": 1.0438853939318922
+   },
+   "matched_peak_below_1e3": {
+    "n": 410,
+    "chi2_high": 0.0024390243902439024,
+    "runs_fail": 0.0,
+    "flag": 0.0024390243902439024,
+    "runs_test_applicable": 0.8804878048780488,
+    "runs_fail_fixed_p_selected_points": 0.0024390243902439024,
+    "runs_fail_fixed_p_all_points": 0.21707317073170732,
+    "chi2_per_point_median": 0.953752309858053
+   },
+   "matched_peak_1e3_1e4": {
+    "n": 411,
+    "chi2_high": 0.009732360097323601,
+    "runs_fail": 0.004866180048661801,
+    "flag": 0.014598540145985401,
+    "runs_test_applicable": 0.975669099756691,
+    "runs_fail_fixed_p_selected_points": 0.0413625304136253,
+    "runs_fail_fixed_p_all_points": 0.15571776155717762,
+    "chi2_per_point_median": 1.0053960691022776
+   },
+   "matched_peak_1e4_1e5": {
+    "n": 420,
+    "chi2_high": 0.011904761904761904,
+    "runs_fail": 0.014285714285714285,
+    "flag": 0.02142857142857143,
+    "runs_test_applicable": 0.9952380952380953,
+    "runs_fail_fixed_p_selected_points": 0.13333333333333333,
+    "runs_fail_fixed_p_all_points": 0.2119047619047619,
+    "chi2_per_point_median": 1.096167740162533
+   },
+   "matched_peak_above_1e5": {
+    "n": 431,
+    "chi2_high": 0.03248259860788863,
+    "runs_fail": 0.018561484918793503,
+    "flag": 0.04176334106728538,
+    "runs_test_applicable": 1.0,
+    "runs_fail_fixed_p_selected_points": 0.26450116009280744,
+    "runs_fail_fixed_p_all_points": 0.29930394431554525,
+    "chi2_per_point_median": 1.9871100828923853
+   }
+  },
+  "seconds_total": 16812.693817751482
+ }
+}

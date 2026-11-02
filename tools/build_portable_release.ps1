@@ -4,7 +4,7 @@
 #   1. the files git tracks, and
 #   2. the model files 1D Predict needs at run time that git ignores (*.h5, *.npz, *.keras under
 #      modules/, outside the development records).
-#   3. the optional fit1d kit's runtime subset, checked against its SHA-256 file manifest.
+#   3. the runtime subset of the bundled fit1d kit (utils/gisaxs1d_gui_kit), checked against its SHA-256 file manifest.
 #      Personal examples and their reference runs are excluded; the ZIP receives a subset manifest.
 # A developer's folder also holds personal settings (config/user_*.json), the instrument geometry of
 # their own beamtime (config/instrument_profiles.json), reports, research folders, notebooks and

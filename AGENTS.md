@@ -72,8 +72,11 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
     网络权重绑定了其中五个源文件，那五个一个字节都不能改。改动记在 `SOURCE.json` 的 `local_patches`，
     改完运行 `python verify.py --write`，`tests/test_sputter_toolkit_bundle.py` 检查字节和私有名称；
     私有名称从被 git 忽略的 `docs/agents/eval/local/private_tokens.txt`（每行一个）读取，名称本身不写进提交的文件。
+  - `utils/gisaxs1d_gui_kit/`：fit1d 工具包（Fitting 的 Predict parameters (fit1d)、1D Predict 的 fit1d），含两个 numpy 网络
+    和形状因子表，随仓库提供，只在任务子进程里导入（`fitting/infrastructure/adapters/fit1d_method.py`）；环境变量
+    `GISAXS1D_KIT_HOME` 可以指向另一份。只放运行时文件，例子数据和引用实测数据的研究笔记都不放；改动记在 `SOURCE.json`，
+    每个文件按 `FILES_SHA256.json` 校验（`.gitattributes` 关掉换行转换），`tests/test_fit1d_kit_bundle.py` 检查字节和私有名称。
   - **不在仓库里的可选运行时**，都在可取消的子进程里运行，主程序不导入它们：
-    - fit1d 工具包：`utils/gisaxs1d_gui_kit/`（git 忽略）或环境变量 `GISAXS1D_KIT_HOME`；
     - SEM 的 StarDist：单独的 Python 环境（`requirements-sem-stardist.txt`，`GIMAP_SEM_STARDIST_HOME`），
       模型权重放在仓库外，不联网下载。
 

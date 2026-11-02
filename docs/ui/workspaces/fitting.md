@@ -85,9 +85,9 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   再拟合整个文件夹。
 - **Fit**（`views/fit_step_view.py`，行为在 `single/run.py`）：一个 Method 下拉、一个按钮。方法：Predict parameters
   (fit1d)、Refine the values in Model（局部有界最小二乘）、Search the ranges, then refine（差分进化 + 三个起点精修）、
-  Find the particle shape (no AI)、AI proposal (1D Predict)。打开曲线时页面替它选好：未拟合的 GISAXS 线切在装了 fit1d
-  工具包时选 Predict，没装时（`workflow_v5.fit1d_kit_available()`，每打开一条曲线查一次；`single/fit1d_review.py`）选寻找形状，
-  并把 Predict 的提示换成 `FIT1D_MISSING_TIP`（可选附加组件、放在哪里）；两种情况下面一行都写 “Recommended for this curve”；
+  Find the particle shape (no AI)、AI proposal (1D Predict)。打开曲线时页面替它选好：未拟合的 GISAXS 线切选 Predict
+  （fit1d 工具包随仓库提供）；工具包缺失时（`workflow_v5.fit1d_kit_available()`，每打开一条曲线查一次；`single/fit1d_review.py`）
+  选寻找形状，并把 Predict 的提示换成 `FIT1D_MISSING_TIP`（缺少工具包、它应该在哪里）；两种情况下面一行都写 “Recommended for this curve”；
   其余曲线保持原来的选择（GIWAXS I(q) 从不选粒子搜索）；Predict 或寻找形状
   之后自动换成 Refine。Predict 下面只多一行 Particles（尝试组成 / 模型中的粒子），寻找形状下面一行 Families。
   **Resolve values at the edge of their range automatically**（默认勾选，记住；In-situ series 跟随它）：见下面“边界”。
@@ -157,7 +157,7 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   不再宣称显示原 v2 曲线，禁止把过期结果作为当前 fit 导出。恢复相同条件可恢复有效状态，或重新拟合。
 - **进程边界**：`presentation/single/fit1d.py` → `application/single_fit1d.py` 的 JobRequest →
   `infrastructure/adapters/single_fit1d.py` → 工具包。只在 JobRunner 子进程导入研究代码，Stop 终止该 job；
-  不依赖 V5 / TensorFlow 资产。工具包位置为 `utils/gisaxs1d_gui_kit` 或 `GISAXS1D_KIT_HOME`。
+  不依赖 V5 / TensorFlow 资产。工具包随仓库提供，位于 `utils/gisaxs1d_gui_kit`（`GISAXS1D_KIT_HOME` 可指向另一份）。
   回归测试为 `tests/test_fit_page_fit1d.py`。
 
 ## 从 Analyze 接收曲线
@@ -197,8 +197,8 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   specialist (experimental)** 只在显式选择一个 Random cylinder（`components=[2]`）且曲线带原生
   计数时使用局部网络，否则数值回退；第三种 **Physical fit (numerical)** 不用网络。Stage 列显示 Neural model / Model + amplitude /
   Numerical fallback，悬停可见原因；不显示伪概率。
-- 第四种 **fit1d (network + physical fit)** 调用外部的 gisaxs1d 工具包（放在 `utils/gisaxs1d_gui_kit`，或用环境变量
-  `GISAXS1D_KIT_HOME` 指定；只需 numpy、scipy）。找不到工具包时，任务以一句说明放在哪里的消息失败。
+- 第四种 **fit1d (network + physical fit)** 调用随仓库提供的 gisaxs1d 工具包（`utils/gisaxs1d_gui_kit`，或用环境变量
+  `GISAXS1D_KIT_HOME` 指定另一份；只需 numpy、scipy、threadpoolctl）。找不到工具包时，任务以一句说明它应该在哪里的消息失败。
   - 组分必须由用户在 Complete composition 里给定（Sphere=1、Vertical cylinder=3；没有 Random cylinder）：
     一条曲线识别不了组分，空着或含 2 时 `validate_options` 报错。不能固定 σ res（可以固定 ν res）。
   - Parameters… 里 fit1d 的设置：search（`fit1d_policy`：fast / auto / robust）、curve type（`fit1d_mode`：

@@ -31,11 +31,11 @@ METHODS = (
 )
 FIT1D_MISSING_TIP = (
     "Finds the particles and their sizes from the curve (network proposals and a physical fit), with errors and "
-    "equivalent solutions. An optional add-on, not distributed with GIMaP and not installed here: put the folder "
-    "gisaxs1d_gui_kit in utils/gisaxs1d_gui_kit of the GIMaP folder, or set the environment variable "
-    "GISAXS1D_KIT_HOME to its folder, then start GIMaP again. Without it, use Find the particle shape (no AI)."
+    "equivalent solutions. Its kit is missing here. It comes with GIMaP in utils/gisaxs1d_gui_kit: copy that "
+    "folder again from the GIMaP download, or set the environment variable GISAXS1D_KIT_HOME to a copy of it, "
+    "then start GIMaP again. Without it, use Find the particle shape (no AI)."
 )
-"""The tooltip of Predict parameters (fit1d) when its kit is not installed (``single/fit1d_review.py``)."""
+"""The tooltip of Predict parameters (fit1d) when its kit is missing (``single/fit1d_review.py``)."""
 QUICK_FAMILIES = (("Try every family", "auto"), ("The families in Model", "model"))
 RESOLVE_TIP = ("When a value stops at the edge of its range, widen that side (or fix a size spread at its lower "
                "limit), fit again and keep it if the fit is not worse. Results lists what was done.")
@@ -54,7 +54,7 @@ def build_fit_step(owner, page: QWidget, layout) -> None:
     owner.method_combo.setMinimumContentsLength(14)
     row.addWidget(owner.method_combo, 1)
     layout.addLayout(row)
-    owner.method_hint = muted("", page)  # only why a method is recommended, or that its add-on is missing
+    owner.method_hint = muted("", page)  # only why a method is recommended, or that its kit is missing
     owner.method_hint.setObjectName("fitMethodHint")
     owner.method_hint.hide()
     layout.addWidget(owner.method_hint)

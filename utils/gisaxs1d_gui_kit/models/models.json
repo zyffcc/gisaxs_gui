@@ -1,0 +1,15 @@
+{
+ "default": "general",
+ "models": {
+  "general": {
+   "dir": "general",
+   "title": "General (physics-trained)",
+   "description": "Proposal network trained on synthetic curves with the physics (chi2) loss. Default."
+  },
+  "au_np_si": {
+   "dir": "au_np_si",
+   "title": "Au nanoparticles on Si (adapted)",
+   "description": "The general network adapted without labels to measured in-situ curves of Au nanoparticles on Si. Use it for curves of that kind of sample."
+  }
+ }
+}

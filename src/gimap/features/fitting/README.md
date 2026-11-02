@@ -31,7 +31,7 @@ Hosemann 次晶（w = w_rel·D），q 用 nm⁻¹，长度 nm；与手动模型�
 恢复原条件或重拟合后可保存。测试在 `tests/test_fit_page_fit1d.py`。
 
 1D Predict 批量窗口的第四种方法 `fit1d`（`infrastructure/adapters/fit1d_method.py`）调用同一个 gisaxs1d 工具包
-（`application/workflow_v5.fit1d_kit_home()`：环境变量 `GISAXS1D_KIT_HOME`，否则 `utils/gisaxs1d_gui_kit`）。工具包是
-研究代码，只在 job 进程里导入；批量路线 `run_workflow_job` 逐曲线处理，默认 fast。
+（`application/workflow_v5.fit1d_kit_home()`：环境变量 `GISAXS1D_KIT_HOME`，否则随仓库提供的 `utils/gisaxs1d_gui_kit`）。
+工具包是研究代码，只在 job 进程里导入；批量路线 `run_workflow_job` 逐曲线处理，默认 fast。
 行里的曲线和分量是工具包原结果（约定写在每行的 `unit_contract` / `validation_scope`，标记写在 `warnings`），
 选中行后保留原 v2 图，映射的 Components 仅作手动起点。界面与调用链见 `docs/ui/workspaces/fitting.md`。

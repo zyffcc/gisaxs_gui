@@ -1,0 +1,79 @@
+{
+ "name": "au_np_si",
+ "title": "Au nanoparticles on Si (adapted)",
+ "description": "The general network adapted without labels to measured in-situ curves of Au nanoparticles on Si. Use it for curves of that kind of sample.",
+ "source_directory": "work/models/cond_v2_ftr1",
+ "source_weights_sha256": "46c6f722a171c81d7a5a824347471af1eaad539ea68bacedfc7fca47c0c24b7f",
+ "weights_sha256": "d67a64a5632b90d672d919a61b51ebe9431f760f8118465c966cbaa75e2f2826",
+ "training": {
+  "first": {
+   "epoch": 0,
+   "train": null,
+   "val": 0.02663969062268734,
+   "val_by_K": {
+    "1": 0.005185289774090052,
+    "2": 0.01810327172279358,
+    "3": 0.030773591250181198,
+    "4": 0.03872738406062126
+   },
+   "seconds": 0,
+   "val_phys": 1.473615288734436,
+   "val_phys_ok": 0.5267051208665404,
+   "val_phys_by_K": {
+    "1": 1.1352468729019165,
+    "2": 1.4611330032348633,
+    "3": 1.5970581769943237,
+    "4": 1.6323190927505493
+   }
+  },
+  "last": {
+   "epoch": 8,
+   "train": 0.07318036890029907,
+   "val": 0.02687995135784149,
+   "val_by_K": {
+    "1": 0.005327449645847082,
+    "2": 0.018424810841679573,
+    "3": 0.031052716076374054,
+    "4": 0.0389348566532135
+   },
+   "seconds": 113,
+   "train_phys": 1.435185749053955,
+   "val_phys": 1.4240659475326538,
+   "val_phys_ok": 0.5414997137950772,
+   "val_phys_by_K": {
+    "1": 1.0974385738372803,
+    "2": 1.4058456420898438,
+    "3": 1.5464924573898315,
+    "4": 1.5794404745101929
+   }
+  },
+  "epochs": 8
+ },
+ "protocol": {
+  "train": "data/train/shard_*.npz",
+  "val": "data/val/shard_*.npz",
+  "out": "models/cond_v2_ftr1",
+  "shards": "None",
+  "epochs": "8",
+  "batch": "1024",
+  "lr": "0.0001",
+  "heads": "8",
+  "width": "256",
+  "seed": "1",
+  "device": "auto",
+  "init": "models/cond_v2_ft2",
+  "max_steps": "500",
+  "amp": "True",
+  "phys_weight": "0.03",
+  "phys_eval": "False",
+  "phys_floor": "0.03",
+  "phys_clip": "30.0",
+  "real": "measured curves, not distributed",
+  "real_per_batch": "64",
+  "real_weight": "4.0",
+  "real_val": "measured curves, not distributed",
+  "gpu_data": "True",
+  "n_train": 2048000,
+  "framework": "pytorch 2.5.1+cu121"
+ }
+}

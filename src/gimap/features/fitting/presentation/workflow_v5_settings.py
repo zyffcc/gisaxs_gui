@@ -45,7 +45,7 @@ FIT1D_MODES = (("GISAXS (Yoneda cut)", "gisaxs"), ("SAXS (dilute, no structure f
 FIT1D_MODELS = (("General network", "general"), ("Au nanoparticles on Si (adapted)", "au_np_si"))
 """(shown, option value) of the fit1d kit's search, curve type and proposal network."""
 FIT1D_TIP = (
-    "fit1d is an external kit (folder utils/gisaxs1d_gui_kit, or GISAXS1D_KIT_HOME). It needs the Complete "
+    "fit1d is a separate kit that comes with GIMaP (folder utils/gisaxs1d_gui_kit, or GISAXS1D_KIT_HOME). It needs the Complete "
     "composition (Sphere / Vertical cylinder; it has no random cylinder): one curve does not identify the "
     "composition. Its physics differs from the manual model: number-weighted sizes, Hosemann paracrystal, "
     "spheres at |q| = sqrt(q∥² + qz²). The curve shown is fit1d's own."
@@ -113,7 +113,7 @@ class WorkflowV5SettingsMixin:
             "The specialist requires Complete composition = one Random cylinder and eligible native CBF counts. "
             "Other inputs, fixed resolution and poor curve agreement use numerical fallback; "
             "that fallback does not make the specialist a general model. Scores are not probabilities. "
-            "fit1d is an external kit with its own physics and needs the Complete composition "
+            "fit1d is a separate kit with its own physics and needs the Complete composition "
             "(Sphere / Vertical cylinder)."
         )
         left.addRow("Fit method", self.method)

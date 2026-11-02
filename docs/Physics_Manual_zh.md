@@ -1466,7 +1466,7 @@ M_H 是程序的稳健失配度，即 σ 归一化残差的平均 Huber 损失�
 
 ## 9. 一维曲线的模型拟合（拟合）
 
-拟合工作区用各自的模型拟合一条曲线，或者序列的每一帧。本章描述模型，以及拟合（Fit）步骤的数值方法 *精修模型中的数值*（Refine the values in Model，简称 精修，Refine）和 *在范围内搜索，再精修*（Search the ranges, then refine，简称 搜索，Search），还有 *寻找颗粒形状（不用 AI）*。*预测参数（fit1d）*（Predict parameters (fit1d)）使用单独安装的工具包，其内部不在这里描述；*AI 建议（一维预测）*（AI proposal (1D Predict)）见第 10 章。
+拟合工作区用各自的模型拟合一条曲线，或者序列的每一帧。本章描述模型，以及拟合（Fit）步骤的数值方法 *精修模型中的数值*（Refine the values in Model，简称 精修，Refine）和 *在范围内搜索，再精修*（Search the ranges, then refine，简称 搜索，Search），还有 *寻找颗粒形状（不用 AI）*。*预测参数（fit1d）*（Predict parameters (fit1d)）使用随 GIMaP 提供的 fit1d 工具包（`utils/gisaxs1d_gui_kit`），其内部不在这里描述；*AI 建议（一维预测）*（AI proposal (1D Predict)）见第 10 章。
 
 **单位：拟合工作区内部用 nm⁻¹。** 以 Å⁻¹ 读入的曲线（分析工作区的 `_fit_input.dat`）乘以 10。尺寸和距离用 nm，w 用 nm⁻¹，分布宽度 σ_R/R、σ_h/h、σ_D/D 是相对值。
 

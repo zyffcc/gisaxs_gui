@@ -1,6 +1,6 @@
 """The fit method ``fit1d`` of 1D Predict: its options, its panel, and a fit through the job process.
 
-The fits need the external gisaxs1d kit (``GISAXS1D_KIT_HOME`` or ``utils/gisaxs1d_gui_kit``) and are skipped
+The fits need the gisaxs1d kit (``utils/gisaxs1d_gui_kit``, which comes with GIMaP, or ``GISAXS1D_KIT_HOME``) and are skipped
 without it. They run in a job process, as in the program, so the kit's code is never imported here.
 """
 
@@ -24,7 +24,7 @@ from src.gimap.integrations.jobs import LocalProcessJobRunner
 HANDLER = "src.gimap.features.fitting.infrastructure.adapters.workflow_v5:run_workflow_job"
 needs_kit = pytest.mark.skipif(
     not (fit1d_kit_home() / "gisaxs1d_kit" / "core.py").is_file(),
-    reason="the gisaxs1d kit (GISAXS1D_KIT_HOME or utils/gisaxs1d_gui_kit) is not installed",
+    reason="the gisaxs1d kit (utils/gisaxs1d_gui_kit or GISAXS1D_KIT_HOME) is missing",
 )
 QZ = 0.5
 """An arbitrary out-of-plane q for the synthetic fixture (nm⁻¹)."""
@@ -621,3 +621,12 @@ def test_auto_composition_ranks_candidates_with_their_own_parameters():
     light = value["native"]["candidates"]
     assert [c["composition"] for c in light] == [c["composition"] for c in candidates]
     assert "table" not in light[0] and value["native"]["fit1d_constraints"]["composition"] == "auto:sphere,vc:3"
+
+
+def test_the_qz_warning_names_where_cut_qz_is_set_and_is_translated():
+    """The warning is shown on the single page and in 1D Predict: it names both places, and in Chinese too."""
+    from src.gimap.app.presentation.i18n.zh_fit1d import FIT1D_ZH
+    from src.gimap.features.fitting.infrastructure.adapters.fit1d_method import QZ_ZERO
+
+    assert "Fit step ▸ Options" in QZ_ZERO and "Parameters…" in QZ_ZERO
+    assert "拟合步骤 ▸ 选项" in FIT1D_ZH[QZ_ZERO]

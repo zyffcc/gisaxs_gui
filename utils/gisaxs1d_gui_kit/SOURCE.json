@@ -1,0 +1,74 @@
+{
+ "source": "gisaxs1d_gui_kit 1.0.0 (2026-10-13), the fit1d kit of the 1D GISAXS research code",
+ "source_commit": "85140ae6ab026533e0284163737da05e77750d9e",
+ "bundled": "The import closure of gisaxs1d_kit.core and gisaxs1d_kit.results (what GIMaP's fit1d method imports), the rest of the gisaxs1d_kit package, research/fit1d with ood_stats.json, tablepack.py, the two networks (models/general, models/au_np_si) and the packed form-factor tables.",
+ "not_bundled": [
+  "examples/, expected.json, selftest.py, selftest.bat, selftest_reference_run.json (measured curves and results on them)",
+  "README_zh.md and the README / DESIGN notes under app/research (they cite measured data)",
+  "app/research/real_data/ except __init__.py, symmetry.py and yoneda_cut.py (validation scripts on measured data)",
+  "app/research/fit1d/timing.py (benchmark on measured curves)",
+  "app/research/fast_inference/gn_convergence.py, snr_scaling.py, app/research/series1d/__main__.py, synth_series.py (studies and command lines GIMaP does not use)",
+  "_env.bat, run_panel.bat, run_panel.sh, run_panel_zh.bat (stand-alone panel launchers)",
+  "gimap/ (the integration patch for GIMaP 0.1.0, applied long ago)"
+ ],
+ "networks_unchanged": {
+  "models/general/weights_numpy.npz": "05c66708e5f81c3690bcff8789d170eaf188f751cce5bef66ffa809cb1cd4868",
+  "models/au_np_si/weights_numpy.npz": "d67a64a5632b90d672d919a61b51ebe9431f760f8118465c966cbaa75e2f2826"
+ },
+ "tables_unchanged": {
+  "tables_packed/ff_1_number_v2.fft": "db43c1492ee1eb2f11e1fce717df61230c159c64c953d0a3801275bebf735515",
+  "tables_packed/ff_2_number_v2.fft": "9e17ce40b0ea8d6a3b1b6bff34aaf2842f1380920f0487d22464e099d52f435b",
+  "tables_packed/ff_3_number_v2.fft": "726b95dd5872f1ca0ef61386874792cabe3fdc0791632426d49a55a97ba58592"
+ },
+ "local_patches": [
+  {
+   "files": [
+    "app/research/fit1d/api.py",
+    "app/research/series1d/inputs.py",
+    "app/research/series1d/recipe.py",
+    "gisaxs1d_kit/__init__.py",
+    "gisaxs1d_kit/client.py",
+    "gisaxs1d_kit/qt_panel.py"
+   ],
+   "change": "Usage examples in docstrings use neutral values (qz = 0.5, label 'cut 1') and a neutral file name; one comment no longer names a data set. No code changed.",
+   "reason": "The examples came from unpublished measurements."
+  },
+  {
+   "files": [
+    "models/models.json",
+    "gisaxs1d_kit/_paths.py",
+    "models/au_np_si/MODEL_INFO.json"
+   ],
+   "change": "The description of the network au_np_si no longer names the series and its frame count.",
+   "reason": "The series is unpublished."
+  },
+  {
+   "files": [
+    "models/general/MODEL_INFO.json",
+    "models/au_np_si/MODEL_INFO.json"
+   ],
+   "change": "Cluster paths shortened to the run folder; the scores on measured curves and the file names of those curves removed. Training settings and scores on synthetic curves unchanged.",
+   "reason": "Personal paths; results on unpublished data."
+  },
+  {
+   "files": [
+    "KIT_MANIFEST.json"
+   ],
+   "change": "code_files and size_mb describe this folder; verified_with names the Python installations without their paths.",
+   "reason": "The folder holds the runtime files only; personal paths."
+  }
+ ],
+ "upstream_sha256_of_patched_files": {
+  "KIT_MANIFEST.json": "90e848555b321402006f82ce1c1620f92e1929fd0996b9f93037a3d72eb7f52b",
+  "app/research/fit1d/api.py": "e59538f85ba77bf64fcb9393f96dfa0842d7c0f2a9dcebba0e5bc341b60b907b",
+  "app/research/series1d/inputs.py": "a05d78c05f69c9176ccef681c389f93b6dbd98c4dd575e1f648f8aece9541944",
+  "app/research/series1d/recipe.py": "a40b46e353872ad2dce53ab4b2e9ff2bc105f7b82a70361f56fae92782d21b64",
+  "gisaxs1d_kit/__init__.py": "78108fdd29b771807c367dccdbe55e745ea3777ecbcf99b563748c222ed31caa",
+  "gisaxs1d_kit/_paths.py": "a1d395251c95002fede19a77bccd0098a8702860e8bf0d7ad6924e3deac48451",
+  "gisaxs1d_kit/client.py": "c87aaae18d4eadabfbf186a6154fe92d843aee2bf75bea27b4f0e0ee8f7b52c4",
+  "gisaxs1d_kit/qt_panel.py": "fa9a851053250538e812050551044ac656f71eb8096c3b5b39ffb93f176ad1a6",
+  "models/au_np_si/MODEL_INFO.json": "b95cc475d3f741df6344c221c7c64ccd42150facce59845bd24eaf50ea28425d",
+  "models/general/MODEL_INFO.json": "c4182c7512cece4b00a12b2f4f2a6e532fa7985fc34a8c14b8e2e89b4260bb2c",
+  "models/models.json": "e89a3eafb2b74b440d71b5988c355971c054e02ca2662b0cc6c1d2325ca6dc97"
+ }
+}

@@ -195,9 +195,6 @@ None of these is in the repository or in the portable package.
   separate Python environment, made from `requirements-sem-stardist.txt`. SEM Particle Analysis starts
   them in a subprocess. GIMaP neither ships nor downloads StarDist model weights. A model you use keeps
   the licence its publisher gives it.
-- The optional **fit1d kit** (`utils/gisaxs1d_gui_kit/` or `GISAXS1D_KIT_HOME`) is not part of the
-  repository. A portable package contains its runtime files only if the kit was present when the package
-  was built. Its licence and provenance are **to be confirmed by the authors**.
 
 ## 5. Research code and trained networks in the repository
 
@@ -225,6 +222,14 @@ GIMaP. For each of them, authorship and licence are **to be confirmed by the aut
   - `SOURCE.json` names neither authors nor a licence.
   - The published values it compares with are cited, with their DOIs, in
     `configs/literature_reference_v1.json`.
+- **fit1d kit** (`utils/gisaxs1d_gui_kit/`): the research code of the fit1d method (gisaxs1d_gui_kit
+  1.0.0, 2026-10-13) with two numpy networks (`models/general`, `models/au_np_si`) and packed form-factor
+  tables. It runs Fitting ▸ **Predict parameters (fit1d)** and the method *fit1d* of 1D Predict, imported in
+  a job process only. It was added to the repository on 2026-11-02 at the authors' request.
+  - Only its runtime files are bundled. `SOURCE.json` lists what was left out (example measurements, results
+    on measured data, research notes) and the few text changes; the networks and the tables are unchanged.
+  - `FILES_SHA256.json` holds the SHA-256 of every file; `tests/test_fit1d_kit_bundle.py` checks them.
+  - The network `au_np_si` was adapted without labels to measured curves, which are not distributed.
 - The **2D Prediction** modules (`modules/*/module.yaml`, `preprocess.py`) are configuration and
   preprocessing only. No 2D network weights are shipped.
 

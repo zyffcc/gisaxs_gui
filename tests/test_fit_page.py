@@ -565,7 +565,7 @@ def test_the_methods_that_take_one_curve_go_over_to_the_mean_when_both_halves_ar
     page.open_curve(_curve_file(tmp_path, signed=True), "both_abs")
     assert page.session.side == "both" and page._data().q.size == 480
     assert page.recommended_method() == ("fit1d" if page._fit1d_kit else "shapes")  # without the optional kit: shapes
-    page.set_method("shapes")  # a signed cut recommends fit1d when its kit is installed; the shape search is chosen here
+    page.set_method("shapes")  # a signed cut recommends fit1d when its kit is there; the shape search is chosen here
     page.run_fit()
     _wait(page)
     assert len(asked) == 1 and np.allclose(asked[0], Q_NM / 10.0)  # one measurement per |q|: the 240 points of the mean

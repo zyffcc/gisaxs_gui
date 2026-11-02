@@ -130,11 +130,11 @@ FIT1D_ZH = {
         '从模型中的数值出发，用拟合页自己的模型做最小二乘：快，找到最近的好拟合。',
     'Recommended for this curve: a GISAXS cut not fitted yet.':
         '推荐用于这条曲线：尚未拟合的 GISAXS 线切。',
-    'Recommended for this curve: a GISAXS cut not fitted yet (Predict parameters needs the optional fit1d add-on, which is not installed).':
-        '推荐用于这条曲线：尚未拟合的 GISAXS 线切（预测参数需要可选的 fit1d 附加组件，这里没有安装）。',
-    'Finds the particles and their sizes from the curve (network proposals and a physical fit), with errors and equivalent solutions. An optional add-on, not distributed with GIMaP and not installed here: put the folder gisaxs1d_gui_kit in utils/gisaxs1d_gui_kit of the GIMaP folder, or set the environment variable GISAXS1D_KIT_HOME to its folder, then start GIMaP again. Without it, use Find the particle shape (no AI).':
-        '从曲线找出粒子及其尺寸（网络给初值，再做物理拟合），给出误差和等价解。这是一个可选的附加组件，不随 GIMaP 分发，这里没有安装：'
-        '把文件夹 gisaxs1d_gui_kit 放到 GIMaP 文件夹的 utils/gisaxs1d_gui_kit，或者把环境变量 GISAXS1D_KIT_HOME 设为它所在的文件夹，'
+    'Recommended for this curve: a GISAXS cut not fitted yet (the kit of Predict parameters (fit1d) is missing here).':
+        '推荐用于这条曲线：尚未拟合的 GISAXS 线切（这里缺少预测参数（fit1d）的工具包）。',
+    'Finds the particles and their sizes from the curve (network proposals and a physical fit), with errors and equivalent solutions. Its kit is missing here. It comes with GIMaP in utils/gisaxs1d_gui_kit: copy that folder again from the GIMaP download, or set the environment variable GISAXS1D_KIT_HOME to a copy of it, then start GIMaP again. Without it, use Find the particle shape (no AI).':
+        '从曲线找出粒子及其尺寸（网络给初值，再做物理拟合），给出误差和等价解。这里缺少它的工具包。工具包随 GIMaP 提供，'
+        '位于 utils/gisaxs1d_gui_kit：请从 GIMaP 的下载里重新复制这个文件夹，或者把环境变量 GISAXS1D_KIT_HOME 设为它的一份副本，'
         '然后重新启动 GIMaP。没有它时，请用“寻找颗粒形状（不用 AI）”。',
     'Particles':
         '粒子',
@@ -262,6 +262,9 @@ FIT1D_ZH = {
         '一帧有几个同样好的解时，保留最接近上一帧的那个（序列最平滑）；明显更好的其他解仍会被采用，并注明',
     "Predict each frame needs Sphere / Vertical cylinder particles in Single analysis' model.":
         '逐帧预测需要单条分析的模型中有球 / 竖直圆柱粒子。',
+    'No qz of the cut was given: spheres are evaluated at qz = 0 (|q| = q_par). For a Yoneda cut set “Cut qz” (Fit step ▸ Options; in 1D Predict, Parameters…); the sphere radius depends on it.':
+        '没有给出线切的 qz：球按 qz = 0 计算（|q| = q_par）。Yoneda 线切请设置“线切的 qz”（拟合步骤 ▸ 选项；一维预测里在“参数…”中），'
+        '球的半径取决于它。',
 }
 
 __all__ = ["FIT1D_ZH"]

@@ -229,7 +229,7 @@ Zenodo DOI and paper submission, is [docs/releasing.md](releasing.md).
   manual (introduction, Known limitations, FAQ, Version and Contact) and `CHANGELOG.md` say so. Change them
   together when a version is released as final (see [releasing.md](releasing.md)).
 
-- When `utils/gisaxs1d_gui_kit/` is installed, the builder also validates its `FILES_SHA256.json`
+- The builder also validates the bundled `utils/gisaxs1d_gui_kit/` against its `FILES_SHA256.json`
   with `tools/list_fit1d_release_files.py` (standard-library Python, including for `-ListOnly`). It
   includes only the declared runtime code, networks, packed tables and launchers. The only
   `research/` exception is the checked kit's `app/research/`; other research and personal folders

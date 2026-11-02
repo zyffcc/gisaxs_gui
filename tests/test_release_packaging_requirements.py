@@ -73,7 +73,7 @@ def code():
             if "development" in parts or "__pycache__" in parts:
                 continue  # research records and caches: not part of the program, nor of a release
             if parts[:2] == ("utils", "gisaxs1d_gui_kit"):
-                continue  # frozen external kit; required host dependencies are EXTERNAL_RUNTIME above
+                continue  # the bundled, frozen fit1d kit; required host dependencies are EXTERNAL_RUNTIME above
             if parts[:2] == ("utils", "sputter_toolkit"):
                 # external Sputter toolkit, run as a subprocess; its packages: requirements-sputter.txt. Its own
                 # package (``sputtergisaxs``) is the program's: the fringe tool imports the toolkit's grid from it.

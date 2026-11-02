@@ -1,4 +1,4 @@
-"""Validate the optional fit1d kit and select its distributable runtime files.
+"""Validate the fit1d kit (utils/gisaxs1d_gui_kit, bundled) and select its distributable runtime files.
 
 Standard library only: the Windows release builder uses this before conda-pack. A personal kit
 also holds example measurements and their reference results; those do not belong in a release.

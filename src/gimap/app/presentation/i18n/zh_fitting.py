@@ -260,11 +260,11 @@ FITTING_ZH = {
     "fit1d curve type": "fit1d 曲线类型",
     "fit1d network": "fit1d 网络",
     "fit1d systematic error (%)": "fit1d 系统误差（%）",
-    "fit1d is an external kit (folder utils/gisaxs1d_gui_kit, or GISAXS1D_KIT_HOME). It needs the Complete "
+    "fit1d is a separate kit that comes with GIMaP (folder utils/gisaxs1d_gui_kit, or GISAXS1D_KIT_HOME). It needs the Complete "
     "composition (Sphere / Vertical cylinder; it has no random cylinder): one curve does not identify the "
     "composition. Its physics differs from the manual model: number-weighted sizes, Hosemann paracrystal, "
     "spheres at |q| = sqrt(q∥² + qz²). The curve shown is fit1d's own.":
-        "fit1d 是外部工具包（文件夹 utils/gisaxs1d_gui_kit，或环境变量 GISAXS1D_KIT_HOME）。它需要“完整组成”"
+        "fit1d 是随 GIMaP 提供的单独工具包（文件夹 utils/gisaxs1d_gui_kit，或环境变量 GISAXS1D_KIT_HOME）。它需要“完整组成”"
         "（球 / 竖直圆柱；没有随机取向圆柱）：一条曲线无法识别组成。它的物理模型与手动模型不同：数目加权的尺寸分布、"
         "Hosemann 次晶、球按 |q| = sqrt(q∥² + qz²) 计算。显示的曲线是 fit1d 自己的曲线。",
     "fit1d: the out-of-plane q of the horizontal cut; spheres are evaluated at |q| = sqrt(q∥² + qz²). "
@@ -278,8 +278,8 @@ FITTING_ZH = {
     "Refine it here.":
         "{model} 已作为起点放进 Components 和 Global：拟合页的模型与 fit1d 的曲线最多相差 {percent} %"
         "（fit1d 有自己的物理模型：数目加权的尺寸分布、Hosemann 次晶、球带 qz）。请在这里精修。",
-    "General V5 proposes multiple compositions but remains experimental. The specialist requires Complete composition = one Random cylinder and eligible native CBF counts. Other inputs, fixed resolution and poor curve agreement use numerical fallback; that fallback does not make the specialist a general model. Scores are not probabilities. fit1d is an external kit with its own physics and needs the Complete composition (Sphere / Vertical cylinder).":
-        "通用 V5 会给出多种组成，但仍是实验性的。专用模型要求“完整组成”只有一个随机取向圆柱，并且输入是符合条件的原始 CBF 计数。其他输入、固定的分辨率或曲线吻合较差时会改用数值回退；这种回退并不会让专用模型变成通用模型。得分不是概率。fit1d 是外部工具包，有自己的物理模型，需要“完整组成”（球 / 竖直圆柱）。",
+    "General V5 proposes multiple compositions but remains experimental. The specialist requires Complete composition = one Random cylinder and eligible native CBF counts. Other inputs, fixed resolution and poor curve agreement use numerical fallback; that fallback does not make the specialist a general model. Scores are not probabilities. fit1d is a separate kit with its own physics and needs the Complete composition (Sphere / Vertical cylinder).":
+        "通用 V5 会给出多种组成，但仍是实验性的。专用模型要求“完整组成”只有一个随机取向圆柱，并且输入是符合条件的原始 CBF 计数。其他输入、固定的分辨率或曲线吻合较差时会改用数值回退；这种回退并不会让专用模型变成通用模型。得分不是概率。fit1d 是单独的工具包，有自己的物理模型，需要“完整组成”（球 / 竖直圆柱）。",
     "Fix σ res (nm⁻¹)": "固定 σ res（nm⁻¹）",
     "Fix ν res": "固定 ν res",
     "General V5: 0.007–0.013 nm⁻¹. RC specialist / physical fit: 0.001–0.1 nm⁻¹; fixed resolution uses numerical fallback.":

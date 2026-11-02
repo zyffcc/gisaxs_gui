@@ -1,0 +1,15 @@
+{
+ "kit": "gisaxs1d_gui_kit_install",
+ "code_files": 51,
+ "size_mb": 64.8,
+ "verified_with": [
+  "Python 3 (miniforge, macOS)",
+  "Python 3 (miniforge environment gui, macOS)"
+ ],
+ "models": {
+  "general": "cond_v2_ft4",
+  "au_np_si": "cond_v2_ftr1"
+ },
+ "git_head": "85140ae6ab026533e0284163737da05e77750d9e",
+ "bundled_in": "GIMaP utils/gisaxs1d_gui_kit: runtime files only, see SOURCE.json"
+}

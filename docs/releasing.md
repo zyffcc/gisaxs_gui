@@ -93,9 +93,8 @@ would reach the users.
   The build in step 6 keeps other files in `release\`; it replaces only the ZIP, its parts and
   `SHA256SUMS.txt`.)
 
-- The optional fit1d kit (`utils/gisaxs1d_gui_kit/`) goes into the package when it is present at build
-  time. Remove it from the build folder when its licence is not settled (`THIRD_PARTY_NOTICES.md`,
-  section 4).
+- The fit1d kit (`utils/gisaxs1d_gui_kit/`) is part of the repository. The builder packs its runtime files
+  after checking each one against the kit's `FILES_SHA256.json` (`tools/list_fit1d_release_files.py`).
 
 ## 5. Check the file list (`-ListOnly`)
 

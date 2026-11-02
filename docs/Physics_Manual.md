@@ -1675,8 +1675,8 @@ Like the GIWAXS report (section 7.9), the GISAXS report's *Decisions* always say
 
 Fitting fits one curve, or every frame of a series, with its own model. This chapter describes the model and the
 numerical methods *Refine the values in Model* (Refine) and *Search the ranges, then refine* (Search) of the Fit step,
-and *Find the particle shape (no AI)*. *Predict parameters (fit1d)* uses a separately installed kit whose internals are
-not described here; *AI proposal (1D Predict)* is chapter 10.
+and *Find the particle shape (no AI)*. *Predict parameters (fit1d)* uses the fit1d kit that comes with GIMaP
+(`utils/gisaxs1d_gui_kit`), whose internals are not described here; *AI proposal (1D Predict)* is chapter 10.
 
 **Units: Fitting works in nm⁻¹ internally.** A curve read in Å⁻¹ (an Analyze `_fit_input.dat`) is multiplied by 10.
 Sizes and distances are in nm, w in nm⁻¹, the spreads σ_R/R, σ_h/h, σ_D/D are relative.

@@ -18,7 +18,7 @@ extend-exclude = [
     "modules/Fitting_1D_Model/Workflow_v5/development",
     # Frozen upstream model code is checked against its SHA256 manifest instead.
     "modules/Fitting_1D_Model/Workflow_v5/conditional_v2",
-    # The optional fit1d kit is external research code, imported only inside a job process.
+    # The bundled fit1d kit is frozen research code, imported only inside a job process.
     "utils/gisaxs1d_gui_kit",
     # The optional Sputter toolkit is external research code, run only as a subprocess.
     "utils/sputter_toolkit",

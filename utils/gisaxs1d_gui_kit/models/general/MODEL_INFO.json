@@ -1,0 +1,75 @@
+{
+ "name": "general",
+ "title": "General (physics-trained)",
+ "description": "Proposal network trained on synthetic curves with the physics (chi2) loss. Default.",
+ "source_directory": "work/models/cond_v2_ft4",
+ "source_weights_sha256": "d46a291e46be2031480261b8649c3d5451a1b708d8ed90abfec7c172a1c68b44",
+ "weights_sha256": "05c66708e5f81c3690bcff8789d170eaf188f751cce5bef66ffa809cb1cd4868",
+ "training": {
+  "first": {
+   "epoch": 0,
+   "train": null,
+   "val": 0.02655109390616417,
+   "val_by_K": {
+    "1": 0.0052305664867162704,
+    "2": 0.018078524619340897,
+    "3": 0.030643710866570473,
+    "4": 0.03856905922293663
+   },
+   "seconds": 0,
+   "val_phys": 1.80434250831604,
+   "val_phys_ok": 0.42543260974858,
+   "val_phys_by_K": {
+    "1": 1.4755960702896118,
+    "2": 1.803833246231079,
+    "3": 1.9237761497497559,
+    "4": 1.9491862058639526
+   }
+  },
+  "last": {
+   "epoch": 24,
+   "train": 0.07045484330877662,
+   "val": 0.0271456241607666,
+   "val_by_K": {
+    "1": 0.005338342860341072,
+    "2": 0.018536482006311417,
+    "3": 0.031322967261075974,
+    "4": 0.03941049054265022
+   },
+   "seconds": 526,
+   "train_phys": 1.324700992166996,
+   "val_phys": 1.2796937227249146,
+   "val_phys_ok": 0.5869402492184405,
+   "val_phys_by_K": {
+    "1": 1.0180400609970093,
+    "2": 1.2542191743850708,
+    "3": 1.373732566833496,
+    "4": 1.4170912504196167
+   }
+  },
+  "epochs": 24
+ },
+ "protocol": {
+  "train": "data/train/shard_*.npz",
+  "val": "data/val/shard_*.npz",
+  "out": "models/cond_v2_ft4",
+  "shards": "None",
+  "epochs": "24",
+  "batch": "1024",
+  "lr": "0.0003",
+  "heads": "8",
+  "width": "256",
+  "seed": "1",
+  "device": "auto",
+  "init": "models/cond_v2_a",
+  "max_steps": "None",
+  "amp": "True",
+  "phys_weight": "0.03",
+  "phys_eval": "False",
+  "phys_floor": "0.03",
+  "phys_clip": "30.0",
+  "gpu_data": "True",
+  "n_train": 2048000,
+  "framework": "pytorch 2.5.1+cu121"
+ }
+}

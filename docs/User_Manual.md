@@ -204,11 +204,9 @@ fit is a screening step: confirm the model in Fitting (step 5).
 q in Å⁻¹) and opens it in **Fitting ▸ Single analysis**: **Curve** ✓ `599 points fitted`, **Model**
 `Sphere · 9 free`, **Fit** *Choose a method, then Fit*. Fitting shows q in nm⁻¹.
 
-The Fit step has chosen **Find the particle shape (no AI)** for this curve, and the line under
-**Method** says why: *Recommended for this curve: a GISAXS cut not fitted yet (Predict parameters needs
-the optional fit1d add-on, which is not installed).* With the fit1d kit installed (section 2.3) it
-chooses **Predict parameters (fit1d)** instead (*Recommended for this curve: a GISAXS cut not fitted
-yet.*); to follow this walkthrough, choose **Find the particle shape (no AI)** in **Method** then. Press
+The Fit step has chosen **Predict parameters (fit1d)** for this curve, and the line under **Method**
+says why: *Recommended for this curve: a GISAXS cut not fitted yet.* (fit1d comes with GIMaP, section 6.4.)
+To follow this walkthrough, choose **Find the particle shape (no AI)** in **Method** instead, then press
 **Find the particle shape**. After about 15 s the status line says *5 solutions; the best, Sphere (χ²ᵣ
 1.39), is in Model*. Results lists the other
 solutions under **Other solutions**; press **Refine These Values** to refine the sphere and get its
@@ -330,7 +328,8 @@ first **Predict** installs PyTorch into the Python GIMaP runs in. To install it 
 `python -m pip install -r requirements-sputter.txt` in the same environment.
 
 The trained weights of 1D Predict are in the Git repository (about 56 MB), so a checkout runs
-everything, including 1D Predict (chapter 6). On macOS, BornAgain is installed separately: `README.md`
+everything, including 1D Predict (chapter 6). The fit1d kit of **Predict parameters (fit1d)** is there too
+(`utils/gisaxs1d_gui_kit`, about 62 MB, section 6.4). On macOS, BornAgain is installed separately: `README.md`
 says how.
 
 ### 2.3 Optional parts
@@ -340,7 +339,6 @@ GIMaP runs without these. Each is needed only for the function named.
 | Part | Needed for | How |
 |---|---|---|
 | An AI account or a local model | **Ask AI…**, **Tools ▸ Process with AI…** | The Python packages come with `requirements.txt`; set up the AI in **Tools ▸ Settings… ▸ Assistant** (chapter 10) |
-| The fit1d kit (`gisaxs1d_gui_kit`) | **Predict parameters (fit1d)** in Fitting (also for every frame of an In-situ series) and the method *fit1d* in 1D Predict | Put it in `utils/gisaxs1d_gui_kit`, or name its folder in the environment variable `GISAXS1D_KIT_HOME` (chapter 6) |
 | StarDist | Separating touching particles in **Tools ▸ SEM Particle Analysis…** | A separate Python environment with `requirements-sem-stardist.txt`, and a local model folder (chapter 9) |
 | PyTorch (CPU) | **Predict** in the Sputter workspace | Not in the portable package: installed into GIMaP's Python on the first Predict (about 1.2 GB, needs the internet). In a source folder, the first start of `Start_GIMaP.bat` installs it (section 2.2). By hand: `python -m pip install -r requirements-sputter.txt` (section 8.1) |
 
@@ -1819,14 +1817,13 @@ sizes for your sample, or let the Fit step find them.
   **Find the particle shape (no AI)**, which needs nothing beyond GIMaP; otherwise the choice stays as it was (a
   GIWAXS I(q) never gets a particle search). After a prediction or a shape search the method turns to **Refine the
   values in Model**.
-- An unfitted GISAXS horizontal cut gets a recommended method, and the line under **Method** says why. Which one
-  depends on the fit1d kit, an optional add-on that does not come with GIMaP (section 6.4):
-  - without the kit (as GIMaP is distributed), **Find the particle shape (no AI)**, also when you have edited the
-    model: *Recommended for this curve: a GISAXS cut not fitted yet (Predict parameters needs the optional fit1d
-    add-on, which is not installed).* It fits the cut with Fitting's own models. The tooltip of **Predict
-    parameters (fit1d)** then says that it is an optional add-on and where to put it;
-  - with the kit installed, **Predict parameters (fit1d)**: *Recommended for this curve: a GISAXS cut not fitted
-    yet.*
+- An unfitted GISAXS horizontal cut gets a recommended method, and the line under **Method** says why:
+  - **Predict parameters (fit1d)**: *Recommended for this curve: a GISAXS cut not fitted yet.* Its kit comes with
+    GIMaP (section 6.4);
+  - if that kit is missing from the GIMaP folder, **Find the particle shape (no AI)**, also when you have edited the
+    model: *Recommended for this curve: a GISAXS cut not fitted yet (the kit of Predict parameters (fit1d) is
+    missing here).* It fits the cut with Fitting's own models. The tooltip of **Predict parameters (fit1d)** then
+    says where the kit belongs.
 
   GIMaP looks for the kit again whenever a curve is opened.
 - Under the method, only what it needs: **Particles** for Predict (section 6.4), **Families** for the shape search
@@ -1881,10 +1878,10 @@ One **Fit** button runs the method chosen in **Method**:
 
 | Method | What it does | When to use it |
 |---|---|---|
-| **Predict parameters (fit1d)** | A separate kit: network proposals and its own physical fit, for spheres and vertical cylinders, with errors and equivalent solutions (section 6.4). | Only with the fit1d kit, an optional add-on (section 6.4): a start for a GISAXS cut, with its errors and equivalent solutions. Chosen for an unfitted GISAXS cut when the kit is installed. |
+| **Predict parameters (fit1d)** | A separate kit: network proposals and its own physical fit, for spheres and vertical cylinders, with errors and equivalent solutions (section 6.4). | A start for a GISAXS cut, with its errors and equivalent solutions (section 6.4). Chosen for an unfitted GISAXS cut. |
 | **Refine the values in Model** | Bounded least squares from the values in Model, with Fitting's own model; stays near them. | The model is close: after a prediction or a solution, after Analyze, or to get errors. |
 | **Search the ranges, then refine** | Differential evolution across the ranges of the free values (log scale when a range spans 10× or more), then refinement from the three best starts. | The start is poor but you know the family and sensible ranges. Slower. |
-| **Find the particle shape (no AI)** | The numerical fit of sphere, random cylinder and vertical cylinder from several starts, as in Analyze's automatic analysis. The solutions go to Results, the best into Model. | The first look at a new curve, a GISAXS cut included: chosen for an unfitted GISAXS cut when the fit1d kit is not installed. Needs no add-on and uses no network. |
+| **Find the particle shape (no AI)** | The numerical fit of sphere, random cylinder and vertical cylinder from several starts, as in Analyze's automatic analysis. The solutions go to Results, the best into Model. | The first look at a new curve, a GISAXS cut included: chosen for an unfitted GISAXS cut when the fit1d kit is missing. Uses no network. |
 | **AI proposal (1D Predict)** | The experimental V5 network proposes compositions and parameters, then corrects them numerically. Its solutions go to Results. | A second opinion on the family. Check and refine its solutions; do not report them as results. |
 
 - The scales (every particle's scale, the background, the peak A) are solved exactly (non-negative least
@@ -1905,24 +1902,26 @@ box off to leave such values at their edge, with a warning.
 
 ### 6.4 fit1d
 
-fit1d is an optional add-on: a separate kit with its own networks and physics. It is not distributed with
-GIMaP and is not publicly available, so this section is for those who have a copy. Everything else in Fitting
-works without it; for a first fit of a GISAXS cut use **Find the particle shape (no AI)** (section 6.3).
+fit1d is a separate kit with its own networks and physics. It comes with GIMaP in `utils/gisaxs1d_gui_kit`
+(about 62 MB, in the repository and in the portable package), so nothing has to be installed. Everything else in
+Fitting works without it.
 
-**Where the kit goes.** Put the folder `gisaxs1d_gui_kit` (it holds `gisaxs1d_kit/`, `app/`, `models/` and
-`tables_packed/`) in `utils/gisaxs1d_gui_kit` in the program folder, or set the environment variable
-`GISAXS1D_KIT_HOME` to its folder, then start GIMaP again. It needs numpy and scipy only, no TensorFlow and no
-V5 files. Without the kit, an unfitted GISAXS cut gets **Find the particle shape (no AI)** instead of Predict
-(section 6.2), the tooltip of **Predict parameters (fit1d)** says that it is an optional add-on and where it goes,
-and choosing it anyway stops with a message that names the folder where GIMaP looked.
+**The kit.** The folder `utils/gisaxs1d_gui_kit` holds `gisaxs1d_kit/`, `app/`, `models/` (the two networks) and
+`tables_packed/`. It needs numpy, scipy and threadpoolctl from `requirements.txt`, no TensorFlow and no V5 files.
+The environment variable `GISAXS1D_KIT_HOME` points GIMaP to another copy. The first fit unpacks the form-factor
+tables once into `%USERPROFILE%\.cache\gisaxs1d_tables` (`~/.cache/gisaxs1d_tables` on macOS and Linux), about
+74 MB; the environment variable `GISAXS1D_TABLES` chooses another folder. If the kit is missing from the GIMaP
+folder, an unfitted GISAXS cut gets **Find the particle shape (no AI)** instead of Predict (section 6.2), the
+tooltip of **Predict parameters (fit1d)** says where the kit belongs, and choosing it anyway stops with a message
+that names the folder where GIMaP looked.
 
 In the Fit step the kit is the method **Predict parameters (fit1d)**. It fits all the populations of one curve
 together. A good fit does not prove that the composition is the true one.
 
 **What to enter**
 
-1. In **Fit**, select **Predict parameters (fit1d)** (preselected for an unfitted GISAXS cut when the kit is
-   installed). Under it,
+1. In **Fit**, select **Predict parameters (fit1d)** (preselected for an unfitted GISAXS
+   cut). Under it,
    **Particles** chooses what it fits — **The particles in Model**, **Try 1–3 vertical cylinders** or **Try
    spheres and vertical cylinders (1–3)**:
    - **Try spheres and vertical cylinders (1–3)** or **Try 1–3 vertical cylinders**: the kit fits every
@@ -2001,8 +2000,8 @@ refine, not as results.
    one in their header**. A file whose header states both Å⁻¹ and nm⁻¹ is not fitted and is named there.
 2. **Parameters…** sets:
    - **Fit method**: *General V5 (experimental)* (default), *Single RC specialist (experimental)*,
-     *Physical fit (numerical)*, which uses no network, or *fit1d (network + physical fit)*, only with the optional
-     fit1d kit (section 6.4); fit1d needs the **Complete composition** (spheres and vertical cylinders only).
+     *Physical fit (numerical)*, which uses no network, or *fit1d (network + physical fit)*, with the fit1d kit
+     (section 6.4); fit1d needs the **Complete composition** (spheres and vertical cylinders only).
    - **Complete composition**: the particle families when you know them.
    - **q unit of files without one in their header**: nm⁻¹ by default. A file whose header states its unit of q is
      read in that unit, whatever is set here; Analyze's `_fit_input.dat` files state Å⁻¹ and need no setting. A
@@ -2104,7 +2103,7 @@ Every curve of a folder, fitted with the model of Single analysis. The command b
     afresh where the curves change course.
 - **Method**: **Refine (fast)**, **Search the ranges, then refine (slow)** or **Predict each frame (fit1d)**.
 - **Predict each frame (fit1d)** runs Predict on every frame, with the particles, fixed values and ranges of
-  Single's model and the settings of Single's Fit step (only with the optional fit1d kit, section 6.4). The table
+  Single's model and the settings of Single's Fit step (with the fit1d kit, section 6.4). The table
   holds fit1d's values and
   errors, and the frame plot fit1d's own curve. **Prefer the solution that continues the previous frame** (on by
   default): each frame is fitted once more with every value held near the previous frame's; when that fit is as
@@ -3067,7 +3066,7 @@ drawn on a placeholder axis (0.05–15 nm on both axes), which is not a physical
 to the SEM comparison.
 
 The V5 methods of 1D Predict use their bundled model in `modules/Fitting_1D_Model/Workflow_v5`; fit1d
-uses its installed `gisaxs1d_gui_kit` instead (section 6.4).
+uses its own kit in `utils/gisaxs1d_gui_kit` instead (section 6.4).
 
 ## 12. Output files
 
@@ -3196,7 +3195,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Format Converter does not read EDF.** | Use **Analyze ▸ Batch Export ▸ Converted detector frames**. |
 | **The uint16 modes of the Format Converter mark pixels without data only in HDF5**: in a TIFF or CBF such a pixel holds 65535 and reads back as a valid value (section 9.1). | Keep the stored data type (the default), or write HDF5, when the gaps and bad pixels matter. |
 | **SEM sizes depend on the segmentation**, and the default StarDist weights are trained on cell nuclei, not SEM. The scale is never read from the image. | Enter the calibration from the scale bar; check every outline; prefer a model trained on SEM images. |
-| **fit1d** (Predict parameters) offers spheres and vertical cylinders only, not random cylinders; with **Try …** compositions the Model's values and ranges are not passed. It needs the separately installed kit. | Use **The particles in Model** to pass fixed values and ranges; treat the result as a start for **Refine These Values**. Without the kit, use *Find the particle shape (no AI)*. |
+| **fit1d** (Predict parameters) offers spheres and vertical cylinders only, not random cylinders; with **Try …** compositions the Model's values and ranges are not passed. | Use **The particles in Model** to pass fixed values and ranges; treat the result as a start for **Refine These Values**. |
 | **2D Prediction reads CBF frames only.** | Convert other frames to CBF with the Format Converter. |
 | **2D Prediction applies no geometry and no correction to a frame**: the module's own preprocessing is all that runs (section 11.3). | Use a module only for data of the set-up it was trained for. |
 | **The Ag and Cu distribution modules of 2D Prediction declare no axes**: their maps and curves are drawn on a placeholder axis (0.05–15 nm), which is not a physical scale, and they are not attached to the SEM comparison (section 11.3). | Read only the shape of these distributions. When you know the axes of the trained model, add them to the module's `module.yaml`. |
@@ -3255,8 +3254,8 @@ contain the files. In a source checkout:
 
 The numerical methods of Fitting (*Refine the values in Model*, *Search the ranges, then refine*, *Find the
 particle shape (no AI)*) use no model files: the check does not concern them. *Predict parameters (fit1d)*
-needs its own kit under `utils/gisaxs1d_gui_kit` (or `GISAXS1D_KIT_HOME`); without it the method says where to
-put the folder.
+needs its own kit, which comes with GIMaP in `utils/gisaxs1d_gui_kit` (or the folder in `GISAXS1D_KIT_HOME`);
+without it the method says where the folder belongs.
 
 ### 14.4 Predict is disabled, or the model is not imported (2D Prediction)
 

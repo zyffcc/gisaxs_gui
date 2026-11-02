@@ -1,6 +1,7 @@
-"""The fit method ``fit1d`` of 1D Predict: the external gisaxs1d kit (network proposals + physical fit).
+"""The fit method ``fit1d`` of 1D Predict: the gisaxs1d kit (network proposals + physical fit).
 
-The kit is research code outside the program (``application.workflow_v5.fit1d_kit_home``): it is put on
+The kit is research code that comes with GIMaP in ``utils/gisaxs1d_gui_kit``
+(``application.workflow_v5.fit1d_kit_home``): it is put on
 ``sys.path`` and imported here only, inside the job process that runs ``run_workflow_job``. It needs numpy and
 scipy, no TensorFlow.
 
@@ -42,14 +43,15 @@ SCOPE = (
     "different curve from the same numbers. Parameter statuses and equivalent solutions: see warnings."
 )
 KIT_MISSING = (
-    "The fit1d kit was not found in {home}. Copy the folder gisaxs1d_gui_kit (it contains gisaxs1d_kit/, "
-    "app/, models/ and tables_packed/) to that place, or set the environment variable GISAXS1D_KIT_HOME to "
-    "the folder, then start GIMaP again."
+    "The fit1d kit was not found in {home}. It comes with GIMaP in utils/gisaxs1d_gui_kit (it contains "
+    "gisaxs1d_kit/, app/, models/ and tables_packed/): copy that folder again from the GIMaP download, or set the "
+    "environment variable GISAXS1D_KIT_HOME to a copy of it, then start GIMaP again."
 )
-KIT_BROKEN = "The fit1d kit in {home} could not be loaded ({reason}). Run its selftest, or copy the folder again."
+KIT_BROKEN = ("The fit1d kit in {home} could not be loaded ({reason}). Copy the folder utils/gisaxs1d_gui_kit again "
+              "from the GIMaP download.")
 QZ_ZERO = (
     "No qz of the cut was given: spheres are evaluated at qz = 0 (|q| = q_par). For a Yoneda cut set "
-    "“Cut qz” in Parameters…; the sphere radius depends on it."
+    "“Cut qz” (Fit step ▸ Options; in 1D Predict, Parameters…); the sphere radius depends on it."
 )
 SIGMA_ESTIMATED = (
     "The curve has no error bars: sigma was estimated by 1D Predict (Relative σ), so chi² and the errors "

@@ -131,7 +131,8 @@ python main.py
 
 The Sputter workspace's model is part of the repository (`utils/sputter_toolkit`) and runs on PyTorch
 (CPU), which its first **Predict** installs into the Python GIMaP runs in (about 1.2 GB; by hand:
-`python -m pip install -r requirements-sputter.txt`).
+`python -m pip install -r requirements-sputter.txt`). The fit1d kit of **Predict parameters (fit1d)** is part
+of the repository too (`utils/gisaxs1d_gui_kit`, about 62 MB) and needs only `requirements.txt`.
 
 **macOS and BornAgain.** BornAgain 24.1 has no macOS wheel on PyPI, so `requirements.txt` leaves it out on
 macOS: install it from the Homebrew formula `mlz/homebrew/bornagain@24.1` as a wheel built for the same
@@ -183,8 +184,8 @@ nanoparticles, GALAXI), about ten minutes each.
    particle shape (no AI)** (sphere, random and vertical cylinder from several starts), **Refine the values
    in Model**, **Search the ranges, then refine** or **AI proposal (1D Predict)** — and press **Fit**
    (`Ctrl+Return`); **Stop** keeps the best values so far of *Refine* and *Search* (a stopped shape search,
-   AI proposal or Predict gives no new result). **Predict parameters (fit1d)** needs the optional
-   fit1d kit, which is not part of this repository (manual, section 2.3).
+   AI proposal or Predict gives no new result). **Predict parameters (fit1d)** uses the
+   fit1d kit, which comes with GIMaP (`utils/gisaxs1d_gui_kit`; manual, section 6.4).
 3. **Results** gives χ²ᵣ, every value ± 1σ and warnings (a value at a bound, strongly correlated values).
    The **Fitting** menu saves the data and fit (CSV with a JSON record), the plot and the model.
 
@@ -299,8 +300,6 @@ Optional parts, each needed only for the function named:
   **Predict** (or by `Start_GIMaP.bat` in a source folder).
 - StarDist, to separate touching particles in SEM Particle Analysis, runs in a separate Python environment
   made from `requirements-sem-stardist.txt`, with a model folder of your own.
-- The fit1d kit (`utils/gisaxs1d_gui_kit/`, or the folder named in `GISAXS1D_KIT_HOME`) is needed for
-  **Predict parameters (fit1d)**.
 
 ## Development
 

@@ -1,6 +1,6 @@
 # Windows launchers end their lines with CRLF in every checkout, ZIP and release: cmd.exe misreads
 # blocks and labels of an LF-only .bat (the portable 0.0.2 shipped Start_GIMaP.bat with LF only).
-# The two folder rules below come later and win for their own files.
+# The folder rules below come later and win for their own files.
 *.bat text eol=crlf
 *.cmd text eol=crlf
 # The bundled 1D Predict model (Workflow V5) is checked file by file against SHA-256 manifests
@@ -14,3 +14,7 @@ modules/Fitting_1D_Model/Workflow_v5/** -text
 # files. Its text files end their lines with LF; with core.autocrlf a checkout would turn them into CRLF:
 # no line-ending conversion in this folder.
 utils/sputter_toolkit/** -text
+# The bundled fit1d kit (utils/gisaxs1d_gui_kit) is checked file by file against FILES_SHA256.json (sha256
+# of the bytes) before a release packs it; its text files end their lines with LF: no line-ending
+# conversion in this folder.
+utils/gisaxs1d_gui_kit/** -text

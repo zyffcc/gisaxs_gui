@@ -25,9 +25,9 @@ from ..views.step_widgets import fit_to_rows, show_line
 GISAXS_CUT = "native_detector_columns"
 """``observation["source"]`` of a GISAXS horizontal cut sent from Analyze."""
 RECOMMENDED = "Recommended for this curve: a GISAXS cut not fitted yet."
-RECOMMENDED_NO_KIT = ("Recommended for this curve: a GISAXS cut not fitted yet (Predict parameters needs the optional "
-                      "fit1d add-on, which is not installed).")
-"""… when the shape search is recommended because the fit1d kit is not installed (``recommended_method``)."""
+RECOMMENDED_NO_KIT = ("Recommended for this curve: a GISAXS cut not fitted yet (the kit of Predict parameters (fit1d) "
+                      "is missing here).")
+"""… when the shape search is recommended because the fit1d kit is missing (``recommended_method``)."""
 FIT1D_TIP = dict((key, description) for key, _title, description in METHODS)["fit1d"]
 SOURCES = {"model": " (Model)", "widened": " (widened here)", "follow": " (near the previous frame)",
            "bound_upper": " (a bound: every larger value fits as well)",
@@ -79,8 +79,8 @@ class Fit1DReviewMixin:
         self._look_for_fit1d_kit()
 
     def _look_for_fit1d_kit(self) -> None:
-        """Whether the optional fit1d kit is installed (looked for again with every curve opened), and the
-        tooltip of Predict parameters that says so: without the kit, that it is an add-on and where it goes."""
+        """Whether the fit1d kit is there (looked for again with every curve opened), and the tooltip of
+        Predict parameters that says so: without the kit, that it is missing and where it belongs."""
         self._fit1d_kit = fit1d_kit_available()
         index = self.method_combo.findData("fit1d")
         if index >= 0:
@@ -89,7 +89,7 @@ class Fit1DReviewMixin:
     # -- before a fit ------------------------------------------------------------------------
 
     def recommended_method(self) -> str:
-        """For a GISAXS horizontal cut that has not been fitted yet: fit1d when its kit is installed, else the shape
+        """For a GISAXS horizontal cut that has not been fitted yet: fit1d when its kit is there, else the shape
         search (when the page has it); else empty (no recommendation)."""
         session = self.session
         unfitted = session.result is None and session.native_result is None and not session.solutions
@@ -122,7 +122,7 @@ class Fit1DReviewMixin:
 
     def _refresh_fit1d_action(self) -> None:
         """The line under the method — only why it is recommended for this curve, or, for Predict without its kit,
-        that the add-on is missing and where it goes (what a method does is its tooltip) — and fit1d's notes."""
+        that the kit is missing and where it belongs (what a method does is its tooltip) — and fit1d's notes."""
         if not hasattr(self, "fit1d_composition") or not hasattr(self, "method_combo"):
             return
         method = self.method()
