@@ -28,16 +28,16 @@
 # problem go to the error stream, and the exit code is 1 when there is a problem.
 #
 # The packed environment is "gimap-release": Python 3.10 from conda-forge and everything else from
-# requirements.txt through pip, nothing more. It is kept apart from the environment you develop in:
+# requirements-release.txt through pip, nothing more. It is kept apart from the environment you develop in:
 # conda-pack refuses an environment where pip replaced files of conda packages, and every extra
 # package (numpy 2, BornAgain 21, test or research tools) would reach the users. Create it once
 # (conda-forge only: packages from Anaconda's "defaults" channel come under Anaconda's terms):
 #   conda create -n gimap-release -c conda-forge --override-channels python=3.10 -y
-#   conda run -n gimap-release python -m pip install -r requirements.txt
+#   conda run -n gimap-release python -m pip install -r requirements-release.txt
 # Do not run "conda clean --all" before a build: the conda package licences are read from the
 # package cache (pkgs\<package>\info\licenses).
 # Do not upgrade conda's pip or setuptools inside it, and do not add torch (the Sputter workspace
-# installs it on the first Predict). After requirements.txt changes, run the pip line again; when
+# installs it on the first Predict). After either requirements file changes, run the pip line again; when
 # conda-pack reports files "deleted/overwritten", remove the environment
 # (conda env remove -n gimap-release) and create it again.
 #

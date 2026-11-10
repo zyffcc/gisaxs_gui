@@ -65,16 +65,17 @@ would reach the users.
   conda is not on `PATH` in a normal shell.
 - Create the environment once, from conda-forge only. Packages from Anaconda's `defaults` channel come
   under Anaconda's terms of service, and `THIRD_PARTY_NOTICES.md` says the runtime's conda packages come
-  from conda-forge: the build stops when one does not. Then install `requirements.txt`:
+  from conda-forge: the build stops when one does not. Then install `requirements-release.txt`, the same
+  direct dependency versions used by the platform checks:
 
   ```powershell
   conda create -n gimap-release -c conda-forge --override-channels python=3.10 -y
-  conda run -n gimap-release python -m pip install -r requirements.txt
+  conda run -n gimap-release python -m pip install -r requirements-release.txt
   ```
 
 - Do not upgrade conda's pip or setuptools in it. Do not install torch (Sputter installs it on its first
   Predict), pytest or anything else.
-- After `requirements.txt` changes, run the pip line again. When conda-pack reports files
+- After `requirements.txt` or `requirements-release.txt` changes, run the pip line again. When conda-pack reports files
   "deleted/overwritten", remove the environment (`conda env remove -n gimap-release`) and create it again.
 - Do not run `conda clean --all` before a build. The licences of the conda packages (Python, OpenSSL,
   Tcl/Tk …) are read from the package cache, `pkgs\<package>\info\licenses`.
