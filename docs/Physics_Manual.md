@@ -4,6 +4,11 @@ This reference states what GIMaP computes, from a detector frame to a reported n
 
 Applies to GIMaP 0.2.0.
 
+Opened from **Help ▸ Physics and Methods**, this reference has a fixed, expandable chapter outline and
+**Search this document** for headings and text. Both work offline; click a result to jump to its section.
+Equations retain their original symbols, spacing and line breaks in fixed-width blocks. Scroll horizontally
+inside a wide block to read the complete equation and its number; the text remains selectable and copyable.
+
 The [User Manual](User_Manual.md) (`docs/User_Manual.md`, Help ▸ User Manual) explains how to use the program; this reference explains what the program does with the data. Both describe the same version. Where they seem to disagree, or where this text disagrees with the program, please report it.
 
 To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root of the repository, or Help ▸ How to Cite GIMaP…, and name the version you used. Methods taken from other work are cited where they are used; the full list is under References at the end.

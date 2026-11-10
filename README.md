@@ -161,6 +161,7 @@ nanoparticles, GALAXI), about ten minutes each.
 - [User Manual](docs/User_Manual.md), in Chinese [User_Manual_zh.md](docs/User_Manual_zh.md): how to use
   GIMaP, from installation to every output file. **Help ▸ User Manual** (`F1`) opens the
   manual in your browser, in the interface language.
+  The offline reading page has an expandable chapter outline and a search of headings and text.
 - [Physics and Methods](docs/Physics_Manual.md), in Chinese [Physics_Manual_zh.md](docs/Physics_Manual_zh.md):
   what GIMaP computes — geometry, q, calibration, corrections, cuts, uncertainties, models — with the
   assumptions, the limits and the references (**Help ▸ Physics and Methods**).

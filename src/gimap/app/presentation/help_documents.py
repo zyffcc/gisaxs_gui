@@ -15,7 +15,7 @@ page that works:
 A link to another Markdown document (the User Manual to ``Physics_Manual.md#…``, a link to
 ``CHANGELOG.md`` or ``THIRD_PARTY_NOTICES.md``) points at that document's page instead of the raw ``.md``:
 the documents linked are rendered too, each to a page of its own (``page_path``), and kept until their
-``.md`` changes (``write_page``).
+``.md`` changes (``write_page``). ``help_page`` adds the offline chapter navigation and text search.
 """
 
 from __future__ import annotations
@@ -35,6 +35,8 @@ from PyQt5.QtGui import QDesktopServices, QTextDocument
 from PyQt5.QtWidgets import QWidget
 
 from .app_dialogs import warn
+from .help_code import document_html
+from .help_page import documentation_page
 from .i18n import current_language, tr, trf
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -194,15 +196,6 @@ def absolute_links(page: str, folder: Path, page_of: Optional[PageOf] = None) ->
 
 
 _BODY = re.compile(r"<body[^>]*>(.*)</body>", re.S | re.I)
-STYLE = (
-    "body{max-width:980px;margin:32px auto;padding:0 24px;line-height:1.58;font-size:15px;"
-    "font-family:'Segoe UI','Microsoft YaHei',sans-serif;color:#1f2933;background:#ffffff}"
-    "p,li{white-space:pre-wrap}"
-    "h1,h2,h3,h4,h5,h6{margin-top:1.3em !important;margin-bottom:0.45em !important;line-height:1.3}"
-    "code,pre{background:#f4f6f8;border-radius:4px}pre{padding:12px;overflow-x:auto}a{color:#0b63ce}"
-    "img{max-width:100%;height:auto;border:1px solid #d9dee4;border-radius:6px}"
-    "table{border-collapse:collapse;margin:8px 0}td,th{border:1px solid #d9dee4;padding:4px 8px;vertical-align:top}"
-)
 
 
 def render_markdown(markdown: str, title: str, folder: Path, page_of: Optional[PageOf] = None, head: str = "") -> str:
@@ -211,17 +204,17 @@ def render_markdown(markdown: str, title: str, folder: Path, page_of: Optional[P
     ``absolute_links``). An empty ``title`` takes the text of the first heading; ``head`` goes into ``<head>``."""
     document = QTextDocument()
     document.setMarkdown(escape_raw_html(markdown))
-    found = _BODY.search(document.toHtml())
-    body = found.group(1) if found else document.toHtml()
+    rendered = document_html(document)
+    found = _BODY.search(rendered)
+    body = found.group(1) if found else rendered
     body = absolute_links(add_heading_anchors(body), folder, page_of)
     title = title or next(iter(heading_texts(body)), "") or "GIMaP"
-    return (f"<!doctype html><html><head><meta charset=\"utf-8\"><title>{html.escape(title)}</title>{head}"
-            f"<style>{STYLE}</style></head><body>{body}</body></html>")
+    return documentation_page(body, title, head)
 
 
 # -- the pages in the temporary folder ----------------------------------------------------------------
 
-PAGE_FORMAT = 2
+PAGE_FORMAT = 4
 """Goes up when the pages ``render_markdown`` writes change: a page kept from another format is rendered again."""
 _STAMP = re.compile(r'<meta name="gimap-help-page" content="([^"]*)">')
 

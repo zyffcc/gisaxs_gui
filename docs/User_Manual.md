@@ -19,6 +19,14 @@ what you decide, this manual names its section there.
 
 New to GIMaP? Start with chapter 1: two walk-throughs of about ten minutes each, on public data.
 
+Open **Help ▸ User Manual** (`F1`) for the offline reading page: a fixed, expandable chapter outline on
+the left and **Search this document**, which searches both headings and text. Click a chapter or a
+search result to jump to it; the outline marks your current section. Press `/` to focus search, `Enter`
+to open the first result and `Esc` to clear it. In a narrow window, **Contents** opens the navigation.
+The page follows your browser/system light or dark appearance; printing uses light colours.
+Formulas and commands keep their spacing and line breaks in fixed-width blocks; long lines scroll within
+the block. Inline code keeps its fixed-width formatting too.
+
 ## Contents
 
 1. Quick start
@@ -526,7 +534,8 @@ the folders GIMaP keeps, and the links to GitHub, the citation, the notices and 
 - **Tools ▸ 1D Predict — Fit Many Curves…** fits a list of curve files with the experimental neural
   model (chapter 6). The other tool windows are described in chapters 4 and 9.
 - **Help ▸ User Manual** opens this manual in your web browser; in the Chinese interface it opens the
-  Chinese edition. **Physics and Methods** (how GIMaP computes what it shows) and **Third-party
+  Chinese edition. Its fixed chapter outline and text search work offline. **Physics and Methods**
+  (how GIMaP computes what it shows) and **Third-party
   Notices** open the same way; a link from one of these documents to another opens the other one at
   that section. **Keyboard Shortcuts…** lists every key of the menus and of the pages
   in a table you can copy (`Ctrl+C`).
@@ -536,6 +545,9 @@ the folders GIMaP keeps, and the links to GitHub, the citation, the notices and 
   and numpy (no paths, no data) to the clipboard and opens a new issue on GitHub in your browser:
   paste them there. **Check for Updates…** opens the releases page on GitHub in your browser (newest
   first, pre-releases included); GIMaP itself makes no network request.
+
+![The offline help reader](manual_images/en/25_help_reader.png)
+*The help reader: expandable chapters and text search stay beside the document while you read.*
 
 ### 3.7 Keyboard shortcuts
 

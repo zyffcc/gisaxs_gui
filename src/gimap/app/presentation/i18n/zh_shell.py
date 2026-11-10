@@ -1,6 +1,17 @@
 """Chinese for the application shell and the shared components (Start page, sidebar, menus, Settings, toasts, plots, steps)."""
 
 SHELL_ZH = {
+    "Contents": "目录",
+    "Overview": "概览",
+    "Documentation": "帮助文档",
+    "Document navigation": "文档导航",
+    "Skip to content": "跳到正文",
+    "Search this document": "搜索本篇文档",
+    "Search headings and text…": "搜索标题和正文…",
+    "Search headings and text. Esc clears the search.": "搜索标题和正文，按 Esc 清空搜索。",
+    "{count} matching sections": "找到 {count} 个相关章节",
+    "Search results": "搜索结果",
+    "Back to top": "回到顶部",
     " (folder)": "（文件夹）",
     " (project)": "（项目）",
     "Expand &Sidebar": "展开侧栏(&S)",

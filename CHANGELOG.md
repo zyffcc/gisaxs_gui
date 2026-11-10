@@ -321,6 +321,12 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Documentation
 
+- Help documents open as offline reading pages with a fixed, expandable chapter outline, full-text
+  section search and a current-section marker. The reader supports English and Chinese, narrow windows,
+  light/dark browser appearance and light-colour printing; links between documents still open the named section.
+- Formula and command blocks retain their line breaks, indentation and fixed-width alignment, including
+  equation numbers. Long lines scroll inside the block. Inline code is preserved in paragraphs, tables and
+  links. Previously Qt's HTML export could flatten these blocks into ordinary paragraphs and drop code fonts.
 - The **User Manual** is rewritten along the work: a quick start on the public example data, then installation,
   the window, geometry and calibration, Analyze, Fitting, Compare, **Sputter** (chapter 8, a chapter of its own,
   in the order of the page), the tool windows (including SEM Particle Analysis), the AI assistant, Labs, a table

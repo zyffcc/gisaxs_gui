@@ -45,6 +45,10 @@
   会让后面的内容全部变空；`toHtml()` 之后给每个标题加上 GitHub 的锚点，相对链接和图片改成绝对的 `file:` URL。
   链到另一份 Markdown 文档的链接（如 `Physics_Manual.md#…`）改指那份文档的网页（`page_path`，同样带锚点）：被链到的文档
   也一并渲染，它们的 `.md` 没变时沿用临时文件夹里已有的网页。
+- `help_page.py` 和同名 CSS / JS：帮助网页的固定分级目录、章节全文搜索和当前位置提示。样式和脚本嵌入页面，
+  不依赖网络；导航文字按文档语言翻译，正文和原有锚点保留，浅色 / 深色跟随浏览器，窄窗口可展开目录。
+- `help_code.py`：按 Qt 的代码格式元数据恢复 `<pre><code>` 和行内 `<code>`，保留公式、编号与命令的原文和对齐；
+  不把公式转写成另一种数学记法。长行在代码块内横向滚动。
 - `help_dialogs.py`：Keyboard Shortcuts（菜单的快捷键从菜单实时读出，页面的快捷键在 `PAGE_KEYS` 一张表里，测试拿它对照窗口的
   每个 `QShortcut`）、How to Cite、About、Example Data 的文件夹对话框，以及 Report a Problem 复制的 `system_summary()`。
   读文件、复制示例的部分在 `app/help_commands.py`。

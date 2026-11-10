@@ -130,6 +130,8 @@ def _entries(menu):
 
 
 def test_the_manual_lists_the_entries_of_the_real_menus(menus) -> None:
+    from PyQt5.QtGui import QKeySequence
+
     from src.gimap.app.presentation.navigation import NAVIGATION_ITEMS
 
     manual = _text(MANUAL)
@@ -150,7 +152,11 @@ def test_the_manual_lists_the_entries_of_the_real_menus(menus) -> None:
                  # the keys of the pages, shown in the menus (as text after a tab: the page owns the key)
                  "edit_undo", "edit_redo", "analyze_repeat", "analyze_export", "analyze_batch", "fitting_fit"):
         action = menus.actions[name]
-        shortcut = action.shortcut().toString() or action.text().partition("\t")[2]
+        shortcut = action.shortcut().toString(QKeySequence.PortableText)
+        if not shortcut:
+            # Page-owned shortcuts in menu labels use platform glyphs (e.g. ⌘Z on macOS).
+            shown = action.text().partition("\t")[2]
+            shortcut = QKeySequence.fromString(shown, QKeySequence.NativeText).toString(QKeySequence.PortableText)
         assert shortcut and f"`{shortcut}`" in table, (name, shortcut)
 
 
