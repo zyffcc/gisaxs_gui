@@ -211,7 +211,8 @@ def test_canonical_centres_in_a_file_are_converted_to_the_fit_s_pixels(tmp_path:
         item["center_y_px"] += 0.5
     loaded = JsonCalibrationStorageAdapter().load(_write(tmp_path / "canonical.json", payload))
 
-    assert _centres(loaded) == pytest.approx(_centres(result))
+    for actual, expected in zip(_centres(loaded), _centres(result), strict=True):
+        assert actual == pytest.approx(expected)
     assert [c.distance_mm for c in loaded.candidates] == [c.distance_mm for c in result.candidates]
     assert "center_convention" not in loaded.metadata
     geometry = calibrated_geometry(loaded)
