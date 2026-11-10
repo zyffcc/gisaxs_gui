@@ -1058,7 +1058,8 @@ looked at every 2 s. New frames are listed and the newest is shown as soon as it
 written. Press **Watch** again to stop.
 
 - A file, or a set of module files, that grows frame by frame while the detector writes is followed
-  even when adding frames does not change the file size. Each look takes the frames it already held at the look before, so the newest frame,
+  even when adding frames does not change the file size or timestamp. Recently written files and files
+  held by their writer are inspected again; stable files keep their cached layout. Each look takes the frames it already held at the look before, so the newest frame,
   which may still be being written, waits for the next look. The Data step says *Still growing: frame N
   is the newest complete one*. A Series map or Batch Export started meanwhile takes only these frames.
   A program on the same Windows PC that writes the file with HDF5's file locking locks it against

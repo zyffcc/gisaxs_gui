@@ -32,7 +32,6 @@ FRAME_BEYOND = "frame {frame} of {frames}"  # IndexError: frame is 1-based
 _SETTLE_NS = 2_000_000_000  # a folder untouched for this long has no change hiding behind its timestamp
 _LISTINGS: dict[str, tuple[int, int, tuple[str, ...]]] = {}  # folder -> (listed at, folder mtime, names)
 _BURST = threading.local()
-_HANDLE_STAT = os.name == "nt"
 
 
 def is_hdf5(path: str | Path) -> bool:
@@ -119,13 +118,7 @@ def _canonical(path: str | Path) -> Path:
 
 def _stamp(path: str | Path) -> tuple:
     try:
-        if _HANDLE_STAT:
-            # Windows directory metadata can lag behind HDF5 writes that keep the file size unchanged.
-            # Query the file handle itself; no detector data are read or modified.
-            with open(path, "rb") as stream:
-                stat = os.fstat(stream.fileno())
-        else:
-            stat = os.stat(path)
+        stat = os.stat(path)
         return (str(path), stat.st_mtime_ns, stat.st_size)
     except OSError:
         return (str(path), 0, -1)
@@ -135,14 +128,28 @@ def _signature(paths: Iterable[str | Path]) -> tuple:
     return tuple(_stamp(path) for path in paths)
 
 
+def _reusable(stamp: tuple, checked_ns: int, *, live: bool = False) -> bool:
+    """A recent write can share a timestamp and size with the next HDF5 metadata update.
+
+    Only an inspection taken after the two-second settling window can be retained across calls.
+    A folder listing shares one snapshot within its operation, including recently inspected files.
+    Live/locked files are always retried on the next operation, even when their timestamp stands.
+    """
+    started = getattr(_BURST, "started_ns", None)
+    return ((started is not None and checked_ns >= started)
+            or (not live and checked_ns - stamp[1] > _SETTLE_NS))
+
+
 class one_listing_per_folder:
     """Within the block (of this thread) every folder is listed once: one answer for a whole file list."""
 
     def __enter__(self) -> None:
+        self.previous = (getattr(_BURST, "listings", None), getattr(_BURST, "started_ns", None))
         _BURST.listings = {}
+        _BURST.started_ns = time.time_ns()
 
     def __exit__(self, *_error: Any) -> None:
-        _BURST.listings = None
+        _BURST.listings, _BURST.started_ns = self.previous
 
 
 def _folder_names(folder: str) -> tuple[tuple[str, ...], Optional[int]]:

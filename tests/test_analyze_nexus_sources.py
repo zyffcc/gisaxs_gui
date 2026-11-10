@@ -386,6 +386,10 @@ def test_a_folder_is_listed_once_and_each_file_is_opened_once(tmp_path: Path, mo
     for scan in range(1, 41):
         for module in (1, 2, 3):
             _module(tmp_path / f"scan_{scan:05d}_m{module:02d}.nxs", module, frames=2)
+    # Archived files: recent writes are deliberately rechecked until their timestamps settle.
+    quiet = time.time_ns() - 60_000_000_000
+    for path in tmp_path.iterdir():
+        os.utime(path, ns=(quiet, quiet))
     listings: list[str] = []
     real_listdir = os.listdir
     monkeypatch.setattr(nexus_files.os, "listdir", lambda folder: listings.append(str(folder)) or real_listdir(folder))

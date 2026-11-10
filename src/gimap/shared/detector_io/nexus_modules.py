@@ -22,7 +22,7 @@ import h5py
 import numpy as np
 
 from .nexus_datasets import ImageStack, _text, image_stacks, natural_key
-from .nexus_files import UNFINISHED_AFTER_S, BeingWritten, LeftUnfinished, _stamp, open_nexus
+from .nexus_files import UNFINISHED_AFTER_S, BeingWritten, LeftUnfinished, _reusable, _stamp, open_nexus
 
 # English templates; presentation translates them with trf(template, **values).
 MODULES_UNEQUAL = ("Module files hold different numbers of frames ({detail}; the others {full}): "
@@ -54,8 +54,8 @@ _MODULE_NUMBER = re.compile(r"^(?P<stem>.+?)_?m\d{1,3}$", re.IGNORECASE)
 _CANDIDATES = 3  # other scans of a folder that are asked how many module files they have
 _LAMBDA_LAYOUT = re.compile(r"\s*(\d+)\s*[xX]\s*(\d+)\s*")
 
-# (file, dataset, detector group) -> (stamp, what the file says about being a module)
-_FACTS: dict[tuple[str, str, str], tuple[tuple, Optional[dict]]] = {}
+# (file, dataset, detector group) -> (stamp, what the file says about being a module, inspected at)
+_FACTS: dict[tuple[str, str, str], tuple[tuple, Optional[dict], int]] = {}
 _FACTS_REMEMBERED = 40_000  # beyond that the oldest quarter is forgotten (and simply asked again)
 _INDEXED: dict[int, tuple[tuple[str, ...], dict]] = {}  # id of a folder listing -> (the listing, its index)
 _LOCK = threading.Lock()
@@ -206,7 +206,7 @@ def remember_facts(member: Path, chosen: ImageStack, stamp: tuple, facts: Option
         if len(_FACTS) >= _FACTS_REMEMBERED:
             for old in list(_FACTS)[: _FACTS_REMEMBERED // 4]:
                 del _FACTS[old]
-        _FACTS[(os.path.normcase(str(member)), chosen.path, chosen.detector_group)] = (stamp, facts)
+        _FACTS[(os.path.normcase(str(member)), chosen.path, chosen.detector_group)] = (stamp, facts, time.time_ns())
 
 
 def forget_facts(path: Optional[Path] = None) -> None:
@@ -225,8 +225,9 @@ def _sibling_facts(member: Path, chosen: ImageStack) -> tuple[tuple, Optional[di
     stamp = _stamp(member)
     with _LOCK:
         known = _FACTS.get((os.path.normcase(str(member)), chosen.path, chosen.detector_group))
-    if known is not None and known[0] == stamp:
-        return known
+    if (known is not None and known[0] == stamp
+            and _reusable(stamp, known[2], live=bool(known[1] and known[1]["writing"]))):
+        return known[:2]
     with open_nexus(member) as handle:
         facts = _module_facts(handle, chosen)
     remember_facts(member, chosen, stamp, facts)

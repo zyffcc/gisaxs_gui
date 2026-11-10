@@ -533,6 +533,13 @@ def _count_opens(monkeypatch) -> list[str]:
     return opened
 
 
+def _settle_files(paths) -> None:
+    """Archived files, outside the timestamp settling window used for live acquisition."""
+    quiet = time.time_ns() - 60_000_000_000
+    for path in paths:
+        os.utime(path, ns=(quiet, quiet))
+
+
 def test_a_folder_is_listed_once_and_each_file_opened_once(tmp_path: Path, monkeypatch) -> None:
     for scan in (1, 2, 3):
         for module in range(1, 6):
@@ -541,6 +548,7 @@ def test_a_folder_is_listed_once_and_each_file_opened_once(tmp_path: Path, monke
     for index in (1, 2, 3):
         _frames_file(tmp_path / f"film{index}.nxs", np.zeros((1, H, W), dtype=np.int32))
     files = sorted(tmp_path.iterdir())
+    _settle_files(files)
     opened = _count_opens(monkeypatch)
     listings: list[str] = []
     real_listdir = os.listdir
@@ -568,6 +576,7 @@ def test_files_named_alike_that_are_no_module_set_are_opened_once_each(tmp_path:
     """A film series of one single-module Lambda: ``film1.nxs`` … all at the same position (never N × N opens)."""
     count = 40
     files = [_module(tmp_path / f"film{index}.nxs", 1, frames=1, position=[0.0, 0.0, 0.0]) for index in range(1, count + 1)]
+    _settle_files(files)
     opened = _count_opens(monkeypatch)
     stats: list[str] = []
     real_stat = os.stat
@@ -594,6 +603,7 @@ def test_files_named_alike_that_are_no_module_set_are_opened_once_each(tmp_path:
 
 def test_the_modules_of_a_set_are_opened_once_when_asked_one_after_the_other(tmp_path: Path, monkeypatch) -> None:
     paths = [_module(tmp_path / f"scan_m{module:02d}.nxs", module) for module in range(1, 7)]
+    _settle_files(paths)
     opened = _count_opens(monkeypatch)
     layouts = [cached_layout(path) for path in reversed(paths)]  # the last module first, as a watcher may meet them
     assert all(layout is layouts[0] and layout.kind == "module_set" for layout in layouts)
@@ -609,30 +619,29 @@ def test_a_growing_file_invalidates_the_cached_layout(tmp_path: Path, monkeypatc
             handle[f"{DET}/data"].resize(count, axis=0)
     grown = cached_layout(paths[0])
     assert grown is not first and grown.frames == 5 and grown.member_frames == (8, 5) and not grown.complete, _growth_state(paths, first)
-    assert grown.signature != first.signature and detect_nxs_frame_count(paths[1]) == 5
+    assert detect_nxs_frame_count(paths[1]) == 5
+    # Once the files have settled and been checked again, repeated requests avoid HDF5 opens.
+    later = time.time_ns() + 3_000_000_000
+    monkeypatch.setattr(nexus_files.time, "time_ns", lambda: later)
+    assert cached_layout(paths[0]) is grown
     opened = _count_opens(monkeypatch)
     assert cached_layout(paths[0]) is grown and opened == []
 
 
-def test_growing_modules_are_seen_when_directory_metadata_is_stale(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("after_settling", [False, True])
+def test_growing_modules_are_seen_with_unchanged_timestamps_and_sizes(tmp_path: Path, monkeypatch, after_settling) -> None:
     paths = [_module(tmp_path / f"growing_m{module:02d}.nxs", module, frames=3) for module in (1, 2)]
-    frozen = {str(path): path.stat() for path in paths}
+    frozen = {path: path.stat().st_mtime_ns for path in paths}
     first = cached_layout(paths[0])
     for count, path in zip((8, 5), paths, strict=True):
         with h5py.File(path, "a") as handle:
             handle[f"{DET}/data"].resize(count, axis=0)
-
-    class StaleDirectoryMetadata:
-        def stat(self, path, *args, **kwargs):
-            return frozen.get(str(path)) or os.stat(path, *args, **kwargs)
-
-        def __getattr__(self, name):
-            return getattr(os, name)
-
-    monkeypatch.setattr(nexus_files, "os", StaleDirectoryMetadata())
-    monkeypatch.setattr(nexus_files, "_HANDLE_STAT", False)
-    assert nexus_files._stamp(paths[0]) == first.signature[0]
-    monkeypatch.setattr(nexus_files, "_HANDLE_STAT", True)
+        os.utime(path, ns=(frozen[path], frozen[path]))
+    assert tuple(nexus_files._stamp(path) for path in paths) == first.signature
+    if after_settling:
+        # The last metadata update in a clock tick must still be seen when monitoring resumes later.
+        later = time.time_ns() + 3_000_000_000
+        monkeypatch.setattr(nexus_files.time, "time_ns", lambda: later)
     grown = cached_layout(paths[0])
     assert grown is not first and grown.frames == 5 and grown.member_frames == (8, 5), _growth_state(paths, first)
 

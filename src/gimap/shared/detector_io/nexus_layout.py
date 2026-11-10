@@ -14,9 +14,10 @@ The content decides, a file name only proposes: ``…_mNN`` siblings are a modul
 them hold the same dataset and module shape and carry pairwise distinct module positions
 (``<detector group>/translation/distance``; the decision is in ``nexus_modules``).  One file that does
 not fit, or two files with the same position, settle that the files are no set: nothing more is opened,
-and the verdict stands while those files are unchanged.  ``cached_layout`` repeats the inspection only
-when a file of the source changed (modification time and size of every member; for module-like names
-also the files next to it), so asking again costs ``os.stat`` calls.  A failed inspection is never stored.
+and the verdict stands while those files are unchanged. ``cached_layout`` retains settled inspections
+using modification time and size of every member (for module-like names also the files next to it).
+Recent writes and pending writers are rechecked: HDF5 shape changes can share a timestamp and size.
+Stable archived files cost only ``os.stat`` calls. A failed inspection is never stored.
 
 What cannot be known from one source alone is said as a remark, never decided silently:
 
@@ -35,7 +36,7 @@ import os
 import re
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -60,6 +61,7 @@ from .nexus_files import (
     _LISTINGS,
     _canonical,
     _folder_names,
+    _reusable,
     _signature,
     _stamp,
     is_hdf5,
@@ -187,6 +189,7 @@ class _Entry:
     watch: bool = False                  # a new file next to it can change the layout
     expires: Optional[float] = None      # when a file marked as being written counts as left by its writer
     neighbours: int = 0                  # module set: files of the largest other scan of the folder (by name)
+    checked_ns: int = field(default_factory=lambda: time.time_ns())
 
 
 _CACHE: dict[tuple[str, str], _Entry] = {}
@@ -335,7 +338,9 @@ def inspect_nexus(path: str | Path, dataset: Optional[str] = None) -> NexusLayou
 
 def _still_valid(entry: _Entry, path: Path) -> bool:
     # Every member, and every file next to it the decision was made with: unchanged since they were opened.
-    if any(_stamp(stamp[0]) != stamp for stamp in dict.fromkeys(entry.layout.signature + entry.watched)):
+    stamps = dict.fromkeys(entry.layout.signature + entry.watched)
+    live = bool(entry.layout.pending or entry.expires is not None)
+    if any(_stamp(stamp[0]) != stamp or not _reusable(stamp, entry.checked_ns, live=live) for stamp in stamps):
         return False
     if any(os.path.exists(name) for name in entry.missing):
         return False
@@ -359,14 +364,17 @@ def _still_valid(entry: _Entry, path: Path) -> bool:
 
 
 def cached_layout(path: str | Path, dataset: Optional[str] = None) -> NexusLayout:
-    """``inspect_nexus`` once per state of the files: nothing is opened while nothing changed."""
+    """Reuse settled layouts; recheck recent writes and files whose writers have not closed them."""
     path = _canonical(path)
     key = _cache_key(path, dataset)
     with _LOCK:
         entry = _CACHE.get(key)
     if entry is not None and _still_valid(entry, path):
         return entry.layout
+    previous = entry
     entry = _inspect(path, dataset)
+    if previous is not None and previous.layout.__dict__ == entry.layout.__dict__:
+        entry.layout = previous.layout  # keep the shared identity when a reinspection finds no change
     with _LOCK:
         if len(_CACHE) >= _REMEMBERED:
             for old in list(_CACHE)[: _REMEMBERED // 4]:
