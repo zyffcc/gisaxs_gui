@@ -35,7 +35,7 @@ from PyQt5.QtGui import QDesktopServices, QTextDocument
 from PyQt5.QtWidgets import QWidget
 
 from .app_dialogs import warn
-from .help_code import document_html
+from .help_code import document_html, protect_fences
 from .help_page import documentation_page
 from .i18n import current_language, tr, trf
 
@@ -203,8 +203,9 @@ def render_markdown(markdown: str, title: str, folder: Path, page_of: Optional[P
     images of ``folder`` (where the document lies) as absolute ``file:`` URLs (``page_of``: see
     ``absolute_links``). An empty ``title`` takes the text of the first heading; ``head`` goes into ``<head>``."""
     document = QTextDocument()
+    markdown, literals = protect_fences(markdown)
     document.setMarkdown(escape_raw_html(markdown))
-    rendered = document_html(document)
+    rendered = document_html(document, literals)
     found = _BODY.search(rendered)
     body = found.group(1) if found else rendered
     body = absolute_links(add_heading_anchors(body), folder, page_of)
@@ -214,7 +215,7 @@ def render_markdown(markdown: str, title: str, folder: Path, page_of: Optional[P
 
 # -- the pages in the temporary folder ----------------------------------------------------------------
 
-PAGE_FORMAT = 4
+PAGE_FORMAT = 5
 """Goes up when the pages ``render_markdown`` writes change: a page kept from another format is rendered again."""
 _STAMP = re.compile(r'<meta name="gimap-help-page" content="([^"]*)">')
 

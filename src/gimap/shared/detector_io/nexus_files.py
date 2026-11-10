@@ -32,6 +32,7 @@ FRAME_BEYOND = "frame {frame} of {frames}"  # IndexError: frame is 1-based
 _SETTLE_NS = 2_000_000_000  # a folder untouched for this long has no change hiding behind its timestamp
 _LISTINGS: dict[str, tuple[int, int, tuple[str, ...]]] = {}  # folder -> (listed at, folder mtime, names)
 _BURST = threading.local()
+_HANDLE_STAT = os.name == "nt"
 
 
 def is_hdf5(path: str | Path) -> bool:
@@ -118,7 +119,13 @@ def _canonical(path: str | Path) -> Path:
 
 def _stamp(path: str | Path) -> tuple:
     try:
-        stat = os.stat(path)
+        if _HANDLE_STAT:
+            # Windows directory metadata can lag behind HDF5 writes that keep the file size unchanged.
+            # Query the file handle itself; no detector data are read or modified.
+            with open(path, "rb") as stream:
+                stat = os.fstat(stream.fileno())
+        else:
+            stat = os.stat(path)
         return (str(path), stat.st_mtime_ns, stat.st_size)
     except OSError:
         return (str(path), 0, -1)

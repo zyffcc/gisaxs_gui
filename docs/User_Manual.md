@@ -24,7 +24,7 @@ the left and **Search this document**, which searches both headings and text. Cl
 search result to jump to it; the outline marks your current section. Press `/` to focus search, `Enter`
 to open the first result and `Esc` to clear it. In a narrow window, **Contents** opens the navigation.
 The page follows your browser/system light or dark appearance; printing uses light colours.
-Formulas and commands keep their spacing and line breaks in fixed-width blocks; long lines scroll within
+On Windows and macOS, formulas and commands keep their source spacing and line breaks in fixed-width blocks; long lines scroll within
 the block. Inline code keeps its fixed-width formatting too.
 
 ## Contents
@@ -1058,7 +1058,7 @@ looked at every 2 s. New frames are listed and the newest is shown as soon as it
 written. Press **Watch** again to stop.
 
 - A file, or a set of module files, that grows frame by frame while the detector writes is followed
-  while it grows: each look takes the frames it already held at the look before, so the newest frame,
+  even when adding frames does not change the file size. Each look takes the frames it already held at the look before, so the newest frame,
   which may still be being written, waits for the next look. The Data step says *Still growing: frame N
   is the newest complete one*. A Series map or Batch Export started meanwhile takes only these frames.
   A program on the same Windows PC that writes the file with HDF5's file locking locks it against

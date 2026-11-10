@@ -81,6 +81,9 @@ would reach the users.
   Tcl/Tk …) are read from the package cache, `pkgs\<package>\info\licenses`.
 - The Python on `PATH` that runs the build needs conda-pack: `python -m pip install --user conda-pack`, or
   `conda install -n base -c conda-forge conda-pack`.
+- The build and source setup scripts prefer their own PowerShell engine's built-in modules. This also
+  supports calls through Python/cmd launched by PowerShell 7, which can otherwise pass incompatible
+  module paths to Windows PowerShell ([Microsoft's module-path documentation](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_psmodulepath)).
 - Check the environment: `conda run -n gimap-release python -c "import PyQt5, bornagain, tensorflow, h5py, fabio"`.
 - Record what will be packed, for the release page and for readers who want to rebuild it:
 

@@ -604,6 +604,29 @@ def test_a_growing_file_invalidates_the_cached_layout(tmp_path: Path, monkeypatc
     assert cached_layout(paths[0]) is grown and opened == []
 
 
+def test_growing_modules_are_seen_when_directory_metadata_is_stale(tmp_path: Path, monkeypatch) -> None:
+    paths = [_module(tmp_path / f"growing_m{module:02d}.nxs", module, frames=3) for module in (1, 2)]
+    frozen = {str(path): path.stat() for path in paths}
+    first = cached_layout(paths[0])
+    for count, path in zip((8, 5), paths, strict=True):
+        with h5py.File(path, "a") as handle:
+            handle[f"{DET}/data"].resize(count, axis=0)
+
+    class StaleDirectoryMetadata:
+        def stat(self, path, *args, **kwargs):
+            return frozen.get(str(path)) or os.stat(path, *args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(os, name)
+
+    monkeypatch.setattr(nexus_files, "os", StaleDirectoryMetadata())
+    monkeypatch.setattr(nexus_files, "_HANDLE_STAT", False)
+    assert nexus_files._stamp(paths[0]) == first.signature[0]
+    monkeypatch.setattr(nexus_files, "_HANDLE_STAT", True)
+    grown = cached_layout(paths[0])
+    assert grown is not first and grown.frames == 5 and grown.member_frames == (8, 5)
+
+
 def test_a_module_that_arrives_later_joins_the_set(tmp_path: Path) -> None:
     _module(tmp_path / "scan_m02.nxs", 2)
     assert cached_layout(tmp_path / "scan_m02.nxs").kind == "stack"

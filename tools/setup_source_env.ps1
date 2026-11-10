@@ -27,6 +27,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Prefer this engine's modules when Python/cmd inherited a PowerShell 7 module path.
+$env:PSModulePath = "$PSHOME\Modules;$env:PSModulePath"
 # GIMAP_SETUP_NOSTART=1 sets up without starting (checks, automation), also when called by Start_GIMaP.bat.
 if ($env:GIMAP_SETUP_NOSTART -eq "1") { $NoStart = $true }
 $ProgressPreference = "SilentlyContinue"   # Invoke-WebRequest is very slow with its progress bar in PS 5.1

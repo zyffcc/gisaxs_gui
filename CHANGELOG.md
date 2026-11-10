@@ -13,6 +13,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 ### Release preparation — Windows and macOS
 
 - Removed Trainset Build from navigation, menus and application startup. Existing research files remain untouched.
+- Windows help preserves the original formula spacing and inline code across Qt versions. NeXus monitoring
+  refreshes file metadata so appended frames are detected even when the file size is unchanged.
+- Windows build and source setup scripts use their own PowerShell modules when launched through PowerShell 7.
 - XRR excludes integer negative gap codes while keeping floating negative data, reads urad/µrad/μrad correctly,
   rejects unknown angle units and uses transformed NeXus header beam centres.
 - Save Project restores the Sputter form and references its result folder; older projects clear that workspace.

@@ -61,6 +61,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# A Python process launched by PowerShell 7 can pass its module path to Windows PowerShell 5.1.
+# Prefer this engine's own built-in modules (Get-FileHash, Compress-Archive, etc.).
+$env:PSModulePath = "$PSHOME\Modules;$env:PSModulePath"
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
 function Require-Command([string]$Name, [string]$InstallHint) {

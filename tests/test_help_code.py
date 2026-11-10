@@ -47,7 +47,8 @@ def test_inline_symbols_paths_and_code_in_links_keep_code_semantics(tmp_path):
         "| Name | Meaning |\n|---|---|\n| `p_x` | pixel size |\n", "Code", tmp_path,
     )
     for literal in ("q_x", "α_i", "λ²", "array[i] < 0", "manual_name.md", "literal `backticks`", "p_x"):
-        assert f"<code>{html.escape(literal)}</code>" in page
+        assert f"<code>{html.escape(literal)}</code>" in page, re.findall(
+            r".{0,150}" + re.escape(html.escape(literal)) + r".{0,150}", page)
     assert '<h1 id="code-q_x"' in page
 
 
@@ -57,3 +58,24 @@ def test_indented_code_and_a_fenced_block_in_a_list_keep_indentation(tmp_path):
         "Code", tmp_path,
     )
     assert _code_blocks(page) == ["first\n  second\n", "a = 1\n  b = 2\n"]
+
+
+def test_fenced_literals_keep_spaces_and_separate_adjacent_blocks(tmp_path):
+    page = render_markdown("```\nfirst\n                  second\n```\n\n```\nthird\n```", "Code", tmp_path)
+    assert _code_blocks(page) == ["first\n                  second\n", "third\n"]
+    assert "GIMaPFence" not in page
+    assert _code_blocks(render_markdown("```", "Code", tmp_path)) == ["\n"]
+
+
+def test_old_qt_explicit_code_font_without_fixed_pitch_keeps_semantics():
+    from PyQt5.QtGui import QFontDatabase, QTextCharFormat, QTextCursor, QTextDocument
+    from src.gimap.app.presentation.help_code import document_html
+    document = QTextDocument()
+    document.setPlainText("q_x")
+    cursor = QTextCursor(document)
+    cursor.select(QTextCursor.Document)
+    format = QTextCharFormat()
+    format.setFontFamily(QFontDatabase.systemFont(QFontDatabase.FixedFont).family())
+    format.setFontFixedPitch(False)
+    cursor.mergeCharFormat(format)
+    assert "<code>q_x</code>" in document_html(document)
