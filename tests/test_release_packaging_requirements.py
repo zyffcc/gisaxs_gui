@@ -22,6 +22,7 @@ CODE = ("main.py", "src", "modules", "utils", "tools")
 # A requirement whose module has another name than the package.
 IMPORTED_AS = {
     "opencv-python": "cv2",
+    "conda-pack": "conda_pack",
     "pyyaml": "yaml",
     "pyqt5": "PyQt5",
     "tensorflow-intel": "tensorflow",
