@@ -45,7 +45,7 @@ jobs:
         run: python tools/check.py --research skip
       - name: Check release regressions
         if: github.event_name == 'workflow_dispatch' && inputs.check_scope == 'release-regression'
-        run: python tools/check.py --research skip -- tests/test_help_code.py tests/test_release_help_menu.py tests/test_release_packaging_list.py tests/test_nexus_layout.py tests/test_analyze_nexus_sources.py tests/test_release2_calibration_files.py
+        run: python tools/check.py --research skip -- tests/test_help_code.py tests/test_release_help_menu.py tests/test_release_packaging_list.py tests/test_nexus_layout.py tests/test_nexus_followups.py tests/test_nexus_reading.py tests/test_converted_frames_invalid_pixels.py tests/test_analyze_nexus_sources.py tests/test_release2_calibration_files.py tests/test_release_readiness.py
       - name: Record dependency versions
         if: always()
         run: python -m pip freeze > pip-freeze.txt

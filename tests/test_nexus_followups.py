@@ -430,6 +430,10 @@ def test_only_a_module_set_of_the_same_detector_counts_as_evidence(tmp_path: Pat
 def test_asking_the_other_scan_opens_no_file_twice(tmp_path: Path, monkeypatch) -> None:
     _scan(tmp_path, "scan_00001", (1, 2, 3))
     _scan(tmp_path, "scan_00002", (1, 2))
+    # Stable archived scans: recent HDF5 metadata writes are intentionally inspected again.
+    quiet = time.time_ns() - 60_000_000_000
+    for path in tmp_path.iterdir():
+        os.utime(path, ns=(quiet, quiet))
     opened: list[str] = []
     real = h5py.File
 
