@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import platform
 import re
 import shutil
@@ -73,6 +74,14 @@ def build(prefix: Path, output: Path) -> Path:
             shutil.copy2(ROOT / name, target)
         if kit_manifest:
             (application / KIT / MANIFEST).write_text(json.dumps(kit_manifest, indent=1) + '\n')
+        # Test the files that will actually ship, where omitted optional workspaces are absent.
+        check_home = Path(temporary) / 'check-home'
+        check_home.mkdir()
+        check_env = dict(os.environ, GIMAP_HOME=str(check_home), QT_QPA_PLATFORM='offscreen',
+                         GIMAP_SPUTTER_NO_INSTALL='1', PYTHONNOUSERSITE='1')
+        check_env.pop('PYTHONPATH', None)
+        subprocess.run([str(prefix / 'bin/python'), str(application / 'tools/offscreen_smoke.py')],
+                       env=check_env, cwd=temporary, check=True, timeout=90)
         licences = collect(prefix, package / 'licenses', ROOT)
         if not licences['ok']:
             raise ValueError('Incomplete dependency licences: ' + '; '.join(licences['problems']))

@@ -15,7 +15,7 @@ class ApplicationRuntime(QObject):
     status_updated = pyqtSignal(str)
     progress_updated = pyqtSignal(int)
 
-    def __init__(self, ui, parent=None, *, simulation_port=None):
+    def __init__(self, ui, parent=None):
         super().__init__(parent)
         self.ui = ui
         self.parent = parent
@@ -25,14 +25,12 @@ class ApplicationRuntime(QObject):
         )
         if self.app_context is None:
             raise ValueError("ApplicationRuntime requires AppContext")
-        if simulation_port is None:
-            raise ValueError("ApplicationRuntime requires an injected simulation port")
         components = getattr(ui, "components", None)
         if components is None:
             raise ValueError("ApplicationRuntime requires composed feature pages")
 
         self.settings = self.app_context.settings
-        self._compose_features(components, simulation_port)
+        self._compose_features(components)
         self.fitting_session = FittingSessionCoordinator(
             self.settings, self.fitting
         )
@@ -45,7 +43,7 @@ class ApplicationRuntime(QObject):
         self._setup_connections()
         QTimer.singleShot(200, self._delayed_feature_initialization)
 
-    def _compose_features(self, components, simulation_port) -> None:
+    def _compose_features(self, components) -> None:
         """Construct feature presentation runtimes with injected dependencies."""
         from src.gimap.features.fitting.bootstrap import create_fitting_view_model
         from src.gimap.features.fitting.presentation.view_binding import (
@@ -143,7 +141,7 @@ class ApplicationRuntime(QObject):
             binding.initialize()
 
     def _on_parameters_changed(self, module_name, parameters) -> None:
-        """Keep the latest parameters of a module. Nothing is said: Trainset sends them on every edit and
+        """Keep the latest parameters of a module. Nothing is said: the page sends them on edits and
         autosave, which would fill the status bar with noise (and push out the step instruction)."""
         self.current_parameters[module_name] = parameters
 

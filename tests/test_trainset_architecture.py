@@ -348,7 +348,7 @@ def test_design_and_configuration_use_cases_depend_only_on_ports(tmp_path):
     assert configuration.validate(merged, require_hpc=False)[0] is True
 
 
-def test_trainset_view_binding_receives_simulation_port_from_composition_root():
+def test_retired_trainset_accepts_an_injected_simulator_but_is_not_composed():
     binding = (
         ROOT / "src/gimap/features/trainset/presentation/view_binding.py"
     ).read_text(encoding="utf-8")
@@ -362,15 +362,15 @@ def test_trainset_view_binding_receives_simulation_port_from_composition_root():
     assert "DatasetGenerator(" not in binding
     assert "simulate_pattern(" not in binding
     assert "BornAgainSimulator(" not in main_controller
-    assert "simulation_port=simulation_port" in main_controller
-    assert "simulation_port=BornAgainSimulator(" in composition_root
+    assert "simulation_port" not in main_controller
+    assert "BornAgainSimulator" not in composition_root
 
 
 def test_trainset_view_binding_does_not_import_tensorflow_runtime():
     imports = [name for path in _binding_paths() for name in _imports(path)]
 
     assert not any(name.startswith("tensorflow") for name in imports)
-    assert "create_trainset_view_model" in (
+    assert "create_trainset_view_model" not in (
         ROOT / "src/gimap/app/runtime.py"
     ).read_text(encoding="utf-8")
 

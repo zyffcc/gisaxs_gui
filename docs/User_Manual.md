@@ -2055,7 +2055,7 @@ with native detector counts (Analyze's horizontal cut). Otherwise it falls back 
 Selecting a fit1d row keeps its original curve and components visible; a manual model is copied only as a starting
 point.
 
-**Where the results go.** Each run writes a new folder `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the GIMaP user data folder (for the portable version: the program folder). It holds `request.json`, `batch_summary.json`,
+**Where the results go.** Each run writes a new folder `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the GIMaP user data folder (also for the portable version). **Help ▸ Open User Data Folder** opens it. It holds `request.json`, `batch_summary.json`,
 `top20_candidates.json`, `fitting_run_summary.json` and, for every curve and half, `solutions.json` (parameters,
 units, the stage that ran and why), `display.npz` and `fitting_curves.csv` (*General V5* also writes
 `candidates.npz`). `request.json` and `fitting_run_summary.json` list the unit each curve's q was read in

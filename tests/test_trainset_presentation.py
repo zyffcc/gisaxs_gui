@@ -222,15 +222,14 @@ def test_trainset_workflow_shell_is_owned_by_python_views() -> None:
     }
 
 
-def test_application_shell_keeps_only_trainset_host() -> None:
+def test_application_shell_has_no_retired_trainset_host() -> None:
     app = _app()
     window = QMainWindow()
     ui = Ui_MainWindow()
     ui.setupUi(window)
 
-    assert ui.mainWindowWidget.indexOf(ui.trainsetBuildPage) == 0
-    assert ui.trainsetBuildPage.layout() is ui.verticalLayout_6
-    assert ui.verticalLayout_6.count() == 0
+    assert not hasattr(ui, "trainsetBuildPage")
+    assert not hasattr(ui, "verticalLayout_6")
 
     source = SHELL_VIEW.read_text(encoding="utf-8")
     for removed_name in (
@@ -248,7 +247,7 @@ def test_application_shell_keeps_only_trainset_host() -> None:
     app.processEvents()
 
 
-def test_app_composition_installs_trainset_page_before_controller_binding() -> None:
+def test_app_composition_does_not_install_the_retired_trainset_page() -> None:
     app = _app()
 
     class ComposedWindow(QMainWindow, Ui_MainWindow):
@@ -265,21 +264,9 @@ def test_app_composition_installs_trainset_page_before_controller_binding() -> N
     window.app_context = context
 
     components = MainWindowComponents(window)
-    page = components.trainset_page
-    binding = TrainsetViewBinding(
-        window,
-        simulation_port=SimulationStub(),
-        trainset_view_model=TrainsetViewModelStub(),
-        page=page,
-        project_root=PROJECT_ROOT,
-    )
-
-    assert window.mainWindowWidget.indexOf(window.trainsetBuildPage) == 0
-    assert window.verticalLayout_6.count() == 1
-    assert window.trainsetWorkspace is page
-    assert binding.page is page
-    assert not hasattr(binding, "_replace_legacy_page")
-    assert not hasattr(binding, "_legacy_page_widgets")
+    assert "trainset" not in components.pages
+    assert not hasattr(components, "trainset_page")
+    assert not hasattr(window, "trainsetWorkspace")
 
     window.close()
     context.jobs.shutdown()

@@ -62,3 +62,21 @@ def test_launcher_handles_unicode_spaces_moving_packages_and_bad_downloads(tmp_p
     shutil.move(str(package), moved)
     subprocess.run([str(moved / launcher.name)], env=env, check=True, capture_output=True)
     assert (data / 'calls.txt').read_text().splitlines() == calls + [str(moved / 'app/main.py')]
+
+
+def test_application_starts_without_the_retired_training_package(tmp_path):
+    """A complete source tree must not conceal an import that breaks the smaller portable package."""
+    code = '''
+import sys, importlib.abc, runpy
+from pathlib import Path
+class NoTrainset(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.startswith(('src.gimap.features.trainset', 'src.gimap.integrations.bornagain')):
+            raise ModuleNotFoundError('Retired workspace is not shipped: ' + fullname)
+sys.meta_path.insert(0, NoTrainset())
+runpy.run_path(str(Path(sys.argv[1]) / 'tools/offscreen_smoke.py'), run_name='__main__')
+'''
+    env = dict(os.environ, GIMAP_HOME=str(tmp_path), QT_QPA_PLATFORM='offscreen', GIMAP_SPUTTER_NO_INSTALL='1')
+    result = subprocess.run([sys.executable, '-c', code, str(ROOT)], env=env, capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'Offscreen startup OK' in result.stdout

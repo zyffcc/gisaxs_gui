@@ -288,7 +288,7 @@ def test_a_labs_parameter_file_of_an_earlier_version_loads_and_the_next_one_save
     with _window(tmp_path / "home", monkeypatch) as (binding, window, path):
         runtime = window.runtime  # the test window has no file store for these commands: the application's one
         labs = WorkspaceParameterCoordinator(
-            repository=JsonProjectParametersRepository(), trainset=runtime.trainset, fitting=runtime.fitting,
+            repository=JsonProjectParametersRepository(), fitting=runtime.fitting,
             prediction=runtime.prediction, status=lambda message: None)
         saved = tmp_path / "made_up_labs_parameters.json"
         assert labs.save(str(saved))

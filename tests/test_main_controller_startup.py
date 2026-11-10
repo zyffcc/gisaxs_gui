@@ -41,13 +41,13 @@ def test_delayed_startup_initializes_each_feature_binding_once() -> None:
     ]
 
 
-def test_main_composition_root_injects_bornagain_adapter() -> None:
+def test_main_composition_root_does_not_construct_the_retired_simulator() -> None:
     controller_source = RUNTIME.read_text(encoding="utf-8")
     main_source = (PROJECT_ROOT / "main.py").read_text(encoding="utf-8")
 
     assert "src.gimap.integrations.bornagain" not in controller_source
     assert "BornAgainSimulator(" not in controller_source
-    assert "simulation_port=BornAgainSimulator(runner=self.app_context.jobs)" in main_source
+    assert "BornAgainSimulator" not in main_source
 
 
 def test_application_runtime_uses_app_context_without_global_registry() -> None:

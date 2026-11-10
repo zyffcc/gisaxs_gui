@@ -31,7 +31,6 @@ from src.gimap.app.presentation.theme.appearance import Appearance
 from src.gimap.app.runtime import ApplicationRuntime
 from src.gimap.app.window_view import ApplicationWindowView
 from src.gimap.features.fitting import application as fitting_files
-from src.gimap.integrations.bornagain import BornAgainSimulator
 
 WINDOW_GEOMETRY_KEY = "window.geometry"
 CURVE_SUFFIXES = tuple(fitting_files.CURVE_SUFFIXES)
@@ -123,7 +122,6 @@ class MainWindow(QMainWindow, ApplicationWindowView):
             self.runtime = ApplicationRuntime(
                 self,
                 self,
-                simulation_port=BornAgainSimulator(runner=self.app_context.jobs),
             )
         except Exception as exc:  # keep the window usable; the error is shown, not hidden
             print(f"Deferred initialization failed: {exc}")

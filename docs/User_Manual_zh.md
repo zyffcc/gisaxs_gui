@@ -1653,7 +1653,7 @@ fit1d 有自己的物理模型（数目加权的截断高斯尺寸分布、Hosem
 
 选中 fit1d 的行时，图上保留它原来的曲线和分量；复制过去的手动模型只是起点。
 
-**结果写在哪里。** 每次运行在启动 GIMaP 的文件夹（便携版是程序文件夹）里新建一个文件夹
+**结果写在哪里。** 每次运行在 GIMaP 用户数据文件夹（便携版也相同）里新建一个文件夹；可用**帮助 ▸ 打开用户数据文件夹**（Help ▸ Open User Data Folder）打开该位置：
 `AI_Fitting_Output/v5_<日期>_<时间>_<微秒>/`。里面有 `request.json`、`batch_summary.json`、`top20_candidates.json`、
 `fitting_run_summary.json`，以及每条曲线每一半的 `solutions.json`（参数、单位、运行的阶段及原因）、`display.npz` 和
 `fitting_curves.csv`（*通用 V5* 还写 `candidates.npz`）。`request.json` 和 `fitting_run_summary.json` 列出每条曲线的 q
