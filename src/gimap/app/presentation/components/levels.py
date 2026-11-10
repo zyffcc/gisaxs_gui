@@ -143,13 +143,13 @@ def level_bar(image_item):
                 if compact:
                     style = self.axis.style
                     self._full_style = {"tickFont": style["tickFont"], "tickTextWidth": style["tickTextWidth"],
-                                        "tickTextOffset": style["tickTextOffset"][0]}  # [0]: a vertical axis
+                                        "tickTextOffset": style["tickTextOffset"][0], "autoExpandTextSpace": style["autoExpandTextSpace"]}  # [0]: a vertical axis
                     font = QFont(style["tickFont"] or self.axis.font())
                     if font.pointSizeF() > 0:
                         font.setPointSizeF(font.pointSizeF() * COMPACT_FONT_SCALE)
                     else:
                         font.setPixelSize(max(6, round(font.pixelSize() * COMPACT_FONT_SCALE)))
-                    self.axis.setStyle(tickFont=font, tickTextWidth=12, tickTextOffset=3)
+                    self.axis.setStyle(tickFont=font, tickTextWidth=20, tickTextOffset=3, autoExpandTextSpace=False)
                 else:
                     self.axis.setStyle(**self._full_style)
                 self.set_label(self._label)

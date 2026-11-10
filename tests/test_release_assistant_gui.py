@@ -305,7 +305,7 @@ def test_find_geometry_says_at_once_that_the_calibration_was_searched(zh) -> Non
     Automatically (the Results tab, with the path, is not brought forward for a geometry-only run)."""
     from src.gimap.features.assistant.presentation import automatic_outcome
 
-    name = Path(LONG_PATH).name
+    name = "Pilatus1M_long_name_00001.poni"
     apply_language(DEFAULT_LANGUAGE)
     state, line = automatic_outcome(_geometry_report(_searched_decision()))
     assert state == "ok"

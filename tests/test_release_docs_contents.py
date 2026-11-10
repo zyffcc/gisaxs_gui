@@ -205,13 +205,15 @@ def test_the_readme_counts_the_pages_of_the_smoke_check() -> None:
 
 
 def test_where_1d_predict_writes_is_what_the_documents_say() -> None:
-    """Every run goes to ``AI_Fitting_Output/v5_<date>_<time>_<µs>`` under the working folder (three call sites)."""
-    fitting = ROOT / "src" / "gimap" / "features" / "fitting" / "presentation"
-    for source in (fitting / "workflow_v5_dialog.py", fitting / "single" / "run.py",
-                   fitting / "bindings" / "ai_job_execution.py"):
+    """Each caller uses the same writable user-data output root."""
+    fitting = ROOT / "src/gimap/features/fitting/presentation"
+    for source in (fitting / "workflow_v5_dialog.py", fitting / "single/run.py",
+                   fitting / "bindings/ai_job_execution.py"):
         code = _text(source)
-        assert '"AI_Fitting_Output"' in code and "Path.cwd()" in code, source.name
-        assert '("v5_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f"))' in code, source.name
+        assert "src.gimap.integrations.state.run_paths" in code
+        assert "Path.cwd()" not in code
+    helper = _text(ROOT / "src/gimap/integrations/state/run_paths.py")
+    assert 'user_data_dir() / "AI_Fitting_Output"' in helper
     zh = MANUAL.with_name("User_Manual_zh.md")
     for path in (README, MANUAL, CHANGELOG):
         assert "AI_Fitting_Output/v5_<date>_<time>_<µs>/" in _text(path), path.name

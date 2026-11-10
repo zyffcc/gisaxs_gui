@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 KIT = "utils/gisaxs1d_gui_kit"
 KIT_DIR = ROOT / KIT
 MANIFEST = "FILES_SHA256.json"
-DOCUMENTATION = {"README.md", "SOURCE.json"}
+DOCUMENTATION = {"README.md"}
 """In the manifest, but not runtime files: the release package leaves them out."""
 REAL_DATA_MODULES = {"__init__.py", "symmetry.py", "yoneda_cut.py"}
 """The only modules of ``app/research/real_data`` the fit imports; the others are validation scripts on measured
@@ -156,7 +156,7 @@ def test_the_source_record_names_its_origin_what_was_left_out_and_its_patches():
     for patch in source["local_patches"]:
         assert patch["files"] and patch["change"] and patch["reason"]
         assert all((KIT_DIR / name).is_file() for name in patch["files"]), patch["files"]
-        assert set(patch["files"]) <= set(source["upstream_sha256_of_patched_files"])
+        assert set(patch["files"]) <= set(source["upstream_sha256_of_patched_files"]) | set(patch.get("added_files", []))
 
 
 def test_no_measurements_selftests_or_research_notes_are_bundled():

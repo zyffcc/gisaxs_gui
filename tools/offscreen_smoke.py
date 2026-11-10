@@ -57,12 +57,12 @@ def main() -> int:
     )
     bindings = tuple(
         name
-        for name in ("fitting", "prediction", "trainset")
+        for name in ("fitting", "prediction")
         if getattr(window.runtime, name, None) is not None
     )
     compare = getattr(window.components, "compare_page", None)
     sputter = getattr(window.components, "sputter_page", None)
-    if window.mainWindowWidget.count() != 7 or len(bindings) != 3 or compare is None or sputter is None:
+    if window.mainWindowWidget.count() != 6 or len(bindings) != 2 or compare is None or sputter is None:
         raise RuntimeError(
             f"Unexpected workspace composition: pages={window.mainWindowWidget.count()}, "
             f"bindings={bindings}"

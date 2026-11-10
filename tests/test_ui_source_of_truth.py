@@ -144,7 +144,6 @@ def test_application_shell_view_contains_hosts_not_feature_controls() -> None:
         SOURCE_ROOT / "app/presentation/views/main_window_view.py"
     ).read_text(encoding="utf-8")
     for host in (
-        "trainsetBuildPage",
         "gisaxsPredictPageHost",
         "gisaxsFittingPageHost",
         "comparePageHost",

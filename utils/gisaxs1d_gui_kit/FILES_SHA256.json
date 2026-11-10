@@ -61,10 +61,11 @@
   "models/general/weights_numpy.npz": "05c66708e5f81c3690bcff8789d170eaf188f751cce5bef66ffa809cb1cd4868",
   "models/models.json": "924689da243adc18394a481272d1ce7444e61a7a9bcb35bc562015371c446ccd",
   "README.md": "95ec7645fe91efa9c7e288649bdbafa29864746350a9b0b80cdca3bc4726ec50",
-  "SOURCE.json": "3bf64671f0c46e36d4e24461a2dd6522aff84c8b9a51ce86ba6164b458ad0d95",
+  "SOURCE.json": "30c3e4daa01f21919aba4591ab7f831673d2cdd0a4b7164e0f872743aa47331c",
   "tablepack.py": "7ed713c94a9a82fbc763b8dadad3fff3b7e67d5b1bd2b61213e5f82f81269eb1",
   "tables_packed/ff_1_number_v2.fft": "db43c1492ee1eb2f11e1fce717df61230c159c64c953d0a3801275bebf735515",
   "tables_packed/ff_2_number_v2.fft": "9e17ce40b0ea8d6a3b1b6bff34aaf2842f1380920f0487d22464e099d52f435b",
-  "tables_packed/ff_3_number_v2.fft": "726b95dd5872f1ca0ef61386874792cabe3fdc0791632426d49a55a97ba58592"
+  "tables_packed/ff_3_number_v2.fft": "726b95dd5872f1ca0ef61386874792cabe3fdc0791632426d49a55a97ba58592",
+  "LICENSE": "db1bbee832b729cc6a08c381c8e00d915d37ca657990fe016ca2d6992238f395"
  }
 }

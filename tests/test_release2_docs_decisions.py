@@ -454,7 +454,7 @@ def test_the_xrr_window_shows_what_the_documents_say() -> None:
         assert "pixel centres counted from 0" in record["columns"][column]
 
 
-def test_the_nexus_header_limitation_of_the_xrr_window_is_still_true(tmp_path: Path) -> None:
+def test_xrr_and_analyze_use_the_same_nexus_header_coordinates(tmp_path: Path) -> None:
     """A made-up NeXus file (not written by the Lambda server) whose header points at one marked pixel.
 
     Since NeXus files are read by content, only files of the Lambda server are turned (transpose and flip) when
@@ -484,14 +484,9 @@ def test_the_nexus_header_limitation_of_the_xrr_window_is_still_true(tmp_path: P
     )
     from src.gimap.shared.detector_io import load_detector_image
 
-    limitations = " ".join(_part(_text(CHANGELOG), "### Known limitations", "### ").split())
-    section = " ".join(_part(_text(MANUAL), "### 9.2 XRR Series Extractor", "### ").split())
-    for text in (limitations, section):
-        assert "without the turn (transpose and flip) the frame gets when it is loaded" in text
-        assert "*from file*" in text and "replaces the centre of the last calibration" in text
-        assert "check on the preview that the cross lies on the direct beam" in text.lower()
-        assert "**Pick direct-beam center**" in text and "CBF series are not affected" in text
-    assert "已知限制：NeXus 头里的光束中心" in _text(XRR_PAGE)
+    section = _part(_text(MANUAL), "### 9.2 XRR Series Extractor", "### ")
+    assert "XRR and Analyze now use the same displayed centre" in section
+    assert "已知限制：NeXus" not in _text(XRR_PAGE)
 
     marked = 1000.0
     stored = np.zeros((40, 60), dtype=np.float32)  # the fast axis of a NeXus image is its last one
@@ -535,11 +530,7 @@ def test_the_nexus_header_limitation_of_the_xrr_window_is_still_true(tmp_path: P
         assert window.geometry_source_labels["center_y"].text() == "from file"
         # "the two numbers of the header as column and row of the frame it shows" (shown 0.5 px higher)
         shown = (window.center_x_spin.value(), window.center_y_spin.value())
-        assert shown == (along_fast + 0.5, along_slow + 0.5), (
-            "the XRR window no longer takes a NeXus header centre as column and row of the frame it shows: "
-            "remove the limitation from CHANGELOG.md, docs/User_Manual.md (sections 9.2 and 13) and "
-            "docs/ui/workspaces/xrr.md"
-        )
+        assert shown == (header_x, header_y)
         # Read as stored, the header's column and row are those of the frame shown: a one-pixel ROI reads the mark.
         geometry = window._geometry()
         read = extract_circular_roi(frame, None, geometry.beam_center_x_px, geometry.beam_center_y_px, 0, "sum")

@@ -112,7 +112,7 @@ def test_the_peak_table_is_compact_and_says_the_rest_in_its_tooltips() -> None:
 
 
 @pytest.mark.parametrize("language", ["en", "zh"])
-def test_the_peak_table_fits_the_results_tab_of_a_1280_px_window(language, zh) -> None:
+def test_the_peak_table_fits_the_results_tab_of_a_1280_px_window(language) -> None:
     _app()
     apply_language(language)
     parent = QWidget()
@@ -127,6 +127,7 @@ def test_the_peak_table_fits_the_results_tab_of_a_1280_px_window(language, zh) -
     assert needed <= table.viewport().width(), (needed, table.viewport().width())
     assert table.horizontalScrollBar().maximum() == 0  # nothing to scroll sideways
     parent.close()
+    apply_language(DEFAULT_LANGUAGE)
 
 
 def test_compact_words() -> None:

@@ -73,7 +73,7 @@ def test_parameters_loaded_through_the_shell_are_not_validated(tmp_path):
     for new_reference in (False, True):
         _previewed(page)
         # File ▸ Load parameters: WorkspaceParameterCoordinator.load → trainset.set_parameters
-        window.runtime.workspace_parameters.trainset.set_parameters(
+        binding.set_parameters(
             _other_design(binding, tmp_path, new_reference=new_reference)
         )
         _settle(0.1)

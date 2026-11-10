@@ -330,11 +330,8 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
             return
         try:
             self.save_settings()
-            self.output_dir = (
-                Path.cwd()
-                / "AI_Fitting_Output"
-                / ("v5_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f"))
-            )
+            from src.gimap.integrations.state.run_paths import fitting_run_directory
+            self.output_dir = fitting_run_directory()
             payload = dict(
                 model_path=str(bundled_workflow()),
                 output_dir=str(self.output_dir),

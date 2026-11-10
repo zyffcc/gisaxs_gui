@@ -42,6 +42,9 @@ def collect(components, page: str = "", path=None) -> dict:
     compare = getattr(components, "compare_page", None)
     if compare is not None:
         data["compare"] = compare.project_state(path)
+    sputter = getattr(components, "sputter_page", None)
+    if sputter is not None:
+        data["sputter"] = sputter.project_state()
     return data
 
 
@@ -93,6 +96,10 @@ def missing(data: dict, path=None) -> list[str]:
     if compare.get("arrays_file") and path is not None:
         sidecar = Path(path).parent / str(compare["arrays_file"])
         named.append((str(sidecar), sidecar.exists()))
+    for key in ("scan_folder", "mask", "result_folder"):
+        value = _part(data, "sputter").get(key)
+        if value:
+            named.append((str(value), Path(value).exists()))
     gone, seen = [], set()
     for item, there in named:
         if not there and item not in seen:
@@ -179,6 +186,9 @@ def apply(components, data: dict, path=None) -> list[str]:
     compare = getattr(components, "compare_page", None)
     if compare is not None:  # a project without Compare (an older file): no series, not those of before
         notes += compare.apply_project_state(_part(data, "compare"), path)
+    sputter = getattr(components, "sputter_page", None)
+    if sputter is not None:
+        notes += sputter.apply_project_state(_part(data, "sputter"))
     return notes
 
 

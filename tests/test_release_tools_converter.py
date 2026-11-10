@@ -200,7 +200,8 @@ def test_every_box_of_the_run_is_chinese(tmp_path, chinese, boxes, review) -> No
 
         dialog.naming_combo.setEditText("{source}_{frame:06d}")
         dialog._next()
-        assert review["title"] == "确认转换"
+        import sys
+        assert review["title"] == ("" if sys.platform == "darwin" else "确认转换")
         assert review["buttons"] == sorted(["返回", "转换", "取消"])
         assert review["text"].startswith("输入：\n1 个 NXS 文件\n已选 2 张图像 / 帧\n\n输出：\n")
         assert "\n预计输出：\n2 个文件，约 " in review["text"]

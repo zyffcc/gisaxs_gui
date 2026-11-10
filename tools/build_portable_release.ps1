@@ -126,6 +126,7 @@ Require-Command "git" "Install Git for Windows: the application file list is wha
 
 # Tracked, but not part of the application: working papers and development records.
 $NotShipped = @(
+    '^src/gimap/features/trainset/',
     '^docs/research/',
     '^work/',
     '^GISAXS_HANDOFF_[^/]*\.md$'

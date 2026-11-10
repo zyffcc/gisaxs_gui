@@ -33,12 +33,11 @@ from src.gimap.features.prediction.presentation import (
     PredictCard,
     PredictModelLibraryCard,
 )
-from src.gimap.features.trainset.presentation import TrainsetBuildPage
 from src.gimap.features.fitting.presentation import FittingWorkspace
 from src.gimap.shared.detector_io import DETECTOR_SUFFIXES
 
 SIDEBAR_COLLAPSED_KEY = "shell.sidebar_collapsed"
-STATUS_BAR_PAGES = ("predict", "trainset")
+STATUS_BAR_PAGES = ("predict",)
 """The Labs pages report through the status bar under the page; every other page has its own status line."""
 TASK_MODES = {"giwaxs": "GIWAXS", "gisaxs": "GISAXS"}
 
@@ -69,7 +68,6 @@ class MainWindowComponents(HandoverMixin):
         self.preferences = ui.app_context.preferences
         self.task_runner = TaskRunner(ui.centralwidget)
         self._assistant = None
-        self.trainset_page = self._create_trainset_page()
         self.analyze_page = self._create_analyze_page()
         self.compare_page = self._create_compare_page()
         self.sputter_page = self._create_sputter_page()
@@ -92,7 +90,6 @@ class MainWindowComponents(HandoverMixin):
             "analyze": ui.analyzePage,
             "fitting": ui.gisaxsFittingPage,
             "predict": ui.gisaxsPredictPage,
-            "trainset": ui.trainsetBuildPage,
             "compare": self.compare_page,
             "sputter": self.sputter_page,
         }
@@ -118,17 +115,6 @@ class MainWindowComponents(HandoverMixin):
         self.show_page("home")
 
     # -- pages ------------------------------------------------------------
-
-    def _create_trainset_page(self) -> TrainsetBuildPage:
-        host = self.ui.trainsetBuildPage
-        layout = host.layout()
-        if layout is None:  # an empty QLayout is falsy (len == 0)
-            layout = QVBoxLayout(host)
-        layout.setContentsMargins(0, 0, 0, 0)
-        page = TrainsetBuildPage(host)
-        layout.addWidget(page)
-        self.ui.trainsetWorkspace = page
-        return page
 
     def _create_compare_page(self):
         """Compare: Analyze's Series maps (Send to Compare) and curve files side by side."""
@@ -501,7 +487,6 @@ class MainWindowComponents(HandoverMixin):
                       getattr(self, "sputter_page", None), workspace,
                       getattr(workspace, "fit_page", None), getattr(workspace, "series_page", None),
                       self._labs_page(getattr(runtime, "prediction", None), self.predict_workspace),
-                      self._labs_page(getattr(runtime, "trainset", None), self.trainset_page),
                       self._assistant, *(tools.windows() if tools is not None else ()))
         pages, seen = [], set()
         for page in candidates:

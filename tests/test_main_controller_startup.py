@@ -36,7 +36,6 @@ def test_delayed_startup_initializes_each_feature_binding_once() -> None:
 
     assert _binding_initialize_calls(_method(tree, "_initialize_ui")) == []
     assert _binding_initialize_calls(_method(tree, "_delayed_feature_initialization")) == [
-        "trainset",
         "fitting",
         "prediction",
     ]

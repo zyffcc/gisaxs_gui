@@ -131,13 +131,19 @@ class LocalXrrSeriesRepository:
     def load_frame(self, frame: XrrFrameRef) -> XrrDetectorFrame:
         from src.gimap.shared.detector_io import load_detector_image
 
+        from src.gimap.shared.detector_io.output_values import invalid_pixels
+
         loaded = load_detector_image(frame.path, frame_idx=frame.frame_index)
+        metadata = dict(loaded.metadata)
+        if metadata.get("format") in {"nxs", "hdf5"}:
+            center = metadata.get("header_beam_center")
+            # A stitched module set has no unambiguous single header centre. Do not reuse its raw coordinates.
+            metadata["beam_center_x_px"] = None if center is None else float(center[0]) - 0.5
+            metadata["beam_center_y_px"] = None if center is None else float(center[1]) - 0.5
         return XrrDetectorFrame(
             data=np.asarray(loaded.data, dtype=np.float32),
-            invalid_mask=(
-                None if loaded.mask is None else np.asarray(loaded.mask, dtype=bool)
-            ),
-            metadata=dict(loaded.metadata),
+            invalid_mask=invalid_pixels(loaded.data, loaded.mask, loaded.metadata.get("stored_dtype")),
+            metadata=metadata,
         )
 
     @classmethod
@@ -246,10 +252,17 @@ class LocalXrrSeriesRepository:
             raise ValueError(
                 f"NXS angle dataset contains {values.size} values but the series has {count} frames."
             )
-        if "mrad" in units:
+        units = units.strip().replace("µ", "u").replace("μ", "u")
+        if units in {"urad", "microradian", "microradians"}:
+            values = np.degrees(values / 1e6)
+        elif units in {"mrad", "milliradian", "milliradians"}:
             values = np.degrees(values / 1000.0)
         elif units in {"rad", "radian", "radians"}:
             values = np.degrees(values)
+        elif units not in {"", "deg", "degree", "degrees", "°"}:
+            raise ValueError(f"Unsupported angle unit {units!r}; use degrees, rad, mrad or urad.")
+        if not np.isfinite(values).all():
+            raise ValueError("The angle dataset contains non-finite values.")
         return values
 
     @staticmethod

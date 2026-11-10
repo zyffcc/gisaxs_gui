@@ -1,0 +1,16 @@
+# Reproducible direct dependencies for Python 3.10 on Windows x64 and macOS arm64 / x86_64.
+# Archive pip-freeze.txt and conda-explicit.txt with each build to pin transitive dependencies too.
+-r requirements.txt
+numpy==1.26.4
+scipy==1.15.3
+threadpoolctl==3.6.0
+matplotlib==3.10.9
+pyqtgraph==0.13.7
+PyQt5==5.15.11
+opencv-python==4.11.0.86
+h5py==3.16.0
+hdf5plugin==7.0.0
+fabio==2025.10.0
+PyYAML==6.0.3
+tensorflow-intel==2.15.0; platform_system == 'Windows'
+tensorflow==2.15.1; platform_system != 'Windows'

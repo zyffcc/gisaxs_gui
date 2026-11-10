@@ -38,7 +38,6 @@ class ApplicationRuntime(QObject):
         )
         self.workspace_parameters = WorkspaceParameterCoordinator(
             repository=self.app_context.project_parameters,
-            trainset=self.trainset,
             fitting=self.fitting,
             prediction=self.prediction,
             status=self.status_updated.emit,
@@ -55,21 +54,6 @@ class ApplicationRuntime(QObject):
         from src.gimap.features.prediction.bootstrap import create_prediction_view_model
         from src.gimap.features.prediction.presentation.view_binding import (
             PredictionViewBinding,
-        )
-        from src.gimap.features.trainset.bootstrap import create_trainset_view_model
-        from src.gimap.features.trainset.presentation.view_binding import (
-            TrainsetViewBinding,
-        )
-
-        self.trainset = TrainsetViewBinding(
-            self.ui,
-            self,
-            simulation_port=simulation_port,
-            trainset_view_model=create_trainset_view_model(
-                self.app_context, simulation_port
-            ),
-            page=components.trainset_page,
-            project_root=Path(__file__).resolve().parents[3],
         )
         self.fitting = FittingViewBinding(
             self.ui,
@@ -92,7 +76,6 @@ class ApplicationRuntime(QObject):
         try:
             print("Application runtime: Starting delayed feature initialization...")
             self._initialize_ui()
-            self.trainset.initialize()
             self.fitting.initialize()
             workspace = getattr(self.ui, "fittingWorkspace", None)
             if workspace is not None and hasattr(workspace, "attach_legacy"):
@@ -109,23 +92,6 @@ class ApplicationRuntime(QObject):
             # No timeout: a step instruction ("Click the direct-beam position …") stays while its mode lasts,
             # until the next message replaces it. Fixed English texts are translated here (the zh table).
             self.status_updated.connect(lambda text: statusbar.showMessage(tr(str(text))))
-
-        trainset = self.trainset
-        # Step instructions and job messages of Trainset Build (the status bar is shown on the Labs pages).
-        # The two Labs pages share the bar: a page that is not shown does not write over the other's line
-        # (each page keeps its last message and shows it again when it is opened).
-        trainset.status_updated.connect(lambda text: self._page_says("trainset", text))
-        trainset.parameters_changed.connect(self._on_parameters_changed)
-        trainset.generation_started.connect(
-            lambda: self._page_says("trainset", "Trainset generation started...")
-        )
-        trainset.generation_finished.connect(
-            lambda: self._page_says("trainset", "Trainset generation completed!")
-        )
-        trainset.progress_updated.connect(self.progress_updated)
-        trainset.prediction_module_registered.connect(
-            self._open_registered_prediction_module
-        )
 
         fitting = self.fitting
         fitting.parameters_changed.connect(
@@ -208,11 +174,6 @@ class ApplicationRuntime(QObject):
 
     def handle_window_close(self) -> None:
         self.save_session_on_close()
-
-    @property
-    def trainset_controller(self):
-        """Deprecated runtime attribute retained for third-party integrations."""
-        return self.trainset
 
     @property
     def gisaxs_predict_controller(self):

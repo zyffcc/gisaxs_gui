@@ -114,8 +114,7 @@ PAGE_KEYS = (
     PageKeys("Geometry Calibration", ("Esc",), "Close the window (it asks first while a calibration runs)"),
     PageKeys("XRR Series Extractor", ("Esc",),
              "Stop picking the direct-beam centre on the preview; when not picking, close the window"),
-    PageKeys("Trainset Build (the image)", ("Esc",),
-             "Leave the drawing mode: picking the direct beam, the ROI or a mask shape"),
+
 )
 """The keys of the pages and windows, in the order of the manual's table (section 3.7)."""
 

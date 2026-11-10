@@ -28,6 +28,7 @@ from ..application import DOWNLOAD_SIZE, SputterService
 from .fringe_flow import FRINGES_KEY, FringeFlowMixin
 from .geometry import INSPECT_KEY, SputterGeometryMixin, warning_style
 from .literature_tab import LiteratureTab
+from .project_state import SputterProjectMixin
 from .predict_flow import PREDICT_KEY, SputterPredictMixin
 from .results_panel import SputterResultsMixin
 from .sketch_view import SketchView
@@ -42,7 +43,7 @@ ENVIRONMENT_UNKNOWN = "PyTorch is checked when you press Predict"
 ENVIRONMENT_TIP = "Model: bundled with GIMaP · Python: {python}"
 
 
-class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin, FringeFlowMixin, WindowMenuMixin,
+class SputterPage(SputterProjectMixin, SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin, FringeFlowMixin, WindowMenuMixin,
                   QWidget, SputterPageView):
     eventReceived = pyqtSignal(object)
 
@@ -86,6 +87,8 @@ class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin
         self._connect_predict()
         self._connect_results()
         self._connect_window_menu()
+        self._empty_project_state = self.project_state()
+        self._pending_project_state = None
         self._restore()
         self._metal_changed()
         self._show_status()

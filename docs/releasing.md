@@ -249,6 +249,41 @@ Read the current JAC *Notes for Authors* before submitting; the points below are
   acknowledgements, and say what they were used for.
 - **Licences**: state that GIMaP is MIT-licensed, and that the Windows package is distributed under
   GPL-3.0 terms for PyQt5 and BornAgain.
-- **Machine requirements**: give the measured numbers of step 7 and the platforms: Windows tested; macOS
-  from source, partly checked; Linux not tested.
+- **Machine requirements**: give the measured numbers and acceptance results for Windows x64, macOS
+  Apple Silicon and macOS Intel separately. Linux is not a supported release target.
 - **Open access**: JAC's open-access option uses CC BY. Decide when you submit.
+
+## Windows and macOS acceptance
+
+The release targets Windows x64 and macOS 15+ (Apple Silicon and Intel, separate packages).
+`.github/workflows/desktop.yml` checks the same source on Windows Server 2022, macOS 15 arm64 and
+macOS 15 Intel. Every required job must pass on the commit being published. A skipped optional-runtime
+test is not evidence that the runtime works; record such coverage separately. Never call an untested
+architecture supported merely because the source imports there.
+
+Use Python 3.10 and `requirements-release.txt` in a clean Conda environment. Keep the complete
+`pip freeze` and `conda list --explicit` output with each package; direct pins alone do not lock
+transitive dependencies. Build only tracked source plus the verified runtime manifests. Trainset Build
+is excluded from both platform packages; local research files and personal settings are never bundled.
+
+For macOS, build on each target architecture:
+
+```sh
+python -m pip install conda-pack
+python tools/build_macos_release.py --prefix /path/to/clean/conda/environment --out /path/to/release
+```
+
+The builder collects dependency licence texts, verifies the fit1d manifest, and writes an
+architecture-named ZIP and SHA-256 file. The ZIP contains `app/`, `runtime.tar.gz`, the double-click
+`Start_GIMaP.command`, `BUILD.json` and `pip-freeze.txt`. On first launch the runtime is verified and
+relocated into `~/Library/Application Support/GIMaP/runtimes/<sha256>/`; application and input folders
+need not be writable. Later launches reuse it. The launcher preserves a supplied `GIMAP_HOME`.
+Packages are unsigned; explain the normal macOS Open action instead of disabling system protection.
+
+Before publishing either platform package, extract it on a clean machine/user account without Python:
+open a public example, set geometry, analyze, send to Fitting, fit, export, save and reopen a project,
+open Sputter results, and open both manuals offline. Test an output folder with spaces and non-ASCII
+characters, cancellation, missing optional models, and both languages/themes. On macOS also move the
+portable folder after its first launch and launch again. Use a temporary GIMAP_HOME and temporary output
+directory during these checks. Record the OS, processor, package SHA, installation result and test result
+on the release page. Keep 0.2.0 marked as a pre-release until this package acceptance is complete.

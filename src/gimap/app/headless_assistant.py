@@ -15,6 +15,8 @@ defaults so a run is reproducible.  Two rules differ from the GUI:
 
 from __future__ import annotations
 
+from src.gimap.shared.version import SOFTWARE
+
 import dataclasses
 import json
 import os
@@ -305,6 +307,7 @@ def write_outputs(session: HeadlessSession, report: dict, folder: Path) -> list[
     import numpy as np
 
     folder.mkdir(parents=True, exist_ok=True)
+    report = {**report, "software_version": SOFTWARE}
     written = [folder / "report.json", folder / "report.md"]
     written[0].write_text(json.dumps(report, indent=1, ensure_ascii=False, default=str), encoding="utf-8")
     written[1].write_text(pipeline_markdown(report), encoding="utf-8")

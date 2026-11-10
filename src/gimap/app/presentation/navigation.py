@@ -44,8 +44,6 @@ NAVIGATION_ITEMS = (
                    "In-situ sputter series: particle size and spacing over time, and how reliable they are"),
     NavigationItem("predict", "2D Prediction", "Predict.svg", "Labs",
                    "Machine-learning prediction from 2D patterns"),
-    NavigationItem("trainset", "Trainset Build", "TraintingSetBuild.svg", "Labs",
-                   "Simulate training sets"),
 )
 """Workspaces in sidebar order: everyday analysis first, then the
 experimental machine-learning tools ("Labs")."""

@@ -47,7 +47,7 @@ right.*
 - **Command line and MCP**: `tools/gimap_agent.py` runs the automatic analysis without the window and
   serves the analysis tools to agents over MCP (see [Command Line and MCP](#command-line-and-mcp)).
 - **Labs** (experimental): 2D Prediction runs trained TensorFlow modules on GISAXS frames (no trained model
-  comes with GIMaP); Trainset Build simulates GISAXS training sets with BornAgain.
+  comes with GIMaP).
 - **Records**: every curve shows its sources on the plot. Curve exports write `<stem>_analysis.json`
   (source frames, geometry, corrections, settings) beside them, and the CSV and `_fit_input.dat` files
   name their sources in `#` header lines.
@@ -134,10 +134,21 @@ The Sputter workspace's model is part of the repository (`utils/sputter_toolkit`
 `python -m pip install -r requirements-sputter.txt`). The fit1d kit of **Predict parameters (fit1d)** is part
 of the repository too (`utils/gisaxs1d_gui_kit`, about 62 MB) and needs only `requirements.txt`.
 
-**macOS and BornAgain.** BornAgain 24.1 has no macOS wheel on PyPI, so `requirements.txt` leaves it out on
-macOS: install it from the Homebrew formula `mlz/homebrew/bornagain@24.1` as a wheel built for the same
+**macOS and BornAgain.** The released analysis workspaces do not require BornAgain. It is optional for
+research simulations and their tests; install it from the Homebrew formula `mlz/homebrew/bornagain@24.1` as a wheel built for the same
 Python version as GIMaP's environment, then install the rest with pip. The
 [development guide](docs/development.md) gives the commands and how to check the wheel.
+
+### macOS: portable package
+
+Use the `macos-arm64` package on Apple Silicon or `macos-x86_64` on Intel (target: macOS 15+).
+Extract it and double-click `Start_GIMaP.command`; preparation and any errors appear in Terminal.
+The first launch verifies and installs its bundled runtime under
+`~/Library/Application Support/GIMaP/runtimes/`. No separate Python installation is needed.
+Keep `app/`, `runtime.tar.gz` and the launcher together. Packages are unsigned; use macOS's Open action
+for a trusted download. Do not disable system protection. Only download an asset matching the documented
+GIMaP version: older releases have different pages and features. Until that version has a package,
+use the source installation above.
 
 ## Quick start
 
@@ -208,8 +219,7 @@ in the portable version, so a checkout runs it.
   curves…** or **Use current cut**, choose the method in **Parameters…** — *General V5 (experimental)*,
   *Single RC specialist (experimental)* or *Physical fit (numerical)*, which uses no network — then **Fit
   curve**.
-- **Output**: every run writes a new folder `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the folder GIMaP was
-  started from (for the portable version: the program folder): `request.json`, `batch_summary.json`,
+- **Output**: every run writes a new folder `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the GIMaP user data folder: `request.json`, `batch_summary.json`,
   `top20_candidates.json`, `fitting_run_summary.json` and, for every curve and half, `solutions.json`,
   `display.npz` and `fitting_curves.csv` (*General V5* also writes `candidates.npz`). The folders are not
   removed automatically.
@@ -260,10 +270,10 @@ Where you rely on a method or a data set that GIMaP builds on, cite it as well: 
 
 ## System Requirements
 
-- **Windows** (64-bit) is the platform GIMaP is developed and tested on; the portable version needs no
-  Python.
-- **macOS**: from source, with BornAgain installed separately; the set-up was checked on macOS 14 in
-  October 2026. **Linux**: from source; not tested.
+- **Release targets**: Windows x64 and macOS 15+ (separate Apple Silicon and Intel packages). Portable
+  packages include Python. Each release must pass the platform checks and clean-machine package
+  acceptance in [the release guide](docs/releasing.md); see the release notes for completed acceptance.
+  BornAgain is optional on macOS. **Linux**: from source; not tested.
 - **Python** 3.10 or 3.11 to run from source.
 - **Screen**: 1280 × 720 or larger (the smallest window is 1024 × 640). GIMaP follows the display scaling of
   the operating system; **View ▸ Font Size** changes the text size.
@@ -312,7 +322,7 @@ python tools/check.py
 ```
 
 This runs the test suite (about 14 minutes), an offscreen start-and-close check of the real main window
-with its seven pages, and the deliberately narrow Ruff baseline, without formatting unrelated code. The
+with its six pages, and the deliberately narrow Ruff baseline, without formatting unrelated code. The
 tests use only data that are in the repository: the public data in `tests/data/external/` (sources and
 licences in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)) and the example frames and curves in
 `TestSAXSdata/`, the authors' own measurements, released with GIMaP under its MIT License. Configuration is in

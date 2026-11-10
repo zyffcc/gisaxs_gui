@@ -118,7 +118,7 @@ def technique_line(report: dict) -> str:
         line = f"{tr('Geometry')} — {words(quality)}"
         found = found_by_search(report)
         if found:  # nobody named it: said where the person looks first (its path and place: the Results tab)
-            line += _separator() + trf("found by the search: {name}", name=Path(str(found["decision"])).name)
+            line += _separator() + trf("found by the search: {name}", name=Path(str(found["decision"]).replace("\\", "/")).name)
         return line
     return f"GIWAXS — {giwaxs_summary(report)}"
 
@@ -306,7 +306,7 @@ class GuidedResultsPanel(QWidget):
             self.layout_.addWidget(badge(text, GOOD, self))
             found = found_by_search(report)
             if found and report.get("procedure") != "geometry":  # Find Geometry says it in its outcome line
-                above = label(trf(SEARCHED_ABOVE, name=Path(str(found["decision"])).name), self, role="muted")
+                above = label(trf(SEARCHED_ABOVE, name=Path(str(found["decision"]).replace("\\", "/")).name), self, role="muted")
                 above.setObjectName("guidedSearchedAbove")
                 self.layout_.addWidget(above)
             if points:

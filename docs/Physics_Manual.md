@@ -165,7 +165,6 @@ The table lists the symbols that occur in more than one chapter. Every other sym
 | Symbol | Unit | Meaning | Defined in |
 |---|---|---|---|
 | E | keV (eV in the Sputter tools) | photon energy | (1.1) |
-| λ | Å (nm in Trainset and Sputter) | X-ray wavelength, λ = hc/E | (1.1) |
 | k | Å⁻¹ | wavenumber 2π/λ, the length of k_i and k_f | (1.2) |
 | k_i, k_f | Å⁻¹ | incident and scattered wavevectors | (2.4), section 2.1 |
 | α_i | ° | grazing angle of incidence between the beam and the sample surface | section 1.1 |
@@ -174,7 +173,6 @@ The table lists the symbols that occur in more than one chapter. Every other sym
 | 2θ | ° | scattering angle between k_i and k_f; θ is half of it (in XRR, θ is the sample angle) | (2.12) |
 | q_x, q_y, q_z | Å⁻¹ | components of the scattering vector q = k_f − k_i in the sample frame: q_x along the projection of the beam onto the surface, q_y in the surface across the beam, q_z along the surface normal | (2.5)–(2.7) |
 | q | Å⁻¹ | magnitude of the scattering vector (written with bars or abs() where the sign of a signed coordinate is dropped) | (2.10) |
-| q_∥ | Å⁻¹ | signed in-plane magnitude, with the sign of q_y (q_r in Trainset) | (2.11) |
 | χ | ° | polar angle of q from the surface normal: 0° out of plane, ±90° in the plane, sign of q_y | (2.13) |
 | L | m (entered in mm) | sample–detector distance, measured along the direct beam | section 1.1 |
 | L_p | m | distance from the sample to the centre of pixel p | (2.2) |
@@ -193,9 +191,7 @@ The table lists the symbols that occur in more than one chapter. Every other sym
 | τ | Å, reported in nm | Scherrer crystallite size (`L` in the code) | section 7.8 |
 | f | – | Hermans orientation factor (the program writes "Herman's f") | section 7.7 |
 | q* | Å⁻¹ (nm⁻¹ in Sputter) | position of the in-plane correlation peak of a GISAXS cut | sections 8.4, 12.3 |
-| D | nm | real-space spacing: the mean nearest-neighbour distance of the paracrystal (Fitting, 1D Predict, Trainset) or the centre-to-centre island spacing (Sputter). D* = 2π/q* is the direct estimate from the correlation peak. D is never the sample–detector distance, which is L | sections 8.4, 9.5, 12.3 |
 | R | nm | radius of a particle or an island | sections 9.4, 12.5 |
-| h, H | nm | height of a particle or an island: h in Fitting and 1D Predict (cylinder height), H in Trainset, 2D Prediction and Sputter, as the program labels it | sections 9.4, 12.12, 13.5 |
 | σ_R/R, σ_h/h, σ_D/D | – | relative spreads of R, h and D (the parameters labelled σ_R/R, σ_h/h and σ_D/D); σ_D is the absolute spread of D, and σ_D/D is GIMaP's paracrystal spread, defined in section 9.5 | sections 9.3, 9.5 |
 | P(q), S(q) | – | form factor and structure factor | sections 9.4, 9.5 |
 | φ | – | paracrystal factor exp(−π q² σ_D²) | (9.13) |
@@ -207,7 +203,6 @@ The table lists the symbols that occur in more than one chapter. Every other sym
 
 - **Analyze, Geometry Calibration and XRR Series Extractor** use q in Å⁻¹ and d in Å. The curves Analyze exports, `<stem>_fit_input.dat` included, are in Å⁻¹.
 - **Fitting works in nm⁻¹ internally.** A curve read in Å⁻¹ is multiplied by 10 (1 Å⁻¹ = 10 nm⁻¹; 1 nm = 10 Å). Sizes and distances of the models are in nm. The quick physical fit converts in the same way (section 8.5).
-- **1D Predict, 2D Prediction, Trainset Build and Sputter** use nm⁻¹ and nm.
 - **Angles** are in degrees in the windows and the records. Formulas use radians wherever an angle enters a trigonometric function or is a width in radians (for example β in (7.30)).
 - **Detector lengths.** Pixel coordinates are in px. L, X, Y and the pixel sizes are in metres in the formulas; the windows take L in mm and pixel sizes in µm.
 - **Intensities** are mean counts per pixel (`I (counts/pixel)`), not absolute intensities (section 2.5).
@@ -215,7 +210,6 @@ The table lists the symbols that occur in more than one chapter. Every other sym
 ### 0.3 Conventions of this reference
 
 - Equations are numbered per chapter: (5.3) is the third numbered equation of chapter 5, while "section 5.3" is a section.
-- Pixel coordinates are canonical (section 1.2) unless a section says otherwise. Some stored numbers use the index convention, which counts pixel centres from 0 (section 1.3); Trainset keeps its legacy convention (section 1.5).
 - A "valid pixel" is defined in section 4.1. A "usable pixel" is valid and above the sample horizon (section 2.3).
 - Each method ends with a line "Implementation:" that names the modules, with paths relative to the root of the repository. Paths under `utils/` and `modules/` are research code and prediction modules that GIMaP runs in separate processes.
 - Defaults and thresholds are those of GIMaP 0.2.0.
@@ -287,7 +281,6 @@ The conversion is done only in `src/gimap/shared/geometry/conventions.py`. The i
 - **The calibration engine and the exported calibration `.json`.** The candidates' `center_x_px` and `center_y_px` are index coordinates. The file says so in `metadata.center_convention` (`"name": "index"` and a sentence that explains the 0.5 px difference). A file without that key is read as index coordinates; a file that declares `"canonical"` is converted on reading. The window converts for display.
 - **XRR Series Extractor.** The extraction, the exported CSV (`roi_center_x_px`, `roi_center_y_px`) and its JSON record (`beam_center_x_px`, `beam_center_y_px`) use index coordinates, and the record names them with `center_convention`. The window converts for display.
 - **Settings.** `detector.beam_center_x` and `detector.beam_center_y`, written when a calibration is applied, are index coordinates.
-- **Trainset** configurations (section 1.5).
 
 A third, legacy convention counts rows from the bottom: `x_canonical = x + 0.5`, `y_canonical = rows − y − 0.5`. It is read once, when a geometry stored by the former Cut & Fitting page is converted into an instrument profile.
 
@@ -326,8 +319,6 @@ with the beam centre in index coordinates, pixel sizes and `L` in mm and `λ` in
 
 - The pixel positions (1.6) are the canonical ones of (1.3) and (1.4) after the shift (1.5).
 - Only the exit-angle model (1.7) differs from the exact model of chapter 2. In the plane of incidence (`X = 0`) the two agree to 10⁻¹⁵; away from it they differ.
-- A test checks that Trainset reproduces its earlier q maps to 10⁻¹² of the largest |q|.
-- Moving Trainset to the exact model is a scientific decision for the authors (`docs/architecture/geometry.md`) and has not been made.
 
 Implementation: `src/gimap/shared/geometry/legacy_conventions.py`
 
@@ -2898,6 +2889,9 @@ is given.
 
 ### 13.1 XRR Series Extractor
 
+Integer negative gap codes, non-finite pixels and the detector reader mask are excluded from the ROI; floating negative data remain valid. Motor units support degrees, rad, mrad and urad (µrad/μrad); unknown units and non-finite angles are rejected. The transformed NeXus header centre follows the same displayed coordinates as Analyze.
+
+
 **Purpose and assumptions.** The extractor turns an angle series of area-detector frames into a specular
 reflectivity curve, one point per frame (Tools ▸ XRR Series Extractor). It assumes one geometry:
 
@@ -2955,8 +2949,7 @@ r = 1 holds 5. The ROI is clipped at the frame edges.
 Which pixels are invalid is the reader's decision (section 4.1): in a CBF frame, negative values
 and non-finite values; in a NeXus/HDF5 frame, the rejected `pixel_mask` bits, the maximum of an unsigned type,
 and the parts of a stitched canvas that no module covers. The extractor does not apply Analyze's bad-pixel
-search, drawn masks or thresholds. Negative values in a signed-integer NeXus/HDF5 frame are not masked by that
-reader and therefore enter the sum.
+search, drawn masks or thresholds. The XRR adapter additionally excludes negative codes in signed-integer frames; floating negative values remain data.
 
 **θ of each frame.** Either a linear sequence or a motor dataset in the NeXus file:
 
@@ -2965,8 +2958,7 @@ reader and therefore enter the sum.
 θ_n = v_n · c_unit,         c_unit = 180/(1000π) for "mrad", 180/π for "rad", 1 otherwise   (13.9)
 ```
 
-Defaults: θ_start = 0°, Δθ = 0.01°. In (13.9) the `units` attribute of the dataset decides; any unit other than
-`mrad`, `rad`, `radian` or `radians` is read as degrees, so a dataset in µrad would be misread.
+Defaults: θ_start = 0°, Δθ = 0.01°. In (13.9) the `units` attribute of the dataset decides; `deg`/`degree`/`degrees`, `rad`, `mrad` and `urad` (also µrad/μrad) are supported. Missing units retain the documented degree default; unknown units are rejected.
 
 **Pixel coordinates.** The extraction works internally in 0-based pixel-centre indices (the index convention of
 section 1.3: the centre of the first pixel is (0, 0), x is the column, y the row, row 0 at the top). The window
@@ -3366,139 +3358,7 @@ Implementation: `src/gimap/features/prediction/infrastructure/adapters/fabio_ima
 
 ### 13.5 Trainset Build (Labs)
 
-**Purpose and status.** Trainset Build designs and generates simulated GISAXS training sets with BornAgain (Pospelov et al., 2020) and
-prepares the training of a network (Labs ▸ Trainset Build). The feature is under development. It deliberately keeps
-the conventions its training data were generated with; changing them is a scientific decision
-(`docs/architecture/geometry.md`).
-
-**Legacy convention.** Trainset computes its q map with the legacy convention of section 1.5, equations (1.6) to
-(1.8): q is in nm⁻¹ (λ in nm, lengths in mm), pixel centres are 0-based indices (no +0.5), and the exit angle is
-obtained by subtracting α_i. Its in-plane component `q_r` is the q_∥ of (2.11). Analyze uses the exact exit direction
-and canonical pixels instead.
-
-**Defaults.** λ = 0.105 nm (11.81 keV), α_i = 0.4°; detector 1475 × 1679 px of 0.172 mm at L = 3230 mm, beam centre
-(804, 305) px; ROI x = 600, y = 180, 256 × 256 px; seed 42; 200 000 samples in shards of 2000, split 0.8/0.1/0.1, Latin
-hypercube. Parameters: R 1–15 nm, H 1–20 nm, D 3–50 nm, σ_D/D 0.05–0.20. These values are a starting design. With
-them, (13.40) gives α_f from −0.80° to −0.02° over the ROI: the whole default ROI lies below the sample horizon. The
-beam centre and ROI must be set for the experiment, for example from a reference frame.
-
-**BornAgain set-up.** Only BornAgain 24.1.x is accepted; the simulation runs in a separate process with a time limit
-of 300 s. The ROI becomes a spherical detector of n_φ = ROI width and n_α = ROI height bins. Its limits are the angles
-at the first and last ROI pixel:
-
-```text
-φ = atan((j − x_c,index) p_x / (L cos α_i))                                            (13.39)
-α = atan((y_c,index − i) p_y / L) − α_i                                                (13.40)
-```
-
-BornAgain 24.1 takes these limits as the outer bin edges (checked with BornAgain 24.1), so its bin centres differ
-from the pixel centres by up to half a pixel at the edges. The detector is uniform in angle, while the q map of
-section 1.5 is that of a flat detector; (13.39) has L cos α_i where (1.7) has L. Both differences are small at
-these angles (1/cos 0.4° = 1.00002).
-
-- Beam: intensity 10¹², wavelength λ, grazing angle α_i.
-- Resolution: a 2-D Gaussian with σ_φ = σ_α = 0.01°; averaged materials (`setUseAvgMaterials(True)`).
-- Sample: a vacuum ambient layer holding one particle type with abundance 1, no interference function (a dilute
-  layout); then the enabled layers with `thickness > 0`, in order; then the substrate. Default: copper particles on
-  20 nm Copper / 50 nm Polymer / Silicon.
-- Particle density: ρ_eff = min(ρ, 0.35 / (π R²)), ρ = 0.01 nm⁻² by default; the projected coverage is capped at
-  35%.
-- Form factors: `Sphere(R)`, `Cylinder(R, H)`, `Box(L_x, L_y, L_z)`, and the default
-  `SphericalSegment(R, 0, max(10⁻⁶ nm, 2R − H))`: a sphere of radius R cut to height H.
-- Roughness, when `σ > 0`: `SelfAffineFractalModel(σ, Hurst 0.3, lateral correlation 5 nm)`, `TanhTransient`,
-  `CommonDepthCrosscorrelation(10 nm)`.
-- The image is flipped up–down once, so that large α_f is at the top. The training images then have the orientation
-  of the experimental detector display: detector x increases to the right and detector y downward, and the exit
-  angle (and q_z) is higher at the top.
-
-**Materials: a fixed table of δ and β.** The refractive index n = 1 − δ + iβ of each material comes from a table:
-
-| Material name | δ | β |
-|---|---|---|
-| `Gold` | 1.7065·10⁻⁵ | 2.0640·10⁻⁶ |
-| `Silicon` | 2.8402·10⁻⁶ | 2.5265·10⁻⁸ |
-| `Copper` | 1.2081·10⁻⁵ | 1.0584·10⁻⁶ |
-| `Polymer`, `PEO` | 1.9503·10⁻⁶ | 1.8413·10⁻⁹ |
-
-An unknown name takes the values of Silicon; `Vacuum` is 0. The table does not follow the configured wavelength.
-Its energy is not stated in the code. The free-electron estimate δ = r_e λ² ρ_e / (2π) for silicon (2.329 g cm⁻³,
-f_1 = Z) matches δ = 2.8402·10⁻⁶ at λ = 0.952 Å (13.0 keV), whereas the default λ = 0.105 nm gives δ ≈ 3.46·10⁻⁶. The
-table therefore appears to belong to about 13 keV, not to the default 11.8 keV. This is to be confirmed by the
-model author, for example against the Henke tables (Henke et al., 1993; CXRO).
-
-**Structure factor.** No interference function is used inside BornAgain. A one-dimensional paracrystal along q_y
-multiplies the form-factor image afterwards, with the legacy q_y (section 1.5) in nm⁻¹ at the ROI pixels and D in nm:
-
-```text
-σ_D = (σ_D/D) · D          (the absolute spread from the parameter σ_D/D)      (13.41)
-φ(q_y) = exp(−π q_y² σ_D²)                                                          (13.42)
-S(q_y) = |(1 − φ²) / max(1 + φ² − 2φ cos(q_y D), 10⁻⁸)|                          (13.43)
-I(q) = I_FF(q) · S(q_y)                                                          (13.44)
-```
-
-(13.43) has the form of the one-dimensional paracrystal of Hosemann, the same as (9.12). With a Gaussian distribution
-of spacings of standard deviation σ_nn, the usual factor is φ = exp(−q² σ_nn²/2). The code's exponent −π q² σ_D²
-equals that form with σ_nn = √(2π) σ_D ≈ 2.51 σ_D, as in (9.14). Whether σ_D/D is meant in this sense is to be confirmed by the model author; until then,
-σ_D/D should not be read as the relative standard deviation of the spacing.
-
-**Mixtures of sizes.** By default each sample is a Gaussian mixture of K = 5 components around the sampled centre
-(R̄, H̄). Without the grid cache, for each component k and parameter p ∈ {R, H}:
-
-```text
-c_{k,p} = clip(N(p̄, (u_{k,p} Δp)²), p_min, p_max),   u_{k,p} ~ U(0.01, 0.30),   Δp = p_max − p_min   (13.45)
-H_k ← min(H_k, max(10⁻⁶, 2R_k − 10⁻⁶)),   w ~ Dirichlet(1, …, 1)                  (13.46)
-I_FF = Σ_k w_k I_BA(c_k)                                                         (13.47)
-```
-
-With the grid cache (full runs, when every parameter other than the form-factor and structure-factor parameters is
-fixed), BornAgain images are computed once on the bin centres of a 30 × 30 (R, H) grid. A sample is then the
-Gaussian-kernel average over the valid grid nodes n (those with H ≤ 2R):
-
-```text
-W(n) = Σ_k w_k exp(−½ Σ_p ((n_p − c_{k,p}) / σ_{k,p})²),   σ_{k,p} = u′ · span_p,   u′ ~ U(0.01, 0.30)   (13.48)
-I_FF = Σ_n W(n) I_BA(n) / Σ_n W(n)                                               (13.49)
-```
-
-span_p is the distance between the first and last grid centre. S(q_y) of (13.43) is applied afterwards in both
-cases. The label of a sample is its centre (R̄, H̄, D, σ_D/D), not the components.
-
-Open issue at the time of writing: the cached images are stored as float16, whose largest value is 65504. With the
-default design, BornAgain intensities exceed this for medium and large particles (maximum 1.5·10⁵ for R = H = 8 nm,
-3.6·10⁶ for R = 15 nm, H = 20 nm; beam intensity 10¹²), so cached pixels overflow to infinity. In a test with the default design (grid reduced to 4 × 4), about one third of the pixels of each final
-training image were not finite. Runs without the cache are not affected.
-
-**Sampling.** Latin hypercube (McKay et al., 1979; `scipy.stats.qmc`), grid or random sampling in [0, 1]^d, mapped linearly (or
-log-uniformly) to each range. Constraints are enforced by clipping: H ≤ 2R − 10⁻⁶ nm and D ≥ 2R + 10⁻⁶ nm. A sample
-for which a constraint cannot be met stops the generation with an error. The Latin hypercube is drawn per shard of 2000 samples.
-
-**Augmentation and preprocessing of the training images** (in this order; each step can be switched off):
-
-```text
-physical background (off by default): I ← max(I + B, 0)                          (13.50)
-Gaussian noise: σ_n = √(⟨I²⟩ / 10^(SNR/10)), SNR ~ U(80, 110) dB;  I ← max(I + N(0, σ_n²), 0)   (13.51)
-Poisson noise (off by default): I ← Poisson(c·I)/c,  c ~ U(1, 20)                 (13.52)
-mask: I ← −1 on masked pixels
-log: I ← ln(max(I, 0) + 10⁻⁶) on unmasked pixels                                 (13.53)
-normalise: I ← (I − I_min)/(I_max − I_min) on unmasked pixels (range [0, 1])      (13.54)
-random edge crop (off by default): up to 4 px per side, resized back (INTER_AREA)
-```
-
-B is a parametrised synthetic background (specular ridge, Yoneda-like band, Guinier–Porod wedge, gradient, floor),
-scaled so that its 95th percentile is a set fraction of the signal's 75th percentile. This normalisation differs
-from the shipped 2D Prediction modules (13.35). A model registered from Trainset carries its own preprocessing: the
-training pipeline with noise, background and edge crop switched off; its outputs are parameters scaled as in
-(13.36).
-
-**Points to confirm with the model author.** (1) The energy of the δ/β table (about 13 keV by the estimate above,
-while the default λ is 0.105 nm). (2) The paracrystal exponent −π q_y² σ_D² of (13.42) and the meaning of σ_D/D.
-
-Implementation: `src/gimap/shared/geometry/legacy_conventions.py` and `src/gimap/shared/geometry/q_mapping.py`
-(legacy q map), `src/gimap/features/trainset/domain/geometry.py` ((13.39)–(13.40)),
-`src/gimap/integrations/bornagain/api_24_1.py` (sample, materials, detector), `src/gimap/features/trainset/application/simulation.py`
-((13.41)–(13.47)), `src/gimap/features/trainset/infrastructure/adapters/grid_cache.py` ((13.48)–(13.49)),
-`src/gimap/features/trainset/infrastructure/adapters/dataset_generation.py` (sampling, shards),
-`src/gimap/features/trainset/infrastructure/adapters/preprocessing_pipeline.py` ((13.50)–(13.54)),
-`src/gimap/features/trainset/infrastructure/adapters/configuration.py` (defaults).
+This workspace has been removed from GIMaP. Its simulation and training methods are not part of the released application. Existing research files are not changed.
 
 ## 14. Provenance and reproducibility
 
@@ -3599,7 +3459,7 @@ version (`GIMaP v0.2.0` for this release). These records name the release that w
 
 Records written before this release have no `software_version`; their other keys are unchanged. The curve tables
 of Analyze and Batch Export name only `GIMaP Analyze 1` in their `#` lines: the `_analysis.json` or batch record
-beside them names the release. A Trainset job folder records the git commit of the source instead (section 14.6).
+beside them names the release.
 
 ### 14.6 Records of the tool windows and Labs
 
@@ -3609,12 +3469,10 @@ beside them names the release. A Trainset job folder records the git commit of t
 | SEM Particle Analysis | `sem_analysis.json` (schema 1); the same source, settings and comparison as one JSON `#` line at the top of `sem_particles.csv` and `sem_distribution.csv` | `software_version`; source path, SHA-256 and size; grey conversion; scale; ROI; method and every setting; threshold and its method; radius, perimeter and centroid definitions; counts; for StarDist the library versions, Python, normalisation (13.16), scale, tiles, thresholds, model configuration, score range and the SHA-256 and size of every model file; for existing labels the SHA-256 of the label file; the comparison settings, normalisation and rebinning rules, the prediction's source and arrays; plot settings; the list of files |
 | 2D Prediction | `<input>_prediction.json` (`gimap.prediction-export/1`) | `software_version`; input files, mode and stack; module name, id, version and YAML file; model path, framework, runtime and its version; the configured steps and the steps applied (names, and the shape of each intermediate image); display settings |
 | Format Converter | `conversion_metadata.json` (or one JSON per frame), `conversion_report.json`, header `GIMaP_metadata` | `software_version` (in each frame's record and in the report); the reader's metadata of each frame, source, frame number, output name, shape and type; `pixel_values` (stored and written type, number of pixels without data, how they were written, the rule (4.1)); frames written and failed; in HDF5 the `pixel_mask` |
-| Trainset Build | the job folder: `config.yaml`, `manifest.json`; HDF5 shards `dataset_NNNN.h5` | `config.yaml` is the whole design; `manifest.json` holds the git commit, the seed, the spherical ROI limits (13.39)–(13.40) and the SHA-256 of every file of the package; a shard holds `images`, `labels`, `masks` and the attribute `label_names` |
 
 Implementation: `src/gimap/features/xrr/application/export_record.py`, `src/gimap/features/sem/infrastructure/exporter.py`,
 `src/gimap/features/prediction/application/export_record.py`,
-`src/gimap/features/format_converter/infrastructure/adapters/local_files.py`,
-`src/gimap/features/trainset/infrastructure/adapters/portable_job_package.py`.
+`src/gimap/features/format_converter/infrastructure/adapters/local_files.py`.
 
 ### 14.7 Checksums
 
@@ -3623,7 +3481,6 @@ SHA-256 digests identify files whose content matters:
 - SEM: the source image, a label image and a CSV source; every StarDist model file, before and after the run
   (a change refuses the result).
 - Geometry Calibration: the calibrant image (`image_sha256`).
-- Trainset: every file of a job package (`manifest.json`).
 - 2D Prediction: an optional `manifest.json` beside a `.keras` model may give a SHA-256, which is checked before
   the model is loaded. The digest is not written to the export record.
 
@@ -3638,19 +3495,15 @@ Where an algorithm draws random numbers, the seed is fixed, so the same input an
 | Fitting, AI fitting profile | `random_seed`, default 123 (can be set in the AI settings) | passed to the research code in its subprocess |
 | Geometry Calibration, centre estimate | 0 | random pairs of gradient pixels |
 | Run Automatic Analysis, Hermans orientation factor | 0 (default) | Monte Carlo error of f |
-| Trainset Build | project seed, default 42; a cluster array task uses seed + task index | sampling, mixtures, noise, masks |
 
 StarDist inference and the 2D Prediction networks draw no random numbers in GIMaP. The seeds are part of the code
-or of the saved settings; except for Trainset (`config.yaml`, `manifest.json`), they are not written into the
-export records.
+or of the saved settings. Research run records state their seed policy; not every runtime exposes a controllable seed.
 
 ### 14.9 What the records do not yet contain
 
 These gaps are known at the time of writing. A reader who needs the information must keep it separately.
 
-- The release version of GIMaP is missing from the records of Sputter, of the AI assistant (its reports and
-  `assistant_runs/`), of `tools/gimap_agent.py` and of 1D Predict's run folders, from Fitting's model file and from
-  the set-up files `masks.json` and `cuts.json`; records written before 0.2.0 have none (section 14.5).
+- Current Sputter, AI assistant, CLI and 1D Predict run records include `software_version`. Older records may lack it. Fitting model files and masks/cuts settings still do not identify a release.
 - The 2D Prediction record has no hash of the model weights, the YAML file or `preprocess.py`, and it names the
   steps but does not copy their parameters (crop margins, thresholds); these stay in the module's YAML file, which
   can change later. Axes filled in by default (section 13.4) are not marked as such. The copy handed to the SEM
@@ -3659,9 +3512,6 @@ These gaps are known at the time of writing. A reader who needs the information 
 - The SEM record holds no summary statistics, because none are computed (section 13.2).
 - The uint16 modes of the Format Converter write pixels without data as 65535; outside HDF5, which marks them in
   its `pixel_mask`, they read back as valid values (section 13.3).
-- Trainset shards hold only the label names; the design and seed are in the job folder, not in the shard. The
-  job folder's `environment.yml` asks for BornAgain 24.1, and GIMaP checks for 24.1.x, but the exact BornAgain
-  version used is not written.
 - Seeds are not written into the records (section 14.8).
 - Bad pixels, drawn masks and mirror-filled pixels are recorded as counts, not as positions (section 14.4).
 - `<stem>_analysis.json` gives its time of creation in UTC (`created`), as the XRR and SEM records do; the 2D
@@ -3716,11 +3566,10 @@ This chapter collects the limits stated in chapters 1 to 14, so that they can be
 
 ### 15.6 Tool windows and Labs
 
-- **XRR Series Extractor.** No background subtraction, footprint, monitor, polarisation, absorption, resolution or refraction correction, and no θ offset. A motor dataset in µrad is read as degrees. The beam centre in the header of a Lambda NeXus file is taken without the transform applied to the frame (section 13.1).
+- **XRR Series Extractor.** No background subtraction, footprint, monitor, polarisation, absorption, resolution or refraction correction, and no θ offset. Angle units and transformed header coordinates are checked as described in section 13.1.
 - **SEM Particle Analysis.** The scale comes only from the user. The default StarDist model is not validated for SEM. The circularity of a digitised disc is about 0.90, not 1. A SEM distribution and a scattering prediction are different quantities (section 13.2).
 - **Format Converter.** The uint16 modes lose the marking of pixels without data outside HDF5 (section 13.3).
 - **2D Prediction.** No geometry and no correction enter; the preprocessing is the module's own; axes that a module does not declare are filled in by default; the units of the SF parameters are not declared (section 13.4).
-- **Trainset Build.** The legacy convention (section 1.5); the default region of interest lies below the sample horizon; BornAgain's detector is uniform in angle while the q map is that of a flat detector; the δ/β table belongs to a fixed energy that the code does not state; the grid cache stores images as float16 and overflows for the default design (section 13.5).
 
 ### 15.7 Records
 

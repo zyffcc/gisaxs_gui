@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from src.gimap.shared.version import SOFTWARE
+
 import json
 import os
 import tempfile
@@ -135,7 +137,7 @@ class JsonResultStore:
 
     def write_tables(self, folder: str, stem: str, payload: dict) -> str:
         path = Path(folder) / f"{stem}_assistant.json"
-        return str(_atomic_write(path, json.dumps(payload, indent=2, ensure_ascii=False) + "\n"))
+        return str(_atomic_write(path, json.dumps({**payload, "software_version": SOFTWARE}, indent=2, ensure_ascii=False) + "\n"))
 
     def save_text(self, path: str | Path, text: str) -> str:
         return str(_atomic_write(Path(path), text))
@@ -147,6 +149,7 @@ class JsonResultStore:
         stamp = time.strftime("%Y%m%d-%H%M%S")
         stem = Path(str(record.get("frame") or "frame")).stem or "frame"
         path = self.data_dir / RUNS_FOLDER / f"{stamp}_{stem}.json"
+        record = {**record, "software_version": SOFTWARE}
         text = json.dumps(record, indent=1, ensure_ascii=False, default=str)
         return str(_atomic_write(path, text + "\n"))
 

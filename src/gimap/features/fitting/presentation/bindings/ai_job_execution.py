@@ -43,7 +43,8 @@ class AiJobExecutionMixin:
     """Own ai job execution behavior."""
 
     def _ai_prediction_output_root(self) -> Path:
-        return Path.cwd() / "AI_Fitting_Output"
+        from src.gimap.integrations.state.run_paths import fitting_output_root
+        return fitting_output_root()
 
     def _ai_current_prediction_dir(self) -> Path:
         from datetime import datetime

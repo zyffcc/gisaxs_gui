@@ -1523,3 +1523,9 @@ QLabel#analyzeFilePosition {
     font-size: @font_small_pt@;
     padding: 0 2px;
 }
+
+/* Compact scientific tables keep full numeric precision; narrower header padding works with native macOS fonts. */
+QTableWidget[gimapCompactTable="true"] QHeaderView::section {
+    padding-left: 3px;
+    padding-right: 3px;
+}

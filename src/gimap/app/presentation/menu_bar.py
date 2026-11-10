@@ -183,10 +183,10 @@ class MainMenuBar(QObject):
         if c.load_parameters is not None or c.save_parameters is not None:
             labs = self.labs_menu = menu.addMenu("&Labs Parameters")
             # On the entry in File (a QMenu's own tooltip is never shown there).
-            labs.menuAction().setToolTip("The settings of 2D Prediction and Trainset Build, and Fitting's model")
+            labs.menuAction().setToolTip("The settings of 2D Prediction, and Fitting's model")
             self._submenus.append(labs)
             self._add(labs, "load_parameters", "&Load…", c.load_parameters,
-                      tip="Load the settings of the Labs pages (2D Prediction, Trainset Build) and Fitting's model from a "
+                      tip="Load the settings of the Labs pages (2D Prediction) and Fitting's model from a "
                           "JSON file; Fitting's model is replaced")
             self._add(labs, "save_parameters", "&Save As…", c.save_parameters,
                       tip="Save the settings of the Labs pages and Fitting's model to a JSON file")

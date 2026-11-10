@@ -30,11 +30,6 @@ class MainWindowView(object):
             QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
         )
 
-        self.trainsetBuildPage = QtWidgets.QWidget()
-        self.trainsetBuildPage.setObjectName("trainsetBuildPage")
-        self.verticalLayout_6 = QtWidgets.QVBoxLayout(self.trainsetBuildPage)
-        self.verticalLayout_6.setObjectName("verticalLayout_6")
-        self.mainWindowWidget.addWidget(self.trainsetBuildPage)
         self.gisaxsPredictPageHost = QtWidgets.QWidget()
         self.gisaxsPredictPageHost.setObjectName("gisaxsPredictPageHost")
         self.mainWindowWidget.addWidget(self.gisaxsPredictPageHost)

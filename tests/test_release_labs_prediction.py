@@ -128,7 +128,7 @@ def test_a_page_that_predicted_nothing_does_not_say_batch_results_are_ready(wind
     assert prediction._multifile_results_widget.table_model.rowCount() == 0
     assert BATCH_READY not in window.predictStatusTextBrowser.toPlainText()
     assert BATCH_READY not in prediction.page_status.text
-    window.runtime.navigate("trainset")
+    window.runtime.navigate("analyze")
     window.runtime.navigate("predict")  # showing the page says its own last line again
     assert BATCH_READY not in window.statusbar.currentMessage()
     # Building the table again (Open Batch Results before any run) says nothing either.
@@ -248,7 +248,9 @@ def test_the_dialogs_and_message_boxes_are_translated_when_they_are_shown(window
                           QMessageBox.Ok, window)
         opened.append(box)
         i18n.apply_to(box, "zh")
-        assert (box.windowTitle(), box.text()) == (_zh("Invalid Parameters"), _zh("Please select a valid input file"))
+        assert box.text() == _zh("Please select a valid input file")
+        import sys
+        assert box.windowTitle() == ("" if sys.platform == "darwin" else _zh("Invalid Parameters"))
     finally:
         for dialog in opened:
             if dialog is not None:

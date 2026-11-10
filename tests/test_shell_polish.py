@@ -497,11 +497,11 @@ def test_start_recent_is_the_open_recent_list_with_tags(window, monkeypatch, tmp
 
 def test_the_status_bar_shows_on_the_labs_pages_only(window) -> None:
     components = window.components
-    components.show_page("trainset")
+    components.show_page("predict")
     assert window.statusbar.isVisible()
     runtime = getattr(window, "runtime", None)
     assert runtime is not None, "the feature runtimes did not start"
-    runtime.trainset.status_updated.emit("Draw the rectangular ROI on the detector image")
+    runtime.prediction.status_updated.emit("Draw the rectangular ROI on the detector image")
     assert window.statusbar.currentMessage() == "Draw the rectangular ROI on the detector image"
     components.show_page("predict")
     assert window.statusbar.isVisible()

@@ -134,11 +134,11 @@ def test_a_language_switch_reaches_the_labs_bindings_and_the_tool_windows(window
     tool = window.menus.tools.show("probe", lambda parent: ToolWindow(parent))
     pages = {"analyze": components.analyze_page, "compare": components.compare_page,
              "single": components.fitting_workspace.fit_page, "series": components.fitting_workspace.series_page,
-             "prediction": runtime.prediction, "trainset": runtime.trainset}
+             "prediction": runtime.prediction}
     for name, page in pages.items():
         monkeypatch.setattr(page, "refresh_language", lambda name=name: refreshed.append(name), raising=False)
     # The Labs pages hand over to their bindings: told through the binding only, not twice.
-    for name, page in {"predict page": components.predict_workspace, "trainset page": components.trainset_page}.items():
+    for name, page in {"predict page": components.predict_workspace}.items():
         monkeypatch.setattr(page, "refresh_language", lambda name=name: refreshed.append(name), raising=False)
     expected = sorted([*pages, "tool"])
     try:
@@ -153,7 +153,7 @@ def test_a_language_switch_reaches_the_labs_bindings_and_the_tool_windows(window
         with monkeypatch.context() as patch:
             patch.delattr(window, "runtime")
             window.menus.set_language("zh")
-        assert {"predict page", "trainset page"} <= set(refreshed) and not {"prediction", "trainset"} & set(refreshed)
+        assert {"predict page"} <= set(refreshed) and not {"prediction"} & set(refreshed)
     finally:
         apply_language(DEFAULT_LANGUAGE, [window])
         tool.close()

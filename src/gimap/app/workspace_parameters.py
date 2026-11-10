@@ -14,12 +14,10 @@ class WorkspaceParameterCoordinator:
         self,
         *,
         repository,
-        trainset,
         fitting,
         prediction,
         status: Callable[[str], None],
     ):
-        self.trainset = trainset
         self.fitting = fitting
         self.prediction = prediction
         self.status = status
@@ -28,7 +26,6 @@ class WorkspaceParameterCoordinator:
 
     def snapshot(self) -> dict:
         return {
-            "trainset": self.trainset.get_parameters(),
             "fitting": self.fitting.get_parameters(),
             "fitting_model_parameters": {
                 "fitting": self.fitting.model_params_manager.get_parameter(
@@ -45,8 +42,6 @@ class WorkspaceParameterCoordinator:
             if self._load is None:
                 raise RuntimeError("Project parameter storage is unavailable")
             parameters = self._load.execute(file_path)
-            if "trainset" in parameters:
-                self.trainset.set_parameters(parameters["trainset"])
             if "fitting" in parameters:
                 self.fitting.set_parameters(parameters["fitting"])
             self._restore_fitting_model_parameters(parameters)
@@ -72,7 +67,6 @@ class WorkspaceParameterCoordinator:
     def validate(self) -> list[tuple[str, bool, str]]:
         results = []
         for name, runtime in (
-            ("Trainset parameters", self.trainset),
             ("Fitting parameters", self.fitting),
             ("GISAXS prediction parameters", self.prediction),
         ):
@@ -83,7 +77,6 @@ class WorkspaceParameterCoordinator:
 
     def reset(self) -> None:
         for runtime in (
-            self.trainset,
             self.fitting,
             self.prediction,
         ):

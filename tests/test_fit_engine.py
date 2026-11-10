@@ -104,7 +104,7 @@ def test_a_wide_search_escapes_a_bad_start() -> None:
     start = truth.with_values({(0, "R"): 1.5, (0, "D"): 300.0})
     local = fit(start, data, method="local")
     wide = fit(start, data, method="global", max_evaluations=1500)
-    assert wide.chi2_reduced < 1.5 and wide.chi2_reduced <= local.chi2_reduced
+    assert wide.chi2_reduced < 1.5 and wide.chi2_reduced <= local.chi2_reduced + 1e-6  # numerical convergence tolerance across BLAS implementations
     assert wide.model.get((0, "R")).value == pytest.approx(6.0, rel=0.05)
 
 

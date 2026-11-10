@@ -10,6 +10,8 @@ from closing; every action on the Analyze page reaches the GUI thread through
 
 from __future__ import annotations
 
+from src.gimap.shared.version import SOFTWARE
+
 import dataclasses
 import html
 import json
@@ -442,6 +444,7 @@ class AssistantController(QObject):
 
     def _record(self, outcome: RunOutcome, *, transcript: bool = False) -> dict:
         record = {
+            "software_version": SOFTWARE,
             "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "frame": self._frame,
             "model": outcome.model or self._model,

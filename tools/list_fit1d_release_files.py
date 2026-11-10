@@ -16,7 +16,7 @@ from pathlib import Path, PurePosixPath
 KIT = "utils/gisaxs1d_gui_kit"
 MANIFEST = "FILES_SHA256.json"
 SCHEMA = "gisaxs1d_kit_files_v1"
-ROOT_FILES = {"KIT_MANIFEST.json", "tablepack.py", "_env.bat",
+ROOT_FILES = {"LICENSE", "SOURCE.json", "KIT_MANIFEST.json", "tablepack.py", "_env.bat",
               "run_panel.bat", "run_panel.sh"}
 REQUIRED = {
     "KIT_MANIFEST.json", "tablepack.py", "models/models.json",

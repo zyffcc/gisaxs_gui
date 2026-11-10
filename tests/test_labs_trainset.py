@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -59,7 +60,25 @@ def _trainset(tmp_path):
     window = MainWindow(context)
     window.resize(1280, 800)
     _wait(lambda: getattr(window, "_initialization_completed", False))
-    binding = window.runtime.trainset
+    from src.gimap.features.trainset.bootstrap import create_trainset_view_model
+    from src.gimap.features.trainset.presentation.view_binding import TrainsetViewBinding
+    from src.gimap.integrations.bornagain import BornAgainSimulator
+    page = TrainsetBuildPage(window)
+    window.components.trainset_page = page
+    window.trainsetWorkspace = page
+    window.components.pages["trainset"] = page
+    window.mainWindowWidget.addWidget(page)
+    simulation = BornAgainSimulator(runner=context.jobs)
+    binding = TrainsetViewBinding(window, window.runtime, simulation_port=simulation,
+        trainset_view_model=create_trainset_view_model(context, simulation), page=page,
+        project_root=Path(__file__).resolve().parents[1])
+    window.runtime.trainset = binding
+    binding.status_updated.connect(lambda text: window.runtime._page_says("trainset", text))
+    binding.generation_started.connect(lambda: binding.status_updated.emit("Trainset generation started..."))
+    binding.generation_finished.connect(lambda: binding.status_updated.emit("Trainset generation completed!"))
+    original_pages = window.components._language_pages
+    window.components._language_pages = lambda: [*original_pages(), binding]
+    binding.initialize()
     _wait(lambda: binding._initialized)
     reference = tmp_path / "reference.npy"
     y, x = np.mgrid[0:96, 0:120]

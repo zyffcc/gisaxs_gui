@@ -199,8 +199,9 @@ None of these is in the repository or in the portable package.
 ## 5. Research code and trained networks in the repository
 
 These parts are research code and trained networks bundled with GIMaP; the program runs the research
-code in subprocesses. They have no licence file of their own and are distributed here together with
-GIMaP. For each of them, authorship and licence are **to be confirmed by the authors**.
+code in subprocesses. Their author, **Yufeng Zhai**, confirmed on 2026-11-10 that the research code and bundled networks
+are released under the **MIT License**. Each bundle includes `LICENSE`; `SOURCE.json` records authorship
+where present. This confirmation does not change the separate licences of third-party dependencies.
 
 - **1D Predict Workflow V5** (`modules/Fitting_1D_Model/Workflow_v5/`): code and trained network weights
   (`*.h5`, `*.npz`) for Tools ▸ 1D Predict. They propose candidate fits of a 1D GISAXS curve with up to
@@ -219,7 +220,7 @@ GIMaP. For each of them, authorship and licence are **to be confirmed by the aut
   network checkpoints (`experts/polymer/model/best.pt`, `experts/TS/model/best.pt`). It is bundled from
   the source commit `19d775bc`, with the local patches that `SOURCE.json` lists.
   - `MANIFEST.json` and `verify.py` check every file.
-  - `SOURCE.json` names neither authors nor a licence.
+  - `SOURCE.json` records Yufeng Zhai as the author and MIT as the licence.
   - The published values it compares with are cited, with their DOIs, in
     `configs/literature_reference_v1.json`.
 - **fit1d kit** (`utils/gisaxs1d_gui_kit/`): the research code of the fit1d method (gisaxs1d_gui_kit

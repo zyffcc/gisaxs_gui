@@ -382,7 +382,8 @@ class FitRunMixin:
             floor = max(float(np.max(np.abs(data.intensity))) * 0.001, 1e-12)
             sigma = np.hypot(0.10 * np.abs(data.intensity), floor)
         options = workflow_options_for_mode({**default_options(), "side": "positive"}, "full")
-        output = Path.cwd() / "AI_Fitting_Output" / ("v5_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f"))
+        from src.gimap.integrations.state.run_paths import fitting_run_directory
+        output = fitting_run_directory()
         request = CandidateGenerationRequest(
             model_path=bundled_workflow(), output_dir=output, q=data.q, intensity=data.intensity, sigma=sigma,
             profile=profile.to_dict(),

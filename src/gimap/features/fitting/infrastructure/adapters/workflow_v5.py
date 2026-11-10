@@ -6,6 +6,8 @@ front end; its estimated conditions do not inherit the known-condition validatio
 
 from __future__ import annotations
 
+from src.gimap.shared.version import SOFTWARE
+
 import json
 import sys
 import time
@@ -16,6 +18,7 @@ import numpy as np
 
 from ...application.workflow_v5 import FROM_REQUEST, bundled_workflow, q_unit_of_file, validate_options
 from .curve_units import file_q_unit
+from .run_provenance import model_provenance
 
 
 def read_curve(path: Path):
@@ -308,8 +311,11 @@ def run_workflow_job(payload, report, is_cancelled):
     output.mkdir(parents=True, exist_ok=True)
     sources = payload.get("files") or [None]
     units = curve_units(sources, options)
+    model_record = model_provenance(options["method"], payload.get("model_path"))
     (output / "request.json").write_text(
-        json.dumps({**payload, "q_units": units}, indent=2, allow_nan=False), encoding="utf-8"
+        json.dumps({**payload, "options": options, "software_version": SOFTWARE,
+                    "randomness": {"policy": "research runtime defaults; no run-level seed override", "seed": None},
+                    "model": model_record, "q_units": units}, indent=2, allow_nan=False), encoding="utf-8"
     )
     experimental = options["method"] == "experimental"
     stable = options["method"] == "stable"
@@ -411,6 +417,7 @@ def run_workflow_job(payload, report, is_cancelled):
         )
         report(index + 1, len(sources), f"{index + 1}/{len(sources)} files finished — {name}", {})
     summary = dict(
+        software_version=SOFTWARE, model=model_record,
         profile="Single RC specialist (experimental) + numerical fallback" if stable else ("Experimental physical fit (numerical)" if experimental else ("fit1d (network + physical fit)" if fit1d else ("V5 + four-step correction" if options["numerical"] else "V5 neural only"))),
         runtime_seconds=time.perf_counter() - started,
         configured_candidates=len(all_rows),

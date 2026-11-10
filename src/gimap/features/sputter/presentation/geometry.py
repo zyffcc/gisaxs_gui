@@ -120,6 +120,7 @@ class SputterGeometryMixin:
 
     def set_scan_folder(self, folder) -> None:
         """Look at ``folder`` (its first frame's header, in the background) and fill the form from it."""
+        self._pending_project_state = None
         self.scan_picker.set_path(str(folder))
         self._requested_scan = str(folder)
         self.scan_info = None
@@ -152,7 +153,10 @@ class SputterGeometryMixin:
             self.scan_picker.set_path(str(info.folder))  # the frames are one level down (``p2m/``)
         self._summary = None
         self._apply(prefill(info, self._memory()), self._edited)
-        self._show_thickness_fields()  # back on the scan of the result shown: what it was drawn with
+        self._show_thickness_fields()  # the restored project form takes precedence over result defaults
+        if self._pending_project_state is not None:
+            self._restore_project_form(self._pending_project_state)
+            self._pending_project_state = None
         self._show_scan_summary()
         self._show_sources()
         self._run_queued()

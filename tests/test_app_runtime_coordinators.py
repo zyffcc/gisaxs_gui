@@ -89,7 +89,6 @@ class MemoryProjectRepository:
 def _workspace_coordinator(repository=None):
     messages = []
     runtimes = {
-        "trainset": FakeFeatureRuntime({"samples": 10}),
         "fitting": FakeFittingRuntime({"points": 50}),
         "prediction": FakeFeatureRuntime({"module": "example"}),
     }
@@ -107,7 +106,6 @@ def test_workspace_parameter_coordinator_preserves_snapshot_shape(tmp_path):
 
     assert coordinator.save(tmp_path / "parameters.json")
     assert repository.values == {
-        "trainset": {"samples": 10},
         "fitting": {"points": 50},
         "fitting_model_parameters": {"fitting": {"BG": 0.1}},
         "gisaxs_predict": {"module": "example"},
@@ -129,7 +127,7 @@ def test_workspace_parameter_coordinator_loads_each_public_feature_api():
     coordinator, runtimes, messages = _workspace_coordinator(repository)
 
     assert coordinator.load("parameters.json")
-    assert runtimes["trainset"].values == {"samples": 20}
+    assert "trainset" not in coordinator.snapshot()  # retired section of older settings is ignored
     assert "classification" not in runtimes  # a section of an older file (the page is gone) is left alone
     assert runtimes["prediction"].values == {"module": "new"}
     assert runtimes["fitting"].model_params_manager.values["fitting"] == {"BG": 0.2}
@@ -142,7 +140,6 @@ def test_workspace_parameter_validation_and_reset_are_feature_neutral():
     coordinator, runtimes, messages = _workspace_coordinator()
 
     assert [result[0] for result in coordinator.validate()] == [
-        "Trainset parameters",
         "Fitting parameters",
         "GISAXS prediction parameters",
     ]

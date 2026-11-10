@@ -16,6 +16,8 @@ folder's code, so a GIMaP with another model never reuses the networks' outputs 
 
 from __future__ import annotations
 
+from src.gimap.shared.version import SOFTWARE
+
 import hashlib
 import json
 import os
@@ -114,6 +116,8 @@ class BundledToolkit:
         manifest = self.home / "MANIFEST.json"
         model = self.model_id()
         record = {
+            "software_version": SOFTWARE,
+            "randomness": {"policy": "research runtime defaults; not controlled by GIMaP"},
             "written": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "scan_folder": str(request.scan_folder),
             "request": request.analysis_values() | {"rate_nm_s": request.rate_nm_s, "t0_s": request.t0_s,

@@ -22,7 +22,8 @@ BASE_COLUMNS = (
 
 class LocalInSituRecordRepository:
     def cache_directory(self) -> Path:
-        return Path.cwd() / ".gimap_cache"
+        from src.gimap.integrations.state import user_data_dir
+        return user_data_dir() / "cache" / "fitting"
 
     def session_path(self) -> Path:
         return self.cache_directory() / "insitu_current_session.jsonl"

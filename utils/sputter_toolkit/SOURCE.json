@@ -167,6 +167,17 @@
    ],
    "change": "A dip is flagged whole, not only its bottom: a window below 50 % of its level (20 % without a modulation) is the core, and the flag extends from it to the contiguous windows with data on both sides while they stay below OFF_SAMPLE['release'] = 80 % of their level (intensity_ratios, dips); flank windows get the reasons OFF_FLANK / OFF_EXTREME_FLANK; the record adds core_windows, release_fraction and sensitivity (the windows a core limit or release level 0.1 lower or higher would flag). The R/D zig-zag counts break the sequence at a flagged window (zigzags(values, breaks)) instead of joining its neighbours; stage and module reversals still join the resolved values. stage_imputed is computed from the votes, so a flagged window whose path stage is carried is marked imputed (NOTE_IMPUTED says so). The mass continuity median and the literature method's checks of the network (2R/D, coverage, eta) and of the TS film leave out flagged windows. NOTE_OFF_SAMPLE / NOTE_OFF_EXTREME give the cores and the release level; the literature's beam_off reason and NOTE_BEAM_OFF no longer name the stage translation (without a modulation the beam may have been interrupted).",
    "reason": "A cut at the bottom of a dip alone left its sides (50-80 % of the level, still partly off the sample, with sizes biased low) in the votes, the trends, the zig-zag counts and the literature checks, put flags right at the threshold, and joining the neighbours of a removed window made new zig-zags; flagged windows still entered the mass continuity and the network checks."
+  },
+  {
+   "files": [
+    "SOURCE.json",
+    "LICENSE"
+   ],
+   "change": "Record author-confirmed authorship and MIT licence; scientific code, weights and tables unchanged.",
+   "reason": "Author confirmed authorship and MIT distribution on 2026-11-10."
   }
- ]
+ ],
+ "author": "Yufeng Zhai",
+ "license": "MIT",
+ "license_confirmed": "2026-11-10"
 }

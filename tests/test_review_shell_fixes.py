@@ -69,21 +69,21 @@ def test_the_labs_status_bar_keeps_step_instructions_and_says_nothing_on_paramet
 
     runtime = window.runtime
     statusbar = window.statusbar
-    _navigate(window, "trainset")
+    _navigate(window, "predict")
     _settle()
     messages = []
     statusbar.messageChanged.connect(messages.append)
-    runtime.trainset.status_updated.emit("Click the direct-beam position on the full detector")
+    runtime.prediction.status_updated.emit("Click the direct-beam position on the full detector")
     # No timeout: the instruction stays while its mode lasts (QStatusBar keeps no running timer).
     assert statusbar.currentMessage() == "Click the direct-beam position on the full detector"
     assert not [timer for timer in statusbar.findChildren(QTimer) if timer.isActive()]
     messages.clear()
-    runtime.trainset.parameters_changed.emit("Trainset parameters", {"roi": 1})
+    runtime.prediction.parameters_changed.emit({"roi": 1})
     assert messages == [] and statusbar.currentMessage() == "Click the direct-beam position on the full detector"
-    assert runtime.current_parameters["Trainset parameters"] == {"roi": 1}
+    assert runtime.current_parameters["GISAXS prediction parameters"] == {"roi": 1}
     try:
         apply_language("zh")
-        runtime.trainset.status_updated.emit("Trainset settings restored")
+        runtime.prediction.status_updated.emit("Trainset settings restored")
         assert statusbar.currentMessage() == ZH["Trainset settings restored"]
     finally:
         apply_language("en")
@@ -93,16 +93,16 @@ def test_the_status_bar_sits_under_the_page_and_the_sidebar_keeps_its_height(win
     components = window.components
     assert window.statusbar.parentWidget() is window.mainContentWidget
     heights = {}
-    for key in ("analyze", "trainset", "predict", "home"):
+    for key in ("analyze", "fitting", "predict", "home"):
         components.show_page(key)
         _settle(0.1)
         heights[key] = components.sidebar.height()
-        assert window.statusbar.isVisible() == (key in ("trainset", "predict")), key
+        assert window.statusbar.isVisible() == (key == "predict"), key
     assert len(set(heights.values())) == 1, heights
-    assert heights["trainset"] == window.centralwidget.height()
+    assert heights["predict"] == window.centralwidget.height()
     statusbar = window.statusbar
     status_bottom = statusbar.mapTo(window, statusbar.rect().bottomLeft()).y()
-    components.show_page("trainset")
+    components.show_page("predict")
     _settle(0.1)
     assert statusbar.mapTo(window, QPoint(0, 0)).x() >= components.sidebar.width()
     assert status_bottom <= window.centralwidget.geometry().bottom()

@@ -9,7 +9,7 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
   - **Fitting**：一维模型拟合，可以拟合单条曲线或原位序列。
   - **Compare**：多个序列或样品的阶段、异常帧、谁和谁相像。
   - **Sputter**：原位溅射序列逐时间窗的颗粒尺寸、间距、生长阶段（工具包在子进程里运行）。
-- **Labs**：2D Prediction、Trainset Build。
+- **Labs**：2D Prediction。Trainset Build 已从导航、菜单和应用启动移除，研究组件不随发布包提供。
 - **Tools 菜单**：Geometry Calibration、Format Converter（含 Convert Current File）、XRR Series Extractor、
   SEM Particle Analysis（SEM 图像粒径分析；2D Prediction 结果区的 SEM comparison… 也打开它）、
   1D Predict — Fit Many Curves（机器学习一维拟合，调用研究代码）、Process with AI、Settings。

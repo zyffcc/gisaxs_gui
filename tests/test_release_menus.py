@@ -106,7 +106,7 @@ def test_the_menu_bar_has_seven_menus_in_order(menu_bar) -> None:
     assert [action.text() for action in view] == ["Workspaces", "Labs"]  # the sidebar's sections
     assert menu_bar.actions["sem_analysis"].text() == "SE&M Particle Analysis…"
     assert "AI assistant" in menu_bar.actions["settings"].toolTip()
-    assert menu_bar.labs_menu.menuAction().toolTip() == ("The settings of 2D Prediction and Trainset Build, "
+    assert menu_bar.labs_menu.menuAction().toolTip() == ("The settings of 2D Prediction, "
                                                          "and Fitting's model")  # Load… replaces Fitting's model
 
 

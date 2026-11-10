@@ -67,9 +67,9 @@ MENUS_ZH = {
     "S&top": "停止(&T)",
     "1D Predict — Fit Many &Curves…": "一维预测——拟合多条曲线(&C)…",
     # File ▸ Labs Parameters (presentation/menu_bar.py)
-    "The settings of 2D Prediction and Trainset Build, and Fitting's model": "二维预测和训练集构建的设置，以及拟合的模型",
-    "Load the settings of the Labs pages (2D Prediction, Trainset Build) and Fitting's model from a JSON file; "
-    "Fitting's model is replaced": "从 JSON 文件载入实验室页面（二维预测、训练集构建）的设置和拟合的模型；拟合的模型会被替换",
+    "The settings of 2D Prediction, and Fitting's model": "二维预测的设置，以及拟合的模型",
+    "Load the settings of the Labs pages (2D Prediction) and Fitting's model from a JSON file; "
+    "Fitting's model is replaced": "从 JSON 文件载入实验室页面（二维预测）的设置和拟合的模型；拟合的模型会被替换",
     "Save the settings of the Labs pages and Fitting's model to a JSON file": "把实验室页面的设置和拟合的模型保存为 JSON 文件",
     # -- why an entry cannot run now (app/workspace_commands.py) ----------------------------------
     "Set the geometry first (Geometry step).": "请先设置几何（几何步骤）。",

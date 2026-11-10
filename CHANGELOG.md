@@ -10,6 +10,20 @@ hold, a source folder that starts with one double-click, and a reference of the 
 Methods*. Some results differ from those of 0.1.0, and a model folder imported in 2D Prediction has to be
 chosen once more: read *Updating from 0.1.0* at the end of this version before you update.
 
+### Release preparation — Windows and macOS
+
+- Removed Trainset Build from navigation, menus and application startup. Existing research files remain untouched.
+- XRR excludes integer negative gap codes while keeping floating negative data, reads urad/µrad/μrad correctly,
+  rejects unknown angle units and uses transformed NeXus header beam centres.
+- Save Project restores the Sputter form and references its result folder; older projects clear that workspace.
+- Fitting keeps physical **Fit a Folder of Curves…** separate from the experimental **1D Predict — Fit Many Curves…** entry; the manual explains which workflow to use.
+- 1D Predict writes `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the user data folder, independent of the launch folder.
+  Sputter, 1D Predict, AI assistant and command-line reports identify the GIMaP release.
+- Added a macOS portable builder and checks for Windows x64, macOS Apple Silicon and Intel. Package acceptance
+  remains separate from source checks; release assets state the tested systems.
+- Research code and bundled network licences confirmed by their author Yufeng Zhai as MIT; dependency licences unchanged.
+
+
 ### Sputter (new workspace)
 
 - **Sputter** (sidebar, `Ctrl+5`) follows an in-situ sputter deposition from the PILATUS CBF frames of one
@@ -629,8 +643,7 @@ hold.
 - **Sputter's first Predict downloads PyTorch** (about 1.2 GB, needs the internet); the model runs on the CPU.
   Without internet, install it by hand (manual, section 14.7).
 - **Sputter keeps every result folder**, with the frames as the model read them (`intake/`, `binned/`), in the
-  user data folder unless you chose another place; nothing removes them, and **File ▸ Save Project** does not
-  hold Sputter results.
+  user data folder unless you chose another place; nothing removes them, and **File ▸ Save Project** holds its parameters and result-folder reference.
 - **Sputter's literature method rests on the deposition rate, t0 and deposition end you give** and on
   D = 2π/q*. The percolation interval assumes the rate within ±10% and t0 within ±2 s (±0.5 s when t0 is given),
   engineering choices the page does not change (the toolkit's `physical` command does), takes the deposition end
@@ -656,9 +669,7 @@ hold.
   search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them: calibrate such an image
   with pyFAI and give GIMaP the `.poni`.
 - **XRR intensities are raw**: no monitor normalisation, footprint, background or resolution correction, and no
-  θ offset. A θ motor dataset in µrad is read as degrees (only `mrad` and `rad` are converted). Analyze's
-  bad-pixel search and masks are not applied, and negative values of a signed-integer NeXus/HDF5 frame enter
-  the sum.
+  θ offset. Angle units and signed-integer gap codes are checked before extraction.
 - **Format Converter does not read EDF** (use Batch Export ▸ Converted detector frames), and its uint16 modes
   mark pixels without data only in HDF5: in a TIFF or CBF such a pixel holds 65535 and reads back as a valid
   value.
@@ -669,8 +680,7 @@ hold.
 - **2D Prediction reads CBF frames only and applies no geometry and no correction** to a frame: the module's
   own preprocessing is all that runs. **The Ag and Cu distribution modules declare no axes**: their maps and
   curves are drawn on a placeholder axis (0.05–15 nm), which is not a physical scale.
-- **Trainset Build** stores the images of its BornAgain grid cache as float16, which overflows above 65504: with
-  the default design, part of the pixels of a training image can come out not finite.
+
 - **1D Predict (Workflow V5) is validated on simulated curves only**, with the composition and resolution given;
   finding the composition, an unknown resolution and measured data are not validated.
 - **The quick model fit of a GISAXS cut** (Run Automatic Analysis; *Find the particle shape (no AI)*) **is a
@@ -679,9 +689,9 @@ hold.
   R⁶-weighted mean radius (−29 % to +26 %); D and its disorder were not recovered, and 2π/q* was within 10 % of the
   true distance in 1 of 10 cuts with interference. Choose the model from what you know of the sample and confirm it
   in Fitting.
-- **No record holds the random seeds, and pixels left out are counted, not located.** The records of Sputter,
-  the AI assistant, `tools/gimap_agent.py` and 1D Predict's run folders do not name the GIMaP version; note it
-  (**Help ▸ About GIMaP**) with results from those.
+- Research runtimes do not all expose a controllable seed; their run records state this limitation.
+  Sputter, 1D Predict, AI and CLI records now identify the software version.
+
 - **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`,
   `assistant_provider_keys.json`). On a shared computer, set the key as an environment variable instead, or
   **Remove** it after use.

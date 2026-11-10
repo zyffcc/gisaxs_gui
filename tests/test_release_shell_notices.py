@@ -87,7 +87,7 @@ def test_a_confirmation_of_the_page_left_goes_when_the_page_changes(window) -> N
     plain = show_toast(window, "3 series compared: 2 groups.", level="ok")
     components.show_page("compare")  # the page already shown: nothing changed, the notice stays
     assert visible_toasts(window) == [plain]
-    components.show_page("trainset")
+    components.show_page("predict")
     assert visible_toasts(window) == []  # not over Trainset's buttons
 
     error = show_toast(window, "Could not read frame 12.", level="error")

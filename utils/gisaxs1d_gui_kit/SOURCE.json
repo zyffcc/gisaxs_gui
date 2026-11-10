@@ -56,6 +56,18 @@
    ],
    "change": "code_files and size_mb describe this folder; verified_with names the Python installations without their paths.",
    "reason": "The folder holds the runtime files only; personal paths."
+  },
+  {
+   "files": [
+    "SOURCE.json",
+    "LICENSE"
+   ],
+   "change": "Record author-confirmed authorship and MIT licence; scientific code, weights and tables unchanged.",
+   "reason": "Author confirmed authorship and MIT distribution on 2026-11-10.",
+   "added_files": [
+    "SOURCE.json",
+    "LICENSE"
+   ]
   }
  ],
  "upstream_sha256_of_patched_files": {
@@ -70,5 +82,8 @@
   "models/au_np_si/MODEL_INFO.json": "b95cc475d3f741df6344c221c7c64ccd42150facce59845bd24eaf50ea28425d",
   "models/general/MODEL_INFO.json": "c4182c7512cece4b00a12b2f4f2a6e532fa7985fc34a8c14b8e2e89b4260bb2c",
   "models/models.json": "e89a3eafb2b74b440d71b5988c355971c054e02ca2662b0cc6c1d2325ca6dc97"
- }
+ },
+ "author": "Yufeng Zhai",
+ "license": "MIT",
+ "license_confirmed": "2026-11-10"
 }
