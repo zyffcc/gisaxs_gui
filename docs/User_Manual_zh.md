@@ -345,6 +345,8 @@ GIMaP 在 Windows 上开发和测试。1280 × 720 的屏幕就够用（窗口�
 
 Mac 从源码安装时，请使用 Python 3.10 并运行 `python -m pip install -r requirements-release.txt`。它会选择兼容的官方 SciPy 构建；仅版本号相同并不代表二进制构建相同。
 
+Intel Mac 的溅射功能使用 PyTorch 2.2.2 和 NumPy 2 以下版本；Apple Silicon 和 Windows 使用 PyTorch 2.3 或更新版本。自带安装流程会自动选择对应依赖。
+
 ## 3. 主窗口
 
 ### 3.1 窗口的各部分

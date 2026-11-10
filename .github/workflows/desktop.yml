@@ -32,6 +32,8 @@ jobs:
             requirements-release.txt
       - name: Install release and check dependencies
         run: python -m pip install -r requirements-release.txt pytest ruff httpx
+      - name: Install and verify Sputter runtime
+        run: python -m pip install -r requirements-sputter.txt
       - name: Check application
         run: python tools/check.py --research skip
       - name: Record dependency versions

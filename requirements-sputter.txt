@@ -1,6 +1,6 @@
-# The Sputter workspace's model toolkit (research code bundled in utils/sputter_toolkit, run as a
-# subprocess) needs PyTorch; numpy, scipy, matplotlib and fabio come with requirements.txt.
-# Start_GIMaP.bat (tools/setup_source_env.ps1) adds it to a source folder's environment. The Windows
-# wheels of torch on PyPI are CPU builds; a CUDA build only matters for physical refinement, which is
-# not part of the bundle. 2.3 is the first PyTorch built for NumPy 2.
-torch>=2.3,<3
+# Sputter runs in an isolated CPU subprocess. GIMaP pins NumPy below 2.
+# Intel Mac wheels ended at PyTorch 2.2.2; other release targets use newer CPU builds.
+# https://github.com/pytorch/pytorch/issues/114602
+# The installer constrains the already installed NumPy version.
+torch==2.2.2; platform_system == "Darwin" and platform_machine == "x86_64"
+torch>=2.3,<3; platform_system != "Darwin" or platform_machine != "x86_64"

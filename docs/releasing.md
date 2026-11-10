@@ -257,8 +257,9 @@ Read the current JAC *Notes for Authors* before submitting; the points below are
 
 The release targets Windows x64 and macOS 15+ (Apple Silicon and Intel, separate packages).
 `.github/workflows/desktop.yml` checks the same source on Windows Server 2022, macOS 15 arm64 and
-macOS 15 Intel. Every required job must pass on the commit being published. A skipped optional-runtime
-test is not evidence that the runtime works; record such coverage separately. Never call an untested
+macOS 15 Intel. Every required job must pass on the commit being published. The matrix also installs Sputter's PyTorch runtime and loads both bundled checkpoints. Intel Macs use
+PyTorch 2.2.2 with NumPy below 2 ([upstream platform change](https://github.com/pytorch/pytorch/issues/114602)).
+A skipped optional-runtime test is not evidence that the runtime works; record such coverage separately. Never call an untested
 architecture supported merely because the source imports there.
 
 Use Python 3.10 and `requirements-release.txt` in a clean Conda environment. It selects official OpenBLAS

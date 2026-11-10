@@ -19,6 +19,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 - Fitting keeps physical **Fit a Folder of Curves…** separate from the experimental **1D Predict — Fit Many Curves…** entry; the manual explains which workflow to use.
 - 1D Predict writes `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the user data folder, independent of the launch folder.
   Sputter, 1D Predict, AI assistant and command-line reports identify the GIMaP release.
+- Intel Mac Sputter installs PyTorch 2.2.2; Windows and Apple Silicon use the newer supported builds.
 - Added a macOS portable builder and checks for Windows x64, macOS Apple Silicon and Intel. Package acceptance
   remains separate from source checks; release assets state the tested systems.
 - Research code and bundled network licences confirmed by their author Yufeng Zhai as MIT; dependency licences unchanged.

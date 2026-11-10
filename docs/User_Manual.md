@@ -413,6 +413,8 @@ developer's computer does not replace package acceptance testing.
 
 For source installations on a Mac, use Python 3.10 and `python -m pip install -r requirements-release.txt`. It selects the compatible official SciPy build; version numbers alone do not identify the binary build.
 
+Sputter on Intel Macs uses PyTorch 2.2.2 with NumPy below 2; Apple Silicon and Windows use PyTorch 2.3 or newer. The supplied installer selects the matching requirement automatically.
+
 ## 3. The window
 
 ### 3.1 The parts of the window

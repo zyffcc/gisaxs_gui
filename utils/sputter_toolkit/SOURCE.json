@@ -175,6 +175,13 @@
    ],
    "change": "Record author-confirmed authorship and MIT licence; scientific code, weights and tables unchanged.",
    "reason": "Author confirmed authorship and MIT distribution on 2026-11-10."
+  },
+  {
+   "files": [
+    "requirements.txt"
+   ],
+   "change": "Use PyTorch 2.2.2 and NumPy below 2 for Intel macOS; keep newer PyTorch on other targets. Scientific sources and checkpoints unchanged.",
+   "reason": "PyTorch stopped publishing Intel macOS wheels after 2.2.2; the application supports both Mac architectures."
   }
  ],
  "author": "Yufeng Zhai",

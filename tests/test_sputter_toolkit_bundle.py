@@ -1188,12 +1188,19 @@ def test_every_literature_sentence_comes_from_a_template(kit, tmp_path):
 
 # ------------------------------------------------------------------------- the networks --
 def test_the_shipped_policies_load_with_their_checkpoints(kit):
-    pytest.importorskip("torch")
+    torch = pytest.importorskip("torch")
     infer = importlib.import_module("sputtergisaxs.neural_refine_infer")
     for module, name in (("polymer", "polymer_embed"), ("TS", "TS_layer")):
         folder = KIT_DIR / "experts" / module
         expert = infer.NRExpert(folder / "model" / "best.pt", folder / "policy.json", device="cpu")
         assert expert.declaration["bank"]["module"] == name
+        # A synthetic encoded input verifies inference on every supported CPU runtime, not fit accuracy.
+        vector = torch.zeros((1, expert.declaration["bank"]["input_dim"]))
+        with torch.no_grad():
+            draw = expert.net.sample_branch({"vector": vector}, 0, 16,
+                                           generator=torch.Generator().manual_seed(23))
+        assert draw["z"].shape[1] == 16 and torch.isfinite(draw["z"]).all()
+        assert torch.isfinite(draw["branch_probability"]).all()
         recorded = expert.declaration["bank"]["input_policy_sha256"]
         policy = json.loads((folder / "policy.json").read_text(encoding="utf-8"))
         infer.check_policy(policy, recorded)

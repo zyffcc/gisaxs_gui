@@ -121,3 +121,17 @@ def test_old_scan_inspection_cannot_overwrite_a_new_project(tmp_path, monkeypatc
         finished.set()
         page.tasks.wait(5)
         window.close()
+
+
+@pytest.mark.parametrize('system, machine, wanted', [('Darwin', 'x86_64', '2.2.2'),
+                                                     ('Darwin', 'arm64', '2.3.0'),
+                                                     ('Windows', 'AMD64', '2.3.0')])
+def test_sputter_requirements_select_an_available_platform_runtime(system, machine, wanted):
+    from packaging.requirements import Requirement
+    root = Path(__file__).resolve().parents[1]
+    for name in ('requirements-sputter.txt', 'utils/sputter_toolkit/requirements.txt'):
+        requirements = [Requirement(line.strip()) for line in (root / name).read_text().splitlines()
+                        if line.strip() and not line.lstrip().startswith('#')]
+        selected = [r for r in requirements if r.name == 'torch' and
+                    (r.marker is None or r.marker.evaluate({'platform_system': system, 'platform_machine': machine}))]
+        assert len(selected) == 1 and wanted in selected[0].specifier
