@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from src.gimap.shared.version import SOFTWARE
+
 from src.gimap.features.assistant.infrastructure import (
     FEATURE_REQUESTS_FILE,
     KEY_FILE,
@@ -40,13 +42,15 @@ def test_an_in_memory_session_has_nowhere_to_save_a_key() -> None:
 def test_results_runs_and_tool_requests_are_written_as_json(tmp_path: Path) -> None:
     store = JsonResultStore(tmp_path / "data")
     table = store.write_tables(str(tmp_path / "frames" / "gimap_analysis"), "frame_001", {"peaks": [1.0]})
-    assert json.loads(Path(table).read_text("utf-8")) == {"peaks": [1.0]}
+    assert json.loads(Path(table).read_text("utf-8")) == {"peaks": [1.0], "software_version": SOFTWARE}
     assert Path(table).name == "frame_001_assistant.json"
 
     run = store.save_run({"frame": "C:/data/frame_001.tif", "state": "completed", "steps": []})
     assert Path(run).parent == tmp_path / "data" / RUNS_FOLDER
     assert Path(run).name.endswith("_frame_001.json")
-    assert json.loads(Path(run).read_text("utf-8"))["state"] == "completed"
+    record = json.loads(Path(run).read_text("utf-8"))
+    assert record["state"] == "completed"
+    assert record["software_version"] == SOFTWARE
 
     store.append_feature_request({"capability": "pole figure", "reason": "r"})
     store.append_feature_request({"capability": "indexing", "reason": "r"})
