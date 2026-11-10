@@ -343,6 +343,8 @@ GIMaP 在 Windows 上开发和测试。1280 × 720 的屏幕就够用（窗口�
 使用 macOS 的“打开”操作，不必关闭系统保护。目标系统为 macOS 15 或更新版本及 Windows x64；
 每个发布包实际验收的系统与架构以发布页为准。开发机源码启动成功不等于安装包验收通过。
 
+Mac 从源码安装时，请使用 Python 3.10 并运行 `python -m pip install -r requirements-release.txt`。它会选择兼容的官方 SciPy 构建；仅版本号相同并不代表二进制构建相同。
+
 ## 3. 主窗口
 
 ### 3.1 窗口的各部分

@@ -51,6 +51,15 @@ def build(prefix: Path, output: Path) -> Path:
     if not (prefix / 'conda-meta').is_dir():
         raise ValueError('Use a dedicated Conda release environment.')
     subprocess.run(['git', '-C', str(ROOT), 'diff', '--exit-code', 'HEAD', '--'], check=True)
+    actual_arch = subprocess.check_output([str(prefix / 'bin/python'), '-c',
+                                           'import platform; print(platform.machine())'], text=True).strip()
+    if actual_arch != arch:
+        raise ValueError(f'Release environment architecture {actual_arch} does not match builder {arch}')
+    # In a fresh process: catch incompatible native wheels before producing a package.
+    subprocess.run([str(prefix / 'bin/python'), '-c',
+                    'import numpy, scipy.signal, scipy.sparse.linalg, h5py, cv2, matplotlib; '
+                    'from PyQt5 import QtCore; import tensorflow; print("Release runtime imports passed")'], check=True)
+
     from src.gimap.shared.version import __version__
     names, kit_manifest = source_files(ROOT)
     output.mkdir(parents=True, exist_ok=True)

@@ -261,7 +261,10 @@ macOS 15 Intel. Every required job must pass on the commit being published. A sk
 test is not evidence that the runtime works; record such coverage separately. Never call an untested
 architecture supported merely because the source imports there.
 
-Use Python 3.10 and `requirements-release.txt` in a clean Conda environment. Keep the complete
+Use Python 3.10 and `requirements-release.txt` in a clean Conda environment. It selects official OpenBLAS
+SciPy wheels on macOS: the macOS 14 Accelerate wheel can fail to load on macOS 27
+([SciPy issue #25635](https://github.com/scipy/scipy/issues/25635)). Do not substitute a different wheel merely
+because its version number matches. The macOS builder checks native imports and processor architecture first. Keep the complete
 `pip freeze` and `conda list --explicit` output with each package; direct pins alone do not lock
 transitive dependencies. Build only tracked source plus the verified runtime manifests. Trainset Build
 is excluded from both platform packages; local research files and personal settings are never bundled.

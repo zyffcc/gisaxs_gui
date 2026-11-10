@@ -307,7 +307,7 @@ Implementation: `src/gimap/features/analyze/application/geometry_resolution.py`,
 
 ### 1.5 Exception: Trainset's legacy convention
 
-Trainset (Labs ▸ Trainset Build) keeps the convention with which its training data were generated. Its detector grid is
+The retired Trainset research code keeps the convention with which its training data were generated. It is not an application workspace. Its detector grid is
 
 ```text
 X_j = (j − x_c,index) · p_x,      Y_i = (y_c,index − i) · p_y          (1.6)
@@ -3498,6 +3498,8 @@ Where an algorithm draws random numbers, the seed is fixed, so the same input an
 
 StarDist inference and the 2D Prediction networks draw no random numbers in GIMaP. The seeds are part of the code
 or of the saved settings. Research run records state their seed policy; not every runtime exposes a controllable seed.
+
+The 1D Predict request and summary also record the SHA-256 of the selected model manifest. This is a fingerprint of the declared bundle, not a per-run check of every model file. Requests preserve normalized options and explicitly identify the runtime-default random-seed policy; no fixed run seed is claimed.
 
 ### 14.9 What the records do not yet contain
 

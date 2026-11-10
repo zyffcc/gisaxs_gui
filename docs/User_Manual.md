@@ -411,6 +411,8 @@ trust; do not disable system protection. Target systems are macOS 15 or later an
 page lists the exact systems and architectures verified for each package. A source checkout running on a
 developer's computer does not replace package acceptance testing.
 
+For source installations on a Mac, use Python 3.10 and `python -m pip install -r requirements-release.txt`. It selects the compatible official SciPy build; version numbers alone do not identify the binary build.
+
 ## 3. The window
 
 ### 3.1 The parts of the window

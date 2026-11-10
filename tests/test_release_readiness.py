@@ -94,3 +94,30 @@ def test_model_manifest_fingerprint_changes_with_the_selected_bundle(tmp_path):
     manifest.write_text('{"files": {"model": "b"}}')
     assert model_provenance('v5', tmp_path)['manifest_sha256'] != first['manifest_sha256']
     assert first['folder'] == str(tmp_path)
+
+
+def test_old_scan_inspection_cannot_overwrite_a_new_project(tmp_path, monkeypatch):
+    from threading import Event
+    from tests.test_project import _window
+    from src.gimap.features.sputter.application import ScanInfo
+    window = _window()
+    page = window.components.sputter_page
+    finished = Event()
+
+    def inspect(folder):
+        assert finished.wait(5)
+        return ScanInfo(folder, frames=4, energy_kev_hint=9.5)
+
+    monkeypatch.setattr(page.service, 'inspect', inspect)
+    try:
+        page.set_scan_folder(tmp_path)
+        page.apply_project_state({})
+        finished.set()
+        assert page.tasks.wait(5)
+        assert page.scan_picker.path() == ''
+        assert page.scan_info is None
+        assert not page._inspecting
+    finally:
+        finished.set()
+        page.tasks.wait(5)
+        window.close()

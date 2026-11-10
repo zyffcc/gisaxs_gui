@@ -7,7 +7,7 @@ Last checked: 2026-11-01.
 ## 1. GIMaP itself
 
 - GIMaP's own code and documentation are released under the **MIT License**: see [LICENSE](LICENSE)
-  (Copyright (c) 2025–2026 Yufeng Zhai and DESY).
+  (Copyright (c) 2025–2026 Yufeng Zhai).
 - The MIT License covers the files of this repository except those named in sections 2 and 5, and except
   the frame content in the manual screenshots described at the end of section 2. These keep the licences
   and terms given there.
