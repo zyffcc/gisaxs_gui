@@ -102,6 +102,16 @@ def _names(paths) -> list[str]:
     return [Path(path).name for path in paths]
 
 
+def _growth_state(paths, before):
+    """Include the real file state when a native platform fails to invalidate its layout."""
+    state = {"before": before.signature, "after": [nexus_files._stamp(path) for path in paths], "files": []}
+    for path in paths:
+        stat = path.stat()
+        with h5py.File(path, "r") as handle:
+            state["files"].append((stat.st_mtime_ns, stat.st_size, handle[f"{DET}/data"].shape))
+    return state
+
+
 # -- detector modules: the names propose, the content decides ---------------------------------------------------------
 
 
@@ -598,7 +608,7 @@ def test_a_growing_file_invalidates_the_cached_layout(tmp_path: Path, monkeypatc
         with h5py.File(path, "a") as handle:
             handle[f"{DET}/data"].resize(count, axis=0)
     grown = cached_layout(paths[0])
-    assert grown is not first and grown.frames == 5 and grown.member_frames == (8, 5) and not grown.complete
+    assert grown is not first and grown.frames == 5 and grown.member_frames == (8, 5) and not grown.complete, _growth_state(paths, first)
     assert grown.signature != first.signature and detect_nxs_frame_count(paths[1]) == 5
     opened = _count_opens(monkeypatch)
     assert cached_layout(paths[0]) is grown and opened == []
@@ -624,7 +634,7 @@ def test_growing_modules_are_seen_when_directory_metadata_is_stale(tmp_path: Pat
     assert nexus_files._stamp(paths[0]) == first.signature[0]
     monkeypatch.setattr(nexus_files, "_HANDLE_STAT", True)
     grown = cached_layout(paths[0])
-    assert grown is not first and grown.frames == 5 and grown.member_frames == (8, 5)
+    assert grown is not first and grown.frames == 5 and grown.member_frames == (8, 5), _growth_state(paths, first)
 
 
 def test_a_module_that_arrives_later_joins_the_set(tmp_path: Path) -> None:
