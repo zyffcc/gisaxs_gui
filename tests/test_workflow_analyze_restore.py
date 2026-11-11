@@ -10,6 +10,7 @@ import pytest
 from src.gimap.shared.detector_io import forget_layout
 from tests.test_analyze_nexus_sources import H, W, _master, _stack
 from tests.test_analyze_workspace import _context, _done, _page
+from tests.test_assistant_calibration import save_tiff
 
 
 @pytest.fixture
@@ -62,6 +63,29 @@ def test_project_reopens_the_same_source_when_import_order_is_sorted(page_factor
     reopened = page_factory()
     assert reopened.apply_project_state(saved) == []
     _assert_frame(reopened, second, 7, 7)
+
+
+def test_project_preserves_the_observations_summed_across_single_frame_files(page_factory, tmp_path):
+    first, second, third = [save_tiff(tmp_path / f"{name}.tif", np.full((H, W), value))
+                            for name, value in (("a", 1), ("b", 10), ("c", 100))]
+    page = page_factory()
+    page.add_paths([second])
+    _done(page)
+    page.add_paths([first, third])
+    _done(page)
+    assert page.view_model.state.files == [second, first, third]
+    page.view_model.set_sum_count(2)
+    assert page.show_frame(0, 0)
+    _assert_frame(page, second, 0, 11)
+    assert page.view_model.state.analysis.summed_frames == ((first, 0),)
+    saved = _saved(page)
+
+    reopened = page_factory()
+    assert reopened.apply_project_state(saved) == []
+    # Keeping B selected is insufficient: sorting its neighbours would silently sum B+C (110).
+    _assert_frame(reopened, second, 0, 11)
+    assert reopened.view_model.state.analysis.summed_frames == ((first, 0),)
+    assert reopened.view_model.state.files == [second, first, third]
 
 
 def test_missing_earlier_source_does_not_shift_the_selected_observation(page_factory, tmp_path):

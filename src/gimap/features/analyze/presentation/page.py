@@ -237,13 +237,13 @@ class AnalyzePage(
             self._remember(last_folder=folder)
             self.import_paths([folder])
 
-    def add_paths(self, paths, *, show_listed: bool = True) -> list[Path]:
+    def add_paths(self, paths, *, show_listed: bool = True, preserve_order: bool = False) -> list[Path]:
         """List the frames of ``paths`` and show the first new one; returns the new ones only (folder
         watching and Batch Export rely on that). When nothing is new, a frame among them that is listed
         already is shown (the one on screen stays when it is one of them) instead of a warning;
         ``show_listed=False`` leaves the frame and the step on screen as they are. While the automatic
         analysis works, new frames are only listed: it keeps the frame it works on."""
-        added = self.view_model.add_paths(paths)
+        added = self.view_model.add_paths(paths, preserve_order=preserve_order)
         self._rows_regrouped()  # listed files that are one source now (a master arrived, a first module)
         if not added:
             listed = self.view_model.already_listed

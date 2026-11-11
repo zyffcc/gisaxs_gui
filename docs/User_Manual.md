@@ -615,7 +615,8 @@ or dropping a `.gimap` file on the window opens it.
   file, `<name>.compare.npz`, next to the project: move or copy the two files together.
 - When a file has moved, the project still opens; a note
   says how many files are missing and names the first ones, and **Details…** lists them all.
-- Analyze restores the displayed source and its original frame number even if the list is reordered.
+- Analyze restores the saved source order, displayed source and original frame number. The source order
+  also determines which adjacent single-frame files contribute to **Sum** and their order in a series.
   If that source is missing, a note explains the fallback to the first imported frame of another source.
   If a NeXus chunk is now represented by its master, its frame number and import selection are mapped into that master.
 - Older projects without fit1d options use their initial defaults, with cut qz unset. Opening an empty

@@ -41,7 +41,7 @@ class ProjectMixin:
         if present:
             self._import_applying = True
             try:
-                self.add_paths(present)
+                self.add_paths(present, preserve_order=True)
                 notes += self.view_model.apply_import_selections(data.get("import_selections") or {}, sources=files)
             finally:
                 self._import_applying = False

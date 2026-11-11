@@ -112,13 +112,22 @@ class SourcesModelMixin:
 
     # -- the list ------------------------------------------------------------------------
 
-    def add_paths(self, paths: Sequence[str | Path]) -> list[Path]:
+    def add_paths(self, paths: Sequence[str | Path], *, preserve_order: bool = False) -> list[Path]:
         """Add frames from files/folders; returns the newly added ones.
 
         ``already_listed`` then holds the list positions of the frames among ``paths`` that were listed before;
         ``replaced`` and ``dropped`` the rows that changed because files now belong together.
         """
-        added, self.already_listed = self._list_sources(self._frames.expand(paths))
+        sources = self._frames.expand(paths)
+        if preserve_order:
+            # A project's order defines adjacent single-frame sums and series rows. A canonical
+            # master/module set takes the position of the first saved source it represents.
+            order = {}
+            for index, path in enumerate(paths):
+                order.setdefault(source_key(Path(path)), index)
+            sources.sort(key=lambda source: min(order.get(source_key(Path(part)), len(paths))
+                                               for part in (source, *self._parts(source))))
+        added, self.already_listed = self._list_sources(sources)
         return added
 
     def add_import_sources(self, paths: Sequence[Path]) -> list[Path]:

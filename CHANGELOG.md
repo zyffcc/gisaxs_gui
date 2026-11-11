@@ -12,7 +12,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
-- Project reopening restores Analyze's source identity and original frame after reordering or missing files,
+- Project reopening restores Analyze's source order, identity and original frame after missing files,
+  preserving the order used for adjacent single-frame sums and series,
   including chunk-to-master frame and import-selection mapping.
 - Fitting projects and sessions restore all fit1d inputs and the chosen method. Opening another curve clears
   its cut qz; an Analyze GISAXS cut selects GISAXS physics. Empty projects clear old native results and residuals.
