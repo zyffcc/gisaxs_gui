@@ -48,6 +48,25 @@ jobs:
           $destination = Join-Path $env:RUNNER_TEMP 'portable-check'
           Expand-Archive -LiteralPath $archive.FullName -DestinationPath $destination
           $package = Join-Path $destination $archive.BaseName
+          $env:GIMAP_TEST_ARCHIVE = $archive.FullName
+          $env:GIMAP_TEST_PACKAGE = $package
+          $diagnose = @'
+          import hashlib, os, zipfile
+          from pathlib import Path
+          archive = Path(os.environ['GIMAP_TEST_ARCHIVE'])
+          package = Path(os.environ['GIMAP_TEST_PACKAGE'])
+          prefix = Path(os.environ['CONDA']) / 'envs/gimap-release'
+          with zipfile.ZipFile(archive) as z:
+              for relative in ('Lib/pathlib.py', 'Lib/urllib/__init__.py', 'Lib/urllib/parse.py'):
+                  names = [name for name in z.namelist() if name.lower().endswith('/runtime/' + relative.lower())]
+                  print('ENTRIES', relative, names)
+                  for label, data in [('source', (prefix / relative).read_bytes()),
+                                      ('archive', z.read(names[0])),
+                                      ('extracted', (package / 'runtime' / relative).read_bytes())]:
+                      print(label, len(data), hashlib.sha256(data).hexdigest(), 'null bytes', data.count(b'\0'), repr(data[:80]))
+          '@
+          conda run --no-capture-output -n base python -c $diagnose
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (Test-Path (Join-Path $package 'src/gimap/features/trainset')) { throw 'Retired workspace shipped' }
           $python = Join-Path $package 'runtime/python.exe'
           $env:PATH = "$package\runtime;$package\runtime\Library\bin;$package\runtime\Scripts;$env:PATH"
