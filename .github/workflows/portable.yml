@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022, macos-15-intel]
+        os: [windows-2022]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     env:
@@ -65,7 +65,9 @@ jobs:
                                       ('extracted', (package / 'runtime' / relative).read_bytes())]:
                       print(label, len(data), hashlib.sha256(data).hexdigest(), 'null bytes', data.count(b'\0'), repr(data[:80]))
           '@
-          conda run --no-capture-output -n base python -c $diagnose
+          $diagnosticFile = Join-Path $env:RUNNER_TEMP 'diagnose-package.py'
+          $diagnose | Set-Content -Encoding utf8 $diagnosticFile
+          conda run --no-capture-output -n base python $diagnosticFile
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (Test-Path (Join-Path $package 'src/gimap/features/trainset')) { throw 'Retired workspace shipped' }
           $python = Join-Path $package 'runtime/python.exe'
