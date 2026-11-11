@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 from threading import Event
+from time import monotonic
 
 import numpy as np
 import pytest
 from PyQt5.QtTest import QTest
 
 from tests.test_analyze_geometry_adjustment import _open, _wheel_up, page
+
+
+def _wait_for_worker(started):
+    """Pump the GUI timers that submit the preview until its real worker reaches the barrier."""
+    deadline = monotonic() + 2.0
+    while not started.is_set() and monotonic() < deadline:
+        QTest.qWait(10)
+    assert started.is_set(), "preview worker did not start while processing Qt events"
 
 
 def _settle(page):
@@ -146,10 +155,9 @@ def test_busy_preview_waits_and_only_reduces_the_latest_pending_centre(page, mon
         return analyze(request)
 
     monkeypatch.setattr(page.view_model, "analyze", blocked)
-    x_spin.setValue(198.1234)
-    QTest.qWait(230)
-    assert started.wait(2)
     try:
+        x_spin.setValue(198.1234)
+        _wait_for_worker(started)
         for value in (199.2345, 200.3456, 201.4567):
             x_spin.setValue(value)
         QTest.qWait(230)
@@ -216,10 +224,9 @@ def test_unchecking_during_a_busy_preview_drops_its_unsubmitted_newer_centre(pag
         return analyze(request)
 
     monkeypatch.setattr(page.view_model, "analyze", blocked)
-    getattr(dialog, x_name).setValue(198.1234)
-    QTest.qWait(230)
-    assert started.wait(2)
     try:
+        getattr(dialog, x_name).setValue(198.1234)
+        _wait_for_worker(started)
         getattr(dialog, x_name).setValue(200.8037)
         QTest.qWait(230)
         dialog.live_preview_check.setChecked(False)
@@ -263,7 +270,13 @@ def test_incomplete_input_cancels_a_pending_preview_until_the_value_is_valid(pag
     assert page.view_model.state.analysis.geometry.beam_center_x_px == pytest.approx(201.1256)
 
 
-def test_an_old_inflight_preview_cannot_replace_the_new_file_analysis(page, monkeypatch):
+@pytest.mark.parametrize("preview_delay_ms", [None, 400])
+def test_an_old_inflight_preview_cannot_replace_the_new_file_analysis(page, monkeypatch, preview_delay_ms):
+    if preview_delay_ms is not None:
+        from src.gimap.features.analyze.presentation.bindings import geometry_editor
+
+        # A timer later than the old fixed 230 ms wait still needs the GUI event loop to launch its worker.
+        monkeypatch.setattr(geometry_editor, "LIVE_PREVIEW_DELAY_MS", preview_delay_ms)
     dialog, x_name, _y = _open(page, "geometry")
     dialog.live_preview_check.setChecked(True)
     analyze = page.view_model.analyze
@@ -278,10 +291,9 @@ def test_an_old_inflight_preview_cannot_replace_the_new_file_analysis(page, monk
         return analyze(request)
 
     monkeypatch.setattr(page.view_model, "analyze", blocked_old)
-    getattr(dialog, x_name).setValue(198.1234)
-    QTest.qWait(230)
-    assert started.wait(2)
     try:
+        getattr(dialog, x_name).setValue(198.1234)
+        _wait_for_worker(started)
         page._file_selected(1)
         assert page.view_model.current_path.name == "b.cbf"
     finally:
