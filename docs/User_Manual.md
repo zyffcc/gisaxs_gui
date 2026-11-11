@@ -354,10 +354,13 @@ TensorFlow runs on the CPU; a GPU set-up is not configured.
 
 ### 2.4 Updating
 
-**Portable version.** Get the new version as in section 2.1, the installer or the ZIP. It goes into a
+**Windows portable version.** Get the new version as in section 2.1, the installer or the ZIP. It goes into a
 folder of its own; start the new `Start_GIMaP.bat` and delete the old folder when you no longer need
 it. `Update_GIMaP.bat` cannot update a portable folder: it has no `.git`, and the script says so and
 changes nothing.
+
+**macOS portable version.** Extract the new package into a new folder and open its `Start_GIMaP.command`.
+Its first launch prepares the runtime for that package. Settings remain in the user data folder.
 
 **Source checkout (a git clone).** Double-click `Update_GIMaP.bat` in the folder (it needs Git 2.16 or
 newer), or run:
@@ -395,7 +398,8 @@ while the user data folder holds no settings yet.
 
 ### 2.5 System and screen
 
-Windows is the platform GIMaP is developed and tested on. A 1280 × 720 screen is enough (the
+Release targets are Windows x64 and macOS 15 or later, with separate Apple Silicon and Intel packages.
+The release page identifies the systems verified for each package. A 1280 × 720 screen is enough (the
 smallest window is 1024 × 640); a 1080p or larger screen is more comfortable for the detector image
 beside the curves. GIMaP follows the display scaling of the operating system (for example 125 % or
 150 %).
@@ -3206,7 +3210,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Sputter flags windows where the beam may be off the sample from the intensity alone** (a dip below half of the level of the neighbouring windows within one modulation period, or below 20% within 10 s without a modulation, with its sides down to 80%; section 8.5). The stage position and the range of its translation are not read: a dip that never falls below half of the level is not flagged, however long, nor is a slower drift off the sample; a dip with another cause (a drop of the beam, the shutter) is flagged alike, and the first and last windows are not judged. When the footprint reaches the sample edge, edge scattering or streaks can raise the intensity in the analysed region instead of lowering it: such windows are not flagged. | Compare the flagged windows with the stage log of the beamtime when you have it; their values stay in the Windows table. |
 | **Sputter's literature method rests on the deposition rate, t0 and deposition end you give** (GISAXS measures none of them) and on D = 2π/q*. Its percolation interval assumes the rate within ±10% and t0 within ±2 s (±0.5 s when t0 is given) — engineering choices the page does not change — takes the deposition end as exact, and leaves out the systematic error of 2π/q* (more than 40% for D > 10 nm once coalescence starts). Without a deposition end the deposition is taken to last to the end of the scan. PNO, PSBMA and PEO have no published percolation data: the band of all polymers of the metal is used (section 8.4). | Give the rate at the sample position, and t0 and the deposition end when you know them; for other errors run the toolkit's `physical` command with `--rate-error` and `--t0-error`. Read a *not determined* percolation as not determined, and compare with other chambers' thresholds as a comparison, not a prediction. |
 | **Sputter's first Predict downloads PyTorch** (about 1.2 GB, needs the internet); the model runs on the CPU. | Without internet, install PyTorch by hand (section 14.7). |
-| Windows is the platform GIMaP is developed and tested on. TensorFlow runs on the CPU; a GPU set-up is not configured. | — |
+| **TensorFlow runs on the CPU on Windows and macOS**; a GPU set-up is not configured. | Use the bundled CPU runtime. |
 
 ## 14. Troubleshooting, FAQ, version and contact
 

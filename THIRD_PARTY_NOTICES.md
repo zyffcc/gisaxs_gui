@@ -1,8 +1,9 @@
 # Third-party notices
 
-This file lists what in the GIMaP (Grazing-Incidence Mapping Package) repository and in its Windows
+This file lists what in the GIMaP (Grazing-Incidence Mapping Package) repository and in its Windows and macOS
 portable package is not GIMaP's own work, the licence it comes under, and where it comes from.
-Last checked: 2026-11-01.
+Packaging coverage updated: 2026-11-11. The dependency table below records its original audit date;
+each package's `licenses/README.txt` identifies its actual dependencies and versions.
 
 ## 1. GIMaP itself
 
@@ -98,6 +99,14 @@ The other screenshots show synthetic data or no data.
 The portable package `GIMaP-<version>-windows-x64-portable.zip` holds GIMaP's files and, in `runtime\`,
 a packed Conda environment. That environment has Python 3.10 from conda-forge and the packages of
 `requirements.txt` from PyPI. `tools/build_portable_release.ps1` builds it.
+
+**macOS packages** are built by `tools/build_macos_release.py` for Apple Silicon and Intel separately,
+using `requirements-release.txt`. They contain the same application licence and third-party notices,
+plus the dependency licences collected from their own environment. Their Python environment is in
+`runtime.tar.gz`, extracted into the user's runtime cache at first launch; Python packages are under
+`lib/python3.10/site-packages/`. The Windows paths and DLL examples below describe the Windows package.
+Use the macOS package's `licenses/README.txt` and `pip-freeze.txt` for its components and versions.
+The third-party licence terms are retained on both platforms; they are not replaced by GIMaP's MIT licence.
 
 ### The licences/ folder of the package
 
