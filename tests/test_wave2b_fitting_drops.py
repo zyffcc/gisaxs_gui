@@ -7,7 +7,7 @@ from PyQt5.QtGui import QDragEnterEvent, QDropEvent
 from PyQt5.QtWidgets import QApplication
 
 from tests.test_fit_page import _curve_file, _page
-from tests.test_fit_series import _model, _pages, _series
+from tests.test_fit_series import _loaded, _model, _pages, _series
 from tests.test_wave2b_fitting_series_list import _close
 
 
@@ -83,6 +83,7 @@ def test_a_folder_dropped_on_in_situ_series_is_listed(tmp_path) -> None:
     assert series.acceptDrops()
     assert not _enter(series, _mime(folder / "run_00002_fit_input.dat"))  # a curve: Single analysis opens those
     assert _drop(series, _mime(folder))
+    _loaded(series)
     assert series.folder == str(folder) and len(series.paths) == 5
     _close(series, single)
 

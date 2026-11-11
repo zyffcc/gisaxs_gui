@@ -482,6 +482,8 @@ def main():
     page.tasks.wait(120)
     workspace = window.components.fitting_workspace
     series = workspace.series_page
+    assert series.loading_tasks.wait(60), "Fitting series discovery did not finish"
+    assert not series._listing_busy
     print(json.dumps({
         **single,
         "series_context": workspace.context_stack.currentWidget() is series,

@@ -535,6 +535,7 @@ def test_a_giwaxs_curve_or_series_in_fitting_is_said_to_be_one_and_no_particle_f
             _fit_input(series / f"film_frame{frame:04d}_fit_input.dat", giwaxs=True, scale=1.0 + 0.1 * frame)
         _answer(monkeypatch, QMessageBox.Discard)
         components._send_series_to_fitting(series)
+        _loaded(workspace.series_page)
         _settle()
         assert len(workspace.series_page.paths) == 5 and workspace.context_stack.currentWidget() is workspace.series_page
         assert note.isVisibleTo(window) and note.title_label.text() == "GIWAXS I(q) curves, not GISAXS cuts"
@@ -564,10 +565,12 @@ def test_a_giwaxs_curve_or_series_in_fitting_is_said_to_be_one_and_no_particle_f
         for frame in range(4):
             _fit_input(cuts / f"cut_frame{frame:04d}_fit_input.dat", halves="positive", scale=1.0 + 0.1 * frame)
         components._send_series_to_fitting(cuts)
+        _loaded(workspace.series_page)
         _settle()
         assert len(workspace.series_page.paths) == 4 and note.isHidden()
         assert workspace.series_page.series_side() == "positive"  # the halves Analyze sent the series with
         components._send_series_to_fitting(series)  # the GIWAXS folder again: said again
+        _loaded(workspace.series_page)
         _settle()
         assert note.isVisibleTo(window)
     finally:
@@ -594,6 +597,7 @@ def test_a_run_on_a_series_of_giwaxs_curves_ends_with_the_note_saying_what_came_
             _fit_input(folder / f"film_frame{frame:04d}_fit_input.dat", giwaxs=True, scale=1.0 + 0.1 * frame)
         _answer(monkeypatch, QMessageBox.Discard)
         components._send_series_to_fitting(folder)
+        _loaded(workspace.series_page)
         _settle()
         assert note.isVisibleTo(window)
         note.dismiss_button.click()  # closed for this series …
