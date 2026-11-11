@@ -1,0 +1,139 @@
+name: Portable package checks
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Package platform to verify
+        type: choice
+        options: [all, windows, apple-silicon, intel-mac]
+        default: all
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.platform == 'windows' && '["windows-2022"]' || inputs.platform == 'apple-silicon' && '["macos-15"]' || inputs.platform == 'intel-mac' && '["macos-15-intel"]' || '["windows-2022","macos-15","macos-15-intel"]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      QT_QPA_PLATFORM: offscreen
+      GIMAP_SPUTTER_NO_INSTALL: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: conda-incubator/setup-miniconda@v4
+        with:
+          miniforge-version: latest
+          activate-environment: gimap-release
+          python-version: '3.10'
+          channels: conda-forge
+          conda-remove-defaults: true
+      - name: Install clean release runtime
+        shell: bash -el {0}
+        run: |
+          conda run --no-capture-output -n gimap-release python -m pip install -r requirements-release.txt
+          conda run --no-capture-output -n base python -m pip install conda-pack
+      - name: Build Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          conda run --no-capture-output -n base powershell -NoProfile -ExecutionPolicy Bypass -File tools/build_portable_release.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify Windows packed runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = Get-ChildItem release/GIMaP-*-windows-x64-portable.zip | Select-Object -First 1
+          $destination = Join-Path $env:RUNNER_TEMP 'portable-check'
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath $destination
+          $package = Join-Path $destination $archive.BaseName
+          $env:GIMAP_TEST_ARCHIVE = $archive.FullName
+          $env:GIMAP_TEST_PACKAGE = $package
+          $verify = @'
+          import os, zipfile
+          from pathlib import Path
+          archive = Path(os.environ['GIMAP_TEST_ARCHIVE'])
+          package = Path(os.environ['GIMAP_TEST_PACKAGE'])
+          prefix = Path(os.environ['CONDA']) / 'envs/gimap-release'
+          with zipfile.ZipFile(archive) as z:
+              for relative in ('Lib/pathlib.py', 'Lib/urllib/__init__.py', 'Lib/urllib/parse.py'):
+                  names = [name for name in z.namelist() if name.lower().endswith('/runtime/' + relative.lower())]
+                  assert len(names) == 1, names
+                  assert (prefix / relative).read_bytes() == z.read(names[0]) == (package / 'runtime' / relative).read_bytes(), relative
+              empty = [item for item in z.infolist() if not item.is_dir() and item.file_size == 0]
+              for item in empty:
+                  assert (package.parent / item.filename).stat().st_size == 0, item.filename
+              print(f'Packed runtime files match; all {len(empty)} empty files survived Windows extraction.')
+          '@
+          $verificationFile = Join-Path $env:RUNNER_TEMP 'verify-package.py'
+          $verify | Set-Content -Encoding utf8 $verificationFile
+          conda run --no-capture-output -n base python $verificationFile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (Test-Path (Join-Path $package 'src/gimap/features/trainset')) { throw 'Retired workspace shipped' }
+          $python = Join-Path $package 'runtime/python.exe'
+          $env:PATH = "$package\runtime;$package\runtime\Library\bin;$package\runtime\Scripts;$env:PATH"
+          Remove-Item Env:PYTHONPATH,Env:PYTHONHOME -ErrorAction SilentlyContinue
+          $env:PYTHONNOUSERSITE = '1'
+          $env:GIMAP_HOME = Join-Path $env:RUNNER_TEMP 'gimap-test-home'
+          New-Item -ItemType Directory -Force $env:GIMAP_HOME | Out-Null
+          '{"schema_version":1,"settings":{},"preferences":{}}' | Set-Content -Encoding utf8 (Join-Path $env:GIMAP_HOME 'settings.json')
+          '{"schema_version":1,"profiles":[]}' | Set-Content -Encoding utf8 (Join-Path $env:GIMAP_HOME 'instrument_profiles.json')
+          $env:MPLCONFIGDIR = Join-Path $env:GIMAP_HOME 'matplotlib'
+          & $python (Join-Path $package 'tools/portable_unpack.py') --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $python (Join-Path $package 'tools/portable_unpack.py')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $python (Join-Path $package 'tools/offscreen_smoke.py')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build macOS package
+        if: runner.os == 'macOS'
+        shell: bash -el {0}
+        run: |
+          prefix="$(conda run -n gimap-release python -c 'import sys; print(sys.prefix)')"
+          conda run --no-capture-output -n base python tools/build_macos_release.py --prefix "$prefix" --out release
+      - name: Verify macOS packed launcher
+        if: runner.os == 'macOS'
+        shell: bash -el {0}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json, os, subprocess, time
+          base = Path(os.environ['RUNNER_TEMP']) / 'portable-check'
+          base.mkdir()
+          archive = next(Path('release').glob('GIMaP-*-macos-*-portable.zip'))
+          subprocess.run(['ditto', '-x', '-k', str(archive), str(base)], check=True)
+          package = base / archive.stem
+          home, data = base / 'test user', base / 'data'
+          home.mkdir(); data.mkdir()
+          (data / 'settings.json').write_text('{"schema_version":1,"settings":{},"preferences":{}}')
+          (data / 'instrument_profiles.json').write_text('{"schema_version":1,"profiles":[]}')
+          env = dict(os.environ, HOME=str(home), GIMAP_HOME=str(data), PYTHONUNBUFFERED='1')
+          log_path = base / 'launcher.log'
+          with log_path.open('w') as log:
+              process = subprocess.Popen([str(package / 'Start_GIMaP.command')], env=env, stdout=log, stderr=subprocess.STDOUT)
+              try:
+                  deadline = time.monotonic() + 240
+                  while time.monotonic() < deadline:
+                      text = log_path.read_text()
+                      if 'Feature initialization complete' in text:
+                          break
+                      if process.poll() is not None:
+                          raise RuntimeError(text)
+                      time.sleep(.5)
+                  else:
+                      raise RuntimeError('Packed launcher timed out: ' + log_path.read_text())
+              finally:
+                  process.terminate()
+                  process.wait(timeout=30)
+          print(log_path.read_text())
+          build = json.loads((package / 'BUILD.json').read_text())
+          runtime = home / 'Library/Application Support/GIMaP/runtimes' / build['runtime_sha256']
+          env.pop('PYTHONPATH', None); env.pop('PYTHONHOME', None)
+          subprocess.run([str(runtime / 'bin/python'), str(package / 'app/tools/offscreen_smoke.py')], env=env, check=True, timeout=90)
+          print(json.dumps(build, indent=2))
+          PY
