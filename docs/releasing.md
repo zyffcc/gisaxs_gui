@@ -148,6 +148,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_portable_relea
     split, its parts and the two `.bat` files (not the ZIP, which is then not uploaded). `sha256sum -c
     SHA256SUMS.txt` checks them, as does `Get-FileHash -Algorithm SHA256 <file>` in PowerShell; a user
     who downloaded only some of them uses `sha256sum -c --ignore-missing SHA256SUMS.txt`.
+- Application and licence files are appended with `tools/append_release_files.py`; the existing runtime
+  entries are not rewritten. This preserves empty Python package files through Windows extraction.
+  The native portable-package check builds, extracts and starts the packaged application as well as
+  checking the source checkout.
 - Compare `licenses\README.txt` in the ZIP with the table in `THIRD_PARTY_NOTICES.md`. A new component
   under a copyleft licence (GPL, LGPL, MPL) belongs in the notices.
 

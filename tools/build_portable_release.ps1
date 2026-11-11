@@ -434,36 +434,18 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Copying $($ApplicationFiles.Count) application files..."
-Add-Type -AssemblyName System.IO.Compression
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$Archive = [System.IO.Compression.ZipFile]::Open($ArchivePath, [System.IO.Compression.ZipArchiveMode]::Update)
+$SelectionPath = Join-Path $LicenseStaging 'application-selection.json'
+$Generated = @{}
+if ($Fit1DSubsetJson) { $Generated[$Fit1DManifestPath] = $Fit1DSubsetJson }
+@{ files = @($ApplicationFiles); licences = @($LicenseFiles); generated = $Generated } |
+    ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $SelectionPath -Encoding UTF8
 try {
-    # Only the checked list: the bytes on disk, which are the ones the model manifests were made from.
-    foreach ($RelativePath in $ApplicationFiles) {
-        if ($RelativePath -eq $Fit1DManifestPath -and $Fit1DSubsetJson) {
-            $Entry = $Archive.CreateEntry("$PackageName/$RelativePath")
-            $Writer = [System.IO.StreamWriter]::new($Entry.Open(), [System.Text.UTF8Encoding]::new($false))
-            try { $Writer.Write($Fit1DSubsetJson) } finally { $Writer.Dispose() }
-            continue
-        }
-        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
-            $Archive,
-            (Join-Path $ProjectRoot $RelativePath),
-            "$PackageName/$RelativePath",
-            [System.IO.Compression.CompressionLevel]::Optimal
-        ) | Out-Null
-    }
-    foreach ($RelativePath in $LicenseFiles) {
-        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
-            $Archive,
-            (Join-Path $LicenseStaging $RelativePath),
-            "$PackageName/licenses/$RelativePath",
-            [System.IO.Compression.CompressionLevel]::Optimal
-        ) | Out-Null
-    }
+    # Preserve the original runtime entries, including empty deflated Python package files.
+    & python (Join-Path $ProjectRoot 'tools/append_release_files.py') --archive $ArchivePath `
+        --root $ProjectRoot --package $PackageName --licences $LicenseStaging --selection $SelectionPath
+    if ($LASTEXITCODE -ne 0) { throw "Application files could not be added to the portable archive." }
 }
 finally {
-    $Archive.Dispose()
     Remove-LicenseStaging
 }
 

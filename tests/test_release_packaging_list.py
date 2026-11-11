@@ -32,6 +32,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "tools" / "build_portable_release.ps1"
 KIT_HELPER = ROOT / "tools" / "list_fit1d_release_files.py"
 LICENSE_HELPER = ROOT / "tools" / "collect_licenses.py"
+APPEND_HELPER = ROOT / "tools" / "append_release_files.py"
 V5 = "modules/Fitting_1D_Model/Workflow_v5"
 
 pytestmark = pytest.mark.skipif(
@@ -104,6 +105,7 @@ MANIFESTS = {
 }
 PACKED = set(TRACKED) | set(MODEL) | set(MANIFESTS) | {
     "tools/build_portable_release.ps1", "tools/list_fit1d_release_files.py", "tools/collect_licenses.py",
+    "tools/append_release_files.py",
 }
 
 
@@ -150,6 +152,7 @@ def developer_folder(tmp_path):
     shutil.copy2(SCRIPT, root / "tools" / SCRIPT.name)
     shutil.copy2(KIT_HELPER, root / "tools" / KIT_HELPER.name)
     shutil.copy2(LICENSE_HELPER, root / "tools" / LICENSE_HELPER.name)
+    shutil.copy2(APPEND_HELPER, root / "tools" / APPEND_HELPER.name)
     _git(root, "init", "--quiet")
     # ``git add`` with paths: the ignored files stay out, and so does the untracked ``_handoff``.
     _git(root, "add", "--", ".gitignore", "main.py", "Start_GIMaP.bat", "src", "config", "docs",
