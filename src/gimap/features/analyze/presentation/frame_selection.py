@@ -213,17 +213,44 @@ class ImportSelectionMixin:
         return {str(path): selected.to_record() for path in self.state.files
                 if (selected := self.import_selection(path)) is not None}
 
-    def apply_import_selections(self, record: dict) -> list[str]:
+    def apply_import_selections(self, record: dict, *, sources=()) -> list[str]:
         """Restore selections of present listed sources; old projects without this field mean All."""
         self._import_selections.clear()
         paths = {str(path).casefold(): path for path in self.state.files}
+        entries = dict(record or {})
+        named = {str(name).casefold() for name in entries}
+        for source in sources:
+            if str(source).casefold() not in named:
+                entries[str(source)] = None  # an omitted source selected all of its own frames
+        direct = {str(name).casefold() for name in entries} & paths.keys()
+        restored = set()
         notes = []
-        for name, selected in dict(record or {}).items():
+        for name, selected in entries.items():
             path = paths.get(str(name).casefold())
+            alias = path is None
             if path is None:
-                continue
+                found = self.locate_source_frame(name)
+                if found is None or str(found[0]).casefold() in direct:
+                    continue
+                path, offset = found
+            else:
+                offset = 0
             try:
-                self.set_import_selection(path, selected)
+                selection = FrameSelection.from_record(selected)
+                if selection is None and alias:
+                    layout = self.describe(path)
+                    if layout is not None and layout.kind == "chunked_master":
+                        count = next((frames for part, frames in zip(layout.members[1:], layout.member_frames)
+                                      if str(part).casefold() == str(name).casefold()), 0)
+                        selection = FrameSelection((range(count),))
+                if selection is not None:
+                    selection = selection.shifted(offset)
+                key = str(path).casefold()
+                if key in restored:
+                    previous = self.import_selection(path)
+                    selection = previous.union(selection) if previous is not None and selection is not None else None
+                self.set_import_selection(path, selection)
+                restored.add(key)
             except (ValueError, KeyError, TypeError) as exc:
                 notes.append(f"Frame selection for {path.name} could not be restored: {exc}")
         return notes

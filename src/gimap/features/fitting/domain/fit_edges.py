@@ -21,6 +21,7 @@ from typing import Callable, Optional
 from .fit1d_bounds import Note
 from .fit1d_edges import ACCEPT, ROUNDS
 from .fit_model import LINEAR, FitModel
+from .fit_engine import stopped_result
 
 SPREADS = frozenset({"sigma_R", "sigma_h", "sigma_D"})
 LEFT_ALONE = LINEAR | {"k"}
@@ -82,22 +83,28 @@ def settle(fit: Callable[[FitModel], object], result, *, limit: int = 3,
            cancelled: Callable[[], bool] = lambda: False) -> tuple:
     """The values still at an edge, each fixed at the least extreme value the curve allows (see the module):
     (the result kept, the notes of what was done)."""
+    if cancelled():
+        return stopped_result(result), []
     if result.stopped or not math.isfinite(result.chi2_reduced):
         return result, []
     best, tolerance, actions = _total(result), max(1.0, float(result.chi2_reduced)), []
     edges = [path for path in result.at_bounds if path[1] not in LEFT_ALONE and result.model.get(path).free]
     for path in edges[:limit]:
         if cancelled():
-            break
+            return stopped_result(result), actions
         parameter = result.model.get(path)
         side = _side(parameter)
         kept = None
         for step in range(1, STEP_COUNT + 1):
+            if cancelled():
+                return stopped_result(result), actions
             value = _inward(parameter, side, path[1], step)
             if value == parameter.value or (kept is not None and value == kept[0]):
                 break
             trial = fit(result.model.with_parameter(path, value=value, free=False))
-            if trial.stopped or _total(trial) - best > tolerance:
+            if trial.stopped or cancelled():
+                return stopped_result(result), actions
+            if _total(trial) - best > tolerance:
                 break
             kept = (value, trial)
         if kept is None:
@@ -119,7 +126,9 @@ def resolve(fit: Callable[[FitModel], object], result, *, rounds: int = ROUNDS,
     and those of what is still at an edge."""
     actions = []
     for _round in range(rounds):
-        if result.stopped or cancelled():
+        if cancelled():
+            result = stopped_result(result)
+        if result.stopped:
             break
         model, done = result.model, []
         for path in result.at_bounds:
@@ -130,8 +139,11 @@ def resolve(fit: Callable[[FitModel], object], result, *, rounds: int = ROUNDS,
         if not done:
             break
         trial = fit(model)
+        if trial.stopped or cancelled():
+            result = stopped_result(result)
+            break
         before, after = result.chi2_reduced, trial.chi2_reduced
-        if trial.stopped or not after <= before * ACCEPT:
+        if not after <= before * ACCEPT:
             actions.append(Note(KEPT, dict(count=len(done), before=f"{before:.3g}", after=f"{after:.3g}")))
             break
         for path, change in done:
@@ -139,10 +151,12 @@ def resolve(fit: Callable[[FitModel], object], result, *, rounds: int = ROUNDS,
                           after=f"{after:.3g}")
             actions.append(Note(WIDENED, {**values, "old": f"{change['old']:.4g}", "new": f"{change['new']:.4g}"}))
         result = trial
-    if rounds:
+    if rounds and not result.stopped:
         result, bounds = settle(fit, result, cancelled=cancelled)
         actions.extend(bounds)
     remaining = []
+    if result.stopped or cancelled():
+        return stopped_result(result), actions, remaining
     for path in result.at_bounds:
         if path[1] in LEFT_ALONE or not result.model.get(path).free:
             continue

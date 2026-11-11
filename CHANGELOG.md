@@ -12,6 +12,12 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- Project reopening restores Analyze's source identity and original frame after reordering or missing files,
+  including chunk-to-master frame and import-selection mapping.
+- Fitting projects and sessions restore all fit1d inputs and the chosen method. Opening another curve clears
+  its cut qz; an Analyze GISAXS cut selects GISAXS physics. Empty projects clear old native results and residuals.
+- Stop remains a stopped outcome during boundary refinement and queued result delivery, while retaining
+  the completed numerical result; an interrupted boundary check does not claim convergence or a settled bound.
 - Removed Trainset Build from navigation, menus and application startup. Existing research files remain untouched.
 - Windows help preserves the original formula spacing and inline code across Qt versions. NeXus monitoring
   reinspects recent writes and pending writers so appended frames are detected even when the file size

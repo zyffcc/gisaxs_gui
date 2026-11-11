@@ -301,3 +301,39 @@ characters, cancellation, missing optional models, and both languages/themes. On
 portable folder after its first launch and launch again. Use a temporary GIMAP_HOME and temporary output
 directory during these checks. Record the OS, processor, package SHA, installation result and test result
 on the release page. Keep 0.2.0 marked as a pre-release until this package acceptance is complete.
+
+## Core workflow acceptance
+
+Use these fixed tasks to assess a GUI change. Preserve the input, settings and baseline revision before
+editing. Compare the changed behavior with the task's expected outcome, then run the relevant regression
+and the complete checks. Numerical correctness needs an analytic or independent reference; agreement with
+the previous version alone establishes continuity, not correctness. Use only public or synthetic fixtures
+in committed checks. Private cases and results remain in the ignored local evaluation folder.
+
+| Task | Input and required outcome | Automated evidence |
+|---|---|---|
+| GISAXS frame to fitted curve | Public GALAXI example: geometry, cut, hand-over and export retain source, units and counting information; distinguish screening from measurement. | `test_public_data.py`, `test_guided_gisaxs.py`, `test_analyze_fit_input_contract.py` |
+| GIWAXS geometry and reduction | Public AgBh/P08 examples: calibration and expected peaks agree within the existing reference tolerances. | `test_public_data.py` |
+| Series to map and comparison | Synthetic frames/curves: every imported frame has the right row; curve names, read progress and errors remain intelligible. | `test_series_map.py`, `test_release_analyze_series.py`, `test_release_compare_reading.py` |
+| Reopen a multi-source project | Synthetic HDF5: reordering, missing files and a restored master preserve source identity, physical frame number and imported scope; missing current sources give an explicit fallback. | `test_workflow_analyze_restore.py`, `test_project.py` |
+| Restore fitting inputs | Synthetic curves: a new curve clears cut qz; projects/sessions restore their own options and method; empty projects clear native results and residuals. | `test_workflow_fitting_state.py`, `test_release_shell_project.py` |
+| Stop and continue working | Synthetic fits: stopping during refinement or result delivery preserves usable values with stopped status; old work cannot replace the current curve. | `test_workflow_fit_cancellation.py`, `test_release_fitting_progress.py` |
+| Restore Sputter work | Synthetic form/scan inspection: project settings are restored; an older project's empty state and a late inspection cannot mix samples. | `test_release_readiness.py` |
+| Start and find help | Native Windows, Apple Silicon and Intel Mac: six pages start, both manuals open, formula/code contents survive rendering. Package installation is checked separately above. | `offscreen_smoke.py`, `test_help_code.py`, desktop and portable workflows |
+
+The manual `Desktop release checks` workflow offers **core-workflows** to run this focused set on all
+three platforms. It supplements the complete suite and portable-package acceptance.
+
+For independent use, give two colleagues the same tasks on the supported systems and let them follow
+the user manual. Record the build, system, task completion, elapsed time, wrong turns, requests for help,
+whether they found the exported files, and whether they identified the source, units and method correctly.
+These human observations are separate from automated pass counts; no independent-user result has been
+recorded in this checklist yet. Set performance targets after measuring the baseline rather than inventing
+completion times. Fix the demonstrated obstacles in small changes and repeat the affected task.
+
+The first round (2026-11-11, baseline `3b0e687`) reproduced three groups of state defects: Analyze source
+identity on project reopening, fitting input/result ownership, and cancellation after an earlier fit had
+converged. The established 81-test selection passed, while the initial 23 targeted cases exposed 22 failures.
+Review also added mixed All/subset chunk selections and invalid saved fit1d values. The dedicated workflow
+test files retain these counterexamples for subsequent GUI changes. The navigation and model equations
+were kept unchanged in this round.

@@ -33,6 +33,7 @@ from ..domain.fit_engine import (
     fit_scales,
     log_rmse,
     residuals,
+    stopped_result,
 )
 from ..domain.fit_model import (
     FAMILIES,
@@ -223,11 +224,16 @@ def fit_resolving(model: FitModel, data: FitData, *, method: str = "local", max_
     """A fit, then its parameters at an edge of their range answered and the model refined again
     (``domain.fit_edges``): (the result kept, notes of what was done, notes of what is still at an edge)."""
     result = fit(model, data, method=method, max_evaluations=max_evaluations, progress=progress, stop=stop)
+    if stop is not None and stop():
+        return stopped_result(result), [], []
     if not resolve:
         return result, [], []
     again = lambda changed: fit(changed, data, method="local", max_evaluations=max_evaluations,  # noqa: E731
                                 progress=progress, stop=stop)
-    return fit_edges.resolve(again, result, cancelled=stop or (lambda: False))
+    result, actions, remaining = fit_edges.resolve(again, result, cancelled=stop or (lambda: False))
+    if stop is not None and stop():
+        return stopped_result(result), actions, []
+    return result, actions, remaining
 
 
 def parameter_text(key: str, value: float, error: Optional[float] = None) -> str:

@@ -599,7 +599,8 @@ A project (`.gimap`, a JSON file) reopens a sample as it was left:
 
 - the frames and the whole set-up of Analyze (mode, profile, masks and drawn regions, corrections,
   cuts), the frames chosen for import (section 5.1) and whether one cut is held for a series;
-- the curve, halves, fitting range, left-out points and model of Fitting;
+- the curve, halves, fitting range, left-out points, model and selected method of Fitting, including all
+  fit1d options (network, search, curve type, cut qz, systematic error and composition);
 - the folder and choices of the In-situ series, and the series of Compare;
 - the Sputter form, scan/mask/output paths and current result-folder reference (the results are not copied).
 
@@ -614,6 +615,11 @@ or dropping a `.gimap` file on the window opens it.
   file, `<name>.compare.npz`, next to the project: move or copy the two files together.
 - When a file has moved, the project still opens; a note
   says how many files are missing and names the first ones, and **Details…** lists them all.
+- Analyze restores the displayed source and its original frame number even if the list is reordered.
+  If that source is missing, a note explains the fallback to the first imported frame of another source.
+  If a NeXus chunk is now represented by its master, its frame number and import selection are mapped into that master.
+- Older projects without fit1d options use their initial defaults, with cut qz unset. Opening an empty
+  project clears the previous curve's fit1d results, candidates and residuals.
 - Opening a project replaces what the window holds: the frames of Analyze, the curve and the In-situ
   series of Fitting and the series of Compare of the sample before are closed. Save them first if you need them.
 - After **Clear** in Analyze, what you open next is no longer that project: **Save Project** asks
@@ -1902,6 +1908,8 @@ What to check:
 - A save that fails (for example on a read-only file) leaves an earlier file as it was and says why.
 
 The model, the method and the choices are kept for the next session, and the last curve opens again.
+Its saved fit1d options are restored with that curve. A different curve arriving during startup takes
+precedence and does not inherit the saved curve's cut qz.
 
 ### 6.3 Fit methods
 
@@ -1917,7 +1925,9 @@ One **Fit** button runs the method chosen in **Method**:
 
 - The scales (every particle's scale, the background, the peak A) are solved exactly (non-negative least
   squares) at every step. The search therefore moves only sizes, spreads, distances and the peak's shape.
-- **Stop**: *Refine* and *Search* keep the best values so far. Stopping *Find the particle shape*, the AI
+- **Stop**: *Refine* and *Search* keep the best values so far. A stop during boundary refinement or while
+  results wait to be displayed remains a stopped outcome; an interrupted boundary check does not establish
+  convergence or a settled bound. Stopping *Find the particle shape*, the AI
   proposal or Predict produces no new result.
 - The AI proposal also writes a run folder in `AI_Fitting_Output/` (section 6.5).
 
@@ -1969,7 +1979,10 @@ together. A good fit does not prove that the composition is the true one.
    - **fit1d curve type**: **GISAXS (Yoneda cut)** or **SAXS (dilute, no structure factor)**. SAXS ignores qz and
      has no structure factor or low-q term.
    - **Cut qz (nm⁻¹)**: for a Yoneda cut, tick it and enter the vacuum qz of the cut. It is not filled from
-     Analyze. Unticked means qz = 0, with a warning when a sphere is present.
+     Analyze. Unticked means qz = 0, with a warning when a sphere is present. Opening a curve clears this
+     value, including reopening the same file (Analyze may have overwritten it with another cut).
+     Changing the current curve's range or display keeps it; restoring a saved project or session restores
+     that curve's saved value. A new cut explicitly identified as GISAXS by Analyze selects the GISAXS curve type.
    - **fit1d systematic error (%)**: a relative error added to σ in quadrature (0 by default; 2–5 % suits
      bright measured curves). Without σ in the file, fit1d assumes Poisson errors and says so.
 3. Press **Fit**. It runs in a separate process; **Stop** ends it without a result. Values at the edge of their

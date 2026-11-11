@@ -216,6 +216,17 @@ class SourcesModelMixin:
         own = self._watch_done.get(source_key(path), ((), 0))[1]
         return tuple(str(member) for member in layout.members), max(own, handed)
 
+    def locate_source_frame(self, path, frame_index: int = 0) -> Optional[FrameRef]:
+        """Find the same observation after a source was reordered or acquired a master/module name."""
+        key = source_key(Path(path))
+        for source in self.state.files:
+            if source_key(source) == key:
+                return source, int(frame_index)
+        for source in self.state.files:
+            if any(source_key(part) == key for part in self._parts(source)):
+                return source, self._frame_within(source, Path(path), frame_index)
+        return None
+
     def _frame_within(self, source: Path, part: Path, frame_index: int) -> int:
         """The frame of ``source`` that frame ``frame_index`` of its file ``part`` is: the same number in a set
         of module files; in a master, counted on through the data files before ``part`` (its first frame when

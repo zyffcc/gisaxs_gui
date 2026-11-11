@@ -42,6 +42,7 @@ from ...application.single_fit import (
     fit_resolving,
     model_from_solution,
     residuals,
+    stopped_result,
 )
 from ...application.workflow_v5 import bundled_workflow, default_options
 from .session import Solution
@@ -286,6 +287,8 @@ class FitRunMixin:
     def _fitted(self, result, actions=(), remaining=(), *, selection=None, curve=None) -> None:
         if self._of_another_curve(curve):
             return
+        if self._stop_event.is_set():
+            result, remaining = stopped_result(result), ()
         self._finish()
         self._fit_notes = dict(result=result, actions=list(actions), remaining=list(remaining))
         self.session.result = result

@@ -8,7 +8,7 @@ on:
       check_scope:
         description: Run the complete suite or the cross-platform release regressions
         type: choice
-        options: [full, release-regression]
+        options: [full, release-regression, core-workflows]
         default: full
 permissions:
   contents: read
@@ -41,11 +41,14 @@ jobs:
       - name: Install and verify Sputter runtime
         run: python -m pip install -r requirements-sputter.txt
       - name: Check application
-        if: github.event_name != 'workflow_dispatch' || inputs.check_scope != 'release-regression'
+        if: github.event_name != 'workflow_dispatch' || inputs.check_scope == 'full'
         run: python tools/check.py --research skip
       - name: Check release regressions
         if: github.event_name == 'workflow_dispatch' && inputs.check_scope == 'release-regression'
         run: python tools/check.py --research skip -- tests/test_help_code.py tests/test_release_help_menu.py tests/test_release_packaging_list.py tests/test_release_zip.py tests/test_nexus_layout.py tests/test_nexus_followups.py tests/test_nexus_reading.py tests/test_converted_frames_invalid_pixels.py tests/test_analyze_nexus_sources.py tests/test_release2_calibration_files.py tests/test_release_readiness.py
+      - name: Check core workflows
+        if: github.event_name == 'workflow_dispatch' && inputs.check_scope == 'core-workflows'
+        run: python tools/check.py --research skip -- tests/test_public_data.py tests/test_guided_gisaxs.py tests/test_analyze_fit_input_contract.py tests/test_series_map.py tests/test_release_analyze_series.py tests/test_release_compare_reading.py tests/test_project.py tests/test_release_shell_project.py tests/test_release_readiness.py tests/test_release_fitting_progress.py tests/test_workflow_analyze_restore.py tests/test_workflow_fit_cancellation.py tests/test_workflow_fitting_state.py tests/test_release_docs_contents.py tests/test_release2_docs_decisions.py tests/test_help_code.py tests/test_release_history.py
       - name: Record dependency versions
         if: always()
         run: python -m pip freeze > pip-freeze.txt

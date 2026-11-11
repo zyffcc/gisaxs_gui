@@ -1677,6 +1677,11 @@ and *Find the particle shape (no AI)*. *Predict parameters (fit1d)* uses the fit
 **Units: Fitting works in nm⁻¹ internally.** A curve read in Å⁻¹ (an Analyze `_fit_input.dat`) is multiplied by 10.
 Sizes and distances are in nm, w in nm⁻¹, the spreads σ_R/R, σ_h/h, σ_D/D are relative.
 
+**fit1d cut qz** is a user-supplied vacuum value in nm⁻¹, associated with the curve being fitted.
+Opening a curve clears it; a project or session restores the value explicitly saved for its curve.
+Analyze's finite-width horizontal band is not automatically replaced by a single inferred qz.
+This changes the ownership and restoration of the input, not the model equations.
+
 ### 9.1 Points that are fitted
 
 A curve with signed q (a horizontal GISAXS cut) is fitted on one of: the mean of both halves (6.16)–(6.17), both halves on

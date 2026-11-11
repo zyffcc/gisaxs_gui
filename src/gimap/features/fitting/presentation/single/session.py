@@ -113,7 +113,12 @@ class FitSession:
         """Which points are fitted: the halves, the range and the left-out points."""
         return self.side, self.q_range, frozenset(self.excluded)
 
-    def set_curve(self, curve: Curve) -> None:
+    def clear_curve(self) -> None:
+        """Close every result of a curve, including native research results, while keeping its model."""
+        self.set_curve(None)
+        self.clear_history()
+
+    def set_curve(self, curve: Optional[Curve]) -> None:
         self.curve = curve
         self.q_range = None
         self.result = None
@@ -125,7 +130,7 @@ class FitSession:
         self.native_model = None
         self.excluded = set()
         self._last_kind = ""  # a range change on this curve is a step of its own
-        if not curve.signed:
+        if curve is None or not curve.signed:
             self.side = "mean"
 
     # -- the model ----------------------------------------------------------------------
@@ -223,7 +228,7 @@ class FitSession:
         return self.result is not None and self.result.model == self.model
 
     def native_is_current(self) -> bool:
-        return (self.native_result is not None and self.result is None and self.native_model == self.model
+        return (self.curve is not None and self.native_result is not None and self.result is None and self.native_model == self.model
                 and self.native_selection == self.selection()
                 and all(self.native_result.get("settings", {}).get(key) == value
                         for key, value in self.native_settings.items()))

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import math
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable, Mapping, Optional
 
 import numpy as np
@@ -86,6 +86,11 @@ class FitResult:
     errors: Mapping[tuple, float] = field(default_factory=dict)
     correlated: tuple = ()
     at_bounds: tuple = ()
+
+
+def stopped_result(result: FitResult) -> FitResult:
+    """Keep completed numerical work while marking the whole request as interrupted."""
+    return replace(result, stopped=True, converged=False, message="Stopped: the best values so far are kept.")
 
 
 def residuals(model: FitModel, data: FitData) -> np.ndarray:
@@ -350,4 +355,4 @@ def _at_bounds(model: FitModel, problem: _Problem) -> tuple:
 
 
 __all__ = ["PHASES", "PROGRESS_LINE", "FitData", "FitResult", "FitStopped", "fit", "fit_scales", "log_rmse",
-           "residuals"]
+           "residuals", "stopped_result"]

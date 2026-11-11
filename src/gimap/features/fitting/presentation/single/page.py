@@ -214,6 +214,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
                                   unit=loaded.q_source_unit, unit_from=getattr(loaded, "q_unit_from", ""))
         self._halt_fit()  # a fit of the curve before stops; what it brings back is not kept (run.py)
         self.session.set_curve(curve)
+        self._new_fit1d_curve(getattr(loaded, "observation", None))
         if side is not None and curve.signed:  # a curve with one side has no halves to choose from
             self.session.side = ANALYZE_SIDES.get(side, side if side in dict(SIDES) else "mean")
         data = self._data()
@@ -225,6 +226,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self._render_all()
         self._log(tr("Opened {name}: {points} points").format(name=path.name, points=curve.q.size))
         self._curve_opened_step(getattr(loaded, "observation", None))  # fit1d first for a GISAXS cut (fit1d_review)
+        self._remember_curve()
         note = self._saved_unit_note(unit)  # a header that states another unit than the one saved
         self._status(note or (lambda: tr("Opened {name}.").format(name=path.name)), "warning" if note else "ok")
         self.curveOpened.emit(str(path))
@@ -241,7 +243,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         if curve is not None and curve.path:
             self._remember(curve={"path": curve.path, "side": self.session.side, "unit": curve.source_unit,
                                   "q_range": None if self.session.q_range is None else list(self.session.q_range),
-                                  "excluded": sorted(self.session.excluded)})
+                                  "excluded": sorted(self.session.excluded), "fit1d_settings": self.fit1d_settings()})
 
     def set_range(self, q_range, *, record: bool = True, coalesce: bool = False) -> None:
         """``record=False``: set again from a project or the last session (not a step of Undo); ``coalesce``:
@@ -482,18 +484,23 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.show_ranges_check.toggled.connect(lambda on: self._remember(show_ranges=bool(on)))
         last = self._remembered("curve")
         if isinstance(last, dict) and last.get("path") and Path(str(last["path"])).is_file():
+            last = {**last, "method": self.method()}
             QTimer.singleShot(0, lambda: self._reopen(last))
 
     def _reopen(self, last: dict) -> None:
         if self.session.curve is not None:  # a curve arrived meanwhile (Send to Fitting)
             return
         if self.open_curve(last["path"], last.get("side"), unit=last.get("unit")):
+            if isinstance(last.get("fit1d_settings"), dict):
+                self._apply_fit1d_settings(last["fit1d_settings"])
             self.session.excluded = {float(value) for value in last.get("excluded") or ()}
             q_range = last.get("q_range")
             if isinstance(q_range, list) and len(q_range) == 2:
                 self.set_range(q_range, record=False)  # as last time: not a step of Undo
             else:
                 self._exclusions_changed()
+            if last.get("method") is not None:
+                self.set_method(last["method"])
 
     # -- a project -------------------------------------------------------------------------
 
@@ -505,10 +512,13 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
                 "q_range": None if session.q_range is None else list(session.q_range),
                 "excluded": sorted(session.excluded)},
             "model": model_to_dict(session.model), "method": self.method(), SETTING_KEY: self.unit_setting(),
+            "fit1d_settings": self.fit1d_settings(),
         }
 
     def apply_project_state(self, data: dict) -> list[str]:
         notes = []
+        self._fit1d_candidates = []
+        self._gisaxs_cut = False
         if isinstance(data.get("model"), dict):
             try:
                 self.session.model = model_from_dict(data["model"])
@@ -526,6 +536,12 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
                     self.set_range(curve["q_range"], record=False)
         elif curve.get("path"):
             notes.append(tr("the Fitting curve {name} is no longer there").format(name=Path(curve["path"]).name))
+        settings = data.get("fit1d_settings")
+        if curve.get("path") and self.session.curve is None and isinstance(settings, dict):
+            settings = {**settings, "fit1d_qz": None}
+        notes += self._apply_fit1d_settings(settings)
+        if data.get("method") is not None:
+            self.set_method(data["method"])  # a saved choice takes precedence over a new-curve recommendation
         self.session.clear_history()  # a new start: Undo does not bring back the work before the project
         self._model_changed(editor=True)
         self._render_all()

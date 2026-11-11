@@ -4,6 +4,7 @@ starting model. Candidates and parameters at an edge are in ``fit1d_review.py``.
 from __future__ import annotations
 
 import numpy as np
+from PyQt5.QtCore import QSignalBlocker
 from PyQt5.QtWidgets import QHeaderView, QTableWidgetItem
 
 from src.gimap.app.presentation.i18n import tr, trf
@@ -18,7 +19,7 @@ from ...application.single_fit1d import (
     model_path,
     native_export,
 )
-from .fit1d_review import note_text, number
+from .fit1d_review import GISAXS_CUT, note_text, number
 from ..views.step_widgets import fit_to_rows, show_line
 
 FINISHED = ("fit1d finished: χ²/point {chi2}. Its original v2 curve and errors are in Results; Model is a starting "
@@ -58,16 +59,11 @@ class Fit1DPageMixin:
         self._gisaxs_cut = False
         for value, text in COMPOSITIONS:
             self.fit1d_composition.addItem(tr(text), value)
-        stored = self._remembered("fit1d_settings") or {}
-        for key, widget in (("fit1d_model", self.fit1d_network), ("fit1d_policy", self.fit1d_policy),
-                            ("fit1d_mode", self.fit1d_mode), ("fit1d_composition", self.fit1d_composition)):
-            index = widget.findData(stored.get(key))
-            if index >= 0:
-                widget.setCurrentIndex(index)
-        qz = stored.get("fit1d_qz")
-        self.fit1d_use_qz.setChecked(qz is not None)
-        self.fit1d_qz.setValue(float(qz or 0))
-        self.fit1d_sigma_floor.setValue(100 * float(stored.get("fit1d_sigma_floor") or 0))
+        self._fit1d_defaults = self.fit1d_settings()
+        stored = self._remembered("fit1d_settings")
+        stored = stored if isinstance(stored, dict) else {}
+        # A global preference cannot identify the cut that a physical qz belongs to.
+        self._apply_fit1d_settings({**stored, "fit1d_qz": None}, notify=False)
         for widget in (self.fit1d_network, self.fit1d_policy, self.fit1d_mode, self.fit1d_composition):
             widget.currentIndexChanged.connect(self._fit1d_settings_changed)
         self.fit1d_use_qz.toggled.connect(self._fit1d_settings_changed)
@@ -83,12 +79,52 @@ class Fit1DPageMixin:
                     fit1d_sigma_floor=self.fit1d_sigma_floor.value() / 100,
                     fit1d_composition=self.fit1d_composition.currentData())
 
+    def _apply_fit1d_settings(self, settings=None, *, notify=True):
+        """Restore a complete set atomically; fields absent from older projects use initial defaults."""
+        values = {**self._fit1d_defaults, **(settings if isinstance(settings, dict) else {})}
+        notes = []
+        for key, label, maximum in (("fit1d_qz", "Cut qz (nm⁻¹)", self.fit1d_qz.maximum()),
+                                    ("fit1d_sigma_floor", "fit1d systematic error (%)", self.fit1d_sigma_floor.maximum() / 100)):
+            raw = values[key]
+            if raw is None:
+                continue
+            try:
+                number_value = float(raw)
+                if isinstance(raw, bool) or not np.isfinite(number_value) or not 0 <= number_value <= maximum:
+                    raise ValueError
+                values[key] = number_value
+            except (ValueError, TypeError):
+                values[key] = self._fit1d_defaults[key]
+                notes.append(trf("Saved {field} is invalid and was reset to its default.", field=tr(label)))
+        combos = (("fit1d_model", self.fit1d_network), ("fit1d_policy", self.fit1d_policy),
+                  ("fit1d_mode", self.fit1d_mode), ("fit1d_composition", self.fit1d_composition))
+        widgets = [widget for _key, widget in combos] + [self.fit1d_use_qz, self.fit1d_qz, self.fit1d_sigma_floor]
+        blockers = [QSignalBlocker(widget) for widget in widgets]
+        for key, widget in combos:
+            index = widget.findData(values[key])
+            widget.setCurrentIndex(index if index >= 0 else widget.findData(self._fit1d_defaults[key]))
+        qz = values["fit1d_qz"]
+        self.fit1d_use_qz.setChecked(qz is not None)
+        self.fit1d_qz.setValue(float(qz or 0))
+        self.fit1d_sigma_floor.setValue(100 * float(values["fit1d_sigma_floor"] or 0))
+        blockers.clear()
+        if notify:
+            self._fit1d_settings_changed()
+        return notes
+
+    def _new_fit1d_curve(self, observation):
+        values = {**self.fit1d_settings(), "fit1d_qz": None}
+        if (observation or {}).get("source") == GISAXS_CUT:
+            values["fit1d_mode"] = "gisaxs"
+        self._apply_fit1d_settings(values)
+
     def _fit1d_settings_changed(self, *_args):
         gisaxs = self.fit1d_mode.currentData() == "gisaxs"
         self.fit1d_use_qz.setEnabled(gisaxs)
         self.fit1d_qz.setEnabled(gisaxs and self.fit1d_use_qz.isChecked())
         self.session.native_settings = self.fit1d_settings()
         self._remember(fit1d_settings=self.session.native_settings)
+        self._remember_curve()
         if self.session.native_result is not None:
             self._render_all()
         else:

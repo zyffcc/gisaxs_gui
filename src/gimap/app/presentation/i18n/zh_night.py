@@ -48,6 +48,9 @@ NIGHT_ZH = {
     "The cut, fitted in Fitting.": "这条切线，在拟合中拟合。",
     "Every frame, fitted in Fitting ▸ In-situ series.": "每一帧，在 拟合 ▸ 原位序列 中拟合。",
     "{count} frames of the project are no longer there": "项目中有 {count} 帧已经不在原处",
+    "Saved {field} is invalid and was reset to its default.": "保存的{field}无效，已恢复为默认值。",
+    "The previously displayed source {name} is unavailable; opened the first imported frame of another source.":
+        "之前显示的数据源 {name} 已不可用；已打开另一数据源的首个导入帧。",
     "the Analyze set-up could not be read: {reason}": "无法读取分析的设置：{reason}",
     "The standard procedure without AI: geometry, mask, cuts and results, each step with what it found":
         "不用 AI 的标准流程：几何、掩膜、切线和结果，每一步都给出它发现了什么",
