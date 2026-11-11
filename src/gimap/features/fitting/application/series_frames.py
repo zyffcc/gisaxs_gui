@@ -9,6 +9,7 @@ returning ``q`` (Å⁻¹), ``intensity``, ``sigma``, ``pixels`` and ``observatio
 from __future__ import annotations
 
 import fnmatch
+import os
 from pathlib import Path
 from typing import Callable
 
@@ -16,7 +17,7 @@ from src.gimap.shared.detector_io.loading import DETECTOR_SUFFIXES
 
 from ..domain import CurveData
 from .curve_units import FROM_FRAME
-from .models import CurveOperationResult, InSituSourceFrame
+from .models import CurveOperationResult, FileOperationError, InSituSourceFrame
 from .use_cases import _structured_file_error
 
 FRAME_PATTERNS = tuple(f"*{suffix}" for suffix in DETECTOR_SUFFIXES)
@@ -61,4 +62,45 @@ def frame_curve(cut: Callable, recipe, token: str, summed=()) -> CurveOperationR
         return CurveOperationResult(error=_structured_file_error(frame_path(token), "read", exc))
 
 
-__all__ = ["FRAME_PATTERNS", "frame_curve", "frame_name", "frame_path", "is_frame", "is_frame_pattern", "matching"]
+def file_stamp(token):
+    """Size and modification time of a source, including a frame token within one source."""
+    try:
+        status = os.stat(frame_path(str(token)))
+    except OSError:
+        return None
+    return status.st_size, status.st_mtime_ns
+
+
+class SeriesCurveReader:
+    """One worker's source snapshot. It never writes to the page's caches or view-model state.
+
+    A detector cut is reused only while the source's size and timestamp still match. ``loaded``
+    contains stable reads for the GUI to publish after checking its request generation.
+    """
+
+    def __init__(self, *, load, bridge, recipe, why, items, cache, stamps=None):
+        self.load, self.bridge, self.recipe, self.why = load, bridge, recipe, why
+        self.items, self.cache, self.stamps = dict(items), dict(cache), dict(stamps or {})
+        self.loaded = {}
+
+    def __call__(self, request):
+        token = str(request.path)
+        if self.bridge is None or not is_frame(token):
+            return self.load(request)
+        before = file_stamp(token)
+        cached = self.cache.get(token)
+        if cached is not None and before is not None and self.stamps.get(token) == before:
+            return cached
+        if self.recipe is None:
+            return CurveOperationResult(error=FileOperationError(
+                code="invalid_data", message=self.why or "Analyze is not open.", path=token))
+        outcome = frame_curve(self.bridge.cut, self.recipe, token, self.items.get(token, ()))
+        after = file_stamp(token)
+        if outcome.error is None and before is not None and before == after:
+            self.cache[token], self.stamps[token] = outcome, before
+            self.loaded[token] = outcome, before
+        return outcome
+
+
+__all__ = ["FRAME_PATTERNS", "SeriesCurveReader", "file_stamp", "frame_curve", "frame_name", "frame_path",
+           "is_frame", "is_frame_pattern", "matching"]

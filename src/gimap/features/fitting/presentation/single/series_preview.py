@@ -23,11 +23,11 @@ from PyQt5.QtCore import Qt
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import set_role
 
-from ...application import LoadCurveRequest
 from ...application.models import CURVE_NOT_FOUND
 from ...application.series_fit import TOO_FEW_POINTS, UNREADABLE, parameter_columns, prepare_frame
 from ...application.single_fit import SERIES_SIDES, Curve, evaluate, left_out_points, prepare_points
 from ..views.fit_series_view import FRAME_EMPTY
+from .series_loading import LOADING
 from .series_stages import CHI2
 from .series_text import ONE_HALF
 from .session import path_name
@@ -70,22 +70,8 @@ class FitSeriesPreviewMixin:
         path = self.paths[index]
         key = (path, self._preview_unit())
         curve = self._preview_curves.get(key)
-        if curve is None:
-            errors = self._read_errors = self._read_errors if self._read_errors is not None else {}
-            try:
-                outcome = self.load_series_curve(LoadCurveRequest(Path(path), key[1]))  # a detector frame is cut
-            except (OSError, ValueError) as exc:  # the file cannot be read: the frame says so
-                errors[path] = str(exc)
-                return None
-            if outcome.error is not None:
-                errors[path] = outcome.error.message
-                return None
-            errors.pop(path, None)
-            value = outcome.value
-            self._note_curve(index, value.q, value.observation)  # two halves? sent with which? (series_halves.py)
-            curve = Curve.from_arrays(value.q, value.intensity, value.error, name=Path(path).name, path=path,
-                                      unit=value.q_source_unit, unit_from=value.q_unit_from)
-            self._preview_curves[key] = curve
+        if curve is None and path not in (self._read_errors or {}):
+            self._request_preview(index, key)
         return curve
 
     # -- the selected frame -----------------------------------------------------------------
@@ -111,6 +97,12 @@ class FitSeriesPreviewMixin:
         self._drawn_with = (index, settings, self._preview_unit())
         path = self.paths[index]
         self.frame_plot.set_title(f"{index + 1} · {Path(path).name}")
+        if curve is None and (path, self._preview_unit()) in self._preview_pending:
+            self.frame_plot.hide_window()
+            self.frame_plot.set_curves([])
+            self.frame_plot.set_empty_text(tr(LOADING))
+            self._show_frame_note(tr(LOADING))
+            return
         if curve is None:
             self._frame_not_drawn(index, (frame.error if frame is not None and frame.error else None)
                                   or (self._read_errors or {}).get(path) or UNREADABLE)

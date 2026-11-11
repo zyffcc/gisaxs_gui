@@ -4,6 +4,7 @@ switch, and the Chinese of the Compare texts."""
 
 from __future__ import annotations
 
+from tests.test_fit_series import _loaded, _open_series
 import ast
 import re
 import time
@@ -80,7 +81,7 @@ def test_the_in_situ_page_says_why_four_curves_have_no_stages(tmp_path) -> None:
     folder = _series(tmp_path, radii=(5.0, 5.4, 5.8, 6.2))
     single, series = _pages()
     try:
-        series.open_series(folder)
+        _open_series(series, folder)
         end = time.monotonic() + 30
         while not series.stages_label.text().startswith("No stages") and time.monotonic() < end:
             series.stage_tasks.wait(0.1)
@@ -264,7 +265,7 @@ def test_in_situ_stage_names_follow_the_theme_and_the_language(tmp_path) -> None
             apply_theme("light")
             single.open_curve(folder / "run_00001_fit_input.dat")
             single.set_model(_model(5.0))
-            series.open_series(folder)
+            _open_series(series, folder)
             end = time.monotonic() + 60
             while series._series_stages is None and time.monotonic() < end:
                 series.stage_tasks.wait(0.1)

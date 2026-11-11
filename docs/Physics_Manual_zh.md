@@ -428,7 +428,7 @@ row_specular = y_c − L tan 2α_i / p_y         (α_f = α_i)             (2.16
 以下效应不在 q 图中，在分析工作区的其他地方也没有：
 
 - **折射与畸变波玻恩近似（distorted-wave Born approximation，DWBA）。** `q_z` 是运动学的真空值。α_i 和 α_f 都不按临界角校正。在临界角附近及以下，薄膜内部的 `q_z` 与这里给出的值不同。
-- **探测器倾斜和旋转。** 模型没有旋转参数。`.poni` 的倾斜被折算进光束中心和距离，然后略去（3.6 节）；略去它对 |q| 的影响对每一帧都计算并报告，倾斜超过 1° 或误差超过 0.5 % 时是自动分析的待处理项（3.7 节）。标定不精修倾斜（3.3 节）。
+- **探测器倾斜和旋转。** 模型没有旋转参数。`.poni` 的倾斜被折算进光束中心和距离，然后略去（3.6 节）；略去它对 |q| 的影响对每一帧都计算并报告，倾斜超过 1° 或误差超过 0.5 % 时是自动分析的待处理项（3.7 节）。略去的 Rot3 另作方向检查，绝对值超过 1° 时单独提醒；|q| 误差不衡量方向误差。标定不精修倾斜（3.3 节）。
 - **样品方位角和侧滚（roll）。** 假定样品只绕与光束垂直的水平轴倾斜。绕表面法线或绕光束的旋转不作描述。
 - **视差与传感器厚度。** 一个像素就是它的中心；没有相互作用深度，也没有像素拆分。
 - **平场与探测效率。** 不做平场、探测器效率、空气或窗口吸收的校正。
@@ -564,7 +564,7 @@ tilt = arccos(cos rot_1 cos rot_2)                                      (3.13)
 
 - `L_poni` 是 `.poni` 中的 Distance（m）；`poni_1`、`poni_2`（m）和 `p_1`、`p_2`（像素尺寸）分别对应慢轴（行，所以 `p_y = p_1`）和快轴（列，`p_x = p_2`）。它们被当作从存储图像像素 (0, 0) 的角点量起；较新的 `.poni` 文件中的 `orientation` 项不读取。
 - 像素尺寸来自 `PixelSize1/2`、`detector_config`，或已知的探测器名（Pilatus 172 µm，Eiger 75 µm，PerkinElmer 200 µm，Lambda 55 µm，MAR345 100 µm，Jungfrau 75 µm）。波长由 m 换算为 Å。
-- 倾斜本身和 `rot_3` 不进入几何，但并没有丢掉：仪器配置保留文件中的距离、PONI、各旋转角和像素尺寸（`dropped_tilt`），3.7 节给出略去它们的代价。倾斜超过 0.5° 时，检查该文件时还会说明：平板几何使远离光束处的 q 只是近似。
+- 倾斜本身和 `rot_3` 不进入几何，但并没有丢掉：仪器配置保留文件中的距离、PONI、各旋转角和像素尺寸（`dropped_tilt`），3.7 节分别说明略去它们对 |q| 和方向量的影响。倾斜超过 0.5° 时，检查该文件时还会说明：平板几何使远离光束处的 q 只是近似。
 - `.poni` 原样应用：不检查它的像素尺寸和帧尺寸是否与数据相符。
 
 公开数据中的示例：P08 文件给出 (545.46, 1826.95) px，`L` = 811.77 mm，倾斜 0.31°；pyFAI AgBh 文件给出 (179.98, 263.86) px，`L` = 1583.31 mm，倾斜 0.57°（有说明）；Xeuss 文件给出 (7.05, 589.49) px，`L` = 147.58 mm，倾斜 6.06°（有说明）。
@@ -590,6 +590,15 @@ t_3 = p_1 s_2 − p_2 c_2 s_1 + L_poni c_1 c_2
 
 - 求和遍及这一帧的有效像素（分析工作区的掩膜，去掉缝隙和坏像素）中、中心离直射束至少 10 px 的像素；离光束更近处 |q| 趋于零，相对误差没有意义。
 - ε 与 λ 和 α_i 都无关。绕光束的旋转 `rot_3` 不改变 `t_3` 和 `t_1² + t_2²`，所以不改变 |q|；它使 χ 转过 `rot_3`，这一点 ε 不衡量。
+- 略去的绕光束旋转单独报告：即使 ε 为零，非零 Rot3 仍会改变 qy/qz 以及面内/面外切线的方向归属。
+  带符号的角度按 360° 整圈归一化到 [−180°, 180°]；绝对值不大于 10⁻¹⁰° 的残留按零处理，仅用于消除整圈的浮点舍入误差。
+  原来的三个旋转角仍保留。每个归一化后的非零角度都在分析页和报告中说明；**绝对值超过 1°** 时单独列入
+  *需要处理*（Needs attention，CLI 退出码 2），否则列入*决策*（Decisions）。这个提醒阈值不是取向精度容差，不阻止约化。
+  单独 Rot3 = 30° 时 ε ≈ 0，但横向射线方向已转过 30°；|q| 误差不能给方向量的误差设上限，应使用完整 `.poni` 几何核对。
+- 报告的 `geometry.flat_detector` 保存 `dropped_beam_axis_rotation_deg`、`q_needs_attention` 和
+  `direction_needs_attention`，`needs_attention` 是两个标志的逻辑或。前者仍用下文的法线倾斜/|q| 阈值，后者只看 Rot3。
+  `limits.beam_axis_rotation_deg` 为 1.0，`limits.rotation_zero_tolerance_deg` 为 10⁻¹⁰。
+  没有有效像素时，|q| 误差为 `null`，旋转及方向标志仍然已知。科学数组没有被应用任何旋转校正。
 - 比较的对象是 `.poni` 自己的平板几何，而不是正在使用的几何，所以 ε 只反映倾斜本身的代价：之后移动的光束中心（自动分析中 GISAXS 的对称轴，8.2 节，或手动设定的中心）或改过的距离都不计入 ε，10 px 也从 `.poni` 的直射束算起。在公开的 AgBh 帧上，对称轴把中心移动了 −0.39 px；ε_max 仍是 0.08 %，而与移动后的中心比较会得到 4.1 %。报告中关于倾斜的那一行给出它所报告的那一帧的估计（应用几何之后求和的帧会改变有效像素）。
 - 倾斜超过 **1°** 或 ε_max 超过 **0.5 %** 时，这一帧带有一条消息（分析工作区的状态栏和带警告标记的几何步骤；记录的 `messages`），自动分析把倾斜列在*需要处理*（Needs attention）中（`tools/gimap_agent.py` 的退出码为 2）。两者都低于限值时，*决策*（Decisions）中写明 ε_max 是多少。倾斜、三个旋转角、ε_max、ε_rms、比较的像素数和限值都写进 `<stem>_analysis.json`（`geometry`，14.2 节）和 `report.json`（`geometry.flat_detector`）。
 - 一个测试用手算的例子检验 (3.15)：rot_1 = 60°，`L_poni` = 0.05 m，于是直射束离样品 L = 0.1 m；沿该行离光束 0.1 m 的像素在倾斜探测器上位于 2θ = 75°，在平板探测器上位于 45°，ε = sin 22.5° / sin 37.5° − 1 = −0.3714。
@@ -2909,7 +2918,7 @@ P_row(i) = Σ_j M_ij,    P_col(j) = Σ_i M_ij                                   
 |---|---|
 | 程序与来源 | `software`（记录名 `GIMaP Analyze 1`）、`software_version`（发布版本，例如 `GIMaP v0.2.0`；14.5 节）、`source_file`、`frame_index`、`frame_count`、`frame`（从 1 计数的标签）、`summed_frames`（加入的每一帧的文件和索引） |
 | 探测器 | `detector_name`、`frame_shape`、`measurement`（GISAXS 或 GIWAXS） |
-| 几何 | `geometry`（像素尺寸、距离、光束中心、波长、α_i；以及平板探测器从 `.poni` 中略去的内容：`dropped_tilt_deg`、`dropped_rotations_deg`（rot1、rot2、rot3）、`flat_detector_q_error_max` 和 `flat_detector_q_error_rms`（3.7 节的 ε_max 和 ε_rms，以分数计）、`flat_detector_pixels_compared`、`flat_detector_limits`；不知道倾斜时为 `null`）、`geometry_convention`（规范像素角点坐标系，第 0 行在上，以 Å⁻¹ 计、垂直于光束的平板探测器的运动学（真空）掠入射 q）、`instrument_profile`（名称、来源、更新时间；几何由运行自动分析或 `tools/gimap_agent.py` 选定时，来源以 `automatic analysis:` 开头，由 AI 选定时以 `assistant:` 开头——0.2.0 之前两者都写 `assistant:`） |
+| 几何 | `geometry`（像素尺寸、距离、光束中心、波长、α_i；以及平板探测器从 `.poni` 中略去的内容：`dropped_tilt_deg`、`dropped_rotations_deg`（原始 rot1、rot2、rot3）、`dropped_beam_axis_rotation_deg`（按整圈归一化的 Rot3）、`flat_detector_q_needs_attention` 和 `flat_detector_direction_needs_attention`（独立的法线倾斜/\|q\| 与方向待检查标志）、`flat_detector_q_error_max` 和 `flat_detector_q_error_rms`（3.7 节的 ε_max 和 ε_rms，以分数计）、`flat_detector_pixels_compared`、`flat_detector_limits`；不知道倾斜时为 `null`）、`geometry_convention`（规范像素角点坐标系，第 0 行在上，以 Å⁻¹ 计、垂直于光束的平板探测器的运动学（真空）掠入射 q）、`instrument_profile`（名称、来源、更新时间；几何由运行自动分析或 `tools/gimap_agent.py` 选定时，来源以 `automatic analysis:` 开头，由 AI 选定时以 `assistant:` 开头——0.2.0 之前两者都写 `assistant:`） |
 | 统计与分箱 | `error_model`（`poisson`、`pixel_scatter` 或 `scaled_poisson`：6.4 节的三种误差模型，由 `photon_counts` 和 GIWAXS 强度校正决定；没有约化时为 `null`）、`binning`（GIWAXS：每条 I(q) 的固定边界分箱的 `radial_bins`、`q_min`、`q_max`、`bin_width` 和 `unit`，`bins_chosen`，`radial_points`（合并后 I(q) 的点数），`merge`（6.5 节的规则），`chi_bin_deg` 和 `chi_merge`；GISAXS：每个探测器列或行一个点，不合并） |
 | 时间 | `created`：写出记录的 UTC 时间（ISO 8601，例如 `2026-11-01T05:52:31+00:00`） |
 | 校正 | `corrections`（每一项设置）、`intensity_corrections`（GIWAXS：如何应用、公式、参数）、`bad_pixels_left_out`、`drawn_mask_pixels`、`pixels_filled_from_mirror` |
@@ -3031,7 +3040,7 @@ SHA-256 摘要标识内容重要的文件：
 
 ### 15.2 仪器与几何
 
-- **探测器倾斜和旋转。** 探测器被当作平的、垂直于直射束。标定只精修 x_c、y_c 和 L；`.poni` 文件的倾斜被折算进光束中心和距离，然后略去；略去它对 |q| 的影响会被计算并报告，超过 1° 或 0.5 % 时是待处理项（2.5、3.3、3.6、3.7 节）。直的样品地平线、镜像补齐、立体角和偏振因子以及 XRR 几何都建立在同一假设之上（2.3、4.8、5.2、5.3、13.1 节）。
+- **探测器倾斜和旋转。** 探测器被当作平的、垂直于直射束。标定只精修 x_c、y_c 和 L；`.poni` 文件的倾斜被折算进光束中心和距离，然后略去；略去它对 |q| 的影响会被计算并报告，超过 1° 或 0.5 % 时是待处理项（2.5、3.3、3.6、3.7 节）。Rot3 虽不改变 |q|，却影响 χ、qy/qz 和方向切线；它被独立说明，绝对值超过 1° 时提醒检查，但没有被校正。直的样品地平线、镜像补齐、立体角和偏振因子以及 XRR 几何都建立在同一假设之上（2.3、4.8、5.2、5.3、13.1 节）。
 - **样品取向。** 样品只绕与光束垂直的水平轴倾斜 α_i，没有别的；分析工作区不描述绕表面法线或绕光束的旋转（2.5 节）。只有溅射工具包接受样品侧滚角（12.1 节）。
 - **像素。** 一个像素用它的中心代表：没有视差、没有传感器厚度、没有像素拆分（2.5、6.1 节）。
 - **光束。** 不对发散度、能量带宽和光斑足迹建模（2.5 节）。XRR 提取工具不做光斑足迹校正（13.1 节）。

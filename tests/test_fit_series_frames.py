@@ -10,6 +10,8 @@ import numpy as np
 import pytest
 
 from tests.test_analyze_workspace import GALAXI, _done, _public_page, requires_public
+from tests.test_fit_series import _loaded, _open_series
+
 from tests.test_fit_series import _pages, _wait
 
 
@@ -37,7 +39,7 @@ def test_a_folder_of_frames_is_cut_as_in_analyze_and_fitted(tmp_path) -> None:
     single, series = _pages(SeriesFrames(lambda: analyze.view_model))
     try:
         single.set_model(FitModel((new_component("sphere", radius=5.5, distance=55.0),)))
-        assert series.open_series(folder)  # no curves here: the frames are listed, each to be cut
+        assert _open_series(series, folder)  # no curves here: the frames are listed, each to be cut
         assert series.pattern_edit.text() == "*.tif" and series.frames_mode() and len(series.paths) == 3
         assert "3 detector frames listed" in series.status_label.text()
         assert series.frames_card.isVisibleTo(series) and "GALAXI Pilatus 1M" in series.frames_label.text()
@@ -84,13 +86,14 @@ def test_frames_wait_for_analyze_to_be_set_up(tmp_path) -> None:
     try:
         single.set_model(FitModel((new_component("sphere"),)))
         series.pattern_edit.setText("*.tif")
-        assert series.open_series(folder) and len(series.paths) == 2
+        assert _open_series(series, folder) and len(series.paths) == 2
         assert "cannot be cut yet" in series.frames_label.text()
         series.start()
         assert not series.running and "open one frame of this series in Analyze" in series.status_label.text()
         analyze.add_paths([str(folder / "galaxi_00001.tif")])
         _done(analyze)
         series.take_setup_button.click()
+        _loaded(series)
         assert "GALAXI Pilatus 1M" in series.frames_label.text() and series.ready_to_cut()
     finally:
         series.dispose()

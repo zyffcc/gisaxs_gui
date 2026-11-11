@@ -3,6 +3,7 @@ and a project whose data moved says so in one short notice with the whole list b
 
 from __future__ import annotations
 
+from tests.test_fit_series import _loaded, _open_series
 import json
 import os
 import time
@@ -55,11 +56,12 @@ def _work_of_another_sample(window, folder) -> None:
     single.set_range((0.2, 1.5))
     single.session.excluded.add(float(f"{single.session.all_points().q[30]:.9g}"))
     single.show_step("results")
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     series.start()
     _wait(series)
     assert series.fits and series.paths
     components.compare_page.add_folder(folder)
+    assert components.compare_page.tasks.wait(30)
     assert components.compare_page.series
     single.session.side = "positive"  # the half chosen for this sample's cut
     series._halves_chosen, series._halves_origin = "negative", "chosen"  # … and the one chosen for its series
@@ -105,7 +107,7 @@ def test_a_project_keeps_the_halves_of_its_in_situ_series(window, tmp_path) -> N
         np.savetxt(folder / f"cut_{index + 1:05d}_fit_input.dat", np.column_stack(_cut(radius, index, negative=1.3)))
     curve = tmp_path / "representative_fit_input.dat"
     curve.write_bytes((folder / "cut_00001_fit_input.dat").read_bytes())
-    assert single.open_curve(curve, "mean") and series.open_series(folder)
+    assert single.open_curve(curve, "mean") and _open_series(series, folder)
     assert series.set_series_side("negative") and series.halves_source() == "chosen"
     assert menus._write_project(tmp_path / "one half.gimap")
     saved = json.loads(Path(menus.project_path).read_text(encoding="utf-8"))
@@ -175,7 +177,7 @@ def test_a_project_whose_curve_and_folder_are_gone_does_not_keep_those_of_before
     assert single.session.model.components  # the model stays a model
 
     # ... and a project that names a curve and a folder that are there opens them as before.
-    assert single.open_curve(folder / "run_00002_fit_input.dat") and series.open_series(folder, "*_fit_input.dat")
+    assert single.open_curve(folder / "run_00002_fit_input.dat") and _open_series(series, folder, "*_fit_input.dat")
     assert menus._write_project(tmp_path / "with data.gimap")
     with_data = Path(menus.project_path)
     assert menus.open_project(moved) and single.session.curve is None and series.paths == []

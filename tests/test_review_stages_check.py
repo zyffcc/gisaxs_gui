@@ -4,6 +4,7 @@ it started with, and Compare gives the reason a comparison failed in the interfa
 
 from __future__ import annotations
 
+from tests.test_fit_series import _loaded, _open_series
 import time
 
 from PyQt5.QtCore import Qt
@@ -31,12 +32,12 @@ def test_another_folder_forgets_the_stages_of_the_one_before(tmp_path) -> None:
     second = _series(tmp_path / "second", radii=(5.0, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6))
     single, series = _pages()
     try:
-        series.open_series(first)
+        _open_series(series, first)
         _stages_found(series)
         assert series.is_odd_frame(5) and not series.skip_odd_check.isHidden()
         series.skip_odd_check.setChecked(True)
         assert series._without_odd(series._listed()) == [index for index in range(12) if index != 5]
-        series.open_series(second)  # before its own stages are found: nothing of the first folder's
+        _open_series(series, second)  # before its own stages are found: nothing of the first folder's
         listed = series._listed()
         assert series._series_stages is None and series.stage_of_frame(5) is None
         assert series.skip_odd_check.isHidden() and series._without_odd(listed) == listed  # Start fits all 7
@@ -56,7 +57,7 @@ def test_a_search_while_the_series_runs_keeps_its_stages(tmp_path) -> None:
     _odd_series(folder)
     single, series = _pages()
     try:
-        series.open_series(folder)
+        _open_series(series, folder)
         _stages_found(series)
         found = series._series_stages
         series.running = True  # a timer that fires during a run (“afresh at each stage” reads the stages)

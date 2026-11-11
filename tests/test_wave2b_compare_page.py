@@ -114,6 +114,7 @@ def test_file_and_comparison_errors_follow_a_language_switch(tmp_path: Path, chi
     try:
         (tmp_path / "empty").mkdir()
         assert page.add_folder(tmp_path / "empty") is None
+        assert page.tasks.wait(10)
         english = "Fewer than two curve files (.dat, .txt, .csv, .xy, .chi) in empty."
         assert page.status_label.text() == english
         apply_language("zh", [page])
@@ -147,9 +148,11 @@ def _mime(paths) -> QMimeData:
 
 def test_folders_and_curve_files_can_be_dropped_and_other_files_are_refused(tmp_path: Path, monkeypatch) -> None:
     from src.gimap.features.compare.presentation import series_input
+    from src.gimap.features.compare.presentation import page as page_module
 
     toasts = []
     monkeypatch.setattr(series_input, "show_toast", lambda parent, text, **kw: toasts.append((text, kw)))
+    monkeypatch.setattr(page_module, "show_toast", lambda parent, text, **kw: toasts.append((text, kw)))
     page = _shown_page()
     try:
         assert page.acceptDrops()
@@ -174,18 +177,25 @@ def test_folders_and_curve_files_can_be_dropped_and_other_files_are_refused(tmp_
         page.dropEvent(drop)
         assert drop.isAccepted() and page.series == []  # read once the drop has returned (the source is free)
         QApplication.processEvents()
+        assert page.tasks.wait(10)
         assert [item.name for item in page.series] == ["run_A"]
         # Curve files together: one series; the other file is left out with a warning.
         drop = QDropEvent(QPointF(5, 5), Qt.CopyAction, mixed, Qt.LeftButton, Qt.NoModifier)
         page.dropEvent(drop)
         QApplication.processEvents()
+        assert page.tasks.wait(10)
         assert [item.name for item in page.series] == ["run_A", "run_B"] and page.series[1].rows == 12
-        assert page.status_label.text() == ("Not added: notes.pdf. Compare takes a folder or curve files "
-                                            "(.dat, .txt, .csv, .xy, .chi).")
+        assert any(text == ("Not added: notes.pdf. Compare takes a folder or curve files "
+                            "(.dat, .txt, .csv, .xy, .chi).") for text, _options in toasts)
         # A single curve file: the error says a series needs two.
-        assert page.add_dropped([files[0]]) == [] and page.status_label.text() == "A series needs at least two curve files."
+        assert page.add_dropped([files[0]]) == []
+        assert page.tasks.wait(10)
+        assert any(text == "A series needs at least two curve files." for text, _options in toasts)
         # The same folder again: refused as a duplicate.
-        assert page.add_dropped([tmp_path / "run_A"])[0] is page.series[0] and len(page.series) == 2
+        original = page.series[0]
+        assert page.add_dropped([tmp_path / "run_A"]) == []
+        assert page.tasks.wait(10)
+        assert page.series[0] is original and len(page.series) == 2
         _wait(page, lambda: _idle(page) and page.comparison is not None and len(page.comparison.results) == 2)
     finally:
         _close(page)

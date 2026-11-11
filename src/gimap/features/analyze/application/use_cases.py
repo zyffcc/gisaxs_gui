@@ -46,7 +46,7 @@ from .export_record import (  # noqa: F401 - the record of an export; these name
     fit_input_metadata as _fit_input_metadata,
     fit_input_observation,
 )
-from .flat_detector import flat_detector_error, flat_detector_message
+from .flat_detector import detector_rotation_message, flat_detector_error, flat_detector_message
 from .frame_preprocessing import FramePreprocessingMixin, FrameSum, floating, photon_counts
 from .geometry_resolution import ResolveGeometry, center_not_used_message
 from .ports import CurveWriter, FrameSource, InstrumentProfileStore
@@ -208,8 +208,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
         if unused_center:
             messages.append(unused_center)
         flat = flat_detector_error(resolution.profile, geometry, shape, valid)  # a .poni tilt left out
-        if flat_detector_message(flat):
-            messages.append(flat_detector_message(flat))
+        messages.extend(message for message in (flat_detector_message(flat), detector_rotation_message(flat)) if message)
         profile_shape = resolution.profile.detector_shape if resolution.profile else None
         if profile_shape is not None and tuple(profile_shape) != shape:
             messages.append(

@@ -136,6 +136,9 @@ SENTENCES = (
     "GIMaP's geometry is a flat detector perpendicular to the beam; leaving the tilt out changes |q| by at most "
     "{error} % over the valid detector area (an open point above {limit_deg}° or {limit_error} %)",
     "{tilt}° left out",
+    "The calibration's rotation about the beam (Rot3 = {rotation}°) is left out. Rot3 alone does not change |q|, "
+    "but it rotates χ and changes the directional assignment of qy/qz and in-plane/out-of-plane cuts.",
+    "Rot3 = {rotation}° left out",
 )
 """English templates of the sentences a run writes; ``{name}`` is a value written as it is (or ``NESTED``).
 The fixed sentences (no values) are plain keys of the table. The form with the most fixed text is tried first,

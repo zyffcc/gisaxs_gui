@@ -8,6 +8,7 @@ name what is opened.
 
 from __future__ import annotations
 
+from tests.test_fit_series import _loaded, _open_series
 import json
 from pathlib import Path
 
@@ -389,37 +390,46 @@ def test_add_folder_on_a_batch_export_asks_which_curve_and_names_the_series_afte
         first = _batch_export(tmp_path / "sample_A", frames=6)
         second = _batch_export(tmp_path / "sample_B", frames=6)
         answer("azimuthal")
-        added = page.add_folder(first)
+        assert page.add_folder(first) is None
+        assert page.tasks.wait(10)
+        added = page.series[0]
         title, label, items, current = asked[-1]
         assert title == "Curves of the Folder"
         assert label == "sample_A holds 4 kinds of curves. One kind is one series — which one?"
         assert items[0] == "radial — I(q) · 6 frames" and current == 0  # I(q) first while nothing was chosen before
         assert items[3].startswith("region1_chi — Ring q 1.700: I(χ)") and items[3].endswith(" · 6 frames")
         assert added is page.series[0] and added.name == "sample_A · azimuthal" and added.x_label == "χ (°)"
-        assert added.rows == 6 and page.status_label.text() == "Added sample_A · azimuthal: 6 frames."
+        assert added.rows == 6
         assert page.series_table.item(0, 2).text() == "sample_A"  # From: the folder that was added
         page.add_folder(second)
+        assert page.tasks.wait(10)
         assert asked[-1][3] == 2  # the curve chosen last is offered first
         assert [item.name for item in page.series] == ["sample_A · azimuthal", "sample_B · azimuthal"]
         _wait(page, lambda: _idle(page) and page.comparison is not None)
         assert page.comparison.x_label == "χ (°)" and page.range_label.text() == "χ range"
         # Cancelled: nothing is added, and the page says so
         monkeypatch.setattr(QInputDialog, "getItem", staticmethod(lambda *args: ("", False)))
-        assert page.add_folder(first) is None and len(page.series) == 2
+        assert page.add_folder(first) is None
+        assert page.tasks.wait(10)
+        assert len(page.series) == 2
         assert page.status_label.text() == "Nothing added: no curve of sample_A was chosen."
         # A kind given by the caller, and a folder with one kind: no question
         monkeypatch.setattr(QInputDialog, "getItem", staticmethod(lambda *args: pytest.fail("asked")))
         page.clear_all()
-        assert page.add_folder(first, kind="radial").name == "sample_A · radial"
-        assert page.add_folder(first / "fit_input").name == "sample_A"
+        assert page.add_folder(first, kind="radial") is None
+        assert page.add_folder(first / "fit_input") is None
+        assert page.tasks.wait(10)
+        assert [item.name for item in page.series] == ["sample_A · radial", "sample_A"]
         assert page.add_folder(second, kind="vertical") is None  # not a curve of this folder
+        assert page.tasks.wait(10)
         assert page.status_label.text() == "sample_B holds no curves “vertical” (radial, in_plane, azimuthal, region1_chi)."
         # Two folders dropped together are asked about once
         page.clear_all()
         asked.clear()
         answer("in_plane")
-        dropped = page.add_dropped([first, second])
-        assert len(asked) == 1 and [item.name for item in dropped] == ["sample_A · in_plane", "sample_B · in_plane"]
+        assert page.add_dropped([first, second]) == []
+        assert page.tasks.wait(10)
+        assert len(asked) == 1 and [item.name for item in page.series] == ["sample_A · in_plane", "sample_B · in_plane"]
         assert series_input.KIND_QUESTION in i18n.ZH and series_input.KIND_ITEM in i18n.ZH
         assert page.add_folder_action.toolTip().endswith("holds several kinds of curves: you choose one")
     finally:
@@ -647,7 +657,7 @@ def test_opening_a_project_asks_before_unsaved_series_results_go(tmp_path: Path,
         folder = tmp_path / "run" / "fit_input"
         for frame in range(3):
             _fit_input(folder / f"cut_{frame:04d}_fit_input.dat")
-        assert series.open_series(folder) and len(series.paths) == 3
+        assert _open_series(series, folder) and len(series.paths) == 3
         series.fits = {0: SimpleNamespace(fitted=True, ok=True)}  # a run that ended, its table not saved
         series._unsaved = True
         asked = []

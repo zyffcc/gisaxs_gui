@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.test_fit_series import _loaded, _open_series
 import json
 import threading
 import time
@@ -465,7 +466,7 @@ def test_the_series_predicts_every_frame_and_follows_the_previous_one(tmp_path):
         assert single.open_curve(folder / "run_00001_fit_input.dat")
         single.set_model(FitModel((new_component("vertical_cylinder"),)))
         single.fit1d_policy.setCurrentIndex(single.fit1d_policy.findData("fast"))
-        series.open_series(folder)
+        _open_series(series, folder)
         series.set_series_method("fit1d")
         assert series.series_method() == "fit1d" and series.follow_check.isEnabled() and series.follow_check.isChecked()
         series.start()

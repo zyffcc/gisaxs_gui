@@ -3,6 +3,7 @@ for a model of one particle and the Fit step's intro (fitting-13)."""
 
 from __future__ import annotations
 
+from tests.test_fit_series import _loaded, _open_series
 from PyQt5.QtCore import QEvent, Qt
 from PyQt5.QtGui import QKeyEvent
 from PyQt5.QtWidgets import QAbstractItemView, QApplication
@@ -80,7 +81,7 @@ def test_the_series_table_copies_and_its_headers_are_short_with_the_full_name_on
     folder = _series(tmp_path)
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     combo = series.trend_combo
     assert combo.itemText(combo.currentIndex()) == "R (nm)"
     assert combo.itemData(combo.currentIndex(), Qt.ToolTipRole) == "1·Sphere R (nm)"

@@ -327,7 +327,7 @@ class ApplicationMenus:
 
         try:
             written = project.save(self.window.components, path, self.window.components.current_page_key() or "")
-        except OSError as exc:
+        except (OSError, TypeError, ValueError) as exc:
             warn(self.window, tr("Save Project"), trf("The project could not be saved: {error}", error=exc))
             return False
         self._remember_project(written)

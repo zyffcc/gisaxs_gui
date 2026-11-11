@@ -136,6 +136,10 @@ class FittingViewModel(FittingWorkflowViewModelMixin):
         )
         return outcome
 
+    def read_series_curve(self, request: LoadCurveRequest):
+        """Read in a worker without changing Single analysis' current curve or UI state."""
+        return self._load_curve.execute(request)
+
     def stated_q_unit(self, path) -> str | None:
         """The unit of q a curve file states in its header: ``"angstrom"``, ``"nm"`` or ``None``."""
         return self._load_curve.stated_q_unit(path)

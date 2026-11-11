@@ -18,7 +18,6 @@ from PyQt5.QtWidgets import QFileDialog, QListWidgetItem
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application import DiscoverInSituFramesRequest
 from ...application.series_fit import file_name
 from ..views.fit_series_view import FOLDER_HINT, NO_FOLDER
 from .series_frames import FRAMES_LISTED
@@ -49,6 +48,7 @@ class FitSeriesListingMixin:
             return False
         if ask and not self._may_drop_results():
             return False
+        self._restore_listing = None
         self.folder = str(folder)
         if pattern:
             self.pattern_edit.setText(pattern)
@@ -67,43 +67,14 @@ class FitSeriesListingMixin:
         self.folder_chip.setToolTip(self.folder)
         self._remember(folder=self.folder, pattern=self.pattern_edit.text())
 
-    def _discover(self, folder=None) -> list[str]:
-        if self.frames_mode():  # detector frames, each cut as in Analyze (``series_frames``)
-            return self.discover_frames(folder or self.folder)
-        frames = self.view_model.storage.discover_insitu_frames(DiscoverInSituFramesRequest(
-            Path(folder or self.folder), self.pattern_edit.text().strip() or "*_fit_input.dat", self.subfolders_check.isChecked()))
-        return [str(frame.path) for frame in frames]
-
-    def _curves_below(self) -> tuple:
-        """Nothing matches in the chosen folder: ``(folder, curves)`` of its ``fit_input`` folder — one or
-        two levels down — when exactly one of those holds curves, else ``(None, [])``; ``_below`` names the
-        places that hold some (for the status line)."""
-        root = Path(self.folder)
-        try:
-            children = sorted(child for child in root.iterdir() if child.is_dir())
-        except OSError:  # a folder that cannot be looked into: only its own fit_input
-            children = []
-        places = [root / FIT_INPUT_FOLDER] + [child / FIT_INPUT_FOLDER for child in children]
-        found = [(place, curves) for place in places if place.is_dir() for curves in [self._discover(place)] if curves]
-        self._below = ", ".join(place.relative_to(root).as_posix() for place, _curves in found)
-        return found[0] if len(found) == 1 else (None, [])
-
     def _list_curves(self, *, again: bool = False) -> bool:
-        """The curves of the folder that match the pattern. ``again``: a folder opened anew — listed afresh
-        also when the same files are there (they may have been written again)."""
+        """Start background discovery; True means the request was accepted."""
         if not self.folder or self.running or self._asking:
             return False
-        self._below, below = "", None
-        try:
-            paths = self._discover()
-            if not paths and not self.subfolders_check.isChecked() and not self.frames_mode():
-                below, paths = self._curves_below()
-            if not paths and not self.frames_mode() and (pattern := self.frame_pattern_in(self.folder)):
-                self.pattern_edit.setText(pattern)  # no curves, but detector frames: cut each as in Analyze
-                paths = self._discover()
-        except (OSError, ValueError, RuntimeError) as exc:
-            self._status(lambda reason=str(exc): tr("Could not list the curves: {reason}").format(reason=reason), "error")
-            return False
+        return self._begin_listing(again)
+
+    def _accept_listing(self, result, read, *, again, recursive, unit):
+        paths, pattern, below, self._below, items = result
         if not again and paths == self.paths:  # the same curves (the field only lost the focus): nothing changes
             self._listing = (self.pattern_edit.text(), self.subfolders_check.isChecked())
             return bool(self.paths)
@@ -113,6 +84,8 @@ class FitSeriesListingMixin:
             self.subfolders_check.setChecked(self._listing[1])
             self.subfolders_check.blockSignals(False)
             return bool(self.paths)
+        self.pattern_edit.setText(pattern)
+        self._frame_items = items
         if below is not None:  # the folder Analyze wrote the curves into becomes the folder of the series
             self.folder = str(below)
             self._show_folder()
@@ -130,6 +103,8 @@ class FitSeriesListingMixin:
         self.last_spin.setValue(max(1, len(self.paths)))
         for spin in (self.first_spin, self.last_spin, self.every_spin):
             spin.blockSignals(False)
+        for index, outcome in read:
+            self._cache_preview(index, outcome, "angstrom" if self.frames_mode() else unit)
         self._frames_changed()
         self._select_first()
         self._probe_signed()  # the first frame may have lost a half, or be no curve: a look at a few more
@@ -177,6 +152,9 @@ class FitSeriesListingMixin:
     def close_series(self) -> None:
         """No folder (a project without a series opens): the curves, fits, stages and halves of before go,
         and the page is as it starts."""
+        self._invalidate_loading()
+        self._listing_busy = False
+        self._restore_listing = None
         self.folder, self.paths, self.fits, self.queue, self._names = "", [], {}, [], None
         self._curves, self._preview_curves, self._selected, self._start_model = {}, {}, None, None
         self._previous = self._last_done = self._drawn_with = None

@@ -56,22 +56,62 @@ TILT_SMALL = (
     "{error} % over the valid detector area (an open point above {limit_deg}° or {limit_error} %)"
 )
 """A tilt the geometry leaves out (a ``.poni``'s rotations; Analyze's estimate, ``shared/geometry/detector_tilt``)."""
+ROTATION_ITEM = "detector rotation about the beam"
+ROTATION_WHY = (
+    "The calibration's rotation about the beam (Rot3 = {rotation}°) is left out. Rot3 alone does not change |q|, "
+    "but it rotates χ and changes the directional assignment of qy/qz and in-plane/out-of-plane cuts."
+)
+ROTATION_HINT = (
+    "Do not use the |q| error as an orientation error bound. Check direction-dependent results with the full "
+    ".poni geometry (e.g. pyFAI); GIMaP has not applied this rotation."
+)
 
 
 def tilt_entry(status: Optional[dict]) -> Optional[tuple[str, dict]]:
     """``("attention" | "decision", entry)`` for the tilt in ``status`` (``geometry.flat_detector``), ``None``
     without one. The numbers are read as the report keeps them (``clean``), so the line says the percentage the
-    report's Geometry section and ``report.json`` give, and the verdict is Analyze's (``needs_attention``)."""
+    report's Geometry section and ``report.json`` give, and the verdict is Analyze's scalar/normal-tilt review
+    (``q_needs_attention``; older status dictionaries only have ``needs_attention``). Rot3 has its own entry."""
     flat = clean(((status or {}).get("geometry") or {}).get("flat_detector"))
     if not flat:
         return None
     tilt, error, limits = float(flat.get("dropped_tilt_deg") or 0.0), flat.get("q_error_max"), flat.get("limits") or {}
     percent = "?" if error is None else f"{100 * float(error):.2g}"
-    if flat.get("needs_attention"):
+    if flat.get("q_needs_attention", flat.get("needs_attention")):
         return "attention", {"item": TILT_ITEM, "why": TILT_WHY.format(tilt=f"{tilt:.2f}", error=percent), "option": None,
                              "hint": TILT_HINT}
-    return "decision", {"what": TILT_ITEM, "decision": f"{tilt:.2f}° left out", "why": TILT_SMALL.format(
+    return "decision", {"what": TILT_ITEM, "decision": f"{tilt:.2f}° left out" if tilt else "no detector-normal tilt",
+                        "why": TILT_SMALL.format(
         error=percent, limit_deg=f"{limits.get('tilt_deg', 1.0):g}", limit_error=f"{100 * limits.get('q_error', 0.005):g}")}
+
+
+def rotation_entry(status: Optional[dict]) -> Optional[tuple[str, dict]]:
+    """The omitted beam-axis rotation, independent of the scalar |q| estimate; smaller rotations stay visible."""
+    flat = clean(((status or {}).get("geometry") or {}).get("flat_detector")) or {}
+    rotation = flat.get("dropped_beam_axis_rotation_deg")
+    if not rotation:
+        return None
+    angle = f"{float(rotation):.4g}"
+    why = ROTATION_WHY.format(rotation=angle)
+    if flat.get("direction_needs_attention"):
+        return "attention", {"item": ROTATION_ITEM, "why": why, "option": None, "hint": ROTATION_HINT}
+    return "decision", {"what": ROTATION_ITEM, "decision": f"Rot3 = {angle}° left out", "why": why}
+
+
+def _refresh_geometry_entry(run, name: str, said: Optional[tuple[str, dict]]) -> None:
+    """Replace a geometry note in its existing position, moving it between Decisions and Needs attention."""
+    places = {"decision": next((i for i, item in enumerate(run.decisions) if item.get("what") == name), None),
+              "attention": next((i for i, item in enumerate(run.attention) if item.get("item") == name), None)}
+    if places["decision"] is None and places["attention"] is None:
+        return  # no geometry note was said: nothing to bring in line
+    if places["decision"] is not None:
+        del run.decisions[places["decision"]]
+    if places["attention"] is not None:
+        del run.attention[places["attention"]]
+    if said is not None:
+        items = run.attention if said[0] == "attention" else run.decisions
+        place = places[said[0]]
+        items.insert(len(items) if place is None else place, said[1])
 
 
 class GeometryStepsMixin:
@@ -102,31 +142,19 @@ class GeometryStepsMixin:
             self._call("set_incidence_angle", {"degrees": self._incidence})
 
     def _flat_detector(self) -> None:
-        """A tilt the applied geometry leaves out: an open point above the limits (1°, 0.5 % in |q|), else a decision
-        that says how much it changes |q|. Analyze compares the tilted .poni with the flat geometry made from it on the
-        frame's valid pixels, so a centre moved later (the GISAXS symmetry axis) does not change the estimate."""
-        said = tilt_entry(self.catalog.results.status)
-        if said is not None:
-            (self._run.attention if said[0] == "attention" else self._run.decisions).append(said[1])
+        """Magnitude/normal tilt and beam-axis direction are separate review points. Analyze compares the .poni
+        with its own flat geometry: a centre moved later does not change either estimate."""
+        for entry in (tilt_entry, rotation_entry):
+            said = entry(self.catalog.results.status)
+            if said is not None:
+                (self._run.attention if said[0] == "attention" else self._run.decisions).append(said[1])
 
     def _flat_detector_as_reported(self) -> None:
         """The tilt said again from the status the report describes, in the place where it was said: the frames
         summed since, or a reduction that fills a half from its mirror, change the valid pixels the estimate is taken
         over, so the Decisions or Needs attention give the number and the verdict of ``geometry.flat_detector``."""
-        run = self._run
-        places = {"decision": next((i for i, item in enumerate(run.decisions) if item.get("what") == TILT_ITEM), None),
-                  "attention": next((i for i, item in enumerate(run.attention) if item.get("item") == TILT_ITEM), None)}
-        if places["decision"] is None and places["attention"] is None:
-            return  # no tilt was said (no geometry applied): nothing to bring in line
-        if places["decision"] is not None:
-            del run.decisions[places["decision"]]
-        if places["attention"] is not None:
-            del run.attention[places["attention"]]
-        said = tilt_entry(self.catalog.results.status)
-        if said is not None:
-            items = run.attention if said[0] == "attention" else run.decisions
-            place = places[said[0]]
-            items.insert(len(items) if place is None else place, said[1])
+        for name, entry in ((TILT_ITEM, tilt_entry), (ROTATION_ITEM, rotation_entry)):
+            _refresh_geometry_entry(self._run, name, entry(self.catalog.results.status))
 
     def _geometry(self, status: dict) -> bool:
         """The calibration of an earlier frame of the batch; else the calibrations the person named (option,
@@ -409,4 +437,4 @@ class GeometryStepsMixin:
 
 
 __all__ = ["ACCEPTED", "GeometryStepsMixin", "MAX_FILES", "MAX_IMAGES", "SEARCHED", "TILT_HINT", "TILT_ITEM", "TILT_SMALL",
-           "TILT_WHY", "tilt_entry"]
+           "TILT_WHY", "ROTATION_HINT", "ROTATION_ITEM", "ROTATION_WHY", "rotation_entry", "tilt_entry"]

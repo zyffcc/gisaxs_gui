@@ -15,6 +15,7 @@ def test_the_from_column_names_the_workspace_in_the_interface_language(tmp_path:
         page.add_map(_map(1), "a")
         _write_curves(tmp_path / "run_A", _run(60, seed=2))
         page.add_folder(tmp_path / "run_A")
+        assert page.tasks.wait(10)
         table = page.series_table
         assert table.item(0, 2).text() == "Analyze" and table.item(1, 2).text() == "run_A"
         apply_language("zh", [page])
@@ -67,6 +68,7 @@ def test_the_save_dialogs_start_in_the_home_folder_when_no_series_came_from_a_fo
         assert page._folder() == str(tmp_path)
         _write_curves(tmp_path / "run_A", _run(60, seed=2))
         page.add_folder(tmp_path / "run_A")
+        assert page.tasks.wait(10)
         assert page._folder() == str(tmp_path / "run_A")
     finally:
         _close(page)

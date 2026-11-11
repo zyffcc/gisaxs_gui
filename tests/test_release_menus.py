@@ -7,6 +7,7 @@ disabled entry says why; an Analyze or Fitting entry shows its page first, then 
 
 from __future__ import annotations
 
+from tests.test_fit_series import _loaded, _open_series
 import os
 import time
 from pathlib import Path
@@ -409,7 +410,7 @@ def test_in_situ_start_follows_a_model_set_up_after_the_folder_was_listed(tmp_pa
             components=SimpleNamespace(fitting_workspace=workspace))))
         single.set_model(FitModel(()))
         assert commands._series_start() == NO_SERIES_CURVES
-        assert series.open_series(_series(tmp_path))
+        assert _open_series(series, _series(tmp_path))
         assert commands._series_start() == NO_SERIES_MODEL
         single.set_model(_model(5.2))  # set up in Single analysis: the series page is not refreshed until shown
         assert commands._series_start() == ""

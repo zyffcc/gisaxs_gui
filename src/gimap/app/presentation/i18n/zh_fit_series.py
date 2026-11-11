@@ -107,4 +107,10 @@ FIT_SERIES_ZH = {
     "measured (−q)": "测量（−q）",
 }
 
+FIT_SERIES_ZH.update({
+    'Listing and previewing the series … (Stop to cancel)': '正在列出并预览序列 …（按停止取消）',
+    'Loading frame …': '正在载入帧 …',
+    'Series loading cancelled.': '已取消序列载入。',
+})
+
 __all__ = ["FIT_SERIES_ZH"]

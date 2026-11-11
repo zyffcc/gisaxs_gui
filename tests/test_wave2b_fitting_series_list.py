@@ -4,6 +4,7 @@ danger colours, numbers padded with figure spaces, the trend's legend “stage n
 
 from __future__ import annotations
 
+from tests.test_fit_series import _loaded, _open_series
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
 
@@ -40,7 +41,7 @@ def test_frame_numbers_are_padded_with_figure_spaces(tmp_path) -> None:
     for index in range(5, 12):  # 12 frames: two digits
         (folder / f"run_{index + 1:05d}_fit_input.dat").write_bytes((folder / "run_00001_fit_input.dat").read_bytes())
     single.open_curve(folder / "run_00001_fit_input.dat")
-    series.open_series(folder)
+    _open_series(series, folder)
     texts = [series.frame_list.item(row).text() for row in range(series.frame_list.count())]
     assert texts[0].startswith(f"· {FIGURE_SPACE}1  run_00001") and texts[11].startswith("· 12  run_00012")
     assert all(" " * 2 + "run_" in text for text in texts) and " 1  run" not in texts[0].replace(FIGURE_SPACE, "#")
@@ -53,7 +54,7 @@ def test_the_list_keeps_its_colour_with_a_stage_square_and_the_states_coloured(t
     (folder / "run_00003_fit_input.dat").write_text("not a curve\n", encoding="utf-8")
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     series.start()
     _wait(series)
     series.stage_of_frame = lambda index: 1 if index < 3 else 2  # two stages (the search needs more frames)
@@ -91,7 +92,7 @@ def test_a_frame_that_did_not_converge_is_in_the_warning_colour(tmp_path) -> Non
     single, series = _pages()
     folder = _series(tmp_path)
     single.open_curve(folder / "run_00001_fit_input.dat")
-    series.open_series(folder)
+    _open_series(series, folder)
     series.fits[1] = SimpleNamespace(ok=True, result=SimpleNamespace(converged=False, chi2_reduced=7.0))
     series._mark_stages()
     item = series.frame_list.item(1)
@@ -125,7 +126,7 @@ def test_empty_plots_say_what_appears_there(tmp_path) -> None:
     single, series = _pages()
     folder = _series(tmp_path)
     single.open_curve(folder / "run_00001_fit_input.dat")
-    series.open_series(folder)
+    _open_series(series, folder)
     assert series.trend_plot.figure_state()["title"] == ""  # the sentence once: over the plot, not in the title
     assert series.trend_plot.empty_overlay.label.text() == TREND_EMPTY
     assert not series.trend_plot.empty_overlay.label.isHidden()

@@ -6,9 +6,8 @@ Analyze wrote — a Batch Export, its ``curves`` folder, the exports of single f
 (``choose_kind``, the last choice first), reads that kind alone and names the series after it; folders dropped
 together are asked about once.
 
-Reading the curve files of a series (``_read``: Add ▸ Folder of Curves… / Curve Files…, and a drop) says how far
-it is: a thousand files take seconds, and the window stays drawn meanwhile. The comparison waits until the files
-are in, so several folders dropped together are compared once.
+Folder discovery and curve reading run in a cancellable background queue (``reading``). The interface stays
+responsive, progress counts the files, and comparison waits until the queued series are in.
 
 Drop a folder of curve files (each folder: one series), or curve files (together: one series) anywhere on the
 page — the same as Add ▸ Folder of Curves… / Curve Files…. Anything else dropped (a project, an image, a file
@@ -19,26 +18,24 @@ of another kind) is left out with a warning that says what Compare takes. Remove
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Optional, Sequence
+from typing import Optional, Sequence
 
 import numpy as np
 from PyQt5 import sip
-from PyQt5.QtCore import QEventLoop, Qt, QTimer
-from PyQt5.QtWidgets import QApplication, QFileDialog, QInputDialog
+from PyQt5.QtCore import QTimer
+from PyQt5.QtWidgets import QFileDialog, QInputDialog
 
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ..application import CURVE_SUFFIXES, Progress, SeriesData
+from ..application import CURVE_SUFFIXES, SeriesData
 from ..application.sources import FIT_INPUT_KIND, OTHER_KIND
-from .errors import error_text
+from .reading import READING, CompareReadingMixin
 
 UNDO_MS = 10000
 """How long the toast of Remove All (with its Undo) stays."""
 SHOWN_NAMES = 3
 """File names listed in the warning about dropped files that were left out."""
-READING = "Reading curve files: {done} of {total} …"
-"""The status line while the curve files of a series are read."""
 KIND_TITLE = "Curves of the Folder"
 KIND_QUESTION = "{folder} holds {n} kinds of curves. One kind is one series — which one?"
 KIND_ITEM = "{key} — {title} · {n} frames"
@@ -51,10 +48,6 @@ OTHER_TITLE = "other files"
 KIND_PREFERENCE = "kind"
 FIRST_CHOICES = ("radial", "horizontal")
 """The curve offered first when none was chosen before: I(q) of a GIWAXS frame, the horizontal cut of a GISAXS one."""
-
-
-class _ReadAbandoned(Exception):
-    """The window was closed while curve files were read: the reading stops and nothing is added."""
 
 
 def same_series(a: SeriesData, b: SeriesData) -> bool:
@@ -111,7 +104,7 @@ def choose_kind(parent, folder: str, kinds: Sequence, last: Optional[str] = None
     return keys[items.index(answer)] if accepted and answer in items else None
 
 
-class CompareInputMixin:
+class CompareInputMixin(CompareReadingMixin):
     """Needs ``series``, ``service``, ``_q_range``, ``add_series``, ``_unique``, ``_emptied``, ``_status``,
     ``_remember``, ``_remembered``, ``refresh`` and ``_schedule`` (the ``ComparePage``); the page calls
     ``setAcceptDrops(True)`` and lets its comparison wait while ``_reading``."""
@@ -124,28 +117,19 @@ class CompareInputMixin:
     """The kind chosen last, offered first at the next question (kept with the preferences when there are any)."""
 
     def add_folder(self, folder=None, kind: Optional[str] = None, *, prefer: Optional[str] = None) -> Optional[SeriesData]:
-        """Add ▸ Folder of Curves…, or a folder given: its one kind of curve as a series. With several kinds
+        """Queue a folder import. With several kinds
         (a folder Analyze wrote) the kind ``kind``; else ``prefer`` when the folder holds it; else the one the
         person chooses — nothing is added when the question is cancelled."""
+        if sip.isdeleted(self) or self._disposed:
+            return None
         folder = folder or QFileDialog.getExistingDirectory(self, tr("Folder of Curve Files"), self._remembered("folder") or "")
         if not folder:
             return None
         self._remember(folder=str(folder))
-        if kind is None:
-            kind = self._kind_of(Path(folder), prefer)
-            if kind is False:
-                return None
-        data = self._read(lambda progress: self.service.series_from_folder(Path(folder), kind=kind or None, progress=progress))
-        return self.add_series(data) if data is not None else None
+        self._enqueue_import(folder=Path(folder), kind=kind, prefer=prefer)
 
-    def _kind_of(self, folder: Path, prefer: Optional[str] = None):
-        """Which kind of curve of ``folder`` is the series: ``None`` when it holds one kind (or cannot be
-        looked into: reading it says why), ``prefer`` when it holds that one, else the person's choice —
-        ``False`` when the question is cancelled."""
-        try:
-            kinds = self.service.folder_kinds(folder)
-        except (OSError, ValueError):
-            return None
+    def _choose_kind(self, folder: Path, kinds, prefer: Optional[str] = None):
+        """Choose on the GUI thread after folder discovery has completed in a worker."""
         if len(kinds) < 2:
             return None
         if prefer and prefer in [kind.key for kind in kinds]:
@@ -159,59 +143,15 @@ class CompareInputMixin:
         return chosen
 
     def add_files(self, paths=None) -> Optional[SeriesData]:
+        if sip.isdeleted(self) or self._disposed:
+            return None
         if paths is None:
             filters = tr("Curve files") + " (" + " ".join(f"*{suffix}" for suffix in CURVE_SUFFIXES) + ")"
             paths, _ = QFileDialog.getOpenFileNames(self, tr("Curve Files of One Series"), self._remembered("folder") or "", filters)
         if not paths:
             return None
         self._remember(folder=str(Path(paths[0]).parent))
-        data = self._read(lambda progress: self.service.series_from_files([Path(path) for path in paths], progress=progress))
-        return self.add_series(data) if data is not None else None
-
-    # -- reading ---------------------------------------------------------------------------------
-
-    _read_stopped = False
-    """The window was closed while a series was read: the series still waiting (several folders dropped) are not
-    read either, as long as it stays closed."""
-    _reading = 0
-    """Readings in progress. The comparison waits for them (``ComparePage.recompute``): its timer runs with the
-    events of every count, and the folders of one drop are compared once, with one notice — not after each."""
-
-    def _read(self, read: Callable[[Progress], SeriesData]) -> Optional[SeriesData]:
-        """The series ``read(progress)`` makes from curve files; ``None``, with the error said, when they do not
-        make one. The files are read on the interface thread, a thousand in seconds (longer the first time): the
-        cursor waits, the status line counts the files, and at every count the window is drawn again. Clicks and
-        keys wait until the reading has ended, so nothing else starts in between; a window closed meanwhile ends
-        it, and nothing is added (no count is left on the status line either)."""
-        if sip.isdeleted(self):  # gone with its window while an earlier folder of the same drop was read
-            return None
-        shown = self.window().isVisible()
-        if self._read_stopped and not shown:
-            return None
-        self._read_stopped = False
-
-        def progress(done: int, total: int) -> None:
-            self._status(lambda: trf(READING, done=done, total=total))
-            QApplication.processEvents(QEventLoop.ExcludeUserInputEvents)
-            if sip.isdeleted(self) or (shown and not self.window().isVisible()):
-                self._read_stopped = True
-                raise _ReadAbandoned
-
-        self._reading += 1
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            return read(progress)
-        except _ReadAbandoned:
-            if not sip.isdeleted(self):
-                self._status("")  # “Reading … 50 of 300” would still stand there if the window is shown again
-            return None
-        except (ValueError, OSError) as exc:
-            error = str(exc)
-        finally:
-            self._reading -= 1
-            QApplication.restoreOverrideCursor()
-        self._status(lambda: error_text(error), "error")
-        return None
+        self._enqueue_import(paths=tuple(Path(path) for path in paths))
 
     # -- dropping --------------------------------------------------------------------------------
 
@@ -242,27 +182,31 @@ class CompareInputMixin:
 
     def add_dropped(self, paths: Sequence) -> list[SeriesData]:
         """Each folder as one series (``add_folder``), the curve files together as one (``add_files``); other
-        paths are left out with a warning. Returns the series added."""
+        paths are left out with a warning. Completion is asynchronous."""
+        if sip.isdeleted(self) or self._disposed:
+            return []
         paths = [Path(path) for path in paths]
         folders = [path for path in paths if path.is_dir()]
         curves = [path for path in paths if is_curve_file(path)]
         others = [path for path in paths if path not in folders and path not in curves]
-        self._kind_asked = None  # folders of one drop: asked once, the others take the same kind when they hold it
-        added = [self.add_folder(folder, prefer=self._kind_asked) for folder in folders]
+        group = {}  # one kind choice is shared by the sequential requests of this drop
+        for folder in folders:
+            self._enqueue_import(folder=folder, group=group)
         if curves:
-            added.append(self.add_files([str(path) for path in curves]))
+            self._enqueue_import(paths=tuple(curves), group=group)
         if others and not sip.isdeleted(self):  # the page may have gone with its window while the files were read
             names = ", ".join(path.name or str(path) for path in others[:SHOWN_NAMES])
             names += " …" if len(others) > SHOWN_NAMES else ""
             self._status(lambda names=names: trf(
                 "Not added: {names}. Compare takes a folder or curve files ({suffixes}).",
                 names=names, suffixes=", ".join(CURVE_SUFFIXES)), "warning")
-        return [item for item in added if item is not None]
+        return []  # completion is asynchronous; the series table reports accepted imports
 
     # -- Remove All, and its Undo ------------------------------------------------------------------
 
     def clear_all(self) -> None:
         """Remove All: every series out at once; the toast's Undo puts them back."""
+        self.cancel_import(announce=False)
         removed, q_range = list(self.series), self._q_range
         self.series.clear()
         self._emptied()  # the empty state; the status line stays empty (the toast is the notice)

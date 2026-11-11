@@ -16,7 +16,7 @@ from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.shared.detector_io.nexus_layout import ERROR_TEMPLATES, FRAME_BEYOND, LEFT_UNFINISHED
 
 from ..application import RECTANGLE
-from ..application.flat_detector import FLAT_DETECTOR_MESSAGE
+from ..application.flat_detector import DETECTOR_ROTATION_MESSAGE, FLAT_DETECTOR_MESSAGE
 from ..application.geometry_resolution import CENTER_NOT_USED, CENTER_NOT_USED_HEADER
 
 NO_PROFILE = "No instrument profile for {detector} ({shape}). Calibrate once or enter the geometry to get q curves."
@@ -81,6 +81,7 @@ TEMPLATES: tuple[tuple[str, dict[str, Callable[[str], str]]], ...] = (
     (CENTER_NOT_USED, {}),
     (CENTER_NOT_USED_HEADER, {}),
     (FLAT_DETECTOR_MESSAGE, {}),
+    (DETECTOR_ROTATION_MESSAGE, {}),
     (EMPTY_CUT, {"title": curve_title}),
     (EMPTY_SECTOR, {"title": curve_title}),
     (PROFILE_ADDED, {}),
@@ -120,6 +121,21 @@ def message_text(message: str) -> str:
     return message
 
 
+def flat_detector_summary(estimate, translate: Callable[[str], str] = str) -> list[str]:
+    """Separate scalar |q| and direction notes for the geometry summary and step rail."""
+    if estimate is None:
+        return []
+    parts = []
+    if estimate.q_needs_attention:
+        error = "?" if estimate.q_error_max is None else f"{100 * estimate.q_error_max:.2g}"
+        parts.append(translate("tilt {tilt}° left out: |q| up to {error} % off").format(
+            tilt=f"{estimate.tilt_deg:.2f}", error=error))
+    if estimate.beam_axis_rotation_deg:
+        parts.append(translate("Rot3 {rotation}° left out: χ and qy/qz directions affected").format(
+            rotation=f"{estimate.beam_axis_rotation_deg:.4g}"))
+    return parts
+
+
 def left_unfinished(message: str) -> bool:
     """``message`` is the reader's sentence for a file its writer left open and never closed: nothing to wait
     for, something to act on (the sentence says how)."""
@@ -150,5 +166,5 @@ def detector_text(analysis) -> Optional[str]:
 __all__ = [
     "BACKGROUND_MISSING", "EMPTY_CUT", "EMPTY_SECTOR", "MASK_FILE_MISSING", "MASK_SHAPE", "NO_PROFILE", "PROFILE_ADDED",
     "PROFILE_MISSING", "PROFILE_SHAPE", "READ_ERRORS", "REGION_CHI_EMPTY", "REGION_Q_EMPTY", "TEMPLATES", "curve_title",
-    "detector_text", "left_unfinished", "mask_text", "message_text",
+    "detector_text", "flat_detector_summary", "left_unfinished", "mask_text", "message_text",
 ]

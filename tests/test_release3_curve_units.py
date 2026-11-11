@@ -9,6 +9,7 @@ from; the fit's record, the series record and projects name it. All data here is
 
 from __future__ import annotations
 
+from tests.test_fit_series import _loaded, _open_series
 import json
 from pathlib import Path
 
@@ -167,7 +168,7 @@ def test_a_series_reads_each_file_in_its_own_unit_and_records_it(tmp_path) -> No
         single.set_unit_setting("nm")
         single.open_curve(folder / "run_00001_fit_input.dat")
         single.set_model(_model(5.2))
-        assert series.open_series(folder)
+        assert _open_series(series, folder)
         assert series.units_note.text().splitlines() == [
             "2 curves: q in Å⁻¹, as their header states",
             "1 curves: q in nm⁻¹, no unit in their header (Single analysis ▸ Curve ▸ File)",
@@ -196,7 +197,7 @@ def test_a_series_does_not_fit_a_file_that_states_both_units(tmp_path) -> None:
     try:
         single.open_curve(folder / "run_00001_fit_input.dat")
         single.set_model(_model(5.2))
-        assert series.open_series(folder)
+        assert _open_series(series, folder)
         assert series.units_note.text().splitlines()[-1] == (
             f"1 curves are not fitted, the unit of q cannot be read: run_00004_fit_input.dat — {BOTH_UNITS}")
         series.skip_odd_check.setChecked(False)
@@ -221,7 +222,7 @@ def test_the_unit_lines_and_the_setting_in_chinese(tmp_path) -> None:
         _analyze_file(folder / f"run_{index + 1:05d}_fit_input.dat", RADII[index], index)
     try:
         single.open_curve(folder / "run_00001_fit_input.dat")
-        series.open_series(folder)
+        _open_series(series, folder)
         i18n.apply_language("zh")
         i18n.apply_to(single, "zh")
         single.refresh_language()

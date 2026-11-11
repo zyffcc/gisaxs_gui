@@ -6,8 +6,9 @@ flat geometry GIMaP made from that same ``.poni`` (``DetectorTilt.flat_geometry`
 ``shared/geometry/detector_tilt.flat_detector_q_error``). So the estimate is what the tilt alone costs: a beam
 centre moved afterwards (the GISAXS symmetry axis, a centre set by hand) or another distance does not change it.
 The result goes into the frame's record (``<stem>_analysis.json``), the status the automatic analysis reads, and —
-above 1° of tilt or 0.5 % in |q| — a message on the frame (the status line in Analyze). The last comparison is
-kept, so re-analysing the same frame does not compute it again.
+above 1° of tilt or 0.5 % in |q| — a message on the frame (the status line in Analyze). An omitted Rot3 is
+reported separately, including below its 1° review threshold; its direction error is not a |q| error.
+The last comparison is kept, so re-analysing the same frame does not compute it again.
 """
 
 from __future__ import annotations
@@ -24,7 +25,11 @@ FLAT_DETECTOR_MESSAGE = (
     "The calibration describes a detector tilted by {tilt}°; GIMaP's geometry is a flat detector perpendicular to "
     "the beam, so the tilt is left out and |q| is off by up to {error} % on this frame."
 )
-"""A frame's message (``FrameAnalysis.messages``) when the tilt left out matters (``FlatDetectorError.needs_attention``)."""
+"""A frame's message (``FrameAnalysis.messages``) for scalar/normal-tilt review (``q_needs_attention``)."""
+DETECTOR_ROTATION_MESSAGE = (
+    "The calibration's rotation about the beam (Rot3 = {rotation}°) is left out. Rot3 alone does not change |q|, "
+    "but it rotates χ and changes the directional assignment of qy/qz and in-plane/out-of-plane cuts."
+)
 
 _map: tuple = (None, None)
 """The last per-pixel error map, for its (shape, tilt): the frames of a series share it."""
@@ -60,24 +65,36 @@ def flat_detector_error(
 
 def flat_detector_message(estimate: Optional[FlatDetectorError]) -> Optional[str]:
     """The frame's message for ``estimate``; ``None`` below the limits."""
-    if estimate is None or not estimate.needs_attention:
+    if estimate is None or not estimate.q_needs_attention:
         return None
     error = "?" if estimate.q_error_max is None else f"{100 * estimate.q_error_max:.2g}"
     return FLAT_DETECTOR_MESSAGE.format(tilt=f"{estimate.tilt_deg:.2f}", error=error)
 
 
+def detector_rotation_message(estimate: Optional[FlatDetectorError]) -> Optional[str]:
+    """Say every nonzero omitted Rot3; the 1° review flag is not an orientation-accuracy guarantee."""
+    if estimate is None or not estimate.beam_axis_rotation_deg:
+        return None
+    return DETECTOR_ROTATION_MESSAGE.format(rotation=f"{estimate.beam_axis_rotation_deg:.4g}")
+
+
 def flat_detector_record(estimate: Optional[FlatDetectorError]) -> dict:
-    """The keys added to the record's ``geometry``: the tilt left out (degrees, and the three rotations) and the
-    largest and RMS relative |q| error (fractions). ``None`` values when no tilt is known."""
+    """Record the normal tilt, all three original rotations, normalized Rot3 and independent review flags, plus
+    largest/RMS relative |q| errors (fractions). ``None`` values when no omitted rotations are known."""
     if estimate is None:
         return {"dropped_tilt_deg": None, "dropped_rotations_deg": None, "flat_detector_q_error_max": None,
-                "flat_detector_q_error_rms": None}
+                "flat_detector_q_error_rms": None, "dropped_beam_axis_rotation_deg": None,
+                "flat_detector_q_needs_attention": None, "flat_detector_direction_needs_attention": None}
     values = estimate.to_dict()
     return {
         "dropped_tilt_deg": values["dropped_tilt_deg"], "dropped_rotations_deg": values["dropped_rotations_deg"],
+        "dropped_beam_axis_rotation_deg": values["dropped_beam_axis_rotation_deg"],
+        "flat_detector_q_needs_attention": values["q_needs_attention"],
+        "flat_detector_direction_needs_attention": values["direction_needs_attention"],
         "flat_detector_q_error_max": values["q_error_max"], "flat_detector_q_error_rms": values["q_error_rms"],
         "flat_detector_pixels_compared": values["pixels_compared"], "flat_detector_limits": values["limits"],
     }
 
 
-__all__ = ["FLAT_DETECTOR_MESSAGE", "flat_detector_error", "flat_detector_message", "flat_detector_record"]
+__all__ = ["DETECTOR_ROTATION_MESSAGE", "FLAT_DETECTOR_MESSAGE", "detector_rotation_message", "flat_detector_error",
+           "flat_detector_message", "flat_detector_record"]

@@ -227,4 +227,21 @@ COMPARE_ZH = {
     "Reading curve files: {done} of {total} …": "正在读取曲线文件：{done} / {total} …",
 }
 
+COMPARE_ZH.update({
+    'The series or settings changed: save when they are compared again.': '序列或设置已改变：请等重新比较完成后再保存。',
+    'Looking for curve files …': '正在查找曲线文件 …',
+    'Reading curve files …': '正在读取曲线文件 …',
+    'Import cancelled. Unfinished series were not added.': '已取消导入。尚未读完的序列未加入。',
+    'Wait for Compare imports to finish, or cancel them, before saving the project.': '请等待比较页导入完成，或取消导入后，再保存项目。',
+    "The project's Compare array file is missing.": '项目的比较数组文件缺失。',
+})
+
 __all__ = ["COMPARE_ZH"]
+
+COMPARE_ZH.update({
+    "{n} series could not be imported. First error: {error}": "有 {n} 个序列未能导入。首个错误：{error}",
+})
+
+COMPARE_ZH.update({
+    "The comparison continues after the queued imports finish.": "排队的导入完成后继续比较。",
+})

@@ -64,6 +64,27 @@ def _pages(frames=None):
     return single, series
 
 
+def _loaded(series, limit=30.0):
+    """Wait for the asynchronous listing / selected-frame preview, without waiting for a fit."""
+    end = time.monotonic() + limit
+    while (series._listing_busy or series.preview_tasks.is_busy()) and time.monotonic() < end:
+        QApplication.processEvents()
+        time.sleep(0.005)
+    QApplication.processEvents()
+    assert not series._listing_busy and not series.preview_tasks.is_busy()
+
+
+def _open_series(series, *args, **kwargs):
+    accepted = series.open_series(*args, **kwargs)
+    _loaded(series)
+    return bool(accepted and series.paths)
+
+
+def _look(series):
+    series._look_for_new()
+    assert series.watch_tasks.wait(30)
+
+
 def _wait(series, limit: float = 120.0) -> None:
     end = time.monotonic() + limit
     while series.running and time.monotonic() < end:
@@ -86,7 +107,7 @@ def test_a_series_is_fitted_frame_after_frame_from_the_previous_result(tmp_path)
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
     assert series.step_rail.state("curves") == "pending" and not series.start_button.isEnabled()
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     assert len(series.paths) == 5 and series.frame_list.count() == 5 and series.start_button.isEnabled()
     assert "Sphere" in series.model_summary.text() and "Mean of both halves" in series.model_summary.text()
     series.start()
@@ -125,7 +146,7 @@ def test_series_saves_report_errors_and_leave_no_table_without_its_record(tmp_pa
     folder = _series(tmp_path, RADII[:3])
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     series.start()
     _wait(series)
     write_text = Path.write_text
@@ -161,10 +182,11 @@ def test_before_start_the_frames_and_the_trend_choices_are_shown(tmp_path) -> No
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
     single.set_range((0.5, 1.5))  # the preview fits what Single analysis would fit
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     assert series.frame_list.currentRow() == 0 and series.frame_plot.curve_count() >= 1
     assert series.frame_plot.figure_state()["title"].startswith("1 · run_00001")
     series.frame_list.setCurrentRow(3)
+    _loaded(series)
     state = series.frame_plot.figure_state()
     assert state["title"] == "4 · run_00004_fit_input.dat"
     q, intensity, sigma = np.loadtxt(folder / "run_00004_fit_input.dat", unpack=True)
@@ -193,17 +215,19 @@ def test_after_start_a_frame_not_fitted_yet_is_drawn_on_the_points_of_the_run(tm
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
     single.set_range((0.5, 1.5))
-    series.open_series(folder)
+    _open_series(series, folder)
     series.start()
     series.stop()  # stopped early: the frames after the first are not fitted
     _wait(series)
     assert 3 not in series.fits and series._settings.q_range == (0.5, 1.5)
     single.set_range((0.2, 1.9))  # Single analysis moves on
     series.frame_list.setCurrentRow(3)
+    _loaded(series)
     name, x, _y = series.frame_plot.figure_state()["curves"][0]
     assert x.min() >= 0.5 and x.max() <= 1.5  # the points the run fits, not Single's new range
-    series.open_series(folder)  # listed again: before Start, the frames follow Single analysis
+    _open_series(series, folder)  # listed again: before Start, the frames follow Single analysis
     series.frame_list.setCurrentRow(3)
+    _loaded(series)
     name, x, _y = series.frame_plot.figure_state()["curves"][0]
     assert x.min() < 0.5 and x.max() > 1.5
     series.dispose()
@@ -238,7 +262,7 @@ def test_stages_and_odd_frames_steer_the_run(tmp_path) -> None:
     single, series = _pages()
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.0))
-    series.open_series(folder)
+    _open_series(series, folder)
     end = time.monotonic() + 60
     while series._series_stages is None and time.monotonic() < end:
         series.stage_tasks.wait(0.1)
@@ -280,16 +304,16 @@ def test_stages_are_found_after_a_run_that_started_while_they_were_looked_for(tm
     single, series = _pages()
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.0))
-    load, release = series.view_model.load_curve, threading.Event()
+    load, release = series.view_model.read_series_curve, threading.Event()
 
     def held(request):  # the search (in the background) reads a long series: it is held until the run is on
         if threading.current_thread() is not threading.main_thread():
             release.wait(30)
         return load(request)
 
-    monkeypatch.setattr(series.view_model, "load_curve", held)
     try:
-        series.open_series(folder)
+        _open_series(series, folder)
+        monkeypatch.setattr(series.view_model, "read_series_curve", held)
         series.start_stages.setChecked(True)  # “afresh at each stage”
         end = time.monotonic() + 30
         while not series.stage_tasks.is_busy() and time.monotonic() < end:
@@ -339,7 +363,7 @@ def test_a_bad_file_does_not_stop_the_series_and_stop_keeps_what_was_done(tmp_pa
     (folder / "run_00003_fit_input.dat").write_text("not a curve\n", encoding="utf-8")
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     series.start()
     _wait(series)
     assert len(series.fits) == 5 and not series.fits[2].ok and series.fits[3].ok
@@ -359,7 +383,7 @@ def test_watch_fits_curves_that_appear_and_a_frame_opens_in_single_analysis(tmp_
     folder = _series(tmp_path, RADII[:2])
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     series.watch_check.setChecked(True)
     series.start()
     end = time.monotonic() + 60
@@ -367,9 +391,9 @@ def test_watch_fits_curves_that_appear_and_a_frame_opens_in_single_analysis(tmp_
         QApplication.processEvents()
         time.sleep(0.01)
     _write(folder / "run_00003_fit_input.dat", 5.9, 7)  # written during the run
-    series._look_for_new()
+    _look(series)
     assert len(series.paths) == 2  # seen once: it may still be written
-    series._look_for_new()  # the same size and time at the next look: taken
+    _look(series)  # the same size and time at the next look: taken
     while len(series.fits) < 3 and time.monotonic() < end:
         QApplication.processEvents()
         time.sleep(0.01)
@@ -379,6 +403,7 @@ def test_watch_fits_curves_that_appear_and_a_frame_opens_in_single_analysis(tmp_
     opened = []
     series.openFrameRequested.connect(lambda path, model: opened.append((path, model)))
     series.frame_list.setCurrentRow(2)
+    _loaded(series)
     series.to_single_button.click()
     assert opened and opened[0][0].endswith("run_00003_fit_input.dat") and opened[0][1] is not None
     series.dispose()
@@ -583,7 +608,7 @@ def test_in_the_page_a_frame_without_the_chosen_half_fails_with_its_reason(tmp_p
                    np.column_stack(_cut(radius, index, only="negative" if index == 2 else None, negative=1.3)))
     single.open_curve(folder / "run_00001_fit_input.dat", "positive")
     single.set_model(_model(5.2))
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     series.start()
     _wait(series)
     assert series._settings.side == "positive" and len(series.fits) == 5 and not series.running
@@ -633,7 +658,7 @@ def test_a_series_of_one_sided_curves_is_fitted_whatever_half_single_analysis_wa
     single.open_curve(folder / "run_00001_fit_input.dat", "negative")  # as main_window sends it: side=fit_side
     single.set_model(_model(5.2))
     assert single.side_combo.isHidden() and single._data().q.size == 200
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     series.start()
     _wait(series)
     assert [series.fits[index].ok for index in range(5)] == [True] * 5, sorted({fit.error for fit in series.fits.values()})
@@ -650,7 +675,7 @@ def test_a_half_chosen_for_a_cut_in_single_analysis_does_not_fail_a_series_of_on
     single.open_curve(cut, "negative")  # a signed cut on its q < 0 half
     single.set_model(_model(5.2))
     assert not single.side_combo.isHidden() and single.session.side == "negative"
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     series.start()
     _wait(series)
     assert [series.fits[index].ok for index in range(5)] == [True] * 5, sorted({fit.error for fit in series.fits.values()})
@@ -672,7 +697,7 @@ def test_a_first_frame_that_lost_a_half_does_not_make_the_series_one_without_hal
         lines += [f"{q:.8g} {intensity:.8g} {sigma:.8g} 5" for q, intensity, sigma in zip(*cut)]
         (folder / f"cut_{index + 1:05d}_fit_input.dat").write_text("\n".join(lines) + "\n", encoding="utf-8")
     single.set_model(_model(5.2))
-    assert series.open_series(folder) and series.curves_signed()  # a look at a few more: these are cuts
+    assert _open_series(series, folder) and series.curves_signed()  # a look at a few more: these are cuts
     assert series.series_side() == "negative" and series.halves_source() == "files"  # … said before Start
     series.start()
     assert series._settings.side == "negative" and series._side_from == "files"
@@ -691,7 +716,7 @@ def test_watch_loses_no_frame_when_the_timer_and_a_finished_fit_coincide(tmp_pat
     folder = _series(tmp_path, RADII[:3])
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     series.watch_check.setChecked(True)
     done, written = series._frame_done, []
 
@@ -700,8 +725,8 @@ def test_watch_loses_no_frame_when_the_timer_and_a_finished_fit_coincide(tmp_pat
         if len(written) < 4:  # a curve arrives, and the watch looks, between a finished fit and the queued next one
             written.append(1)
             _write(folder / f"run_{len(written) + 3:05d}_fit_input.dat", 5.9, 7)
-            series._look_for_new()
-            series._look_for_new()
+            _look(series)
+            _look(series)
 
     series._frame_done = racing
     series.start()
@@ -727,7 +752,7 @@ def test_watch_reads_a_curve_again_that_was_still_being_written(tmp_path) -> Non
     folder = _series(tmp_path, RADII[:2])
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     series.watch_check.setChecked(True)
     series.start()
     end = time.monotonic() + 60
@@ -742,30 +767,30 @@ def test_watch_reads_a_curve_again_that_was_still_being_written(tmp_path) -> Non
     with open(target, "w", encoding="utf-8") as stream:  # the writer is in the middle of the file
         stream.write("\n".join(rows[:60]) + "\n")
         stream.flush()
-        series._look_for_new()
-        series._look_for_new()  # … and pauses there for a moment: the file looks settled, and is read
+        _look(series)
+        _look(series)  # … and pauses there for a moment: the file looks settled, and is read
         while len(series.fits) < 3 and time.monotonic() < end:
             QApplication.processEvents()
             time.sleep(0.01)
         early = series.fits[2]
         assert early.points == 60
         stream.write("\n".join(rows[60:]) + "\n")
-    series._look_for_new()  # changed since it was read; it may still change
+    _look(series)  # changed since it was read; it may still change
     assert series.fits[2] is early and 2 not in series.queue
-    series._look_for_new()  # settled: read and fitted again
+    _look(series)  # settled: read and fitted again
     while (series.fits[2] is early or series.tasks.is_busy()) and time.monotonic() < end:
         QApplication.processEvents()
         time.sleep(0.01)
     assert series.fits[2].points == 200 and series.fits[2].ok and series.results_table.rowCount() == 3
     assert series.results_table.item(2, series.results_table.columnCount() - 2).text() == "200"  # its row made again
     assert "fitted again" in series.log_view.toPlainText()
-    series._look_for_new()
-    series._look_for_new()
+    _look(series)
+    _look(series)
     assert series.queue == [] and series.running  # nothing changed: nothing is fitted twice
     # A new file is not taken at the first look, nor an empty one at any.
     (folder / "run_00004_fit_input.dat").write_text("", encoding="utf-8")
-    series._look_for_new()
-    series._look_for_new()
+    _look(series)
+    _look(series)
     assert len(series.paths) == 3
     series.stop()
     _wait(series)
@@ -778,7 +803,7 @@ def test_the_watch_box_works_when_ticked_or_unticked_during_a_run(tmp_path) -> N
     folder = _series(tmp_path, RADII[:2])
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     assert "Can be switched while the series runs" in series.watch_check.toolTip()
     series.start()
     assert series.running and not series._watch.isActive()
@@ -792,8 +817,8 @@ def test_the_watch_box_works_when_ticked_or_unticked_during_a_run(tmp_path) -> N
     assert series.running and len(series.fits) == 2  # it stays, for the curves to come
     assert series.status_label.text().startswith("Waiting for new curves in")
     _write(folder / "run_00003_fit_input.dat", 5.9, 7)
-    series._look_for_new()
-    series._look_for_new()
+    _look(series)
+    _look(series)
     while len(series.fits) < 3 and time.monotonic() < end:
         QApplication.processEvents()
         time.sleep(0.01)
@@ -813,7 +838,7 @@ def test_watch_keeps_to_the_frames_that_were_chosen(tmp_path) -> None:
     folder = _series(tmp_path, RADII[:4])
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     series.every_spin.setValue(2)  # frames 1 and 3
     series.watch_check.setChecked(True)
     series.start()
@@ -823,8 +848,8 @@ def test_watch_keeps_to_the_frames_that_were_chosen(tmp_path) -> None:
         time.sleep(0.01)
     for number in (5, 6):
         _write(folder / f"run_{number:05d}_fit_input.dat", 6.0, number)
-    series._look_for_new()
-    series._look_for_new()
+    _look(series)
+    _look(series)
     while (len(series.fits) < 3 or series.tasks.is_busy()) and time.monotonic() < end:
         QApplication.processEvents()
         time.sleep(0.01)
@@ -846,7 +871,7 @@ def test_the_record_of_a_run_that_watch_extended_says_what_was_fitted(tmp_path) 
     folder = _series(tmp_path, RADII[:3])
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     series.start()
     series.watch_check.setChecked(True)  # ticked during the run: the record says that new curves were watched for
     end = time.monotonic() + 60
@@ -855,8 +880,8 @@ def test_the_record_of_a_run_that_watch_extended_says_what_was_fitted(tmp_path) 
         time.sleep(0.01)
     for number in (4, 5):
         _write(folder / f"run_{number:05d}_fit_input.dat", 6.0, number)
-    series._look_for_new()
-    series._look_for_new()
+    _look(series)
+    _look(series)
     while (len(series.fits) < 5 or series.tasks.is_busy()) and time.monotonic() < end:
         QApplication.processEvents()
         time.sleep(0.01)
@@ -879,7 +904,7 @@ def test_watch_says_when_the_folder_cannot_be_read_and_goes_on_when_it_is_back(t
     folder = _series(tmp_path, RADII[:2])
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     series.watch_check.setChecked(True)
     series.start()
     end = time.monotonic() + 60
@@ -891,13 +916,13 @@ def test_watch_says_when_the_folder_cannot_be_read_and_goes_on_when_it_is_back(t
     assert series.status_label.text() == waiting
     away = tmp_path / "away"
     folder.rename(away)
-    series._look_for_new()
+    _look(series)
     assert series.status_label.text() == "The folder of the curves cannot be read: waiting for it … (Stop to end)"
     assert series.running and len(series.fits) == 2  # nothing is lost, the run stays
     away.rename(folder)
-    series._look_for_new()
+    _look(series)
     assert series.status_label.text() == waiting
-    series._look_for_new()
+    _look(series)
     assert series.queue == [] and len(series.paths) == 2  # the same curves: nothing is fitted again
     series.stop()
     _wait(series)
@@ -917,7 +942,7 @@ def test_a_curve_that_is_gone_when_its_turn_comes_says_so_in_the_interface_langu
     try:
         apply_language(language, [series, single])
         series.refresh_language()
-        series.open_series(folder)
+        _open_series(series, folder)
         gone = folder / "run_00002_fit_input.dat"
         path = series.paths[1]
         gone.unlink()  # deleted after the curves were listed
@@ -930,6 +955,7 @@ def test_a_curve_that_is_gone_when_its_turn_comes_says_so_in_the_interface_langu
         assert series.results_table.item(1, 1).text() == f"✗ {said}"
         assert series.frame_list.item(1).text().endswith(said) and said in series.log_view.toPlainText()
         series.frame_list.setCurrentRow(1)
+        _loaded(series)
         assert said in series.frame_note.text()
     finally:
         apply_language(DEFAULT_LANGUAGE, [series, single])
@@ -952,21 +978,21 @@ def test_the_hint_names_fit_input_and_a_chosen_gimap_analysis_folder_finds_it(tm
     for index, radius in enumerate(RADII[:3]):
         _write(folder / f"run_{index + 1:05d}_fit_input.dat", radius, index)
     (chosen / "curves").mkdir()  # the other folders of a Batch Export hold no fit inputs
-    assert series.open_series(chosen)  # the folder Batch Export was given, not the one it wrote the curves into
+    assert _open_series(series, chosen)  # the folder Batch Export was given, not the one it wrote the curves into
     assert len(series.paths) == 3 and series.folder == str(folder) and series.folder_chip.toolTip() == str(folder)
     assert series.status_label.text() == "3 curves listed, in fit_input of the chosen folder."
     # Several sends below one folder: nothing is guessed, the places are named.
     for name in ("first", "second"):
         (tmp_path / "sends" / name / "fit_input").mkdir(parents=True)
         _write(tmp_path / "sends" / name / "fit_input" / "run_00001_fit_input.dat", 5.0, 1)
-    assert series.open_series(tmp_path / "sends") is False and series.paths == []
+    assert _open_series(series, tmp_path / "sends") is False and series.paths == []
     assert series.status_label.text() == ("No curves here, but in first/fit_input, second/fit_input: choose one of "
                                           "them, or tick “Also in subfolders”.")
     assert series.frame_plot.figure_state()["title"] == "" and series.frame_plot.curve_count() == 0  # not the frame of before
     assert series.frame_note.text() == ""
     empty = tmp_path / "empty"
     empty.mkdir()
-    assert series.open_series(empty) is False
+    assert _open_series(series, empty) is False
     assert series.status_label.text() == f"No curves matching *_fit_input.dat in {empty}."
     series.dispose()
     single.dispose()
@@ -1002,7 +1028,7 @@ def test_a_line_of_the_list_leads_with_the_state_and_wraps_instead_of_being_cut(
     (folder / names[2]).write_text("not a curve\n", encoding="utf-8")
     single.open_curve(folder / names[0])
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     assert series.frame_list.item(0).text() == "· 1  …00001"
     assert series.frame_list.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff and series.frame_list.wordWrap()
     assert series.frame_plot.figure_state()["title"] == f"1 · {names[0]}"  # the whole name: where the frame is shown
@@ -1032,7 +1058,7 @@ def test_an_unreadable_file_does_not_end_the_search_for_stages_and_is_marked_bef
     single, series = _pages()
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.0))
-    series.open_series(folder)
+    _open_series(series, folder)
     end = time.monotonic() + 60
     while series._series_stages is None and time.monotonic() < end:
         series.stage_tasks.wait(0.1)
@@ -1045,6 +1071,7 @@ def test_an_unreadable_file_does_not_end_the_search_for_stages_and_is_marked_bef
     assert item.text().startswith("✗ 14") and series.frame_list.item(12).text().startswith("· 13")
     assert series.stage_of_frame(13) == series.stage_of_frame(14)  # in a stage by its place
     series.frame_list.setCurrentRow(13)
+    _loaded(series)
     assert series.frame_plot.curve_count() == 0 and series.frame_note.text().startswith("Frame 14 cannot be fitted: ")
     series.dispose()
     single.dispose()
@@ -1053,7 +1080,7 @@ def test_an_unreadable_file_does_not_end_the_search_for_stages_and_is_marked_bef
 def test_first_is_never_after_last(tmp_path) -> None:
     single, series = _pages()
     folder = _series(tmp_path)
-    series.open_series(folder)
+    _open_series(series, folder)
     series.last_spin.setValue(2)
     series.first_spin.setValue(4)  # First past Last: Last follows, the range is never empty
     assert series.last_spin.value() == 4 and series._listed() == [3] and series.frame_list.count() == 1

@@ -13,6 +13,8 @@ from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_language
 from src.gimap.features.fitting.application.single_fit import Curve, prepare_curve
+from tests.test_fit_series import _loaded, _open_series
+
 from tests.test_fit_series import RADII, _answer, _cut, _model, _pages, _wait
 
 FROM_FILES, FROM_SINGLE = "from the fit inputs written by Analyze", "as in Single analysis"
@@ -81,7 +83,7 @@ def test_the_series_has_its_own_choice_of_three_halves_in_the_curves_step(tmp_pa
     assert "mean of both halves, or one half" in combo.toolTip()
     assert not combo.isEnabled() and series.halves_note.isHidden()  # no curves yet: nothing to choose for
     folder = _cuts(tmp_path)
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     assert series.series_side() == "mean" and series.halves_source() == "default"  # nothing says otherwise
     assert combo.isEnabled() and combo.currentData() == "mean" and series.halves_note.isHidden()
     assert "Mean of both halves; every point" in series.model_summary.text()
@@ -98,7 +100,7 @@ def test_the_halves_come_from_the_fit_inputs_then_single_analysis_then_the_mean(
     single.set_model(_model(5.2))
     assert single.session.side == "positive" and not single.side_combo.isHidden()
 
-    assert series.open_series(sent)
+    assert _open_series(series, sent)
     assert series.series_side() == "negative" and series.halves_source() == "files"  # before Single analysis'
     assert series.side_combo.currentData() == "negative" and series.side_combo.isEnabled()
     assert series.halves_note.text() == FROM_FILES and not series.halves_note.isHidden()
@@ -109,7 +111,7 @@ def test_the_halves_come_from_the_fit_inputs_then_single_analysis_then_the_mean(
     expected = prepare_curve(Curve.from_arrays(q, intensity, sigma, name="c"), "negative")
     assert np.allclose(x, expected.q) and np.allclose(y, expected.intensity)
 
-    assert series.open_series(plain)
+    assert _open_series(series, plain)
     assert series.series_side() == "positive" and series.halves_source() == "single"
     assert series.halves_note.text() == FROM_SINGLE and f"q > 0 half ({FROM_SINGLE})" in series.model_summary.text()
     single.set_side("negative")  # it follows Single analysis while nothing else says
@@ -121,15 +123,16 @@ def test_the_halves_come_from_the_fit_inputs_then_single_analysis_then_the_mean(
     assert series.halves_note.text().startswith("Single analysis fits both halves on |q|")
 
     # The person's own choice, here: before everything else, and Single analysis keeps its own.
-    assert series.open_series(sent)
+    assert _open_series(series, sent)
     _choose(series, "positive")
     assert series.series_side() == "positive" and series.halves_source() == "chosen" and series.halves_note.isHidden()
     assert single.session.side == "both"
     series.pattern_edit.setText("cut_0000[1-4]_fit_input.dat")  # another pattern, the same series: the choice stays
     series._list_curves()
+    _loaded(series)
     assert len(series.paths) == 4 and series.series_side() == "positive"
     # A folder opened anew is another series: it is fitted as it was sent, not as the one before was chosen.
-    assert series.open_series(sent, "*_fit_input.dat")
+    assert _open_series(series, sent, "*_fit_input.dat")
     assert series.series_side() == "negative" and series.halves_source() == "files"
     _close(series, single)
 
@@ -139,7 +142,7 @@ def test_the_run_fits_the_halves_of_the_series_and_the_record_says_where_they_ca
     folder = _cuts(tmp_path, "negative")
     single.open_curve(folder / "cut_00001_fit_input.dat", "both_abs")  # Analyze's display default in Single analysis
     single.set_model(_model(5.2))
-    assert single.session.side == "both" and series.open_series(folder)
+    assert single.session.side == "both" and _open_series(series, folder)
     series.start()
     assert not series.side_combo.isEnabled()  # not while the series runs
     _wait(series)
@@ -164,7 +167,7 @@ def test_changing_the_halves_draws_the_frame_again_finds_the_stages_again_and_ma
     folder = _cuts(tmp_path)
     single.open_curve(folder / "cut_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     _stages(series)
     mean = _shown(series)[1]
     key = series._stages_key
@@ -199,7 +202,7 @@ def test_curves_with_one_side_have_no_halves_to_choose(tmp_path) -> None:
     np.savetxt(cut, np.column_stack(_cut(RADII[0], 0, negative=1.3)))
     single.open_curve(cut, "negative")  # Single analysis is on the q < 0 half of a cut
     single.set_model(_model(5.2))
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     assert not series.curves_signed() and series.series_side() == "mean" and series.halves_source() == "one-sided"
     assert not series.side_combo.isEnabled() and series.side_combo.currentData() == "mean"
     assert series.halves_note.isHidden()  # the box is switched off; its tooltip (and its label's) says why
@@ -220,7 +223,7 @@ def test_before_start_the_page_says_the_halves_that_start_fits(tmp_path, monkeyp
     single, series = _pages()
     single.set_model(_model(5.2))
     lost = _cuts(tmp_path, "negative", name="lost", lost={0: "positive"}, radii=RADII[:2])  # frame 1 without its q < 0 half
-    assert series.open_series(lost)
+    assert _open_series(series, lost)
     assert series.curves_signed() and series.series_side() == "negative" and series.halves_source() == "files"
     assert series.side_combo.isEnabled() and series.side_combo.currentData() == "negative"
     assert series.halves_note.text() == FROM_FILES and not series.halves_note.isHidden()
@@ -234,7 +237,7 @@ def test_before_start_the_page_says_the_halves_that_start_fits(tmp_path, monkeyp
 
     corrupt = _cuts(tmp_path, "positive", name="corrupt", radii=RADII[:2])
     (corrupt / "cut_00001_fit_input.dat").write_text("not a curve\n", encoding="utf-8")
-    assert series.open_series(corrupt)
+    assert _open_series(series, corrupt)
     assert series.series_side() == "positive" and series.halves_source() == "files"
     assert series.side_combo.isEnabled() and series.halves_note.text() == FROM_FILES
     assert f"q > 0 half ({FROM_FILES}); every point" in series.model_summary.text()
@@ -248,7 +251,7 @@ def test_before_start_the_page_says_the_halves_that_start_fits(tmp_path, monkeyp
     for index, radius in enumerate(RADII[:3]):
         np.savetxt(one_sided / f"iq_{index + 1:05d}_fit_input.dat", np.column_stack(_cut(radius, index, only="positive")))
     (one_sided / "iq_00001_fit_input.dat").write_text("not a curve\n", encoding="utf-8")
-    assert series.open_series(one_sided)
+    assert _open_series(series, one_sided)
     assert not series.curves_signed() and series.halves_source() == "one-sided" and not series.side_combo.isEnabled()
     _close(series, single)
 
@@ -260,13 +263,13 @@ def test_the_search_of_a_folder_listed_before_is_not_taken_for_one_with_as_many_
 
     single, series = _pages()
     cuts = _cuts(tmp_path, "negative", name="cuts")  # five cuts through the beam
-    assert series.open_series(cuts)
+    assert _open_series(series, cuts)
     _stages(series)
     listed, stages = series._listed(), series._series_stages
     curves = [series._preview_curve(index) for index in listed]
     assert stages is not None and all(curve.signed and curve.path == series.paths[index] for index, curve in zip(listed, curves))
     plain = _series(tmp_path)  # five curves with one side
-    assert series.open_series(plain) and series._listed() == listed
+    assert _open_series(series, plain) and series._listed() == listed
     assert not series.curves_signed() and series._series_stages is None
     read = [(index, np.array([-0.1, 0.1]), {"halves": "negative"}) for index in listed]
     series._stages_found(listed, series._stage_settings(), stages, "", curves, {}, read)  # the search of the cuts ends now
@@ -290,7 +293,7 @@ def test_a_frame_without_the_chosen_half_fails_with_its_sentence_and_the_run_goe
     try:
         apply_language(language, [series, single])
         series.refresh_language()
-        assert series.open_series(folder) and series.series_side() == "positive"
+        assert _open_series(series, folder) and series.series_side() == "positive"
         _stages(series)
         # Before the run: the frame says in the list that it cannot be used, the search goes on without it.
         item = series.frame_list.item(2)
@@ -298,11 +301,13 @@ def test_a_frame_without_the_chosen_half_fails_with_its_sentence_and_the_run_goe
         assert series._skipped == {2: sentence} and series.frame_list.item(1).text().startswith("·")
         assert ("cannot be used: frames 3" if language == "en" else "3") in series.stages_label.text()
         series.frame_list.setCurrentRow(2)
+        _loaded(series)
         assert series.frame_plot.curve_count() == 0  # the other half is not drawn in its place
         assert said in series.frame_plot.empty_overlay.label.text() and said in series.frame_note.text()
         if language == "en":
             assert series.frame_note.text() == "Frame 3 cannot be fitted: No points on the q > 0 half"
             series.frame_list.setCurrentRow(3)  # the fourth holds that half alone: fitted, and the half is named
+            _loaded(series)
             assert series.frame_note.text() == "q > 0 half · 200 points"
         series.start()
         _wait(series)
@@ -330,12 +335,14 @@ def test_under_the_mean_a_frame_with_one_half_is_fitted_on_it_and_says_so(tmp_pa
     folder = _cuts(tmp_path, lost={2: "negative"})
     single.open_curve(folder / "cut_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    assert series.open_series(folder) and series.series_side() == "mean"
+    assert _open_series(series, folder) and series.series_side() == "mean"
     _stages(series)
     assert series._skipped == {}
     series.frame_list.setCurrentRow(2)
+    _loaded(series)
     assert series.frame_note.text() == "q < 0 half only · 200 points"
     series.frame_list.setCurrentRow(1)
+    _loaded(series)
     assert series.frame_note.text() == "Mean of both halves · 200 points"
     series.start()
     _wait(series)
@@ -355,8 +362,9 @@ def test_the_frame_shown_says_what_is_fitted_and_shows_the_points_that_are_not(t
     left_out = {float(f"{points.q[index]:.9g}") for index in (60, 61, 62)}
     single.session.excluded = set(left_out)
     single.set_range((0.5, 1.5))
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     series.frame_list.setCurrentRow(3)
+    _loaded(series)
     state = series.frame_plot.figure_state()
     names = [name for name, _x, _y in state["curves"]]
     assert names == ["measured", "outside the range", "left out"]  # the fitted points first, the others to be seen
@@ -376,13 +384,14 @@ def test_the_frame_shown_says_what_is_fitted_and_shows_the_points_that_are_not(t
 def test_a_project_keeps_the_halves_of_the_series(tmp_path) -> None:
     single, series = _pages()
     folder = _cuts(tmp_path)
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     _choose(series, "negative")
     state = series.project_state()
     assert state["side"] == "negative" and state["side_from"] == "chosen"
     assert json.loads(json.dumps(state)) == state
     other_single, other = _pages()  # another window: Single analysis holds no curve
     assert other.apply_project_state(state) == []
+    _loaded(other)
     assert other.series_side() == "negative" and other.halves_source() == "project"
     assert other.side_combo.currentData() == "negative" and other.halves_note.text() == "as saved in the project"
     assert other_single.session.side == "mean"
@@ -390,7 +399,9 @@ def test_a_project_keeps_the_halves_of_the_series(tmp_path) -> None:
     older = {key: value for key, value in state.items() if not key.startswith("side")}
     sent = _cuts(tmp_path, "positive", name="sent")
     older["folder"] = str(sent)
-    assert other.apply_project_state(older) == [] and other.series_side() == "positive" and other.halves_source() == "files"
+    assert other.apply_project_state(older) == []
+    _loaded(other)
+    assert other.series_side() == "positive" and other.halves_source() == "files"
     # A project without a series: the page as it starts, without the halves of the one before.
     _choose(other, "negative")
     other.close_series()
@@ -403,10 +414,10 @@ def test_a_second_send_of_the_series_is_fitted_as_it_was_sent(tmp_path, monkeypa
     asked = _answer(monkeypatch, QMessageBox.Discard)
     single, series = _pages()
     folder = _cuts(tmp_path, "positive")
-    assert series.open_series(folder) and series.series_side() == "positive"
+    assert _open_series(series, folder) and series.series_side() == "positive"
     _choose(series, "mean")
     for index, radius in enumerate(RADII):  # written again, sent with the q < 0 half this time
         _fit_input(folder / f"cut_{index + 1:05d}_fit_input.dat", _cut(radius, index, negative=1.3), "negative")
-    assert series.open_series(folder, "*_fit_input.dat")
+    assert _open_series(series, folder, "*_fit_input.dat")
     assert series.series_side() == "negative" and series.halves_source() == "files" and asked == []
     _close(series, single)

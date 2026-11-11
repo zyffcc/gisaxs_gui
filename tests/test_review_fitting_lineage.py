@@ -3,6 +3,7 @@ series reading its frames as it was started (points, unit) and never changing un
 
 from __future__ import annotations
 
+from tests.test_fit_series import _loaded, _open_series
 import os
 import threading
 import time
@@ -123,7 +124,7 @@ def test_before_start_the_frame_is_drawn_again_when_single_fits_other_points(tmp
     folder = _series(tmp_path)
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     series.frame_list.setCurrentRow(2)
     _name, x, _y = series.frame_plot.figure_state()["curves"][0]
     assert x.min() < 0.1 and x.max() > 1.9
@@ -133,6 +134,7 @@ def test_before_start_the_frame_is_drawn_again_when_single_fits_other_points(tmp
     assert x.min() >= 0.5 and x.max() <= 1.5 and series.frame_list.currentRow() == 2
     single.open_curve(folder / "run_00001_fit_input.dat", unit="nm")  # q read in nm⁻¹: 10× smaller
     series.refresh()
+    _loaded(series)
     _name, x, _y = series.frame_plot.figure_state()["curves"][0]
     assert x.max() == pytest.approx(0.2, rel=0.01)
     series.dispose()
@@ -144,7 +146,7 @@ def test_a_running_series_keeps_the_unit_of_q_it_was_started_with(tmp_path) -> N
     folder = _series(tmp_path)
     single.open_curve(folder / "run_00001_fit_input.dat")  # Å⁻¹, as Analyze writes them
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     series.start()
     assert series._unit == "angstrom"
     single.open_curve(folder / "run_00003_fit_input.dat", unit="nm")  # another curve looked at meanwhile
@@ -165,7 +167,7 @@ def test_a_project_does_not_change_a_running_series(tmp_path) -> None:
     other.mkdir()
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     series.start()
     assert series.running
     before = series.project_state()

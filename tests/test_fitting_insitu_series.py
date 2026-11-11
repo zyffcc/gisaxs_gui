@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import QApplication
 from PyQt5.QtTest import QTest
 
 from main import MainWindow
+from tests.test_fit_series import _loaded, _open_series
 from src.gimap.app import AppContext
 from src.gimap.features.fitting.application import SingleAnalysisRecipeSnapshot
 from src.gimap.features.fitting.domain import InSituFittingPolicy, InSituTrackingPolicy
@@ -99,7 +100,7 @@ def test_a_frame_opened_in_single_analysis_keeps_the_settings_of_the_series(tmp_
     left_out = point_key(single.session.data().q[10])
     single.session.excluded.add(left_out)
     single._exclusions_changed()
-    series.open_series(folder)
+    _open_series(series, folder)
     series.start()
     _wait_series(series)
     assert len(series.fits) == 3 and series._settings.q_range == (0.5, 1.5)
@@ -109,6 +110,7 @@ def test_a_frame_opened_in_single_analysis_keeps_the_settings_of_the_series(tmp_
     host = SimpleNamespace(show_context=contexts.append, series_page=series, fit_page=single)
     series.openFrameRequested.connect(lambda path, model: FittingWorkspace._frame_in_single(host, path, model))
     series.frame_list.setCurrentRow(2)
+    _loaded(series)
     series.to_single_button.click()
     session = single.session
     assert contexts == ["single"] and session.curve.name == "run_00003_fit_input.dat"

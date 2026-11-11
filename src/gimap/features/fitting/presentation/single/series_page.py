@@ -39,6 +39,7 @@ from .series_fit1d import FitSeriesFit1DMixin
 from .series_frames import FitSeriesFramesMixin
 from .series_halves import FitSeriesHalvesMixin
 from .series_listing import FitSeriesListingMixin
+from .series_loading import FitSeriesLoadingMixin
 from .series_preview import FitSeriesPreviewMixin
 from .series_results import UNTOUCHED, FitSeriesResultsMixin
 from .series_stages import NO_STAGES_AT_START, FitSeriesStagesMixin
@@ -61,7 +62,7 @@ END_SENTENCES = {
 not said like a success (said at the level of a warning)."""
 
 
-class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin, FitSeriesStagesMixin, FitSeriesFit1DMixin,
+class FitSeriesPage(FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin, FitSeriesStagesMixin, FitSeriesFit1DMixin,
                     FitSeriesFramesMixin, FitSeriesUnitsMixin,
                     FitSeriesPreviewMixin, FitSeriesHalvesMixin, FitSeriesResultsMixin, FitSeriesWatchMixin, QWidget,
                     FitSeriesView):
@@ -110,6 +111,7 @@ class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin,
         self._connect_results()
         self._connect_watch()
         self._connect_stages()
+        self.setup_series_loading()
         self._restore()
         self.refresh()
 
@@ -175,14 +177,16 @@ class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin,
         self.setup_note.setVisible(untouched)
         self._show_set_up()  # (what Start does: its tooltip; how to read the table of every frame: the table's)
         self._refresh_results(listed)
-        self.start_button.setVisible(not self.running)
-        self.start_button.setEnabled(bool(listed) and bool(model.components))
+        self.start_button.setVisible(not self.running and not self._listing_busy)
+        self.start_button.setEnabled(bool(listed) and bool(model.components) and not self._listing_busy)
         self.start_button.setToolTip(
             tr("Fit every listed curve with the model of Single analysis") + ("\n" + tr(NOT_SET_UP) if untouched else "")
             if self.start_button.isEnabled() else
             tr("Choose a folder of curves first") if not listed else tr("Set up a model in Single analysis first"))
         self.pause_button.setVisible(self.running)
-        self.stop_button.setVisible(self.running)
+        self.stop_button.setVisible(self.running or self._listing_busy)
+        for spin in (self.first_spin, self.last_spin, self.every_spin):
+            spin.setEnabled(not self._listing_busy)
         self._preview_trend()
         self._redraw_preview()
 
@@ -242,7 +246,7 @@ class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin,
     def start(self) -> None:
         session = self.single.session
         model = session.model
-        if self.running or not self._listed() or not model.components or not self.fit1d_can_start(model) \
+        if self.running or self._listing_busy or not self._listed() or not model.components or not self.fit1d_can_start(model) \
                 or not self.ready_to_cut() or not self._may_drop_results():
             return
         self._probe_signed()  # a half is only chosen for curves that have two (other frames chosen since the listing)
@@ -259,7 +263,9 @@ class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin,
         self.fits, self.queue, self._previous, self._curves = {}, list(listed), None, {}
         self._selected = self._last_done = None
         self._frames_done, self._unsaved, self._read_stamps, self._seen = 0, False, {}, {}
-        self._stop.clear()
+        self._stop = threading.Event()
+        self._watch_scan += 1
+        self._watch_busy = False
         self.pause_button.setChecked(False)  # (before the run is on: un-pausing a run starts its next frame)
         self.running = True
         self._fill_trend_choices()
@@ -300,22 +306,45 @@ class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin,
         index = self.queue.pop(0)
         self._current = index
         path = self.paths[index]
-        self._read_stamps[index] = file_stamp(path)  # Watch reads it again if the file changes after this
-        outcome = self.load_series_curve(LoadCurveRequest(Path(path), self._unit))  # the unit at Start; a frame is cut
-        if outcome.error is not None:
-            self._frame_done(FrameFit(index, path, error=outcome.error.message))
-            return
-        loaded = outcome.value
-        self._note_curve(index, loaded.q, loaded.observation)
-        curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=Path(path).name, path=path,
-                                  unit=loaded.q_source_unit, unit_from=loaded.q_unit_from)
         new_stage = self._new_stage(index)
         start = next_start(self._previous, self._start_model, self._settings, new_stage=new_stage)
         settings, stop = self._settings, self._stop.is_set
         predict = self.predictor(settings, self._previous, new_stage) if settings.method == "fit1d" else None
-        self.tasks.submit(f"series-{index}", lambda: (fit_frame(index, path, curve, start, settings, stop, predict), curve),
-                          on_done=lambda value: self._frame_done(value[0], value[1]),
-                          on_error=lambda message, _details: self._frame_done(FrameFit(index, path, error=message)))
+        load, unit, epoch = self.series_curve_loader(), self._unit, self._loading_epoch
+
+        def work():
+            stamp = file_stamp(path)  # stat can also wait on a network drive
+            outcome = load(LoadCurveRequest(Path(path), unit))
+            if stop():  # Stop during I/O: no fit is started and no spurious failed result is recorded
+                return None, None, stamp, None
+            if outcome.error is not None:
+                return FrameFit(index, path, error=outcome.error.message), None, stamp, None
+            value = outcome.value
+            curve = Curve.from_arrays(value.q, value.intensity, value.error, name=Path(path).name, path=path,
+                                      unit=value.q_source_unit, unit_from=value.q_unit_from)
+            return fit_frame(index, path, curve, start, settings, stop, predict), curve, stamp, value
+
+        def done(value):
+            if not self._loading_current(epoch) or not self.running:
+                return
+            frame, curve, stamp, loaded = value
+            self._read_stamps[index] = stamp
+            if loaded is not None:
+                self._note_curve(index, loaded.q, loaded.observation)
+                self._publish_frame_cuts(load.loaded)
+            if frame is None:
+                self._finish()
+            else:
+                self._frame_done(frame, curve)
+
+        def failed(message, _details):
+            if self._loading_current(epoch) and self.running:
+                if stop():
+                    self._finish()
+                else:
+                    self._frame_done(FrameFit(index, path, error=message))
+
+        self.tasks.submit(f"series-{index}", work, on_done=done, on_error=failed)
         self._set_item(index)
 
     def _frame_done(self, frame: FrameFit, curve: Optional[Curve] = None) -> None:
@@ -346,6 +375,8 @@ class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin,
             self._next()
 
     def stop(self) -> None:
+        if self._listing_busy:
+            self._cancel_loading()
         if not self.running:
             return
         self._stop.set()
@@ -425,10 +456,19 @@ class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin,
     # -- a project -------------------------------------------------------------------------
 
     def project_state(self) -> dict:
-        return {"folder": self.folder, "pattern": self.pattern_edit.text(), "subfolders": self.subfolders_check.isChecked(),
-                "first": self.first_spin.value(), "last": self.last_spin.value(), "every": self.every_spin.value(),
-                "start": self._start_choice(),
-                "method": self.series_method(), "follow": self.follow_check.isChecked(), **self.halves_state()}
+        state = {"folder": self.folder, "pattern": self.pattern_edit.text(), "subfolders": self.subfolders_check.isChecked(),
+                 "first": self.first_spin.value(), "last": self.last_spin.value(), "every": self.every_spin.value(),
+                 "start": self._start_choice(), "method": self.series_method(),
+                 "follow": self.follow_check.isChecked(), **self.halves_state()}
+        if self._listing_busy:
+            # Range/halves wait for discovery and cannot be edited yet. Safe choices above stay live.
+            pending = self._restore_listing or {}
+            for key, default in (("first", 1), ("last", 0), ("every", 1)):
+                state[key] = pending.get(key, default)
+            for key in ("side", "side_from"):
+                if key in pending:
+                    state[key] = pending[key]
+        return state
 
     def apply_project_state(self, data: dict) -> list[str]:
         if self.running:  # nothing changes under a running series (its folder, frames and choices stay)
@@ -445,12 +485,15 @@ class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin,
         if not Path(folder).is_dir():
             return [tr("the series folder {folder} is no longer there").format(folder=folder)]
         if self._open(folder, str(data.get("pattern") or "*_fit_input.dat"), ask=False):
-            for spin, key in ((self.first_spin, "first"), (self.last_spin, "last"), (self.every_spin, "every")):
-                if data.get(key):
-                    spin.setValue(int(data[key]))
-            self.apply_halves_state(data)  # the halves the project kept for this series
-            self.refresh()
+            self._restore_listing = dict(data)
         return []
+
+    def _restore_series_choices(self, data):
+        for spin, key in ((self.first_spin, "first"), (self.last_spin, "last"), (self.every_spin, "every")):
+            if data.get(key):
+                spin.setValue(int(data[key]))
+        self.apply_halves_state(data)
+        self.refresh()
 
     def refresh_language(self) -> None:
         """After a switch of the interface language (``i18n.language_changed``): what this page composed with
@@ -472,10 +515,12 @@ class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin,
             self.status_label.setText(self._status_text())
 
     def dispose(self) -> None:
+        self._dispose_loading()
         self._dispose_stages()
         self._watch.stop()
         self.stop()
         self.tasks.shutdown(2000)
+        self.watch_tasks.shutdown(2000)
         self.frame_plot.dispose()
         self.trend_plot.dispose()
 

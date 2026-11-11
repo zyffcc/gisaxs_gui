@@ -302,6 +302,8 @@ class FitSeriesResultsMixin:
         started = self._start_model is not None
         self.save_button.setVisible(bool(self.fits))
         self.to_single_button.setVisible(bool(self.fits))
+        self.save_button.setEnabled(not self._listing_busy)
+        self.to_single_button.setEnabled(not self._listing_busy)
         self.results_card.setVisible(started)  # before the first Start the rail's “After Start” says it
         if not started:
             self.results_summary.setText("")
@@ -359,7 +361,7 @@ class FitSeriesResultsMixin:
     # -- saving -------------------------------------------------------------------------------
 
     def save_table(self, path=None):
-        if not self.fits or self._start_model is None:
+        if self._listing_busy or not self.fits or self._start_model is None:
             return None
         path = path or QFileDialog.getSaveFileName(self, tr("Save Table of Every Frame"),
                                                    str(start_folder(self.folder) / "series_fit.csv"), "CSV (*.csv)")[0]
@@ -406,6 +408,8 @@ class FitSeriesResultsMixin:
         return f"series_frame_{index + 1:05d}", f"{index + 1} · {file_name(self.paths[index], self.folder)}"
 
     def _save_plot(self, plot, name: str, path=None):
+        if self._listing_busy:
+            return None
         start = start_folder(self.folder, self._remembered("folder"))  # no series yet: not the program's folder
         stem, title = self._plot_words(name)
         path = path or QFileDialog.getSaveFileName(self, tr("Save Plot"), str(start / f"{stem}.png"),

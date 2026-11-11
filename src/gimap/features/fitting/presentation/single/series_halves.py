@@ -140,7 +140,7 @@ class FitSeriesHalvesMixin:
             combo.setItemText(index, tr(text))
         combo.setCurrentIndex(max(0, combo.findData(self.series_side())))
         one_sided = source == "one-sided"
-        combo.setEnabled(bool(self.paths) and not one_sided and not self.running)
+        combo.setEnabled(bool(self.paths) and not one_sided and not self.running and not self._listing_busy)
         if not self.paths:  # no curves yet: nothing to choose for, nothing to say
             note = ""
         elif one_sided:

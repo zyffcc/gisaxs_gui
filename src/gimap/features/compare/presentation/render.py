@@ -82,7 +82,7 @@ class CompareRenderMixin:
     was made from), ``failure_reason()``, ``service`` and ``_status``."""
 
     def _render(self) -> None:
-        comparison = self.comparison
+        comparison = self.comparison if self.comparison_current() else None
         self.method_label.setText(tr(METHOD_LINE))
         self.method_label.setToolTip(tr(METHOD))
         has = comparison is not None
@@ -133,7 +133,11 @@ class CompareRenderMixin:
         its way, or the reason the listed series could not be compared."""
         reason = self.failure_reason()  # the English of the error (“no common q range”): said in zh too
         failure = error_text(reason) if reason else ""
-        if failure:
+        if self._reading:
+            self.empty_state.set_content(tr("Reading curve files …"),
+                                         tr("The comparison continues after the queued imports finish."), "")
+            self.summary_label.setText(tr("Reading curve files …"))
+        elif failure:
             self.empty_state.set_content(tr(FAILED_TITLE), failure + "\n" + tr(FAILED_HINT), "")
             self.summary_label.setText(tr("Could not compare: {reason}").format(reason=failure))
         elif self.series:
@@ -367,11 +371,11 @@ class CompareRenderMixin:
         if self.comparison is None:
             return None
         if not self.comparison_current():  # a series added, removed or renamed since: the rows would not match
-            self._status(lambda: tr("The series changed: save when they are compared again."), "warning")
+            self._status(lambda: tr("The series or settings changed: save when they are compared again."), "warning")
             return None
         path = path or QFileDialog.getSaveFileName(self, title, str(Path(self._folder()) / name), "CSV (*.csv)")[0]
-        if not path:
-            return None
+        if not path or not self.comparison_current():
+            return None  # a modal file dialog can deliver callbacks that change the series
         try:
             written = write(list(self._compared), self.comparison, Path(path))  # the series it was made from
         except (OSError, ValueError) as exc:
@@ -381,12 +385,14 @@ class CompareRenderMixin:
         return written
 
     def _save_plot(self, plot, name: str, path=None) -> Optional[Path]:
-        if self.comparison is None:
+        if not self.comparison_current():
+            if self.comparison is not None:
+                self._status(lambda: tr("The series or settings changed: save when they are compared again."), "warning")
             return None
         path = path or QFileDialog.getSaveFileName(self, tr("Save Plot"), str(Path(self._folder()) / f"compare_{name}.png"),
                                                    "PNG image (*.png);;SVG vector (*.svg)")[0]
-        if not path:
-            return None
+        if not path or not self.comparison_current():
+            return None  # a modal file dialog can deliver callbacks that change the series
         try:
             export_plot(plot, path)  # PNG 1600 px wide or SVG on the light plot palette; OSError: nothing written
         except (OSError, ValueError, RuntimeError) as exc:

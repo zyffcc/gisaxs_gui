@@ -1,4 +1,4 @@
-"""The detector tilt of a pyFAI ``.poni`` that GIMaP's flat geometry leaves out, and what leaving it out costs in |q|.
+"""The rotations of a pyFAI ``.poni`` that GIMaP's flat geometry leaves out: |q| and direction separately.
 
 GIMaP's geometry (``DetectorGeometry``) is a flat detector perpendicular to the direct beam. A ``.poni`` file
 describes the detector by pyFAI's distance, PONI and three rotations. When one is read
@@ -41,6 +41,12 @@ TILT_LIMIT_DEG = 1.0
 """A dropped tilt above this is an open point of the automatic analysis (and a message in Analyze)."""
 Q_ERROR_LIMIT = 0.005
 """…and so is a largest relative |q| error above this (0.5 %), whatever the tilt."""
+ROTATION_REVIEW_DEG = 1.0
+"""Review an omitted beam-axis rotation above 1°, independently of |q|. Like TILT_LIMIT_DEG this is a reminder,
+not an acceptable scientific error bound: every nonzero rotation is recorded and explained, including smaller
+ones. It is an exact angular contribution to χ, whereas qy/qz errors depend on the pixel and sample geometry."""
+ROTATION_ZERO_TOLERANCE_DEG = 1e-10
+"""Only suppress floating-point residue when reducing full turns; not an orientation-accuracy tolerance."""
 NEAR_BEAM_PX = 10.0
 """Pixels whose centre lies closer than this (in pixels) to the direct beam are left out: there |q| tends to zero
 and a relative error says nothing."""
@@ -109,8 +115,8 @@ class DetectorTilt:
 
 @dataclass(frozen=True)
 class FlatDetectorError:
-    """What dropping a tilt costs on one frame: the tilt, the rotations, and the largest and RMS relative |q| error
-    (fractions: 0.063 is 6.3 %) over the valid pixels compared (``pixels``; ``None`` errors when there were none)."""
+    """The omitted normal tilt and rotations, and largest/RMS relative |q| error (fractions: 0.063 is 6.3 %) over
+    valid pixels (``None`` errors when there were none). Rot3 direction review is independent of these errors."""
 
     tilt_deg: float
     rotations_deg: tuple[float, float, float]
@@ -120,16 +126,35 @@ class FlatDetectorError:
     pixels: int
 
     @property
-    def needs_attention(self) -> bool:
+    def q_needs_attention(self) -> bool:
         """Above ``TILT_LIMIT_DEG`` or ``Q_ERROR_LIMIT``: a point to check, not only a line among the decisions."""
         return self.tilt_deg > TILT_LIMIT_DEG or (self.q_error_max or 0.0) > Q_ERROR_LIMIT
+
+    @property
+    def beam_axis_rotation_deg(self) -> float:
+        """The omitted Rot3 modulo full turns, in [-180°, 180°]; raw rotations remain in ``rotations_deg``."""
+        angle = math.remainder(self.rotations_deg[2], 360.0)
+        return 0.0 if abs(angle) <= ROTATION_ZERO_TOLERANCE_DEG else angle
+
+    @property
+    def direction_needs_attention(self) -> bool:
+        return abs(self.beam_axis_rotation_deg) > ROTATION_REVIEW_DEG
+
+    @property
+    def needs_attention(self) -> bool:
+        """Either magnitude/normal-tilt or beam-axis direction needs review; neither blocks reduction."""
+        return self.q_needs_attention or self.direction_needs_attention
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "dropped_tilt_deg": self.tilt_deg, "dropped_rotations_deg": dict(zip(("rot1", "rot2", "rot3"), self.rotations_deg)),
+            "dropped_beam_axis_rotation_deg": self.beam_axis_rotation_deg,
             "q_error_max": self.q_error_max, "q_error_rms": self.q_error_rms, "pixels_compared": self.pixels,
-            "needs_attention": self.needs_attention,
-            "limits": {"tilt_deg": TILT_LIMIT_DEG, "q_error": Q_ERROR_LIMIT, "near_beam_px": NEAR_BEAM_PX},
+            "needs_attention": self.needs_attention, "q_needs_attention": self.q_needs_attention,
+            "direction_needs_attention": self.direction_needs_attention,
+            "limits": {"tilt_deg": TILT_LIMIT_DEG, "q_error": Q_ERROR_LIMIT, "near_beam_px": NEAR_BEAM_PX,
+                       "beam_axis_rotation_deg": ROTATION_REVIEW_DEG,
+                       "rotation_zero_tolerance_deg": ROTATION_ZERO_TOLERANCE_DEG},
         }
 
 
@@ -213,6 +238,7 @@ def flat_detector_q_error(
 
 
 __all__ = [
-    "DetectorTilt", "FlatDetectorError", "NEAR_BEAM_PX", "Q_ERROR_LIMIT", "TILT_LIMIT_DEG", "flat_detector_q_error",
+    "DetectorTilt", "FlatDetectorError", "NEAR_BEAM_PX", "Q_ERROR_LIMIT", "TILT_LIMIT_DEG", "ROTATION_REVIEW_DEG",
+    "ROTATION_ZERO_TOLERANCE_DEG", "flat_detector_q_error",
     "relative_q_error_map", "tilted_cos_two_theta", "tilted_rays",
 ]

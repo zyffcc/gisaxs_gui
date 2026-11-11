@@ -189,6 +189,7 @@ def test_the_page_compares_on_every_change_and_reopens_from_a_project(tmp_path: 
         assert "differs most" not in summary and "run (2) and annealed: end states" in summary
         assert page.results_table.isColumnHidden(1) and not page.distance_table.isHidden()
         notes = page.apply_project_state(state, tmp_path / "sample.gimap")
+        assert page.tasks.wait(30)
         assert not notes and [item.name for item in page.series] == ["run", "run (2)", "annealed"]
         _wait(page, lambda: page.comparison is not None and len(page.comparison.results) == 3)
         page.clear_all()

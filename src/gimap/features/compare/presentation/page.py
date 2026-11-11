@@ -50,9 +50,10 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
         self.series: list[SeriesData] = []
         self.comparison = None
         self._compared: list[SeriesData] = []
+        self._compared_settings: Optional[CompareSettings] = None
         """The series ``comparison`` was made from (``series`` may have changed since: saving waits)."""
         self._failure: Optional[tuple] = None
-        """``(series, reason)`` of the last comparison that failed, while those are still the page's."""
+        """``(series, reason, settings)`` of the last failed comparison."""
         self._q_range: Optional[tuple] = None
         self._running = False
         self._again = False
@@ -64,6 +65,7 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
         self._timer.setSingleShot(True)
         self._timer.setInterval(DELAY_MS)
         self._timer.timeout.connect(self.recompute)
+        self._init_reading()
         self._connect()
         self.setAcceptDrops(True)  # a folder or curve files dropped anywhere on the page (``series_input``)
         self.show_step("series")
@@ -133,6 +135,7 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
         self._render()
         if self._status_text is not None:
             self.status_label.setText(self._status_text())
+        self._refresh_reading_language()
 
     # -- series ------------------------------------------------------------------------------
 
@@ -240,9 +243,8 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
 
     def _range_edited(self) -> None:
         low, high = self.q_low_spin.value(), self.q_high_spin.value()
-        if high > low:
-            self._q_range = (low, high)
-            self._schedule()
+        self._q_range = (low, high)
+        self._schedule()
 
     def whole_range(self) -> None:
         self._q_range = None
@@ -264,8 +266,15 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
 
     def _schedule(self) -> None:
         self._timer.start()
+        self.refresh()
+        self._render()
+        if not self.comparison_current() and self.series and not self._reading:
+            self._status(lambda: tr("Comparing …"))
 
     def recompute(self) -> None:
+        if self._disposed:
+            return
+        self._timer.stop()
         if self._reading:  # curve files are being read (``series_input``): once they are in, not in between
             self._timer.start()
             return
@@ -280,8 +289,8 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
         self.status_progress.show()
         self._status(lambda count=len(series): tr("Comparing {n} series …").format(n=count))
         self.tasks.submit("compare", lambda: self.service.compare(series, settings),
-                          on_done=lambda comparison: self._computed(series, comparison),
-                          on_error=lambda message, _trace: self._failed(series, message))
+                          on_done=lambda comparison: self._computed(series, settings, comparison),
+                          on_error=lambda message, _trace: self._failed(series, settings, message))
 
     def _finished(self) -> bool:
         self._running = False
@@ -296,22 +305,24 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
         return len(series) == len(self.series) and all(a is b for a, b in zip(series, self.series))
 
     def comparison_current(self) -> bool:
-        """The comparison shown is of the page's series as they are (not before an add, removal or rename)."""
-        return self.comparison is not None and self._current(self._compared)
+        """The result belongs to the current series and complete comparison settings."""
+        return (not self._reading and self.comparison is not None and self._current(self._compared)
+                and self._compared_settings == self.settings())
 
     def failure_reason(self) -> str:
         """Why the page's series (as they are) could not be compared; empty when they have not failed."""
-        if self._failure is None or not self.series or not self._current(self._failure[0]):
+        if self._failure is None or not self.series or not self._current(self._failure[0]) or self._failure[2] != self.settings():
             return ""
         return self._failure[1]
 
-    def _computed(self, series, comparison) -> None:
+    def _computed(self, series, settings, comparison) -> None:
         if not self._finished():
             return  # changed meanwhile: comparing again
-        if not self._current(series):  # stale (Remove All, a project opened): the steps say where things stand
+        if self._reading or not self._current(series) or settings != self.settings():  # superseded inputs
             self.refresh()
             return
         self.comparison, self._compared, self._failure = comparison, list(series), None
+        self._compared_settings = settings
         self._close_error_notice()  # “Could not compare …” was about series that are compared now
         low, high = _outward(comparison.compared.min(), comparison.compared.max())
         self._show_range(low, high, limits=_outward(np.nanmin(comparison.q), np.nanmax(comparison.q)))
@@ -331,17 +342,18 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
             return tr("{n} series compared: {k} groups.").format(n=count, k=groups)
         return tr("{n} series compared: all alike.").format(n=count)
 
-    def _failed(self, series, message: str) -> None:
+    def _failed(self, series, settings, message: str) -> None:
         if not self._finished():
             return
-        if not self._current(series):  # about series no longer here: no error to show
+        if self._reading or not self._current(series) or settings != self.settings():  # superseded inputs
             self.refresh()
             return
-        self.comparison, self._compared, self._failure = None, [], (list(series), str(message))
+        self.comparison, self._compared, self._failure = None, [], (list(series), str(message), settings)
         self._announce = False
         self.refresh()
         self._render()
-        self._status(lambda: tr("Could not compare: {reason}").format(reason=error_text(message)), "error")
+        self._status(lambda: tr("Could not compare: {reason}").format(reason=error_text(message)), "error",
+                     comparison_error=True)
 
     def refresh(self) -> None:
         """The series table, the chip and what each step says."""
@@ -367,13 +379,17 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
         self.clear_button.setVisible(has)
         # No series: the chip is empty and the empty state on the right says what to do (Add Series' tooltip: how).
         self.chip.setText(tr("{n} series · {frames} frames").format(n=len(self.series), frames=frames) if has else "")
-        self.step_rail.set_state("series", "ok" if has else "pending",
-                                 tr("{n} series").format(n=len(self.series)) if has else tr("Add a series"))
-        comparison = self.comparison
+        self.step_rail.set_state("series", "busy" if self._reading else "ok" if has else "pending",
+                                tr("Reading curve files …") if self._reading else
+                                tr("{n} series").format(n=len(self.series)) if has else tr("Add a series"))
+        comparison = self.comparison if self.comparison_current() else None
         x_label = comparison.x_label if comparison is not None else (self.series[0].x_label if self.series else "q (Å⁻¹)")
         axis = axis_symbol(x_label)
         if comparison is None:
-            if self.failure_reason():  # the series listed cannot be compared: say so, not “add a series”
+            if self._reading:
+                self.step_rail.set_state("compare", "pending", tr("Reading curve files …"))
+                self.step_rail.set_state("results", "pending", "")
+            elif self.failure_reason():  # the series listed cannot be compared: say so, not “add a series”
                 for key in ("compare", "results"):
                     self.step_rail.set_state(key, "error", tr("Could not compare"))
             elif has:  # a comparison is on its way (one is always scheduled after a change)
@@ -418,7 +434,8 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
 
     # -- status, preferences, project ---------------------------------------------------------
 
-    def _status(self, text, level: str = "info", *, toast: Optional[bool] = None, action=None) -> None:
+    def _status(self, text, level: str = "info", *, toast: Optional[bool] = None, action=None,
+                comparison_error=False) -> None:
         """The status line; a toast for warnings and errors (``toast`` decides otherwise), shown wherever
         the user is in the window. ``action``: ``(title, callback)`` on the toast. ``text``: the line, or a
         function that makes it — made again after a switch of the interface language (a composed text, an
@@ -433,7 +450,7 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
                 shown = show_toast(self.window(), text, level=level)
             else:
                 shown = show_toast(self.window(), text, level=level, action=action)
-            if level == "error":
+            if level == "error" and comparison_error:
                 self._error_notice = shown
 
     _error_notice = None
@@ -457,7 +474,9 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
         self.preferences.set(PREFERENCES_KEY, stored)
 
     def project_state(self, project_path=None) -> dict:
-        """The settings and the series: curve files by path; Analyze maps in ``<project>.compare.npz``."""
+        """The settings and loaded series; project.save supplies a unique path for each array generation."""
+        if self._reading:
+            raise ValueError(tr("Wait for Compare imports to finish, or cancel them, before saving the project."))
         state = {"q_range": list(self._q_range) if self._q_range else None, "shape_only": self.shape_check.isChecked(),
                  "end_frames": self.end_spin.value(), "series": []}
         arrays = {}
@@ -477,48 +496,40 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
         return state
 
     def apply_project_state(self, data: dict, project_path=None) -> list[str]:
-        notes: list[str] = []
+        notes = []
+        self.cancel_import(announce=False)
+        self.tasks.cancel("compare")
+        self._running = self._again = False
+        self._timer.stop()
+        self.status_progress.hide()
         self.series.clear()
-        stored = None
-        if data.get("arrays_file") and project_path is not None:
-            try:
-                stored = np.load(Path(project_path).parent / data["arrays_file"])
-            except OSError:
-                notes.append(tr("Compare: {name} is missing").format(name=data["arrays_file"]))
-        for entry in data.get("series") or ():
-            try:
-                if "files" in entry:
-                    item = self.service.series_from_files([Path(path) for path in entry["files"]], entry.get("name"))
-                elif stored is not None:
-                    index = int(entry["arrays"])
-                    item = SeriesData(entry.get("name", "series"), stored[f"x_{index}"], stored[f"image_{index}"],
-                                      tuple(entry.get("labels") or ()), entry.get("x_label", "q (Å⁻¹)"),
-                                      entry.get("source", "Analyze"))
-                else:
-                    continue
-            except (ValueError, OSError, KeyError) as exc:
-                notes.append(tr("Compare: {name} could not be read ({error})").format(
-                    name=entry.get("name"), error=error_text(exc)))
-                continue
-            self.series.append(item)
+        self._emptied()
         with QSignalBlocker(self.shape_check):
             self.shape_check.setChecked(bool(data.get("shape_only", True)))
         with QSignalBlocker(self.end_spin):
             self.end_spin.setValue(int(data.get("end_frames", 10)))
         rng = data.get("q_range")
-        if not self.series:  # nothing to compare: no status line, range or notice left from before
-            self._emptied()
-            self._q_range = tuple(rng) if rng else None
-            return notes
         self._q_range = tuple(rng) if rng else None
         self.comparison, self._compared, self._failure = None, [], None
         self.refresh()
         self._render()
         self._announce = True
-        self._schedule()
-        return notes
+        sidecar = (Path(project_path).parent / data["arrays_file"]
+                   if data.get("arrays_file") and project_path is not None else None)
+        for entry in data.get("series") or ():
+            files = entry.get("files")
+            missing = (not any(Path(path).exists() for path in files) if files is not None
+                       else sidecar is None or not sidecar.is_file())
+            if missing:
+                notes.append(trf("Compare: {name} is missing", name=entry.get("name", "series")))
+                continue
+            self._enqueue_import(entry=dict(entry), sidecar=sidecar)
+        return notes  # read errors of files that exist are reported asynchronously by the import status
 
     def dispose(self) -> None:
+        self._disposed = True
+        self.cancel_import(announce=False)
+        self.tasks.cancel("compare")
         self._disconnect_theme()
         self._timer.stop()
         for plot in (self.change_plot, self.paths_plot, self.end_plot):

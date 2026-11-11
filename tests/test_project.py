@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from src.gimap.features.fitting.application.single_fit import FitModel, new_component
 from tests.test_assistant_gui import _app
-from tests.test_fit_series import _series
+from tests.test_fit_series import _loaded, _open_series, _series
 
 DATA = Path(__file__).parent / "data" / "external"
 GALAXI = DATA / "gisaxs_galaxi" / "galaxi_data.tif"
@@ -67,7 +67,7 @@ def test_a_project_reopens_analyze_and_fitting_as_they_were(tmp_path) -> None:
     single.set_range((0.2, 1.5))
     first = single.session.all_points().q[30]
     single.session.excluded.add(float(f"{first:.9g}"))
-    workspace.series_page.open_series(folder)
+    _open_series(workspace.series_page, folder)
     workspace.series_page.every_spin.setValue(2)
     workspace.series_page.start_same.setChecked(True)
     from types import SimpleNamespace
@@ -76,9 +76,10 @@ def test_a_project_reopens_analyze_and_fitting_as_they_were(tmp_path) -> None:
     compare.add_map(SimpleNamespace(x=np.linspace(0.05, 0.2, 40), image=np.random.default_rng(0).uniform(1, 2, (6, 40)),
                                     labels=tuple(f"f{i}" for i in range(6)), x_label="q (Å⁻¹)"), "map run")
     compare.add_folder(folder)
+    assert compare.tasks.wait(30)
     path = window.menus._write_project(tmp_path / "sample.gimap") and Path(window.menus.project_path)
-    assert (tmp_path / "sample.compare.npz").exists()  # the map from Analyze, next to the project
     record = json.loads(path.read_text(encoding="utf-8"))
+    assert (tmp_path / record["compare"]["arrays_file"]).exists()  # the committed array generation
     assert record["format"] == "gimap-project" and record["analyze"]["files"] == [str(GALAXI)]
     assert window.windowTitle() == "GIMaP — sample · galaxi_data.tif"  # the project and the frame shown
     before = analyze.project_state()["settings"]
@@ -102,6 +103,8 @@ def test_a_project_reopens_analyze_and_fitting_as_they_were(tmp_path) -> None:
     assert single.session.model.get((0, "R")).value == pytest.approx(4.2)
     assert single.session.q_range == pytest.approx((0.2, 1.5)) and len(single.session.excluded) == 1
     series = reopened.fitting_workspace.series_page
+    _loaded(series)
+    assert reopened.compare_page.tasks.wait(30)
     assert series.folder == str(folder) and series.every_spin.value() == 2 and series.start_same.isChecked()
     assert np.isfinite(single.session.all_points().q).all()
     assert [item.name for item in reopened.compare_page.series] == ["map run", folder.name]
@@ -160,7 +163,7 @@ def test_a_project_does_not_open_while_a_series_runs(tmp_path, monkeypatch) -> N
     single, series = workspace.fit_page, workspace.series_page
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(FitModel((new_component("cylinder", radius=4.2),)))
-    series.open_series(folder)
+    _open_series(series, folder)
     series.start()
     assert series.running
     before = series.project_state()

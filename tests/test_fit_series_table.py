@@ -15,6 +15,8 @@ from PyQt5.QtWidgets import QApplication, QHeaderView, QMessageBox
 
 from src.gimap.app.presentation.theme import theme_manager
 from src.gimap.features.fitting.application.single_fit import evaluate
+from tests.test_fit_series import _loaded, _open_series
+
 from tests.test_fit_series import Q_NM, RADII, _answer, _curve_of, _cut, _model, _pages, _series, _wait, _write
 
 
@@ -33,7 +35,7 @@ def _fitted(tmp_path, radii=RADII, *, bad=None, model=5.2):
         (folder / f"run_{bad + 1:05d}_fit_input.dat").write_text("not a curve\n", encoding="utf-8")
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(model))
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     series.start()
     _wait(series)
     return single, series, folder
@@ -58,7 +60,7 @@ def test_three_hundred_frames_do_not_freeze_the_results_step(tmp_path) -> None:
     for index in range(301):
         (folder / f"run_{index + 1:05d}_fit_input.dat").write_text("0.01 1 1\n0.02 1 1\n0.03 1 1\n", encoding="utf-8")
     single.set_model(_model(5.2))
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     series.show_step("results")
     _settle()
     header = series.results_table.horizontalHeader()
@@ -89,7 +91,7 @@ def test_the_table_is_filled_one_row_per_finished_frame(tmp_path, monkeypatch) -
     folder = _series(tmp_path)
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     rebuilt, rows = [], []
     rebuild, show = series._rebuild_results, series._show_result_row
     monkeypatch.setattr(series, "_rebuild_results", lambda: rebuilt.append(len(series.fits)) or rebuild())
@@ -129,6 +131,7 @@ def test_the_table_shows_every_value_the_points_and_the_halves_and_copies(tmp_pa
     assert "res_width_nm^-1" in names and all(name.isascii() for name in names)
     # A frame selected in the list is the table's current row, and a row selected shows its frame.
     series.frame_list.setCurrentRow(3)
+    _loaded(series)
     assert table.currentRow() == 3
     table.setCurrentCell(1, 0)
     assert series._selected == 1 and series.frame_plot.figure_state()["title"].startswith("2 · run_00002")
@@ -183,7 +186,7 @@ def test_a_fit_with_chi2_far_from_one_is_not_a_green_tick(tmp_path) -> None:
     _ripple(folder, "run_00004_fit_input.dat")
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    series.open_series(folder)
+    _open_series(series, folder)
     series.start_same.setChecked(True)
     series.start()
     _wait(series)
@@ -266,7 +269,7 @@ def test_an_untouched_model_is_said_before_start_and_its_run_is_not_green(tmp_pa
     """Analyze ▸ Send Series to Fitting leaves Single analysis without a curve: the model is its starting guess."""
     single, series = _pages()
     folder = _series(tmp_path)
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     assert single.session.curve is None and not single.session.edited
     assert series.step_rail.state("start") == "warn"
     assert series.step_rail.detail("start") == "Model not set up yet: fit one frame in Single analysis"
@@ -275,6 +278,7 @@ def test_an_untouched_model_is_said_before_start_and_its_run_is_not_green(tmp_pa
     # A listed frame can be sent to Single analysis to set the model up — before any run.
     assert series.edit_model_button.text() == "Set Up on Frame 1 in Single Analysis"
     series.frame_list.setCurrentRow(2)
+    _loaded(series)
     assert series.edit_model_button.text() == "Set Up on Frame 3 in Single Analysis"
     opened, edit = [], []
     series.openFrameRequested.connect(lambda path, model: opened.append((path, model)))
@@ -306,9 +310,10 @@ def test_a_second_start_asks_before_results_that_were_not_saved_go(tmp_path, mon
     asked = _answer(monkeypatch, QMessageBox.Cancel)
     series.start()
     assert len(asked) == 1 and "not saved" in asked[0][1] and not series.running and series.fits == before  # kept
-    assert series.open_series(folder) is False and len(asked) == 2 and series.fits == before  # nor by listing anew
+    assert _open_series(series, folder) is False and len(asked) == 2 and series.fits == before  # nor by listing anew
     # Listing the same curves again (the pattern field merely lost the focus) asks nothing and changes nothing.
     series.pattern_edit.editingFinished.emit()
+    _loaded(series)
     assert len(asked) == 2 and series.fits == before and series.results_table.rowCount() == 3
     # Save: the table is written (here: to the place the dialog names), then the run starts.
     from PyQt5.QtWidgets import QFileDialog
@@ -338,6 +343,7 @@ def test_saved_plots_say_what_they_show(tmp_path, monkeypatch) -> None:
     starts = []
     monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(lambda _parent, _title, start="", *_rest: starts.append(start) or ("", "")))
     series.frame_list.setCurrentRow(1)
+    _loaded(series)
     series._save_plot(series.trend_plot, "trend")
     series._save_plot(series.frame_plot, "frame")
     series.trend_combo.setCurrentIndex(0)  # χ²ᵣ
@@ -402,7 +408,7 @@ def test_the_saved_table_and_record_name_the_files_of_subfolders_apart(tmp_path,
     single.open_curve(root / "run_A" / "fit_input" / "frame_00001_fit_input.dat")
     single.set_model(_model(5.2))
     series.subfolders_check.setChecked(True)
-    assert series.open_series(root) and len(series.paths) == 4
+    assert _open_series(series, root) and len(series.paths) == 4
     texts = [series.frame_list.item(row).text() for row in range(4)]
     assert "run_A/fit_input/frame_00001" in texts[0] and "run_B/fit_input/frame_00001" in texts[2]
     series.start()
@@ -447,7 +453,7 @@ def test_frames_of_subfolders_stay_apart_when_the_folder_is_reached_through_a_li
     single.open_curve(real / "run_A" / "fit_input" / "frame_00001_fit_input.dat")
     single.set_model(_model(5.2))
     series.subfolders_check.setChecked(True)
-    assert series.open_series(link) and len(series.paths) == 4 and series.folder == str(link)
+    assert _open_series(series, link) and len(series.paths) == 4 and series.folder == str(link)
     texts = [series.frame_list.item(row).text() for row in range(4)]
     assert "run_A/fit_input/frame_00001" in texts[0] and "run_B/fit_input/frame_00001" in texts[2]
     series.start()
@@ -467,21 +473,36 @@ def test_a_run_that_fitted_no_frame_leaves_nothing_to_ask_about(tmp_path, monkey
     folder = _series(tmp_path, RADII[:3])
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     series.method_global.setChecked(True)  # a search of the ranges: long enough to be stopped in
     asked = _answer(monkeypatch, QMessageBox.Cancel)
+    import threading
+    from src.gimap.features.fitting.presentation.single import series_page
+    from tests.test_series_loading_responsiveness import _until
+
+    fitting = threading.Event()
+    fit = series_page.fit_frame
+
+    def entered(*args, **kwargs):
+        fitting.set()
+        return fit(*args, **kwargs)
+
+    monkeypatch.setattr(series_page, "fit_frame", entered)
     series.start()
+    _until(fitting.is_set)  # Stop during fitting; Stop during reading is tested separately.
     series.stop()
     _wait(series)
     assert [frame.state for frame in series.fits.values()] == ["stopped"]
     assert series.status_label.text() == "Series stopped: 0 frames fitted, 0 failed."
     assert series.results_summary.text().startswith("0 fitted · 1 stopped")
+    fitting.clear()
     series.start()
     assert asked == [] and series.running  # a second Start: nothing to save, nothing asked
+    _until(fitting.is_set)
     series.stop()
     _wait(series)
     assert [frame.state for frame in series.fits.values()] == ["stopped"]
-    assert series.open_series(folder) and asked == []  # nor when the curves are listed anew
+    assert _open_series(series, folder) and asked == []  # nor when the curves are listed anew
     series.dispose()
     single.dispose()
 
@@ -509,7 +530,7 @@ def test_the_page_and_a_saved_trend_name_the_series_of_analyze(tmp_path, monkeyp
         _write(folder / f"run_{index + 1:05d}_fit_input.dat", radius, index)
     single.open_curve(folder / "run_00001_fit_input.dat")
     single.set_model(_model(5.2))
-    assert series.open_series(folder)
+    assert _open_series(series, folder)
     assert series.step_rail.detail("curves") == "3 of 3 curves" and series.step_intro["curves"].isHidden()
     assert series.folder_chip.toolTip() == str(folder)  # the whole path stays where it was
     series.watch_check.setChecked(True)
@@ -529,7 +550,7 @@ def test_the_page_and_a_saved_trend_name_the_series_of_analyze(tmp_path, monkeyp
     for index, radius in enumerate(RADII[:3]):
         _write(other / f"run_{index + 1:05d}_fit_input.dat", radius, index)
     _answer(monkeypatch, QMessageBox.Discard)
-    assert series.open_series(other)
+    assert _open_series(series, other)
     series.start()
     _wait(series)
     assert series._plot_words("trend")[1] == "1·Sphere R (nm) · sampleB · Sphere"

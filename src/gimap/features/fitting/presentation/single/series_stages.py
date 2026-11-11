@@ -122,9 +122,11 @@ class FitSeriesStagesMixin:
 
     def _schedule_stages(self) -> None:
         """Find the stages again when the listed curves or the way they are fitted changed."""
+        if getattr(self, "_disposed", False):
+            return
         settings = self._stage_settings()
-        key = (tuple(self.paths[index] for index in self._listed()), settings.side, settings.q_range, settings.excluded)
-        if key != self._stages_key and not self.running:
+        key = (tuple(self.paths[index] for index in self._listed()), settings.side, settings.q_range, settings.excluded, self._preview_unit())
+        if key != self._stages_key and not self.running and not getattr(self, "_listing_busy", False):
             self._stages_key = key
             self._stages_timer.start()
 
@@ -152,6 +154,8 @@ class FitSeriesStagesMixin:
             self._say_stages(NOT_FOR_THIS_RUN)
 
     def _find_stages(self) -> None:
+        if self._listing_busy or self._disposed:
+            return
         listed = self._listed()
         if self.running:
             self._search_after_run(len(listed) >= 3)
@@ -162,11 +166,15 @@ class FitSeriesStagesMixin:
         paths = [self.paths[index] for index in listed]
         settings = self._stage_settings()
         unit = self._preview_unit()  # of files whose header states none
-        load = self.load_series_curve  # (a detector frame is cut as in Analyze)
+        load = self.series_curve_loader()  # recipe, items and caches captured before the worker
+        epoch, stop, search_key = self._loading_epoch, self._loading_stop, self._stages_key
+        versions = {path: self._path_versions.get(path, 0) for path in paths}
 
         def work():
             curves, unreadable, read = [], {}, []
             for row, path in enumerate(paths):
+                if stop.is_set():
+                    return None, "", (), {}, ()
                 outcome = load(LoadCurveRequest(Path(path), unit))
                 if outcome.error is not None:  # this file is left out; the search goes on
                     curves.append(None)
@@ -182,8 +190,18 @@ class FitSeriesStagesMixin:
                 return None, str(exc), curves, dict(unusable_curves(curves, settings, unreadable)), read
 
         self._say_stages(LOOKING)
-        self.stage_tasks.submit("series-stages", work, on_done=lambda found: self._stages_found(listed, settings, *found),
-                                on_error=lambda message, _trace: self._stages_failed(listed, message))
+        def current():
+            return (self._loading_current(epoch) and search_key == self._stages_key
+                    and all(self._path_versions.get(path, 0) == version for path, version in versions.items()))
+
+        def done(found):
+            if current():
+                self._publish_frame_cuts(load.loaded)
+                self._stages_found(listed, settings, *found)
+
+        self.stage_tasks.submit("series-stages", work,
+            on_done=done,
+            on_error=lambda message, _trace: self._stages_failed(listed, message) if current() else None)
 
     def _stages_failed(self, listed: list, message: str) -> None:
         if self.running:

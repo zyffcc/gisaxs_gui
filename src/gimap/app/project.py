@@ -4,7 +4,7 @@
 masks and corrections, cuts), Single analysis (the curve, its halves, fitting range, left-out
 points, the model and the method), In-situ series (the folder of curves, the frames, the halves of
 the cut every frame is fitted on, how each starts) and Compare (its settings and series: curve
-files by path, maps from Analyze in ``<name>.compare.npz`` next to the project). Paths are kept as
+files by path, maps from Analyze in ``<name>.<generation>.compare.npz`` next to the project). Paths are kept as
 they are; what is no longer there is reported when the project opens (``missing``, and the notes
 of ``apply``).
 
@@ -16,8 +16,12 @@ Save Project never writes the work of before into it.
 from __future__ import annotations
 
 import json
+import os
+import re
+import tempfile
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 from .presentation.i18n import tr
 
@@ -49,11 +53,69 @@ def collect(components, page: str = "", path=None) -> dict:
 
 
 def save(components, path, page: str = "") -> Path:
+    """Publish a complete project in one replacement, keeping the previous save until then.
+
+    Compare writes each save's arrays to a new generation; its previous arrays must remain intact while
+    collecting and serializing the new JSON. Both files are flushed before the JSON becomes visible.
+    """
     path = Path(path)
     if path.suffix.lower() != PROJECT_SUFFIX:
         path = path.with_suffix(PROJECT_SUFFIX)
-    path.write_text(json.dumps(collect(components, page, path), indent=2, ensure_ascii=False), encoding="utf-8")
+    previous_sidecar = _owned_sidecar(path)
+    generation = path.with_name(f"{path.stem}.{uuid4().hex}{PROJECT_SUFFIX}")
+    sidecar = generation.with_suffix(".compare.npz")
+    temporary = None
+    committed = False
+    try:
+        content = json.dumps(collect(components, page, generation), indent=2, ensure_ascii=False)
+        if sidecar.exists():
+            with sidecar.open("r+b") as stream:
+                os.fsync(stream.fileno())
+        descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+        temporary = Path(name)
+        os.close(descriptor)  # Windows cannot replace a temporary file while its handle is open.
+        with temporary.open("w", encoding="utf-8") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        committed = True
+    finally:
+        _discard(temporary)
+        if not committed:
+            _discard(sidecar)
+    # Cleanup cannot turn an already committed save into a failure (a viewer may hold an old NPZ open).
+    _discard(previous_sidecar)
     return path
+
+
+def _discard(path: Path | None) -> None:
+    if path is not None:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _owned_sidecar(path: Path) -> Path | None:
+    """Only retire the previous file named by this project, never arbitrary neighboring files.
+
+    Older projects used ``<name>.compare.npz``; copied/edited projects can refer to other projects' arrays.
+    Such references remain readable but are not ours to remove.
+    """
+    try:
+        previous = read(path)
+    except (OSError, ValueError):
+        return None
+    name = _part(previous, "compare").get("arrays_file")
+    if not isinstance(name, str):
+        return None
+    legacy = path.with_suffix(".compare.npz").name
+    generated = rf"{re.escape(path.stem)}\.[0-9a-f]{{32}}\.compare\.npz"
+    if name != legacy and re.fullmatch(generated, name) is None:
+        return None
+    sidecar = path.parent / name
+    return None if sidecar.is_symlink() else sidecar
 
 
 def read(path) -> dict:
@@ -63,7 +125,10 @@ def read(path) -> dict:
         raise ValueError("not a GIMaP project") from exc
     if not isinstance(data, dict) or data.get("format") != PROJECT_FORMAT:
         raise ValueError("not a GIMaP project")
-    if int(data.get("version", 0)) > PROJECT_VERSION:
+    version = data.get("version", 0)
+    if type(version) is not int or version < 0:
+        raise ValueError("not a GIMaP project")
+    if version > PROJECT_VERSION:
         raise ValueError("made by a newer GIMaP")
     return data
 

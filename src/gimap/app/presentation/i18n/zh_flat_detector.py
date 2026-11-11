@@ -26,4 +26,13 @@ FLAT_DETECTOR_ZH = {
     "Geometry from “{name}”: {detail}; {tilt}.": "几何来自“{name}”：{detail}；{tilt}。",
 }
 
+FLAT_DETECTOR_ZH.update({
+    'detector rotation about the beam': '探测器绕光束的旋转',
+    "The calibration's rotation about the beam (Rot3 = {rotation}°) is left out. Rot3 alone does not change |q|, but it rotates χ and changes the directional assignment of qy/qz and in-plane/out-of-plane cuts.": '略去了标定中绕光束的旋转（Rot3 = {rotation}°）。单独的 Rot3 不改变 |q|，但会旋转 χ，改变 qy/qz 以及面内/面外切线的方向归属。',
+    'Do not use the |q| error as an orientation error bound. Check direction-dependent results with the full .poni geometry (e.g. pyFAI); GIMaP has not applied this rotation.': '不要把 |q| 误差当作方向误差上限。请用完整的 .poni 几何（例如 pyFAI）核对依赖方向的结果；GIMaP 尚未应用这一旋转。',
+    'Rot3 = {rotation}° left out': '略去 Rot3 = {rotation}°',
+    'no detector-normal tilt': '探测器法线没有倾斜',
+    'Rot3 {rotation}° left out: χ and qy/qz directions affected': '略去了 Rot3 {rotation}°：χ 和 qy/qz 方向受影响',
+})
+
 __all__ = ["FLAT_DETECTOR_ZH"]

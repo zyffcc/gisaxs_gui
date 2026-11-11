@@ -12,6 +12,24 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- Project saves write Compare arrays to a unique `<name>.<generation>.compare.npz` and replace the project
+  atomically only after the new arrays and temporary JSON are complete. Failed saves keep the previous pair;
+  older sidecar names remain readable. Move the project with its current `compare.arrays_file`; an old array
+  file can remain if another program prevents its removal.
+- Compare immediately hides stale results and disables table/plot exports after a series or setting changes.
+  Results return for the current settings, including immediately when the original settings are restored.
+- Compare discovers folders, imports curves and restores project arrays in a background queue with progress
+  and Cancel. Completed series stay; unfinished and queued series are discarded. Saving a project waits until
+  imports finish or are cancelled. Read failures are shown in Compare, and imports that add nothing keep the
+  existing comparison. Cancellation cannot interrupt an active directory scan or single-table read; its result
+  is discarded when it returns, while separate curves stop between files.
+- Fitting scans folders, checks unit headers, previews curves, reads detector cuts and watches folders in the
+  background. Start waits for the initial listing; Stop cancels preparation. Stop during reading skips that
+  frame's fit without recording a false failure; Pause lets the current frame finish. Completed fits stay.
+- An omitted `.poni` Rot3 is reported separately from the |q| error in Analyze, automatic reports and exports.
+  Every nonzero rotation is explained; above 1° it is an independent review item. This is a reminder, not an
+  accuracy guarantee. Rot3 can leave |q| unchanged while affecting χ, qy/qz and in-plane/out-of-plane cuts;
+  full rotation geometry remains unsupported. Original rotations and separate magnitude/direction flags are saved.
 - Project reopening restores Analyze's source order, identity and original frame after missing files,
   preserving the order used for adjacent single-frame sums and series,
   including chunk-to-master frame and import-selection mapping.
@@ -703,6 +721,8 @@ hold.
   R⁶-weighted mean radius (−29 % to +26 %); D and its disorder were not recovered, and 2π/q* was within 10 % of the
   true distance in 1 of 10 cuts with interference. Choose the model from what you know of the sample and confirm it
   in Fitting.
+- Cancel/Stop records a request immediately but cannot forcibly interrupt a directory scan or single-file read.
+  Unfinished Compare imports are discarded, or a Fitting frame is not fitted, when the active read returns.
 - Research runtimes do not all expose a controllable seed; their run records state this limitation.
   Sputter, 1D Predict, AI and CLI records now identify the software version.
 
@@ -712,7 +732,7 @@ hold.
 - **GIMaP's detector is flat and perpendicular to the beam**: a `.poni` tilt (and `Rot3`, and its `orientation`
   entry) is left out, and Geometry Calibration fits no tilt. On a tilted detector |q| is off away from the beam (up
   to 6.3 % on the Xeuss example); the error is now computed and reported, not corrected. For exact q reduce such
-  frames with the full `.poni` geometry (pyFAI).
+  frames with the full `.poni` geometry (pyFAI). Rot3 is separately reported for direction: a small |q| error does not guarantee accurate χ, qy/qz or directional cuts.
 - **Run Automatic Analysis (GIWAXS) fits at most 12 candidate peaks**; the window has no setting for more. Use
   `tools/gimap_agent.py auto --max-peaks N`, or `find_peaks` with `max_peaks`, for the full list.
 - **The GIWAXS and GISAXS q are kinematic** (no refraction correction): near or below the film's critical angle a

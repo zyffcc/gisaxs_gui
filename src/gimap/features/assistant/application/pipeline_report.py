@@ -12,7 +12,7 @@ from typing import Optional
 
 from ..domain import AT_EDGE, assessment, herman_decimals, signed
 from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
-from .pipeline_geometry import SEARCHED
+from .pipeline_geometry import ROTATION_WHY, SEARCHED
 
 OPTION_FLAGS = {
     "calibration": "--calibration PATH",
@@ -129,6 +129,9 @@ def _geometry_lines(report: dict) -> list[str]:
             f"perpendicular to the beam); |q| off by up to {'—' if error is None else _number(100 * error, 2)} % "
             "over the valid detector area"
         )
+        rotation = flat.get("dropped_beam_axis_rotation_deg")
+        if rotation:
+            lines.append("- " + ROTATION_WHY.format(rotation=_number(rotation)))
     searched = found_by_search(report)
     if searched:  # nobody named it: the quality below says it fits its own standard, not whose measurement it is
         lines.insert(1, f"- found by the automatic search, named by nobody: `{searched['decision']}` ({searched['why']})")

@@ -11,13 +11,11 @@ series keeps it (Analyze's settings record and where the cut is pinned). Cut fra
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application import FileOperationError
 from ...application.models import CurveOperationResult
-from ...application.series_frames import frame_curve, frame_path, is_frame, is_frame_pattern, matching
+from ...application.series_frames import SeriesCurveReader, is_frame_pattern
 
 SET_UP = "Each frame is cut as Analyze cuts {frame}: instrument {profile}, αi {incidence}°, Sum {sum}{pinned}."
 PINNED = ", the cut at rows {low}–{high} of that frame"
@@ -35,6 +33,7 @@ class FitSeriesFramesMixin:
         self._recipe, self._recipe_why = None, ""
         self._frame_items: dict = {}
         self._frame_cuts: dict = {}
+        self._frame_cut_stamps: dict = {}
         self.take_setup_button.clicked.connect(self.take_analyze_setup)
 
     # -- listing ------------------------------------------------------------------------------
@@ -42,48 +41,36 @@ class FitSeriesFramesMixin:
     def frames_mode(self) -> bool:
         return self.frames_bridge is not None and is_frame_pattern(self.pattern_edit.text())
 
-    def discover_frames(self, folder) -> list[str]:
-        """The items of a series of frames in ``folder`` that match the pattern (summed as Analyze sums)."""
-        if self._recipe is None:
-            self._take_recipe()
-        items = matching(self.frames_bridge.list(folder), self.pattern_edit.text())
-        items = self.frames_bridge.grouped(items, self._recipe.sum_count if self._recipe is not None else 1)
-        self._frame_items = dict(items)
-        return [token for token, _summed in items]
-
-    def frame_pattern_in(self, folder) -> Optional[str]:
-        """``*.cbf`` (the suffix of its first frame) when ``folder`` holds detector frames, else ``None``."""
-        if self.frames_bridge is None:
-            return None
-        try:
-            items = self.frames_bridge.list(folder)
-        except (OSError, ValueError, RuntimeError):
-            return None
-        return f"*{frame_path(items[0][0]).suffix.lower()}" if items else None
-
     # -- reading ------------------------------------------------------------------------------
 
     def load_series_curve(self, request) -> CurveOperationResult:
-        """``view_model.load_curve`` for every curve the series reads; a detector frame is cut (once)."""
-        token = str(request.path)
-        if self.frames_bridge is None or not is_frame(token):
-            return self.view_model.load_curve(request)
-        cached = self._frame_cuts.get(token)
-        if cached is not None:
-            return cached
-        if self._recipe is None:
-            return CurveOperationResult(error=FileOperationError(
-                code="invalid_data", message=self._recipe_why or tr("Analyze is not open."), path=token))
-        outcome = frame_curve(self.frames_bridge.cut, self._recipe, token, self._frame_items.get(token, ()))
-        if outcome.error is None:
-            self._frame_cuts[token] = outcome
+        """Direct read; UI jobs use a captured ``series_curve_loader`` in the background."""
+        load = self.series_curve_loader()
+        outcome = load(request)
+        self._publish_frame_cuts(load.loaded)
         return outcome
+
+    def series_curve_loader(self):
+        """Capture the recipe and caches on the GUI thread, before submitting any worker."""
+        return self.make_curve_loader(load=self.view_model.read_series_curve, bridge=self.frames_bridge,
+            recipe=self._recipe, why=self._recipe_why, items=self._frame_items, cache=self._frame_cuts,
+            stamps=self._frame_cut_stamps)
+
+    @staticmethod
+    def make_curve_loader(**snapshot):
+        return SeriesCurveReader(**snapshot)
+
+    def _publish_frame_cuts(self, loaded):
+        """GUI thread only, after the caller has checked the epoch and per-path version."""
+        for token, (outcome, stamp) in loaded.items():
+            self._frame_cuts[token], self._frame_cut_stamps[token] = outcome, stamp
 
     # -- Analyze's set-up ---------------------------------------------------------------------
 
     def _take_recipe(self) -> None:
         self._recipe, self._recipe_why = self.frames_bridge.recipe()
         self._frame_cuts = {}
+        self._frame_cut_stamps = {}
 
     def take_analyze_setup(self) -> None:
         """Analyze's set-up as it is now, for the frames listed (listed again: Sum N may have changed)."""

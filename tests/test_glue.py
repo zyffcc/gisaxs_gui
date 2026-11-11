@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+from tests.test_fit_series import _loaded, _open_series
 import json
 import os
 import time
@@ -410,7 +411,7 @@ def test_an_in_situ_series_with_poor_fits_ends_with_a_warning_that_counts_them(t
         _ripple(folder, "run_00004_fit_input.dat")
         single.open_curve(folder / "run_00001_fit_input.dat")
         single.set_model(_model(5.2))
-        series.open_series(folder)
+        _open_series(series, folder)
         series.start_same.setChecked(True)
         series.start()
         _wait(series)

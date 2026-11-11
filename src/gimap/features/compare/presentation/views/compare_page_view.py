@@ -33,7 +33,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, EmptyState, StepRail
+from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, EmptyState, JobStatus, StepRail
 from src.gimap.app.presentation.components.table_copy import enable_table_copy
 from src.gimap.app.presentation.i18n import tr
 
@@ -206,6 +206,11 @@ class ComparePageView:
         self.splitter.setStretchFactor(1, 1)
         self.splitter.setSizes([440, 900])  # room for every column of the result table (``fit_columns``)
         root.addWidget(self.splitter, 1)
+        self.import_job = JobStatus(page)
+        self.import_job.setObjectName("compareImportJob")
+        self.import_job.set_actions_visible(pause=False, details=False)
+        self.import_job.hide()
+        root.addWidget(self.import_job)
         row = QHBoxLayout()
         self.status_label = QLabel("", page)
         self.status_label.setObjectName("compareStatus")

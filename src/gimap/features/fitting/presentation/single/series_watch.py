@@ -9,28 +9,20 @@ everything there is says that it is waiting, and for what; it ends with Stop, or
 
 from __future__ import annotations
 
-import os
 from typing import Optional
 
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QListWidgetItem
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.task_runner import TaskRunner
 
-from ...application.series_frames import frame_path
+from .series_loading import discover_sources, read_units
+
+from ...application.series_frames import file_stamp
 
 WATCH_MS = 2000
 FOLDER_GONE = "The folder of the curves cannot be read: waiting for it … (Stop to end)"
-
-
-def file_stamp(path) -> Optional[tuple]:
-    """``(size, time of the last change in ns)`` of a file as it is now; ``None`` when it cannot be looked at."""
-    path = frame_path(str(path))  # a frame past the first of a detector source: its file
-    try:
-        status = os.stat(path)
-    except OSError:
-        return None
-    return status.st_size, status.st_mtime_ns
 
 
 class FitSeriesWatchMixin:
@@ -38,6 +30,9 @@ class FitSeriesWatchMixin:
     ``_finish()``, ``_listed()``, ``_style_item()``, ``_run_listing``, the widgets of the Curves step."""
 
     def _connect_watch(self) -> None:
+        self.watch_tasks = TaskRunner(self)
+        self._watch_busy = False
+        self._watch_scan = 0
         self._watch = QTimer(self)
         self._watch.setInterval(WATCH_MS)
         self._watch.timeout.connect(self._look_for_new)
@@ -51,6 +46,8 @@ class FitSeriesWatchMixin:
 
     def _watch_toggled(self, on: bool) -> None:
         """Ticked or unticked while the series runs: from now on, or no longer — a run that only waited ends."""
+        self._watch_scan += 1
+        self._watch_busy = False
         if not self.running or self._stop.is_set():
             return
         if on:
@@ -77,15 +74,42 @@ class FitSeriesWatchMixin:
 
     def _look_for_new(self) -> None:
         """A look at the folder: settled new curves are listed and queued, changed ones queued again."""
-        if not self.running or not self.folder or self._stop.is_set():
+        if not self.running or not self.folder or self._stop.is_set() or self._watch_busy:
             return
-        try:
-            found = self._discover()  # curve files, or detector frames (``series_frames``)
-        except (OSError, ValueError, RuntimeError):
+        self._watch_busy = True
+        epoch, scan, stop = self._loading_epoch, self._watch_scan, self._stop
+        storage, bridge, recipe = self.view_model.storage, self.frames_bridge, self._recipe
+        folder, pattern = self.folder, self.pattern_edit.text().strip() or "*_fit_input.dat"
+        recursive = self.subfolders_check.isChecked()
+        stated = getattr(self.view_model, "stated_q_unit", None)
+        frame_mode = self.frames_mode()
+
+        def work():
+            found, _pattern, _below, _places, items = discover_sources(
+                storage, bridge, recipe, folder, pattern, recursive, stop, fallback=False)
+            units = {} if frame_mode else read_units(found, stated, stop)
+            return found, items, {path: file_stamp(path) for path in found if not stop.is_set()}, units
+
+        def done(result):
+            if not self._loading_current(epoch) or scan != self._watch_scan or not self.running or stop.is_set():
+                return
+            self._watch_busy = False
+            found, items, stamps, units = result
+            self._stated_units = units
+            self._frame_items.update(items)
+            self._accept_new_curves(found, stamps)
+
+        def failed(_message, _details):
+            if not self._loading_current(epoch) or scan != self._watch_scan or not self.running or stop.is_set():
+                return
+            self._watch_busy = False
             self._folder_gone = True
-            if self._waiting_for_curves():  # (while a frame is fitted the line is of that frame)
+            if self._waiting_for_curves():
                 self._status(lambda: tr(FOLDER_GONE))
-            return
+
+        self.watch_tasks.submit("watch", work, on_done=done, on_error=failed)
+
+    def _accept_new_curves(self, found, stamps):
         if self._folder_gone:  # it is back
             self._folder_gone = False
             if self._waiting_for_curves():
@@ -94,7 +118,7 @@ class FitSeriesWatchMixin:
         queued, fitting = set(self.queue), self._current if self.tasks.is_busy() else None
         seen, new, again = {}, [], []
         for path in found:
-            stamp = seen[path] = file_stamp(path)
+            stamp = seen[path] = stamps.get(path)
             settled = stamp is not None and stamp[0] > 0 and self._seen.get(path) == stamp
             index = known.get(path)
             if index is None:
@@ -109,8 +133,7 @@ class FitSeriesWatchMixin:
             for index in again:
                 self._read_stamps.pop(index, None)
                 self._curves.pop(index, None)
-                for key in [key for key in self._preview_curves if key[0] == self.paths[index]]:
-                    self._preview_curves.pop(key)  # in whichever unit it was read
+                self._invalidate_curve(self.paths[index])
                 self.queue.append(index)
             self._log(trf("{count} curves changed after they were read: fitted again.", count=len(again)))
         if new or again:

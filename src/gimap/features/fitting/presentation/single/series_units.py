@@ -32,13 +32,7 @@ class FitSeriesUnitsMixin:
     def _stated_unit(self, path: str):
         if self._stated_units is None:
             self._stated_units = {}
-        if path not in self._stated_units:
-            read = getattr(self.view_model, "stated_q_unit", None)
-            try:
-                self._stated_units[path] = None if read is None else read(path)
-            except (OSError, ValueError) as exc:
-                self._stated_units[path] = exc
-        stated = self._stated_units[path]
+        stated = self._stated_units.get(path)
         if isinstance(stated, Exception):
             raise stated
         return stated

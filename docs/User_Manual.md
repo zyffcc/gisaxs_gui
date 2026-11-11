@@ -611,8 +611,15 @@ The 2D Prediction settings go, together with Fitting's model, into their own fil
 by default). **Open Project…**, the Start page's **Open Project…**, **Open Recent** (projects first)
 or dropping a `.gimap` file on the window opens it.
 
-- Data are referenced by path, not copied. Series that Compare took from Analyze are kept in a second
-  file, `<name>.compare.npz`, next to the project: move or copy the two files together.
+- Data are referenced by path, not copied. Compare's embedded arrays are kept in a second file,
+  `<name>.<generation>.compare.npz`, next to the project. Move or copy the `.gimap` and the file named by its
+  `compare.arrays_file` together. Older `<name>.compare.npz` projects still open.
+- Saving writes new arrays and a temporary project file before atomically replacing the `.gimap`. If writing
+  or replacement fails, the previous project and its arrays remain usable. An old array file may remain if
+  another program holds it open; the project names the array file it actually uses.
+- While Compare is importing or restoring series, **Save Project** asks you to wait or cancel that import
+  first; it does not save an incomplete list. Restored Compare data are read in the background, in their saved
+  order. Any read errors appear in Compare's status line and notifications.
 - When a file has moved, the project still opens; a note
   says how many files are missing and names the first ones, and **Details…** lists them all.
 - Analyze restores the saved source order, displayed source and original frame number. The source order
@@ -774,6 +781,14 @@ limits the decision **Detector tilt** says how much it changes |q|. The tilt and
 `<stem>_analysis.json` (chapter 12). The Xeuss example of **Help ▸ Example Data** is such a case: its 6.06°
 tilt puts |q| off by up to 6.3 % at the corner farthest from the beam. For exact q of a tilted detector,
 reduce the frame with the full `.poni` geometry (pyFAI, for example).
+
+**Rotation about the beam is checked separately.** An omitted `Rot3` can leave |q| unchanged while rotating
+χ and changing the direction assigned to qy/qz and in-plane/out-of-plane cuts. Analyze states the omitted
+angle even below 1°; above 1° in magnitude, **detector rotation about the beam** is a separate *Needs attention*
+item (CLI exit code 2). Smaller nonzero angles appear in *Decisions*. The 1° threshold is a reminder to review
+direction-dependent results, not an accuracy guarantee, and it does not stop analysis. Full turns are treated
+as zero; all three original rotations remain in the record. A small |q| error does not establish accurate
+orientation: check these results using the full `.poni` geometry.
 
 The search may pick the calibration of another experiment: one in a folder beside or above the
 frame's when the frame's own folder holds none, or, among several in one folder that was copied in
@@ -2100,11 +2115,19 @@ right the selected frame's fit and, below it, the trend of R through the series,
 Every curve of a folder, fitted with the model of Single analysis. The command bar has **Choose Folder…** and
 **Start**; **Pause** and **Stop** appear while the series runs, **Save** once frames are fitted.
 
+Folder discovery, unit-header inspection, previews, detector-frame cuts and watching run in the background.
+While the initial list and preview are prepared, **Start** is unavailable and **Stop** cancels preparation.
+If **Stop** is pressed while a curve or frame is being read, the request is recorded immediately; when that
+read returns, fitting is skipped and the cancelled frame is not counted as a failed fit. **Pause** lets the
+current frame finish before pausing. Completed results stay available.
+
 **1. Curves**
 
 - **Choose Folder…** (or drop a folder on the page), **Fit Every Curve in This Folder…** in Single analysis'
   Results, or in Analyze list the frames and choose **Send Series to Fitting…**: every frame is exported
   (optionally summed N at a time) into `<name>_fitting/`, and the series opens here with its curves listed.
+- The frame range and halves controls wait for listing to finish. The start strategy, method and follow choice
+  can still be changed; saving a project during preparation keeps those choices.
 - **Files** is the pattern: `*_fit_input.dat` by default; any `.dat` / `.txt` curves work. **Also in
   subfolders** looks deeper.
 - **Detector frames.** **Files** can also name detector files (`*.cbf`, `*.tif`, `*.edf`, `*.nxs` …), and a folder
@@ -2154,8 +2177,8 @@ Every curve of a folder, fitted with the model of Single analysis. The command b
   good as the free one within the kit's tolerance, it is taken (the smoothest of equally good solutions), otherwise
   the free fit is taken and the record says the sample changed there. It does not apply when every frame starts from
   Single's model, nor at the first frame of a new stage.
-- Then **Start** in the command bar. **Pause** and **Stop** act after the frame being fitted; the frames done are
-  kept. A project cannot be opened while a series runs (Stop first). A run started before the stages were found
+- Then **Start** in the command bar. **Pause** and **Stop** act after the frame being fitted; Stop during
+  reading skips that frame's fit as described above. The frames done are kept. A project cannot be opened while a series runs (Stop first). A run started before the stages were found
   uses none (it says so).
 
 **3. Results**
@@ -2263,10 +2286,19 @@ every sample. Two or more series are compared with each other; one alone is desc
   *`<sample or batch>` · `<curve>`*. A Batch Export table of all frames (`<name>_<curve>_frames.csv`) can be added as
   a series too.
 - A folder or curve files can also be dropped on the page. The same map or folder is not added twice.
+- Folder discovery and curve reading run in a background queue; folders are added in the order requested.
+  The job panel shows progress and **Cancel**. Cancelling removes unfinished series and queued imports;
+  fully read series already added stay. A cancellation is registered immediately. An active directory scan
+  or single-table read must return before its result is discarded; reading separate curves stops between files.
+  Opening a project uses the same queue for its curves and sidecar arrays, with read errors shown here.
 - Double-click a name to rename the series. **Remove Selected** (or `Delete`) and **Remove All** (the note that
   follows offers Undo).
 - Long names are shortened on the plots and in the results to the part that differs between series; tables,
   CSV and JSON keep the full names.
+
+![Compare import progress](manual_images/en/14a_compare_import.png)
+
+*Importing 60 synthetic curves: the window stays responsive and Cancel stops unfinished imports.*
 
 **2. Compare**
 
@@ -2277,6 +2309,10 @@ every sample. Two or more series are compared with each other; one alone is desc
 - **End state**: the mean of the last N frames of a series (10 by default; odd frames left out).
 - Every change compares again after a moment, in the background. When a comparison fails (for example no common
   points in the range), Results says why and what to change.
+- Changing the series, q range, shape-only choice or end-frame count immediately hides the old results and
+  disables table and plot exports. They return when the current settings have been compared. Returning to the
+  settings of an existing result restores it immediately if the series have not changed. An import that adds
+  no series keeps the existing comparison; new data are compared after the queue finishes.
 - The series must share their x axis (qy, q or χ). Series on different axes — say a GISAXS qy map and a GIWAXS
   q map — are not compared, and Results names the axes (*The series have different x axes: …*).
 
@@ -2312,7 +2348,8 @@ every sample. Two or more series are compared with each other; one alone is desc
   of the curve) and the same as a sentence.
 - **Change Plot…**, **Paths Plot…**, **End States Plot…** save the figures, always in the light colours.
 - The tables on the page can be copied (`Ctrl+C`, or right-click), with their column names.
-- A project keeps the settings and the series: curve files by path, Analyze maps in `<project>.compare.npz`.
+- A project keeps the settings and the series: curve files by path, embedded arrays in
+  `<project>.<generation>.compare.npz` (section 3.8). Finish or cancel pending imports before saving the project.
 
 ### 7.3 Before you conclude
 
@@ -3128,7 +3165,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Geometry Calibration ▸ **Export Calibration…** | `<image>.gimap-calibration.json` | next to the calibrant image | the file (beam centre counted from pixel centres at 0, 0.5 px lower than the windows show; `metadata.center_convention`) |
 | Geometry Calibration ▸ **Apply** | the instrument profile | user data folder: `instrument_profiles.json` | — |
 | **Tools ▸ Settings… ▸ Assistant** ▸ **API key** ▸ **Save** | `claude_api_key.txt` (Claude API), `assistant_provider_keys.json` (other providers), in plain text; **Remove** deletes the key | user data folder | — |
-| **File ▸ Save Project** | `<name>.gimap`; `<name>.compare.npz` when Compare holds maps from Analyze | next to the first frame | the project (data referenced by path). Sputter results are not part of it: they stay in their result folder |
+| **File ▸ Save Project** | `<name>.gimap`; `<name>.<generation>.compare.npz` when Compare holds embedded arrays | next to the first frame | the project (data referenced by path); move the current `compare.arrays_file` with it (section 3.8). Sputter results stay in their result folder |
 | **File ▸ Labs Parameters ▸ Save As…** | `gimap_parameters.json` | dialog in the GIMaP user data folder | — |
 | Errors (automatic) | `logs/errors.log` (moved to `errors.old.log` above 2 MB) | user data folder | — |
 | **Help ▸ Example Data** | the example's frame with its `.poni` (and mask), and `SOURCE_AND_LICENCE.md` | a folder you choose, by default `Documents/GIMaP examples/<example>/`; files already there are kept | `SOURCE_AND_LICENCE.md` (source and licence of the data) |
@@ -3150,7 +3187,9 @@ for GIWAXS, the number, q range and width of the radial bins, how many points th
 bins were joined and the rule for joining them; for GISAXS, one point per detector column or row. In
 `geometry`, `dropped_tilt_deg`, `dropped_rotations_deg` and `flat_detector_q_error_max` / `_rms` give the
 tilt of a `.poni` that the flat detector leaves out and the largest and RMS relative error in |q| it causes
-(`null` when no tilt is known; section 4.2). The instrument profile's `source` says who chose the geometry:
+(`null` when no tilt is known; section 4.2). `dropped_beam_axis_rotation_deg` gives Rot3 modulo full turns;
+`flat_detector_q_needs_attention` and `flat_detector_direction_needs_attention` separate the normal-tilt/|q|
+review from the direction review. `dropped_rotations_deg` retains the three original angles. The instrument profile's `source` says who chose the geometry:
 `automatic analysis: <file>` for Run Automatic Analysis and `tools/gimap_agent.py`, `assistant: <file>` for
 Process with AI; profiles saved before 0.2.0 say `assistant:` for both ([Physics and Methods, section 14.2](Physics_Manual.md#142-the-record-stem_analysisjson)).
 
@@ -3193,11 +3232,12 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 
 | Limitation | What to do |
 |---|---|
+| **Cancellation does not forcibly interrupt low-level file reading.** A Compare directory scan or single-table read, or the current Fitting read, may still be returning. | Press Cancel or Stop once; the request is registered, and the unfinished import is discarded or the frame fit skipped when reading returns. Completed series and results stay (sections 6.6, 7.2). |
 | **Fitting does not read `.csv` curves**, although Analyze exports its curves as CSV. | Use **Send to Fitting**, or open the `<name>_fit_input.dat` that Analyze writes; `.dat` and `.txt` files with columns `q I [σ]` open too. |
 | **Geometry Calibration can put a wrong solution first.** With the standard on **Auto Detect** and no estimated distance, another standard can come first; a wrong **Estimated distance** misleads also with the right standard, and the field can hold a distance you did not type (section 4.3). | Choose the standard yourself when you know it. Leave **Estimated distance** on *Optional* or type the approximate distance of your set-up; set a number you did not type back to 0 unless it is that distance. Before **Apply**, check the distance and that the drawn rings lie on the rings of the image. |
 | **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them (section 10.5). | Calibrate such an image with pyFAI and give GIMaP the `.poni`: name it in the notes, or put it beside the frames (section 4.2). |
 | **An instrument profile is matched by detector name and frame size only**, and **a calibration found by the automatic search may belong to another experiment** (one beside or above the frame's folder is taken when that folder holds none; file times say nothing in a folder copied in one go) — or even to another detector: a `.poni` or `.json` is applied without checking its pixel size or frame size (section 4.2). | Read which file the report names and check the distance in **Geometry**. Name the calibration in the notes, or give it yourself; remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
-| **GIMaP's detector is flat and perpendicular to the beam**: the tilt of a `.poni` (`Rot1`, `Rot2`) is left out, and so are `Rot3` and its `orientation` entry; Geometry Calibration fits no tilt. On a tilted detector \|q\| is off away from the beam: by up to 6.3 % on the Xeuss example (6.06°). Above 1° of tilt or 0.5 % in \|q\| the automatic analysis says so (section 4.2). | Read the error in the report or in `<stem>_analysis.json` (`flat_detector_q_error_max`). For exact q, reduce such frames with the full `.poni` geometry (pyFAI), or calibrate with the detector perpendicular to the beam. |
+| **GIMaP's detector is flat and perpendicular to the beam**: the tilt of a `.poni` (`Rot1`, `Rot2`) is left out, and so are `Rot3` and its `orientation` entry; Geometry Calibration fits no tilt. On a tilted detector \|q\| is off away from the beam: by up to 6.3 % on the Xeuss example (6.06°). Above 1° of tilt or 0.5 % in \|q\| the automatic analysis says so; Rot3 has a separate direction reminder and review flag above 1° in magnitude (section 4.2). | A small \|q\| error does not guarantee accurate χ, qy/qz or in-plane/out-of-plane directions. Read the error in the report or in `<stem>_analysis.json` (`flat_detector_q_error_max`). For exact q, reduce such frames with the full `.poni` geometry (pyFAI), or calibrate with the detector perpendicular to the beam. |
 | **Run Automatic Analysis (GIWAXS) fits at most 12 candidate peaks**, the most prominent; the window has no setting for more. The others are left out of the peak table, the sector comparison, the rings and the series hints; *Decisions* says how many candidates there were (section 5.5). | Run `tools/gimap_agent.py auto … --max-peaks N` (section 10.7), or ask the AI to run `find_peaks` with `max_peaks`, when you need the full list. |
 | **The GIWAXS and GISAXS q are kinematic: no refraction correction.** Near or below the film's critical angle, the q_z of a peak can be off by up to about k·sin αi, and in GISAXS that of the Yoneda band most, by an amount of that order (the report's *Decisions* give the number for your frame); the ± and σ of the report contain neither that nor the geometry's uncertainty ([Physics and Methods, sections 7.9 and 8.6](Physics_Manual.md#79-what-the-report-states)). | Measure above the critical angle for positions, or correct q_z yourself for the material; quote the systematic error separately from the statistical ±. |
 | **Hermans f and the texture sentence are not corrected for the exit angle.** f weighs the bins next to the sample horizon most, where absorption in the film or a shadow can lower the intensity; on the public P08 frame leaving out the bins within 5° of the sample plane moves f − f_iso by 17–27 σ_f ([Physics and Methods, section 7.7](Physics_Manual.md#77-ring-orientation-and-the-hermans-orientation-factor)). | Read the ring's notes and the *ring orientation* line of *Decisions*; when they name the ring, check I(χ) near χ = ±90° before reading f as texture. |

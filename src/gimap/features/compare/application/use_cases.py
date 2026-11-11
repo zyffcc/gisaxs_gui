@@ -99,7 +99,8 @@ class CompareService:
     # -- series ------------------------------------------------------------------------------
 
     def series_from_files(self, paths: Sequence[Path], name: Optional[str] = None, *,
-                          progress: Optional[Progress] = None, source: Optional[Path] = None) -> SeriesData:
+                          progress: Optional[Progress] = None, source: Optional[Path] = None,
+                          cancelled: Optional[Callable[[], bool]] = None) -> SeriesData:
         """One series from curve files (in counting order); frames on the first file's grid. ``progress(done,
         total)`` is called before the first file and then every ``PROGRESS_EVERY`` files: an in-situ folder of
         a thousand curves takes seconds (longer the first time), and the caller can say how far it is.
@@ -109,6 +110,8 @@ class CompareService:
             raise ValueError(TOO_FEW_FILES)
         curves, failed = [], []
         for done, path in enumerate(paths):
+            if cancelled is not None and cancelled():
+                raise InterruptedError("Import cancelled")
             if progress is not None and done % PROGRESS_EVERY == 0:
                 progress(done, len(paths))
             try:
@@ -123,6 +126,8 @@ class CompareService:
         grid = np.sort(curves[0][1])
         image = np.full((len(curves), grid.size), np.nan)
         for row, (_path, x, y, _label) in enumerate(curves):
+            if cancelled is not None and cancelled():
+                raise InterruptedError("Import cancelled")
             order = np.argsort(x)
             x, y = x[order], y[order]
             inside = (grid >= x[0]) & (grid <= x[-1])
@@ -154,11 +159,14 @@ class CompareService:
         return list(self.folder_content(folder, pattern).kinds)
 
     def series_from_folder(self, folder: Path, pattern: str = "*", *, kind: Optional[str] = None,
-                           progress: Optional[Progress] = None) -> SeriesData:
+                           progress: Optional[Progress] = None,
+                           cancelled: Optional[Callable[[], bool]] = None) -> SeriesData:
         """The series of ``folder``: its one kind of curve, or the kind named ``kind`` (``SeveralKinds`` when
         there are several and none is named). A kind among several is named in the series' name."""
         folder = Path(folder)
         content = self.folder_content(folder, pattern)
+        if cancelled is not None and cancelled():
+            raise InterruptedError("Import cancelled")
         too_few = TOO_FEW_IN_FOLDER.format(suffixes=", ".join(CURVE_SUFFIXES), folder=folder.name)
         if not content.kinds:
             raise ValueError(too_few)
@@ -167,7 +175,7 @@ class CompareService:
         if chosen.key and len(content.kinds) > 1:
             name = KIND_IN_NAME.format(name=name, kind=chosen.key)
         if len(chosen.files) >= 2:
-            return self.series_from_files(chosen.files, name, progress=progress, source=folder)
+            return self.series_from_files(chosen.files, name, progress=progress, source=folder, cancelled=cancelled)
         if chosen.table is not None:
             return self.series_from_table(chosen.table, name, source=folder)
         raise ValueError(too_few)
