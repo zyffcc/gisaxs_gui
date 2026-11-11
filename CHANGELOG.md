@@ -17,6 +17,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   reinspects recent writes and pending writers so appended frames are detected even when the file size
   and timestamp are unchanged; settled archived files retain their cached layouts.
 - Windows build and source setup scripts use their own PowerShell modules when launched through PowerShell 7.
+- Windows portable packages preserve empty runtime files when adding the application, so standard Windows
+  extraction does not turn Python package initializers into invalid files that prevent startup.
 - XRR excludes integer negative gap codes while keeping floating negative data, reads urad/µrad/μrad correctly,
   rejects unknown angle units and uses transformed NeXus header beam centres.
 - Save Project restores the Sputter form and references its result folder; older projects clear that workspace.

@@ -150,8 +150,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_portable_relea
     who downloaded only some of them uses `sha256sum -c --ignore-missing SHA256SUMS.txt`.
 - Application and licence files are appended with `tools/append_release_files.py`; the existing runtime
   entries are not rewritten. This preserves empty Python package files through Windows extraction.
-  The native portable-package check builds, extracts and starts the packaged application as well as
-  checking the source checkout.
+  In GitHub Actions, run **Portable package checks** on the intended source revision: choose Windows,
+  Apple Silicon, Intel Mac or all three. It builds a clean Conda runtime, extracts the package and starts
+  the packaged application; it does not publish a release. Run **Desktop release checks** separately for
+  the full test suite. These automated checks supplement the interactive acceptance in step 7.
 - Compare `licenses\README.txt` in the ZIP with the table in `THIRD_PARTY_NOTICES.md`. A new component
   under a copyleft licence (GPL, LGPL, MPL) belongs in the notices.
 
