@@ -220,11 +220,12 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
             return
         old, typed = self.series[row].name, item.text()
         name = " ".join(typed.split())  # a pasted line break or tab: one space
+        notice = None
         if name and name != old:
             unique = self._unique(name, skip=row)  # two series of one name: the tables and the record mix them up
             if unique != name:
-                self._status(lambda typed=name, given=unique: tr("{name} is already a series: this one is {unique}.").format(
-                    name=typed, unique=given))
+                notice = lambda typed=name, given=unique: tr("{name} is already a series: this one is {unique}.").format(
+                    name=typed, unique=given)
             name = unique
         if (name or old) != typed:
             with QSignalBlocker(self.series_table):
@@ -234,6 +235,8 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
         self.series[row] = self.series[row].renamed(name)
         self._sync_save()  # the comparison still has the old name until it is made again
         self._schedule()
+        if notice is not None:
+            self._status(notice)  # explain the chosen name after the generic pending-comparison status
 
     # -- settings ------------------------------------------------------------------------------
 
@@ -513,7 +516,6 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
         self.comparison, self._compared, self._failure = None, [], None
         self.refresh()
         self._render()
-        self._announce = True
         sidecar = (Path(project_path).parent / data["arrays_file"]
                    if data.get("arrays_file") and project_path is not None else None)
         for entry in data.get("series") or ():

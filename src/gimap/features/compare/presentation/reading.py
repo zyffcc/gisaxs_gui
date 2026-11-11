@@ -24,6 +24,24 @@ class _ReadSignals(QObject):
     progress = pyqtSignal(object, int, int)
 
 
+class _ReadCancellation:
+    """Cancellation surviving QWidget destruction without retaining or reading the widget itself.
+
+    A destroyed callback closing over its QWidget can run while cyclic GC is clearing that same closure.
+    Keep only the current pure-Python Event in the callback's receiver; renewed imports still get distinct tokens.
+    """
+
+    def __init__(self):
+        self.token = Event()
+
+    def renew(self):
+        self.token = Event()
+        return self.token
+
+    def cancel(self):
+        self.token.set()
+
+
 @dataclass
 class _Request:
     folder: Optional[Path] = None
@@ -39,21 +57,22 @@ class CompareReadingMixin:
     def _init_reading(self):
         self._reading = 0
         self._read_queue = deque()
-        self._read_cancel = Event()
+        self._read_cancellation = _ReadCancellation()
+        self._read_cancel = self._read_cancellation.token
         self._disposed = False
         self._read_message = lambda: tr(SCANNING)
         self._read_progress_value = None
         self._read_signals = _ReadSignals(self)
         self._read_signals.progress.connect(self._read_progress)
         self.import_job.cancelRequested.connect(self.cancel_import)
-        self.destroyed.connect(lambda: self._read_cancel.set())
+        self.destroyed.connect(self._read_cancellation.cancel)
 
     def _enqueue_import(self, **values):
         if self._disposed:
             return
         self._read_queue.append(_Request(**values))
         if not self._reading:
-            self._read_cancel = Event()
+            self._read_cancel = self._read_cancellation.renew()
             self._read_errors = []
             self._reading = 1
             self._timer.stop()

@@ -61,12 +61,12 @@ def test_saving_waits_until_the_changed_series_are_compared_again(tmp_path: Path
         _wait(page, lambda: _idle(page) and page.comparison is not None and len(page.comparison.results) == 3)
         assert page.save_button.isEnabled()
         page.series_table.selectRow(0)
-        page.remove_selected()  # the comparison of A, B and C is still shown until the next one is ready
+        page.remove_selected()  # the previous comparison is retained internally but hidden until the next is ready
         assert page.comparison.names == ["A", "B", "C"] and not page.save_button.isEnabled()
         assert page._label(1, 5) == "B_5"  # the frames of the compared series, not of the page's row 1 (C)
         assert page.save_series_table(tmp_path / "early.csv") is None and not (tmp_path / "early.csv").exists()
         assert page.save_frames_table(tmp_path / "early_frames.csv") is None
-        assert toasts[-1] == ("The series changed: save when they are compared again.", "warning")
+        assert toasts[-1] == ("The series or settings changed: save when they are compared again.", "warning")
         _wait(page, lambda: _idle(page) and len(page.comparison.results) == 2)
         assert page.save_button.isEnabled()
         table = page.save_series_table(tmp_path / "series.csv")

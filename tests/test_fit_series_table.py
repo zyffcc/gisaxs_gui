@@ -480,31 +480,40 @@ def test_a_run_that_fitted_no_frame_leaves_nothing_to_ask_about(tmp_path, monkey
     from src.gimap.features.fitting.presentation.single import series_page
     from tests.test_series_loading_responsiveness import _until
 
-    fitting = threading.Event()
+    fitting, release = threading.Event(), threading.Event()
     fit = series_page.fit_frame
 
     def entered(*args, **kwargs):
         fitting.set()
+        assert release.wait(15), "the test did not release the stopped fit"
         return fit(*args, **kwargs)
 
     monkeypatch.setattr(series_page, "fit_frame", entered)
-    series.start()
-    _until(fitting.is_set)  # Stop during fitting; Stop during reading is tested separately.
-    series.stop()
-    _wait(series)
-    assert [frame.state for frame in series.fits.values()] == ["stopped"]
-    assert series.status_label.text() == "Series stopped: 0 frames fitted, 0 failed."
-    assert series.results_summary.text().startswith("0 fitted · 1 stopped")
-    fitting.clear()
-    series.start()
-    assert asked == [] and series.running  # a second Start: nothing to save, nothing asked
-    _until(fitting.is_set)
-    series.stop()
-    _wait(series)
-    assert [frame.state for frame in series.fits.values()] == ["stopped"]
-    assert _open_series(series, folder) and asked == []  # nor when the curves are listed anew
-    series.dispose()
-    single.dispose()
+    try:
+        series.start()
+        _until(fitting.is_set)  # Stop after reading, before the real fit can finish.
+        series.stop()
+        release.set()
+        _wait(series)
+        assert [frame.state for frame in series.fits.values()] == ["stopped"]
+        assert series.status_label.text() == "Series stopped: 0 frames fitted, 0 failed."
+        assert series.results_summary.text().startswith("0 fitted · 1 stopped")
+        fitting.clear()
+        release.clear()
+        series.start()
+        assert asked == [] and series.running  # a second Start: nothing to save, nothing asked
+        _until(fitting.is_set)
+        series.stop()
+        release.set()
+        _wait(series)
+        assert [frame.state for frame in series.fits.values()] == ["stopped"]
+        assert _open_series(series, folder) and asked == []  # nor when the curves are listed anew
+    finally:
+        release.set()
+        series.stop()
+        _wait(series)
+        series.dispose()
+        single.dispose()
 
 
 def test_a_series_is_named_by_the_folder_that_holds_it() -> None:
