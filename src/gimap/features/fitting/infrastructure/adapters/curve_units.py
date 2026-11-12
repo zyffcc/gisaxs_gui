@@ -8,7 +8,7 @@ Where GIMaP writes it, and other programs write it too:
 * the name of the first column with its unit — the header row (the last line of words before the numbers:
   ``q (1/A),I,sigma,pixels``; Fitting's tables ``q_nm^-1,…``), else a ``# columns:`` comment line
   (``# columns: qy (1/A)  I  sigma  pixels``, what ``_fit_input.dat`` has). The header row wins over that line, as
-  in Compare's reader of curve files; without either, the last comment line before the numbers is taken for the
+  in Compare's reader of curve files; without either, the last comment naming a q column is taken for the
   names (``# q (1/nm)  I  err``, as many programs write them).
 
 Any usual spelling of the two units counts: ``1/A``, ``A^-1``, ``Å⁻¹``, ``1/Å``, ``1/angstrom``, ``A-1``;
@@ -42,6 +42,7 @@ _Q_IN = re.compile(r"(?<![A-Za-z])\|?q\|?\s+in\s+([^\s,;)\]]+)", re.IGNORECASE)
 """``q in 1/A`` (also ``|q| in 1/nm``): the unit is the word after ``in``."""
 _IS_Q = re.compile(r"\s*\|?q", re.IGNORECASE)
 """A column of q: q, Q, |q|, qy, qz, qxy, q_par …"""
+_Q_COLUMN_COMMENT = re.compile(r"\|?q(?:xy|[xyz]|_?par|_?perp)?\|?(?:$|[\s_(\[])", re.IGNORECASE)
 _OTHER_AXIS = re.compile(r"chi|χ|theta|θ|deg|°", re.IGNORECASE)
 """A first column of angles: the file states no unit of q for it."""
 _CELLS = re.compile(r"[\s,;]+")
@@ -93,14 +94,23 @@ def stated_q_unit(lines: Iterable[str]) -> Optional[str]:
         if not text:
             continue
         if text.startswith(COMMENTS):
-            comment = text.lstrip("#%;/").strip()
-            for match in _Q_IN.finditer(comment):
+            current = text.lstrip("#%;/").strip()
+            first = _first_cell(current)
+            if _Q_COLUMN_COMMENT.match(first):
+                comment = current
+            for match in _Q_IN.finditer(current):
                 found |= _units_in(match.group(1))
-            if comment.lower().startswith("columns"):
-                columns = comment[len("columns"):].lstrip(":").strip()
+            if current.lower().startswith("columns"):
+                columns = current[len("columns"):].lstrip(":").strip()
             continue
         if _is_numbers(text):
             break
+        try:
+            float(_first_cell(text))
+        except ValueError:
+            pass
+        else:
+            continue  # a numeric q with missing intensities must not replace the unit-bearing header
         header = text  # the last line of words before the numbers
     cell = _first_cell(header) or _first_cell(columns)
     if _OTHER_AXIS.search(cell):  # χ or 2θ: Analyze's tables of them still say “q in 1/A”, for their other curves

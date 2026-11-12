@@ -10,6 +10,8 @@ import numpy as np
 
 from .curve_units import file_q_unit
 from .scattering_curve_files import load_xy_any
+from .curve_tables import inspect_curve_table, load_table_curve
+from ...application.curve_sources import CurveTablePreview
 
 from ...application.models import (
     CURVE_NOT_FOUND,
@@ -83,33 +85,48 @@ def read_fit_input_extras(path: Path) -> tuple[np.ndarray | None, dict]:
 
 class LocalCurveRepository:
     def load(self, request: LoadCurveRequest) -> CurveData:
-        source = Path(request.path).expanduser().resolve()
+        selection = InSituSourceFrame.from_token(str(request.path))
+        source = selection.path.expanduser().resolve()
         if not source.exists():
             raise FileNotFoundError(CURVE_NOT_FOUND.format(path=source))
         if source.suffix.lower() not in CURVE_SUFFIXES:
             # Also Analyze's .csv tables: their columns differ by table (I(χ), q maps, Fitting's own
             # “data and fit” with two q columns), so reading one as q, I, σ could fit the wrong axis.
             raise ValueError(UNSUPPORTED_CURVE)
-        loaded = load_xy_any(str(source))
+        loaded = (load_xy_any(str(source)) if selection.columns is None
+                  else load_table_curve(source, selection.columns))
         pixels, observation = read_fit_input_extras(source)
         if pixels is not None and pixels.size != np.asarray(loaded.q).size:
             pixels = None  # rows were dropped as non-finite: counts no longer align
+        if selection.columns is not None:
+            observation = dict(observation, curve_source={
+                "path": str(source), "columns": selection.columns.to_dict(),
+                "sigma_source": "none" if selection.columns.sigma is None else "column",
+            })
         return CurveData(
             q=loaded.q,
             intensity=loaded.I,
             error=getattr(loaded, "err", None),
             q_source_unit=request.q_source_unit,
-            source_path=str(source),
+            source_path=InSituSourceFrame(source, selection.frame_index, columns=selection.columns).token,
             pixels=pixels,
             observation=observation,
         )
 
     def stated_q_unit(self, path) -> str | None:
         """The unit of q the file's header states (``curve_units``): ``"angstrom"``, ``"nm"`` or ``None``."""
-        source = Path(path).expanduser()
+        source = InSituSourceFrame.from_token(str(path)).path.expanduser()
         if not source.exists():
             raise FileNotFoundError(CURVE_NOT_FOUND.format(path=source.resolve()))  # as ``load`` says it
         return file_q_unit(source)
+
+    def inspect_table(self, path) -> CurveTablePreview:
+        source = InSituSourceFrame.from_token(str(path)).path.expanduser().resolve()
+        if not source.exists():
+            raise FileNotFoundError(CURVE_NOT_FOUND.format(path=source))
+        if source.suffix.lower() not in CURVE_SUFFIXES:
+            raise ValueError(UNSUPPORTED_CURVE)
+        return inspect_curve_table(source)
 
 
 class LocalFitResultRepository:

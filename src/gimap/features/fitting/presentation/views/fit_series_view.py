@@ -97,6 +97,9 @@ class FitSeriesView:
         self.folder_button = QPushButton("Choose Folder…", bar)
         self.folder_button.setObjectName("fitSeriesFolderButton")
         self.folder_button.setToolTip(FOLDER_HINT)
+        self.import_button = QPushButton("Import Curves…", bar)
+        self.import_button.setObjectName("fitSeriesImportButton")
+        self.import_button.setToolTip("Choose curve files and their q, intensity and optional σ columns")
         self.folder_chip = QLabel(NO_FOLDER, bar)
         self.folder_chip.setObjectName("fitCurveChip")
         self.folder_chip.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
@@ -128,6 +131,7 @@ class FitSeriesView:
         self.save_button.setMenu(menu)
         self.save_button.hide()  # shown once frames are fitted
         row.addWidget(self.folder_button)
+        row.addWidget(self.import_button)
         row.addWidget(self.folder_chip, 1)
         row.addWidget(self.start_button)
         row.addWidget(self.pause_button)
@@ -356,11 +360,6 @@ class FitSeriesView:
         self.results_table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.results_table.setWordWrap(False)
         layout.addWidget(self.results_table, 1)
-        self.to_single_button = QPushButton("Open Frame in Single Analysis", page)
-        self.to_single_button.setObjectName("fitSeriesToSingle")
-        self.to_single_button.setToolTip("The selected frame's curve and fitted model in Single analysis, to look closer")
-        self.to_single_button.hide()
-        layout.addWidget(self.to_single_button, 0, Qt.AlignLeft)
         log = AdvancedSection("Run Log", "", page)
         self.log_view = QPlainTextEdit(log)
         self.log_view.setObjectName("fitSeriesLog")
@@ -382,6 +381,12 @@ class FitSeriesView:
         self.frame_plot.set_labels("|q| (nm⁻¹)", "Intensity")
         self.frame_plot.set_empty_text(FRAME_EMPTY)
         self.frame_plot.x_window.setMovable(False)  # the fitting range is shown here, set in Single analysis
+        self.to_single_button = QPushButton("Open Frame in Single Analysis", self.frame_plot)
+        self.to_single_button.setObjectName("fitSeriesToSingle")
+        self.to_single_button.setToolTip(
+            "Open the selected curve in Single analysis to set up a model, or inspect its fitted model")
+        self.to_single_button.hide()
+        self.frame_plot.layout().addWidget(self.to_single_button, 0, Qt.AlignLeft)
         self.frame_note = QLabel("", panel)  # what the frame is fitted on, or why it cannot be
         self.frame_note.setObjectName("fitSeriesFrameNote")
         self.frame_note.setProperty("gimapRole", "muted")

@@ -256,6 +256,8 @@ class Fit1DPageMixin:
                 + (f"; equivalent solutions: {bounds[0]:.4g}–{bounds[1]:.4g}" if bounds else ""))
 
     def _fit1d_export(self):
+        from ...application.curve_sources import source_record
+
         native = self.session.native_result
         names, table = native_export(native)
         curve = self.session.curve
@@ -265,6 +267,8 @@ class Fit1DPageMixin:
                                                            q_unit_from=curve.unit_from),
                       selection=dict(side=self.session.side, q_range_nm_inv=self.session.q_range,
                                      excluded_q_nm_inv=sorted(self.session.excluded)))
+        if curve is not None and curve.path:
+            record["curve"]["source"] = source_record(curve.path)
         return names, table, record
 
     def _draw_fit1d_residuals(self):

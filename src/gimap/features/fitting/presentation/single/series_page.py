@@ -28,6 +28,7 @@ from ...application.series_fit import (
     FrameFit,
     SeriesSettings,
     fit_frame,
+    file_name,
     next_start,
     poor_fit,
     series_counts,
@@ -38,6 +39,7 @@ from .drops import FolderDropMixin, SplitterMemoryMixin
 from .series_fit1d import FitSeriesFit1DMixin
 from .series_frames import FitSeriesFramesMixin
 from .series_halves import FitSeriesHalvesMixin
+from .series_imports import FitSeriesImportsMixin
 from .series_listing import FitSeriesListingMixin
 from .series_loading import FitSeriesLoadingMixin
 from .series_preview import FitSeriesPreviewMixin
@@ -62,7 +64,7 @@ END_SENTENCES = {
 not said like a success (said at the level of a warning)."""
 
 
-class FitSeriesPage(FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin, FitSeriesStagesMixin, FitSeriesFit1DMixin,
+class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin, FitSeriesStagesMixin, FitSeriesFit1DMixin,
                     FitSeriesFramesMixin, FitSeriesUnitsMixin,
                     FitSeriesPreviewMixin, FitSeriesHalvesMixin, FitSeriesResultsMixin, FitSeriesWatchMixin, QWidget,
                     FitSeriesView):
@@ -70,6 +72,7 @@ class FitSeriesPage(FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin,
     """Show Single analysis (the model is set up there)."""
     openFrameRequested = pyqtSignal(str, object)
     """A frame's file and fitted model, to look at in Single analysis."""
+    importCurvesRequested = pyqtSignal()
 
     def __init__(self, view_model, single_page, *, preferences=None, frames=None, parent: Optional[QWidget] = None):
         """``frames``: the cutter of detector frames (``app/series_frames.py``); ``None``: curves only."""
@@ -118,6 +121,7 @@ class FitSeriesPage(FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin,
     def _connect(self) -> None:
         self.step_rail.stepChosen.connect(self.show_step)
         self.folder_button.clicked.connect(self.choose_folder)
+        self.import_button.clicked.connect(self.importCurvesRequested)
         self.pattern_edit.editingFinished.connect(self._list_curves)
         self.subfolders_check.toggled.connect(lambda _on: self._list_curves())
         self.first_spin.valueChanged.connect(self.last_spin.setMinimum)  # never a range without a frame
@@ -151,6 +155,7 @@ class FitSeriesPage(FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin,
     def refresh(self) -> None:
         """Where each step stands, and what the Start step will use."""
         listed = self._listed()
+        self._refresh_imported_controls()
         self.refresh_frames_card()
         self._show_halves()
         self._show_units()
@@ -221,7 +226,7 @@ class FitSeriesPage(FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin,
         if frame is None:
             if self.running:
                 return ("running" if index == self._current and self.tasks.is_busy() else "waiting"), ""
-            reason = self._skipped.get(index)
+            reason = self._skipped.get(index) or (self._read_errors or {}).get(self.paths[index])
             return ("failed", self._reason_text(reason)) if reason else ("waiting", "")
         if not frame.ok:
             return "failed", self._reason_text(frame.error)  # in the interface language; the record keeps it as it came
@@ -257,7 +262,7 @@ class FitSeriesPage(FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin,
             resolve_edges=self.single.resolve_edges_check.isChecked(),  # as in Single analysis' Fit step
             follow=self.follow_check.isChecked(), fit1d={**self.single.fit1d_settings(), "fit1d_composition": "model"})
         self._side_from, self._untouched_start = self.halves_source(), not session.edited
-        self._unit = "angstrom" if self.frames_mode() else self.single.unit_setting()  # for files without a unit
+        self._unit = "angstrom" if self.frames_mode() else self.source_unit_setting()  # for files without a unit
         self._start_model = model
         self._run_listing = self._listing_record(listed)
         self.fits, self.queue, self._previous, self._curves = {}, list(listed), None, {}
@@ -272,7 +277,7 @@ class FitSeriesPage(FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin,
         self._rebuild_results()
         self._show_progress()
         self.status_progress.show()
-        if self.watch_check.isChecked():
+        if self.watch_check.isChecked() and not self.imported_mode():
             self._watch.start()
         self._log(tr("Started: {count} frames, {model}.").format(count=len(listed), model=model_label(model)))
         self._log(self._points_text(self._settings, self._side_from))
@@ -320,7 +325,7 @@ class FitSeriesPage(FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin,
             if outcome.error is not None:
                 return FrameFit(index, path, error=outcome.error.message), None, stamp, None
             value = outcome.value
-            curve = Curve.from_arrays(value.q, value.intensity, value.error, name=Path(path).name, path=path,
+            curve = Curve.from_arrays(value.q, value.intensity, value.error, name=file_name(path), path=path,
                                       unit=value.q_source_unit, unit_from=value.q_unit_from)
             return fit_frame(index, path, curve, start, settings, stop, predict), curve, stamp, value
 
@@ -360,7 +365,7 @@ class FitSeriesPage(FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin,
         self._status(lambda: tr("Frame {frame}: {state}").format(frame=frame.index + 1, state=self._frame_state(frame.index)[1]))
         if not frame.ok:
             self._log(tr("Frame {frame} ({name}) failed: {reason}").format(
-                frame=frame.index + 1, name=Path(frame.path).name, reason=self._reason_text(frame.error)))
+                frame=frame.index + 1, name=file_name(frame.path), reason=self._reason_text(frame.error)))
         if self._selected is None or self._selected == self._last_done:  # following the run
             self._select(frame.index, follow=True)
         self._last_done = frame.index
@@ -440,7 +445,8 @@ class FitSeriesPage(FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin,
         self.preferences.set(PREFERENCES_KEY, stored)
 
     def _remember_choices(self) -> None:
-        self._remember(start=self._start_choice(), method=self.series_method(), follow=self.follow_check.isChecked())
+        if not self.imported_mode():
+            self._remember(start=self._start_choice(), method=self.series_method(), follow=self.follow_check.isChecked())
         self.refresh()
 
     def _restore(self) -> None:
@@ -459,7 +465,7 @@ class FitSeriesPage(FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin,
         state = {"folder": self.folder, "pattern": self.pattern_edit.text(), "subfolders": self.subfolders_check.isChecked(),
                  "first": self.first_spin.value(), "last": self.last_spin.value(), "every": self.every_spin.value(),
                  "start": self._start_choice(), "method": self.series_method(),
-                 "follow": self.follow_check.isChecked(), **self.halves_state()}
+                 "follow": self.follow_check.isChecked(), **self.halves_state(), **self.imported_state()}
         if self._listing_busy:
             # Range/halves wait for discovery and cannot be edited yet. Safe choices above stay live.
             pending = self._restore_listing or {}
@@ -473,6 +479,9 @@ class FitSeriesPage(FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin,
     def apply_project_state(self, data: dict) -> list[str]:
         if self.running:  # nothing changes under a running series (its folder, frames and choices stay)
             return [tr("the In-situ series was not restored: a series is running")]
+        if data.get("source_mode") == "selection":
+            return self._restore_imported_sources(data)
+        self._clear_imported_sources()
         self._set_start(data.get("start"))
         self.set_series_method(data.get("method"))
         self.follow_check.setChecked(bool(data.get("follow", True)))

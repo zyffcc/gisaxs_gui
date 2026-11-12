@@ -24,6 +24,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from .presentation.i18n import tr
+from ..features.fitting.application.models import InSituSourceFrame
 
 PROJECT_FORMAT = "gimap-project"
 PROJECT_VERSION = 1
@@ -149,9 +150,21 @@ def missing(data: dict, path=None) -> list[str]:
     named += [(str(item), Path(str(item)).exists()) for item in (files if isinstance(files, list) else ())]
     curve = _part(data, "fitting", "single", "curve").get("path")
     if curve:
-        named.append((str(curve), Path(str(curve)).is_file()))
-    folder = _part(data, "fitting", "series").get("folder")
-    if folder:
+        try:
+            source = InSituSourceFrame.from_token(str(curve)).path
+        except ValueError:
+            pass  # apply_project_state reports a malformed mapping, not a missing physical file
+        else:
+            named.append((str(source), source.is_file()))
+    fit_series = _part(data, "fitting", "series")
+    folder = fit_series.get("folder")
+    if fit_series.get("source_mode") == "selection":
+        sources = fit_series.get("sources")
+        for source in sources if isinstance(sources, list) else ():
+            if isinstance(source, dict) and source.get("path"):
+                item = Path(str(source["path"]))
+                named.append((str(item), item.is_file()))
+    elif folder:
         named.append((str(folder), Path(str(folder)).is_dir()))
     compare = _part(data, "compare")
     series = compare.get("series")
@@ -243,7 +256,8 @@ def apply(components, data: dict, path=None) -> list[str]:
     notes += workspace.fit_page.apply_project_state(_part(data, "fitting", "single"))
     series = _part(data, "fitting", "series")
     folder = str(series.get("folder") or "")
-    if not workspace.series_page.running and not (folder and Path(folder).is_dir()):
+    selection = series.get("source_mode") == "selection"
+    if not workspace.series_page.running and not selection and not (folder and Path(folder).is_dir()):
         _close_series(workspace.series_page)
         if series.get("pattern"):  # the page sets it with the folder; with none, the project's all the same
             workspace.series_page.pattern_edit.setText(str(series["pattern"]))

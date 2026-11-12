@@ -112,6 +112,8 @@ ANALYZE_MENU = (
 
 FITTING_MENU = (
     Entry("fitting_open_curve", "&Open Curve…", "Open a 1D curve (q, I, σ) — Analyze ▸ Send to Fitting opens its cut here"),
+    Entry("fitting_import_curves", "&Import Curves…",
+          "Batch fit selected TXT/DAT files: preview q I sigma or shared-q columns q I1 I2 …"),
     Entry("fitting_fit_folder", "Fit a Fol&der of Curves…",
           "In-situ series: every curve of a folder (a series, or many samples), each fitted with the model of this "
           "page — fit one curve here first, or let each curve be predicted"),
@@ -125,7 +127,7 @@ FITTING_MENU = (
           "CSV: q, I, σ, the model, the residuals and each term; a JSON record of the model and the fit next to it"),
     Entry("fitting_save_plot", "Save &Plot…", "The plot as shown: PNG (image) or SVG (vector)"),
     SEPARATOR,
-    Submenu("fitting_series", "&In-situ Series", "Every curve of a folder fitted with the model of Single analysis", (
+    Submenu("fitting_series", "&Batch / In-situ Series", "Every listed curve fitted with the model of Single analysis", (
         Entry("fitting_series_start", "&Start", "Fit every listed curve with the model of Single analysis"),
         Entry("fitting_series_stop", "S&top", "Stop after the frame being fitted; the frames done are kept"),
     )),

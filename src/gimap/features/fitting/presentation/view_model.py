@@ -29,6 +29,7 @@ from .workflow_state import (
     fail_workflow_step,
 )
 from .storage_view_model import FittingStorageViewModel
+from ..application.models import InSituSourceFrame
 from .workflow_view_model import FittingWorkflowViewModelMixin
 
 
@@ -112,11 +113,15 @@ class FittingViewModel(FittingWorkflowViewModelMixin):
         self.state = replace(self.state, curve_view=state)
 
     def load_curve(self, request: LoadCurveRequest):
+        try:
+            name = InSituSourceFrame.from_token(str(request.path)).display_name
+        except ValueError:
+            name = request.path.name.split("::gimap", 1)[0]
         self.state = replace(
             self.state,
             curve_status="loading",
             error_message=None,
-            status_message=f"Loading {request.path.name}...",
+            status_message=f"Loading {name}...",
         )
         outcome = self._load_curve.execute(request)
         if outcome.error is not None:
@@ -132,13 +137,17 @@ class FittingViewModel(FittingWorkflowViewModelMixin):
             curve_status="ready",
             current_curve=outcome.value,
             error_message=None,
-            status_message=f"Loaded {request.path.name}",
+            status_message=f"Loaded {name}",
         )
         return outcome
 
     def read_series_curve(self, request: LoadCurveRequest):
         """Read in a worker without changing Single analysis' current curve or UI state."""
         return self._load_curve.execute(request)
+
+    def inspect_curve_table(self, path):
+        """Read table roles and a small preview without changing the current curve."""
+        return self._load_curve.inspect_table(path)
 
     def stated_q_unit(self, path) -> str | None:
         """The unit of q a curve file states in its header: ``"angstrom"``, ``"nm"`` or ``None``."""

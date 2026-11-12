@@ -23,6 +23,7 @@ from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.task_runner import TaskRunner
 
 from ...application import CURVE_SUFFIXES, LoadCurveRequest
+from ...application.models import InSituSourceFrame
 from ...application.single_fit import (
     ANALYZE_SIDES,
     FAMILIES,
@@ -60,11 +61,20 @@ STARTING_MODEL = "Starting model, not set up yet"
 """The Model step while its model is the starting guess (nobody set it up, nor was it fitted)."""
 
 
+def _saved_source(token):
+    try:
+        return InSituSourceFrame.from_token(str(token))
+    except (ValueError, TypeError):
+        return None  # damaged saved mappings must not prevent startup or bypass the reader's error report
+
+
 class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunMixin, FitResultsMixin,
               FitExclusionMixin, Fit1DPageMixin, Fit1DReviewMixin, ResultActionsMixin, CurveUnitMixin, CurveInfoMixin):
     curveOpened = pyqtSignal(str)
     """The file of the curve now on the page (In-situ series takes its set-up from it)."""
     batchRequested = pyqtSignal()
+    importCurvesRequested = pyqtSignal(object)
+    """Preview selected files and explicitly choose their column layout for batch fitting."""
     seriesRequested = pyqtSignal(str, str)
     """Every curve of a folder (folder, file pattern) in In-situ series, each fitted from this page's model."""
     """Open 1D Predict for a list of curves."""
@@ -105,6 +115,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
 
     def _connect(self) -> None:
         self.open_button.clicked.connect(self.open_curve_dialog)
+        self.import_curves_button.clicked.connect(lambda: self.importCurvesRequested.emit([]))
         self.open_curve_step_button.clicked.connect(self.open_curve_dialog)
         self.open_folder_step_button.clicked.connect(lambda: self.seriesRequested.emit("", ""))
         self.load_model_action.triggered.connect(self.load_model_dialog)
@@ -204,13 +215,15 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         """Load a curve file (Analyze's cuts: q in Å⁻¹, signed); ``side`` as Analyze names it. Its q is read in the
         unit its header states, else in ``unit`` (the one it was saved with) or the setting (``curve_unit.py``)."""
         path = Path(path)
+        source = _saved_source(path)
+        name = source.display_name if source is not None else path.name.split("::gimap", 1)[0]
         outcome = self.view_model.load_curve(LoadCurveRequest(path, unit or self.unit_setting()))
         if outcome.error is not None:
-            self._status(lambda: tr("Could not open {name}: {reason}").format(name=path.name,
+            self._status(lambda: tr("Could not open {name}: {reason}").format(name=name,
                                                                               reason=tr(outcome.error.message)), "error")
             return False
         loaded = outcome.value
-        curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=path.name, path=str(path),
+        curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=name, path=str(path),
                                   unit=loaded.q_source_unit, unit_from=getattr(loaded, "q_unit_from", ""))
         self._halt_fit()  # a fit of the curve before stops; what it brings back is not kept (run.py)
         self.session.set_curve(curve)
@@ -221,14 +234,14 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         if not self.session.edited and data is not None and data.q.size >= 3:
             self.session.model = fit_scales(self.session.model, data)  # the starting model at the curve's level
         self._follow_saved_unit()
-        self._remember(folder=str(path.parent), curve={"path": str(path), "side": self.session.side,
+        self._remember(folder=str(source.path.parent), curve={"path": str(path), "side": self.session.side,
                                                        "unit": curve.source_unit})
         self._render_all()
-        self._log(tr("Opened {name}: {points} points").format(name=path.name, points=curve.q.size))
+        self._log(tr("Opened {name}: {points} points").format(name=name, points=curve.q.size))
         self._curve_opened_step(getattr(loaded, "observation", None))  # fit1d first for a GISAXS cut (fit1d_review)
         self._remember_curve()
         note = self._saved_unit_note(unit)  # a header that states another unit than the one saved
-        self._status(note or (lambda: tr("Opened {name}.").format(name=path.name)), "warning" if note else "ok")
+        self._status(note or (lambda: tr("Opened {name}.").format(name=name)), "warning" if note else "ok")
         self.curveOpened.emit(str(path))
         return True
 
@@ -483,7 +496,10 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.show_ranges_check.setChecked(bool(self._remembered("show_ranges")))
         self.show_ranges_check.toggled.connect(lambda on: self._remember(show_ranges=bool(on)))
         last = self._remembered("curve")
-        if isinstance(last, dict) and last.get("path") and Path(str(last["path"])).is_file():
+        saved = _saved_source(last["path"]) if isinstance(last, dict) and last.get("path") else None
+        if isinstance(last, dict) and last.get("path") and saved is None:
+            self._status(tr("Invalid curve source token."), "warning")
+        if saved is not None and saved.path.is_file():
             last = {**last, "method": self.method()}
             QTimer.singleShot(0, lambda: self._reopen(last))
 
@@ -528,14 +544,18 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.set_method(data.get("method"))
         self.set_unit_setting(data.get(SETTING_KEY))  # (an older project has none: its curve's unit is used)
         curve = data.get("curve") or {}
-        if curve.get("path") and Path(curve["path"]).is_file():
+        saved = _saved_source(curve.get("path")) if curve.get("path") else None
+        if curve.get("path") and (saved is None or saved.path.is_file()):
             if self.open_curve(curve["path"], curve.get("side"), unit=curve.get("unit")):
                 notes += [note() for note in [self._saved_unit_note(curve.get("unit"))] if note]
                 self.session.excluded = {float(value) for value in curve.get("excluded") or ()}
                 if curve.get("q_range"):
                     self.set_range(curve["q_range"], record=False)
+            else:
+                notes.append(self.status_label.text())
         elif curve.get("path"):
-            notes.append(tr("the Fitting curve {name} is no longer there").format(name=Path(curve["path"]).name))
+            notes.append(tr("the Fitting curve {name} is no longer there").format(
+                name=saved.display_name))
         settings = data.get("fit1d_settings")
         if curve.get("path") and self.session.curve is None and isinstance(settings, dict):
             settings = {**settings, "fit1d_qz": None}

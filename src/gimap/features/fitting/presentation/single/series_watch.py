@@ -46,6 +46,10 @@ class FitSeriesWatchMixin:
 
     def _watch_toggled(self, on: bool) -> None:
         """Ticked or unticked while the series runs: from now on, or no longer — a run that only waited ends."""
+        if self.imported_mode():
+            self.watch_check.setChecked(False)
+            self._watch.stop()
+            return
         self._watch_scan += 1
         self._watch_busy = False
         if not self.running or self._stop.is_set():
@@ -74,7 +78,7 @@ class FitSeriesWatchMixin:
 
     def _look_for_new(self) -> None:
         """A look at the folder: settled new curves are listed and queued, changed ones queued again."""
-        if not self.running or not self.folder or self._stop.is_set() or self._watch_busy:
+        if self.imported_mode() or not self.running or not self.folder or self._stop.is_set() or self._watch_busy:
             return
         self._watch_busy = True
         epoch, scan, stop = self._loading_epoch, self._watch_scan, self._stop

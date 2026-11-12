@@ -10,12 +10,12 @@ cut in Å⁻¹ and the frames card says how: no line here.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application.curve_units import FROM_FILE, q_unit_read
+from ...application.series_fit import file_name
 from ..unit_texts import UNIT_SHOWN
+from .series_imports import IMPORT_SETTING
 
 STATED = "{count} curves: q in {unit}, as their header states"
 SETTING = "{count} curves: q in {unit}, no unit in their header (Single analysis ▸ Curve ▸ File)"
@@ -48,11 +48,12 @@ class FitSeriesUnitsMixin:
                 unclear.append((path, str(exc)))
                 continue
             groups.setdefault((origin != FROM_FILE, unit), []).append(path)
-        lines = [trf(SETTING if from_setting else STATED, count=len(paths), unit=UNIT_SHOWN[unit])
+        fallback = IMPORT_SETTING if self._imported_q_unit else SETTING
+        lines = [trf(fallback if from_setting else STATED, count=len(paths), unit=UNIT_SHOWN[unit])
                  for (from_setting, unit), paths in sorted(groups.items())]
         if unclear:
             name, reason = unclear[0]
-            lines.append(trf(UNCLEAR, count=len(unclear), name=Path(name).name, reason=tr(reason)))
+            lines.append(trf(UNCLEAR, count=len(unclear), name=file_name(name), reason=tr(reason)))
         return lines
 
     def _show_units(self) -> None:

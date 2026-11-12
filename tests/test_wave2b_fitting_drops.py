@@ -49,8 +49,11 @@ def test_a_curve_file_dropped_on_single_analysis_opens(tmp_path) -> None:
     assert page.session.curve is not None and page.session.curve.path == str(curve)
     other = _curve_file(tmp_path, name="second_fit_input.dat")
     third = _curve_file(tmp_path, name="third_fit_input.dat")
-    assert _drop(page, _mime(other, third))  # several: the first opens, the status says one at a time
-    assert page.session.curve.path == str(other) and "One curve at a time" in page.status_label.text()
+    imports = []
+    page.importCurvesRequested.connect(imports.append)
+    assert _drop(page, _mime(other, third))  # several: preview column roles before importing all of them
+    assert imports == [[str(other), str(third)]]
+    assert page.session.curve.path == str(curve)  # cancelling the preview preserves the current curve
     _close(page)
 
 

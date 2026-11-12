@@ -16,8 +16,6 @@ from typing import Optional
 
 from PyQt5.QtCore import QTimer
 
-from src.gimap.app.presentation.i18n import tr
-
 from ...application import CURVE_SUFFIXES
 
 SPLITTER_DELAY_MS = 400
@@ -57,10 +55,10 @@ class CurveDropMixin:
             event.ignore()
             return
         event.acceptProposedAction()
-        if self.open_curve(str(curves[0])) and len(curves) > 1:  # as Open Curve…: a path, no side
-            name = curves[0].name
-            self._status(lambda: tr("One curve at a time here: {name} is open. Fit ▸ Advanced ▸ Fit Many Curves… "
-                                    "takes several.").format(name=name), "warning")
+        if len(curves) > 1:
+            self.importCurvesRequested.emit([str(path) for path in curves])
+        else:
+            self.open_curve(str(curves[0]))
 
 
 class FolderDropMixin:

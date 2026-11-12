@@ -60,7 +60,7 @@ class FittingContextContainer(QWidget):
 
         self.single_button = QPushButton("Single analysis", self.context_bar)
         self.single_button.setObjectName("fittingSingleContextButton")
-        self.insitu_button = QPushButton("In-situ series", self.context_bar)
+        self.insitu_button = QPushButton("Batch / In-situ series", self.context_bar)
         self.insitu_button.setObjectName("fittingInsituContextButton")
         self.button_group = QButtonGroup(self.context_bar)
         self.button_group.setExclusive(True)

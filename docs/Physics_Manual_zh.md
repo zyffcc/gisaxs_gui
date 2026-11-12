@@ -1482,9 +1482,17 @@ M_H 是程序的稳健失配度，即 σ 归一化残差的平均 Huber 损失�
 
 ### 9.1 拟合哪些点
 
+显式导入不会把明确命名的强度列当作 sigma。`q I1 I2 sigma` 这类表格需要先整理成支持的布局，不能静默地把 I2 当作误差。
+
+**文本表格输入。** 导入预览显示 `.dat` 或 `.txt` 文件的表头和前十行。确认单曲线布局后，按 `q I [sigma]` 读取；确认共享 q 布局后，将 `q I1 I2 …` 中的各强度列分别与第一列 q 配对，作为独立曲线。`q I1 I2` 这样的明确列名可以建议共享 q 布局，但没有列名的三列纯数字表存在歧义，在用户另作选择前保持单曲线默认值。带分析工作区标记的导出文件及其 `q I sigma pixels` 格式始终是一条曲线；sigma 和像素数列不能被拆成独立强度。明确命名的误差列（包括 `sigma1`、`sigma2`）也会禁用共享 q 拆分。交错排列的 `q I1 sigma1 I2 sigma2 …` 表格暂不支持作为多曲线导入；单曲线导入只能读取其第一个 q/I/sigma 三列。文件明确写出的单位优先于“文件未写单位时”的设置；相互矛盾的单位声明仍报错。
+
+读取时，每条曲线所选的 q、I 和可选 sigma 必须来自同一行，然后去掉所选值缺失、无法解析或非有限值的行。只要表格保留了列的位置（例如逗号分隔的空单元格或 `nan`），I1 缺失就不会删除同一 q 处有效的 I2。用空白分隔而少了单元格的行无法确定缺的是哪一列，因此整行跳过，不把后面的值移到前一列。没有 sigma 就保持缺失；导入共享 q 表格不会凭空生成计数误差。原单曲线读取器也会整行排除 sigma 损坏的记录，后续行的 sigma 不再错配到前一行的 q/I。有效的旧 q/I/sigma 文件数值保持不变。
+
+每条导入曲线保留物理源文件、所选列索引、原列名（若有）、表格列数以及 sigma 是否来自文件列。项目与拟合记录保留这份映射。表头改变或所选列缺失时会明确报错，要求重新导入确认，不会静默改读另一列。
+
 q 带符号的曲线（GISAXS 水平切线）在以下之一上拟合：两半的平均 (6.16)–(6.17)、`abs(q)` 上的两半，或者一半。然后应用拟合范围和排除的点。这些点中只保留 `abs(q) > 0` 且值有限的点。只有每个保留的点都有有限的 `σ > 0` 时才使用 σ；否则整条曲线都不用 σ，并且要求 `I > 0`。
 
-实现：`src/gimap/features/fitting/application/single_fit.py`, `src/gimap/features/fitting/domain/fit_engine.py`
+实现：`src/gimap/features/fitting/application/curve_sources.py`, `src/gimap/features/fitting/infrastructure/adapters/curve_tables.py`, `src/gimap/features/fitting/infrastructure/adapters/scattering_curve_files.py`, `src/gimap/features/fitting/application/single_fit.py`, `src/gimap/features/fitting/domain/fit_engine.py`
 
 ### 9.2 强度模型
 

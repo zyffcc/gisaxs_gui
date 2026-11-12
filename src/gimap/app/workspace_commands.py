@@ -231,6 +231,7 @@ class WorkspaceCommands:
             "analyze_clear": MenuEntry(analyze(lambda: page().clear_files()), self._clear),
             # Fitting
             "fitting_open_curve": MenuEntry(fitting(lambda: fit().open_curve_dialog())),
+            "fitting_import_curves": MenuEntry(fitting(lambda: self._fitting.import_curves()), self._series_folder),
             "fitting_fit_folder": MenuEntry(fitting(lambda: series().choose_folder(), "insitu"), self._series_folder),
             "fitting_fit": MenuEntry(fitting(lambda: fit().run_fit()), self._fit),
             "fitting_stop": MenuEntry(fitting(lambda: fit().stop_fit()), self._stop_fit),

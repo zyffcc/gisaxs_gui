@@ -49,6 +49,7 @@ class FitSeriesListingMixin:
         if ask and not self._may_drop_results():
             return False
         self._restore_listing = None
+        self._clear_imported_sources()
         self.folder = str(folder)
         if pattern:
             self.pattern_edit.setText(pattern)
@@ -59,9 +60,12 @@ class FitSeriesListingMixin:
     def _folder_name(self) -> str:
         """What the series is called where the whole path has no room (``series_text.series_name``): in the
         status line and the titles of the trend (shown and saved). The whole path is on the chip."""
-        return series_name(self.folder)
+        return tr("Imported curves") if self.imported_mode() else series_name(self.folder)
 
     def _show_folder(self) -> None:
+        if self.imported_mode():
+            self._show_imported_sources()
+            return
         parts = Path(self.folder).parts
         self.folder_chip.setText(self.folder if len(parts) <= 4 else str(Path("…", *parts[-3:])))
         self.folder_chip.setToolTip(self.folder)
@@ -155,6 +159,7 @@ class FitSeriesListingMixin:
         self._invalidate_loading()
         self._listing_busy = False
         self._restore_listing = None
+        self._clear_imported_sources()
         self.folder, self.paths, self.fits, self.queue, self._names = "", [], {}, [], None
         self._curves, self._preview_curves, self._selected, self._start_model = {}, {}, None, None
         self._previous = self._last_done = self._drawn_with = None

@@ -9,13 +9,15 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.task_runner import TaskRunner
 
 from ...application import DiscoverInSituFramesRequest, LoadCurveRequest
 from ...application.series_frames import frame_path, is_frame_pattern, matching
+from ...application.series_fit import file_name
 from ...application.single_fit import Curve
 from .series_text import FIT_INPUT_FOLDER
+from .series_imports import inspect_imported_sources
 
 LISTING = "Listing and previewing the series … (Stop to cancel)"
 LOADING = "Loading frame …"
@@ -111,14 +113,16 @@ class FitSeriesLoadingMixin:
         self._invalidate_loading()
         epoch, stop = self._loading_epoch, self._loading_stop
         folder = self.folder
+        sources = self._imported_sources
+        inspect = self.view_model.inspect_curve_table if sources is not None else None
         pattern = self.pattern_edit.text().strip() or "*_fit_input.dat"
         recursive = self.subfolders_check.isChecked()
-        if self.frames_bridge is not None and self._recipe is None:
+        if sources is None and self.frames_bridge is not None and self._recipe is None:
             self._take_recipe()  # Analyze's recipe is captured on the GUI thread
         recipe, bridge, storage = self._recipe, self.frames_bridge, self.view_model.storage
         loader, make_loader = self.series_curve_loader(), self.make_curve_loader
         stated = getattr(self.view_model, "stated_q_unit", None)
-        unit = "angstrom" if bridge is not None and is_frame_pattern(pattern) else self.single.unit_setting()
+        unit = "angstrom" if sources is None and bridge is not None and is_frame_pattern(pattern) else self.source_unit_setting()
         self._listing_busy = True
         if again:  # the old results were already saved or discarded before this folder request
             self.paths, self._names, self.fits, self._curves = [], None, {}, {}
@@ -131,8 +135,11 @@ class FitSeriesLoadingMixin:
         self.refresh()
 
         def work():
-            result = discover_sources(storage, bridge, recipe, folder, pattern, recursive, stop)
+            result = (discover_sources(storage, bridge, recipe, folder, pattern, recursive, stop) if sources is None else
+                      ([source.token for source in sources], pattern, None, "", {}))
             paths, chosen_pattern, _below, _places, items = result
+            frame_mode = sources is None and is_frame_pattern(chosen_pattern)
+            errors = inspect_imported_sources(sources, inspect, stop) if sources is not None else {}
             # First frame and the few extra frames used to decide the halves before Start.
             load = loader if not items else make_loader(
                 load=loader, bridge=bridge, recipe=recipe, why="", items=items, cache={})
@@ -142,9 +149,9 @@ class FitSeriesLoadingMixin:
                     if stop.is_set():
                         break
                     read.append((index, load(LoadCurveRequest(Path(paths[index]),
-                                "angstrom" if is_frame_pattern(chosen_pattern) else unit))))
-            units = {} if is_frame_pattern(chosen_pattern) else read_units(paths, stated, stop)
-            return result, read, units, load.loaded
+                                "angstrom" if frame_mode else unit))))
+            units = {} if frame_mode else read_units(paths, stated, stop)
+            return result, read, units, load.loaded, errors
 
         self.loading_tasks.submit("listing", work,
             on_done=lambda result: self._listing_ready(epoch, again, recursive, unit, result),
@@ -155,12 +162,17 @@ class FitSeriesLoadingMixin:
         if not self._loading_current(epoch):
             return
         self._listing_busy = False
-        listing, read, self._stated_units, cuts = result
+        listing, read, self._stated_units, cuts, errors = result
+        self._read_errors.update(errors)
         self._accept_listing(listing, read, again=again, recursive=recursive, unit=unit)
         self._publish_frame_cuts(cuts)
         if self._restore_listing is not None:
             data, self._restore_listing = self._restore_listing, None
             self._restore_series_choices(data)
+        if self.imported_mode() and self._read_errors:
+            path, reason = next(iter(self._read_errors.items()))
+            self._status(lambda: trf("{count} imported curves cannot be read: {name} — {reason}",
+                         count=len(self._read_errors), name=file_name(path), reason=tr(reason)), "warning")
         self.refresh()
 
     def _listing_failed(self, epoch, message):
@@ -179,7 +191,7 @@ class FitSeriesLoadingMixin:
         value = outcome.value
         self._note_curve(index, value.q, value.observation)
         self._preview_curves[(path, unit)] = Curve.from_arrays(
-            value.q, value.intensity, value.error, name=Path(path).name, path=path,
+            value.q, value.intensity, value.error, name=file_name(path), path=path,
             unit=value.q_source_unit, unit_from=value.q_unit_from)
 
     def _request_preview(self, index, key):

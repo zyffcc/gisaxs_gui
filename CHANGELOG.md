@@ -12,6 +12,16 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- Fitting adds **Import Curves…** for selected TXT/DAT files and shared-q tables (`q I1 I2 …`), with column
+  preview, explicit layout and q-unit choices. Existing `q I [sigma]` inputs and Analyze's `q I sigma pixels`
+  exports keep their roles. Independent samples start from the same model without time continuity or odd-frame
+  exclusions; ordered sequences retain the selected file/column order. Projects and exports preserve every
+  curve's physical source and column mapping. Multi-file drops open the preview.
+- Curve rows with an unreadable sigma now skip the whole row together, preventing later errors from shifting
+  onto earlier q/I values; valid three-column data are unchanged. Missing sigma stays absent.
+- Curve import limitations: interleaved `q I1 sigma1 I2 sigma2` tables are not supported; use separate
+  `q I sigma` files. Headerless three-column data require an explicit layout choice. Fixed imported selections
+  do not watch for new files or columns; folder mode continues to watch ordinary single-curve files.
 - Project saves write Compare arrays to a unique `<name>.<generation>.compare.npz` and replace the project
   atomically only after the new arrays and temporary JSON are complete. Failed saves keep the previous pair;
   older sidecar names remain readable. Move the project with its current `compare.arrays_file`; an old array

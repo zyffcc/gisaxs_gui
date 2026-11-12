@@ -14,6 +14,7 @@ EXPECTED_VIEWS_BY_OWNER = {
     "calibration": {"geometry_calibration_dialog_view.py"},
     "compare": {"compare_page_view.py"},
     "fitting": {
+        "curve_import_view.py",
         "fit_page_view.py",
         "fit_results_view.py",
         "fit_step_view.py",

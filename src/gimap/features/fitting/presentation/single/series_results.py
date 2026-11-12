@@ -301,9 +301,8 @@ class FitSeriesResultsMixin:
         frames = list(self.fits.values())
         started = self._start_model is not None
         self.save_button.setVisible(bool(self.fits))
-        self.to_single_button.setVisible(bool(self.fits))
+        self._refresh_open_frame()
         self.save_button.setEnabled(not self._listing_busy)
-        self.to_single_button.setEnabled(not self._listing_busy)
         self.results_card.setVisible(started)  # before the first Start the rail's “After Start” says it
         if not started:
             self.results_summary.setText("")
@@ -330,12 +329,26 @@ class FitSeriesResultsMixin:
             trouble = counts["failed"] or counts["not_converged"] or counts["stopped"] or poor or self._untouched_start
             self.step_rail.set_state("results", "warn" if trouble or stale else "ok", tr(STALE) if stale else lines[0])
 
+    def _can_open_selected(self):
+        index = self._selected
+        if self._listing_busy or self.running or index is None or not 0 <= index < len(self.paths):
+            return False
+        path = self.paths[index]
+        return (self._curves.get(index) is not None or
+                (path not in (self._read_errors or {}) and (path, self._preview_unit()) in self._preview_curves))
+
+    def _refresh_open_frame(self):
+        self.to_single_button.setVisible(bool(self.paths))
+        self.to_single_button.setEnabled(self._can_open_selected())
+
     def _open_in_single(self) -> None:
-        frame = self.fits.get(self._selected) if self._selected is not None else None
-        if frame is None:
-            self._status(tr("Select a fitted frame first."), "warning")
+        if not self._can_open_selected():
+            self._status(tr("Select a readable curve first."), "warning")
             return
-        self.openFrameRequested.emit(frame.path, frame.result.model if frame.ok else None)
+        frame = self.fits.get(self._selected)
+        if not self._started():
+            self._settings = self._stage_settings()
+        self.openFrameRequested.emit(self.paths[self._selected], frame.result.model if frame is not None and frame.ok else None)
 
     # -- results that were not saved --------------------------------------------------------
 

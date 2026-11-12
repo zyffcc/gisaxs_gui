@@ -23,7 +23,7 @@ class FitSeriesFit1DMixin:
 
     def setup_series_fit1d(self) -> None:
         self._series_job = None
-        self.method_fit1d.toggled.connect(lambda on: self.follow_check.setEnabled(on))
+        self.method_fit1d.toggled.connect(lambda on: self.follow_check.setEnabled(on and not self.independent_samples()))
         self.follow_check.setEnabled(self.method_fit1d.isChecked())
 
     def series_method(self) -> str:

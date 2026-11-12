@@ -14,7 +14,6 @@ analysis.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -24,7 +23,7 @@ from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import set_role
 
 from ...application.models import CURVE_NOT_FOUND
-from ...application.series_fit import TOO_FEW_POINTS, UNREADABLE, parameter_columns, prepare_frame
+from ...application.series_fit import TOO_FEW_POINTS, UNREADABLE, file_name, parameter_columns, prepare_frame
 from ...application.single_fit import SERIES_SIDES, Curve, evaluate, left_out_points, prepare_points
 from ..views.fit_series_view import FRAME_EMPTY
 from .series_loading import LOADING
@@ -58,7 +57,7 @@ class FitSeriesPreviewMixin:
         setting (a file whose header states one is read in that one: ``application.curve_units``)."""
         if self._started():
             return self._unit
-        return self.single.unit_setting()
+        return self.source_unit_setting()
 
     def _keep_preview_curves(self, curves) -> None:
         """Curves read elsewhere (the stage search), for drawing their frames without reading them again."""
@@ -92,11 +91,12 @@ class FitSeriesPreviewMixin:
         if curve is None and (frame is None or frame.ok):  # (a frame the run could not read is not drawn from an
             # earlier look at its file: it says why it has no fit)
             curve = self._preview_curve(index)  # read first: what it holds may decide the halves of the series
+        self._refresh_open_frame()
         started = frame is not None or self._started()
         settings = self._settings if started else self._stage_settings()  # before Start: as it would be fitted
         self._drawn_with = (index, settings, self._preview_unit())
         path = self.paths[index]
-        self.frame_plot.set_title(f"{index + 1} · {Path(path).name}")
+        self.frame_plot.set_title(f"{index + 1} · {file_name(path)}")
         if curve is None and (path, self._preview_unit()) in self._preview_pending:
             self.frame_plot.hide_window()
             self.frame_plot.set_curves([])

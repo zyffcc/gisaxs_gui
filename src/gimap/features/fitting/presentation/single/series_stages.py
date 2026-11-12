@@ -29,7 +29,7 @@ from src.gimap.app.presentation.task_runner import TaskRunner
 from src.gimap.app.presentation.theme import theme_manager
 
 from ...application import LoadCurveRequest
-from ...application.series_fit import SeriesSettings, stages_of_curves, unusable_curves
+from ...application.series_fit import SeriesSettings, file_name, stages_of_curves, unusable_curves
 from ...application.single_fit import Curve
 from ..views.fit_series_view import TREND_EMPTY
 from .series_text import STATE_COLOR
@@ -122,7 +122,7 @@ class FitSeriesStagesMixin:
 
     def _schedule_stages(self) -> None:
         """Find the stages again when the listed curves or the way they are fitted changed."""
-        if getattr(self, "_disposed", False):
+        if getattr(self, "_disposed", False) or self.independent_samples():
             return
         settings = self._stage_settings()
         key = (tuple(self.paths[index] for index in self._listed()), settings.side, settings.q_range, settings.excluded, self._preview_unit())
@@ -154,7 +154,7 @@ class FitSeriesStagesMixin:
             self._say_stages(NOT_FOR_THIS_RUN)
 
     def _find_stages(self) -> None:
-        if self._listing_busy or self._disposed:
+        if self._listing_busy or self._disposed or self.independent_samples():
             return
         listed = self._listed()
         if self.running:
@@ -181,7 +181,7 @@ class FitSeriesStagesMixin:
                     unreadable[row] = outcome.error.message
                     continue
                 value = outcome.value
-                curves.append(Curve.from_arrays(value.q, value.intensity, value.error, name=Path(path).name, path=path,
+                curves.append(Curve.from_arrays(value.q, value.intensity, value.error, name=file_name(path), path=path,
                                                 unit=value.q_source_unit, unit_from=value.q_unit_from))
                 read.append((listed[row], value.q, value.observation))
             try:
@@ -283,6 +283,7 @@ class FitSeriesStagesMixin:
             "stages": None if stages is None or not searched else
             [[searched[first] + 1, searched[last] + 1] for first, last in stages.ranges()],
             "watch": self.watch_check.isChecked(),
+            **self.imported_state(),
             **self.frames_record(),
         }
 

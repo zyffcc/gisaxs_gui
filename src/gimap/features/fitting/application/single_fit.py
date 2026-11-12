@@ -262,6 +262,8 @@ def export_table(model: FitModel, data: FitData) -> tuple[list[str], np.ndarray]
 def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: str, q_range, result: Optional[FitResult],
                excluded=()) -> dict:
     """What the export writes next to the table: the model, the fit and how it was made."""
+    from .curve_sources import source_record
+
     made_of = None if curve is None else prepare_points(curve, side, q_range, excluded)
     record = {
         "software_version": SOFTWARE,
@@ -277,6 +279,8 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
                    "left_out_q_nm^-1": sorted(float(value) for value in excluded)},
         "log_rmse": log_rmse(model, data),
     }
+    if curve is not None and curve.path:
+        record["curve"]["source"] = source_record(curve.path)
     if result is not None:
         record["fit"] = {
             "method": result.method, "chi2_reduced": result.chi2_reduced, "converged": result.converged,

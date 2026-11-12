@@ -521,7 +521,7 @@ spreadsheet.
 | Edit | Undo (`Ctrl+Z`), Redo (`Ctrl+Y`; `Ctrl+Shift+Z` also works): the set-up in Analyze, the model in Fitting's Single analysis |
 | View | *Workspaces* and *Labs*: the pages (`Ctrl+1`…`Ctrl+6`), Collapse Sidebar (`Ctrl+B`), Full Screen (`F11`), Theme ▸ Light / Dark, Font Size ▸ Larger (`Ctrl++`) / Smaller (`Ctrl+-`) / Reset (`Ctrl+0`), Language ▸ English / 中文 |
 | Analyze | Run Automatic Analysis, Stop Automatic Analysis, Repeat Analysis (`F5`), Export Curves… (`Ctrl+E`), Batch Export… (`Ctrl+Shift+E`), Batch Export a Folder…, Send to Fitting, Send Series to Fitting…, Send Series to Compare, Set-up Files ▸ Save Settings… / Load Settings… / Save Cuts… / Load Cuts… / Save Masks… / Load Masks…, Figures ▸ Save Image… / Save q-Map Data… / Save View Data…, Clear Frame List |
-| Fitting | Open Curve…, Fit a Folder of Curves…, Fit (`Ctrl+Return`), Stop Fit, Load Model…, Save Model…, Save Data and Fit…, Save Plot…, In-situ Series ▸ Start / Stop, 1D Predict — Fit Many Curves… |
+| Fitting | Open Curve…, Import Curves…, Fit a Folder of Curves…, Fit (`Ctrl+Return`), Stop Fit, Load Model…, Save Model…, Save Data and Fit…, Save Plot…, Batch / In-situ Series ▸ Start / Stop, 1D Predict — Fit Many Curves… |
 | Tools | Geometry Calibration… (`Ctrl+Shift+G`), Format Converter… (`Ctrl+Shift+C`), Convert Current File…, XRR Series Extractor… (`Ctrl+Shift+R`), SEM Particle Analysis…, 1D Predict — Fit Many Curves…, Process with AI… (`Ctrl+Shift+L`), Settings… (`Ctrl+,`) |
 | Help | User Manual (`F1`), Physics and Methods, Keyboard Shortcuts…, Example Data ▸ GISAXS — Ag Nanoparticles (GALAXI)… / SAXS — AgBh Calibrant (pyFAI)… / GIWAXS — MAPbI₃ Film (DESY P08)… / GIWAXS — PbTe, Tilted Detector (Xeuss)…, Report a Problem…, Open Error Log Folder, Open User Data Folder, GitHub Repository, Check for Updates…, How to Cite GIMaP…, Third-party Notices, About GIMaP |
 
@@ -539,7 +539,7 @@ the folders GIMaP keeps, and the links to GitHub, the citation, the notices and 
   Analyze the entry names what it would change (for example *Undo: cut regions*). On the other pages
   they are greyed out.
 - Every entry of **Analyze** and **Fitting** first shows its page (in Fitting the Single analysis, or
-  the In-situ series for Fit a Folder of Curves… and In-situ Series ▸ Start / Stop), then does what
+  the In-situ series for Fit a Folder of Curves… and Batch / In-situ Series ▸ Start / Stop), then does what
   the page's own button does. An entry that cannot run now is greyed out, and its tooltip says why
   (for example *Open a frame first.*).
 - The keys shown next to Undo, Redo, Repeat Analysis, Export Curves…, Batch Export… and Fit belong to
@@ -1731,13 +1731,15 @@ series** (chapter 6).
 The **Fitting** page fits 1D curves with particle models. It has two modes, switched at the top of the page:
 
 - **Single analysis** — one curve, in four steps (section 6.2).
-- **In-situ series** — every curve of a folder, or every frame of a detector series, fitted with the model
-  of Single analysis (section 6.6).
+- **Batch / In-situ series** — selected text curves (including several intensity columns in one file), every
+  curve of a folder, or every frame of a detector series, fitted with the model of Single analysis (section 6.6).
 
 Switching between the two keeps each side's curve, model and results. With no curve open, the Curve step
 offers both ways in side by side: **Open Curve…** and **Fit a Folder of Curves…**. For a series or a batch
 of samples the usual way is: fit one representative curve here (find its particle shape, then refine), then
 press **Fit Every Curve in This Folder…** in Results.
+For selected TXT/DAT files or a shared-q table, use **Import Curves…** in either page's command bar or the
+**Fitting** menu. Dropping several curve files on Single analysis opens this same import preview.
 
 Fitting works in nm⁻¹ and labels every axis and field with its unit. Analyze works in Å⁻¹; the curve files it
 writes for Fitting are in Å⁻¹ and are converted when they are opened.
@@ -1754,7 +1756,7 @@ which writes the curve that Fitting fits.
 | Mask negative pixels + guard | **Mask & corrections** step ▸ **Corrections** (folded) ▸ **Gap guard** (3 px by default) |
 | Stack | **Data** step ▸ **Frames** (folded) ▸ **Sum** |
 | Cut region width | Fitting's **Fitting range** |
-| In-situ CBF / NXS series | Analyze ▸ **Send Series to Fitting…**, or the frames themselves in **In-situ series** (section 6.6) |
+| In-situ CBF / NXS series | Analyze ▸ **Send Series to Fitting…**, or the frames themselves in **Batch / In-situ series** (section 6.6) |
 
 ### 6.1 Curves Fitting reads
 
@@ -1772,7 +1774,52 @@ Fitting does not read `.csv` files, also not the CSV curves that Analyze exports
 Analyze, or open the `_fit_input.dat` written next to the CSV. A `.csv` dropped on Fitting is refused with
 that reason.
 
-Three ways to get a curve in:
+Single-curve inputs keep their existing interpretation: **Open Curve…** and folder discovery read
+`q I [σ]`, including the third column as σ. To split `q I1 I2 …`, use **Import Curves…** explicitly.
+
+**Import selected files or several curves from one file**
+
+![Previewing shared-q curves before importing](manual_images/en/11a_fitting_import.png)
+
+1. Click **Import Curves…** and select one or more `.txt` / `.dat` files. The cancellable preview shows
+   the first ten data rows, column roles, q unit and total number of curves. It does not rewrite or split files.
+2. For each file, check **Column layout**:
+
+   | Layout | Interpretation |
+   |---|---|
+   | **Single curve: q, I, optional σ** | Column 1 is q, column 2 is I, column 3 (when present) is σ. |
+   | **Shared q: q, I₁, I₂, …** | Column 1 is shared q; each remaining column is a separate intensity curve with no supplied σ. |
+
+   A clear header such as `q I sigma` or `q I1 I2` suggests the corresponding layout. Without an unambiguous
+   header the default remains **Single curve**: numbers alone cannot distinguish σ from I₂. Select **Shared q**
+   yourself when appropriate. **Apply layout to all** is available for files with matching columns.
+   Clearly labelled error columns (such as `sigma`, `sigma1`) are protected from shared-q import.
+   Clearly labelled intensity columns cannot be used as σ; mixed layouts with an error column elsewhere
+   must be rearranged into one of the supported layouts.
+   GIMaP Analyze's marked `q I sigma pixels` exports always remain one curve; sigma and pixel counts cannot be
+   imported as intensities. Paired multi-curve errors (`q I1 sigma1 I2 sigma2`) are not supported by this importer.
+3. Choose **Use curves as**: **Independent samples (fit each curve)** is the default. Each curve starts from the
+   same Single analysis model; stage detection, odd-frame exclusion and continuity between curves are disabled.
+   **Time series (file and column order)** uses the displayed file order, then columns from left to right; check
+   that this is the intended experimental order. It enables the usual series controls (section 6.6).
+4. Set **q unit when absent from the header**. Its initial value comes from Single analysis; a unit in each
+   file's header takes priority. Click **Import N curves** to open the fixed selection in **Batch / In-situ series**.
+   Select a representative curve and **Open Frame in Single Analysis** to set up or refine the model, then return
+   and press **Start**. The fit range and left-out points also come from Single analysis: check them before Start.
+
+The list and results identify each curve by its file and intensity column. Projects preserve that exact
+selection and column mapping, including header names; reopening reports missing files or changed columns.
+The CSV and JSON exports retain the source file and selected q/I/σ columns. A mapped curve opened in Single
+analysis also keeps this source in its fit record; **Import Curves from This File…** returns to the preview.
+The original files must remain available. **Watch for new curves** is unavailable for a fixed selection;
+import again to change its files/columns, or use folder mode for watching ordinary single-curve files.
+
+Missing σ stays missing: ordinary Refine/Search uses the existing equal weighting of ln I, without inventing
+counting errors. Each imported curve keeps q, I and its supplied σ aligned by row; invalid values in one
+intensity column do not remove valid points from another curve. fit1d retains its separate uncertainty
+policy (section 6.4).
+
+Other ways to get a single curve in:
 
 1. **Open Curve…** in the command bar (`Ctrl+O` while Fitting is shown), or drop a curve file on the page.
 2. **Analyze ▸ Send to Fitting** — writes `<name>_fit_input.dat` and opens it here. The halves chosen in
@@ -2112,8 +2159,11 @@ unavailable* as the reason (section 14.3). fit1d does not use these files: it us
 *The Results step on the left (the halves and points per frame, then every frame's χ²ᵣ and values ± 1σ); on the
 right the selected frame's fit and, below it, the trend of R through the series, coloured by stage.*
 
-Every curve of a folder, fitted with the model of Single analysis. The command bar has **Choose Folder…** and
-**Start**; **Pause** and **Stop** appear while the series runs, **Save** once frames are fitted.
+The **Batch / In-situ series** tab fits curves with the model of Single analysis. The command bar has
+**Import Curves…**, **Choose Folder…** and **Start**; **Pause** and **Stop** appear while fitting runs,
+**Save** once frames are fitted. **Import Curves…** supports selected files and shared-q tables (section 6.1).
+The folder and time-series controls below apply to folder mode and ordered sequences; independent imported
+samples use the same initial model and have no stage detection, odd-frame exclusion or continuity.
 
 Folder discovery, unit-header inspection, previews, detector-frame cuts and watching run in the background.
 While the initial list and preview are prepared, **Start** is unavailable and **Stop** cancels preparation.
@@ -2138,13 +2188,14 @@ current frame finish before pausing. Completed results stay available.
   written next to the data. The step says whose set-up is used; while Analyze has no frame set up it says why and
   Start does not begin. **Take Analyze's Set-up** takes Analyze's set-up as it is now and cuts the frames again.
   The JSON record keeps Analyze's settings.
-- The curves are listed in counting order of their names (`frame_2` before `frame_10`) and numbered 1, 2, 3 … in
+- Folder curves are listed in counting order of their names (`frame_2` before `frame_10`) and numbered 1, 2, 3 … in
   that order. **Frames**: first – last of these numbers, and **Every** n-th.
 - **The unit of q**: every curve file is read in the unit its header states, else in Single analysis' **q unit of
   files without one in their header** (its value at Start, kept for the run). The step counts the listed curves by
   unit and where it came from — *2 curves: q in Å⁻¹, as their header states*; *1 curves: q in nm⁻¹, no unit in
   their header (Single analysis ▸ Curve ▸ File)* — and names a file whose header states both units: it is not
   fitted, and its frame says why. Detector frames are cut in Å⁻¹.
+  Imported selections instead keep the fallback unit chosen in the import preview; each file's header still wins.
 - **Watch for new curves**: while the series runs, the folder is looked at every 2 s and curves written into it
   (for example by Analyze during a measurement) are fitted too. A new file is taken once its size and time are the
   same at two looks; a file changed after it was read is fitted again; a folder that cannot be read is waited for.
@@ -2199,8 +2250,9 @@ current frame finish before pausing. Completed results stay available.
 - A series of GIWAXS I(q) curves gets the note of section 6.1 again after the run, with how many fits are poor.
 - **Run Log** (folded) at the bottom.
 
-A curve that cannot be read or fitted is marked ✗ in the list, and the series goes on. The folder and the choices
-are kept for the next session and in a project.
+A curve that cannot be read or fitted is marked ✗ in the list, and the series goes on. The folder or exact imported
+selection, its units and choices are kept for the next session and in a project. Mapped sources keep their column
+indices and names in result records; indices in JSON are zero-based, while the preview labels columns from 1.
 
 ## 7. Compare and stages
 
@@ -2257,7 +2309,7 @@ The criteria and the stopping rule are in [Physics and Methods, chapter 11](Phys
   does what it says. The plot under the map can show *Change along the series*. **Export ▸ Stages as Table…**
   writes every frame's stage, odd or not and why, with a JSON record of the method. The reasons are given on the
   map's own axis (χ, qy or q). **Options ▸ Stages compare** chooses the whole x axis or the range the map shows.
-- **Fitting ▸ In-situ series** (section 6.6): the listed curves are compared as they will be fitted (with the
+- **Fitting ▸ Batch / In-situ series** (section 6.6): the listed curves are compared as they will be fitted (with the
   halves, range and left-out points of Single analysis). The list is coloured by stage, **Leave out the odd
   frames** is on by default, and **Each frame starts from** offers **The previous result; the Single model at
   each new stage**.
@@ -3147,8 +3199,8 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Process with AI, when the AI exports | the curves as Export, and `<stem>_assistant.json` | `gimap_analysis/` next to the data | `<stem>_analysis.json`, `<stem>_assistant.json` |
 | Fitting ▸ Single analysis ▸ **Save ▸ Data and Fit…** | `<curve>_fit.csv` + `<curve>_fit.json` (written as a pair) | the folder saved to last, else the folder a curve was last opened from, else the curve's folder | the JSON (model, method, range, left-out points; fit1d keeps its own curves and warnings) |
 | Fitting ▸ **Save ▸ Plot…**, **Save ▸ Model…** | `<curve>_fit.png` / `.svg`; `<curve>_model.json` | as above | none; the model file |
-| Fitting ▸ In-situ series ▸ **Save ▸ Table of Every Frame…** | `series_fit.csv` + `series_fit.json` | the series folder | the JSON (`gimap_series_fit_v2`: start model, halves and where they came from, every frame's state and reason; for detector frames Analyze's settings) |
-| Fitting ▸ In-situ series ▸ **Trend Plot…**, **Selected Frame's Plot…** | `series_trend_<value>.png` (the table column of the value, for example `series_trend_chi2_reduced.png`) and `series_frame_<NNNNN>.png` (the frame counted from 1, five digits), or `.svg`; `series_trend.png`, `series_frame.png` while nothing is fitted | the series folder | none (the title in the picture names the value or frame) |
+| Fitting ▸ Batch / In-situ series ▸ **Save ▸ Table of Every Frame…** | `series_fit.csv` + `series_fit.json` | the series folder | the JSON (`gimap_series_fit_v2`: start model, halves and where they came from, every frame's state and reason; for detector frames Analyze's settings) |
+| Fitting ▸ Batch / In-situ series ▸ **Trend Plot…**, **Selected Frame's Plot…** | `series_trend_<value>.png` (the table column of the value, for example `series_trend_chi2_reduced.png`) and `series_frame_<NNNNN>.png` (the frame counted from 1, five digits), or `.svg`; `series_trend.png`, `series_frame.png` while nothing is fitted | the series folder | none (the title in the picture names the value or frame) |
 | **Tools ▸ 1D Predict — Fit Many Curves…**, and Fitting's *AI proposal (1D Predict)* | a run folder: `request.json`, `batch_summary.json` …, a subfolder per curve with `solutions.json`, `fitting_curves.csv` … | `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the GIMaP user data folder; never removed automatically | `request.json` |
 | Compare ▸ **Save ▸ Table of Every Series… / Table of Every Frame…** | `compare_series.csv` / `compare_frames.csv` + `.json` | the folder of the first series added from files, else the folder a series was last added from (while it is there), else your home folder | `#` header lines and the JSON |
 | Compare ▸ **Change Plot… / Paths Plot… / End States Plot…** | `compare_*.png` or `.svg` | as above | none |
@@ -3233,6 +3285,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | Limitation | What to do |
 |---|---|
 | **Cancellation does not forcibly interrupt low-level file reading.** A Compare directory scan or single-table read, or the current Fitting read, may still be returning. | Press Cancel or Stop once; the request is registered, and the unfinished import is discarded or the frame fit skipped when reading returns. Completed series and results stay (sections 6.6, 7.2). |
+| **Curve import supports `q I [sigma]` and `q I1 I2 …`, not interleaved `q I1 sigma1 I2 sigma2`.** A headerless three-column table cannot identify its meaning by numbers alone. | Choose the layout explicitly in **Import Curves…** (section 6.1). For separate errors per curve, provide one `q I sigma` file per curve. Fixed imported selections cannot watch for new columns/files. |
 | **Fitting does not read `.csv` curves**, although Analyze exports its curves as CSV. | Use **Send to Fitting**, or open the `<name>_fit_input.dat` that Analyze writes; `.dat` and `.txt` files with columns `q I [σ]` open too. |
 | **Geometry Calibration can put a wrong solution first.** With the standard on **Auto Detect** and no estimated distance, another standard can come first; a wrong **Estimated distance** misleads also with the right standard, and the field can hold a distance you did not type (section 4.3). | Choose the standard yourself when you know it. Leave **Estimated distance** on *Optional* or type the approximate distance of your set-up; set a number you did not type back to 0 unless it is that distance. Before **Apply**, check the distance and that the drawn rings lie on the rings of the image. |
 | **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them (section 10.5). | Calibrate such an image with pyFAI and give GIMaP the `.poni`: name it in the notes, or put it beside the frames (section 4.2). |

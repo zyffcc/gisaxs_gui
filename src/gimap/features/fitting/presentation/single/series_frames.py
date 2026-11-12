@@ -39,7 +39,7 @@ class FitSeriesFramesMixin:
     # -- listing ------------------------------------------------------------------------------
 
     def frames_mode(self) -> bool:
-        return self.frames_bridge is not None and is_frame_pattern(self.pattern_edit.text())
+        return not self.imported_mode() and self.frames_bridge is not None and is_frame_pattern(self.pattern_edit.text())
 
     # -- reading ------------------------------------------------------------------------------
 

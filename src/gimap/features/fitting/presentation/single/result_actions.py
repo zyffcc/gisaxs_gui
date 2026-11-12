@@ -10,13 +10,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from PyQt5.QtWidgets import QAction
 
 from src.gimap.app.presentation.i18n import tr, trf
 
 from .fit1d_review import note_text
+from ...application.models import InSituSourceFrame
 
 DONE = "Done automatically:"
 FIXED = "{names}: fixed in Model. Fit Again to keep them there."
@@ -109,7 +108,11 @@ class ResultActionsMixin:
         curve = self.session.curve
         if curve is None or not curve.path:
             return
-        path = Path(curve.path)
+        source = InSituSourceFrame.from_token(curve.path)
+        if source.columns is not None:
+            self.importCurvesRequested.emit([str(source.path)])
+            return
+        path = source.path
         pattern = f"*{FIT_INPUT_SUFFIX}" if path.name.endswith(FIT_INPUT_SUFFIX) else f"*{path.suffix}"
         self.seriesRequested.emit(str(path.parent), pattern)
 
@@ -118,6 +121,12 @@ class ResultActionsMixin:
         native = session.native_result if session.result is None else None
         fitted = session.result is not None or native is not None or bool(session.solutions)
         running = self.fit_running()
+        selected = (session.curve is not None and session.curve.path
+                    and InSituSourceFrame.from_token(session.curve.path).columns is not None)
+        self.series_button.setText(tr("Import Curves from This File…" if selected
+                                      else "Fit Every Curve in This Folder…"))
+        self.series_button.setToolTip(tr("Review the columns of this file before batch fitting." if selected else
+                                        "In-situ series: every curve of this folder, each fitted from this model"))
         self.next_refine_button.setVisible(bool(native is not None or (session.solutions and session.result is None)))
         self.fit_again_button.setVisible(fitted)
         self.series_button.setVisible(fitted and bool(session.curve is not None and session.curve.path)

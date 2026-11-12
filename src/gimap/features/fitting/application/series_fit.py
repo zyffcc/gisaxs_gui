@@ -290,7 +290,8 @@ def file_name(path, folder=None) -> str:
     The listing follows links, so a frame may lie below the place ``folder`` leads to and not below
     ``folder`` as it was chosen (a linked folder, a linked mount point, a mapped drive): both are tried."""
     frame = InSituSourceFrame.from_token(str(path))  # a frame past the first of a detector source: “· frame N”
-    suffix = f" · frame {frame.frame_index + 1}" if frame.frame_index else ""
+    suffix = (frame.display_name[len(frame.path.name):] if frame.columns is not None else
+              f" · frame {frame.frame_index + 1}" if frame.frame_index else "")
     if folder:
         for root in (Path(folder), _resolved(str(folder))):
             try:
@@ -318,13 +319,23 @@ def series_table(frames: list[FrameFit], model: FitModel, *, details: bool = Fal
     (``MADE_OF_COLUMNS``) — for the table that is saved. A frame without a fit has NaN values.
     ``folder``: the folder of the series, for the ``file`` column (``file_name``)."""
     columns = parameter_columns(model)
+    with_sources = details and any(InSituSourceFrame.from_token(frame.path).columns is not None for frame in frames)
     header = ["frame", "file", "chi2_reduced", "log_rmse", "converged"] + (list(MADE_OF_COLUMNS) if details else [])
+    if with_sources:
+        header += ["source_file", "q_column_1based", "intensity_column_1based", "sigma_column_1based", "sigma_source"]
     for _path, name in columns:
         header += [name, f"{name}_error"]
     rows = []
     for frame in sorted(frames, key=lambda item: item.index):
         row = [frame.index + 1, file_name(frame.path, folder)]
         made_of = [frame.points, frame.halves_used] if details else []
+        if with_sources:
+            source = InSituSourceFrame.from_token(frame.path)
+            mapping = source.columns
+            made_of += ([str(source.path), mapping.q + 1, mapping.intensity + 1,
+                         "" if mapping.sigma is None else mapping.sigma + 1,
+                         "none" if mapping.sigma is None else "column"] if mapping is not None else
+                        [str(source.path), "", "", "", "legacy file layout"])
         if not frame.ok:
             rows.append(row + [math.nan, math.nan, False] + made_of + [math.nan] * (2 * len(columns)))
             continue
@@ -369,6 +380,7 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
                        "averaged": frame.averaged, "left_out": frame.left_out,
                        "q_unit": frame.q_unit, "q_unit_from": frame.q_unit_from,
                        "weighting": frame.result.weighting if frame.result is not None else "",
+                       **curve_source_record(frame.path),
                        **({"resolved": list(frame.resolved)} if frame.resolved else {}),
                        **({"followed_previous": bool((frame.native.get("fit1d_follow") or {}).get("followed"))}
                           if frame.native and frame.native.get("fit1d_follow") else {})} for frame in ordered],
@@ -378,6 +390,15 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
     if listing is not None:
         record["listing"] = dict(listing)
     return record
+
+
+def curve_source_record(token: str) -> dict:
+    """Explicit table selections keep their real file and zero-based mapping, also when a fit failed."""
+    source = InSituSourceFrame.from_token(token)
+    if source.columns is None:
+        return {}
+    return {"curve_source": {"path": str(source.path), "columns": source.columns.to_dict(),
+                             "sigma_source": "none" if source.columns.sigma is None else "column"}}
 
 
 __all__ = ["FrameFit", "FrameStages", "MADE_OF_COLUMNS", "POOR_CHI2", "STARTS", "STATES", "SeriesSettings", "TOO_FEW_POINTS",

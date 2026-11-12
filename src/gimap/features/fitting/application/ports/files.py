@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from pathlib import Path
+from ..curve_sources import CurveTablePreview
 
 from ..models import (
     ExportCurveFigureRequest,
@@ -25,6 +26,8 @@ class InSituFrameRepository(Protocol):
 
 class CurveRepository(Protocol):
     def load(self, request: LoadCurveRequest) -> CurveData: ...
+
+    def inspect_table(self, path: Path) -> CurveTablePreview: ...
 
     def stated_q_unit(self, path: Path) -> str | None:
         """The unit of q the file's header states (``"angstrom"`` / ``"nm"``), ``None`` when it states none;

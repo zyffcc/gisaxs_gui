@@ -60,6 +60,8 @@ from ..application.single_fit import to_manual
 from .single.page import FitPage
 from .single.series_page import FitSeriesPage
 from .workspace_context import FittingContextContainer
+from .workspace_imports import CurveImportMixin
+from ..application.models import InSituSourceFrame
 
 LEGACY_Q_VIEW = {"mean": "average", "both": "fold", "positive": "positive", "negative": "negative_abs"}
 
@@ -118,7 +120,7 @@ def _embed_in_section(card) -> None:
     card.style().polish(card)
 
 
-class FittingWorkspace:
+class FittingWorkspace(CurveImportMixin):
     """Single analysis (one curve) and In-situ series (many curves) of Fitting."""
 
     SETTINGS_KEY = "fitting_splitter_sizes_v3"
@@ -143,6 +145,8 @@ class FittingWorkspace:
         self.series_page.editModelRequested.connect(lambda: self.show_context("single"))
         self.series_page.openFrameRequested.connect(self._frame_in_single)
         self.fit_page.seriesRequested.connect(self._series_from_single)
+        self.fit_page.importCurvesRequested.connect(self.import_curves)
+        self.series_page.importCurvesRequested.connect(self.import_curves)
         self._observed: dict[str, tuple] = {}
         self._note_closed: Optional[tuple] = None
         self._note_run: Optional[tuple] = None
@@ -385,8 +389,12 @@ class FittingWorkspace:
         """Whether Analyze wrote the curve file as the I(q) of a GIWAXS frame. A file that does not say how
         its points were measured (a curve from elsewhere) is taken as it is."""
         path = str(path)
+        source = InSituSourceFrame.from_token(path)
+        if source.columns is not None and source.columns.sigma is None:
+            # Shared-q imports cannot be Analyze exports. Do not reread their entire table for this note.
+            return False
         try:
-            stamp = os.stat(path).st_mtime_ns
+            stamp = os.stat(source.path).st_mtime_ns
         except OSError:
             return False
         known = self._observed.get(path)
@@ -456,7 +464,7 @@ class FittingWorkspace:
             if page.method() in ("shapes", "fit1d"):  # particle searches are for a GISAXS cut
                 page.set_method("local")
             page.show_step("curve")
-            name = Path(path).name
+            name = InSituSourceFrame.from_token(path).display_name
             page._status(lambda: trf(GIWAXS_OPENED, name=name))
         self._sync_note()
 
@@ -468,13 +476,14 @@ class FittingWorkspace:
         """A frame of the series, with its fitted model, in Single analysis — on the points the series
         fitted (its halves, range and left-out points), so that the next Start reads the same settings."""
         self.show_context("single")
-        settings = getattr(self.series_page, "_settings", None)
+        has_run = bool(self.series_page.fits or self.series_page.running)
+        settings = self.series_page._settings if has_run else self.series_page._stage_settings()
         page = self.fit_page
-        if not page.open_curve(path, settings.side if settings is not None else page.session.side):
+        unit = self.series_page._unit if has_run else self.series_page.source_unit_setting()
+        if not page.open_curve(path, settings.side, unit=unit):
             return
-        if settings is not None:
-            page.session.excluded = set(settings.excluded)
-            page.set_range(settings.q_range, record=False)  # with the curve: Undo then brings back the model
+        page.session.excluded = set(settings.excluded)
+        page.set_range(settings.q_range, record=False)  # with the curve: Undo then brings back the model
         if model is not None:
             page.set_model(model)
             page._status(lambda: tr("The range and left-out points of the series are kept; the series now starts from "
@@ -503,6 +512,9 @@ class FittingWorkspace:
         if self._legacy is None:
             return
         try:
+            curve = self.fit_page.session.curve
+            if curve is not None:
+                self._legacy._imported_1d_q_unit = curve.source_unit
             self._legacy.import_1d_file(path, q_view=LEGACY_Q_VIEW.get(self.fit_page.session.side, "fold"))
         except Exception as exc:  # the former page only; Single analysis itself has the curve
             self.fit_page._log(trf(LEGACY_CURVE_FAILED, error=exc))

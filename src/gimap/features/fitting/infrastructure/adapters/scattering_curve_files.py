@@ -137,6 +137,8 @@ def load_xy_any(path: str, options: LoadOptions = LoadOptions()) -> XYData:
     q_list: List[float] = []
     I_list: List[float] = []
     e_list: List[float] = []
+    has_error_column = any(len(_split(line, delim)) >= 3 for line in lines[start_idx:]
+                           if _looks_like_data(line, options.comment_prefixes))
     bad_lines = 0
 
     for ln in lines[start_idx:]:
@@ -153,10 +155,11 @@ def load_xy_any(path: str, options: LoadOptions = LoadOptions()) -> XYData:
         try:
             q = _to_float(parts[0], treat_comma_decimal)
             I = _to_float(parts[1], treat_comma_decimal)
+            error = _to_float(parts[2], treat_comma_decimal) if has_error_column else None
             q_list.append(q)
             I_list.append(I)
-            if len(parts) >= 3:
-                e_list.append(_to_float(parts[2], treat_comma_decimal))
+            if error is not None:
+                e_list.append(error)
         except Exception:
             bad_lines += 1
             continue
@@ -170,8 +173,6 @@ def load_xy_any(path: str, options: LoadOptions = LoadOptions()) -> XYData:
     err: Optional[np.ndarray]
     if e_list:
         err = np.asarray(e_list, dtype=float)
-        n = min(len(q), len(I), len(err))
-        q, I, err = q[:n], I[:n], err[:n]
     else:
         err = None
         if options.assume_poisson_err:

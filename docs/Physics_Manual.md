@@ -1697,12 +1697,36 @@ This changes the ownership and restoration of the input, not the model equations
 
 ### 9.1 Points that are fitted
 
+**Text-table input.** The import preview shows the header and the first ten rows of a `.dat` or `.txt` file.
+The confirmed single-curve layout reads `q I [sigma]`; the shared-q layout reads `q I1 I2 …` as independent
+curves, each paired with the first q column. Clear column names such as `q I1 I2` can suggest the second layout,
+but an unlabelled three-column table is ambiguous and keeps the single-curve default until the user chooses
+otherwise. Analyze's marked exports and its `q I sigma pixels` schema remain one curve; the sigma and pixel-count
+columns cannot be imported as separate intensities. Named uncertainty columns (including `sigma1`, `sigma2`)
+also disable shared-q splitting. Interleaved `q I1 sigma1 I2 sigma2 …` tables are not supported as multiple
+curves; single-curve import can read their first q/I/sigma triple only. The unit stated in the file takes precedence over the
+setting for files without a unit; contradictory unit declarations remain an error.
+Explicit import refuses to use a named intensity column as sigma; a table such as `q I1 I2 sigma` must be
+rearranged into a supported layout instead of silently using I2 as the uncertainty.
+
+Reading keeps each selected q, I and optional sigma from the same row, then removes rows whose selected values
+are missing, invalid or non-finite. A missing I1 does not remove a valid I2 at that q when the table retains its
+column positions (for example, an empty comma-separated cell or `nan`). A shortened whitespace-separated row
+cannot identify the missing column and is omitted instead of shifting the remaining values. Missing sigma
+stays absent: importing a shared-q table does not synthesize counting errors. The legacy single-curve reader
+also rejects a malformed sigma row as a whole; a later sigma can no longer become paired with an earlier q/I.
+Valid legacy q/I/sigma values are unchanged.
+
+Each imported curve keeps its physical source file, selected column indexes, original column names when present,
+table width and whether sigma came from a column. Projects and fit records retain this mapping. A changed header
+or missing selected column is reported and requires importing the table again; it is not silently remapped.
+
 A curve with signed q (a horizontal GISAXS cut) is fitted on one of: the mean of both halves (6.16)–(6.17), both halves on
 `abs(q)`, or one half. Then the fitting range and points left out apply. Of these points only `abs(q) > 0` with finite
 values are kept. σ is used only when every kept point has a finite `σ > 0`; otherwise σ is dropped for the whole
 curve, and `I > 0` is required.
 
-Implementation: `src/gimap/features/fitting/application/single_fit.py`, `src/gimap/features/fitting/domain/fit_engine.py`
+Implementation: `src/gimap/features/fitting/application/curve_sources.py`, `src/gimap/features/fitting/infrastructure/adapters/curve_tables.py`, `src/gimap/features/fitting/infrastructure/adapters/scattering_curve_files.py`, `src/gimap/features/fitting/application/single_fit.py`, `src/gimap/features/fitting/domain/fit_engine.py`
 
 ### 9.2 The intensity model
 

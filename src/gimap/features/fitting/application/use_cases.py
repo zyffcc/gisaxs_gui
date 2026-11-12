@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from .curve_units import q_unit_read
+from .curve_sources import CurveTablePreview
 from .errors import FileOperationError
 from .models import (
     ExportCurveFigureRequest,
@@ -77,6 +78,10 @@ class LoadCurve:
     def stated_q_unit(self, path) -> str | None:
         """The unit of q a curve file states in its header (``CurveRepository.stated_q_unit``)."""
         return self._repository.stated_q_unit(Path(path))
+
+    def inspect_table(self, path) -> CurveTablePreview:
+        """Preview a curve table without choosing an ambiguous layout or altering its numbers."""
+        return self._repository.inspect_table(path)
 
 
 class ExportFitResult:

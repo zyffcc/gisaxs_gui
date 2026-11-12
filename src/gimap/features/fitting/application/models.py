@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import base64
+import json
 from pathlib import Path
 from typing import Generic, Literal, TypeVar
 
 import numpy as np
 
 from .errors import FileOperationError
+from .curve_sources import ColumnMapping
 from ..domain import CurveData
 
 
@@ -31,6 +34,7 @@ class OperationResult(Generic[T]):
 
 InSituSourceKind = Literal["curve"]
 _INSITU_FRAME_MARKER = "::gimap-frame="
+_CURVE_COLUMN_MARKER = "::gimap-curve="
 CURVE_SUFFIXES = (".dat", ".txt")
 """1D curve files an in-situ series can fit (Analyze writes ``*_fit_input.dat``)."""
 UNSUPPORTED_CURVE = ("Fitting reads .dat and .txt curves (q, I, σ). For a cut from Analyze, use Send to Fitting or "
@@ -59,24 +63,43 @@ class InSituSourceFrame:
     path: Path
     frame_index: int = 0
     source_kind: InSituSourceKind = "curve"
+    columns: ColumnMapping | None = None
 
     def __post_init__(self) -> None:
-        if self.frame_index < 0:
+        if type(self.frame_index) is not int or self.frame_index < 0:
             raise ValueError("frame_index must be non-negative")
+        if self.columns is not None and not isinstance(self.columns, ColumnMapping):
+            raise ValueError("Invalid curve column mapping.")
 
     @property
     def token(self) -> str:
         path = str(self.path)
+        if self.columns is not None:
+            record = {"version": 1, "frame_index": self.frame_index, "columns": self.columns.to_dict()}
+            payload = json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            return path + _CURVE_COLUMN_MARKER + base64.urlsafe_b64encode(payload).decode("ascii")
         if self.frame_index == 0:
             return path
         return f"{path}{_INSITU_FRAME_MARKER}{self.frame_index}"
 
     @property
     def display_name(self) -> str:
+        if self.columns is not None:
+            return f"{self.path.name} · {self.columns.intensity_name} (column {self.columns.intensity + 1})"
         return self.path.name
 
     @classmethod
     def from_token(cls, token: str) -> "InSituSourceFrame":
+        path_text, marker, payload = str(token).rpartition(_CURVE_COLUMN_MARKER)
+        if marker:
+            try:
+                record = json.loads(base64.b64decode(payload.encode("ascii"), altchars=b"-_", validate=True))
+                if not isinstance(record, dict) or type(record.get("version")) is not int or record["version"] != 1:
+                    raise ValueError("Unsupported curve source token version.")
+                return cls(Path(path_text), frame_index=record.get("frame_index", 0),
+                           columns=ColumnMapping.from_dict(record["columns"]))
+            except (ValueError, KeyError, TypeError, UnicodeError) as exc:
+                raise ValueError("Invalid curve source token.") from exc
         path_text, marker, frame_text = str(token).rpartition(_INSITU_FRAME_MARKER)
         if not marker:
             return cls(path=Path(token))

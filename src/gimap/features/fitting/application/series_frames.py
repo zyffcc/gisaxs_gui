@@ -47,6 +47,8 @@ def matching(items, pattern: str) -> list:
 def frame_name(token: str) -> str:
     """``film_00012.cbf``, or ``run.nxs · frame 4`` for a frame past the first of its source (1-based)."""
     frame = InSituSourceFrame.from_token(token)
+    if frame.columns is not None:
+        return frame.display_name
     return frame.path.name if frame.frame_index == 0 else f"{frame.path.name} · frame {frame.frame_index + 1}"
 
 

@@ -27,6 +27,8 @@ from ...application.single_fit import (
 from ..views.step_widgets import fit_to_rows, show_line
 from .fit1d_review import note_text
 from .session import path_name
+from ...application.models import InSituSourceFrame
+from ...application.curve_sources import source_stem
 
 
 def _item(text: str, tip: str = "") -> QTableWidgetItem:
@@ -333,7 +335,8 @@ class FitResultsMixin:
         of this curve, else the home folder (Save Plot and Save Model also work with no curve)."""
         curve = self.session.curve
         folder = start_folder(self._remembered("save_folder"), self._remembered("folder"),
-                              Path(curve.path).parent if curve is not None and curve.path else None)
+                              InSituSourceFrame.from_token(curve.path).path.parent
+                              if curve is not None and curve.path else None)
         path, _ = QFileDialog.getSaveFileName(self, tr(title), str(folder / name), filters)
         if path:
             self._remember(save_folder=str(Path(path).parent))
@@ -341,7 +344,7 @@ class FitResultsMixin:
 
     def _stem(self) -> str:
         curve = self.session.curve
-        return Path(curve.name).stem if curve is not None else "fit"
+        return (source_stem(curve.path) if curve.path else Path(curve.name).stem) if curve is not None else "fit"
 
     def export_data_dialog(self, path=None):
         data = self._data()

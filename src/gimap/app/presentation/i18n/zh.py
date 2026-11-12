@@ -8,6 +8,7 @@ the newer Analyze tools are in ``zh_analyze.py``.
 from .zh_analyze import ANALYZE_ZH
 from .zh_analyze_runtime import ANALYZE_RUNTIME_ZH
 from .zh_fitting import FITTING_ZH
+from .zh_curve_import import CURVE_IMPORT_ZH
 from .zh_compare import COMPARE_ZH
 from .zh_night import NIGHT_ZH
 from .zh_assistant import ASSISTANT_ZH
@@ -561,6 +562,7 @@ ZH = {
 
 ZH.update(ANALYZE_ZH)
 ZH.update(FITTING_ZH)
+ZH.update(CURVE_IMPORT_ZH)
 ZH.update(NIGHT_ZH)
 ZH.update(COMPARE_ZH)
 ZH.update(SHELL_ZH)

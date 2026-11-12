@@ -78,6 +78,10 @@ class FitPageView(FitStepsView):
         self.load_model_action.setToolTip("A model saved from Fitting (JSON), for this curve")
         open_menu.addAction(self.load_model_action)
         self.open_button.setMenu(open_menu)
+        self.import_curves_button = QPushButton("Import Curves…", bar)
+        self.import_curves_button.setObjectName("fitImportCurvesButton")
+        self.import_curves_button.setToolTip(
+            "Batch fit selected TXT/DAT files: preview q I sigma or shared-q columns q I1 I2 …")
         self.undo_button = QToolButton(bar)
         self.undo_button.setObjectName("fitUndoButton")
         self.undo_button.setText("Undo")
@@ -112,7 +116,7 @@ class FitPageView(FitStepsView):
         self.export_plot_action = export_menu.addAction("Plot…")
         self.save_model_action = export_menu.addAction("Model…")
         self.export_button.setMenu(export_menu)
-        for widget in (self.open_button, self.undo_button, self.redo_button):
+        for widget in (self.open_button, self.import_curves_button, self.undo_button, self.redo_button):
             row.addWidget(widget)
         row.addWidget(_separator(bar))
         row.addWidget(self.curve_chip, 1)
