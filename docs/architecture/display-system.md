@@ -31,6 +31,10 @@ The pages shown — Single analysis (`single/page.py`, layout `views/fit_page_vi
 (`single/series_page.py`, layout `views/fit_series_view.py`) — draw their curves, residuals and trends with the
 shared pyqtgraph `CurvePlot`, like Analyze.
 
+`single/plotting.py` owns the single-curve layers and component visibility. It passes per-curve `LineStyle`
+and `auto_range` choices to `CurvePlot`: data and total model set the default limits, optional components
+retain their original values, and visibility changes preserve the current view.
+
 Matplotlib remains where the older views still are: the 1D Predict window (`workflow_v5_dialog.py`), the classic
 single-curve page and the former in-situ page, which are still built but never shown
 (`fitting/presentation/workspace.py`; the in-situ heatmap with its colour bar is in

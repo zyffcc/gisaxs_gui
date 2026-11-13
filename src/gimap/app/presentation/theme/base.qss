@@ -1496,8 +1496,9 @@ QWidget[gimapStep="true"]:focus {
     border: 1px solid @focus@;
 }
 
-/* The "⋯" menu of a narrow plot header: dots only, no arrow. */
-QToolButton#curvePlotMore::menu-indicator {
+/* These menu buttons already have their own dots or arrow. */
+QToolButton#curvePlotMore::menu-indicator,
+QToolButton#fitComponentOptions::menu-indicator {
     image: none;
     width: 0px;
 }

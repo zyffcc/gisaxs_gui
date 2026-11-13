@@ -1855,13 +1855,24 @@ the residuals below.*
 The page is laid out like Analyze: the steps on the left, each saying where it stands, and the plots on the right.
 
 - **The curve plot**: the points (paler outside the fitting range), the model over the whole curve and the
-  **orange band** of the fitting range (drag it). **Terms** also draws each part of the model: every particle,
-  the background and the resolution peak.
+  **orange band** of the fitting range (drag it). **Components** (off initially) shows the additive intensity
+  contributions: particles, the constant background and any beam-tail/low-q term. The total model is a stronger
+  solid line; contributions use thinner dashed or dotted lines. Use the arrow beside **Components** to choose
+  individual contributions.
 - **The residual plot** below: (I − model)/σ, or ln(I/model) when the file has no σ.
 - **The command bar**: **Open Curve…** (its menu: **Load Model…**), **Undo / Redo** (`Ctrl+Z` /
   `Ctrl+Shift+Z`: every change of the model, the fitting range or the left-out points is one step, and so is every
   fit, solution used and model loaded), **Fit** (`Ctrl+Return`), **Stop** and **Save** (**Data and Fit…**,
   **Plot…**, **Model…**).
+
+Showing or hiding contributions keeps the current x/y limits, including a manual zoom. By default, automatic
+limits and **Reset** use only the data and total model; small component tails can lie below the visible range.
+To inspect those tails, select **Include components in auto range** in the component menu. Changing this option
+resets the view immediately, and subsequent **Reset** uses the same choice. On log axes, zero or negative values
+cannot be drawn; they are not shifted, clipped to a positive floor or normalised. These choices only affect the
+display: fits, residuals and **Save ▸ Data and Fit…** retain the complete model and all contributions. Contributions
+are intensities that add to the model, not particle fractions. For a batch result, choose **Open Frame in Single
+Analysis** to inspect its contributions here.
 
 **1. Curve**
 
@@ -2065,7 +2076,7 @@ brings the previous model back).
 
 **Reading the result**
 
-- The plotted total, the **Terms**, the residuals and **Results** show fit1d's own result: χ²/point, its native
+- The plotted total, the **Components**, the residuals and **Results** show fit1d's own result: χ²/point, its native
   parameter values, errors, states and equivalent-solution ranges. Parameter warnings are in the *state* column;
   hover for ranges.
 - **Save ▸ Data and Fit…** keeps the native total, the components, the effective σ and the warnings in the CSV

@@ -19,7 +19,7 @@ from .curve_plot_extras import (
     CompactHeader, CursorReadout, EmptyOverlay, PlotMenu, axis_symbol, curves_text, folded_label,
 )
 from .curve_plot_parts import (  # noqa: F401 - names other modules import from here
-    CURVE_COLORS, LEGEND_ALPHA, SIDE_TIPS, SIDES, Marker, _halves, _has_both_signs, _Title, legend_text,
+    CURVE_COLORS, LEGEND_ALPHA, SIDE_TIPS, SIDES, LineStyle, Marker, _halves, _has_both_signs, _Title, legend_text,
     readable_log_ticks, second_shade,
 )
 from .curve_plot_window import CurveWindow
@@ -119,6 +119,8 @@ class CurvePlot(QWidget):
         self._source_colors: Optional[list] = None
         self._source_markers: Optional[list] = None
         self._source_legend: Optional[list] = None
+        self._source_line_styles: Optional[list] = None
+        self._source_auto_range: Optional[list] = None
         self._curves: list[tuple[str, np.ndarray, np.ndarray]] = []
         """The curves as shown (after choosing a half); ``figure_state`` and the log range use them."""
         self._colors: list[str] = []
@@ -161,7 +163,7 @@ class CurvePlot(QWidget):
             self.reset_button.setIcon(tool_icon("fit", foreground))
             self.marks_button.setIcon(tool_icon("marks", foreground))
         if self._source:
-            self._redraw()  # legend labels take the new colour
+            self._redraw(preserve_view=True)  # legend labels take the new colour; keep the user's zoom
         self._style_legend()
 
     def _style_legend(self) -> None:
@@ -220,10 +222,12 @@ class CurvePlot(QWidget):
         if self._source:
             self._redraw()
 
-    def _redraw(self) -> None:
+    def _redraw(self, *, preserve_view: bool = False) -> None:
         """The curves of the last ``set_curves`` again, with their colours, markers and legend choice; what a
         caller added to them (``add_extra``) stays, and the caller is told (``curvesRedrawn``)."""
-        self._draw(self._source, self._source_colors, self._source_markers, self._source_legend)
+        view = self._hold_view() if preserve_view else None
+        self._draw(self._source, self._source_colors, self._source_markers, self._source_legend,
+                   self._source_line_styles, self._source_auto_range, view)
         self.curvesRedrawn.emit()
 
     def add_extra(self, item):
@@ -320,7 +324,9 @@ class CurvePlot(QWidget):
         QApplication.clipboard().setText(curves_text(curves, state["x_label"], state["y_label"], x_labels=x_labels))
 
     def set_curves(self, curves: Sequence[tuple[str, np.ndarray, np.ndarray]], colors: Optional[Sequence[str]] = None,
-                   *, markers: Optional[Sequence] = None, legend: Optional[Sequence[bool]] = None) -> None:
+                   *, markers: Optional[Sequence] = None, legend: Optional[Sequence[bool]] = None,
+                   line_styles: Optional[Sequence[Optional[LineStyle]]] = None,
+                   auto_range: Optional[Sequence[bool]] = None, preserve_view: bool = False) -> None:
         """``curves`` is a sequence of ``(name, x, y)``; non-positive y is hidden in log mode.
 
         ``colors``: one colour per curve (e.g. the colour of the region it comes from); by default
@@ -328,14 +334,26 @@ class CurvePlot(QWidget):
         ``True`` for dots, a pyqtgraph symbol (``"x"``, ``"s"`` …) or a ``Marker`` (symbol, size, hollow).
         ``legend``: per curve, ``False`` for no legend entry (a mark that belongs to a curve already in the
         legend: where a path starts, an odd frame); the curve keeps its name for Copy Data.
+        ``line_styles``: optional width, dash and drawing order per curve. ``auto_range``: per curve,
+        whether it determines automatic axis limits (including Reset); default ``True``. Excluding a
+        curve only affects the view, never its stored or drawn values. ``preserve_view`` keeps the current
+        ranges and automatic-range settings, useful for toggling supporting curves without losing a zoom.
 
         A name is shown in the legend whole and in the interface language (``legend_text``); a figure of the
         plot (``plot_export.export_plot``) has it as given here, as its axis titles are.
         """
+        view = self._hold_view() if preserve_view else None
         self.clear_curves()  # with what a caller added to the curves of before
-        self._draw(list(curves), colors, markers, legend)
+        self._draw(list(curves), colors, markers, legend, line_styles, auto_range, view)
 
-    def _draw(self, curves, colors, markers, legend) -> None:
+    def _hold_view(self) -> tuple:
+        """Freeze both axes before removing items can trigger pyqtgraph's automatic range."""
+        view = self.plot.getViewBox()
+        state = (view.viewRange(), list(view.autoRangeEnabled()))
+        view.disableAutoRange()
+        return state
+
+    def _draw(self, curves, colors, markers, legend, line_styles, auto_range, view) -> None:
         import pyqtgraph as pg
 
         from ..i18n import tr
@@ -345,6 +363,8 @@ class CurvePlot(QWidget):
         self._source_colors = None if colors is None else list(colors)
         self._source_markers = None if markers is None else list(markers)
         self._source_legend = None if legend is None else list(legend)
+        self._source_line_styles = None if line_styles is None else list(line_styles)
+        self._source_auto_range = None if auto_range is None else list(auto_range)
         source_colors = [
             (colors[index] if colors is not None and index < len(colors) and colors[index] else CURVE_COLORS[index % len(CURVE_COLORS)])
             for index in range(len(curves))
@@ -360,7 +380,8 @@ class CurvePlot(QWidget):
                 mirrored = half == "|−|"  # dashed, in a second shade: the two halves on |x| tell apart
                 self._curves.append((shown_name, shown_x, shown_y))
                 self._colors.append(second_shade(source_colors[index]) if mirrored else source_colors[index])
-                self._styles.append(Qt.DashLine if mirrored else Qt.SolidLine)
+                spec = line_styles[index] if line_styles is not None and index < len(line_styles) else None
+                self._styles.append(spec or LineStyle(style=Qt.DashLine if mirrored else Qt.SolidLine))
                 self._origin.append(index)
                 self._shown_halves.append(half)
         for index, (name, x, y) in enumerate(self._curves):
@@ -379,28 +400,41 @@ class CurvePlot(QWidget):
                 spec = marker if isinstance(marker, Marker) else Marker(marker if isinstance(marker, str) else "o",
                                                                         4.0 if marker is True or marker == "o" else 7.0)
                 dot = spec.symbol == "o" and not spec.hollow and spec.size <= 4.0  # measured points: no outline
-                item = self.plot.plot(x[keep], y[keep], pen=None, symbol=spec.symbol, symbolSize=spec.size,
+                item = pg.PlotDataItem(x[keep], y[keep], pen=None, symbol=spec.symbol, symbolSize=spec.size,
                                       symbolPen=None if dot else pg.mkPen(self._colors[index], width=1.4),
                                       symbolBrush=pg.mkBrush(0, 0, 0, 0) if spec.hollow else self._colors[index],
                                       name=entry)
             else:
                 x, y = break_at_gaps(x, y)  # no line across bins without pixels
-                pen = pg.mkPen(self._colors[index], width=1.6, style=self._styles[index])
-                item = self.plot.plot(x, y, pen=pen, name=entry, connect="finite")
+                spec = self._styles[index]
+                pen = pg.mkPen(self._colors[index], width=spec.width, style=spec.style)
+                item = pg.PlotDataItem(x, y, pen=pen, name=entry, connect="finite")
                 item.setCurveClickable(True, width=8)
                 origin = self._origin[index]
                 item.sigClicked.connect(lambda _item, *_args, origin=origin: self.curveClicked.emit(origin))
+            self.plot.addItem(item, ignoreBounds=not self._in_auto_range(index))
+            item.setZValue(self._styles[index].z)
             self._items.append(item)
             if entry is not None and self.legend.items:  # what a figure of the plot says: the name as given
                 self.legend.items[-1][1].export_text = legend_text(name)
         self._style_legend()
-        self.plot.enableAutoRange()
-        if self.log_check.isChecked():
-            self._robust_log_range()
+        if view is None:
+            self.reset_view()
+        else:
+            ranges, automatic = view
+            box = self.plot.getViewBox()
+            box.setRange(xRange=ranges[0], yRange=ranges[1], padding=0)
+            for axis, enabled in enumerate(automatic):
+                box.enableAutoRange(axis, enabled)
         self._overlays()
 
+    def _in_auto_range(self, index: int) -> bool:
+        source = self._origin[index]
+        return self._source_auto_range is None or source >= len(self._source_auto_range) \
+            or bool(self._source_auto_range[source])
+
     def reset_view(self) -> None:
-        """Every curve in view again (after a zoom or a pan)."""
+        """Restore automatic limits, using the curves selected by ``auto_range``."""
         self.plot.enableAutoRange()
         if self.log_check.isChecked():
             self._robust_log_range()
@@ -412,7 +446,9 @@ class CurvePlot(QWidget):
         from scipy.ndimage import median_filter
 
         lows, highs = [], []
-        for _name, _x, y in self._curves:
+        for index, (_name, _x, y) in enumerate(self._curves):
+            if not self._in_auto_range(index):
+                continue
             y = np.asarray(y, dtype=np.float64)
             y = y[np.isfinite(y) & (y > 0)]
             if y.size < 3:
@@ -486,4 +522,4 @@ class CurvePlot(QWidget):
         self._window.hide()
 
 
-__all__ = ["CURVE_COLORS", "CurvePlot", "Marker"]
+__all__ = ["CURVE_COLORS", "CurvePlot", "LineStyle", "Marker"]

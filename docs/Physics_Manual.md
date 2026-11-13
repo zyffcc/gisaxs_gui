@@ -1739,6 +1739,12 @@ and exponent of the beam-tail term, and k an overall factor fixed at 1 by defaul
 q_z and DWBA terms are not modelled. The beam-tail term is additive, not a resolution convolution (a Gaussian smearing
 function exists in the code but the model does not use it). With w ≤ 0 or ν ≤ 0 the term is 1.
 
+The plot's **Components** are these additive intensities: `k·Int_i·P_i·S_i`, the scaled beam-tail term and
+`BG`; their sum is the total model. They are not normalised population fractions. A current fit1d result instead
+displays the native engine's scaled particle, background and low-q contributions, which sum to its native total;
+the mapped manual model is not used to reconstruct them. Component visibility and axis limits do not change the
+fit, residuals or numerical exports. Zero and negative values are omitted only from logarithmic display.
+
 Implementation: `src/gimap/features/fitting/domain/fit_model.py`
 
 ### 9.3 Size distributions

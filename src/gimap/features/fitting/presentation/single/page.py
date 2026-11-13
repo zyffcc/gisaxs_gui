@@ -18,7 +18,6 @@ from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import QFileDialog, QMenu, QShortcut, QWidget
 
 from src.gimap.app.presentation.components import show_toast
-from src.gimap.app.presentation.components.curve_plot import CURVE_COLORS
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.task_runner import TaskRunner
 
@@ -29,13 +28,10 @@ from ...application.single_fit import (
     FAMILIES,
     SIDES,
     Curve,
-    evaluate,
     fit_scales,
-    left_out_points,
     model_from_dict,
     model_from_solution,
     model_to_dict,
-    residuals,
 )
 from ..views.fit_page_view import FitPageView
 from ..views.step_widgets import show_line
@@ -47,16 +43,14 @@ from .fit1d import Fit1DPageMixin
 from .fit1d_review import Fit1DReviewMixin
 from .result_actions import ResultActionsMixin
 from .model_editor import FitModelEditor
-from .points import measured_series
+from .plotting import FitPlotMixin
 from .results import FitResultsMixin
 from .run import FitRunMixin
 from .session import FitSession, Solution, model_label
 
 CURVE_FILTER = "Curves ({});;All files (*)".format(" ".join(f"*{suffix}" for suffix in CURVE_SUFFIXES))
 """The curve files the reader takes (``application.CURVE_SUFFIXES``: .dat, .txt)."""
-MODEL_POINTS = 600
 PREFERENCES_KEY = "fitting_single_page"
-DATA_COLOR, OUTSIDE_COLOR, MODEL_COLOR, LEFT_OUT_COLOR = "#2563eb", "#94a3b8", "#f97316", "#dc2626"
 STARTING_MODEL = "Starting model, not set up yet"
 """The Model step while its model is the starting guess (nobody set it up, nor was it fitted)."""
 
@@ -69,7 +63,7 @@ def _saved_source(token):
 
 
 class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunMixin, FitResultsMixin,
-              FitExclusionMixin, Fit1DPageMixin, Fit1DReviewMixin, ResultActionsMixin, CurveUnitMixin, CurveInfoMixin):
+              FitExclusionMixin, Fit1DPageMixin, Fit1DReviewMixin, ResultActionsMixin, CurveUnitMixin, CurveInfoMixin, FitPlotMixin):
     curveOpened = pyqtSignal(str)
     """The file of the curve now on the page (In-situ series takes its set-up from it)."""
     batchRequested = pyqtSignal()
@@ -103,6 +97,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             button.hide()
         self.residual_plot.legend.hide()
         self.setAcceptDrops(True)  # a curve file dropped here opens (``drops.py``)
+        self.setup_component_plot()
         self._connect()
         self.setup_fit1d()
         self.setup_run()
@@ -129,7 +124,6 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.plot.windowChanged.connect(self._band_dragged)
         self.plot.log_x_check.toggled.connect(self._log_x_toggled)
         self.plot.log_check.toggled.connect(lambda _on: self._redraw())
-        self.terms_check.toggled.connect(lambda _on: self._redraw())
         self.show_ranges_check.toggled.connect(self.model_editor.set_show_ranges)
         self.model_editor.edited.connect(self._model_edited)
         self.batch_button.clicked.connect(self.batchRequested)
@@ -362,7 +356,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
 
     # -- the plot -------------------------------------------------------------------------
 
-    def _render_all(self) -> None:
+    def _render_all(self, *, preserve_view: bool = False) -> None:
         session = self.session
         curve = session.curve
         self.curve_chip.setText(curve.name if curve is not None else "")  # none: the plot says how to open one
@@ -376,80 +370,9 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self._fill_curve_card()
         result = session.result if session.result_is_current() else None  # errors only of a fit that still holds
         self.model_editor.set_model(session.model, result.errors if result else {}, result.at_bounds if result else ())
-        self._redraw()
+        self._redraw(preserve_view=preserve_view)
         self._refresh_steps()
         self.render_results()
-
-    def _redraw(self) -> None:
-        session = self.session
-        full, data = (None, None) if session.curve is None else (session.all_points(), self._data())
-        curves, colors, markers = [], [], []
-        if full is not None and full.q.size:
-            inside = np.zeros(full.q.size, bool) if data is None else np.isin(full.q, data.q)
-            left_out = left_out_points(full.q, session.excluded) if session.excluded \
-                else np.zeros(full.q.size, bool)  # as the fit takes the names (the nearest point, half a step)
-            outside = ~inside & ~left_out
-            if outside.any():
-                curves.append((tr("outside the range"), full.q[outside], full.intensity[outside]))
-                colors.append(OUTSIDE_COLOR)
-                markers.append(True)
-            if left_out.any():
-                curves.append((tr("left out"), full.q[left_out], full.intensity[left_out]))
-                colors.append(LEFT_OUT_COLOR)
-                markers.append("x")
-            for name, q, intensity, color in measured_series(session, data):  # both halves on |q|: two colours
-                curves.append((tr(name), q, intensity))
-                colors.append(color)
-                markers.append(True)
-            q_model = np.geomspace(max(full.q.min(), 1e-6), full.q.max(), MODEL_POINTS)
-            try:
-                if session.native_is_current():
-                    native = session.native_result["curves"]
-                    q_model = np.asarray(native["q_nm_inv"], float)
-                    total, parts = native["model"], native.get("components", {})
-                else:
-                    total, parts = evaluate(session.model, q_model, parts=True)
-            except (ValueError, FloatingPointError):
-                total, parts = None, {}
-            if total is not None:
-                label = ("fit1d v2 model" if session.native_is_current() else "manual starting model"
-                         if session.native_result is not None and session.result is None else "model")
-                curves.append((tr(label), q_model, total))
-                colors.append(MODEL_COLOR)
-                markers.append(False)
-                if self.terms_check.isChecked():
-                    for index, (name, values) in enumerate(parts.items()):
-                        curves.append((tr(name), q_model, values))
-                        colors.append(CURVE_COLORS[(index + 2) % len(CURVE_COLORS)])
-                        markers.append(False)
-        self.plot.set_curves(curves, colors, markers=markers)
-        self._draw_band(full)
-        self._draw_residuals(data)
-
-    def _draw_band(self, full) -> None:
-        if full is None or not full.q.size:
-            self.plot.hide_window()
-            return
-        low, high = self.session.q_range or (float(full.q.min()), float(full.q.max()))
-        self.plot.show_window(low, high)
-
-    def _draw_residuals(self, data) -> None:
-        if self._draw_fit1d_residuals():
-            return
-        if data is None or not data.q.size:
-            self.residual_plot.set_curves([])
-            return
-        try:
-            values = residuals(self.session.model, data)
-        except (ValueError, FloatingPointError):
-            values = np.full(data.q.size, np.nan)
-        weighted = data.sigma is not None
-        self.residual_plot.set_labels("|q| (nm⁻¹)", "Δ/σ" if weighted else "Δ ln I")  # short: the plot is low
-        tip = self._residuals_tip(weighted)  # with σ, how the points are weighted (``curve_info``)
-        self.residual_plot.setToolTip(tip)
-        self.residual_plot.plot.getAxis("left").setToolTip(tip)
-        self.residual_plot.set_curves([("0", data.q[[0, -1]], np.zeros(2)), (tr("residual"), data.q, values)],
-                                      [OUTSIDE_COLOR, DATA_COLOR], markers=[False, True])
 
     # -- status, log, preferences ---------------------------------------------------------
 
@@ -571,7 +494,8 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         """After a switch of the interface language (``i18n.language_changed``): what this page composed with
         ``tr`` at run time — the steps, the curve card, the model's cards, the legends, the results — again."""
         self.model_editor.refresh_language()
-        self._render_all()
+        self._render_all(preserve_view=True)
+        self._refresh_residual_tooltip()
         if self._status_text is not None:
             self.status_label.setText(self._status_text())
         self.refresh_progress()  # a fit that runs: its line again (run.py)

@@ -50,6 +50,15 @@ def readable_log_ticks(min_val: float, max_val: float, size: float, std_ticks) -
 
 
 @dataclass(frozen=True)
+class LineStyle:
+    """Display-only line hierarchy; ``z`` also applies to measured markers."""
+
+    width: float = 1.6
+    style: Qt.PenStyle = Qt.SolidLine
+    z: float = 0.0
+
+
+@dataclass(frozen=True)
 class Marker:
     """A curve drawn as points of one symbol (``set_curves(markers=…)``): a pyqtgraph symbol (``"o"``, ``"s"``,
     ``"x"`` …), its size in pixels, and ``hollow`` for an outline only (e.g. where a path starts)."""
@@ -133,5 +142,5 @@ def legend_text(name: str) -> str:
     return html.escape(str(name), quote=False)
 
 
-__all__ = ["CURVE_COLORS", "LEGEND_ALPHA", "Marker", "SIDES", "SIDE_TIPS", "legend_text", "readable_log_ticks",
+__all__ = ["CURVE_COLORS", "LEGEND_ALPHA", "LineStyle", "Marker", "SIDES", "SIDE_TIPS", "legend_text", "readable_log_ticks",
            "second_shade"]

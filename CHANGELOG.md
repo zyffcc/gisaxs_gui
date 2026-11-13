@@ -12,6 +12,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- Fitting's **Components** control shows additive particle, background and beam-tail/low-q contributions with
+  separate visibility choices and thinner dashed/dotted lines below the total model. Toggling contributions
+  preserves the current view. Automatic limits use data and total model by default; **Include components in
+  auto range** explicitly resets the view to include visible contributions. Fits, residuals and numerical exports
+  are unchanged; zero and negative contributions remain absent from logarithmic display.
 - Fitting adds **Import Curves…** for selected TXT/DAT files and shared-q tables (`q I1 I2 …`), with column
   preview, explicit layout and q-unit choices. Existing `q I [sigma]` inputs and Analyze's `q I sigma pixels`
   exports keep their roles. Independent samples start from the same model without time continuity or odd-frame

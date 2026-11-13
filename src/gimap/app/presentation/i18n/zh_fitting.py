@@ -16,6 +16,16 @@ FITTING_ZH = {
     "Terms": "各项",
     "Also draw each term of the model: the particles, the background, the resolution peak":
         "同时画出模型的每一项：颗粒、背景、分辨率峰",
+    "Show additive model contributions without changing the current view.":
+        "显示模型各项的强度贡献，保持当前视图范围。",
+    "Choose components and axis limits": "选择组分与坐标轴范围",
+    "Include components in auto range": "组分参与自动缩放",
+    "Reset the view using the visible components as well as the data and total model.":
+        "按数据、总模型和当前显示的组分重置视图范围。",
+    "Reset to the data and total model; include visible components when selected in the component menu.":
+        "按数据和总模型重置视图；在组分菜单中勾选后，也包含当前显示的组分。",
+    "low-q term": "低 q 项",
+    "beam-tail term": "光束尾项",
     "not fitted": "未拟合的点",
     "model": "模型",
     "residual": "残差",
