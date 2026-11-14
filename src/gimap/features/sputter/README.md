@@ -21,7 +21,10 @@ line with **Edit**, **Open Result…**):
   Matplotlib only).
   `infrastructure/client.py` `locate_package`: the environment variable `GIMAP_SPUTTER_CLIENT`, else the folder the
   user chose (Details ▸ Analyze options ▸ **Choose Folder…**, kept in the preferences), else `utils/sputter_client`
-  of the program folder. Without it the main screen says so, with **Choose Folder…**; **Open Result…** works anyway.
+  of the program folder. A named folder (environment or chosen) that is not a package gives way to the program
+  folder's package, with the reason in `ClientPackage.note` (the Analysis package line, marked, shows it); only
+  without that package is it the problem. Without any the main screen says so, with **Choose Folder…**;
+  **Open Result…** works anyway.
 - **Analyze** (one background task, `ClientService.analyze`, TaskRunner key `sputter_client`): what the package's
   `run.cmd analyze` does, in GIMaP's own Python (`ClientPackageRunner`: `-u -m iampred.analyze --frames … --label
   gui_<scan>_<hash> --metal … --substrate … (--rate-nm-s | --qcm-nm-s) … --alpha-i … --out … --mode … --workers N

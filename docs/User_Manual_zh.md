@@ -1965,7 +1965,8 @@ fit1d 有自己的物理模型（数目加权的截断高斯尺寸分布、Hosem
 **需要什么。** 不需要额外准备：分析包随 GIMaP 提供（程序文件夹的 `utils/sputter_client`；一个有 `code` 和 `models` 的
 文件夹，在 GIMaP 自己的 Python 里运行，用 NumPy、SciPy 和 Matplotlib，不需要 PyTorch）。要改用另一个分析包，用
 **选择文件夹…**（Choose Folder…，在**详情 ▸ 分析选项 ▸ 分析包**（Details ▸ Analyze options ▸ Analysis package））选它的文件夹，
-或把环境变量 `GIMAP_SPUTTER_CLIENT` 设为它；两者都优先于随 GIMaP 提供的那个。完全没有分析包时主屏会说明；
+或把环境变量 `GIMAP_SPUTTER_CLIENT` 设为它；两者都优先于随 GIMaP 提供的那个。这样指定的文件夹如果不是分析包（后来移走了，
+或选错了文件夹），就跳过它，改用随 GIMaP 提供的分析包，**分析包**那一行标出提示，原因在它的悬停提示里。完全没有分析包时主屏会说明；
 **打开结果…**（Open Result…）照样可以显示以前分析过的文件夹。
 
 **输入栏**，从左到右：
@@ -2836,7 +2837,7 @@ Claude API：`pip install anthropic`、密钥、**测试连接**（Test Connecti
 **溅射 ▸ 分析。** 输入栏里的任务状态会说明是什么让它停下：
 
 - *没有找到分析包*，或 *… 不是分析包：缺少 …*：程序文件夹里没有完整的 `utils/sputter_client`（随 GIMaP 提供的分析包），
-  或选的文件夹不是分析包。用**选择文件夹…**（Choose Folder…）选分析包的文件夹（里面有 `code` 和 `models` 的那个），
+  而且也没有选别的分析包。用**选择文件夹…**（Choose Folder…）选分析包的文件夹（里面有 `code` 和 `models` 的那个），
   或把环境变量 `GIMAP_SPUTTER_CLIENT` 设为它（8.1 节）。
 - *请给出沉积速率（nm/s）*、*请给出光子能量或波长* 之类：输入栏或几何里缺一个值；输入栏下面那一行写出还要填写的几何，
   **编辑**（Edit）显示这些字段。

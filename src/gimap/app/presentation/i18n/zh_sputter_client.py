@@ -174,6 +174,8 @@ SPUTTER_CLIENT_ZH = {
     "variable GIMAP_SPUTTER_CLIENT to it.":
         "没有找到分析包。请选择它的文件夹（里面有 code 和 models），或把环境变量 GIMAP_SPUTTER_CLIENT 设为这个文件夹。",
     "{folder} is not an analysis package: {missing} is missing.": "{folder} 不是分析包：缺少 {missing}。",
+    "{folder} is not an analysis package ({missing} is missing): the one that comes with GIMaP is used.":
+        "{folder} 不是分析包（缺少 {missing}）：改用随 GIMaP 提供的分析包。",
     "The analysis stopped with an error ({status}); its last lines are under Details.":
         "分析出错结束（{status}）；最后几行在“详情”里。",
     "Stopped. Frames that were read completely are kept and reused by the next run of the same request.":

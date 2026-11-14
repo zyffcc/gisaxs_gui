@@ -187,10 +187,11 @@ class SputterClientMixin:
         else:
             words = text(PACKAGE_LINE.get(package.source, "{folder}"), folder=str(package.home))
         problem = package.problem if package is not None else ""
+        note = package.note if package is not None else ""  # the folder named is not a package: the program folder's runs
         # a folder has no spaces: a zero-width space after each separator lets the line wrap inside the column
         self.package_label.setText(words.replace("\\", "\\\u200b").replace("/", "/\u200b"))
-        self.package_label.setToolTip(message_text(problem) if problem else words)
-        warning_style(self.package_label, package is None or bool(problem))
+        self.package_label.setToolTip(message_text(problem or note) if problem or note else words)
+        warning_style(self.package_label, package is None or bool(problem) or bool(note))
         self._show_client_empty()
         self._show_static_package()  # static frames run through the same package
 

@@ -30,7 +30,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   **Details ▸ Static Frames (after deposition)** analyses samples measured after their deposition (a folder, a CBF
   file or a zip archive) one at a time into a series, which the main screen shows along the nominal thickness.
 - The analysis package of Sputter ▸ Analyze and Static Frames comes with GIMaP (`utils/sputter_client`): nothing
-  has to be chosen. **Choose Folder…** or `GIMAP_SPUTTER_CLIENT` still use another package.
+  has to be chosen. **Choose Folder…** or `GIMAP_SPUTTER_CLIENT` still use another package; a folder named so that is
+  not an analysis package (chosen once and moved since, or the wrong folder) is passed over for the one that comes
+  with GIMaP, and the Analysis package line says why. It is under the MIT License (`utils/sputter_client/LICENSE`).
 - Sputter ▸ Analyze, limitations: the analysis package analyses only the pairs of metal and substrate it has a
   network for; its values are
   model values that were not compared with an independent measurement of the sample; a step of the analysis does

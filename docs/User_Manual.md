@@ -2459,8 +2459,10 @@ the main screen shows is in its [section 12.16](Physics_Manual.md#1216-analyze-w
 folder; a folder with `code` and `models` that runs in GIMaP's own Python, with NumPy, SciPy and Matplotlib, no
 PyTorch). To use another package, choose its folder with **Choose Folder…** (**Details ▸ Analyze options ▸
 Analysis package**) or set the environment variable `GIMAP_SPUTTER_CLIENT` to it; both take precedence over the
-one that comes with GIMaP. Without any package the main screen says so; **Open Result…** shows a folder analysed
-before all the same.
+one that comes with GIMaP. A folder named so that is not an analysis package (moved since, or the wrong folder) is
+passed over: the package that comes with GIMaP runs, and the **Analysis package** line, marked, says why in its
+tooltip. Without any package the main screen says so; **Open Result…** shows a folder analysed before all the
+same.
 
 **The input bar**, from the left:
 
@@ -3554,7 +3556,7 @@ activate the right Python environment and run `pip install -r requirements.txt`.
 **Sputter ▸ Analyze.** The job status in the input bar says what stopped it:
 
 - *The analysis package was not found*, or *… is not an analysis package: … is missing*: the program folder has no
-  complete `utils/sputter_client` (the package that comes with GIMaP), or the folder chosen is not a package. Choose
+  complete `utils/sputter_client` (the package that comes with GIMaP), and no package was chosen. Choose
   the package's folder with **Choose Folder…** (the folder that holds `code` and `models`), or set the environment
   variable `GIMAP_SPUTTER_CLIENT` to it (section 8.1).
 - *Give the deposition rate (nm/s)*, *Give the photon energy or the wavelength* and the like: a value of the

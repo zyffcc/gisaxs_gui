@@ -437,6 +437,27 @@ def test_a_real_package_folder_is_checked_and_remembered(tmp_path, monkeypatch):
     _close(again)
 
 
+def test_a_chosen_folder_that_is_no_package_gives_way_to_the_bundled_one(tmp_path, monkeypatch):
+    """A folder chosen once that is no package (another research folder, or moved since) does not block the page when
+    the program folder has its package: that one runs, and the package line, marked, says why."""
+    from src.gimap.features.sputter.infrastructure import ClientPackageRunner
+
+    bundled = package_folder(tmp_path / "program" / "utils" / "sputter_client")
+    wrong = tmp_path / "program" / "utils" / "other_research_code"
+    (wrong / "code").mkdir(parents=True)
+    preferences = InMemoryUserPreferencesRepository()
+    page = _page(tmp_path, client=ClientPackageRunner(lambda: tmp_path / "user", local=bundled), preferences=preferences)
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *_a, **_k: str(wrong))
+    page.package_button.click()
+    assert str(bundled) in _shown(page.package_label) and "(in the program folder)" in _shown(page.package_label)
+    assert "the one that comes with GIMaP is used" in page.package_label.toolTip()
+    assert page.package_label.property("gimapRole") == "warning"
+    _close(page)
+    again = _page(tmp_path, client=ClientPackageRunner(lambda: tmp_path / "user", local=bundled), preferences=preferences)
+    assert again.client_empty.title_label.text() == "No result yet"  # not "The analysis package is needed"
+    _close(again)
+
+
 def test_a_long_package_folder_wraps_inside_the_column_of_details(tmp_path, monkeypatch):
     """A folder has no spaces: unbroken, its line made Details wider than its column and cut off its fields."""
     from src.gimap.features.sputter.infrastructure import ClientPackageRunner

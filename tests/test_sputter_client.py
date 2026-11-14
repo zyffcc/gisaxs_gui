@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from src.gimap.features.sputter.application import (CLIENT_INCOMPLETE, CLIENT_MISSING, CLIENT_NO_MAIN, CLIENT_PROBLEMS,
+from src.gimap.features.sputter.application import (CLIENT_FALLBACK, CLIENT_INCOMPLETE, CLIENT_MISSING, CLIENT_NO_MAIN, CLIENT_PROBLEMS,
                                                     STATIC_PROBLEMS, STATIC_UNSUPPORTED, ClientFailed, ClientMissing,
                                                     ClientProgress, ClientRequest, ClientService, ClientStarted,
                                                     StaticDefaults, StaticRequest, StaticService, Stopped,
@@ -186,10 +186,17 @@ def test_the_package_is_the_environments_then_the_chosen_then_the_program_folder
     assert locate_package(chosen, bundled).source == "chosen" and locate_package(chosen, bundled).home == chosen
     monkeypatch.setenv(CLIENT_OVERRIDE, str(named))
     assert locate_package(chosen, bundled).source == "environment"
-    monkeypatch.setenv(CLIENT_OVERRIDE, str(nowhere))  # a named folder that is no package is said, not skipped
-    broken = locate_package(chosen, bundled)
+    monkeypatch.setenv(CLIENT_OVERRIDE, str(nowhere))  # a named folder that is no package: the program folder's runs
+    instead = locate_package(chosen, bundled)
+    assert (instead.home, instead.source, instead.problem, instead.identity) == (bundled, "bundled", "", found.identity)
+    assert instead.note == CLIENT_FALLBACK.format(folder=nowhere, missing="code/iam/iampred/analyze.py")
+    broken = locate_package(chosen, nowhere)  # and none in the program folder either: the problem is said
     assert broken.problem == CLIENT_INCOMPLETE.format(folder=nowhere, missing="code/iam/iampred/analyze.py")
     monkeypatch.delenv(CLIENT_OVERRIDE)
+    other = tmp_path / "other_research_code"  # chosen once: a folder of other research code, not the package
+    (other / "code").mkdir(parents=True)
+    assert locate_package(other, bundled).home == bundled and other.name in locate_package(other, bundled).note
+    assert locate_package(other, nowhere).problem.startswith(str(other))
     (chosen / "MANIFEST.json").write_text('{"invented": "another version"}', encoding="utf-8")
     assert locate_package(chosen, bundled).identity != found.identity
     unversioned = package_folder(tmp_path / "unversioned", manifest=False)

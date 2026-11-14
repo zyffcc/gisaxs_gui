@@ -39,7 +39,7 @@ import numpy as np
 from src.gimap.shared.geometry.conventions import index_center_from_canonical
 from src.gimap.shared.version import SOFTWARE
 
-from ..application import (CLIENT_INCOMPLETE, CLIENT_MISSING, ENGINE_FOLDER, LABEL_PREFIX, MASK_UNREADABLE,
+from ..application import (CLIENT_FALLBACK, CLIENT_INCOMPLETE, CLIENT_MISSING, ENGINE_FOLDER, LABEL_PREFIX, MASK_UNREADABLE,
                            ClientPackage, ClientProgress, ClientRequest, ClientRun)
 from ..domain import (ANALYSIS_FILE, BAD_ARRAYS, BAD_MAIN, MAIN_FILE, MAIN_FOLDER, NO_ARRAYS, NO_MAIN, ClientResult,
                       ClientWindow, WindowPatterns, client_result, window_patterns)
@@ -79,22 +79,26 @@ def _package_identity(home: Path) -> str:
         return "unversioned-" + digest.hexdigest()
 
 
+def _missing_part(home: Path) -> Optional[Path]:
+    return next((part for part in PACKAGE_PARTS if not (home / part).exists()), None)
+
+
 def locate_package(chosen: Optional[Path] = None, local: Path = LOCAL_PACKAGE) -> ClientPackage:
-    """The package to run: the environment's, the user's, the program folder's — the first that is named (a named
-    folder that is not a package is the problem said, not skipped)."""
+    """The package to run: the environment's, the user's, the program folder's — the first that is named. A named
+    folder that is not a package (a folder chosen once and moved since, or the wrong one) gives way to the package of
+    the program folder, with the reason in ``note``; without that package it is the problem said."""
     override = os.environ.get(CLIENT_OVERRIDE, "").strip()
-    if override:
-        home, source = Path(override), "environment"
-    elif chosen:
-        home, source = Path(chosen), "chosen"
-    elif Path(local).is_dir():
-        home, source = Path(local), "bundled"
-    else:
+    named = (Path(override), "environment") if override else (Path(chosen), "chosen") if chosen else None
+    if named is None and not Path(local).is_dir():
         return ClientPackage(None, "", CLIENT_MISSING)
-    missing = next((part for part in PACKAGE_PARTS if not (home / part).exists()), None)
-    if missing is not None:
-        return ClientPackage(home, source, CLIENT_INCOMPLETE.format(folder=home, missing=missing.as_posix()))
-    return ClientPackage(home, source, "", _package_identity(home))
+    home, source = named or (Path(local), "bundled")
+    missing = _missing_part(home)
+    if missing is None:
+        return ClientPackage(home, source, "", _package_identity(home))
+    if named is not None and Path(local).is_dir() and _missing_part(Path(local)) is None:
+        return ClientPackage(Path(local), "bundled", "", _package_identity(Path(local)),
+                             CLIENT_FALLBACK.format(folder=home, missing=missing.as_posix()))
+    return ClientPackage(home, source, CLIENT_INCOMPLETE.format(folder=home, missing=missing.as_posix()))
 
 
 def _file_digest(path: Path) -> str:

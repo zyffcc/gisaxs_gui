@@ -4,7 +4,7 @@ from ..domain import (NO_SOLUTION, ClientEntry, ClientQuantity, ClientResult, Cl
 from ..domain import (FIELD_DISTANCES, SIDE_DISTANCES, Grain, PorousSpace, RealSpace, arrangement, clusters,
                       layer_particles, pore_density, porous_space, real_space, side_grains, spanning, top_grains,
                       visible)
-from .client import (CLIENT_FAILED, CLIENT_INCOMPLETE, CLIENT_MISSING, CLIENT_NO_MAIN, CLIENT_PROBLEMS, CLIENT_STOPPED,
+from .client import (CLIENT_FAILED, CLIENT_FALLBACK, CLIENT_INCOMPLETE, CLIENT_MISSING, CLIENT_NO_MAIN, CLIENT_PROBLEMS, CLIENT_STOPPED,
                      CLIENT_TEMPLATES, ENGINE_FOLDER, FILM_SUBSTRATES, LABEL_PREFIX, MASK_UNREADABLE, MODES, SUBSTRATES,
                      ClientFailed, ClientMissing, ClientPackage, ClientReader, ClientRequest, ClientRun, ClientRunner,
                      ClientService, ClientStarted)
@@ -36,7 +36,7 @@ from .use_cases import (METALS, NO_TABLE, PROBLEMS, STEP_ANALYZE, STEP_ANALYZE_O
                         deposition_end_ok, results_folder, scan_label)
 
 __all__ = [
-    "CLIENT_FAILED", "CLIENT_INCOMPLETE", "CLIENT_MISSING", "CLIENT_NO_MAIN", "CLIENT_PROBLEMS", "CLIENT_STOPPED",
+    "CLIENT_FAILED", "CLIENT_FALLBACK", "CLIENT_INCOMPLETE", "CLIENT_MISSING", "CLIENT_NO_MAIN", "CLIENT_PROBLEMS", "CLIENT_STOPPED",
     "CLIENT_TEMPLATES", "ClientEntry", "ClientFailed", "ClientMissing", "ClientPackage", "ClientProgress",
     "ClientQuantity", "ClientReader", "ClientRequest", "ClientResult", "ClientRun", "ClientRunner", "ClientService",
     "ClientStarted", "ClientWindow", "ENGINE_FOLDER", "FILM_SUBSTRATES", "LABEL_PREFIX", "MASK_UNREADABLE", "MODES",

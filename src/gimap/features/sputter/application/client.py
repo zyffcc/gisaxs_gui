@@ -46,12 +46,13 @@ CLIENT_PROBLEMS = (RATE_PROBLEM, SUBSTRATE_PROBLEM, MODE_PROBLEM, DURATION_PROBL
 CLIENT_MISSING = ("The analysis package was not found. Choose its folder (it holds code and models), or set the "
                   "environment variable GIMAP_SPUTTER_CLIENT to it.")
 CLIENT_INCOMPLETE = "{folder} is not an analysis package: {missing} is missing."
+CLIENT_FALLBACK = "{folder} is not an analysis package ({missing} is missing): the one that comes with GIMaP is used."
 CLIENT_FAILED = "The analysis stopped with an error ({status}); its last lines are under Details."
 CLIENT_STOPPED = "Stopped. Frames that were read completely are kept and reused by the next run of the same request."
 CLIENT_NO_MAIN = ("The analysis finished, but this package does not write the data of the main screen "
                   "(main/main.json): a newer package is needed. Its report is in {folder}.")
 MASK_UNREADABLE = "The mask file cannot be read: {file}"
-CLIENT_TEMPLATES = (*CLIENT_PROBLEMS, CLIENT_MISSING, CLIENT_INCOMPLETE, CLIENT_FAILED, CLIENT_STOPPED, CLIENT_NO_MAIN,
+CLIENT_TEMPLATES = (*CLIENT_PROBLEMS, CLIENT_MISSING, CLIENT_INCOMPLETE, CLIENT_FALLBACK, CLIENT_FAILED, CLIENT_STOPPED, CLIENT_NO_MAIN,
                     MASK_UNREADABLE, *CLIENT_RESULT_TEMPLATES)
 """Messages of the engine the page says in its language (the package's own lines stay as they are)."""
 
@@ -66,6 +67,8 @@ class ClientPackage:
     problem: str = ""
     identity: str = ""
     """The package's version (the SHA-256 of its ``MANIFEST.json``, else a fingerprint of its files)."""
+    note: str = ""
+    """Why the package of the program folder runs instead of the folder named (``CLIENT_FALLBACK``); "" otherwise."""
 
 
 @dataclass(frozen=True)
@@ -303,7 +306,7 @@ class ClientService:
         return self.reader.read(out)
 
 
-__all__ = ["CLIENT_FAILED", "CLIENT_INCOMPLETE", "CLIENT_MISSING", "CLIENT_NO_MAIN", "CLIENT_PROBLEMS",
+__all__ = ["CLIENT_FAILED", "CLIENT_FALLBACK", "CLIENT_INCOMPLETE", "CLIENT_MISSING", "CLIENT_NO_MAIN", "CLIENT_PROBLEMS",
            "CLIENT_STOPPED", "CLIENT_TEMPLATES", "ClientFailed", "ClientMissing", "ClientPackage", "ClientReader",
            "ClientRequest", "ClientRun", "ClientRunner", "ClientService", "ClientStarted", "ENGINE_FOLDER",
            "FILM_SUBSTRATES", "LABEL_PREFIX", "MASK_UNREADABLE", "MODES", "SUBSTRATES"]
