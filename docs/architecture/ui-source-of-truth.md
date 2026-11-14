@@ -85,8 +85,9 @@ QSS 放在应用级 `app/presentation/theme/base.qss` 或 owner 的 `presentatio
 | Prediction | controls、workspace、multi-file results、export/heatmap/trend dialogs | model-driven controls、Matplotlib canvas |
 | Fitting | Single（page、steps）、In-situ series（新页面与经典页面的序列区）、经典 Fitting 控制面、独立拟合窗口 | 动态模型参数、pyqtgraph 曲线、经典页面的 Matplotlib canvas/toolbar |
 | XRR | series extractor dialog | detector/ROI 与 XRR curve Matplotlib canvases、worker progress |
+| Sputter | page（输入栏下的两个视图与详情的布局）、main screen（输入栏、主屏、分析选项） | Matplotlib 画布（实测图与模型图、演化、尺寸趋势、文献对照、结构示意）、按时间窗建立的解的选择、JobStatus |
 
-当前共有 33 个显式 Python View（2026-10-06 核对）。`tests/test_ui_source_of_truth.py` 的
+上表是 2026-10-06 核对时的 33 个 View 加上之后登记的 Sputter（2026-11-14）；完整清单以测试为准：`tests/test_ui_source_of_truth.py` 的
 `EXPECTED_VIEWS_BY_OWNER` 维护完整 owner inventory（必须与实际文件完全一致），并阻止 `.ui`、`_generated`、
 pyuic 标记和非法 runtime/workflow 依赖重新进入仓库。Assistant 没有 `views/`：其面板和对话框在 presentation 模块里直接构建（`guided_*.py`、`panel.py`、
 `start_dialog.py` …）。

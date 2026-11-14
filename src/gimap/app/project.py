@@ -178,6 +178,9 @@ def missing(data: dict, path=None) -> list[str]:
         value = _part(data, "sputter").get(key)
         if value:
             named.append((str(value), Path(value).exists()))
+    value = _part(data, "sputter", "client").get("result_folder")  # the result of Sputter's Analyze
+    if value:
+        named.append((str(value), Path(str(value)).exists()))
     gone, seen = [], set()
     for item, there in named:
         if not there and item not in seen:

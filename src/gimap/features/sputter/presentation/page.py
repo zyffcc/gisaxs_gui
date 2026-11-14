@@ -1,15 +1,23 @@
-"""Sputter workspace: particle size R, spacing D and the metal thickness over an in-situ sputter series, and how
-far to trust them.
+"""Sputter workspace: the grains of an in-situ sputter series, time window by time window.
 
-The user chooses the scan folder and presses Predict; the model bundled with GIMaP runs in GIMaP's own
-Python (PyTorch is installed there on the first Predict). Left: Data, Sample and geometry, Predict with its
-job status, the model's environment, the result line and More options. Right: Size Trend (faint per-window points
-and the trend lines; the metal thickness), Literature (the series against published growth over the nominal
-thickness; the island height H from the q_z fringes, measured in the background), Structure Sketch, Windows and
-Reliability.
-The layout is in ``views/sputter_page_view.py``; the folder and the form in ``geometry.py``, Predict in
-``predict_flow.py``, showing a result in ``results_panel.py``, Show in Analyze (a window's frames, summed) in
-``window_menu.py``.
+**The main screen** (shown first). The input bar takes the scan folder, the metal, the substrate and the deposition
+rate; **Analyze** runs the client analysis package (``client_flow.py``). The result is shown one time window at a
+time (``client_panel.py``): the measured image beside the model image of a solution, the solutions to choose from
+(the network's candidates and the refined one), the values of the solution shown — radius, height, distance, gap,
+size distribution width, coverage — and their evolution over the scan.
+
+**Details** (the second view) holds everything else: the geometry, the options of Analyze, Static Frames (samples
+measured after their deposition, analysed one at a time into a series the main screen shows: ``static_flow.py``), and
+the earlier method —
+Predict with the model bundled with GIMaP, which runs in GIMaP's own Python (PyTorch is installed there on the first
+Predict), with its job status, the model's environment, the result line, More options and its tabs: Size Trend (faint
+per-window points and the trend lines; the metal thickness), Literature (the series against published growth over the
+nominal thickness; the island height H from the q_z fringes, measured in the background), Structure Sketch, Windows
+and Reliability.
+
+The layout is in ``views/sputter_page_view.py`` and ``views/sputter_main_view.py``; the folder and the form in
+``geometry.py``, Predict in ``predict_flow.py``, showing its result in ``results_panel.py``, Show in Analyze (a
+window's frames, summed) in ``window_menu.py``.
 """
 
 from __future__ import annotations
@@ -25,12 +33,15 @@ from src.gimap.app.presentation.task_runner import TaskRunner
 from src.gimap.app.presentation.theme.engine import theme_manager
 
 from ..application import DOWNLOAD_SIZE, SputterService
+from .client_flow import CLIENT_KEY, SputterClientMixin
+from .client_panel import ClientPanelMixin
 from .fringe_flow import FRINGES_KEY, FringeFlowMixin
 from .geometry import INSPECT_KEY, SputterGeometryMixin, warning_style
 from .literature_tab import LiteratureTab
 from .project_state import SputterProjectMixin
 from .predict_flow import PREDICT_KEY, SputterPredictMixin
 from .results_panel import SputterResultsMixin
+from .static_flow import STATIC_KEY, SputterStaticMixin
 from .sketch_view import SketchView
 from .texts import message_text, text
 from .trend_plot import TrendPlot
@@ -43,9 +54,14 @@ ENVIRONMENT_UNKNOWN = "PyTorch is checked when you press Predict"
 ENVIRONMENT_TIP = "Model: bundled with GIMaP · Python: {python}"
 
 
-class SputterPage(SputterProjectMixin, SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin, FringeFlowMixin, WindowMenuMixin,
-                  QWidget, SputterPageView):
+class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, SputterStaticMixin, SputterGeometryMixin,
+                  SputterPredictMixin, SputterResultsMixin, FringeFlowMixin, WindowMenuMixin, QWidget,
+                  SputterPageView):
     eventReceived = pyqtSignal(object)
+    clientEvent = pyqtSignal(object)
+    """A line or a step of Analyze, from its background task (delivered in the GUI thread)."""
+    staticEvent = pyqtSignal(object)
+    """The same for Analyze Sample (static frames)."""
 
     def __init__(self, service: SputterService, *, task_runner: Optional[TaskRunner] = None, preferences=None,
                  parent: Optional[QWidget] = None):
@@ -83,13 +99,20 @@ class SputterPage(SputterProjectMixin, SputterGeometryMixin, SputterPredictMixin
         self.results_picker.path_edit.setPlaceholderText(str(service.results_root()))
         self.mask_picker.browseRequested.connect(self._choose_mask)
         self.results_picker.browseRequested.connect(self._choose_results_root)
+        self._init_client()
+        self._init_static()
+        self._init_client_panel()
         self._connect_geometry()
         self._connect_predict()
         self._connect_results()
         self._connect_window_menu()
+        self._connect_client()
+        self._connect_static()
         self._empty_project_state = self.project_state()
         self._pending_project_state = None
         self._restore()
+        self._restore_client_last()
+        self._restore_static_last()
         self._metal_changed()
         self._show_status()
         self._show_environment()
@@ -98,6 +121,9 @@ class SputterPage(SputterProjectMixin, SputterGeometryMixin, SputterPredictMixin
         last = self._stored().get("last_result")
         if last:
             self.open_results(last, quiet=True)
+        last = self._stored().get("last_client_result")
+        if last:
+            self.open_client_result(last, quiet=True)
 
     # -- small pickers -------------------------------------------------------------------------------------
     def _choose_mask(self) -> None:
@@ -142,6 +168,7 @@ class SputterPage(SputterProjectMixin, SputterGeometryMixin, SputterPredictMixin
         self.literature.redraw()
         if self.result is not None:
             self.sketch.redraw()
+        self.redraw_client_plots()
 
     def refresh_language(self) -> None:
         """Run-time texts in the new interface language (the walker has translated the fixed ones)."""
@@ -153,9 +180,17 @@ class SputterPage(SputterProjectMixin, SputterGeometryMixin, SputterPredictMixin
         self.sketch.refresh_language()
         if self.result is None:
             self.literature.refresh_language()
+        self.refresh_client_language()
+        self.refresh_static_language()
+
+    def running(self) -> bool:
+        """Predict, Analyze or Analyze Sample is at work (the window asks before it closes)."""
+        return SputterPredictMixin.running(self) or self.analyzing() or self.static_analyzing()
 
     def dispose(self) -> None:
         SputterPredictMixin.dispose(self)
+        self._dispose_client()
+        self._dispose_static()
         self._stop_fringes()
         self.tasks.cancel(FRINGES_KEY)
         self.tasks.cancel(INSPECT_KEY)
@@ -165,4 +200,4 @@ class SputterPage(SputterProjectMixin, SputterGeometryMixin, SputterPredictMixin
             pass
 
 
-__all__ = ["PREDICT_KEY", "SputterPage"]
+__all__ = ["CLIENT_KEY", "PREDICT_KEY", "STATIC_KEY", "SputterPage"]

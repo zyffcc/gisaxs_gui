@@ -1,7 +1,70 @@
 # `sputter`
 
-Workspace **Sputter** (sidebar). Particle size R, centre-to-centre spacing D and the metal thickness that can be
-stated, window by window, for an in-situ sputter series on a polymer, and how far each value can be trusted.
+Workspace **Sputter** (sidebar): the structure of an in-situ sputter series, time window by time window. The page
+has two views under one input bar (scan folder, metal, substrate, deposition rate, **Analyze**, the geometry in one
+line with **Edit**, **Open Result…**):
+
+- the **main screen** (shown first): the result of **Analyze**, which runs the client analysis package — for the
+  window chosen, the measured image beside the model image of a solution, the solutions to choose from (the
+  network's candidates and the refined one, each with its fit deviation), the values of the solution shown (grain
+  radius R, height H, distance D, gap, size distribution width, coverage) and their evolution over the scan. Nothing
+  on it grades a value: solutions the data cannot tell apart are simply all offered;
+- **Details**: the geometry, the options of Analyze, and the earlier method, **Predict** with the networks bundled
+  with GIMaP — particle size R, spacing D and the metal thickness that can be stated for a series on a polymer, and
+  how far each value can be trusted — with its five tabs.
+
+## Analyze (the main screen)
+
+- **The package** is not part of GIMaP: a self-contained folder (`code`, `models`; NumPy / SciPy / Matplotlib only).
+  `infrastructure/client.py` `locate_package`: the environment variable `GIMAP_SPUTTER_CLIENT`, else the folder the
+  user chose (Details ▸ Analyze options ▸ **Choose Folder…**, kept in the preferences), else `utils/sputter_client`
+  of the program folder. Without it the main screen says so, with **Choose Folder…**; **Open Result…** works anyway.
+- **Analyze** (one background task, `ClientService.analyze`, TaskRunner key `sputter_client`): what the package's
+  `run.cmd analyze` does, in GIMaP's own Python (`ClientPackageRunner`: `-u -m iampred.analyze --frames … --label
+  gui_<scan>_<hash> --metal … --substrate … (--rate-nm-s | --qcm-nm-s) … --alpha-i … --out … --mode … --workers N
+  --data … -- --sdd-mm … (--energy-ev | --wavelength-nm) … (--beam-col … --beam-row … | --auto-centre) --roll …
+  [--mask …] [--t-dep …] [--t-sput …] [--poly-t …]`, cwd `<package>/code/iam`, `IAM_*`, `IAMPRED_MODELS`,
+  `PYTHONPATH`, `TZ`, `OMP_NUM_THREADS` set). The beam centre is entered in GIMaP's pixel coordinates and handed
+  over as pixel-centre indices (− 0.5), as for the bundled toolkit. Progress from the package's `[n/N] step ...`
+  lines (`ClientProgress`); Cancel ends the process tree.
+- **Labels and folders**: the package never imports a label twice, so the label's hash is of everything the import
+  depends on (`ClientRequest.intake_values`). Output: `<the scan's results folder>/iampred-<hash of the request, the
+  mode and the package's version>`; the same request to the same package shows the result it has. Data and work
+  folders: `<user data>/sputter_client/<package version>/data/<pixel mask>` and `…/work`. An import that was cut off
+  is removed before the next run (the package would refuse its label for ever); a finished one has the marker
+  `<label>.gimap.json`. `gimap_request.json` in the output folder records the request, the package and the command.
+- **Result** (`ClientFolderReader` → `domain/client.py`): `analysis.json`, `main/main.json` (windows with their
+  entries, `pick`, `smooth`; a window may be `{t, error}`) and `main/w_<t>.npz` (the measured image and the model of
+  every entry on cells of exit angle × q_y). The entry shown first is `smooth` (the smooth evolution over the scan),
+  else `pick` (the lowest fit deviation). A choice of the user is kept per window in `main/choices.json` (only where
+  it differs from the default; in the user data folder when the result cannot be written to).
+- **Pictures** (Matplotlib, as the rest of the page): `pattern_view.PatternPair` draws both images on the result's
+  own cells with shared axes and one logarithmic colour scale set by the measured image;
+  `evolution_view.EvolutionPlot` draws R, H, D, the gap and the coverage of the chosen entries over the scan, marks
+  the window shown and selects the window nearest to a click.
+- **Real space** (the switch Patterns | Real Space beside the window selector): `real_space_view.RealSpacePicture`
+  draws the chosen entry in place of the two images — a cut through a row of grains (substrate or polymer film,
+  the continuous base layer `base_nm`, caps of radius r and height (H − base)·r/R) and the top view of a square of
+  7 D (log-normal radii around R on a hexagonal arrangement of distance D, each shifted at random by about 0.12 D).
+  The arrangement is `domain/real_space.py` (pure Python, one seed: another window or entry changes the sizes, not
+  the dice). `base_nm` is not a shown quantity; the reader keeps it for the picture (`SKETCH_KEYS`). Grains that
+  touch form a cluster (`clusters`) drawn as one piece; a cluster across the view has percolated (`spanning`,
+  `arrangement`: islands, coalescing, network) and is drawn darker; a line above the picture says the arrangement,
+  or the continuous layer and the grains on it. A porous TiO₂ entry is drawn from where its metal sits
+  (`porous_space`: the package's `porous_geometry` keys): a cross-section of the layer to scale — particles, the pore
+  metal as a band along its Gaussian in depth, the cap on a share of the tops — and the top of one particle enlarged
+  (cap thickness, clusters). An entry without any of this says why.
+- **Porous substrate** (`ClientResult.porous`): the tiles and the evolution show the island radius (relative), the
+  width, the island, cap and film shares and the two correlation lengths of the metal in the pores.
+- **Static frames** (Details ▸ Static Frames, `static_flow.py`, `views/sputter_static_view.py`): one sample measured
+  after its deposition is analysed into a series (`StaticService` in `application/client_static.py`,
+  `StaticPackageRunner` in `infrastructure/client_static.py`: `-u -m iampred.static --frames … --label …
+  --nominal-nm … --out <series> …`, the package's own geometry for static frames unless a field is filled in,
+  `IAM_STATIC_DATA` = `<user data>/sputter_client/static/<series id>`). The series is shown like a scan, one
+  sample in the place of a time window, along the nominal thickness. `gimap_series.json` in the series folder
+  records what each sample was analysed from; the same name with other inputs replaces the sample.
+
+## Predict (Details: the earlier method)
 
 - **Predict** (one background task, `SputterService.predict`): check PyTorch in GIMaP's own Python (a subprocess
   import) → install it with pip when it is missing (`PipInstaller`: `requirements-sputter.txt`, the installed
@@ -70,12 +133,18 @@ stated, window by window, for an in-situ sputter series on a polymer, and how fa
   continuous film without particles. Cu is read with the Ag model and labelled “for reference only”.
 
 Layers: `domain` (rows, series, reliability report from translatable templates, literature method, sketch, the frames
-of a window), `application` (`SputterService`, `AnalyzeRequest`, progress, environment, scan and window ports),
-`infrastructure` (`BundledToolkit`, `PipInstaller` + `pip_output`, `process`, `CbfHeaderInspector`,
-`StructureFolderReader`, `BinnedWindowReader`), `presentation` (`SputterPage` = `views/sputter_page_view.py` +
-`geometry.py`, `predict_flow.py`, `results_panel.py`, `window_menu.py`, `trend_plot.py`, `literature_tab.py`,
-`sketch_view.py`, `texts.py`, `toolkit_texts.py`, `preset_dialog.py`), `bootstrap.py`. Chinese texts:
-`app/presentation/i18n/zh_sputter.py`, `zh_sputter_report.py`, `zh_sputter_literature.py`, `zh_sputter_toolkit.py`,
-`zh_sputter_handover.py`, `zh_sputter_fringes.py`. Tests: `tests/test_sputter_feature.py`, `tests/test_sputter_page.py`,
-`tests/test_sputter_show_in_analyze.py` (fakes in `tests/sputter_fixtures.py`), `tests/test_sputter_fringes.py`,
-`tests/test_sputter_fringes_page.py` (synthetic cuts in `tests/sputter_fringe_data.py`). Page: `docs/ui/workspaces/sputter.md`.
+of a window; `client.py`: the windows, entries and images of an Analyze result; `real_space.py`: where the grains of
+an entry sit), `application` (`SputterService`,
+`AnalyzeRequest`, progress, environment, scan and window ports; `client.py`: `ClientService`, `ClientRequest` and its
+ports, `client_progress.py`, `client_static.py`), `infrastructure` (`BundledToolkit`, `PipInstaller` + `pip_output`, `process`,
+`CbfHeaderInspector`, `StructureFolderReader`, `BinnedWindowReader`; `client.py`: `ClientPackageRunner`,
+`ClientFolderReader`, `locate_package`; `client_static.py`: `StaticPackageRunner`), `presentation` (`SputterPage` = `views/sputter_page_view.py` +
+`views/sputter_main_view.py` + `views/sputter_static_view.py` + `client_flow.py`, `client_panel.py`, `client_texts.py`,
+`pattern_view.py`, `real_space_view.py`, `evolution_view.py`, `static_flow.py`, `geometry.py`, `predict_flow.py`, `results_panel.py`, `window_menu.py`, `trend_plot.py`,
+`literature_tab.py`, `sketch_view.py`, `texts.py`, `toolkit_texts.py`, `preset_dialog.py`), `bootstrap.py`. Chinese
+texts: `app/presentation/i18n/zh_sputter.py`, `zh_sputter_report.py`, `zh_sputter_literature.py`,
+`zh_sputter_toolkit.py`, `zh_sputter_handover.py`, `zh_sputter_fringes.py`, `zh_sputter_client.py`. Tests:
+`tests/test_sputter_feature.py`, `tests/test_sputter_page.py`, `tests/test_sputter_show_in_analyze.py` (fakes in
+`tests/sputter_fixtures.py`), `tests/test_sputter_fringes.py`, `tests/test_sputter_fringes_page.py` (synthetic cuts in
+`tests/sputter_fringe_data.py`), `tests/test_sputter_client.py`, `tests/test_sputter_main_screen.py` (a fake of the
+package's process and invented results in `tests/sputter_client_fixtures.py`). Page: `docs/ui/workspaces/sputter.md`.

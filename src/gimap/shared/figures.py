@@ -88,16 +88,19 @@ def _has_wide_text(text: str) -> bool:
     return any(ord(character) >= 0x2E80 for character in text)  # CJK and full-width punctuation
 
 
-def cjk_fallback(figure) -> int:
+def cjk_fallback(figure, texts=None) -> int:
     """Texts of ``figure`` with Chinese characters get a Chinese font after Matplotlib's own, so they are
     not drawn as empty boxes (Matplotlib falls back glyph by glyph; Latin letters keep their font).
 
     Other texts are left as they are, so an English figure is unchanged. Returns how many texts changed.
+    ``texts``: only these texts of the figure are looked at — for a figure drawn again many times a second
+    (looking for every text builds every tick of every axis, a tenth of a second for a few axes).
     """
     from matplotlib import font_manager
     from matplotlib.text import Text
 
-    texts = [text for text in figure.findobj(Text) if _has_wide_text(text.get_text() or "")]
+    candidates = figure.findobj(Text) if texts is None else [text for text in texts if text is not None]
+    texts = [text for text in candidates if _has_wide_text(text.get_text() or "")]
     if not texts:
         return 0
     names = {font.name for font in font_manager.fontManager.ttflist}

@@ -16,14 +16,15 @@ from functools import lru_cache
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ..application import (CHECK_SOURCES, FRINGES_FAILED, FRINGES_MISSING, HINT_TEXT, INSTALL_MESSAGES, INSTALL_STAGES,
-                           NO_FRAMES, NO_TABLE, PROBLEMS,
-                           SKETCH_TEMPLATES, SOURCE_TEXT, STOPPED, TOOLKIT_FAILED, TOOLKIT_MISSING,
+from ..application import (CHECK_SOURCES, CLIENT_TEMPLATES, FRINGES_FAILED, FRINGES_MISSING, HINT_TEXT,
+                           INSTALL_MESSAGES, INSTALL_STAGES, NO_FRAMES, NO_TABLE, PROBLEMS,
+                           SKETCH_TEMPLATES, SOURCE_TEXT, STATIC_TEMPLATES, STOPPED, TOOLKIT_FAILED, TOOLKIT_MISSING,
                            WINDOW_TEMPLATES, InstallProgress, Source)
 from .toolkit_texts import TOOLKIT_TEMPLATES
 
 TEMPLATES = (*INSTALL_MESSAGES.values(), TOOLKIT_MISSING, TOOLKIT_FAILED, STOPPED, NO_FRAMES, NO_TABLE,
-             *SKETCH_TEMPLATES, *WINDOW_TEMPLATES, *PROBLEMS, FRINGES_FAILED, FRINGES_MISSING)
+             *SKETCH_TEMPLATES, *WINDOW_TEMPLATES, *PROBLEMS, FRINGES_FAILED, FRINGES_MISSING, *CLIENT_TEMPLATES,
+             *STATIC_TEMPLATES)
 SOURCE_TIPS = {
     "missing": "Not in the frame headers or the scan's files: enter it.",
     "auto": "Empty: the beam centre is estimated from the frames. A centre you give is in Analyze's pixel coordinates.",

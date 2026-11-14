@@ -21,8 +21,8 @@ SPUTTER_ZH = {
     "Sample and geometry": "样品与几何",
     "Metal": "金属",
     "Cu — approximated with the Ag model, reference only": "Cu——用 Ag 模型近似，仅供参考",
-    "Cu is read with the Ag model (the networks were trained for Ag and Au): its sizes are for reference only.":
-        "Cu 用 Ag 模型读取（网络是为 Ag 和 Au 训练的）：它的尺寸仅供参考。",
+    "Predict reads Cu with the Ag model (its networks were trained for Ag and Au): the sizes it gives for Cu are for "
+    "reference only.": "“预测”用 Ag 模型读取 Cu（它的网络是为 Ag 和 Au 训练的）：它给出的 Cu 尺寸仅供参考。",
     "X-rays": "X 射线",
     "Incidence αi (°)": "入射角 αi（°）",
     "Beam centre (px)": "光束中心（px）",

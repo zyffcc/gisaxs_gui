@@ -130,6 +130,7 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [12.13 Grades](#1213-grades)
   - [12.14 Stated limits](#1214-stated-limits)
   - [12.15 Literature references of the method](#1215-literature-references-of-the-method)
+  - [12.16 Analyze: what the main screen shows](#1216-analyze-what-the-main-screen-shows)
 - [13. Tool windows and Labs](#13-tool-windows-and-labs)
   - [13.1 XRR Series Extractor](#131-xrr-series-extractor)
   - [13.2 SEM Particle Analysis](#132-sem-particle-analysis)
@@ -2487,7 +2488,7 @@ Implementation: `src/gimap/features/compare/domain/comparison.py`, `src/gimap/fe
 
 ## 12. Sputter
 
-The Sputter workspace follows an in-situ sputter deposition series: PILATUS CBF frames of Ag or Au sputtered on a polymer film. Window by window it gives the direct features of the GISAXS pattern, a growth stage, the island radius R and spacing D (two methods), thickness substitutes, flags for windows where the beam may be off the sample, and the island height H(t) from moving q_z fringes.
+The Sputter workspace follows an in-situ sputter deposition series. Sections 12.1 to 12.15 describe its method **Predict** (in the view Details): PILATUS CBF frames of Ag or Au sputtered on a polymer film. Window by window it gives the direct features of the GISAXS pattern, a growth stage, the island radius R and spacing D (two methods), thickness substitutes, flags for windows where the beam may be off the sample, and the island height H(t) from moving q_z fringes. What the workspace's main screen shows — the result of **Analyze**, which runs a separate analysis package — is in section 12.16.
 
 GIMaP does not import this code. It runs the bundled toolkit (`utils/sputter_toolkit`, entry `scripts/sputter_struct_v1.py`) and the fringe tool (`utils/sputter_fringes`) as subprocesses and reads their files. Inside both, q is in nm⁻¹, lengths in nm, angles in degrees and time in s from the first frame. The two trained networks are part of the toolkit and bound by SHA-256 to its source files.
 
@@ -2927,6 +2928,20 @@ These references are part of the method: their published values (percolation thr
 | Schu21 | Schuster C. et al., Nanomaterials 11, 589 (2021) | 10.3390/nano11030589 | electrical percolation of Au, Ag, Cu on resin films |
 | Thran99 | Thran A., Kiene M., Zaporojtchenko V., Faupel F., Phys. Rev. Lett. 82, 1903 (1999) | 10.1103/PhysRevLett.82.1903 | condensation coefficient of Ag on polymers |
 | Yu15 | Yu S. et al., J. Phys. Chem. C 119, 4406 (2015) | 10.1021/jp512675w | Ag percolation on Alq₃ |
+
+### 12.16 Analyze: what the main screen shows
+
+Sections 12.1 to 12.15 describe **Predict**, the method that comes with GIMaP. **Analyze**, on the main screen of the workspace, runs a separate analysis package (`iampred`) as a subprocess and shows what the package writes. The networks, the physical forward model and the refinement are the package's and are documented with it; this section states what GIMaP does with the package's input and output.
+
+**Inputs handed to the package.** The folder of CBF frames; the metal and the substrate; the deposition rate, either as the rate at the sample or as the reading of the quartz balance (the package converts a reading to the rate at the sample with its own factor); α_i; the sample–detector distance; the energy or the wavelength; the direct-beam position, entered in GIMaP's pixel coordinates and handed over minus 0.5 px as 0-based pixel centres (section 1.3), or, when it is empty, the request to estimate it from the frames; the sample roll (0° when empty); optionally a detector mask (without one the package uses the pixel mask it was built with), the time of the scan at which the deposition started, its duration, and the thickness of a polymer film. GIMaP changes none of these values. The package keeps an imported scan under a label; GIMaP derives the label from all these inputs, so a changed input is imported anew and never read from an earlier import.
+
+**Quantities.** For every time window the package gives several *entries*: up to three candidates of its network, ranked, and the refined solution when it refined. An entry holds the grain radius R, the grain height H, the centre-to-centre distance D, the gap D − 2R, the width σ of the log-normal distribution of the radius, the coverage (0 to 1) and the metal amount (nm), each as the package defines it for the model family of the sample; a quantity a family does not have is absent and is not shown. Lengths are in nm, the time t in s from the first frame; the nominal deposit of a window is the package's value. GIMaP shows the values with three significant digits (two for σ and the coverage) and computes none of them.
+
+**Fit deviation.** The package's measure of how far the model image of an entry is from the measured image (its deviance per cell with a floor for the model error; lower is better). GIMaP shows the number and does not turn it into a grade, a probability or a threshold.
+
+**Which entry is shown.** In this order: the entry the user chose for the window; the entry the package marks as lying on its smooth evolution over the whole scan; the entry it marks as having the lowest fit deviation; the entry with the lowest fit deviation; the first entry. The evolution plots show the entries so chosen, one per window, against t; a window without a solution leaves a gap in the lines.
+
+**Images.** The measured count rate and the model of each entry are arrays over the exit angle α_f (°) and q_y (nm⁻¹) on the package's cells, which need not be evenly spaced. Both are drawn on those cells (cell edges halfway between neighbouring centres), with q_y on a logarithmic axis when every q_y is positive, on identical axes and with one logarithmic colour scale. Its limits are the 1 % and 99.7 % percentiles of the positive measured values (of the model's when nothing was measured), so they do not depend on the entry shown. Cells without data are left empty; measured values below the lower limit, zero counts included, are drawn in the lowest colour. The arrays are not changed.
 
 ## 13. Tool windows and Labs
 

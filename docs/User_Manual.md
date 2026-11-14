@@ -7,7 +7,8 @@ record of where it came from and with which settings.
 
 This manual describes version 0.2.0, a pre-release: treat it as beta scientific software and check
 results that matter. The workspaces (Analyze, Fitting, Compare, Sputter) are meant for daily work;
-Sputter's model covers Ag and Au sputtered onto polymers (chapter 8). The Labs pages and 1D Predict are
+Sputter's main screen needs a separate analysis package, and the model that comes with GIMaP (Predict) covers
+Ag and Au sputtered onto polymers (chapter 8). The Labs pages and 1D Predict are
 experimental. **Help ▸ About GIMaP** shows the version you are running.
 What changed since 0.0.2, and the known limitations of this version, are in `CHANGELOG.md` in the
 program folder (chapter 13 collects the limitations).
@@ -348,7 +349,8 @@ GIMaP runs without these. Each is needed only for the function named.
 |---|---|---|
 | An AI account or a local model | **Ask AI…**, **Tools ▸ Process with AI…** | The Python packages come with `requirements.txt`; set up the AI in **Tools ▸ Settings… ▸ Assistant** (chapter 10) |
 | StarDist | Separating touching particles in **Tools ▸ SEM Particle Analysis…** | A separate Python environment with `requirements-sem-stardist.txt`, and a local model folder (chapter 9) |
-| PyTorch (CPU) | **Predict** in the Sputter workspace | Not in the portable package: installed into GIMaP's Python on the first Predict (about 1.2 GB, needs the internet). In a source folder, the first start of `Start_GIMaP.bat` installs it (section 2.2). By hand: `python -m pip install -r requirements-sputter.txt` (section 8.1) |
+| PyTorch (CPU) | **Predict** in the Sputter workspace | Not in the portable package: installed into GIMaP's Python on the first Predict (about 1.2 GB, needs the internet). In a source folder, the first start of `Start_GIMaP.bat` installs it (section 2.2). By hand: `python -m pip install -r requirements-sputter.txt` (section 8.2) |
+| The analysis package | **Analyze** on the main screen of the Sputter workspace | A folder distributed separately from GIMaP (it holds `code` and `models`; it needs no further Python package). Choose it once with **Choose Folder…**, set `GIMAP_SPUTTER_CLIENT` to it, or put it in `utils/sputter_client` of the program folder (section 8.1) |
 
 TensorFlow runs on the CPU; a GPU set-up is not configured.
 
@@ -602,7 +604,8 @@ A project (`.gimap`, a JSON file) reopens a sample as it was left:
 - the curve, halves, fitting range, left-out points, model and selected method of Fitting, including all
   fit1d options (network, search, curve type, cut qz, systematic error and composition);
 - the folder and choices of the In-situ series, and the series of Compare;
-- the Sputter form, scan/mask/output paths and current result-folder reference (the results are not copied).
+- the Sputter form (the input bar, the geometry, the options of Analyze and of Predict), scan/mask/output paths
+  and the references to the result folders shown, of Analyze and of Predict (the results are not copied).
 
 The 2D Prediction settings go, together with Fitting's model, into their own files with
 **File ▸ Labs Parameters ▸ Save As…**. Older projects without Sputter reset that workspace to its empty form.
@@ -646,9 +649,12 @@ or dropping a `.gimap` file on the window opens it.
   masks, corrections, cut regions …) is kept in `last_analyze_setup.json` in the user data folder.
   With the first frame of the next session a note offers **Use It**. It is never applied without
   asking, since a new beamtime may need other settings.
-- **Sputter**: the values of each scan folder's last Predict (geometry, metal, polymer, mask, time window,
-  deposition rate, t0 and deposition end), the values used last (another folder does not take over the mask or the sample roll),
-  the geometry presets and the result shown last (opened again at the next start); PyTorch is looked for afresh
+- **Sputter**: the values of each scan folder's last Predict or Analyze (geometry, metal, polymer, mask, time window,
+  deposition rate, t0 and deposition end; for Analyze the substrate, its rate and whether it is a QCM reading, the
+  mode, the start and duration of the deposition and the film thickness), the values used last (another folder does
+  not take over the mask, the sample roll or a rate),
+  the geometry presets, the folder of the analysis package and the results shown last (opened again at the next
+  start); PyTorch is looked for afresh
   at every start.
 - The window size and position, the theme, the font size and the language are restored at the next
   start.
@@ -730,7 +736,7 @@ so. Right-click the field ▸ **Back to Profile αi** to drop it; **Clear** in t
 - When the run applies a calibration instead — one named in the beamtime notes, or one it found for a
   detector without a profile — the answered αi is saved with it in the instrument profile (section 1.3).
 - Sputter ▸ **Show in Analyze** sets αi as if you had typed it, and may set the beam centre and choose
-  a profile (section 8.6).
+  a profile (section 8.7).
 
 How a profile is chosen and what each override replaces is in
 [Physics and Methods, section 1.4](Physics_Manual.md#14-where-the-geometry-of-a-frame-comes-from).
@@ -960,7 +966,7 @@ session and for every frame of the same detector size (rows × columns); frames 
 back to their profile's centre (or the header centre, when the setting above is on), and a note says
 so. It is also kept in settings files and projects. **Save to Profile**
 keeps it for good. Sputter ▸ **Show in Analyze** sets a centre for this session in the same way when
-one was given for its Predict (section 8.6).
+one was given for its Predict (section 8.7).
 
 **Geometry…** and **Enter Coordinates…** open small windows that stay open while you work, so you
 can adjust the centre and watch the curves:
@@ -2427,45 +2433,178 @@ every sample. Two or more series are compared with each other; one alone is desc
 
 ## 8. Sputter
 
-**Project files.** File ▸ Save Project saves this workspace's form and the current result-folder reference. Opening a project restores them; an older project without Sputter clears this workspace. Keep result folders beside their inputs when moving a project; missing folders are reported.
+**Project files.** File ▸ Save Project saves this workspace's form (the input bar, the geometry and the options) and the references to the result folders shown. Opening a project restores them; an older project without Sputter clears this workspace. Keep result folders beside their inputs when moving a project; missing folders are reported.
 
 
 The **Sputter** workspace (sidebar, `Ctrl+5`) follows an in-situ sputter deposition: the PILATUS CBF frames of
-one scan, taken while Ag or Au is sputtered onto a polymer (Cu is read with the Ag model, for reference only).
-For every time window it gives the particle size R (the base radius of a flat-based hemisphere, h = R), the
-spacing D, the island height H, the growth stage, the metal thickness where it can be stated, and how far each
-value can be trusted. How each value is computed is in [Physics and Methods, chapter 12](Physics_Manual.md#12-sputter).
+one scan, taken while a metal is sputtered onto a substrate. Under its input bar it has two views, chosen with
+**Main Screen | Details** at the right of the bar:
 
-### 8.1 Predict in three steps
+- the **main screen** (shown first, section 8.1) shows the result of **Analyze**: for each time window the measured
+  image beside the image of a model, and the grains that model stands for — radius R, height H, distance D, gap,
+  size distribution width and coverage — with their evolution over the scan. Analyze runs a separate analysis
+  package;
+- **Details** (sections 8.2 to 8.10) holds the geometry, the options of Analyze, and the earlier method,
+  **Predict**. Predict reads Ag or Au on a polymer (Cu with the Ag model, for reference only) with the networks
+  that come with GIMaP: for every time window the particle size R (the base radius of a flat-based hemisphere,
+  h = R), the spacing D, the island height H, the growth stage, the metal thickness where it can be stated, and
+  how far each value can be trusted.
 
-1. **Data ▸ Choose…**: the folder of one scan (its CBF frames, or a scan folder with them in one subfolder such
-   as `p2m/`). One line then sums up the frames, the detector, the exposure and the time (its tooltip adds the
-   serial number, the pixel size, the first frame and the flat field).
-2. **Sample and geometry**: **Metal** (Ag, Au, or Cu, approximated with the Ag model), **X-rays** (**Energy
-   (keV)** or **Wavelength (nm)**), **Distance (mm)**, **Incidence αi (°)** and **Beam centre (px)** (col, row).
-   Check every value. Beside each, the page says where it comes from — this folder's last Predict, a preset, for
-   the energy a `Wavelength` line of the header or the scan's NeXus file, or the last Predict of any folder
+How each value of Predict is computed is in [Physics and Methods, chapter 12](Physics_Manual.md#12-sputter); what
+the main screen shows is in its [section 12.16](Physics_Manual.md#1216-analyze-what-the-main-screen-shows).
+
+### 8.1 The main screen: Analyze
+
+**What you need.** The analysis package: a folder (it holds `code` and `models`) that is distributed separately
+from GIMaP and runs in GIMaP's own Python (NumPy, SciPy and Matplotlib; no PyTorch). GIMaP looks for it in the
+environment variable `GIMAP_SPUTTER_CLIENT`, then in the folder you choose once with **Choose Folder…** (on the
+empty main screen, or **Details ▸ Analyze options ▸ Analysis package**), then in `utils/sputter_client` of the
+program folder. Without it the main screen says so; **Open Result…** shows a folder analysed before all the same.
+
+**The input bar**, from the left:
+
+1. **Choose…**: the folder of one scan (its CBF frames, or a scan folder with them in one subfolder such as
+   `p2m/`). A line under the bar then sums up the frames, the detector, the exposure and the time.
+2. **Metal** (Ag, Au, Cu) and **Substrate** (Si, TiO₂, PS, PET, PSBMA, PNO, PEO). The package has a network for
+   some pairs only: for another pair Analyze stops at once, and **Details** of the job status shows the package's
+   sentence that names the pairs it has.
+3. **Rate (nm/s)**: the deposition rate, which is needed. Tick **QCM reading** when the number is the reading of
+   the quartz balance: the package converts it to the rate at the sample. Unticked, it is the rate at the sample
+   itself.
+4. The line below says the geometry that will be used — energy or wavelength, distance, incidence angle, beam
+   centre, sample roll — or which of them are still to enter. **Edit** opens Details at these fields (step 2 of
+   section 8.2 says where their values come from). An empty beam centre is estimated from the frames; the sample
+   roll is 0 unless you enter one, and without a **Mask** the package uses the pixel mask it was built with (both
+   are under **More options**, section 8.3).
+5. **Analyze**. The job status at the right names the step — reading the frames, finding the solutions of every
+   time window, writing the report, drawing the images — and its bar shows the steps that are done (a step does
+   not report while it works: reading the frames of a long scan and refining take minutes). **Cancel** ends it at
+   once; frames that were read completely are kept for the next run. **Details** shows the package's messages.
+
+Analysing the same request again shows the result it has. **Details ▸ Analyze options** has the rest:
+
+| Field | What it is for |
+|---|---|
+| **Mode** | **Auto**: Quick for Si and TiO₂, Refine for polymer substrates. **Quick**: the network's candidates, each drawn by the physical model (about a second per time window). **Refine**: also refines the solution of every window (minutes per window on a polymer). **Full**: a longer refinement of every window and of the whole scan together (hours). |
+| **Start of deposition (s)** | The time of the scan at which the deposition started. Empty: found in the data. |
+| **Deposition duration (s)** | How long the deposition lasted after its start; the metal amount stays constant afterwards. Empty: to the end of the scan. |
+| **Polymer film thickness (nm)** | Shown for a polymer substrate. Empty: the package's own value for that polymer. |
+| **Analysis package** | The folder in use, and **Choose Folder…**. |
+| **Open Report**, **Open Folder** | The package's report of the result shown (every quantity with its range and where it comes from), and the result's folder in the file manager. |
+
+**Reading the result.** The main screen shows one time window:
+
+- **The window.** The slider, the arrows beside it or a click on the evolution plots choose it; beside the slider
+  are its time in the scan and the nominal deposit at that time.
+- **Measured image** and **Model image**: the count rate over q_y and the exit angle, on the same axes and with
+  one logarithmic colour scale. The scale is set by the measured image, so it does not change with the solution;
+  cells without data are empty in both.
+- **Solution shown**: the solutions of this window — **Candidate 1** to **3** of the network and, when the
+  analysis refined, **Refined** — each with its *fit deviation*: how far its model image is from the measured one
+  (lower is better; it compares the solutions of one window). The solution shown first is the one that a smooth
+  evolution over the whole scan selects, which removes most of the ambiguity of a single window; it need not be
+  the one with the lowest fit deviation. Choose another one when its image matches better by eye: the values, the
+  model image and the evolution follow, and the choice is kept with the result. **Back to Default** takes it back.
+- **The values**: **Radius R**, **Height H**, **Distance D** (centre to centre), **Gap** (D − 2R), **Size
+  distribution width** (σ of a log-normal distribution of the radius) and **Coverage** of the solution shown. A
+  quantity that the model of this sample does not have is not shown.
+- **The evolution**: R, H, D and the gap (nm) and the coverage over the time in the scan, for the solution shown
+  in each window; the dashed line marks the window shown.
+- **Patterns | Real Space**, at the right of the window line: **Real Space** draws the solution shown in place of
+  the two images, in nm. Left a cut through a row of grains: the substrate (a polymer film is drawn, its
+  thickness not to scale), the continuous layer under the grains when there is one, and the grains with their
+  radius and height. Right the view from above of a square seven distances D wide: grains with the radius and
+  size distribution of the solution, placed at random around the distance D. The positions are an illustration
+  (the same for every window, so only the sizes change when you move through the scan); the sizes are those of
+  the solution. It follows the window and the solution you choose. Grains that touch are drawn as one piece; a
+  piece that runs across the whole view is darker, and the line above the picture says whether the grains are
+  separate, coalescing or a connected network (percolated) — or, once a continuous layer has formed, its thickness
+  and how the grains on it lie.
+
+When the data cannot tell two solutions apart, both are there, as candidates with similar fit deviations: compare
+their images. A window the package could not use (no frames in it, for example) says why in place of its images.
+
+**Metal in a porous TiO₂ layer.** The model has no lattice of grains there, so there is no height, distance, gap or
+coverage. The values are the **Island radius (relative)** — follow how it changes, not its number — the size
+distribution width, the **Island share** (of the metal in islands that can be resolved; it can exceed 1 early on),
+the **Cap share** (of the metal in the cap on the TiO₂ particles), the **Vertical** and **Lateral correlation**
+lengths of the metal network in the pores and the **Film share**. The evolution shows the three lengths at the left
+and the three shares at the right. **Real Space** draws the layer: left a cross-section to scale, with the TiO₂
+particles, the metal in the pores as a band at the depth where the model puts it, and the cap on the share of the
+particle tops it covers; right the top of one particle enlarged, with the cap at its thickness and the clusters at
+their size. The line below says how much metal has been deposited and how much of it is in islands, in the cap and
+in the pores.
+
+**Static frames (after deposition).** Samples measured after their deposition — a thickness series of Au films,
+for example — are analysed one at a time into a *series* under **Details ▸ Static Frames (after deposition)**:
+
+1. **Frames**: the GISAXS frames of one sample — a folder (**Folder…**), one CBF file or a zip archive
+   (**File…**). For an archive GIMaP lists the folders in it that hold frames; the folder inside the archive
+   follows after two colons (`archive.zip::folder/`).
+2. **Sample name** and **Nominal thickness (nm)**: the sample's place on the axis of the series.
+3. **Bare substrate** (optional): frames of the substrate without metal, measured the same way; empty, the film
+   is taken to lie directly on Si.
+4. **Series folder**: every sample analysed into it is added to the same series; choose an existing series to add
+   to it. **Mode**: Quick, Refine or Full.
+5. The geometry of these frames: empty fields keep the package's own values, which **Package Values** fills in;
+   **Masks of the Package** lists the pixel masks it brings.
+6. **Analyze Sample**. Afterwards the main screen shows the series: one sample in place of each time window, the
+   evolution along the nominal thickness. A sample name that the series has already, with other frames or
+   values, is replaced after a question. Analyze and Analyze Sample do not run at the same time.
+
+The package supports Au films at an incidence angle near 0.40°; what it says about other cases appears in the
+section's log.
+
+![The main screen of Sputter with a result](manual_images/en/22_sputter.png)
+*The main screen with a result — here a made-up one: synthetic images and invented values, and three PILATUS CBF
+frames from the repository's `TestSAXSdata/` folder standing in for the scan folder. Top: the input bar, the
+geometry in one line and the job status of Analyze. Below: the window chosen with the switch Patterns | Real
+Space, the measured image beside the model image of the solution shown, the solutions with their fit deviations, the values, and the evolution over the scan.*
+
+**Before you conclude.** The values are those of a physical model whose image reproduces the measured one, on an
+evolution that is smooth over the scan. They were not compared with an independent measurement of your sample
+(SEM, AFM, XRR), and the nominal deposit and the metal amount scale with the rate you give. The package's report
+(**Open Report**) says for every quantity whether it is read from the counts, a model value or an estimate.
+
+**Open Result…** shows a result analysed before: choose its folder, or the scan's results folder to get its newest
+result. A folder that only holds a result of Predict is shown in Details. Chapter 12 says where the results are.
+
+### 8.2 Predict in three steps
+
+Predict, **More options** and the five tabs of sections 8.2 to 8.10 are in **Details**.
+
+1. **Choose…** in the input bar: the folder of one scan (its CBF frames, or a scan folder with them in one
+   subfolder such as `p2m/`). One line then sums up the frames, the detector, the exposure and the time (its
+   tooltip adds the serial number, the pixel size, the first frame and the flat field).
+2. **Sample and geometry**: **Metal** (Ag, Au, or Cu, approximated with the Ag model; it is the metal of the input
+   bar), **X-rays** (**Energy (keV)** or **Wavelength (nm)**), **Distance (mm)**, **Incidence αi (°)** and **Beam
+   centre (px)** (col, row). Check every value. Beside each, the page says where it comes from — this folder's
+   last Predict or Analyze, a preset, for
+   the energy a `Wavelength` line of the header or the scan's NeXus file, or the last run of any folder
    (*please check*) — or asks for it: a PILATUS header holds neither the distance nor the incidence angle. The
    `E<eV>` in a flat-field file name is the detector's calibration energy, not necessarily the beam's: it is shown
    beside the field and never filled in. A value to check and an energy of the files that differs from the one used
    are shown as a warning (⚠); the tooltip of the line says why. An empty **Beam centre (px)** is estimated from
    the frames; a centre you give is in Analyze's pixel coordinates (section 4.4).
-3. **Predict**. The first time, PyTorch is installed into GIMaP's Python (*Step 1 of 2*, about 1.2 GB, needs the
+3. **Predict** (under *Earlier method: the networks bundled with GIMaP*). The first time, PyTorch is installed into
+   GIMaP's Python (*Step 1 of 2*, about 1.2 GB, needs the
    internet). Then the frames are read and summed into time windows, and the model runs (*Step 2 of 2*).
    **Cancel** stops at once; **Details** shows the messages; the tooltip of the line under the job status names the
    Python used.
 
-![The Sputter workspace with a scan folder chosen, before Predict](manual_images/en/22_sputter.png)
-*Sputter with a folder chosen, before Predict. Here three PILATUS CBF frames from the repository's `TestSAXSdata/`
-folder stand in for a scan (they are not a sputter series, so no result is shown): the line under **Data** sums up the frames, the detector, the exposure and
+![Details of the Sputter workspace with a scan folder chosen, before Predict](manual_images/en/22a_sputter_details.png)
+*Details with a folder chosen, before Predict. Here three PILATUS CBF frames from the repository's `TestSAXSdata/`
+folder stand in for a scan (they are not a sputter series, so no result is shown): the line under the input bar sums
+up the frames, the detector, the exposure and
 the time. The energy, distance and incidence angle are not in the files, so the page asks for them (the flat-field
-energy is shown beside the energy, not filled in); an empty beam centre is estimated from the frames. The line under
-the job status says that PyTorch is installed on the first Predict.*
+energy is shown beside the energy, not filled in); an empty beam centre is estimated from the frames. Below the
+geometry are the options of Analyze (no analysis package was chosen yet), then Predict: scroll the column for its
+job status, the line about PyTorch and **More options**.*
 
 **Save Geometry as Preset…** fills in later scans of this detector and flat field within one beamtime (a week either
 side of the scan, to start with). Section 3.9 says what else is remembered.
 
-### 8.2 More options
+### 8.3 More options
 
 | Field | What it is for |
 |---|---|
@@ -2479,7 +2618,7 @@ side of the scan, to start with). Section 3.9 says what else is remembered.
 | **Save results in** | Where the result folders go (default: the folder `sputter` in the user data folder). |
 | **Open Results Folder…** | Shows an earlier result. |
 | **Add Refined Windows…** | Once a result is shown: merges physical-refinement windows computed elsewhere (one JSON each). |
-| **Explanation** | Which explanation is shown (section 8.3); it can be changed once a result offers more than one. |
+| **Explanation** | Which explanation is shown (section 8.4); it can be changed once a result offers more than one. |
 
 The rate, t0 and end are remembered for this scan folder only; the polymer and the time window are taken over
 from the last Predict.
@@ -2487,7 +2626,7 @@ from the last Predict.
 Each request gets its own folder, `sputter/<scan>-<code>`, named from the scan and every value the result depends
 on: the same request reuses it (a stopped run goes on), another geometry or model gets a new one.
 
-### 8.3 Two explanations, and the grades
+### 8.4 Two explanations, and the grades
 
 **More options ▸ Explanation** chooses how the windows are explained:
 
@@ -2529,7 +2668,7 @@ Physics and Methods defines [the physical path](Physics_Manual.md#126-the-physic
 [the literature method](Physics_Manual.md#1210-the-literature-method-mass-balance-for-hemispheres) and
 [the grades](Physics_Manual.md#1213-grades).
 
-### 8.4 The tabs
+### 8.5 The tabs
 
 The tabs on the right are **Size Trend**, **Literature**, **Structure Sketch**, **Windows** and **Reliability**.
 
@@ -2542,7 +2681,7 @@ one. Tick **Show details** to add:
   method only the nominal thickness δ, which the islands hold by construction);
 - the panel **TS length L (film windows)**;
 - the direct 2π/q\* with its check (red circle: a D outside the simulated 90 % range of 2π/q\*);
-- the windows where the beam may be off the sample (hollow grey points, section 8.5).
+- the windows where the beam may be off the sample (hollow grey points, section 8.6).
 
 **Logarithmic size axis** (on by default) puts the sizes and thicknesses on a log axis; H always stays linear.
 With a rate, the top axis also gives δ.
@@ -2576,7 +2715,7 @@ measured, **H fringes (nm)**. `Ctrl+C` copies rows.
 **Reliability** says in words what the grades and the typical errors mean, what the path assumes and what the
 thickness values are; with the literature method also how many checks agree.
 
-### 8.5 The result line and its flags
+### 8.6 The result line and its flags
 
 The line under **Predict** (shown once there is a result) names the windows, how many have R and D, and the film
 onset (with the literature method: the percolation). Two flags may follow:
@@ -2588,7 +2727,7 @@ onset (with the literature method: the percolation). Two flags may follow:
   … windows* when there is no modulation: windows far below the intensity of their neighbours. They keep their values in **Windows** but are left out of the stage path, the
   trends, the checks and H ([Physics and Methods, section 12.9](Physics_Manual.md#129-windows-where-the-beam-may-be-off-the-sample)).
 
-### 8.6 Show in Analyze
+### 8.7 Show in Analyze
 
 Right-click a row of **Windows**, the **Structure Sketch** or a point of **Size Trend** and choose **Show in
 Analyze**: Analyze's frame list is replaced by the raw frames of that window, summed (**Sum**), so its image and
@@ -2596,14 +2735,15 @@ cuts show what the model read. αi and a beam centre you gave are taken over; di
 instrument profile within 0.5 mm and 0.1% of the Sputter values, or the notice says what to enter. Nothing changes
 while Analyze is busy.
 
-### 8.7 Changing the rate, t0 or end after a run
+### 8.8 Changing the rate, t0 or end after a run
 
 A new **Deposition rate**, **t0** or **Deposition end** rewrites the files of the result shown without reading the
-frames again (a rate must be positive, an end after t0). For a result of another scan than the one under **Data**,
-the values are kept for the next **Predict** of the folder under **Data**. Without a rate, the literature method gives way to the physical
-path.
+frames again (a rate must be positive, an end after t0). For a result of another scan than the one in the input bar,
+the values are kept for the next **Predict** of the folder in the input bar. Without a rate, the literature method gives way to the physical
+path. These three fields belong to Predict; Analyze has its own rate in the input bar and its own start and duration
+under **Analyze options** (section 8.1), and a change of them needs a new Analyze.
 
-### 8.8 Before you conclude
+### 8.9 Before you conclude
 
 - The thickness of a continuous film is not determined (in simulation the model returns its prior), and a film with
   particles on it is not modelled. Use t_eq and the nominal thickness; compare with XRR, a quartz balance or a
@@ -2616,11 +2756,14 @@ path.
 
 Every stated limit: [Physics and Methods, section 12.14](Physics_Manual.md#1214-stated-limits).
 
-### 8.9 Output files
+### 8.10 Output files
 
-Each result folder holds the model's tables (`structure_physical.csv`, `structure.csv`) with their summaries, the
-binned frames, `gimap_request.json`, the island heights (`fringes_v1/`) and the pictures you save; chapter 12 lists
-them all.
+Each result folder of Predict holds the model's tables (`structure_physical.csv`, `structure.csv`) with their
+summaries, the binned frames, `gimap_request.json`, the island heights (`fringes_v1/`) and the pictures you save.
+A result of Analyze is in a subfolder of the scan's folder, `iampred-<code>`: the package's report (`REPORT.md`,
+`report.png`, `report.csv`) and figures, `windows.csv`, `analysis.json`, the data of the main screen
+(`main/main.json` and one `w_<t>.npz` and `.png` per time window), your choices of a solution
+(`main/choices.json`) and `gimap_request.json`. Chapter 12 lists them all.
 
 ## 9. Tool windows
 
@@ -3216,7 +3359,9 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Compare ▸ **Save ▸ Table of Every Series… / Table of Every Frame…** | `compare_series.csv` / `compare_frames.csv` + `.json` | the folder of the first series added from files, else the folder a series was last added from (while it is there), else your home folder | `#` header lines and the JSON |
 | Compare ▸ **Change Plot… / Paths Plot… / End States Plot…** | `compare_*.png` or `.svg` | as above | none |
 | Sputter ▸ **Predict** | a folder per scan and request: `structure_physical.csv` + `structure_physical_summary.json` (the physical path), `structure.csv` + `structure_summary.json` (per window) with the model's own trend figure `structure_trend.png`, and the frames as the model read them (`intake/`) and summed into windows (`binned/`). `structure_selected.csv` and `structure_sequence.csv` (each with its summary and `_trend.png`) are there only when made with the toolkit's `select` and `sequence` commands | user data folder: `sputter/<scan>-<code>/` (or **More options ▸ Save results in**); the same request reuses its folder | `gimap_request.json` (the request, the Python, PyTorch's version) |
-| Sputter ▸ a new **Deposition rate**, **t0** or **Deposition end** after a run (section 8.7) | `structure_physical.csv` + `structure_physical_summary.json` written again (no frame is read) | the result folder | the summary |
+| Sputter ▸ **Analyze** (section 8.1) | a folder per request: `analysis.json` (status, model family, steps, the files), the package's `REPORT.md`, `report.png`, `report.csv`, `windows.csv`, `summary.json`, `evolution.png`, `patterns.png` and step logs, and `main/` with `main.json` and one `w_<t>.npz` + `w_<t>.png` per time window (the measured image and the model image of every solution) | the scan's folder (see Predict): `sputter/<scan>-<code>/iampred-<code>/`; the same request to the same package shows the result it has. The frames as the package read them are kept in the user data folder: `sputter_client/<package version>/data/` | `gimap_request.json` (the request, the label of the imported scan, the package and its version, the Python, the command) |
+| Sputter ▸ another **Solution shown** on the main screen | `choices.json`: the solution chosen per time window, where it is not the default | the result's `main/`; when it cannot be written, the user data folder: `sputter_client/choices/` | the file itself (result folder, GIMaP version, time) |
+| Sputter ▸ a new **Deposition rate**, **t0** or **Deposition end** after a run (section 8.8) | `structure_physical.csv` + `structure_physical_summary.json` written again (no frame is read) | the result folder | the summary |
 | Sputter ▸ **More options ▸ Add Refined Windows…** | `structure.csv`, `structure_summary.json`, `structure_trend.png` and the physical files written again with the refined windows | the result folder | the summaries |
 | Sputter ▸ Structure Sketch ▸ **Save Image… / Save Storyboard…** | `sketch_<time>s.png` / `storyboard.png`, or PDF, SVG | the result folder | none |
 | Sputter, in the background after a result is shown | `fringe_heights.csv` (H from the q_z fringes per time group) + `fringe_summary.json` | the result folder's `fringes_v1/`; when it cannot be written, the user data folder: `sputter_fringes/<result folder>/` | the summary: SHA-256 of `binned/run.json`, the chunks and `structure_physical.csv`, the tool's version, αc and its source, the settings |
@@ -3320,13 +3465,14 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **1D Predict (Workflow V5) is validated on simulated curves only**, with the composition and resolution given; finding the composition (none given in **Complete composition**), an unknown resolution and measured data are not validated ([Physics and Methods, section 10.8](Physics_Manual.md#108-validation-status)). | Treat its solutions as a second opinion: refine them in Fitting and judge them by the residuals. |
 | **Research runtimes do not all expose a controllable seed.** Sputter and 1D Predict record this limitation explicitly. Run records identify `software_version`; masks are counted, not stored as pixel lists. | Keep the input, settings and model files with the exported records. |
 | **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`, `assistant_provider_keys.json`; section 10.1): whoever can read that folder can read them. | On a shared computer, or with `GIMAP_HOME` on a shared drive, set the key as an environment variable instead, or **Remove** it after use. |
-| **Sputter does not determine the thickness of a continuous film**, and a film with particles on it is not modelled (section 8.8). | Read the island-volume equivalent t_eq (island windows, conditional) and the nominal thickness from a deposition rate; compare with XRR, a quartz balance or a cross-section. |
+| **Sputter does not determine the thickness of a continuous film**, and a film with particles on it is not modelled (section 8.9). | Read the island-volume equivalent t_eq (island windows, conditional) and the nominal thickness from a deposition rate; compare with XRR, a quartz balance or a cross-section. |
 | **Sputter reads Cu with the Ag model** (the networks were trained for Ag and Au). | Use Cu results for reference only. |
-| **Sputter reads folders of CBF frames only**, and its networks were trained for Ag and Au on polymer substrates (chapter 8). | For NeXus series or another substrate use Analyze's series map (section 5.6) and Fitting's in-situ series (section 6.6); converting frames to CBF does not make another substrate valid. |
+| **Sputter ▸ Analyze needs the analysis package**, which is not part of GIMaP, and analyses only the pairs of metal and substrate the package has a network for; its values are model values that were not compared with an independent measurement of your sample (section 8.1). The frames it read are kept in the user data folder (`sputter_client/`), one copy per request that changes the import (rate, geometry, mask, substrate …); nothing removes them. | Choose the package's folder once (**Choose Folder…**). Judge a solution by its model image beside the measured one, and compare with SEM, AFM or XRR where you can. Delete old folders of `sputter_client/` yourself. |
+| **Sputter reads folders of CBF frames only**, and the networks of Predict were trained for Ag and Au on polymer substrates (chapter 8). | For NeXus series, or with Predict another substrate, use Analyze's series map (section 5.6) and Fitting's in-situ series (section 6.6); converting frames to CBF does not make another substrate valid. |
 | **Sputter keeps every result folder**, with the frames as the model read them (`intake/`, `binned/`), in the user data folder unless you chose another place; nothing removes them, and **File ▸ Save Project** holds the Sputter form and references its result folder. | For long scans choose **More options ▸ Save results in** on a data disk; delete old folders yourself; open a result again with **More options ▸ Open Results Folder…**. |
 | **Sputter's island height H from the q_z fringes is the height of a uniform layer** (minima at H Q = 2π n): for islands of another shape and with the refraction model it may be off by a constant of about 1 nm; with one fringe period or less in the range it carries a systematic error of up to 8% (inside its interval). It is not given while no minimum is in the detector's q_z range, while a minimum crosses a module gap, or when the order cannot be told. | Read the trend; compare with XRR, AFM or a cross-section; the summary names αc and where it comes from. |
-| **Sputter flags windows where the beam may be off the sample from the intensity alone** (a dip below half of the level of the neighbouring windows within one modulation period, or below 20% within 10 s without a modulation, with its sides down to 80%; section 8.5). The stage position and the range of its translation are not read: a dip that never falls below half of the level is not flagged, however long, nor is a slower drift off the sample; a dip with another cause (a drop of the beam, the shutter) is flagged alike, and the first and last windows are not judged. When the footprint reaches the sample edge, edge scattering or streaks can raise the intensity in the analysed region instead of lowering it: such windows are not flagged. | Compare the flagged windows with the stage log of the beamtime when you have it; their values stay in the Windows table. |
-| **Sputter's literature method rests on the deposition rate, t0 and deposition end you give** (GISAXS measures none of them) and on D = 2π/q*. Its percolation interval assumes the rate within ±10% and t0 within ±2 s (±0.5 s when t0 is given) — engineering choices the page does not change — takes the deposition end as exact, and leaves out the systematic error of 2π/q* (more than 40% for D > 10 nm once coalescence starts). Without a deposition end the deposition is taken to last to the end of the scan. PNO, PSBMA and PEO have no published percolation data: the band of all polymers of the metal is used (section 8.4). | Give the rate at the sample position, and t0 and the deposition end when you know them; for other errors run the toolkit's `physical` command with `--rate-error` and `--t0-error`. Read a *not determined* percolation as not determined, and compare with other chambers' thresholds as a comparison, not a prediction. |
+| **Sputter flags windows where the beam may be off the sample from the intensity alone** (a dip below half of the level of the neighbouring windows within one modulation period, or below 20% within 10 s without a modulation, with its sides down to 80%; section 8.6). The stage position and the range of its translation are not read: a dip that never falls below half of the level is not flagged, however long, nor is a slower drift off the sample; a dip with another cause (a drop of the beam, the shutter) is flagged alike, and the first and last windows are not judged. When the footprint reaches the sample edge, edge scattering or streaks can raise the intensity in the analysed region instead of lowering it: such windows are not flagged. | Compare the flagged windows with the stage log of the beamtime when you have it; their values stay in the Windows table. |
+| **Sputter's literature method rests on the deposition rate, t0 and deposition end you give** (GISAXS measures none of them) and on D = 2π/q*. Its percolation interval assumes the rate within ±10% and t0 within ±2 s (±0.5 s when t0 is given) — engineering choices the page does not change — takes the deposition end as exact, and leaves out the systematic error of 2π/q* (more than 40% for D > 10 nm once coalescence starts). Without a deposition end the deposition is taken to last to the end of the scan. PNO, PSBMA and PEO have no published percolation data: the band of all polymers of the metal is used (section 8.5). | Give the rate at the sample position, and t0 and the deposition end when you know them; for other errors run the toolkit's `physical` command with `--rate-error` and `--t0-error`. Read a *not determined* percolation as not determined, and compare with other chambers' thresholds as a comparison, not a prediction. |
 | **Sputter's first Predict downloads PyTorch** (about 1.2 GB, needs the internet); the model runs on the CPU. | Without internet, install PyTorch by hand (section 14.7). |
 | **TensorFlow runs on the CPU on Windows and macOS**; a GPU set-up is not configured. | Use the bundled CPU runtime. |
 
@@ -3403,7 +3549,23 @@ expired, replace it, or **Remove** it to use the variable.
 on Windows), which in practice installs a 2.15 release; 2.15.1 is the tested version. For a missing package,
 activate the right Python environment and run `pip install -r requirements.txt`.
 
-**Sputter.** The job status under **Predict** says what stopped it:
+**Sputter ▸ Analyze.** The job status in the input bar says what stopped it:
+
+- *The analysis package was not found*, or *… is not an analysis package: … is missing*: choose the package's
+  folder with **Choose Folder…** (the folder that holds `code` and `models`), or set the environment variable
+  `GIMAP_SPUTTER_CLIENT` to it (section 8.1).
+- *Give the deposition rate (nm/s)*, *Give the photon energy or the wavelength* and the like: a value of the
+  input bar or of the geometry is missing; the line under the bar names the geometry still to enter, and **Edit**
+  shows its fields.
+- *The analysis stopped with an error (failed at …)* or *(exit code …)*: press **Details**; the log under
+  **Analyze options** ends with the package's last lines. A last line *no network for … on …* means that the
+  package has no network for this metal on this substrate; the line names the pairs it has.
+- *The analysis finished, but this package does not write the data of the main screen*: the package is an older
+  one; its report is in the folder named. Use a newer package.
+- **Open Result…** says *… holds no result of the analysis (main/main.json)*: the folder holds no finished
+  result of Analyze.
+
+**Sputter ▸ Predict.** The job status under **Predict** (in Details) says what stopped it:
 
 - *The Sputter model is not in this GIMaP folder: … is missing or incomplete.* The model is part of GIMaP, in
   `utils/sputter_toolkit/` of the program folder, and the message says what each kind of installation does
@@ -3411,7 +3573,7 @@ activate the right Python environment and run `pip install -r requirements.txt`.
   the release again. Update a git clone with `Update_GIMaP.bat`; download a folder from **Code ▸ Download
   ZIP** again.
 - *No CBF frames in this folder.* Choose the folder that holds the scan's CBF frames, or the scan folder with
-  them in one subfolder (section 8.1). Sputter reads CBF frames only (chapter 13).
+  them in one subfolder (section 8.2). Sputter reads CBF frames only (chapter 13).
 - *Give the photon energy or the wavelength*, *Give the sample-detector distance and the incidence angle (both
   positive)* and the like: a value of **Sample and geometry** or **More options** is missing or out of range —
   both beam-centre coordinates or neither, a positive time window and rate, an end after t0.
@@ -3421,7 +3583,7 @@ activate the right Python environment and run `pip install -r requirements.txt`.
 - *… has no `structure_physical.csv` (press Predict, or choose a results folder)*: the folder chosen with
   **Open Results Folder…** holds no finished result.
 - **Show in Analyze** says *No instrument profile has the Sputter geometry*: enter the distance and λ it names in
-  Analyze (Geometry step ▸ **Geometry…**), then show the window again (section 8.6).
+  Analyze (Geometry step ▸ **Geometry…**), then show the window again (section 8.7).
 
 **PyTorch.** It is needed by the Sputter workspace only: its first **Predict** downloads it from pypi.org and
 installs it into the Python GIMaP runs in (`requirements-sputter.txt`, keeping the installed NumPy). When that
@@ -3481,7 +3643,8 @@ GIMaP user data folder. Fits you save yourself
 (**Save**) go where you choose. Chapter 12 lists every output.
 
 **Where are Sputter's results saved?** In `sputter/<scan>-<code>/` of the user data folder, or in the folder
-set with **More options ▸ Save results in** (section 8.2; chapter 12). They are kept until you delete them.
+set with **More options ▸ Save results in** (section 8.3; chapter 12); a result of Analyze is in its subfolder
+`iampred-<code>/`. They are kept until you delete them.
 
 **Does anything leave my computer?** Your data leave it only when you use the AI assistant with a remote
 brain (Claude Code, the Claude API or another provider's server): then the frame's status and the reduced

@@ -386,6 +386,7 @@ def test_a_one_line_source_has_no_empty_line_under_it(tmp_path):
     line, and a height set once never shrank again when the panel was wider."""
     page = _page(tmp_path, inspector=FakeInspector(energy_hint_source="flat_field"))
     page.show()
+    page.show_details()  # the geometry fields are in Details (the page opens on the main screen)
     page.set_scan_folder(tmp_path / "zz_invented_scan")
     _settle(lambda: page.scan_info is not None)
     _settle(seconds=0.3)
@@ -482,6 +483,7 @@ def test_a_saved_preset_fills_a_scan_of_the_same_beamtime(tmp_path, monkeypatch)
 def test_cu_is_offered_and_labelled_as_read_with_the_ag_model(tmp_path):
     page = _page(tmp_path)
     page.show()
+    page.show_details()  # the earlier method's metal and its note are in Details
     index = page.metal.findData("Cu")
     assert "approximated with the Ag model" in page.metal.itemText(index)
     page.metal.setCurrentIndex(index)

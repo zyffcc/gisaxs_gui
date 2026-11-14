@@ -12,6 +12,28 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- The **Sputter** workspace opens on a new **main screen**. **Analyze** (scan folder, metal, substrate and
+  deposition rate in one input bar) runs a separate analysis package and shows, window by window, the measured
+  image beside the model image of a solution, the solutions to choose from (the network's candidates and the
+  refined one, each with its fit deviation), and the radius, height, distance, gap, size distribution width and
+  coverage of the solution shown with their evolution over the scan. The solution shown first is the one a smooth
+  evolution over the whole scan selects; a choice of another one is kept with the result. **Open Result…** shows a
+  folder analysed before. Everything the page held before — the geometry, **Predict** with the networks that
+  come with GIMaP, **More options** and the five tabs — is in the second view, **Details**, and works as before;
+  the scan folder moved into the input bar, and the metal is one choice for both methods.
+- Sputter main screen: **Patterns | Real Space** beside the window selector draws the solution shown in real space —
+  a cut through a row of grains with the base layer under them, and the view from above — at the radius,
+  distance, size distribution and height of the solution, in nm; touching grains are drawn as one piece and the
+  picture says whether the grains are separate, coalescing or percolated. Results on porous TiO₂ show their own
+  values (island radius, relative; island, cap and film shares; the correlation lengths of the metal in the pores),
+  and Real Space draws the TiO₂ layer with the metal in its pores, the cap on the particle tops and the clusters.
+  **Details ▸ Static Frames (after deposition)** analyses samples measured after their deposition (a folder, a CBF
+  file or a zip archive) one at a time into a series, which the main screen shows along the nominal thickness.
+- Sputter ▸ Analyze, limitations: the analysis package is not part of GIMaP (choose its folder once, or set
+  `GIMAP_SPUTTER_CLIENT`); it analyses only the pairs of metal and substrate it has a network for; its values are
+  model values that were not compared with an independent measurement of the sample; a step of the analysis does
+  not report progress while it works; the frames it read stay in the user data folder (`sputter_client/`) until
+  you delete them.
 - Fitting's **Components** control shows additive particle, background and beam-tail/low-q contributions with
   separate visibility choices and thinner dashed/dotted lines below the total model. Toggling contributions
   preserves the current view. Automatic limits use data and total model by default; **Include components in

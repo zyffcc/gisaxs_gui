@@ -89,8 +89,9 @@ licence and attribution of their source above:
   `07_giwaxs_results.png`, `23_analyze_menu.png`: `S121_MAI_A2_00841.tif` of the pygid usage examples
   (CC BY 4.0; cite as given above; adapted: rendered, masked and integrated by GIMaP);
 - `03_calibration.png`: the pyFAI silver behenate image (licence to be confirmed);
-- `15_format_converter.png`, `16_xrr.png`, `20_prediction.png`, `22_sputter.png`: frames of
-  `TestSAXSdata/` (the authors' own data, MIT License).
+- `15_format_converter.png`, `16_xrr.png`, `20_prediction.png`, `22_sputter.png`, `22a_sputter_details.png`:
+  frames of `TestSAXSdata/` (the authors' own data, MIT License); of the two Sputter screenshots only the line
+  that sums up the frames comes from them, and the images and values in `22_sputter.png` are synthetic.
 
 The other screenshots show synthetic data or no data.
 

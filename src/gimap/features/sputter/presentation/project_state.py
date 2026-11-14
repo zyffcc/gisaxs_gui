@@ -24,6 +24,8 @@ class SputterProjectMixin:
             "variant": self.result.variant if self.result is not None else None,
             "advanced_open": self.options_section.is_expanded(),
             "log_scale": self.log_scale.isChecked(), "trend_details": self.trend_details.isChecked(),
+            "client": self.client_project_state(),  # Analyze: the bar, its options and its result folder
+            "static": self.static_project_state(),  # Static Frames: the section's fields
         }
 
     def _restore_project_form(self, state: dict) -> None:
@@ -82,4 +84,5 @@ class SputterProjectMixin:
             self.set_scan_folder(scan)
             self._pending_project_state = state
             self._edited = set(GROUPS)
-        return notes
+        self.apply_static_project_state(state.get("static"))
+        return notes + self.apply_client_project_state(state.get("client"))  # after the folder: its values stay

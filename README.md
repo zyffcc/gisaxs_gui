@@ -35,9 +35,12 @@ right.*
   distance, fitted to one curve or to every curve of a folder; every value with ± 1σ and warnings.
 - **Compare and stages** (no AI): where an in-situ series changes course (stages), which frames do not
   belong (odd frames), and several series or samples side by side.
-- **Sputter**: an in-situ sputter deposition of Ag or Au on a polymer (PILATUS CBF frames; Cu with the Ag
-  model, for reference only), read as particle size, spacing, island height, growth stage and metal
-  thickness for every time window, each with how far it can be trusted.
+- **Sputter**: an in-situ sputter deposition (PILATUS CBF frames), time window by time window. Its main
+  screen shows the result of **Analyze**, which runs a separate analysis package: the measured image beside
+  the model image of each solution, and the grain radius, height, distance, gap, size distribution width and
+  coverage with their evolution. **Details** holds the method that comes with GIMaP, **Predict**: Ag or Au
+  on a polymer (Cu with the Ag model, for reference only), read as particle size, spacing, island height,
+  growth stage and metal thickness, each with how far it can be trusted.
 - **Tools**: Geometry Calibration (beam centre and distance from AgBh, LaB₆, CeO₂ …), Format Converter,
   XRR Series Extractor, SEM Particle Analysis (particle sizes from SEM images, with a scale you give) and 1D
   Predict for many curves.
@@ -131,7 +134,9 @@ python main.py
 
 The Sputter workspace's model is part of the repository (`utils/sputter_toolkit`) and runs on PyTorch
 (CPU), which its first **Predict** installs into the Python GIMaP runs in (about 1.2 GB; by hand:
-`python -m pip install -r requirements-sputter.txt`). The fit1d kit of **Predict parameters (fit1d)** is part
+`python -m pip install -r requirements-sputter.txt`). The analysis package of Sputter's **Analyze** is not
+part of the repository: choose its folder in the workspace, set `GIMAP_SPUTTER_CLIENT` to it, or put it in
+`utils/sputter_client` (it needs only `requirements.txt`). The fit1d kit of **Predict parameters (fit1d)** is part
 of the repository too (`utils/gisaxs1d_gui_kit`, about 62 MB) and needs only `requirements.txt`.
 
 **macOS and BornAgain.** The released analysis workspaces do not require BornAgain. It is optional for

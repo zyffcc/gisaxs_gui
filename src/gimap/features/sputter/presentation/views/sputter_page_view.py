@@ -1,13 +1,20 @@
 """Static layout of the Sputter page (behaviour in ``presentation/page.py`` and its mixins).
 
-Left, from the top: the title (what the page gives, in its tooltip); Data (the scan folder and one line about it);
-Sample and geometry (metal, X-rays, distance, incidence, beam centre, each with where its value comes from); the
-Predict button with its job status and the log under Details; a line about PyTorch (the model's Python in its tooltip);
-the result in one line (once there is one: before, the Size Trend tab says how to get one);
-More options (collapsed): polymer, sample roll, mask, time window, deposition rate, its start t0 and its end, the
-results folder,
-Open Results Folder…, Add Refined Windows… and the explanation shown. Right: Size Trend, Literature (added by the
-page), Structure Sketch, Windows and Reliability.
+From the top: the input bar (``sputter_main_view.py``: the scan folder, metal, substrate, deposition rate, Analyze
+and its job status, the geometry in one line, Open Result… and the switch of the view), then one of two views.
+
+**The main screen** (``sputter_main_view.py``, shown first): one time window of a result — the measured image beside
+the model image, the solutions to choose from, the value tiles and the evolution over the scan.
+
+**Details**: everything else. Left, from the top: the title (what the earlier method gives, in its tooltip); Sample
+and geometry (metal, X-rays, distance, incidence, beam centre, each with where its value comes from); Analyze options
+(``sputter_main_view.py``); Static Frames (``sputter_static_view.py``, collapsed); the earlier method — the Predict
+button with its job status and the log under Details; a
+line about PyTorch (the model's Python in its tooltip); the result in one line (once there is one: before, the Size
+Trend tab says how to get one); More options (collapsed): polymer, sample roll, mask, time window, deposition rate,
+its start t0 and its end, the results folder, Open Results Folder…, Add Refined Windows… and the explanation shown;
+under the mask, Masks of the Package offers the pixel masks the analysis package brings.
+Right: Size Trend, Literature (added by the page), Structure Sketch, Windows and Reliability.
 """
 
 from __future__ import annotations
@@ -15,23 +22,27 @@ from __future__ import annotations
 from PyQt5.QtCore import QLocale, Qt
 from PyQt5.QtGui import QDoubleValidator
 from PyQt5.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-                             QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QTableWidget, QTabWidget,
-                             QTextBrowser, QVBoxLayout, QWidget)
+                             QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QStackedWidget, QTableWidget,
+                             QTabWidget, QTextBrowser, QVBoxLayout, QWidget)
 
 from src.gimap.app.presentation.components import AdvancedSection, FilePicker, JobStatus, ParameterSection
 from src.gimap.app.presentation.components.table_copy import enable_table_copy
 from src.gimap.app.presentation.i18n import tr
 
+from .sputter_main_view import SputterMainView
+from .sputter_static_view import MASKS_BUTTON, MASKS_TIP, SputterStaticView
+
 LEFT_WIDTH = 470
 METAL_CHOICES = (("Ag", "Ag"), ("Au", "Au"), ("Cu — approximated with the Ag model, reference only", "Cu"))
-CU_NOTE = ("Cu is read with the Ag model (the networks were trained for Ag and Au): its sizes are for reference "
-           "only.")
+CU_NOTE = ("Predict reads Cu with the Ag model (its networks were trained for Ag and Au): the sizes it gives for Cu "
+           "are for reference only.")
 POLYMERS = ("PSBMA", "PS", "PEO", "polymer")
 TITLE = "Sputter series"
 TITLE_TIP = ("Particle size R and spacing D over time, the metal thickness where it can be stated (island-volume "
              "equivalent; nominal, from a deposition rate), and how far each value can be trusted.")
-SCAN_FOLDER_TIP = ("The folder of one scan (its CBF frames, or a scan folder with them in one subfolder such as p2m/): "
-                   "its first frame tells the detector, the exposure and the time.")
+EARLIER_METHOD = "Earlier method: the networks bundled with GIMaP"
+EARLIER_METHOD_TIP = ("Predict reads the scan with the networks bundled with GIMaP (Ag and Au on polymers) and fills "
+                      "the tabs at the right. Analyze, above, is the newer analysis.")
 RESULT_EMPTY = "No result yet: choose a scan folder and press Predict."
 REPORT_EMPTY = ("<p>Choose a scan folder and press Predict, or open a results folder (More options). Each R and D "
                 "value gets a grade: <b>Lit</b> literature method (R from the nominal thickness and 2π/q*; the default "
@@ -103,16 +114,30 @@ def _row(parent: QWidget, *widgets, stretch_last: bool = False) -> QWidget:
     return row
 
 
-class SputterPageView:
+class SputterPageView(SputterMainView, SputterStaticView):
     def setup_ui(self, page: QWidget) -> None:
         page.setObjectName("sputterPage")
-        outer = QHBoxLayout(page)
+        outer = QVBoxLayout(page)
         outer.setContentsMargins(12, 12, 12, 12)
+        outer.setSpacing(10)
+        outer.addWidget(self._input_bar(page, _number_edit, _meta))
+        self.view_stack = QStackedWidget(page)
+        self.view_stack.setObjectName("sputterViews")
+        self.view_stack.addWidget(self._main_view(self.view_stack))
+        self.view_stack.addWidget(self._details_view(self.view_stack))
+        outer.addWidget(self.view_stack, 1)
+
+    def _details_view(self, parent: QWidget) -> QWidget:
+        details = QWidget(parent)
+        self.details_view = details
+        outer = QHBoxLayout(details)
+        outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(12)
-        scroll = QScrollArea(page)
+        scroll = QScrollArea(details)
         scroll.setWidgetResizable(True)
         scroll.setFixedWidth(LEFT_WIDTH)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.details_scroll = scroll
         left = QWidget()
         scroll.setWidget(left)
         column = QVBoxLayout(left)
@@ -122,26 +147,15 @@ class SputterPageView:
         title.setProperty("gimapRole", "strong")
         title.setToolTip(TITLE_TIP)
         column.addWidget(title)
-        column.addWidget(self._data_section(left))
         column.addWidget(self._geometry_section(left))
+        column.addWidget(self._analysis_section(left, _number_edit, _meta))
+        column.addWidget(self._static_section(left, _number_edit, _meta))
         column.addWidget(self._predict_block(left))
         column.addWidget(self._options_section(left))
         column.addStretch(1)
         outer.addWidget(scroll)
-        outer.addWidget(self._tabs(page), 1)
-
-    def _data_section(self, parent: QWidget) -> ParameterSection:
-        section = ParameterSection("Data", "", parent)
-        self.scan_picker = FilePicker(section, placeholder="Folder with the CBF frames of one scan",
-                                      browse_text="Choose…", clearable=False)
-        self.scan_picker.setObjectName("sputterScanFolder")
-        self.scan_picker.setToolTip(SCAN_FOLDER_TIP)
-        self.scan_picker.path_edit.setToolTip(SCAN_FOLDER_TIP)
-        self.scan_summary = _meta(section)  # one line about the scan once a folder is chosen
-        self.scan_summary.setVisible(False)
-        section.add_widget(self.scan_picker)
-        section.add_widget(self.scan_summary)
-        return section
+        outer.addWidget(self._tabs(details), 1)
+        return details
 
     def _geometry_section(self, parent: QWidget) -> ParameterSection:
         section = ParameterSection("Sample and geometry", "", parent)
@@ -183,6 +197,7 @@ class SputterPageView:
         self.preset_button.setToolTip("Keep this geometry for every scan of this detector and flat field in a date "
                                       "range (a beamtime): such scans are filled in from it.")
         section.add_widget(_row(section, self.preset_button))
+        self.geometry_section = section
         return section
 
     def _predict_block(self, parent: QWidget) -> QWidget:
@@ -190,10 +205,12 @@ class SputterPageView:
         layout = QVBoxLayout(block)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
-        self.predict_button = QPushButton("Predict", block)
+        self.predict_caption = QLabel(EARLIER_METHOD, block)
+        self.predict_caption.setProperty("gimapRole", "strong")
+        self.predict_caption.setToolTip(EARLIER_METHOD_TIP)
+        self.predict_button = QPushButton("Predict", block)  # Analyze, in the bar, is the page's primary action
         self.predict_button.setObjectName("sputterPredict")
-        self.predict_button.setProperty("gimapPrimaryAction", True)
-        self.predict_button.setMinimumHeight(36)
+        self.predict_button.setMinimumHeight(32)
         self.predict_button.setToolTip("Read the frames and predict the structure of every time window. The first "
                                        "time, PyTorch is installed into GIMaP's Python before (about 1.2 GB).")
         self.job_status = JobStatus(block)
@@ -210,7 +227,8 @@ class SputterPageView:
         self.result_label.setWordWrap(True)
         self.result_label.setTextFormat(Qt.RichText)
         self.result_label.setVisible(False)
-        for widget in (self.predict_button, self.job_status, self.log, self.environment_label, self.result_label):
+        for widget in (self.predict_caption, self.predict_button, self.job_status, self.log, self.environment_label,
+                       self.result_label):
             layout.addWidget(widget)
         return block
 
@@ -225,6 +243,8 @@ class SputterPageView:
         _narrow(self.polymer, 8)
         self.roll = _number_edit(section, "0")
         self.mask_picker = FilePicker(section, placeholder="optional detector mask (.npy)", browse_text="…")
+        self.package_masks_button = QPushButton(MASKS_BUTTON, section)
+        self.package_masks_button.setToolTip(MASKS_TIP)
         self.bin_seconds = QDoubleSpinBox(section)
         self.bin_seconds.setRange(0.05, 60.0)
         self.bin_seconds.setDecimals(2)
@@ -247,6 +267,7 @@ class SputterPageView:
         form.addRow("Sample roll (°)", self.roll)
         form.addRow("", self.source_labels["roll"])
         form.addRow("Mask", self.mask_picker)
+        form.addRow("", _row(section, self.package_masks_button))
         form.addRow("Time window (s)", self.bin_seconds)
         form.addRow("Deposition rate (nm/s)", self.rate)
         form.addRow("Start of deposition t0 (s)", self.t0)
@@ -307,5 +328,5 @@ class SputterPageView:
         return self.tabs
 
 
-__all__ = ["CU_NOTE", "METAL_CHOICES", "REPORT_EMPTY", "RESULT_EMPTY", "SCAN_FOLDER_TIP", "SputterPageView", "TITLE",
+__all__ = ["CU_NOTE", "EARLIER_METHOD", "METAL_CHOICES", "REPORT_EMPTY", "RESULT_EMPTY", "SputterPageView", "TITLE",
            "TITLE_TIP"]
