@@ -76,6 +76,11 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
     和形状因子表，随仓库提供，只在任务子进程里导入（`fitting/infrastructure/adapters/fit1d_method.py`）；环境变量
     `GISAXS1D_KIT_HOME` 可以指向另一份。只放运行时文件，例子数据和引用实测数据的研究笔记都不放；改动记在 `SOURCE.json`，
     每个文件按 `FILES_SHA256.json` 校验（`.gitattributes` 关掉换行转换），`tests/test_fit1d_kit_bundle.py` 检查字节和私有名称。
+  - `utils/sputter_client/`：Sputter 页“分析”和“静态帧”的分析包，研究代码 `iampred` 的发布版（只有这两个命令用到的文件和
+    numpy 网络，不含开发时所用私有数据的名字），随仓库提供，只按路径用子进程调用（`features/sputter/infrastructure/client.py`）；
+    `GIMAP_SPUTTER_CLIENT` 或用户选的文件夹优先。不在这里改：在研究代码里用 `python -m iampred.release` 重新构建后整体替换。
+    每个文件按 `MANIFEST.json` 校验（`.gitattributes` 关掉换行转换），`tests/test_sputter_client_bundle.py` 检查字节、
+    私有名称、用当前 Python 能编译、不装 PyTorch 也能启动各命令、每个网络能加载，以及网络带着的哈希。
   - **不在仓库里的可选运行时**，都在可取消的子进程里运行，主程序不导入它们：
     - SEM 的 StarDist：单独的 Python 环境（`requirements-sem-stardist.txt`，`GIMAP_SEM_STARDIST_HOME`），
       模型权重放在仓库外，不联网下载。

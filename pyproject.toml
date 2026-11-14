@@ -22,6 +22,8 @@ extend-exclude = [
     "utils/gisaxs1d_gui_kit",
     # The optional Sputter toolkit is external research code, run only as a subprocess.
     "utils/sputter_toolkit",
+    # The analysis package of the Sputter page is a release build of research code, run only as a subprocess.
+    "utils/sputter_client",
 ]
 
 [tool.ruff.lint]

@@ -1,0 +1,231 @@
+{
+ "family": "polyag_v5",
+ "fitter": "iam_fit4",
+ "env": {
+  "IAM_SMEAR_EDGE": "zero",
+  "IAM_SMOOTH": "1",
+  "IAM_PIXMASK": "00a29e295663",
+  "IAM_BASE": "1",
+  "IAM_SMALL": "1",
+  "IAM_FIX": "nu=1",
+  "IAM_ETAMAX": "0.98",
+  "IAM_SIGMAX": "0.3",
+  "IAM_RMAX": "60",
+  "IAM_FLMAX": "0.8",
+  "IAM_FBMAX": "0.98",
+  "IAM_BASEVOID": "1",
+  "IAM_BASEVOID_AMP": "1",
+  "IAM_LSOFT": "1",
+  "IAM_SIGL": "1",
+  "IAM_FILMFLUCT": "1"
+ },
+ "metals": [
+  "Ag"
+ ],
+ "scalars": [
+  "ln_hm_nominal",
+  "t_rel"
+ ],
+ "mass_factor": [
+  -1.0,
+  1.0
+ ],
+ "ref_kind": "window",
+ "scans": {
+  "ref04": {
+   "ref": "polyag_v5",
+   "metal": "Ag",
+   "env": {
+    "IAM_EPS": "0.0413"
+   },
+   "host": "PNO"
+  },
+  "ref05": {
+   "ref": "polyag_v5",
+   "metal": "Ag",
+   "env": {
+    "IAM_PFILM": "1",
+    "IAM_POLYT_NM": "30"
+   },
+   "host": "PSBMA"
+  },
+  "ref01": {
+   "ref": "polyag_v5",
+   "metal": "Ag",
+   "env": {
+    "IAM_ONSET": "override",
+    "IAM_LAM_NM": "0.105"
+   },
+   "host": "PS"
+  },
+  "ref02": {
+   "ref": "polyag_v5",
+   "metal": "Ag",
+   "env": {
+    "IAM_ONSET": "override",
+    "IAM_LAM_NM": "0.105"
+   },
+   "host": "PS"
+  },
+  "ref03": {
+   "ref": "polyag_v5",
+   "metal": "Ag",
+   "env": {
+    "IAM_ONSET": "override",
+    "IAM_LAM_NM": "0.105"
+   },
+   "host": "PS"
+  }
+ },
+ "monotone": [
+  "cov",
+  "lnh_mass"
+ ],
+ "reported": [
+  {
+   "name": "lnR_num",
+   "expr": "log((m.n * m.Rm + m.n_s * float(sum(m.sp.wj * m.sp.Rj))) / (m.n + m.n_s))",
+   "label": "R, number-weighted (nm)",
+   "unit": "ln nm",
+   "status": "identifiable_early",
+   "valid_t_rel": [
+    0,
+    8
+   ],
+   "note": "all islands / grains counted (main + small population): independent of which population the fit calls 'main'; between the unpenalised and the adopted joint solutions it moves by 4 % (median) / 20 % (p90). Island stage up to about 8 s after the onset is the validated range; later windows are conditional on the adopted family."
+  },
+  {
+   "name": "lnD_num",
+   "expr": "0.5 * log(2 / (sqrt(3) * (m.n + m.n_s)))",
+   "label": "D, all islands (nm)",
+   "unit": "ln nm",
+   "status": "identifiable_early",
+   "valid_t_rel": [
+    0,
+    8
+   ],
+   "note": "mean centre spacing of all islands / grains (hexagonal equivalent of the number density). all islands / grains counted (main + small population): independent of which population the fit calls 'main'; between the unpenalised and the adopted joint solutions it moves by 4 % (median) / 20 % (p90). Island stage up to about 8 s after the onset is the validated range; later windows are conditional on the adopted family."
+  },
+  {
+   "name": "lnR_mass",
+   "expr": "log(((1 - m.fs - m.fL) * m.Rm + m.fs * float(sum(m.sp.wj * m.sp.Rj))) / (1 - m.fL))",
+   "label": "R, mass-weighted (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "grains that carry the mass above the base (mass-weighted over main + small population, large mounds excluded): the fine grains of a closed film, NOT its dominant lateral scale (see lnR_dom, lnR_L); smooth in time in the adopted solutions, between solutions 4 % (median) / 40-46 % (p90, late film). Island stage up to about 8 s after the onset is the validated range; later windows are conditional on the adopted family."
+  },
+  {
+   "name": "lnD_mass",
+   "expr": "((1 - m.fs - m.fL) * log(m.D) + m.fs * log(m.D_s)) / (1 - m.fL)",
+   "label": "D, mass-weighted (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "spacing of the grains that carry the mass above the base (large mounds excluded). After closure the counts show a knee without a correlation peak: the spacing is not determined there (it differs by a factor 2-3 between equally good solutions) and it is no longer the lateral scale of the film; use lnR_dom / lnR_L. Before closure: between solutions 4 % (median). Island stage up to about 8 s after the onset is the validated range; later windows are conditional on the adopted family."
+  },
+  {
+   "name": "lnR_dom",
+   "expr": "np.average(log(np.array([sum(m.wj * m.Rj ** 3) / sum(m.wj * m.Rj ** 2), sum(m.sp.wj * m.sp.Rj ** 4) / sum(m.sp.wj * m.sp.Rj ** 3), sum(m.L.wj * m.L.Rj ** 4) / sum(m.L.wj * m.L.Rj ** 3)])), weights=np.array([(1 - m.fs - m.fL) * m.T, m.fs * m.sp.a * sum(m.sp.wj * m.sp.Rj ** 4) / sum(m.sp.wj * m.sp.Rj ** 3), m.fL * m.L.a * sum(m.L.wj * m.L.Rj ** 4) / sum(m.L.wj * m.L.Rj ** 3)]))",
+   "label": "dominant lateral feature radius (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "radius of the population that carries the knee of the horizontal cut: geometric mean of the volume-weighted radii of main grains, small islands and large flat mounds, weighted by mass share x height (the weight of a population in q^2 I, the representation in which the knee is read). The islands before closure, the mounds of the film surface after it (w_L above 0.6). 3.0 x R_dom is the model counterpart of the direct reading obs_L_knee_nm: on the 56 reference windows with a knee inside the q range the ratio is 1.07 (median), 0.73-1.79 (p16-p84). A mound radius far above 30 nm describes a component below the q range, not a feature size (windows of the coalescence stage with dev5 above 4). Island stage up to about 8 s after the onset is the validated range; later windows are conditional on the adopted family."
+  },
+  {
+   "name": "lnR_L",
+   "expr": "log(sum(m.L.wj * m.L.Rj ** 4) / sum(m.L.wj * m.L.Rj ** 3))",
+   "label": "mound radius (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "volume-weighted radius of the large flat mounds (no positional order): the lateral scale of the surface relief of a closed film; before closure a minor low-q term (see w_L). Mounds that overlap in the model (projected coverage above 1) stand for a relief amplitude, their height is then not a morphology value."
+  },
+  {
+   "name": "w_L",
+   "expr": "np.array([(1 - m.fs - m.fL) * m.T, m.fs * m.sp.a * sum(m.sp.wj * m.sp.Rj ** 4) / sum(m.sp.wj * m.sp.Rj ** 3), m.fL * m.L.a * sum(m.L.wj * m.L.Rj ** 4) / sum(m.L.wj * m.L.Rj ** 3)])[2] / sum(np.array([(1 - m.fs - m.fL) * m.T, m.fs * m.sp.a * sum(m.sp.wj * m.sp.Rj ** 4) / sum(m.sp.wj * m.sp.Rj ** 3), m.fL * m.L.a * sum(m.L.wj * m.L.Rj ** 4) / sum(m.L.wj * m.L.Rj ** 3)]))",
+   "label": "mound weight in R_dom",
+   "unit": "",
+   "status": "conditional",
+   "note": "weight of the mounds in lnR_dom (mass share x height): near 0 island-like, above 0.6 the film-surface relief carries the lateral scale"
+  },
+  {
+   "name": "lnR_grain",
+   "expr": "log(sum(m.wj * m.Rj ** 3) / sum(m.wj * m.Rj ** 2))",
+   "label": "grain radius (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "volume-weighted radius of the main columnar grains / domes: the fine grain structure of the closed film (5-8 nm in the film-stage test); their spacing is not determined after closure (no correlation peak in the counts). Island stage up to about 8 s after the onset is the validated range; later windows are conditional on the adopted family."
+  },
+  {
+   "name": "cov",
+   "expr": "min(m.coverage + m.n_s * float(sum(m.sp.wj * pi * m.sp.Rj ** 2)), 1.0)",
+   "label": "coverage",
+   "unit": "",
+   "status": "identifiable_early",
+   "valid_t_rel": [
+    0,
+    8
+   ],
+   "note": "projected metal coverage of all populations; 13 % (p90) between solutions. Island stage up to about 8 s after the onset is the validated range; later windows are conditional on the adopted family."
+  },
+  {
+   "name": "lnh_mass",
+   "expr": "log(m.h_tot)",
+   "label": "mass thickness (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "mass-equivalent thickness (bulk density) = mass factor x deposition rate x time; absolute as far as the rate and the intensity constant hold (fitted mass factors of the reference scans 0.83-0.97)"
+  },
+  {
+   "name": "lnt_film",
+   "expr": "log(m.t_b + (1 - m.fb) * m.h_tot)",
+   "label": "mean film thickness (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "geometric mean thickness: porous base layer (mass / relative density) + the relief above it; 1.0-1.7 x the mass thickness in the reference fits; 14 % (p90) between solutions on top of the mass scale"
+  },
+  {
+   "name": "lnH_top",
+   "expr": "log(max((1 - m.fb) * m.h_tot / min(max(m.coverage + m.n_s * float(sum(m.sp.wj * pi * m.sp.Rj ** 2)), 0.02), 1.0), 0.02))",
+   "label": "relief height (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "mean height of the islands (island stage) or of the relief above the dense base (film stage); the split base / relief is weakly determined in the film stage (27 % p90 between solutions, single windows more)"
+  },
+  {
+   "name": "f_base",
+   "expr": "m.fb",
+   "label": "dense-base mass fraction",
+   "unit": "",
+   "status": "conditional",
+   "note": "share of the mass in the laterally uniform base layer; erratic between windows in the film stage: read only as island-like (near 0) against film-like (near 1)"
+  },
+  {
+   "name": "lnR_P",
+   "expr": "p['lnRP']",
+   "label": "radius of the film-density regions (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "lateral size of the regions where the whole film is sparser / denser; meaningful only where lnA_P is above about -5"
+  },
+  {
+   "name": "lnA_P",
+   "expr": "p['lnAP']",
+   "label": "ln of the film-density fluctuation amplitude",
+   "unit": "",
+   "status": "conditional",
+   "note": "A_P = area share x (density difference / mean film density)^2; -13.8 = term off"
+  }
+ ],
+ "hosts": [
+  "PNO",
+  "PSBMA",
+  "PS"
+ ],
+ "fill": {
+  "kv": 0.0,
+  "sL": 0.0,
+  "lnRv": 0.6931471805599453,
+  "omv": 0.3,
+  "lnRP": 3.4011973816621555,
+  "lnAP": -13.815510557964274
+ }
+}

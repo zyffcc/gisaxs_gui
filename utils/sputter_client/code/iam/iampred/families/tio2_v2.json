@@ -1,0 +1,169 @@
+{
+ "family": "tio2_v2",
+ "fitter": "iam_fit_t",
+ "env": {
+  "IAM_SMEAR_EDGE": "zero",
+  "IAM_SMOOTH": "1",
+  "IAM_PIXMASK": "00a29e295663",
+  "IAM_ONSET": "override",
+  "IAM_SIGMAX": "0.3",
+  "IAM_RMAX": "40",
+  "IAM_FISLMAX": "3",
+  "IAM_KOPTMAX": "3",
+  "IAM_BURY": "1",
+  "IAM_OZ": "1",
+  "IAM_OZZ": "1",
+  "IAM_TIO2_DEEP": "1",
+  "IAM_TIO2_DEEP_NM": "1000",
+  "IAM_Z0MAX": "1000",
+  "IAM_COAT": "top",
+  "IAM_GMAX": "1.0",
+  "IAM_BURYGRID": "100,300,600",
+  "IAM_COVMAX": "1.0",
+  "IAM_AOZMAX": "1000",
+  "IAM_TIO2_FIX": "1",
+  "IAM_CAP": "1",
+  "IAM_CAPPATCH": "1",
+  "IAM_CAP_PLACE": "on",
+  "IAM_CAP_AVG": "int",
+  "IAM_PHICAPMIN": "0.6",
+  "IAM_TCAPMAX": "30",
+  "IAM_CAP0": "0.3",
+  "IAM_PHICAP0": "0.9",
+  "IAM_CP0": "0.4",
+  "IAM_CAPGRID": "0.1,0.4,0.8",
+  "IAM_CAP_WARMK": "0.02,0.3",
+  "IAM_TFILM": "1"
+ },
+ "metals": [
+  "Au",
+  "Ag"
+ ],
+ "scalars": [
+  "ln_hm_nominal",
+  "t_rel",
+  "metal"
+ ],
+ "mass_factor": null,
+ "ref_kind": "window",
+ "scans": {
+  "ref14": {
+   "ref": "tio2_v2",
+   "metal": "Au"
+  },
+  "ref26": {
+   "ref": "tio2_v2",
+   "metal": "Au"
+  },
+  "ref27": {
+   "ref": "tio2_v2",
+   "metal": "Au"
+  },
+  "ref28": {
+   "ref": "tio2_v2",
+   "metal": "Au"
+  },
+  "ref16": {
+   "ref": "tio2_v2",
+   "metal": "Au"
+  },
+  "ref17": {
+   "ref": "tio2_v2",
+   "metal": "Au"
+  },
+  "ref18": {
+   "ref": "tio2_v2",
+   "metal": "Au"
+  },
+  "ref19": {
+   "ref": "tio2_v2",
+   "metal": "Au"
+  },
+  "ref20": {
+   "ref": "tio2_v2",
+   "metal": "Au"
+  },
+  "ref21": {
+   "ref": "tio2_v2",
+   "metal": "Au"
+  },
+  "ref23": {
+   "ref": "tio2_v2",
+   "metal": "Ag"
+  },
+  "ref24": {
+   "ref": "tio2_v2",
+   "metal": "Ag"
+  },
+  "ref25": {
+   "ref": "tio2_v2",
+   "metal": "Ag"
+  }
+ },
+ "reported": [
+  {
+   "name": "lnR_rel",
+   "expr": "log(m.S.R)",
+   "label": "island R (relative trend)",
+   "unit": "ln nm",
+   "status": "relative_trend",
+   "note": "N5: not an absolute radius; island term is 0.1-5 % of the intensity late"
+  },
+  {
+   "name": "f_isl",
+   "expr": "exp(p['lnfisl'])",
+   "label": "island mass share",
+   "unit": "",
+   "status": "conditional"
+  },
+  {
+   "name": "k_opt",
+   "expr": "exp(p['lnkopt'])",
+   "label": "optical metal factor",
+   "unit": "",
+   "status": "conditional"
+  },
+  {
+   "name": "cap",
+   "expr": "p['kcap']",
+   "label": "cap fraction",
+   "unit": "",
+   "status": "conditional",
+   "note": "TOP-lite cap layer; where the film term is active the cap share often falls to ~0 and the film term carries the dense-metal signal: cap and w_film are not separately identified"
+  },
+  {
+   "name": "sigma_z",
+   "expr": "exp(p['lnszo'])",
+   "label": "network sigma_z (nm)",
+   "unit": "nm",
+   "status": "identifiable_network",
+   "note": "vertical correlation of the buried pore network, stable 1.2-3.4 nm"
+  },
+  {
+   "name": "xi",
+   "expr": "exp(p['lnxio'])",
+   "label": "network xi (nm)",
+   "unit": "nm",
+   "status": "conditional"
+  },
+  {
+   "name": "w_film",
+   "expr": "p['phif'] / (1 + (0.1 * exp(p['lnLf']) / (2 * pi)) ** 4)",
+   "label": "film share of the low-q substrate term at q = 0.1 nm^-1",
+   "unit": "",
+   "status": "conditional",
+   "note": "IAM_TFILM: share of the large-scale TiO2 topography seen through the top-of-metal field; 0 early, grows with thickness (HiPIMS Au up to 0.44); a structural-change indicator, not a film thickness"
+  },
+  {
+   "name": "lnL_f",
+   "expr": "p['lnLf']",
+   "label": "film crossover length (ln nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "ln of the lateral length above which the topography is seen through the film term; exp = 10-45 nm where the term is active, undetermined (150-400 nm, outside the measured q range) where w_film ~ 0"
+  }
+ ],
+ "hosts": [
+  "TiO2"
+ ]
+}

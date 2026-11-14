@@ -1,0 +1,5 @@
+{
+ "_note": "client package: paths come from run.cmd / run.sh",
+ "data": "../../data",
+ "work": "../../work"
+}

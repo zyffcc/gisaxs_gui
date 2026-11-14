@@ -29,8 +29,10 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   and Real Space draws the TiO₂ layer with the metal in its pores, the cap on the particle tops and the clusters.
   **Details ▸ Static Frames (after deposition)** analyses samples measured after their deposition (a folder, a CBF
   file or a zip archive) one at a time into a series, which the main screen shows along the nominal thickness.
-- Sputter ▸ Analyze, limitations: the analysis package is not part of GIMaP (choose its folder once, or set
-  `GIMAP_SPUTTER_CLIENT`); it analyses only the pairs of metal and substrate it has a network for; its values are
+- The analysis package of Sputter ▸ Analyze and Static Frames comes with GIMaP (`utils/sputter_client`): nothing
+  has to be chosen. **Choose Folder…** or `GIMAP_SPUTTER_CLIENT` still use another package.
+- Sputter ▸ Analyze, limitations: the analysis package analyses only the pairs of metal and substrate it has a
+  network for; its values are
   model values that were not compared with an independent measurement of the sample; a step of the analysis does
   not report progress while it works; the frames it read stay in the user data folder (`sputter_client/`) until
   you delete them.

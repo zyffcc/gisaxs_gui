@@ -7,7 +7,7 @@ record of where it came from and with which settings.
 
 This manual describes version 0.2.0, a pre-release: treat it as beta scientific software and check
 results that matter. The workspaces (Analyze, Fitting, Compare, Sputter) are meant for daily work;
-Sputter's main screen needs a separate analysis package, and the model that comes with GIMaP (Predict) covers
+Sputter's main screen runs an analysis package that comes with GIMaP, and the model of Predict covers
 Ag and Au sputtered onto polymers (chapter 8). The Labs pages and 1D Predict are
 experimental. **Help ▸ About GIMaP** shows the version you are running.
 What changed since 0.0.2, and the known limitations of this version, are in `CHANGELOG.md` in the
@@ -350,7 +350,7 @@ GIMaP runs without these. Each is needed only for the function named.
 | An AI account or a local model | **Ask AI…**, **Tools ▸ Process with AI…** | The Python packages come with `requirements.txt`; set up the AI in **Tools ▸ Settings… ▸ Assistant** (chapter 10) |
 | StarDist | Separating touching particles in **Tools ▸ SEM Particle Analysis…** | A separate Python environment with `requirements-sem-stardist.txt`, and a local model folder (chapter 9) |
 | PyTorch (CPU) | **Predict** in the Sputter workspace | Not in the portable package: installed into GIMaP's Python on the first Predict (about 1.2 GB, needs the internet). In a source folder, the first start of `Start_GIMaP.bat` installs it (section 2.2). By hand: `python -m pip install -r requirements-sputter.txt` (section 8.2) |
-| The analysis package | **Analyze** on the main screen of the Sputter workspace | A folder distributed separately from GIMaP (it holds `code` and `models`; it needs no further Python package). Choose it once with **Choose Folder…**, set `GIMAP_SPUTTER_CLIENT` to it, or put it in `utils/sputter_client` of the program folder (section 8.1) |
+| The analysis package | **Analyze** and **Static Frames** of the Sputter workspace | Comes with GIMaP (`utils/sputter_client`); it needs no further Python package. **Choose Folder…** or `GIMAP_SPUTTER_CLIENT` use another one (section 8.1) |
 
 TensorFlow runs on the CPU; a GPU set-up is not configured.
 
@@ -2455,11 +2455,12 @@ the main screen shows is in its [section 12.16](Physics_Manual.md#1216-analyze-w
 
 ### 8.1 The main screen: Analyze
 
-**What you need.** The analysis package: a folder (it holds `code` and `models`) that is distributed separately
-from GIMaP and runs in GIMaP's own Python (NumPy, SciPy and Matplotlib; no PyTorch). GIMaP looks for it in the
-environment variable `GIMAP_SPUTTER_CLIENT`, then in the folder you choose once with **Choose Folder…** (on the
-empty main screen, or **Details ▸ Analyze options ▸ Analysis package**), then in `utils/sputter_client` of the
-program folder. Without it the main screen says so; **Open Result…** shows a folder analysed before all the same.
+**What you need.** Nothing more: the analysis package comes with GIMaP (`utils/sputter_client` of the program
+folder; a folder with `code` and `models` that runs in GIMaP's own Python, with NumPy, SciPy and Matplotlib, no
+PyTorch). To use another package, choose its folder with **Choose Folder…** (**Details ▸ Analyze options ▸
+Analysis package**) or set the environment variable `GIMAP_SPUTTER_CLIENT` to it; both take precedence over the
+one that comes with GIMaP. Without any package the main screen says so; **Open Result…** shows a folder analysed
+before all the same.
 
 **The input bar**, from the left:
 
@@ -2598,7 +2599,8 @@ folder stand in for a scan (they are not a sputter series, so no result is shown
 up the frames, the detector, the exposure and
 the time. The energy, distance and incidence angle are not in the files, so the page asks for them (the flat-field
 energy is shown beside the energy, not filled in); an empty beam centre is estimated from the frames. Below the
-geometry are the options of Analyze (no analysis package was chosen yet), then Predict: scroll the column for its
+geometry are the options of Analyze (this picture was taken without an analysis package), then Predict: scroll the
+column for its
 job status, the line about PyTorch and **More options**.*
 
 **Save Geometry as Preset…** fills in later scans of this detector and flat field within one beamtime (a week either
@@ -3467,7 +3469,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`, `assistant_provider_keys.json`; section 10.1): whoever can read that folder can read them. | On a shared computer, or with `GIMAP_HOME` on a shared drive, set the key as an environment variable instead, or **Remove** it after use. |
 | **Sputter does not determine the thickness of a continuous film**, and a film with particles on it is not modelled (section 8.9). | Read the island-volume equivalent t_eq (island windows, conditional) and the nominal thickness from a deposition rate; compare with XRR, a quartz balance or a cross-section. |
 | **Sputter reads Cu with the Ag model** (the networks were trained for Ag and Au). | Use Cu results for reference only. |
-| **Sputter ▸ Analyze needs the analysis package**, which is not part of GIMaP, and analyses only the pairs of metal and substrate the package has a network for; its values are model values that were not compared with an independent measurement of your sample (section 8.1). The frames it read are kept in the user data folder (`sputter_client/`), one copy per request that changes the import (rate, geometry, mask, substrate …); nothing removes them. | Choose the package's folder once (**Choose Folder…**). Judge a solution by its model image beside the measured one, and compare with SEM, AFM or XRR where you can. Delete old folders of `sputter_client/` yourself. |
+| **Sputter ▸ Analyze runs the analysis package that comes with GIMaP**, which analyses only the pairs of metal and substrate the package has a network for; its values are model values that were not compared with an independent measurement of your sample (section 8.1). The frames it read are kept in the user data folder (`sputter_client/`), one copy per request that changes the import (rate, geometry, mask, substrate …); nothing removes them. | Judge a solution by its model image beside the measured one, and compare with SEM, AFM or XRR where you can. Delete old folders of `sputter_client/` yourself. |
 | **Sputter reads folders of CBF frames only**, and the networks of Predict were trained for Ag and Au on polymer substrates (chapter 8). | For NeXus series, or with Predict another substrate, use Analyze's series map (section 5.6) and Fitting's in-situ series (section 6.6); converting frames to CBF does not make another substrate valid. |
 | **Sputter keeps every result folder**, with the frames as the model read them (`intake/`, `binned/`), in the user data folder unless you chose another place; nothing removes them, and **File ▸ Save Project** holds the Sputter form and references its result folder. | For long scans choose **More options ▸ Save results in** on a data disk; delete old folders yourself; open a result again with **More options ▸ Open Results Folder…**. |
 | **Sputter's island height H from the q_z fringes is the height of a uniform layer** (minima at H Q = 2π n): for islands of another shape and with the refraction model it may be off by a constant of about 1 nm; with one fringe period or less in the range it carries a systematic error of up to 8% (inside its interval). It is not given while no minimum is in the detector's q_z range, while a minimum crosses a module gap, or when the order cannot be told. | Read the trend; compare with XRR, AFM or a cross-section; the summary names αc and where it comes from. |
@@ -3551,9 +3553,10 @@ activate the right Python environment and run `pip install -r requirements.txt`.
 
 **Sputter ▸ Analyze.** The job status in the input bar says what stopped it:
 
-- *The analysis package was not found*, or *… is not an analysis package: … is missing*: choose the package's
-  folder with **Choose Folder…** (the folder that holds `code` and `models`), or set the environment variable
-  `GIMAP_SPUTTER_CLIENT` to it (section 8.1).
+- *The analysis package was not found*, or *… is not an analysis package: … is missing*: the program folder has no
+  complete `utils/sputter_client` (the package that comes with GIMaP), or the folder chosen is not a package. Choose
+  the package's folder with **Choose Folder…** (the folder that holds `code` and `models`), or set the environment
+  variable `GIMAP_SPUTTER_CLIENT` to it (section 8.1).
 - *Give the deposition rate (nm/s)*, *Give the photon energy or the wavelength* and the like: a value of the
   input bar or of the geometry is missing; the line under the bar names the geometry still to enter, and **Edit**
   shows its fields.

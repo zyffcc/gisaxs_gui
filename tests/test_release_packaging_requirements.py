@@ -75,6 +75,12 @@ def code():
                 continue  # research records and caches: not part of the program, nor of a release
             if parts[:2] == ("utils", "gisaxs1d_gui_kit"):
                 continue  # the bundled, frozen fit1d kit; required host dependencies are EXTERNAL_RUNTIME above
+            if parts[:2] == ("utils", "sputter_client"):
+                # the bundled analysis package of the Sputter page, a release build of research code run as a
+                # subprocess in the program's Python: its commands need NumPy, SciPy and Matplotlib (fabio when
+                # present); its other imports (torch, pyFAI, xraydb) sit on research paths the page never runs
+                # (tests/test_sputter_client_bundle.py: the commands start without PyTorch)
+                continue
             if parts[:2] == ("utils", "sputter_toolkit"):
                 # external Sputter toolkit, run as a subprocess; its packages: requirements-sputter.txt. Its own
                 # package (``sputtergisaxs``) is the program's: the fringe tool imports the toolkit's grid from it.

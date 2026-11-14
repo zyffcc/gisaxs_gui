@@ -134,10 +134,11 @@ python main.py
 
 The Sputter workspace's model is part of the repository (`utils/sputter_toolkit`) and runs on PyTorch
 (CPU), which its first **Predict** installs into the Python GIMaP runs in (about 1.2 GB; by hand:
-`python -m pip install -r requirements-sputter.txt`). The analysis package of Sputter's **Analyze** is not
-part of the repository: choose its folder in the workspace, set `GIMAP_SPUTTER_CLIENT` to it, or put it in
-`utils/sputter_client` (it needs only `requirements.txt`). The fit1d kit of **Predict parameters (fit1d)** is part
-of the repository too (`utils/gisaxs1d_gui_kit`, about 62 MB) and needs only `requirements.txt`.
+`python -m pip install -r requirements-sputter.txt`). The analysis package of Sputter's **Analyze** and
+**Static Frames** is part of the repository too (`utils/sputter_client`, about 75 MB) and needs only
+`requirements.txt`; another folder chosen in the workspace or `GIMAP_SPUTTER_CLIENT` use another package.
+The fit1d kit of **Predict parameters (fit1d)** is part of the repository too (`utils/gisaxs1d_gui_kit`, about
+62 MB) and needs only `requirements.txt`.
 
 **macOS and BornAgain.** The released analysis workspaces do not require BornAgain. It is optional for
 research simulations and their tests; install it from the Homebrew formula `mlz/homebrew/bornagain@24.1` as a wheel built for the same

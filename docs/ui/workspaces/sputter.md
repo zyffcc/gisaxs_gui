@@ -20,7 +20,7 @@
   `presentation/views/sputter_main_view.py`、`presentation/client_flow.py`、`client_panel.py`、`client_texts.py`、
   `pattern_view.py`、`evolution_view.py`、`real_space_view.py` 与 `domain/real_space.py`（实空间示意）；静态帧：
   `application/client_static.py`、`infrastructure/client_static.py`、`presentation/static_flow.py`、
-  `presentation/views/sputter_static_view.py`；分析包不在仓库里（`GIMAP_SPUTTER_CLIENT`、用户选的文件夹或 `utils/sputter_client/`）；
+  `presentation/views/sputter_static_view.py`；分析包随仓库提供（`utils/sputter_client/`，研究代码的发布版：只有这些命令用到的文件，不含开发时所用私有数据的名字，`MANIFEST.json` 与 `tests/test_sputter_client_bundle.py` 检查它；`GIMAP_SPUTTER_CLIENT` 或用户选的文件夹优先）；
   由 q_z 干涉条纹得到的岛高度：`domain/fringes.py`、`application/fringes.py`、`infrastructure/fringes.py`、
   `presentation/fringe_flow.py`、`presentation/fringe_panel.py`，工具 `utils/sputter_fringes/`（numpy/scipy，子进程）；
   模型 `utils/sputter_toolkit/`（GUI 只按路径以子进程调用；文献方法在 `sputtergisaxs/sputter_literature.py`，已发表数值在

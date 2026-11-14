@@ -15,7 +15,10 @@ line with **Edit**, **Open Result…**):
 
 ## Analyze (the main screen)
 
-- **The package** is not part of GIMaP: a self-contained folder (`code`, `models`; NumPy / SciPy / Matplotlib only).
+- **The package** comes with GIMaP: `utils/sputter_client`, a release build of the research code (only the files
+  the commands below use, no names of the private data it was developed on; `MANIFEST.json` and
+  `tests/test_sputter_client_bundle.py` check it). A self-contained folder (`code`, `models`; NumPy / SciPy /
+  Matplotlib only).
   `infrastructure/client.py` `locate_package`: the environment variable `GIMAP_SPUTTER_CLIENT`, else the folder the
   user chose (Details ▸ Analyze options ▸ **Choose Folder…**, kept in the preferences), else `utils/sputter_client`
   of the program folder. Without it the main screen says so, with **Choose Folder…**; **Open Result…** works anyway.

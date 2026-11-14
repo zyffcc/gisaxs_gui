@@ -225,3 +225,7 @@ docs/agents/eval/local/
 # out its fitting code (research/) and its two networks (*.npz).
 !utils/gisaxs1d_gui_kit/app/research/
 !utils/gisaxs1d_gui_kit/models/*/weights_numpy.npz
+
+# The analysis package of the Sputter page (utils/sputter_client) is part of the repository too; its networks
+# and two tables are *.npz files, which the general rule above leaves out.
+!utils/sputter_client/**/*.npz

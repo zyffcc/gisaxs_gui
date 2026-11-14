@@ -1,0 +1,102 @@
+{
+ "families": {
+  "si_v6": {
+   "en": "Au / Ag on Si",
+   "zh": "Si 基底（Au / Ag）"
+  },
+  "polyag_v5": {
+   "en": "Ag on polymer",
+   "zh": "聚合物基底（Ag）"
+  },
+  "tio2_v2": {
+   "en": "Au / Ag on TiO$_2$",
+   "zh": "TiO$_2$ 基底（Au / Ag）"
+  },
+  "cu_v4": {
+   "en": "Cu on PEO",
+   "zh": "PEO 基底（Cu）"
+  }
+ },
+ "figure": {
+  "si_v6": [
+   [
+    "R_nm",
+    "grain radius R (nm)",
+    "晶粒半径 R (nm)",
+    "log"
+   ],
+   [
+    "D_nm",
+    "centre distance D (nm)",
+    "中心间距 D (nm)",
+    "log"
+   ],
+   [
+    "cov",
+    "coverage",
+    "覆盖率",
+    "linear"
+   ]
+  ],
+  "polyag_v5": [
+   [
+    "R_dom_nm",
+    "dominant lateral feature radius R_dom (nm)",
+    "主导横向特征半径 R_dom (nm)",
+    "log"
+   ],
+   [
+    "R_grain_nm",
+    "grain radius (nm)",
+    "晶粒半径 (nm)",
+    "log"
+   ],
+   [
+    "t_film_nm",
+    "mean film thickness (nm)",
+    "平均膜厚 (nm)",
+    "log"
+   ]
+  ],
+  "tio2_v2": [
+   [
+    "sigma_z",
+    "network $\\sigma_z$ (nm)",
+    "孔网络 $\\sigma_z$ (nm)",
+    "linear"
+   ],
+   [
+    "R_rel_nm",
+    "relative size R_rel (nm, trend only)",
+    "相对尺寸 R_rel (nm，只看趋势)",
+    "log"
+   ],
+   [
+    "w_film",
+    "film share w_film (structural-change indicator)",
+    "膜项份额 w_film（结构变化指标）",
+    "linear"
+   ]
+  ],
+  "cu_v4": [
+   [
+    "R_mass_nm",
+    "mass-weighted radius R (nm)",
+    "质量加权半径 R (nm)",
+    "log"
+   ],
+   [
+    "D_mass_nm",
+    "mass-weighted distance D (nm)",
+    "质量加权间距 D (nm)",
+    "log"
+   ],
+   [
+    "t_film_nm",
+    "mean film thickness (nm)",
+    "平均膜厚 (nm)",
+    "log"
+   ]
+  ]
+ }
+}

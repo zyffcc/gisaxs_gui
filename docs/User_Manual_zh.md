@@ -5,7 +5,7 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的桌面分析软件。�
 每条曲线都记着它从哪里来、用了哪些设置。
 
 本手册对应 0.2.0 版，这是预发布版（pre-release）：请把它当作测试阶段的科学软件，重要的结果要核对。
-工作区（分析、拟合、比较、溅射）可以用于日常工作；溅射的主屏需要一个单独提供的分析包，GIMaP 自带的模型（预测）适用于
+工作区（分析、拟合、比较、溅射）可以用于日常工作；溅射的主屏运行随 GIMaP 提供的分析包，GIMaP 自带的模型（预测）适用于
 溅射到聚合物上的 Ag 和 Au（第 8 章）。
 实验室（Labs）页面和一维预测（1D Predict）是实验性的。
 **帮助 ▸ 关于 GIMaP**（Help ▸ About GIMaP）显示正在运行的版本。自 0.0.2 以来的改动和这一版的已知限制
@@ -296,7 +296,7 @@ PyTorch 装进 GIMaP 所用的 Python。想事先装好，就在同一个环境�
 | AI 账号或本地模型 | **问 AI…**（Ask AI…）、**工具 ▸ 用 AI 处理…**（Tools ▸ Process with AI…） | Python 包已在 `requirements.txt` 里；在**工具 ▸ 设置… ▸ AI 助手**（Tools ▸ Settings… ▸ Assistant）里设置 AI（第 10 章） |
 | StarDist | **工具 ▸ SEM 粒径分析…**（Tools ▸ SEM Particle Analysis…）里分开相互接触的颗粒 | 单独的 Python 环境，装 `requirements-sem-stardist.txt`，再加一个本地模型文件夹（第 9 章） |
 | PyTorch（CPU） | 溅射工作区的**预测**（Predict） | 不在便携版安装包里：第一次预测时装进 GIMaP 的 Python（约 1.2 GB，需要联网）。在源码文件夹里，`Start_GIMaP.bat` 第一次启动时就装好它（2.2 节）。手动安装用 `python -m pip install -r requirements-sputter.txt`（8.2 节） |
-| 分析包 | 溅射工作区主屏的**分析**（Analyze） | 与 GIMaP 分开提供的一个文件夹（里面有 `code` 和 `models`；不需要再装 Python 包）。用**选择文件夹…**（Choose Folder…）选一次，或把 `GIMAP_SPUTTER_CLIENT` 设为它，或把它放在程序文件夹的 `utils/sputter_client` 里（8.1 节） |
+| 分析包 | 溅射工作区的**分析**（Analyze）和**静态帧**（Static Frames） | 随 GIMaP 提供（`utils/sputter_client`），不需要再装 Python 包。用**选择文件夹…**（Choose Folder…）或 `GIMAP_SPUTTER_CLIENT` 可以改用另一个分析包（8.1 节） |
 
 TensorFlow 在 CPU 上运行；GPU 环境没有配置。
 
@@ -1962,11 +1962,11 @@ fit1d 有自己的物理模型（数目加权的截断高斯尺寸分布、Hosem
 
 ### 8.1 主屏：分析
 
-**需要什么。** 分析包：一个文件夹（里面有 `code` 和 `models`），与 GIMaP 分开提供，在 GIMaP 自己的 Python 里运行
-（NumPy、SciPy 和 Matplotlib；不需要 PyTorch）。GIMaP 依次在这些地方找它：环境变量 `GIMAP_SPUTTER_CLIENT`；你用
-**选择文件夹…**（Choose Folder…）选过一次的文件夹（在空的主屏上，或**详情 ▸ 分析选项 ▸ 分析包**（Details ▸ Analyze options ▸
-Analysis package））；程序文件夹的 `utils/sputter_client`。没有分析包时主屏会说明；**打开结果…**（Open Result…）照样可以
-显示以前分析过的文件夹。
+**需要什么。** 不需要额外准备：分析包随 GIMaP 提供（程序文件夹的 `utils/sputter_client`；一个有 `code` 和 `models` 的
+文件夹，在 GIMaP 自己的 Python 里运行，用 NumPy、SciPy 和 Matplotlib，不需要 PyTorch）。要改用另一个分析包，用
+**选择文件夹…**（Choose Folder…，在**详情 ▸ 分析选项 ▸ 分析包**（Details ▸ Analyze options ▸ Analysis package））选它的文件夹，
+或把环境变量 `GIMAP_SPUTTER_CLIENT` 设为它；两者都优先于随 GIMaP 提供的那个。完全没有分析包时主屏会说明；
+**打开结果…**（Open Result…）照样可以显示以前分析过的文件夹。
 
 **输入栏**，从左到右：
 
@@ -2069,7 +2069,7 @@ Analysis package））；程序文件夹的 `utils/sputter_client`。没有分�
 ![选好扫描文件夹、还没有预测时溅射工作区的详情](manual_images/zh/22a_sputter_details.png)
 *选好文件夹、还没有按预测时的详情。这里用仓库 `TestSAXSdata/` 文件夹里的三帧 PILATUS CBF 帧代替一个扫描（它们不是溅射序列，所以没有结果）：
 输入栏下面一行写出帧数、探测器、曝光和时间。能量、距离和入射角不在文件里，所以页面请你填写（平场的能量只显示在能量旁边，
-不填入）；光束中心留空时由帧估计。几何下面是分析的选项（还没有选分析包），再下面是预测：向下滚动这一栏可以看到它的任务状态、
+不填入）；光束中心留空时由帧估计。几何下面是分析的选项（这张图是在没有分析包时截的），再下面是预测：向下滚动这一栏可以看到它的任务状态、
 关于 PyTorch 的那一行和**更多选项**。*
 
 **把几何存为预设…**（Save Geometry as Preset…）为这台探测器和这个平场在一次束线时间内（默认是扫描前后各一周）的后续扫描
@@ -2770,7 +2770,7 @@ ASCII——`1/A`、`deg`、`2theta`、`alpha_i`、`chi`、`sigma`、`+/-`——�
 | **在 GIMaP 里存下的 API 密钥是明文**，放在用户数据文件夹里（`claude_api_key.txt`、`assistant_provider_keys.json`；10.1 节）：能读这个文件夹的人就能读到它们。 | 在共用的电脑上，或 `GIMAP_HOME` 在共享盘上时，改用环境变量，或用完后 **移除**（Remove）。 |
 | **溅射工作区不能确定连续膜的厚度**，膜上带颗粒的情形也没有建模（8.9 节）。 | 读岛体积等效厚度 t_eq（岛时间窗，有条件）和由沉积速率得到的名义厚度；与 XRR、石英晶体微天平或截面对照。 |
 | **溅射工作区用 Ag 模型读取 Cu**（网络是为 Ag 和 Au 训练的）。 | Cu 的结果仅供参考。 |
-| **溅射 ▸ 分析需要分析包**，它不是 GIMaP 的一部分，并且只分析分析包有网络的金属与基底组合；它给出的是模型值，没有与你的样品的独立测量比较过（8.1 节）。它读入的帧保存在用户数据文件夹（`sputter_client/`）里，每个改变了导入的请求（速率、几何、掩膜、基底……）各有一份；没有任何操作会删除它们。 | 用**选择文件夹…**选一次分析包的文件夹。看模型图与实测图并排对得怎样来判断一个解，能做的话再与 SEM、AFM 或 XRR 对照。`sputter_client/` 里的旧文件夹自己删除。 |
+| **溅射 ▸ 分析运行随 GIMaP 提供的分析包**，它只分析分析包有网络的金属与基底组合；它给出的是模型值，没有与你的样品的独立测量比较过（8.1 节）。它读入的帧保存在用户数据文件夹（`sputter_client/`）里，每个改变了导入的请求（速率、几何、掩膜、基底……）各有一份；没有任何操作会删除它们。 | 看模型图与实测图并排对得怎样来判断一个解，能做的话再与 SEM、AFM 或 XRR 对照。`sputter_client/` 里的旧文件夹自己删除。 |
 | **溅射工作区只读 CBF 帧的文件夹**，预测的网络是为聚合物基底上的 Ag 和 Au 训练的（第 8 章）。 | NeXus 序列，或预测不适用的其他基底，请用分析的序列热图（5.6 节）和拟合的原位序列（6.6 节）；把帧转成 CBF 并不能让其他基底变得适用。 |
 | **溅射工作区保留每个结果文件夹**，连同模型读入的帧（`intake/`、`binned/`），默认放在用户数据文件夹里；没有任何操作会删除它们，**文件 ▸ 保存项目** 会保存溅射参数和结果文件夹引用。 | 长扫描请在 **更多选项 ▸ 结果保存在** 里选数据盘上的文件夹；旧文件夹自己删除；用 **更多选项 ▸ 打开结果文件夹…** 重新打开结果。 |
 | **溅射工作区由 q_z 干涉条纹得到的岛高度 H 是均匀层的高度**（极小值位于 H Q = 2π n）：对其他形状的岛，加上折射模型，可能有约 1 nm 的固定偏差；范围内不足一个条纹周期时有最多 8% 的系统误差（已含在区间内）。范围内没有极小值、极小值正穿过模块间隙或无法确定级次时，不给出 H。 | 看趋势；与 XRR、AFM 或截面对照；摘要写明 αc 及其来源。 |
@@ -2835,8 +2835,9 @@ Claude API：`pip install anthropic`、密钥、**测试连接**（Test Connecti
 
 **溅射 ▸ 分析。** 输入栏里的任务状态会说明是什么让它停下：
 
-- *没有找到分析包*，或 *… 不是分析包：缺少 …*：用**选择文件夹…**（Choose Folder…）选分析包的文件夹（里面有 `code` 和
-  `models` 的那个），或把环境变量 `GIMAP_SPUTTER_CLIENT` 设为它（8.1 节）。
+- *没有找到分析包*，或 *… 不是分析包：缺少 …*：程序文件夹里没有完整的 `utils/sputter_client`（随 GIMaP 提供的分析包），
+  或选的文件夹不是分析包。用**选择文件夹…**（Choose Folder…）选分析包的文件夹（里面有 `code` 和 `models` 的那个），
+  或把环境变量 `GIMAP_SPUTTER_CLIENT` 设为它（8.1 节）。
 - *请给出沉积速率（nm/s）*、*请给出光子能量或波长* 之类：输入栏或几何里缺一个值；输入栏下面那一行写出还要填写的几何，
   **编辑**（Edit）显示这些字段。
 - *分析出错结束（failed at …）* 或 *（exit code …）*：按**详情**（Details）；**分析选项**下面的日志以分析包的最后几行结尾。

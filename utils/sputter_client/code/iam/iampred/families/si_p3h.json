@@ -1,0 +1,202 @@
+{
+ "family": "si_p3h",
+ "fitter": "iam_fit4",
+ "env": {
+  "IAM_SMEAR_EDGE": "zero",
+  "IAM_SMOOTH": "1",
+  "IAM_PIXMASK": "00a29e295663",
+  "IAM_BASE": "1",
+  "IAM_SMALL": "1",
+  "IAM_FIX": "nu=1",
+  "IAM_ETAMAX": "0.98",
+  "IAM_SIGMAX": "0.3",
+  "IAM_RMAX": "60",
+  "IAM_FLMAX": "0.8",
+  "IAM_FBMAX": "0.98",
+  "IAM_SHADOW_BG": "pre0",
+  "IAM_LSOFT": "1",
+  "IAM_BASEVOID": "1",
+  "IAM_BASEVOID_AMP": "1",
+  "IAM_LC": "1",
+  "IAM_FILMFLUCT": "1",
+  "IAM_GSH": "1",
+  "IAM_SF": "hd"
+ },
+ "needs": [
+  "IAM_SHADOW_DIR (shadow_v1 tables of the joint windows)"
+ ],
+ "metals": [
+  "Au",
+  "Ag"
+ ],
+ "scalars": [
+  "ln_hm_nominal",
+  "t_rel",
+  "metal"
+ ],
+ "mass_factor": [
+  -1.0,
+  1.0
+ ],
+ "ref_kind": "window",
+ "scans": {
+  "ref15": {
+   "ref": "si_p3h",
+   "metal": "Au"
+  },
+  "ref06": {
+   "ref": "si_p3h",
+   "metal": "Au"
+  },
+  "ref22": {
+   "ref": "si_p3h",
+   "metal": "Ag"
+  },
+  "ref07": {
+   "ref": "si_p3h",
+   "metal": "Ag"
+  },
+  "ref08": {
+   "ref": "si_p3h",
+   "metal": "Ag"
+  },
+  "ref09": {
+   "ref": "si_p3h",
+   "metal": "Ag"
+  },
+  "ref10": {
+   "ref": "si_p3h",
+   "metal": "Ag"
+  },
+  "ref11": {
+   "ref": "si_p3h",
+   "metal": "Ag"
+  },
+  "ref12": {
+   "ref": "si_p3h",
+   "metal": "Ag"
+  }
+ },
+ "reported": [
+  {
+   "name": "lnR",
+   "expr": "log(m.R)",
+   "label": "R (nm)",
+   "unit": "ln nm",
+   "status": "identifiable_early",
+   "valid_t_rel": [
+    0,
+    30
+   ],
+   "note": "identifiable in the island / coalescence stage (about 3-30 s, misfit-transplant tests of 11-02: size P90 10-17 %, coverage within 0.05); later grains (Ag >= 80 s) not identifiable"
+  },
+  {
+   "name": "lnD",
+   "expr": "log(m.D)",
+   "label": "D (nm)",
+   "unit": "ln nm",
+   "status": "identifiable_early",
+   "valid_t_rel": [
+    0,
+    30
+   ],
+   "note": "identifiable in the island / coalescence stage (about 3-30 s, misfit-transplant tests of 11-02: size P90 10-17 %, coverage within 0.05); later grains (Ag >= 80 s) not identifiable; D from the number density (not 2 pi / q*)"
+  },
+  {
+   "name": "cov",
+   "expr": "min(m.coverage + (m.n_s * float(sum(m.sp.wj * pi * m.sp.Rj ** 2)) if m.fs > 0 else 0.0), 1.0)",
+   "label": "coverage",
+   "unit": "",
+   "status": "identifiable_early",
+   "valid_t_rel": [
+    0,
+    30
+   ],
+   "note": "identifiable in the island / coalescence stage (about 3-30 s, misfit-transplant tests of 11-02: size P90 10-17 %, coverage within 0.05); later grains (Ag >= 80 s) not identifiable"
+  },
+  {
+   "name": "lnT",
+   "expr": "log(max(m.T, 0.05))",
+   "label": "height T (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "absolute scale set by the mass factor and the deposition rate"
+  },
+  {
+   "name": "base_mass",
+   "expr": "m.fb * m.h_tot",
+   "label": "dense base mass (nm)",
+   "unit": "nm",
+   "status": "conditional",
+   "note": "absolute scale set by the mass factor and the deposition rate"
+  },
+  {
+   "name": "lnR_P",
+   "expr": "p['lnRP']",
+   "label": "radius of the film-density regions (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "lateral size of the regions where the whole film is sparser / denser; meaningful only where lnA_P is above about -5"
+  },
+  {
+   "name": "lnA_P",
+   "expr": "p['lnAP']",
+   "label": "ln of the film-density fluctuation amplitude",
+   "unit": "",
+   "status": "conditional",
+   "note": "A_P = area share x (density difference / mean film density)^2; -13.8 = term off"
+  },
+  {
+   "name": "sH",
+   "expr": "p['sH']",
+   "label": "log-normal spread of the grain heights",
+   "unit": "",
+   "status": "conditional",
+   "note": "0 = all grains of one height (the film fringe at the grain scale is sharp)"
+  }
+ ],
+ "fill": {
+  "phiS": 0.0,
+  "lnLc": 3.6888794541139363,
+  "lnRP": 3.4011973816621555,
+  "lnAP": -13.815510557964274,
+  "sH": 0.0
+ },
+ "features": {
+  "af": [
+   0.03,
+   1.0
+  ],
+  "pool": 2,
+  "ratio": true
+ },
+ "noise": {
+  "scale": 0.15,
+  "drift": 0.05
+ },
+ "hosts": [
+  "Si"
+ ],
+ "prior": {
+  "near": 0.15,
+  "interp": 0.1,
+  "cross": 0.1,
+  "uniform": 0.0,
+  "growth_share": 0.65,
+  "growth": {
+   "pool": true,
+   "closed": 1.3,
+   "dt": [
+    0.0,
+    1.0
+   ],
+   "ref_amount": true,
+   "kappa": [
+    1.0,
+    0.1,
+    0.75,
+    1.35
+   ]
+  }
+ }
+}

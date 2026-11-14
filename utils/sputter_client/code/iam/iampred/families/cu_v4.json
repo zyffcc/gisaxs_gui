@@ -1,0 +1,147 @@
+{
+ "family": "cu_v4",
+ "fitter": "iam_fit4",
+ "env": {
+  "IAM_SMEAR_EDGE": "zero",
+  "IAM_SMOOTH": "1",
+  "IAM_PIXMASK": "f48698177a76",
+  "IAM_ONSET": "override",
+  "IAM_LAM_NM": "0.105",
+  "IAM_FL_KEV": "8.048",
+  "IAM_BASE": "1",
+  "IAM_SMALL": "1",
+  "IAM_FIX": "nu=1,lnK=11.6869",
+  "IAM_ETAMAX": "0.98",
+  "IAM_SIGMAX": "0.3",
+  "IAM_RMAX": "60",
+  "IAM_FLMAX": "0.8",
+  "IAM_FBMAX": "0.98",
+  "IAM_PFILM": "1",
+  "IAM_POLYT_NM": "40",
+  "IAM_BASEVOID": "1",
+  "IAM_BASEVOID_AMP": "1",
+  "IAM_LSOFT": "1",
+  "IAM_SIGL": "1",
+  "IAM_FILMFLUCT": "1"
+ },
+ "metals": [
+  "Cu"
+ ],
+ "scalars": [
+  "ln_hm_nominal",
+  "t_rel"
+ ],
+ "mass_factor": [
+  -1.0,
+  1.0
+ ],
+ "ref_kind": "window",
+ "scans": {
+  "ref13": {
+   "ref": "cu_v4",
+   "metal": "Cu"
+  }
+ },
+ "monotone": [
+  "lnD_mass",
+  "cov",
+  "lnh_mass"
+ ],
+ "reported": [
+  {
+   "name": "lnR_num",
+   "expr": "log((m.n * m.Rm + m.n_s * float(sum(m.sp.wj * m.sp.Rj))) / (m.n + m.n_s))",
+   "label": "R, number-weighted (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "all islands / grains counted (main + small population): independent of which population the fit calls 'main'; between the unpenalised and the adopted joint solutions it moves by 4 % (median) / 20 % (p90). Single scan (62 s, up to 6.7 nm); K, PEO thickness and geometry unconfirmed; the first windows (2-8 s) change strongly between solutions."
+  },
+  {
+   "name": "lnD_num",
+   "expr": "0.5 * log(2 / (sqrt(3) * (m.n + m.n_s)))",
+   "label": "D, all islands (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "mean centre spacing of all islands / grains (hexagonal equivalent of the number density). all islands / grains counted (main + small population): independent of which population the fit calls 'main'; between the unpenalised and the adopted joint solutions it moves by 4 % (median) / 20 % (p90). Single scan (62 s, up to 6.7 nm); K, PEO thickness and geometry unconfirmed; the first windows (2-8 s) change strongly between solutions."
+  },
+  {
+   "name": "lnR_mass",
+   "expr": "log(((1 - m.fs - m.fL) * m.Rm + m.fs * float(sum(m.sp.wj * m.sp.Rj))) / (1 - m.fL))",
+   "label": "R, mass-weighted (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "grains that carry the mass (mass-weighted over main + small population, large clusters excluded) = lateral size of the surface grains once a film has formed; smooth in time in the adopted solutions, between solutions 4 % (median) / 40-46 % (p90, late film). Single scan (62 s, up to 6.7 nm); K, PEO thickness and geometry unconfirmed; the first windows (2-8 s) change strongly between solutions."
+  },
+  {
+   "name": "lnD_mass",
+   "expr": "((1 - m.fs - m.fL) * log(m.D) + m.fs * log(m.D_s)) / (1 - m.fL)",
+   "label": "D, mass-weighted (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "spacing of the grains that carry the mass = lateral period of the surface relief in the film stage. grains that carry the mass (mass-weighted over main + small population, large clusters excluded) = lateral size of the surface grains once a film has formed; smooth in time in the adopted solutions, between solutions 4 % (median) / 40-46 % (p90, late film). Single scan (62 s, up to 6.7 nm); K, PEO thickness and geometry unconfirmed; the first windows (2-8 s) change strongly between solutions."
+  },
+  {
+   "name": "cov",
+   "expr": "min(m.coverage + m.n_s * float(sum(m.sp.wj * pi * m.sp.Rj ** 2)), 1.0)",
+   "label": "coverage",
+   "unit": "",
+   "status": "conditional",
+   "note": "projected metal coverage of all populations; 13 % (p90) between solutions. Single scan (62 s, up to 6.7 nm); K, PEO thickness and geometry unconfirmed; the first windows (2-8 s) change strongly between solutions."
+  },
+  {
+   "name": "lnh_mass",
+   "expr": "log(m.h_tot)",
+   "label": "mass thickness (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "mass-equivalent thickness (bulk density) = mass factor x deposition rate x time; absolute as far as the rate and the intensity constant hold (fitted mass factors of the reference scans 0.83-0.97)"
+  },
+  {
+   "name": "lnt_film",
+   "expr": "log(m.t_b + (1 - m.fb) * m.h_tot)",
+   "label": "mean film thickness (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "geometric mean thickness: porous base layer (mass / relative density) + the relief above it; 1.0-1.7 x the mass thickness in the reference fits; 14 % (p90) between solutions on top of the mass scale"
+  },
+  {
+   "name": "lnH_top",
+   "expr": "log(max((1 - m.fb) * m.h_tot / min(max(m.coverage + m.n_s * float(sum(m.sp.wj * pi * m.sp.Rj ** 2)), 0.02), 1.0), 0.02))",
+   "label": "relief height (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "mean height of the islands (island stage) or of the relief above the dense base (film stage); the split base / relief is weakly determined in the film stage (27 % p90 between solutions, single windows more)"
+  },
+  {
+   "name": "f_base",
+   "expr": "m.fb",
+   "label": "dense-base mass fraction",
+   "unit": "",
+   "status": "conditional",
+   "note": "share of the mass in the laterally uniform base layer; erratic between windows in the film stage: read only as island-like (near 0) against film-like (near 1)"
+  },
+  {
+   "name": "lnR_P",
+   "expr": "p['lnRP']",
+   "label": "radius of the film-density regions (nm)",
+   "unit": "ln nm",
+   "status": "conditional",
+   "note": "lateral size of the regions where the whole film is sparser / denser; meaningful only where lnA_P is above about -5"
+  },
+  {
+   "name": "lnA_P",
+   "expr": "p['lnAP']",
+   "label": "ln of the film-density fluctuation amplitude",
+   "unit": "",
+   "status": "conditional",
+   "note": "A_P = area share x (density difference / mean film density)^2; -13.8 = term off"
+  }
+ ],
+ "hosts": [
+  "PEO"
+ ],
+ "fill": {
+  "lnRP": 3.4011973816621555,
+  "lnAP": -13.815510557964274
+ }
+}
