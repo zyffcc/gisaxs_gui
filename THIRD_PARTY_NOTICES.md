@@ -238,7 +238,8 @@ where present. This confirmation does not change the separate licences of third-
   networks for Au and Ag on Si and porous TiO₂, Ag on polymer films, Cu on PEO, and static Au films. It runs
   Sputter ▸ **Analyze** and **Static Frames** in a subprocess. Only the files those commands use are bundled,
   without the names of the private data it was developed on; `MANIFEST.json` checks every file. It was added to
-  the repository on 2026-11-14 at the author's request; unlike the other bundles it has no `LICENSE` file of its own.
+  the repository on 2026-11-14 at the author's request, under the MIT License (`LICENSE`, decided by the author
+  on 2026-11-14).
 - **fit1d kit** (`utils/gisaxs1d_gui_kit/`): the research code of the fit1d method (gisaxs1d_gui_kit
   1.0.0, 2026-10-13) with two numpy networks (`models/general`, `models/au_np_si`) and packed form-factor
   tables. It runs Fitting ▸ **Predict parameters (fit1d)** and the method *fit1d* of 1D Predict, imported in

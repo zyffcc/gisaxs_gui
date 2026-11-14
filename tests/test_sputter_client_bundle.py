@@ -82,6 +82,7 @@ def test_the_package_has_what_the_page_runs():
         assert (PKG / "models" / "static_nn_v1" / mode / "model.npz").is_file(), mode
     assert (PKG / "code" / "iam" / "iampred" / "static.py").is_file()  # Static Frames reads its geometry here
     assert not (PKG / "code" / "iam" / "iampred" / "intake_defaults.json").exists()  # no beamline of the private data
+    assert (PKG / "LICENSE").read_text(encoding="utf-8").startswith("MIT License")  # THIRD_PARTY_NOTICES, section 5
 
 
 def test_no_private_names_or_absolute_paths_in_the_package():

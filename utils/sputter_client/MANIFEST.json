@@ -1,7 +1,7 @@
 {
- "created_utc": "2026-11-14T16:17:04.556980+00:00",
+ "created_utc": "2026-11-14T22:13:13.436415+00:00",
  "release": true,
- "git_head": "77283689b262ff669c642f0318e9c3fc9fb04a33",
+ "git_head": "eb7590564f4683b2d4d12582c2a22589fc31718a",
  "families": [
   "si_p3h",
   "si_v6",
@@ -26,7 +26,7 @@
   "static_nn_v1/static_analytic": false,
   "static_nn_v1/static_ref": false
  },
- "n_files": 178,
+ "n_files": 179,
  "files": {
   "code/assets/p03_2021_pixmask_v1.npy": "f48698177a765ae43f54865912537461b176b7d0c11edb9fe9343d89027fe76a",
   "code/assets/p03_2025_pixmask_v1.npy": "00a29e295663bcc4e78da4cb0b2b60f096fe99b982ad8dd6157f6c5da245c473",
@@ -193,6 +193,7 @@
   "code/toolkit/sputtergisaxs/v2_ppc.py": "29c3a9aaf9df524d2c2e6d174f2b6cb96bbb3c1a4b6eb97aab77fc41ff56cbc5",
   "code/toolkit/sputtergisaxs/v2_scene.py": "89ff4a0a10d781251ef80b3ce3f5729455be83f52aa68c13f60a4ff8315e9ce6",
   "code/toolkit/sputtergisaxs/v2_training.py": "4b3de1ba20e7bff7030b7c97e1ac607d79dd64aa9148378b420c15cd0f3eb81b",
+  "LICENSE": "db1bbee832b729cc6a08c381c8e00d915d37ca657990fe016ca2d6992238f395",
   "models/cu_p3/nn/model.npz": "9737c18c085f4f84c665680212bcd6ed2c05470eea559be8a64673e8373d8c5e",
   "models/cu_v4/nn/model.npz": "980477b19faeb5fa326065eb6f82a9ed3c42d24e7ce183d3d3490771c099f920",
   "models/polyag_p3/nn/model.npz": "98e3b79e0118e5fd0dc3c05c715a86cb8aa7bd31e0f9e1dda28452580a4e72e5",
