@@ -564,8 +564,7 @@ ZH = {
 }
 
 ZH.update(ANALYZE_ZH)
-ZH.update(FITTING_ZH)
-ZH.update(FIT_CONTROLS_ZH)
+ZH.update({**FITTING_ZH, **FIT_CONTROLS_ZH})
 ZH.update(CURVE_IMPORT_ZH)
 ZH.update(NIGHT_ZH)
 ZH.update(COMPARE_ZH)
