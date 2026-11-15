@@ -136,7 +136,9 @@ line with **Edit**, **Open Result…**):
   GIMaP's Python, numpy/scipy only; `FRINGES_KEY`). Measured H adds a Size Trend panel (also in the simple view), two
   Windows columns (the nearest time group) and a Reliability paragraph; a failure goes to the log only.
 - Film windows: the thickness is not determined (the model's estimate equals its prior); the sketch draws a
-  continuous film without particles. Cu is read with the Ag model and labelled “for reference only”.
+  continuous film without particles. The earlier method has no Cu network: a Cu request is refused (PROBLEMS[8],
+  Analyze reads Cu with its own networks); a Cu result it made before (with the Ag model) keeps its label “for
+  reference only”.
 
 Layers: `domain` (rows, series, reliability report from translatable templates, literature method, sketch, the frames
 of a window; `client.py`: the windows, entries and images of an Analyze result; `real_space.py`: where the grains of

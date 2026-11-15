@@ -33,6 +33,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   has to be chosen. **Choose Folder…** or `GIMAP_SPUTTER_CLIENT` still use another package; a folder named so that is
   not an analysis package (chosen once and moved since, or the wrong folder) is passed over for the one that comes
   with GIMaP, and the Analysis package line says why. It is under the MIT License (`utils/sputter_client/LICENSE`).
+  Without a mask file it uses the pixel mask its network was trained with (Cu on PEO: the P03 mask of 2021; before,
+  Cu on PEO failed at predict with "cache mask …, IAM_PIXMASK requires …"), and a mask file you choose is accepted
+  by every network.
+- Sputter: Cu is Cu. The metal list says Cu (no more "approximated with the Ag model"); Analyze reads Cu with its own
+  networks, and the earlier method (Predict), whose networks are for Ag and Au, does not run for Cu and says so.
 - Sputter ▸ Analyze, limitations: the analysis package analyses only the pairs of metal and substrate it has a
   network for; its values are
   model values that were not compared with an independent measurement of the sample; a step of the analysis does

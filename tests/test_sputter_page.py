@@ -480,15 +480,23 @@ def test_a_saved_preset_fills_a_scan_of_the_same_beamtime(tmp_path, monkeypatch)
     _close(other)
 
 
-def test_cu_is_offered_and_labelled_as_read_with_the_ag_model(tmp_path):
+def test_cu_is_offered_as_cu_and_the_earlier_method_does_not_read_it_with_the_ag_model(tmp_path):
+    from dataclasses import replace
+
+    from src.gimap.features.sputter.application.use_cases import PROBLEMS, AnalyzeRequest
+
     page = _page(tmp_path)
     page.show()
-    page.show_details()  # the earlier method's metal and its note are in Details
+    page.show_details()  # the metal and its note are in Details
     index = page.metal.findData("Cu")
-    assert "approximated with the Ag model" in page.metal.itemText(index)
+    assert page.metal.itemText(index) == "Cu"
     page.metal.setCurrentIndex(index)
-    assert page.cu_note.isVisible()
+    assert page.cu_note.isVisible() and "its own networks" in page.cu_note.text()
     _close(page)
+    cu = AnalyzeRequest(scan_folder=tmp_path, energy_ev=12000.0, wavelength_nm=None, sdd_mm=3000.0, alpha_i_deg=0.4,
+                        metal="Cu", bin_seconds=0.5)
+    assert PROBLEMS[8] in cu.problems()  # Analyze on the main screen has the Cu network
+    assert PROBLEMS[8] not in replace(cu, metal="Ag").problems()
 
 
 # -- results -------------------------------------------------------------------------------------------------

@@ -20,9 +20,9 @@ SPUTTER_ZH = {
         "选择一个扫描的文件夹：它的第一帧给出探测器和时间。",
     "Sample and geometry": "样品与几何",
     "Metal": "金属",
-    "Cu — approximated with the Ag model, reference only": "Cu——用 Ag 模型近似，仅供参考",
-    "Predict reads Cu with the Ag model (its networks were trained for Ag and Au): the sizes it gives for Cu are for "
-    "reference only.": "“预测”用 Ag 模型读取 Cu（它的网络是为 Ag 和 Au 训练的）：它给出的 Cu 尺寸仅供参考。",
+    "Analyze reads Cu with its own networks, trained for Cu on PEO. The earlier method here (Predict) has networks for "
+    "Ag and Au only and does not run for Cu.":
+        "“分析”用 Cu 自己的网络（在 PEO 上的 Cu 训练）读取 Cu。这里的旧方法（预测）只有 Ag 和 Au 的网络，对 Cu 不运行。",
     "X-rays": "X 射线",
     "Incidence αi (°)": "入射角 αi（°）",
     "Beam centre (px)": "光束中心（px）",
@@ -154,6 +154,8 @@ SPUTTER_ZH = {
     "Give the sample-detector distance and the incidence angle (both positive).": "请给出样品-探测器距离和入射角（都为正）。",
     "Give both beam-centre coordinates, or neither (automatic estimate).": "请给出光束中心的两个坐标，或都不给（自动估计）。",
     "Metal must be Ag, Au or Cu.": "金属必须是 Ag、Au 或 Cu。",
+    "The earlier method has networks for Ag and Au only: for Cu use Analyze on the main screen, whose network is "
+    "trained for Cu.": "旧方法只有 Ag 和 Au 的网络：Cu 请用主屏的“分析”，它的网络是为 Cu 训练的。",
     "The time window must be positive.": "时间窗必须为正。",
     "The deposition rate must be positive (or empty).": "沉积速率必须为正（或留空）。",
     # -- the environment, PyTorch's installation ------------------------------------------------------------------

@@ -9,7 +9,7 @@
 - **科学说明**：各量的定义、规则和阈值见 [Physics and Methods Reference](../../Physics_Manual.md) 第 12 章；本文写调用链、
   文件与界面约定。
 - **Scope**: 原位溅射序列逐时间窗的结构。主屏（分析包）：晶粒半径 R、高度 H、中心间距 D、间隙、尺寸分布宽度、覆盖率，
-  每个时间窗若干候选解，实测图与模型图并排；详情里的早先方法（随仓库的网络：聚合物上的 Ag、Au；Cu 用 Ag 模型近似）：
+  每个时间窗若干候选解，实测图与模型图并排；详情里的早先方法（随仓库的网络：聚合物上的 Ag、Au；没有 Cu 的网络，对 Cu 不运行，Cu 由主屏的分析读取）：
   颗粒尺寸 R、间距 D、生长阶段、金属厚度的替代量，以及它们的可靠性
 - **Related code**: [`src/gimap/features/sputter/`](../../../src/gimap/features/sputter/)（说明见其 `README.md`）、
   `app/main_window.py`（`_create_sputter_page`、`running_jobs`、`_language_pages`、`shutdown`）、
@@ -50,8 +50,8 @@
 `views/sputter_page_view.py` 从上到下：**输入栏**（两个视图都显示）和一个 `QStackedWidget`（`view_stack`）。
 
 - **输入栏**（`views/sputter_main_view.py` 的 `_input_bar`）：扫描文件夹（`scan_picker`，原来在“数据”区）、金属
-  `sample_metal`（Ag / Au / Cu，与详情里早先方法的 `metal` 是同一个选择，互相同步；早先方法的下拉项仍把 Cu 标成“用 Ag 模型
-  近似”）、基底 `substrate`、速率 `sample_rate` 与 **QCM 读数** `qcm_check`、主按钮**分析** `analyze_button`；下一行是一句几何
+  `sample_metal`（Ag / Au / Cu，与详情里早先方法的 `metal` 是同一个选择，互相同步；下拉项就写 Cu；选 Cu 时下面一行说明分析用 Cu 自己的网络、
+  早先方法对 Cu 不运行）、基底 `substrate`、速率 `sample_rate` 与 **QCM 读数** `qcm_check`、主按钮**分析** `analyze_button`；下一行是一句几何
   `geometry_summary`（能量、距离、入射角、光束中心、滚转角；缺什么就只说“还需填写的几何：…”，选了文件夹后用警示色）和
   **编辑**（切到详情、滚到几何区、光标放在第一个空字段）、**打开结果…**、视图开关 `view_switch`（主屏 / 详情）；再下一行是
   扫描的一句话 `scan_summary`；右边是分析的 `JobStatus`（`analyze_status`：取消、详情——详情按钮切到详情视图并显示日志）。
@@ -306,7 +306,7 @@
 
 - 金属膜厚度：现有模型测不出（TS 网络在模拟中后验等于先验）。只给岛体积等效厚度 t_eq（有条件，膜时间窗不给）和
   名义厚度 速率 × (t − t0)（给出沉积结束时间时此后不变）；膜时间窗写“厚度未确定”。“膜 + 稀疏颗粒”的新模型另行开发。
-- Cu 可以选，但处处标明“用 Ag 模型近似，仅供参考”（结果行、报告、示意图、保存的图像和分镜图）。
+- Cu：主屏的分析用 Cu 自己的网络（为 PEO 上的 Cu 训练）；早先方法只有 Ag、Au 的网络，收到 Cu 时说明并不运行。它以前用 Ag 模型算出的 Cu 结果打开时照旧标明“用 Ag 模型近似，仅供参考”（结果行、报告、示意图、保存的图像和分镜图）。
 - 结果文件夹的代码包含模型版本（`BundledToolkit.model_id()`：`MANIFEST.json` 的 SHA-256，没有时用文件指纹），换了模型
   不会重用旧模型的网络输出；`gimap_request.json` 记 `model_id` 和所选的 `scan_folder`。
 - 物理路径不在相邻时间窗之间切换精修值和网络值（等级 P）；精修值留在表里。强度的周期性调制称“强度调制周期（可能来自样品台

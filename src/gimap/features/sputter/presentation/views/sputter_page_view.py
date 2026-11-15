@@ -33,9 +33,9 @@ from .sputter_main_view import SputterMainView
 from .sputter_static_view import MASKS_BUTTON, MASKS_TIP, SputterStaticView
 
 LEFT_WIDTH = 470
-METAL_CHOICES = (("Ag", "Ag"), ("Au", "Au"), ("Cu — approximated with the Ag model, reference only", "Cu"))
-CU_NOTE = ("Predict reads Cu with the Ag model (its networks were trained for Ag and Au): the sizes it gives for Cu "
-           "are for reference only.")
+METAL_CHOICES = (("Ag", "Ag"), ("Au", "Au"), ("Cu", "Cu"))
+CU_NOTE = ("Analyze reads Cu with its own networks, trained for Cu on PEO. The earlier method here (Predict) has "
+           "networks for Ag and Au only and does not run for Cu.")
 POLYMERS = ("PSBMA", "PS", "PEO", "polymer")
 TITLE = "Sputter series"
 TITLE_TIP = ("Particle size R and spacing D over time, the metal thickness where it can be stated (island-volume "

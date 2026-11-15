@@ -2445,7 +2445,7 @@ one scan, taken while a metal is sputtered onto a substrate. Under its input bar
   size distribution width and coverage — with their evolution over the scan. Analyze runs a separate analysis
   package;
 - **Details** (sections 8.2 to 8.10) holds the geometry, the options of Analyze, and the earlier method,
-  **Predict**. Predict reads Ag or Au on a polymer (Cu with the Ag model, for reference only) with the networks
+  **Predict**. Predict reads Ag or Au on a polymer (it has no network for Cu: Analyze reads Cu) with the networks
   that come with GIMaP: for every time window the particle size R (the base radius of a flat-based hemisphere,
   h = R), the spacing D, the island height H, the growth stage, the metal thickness where it can be stated, and
   how far each value can be trusted.
@@ -2477,8 +2477,9 @@ same.
 4. The line below says the geometry that will be used — energy or wavelength, distance, incidence angle, beam
    centre, sample roll — or which of them are still to enter. **Edit** opens Details at these fields (step 2 of
    section 8.2 says where their values come from). An empty beam centre is estimated from the frames; the sample
-   roll is 0 unless you enter one, and without a **Mask** the package uses the pixel mask it was built with (both
-   are under **More options**, section 8.3).
+   roll is 0 unless you enter one, and without a **Mask** the package uses the pixel mask its network for this metal
+   and substrate was trained with - the P03 mask of 2021 for Cu on PEO, of 2025 for the others (both are under
+   **More options**, section 8.3).
 5. **Analyze**. The job status at the right names the step — reading the frames, finding the solutions of every
    time window, writing the report, drawing the images — and its bar shows the steps that are done (a step does
    not report while it works: reading the frames of a long scan and refining take minutes). **Cancel** ends it at
@@ -2579,8 +2580,8 @@ Predict, **More options** and the five tabs of sections 8.2 to 8.10 are in **Det
 1. **Choose…** in the input bar: the folder of one scan (its CBF frames, or a scan folder with them in one
    subfolder such as `p2m/`). One line then sums up the frames, the detector, the exposure and the time (its
    tooltip adds the serial number, the pixel size, the first frame and the flat field).
-2. **Sample and geometry**: **Metal** (Ag, Au, or Cu, approximated with the Ag model; it is the metal of the input
-   bar), **X-rays** (**Energy (keV)** or **Wavelength (nm)**), **Distance (mm)**, **Incidence αi (°)** and **Beam
+2. **Sample and geometry**: **Metal** (Ag, Au or Cu; it is the metal of the input bar - Analyze reads Cu with its own
+   networks, Predict does not run for Cu), **X-rays** (**Energy (keV)** or **Wavelength (nm)**), **Distance (mm)**, **Incidence αi (°)** and **Beam
    centre (px)** (col, row). Check every value. Beside each, the page says where it comes from — this folder's
    last Predict or Analyze, a preset, for
    the energy a `Wavelength` line of the header or the scan's NeXus file, or the last run of any folder
@@ -3470,7 +3471,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Research runtimes do not all expose a controllable seed.** Sputter and 1D Predict record this limitation explicitly. Run records identify `software_version`; masks are counted, not stored as pixel lists. | Keep the input, settings and model files with the exported records. |
 | **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`, `assistant_provider_keys.json`; section 10.1): whoever can read that folder can read them. | On a shared computer, or with `GIMAP_HOME` on a shared drive, set the key as an environment variable instead, or **Remove** it after use. |
 | **Sputter does not determine the thickness of a continuous film**, and a film with particles on it is not modelled (section 8.9). | Read the island-volume equivalent t_eq (island windows, conditional) and the nominal thickness from a deposition rate; compare with XRR, a quartz balance or a cross-section. |
-| **Sputter reads Cu with the Ag model** (the networks were trained for Ag and Au). | Use Cu results for reference only. |
+| **Sputter ▸ Analyze reads Cu with networks trained for Cu on PEO**; Predict, the earlier method, has networks for Ag and Au only and does not run for Cu (Cu results it made before were read with the Ag model and say so). | For Cu on another substrate, compare the model image with the measured one before using the values. |
 | **Sputter ▸ Analyze runs the analysis package that comes with GIMaP**, which analyses only the pairs of metal and substrate the package has a network for; its values are model values that were not compared with an independent measurement of your sample (section 8.1). The frames it read are kept in the user data folder (`sputter_client/`), one copy per request that changes the import (rate, geometry, mask, substrate …); nothing removes them. | Judge a solution by its model image beside the measured one, and compare with SEM, AFM or XRR where you can. Delete old folders of `sputter_client/` yourself. |
 | **Sputter reads folders of CBF frames only**, and the networks of Predict were trained for Ag and Au on polymer substrates (chapter 8). | For NeXus series, or with Predict another substrate, use Analyze's series map (section 5.6) and Fitting's in-situ series (section 6.6); converting frames to CBF does not make another substrate valid. |
 | **Sputter keeps every result folder**, with the frames as the model read them (`intake/`, `binned/`), in the user data folder unless you chose another place; nothing removes them, and **File ▸ Save Project** holds the Sputter form and references its result folder. | For long scans choose **More options ▸ Save results in** on a data disk; delete old folders yourself; open a result again with **More options ▸ Open Results Folder…**. |

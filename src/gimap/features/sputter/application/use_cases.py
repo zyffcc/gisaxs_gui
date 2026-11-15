@@ -32,6 +32,8 @@ PROBLEMS = (
     "The time window must be positive.",
     "The deposition rate must be positive (or empty).",
     "The end of the deposition must be after its start t0 (or empty).",
+    "The earlier method has networks for Ag and Au only: for Cu use Analyze on the main screen, whose network is "
+    "trained for Cu.",
 )
 TOOLKIT_MISSING = ("The Sputter model is not in this GIMaP folder: {folder} is missing or incomplete. The model is part "
                    "of GIMaP. Portable version: it comes with the package, so this folder is incomplete; install or "
@@ -81,6 +83,8 @@ class AnalyzeRequest:
             out.append(PROBLEMS[3])
         if self.metal not in METALS:
             out.append(PROBLEMS[4])
+        elif self.metal == "Cu":  # its networks are for Ag and Au: Cu is not read with the Ag model any more
+            out.append(PROBLEMS[8])
         if not self.bin_seconds or self.bin_seconds <= 0:
             out.append(PROBLEMS[5])
         if self.rate_nm_s is not None and self.rate_nm_s <= 0:

@@ -322,8 +322,10 @@ def test_request_problems_are_explained(tmp_path):
     for words in ("scan folder", "energy", "distance", "Ag, Au or Cu"):
         assert words in problems
     assert AnalyzeRequest(scan_folder=Path(""), sdd_mm=1., alpha_i_deg=1., metal="Ag", energy_ev=1.).problems()
-    ok = AnalyzeRequest(scan_folder=tmp_path, sdd_mm=1000., alpha_i_deg=.3, metal="Cu", energy_ev=9000.)
-    assert ok.problems() == []  # Cu is allowed (read with the Ag model)
+    ok = AnalyzeRequest(scan_folder=tmp_path, sdd_mm=1000., alpha_i_deg=.3, metal="Ag", energy_ev=9000.)
+    assert ok.problems() == []
+    cu = AnalyzeRequest(scan_folder=tmp_path, sdd_mm=1000., alpha_i_deg=.3, metal="Cu", energy_ev=9000.)
+    assert " ".join(cu.problems()).startswith("The earlier method has networks for Ag and Au only")  # not the Ag model
     assert AnalyzeRequest(scan_folder=tmp_path, sdd_mm=1000., alpha_i_deg=.3, metal="Ag", energy_ev=9000.,
                           rate_nm_s=-1.).problems()
     # The end of the deposition comes after its start (t0 = 0 when it is not given).

@@ -39,7 +39,7 @@ right.*
   screen shows the result of **Analyze**, which runs a separate analysis package: the measured image beside
   the model image of each solution, and the grain radius, height, distance, gap, size distribution width and
   coverage with their evolution. **Details** holds the method that comes with GIMaP, **Predict**: Ag or Au
-  on a polymer (Cu with the Ag model, for reference only), read as particle size, spacing, island height,
+  on a polymer (Cu is read by Analyze, with its own networks), read as particle size, spacing, island height,
   growth stage and metal thickness, each with how far it can be trusted.
 - **Tools**: Geometry Calibration (beam centre and distance from AgBh, LaB₆, CeO₂ …), Format Converter,
   XRR Series Extractor, SEM Particle Analysis (particle sizes from SEM images, with a scale you give) and 1D
