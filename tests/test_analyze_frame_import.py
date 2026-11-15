@@ -279,8 +279,10 @@ def test_a_slow_metadata_scan_keeps_the_window_responsive_and_late_results_are_d
         page.import_paths([path], interactive=False)
         _until(entered.is_set)
         assert page.tasks.is_busy() and not page.import_cancel_button.isHidden()
-        QTest.qWait(100)
-        assert len(ticks) >= 3 and reads == []
+        # the window keeps handling events while the scan is held (waiting for the ticks, not counting them in a fixed
+        # time: a slow CI runner gave 1-2 ticks of 10 ms in 100 ms)
+        _until(lambda: len(ticks) >= 3, 5)
+        assert page.tasks.is_busy() and reads == []
         if action == "cancel":
             page.cancel_frame_import()
         else:
