@@ -1,7 +1,8 @@
 """Sputter workspace: the grains of an in-situ sputter series, time window by time window.
 
 **The main screen** (shown first). The input bar takes the scan folder, the metal, the substrate and the deposition
-rate; **Analyze** runs the client analysis package (``client_flow.py``). The result is shown one time window at a
+rate; **Analyze** runs the client analysis package (``client_flow.py``); while it runs, the main screen shows its
+steps and what each has found so far (``live_panel.py``). The result is shown one time window at a
 time (``client_panel.py``): the measured image beside the model image of a solution, the solutions to choose from
 (the network's candidates and the refined one), the values of the solution shown — radius, height, distance, gap,
 size distribution width, coverage — and their evolution over the scan.
@@ -38,6 +39,7 @@ from .client_panel import ClientPanelMixin
 from .fringe_flow import FRINGES_KEY, FringeFlowMixin
 from .geometry import INSPECT_KEY, SputterGeometryMixin, warning_style
 from .literature_tab import LiteratureTab
+from .live_panel import LivePanelMixin
 from .project_state import SputterProjectMixin
 from .predict_flow import PREDICT_KEY, SputterPredictMixin
 from .results_panel import SputterResultsMixin
@@ -54,9 +56,9 @@ ENVIRONMENT_UNKNOWN = "PyTorch is checked when you press Predict"
 ENVIRONMENT_TIP = "Model: bundled with GIMaP · Python: {python}"
 
 
-class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, SputterStaticMixin, SputterGeometryMixin,
-                  SputterPredictMixin, SputterResultsMixin, FringeFlowMixin, WindowMenuMixin, QWidget,
-                  SputterPageView):
+class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, LivePanelMixin, SputterStaticMixin,
+                  SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin, FringeFlowMixin, WindowMenuMixin,
+                  QWidget, SputterPageView):
     eventReceived = pyqtSignal(object)
     clientEvent = pyqtSignal(object)
     """A line or a step of Analyze, from its background task (delivered in the GUI thread)."""
@@ -102,6 +104,7 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Spu
         self._init_client()
         self._init_static()
         self._init_client_panel()
+        self._init_live()
         self._connect_geometry()
         self._connect_predict()
         self._connect_results()
@@ -169,6 +172,7 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Spu
         if self.result is not None:
             self.sketch.redraw()
         self.redraw_client_plots()
+        self.redraw_live_plots()
 
     def refresh_language(self) -> None:
         """Run-time texts in the new interface language (the walker has translated the fixed ones)."""

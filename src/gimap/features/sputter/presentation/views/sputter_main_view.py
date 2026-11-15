@@ -12,7 +12,8 @@ host for the solution drawn in real space (one shown at a time); a host for the 
 distribution width, coverage, and for a porous substrate the island, cap and film shares and the two correlation
 lengths: only the tiles of the quantities a result has are shown — and the fit deviation of the solution shown; a
 host for the evolution over the scan. A series of static samples is shown the same way, one sample in the place of a
-time window. Before there is a result an empty state says what to do.
+time window. Before there is a result an empty state says what to do; while Analyze runs, the live view
+(``sputter_live_view.py``) is the third page of the same stack.
 
 **Analyze options** (a section of Details): the mode, the optional onset and duration of the deposition and polymer
 film thickness, the analysis package and its folder, Open Report and Open Folder (of the result shown), and the log.
@@ -225,6 +226,7 @@ class SputterMainView:
         centred.addStretch(1)
         self.result_stack.addWidget(empty)
         self.result_stack.addWidget(self._result_view(self.result_stack))
+        self.result_stack.addWidget(self._live_view(self.result_stack))  # while Analyze runs (sputter_live_view.py)
         return self.result_stack
 
     def _result_view(self, parent: QWidget) -> QWidget:

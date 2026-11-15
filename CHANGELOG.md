@@ -54,6 +54,12 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   the automatic beam centre is taken from frames with counts only, where before one empty frame among those it looked
   at made it fail ("No supported specular-centre candidate"). Frames on a network drive that its sync client holds
   for a moment are read again (a few tries) instead of failing the import.
+- Sputter ▸ Analyze shows what it is doing while it runs: the main screen becomes a live view with the four steps
+  (read the frames, find the solutions, write the report, draw the images), each with its state and one line of what
+  it found, and, for the step at work, the detector summed with its mask and the frames read last, the count rate of
+  every frame read so far, then the measured and model image of each time window as it is solved and the sizes found
+  so far. A click on a step that has started shows what it found. Needs the analysis package of 2026-11-15 or newer
+  (an older one is followed by its steps alone); the results are the same as before.
 - **Geometry Calibration**: the **Distance range** is a limit, not a starting point. No solution outside it is shown,
   also not after the fit of centre and distance (before, the fit could leave a custom range); when none lies in it,
   the calibration says so. An image of the standard taken at grazing incidence (AgBH on a wafer: arcs above the

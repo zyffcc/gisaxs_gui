@@ -76,7 +76,10 @@ class ClientPanelMixin:
 
     # -- the empty states ----------------------------------------------------------------------------------------
     def _show_client_empty(self) -> None:
-        """Without a result: how to get one — or, without the analysis package, how to give it."""
+        """Without a result: how to get one — or, without the analysis package, how to give it. While Analyze runs the
+        live view stays (it shows this again when the run ends)."""
+        if self.live_running():
+            return
         if self.client_result is not None:
             self.result_stack.setCurrentIndex(1)
             return

@@ -4,7 +4,8 @@ From the top: the input bar (``sputter_main_view.py``: the scan folder, metal, s
 and its job status, the geometry in one line, Open Result… and the switch of the view), then one of two views.
 
 **The main screen** (``sputter_main_view.py``, shown first): one time window of a result — the measured image beside
-the model image, the solutions to choose from, the value tiles and the evolution over the scan.
+the model image, the solutions to choose from, the value tiles and the evolution over the scan. While Analyze runs it
+shows the live view instead (``sputter_live_view.py``): the steps and what each has found so far.
 
 **Details**: everything else. Left, from the top: the title (what the earlier method gives, in its tooltip); Sample
 and geometry (metal, X-rays, distance, incidence, beam centre, each with where its value comes from); Analyze options
@@ -29,6 +30,7 @@ from src.gimap.app.presentation.components import AdvancedSection, FilePicker, J
 from src.gimap.app.presentation.components.table_copy import enable_table_copy
 from src.gimap.app.presentation.i18n import tr
 
+from .sputter_live_view import SputterLiveView
 from .sputter_main_view import SputterMainView
 from .sputter_static_view import MASKS_BUTTON, MASKS_TIP, SputterStaticView
 
@@ -114,7 +116,7 @@ def _row(parent: QWidget, *widgets, stretch_last: bool = False) -> QWidget:
     return row
 
 
-class SputterPageView(SputterMainView, SputterStaticView):
+class SputterPageView(SputterMainView, SputterLiveView, SputterStaticView):
     def setup_ui(self, page: QWidget) -> None:
         page.setObjectName("sputterPage")
         outer = QVBoxLayout(page)

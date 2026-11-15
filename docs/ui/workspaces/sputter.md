@@ -5,7 +5,8 @@
   “文献对照”页比较两者；2026-10-26 加入由 q_z 干涉条纹得到的岛高度 H，显示结果后在后台测量；2026-11-14 页面重写：
   打开时是**主屏**（“分析” Analyze，调用仓库外的分析包；实测图与模型图并排、候选解、数值块、演化），原来的页面整个收进第二个
   视图**详情**（Details），行为不变——见下面“主屏与分析（Analyze）”；同日补充：多孔基底结果的数值块、详情里的“静态帧
-  （沉积之后测量）”、主屏图样区的“图样 ｜ 实空间”切换——见“多孔基底”“静态帧”“实空间示意”三节）
+  （沉积之后测量）”、主屏图样区的“图样 ｜ 实空间”切换——见“多孔基底”“静态帧”“实空间示意”三节；2026-11-15 分析运行时
+  主屏显示**实时视图**：四个步骤各在做什么、已经得到什么——见“实时视图”一节）
 - **科学说明**：各量的定义、规则和阈值见 [Physics and Methods Reference](../../Physics_Manual.md) 第 12 章；本文写调用链、
   文件与界面约定。
 - **Scope**: 原位溅射序列逐时间窗的结构。主屏（分析包）：晶粒半径 R、高度 H、中心间距 D、间隙、尺寸分布宽度、覆盖率，
@@ -18,7 +19,9 @@
   `zh_sputter_handover.py`、`zh_sputter_fringes.py`、`zh_sputter_client.py`（主屏与分析）；
   主屏与分析：`domain/client.py`、`application/client.py`、`application/client_progress.py`、`infrastructure/client.py`、
   `presentation/views/sputter_main_view.py`、`presentation/client_flow.py`、`client_panel.py`、`client_texts.py`、
-  `pattern_view.py`、`evolution_view.py`、`real_space_view.py` 与 `domain/real_space.py`（实空间示意）；静态帧：
+  `pattern_view.py`、`evolution_view.py`、`real_space_view.py` 与 `domain/real_space.py`（实空间示意）；实时视图：
+  `application/client_live.py`、`presentation/live_panel.py`、`live_pictures.py`、`presentation/views/sputter_live_view.py`、
+  `i18n/zh_sputter_live.py`；静态帧：
   `application/client_static.py`、`infrastructure/client_static.py`、`presentation/static_flow.py`、
   `presentation/views/sputter_static_view.py`；分析包随仓库提供（`utils/sputter_client/`，研究代码的发布版：只有这些命令用到的文件，不含开发时所用私有数据的名字，`MANIFEST.json` 与 `tests/test_sputter_client_bundle.py` 检查它；`GIMAP_SPUTTER_CLIENT` 或用户选的文件夹优先）；
   由 q_z 干涉条纹得到的岛高度：`domain/fringes.py`、`application/fringes.py`、`infrastructure/fringes.py`、
@@ -38,8 +41,11 @@
   多孔基底与静态帧的读取、静态帧的命令行与服务；实空间示意的排布）、
   [`tests/test_sputter_main_screen.py`](../../../tests/test_sputter_main_screen.py)（主屏：数值块、换解、保存选择、空状态、
   分析与取消、语言、项目；多孔基底的数值块、静态帧系列与“分析这个样品”、实空间示意的切换、长路径不撑宽详情左栏；
-  假的分析包进程与编造的结果：[`tests/sputter_client_fixtures.py`](../../../tests/sputter_client_fixtures.py)）
-- **Last verified**: 2026-11-14（主屏与分析：离线测试；多孔基底、静态帧和实空间示意另用本机几份真实结果的副本在离屏窗口里
+  假的分析包进程与编造的结果：[`tests/sputter_client_fixtures.py`](../../../tests/sputter_client_fixtures.py)）、
+  [`tests/test_sputter_live.py`](../../../tests/test_sputter_live.py)（实时视图：`@live` 行、事件带数组交给界面、
+  `LiveRun` 的累积、分析运行中主屏的步骤与图、点步骤、失败后回到原来的画面、中文）
+- **Last verified**: 2026-11-15（实时视图：离线测试；另在本机用一份真实扫描和带实时事件的分析包在离屏窗口里走完四步并截图，
+  数值不进仓库）；2026-11-14（主屏与分析：离线测试；多孔基底、静态帧和实空间示意另用本机几份真实结果的副本在离屏窗口里
   看过，数值不进仓库；另在本机用真实的旧版分析包核对过命令行和环境——给一个不存在的帧文件夹，
   分析包解析完全部参数后拒绝它，不读帧；主屏另用本机一份真实结果的副本看过，数值不进仓库）；2026-11-01（状态行、默认解释、
   工作进程数和光斑移出样品的规则对照代码）；其余 2026-10-23（离线测试；编造的扫描名与数值；文献方法另在本机真实结果的副本上
@@ -102,7 +108,9 @@
      标记时把它删掉（只删 `gui_` 开头、GIMaP 自己建的那个文件夹）。
    - 运行前写 `<输出>/gimap_request.json`（请求、标签、分析包路径与版本、Python、命令行）。
 4. **进度**（`application/client_progress.py`）：`[n/N] <step> ...`、`done in … s` / `FAILED (…)`、`status: …`；任务状态说
-   “第 n 步，共 N 步：…”，进度条显示已完成的步骤所占的份额（步骤内部没有进度）。其余的行进日志（详情 ▸ 分析选项）。
+   “第 n 步，共 N 步：…”，进度条显示已完成的步骤所占的份额（步骤内部没有进度）。`@live {json}` 行是实时视图的事件（见下节），
+   在后台线程里读好它的小数组文件后作为 `LiveEvent` 交给界面，不进日志，也不进失败时显示的最后几行；其余的行进日志
+   （详情 ▸ 分析选项）。
 5. **结果**（`ClientFolderReader` → `domain/client.py`）：`analysis.json`（状态、模型族、模式、各文件路径）、
    `main/main.json`（`wanted`、`windows[]`：`t`、`t_rel`、`h_nom`、`arrays`、`entries[]`、`pick`、`smooth`；或 `{t, error}`）、
    `main/w_<t>.npz`（`q`、`af`、`measured`、`models`、`labels`）。没有的量就是没有（数值块隐藏、演化线断开）；`arrays` 只接受
@@ -119,6 +127,36 @@
    两者的边距按像素固定（坐标轴不随数值跳动，上下两排图左边对齐），随主题重画（`restyle_figure`），不改数组；中文字体只给
    已知的几个标题（`cjk_fallback(figure, texts)`：遍历整幅图会把每个刻度都建出来，一次要 0.1 s）。用 Matplotlib 而不是
    `DetectorView` / `CurvePlot`：格点不等距、两幅图要共用一个色标，并且本页的测试不逐个 `dispose()`（pyqtgraph 视图需要）。
+
+## 实时视图（分析运行时的主屏）
+
+分析一次要几分钟到几十分钟（读帧、精修最慢）。从分析包开始运行（`ClientStarted`，不是直接显示已有结果）到它结束，主屏的
+`result_stack` 显示第三页 `live_view`（`views/sputter_live_view.py`；行为在 `live_panel.py` 的 `LivePanelMixin`）：
+
+- **左栏**：`StepRail` 四步——读入帧、求解结构、写报告、绘制图像——各带状态（按 `ClientProgress` 的步骤行；有两个网络时，
+  第二个网络跑完、`chosen` 到达之前“求解结构”仍在进行）和一行产出：已读入 n / N 帧 → “N 帧，起–止 s，沉积自 … s 开始”
+  （或“此扫描此前已读入”）；“网络 i/n：已求解 k / m 个时间窗” → “<网络> 与数据更吻合（拟合偏差 …）”；“已绘制 k / m 个时间窗”。
+  下面是已运行时间。点一个已开始的步骤显示它的产出；点正在进行的步骤回到跟随分析；点尚未开始的步骤不变。
+- **右边**：“第 n 步（共 4 步）：…”、这一步做什么（一段话），一幅图、图下一行、一幅曲线：
+  - 读入帧：`FramesPicture`——左边是自动掩膜所用抽样帧的求和（分析包按 4×4 像素合并后的 log₁₀ 计数），掩膜去掉的部分
+    红色半透明、直射束 “+”、样品地平线虚线；右边是最近读入的一块帧（128 帧）在 q_y–出射角网格上的计数率（两侧各自的格子，
+    中间的空隙留空，对数色标取 1 % 和 99.7 % 分位）；图下是束心（GIMaP 像素坐标）与掩膜去掉的像素数。`TracePlot`：已读入各帧的
+    每像素计数率对扫描时间，导入找到沉积开始时用虚线标出。
+  - 求解结构、写报告、绘制图像：最近求解的时间窗（正在工作的网络的；数据选定网络后是选定的那个的）的实测图与模型图
+    （复用 `PatternPair`，同一套格子与色标规则），图下一行
+    “t = … s · 候选 k（或精修解）· 半径 R … · 高度 H … · 间距 D … · 覆盖率 … · 拟合偏差 …”；演化图复用 `EvolutionPlot`，
+    画到目前为止各时间窗拟合偏差最小的解（正在工作的网络；选定网络后画选定的那个），最近的时间窗用竖线标出。
+- **效率**：事件在后台线程里读好数组（每个几十到几百 kB，`LIVE_ARRAYS_LIMIT` 以上不读），界面线程只更新 `LiveRun`；
+  图由单发定时器最多每 `REDRAW_MS`（400 ms）画一次，只画变了的部分；帧图和实测／模型图在格子不变时只换数值。
+  `LiveRun` 只留每个网络最近求解的一个时间窗和最近一块帧的数组，其余只留数值。
+- **结束**：成功时显示结果；失败或停止时回到运行前显示的（原来的结果或空状态）。不发事件的旧版分析包只有左栏的步骤，
+  右边说明它不显示中间结果。
+
+**分析包的约定**（研究代码 `iampred.live`，2026-11-15）：每一步的进程从环境变量 `IAMPRED_LIVE` 得到一个文件夹，在其中写
+`<时间>_<pid>.json`（和需要时同名 `.npz`，先写临时名再改名）；`iampred.analyze` 在步骤运行时每 0.5 s 把新事件打印成一行
+`@live {json}`（加 `step` 和 `arrays`：npz 的绝对路径），结束时删掉 `<输出>/live/`。事件：`centre`、`detector`、`frames`、
+`imported`（读入帧）；`models`、`windows`、`window`、`chosen`（求解；`models`、`chosen` 由 `analyze` 自己发）；`drawing`、
+`drawn`（绘图）。字段见 `application/client_live.py` 的说明。事件不改变任何结果（同一扫描有无事件，`windows.csv` 逐字节相同）。
 
 主屏的约定：
 

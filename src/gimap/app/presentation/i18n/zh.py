@@ -32,6 +32,7 @@ from .zh_sputter_toolkit import SPUTTER_TOOLKIT_ZH
 from .zh_sputter_handover import SPUTTER_HANDOVER_ZH
 from .zh_sputter_fringes import SPUTTER_FRINGES_ZH
 from .zh_sputter_client import SPUTTER_CLIENT_ZH
+from .zh_sputter_live import SPUTTER_LIVE_ZH
 from .zh_menus import MENUS_ZH
 from .zh_giwaxs_auto import GIWAXS_AUTO_ZH
 from .zh_flat_detector import FLAT_DETECTOR_ZH
@@ -587,7 +588,7 @@ ZH.update(SPUTTER_LITERATURE_ZH)
 ZH.update(SPUTTER_TOOLKIT_ZH)
 ZH.update(SPUTTER_HANDOVER_ZH)
 ZH.update(SPUTTER_FRINGES_ZH)
-ZH.update(SPUTTER_CLIENT_ZH)
+ZH.update({**SPUTTER_CLIENT_ZH, **SPUTTER_LIVE_ZH})
 ZH.update(MENUS_ZH)
 ZH.update(GIWAXS_AUTO_ZH)
 ZH.update(FLAT_DETECTOR_ZH)

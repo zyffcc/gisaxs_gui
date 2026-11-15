@@ -2,7 +2,8 @@
 
 Analyze is one background task (``ClientService.analyze``): the client analysis package runs as a subprocess, its
 steps move the bar of the job status in the input bar, Cancel ends its whole process tree, and its lines go to the
-log in Details ▸ Analyze options. It uses the folder in the picker, the bar's metal, substrate and rate, the geometry
+log in Details ▸ Analyze options. While it runs, the main screen shows what each step has found so far
+(``live_panel.py``: the package's live events, which do not go to the log). It uses the folder in the picker, the bar's metal, substrate and rate, the geometry
 of Details (the one line under the bar says what will be used; Edit shows the fields) and the options of Details.
 Pressed while the folder's header is still read, it starts once the form is filled from it. A request that was
 analysed before by the same package shows the result it has.
@@ -28,7 +29,7 @@ from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr
 
 from ..application import (FILM_SUBSTRATES, ClientFailed, ClientProgress, ClientRequest, ClientResult, ClientStarted,
-                           Stopped, folder_key)
+                           LiveEvent, Stopped, folder_key)
 from .client_texts import (DONE, FAILED_TOAST, GEOMETRY_ALPHA, GEOMETRY_CENTRE, GEOMETRY_CENTRE_AUTO, GEOMETRY_DISTANCE,
                            GEOMETRY_ENERGY, GEOMETRY_MISSING, GEOMETRY_ROLL, GEOMETRY_TO_ENTER, GEOMETRY_WAVELENGTH,
                            NO_REPORT, OPENED_EARLIER, PACKAGE_LINE, PACKAGE_NONE, READY_TOAST, SHOWN_AGAIN, STARTING,
@@ -382,21 +383,31 @@ class SputterClientMixin:
         if self._client_busy:
             self._client_stop = True
         self.tasks.cancel(CLIENT_KEY)
+        self._live_end()
 
     def _client_event(self, event) -> None:
+        if isinstance(event, LiveEvent):  # what a step found so far: the live view
+            self._live_event(event)
+            return
         if isinstance(event, ClientStarted):
             self.client_log.appendPlainText(f"{event.label} -> {event.folder}")
+            if not event.reused:
+                self._live_begin(event.folder)
             return
         line = str(event)
         self.client_log.appendPlainText(line)
         tracker = self._client_tracker
-        if tracker is None or not tracker.feed(line) or self._client_stop:
+        if tracker is None or not tracker.feed(line):
+            return
+        self._live_progress(tracker)
+        if self._client_stop:
             return
         template, values = tracker.message()
         if template:
             self._client_status("running", [(template, values)], tracker.fraction)
 
     def _client_finished(self, outcome) -> None:
+        self._live_end()
         tracker, self._client_tracker = self._client_tracker, None
         self._client_busy = False
         self._sync_run_buttons()
@@ -504,6 +515,7 @@ class SputterClientMixin:
         self._show_geometry_summary()
         self._show_package()
         self.refresh_client_panel_language()
+        self.refresh_live_language()
 
 
 __all__ = ["CLIENT_KEY", "SputterClientMixin"]

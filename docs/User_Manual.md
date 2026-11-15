@@ -2494,9 +2494,23 @@ same.
    another detector size is not used, the automatic mask then stands alone). Hover over the name of the result to
    see the mask it was read with.
 5. **Analyze**. The job status at the right names the step — reading the frames, finding the solutions of every
-   time window, writing the report, drawing the images — and its bar shows the steps that are done (a step does
-   not report while it works: reading the frames of a long scan and refining take minutes). **Cancel** ends it at
-   once; frames that were read completely are kept for the next run. **Details** shows the package's messages.
+   time window, writing the report, drawing the images — and its bar shows the steps that are done. **Cancel** ends
+   it at once; frames that were read completely are kept for the next run. **Details** shows the package's messages.
+   While the analysis runs, the main screen shows what it is doing and what it has found so far (the live view):
+
+   - At the left, the four steps — **Read the frames**, **Find the solutions**, **Write the report**, **Draw the
+     images** — each with its state and one line of what it found (frames read so far, time windows solved, the
+     network that fits the data better, windows drawn), and the time since the start.
+   - At the right, the step at work in one paragraph, with a picture and a plot. Reading the frames: the detector
+     summed over sampled frames, with the pixels the mask leaves out in red, the direct beam (+) and the sample
+     horizon (dashed), beside the frames read last on the grid of q_y and exit angle; below, the count rate of every
+     frame read so far, which rises as the metal is deposited. Finding the solutions (and the two steps after it):
+     the measured image of the window solved last beside the model image of its solution, its values in the line
+     under them, and the radius, height, distance and coverage of every window solved so far.
+   - A click on a step that has started shows what it found; a click on the step at work follows the analysis
+     again. When the analysis ends, its result replaces the live view (after a failure or **Cancel**, what was shown
+     before comes back). What the live view shows is not the result: the result is what the package writes at the
+     end, with every candidate of every window.
 
 Analysing the same request again shows the result it has. **Details ▸ Analyze options** has the rest:
 

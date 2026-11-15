@@ -40,10 +40,10 @@ from src.gimap.shared.geometry.conventions import index_center_from_canonical
 from src.gimap.shared.version import SOFTWARE
 
 from ..application import (CLIENT_FALLBACK, CLIENT_INCOMPLETE, CLIENT_MISSING, ENGINE_FOLDER, LABEL_PREFIX, MASK_UNREADABLE,
-                           ClientPackage, ClientProgress, ClientRequest, ClientRun)
+                           ClientPackage, ClientProgress, ClientRequest, ClientRun, live_event, parse_live)
 from ..domain import (ANALYSIS_FILE, BAD_ARRAYS, BAD_MAIN, MAIN_FILE, MAIN_FOLDER, NO_ARRAYS, NO_MAIN, ClientResult,
                       ClientWindow, WindowPatterns, client_result, window_patterns)
-from .process import child_environment, console_python, run_streaming
+from .process import TAIL_LINES, child_environment, console_python, run_streaming
 from .toolkit import default_workers
 
 CLIENT_OVERRIDE = "GIMAP_SPUTTER_CLIENT"
@@ -57,6 +57,8 @@ IMPORT_MARKER = ".gimap.json"
 PACKAGE_MASK = "package-mask"
 MASK_FOLDER = Path("code") / "assets"
 LOG_TAIL = 15
+LIVE_ARRAYS_LIMIT = 32 << 20
+"""The largest file of a live-view event that is read (bytes; the package writes a few hundred kB at most)."""
 _SEE_LOG = re.compile(r"\(see (.+?)\)")
 
 
@@ -109,6 +111,20 @@ def _file_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
+def live_arrays(path: Optional[Path]) -> dict:
+    """The arrays of an event of the live view ({} without a file, or when it is gone, too large or unreadable: the
+    view then goes without its picture)."""
+    if path is None:
+        return {}
+    try:
+        if Path(path).stat().st_size > LIVE_ARRAYS_LIMIT:
+            return {}
+        with np.load(path, allow_pickle=False) as arrays:
+            return {name: arrays[name] for name in arrays.files}
+    except (OSError, ValueError, EOFError, KeyError):
+        return {}
+
+
 def _json(path: Path) -> dict:
     try:
         value = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -143,13 +159,27 @@ class ClientPackageRunner:
         return self._workers()
 
     def launch(self, command: list, package: ClientPackage, data_root: Path, work_root: Path,
-               on_line: Callable[[str], None], should_stop: Callable[[], object], **environment) -> ClientRun:
-        """Run a command of the package in its folder with its environment (and ``environment`` on top)."""
+               on_line: Callable[[object], None], should_stop: Callable[[], object], **environment) -> ClientRun:
+        """Run a command of the package in its folder with its environment (and ``environment`` on top). A line of
+        the live view (``@live …``) reaches ``on_line`` as a ``LiveEvent`` with its arrays read here, in the
+        background; the others as they are. The tail kept for a failure holds the others only."""
         env = self.environment(package, data_root, work_root)
         env.update({key: str(value) for key, value in environment.items()})
-        outcome = self._run_process(command, on_line=on_line, should_stop=should_stop, env=env,
+        tail: list = []
+
+        def line_or_event(line: str) -> None:
+            found = parse_live(line)
+            if found is None:
+                tail.append(line)
+                del tail[:-TAIL_LINES]
+                on_line(line)
+            else:
+                on_line(live_event(found[0], live_arrays(found[1])))
+
+        outcome = self._run_process(command, on_line=line_or_event, should_stop=should_stop, env=env,
                                     cwd=str(Path(package.home) / IAM))
-        return ClientRun(outcome.code, bool(outcome.stopped), tuple(outcome.tail))
+        kept = tail or [line for line in outcome.tail if parse_live(line) is None]
+        return ClientRun(outcome.code, bool(outcome.stopped), tuple(kept))
 
     # -- where the package keeps its data ---------------------------------------------------------------------
     def roots(self, package: ClientPackage, request: ClientRequest) -> tuple:
@@ -233,8 +263,9 @@ class ClientPackageRunner:
         self._record(package, request, out, command, label)
         progress = ClientProgress()
 
-        def keep(line: str) -> None:
-            progress.feed(line)
+        def keep(line) -> None:
+            if isinstance(line, str):  # not an event of the live view
+                progress.feed(line)
             if "intake" in progress.done and not (data_root / (label + IMPORT_MARKER)).is_file():
                 (data_root / (label + IMPORT_MARKER)).write_text(
                     json.dumps({"label": label, "request": request.intake_values()}, indent=2, default=str),

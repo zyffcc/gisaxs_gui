@@ -144,14 +144,17 @@ Layers: `domain` (rows, series, reliability report from translatable templates, 
 of a window; `client.py`: the windows, entries and images of an Analyze result; `real_space.py`: where the grains of
 an entry sit), `application` (`SputterService`,
 `AnalyzeRequest`, progress, environment, scan and window ports; `client.py`: `ClientService`, `ClientRequest` and its
-ports, `client_progress.py`, `client_static.py`), `infrastructure` (`BundledToolkit`, `PipInstaller` + `pip_output`, `process`,
+ports, `client_progress.py`, `client_static.py`; `client_live.py`: the live events of a running Analyze and
+`LiveRun`), `infrastructure` (`BundledToolkit`, `PipInstaller` + `pip_output`, `process`,
 `CbfHeaderInspector`, `StructureFolderReader`, `BinnedWindowReader`; `client.py`: `ClientPackageRunner`,
 `ClientFolderReader`, `locate_package`; `client_static.py`: `StaticPackageRunner`), `presentation` (`SputterPage` = `views/sputter_page_view.py` +
-`views/sputter_main_view.py` + `views/sputter_static_view.py` + `client_flow.py`, `client_panel.py`, `client_texts.py`,
+`views/sputter_main_view.py` + `views/sputter_live_view.py` + `views/sputter_static_view.py` + `client_flow.py`,
+`client_panel.py`, `client_texts.py`, `live_panel.py`, `live_pictures.py`,
 `pattern_view.py`, `real_space_view.py`, `evolution_view.py`, `static_flow.py`, `geometry.py`, `predict_flow.py`, `results_panel.py`, `window_menu.py`, `trend_plot.py`,
 `literature_tab.py`, `sketch_view.py`, `texts.py`, `toolkit_texts.py`, `preset_dialog.py`), `bootstrap.py`. Chinese
 texts: `app/presentation/i18n/zh_sputter.py`, `zh_sputter_report.py`, `zh_sputter_literature.py`,
-`zh_sputter_toolkit.py`, `zh_sputter_handover.py`, `zh_sputter_fringes.py`, `zh_sputter_client.py`. Tests:
+`zh_sputter_toolkit.py`, `zh_sputter_handover.py`, `zh_sputter_fringes.py`, `zh_sputter_client.py`,
+`zh_sputter_live.py`. Tests:
 `tests/test_sputter_feature.py`, `tests/test_sputter_page.py`, `tests/test_sputter_show_in_analyze.py` (fakes in
 `tests/sputter_fixtures.py`), `tests/test_sputter_fringes.py`, `tests/test_sputter_fringes_page.py` (synthetic cuts in
 `tests/sputter_fringe_data.py`), `tests/test_sputter_client.py`, `tests/test_sputter_main_screen.py` (a fake of the
