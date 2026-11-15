@@ -58,6 +58,8 @@ def main():
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--shadow", action="store_true")
     ap.add_argument("--shadow-only", action="store_true", help="only extract the shadow table of an existing intake")
+    ap.add_argument("--auto-mask", choices=["on", "off"], default="on",
+                    help="mask the pixels the frames show to be unusable (dead, hot, beamstop) as well (iampred.automask)")
     a = ap.parse_args()
     sys.path.insert(0, str(IAM))
     if a.data:
@@ -121,7 +123,18 @@ def _intake(a, root, mask, msha, energy, lam, out):
     else:
         geo.update(beam_col=a.beam_col, beam_row=a.beam_row)
     t0 = datetime.now(timezone.utc)
-    prepare(Path(a.frames), out / "intake", **geo, maskpath=mask, workers=a.workers, system_note=f"iampred intake {a.label}")
+    used, auto = mask, None
+    if a.auto_mask == "on":
+        import numpy as np
+        from . import automask as AM
+        combined, auto = AM.build(a.frames, mask, geo["beam_row"], a.sdd_mm, a.alpha_i)
+        out.mkdir(parents=True, exist_ok=True)
+        used = out / "pixmask_used.npy"
+        np.save(used, combined)
+        auto.update(file=used.name, sha256=sha(used))
+        print(f"automatic mask: {auto['dead']} dead, {auto['hot']} hot, {auto['shadow']} beamstop / holder pixels "
+              f"masked besides {mask.name}" + (f" ({auto['base']})" if auto.get("base") else ""))
+    prepare(Path(a.frames), out / "intake", **geo, maskpath=used, workers=a.workers, system_note=f"iampred intake {a.label}")
     run, rows = intake_rows(out / "intake")
     ids = bin_ids([r["time_s"] for r in rows], seconds=0.5)
     aggregate(out / "intake", out / "binned", run, rows, ids, nominal_seconds=0.5)
@@ -131,7 +144,7 @@ def _intake(a, root, mask, msha, energy, lam, out):
                   started_utc=t0.strftime("%Y-%m-%dT%H:%M:%SZ"),
                   built_utc=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), frames=run["selected_frames"],
                   received_frames=run["received_frames"], time_first_s=rows[0]["time_s"], time_last_s=rows[-1]["time_s"],
-                  geometry=b.get("geometry"))
+                  geometry=b.get("geometry"), auto_mask=auto)
     (out / "pixmask.json").write_text(json.dumps(marker, indent=1) + "\n", encoding="utf-8", newline="\n")
     qcm = a.qcm_nm_s if a.qcm_nm_s is not None else a.rate_nm_s / 0.6
     scan = dict(metal=a.metal, sub=a.substrate, qcm=qcm, growth=a.label, ai=a.alpha_i, lam=lam,

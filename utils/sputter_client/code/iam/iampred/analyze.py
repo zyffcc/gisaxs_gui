@@ -61,6 +61,17 @@ def data_for_mask(data, digest):
     return data if same else data / f"mask-{digest[:12]}"
 
 
+def _mask_used(data, label):
+    'The pixel mask the scan was imported with (its marker): the mask file and what the automatic mask added.'
+    marker = data / label / "pixmask.json" if data is not None else None
+    if marker is None or not marker.exists():
+        return None
+    m = json.loads(marker.read_text(encoding="utf-8"))
+    auto = m.get("auto_mask") or {}
+    return dict(file=m.get("file"), automatic=bool(auto), base_used=not auto.get("base"),
+                **{k: auto.get(k) for k in ("dead", "hot", "shadow", "holder", "invalid", "kept", "pixels") if k in auto})
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     extra = []
@@ -168,7 +179,7 @@ def main(argv=None):
             shutil.copytree(out / fam / "main", out / "main", dirs_exist_ok=True)
     files = {k: (str(out / v) if (out / v).exists() else None) for k, v in FILES.items()}
     res = dict(status=status, label=a.label, metal=a.metal, substrate=a.substrate, family=fam, families_tried=tried, like=like, mode=a.mode, steps=steps, files=files,
-               note="development reference: not validated against independent characterisation")
+               mask=_mask_used(data, a.label), note="development reference: not validated against independent characterisation")
     (out / "analysis.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
     print(f"status: {status}; report: {files['report_md']}", flush=True)
     return 0 if status == "ok" else 1
