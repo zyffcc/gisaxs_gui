@@ -54,12 +54,21 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   the automatic beam centre is taken from frames with counts only, where before one empty frame among those it looked
   at made it fail ("No supported specular-centre candidate"). Frames on a network drive that its sync client holds
   for a moment are read again (a few tries) instead of failing the import.
+- Sputter ▸ Analyze: a new **Substrate** choice, **Polymer**, for a polymer film of another or unknown kind (a block
+  copolymer, for instance): the model describes every polymer as one film layer, and which polymer it is changes the
+  metal's sizes by a few percent. Cu runs on every polymer and Ag on PEO too. The Cu network was trained again with a
+  second scan (Cu on a block copolymer, grown to a closed film): on that scan the network alone fits clearly better than
+  before, and Analyze still runs the earlier Cu network next to it and keeps the better of the two for each scan.
+- Sputter ▸ Analyze: a scan whose first frames are dark (the X-ray shutter opened after the detector started) takes its
+  bare substrate and the start of the deposition from the frames after the shutter opened. Before, the dark frames
+  went into the bare substrate, which made it several times too weak in every time window of such a scan.
 - Sputter ▸ Analyze shows what it is doing while it runs: the main screen becomes a live view with the four steps
   (read the frames, find the solutions, write the report, draw the images), each with its state and one line of what
   it found, and, for the step at work, the detector summed with its mask and the frames read last, the count rate of
   every frame read so far, then the measured and model image of each time window as it is solved and the sizes found
-  so far. A click on a step that has started shows what it found. Needs the analysis package of 2026-11-15 or newer
-  (an older one is followed by its steps alone); the results are the same as before.
+  so far. A click on a step that has started shows what it found. The analysis package that comes with GIMaP sends
+  what the view shows (an older package chosen in Details is followed by its steps alone); the results are the same
+  as before.
 - **Geometry Calibration**: the **Distance range** is a limit, not a starting point. No solution outside it is shown,
   also not after the fit of centre and distance (before, the fit could leave a custom range); when none lies in it,
   the calibration says so. An image of the standard taken at grazing incidence (AgBH on a wafer: arcs above the

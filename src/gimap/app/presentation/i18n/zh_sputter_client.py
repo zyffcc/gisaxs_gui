@@ -44,6 +44,9 @@ SPUTTER_CLIENT_ZH = {
         "这个解没有可画的形貌：分析包既没有给出晶粒的半径和间距，也没有给出金属在多孔层里的位置。",
     # -- the input bar -----------------------------------------------------------------------------------------------
     "Rate (nm/s)": "速率（nm/s）",
+    "Polymer: a polymer film of another or unknown kind, a block copolymer for instance. The model describes every "
+    "polymer as one film layer; which polymer it is changes the metal's sizes by a few percent.":
+        "Polymer：其他或不确定种类的聚合物膜，例如嵌段共聚物。模型把任何聚合物都描述成一层膜；聚合物种类对金属尺寸的影响只有几个百分点。",
     "Deposition rate in nm/s: needed, the solutions depend on the metal deposited at each time.":
         "沉积速率（nm/s）：必填，各个解依赖每个时刻已沉积的金属量。",
     "QCM reading": "QCM 读数",

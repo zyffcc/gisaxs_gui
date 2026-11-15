@@ -15,13 +15,17 @@ HERE = Path(__file__).resolve().parent
 ASSETS = HERE.parent.parent / "assets"
 
 POLY = ("PS", "PNO", "PSBMA", "PET")
+FILMS = POLY + ("PEO",)
+
+
+GENERIC_HOST = {"Ag": "PS", "Cu": "PEO"}
 FAMILIES = {("Au", "Si"): ("si_p3h", None), ("Ag", "Si"): ("si_p3h", None),
             ("Au", "TiO2"): ("tio2_v2", None), ("Ag", "TiO2"): ("tio2_v2", None),
-            ("Cu", "PEO"): ("cu_p3", None),
-            **{("Ag", s): ("polyag_p3", "ref04" if s == "PNO" else "ref05") for s in POLY}}
+            **{("Cu", s): ("cu_p4", None) for s in FILMS},
+            **{("Ag", s): ("polyag_p3", "ref04" if s == "PNO" else "ref05") for s in FILMS}}
 
 
-ALTERNATIVES = {"polyag_p3": ["polyag_v5"], "si_p3h": ["si_v6"], "cu_p3": ["cu_v4"]}
+ALTERNATIVES = {"polyag_p3": ["polyag_v5"], "si_p3h": ["si_v6"], "cu_p4": ["cu_v4"]}
 MODES = dict(quick=dict(refine=0, sequence=0, max_windows=60), refine=dict(refine=8, sequence=0, max_windows=24),
              full=dict(refine=30, sequence=30, max_windows=96))
 FILES = dict(report_md="REPORT.md", report_png="report.png", report_csv="report.csv", windows_csv="windows.csv",
@@ -29,10 +33,16 @@ FILES = dict(report_md="REPORT.md", report_png="report.png", report_csv="report.
              main_json="main/main.json")
 
 
+def host_of(metal, substrate):
+    'The substrate the import and the forward model use: a concrete polymer for --substrate Polymer.'
+    return GENERIC_HOST.get(metal, substrate) if substrate == "Polymer" else substrate
+
+
 def choose(metal, substrate):
     '(family, like) for a sample, or SystemExit with the supported combinations.'
+    substrate = host_of(metal, substrate)
     if (metal, substrate) not in FAMILIES:
-        sup = ", ".join(f"{m} on {s}" for (m, s) in FAMILIES)
+        sup = ", ".join(f"{m} on {s}" for (m, s) in FAMILIES) + ", Ag or Cu on Polymer"
         raise SystemExit(f"no network for {metal} on {substrate}. Supported: {sup}. "
                          f"The direct readings do not need a network: run with --family of the closest case to get them.")
     return FAMILIES[(metal, substrate)]
@@ -81,7 +91,8 @@ def main(argv=None):
     ap.add_argument("--frames", required=True)
     ap.add_argument("--label", required=True)
     ap.add_argument("--metal", required=True, choices=["Au", "Ag", "Cu"])
-    ap.add_argument("--substrate", required=True, choices=["Si", "TiO2", "PS", "PET", "PSBMA", "PNO", "PEO"])
+    ap.add_argument("--substrate", required=True, choices=["Si", "TiO2", "PS", "PET", "PSBMA", "PNO", "PEO", "Polymer"],
+                    help="Polymer: a polymer film of unknown or another kind (the optics of the metal network's polymer)")
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--rate-nm-s", type=float)
     g.add_argument("--qcm-nm-s", type=float)
@@ -144,7 +155,8 @@ def main(argv=None):
         steps.append(dict(step="intake", returncode=0, seconds=0.0, log=None, note="scan already imported: reused"))
         print("[1/4] intake ... reused the imported scan", flush=True)
     else:
-        args = ["--frames", a.frames, "--label", a.label, "--metal", a.metal, "--substrate", a.substrate, "--alpha-i", a.alpha_i, "--workers", a.workers]
+        args = ["--frames", a.frames, "--label", a.label, "--metal", a.metal, "--substrate", host_of(a.metal, a.substrate),
+                "--alpha-i", a.alpha_i, "--workers", a.workers]
         args += ["--rate-nm-s", a.rate_nm_s] if a.rate_nm_s is not None else ["--qcm-nm-s", a.qcm_nm_s]
         args += ["--data", data] if data is not None else []
         args += ["--shadow"] if a.substrate == "Si" and "--shadow" not in extra else []
@@ -178,7 +190,7 @@ def main(argv=None):
         if run_quiet("present", args, "main") and (out / fam / "main" / "main.json").exists():
             shutil.copytree(out / fam / "main", out / "main", dirs_exist_ok=True)
     files = {k: (str(out / v) if (out / v).exists() else None) for k, v in FILES.items()}
-    res = dict(status=status, label=a.label, metal=a.metal, substrate=a.substrate, family=fam, families_tried=tried, like=like, mode=a.mode, steps=steps, files=files,
+    res = dict(status=status, label=a.label, metal=a.metal, substrate=a.substrate, host=host_of(a.metal, a.substrate), family=fam, families_tried=tried, like=like, mode=a.mode, steps=steps, files=files,
                mask=_mask_used(data, a.label), note="development reference: not validated against independent characterisation")
     (out / "analysis.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
     print(f"status: {status}; report: {files['report_md']}", flush=True)

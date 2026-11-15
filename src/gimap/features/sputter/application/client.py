@@ -29,10 +29,11 @@ from typing import Callable, Optional, Protocol
 from ..domain import CLIENT_RESULT_TEMPLATES, NO_MAIN, ClientResult, ClientWindow, WindowPatterns
 from .use_cases import METALS, PROBLEMS, Stopped, scan_label
 
-SUBSTRATES = ("Si", "TiO2", "PS", "PET", "PSBMA", "PNO", "PEO")
-FILM_SUBSTRATES = ("PS", "PET", "PSBMA", "PNO", "PEO")
+SUBSTRATES = ("Si", "TiO2", "PS", "PET", "PSBMA", "PNO", "PEO", "Polymer")
+FILM_SUBSTRATES = ("PS", "PET", "PSBMA", "PNO", "PEO", "Polymer")
 """Substrates that are a polymer film on the wafer: its thickness can be given (the package has a value of its own
-for each of them)."""
+for each of them). Polymer: a film of another or unknown kind (a block copolymer, say); the package takes the optics
+of the polymer its network for the metal was trained on."""
 MODES = ("auto", "quick", "refine", "full")
 ENGINE_FOLDER = "iampred"
 LABEL_PREFIX = "gui_"

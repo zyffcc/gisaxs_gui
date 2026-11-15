@@ -46,6 +46,51 @@ def lit_frames(files, n=30):
     return lit or files
 
 
+DARK_RAMP_SHARE, BASE_S, RISE = 0.9, 0.3, 1.05
+"""A scan whose first bins have no counts (the X-ray shutter opened after the detector started): the first lit bin whose
+rate reaches 90 % of the next three is the start of the bare plateau; the onset is the first bin after BASE_S seconds of
+plateau where four bins in a row exceed 1.05 x its median rate - the forward model's own rule (tio2_explore.onset), with
+the baseline on lit bins instead of 0.3-1.0 s."""
+
+
+def dark_start_onset(scan_dir):
+    '(t_dep, pre_start, pre_end, shutter_open) from the binned cache of a scan that starts with dark bins after 0.3 s,'
+    import numpy as np
+    root = Path(scan_dir)
+    grid = root.parent / "native_grid.npz"
+    if not grid.exists():
+        return None
+    g = np.load(grid)
+    af = 0.5 * (g["native_edges"][1:] + g["native_edges"][:-1])
+    q = 0.5 * (g["q_edges"][1:] + g["q_edges"][:-1])
+    sel = ((af >= 0.10) & (af < 0.35))[:, None] & ((np.abs(q) >= 0.15) & (np.abs(q) < 1.2))[None, :]
+    times, rate, total = [], [], []
+    for meta in sorted((root / "binned").glob("chunk_*.json")):
+        rows = json.loads(meta.read_text(encoding="utf-8"))["rows"]
+        with np.load(meta.with_suffix(".npz")) as z:
+            Y, E = z["Y"].astype(float), z["E"].astype(float)
+        for i, r in enumerate(rows):
+            times.append(float(r["time_s"]))
+            total.append(float(Y[i].sum()))
+            rate.append(float((Y[i] * sel).sum() / max((E[i] * sel).sum(), 1e-12)))
+        if times and times[-1] > 30.0:
+            break
+    times, rate, total = np.array(times), np.array(rate), np.array(total)
+    lit = total > 0
+    if not lit.any() or not (~lit[(times >= 0.3) & (times < times[np.argmax(lit)])]).any():
+        return None
+    first = int(np.argmax(lit))
+    start = next((i for i in range(first, len(rate) - 3) if rate[i] >= DARK_RAMP_SHARE * np.median(rate[i + 1:i + 4])),
+                 first)
+    base = (times >= times[start]) & (times <= times[start] + BASE_S)
+    r0 = float(np.median(rate[base]))
+    above = rate > RISE * r0
+    for i in range(len(rate) - 4):
+        if times[i] > times[start] + BASE_S and above[i:i + 4].all():
+            return float(times[i]), float(times[start]), float(times[i] - 0.05), float(times[first])
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--frames", required=True)
@@ -179,6 +224,12 @@ def _intake(a, root, mask, msha, energy, lam, out):
         scan["t_dep"] = a.t_dep
     if a.pre:
         scan["pre_start"], scan["pre_end"] = (float(v) for v in a.pre.split(","))
+    if a.t_dep is None and not a.pre:
+        dark = dark_start_onset(out)
+        if dark:
+            scan.update(t_dep=dark[0], pre_start=dark[1], pre_end=dark[2])
+            print(f"the first frames are dark (X-ray from {dark[3]:.2f} s): bare plateau from {dark[1]:.2f} s, "
+                  f"onset {dark[0]:.2f} s")
     if a.poly_t is not None:
         scan["poly_t"] = a.poly_t
     if a.t_sput is not None:

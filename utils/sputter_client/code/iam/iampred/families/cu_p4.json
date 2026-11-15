@@ -1,5 +1,5 @@
 {
- "family": "cu_p3",
+ "family": "cu_p4",
  "fitter": "iam_fit4",
  "env": {
   "IAM_SMEAR_EDGE": "zero",
@@ -38,7 +38,11 @@
  "ref_kind": "window",
  "scans": {
   "ref13": {
-   "ref": "cu_p3",
+   "ref": "cu_p4",
+   "metal": "Cu"
+  },
+  "ref14": {
+   "ref": "cu_p4",
    "metal": "Cu"
   }
  },
@@ -153,11 +157,11 @@
   "growth": {
    "ln_h_c": [
     0.26236426446749106,
-    0.5
+    0.7
    ],
    "ln_D1": [
     1.791759469228055,
-    0.45
+    0.7
    ],
    "c_max": [
     0.7,
@@ -165,7 +169,7 @@
    ],
    "ln_h_b": [
     1.791759469228055,
-    0.45
+    0.7
    ],
    "large": {
     "p_on": 0.5,

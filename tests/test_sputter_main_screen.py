@@ -567,7 +567,7 @@ def test_the_film_thickness_is_offered_for_a_polymer_film_only(tmp_path):
     page.substrate.setCurrentIndex(page.substrate.findData("PSBMA"))
     assert page.film_thickness.isVisible() and page.film_label.isVisible()
     assert [page.substrate.itemData(i) for i in range(page.substrate.count())] == \
-        ["Si", "TiO2", "PS", "PET", "PSBMA", "PNO", "PEO"]
+        ["Si", "TiO2", "PS", "PET", "PSBMA", "PNO", "PEO", "Polymer"]
     assert page.sample_metal.itemText(page.sample_metal.findData("Cu")) == "Cu"  # no note of the earlier method here
     _close(page)
 
