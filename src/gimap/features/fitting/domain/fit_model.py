@@ -8,6 +8,14 @@
   component has one (``structure``), else 1;
 * BG a constant background, A/(1+(|q|/w)^ν) the resolution peak at q = 0, k an overall factor.
 
+Spheres of a horizontal GISAXS cut: with αi = αf = 0 (the default) the sphere is evaluated at q_z = 0, the
+effective interface approximation, which needs nothing about the substrate. With the angles and λ of the cut
+the sphere amplitude is the sum of the direct and the exit-reflected path of the DWBA,
+    A = f(√(q² + q₊²) R) e^{-i q₊ R} + r f(√(q² + q₋²) R) e^{-i q₋ R},  q₊ = k_i + k_f,  q₋ = k_i − k_f,
+with r = |r| e^{i arg r} a free effective reflection coefficient (|r| = 0: Born at the vacuum q_z).
+Cylinders keep their form: a vertical cylinder's paths share the in-plane factor (exact), and a random
+cylinder is orientation-averaged at |q|.
+
 q in nm⁻¹, sizes in nm. The formulas are those of ``scattering_model`` (the manual model) with
 the same sampling, so a model here and the same model in the manual parameter store give the
 same curve; ``to_manual`` / ``from_manual`` convert the spreads (nm for spheres and random
@@ -29,6 +37,7 @@ from .scattering_model import (
     cylinder_orientation_average,
     cylinder_radial_average,
     sphere_form_factor_pd,
+    sphere_two_path_pd,
     structure_factor_1d,
     vertical_cylinder_form_factor_pd,
 )
@@ -42,7 +51,10 @@ FAMILIES = {
 }
 MANUAL_NAMES = {"sphere": "Sphere", "cylinder": "Cylinder", "vertical_cylinder": "Vertical Cylinder"}
 STRUCTURE = ("D", "sigma_D")
-GLOBALS = ("background", "res_amplitude", "res_width", "res_exponent", "k")
+BASE_GLOBALS = ("background", "res_amplitude", "res_width", "res_exponent", "k")
+GRAZING = ("alpha_i", "alpha_f", "wavelength", "refl_amp", "refl_phase")
+"""Geometry of the cut and the effective reflection coefficient r of the two-path sphere (fixed by default)."""
+GLOBALS = BASE_GLOBALS + GRAZING
 LINEAR = frozenset({"Int", "background", "res_amplitude"})
 """Scales: with the others fixed, the intensity is linear in them (solved exactly while fitting)."""
 INF = math.inf
@@ -77,6 +89,15 @@ INFO = {
     "res_exponent": ParameterInfo("Peak ν", "", 3.0, 1.0, 20.0, tip="Exponent ν of the resolution peak (its tail)"),
     "k": ParameterInfo("Factor k", "", 1.0, 1e-6, 1e6, free=False,
                        tip="Overall factor of everything but the background (usually fixed at 1)"),
+    "alpha_i": ParameterInfo("αi", "°", 0.0, 0.0, 5.0, free=False,
+                             tip="Incidence angle of the cut; with αf = 0 too, spheres at q_z = 0 (effective interface)"),
+    "alpha_f": ParameterInfo("αf", "°", 0.0, 0.0, 5.0, free=False,
+                             tip="Exit angle of the cut (the detector row of the horizontal cut)"),
+    "wavelength": ParameterInfo("λ", "nm", 0.1, 0.005, 1.0, free=False, tip="Wavelength"),
+    "refl_amp": ParameterInfo("|r|", "", 0.0, 0.0, 1.0, free=False,
+                              tip="Size of the effective reflection coefficient of the exit-reflected path (spheres)"),
+    "refl_phase": ParameterInfo("arg r", "rad", 0.0, -math.pi, math.pi, free=False,
+                                tip="Phase of the effective reflection coefficient (spheres)"),
 }
 
 
@@ -166,12 +187,35 @@ def _cached(cache: Optional[dict], key: tuple, compute):
     return cache[key]
 
 
-def component_form(component: Component, q: np.ndarray, cache: Optional[dict] = None) -> np.ndarray:
+def grazing(model: FitModel) -> Optional[tuple]:
+    """(q₊, q₋, k_f, |r|, arg r) of the two-path sphere, or None for the effective interface (q_z = 0)."""
+    g = {key: float(model.globals[key].value) for key in GRAZING}
+    if g["alpha_i"] == 0 and g["alpha_f"] == 0 and g["refl_amp"] == 0:
+        return None
+    k = 2 * math.pi / g["wavelength"]
+    k_i, k_f = k * math.sin(math.radians(g["alpha_i"])), k * math.sin(math.radians(g["alpha_f"]))
+    return (k_i + k_f, k_i - k_f, k_f, g["refl_amp"], g["refl_phase"])
+
+
+def qz_plus_r(model: FitModel) -> list[tuple[int, float]]:
+    """q₊·R of every sphere (component index, value), q₊ = k_i + k_f; empty without the angles of the cut."""
+    paths = grazing(model)
+    if paths is None or paths[0] <= 0:
+        return []
+    return [(index, paths[0] * c.value("R")) for index, c in enumerate(model.components) if c.family == "sphere"]
+
+
+def component_form(component: Component, q: np.ndarray, cache: Optional[dict] = None,
+                   paths: Optional[tuple] = None) -> np.ndarray:
     """P(q)·S(q) of one component with scale 1 (q in nm⁻¹). ``cache``: reuse the parts that did not
-    change during one fit (a random cylinder's radius and height averages are separate)."""
+    change during one fit (a random cylinder's radius and height averages are separate). ``paths``:
+    :func:`grazing` of the model (used by spheres only)."""
     q = np.asarray(q, dtype=float)
     radius, spread = component.value("R"), component.value("sigma_R")
-    if component.family == "sphere":
+    if component.family == "sphere" and paths is not None:
+        form = _cached(cache, ("sphere2", radius, spread, *paths),
+                       lambda: sphere_two_path_pd(q, radius, radius * spread, *paths, n_samples=25, nsig=4.0))
+    elif component.family == "sphere":
         form = _cached(cache, ("sphere", radius, spread),
                        lambda: sphere_form_factor_pd(q, radius, radius * spread, n_samples=25, nsig=4.0))
     elif component.family == "cylinder":
@@ -201,9 +245,10 @@ def evaluate(model: FitModel, q: np.ndarray, *, parts: bool = False, cache: Opti
     """The model on ``q`` (nm⁻¹); with ``parts``, also each term: ``(total, {name: curve})``."""
     q = np.abs(np.asarray(q, dtype=float))
     g = {key: float(parameter.value) for key, parameter in model.globals.items()}
-    terms = {}
+    terms, paths = {}, grazing(model)
     for index, component in enumerate(model.components):
-        terms[f"{index + 1}: {FAMILIES[component.family][0]}"] = g["k"] * component.value("Int") * component_form(component, q, cache)
+        terms[f"{index + 1}: {FAMILIES[component.family][0]}"] = (
+            g["k"] * component.value("Int") * component_form(component, q, cache, paths))
     if g["res_amplitude"] != 0:
         terms["resolution peak"] = g["k"] * g["res_amplitude"] * resolution_shape(model, q)
     total = g["background"] + (np.sum(list(terms.values()), axis=0) if terms else np.zeros_like(q))
@@ -323,7 +368,7 @@ def model_from_dict(data: Mapping) -> FitModel:
 
 
 __all__ = [
-    "FAMILIES", "GLOBALS", "INFO", "LINEAR", "Component", "FitModel", "Parameter", "ParameterInfo",
-    "component_form", "evaluate", "from_manual", "model_from_dict", "model_to_dict", "new_component",
+    "BASE_GLOBALS", "FAMILIES", "GLOBALS", "GRAZING", "INFO", "LINEAR", "Component", "FitModel", "Parameter",
+    "ParameterInfo", "component_form", "evaluate", "grazing", "qz_plus_r", "from_manual", "model_from_dict", "model_to_dict", "new_component",
     "resolution_shape", "to_manual",
 ]

@@ -5,6 +5,7 @@ __all__ = [
     "make_mixed_model",  # <- 工厂：根据 spec 生成可拟合函数 f(q,*p)
     "params_template",  # <- 给定 spec 返回参数名顺序
     "sphere_form_factor_pd",  # 单形状工具
+    "sphere_two_path_pd",  # 掠入射：直射与出射反射两条路径
     "cylinder_form_factor_pd",  # 单形状工具（含各向平均）
     "vertical_cylinder_form_factor_pd",
     "structure_factor_1d",
@@ -107,6 +108,23 @@ def sphere_form_factor_pd(q, R, sigma_R, n_samples=25, nsig=4.0):
         Fi = _F_sphere_amp(q, Ri)
         F2 += wi * (Fi * Fi)
     return F2
+
+
+def sphere_two_path_pd(q, R, sigma_R, q_plus, q_minus, k_f, refl_amp, refl_phase, n_samples=25, nsig=4.0):
+    """Sphere on a surface, horizontal cut: the direct and the exit-reflected DWBA path, on the size grid of
+    :func:`sphere_form_factor_pd` (each size's |A|² normalised by its V², as there).
+
+    A = f(√(q²+q₊²)R) e^{-iq₊R} + r f(√(q²+q₋²)R) e^{-iq₋R}, r = refl_amp·e^{i·refl_phase}, so
+    |A|² = f₊² + |r|² f₋² + 2|r| f₊ f₋ cos(arg r + 2 k_f R)   (q₊ − q₋ = 2 k_f)."""
+    q = np.asarray(q, dtype=float)
+    q_p, q_m = np.hypot(q, q_plus), np.hypot(q, q_minus)
+    Rs, W = _gaussian_grid(R, sigma_R, nsig=nsig, n=n_samples, clip_min=0.0)
+    out = np.zeros_like(q, dtype=float)
+    for Ri, wi in zip(Rs, W):
+        f_p, f_m = _F_sphere_amp(q_p, Ri), _F_sphere_amp(q_m, Ri)
+        out += wi * (f_p * f_p + refl_amp ** 2 * f_m * f_m
+                     + 2.0 * refl_amp * f_p * f_m * np.cos(refl_phase + 2.0 * k_f * Ri))
+    return out
 
 
 # ---- Cylinder (随机取向各向平均) ----

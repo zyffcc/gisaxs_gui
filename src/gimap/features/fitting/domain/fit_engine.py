@@ -23,7 +23,7 @@ import numpy as np
 from scipy.optimize import differential_evolution, least_squares, lsq_linear
 from scipy.stats import qmc
 
-from .fit_model import LINEAR, FitModel, component_form, evaluate, resolution_shape
+from .fit_model import LINEAR, FitModel, component_form, evaluate, grazing, resolution_shape
 
 TINY = 1e-300
 CORRELATED = 0.95
@@ -183,9 +183,9 @@ class _Problem:
         q, g = self.data.q, model.globals
         k = float(g["k"].value)
         columns, fixed = [], np.full_like(q, 0.0 if ("globals", "background") in self.linear else g["background"].value)
-        forms = {}
+        forms, paths = {}, grazing(model)
         for index, component in enumerate(model.components):
-            forms[index] = component_form(component, q, self.cache)
+            forms[index] = component_form(component, q, self.cache, paths)
             if (index, "Int") in self.linear:
                 continue
             fixed = fixed + k * component.value("Int") * forms[index]

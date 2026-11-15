@@ -12,6 +12,13 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Fitting, spheres in grazing incidence:** a new card in Model, *Spheres in grazing incidence*. By default
+  nothing changes: spheres are evaluated at q_z = 0 (the effective interface approximation, no substrate
+  needed). Entering αi, αf and λ of the cut evaluates spheres as the direct plus the exit-reflected path with a
+  free effective reflection coefficient |r|·e^(i·arg r); the results then show q₊R of each sphere. fit1d no
+  longer warns when *Cut qz* is not given. Physics and Methods has new sections 9.10 (why upright cylinders are
+  exact in this approximation and spheres are not, with examples on Si and on a polymer film) and 9.11 (what each
+  population of the usual three-population fit takes up).
 - **Fitting:** parameter limits and fixed values are enforced, including linear intensity/background terms;
   incompatible predictor constraints are refused. Predict stays selected after finishing. Complete equivalent
   fits can be switched as a whole from the result dropdown; components are available in the curve's right-click

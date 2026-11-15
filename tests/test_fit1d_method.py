@@ -219,8 +219,8 @@ def test_files_are_fitted_per_half_and_a_bad_file_does_not_stop_the_batch(tmp_pa
     positive, negative, bare_row = rows
     assert all(v < 0 for v in negative["native_q"]) and all(v > 0 for v in positive["native_q"])
     np.testing.assert_allclose(negative["native_fit"], positive["native_fit"], rtol=1e-9)  # the same curve, mirrored
-    for row in rows:  # no qz given: said in the row, not guessed
-        assert any("qz = 0" in warning for warning in row["warnings"])
+    for row in rows:  # no qz given: the effective interface approximation (qz = 0), recorded, not a warning
+        assert not any("qz = 0" in warning for warning in row["warnings"])
         assert row["fit1d"]["qz_nm_inv"] == 0 and not row["fit1d"]["qz_given"] and row["fit1d"]["sigma_floor"] == 0.03
     assert any("sigma was estimated" in warning for warning in bare_row["warnings"])
     assert not any("sigma was estimated" in warning for warning in positive["warnings"])
@@ -643,10 +643,8 @@ def test_auto_composition_ranks_candidates_with_their_own_parameters():
     assert "table" not in light[0] and value["native"]["fit1d_constraints"]["composition"] == "auto:sphere,vc:3"
 
 
-def test_the_qz_warning_names_where_cut_qz_is_set_and_is_translated():
-    """The warning is shown on the single page and in 1D Predict: it names both places, and in Chinese too."""
-    from src.gimap.app.presentation.i18n.zh_fit1d import FIT1D_ZH
-    from src.gimap.features.fitting.infrastructure.adapters.fit1d_method import QZ_ZERO
+def test_no_cut_qz_is_the_effective_interface_default_without_a_warning():
+    """qz = 0 is the effective interface approximation (spheres at q_par): the normal case, not a warning."""
+    from src.gimap.features.fitting.infrastructure.adapters import fit1d_method
 
-    assert "Fit step ▸ Options" in QZ_ZERO and "Parameters…" in QZ_ZERO
-    assert "拟合步骤 ▸ 选项" in FIT1D_ZH[QZ_ZERO]
+    assert not hasattr(fit1d_method, "QZ_ZERO")

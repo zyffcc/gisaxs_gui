@@ -24,7 +24,7 @@ import math
 from dataclasses import asdict, dataclass
 from typing import Iterable, Mapping, Optional
 
-from .fit_model import INFO, FitModel
+from .fit_model import GRAZING, INFO, FitModel
 
 SQRT_2PI = math.sqrt(2.0 * math.pi)
 TYPE_CODE = {"sphere": 1, "vertical_cylinder": 3}
@@ -138,6 +138,8 @@ def model_constraints(model: FitModel, *, structure_factor: bool = True) -> list
     # These coefficients have different definitions in the native and manual models.
     # Never pretend that a constraint on one was applied to the other.
     for (owner, key), parameter in model.parameters():
+        if key in GRAZING:  # the angles and r of Refine's two-path sphere; fit1d has its own cut q_z
+            continue
         info = INFO[key]
         custom = (parameter.lower, parameter.upper) != (info.lower, info.upper)
         fixed = not parameter.free and (info.free or parameter.value != info.value)

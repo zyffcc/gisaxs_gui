@@ -1933,6 +1933,13 @@ Analysis** to inspect its contributions here.
   the peak. The model as a formula, and how **σD/D** relates to the usual paracrystal spread, are in Physics and
   Methods, [section 9.2](Physics_Manual.md#92-the-intensity-model) and
   [section 9.5](Physics_Manual.md#95-structure-factor-one-dimensional-paracrystal).
+- **Spheres in grazing incidence**: αi, αf, λ and the effective reflection coefficient |r|, arg r. With αi = αf = 0
+  (the default) spheres are evaluated at q_z = 0, the effective interface approximation, which needs nothing about the
+  substrate. Enter αi, αf (the row of the cut) and λ to evaluate spheres as the direct plus the exit-reflected path,
+  and free |r| and arg r to fit the reflection; cylinders are not affected. After a fit with the angles entered, the
+  results show q₊R of every sphere. When to use which, with examples on Si and on a polymer film:
+  [Physics and Methods, section 9.10](Physics_Manual.md#910-spheres-and-cylinders-in-a-horizontal-cut-the-effective-interface-approximation);
+  how to read a fit with three populations: [section 9.11](Physics_Manual.md#911-the-three-population-model).
 - After a fit every value shows its ± error, or *⚠ at a bound* (orange) when it stopped at the edge of its range and
   was not resolved (section 6.3, *Values at the edge of their range*).
 
@@ -2067,8 +2074,9 @@ together. A good fit does not prove that the composition is the true one.
      **Robust (always many starts)**.
    - **fit1d curve type**: **GISAXS (Yoneda cut)** or **SAXS (dilute, no structure factor)**. SAXS ignores qz and
      has no structure factor or low-q term.
-   - **Cut qz (nm⁻¹)**: for a Yoneda cut, tick it and enter the vacuum qz of the cut. It is not filled from
-     Analyze. Unticked means qz = 0, with a warning when a sphere is present. Opening a curve clears this
+   - **Cut qz (nm⁻¹)**: unticked (the default) evaluates spheres at qz = 0, the effective interface approximation,
+     which needs nothing about the substrate (Physics Manual, section 9.10). Tick it only to evaluate spheres at a
+     chosen vacuum qz instead. It is not filled from Analyze. Opening a curve clears this
      value, including reopening the same file (Analyze may have overwritten it with another cut).
      Changing the current curve's range or display keeps it; restoring a saved project or session restores
      that curve's saved value. A new cut explicitly identified as GISAXS by Analyze selects the GISAXS curve type.

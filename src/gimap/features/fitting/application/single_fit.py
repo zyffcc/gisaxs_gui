@@ -36,8 +36,10 @@ from ..domain.fit_engine import (
     stopped_result,
 )
 from ..domain.fit_model import (
+    BASE_GLOBALS,
     FAMILIES,
     GLOBALS,
+    GRAZING,
     INFO,
     LINEAR,
     Component,
@@ -45,9 +47,11 @@ from ..domain.fit_model import (
     Parameter,
     evaluate,
     from_manual,
+    grazing,
     model_from_dict,
     model_to_dict,
     new_component,
+    qz_plus_r,
     to_manual,
 )
 from ..domain import fit_edges
@@ -285,6 +289,9 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
                    "averaged": None if made_of is None else made_of.averaged,
                    "left_out_q_nm^-1": sorted(float(value) for value in excluded)},
         "log_rmse": log_rmse(model, data),
+        # spheres of a horizontal cut: q_z = 0 (effective interface) or the two-path model with the cut's angles
+        "sphere_model": "effective interface (q_z = 0)" if grazing(model) is None else "two paths (direct + exit-reflected)",
+        "qz_plus_R": {f"{index}": round(value, 4) for index, value in qz_plus_r(model)},
     }
     if curve is not None and curve.path:
         record["curve"]["source"] = source_record(curve.path)
@@ -300,7 +307,7 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
 
 
 __all__ = [
-    "ANALYZE_SIDES", "FAMILIES", "GLOBALS", "INFO", "LINEAR", "NM_PER_A", "PHASES", "PROGRESS_LINE", "SIDES",
+    "ANALYZE_SIDES", "BASE_GLOBALS", "FAMILIES", "GLOBALS", "GRAZING", "INFO", "grazing", "qz_plus_r", "LINEAR", "NM_PER_A", "PHASES", "PROGRESS_LINE", "SIDES",
     "BOTH_USES_MEAN", "ONE_CURVE_METHODS", "QUICK_FIT_MIN_POINTS", "SERIES_SIDES", "TOO_FEW_FOR_QUICK_FIT",
     "Component", "Curve", "FitData", "FitModel", "FitResult", "FitStopped", "MissingHalf", "Parameter", "PreparedCurve",
     "evaluate", "export_table", "fit", "fit_record", "fit_resolving", "fit_scales", "from_manual", "left_out_points", "log_rmse",

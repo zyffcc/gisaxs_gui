@@ -93,6 +93,8 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [9.7 Objective and the scales](#97-objective-and-the-scales)
   - [9.8 Refine, Search, goodness of fit and the errors](#98-refine-search-goodness-of-fit-and-the-errors)
   - [9.9 Find the particle shape](#99-find-the-particle-shape)
+  - [9.10 Spheres and cylinders in a horizontal cut: the effective interface approximation](#910-spheres-and-cylinders-in-a-horizontal-cut-the-effective-interface-approximation)
+  - [9.11 The three-population model](#911-the-three-population-model)
 - [10. 1D Predict (Workflow V5, conditional_v2)](#10-1d-predict-workflow-v5-conditional_v2)
   - [10.1 Input](#101-input)
   - [10.2 What the networks propose](#102-what-the-networks-propose)
@@ -1736,8 +1738,9 @@ I(q) = BG + k · [ Σ_i Int_i · P_i(q) · S_i(q) + A / ( 1 + (q / w)^ν ) ],   
 ```
 
 Int_i is the scale of component i, BG a constant background (not multiplied by k), A, w and ν the amplitude, width
-and exponent of the beam-tail term, and k an overall factor fixed at 1 by default. The model depends on `abs(q)` only;
-q_z and DWBA terms are not modelled. The beam-tail term is additive, not a resolution convolution (a Gaussian smearing
+and exponent of the beam-tail term, and k an overall factor fixed at 1 by default. By default the model depends on
+`abs(q)` only: spheres are evaluated at q_z = 0, the effective interface approximation. Given the angles of the cut,
+spheres can instead use the direct and the exit-reflected path of the DWBA (section 9.10). The beam-tail term is additive, not a resolution convolution (a Gaussian smearing
 function exists in the code but the model does not use it). With w ≤ 0 or ν ≤ 0 the term is 1.
 
 The plot's **Components** are these additive intensities: `k·Int_i·P_i·S_i`, the scaled beam-tail term and
@@ -1851,6 +1854,11 @@ Implementation: `src/gimap/features/fitting/domain/scattering_model.py`
 | res_width | Peak w | nm⁻¹ | 0.02 | 0.001–0.1 | yes |
 | res_exponent | Peak ν | – | 3 | 1–20 | yes |
 | k | Factor k | – | 1 | 10⁻⁶–10⁶ | no |
+| alpha_i | αi | ° | 0 | 0–5 | no |
+| alpha_f | αf | ° | 0 | 0–5 | no |
+| wavelength | λ | nm | 0.1 | 0.005–1 | no |
+| refl_amp | \|r\| | – | 0 | 0–1 | no |
+| refl_phase | arg r | rad | 0 | −π–π | no |
 
 Each component has Int, R, σ_R/R (h and σ_h/h for random cylinders) and, with its structure factor, D and σ_D/D.
 
@@ -1968,6 +1976,121 @@ deviation says by how much. Converted proposals retain fixed values and are clip
 into Model, and Refine is proposed next.
 
 Implementation: `src/gimap/features/fitting/presentation/single/run.py`, `src/gimap/features/fitting/domain/native_solution.py`
+
+### 9.10 Spheres and cylinders in a horizontal cut: the effective interface approximation
+
+**The full expression needs the substrate.** For particles sitting on a surface, the distorted-wave Born
+approximation (DWBA) adds the waves reflected by the surface before and after the scattering:
+
+```text
+A(q_y) = F(q_y, k_i+k_f) + r_i F(q_y, k_f−k_i) + r_f F(q_y, k_i−k_f) + r_i r_f F(q_y, −k_i−k_f)      (9.27)
+k_i = k sin α_i,   k_f = k sin α_f,   F(q_∥, Q) = ∫ V e^{−i q_∥·r_∥} e^{−iQz} dr
+```
+
+r_i and r_f are the reflection coefficients of the surface at α_i and α_f. They depend on the whole layer stack
+under the particles (polymer film, oxide, roughness, the particle layer itself), which is usually not known.
+Example: at the Si critical angle, r_f = 0.82 − 0.15i on bare Si and −0.64 − 0.29i on Si covered with 100 nm
+polystyrene (λ = 0.1045 nm).
+
+**What GIMaP does by default.** Fitting (and fit1d without *Cut qz*) uses the effective interface approximation
+(EIA) of the Müller-Buschbaum group: the transmission factors are constant along a horizontal cut, so they go into
+the scale, and the form factor is taken at q_z = 0. No substrate information is needed.
+
+**Why upright cylinders are exact.** For a cylinder standing on the surface the amplitude separates:
+
+```text
+F(q_∥, Q) = πR²H · [2J₁(q_∥R)/(q_∥R)] · sinc(QH/2) e^{−iQH/2}                                    (9.28)
+```
+
+All four terms of (9.27) share the in-plane factor 2J₁(q_∥R)/(q_∥R). The Q-dependent factor is the same at every
+point of the cut, so the cut has exactly the shape of the q_z = 0 form factor, on any substrate. This holds when
+the heights do not vary with the radius; a height that grows with R would weight the radii differently.
+
+**Why spheres are an approximation.** A sphere has no such separation: its form factor depends on
+|q| = √(q_y² + Q²), and the four terms have different Q. The two that matter at the Yoneda angle (|r_f| ≈ 0.8,
+|r_i| ≈ 0.04 at α_i = 0.4°) are q₊ = k_i + k_f and q₋ = k_i − k_f. Setting Q = 0 changes the positions of the
+minima, and the radius moves to compensate. The error grows with q₊R. A hemisphere at q_z = 0 has exactly half
+the amplitude of the full sphere, so the EIA cannot tell them apart; R is the in-plane radius.
+
+Simulated cuts (four-term DWBA, checked against BornAgain 24.1), λ = 0.1045 nm, α_i = 0.40°, cut at the Si Yoneda
+angle α_f = 0.150° (q₊ = 0.577 nm⁻¹), σ_R/R = 0.15, D = 3.2R, σ_nn/D = 0.2, 10⁵ counts at the peak, fitted in the EIA
+with the right family:
+
+| Particles | R (nm) | q₊R | R error, bare Si | R error, 100 nm PS on Si |
+|---|---|---|---|---|
+| upright cylinder, H = 6 nm | 4 | – | 0.0 % | 0.0 % |
+| sphere | 2 | 1.15 | −0.4 % | +1.9 % |
+| sphere | 3 | 1.73 | +1.4 % | +5.0 % |
+| sphere | 4 | 2.31 | −4.0 % (χ²ᵣ 31) | −1.6 % (χ²ᵣ 52) |
+| sphere | 6 | 3.46 | −39 % | −33 % |
+| hemisphere | 2 | 1.15 | −1.1 % | −4.1 % (χ²ᵣ 1.0) |
+| hemisphere | 4 | 2.31 | −5.1 % | −16 % |
+| hemisphere | 6 | 3.46 | −24 % | −43 % |
+
+- Up to q₊R ≈ 1.7 for spheres and ≈ 1.2 for hemispheres the EIA radius is within about 5 %.
+- Beyond that the error depends on the unknown substrate, sign included, so it cannot be corrected afterwards.
+  χ²ᵣ usually shows it, but not always (hemispheres of 2 nm on PS: −4 % at χ²ᵣ = 1.0).
+- D and σ_nn/D stay within 1 % in every case: the spacing comes from the structure factor, not from the form factor.
+- With α_i and α_f entered, Fitting shows q₊R of every sphere under the result, as information.
+
+**Two paths with a free reflection coefficient.** In *Spheres in grazing incidence* (Model step), α_i, α_f and λ
+of the cut switch spheres to the two terms that dominate:
+
+```text
+A = f(√(q²+q₊²)R) e^{−iq₊R} + r f(√(q²+q₋²)R) e^{−iq₋R},   r = |r| e^{i arg r}                       (9.29)
+|A|² = f₊² + |r|² f₋² + 2|r| f₊ f₋ cos(arg r + 2k_f R)
+```
+
+r is a free effective coefficient, so the substrate is still not needed; only the measured angles are. Free |r|
+and arg r to fit them. On the simulated cuts above it brings the radius of spheres and hemispheres with q₊R ≥ 2
+back to within a few percent on both substrates, and also on a dense particle film whose own layer changes the
+reflection. Its limits:
+
+- Below q₊R ≈ 1.5 the two paths differ too little: r and R trade against each other (R off by +15 % to +38 % at
+  R = 2 nm). Use the EIA there.
+- Two settings of r can describe a cut equally well with radii about 5 % apart. Refine from the EIA radius, and
+  compare a second start with arg r shifted by π.
+- r is an effective number: it also takes up r_i, the particle layer and the phase convention. It is not the
+  reflectivity of the substrate (a dense film needed |r| > 1; the default range stops at 1).
+- With the angles entered and |r| fixed at 0 the sphere is the Born term at the vacuum q_z. That is not better than
+  q_z = 0: on Si it is worse from R = 4 nm, because the exit-reflected path pulls the effective q_z below q₊.
+- Upright cylinders do not change (9.28); random cylinders stay at |q|.
+
+Implementation: `src/gimap/features/fitting/domain/fit_model.py` (`grazing`, `qz_plus_r`),
+`src/gimap/features/fitting/domain/scattering_model.py` (`sphere_two_path_pd`)
+
+### 9.11 The three-population model
+
+**The habit.** Yoneda cuts of nanoparticle films are often fitted with three populations of upright cylinders,
+a large, a medium and a small one, usually with a paracrystal on the main population.
+
+**Why three.** The cut spans about two decades in q, and each part is dominated by something else:
+
+- low q: the tail of the direct and reflected beam, roughness, aggregates;
+- around the structure peak: the particles and their spacing;
+- high q: the decay of the form factor.
+
+One population per window lets each window be described without pulling the others. The fit converges, and the
+residuals become flat. Some films do contain several sizes (primary particles and clusters in sputtered or sprayed
+films), but a good three-population fit does not show that by itself.
+
+**What each population takes up.** Simulated film: spheres R = 4 nm on Si (σ_R/R = 0.15, D = 12.8 nm,
+σ_nn/D = 0.2), four-term DWBA, resolution 0.005 nm⁻¹; fitted with three upright cylinders in the EIA (Search,
+then Refine):
+
+| Population | What it became | What it means |
+|---|---|---|
+| main, with structure factor | D within 0.2 %, σ_nn/D within 0.01; R 4–9 % low | spacing and disorder are measurements; R carries the shape difference (cylinder for sphere, 9.10) |
+| same size, no structure factor | appears when the true film follows the decoupling approximation or has truncated particles; takes 40–60 % of the intensity below 0.15 nm⁻¹ | the part of the same particles' scattering that the spacing does not modulate (⟨\|F\|²⟩ − \|⟨F⟩\|², from size spread and imperfect order); not a second kind of particle |
+| large, no structure factor | R of tens to hundreds of nm or σ_R/R at its limit of 1; takes the low-q upturn | roughness, beam tail, aggregates; its R has no meaning; with the low-q term free it is mostly redundant |
+| small, narrow | R ≈ 2 nm with a few % of the intensity even though the film has no small particles | compensates the form-factor shape at high q (q_z, DWBA, particle shape); real small clusters would look the same |
+
+**How to read a three-population fit.**
+
+- Take D and σ_nn/D of the population with the structure factor as results.
+- Take its R with the shape caveat of section 9.10.
+- Take the other two populations as descriptions of their q windows. Read them as particles only with independent
+  support: SEM or AFM, the same population at another α_f, or a size that evolves smoothly in a series.
 
 ## 10. 1D Predict (Workflow V5, conditional_v2)
 
@@ -3575,7 +3698,8 @@ This chapter collects the limits stated in chapters 1 to 14, so that they can be
 
 ### 15.1 Scattering physics
 
-- **Refraction and the DWBA.** Every q of Analyze, Fitting and 1D Predict is the kinematic vacuum value. Neither α_i nor α_f is corrected for the critical angle, and no reflected-wave terms of the distorted-wave Born approximation are computed (sections 2.5, 8.6, 9.2). The Yoneda band is located empirically, without any critical angle (sections 6.7, 8.1). The film absorption correction and the q_z of the XRR extractor also ignore refraction (sections 5.4, 13.1). The only refraction-corrected quantity is the Sputter island height H(t), which uses the refracted wavevector transfer for the positions of fringe minima, not a DWBA intensity (section 12.12). The GIWAXS report says that q is kinematic in its *Decisions*, with the q_z shift of up to about k sin α_i that refraction can cause near or below the film's critical angle at the frame's α_i (section 7.9); the GISAXS report says so too, with the Yoneda band's q_z shifted most (section 8.6).
+- **Refraction and the DWBA.** Every q of Analyze, Fitting and 1D Predict is the kinematic vacuum value. Neither α_i nor α_f is corrected for the critical angle, and no reflected-wave terms of the distorted-wave Born approximation are computed (sections 2.5, 8.6, 9.2), except
+Fitting's optional two-path sphere with a free effective reflection coefficient (section 9.10). The Yoneda band is located empirically, without any critical angle (sections 6.7, 8.1). The film absorption correction and the q_z of the XRR extractor also ignore refraction (sections 5.4, 13.1). The only refraction-corrected quantity is the Sputter island height H(t), which uses the refracted wavevector transfer for the positions of fringe minima, not a DWBA intensity (section 12.12). The GIWAXS report says that q is kinematic in its *Decisions*, with the q_z shift of up to about k sin α_i that refraction can cause near or below the film's critical angle at the frame's α_i (section 7.9); the GISAXS report says so too, with the Yoneda band's q_z shifted most (section 8.6).
 - **Absolute intensity.** Intensities are mean counts per pixel. No monitor, transmission, exposure-time, sample-volume, flat-field, detector-efficiency, air- or window-absorption correction is applied (section 2.5). Only the optional GIWAXS geometric factors divide the intensities (chapter 5), and a series can be normalised to a reference peak (section 6.10). The scales of the Fitting models are therefore relative. The sphere and random-cylinder form factors are normalised to P(0) = 1, so Int is not number density × V² × Δρ², and the vertical cylinder is weighted by R⁴ instead (section 9.4).
 - **Lorentz and Ewald-sphere corrections.** I(χ) and the ring intensities are intensities on the detector. No Lorentz factor is applied, and the missing wedge near χ = 0 is not reconstructed (sections 2.2, 7.7).
 - **Texture.** The Hermans factor assumes a fibre texture about the surface normal; the missing wedge enters only through the coverage C_w and the isotropic reference f_iso, and the background under a ring is one χ-independent constant (section 7.7). No exit-angle correction (film absorption, transmission function, shadowing) is applied to I(χ), and the sin χ weight makes the bins next to the sample horizon count most: f can depend on them by many σ_f, which the report states but does not correct (section 7.7). The in-plane and out-of-plane comparison uses two sectors of 20°; it is not a pole figure (section 7.6).
