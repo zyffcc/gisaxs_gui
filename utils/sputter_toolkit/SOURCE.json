@@ -184,7 +184,7 @@
    "reason": "PyTorch stopped publishing Intel macOS wheels after 2.2.2; the application supports both Mac architectures."
   }
  ],
- "author": "Yufeng Zhai",
+ "author": "the GIMaP authors",
  "license": "MIT",
  "license_confirmed": "2026-11-10"
 }

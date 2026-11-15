@@ -2,7 +2,7 @@
  "files": {
   "LICENSE": "db1bbee832b729cc6a08c381c8e00d915d37ca657990fe016ca2d6992238f395",
   "README.md": "c6f46e709244061f50a778fdcdf8380645f72325deee0686f89418ccb15016a5",
-  "SOURCE.json": "24cfaf1dcb5064c992d8309685f0a2584188ac048cdc3a32d90e9967f439aaba",
+  "SOURCE.json": "5578d034b75edc1211d241c1e9bdc95372ec2a8996391b05d5481aec40ee531e",
   "configs/literature_reference_v1.json": "15d9e00c7e1d328bb454008f6ceef4c25d87cd84e0dde32f923f6a429a98e497",
   "configs/sputter_selector_v1.json": "a7cf4392a85e45e11d1a347040b299239f4a128f4211cc49ad546bbc299e0138",
   "configs/sputter_struct_reliability_v1.json": "85d92a09df78c71b80300947d2c158f422a92bf356c84ab6c3127257c67320b5",
