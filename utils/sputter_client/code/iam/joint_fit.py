@@ -21,8 +21,8 @@ import numpy as np
 import scipy.sparse as sp
 from scipy.optimize import least_squares
 
-WINDOWS = {"ref15": [3, 5, 7, 10, 15, 20, 30, 40, 60, 80, 110, 140],
-           "ref22": [3, 5, 7, 10, 15, 20, 30, 50, 80, 120, 200, 290]}
+WINDOWS = {"ref16": [3, 5, 7, 10, 15, 20, 30, 40, 60, 80, 110, 140],
+           "ref23": [3, 5, 7, 10, 15, 20, 30, 50, 80, 120, 200, 290]}
 SIG_SHARED = os.environ.get("IAM_JOINT_SIG", "local") == "shared"
 SCALE2_OPT = os.environ.get("IAM_SCALE2", "0") == "1"
 SCALE_OPT = os.environ.get("IAM_SCALE", "0") == "1" or SCALE2_OPT

@@ -40,7 +40,7 @@
  ],
  "ref_kind": "window",
  "scans": {
-  "ref15": {
+  "ref16": {
    "ref": "si_p3h",
    "metal": "Au"
   },
@@ -48,7 +48,7 @@
    "ref": "si_p3h",
    "metal": "Au"
   },
-  "ref22": {
+  "ref23": {
    "ref": "si_p3h",
    "metal": "Ag"
   },

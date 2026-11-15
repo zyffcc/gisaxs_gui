@@ -162,7 +162,7 @@ class Morph2:
 
 
 def eps_spec(label):
-    'IAM_EPS_SPEC="ref14:0.0132,ref23:-0.0038" (2026-11-06, tio2_prereq C2): per-scan eps = alpha_i - 0.40 measured from'
+    'IAM_EPS_SPEC="ref15:0.0132,ref24:-0.0038" (2026-11-06, tio2_prereq C2): per-scan eps = alpha_i - 0.40 measured from'
     for item in filter(None, os.environ.get("IAM_EPS_SPEC", "").split(",")):
         k, v = item.split(":")
         if k.strip() == label:

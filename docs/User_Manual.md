@@ -2478,9 +2478,11 @@ same.
 
 1. **Choose…**: the folder of one scan (its CBF frames, or a scan folder with them in one subfolder such as
    `p2m/`). A line under the bar then sums up the frames, the detector, the exposure and the time.
-2. **Metal** (Ag, Au, Cu) and **Substrate** (Si, TiO₂, PS, PET, PSBMA, PNO, PEO). The package has a network for
-   some pairs only: for another pair Analyze stops at once, and **Details** of the job status shows the package's
-   sentence that names the pairs it has.
+2. **Metal** (Ag, Au, Cu) and **Substrate** (Si, TiO₂, PS, PET, PSBMA, PNO, PEO, Polymer). **Polymer** is a
+   polymer film of another or unknown kind, a block copolymer for instance: the model describes every polymer as one
+   film layer, and which polymer it is changes the metal's sizes by a few percent; Ag and Cu run on every polymer. The
+   package has a network for some pairs only: for another pair Analyze stops at once, and **Details** of the job
+   status shows the package's sentence that names the pairs it has.
 3. **Rate (nm/s)**: the deposition rate, which is needed. Tick **QCM reading** when the number is the reading of
    the quartz balance: the package converts it to the rate at the sample. Unticked, it is the rate at the sample
    itself.
@@ -3484,7 +3486,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Research runtimes do not all expose a controllable seed.** Sputter and 1D Predict record this limitation explicitly. Run records identify `software_version`; masks are counted, not stored as pixel lists. | Keep the input, settings and model files with the exported records. |
 | **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`, `assistant_provider_keys.json`; section 10.1): whoever can read that folder can read them. | On a shared computer, or with `GIMAP_HOME` on a shared drive, set the key as an environment variable instead, or **Remove** it after use. |
 | **Sputter does not determine the thickness of a continuous film**, and a film with particles on it is not modelled (section 8.9). | Read the island-volume equivalent t_eq (island windows, conditional) and the nominal thickness from a deposition rate; compare with XRR, a quartz balance or a cross-section. |
-| **Sputter ▸ Analyze reads Cu with networks trained for Cu on PEO**; Predict, the earlier method, has networks for Ag and Au only and does not run for Cu (Cu results it made before were read with the Ag model and say so). | For Cu on another substrate, compare the model image with the measured one before using the values. |
+| **Sputter ▸ Analyze reads Cu with networks trained for Cu on two polymer films (a homopolymer and a block copolymer)**; Predict, the earlier method, has networks for Ag and Au only and does not run for Cu (Cu results it made before were read with the Ag model and say so). | For Cu on another substrate, choose **Polymer** for a polymer film and compare the model image with the measured one before using the values. |
 | **Sputter ▸ Analyze runs the analysis package that comes with GIMaP**, which analyses only the pairs of metal and substrate the package has a network for; its values are model values that were not compared with an independent measurement of your sample (section 8.1). The frames it read are kept in the user data folder (`sputter_client/`), one copy per request that changes the import (rate, geometry, mask, substrate …); nothing removes them. | Judge a solution by its model image beside the measured one, and compare with SEM, AFM or XRR where you can. Delete old folders of `sputter_client/` yourself. |
 | **Sputter reads folders of CBF frames only**, and the networks of Predict were trained for Ag and Au on polymer substrates (chapter 8). | For NeXus series, or with Predict another substrate, use Analyze's series map (section 5.6) and Fitting's in-situ series (section 6.6); converting frames to CBF does not make another substrate valid. |
 | **Sputter keeps every result folder**, with the frames as the model read them (`intake/`, `binned/`), in the user data folder unless you chose another place; nothing removes them, and **File ▸ Save Project** holds the Sputter form and references its result folder. | For long scans choose **More options ▸ Save results in** on a data disk; delete old folders yourself; open a result again with **More options ▸ Open Results Folder…**. |
