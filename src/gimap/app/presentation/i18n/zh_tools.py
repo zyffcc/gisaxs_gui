@@ -322,6 +322,10 @@ TOOLS_ZH = {
     "The detector image contains no usable pixels.": "探测器图像中没有可用的像素。",
     "No valid pixels are available for a radial profile.": "没有可用于径向分布的有效像素。",
     "Custom distance minimum must be smaller than the maximum.": "自定义距离的下限必须小于上限。",
+    "Grazing-incidence image: the specular rod is left out of the ring fit.": "掠入射图像：镜面反射杆不参与环的拟合。",
+    "A horizontal band above the beam (the Yoneda band) is not taken for a ring.": "光束上方的水平亮带（Yoneda 带）不当作环。",
+    "No solution lies within the distance range. Widen the range, or check the energy and the pixel size.":
+        "在距离范围内没有解。请放宽范围，或检查能量和像素尺寸。",
     "This file is not a GIMaP geometry calibration.": "这个文件不是 GIMaP 的几何标定文件。",
     "Unsupported geometry calibration file version.": "不支持这个版本的几何标定文件。",
     "The selected q value is not physically reachable at this energy.": "在这个能量下，所选的 q 值在物理上达不到。",

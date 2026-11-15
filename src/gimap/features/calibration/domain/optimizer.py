@@ -54,6 +54,7 @@ def refine_candidate(
     wavelength_angstrom: float,
     pixel_size_x_m: float,
     pixel_size_y_m: float,
+    distance_range_mm: tuple[float, float] | None = None,
 ) -> CalibrationCandidate:
     if candidate.matched_ring_count < 2:
         candidate.warnings.append("Only one ring is matched; center and distance remain ambiguous.")
@@ -80,8 +81,12 @@ def refine_candidate(
     else:
         center_window = max(12.0, min(60.0, 0.04 * max(analysis.signal.shape)))
     initial = np.array([candidate.center_x_px, candidate.center_y_px, candidate.distance_mm])
-    lower = np.array([initial[0] - center_window, initial[1] - center_window, max(1.0, initial[2] * 0.85)])
-    upper = np.array([initial[0] + center_window, initial[1] + center_window, initial[2] * 1.15])
+    low_mm, high_mm = distance_range_mm or (1.0, np.inf)   # the user's range is a hard limit of the fit too
+    initial[2] = float(np.clip(initial[2], low_mm, high_mm))
+    lower = np.array([initial[0] - center_window, initial[1] - center_window, max(1.0, low_mm, initial[2] * 0.85)])
+    upper = np.array([initial[0] + center_window, initial[1] + center_window, min(high_mm, initial[2] * 1.15)])
+    if not lower[2] < upper[2]:
+        lower[2], upper[2] = initial[2] - 1e-6, initial[2] + 1e-6
     fit = least_squares(residual, initial, bounds=(lower, upper), loss="soft_l1", f_scale=2.0, max_nfev=80)
     candidate.center_x_px, candidate.center_y_px, candidate.distance_mm = map(float, fit.x)
     return candidate

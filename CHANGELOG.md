@@ -54,6 +54,16 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   the automatic beam centre is taken from frames with counts only, where before one empty frame among those it looked
   at made it fail ("No supported specular-centre candidate"). Frames on a network drive that its sync client holds
   for a moment are read again (a few tries) instead of failing the import.
+- **Geometry Calibration**: the **Distance range** is a limit, not a starting point. No solution outside it is shown,
+  also not after the fit of centre and distance (before, the fit could leave a custom range); when none lies in it,
+  the calibration says so. An image of the standard taken at grazing incidence (AgBH on a wafer: arcs above the
+  sample horizon, the specular rod, the Yoneda band) is recognised: the rod is left out of the ring search and the
+  fit, a horizontal band above the beam is not taken for a ring, the rings are looked for in the half of the image the
+  sample does not shadow, and the coarse beam centre is polished to the pixel first. For silver behenate the orders
+  between the matched ones must all be there, so the Yoneda band is no longer taken for the first ring of a solution
+  at half the distance; the best solution near a stated estimated distance is always refined. **Auto Detect**
+  without an estimated distance now ranks silver behenate first on the public silver behenate image (before, a LaB₆
+  solution at a much shorter distance). A wrong estimated distance still misleads (User Manual, section 4.3).
 - Sputter ▸ Analyze, limitations: the analysis package analyses only the pairs of metal and substrate it has a
   network for; its values are
   model values that were not compared with an independent measurement of the sample; a step of the analysis does

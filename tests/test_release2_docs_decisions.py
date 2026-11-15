@@ -3,9 +3,9 @@
 - A source checkout is updated with ``tools/update_source.ps1``; the history of ``main`` was rewritten.
 - Geometry Calibration, the XRR Series Extractor and Analyze show the same beam centre; the files the two
   tools export keep pixel-centre indices and say so.
-- Auto Detect of the calibration standard can put the wrong standard first, and a wrong estimated distance
-  misleads the search: a known limitation, documented now and corrected later. The test that reproduces it
-  fails when it is corrected, so the texts follow. The window no longer fills the estimate with a built-in
+- Auto Detect of the calibration standard put the wrong standard first (corrected 2026-11-15: a regression test
+  now), and a wrong estimated distance misleads the search: a known limitation, documented now and corrected
+  later. The test that reproduces it fails when it is corrected, so the texts follow. The window no longer fills the estimate with a built-in
   distance: the rule it follows is checked here on the window itself.
 - A case built on private data is not in the repository, and no document names one.
 - Fitting starts a new user with a neutral model and stores one block of values per shape.
@@ -555,16 +555,19 @@ def test_the_auto_detect_limitation_is_in_the_documents() -> None:
         assert "Auto Detect" in text
         assert "Choose the standard yourself when you know it" in text
         assert "check that the distance is the one of your set-up" in text
-        assert "silver behenate" in text and "LaB₆ solution at a much shorter distance came first" in text
+        # 0.1.0's limitation (CHANGELOG, as it was then); the manual says it was corrected.
+        assert "silver behenate" in text and "LaB₆ solution at a much shorter distance" in text
         assert "corrected in a later version" in text
         # The second way to a wrong solution: a wrong estimate, which somebody typed or the window took over.
-        assert "**Estimated distance**" in text and "2000 mm typed in" in text
-        assert "a solution near 1830 mm came first" in text and "about 1630 mm" in text
+        assert "**Estimated distance**" in text and "2000 mm typed in" in text and "about 1630 mm" in text
         assert "approximate distance of your set-up" in text and "*Optional*" in text
         assert "the distance the image file states" in text and "the distance of the calibration applied last" in text
         # No longer true: the window does not put the built-in 2000 mm into the field.
         for stale in ("or 2000 mm on a new installation", "2000 mm left in the field", "with 2000 mm in it"):
             assert stale not in text, stale
+    assert "a solution near 1830 mm came first" in limitations  # 0.1.0
+    assert "a solution near 1790 mm came first" in section and "a LaB₆ solution at 120 mm came first" in section
+    assert "Before this version, **Auto Detect** without an estimated distance put a LaB₆ solution" in section
     assert "set a number you did not type back to 0" in limitations
     assert "set the field to 0 (it then shows *Optional*)" in section
     assert "with 1500 to 1800 mm typed in, the silver behenate solution came first" in section
@@ -697,15 +700,16 @@ def test_the_estimated_distance_is_filled_in_as_the_documents_say(tmp_path: Path
         QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
 
-def test_the_auto_detect_limitation_is_still_true(tmp_path: Path) -> None:
+def test_auto_detect_and_a_wrong_estimate_on_the_public_image(tmp_path: Path) -> None:
     """A public silver behenate image under a name that names no standard.
 
-    Auto Detect without an estimated distance (what a new installation has) ranks a LaB₆ solution at a much
-    shorter distance first; with the standard chosen and no estimated distance the distance is right; with the
-    standard chosen and a wrong estimate typed in (2000 mm) a solution near 1830 mm comes first. When one of
-    these is corrected this test fails: change the limitation in CHANGELOG.md, docs/User_Manual.md
-    (sections 4.3 and 13) and docs/ui/workspaces/calibration.md, and turn that part of this test into the regression
-    test. What helps is checked too: an approximate distance puts the right standard first for Auto Detect.
+    Auto Detect without an estimated distance (what a new installation has) ranks silver behenate first at the
+    right distance (until 2026-11-15 a LaB₆ solution at a much shorter distance came first: now the regression
+    test); with the standard chosen and no estimated distance the distance is right. A wrong estimate typed in
+    (2000 mm) still misleads: with the standard chosen a solution near 1790 mm comes first, with Auto Detect a
+    LaB₆ solution at about 120 mm. When that is corrected this test fails: change the limitation in
+    docs/User_Manual.md (sections 4.3 and 13) and docs/ui/workspaces/calibration.md, and turn that part of this test
+    into the regression test. What helps is checked too: an approximate distance puts the right standard first.
     """
     if not PUBLIC_AGBH.is_file():
         pytest.skip("the public silver behenate image is not in this checkout")
@@ -731,15 +735,10 @@ def test_the_auto_detect_limitation_is_still_true(tmp_path: Path) -> None:
 
     automatic = run(CalibrationRequest(image=image, energy_kev=energy_kev, standard_key="auto"), None, None)
     first = automatic.selected_candidate
-    assert not (first.standard_key == "agbh" and abs(first.distance_mm - expected_mm) <= 0.03 * expected_mm), (
-        "Auto Detect now ranks the right standard first on this image: remove the known limitation from "
-        "CHANGELOG.md, docs/User_Manual.md (sections 4.3 and 13) and docs/ui/workspaces/calibration.md"
-    )
-    # What the documents say was seen: another standard, at a much shorter distance; silver behenate last.
-    assert first.standard_key == "lab6" and first.distance_mm < 0.25 * expected_mm
-    assert automatic.candidates[-1].standard_key == "agbh"
+    # Regression (corrected 2026-11-15): silver behenate first, at the distance found with the standard chosen.
+    assert first.standard_key == "agbh" and abs(first.distance_mm - best.distance_mm) < 0.5
 
-    # "With silver behenate chosen and 2000 mm typed in, a solution near 1830 mm came first."
+    # "With silver behenate chosen and 2000 mm typed in, a solution near 1790 mm came first."
     misled = run(CalibrationRequest(image=image, energy_kev=energy_kev, standard_key="agbh",
                                     estimated_distance_mm=2000.0), None, None).selected_candidate
     assert not abs(misled.distance_mm - expected_mm) <= 0.03 * expected_mm, (
@@ -747,8 +746,15 @@ def test_the_auto_detect_limitation_is_still_true(tmp_path: Path) -> None:
         "case of the limitation in CHANGELOG.md, docs/User_Manual.md (sections 4.3 and 13) and "
         "docs/ui/workspaces/calibration.md"
     )
-    assert misled.standard_key == "agbh" and round(misled.distance_mm, -1) == 1830.0
+    assert misled.standard_key == "agbh" and round(misled.distance_mm, -1) == 1790.0
     assert round(best.distance_mm, -1) == 1630.0  # "the real distance is about 1630 mm"
+    # "with Auto Detect and 2000 mm, a LaB₆ solution at 120 mm came first"
+    misled_auto = run(CalibrationRequest(image=image, energy_kev=energy_kev, standard_key="auto",
+                                         estimated_distance_mm=2000.0), None, None).selected_candidate
+    assert misled_auto.standard_key == "lab6" and round(misled_auto.distance_mm, -1) == 120.0, (
+        "Auto Detect with 2000 mm no longer puts LaB₆ first: change the limitation in docs/User_Manual.md "
+        "(sections 4.3 and 13) and docs/ui/workspaces/calibration.md"
+    )
 
     # "An approximate distance helps Auto Detect too: with 1500 to 1800 mm typed in, the silver behenate
     # solution came first on this image." The solution is the one found with the standard chosen.

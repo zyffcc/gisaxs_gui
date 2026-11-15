@@ -15,7 +15,12 @@ from src.gimap.app.bootstrap import create_standalone_legacy_context
 from src.gimap.features.calibration.bootstrap import create_calibration_view_model
 from src.gimap.features.calibration.domain.candidate_ranker import rank_candidates
 from src.gimap.features.calibration.domain.center_estimator import estimate_center_candidates
-from src.gimap.features.calibration.domain.engine import CalibrationEngine
+from src.gimap.features.calibration.domain.engine import CalibrationEngine, CalibrationError
+from src.gimap.features.calibration.domain.gisaxs_features import (
+    follows_horizontal_line,
+    specular_rod_columns,
+    without_columns,
+)
 from src.gimap.features.calibration.domain.geometry_model import (
     energy_to_wavelength,
     q_to_ring_radius_px,
@@ -52,6 +57,29 @@ def synthetic_rings(
     if partial:
         data[(xx < center[0]) & (yy < center[1])] = np.nan
         data[240:275, :] = np.nan
+    return data
+
+
+def synthetic_grazing_agbh(
+    shape=(900, 800), center=(400.0, 700.0), energy_kev=12.0, distance_mm=1500.0, pixel_m=172e-6, sigma_px=2.0
+) -> np.ndarray:
+    """AgBH on a wafer at grazing incidence: arcs above the sample horizon only, the wafer's shadow below it, a bright
+    specular rod through the beam and a Yoneda band at about half the first order's radius (the band the automatic
+    calibration once took for the first ring of a half-distance solution)."""
+    yy, xx = np.indices(shape, dtype=np.float32)
+    cx, cy = center
+    radius = np.hypot(xx - cx, yy - cy)
+    radii = q_to_ring_radius_px(STANDARDS["agbh"].q_values_inv_angstrom[:8], energy_kev, distance_mm, pixel_m)
+    data = np.zeros(shape, dtype=np.float32)
+    for order, ring in enumerate(radii):
+        data += 300.0 / (1 + order) * np.exp(-0.5 * ((radius - ring) / sigma_px) ** 2)
+    horizon, yoneda = cy - 12.0, cy - 0.5 * float(radii[0])
+    above = yy < horizon
+    data += 2000.0 * np.exp(-0.5 * ((yy - yoneda) / 4.0) ** 2) * np.exp(-np.abs(xx - cx) / 120.0) * above
+    data += 3000.0 * np.exp(-0.5 * ((xx - cx) / 2.0) ** 2) * above
+    data[~above] *= 0.02
+    data += np.random.default_rng(3).poisson(2.0, shape).astype(np.float32)
+    data[(np.abs(xx - cx) < 8) & (np.abs(yy - cy) < 8)] = np.nan
     return data
 
 
@@ -304,6 +332,62 @@ class CalibrationTests(unittest.TestCase):
             self.assertAlmostEqual(result.selected_candidate.center_x_px, 342.0, delta=15.0)
             self.assertAlmostEqual(result.selected_candidate.center_y_px, 367.0, delta=15.0)
             self.assertAlmostEqual(result.selected_candidate.distance_mm, distance, delta=80.0)
+
+    def test_grazing_agbh_without_estimate(self):
+        """A grazing-incidence AgBH in the SAXS range without an estimate: the true distance, not the half-distance
+        alias built on the Yoneda band, and the solution says the image was taken at grazing incidence."""
+        energy, pixel = 12.0, 172e-6
+        for distance, center in ((1500.0, (400.0, 700.0)), (2200.0, (380.5, 760.3))):
+            data = synthetic_grazing_agbh(center=center, energy_kev=energy, distance_mm=distance, pixel_m=pixel)
+            with tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / "grazing_agbh.npy"
+                path.write_bytes(b"synthetic grazing calibration source")
+                image = DetectorImage(data, ~np.isfinite(data), path, pixel_size_x_m=pixel, pixel_size_y_m=pixel)
+                result = CalibrationEngine().calibrate(image, energy_kev=energy, standard_key="agbh",
+                                                       estimated_distance_mm=None, distance_range_mm=(500, 6000))
+            best = result.selected_candidate
+            # within 3 %: the half-distance alias is 50 % off; an order beyond the detector edge can pair with noise
+            self.assertAlmostEqual(best.distance_mm, distance, delta=0.03 * distance)
+            self.assertLess(np.hypot(best.center_x_px - center[0], best.center_y_px - center[1]), 3.0)
+            self.assertTrue(any("specular rod" in warning for warning in best.warnings))
+
+    def test_distance_range_is_a_hard_limit(self):
+        """No solution leaves the custom range, also not after the fit; a range without one says so."""
+        energy, distance, pixel = 12.0, 1000.0, 172e-6
+        qs = STANDARDS["agbh"].q_values_inv_angstrom[:3]
+        radii = q_to_ring_radius_px(qs, energy, distance, pixel)
+        data = synthetic_rings(shape=(700, 700), center=(342.0, 367.0), radii=tuple(float(r) for r in radii))
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "synthetic.npy"
+            path.write_bytes(b"synthetic calibration source")
+            image = DetectorImage(data, ~np.isfinite(data), path, pixel_size_x_m=pixel, pixel_size_y_m=pixel)
+            for low, high in ((1080.0, 1600.0), (600.0, 940.0)):
+                try:
+                    result = CalibrationEngine().calibrate(image, energy_kev=energy, standard_key="agbh",
+                                                           distance_range_mm=(low, high))
+                except CalibrationError as error:
+                    self.assertIn("distance range", str(error))
+                    continue
+                for candidate in result.candidates:
+                    self.assertGreaterEqual(candidate.distance_mm, low)
+                    self.assertLessEqual(candidate.distance_mm, high)
+
+    def test_yoneda_band_is_not_a_ring(self):
+        data = synthetic_grazing_agbh()
+        image = DetectorImage(data, ~np.isfinite(data), Path("synthetic.npy"), pixel_size_x_m=172e-6,
+                              pixel_size_y_m=172e-6)
+        analysis = preprocess_detector_image(image)
+        rod = specular_rod_columns(analysis)
+        self.assertIsNotNone(rod)
+        self.assertLessEqual(rod[0], 400)
+        self.assertGreaterEqual(rod[1], 400)
+        ring_image = without_columns(analysis, rod)
+        first = float(q_to_ring_radius_px(STANDARDS["agbh"].q_values_inv_angstrom[0], 12.0, 1500.0, 172e-6))
+        self.assertTrue(follows_horizontal_line(ring_image, 400.0, 700.0, 0.5 * first))
+        self.assertFalse(follows_horizontal_line(ring_image, 400.0, 700.0, first))
+        transmission = preprocess_detector_image(DetectorImage(synthetic_rings(), np.zeros((512, 512), bool),
+                                                               Path("synthetic.npy")))
+        self.assertIsNone(specular_rod_columns(transmission))
 
     def test_unknown_detector_can_be_selected_manually(self):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")

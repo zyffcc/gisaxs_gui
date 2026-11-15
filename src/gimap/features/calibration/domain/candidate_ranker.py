@@ -14,7 +14,8 @@ def _add_warning(candidate: CalibrationCandidate, message: str) -> None:
         candidate.warnings.append(message)
 
 
-def score_candidate(candidate: CalibrationCandidate, estimated_distance_mm: float | None = None) -> CalibrationCandidate:
+def score_candidate(candidate: CalibrationCandidate, estimated_distance_mm: float | None = None,
+                    grazing: bool = False) -> CalibrationCandidate:
     rings = candidate.matched_ring_count
     prior = 0.0
     if estimated_distance_mm and estimated_distance_mm > 0:
@@ -38,7 +39,8 @@ def score_candidate(candidate: CalibrationCandidate, estimated_distance_mm: floa
         lowest_order = 0
         candidate.harmonic_quality = 0.0
     inner_unmatched = 0
-    if harmonic_standard and candidate.matched_rings:
+    # Grazing incidence: the Yoneda band and the sample horizon are strong peaks inside the first ring by nature.
+    if harmonic_standard and candidate.matched_rings and not grazing:
         first_matched = min(match.observed_radius_px for match in candidate.matched_rings)
         matched_radii = [match.observed_radius_px for match in candidate.matched_rings]
         inner_unmatched = sum(
@@ -50,6 +52,13 @@ def score_candidate(candidate: CalibrationCandidate, estimated_distance_mm: floa
         max(0.0, match.prominence) for match in candidate.matched_rings
     ])) if candidate.matched_rings else 0.0
     ring_score = min(rings, 5) * 22.0 + max(0, rings - 5) * 5.0
+    completeness = getattr(candidate, "order_completeness", None)
+    if completeness is not None:
+        # The orders a harmonic standard shows where the detector records are all there for the true distance; a
+        # short-distance alias pairs a few peaks with scattered high orders and leaves most of its orders unseen.
+        # Squared for AgBH: one missing order outweighs one extra coincidence (a Yoneda band taken for order 1 of a
+        # half-distance solution leaves its order 3 unseen). A crystalline standard has weak reflections: linear.
+        ring_score *= completeness ** 2 if harmonic_standard else completeness
     candidate.score = (
         ring_score
         + min(candidate.azimuthal_coverage, 1.0) * 16.0
@@ -99,8 +108,9 @@ def score_candidate(candidate: CalibrationCandidate, estimated_distance_mm: floa
     return candidate
 
 
-def rank_candidates(candidates: list[CalibrationCandidate], estimated_distance_mm: float | None = None, limit: int = 5) -> list[CalibrationCandidate]:
-    scored = [score_candidate(candidate, estimated_distance_mm) for candidate in candidates]
+def rank_candidates(candidates: list[CalibrationCandidate], estimated_distance_mm: float | None = None, limit: int = 5,
+                    grazing: bool = False) -> list[CalibrationCandidate]:
+    scored = [score_candidate(candidate, estimated_distance_mm, grazing) for candidate in candidates]
     scored.sort(key=lambda item: item.score, reverse=True)
     unique: list[CalibrationCandidate] = []
     for item in scored:

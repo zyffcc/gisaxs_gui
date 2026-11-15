@@ -856,7 +856,15 @@ Start page (*Calibrate the detector*).
    header is not used) or, failing that, if a calibration was applied before, with the distance of
    that calibration: check that such a number is the distance of this set-up. **Distance range**
    limits the search (*Auto · 30–10000 mm*, *SAXS · 500–10000 mm*, *WAXS · 30–1500 mm*, or *Custom*
-   with the bounds in **Advanced configuration**).
+   with the bounds in **Advanced configuration**). The range is a limit, not a starting point: no solution
+   outside it is shown, also not after the fit of centre and distance. When none lies in it, the calibration
+   stops with *No solution lies within the distance range* — widen the range, or check the energy and the
+   pixel size.
+   An image of the standard taken at grazing incidence (AgBH on a wafer: arcs above the sample horizon, the
+   specular rod through the beam, the Yoneda band) is recognised. The rod is left out of the ring search
+   and the fit, a horizontal band above the beam is not taken for a ring, and for AgBH every order between the
+   matched ones must be there — so the Yoneda band is no longer taken for the first ring of a solution at
+   half the distance. The warnings of the solution say when this applied.
 6. Click **Auto Calibration**. The calculation runs in the background; **Cancel** stops it after the
    current step.
 7. Review the result: beam centre, distance, matched rings, RMS residual, confidence and warning of
@@ -898,18 +906,20 @@ exported calibration file keeps its numbers as in earlier versions: there the be
 pixel centres from 0, half a pixel lower than the window shows, and the file says so
 (`metadata.center_convention`). Importing the file shows the same centre again.
 
-**Known limitation: a wrong solution can come first.** Both cases below were seen on a silver
+**Known limitation: a wrong estimated distance can put a wrong solution first.** Seen on a silver
 behenate image whose path does not name the standard.
 
-- With the standard left on **Auto Detect** and no estimated distance, a solution of another standard
-  can be ranked first: a LaB₆ solution at a much shorter distance came first, and the silver behenate
-  solution was last in the list of candidates. Choose the standard yourself when you know it. An
-  approximate distance helps Auto Detect too: with 1500 to 1800 mm typed in, the silver behenate
-  solution came first on this image.
 - A wrong estimated distance can mislead, also with the right standard: the search prefers solutions
   near the value in **Estimated distance**. With silver behenate chosen and 2000 mm typed in, a
-  solution near 1830 mm came first, although the real distance is about 1630 mm; with the field left
-  on *Optional*, the right solution came first.
+  solution near 1790 mm came first, although the real distance is about 1630 mm; with **Auto Detect**
+  and 2000 mm, a LaB₆ solution at 120 mm came first. With the field left on *Optional*, the right
+  solution came first, with the standard chosen and with **Auto Detect** alike. Choose the standard
+  yourself when you know it. An approximate distance helps: with 1500 to 1800 mm typed in, the silver
+  behenate solution came first on this image.
+- Before this version, **Auto Detect** without an estimated distance put a LaB₆ solution at a much
+  shorter distance first on this image, and the silver behenate solution last in the list of
+  candidates. A harmonic standard is now ranked by how complete its orders are, and silver behenate
+  comes first.
 
 **Estimated distance** can hold a number you did not type. It is never filled with a built-in value:
 on a new installation it stays on *Optional*. But each time an image is opened it takes the distance
@@ -3451,7 +3461,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Cancellation does not forcibly interrupt low-level file reading.** A Compare directory scan or single-table read, or the current Fitting read, may still be returning. | Press Cancel or Stop once; the request is registered, and the unfinished import is discarded or the frame fit skipped when reading returns. Completed series and results stay (sections 6.6, 7.2). |
 | **Curve import supports `q I [sigma]` and `q I1 I2 …`, not interleaved `q I1 sigma1 I2 sigma2`.** A headerless three-column table cannot identify its meaning by numbers alone. | Choose the layout explicitly in **Import Curves…** (section 6.1). For separate errors per curve, provide one `q I sigma` file per curve. Fixed imported selections cannot watch for new columns/files. |
 | **Fitting does not read `.csv` curves**, although Analyze exports its curves as CSV. | Use **Send to Fitting**, or open the `<name>_fit_input.dat` that Analyze writes; `.dat` and `.txt` files with columns `q I [σ]` open too. |
-| **Geometry Calibration can put a wrong solution first.** With the standard on **Auto Detect** and no estimated distance, another standard can come first; a wrong **Estimated distance** misleads also with the right standard, and the field can hold a distance you did not type (section 4.3). | Choose the standard yourself when you know it. Leave **Estimated distance** on *Optional* or type the approximate distance of your set-up; set a number you did not type back to 0 unless it is that distance. Before **Apply**, check the distance and that the drawn rings lie on the rings of the image. |
+| **Geometry Calibration can put a wrong solution first.** A wrong **Estimated distance** misleads, also with the right standard and with **Auto Detect**, and the field can hold a distance you did not type (section 4.3). | Choose the standard yourself when you know it. Leave **Estimated distance** on *Optional* or type the approximate distance of your set-up; set a number you did not type back to 0 unless it is that distance. Before **Apply**, check the distance and that the drawn rings lie on the rings of the image. |
 | **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them (section 10.5). | Calibrate such an image with pyFAI and give GIMaP the `.poni`: name it in the notes, or put it beside the frames (section 4.2). |
 | **An instrument profile is matched by detector name and frame size only**, and **a calibration found by the automatic search may belong to another experiment** (one beside or above the frame's folder is taken when that folder holds none; file times say nothing in a folder copied in one go) — or even to another detector: a `.poni` or `.json` is applied without checking its pixel size or frame size (section 4.2). | Read which file the report names and check the distance in **Geometry**. Name the calibration in the notes, or give it yourself; remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
 | **GIMaP's detector is flat and perpendicular to the beam**: the tilt of a `.poni` (`Rot1`, `Rot2`) is left out, and so are `Rot3` and its `orientation` entry; Geometry Calibration fits no tilt. On a tilted detector \|q\| is off away from the beam: by up to 6.3 % on the Xeuss example (6.06°). Above 1° of tilt or 0.5 % in \|q\| the automatic analysis says so; Rot3 has a separate direction reminder and review flag above 1° in magnitude (section 4.2). | A small \|q\| error does not guarantee accurate χ, qy/qz or in-plane/out-of-plane directions. Read the error in the report or in `<stem>_analysis.json` (`flat_detector_q_error_max`). For exact q, reduce such frames with the full `.poni` geometry (pyFAI), or calibrate with the detector perpendicular to the beam. |

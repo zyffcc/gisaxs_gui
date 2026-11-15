@@ -73,7 +73,7 @@ Qt signals、`QFileDialog` 和 `QMessageBox` 留在 dialog。路径规范化
   算式在 `shared/geometry/conventions.py`。新加一处显示或输入中心的控件时走这两个函数。
 - 以前的版本在窗口里显示的是引擎的数，比 Analyze 小 0.5 px；手抄过中心的记录要按这个差别核对。
 
-## 已知限制：Auto Detect 可能把错的标样排在第一（2026-10-13）
+## 已知限制：Auto Detect 与估计距离（2026-10-13；2026-11-15 更新）
 
 载入图像时看的是图像的整个路径（文件名和它上面各级文件夹的名字，不分大小写；标样的写法见
 `domain/standard_selection.py` 的 `STANDARD_SOURCE_ALIASES`，如 `agbh`、`lab6`、`ceo2`）：
@@ -82,21 +82,26 @@ Qt signals、`QFileDialog` 和 `QMessageBox` 留在 dialog。路径规范化
 - 出现两种以上（例如 LaB₆ + CeO₂ 混合标样的名字）：Standard 设为 Auto Detect，状态行写 “multiple standard names found”；
 - 一种都没有：Standard 保持原样，新开的窗口是 Auto Detect。
 
-Auto Detect 时引擎用所有已知标样去试，再按环的匹配打分。打分可能让另一种标样的解排在第一。
+Auto Detect 时引擎用所有已知标样去试，再按环的匹配打分。
 
-- 见过的例子：一张山嵛酸银（AgBh）图像，路径里没有标样，Estimated distance 为空（新安装现在就是这样）。排第一的是 LaB₆
-  在短得多的距离上的解，AgBh 的解排在候选表的最后；手动选 AgBh、并且 Estimated distance 为空时结果正确。
-- **估计距离错了会带偏结果，选对了标样也一样。** 搜索偏向 Estimated distance 附近的解（`domain/candidate_ranker.py`）。
-  同一张图上选 AgBh：框里填 2000 mm 时排第一的是约 1830 mm 的解，而实际距离约 1630 mm（候选表里没有正确的解）；
-  填 1200 mm 时排第一的是约 1175 mm 的解（正确的解排第二）；留空（0，显示 Optional）或填 1400–1900 mm 时排第一的是正确的解。
-  Auto Detect 时，估计值接近实际值（这张图上 1500–1800 mm）能把正确的解排到第一，填 2000 mm 时排第一的仍是 LaB₆。
+- 2026-10-13 见过的例子：一张山嵛酸银（AgBh）图像，路径里没有标样，Estimated distance 为空。排第一的是 LaB₆
+  在短得多的距离上的解，AgBh 的解排在候选表的最后。**2026-11-15 起已改好：**谐波标样（AgBh）按各级环是否齐全排序
+  （`domain/peak_matcher.py` 的 `_completeness`，`candidate_ranker.py` 里平方计入），这张图上 Auto Detect 不给估计值
+  时排第一的是 AgBh 约 1628 mm 的解。
+- **估计距离错了会带偏结果，选对了标样也一样**（仍然成立）。搜索偏向 Estimated distance 附近的解（`domain/candidate_ranker.py`）。
+  同一张图上选 AgBh：框里填 2000 mm 时排第一的是约 1790 mm 的解（2026-10-13 时是约 1830 mm），而实际距离约 1630 mm；
+  填 1200、1400 或 1900 mm 以及留空（0，显示 Optional）时排第一的是正确的解。
+  Auto Detect 时，留空或估计值接近实际值（这张图上 1500–1800 mm）时正确的解排第一，填 2000 mm 时排第一的是 120 mm 的 LaB₆。
 - 用户该怎么做：知道标样时自己选；知道装置的大概距离就填进 Estimated distance，不知道就留着 Optional；
   载入图像后框里出现不是自己输入的数时（见下一节），核对它是不是这套装置的距离，不是就清成 0；Apply 之前核对距离，
-  并看画出的环是否落在图像的环上。手册 4.3 节、第 13 章（已知限制）和 `CHANGELOG.md` 的已知限制写了同样的话。
-- 搜索和排序是打分算法的问题，按用户的决定这一版只写进文档，之后再改。
-  `tests/test_release2_docs_decisions.py` 里有测试在 `tests/data/external/` 的公开 AgBh 图上复现这两种情况
-  （把图像拷到路径里不含标样的地方再标定）：改好之后那些测试会失败，那时把它们改成回归测试，
-  并删掉手册、`CHANGELOG.md` 和本节里的这条限制。
+  并看画出的环是否落在图像的环上。手册 4.3 节和第 13 章（已知限制）写了同样的话；`CHANGELOG.md` 0.1.0 的已知限制是当时的情况。
+- `tests/test_release2_docs_decisions.py` 在 `tests/data/external/` 的公开 AgBh 图上复现这些情况（把图像拷到路径里不含
+  标样的地方再标定）：Auto Detect 不给估计值的那一条现在是回归测试；填 2000 mm 的那一条改好之后测试会失败，那时把它也改成
+  回归测试，并删掉手册和本节里的这条限制。
+- 距离范围（Distance range）是硬限制：拟合中心和距离之后，范围外的解也不显示；范围内没有解时报
+  “No solution lies within the distance range …”。掠入射的标样图（镜面反射杆、Yoneda 带、只有地平线以上的弧）见
+  `domain/gisaxs_features.py`（杆和水平亮带）、`domain/center_polish.py`（粗中心磨到一个像素以内），以及引擎里只用亮的
+  那一半图找环（`LitHalf`）。
 
 ## Estimated distance 里填什么（2026-10-13）
 
@@ -154,6 +159,7 @@ Auto Detect 时引擎用所有已知标样去试，再按环的匹配打分。�
 - [ ] 手动拖动 center、编辑 distance、Fit selected ring 正常；
 - [ ] 结果栏和手动精修里的光束中心，与 Apply 之后 Analyze 对同一个仪器配置显示的数相同（不差 0.5 px）；
 - [ ] 路径里不含标样的图像：Standard 留在 Auto Detect 时核对排第一的标样和距离（见上面的已知限制）；
+- [ ] 掠入射的 AgBh 图（P03）：SAXS 范围、不给估计值时距离与束心正确，警告里写明镜面反射杆不参与拟合；自定义距离范围之外的解不出现；
 - [ ] 新安装（没有 Apply 过）载入图像后 Estimated distance 显示 Optional；Apply 之后载入下一张图，框里是刚应用的距离；
       框里的数（上次标定的、NeXus 文件的、自己输入的）偏离实际距离时，选对标样也要核对距离；
 - [ ] Apply 仍执行显著差异确认，把几何存为仪器配置，并通知 Analyze 改用它；
