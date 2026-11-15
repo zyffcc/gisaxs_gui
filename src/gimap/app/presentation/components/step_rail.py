@@ -145,6 +145,22 @@ class StepRail(QWidget):
         step.restyle()
         step.fit_detail()
 
+    def set_title(self, key: str, title: str) -> None:
+        """Another title for a step (a flow whose steps differ by case: the caller translates it)."""
+        step = self._steps.get(key)
+        if step is not None:
+            step.title.setText(title)
+
+    def set_step_visible(self, key: str, visible: bool) -> None:
+        """Show or hide a step (a case of the flow that has fewer steps); the numbers of the others stay."""
+        step = self._steps.get(key)
+        if step is not None:
+            step.setVisible(visible)
+
+    def title(self, key: str) -> str:
+        step = self._steps.get(key)
+        return step.title.text() if step is not None else ""
+
     def state(self, key: str) -> str:
         step = self._steps.get(key)
         return str(step.property("state") or "pending") if step is not None else "pending"

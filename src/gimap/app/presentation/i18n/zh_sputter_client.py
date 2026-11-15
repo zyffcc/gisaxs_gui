@@ -227,15 +227,19 @@ SPUTTER_CLIENT_ZH = {
     "Range: {low} – {high}": "范围：{low} – {high}",
     "Nominal thickness": "名义厚度",
     "Model solution": "模型解",
-    "Choose the folder of a scan, give the metal, the substrate and the deposition rate, and press Analyze. Open "
-    "Result… shows a folder analysed before. Frames measured after the deposition are analysed in Details, under "
-    "Static Frames.":
-        "选择一个扫描的文件夹，给出金属、基底和沉积速率，然后按“分析”。“打开结果…”可以显示以前分析过的文件夹。"
-        "沉积之后测的帧在“详情”的“静态帧”里分析。",
+    "In Situ: choose the folder of a scan recorded during the deposition, give the metal, the substrate and the "
+    "deposition rate, and press Analyze. After Deposition: choose the frames of a sample measured afterwards and give "
+    "its name and nominal thickness instead of a rate; frames of a bare piece of the same substrate are optional. "
+    "Open Result… shows a folder analysed before.":
+        "原位：选择沉积过程中记录的扫描文件夹，给出金属、基底和沉积速率，然后按“分析”。沉积后：选择沉积之后测量的样品的帧，"
+        "给出样品名和名义厚度（代替速率）；同种基底未镀金属的另一片的帧是可选的。“打开结果…”可以显示以前分析过的文件夹。",
     # -- Details: Static Frames ----------------------------------------------------------------------------------------
     "Static Frames (after deposition)": "静态帧（沉积之后测量）",
-    "Frames of a sample measured after its deposition: each sample is analysed into a series, which the main screen "
-    "shows against the nominal thickness.": "样品镀完之后测的帧：每个样品分析后归入一个系列，主屏按名义厚度显示这个系列。",
+    "Samples measured after their deposition (choose After Deposition in the bar and give the sample there): the "
+    "series they go to, the mode and the geometry of their frames. Each sample is analysed into the series, which the "
+    "main screen shows against the nominal thickness.":
+        "沉积之后测量的样品（在输入栏选“沉积后”，样品在那里给出）：样品归入的系列、模式和这些帧的几何。"
+        "每个样品分析后归入系列，主屏按名义厚度显示这个系列。",
     "Au films measured after the deposition, one sample at a time into a series.":
         "沉积之后测量的 Au 膜，每次分析一个样品，归入一个系列。",
     "Au films measured after the deposition at an incidence angle near {alpha}°, one sample at a time into a series.":
@@ -244,19 +248,24 @@ SPUTTER_CLIENT_ZH = {
     "File…": "文件…",
     "Choose one CBF file or a zip archive.": "选择单个 CBF 文件或一个 zip 压缩包。",
     "The GISAXS frames of one sample: a folder (every CBF file in it), one CBF file, or a zip archive. For an "
-    "archive, the folder inside it follows after two colons: archive.zip::folder/":
+    "archive, the folder inside it follows after two colons: archive.zip::folder/. Which of the frames are usable the "
+    "analysis finds itself.":
         "一个样品的 GISAXS 帧：一个文件夹（其中的全部 CBF 文件）、单个 CBF 文件，或一个 zip 压缩包。"
-        "压缩包内的文件夹写在两个冒号之后：archive.zip::folder/",
-    "Sample name": "样品名",
+        "压缩包内的文件夹写在两个冒号之后：archive.zip::folder/。哪些帧可用，分析会自己判断。",
+    "Sample": "样品",
     "The name of the sample in the series: letters, digits, - and _ (anything else becomes _). Analysing a name "
     "again with other frames or values replaces that sample.":
         "样品在系列里的名字：字母、数字、- 和 _（其他字符换成 _）。同一个名字用别的帧或数值再分析一次，会替换原来的样品。",
-    "The nominal thickness of the film (nm): the position of the sample on the axis of the series.":
-        "膜的名义厚度（nm）：样品在系列横轴上的位置。",
-    "Bare substrate": "空基底",
-    "Frames of the bare substrate, measured like the sample: they are used as the substrate part of its image. "
-    "Empty: the film is taken to lie directly on Si.":
-        "空基底的帧，测法与样品相同：用作样品图像里的基底部分。留空：认为膜直接长在 Si 上。",
+    "The nominal thickness of the film (nm), as deposited: for a sample measured after its deposition it takes the "
+    "place of the deposition rate, and it is the position of the sample on the axis of the series.":
+        "膜的名义厚度（nm，即沉积量）：对沉积之后测量的样品，它代替沉积速率，也是样品在系列横轴上的位置。",
+    "Bare substrate": "裸基底",
+    "Frames of another piece of the same substrate without metal, measured like the sample: they give the substrate "
+    "part of its image. An in-situ scan takes this from its own frames before the deposition; a sample measured "
+    "afterwards has none, so it needs another piece. Empty: the film is taken to lie directly on Si.":
+        "另一片同种基底、没有镀金属的帧，测法与样品相同：用作样品图像里的基底部分。原位扫描用的是它自己沉积开始之前的帧；"
+        "沉积之后测量的样品没有这样的帧，所以要另一片。留空：认为膜直接长在 Si 上。",
+    "optional: another piece, no metal": "可选：另一片未镀金属的同种基底",
     "Series folder": "系列文件夹",
     "The folder of the series. Each sample analysed into it is added to its report and to what the main screen "
     "shows; choosing the folder of an existing series adds to that series.":
@@ -277,9 +286,14 @@ SPUTTER_CLIENT_ZH = {
     "Package Values": "分析包的数值",
     "Fill the geometry fields with the values the analysis package uses for static frames.":
         "把分析包处理静态帧时所用的数值填进几何各栏。",
-    "Analyze Sample": "分析这个样品",
-    "Read the frames of this sample, find its solution and add it to the series; the main screen then shows the "
-    "series.": "读取这个样品的帧，求出它的解并加入系列；随后主屏显示这个系列。",
+    # -- the bar: what it analyses (views/sputter_main_view.py) ----------------------------------------------------
+    "In Situ": "原位",
+    "After Deposition": "沉积后",
+    "Frames recorded during the deposition: the deposition rate gives the metal deposited at each time.":
+        "沉积过程中记录的帧：由沉积速率得到每个时刻已沉积的金属量。",
+    "The frames of one sample measured after its deposition: its nominal thickness takes the place of the rate, and "
+    "every sample analysed into a series is shown against it.":
+        "沉积之后测量的一个样品的帧：用它的名义厚度代替速率，分析进同一系列的样品按名义厚度显示。",
     "Choose the Folder of the Frames": "选择帧所在的文件夹",
     "Choose a CBF File or a Zip Archive": "选择 CBF 文件或 zip 压缩包",
     "Choose the Folder of the Series": "选择系列的文件夹",
@@ -300,10 +314,10 @@ SPUTTER_CLIENT_ZH = {
     "Choose the frames of the sample: a folder, one CBF file or a zip archive.":
         "请选择样品的帧：一个文件夹、单个 CBF 文件或一个 zip 压缩包。",
     "The frames of the bare substrate were not found: choose a folder, one CBF file or a zip archive, or leave the "
-    "field empty.": "没有找到空基底的帧：请选择一个文件夹、单个 CBF 文件或一个 zip 压缩包，或把这一栏留空。",
+    "field empty.": "没有找到裸基底的帧：请选择一个文件夹、单个 CBF 文件或一个 zip 压缩包，或把这一栏留空。",
     "Give the sample a name with letters or digits.": "请给样品起一个含字母或数字的名字。",
     "A sample name cannot end in _ref: the frames of a bare substrate are kept under such a name.":
-        "样品名不能以 _ref 结尾：空基底的帧就保存在这样的名字下。",
+        "样品名不能以 _ref 结尾：裸基底的帧就保存在这样的名字下。",
     "Give the nominal thickness of the sample (nm).": "请给出样品的名义厚度（nm）。",
     "Choose the folder of the series.": "请选择系列的文件夹。",
     "The mode must be quick, refine or full.": "模式必须是 quick、refine 或 full。",

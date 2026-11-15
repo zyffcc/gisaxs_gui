@@ -1,9 +1,12 @@
 """Static layout of the Sputter page's main screen and of its input bar (behaviour in ``presentation/client_flow.py``
 and ``client_panel.py``).
 
-**The input bar** (always shown, above the two views): the scan folder, Metal, Substrate, the deposition rate with
-its QCM reading box and the primary button Analyze; one line about the scan; one line with the geometry used and
-Edit; Open Result… and the switch between the main screen and Details; at the right the job status of Analyze.
+**The input bar** (always shown, above the two views): the switch In Situ | After Deposition and its inputs — an
+in-situ scan: the scan folder, Metal, Substrate, the deposition rate with its QCM reading box; a sample measured after
+its deposition: its frames (folder, or a CBF file or zip archive), its name, its nominal thickness and, optionally,
+frames of the bare substrate (another piece of the same substrate without metal) — and the primary button Analyze;
+one line about the scan; one line with the geometry used and Edit; Open Result… and the switch between the main
+screen and Details; at the right the job status of Analyze (of both kinds).
 
 **The main screen** shows one time window of a result: the window selector (previous, slider, next, its time and
 nominal deposit) with the switch Patterns | Real Space; a host for the measured image beside the model image and a
@@ -22,12 +25,14 @@ film thickness, the analysis package and its folder, Open Report and Open Folder
 from __future__ import annotations
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QCheckBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton,
-                             QSizePolicy, QSlider, QStackedWidget, QToolButton, QVBoxLayout, QWidget)
+from PyQt5.QtWidgets import (QCheckBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
+                             QPushButton, QSizePolicy, QSlider, QStackedWidget, QToolButton, QVBoxLayout, QWidget)
 
 from src.gimap.app.presentation.components import (EmptyState, FilePicker, JobStatus, ParameterSection,
                                                    SafeWheelComboBox, SegmentedControl)
 from src.gimap.app.presentation.i18n import DATA_VALUES
+
+from .sputter_static_view import FRAMES_TIP, NAME_TIP, NOMINAL_TIP, REFERENCE_PLACEHOLDER, REFERENCE_TIP
 
 STATUS_WIDTH = 400
 EMPTY_WIDTH = 720
@@ -40,6 +45,12 @@ MODE_CHOICES = (("Auto", "auto", "Quick for Si and TiO₂, Refine for polymer su
                 ("Refine", "refine", "Also refines the solution of every window (minutes per window on a polymer)."),
                 ("Full", "full", "A longer refinement of every window and of the whole scan together: hours."))
 VIEW_CHOICES = (("Main Screen", "main"), ("Details", "details"))
+KIND_CHOICES = (("In Situ", "insitu", "Frames recorded during the deposition: the deposition rate gives the metal "
+                                      "deposited at each time."),
+                ("After Deposition", "static", "The frames of one sample measured after its deposition: its nominal "
+                                               "thickness takes the place of the rate, and every sample analysed into a "
+                                               "series is shown against it."))
+"""What the bar analyses: an in-situ scan, or a sample measured after its deposition."""
 IMAGE_CHOICES = (("Patterns", "patterns", "The measured image beside the model image of the solution shown."),
                  ("Real Space", "space", "The solution shown drawn in real space: a cut through a row of grains and "
                                          "the view from above, in nm."))
@@ -134,7 +145,18 @@ class SputterMainView:
 
         inputs = QHBoxLayout()
         inputs.setSpacing(6)
-        self.scan_picker = FilePicker(bar, placeholder="Folder with the CBF frames of one scan",
+        self.kind_switch = SegmentedControl(bar)  # in situ: a series during the deposition; after: one sample
+        self.kind_switch.setObjectName("sputterKind")
+        for index, (label, key, tip) in enumerate(KIND_CHOICES):
+            self.kind_switch.addItem(label, key)
+            self.kind_switch.setItemToolTip(index, tip)
+        self.input_stack = QStackedWidget(bar)  # 0: an in-situ scan, 1: a sample measured after the deposition
+        self.input_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        insitu, after = QWidget(self.input_stack), QWidget(self.input_stack)
+        self.input_stack.addWidget(insitu)
+        self.input_stack.addWidget(after)
+        self._static_inputs(after, number_edit)
+        self.scan_picker = FilePicker(insitu, placeholder="Folder with the CBF frames of one scan",
                                       browse_text="Choose…", clearable=False)
         self.scan_picker.setObjectName("sputterScanFolder")
         self.scan_picker.setToolTip(SCAN_FOLDER_TIP)
@@ -154,22 +176,28 @@ class SputterMainView:
         self.sample_rate.setObjectName("sputterSampleRate")
         self.sample_rate.setFixedWidth(84)
         self.sample_rate.setToolTip(RATE_TIP)
-        self.qcm_check = QCheckBox("QCM reading", bar)
+        self.qcm_check = QCheckBox("QCM reading", insitu)
         self.qcm_check.setToolTip(QCM_TIP)
         self.analyze_button = QPushButton("Analyze", bar)
         self.analyze_button.setObjectName("sputterAnalyze")
         self.analyze_button.setProperty("gimapPrimaryAction", True)
         self.analyze_button.setMinimumWidth(120)
         self.analyze_button.setToolTip(ANALYZE_TIP)
-        inputs.addWidget(self.scan_picker, 1)
+        row = QHBoxLayout(insitu)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        row.addWidget(self.scan_picker, 1)
         for caption, widget in (("Metal", self.sample_metal), ("Substrate", self.substrate),
                                 ("Rate (nm/s)", self.sample_rate)):
-            label = QLabel(caption, bar)
+            label = QLabel(caption, insitu)
             label.setBuddy(widget)
-            inputs.addSpacing(8)
-            inputs.addWidget(label)
-            inputs.addWidget(widget)
-        inputs.addWidget(self.qcm_check)
+            row.addSpacing(8)
+            row.addWidget(label)
+            row.addWidget(widget)
+        row.addWidget(self.qcm_check)
+        inputs.addWidget(self.kind_switch)
+        inputs.addSpacing(8)
+        inputs.addWidget(self.input_stack, 1)
         inputs.addSpacing(8)
         inputs.addWidget(self.analyze_button)
         outer.addLayout(inputs)
@@ -213,6 +241,42 @@ class SputterMainView:
         lower.addWidget(self.analyze_status, 0, Qt.AlignTop)
         outer.addLayout(lower)
         return bar
+
+    def _static_inputs(self, page: QWidget, number_edit) -> None:
+        """The inputs of a sample measured after its deposition: its frames, its name, its nominal thickness (in the
+        place of the rate) and, optionally, frames of the bare substrate — another piece without metal (the series
+        folder, the mode and the geometry are in Details)."""
+        # Choose… offers a folder or one file (a CBF frame or a zip archive): a menu, set up by static_flow.py
+        self.static_frames = FilePicker(page, placeholder="folder, CBF file or zip archive", browse_text="Choose…",
+                                        clearable=False)
+        self.static_frames.setObjectName("sputterStaticFrames")
+        self.static_frames.path_edit.setToolTip(FRAMES_TIP)
+        self.static_name = QLineEdit(page)
+        self.static_name.setObjectName("sputterStaticName")
+        self.static_name.setPlaceholderText("required")
+        self.static_name.setToolTip(NAME_TIP)
+        self.static_name.setFixedWidth(100)
+        self.static_nominal = number_edit(page, "required")
+        self.static_nominal.setObjectName("sputterStaticNominal")
+        self.static_nominal.setToolTip(NOMINAL_TIP)
+        self.static_nominal.setFixedWidth(72)
+        self.static_reference = FilePicker(page, placeholder=REFERENCE_PLACEHOLDER, browse_text="Choose…",
+                                           clearable=False)
+        self.static_reference.setObjectName("sputterStaticReference")
+        self.static_reference.path_edit.setToolTip(REFERENCE_TIP)
+        row = QHBoxLayout(page)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        row.addWidget(self.static_frames, 3)
+        for caption, widget, tip in (("Sample", self.static_name, NAME_TIP),
+                                     ("Nominal (nm)", self.static_nominal, NOMINAL_TIP),
+                                     ("Bare substrate", self.static_reference, REFERENCE_TIP)):
+            label = QLabel(caption, page)
+            label.setBuddy(widget)
+            label.setToolTip(tip)
+            row.addSpacing(8)
+            row.addWidget(label)
+            row.addWidget(widget, 2 if widget is self.static_reference else 0)
 
     # -- the main screen -----------------------------------------------------------------------------------------
     def _main_view(self, page: QWidget) -> QWidget:
@@ -411,5 +475,5 @@ class SputterMainView:
         return section
 
 
-__all__ = ["DEVIATION_CAPTION", "ENTRY_HINT", "ElidedLabel", "IMAGE_CHOICES", "MODE_CHOICES", "SAMPLE_METALS", "SUBSTRATE_CHOICES",
+__all__ = ["DEVIATION_CAPTION", "ENTRY_HINT", "ElidedLabel", "IMAGE_CHOICES", "KIND_CHOICES", "MODE_CHOICES", "SAMPLE_METALS", "SUBSTRATE_CHOICES",
            "SputterMainView", "TILES", "VIEW_CHOICES"]

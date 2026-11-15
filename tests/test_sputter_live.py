@@ -106,9 +106,11 @@ def test_the_run_keeps_the_frames_the_solutions_and_the_network_chosen(tmp_path)
     assert (label, time_s, patterns.labels) == ("refined", 4.0, ("refined",))
     assert patterns.measured.shape == (CELL_AF.size, CELL_Q.size)
     run.feed(_event("windows", "predict", family="zz_other", total=3, refine=0))
-    assert run.network_index() == (2, 2) and run.solved() == 0 and run.result(tmp_path) is None
+    assert run.network_index() == (2, 2) and run.solved() == 0
+    # until the next network has a solution, the view keeps the one before (it does not go blank)
+    assert run.result(tmp_path).family == "zz_net" and run.latest_patterns()[2] == 4.0
     run.feed(_window(6.0, "candidate 3", 9.0, 7.0, family="zz_other"))
-    assert run.latest_patterns()[2] == 6.0  # the network at work
+    assert run.latest_patterns()[2] == 6.0 and run.result(tmp_path).family == "zz_other"  # the network at work
     run.feed(_event("chosen", "predict", family="zz_net", deviations={"zz_net": 3.0, "zz_other": 5.5}))
     assert run.chosen == "zz_net" and run.result(tmp_path, run.shown_family()).family == "zz_net"
     assert run.latest_patterns()[1:3] == ("refined", 4.0)  # once chosen: the latest window of the network chosen
@@ -268,6 +270,120 @@ def test_a_failed_or_stopped_run_shows_again_what_was_shown_before(tmp_path):
     page.close()
 
 
+def _static_frame(frame: int, radius: float, deviation: float, stage: str = "network") -> LiveEvent:
+    measured = np.outer(np.linspace(1, 2, CELL_AF.size), np.linspace(3, 1, CELL_Q.size))
+    return _event("frame", "predict", {"q": CELL_Q, "af": CELL_AF, "measured": measured, "model": 0.8 * measured},
+                  label="zz_6nm", index=frame - 1, frame=frame, nominal_nm=6.0, stage=stage, fit_deviation=deviation,
+                  values={"R_nm": radius, "H_nm": 5.0, "D_nm": 12.0, "coverage": 0.5})
+
+
+STATIC_EVENTS = (_event("detector", "intake", {"image": np.ones((8, 6), np.float16), "masked": np.zeros((8, 6), np.float16)},
+                        label="zz_6nm", role="sample", binning=4, col=3.0, row=5.0, horizon_row=4.0, frames_summed=9,
+                        dead=1, hot=2, shadow=0, kept=950, pixels=1000),
+                 _event("sample", "intake", {"q": Q, "af": AF, "rate": np.ones((AF.size, Q.size), np.float32)},
+                        label="zz_6nm", role="sample", nominal_nm=6.0, frames=9, usable=8,
+                        excluded=[["zz_00001.cbf", "512 saturated pixels: direct or specular beam not blocked"]]),
+                 _event("solving", "predict", label="zz_6nm", total=4, refine=0),
+                 _static_frame(2, 4.0, 2.8), _static_frame(5, 4.4, 3.2))
+
+
+def test_a_static_run_keeps_the_sample_its_frames_and_the_series(tmp_path):
+    from src.gimap.features.sputter.domain import ClientEntry, ClientResult, ClientWindow
+
+    run = LiveRun(kind="static")
+    assert [run.feed(event) for event in STATIC_EVENTS] == ["detector", "sample", "solving", "frame", "frame"]
+    assert run.detector is not None and run.sample.number("usable") == 8 and run.frames_to_solve == 4
+    assert run.frames_solved() == 2 and run.frame_entry(5).label == "frame 5"
+    patterns, label, frame, _event_ = run.frame_patterns()
+    assert (label, frame, patterns.labels) == ("frame 5", 5.0, ("frame 5",))
+    # the series as it was (another sample, and this one analysed before: it is left out) and this sample's frames
+    before = ClientResult(tmp_path, windows=(
+        ClientWindow(1.0, nominal_nm=4.0, label="zz_4nm", entries=(ClientEntry("model", values={"R_nm": 3.0}),)),
+        ClientWindow(2.0, nominal_nm=6.0, label="zz_6nm", entries=(ClientEntry("model", values={"R_nm": 9.9}),))),
+        kind="static", x_label="nominal thickness", x_unit="nm")
+    result = run.static_result(tmp_path, before, "zz_6nm", 6.0)
+    assert result.static and [w.label for w in result.windows] == ["zz_4nm", "zz_6nm frame 2", "zz_6nm frame 5"]
+    assert [result.position(w) for w in result.windows] == [4.0, 6.0, 6.0] and result.series("R_nm")[1] == [3.0, 4.0, 4.4]
+    run.feed(_static_frame(2, 4.1, 2.0, stage="refined"))  # the refined solution stands for its frame
+    assert run.frame_entry(2).values["R_nm"] == 4.1 and run.static_result(tmp_path, None, "zz_6nm", 6.0).windows[0].label \
+        == "zz_6nm frame 2"
+    run.feed(_event("detector", "intake", {"image": np.ones((8, 6), np.float16)}, role="bare substrate"))
+    assert run.reference_detector is not None
+
+
+class LiveStaticRunner:
+    """The static command: its steps with live events, held after the frames until ``go`` is set."""
+
+    def __init__(self, series_root):
+        from tests.sputter_client_fixtures import FakeStaticRunner
+
+        self.inner = FakeStaticRunner(series_root)
+        self.go, self.held = threading.Event(), threading.Event()
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+    def run(self, request, on_line, should_stop):
+        from tests.sputter_client_fixtures import STATIC_LINES
+
+        on_line(STATIC_LINES[0])
+        for event in STATIC_EVENTS[:2]:
+            on_line(event)
+        for line in STATIC_LINES[1:4]:
+            on_line(line)
+        for event in STATIC_EVENTS[2:]:
+            on_line(event)
+        self.held.set()
+        self.go.wait(20)
+        return self.inner.run(request, lambda line: None if line in STATIC_LINES[:4] else on_line(line), should_stop)
+
+
+def test_after_deposition_the_main_screen_shows_the_sample_its_frames_and_the_series(tmp_path):
+    from src.gimap.features.sputter.presentation.live_panel import LIVE_PAGE
+    from src.gimap.integrations.state import InMemoryUserPreferencesRepository
+    from tests.test_sputter_main_screen import _page as main_page
+
+    runner = LiveStaticRunner(tmp_path / "series")
+    page = main_page(tmp_path, static=runner, preferences=InMemoryUserPreferencesRepository())
+    page.show()
+    frames = tmp_path / "zz frames"
+    frames.mkdir()
+    page.set_analysis_kind("static")
+    assert page.input_stack.currentIndex() == 1 and page.static_frames.isVisible() and not page.scan_picker.isVisible()
+    assert page.static_reference.path_edit.placeholderText() == "optional: another piece, no metal"
+    page.static_frames.set_path(str(frames))
+    page.static_name.setText("zz 6nm")
+    page.static_nominal.setText("6")
+    page.analyze_button.click()  # After Deposition: Analyze runs the sample
+    _settle(lambda: runner.held.is_set())
+    _settle(lambda: page._live is not None and page._live.frames_solved() == 2, 5)
+    page._live_draw()
+    assert page.result_stack.currentIndex() == LIVE_PAGE and page._live.kind == "static"
+    steps = page.live_steps
+    assert [steps.title(key) for key in ("intake", "predict", "report")] == [
+        "Read the frames of the sample", "Find its solution", "Add it to the series"]
+    assert not steps._steps["present"].isVisible()
+    assert steps.detail("intake") == "8 of 9 frames usable"
+    assert steps.detail("predict") == "2 of 4 frames solved (4 of the 8 usable)"  # Quick solves four of them
+    assert page.live_title.text() == "Step 2 of 3: Find its solution"
+    assert page.live_patterns.titles == ("Measured image", "Model image: Frame 5")
+    assert page.live_caption.full_text().startswith("Frame 5 · network · Radius R 4.4 nm")
+    assert page.live_evolution.series["R_nm"][1] == [4.0, 4.4]  # every frame at the nominal thickness
+    assert page.live_plot_host.isVisible()
+    page._live_step_chosen("intake")
+    page._live_draw()
+    assert page.live_frames.titles == ("Detector, summed", "Usable frames of the sample, summed")
+    assert page.live_caption.full_text().startswith("8 of 9 frames usable · no bare substrate")
+    assert "left out: zz_00001.cbf (512 saturated pixels" in page.live_caption.full_text()
+    runner.go.set()
+    _settle(lambda: not page.static_analyzing())
+    assert page.result_stack.currentIndex() == 1 and page.client_result.static and page._live is None
+    assert page.analyze_status.state_label.property("gimapJobState") == "succeeded"
+    page.dispose()
+    page.tasks.wait(10)
+    page.close()
+
+
 def test_the_count_rate_line_is_not_drawn_across_frames_not_read_yet():
     from src.gimap.features.sputter.presentation.live_pictures import side_edges, with_gaps
 
@@ -280,11 +396,11 @@ def test_the_count_rate_line_is_not_drawn_across_frames_not_read_yet():
 
 def test_the_live_view_speaks_chinese():
     from src.gimap.app.presentation.i18n.zh import ZH
-    from src.gimap.features.sputter.presentation import live_panel, live_pictures
+    from src.gimap.features.sputter.presentation import live_panel, live_pictures, live_static
     from src.gimap.features.sputter.presentation.views import sputter_live_view as view
 
-    held = [*live_panel.TEMPLATES, *live_pictures.TEMPLATES, view.LIVE_TITLE, view.LIVE_HINT,
-            *(name for _key, name in view.LIVE_STEP_TITLES)]
+    held = [*live_panel.TEMPLATES, *live_pictures.TEMPLATES, *live_static.STATIC_TEMPLATES, view.LIVE_TITLE,
+            view.LIVE_HINT, *(name for _key, name in view.LIVE_STEP_TITLES)]
     assert [template for template in held if template not in ZH] == []
     for template in held:
         fields = sorted(set(__import__("re").findall(r"{(\w+)}", template)))

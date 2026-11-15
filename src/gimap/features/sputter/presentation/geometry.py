@@ -194,7 +194,9 @@ class SputterGeometryMixin:
         words = self._summary_text()
         self.scan_summary.setText(words)
         self.scan_summary.setToolTip(self._summary_tip())
-        self.scan_summary.setVisible(bool(words))
+        # the line is about the in-situ scan of the bar: not shown while the bar takes a sample after deposition
+        kind = getattr(self, "kind_switch", None)
+        self.scan_summary.setVisible(bool(words) and (kind is None or kind.currentData() != "static"))
 
     # -- the fields ------------------------------------------------------------------------------------------
     def _field_text(self, group: str) -> tuple:

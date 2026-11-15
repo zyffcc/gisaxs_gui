@@ -2477,7 +2477,8 @@ passed over: the package that comes with GIMaP runs, and the **Analysis package*
 tooltip. Without any package the main screen says so; **Open Result…** shows a folder analysed before all the
 same.
 
-**The input bar**, from the left:
+**The input bar**, from the left (with **In Situ** chosen at its left end; **After Deposition** is for a sample
+measured after its deposition, see *Samples measured after their deposition* below):
 
 1. **Choose…**: the folder of one scan (its CBF frames, or a scan folder with them in one subfolder such as
    `p2m/`). A line under the bar then sums up the frames, the detector, the exposure and the time.
@@ -2571,22 +2572,31 @@ particle tops it covers; right the top of one particle enlarged, with the cap at
 their size. The line below says how much metal has been deposited and how much of it is in islands, in the cap and
 in the pores.
 
-**Static frames (after deposition).** Samples measured after their deposition — a thickness series of Au films,
-for example — are analysed one at a time into a *series* under **Details ▸ Static Frames (after deposition)**:
+**Samples measured after their deposition.** A sample measured after its deposition — one of a thickness series
+of Au films, for example — has no deposition rate and no frames from before the deposition. Choose **After
+Deposition** at the left of the input bar (**In Situ** is a scan recorded during the deposition); the bar then asks
+for this sample, and each sample is analysed into a *series*:
 
-1. **Frames**: the GISAXS frames of one sample — a folder (**Folder…**), one CBF file or a zip archive
-   (**File…**). For an archive GIMaP lists the folders in it that hold frames; the folder inside the archive
-   follows after two colons (`archive.zip::folder/`).
-2. **Sample name** and **Nominal thickness (nm)**: the sample's place on the axis of the series.
-3. **Bare substrate** (optional): frames of the substrate without metal, measured the same way; empty, the film
-   is taken to lie directly on Si.
-4. **Series folder**: every sample analysed into it is added to the same series; choose an existing series to add
-   to it. **Mode**: Quick, Refine or Full.
-5. The geometry of these frames: empty fields keep the package's own values, which **Package Values** fills in;
-   **Masks of the Package** lists the pixel masks it brings.
-6. **Analyze Sample**. Afterwards the main screen shows the series: one sample in place of each time window, the
-   evolution along the nominal thickness. A sample name that the series has already, with other frames or
-   values, is replaced after a question. Analyze and Analyze Sample do not run at the same time.
+1. **Frames** (**Choose…**): the GISAXS frames of one sample — a folder, or one CBF file or a zip archive. For an
+   archive GIMaP lists the folders in it that hold frames; the folder inside the archive follows after two colons
+   (`archive.zip::folder/`).
+2. **Sample**: its name in the series.
+3. **Nominal (nm)**: the nominal thickness of the film, as deposited. It takes the place of the deposition rate and
+   is the sample's place on the axis of the series.
+4. **Bare substrate** (optional): frames of *another piece* of the same substrate without metal, measured the same
+   way; they give the substrate part of the image. Empty, the film is taken to lie directly on Si.
+5. **Analyze**. While it runs the main screen shows three steps: the frames of the sample read (the detector summed,
+   the usable frames summed, which frames are left out and why), the solution of each frame as it is found
+   (measured and model image of the frame solved last; below, the series with every frame solved so far at the
+   sample's nominal thickness), and the sample added to the series. Afterwards the main screen shows the series: one
+   sample in place of each time window — its value is the median over its frames —, the evolution along the
+   nominal thickness. A sample name that the series has already, with other frames or values, is replaced after a
+   question.
+
+Under **Details ▸ Static Frames (after deposition)**: the **Series folder** (every sample analysed into it is added
+to the same series; choose an existing series to add to it), the **Mode** (Quick, Refine or Full), the geometry of
+these frames (empty fields keep the package's own values, which **Package Values** fills in; **Masks of the Package**
+lists the pixel masks it brings) and the log. One analysis runs at a time.
 
 The package supports Au films at an incidence angle near 0.40°; what it says about other cases appears in the
 section's log.

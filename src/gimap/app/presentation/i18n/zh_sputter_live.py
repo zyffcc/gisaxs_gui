@@ -59,6 +59,47 @@ SPUTTER_LIVE_ZH = {
     "Frames read": "已读入的帧",
     "Count rate per pixel": "每像素计数率",
     "Start of the deposition": "沉积开始",
+    # -- a sample measured after its deposition (live_static.py) ---------------------------------------------------
+    "Read the frames of the sample": "读入样品的帧",
+    "Find its solution": "求解结构",
+    "Add it to the series": "归入系列",
+    "Every frame of the sample is projected onto a grid of q_y and exit angle, without the pixels the mask leaves out; "
+    "a frame with the direct or the specular beam not blocked is left out. A sample measured after its deposition has "
+    "no frames from before it: the substrate part of its image comes from frames of another piece of the same "
+    "substrate without metal (the bare substrate), or, without them, from the model of Si. Left: the detector summed — "
+    "red: left out by the mask, +: the direct beam, dashed: the sample horizon. Right: the usable frames summed. "
+    "Below: the series so far.":
+        "把样品的每一帧投影到 q_y–出射角网格上（掩膜去掉的像素不计）；直射束或镜面反射没有挡住的帧不用。"
+        "沉积之后测量的样品没有沉积之前的帧：它图像里的基底部分来自另一片同种基底、没有镀金属的帧（裸基底），"
+        "没有给出时用 Si 的模型。左：探测器求和——红色为掩膜去掉的像素，+ 为直射束，虚线为样品地平线。右：可用帧之和。"
+        "下：目前的系列。",
+    "For each usable frame the network proposes candidate structures; the physical model draws each as an image and "
+    "the one closest to the measured frame is kept. Above: the frame solved last, measured and model image. Below: "
+    "the series so far, with every frame of this sample at its nominal thickness; the sample's value is their median. "
+    "Quick and Refine solve four of the usable frames, Full every one.":
+        "网络为每个可用帧给出若干候选结构；物理模型把每个候选画成图样，留下与实测帧最接近的那个。"
+        "上：最近求解的帧，实测图与模型图。下：目前的系列，这个样品的每一帧都画在它的名义厚度处；样品的数值取它们的中位数。"
+        "快速和精修模式取可用帧中的 4 帧，完整模式取全部。",
+    "The sample's values — the median over its frames — go into the series, with its report and images.":
+        "样品的数值（各帧的中位数）连同报告和图像归入系列。",
+    "{usable} of {frames} frames usable": "{frames} 帧中 {usable} 帧可用",
+    "Bare substrate: {usable} of {frames} frames usable": "裸基底：{frames} 帧中 {usable} 帧可用",
+    "{solved} of {total} frames solved": "已求解 {solved} / {total} 帧",
+    "{solved} of {total} frames solved ({total} of the {usable} usable)":
+        "已求解 {solved} / {total} 帧（取 {usable} 个可用帧中的 {total} 帧）",
+    "Usable frames of the sample, summed": "样品可用帧之和",
+    "Usable frames of the bare substrate, summed": "裸基底可用帧之和",
+    "left out: {name} ({reason})": "未用：{name}（{reason}）",
+    "{count} saturated pixels: direct or specular beam not blocked": "{count} 个饱和像素：直射束或镜面反射没有挡住",
+    "bare substrate: another piece without metal": "裸基底：另一片未镀金属的基底",
+    "no bare substrate: the film is taken to lie on Si": "没有裸基底：认为膜长在 Si 上",
+    "Frame {frame}": "第 {frame} 帧",
+    "network": "网络",
+    "refined": "精修",
+    "The first frames are being solved…": "正在求解最初的几帧…",
+    # -- the bar, After Deposition (views/sputter_main_view.py, static_flow.py) ------------------------------------
+    "Nominal (nm)": "名义厚度（nm）",
+    "CBF File or Zip Archive…": "CBF 文件或 zip 压缩包…",
 }
 
 __all__ = ["SPUTTER_LIVE_ZH"]

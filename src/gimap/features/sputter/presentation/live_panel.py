@@ -30,10 +30,11 @@ from PyQt5.QtCore import QTimer
 
 from src.gimap.app.presentation.i18n import tr
 
-from ..application import LIVE_STEPS, LiveEvent, LiveRun
+from ..application import LIVE_STEPS, STATIC_LIVE_STEPS, LiveEvent, LiveRun
 from .client_texts import entry_name, shown_number
 from .evolution_view import EvolutionPlot
 from .live_pictures import FramesPicture, TracePlot
+from .live_static import STATIC_EXPLAIN, STATIC_STEP_NAMES, LiveStaticMixin
 from .pattern_view import PatternPair
 from .texts import text
 from .views.sputter_live_view import LIVE_STEP_TITLES
@@ -95,9 +96,9 @@ def _count(value) -> str:
     return f"{int(value or 0):,}"
 
 
-class LivePanelMixin:
-    """Needs the widgets of ``views/sputter_live_view.py``, ``result_stack``, ``_client_tracker`` and
-    ``_show_client_empty``."""
+class LivePanelMixin(LiveStaticMixin):
+    """Needs the widgets of ``views/sputter_live_view.py``, ``result_stack``, ``_client_tracker``,
+    ``_static_tracker`` and ``_show_client_empty``."""
 
     def _init_live(self) -> None:
         self._live: Optional[LiveRun] = None
@@ -105,6 +106,7 @@ class LivePanelMixin:
         self._live_started = 0.0
         self._live_events = 0
         self._live_reused = False
+        self._live_sample: dict = {}
         self._live_dirty: set = set()
         self._live_shown = ""
         self._live_pinned = ""
@@ -126,13 +128,20 @@ class LivePanelMixin:
         """The live view is up (also asked while the page is built, before ``_init_live``)."""
         return getattr(self, "_live", None) is not None
 
-    def _live_begin(self, folder) -> None:
-        """Analyze started a run (not a result it had already): the live view replaces the main screen."""
-        self._live, self._live_folder, self._live_events, self._live_reused = LiveRun(), folder, 0, False
+    def _live_begin(self, folder, *, kind: str = "insitu", label: str = "", nominal_nm=None, series=None,
+                    reference: bool = False) -> None:
+        """Analyze started a run (not a result it had already): the live view replaces the main screen. ``kind``
+        ``static``: one sample measured after its deposition (``label``, ``nominal_nm``; ``series``: the series as
+        it was before; ``reference``: frames of a bare substrate were given)."""
+        self._live, self._live_folder, self._live_events, self._live_reused = LiveRun(kind=kind), folder, 0, False
+        self._live_sample = {"label": label, "nominal_nm": nominal_nm, "series": series, "reference": reference}
         self._live_started = time.monotonic()
         self._live_shown, self._live_pinned = "", ""
+        self._live_titles()
         for key in LIVE_STEPS:
             self.live_steps.set_state(key, "pending", "")
+        self.live_steps.set_step_visible("present", kind != "static")
+        self.live_plot_host.setVisible(True)  # a static run hides it while its series has nothing
         self.live_patterns.show_message(tr(WAITING_SOLUTIONS))
         self.live_frames.show(None, None)
         self.live_trace.show([], [], None)
@@ -185,8 +194,8 @@ class LivePanelMixin:
         """A click on a step: what it found (one that has started), or — the step at work — follow the analysis."""
         if self._live is None:
             return
-        running = self._live_running_step()
-        if key not in LIVE_STEPS or LIVE_STEPS.index(key) > LIVE_STEPS.index(running):
+        running, steps = self._live_running_step(), self._live_steps_of()
+        if key not in steps or steps.index(key) > steps.index(running):
             if self._live_shown:  # not started: the step shown stays (and stays marked)
                 self.live_steps.set_current(self._live_shown)
             return
@@ -194,10 +203,25 @@ class LivePanelMixin:
         self._live_changed("all")
 
     # -- what is shown -------------------------------------------------------------------------------------------
+    def _live_static(self) -> bool:
+        return self._live is not None and self._live.kind == "static"
+
+    def _live_steps_of(self) -> tuple:
+        return STATIC_LIVE_STEPS if self._live_static() else LIVE_STEPS
+
+    def _live_tracker(self):
+        return getattr(self, "_static_tracker" if self._live_static() else "_client_tracker", None)
+
+    def _live_titles(self) -> None:
+        """The names of the steps for the kind of run (in the interface language)."""
+        names = STATIC_STEP_NAMES if self._live_static() else STEP_NAMES
+        for key, name in names.items():
+            self.live_steps.set_title(key, tr(name))
+
     def _live_running_step(self) -> str:
-        tracker = getattr(self, "_client_tracker", None)
+        tracker, steps = self._live_tracker(), self._live_steps_of()
         step = tracker.step if tracker is not None else ""
-        return step if step in LIVE_STEPS else LIVE_STEPS[0]
+        return step if step in steps else steps[0]
 
     def _live_draw(self) -> None:
         run = self._live
@@ -210,9 +234,13 @@ class LivePanelMixin:
         if step != self._live_shown:
             self.live_steps.set_current(step)
         self._live_shown = step
-        self.live_title.setText(text(TITLE, index=LIVE_STEPS.index(step) + 1, count=len(LIVE_STEPS),
-                                     name=tr(STEP_NAMES[step])))
-        self.live_explain.setText(tr(EXPLAIN[step]))
+        steps = self._live_steps_of()
+        names, explain = (STATIC_STEP_NAMES, STATIC_EXPLAIN) if self._live_static() else (STEP_NAMES, EXPLAIN)
+        self.live_title.setText(text(TITLE, index=steps.index(step) + 1, count=len(steps), name=tr(names[step])))
+        self.live_explain.setText(tr(explain[step]))
+        if self._live_static():
+            self._live_draw_static(run, step, turned, dirty)
+            return
         if step == "intake":
             self.live_picture_host.setCurrentIndex(0)
             self.live_plot_host.setCurrentIndex(0)
@@ -239,18 +267,20 @@ class LivePanelMixin:
         self.live_caption.set_full_text(self._window_caption(run, latest))
 
     def _live_show_steps(self, run: LiveRun) -> None:
-        tracker = getattr(self, "_client_tracker", None)
+        tracker, steps = self._live_tracker(), self._live_steps_of()
         running = self._live_running_step()
-        for key in LIVE_STEPS:
+        for key in steps:
             failed = tracker is not None and key in tracker.failed
             done = tracker is not None and (key in tracker.done or bool(tracker.status))
-            before = LIVE_STEPS.index(key) < LIVE_STEPS.index(running)
+            before = steps.index(key) < steps.index(running)
             if key == "predict" and run.families and not run.chosen and running == "predict":
                 done = False  # the next network of the analysis is still at work
             state = "error" if failed else "ok" if done or before else "busy" if key == running else "pending"
             self.live_steps.set_state(key, state, self._step_line(key, run, tracker))
 
     def _step_line(self, key: str, run: LiveRun, tracker) -> str:
+        if run.kind == "static":
+            return self._static_step_line(key, run)
         if key == "intake":
             if self._live_reused:
                 return tr(REUSED_LINE)
@@ -313,8 +343,9 @@ class LivePanelMixin:
 
     def _nothing_live(self) -> bool:
         """The package has sent no live event although its first step is over (an older package)."""
-        tracker = getattr(self, "_client_tracker", None)
-        return self._live_events == 0 and tracker is not None and LIVE_STEPS.index(self._live_running_step()) > 0
+        tracker = self._live_tracker()
+        return self._live_events == 0 and tracker is not None and \
+            self._live_steps_of().index(self._live_running_step()) > 0
 
     # -- theme and language --------------------------------------------------------------------------------------
     def redraw_live_plots(self) -> None:
@@ -325,6 +356,7 @@ class LivePanelMixin:
         if self._live is None:
             return
         self._live_tick()
+        self._live_titles()
         self.redraw_live_plots()
         self._live_dirty.add("all")
         self._live_draw()
