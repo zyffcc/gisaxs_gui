@@ -43,7 +43,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   beamtime's mask or the automatic one. With 10 % more of the pattern masked, the first radius they give moves by
   3 % (polymer) and 1 % (Cu) instead of 7 % and 19 % (median over real windows). On the reference scans the best
   candidate fits as well as before or better (fit deviation 0.82 of before on average for the polymer scans, 0.94
-  for the Cu scan; the first Cu candidate 1.07).
+  for the Cu scan; the first Cu candidate 1.07). The TiO2 network and the two networks of Static Frames were trained
+  the same way: their candidates fit the reference frames clearly better than before (fit deviation 0.61 of before
+  on 13 TiO2 scans, 0.78 on 211 static frames). The Si network is the one before (two retrainings did not fit the
+  reference scans as well). Static Frames use the automatic mask too, so frames of another detector size are read
+  instead of failing on the mask.
 - Sputter: Cu is Cu. The metal list says Cu (no more "approximated with the Ag model"); Analyze reads Cu with its own
   networks, and the earlier method (Predict), whose networks are for Ag and Au, does not run for Cu and says so.
 - Sputter ▸ Analyze, limitations: the analysis package analyses only the pairs of metal and substrate it has a

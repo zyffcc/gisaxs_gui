@@ -88,6 +88,58 @@ def _safe(task):
         return dict(error=f"{type(e).__name__}: {str(e)[:80]}")
 
 
+def _auto_mask(kind, base, entries, mask, geometry, root, label, n_max=40):
+    '(mask file to read the frames with, report) - the given mask and the automatic one (iampred.automask) from the'
+    import zipfile
+    from . import automask as AM
+    import iam_paths as IAMP
+    if str(IAMP.DIST) not in sys.path:
+        sys.path.insert(0, str(IAMP.DIST))
+    from sputtergisaxs.cbfio import _decode_byte_offset
+    import re
+    total = invalid = None
+    zf = zipfile.ZipFile(base) if kind == "zip" else None
+    try:
+        for e in entries[:n_max]:
+            try:
+                raw = zf.read(e) if zf is not None else Path(e).read_bytes()
+                arr, hdr = _decode_byte_offset(raw)
+            except Exception:
+                continue
+            cut = re.search(r"Count_cutoff\s+([\d.eE+-]+)", hdr)
+            img = arr.astype(np.float64)
+            bad = (img < 0) | ((img >= 0.5 * float(cut.group(1))) if cut else False)
+            if total is not None and img.shape != total.shape:
+                continue
+            total = np.where(bad, 0.0, img) if total is None else total + np.where(bad, 0.0, img)
+            invalid = bad if invalid is None else invalid | bad
+    finally:
+        if zf is not None:
+            zf.close()
+    if total is None:
+        return mask, None
+    base_mask = np.load(mask).astype(bool)
+    horizon = AM.horizon_row(geometry["db_row"], geometry["sdd_mm"], geometry["alpha_i_deg"], geometry.get("pixel_mm", AM.PIXEL_MM))
+    combined, report = AM.auto_mask(total, invalid, base_mask, horizon)
+    folder = root / "masks"
+    folder.mkdir(parents=True, exist_ok=True)
+    used = folder / f"{label}.npy"
+    np.save(used, combined)
+    report.update(file=used.name, sha256=hashlib.sha256(used.read_bytes()).hexdigest(), frames_summed=int(min(len(entries), n_max)))
+    return used, report
+
+
+def _mask_of(root, label):
+    'The pixel mask the sample was read with (its marker): the mask file and what the automatic mask added.'
+    marker = root / label / "pixmask.json" if label else None
+    if marker is None or not marker.exists():
+        return None
+    m = json.loads(marker.read_text(encoding="utf-8"))
+    auto = m.get("auto_mask") or {}
+    return dict(file=m.get("file"), automatic=bool(auto), base_used=not auto.get("base"),
+                **{k: auto.get(k) for k in ("dead", "hot", "shadow", "holder", "invalid", "kept", "pixels") if k in auto})
+
+
 def intake(a, root, label, spec, nominal, reference, note):
     import static_intake as SI
     from concurrent.futures import ProcessPoolExecutor
@@ -112,7 +164,14 @@ def intake(a, root, label, spec, nominal, reference, note):
     geometry = dict(GEOMETRY, energy_ev=a.energy_ev, sdd_mm=a.sdd_mm, db_row=a.beam_row, db_col=a.beam_col, sample_roll_deg=a.roll)
     skipped = [e for e in entries if "giwaxs" in Path(e).name.lower()]
     entries = [e for e in entries if e not in skipped]
-    with ProcessPoolExecutor(a.workers, initializer=SI._init, initargs=(geometry, str(base.parent) if kind == "zip" else None, str(mask))) as pool:
+    used = mask
+    if getattr(a, "auto_mask", "on") == "on":
+        used, auto = _auto_mask(kind, base, entries, mask, geometry, root, label)
+        if auto is not None:
+            marker = dict(marker, auto_mask=auto)
+            print(f"      {label}: automatic mask: {auto['dead']} dead, {auto['hot']} hot, {auto['shadow']} beamstop / holder "
+                  f"pixels besides {mask.name}" + (f" ({auto['base']})" if auto.get("base") else ""), flush=True)
+    with ProcessPoolExecutor(a.workers, initializer=SI._init, initargs=(geometry, str(base.parent) if kind == "zip" else None, str(used))) as pool:
         res = list(pool.map(_safe, [(base.name, m) for m in entries] if kind == "zip" else entries))
     failed = [(e, r["error"]) for e, r in zip(entries, res) if "error" in r]
     entries, res = [e for e, r in zip(entries, res) if "error" not in r], [r for r in res if "error" not in r]
@@ -436,6 +495,8 @@ def main(argv=None):
     ap.add_argument("--models")
     ap.add_argument("--data")
     ap.add_argument("--mask")
+    ap.add_argument("--auto-mask", choices=["on", "off"], default="on",
+                    help="mask the pixels the sample's own frames show to be unusable as well (iampred.automask)")
     ap.add_argument("--sdd-mm", type=float, default=GEOMETRY["sdd_mm"])
     ap.add_argument("--energy-ev", type=float, default=GEOMETRY["energy_ev"])
     ap.add_argument("--beam-row", type=float, default=GEOMETRY["db_row"])
@@ -512,6 +573,7 @@ def main(argv=None):
         ok = step("report", do_report)
     files = {k: (str(out / v) if (out / v).exists() else None) for k, v in FILES.items()}
     res = dict(status=status, kind="static", label=a.label, samples=labels, mode=a.mode, data_root=str(root), steps=steps, files=files,
+               mask=_mask_of(root, a.label),
                note="development reference: not validated against independent characterisation")
     (out / "analysis.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
     print(f"status: {status}; report: {files['report_md']}", flush=True)
