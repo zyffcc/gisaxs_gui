@@ -477,7 +477,20 @@ def test_a_long_package_folder_wraps_inside_the_column_of_details(tmp_path, monk
     assert _shown(page.package_label) == str(good)
     assert page.package_label.minimumSizeHint().width() < page.details_scroll.viewport().width()
     assert inner.minimumSizeHint().width() <= max(without, page.details_scroll.viewport().width())
+    # whatever the font (macOS ones are wider): no run of the line without a place to wrap is longer than the limit
+    from src.gimap.features.sputter.presentation.client_texts import LONGEST_UNBROKEN
+    assert max(len(run) for run in re.split(r"[\s\u200b]", page.package_label.text())) <= LONGEST_UNBROKEN + 1
     _close(page)
+
+
+def test_a_folder_gets_places_to_wrap_and_reads_the_same():
+    from src.gimap.features.sputter.presentation.client_texts import LONGEST_UNBROKEN, wrappable
+
+    folder = r"C:\zz_data\zz_an_unusually_long_folder_name_without_any_separator_in_it\v1.2-final"
+    shown = wrappable(folder)
+    assert shown.replace("\u200b", "") == folder
+    assert max(len(run) for run in shown.split("\u200b")) <= LONGEST_UNBROKEN + 1
+    assert wrappable("zz (in the program folder)") == "zz (in the program folder)"  # words wrap at their spaces
 
 
 def test_cancel_stops_the_package_and_a_failure_keeps_its_last_lines(tmp_path):
@@ -609,7 +622,8 @@ def test_the_main_screen_speaks_chinese_after_a_switch(tmp_path):
         page.refresh_language()
         kept = sorted({english[id(w)] for w in widgets if w.text() == english[id(w)]
                        and re.search(r"[A-Za-z]{3,}", re.sub(r"<[^>]+>|PyTorch|Python|GIMaP|PILATUS|S/N|PSBMA", "", w.text()))
-                       and not re.fullmatch(r"[\w.\- ·/]+", w.text())})  # names (scan, sample, family, package) are data
+                       # names (scan, sample, family, package) are data; a folder carries places to wrap
+                       and not re.fullmatch(r"[\w.\- ·/]+", w.text().replace("​", ""))})
         assert kept == []
         assert page.analyze_button.text() == "分析" and page.view_switch.itemText(0) == "主屏"
         assert page.window_label.text() == "t = 2 s · 已沉积 0.4 nm"

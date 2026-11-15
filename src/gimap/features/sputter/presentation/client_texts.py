@@ -84,6 +84,32 @@ TEMPLATES = (ENTRY_CANDIDATE, ENTRY_REFINED, ENTRY_MODEL, ENTRY_TIP, ENTRY_TIP_W
              OPENED_EARLIER, STEP_OF, STEP_REUSED, *STEP_TEXT.values(), MASK_FILE, MASK_AUTO, MASK_AUTO_ONLY)
 """The templates that need Chinese (the others hold only values, units and symbols)."""
 _CANDIDATE = re.compile(r"candidate\s+(\d+)", re.IGNORECASE)
+BREAK_AFTER = "\\/_-."
+"""Characters of a folder after which a line may wrap."""
+LONGEST_UNBROKEN = 12
+"""Most characters of a folder without a place to wrap (a longer name gets one after so many)."""
+ZERO_WIDTH_SPACE = "​"
+
+
+def wrappable(text: str) -> str:
+    """``text`` (a folder, or a line holding one) with a zero-width space after every separator, '_', '-' and '.', and
+    after every LONGEST_UNBROKEN characters of a run without one: a label that wraps words can then break it at any
+    font. A folder has no spaces: unbroken, its longest name sets the least width of the label and so of its column
+    (macOS fonts are wider than Windows ones)."""
+    out, run = [], 0
+    for char in str(text):
+        out.append(char)
+        if char.isspace():
+            run = 0
+        elif char in BREAK_AFTER:
+            out.append(ZERO_WIDTH_SPACE)
+            run = 0
+        else:
+            run += 1
+            if run >= LONGEST_UNBROKEN:
+                out.append(ZERO_WIDTH_SPACE)
+                run = 0
+    return "".join(out)
 
 
 def shown_number(value, digits: int = 3) -> str:
@@ -150,4 +176,4 @@ __all__ = ["CHOICE_NOT_SAVED", "DONE", "EMPTY_ACTION", "EMPTY_MESSAGE", "EMPTY_T
            "OPENED_EARLIER", "PACKAGE_ACTION", "PACKAGE_LINE", "PACKAGE_NONE", "PACKAGE_TITLE", "READY_TOAST",
            "MASK_AUTO", "MASK_AUTO_ONLY", "MASK_FILE", "RELATIVE_RADIUS_TIP", "RESULT_NAME", "SAMPLE_CONTROLS", "SAMPLE_ERROR", "SHOWN_AGAIN", "STARTING",
            "STOPPING_ANALYSIS", "TEMPLATES", "WAITING_TO_ANALYZE", "WINDOW_CONTROLS", "WINDOW_ERROR", "entry_name",
-           "entry_segment", "entry_tip", "range_text", "shown_number", "window_text", "window_tip"]
+           "entry_segment", "entry_tip", "range_text", "shown_number", "window_text", "window_tip", "wrappable"]

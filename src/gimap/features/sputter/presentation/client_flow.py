@@ -33,7 +33,7 @@ from ..application import (FILM_SUBSTRATES, ClientFailed, ClientProgress, Client
 from .client_texts import (DONE, FAILED_TOAST, GEOMETRY_ALPHA, GEOMETRY_CENTRE, GEOMETRY_CENTRE_AUTO, GEOMETRY_DISTANCE,
                            GEOMETRY_ENERGY, GEOMETRY_MISSING, GEOMETRY_ROLL, GEOMETRY_TO_ENTER, GEOMETRY_WAVELENGTH,
                            NO_REPORT, OPENED_EARLIER, PACKAGE_LINE, PACKAGE_NONE, READY_TOAST, SHOWN_AGAIN, STARTING,
-                           STOPPING_ANALYSIS, WAITING_TO_ANALYZE)
+                           STOPPING_ANALYSIS, WAITING_TO_ANALYZE, wrappable)
 from .geometry import warning_style
 from .predict_flow import Failure
 from .texts import message_text, text
@@ -189,8 +189,8 @@ class SputterClientMixin:
             words = text(PACKAGE_LINE.get(package.source, "{folder}"), folder=str(package.home))
         problem = package.problem if package is not None else ""
         note = package.note if package is not None else ""  # the folder named is not a package: the program folder's runs
-        # a folder has no spaces: a zero-width space after each separator lets the line wrap inside the column
-        self.package_label.setText(words.replace("\\", "\\\u200b").replace("/", "/\u200b"))
+        # a folder has no spaces: zero-width spaces let the line wrap inside the column, whatever the font
+        self.package_label.setText(wrappable(words))
         self.package_label.setToolTip(message_text(problem or note) if problem or note else words)
         warning_style(self.package_label, package is None or bool(problem) or bool(note))
         self._show_client_empty()

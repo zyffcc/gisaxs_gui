@@ -8,6 +8,18 @@ import numpy as np
 
 from .models import CalibrationCandidate
 
+RING_PROMINENCE_FULL = 0.1
+"""Prominence of a matched ring (in the log1p-scaled radial profile: about its relative contrast, 0.1 = 10 %) from
+which it counts as a whole ring in the score; a weaker one counts in proportion. Rings of calibrants stand out by far
+more (real frames 0.12-1.7); peaks of a few percent are where noise and stray features meet a harmonic sequence by
+chance, and four of them must not outweigh three clear rings (a grazing AgBH with the CI's NumPy 1.26 / SciPy 1.15
+gave such a 1683 mm alias of a 2200 mm image)."""
+
+
+def ring_weight(prominence: float) -> float:
+    """How much of a ring a matched peak of this prominence counts for (0-1)."""
+    return min(1.0, max(0.0, float(prominence)) / RING_PROMINENCE_FULL)
+
 
 def _add_warning(candidate: CalibrationCandidate, message: str) -> None:
     if message not in candidate.warnings:
@@ -51,7 +63,11 @@ def score_candidate(candidate: CalibrationCandidate, estimated_distance_mm: floa
     mean_prominence = float(np.mean([
         max(0.0, match.prominence) for match in candidate.matched_rings
     ])) if candidate.matched_rings else 0.0
-    ring_score = min(rings, 5) * 22.0 + max(0, rings - 5) * 5.0
+    # the rings counted by how clearly they stand out (RING_PROMINENCE_FULL): a coincidence with a noise-level peak is
+    # not a ring of the standard
+    counted = sum(ring_weight(match.prominence) for match in candidate.matched_rings) if candidate.matched_rings \
+        else float(rings)
+    ring_score = min(counted, 5.0) * 22.0 + max(0.0, counted - 5.0) * 5.0
     completeness = getattr(candidate, "order_completeness", None)
     if completeness is not None:
         # The orders a harmonic standard shows where the detector records are all there for the true distance; a

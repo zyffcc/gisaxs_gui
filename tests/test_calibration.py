@@ -35,6 +35,7 @@ from src.gimap.features.calibration.domain.models import (
     CalibrationCandidate,
     CalibrationResult,
     DetectorImage,
+    MatchedRing,
 )
 from src.gimap.features.calibration.domain.peak_detector import DetectedPeak
 from src.gimap.features.calibration.domain.peak_matcher import generate_distance_candidates
@@ -284,6 +285,25 @@ class CalibrationTests(unittest.TestCase):
         second = CalibrationCandidate("agbh", 10, 10, 2000, matched_ring_count=3, rms_residual_px=1, azimuthal_coverage=0.5)
         ranked = rank_candidates([first, second], estimated_distance_mm=1900)
         self.assertEqual(ranked[0].distance_mm, 2000)
+
+    def test_noise_level_rings_do_not_outweigh_clear_rings(self):
+        """Four orders matched to peaks of a few percent contrast (a chance harmonic sequence) rank below three clear
+        rings; with libraries where such an alias is generated (NumPy 1.26 / SciPy 1.15) it won by 1 point before."""
+        def candidate(distance, prominences, rms, support):
+            rings = [MatchedRing(index, 0.1 * (index + 1), 100.0 * (index + 1), 100.0 * (index + 1), 0.0, prominence,
+                                 0.06) for index, prominence in enumerate(prominences)]
+            item = CalibrationCandidate("agbh", 10, 10, distance, matched_ring_count=len(rings), rms_residual_px=rms,
+                                        distance_consistency=0.001, azimuthal_coverage=0.06, matched_rings=rings)
+            item.center_support, item.valid_data_fraction, item.order_completeness = support, 0.9, 1.0
+            return item
+
+        alias = candidate(1683.5, (0.07, 0.16, 0.04, 0.05), 0.77, 0.915)
+        true = candidate(2200.2, (2.79, 2.45, 2.23), 0.25, 0.95)
+        self.assertEqual(rank_candidates([alias, true], grazing=True)[0].distance_mm, 2200.2)
+        # rings of real calibrants (contrast 0.12 and more) still count whole: four of them beat three
+        four = candidate(1500.0, (0.12, 0.3, 0.2, 0.15), 0.5, 0.95)
+        three = candidate(2000.0, (0.5, 0.4, 0.3), 0.5, 0.95)
+        self.assertEqual(rank_candidates([three, four])[0].distance_mm, 1500.0)
 
     def test_serialization_round_trip(self):
         candidate = CalibrationCandidate("agbh", 10, 20, 1000, matched_ring_count=3, rms_residual_px=0.5)

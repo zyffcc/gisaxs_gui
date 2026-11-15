@@ -86,6 +86,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   at half the distance; the best solution near a stated estimated distance is always refined. **Auto Detect**
   without an estimated distance now ranks silver behenate first on the public silver behenate image (before, a LaB₆
   solution at a much shorter distance). A wrong estimated distance still misleads (User Manual, section 4.3).
+  A matched ring counts in the ranking by how clearly it stands out: four orders paired with peaks of a few percent
+  contrast no longer outweigh three clear rings (with NumPy 1.26 / SciPy 1.15 such a chance sequence gave 1683 mm for
+  a 2200 mm grazing image); the real test frames give the same solutions as before.
+- Sputter ▸ Details: a long folder of the analysis package wraps inside its column with any font (on macOS a long
+  folder name widened Details).
 - Sputter ▸ Analyze, limitations: the analysis package analyses only the pairs of metal and substrate it has a
   network for; its values are
   model values that were not compared with an independent measurement of the sample; a step of the analysis does
