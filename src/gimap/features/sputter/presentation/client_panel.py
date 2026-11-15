@@ -26,7 +26,7 @@ from src.gimap.app.presentation.i18n import tr
 
 from ..application import ClientResult, ClientWindow
 from .client_texts import (CHOICE_NOT_SAVED, EMPTY_ACTION, EMPTY_MESSAGE, EMPTY_TITLE, PACKAGE_ACTION, PACKAGE_TITLE,
-                           RELATIVE_RADIUS_TIP, RESULT_NAME, SAMPLE_CONTROLS, SAMPLE_ERROR, WINDOW_CONTROLS,
+                           MASK_AUTO, MASK_AUTO_ONLY, MASK_FILE, RELATIVE_RADIUS_TIP, RESULT_NAME, SAMPLE_CONTROLS, SAMPLE_ERROR, WINDOW_CONTROLS,
                            WINDOW_ERROR, entry_name, entry_segment, entry_tip, range_text, shown_number, window_text,
                            window_tip)
 from .evolution_view import RELATIVE_RADIUS, EvolutionPlot
@@ -38,6 +38,16 @@ from .views.sputter_main_view import ENTRY_HINT, TILES
 TILE_DIGITS = {"width": 2, "coverage": 2, "f_islands": 2, "cap_share": 2, "film_share": 2}
 """Significant digits of a tile's value (3 where not named)."""
 PATTERN_CACHE = 8
+
+
+def mask_text(mask: dict) -> str:
+    """The pixel mask of a result in words ("" when the package does not say)."""
+    if not mask or not mask.get("file"):
+        return ""
+    if not mask.get("automatic"):
+        return text(MASK_FILE, file=mask["file"])
+    counts = {key: f"{int(mask.get(key) or 0):,}" for key in ("shadow", "dead", "hot")}  # shadow includes the holder
+    return text(MASK_AUTO if mask.get("base_used", True) else MASK_AUTO_ONLY, file=mask["file"], **counts)
 
 
 class ClientPanelMixin:
@@ -107,7 +117,7 @@ class ClientPanelMixin:
         named = "/".join(part for part in (result.metal, result.substrate) if part) or "?"  # the metal on its substrate
         self.result_name.setText(RESULT_NAME.format(scan=result.scan or result.folder.name, sample=named,
                                                     family=result.family or "?"))
-        self.result_name.setToolTip(str(result.folder))
+        self.result_name.setToolTip("\n".join(part for part in (str(result.folder), mask_text(result.mask)) if part))
         self.window_slider.blockSignals(True)
         self.window_slider.setRange(0, len(result.windows) - 1)
         first = next((index for index, window in enumerate(result.windows) if window.entries), 0)

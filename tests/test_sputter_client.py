@@ -174,6 +174,25 @@ def test_choices_of_a_result_that_cannot_be_written_to_go_to_the_user_folder(tmp
         ClientFolderReader().save_choices(result, {"2": "refined"})  # nowhere else to write to
 
 
+
+def test_the_pixel_mask_of_a_result_is_read_and_said(tmp_path):
+    """The package writes the mask it read the frames with into analysis.json; the result's name says it on hover."""
+    from src.gimap.features.sputter.presentation.client_panel import mask_text
+
+    folder = write_result(tmp_path / "out")
+    analysis = json.loads((folder / "analysis.json").read_text(encoding="utf-8"))
+    assert ClientFolderReader().read(folder).mask == {}  # an older package: nothing said
+    assert mask_text({}) == ""
+    analysis["mask"] = dict(file="zz_mask.npy", automatic=True, base_used=True, shadow=3516, holder=81, dead=321, hot=113)
+    (folder / "analysis.json").write_text(json.dumps(analysis), encoding="utf-8")
+    mask = ClientFolderReader().read(folder).mask
+    assert mask["file"] == "zz_mask.npy"
+    said = mask_text(mask)
+    assert "zz_mask.npy and the automatic mask" in said and "3,516 pixels of beamstop and holder" in said
+    assert "321 dead" in said and "113 hot" in said
+    assert "does not fit this detector" in mask_text(dict(mask, base_used=False))
+    assert mask_text(dict(file="zz_mask.npy", automatic=False)) == "Pixel mask: zz_mask.npy."
+
 # -- the package and its command -----------------------------------------------------------------------------------
 
 

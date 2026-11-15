@@ -174,6 +174,11 @@ SPUTTER_CLIENT_ZH = {
     "variable GIMAP_SPUTTER_CLIENT to it.":
         "没有找到分析包。请选择它的文件夹（里面有 code 和 models），或把环境变量 GIMAP_SPUTTER_CLIENT 设为这个文件夹。",
     "{folder} is not an analysis package: {missing} is missing.": "{folder} 不是分析包：缺少 {missing}。",
+    "Pixel mask: {file}.": "像素掩膜：{file}。",
+    "Pixel mask: {file} and the automatic mask from the frames ({shadow} pixels of beamstop and holder, {dead} dead, "
+    "{hot} hot).": "像素掩膜：{file}，加上从帧本身得出的自动掩膜（挡块及支撑杆 {shadow} 个像素，死像素 {dead} 个，热像素 {hot} 个）。",
+    "Pixel mask: the automatic mask from the frames ({shadow} pixels of beamstop and holder, {dead} dead, {hot} hot); "
+    "{file} does not fit this detector.": "像素掩膜：从帧本身得出的自动掩膜（挡块及支撑杆 {shadow} 个像素，死像素 {dead} 个，热像素 {hot} 个）；{file} 与这台探测器不符。",
     "{folder} is not an analysis package ({missing} is missing): the one that comes with GIMaP is used.":
         "{folder} 不是分析包（缺少 {missing}）：改用随 GIMaP 提供的分析包。",
     "The analysis stopped with an error ({status}); its last lines are under Details.":

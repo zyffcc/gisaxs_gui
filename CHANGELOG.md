@@ -35,7 +35,15 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   with GIMaP, and the Analysis package line says why. It is under the MIT License (`utils/sputter_client/LICENSE`).
   Without a mask file it uses the pixel mask its network was trained with (Cu on PEO: the P03 mask of 2021; before,
   Cu on PEO failed at predict with "cache mask …, IAM_PIXMASK requires …"), and a mask file you choose is accepted
-  by every network.
+  by every network. The package also masks what the frames themselves show to be unusable - dead and hot pixels, the
+  beamstop and its holder - on top of the mask (an automatic mask; the tooltip of the result's name says which mask
+  the frames were read with).
+- Sputter ▸ Analyze: the networks for Ag on polymers and for Cu on PEO were trained again with random extra masks
+  (blocks like beamstops, lines like module gaps), so their answer hardly depends on which pixels are masked - another
+  beamtime's mask or the automatic one. With 10 % more of the pattern masked, the first radius they give moves by
+  3 % (polymer) and 1 % (Cu) instead of 7 % and 19 % (median over real windows). On the reference scans the best
+  candidate fits as well as before or better (fit deviation 0.82 of before on average for the polymer scans, 0.94
+  for the Cu scan; the first Cu candidate 1.07).
 - Sputter: Cu is Cu. The metal list says Cu (no more "approximated with the Ag model"); Analyze reads Cu with its own
   networks, and the earlier method (Predict), whose networks are for Ag and Au, does not run for Cu and says so.
 - Sputter ▸ Analyze, limitations: the analysis package analyses only the pairs of metal and substrate it has a

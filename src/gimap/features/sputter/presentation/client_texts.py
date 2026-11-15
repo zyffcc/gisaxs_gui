@@ -24,6 +24,11 @@ WINDOW_TEXT_PLAIN = "t = {time} s"
 WINDOW_TIP = "Time window {index} of {count}."
 WINDOW_TIP_ONSET = "Time window {index} of {count}: {onset} s after the start of the deposition."
 RESULT_NAME = "{scan} · {sample} · {family}"
+MASK_FILE = "Pixel mask: {file}."
+MASK_AUTO = ("Pixel mask: {file} and the automatic mask from the frames ({shadow} pixels of beamstop and holder, "
+             "{dead} dead, {hot} hot).")
+MASK_AUTO_ONLY = ("Pixel mask: the automatic mask from the frames ({shadow} pixels of beamstop and holder, {dead} dead, "
+                  "{hot} hot); {file} does not fit this detector.")
 WINDOW_ERROR = "This time window has no solution: {reason}"
 WINDOW_CONTROLS = ("Previous time window", "Next time window", "Time window shown")
 """The tooltips of the arrows and of the slider for an in-situ scan …"""
@@ -76,7 +81,7 @@ TEMPLATES = (ENTRY_CANDIDATE, ENTRY_REFINED, ENTRY_MODEL, ENTRY_TIP, ENTRY_TIP_W
              GEOMETRY_CENTRE, GEOMETRY_CENTRE_AUTO, GEOMETRY_ROLL, GEOMETRY_TO_ENTER, *GEOMETRY_MISSING.values(),
              WAITING_TO_ANALYZE,
              STARTING, STOPPING_ANALYSIS, DONE, SHOWN_AGAIN, READY_TOAST, FAILED_TOAST, CHOICE_NOT_SAVED, NO_REPORT,
-             OPENED_EARLIER, STEP_OF, STEP_REUSED, *STEP_TEXT.values())
+             OPENED_EARLIER, STEP_OF, STEP_REUSED, *STEP_TEXT.values(), MASK_FILE, MASK_AUTO, MASK_AUTO_ONLY)
 """The templates that need Chinese (the others hold only values, units and symbols)."""
 _CANDIDATE = re.compile(r"candidate\s+(\d+)", re.IGNORECASE)
 
@@ -143,6 +148,6 @@ __all__ = ["CHOICE_NOT_SAVED", "DONE", "EMPTY_ACTION", "EMPTY_MESSAGE", "EMPTY_T
            "GEOMETRY_ALPHA", "GEOMETRY_CENTRE", "GEOMETRY_CENTRE_AUTO", "GEOMETRY_DISTANCE", "GEOMETRY_ENERGY",
            "GEOMETRY_MISSING", "GEOMETRY_ROLL", "GEOMETRY_TO_ENTER", "GEOMETRY_WAVELENGTH", "NO_REPORT",
            "OPENED_EARLIER", "PACKAGE_ACTION", "PACKAGE_LINE", "PACKAGE_NONE", "PACKAGE_TITLE", "READY_TOAST",
-           "RELATIVE_RADIUS_TIP", "RESULT_NAME", "SAMPLE_CONTROLS", "SAMPLE_ERROR", "SHOWN_AGAIN", "STARTING",
+           "MASK_AUTO", "MASK_AUTO_ONLY", "MASK_FILE", "RELATIVE_RADIUS_TIP", "RESULT_NAME", "SAMPLE_CONTROLS", "SAMPLE_ERROR", "SHOWN_AGAIN", "STARTING",
            "STOPPING_ANALYSIS", "TEMPLATES", "WAITING_TO_ANALYZE", "WINDOW_CONTROLS", "WINDOW_ERROR", "entry_name",
            "entry_segment", "entry_tip", "range_text", "shown_number", "window_text", "window_tip"]

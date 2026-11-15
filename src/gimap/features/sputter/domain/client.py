@@ -176,6 +176,9 @@ class ClientResult:
     x_label: str = ""
     """What the series' axis is, as the package says it ("" for an in-situ scan: the time)."""
     x_unit: str = ""
+    mask: dict = field(default_factory=dict)
+    """The pixel mask the frames were read with (``analysis.json``: its file, and the pixels the automatic mask of the
+    package took: ``shadow`` beamstop and holder, ``dead``, ``hot``); empty for a package that does not say."""
 
     @property
     def static(self) -> bool:
@@ -323,7 +326,8 @@ def client_result(folder: Path, main: dict, analysis: Optional[dict] = None) -> 
         str(analysis.get("substrate") or ""), str(analysis.get("mode") or ""),
         str(main.get("note") or analysis.get("note") or ""), wanted, tuple(unique),
         {str(key): value for key, value in files.items()}, tuple(step for step in steps if isinstance(step, dict)),
-        str(main.get("kind") or analysis.get("kind") or ""), str(axis.get("label") or ""), str(axis.get("unit") or ""))
+        str(main.get("kind") or analysis.get("kind") or ""), str(axis.get("label") or ""), str(axis.get("unit") or ""),
+        dict(analysis["mask"]) if isinstance(analysis.get("mask"), dict) else {})
 
 
 def window_patterns(window: ClientWindow, arrays) -> WindowPatterns:

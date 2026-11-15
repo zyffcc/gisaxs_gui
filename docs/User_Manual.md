@@ -2479,7 +2479,10 @@ same.
    section 8.2 says where their values come from). An empty beam centre is estimated from the frames; the sample
    roll is 0 unless you enter one, and without a **Mask** the package uses the pixel mask its network for this metal
    and substrate was trained with - the P03 mask of 2021 for Cu on PEO, of 2025 for the others (both are under
-   **More options**, section 8.3).
+   **More options**, section 8.3). On top of that mask, or of the one you give, the package masks what the frames
+   themselves show to be unusable: dead and hot pixels, the beamstop and its holder (the automatic mask; a mask of
+   another detector size is not used, the automatic mask then stands alone). Hover over the name of the result to
+   see the mask it was read with.
 5. **Analyze**. The job status at the right names the step — reading the frames, finding the solutions of every
    time window, writing the report, drawing the images — and its bar shows the steps that are done (a step does
    not report while it works: reading the frames of a long scan and refining take minutes). **Cancel** ends it at
