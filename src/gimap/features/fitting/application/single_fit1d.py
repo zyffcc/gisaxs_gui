@@ -19,6 +19,7 @@ from ..domain.fit1d_bounds import MODEL_KEYS, TO_KIT, Constraint, model_constrai
 from ..domain.fit1d_edges import ROUNDS
 from ..domain.fit_engine import FitResult, log_rmse
 from ..domain.fit_model import FitModel
+from ..domain.fit_limits import explicit_limits
 from .single_fit import model_from_solution
 from .workflow_v5 import validate_options
 
@@ -42,6 +43,8 @@ def is_auto(settings: dict) -> bool:
 
 def fit1d_constraints(model: FitModel, settings: dict) -> list[Constraint]:
     if is_auto(settings):
+        if explicit_limits(model):
+            raise ValueError("Model has fixed values or custom ranges. Choose The particles in Model to keep them.")
         return []
     return model_constraints(model, structure_factor=settings.get("fit1d_mode", "gisaxs") == "gisaxs")
 
@@ -82,7 +85,7 @@ def fit1d_request(data, model, settings: dict, *, resolve_edges: bool = True, pr
         payload=dict(q=data.q.tolist(), intensity=data.intensity.tolist(),
                      sigma=None if data.sigma is None else data.sigma.tolist(), options=options,
                      composition=composition, constraints=[item.to_dict() for item in constraints],
-                     population_order=order, rounds=ROUNDS if resolve_edges else 0,
+                     population_order=order, rounds=ROUNDS if resolve_edges and composition != "model" else 0,
                      previous=list(previous or ())),
         timeout_seconds=None,
     )
@@ -123,8 +126,11 @@ def fit1d_result(value: dict, base: FitModel, data) -> FitResult:
 
 
 def model_path(model: FitModel, name: str):
-    """The Model's (component, key) of a fit1d parameter (``"pop2.R_nm"``); None for a global term or another
-    composition than Model's."""
+    """The Model path of a native population parameter, background or exponent; None without a matching parameter."""
+    if name == "background_B":
+        return "globals", "background"
+    if name == "low_q.nu":
+        return "globals", "res_exponent"
     target, _, key = str(name).partition(".")
     order = model_order(model) if all(c.family in SHAPES for c in model.components) else []
     if not target.startswith("pop") or not target[3:].isdigit() or key not in MODEL_KEYS:

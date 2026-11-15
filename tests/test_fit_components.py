@@ -20,6 +20,21 @@ def _settle():
         QApplication.processEvents()
 
 
+def test_right_click_menu_controls_populations_and_global_terms(page):
+    page.set_model(page.session.model.with_parameter(("globals", "res_amplitude"), value=10))
+    page.plot.plot_menu.menu.clear()
+    page._add_component_context_menu()
+    assert page.component_menu.menuAction() in page.plot.plot_menu.menu.actions()
+    assert "constant background" in page._component_actions
+    assert "resolution peak" in page._component_actions
+    before = page.session.model
+    action = page._component_actions["constant background"]
+    action.setChecked(False)
+    action.setChecked(True)
+    assert page.terms_check.isChecked()
+    assert page.session.model is before
+
+
 @pytest.fixture
 def page(tmp_path):
     widget = _page()

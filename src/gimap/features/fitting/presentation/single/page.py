@@ -41,6 +41,7 @@ from .drops import CurveDropMixin, SplitterMemoryMixin
 from .exclusion import FitExclusionMixin
 from .fit1d import Fit1DPageMixin
 from .fit1d_review import Fit1DReviewMixin
+from .equivalent_solutions import EquivalentSolutionsMixin
 from .result_actions import ResultActionsMixin
 from .model_editor import FitModelEditor
 from .plotting import FitPlotMixin
@@ -63,7 +64,7 @@ def _saved_source(token):
 
 
 class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunMixin, FitResultsMixin,
-              FitExclusionMixin, Fit1DPageMixin, Fit1DReviewMixin, ResultActionsMixin, CurveUnitMixin, CurveInfoMixin, FitPlotMixin):
+              FitExclusionMixin, Fit1DPageMixin, Fit1DReviewMixin, EquivalentSolutionsMixin, ResultActionsMixin, CurveUnitMixin, CurveInfoMixin, FitPlotMixin):
     curveOpened = pyqtSignal(str)
     """The file of the curve now on the page (In-situ series takes its set-up from it)."""
     batchRequested = pyqtSignal()
@@ -161,7 +162,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             self.step_rail.set_state("fit", "busy", tr("Fitting …"))
         elif session.native_result is not None and result is None:
             native = session.native_result["summary"]
-            state = "ok" if session.native_is_current() and native["status"] == "ok" else "warn"
+            state = "ok" if session.native_is_current() else "warn"
             self.step_rail.set_state("fit", state, f"fit1d · χ²/point {native['chi2_per_point']:.3g}")
         elif result is not None and not session.result_is_current():
             self.step_rail.set_state("fit", "warn", stale)

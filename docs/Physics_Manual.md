@@ -1867,18 +1867,15 @@ r_i = ln I_i − ln max( m_i, 10⁻³⁰⁰ )               without σ (each poi
 
 m_i is the model (9.1). The fit minimises Σ r_i².
 
-**Scales by non-negative least squares (variable projection).** The intensity is linear in Int_i, BG and A. Those of
+**Scales by bounded least squares (variable projection).** The intensity is linear in Int_i, BG and A. Those of
 them that are free are eliminated at every evaluation of the model (Golub & Pereyra, 1973). With the non-linear values
 set, the columns `k P_i S_i`, `1` and `k / (1 + (q/w)^ν)` form the matrix X, the fixed terms the vector m_fixed, and
 
 ```text
-c = argmin_{c ≥ 0} ‖ W ( X c − (I − m_fixed) ) ‖²,   W = diag(1/σ_i), or diag(1/I_i) without σ        (9.17)
+c = argmin_{l ≤ c ≤ u} ‖ W ( X c − (I − m_fixed) ) ‖²,   W = diag(1/σ_i), or diag(1/I_i) without σ        (9.17)
 ```
 
-is solved by NNLS (Lawson & Hanson, 1974; `scipy.optimize.nnls`). The optimiser therefore moves only the sizes,
-spreads, distances and the width and exponent of the beam-tail term. Without σ, (9.17) minimises relative residuals
-while the outer objective is (9.16): an approximation of the exact profile. NNLS enforces only c ≥ 0; the scales have
-no range in the interface.
+Solved with bounded linear least squares (`scipy.optimize.lsq_linear`, BVLS, `tol=1e-10`, at most 100 times the number of free linear terms iterations). Columns are normalised by their norms to reduce sensitivity to scale differences. l and u are the Model limits, default [0, ∞). Without σ, (9.17) still minimises relative residuals while the outer objective is logarithmic (9.16): this remains an approximate profile, not exact elimination under the log likelihood.
 
 Implementation: `src/gimap/features/fitting/domain/fit_engine.py`
 
@@ -1920,7 +1917,7 @@ exceeds 0.05 (fewer when fewer are distinct); the last quarter of the budget is 
 `max(20, ⌊(B/4)/n_starts⌋)` evaluations through (9.20). With fixed seed and budget, Search
 is deterministic.
 
-**Reduced χ².** With N points and p free parameters, including the scales solved by NNLS:
+**Reduced χ².** With N points and p free parameters, including the scales solved by bounded least squares:
 
 ```text
 χ²_red = Σ_i r_i² / ( N − p )                                                                          (9.23)
@@ -1943,25 +1940,15 @@ C = G [ (J G)ᵀ (J G) ]⁺ G · s²      ( = (JᵀJ)⁻¹ s² when JᵀJ is inv
 ⁺ is the pseudo-inverse. The errors are linearised (Wald) 1σ errors, not profile intervals. They are **always scaled
 by s² = χ²_red**, so they also shrink when χ²_red is below 1, unlike the peak fits of chapter 7, which only inflate (7.12).
 Pairs with `abs(ρ) ≥ 0.95` are listed as strongly correlated. A non-linear parameter within 10⁻³ of either end of its
-(log-)unit range, and a scale at 0, is listed as at a bound; its error is not meaningful.
+(log-)unit range, and a scale at either of its limits, is listed as at a bound; its error is not meaningful.
 
 Implementation: `src/gimap/features/fitting/domain/fit_engine.py`
 
-**Values at the edge of their range.** With *Resolve values at the edge of their range automatically* (on by
-default), after Refine or Search a size, distance, or beam-tail width or exponent at an edge gets that side of its range widened
-(× 2 upwards, ÷ 2 downwards, the latter only for a positive lower limit), and the model is refined again; the change
-is kept when `χ²_red,new ≤ 1.02 χ²_red,old`, for at most 2 rounds. Spreads, scales and k are not widened. A value still at an
-edge (at most three of them) is then walked inward with the others refitted: sizes, the width and the exponent by a
-factor 1.25 per step, spreads by 0.05, at most 8 steps, while
+**Values at the edge of their range.** Model's fixed values and limits are hard constraints. Refine and Search report boundary diagnostics without widening ranges or fixing free parameters automatically. The returned curve has the smallest residual sum of squares among the feasible starting curve and the evaluated curves, so refinement cannot replace a better feasible start.
 
-```text
-Σ r² (trial) − Σ r² (best) ≤ max( 1, χ²_red )                                                         (9.27)
-```
+For fit1d with The particles in Model, radius, distance and spread ranges (including defaults) are intersected with the kit's physical limits; fixed values are retained. Only unconstrained automatic composition searches may extend default ranges and perform the existing one-sided-bound analysis. Complete equivalent solutions use the kit's existing criterion Δχ² ≤ max(25, 0.02N)·max(1, χ²_best/N). At most six distinct alternatives are reconstructed from already computed fits without further optimisation; the entire parameter set and curve switch together. Endpoints of equivalent ranges are not treated as complete solutions.
 
-It is kept at the least extreme value allowed, fixed in Model, and reported as a one-sided bound (≥ or ≤). The
-tolerance is Δχ² = 1 for one parameter, scaled by χ²_red when that exceeds 1.
-
-Implementation: `src/gimap/features/fitting/domain/fit_edges.py`
+Implementation: `domain/fit_engine.py`, `domain/fit1d_bounds.py`, `infrastructure/adapters/fit1d_alternatives.py` under the fitting feature.
 
 ### 9.9 Find the particle shape
 
@@ -1976,7 +1963,7 @@ solved again by NNLS against the solution's own fitted curve with relative resid
 solution's BG and A, or with all linear terms refitted); the closer trial is kept, and its largest relative deviation
 `max abs(m_GIMaP / m_solution − 1)` is reported. For spheres and random cylinders the forms agree and the conversion is
 exact up to rounding. For vertical cylinders the R⁴ weighting of (9.10) makes the curves differ when `σ_R/R > 0`, and the
-deviation says by how much. The converted solutions are scored with Fitting's residuals (9.15–9.16) and
+deviation says by how much. Converted proposals retain fixed values and are clipped to Model's limits; with custom constraints they are then refined with the manual model. Compositions incompatible with constrained populations are not offered. The resulting solutions are scored with Fitting's residuals (9.15–9.16) and
 χ²_red (9.23) and **sorted by that χ²_red** (the automatic analysis of chapter 8 sorts the same fit by M_H). The best goes
 into Model, and Refine is proposed next.
 

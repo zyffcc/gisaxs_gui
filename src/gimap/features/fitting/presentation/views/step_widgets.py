@@ -69,7 +69,7 @@ def fit_to_rows(table: QTableWidget) -> None:
         table._gimap_keep_to_rows = _KeepToRows(table)
         table.installEventFilter(table._gimap_keep_to_rows)
     header = table.horizontalHeader()
-    top = header.height() if header.isVisible() and header.height() > 0 else header.sizeHint().height()
+    top = 0 if header.isHidden() else (header.height() if header.height() > 0 else header.sizeHint().height())
     scroll = table.horizontalScrollBar()
     bottom = scroll.sizeHint().height() if table.horizontalScrollBarPolicy() != Qt.ScrollBarAlwaysOff \
         and scroll.isVisible() else 0

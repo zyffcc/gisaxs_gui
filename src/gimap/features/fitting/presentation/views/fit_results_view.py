@@ -12,11 +12,15 @@ from __future__ import annotations
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
+    QDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -67,11 +71,38 @@ def build_results_step(owner, page: QWidget, layout) -> None:
         button.hide()
         next_row.addWidget(button)
     layout.addLayout(next_row)
-    owner.actions_label = _label(page, "fitAutoActions", "success")
-    layout.addWidget(owner.actions_label)
-    owner.warnings_label = _label(page, "fitWarnings", "warning")
+    owner.fit_notes_button = QPushButton("Fit details…", page)
+    layout.addWidget(owner.fit_notes_button)
+    owner.fit_notes_dialog = QDialog(page)
+    owner.fit_notes_dialog.setWindowTitle("Fit details")
+    owner.fit_notes_dialog.resize(600, 430)
+    notes_layout = QVBoxLayout(owner.fit_notes_dialog)
+    scroll = QScrollArea(owner.fit_notes_dialog)
+    scroll.setWidgetResizable(True)
+    content = QWidget(scroll)
+    content_layout = QVBoxLayout(content)
+    owner.actions_label = _label(content, "fitAutoActions", "muted")
+    content_layout.addWidget(owner.actions_label)
+    owner.warnings_label = _label(content, "fitWarnings", "muted")
     owner.warnings_label.show()
-    layout.addWidget(owner.warnings_label)
+    content_layout.addWidget(owner.warnings_label)
+    content_layout.addStretch(1)
+    scroll.setWidget(content)
+    notes_layout.addWidget(scroll)
+    owner.fit_notes_button.clicked.connect(owner.fit_notes_dialog.show)
+
+    owner.solution_selector = QComboBox(page)
+    owner.solution_selector.setObjectName("fitEquivalentSolution")
+    owner.solution_selector.setToolTip("Choose a complete solution: all parameters and curves change together.")
+    owner.solution_selector_table = read_only_table(("Solution", ""), page, "fitSolutionSelection")
+    owner.solution_selector_table.setRowCount(1)
+    owner.solution_selector_table.setCellWidget(0, 0, owner.solution_selector)
+    owner.solution_selector_table.setSpan(0, 0, 1, 2)
+    owner.solution_selector_table.horizontalHeader().hide()
+    owner.solution_selector_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+    fit_to_rows(owner.solution_selector_table)
+    owner.solution_selector_table.hide()
+    layout.addWidget(owner.solution_selector_table)
 
     owner.parameters_table = _stretching(read_only_table(("", "value", "±"), page, "fitParametersTable",
                                                          QAbstractItemView.ExtendedSelection), 0)

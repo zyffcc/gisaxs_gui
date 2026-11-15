@@ -127,7 +127,7 @@ class ResultActionsMixin:
                                       else "Fit Every Curve in This Folder…"))
         self.series_button.setToolTip(tr("Review the columns of this file before batch fitting." if selected else
                                         "In-situ series: every curve of this folder, each fitted from this model"))
-        self.next_refine_button.setVisible(bool(native is not None or (session.solutions and session.result is None)))
+        self.next_refine_button.setVisible(bool(session.solutions and session.result is None))
         self.fit_again_button.setVisible(fitted)
         self.series_button.setVisible(fitted and bool(session.curve is not None and session.curve.path)
                                       and bool(session.model.components))

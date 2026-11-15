@@ -1,8 +1,7 @@
 """The single-page fit1d handler; imported only by the isolated JobRunner process.
 
-One fit of the kit with the Model's constraints, then its parameters at an edge resolved like an analyst would:
-widen a range, fit again and keep what does not make the fit worse (``domain.fit1d_edges.resolve``); a value that
-stays at an edge is given as a bound, at the least extreme value the curve allows (``settle``). A frame of a series
+One fit of the kit under the Model's hard constraints. Only an automatic composition search can widen default
+ranges (``domain.fit1d_edges.resolve``) and find one-sided bounds (``settle``). A frame of a series
 (``payload["previous"]``: the previous frame's populations) is also fitted as a continuation of the previous frame,
 which is kept when it fits as well (``domain.fit1d_follow``). With an ``auto:`` composition the kit first fits and ranks every composition;
 the best is then resolved the same way, and all of them come back as candidates (``MAX_CANDIDATES`` best by BIC),
@@ -17,6 +16,7 @@ import time
 import numpy as np
 
 from .fit1d_method import _clean, load_kit, solution_row
+from .fit1d_alternatives import capture_alternatives, native_alternatives
 from ...application.workflow_v5 import FIT1D_SHAPES, validate_options
 from ...domain.fit1d_bounds import Constraint, as_kit, measurable
 from ...domain.fit1d_edges import mark_bounds, remaining_note, resolve, settle
@@ -28,7 +28,8 @@ SHAPE_IDS = {"sphere": 1, "vertical_cylinder": 3}
 
 def _fit(core, arguments, constraints):
     """The kit's result and its raw fit1d result (the compositions it tried, best first)."""
-    result = core.fit_curve({**arguments, "constraints": as_kit(constraints) or None, "include_raw": True})
+    with capture_alternatives():
+        result = core.fit_curve({**arguments, "constraints": as_kit(constraints) or None, "include_raw": True})
     return result, result.pop("raw")
 
 
@@ -152,7 +153,9 @@ def run_single_fit1d(payload, report, is_cancelled):
     if follow is not None:
         result["fit1d_follow"] = follow
     report(1, 1, "fit1d finished", {})
-    return _clean(dict(native=result, mapping_row=row, candidates=candidates))
+    equivalents = native_alternatives(raw, result, options,
+                                      lambda own: solution_row(own, _item(own), options, seconds))
+    return _clean(dict(native=result, mapping_row=row, candidates=candidates, equivalents=equivalents))
 
 
 __all__ = ["MAX_CANDIDATES", "run_single_fit1d"]

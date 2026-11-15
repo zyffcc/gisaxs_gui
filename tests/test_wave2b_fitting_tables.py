@@ -101,9 +101,10 @@ def test_the_series_table_copies_and_its_headers_are_short_with_the_full_name_on
 
 
 def test_the_fit_step_says_what_to_do() -> None:
-    page = _page()  # once, on the rail; the check box on the step says what is done at the edges (its tooltip how)
+    page = _page()  # Only automatic composition searches may resolve their own default edges.
     assert page.step_rail.detail("fit") == "Choose a method, then Fit"
     assert page.step_intro["fit"].text() == "" and page.step_intro["fit"].isHidden()
-    assert page.resolve_edges_check.text() == "Resolve values at the edge of their range automatically"
-    assert page.resolve_edges_check.toolTip().startswith("When a value stops at the edge of its range")
+    assert page.resolve_edges_check.text() == "Resolve default ranges during composition search"
+    assert page.resolve_edges_check.toolTip().startswith("Only automatic composition searches")
+    assert "Model's fixed values and min–max ranges are always kept" in page.resolve_edges_check.toolTip()
     _close(page)

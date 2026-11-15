@@ -378,19 +378,19 @@ def test_the_model_s_fixed_values_and_changed_ranges_become_fit1d_constraints():
     model = model.with_parameter(("globals", "background"), value=0.0, free=False)
     constraints = model_constraints(model)
     kit = as_kit(constraints)
-    # pop1 is the sphere (Model's second particle), pop2 the cylinder; unchanged default ranges are not passed.
-    assert kit == {"pop1": {"R_nm": 3.0}, "pop2": {"D_nm": [50.0, 400.0], "w_rel": pytest.approx(0.1 * math.sqrt(2 * math.pi))},
-                   "background": 0.0}
-    assert {item.name: item.component for item in constraints} == {
-        "pop1.R_nm": 1, "pop2.D_nm": 0, "pop2.w_rel": 0, "background": None}
-    assert all(item.source == "model" for item in constraints)
-    # SAXS has no structure factor: no D, no σD/D.
-    assert as_kit(model_constraints(model, structure_factor=False)) == {"pop1": {"R_nm": 3.0}, "background": 0.0}
+    # Defaults are also hard limits; populations remain associated with Model's order.
+    assert kit["pop1"]["R_nm"] == 3.0
+    assert kit["pop2"]["D_nm"] == [50.0, 400.0]
+    assert kit["pop2"]["w_rel"] == pytest.approx(0.1 * math.sqrt(2 * math.pi))
+    assert kit["background"] == 0.0
+    assert all(item.source in ("model", "model_default") for item in constraints)
+    with pytest.raises(ValueError, match="SAXS has no structure factor"):
+        model_constraints(model, structure_factor=False)
     with pytest.raises(ValueError, match="sigma_R_rel fixed at 0.01"):
         model_constraints(_sphere_and_cylinder({(1, "sigma_R"): dict(value=0.01, free=False)}))
     # A range partly outside what fit1d accepts is clipped to it.
     clipped = model_constraints(_sphere_and_cylinder({(1, "sigma_R"): dict(lower=0.0, upper=0.2)}))
-    assert as_kit(clipped) == {"pop1": {"sigma_R_rel": [0.02, 0.2]}}
+    assert as_kit(clipped)["pop1"]["sigma_R_rel"] == [0.02, 0.2]
 
 
 def test_a_range_beyond_what_the_curve_resolves_is_said_before_the_fit():
@@ -423,9 +423,7 @@ def test_parameters_at_an_edge_are_told_apart_and_answered():
     radius = resolution(edges[0], [user], populations, 0.05, 2.0)
     assert (radius.kind, radius.source, radius.low, radius.high) == ("range", "widened", 0.25, 2 * 100.0)
     assert resolution(edges[1], [user], populations, 0.05, 2.0) is None  # physical: nothing to widen (``settle``)
-    distance = resolution(edges[2], [user], populations, 0.05, 2.0)  # the user's range is widened as well
-    assert (distance.kind, distance.source, distance.low, distance.high, distance.component) == (
-        "range", "widened", 50.0, 800.0, 0)
+    assert resolution(edges[2], [user], populations, 0.05, 2.0) is None  # user limit
     order = resolution(edges[3], [user], populations, 0.05, 2.0)
     assert (order.low, order.high) == (0.02, 1.0)
     assert resolution(edges[3], [order], populations, 0.05, 2.0) is None  # already at the kit's limit
@@ -453,14 +451,9 @@ def test_the_fit_widens_what_stops_at_an_edge_and_keeps_only_what_does_not_make_
 
     first = _kit_result(900.0, ["pop1.R_nm@upper", "pop1.sigma_R_rel@lower"], R_nm=4.5, sigma_R_rel=0.03)
     done = resolve(fit, [user], *first, 0.05, 2.0)
-    # R widened; σR/R at its physical limit is not widened (``settle`` gives it as a bound).
-    assert asked[0]["pop1.R_nm"].high == 9.0 and "pop1.sigma_R_rel" not in asked[0] and len(asked) == 1
-    assert [note.template for note in done.actions] == [WIDENED_USER] and done.refits == 1
-    assert "your range (4.5 nm): widened to 9 nm" in done.actions[0].text and "9 → 1.1" in done.actions[0].text
-    assert [edge.name for edge in done.edges] == ["pop1.sigma_R_rel"]
-    worse = resolve(lambda constraints: _kit_result(2000.0, []), [user], *first, 0.05, 2.0)
-    assert worse.result is first[0] and [note.template for note in worse.actions] == [KEPT]
-    assert worse.constraints == [user]
+    assert asked == [] and done.refits == 0 and not done.actions
+    assert done.constraints == [user] and done.result is first[0]
+    assert "pop1.R_nm" in [edge.name for edge in done.edges]
 
 
 def test_a_value_that_stays_at_an_edge_is_given_as_the_least_extreme_bound_the_curve_allows():
@@ -528,7 +521,7 @@ def test_a_frame_follows_the_previous_one_inside_a_window_unless_a_free_fit_is_c
     assert follow_note(100.0, 120.0, 200).template == FOLLOWED and follow_note(100.0, 130.0, 200).template == JUMPED
 
 
-def test_a_value_of_the_model_at_an_edge_is_widened_then_a_spread_fixed():
+def test_a_value_of_the_model_at_an_edge_keeps_its_requested_range():
     from src.gimap.features.fitting.application.single_fit import FitData, FitModel, evaluate, fit_resolving, new_component
 
     q = np.linspace(0.08, 2.0, 160)
@@ -537,10 +530,9 @@ def test_a_value_of_the_model_at_an_edge_is_widened_then_a_spread_fixed():
     data = FitData(q, clean + np.random.default_rng(7).normal(0, 1, q.size) * np.sqrt(clean), np.sqrt(clean))
     start = FitModel((new_component("sphere", radius=4.0),)).with_parameter((0, "R"), lower=2.0, upper=4.5)
     result, actions, remaining = fit_resolving(start, data)
-    assert result.model.get((0, "R")).value == pytest.approx(6.0, rel=0.02) and result.chi2_reduced < 1.2
-    assert result.model.get((0, "R")).upper == 9.0 and result.model.get((0, "sigma_R")).free  # not fixed: not at a limit
-    assert any(note.values["path"] == [0, "R"] and "widened to 9" in note.text for note in actions)
-    assert not remaining
+    assert result.model.get((0, "R")).value == pytest.approx(4.5, rel=1e-3)
+    assert result.model.get((0, "R")).upper == 4.5 and result.model.get((0, "sigma_R")).free
+    assert not actions and remaining
     plain, none, _ = fit_resolving(start, data, resolve=False)
     assert plain.model.get((0, "R")).value == pytest.approx(4.5, rel=1e-3) and none == []
 
@@ -549,15 +541,23 @@ def test_a_value_of_the_model_at_an_edge_is_widened_then_a_spread_fixed():
 def test_fixed_values_reach_fit1d_and_are_recorded():
     q, intensity, sigma = _example()
     model = _sphere_and_cylinder({(1, "R"): dict(value=3.1, free=False)})
+    model = model.with_parameter(("globals", "background"), value=7, free=False)
+    model = model.with_parameter(("globals", "res_exponent"), value=2.5, free=False)
     value = _single(_data(q, intensity, sigma), model)
     native = value["native"]
     sphere = next(p for p in native["populations"] if p["name"] == "pop1")
     assert sphere["shape"] == "sphere" and sphere["R_nm"] == 3.1 and sphere["status"]["R_nm"] == "fixed"
     used = native["fit1d_constraints"]["used"]
     assert (used[0]["name"], used[0]["kind"], used[0]["source"]) == ("pop1.R_nm", "fixed", "model")
-    assert native["fit1d_constraints"]["given"] == used[:1]
-    assert all(item["source"] in ("widened", "bound_upper", "bound_lower") for item in used[1:])  # done by the fit
+    assert native["fit1d_constraints"]["given"] == used
+    assert all(item["source"] == "model_default" or item["kind"] == "fixed" for item in used[1:])
+    table_values = {row["key"]: row["value"] for row in native["table"]}
+    assert table_values["background_B"] == 7 and table_values["low_q.nu"] == 2.5
     assert native["fit1d_constraints"]["population_order"] == [1, 0]
+    for alternative in value["equivalents"]:
+        own = alternative["native"]
+        assert next(p for p in own["populations"] if p["name"] == "pop1")["R_nm"] == 3.1
+        assert own["fit1d_constraints"] == native["fit1d_constraints"]
     assert native["fit1d_bounds"]["measurable"]["R_nm"] == pytest.approx([0.5 / q.max(), 5 / q.min()])
     # The row for Model, in Model's order: the cylinder first.
     from src.gimap.features.fitting.application.single_fit import model_from_solution
@@ -566,6 +566,27 @@ def test_fixed_values_reach_fit1d_and_are_recorded():
     mapped, _ = model_from_solution(in_model_order(value["mapping_row"], model), model)
     assert [c.family for c in mapped.components] == ["vertical_cylinder", "sphere"]
     assert mapped.get((1, "R")).value == pytest.approx(3.1) and not mapped.get((1, "R")).free
+
+
+@needs_kit
+def test_equivalent_solutions_are_complete_existing_fits():
+    value = _single(_data(*_example()), _sphere_and_cylinder())
+    alternatives = value["equivalents"]
+    assert 1 <= len(alternatives) <= 6
+    primary = value["native"]["curves"]
+    best = value["native"]["summary"]["chi2_per_point"] * len(primary["q_nm_inv"])
+    tolerance = max(25, .02 * len(primary["q_nm_inv"])) * max(1, best / len(primary["q_nm_inv"]))
+    for choice in alternatives:
+        own = choice["native"]
+        curves = own["curves"]
+        assert choice["delta_chi2"] <= tolerance + 1e-6
+        assert curves["q_nm_inv"] == primary["q_nm_inv"]
+        assert curves["intensity"] == primary["intensity"]
+        assert curves["sigma"] == primary["sigma"]
+        np.testing.assert_allclose(sum(np.asarray(part) for part in curves["components"].values()), curves["model"])
+        assert own["table"] and choice["mapping_row"]["components"]
+        if any(row["status"] == "ambiguous" for row in value["native"]["table"]):
+            assert any(row["status"] == "ambiguous" for row in own["table"])
 
 
 def _cylinders(radius=3.0, distance=150.0, q_min=0.05, seed=1):
@@ -583,19 +604,18 @@ def _cylinders(radius=3.0, distance=150.0, q_min=0.05, seed=1):
 
 
 @needs_kit
-def test_a_default_edge_is_widened_and_fitted_again():
+def test_model_default_ranges_are_passed_without_automatic_refits():
     from src.gimap.features.fitting.application.single_fit import FitModel, new_component
 
     value = _single(_data(*_cylinders()), FitModel((new_component("vertical_cylinder"),)), fit1d_qz=None)
     native = value["native"]
     bounds = native["fit1d_bounds"]
-    assert 1 <= bounds["refits"] <= 2
-    assert any(note["values"]["name"] == "pop1 D" and note["values"]["side"] == "upper" for note in bounds["actions"])
+    assert bounds["refits"] == 0 and not bounds["actions"]
     assert native["populations"][0]["D_nm"] == pytest.approx(150.0, rel=0.05)
     assert not [edge for edge in bounds["edges"] if edge["key"] == "D_nm"]
-    widened = [item for item in native["fit1d_constraints"]["used"] if item["source"] == "widened"]
-    assert widened and widened[0]["name"] == "pop1.D_nm" and widened[0]["high"] > 150.0
-    assert any("default range" in note["text"] for note in bounds["actions"])
+    given = native["fit1d_constraints"]["given"]
+    assert given == native["fit1d_constraints"]["used"]
+    assert any(item["name"] == "pop1.D_nm" and item["high"] == 3000 for item in given)
 
 
 @needs_kit

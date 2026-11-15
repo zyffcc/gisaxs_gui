@@ -83,6 +83,12 @@ class _Row:
         span.setSpacing(4)
         self.lower = _spin(self.range, parameter.lower, f"fitLower_{path[0]}_{key}")
         self.upper = _spin(self.range, parameter.upper, f"fitUpper_{path[0]}_{key}")
+        self.unbounded = QCheckBox("∞", self.range)
+        self.unbounded.setObjectName(f"fitUnbounded_{path[0]}_{key}")
+        self.unbounded.setToolTip(tr("No upper limit"))
+        self.unbounded.setVisible(key in LINEAR)
+        self.unbounded.setChecked(math.isinf(parameter.upper))
+        self.upper.setEnabled(not self.unbounded.isChecked())
         between = QLabel("–", self.range)
         between.setProperty("gimapRole", "muted")
         for spin in (self.lower, self.upper):
@@ -90,6 +96,7 @@ class _Row:
         span.addWidget(self.lower, 1)
         span.addWidget(between)
         span.addWidget(self.upper, 1)
+        span.addWidget(self.unbounded)
         for column, widget in enumerate((self.name, self.value, self.error, self.free)):
             grid.addWidget(widget, 2 * line, column)
         grid.addWidget(self.range, 2 * line + 1, 1, 1, 3)
@@ -97,6 +104,7 @@ class _Row:
         self.free.toggled.connect(lambda on: editor.change(path, free=bool(on)))
         self.lower.valueChanged.connect(lambda value: editor.change(path, lower=float(value)))
         self.upper.valueChanged.connect(lambda value: editor.change(path, upper=float(value)))
+        self.unbounded.toggled.connect(lambda on: editor.change(path, upper=math.inf if on else self.upper.value()))
         self.show_range(editor.show_ranges)
 
     def _value(self, value: float) -> None:
@@ -113,6 +121,10 @@ class _Row:
         _set(self.value, parameter.value)
         _set(self.lower, parameter.lower)
         _set(self.upper, parameter.upper)
+        self.unbounded.blockSignals(True)
+        self.unbounded.setChecked(math.isinf(parameter.upper))
+        self.unbounded.blockSignals(False)
+        self.upper.setEnabled(not self.unbounded.isChecked())
         self.free.blockSignals(True)
         self.free.setChecked(parameter.free)
         self.free.blockSignals(False)
@@ -131,8 +143,7 @@ class _Row:
             self.error.setToolTip("")
 
     def show_range(self, on: bool) -> None:
-        # Scales are solved exactly (≥ 0) while fitting: they have no range to set.
-        self.range.setVisible(on and self.path[1] not in LINEAR)
+        self.range.setVisible(on)
 
 
 class FitModelEditor(QWidget):

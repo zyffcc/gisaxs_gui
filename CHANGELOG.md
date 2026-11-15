@@ -12,6 +12,13 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Fitting:** parameter limits and fixed values are enforced, including linear intensity/background terms;
+  incompatible predictor constraints are refused. Predict stays selected after finishing. Complete equivalent
+  fits can be switched as a whole from the result dropdown; components are available in the curve's right-click
+  menu. Detailed diagnostics move to **Fit details…**. Older external fit1d kits may supply equivalent ranges
+  without complete alternative solutions; only complete solutions can be selected. fit1d cannot enforce manual
+  intensity scales, low-q amplitude/width or background ranges: use Refine or Search for those constraints.
+
 - The **Sputter** workspace opens on a new **main screen**. **Analyze** (scan folder, metal, substrate and
   deposition rate in one input bar) runs a separate analysis package and shows, window by window, the measured
   image beside the model image of a solution, the solutions to choose from (the network's candidates and the
@@ -336,7 +343,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   **Find the particle shape (no AI)** when the fit1d kit is missing, with a line that says why.
 - **Results** says what to do next (**Refine These Values**, **Fit Again**, **Fit Every Curve in This
   Folder…**). With **Resolve values at the edge of their range automatically** (on by default) a value that
-  stops at the edge of its range is fitted again with the range widened, listed under *Done automatically*; a
+  stops at the edge of a Model range stays within that limit; boundary notes are in *Fit details*; a
   value still at the edge is reported as a one-sided bound (for example *≥ 0.549*). Select values and press
   **Fix**, **Let It Fit** or **Range…**: the next **Fit Again** uses them.
 - **Predict parameters (fit1d)** fits spheres and vertical cylinders with fit1d, a kit with its own networks

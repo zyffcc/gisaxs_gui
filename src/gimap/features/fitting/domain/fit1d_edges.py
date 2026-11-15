@@ -121,7 +121,7 @@ def classify_edges(at_bound: Iterable[str], constraints: Iterable[Constraint], p
             continue  # a fixed value is where it was put
         elif (key, side) in PHYSICAL:
             kind = "physical"
-        elif given is not None and given.source == "model":
+        elif given is not None and given.source in ("model", "model_default"):
             kind = "user"
         else:
             kind = "default"
@@ -146,7 +146,7 @@ def resolution(edge: Edge, constraints: Iterable[Constraint], populations, q_min
     widths); None when nothing can be done."""
     current = next((item for item in constraints if item.name == edge.name), None)
     component = None if current is None else current.component
-    if edge.kind not in ("default", "user"):  # a physical edge cannot be widened: ``settle`` gives its bound
+    if edge.kind != "default":  # user ranges are hard limits, never widened
         return None
     if current is not None and current.kind == "range":
         low, high = current.low, current.high
@@ -226,7 +226,7 @@ def settle(fit: Callable[[list], tuple], resolved: "Resolved", *, cancelled: Cal
     actions, refits = list(resolved.actions), resolved.refits
     chi2_best, dof = _total(result)
     tolerance = max(1.0, chi2_best / dof)
-    for edge in [edge for edge in resolved.edges if edge.kind != "other" and edge.value is not None][:limit]:
+    for edge in [edge for edge in resolved.edges if edge.kind not in ("other", "user") and edge.value is not None][:limit]:
         if cancelled():
             break
         report("A value stays at the edge of its range: finding the least extreme value the curve allows")
