@@ -72,8 +72,17 @@ def local_par():
     return [q for q in F4.PAR if q[0] not in drop and q[0] not in FIXED] + ([] if SIG_SHARED else [SIG])
 
 
+def _register(scan):
+    'A scan that is not in iam.SCANS but has DATA/<scan>/scan.json (iampred.intake) is registered from it.'
+    import iam as M
+    if scan not in M.SCANS:
+        from iampred import adapter as A
+        A.register(scan)
+
+
 def _init(scan, times):
     os.environ.setdefault("OMP_NUM_THREADS", "1")
+    _register(scan)
     import iam as M
     import iam_fit4 as F4
     s = M.Scan(scan)
@@ -380,6 +389,7 @@ def main():
     ap.add_argument("--tmin", type=float, default=0.0, help="drop windows before this time (s)")
     ap.add_argument("--windows", type=float, nargs="+", default=None, help="window centres (s) instead of WINDOWS[scan]")
     a = ap.parse_args()
+    _register(a.scan)
     OUT.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     J = Joint(a.scan, a.workers, 0.0, a.tmin, a.windows)

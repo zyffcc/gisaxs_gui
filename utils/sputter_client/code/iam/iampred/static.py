@@ -17,6 +17,8 @@ from pathlib import Path
 
 import numpy as np
 
+from . import live as LV
+
 HERE = Path(__file__).resolve().parent
 IAM = HERE.parent
 MODEL = IAM.parent
@@ -88,7 +90,19 @@ def _safe(task):
         return dict(error=f"{type(e).__name__}: {str(e)[:80]}")
 
 
-def _auto_mask(kind, base, entries, mask, geometry, root, label, n_max=40):
+def _detector_event(total, keep, report, geometry, horizon, label, role, binning=4):
+    "The live view's picture of the frames summed for the automatic mask (iampred.live)."
+    try:
+        image, masked = LV.binned_log(total, keep, binning)
+        at = lambda v: LV.rounded((float(v) + 0.5) / binning - 0.5, 2)
+        LV.emit("detector", dict(image=image, masked=masked), label=label, role=role, binning=binning,
+                col=at(geometry["db_col"]), row=at(geometry["db_row"]), horizon_row=at(horizon),
+                **{k: report.get(k) for k in ("frames_summed", "dead", "hot", "shadow", "kept", "pixels")})
+    except Exception:
+        pass
+
+
+def _auto_mask(kind, base, entries, mask, geometry, root, label, n_max=40, role="sample"):
     '(mask file to read the frames with, report) - the given mask and the automatic one (iampred.automask) from the'
     import zipfile
     from . import automask as AM
@@ -126,6 +140,8 @@ def _auto_mask(kind, base, entries, mask, geometry, root, label, n_max=40):
     used = folder / f"{label}.npy"
     np.save(used, combined)
     report.update(file=used.name, sha256=hashlib.sha256(used.read_bytes()).hexdigest(), frames_summed=int(min(len(entries), n_max)))
+    if LV.folder() is not None:
+        _detector_event(total, combined, report, geometry, horizon, label, role)
     return used, report
 
 
@@ -140,8 +156,24 @@ def _mask_of(root, label):
                 **{k: auto.get(k) for k in ("dead", "hot", "shadow", "holder", "invalid", "kept", "pixels") if k in auto})
 
 
+def _sample_event(root, label, role, nominal, frames, res):
+    "The live view's summary of the frames read: usable and left out (with the reason), and the usable ones summed on"
+    try:
+        usable = [r for f, r in zip(frames, res) if f["state"] == "usable"]
+        arrays = None
+        if usable and (root / "native_grid.npz").exists():
+            q, af = LV.native_axes(root / "native_grid.npz")
+            arrays = dict(q=q, af=af, rate=LV.native_rate_YE(sum(np.asarray(r["Y"], float) for r in usable),
+                                                             sum(np.asarray(r["E"], float) for r in usable)))
+        LV.emit("sample", arrays, label=label, role=role, nominal_nm=LV.rounded(nominal), frames=len(frames),
+                usable=len(usable), excluded=[[Path(f["member"]).name, f["reason"]] for f in frames if f["state"] != "usable"])
+    except Exception:
+        pass
+
+
 def intake(a, root, label, spec, nominal, reference, note):
     import static_intake as SI
+    role = "sample" if reference is not None else "bare substrate"
     from concurrent.futures import ProcessPoolExecutor
     kind, base, entries = frame_list(spec)
     if not entries:
@@ -166,7 +198,7 @@ def intake(a, root, label, spec, nominal, reference, note):
     entries = [e for e in entries if e not in skipped]
     used = mask
     if getattr(a, "auto_mask", "on") == "on":
-        used, auto = _auto_mask(kind, base, entries, mask, geometry, root, label)
+        used, auto = _auto_mask(kind, base, entries, mask, geometry, root, label, role=role)
         if auto is not None:
             marker = dict(marker, auto_mask=auto)
             print(f"      {label}: automatic mask: {auto['dead']} dead, {auto['hot']} hot, {auto['shadow']} beamstop / holder "
@@ -188,6 +220,8 @@ def intake(a, root, label, spec, nominal, reference, note):
             f"{sat} saturated pixels: direct or specular beam not blocked" if sat > SAT_MAX or (sat > SAT_REL * sat_med and sat > SAT_MIN) else ""
         frames.append(dict(member=str(e), raw_scan=Path(e).stem, scan_folder=Path(e).parent.name,
                            state="excluded" if why else "usable", reason=why))
+    if LV.folder() is not None:
+        _sample_event(root, label, role, nominal, frames, res)
     if not any(f["state"] == "usable" for f in frames):
         raise SystemExit(f"{spec}: no usable frame ({frames[0]['reason']})")
     t = dict(sample=a.sample or label, substrate=a.substrate or ("Si" if reference == "analytic_si" else "bare substrate measured"),
@@ -509,9 +543,19 @@ def main(argv=None):
     use_root(root)
     steps, status = [], "ok"
 
+
+    live = out / "live"
+    LV.clear(live)
+    os.environ[LV.ENV] = str(live / "static")
+    (live / "static").mkdir(parents=True, exist_ok=True)
+    forward = LV.Forwarder(live / "static", "intake")
+    forward.__enter__()
+
     def step(name, fn):
         nonlocal status
         t0 = time.time()
+        forward.sweep()
+        forward.step = name
         print(f"[{name}] ...", flush=True)
         try:
             note = fn()
@@ -520,6 +564,7 @@ def main(argv=None):
             note, rc = str(e), 1
         except Exception as e:
             note, rc = f"{type(e).__name__}: {e}", 1
+        forward.sweep()
         steps.append(dict(step=name, returncode=rc, seconds=round(time.time() - t0, 1), note=note if isinstance(note, str) else None))
         print(f"      {'done' if rc == 0 else 'FAILED: ' + str(note)} in {steps[-1]['seconds']:.0f} s", flush=True)
         if rc != 0 and status == "ok":
@@ -576,7 +621,9 @@ def main(argv=None):
                mask=_mask_of(root, a.label),
                note="development reference: not validated against independent characterisation")
     (out / "analysis.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
+    forward.__exit__(None, None, None)
     print(f"status: {status}; report: {files['report_md']}", flush=True)
+    LV.clear(live)
     return 0 if status == "ok" else 1
 
 
