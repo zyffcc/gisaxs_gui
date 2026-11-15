@@ -32,7 +32,7 @@ STATUS_WIDTH = 400
 EMPTY_WIDTH = 720
 SAMPLE_METALS = ("Ag", "Au", "Cu")
 SUBSTRATE_CHOICES = (("Si", "Si"), ("TiO₂", "TiO2"), ("PS", "PS"), ("PET", "PET"), ("PSBMA", "PSBMA"), ("PNO", "PNO"),
-                     ("PEO", "PEO"))
+                     ("PEO", "PEO"), ("Polymer", "Polymer"))
 MODE_CHOICES = (("Auto", "auto", "Quick for Si and TiO₂, Refine for polymer substrates."),
                 ("Quick", "quick", "The network's candidates, each drawn by the physical model: about a second per "
                                    "time window."),
@@ -45,6 +45,8 @@ IMAGE_CHOICES = (("Patterns", "patterns", "The measured image beside the model i
 SCAN_FOLDER_TIP = ("The folder of one scan (its CBF frames, or a scan folder with them in one subfolder such as p2m/): "
                    "its first frame tells the detector, the exposure and the time.")
 RATE_TIP = "Deposition rate in nm/s: needed, the solutions depend on the metal deposited at each time."
+SUBSTRATE_TIP = ("Polymer: a polymer film of another or unknown kind, a block copolymer for instance. The model describes "
+                 "every polymer as one film layer; which polymer it is changes the metal's sizes by a few percent.")
 QCM_TIP = ("Ticked: the number is the reading of the quartz balance (QCM), which the analysis converts to the rate at "
            "the sample. Not ticked: the rate at the sample itself.")
 ANALYZE_TIP = ("Read the frames, find the solutions of every time window and draw each as an image beside the "
@@ -146,6 +148,7 @@ class SputterMainView:
         self.substrate.setProperty(DATA_VALUES, True)  # material names
         for label, key in SUBSTRATE_CHOICES:
             self.substrate.addItem(label, key)
+        self.substrate.setToolTip(SUBSTRATE_TIP)
         self.sample_rate = number_edit(bar, "required")
         self.sample_rate.setObjectName("sputterSampleRate")
         self.sample_rate.setFixedWidth(84)

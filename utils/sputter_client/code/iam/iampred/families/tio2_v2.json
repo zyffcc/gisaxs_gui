@@ -47,11 +47,7 @@
  "mass_factor": null,
  "ref_kind": "window",
  "scans": {
-  "ref14": {
-   "ref": "tio2_v2",
-   "metal": "Au"
-  },
-  "ref26": {
+  "ref15": {
    "ref": "tio2_v2",
    "metal": "Au"
   },
@@ -63,7 +59,7 @@
    "ref": "tio2_v2",
    "metal": "Au"
   },
-  "ref16": {
+  "ref29": {
    "ref": "tio2_v2",
    "metal": "Au"
   },
@@ -87,15 +83,19 @@
    "ref": "tio2_v2",
    "metal": "Au"
   },
-  "ref23": {
+  "ref22": {
    "ref": "tio2_v2",
-   "metal": "Ag"
+   "metal": "Au"
   },
   "ref24": {
    "ref": "tio2_v2",
    "metal": "Ag"
   },
   "ref25": {
+   "ref": "tio2_v2",
+   "metal": "Ag"
+  },
+  "ref26": {
    "ref": "tio2_v2",
    "metal": "Ag"
   }

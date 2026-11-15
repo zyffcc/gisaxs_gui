@@ -39,7 +39,7 @@
  ],
  "ref_kind": "window",
  "scans": {
-  "ref15": {
+  "ref16": {
    "ref": "si_v6",
    "metal": "Au"
   },
@@ -47,7 +47,7 @@
    "ref": "si_v6",
    "metal": "Au"
   },
-  "ref22": {
+  "ref23": {
    "ref": "si_v6",
    "metal": "Ag"
   },
