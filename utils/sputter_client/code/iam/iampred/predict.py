@@ -292,6 +292,8 @@ def _client_entry(cfg, a, data_root):
                          f"choose the one that fits the new sample with --like <scan>")
     if "t_dep" in meta or "pre_start" in meta:
         env["IAM_ONSET"] = "override"
+    pm = data_root / a.scan / "pixmask.json"
+    env["IAM_PIXMASK"] = json.loads(pm.read_text(encoding="utf-8"))["sha256"][:12] if pm.exists() else "none"
     return dict(metal=meta.get("metal", "?"), env=env, client=True), meta
 
 

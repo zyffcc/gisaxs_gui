@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+ASSETS = HERE.parent.parent / "assets"
 
 POLY = ("PS", "PNO", "PSBMA", "PET")
 FAMILIES = {("Au", "Si"): ("si_p3h", None), ("Ag", "Si"): ("si_p3h", None),
@@ -35,6 +36,29 @@ def choose(metal, substrate):
         raise SystemExit(f"no network for {metal} on {substrate}. Supported: {sup}. "
                          f"The direct readings do not need a network: run with --family of the closest case to get them.")
     return FAMILIES[(metal, substrate)]
+
+
+def family_mask(fam):
+    "(file, sha256) of the detector mask the family's networks were trained with (env IAM_PIXMASK, a sha256 prefix),"
+    import hashlib
+    want = (json.loads((HERE / "families" / f"{fam}.json").read_text(encoding="utf-8")).get("env") or {}).get("IAM_PIXMASK")
+    if not want or want == "none":
+        return None
+    for f in sorted(ASSETS.glob("*.npy")):
+        digest = hashlib.sha256(f.read_bytes()).hexdigest()
+        if digest.startswith(want):
+            return f, digest
+    return None
+
+
+def data_for_mask(data, digest):
+    'The data root for caches of this mask: DATA itself when it is empty or holds this mask, else DATA/mask-<prefix>'
+    marker = data / "pixmask.json"
+    if marker.exists():
+        same = json.loads(marker.read_text(encoding="utf-8")).get("sha256") == digest
+    else:
+        same = not (data.exists() and any(p.is_dir() for p in data.iterdir()))
+    return data if same else data / f"mask-{digest[:12]}"
 
 
 def main(argv=None):
@@ -70,6 +94,15 @@ def main(argv=None):
     data = Path(a.data).resolve() if a.data else Path(os.environ.get("IAM_DATA", "")).resolve() if os.environ.get("IAM_DATA") else None
     mode = MODES[a.mode]
     steps, status = [], "ok"
+    if "--mask" not in extra and data is not None and family_mask(fam) is not None:
+        mask_file, digest = family_mask(fam)
+        extra = extra + ["--mask", str(mask_file)]
+        nested = data_for_mask(data, digest)
+        if nested != data:
+            print(f"mask {mask_file.name}: {data} holds caches of another mask, this scan goes to {nested}", flush=True)
+            if (nested / a.label).is_dir() and not (nested / a.label / "scan.json").exists():
+                shutil.rmtree(nested / a.label)
+        data = nested
 
     def run(name, args):
         nonlocal status
@@ -102,7 +135,7 @@ def main(argv=None):
     else:
         args = ["--frames", a.frames, "--label", a.label, "--metal", a.metal, "--substrate", a.substrate, "--alpha-i", a.alpha_i, "--workers", a.workers]
         args += ["--rate-nm-s", a.rate_nm_s] if a.rate_nm_s is not None else ["--qcm-nm-s", a.qcm_nm_s]
-        args += ["--data", data] if a.data else []
+        args += ["--data", data] if data is not None else []
         args += ["--shadow"] if a.substrate == "Si" and "--shadow" not in extra else []
         ok = run("intake", args + extra)
     tried = {}
@@ -114,7 +147,7 @@ def main(argv=None):
                     "--k", 3, "--workers", a.workers, "--refine", mode["refine"]]
             args += ["--sequence", mode["sequence"]] if mode["sequence"] else []
             args += ["--like", like] if like else []
-            args += ["--data", data] if a.data else []
+            args += ["--data", data] if data is not None else []
             good = run("predict", args) if f == fam else run_quiet("predict", args, f)
             if good and (sub / "summary.json").exists():
                 s = json.loads((sub / "summary.json").read_text(encoding="utf-8"))
@@ -130,7 +163,7 @@ def main(argv=None):
         ok = run("report", [out])
     if ok:
         print("[4/4] present ...", flush=True)
-        args = [out / fam, "--k", 3, "--workers", a.workers] + (["--data", data] if a.data else [])
+        args = [out / fam, "--k", 3, "--workers", a.workers] + (["--data", data] if data is not None else [])
         if run_quiet("present", args, "main") and (out / fam / "main" / "main.json").exists():
             shutil.copytree(out / fam / "main", out / "main", dirs_exist_ok=True)
     files = {k: (str(out / v) if (out / v).exists() else None) for k, v in FILES.items()}
