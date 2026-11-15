@@ -1,7 +1,7 @@
 """Fitting one curve with a ``FitModel``: bounded least squares, a wide search first, and the errors.
 
 * The free scales (component Int, background, resolution-peak A) enter linearly: at every step
-  they are solved exactly by non-negative least squares for the other parameters (variable
+  they are solved by bounded weighted least squares for the other parameters (variable
   projection), so the search only moves sizes, spreads, distances and the peak shape.
 * ``local``: bounded least squares (trust region) from the current values.
 * ``global``: differential evolution over the ranges of the free non-linear parameters (a range
@@ -20,7 +20,7 @@ from dataclasses import dataclass, field, replace
 from typing import Callable, Mapping, Optional
 
 import numpy as np
-from scipy.optimize import differential_evolution, least_squares, nnls
+from scipy.optimize import differential_evolution, least_squares, lsq_linear
 from scipy.stats import qmc
 
 from .fit_model import LINEAR, FitModel, component_form, evaluate, resolution_shape
@@ -118,6 +118,9 @@ class _Problem:
     def __init__(self, model: FitModel, data: FitData, stop, progress, total: int):
         self.model, self.data, self.stop, self.progress, self.total = model, data, stop, progress, max(1, total)
         free = [(path, parameter) for path, parameter in model.parameters() if parameter.free]
+        for path, parameter in free:
+            if not (math.isfinite(parameter.lower) and parameter.lower < parameter.upper):
+                raise ValueError(f"Give {path[1]} a valid range (min < max) to fit it")
         self.nonlinear = [(path, p) for path, p in free if path[1] not in LINEAR]
         self.linear = [path for path, p in free if path[1] in LINEAR]
         for path, parameter in self.nonlinear:
@@ -141,7 +144,7 @@ class _Problem:
         if self.logarithmic.any():
             lo, hi = np.log(self.lower[self.logarithmic]), np.log(self.upper[self.logarithmic])
             values[self.logarithmic] = np.exp(lo + t[self.logarithmic] * (hi - lo))
-        return values
+        return np.clip(values, self.lower, self.upper)
 
     def encode(self, values) -> np.ndarray:
         values = np.clip(np.asarray(values, dtype=float), self.lower, self.upper)
@@ -195,8 +198,15 @@ class _Problem:
         matrix = np.column_stack(columns) * self.weights[:, None]
         target = (self.data.intensity - fixed) * self.weights
         if not (np.all(np.isfinite(matrix)) and np.all(np.isfinite(target))):
-            return model
-        coefficients = nnls(matrix, target, maxiter=50 * matrix.shape[1])[0]
+            return model.with_values({path: np.clip(model.get(path).value, model.get(path).lower,
+                                                    model.get(path).upper) for path in self.linear})
+        # Normalise columns: particle scales and background can differ by many decades.
+        scales = np.maximum(np.linalg.norm(matrix, axis=0), np.finfo(float).tiny)
+        low = np.array([model.get(path).lower for path in self.linear])
+        high = np.array([model.get(path).upper for path in self.linear])
+        solved = lsq_linear(matrix / scales, target, bounds=(low * scales, high * scales),
+                            method="bvls", tol=1e-10, max_iter=100 * len(self.linear))
+        coefficients = np.clip(solved.x / scales, low, high)
         return model.with_values(dict(zip(self.linear, coefficients)))
 
     def residual(self, t) -> np.ndarray:
@@ -228,6 +238,13 @@ def fit(model: FitModel, data: FitData, *, method: str = "local", max_evaluation
     count = sum(1 for _path, p in model.parameters() if p.free)
     budget = int(max_evaluations or (4000 if method == "global" else 150 * (count + 1)))
     problem = _Problem(model, data, stop, progress, budget)
+    # The starting curve is a valid contender. Profiling linear scales uses relative
+    # weights without sigma, whereas the reported objective is logarithmic.
+    # A completed refinement must never replace a better feasible starting curve.
+    if all(not p.free or p.lower <= p.value <= p.upper for _path, p in model.parameters()):
+        initial = residuals(model, data)
+        if np.all(np.isfinite(initial)):
+            problem.best = (float(initial @ initial), model)
     stopped, converged, message = False, True, ""
     try:
         if not problem.nonlinear:
@@ -350,7 +367,11 @@ def _at_bounds(model: FitModel, problem: _Problem) -> tuple:
     if problem.nonlinear:
         t = problem.encode([model.get(path).value for path, _p in problem.nonlinear])
         edges += [path for (path, _p), value in zip(problem.nonlinear, t) if value <= EDGE or value >= 1 - EDGE]
-    edges += [path for path in problem.linear if model.get(path).value <= 0]
+    for path in problem.linear:
+        p = model.get(path)
+        tolerance = EDGE * (p.upper - p.lower) if math.isfinite(p.upper) else 1e-8 * max(1, abs(p.value))
+        if p.value <= p.lower + tolerance or p.value >= p.upper - tolerance:
+            edges.append(path)
     return tuple(edges)
 
 

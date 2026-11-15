@@ -261,7 +261,7 @@ def test_one_method_choice_recommends_predict_for_an_unfitted_gisaxs_cut(tmp_pat
         assert constraints["pop1.R_nm"]["kind"] == "range" and constraints["pop1.R_nm"]["high"] == 900.0
         assert constraints["pop2.sigma_R_rel"]["kind"] == "fixed" and constraints["pop2.sigma_R_rel"]["low"] == 0.1
         page.fit1d_composition.setCurrentIndex(page.fit1d_composition.findData("auto:vc:3"))
-        assert "not passed" in page.fit1d_notes.text()
+        assert "Choose The particles in Model" in page.fit1d_notes.text()
         page.set_method("local")
         assert not page.fit1d_row.isVisibleTo(page) and not page.fit1d_notes.isVisibleTo(page)
         assert page.method_hint.text() == "" and page.method_hint.isHidden()  # what Refine does: its tooltip
@@ -332,7 +332,7 @@ def test_compositions_are_compared_and_one_is_predicted_again_then_refined(tmp_p
         _wait(page)
         native = page.session.native_result
         assert native is not None, page.status_label.text()
-        assert page.method() == "local" and page.next_refine_button.isVisibleTo(page)  # next: refine
+        assert page.method() == "fit1d" and not page.next_refine_button.isVisibleTo(page)  # keep native physics
         assert page.alternatives.isVisibleTo(page) and "Other compositions" in page.alternatives.toggle_button.text()
         table = page.fit1d_candidates_table
         assert table.rowCount() >= 2
@@ -356,7 +356,7 @@ def test_compositions_are_compared_and_one_is_predicted_again_then_refined(tmp_p
         assert page.export_data_dialog(output) == output
         record = json.loads(output.with_suffix(".json").read_text(encoding="utf-8"))
         assert record["native_result"]["fit1d_constraints"]["composition"] == "model"
-        page.next_refine_button.click()
+        page.run_fit("local")  # explicitly opt into the manual model
         _wait(page)
         assert page.session.result is not None and page.session.result.method == "local", page.status_label.text()
         assert page.fit_again_button.isVisibleTo(page) and not page.next_refine_button.isVisibleTo(page)
@@ -382,18 +382,14 @@ def test_values_at_an_edge_are_resolved_by_the_fit_itself(tmp_path):
         native = page.session.native_result
         assert native is not None, page.status_label.text()
         sphere = next(p for p in native["populations"] if p["name"] == "pop1")
-        assert sphere["R_nm"] == pytest.approx(3.0, rel=0.1)  # the true radius, beyond the range given
+        assert 1.0 <= sphere["R_nm"] <= 2.0  # the requested range is a hard limit
         used = {item["name"]: item for item in native["fit1d_constraints"]["used"]}
-        assert used["pop1.R_nm"]["source"] == "widened" and used["pop1.R_nm"]["high"] >= 4.0
-        assert "pop1.R_nm" not in {edge["name"] for edge in native["fit1d_bounds"]["edges"]}
-        assert page.actions_label.isVisibleTo(page)
-        text = page.actions_label.text()
-        assert text.startswith("Done automatically") and "edge of your range (2 nm): widened to 4 nm" in text
-        assert "(Model)" in page.fit1d_constraints_label.text() or "(widened here)" in page.fit1d_constraints_label.text()
-        for action in native["fit1d_bounds"]["actions"]:
-            if "fits the curve as well" in action["text"]:  # a value that stayed at an edge: given as a bound
-                assert any(item["source"].startswith("bound_") and item["kind"] == "fixed" for item in used.values())
-                assert any(row["status"] == "one_sided" for row in native["table"])
+        assert used["pop1.R_nm"]["source"] == "model" and used["pop1.R_nm"]["high"] == 2.0
+        assert not native["fit1d_bounds"]["actions"]
+        assert page.fit_notes_button.isVisibleTo(page)
+        assert not page.warnings_label.isVisibleTo(page)
+        page.fit_notes_button.click()
+        assert page.warnings_label.isVisibleTo(page.fit_notes_dialog)
         assert not page.findChildren(QPushButton, "fit1dEdge_widen")  # nothing to click
     finally:
         page.dispose()
@@ -425,10 +421,10 @@ def test_refine_resolves_a_range_edge_and_the_values_are_fixed_from_the_results(
         page.run_fit()
         _wait(page)
         result = page.session.result
-        assert result is not None and page.session.model.get((0, "R")).value == pytest.approx(6.0, rel=0.05)
-        assert page.session.model.get((0, "R")).upper == 9.0  # widened by the fit itself
-        assert page.actions_label.isVisibleTo(page) and "widened to 9" in page.actions_label.text()
-        assert "stopped at a bound" not in page.warnings_label.text()
+        assert result is not None and 2.0 <= page.session.model.get((0, "R")).value <= 4.5
+        assert page.session.model.get((0, "R")).upper == 4.5  # never widened
+        assert not page.actions_label.isVisibleTo(page)
+        assert page.fit_notes_button.isVisibleTo(page) and not page.warnings_label.isVisibleTo(page)
         # From the results: fix R, fit again with it fixed; the series entry lists this folder.
         line = page._row_paths.index((0, "R"))
         page.parameters_table.clearSelection()

@@ -3,18 +3,18 @@ fit, the constraints it used and the compositions it tried (``auto:``)."""
 
 from __future__ import annotations
 
+import re
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QTableWidgetItem
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application.single_fit import FitModel, model_from_solution
+from ...application.single_fit import FitModel, model_from_solution, explicit_limits
 from ...application.single_fit1d import (
-    AUTO_IGNORES_MODEL,
     COMPOSITIONS,
     NO_PARTICLES,
     SHAPES,
-    fit1d_constraints,
     is_auto,
     prefit_notes,
 )
@@ -29,7 +29,7 @@ RECOMMENDED_NO_KIT = ("Recommended for this curve: a GISAXS cut not fitted yet (
                       "is missing here).")
 """… when the shape search is recommended because the fit1d kit is missing (``recommended_method``)."""
 FIT1D_TIP = dict((key, description) for key, _title, description in METHODS)["fit1d"]
-SOURCES = {"model": " (Model)", "widened": " (widened here)", "follow": " (near the previous frame)",
+SOURCES = {"model": " (Model)", "model_default": " (Model)", "widened": " (widened here)", "follow": " (near the previous frame)",
            "bound_upper": " (a bound: every larger value fits as well)",
            "bound_lower": " (a bound: every smaller value fits as well)"}
 CONSTRAINTS_USED = "Constraints passed to fit1d: {items}."
@@ -58,10 +58,18 @@ def _number(value: float) -> str:
 number = _number
 
 
+def fit_error_text(message: str) -> str:
+    template = "fit1d cannot preserve {parameter} in its native model. Use Refine or Search for this constraint."
+    match = re.fullmatch(r"fit1d cannot preserve (.+) in its native model\. Use Refine or Search for this constraint\.", message)
+    return trf(template, parameter=match[1]) if match else tr(message)
+
+
 def note_text(note: dict, name=None) -> str:
     """A note of the fit (``template`` and ``values``) in the interface language; ``name``: the name to show for
     ``values["path"]`` (a parameter of Fitting's model)."""
     values = dict(note.get("values") or {})
+    if not values:
+        return fit_error_text(note["template"])
     if values.get("side") in STATE_WORDS:
         values["side"] = tr(values["side"])
     if values.get("reason"):
@@ -137,19 +145,18 @@ class Fit1DReviewMixin:
         notes = []
         if method == "fit1d":
             settings = self.fit1d_settings()
-            model = self.session.model
+            model = self.fit1d_request_model()
             if is_auto(settings):
-                try:
-                    ignored = bool(fit1d_constraints(model, {**settings, "fit1d_composition": "model"}))
-                except ValueError:
-                    ignored = False
-                notes = [tr(AUTO_IGNORES_MODEL)] if ignored else []
+                notes = [tr("Model has fixed values or custom ranges. Choose The particles in Model to keep them.")]
+                if not explicit_limits(model):
+                    notes = []
             elif not model.components or any(c.family not in SHAPES for c in model.components):
                 notes = [tr(NO_PARTICLES)]
             else:
-                notes = [trf(note.template, **note.values) for note in prefit_notes(self._data(), model, settings)]
+                notes = [note_text(note.to_dict()) for note in prefit_notes(self._data(), model, settings)]
         self.fit1d_notes.setText("\n".join(notes))
         self.fit1d_notes.setVisible(bool(notes))
+        self.resolve_edges_check.setVisible(method == "fit1d" and is_auto(self.fit1d_settings()))
 
     # -- after a fit -----------------------------------------------------------------------------
 

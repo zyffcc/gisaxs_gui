@@ -51,6 +51,7 @@ from ..domain.fit_model import (
     to_manual,
 )
 from ..domain import fit_edges
+from ..domain.fit_limits import constrain_proposal, explicit_limits
 from ..domain.native_solution import native_solution_mapping
 
 NM_PER_A = 10.0
@@ -216,24 +217,30 @@ def model_from_solution(row: Mapping, base: Optional[FitModel] = None) -> tuple[
     """A quick-fit or 1D Predict solution as a model (free/fixed and ranges from ``base``), and the
     largest relative difference between the model's curve and the solution's own curve."""
     converted = native_solution_mapping(row)
-    return from_manual(converted.mapping, base), converted.max_deviation
+    proposed = from_manual(converted.mapping)
+    model = constrain_proposal(proposed, base) if base is not None else proposed
+    return model, solution_deviation(model, row)
+
+
+def solution_deviation(model: FitModel, row: Mapping) -> float:
+    """Difference from the source curve after conversion, constraints or refinement."""
+    q = np.asarray(row.get("native_q") or (), dtype=float)
+    target = np.asarray(row.get("native_fit") or (), dtype=float)
+    if not q.size or q.shape != target.shape:
+        return float("nan")
+    keep = np.isfinite(q) & np.isfinite(target) & (target > 0)
+    return float(np.max(np.abs(evaluate(model, np.abs(q[keep])) / target[keep] - 1))) if keep.any() else float("nan")
 
 
 def fit_resolving(model: FitModel, data: FitData, *, method: str = "local", max_evaluations=None, progress=None,
                   stop=None, resolve: bool = True) -> tuple:
-    """A fit, then its parameters at an edge of their range answered and the model refined again
-    (``domain.fit_edges``): (the result kept, notes of what was done, notes of what is still at an edge)."""
+    """Fit under hard Model limits; return the result, no automatic changes, and boundary diagnostics."""
     result = fit(model, data, method=method, max_evaluations=max_evaluations, progress=progress, stop=stop)
     if stop is not None and stop():
         return stopped_result(result), [], []
-    if not resolve:
-        return result, [], []
-    again = lambda changed: fit(changed, data, method="local", max_evaluations=max_evaluations,  # noqa: E731
-                                progress=progress, stop=stop)
-    result, actions, remaining = fit_edges.resolve(again, result, cancelled=stop or (lambda: False))
-    if stop is not None and stop():
-        return stopped_result(result), actions, []
-    return result, actions, remaining
+    # Model min/max are a contract, including when the old Resolve checkbox was saved on.
+    # Retain edge diagnostics without widening or fixing any parameter behind the user's back.
+    return fit_edges.resolve(lambda changed: result, result, rounds=0, cancelled=stop or (lambda: False))
 
 
 def parameter_text(key: str, value: float, error: Optional[float] = None) -> str:
@@ -298,5 +305,5 @@ __all__ = [
     "Component", "Curve", "FitData", "FitModel", "FitResult", "FitStopped", "MissingHalf", "Parameter", "PreparedCurve",
     "evaluate", "export_table", "fit", "fit_record", "fit_resolving", "fit_scales", "from_manual", "left_out_points", "log_rmse",
     "model_from_dict", "model_from_solution", "model_to_dict", "new_component", "parameter_text", "point_key",
-    "prepare_curve", "prepare_points", "residuals", "to_manual",
+    "prepare_curve", "prepare_points", "residuals", "to_manual", "explicit_limits", "solution_deviation",
 ]

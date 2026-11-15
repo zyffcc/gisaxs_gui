@@ -37,8 +37,8 @@ FIT1D_MISSING_TIP = (
 )
 """The tooltip of Predict parameters (fit1d) when its kit is missing (``single/fit1d_review.py``)."""
 QUICK_FAMILIES = (("Try every family", "auto"), ("The families in Model", "model"))
-RESOLVE_TIP = ("When a value stops at the edge of its range, widen that side (or fix a size spread at its lower "
-               "limit), fit again and keep it if the fit is not worse. Results lists what was done.")
+RESOLVE_TIP = ("Only automatic composition searches may extend the predictor's default ranges. "
+               "Model's fixed values and min–max ranges are always kept. See Fit details for boundary diagnostics.")
 
 
 def build_fit_step(owner, page: QWidget, layout) -> None:
@@ -89,7 +89,7 @@ def build_fit_step(owner, page: QWidget, layout) -> None:
     layout.addWidget(owner.fit_progress)
     layout.addWidget(owner.fit_progress_text)
     layout.addWidget(owner.stop_step_button, 0, Qt.AlignLeft)
-    owner.resolve_edges_check = QCheckBox("Resolve values at the edge of their range automatically", page)
+    owner.resolve_edges_check = QCheckBox("Resolve default ranges during composition search", page)
     owner.resolve_edges_check.setObjectName("fitResolveEdges")
     owner.resolve_edges_check.setToolTip(RESOLVE_TIP)
     owner.resolve_edges_check.setChecked(True)

@@ -56,6 +56,17 @@ class FitPlotMixin:
         self._component_menu_labels = ()
         self.terms_check.toggled.connect(lambda _on: self._redraw(preserve_view=True))
         self.component_range_action.toggled.connect(self._component_range_changed)
+        self.plot.plot_menu.menu.aboutToShow.connect(self._add_component_context_menu)
+
+    def _add_component_context_menu(self) -> None:
+        menu = self.plot.plot_menu.menu
+        menu.addSeparator()
+        action = menu.addAction(tr("Show components"))
+        action.setCheckable(True)
+        action.setChecked(self.terms_check.isChecked())
+        action.toggled.connect(self.terms_check.setChecked)
+        self.component_menu.setTitle(tr("Components"))
+        menu.addMenu(self.component_menu)
 
     def _sync_component_menu(self, parts) -> None:
         labels = tuple((name, component_label(name)) for name in parts)
@@ -78,6 +89,9 @@ class FitPlotMixin:
 
     def _component_chosen(self, name: str, on: bool) -> None:
         self._component_choices[name] = on
+        if on and not self.terms_check.isChecked():
+            self.terms_check.setChecked(True)
+            return
         self._redraw(preserve_view=True)
 
     def _component_range_changed(self, _on: bool) -> None:

@@ -203,6 +203,8 @@ class FitResultsMixin:
         if not self._render_fit1d_results():
             self._render_model_results()
         self.render_result_actions()  # next steps, what the fit did by itself, the folds (result_actions.py)
+        self.fit_notes_button.setVisible(bool(self.warnings_label.text() or not self.actions_label.isHidden()))
+        self.refresh_equivalent_selector()
 
     def _render_model_results(self) -> None:
         header = self.parameters_table.horizontalHeader()

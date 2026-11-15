@@ -8,11 +8,11 @@ w/D in [0.02, 0.5]. It accepts a fixed value or a range for any of them (``resea
 
 Here:
 
-* ``model_constraints``: the Model's fixed values and the ranges a user changed, in the kit's units —
+* ``model_constraints``: the Model's fixed values and all parameter ranges, in the kit's units —
   R, D in nm; σR/R as is; Fitting's σD/D is the kit's w/D divided by sqrt(2π) (the spread with the same
   paracrystal damping, as the adapter maps the kit's result back), so w/D = σD/D · sqrt(2π);
 * ``range_notes``: before a fit, a user range reaching beyond what the curve can resolve (a narrower one needs
-  no word: a value that stops at its edge is resolved by the fit, ``fit1d_edges``);
+  no word: a value that stops at its edge is reported after the fit, ``fit1d_edges``);
 * what happens to a parameter that stops at an edge after the fit is in ``fit1d_edges``.
 
 Messages are English templates with ``{fields}`` (``Note``); the interface translates the template.
@@ -72,7 +72,8 @@ class Note:
 class Constraint:
     """One constraint passed to the kit. ``target``: ``pop1``, ``pop2``, … or ``background``; ``key``: the kit's
     parameter (``R_nm`` …, empty for the background); ``component``: the Model's component (None: global);
-    ``source``: ``model`` (fixed or a range in Model) or ``widened`` (after a fit stopped at a default edge)."""
+    ``source``: ``model`` (explicit constraint), ``model_default`` (unchanged Model range), or ``widened``
+    (an automatic composition search extended its own default range)."""
 
     target: str
     key: str
@@ -129,12 +130,24 @@ def _limited(key: str, name: str, low: float, high: float, kind: str) -> tuple[f
 
 
 def model_constraints(model: FitModel, *, structure_factor: bool = True) -> list[Constraint]:
-    """The Model's fixed values and the ranges a user changed (default ranges are left to the kit, which ties
-    them to the curve). D and σD/D only with a structure factor (GISAXS), and only for a component that has one.
+    """The Model's fixed values and all supported ranges, intersected with the kit's physical limits. D and σD/D only with a structure factor (GISAXS), and only for a component that has one.
     Raises ValueError for a family fit1d has not or a fixed value it does not accept."""
     families = [component.family for component in model.components]
     if any(family not in TYPE_CODE for family in families):
         raise ValueError("fit1d needs 1–4 particles in Model: Sphere or Vertical cylinder")
+    # These coefficients have different definitions in the native and manual models.
+    # Never pretend that a constraint on one was applied to the other.
+    for (owner, key), parameter in model.parameters():
+        info = INFO[key]
+        custom = (parameter.lower, parameter.upper) != (info.lower, info.upper)
+        fixed = not parameter.free and (info.free or parameter.value != info.value)
+        supported = key in KIT_KEYS or key == "background" or key == "res_exponent"
+        if not supported and (custom or fixed):
+            raise ValueError(f"fit1d cannot preserve {owner}:{key} in its native model. Use Refine or Search for this constraint.")
+        if key in ("D", "sigma_D") and not structure_factor and (custom or fixed):
+            raise ValueError("SAXS has no structure factor: choose GISAXS to constrain D or its disorder.")
+    if structure_factor and any(not c.structure for c in model.components):
+        raise ValueError("fit1d applies the structure factor to every population: enable it in Model or choose SAXS.")
     constraints = []
     for number, index in enumerate(population_order(families), start=1):
         component = model.components[index]
@@ -146,15 +159,27 @@ def model_constraints(model: FitModel, *, structure_factor: bool = True) -> list
             if not parameter.free:
                 low, high = _limited(KIT_KEYS[key], name, parameter.value * factor, parameter.value * factor, "fixed")
                 constraints.append(Constraint(f"pop{number}", KIT_KEYS[key], "fixed", low, high, index))
-            elif (parameter.lower, parameter.upper) != (info.lower, info.upper):
+            else:
                 upper = parameter.upper if math.isfinite(parameter.upper) else LIMITS[KIT_KEYS[key]][1] / factor
                 low, high = _limited(KIT_KEYS[key], name, parameter.lower * factor, upper * factor, "range")
-                constraints.append(Constraint(f"pop{number}", KIT_KEYS[key], "range", low, high, index))
+                source = "model" if (parameter.lower, parameter.upper) != (info.lower, info.upper) else "model_default"
+                constraints.append(Constraint(f"pop{number}", KIT_KEYS[key], "range", low, high, index, source))
     background = model.globals["background"]
     if not background.free:
         if background.value < 0:
             raise ValueError("background fixed below 0: fit1d needs a background ≥ 0")
         constraints.append(Constraint("background", "", "fixed", background.value, background.value))
+    elif (background.lower, background.upper) != (INFO["background"].lower, INFO["background"].upper):
+        raise ValueError("fit1d supports a fixed background, not a background range. Use Refine or Search for this constraint.")
+    exponent = model.globals["res_exponent"]
+    custom = (exponent.lower, exponent.upper) != (INFO["res_exponent"].lower, INFO["res_exponent"].upper)
+    if not exponent.free or custom:
+        if not structure_factor:
+            raise ValueError("SAXS has no low-q term: choose GISAXS to constrain its exponent.")
+        low, high = (exponent.value, exponent.value) if not exponent.free else (max(0.5, exponent.lower), min(12, exponent.upper))
+        if not 0.5 <= low <= high <= 12 or (exponent.free and low == high):
+            raise ValueError("fit1d low-q exponent must be within 0.5–12.")
+        constraints.append(Constraint("nu", "", "fixed" if not exponent.free else "range", low, high))
     return constraints
 
 
@@ -163,8 +188,8 @@ def as_kit(constraints: Iterable[Constraint]) -> dict:
     out: dict = {}
     for item in constraints:
         value = item.low if item.kind == "fixed" else [item.low, item.high]
-        if item.target == "background":
-            out["background"] = value
+        if item.target in ("background", "nu"):
+            out[item.target] = value
         else:
             out.setdefault(item.target, {})[item.key] = value
     return out
@@ -175,7 +200,7 @@ def range_notes(constraints: Iterable[Constraint], q_min: float, q_max: float) -
     window = measurable(q_min, q_max)
     notes = []
     for item in constraints:
-        if item.kind != "range" or item.key not in window:
+        if item.kind != "range" or item.key not in window or item.source == "model_default":
             continue
         low, high = window[item.key]
         values = dict(name=item.name, low=number(item.low), high=number(item.high), unit=unit_text(item.key),

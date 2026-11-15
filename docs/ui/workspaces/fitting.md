@@ -1,3 +1,4 @@
+<!-- 2026-11-15: fitting constraints and result interaction updated. -->
 # Fitting 界面与交互说明
 
 - **Status**: Current
@@ -142,12 +143,12 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
 - 网络：general = `cond_v2_ft4`，au_np_si = `cond_v2_ftr1`。主单页 search 默认 **Auto**，另有 Fast / Robust；
   curve type 为 GISAXS / SAXS，systematic error 为相对误差下限。Yoneda 切线的真空 qz（nm⁻¹）需手填，
   不自动从 Analyze 带入；不勾选按 0 计算，含球时给提示。SAXS 忽略 qz、关闭结构因子和低 q 项。
-- **约束**（`domain/fit1d_bounds.py`）：组成为 `model` 时，Model 中固定的值和改过的范围（与默认范围不同的）
-  作为工具包的 `{'fixed'}` / `{'range'}` 约束传入：R、D 用 nm，σR/R 原样，σD/D 换成 w/D = σD/D·√(2π)，固定的
-  background 也传；群按工具包编号（先球后竖直圆柱，各按 Model 顺序）。默认范围留给工具包，由曲线的 q 范围决定
-  （R ∈ [0.5/q_max, 5/q_min]、D ∈ [2R, 40R]）。范围超出曲线能分辨的 R / D 时拟合前提示。Constraints and ranges 与导出的
-  JSON（`native_result.fit1d_constraints`：`given`、`used`、来源 model / widened / limit）写出用到的每个约束；
-  `native_result.fit1d_bounds`：`measurable`、`actions`（自动做了什么）、`edges`（仍在边上的）、`refits`。
+- **约束**（`domain/fit1d_bounds.py`）：组成为 `model` 时传入所有支持的范围及固定值，范围与工具包物理范围取交集。
+  R、D 用 nm，σR/R 原样，σD/D 换成 w/D = σD/D·√(2π)，固定背景与 ν 约束也传入。
+  不支持的强度、低 q 宽度或背景范围约束明确拒绝；自动组成搜索不能丢弃自定义约束。
+  Model 的范围不自动扩大、自由值不自动固定。仅自动组成搜索可处理工具包的默认边界。
+  Constraints and ranges 与 JSON 的 `native_result.fit1d_constraints` 记录 `given` / `used` 与来源
+  `model` / `model_default`；`fit1d_bounds` 记录 `measurable` / `actions` / `edges` / `refits`。
   v2 为数目加权截断高斯尺寸分布（相对宽度）和 Hosemann 次晶 w = w_rel·D，q 用 nm⁻¹、长度 nm；
   球用 |q| = √(q∥² + qz²)，竖直圆柱用 q∥。手动模型的正演与宽度约定不同，映射只作为后续手动精修的起点。
 - **原结果保留**：图上的总曲线、Terms 各群分量、残差、Results 的 χ²/点及参数误差 / 状态来自原 v2 结果。
@@ -257,13 +258,12 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
 - **Start**：Single analysis 的模型、拟合范围和排除的点，以及上面的两半（摘要写在这里，Edit in Single
   Analysis 回去改）；每帧从上一帧的结果开始（默认，上一帧没收敛时退回 Single 的模型）或都从 Single
   的模型开始；方法 Refine（快）、Search the ranges, then refine（慢）或 **Predict each frame (fit1d)**。阶段还没找到就开始的
-  运行不用阶段（“No stages for this run: it started before they were found.”），运行结束后再找。边界的处理跟随 Single 的
-  Resolve… 勾选。
+  运行不用阶段（“No stages for this run: it started before they were found.”），运行结束后再找。各方法都保留模型的固定值和上下限。
 - **Predict each frame (fit1d)**（`single/series_fit1d.py`，`domain/fit1d_follow.py`）：每帧一个 fit1d job（粒子、固定值和
-  范围用 Single 的模型，设置用 Single 的 Fit 步骤，边界同样自动处理），表格的值是 fit1d 的值和 1σ 误差（σD/D = w/D/√(2π)），
+  范围用 Single 的模型，设置用 Single 的 Fit 步骤，只报告边界而不自动改范围），表格的值是 fit1d 的值和 1σ 误差（σD/D = w/D/√(2π)），
   帧图画 fit1d 自己的 v2 曲线。**Prefer the solution that continues the previous frame**（默认勾选；起点为 Single 的模型、或新阶段
   的第一帧时不跟随）：每帧再拟合一次，所有参数限制在上一帧值附近的窗口里（R、D × / ÷ 1.5，相对宽度 ± 0.15；用户固定的值不变，
-  用户范围取交集；值停在窗口边上时窗口照样放宽），若它的 χ² 不比自由拟合差过工具包跟踪器的同盆容差
+  用户范围取交集，不自动放宽窗口），若它的 χ² 不比自由拟合差过工具包跟踪器的同盆容差
   max(25, 0.02 N)·max(1, χ²/N)，就采用它（等价解中最平滑的序列），否则采用自由拟合并写明“样品在这里变了”。工具包自己的
   series1d 跟踪器只处理探测器帧，曲线文件夹在工具包里是逐条独立拟合，所以这条规则在这里实现。记录：`settings.method`
   = `fit1d`、`settings.follow`、`settings.fit1d`，每帧 `followed_previous` 与 `resolved`。
@@ -289,6 +289,13 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   排除点比较全部曲线；Curves 步骤写出阶段与异常帧，帧列表按阶段着色；Leave out the odd frames（默认开）；Start 的第三个
   选项“上一帧的结果；每个新阶段从 Single 的模型开始”；趋势图按阶段着色。见 [compare.md](compare.md)。
 
+## 固定值、硬范围和结果浏览（2026-11-15）
+
+- `domain/fit_limits.py` 保留建议中的固定值和范围；`fit_engine` 使用按列缩放的 BVLS 求解有界强度项，并保留可行初始曲线作为最优结果候选。
+- `fit_resolving` 只给出边界诊断，不修改模型范围。fit1d 使用模型组成时传递全部支持范围，禁用自动放宽；不支持的约束显式拒绝。序列沿用同一请求。
+- `infrastructure/adapters/fit1d_alternatives.py` 只在隔离任务进程中捕获已经计算的完整等价解，不修改研究包；最多六个不同替代解。`single/equivalent_solutions.py` 用表格下拉框整套切换，过期后不可切换，导出记录选择。
+- `single/plotting.py` 把各群粒子与全局项显示开关接入右键。`Fit details…` 非模态浮窗收纳详细诊断；预测后保持 fit1d，不自动切换手动模型。
+
 ## 验证
 
 - 单元与界面：上面的 Related tests，以及 `tests/test_analyze_workspace.py` 中经真实窗口的
@@ -309,8 +316,8 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
 - [ ] 五种方法（Predict parameters (fit1d) / Refine the values in Model / Search the ranges, then refine /
       Find the particle shape (no AI) / AI proposal (1D Predict)）在 Method 下拉里，都由同一个 Fit 按钮（Ctrl+Return）启动；
       未拟合的 GISAXS 线切自动选 Predict 并写 Recommended；精修的 Stop 保留最优值，fit1d 的 Stop 不产生新结果；
-- [ ] 范围太窄的 R（例如 1–2 nm，真值 3 nm）：Predict 和 Refine 都自己放宽并重拟合，Results 的 “Done automatically”
-      写出放宽前后的边和 χ²；不用点任何按钮；取消勾选 Resolve… 后不再处理，值停在边上并有提示；
+- [ ] 范围太窄的 R（例如 1–2 nm，真值 3 nm）：Predict 和 Refine 都保留用户范围，
+      边界说明在拟合详情中；固定值不变；
 - [ ] Results 选中一个值 → Fix → Fit Again：该值固定参与下一次拟合；Fit Every Curve in This Folder… 打开 In-situ series
       并列出同一文件夹的同类文件；
       Options ▸ 1D Predict Batch Window… 打开 1D Predict 窗口，回退原因在 Stage 列的提示里；

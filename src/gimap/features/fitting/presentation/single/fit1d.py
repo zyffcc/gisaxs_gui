@@ -22,10 +22,6 @@ from ...application.single_fit1d import (
 from .fit1d_review import GISAXS_CUT, note_text, number
 from ..views.step_widgets import fit_to_rows, show_line
 
-FINISHED = ("fit1d finished: χ²/point {chi2}. Its original v2 curve and errors are in Results; Model is a starting "
-            "point for manual refinement.")
-FINISHED_AUTO = ("fit1d tried {count} compositions; the best, {composition} (χ²/point {chi2}), is in Results and in "
-                 "Model. Compare the candidates in Results.")
 STATE_RANGE = "{state}: {low}–{high} {unit}"
 STATUS_WORDS = {"one_sided": "one-sided bound"}
 """States of the kit's table written here (``domain.fit1d_edges.mark_bounds``), in words."""
@@ -54,6 +50,7 @@ def short_name(row) -> str:
 
 class Fit1DPageMixin:
     def setup_fit1d(self):
+        self.setup_equivalent_solutions()
         self._fit1d_job_id = None
         self._fit1d_candidates = []
         self._gisaxs_cut = False
@@ -130,7 +127,17 @@ class Fit1DPageMixin:
         else:
             self._refresh_fit1d_action()
 
+    def fit1d_request_model(self):
+        """An untouched automatic prediction is a generated starting model, not a new user constraint."""
+        session = self.session
+        previous = session.native_result
+        if (is_auto(self.fit1d_settings()) and previous is not None and session.result is None
+                and is_auto(previous.get("settings") or {}) and session.model == session.native_model):
+            return FitModel()
+        return session.model
+
     def _start_fit1d(self, data, model, selection, curve):
+        model = self.fit1d_request_model()
         request = fit1d_request(data, model, self.fit1d_settings(), resolve_edges=self.resolve_edges_check.isChecked())
         self._fit1d_job_id = request.job_id
         self.tasks.submit("fit", lambda: self._run_fit1d_job(request),
@@ -166,20 +173,16 @@ class Fit1DPageMixin:
             self._status(lambda: tr("Stopped before the search finished: no new solutions."), "warning")
             return
         native = value["native"]
+        self.keep_equivalent_solutions(value, selection, curve)
         auto = is_auto(native.get("settings") or {})
         if value.get("candidates"):  # a fit of one composition keeps the list of the compositions tried before
             self._fit1d_candidates = list(value["candidates"])
         row = value["mapping_row"] if auto else in_model_order(value["mapping_row"], self.session.model)
         self._take_fit1d(native, row, FitModel() if auto else self.session.model, selection)
-        self.set_method("local")  # next: refine these values with Fitting's own model
+        self.set_method("fit1d")  # keep the prediction's physics on the next Fit
         self.show_step("results")
-        summary, bounds = native["summary"], native.get("fit1d_bounds") or {}
-        if auto and len(value.get("candidates") or ()) > 1:
-            message = lambda: trf(FINISHED_AUTO, count=len(self._fit1d_candidates),  # noqa: E731
-                                  composition=summary["composition"], chi2=f"{summary['chi2_per_point']:.3g}")
-        else:
-            message = lambda: trf(FINISHED, chi2=f"{summary['chi2_per_point']:.3g}")  # noqa: E731
-        self._status(message, "ok" if summary["status"] == "ok" and not bounds.get("edges") else "warning")
+        summary = native["summary"]
+        self._status(lambda: trf("Prediction finished: χ²/point {chi2}.", chi2=f"{summary['chi2_per_point']:.3g}"), "ok")
 
     def _take_fit1d(self, native, row, base, selection=None):
         """Show ``native`` (fit1d's own result) and put its values into Model as a starting point."""

@@ -1926,7 +1926,8 @@ Analysis** to inspect its contributions here.
   one family.
 - **fit** ticked: the fit may change the value. Unticked: the value stays fixed.
 - **Ranges** shows each value's min – max. The fit keeps the value inside it; *Search the ranges* searches
-  across it. A value typed outside its range widens the range.
+  across it. A value typed outside its range widens the range. For linear terms such as intensity and background,
+  **∞** means no upper limit; untick it to enter a finite maximum.
 - **Background and resolution peak**: a constant background, and a peak at q = 0 for the tail of the direct and
   reflected beam and the resolution there; an overall factor k, fixed at 1 by default, multiplies the particles and
   the peak. The model as a formula, and how **σD/D** relates to the usual paracrystal spread, are in Physics and
@@ -1957,8 +1958,8 @@ sizes for your sample, or let the Fit step find them.
   (*Try every family* or *The families in Model*).
 - Press **Fit** in the command bar (`Ctrl+Return`) or the button below, which carries the method's name (for
   example **Refine**). A progress bar and **Stop** appear while it runs.
-- **Resolve values at the edge of their range automatically** (on by default, remembered; the In-situ series
-  follows it): see section 6.3.
+- **Resolve default ranges during composition search** (on by default, remembered): applies only to automatic
+  composition searches, never to Model's limits or the In-situ series. See section 6.3.
 - **Options** (folded): the settings of Predict (fit1d) (network, search, curve type, qz, systematic error;
   section 6.4),
   **Evaluations at most (Refine, Search)** (automatic by default) and **1D Predict Batch Window…** (section 6.5).
@@ -1967,14 +1968,16 @@ sizes for your sample, or let the Fit step find them.
 
 - The quality: χ²ᵣ (with σ) or the variance of ln I (without σ), the points, the free values, converged or not.
   After Predict a second line says that Model holds only a starting point.
-- What to do next: **Refine These Values** (after a prediction or a shape search), **Fit Again** (the same
+- What to do next: **Refine These Values** (after a shape search), **Fit Again** (the same
   method, with the values, fixed values and ranges now in Model) and **Fit Every Curve in This Folder…** (the
   In-situ series on this curve's folder, each curve starting from this model).
-- *Done automatically* (green): values at the edge of their range that the fit widened and fitted again, with
-  χ² before and after.
-- Warnings (orange), only what you need to know: a value still at an edge, the kit's notes, strongly correlated
-  pairs (|ρ| ≥ 0.95: the data do not separate them; fix one — the first two pairs are named, hover for the rest)
-  or χ²ᵣ well above 1.
+- **Fit details…** opens a separate, nonmodal window for boundary diagnostics, correlations, assumptions and
+  automatic actions. Routine diagnostic notes do not turn a completed prediction into a yellow warning.
+- When complete equivalent fits are available, the dropdown above the parameter table switches the entire
+  solution: parameters, errors, total curve, components and residuals together. It does not combine individual
+  parameter endpoints from unrelated solutions. The exported record identifies the selected solution.
+- Right-click the curve: **Show components** and **Components** control each population, constant background
+  and low-q term separately. This only changes visibility; it does not change the fit or its scientific arrays.
 - The values, each ± its 1σ error (the covariance at the solution, scaled by χ²ᵣ). Select values and press
   **Fix**, **Let It Fit** or **Range…** (or right-click): the next **Fit Again** uses them. **Range…** shows the
   value's min – max in Model.
@@ -2013,23 +2016,19 @@ One **Fit** button runs the method chosen in **Method**:
 | **Find the particle shape (no AI)** | The numerical fit of sphere, random cylinder and vertical cylinder from several starts, as in Analyze's automatic analysis. The solutions go to Results, the best into Model. | The first look at a new curve, a GISAXS cut included: chosen for an unfitted GISAXS cut when the fit1d kit is missing. Uses no network. |
 | **AI proposal (1D Predict)** | The experimental V5 network proposes compositions and parameters, then corrects them numerically. Its solutions go to Results. | A second opinion on the family. Check and refine its solutions; do not report them as results. |
 
-- The scales (every particle's scale, the background, the peak A) are solved exactly (non-negative least
-  squares) at every step. The search therefore moves only sizes, spreads, distances and the peak's shape.
-- **Stop**: *Refine* and *Search* keep the best values so far. A stop during boundary refinement or while
-  results wait to be displayed remains a stopped outcome; an interrupted boundary check does not establish
-  convergence or a settled bound. Stopping *Find the particle shape*, the AI
+- The scales (every particle's scale, the background, the peak A) are solved within their limits (bounded weighted
+  least squares) at every step. The search therefore moves only sizes, spreads, distances and the peak's shape.
+- **Stop**: *Refine* and *Search* keep the best values so far. A stop while results wait to be displayed remains
+  a stopped outcome; it is not reported as convergence. Stopping *Find the particle shape*, the AI
   proposal or Predict produces no new result.
 - The AI proposal also writes a run folder in `AI_Fitting_Output/` (section 6.5).
 
-**Values at the edge of their range.** With **Resolve values at the edge of their range automatically** on,
-a value that stops at the edge of its range after Predict, Refine or Search is dealt with by the fit itself, and
-Results lists what was done under *Done automatically*: the range is widened on that side and the curve fitted
-again (kept only when χ² is at most 2 % worse; values you fixed are never touched); a value still at the edge, or
-one that cannot be widened (a spread at its lower limit, D = 2R), gives only a bound and is reported as one-sided
-(for example *≥ 0.549*). When even that is clearly worse at a limit of the model itself (σR/R at 0.6), the curve
-wants a value beyond the model: the model may lack something. The steps and tolerances are in
-[Physics and Methods, section 9.8](Physics_Manual.md#98-refine-search-goodness-of-fit-and-the-errors). Turn the
-box off to leave such values at their edge, with a warning.
+**Values at the edge of their range.** Model's fixed values and min–max ranges are hard limits, including
+population scales and global terms. Refine and Search never widen them or fix a free value automatically.
+Shape/AI proposals are brought inside these limits; with custom constraints they are refined before they are offered. A method that cannot
+represent a constraint refuses it with an explanation; it never silently ignores it. Boundary diagnostics are
+under **Fit details…**. Only an automatic composition search without custom constraints can extend fit1d's
+own default ranges when **Resolve default ranges during composition search** is enabled.
 
 ### 6.4 fit1d
 
@@ -2058,7 +2057,7 @@ together. A good fit does not prove that the composition is the true one.
    - **Try spheres and vertical cylinders (1–3)** or **Try 1–3 vertical cylinders**: the kit fits every
      composition of these shapes and ranks them (by BIC); the best is shown. For a GISAXS cut whose Model is not
      yet edited, **Particles** starts on **Try spheres and vertical cylinders (1–3)**. The Model's values and
-     ranges are not passed, since the populations differ between compositions.
+     ranges cannot be transferred between different compositions. If Model contains custom ranges or fixed values, use **The particles in Model**; the automatic composition search refuses to run until these constraints can be preserved.
    - **The particles in Model**: the 1–4 **Sphere** / **Vertical cylinder** particles you put in Model (repeated
      families are allowed), with Model's constraints (below). Random cylinders are not offered by fit1d.
 2. Its settings are folded under **Options** in the Fit step:
@@ -2078,11 +2077,15 @@ together. A good fit does not prove that the composition is the true one.
 3. Press **Fit**. It runs in a separate process; **Stop** ends it without a result. Values at the edge of their
    range are resolved as described in section 6.3.
 
-**Constraints from Model** (with **The particles in Model**): values you fixed and ranges you changed (different
-from the default ones) are passed to the kit — R and D in nm, σR/R as it is, σD/D converted to the kit's w/D, and
-a fixed background. Default ranges are left to the kit, which sets them from the q range of the curve. A range
-beyond what this q range can measure is said before the fit. **Results ▸ Constraints and ranges** and the JSON
-record list every constraint used and where it came from (Model, widened here, a bound).
+**Constraints from Model** (with **The particles in Model**): fixed R, D and spreads, and their displayed
+ranges (including defaults), are passed to fit1d in its units. A fixed background and the low-q exponent are
+also supported. Ranges are intersected with the kit's physical limits; a fixed value outside them is refused.
+Manual intensity scales and the low-q amplitude/width use different native definitions; constraints on them,
+a background range, or D constraints in SAXS are refused. Use Refine or Search for these constraints.
+**Try …** compositions is refused when Model has fixed values or custom ranges: choose **The particles in Model**.
+Repeating an automatic prediction starts a fresh composition search while its generated manual starting model
+remains untouched. Once you edit that model, its constraints are checked again.
+**Results ▸ Constraints and ranges** and the JSON record list the constraints actually used.
 
 **Other compositions.** After **Try …**, Results has a folded **Other compositions** list (up to six: χ²/point,
 ΔBIC, which ones cannot be told apart, the kit's flags). Compositions within ΔBIC ≤ 10 of the best cannot be told
@@ -2097,8 +2100,8 @@ brings the previous model back).
   hover for ranges.
 - **Save ▸ Data and Fit…** keeps the native total, the components, the effective σ and the warnings in the CSV
   and its JSON record.
-- The values copied into Model are only a manual starting point. **Refine These Values** afterwards uses the
-  manual model's physics.
+- The values copied into Model are only a manual starting point. Predict stays selected after completion. Selecting **Refine the values in Model** explicitly uses the
+  manual model's different physics; its curve need not match the prediction.
 - Editing Model, the selected points or the fit1d settings marks the fit stale: its table and χ² are labelled as
   the previous result, the plot shows the manual starting model, and exporting the stale fit is refused. Fit
   again, or restore its conditions.
@@ -2238,8 +2241,8 @@ current frame finish before pausing. Completed results stay available.
 **2. Start**
 
 - Every frame uses the model, the fitting range and the left-out points of Single analysis (**Edit in Single
-  Analysis** changes them) and the halves of the Curves step. Values at the edge of their range are resolved as
-  **Resolve values at the edge of their range automatically** in Single analysis says (section 6.3).
+  Analysis** changes them) and the halves of the Curves step. Every method preserves Model's fixed values and
+  limits; values at a boundary are reported without widening the limits (section 6.3).
 - **Each frame starts from**:
   - **The previous frame's result** (default) — for a slowly changing sample. A frame that did not converge
     makes the next one start from Single's model again.
@@ -3489,7 +3492,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Format Converter does not read EDF.** | Use **Analyze ▸ Batch Export ▸ Converted detector frames**. |
 | **The uint16 modes of the Format Converter mark pixels without data only in HDF5**: in a TIFF or CBF such a pixel holds 65535 and reads back as a valid value (section 9.1). | Keep the stored data type (the default), or write HDF5, when the gaps and bad pixels matter. |
 | **SEM sizes depend on the segmentation**, and the default StarDist weights are trained on cell nuclei, not SEM. The scale is never read from the image. | Enter the calibration from the scale bar; check every outline; prefer a model trained on SEM images. |
-| **fit1d** (Predict parameters) offers spheres and vertical cylinders only, not random cylinders; with **Try …** compositions the Model's values and ranges are not passed. | Use **The particles in Model** to pass fixed values and ranges; treat the result as a start for **Refine These Values**. |
+| **fit1d** supports spheres and vertical cylinders. Its constraints do not cover manual intensity scales, low-q amplitude/width or background ranges. Older external kits may expose only equivalent ranges, not complete alternative solutions. | Use **The particles in Model** for supported constraints; otherwise use Refine or Search. The dropdown only offers complete computed solutions. |
 | **2D Prediction reads CBF frames only.** | Convert other frames to CBF with the Format Converter. |
 | **2D Prediction applies no geometry and no correction to a frame**: the module's own preprocessing is all that runs (section 11.3). | Use a module only for data of the set-up it was trained for. |
 | **The Ag and Cu distribution modules of 2D Prediction declare no axes**: their maps and curves are drawn on a placeholder axis (0.05–15 nm), which is not a physical scale, and they are not attached to the SEM comparison (section 11.3). | Read only the shape of these distributions. When you know the axes of the trained model, add them to the module's `module.yaml`. |

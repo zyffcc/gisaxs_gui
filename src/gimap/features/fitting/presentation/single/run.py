@@ -1,8 +1,7 @@
 """The Fit step: one method (Predict parameters with fit1d — ``fit1d.py`` — or one of four others), one button,
 progress and Stop (the work runs in the background).
 
-* Refine the current values / Search the ranges, then refine — the fitting engine on the model, then the values
-  at an edge of their range resolved and refined again (``fit_resolving``, when the box is ticked);
+* Refine / Search — the fitting engine under Model's hard limits, with boundary diagnostics;
 * Find the particle shape (no AI) — the quick physical fit (sphere, random and vertical cylinder
   from several starts, injected by the composition root); its solutions go to Results, the best
   into Model;
@@ -40,12 +39,15 @@ from ...application.single_fit import (
     ONE_CURVE_METHODS,
     PROGRESS_LINE,
     fit_resolving,
+    explicit_limits,
     model_from_solution,
+    solution_deviation,
     residuals,
     stopped_result,
 )
 from ...application.workflow_v5 import bundled_workflow, default_options
 from .session import Solution
+from .fit1d_review import fit_error_text
 
 FAMILY_IDS = {"sphere": 1, "cylinder": 2, "vertical_cylinder": 3}
 METHOD_NAMES = {"local": "Refine", "global": "Search the ranges", "shapes": "Find the particle shape",
@@ -231,6 +233,7 @@ class FitRunMixin:
         if not on:
             self.fit_progress_text.setText("")
         self._refresh_steps()
+        self.refresh_equivalent_selector()
 
     def _show_bars(self, percent: int, *, busy: bool) -> None:
         """``busy``: a moving bar without a number — the fit runs, but there is nothing to count yet (its
@@ -282,7 +285,7 @@ class FitRunMixin:
         if stopped:
             self._status(lambda: tr("Stopped before the search finished: no new solutions."), "warning")
         else:
-            self._status(lambda: tr("The fit failed: {reason}").format(reason=message), "error")
+            self._status(lambda: tr("The fit failed: {reason}").format(reason=fit_error_text(message)), "error")
 
     def _fitted(self, result, actions=(), remaining=(), *, selection=None, curve=None) -> None:
         if self._of_another_curve(curve):
@@ -335,15 +338,23 @@ class FitRunMixin:
                 model, deviation = model_from_solution(row, base)
             except (ValueError, KeyError, TypeError):
                 continue
+            # Proposal engines do not share this model's parameterisation. Finish under its hard limits.
+            if explicit_limits(base):
+                fitted, _actions, _remaining = fit_resolving(model, data, stop=self._stop_event.is_set,
+                                                            progress=self._progress.changed.emit, resolve=False)
+                model = fitted.model
+                deviation = solution_deviation(model, row)
             values = residuals(model, data)
             free = sum(1 for _path, parameter in model.parameters() if parameter.free)
             dof = max(1, data.q.size - free)
             solutions.append(Solution(model, float(values @ values / dof), source, deviation))
+        if not solutions and explicit_limits(base) and rows:
+            raise ValueError("No candidate preserves Model's constraints. Use Refine or Search with the current model.")
         return sorted(solutions, key=lambda item: item.chi2 if math.isfinite(item.chi2) else math.inf)
 
     def _find_shapes(self, data, base, families: str, edited: bool) -> list[Solution]:
         components = ()
-        if families == "model" and base.components:
+        if (families == "model" or explicit_limits(base)) and base.components:
             components = tuple(FAMILY_IDS[component.family] for component in base.components)
         distance = None
         if edited and base.components and base.components[0].structure:
