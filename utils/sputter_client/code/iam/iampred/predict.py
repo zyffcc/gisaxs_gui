@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 
 from . import features as FE
+from . import live as LV
 from . import observe as OB
 from . import registry as REG
 from . import references as RF
@@ -75,6 +76,32 @@ def _features(args):
     return out
 
 
+def _wanted_live(cfg, ctx, x, m, p, h, rep):
+    'The quantities of the main screen of one solution, for the live view (None when it is off or they cannot be'
+    if LV.folder() is None:
+        return None
+    try:
+        from . import present as PS
+        return PS.wanted(ctx.pnames, [r["name"] for r in cfg["reported"]], np.asarray(x, float).tolist(), rep, h,
+                         getattr(m, "t_b", 0.0), m)
+    except Exception:
+        return None
+
+
+def _live_window(cfg, ctx, s, t, label, kind, mu, d5, values):
+    'One window solved, for the live view (iampred.live): its quantities, measured and model image.'
+    if values is None:
+        return
+    try:
+        meas, model = LV.window_images(ctx, mu)
+        LV.emit("window", dict(q=np.asarray(s.q, np.float32), af=np.asarray(s.af, np.float32), measured=meas,
+                               model=model),
+                family=cfg["family"], t=float(t), t_rel=LV.rounded(t - s.t_dep, 3), h_nom=LV.rounded(ctx.h_nom_ctx, 4),
+                label=label, entry_kind=kind, fit_deviation=LV.rounded(d5, 3), values=values)
+    except Exception:
+        pass
+
+
 def _render(args):
     cfg, scan, items, refine, outdir = args
     from . import adapter as A
@@ -83,7 +110,7 @@ def _render(args):
     for it in items:
         t = it["t"]
         ctx = A.Context(cfg, s, t)
-        cands = []
+        cands, shown = [], []
         for c in it["cands"]:
             x = np.asarray(c["x"], float)
             t0 = time.time()
@@ -93,9 +120,11 @@ def _render(args):
                 rep = ctx.reported(m, p, h)
             except (Exception, SystemExit) as e:
                 cands.append(dict(weight=c["weight"], dev5=float("nan"), error=str(e)[:120]))
+                shown.append(None)
                 continue
             cands.append(dict(weight=c["weight"], dev5=d5, reported=rep.tolist(), x=x.tolist(), h_m=h,
                               seconds=time.time() - t0, mu=mu.astype(np.float32)))
+            shown.append(_wanted_live(cfg, ctx, x, m, p, h, rep.tolist()))
         good = [c for c in cands if np.isfinite(c["dev5"])]
         row = dict(scan=scan, t=t, cands=[{k: v for k, v in c.items() if k != "mu"} for c in cands])
         if good:
@@ -103,6 +132,9 @@ def _render(args):
             row["best"] = {k: v for k, v in b.items() if k != "mu"}
             row["best_rank"] = cands.index(b) + 1
             np.savez_compressed(Path(outdir) / "mu" / f"{scan}_{t:g}_best.npz", mu=b["mu"])
+
+            _live_window(cfg, ctx, s, t, f"candidate {good.index(b) + 1}", "candidate", b["mu"], b["dev5"],
+                         shown[cands.index(b)])
             if refine > 0:
                 t0 = time.time()
                 nf = len(ctx.names)
@@ -112,9 +144,11 @@ def _render(args):
                 xr = np.r_[xr, xb[nf:]]
                 (mu, _, _), m, p, h = ctx.render(xr)
                 d5, _ = ctx.dev5(mu)
-                row["refined"] = dict(dev5=d5, reported=ctx.reported(m, p, h).tolist(), x=xr.tolist(), h_m=h,
+                rep = ctx.reported(m, p, h)
+                row["refined"] = dict(dev5=d5, reported=rep.tolist(), x=xr.tolist(), h_m=h,
                                       seconds=time.time() - t0, nfev=refine)
                 np.savez_compressed(Path(outdir) / "mu" / f"{scan}_{t:g}_refined.npz", mu=mu.astype(np.float32))
+                _live_window(cfg, ctx, s, t, "refined", "refined", mu, d5, _wanted_live(cfg, ctx, xr, m, p, h, rep.tolist()))
         rows.append(row)
     return rows
 
@@ -383,6 +417,7 @@ def main():
         times = [float(v) for v in how.split(",")]
     if not times:
         raise SystemExit(f"{a.scan}: no windows for --times {how} (new scans have no reference windows: use all or t1,t2)")
+    LV.emit("windows", family=cfg["family"], total=len(times), refine=a.refine)
     nw = max(1, min(a.workers, len(times)))
     key = json.loads(json.dumps(dict(family=cfg["family"], scan=a.scan, family_hash=cfg["family_hash"],
                                      forward_hash=cfg["forward_hash"], model=_sha(a.model), k=a.k, refine=a.refine,

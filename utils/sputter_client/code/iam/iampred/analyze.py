@@ -6,10 +6,11 @@ import argparse
 import json
 import os
 import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
+
+from . import live as LV
 
 HERE = Path(__file__).resolve().parent
 ASSETS = HERE.parent.parent / "assets"
@@ -126,13 +127,15 @@ def main(argv=None):
                 shutil.rmtree(nested / a.label)
         data = nested
 
+    live = out / "live"
+    LV.clear(live)
+
     def run(name, args):
         nonlocal status
         t0 = time.time()
         print(f"[{dict(intake=1, predict=2, report=3)[name]}/4] {name} ...", flush=True)
-        with open(out / f"analyze_{name}.log", "w", encoding="utf-8") as fh:
-            rc = subprocess.run([sys.executable, "-m", f"iampred.{name}"] + [str(v) for v in args], stdout=fh, stderr=subprocess.STDOUT,
-                                cwd=str(HERE.parent)).returncode
+        rc = LV.run_step([sys.executable, "-m", f"iampred.{name}"] + [str(v) for v in args], out / f"analyze_{name}.log",
+                         HERE.parent, live / name, name)
         steps.append(dict(step=name, returncode=rc, seconds=round(time.time() - t0, 1), log=str(out / f"analyze_{name}.log")))
         print(f"      {'done' if rc == 0 else 'FAILED (see ' + steps[-1]['log'] + ')'} in {steps[-1]['seconds']:.0f} s", flush=True)
         if rc != 0 and status == "ok":
@@ -142,9 +145,8 @@ def main(argv=None):
     def run_quiet(name, args, tag):
         'An alternative network, or the main-screen step: its failure does not fail the analysis.'
         t0 = time.time()
-        with open(out / f"analyze_{name}_{tag}.log", "w", encoding="utf-8") as fh:
-            rc = subprocess.run([sys.executable, "-m", f"iampred.{name}"] + [str(v) for v in args], stdout=fh, stderr=subprocess.STDOUT,
-                                cwd=str(HERE.parent)).returncode
+        rc = LV.run_step([sys.executable, "-m", f"iampred.{name}"] + [str(v) for v in args],
+                         out / f"analyze_{name}_{tag}.log", HERE.parent, live / f"{name}_{tag}", name)
         steps.append(dict(step=f"{name} ({tag})", returncode=rc, seconds=round(time.time() - t0, 1), log=str(out / f"analyze_{name}_{tag}.log")))
         print(f"      {name} ({tag}): {'done' if rc == 0 else 'failed'} in {steps[-1]['seconds']:.0f} s", flush=True)
         return rc == 0
@@ -164,6 +166,7 @@ def main(argv=None):
     tried = {}
     if ok:
         alts = ALTERNATIVES.get(fam, []) if (a.alternatives == "on" or (a.alternatives == "auto" and a.mode != "full")) and not a.family else []
+        LV.say("models", "predict", families=[fam] + alts, mode=a.mode)
         for f in [fam] + alts:
             sub = out / f
             args = [f, "--scan", a.label, "--out", sub, "--times", "all", "--step", a.step, "--max-windows", a.max_windows or mode["max_windows"],
@@ -178,6 +181,7 @@ def main(argv=None):
         ok = bool(tried)
         if ok:
             fam = min(tried, key=tried.get)
+            LV.say("chosen", "predict", family=fam, deviations={k: LV.rounded(v, 3) for k, v in tried.items()})
             for v in ("windows.csv", "summary.json", "evolution.png", "patterns.png", "sequence_record.json"):
                 if (out / fam / v).exists():
                     shutil.copyfile(out / fam / v, out / v)
@@ -194,6 +198,7 @@ def main(argv=None):
                mask=_mask_used(data, a.label), note="development reference: not validated against independent characterisation")
     (out / "analysis.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
     print(f"status: {status}; report: {files['report_md']}", flush=True)
+    LV.clear(live)
     return 0 if status == "ok" else 1
 
 

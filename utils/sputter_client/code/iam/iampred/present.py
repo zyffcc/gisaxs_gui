@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import live as LV
 from . import registry as REG
 from . import runner
 
@@ -204,6 +205,7 @@ def _windows(args):
                             entries=recs, pick=recs[best]["label"]))
         except (Exception, SystemExit) as e:
             out.append(dict(t=t, error=f"{type(e).__name__}: {str(e)[:160]}"))
+        LV.emit("drawn", t=t, entries=len(out[-1].get("entries") or ()))
     return out
 
 
@@ -238,6 +240,7 @@ def main():
                 pass
     main_dir = out / "main"
     main_dir.mkdir(exist_ok=True)
+    LV.emit("drawing", total=len(rows))
     nw = max(1, min(a.workers, len(rows)))
     chunks = [rows[i::nw] for i in range(nw)]
     res = runner.run(cfg, [(cfg, scan, c, a.k, str(main_dir), st["info"]) for c in chunks if c], _windows, nw, data=a.data, shadow=a.shadow)

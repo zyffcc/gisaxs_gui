@@ -12,6 +12,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import live as LV
+
 HERE = Path(__file__).resolve().parent
 
 
@@ -172,15 +174,26 @@ def main():
         shadow(a, root)
 
 
+def _detector_event(total, keep, auto, geo, a, binning=4):
+    "The live view's picture of the detector: the summed frames of the automatic mask and what the mask leaves out,"
+    from . import automask as AM
+    image, masked = LV.binned_log(total, keep, binning)
+    at = lambda v: LV.rounded((float(v) + 0.5) / binning - 0.5, 2)
+    LV.emit("detector", dict(image=image, masked=masked), binning=binning, col=at(geo["beam_col"]), row=at(geo["beam_row"]),
+            horizon_row=at(AM.horizon_row(geo["beam_row"], a.sdd_mm, a.alpha_i)),
+            **{k: auto.get(k) for k in ("frames_summed", "dead", "hot", "shadow", "kept", "pixels")})
+
+
 def _intake(a, root, mask, msha, energy, lam, out):
-    from sputtergisaxs.polymer_dev_intake import prepare
+    from sputtergisaxs.polymer_dev_intake import prepare, frames
     from sputtergisaxs.polymer_review_data import intake_rows, bin_ids, aggregate
     geo = dict(energy_ev=energy, sdd_mm=a.sdd_mm, alpha_i_deg=a.alpha_i, metal=a.metal, sample_roll_deg=a.roll)
     if a.auto_centre:
-        from sputtergisaxs.polymer_dev_intake import auto_center, frames
+        from sputtergisaxs.polymer_dev_intake import auto_center
         cen = auto_center(lit_frames(frames(Path(a.frames))), a.sdd_mm, a.alpha_i)
         geo.update(beam_col=float(cen["db_col"]), beam_row=float(cen["db_row"]))
         print(f"auto centre: col {cen['db_col']:.1f} row {cen['db_row']:.1f} (roll kept at {a.roll})")
+        LV.emit("centre", col=LV.rounded(cen["db_col"], 2), row=LV.rounded(cen["db_row"], 2))
     else:
         geo.update(beam_col=a.beam_col, beam_row=a.beam_row)
     t0 = datetime.now(timezone.utc)
@@ -188,24 +201,32 @@ def _intake(a, root, mask, msha, energy, lam, out):
     if a.auto_mask == "on":
         import numpy as np
         from . import automask as AM
-        combined, auto = AM.build(a.frames, mask, geo["beam_row"], a.sdd_mm, a.alpha_i)
+        picture = {}
+        combined, auto = AM.build(a.frames, mask, geo["beam_row"], a.sdd_mm, a.alpha_i,
+                                  on_sum=(lambda total: picture.update(total=total)) if LV.folder() else None)
         out.mkdir(parents=True, exist_ok=True)
         used = out / "pixmask_used.npy"
         np.save(used, combined)
         auto.update(file=used.name, sha256=sha(used))
         print(f"automatic mask: {auto['dead']} dead, {auto['hot']} hot, {auto['shadow']} beamstop / holder pixels "
               f"masked besides {mask.name}" + (f" ({auto['base']})" if auto.get("base") else ""))
-    for attempt in range(3):
-        try:
-            prepare(Path(a.frames), out / "intake", **geo, maskpath=used, workers=a.workers,
-                    system_note=f"iampred intake {a.label}")
-            break
-        except OSError as e:
-            if attempt == 2:
-                raise
-            print(f"reading the frames failed ({type(e).__name__}: {e}); trying again in 20 s", flush=True)
-            import time
-            time.sleep(20)
+        if picture:
+            try:
+                _detector_event(picture.pop("total"), combined, auto, geo, a)
+            except Exception:
+                pass
+    with LV.ChunkWatcher(out / "intake", root / "native_grid.npz", len(frames(Path(a.frames)))):
+        for attempt in range(3):
+            try:
+                prepare(Path(a.frames), out / "intake", **geo, maskpath=used, workers=a.workers,
+                        system_note=f"iampred intake {a.label}")
+                break
+            except OSError as e:
+                if attempt == 2:
+                    raise
+                print(f"reading the frames failed ({type(e).__name__}: {e}); trying again in 20 s", flush=True)
+                import time
+                time.sleep(20)
     run, rows = intake_rows(out / "intake")
     ids = bin_ids([r["time_s"] for r in rows], seconds=0.5)
     aggregate(out / "intake", out / "binned", run, rows, ids, nominal_seconds=0.5)
@@ -236,6 +257,8 @@ def _intake(a, root, mask, msha, energy, lam, out):
         scan["t_sput"] = a.t_sput
     (out / "scan.json").write_text(json.dumps(scan, indent=1) + "\n", encoding="utf-8", newline="\n")
     print(f"{a.label}: {run['selected_frames']} frames, {rows[0]['time_s']:.2f}-{rows[-1]['time_s']:.2f} s -> {out}")
+    LV.emit("imported", frames=run["selected_frames"], t_first=LV.rounded(rows[0]["time_s"], 3),
+            t_last=LV.rounded(rows[-1]["time_s"], 3), onset=LV.rounded(scan.get("t_dep"), 3))
 
 
 def shadow(a, root):

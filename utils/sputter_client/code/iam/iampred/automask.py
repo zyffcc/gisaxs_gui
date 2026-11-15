@@ -100,12 +100,14 @@ def auto_mask(total, invalid, base=None, horizon=None):
     return mask, report
 
 
-def build(frames_dir, base_path=None, beam_row=None, sdd_mm=None, alpha_i_deg=None, n_sample=N_SAMPLE):
-    'Mask and report for a folder of CBF frames (and an optional base mask .npy).'
+def build(frames_dir, base_path=None, beam_row=None, sdd_mm=None, alpha_i_deg=None, n_sample=N_SAMPLE, on_sum=None):
+    'Mask and report for a folder of CBF frames (and an optional base mask .npy). ``on_sum(total)``: gets the summed'
     files = sorted(Path(frames_dir).glob("*.cbf")) if Path(frames_dir).is_dir() else [Path(frames_dir)]
     if not files:
         raise ValueError(f"{frames_dir}: no CBF frames")
     total, invalid, used = summed(files, n_sample)
+    if on_sum is not None and total is not None:
+        on_sum(total)
     base = np.load(base_path).astype(bool) if base_path else None
     horizon = horizon_row(beam_row, sdd_mm, alpha_i_deg) if None not in (beam_row, sdd_mm, alpha_i_deg) else None
     mask, report = auto_mask(total, invalid, base, horizon)
