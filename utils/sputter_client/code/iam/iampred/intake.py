@@ -30,6 +30,22 @@ def sha(p):
     return h.hexdigest()
 
 
+def lit_frames(files, n=30):
+    'The frames with counts among n spread over the scan (a frame taken before the beam or the shutter opened has'
+    import numpy as np
+    from sputtergisaxs.polymer_dev_intake import load_frame
+    ids = np.unique(np.linspace(0, len(files) - 1, min(n, len(files))).round().astype(int))
+    lit = []
+    for i in ids:
+        try:
+            image, _ = load_frame(files[int(i)])
+        except Exception:
+            continue
+        if float(np.nansum(image)) > 0:
+            lit.append(files[int(i)])
+    return lit or files
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--frames", required=True)
@@ -117,7 +133,7 @@ def _intake(a, root, mask, msha, energy, lam, out):
     geo = dict(energy_ev=energy, sdd_mm=a.sdd_mm, alpha_i_deg=a.alpha_i, metal=a.metal, sample_roll_deg=a.roll)
     if a.auto_centre:
         from sputtergisaxs.polymer_dev_intake import auto_center, frames
-        cen = auto_center(frames(Path(a.frames)), a.sdd_mm, a.alpha_i)
+        cen = auto_center(lit_frames(frames(Path(a.frames))), a.sdd_mm, a.alpha_i)
         geo.update(beam_col=float(cen["db_col"]), beam_row=float(cen["db_row"]))
         print(f"auto centre: col {cen['db_col']:.1f} row {cen['db_row']:.1f} (roll kept at {a.roll})")
     else:
@@ -134,7 +150,17 @@ def _intake(a, root, mask, msha, energy, lam, out):
         auto.update(file=used.name, sha256=sha(used))
         print(f"automatic mask: {auto['dead']} dead, {auto['hot']} hot, {auto['shadow']} beamstop / holder pixels "
               f"masked besides {mask.name}" + (f" ({auto['base']})" if auto.get("base") else ""))
-    prepare(Path(a.frames), out / "intake", **geo, maskpath=used, workers=a.workers, system_note=f"iampred intake {a.label}")
+    for attempt in range(3):
+        try:
+            prepare(Path(a.frames), out / "intake", **geo, maskpath=used, workers=a.workers,
+                    system_note=f"iampred intake {a.label}")
+            break
+        except OSError as e:
+            if attempt == 2:
+                raise
+            print(f"reading the frames failed ({type(e).__name__}: {e}); trying again in 20 s", flush=True)
+            import time
+            time.sleep(20)
     run, rows = intake_rows(out / "intake")
     ids = bin_ids([r["time_s"] for r in rows], seconds=0.5)
     aggregate(out / "intake", out / "binned", run, rows, ids, nominal_seconds=0.5)

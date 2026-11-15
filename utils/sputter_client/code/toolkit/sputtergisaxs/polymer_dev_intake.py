@@ -18,6 +18,15 @@ def frames(path):
 
 
 def load_frame(path):
+    for attempt in range(6):
+        try:
+            return _load_frame_once(path)
+        except PermissionError:
+            if attempt==5:raise
+            time.sleep(1.+2.*attempt)
+
+
+def _load_frame_once(path):
     with Path(path).open('rb') as stream:header=stream.read(16384).decode('latin1')
     cutoff=re.search(r'Count_cutoff\s+([\d.eE+-]+)',header)
     image,meta=read_cbf(path,count_limit=float('inf'))

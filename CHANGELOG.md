@@ -50,6 +50,10 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   instead of failing on the mask.
 - Sputter: Cu is Cu. The metal list says Cu (no more "approximated with the Ag model"); Analyze reads Cu with its own
   networks, and the earlier method (Predict), whose networks are for Ag and Au, does not run for Cu and says so.
+- Sputter ▸ Analyze reads scans whose first frames are empty (the X-ray shutter opened after the detector started):
+  the automatic beam centre is taken from frames with counts only, where before one empty frame among those it looked
+  at made it fail ("No supported specular-centre candidate"). Frames on a network drive that its sync client holds
+  for a moment are read again (a few tries) instead of failing the import.
 - Sputter ▸ Analyze, limitations: the analysis package analyses only the pairs of metal and substrate it has a
   network for; its values are
   model values that were not compared with an independent measurement of the sample; a step of the analysis does

@@ -30,7 +30,10 @@ def summed(files, n_sample=N_SAMPLE):
     ids = np.unique(np.linspace(0, len(files) - 1, min(n_sample, len(files))).round().astype(int))
     total, invalid = None, None
     for i in ids:
-        image, _ = load_frame(files[i])
+        try:
+            image, _ = load_frame(files[i])
+        except OSError:
+            continue
         bad = ~np.isfinite(image) | (image < 0)
         good = np.where(bad, 0.0, image)
         total = good if total is None else total + good
