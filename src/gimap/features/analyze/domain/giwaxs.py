@@ -55,8 +55,9 @@ def giwaxs_maps(shape: tuple[int, int], geometry: DetectorGeometry) -> GiwaxsMap
     q_parallel = np.empty_like(q)
     qz = np.empty_like(q)
     chi = np.empty_like(q)
-    # αf >= 0  <=>  qz >= k·sin(αi) in the exact model.
+    # αf >= 0  <=>  qz >= k·sin(αi) in the exact model; with refraction, αf >= αc (below it q_z tells no angle).
     horizon_qz = geometry.wavevector_inv_angstrom * math.sin(geometry.incidence_rad)
+    above = np.empty((rows, columns), dtype=bool) if geometry.refraction else None
     for start in range(0, rows, BLOCK_ROWS):
         stop = min(rows, start + BLOCK_ROWS)
         block = grazing_q_region(geometry, (start, stop), (0, columns))
@@ -64,7 +65,11 @@ def giwaxs_maps(shape: tuple[int, int], geometry: DetectorGeometry) -> GiwaxsMap
         q_parallel[start:stop] = block.q_parallel
         qz[start:stop] = block.qz
         chi[start:stop] = np.degrees(np.arctan2(block.q_parallel, block.qz))
-    return GiwaxsMaps(q, q_parallel, qz, chi, qz >= np.float32(horizon_qz), _pixel_q_step(q))
+        if above is not None:
+            above[start:stop] = block.sin_exit >= math.sin(geometry.critical_rad)
+    if above is None:
+        above = qz >= np.float32(horizon_qz)
+    return GiwaxsMaps(q, q_parallel, qz, chi, above, _pixel_q_step(q))
 
 
 def _pixel_q_step(q: np.ndarray, stride: int = 4) -> float:

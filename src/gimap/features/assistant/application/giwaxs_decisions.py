@@ -60,6 +60,11 @@ def refraction_decision(geometry: Optional[dict], technique: str = "giwaxs", *, 
     the αi and wavelength the run used, in the words of ``technique`` (``giwaxs`` or ``gisaxs``). ``given``: the run
     was given its αi (an αi of 0° is then the person's, not the stand-in for a missing one)."""
     geometry = geometry or {}
+    critical = geometry.get("critical_angle_deg")
+    if critical:
+        return {"what": "q", "decision": f"q_z corrected for refraction in the film (αc = {float(critical):g}°)",
+                "why": "q_z is the one inside the film, k(√(sin²αf − sin²αc) + √(sin²αi − sin²αc)); q∥ does not "
+                       "change; pixels below αc are left out of what uses q_z"}
     wavelength, incidence = geometry.get("wavelength_A"), geometry.get("incidence_deg")
     shifted, barely = REFRACTION.get(technique, REFRACTION["giwaxs"])
     why = shifted

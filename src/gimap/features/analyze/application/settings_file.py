@@ -106,6 +106,7 @@ def settings_record(settings: AnalyzeSettings) -> dict[str, Any]:
             "polarization": corrections.polarization,
             "film_thickness_nm": corrections.film_thickness_nm,
             "attenuation_length_um": corrections.attenuation_length_um,
+            "critical_angle_deg": corrections.critical_angle_deg,
         },
         "giwaxs": {
             "in_plane_half_width_deg": giwaxs.in_plane_half_width_deg,
@@ -160,6 +161,7 @@ def settings_from_record(record: Any) -> AnalyzeSettings:
             polarization=_optional_float(values.get("polarization")),
             film_thickness_nm=_optional_float(values.get("film_thickness_nm")),
             attenuation_length_um=_optional_float(values.get("attenuation_length_um")),
+            critical_angle_deg=_optional_float(values.get("critical_angle_deg")),
         )
         values = record.get("giwaxs") or {}
         sector = values.get("sector")

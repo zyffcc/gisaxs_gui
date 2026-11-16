@@ -45,13 +45,18 @@ def gisaxs_maps(shape: tuple[int, int], geometry: DetectorGeometry) -> GisaxsMap
     rows, columns = int(shape[0]), int(shape[1])
     qy = np.empty((rows, columns), dtype=np.float32)
     qz = np.empty_like(qy)
+    above = np.empty((rows, columns), dtype=bool) if geometry.refraction else None
     for start in range(0, rows, MAP_BLOCK_ROWS):
         stop = min(rows, start + MAP_BLOCK_ROWS)
         block = grazing_q_region(geometry, (start, stop), (0, columns))
         qy[start:stop] = block.qy
         qz[start:stop] = block.qz
-    horizon_qz = geometry.wavevector_inv_angstrom * math.sin(geometry.incidence_rad)
-    return GisaxsMaps(qy, qz, qz >= np.float32(horizon_qz))
+        if above is not None:  # refraction: α_f ≥ α_c (below it the film's q_z tells no angle)
+            above[start:stop] = block.sin_exit >= math.sin(geometry.critical_rad)
+    if above is None:
+        horizon_qz = geometry.wavevector_inv_angstrom * math.sin(geometry.incidence_rad)
+        above = qz >= np.float32(horizon_qz)
+    return GisaxsMaps(qy, qz, above)
 
 
 def gisaxs_q_map(image: np.ndarray, valid: np.ndarray, maps: GisaxsMaps) -> ReciprocalSpaceMap | None:
@@ -193,11 +198,12 @@ def vertical_cut(
     half_width_px: float,
     counts: bool = True,
 ) -> Curve:
-    """I(qz) over a band of columns above the sample horizon: one point per detector row."""
+    """I(qz) over a band of columns above the sample horizon (with refraction, above the row of α_c): one point
+    per detector row."""
     rows, columns = image.shape
     start = max(0, int(math.floor(center_column - half_width_px)))
     stop = min(columns, int(math.ceil(center_column + half_width_px)))
-    horizon = geometry.horizon_row()
+    horizon = geometry.row_for_exit_angle(geometry.critical_angle_deg) if geometry.refraction else geometry.horizon_row()
     last_row = int(min(rows, max(0, math.floor(horizon))))
     region = {
         "rows": (0, last_row),

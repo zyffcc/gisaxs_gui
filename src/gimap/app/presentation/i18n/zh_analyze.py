@@ -534,6 +534,13 @@ ANALYZE_ZH = {
     "q box: I(qz)": "q 框：I(qz)",
     "q box: I(q∥)": "q 框：I(q∥)",
     "Analyze was cleared.": "分析页已清空。",
+    "Refraction in the film, αc": "薄膜内的折射，αc",
+    "q_z inside the film: k(√(sin²αf − sin²αc) + √(sin²αi − sin²αc)); q∥ does not change. Pixels below αc are left out of the maps and the cuts in q_z. Off: the kinematic q_z in vacuum.":
+        "薄膜内的 q_z：k(√(sin²αf − sin²αc) + √(sin²αi − sin²αc))；q∥ 不变。低于 αc 的像素不进入 q 图和 q_z 切线。关闭时为真空中的运动学 q_z。",
+    "Critical angle αc of the film at this energy, e.g. from its density (tables such as CXRO) or from the Yoneda band":
+        "薄膜在该能量下的临界角 αc，可由密度（查 CXRO 等表格）或 Yoneda 带得到",
+    "refraction αc {value}°": "折射 αc {value}°",
+    "refraction": "折射",
 }
 
 __all__ = ["ANALYZE_ZH"]

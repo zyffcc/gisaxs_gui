@@ -46,10 +46,11 @@ Q_LABEL = "q (Å⁻¹)"
 GEOMETRY_CONVENTION = (
     "canonical pixel-corner frame, row 0 at top, beam centre = direct beam; "
     "kinematic (vacuum) grazing-incidence q of a flat detector, tilted by pyFAI's rotations rot1-rot3 of the "
-    "geometry (all 0: perpendicular to the beam), Å⁻¹"
+    "geometry (all 0: perpendicular to the beam); q_z inside the film when geometry.critical_angle_deg is above 0 "
+    "(refraction, pixels below it left out), Å⁻¹"
 )
-"""``geometry_convention`` of the record: what the q values are (no refraction; the detector tilt is
-``geometry.rot1_rad`` … ``rot3_rad``)."""
+"""``geometry_convention`` of the record: what the q values are (the detector tilt is ``geometry.rot1_rad`` …
+``rot3_rad``; refraction only with ``geometry.critical_angle_deg`` above 0)."""
 POISSON, PIXEL_SCATTER, SCALED_POISSON = "poisson", "pixel_scatter", "scaled_poisson"
 """``error_model``: σ of a point from the photon counts of its pixels (√Σ / n), from the scatter of its pixels
 (not counts as measured: ``frame_preprocessing.photon_counts``), or from the counts scaled like the values (GIWAXS

@@ -59,6 +59,7 @@ _CORRECTIONS = (
     (("mirror_fill",), "mirror filling"),
     (("minimum", "maximum", "gap_guard_px", "bad_pixels"), "pixel limits"),
     (("solid_angle", "polarization", "film_thickness_nm", "attenuation_length_um"), "intensity corrections"),
+    (("critical_angle_deg",), "refraction"),
 )
 _GIWAXS = (
     (("regions",), "cut regions"),

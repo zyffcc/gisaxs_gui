@@ -1193,7 +1193,9 @@ that the counting statistics no longer hold.
 
 **Corrections** (folded): a background frame (**Choose…**, with **Scale** and, for NeXus, **Frame**),
 a valid raw intensity range (**Min** / **Max**), and the **Gap guard** (default 3 px; 0–20 px,
-remembered), which also leaves out pixels this close to gaps and bad pixels.
+remembered), which also leaves out pixels this close to gaps and bad pixels. **Refraction in the film, αc**
+makes q_z the one inside a film of that critical angle (q∥ does not change; pixels below αc are left out of the q
+maps and of the cuts in q_z). Off by default; Physics and Methods 2.6.
 
 The order is fixed: invalid detector pixels → hot and dead pixels → masks → background → gap guard
 → intensity range → mirror fill → intensity corrections. Curves, q map, cake and exports all use

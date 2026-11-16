@@ -109,6 +109,8 @@ class PipelineOptions:
     else from the image's name, else compared (also when the notes and the name disagree)."""
     energy_kev: Optional[float] = None
     incidence_deg: Optional[float] = None
+    critical_angle_deg: Optional[float] = None
+    """The film's critical angle (°): q_z is then corrected for refraction (``None``: kinematic q_z)."""
     pixel_size_um: Optional[float] = None
     """Detector pixel size (µm): the person's statement, used even when the image header gives another
     (the decision names both)."""
@@ -238,6 +240,23 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
             raise frame_changed(self._start_path, status.get("path"))
         self._frame_status = status
 
+    def _refraction(self) -> None:
+        """The film's critical angle given to the run: Analyze corrects q_z for refraction from here on (the
+        report's *q* decision says so, ``refraction_decision``)."""
+        value = self.options.critical_angle_deg
+        if value is None:
+            return
+        if not 0.0 < float(value) < 2.0:
+            self._attention("refraction", f"The critical angle {float(value):g}° is not between 0 and 2°.", None,
+                            "Give the film's critical angle in degrees, e.g. 0.15.")
+            return
+        workbench = getattr(self.catalog, "workbench", None)
+        if workbench is None or not hasattr(workbench, "set_critical_angle"):
+            return
+        status = workbench.set_critical_angle(float(value))
+        if isinstance(status, dict):
+            self.catalog.results.status = status
+
     def _decide(self, what: str, decision: str, why: str) -> None:
         self._run.decisions.append({"what": what, "decision": decision, "why": why})
 
@@ -285,6 +304,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
                 self._decide("technique", "none", NO_GEOMETRY)
             return self._report()
         self._incidence_in_use()
+        self._refraction()
         self._flat_detector()
         if self.options.stop_after_geometry:
             self._incidence_worded_for((self.catalog.results.status or {}).get("measurement"))  # what Auto reads it as

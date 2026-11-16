@@ -26,8 +26,10 @@ kept so the tests can state how far those approximations were from ``EXACT``
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
 
 import numpy as np
 
@@ -61,6 +63,8 @@ class GrazingQMap:
     qz: np.ndarray
     q_parallel: np.ndarray
     """In-plane magnitude √(qx² + qy²), signed like qy (the usual "qr" axis)."""
+    sin_exit: Optional[np.ndarray] = None
+    """sin α_f of the scattered ray in vacuum (the exact model; ``None`` for the legacy ones)."""
 
     @property
     def q(self) -> np.ndarray:
@@ -183,6 +187,18 @@ def signed_parallel(qx: np.ndarray, qy: np.ndarray, *, zero_at_axis: bool = Fals
     return np.copysign(magnitude, qy)
 
 
+def refracted_qz(sin_exit, sin_incidence: float, critical_rad: float, wavevector: float) -> np.ndarray:
+    """q_z inside a film of critical angle α_c: k (Re√(sin²α_f − sin²α_c) + Re√(sin²α_i − sin²α_c)).
+
+    The in-plane components of k are kept at the surface, so only q_z changes. Below α_c a wave in the film is
+    evanescent and its term is 0 (α_f below 0 too); q_z then no longer tells the exit angle, so the analyses leave
+    those pixels out (``sin_exit < sin α_c``)."""
+    sin_c2 = math.sin(critical_rad) ** 2
+    sin_exit = np.asarray(sin_exit, dtype=np.float64)
+    exit_term = np.where(sin_exit > 0, np.sqrt(np.maximum(sin_exit * sin_exit - sin_c2, 0.0)), 0.0)
+    return wavevector * (exit_term + math.sqrt(max(sin_incidence * sin_incidence - sin_c2, 0.0)))
+
+
 def scattering_vectors(
     x: np.ndarray,
     y: np.ndarray,
@@ -192,13 +208,18 @@ def scattering_vectors(
     model: ExitAngleModel = ExitAngleModel.EXACT,
     *,
     zero_at_axis: bool = False,
+    critical_rad: float = 0.0,
 ) -> GrazingQMap:
-    """q = k_f − k_i in the sample frame, in units of ``wavevector``."""
+    """q = k_f − k_i in the sample frame, in units of ``wavevector``; with ``critical_rad`` above 0, q_z is the one
+    inside the film (:func:`refracted_qz`)."""
     along_beam, across_beam, normal = exit_directions(x, y, distance, incidence_rad, model)
     qx = wavevector * (along_beam - np.cos(incidence_rad))
     qy = wavevector * across_beam
-    qz = wavevector * (normal + np.sin(incidence_rad))
-    return GrazingQMap(qx, qy, qz, signed_parallel(qx, qy, zero_at_axis=zero_at_axis))
+    if critical_rad > 0:
+        qz = refracted_qz(normal, math.sin(incidence_rad), critical_rad, wavevector)
+    else:
+        qz = wavevector * (normal + np.sin(incidence_rad))
+    return GrazingQMap(qx, qy, qz, signed_parallel(qx, qy, zero_at_axis=zero_at_axis), normal)
 
 
 # -- public entry points on DetectorGeometry ---------------------------------------------
@@ -218,6 +239,7 @@ def grazing_q_map(
         geometry.incidence_rad,
         geometry.wavevector_inv_angstrom,
         model,
+        critical_rad=geometry.critical_rad,
     )
 
 
@@ -236,6 +258,7 @@ def grazing_q_region(
         geometry.incidence_rad,
         geometry.wavevector_inv_angstrom,
         model,
+        critical_rad=geometry.critical_rad,
     )
 
 

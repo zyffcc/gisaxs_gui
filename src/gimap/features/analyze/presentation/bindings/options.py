@@ -36,6 +36,8 @@ class OptionsMixin:
             widget.toggled.connect(self._limits_changed)
         for spin in (self.minimum_spin, self.maximum_spin):
             spin.valueChanged.connect(self._limits_changed)
+        self.refraction_check.toggled.connect(self._refraction_changed)
+        self.critical_angle_spin.valueChanged.connect(self._refraction_changed)
         for widget in (self.solid_angle_check, self.polarization_check, self.film_check):
             widget.toggled.connect(self._intensity_changed)
         for spin in (self.polarization_spin, self.film_thickness_spin, self.attenuation_spin):
@@ -53,7 +55,7 @@ class OptionsMixin:
         self.detector_view.boxChanged.connect(self._box_dragged)
         self.sector_grid.setEnabled(False)
         self.box_grid.setEnabled(False)
-        for spin in (self.polarization_spin, self.film_thickness_spin, self.attenuation_spin):
+        for spin in (self.polarization_spin, self.film_thickness_spin, self.attenuation_spin, self.critical_angle_spin):
             spin.setEnabled(False)
 
     def _options_changed(self) -> None:
@@ -106,6 +108,12 @@ class OptionsMixin:
             self.minimum_spin.value() if self.minimum_check.isChecked() else None,
             self.maximum_spin.value() if self.maximum_check.isChecked() else None,
         )
+        self._options_changed()
+
+    def _refraction_changed(self, *_args) -> None:
+        on = self.refraction_check.isChecked()
+        self.critical_angle_spin.setEnabled(on)
+        self.view_model.set_critical_angle(self.critical_angle_spin.value() if on else None)
         self._options_changed()
 
     def _intensity_changed(self, *_args) -> None:

@@ -145,6 +145,7 @@ class AnalyzeAutomation:
             "tilt_deg": geometry.tilt_deg,
             "rotations_deg": [math.degrees(geometry.rot1_rad), math.degrees(geometry.rot2_rad),
                               math.degrees(geometry.rot3_rad)],
+            "critical_angle_deg": geometry.critical_angle_deg,
         }
         corrections = state.corrections
         info["corrections"] = {
@@ -256,6 +257,21 @@ class AnalyzeAutomation:
         page = self._page
         self._set(page.incidence_spin, INCIDENCE_FROM_PROFILE if degrees is None else float(degrees))
         page.view_model.set_incidence(degrees)
+        page._remember()
+        self.reanalyse(done)
+
+    def set_critical_angle(self, degrees: Optional[float], done: Done) -> None:
+        """Refraction of q_z in a film of critical angle ``degrees`` (``None`` or 0: off), as the Corrections
+        section sets it."""
+        page = self._page
+        on = bool(degrees)
+        if on:
+            self._set(page.critical_angle_spin, float(degrees))
+        page.refraction_check.blockSignals(True)
+        page.refraction_check.setChecked(on)
+        page.refraction_check.blockSignals(False)
+        page.critical_angle_spin.setEnabled(on)
+        page.view_model.set_critical_angle(float(degrees) if on else None)
         page._remember()
         self.reanalyse(done)
 

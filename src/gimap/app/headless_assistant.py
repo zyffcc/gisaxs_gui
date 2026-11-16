@@ -318,7 +318,9 @@ def provenance_lines(session: HeadlessSession) -> str:
             lines.append(
                 f"geometry: distance {geometry.distance_m * 1e3:.4f} mm, direct beam ({geometry.beam_center_x_px:.3f}, "
                 f"{geometry.beam_center_y_px:.3f}) px, wavelength {geometry.wavelength_angstrom:.6g} A, "
-                f"alpha_i {geometry.incidence_deg:.4g} deg, detector tilt {geometry.tilt_deg:.4g} deg")
+                f"alpha_i {geometry.incidence_deg:.4g} deg, detector tilt {geometry.tilt_deg:.4g} deg"
+                + (f", q_z refracted in a film of alpha_c {geometry.critical_angle_deg:.4g} deg" if geometry.refraction
+                   else ""))
     return "\n".join(lines)
 
 

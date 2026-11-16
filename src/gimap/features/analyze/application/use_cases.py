@@ -180,6 +180,10 @@ class AnalyzeFrame(FramePreprocessingMixin):
             beam_center_shape=request.beam_center_shape,
         )
         geometry = resolution.geometry
+        refraction = getattr(request.corrections, "critical_angle_deg", None)
+        if geometry is not None and refraction:
+            geometry = geometry.with_critical_angle(float(refraction))
+            resolution = replace(resolution, geometry=geometry)
         # What Auto would choose, in every mode: a pinned mode that disagrees is pointed out.
         detected = None if geometry is None else classify_measurement(shape, geometry)
         kind = None if geometry is None else (request.mode if request.mode != AUTO else detected)

@@ -41,6 +41,9 @@ class DetectorGeometry:
       detector perpendicular to the beam. With them the detector plane turns about the direct beam, which stays at
       ``beam_center_x_px``, ``beam_center_y_px`` and ``distance_m`` from the sample; where each pixel then lies is
       ``q_mapping.lab_rays``.
+    * ``critical_angle_deg`` is the critical angle α_c of the film the beam enters; above 0 the grazing q_z is the
+      one inside the film (refraction, ``q_mapping.refracted_qz``), 0 (the default) the kinematic q_z in vacuum. It
+      belongs to the sample, not to the instrument: a profile keeps 0 and Analyze sets it per measurement.
     * Lengths are metres, the wavelength is in Å, so q comes out in Å⁻¹.
     """
 
@@ -54,6 +57,7 @@ class DetectorGeometry:
     rot1_rad: float = 0.0
     rot2_rad: float = 0.0
     rot3_rad: float = 0.0
+    critical_angle_deg: float = 0.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "pixel_size_x_m", _positive("pixel_size_x_m", self.pixel_size_x_m))
@@ -73,6 +77,10 @@ class DetectorGeometry:
             if name != "rot3_rad" and not abs(angle) < math.pi / 2:
                 raise ValueError(f"{name} must be within (-90°, 90°), got {angle!r} rad.")
             object.__setattr__(self, name, angle)
+        critical = _finite("critical_angle_deg", self.critical_angle_deg)
+        if not 0.0 <= critical < 90.0:
+            raise ValueError(f"critical_angle_deg must be within [0, 90), got {critical!r}.")
+        object.__setattr__(self, "critical_angle_deg", critical)
 
     @property
     def tilted(self) -> bool:
@@ -114,6 +122,18 @@ class DetectorGeometry:
 
     def with_incidence(self, incidence_deg: float) -> "DetectorGeometry":
         return replace(self, incidence_deg=float(incidence_deg))
+
+    @property
+    def refraction(self) -> bool:
+        """Whether q_z is corrected for refraction in a film (``critical_angle_deg`` above 0)."""
+        return self.critical_angle_deg > 0.0
+
+    @property
+    def critical_rad(self) -> float:
+        return math.radians(self.critical_angle_deg)
+
+    def with_critical_angle(self, critical_angle_deg: float) -> "DetectorGeometry":
+        return replace(self, critical_angle_deg=float(critical_angle_deg))
 
     def with_rotations(self, rot1_rad: float, rot2_rad: float, rot3_rad: float) -> "DetectorGeometry":
         return replace(self, rot1_rad=float(rot1_rad), rot2_rad=float(rot2_rad), rot3_rad=float(rot3_rad))

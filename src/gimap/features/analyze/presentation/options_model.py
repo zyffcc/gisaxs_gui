@@ -118,6 +118,13 @@ class OptionsModelMixin:
         value = self._read_setting(SECTION, BAD_PIXELS_KEY, True)
         return str(value).strip().lower() not in ("false", "0", "no", "off")
 
+    def set_critical_angle(self, critical_angle_deg: Optional[float]) -> None:
+        """The film's critical angle for the refraction of q_z (``None``: kinematic q_z)."""
+        self.state.corrections = replace(
+            self.state.corrections,
+            critical_angle_deg=None if not critical_angle_deg else float(critical_angle_deg),
+        )
+
     def set_intensity_corrections(
         self, *, solid_angle: bool, polarization: Optional[float], film_thickness_nm: Optional[float],
         attenuation_length_um: Optional[float],

@@ -135,6 +135,24 @@ class OptionsPanelView:
         )
         guard.addRow("Gap guard", self.gap_guard_spin)
         section.add_layout(guard)
+        refraction = QHBoxLayout()
+        self.refraction_check = QCheckBox("Refraction in the film, αc", section)
+        self.refraction_check.setObjectName("analyzeRefractionCheck")
+        self.refraction_check.setToolTip(
+            "q_z inside the film: k(√(sin²αf − sin²αc) + √(sin²αi − sin²αc)); q∥ does not change. Pixels below αc "
+            "are left out of the maps and the cuts in q_z. Off: the kinematic q_z in vacuum."
+        )
+        self.critical_angle_spin = _spin(section, 0.01, 2.0, 0.15, decimals=3, step=0.005, suffix="°")
+        self.critical_angle_spin.setObjectName("analyzeCriticalAngleSpin")
+        self.critical_angle_spin.setToolTip(
+            "Critical angle αc of the film at this energy, e.g. from its density (tables such as CXRO) or from the "
+            "Yoneda band"
+        )
+        self.critical_angle_spin.setMaximumWidth(130)
+        refraction.addWidget(self.refraction_check)
+        refraction.addWidget(self.critical_angle_spin)
+        refraction.addStretch(1)
+        section.add_layout(refraction)
         return section
 
     def _intensity_section(self, parent) -> AdvancedSection:

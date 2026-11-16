@@ -96,7 +96,8 @@ def command_auto(arguments) -> int:
 
     options = PipelineOptions(
         calibration=arguments.calibration, standard=arguments.standard, energy_kev=arguments.energy_kev,
-        incidence_deg=arguments.incidence_deg, pixel_size_um=arguments.pixel_size_um, frame=arguments.frame,
+        incidence_deg=arguments.incidence_deg, critical_angle_deg=arguments.critical_angle_deg,
+        pixel_size_um=arguments.pixel_size_um, frame=arguments.frame,
         sum_frames=arguments.sum,
         rings=arguments.rings, max_peaks=arguments.max_peaks, recalibrate=arguments.recalibrate, notes=_notes(arguments),
         technique=arguments.technique, follow_detection=arguments.technique is None, fit=not arguments.no_fit,
@@ -227,6 +228,8 @@ def parser() -> argparse.ArgumentParser:
     )
     auto.add_argument("--energy-kev", type=float, help="X-ray energy in keV (beats the header and the notes)")
     auto.add_argument("--incidence-deg", type=float, help="incidence angle αi in degrees (beats the notes and the profile)")
+    auto.add_argument("--critical-angle-deg", type=float,
+                      help="critical angle αc of the film in degrees: q_z is corrected for refraction (default: kinematic)")
     auto.add_argument(
         "--pixel-size-um", type=float,
         help="detector pixel size in µm: used even when the image header gives another (Decisions names both)",

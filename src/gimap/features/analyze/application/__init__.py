@@ -186,15 +186,16 @@ from .use_cases import (
 
 
 def q_at_position(geometry: DetectorGeometry, x_px: float, y_px: float) -> dict[str, float]:
-    """Exact q components (Å⁻¹) and exit angle at one continuous detector position."""
+    """Exact q components (Å⁻¹) and exit angle at one continuous detector position (q_z inside the film when the
+    geometry has a critical angle)."""
     import numpy as np
 
     x = np.array([(float(x_px) - geometry.beam_center_x_px) * geometry.pixel_size_x_m])
     y = np.array([(geometry.beam_center_y_px - float(y_px)) * geometry.pixel_size_y_m])
     along, x, y = lab_rays(geometry, x, y)
-    q = scattering_vectors(x, y, along, geometry.incidence_rad, geometry.wavevector_inv_angstrom)
-    k = geometry.wavevector_inv_angstrom
-    sin_alpha_f = float(q.qz[0]) / k - math.sin(geometry.incidence_rad)
+    q = scattering_vectors(x, y, along, geometry.incidence_rad, geometry.wavevector_inv_angstrom,
+                           critical_rad=geometry.critical_rad)
+    sin_alpha_f = float(q.sin_exit[0])
     return {
         "qx": float(q.qx[0]),
         "qy": float(q.qy[0]),

@@ -72,6 +72,9 @@ class GuiWorkbench:
     def set_incidence(self, degrees: Optional[float]) -> dict:
         return self._apply(lambda done: self._automation.set_incidence(degrees, done))
 
+    def set_critical_angle(self, degrees: Optional[float]) -> dict:
+        return self._apply(lambda done: self._automation.set_critical_angle(degrees, done))
+
     def set_sector_widths(self, in_plane_deg: float, out_of_plane_deg: float) -> dict:
         return self._apply(lambda done: self._automation.set_sector_widths(in_plane_deg, out_of_plane_deg, done))
 

@@ -365,6 +365,8 @@ class BatchExportMixin:
         if state.mode != GISAXS and (corrections.solid_angle or corrections.polarization is not None
                                      or corrections.film_thickness_nm is not None):
             parts.append(tr("intensity corrections"))
+        if corrections.critical_angle_deg:
+            parts.append(tr("refraction αc {value}°").format(value=f"{corrections.critical_angle_deg:g}"))
         if corrections.background_path:
             parts.append(tr("background {name}").format(name=Path(corrections.background_path).name))
         if self.view_model.sum_count > 1:
@@ -446,6 +448,7 @@ class BatchExportMixin:
             (self.minimum_check, corrections.minimum is not None), (self.maximum_check, corrections.maximum is not None),
             (self.solid_angle_check, corrections.solid_angle), (self.polarization_check, corrections.polarization is not None),
             (self.film_check, corrections.film_thickness_nm is not None and corrections.attenuation_length_um is not None),
+            (self.refraction_check, bool(corrections.critical_angle_deg)),
             (self.sector_check, giwaxs.sector is not None), (self.box_check, giwaxs.box is not None),
         ]
         for check, value in checks:
@@ -454,7 +457,8 @@ class BatchExportMixin:
         for spin, value in ((self.minimum_spin, corrections.minimum), (self.maximum_spin, corrections.maximum),
                             (self.polarization_spin, corrections.polarization),
                             (self.film_thickness_spin, corrections.film_thickness_nm),
-                            (self.attenuation_spin, corrections.attenuation_length_um)):
+                            (self.attenuation_spin, corrections.attenuation_length_um),
+                            (self.critical_angle_spin, corrections.critical_angle_deg)):
             if value is not None:
                 with QSignalBlocker(spin):
                     spin.setValue(value)
@@ -473,6 +477,7 @@ class BatchExportMixin:
         film = corrections.film_thickness_nm is not None and corrections.attenuation_length_um is not None
         self.film_thickness_spin.setEnabled(film)
         self.attenuation_spin.setEnabled(film)
+        self.critical_angle_spin.setEnabled(bool(corrections.critical_angle_deg))
         self.sector_grid.setEnabled(giwaxs.sector is not None)
         self.box_grid.setEnabled(giwaxs.box is not None)
         self.x_axis_control.setCurrentIndex(max(0, self.x_axis_control.findData(giwaxs.x_axis)))

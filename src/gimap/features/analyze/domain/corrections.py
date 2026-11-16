@@ -49,6 +49,10 @@ class Corrections:
 
     The intensity corrections need the geometry; they are applied after the others, in the analysis,
     and are not part of ``is_identity``."""
+    critical_angle_deg: Optional[float] = None
+    """GISAXS and GIWAXS: the critical angle α_c of the film; q_z is then the one inside it (refraction,
+    ``q_mapping.refracted_qz``) and pixels below α_c are left out of the maps and cuts that use q_z. ``None``: the
+    kinematic q_z in vacuum. Part of the geometry of the analysis, not of ``is_identity``."""
 
     @property
     def is_identity(self) -> bool:

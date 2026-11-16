@@ -31,6 +31,7 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [2.3 Horizon, specular and Yoneda rows](#23-horizon-specular-and-yoneda-rows)
   - [2.4 GISAXS or GIWAXS](#24-gisaxs-or-giwaxs)
   - [2.5 What the q map does not model](#25-what-the-q-map-does-not-model)
+  - [2.6 Refraction in the film (optional)](#26-refraction-in-the-film-optional)
 - [3. Calibration](#3-calibration)
   - [3.1 Calibrants](#31-calibrants)
   - [3.2 Ring model](#32-ring-model)
@@ -431,7 +432,7 @@ Implementation: `src/gimap/features/analyze/domain/classification.py`
 
 The following effects are not in the q map, nor anywhere else in Analyze:
 
-- **Refraction and the distorted-wave Born approximation (DWBA).** `q_z` is the kinematic vacuum value. Neither α_i nor α_f is corrected for the critical angle. Near and below the critical angle the `q_z` inside the film differs from the value given here.
+- **Refraction and the distorted-wave Born approximation (DWBA).** `q_z` is the kinematic vacuum value unless the film's critical angle is given (section 2.6). No reflected-wave terms of the DWBA are computed.
 - **Detector tilt and rotation.** A `.poni` tilt (rot1, rot2, rot3) is part of the geometry and enters q, χ, the solid angle and the polarisation factor (section 3.7). The calibration refines no tilt (section 3.3). The straight horizon row below assumes an untilted detector.
 - **Sample azimuth and roll.** The sample is assumed to be tilted only about the horizontal axis perpendicular to the beam. A rotation about the surface normal or about the beam is not described.
 - **Parallax and sensor thickness.** A pixel is its centre; there is no depth of interaction and no pixel splitting.
@@ -442,6 +443,34 @@ The following effects are not in the q map, nor anywhere else in Analyze:
 The flat, perpendicular detector is also assumed by the straight horizon (section 2.3), by mirror filling (section 4.8) and by the solid-angle and polarisation factors (chapter 5).
 
 Implementation: `src/gimap/shared/geometry/q_mapping.py` (the only q mapping Analyze uses)
+
+### 2.6 Refraction in the film (optional)
+
+With **Refraction in the film, αc** ticked (**Corrections**, folded; `--critical-angle-deg` of
+`tools/gimap_agent.py auto`), q_z is the one inside a film of critical angle α_c:
+
+```text
+q_z = k ( Re√(sin²α_f − sin²α_c) + Re√(sin²α_i − sin²α_c) )                                       (2.18)
+```
+
+α_f is the exit angle of the ray in vacuum (2.8). The in-plane part of the wavevector is kept at the surface, so q_x,
+q_y and q_∥ do not change; |q| of (2.10) and χ of (2.13) use the q_z of (2.18). Off (the default), q_z is (2.7).
+
+- Below α_c a wave in the film is evanescent and its term is 0. q_z then no longer tells α_f, so pixels with
+  α_f < α_c are left out of the q maps, of I(q), I(χ), the sectors and boxes of GIWAXS, and the vertical GISAXS cut
+  stops at the row of α_c. The horizontal cut I(q_y) does not change. With α_i < α_c the incident term is 0.
+- Hand example (tested): λ = 1 Å, α_i = 0.2°, α_c = 0.15°, α_f = 1.0°: q_z = 2π (0.0172549 + 0.0023088) =
+  0.122923 Å⁻¹, against the kinematic 2π (sin 1° + sin 0.2°) = 0.131583 Å⁻¹.
+- It describes one homogeneous film and the transmitted waves only. The reflected-wave terms of the DWBA, a
+  substrate and a depth profile are not included, and α_c is taken as given (for example from the film's density, or
+  from the Yoneda band, section 2.3). An α_c too large or too small moves q_z most near α_f ≈ α_c.
+- The value is a setting of the measurement, kept with the Analyze settings, not in the instrument profile. The record
+  gives it as `geometry.critical_angle_deg` (0: kinematic), `geometry_convention` says what q_z is, the CSV headers of
+  the command line name it, and the automatic report's *q* decision reads *q_z corrected for refraction in the film
+  (αc = …)* (sections 7.9, 8.6).
+
+Implementation: `src/gimap/shared/geometry/q_mapping.py` (`refracted_qz`), `src/gimap/features/analyze/domain/giwaxs.py`,
+`src/gimap/features/analyze/domain/gisaxs.py`
 
 ## 3. Calibration
 
@@ -1450,7 +1479,8 @@ f, f_iso and f − f_iso with the decimals that show σ_f to two significant dig
 
 - *q*: kinematic, no refraction correction. Near or below the film's critical angle, refraction shifts q_z by up to
   about k sin α_i, and the line gives that number for the frame (`2π/λ · sin α_i`; 0.0119 Å⁻¹ for the public P08
-  frame at α_i = 0.075°, λ = 0.6888 Å), or says that it is unknown while α_i is 0° for want of a value;
+  frame at α_i = 0.075°, λ = 0.6888 Å), or says that it is unknown while α_i is 0° for want of a value. With the
+  film's critical angle given (section 2.6) it reads *q_z corrected for refraction in the film (αc = …)*;
 - *uncertainties*: statistical only, with the error model of the frame (Poisson counting statistics, or the pixel
   scatter of each bin); the geometry, the background under a ring and refraction are not included;
 - *peak search* when the list was cut at the cap (section 7.3), *texture rule*, and *ring orientation* for rings
@@ -1702,7 +1732,8 @@ Like the GIWAXS report (section 7.9), the GISAXS report's *Decisions* always say
 
 - *q*: kinematic, no refraction correction. Near the critical angle refraction mostly shifts q_z, that of the Yoneda
   band (α_f ≈ α_c) most, by an amount of the order of k sin α_i, and the line gives that number for the frame
-  (`2π/λ · sin α_i`; 0.0379 Å⁻¹ for the public GALAXI frame at α_i = 0.463°, λ = 1.34 Å); q_y and 2π/q* barely change;
+  (`2π/λ · sin α_i`; 0.0379 Å⁻¹ for the public GALAXI frame at α_i = 0.463°, λ = 1.34 Å); q_y and 2π/q* barely change.
+  With the film's critical angle given (section 2.6) it reads *q_z corrected for refraction in the film (αc = …)*;
 - *uncertainties*: statistical only — the σ of the cuts' points, by which χ²/N is normalised, with the error model of
   the frame (Poisson counting statistics, or the pixel scatter of each bin); the geometry and refraction are not
   included, and the quick fit gives no ± for R, h or D.
@@ -3899,7 +3930,7 @@ This chapter collects the limits stated in chapters 1 to 14, so that they can be
 
 ### 15.1 Scattering physics
 
-- **Refraction and the DWBA.** Every q of Analyze, Fitting and 1D Predict is the kinematic vacuum value. Neither α_i nor α_f is corrected for the critical angle, and no reflected-wave terms of the distorted-wave Born approximation are computed (sections 2.5, 8.6, 9.2), except
+- **Refraction and the DWBA.** Every q of Analyze, Fitting and 1D Predict is the kinematic vacuum value unless Analyze is given the film's critical angle (q_z of one film, section 2.6), and no reflected-wave terms of the distorted-wave Born approximation are computed (sections 2.5, 8.6, 9.2), except
 Fitting's optional two-path sphere with a free effective reflection coefficient (section 9.10). The Yoneda band is located empirically, without any critical angle (sections 6.7, 8.1). The film absorption correction and the q_z of the XRR extractor also ignore refraction (sections 5.4, 13.1). The only refraction-corrected quantity is the Sputter island height H(t), which uses the refracted wavevector transfer for the positions of fringe minima, not a DWBA intensity (section 12.12). The GIWAXS report says that q is kinematic in its *Decisions*, with the q_z shift of up to about k sin α_i that refraction can cause near or below the film's critical angle at the frame's α_i (section 7.9); the GISAXS report says so too, with the Yoneda band's q_z shifted most (section 8.6).
 - **Absolute intensity.** Intensities are mean counts per pixel. No monitor, transmission, exposure-time, sample-volume, flat-field, detector-efficiency, air- or window-absorption correction is applied (section 2.5). Only the optional GIWAXS geometric factors divide the intensities (chapter 5), and a series can be normalised to a reference peak (section 6.10). The scales of the Fitting models are therefore relative. The sphere and random-cylinder form factors are normalised to P(0) = 1, so Int is not number density × V² × Δρ², and the vertical cylinder is weighted by R⁴ instead (section 9.4).
 - **Lorentz and Ewald-sphere corrections.** I(χ) and the ring intensities are intensities on the detector. No Lorentz factor is applied, and the missing wedge near χ = 0 is not reconstructed (sections 2.2, 7.7).
