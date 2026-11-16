@@ -41,7 +41,7 @@ NAVIGATION_ITEMS = (
     NavigationItem("compare", "Compare", "Compare.svg", "Workspaces",
                    "Runs or samples side by side: odd frames, stages, how fast each changed, which are alike"),
     NavigationItem("sputter", "Sputter", "Sputter.svg", "Workspaces",
-                   "In-situ sputter series: particle size and spacing over time, and how reliable they are"),
+                   "In-situ sputter series: grain size, height and spacing over time, fitted window by window"),
     NavigationItem("predict", "2D Prediction", "Predict.svg", "Labs",
                    "Machine-learning prediction from 2D patterns"),
 )

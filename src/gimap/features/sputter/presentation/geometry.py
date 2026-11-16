@@ -4,9 +4,10 @@ Choosing a folder reads the first frame's header in the background (``SputterSer
 the form: each geometry value from what was used for this folder before, else a geometry preset of the user
 that matches the scan, else (the energy) a ``Wavelength`` line of the header or the scan's NeXus file, else
 the values used last (``application.scan.prefill``). Next to each field the page says where its value comes
-from; a field the user edits while the header is read keeps the user's value. Predict waits for the header
-of the folder in the picker (``header_ready``). The values are kept in the preferences when Predict starts
-(for the folder, and as the last used ones).
+from; a field the user edits while the header is read keeps the user's value. Analyze waits for the header
+of the folder in the picker (``header_ready``). The values are kept in the preferences when Analyze starts
+(for the folder, and as the last used ones). Values an older page kept (``python``, ``toolkit``, ``device``, the
+folder of the result of the earlier method) are dropped then; others it kept are not read.
 """
 
 from __future__ import annotations
@@ -20,14 +21,15 @@ from PyQt5.QtWidgets import QFileDialog
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.theme import set_role, set_state
 
-from ..application import (GROUPS, AnalyzeRequest, Prefill, ScanInfo, Source, add_preset, folder_key, make_preset,
-                           prefill, remember)
+from ..application import GROUPS, Prefill, ScanInfo, Source, add_preset, folder_key, make_preset, prefill, remember
 from .texts import SUMMARY_TIPS, message_text, source_text, source_tip, source_warns, text
 
 PREFERENCES_KEY = "sputter_page"
 INSPECT_KEY = "sputter_inspect"
-OLD_KEYS = {"sdd": "sdd", "alpha": "alpha", "energy": "energy", "window": "window", "mask": "mask"}
-"""Values the earlier page kept (``python``, ``toolkit`` and ``device`` are no longer used)."""
+OLD_KEYS = {"sdd": "sdd", "alpha": "alpha", "energy": "energy", "mask": "mask"}
+"""Values a much older page kept at the top level of its memory (read once into ``last``)."""
+DROPPED_KEYS = ("python", "toolkit", "device", "energy_kind", "window", "last_result")
+"""Values older pages kept that nothing reads any more: dropped when the memory is written."""
 
 
 def _float(text_value: str) -> Optional[float]:
@@ -67,7 +69,6 @@ class SputterGeometryMixin:
             for widget in widgets:
                 widget.textEdited.connect(lambda _text, g=group: self._entered(g))
         self.energy_kind.activated.connect(lambda _index: self._entered("xray"))
-        self.metal.currentIndexChanged.connect(self._metal_changed)
         self.preset_button.clicked.connect(self._save_preset)
         self.options_section.expandedChanged.connect(lambda _open: self._remember_view())
 
@@ -153,7 +154,6 @@ class SputterGeometryMixin:
             self.scan_picker.set_path(str(info.folder))  # the frames are one level down (``p2m/``)
         self._summary = None
         self._apply(prefill(info, self._memory()), self._edited)
-        self._show_thickness_fields()  # the restored project form takes precedence over result defaults
         if self._pending_project_state is not None:
             self._restore_project_form(self._pending_project_state)
             self._pending_project_state = None
@@ -219,17 +219,9 @@ class SputterGeometryMixin:
             else:
                 getattr(self, group).setText(_shown(values.get(group)))
         if values.get("metal") in ("Ag", "Au", "Cu"):
-            self.metal.setCurrentIndex(max(0, self.metal.findData(values["metal"])))
-        if values.get("polymer"):
-            self.polymer.setCurrentText(str(values["polymer"]))
+            self.sample_metal.setCurrentIndex(max(0, self.sample_metal.findData(values["metal"])))
         if "mask" in values:
             self.mask_picker.set_path(str(values.get("mask") or ""))
-        if isinstance(values.get("window"), (int, float)) and values["window"] > 0:
-            self.bin_seconds.setValue(float(values["window"]))
-        if "rate" in values:
-            self.rate.setText(_shown(values.get("rate")))
-            self.t0.setText(_shown(values.get("t0")))
-            self.t_end.setText(_shown(values.get("t_end")))
 
     def _entered(self, group: str) -> None:
         self._edited.add(group)
@@ -250,54 +242,21 @@ class SputterGeometryMixin:
             if group in fields:
                 fields[group].setToolTip(tip if tip != label.text() else "")
 
-    def _metal_changed(self, _index: int = 0) -> None:
-        self.cu_note.setVisible(self.metal.currentData() == "Cu")
-
     def _values(self) -> dict:
         return {"energy_kind": self.energy_kind.currentData(), "energy": _float(self.energy_value.text()),
                 "sdd": _float(self.sdd.text()), "alpha": _float(self.alpha.text()),
                 "beam_col": _float(self.beam_col.text()), "beam_row": _float(self.beam_row.text()),
-                "roll": _float(self.roll.text()) or 0.0, "metal": self.metal.currentData(),
-                "polymer": self.polymer.currentText().strip() or "polymer", "mask": self.mask_picker.path(),
-                "window": self.bin_seconds.value(), "rate": _float(self.rate.text()), "t0": _float(self.t0.text()),
-                "t_end": _float(self.t_end.text())}
+                "roll": _float(self.roll.text()) or 0.0, "metal": self.sample_metal.currentData(),
+                "mask": self.mask_picker.path()}
 
-    def _request(self) -> AnalyzeRequest:
-        v = self._values()
-        energy = v["energy"]
-        is_energy = v["energy_kind"] != "wavelength"
-        root = self.results_picker.path()
-        return AnalyzeRequest(
-            scan_folder=Path(self.scan_picker.path() or ""), sdd_mm=v["sdd"], alpha_i_deg=v["alpha"],
-            metal=v["metal"], energy_ev=energy * 1000. if is_energy and energy is not None else None,
-            wavelength_nm=None if is_energy else energy, polymer_type=v["polymer"], beam_col=v["beam_col"],
-            beam_row=v["beam_row"], sample_roll_deg=v["roll"], mask_file=Path(v["mask"]) if v["mask"] else None,
-            bin_seconds=v["window"], rate_nm_s=v["rate"], t0_s=v["t0"], t_end_s=v["t_end"],
-            results_root=Path(root) if root else None)
-
-    def _remember(self, request: AnalyzeRequest) -> None:
-        stored = remember(self._memory(), request.scan_folder, self._values())
-        stored["last_scan"] = str(request.scan_folder)
+    def _remember(self, scan_folder) -> None:
+        """The geometry, for this folder and as the last used; the results folder and the view."""
+        stored = remember(self._memory(), scan_folder, self._values())
+        stored["last_scan"] = str(scan_folder)
         stored["results_root"] = self.results_picker.path()
         stored["advanced_open"] = self.options_section.is_expanded()
-        for old in ("python", "toolkit", "device", "energy_kind", *OLD_KEYS):
+        for old in (*DROPPED_KEYS, *OLD_KEYS):
             stored.pop(old, None)
-        self._store(stored)
-
-    def _remember_thickness(self, scan: Optional[Path], rate: Optional[float], t0: Optional[float],
-                            t_end: Optional[float]) -> None:
-        """A new deposition rate, t0 and end of the deposition belong to the scan of the result they were applied to
-        (when it is known)."""
-        stored = self._memory()
-        folders = dict(stored.get("folders") or {})
-        if scan and folder_key(scan) in folders:
-            folders[folder_key(scan)] = dict(folders[folder_key(scan)], rate=rate, t0=t0, t_end=t_end)
-            stored["folders"] = folders
-            self._store(stored)
-
-    def _remember_result(self, folder: Path) -> None:
-        stored = self._memory()
-        stored["last_result"] = str(folder)
         self._store(stored)
 
     # -- presets ---------------------------------------------------------------------------------------------

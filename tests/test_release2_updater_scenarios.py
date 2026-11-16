@@ -203,7 +203,6 @@ def test_a_rewritten_history_is_followed_and_the_old_state_is_kept(lab):
     assert f"git branch -D {backup}" in done.stdout
     assert "python -m pip install -r requirements.txt" in done.stdout   # the list changed
     assert "Started with Start_GIMaP.bat: nothing to do" in done.stdout
-    assert "requirements-sputter.txt" not in done.stdout                # that one did not
     assert lab.stashes(other) == []
     _personal_files_are_untouched(other)
 
@@ -504,21 +503,19 @@ def test_a_folder_that_is_not_a_checkout_is_refused(lab):
 
 def test_a_changed_list_of_packages_is_reported_for_both_ways_of_starting_gimap(lab):
     """``Start_GIMaP.bat`` adds the packages of a changed list at its next start
-    (``tools/setup_source_env.ps1`` compares their SHA-256); an environment of your own needs pip.
-    ``requirements-sputter.txt`` (PyTorch, for Sputter) counts as much as ``requirements.txt``."""
-    lab.publish(more={"requirements-sputter.txt": "torch>=2.3,<3\n"})
+    (``tools/setup_source_env.ps1`` compares their SHA-256); an environment of your own needs pip."""
+    lab.publish()
     other = lab.computer()
-    lab.commit(lab.author, "newer torch", {"requirements-sputter.txt": "torch>=2.4,<3\n"})
+    lab.commit(lab.author, "newer numpy", {"requirements.txt": "numpy>=1.26\n"})
     lab.git(lab.author, "push", "--quiet", "origin", "HEAD:main")
 
     done = lab.update(other)
 
     assert done.returncode == 0, _report(done)
-    assert "packages GIMaP needs changed: requirements-sputter.txt (PyTorch, for Sputter)." in done.stdout
+    assert "packages GIMaP needs changed: requirements.txt." in done.stdout
     assert "Started with Start_GIMaP.bat: nothing to do, its next start adds the new packages itself." in done.stdout
     assert "Run from an environment you set up yourself" in done.stdout
-    assert "python -m pip install -r requirements-sputter.txt" in done.stdout
-    assert "python -m pip install -r requirements.txt" not in done.stdout     # that list did not change
+    assert "python -m pip install -r requirements.txt" in done.stdout
 
     lab.advance()       # no list changes
 

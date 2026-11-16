@@ -8,7 +8,7 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
     Batch Export。
   - **Fitting**：一维模型拟合，可以拟合单条曲线或原位序列。
   - **Compare**：多个序列或样品的阶段、异常帧、谁和谁相像。
-  - **Sputter**：原位溅射序列逐时间窗的颗粒尺寸、间距、生长阶段（工具包在子进程里运行）。
+  - **Sputter**：原位溅射序列逐时间窗的晶粒尺寸、高度、间距（随仓库的分析包在子进程里运行）；详情只放分析用到的选项和所示结果的时间窗、报告、日志。
 - **Labs**：2D Prediction。Trainset Build 已从导航、菜单和应用启动移除，研究组件不随发布包提供。
 - **Tools 菜单**：Geometry Calibration、Format Converter（含 Convert Current File）、XRR Series Extractor、
   SEM Particle Analysis（SEM 图像粒径分析；2D Prediction 结果区的 SEM comparison… 也打开它）、
@@ -66,12 +66,6 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
   - `src/gimap/shared/`：探测器读取、几何、`series_stages`（阶段与异常帧）、`figures`；
   - `src/gimap/integrations/`：用户数据（UserStore）、任务、BornAgain、TensorFlow；
   - `utils/ML_Fitting_1D_GISAXS/`：研究代码，GUI 只按路径用子进程调用它。
-  - `utils/sputter_toolkit/`：Sputter 工作区的研究代码（含两个网络权重），随仓库提供，也只按路径用子进程调用
-    （`scripts/sputter_struct_v1.py`），主程序不导入它。它要 PyTorch：`requirements-sputter.txt`，源码目录启动时
-    自动装上。每个文件按 `MANIFEST.json` 的 SHA-256 校验（`.gitattributes` 对这个文件夹关掉换行转换）；
-    网络权重绑定了其中五个源文件，那五个一个字节都不能改。改动记在 `SOURCE.json` 的 `local_patches`，
-    改完运行 `python verify.py --write`，`tests/test_sputter_toolkit_bundle.py` 检查字节和私有名称；
-    私有名称从被 git 忽略的 `docs/agents/eval/local/private_tokens.txt`（每行一个）读取，名称本身不写进提交的文件。
   - `utils/gisaxs1d_gui_kit/`：fit1d 工具包（Fitting 的 Predict parameters (fit1d)、1D Predict 的 fit1d），含两个 numpy 网络
     和形状因子表，随仓库提供，只在任务子进程里导入（`fitting/infrastructure/adapters/fit1d_method.py`）；环境变量
     `GISAXS1D_KIT_HOME` 可以指向另一份。只放运行时文件，例子数据和引用实测数据的研究笔记都不放；改动记在 `SOURCE.json`，
@@ -81,6 +75,7 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
     `GIMAP_SPUTTER_CLIENT` 或用户选的文件夹优先。不在这里改：在研究代码里用 `python -m iampred.release` 重新构建后整体替换。
     每个文件按 `MANIFEST.json` 校验（`.gitattributes` 关掉换行转换），`tests/test_sputter_client_bundle.py` 检查字节、
     私有名称、用当前 Python 能编译、不装 PyTorch 也能启动各命令、每个网络能加载，以及网络带着的哈希。
+    私有名称从被 git 忽略的 `docs/agents/eval/local/private_tokens.txt`（每行一个）读取，名称本身不写进提交的文件。
   - **不在仓库里的可选运行时**，都在可取消的子进程里运行，主程序不导入它们：
     - SEM 的 StarDist：单独的 Python 环境（`requirements-sem-stardist.txt`，`GIMAP_SEM_STARDIST_HOME`），
       模型权重放在仓库外，不联网下载。

@@ -497,6 +497,8 @@ def main():
                                           feats=[{k: v for k, v in d.items() if k not in ("X", "S", "info")} for d in feats]))
     else:
         feats, info, q, rows = st["feats"], st["info"], np.array(st["q"], float), st["rows"]
+        for r in rows:
+            r.pop("seq", None)
         okf = [d for d in feats if d["ok"]]
         print(f"--reuse: {len(okf)} windows (features, candidates, per-window refinement) from state.json.gz", flush=True)
     reps = cfg["reported"]
@@ -538,6 +540,9 @@ def main():
                 r["seq"] = sw[r["t"]]
                 if "refined" in r:
                     r["seq"]["versus"] = versus(r["seq"]["dev5"], r["refined"]["dev5"])
+
+        _dump(out / "state.json.gz", dict(key=key, info=info, q=q, rows=rows,
+                                          feats=[{k: v for k, v in d.items() if k not in ("X", "S", "info")} for d in feats]))
         if seq["shared"] is not None:
             nf = len(info["pnames"]) - 1
             tt = [r["t"] for r in rows if "seq" in r]

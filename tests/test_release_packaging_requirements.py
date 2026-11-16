@@ -81,11 +81,6 @@ def code():
                 # present); its other imports (torch, pyFAI, xraydb) sit on research paths the page never runs
                 # (tests/test_sputter_client_bundle.py: the commands start without PyTorch)
                 continue
-            if parts[:2] == ("utils", "sputter_toolkit"):
-                # external Sputter toolkit, run as a subprocess; its packages: requirements-sputter.txt. Its own
-                # package (``sputtergisaxs``) is the program's: the fringe tool imports the toolkit's grid from it.
-                own.update(parts[2:-1])
-                continue
             if path.relative_to(ROOT).as_posix() in ISOLATED_RUNTIMES:
                 continue  # checked against its own runtime manifest below
             if parts[0] != "src":

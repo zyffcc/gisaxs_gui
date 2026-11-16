@@ -39,9 +39,8 @@ right.*
 - **Sputter**: an in-situ sputter deposition (PILATUS CBF frames), time window by time window. Its main
   screen shows the result of **Analyze**, which runs a separate analysis package: the measured image beside
   the model image of each solution, and the grain radius, height, distance, gap, size distribution width and
-  coverage with their evolution. **Details** holds the method that comes with GIMaP, **Predict**: Ag or Au
-  on a polymer (Cu is read by Analyze, with its own networks), read as particle size, spacing, island height,
-  growth stage and metal thickness, each with how far it can be trusted.
+  coverage with their evolution. **Details** holds the geometry and the options, and the windows, the report
+  and the logs of the result shown.
 - **Tools**: Geometry Calibration (beam centre and distance from AgBh, LaB₆, CeO₂ …), Format Converter,
   XRR Series Extractor, SEM Particle Analysis (particle sizes from SEM images, with a scale you give) and 1D
   Predict for many curves.
@@ -94,8 +93,7 @@ For a clone of the repository (`git clone https://github.com/zyffcc/gisaxs_gui.g
 (**Code ▸ Download ZIP**, extracted to a short path that you may write to): double-click
 `Start_GIMaP.bat` in the folder. The first start sets up a private environment in `.gimap\` inside the
 folder: it downloads uv (a small Python installer, pinned version, checked against its SHA-256),
-Python 3.10, the packages of `requirements.txt` (about 2 GB) and PyTorch for the Sputter workspace
-(`requirements-sputter.txt`, about 1.2 GB more) — 3-20 minutes depending on the connection. Then GIMaP
+Python 3.10 and the packages of `requirements.txt` (about 2 GB) — 3-20 minutes depending on the connection. Then GIMaP
 opens; later starts are immediate. Nothing outside the folder is changed; delete `.gimap\` to remove the
 environment.
 To update a clone, double-click `Update_GIMaP.bat` (see
@@ -144,10 +142,7 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
-The Sputter workspace's model is part of the repository (`utils/sputter_toolkit`) and runs on PyTorch
-(CPU), which its first **Predict** installs into the Python GIMaP runs in (about 1.2 GB; by hand:
-`python -m pip install -r requirements-sputter.txt`). The analysis package of Sputter's **Analyze** and
-**Static Frames** is part of the repository too (`utils/sputter_client`, about 75 MB) and needs only
+The analysis package of Sputter's **Analyze** and **Static Frames** is part of the repository (`utils/sputter_client`, about 75 MB) and needs only
 `requirements.txt`; another folder chosen in the workspace or `GIMAP_SPUTTER_CLIENT` use another package.
 The fit1d kit of **Predict parameters (fit1d)** is part of the repository too (`utils/gisaxs1d_gui_kit`, about
 62 MB) and needs only `requirements.txt`.
@@ -295,9 +290,7 @@ Where you rely on a method or a data set that GIMaP builds on, cite it as well: 
 - **Python** 3.10 or 3.11 to run from source.
 - **Screen**: 1280 × 720 or larger (the smallest window is 1024 × 640). GIMaP follows the display scaling of
   the operating system; **View ▸ Font Size** changes the text size.
-- **Disk**: about 2 GB for the Python environment, and about 1.2 GB more for PyTorch (Sputter workspace): the
-  portable version installs it on the first Sputter **Predict**, and `Start_GIMaP.bat` in a source folder
-  installs it at the first start.
+- **Disk**: about 2 GB for the Python environment.
 - **Memory and speed**: reducing one frame in Analyze takes 0.06 s for a Pilatus 1M GISAXS frame and 0.7 s for a
   2048 × 2048 GIWAXS frame (the first frame of a detector 0.13 s and 1.0 s), and the process then holds about
   0.2 GB and 0.6 GB (`tools/benchmarks/analyze_speed.py`, a 32-thread desktop CPU). The window, Batch Export of
@@ -329,8 +322,6 @@ Dependencies are listed in `requirements.txt`:
 
 Optional parts, each needed only for the function named:
 
-- The Sputter workspace's model needs PyTorch (CPU): `requirements-sputter.txt`, installed on its first
-  **Predict** (or by `Start_GIMaP.bat` in a source folder).
 - StarDist, to separate touching particles in SEM Particle Analysis, runs in a separate Python environment
   made from `requirements-sem-stardist.txt`, with a model folder of your own.
 
@@ -378,8 +369,7 @@ found and what it did:
 - When Git cannot replace a file because another program has it open (GIMaP itself, an editor), the
   version you had is put back whole, with your edits where they were: close the program and run the script
   again.
-- When a list of Python packages changed (`requirements.txt`, or `requirements-sputter.txt`: PyTorch, for
-  Sputter), it says so. If you start GIMaP with `Start_GIMaP.bat`, there is nothing to do: its next start
+- When the list of Python packages changed (`requirements.txt`), it says so. If you start GIMaP with `Start_GIMaP.bat`, there is nothing to do: its next start
   adds the new packages itself. In an environment you set up yourself (conda, venv), run the command the
   script prints for each changed list, such as `python -m pip install -r requirements.txt`.
 

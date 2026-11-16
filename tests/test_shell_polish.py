@@ -547,7 +547,7 @@ def test_every_sidebar_tooltip_is_translated() -> None:
             tip = sidebar.findChild(QWidget, f"navigation_{item.key}").toolTip()
             assert item.description not in tip and "\n" in tip, item.key
         sputter = sidebar.findChild(QWidget, "navigation_sputter").toolTip()
-        assert sputter == "溅射\n原位溅射序列：颗粒尺寸和间距随时间的变化，以及它们有多可靠"
+        assert sputter == "溅射\n原位溅射序列：逐时间窗拟合的晶粒尺寸、高度和间距随时间的变化"
     finally:
         apply_language("en", [sidebar])
     sidebar.close()

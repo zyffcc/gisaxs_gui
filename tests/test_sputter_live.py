@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import QApplication
 from src.gimap.app.presentation.task_runner import TaskRunner
 from src.gimap.features.sputter.application import ClientRun, LiveEvent, LiveRun, live_event, parse_live
 from tests.sputter_client_fixtures import FakeClientRunner, write_result
-from tests.sputter_fixtures import FakeInspector, FakeInstaller, FakeRunner, scan_folder
+from tests.sputter_fixtures import FakeInspector, scan_folder
 
 Q = np.r_[-np.linspace(1.0, 0.1, 10), np.linspace(0.1, 1.0, 10)].astype(np.float32)
 AF = np.linspace(0.05, 0.9, 12).astype(np.float32)
@@ -232,7 +232,7 @@ def _page(tmp_path, client):
     from src.gimap.features.sputter.presentation.page import SputterPage
 
     service = create_sputter_service(
-        runner=FakeRunner(), installer=FakeInstaller(ready=True), inspector=FakeInspector(),
+        inspector=FakeInspector(),
         results_root=lambda: tmp_path / "results",
         client=create_client_service(runner=client, reader=ClientFolderReader(lambda: tmp_path / "user")))
     page = SputterPage(service, task_runner=TaskRunner())
@@ -251,6 +251,7 @@ def test_the_main_screen_shows_each_step_and_what_it_found_while_analyze_runs(tm
     page.sdd.setText("1000")
     page.alpha.setText("0.3")
     page.sample_rate.setText("0.25")
+    page.rate_unit.setCurrentIndex(page.rate_unit.findData("nm/s"))
     page.analyze_button.click()
     _settle(lambda: client.held.is_set())
     _settle(lambda: page.live_steps.state("predict") == "busy" and page._live.solved() == 2, 5)

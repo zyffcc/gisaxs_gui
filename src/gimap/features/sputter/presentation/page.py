@@ -1,24 +1,18 @@
 """Sputter workspace: the grains of an in-situ sputter series, time window by time window.
 
 **The main screen** (shown first). The input bar takes the scan folder, the metal, the substrate and the deposition
-rate; **Analyze** runs the client analysis package (``client_flow.py``); while it runs, the main screen shows its
-steps and what each has found so far (``live_panel.py``). The result is shown one time window at a
-time (``client_panel.py``): the measured image beside the model image of a solution, the solutions to choose from
-(the network's candidates and the refined one), the values of the solution shown — radius, height, distance, gap,
-size distribution width, coverage — and their evolution over the scan.
+rate with its unit (``rate_flow.py``); **Analyze** runs the client analysis package (``client_flow.py``); while it runs,
+the main screen shows its steps and what each has found so far (``live_panel.py``). The result is shown one time
+window at a time (``client_panel.py``): the measured image beside the model image of a solution, the solutions to
+choose from (the network's candidates, the refined one and the joint fit of the whole scan), the values of the
+solution shown — radius, height, distance, gap, size distribution width, coverage — and their evolution over the scan.
 
-**Details** (the second view) holds everything else: the geometry, the options of Analyze, Static Frames (samples
-measured after their deposition, analysed one at a time into a series the main screen shows: ``static_flow.py``), and
-the earlier method —
-Predict with the model bundled with GIMaP, which runs in GIMaP's own Python (PyTorch is installed there on the first
-Predict), with its job status, the model's environment, the result line, More options and its tabs: Size Trend (faint
-per-window points and the trend lines; the metal thickness), Literature (the series against published growth over the
-nominal thickness; the island height H from the q_z fringes, measured in the background), Structure Sketch, Windows
-and Reliability.
+**Details** (the second view): the geometry, the options of Analyze, Static Frames (samples measured after their
+deposition, analysed one at a time into a series the main screen shows: ``static_flow.py``) and More options; at the
+right the result shown, from the files of its folder: Windows, Report and Log (``result_tabs.py``).
 
 The layout is in ``views/sputter_page_view.py`` and ``views/sputter_main_view.py``; the folder and the form in
-``geometry.py``, Predict in ``predict_flow.py``, showing its result in ``results_panel.py``, Show in Analyze (a
-window's frames, summed) in ``window_menu.py``.
+``geometry.py``.
 """
 
 from __future__ import annotations
@@ -33,33 +27,20 @@ from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.task_runner import TaskRunner
 from src.gimap.app.presentation.theme.engine import theme_manager
 
-from ..application import DOWNLOAD_SIZE, SputterService
+from ..application import SputterService
 from .client_flow import CLIENT_KEY, SputterClientMixin
 from .client_panel import ClientPanelMixin
-from .fringe_flow import FRINGES_KEY, FringeFlowMixin
-from .geometry import INSPECT_KEY, SputterGeometryMixin, warning_style
-from .literature_tab import LiteratureTab
+from .geometry import INSPECT_KEY, SputterGeometryMixin
 from .live_panel import LivePanelMixin
 from .project_state import SputterProjectMixin
-from .predict_flow import PREDICT_KEY, SputterPredictMixin
-from .results_panel import SputterResultsMixin
+from .rate_flow import RateMixin
+from .result_tabs import ResultTabsMixin
 from .static_flow import STATIC_KEY, SputterStaticMixin
-from .sketch_view import SketchView
-from .texts import message_text, text
-from .trend_plot import TrendPlot
 from .views.sputter_page_view import SputterPageView
-from .window_menu import WindowMenuMixin
-
-ENVIRONMENT_READY = "PyTorch {version}: ready"
-ENVIRONMENT_MISSING = "⚠ PyTorch is installed on the first Predict ({size}, needs the internet)"
-ENVIRONMENT_UNKNOWN = "PyTorch is checked when you press Predict"
-ENVIRONMENT_TIP = "Model: bundled with GIMaP · Python: {python}"
 
 
-class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, LivePanelMixin, SputterStaticMixin,
-                  SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin, FringeFlowMixin, WindowMenuMixin,
-                  QWidget, SputterPageView):
-    eventReceived = pyqtSignal(object)
+class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, ResultTabsMixin, LivePanelMixin,
+                  SputterStaticMixin, RateMixin, SputterGeometryMixin, QWidget, SputterPageView):
     clientEvent = pyqtSignal(object)
     """A line or a step of Analyze, from its background task (delivered in the GUI thread)."""
     staticEvent = pyqtSignal(object)
@@ -72,43 +53,21 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Liv
         self.service = service
         self.tasks = task_runner or TaskRunner(self)
         self.preferences = preferences
-        self.result = None
-        self._init_fringes()
         self.scan_info = None
         self.sources: dict = {}
         self._edited: set = set()
         self._requested_scan = ""
         self._summary = None
-        self._busy: Optional[str] = None
-        self._stop = False
-        self._tracker = None
-        self._step = ""
-        self._installing_writing = False
         self._inspecting = False          # the header of the chosen folder is being read
-        self._predict_queued = False      # Predict pressed while the header was read or the files rewritten
-        self._result_owner = ""           # folder_key of the scan the result shown belongs to
-        self._drawn: Optional[tuple] = None   # (rate, t0, end) the result's physical files were drawn with
-        self._rebuild_values: Optional[tuple] = None
-        self._thickness_typed = False     # the rate, t0 or end was typed while the model ran
-        self._status_parts = ("idle", [], 0.0, True)  # at rest the chip says it
-        self.trend = TrendPlot(self.trend_layout)
-        self.sketch = SketchView()
-        self.literature = LiteratureTab()
-        self.tabs.addTab(self.literature, "Literature")
-        self.tabs.addTab(self.sketch, "Structure Sketch")
-        self.tabs.addTab(self.table, "Windows")
-        self.tabs.addTab(self.report, "Reliability")
         self.results_picker.path_edit.setPlaceholderText(str(service.results_root()))
         self.mask_picker.browseRequested.connect(self._choose_mask)
         self.results_picker.browseRequested.connect(self._choose_results_root)
         self._init_client()
         self._init_static()
         self._init_client_panel()
+        self._init_result_tabs()
         self._init_live()
         self._connect_geometry()
-        self._connect_predict()
-        self._connect_results()
-        self._connect_window_menu()
         self._connect_client()
         self._connect_static()
         self._empty_project_state = self.project_state()
@@ -116,14 +75,7 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Liv
         self._restore()
         self._restore_client_last()
         self._restore_static_last()
-        self._metal_changed()
-        self._show_status()
-        self._show_environment()
-        self._draw_trend()  # the empty state until there is a result
         theme_manager().changed.connect(self._theme_changed)
-        last = self._stored().get("last_result")
-        if last:
-            self.open_results(last, quiet=True)
         last = self._stored().get("last_client_result")
         if last:
             self.open_client_result(last, quiet=True)
@@ -146,57 +98,32 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Liv
             self.results_picker.set_path(folder)
 
     # -- texts -----------------------------------------------------------------------------------------------
-    def _show_environment(self) -> None:
-        missing = self.service.toolkit_problem()
-        status = self.service.environment()
-        if status.ready:
-            words = text(ENVIRONMENT_READY, version=status.torch_version)
-        elif status.problem == "unknown":
-            words = text(ENVIRONMENT_UNKNOWN)
-        else:  # the first Predict downloads PyTorch: a consequence of pressing it
-            words = text(ENVIRONMENT_MISSING, size=tr(DOWNLOAD_SIZE))
-        self.environment_label.setText(message_text(missing) if missing else words)
-        self.environment_label.setToolTip(text(ENVIRONMENT_TIP, python=status.python))
-        warning_style(self.environment_label, bool(missing) or not (status.ready or status.problem == "unknown"))
-
     def _notify(self, message: str, *, error: bool = False) -> None:
         try:
             show_toast(self, message, level="error" if error else "info")
         except Exception:  # noqa: BLE001 - a missing toast host must not hide the message
-            self.job_status.message_label.setText(message)
+            self.analyze_status.message_label.setText(message)
 
     def _theme_changed(self, *_args) -> None:
         """The plots in the colours of the new theme (data colours stay)."""
-        self._draw_trend()
-        self.literature.redraw()
-        if self.result is not None:
-            self.sketch.redraw()
         self.redraw_client_plots()
         self.redraw_live_plots()
 
     def refresh_language(self) -> None:
         """Run-time texts in the new interface language (the walker has translated the fixed ones)."""
-        self._show_status()
         self._show_sources()
         self._show_scan_summary()
-        self._show_environment()
-        self.refresh_results_language()
-        self.sketch.refresh_language()
-        if self.result is None:
-            self.literature.refresh_language()
         self.refresh_client_language()
         self.refresh_static_language()
+        self.refresh_result_tabs_language()
 
     def running(self) -> bool:
-        """Predict, Analyze or Analyze Sample is at work (the window asks before it closes)."""
-        return SputterPredictMixin.running(self) or self.analyzing() or self.static_analyzing()
+        """Analyze or Analyze Sample is at work (the window asks before it closes)."""
+        return self.analyzing() or self.static_analyzing()
 
     def dispose(self) -> None:
-        SputterPredictMixin.dispose(self)
         self._dispose_client()
         self._dispose_static()
-        self._stop_fringes()
-        self.tasks.cancel(FRINGES_KEY)
         self.tasks.cancel(INSPECT_KEY)
         try:
             theme_manager().changed.disconnect(self._theme_changed)
@@ -204,4 +131,4 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Liv
             pass
 
 
-__all__ = ["CLIENT_KEY", "PREDICT_KEY", "STATIC_KEY", "SputterPage"]
+__all__ = ["CLIENT_KEY", "STATIC_KEY", "SputterPage"]

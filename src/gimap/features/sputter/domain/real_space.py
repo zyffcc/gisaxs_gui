@@ -6,7 +6,8 @@ distribution, the height H of the metal above the substrate and the thickness of
 
 - top view: a square of ``FIELD_DISTANCES`` x D; the grains on a hexagonal arrangement of distance D, each shifted at
   random by about ``SHIFT`` x D (an arrangement without long-range order, as the model's interference function has),
-  each with a radius drawn from the log-normal distribution of median R. A base layer covers the whole field.
+  each with a radius drawn from the log-normal distribution of median R. A base layer covers the whole field:
+  the film is closed (``RealSpace.continuous``) and the grains are relief on it.
 - side view: a cut ``SIDE_DISTANCES`` x D long through one row of grains: the base layer, and on it each grain as a cap
   of its radius and of the height H - base, scaled with its radius.
 
@@ -70,6 +71,11 @@ class RealSpace:
     """Top of the metal above the substrate (base layer + grains), nm."""
     base: float
     """Thickness of the continuous layer under the grains, nm (0: separate islands)."""
+
+    @property
+    def continuous(self) -> bool:
+        """A closed film: the grains sit on a continuous layer of the metal."""
+        return self.base > 0
 
     @property
     def grain_height(self) -> float:

@@ -196,9 +196,6 @@ The licences below are the ones the packages declare in their metadata (Python d
 
 None of these is in the repository or in the portable package.
 
-- **PyTorch** (BSD-3-Clause, [github.com/pytorch/pytorch](https://github.com/pytorch/pytorch)) runs the
-  networks of the Sputter workspace. The workspace installs it from PyPI on its first **Predict**
-  (`requirements-sputter.txt`). In a source folder, `Start_GIMaP.bat` installs it.
 - **StarDist** 0.9.2 and **CSBDeep** 0.8.2 (both BSD-3-Clause,
   [github.com/stardist/stardist](https://github.com/stardist/stardist),
   [github.com/CSBDeep/CSBDeep](https://github.com/CSBDeep/CSBDeep)) run with TensorFlow 2.15.1 in a
@@ -226,13 +223,6 @@ where present. This confirmation does not change the separate licences of third-
   and the 1D fitting research code in `utils/ML_Fitting_1D_GISAXS/`. `saved_model_K3K4/` and the research
   code were added to the repository on 2026-06-08 with the first 1D Predict; `k1_k2_k3_k4_phys/` was added
   on 2026-08-11.
-- **Sputter toolkit** (`utils/sputter_toolkit/`): the research code `sputter_struct_v1` with two PyTorch
-  network checkpoints (`experts/polymer/model/best.pt`, `experts/TS/model/best.pt`). It is bundled from
-  the source commit `19d775bc`, with the local patches that `SOURCE.json` lists.
-  - `MANIFEST.json` and `verify.py` check every file.
-  - `SOURCE.json` records Yufeng Zhai as the author and MIT as the licence.
-  - The published values it compares with are cited, with their DOIs, in
-    `configs/literature_reference_v1.json`.
 - **Sputter analysis package** (`utils/sputter_client/`): a release build of the research code `iampred` (the
   physical forward model of in-situ sputter GISAXS and the networks trained on its simulations) with numpy
   networks for Au and Ag on Si and porous TiO₂, Ag on polymer films, Cu on PEO, and static Au films. It runs

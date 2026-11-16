@@ -129,12 +129,11 @@ class MainWindowComponents(HandoverMixin):
         return page
 
     def _create_sputter_page(self):
-        """Sputter: size, spacing and metal thickness of an in-situ sputter series (model bundled with GIMaP)."""
+        """Sputter: the grains of an in-situ sputter series, window by window (the bundled analysis package)."""
         from src.gimap.features.sputter.bootstrap import create_sputter_service
         from src.gimap.features.sputter.presentation.page import SputterPage
 
         page = SputterPage(create_sputter_service(), task_runner=self.task_runner, preferences=self.preferences)
-        page.set_analyze_target(self._show_sputter_window)  # Show in Analyze: a window's frames, summed
         self.ui.mainWindowWidget.addWidget(page)
         self.ui.sputterPage = page
         return page
@@ -430,7 +429,7 @@ class MainWindowComponents(HandoverMixin):
             # The Labs runtime starts after the window is shown: no runtime yet is an AttributeError, skipped.
             (tr("2D Prediction"), lambda: self.ui.runtime.prediction.prediction_running()),
             (tr("SEM Particle Analysis"), lambda: self.ui.menus.sem_running()),
-            (tr("Sputter prediction"), lambda: self.sputter_page.running()),
+            (tr("Sputter analysis"), lambda: self.sputter_page.running()),
         )
         jobs = []
         for name, busy in checks:
@@ -533,7 +532,7 @@ class MainWindowComponents(HandoverMixin):
             self._assistant.shutdown()
         self._stop_automatic_analysis()
         # A Single fit and an In-situ series: stop, wait (2 s at most) for their threads, release the plots;
-        # Sputter: its model's (or pip's) whole process tree is ended.
+        # Sputter: the analysis package's whole process tree is ended.
         for page in (self.fitting_workspace.fit_page, self.fitting_workspace.series_page, self.sputter_page):
             try:
                 page.dispose()

@@ -1,12 +1,10 @@
 """The Sputter page's run-time texts in the interface language.
 
-The application and the domain write English from templates (problems of a request, PyTorch's installer,
-the toolkit, the result reader, the sketch's notes, the reliability report). A message that reaches the page
-as text only (a failed background task) is matched against those templates again and the same values are
-filled into the translated template (``trf``), as Compare does (``compare/presentation/errors.py``); file
-names, folders and numbers stay as they are. Anything else is translated when it is an exact key of the
-table, else shown as it is. The toolkit's own sentences (notes, reasons, the literature checks) are matched the
-same way against its templates (``toolkit_texts.TOOLKIT_TEMPLATES``): ``note_text``.
+The application and the domain write English from templates (problems of a request, the analysis package's engine,
+the result reader). A message that reaches the page as text only (a failed background task) is matched against those
+templates again and the same values are filled into the translated template (``trf``), as Compare does
+(``compare/presentation/errors.py``); file names, folders and numbers stay as they are. Anything else is translated
+when it is an exact key of the table, else shown as it is.
 """
 
 from __future__ import annotations
@@ -16,15 +14,10 @@ from functools import lru_cache
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ..application import (CHECK_SOURCES, CLIENT_TEMPLATES, FRINGES_FAILED, FRINGES_MISSING, HINT_TEXT,
-                           INSTALL_MESSAGES, INSTALL_STAGES, NO_FRAMES, NO_TABLE, PROBLEMS,
-                           SKETCH_TEMPLATES, SOURCE_TEXT, STATIC_TEMPLATES, STOPPED, TOOLKIT_FAILED, TOOLKIT_MISSING,
-                           WINDOW_TEMPLATES, InstallProgress, Source)
-from .toolkit_texts import TOOLKIT_TEMPLATES
+from ..application import (CHECK_SOURCES, CLIENT_PROBLEMS, CLIENT_TEMPLATES, HINT_TEXT, NO_FRAMES, PROBLEMS,
+                           SOURCE_TEXT, STATIC_TEMPLATES, Source)
 
-TEMPLATES = (*INSTALL_MESSAGES.values(), TOOLKIT_MISSING, TOOLKIT_FAILED, STOPPED, NO_FRAMES, NO_TABLE,
-             *SKETCH_TEMPLATES, *WINDOW_TEMPLATES, *PROBLEMS, FRINGES_FAILED, FRINGES_MISSING, *CLIENT_TEMPLATES,
-             *STATIC_TEMPLATES)
+TEMPLATES = (NO_FRAMES, *PROBLEMS, *CLIENT_TEMPLATES, *STATIC_TEMPLATES)
 SOURCE_TIPS = {
     "missing": "Not in the frame headers or the scan's files: enter it.",
     "auto": "Empty: the beam centre is estimated from the frames. A centre you give is in Analyze's pixel coordinates.",
@@ -45,21 +38,7 @@ SUMMARY_TIPS = ("S/N {serial}", "{pixel} µm pixels", "first frame {first_frame}
 LABEL_TEMPLATES = (*SOURCE_TEXT.values(), *HINT_TEXT.values(), *SOURCE_TIPS.values(), *HINT_TIPS.values(),
                    *SUMMARY_TIPS)
 """Where a value comes from and what the files say about the energy (shown beside the fields)."""
-STAGE_NAMES = {
-    "pre_nucleation": "pre-nucleation", "islands": "islands", "coalescence": "coalescence", "film": "film",
-    "pre_nucleation_candidate": "pre-nucleation (candidate)",
-    "separate_islands_candidate": "separate islands (candidate)",
-    "coalescence_candidate": "coalescence (candidate)",
-    "coalescence_or_film_candidate": "coalescence or film (candidate)",
-    "continuous_film_candidate": "continuous film (candidate)",
-}
-"""The toolkit's stage names (on the physical path, and the per-window rule's candidates) as the page says them."""
 _FIELD = re.compile(r"\{(\w+)\}")
-SYMBOLS = ((re.compile(r"\(2\*pi/sqrt\(3\)\)"), "(2π/√3)"), (re.compile(r"2\*pi/q\*"), "2π/q*"),
-           (re.compile(r"\bdelta_c\b"), "δc"), (re.compile(r"\bdelta\b"), "δ"), (re.compile(r"\bchi\b"), "χ"),
-           (re.compile(r"\brho\b"), "ρ"), (re.compile(r"\beta\b"), "η"), (re.compile(r"<="), "≤"),
-           (re.compile(r">="), "≥"))
-"""The toolkit writes symbols in ASCII (``delta``, ``2*pi/q*``); the page shows them as symbols."""
 
 
 @lru_cache(maxsize=None)
@@ -91,44 +70,10 @@ def message_text(message) -> str:
                 return text(template, **found.groupdict())
         elif message == template:
             return tr(template)
-    parts = [problem for problem in PROBLEMS if problem in message]
+    parts = [problem for problem in (*PROBLEMS, *CLIENT_PROBLEMS) if problem in message]
     if parts and " ".join(parts) == message:
         return " ".join(tr(problem) for problem in parts)
     return tr(message)
-
-
-@lru_cache(maxsize=4096)
-def _toolkit_match(sentence: str):
-    """(template, values) of the toolkit's template a sentence was made from, or None."""
-    for template in TOOLKIT_TEMPLATES:
-        if "{" not in template:
-            if sentence == template:
-                return template, ()
-            continue
-        found = _pattern(template).fullmatch(sentence)
-        if found is not None:
-            return template, tuple(found.groupdict().items())
-    return None
-
-
-def note_text(sentence) -> str:
-    """A sentence of the toolkit (a note, a reason, a literature check) in the interface language; one it words
-    otherwise stays as it is."""
-    sentence = "" if sentence is None else str(sentence)
-    if not sentence:
-        return sentence
-    found = _toolkit_match(sentence)
-    if found is None:
-        return message_text(sentence)
-    template, values = found
-    return symbols(text(template, **dict(values)) if values else tr(template))
-
-
-def symbols(sentence: str) -> str:
-    """The toolkit's ASCII symbols as symbols (δ, 2π/q*, χ, ρ, η, ≤, ≥); column names stay as they are."""
-    for pattern, symbol in SYMBOLS:
-        sentence = pattern.sub(symbol, sentence)
-    return sentence
 
 
 def source_text(source: Source) -> str:
@@ -157,16 +102,5 @@ def source_tip(source: Source) -> str:
     return "\n".join(tips) or source_text(source)
 
 
-def stage_name(stage) -> str:
-    """A stage of the toolkit in the interface language (an unknown one as it is)."""
-    return tr(STAGE_NAMES[stage]) if stage in STAGE_NAMES else (stage or "")
-
-
-def install_text(progress: InstallProgress) -> str:
-    template = INSTALL_STAGES.get(progress.stage)
-    return text(template, **progress.fields()) if template else ""
-
-
-__all__ = ["HINT_TIPS", "LABEL_TEMPLATES", "SOURCE_TIPS", "STAGE_NAMES", "SUMMARY_TIPS", "TEMPLATES", "TOOLKIT_TEMPLATES",
-           "install_text", "message_text", "note_text", "source_text", "source_tip", "source_warns", "stage_name",
-           "symbols", "text"]
+__all__ = ["HINT_TIPS", "LABEL_TEMPLATES", "SOURCE_TIPS", "SUMMARY_TIPS", "TEMPLATES", "message_text", "source_text",
+           "source_tip", "source_warns", "text"]

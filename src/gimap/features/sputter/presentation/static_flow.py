@@ -34,10 +34,9 @@ from src.gimap.app.presentation.i18n import tr
 
 from ..application import (ClientProgress, ClientResult, ClientStarted, LiveEvent, StaticRequest, join_frames,
                            split_frames)
-from .client_flow import _guarded
+from .client_flow import Failure, _guarded
 from .client_texts import STARTING, STOPPING_ANALYSIS
 from .geometry import warning_style
-from .predict_flow import Failure
 from .texts import message_text, text
 
 STATIC_KEY = "sputter_static"

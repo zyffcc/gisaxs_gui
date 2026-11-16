@@ -1,5 +1,4 @@
-"""Compose Sputter: the service with the bundled toolkit, PyTorch's installer, the scan header, the readers, the
-island height from the q_z fringes and Analyze (the client analysis package)."""
+"""Compose Sputter: the scan header, the results root and Analyze (the client analysis package)."""
 
 from __future__ import annotations
 
@@ -8,28 +7,21 @@ from typing import Callable, Optional
 
 from src.gimap.integrations.state.user_store import user_data_dir
 
-from .application import ClientService, FringeService, SputterService, StaticService
-from .infrastructure import (BinnedWindowReader, BundledToolkit, CbfHeaderInspector, ClientFolderReader,
-                             ClientPackageRunner, FringeFolderStore, FringeTool, PipInstaller, StaticPackageRunner,
-                             StructureFolderReader)
+from .application import ClientService, SputterService, StaticService
+from .infrastructure import CbfHeaderInspector, ClientFolderReader, ClientPackageRunner, StaticPackageRunner
 
 
 def default_results_root() -> Path:
-    """``<user data folder>/sputter``: one folder per scan and request."""
+    """``<user data folder>/sputter``: one folder per scan and geometry."""
     return user_data_dir() / "sputter"
 
 
-def create_sputter_service(*, runner=None, installer=None, inspector=None, reader=None, windows=None,
-                           results_root: Optional[Callable[[], Path]] = None, fringes=None,
+def create_sputter_service(*, inspector=None, results_root: Optional[Callable[[], Path]] = None,
                            client=None) -> SputterService:
-    """The real adapters unless others are given (tests give fakes). ``fringes``: the island height from the q_z
-    fringes (by default the tool bundled in ``utils/sputter_fringes``; outputs the result folder cannot take go to the
-    user data folder). ``client``: Analyze, the client analysis package (by default the package found by
-    ``infrastructure.client.locate_package``, its data and work folders in the user data folder)."""
-    return SputterService(runner or BundledToolkit(), reader or StructureFolderReader(), installer or PipInstaller(),
-                          inspector or CbfHeaderInspector(), results_root or default_results_root,
-                          windows or BinnedWindowReader(),
-                          fringes or FringeService(FringeTool(), FringeFolderStore(), user_data_dir),
+    """The real adapters unless others are given (tests give fakes). ``client``: Analyze, the client analysis package
+    (by default the package found by ``infrastructure.client.locate_package``, its data and work folders in the user
+    data folder)."""
+    return SputterService(inspector or CbfHeaderInspector(), results_root or default_results_root,
                           client or create_client_service())
 
 

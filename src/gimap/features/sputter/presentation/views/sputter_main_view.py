@@ -2,7 +2,8 @@
 and ``client_panel.py``).
 
 **The input bar** (always shown, above the two views): the switch In Situ | After Deposition and its inputs — an
-in-situ scan: the scan folder, Metal, Substrate, the deposition rate with its QCM reading box; a sample measured after
+in-situ scan: the scan folder, Metal, Substrate, the deposition rate with its unit (Å/s or nm/s) and its QCM reading
+box; a sample measured after
 its deposition: its frames (folder, or a CBF file or zip archive), its name, its nominal thickness and, optionally,
 frames of the bare substrate (another piece of the same substrate without metal) — and the primary button Analyze;
 one line about the scan; one line with the geometry used and Edit; Open Result… and the switch between the main
@@ -19,7 +20,8 @@ time window. Before there is a result an empty state says what to do; while Anal
 (``sputter_live_view.py``) is the third page of the same stack.
 
 **Analyze options** (a section of Details): the mode, the optional onset and duration of the deposition and polymer
-film thickness, the analysis package and its folder, Open Report and Open Folder (of the result shown), and the log.
+film thickness, the analysis package and its folder, Open Report and Open Folder (of the result shown), and the
+messages of the run (the job status's Details shows them).
 """
 
 from __future__ import annotations
@@ -56,9 +58,13 @@ IMAGE_CHOICES = (("Patterns", "patterns", "The measured image beside the model i
                                          "the view from above, in nm."))
 SCAN_FOLDER_TIP = ("The folder of one scan (its CBF frames, or a scan folder with them in one subfolder such as p2m/): "
                    "its first frame tells the detector, the exposure and the time.")
-RATE_TIP = "Deposition rate in nm/s: needed, the solutions depend on the metal deposited at each time."
+RATE_TIP = ("Deposition rate, in the unit chosen beside it: needed, the solutions depend on the metal deposited at "
+            "each time.")
 SUBSTRATE_TIP = ("Polymer: a polymer film of another or unknown kind, a block copolymer for instance. The model describes "
                  "every polymer as one film layer; which polymer it is changes the metal's sizes by a few percent.")
+RATE_UNITS = (("Å/s", "A/s", 0.1), ("nm/s", "nm/s", 1.0))
+"""(shown, stored, nm/s per unit) of the deposition rate's unit; a quartz balance shows Å/s, the first."""
+RATE_UNIT_TIP = "Unit of the deposition rate: a quartz balance (QCM) shows Å/s; 1 nm/s = 10 Å/s."
 QCM_TIP = ("Ticked: the number is the reading of the quartz balance (QCM), which the analysis converts to the rate at "
            "the sample. Not ticked: the rate at the sample itself.")
 ANALYZE_TIP = ("Read the frames, find the solutions of every time window and draw each as an image beside the "
@@ -176,6 +182,12 @@ class SputterMainView:
         self.sample_rate.setObjectName("sputterSampleRate")
         self.sample_rate.setFixedWidth(84)
         self.sample_rate.setToolTip(RATE_TIP)
+        self.rate_unit = SafeWheelComboBox(insitu)  # a quartz balance shows Å/s: the first, the default
+        self.rate_unit.setObjectName("sputterRateUnit")
+        self.rate_unit.setProperty(DATA_VALUES, True)  # units
+        for shown, key, _scale in RATE_UNITS:
+            self.rate_unit.addItem(shown, key)
+        self.rate_unit.setToolTip(RATE_UNIT_TIP)
         self.qcm_check = QCheckBox("QCM reading", insitu)
         self.qcm_check.setToolTip(QCM_TIP)
         self.analyze_button = QPushButton("Analyze", bar)
@@ -189,12 +201,13 @@ class SputterMainView:
         row.setSpacing(4)
         row.addWidget(self.scan_picker, 1)
         for caption, widget in (("Metal", self.sample_metal), ("Substrate", self.substrate),
-                                ("Rate (nm/s)", self.sample_rate)):
+                                ("Rate", self.sample_rate)):
             label = QLabel(caption, insitu)
             label.setBuddy(widget)
             row.addSpacing(4)
             row.addWidget(label)
             row.addWidget(widget)
+        row.addWidget(self.rate_unit)
         row.addWidget(self.qcm_check)
         inputs.addWidget(self.kind_switch)
         inputs.addSpacing(4)
@@ -222,8 +235,8 @@ class SputterMainView:
         self.view_switch.setObjectName("sputterViewSwitch")
         for label, key in VIEW_CHOICES:
             self.view_switch.addItem(label, key)
-        self.view_switch.setItemToolTip(1, "The geometry, the options of the analysis, the report and the earlier "
-                                           "method with its tabs.")
+        self.view_switch.setItemToolTip(1, "The geometry and the options of Analyze, and the windows, the report and "
+                                           "the log of the result shown.")
         first.addWidget(self.geometry_summary, 1)
         first.addWidget(self.geometry_edit_button)
         first.addSpacing(12)
@@ -476,5 +489,5 @@ class SputterMainView:
         return section
 
 
-__all__ = ["DEVIATION_CAPTION", "ENTRY_HINT", "ElidedLabel", "IMAGE_CHOICES", "KIND_CHOICES", "MODE_CHOICES", "SAMPLE_METALS", "SUBSTRATE_CHOICES",
+__all__ = ["RATE_UNITS", "RATE_UNIT_TIP", "DEVIATION_CAPTION", "ENTRY_HINT", "ElidedLabel", "IMAGE_CHOICES", "KIND_CHOICES", "MODE_CHOICES", "SAMPLE_METALS", "SUBSTRATE_CHOICES",
            "SputterMainView", "TILES", "VIEW_CHOICES"]

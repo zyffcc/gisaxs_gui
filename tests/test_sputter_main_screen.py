@@ -24,7 +24,7 @@ from src.gimap.integrations.state import InMemoryUserPreferencesRepository
 from src.gimap.features.sputter.application import STATIC_UNSUPPORTED
 from tests.sputter_client_fixtures import (POROUS_WANTED, FakeClientRunner, FakeStaticRunner, entry, package_folder,
                                            porous_windows, window, write_result, write_static)
-from tests.sputter_fixtures import FakeInspector, FakeInstaller, FakeRunner, result_folder, scan_folder
+from tests.sputter_fixtures import FakeInspector, scan_folder
 
 
 @pytest.fixture(autouse=True)
@@ -48,8 +48,7 @@ def _page(tmp_path, *, client=None, preferences=None, reader=None, static=None):
 
     reader = reader or ClientFolderReader(lambda: tmp_path / "user")
     service = create_sputter_service(
-        runner=FakeRunner(), installer=FakeInstaller(ready=True), inspector=FakeInspector(),
-        results_root=lambda: tmp_path / "results",
+        inspector=FakeInspector(), results_root=lambda: tmp_path / "results",
         client=create_client_service(runner=client or FakeClientRunner(), reader=reader, static_runner=static))
     page = SputterPage(service, task_runner=TaskRunner(), preferences=preferences)
     page.resize(1256, 869)  # the page's size in a 1440 x 900 window
@@ -63,12 +62,13 @@ def _close(page) -> None:
     page.deleteLater()
 
 
-def _fill(page, folder, rate: str = "0.25") -> None:
+def _fill(page, folder, rate: str = "0.25", unit: str = "nm/s") -> None:
     page.set_scan_folder(folder)
     _settle(lambda: page.header_ready())
     page.sdd.setText("1000")
     page.alpha.setText("0.3")
     page.sample_rate.setText(rate)
+    page.rate_unit.setCurrentIndex(page.rate_unit.findData(unit))
 
 
 def _tiles(page) -> dict:
@@ -293,7 +293,6 @@ def test_analyze_runs_the_package_and_shows_its_result(tmp_path):
     assert "3 frames" in page.scan_summary.text()
     assert page.geometry_summary.full_text() == "9 keV · 1000 mm · αi 0.3° · beam centre from the frames · roll 0°"
     page.sample_metal.setCurrentIndex(page.sample_metal.findData("Au"))
-    assert page.metal.currentData() == "Au"  # one metal for both methods
     page.substrate.setCurrentIndex(page.substrate.findData("PS"))
     page.qcm_check.setChecked(True)
     page.film_thickness.setText("35")
@@ -311,7 +310,7 @@ def test_analyze_runs_the_package_and_shows_its_result(tmp_path):
     assert (request.beam_col, request.beam_row, request.sample_roll_deg, request.mask_file) == (None, None, 0.0, None)
     # the output is a subfolder of the scan's results folder
     assert runner.folders[0].name.startswith("iampred-") and runner.folders[0].parent.parent == tmp_path / "results"
-    assert runner.folders[0].parent == page.service.results_folder(page._request())
+    assert runner.folders[0].parent == page.service.results_folder(request)
     assert page.analyze_status.state_label.property("gimapJobState") == "succeeded"
     assert page.analyze_status.message_label.text() == "Done: 4 time windows."
     assert "Step 1 of 4: Reading the frames…" in seen and "Step 4 of 4: Drawing the measured and the model images…" in seen
@@ -562,16 +561,18 @@ def test_closing_the_window_stops_analyze(tmp_path):
     _close(page)
 
 
-# -- Details, the earlier method, the project and the language ---------------------------------------------------------
+# -- Details, the project and the language ------------------------------------------------------------------------------
 
 
-def test_a_folder_of_the_earlier_method_opens_in_details(tmp_path):
+def test_a_folder_without_a_result_is_not_opened(tmp_path):
+    """A folder of the earlier method (its tables, no result of the package) is a folder without a result."""
     page = _page(tmp_path)
     page.show()
-    old = result_folder(tmp_path / "res", physical=True)
-    assert page.open_client_result(old)
-    assert page.details_shown() and page.result is not None and page.client_result is None
-    assert not page.open_client_result(tmp_path / "nothing here", quiet=True)
+    old = tmp_path / "res"
+    old.mkdir()
+    (old / "structure.csv").write_text("time_s,R_nm\n0.5,2.0\n", encoding="utf-8")
+    assert not page.open_client_result(old, quiet=True) and not page.open_client_result(tmp_path / "nothing", quiet=True)
+    assert page.client_result is None and not page.details_shown() and page.tab_windows.currentIndex() == 0
     _close(page)
 
 
@@ -654,9 +655,10 @@ def test_the_main_screen_speaks_chinese_after_a_switch(tmp_path):
 def test_every_template_of_the_main_screen_is_in_the_chinese_table():
     from src.gimap.app.presentation.i18n.zh import ZH
     from src.gimap.features.sputter.application import CLIENT_TEMPLATES
-    from src.gimap.features.sputter.presentation import client_texts, evolution_view, pattern_view, real_space_view
+    from src.gimap.features.sputter.presentation import (client_texts, evolution_view, pattern_view, real_space_view,
+                                                         result_tabs)
     from src.gimap.features.sputter.presentation.views import sputter_main_view as view
-    from src.gimap.features.sputter.presentation.views.sputter_page_view import CU_NOTE, EARLIER_METHOD, EARLIER_METHOD_TIP
+    from src.gimap.features.sputter.presentation.views import sputter_page_view as details
 
     held = [*CLIENT_TEMPLATES, *client_texts.TEMPLATES, *pattern_view.TEMPLATES, *evolution_view.TEMPLATES,
             *real_space_view.TEMPLATES, *(text for label, _key, tip in view.IMAGE_CHOICES for text in (label, tip)),
@@ -664,7 +666,8 @@ def test_every_template_of_the_main_screen_is_in_the_chinese_table():
             *(text for label, _key, tip in view.MODE_CHOICES for text in (label, tip)),
             *(label for label, _key in view.VIEW_CHOICES), view.DEVIATION_CAPTION, view.DEVIATION_TIP, view.ENTRY_HINT,
             view.RATE_TIP, view.QCM_TIP, view.ANALYZE_TIP, view.FILM_TIP, view.ONSET_TIP, view.DURATION_TIP,
-            view.SCAN_FOLDER_TIP, CU_NOTE, EARLIER_METHOD, EARLIER_METHOD_TIP, ", "]
+            view.SCAN_FOLDER_TIP, view.RATE_UNIT_TIP, *result_tabs.TEMPLATES, details.NO_RESULT, details.TAB_WINDOWS,
+            details.TAB_REPORT, details.TAB_LOG, ", "]
     missing = [template for template in held if template not in ZH]
     assert missing == []
     for template in held:  # a translated template keeps its fields
@@ -709,7 +712,10 @@ def test_the_solution_shown_can_be_seen_in_real_space(tmp_path):
 
 
 def test_coalescing_grains_and_a_porous_layer_are_drawn_as_they_are(tmp_path):
+    from matplotlib.colors import to_rgba
+
     from src.gimap.features.sputter.application import PorousSpace
+    from src.gimap.features.sputter.presentation import real_space_view
 
     page = _page(tmp_path)
     page.show()
@@ -720,7 +726,21 @@ def test_coalescing_grains_and_a_porous_layer_are_drawn_as_they_are(tmp_path):
     assert page.real_space.arrangement == "islands" and "Separate islands" in _picture_texts(page)
     page.select_window(1)  # grains of 5.2 nm at 10 nm: a network across the view, on a continuous layer
     assert page.real_space.arrangement == "network"
-    assert "Continuous layer of 2 nm; the grains on it: connected across the view" in _picture_texts(page)
+    assert "Continuous film 2 nm, grains on top: connected across the view" in _picture_texts(page)
+    # a closed film: the whole square is the metal of the base, the grains are relief on it
+    _side, top = page.real_space.figure.axes
+    square = top.patches[0]
+    assert (square.get_width(), square.get_height()) == (page.real_space.drawn.field,) * 2
+    fill, edge = (to_rgba(colour) for colour in real_space_view.METAL_COLOURS["Ag"])
+    assert square.get_facecolor() == fill and square.get_alpha() is None
+    outlines, grains = top.collections
+    assert set(outlines.get_linewidths()) == {0.6}
+    relief = grains.get_facecolors()[0]
+    assert all(r <= f for r, f in zip(relief[:3], fill[:3])) and tuple(relief) != fill  # darker than the film
+    page.select_window(0)  # separate islands without a base layer: on the substrate, as before
+    assert "Separate islands" in _picture_texts(page)
+    assert top is not page.real_space.figure.axes[1]
+    assert to_rgba(page.real_space.figure.axes[1].patches[0].get_facecolor()) == to_rgba(real_space_view.SUBSTRATE)
     porous = dict(R_nm=0.9, width=0.2, f_islands=0.2, cap_share=0.2, depth_nm=2.0, xi_nm=5.0, film_share=0.05,
                   amount_nm=8.0, particle_nm=75.0, pore_depth_nm=400.0, pore_width_nm=60.0, cap_cover=0.3,
                   cap_thickness_nm=10.0, island_amount_nm=1.5, cap_amount_nm=0.5, pore_amount_nm=2.0,

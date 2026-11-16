@@ -3,9 +3,11 @@
 **Grains** (a flat substrate or a polymer film). Left a side view: a cut through one row of grains — the substrate (a
 polymer film is drawn, its thickness not to scale), the continuous base layer and the grains as caps of their radius
 and height, on one nm scale in both directions. Right the top view of a square of 7 distances D: the grains (log-normal
-radii around R, arranged at the distance D without long-range order), the base layer under them as a tint. Grains that
-touch are drawn as one piece (an outline around the cluster only); a cluster that crosses the view — the film has
-percolated — is drawn darker, and a line says whether the grains are separate, coalescing or a connected network.
+radii around R, arranged at the distance D without long-range order). Grains that touch are drawn as one piece (an
+outline around the cluster only); a cluster that crosses the view — the film has percolated — is drawn darker, and a
+line says whether the grains are separate, coalescing or a connected network. A solution with a continuous base layer
+is a closed film: the whole square is the metal of the base, the grains on it are relief (slightly darker, with thin
+outlines), and the line says the film's thickness and the grains on top.
 
 **A porous TiO₂ layer.** Left a cross-section of the layer to scale: TiO₂ particles of the model's radius, the metal in
 the pores as a tint whose strength follows its Gaussian in depth, the cap layer on the share of the particle tops it
@@ -27,8 +29,13 @@ from src.gimap.app.presentation.i18n import tr
 
 from ..application import (FILM_SUBSTRATES, arrangement, clusters, layer_particles, pore_density, porous_space,
                            real_space, side_grains, spanning, top_grains, visible)
-from .sketch_view import INK, METAL_COLOURS, POLYMER, POLYMER_EDGE, SUBSTRATE
 from .texts import text
+
+METAL_COLOURS = {"Ag": ("#b8c0c8", "#5f6b76"), "Au": ("#e3b23c", "#8a6512"), "Cu": ("#d08a5c", "#7a4220")}
+"""(fill, edge) of each metal."""
+POLYMER, POLYMER_EDGE, SUBSTRATE = "#f3e3c3", "#c9a86a", "#9aa0a8"
+INK = "black"
+"""Words drawn inside a view: on its white face in either theme."""
 
 SIDE_TITLE = "side view (cut)"
 TOP_TITLE = "top view"
@@ -42,7 +49,7 @@ DRAWN_NOTE = ("Grains placed at random around the distance D; radius, size distr
 ARRANGEMENTS = {"islands": "Separate islands",
                 "coalescing": "Coalescing: neighbouring grains touch",
                 "network": "Connected network across the view (percolated)"}
-ON_LAYER = "Continuous layer of {thickness} nm; the grains on it: {grains}"
+ON_LAYER = "Continuous film {thickness} nm, grains on top: {grains}"
 GRAINS_ON_LAYER = {"islands": "separate", "coalescing": "touching their neighbours",
                    "network": "connected across the view"}
 LAYER_TITLE = "cross-section of the TiO₂ layer"
@@ -58,12 +65,10 @@ NO_GRAINS = ("This solution has no arrangement to draw: the package gave neither
 TEMPLATES = (SIDE_TITLE, TOP_TITLE, X_LABEL, Y_LABEL, HEIGHT_LABEL, POLYMER_NOTE, BASE_NOTE, DRAWN_NOTE,
              *ARRANGEMENTS.values(), ON_LAYER, *GRAINS_ON_LAYER.values(), LAYER_TITLE, ZOOM_TITLE, DEPTH_LABEL, PORE_NOTE, CAP_NOTE, NO_CAP,
              POROUS_NOTE, NO_GRAINS)
-LIGHT = 0.45
-"""Opacity of the base layer's tint in the top view (the grains on it stay fully opaque)."""
+RELIEF = 0.25
+"""How much darker than the metal the grains on a closed film are (a share of the way to the edge colour)."""
 TIO2, TIO2_EDGE = "#f4efe4", "#b3a487"
 """TiO₂ particles (an off-white ceramic, so that silver, gold and copper all stand out)."""
-CONTINUOUS = 0.3
-"""A base layer at least this thick (nm) is named in the line about the arrangement."""
 
 
 def cap_outline(x: float, base: float, radius: float, height: float, points: int = 48) -> np.ndarray:
@@ -83,11 +88,11 @@ def _number(value: float) -> str:
     return f"{value:.3g}"
 
 
-def _union(axes, patches_of, fills: list, edge: str, zorder: float) -> None:
+def _union(axes, patches_of, fills: list, edge: str, zorder: float, line: float = 1.4) -> None:
     """Patches drawn as one piece where they overlap: outlines first, then the fills over every inner outline."""
     from matplotlib.collections import PatchCollection
 
-    axes.add_collection(PatchCollection(patches_of(), facecolor="none", edgecolor=edge, linewidth=1.4, zorder=zorder))
+    axes.add_collection(PatchCollection(patches_of(), facecolor="none", edgecolor=edge, linewidth=line, zorder=zorder))
     axes.add_collection(PatchCollection(patches_of(), facecolor=fills, edgecolor="none", zorder=zorder + 0.1))
 
 
@@ -201,19 +206,24 @@ class RealSpacePicture:
         side.set_aspect("equal", adjustable="box")
         self._frame(side, SIDE_TITLE, X_LABEL, HEIGHT_LABEL)
 
-        # top view: the base layer as a tint, the grains on it, a cluster as one piece
+        # top view: the grains on the substrate, a cluster as one piece; on a closed film the whole square is the
+        # metal of the base and the grains are relief on it
         field = space.field
-        top.add_patch(Rectangle((0, 0), field, field, facecolor=POLYMER if polymer else SUBSTRATE, lw=0, zorder=1))
-        if space.base > 0:
-            top.add_patch(Rectangle((0, 0), field, field, facecolor=fill, alpha=LIGHT, lw=0, zorder=2))
-        _union(top, lambda: [Circle((grain.x, grain.y), grain.radius) for grain in grains],
-               [deep if label in crossing else fill for label in labels], edge, 3)
+        if space.continuous:
+            relief = _mix(fill, edge, RELIEF)
+            top.add_patch(Rectangle((0, 0), field, field, facecolor=fill, edgecolor=edge, lw=.6, zorder=1))
+            _union(top, lambda: [Circle((grain.x, grain.y), grain.radius) for grain in grains], [relief] * len(grains),
+                   edge, 3, line=.6)
+        else:
+            top.add_patch(Rectangle((0, 0), field, field, facecolor=POLYMER if polymer else SUBSTRATE, lw=0, zorder=1))
+            _union(top, lambda: [Circle((grain.x, grain.y), grain.radius) for grain in grains],
+                   [deep if label in crossing else fill for label in labels], edge, 3)
         top.set_xlim(0, field)
         top.set_ylim(0, field)
         top.set_aspect("equal", adjustable="box")
         self._frame(top, TOP_TITLE, X_LABEL, Y_LABEL)
         words = tr(ARRANGEMENTS[self.arrangement])
-        if space.base >= CONTINUOUS:  # a closed film: what is said is the layer, then the grains on it
+        if space.continuous:  # a closed film: what is said is the film, then the grains on it
             words = text(ON_LAYER, thickness=_number(space.base), grains=tr(GRAINS_ON_LAYER[self.arrangement]))
         figure.text(0.96, 0.93, words, ha="right", va="bottom", fontsize=8.5, fontweight="bold")
         figure.text(0.07, 0.03, text(DRAWN_NOTE, name=name), ha="left", va="bottom", fontsize=7.5)
@@ -306,4 +316,5 @@ def _collection(patches: list, face: str, edge_colour: str):
     return PatchCollection(patches, facecolor=face, edgecolor=edge_colour, linewidth=.6, zorder=2)
 
 
-__all__ = ["ARRANGEMENTS", "GRAINS_ON_LAYER", "RealSpacePicture", "TEMPLATES", "cap_outline"]
+__all__ = ["ARRANGEMENTS", "GRAINS_ON_LAYER", "METAL_COLOURS", "ON_LAYER", "RealSpacePicture", "TEMPLATES",
+           "cap_outline"]

@@ -27,7 +27,9 @@ FAMILIES = {("Au", "Si"): ("si_p3h", None), ("Ag", "Si"): ("si_p3h", None),
 
 
 ALTERNATIVES = {"polyag_p3": ["polyag_v5"], "si_p3h": ["si_v6"], "cu_p5": ["cu_v4"]}
-MODES = dict(quick=dict(refine=0, sequence=0, max_windows=60), refine=dict(refine=8, sequence=0, max_windows=24),
+
+
+MODES = dict(quick=dict(refine=0, sequence=0, max_windows=60), refine=dict(refine=0, sequence=6, max_windows=24),
              full=dict(refine=30, sequence=30, max_windows=96))
 FILES = dict(report_md="REPORT.md", report_png="report.png", report_csv="report.csv", windows_csv="windows.csv",
              evolution_png="evolution.png", patterns_png="patterns.png", summary_json="summary.json",
@@ -167,14 +169,21 @@ def main(argv=None):
     if ok:
         alts = ALTERNATIVES.get(fam, []) if (a.alternatives == "on" or (a.alternatives == "auto" and a.mode != "full")) and not a.family else []
         LV.say("models", "predict", families=[fam] + alts, mode=a.mode)
+
+
+        later = a.mode == "refine" and bool(alts)
+
+        def predict_args(f, refine, sequence):
+            args = [f, "--scan", a.label, "--out", out / f, "--times", "all", "--step", a.step, "--max-windows",
+                    a.max_windows or mode["max_windows"], "--k", 3, "--workers", a.workers, "--refine", refine]
+            args += ["--sequence", sequence] if sequence else []
+            args += ["--like", like] if like else []
+            return args + (["--data", data] if data is not None else [])
+
+        first = (0, 0) if later else (mode["refine"], mode["sequence"])
         for f in [fam] + alts:
             sub = out / f
-            args = [f, "--scan", a.label, "--out", sub, "--times", "all", "--step", a.step, "--max-windows", a.max_windows or mode["max_windows"],
-                    "--k", 3, "--workers", a.workers, "--refine", mode["refine"]]
-            args += ["--sequence", mode["sequence"]] if mode["sequence"] else []
-            args += ["--like", like] if like else []
-            args += ["--data", data] if data is not None else []
-            good = run("predict", args) if f == fam else run_quiet("predict", args, f)
+            good = run("predict", predict_args(f, *first)) if f == fam else run_quiet("predict", predict_args(f, *first), f)
             if good and (sub / "summary.json").exists():
                 s = json.loads((sub / "summary.json").read_text(encoding="utf-8"))
                 tried[f] = next((float(s[k]) for k in ("median_dev5_sequence", "median_dev5_refined", "median_dev5_best") if s.get(k) is not None), float("inf"))
@@ -182,6 +191,9 @@ def main(argv=None):
         if ok:
             fam = min(tried, key=tried.get)
             LV.say("chosen", "predict", family=fam, deviations={k: LV.rounded(v, 3) for k, v in tried.items()})
+            if later:
+                LV.say("refine", "predict", family=fam, refine=mode["refine"], iterations=mode["sequence"])
+                run_quiet("predict", predict_args(fam, mode["refine"], mode["sequence"]), "refine")
             for v in ("windows.csv", "summary.json", "evolution.png", "patterns.png", "sequence_record.json"):
                 if (out / fam / v).exists():
                     shutil.copyfile(out / fam / v, out / v)

@@ -118,22 +118,9 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [11.10 Compare](#1110-compare)
   - [11.11 Limits of the series methods](#1111-limits-of-the-series-methods)
 - [12. Sputter](#12-sputter)
-  - [12.1 Inputs and the projection of the frames](#121-inputs-and-the-projection-of-the-frames)
-  - [12.2 Time windows](#122-time-windows)
-  - [12.3 Direct features of each window](#123-direct-features-of-each-window)
-  - [12.4 The growth stage of a window: an observation rule](#124-the-growth-stage-of-a-window-an-observation-rule)
-  - [12.5 The two networks](#125-the-two-networks)
-  - [12.6 The physical path](#126-the-physical-path)
-  - [12.7 Thickness substitutes](#127-thickness-substitutes)
-  - [12.8 The intensity-modulation period](#128-the-intensity-modulation-period)
-  - [12.9 Windows where the beam may be off the sample](#129-windows-where-the-beam-may-be-off-the-sample)
-  - [12.10 The literature method (mass balance for hemispheres)](#1210-the-literature-method-mass-balance-for-hemispheres)
-  - [12.11 Checks against published growth](#1211-checks-against-published-growth)
-  - [12.12 Island height H(t) from moving q_z fringes](#1212-island-height-ht-from-moving-q_z-fringes)
-  - [12.13 Grades](#1213-grades)
-  - [12.14 Stated limits](#1214-stated-limits)
-  - [12.15 Literature references of the method](#1215-literature-references-of-the-method)
-  - [12.16 Analyze: what the main screen shows](#1216-analyze-what-the-main-screen-shows)
+  - [12.1 Analyze: what the main screen shows](#121-analyze-what-the-main-screen-shows)
+  - [12.2 The deposition rate](#122-the-deposition-rate)
+  - [12.3 The real-space picture](#123-the-real-space-picture)
 - [13. Tool windows and Labs](#13-tool-windows-and-labs)
   - [13.1 XRR Series Extractor](#131-xrr-series-extractor)
   - [13.2 SEM Particle Analysis](#132-sem-particle-analysis)
@@ -194,13 +181,13 @@ The table lists the symbols that occur in more than one chapter. Every other sym
 | d | Å | lattice spacing of a reflection, d = 2π/q | section 7.4 |
 | τ | Å, reported in nm | Scherrer crystallite size (`L` in the code) | section 7.8 |
 | f | – | Hermans orientation factor (the program writes "Herman's f") | section 7.7 |
-| q* | Å⁻¹ (nm⁻¹ in Sputter) | position of the in-plane correlation peak of a GISAXS cut | sections 8.4, 12.3 |
-| R | nm | radius of a particle or an island | sections 9.4, 12.5 |
+| q* | Å⁻¹ (nm⁻¹ in Sputter) | position of the in-plane correlation peak of a GISAXS cut | section 8.4 |
+| R | nm | radius of a particle or an island | section 9.4 |
 | σ_R/R, σ_h/h, σ_D/D | – | relative spreads of R, h and D (the parameters labelled σ_R/R, σ_h/h and σ_D/D); σ_D is the absolute spread of D, and σ_D/D is GIMaP's paracrystal spread, defined in section 9.5 | sections 9.3, 9.5 |
 | P(q), S(q) | – | form factor and structure factor | sections 9.4, 9.5 |
 | φ | – | paracrystal factor exp(−π q² σ_D²) | (9.13) |
-| δ, β | – | refractive-index decrement and absorption index, n = 1 − δ + iβ (written δ_X in chapter 12, where δ is the nominal thickness of the deposited metal) | sections 12.12, 13.5 |
-| α_c | ° | critical angle of total external reflection | section 12.12 |
+| δ, β | – | refractive-index decrement and absorption index, n = 1 − δ + iβ | section 13.5 |
+| α_c | ° | critical angle of total external reflection | section 8.6 |
 | t | s | time; t_exp is an exposure time | chapters 11, 12 |
 
 ### 0.2 Units
@@ -2765,460 +2752,43 @@ Implementation: `src/gimap/features/compare/domain/comparison.py`, `src/gimap/fe
 
 ## 12. Sputter
 
-The Sputter workspace follows an in-situ sputter deposition series. Sections 12.1 to 12.15 describe its method **Predict** (in the view Details): PILATUS CBF frames of Ag or Au sputtered on a polymer film. Window by window it gives the direct features of the GISAXS pattern, a growth stage, the island radius R and spacing D (two methods), thickness substitutes, flags for windows where the beam may be off the sample, and the island height H(t) from moving q_z fringes. What the workspace's main screen shows — the result of **Analyze**, which runs a separate analysis package — is in section 12.16.
+The Sputter workspace follows an in-situ sputter deposition series. Its **Analyze** runs a separate analysis package (`iampred`, bundled with GIMaP as `utils/sputter_client`) as a subprocess and shows what the package writes. The networks, the physical forward model and the refinement are the package's and are documented with it; this chapter states what GIMaP does with the package's input and output (12.1), with the deposition rate (12.2), and how it draws a solution in real space (12.3).
 
-GIMaP does not import this code. It runs the bundled toolkit (`utils/sputter_toolkit`, entry `scripts/sputter_struct_v1.py`) and the fringe tool (`utils/sputter_fringes`) as subprocesses and reads their files. Inside both, q is in nm⁻¹, lengths in nm, angles in degrees and time in s from the first frame. The two trained networks are part of the toolkit and bound by SHA-256 to its source files.
+### 12.1 Analyze: what the main screen shows
 
-### 12.1 Inputs and the projection of the frames
+**Inputs handed to the package.** The folder of CBF frames; the metal and the substrate; the deposition rate in nm/s, either as the rate at the sample or as the reading of the quartz balance (section 12.2); α_i; the sample–detector distance; the energy or the wavelength; the direct-beam position, entered in GIMaP's pixel coordinates and handed over minus 0.5 px as 0-based pixel centres (section 1.3), or, when it is empty, the request to estimate it from the frames; the sample roll (0° when empty); optionally a detector mask (without one the package uses the pixel mask it was built with), the time of the scan at which the deposition started, its duration, and the thickness of a polymer film. GIMaP changes none of these values. The package keeps an imported scan under a label; GIMaP derives the label from all these inputs, so a changed input is imported anew and never read from an earlier import.
 
-**Inputs.** The folder of CBF frames of one scan; the X-ray energy (eV) or wavelength; the sample–detector distance (mm); the incidence angle α_i (°); the metal (Ag or Au; Predict does not run for Cu, which Analyze reads with its own networks); the polymer type (used only to pick the published band, section 12.11); the sample roll (default 0°); optionally the direct-beam position, a detector mask (`.npy`), the window length, the deposition rate F (nm/s), the start t_0 and the end t_end of the deposition (s). The page takes the beam position in GIMaP's pixel coordinates and subtracts 0.5 px to give the toolkit's 0-based pixel centres (section 1.3). Without a beam position, the toolkit estimates it from the frames. The page proposes the energy from the `Wavelength` line of the first CBF header or from the `beam_energy` of a NeXus file of the same scan, and says which; the `E<eV>` in the name of a flat-field file is the detector's calibration energy and is never used. The pixel size is fixed at 0.172 mm.
-
-**Frames.** Time stamps come from the CBF headers; `t = 0` at the first frame. They must increase strictly, else the run stops ("cannot invent a clock"). A truncated or undecodable frame is listed with its reason and left out; no pixel is invented. Valid pixels are finite, non-negative, below the header's count cut-off and inside the mask. Only a fixed detector region around the beam is used (939 rows above to 31 rows below the beam, about ±555 columns); pixels within ±0.13 nm⁻¹ of |q| = 2.1 nm⁻¹ are excluded (the code does not state why).
-
-**Projection.** For each pixel, with `u` the unit vector from the sample to the pixel (flat detector perpendicular to the beam at the given distance), `x̂` the beam direction, `n_s` the sample normal tilted by α_i (and the roll), and `ŷ_s` the in-plane direction normal to the beam:
-
-```text
-α_f = arcsin( n_s · u )                                                                         (12.1)
-q   = k (u − x̂),    k = 2π/λ,   λ = 1239.841984 / E[eV]  nm                                      (12.2)
-q_y = ŷ_s · q,      side = sign(q_y)                                                            (12.3)
-```
-
-Counts `Y` and pixel exposure `U = (number of pixels) × exposure time` are summed per cell of a native grid: |q_y| from 0.05 to 1.80 nm⁻¹ in 70 bins of 0.025 nm⁻¹, α_f from 0.02° to 1.50° in cells of 0.01° (with a few extra band edges), and the two sides of the beam.
-
-Implementation: `utils/sputter_toolkit/sputtergisaxs/polymer_dev_intake.py`, `utils/sputter_toolkit/sputtergisaxs/stage5_input.py`, `src/gimap/features/sputter/infrastructure/toolkit.py`
-
-### 12.2 Time windows
-
-Frames are summed into windows of 0.1 s during the first 5 s and of `T` afterwards (`T` = 0.5 s by default; the page accepts 0.05–60 s). With `Δt` the median frame spacing:
-
-```text
-t' = t + min(Δt/2, T/4)                          (absorbs acquisition jitter at the edges)      (12.4)
-window = ⌊t'/0.1⌋                 for t' < 5 s                                                  (12.5)
-window = 50 + ⌊(t' − 5)/T⌋         for t' ≥ 5 s                                                  (12.6)
-Y_w = ∑_{i∈w} Y_i,   U_w = ∑_{i∈w} n_i t_exp,i,   t_w = ∑ t_exp,i t_i / ∑ t_exp,i                            (12.7)
-```
-
-`n_i` is the pixel count per cell and `t_exp,i` the header exposure of frame `i`. The sums are exact. The run checks that the total counts and the total exposure of the windows equal those of the frames ("photon/exposure closure"). A window with fewer than 1000 counts in total (shutter closed, beam off) gets no stage and no values.
-
-Implementation: `utils/sputter_toolkit/sputtergisaxs/polymer_review_data.py`
-
-### 12.3 Direct features of each window
-
-**Correlation peak q\*.** In each of four α_f bands (0.08–0.30°, 0.30–0.60°, 0.60–1.00°, 1.00–1.50°) and on each side, the horizontal cut `Y(q)` with exposure `U(q)` is fitted by Poisson deviance on `[q_lo, 1.75] nm⁻¹`, `q_lo = max(0.05, lowest q with exposure)`:
-
-```text
-μ(q) = U(q) · s · [ b_0 + b_1 (q/0.5)^(−p) + A · exp( −(q − q*)² / (2σ_q²) ) ]                     (12.8)
-dev  = 2 ∑ [ y ln(y/μ) − y + μ ]                                                                (12.9)
-ΔAIC = dev_0 − dev − 6                       (dev_0: the same model without the Gaussian)       (12.10)
-```
-
-(12.10) is the difference of the Akaike information criterion (Akaike, 1974) for three added parameters.
-
-```text
-FWHM = 2 √(2 ln 2) · σ_q,     D* = 2π / q*                                                    (12.11)
-```
-
-`s` is the 80 % quantile of the rates (a scale only). Bounds: `b_0, b_1, A ∈ [0, 10³]`, `p ∈ [0, 5]`, `q* ∈ [q_lo + 0.01, 1.74]`, `σ_q ∈ [0.02, 0.6] nm⁻¹`. At least 12 points and 100 counts are needed. Several starts are tried (the largest excess over the null fit, 0.57 nm⁻¹, low-q excesses below 0.25 nm⁻¹, 0.0875 and 0.1375 nm⁻¹, with widths 0.03, 0.07 and 0.16 nm⁻¹); the lowest deviance wins. The covariance is `(JᵀJ)⁺ · max(1, dev/(N − 6))`.
-
-The peak is *resolved* when the optimiser succeeded, `ΔAIC > 10`, `A > 2 SE(A)`, it is not at an edge (`q* ± FWHM/2` inside the supported window within 0.0125 nm⁻¹, `0.0205 < σ_q < 0.59 nm⁻¹`), and there is no gap wider than 0.051 nm⁻¹ in the data at or within ±σ_q of q*.
-
-Per α_f band: *bilateral* when both sides are resolved and agree within 10 % (`(max − min)/mean ≤ 0.1`; q\* is their mean), *one side* when one side is resolved. The window's q\* is that of the first bilateral band (lowest α_f first), else of the first one-side band. The peak is total scattering: host and metal are not separated.
-
-**Yoneda ridge.** The α_f profile (cells of 0.01° from 0.02° to 0.80°, both sides, |q_y| from 0.05 to 1.2 nm⁻¹) as a rate; its highest local maximum in 0.08–0.55°; the ridge position is the centroid of the rate above its 20 % quantile within ±0.07° of that maximum.
-
-**High-q slope.** The slope of `ln(Y/U)` against `ln q` over 1.0–1.75 nm⁻¹ (both sides, all α_f), weighted by √Y, with at least 8 points. It is an apparent slope of the total scattering, not a metal-only size.
-
-**Intensity rate.** `r = ∑Y / ∑U` (counts per pixel-second of the native grid), `SE(r) = √(∑Y) / ∑U`.
-
-Implementation: `utils/sputter_toolkit/sputtergisaxs/polymer_review_features.py`, `utils/sputter_toolkit/sputtergisaxs/features.py`
-
-### 12.4 The growth stage of a window: an observation rule
-
-The stage is decided from the direct features by a fixed rule, not by a network. The code calls the stages *candidates* and states that no connectivity, zero-metal reference or cause of sample motion is inferred. The quantities, per window at time `t`:
-
-- Reference Yoneda `Y_0`: the median ridge position of the windows in the first 2 s. Smoothed ridge `ỹ(t)`: the median over `[t − 5 s, t]` (past only). Shift `= ỹ − Y_0`; *ever moved* once `|shift| ≥ 0.02°`; *unmoved* when `|shift| ≤ 0.01°` and never moved.
-- *Plateau*: over `[t − 10 s, t]` at least 5 smoothed values spanning at least 8 s, their 10–90 % spread ≤ 0.02° and the slope of a straight line ≤ 0.001 °/s in magnitude.
-- *Peak moving to lower q*: the q\* history of the same α_f band over the last 10 s (at least 5 points over at least 2.5 s) has Spearman ρ ≤ −0.6, a negative slope, and a drop (median of the first third minus median of the last third) of at least `max(0.025 nm⁻¹, 0.05 q*_first)`. The history restarts when the band changes or q\* jumps by more than ×1.5 or less than ×0.5.
-- *Lost*: no resolved peak now, and the last one at least 1 s ago.
-- *Low count*: `r ≤ min( median_{0–2 s} r + max(3 · 1.4826 · MAD, 3 · median SE), Q_25(r) )`, where `Q_25` is the 25 % quantile of all windows of the scan.
-
-Decision, in this order:
-
-| Stage | Condition |
-|---|---|
-| coalescence or film candidate | peak lost, a lower-q motion seen before, Yoneda ever moved, and now on a plateau |
-| coalescence candidate | one-side peak that moves to lower q now |
-| separate islands candidate | a resolved peak |
-| pre-nucleation candidate | low count, Yoneda unmoved, no lower-q motion seen |
-| unresolved | everything else |
-
-Implementation: `utils/sputter_toolkit/sputtergisaxs/polymer_review_stages.py`
-
-### 12.5 The two networks
-
-**Routing.** A window whose rule stage is coalescence or coalescence-or-film goes to the TS network (`TS_layer`, a late, film-like texture model); every other window to the polymer network (`polymer_embed`, islands on a polymer). Every window is also run through the other network, so that the physical path (section 12.6) can use the network of its own stage.
-
-TS stands for Teubner–Strey: the TS network was trained on a Teubner–Strey-type effective two-phase scattering scenario (a positive lateral spectrum peaked at q_0 over a finite metal-network layer; Teubner & Strey, 1987, J. Chem. Phys. 87, 3195), which the code states is neither an island model nor a verified connected morphology (`utils/sputter_toolkit/sputtergisaxs/scenario_ts.py`).
-
-**Input.** Eight horizontal cuts (four α_f bands × two sides × 70 |q_y| bins) and two vertical cuts I(α_f) (two sides), summed over the three |q_y| bins around q\* (over 0.15–1.2 nm⁻¹ when no peak is resolved). Each cut's rate is divided by its own median positive rate and passed through arcsinh, with a support mask. Added are the four direct features (q\*, FWHM, Yoneda, high-q slope / 5) with presence flags, the peak-known flag, `ln(E / 12 keV)`, α_i and the metal flag (Au or Ag; Cu enters as Ag).
-
-**Output.** A Gaussian-mixture posterior per window. Up to three modes are kept, with their probabilities and component intervals (68 % and 95 % of the component Gaussian, mapped to physical units; these are not calibrated intervals). The tables use the most probable mode.
-
-| Network | Quantities |
-|---|---|
-| polymer_embed | D (centre-to-centre spacing, nm); R (number-mean base radius of an equivalent flat-based hemisphere, h = R, nm); σ_ln (log-normal width of R); burial depth (nm); polymer thickness (nm) |
-| TS_layer | Λ_TS = 2π/q_0 (`L` in the toolkit's output), a lateral texture length of the late film-like pattern (nm; not an island spacing); width; metal fraction f_m; film thickness; a depth correlation; lamellar surrogates `w = f_m Λ_TS`, `g = (1 − f_m) Λ_TS` |
-
-The recorded domains are D in 2–120 nm (polymer) and Λ_TS in 3–200 nm (TS).
-
-**Reliability from simulation.** The configuration `configs/sputter_struct_reliability_v1.json` holds numbers from a simulation scoring of 200 independent simulated `polymer_embed` families (100 Ag, 100 Au) at the counts of one 0.5 s window. Its own scope note: exploratory numbers computed after the simulation was scored, not a pre-registered test, valid within the hemisphere model. The typical relative scatter is
-
-```text
-e = exp( 1.4826 · MAD( ln(estimate/true) ) ) − 1                    (about a 68 % band)         (12.12)
-```
-
-| Quantity | Network (grades C, P) | Converged refinement (grades A, B) |
-|---|---|---|
-| R, Ag | e = 0.307, P90 = 0.634, order right 0.92 | e = 0.157, P90 = 0.67, order right 0.935 |
-| R, Au | e = 0.256, P90 = 0.634, order right 0.924 | e = 0.101, P90 = 0.496, order right 0.963 |
-| D, Ag | e = 0.26, P90 = 0.635, order right 0.902 | e = 0.119, P90 = 0.629, order right 0.918 |
-| D, Au | e = 0.24, P90 = 0.627, order right 0.905 | e = 0.052, P90 = 0.627, order right 0.89 |
-
-"Order right" is the share of pairs of windows that differ by at least ×1.2 whose order is predicted correctly. P90 is the 90 % quantile of the relative error: about 10–20 % of the values are more than 50 % off, because another structure fits the counts equally well. Burial depth is unreliable and the polymer thickness is not determined (rank correlation 0.08–0.13). The TS length Λ_TS has only a development calibration. The TS metal fraction and film thickness are not identifiable: in simulation their posterior equals the prior.
-
-Each R or D value carries the band `[v/(1 + e), v(1 + e)]`. A network D is checked against the direct observation:
-
-```text
-D_direct_check = consistent  ⇔  0.587 ≤ D / (2π/q*) ≤ 1.75                                      (12.13)
-```
-
-The band holds 90 % of the true `D/(2π/q*)` in the simulation.
-
-Implementation: `utils/sputter_toolkit/sputtergisaxs/polymer_review_infer.py`, `utils/sputter_toolkit/sputtergisaxs/neural_refine_input.py`, `utils/sputter_toolkit/sputtergisaxs/sputter_struct.py`
-
-### 12.6 The physical path
-
-The rule decides every window on its own, so stage, network and source of R and D can switch back and forth. The physical path reads the series once, with one model assumption stated in the code: during deposition the film does not turn back into islands.
-
-**Stage path.** Stages are mapped to an ordinal scale: pre-nucleation 0, islands 1, coalescence 2, film 3 (the coalescence-or-film candidate counts as film). Windows with an unresolved stage, without data (section 12.2) or with the beam possibly off the sample (section 12.9) cast no vote. The path is the non-decreasing L1 fit of the votes by pool-adjacent violators (isotonic regression; Ayer et al., 1955; Robertson et al., 1988), the value of a pooled block being its lower median. A window without data gets no stage. Any other window without a vote takes the value of the previous voting window (the next one at the start) and is marked `stage_imputed`.
-
-**Network of the path.** Path stages 2 and 3 use the TS network, stages 0 and 1 the polymer network. So coalescence windows are already film-type windows (`film = true`) and have no R or D. R (grade **P**) is given in every window whose path stage is islands; D in those of them with a resolved peak. The values come from the most probable mode of the path's network, with the network bands of section 12.5. Pre-nucleation and film windows have none.
-
-**Film onset.** The onset is the first window on the TS network. For each possible step position `m` (and "no TS at all"), the number of resolved windows that disagree with a single islands→TS step at `m` is counted:
-
-```text
-N(m) = #{ resolved i < m with a late stage } + #{ resolved i ≥ m with an early stage }           (12.14)
-```
-
-The onset interval spans every `m` with `N(m) ≤ min N + 2`. The onset is *not established* when "no TS at all" also lies within `min N + 2`.
-
-**Trends of R and D.** At each window `i`, a Theil–Sen fit (Theil, 1950; Sen, 1968) of `ln v` against `t` over the island windows (beam-off windows left out) within `±span/2`:
-
-```text
-span = max( modulation period (section 12.8), 2.5 s )                                                   (12.15)
-β    = median over pairs (j < l) of (ln v_l − ln v_j) / (t_l − t_j)                              (12.16)
-trend_i = exp( median_j [ ln v_j − β (t_j − t_i) ] )                                            (12.17)
-```
-
-With fewer than 4 points in the span, the trend is the local median. The trend is also evaluated at beam-off island windows.
-
-**Back-and-forth counts.** Recorded before (rule) and after (path): stage excursions A→B→A, module changes TS→polymer, and zig-zags of R and D (a step `|Δ ln v| > ln 1.2` reversed to within 20 % of the value before it within the next 1–3 values). Beam-off windows are left out; the R and D sequences break at them.
-
-Implementation: `utils/sputter_toolkit/sputtergisaxs/sputter_physical.py`
-
-### 12.7 Thickness substitutes
-
-GISAXS does not measure the metal thickness here. Two substitutes are given.
-
-**Island-volume equivalent thickness** (island windows with R and D only). For flat-based hemispheres (h = R) on a hexagonal lattice of spacing D, with a log-normal size distribution of width σ_ln:
-
-```text
-t_eq = (2/3) π R³ exp(3σ_ln²) / ( (√3/2) D² ) = 2.4184 · R³ exp(3σ_ln²) / D²                            (12.18)
-band: t_eq / f_band … t_eq · f_band,    f_band = exp( √( 9 ε_R² + 4 ε_D² ) ),   ε = ln(1 + e)                   (12.19)
-```
-
-`R` is the number-mean radius; `exp(3σ_ln²)` turns `R̄³` into the mean `⟨R³⟩` of a log-normal distribution. The band is first-order propagation of `R³/D²` in log space with the network scatters `e` of section 12.5: `f_band = 2.53` for Ag (and Cu), `2.24` for Au. Invented example: `R = 3 nm`, `D = 8 nm`, `σ_ln = 0.2` give `t_eq = 1.15 nm`, band 0.45–2.91 nm (Ag). It is the metal in the visible islands under this shape assumption, not the deposited amount.
-
-**Nominal thickness** (when a rate is given):
-
-```text
-h_nom(t) = F · min( max(0, t − t_0), t_end − t_0 )                                                 (12.20)
-```
-
-`t_0 = 0` (the first frame) when not given, which the notes call an assumption; each second of error in t_0 shifts `h_nom` by F × 1 s. Without `t_end` the deposition lasts to the end of the scan. A rate that is not positive, or `t_end ≤ t_0`, is refused before any frame is read.
-
-**Mass continuity.** The median `t_eq` and the median `h_nom` over the last 5 island windows before the film onset (beam-off windows left out), and their ratio.
-
-Film windows get no thickness: the TS film thickness and metal fraction are not identifiable.
-
-Implementation: `utils/sputter_toolkit/sputtergisaxs/sputter_physical.py`
-
-### 12.8 The intensity-modulation period
-
-During deposition the sample stage is translated back and forth so that the beam does not damage one spot. Near the ends of the travel the grazing-incidence footprint can reach the sample edge or leave the sample, and the intensity dips once or twice per cycle. The code states that the data alone do not prove this source; the page asks rather than asserts ("sample stage translation?").
-
-1. Windows after 5 s with the modal nominal length `Δ` (0.5 s by default) and `r > 0`; at least 20 are needed.
-2. `y_m = ln r` on the regular index grid `m = round((t − t_first)/Δ)`; `z = y − ` a centred local least-squares line over ±30 s; mean removed.
-3. `ACF(κ) = mean(z_m z_{m+κ}) / var(z)` over valid pairs (at least 10 pairs).
-4. Local maxima of the ACF of at least 0.1 at lags 2–60 s, refined by a parabola through three points.
-5. The period is the shortest maximum whose double lag (within `max(1.5, 0.1 κ)` windows) is also a maximum, with `max(ACF(κ), ACF(2κ)) ≥ 0.3`, and with at least 3 full cycles in the series. When `2κ` is beyond 60 s, a maximum of at least 0.3 alone suffices. Failing that, the first maximum of at least 0.3 (with 3 cycles).
-6. When `ACF(2κ) ≥ ACF(κ) + 0.05`, the dips have unequal depths and the pattern repeats exactly only after `2κ` (`full_repeat_s`): possibly one full back-and-forth cycle of the stage.
-
-The strongest periodogram line in the same band is recorded as a cross-check. The summary keeps the period as `modulation_period_s` (and under its older key `rotation_period_s`).
-
-Implementation: `utils/sputter_toolkit/sputtergisaxs/sputter_physical.py`
-
-### 12.9 Windows where the beam may be off the sample
-
-From the data only (the intensity rate of each window with data):
-
-```text
-S = max(P, 2 s) with a detected modulation period P;   S = 10 s without                          (12.21)
-ℓ_w = min( Q_90{ ln r_j : t_w − S ≤ t_j < t_w },  Q_90{ ln r_j : t_w < t_j ≤ t_w + S } )          (12.22)
-u_w = exp( ln r_w − ℓ_w )                                                                        (12.23)
-core:  u_w < 0.5 (with a modulation),   u_w < 0.2 (without)                                      (12.24)
-```
-
-Each side needs at least 3 windows with data; the first and last windows are not judged. The lower side counts, so a steady rise or fall during growth is never a dip, nor is a step that stays. Below 50 % more than half of the scattering is missing, as when more than half of the footprint has left the sample. From each core the flag extends along the time-ordered windows with data, on both sides, while `u_w < 0.8`; an unjudged window stops it, windows without data are skipped. Without a modulation only an extreme dip has a core (no sample seen, or the beam interrupted), and its flanks are extended the same way. A flagged window without a Yoneda ridge, while at least 50 % of the other windows have one, says so in its reason; this corroborates but does not decide. The record also gives how many windows a core limit or release level 0.1 lower or higher would flag.
-
-Flagged windows keep their values in the tables. They cast no stage vote and are left out of the R and D trends, the back-and-forth counts, the mass continuity, the literature method's trend of D and its checks of the network, and the fringe analysis. Known limits stated in the toolkit: a dip that never reaches the core limit is not flagged however long; a window where the footprint reaches the sample edge can show *more* intensity (edge scattering) and is not flagged; the stage position is not read.
-
-Implementation: `utils/sputter_toolkit/sputtergisaxs/sputter_offsample.py`
-
-### 12.10 The literature method (mass balance for hemispheres)
-
-The in-situ GISAXS studies of sputter growth at the P03 beamline (Schwartzkopf et al., 2015; Gensch et al., 2019, 2021; Bulut et al., 2024) do not fit R. They take the nominal thickness δ from a deposition rate and the spacing D = 2π/q\* of the direct peak, and compute R by mass balance for flat-based hemispheres on a hexagonal lattice. With a deposition rate and at least 10 usable peak windows, this is the default explanation of the page (grade **Lit**); otherwise the physical path is.
-
-```text
-δ(t) = F · ( min(t, t_end) − t_0 )                                                               (12.25)
-D_lit = D* = 2π / q*                                                                               (12.26)
-δ = (2/3) π R³ / ( (√3/2) D² ) = 2.4184 · R³ / D²                                               (12.27)
-R_lit = ( δ D² / 2.4184 )^{1/3}                                                                 (12.28)
-Θ = (2π/√3) (R/D)² = 3.6276 (R/D)²                                                              (12.29)
-2R/D = 2 ( δ / (2.4184 D) )^{1/3}                                                               (12.30)
-```
-
-Unlike (12.20), δ is not clipped at 0: windows before t_0 have `δ < 0` and are marked as before the deposition. Invented example: `F = 0.10 nm/s`, `t_0 = 0`, `q* = 1.047 nm⁻¹` at `t = 10 s` give `δ = 1.0 nm`, `D = 6.0 nm`, `R = 2.46 nm`, `2R/D = 0.82`, `Θ = 0.61`.
-
-**Which peaks are used.** D is taken only from windows with data and a resolved peak (bilateral or one side). A peak is not used, in this order of tests, when:
-
-1. the window lies before the deposition (`t < t_0`, or `δ ≤ 0`): host;
-2. the beam may be off the sample (section 12.9);
-3. `D > 2 ×` the largest published D(δ) of *all* reference curves of all metals at that δ (log–log interpolation, ends held): host;
-4. it comes after the first gap longer than `max(20 s, 2 P)` between two usable peaks: late peak (every later peak too);
-5. it is a jump: after at least 3 kept peaks, with the median `D_ref` and median time `t_ref` of the last 5 kept peaks (times are deposition times `min(t, t_end)`),
-
-```text
-ln( D / D_ref ) > ln 2 + ln max( 1, (t − t_0)/(t_ref − t_0) )                                      (12.31)
-```
-
-6. it is more than a factor 2 from the trend (12.32) (`|ln D − ln D_trend| > ln 2`), tested twice with a refit in between: outlier.
-
-A jump or outlier within ×1.35 of the median host-peak D (at least 2 host peaks) is called a host peak too. With fewer than 10 used peaks there are no literature-method values.
-
-**Trend of D.** The non-decreasing L1 fit of `ln D_lit` in time order: pool-adjacent violators with block medians. It is extended as a step function (the value of the last used window at or before each time) to every window with data between the first and the last used peak.
-
-```text
-D_trend(t) = exp( isotonic L1 fit of ln D_lit )                                                 (12.32)
-```
-
-**Percolation.** The first window after nucleation (`δ > 0.4 nm`) where `2R/D` computed from the trend reaches 1, linearly interpolated in δ between that window and the one before. At `2R = D`:
-
-```text
-Θ_c = π/(2√3) = 0.9069,     δ_c = 2.4184 · D(t_c) / 8 = 0.3023 · D(t_c) = 0.6046 · R             (12.33)
-```
-
-So the percolation thickness is fixed by D at the crossing time; the rate and t_0 decide only *when* the crossing happens. Invented example: if the trend is 10 nm at the crossing, `δ_c = 3.02 nm`, reached at `t = 30.2 s` with `F = 0.10 nm/s`.
-
-**68 % interval.** It holds the scatter of the windows and the errors of F and t_0:
-
-- Scatter: residuals of `ln D_lit` around a running median of `±max(2, ⌊b/2⌋)` neighbours; `b = max(3, round(max(P, 2.5 s) / median spacing))` windows. 200 moving-block bootstrap samples (Künsch, 1989; blocks of `b` residuals, random starts, seed 0) are added to the fitted trend and refitted isotonically.
-- Lower end: the 16 % quantile of the bootstrap crossings with the rate `F(1 + ε_F)` and the start `t_0 − ε_t`. Upper end: the 84 % quantile with `F(1 − ε_F)` and `t_0 + ε_t`. A bootstrap trend that never crosses counts as infinite.
-- Defaults: `ε_F = 0.10`; `ε_t = 2 s` when t_0 is assumed at the first frame, `0.5 s` (one window) when t_0 is given. The configuration calls them engineering choices (a QCM reading with an untuned tooling factor; a shutter opened by hand). The toolkit's `physical` command accepts `--rate-error` and `--t_0-error`; GIMaP always uses the defaults.
-- Times: `t_low = (t_0 − ε_t) + δ_low / (F (1 + ε_F))`, `t_high = (t_0 + ε_t) + δ_high / (F (1 − ε_F))`.
-
-A systematic error of 2π/q\* is not in the interval. The δ range where the trend's `|2R/D − 1| ≤ 0.05` is recorded; there a small change of F or t_0 moves the crossing far.
-
-**States.**
-
-| State | Condition | Meaning |
-|---|---|---|
-| reached | central crossing exists and both ends are finite | δ_c with its interval (the interval always contains δ_c) |
-| first_window | 2R/D ≥ 1 already at the first counted window (both ends finite) | upper bound; lower end 0 |
-| not determined | the lower end is finite, but the central trend does not cross or the upper end is infinite | 2R/D may reach 1 within the errors but need not; R is given throughout |
-| not reached | the lower end is infinite (even the early setting does not cross in at least 84 % of the resamples) | lower bound: the peak phase ends first |
-
-After a reached (or first-window) percolation, windows later than `t_c` count as film: D = 2π/q\* is kept, R is not given. This is the page's choice, after molecular dynamics finding that R loses its island meaning once a network forms (Abraham et al., 2016); the P03 studies go on reporting R and 2R/D after percolation.
-
-**Network quantities on the same axis.** For island windows of the physical path: `2R/D_net` and `Θ_net` from the network R and D with (12.29), and `η = t_eq / δ` (for `δ > 0`), the share of the nominal metal in the islands the network sees.
-
-Implementation: `utils/sputter_toolkit/sputtergisaxs/sputter_literature.py`, `src/gimap/features/sputter/domain/literature.py`
-
-### 12.11 Checks against published growth
-
-The Literature tab gives six checks, each *consistent*, *inconsistent* or *not testable*, with what was measured, what is published and the references. The literature-method R agrees with the literature by construction (it is the same mass balance); the independent tests are the shape of D(δ), the percolation δ against the published thresholds, and the network's 2R/D and mass balance.
-
-**Published band.** The host class is chosen from the polymer name: oxides (Si, SiO₂, TiO₂, Al₂O₃, glass, …) give Au/Si, Ag/oxides or Cu/oxides; Au on PS gives Au/PS; Au on another polymer gives Au/other polymers; Ag and Cu give `<metal>/polymers`; an unknown polymer uses all polymers of the metal. A named polymer that no published value of its class covers (for example PNO, PSBMA or PEO) keeps the band of the class, and the note says that no published percolation data exist for it. Each published threshold counts as `δ_c ± its printed ±` (or `± 10 %` of itself when none is printed, so that a class with one value is not a band of zero width); a published range counts as it is. The band is the minimum to maximum of these. A rate-scaled band `δ_c (F/F_ref)^(−γ_F)`, `γ_F ∈ [0.07, 0.17]`, is printed for information; it does not enter the verdict, because chambers differ by more than the rate effect.
-
-**Interval against band.** Overlap is consistent; an interval entirely below the band is inconsistent ("earlier"), entirely above inconsistent ("later"). A one-sided result (first window, not determined, not reached) that overlaps the band is not testable.
-
-1. **D does not decrease with δ** (after nucleation, `δ > 0.4 nm`; in time without a rate). With the used peaks (at least 10, and at least 24 for a verdict): Spearman ρ of ln D against δ is reported; the peaks are split into `min(12, ⌊n/8⌋)` equal-count bins in time order; per bin the median of ln D and `SE = 1.2533 · 1.4826 · MAD / √n_bin`. Inconsistent when some earlier bin's median exceeds a later one's by more than `max(ln 1.1, 2 √(SE_i² + SE_j²))`. Late peaks are compared with the end of the trend in a note.
-2. **Percolation** of the literature method against the band. For Cu the crossing is also computed with the published shape factor `f_H = H/R = 2.75` (2R/D ∝ f_H^{−1/3}); when the two verdicts differ, the result is not testable.
-3. **TS onset** of the physical path, converted to δ, against the same band; open above when the onset is not established.
-4. **Network 2R/D and coverage**: island windows with `δ ≥ 1 nm` (beam-off left out), at least 5. Consistent when the median `2R/D ∈ [0.55, 1.0]` or the median `Θ ∈ [0.5, 0.96]`; coverage follows from 2R/D, so they are one check.
-5. **Network mass balance**: the same windows; inconsistent when `median η · f_band < 0.5` or `median η / f_band > 1.5`, with `f_band` the band factor of (12.19). The 0.5 is an engineering choice.
-6. **TS film thickness** grows about linearly with δ: always not testable while the network's film thickness is not identifiable.
-
-Without a deposition rate only check 1 (in time) is made.
-
-Implementation: `utils/sputter_toolkit/sputtergisaxs/sputter_literature.py`, `utils/sputter_toolkit/configs/literature_reference_v1.json`
-
-### 12.12 Island height H(t) from moving q_z fringes
-
-While the metal grows, vertical cuts at low q_y show minima that move to lower α_f: the minima of the vertical form factor of the islands or the layer. GIMaP measures them in the background after a result is shown (Sputter ▸ Size Trend, panel "H, island height from q_z fringes"), with 1 s time groups, the metal of the result and the default q_y band below; the page passes no α_c and no other band.
-
-**Optics.** The fringe tool takes k and λ as in (12.2), with the same constant.
-
-```text
-α_c = √(2δ_X),   δ_X = r_e λ² ρ_e / (2π)                                                         (12.34)
-k_z(α) = k √max( sin²α − sin²α_c, 0 )                                                           (12.35)
-Q(α_f) = k_z(α_i) + k_z(α_f)              (inside the metal)                                     (12.36)
-q_z = k ( sin α_i + sin α_f )             (vacuum, for the baseline only)                        (12.37)
-H_n = 2π n / Q(α_f)                                                                             (12.38)
-```
-
-`r_e = 2.8179403262 × 10⁻⁶ nm`. This is the refraction-corrected (distorted-wave) wavevector transfer of grazing-incidence scattering (Renaud et al., 2009); only the position of the minima is used, not a full DWBA intensity. Bulk electron densities: Cu 2.46, Ag 2.77, Au 4.66 e/Å³ (no anomalous dispersion). `H_n` is the height of a uniform layer (box profile) whose order-n minimum of the vertical form factor `sinc(Q H/2)` lies at α_f, with refraction inside the metal. It is the vertical size of the islands or the layer; it equals the film thickness only once a continuous film has formed. Invented example at 12.0 keV and α_i = 0.40°: `α_c(Ag) = 0.295°`; an order-1 minimum at α_f = 1.00° gives `Q = 1.301 nm⁻¹` and `H = 4.83 nm` (the vacuum q_z = 1.486 nm⁻¹ would give 4.23 nm).
-
-**Data.** For each window, both sides, the counts and exposure of the |q_y| bins inside 0.05–0.15 nm⁻¹, merged into regular 0.01° α_f cells. Windows flagged as beam-off and windows with fewer than 1000 counts in the band are left out. Every chunk is checked against the SHA-256 recorded at binning. Windows are grouped in 1 s groups from the first usable window and summed.
-
-**Clean α_f range.** A cell whose exposure (summed over the scan) is below half the median is unusable; a run of at least 0.02° of such cells is a gap (module gap, detector edge) and is widened by one cell. Nothing below `max(α_i + 0.12°, α_c + 0.20°)` is used (specular, the metal's Yoneda region, the steep k_z near α_c). Runs shorter than 0.12° are dropped.
-
-**Baseline.** `ln(Y/U) = a + b ln q_z`, weighted by the counts, over the whole clean range of each cut; a local baseline would absorb the fringes. Static detector rows: a cell whose narrow residual (minus a running median of 7 cells), as a median over all groups, exceeds `max(0.006, 4 × robust σ)` is left out.
-
-**Minima.** On the residual's running mean over 5 cells, a local minimum (the lowest within ±3 cells). At scales `w` of 0.03°, 0.06° and 0.12°: a count-weighted parabola within `min(w, 0.05°)` places the vertex (within 0.02° of the local minimum); the depth is the mean of the shoulders at `±w` minus the centre (each a summed rate over `max(0.01°, w/4)`):
-
-```text
-depth = ½ (ℓ_L + ℓ_R) − ℓ_C,     σ_depth = √( 1/Y_C + ¼ (1/Y_L + 1/Y_R) )                        (12.39)
-accepted  ⇔  depth > 3 σ_depth   and   depth > 0.006   (at one scale at least)                   (12.40)
-```
-
-The position error is the standard deviation of 30 Poisson-bootstrap re-locations (at least 10 must fall within 0.05°; floor 0.002°). Minima of the two sides within `max(0.012°, 3 σ_combined)` are one minimum seen on *both* sides (inverse-variance mean); within 0.05° but beyond that tolerance they *disagree* and give no height; otherwise the minimum is one-sided.
-
-**Phase-locked fit** of each side's cut, without counting orders:
-
-```text
-ln(Y/U) = c_0 + c_1 ζ + c_2 ζ² + A cos(H Q),   ζ = ln q_z,   A < 0                               (12.41)
-```
-
-H on a grid from 1.5 to 80 nm in steps of 0.05 nm; the cosine is projected orthogonal to the baseline terms; the best H gives the largest χ² gain; `σ_H` from the curvature of χ² near the best H (`Δχ² = χ²_red`, `χ²_red ≥ 1`). A group's phase-locked H is accepted when on both sides at least 1.5 fringe periods are in range (`H ΔQ / 2π`), the best H is better by `Δχ² ≥ 10` than any H more than 25 % away (no alias), the sides agree within `max(3 σ, 3 %)`, and the group lies within 10 % of a straight line through the accepted groups (iterated; only the longest run with at most 5 missing groups; at least 4 groups).
-
-**Tracks and orders.** Minima that stay within 0.01° for 20 s or longer are static (detector rows, a film's own fringes) and dropped. Both-side minima are linked in time (at most 3 groups apart, moving between 0.08° down and 0.01° up); a track is accepted with at least 4 minima and a net descent of at least 0.05°. One-sided minima within 0.02° of an accepted track's line join it. Orders, in this sequence:
-
-1. from the phase-locked fit: `n = median( H_phase Q / 2π )` over at least 3 minima, within 0.25 of an integer;
-2. else the first accepted track is `n = 1` when it entered at the top of the clean range (its first minimum within 0.12° of the top, or a straight line of `1/Q` over its first 8 minima reaching the top at most 30 s earlier), not before the third group;
-3. a track coexisting with one of known order: `n = n_ref · median(Q / Q_ref)`, within 0.25 of an integer;
-4. a track without overlap: `n = H Q / 2π` with H from a straight line through known heights within ±30 s, the median within 0.3 of an integer and every estimate within 0.5.
-
-When more than a third of the pairs of coexisting orders (and of minima against the phase-locked fit) differ by more than `max(8 %, 3 σ)`, all orders are reset and reported as ambiguous.
-
-**Critical angle used.** In this order: a given value; a scan of the phase-locked fits over 0.6–1.25 times the bulk value in steps of 0.0025° (at least 8 accepted groups with at least 2 periods on both sides; error from the rise of the summed χ² by its reduced value, floor 0.01°; rejected at the scan edge); a fit that makes coexisting orders give the same H (at least 3 groups with two orders; `χ² = ∑ (H_a − H_b)² / (σ_a² + σ_b²)`; rejected at the edge, when `χ²/dof > 5`, or outside 0.6–1.25 times the bulk value); else the bulk value with an assumed error of ±0.02° ("islands may be less dense than the bulk"). Tracks and orders are built with the bulk (or given) value; only the phase-locked pass is redone with the final α_c when it differs by more than 0.001°. GIMaP gives no α_c, so the first source is never used from the page.
-
-**H of a group and its 68 % interval.** The accepted phase-locked H when it holds at least 2 periods (or when no minimum of known order exists); else the inverse-variance mean over the minima of known order, its error multiplied by `√max(1, scatter)`.
-
-```text
-σ_H² = σ_position² + σ_αc² + (s_sys · H)²                                                       (12.42)
-s_sys = 8 % (< 0.75 periods), 4 % (< 1.25), 2 % (< 2), 1.5 % (otherwise)                         (12.43)
-```
-
-`σ_position` comes from the bootstrap (or the χ² curvature), `σ_αc` from shifting α_c by its error, and `s_sys` is a systematic baseline error by the number of periods in the clean range (`H · span(Q)/2π`), estimated in the code from synthetic cuts with power-law backgrounds. The slab phase assumed (minima at `H Q = 2π n`) may leave a constant offset of about 1 nm in H; this is not in the interval.
-
-**Status of a group.** measured (seen on both sides, or phase-locked); one side only; sides disagree; ambiguous order; below range (before the first order-1 minimum entered the range: `H < 2π / Q(top)` is given as a bound); not detected.
-
-**Growth rate.** A weighted straight line `H = a + v t` through the measured groups (at least 4 over at least 3 s), errors scaled by `√max(1, χ²/dof)`; `t_0,H = −a/v` is the deposition start the fringes imply, for information only. The change of v for α_c ± 0.01° is recorded.
-
-**Accuracy statements.** The tests on synthetic result folders (a growing layer's fringes with Poisson noise and invented detector gaps) require that at least 90 % of the 68 % intervals contain the true H, that every accepted track gets its true order (within 0.25), and that the fitted v is within `3 σ_v + 3 %` of the true value. These are statements about the synthetic cases, not about real islands.
-
-**Freshness.** The outputs are measured again when the tool's source (SHA-256), the binned run record, the metal, or the set of beam-off windows change.
-
-Implementation: `utils/sputter_fringes/optics.py`, `utils/sputter_fringes/minima.py`, `utils/sputter_fringes/detect.py`, `utils/sputter_fringes/phase.py`, `utils/sputter_fringes/tracks.py`, `utils/sputter_fringes/heights.py`, `utils/sputter_fringes/cli.py`, `src/gimap/features/sputter/infrastructure/fringes.py`
-
-### 12.13 Grades
-
-Every R and D value carries a grade letter (Sputter ▸ Windows and Explanation).
-
-| Grade | Source | Meaning |
-|---|---|---|
-| A | converged physical refinement, unique solution | refinement needs a GPU and is not in the bundle; refined windows made elsewhere can be added |
-| B | converged physical refinement, an equally good alternative exists | as A, with a second solution |
-| C | network only, per window | rule routing of section 12.5; band from the network scatter |
-| P | network on the physical path | one stage path through time; no switching of source between windows |
-| Lit | literature method | mass balance (12.27) with the nominal thickness and D = 2π/q\* |
-| S | time-consistent path, data-supported | exploratory view |
-| T | time-consistent path, constraint-driven | exploratory view |
-| L | learned selector | exploratory view |
-
-The selector and the time-consistent path did not pass their registered simulation tests for R; they are offered as exploratory views only.
-
-Implementation: `src/gimap/features/sputter/domain/structure.py`
-
-### 12.14 Stated limits
-
-- R is the base radius of an equivalent flat-based hemisphere (h = R). Real clusters on polymers are often truncated spheres with h/R between 1 and 2. In the literature method R scales as `f_H^{−1/3}` with the shape factor `f_H = H/R`; flatter Ag on oxides and `f_H = 2.75` for Cu on PS-b-PEO are reported. Trends are more reliable than absolute values.
-- D = 2π/q\* can be off by more than 40 % for `D > 10 nm` once coalescence starts (Hodas et al., 2017). The peak is total scattering: host and metal are not separated.
-- The deposition rate and t_0 are not measured by GISAXS. The sticking coefficient of these metals on these polymers is not known; all metal is assumed to stay on the surface.
-- Published thresholds come from other chambers and rates; the rate dependence (`δ_c ∝ F^{−γ_F}`, γ_F ≈ 0.07–0.17) is weaker than the differences between chambers. A band is a comparison, not a prediction.
-- The thickness of a continuous film and the TS metal fraction are not identifiable. A film with particles on it is not modelled.
-- The reliability numbers come from simulation within the hemisphere model, at the counts of 0.5 s windows; they are exploratory, not a pre-registered test.
-- Rule stages are candidates; a connected film is not proven. The path assumes no return from film to islands.
-- The source of the intensity modulation is not proven. Beam-off flags miss shallow dips and edge scattering that raises the intensity.
-- H is that of a uniform layer, measurable only while a minimum lies inside the clean q_z range and its order is known; a constant offset of about 1 nm is possible.
-- Fixed in the code and not exposed in the page: the pixel size (0.172 mm), the detector region used, the rate and t_0 errors of the percolation interval, the q_y band (0.05–0.15 nm⁻¹) and the α_c source of the fringe analysis.
-
-### 12.15 Literature references of the method
-
-These references are part of the method: their published values (percolation thresholds by metal and host, 2R/D and coverage ranges, D(δ) curves, the rate dependence, notes on mass balance and on 2π/q\*) are in `utils/sputter_toolkit/configs/literature_reference_v1.json`, each with its key, provenance (T text or table, F read from a figure, C calculated, R from a review, S abstract only) and DOI. The citations and DOIs below are copied from that file. Each was matched to a publisher or Crossref record, or is a standard reference of the field.
-
-| Key | Citation (as in the configuration) | DOI or URL | Used for |
-|---|---|---|---|
-| Abr16 | Abraham J.W., Strunskus T., Faupel F., Bonitz M., J. Appl. Phys. 119, 185301 (2016) | 10.1063/1.4948375 | R loses its island meaning after a network forms; coverage at 1 nm |
-| Aste96 | Aste T., Phys. Rev. E 53, 2571 (1996) | 10.1103/PhysRevE.53.2571 | coverage at percolation |
-| Bulut24 | Bulut Y. et al., Langmuir 40, 22591 (2024) | 10.1021/acs.langmuir.4c02344 | Au percolation on PS and other polymers; D(δ) Au/PS dcMS and HiPIMS; 2R/D; coverage at 4 nm |
-| Colin20 | Colin J. et al., Nanomaterials 10, 2225 (2020) | 10.3390/nano10112225 | Ag and Cu percolation on SiO₂; coverage |
-| Dend20 | Dendooven J. et al., Phys. Chem. Chem. Phys. 22, 24917 (2020) | 10.1039/d0cp03563g | 2π/q_max against XRF loading |
-| Gen19 | Gensch M. et al., ACS Appl. Mater. Interfaces 11, 29416 (2019) | 10.1021/acsami.9b08594 | Ag percolation on PS, PMMA, PS-b-PMMA; D(δ) Ag/PS and Ag/PMMA |
-| Gen21 | Gensch M. et al., ACS Appl. Nano Mater. 4, 4245 (2021) | 10.1021/acsanm.1c00829 | Ag percolation (DC); D(δ) Ag/PMMA DC |
-| GenTh23 | Gensch M., PhD thesis, Technical University of Munich (2023) | https://mediatum.ub.tum.de/doc/1690709/1690709.pdf | geometry; Ag 2R/D range; D(δ) figures |
-| Gra13 | Grachev S.Y. et al., J. Phys. D: Appl. Phys. 46, 375305 (2013) | 10.1088/0022-3727/46/37/375305 | Ag on Al₂O₃: early 2R/D and coverage, sticking, flattening |
-| Hod17 | Hodas M. et al., Phys. Rev. B 95, 035424 (2017) | 10.1103/PhysRevB.95.035424 | D(δ) Cu/graphene; bias of 2π/q\*; 2R/D test band |
-| Jam19 | Jamnig A. et al., Sci. Rep. 9, 6640 (2019) | 10.1038/s41598-019-43107-8 | rate dependence χ; Ag and Cu percolation on a-C |
-| Jeffers | Jeffers G., Dubson M.A., Duxbury P.M., J. Appl. Phys. 75, 5016 (1994) | 10.1063/1.355742 | coverage at percolation |
-| Kaune09 | Kaune G. et al., ACS Appl. Mater. Interfaces 1, 353 (2009) | 10.1021/am8000727 | metal embedded in the polymer (mass balance) |
-| Liang22 | Liang S., Schwartzkopf M., Roth S.V., Mueller-Buschbaum P., Nanoscale Adv. 4, 2533 (2022) | 10.1039/d2na00127f | review through which some Au thresholds are taken |
-| Nittler12 | Nittler L., Delcorte A., Bertrand P., Migeon H.-N., Surf. Interface Anal. 44, 1072 (2012) | 10.1002/sia.4866 | condensation coefficients on polymers |
-| Quint00 | Quintanilla J., Torquato S., Ziff R.M., J. Phys. A 33, L399 (2000) | 10.1088/0305-4470/33/42/104 | coverage at percolation (penetrable discs) |
-| Ruff11 | Ruffino F. et al., Appl. Phys. A 103, 939 (2011) | 10.1007/s00339-011-6413-1 | coverage at percolation, Au on PS and PMMA |
-| Sch13 | Schwartzkopf M. et al., Nanoscale 5, 5053 (2013) | 10.1039/c3nr34216f | Au percolation on SiOₓ; coverage at 1 nm |
-| Sch15 | Schwartzkopf M. et al., ACS Appl. Mater. Interfaces 7, 13547 (2015) | 10.1021/acsami.5b02901 | Au/PS percolation; D(δ) Au/PS RF; geometry; shape f_H = 1 |
-| Sch17 | Schwartzkopf M. et al., ACS Appl. Mater. Interfaces 9, 5629 (2017) | 10.1021/acsami.6b15172 | Au/PS rate series; χ for Au |
-| Sch21 | Schwartzkopf M. et al., Nanoscale Horiz. 6, 132 (2021) | 10.1039/d0nh00538j | Au/PS percolation at a high rate; nucleation |
-| Schap21 | Schaper S.J. et al., Nanoscale 13, 10555 (2021) | 10.1039/d1nr01480c | Cu percolation on PS-b-PEO; shape f_H = 2.75 |
-| Schu21 | Schuster C. et al., Nanomaterials 11, 589 (2021) | 10.3390/nano11030589 | electrical percolation of Au, Ag, Cu on resin films |
-| Thran99 | Thran A., Kiene M., Zaporojtchenko V., Faupel F., Phys. Rev. Lett. 82, 1903 (1999) | 10.1103/PhysRevLett.82.1903 | condensation coefficient of Ag on polymers |
-| Yu15 | Yu S. et al., J. Phys. Chem. C 119, 4406 (2015) | 10.1021/jp512675w | Ag percolation on Alq₃ |
-
-### 12.16 Analyze: what the main screen shows
-
-Sections 12.1 to 12.15 describe **Predict**, the method that comes with GIMaP. **Analyze**, on the main screen of the workspace, runs a separate analysis package (`iampred`) as a subprocess and shows what the package writes. The networks, the physical forward model and the refinement are the package's and are documented with it; this section states what GIMaP does with the package's input and output.
-
-**Inputs handed to the package.** The folder of CBF frames; the metal and the substrate; the deposition rate, either as the rate at the sample or as the reading of the quartz balance (the package converts a reading to the rate at the sample with its own factor); α_i; the sample–detector distance; the energy or the wavelength; the direct-beam position, entered in GIMaP's pixel coordinates and handed over minus 0.5 px as 0-based pixel centres (section 1.3), or, when it is empty, the request to estimate it from the frames; the sample roll (0° when empty); optionally a detector mask (without one the package uses the pixel mask it was built with), the time of the scan at which the deposition started, its duration, and the thickness of a polymer film. GIMaP changes none of these values. The package keeps an imported scan under a label; GIMaP derives the label from all these inputs, so a changed input is imported anew and never read from an earlier import.
-
-**Quantities.** For every time window the package gives several *entries*: up to three candidates of its network, ranked, and the refined solution when it refined. An entry holds the grain radius R, the grain height H, the centre-to-centre distance D, the gap D − 2R, the width σ of the log-normal distribution of the radius, the coverage (0 to 1) and the metal amount (nm), each as the package defines it for the model family of the sample; a quantity a family does not have is absent and is not shown. Lengths are in nm, the time t in s from the first frame; the nominal deposit of a window is the package's value. GIMaP shows the values with three significant digits (two for σ and the coverage) and computes none of them.
+**Quantities.** For every time window the package gives several *entries*: up to three candidates of its network, ranked, and, when it refined, the refined solution and the joint fit of the whole scan (every window refined together over the scan, smooth in time; the package then marks it as lying on its smooth evolution). An entry holds the grain radius R, the grain height H, the centre-to-centre distance D, the gap D − 2R, the width σ of the log-normal distribution of the radius, the coverage (0 to 1) and the metal amount (nm), each as the package defines it for the model family of the sample; a quantity a family does not have is absent and is not shown. Lengths are in nm, the time t in s from the first frame; the nominal deposit of a window is the package's value. GIMaP shows the values with three significant digits (two for σ and the coverage) and computes none of them.
 
 **Fit deviation.** The package's measure of how far the model image of an entry is from the measured image (its deviance per cell with a floor for the model error; lower is better). GIMaP shows the number and does not turn it into a grade, a probability or a threshold.
 
 **Which entry is shown.** In this order: the entry the user chose for the window; the entry the package marks as lying on its smooth evolution over the whole scan; the entry it marks as having the lowest fit deviation; the entry with the lowest fit deviation; the first entry. The evolution plots show the entries so chosen, one per window, against t; a window without a solution leaves a gap in the lines.
 
 **Images.** The measured count rate and the model of each entry are arrays over the exit angle α_f (°) and q_y (nm⁻¹) on the package's cells, which need not be evenly spaced. Both are drawn on those cells (cell edges halfway between neighbouring centres), with q_y on a logarithmic axis when every q_y is positive, on identical axes and with one logarithmic colour scale. Its limits are the 1 % and 99.7 % percentiles of the positive measured values (of the model's when nothing was measured), so they do not depend on the entry shown. Cells without data are left empty; measured values below the lower limit, zero counts included, are drawn in the lowest colour. The arrays are not changed.
+
+### 12.2 The deposition rate
+
+The rate is typed in Å/s (what a quartz balance shows) or in nm/s and handed to the package in nm/s: r [nm/s] = r [Å/s] / 10, rounded to 12 significant digits so that a typed 2.2 Å/s is 0.22 nm/s exactly. With *QCM reading* the number is the balance's reading r_QCM and the package takes the rate at the sample as
+
+r_sample = 0.6 r_QCM                                                     (12.1)
+
+(the factor is the package's, `iampred/intake.py`); otherwise r_sample = r. A rate at the sample outside 0.005 nm/s ≤ r_sample ≤ 1 nm/s makes the page ask whether the unit is right before the analysis starts. The range is a check of the unit (a QCM reading taken as nm/s is ten times too fast), not a physical limit: the analysis runs with any positive rate once confirmed.
+
+The line under the input bar states the nominal thickness reached at the last frame,
+
+δ_end = r_sample (min(t_N, t_0 + Δt) − t_0),   t_N = N τ                 (12.2)
+
+with N the number of frames, τ the exposure period of the first frame's header (its exposure time when there is no period), t_0 the start of the deposition entered (0 when empty) and Δt its duration entered (none when empty). It is shown only; the nominal deposit of each window is the package's value.
+
+Implementation: `src/gimap/features/sputter/application/client.py` (`QCM_FACTOR`, `RATE_LOW_NM_S`, `RATE_HIGH_NM_S`), `src/gimap/features/sputter/presentation/rate_flow.py`
+
+### 12.3 The real-space picture
+
+**Real Space** draws the solution shown at its size; the arrangement is an illustration. The top view is a square of 7 D. Grains sit on a hexagonal lattice of spacing D, each shifted by 0.12 D times a standard normal number in x and in y; the radius of each is r = R exp(σ z), with z standard normal clipped to ±2.5, and the height of its cap above the base layer is (H − b) r/R, b being the thickness of the continuous base layer (`base_nm`; a cap of height R without H). The side view is a cut 4 D long through one row of grains. The random numbers come from one fixed seed and are drawn in the same order for every solution, so another window or solution changes the sizes and not the positions.
+
+Two grains touch when their centres are no farther apart than the sum of their radii; touching grains form a cluster. The arrangement is *islands* when no two grains of the view touch, *network* when a cluster connects two opposite edges of the square (percolated), else *coalescing*. A solution with b > 0 is a closed film: the top view is the metal of the base layer over the whole square, with the grains as relief on it.
+
+Implementation: `src/gimap/features/sputter/domain/real_space.py`, `src/gimap/features/sputter/presentation/real_space_view.py`
 
 ## 13. Tool windows and Labs
 
@@ -3877,7 +3447,7 @@ Fitting's optional two-path sphere with a free effective reflection coefficient 
 ### 15.2 Instrument and geometry
 
 - **Detector tilt and rotation.** The calibration refines only x_c, y_c and L; it fits no tilt. A tilt comes from a `.poni` file and is applied as pyFAI applies it (section 3.7). The straight horizon, mirror filling, the calibration's line check and the XRR geometry still assume an untilted detector (sections 2.5, 4.8, 3.3, 13.1).
-- **Sample orientation.** The sample is tilted by α_i about the horizontal axis perpendicular to the beam and by nothing else; a rotation about the surface normal or about the beam is not described in Analyze (section 2.5). The Sputter toolkit alone accepts a sample roll (section 12.1).
+- **Sample orientation.** The sample is tilted by α_i about the horizontal axis perpendicular to the beam and by nothing else; a rotation about the surface normal or about the beam is not described in Analyze (section 2.5). Sputter alone hands a sample roll to its analysis package (section 12.1).
 - **Pixels.** A pixel is represented by its centre: there is no parallax, no sensor thickness and no pixel splitting (sections 2.5, 6.1).
 - **Beam.** Divergence, energy bandwidth and footprint are not modelled (section 2.5). The XRR extractor applies no footprint correction (section 13.1).
 - **Calibration.** The wavelength and the pixel sizes are inputs, not refined. The calibrant constants are fixed and not corrected for temperature. Ring radii stay on a 1 px grid. A "good" calibration agrees with its own image; this does not show that it belongs to the sample data (sections 3.1 to 3.4). The `orientation` entry of newer `.poni` files is not read (section 3.6).
@@ -3905,7 +3475,7 @@ Fitting's optional two-path sphere with a free effective reflection coefficient 
 ### 15.5 Series and Sputter
 
 - **Series.** Stages and odd frames are found in frame order, not in time; only positive intensities enter; a q bin with data in fewer than 95 % of the frames is not compared; *shape only* removes the overall level; the thresholds are working choices, not derived from a noise model of the detector (section 11.11).
-- **Sputter.** Islands are flat-based hemispheres (h = R); D = 2π/q* can be biased once coalescence starts; the sticking coefficient is not known and all metal is assumed to stay on the surface; the rate and t_0 are not measured by GISAXS; published thresholds come from other chambers; the thickness and metal fraction of a continuous film are not identifiable; rule stages are candidates and a connected film is not proven; shallow beam-off dips and edge scattering are not flagged; H(t) is the height of a uniform layer, with a possible constant offset of about 1 nm; Predict has networks for Ag and Au only and does not run for Cu.
+- **Sputter.** The values are the analysis package's (section 12.1): GIMaP neither computes nor grades them; the rate and t_0 are not measured by GISAXS, and the nominal deposit scales with the rate given; the range of usual rates is a check of the unit, not a limit (section 12.2); the real-space picture places the grains at random (section 12.3).
 
 ### 15.6 Tool windows and Labs
 
