@@ -303,20 +303,22 @@ def _predict_task(args):
                intervals_95={nm: [float(q[j, 0]), float(q[j, 4])] for j, nm in enumerate(meta["reported"])},
                median={nm: float(q[j, 2]) for j, nm in enumerate(meta["reported"])})
 
-    def write(x, opt, sub, t_start):
+    def write(x, opt, sub, t_start, stage=None):
         rec, mu, Pp, m, p = IS.record(f, s, label, i, x, opt, [round(t[0], 4) for t in tried], t_start, mode)
         rec["network"] = net
         od = Path(outdir) / sub / "static_fits" / label
         od.mkdir(parents=True, exist_ok=True)
         (od / f"{label}_{i:03d}.json").write_text(json.dumps(rec, indent=1), encoding="utf-8")
         np.savez_compressed(od / f"{label}_{i:03d}_mu.npz", mu=mu.astype(np.float32), sub=Pp["sub"].astype(np.float32))
+        if stage:
+            _live_frame(s, f, label, i, rec, mu, stage)
         return rec
 
     seen, starts = [], []
     for t in tried:
         if not any(abs(t[2] - w) < 1e-12 for w in seen):
             seen.append(t[2]); starts.append(t)
-    rd = write(tried[0][1], dict(start=tried[0][3], nfev=0), "direct", t0)
+    rd = write(tried[0][1], dict(start=tried[0][3], nfev=0), "direct", t0, "network")
     t_direct = time.time() - t0
     rr = rd
     if refine > 0:
@@ -326,7 +328,7 @@ def _predict_task(args):
             runs.append((F, x, dict(f.last, start=t[3])))
         runs.sort(key=lambda v: v[0])
         net["dev5_refine_runs"] = [round(dev5_of(f, r[1]), 4) for r in runs]
-        rr = write(runs[0][1], runs[0][2], ".", t0)
+        rr = write(runs[0][1], runs[0][2], ".", t0, "refined")
     else:
         write(tried[0][1], dict(start=tried[0][3], nfev=0), ".", t0)
     print(f"{label} #{i} dev5 network {net['dev5_as_given']:.2f} +nnls {net['dev5_direct']:.2f} refined {rr['dev_per_cell']['0.05']:.2f} "
@@ -338,6 +340,20 @@ def _predict_task(args):
     for nm in meta["reported"]:
         row[f"{nm}_net68_lo"], row[f"{nm}_net68_hi"] = (round(v, 4) for v in net["intervals_68"][nm])
     return row
+
+
+def _live_frame(s, f, label, i, rec, mu, stage):
+    'One frame solved, for the live view of a GUI (iampred.live; only when IAMPRED_LIVE names a folder).'
+    from iampred import live as LV
+    if LV.folder() is None:
+        return
+    try:
+        meas, model = LV.static_frame_images(f.w, mu)
+        LV.emit("frame", dict(q=np.asarray(s.q, np.float32), af=np.asarray(s.af, np.float32), measured=meas, model=model),
+                label=label, index=int(i), frame=int(i) + 1, nominal_nm=LV.rounded(s.cfg.get("nominal_nm")), stage=stage,
+                fit_deviation=LV.rounded(rec.get("dev_per_cell", {}).get("0.05"), 3), values=LV.static_values(rec))
+    except Exception:
+        pass
 
 
 def cmd_predict(a):
@@ -352,6 +368,11 @@ def cmd_predict(a):
         if a.max_frames:
             frames = frames[:a.max_frames]
         tasks += [(lab, i, a.models, a.refine, a.k, a.out, a.rb_late) for i in frames]
+        try:
+            from iampred import live as LV
+            LV.emit("solving", label=lab, total=len(frames), refine=a.refine)
+        except Exception:
+            pass
     Path(a.out).mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     rows = _map(_predict_task, tasks, a.workers)

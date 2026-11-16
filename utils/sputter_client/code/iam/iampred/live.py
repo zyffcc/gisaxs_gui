@@ -77,6 +77,7 @@ class Forwarder:
     def __init__(self, where, step, out=None):
         self.where, self.step, self.out = Path(where), step, out or sys.stdout
         self.seen = set()
+        self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._loop, daemon=True)
 
@@ -95,6 +96,10 @@ class Forwarder:
             self.sweep()
 
     def sweep(self):
+        with self._lock:
+            self._sweep()
+
+    def _sweep(self):
         try:
             names = sorted(p.name for p in self.where.glob("*.json") if p.name not in self.seen)
         except OSError:
@@ -239,6 +244,39 @@ class ChunkWatcher:
             arrays = dict(q=q, af=af, rate=rate)
         emit("frames", arrays, chunk=index, done=min(self.done, self.total), total=self.total,
              t_first=rounded(min(times), 3), t_last=rounded(max(times), 3), trace=trace)
+
+
+def native_rate_YE(Y, E):
+    'Count rate (af x q, both sides as in native_axes) of counts Y and exposures E on the native grid (side x af x q,'
+    Y, E = np.asarray(Y, float), np.asarray(E, float)
+    if Y.ndim == 4:
+        Y, E = Y.sum(0), E.sum(0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rate = np.where(E > 0, Y / E, np.nan)
+    return np.concatenate([rate[0][:, ::-1], rate[1]], axis=1).astype(np.float32)
+
+
+def static_frame_images(w, mu):
+    '(measured, model) count rate of one static frame on its cells (af x q; the window arrays carry a leading axis of'
+    ok = np.asarray(w["mask"], bool)
+    E = np.where(ok, w["E"], 0.0)
+    Es = E.sum(0) if E.ndim == 3 else E
+    with np.errstate(invalid="ignore", divide="ignore"):
+        Y = np.where(ok, w["Y"], 0.0)
+        meas = np.where(Es > 0, (Y.sum(0) if Y.ndim == 3 else Y) / np.maximum(Es, 1e-30), np.nan)
+        M = np.asarray(mu, float) * E
+        model = np.where(Es > 0, (M.sum(0) if M.ndim == 3 else M) / np.maximum(Es, 1e-30), np.nan)
+    return meas.astype(np.float32), model.astype(np.float32)
+
+
+def static_values(rec):
+    'The quantities of the main screen of a static fit record (as iampred.static puts them on its main screen).'
+    try:
+        R, D, t_b, T = (float(rec[k]) for k in ("R", "d_hex", "t_b", "T"))
+        return dict(R_nm=rounded(R), H_nm=rounded(t_b + T), D_nm=rounded(D), gap_nm=rounded(max(D - 2.0 * R, 0.0)),
+                    coverage=rounded(rec.get("eta")), amount_nm=rounded(rec.get("h_m_model")), base_nm=rounded(t_b))
+    except (KeyError, TypeError, ValueError):
+        return {}
 
 
 def window_images(ctx, mu):

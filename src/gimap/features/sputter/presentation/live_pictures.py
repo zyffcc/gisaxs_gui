@@ -113,12 +113,15 @@ class FramesPicture:
         self._norm = None
         self._cells: Optional[tuple] = None
         self._last: tuple = (None, None)
+        self._frames_title = ""
         self.titles = ("", "")
 
-    def show(self, detector, frames) -> None:
-        """``detector``: the event of the summed detector (or None); ``frames``: the event of the chunk read last."""
-        same = self._last[0] is detector and self._axes is not None
-        self._last = (detector, frames)
+    def show(self, detector, frames, frames_title: str = "") -> None:
+        """``detector``: the event of the summed detector (or None); ``frames``: the event of the chunk read last (or
+        of the usable frames of a sample); ``frames_title``: the right picture's title (in the interface language) when
+        the frames have no times."""
+        same = self._last[0] is detector and self._axes is not None and frames_title == self._frames_title
+        self._last, self._frames_title = (detector, frames), frames_title
         if not (same and self._update(frames)):
             self._draw()
 
@@ -179,7 +182,7 @@ class FramesPicture:
         from matplotlib.colors import LogNorm
 
         axes, bar = self._axes[1], self._axes[2]
-        self.titles = (self.titles[0], tr(FRAMES_WAITING))
+        self.titles = (self.titles[0], self._frames_title or tr(FRAMES_WAITING))
         axes.set_title(self.titles[1], fontsize=10)
         cells = self._grid(event)
         if cells is None:
@@ -222,7 +225,7 @@ class FramesPicture:
 
     def _title(self, event) -> None:
         first, last = event.number("t_first"), event.number("t_last")
-        if first is not None and last is not None:
+        if first is not None and last is not None and not self._frames_title:
             self.titles = (self.titles[0], text(FRAMES_TITLE, first=f"{first:.1f}", last=f"{last:.1f}"))
             self._axes[1].set_title(self.titles[1], fontsize=10)
 

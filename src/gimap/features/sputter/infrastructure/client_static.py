@@ -252,8 +252,9 @@ class StaticPackageRunner:
         progress = ClientProgress.static()
         marker = root / (label + IMPORT_MARKER)
 
-        def keep(line: str) -> None:
-            progress.feed(line)
+        def keep(line) -> None:
+            if isinstance(line, str):  # not an event of the live view
+                progress.feed(line)
             if owned and "intake" in progress.done and not marker.is_file():
                 marker.write_text(json.dumps({"label": label, "intake": request.intake_digest(),
                                               "request": request.intake_values()}, indent=2, default=str),

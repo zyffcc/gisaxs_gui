@@ -88,7 +88,15 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   every frame read so far, then the measured and model image of each time window as it is solved and the sizes found
   so far. A click on a step that has started shows what it found. The analysis package that comes with GIMaP sends
   what the view shows (an older package chosen in Details is followed by its steps alone); the results are the same
-  as before.
+  as before. Between the two networks of an analysis the view keeps the last solved window instead of going blank.
+- Sputter: **In Situ | After Deposition** at the left of the input bar. **After Deposition** is for a sample measured
+  after its deposition, which has no deposition rate and no frames from before it: the bar asks for its frames, its
+  name, its **nominal thickness** (in place of the rate; its place on the axis of the series) and, optionally, the
+  frames of a **bare substrate** (another piece of the same substrate without metal; without it the film is taken to
+  lie on Si), and **Analyze** analyses it into the series. While it runs the main screen shows three steps live: the
+  frames read (which are usable, which are left out and why), the solution of each frame as it is found with its
+  measured and model image, and the series with every frame solved so far. **Details ▸ Static Frames** keeps the
+  series folder, the mode and the geometry; **Analyze Sample** there is gone.
 - **Geometry Calibration**: the **Distance range** is a limit, not a starting point. No solution outside it is shown,
   also not after the fit of centre and distance (before, the fit could leave a custom range); when none lies in it,
   the calibration says so. An image of the standard taken at grazing incidence (AgBH on a wafer: arcs above the

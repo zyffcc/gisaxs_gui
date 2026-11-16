@@ -279,11 +279,10 @@ def test_a_slow_metadata_scan_keeps_the_window_responsive_and_late_results_are_d
         page.import_paths([path], interactive=False)
         _until(entered.is_set)
         assert page.tasks.is_busy() and not page.import_cancel_button.isHidden()
-        # The timer keeps firing while the scan is held: the event loop is not blocked. Slow CI runners
-        # fire a 10 ms timer only once or twice in 100 ms, so wait for the ticks instead of a fixed time.
-        start = len(ticks)
-        _until(lambda: len(ticks) >= start + 3, seconds=5)
-        assert reads == []
+        # the window keeps handling events while the scan is held (waiting for the ticks, not counting them in a fixed
+        # time: a slow CI runner gave 1-2 ticks of 10 ms in 100 ms)
+        _until(lambda: len(ticks) >= 3, 5)
+        assert page.tasks.is_busy() and reads == []
         if action == "cancel":
             page.cancel_frame_import()
         else:

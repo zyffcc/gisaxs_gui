@@ -877,7 +877,8 @@ def test_the_static_section_starts_with_the_geometry_of_the_package(tmp_path):
                                                     "static_roll")] == ["9.5", "4321", "300.5", "700.5", "-0.25"]
     assert page.static_series.path() == "" and page.static_series.path_edit.placeholderText() == str(
         tmp_path / "series" / "series_1")
-    assert page.static_mode.currentData() == "quick" and page.static_button.isEnabled()
+    page.set_analysis_kind("static")
+    assert page.static_mode.currentData() == "quick" and page.analyze_button.isEnabled()
     page.static_sdd.setText("5000")
     page.static_roll.setText("")
     page.static_mask.set_path(str(tmp_path / "zz_mask.npy"))
@@ -889,13 +890,17 @@ def test_the_static_section_starts_with_the_geometry_of_the_package(tmp_path):
     _close(page)
     # a package that does not know static frames: said in the section, nothing can start
     older, _runner = _static_page(tmp_path / "older", problem=STATIC_UNSUPPORTED)
-    assert "no entry for static frames" in older.static_note.text() and not older.static_button.isEnabled()
-    assert older.static_energy.text() == "" and older.analyze_button.isEnabled()
+    assert "no entry for static frames" in older.static_note.text() and older.analyze_button.isEnabled()  # in situ
+    older.set_analysis_kind("static")
+    assert older.static_energy.text() == "" and not older.analyze_button.isEnabled()
     older.analyze_static()
     assert not older.static_analyzing()
+    older.set_analysis_kind("insitu")
+    assert older.analyze_button.isEnabled()
     _close(older)
     plain = _page(tmp_path / "plain")  # a service without static frames
-    assert not plain.static_button.isEnabled() and plain.static_project_state()["static_sdd"] == ""
+    plain.set_analysis_kind("static")
+    assert not plain.analyze_button.isEnabled() and plain.static_project_state()["static_sdd"] == ""
     _close(plain)
 
 
@@ -909,9 +914,10 @@ def test_analyze_sample_adds_to_the_series_and_shows_it(tmp_path):
     page.static_nominal.setText("8")
     seen = []
     page.staticEvent.connect(lambda _event: seen.append(page.static_status.message_label.text()))
-    page.static_button.click()
+    page.set_analysis_kind("static")  # After Deposition: Analyze runs the sample of the bar
+    page.analyze_button.click()
     assert page.static_analyzing() and page.running()
-    assert not page.static_button.isEnabled() and not page.analyze_button.isEnabled()  # one analysis at a time
+    assert not page.analyze_button.isEnabled()  # one analysis at a time
     _settle(lambda: not page.static_analyzing())
     request = runner.requests[0]
     assert (request.frames, request.name, request.nominal_nm, request.mode) == (str(tmp_path / "zz frames"), "zz 8nm",
@@ -922,7 +928,7 @@ def test_analyze_sample_adds_to_the_series_and_shows_it(tmp_path):
     assert "Step 1 of 3: Reading the frames…" in seen and "Step 2 of 3: Finding the solution of the sample…" in seen
     assert "Step 3 of 3: Writing the report and the images of the series…" in seen
     assert not page.details_shown() and page.client_result.static and page.window_label.text() == "zz_8nm · nominal 8 nm"
-    assert page.static_button.isEnabled() and page.analyze_button.isEnabled()
+    assert page.analyze_button.isEnabled()
     assert "zz: 4 frames, 4 usable" in page.static_log.toPlainText()
     assert any("zz_8nm is in the series" in toast.text() for toast in visible_toasts(page))
     stored = page.preferences.get("sputter_page")
@@ -950,7 +956,8 @@ def test_analyze_sample_adds_to_the_series_and_shows_it(tmp_path):
 def test_analyze_sample_says_what_is_missing_and_asks_before_it_replaces(tmp_path, monkeypatch):
     page, runner = _static_page(tmp_path)
     page.static_frames.set_path("")
-    page.static_button.click()
+    page.set_analysis_kind("static")
+    page.analyze_button.click()
     assert not page.static_analyzing() and runner.requests == []
     assert page.static_status.state_label.property("gimapJobState") == "failed"
     message = page.static_status.message_label.text()
@@ -986,7 +993,7 @@ def test_cancel_stops_analyze_sample_and_a_failure_keeps_its_reason(tmp_path):
     assert "Stopping" in page.static_status.message_label.text()
     _settle(lambda: not page.static_analyzing())
     assert page.static_status.state_label.property("gimapJobState") == "cancelled"
-    assert "stay in the series" in page.static_status.message_label.text() and page.static_button.isEnabled()
+    assert "stay in the series" in page.static_status.message_label.text() and page.analyze_button.isEnabled()
     _close(page)
     failing, _runner = _static_page(tmp_path / "b", status="failed at predict")
     failing.static_name.setText("zz_8nm")
@@ -1078,7 +1085,8 @@ def test_static_frames_speak_chinese_after_a_switch(tmp_path):
 
     page, _runner = _static_page(tmp_path)
     page.open_client_result(write_static(tmp_path / "zz_series"))
-    page.static_button.click()  # nothing to analyse yet: what is missing, in the status
+    page.set_analysis_kind("static")
+    page.analyze_button.click()  # nothing to analyse yet: what is missing, in the status
     try:
         apply_language("zh", roots=(page,))
         page.refresh_language()
@@ -1088,7 +1096,8 @@ def test_static_frames_speak_chinese_after_a_switch(tmp_path):
         assert page.evolution.figure.axes[0].get_xlabel() == "名义厚度 (nm)"
         assert page.tiles["R_nm"].toolTip().splitlines()[-1] == "范围：1.8 – 2.4 nm"
         assert page.static_section.toggle_button.text() == "静态帧（沉积之后测量）"
-        assert page.static_button.text() == "分析这个样品" and page.static_note.text().startswith("沉积之后在入射角约 0.35°")
+        assert page.kind_switch.itemText(1) == "沉积后" and page.static_note.text().startswith("沉积之后在入射角约 0.35°")
+        assert page.static_reference.path_edit.placeholderText() == "可选：另一片未镀金属的同种基底"
         assert "请给样品起一个含字母或数字的名字。" in page.static_status.message_label.text()
         assert page.package_masks_button.text() == page.static_masks_button.text() == "分析包自带的掩膜"
         page.open_client_result(write_result(tmp_path / "porous", windows=porous_windows(), wanted=POROUS_WANTED))
@@ -1099,7 +1108,8 @@ def test_static_frames_speak_chinese_after_a_switch(tmp_path):
         apply_language(DEFAULT_LANGUAGE, roots=(page,))
         page.refresh_language()
     assert page.tile_captions["R_nm"].full_text() == "Island radius (relative)"
-    assert page.static_button.text() == "Analyze Sample" and "Give the sample a name" in page.static_status.message_label.text()
+    assert page.kind_switch.itemText(1) == "After Deposition"
+    assert "Give the sample a name" in page.static_status.message_label.text()
     _close(page)
 
 
@@ -1109,11 +1119,14 @@ def test_every_template_of_static_frames_and_of_a_porous_result_is_in_the_chines
     from src.gimap.features.sputter.presentation import static_flow
     from src.gimap.features.sputter.presentation.views import sputter_static_view as view
 
+    from src.gimap.features.sputter.presentation.views import sputter_main_view as bar
+
     held = [*STATIC_TEMPLATES, *STATIC_STEP_TEXT.values(), *static_flow.TEMPLATES, view.STATIC_TITLE, view.STATIC_TIP,
             *(text for label, _key, tip in view.STATIC_MODE_CHOICES for text in (label, tip)), view.FRAMES_TIP,
-            view.NAME_TIP, view.NOMINAL_TIP, view.REFERENCE_TIP, view.SERIES_TIP, view.GEOMETRY_NOTE, view.CENTRE_TIP,
-            view.MASKS_BUTTON, view.MASKS_TIP, "Analyze Sample", "Package Values", "File…", "Sample name",
-            "Bare substrate", "Series folder", "of the package", "of the package (.npy)",
+            view.NAME_TIP, view.NOMINAL_TIP, view.REFERENCE_TIP, view.REFERENCE_PLACEHOLDER, view.SERIES_TIP,
+            view.GEOMETRY_NOTE, view.CENTRE_TIP, view.MASKS_BUTTON, view.MASKS_TIP,
+            *(text for label, _key, tip in bar.KIND_CHOICES for text in (label, tip)), "Package Values", "Sample",
+            "Nominal (nm)", "Bare substrate", "Series folder", "of the package", "of the package (.npy)",
             "folder, CBF file or zip archive", "Choose the Folder of the Frames", "Choose a CBF File or a Zip Archive",
             "Choose the Folder of the Series"]
     missing = [template for template in held if template not in ZH]

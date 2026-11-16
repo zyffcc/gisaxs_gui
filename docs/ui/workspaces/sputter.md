@@ -6,7 +6,9 @@
   打开时是**主屏**（“分析” Analyze，调用仓库外的分析包；实测图与模型图并排、候选解、数值块、演化），原来的页面整个收进第二个
   视图**详情**（Details），行为不变——见下面“主屏与分析（Analyze）”；同日补充：多孔基底结果的数值块、详情里的“静态帧
   （沉积之后测量）”、主屏图样区的“图样 ｜ 实空间”切换——见“多孔基底”“静态帧”“实空间示意”三节；2026-11-15 分析运行时
-  主屏显示**实时视图**：四个步骤各在做什么、已经得到什么——见“实时视图”一节）
+  主屏显示**实时视图**：四个步骤各在做什么、已经得到什么——见“实时视图”一节；2026-11-16 输入栏加入**原位 ｜ 沉积后**
+  切换：沉积之后测量的样品在输入栏给出帧、样品名、名义厚度（代替沉积速率）和可选的裸基底，“分析”分析它，运行时同样
+  显示实时视图——见“静态帧”一节）
 - **科学说明**：各量的定义、规则和阈值见 [Physics and Methods Reference](../../Physics_Manual.md) 第 12 章；本文写调用链、
   文件与界面约定。
 - **Scope**: 原位溅射序列逐时间窗的结构。主屏（分析包）：晶粒半径 R、高度 H、中心间距 D、间隙、尺寸分布宽度、覆盖率，
@@ -20,8 +22,8 @@
   主屏与分析：`domain/client.py`、`application/client.py`、`application/client_progress.py`、`infrastructure/client.py`、
   `presentation/views/sputter_main_view.py`、`presentation/client_flow.py`、`client_panel.py`、`client_texts.py`、
   `pattern_view.py`、`evolution_view.py`、`real_space_view.py` 与 `domain/real_space.py`（实空间示意）；实时视图：
-  `application/client_live.py`、`presentation/live_panel.py`、`live_pictures.py`、`presentation/views/sputter_live_view.py`、
-  `i18n/zh_sputter_live.py`；静态帧：
+  `application/client_live.py`、`presentation/live_panel.py`、`live_pictures.py`、`live_static.py`（沉积后的样品）、
+  `presentation/views/sputter_live_view.py`、`i18n/zh_sputter_live.py`；静态帧：
   `application/client_static.py`、`infrastructure/client_static.py`、`presentation/static_flow.py`、
   `presentation/views/sputter_static_view.py`；分析包随仓库提供（`utils/sputter_client/`，研究代码的发布版：只有这些命令用到的文件，不含开发时所用私有数据的名字，`MANIFEST.json` 与 `tests/test_sputter_client_bundle.py` 检查它；`GIMAP_SPUTTER_CLIENT` 或用户选的文件夹优先）；
   由 q_z 干涉条纹得到的岛高度：`domain/fringes.py`、`application/fringes.py`、`infrastructure/fringes.py`、
@@ -40,11 +42,12 @@
   [`tests/test_sputter_client.py`](../../../tests/test_sputter_client.py)（分析包的读取器、命令行与环境、进度行、服务；
   多孔基底与静态帧的读取、静态帧的命令行与服务；实空间示意的排布）、
   [`tests/test_sputter_main_screen.py`](../../../tests/test_sputter_main_screen.py)（主屏：数值块、换解、保存选择、空状态、
-  分析与取消、语言、项目；多孔基底的数值块、静态帧系列与“分析这个样品”、实空间示意的切换、长路径不撑宽详情左栏；
+  分析与取消、语言、项目；多孔基底的数值块、输入栏的“沉积后”与静态帧系列、实空间示意的切换、长路径不撑宽详情左栏；
   假的分析包进程与编造的结果：[`tests/sputter_client_fixtures.py`](../../../tests/sputter_client_fixtures.py)）、
   [`tests/test_sputter_live.py`](../../../tests/test_sputter_live.py)（实时视图：`@live` 行、事件带数组交给界面、
-  `LiveRun` 的累积、分析运行中主屏的步骤与图、点步骤、失败后回到原来的画面、中文）
-- **Last verified**: 2026-11-15（实时视图：离线测试；另在本机用一份真实扫描和带实时事件的分析包在离屏窗口里走完四步并截图，
+  `LiveRun` 的累积、分析运行中主屏的步骤与图、点步骤、失败后回到原来的画面、中文；沉积后的样品：三步、各帧的解、系列）
+- **Last verified**: 2026-11-16（输入栏的“沉积后”与静态帧的实时视图：离线测试；另在本机用一份真实的沉积后样品
+  在离屏窗口里经输入栏走完三步并截图，数值不进仓库）；2026-11-15（实时视图：离线测试；另在本机用一份真实扫描和带实时事件的分析包在离屏窗口里走完四步并截图，
   数值不进仓库）；2026-11-14（主屏与分析：离线测试；多孔基底、静态帧和实空间示意另用本机几份真实结果的副本在离屏窗口里
   看过，数值不进仓库；另在本机用真实的旧版分析包核对过命令行和环境——给一个不存在的帧文件夹，
   分析包解析完全部参数后拒绝它，不读帧；主屏另用本机一份真实结果的副本看过，数值不进仓库）；2026-11-01（状态行、默认解释、
@@ -55,7 +58,9 @@
 
 `views/sputter_page_view.py` 从上到下：**输入栏**（两个视图都显示）和一个 `QStackedWidget`（`view_stack`）。
 
-- **输入栏**（`views/sputter_main_view.py` 的 `_input_bar`）：扫描文件夹（`scan_picker`，原来在“数据”区）、金属
+- **输入栏**（`views/sputter_main_view.py` 的 `_input_bar`）：最左是切换**原位 ｜ 沉积后**（`kind_switch`，
+  `KIND_CHOICES`），其后的输入在 `input_stack` 的两页里（不显示的那页大小策略设为 `Ignored`，不撑宽输入栏）。“沉积后”一页见
+  “静态帧”一节；“原位”一页：扫描文件夹（`scan_picker`，原来在“数据”区）、金属
   `sample_metal`（Ag / Au / Cu，与详情里早先方法的 `metal` 是同一个选择，互相同步；下拉项就写 Cu；选 Cu 时下面一行说明分析用 Cu 自己的网络、
   早先方法对 Cu 不运行）、基底 `substrate`、速率 `sample_rate` 与 **QCM 读数** `qcm_check`、主按钮**分析** `analyze_button`；下一行是一句几何
   `geometry_summary`（能量、距离、入射角、光束中心、滚转角；缺什么就只说“还需填写的几何：…”，选了文件夹后用警示色）和
@@ -68,7 +73,7 @@
   候选 1…3、精修解，各带拟合偏差）、**恢复默认解**、一句说明；数值块（半径 R、高度 H、间距 D、间隙、尺寸分布宽度、覆盖率；
   没有的量不显示）和所显示解的拟合偏差；演化图（`EvolutionPlot`）。
 - **详情**（`_details_view`）：原来的整个页面——左栏（标题、样品与几何、**分析选项**、早先的方法“预测”及其任务状态、
-  静态帧（`sputter_static_view.py`，默认收起）、更多选项）和右边五个标签页。分析选项（`_analysis_section`）：模式（自动 / 快速 / 精修 / 完整）、沉积开始、沉积持续时间、
+  静态帧的系列、模式与几何（`sputter_static_view.py`，默认收起）、更多选项）和右边五个标签页。分析选项（`_analysis_section`）：模式（自动 / 快速 / 精修 / 完整）、沉积开始、沉积持续时间、
   聚合物膜厚（只在基底是聚合物膜时显示）、分析包的文件夹与“选择文件夹…”、打开报告、打开文件夹（所显示结果的）、日志。
 
 原有控件的属性名都没有变（`scan_picker`、`metal`、`rate`、`job_status`、`predict_button`、`tabs` …）；“预测”不再是主按钮样式
@@ -151,12 +156,22 @@
   `LiveRun` 只留每个网络最近求解的一个时间窗和最近一块帧的数组，其余只留数值。
 - **结束**：成功时显示结果；失败或停止时回到运行前显示的（原来的结果或空状态）。不发事件的旧版分析包只有左栏的步骤，
   右边说明它不显示中间结果。
+- **网络之间不空白**：第二个网络刚开始、还没有解时，图和演化仍显示上一个有解的网络，直到新网络的第一个时间窗到达。
+- **沉积后的样品**（`live_static.py` 的 `LiveStaticMixin`，`LiveRun(kind="static")`）：三步——读入样品的帧、求解结构、
+  归入系列（`STATIC_LIVE_STEPS`；“绘制图像”隐藏）。读入帧：左边探测器求和（给了裸基底时先是裸基底的，再是样品的），右边
+  样品可用帧之和；图下“N 帧中 n 帧可用 · 裸基底：另一片未镀金属的基底（或：没有裸基底，认为膜长在 Si 上）· 未用：<文件>
+  （分析包说的原因）”；下面是目前的系列。求解结构：最近求解的一帧的实测图与模型图，图下“第 k 帧 · 网络（或精修）· 半径 R … ·
+  拟合偏差 …”；演化图是此前已分析的样品加上这个样品已求解的各帧（都画在名义厚度处，经中位数连线——结果里样品的数值就是各帧的
+  中位数），最近一帧标出。步骤行“N 帧中 n 帧可用”“已求解 k / m 帧”（快速、精修模式只取可用帧中的 4 帧，这时加上
+  “取 n 个可用帧中的 m 帧”）。
 
 **分析包的约定**（研究代码 `iampred.live`，2026-11-15）：每一步的进程从环境变量 `IAMPRED_LIVE` 得到一个文件夹，在其中写
 `<时间>_<pid>.json`（和需要时同名 `.npz`，先写临时名再改名）；`iampred.analyze` 在步骤运行时每 0.5 s 把新事件打印成一行
 `@live {json}`（加 `step` 和 `arrays`：npz 的绝对路径），结束时删掉 `<输出>/live/`。事件：`centre`、`detector`、`frames`、
 `imported`（读入帧）；`models`、`windows`、`window`、`chosen`（求解；`models`、`chosen` 由 `analyze` 自己发）；`drawing`、
 `drawn`（绘图）。字段见 `application/client_live.py` 的说明。事件不改变任何结果（同一扫描有无事件，`windows.csv` 逐字节相同）。
+`iampred.static` 同样转发：`detector`（`role`：`sample` 或 `bare substrate`）、`sample`（可用帧之和、帧数、未用的帧及原因）、
+`solving`（要求解的帧数）、`frame`（一帧的解，`stage`：`network` 或 `refined`，带实测图与模型图）。
 
 主屏的约定：
 
@@ -180,10 +195,15 @@
 
 ## 静态帧（Static Frames，沉积之后测量）
 
-详情里一节（`sputter_static_view.py`，默认收起；行为在 `static_flow.py`）：一个样品的帧（文件夹、一个 CBF 文件，或 zip 包加
-`::` 后的包内文件夹；选 zip 时列出包里有 CBF 的文件夹让用户选）、样品名、名义厚度（nm）、可选的空基底帧、系列文件夹、
-模式（快速 / 精修 / 完整），这些帧的几何（能量、距离、光束中心、滚转角、掩膜；留空用分析包自己的值，“分析包的值”把它们
-填进来；“分析包自带的掩膜”按文件名列出包里的 `.npy`），按钮**分析这个样品**及其任务状态和日志。
+沉积之后测量的样品没有沉积速率，也没有沉积之前的帧，所以输入栏的“沉积后”一页（`kind_switch` 选 `static`；行为在
+`static_flow.py`）问的是别的：样品的帧（`static_frames`；“选择…”菜单：文件夹，或一个 CBF 文件 / zip 包——zip 包加 `::` 后的包内
+文件夹，包里有 CBF 的文件夹不止一个时让用户选）、样品名 `static_name`、**名义厚度**（nm，`static_nominal`：代替沉积速率，也是
+样品在系列横轴上的位置）、可选的**裸基底**（`static_reference`：另一片同种基底、未镀金属、同样测量的帧，给出图像里的基底部分；
+不给时分析包用 Si 的模型）。主按钮仍是**分析**（`analyze` 按 `analysis_kind()` 分给 `analyze_static`），任务状态是输入栏的同一个
+（`static_status` 就是 `analyze_status`，`_status_owner` 记住最近是哪一种分析在说话）。几何一行这时说这些帧的几何。所选种类记在
+偏好 `analysis_kind` 和项目里。详情里一节（`sputter_static_view.py`，默认收起）只留系列文件夹、模式（快速 / 精修 / 完整）、
+这些帧的几何（能量、距离、光束中心、滚转角、掩膜；留空用分析包自己的值，“分析包的值”把它们填进来；“分析包自带的掩膜”按文件名
+列出包里的 `.npy`）和日志。运行时主屏显示实时视图的三步（见“实时视图”）。
 
 1. `StaticService.analyze`（`application/client_static.py`）→ `StaticPackageRunner`（`infrastructure/client_static.py`）：
    `python -u -m iampred.static --frames … --label … --nominal-nm … --out <系列> [--reference-frames …] [--sample …]
@@ -195,7 +215,8 @@
    先问，再把旧的导入和系列里的那个样品删掉重做；完全相同的请求直接显示系列。
 3. 结束后主屏显示整个系列：样品代替时间窗（选择器写“样品名 · 名义厚度 … nm”），每个样品一个解（`模型解`，各帧的中位数），
    演化图横轴是名义厚度，不出现“时间”字样；数值的范围（各帧与网络区间）在数值块的提示里。**打开结果…**也能打开系列。
-4. “分析”和“分析这个样品”不同时运行：一个在跑时另一个等待。系列文件夹、模式、几何、掩膜记为上次用的值，整节进项目文件。
+4. 一次只运行一个分析：一种在跑时“分析”不可用（切到另一种也一样）；所选的包不认识静态帧时，“沉积后”下的“分析”不可用。
+   系列文件夹、模式、几何、掩膜记为上次用的值，整节和所选种类进项目文件（旧项目为“原位”）。
 
 ## 实空间示意（Real Space）
 

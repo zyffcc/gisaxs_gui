@@ -131,13 +131,22 @@ class SputterClientMixin:
         return self.view_stack.currentIndex() == 1
 
     def edit_geometry(self) -> None:
-        """Details at the geometry fields: the first one that is still empty has the cursor."""
+        """Details at the geometry fields: the first one that is still empty has the cursor (After Deposition: the
+        geometry of static frames, in their section)."""
         self.show_details(True)
+        if self.analysis_kind() == "static":
+            self.static_section.set_expanded(True)
+            self.details_scroll.ensureWidgetVisible(self.static_energy)
+            self.static_energy.setFocus()
+            return
         self.details_scroll.ensureWidgetVisible(self.geometry_section)
         fields = (self.energy_value, self.sdd, self.alpha)
         next((field for field in fields if not field.text().strip()), fields[0]).setFocus()
 
     def _show_client_log(self) -> None:
+        if self._status_owner == "static":  # the job status is the one of the analysis of a sample
+            self._show_static_log()
+            return
         self.show_details(True)
         self.client_log.setVisible(True)
         self.details_scroll.ensureWidgetVisible(self.client_log)
@@ -175,7 +184,30 @@ class SputterClientMixin:
                  text(GEOMETRY_ROLL, roll=_shown(values["roll"]))]
         return " · ".join(parts), False
 
+    def _static_geometry_line(self) -> str:
+        """The geometry of static frames in one line: a field left empty takes the package's own value."""
+        static = self._static_service()
+        defaults = static.defaults() if static is not None else None
+        own = {"energy": None if defaults is None or defaults.energy_ev is None else defaults.energy_ev / 1000.0,
+               "sdd": getattr(defaults, "sdd_mm", None), "col": getattr(defaults, "beam_col", None),
+               "row": getattr(defaults, "beam_row", None), "roll": getattr(defaults, "sample_roll_deg", None),
+               "alpha": getattr(defaults, "alpha_i_deg", None)}
+        for key, name in (("energy", "static_energy"), ("sdd", "static_sdd"), ("col", "static_beam_col"),
+                          ("row", "static_beam_row"), ("roll", "static_roll")):
+            own[key] = _float(getattr(self, name).text()) if getattr(self, name).text().strip() else own[key]
+        parts = [GEOMETRY_ENERGY.format(energy=_shown(own["energy"])) if own["energy"] else "",
+                 GEOMETRY_DISTANCE.format(distance=_shown(own["sdd"])) if own["sdd"] else "",
+                 GEOMETRY_ALPHA.format(alpha=_shown(own["alpha"])) if own["alpha"] else "",
+                 text(GEOMETRY_CENTRE, col=_shown(own["col"]), row=_shown(own["row"]))
+                 if own["col"] is not None and own["row"] is not None else "",
+                 text(GEOMETRY_ROLL, roll=_shown(own["roll"])) if own["roll"] is not None else ""]
+        return " · ".join(part for part in parts if part)
+
     def _show_geometry_summary(self) -> None:
+        if self.analysis_kind() == "static":
+            self.geometry_summary.set_full_text(self._static_geometry_line())
+            warning_style(self.geometry_summary, False)
+            return
         line, missing = self._geometry_line()
         self.geometry_summary.set_full_text(line)
         warning_style(self.geometry_summary, missing and bool(self.scan_picker.path()))  # needed once a scan is chosen
@@ -298,9 +330,13 @@ class SputterClientMixin:
     def _client_status(self, state: str, parts: list, progress: Optional[float] = 0.0) -> None:
         """``parts``: (template, values) pairs joined by " — " (composed again after a language switch)."""
         self._client_status_parts = (state, parts, progress)
+        self._status_owner = "client"
         self._show_client_status()
 
     def _show_client_status(self) -> None:
+        if getattr(self, "_status_owner", "client") == "static":  # the job status says what a sample's analysis did
+            self._show_static_status()
+            return
         state, parts, progress = self._client_status_parts
         words = []
         for template, values in parts:
@@ -315,6 +351,9 @@ class SputterClientMixin:
         self._notify(message_text(message), error=True)
 
     def analyze(self) -> None:
+        if self.analysis_kind() == "static":  # After Deposition: the sample of the bar (static_flow.py)
+            self.analyze_static()
+            return
         client = self.service.client
         if self._client_busy or client is None or self.static_analyzing():
             return
@@ -371,6 +410,9 @@ class SputterClientMixin:
                 self._client_status("idle", [], 0.0)
 
     def stop_analysis(self) -> None:
+        if self.static_analyzing():  # Cancel of the shared job status: the analysis of a sample
+            self.stop_static()
+            return
         if not self._client_busy or self._client_stop:
             return
         self._client_stop = True
