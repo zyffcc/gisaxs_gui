@@ -1906,7 +1906,9 @@ Analysis** to inspect its contributions here.
 **2. Model**
 
 - **Add Particle** adds one card per particle: **Sphere**, **Random cylinder** or **Vertical cylinder**.
-- Each card has **Distance D** on or off (the paracrystal interference between neighbours) and its values:
+- Each card has **Distance D** on or off (the paracrystal interference between neighbours), with **Coupling**
+  LMA (P·S, the default) or DA (sizes independent of positions;
+  [Physics and Methods, section 9.5](Physics_Manual.md#95-structure-factor-one-dimensional-paracrystal)), and its values:
   scale, R and **σR/R**, h and **σh/h** for random cylinders, D and **σD/D**. Spreads are relative everywhere
   (as in Analyze's results and in 1D Predict). The scale multiplies the form factor, which is 1 at q = 0 for
   spheres and random cylinders but 10⁻⁶·⟨R⁴⟩/4 (R in nm) for vertical cylinders: compare scales only within

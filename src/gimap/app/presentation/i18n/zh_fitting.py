@@ -126,6 +126,12 @@ FITTING_ZH = {
     "Phase of the effective reflection coefficient (spheres)": "有效反射系数的相位（球）",
     "q₊R of the spheres (q₊ = kᵢ + k_f): {values}": "球的 q₊R（q₊ = kᵢ + k_f）：{values}",
     "By number: {values}": "按数目：{values}",
+    "Coupling": "耦合",
+    "LMA: P·S": "LMA：P·S",
+    "DA: P + |⟨F⟩|²(S − 1)": "DA：P + |⟨F⟩|²(S − 1)",
+    "LMA: every size sits among neighbours of its own size. DA: sizes and positions are independent, so the size "
+    "spread adds scattering that the spacing does not modulate.":
+        "LMA：每种尺寸的颗粒周围都是同样尺寸的近邻。DA：尺寸与位置无关，所以尺寸分布带来一部分不受间距调制的散射。",
     "not defined (the distribution rises towards small R)": "无定义（分布向小 R 上升）",
     "Loaded the model from {name}.": "已从 {name} 载入模型。",
     "Could not load the model: {reason}": "无法载入模型：{reason}",

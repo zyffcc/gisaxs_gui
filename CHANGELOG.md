@@ -12,6 +12,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Fitting, Coupling:** a particle with Distance D has *Coupling* LMA (P·S, as before) or DA (P + |⟨F⟩|²(S − 1):
+  sizes independent of positions), so the part of a size spread that the spacing does not modulate is described by
+  the particles themselves instead of a further population (Physics and Methods 9.5, 9.11).
 - **Command line:** every CSV of `tools/gimap_agent.py` begins with `#` lines that give the release, each input
   file with its SHA-256 and the geometry, so a curve says where it came from without `report.json` beside it.
 - **Fitting, mean of both halves:** the q > 0 half gives the |q| points, as in Analyze and the Series map, so one

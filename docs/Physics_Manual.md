@@ -1863,7 +1863,27 @@ neighbour distance**; that is √(2π) ≈ 2.507 times larger. The low-q limit i
 
 No hard-core condition D ≥ 2R is applied in Refine or Search; the quick fit and 1D Predict enforce D ≥ 2.002 R.
 
-Implementation: `src/gimap/features/fitting/domain/scattering_model.py`
+**Coupling: LMA or DA.** With **Coupling** of a card (shown when Distance D is on) the paracrystal enters in one of
+two ways:
+
+```text
+LMA:  I = P(q) · S(q)                                                                              (9.14a)
+DA:   I = P(q) + |⟨F⟩|² (S(q) − 1)                                                                 (9.14b)
+```
+
+- LMA (the default, and the only one before 0.2) takes every size among neighbours of its own size. DA takes sizes
+  and positions as independent.
+- ⟨F⟩ is the amplitude averaged by number. Spheres and random cylinders carry intensity weights (section 9.3), so
+  ⟨F⟩ uses `w_j / V_j²`; normalised like P, the term is `(Σ_j w_j F_j / V_j)² / Σ_j (w_j / V_j²)`. Random cylinders
+  average the amplitude over orientation too. A test checks the sphere against a direct average by number (10⁻¹⁰).
+- With one size, DA and LMA are the same curve. With a size spread, DA keeps the part `P − |⟨F⟩|²` free of the
+  spacing: more intensity below the structure peak, a weaker peak. At σ_R/R = 0.2 spheres, the low-q intensity is
+  about 1.5 times that of LMA.
+- This is the part that a same-size population without a structure factor takes up in a three-population fit
+  (section 9.11). DA describes it with the particles' own size and spacing, without a further population.
+- fit1d uses the LMA.
+
+Implementation: `src/gimap/features/fitting/domain/scattering_model.py`, `src/gimap/features/fitting/domain/coherent_terms.py`
 
 ### 9.6 Parameters and defaults
 
@@ -2108,7 +2128,7 @@ then Refine):
 | Population | What it became | What it means |
 |---|---|---|
 | main, with structure factor | D within 0.2 %, σ_nn/D within 0.01; R 4–9 % low | spacing and disorder are measurements; R carries the shape difference (cylinder for sphere, 9.10) |
-| same size, no structure factor | appears when the true film follows the decoupling approximation or has truncated particles; takes 40–60 % of the intensity below 0.15 nm⁻¹ | the part of the same particles' scattering that the spacing does not modulate (⟨\|F\|²⟩ − \|⟨F⟩\|², from size spread and imperfect order); not a second kind of particle |
+| same size, no structure factor | appears when the true film follows the decoupling approximation or has truncated particles; takes 40–60 % of the intensity below 0.15 nm⁻¹ | the part of the same particles' scattering that the spacing does not modulate (⟨\|F\|²⟩ − \|⟨F⟩\|², from size spread and imperfect order); not a second kind of particle. *Coupling* DA of the main population describes it directly (section 9.5) |
 | large, no structure factor | R of tens to hundreds of nm or σ_R/R at its limit of 1; takes the low-q upturn | roughness, beam tail, aggregates; its R has no meaning; with the low-q term free it is mostly redundant |
 | small, narrow | R ≈ 2 nm with a few % of the intensity even though the film has no small particles | compensates the form-factor shape at high q (q_z, DWBA, particle shape); real small clusters would look the same |
 

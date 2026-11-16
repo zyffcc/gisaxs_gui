@@ -31,6 +31,7 @@ from typing import Mapping, Optional
 import numpy as np
 
 from .candidates import CandidateComponentParameters, CandidateParameterMapping
+from .coherent_terms import cylinder_coherent_pd, sphere_coherent_pd, vertical_cylinder_coherent_pd
 from .scattering_model import (
     _resolution_peak,
     cylinder_axial_average,
@@ -119,6 +120,9 @@ class Component:
     family: str
     params: Mapping[str, Parameter]
     structure: bool = True
+    coupling: str = "lma"
+    """How the paracrystal enters (``COUPLINGS``): ``lma``, P(q)·S(q) (local monodisperse approximation), or
+    ``da``, P(q) + |<F>|²(S(q) − 1) (decoupling approximation: the sizes are uncorrelated with the positions)."""
 
     def keys(self) -> tuple[str, ...]:
         return ("Int", *FAMILIES[self.family][1], *(STRUCTURE if self.structure else ()))
@@ -247,6 +251,20 @@ def sigma_nn_over_d(component: Component) -> Optional[float]:
     return math.sqrt(2.0 * math.pi) * component.value("sigma_D")
 
 
+COUPLINGS = ("lma", "da")
+
+
+def _coherent_form(component: Component, q: np.ndarray, paths: Optional[tuple]) -> np.ndarray:
+    radius, spread = component.value("R"), component.value("sigma_R")
+    if component.family == "sphere":
+        return sphere_coherent_pd(q, radius, radius * spread, n_samples=25, nsig=4.0, paths=paths)
+    if component.family == "cylinder":
+        height, height_spread = component.value("h"), component.value("sigma_h")
+        return cylinder_coherent_pd(q, radius, radius * spread, height, height * height_spread, n_R=13, n_h=13,
+                                    nsig=4.0, n_orient=24)
+    return vertical_cylinder_coherent_pd(q, radius, spread, n_samples=25, nsig=3.0)
+
+
 def component_form(component: Component, q: np.ndarray, cache: Optional[dict] = None,
                    paths: Optional[tuple] = None) -> np.ndarray:
     """P(q)·S(q) of one component with scale 1 (q in nm⁻¹). ``cache``: reuse the parts that did not
@@ -274,8 +292,17 @@ def component_form(component: Component, q: np.ndarray, cache: Optional[dict] = 
     if component.structure:
         distance, disorder = component.value("D"), component.value("sigma_D")
         if distance > 0 and disorder > 0:
-            form = form * _cached(cache, ("S", distance, disorder),
-                                  lambda: structure_factor_1d(q, distance, distance * disorder))
+            structure = _cached(cache, ("S", distance, disorder),
+                                lambda: structure_factor_1d(q, distance, distance * disorder))
+            if component.coupling == "da":
+                key = ("coherent", component.family, radius, spread, *(
+                    (component.value("h"), component.value("sigma_h")) if component.family == "cylinder" else ()),
+                       *((paths or ()) if component.family == "sphere" else ()))
+                coherent = _cached(cache, key, lambda: _coherent_form(component, q, paths
+                                                                      if component.family == "sphere" else None))
+                form = form + coherent * (structure - 1.0)
+            else:
+                form = form * structure
     return np.asarray(form, dtype=float)
 
 
@@ -378,7 +405,7 @@ def model_to_dict(model: FitModel) -> dict:
 
     return {
         "schema": "gimap_fit_model_v1", "q_unit": "nm^-1", "spreads": "relative",
-        "components": [{"family": c.family, "structure": c.structure,
+        "components": [{"family": c.family, "structure": c.structure, "coupling": c.coupling,
                         "params": {key: parameter(c.params[key]) for key in c.keys()}} for c in model.components],
         "globals": {key: parameter(model.globals[key]) for key in GLOBALS},
     }
@@ -397,6 +424,8 @@ def model_from_dict(data: Mapping) -> FitModel:
     components = []
     for raw in data.get("components") or ():
         component = new_component(str(raw["family"]), structure=bool(raw.get("structure", True)))
+        coupling = str(raw.get("coupling") or "lma")
+        component = replace(component, coupling=coupling if coupling in COUPLINGS else "lma")
         params = dict(component.params)
         for key, value in (raw.get("params") or {}).items():
             if key in params:
@@ -410,7 +439,7 @@ def model_from_dict(data: Mapping) -> FitModel:
 
 
 __all__ = [
-    "BASE_GLOBALS", "FAMILIES", "GLOBALS", "GRAZING", "INFO", "LINEAR", "Component", "FitModel", "Parameter",
+    "BASE_GLOBALS", "COUPLINGS", "FAMILIES", "GLOBALS", "GRAZING", "INFO", "LINEAR", "Component", "FitModel", "Parameter",
     "ParameterInfo", "component_form", "evaluate", "grazing", "number_size", "qz_plus_r", "sigma_nn_over_d", "from_manual", "model_from_dict", "model_to_dict", "new_component",
     "resolution_shape", "to_manual",
 ]

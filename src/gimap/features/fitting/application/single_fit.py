@@ -289,7 +289,8 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
     record = {
         "software_version": SOFTWARE,
         "model": model_to_dict(model),
-        "equation": "I(q) = BG + k * [sum_i Int_i * P_i(q) * S_i(q; D_i, sigma_D_i/D_i) + A / (1 + (|q|/w)^nu)]",
+        "equation": "I(q) = BG + k * [sum_i Int_i * P_i(q) * S_i(q; D_i, sigma_D_i/D_i) + A / (1 + (|q|/w)^nu)]; "
+                    "a component with coupling 'da' has P_i + |<F_i>|^2 (S_i - 1) in place of P_i * S_i",
         "curve": None if curve is None else {"name": curve.name, "path": curve.path, "q_unit_of_file": curve.source_unit,
                                              "q_unit_from": curve.unit_from},
         "points": {"side": side, "q_range_nm^-1": None if q_range is None else [float(v) for v in q_range],

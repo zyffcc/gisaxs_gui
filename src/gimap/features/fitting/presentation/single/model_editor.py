@@ -212,7 +212,7 @@ class FitModelEditor(QWidget):
             return
         fresh = new_component(family, structure=old.structure)
         params = {key: old.params.get(key, value) for key, value in fresh.params.items()}
-        self._replace_component(index, replace(fresh, params=params))
+        self._replace_component(index, replace(fresh, params=params, coupling=old.coupling))
 
     def _emit(self, model: FitModel, *, rebuild: bool = True) -> None:
         self.model = model
@@ -297,7 +297,26 @@ class FitModelEditor(QWidget):
         for line, key in enumerate(component.keys()):
             self._rows[(index, key)] = _Row(self, grid, line, (index, key), card)
         layout.addLayout(grid)
+        if component.structure:
+            layout.addLayout(self._coupling_row(index, component, card))
         return card
+
+    def _coupling_row(self, index: int, component: Component, card: QFrame) -> QHBoxLayout:
+        """How the paracrystal enters: P·S (LMA) or P + |<F>|²(S − 1) (DA; Physics and Methods, section 9.5)."""
+        row = QHBoxLayout()
+        label = QLabel(tr("Coupling"), card)
+        box = QComboBox(card)
+        box.setObjectName(f"fitCoupling_{index}")
+        box.addItem(tr("LMA: P·S"), "lma")
+        box.addItem(tr("DA: P + |⟨F⟩|²(S − 1)"), "da")
+        box.setToolTip(tr("LMA: every size sits among neighbours of its own size. DA: sizes and positions are "
+                          "independent, so the size spread adds scattering that the spacing does not modulate."))
+        box.setCurrentIndex(max(0, box.findData(component.coupling)))
+        box.currentIndexChanged.connect(lambda _i, at=index, combo=box: self._replace_component(
+            at, replace(self.model.components[at], coupling=str(combo.currentData()))))
+        row.addWidget(label)
+        row.addWidget(box, 1)
+        return row
 
     def _globals_card(self) -> QFrame:
         card, layout = self._card("fitGlobals")
