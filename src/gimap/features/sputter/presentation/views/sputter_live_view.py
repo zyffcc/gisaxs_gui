@@ -58,6 +58,7 @@ class SputterLiveView:
         heading.setProperty("gimapRole", "heading")
         self.live_steps = StepRail(LIVE_STEP_TITLES, side)
         self.live_steps.setObjectName("sputterLiveSteps")
+        self.live_steps.set_wrap(True)  # a line says how far a long step has come: it is shown whole
         self.live_clock = QLabel("", side)
         self.live_clock.setObjectName("sputterLiveClock")
         self.live_clock.setProperty("gimapRole", "muted")

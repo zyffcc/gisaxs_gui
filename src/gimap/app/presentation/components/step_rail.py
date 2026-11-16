@@ -2,7 +2,8 @@
 
 Each step shows a number (or a mark when done), a title and one line of what was found
 ("PILATUS 2M · 1 frame", "No geometry yet"); a longer line is cut with "…" and is whole in the step's
-tooltip, so a step never pushes the next ones down. The state colours the mark: ``pending``,
+tooltip, so a step never pushes the next ones down — or, after ``set_wrap(True)`` (a flow with few steps whose
+lines say how far a long step has come), wraps onto as many lines as it needs. The state colours the mark: ``pending``,
 ``ok``, ``warn``, ``error`` or ``busy``. Clicking a step emits ``stepChosen(key)``; the
 current step is highlighted.
 """
@@ -47,6 +48,7 @@ class _Step(QWidget):
         self.detail.hide()
         self.detail.installEventFilter(self)
         self.full_detail = ""
+        self.wrap = False
         text.addWidget(self.title)
         text.addWidget(self.detail)
         layout.addWidget(self.mark, 0, Qt.AlignTop)
@@ -79,6 +81,10 @@ class _Step(QWidget):
         detail = self.detail
         text = self.full_detail
         if detail.isHidden() or not text:
+            return
+        if self.wrap:  # whole, on as many lines as it needs
+            if detail.text() != text:
+                detail.setText(text)
             return
         margins = detail.contentsMargins()
         room = max(1, detail.width() - margins.left() - margins.right() - 2 * detail.margin())
@@ -144,6 +150,14 @@ class StepRail(QWidget):
         step.setToolTip(detail)
         step.restyle()
         step.fit_detail()
+
+    def set_wrap(self, wrap: bool) -> None:
+        """Lines of the steps wrapped whole onto as many lines as they need (True) or cut with "…" (False)."""
+        for step in self._steps.values():
+            step.wrap = wrap
+            step.detail.setWordWrap(wrap)
+            step.detail.setText(step.full_detail)
+            step.fit_detail()
 
     def set_title(self, key: str, title: str) -> None:
         """Another title for a step (a flow whose steps differ by case: the caller translates it)."""

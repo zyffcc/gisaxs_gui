@@ -51,8 +51,10 @@ EXPLAIN = {
                "left out by the mask, +: the direct beam, dashed: the sample horizon. Right: the frames read last. "
                "Below: the count rate of every frame read so far; it rises as the metal is deposited."),
     "predict": ("For every time window the network proposes candidate structures; the physical model draws each as an "
-                "image and the one closest to the measured image is kept. Above: the window solved last, measured "
-                "and model image. Below: the sizes found so far."),
+                "image and the one closest to the measured image is kept. First the network input of every window is "
+                "prepared and the network runs once for all of them; when the mode refines, every window has its "
+                "candidates before the refinements start. Above: the window solved last, measured and model image. "
+                "Below: the sizes found so far."),
     "report": "The solutions of all windows go into a table, the plots of their evolution and a report.",
     "present": ("For every window the measured image and the image of every candidate are drawn for the main screen. "
                 "The result opens when this step is done."),
@@ -66,7 +68,17 @@ IMPORTED_LINE = "{frames} frames, {first}–{last} s"
 IMPORTED_ONSET = "{frames} frames, {first}–{last} s, deposition from {onset} s"
 REUSED_LINE = "Read before for this scan"
 WINDOWS_LINE = "{solved} of {total} time windows"
-NETWORK_LINE = "Network {index} of {count}: {solved} of {total} time windows"
+NETWORK_PREFIX = "Network {index} of {count}: {what}"
+PHASE_LINES = {
+    "features": "Network inputs ready for {done} of {total} time windows",
+    "network": "The network proposes candidates for {total} time windows…",
+    "render": "{solved} of {total} time windows solved ({images} model images computed)",
+    "refine": "{solved} of {total} time windows solved, {done} refined ({images} model images computed)",
+    "sequence": "Whole-scan refinement: iteration {done} of at most {total}",
+}
+"""What the network at work is doing, phase by phase (``LiveRun.phase``): the line of the step, and the message of
+the pictures until the first window is solved."""
+FIRST_WINDOW = "The measured and the model image of a time window appear here once the first one is solved."
 CHOSEN_LINE = "{family} fits the data better"
 CHOSEN_DEVIATION = "{family} fits the data better (fit deviation {deviation})"
 DRAWN_LINE = "{drawn} of {total} windows drawn"
@@ -78,8 +90,9 @@ WAITING_SOLUTIONS = "The first time windows are being solved…"
 WAITING_FRAMES = "The frames are being read…"
 NOTHING_LIVE = "This analysis package does not show what it finds while it works: its result opens at the end."
 TEMPLATES = (*STEP_NAMES.values(), *EXPLAIN.values(), TITLE, CLOCK, CENTRE_LINE, FRAMES_LINE, IMPORTED_LINE,
-             IMPORTED_ONSET, REUSED_LINE, WINDOWS_LINE, NETWORK_LINE, CHOSEN_LINE, CHOSEN_DEVIATION, DRAWN_LINE,
-             DETECTOR_CAPTION, DEVIATION_PART, WAITING_SOLUTIONS, WAITING_FRAMES, NOTHING_LIVE)
+             IMPORTED_ONSET, REUSED_LINE, NETWORK_PREFIX, *PHASE_LINES.values(), FIRST_WINDOW, CHOSEN_LINE,
+             CHOSEN_DEVIATION, DRAWN_LINE, DETECTOR_CAPTION, DEVIATION_PART, WAITING_SOLUTIONS, WAITING_FRAMES,
+             NOTHING_LIVE)
 """The templates of the live view that need Chinese (numbers, units and network names are data)."""
 CAPTION_KEYS = ("R_nm", "H_nm", "D_nm", "coverage")
 """The quantities said under the images of the window solved last (those the solution has)."""
@@ -159,6 +172,22 @@ class LivePanelMixin(LiveStaticMixin):
         changed = self._live.feed(event)
         if changed:
             self._live_changed(changed)
+            self._live_update_bar()
+
+    def _live_update_bar(self) -> None:
+        """The bar of the job status: how far the step at work has come, as the events tell it (``within``)."""
+        tracker = self._live_tracker()
+        if tracker is None or not tracker.step or self._live is None:
+            return
+        share = self._live.step_share(tracker.step)
+        if share is None or (tracker.within is not None and abs(share - tracker.within) < 0.005):
+            return
+        tracker.within = share
+        template, values = tracker.message()
+        static = self._live_static()
+        if not template or (self._static_stop if static else self._client_stop):
+            return
+        (self._static_status if static else self._client_status)("running", [(template, values)], tracker.fraction)
 
     def _live_progress(self, tracker) -> None:
         """A step line of the package (``tracker`` has taken it)."""
@@ -254,9 +283,10 @@ class LivePanelMixin(LiveStaticMixin):
         self.live_picture_host.setCurrentIndex(1)
         self.live_plot_host.setCurrentIndex(1)
         latest = run.latest_patterns()
-        if turned or "window" in dirty:
-            if latest is None:
-                self.live_patterns.show_message(tr(WAITING_SOLUTIONS))
+        if turned or "window" in dirty or (latest is None and "progress" in dirty):
+            if latest is None:  # what the network does until its first window is solved
+                doing = self._phase_line(run)
+                self.live_patterns.show_message(doing + "\n" + tr(FIRST_WINDOW) if doing else tr(WAITING_SOLUTIONS))
             else:
                 self.live_patterns.show(latest[0], latest[1], entry_name(latest[1]))
         if turned or dirty & {"window", "windows", "chosen"}:
@@ -302,15 +332,28 @@ class LivePanelMixin(LiveStaticMixin):
                 return text(CHOSEN_DEVIATION, family=run.chosen, deviation=shown_number(deviation)) \
                     if deviation is not None and len(run.deviations) > 1 else \
                     text(CHOSEN_LINE, family=run.chosen) if len(run.deviations) > 1 else ""
-            if run.family:
-                index, count = run.network_index()
-                values = {"solved": run.solved(), "total": run.totals.get(run.family, 0)}
-                return text(NETWORK_LINE, index=index, count=count, **values) if count > 1 else \
-                    text(WINDOWS_LINE, **values)
-            return ""
+            return self._phase_line(run)
         if key == "present" and run.drawing:
             return text(DRAWN_LINE, drawn=run.drawn, total=run.drawing)
         return ""
+
+    @staticmethod
+    def _phase_line(run: LiveRun) -> str:
+        """What the network at work is doing and how far it has come ("" before it starts)."""
+        if not run.family:
+            return ""
+        phase, total = run.phase() or "render", run.totals.get(run.family, 0)
+        images = run.phase_count("render", key="images")[0] + run.phase_count("refine", key="evaluations")[0]
+        if phase in ("render", "refine") and not images:  # a package that does not count them
+            words = text(WINDOWS_LINE, solved=run.solved(), total=total)
+        elif phase in ("render", "refine"):
+            words = text(PHASE_LINES[phase], solved=run.solved(), done=run.refined(), total=total,
+                         images=_count(images))
+        else:
+            done, phase_total = run.phase_count(phase)
+            words = text(PHASE_LINES[phase], done=_count(done), total=_count(phase_total or total))
+        index, count = run.network_index()
+        return text(NETWORK_PREFIX, index=index, count=count, what=words) if count > 1 else words
 
     def _detector_caption(self, run: LiveRun) -> str:
         event = run.detector

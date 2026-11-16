@@ -2501,7 +2501,11 @@ measured after its deposition, see *Samples measured after their deposition* bel
 
    - At the left, the four steps — **Read the frames**, **Find the solutions**, **Write the report**, **Draw the
      images** — each with its state and one line of what it found (frames read so far, time windows solved, the
-     network that fits the data better, windows drawn), and the time since the start.
+     network that fits the data better, windows drawn), and the time since the start. While the solutions are
+     found the line says what the network is doing and how far it has come: the network inputs prepared, the
+     network proposing candidates, the windows solved and the model images computed, the windows refined (Refine:
+     every window gets its candidates first, then each is refined), the iterations of the whole-scan refinement
+     (Full). The bar of the job status moves on inside each step as well.
    - At the right, the step at work in one paragraph, with a picture and a plot. Reading the frames: the detector
      summed over sampled frames, with the pixels the mask leaves out in red, the direct beam (+) and the sample
      horizon (dashed), beside the frames read last on the grid of q_y and exit angle; below, the count rate of every

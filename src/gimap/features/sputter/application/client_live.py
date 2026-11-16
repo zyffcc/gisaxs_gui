@@ -16,6 +16,11 @@ The events, by step:
   ``windows`` — a network starts on that many time windows; ``window`` — one window solved: its best candidate (and,
   when the mode refines, later its refined solution) with the quantities of the main screen, the fit deviation, and
   the measured image beside the model image; ``chosen`` — the network whose solutions fit the scan better;
+  ``progress`` — how far a phase of a network has come, sent by each worker process for its own share (``done``,
+  for the refinement also ``evaluations``: model images computed) at most once a second: ``features`` (the network
+  input of each window), ``network`` (the network's candidates for all windows, 0 at its start and all at its end),
+  ``render`` (the candidates of each window drawn by the model), ``refine`` (each window's best candidate refined),
+  ``sequence`` (the whole-scan refinement: its iteration);
 * drawing the images (``present``): ``drawing`` — how many windows; ``drawn`` — one window drawn.
 
 ``LiveRun`` keeps what the page shows: the pictures of the latest events and every solution found so far, as a
@@ -41,6 +46,11 @@ LIVE_PREFIX = "@live "
 LIVE_STEPS = ("intake", "predict", "report", "present")
 STATIC_LIVE_STEPS = ("intake", "predict", "report")
 """The steps of the analysis of a sample measured after its deposition (the package's static command)."""
+PHASES = ("features", "network", "render", "refine", "sequence")
+"""The phases of one network in the step that finds the solutions, in their order."""
+PHASE_WEIGHTS = {"features": 1.0, "network": 0.3, "render": 2.0, "refine": 6.0, "sequence": 8.0}
+"""The rough share of a network's time each phase takes (refining and the whole-scan refinement take most of it when
+the mode has them): only for the bar of the job status, which says how far the analysis has come."""
 
 
 @dataclass(frozen=True)
@@ -106,6 +116,10 @@ class LiveRun:
     """Network -> the latest window it solved (with its images)."""
     chosen: str = ""
     deviations: dict = field(default_factory=dict)
+    progress: dict = field(default_factory=dict)
+    """(network, phase) -> {worker: its latest progress event's fields} (each worker counts its own share)."""
+    phases: dict = field(default_factory=dict)
+    """Network -> the latest of its phases that has begun."""
     drawing: int = 0
     drawn: int = 0
     # a sample measured after its deposition (the package's static command)
@@ -174,6 +188,13 @@ class LiveRun:
             self.chosen = str(event.get("family") or "")
             found = event.get("deviations")
             self.deviations = {str(k): number(v) for k, v in found.items()} if isinstance(found, dict) else {}
+        elif kind == "progress":
+            phase, family = str(event.get("phase") or ""), str(event.get("family") or self.family)
+            if phase not in PHASES:
+                return ""
+            self.progress.setdefault((family, phase), {})[str(event.get("worker") or "")] = dict(event.fields)
+            if PHASES.index(phase) >= PHASES.index(self.phases.get(family, PHASES[0])):
+                self.phases[family] = phase
         elif kind == "drawing":
             self.drawing, self.drawn = int(event.number("total") or 0), 0
         elif kind == "drawn":
@@ -254,6 +275,84 @@ class LiveRun:
     def solved(self, family: Optional[str] = None) -> int:
         return len(self.solutions.get(self.family if family is None else family, {}))
 
+    def refined(self, family: Optional[str] = None) -> int:
+        """Windows of a network whose refined solution has arrived."""
+        found = self.solutions.get(self.family if family is None else family, {})
+        return sum(1 for entries in found.values() if any(entry.kind == "refined" for entry, *_ in entries.values()))
+
+    def phase(self, family: Optional[str] = None) -> str:
+        """The phase a network is in ("" before its first progress event or window): a solved window means it draws
+        candidates at least, a refined one that it refines."""
+        family = self.family if family is None else family
+        found = self.phases.get(family, "")
+        rank = PHASES.index(found) if found else -1
+        if self.refined(family) and rank < PHASES.index("refine"):
+            return "refine"
+        if self.solved(family) and rank < PHASES.index("render"):
+            return "render"
+        return found
+
+    def phase_count(self, phase: str, family: Optional[str] = None, key: str = "done") -> tuple:
+        """(the sum over the workers of ``key``, the phase's total) of a network's phase ((0, 0) before any event)."""
+        workers = self.progress.get((self.family if family is None else family, phase), {})
+        done = sum(int(number(fields.get(key)) or 0) for fields in workers.values())
+        total = max((int(number(fields.get("total")) or 0) for fields in workers.values()), default=0)
+        return done, total
+
+    def network_share(self, family: Optional[str] = None) -> float:
+        """How much of a network's work is done (0–1), by its phases (``PHASE_WEIGHTS``; refining only when the mode
+        refines, the whole-scan refinement only once it has begun)."""
+        family = self.family if family is None else family
+        phase = self.phase(family)
+        steps = [name for name in PHASES if name not in ("refine", "sequence")]
+        if self.refine > 0 or phase == "refine":
+            steps.append("refine")
+        if phase == "sequence" or self.mode == "full":
+            steps.append("sequence")
+        total = self.totals.get(family, 0)
+        shares = {"features": self._share(*self.phase_count("features", family)),
+                  "network": self._share(*self.phase_count("network", family)),
+                  "render": self._share(max(self.solved(family), self.phase_count("render", family)[0]), total),
+                  "refine": self._share(self.refined(family) + self._refining(family), total),
+                  "sequence": self._share(*self.phase_count("sequence", family))}
+        weight = sum(PHASE_WEIGHTS[name] for name in steps)
+        return sum(PHASE_WEIGHTS[name] * shares[name] for name in steps) / weight if weight else 0.0
+
+    def _refining(self, family: str) -> float:
+        """How much of the windows being refined is done: each worker's model images of its window at work over about
+        the most one window takes (``current`` / ``budget``; 0 between windows)."""
+        found = 0.0
+        for fields in self.progress.get((family, "refine"), {}).values():
+            current, budget = number(fields.get("current")), number(fields.get("budget"))
+            if current and budget:
+                found += min(0.95, current / budget)  # a window is done when its refined solution arrives
+        return found
+
+    @staticmethod
+    def _share(done, total) -> float:
+        return min(1.0, done / total) if total else 0.0
+
+    def step_share(self, step: str) -> Optional[float]:
+        """How much of a step is done (0–1) as the events tell it, or None when they do not."""
+        if step == "intake":
+            if self.kind == "static":
+                return 1.0 if self.sample is not None else None
+            if self.imported is not None:
+                return 1.0
+            return self._share(self.frames_done, self.frames_total) if self.frames_total else None
+        if step == "predict":
+            if self.kind == "static":
+                return self._share(self.frames_solved(), self.frames_to_solve) if self.frames_to_solve else None
+            if self.chosen:
+                return 1.0
+            if not self.family:
+                return None
+            index, count = self.network_index()
+            return (max(0, index - 1) + self.network_share()) / max(1, count)
+        if step == "present" and self.drawing:
+            return self._share(self.drawn, self.drawing)
+        return None
+
     def trace_points(self) -> tuple:
         """(times, count rates) of the frames read so far, in the order of time."""
         times = sorted(self.trace)
@@ -318,5 +417,5 @@ def _matrix(values) -> np.ndarray:
     return np.asarray(values, dtype=float)
 
 
-__all__ = ["FRAME_LABEL", "LIVE_PREFIX", "LIVE_STEPS", "LiveEvent", "LiveRun", "STATIC_LIVE_STEPS", "live_event",
-           "parse_live"]
+__all__ = ["FRAME_LABEL", "LIVE_PREFIX", "LIVE_STEPS", "LiveEvent", "LiveRun", "PHASES", "PHASE_WEIGHTS",
+           "STATIC_LIVE_STEPS", "live_event", "parse_live"]

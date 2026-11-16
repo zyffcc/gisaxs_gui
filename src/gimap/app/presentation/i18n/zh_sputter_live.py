@@ -22,9 +22,11 @@ SPUTTER_LIVE_ZH = {
         "红色为掩膜去掉的像素，+ 为直射束，虚线为样品地平线。右：最近读入的帧。下：已读入各帧的计数率，"
         "金属沉积后随之上升。",
     "For every time window the network proposes candidate structures; the physical model draws each as an image and "
-    "the one closest to the measured image is kept. Above: the window solved last, measured and model image. Below: "
-    "the sizes found so far.":
+    "the one closest to the measured image is kept. First the network input of every window is prepared and the "
+    "network runs once for all of them; when the mode refines, every window has its candidates before the "
+    "refinements start. Above: the window solved last, measured and model image. Below: the sizes found so far.":
         "网络为每个时间窗给出若干候选结构；物理模型把每个候选画成图样，留下与实测图最接近的那个。"
+        "先为每个时间窗准备网络输入，网络一次处理全部时间窗；需要精修时，先给每个时间窗求出候选，再逐个精修。"
         "上：最近求解的时间窗，实测图与模型图。下：目前已求出的尺寸。",
     "The solutions of all windows go into a table, the plots of their evolution and a report.":
         "所有时间窗的解写入表格、演化图和报告。",
@@ -40,8 +42,16 @@ SPUTTER_LIVE_ZH = {
     "{frames} frames, {first}–{last} s, deposition from {onset} s": "{frames} 帧，{first}–{last} s，沉积自 {onset} s 开始",
     "Read before for this scan": "此扫描此前已读入",
     "{solved} of {total} time windows": "已求解 {solved} / {total} 个时间窗",
-    "Network {index} of {count}: {solved} of {total} time windows":
-        "网络 {index}/{count}：已求解 {solved} / {total} 个时间窗",
+    "Network {index} of {count}: {what}": "网络 {index}/{count}：{what}",
+    "Network inputs ready for {done} of {total} time windows": "已准备 {done} / {total} 个时间窗的网络输入",
+    "The network proposes candidates for {total} time windows…": "网络正在为 {total} 个时间窗给出候选结构…",
+    "{solved} of {total} time windows solved ({images} model images computed)":
+        "已求解 {solved} / {total} 个时间窗（已计算 {images} 幅模型图）",
+    "{solved} of {total} time windows solved, {done} refined ({images} model images computed)":
+        "已求解 {solved} / {total} 个时间窗，已精修 {done} 个（已计算 {images} 幅模型图）",
+    "Whole-scan refinement: iteration {done} of at most {total}": "整条扫描联合精修：第 {done} 轮（最多 {total} 轮）",
+    "The measured and the model image of a time window appear here once the first one is solved.":
+        "求出第一个时间窗后，这里显示它的实测图与模型图。",
     "{family} fits the data better": "{family} 与数据更吻合",
     "{family} fits the data better (fit deviation {deviation})": "{family} 与数据更吻合（拟合偏差 {deviation}）",
     "{drawn} of {total} windows drawn": "已绘制 {drawn} / {total} 个时间窗",

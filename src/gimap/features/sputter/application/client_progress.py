@@ -12,13 +12,17 @@ Its ``static`` command (one sample measured after its deposition) names its step
 ``[intake] ...``, ``[predict] ...``, ``[report] ...`` — and ends each with ``done in <s> s`` or
 ``FAILED: <reason> in <s> s``: ``ClientProgress.static()`` follows it.
 
-A step says nothing while it works, so the bar shows the steps that are finished.
+A step's own lines say only when it starts and ends; how far it has come inside comes from the live events
+(``client_live.LiveRun.step_share``), which the page puts into ``within``. Without them the bar shows the steps that
+are finished. The step that finds the solutions says ``done`` after its first network although the analysis may run
+another one: ``within`` (below 1 until the data have chosen) keeps the bar moving then.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Optional
 
 STEP_TEXT = {
     "intake": "Reading the frames",
@@ -57,6 +61,8 @@ class ClientProgress:
     status: str = ""
     texts: dict = field(default_factory=lambda: STEP_TEXT)
     weights: dict = field(default_factory=lambda: STEP_WEIGHTS)
+    within: Optional[float] = None
+    """How much of the step at work is done (0–1), from the live events; None: not known."""
 
     @classmethod
     def static(cls) -> "ClientProgress":
@@ -87,7 +93,7 @@ class ClientProgress:
         return False
 
     def _started(self, step: str, index: int, total: int, rest: str) -> None:
-        self.index, self.total, self.step = index, total, step
+        self.index, self.total, self.step, self.within = index, total, step, None
         self.reused = bool(rest.strip())
         self.finished = self.reused  # a step with nothing to do ends on its own line
         if self.reused:
@@ -101,10 +107,14 @@ class ClientProgress:
         if self.status:
             return 1.0
         names = list(self.weights)
+        if self.finished and (self.within is None or self.step != "predict"):
+            share = 1.0  # a step that ended (the one finding the solutions may still run another network)
+        else:
+            share = min(1.0, max(0.0, self.within or 0.0))
         if self.step in names and self.total == len(names):
             before = sum(self.weights[name] for name in names[:names.index(self.step)])
-            return min(1.0, before + (self.weights[self.step] if self.finished else 0.0))
-        return min(1.0, (self.index - 1 + (1 if self.finished else 0)) / self.total)
+            return min(1.0, before + self.weights[self.step] * share)
+        return min(1.0, (self.index - 1 + share) / self.total)
 
     def message(self) -> tuple:
         """The template and values of what is happening now (the page translates the template and the stage)."""

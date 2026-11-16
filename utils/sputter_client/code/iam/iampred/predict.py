@@ -6,6 +6,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -29,7 +30,8 @@ GROW = 10.0
 
 
 def _features(args):
-    cfg, scan, times = args
+    cfg, scan, times = args[:3]
+    total = args[3] if len(args) > 3 else len(times)
     from . import adapter as A
     out = []
     s = A.get_scan(scan)
@@ -73,6 +75,7 @@ def _features(args):
                             obs_yoneda=obs_y, obs_yoneda_grain=obs_yg))
         except (Exception, SystemExit) as e:
             out.append(dict(t=float(t), ok=False, reason=f"{type(e).__name__}: {str(e)[:160]}"))
+        LV.progress("features", len(out), total, force=len(out) == len(times), family=cfg["family"])
     return out
 
 
@@ -103,10 +106,13 @@ def _live_window(cfg, ctx, s, t, label, kind, mu, d5, values):
 
 
 def _render(args):
-    cfg, scan, items, refine, outdir = args
+    'The candidates of every window of ``items`` drawn by the model (best one kept), then - with ``refine`` - each'
+    cfg, scan, items, refine, outdir = args[:5]
+    total = args[5] if len(args) > 5 else len(items)
     from . import adapter as A
     s = A.get_scan(scan)
-    rows = []
+    rows, todo = [], []
+    seen = [0]
     for it in items:
         t = it["t"]
         ctx = A.Context(cfg, s, t)
@@ -114,6 +120,8 @@ def _render(args):
         for c in it["cands"]:
             x = np.asarray(c["x"], float)
             t0 = time.time()
+            seen[0] += 1
+            LV.progress("render", len(rows), total, family=cfg["family"], images=seen[0])
             try:
                 (mu, _, _), m, p, h = ctx.render(x)
                 d5, _ = ctx.dev5(mu)
@@ -136,21 +144,48 @@ def _render(args):
             _live_window(cfg, ctx, s, t, f"candidate {good.index(b) + 1}", "candidate", b["mu"], b["dev5"],
                          shown[cands.index(b)])
             if refine > 0:
-                t0 = time.time()
-                nf = len(ctx.names)
-                xb = np.asarray(b["x"], float)
-                ctx.render(xb)
-                xr, _ = ctx.f.run(np.clip(xb[:nf], ctx.f.lb + 1e-9, ctx.f.ub - 1e-9), refine)
-                xr = np.r_[xr, xb[nf:]]
-                (mu, _, _), m, p, h = ctx.render(xr)
-                d5, _ = ctx.dev5(mu)
-                rep = ctx.reported(m, p, h)
-                row["refined"] = dict(dev5=d5, reported=rep.tolist(), x=xr.tolist(), h_m=h,
-                                      seconds=time.time() - t0, nfev=refine)
-                np.savez_compressed(Path(outdir) / "mu" / f"{scan}_{t:g}_refined.npz", mu=mu.astype(np.float32))
-                _live_window(cfg, ctx, s, t, "refined", "refined", mu, d5, _wanted_live(cfg, ctx, xr, m, p, h, rep.tolist()))
+                todo.append((row, t, row["best"]["x"]))
         rows.append(row)
+        LV.progress("render", len(rows), total, force=len(rows) == len(items), family=cfg["family"], images=seen[0])
+    seen = [0]
+    for n, (row, t, x_best) in enumerate(todo):
+        t0 = time.time()
+        ctx = A.Context(cfg, s, t)
+        nf = len(ctx.names)
+        start, budget = seen[0], refine * (nf + 1)
+        _count_images(ctx, seen, lambda: LV.progress("refine", n, total, family=cfg["family"], evaluations=seen[0],
+                                                     current=seen[0] - start, budget=budget))
+        xb = np.asarray(x_best, float)
+        ctx.render(xb)
+        xr, _ = ctx.f.run(np.clip(xb[:nf], ctx.f.lb + 1e-9, ctx.f.ub - 1e-9), refine)
+        xr = np.r_[xr, xb[nf:]]
+        (mu, _, _), m, p, h = ctx.render(xr)
+        d5, _ = ctx.dev5(mu)
+        rep = ctx.reported(m, p, h)
+        row["refined"] = dict(dev5=d5, reported=rep.tolist(), x=xr.tolist(), h_m=h,
+                              seconds=time.time() - t0, nfev=refine)
+        np.savez_compressed(Path(outdir) / "mu" / f"{scan}_{t:g}_refined.npz", mu=mu.astype(np.float32))
+        _live_window(cfg, ctx, s, t, "refined", "refined", mu, d5, _wanted_live(cfg, ctx, xr, m, p, h, rep.tolist()))
+        LV.progress("refine", n + 1, total, force=True, family=cfg["family"], evaluations=seen[0], current=0,
+                    budget=budget)
     return rows
+
+
+def _count_images(ctx, seen, report):
+    'For the live view only: count the model images the refinement computes (``seen[0]``) and call ``report``'
+    if LV.folder() is None:
+        return
+    try:
+        resid = ctx.f.resid
+
+        def counted(*args, **kwargs):
+            seen[0] += 1
+            report()
+            return resid(*args, **kwargs)
+
+        ctx.f.resid = counted
+    except Exception:
+        pass
 
 
 def _all_times(args):
@@ -431,7 +466,7 @@ def main():
             st = None
     if st is None:
         chunks = [times[i::nw] for i in range(nw)]
-        feats = sum(runner.run(cfg, [(cfg, a.scan, c) for c in chunks if c], _features, nw, data=a.data,
+        feats = sum(runner.run(cfg, [(cfg, a.scan, c, len(times)) for c in chunks if c], _features, nw, data=a.data,
                                shadow=a.shadow), [])
         feats.sort(key=lambda d: d["t"])
         okf = [d for d in feats if d["ok"]]
@@ -448,12 +483,14 @@ def main():
         if mism:
             raise SystemExit(f"model / forward-model mismatch in {mism}: the forward code or switches changed since training")
         X = np.stack([d["X"] for d in okf]); S = np.stack([d["S"] for d in okf])
+        LV.progress("network", 0, len(okf), force=True, family=cfg["family"])
         cands = P.candidates(X, S)
         q = P.intervals(X, S, n=300)
+        LV.progress("network", len(okf), len(okf), force=True, family=cfg["family"])
         items = [dict(t=d["t"], cands=[dict(weight=c["weight"], x=c["x"].tolist()) for c in cs[:a.k]])
                  for d, cs in zip(okf, cands)]
         chunks = [items[i::nw] for i in range(nw)]
-        rows = sum(runner.run(cfg, [(cfg, a.scan, c, a.refine, str(out)) for c in chunks if c], _render, nw,
+        rows = sum(runner.run(cfg, [(cfg, a.scan, c, a.refine, str(out), len(items)) for c in chunks if c], _render, nw,
                               data=a.data, shadow=a.shadow), [])
         rows.sort(key=lambda r: r["t"])
         _dump(out / "state.json.gz", dict(key=key, info=info, q=q, rows=rows,
@@ -476,8 +513,13 @@ def main():
                 raise SystemExit(f"--smooth {n_}: not a reported quantity of {cfg['family']} ({', '.join(names)})")
             over[n_] = float(v_)
         scales = smooth_scales(reps, use, over) if a.smooth_weight > 0 else []
-        sq = SQ.Sequence(cfg, a.scan, [r["t"] for r in use], a.workers, data=a.data, shadow=a.shadow,
-                         log=lambda m_: print(m_, flush=True))
+        def seq_log(m_):
+            print(m_, flush=True)
+            it_ = re.search(r": iteration (\d+) ", m_)
+            if it_:
+                LV.progress("sequence", int(it_.group(1)), a.sequence, family=cfg["family"])
+
+        sq = SQ.Sequence(cfg, a.scan, [r["t"] for r in use], a.workers, data=a.data, shadow=a.shadow, log=seq_log)
         try:
             pools = scan_pools(sq, use, a.transplant, sq.log)
             cont = [(k, sc, GROW * sc) for k, (_, sc) in enumerate(scales) if sc > 0]
