@@ -270,6 +270,10 @@ def test_the_main_screen_fits_the_window_without_expanding_anything(tmp_path, wi
         assert widget.isVisible() and corner.x() < width and corner.y() < height, widget.objectName()
         assert widget.width() >= widget.minimumSizeHint().width(), widget.objectName()  # nothing squeezed
     assert page.patterns.canvas.height() >= 220 and page.evolution.canvas.height() >= 170
+    page.set_analysis_kind("static", remember=False)  # the inputs of a sample measured after its deposition fit too
+    _settle(seconds=0.2)
+    bar.layout().activate()
+    assert bar.minimumSizeHint().width() <= room
     _close(page)
     host.deleteLater()
 
