@@ -46,6 +46,21 @@ def emit(kind, arrays=None, **fields):
         return None
 
 
+PROGRESS_S = 1.0
+_LAST_PROGRESS = {}
+
+
+def progress(phase, done, total, force=False, **fields):
+    'A progress event of this process (see the module docstring): written when ``force``, at the first call of a'
+    if folder() is None:
+        return None
+    now = time.monotonic()
+    if not (force or done >= total or now - _LAST_PROGRESS.get(phase, -1e9) >= PROGRESS_S):
+        return None
+    _LAST_PROGRESS[phase] = now
+    return emit("progress", phase=phase, done=int(done), total=int(total), worker=os.getpid(), **fields)
+
+
 def _plain(value):
     if isinstance(value, (np.floating, np.integer)):
         return value.item()
