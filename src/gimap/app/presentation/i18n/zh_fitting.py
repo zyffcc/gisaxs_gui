@@ -125,6 +125,8 @@ FITTING_ZH = {
     "Size of the effective reflection coefficient of the exit-reflected path (spheres)": "出射反射路径的有效反射系数的大小（球）",
     "Phase of the effective reflection coefficient (spheres)": "有效反射系数的相位（球）",
     "q₊R of the spheres (q₊ = kᵢ + k_f): {values}": "球的 q₊R（q₊ = kᵢ + k_f）：{values}",
+    "By number: {values}": "按数目：{values}",
+    "not defined (the distribution rises towards small R)": "无定义（分布向小 R 上升）",
     "Loaded the model from {name}.": "已从 {name} 载入模型。",
     "Could not load the model: {reason}": "无法载入模型：{reason}",
     "Could not use this solution: {reason}": "无法使用这个解：{reason}",

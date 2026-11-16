@@ -12,6 +12,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Fitting, results:** each particle's radius by number (fit1d and microscopy count particles; Fitting's spheres
+  and random cylinders are weighted by intensity) and σ_nn/D, also in the exported record (`derived`). For a broad
+  sphere distribution (σ_R/R above about 0.2) the radius by number is *not defined* (Physics and Methods 9.3).
 - **Geometry Calibration:** the beam centre and the distance have a 1σ, the scatter between the rings (leave one
   ring out); it is in the calibration record, the tooltips of the result and the instrument profile's source.
 - **Analyze, a tilted detector:** the rotations of a `.poni` (pyFAI's rot1, rot2, rot3) are part of the

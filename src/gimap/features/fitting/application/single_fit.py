@@ -51,7 +51,9 @@ from ..domain.fit_model import (
     model_from_dict,
     model_to_dict,
     new_component,
+    number_size,
     qz_plus_r,
+    sigma_nn_over_d,
     to_manual,
 )
 from ..domain import fit_edges
@@ -270,6 +272,13 @@ def export_table(model: FitModel, data: FitData) -> tuple[list[str], np.ndarray]
     return names, np.column_stack(columns)
 
 
+def derived_values(component: Component) -> dict:
+    size = number_size(component)  # None: not defined for this intensity-weighted width (fit_model.number_size)
+    return {"R_number_mean_nm": None if size is None else round(size[0], 6),
+            "sigma_R_number_rel": None if size is None else round(size[1], 6),
+            "sigma_nn_over_D": None if not component.structure else round(sigma_nn_over_d(component), 6)}
+
+
 def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: str, q_range, result: Optional[FitResult],
                excluded=()) -> dict:
     """What the export writes next to the table: the model, the fit and how it was made."""
@@ -292,6 +301,8 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
         # spheres of a horizontal cut: q_z = 0 (effective interface) or the two-path model with the cut's angles
         "sphere_model": "effective interface (q_z = 0)" if grazing(model) is None else "two paths (direct + exit-reflected)",
         "qz_plus_R": {f"{index}": round(value, 4) for index, value in qz_plus_r(model)},
+        # every particle's radius by number (as microscopy and fit1d count) and σ_nn/D (Hosemann, fit1d's w/D)
+        "derived": [derived_values(component) for component in model.components],
     }
     if curve is not None and curve.path:
         record["curve"]["source"] = source_record(curve.path)
@@ -307,7 +318,8 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
 
 
 __all__ = [
-    "ANALYZE_SIDES", "BASE_GLOBALS", "FAMILIES", "GLOBALS", "GRAZING", "INFO", "grazing", "qz_plus_r", "LINEAR", "NM_PER_A", "PHASES", "PROGRESS_LINE", "SIDES",
+    "ANALYZE_SIDES", "BASE_GLOBALS", "FAMILIES", "GLOBALS", "GRAZING", "INFO", "grazing", "qz_plus_r", "derived_values",
+    "number_size", "sigma_nn_over_d", "LINEAR", "NM_PER_A", "PHASES", "PROGRESS_LINE", "SIDES",
     "BOTH_USES_MEAN", "ONE_CURVE_METHODS", "QUICK_FIT_MIN_POINTS", "SERIES_SIDES", "TOO_FEW_FOR_QUICK_FIT",
     "Component", "Curve", "FitData", "FitModel", "FitResult", "FitStopped", "MissingHalf", "Parameter", "PreparedCurve",
     "evaluate", "export_table", "fit", "fit_record", "fit_resolving", "fit_scales", "from_manual", "left_out_points", "log_rmse",

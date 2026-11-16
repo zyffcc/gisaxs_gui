@@ -23,6 +23,7 @@ from ...application.single_fit import (
     export_table,
     grazing,
     qz_plus_r,
+    derived_values,
     fit_record,
     model_to_dict,
     parameter_text,
@@ -34,6 +35,7 @@ from ...application.models import InSituSourceFrame
 from ...application.curve_sources import source_stem
 
 QZ_PLUS_R = "q₊R of the spheres (q₊ = kᵢ + k_f): {values}"
+BY_NUMBER = "By number: {values}"
 
 
 def _item(text: str, tip: str = "") -> QTableWidgetItem:
@@ -240,7 +242,8 @@ class FitResultsMixin:
             ).format(quality=self._quality_text(result), rmse=f"{result.log_rmse:.3g}", evaluations=result.evaluations,
                      seconds=f"{result.seconds:.1f}", method=tr("Search the ranges") if result.method == "global" else tr("Refine")))
             self._correlated_tip = ""
-            self.warnings_label.setText("\n".join(self._grazing_lines() + self._warnings(result) + search_note))
+            self.warnings_label.setText("\n".join(self._size_lines() + self._grazing_lines() + self._warnings(result)
+                                                   + search_note))
             self.warnings_label.setToolTip(self._correlated_tip)
             show_line(self.step_intro["results"], "")  # the box right below has it all (and a stale fit: its warnings)
         self._fill_parameters(result if session.result_is_current() else None)
@@ -277,6 +280,21 @@ class FitResultsMixin:
         if path[0] != "globals" or parameter.free:
             return False
         return parameter.value == 0 or (path[1] in GRAZING and grazing(self.session.model) is None)
+
+    def _size_lines(self) -> list[str]:
+        """Each particle's radius by number and σ_nn/D, as information: Fitting's R of spheres and random cylinders
+        is weighted by intensity, fit1d's and a microscope's by number (Physics and Methods, section 9.3)."""
+        parts = []
+        for index, component in enumerate(self.session.model.components, start=1):
+            values = derived_values(component)
+            if values["R_number_mean_nm"] is None:
+                text = f"{index}: R " + tr("not defined (the distribution rises towards small R)")
+            else:
+                text = f"{index}: R {values['R_number_mean_nm']:.3g} nm, σR/R {values['sigma_R_number_rel']:.2g}"
+            if values["sigma_nn_over_D"] is not None:
+                text += f", σ_nn/D {values['sigma_nn_over_D']:.2g}"
+            parts.append(text)
+        return [trf(BY_NUMBER, values="; ".join(parts))] if parts else []
 
     def _grazing_lines(self) -> list[str]:
         """q₊R of the spheres, as information (the range of each sphere model is in the Physics Manual)."""
