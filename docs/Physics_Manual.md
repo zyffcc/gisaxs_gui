@@ -1880,7 +1880,11 @@ DA:   I = P(q) + |⟨F⟩|² (S(q) − 1)                                       
   spacing: more intensity below the structure peak, a weaker peak. At σ_R/R = 0.2 spheres, the low-q intensity is
   about 1.5 times that of LMA.
 - This is the part that a same-size population without a structure factor takes up in a three-population fit
-  (section 9.11). DA describes it with the particles' own size and spacing, without a further population.
+  (section 9.11). On the simulated films of 9.11 (spheres R = 4 nm, four-term DWBA, resolution, beam tail and
+  roughness; main population and a large one, low-q term free), a film made in the DA is fitted with χ²ᵣ ≈ 2.5 in
+  DA and 8.3 in LMA; a film made in the LMA with 11 in LMA and 32 in DA. The curve therefore tells the two apart.
+  A third, same-size population brings the DA film to 1.1–1.4 in LMA as well, because it also takes up the
+  difference of the sphere's shape (section 9.10). D and σ_nn/D stay within 0.3 % and 0.005 in every case.
 - fit1d uses the LMA.
 
 Implementation: `src/gimap/features/fitting/domain/scattering_model.py`, `src/gimap/features/fitting/domain/coherent_terms.py`
