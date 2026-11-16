@@ -95,6 +95,7 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [9.9 Find the particle shape](#99-find-the-particle-shape)
   - [9.10 Spheres and cylinders in a horizontal cut: the effective interface approximation](#910-spheres-and-cylinders-in-a-horizontal-cut-the-effective-interface-approximation)
   - [9.11 The three-population model](#911-the-three-population-model)
+  - [9.12 Predict parameters (fit1d)](#912-predict-parameters-fit1d)
 - [10. 1D Predict (Workflow V5, conditional_v2)](#10-1d-predict-workflow-v5-conditional_v2)
   - [10.1 Input](#101-input)
   - [10.2 What the networks propose](#102-what-the-networks-propose)
@@ -1688,7 +1689,7 @@ Like the GIWAXS report (section 7.9), the GISAXS report's *Decisions* always say
 Fitting fits one curve, or every frame of a series, with its own model. This chapter describes the model and the
 numerical methods *Refine the values in Model* (Refine) and *Search the ranges, then refine* (Search) of the Fit step,
 and *Find the particle shape (no AI)*. *Predict parameters (fit1d)* uses the fit1d kit that comes with GIMaP
-(`utils/gisaxs1d_gui_kit`), whose internals are not described here; *AI proposal (1D Predict)* is chapter 10.
+(`utils/gisaxs1d_gui_kit`), described in section 9.12; *AI proposal (1D Predict)* is chapter 10.
 
 **Units: Fitting works in nm⁻¹ internally.** A curve read in Å⁻¹ (an Analyze `_fit_input.dat`) is multiplied by 10.
 Sizes and distances are in nm, w in nm⁻¹, the spreads σ_R/R, σ_h/h, σ_D/D are relative.
@@ -2091,6 +2092,107 @@ then Refine):
 - Take its R with the shape caveat of section 9.10.
 - Take the other two populations as descriptions of their q windows. Read them as particles only with independent
   support: SEM or AFM, the same population at another α_f, or a size that evolves smoothly in a series.
+
+### 9.12 Predict parameters (fit1d)
+
+*Predict parameters (fit1d)* fits the cut with a model of its own. A network proposes starting values; a
+least-squares fit refines them. The network only chooses where the fit starts; the result is the fit.
+
+**The model.**
+
+```text
+I(q) = Σ_j A_j F_j(q) S_j(q) + B + C / (1 + (q/w)^ν),      A_j, B, C ≥ 0                            (9.30)
+```
+
+- Up to four populations. Each one is a sphere, evaluated at |q| = √(q_∥² + q_z²) with the q_z of the cut
+  (q_z = 0 when no *Cut qz* is given: the EIA of section 9.10), or an upright cylinder, evaluated at q_∥.
+- Sizes follow a number-weighted Gaussian, cut at ±4σ.
+- S_j is the Hosemann paracrystal with neighbour distance D and spread w = (σ_nn/D)·D.
+- For every set of the nonlinear parameters, the amplitudes A_j, B and C are solved by non-negative least squares
+  (variable projection).
+- ν is fixed at 2 unless it is freed.
+
+Fitting's own model differs in two conventions: its sizes are weighted by intensity, and its spread is
+σ_D = (σ_nn/D)/√(2π). A fit1d result sent to Model as a start has σ_D converted, while R and σ_R/R are copied as
+they are; Model's curve therefore differs from fit1d's until Refine has run.
+
+**The network.**
+
+- Input: the cut, rebinned to at most 192 points. Each point gives log(q/q_max), q/q_max, asinh(I/m) and
+  asinh(σ/m), where m is the median intensity.
+- Conditions: the composition (one of 34) and three numbers, q_z/q_max, GISAXS or SAXS, and log₁₀(q_max/q_min).
+- Its parameter ranges are set by the q window of the cut itself: R from 0.5/q_max to 5/q_min, D from 2R to 40R,
+  σ_R/R from 0.03 to 0.5, σ_nn/D from 0.02 to 0.5. The same network therefore serves cuts measured at any
+  distance and energy.
+- Architecture: five masked convolutions along q (kernels of 3 to 33 points, 256 channels), each modulated by the
+  conditions; mean and maximum pooling; three dense layers. It gives eight sets of starting values (heads).
+- Training: 2.05 million synthetic curves of the model (9.30), with a loss on the parameters and a small χ² term.
+  The weights of `general` are distributed with GIMaP and checked by SHA-256. The second network, `au_np_si`, is
+  `general` adapted without labels to measured in-situ curves of Au particles on Si (curves not distributed).
+- Inference runs in numpy; neither PyTorch nor TensorFlow is needed.
+
+**From the proposals to the fit.**
+
+1. The eight heads are evaluated; the amplitudes come from non-negative least squares.
+2. The two best heads (plus, with two or more populations, one start built without the network) are aligned on an
+   (R, D) grid and refined by Levenberg–Marquardt.
+3. Heads whose χ² is still falling continue, up to 40 evaluations.
+4. With the policy *auto*, a robust search runs only when a check fires: χ² still falling at the end, two heads
+   with the same χ² but different R or D, a size at its bound, a population with zero amplitude, or no head that
+   describes the curve. It refines all eight heads and 16 Latin-hypercube starts, then restarts D over a grid.
+
+The result is the lowest χ² over everything evaluated, so the search never replaces a solution by a worse one.
+
+**Errors and flags.**
+
+- 1σ comes from the local covariance (JᵀJ)⁻¹, scaled by max(1, χ²/dof). A direction that the cut does not
+  constrain is reported as unconstrained.
+- *weakly constrained*: relative error above 50 %, a value at its bound, a population with zero amplitude, or
+  another solution of equivalent χ² whose R or D differs by more than 5σ.
+- *quality*: χ² per point above the 99th percentile of reference fits at the same signal-to-noise, or a runs test
+  of the residual signs that fails (p < 10⁻³).
+- *ood*: the Mahalanobis distance of five descriptors of the input (q range, number of points, dynamic range,
+  median σ/I, fraction of unusable points) from those of the development curves is above their 99.5th percentile.
+- Thresholds are taken from the development curves only.
+
+**Composition.** With *auto*, every candidate composition is fitted and ranked by
+
+```text
+BIC = χ² + k ln N                                                                                    (9.31)
+```
+
+with k free parameters and N points. Compositions within ΔBIC ≤ 10 of the lowest are reported together as
+indistinguishable.
+
+**Benchmark.** 200 curves fit1d had never seen, made with an independent forward model (`tools/benchmarks`, no
+code shared with fit1d):
+
+- populations: one sphere, one upright cylinder, two spheres, or a sphere and a cylinder;
+- ranges: R 1.2–10 nm (two populations 1.8–3 times apart), σ_R/R 0.1–0.35, D/2R 1.3–2.5, σ_nn/D 0.1–0.3, 10³–10⁵ counts at the peak, q 0.02–2 nm⁻¹;
+- half with fit1d's own physics, half with a resolution of 0.005 nm⁻¹, a beam tail and roughness added.
+
+The true composition is given. The errors are the median and the 90th percentile over all populations:
+
+| | network alone | after the fit |
+|---|---|---|
+| R (relative) | 14 % / 48 % | 0.7 % / 13 % |
+| D (relative) | 3 % / 33 % | 0.1 % / 0.3 % |
+| σ_R/R (absolute) | 0.06 / 0.18 | 0.006 / 0.08 |
+| σ_nn/D (absolute) | 0.011 / 0.049 | 0.001 / 0.005 |
+| time per curve (one core) | 0.12 s | 3.5 s |
+
+- The large errors come from the cuts with two populations, where the weaker one is partly hidden (90th percentile
+  of R 8–29 %). One population alone is within 5 % in nine cases out of ten.
+- On the cuts with fit1d's own physics, 61–70 % of the values lie within their 1σ (68 % expected): the errors are
+  the statistical errors. With the beam tail and roughness, 26–43 %: the low-q term does not describe them
+  exactly, and the errors do not contain that.
+- *auto* (up to two populations) finds the true composition in 69 % of the cuts with fit1d's own physics and in 30 %
+  with the low-q physics. A single population then usually gets a second one that takes up the roughness, as the
+  large population of section 9.11. Take the composition from Model when it is known; take *auto* as a suggestion.
+
+Implementation: `src/gimap/features/fitting/infrastructure/adapters/fit1d_method.py`,
+`src/gimap/features/fitting/infrastructure/adapters/single_fit1d.py`, `utils/gisaxs1d_gui_kit` (fit1d);
+benchmark: `tools/benchmarks/fit1d_recovery.py`, summary `tools/benchmarks/fit1d_recovery_summary.json`
 
 ## 10. 1D Predict (Workflow V5, conditional_v2)
 

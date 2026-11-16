@@ -1,0 +1,206 @@
+"""M3: how well fit1d recovers the parameters of curves it has never seen.
+
+Held-out curves come from the independent truth model (yoneda_truth.py, no code shared with fit1d), drawn at random
+inside the range fit1d is meant for, with a fresh seed. Two levels of physics:
+  model     Born at the vacuum q_z of the Yoneda row, LMA, Hosemann paracrystal, number-weighted Gaussian sizes,
+            Poisson counts and a flat background: the physics of fit1d itself (an in-model test of network and fit)
+  measured  + Gaussian resolution (sigma 0.005 nm^-1), a beam tail at q = 0 and resolvable roughness at low q:
+            what a measured cut adds and fit1d describes with its low-q term
+Compositions: one sphere, one upright cylinder, sphere + sphere, sphere + cylinder (two size scales).
+For every curve fit1d runs three times with GIMaP's default network ('general'):
+  network   policy 'preview' with the true composition: network proposals and NNLS amplitudes only
+  fit       policy 'auto' with the true composition: the full pipeline (proposals, LM, search on signals)
+  choose    composition 'auto:sphere,vc:2': does the BIC rule pick the true composition?
+Reported per parameter (R, sigma_R/R, D, sigma_nn/D; populations matched by R): median and 90th percentile of the
+relative error, bias, the share of |z| <= 1 with the reported 1-sigma error (coverage), and the time per curve.
+usage: python tools/benchmarks/fit1d_recovery.py [--n 200] [--workers 10] [--quick]
+The summary of the run quoted in Physics and Methods, section 9.12, is fit1d_recovery_summary.json; every curve is in results/ (not committed).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import os
+import sys
+import time
+from multiprocessing import Pool
+from pathlib import Path
+
+import numpy as np
+
+HERE = Path(__file__).resolve().parent
+GIMAP = HERE.parents[1]                                          # the repository
+KIT_APP = GIMAP / "utils" / "gisaxs1d_gui_kit" / "app"
+MODEL_DIR = GIMAP / "utils" / "gisaxs1d_gui_kit" / "models" / "general"
+for p in (str(HERE), str(KIT_APP)):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+import yoneda_truth as yt  # noqa: E402
+
+GEOM = yt.Geometry(wavelength_nm=0.1045, alpha_i_deg=0.40)       # P03, Yoneda row of Si
+Q = np.linspace(0.02, 2.0, 397)                                  # nm^-1
+COMPOSITIONS = {"sphere": ("sphere",), "vc": ("vc",), "sphere,sphere": ("sphere", "sphere"),
+                "sphere,vc": ("sphere", "vc")}
+KEYS = ("R", "sR", "D", "s_nn")
+FIT_KEYS = dict(R=("R_nm", "R_nm_err"), sR=("sigma_R_rel", "sigma_R_rel_err"), D=("D_nm", "D_nm_err"),
+                s_nn=("w_rel", "w_rel_err"))
+
+
+def draw(index, seed0=20261116):
+    """One held-out case: composition, populations, counts and the level of physics."""
+    rng = np.random.default_rng(seed0 + index)
+    names = list(COMPOSITIONS)
+    comp = names[index % len(names)]
+    level = "model" if (index // len(names)) % 2 == 0 else "measured"
+    shapes = COMPOSITIONS[comp]
+    pops = []
+    for k, shape in enumerate(shapes):
+        if k == 0:
+            R = float(np.exp(rng.uniform(np.log(2.0), np.log(8.0))))
+        else:                                       # a second size scale, at least 1.8 times apart
+            ratio = float(np.exp(rng.uniform(np.log(1.8), np.log(3.0))))
+            R = pops[0]["R"] * ratio if pops[0]["R"] * ratio <= 10.0 else pops[0]["R"] / ratio
+            R = float(max(R, 1.2))
+        pops.append(dict(shape=shape, R=R, sR=float(rng.uniform(0.1, 0.35)),
+                         D=float(2 * R * rng.uniform(1.3, 2.5)), s_nn=float(rng.uniform(0.1, 0.3)),
+                         share=1.0 if k == 0 else float(rng.uniform(0.3, 1.0))))
+    peak = float(10 ** rng.uniform(3, 5))
+    return dict(index=index, composition=comp, level=level, populations=pops, peak_counts=peak,
+                background=float(10 ** rng.uniform(-3, -1.5)), seed=seed0 + index)
+
+
+def curve(case):
+    """The measured curve of a case: populations summed without noise, then background and Poisson counts."""
+    inst = yt.Instrument(peak_counts=0.0)
+    if case["level"] == "measured":
+        inst = yt.replace(inst, sigma_g=0.005, central=30.0, eta=0.03, gamma=0.004, rough=1.0, xi=50.0, hurst=0.5)
+    total, peak_of_particles = np.zeros_like(Q), None
+    for k, p in enumerate(case["populations"]):
+        film = yt.Film(R=p["R"], sR=p["sR"], D=p["D"], s_nn=p["s_nn"], coupling="lma", scattering="born_qz",
+                       cyl_h=2.0 * p["R"] if p["shape"] == "vc" else 0.0)
+        own = yt.measured_curve(Q, yt.Case(GEOM, film, inst if k == 0 else yt.replace(inst, central=0.0, rough=0.0)))
+        particles = own["parts"]["particles"]
+        if peak_of_particles is None:
+            peak_of_particles = float(particles.max())
+            total += own["I"]
+        else:                                        # the second population at a share of the first one's peak
+            total += own["I"] * p["share"] * peak_of_particles / float(particles.max())
+    total += case["background"] * float(total.max())
+    scale = case["peak_counts"] / float(total[Q > 0.1].max())
+    rng = np.random.default_rng(case["seed"])
+    counts = rng.poisson(total * scale).astype(float)
+    return counts, np.sqrt(np.maximum(counts, 1.0))
+
+
+def _populations(result):
+    best = result["results"][0]
+    pops = []
+    for p in best["populations"]:
+        row = dict(shape="sphere" if p.get("shape", p.get("type")) in ("sphere", 1) else "vc")
+        for key, (value, error) in FIT_KEYS.items():
+            row[key], row[key + "_err"] = p.get(value), p.get(error)
+        pops.append(row)
+    return best, sorted(pops, key=lambda r: r["R"] or 0.0)
+
+
+def run(index):
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    from research.fit1d.api import fit1d
+    case = draw(index)
+    I, s = curve(case)
+    out = dict(case=case)
+    common = dict(mode="gisaxs", qz=float(GEOM.qz_vacuum), workers=1, seed=0, model_dir=str(MODEL_DIR))
+    for name, kw in (("network", dict(composition=case["composition"], policy="preview")),
+                     ("fit", dict(composition=case["composition"], policy="auto")),
+                     ("choose", dict(composition="auto:sphere,vc:2", policy="auto"))):
+        t0 = time.perf_counter()
+        try:
+            res = fit1d(Q, I, s, **kw, **common)
+            best, pops = _populations(res)
+            flags = best.get("flags") or {}
+            out[name] = dict(ok=True, populations=pops, composition=best.get("composition_text"),
+                             chi2=best.get("chi2_per_point"), raised=list(flags.get("raised") or []),
+                             indistinguishable=bool(best.get("indistinguishable")),
+                             in_set=[r.get("composition_text") for r in res["results"] if r.get("in_candidate_set")])
+        except Exception as exc:  # noqa: BLE001 - one failing fit must not stop the study
+            out[name] = dict(ok=False, error=f"{type(exc).__name__}: {exc}")
+        out[name]["seconds"] = time.perf_counter() - t0
+    return out
+
+
+def summary(results):
+    """Errors per parameter and stage, composition choice, coverage, time."""
+    table = {}
+    for stage in ("network", "fit"):
+        for level in ("model", "measured", "all"):
+            errs = {k: [] for k in KEYS}
+            zs = {k: [] for k in KEYS}
+            for r in results:
+                if level != "all" and r["case"]["level"] != level:
+                    continue
+                got = r.get(stage) or {}
+                if not got.get("ok") or len(got["populations"]) != len(r["case"]["populations"]):
+                    continue
+                truth = sorted(r["case"]["populations"], key=lambda p: p["R"])
+                for t, g in zip(truth, got["populations"]):
+                    for k in KEYS:
+                        if g.get(k) is None:
+                            continue
+                        rel = (g[k] - t[k]) / t[k] if k in ("R", "D") else g[k] - t[k]
+                        errs[k].append(rel)
+                        e = g.get(k + "_err")
+                        if e and e > 0 and math.isfinite(e):
+                            zs[k].append((g[k] - t[k]) / e)
+            row = {}
+            for k in KEYS:
+                a = np.abs(np.asarray(errs[k]))
+                row[k] = dict(n=int(a.size), median_abs=float(np.median(a)) if a.size else None,
+                              p90_abs=float(np.percentile(a, 90)) if a.size else None,
+                              bias=float(np.median(errs[k])) if a.size else None,
+                              coverage_1sigma=float(np.mean(np.abs(zs[k]) <= 1)) if zs[k] else None, n_z=len(zs[k]))
+            table[f"{stage}/{level}"] = row
+    choose = {}
+    for level in ("model", "measured", "all"):
+        rows = [r for r in results if (level == "all" or r["case"]["level"] == level) and r.get("choose", {}).get("ok")]
+        exact = [r["choose"]["composition"] == r["case"]["composition"] for r in rows]
+        in_set = [r["case"]["composition"] in (r["choose"].get("in_set") or []) for r in rows]
+        choose[level] = dict(n=len(rows), exact=float(np.mean(exact)) if rows else None,
+                             true_in_equivalent_set=float(np.mean(in_set)) if rows else None)
+    seconds = {stage: float(np.median([r[stage]["seconds"] for r in results if stage in r]))
+               for stage in ("network", "fit", "choose")}
+    return dict(parameters=table, composition=choose, median_seconds=seconds, n=len(results))
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--n", type=int, default=200)
+    ap.add_argument("--workers", type=int, default=10)
+    ap.add_argument("--quick", action="store_true")
+    a = ap.parse_args()
+    n = 8 if a.quick else a.n
+    t0 = time.perf_counter()
+    results = []
+    with Pool(min(a.workers, n)) as pool:
+        for i, r in enumerate(pool.imap_unordered(run, range(n)), 1):
+            results.append(r)
+            c = r["case"]
+            print(f"[{i}/{n}] {c['composition']:13s} {c['level']:8s} "
+                  + " ".join(f"{k}:{'ok' if r[k].get('ok') else 'ERR'} {r[k]['seconds']:.1f}s" for k in ("network", "fit", "choose"))
+                  + f" chose {r['choose'].get('composition')}", flush=True)
+    s = summary(results)
+    name = "fit1d_recovery_quick.json" if a.quick else "fit1d_recovery.json"
+    (HERE / "results").mkdir(exist_ok=True)
+    if not a.quick:
+        (HERE / "fit1d_recovery_summary.json").write_text(json.dumps(s, indent=1))
+    (HERE / "results" / name).write_text(json.dumps(dict(summary=s, results=results, q=[float(Q[0]), float(Q[-1]), len(Q)],
+                                                         geometry=dict(wavelength_nm=GEOM.wavelength_nm,
+                                                                       alpha_i_deg=GEOM.alpha_i_deg,
+                                                                       qz_vacuum=float(GEOM.qz_vacuum)),
+                                                         seconds=time.perf_counter() - t0), indent=1, default=str))
+    print(json.dumps(s, indent=1))
+
+
+if __name__ == "__main__":
+    main()

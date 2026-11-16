@@ -18,6 +18,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 - **Fitting, records:** an exported fit1d result keeps fit1d's own provenance (its version and the SHA-256 of its
   sources, of the network's weights, of the OOD thresholds and of the form-factor tables); the source of a curve
   is recorded with its file name and SHA-256.
+- **Physics and Methods, section 9.12:** what *Predict parameters (fit1d)* does — its model, network, refinement,
+  errors, flags and composition rule — and how well it recovers known parameters on 200 curves it had never seen
+  (the benchmark is `tools/benchmarks/fit1d_recovery.py`, with an independent forward model).
 - **Fitting, spheres in grazing incidence:** a new card in Model, *Spheres in grazing incidence*. By default
   nothing changes: spheres are evaluated at q_z = 0 (the effective interface approximation, no substrate
   needed). Entering αi, αf and λ of the cut evaluates spheres as the direct plus the exit-reflected path with a
