@@ -1,5 +1,5 @@
 {
- "family": "cu_p4",
+ "family": "cu_p5",
  "fitter": "iam_fit4",
  "env": {
   "IAM_SMEAR_EDGE": "zero",
@@ -22,7 +22,8 @@
   "IAM_BASEVOID_AMP": "1",
   "IAM_LSOFT": "1",
   "IAM_SIGL": "1",
-  "IAM_FILMFLUCT": "1"
+  "IAM_FILMFLUCT": "1",
+  "IAM_FLUCT_PSD": "1"
  },
  "metals": [
   "Cu"
@@ -38,11 +39,12 @@
  "ref_kind": "window",
  "scans": {
   "ref13": {
-   "ref": "cu_p4",
+   "ref": "cu_p5",
    "metal": "Cu"
   },
   "ref14": {
-   "ref": "cu_p4",
+   "kind": "joint",
+   "ref": "cu_p5/ref14_joint.json",
    "metal": "Cu"
   }
  },
@@ -127,10 +129,10 @@
   {
    "name": "lnR_P",
    "expr": "p['lnRP']",
-   "label": "radius of the film-density regions (nm)",
+   "label": "lateral correlation length of the film-density fluctuation (nm)",
    "unit": "ln nm",
    "status": "conditional",
-   "note": "lateral size of the regions where the whole film is sparser / denser; meaningful only where lnA_P is above about -5"
+   "note": "correlation length xi of the self-affine lateral spectrum of the whole-film fluctuation (continuous film; it carries the film fringes); meaningful only where lnA_P is above about -5"
   },
   {
    "name": "lnA_P",
@@ -146,7 +148,8 @@
  ],
  "fill": {
   "lnRP": 3.4011973816621555,
-  "lnAP": -13.815510557964274
+  "lnAP": -13.815510557964274,
+  "Hf": 0.5
  },
  "prior": {
   "near": 0.15,

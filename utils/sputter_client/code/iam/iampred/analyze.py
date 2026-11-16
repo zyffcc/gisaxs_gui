@@ -22,11 +22,11 @@ FILMS = POLY + ("PEO",)
 GENERIC_HOST = {"Ag": "PS", "Cu": "PEO"}
 FAMILIES = {("Au", "Si"): ("si_p3h", None), ("Ag", "Si"): ("si_p3h", None),
             ("Au", "TiO2"): ("tio2_v2", None), ("Ag", "TiO2"): ("tio2_v2", None),
-            **{("Cu", s): ("cu_p4", None) for s in FILMS},
+            **{("Cu", s): ("cu_p5", None) for s in FILMS},
             **{("Ag", s): ("polyag_p3", "ref04" if s == "PNO" else "ref05") for s in FILMS}}
 
 
-ALTERNATIVES = {"polyag_p3": ["polyag_v5"], "si_p3h": ["si_v6"], "cu_p4": ["cu_v4"]}
+ALTERNATIVES = {"polyag_p3": ["polyag_v5"], "si_p3h": ["si_v6"], "cu_p5": ["cu_v4"]}
 MODES = dict(quick=dict(refine=0, sequence=0, max_windows=60), refine=dict(refine=8, sequence=0, max_windows=24),
              full=dict(refine=30, sequence=30, max_windows=96))
 FILES = dict(report_md="REPORT.md", report_png="report.png", report_csv="report.csv", windows_csv="windows.csv",

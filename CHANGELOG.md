@@ -89,6 +89,12 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   metal's sizes by a few percent. Cu runs on every polymer and Ag on PEO too. The Cu network was trained again with a
   second scan (Cu on a block copolymer, grown to a closed film): on that scan the network alone fits clearly better than
   before, and Analyze still runs the earlier Cu network next to it and keeps the better of the two for each scan.
+- Sputter ▸ Analyze, Cu: a closed Cu film (from about 10 nm) is fitted much better. Its exit-angle fringes come from the
+  whole film thickness; the model now describes the film as a dense layer under small grains, with lateral fluctuations
+  through the whole film whose size spectrum is that of a continuous film, and the Cu network was trained again on
+  that. On the closed-film part of the reference scan the fit deviation after refinement drops by about a quarter; the
+  earlier Cu network still runs next to it, and Analyze keeps the better of the two for each scan. The other networks
+  are unchanged: the new term is off for them and their results are the same as before.
 - Sputter ▸ Analyze: a scan whose first frames are dark (the X-ray shutter opened after the detector started) takes its
   bare substrate and the start of the deposition from the frames after the shutter opened. Before, the dark frames
   went into the bare substrate, which made it several times too weak in every time window of such a scan.

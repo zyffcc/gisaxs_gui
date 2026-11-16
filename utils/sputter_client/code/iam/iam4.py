@@ -349,6 +349,10 @@ class Model4c(Model4b):
 
     fluct = None
     fluct_s = 0.3
+
+
+    fluct_psd = False
+    fluct_h = 0.5
     _ff = None
 
     def film_fluct(self, m, slab0):
@@ -367,6 +371,9 @@ class Model4c(Model4b):
                 dz = u * ts[j]
                 E = A[j] * np.exp(1j * kzs[j] * dz) + B[j] * np.exp(-1j * kzs[j] * dz)
                 amp = amp + phi * w * ts[j] * E[0] * E[1:]
+        if self.fluct_psd:
+            C = np.pi * RP ** 2 * (1.0 + (self.q * RP) ** 2) ** -(1.0 + self.fluct_h)
+            return RE ** 2 * abs(rho_e(self.s.metal, self.f1)) ** 2 * AP * (np.abs(amp) ** 2)[:, None] * C[None, :]
         Rj, wj = M.ln_nodes(RP, self.fluct_s, M2.GH5_X, M2.GH5_W)
         nP = AP / (np.pi * np.sum(wj * Rj ** 2))
         return RE ** 2 * abs(rho_e(self.s.metal, self.f1)) ** 2 * M.incoherent_sum(amp[:, None], Rj[:, None], self.q, nP * wj)
