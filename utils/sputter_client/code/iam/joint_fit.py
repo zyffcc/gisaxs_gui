@@ -158,6 +158,9 @@ def _final(task):
         desc.update(sL=float(pp["sL"]), HL=float(np.max(m.L.Hj)) if m.fL > 0 else 0.0)
     if "sigL" in pp:
         desc.update(sigL=float(pp["sigL"]))
+    if "lnAP" in pp:
+        desc.update(A_P=float(np.exp(pp["lnAP"])), R_P=float(np.exp(pp["lnRP"])),
+                    **({"Hf": float(pp["Hf"])} if "Hf" in pp else {}))
     if BASEVOID or BURIED:
         import underlayer as U
         desc.update(U.describe(f.mdl, m))
