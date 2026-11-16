@@ -19,6 +19,7 @@ The summary of the run quoted in Physics and Methods, section 9.12, is fit1d_rec
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import math
 import os
@@ -107,7 +108,8 @@ def _populations(result):
 
 def run(index):
     os.environ.setdefault("OMP_NUM_THREADS", "1")
-    from research.fit1d.api import fit1d
+    # By name, as GIMaP loads the kit: an optional folder beside the program, not a package of requirements.txt.
+    fit1d = importlib.import_module("research.fit1d.api").fit1d
     case = draw(index)
     I, s = curve(case)
     out = dict(case=case)

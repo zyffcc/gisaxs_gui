@@ -33,6 +33,11 @@ FLAT_DETECTOR_ZH.update({
     'Rot3 = {rotation}° left out': '略去 Rot3 = {rotation}°',
     'no detector-normal tilt': '探测器法线没有倾斜',
     'Rot3 {rotation}° left out: χ and qy/qz directions affected': '略去了 Rot3 {rotation}°：χ 和 qy/qz 方向受影响',
+    'detector tilt {tilt}°': '探测器倾斜 {tilt}°',
+    '{tilt}° in the geometry': '{tilt}°，已计入几何',
+    "The calibration's rotations (rot1, rot2, rot3 = {rotations}°) are part of the geometry: q, χ and the solid "
+    "angle are those of the tilted detector, as pyFAI computes them.":
+        '标定的转角（rot1、rot2、rot3 = {rotations}°）已计入几何：q、χ 和立体角都按倾斜的探测器计算，与 pyFAI 相同。',
 })
 
 __all__ = ["FLAT_DETECTOR_ZH"]

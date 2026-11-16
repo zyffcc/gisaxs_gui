@@ -5,8 +5,11 @@ be expressed exactly while the physics exists only once:
 
 1. *Displacements*: where the centre of each pixel sits on the detector,
    relative to the direct beam (``X`` to the right, ``Y`` upward, both in the
-   same length unit as the sample–detector distance ``D``).
-2. *Physics*: from ``(X, Y, D)``, the grazing angle and |k| to the scattering
+   same length unit as the sample–detector distance ``D``), and from them the
+   laboratory vector from the sample to the pixel (:func:`lab_rays`: ``(D, X, Y)``
+   for a detector perpendicular to the beam, turned by the detector's rotations
+   otherwise).
+2. *Physics*: from that vector, the grazing angle and |k| to the scattering
    vector in the sample frame (``qx`` along the beam, ``qy`` in the surface
    plane perpendicular to it, ``qz`` along the surface normal).
 
@@ -108,6 +111,29 @@ def region_displacements(
     return np.meshgrid(x, y)
 
 
+def lab_rays(geometry: DetectorGeometry, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """``(along the beam, right, up)``: the laboratory vector from the sample to the detector points at in-plane
+    displacements ``(x, y)`` from the direct beam (metres, from :func:`region_displacements`).
+
+    A detector perpendicular to the beam gives ``(D, x, y)``. A tilted one (``geometry.rot1_rad`` …, pyFAI's
+    rotations) turns the detector plane about the direct beam: ``D·ê_beam + x·ĉ + y·r̂`` with ``ĉ``, ``r̂`` the
+    directions of its columns and of its rows upward (``DetectorGeometry.in_plane_axes``). This is pyFAI's pixel
+    position written relative to the direct beam."""
+    x, y = np.asarray(x, dtype=np.float64), np.asarray(y, dtype=np.float64)
+    if not geometry.tilted:
+        return np.full(np.broadcast(x, y).shape, float(geometry.distance_m)), x, y
+    (ax, rx, ux), (ay, ry, uy) = geometry.in_plane_axes()
+    return geometry.distance_m + x * ax + y * ay, x * rx + y * ry, x * ux + y * uy
+
+
+def geometry_rays(
+    geometry: DetectorGeometry, rows: tuple[int, int], columns: tuple[int, int]
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """:func:`lab_rays` of the pixel centres of a rectangular region."""
+    x, y = region_displacements(geometry, rows, columns)
+    return lab_rays(geometry, x, y)
+
+
 # -- step 2: physics ------------------------------------------------------------------
 
 
@@ -121,7 +147,8 @@ def exit_directions(
     """Unit vector of the scattered ray in the sample frame.
 
     Returns ``(cos αf·cos 2θf, cos αf·sin 2θf, sin αf)``; ``x``, ``y`` and
-    ``distance`` must share one length unit.
+    ``distance`` must share one length unit. ``distance`` may be an array: the
+    along-beam component of every ray of a tilted detector (:func:`lab_rays`).
     """
     model = ExitAngleModel(model)
     if model is ExitAngleModel.EXACT:
@@ -183,11 +210,11 @@ def grazing_q_map(
     model: ExitAngleModel = ExitAngleModel.EXACT,
 ) -> GrazingQMap:
     """GISAXS/GIWAXS q for every pixel of an image of ``shape``, in Å⁻¹."""
-    x, y = pixel_center_displacements(shape, geometry)
+    along, x, y = lab_rays(geometry, *pixel_center_displacements(shape, geometry))
     return scattering_vectors(
         x,
         y,
-        geometry.distance_m,
+        along,
         geometry.incidence_rad,
         geometry.wavevector_inv_angstrom,
         model,
@@ -201,11 +228,11 @@ def grazing_q_region(
     model: ExitAngleModel = ExitAngleModel.EXACT,
 ) -> GrazingQMap:
     """:func:`grazing_q_map` restricted to a rectangular pixel region, in Å⁻¹."""
-    x, y = region_displacements(geometry, rows, columns)
+    along, x, y = geometry_rays(geometry, rows, columns)
     return scattering_vectors(
         x,
         y,
-        geometry.distance_m,
+        along,
         geometry.incidence_rad,
         geometry.wavevector_inv_angstrom,
         model,
@@ -218,7 +245,7 @@ def transmission_map(shape: tuple[int, int], geometry: DetectorGeometry) -> Tran
     χ is the azimuth on the detector, 0° to the right and 90° up; it is not the GIWAXS χ of Analyze
     (``analyze/domain/giwaxs.py``: 0° along the surface normal).
     """
-    x, y = pixel_center_displacements(shape, geometry)
-    two_theta = np.arctan2(np.hypot(x, y), geometry.distance_m)
+    along, x, y = lab_rays(geometry, *pixel_center_displacements(shape, geometry))
+    two_theta = np.arctan2(np.hypot(x, y), along)
     q = 2.0 * geometry.wavevector_inv_angstrom * np.sin(two_theta / 2.0)
     return TransmissionMap(q, np.degrees(two_theta), np.degrees(np.arctan2(y, x)))

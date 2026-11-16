@@ -31,7 +31,7 @@ from .geometry_model import FIT_SIDE_KEY, HEADER_CENTER_KEY, SECTION, GeometryMo
 from .batch_model import BatchModelMixin
 from .export_model import EXPORT_FOLDER, ExportModelMixin
 from .options_model import GAP_GUARD_KEY, OptionsModelMixin
-from .texts import flat_detector_summary
+from .texts import flat_detector_summary, tilt_summary
 
 
 @dataclass
@@ -269,7 +269,7 @@ class AnalyzeViewModel(
             f"αi = {geometry.incidence_deg:.3f}°", (analysis.kind or "").upper(), origin,
         ]
         flat = getattr(analysis, "flat_detector", None)  # a .poni tilt the flat geometry leaves out
-        parts.extend(flat_detector_summary(flat, translate))
+        parts.extend((*tilt_summary(geometry, translate), *flat_detector_summary(flat, translate)))
         return " · ".join(part for part in parts if part)
 
     @staticmethod

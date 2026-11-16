@@ -38,7 +38,7 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [3.4 Quality measures](#34-quality-measures)
   - [3.5 From a calibration to an instrument profile](#35-from-a-calibration-to-an-instrument-profile)
   - [3.6 pyFAI `.poni` files](#36-pyfai-poni-files)
-  - [3.7 What a `.poni` tilt left out costs in |q|](#37-what-a-poni-tilt-left-out-costs-in-q)
+  - [3.7 The detector tilt of a `.poni`](#37-the-detector-tilt-of-a-poni)
 - [4. Reading and preparing frames](#4-reading-and-preparing-frames)
   - [4.1 Stored values and valid pixels](#41-stored-values-and-valid-pixels)
   - [4.2 NeXus and HDF5 sources](#42-nexus-and-hdf5-sources)
@@ -226,7 +226,7 @@ Every q value in Analyze comes from one geometry object and one pixel convention
 
 ### 1.1 The detector model
 
-GIMaP describes a measurement with seven numbers. The detector is flat and perpendicular to the direct beam. The sample surface is tilted by the grazing angle α_i.
+GIMaP describes a measurement with seven numbers, and three more for a tilted detector. The detector is flat; without rotations it is perpendicular to the direct beam (a `.poni` tilt, section 3.7). The sample surface is tilted by the grazing angle α_i.
 
 | Symbol | Stored field | Unit | Meaning |
 |---|---|---|---|
@@ -432,7 +432,7 @@ Implementation: `src/gimap/features/analyze/domain/classification.py`
 The following effects are not in the q map, nor anywhere else in Analyze:
 
 - **Refraction and the distorted-wave Born approximation (DWBA).** `q_z` is the kinematic vacuum value. Neither α_i nor α_f is corrected for the critical angle. Near and below the critical angle the `q_z` inside the film differs from the value given here.
-- **Detector tilt and rotation.** The model has no rotation parameters. A `.poni` tilt is folded into the beam centre and the distance and then left out (section 3.6); what that costs in |q| is computed for every frame and reported, and a tilt above 1° or an error above 0.5 % is a point to check of the automatic analysis (section 3.7). Omitted Rot3 is checked separately for direction, with its own review reminder above 1° in magnitude; the |q| error does not measure direction error. The calibration refines no tilt (section 3.3).
+- **Detector tilt and rotation.** A `.poni` tilt (rot1, rot2, rot3) is part of the geometry and enters q, χ, the solid angle and the polarisation factor (section 3.7). The calibration refines no tilt (section 3.3). The straight horizon row below assumes an untilted detector.
 - **Sample azimuth and roll.** The sample is assumed to be tilted only about the horizontal axis perpendicular to the beam. A rotation about the surface normal or about the beam is not described.
 - **Parallax and sensor thickness.** A pixel is its centre; there is no depth of interaction and no pixel splitting.
 - **Flat field and efficiency.** No flat-field, detector-efficiency, air or window absorption correction is applied.
@@ -568,16 +568,19 @@ tilt = arccos(cos rot_1 cos rot_2)                                      (3.13)
 
 - `L_poni` is the `.poni` Distance (m); `poni_1`, `poni_2` (m) and `p_1`, `p_2` (pixel sizes) refer to the slow axis (rows, so `p_y = p_1`) and the fast axis (columns, `p_x = p_2`). They are taken as measured from the corner of pixel (0, 0) of the stored image; an `orientation` entry of newer `.poni` files is not read.
 - The pixel sizes come from `PixelSize1/2`, from `detector_config`, or from a known detector name (Pilatus 172 µm, Eiger 75 µm, PerkinElmer 200 µm, Lambda 55 µm, MAR345 100 µm, Jungfrau 75 µm). The wavelength is converted from m to Å.
-- The tilt itself and `rot_3` are left out of the geometry, but not forgotten: the instrument profile keeps the file's distance, PONI, rotations and pixel sizes (`dropped_tilt`), and section 3.7 separates the effects on |q| and on directional quantities. Above 0.5° the file's inspection also notes that the flat geometry makes q approximate far from the beam.
+- The rotations go into the geometry with the direct beam and the distance (section 3.7); the instrument profile also keeps the file's distance, PONI, rotations and pixel sizes (`dropped_tilt`). Above 0.5° the file's inspection notes the tilt.
 - A `.poni` is applied as it is: its pixel size and frame size are not checked against the data.
 
 Examples from the public data: the P08 file gives (545.46, 1826.95) px, `L` = 811.77 mm, tilt 0.31°; the pyFAI AgBh file gives (179.98, 263.86) px, `L` = 1583.31 mm, tilt 0.57° (note); the Xeuss file gives (7.05, 589.49) px, `L` = 147.58 mm, tilt 6.06° (note).
 
 Implementation: `src/gimap/features/assistant/domain/calibration_files.py`
 
-### 3.7 What a `.poni` tilt left out costs in |q|
+### 3.7 The detector tilt of a `.poni`
 
-For every frame analysed with a profile that keeps a `.poni` tilt (section 3.6), Analyze compares |q| of the tilted geometry with |q| of the flat geometry made from the same `.poni` (its direct beam (3.10)–(3.11) and the distance L (3.12) to it), pixel by pixel. pyFAI's vector from the sample to the centre of pixel (row i, column j), with `p_1 = (i + ½) p_1 − poni_1`, `p_2 = (j + ½) p_2 − poni_2` (the pixel sizes `p_1`, `p_2` of the file), `c_k = cos rot_k` and `s_k = sin rot_k`, is
+A `.poni` tilt is part of the geometry: the rotations rot_1, rot_2, rot_3 are stored with it (`rot1_rad`,
+`rot2_rad`, `rot3_rad`) and every pixel is placed where pyFAI places it. pyFAI's vector from the sample to the
+centre of pixel (row i, column j), with `p_1 = (i + ½) p_1 − poni_1`, `p_2 = (j + ½) p_2 − poni_2` (the pixel sizes
+`p_1`, `p_2` of the file), `c_k = cos rot_k` and `s_k = sin rot_k`, is
 
 ```text
 t_1 = p_1 c_2 c_3 + p_2 (c_3 s_1 s_2 − c_1 s_3) − L_poni (c_1 c_3 s_2 + s_1 s_3)
@@ -585,35 +588,36 @@ t_2 = p_1 c_2 s_3 + p_2 (c_1 c_3 + s_1 s_2 s_3) − L_poni (−c_3 s_1 + c_1 s_2
 t_3 = p_1 s_2 − p_2 c_2 s_1 + L_poni c_1 c_2
 ```
 
-with `t_3` along the beam. GIMaP's ray is `(L, X, Y)` with X and Y of (1.3) and (1.4). For a ray with the component `a` along the beam and the rest `b`, `2 sin²θ = b² / (R (R + a))` with `R = √(a² + b²)` (this form has no cancellation near the beam), and since `|q| = 4π sin θ / λ`:
+with `t_3` along the beam. The vector is linear in the pixel position and vanishes across the beam at the direct
+beam (3.10)–(3.11), at distance L (3.12). GIMaP therefore writes it relative to the direct beam:
 
 ```text
-ε_p = sin θ_flat / sin θ_tilted − 1                                                         (3.15)
-ε_max = max_p |ε_p|,      ε_rms = √( (1/N) Σ_p ε_p² )                                      (3.16)
+(along the beam, right, up) = L ê_beam + X ĉ + Y r̂                                          (3.15)
+ĉ = M ê_2,   r̂ = −M ê_1,   M = R_3 R_2 R_1,   laboratory axes (t_3, t_2, −t_1)
 ```
 
-- The sum runs over the frame's valid pixels (Analyze's mask, gaps and bad pixels left out) whose centre lies at least 10 px from the direct beam, where |q| tends to zero and a relative error says nothing.
-- ε depends neither on λ nor on α_i. A rotation `rot_3` about the beam leaves `t_3` and `t_1² + t_2²` unchanged, so it does not change |q|; it turns χ by `rot_3`, which ε does not measure.
-- The omitted beam-axis rotation is reported independently: nonzero Rot3 changes the directional assignment
-  of qy/qz and in-plane/out-of-plane cuts even when ε is zero. Its signed angle is reduced modulo 360° to
-  [−180°, 180°]; residues no larger than 10⁻¹⁰° are treated as zero solely to suppress floating-point roundoff
-  for full turns. The three original angles remain recorded. Every nonzero reduced angle is explained in
-  Analyze and the report; above **1° in magnitude** it is a separate *Needs attention* item (CLI exit code 2),
-  otherwise a *Decision*. This review threshold is not an orientation-accuracy tolerance and does not block
-  reduction. A pure Rot3 = 30° has ε ≈ 0 while its transverse ray direction turns by 30°; |q| error cannot bound
-  the error of directional quantities. Use the full `.poni` geometry to check those quantities.
-- The report's `geometry.flat_detector` stores `dropped_beam_axis_rotation_deg`, `q_needs_attention` and
-  `direction_needs_attention`; its `needs_attention` is the logical OR of the two flags. The first flag retains
-  the normal-tilt/|q| thresholds below, and the second uses only Rot3. `limits.beam_axis_rotation_deg` is 1.0 and
-  `limits.rotation_zero_tolerance_deg` is 10⁻¹⁰. With no valid pixels the |q| errors are `null`, while the rotation
-  and its direction flag remain known. No rotation correction is applied to the scientific arrays.
-- The comparison is with the flat geometry of the `.poni`, not with the geometry in use, so ε is what the tilt alone costs: a beam centre moved afterwards (the GISAXS symmetry axis of the automatic analysis, section 8.2, or a centre set by hand) or another distance is no part of it, and the 10 px are counted from the `.poni`'s direct beam. On the public AgBh frame the symmetry axis moves the centre by −0.39 px; ε_max stays 0.08 %, where a comparison with the moved centre would read 4.1 %. The report's tilt line gives the estimate of the frame it reports (frames summed since the geometry was applied change the valid pixels).
-- Above **1°** of tilt or **0.5 %** in ε_max, the frame gets a message (Analyze's status line and its Geometry step, marked with a warning; `messages` of the record), and the automatic analysis lists the tilt under *Needs attention* (`tools/gimap_agent.py` exits with code 2). Below both, its *Decisions* say how much ε_max is. The tilt, the three rotations, ε_max, ε_rms, the number of pixels compared and the limits are written into `<stem>_analysis.json` (`geometry`, section 14.2) and `report.json` (`geometry.flat_detector`).
-- A test checks (3.15) on a hand-computed case: rot_1 = 60°, `L_poni` = 0.05 m, so the direct beam lies L = 0.1 m from the sample; a pixel 0.1 m from the beam along the row is at 2θ = 75° on the tilted detector and 45° on the flat one, ε = sin 22.5° / sin 37.5° − 1 = −0.3714.
+X and Y are the displacements (1.3), (1.4) from the direct beam, ĉ the direction of the detector columns and r̂
+that of its rows upward. Untilted, (3.15) is `(L, X, Y)`. Every quantity of a pixel comes from this vector: q of
+(2.8), 2θ and χ, the exit angle of a row, the solid angle `(L / |t|)³` and the polarisation factor (section 5).
 
-Examples from the public data: the P08 file (tilt 0.31°) gives ε_max = 0.20 % (a decision), the Xeuss file (tilt 6.06°) ε_max = 6.3 % and ε_rms = 4.2 % on the 278 518 valid pixels compared (a point to check). The largest error lies at the corner farthest from the beam.
+- A beam centre moved later (the GISAXS symmetry axis, a centre set by hand) moves the detector in its own plane;
+  the rotations stay.
+- A test compares (3.15) with (3.14) for several sets of rotations (equal to 10⁻¹⁷ m) and, on the public Xeuss
+  frame (tilt 6.06°), |q| of every pixel with pyFAI's `4π sin θ / λ` (equal to 10⁻⁹).
+- What the tilt changes: leaving it out puts |q| off by up to 0.20 % on the P08 file (tilt 0.31°), 0.08 % on the
+  AgBh file (0.57°) and 6.3 % on the Xeuss file (6.06°, at the corner farthest from the beam). Rot3 alone leaves |q|
+  unchanged and turns χ by rot_3.
+- The automatic analysis lists the tilt under *Decisions* (`detector tilt: 6.06° in the geometry`), and the
+  Geometry step and its summary say `detector tilt 6.06°`. The record has the rotations in `geometry`.
+- Profiles saved by GIMaP 0.1 kept the tilt beside a flat geometry (`dropped_tilt`). They are read with the tilt
+  in the geometry. Geometry Calibration refines no tilt (section 3.3): a profile it updates is untilted.
+- What still assumes an untilted detector: the straight horizon row of section 2.5, the mirror filling of
+  section 4.8, the line check of the calibration and the XRR geometry (section 13.1). For tilts of a few degrees
+  these are small near the beam and grow towards the edges.
 
-Implementation: `src/gimap/shared/geometry/detector_tilt.py`, `src/gimap/features/analyze/application/flat_detector.py`, `src/gimap/features/assistant/application/pipeline_geometry.py`
+Implementation: `src/gimap/shared/geometry/detector_geometry.py` (`in_plane_axes`),
+`src/gimap/shared/geometry/q_mapping.py` (`lab_rays`), `src/gimap/shared/geometry/instrument_profile.py`,
+`src/gimap/shared/geometry/detector_tilt.py`
 
 ## 4. Reading and preparing frames
 
@@ -3660,7 +3664,7 @@ Every curve export of Analyze writes `<stem>_analysis.json` beside the curve fil
 |---|---|
 | Program and source | `software` (the record name `GIMaP Analyze 1`), `software_version` (the release, for example `GIMaP v0.2.0`; section 14.5), `source_file`, `frame_index`, `frame_count`, `frame` (1-based label), `summed_frames` (file and index of each frame added) |
 | Detector | `detector_name`, `frame_shape`, `measurement` (GISAXS or GIWAXS) |
-| Geometry | `geometry` (pixel sizes, distance, beam centre, wavelength, α_i; and what the flat detector leaves out of a `.poni`: `dropped_tilt_deg`, `dropped_rotations_deg` (original rot1, rot2, rot3), `dropped_beam_axis_rotation_deg` (Rot3 modulo full turns), `flat_detector_q_needs_attention` and `flat_detector_direction_needs_attention` (independent normal-tilt/\|q\| and direction review flags), `flat_detector_q_error_max` and `flat_detector_q_error_rms` (ε_max and ε_rms of section 3.7, fractions), `flat_detector_pixels_compared`, `flat_detector_limits`; `null` when no tilt is known), `geometry_convention` (canonical pixel-corner frame, row 0 at the top, kinematic (vacuum) grazing-incidence q of a flat detector perpendicular to the beam, in Å⁻¹), `instrument_profile` (name, source, time of update; the source begins with `automatic analysis:` when Run Automatic Analysis or `tools/gimap_agent.py` chose the geometry and with `assistant:` when the AI did, as it did for both before 0.2.0) |
+| Geometry | `geometry` (pixel sizes, distance, beam centre, wavelength, α_i; `rot1_rad`, `rot2_rad`, `rot3_rad`: the detector's rotations of section 3.7; the `dropped_…` and `flat_detector_…` fields of 0.1 are `null`), `geometry_convention` (canonical pixel-corner frame, row 0 at the top, kinematic (vacuum) grazing-incidence q of a flat detector, tilted by the rotations, in Å⁻¹), `instrument_profile` (name, source, time of update; the source begins with `automatic analysis:` when Run Automatic Analysis or `tools/gimap_agent.py` chose the geometry and with `assistant:` when the AI did, as it did for both before 0.2.0) |
 | Statistics and binning | `error_model` (`poisson`, `pixel_scatter` or `scaled_poisson`: the three error models of section 6.4, as `photon_counts` and the GIWAXS intensity corrections decided; `null` without a reduction), `binning` (GIWAXS: `radial_bins`, `q_min`, `q_max`, `bin_width` and `unit` of the fixed-edge bins of every I(q), `bins_chosen`, `radial_points` (the points of I(q) after merging), `merge` (the rule of section 6.5), `chi_bin_deg` and `chi_merge`; GISAXS: one point per detector column or row, no merging) |
 | Time | `created`: the UTC time the record was written (ISO 8601, for example `2026-11-01T05:52:31+00:00`) |
 | Corrections | `corrections` (every setting), `intensity_corrections` (GIWAXS: how applied, formulas, parameters), `bad_pixels_left_out`, `drawn_mask_pixels`, `pixels_filled_from_mirror` |
@@ -3811,7 +3815,7 @@ Fitting's optional two-path sphere with a free effective reflection coefficient 
 
 ### 15.2 Instrument and geometry
 
-- **Detector tilt and rotation.** The detector is taken as flat and perpendicular to the direct beam. The calibration refines only x_c, y_c and L; the tilt of a `.poni` file is folded into the beam centre and the distance, then left out; what that costs in |q| is computed and reported, a point to check above 1° or 0.5 % (sections 2.5, 3.3, 3.6, 3.7). Rot3 leaves |q| unchanged but affects χ, qy/qz and directional cuts; it is explained separately and flagged for review above 1° in magnitude, without being corrected. The same assumption underlies the straight horizon, mirror filling, the solid-angle and polarisation factors and the XRR geometry (sections 2.3, 4.8, 5.2, 5.3, 13.1).
+- **Detector tilt and rotation.** The calibration refines only x_c, y_c and L; it fits no tilt. A tilt comes from a `.poni` file and is applied as pyFAI applies it (section 3.7). The straight horizon, mirror filling, the calibration's line check and the XRR geometry still assume an untilted detector (sections 2.5, 4.8, 3.3, 13.1).
 - **Sample orientation.** The sample is tilted by α_i about the horizontal axis perpendicular to the beam and by nothing else; a rotation about the surface normal or about the beam is not described in Analyze (section 2.5). The Sputter toolkit alone accepts a sample roll (section 12.1).
 - **Pixels.** A pixel is represented by its centre: there is no parallax, no sensor thickness and no pixel splitting (sections 2.5, 6.1).
 - **Beam.** Divergence, energy bandwidth and footprint are not modelled (section 2.5). The XRR extractor applies no footprint correction (section 13.1).

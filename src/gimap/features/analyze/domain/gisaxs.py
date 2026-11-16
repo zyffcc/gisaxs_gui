@@ -78,6 +78,8 @@ def _row_bounds(center: float, half: float, rows: int) -> tuple[int, int]:
 
 def exit_angle_deg_at_row(geometry: DetectorGeometry, row: float) -> float:
     """Exit angle on the beam-centre column at a continuous row coordinate."""
+    if geometry.tilted:
+        return math.degrees(geometry.exit_angle_at(geometry.beam_center_x_px, float(row)))
     height_m = (geometry.beam_center_y_px - float(row)) * geometry.pixel_size_y_m
     return math.degrees(math.atan2(height_m, geometry.distance_m)) - geometry.incidence_deg
 

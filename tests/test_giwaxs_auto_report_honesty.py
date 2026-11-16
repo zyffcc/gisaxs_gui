@@ -106,7 +106,7 @@ def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08) ->
     assert rule["decision"].endswith("|f − f_iso| ≥ max(0.1, 3σ_f)") and "without this margin" in rule["why"]
     assert any(ring["texture"].startswith("tilted") for ring in report["rings"])  # 2.224 Å⁻¹, f − f_iso below 0.1
     horizon = _decision(report, "ring orientation")  # on this frame I(χ) falls to the background next to the horizon
-    assert "|χ| ≥ 85°" in horizon["decision"] and "0.9972 (+0.141 → +0.094" in horizon["why"]
+    assert "|χ| ≥ 85°" in horizon["decision"] and "0.9972 (+0.141 → +0.095" in horizon["why"]  # with the .poni tilt (0.31°)
     assert all(ring.get("herman_excess") is not None for ring in report["rings"])
 
 

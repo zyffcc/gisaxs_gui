@@ -76,7 +76,8 @@ def test_direction_and_q_review_entries_refresh_independently():
     assert "Rot3 = 0.5°" in run.decisions[1]["why"]
 
 
-def test_synthetic_rot3_is_visible_in_analyze_and_all_report_exports(tmp_path):
+def test_synthetic_rot3_is_applied_in_analyze_and_said_in_all_report_exports(tmp_path):
+    """Rot3 is part of the geometry since 0.2: χ and the qy/qz directions are those of the rotated detector."""
     from PIL import Image
 
     from src.gimap.app.headless_assistant import open_headless_session
@@ -84,7 +85,7 @@ def test_synthetic_rot3_is_visible_in_analyze_and_all_report_exports(tmp_path):
     from src.gimap.features.assistant.application import PipelineOptions
     from src.gimap.features.assistant.application.pipeline_geometry import ROTATION_ITEM, TILT_ITEM
     from src.gimap.features.assistant.application.pipeline_report import pipeline_markdown
-    from tools.gimap_agent import exit_code
+    from src.gimap.shared.geometry import grazing_q_map
 
     frame = tmp_path / "synthetic_ring.tif"
     rows, columns = np.indices((80, 80))
@@ -98,25 +99,25 @@ def test_synthetic_rot3_is_visible_in_analyze_and_all_report_exports(tmp_path):
     )
     session = open_headless_session(frame, saved_profiles=False, out_dir=tmp_path / "out")
     try:
-        report = session.run_pipeline(PipelineOptions(calibration=str(calibration), incidence_deg=0.2,
+        report = session.run_pipeline(PipelineOptions(calibration=str(calibration), incidence_deg=0.0,
                                                       technique="giwaxs", stop_after_geometry=True))
-        record = analysis_metadata(session.page.view_model.state.analysis)
-        summary = session.page.summary_label.text()
-        step = session.page.step_rail.detail("geometry")
-        assert session.page.step_rail.state("geometry") == "warn"
+        analysis = session.page.view_model.state.analysis
+        record = analysis_metadata(analysis)
+        geometry = analysis.geometry
+        assert session.page.step_rail.state("geometry") == "ok"
     finally:
         session.close()
-    assert "Rot3 30°" in summary and "χ and qy/qz directions affected" in summary
-    assert "Rot3 30°" in step and "|q| up to" not in step
-    assert report["geometry"]["flat_detector"]["q_error_max"] == pytest.approx(0.0, abs=1e-12)
-    assert any(entry["item"] == ROTATION_ITEM for entry in report["needs_attention"])
-    assert not any(entry["item"] == TILT_ITEM for entry in report["needs_attention"])
-    assert exit_code([report]) == 2
-    markdown = pipeline_markdown(report)
-    assert "Rot3 = 30°" in markdown and "Rot3 alone does not change |q|" in markdown
-    geometry = record["geometry"]
-    assert geometry["dropped_rotations_deg"] == pytest.approx({"rot1": 0.0, "rot2": 0.0, "rot3": 30.0})
-    assert geometry["dropped_beam_axis_rotation_deg"] == pytest.approx(30.0)
-    assert geometry["flat_detector_direction_needs_attention"] and not geometry["flat_detector_q_needs_attention"]
-    assert any("in-plane/out-of-plane" in message for message in record["messages"])
-    assert not any("tilted by 0.00°" in message for message in record["messages"])
+    assert geometry.rot3_rad == pytest.approx(math.pi / 6)
+    assert not any(entry["item"] in (ROTATION_ITEM, TILT_ITEM) for entry in report["needs_attention"])
+    decision = next(entry for entry in report["decisions"] if entry["what"] == TILT_ITEM)
+    assert decision["decision"] == "0.00° in the geometry" and "0, 0, 30°" in decision["why"]
+    assert "rot1, rot2, rot3 = 0, 0, 30°" in pipeline_markdown(report)
+    assert record["geometry"]["rot3_rad"] == pytest.approx(math.pi / 6) and record["geometry"]["dropped_tilt_deg"] is None
+    # The pixel straight right of the beam on the detector lies 30° turned in the laboratory (pyFAI's rays).
+    q = grazing_q_map(analysis.shape, geometry)
+    t1, t2, t3 = tilted_rays(DetectorTilt(0.2, 0.004, 0.004, 0.0, 0.0, math.pi / 6, 1e-4, 1e-4),
+                             np.arange(80.0)[:, None], np.arange(80.0)[None, :])
+    k = geometry.wavevector_inv_angstrom
+    radius = np.sqrt(t1**2 + t2**2 + t3**2)
+    np.testing.assert_allclose(q.qy, k * t2 / radius, atol=1e-12)
+    np.testing.assert_allclose(q.qz, k * (-t1) / radius, atol=1e-12)
