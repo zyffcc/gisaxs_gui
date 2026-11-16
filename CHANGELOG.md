@@ -40,6 +40,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   10⁻¹³, and the azimuthal I(q) to 10⁻⁷ on the same pixels and bins; pyFAI's Σ I / Σ F differs from GIMaP's mean of
   I / F by up to 1.3 % on a frame close to the sample (Physics and Methods 3.7, 6.1;
   `tools/benchmarks/pyfai_comparison.py`).
+- **Fitting, D ≥ 2R:** a fit keeps the paracrystal's distance at or above twice the mean radius, so the particles
+  do not overlap (D could fall to 1 nm before); a D at 2R is reported at its lower bound (Physics and Methods 9.6).
 - **Checked against pygid and BornAgain:** every pixel's q∥ and q_z agree with pygid to 10⁻¹⁵ once its pixel
   convention (pixel i at i·p, half a pixel from pyFAI's centre) is taken into account. On the public GALAXI frame,
   Fitting finds the same sphere radius and spread on the measured cut as on BornAgain's model of it simulated on that
