@@ -2075,12 +2075,14 @@ with the right family:
 | sphere | 4 | 2.31 | −4.0 % (χ²ᵣ 31) | −1.6 % (χ²ᵣ 52) |
 | sphere | 6 | 3.46 | −39 % | −33 % |
 | hemisphere | 2 | 1.15 | −1.1 % | −4.1 % (χ²ᵣ 1.0) |
+| hemisphere | 3 | 1.73 | −1.0 % | −7.3 % (χ²ᵣ 1.5) |
 | hemisphere | 4 | 2.31 | −5.1 % | −16 % |
 | hemisphere | 6 | 3.46 | −24 % | −43 % |
 
 - Up to q₊R ≈ 1.7 for spheres and ≈ 1.2 for hemispheres the EIA radius is within about 5 %.
 - Beyond that the error depends on the unknown substrate, sign included, so it cannot be corrected afterwards.
-  χ²ᵣ usually shows it, but not always (hemispheres of 2 nm on PS: −4 % at χ²ᵣ = 1.0).
+  χ²ᵣ usually shows it, but not always (hemispheres of 2 nm on PS: −4 % at χ²ᵣ = 1.0; of 3 nm: −7 % at 1.5). For
+  hemispheres the polymer film sets the limit: on bare Si they stay within 3 % up to q₊R ≈ 2.0.
 - D and σ_nn/D stay within 1 % in every case: the spacing comes from the structure factor, not from the form factor.
 - With α_i and α_f entered, Fitting shows q₊R of every sphere under the result, as information.
 
