@@ -6,7 +6,7 @@ import math
 
 from .batch_preview import FitCurvePreview, FrameFitPreview, failed_preview, model_preview, peak_preview
 
-from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile, scattering_vectors
+from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile, lab_rays, scattering_vectors
 
 from ..domain import (
     PROFILES,
@@ -191,9 +191,8 @@ def q_at_position(geometry: DetectorGeometry, x_px: float, y_px: float) -> dict[
 
     x = np.array([(float(x_px) - geometry.beam_center_x_px) * geometry.pixel_size_x_m])
     y = np.array([(geometry.beam_center_y_px - float(y_px)) * geometry.pixel_size_y_m])
-    q = scattering_vectors(
-        x, y, geometry.distance_m, geometry.incidence_rad, geometry.wavevector_inv_angstrom
-    )
+    along, x, y = lab_rays(geometry, x, y)
+    q = scattering_vectors(x, y, along, geometry.incidence_rad, geometry.wavevector_inv_angstrom)
     k = geometry.wavevector_inv_angstrom
     sin_alpha_f = float(q.qz[0]) / k - math.sin(geometry.incidence_rad)
     return {

@@ -1,4 +1,4 @@
-"""A detector tilt GIMaP's flat geometry leaves out is measured and said, not folded away in silence.
+"""A .poni tilt is part of GIMaP's geometry (since 0.2); what a flat detector would cost is still computed and tested.
 
 GIMaP's geometry is a flat detector perpendicular to the beam; a ``.poni`` tilt (rot1, rot2) is converted into the
 direct beam and its distance, then dropped. ``shared/geometry/detector_tilt`` compares |q| of the two geometries
@@ -148,9 +148,9 @@ def test_a_centre_moved_after_the_poni_is_no_part_of_what_the_tilt_costs() -> No
     assert flat_detector_q_error(flat.tilt, refined, shape, valid).q_error_max > 0.04  # the centre shift, not the tilt
 
 
-def test_the_gisaxs_run_on_a_tilted_poni_says_one_estimate_everywhere(tmp_path) -> None:
-    """After the symmetry axis moved the centre, Decisions, the Geometry section, report.json and the frame's record
-    give the same estimate and the same verdict (it was 0.08 % in Decisions, 4.1 % and an open point elsewhere)."""
+def test_the_gisaxs_run_on_a_tilted_poni_uses_the_tilt_and_says_so_everywhere(tmp_path) -> None:
+    """The .poni's tilt is part of the geometry: Decisions, the Geometry section and the frame's record say it, and
+    no estimate of a tilt left out is made."""
     from src.gimap.app.headless_assistant import open_headless_session
     from src.gimap.features.analyze.application.export_record import analysis_metadata
     from src.gimap.features.assistant.application import PipelineOptions
@@ -166,16 +166,16 @@ def test_the_gisaxs_run_on_a_tilted_poni_says_one_estimate_everywhere(tmp_path) 
         record = json.loads(json.dumps(analysis_metadata(session.page.view_model.state.analysis)))
     finally:
         session.close()
-    symmetry = report["gisaxs"]["symmetry"]
-    assert abs(symmetry["x_px"] - symmetry["initial_x_px"]) > 0.1  # the centre moved after the .poni was applied
-    assert report["geometry"]["beam_center_px"][0] == pytest.approx(symmetry["x_px"], abs=1e-6)
-    flat = report["geometry"]["flat_detector"]
-    assert flat["q_error_max"] == pytest.approx(0.0008, rel=0.05) and not flat["needs_attention"]
+    poni = parse_poni((tmp_path / "Pilatus1M.poni").read_text(encoding="utf-8")).tilt
+    assert report["geometry"]["flat_detector"] is None
+    assert report["geometry"]["tilt_deg"] == pytest.approx(poni.tilt_deg, abs=1e-3)  # the report rounds
     assert not any(item["item"] == "detector tilt" for item in report["needs_attention"])
     decision = next(item for item in report["decisions"] if item["what"] == "detector tilt")
-    assert decision["decision"] == "0.57° left out" and "by at most 0.08 % over" in decision["why"]
-    assert "|q| off by up to 0.08 % over the valid detector area" in pipeline_markdown(report)
-    assert record["geometry"]["flat_detector_q_error_max"] == pytest.approx(flat["q_error_max"], rel=1e-3)
+    assert decision["decision"] == "0.57° in the geometry" and "pyFAI" in decision["why"]
+    assert "detector tilt 0.57" in pipeline_markdown(report) and "part of the geometry" in pipeline_markdown(report)
+    assert record["geometry"]["rot1_rad"] == pytest.approx(poni.rot1_rad)
+    assert record["geometry"]["rot2_rad"] == pytest.approx(poni.rot2_rad)
+    assert record["geometry"]["dropped_tilt_deg"] is None
     assert not any("tilted by" in message for message in record["messages"])
 
 
@@ -220,38 +220,58 @@ def xeuss_run(tmp_path_factory):
     session.close()
 
 
-def test_a_tilted_poni_is_a_point_to_check_with_exit_code_2_and_in_the_record(xeuss_run) -> None:
+def test_a_tilted_poni_gives_the_q_of_pyfai_and_is_in_the_record(xeuss_run) -> None:
+    """The public Xeuss frame, 6.06° tilt: every pixel's |q| is pyFAI's (up to 6.3 % off with the flat detector of
+    0.1), the tilt is a decision, not a point to check, and the record carries the rotations."""
     import tools.gimap_agent as agent
     from src.gimap.features.analyze.application.export_record import analysis_metadata
     from src.gimap.features.assistant.application.pipeline_report import pipeline_markdown
+    from src.gimap.shared.geometry import grazing_q_map
 
     session, report = xeuss_run
-    item = next(entry for entry in report["needs_attention"] if entry["item"] == "detector tilt")
-    assert "tilted by 6.06°" in item["why"] and "up to 6.3 %" in item["why"] and item["option"] is None
-    assert agent.exit_code([report]) == 2
-    markdown = pipeline_markdown(report)
-    assert "Status: **NEEDS INPUT**" in markdown and "detector tilt left out: 6.06°" in markdown
-    flat = report["geometry"]["flat_detector"]
-    assert flat["needs_attention"] and flat["q_error_max"] == pytest.approx(0.0625, rel=0.02)
+    assert not any(entry["item"] == "detector tilt" for entry in report["needs_attention"])
+    decision = next(entry for entry in report["decisions"] if entry["what"] == "detector tilt")
+    assert decision["decision"] == "6.06° in the geometry"
+    assert agent.exit_code([report]) != 2 or any(e["item"] != "detector tilt" for e in report["needs_attention"])
+    assert "detector tilt 6.06" in pipeline_markdown(report)
 
     analysis = session.page.view_model.state.analysis
+    poni = parse_poni((EXTERNAL / "giwaxs_xeuss_pbte" / "AgBe_250403_XENOCS.poni").read_text(encoding="utf-8")).tilt
+    q = grazing_q_map(analysis.shape, analysis.geometry).q
+    cos_two_theta = tilted_cos_two_theta(poni, np.arange(analysis.shape[0], dtype=float)[:, None],
+                                         np.arange(analysis.shape[1], dtype=float)[None, :])
+    k = analysis.geometry.wavevector_inv_angstrom
+    pyfai = 2 * k * np.sqrt((1 - cos_two_theta) / 2)  # 4π sin θ / λ, the incidence angle does not change |q|
+    far = pyfai > 0.05
+    assert np.max(np.abs(q[far] / pyfai[far] - 1)) < 1e-9
+
     record = json.loads(json.dumps(analysis_metadata(analysis)))
     geometry = record["geometry"]
-    assert geometry["dropped_tilt_deg"] == pytest.approx(6.058, abs=1e-3)
-    assert geometry["flat_detector_q_error_max"] == pytest.approx(0.0625, rel=0.02)
-    assert geometry["dropped_rotations_deg"]["rot3"] == 0.0
-    assert "flat detector perpendicular to the beam" in record["geometry_convention"]
+    assert geometry["rot1_rad"] == pytest.approx(poni.rot1_rad) and geometry["rot2_rad"] == pytest.approx(poni.rot2_rad)
+    assert geometry["dropped_tilt_deg"] is None and geometry["flat_detector_q_error_max"] is None
+    assert "tilted by pyFAI's rotations" in record["geometry_convention"]
     assert record["instrument_profile"]["source"] == "automatic analysis: AgBe_250403_XENOCS.poni"
-    assert any("tilted by 6.06°" in message for message in record["messages"])  # Analyze's status line says it
-    assert "tilt 6.06° left out" in session.page.summary_label.text()
-    # The Geometry step warns in the step rail (its line under the title said the same and is gone).
-    assert "tilt 6.06° left out" in session.page.step_rail.detail("geometry")
-    assert session.page.step_rail.state("geometry") == "warn"
+    assert not any("tilted by" in message for message in record["messages"])
+    assert "detector tilt 6.06°" in session.page.summary_label.text()
+    assert "detector tilt 6.06°" in session.page.step_rail.detail("geometry")
+    assert session.page.step_rail.state("geometry") == "ok"
     assert datetime.fromisoformat(record["created"]).utcoffset().total_seconds() == 0
     assert record["error_model"] == "poisson"
     binning = record["binning"]
     assert binning["radial_bins"] >= binning["radial_points"] > 100 and binning["bin_width"] > 0
     assert binning["bin_width"] == pytest.approx((binning["q_max"] - binning["q_min"]) / binning["radial_bins"])
+
+
+def test_a_profile_saved_with_a_dropped_tilt_is_read_with_the_tilt_in_its_geometry() -> None:
+    """Profiles of 0.1 kept the .poni tilt beside a flat geometry; read now, the geometry carries it."""
+    tilt = DetectorTilt(0.2, 0.03, 0.04, 0.05, -0.02, 0.1, 172e-6, 172e-6)
+    flat = tilt.flat_geometry(1.0, 0.2)
+    old = {"name": "old", "geometry": {key: value for key, value in flat.__dict__.items() if not key.startswith("rot")},
+           "dropped_tilt": tilt.to_dict()}
+    profile = InstrumentProfile.from_dict(old)
+    assert (profile.geometry.rot1_rad, profile.geometry.rot2_rad, profile.geometry.rot3_rad) == (0.05, -0.02, 0.1)
+    assert profile.geometry.tilt_deg == pytest.approx(tilt.tilt_deg)
+    assert InstrumentProfile.from_dict(profile.to_dict()).geometry == profile.geometry
 
 
 def test_the_tilt_texts_are_shown_in_chinese_with_their_numbers() -> None:

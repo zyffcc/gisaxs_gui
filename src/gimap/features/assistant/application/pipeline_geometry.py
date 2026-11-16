@@ -56,6 +56,11 @@ TILT_SMALL = (
     "{error} % over the valid detector area (an open point above {limit_deg}° or {limit_error} %)"
 )
 """A tilt the geometry leaves out (a ``.poni``'s rotations; Analyze's estimate, ``shared/geometry/detector_tilt``)."""
+TILT_USED = (
+    "The calibration's rotations (rot1, rot2, rot3 = {rotations}°) are part of the geometry: q, χ and the solid "
+    "angle are those of the tilted detector, as pyFAI computes them."
+)
+"""The decision when the geometry carries the tilt of a ``.poni`` (every geometry read from one since 0.2)."""
 ROTATION_ITEM = "detector rotation about the beam"
 ROTATION_WHY = (
     "The calibration's rotation about the beam (Rot3 = {rotation}°) is left out. Rot3 alone does not change |q|, "
@@ -96,6 +101,21 @@ def rotation_entry(status: Optional[dict]) -> Optional[tuple[str, dict]]:
     if flat.get("direction_needs_attention"):
         return "attention", {"item": ROTATION_ITEM, "why": why, "option": None, "hint": ROTATION_HINT}
     return "decision", {"what": ROTATION_ITEM, "decision": f"Rot3 = {angle}° left out", "why": why}
+
+
+def tilt_used_entry(status: Optional[dict]) -> Optional[tuple[str, dict]]:
+    """A decision for a tilt the geometry carries; ``None`` for a detector perpendicular to the beam."""
+    geometry = clean((status or {}).get("geometry")) or {}
+    rotations = geometry.get("rotations_deg") or ()
+    if geometry.get("flat_detector") or not any(rotations):
+        return None
+    return "decision", {"what": TILT_ITEM, "decision": f"{float(geometry.get('tilt_deg') or 0.0):.2f}° in the geometry",
+                        "why": TILT_USED.format(rotations=", ".join(f"{float(value):.4g}" for value in rotations))}
+
+
+def detector_tilt_entry(status: Optional[dict]) -> Optional[tuple[str, dict]]:
+    """The tilt line: what a tilt left out costs (older profiles kept flat), else the tilt the geometry carries."""
+    return tilt_entry(status) or tilt_used_entry(status)
 
 
 def _refresh_geometry_entry(run, name: str, said: Optional[tuple[str, dict]]) -> None:
@@ -144,7 +164,7 @@ class GeometryStepsMixin:
     def _flat_detector(self) -> None:
         """Magnitude/normal tilt and beam-axis direction are separate review points. Analyze compares the .poni
         with its own flat geometry: a centre moved later does not change either estimate."""
-        for entry in (tilt_entry, rotation_entry):
+        for entry in (detector_tilt_entry, rotation_entry):
             said = entry(self.catalog.results.status)
             if said is not None:
                 (self._run.attention if said[0] == "attention" else self._run.decisions).append(said[1])
@@ -153,7 +173,7 @@ class GeometryStepsMixin:
         """The tilt said again from the status the report describes, in the place where it was said: the frames
         summed since, or a reduction that fills a half from its mirror, change the valid pixels the estimate is taken
         over, so the Decisions or Needs attention give the number and the verdict of ``geometry.flat_detector``."""
-        for name, entry in ((TILT_ITEM, tilt_entry), (ROTATION_ITEM, rotation_entry)):
+        for name, entry in ((TILT_ITEM, detector_tilt_entry), (ROTATION_ITEM, rotation_entry)):
             _refresh_geometry_entry(self._run, name, entry(self.catalog.results.status))
 
     def _geometry(self, status: dict) -> bool:

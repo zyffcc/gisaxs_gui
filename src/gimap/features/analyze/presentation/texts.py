@@ -121,6 +121,13 @@ def message_text(message: str) -> str:
     return message
 
 
+def tilt_summary(geometry, translate: Callable[[str], str] = str) -> list[str]:
+    """The detector tilt in use (pyFAI's rotations of the geometry), for the geometry summary and step rail."""
+    if geometry is None or not getattr(geometry, "tilted", False):
+        return []
+    return [translate("detector tilt {tilt}°").format(tilt=f"{geometry.tilt_deg:.2f}")]
+
+
 def flat_detector_summary(estimate, translate: Callable[[str], str] = str) -> list[str]:
     """Separate scalar |q| and direction notes for the geometry summary and step rail."""
     if estimate is None:

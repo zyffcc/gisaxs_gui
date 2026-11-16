@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from src.gimap.shared.geometry import DetectorGeometry
+from src.gimap.shared.geometry import DetectorGeometry, lab_rays
 
 from .models import GISAXS, GIWAXS
 
@@ -19,14 +19,15 @@ user can always choose the mode; this only sets the automatic guess.
 
 
 def max_scattering_angle_deg(shape: tuple[int, int], geometry: DetectorGeometry) -> float:
-    """Largest 2θ over the frame; attained at a corner for a flat detector."""
+    """Largest 2θ over the frame's corners (where it lies for a detector perpendicular to the beam)."""
     rows, columns = int(shape[0]), int(shape[1])
     largest = 0.0
     for corner_x in (0.0, float(columns)):
         for corner_y in (0.0, float(rows)):
             dx = (corner_x - geometry.beam_center_x_px) * geometry.pixel_size_x_m
-            dy = (corner_y - geometry.beam_center_y_px) * geometry.pixel_size_y_m
-            largest = max(largest, math.degrees(math.atan2(math.hypot(dx, dy), geometry.distance_m)))
+            dy = (geometry.beam_center_y_px - corner_y) * geometry.pixel_size_y_m
+            along, right, up = (float(v) for v in lab_rays(geometry, dx, dy))
+            largest = max(largest, math.degrees(math.atan2(math.hypot(right, up), along)))
     return largest
 
 

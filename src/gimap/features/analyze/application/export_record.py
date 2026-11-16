@@ -45,10 +45,11 @@ SOFTWARE = "GIMaP Analyze 1"
 Q_LABEL = "q (Å⁻¹)"
 GEOMETRY_CONVENTION = (
     "canonical pixel-corner frame, row 0 at top, beam centre = direct beam; "
-    "kinematic (vacuum) grazing-incidence q of a flat detector perpendicular to the beam, Å⁻¹"
+    "kinematic (vacuum) grazing-incidence q of a flat detector, tilted by pyFAI's rotations rot1-rot3 of the "
+    "geometry (all 0: perpendicular to the beam), Å⁻¹"
 )
-"""``geometry_convention`` of the record: what the q values are (no refraction, no detector tilt; a ``.poni`` tilt
-left out is in ``geometry.dropped_tilt_deg`` with what it costs, ``geometry.flat_detector_q_error_max``)."""
+"""``geometry_convention`` of the record: what the q values are (no refraction; the detector tilt is
+``geometry.rot1_rad`` … ``rot3_rad``)."""
 POISSON, PIXEL_SCATTER, SCALED_POISSON = "poisson", "pixel_scatter", "scaled_poisson"
 """``error_model``: σ of a point from the photon counts of its pixels (√Σ / n), from the scatter of its pixels
 (not counts as measured: ``frame_preprocessing.photon_counts``), or from the counts scaled like the values (GIWAXS

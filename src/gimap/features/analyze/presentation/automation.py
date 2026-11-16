@@ -10,6 +10,7 @@ when the page shows 2θ.  All methods must be called on the GUI thread.
 from __future__ import annotations
 
 import io
+import math
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
@@ -141,6 +142,9 @@ class AnalyzeAutomation:
             "pixel_size_um": [geometry.pixel_size_x_m * 1e6, geometry.pixel_size_y_m * 1e6],
             "instrument_profile": profile.name if profile else None,
             "flat_detector": analysis.flat_detector.to_dict() if analysis.flat_detector is not None else None,
+            "tilt_deg": geometry.tilt_deg,
+            "rotations_deg": [math.degrees(geometry.rot1_rad), math.degrees(geometry.rot2_rad),
+                              math.degrees(geometry.rot3_rad)],
         }
         corrections = state.corrections
         info["corrections"] = {

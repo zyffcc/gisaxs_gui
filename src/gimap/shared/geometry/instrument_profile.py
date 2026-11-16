@@ -31,8 +31,10 @@ class InstrumentProfile:
     source: str = ""
     updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     dropped_tilt: Optional[DetectorTilt] = None
-    """The tilt of the ``.poni`` the geometry was read from, which the flat ``geometry`` leaves out (``None``: none
-    known). Analyze estimates from it how far |q| is off on each frame (``detector_tilt.flat_detector_q_error``)."""
+    """The tilt of the ``.poni`` the geometry was read from (``None``: none known). The name is historical: up to
+    0.2 the geometry left this tilt out. Now a geometry without rotations takes the tilt's rotations
+    (``__post_init__``), so a profile saved by an older GIMaP is read with its detector tilted as the ``.poni`` says.
+    """
 
     def __post_init__(self) -> None:
         if not str(self.name).strip():
@@ -42,6 +44,11 @@ class InstrumentProfile:
             if rows <= 0 or columns <= 0:
                 raise ValueError(f"Invalid detector shape {self.detector_shape!r}.")
             object.__setattr__(self, "detector_shape", (rows, columns))
+        tilt = self.dropped_tilt
+        if tilt is not None and not self.geometry.tilted:
+            object.__setattr__(
+                self, "geometry", self.geometry.with_rotations(tilt.rot1_rad, tilt.rot2_rad, tilt.rot3_rad)
+            )
 
     def match_score(self, *, detector_name: Optional[str], shape: Optional[tuple[int, int]]) -> int:
         """0 = unrelated; higher is a better match for a loaded file.

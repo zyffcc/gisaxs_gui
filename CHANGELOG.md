@@ -12,6 +12,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Analyze, a tilted detector:** the rotations of a `.poni` (pyFAI's rot1, rot2, rot3) are part of the
+  geometry. Every pixel is placed where pyFAI places it, so q, χ, the exit angle of a row, the solid angle and the
+  polarisation factor are those of the tilted detector (on the Xeuss example |q| changes by up to 6.3 %; it now
+  equals pyFAI's to 10⁻⁹). The tilt is a decision of the automatic analysis instead of a point to check, and the
+  record has `rot1_rad` … `rot3_rad` in `geometry`. Physics and Methods, section 3.7, is rewritten.
 - **Analyze, records:** `<stem>_analysis.json` lists every input file by name with its SHA-256
   (`input_sha256`: the source, its module or data files, and the frames summed with it), so a curve can be traced
   to its frames on another computer, where the folders differ.
@@ -870,6 +875,8 @@ hold.
 
 ### Updating from 0.1.0
 
+- **Instrument profiles made from a tilted `.poni`** are read with the tilt in their geometry: results of such
+  frames change (|q| by up to 6.3 % on the Xeuss example, less near the beam).
 - **What is kept.** Settings, instrument profiles, recent files, the model of Fitting and saved API keys are in
   the user data folder (`%APPDATA%\GIMaP` on Windows, or the folder `GIMAP_HOME` names), as in 0.1.0, so the new
   version finds them. Projects (`.gimap`) of 0.1.0 open.

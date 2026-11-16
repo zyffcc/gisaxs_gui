@@ -25,7 +25,7 @@ Cut & Fitting 的探测器部分已下线：Fitting 只接收 Analyze 写出的�
 |---|---|
 | 像素位置 | 像素 `(行 i, 列 j)` 覆盖连续区域 `[j, j+1] × [i, i+1]`，中心在 `(j+0.5, i+0.5)`；与 pyFAI 及 `imshow(extent=(0, W, H, 0))` 相同 |
 | 行方向 | 第 0 行在图像顶部，y 向下增大 |
-| 束流中心 | `beam_center_x_px / beam_center_y_px` 是**直射束**在上述坐标中的位置。探测器无倾斜时它等于 pyFAI 的 PONI（以像素计）；有倾斜时两者不同：读 `.poni`（`assistant/domain/calibration_files.parse_poni`）按 pyFAI 的 `getFit2D` 由 PONI、rot1、rot2 求直射束位置，距离换成沿直射束的距离，倾斜本身不建模，但不丢掉：`PoniGeometry.tilt` / `InstrumentProfile.dropped_tilt` 保留 .poni 的距离、PONI、三个旋转角和像素尺寸，分析工作区每帧在有效像素上比较倾斜几何与平板几何的 \|q\|（`shared/geometry/detector_tilt.py`，`analyze/application/flat_detector.py`）：超过 1° 或 0.5 % 时是一条消息和自动分析的 Needs attention，数值写进 `_analysis.json` 的 `geometry` |
+| 束流中心 | `beam_center_x_px / beam_center_y_px` 是**直射束**在上述坐标中的位置。探测器无倾斜时它等于 pyFAI 的 PONI（以像素计）；有倾斜时两者不同：读 `.poni`（`assistant/domain/calibration_files.parse_poni`）按 pyFAI 的 `getFit2D` 由 PONI、rot1、rot2 求直射束位置，距离换成沿直射束的距离；三个转角存进 `DetectorGeometry.rot1_rad … rot3_rad`，`q_mapping.lab_rays` 把每个像素放在 pyFAI 放的位置（以直射束为原点写 pyFAI 的像素矢量）。`InstrumentProfile.dropped_tilt` 保留 .poni 的原始数值；0.1 保存的仪器配置读入时把它的转角放进几何 |q\|（`shared/geometry/detector_tilt.py`，`analyze/application/flat_detector.py`）：超过 1° 或 0.5 % 时是一条消息和自动分析的 Needs attention，数值写进 `_analysis.json` 的 `geometry` |
 | 掠入射角 | `incidence_deg`，0 表示透射几何 |
 | 单位 | 长度 m，波长 Å，q 为 Å⁻¹ |
 | qy 符号 | 与探测器列方向同号：图像中直射束右侧的像素 qy > 0，左侧 qy < 0 |

@@ -122,6 +122,10 @@ def _geometry_lines(report: dict) -> list[str]:
         f"αi {_number(geometry.get('incidence_deg'))}°",
     ]
     flat = geometry.get("flat_detector")
+    rotations = geometry.get("rotations_deg") or ()
+    if any(rotations) and not flat:
+        lines.append(f"- detector tilt {_number(geometry.get('tilt_deg'), 3)}° (rot1, rot2, rot3 = "
+                     + ", ".join(_number(value) for value in rotations) + "°), part of the geometry")
     if flat:  # a .poni tilt the flat geometry leaves out (Needs attention or Decisions says whether it matters)
         error = flat.get("q_error_max")
         lines.append(

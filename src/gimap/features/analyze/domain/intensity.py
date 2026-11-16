@@ -28,7 +28,7 @@ from typing import Optional
 import numpy as np
 
 from src.gimap.shared.geometry import DetectorGeometry
-from src.gimap.shared.geometry.q_mapping import exit_directions, region_displacements
+from src.gimap.shared.geometry.q_mapping import exit_directions, geometry_rays
 
 BLOCK_ROWS = 512
 
@@ -65,7 +65,7 @@ def intensity_factor(
     """The factor of every pixel (float32; NaN where it is not defined)."""
     rows, columns = int(shape[0]), int(shape[1])
     factor = np.ones((rows, columns), dtype=np.float32)
-    distance = float(geometry.distance_m)
+    beam = float(geometry.distance_m)
     film = bool(film_thickness_nm and attenuation_length_um and film_thickness_nm > 0 and attenuation_length_um > 0)
     sin_in = math.sin(geometry.incidence_rad)
     if film and sin_in <= 0:
@@ -74,19 +74,20 @@ def intensity_factor(
     reference = _film(np.array(sin_in), sin_in, ratio) if film else None
     for start in range(0, rows, BLOCK_ROWS):
         stop = min(rows, start + BLOCK_ROWS)
-        x, y = region_displacements(geometry, (start, stop), (0, columns))
+        along, x, y = geometry_rays(geometry, (start, stop), (0, columns))
         in_plane = x * x + y * y
-        cos_2theta = distance / np.sqrt(distance * distance + in_plane)
+        radius = np.sqrt(along * along + in_plane)
+        cos_2theta = along / radius
         block = np.ones_like(cos_2theta)
-        if solid_angle:
-            block *= cos_2theta**3
+        if solid_angle:  # (distance to the direct beam / distance to the pixel)³, also on a tilted detector
+            block *= (beam / radius) ** 3
         if polarization is not None:
             with np.errstate(invalid="ignore", divide="ignore"):
                 cos_2phi = np.where(in_plane > 0, (x * x - y * y) / in_plane, 0.0)
             sin2 = 1.0 - cos_2theta**2
             block *= 0.5 * (1.0 + cos_2theta**2 - float(polarization) * cos_2phi * sin2)
         if film:
-            sin_exit = exit_directions(x, y, distance, geometry.incidence_rad)[2]
+            sin_exit = exit_directions(x, y, along, geometry.incidence_rad)[2]
             relative = _film(sin_exit, sin_in, ratio) / reference
             block *= np.where(sin_exit > 0, relative, np.nan)
         factor[start:stop] = block
@@ -99,7 +100,7 @@ def describe_intensity_corrections(corrections) -> Optional[dict]:
         return None
     record: dict = {"applied_as": "I / factor (1 at the direct beam; film absorption 1 at af = ai); q unchanged"}
     if corrections.solid_angle:
-        record["solid_angle"] = "cos^3(2theta), flat detector perpendicular to the direct beam"
+        record["solid_angle"] = "(D/r)^3, D the distance to the direct beam and r to the pixel: cos^3(2theta) for a detector perpendicular to the beam"
     if corrections.polarization is not None:
         record["polarization"] = {
             "factor": float(corrections.polarization),

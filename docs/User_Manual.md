@@ -774,27 +774,14 @@ own folder holds none. The GIWAXS `.poni` of section 1.1, for example, fits the 
 as the search can tell; only its folder puts it after `galaxi_bornagain.poni`. The result is saved
 as the instrument profile of the detector.
 
-**A tilted detector.** GIMaP's geometry is a flat detector perpendicular to the beam. A `.poni` with a
-tilt (pyFAI's `Rot1`, `Rot2`) is converted to the direct beam and its distance, and the tilt is left out;
-the instrument profile keeps it, and for every frame GIMaP compares |q| of the tilted geometry with that of the
-flat geometry made from the same `.poni` on the valid pixels ([Physics and Methods, section 3.7](Physics_Manual.md#37-what-a-poni-tilt-left-out-costs-in-q)).
-The estimate is what the tilt alone costs: a beam centre moved afterwards (by the GISAXS symmetry axis of the
-automatic analysis, or by hand) does not change it.
-When the tilt exceeds 1° or |q| is off by more than 0.5 %, Analyze's status line and the step **Geometry**
-(marked with a warning) say so (*tilt 6.06° left out: |q| up to 6.3 % off*), and the automatic analysis lists **Detector
-tilt** among the points to check (`tools/gimap_agent.py`: under *Needs attention*, exit code 2). Below both
-limits the decision **Detector tilt** says how much it changes |q|. The tilt and the error are written into
-`<stem>_analysis.json` (chapter 12). The Xeuss example of **Help ▸ Example Data** is such a case: its 6.06°
-tilt puts |q| off by up to 6.3 % at the corner farthest from the beam. For exact q of a tilted detector,
-reduce the frame with the full `.poni` geometry (pyFAI, for example).
-
-**Rotation about the beam is checked separately.** An omitted `Rot3` can leave |q| unchanged while rotating
-χ and changing the direction assigned to qy/qz and in-plane/out-of-plane cuts. Analyze states the omitted
-angle even below 1°; above 1° in magnitude, **detector rotation about the beam** is a separate *Needs attention*
-item (CLI exit code 2). Smaller nonzero angles appear in *Decisions*. The 1° threshold is a reminder to review
-direction-dependent results, not an accuracy guarantee, and it does not stop analysis. Full turns are treated
-as zero; all three original rotations remain in the record. A small |q| error does not establish accurate
-orientation: check these results using the full `.poni` geometry.
+**A tilted detector.** A `.poni` with a tilt (pyFAI's `Rot1`, `Rot2`, `Rot3`) gives a tilted geometry:
+every pixel is placed where pyFAI places it, so q, χ, the solid angle and the polarisation factor are those of the
+tilted detector ([Physics and Methods, section 3.7](Physics_Manual.md#37-the-detector-tilt-of-a-poni)). The step
+**Geometry** and the summary say *detector tilt 6.06°*, and the automatic analysis lists it under *Decisions*. A
+beam centre moved later (the GISAXS symmetry axis, or by hand) keeps the tilt. The Xeuss example of
+**Help ▸ Example Data** is such a case: leaving its 6.06° tilt out, as GIMaP 0.1 did, put |q| off by up to 6.3 %.
+Geometry Calibration fits no tilt: a profile it calibrates is untilted, and a geometry typed in the
+**Geometry** dialog is untilted too.
 
 The search may pick the calibration of another experiment: one in a folder beside or above the
 frame's when the frame's own folder holds none, or, among several in one folder that was copied in
@@ -3452,11 +3439,10 @@ folders do not name the release yet ([Physics and Methods, section 14.5](Physics
 filled from the mirror side) or `scaled_poisson` (GIWAXS intensity corrections on counts). `binning` gives,
 for GIWAXS, the number, q range and width of the radial bins, how many points the I(q) kept after sparse
 bins were joined and the rule for joining them; for GISAXS, one point per detector column or row. In
-`geometry`, `dropped_tilt_deg`, `dropped_rotations_deg` and `flat_detector_q_error_max` / `_rms` give the
-tilt of a `.poni` that the flat detector leaves out and the largest and RMS relative error in |q| it causes
-(`null` when no tilt is known; section 4.2). `dropped_beam_axis_rotation_deg` gives Rot3 modulo full turns;
-`flat_detector_q_needs_attention` and `flat_detector_direction_needs_attention` separate the normal-tilt/|q|
-review from the direction review. `dropped_rotations_deg` retains the three original angles. The instrument profile's `source` says who chose the geometry:
+`geometry`, `rot1_rad`, `rot2_rad` and `rot3_rad` are the detector's rotations (pyFAI's, all 0 for a detector
+perpendicular to the beam; section 4.2). The fields `dropped_tilt_deg`, `flat_detector_q_error_max` and the other
+`flat_detector_…` and `dropped_…` fields described what a flat detector left out up to 0.1; they are `null` now
+that the tilt is part of the geometry. The instrument profile's `source` says who chose the geometry:
 `automatic analysis: <file>` for Run Automatic Analysis and `tools/gimap_agent.py`, `assistant: <file>` for
 Process with AI; profiles saved before 0.2.0 say `assistant:` for both ([Physics and Methods, section 14.2](Physics_Manual.md#142-the-record-stem_analysisjson)).
 
@@ -3505,7 +3491,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Geometry Calibration can put a wrong solution first.** A wrong **Estimated distance** misleads, also with the right standard and with **Auto Detect**, and the field can hold a distance you did not type (section 4.3). | Choose the standard yourself when you know it. Leave **Estimated distance** on *Optional* or type the approximate distance of your set-up; set a number you did not type back to 0 unless it is that distance. Before **Apply**, check the distance and that the drawn rings lie on the rings of the image. |
 | **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them (section 10.5). | Calibrate such an image with pyFAI and give GIMaP the `.poni`: name it in the notes, or put it beside the frames (section 4.2). |
 | **An instrument profile is matched by detector name and frame size only**, and **a calibration found by the automatic search may belong to another experiment** (one beside or above the frame's folder is taken when that folder holds none; file times say nothing in a folder copied in one go) — or even to another detector: a `.poni` or `.json` is applied without checking its pixel size or frame size (section 4.2). | Read which file the report names and check the distance in **Geometry**. Name the calibration in the notes, or give it yourself; remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
-| **GIMaP's detector is flat and perpendicular to the beam**: the tilt of a `.poni` (`Rot1`, `Rot2`) is left out, and so are `Rot3` and its `orientation` entry; Geometry Calibration fits no tilt. On a tilted detector \|q\| is off away from the beam: by up to 6.3 % on the Xeuss example (6.06°). Above 1° of tilt or 0.5 % in \|q\| the automatic analysis says so; Rot3 has a separate direction reminder and review flag above 1° in magnitude (section 4.2). | A small \|q\| error does not guarantee accurate χ, qy/qz or in-plane/out-of-plane directions. Read the error in the report or in `<stem>_analysis.json` (`flat_detector_q_error_max`). For exact q, reduce such frames with the full `.poni` geometry (pyFAI), or calibrate with the detector perpendicular to the beam. |
+| **A detector tilt comes only from a `.poni`**: its rotations are applied as pyFAI applies them, but its `orientation` entry is not read; Geometry Calibration fits no tilt, and the straight horizon row, mirror filling and XRR assume an untilted detector (section 4.2). | Calibrate a tilted detector with pyFAI and use its `.poni`. Check that the `.poni` was made for images stored like yours (orientation 3, pyFAI's default). |
 | **Run Automatic Analysis (GIWAXS) fits at most 12 candidate peaks**, the most prominent; the window has no setting for more. The others are left out of the peak table, the sector comparison, the rings and the series hints; *Decisions* says how many candidates there were (section 5.5). | Run `tools/gimap_agent.py auto … --max-peaks N` (section 10.7), or ask the AI to run `find_peaks` with `max_peaks`, when you need the full list. |
 | **The GIWAXS and GISAXS q are kinematic: no refraction correction.** Near or below the film's critical angle, the q_z of a peak can be off by up to about k·sin αi, and in GISAXS that of the Yoneda band most, by an amount of that order (the report's *Decisions* give the number for your frame); the ± and σ of the report contain neither that nor the geometry's uncertainty ([Physics and Methods, sections 7.9 and 8.6](Physics_Manual.md#79-what-the-report-states)). | Measure above the critical angle for positions, or correct q_z yourself for the material; quote the systematic error separately from the statistical ±. |
 | **Hermans f and the texture sentence are not corrected for the exit angle.** f weighs the bins next to the sample horizon most, where absorption in the film or a shadow can lower the intensity; on the public P08 frame leaving out the bins within 5° of the sample plane moves f − f_iso by 17–27 σ_f ([Physics and Methods, section 7.7](Physics_Manual.md#77-ring-orientation-and-the-hermans-orientation-factor)). | Read the ring's notes and the *ring orientation* line of *Decisions*; when they name the ring, check I(χ) near χ = ±90° before reading f as texture. |

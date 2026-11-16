@@ -262,7 +262,7 @@ def parse_poni(text: str) -> PoniGeometry:
     wavelength = _float(values.get("wavelength"))
     notes = []
     if tilt > 0.5:
-        notes.append(f"The detector is tilted by {tilt:.2f}°; GIMaP's geometry is flat, so q is approximate far from the beam.")
+        notes.append(f"The detector is tilted by {tilt:.2f}°; the tilt is part of the geometry (pyFAI's rotations).")
     dropped = poni if (rot1 or rot2 or rot3) else None
     return PoniGeometry(
         distance_mm=poni.beam_distance_m * 1e3,

@@ -22,7 +22,7 @@ def _finite(name: str, value: float) -> float:
 
 @dataclass(frozen=True)
 class DetectorGeometry:
-    """A flat detector perpendicular to the direct beam, plus the grazing angle.
+    """A flat detector, perpendicular to the direct beam or tilted, plus the grazing angle.
 
     Conventions (the same everywhere in GIMaP from now on):
 
@@ -37,6 +37,10 @@ class DetectorGeometry:
       to the direct beam when read, ``assistant/domain/calibration_files.parse_poni``).
     * ``incidence_deg`` is the grazing angle alpha_i between beam and sample surface;
       0 means transmission geometry.
+    * ``rot1_rad``, ``rot2_rad``, ``rot3_rad`` are pyFAI's three detector rotations (as in a ``.poni``); all 0 is a
+      detector perpendicular to the beam. With them the detector plane turns about the direct beam, which stays at
+      ``beam_center_x_px``, ``beam_center_y_px`` and ``distance_m`` from the sample; where each pixel then lies is
+      ``q_mapping.lab_rays``.
     * Lengths are metres, the wavelength is in Å, so q comes out in Å⁻¹.
     """
 
@@ -47,6 +51,9 @@ class DetectorGeometry:
     beam_center_y_px: float
     wavelength_angstrom: float
     incidence_deg: float = 0.0
+    rot1_rad: float = 0.0
+    rot2_rad: float = 0.0
+    rot3_rad: float = 0.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "pixel_size_x_m", _positive("pixel_size_x_m", self.pixel_size_x_m))
@@ -61,6 +68,37 @@ class DetectorGeometry:
         if not -90.0 < incidence < 90.0:
             raise ValueError(f"incidence_deg must be within (-90, 90), got {incidence!r}.")
         object.__setattr__(self, "incidence_deg", incidence)
+        for name in ("rot1_rad", "rot2_rad", "rot3_rad"):
+            angle = _finite(name, getattr(self, name))
+            if name != "rot3_rad" and not abs(angle) < math.pi / 2:
+                raise ValueError(f"{name} must be within (-90°, 90°), got {angle!r} rad.")
+            object.__setattr__(self, name, angle)
+
+    @property
+    def tilted(self) -> bool:
+        """Whether the detector has any rotation (pyFAI's rot1, rot2 or rot3)."""
+        return bool(self.rot1_rad or self.rot2_rad or self.rot3_rad)
+
+    @property
+    def tilt_deg(self) -> float:
+        """Angle between the detector normal and the beam, ``arccos(cos rot1 · cos rot2)``."""
+        cosine = math.cos(self.rot1_rad) * math.cos(self.rot2_rad)
+        return math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
+
+    def in_plane_axes(self) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+        """The laboratory vectors ``(along the beam, right, up)`` of one metre along the detector's columns (to the
+        right of the image) and along its rows upward. Untilted: ``(0, 1, 0)`` and ``(0, 0, 1)``.
+
+        pyFAI places a pixel at ``M · (p1 − poni1, p2 − poni2, L)`` with ``M = R3 R2 R1`` in its frame (1 down the
+        rows, 2 along the columns, 3 along the beam); a step along the columns is ``M[:, 1]``, a step up the rows
+        ``−M[:, 0]``; GIMaP's laboratory axes are (3, 2, −1)."""
+        c1, s1 = math.cos(self.rot1_rad), math.sin(self.rot1_rad)
+        c2, s2 = math.cos(self.rot2_rad), math.sin(self.rot2_rad)
+        c3, s3 = math.cos(self.rot3_rad), math.sin(self.rot3_rad)
+        down = (c2 * c3, c2 * s3, s2)                                      # M[:, 0] in pyFAI's (1, 2, 3)
+        right = (c3 * s1 * s2 - c1 * s3, c1 * c3 + s1 * s2 * s3, -c2 * s1)  # M[:, 1]
+        lab = lambda v, sign: (sign * v[2], sign * v[1], -sign * v[0])     # noqa: E731
+        return lab(right, 1.0), lab(down, -1.0)
 
     @property
     def wavevector_inv_angstrom(self) -> float:
@@ -77,6 +115,9 @@ class DetectorGeometry:
     def with_incidence(self, incidence_deg: float) -> "DetectorGeometry":
         return replace(self, incidence_deg=float(incidence_deg))
 
+    def with_rotations(self, rot1_rad: float, rot2_rad: float, rot3_rad: float) -> "DetectorGeometry":
+        return replace(self, rot1_rad=float(rot1_rad), rot2_rad=float(rot2_rad), rot3_rad=float(rot3_rad))
+
     def cropped(self, left_px: int = 0, top_px: int = 0) -> "DetectorGeometry":
         """Geometry of a sub-image whose top-left corner is at ``(left_px, top_px)``."""
         return replace(
@@ -90,15 +131,40 @@ class DetectorGeometry:
     def row_for_exit_angle(self, alpha_f_deg: float) -> float:
         """Continuous row coordinate where the exit angle equals ``alpha_f_deg``.
 
-        Evaluated in the plane of incidence (the beam-centre column), where the
-        exact flat-detector relation is ``Y = D·tan(alpha_f + alpha_i)`` above
-        the direct beam.
+        Evaluated on the beam-centre column. For a detector perpendicular to the
+        beam the relation is ``Y = D·tan(alpha_f + alpha_i)`` above the direct beam;
+        a tilted detector is solved for the row numerically.
         """
         angle = math.radians(float(alpha_f_deg)) + self.incidence_rad
         if not -math.pi / 2 < angle < math.pi / 2:
             raise ValueError("The requested exit angle does not reach the detector.")
         height_m = self.distance_m * math.tan(angle)
-        return self.beam_center_y_px - height_m / self.pixel_size_y_m
+        row = self.beam_center_y_px - height_m / self.pixel_size_y_m
+        if not self.tilted:
+            return row
+        target = math.radians(float(alpha_f_deg))
+        for _ in range(60):  # Newton on the row, with a numerical slope; converges in a few steps
+            here = self.exit_angle_at(self.beam_center_x_px, row)
+            step = 1e-3
+            slope = (self.exit_angle_at(self.beam_center_x_px, row + step) - here) / step
+            if slope == 0.0:
+                break
+            change = (here - target) / slope
+            row -= change
+            if abs(change) < 1e-9:
+                break
+        return row
+
+    def exit_angle_at(self, x_px: float, y_px: float) -> float:
+        """Exit angle alpha_f (radians) of the ray to a continuous detector position."""
+        (ax, rx, ux), (ay, ry, uy) = self.in_plane_axes()
+        x = (float(x_px) - self.beam_center_x_px) * self.pixel_size_x_m
+        y = (self.beam_center_y_px - float(y_px)) * self.pixel_size_y_m
+        along, up = self.distance_m + x * ax + y * ay, x * ux + y * uy
+        right = x * rx + y * ry
+        radius = math.sqrt(along * along + right * right + up * up)
+        normal = (up * math.cos(self.incidence_rad) - along * math.sin(self.incidence_rad)) / radius
+        return math.asin(max(-1.0, min(1.0, normal)))
 
     def horizon_row(self) -> float:
         """Row of the sample horizon (alpha_f = 0)."""
