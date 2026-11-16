@@ -612,6 +612,10 @@ that of its rows upward. Untilted, (3.15) is `(L, X, Y)`. Every quantity of a pi
   the rotations stay.
 - A test compares (3.15) with (3.14) for several sets of rotations (equal to 10⁻¹⁷ m) and, on the public Xeuss
   frame (tilt 6.06°), |q| of every pixel with pyFAI's `4π sin θ / λ` (equal to 10⁻⁹).
+- `tools/benchmarks/pyfai_comparison.py` compares with pyFAI itself (2026.9) on the four public frames, tilts 0 to
+  6.06°: |q|, 2θ, and q∥ and q_z against pyFAI's fiber units `qip` and `qoop` (sample orientation 4) agree to
+  10⁻¹³; the solid angle agrees to 10⁻⁷ up to one constant (pyFAI normalises to the PONI, GIMaP to the direct
+  beam), the polarisation factor exactly.
 - What the tilt changes: leaving it out puts |q| off by up to 0.20 % on the P08 file (tilt 0.31°), 0.08 % on the
   AgBh file (0.57°) and 6.3 % on the Xeuss file (6.06°, at the corner farthest from the beam). Rot3 alone leaves |q|
   unchanged and turns χ by rot_3.
@@ -849,6 +853,7 @@ Implementation: `src/gimap/features/analyze/domain/intensity.py`, `src/gimap/fea
 
 - Every point of a curve is the mean of the valid pixels assigned to it. The intensity unit is counts per pixel (`I (counts/pixel)`), divided by F when the GIWAXS corrections are on.
 - **No pixel splitting.** Each pixel goes whole to the one bin or detector line that holds its centre's coordinate; pyFAI's split-pixel integrators distribute it instead.
+- **Checked against pyFAI.** On the four public frames, GIMaP's I(q) over the whole azimuth and pyFAI's `integrate1d` (2026.9, histogram, no splitting) on the same pixels, q range and bins agree to 10⁻⁷ (95 % of the bins; the largest difference 0.2 %, where pixels on a bin edge fell the other way) on every bin that holds the same pixels in both. With the solid angle and polarisation, pyFAI divides the sum of the counts by the sum of the factors (`Σ I / Σ F`), GIMaP takes the mean of `I / F`; the two differ where F and I both vary across a bin: by a median of 0.26 % (at most 1.3 %) on the Xeuss frame, close to the sample, and 0.04 % on the P08 frame (`tools/benchmarks/pyfai_comparison.py`).
 - No smoothing and no interpolation across gaps. A bin without pixels gives no point, and the plotted curve is broken there.
 - Each curve carries, per point, x, I, σ and n (the number of pixels).
 - Two samplings are used: one point per detector line (GISAXS cuts, section 6.3) and fixed-edge bins (GIWAXS, section 6.2).

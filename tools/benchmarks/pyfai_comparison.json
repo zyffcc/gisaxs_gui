@@ -1,0 +1,158 @@
+{
+ "pyfai": "2026.9.0",
+ "polarization": 0.95,
+ "frames": [
+  {
+   "frame": "gisaxs_galaxi",
+   "shape": [
+    1043,
+    981
+   ],
+   "tilt_deg": 0.0,
+   "incidence_deg": 0.463,
+   "q_max_relative": 5.040412531798211e-14,
+   "two_theta_max_deg": 1.7763568394002505e-15,
+   "solid_angle_constant": 0.9999999999229185,
+   "solid_angle_max_relative": 3.107617696507248e-08,
+   "polarization_max_relative": 0.0,
+   "fiber_orientation": 4,
+   "q_parallel_max_abs": 1.3123183095764546e-15,
+   "qz_max_abs": 2.220446049250313e-16,
+   "q_range": [
+    0.03827320784330368,
+    0.43418386578559875
+   ],
+   "bins": 850,
+   "intensity_same_estimator": {
+    "bins_compared": 741,
+    "bins_gimap": 821,
+    "scale": 0.999999997138667,
+    "median_relative": 2.61748753782598e-08,
+    "p95_relative": 7.134279411680211e-08,
+    "max_relative": 0.0003867597911413334
+   },
+   "intensity_pyfai_normalisation": {
+    "bins_compared": 741,
+    "bins_gimap": 821,
+    "scale": 0.9999807599164323,
+    "median_relative": 1.002162961150077e-05,
+    "p95_relative": 0.00017190897924890258,
+    "max_relative": 0.0003857096318092834
+   }
+  },
+  {
+   "frame": "saxs_agbh_pyfai",
+   "shape": [
+    1043,
+    981
+   ],
+   "tilt_deg": 0.571,
+   "incidence_deg": 0.2,
+   "q_max_relative": 2.6423307986078726e-14,
+   "two_theta_max_deg": 5.329070518200751e-15,
+   "solid_angle_constant": 1.0001488284245916,
+   "solid_angle_max_relative": 5.965633309568119e-08,
+   "polarization_max_relative": 0.0,
+   "fiber_orientation": 4,
+   "q_parallel_max_abs": 1.927711462679227e-15,
+   "qz_max_abs": 1.6653345369377348e-16,
+   "q_range": [
+    0.022089222446084023,
+    0.5738402605056763
+   ],
+   "bins": 809,
+   "intensity_same_estimator": {
+    "bins_compared": 781,
+    "bins_gimap": 804,
+    "scale": 1.000000000342149,
+    "median_relative": 2.588830305683132e-08,
+    "p95_relative": 7.029840287664513e-08,
+    "max_relative": 9.462854322350722e-08
+   },
+   "intensity_pyfai_normalisation": {
+    "bins_compared": 781,
+    "bins_gimap": 804,
+    "scale": 0.9998507484208863,
+    "median_relative": 1.8831851444911507e-06,
+    "p95_relative": 7.341670600125028e-06,
+    "max_relative": 2.8596871660235834e-05
+   }
+  },
+  {
+   "frame": "giwaxs_p08_mapi",
+   "shape": [
+    2048,
+    2048
+   ],
+   "tilt_deg": 0.307,
+   "incidence_deg": 0.075,
+   "q_max_relative": 2.4358293160275934e-13,
+   "two_theta_max_deg": 1.7763568394002505e-14,
+   "solid_angle_constant": 1.0000430941844147,
+   "solid_angle_max_relative": 9.45427276466404e-08,
+   "polarization_max_relative": 0.0,
+   "fiber_orientation": 4,
+   "q_parallel_max_abs": 3.247402347028583e-15,
+   "qz_max_abs": 3.552713678800501e-15,
+   "q_range": [
+    0.012243097648024559,
+    4.765872478485107
+   ],
+   "bins": 2118,
+   "intensity_same_estimator": {
+    "bins_compared": 1430,
+    "bins_gimap": 2036,
+    "scale": 1.0000000023873263,
+    "median_relative": 2.9338084017727084e-08,
+    "p95_relative": 8.793362640813202e-08,
+    "max_relative": 0.002271891936706849
+   },
+   "intensity_pyfai_normalisation": {
+    "bins_compared": 1430,
+    "bins_gimap": 2036,
+    "scale": 0.9998171716923725,
+    "median_relative": 0.000356243033328818,
+    "p95_relative": 0.0014869577792391395,
+    "max_relative": 0.006693234387404434
+   }
+  },
+  {
+   "frame": "giwaxs_xeuss_pbte",
+   "shape": [
+    619,
+    487
+   ],
+   "tilt_deg": 6.058,
+   "incidence_deg": 0.235,
+   "q_max_relative": 4.618527782440651e-14,
+   "two_theta_max_deg": 1.7763568394002505e-14,
+   "solid_angle_constant": 1.0169429157692882,
+   "solid_angle_max_relative": 1.226721602076708e-07,
+   "polarization_max_relative": 0.0,
+   "fiber_orientation": 4,
+   "q_parallel_max_abs": 1.6653345369377348e-15,
+   "qz_max_abs": 1.9984014443252818e-15,
+   "q_range": [
+    0.019044432789087296,
+    2.7216479778289795
+   ],
+   "bins": 579,
+   "intensity_same_estimator": {
+    "bins_compared": 524,
+    "bins_gimap": 564,
+    "scale": 0.9999999990605921,
+    "median_relative": 2.6316316847907473e-08,
+    "p95_relative": 7.04514834637404e-08,
+    "max_relative": 0.0004684308189517594
+   },
+   "intensity_pyfai_normalisation": {
+    "bins_compared": 524,
+    "bins_gimap": 564,
+    "scale": 0.9835432589702686,
+    "median_relative": 0.002550435121000283,
+    "p95_relative": 0.00768403916928102,
+    "max_relative": 0.013413736658301478
+   }
+  }
+ ]
+}
