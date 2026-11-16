@@ -506,6 +506,12 @@ L = Σ_m u_m r_m / Σ_m u_m²,     u_m = tan 2θ_m / p̄     (r_m: 观测半径,
 
 不精修的有：波长、像素尺寸，以及任何探测器倾斜或旋转。候选解的 `detector_rotation_deg` 字段始终为 0。
 
+**不确定度。** 同一个环上的点不是独立的：环稍有偏差时，它们一起移动。所以 x_c、y_c 和 L 的 1σ 取环与环之间的离散：
+匹配到三个或更多环时，每次去掉一个环重新拟合，σ² = (n − 1)/n · Σ (θ_i − θ̄)²（刀切法）。只有两个环时只剩最小二乘
+协方差 s² (JᵀJ)⁻¹，它是下限。在有五个环的模拟 AgBh 图上，中心的 σ 为 0.02 px，1 m 处距离的 σ 为 0.04 mm。错配的环
+和所有环共有的偏差不在 σ 里。这些值写进标定记录（`center_x_sigma_px`、`center_y_sigma_px`、`distance_sigma_mm`、
+`uncertainty_method`）、结果的提示框，以及仪器配置的 `source`，因此会出现在每个 `<stem>_analysis.json` 里。
+
 实现：`src/gimap/features/calibration/domain/engine.py`, `src/gimap/features/calibration/domain/preprocessing.py`, `src/gimap/features/calibration/domain/center_estimator.py`, `src/gimap/features/calibration/domain/radial_profile.py`, `src/gimap/features/calibration/domain/peak_detector.py`, `src/gimap/features/calibration/domain/peak_matcher.py`, `src/gimap/features/calibration/domain/candidate_ranker.py`, `src/gimap/features/calibration/domain/optimizer.py`
 
 ### 3.4 质量指标

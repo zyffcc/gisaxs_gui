@@ -55,6 +55,9 @@ def calibration_source(result: CalibrationResult) -> str:
         f"calibration {candidate.standard_key} · {result.calibration_timestamp} · "
         f"{result.source_image}"
     )
+    if candidate.distance_sigma_mm is not None:  # the 1σ of the calibration goes wherever the profile is recorded
+        source += (f" · 1σ centre ({candidate.center_x_sigma_px:.2g}, {candidate.center_y_sigma_px:.2g}) px, "
+                   f"distance {candidate.distance_sigma_mm:.2g} mm ({candidate.uncertainty_method})")
     if abs(float(candidate.detector_rotation_deg)) > ROTATION_NOTE_LIMIT_DEG:
         source += f" · detector rotation {candidate.detector_rotation_deg:.2f}° not modelled"
     return source

@@ -15,7 +15,7 @@ from .geometry_model import energy_to_wavelength
 from .center_polish import polished_centers
 from .gisaxs_features import LitHalf, follows_horizontal_line, specular_rod_columns, without_columns
 from .models import CalibrationCandidate, CalibrationResult, DetectorImage
-from .optimizer import refine_candidate
+from .optimizer import estimate_uncertainty, refine_candidate
 from .peak_detector import detect_radial_peaks
 from .peak_matcher import generate_distance_candidates, rematch_candidate
 from .preprocessing import preprocess_detector_image
@@ -249,6 +249,8 @@ class CalibrationEngine:
         candidates = candidates[:5]
         if not candidates:
             raise CalibrationError("Calibration candidates were rejected as physically implausible.")
+        for candidate in candidates:  # 1σ of the centre and distance of the candidates shown
+            estimate_uncertainty(analysis, candidate, wavelength, px, py)
         best = candidates[0]
         for candidate in candidates:
             if rod is not None and GRAZING_NOTE not in candidate.warnings:

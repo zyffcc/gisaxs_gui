@@ -58,6 +58,8 @@ def describe_calibration(result: CalibrationResult) -> dict:
         "shape": list(shape) if shape else None,
         "matched_rings": int(candidate.matched_ring_count),
         "rms_residual_px": float(candidate.rms_residual_px),
+        "uncertainty": {"beam_center_px": [candidate.center_x_sigma_px, candidate.center_y_sigma_px],
+                        "distance_mm": candidate.distance_sigma_mm, "method": candidate.uncertainty_method or None},
         "confidence": candidate.confidence,
         "score": float(candidate.score),
         "warnings": list(candidate.warnings),

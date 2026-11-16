@@ -79,6 +79,12 @@ class CalibrationCandidate:
     center_method: str = ""
     center_support: float = 0.0
     harmonic_quality: float = 0.0
+    center_x_sigma_px: Optional[float] = None
+    center_y_sigma_px: Optional[float] = None
+    distance_sigma_mm: Optional[float] = None
+    uncertainty_method: str = ""
+    """How the 1σ of the centre and the distance were found (``optimizer.estimate_uncertainty``): ``ring jackknife``
+    with three or more matched rings, else ``least squares``; empty when none could be."""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

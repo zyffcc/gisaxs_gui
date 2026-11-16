@@ -135,6 +135,12 @@ class ResultPreviewMixin:
         self.result_labels["Beam center X"].setText(f"{center_x:.3f} px")
         self.result_labels["Beam center Y"].setText(f"{center_y:.3f} px")
         self.result_labels["Distance"].setText(f"{candidate.distance_mm:.3f} mm")
+        # 1σ of the fit (the scatter between the rings), when known
+        for key, value, unit in (("Beam center X", candidate.center_x_sigma_px, "px"),
+                                 ("Beam center Y", candidate.center_y_sigma_px, "px"),
+                                 ("Distance", candidate.distance_sigma_mm, "mm")):
+            self.result_labels[key].setToolTip("" if value is None else tr("1σ: {value} {unit} ({method})").format(
+                value=f"{value:.2g}", unit=unit, method=tr(candidate.uncertainty_method)))
         self.result_labels["Detector rotation"].setText(f"{candidate.detector_rotation_deg:.3f}°")
         self.result_labels["Matched rings"].setText(str(candidate.matched_ring_count))
         self.result_labels["RMS residual"].setText(f"{candidate.rms_residual_px:.3f} px")

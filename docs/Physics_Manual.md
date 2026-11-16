@@ -506,6 +506,14 @@ In (3.8), `(x_p, y_p)` are the integer index coordinates of ring pixel p, `q_p` 
 
 What is not refined: the wavelength, the pixel sizes, and any detector tilt or rotation. The field `detector_rotation_deg` of a candidate stays 0.
 
+**Uncertainty.** The points along one ring are not independent: when a ring is slightly off, all of them move
+together. The 1σ of x_c, y_c and L is therefore the scatter between the rings: with three or more matched rings the
+fit is repeated with each ring left out, and σ² = (n − 1)/n · Σ (θ_i − θ̄)² (jackknife). With two rings only the
+least-squares covariance s² (JᵀJ)⁻¹ is left, a lower bound. On a synthetic AgBh image with five rings σ is 0.02 px
+for the centre and 0.04 mm at 1 m. A ring matched wrongly, or a bias common to all rings, is not in σ. The values are
+in the calibration record (`center_x_sigma_px`, `center_y_sigma_px`, `distance_sigma_mm`, `uncertainty_method`), in
+the tooltips of the result, and in the `source` of the instrument profile, so they reach every `<stem>_analysis.json`.
+
 Implementation: `src/gimap/features/calibration/domain/engine.py`, `src/gimap/features/calibration/domain/preprocessing.py`, `src/gimap/features/calibration/domain/center_estimator.py`, `src/gimap/features/calibration/domain/radial_profile.py`, `src/gimap/features/calibration/domain/peak_detector.py`, `src/gimap/features/calibration/domain/peak_matcher.py`, `src/gimap/features/calibration/domain/candidate_ranker.py`, `src/gimap/features/calibration/domain/optimizer.py`
 
 ### 3.4 Quality measures

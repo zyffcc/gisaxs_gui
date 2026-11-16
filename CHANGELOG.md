@@ -12,6 +12,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Geometry Calibration:** the beam centre and the distance have a 1σ, the scatter between the rings (leave one
+  ring out); it is in the calibration record, the tooltips of the result and the instrument profile's source.
 - **Analyze, a tilted detector:** the rotations of a `.poni` (pyFAI's rot1, rot2, rot3) are part of the
   geometry. Every pixel is placed where pyFAI places it, so q, χ, the exit angle of a row, the solid angle and the
   polarisation factor are those of the tilted detector (on the Xeuss example |q| changes by up to 6.3 %; it now

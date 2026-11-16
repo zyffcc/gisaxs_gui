@@ -48,6 +48,70 @@ def _ring_points(
     return np.concatenate(points_x), np.concatenate(points_y), np.concatenate(point_q)
 
 
+def _ring_residual(xs, ys, qs, wavelength_angstrom, pixel_size_x_m, pixel_size_y_m):
+    mean_pixel = 0.5 * (pixel_size_x_m + pixel_size_y_m)
+
+    def residual(params: np.ndarray) -> np.ndarray:
+        cx, cy, distance = params
+        observed_m = np.sqrt(((xs - cx) * pixel_size_x_m) ** 2 + ((ys - cy) * pixel_size_y_m) ** 2)
+        return (observed_m - q_to_ring_radius_m(qs, wavelength_angstrom, distance)) / mean_pixel
+
+    return residual
+
+
+def estimate_uncertainty(
+    analysis: AnalysisImage,
+    candidate: CalibrationCandidate,
+    wavelength_angstrom: float,
+    pixel_size_x_m: float,
+    pixel_size_y_m: float,
+) -> CalibrationCandidate:
+    """1σ of the beam centre and the distance of a refined candidate.
+
+    The points along one ring are not independent (a ring that is slightly off moves all of them together), so the
+    least-squares covariance of the points says too little. With three or more matched rings the error is the
+    jackknife over rings: the fit is repeated with each ring left out, and
+    σ² = (n − 1)/n · Σ (θ_i − θ̄)². With two rings it is the least-squares covariance s² (JᵀJ)⁻¹, s² the mean square
+    residual per point, which is a lower bound. Nothing is set when the ring points are too few."""
+    if candidate.matched_ring_count < 2:
+        return candidate
+    xs, ys, qs = _ring_points(analysis, candidate, pixel_size_x_m, pixel_size_y_m)
+    if xs.size < 30:
+        return candidate
+    centre = np.array([candidate.center_x_px, candidate.center_y_px, candidate.distance_mm])
+    rings = np.unique(qs)
+    if rings.size >= 3:
+        estimates = []
+        for ring in rings:
+            keep = qs != ring
+            if np.unique(qs[keep]).size < 2:
+                continue
+            residual = _ring_residual(xs[keep], ys[keep], qs[keep], wavelength_angstrom, pixel_size_x_m, pixel_size_y_m)
+            fit = least_squares(residual, centre, loss="soft_l1", f_scale=2.0, max_nfev=40)
+            estimates.append(fit.x)
+        if len(estimates) >= 3:
+            values = np.asarray(estimates)
+            n = values.shape[0]
+            sigma = np.sqrt((n - 1) / n * np.sum((values - values.mean(axis=0)) ** 2, axis=0))
+            candidate.center_x_sigma_px, candidate.center_y_sigma_px, candidate.distance_sigma_mm = map(float, sigma)
+            candidate.uncertainty_method = "ring jackknife"
+            return candidate
+    residual = _ring_residual(xs, ys, qs, wavelength_angstrom, pixel_size_x_m, pixel_size_y_m)
+    values = residual(centre)
+    step = np.array([1e-3, 1e-3, max(1e-6, 1e-6 * centre[2])])
+    jacobian = np.column_stack([(residual(centre + step * axis) - values) / step[i]
+                                for i, axis in enumerate(np.eye(3))])
+    dof = max(1, values.size - 3)
+    try:
+        covariance = np.linalg.inv(jacobian.T @ jacobian) * float(values @ values) / dof
+    except np.linalg.LinAlgError:
+        return candidate
+    sigma = np.sqrt(np.clip(np.diag(covariance), 0.0, None))
+    candidate.center_x_sigma_px, candidate.center_y_sigma_px, candidate.distance_sigma_mm = map(float, sigma)
+    candidate.uncertainty_method = "least squares"
+    return candidate
+
+
 def refine_candidate(
     analysis: AnalysisImage,
     candidate: CalibrationCandidate,
