@@ -25,7 +25,7 @@ SPUTTER_CLIENT_ZH = {
     "Separate islands": "分立的岛",
     "Coalescing: neighbouring grains touch": "聚并中：相邻晶粒相接",
     "Connected network across the view (percolated)": "连成贯穿视场的网络（已逾渗）",
-    "Continuous layer of {thickness} nm; the grains on it: {grains}": "连续底层 {thickness} nm；其上的晶粒：{grains}",
+    "Continuous film {thickness} nm, grains on top: {grains}": "连续膜 {thickness} nm，其上的晶粒：{grains}",
     "separate": "彼此分开",
     "touching their neighbours": "与相邻晶粒相接",
     "connected across the view": "连成贯穿视场的网络",
@@ -43,12 +43,9 @@ SPUTTER_CLIENT_ZH = {
     "the metal sits in a porous layer.":
         "这个解没有可画的形貌：分析包既没有给出晶粒的半径和间距，也没有给出金属在多孔层里的位置。",
     # -- the input bar -----------------------------------------------------------------------------------------------
-    "Rate (nm/s)": "速率（nm/s）",
     "Polymer: a polymer film of another or unknown kind, a block copolymer for instance. The model describes every "
     "polymer as one film layer; which polymer it is changes the metal's sizes by a few percent.":
         "Polymer：其他或不确定种类的聚合物膜，例如嵌段共聚物。模型把任何聚合物都描述成一层膜；聚合物种类对金属尺寸的影响只有几个百分点。",
-    "Deposition rate in nm/s: needed, the solutions depend on the metal deposited at each time.":
-        "沉积速率（nm/s）：必填，各个解依赖每个时刻已沉积的金属量。",
     "QCM reading": "QCM 读数",
     "Ticked: the number is the reading of the quartz balance (QCM), which the analysis converts to the rate at "
     "the sample. Not ticked: the rate at the sample itself.":
@@ -60,8 +57,6 @@ SPUTTER_CLIENT_ZH = {
     "Open Result…": "打开结果…",
     "Show the result in a folder analysed before.": "显示以前分析过的文件夹里的结果。",
     "Main Screen": "主屏",
-    "The geometry, the options of the analysis, the report and the earlier method with its tabs.":
-        "几何、分析的选项、报告，以及早先的方法和它的各个页面。",
     # "X-ray energy" (the first of the names) is in another table
     "Geometry to enter: {names}": "还需填写的几何：{names}",
     "sample-detector distance": "样品到探测器的距离",
@@ -148,12 +143,6 @@ SPUTTER_CLIENT_ZH = {
     "Open the Folder of a Result": "打开结果所在的文件夹",
     "Messages of the analysis": "分析过程的消息",
     "This result has no report file.": "这个结果没有报告文件。",
-    "This folder holds a result of the earlier method: it is shown in Details.":
-        "这个文件夹里是早先方法的结果：已在“详情”里显示。",
-    "Earlier method: the networks bundled with GIMaP": "早先的方法：GIMaP 自带的网络",
-    "Predict reads the scan with the networks bundled with GIMaP (Ag and Au on polymers) and fills the tabs at the "
-    "right. Analyze, above, is the newer analysis.":
-        "“预测”用 GIMaP 自带的网络（聚合物上的 Ag 和 Au）读取扫描，并填写右边的各个页面。上方的“分析”是较新的分析。",
     # -- Analyze: the job status -------------------------------------------------------------------------------------
     "Analyze starts once the header of the first frame is read…": "读完第一帧的文件头后开始分析…",
     "Starting the analysis…": "正在启动分析…",
@@ -167,8 +156,8 @@ SPUTTER_CLIENT_ZH = {
     "The analysis failed.": "分析失败。",
     "The choice could not be saved: {reason}": "无法保存所选的解：{reason}",
     # -- Analyze: problems and failures ------------------------------------------------------------------------------
-    "Give the deposition rate (nm/s): the rate at the sample, or the reading of the quartz balance with QCM reading "
-    "ticked.": "请给出沉积速率（nm/s）：样品处的速率，或者勾选“QCM 读数”后填石英晶体微天平的读数。",
+    "Give the deposition rate (Å/s or nm/s): the rate at the sample, or the reading of the quartz balance with QCM "
+    "reading ticked.": "请给出沉积速率（Å/s 或 nm/s）：样品处的速率，或者勾选“QCM 读数”后填石英晶体微天平的读数。",
     "Choose the substrate.": "请选择基底。",
     "The mode must be auto, quick, refine or full.": "模式必须是 auto、quick、refine 或 full。",
     "The deposition duration must be positive (or empty).": "沉积持续时间必须为正（或留空）。",
@@ -245,8 +234,6 @@ SPUTTER_CLIENT_ZH = {
     "Au films measured after the deposition at an incidence angle near {alpha}°, one sample at a time into a series.":
         "沉积之后在入射角约 {alpha}° 下测量的 Au 膜，每次分析一个样品，归入一个系列。",
     "folder, CBF file or zip archive": "文件夹、CBF 文件或 zip 压缩包",
-    "File…": "文件…",
-    "Choose one CBF file or a zip archive.": "选择单个 CBF 文件或一个 zip 压缩包。",
     "The GISAXS frames of one sample: a folder (every CBF file in it), one CBF file, or a zip archive. For an "
     "archive, the folder inside it follows after two colons: archive.zip::folder/. Which of the frames are usable the "
     "analysis finds itself.":
@@ -337,4 +324,20 @@ SPUTTER_CLIENT_ZH = {
     "The analysis of the static frames stopped with an error ({status}); its last lines are in the log.":
         "静态帧的分析出错结束（{status}）；最后几行在日志里。",
     "Stopped. The samples analysed before stay in the series.": "已停止。之前分析的样品仍在系列里。",
+    # -- the bar: the deposition rate and its unit (views/sputter_main_view.py, rate_flow.py) -------------------------
+    "Rate": "速率",
+    "Deposition rate, in the unit chosen beside it: needed, the solutions depend on the metal deposited at each time.":
+        "沉积速率，单位在旁边选择：必填，各个解依赖每个时刻已沉积的金属量。",
+    "Unit of the deposition rate: a quartz balance (QCM) shows Å/s; 1 nm/s = 10 Å/s.":
+        "沉积速率的单位：石英晶体微天平（QCM）显示的是 Å/s；1 nm/s = 10 Å/s。",
+    "Check the Deposition Rate": "请核对沉积速率",
+    "This rate is unusual for sputtering ({nm} nm/s = {angstrom} Å/s at the sample). Is the unit right?":
+        "这个速率对溅射来说不寻常（样品处 {nm} nm/s = {angstrom} Å/s）。单位对吗？",
+    "Analyze Anyway": "仍然分析",
+    "≈ {thickness} nm deposited at the last frame ({rate} nm/s at the sample)":
+        "到最后一帧约沉积 {thickness} nm（样品处 {rate} nm/s）",
+    "The geometry and the options of Analyze, and the windows, the report and the log of the result shown.":
+        "几何与“分析”的选项，以及所示结果的时间窗、报告和日志。",
+    # -- the solutions (client_texts.py) ------------------------------------------------------------------------------
+    "Joint fit (whole scan)": "联合精修解",
 }

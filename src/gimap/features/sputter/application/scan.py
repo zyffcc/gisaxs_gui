@@ -16,7 +16,8 @@ Every geometry value comes, in this order, from
 
 A value the user chose for this folder or this beamtime is not overridden by a file (a different energy of
 the files is shown next to it). The mask, too, belongs to one set-up: it is taken from this folder's values
-only; the polymer and the time window come from the values used last.
+only; the metal comes from the values used last. Values an older page kept (a polymer, a time window, a rate with
+its start and end) are left in the memory and not read.
 """
 
 from __future__ import annotations
@@ -32,9 +33,9 @@ GROUPS = ("xray", "sdd", "alpha", "beam", "roll")
 beam centre (column and row), sample roll."""
 GROUP_KEYS = {"xray": ("energy_kind", "energy"), "sdd": ("sdd",), "alpha": ("alpha",),
               "beam": ("beam_col", "beam_row"), "roll": ("roll",)}
-SAMPLE_KEYS = ("metal", "polymer", "mask", "window")
+SAMPLE_KEYS = ("metal", "mask")
 FOLDER_ONLY_KEYS = ("rate", "t0", "t_end")
-"""Kept for the folder only: a deposition rate, its start and its end belong to one scan."""
+"""Never carried to the values used last: an older page kept a deposition rate, its start and its end per folder."""
 FOLDER_SAMPLE_KEYS = ("mask",)
 """Taken from this folder's values only (a detector mask belongs to one set-up), never from the last used."""
 MAX_FOLDERS = 300
@@ -194,8 +195,6 @@ def prefill(info: ScanInfo, memory: dict) -> Prefill:
             out.values[key] = ""  # a detector mask belongs to one set-up: not carried from another folder
         elif last.get(key) not in (None, ""):
             out.values[key] = last[key]
-    for key in FOLDER_ONLY_KEYS:
-        out.values[key] = folder.get(key)
     return out
 
 

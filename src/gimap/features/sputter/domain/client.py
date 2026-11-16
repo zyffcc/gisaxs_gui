@@ -1,7 +1,9 @@
 """The result of the client analysis package (pure Python and NumPy): time windows, their solutions and images.
 
 The package analyses one in-situ scan window by window. For every window it writes several solutions (*entries*):
-the candidates of its network, ranked, and — when it refined — the refined solution. Each entry holds the quantities
+the candidates of its network, ranked, and — when it refined — the refined solution and the joint fit of the whole scan
+(label and kind ``joint``: every window refined together over the scan, smooth in time; then also ``smooth``). Refined
+and joint entries have no network weight. Each entry holds the quantities
 of the main screen (grain radius R, grain height H, centre distance D, the gap between grains, the width of the
 log-normal radius distribution, the coverage; a quantity a model family does not have is missing) and its fit
 deviation (how far the model image is from the measured one: lower is better). ``pick`` names the entry with the

@@ -9,7 +9,7 @@ NumPy, SciPy and Matplotlib only.
 ``<package>/code/iam`` with ``IAM_GIMAP``, ``IAM_DIST``, ``IAM_DATA``, ``IAM_WORK``, ``IAM_RAW``, ``IAMPRED_MODELS``,
 ``PYTHONPATH``, ``TZ`` and ``OMP_NUM_THREADS`` set; the options of the import follow ``--``. The beam centre is
 entered in GIMaP's pixel coordinates and handed over as the 0-based pixel-centre indices the package's toolkit counts
-(``shared/geometry/conventions.py``), as for the bundled toolkit; an empty centre becomes ``--auto-centre``.
+(``shared/geometry/conventions.py``); an empty centre becomes ``--auto-centre``.
 
 **Data and work folders** are in the user data folder: ``sputter_client/<package version>/data/<mask>`` (the package
 keeps one pixel mask per data folder) and ``…/work``. An import that was cut off leaves its folder without the
@@ -18,6 +18,7 @@ package's ``scan.json`` or without GIMaP's marker ``<label>.gimap.json``: the pa
 
 **The result** (``ClientFolderReader``): ``analysis.json``, ``main/main.json`` and ``main/w_<t>.npz`` of an output
 folder; the user's choices in ``main/choices.json`` (in the user data folder when the result cannot be written to).
+For Details (``ClientFolderReader.texts``): ``REPORT.md``, ``analysis.json`` and the ``analyze_*.log`` of every step.
 
 The pixel masks a package brings are the ``.npy`` files of its ``code/assets`` (``ClientPackageRunner.masks``).
 Static frames run through ``client_static.py``, which uses this runner's package, environment and process.
@@ -40,11 +41,11 @@ from src.gimap.shared.geometry.conventions import index_center_from_canonical
 from src.gimap.shared.version import SOFTWARE
 
 from ..application import (CLIENT_FALLBACK, CLIENT_INCOMPLETE, CLIENT_MISSING, ENGINE_FOLDER, LABEL_PREFIX, MASK_UNREADABLE,
-                           ClientPackage, ClientProgress, ClientRequest, ClientRun, live_event, parse_live)
+                           ClientPackage, ClientProgress, ClientRequest, ClientRun, ResultTexts, live_event,
+                           parse_live)
 from ..domain import (ANALYSIS_FILE, BAD_ARRAYS, BAD_MAIN, MAIN_FILE, MAIN_FOLDER, NO_ARRAYS, NO_MAIN, ClientResult,
                       ClientWindow, WindowPatterns, client_result, window_patterns)
-from .process import TAIL_LINES, child_environment, console_python, run_streaming
-from .toolkit import default_workers
+from .process import TAIL_LINES, child_environment, console_python, default_workers, run_streaming
 
 CLIENT_OVERRIDE = "GIMAP_SPUTTER_CLIENT"
 LOCAL_PACKAGE = Path(__file__).resolve().parents[5] / "utils" / "sputter_client"
@@ -57,6 +58,10 @@ IMPORT_MARKER = ".gimap.json"
 PACKAGE_MASK = "package-mask"
 MASK_FOLDER = Path("code") / "assets"
 LOG_TAIL = 15
+TEXT_LIMIT = 400_000
+"""The end of a report or log that Details shows (characters; a log of a long run can be larger)."""
+REPORT_FILE = "REPORT.md"
+LOG_PATTERN = "analyze_*.log"
 LIVE_ARRAYS_LIMIT = 32 << 20
 """The largest file of a live-view event that is read (bytes; the package writes a few hundred kB at most)."""
 _SEE_LOG = re.compile(r"\(see (.+?)\)")
@@ -131,6 +136,15 @@ def _json(path: Path) -> dict:
     except (OSError, ValueError):
         return {}
     return value if isinstance(value, dict) else {}
+
+
+def _tail(path: Optional[Path]) -> str:
+    """The text of a file, its end only when it is long ("" when it is missing or unreadable)."""
+    try:
+        words = Path(path).read_text(encoding="utf-8", errors="replace") if path is not None else ""
+    except OSError:
+        return ""
+    return words if len(words) <= TEXT_LIMIT else "…\n" + words[-TEXT_LIMIT:]
 
 
 class ClientPackageRunner:
@@ -354,6 +368,21 @@ class ClientFolderReader:
                 error = exc
         raise error or OSError("no place for the choices")
 
+    def texts(self, result: ClientResult) -> ResultTexts:
+        """The report (``REPORT.md``), ``analysis.json`` and the logs of the steps, in the order of the steps."""
+        folder = Path(result.folder)
+        report = _tail(result.file("report_md") or folder / REPORT_FILE)
+        analysis = self.analysis(folder)
+        steps = analysis.get("steps") if isinstance(analysis.get("steps"), list) else []
+        named = [Path(step["log"]).name for step in steps if isinstance(step, dict) and isinstance(step.get("log"), str)
+                 and step["log"]]
+        try:
+            found = {path.name: path for path in folder.glob(LOG_PATTERN) if path.is_file()}
+        except OSError:
+            found = {}
+        order = [name for name in named if name in found] + sorted(name for name in found if name not in named)
+        return ResultTexts(report, analysis, tuple((name, _tail(found[name])) for name in dict.fromkeys(order)))
+
     def failure_details(self, folder: Path, analysis: dict) -> str:
         """The last lines of the log of the step that failed; a step that names no log (the ``static`` command
         gives its reason as a note, with the log in brackets when there is one) gives its note."""
@@ -375,4 +404,5 @@ class ClientFolderReader:
 
 
 __all__ = ["CHOICES_FILE", "CLIENT_OVERRIDE", "CLIENT_REQUEST_FILE", "ClientFolderReader", "ClientPackageRunner",
-           "IMPORT_MARKER", "LOCAL_PACKAGE", "PACKAGE_MASK", "PACKAGE_PARTS", "STORAGE_FOLDER", "locate_package"]
+           "IMPORT_MARKER", "LOCAL_PACKAGE", "LOG_PATTERN", "PACKAGE_MASK", "PACKAGE_PARTS", "REPORT_FILE",
+           "STORAGE_FOLDER", "locate_package"]

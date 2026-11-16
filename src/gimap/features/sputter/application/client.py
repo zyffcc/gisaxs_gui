@@ -22,13 +22,17 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional, Protocol
 
 from ..domain import CLIENT_RESULT_TEMPLATES, NO_MAIN, ClientResult, ClientWindow, WindowPatterns
 from .use_cases import METALS, PROBLEMS, Stopped, scan_label
 
+QCM_FACTOR = 0.6
+"""The rate at the sample is this share of the quartz balance's reading (the package's own factor)."""
+RATE_LOW_NM_S, RATE_HIGH_NM_S = 0.005, 1.0
+"""A rate at the sample outside this range is unusual for sputtering: the page asks whether its unit is right."""
 SUBSTRATES = ("Si", "TiO2", "PS", "PET", "PSBMA", "PNO", "PEO", "Polymer")
 FILM_SUBSTRATES = ("PS", "PET", "PSBMA", "PNO", "PEO", "Polymer")
 """Substrates that are a polymer film on the wafer: its thickness can be given (the package has a value of its own
@@ -37,8 +41,8 @@ of the polymer its network for the metal was trained on."""
 MODES = ("auto", "quick", "refine", "full")
 ENGINE_FOLDER = "iampred"
 LABEL_PREFIX = "gui_"
-RATE_PROBLEM = ("Give the deposition rate (nm/s): the rate at the sample, or the reading of the quartz balance with "
-                "QCM reading ticked.")
+RATE_PROBLEM = ("Give the deposition rate (Å/s or nm/s): the rate at the sample, or the reading of the quartz balance "
+                "with QCM reading ticked.")
 SUBSTRATE_PROBLEM = "Choose the substrate."
 MODE_PROBLEM = "The mode must be auto, quick, refine or full."
 DURATION_PROBLEM = "The deposition duration must be positive (or empty)."
@@ -144,6 +148,27 @@ class ClientRequest:
         """Eight hex digits of the request, its mode and the package's version."""
         return self._hash(self.intake_values() | {"mode": self.mode, "package": package})
 
+    def rate_at_sample(self) -> Optional[float]:
+        """The deposition rate at the sample (nm/s): a QCM reading times ``QCM_FACTOR``, as the package takes it."""
+        if self.rate_nm_s is None:
+            return None
+        return self.rate_nm_s * (QCM_FACTOR if self.rate_is_qcm else 1.0)
+
+    def unusual_rate(self) -> bool:
+        """The rate at the sample is outside what sputtering gives (a unit mixed up, most likely)."""
+        rate = self.rate_at_sample()
+        return rate is not None and rate > 0 and not RATE_LOW_NM_S <= rate <= RATE_HIGH_NM_S
+
+
+@dataclass(frozen=True)
+class ResultTexts:
+    """What Details says about a result: its report (Markdown), the facts of ``analysis.json`` and the logs of its
+    steps (``(file name, text)``, in the order of the steps)."""
+
+    report: str = ""
+    analysis: dict = field(default_factory=dict)
+    logs: tuple = ()
+
 
 @dataclass(frozen=True)
 class ClientRun:
@@ -218,6 +243,10 @@ class ClientReader(Protocol):
         """The last lines of the log of the step that failed."""
         ...
 
+    def texts(self, result: ClientResult) -> ResultTexts:
+        """The report, ``analysis.json`` and the logs of a result (empty where a file is missing)."""
+        ...
+
 
 class ClientService:
     def __init__(self, runner: ClientRunner, reader: ClientReader, static=None):
@@ -277,6 +306,10 @@ class ClientService:
         written to."""
         return self.reader.save_choices(result, choices)
 
+    def texts(self, result: ClientResult) -> ResultTexts:
+        """The report, the facts and the logs of a result, for Details."""
+        return self.reader.texts(result)
+
     # -- analysing --------------------------------------------------------------------------------------------
     def analyze(self, request: ClientRequest, scan_results: Path, on_event: Callable[[object], None],
                 should_stop: Callable[[], object] = lambda: False) -> ClientResult:
@@ -310,4 +343,5 @@ class ClientService:
 __all__ = ["CLIENT_FAILED", "CLIENT_FALLBACK", "CLIENT_INCOMPLETE", "CLIENT_MISSING", "CLIENT_NO_MAIN", "CLIENT_PROBLEMS",
            "CLIENT_STOPPED", "CLIENT_TEMPLATES", "ClientFailed", "ClientMissing", "ClientPackage", "ClientReader",
            "ClientRequest", "ClientRun", "ClientRunner", "ClientService", "ClientStarted", "ENGINE_FOLDER",
-           "FILM_SUBSTRATES", "LABEL_PREFIX", "MASK_UNREADABLE", "MODES", "SUBSTRATES"]
+           "FILM_SUBSTRATES", "LABEL_PREFIX", "MASK_UNREADABLE", "MODES", "QCM_FACTOR", "RATE_HIGH_NM_S",
+           "RATE_LOW_NM_S", "ResultTexts", "SUBSTRATES"]

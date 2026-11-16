@@ -36,8 +36,8 @@
 #   conda run -n gimap-release python -m pip install -r requirements-release.txt
 # Do not run "conda clean --all" before a build: the conda package licences are read from the
 # package cache (pkgs\<package>\info\licenses).
-# Do not upgrade conda's pip or setuptools inside it, and do not add torch (the Sputter workspace
-# installs it on the first Predict). After either requirements file changes, run the pip line again; when
+# Do not upgrade conda's pip or setuptools inside it, and do not add torch (the release does not ship it).
+# After either requirements file changes, run the pip line again; when
 # conda-pack reports files "deleted/overwritten", remove the environment
 # (conda env remove -n gimap-release) and create it again.
 #

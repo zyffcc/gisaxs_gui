@@ -73,8 +73,7 @@ would reach the users.
   conda run -n gimap-release python -m pip install -r requirements-release.txt
   ```
 
-- Do not upgrade conda's pip or setuptools in it. Do not install torch (Sputter installs it on its first
-  Predict), pytest or anything else.
+- Do not upgrade conda's pip or setuptools in it. Do not install torch, pytest or anything else.
 - After `requirements.txt` or `requirements-release.txt` changes, run the pip line again. When conda-pack reports files
   "deleted/overwritten", remove the environment (`conda env remove -n gimap-release`) and create it again.
 - Do not run `conda clean --all` before a build. The licences of the conda packages (Python, OpenSSL,
@@ -183,7 +182,6 @@ time of the first start. The README and the paper give them as the machine requi
   - Switch the language to Chinese and the theme to dark, and close and reopen GIMaP.
   - `licenses\README.txt`, `licenses\THIRD_PARTY_NOTICES.md` and
     `licenses\python\PyQt5-<version>\GPL-3.0.txt` are there.
-  - Optional, when the computer has network access: the first Sputter Predict installs PyTorch.
 - Fix what fails, then go back to step 3. A new build means new checksums.
 
 ## 8. Switch Zenodo on (before the GitHub release)
@@ -267,8 +265,7 @@ Read the current JAC *Notes for Authors* before submitting; the points below are
 
 The release targets Windows x64 and macOS 15+ (Apple Silicon and Intel, separate packages).
 `.github/workflows/desktop.yml` checks the same source on Windows Server 2022, macOS 15 arm64 and
-macOS 15 Intel. Every required job must pass on the commit being published. The matrix also installs Sputter's PyTorch runtime and loads both bundled checkpoints. Intel Macs use
-PyTorch 2.2.2 with NumPy below 2 ([upstream platform change](https://github.com/pytorch/pytorch/issues/114602)).
+macOS 15 Intel. Every required job must pass on the commit being published.
 A skipped optional-runtime test is not evidence that the runtime works; record such coverage separately. Never call an untested
 architecture supported merely because the source imports there.
 

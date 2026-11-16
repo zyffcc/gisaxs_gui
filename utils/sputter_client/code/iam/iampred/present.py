@@ -115,6 +115,10 @@ def smooth_path(wins, lam=1.0):
     W = [w for w in wins if w.get("entries")]
     if not W:
         return
+    if all(any(e["kind"] == "joint" for e in w["entries"]) for w in W):
+        for w in W:
+            w["smooth"] = next(e["label"] for e in w["entries"] if e["kind"] == "joint")
+        return
 
     def jump(a, b):
         d = sum(abs(math.log(max(a[k], 1e-3) / max(b[k], 1e-3))) for k in SMOOTH_KEYS if a.get(k) is not None and b.get(k) is not None)
@@ -168,6 +172,8 @@ def _windows(args):
                 entries.append((f"candidate {j}", "candidate", j, c))
             if "refined" in row:
                 entries.append(("refined", "refined", None, row["refined"]))
+            if "seq" in row:
+                entries.append(("joint", "joint", None, row["seq"]))
             imgs, recs = [], []
             for label, kind, rank, c in entries:
                 (mu, _, _), m, p, h = ctx.render(np.asarray(c["x"], float))

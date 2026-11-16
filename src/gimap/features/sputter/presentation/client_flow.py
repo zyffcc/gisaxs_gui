@@ -3,21 +3,23 @@
 Analyze is one background task (``ClientService.analyze``): the client analysis package runs as a subprocess, its
 steps move the bar of the job status in the input bar, Cancel ends its whole process tree, and its lines go to the
 log in Details ▸ Analyze options. While it runs, the main screen shows what each step has found so far
-(``live_panel.py``: the package's live events, which do not go to the log). It uses the folder in the picker, the bar's metal, substrate and rate, the geometry
-of Details (the one line under the bar says what will be used; Edit shows the fields) and the options of Details.
-Pressed while the folder's header is still read, it starts once the form is filled from it. A request that was
+(``live_panel.py``: the package's live events, which do not go to the log). It uses the folder in the picker, the
+bar's metal, substrate and rate (in its unit: ``rate_flow.py``), the geometry of Details (the one line under the bar
+says what will be used; Edit shows the fields) and the options of Details. Pressed while the folder's header is still read, it starts once the form is filled from
+it. A rate at the sample that sputtering hardly gives asks first whether its unit is right. A request that was
 analysed before by the same package shows the result it has.
 
-The bar's metal and the metal of Details are one choice (the earlier method names Cu differently). Substrate, rate,
-QCM reading, onset, duration and film thickness are remembered per scan folder; the substrate, the mode and the
-package folder also as the last used ones. A folder that was analysed before gets its own values back; another folder
-starts without the rate, onset, duration and film thickness of the scan before it — but what the user typed and has
-not analysed yet stays. The page opens on the main screen; Details is the second view.
+Substrate, rate and its unit, QCM reading, onset, duration and film thickness are remembered per scan folder; the
+substrate, the unit, the mode and the package folder also as the last used ones. A folder that was analysed before
+gets its own values back; another folder starts without the rate, onset, duration and film thickness of the scan
+before it — but what the user typed and has not analysed yet stays. The page opens on the main screen; Details is the
+second view.
 """
 
 from __future__ import annotations
 
 import traceback
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -32,16 +34,24 @@ from ..application import (FILM_SUBSTRATES, ClientFailed, ClientProgress, Client
                            LiveEvent, Stopped, folder_key)
 from .client_texts import (DONE, FAILED_TOAST, GEOMETRY_ALPHA, GEOMETRY_CENTRE, GEOMETRY_CENTRE_AUTO, GEOMETRY_DISTANCE,
                            GEOMETRY_ENERGY, GEOMETRY_MISSING, GEOMETRY_ROLL, GEOMETRY_TO_ENTER, GEOMETRY_WAVELENGTH,
-                           NO_REPORT, OPENED_EARLIER, PACKAGE_LINE, PACKAGE_NONE, READY_TOAST, SHOWN_AGAIN, STARTING,
+                           NO_REPORT, PACKAGE_LINE, PACKAGE_NONE, READY_TOAST, SHOWN_AGAIN, STARTING,
                            STOPPING_ANALYSIS, WAITING_TO_ANALYZE, wrappable)
 from .geometry import warning_style
-from .predict_flow import Failure
+from .rate_flow import stored_unit
 from .texts import message_text, text
 
 CLIENT_KEY = "sputter_client"
 CLIENT_FOLDERS = "client_folders"
 MAX_CLIENT_FOLDERS = 300
 CLIENT_FIELDS = ("sample_rate", "onset", "duration", "film_thickness")
+
+
+@dataclass(frozen=True)
+class Failure:
+    """A background analysis that ended without a result: the message, the lines under Details and its kind."""
+    message: str
+    details: str = ""
+    kind: str = "error"
 
 
 def _guarded(work):
@@ -86,10 +96,10 @@ class SputterClientMixin:
             client.choose_package(stored["client_package"])
 
     def _restore_client_last(self) -> None:
-        """The substrate, the mode and the QCM box as they were used last."""
+        """The substrate, the mode, the rate's unit and the QCM box as they were used last."""
         last = self._stored().get("client_last")
         last = last if isinstance(last, dict) else {}
-        self._apply_client_values({key: last.get(key) for key in ("substrate", "mode", "qcm")})
+        self._apply_client_values({key: last.get(key) for key in ("substrate", "mode", "qcm", "unit")})
 
     def _connect_client(self) -> None:
         self.analyze_button.clicked.connect(self.analyze)
@@ -102,8 +112,6 @@ class SputterClientMixin:
         self.package_button.clicked.connect(self._choose_package)
         self.report_button.clicked.connect(self._open_report)
         self.result_folder_button.clicked.connect(self._open_result_folder)
-        self.sample_metal.currentIndexChanged.connect(lambda _index: self._metal_synchronised(self.sample_metal, self.metal))
-        self.metal.currentIndexChanged.connect(lambda _index: self._metal_synchronised(self.metal, self.sample_metal))
         self.substrate.currentIndexChanged.connect(self._substrate_changed)
         self.substrate.activated.connect(lambda _index: self._client_typed_now())
         self.qcm_check.clicked.connect(lambda _on: self._client_typed_now())
@@ -113,7 +121,7 @@ class SputterClientMixin:
             field.textChanged.connect(lambda _text: self._show_geometry_summary())
         self.energy_kind.currentIndexChanged.connect(lambda _index: self._show_geometry_summary())
         self.scan_picker.pathChanged.connect(lambda _path: self._show_geometry_summary())
-        self._metal_synchronised(self.metal, self.sample_metal)
+        self._connect_rate()
         self._substrate_changed()
         self._show_geometry_summary()
         self._show_package()
@@ -121,7 +129,7 @@ class SputterClientMixin:
 
     # -- the two views -------------------------------------------------------------------------------------------
     def show_details(self, shown: bool = True) -> None:
-        """Details (the geometry, the options, the earlier method and its tabs) or the main screen."""
+        """Details (the geometry, the options and the tabs about the result) or the main screen."""
         self.view_stack.setCurrentIndex(1 if shown else 0)
         self.view_switch.blockSignals(True)
         self.view_switch.setCurrentIndex(self.view_switch.findData("details" if shown else "main"))
@@ -152,11 +160,6 @@ class SputterClientMixin:
         self.details_scroll.ensureWidgetVisible(self.client_log)
 
     # -- the bar -------------------------------------------------------------------------------------------------
-    def _metal_synchronised(self, source, target) -> None:
-        index = target.findData(source.currentData())
-        if index >= 0 and index != target.currentIndex():
-            target.setCurrentIndex(index)
-
     def _substrate_changed(self, _index: int = 0) -> None:
         film = self.substrate.currentData() in FILM_SUBSTRATES
         self.film_label.setVisible(film)
@@ -248,13 +251,14 @@ class SputterClientMixin:
     # -- the values ----------------------------------------------------------------------------------------------
     def _client_values(self) -> dict:
         return {"substrate": self.substrate.currentData(), "rate": _float(self.sample_rate.text()),
-                "qcm": self.qcm_check.isChecked(), "mode": self.mode_box.currentData(),
+                "unit": self.rate_unit.currentData(), "qcm": self.qcm_check.isChecked(),
+                "mode": self.mode_box.currentData(),
                 "onset": _float(self.onset.text()), "duration": _float(self.duration.text()),
                 "film": _float(self.film_thickness.text())}
 
     def _apply_client_values(self, values: dict) -> None:
         """Values of the bar and of Analyze options (a key that is absent leaves its field as it is)."""
-        for key, box in (("substrate", self.substrate), ("mode", self.mode_box)):
+        for key, box in (("substrate", self.substrate), ("mode", self.mode_box), ("unit", self.rate_unit)):
             index = box.findData(values.get(key)) if key in values else -1
             if index >= 0:
                 box.setCurrentIndex(index)
@@ -271,7 +275,7 @@ class SputterClientMixin:
         energy, is_energy = geometry["energy"], geometry["energy_kind"] != "wavelength"
         return ClientRequest(
             scan_folder=Path(self.scan_picker.path() or ""), metal=self.sample_metal.currentData(),
-            substrate=client["substrate"], rate_nm_s=client["rate"], rate_is_qcm=client["qcm"],
+            substrate=client["substrate"], rate_nm_s=self._rate_nm_s(), rate_is_qcm=client["qcm"],
             alpha_i_deg=geometry["alpha"], sdd_mm=geometry["sdd"],
             energy_ev=energy * 1000. if is_energy and energy is not None else None,
             wavelength_nm=None if is_energy else energy, beam_col=geometry["beam_col"], beam_row=geometry["beam_row"],
@@ -279,7 +283,7 @@ class SputterClientMixin:
             mode=client["mode"], onset_s=client["onset"], duration_s=client["duration"], film_nm=client["film"])
 
     def _remember_client(self, request: ClientRequest) -> None:
-        self._remember(self._request())  # the geometry, for this folder and as the last used
+        self._remember(request.scan_folder)  # the geometry, for this folder and as the last used
         stored = self._stored()
         values = self._client_values()
         folders = dict(stored.get(CLIENT_FOLDERS) or {})
@@ -289,7 +293,7 @@ class SputterClientMixin:
         while len(folders) > MAX_CLIENT_FOLDERS:
             folders.pop(next(iter(folders)))
         stored[CLIENT_FOLDERS] = folders
-        stored["client_last"] = {key: values[key] for key in ("substrate", "mode", "qcm")}
+        stored["client_last"] = {key: values[key] for key in ("substrate", "mode", "qcm", "unit")}
         self._store(stored)
         self._client_owner = key
 
@@ -303,6 +307,7 @@ class SputterClientMixin:
         if isinstance(kept, dict):
             values = {name: kept.get(name) for name in ("rate", "onset", "duration", "film")}
             values.update({name: kept[name] for name in ("substrate", "qcm") if kept.get(name) is not None})
+            values["unit"] = stored_unit(kept, kept.get("rate"))
             self._apply_client_values(values)
             self._client_owner = key
         elif self._client_owner and self._client_owner != key:
@@ -381,7 +386,9 @@ class SputterClientMixin:
             self._client_refused(package.problem)
             self._show_package()
             return
-        scan_results = self.service.results_folder(self._request())
+        if request.unusual_rate() and not self._confirm_rate(request):
+            return
+        scan_results = self.service.results_folder(request, self.results_picker.path() or None)
         self._remember_client(request)
         self._client_stop = False
         self._client_busy = True
@@ -395,15 +402,13 @@ class SputterClientMixin:
                           on_error=lambda message, details: self._client_finished(Failure(message, details)))
 
     def _run_queued(self) -> None:
-        """Analyze pressed while the header was read: now (and the earlier method's Predict likewise)."""
-        super()._run_queued()
+        """Analyze pressed while the header was read: now."""
         if self._analyze_queued and not self._client_busy and not self.static_analyzing():
             self._analyze_queued = False
             self.analyze()
 
     def _forget_queued(self) -> None:
         """Another folder was chosen: an Analyze pressed for the earlier one does not run for it."""
-        super()._forget_queued()
         if self._analyze_queued:
             self._analyze_queued = False
             if not self._client_busy:
@@ -485,8 +490,8 @@ class SputterClientMixin:
             self.open_client_result(Path(folder))
 
     def open_client_result(self, folder, *, quiet: bool = False) -> bool:
-        """Show the Analyze result in (or under) ``folder``; a folder that only holds a result of the earlier method
-        is shown in Details. False when the folder holds neither (said, unless ``quiet``)."""
+        """Show the Analyze result in (or under) ``folder``. False when the folder holds none (said, unless
+        ``quiet``)."""
         client = self.service.client
         if client is None:
             return False
@@ -494,12 +499,6 @@ class SputterClientMixin:
         try:
             result = client.open(folder)
         except (OSError, ValueError) as exc:
-            if client.locate(folder) is None and self.service.variants(folder):
-                self.open_results(folder, quiet=quiet)
-                self.show_details(True)
-                if not quiet:
-                    self._notify(tr(OPENED_EARLIER))
-                return True
             if not quiet:
                 self._notify(message_text(exc), error=True)
             return False
@@ -526,6 +525,7 @@ class SputterClientMixin:
         values = self._client_values()
         fields = {name: getattr(self, name).text() for name in CLIENT_FIELDS}
         return {"substrate": values["substrate"], "qcm": values["qcm"], "mode": values["mode"], "fields": fields,
+                "unit": values["unit"],
                 "result_folder": str(self.client_result.folder) if self.client_result is not None else "",
                 "details_shown": self.details_shown()}
 
@@ -537,7 +537,8 @@ class SputterClientMixin:
         for name in CLIENT_FIELDS:
             getattr(self, name).setText(str(fields.get(name, "")))
         self._apply_client_values({"substrate": state.get("substrate") or self.substrate.itemData(0),
-                                   "mode": state.get("mode") or "auto", "qcm": bool(state.get("qcm"))})
+                                   "mode": state.get("mode") or "auto", "qcm": bool(state.get("qcm")),
+                                   "unit": stored_unit(state, fields.get("sample_rate"))})
         self._client_typed = True  # the project's values stay when the folder's header is read
         self._client_owner = folder_key(self.scan_picker.path()) if self.scan_picker.path() else ""
         self.show_client_result(None)
@@ -560,4 +561,4 @@ class SputterClientMixin:
         self.refresh_live_language()
 
 
-__all__ = ["CLIENT_KEY", "SputterClientMixin"]
+__all__ = ["CLIENT_KEY", "Failure", "SputterClientMixin"]

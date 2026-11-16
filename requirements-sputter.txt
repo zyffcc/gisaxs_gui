@@ -1,6 +1,0 @@
-# Sputter runs in an isolated CPU subprocess. GIMaP pins NumPy below 2.
-# Intel Mac wheels ended at PyTorch 2.2.2; other release targets use newer CPU builds.
-# https://github.com/pytorch/pytorch/issues/114602
-# The installer constrains the already installed NumPy version.
-torch==2.2.2; platform_system == "Darwin" and platform_machine == "x86_64"
-torch>=2.3,<3; platform_system != "Darwin" or platform_machine != "x86_64"

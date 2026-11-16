@@ -63,15 +63,15 @@ def test_project_restores_sputter_and_clears_it_for_an_older_project(tmp_path):
     try:
         page = window.components.sputter_page
         window.components.show_page('sputter')
-        page.metal.setCurrentIndex(page.metal.findData('Ag'))
+        page.sample_metal.setCurrentIndex(page.sample_metal.findData('Ag'))
         page.alpha.setText('0.23')
         page.energy_value.setText('11.7')
         project = tmp_path / 'sample.gimap'
         assert window.menus._write_project(project)
-        page.metal.setCurrentIndex(page.metal.findData('Au'))
+        page.sample_metal.setCurrentIndex(page.sample_metal.findData('Au'))
         page.alpha.setText('0.9')
         assert window.menus.open_project(project)
-        assert page.metal.currentData() == 'Ag'
+        assert page.sample_metal.currentData() == 'Ag'
         assert page.alpha.text() == '0.23'
         assert page.energy_value.text() == '11.7'
         saved = json.loads(project.read_text())
@@ -79,7 +79,7 @@ def test_project_restores_sputter_and_clears_it_for_an_older_project(tmp_path):
         project.write_text(json.dumps(saved))
         assert window.menus.open_project(project)
         assert page.alpha.text() == page._empty_project_state['fields']['alpha']
-        assert page.result is None
+        assert page.client_result is None
         assert 'trainset' not in window.components.pages
         assert not hasattr(window.runtime, 'trainset')
     finally:
@@ -121,17 +121,3 @@ def test_old_scan_inspection_cannot_overwrite_a_new_project(tmp_path, monkeypatc
         finished.set()
         page.tasks.wait(5)
         window.close()
-
-
-@pytest.mark.parametrize('system, machine, wanted', [('Darwin', 'x86_64', '2.2.2'),
-                                                     ('Darwin', 'arm64', '2.3.0'),
-                                                     ('Windows', 'AMD64', '2.3.0')])
-def test_sputter_requirements_select_an_available_platform_runtime(system, machine, wanted):
-    from packaging.requirements import Requirement
-    root = Path(__file__).resolve().parents[1]
-    for name in ('requirements-sputter.txt', 'utils/sputter_toolkit/requirements.txt'):
-        requirements = [Requirement(line.strip()) for line in (root / name).read_text().splitlines()
-                        if line.strip() and not line.lstrip().startswith('#')]
-        selected = [r for r in requirements if r.name == 'torch' and
-                    (r.marker is None or r.marker.evaluate({'platform_system': system, 'platform_machine': machine}))]
-        assert len(selected) == 1 and wanted in selected[0].specifier

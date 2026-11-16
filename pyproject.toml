@@ -20,8 +20,6 @@ extend-exclude = [
     "modules/Fitting_1D_Model/Workflow_v5/conditional_v2",
     # The bundled fit1d kit is frozen research code, imported only inside a job process.
     "utils/gisaxs1d_gui_kit",
-    # The optional Sputter toolkit is external research code, run only as a subprocess.
-    "utils/sputter_toolkit",
     # The analysis package of the Sputter page is a release build of research code, run only as a subprocess.
     "utils/sputter_client",
 ]

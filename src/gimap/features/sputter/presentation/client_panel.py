@@ -115,6 +115,7 @@ class ClientPanelMixin:
             self.evolution.draw(None, None, None)
             self.patterns.show(None, "", "")
             self._show_client_empty()
+            self.show_result_details()
             return
         self.client_choices = self.service.client.choices(result)
         named = "/".join(part for part in (result.metal, result.substrate) if part) or "?"  # the metal on its substrate
@@ -132,6 +133,7 @@ class ClientPanelMixin:
         self.result_stack.setCurrentIndex(1)
         self._draw_evolution()
         self._show_window()
+        self.show_result_details()  # Details ▸ Windows, Report and Log
 
     def _show_result_kind(self) -> None:
         """What depends on the kind of result: the words of the selector and the caption of the radius."""
@@ -230,6 +232,7 @@ class ClientPanelMixin:
         self._fill_entries(window)
         self._show_entry()
         self._draw_evolution()
+        self.refresh_windows_table()
 
     def _back_to_default(self) -> None:
         window = self.client_window()

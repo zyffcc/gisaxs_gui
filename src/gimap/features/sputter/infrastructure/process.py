@@ -1,9 +1,10 @@
 """Run a child process, stream its lines, and stop it together with its children.
 
-Shared by the toolkit and the PyTorch installer. A reader thread hands the output over line by line; the
-caller's ``should_stop`` is asked every 0.2 s (not only when a line arrives: reading frames can be quiet for
-a while). Stopping ends the whole process tree — on Windows ``taskkill /T /F``, elsewhere the process group —
-because the toolkit reads frames in worker processes that ``terminate()`` alone would leave running.
+Used by Analyze and Static Frames (the client analysis package). A reader thread hands the output over line by line;
+the caller's ``should_stop`` is asked every 0.2 s (not only when a line arrives: reading frames can be quiet for a
+while). Stopping ends the whole process tree — on Windows ``taskkill /T /F``, elsewhere the process group — because
+the package reads frames in worker processes that ``terminate()`` alone would leave running. ``default_workers`` says
+how many of those workers the computer can take.
 """
 
 from __future__ import annotations
@@ -20,6 +21,24 @@ from typing import Callable, Optional, Sequence
 
 POLL_SECONDS = 0.2
 TAIL_LINES = 40
+WORKER_BYTES = 0.3e9
+"""Memory of one worker of the analysis package (about 0.2 GB measured in an Analyze run, with a margin)."""
+KEPT_FREE_BYTES = 1.5e9
+"""Memory kept for the package's main process (about 1.1 GB measured) and the rest of the computer."""
+
+
+def default_workers() -> int:
+    """Worker processes of the analysis package: one per core (at most 16, two cores left free; at least one) and no
+    more than the free memory holds after the main process, (free − 1.5 GB) / 0.3 GB, so a busy computer analyses
+    more slowly instead of running out of memory."""
+    by_cores = max(1, min(16, (os.cpu_count() or 3) - 2))
+    try:
+        import psutil
+
+        available = float(psutil.virtual_memory().available)
+    except Exception:  # psutil missing or unreadable: cores only
+        return by_cores
+    return max(1, min(by_cores, int((available - KEPT_FREE_BYTES) // WORKER_BYTES)))
 
 
 def console_python() -> str:
@@ -117,4 +136,5 @@ def run_streaming(command: Sequence[str], *, on_line: Callable[[str], None], sho
     return outcome
 
 
-__all__ = ["Outcome", "POLL_SECONDS", "child_environment", "console_python", "kill_tree", "run_streaming"]
+__all__ = ["Outcome", "POLL_SECONDS", "child_environment", "console_python", "default_workers", "kill_tree",
+           "run_streaming"]
