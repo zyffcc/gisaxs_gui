@@ -46,6 +46,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   (Physics and Methods 2.6). Off by default.
 - **Fitting, D ≥ 2R:** a fit keeps the paracrystal's distance at or above twice the mean radius, so the particles
   do not overlap (D could fall to 1 nm before); a D at 2R is reported at its lower bound (Physics and Methods 9.6).
+- **Tests against pyFAI and pygid:** q, 2θ, q∥ and q_z at fixed pixels of the four public frames are checked
+  against stored pyFAI and pygid values to 10⁻¹¹ Å⁻¹ in every test run, without either program installed; the P08
+  ring positions are now held to 0.0025 Å⁻¹ (was 0.01).
 - **Checked against pygid and BornAgain:** every pixel's q∥ and q_z agree with pygid to 10⁻¹⁵ once its pixel
   convention (pixel i at i·p, half a pixel from pyFAI's centre) is taken into account. On the public GALAXI frame,
   Fitting finds the same sphere radius and spread on the measured cut as on BornAgain's model of it simulated on that

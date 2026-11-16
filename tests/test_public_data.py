@@ -114,5 +114,5 @@ def test_p08_giwaxs_rings_of_mapbi3() -> None:
     # Bins match the pixel spacing (≈ 0.0022 Å⁻¹ here), so the sharp PbI₂ (001) line at 0.899 spans 2–3 bins:
     # its prominence is ≈ 4.8 % of the strongest line.
     found = [float(x[index]) for index in find_peaks(y, prominence=y.max() * 0.04)[0]]
-    for q in info["peaks_q"]:
-        assert min(abs(peak - q) for peak in found) < 0.01, (q, found)
+    for q in info["peaks_q"]:  # within about one bin (2.2 × 10⁻³ Å⁻¹); the listed values have 3 decimals
+        assert min(abs(peak - q) for peak in found) < 0.0025, (q, found)

@@ -11,7 +11,9 @@ They are not GIMaP's data: keep the licences and the attribution below when you 
 | `giwaxs_p08_mapi/` | `S121_MAI_A2_00841.tif`, `LaB6_2021_12_DESY_P08.poni`, `S121_MAI_A2_metadata.yaml` | pygid usage examples, Zenodo 10.5281/zenodo.17466183 (attribution below) | CC BY 4.0 | GIWAXS of a MAPbI₃ film, DESY P08, PerkinElmer 2048², αi = 0.075° |
 | `giwaxs_xeuss_pbte/` | `PbTe_3010_r1_PT_1_10_0_00028.edf`, `mask_PbTe_3010.edf`, `AgBe_250403_XENOCS.poni` | same Zenodo record | CC BY 4.0 | GIWAXS of PbTe nanoplatelets, Xeuss 2.0 lab source, Pilatus 300K, αi = 0.235° |
 
-`galaxi_bornagain.poni` and `manifest.json` are GIMaP's own files (see below).
+`galaxi_bornagain.poni`, `manifest.json` and `reference_values.json` are GIMaP's own files (see below).
+`reference_values.json` holds what pyFAI 2026.9.0 and pygid 0.2.20 give at fixed pixels of these frames
+(`tools/benchmarks/make_external_reference.py`); `tests/test_external_reference.py` checks GIMaP against it.
 
 ## Attribution of the pygid examples (CC BY 4.0)
 
