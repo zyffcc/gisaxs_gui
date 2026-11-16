@@ -71,15 +71,6 @@ class AiJobExecutionMixin:
         self._ai_input_csv = input_csv
         return input_csv, out_dir
 
-    def _ai_exact_nonempty_arg(self):
-        constraints = self.build_ai_constraints_json_from_ui()
-        exact = constraints.get("exact_nonempty")
-        try:
-            exact = int(exact)
-        except Exception:
-            exact = None
-        return exact if exact and exact > 0 else None
-
     def _start_ai_prediction(self, run_mode: str = "fast") -> None:
         if (
             getattr(self, "_insitu_workflow_ai_record", None) is None
@@ -318,10 +309,6 @@ class AiJobExecutionMixin:
         self._ai_run_cancelled = True
         if not self.fitting_view_model.cancel_ai_candidates():
             self._append_ai_log("AI fitting job is already stopping or finished.")
-
-    def _stop_ai_fitting_on_budget(self) -> None:
-        self._append_ai_log("AI fitting time budget reached; requesting cancellation.")
-        self._stop_ai_fitting_process()
 
     def _open_ai_output_folder(self) -> None:
         out_dir = getattr(self, "_ai_output_dir", None)

@@ -5,7 +5,7 @@
 - **Related code**：`src/gimap/features/fitting/domain/scattering_model.py`（公式与手动模型）、
   `fit_model.py`（当前页面的模型）、`fit_engine.py`（Refine 与 Search）、`native_solution.py`（快速物理拟合与
   1D Predict 的解 → 手动模型）、`curve_transformations.py`、`manual_refinement.py`（旧页面的 Local Refine /
-  Global Search）、`utils/ML_Fitting_1D_GISAXS/Training/prediction_curve_io.py`
+  Global Search）
 - **Related tests**：`tests/test_fitting_domain_scattering_model.py`、`tests/test_fit_engine.py`、
   `tests/test_native_solution.py`、
   `tests/test_fitting_curve_rendering.py`、

@@ -1,4 +1,4 @@
-"""Local and Slurm execution adapters for portable trainset jobs."""
+"""The Slurm execution adapter for portable trainset jobs."""
 
 from __future__ import annotations
 
@@ -8,33 +8,12 @@ import shlex
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from ...application import TrainsetRemoteJobStatus
 
 
 JobStatus = TrainsetRemoteJobStatus
-
-
-class LocalBackend:
-    def run_generate(self, package_dir: str | Path, samples: int) -> subprocess.Popen[str]:
-        root = Path(package_dir)
-        return subprocess.Popen(
-            [str(Path(shutil.which("python") or "python")), "generate_dataset.py", "--samples", str(samples), "--mode", "full"],
-            cwd=root,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-
-    def run_training(self, package_dir: str | Path) -> subprocess.Popen[str]:
-        return subprocess.Popen(
-            [str(Path(shutil.which("python") or "python")), "train.py"],
-            cwd=Path(package_dir),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
 
 
 class SlurmBackend:

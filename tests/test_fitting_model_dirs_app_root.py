@@ -71,10 +71,9 @@ def test_stored_settings_resolve_against_the_gimap_folder(tmp_path, monkeypatch)
     assert all(Path(d).is_absolute() for d in dirs)
 
 
-def test_shipped_models_are_found_from_another_working_directory(tmp_path, monkeypatch):
-    if not (REPO / "modules/Fitting_1D_Model").is_dir():
-        return  # a checkout without the model folder: nothing to find
-    monkeypatch.chdir(tmp_path)
-    owner = _owner({"model_base_dirs": ["modules/Fitting_1D_Model"]})
+def test_the_shipped_v5_model_is_found_from_another_working_directory(tmp_path, monkeypatch):
+    from src.gimap.features.fitting.application.workflow_v5 import bundled_workflow
 
-    assert owner._scan_ai_fitting_models()
+    monkeypatch.chdir(tmp_path)
+    assert bundled_workflow() == REPO / "modules/Fitting_1D_Model/Workflow_v5/conditional_v2"
+    assert (bundled_workflow() / "conditional_fast_manifest_v2.json").is_file()

@@ -69,13 +69,6 @@ redistribute them. `tests/data/external/README.md` gives their sources and geome
 - `TestSAXSdata/`: Pilatus CBF frames, Lambda NeXus module files and 1D curves measured by the GIMaP authors.
   They are GIMaP's own data and are released with it under the MIT License (`LICENSE`).
 
-### Other example data
-
-The following files come with no licence or source of their own. Their provenance is **to be confirmed
-by the authors**:
-
-- `WAXS/n4_glass_0cl_air_0_vd_00001-00002.jpg`: an image the program does not use.
-
 ### Manual screenshots
 
 The screenshots in `docs/manual_images/en/` and `docs/manual_images/zh/` (two copies with the same names,
