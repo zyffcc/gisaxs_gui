@@ -409,3 +409,42 @@ def test_the_quick_fit_counts_the_points_it_fits(monkeypatch) -> None:
     row = quick_fit(np.concatenate([[0.0], q[right]]), np.concatenate([[9.0], counts[right]]),
                     np.concatenate([[3.0], sigma[right]]))[0]
     assert len(row["native_q"]) == 300 and row["preparation"]["points"] == 300 and row["preparation"]["one_half"] == 300
+
+
+def test_spheres_at_qz_zero_by_default_and_two_paths_with_the_angles_of_the_cut():
+    """αi = αf = 0: the effective interface (spheres at q_z = 0) as before; with the angles the sphere is the
+    direct plus the exit-reflected path with a free r; a vertical cylinder does not change (its paths share
+    the in-plane factor)."""
+    import math
+
+    from src.gimap.features.fitting.application.single_fit import fit_record
+    from src.gimap.features.fitting.domain import fit_model as fm
+    from src.gimap.features.fitting.domain.scattering_model import _F_sphere_amp, sphere_form_factor_pd
+
+    q = np.linspace(0.02, 2.0, 200)
+    sphere = fm.FitModel(components=(fm.new_component("sphere", radius=4.0, structure=False),))
+    np.testing.assert_allclose(fm.evaluate(sphere, q), sphere_form_factor_pd(q, 4.0, 0.8), rtol=1e-12)
+    assert fm.grazing(sphere) is None and fm.qz_plus_r(sphere) == []
+
+    angles = {"alpha_i": 0.4, "alpha_f": 0.15, "wavelength": 0.1045, "refl_amp": 0.8, "refl_phase": -0.3}
+    two = sphere.with_parameter((0, "sigma_R"), value=0.0)
+    for key, value in angles.items():
+        two = two.with_parameter(("globals", key), value=value)
+    k = 2 * math.pi / 0.1045
+    k_i, k_f = k * math.sin(math.radians(0.4)), k * math.sin(math.radians(0.15))
+    r = 0.8 * np.exp(-0.3j)
+    amplitude = (_F_sphere_amp(np.hypot(q, k_i + k_f), 4.0) * np.exp(-1j * (k_i + k_f) * 4.0)
+                 + r * _F_sphere_amp(np.hypot(q, k_i - k_f), 4.0) * np.exp(-1j * (k_i - k_f) * 4.0))
+    np.testing.assert_allclose(fm.evaluate(two, q), np.abs(amplitude) ** 2, rtol=1e-10)
+    assert fm.qz_plus_r(two)[0][1] == pytest.approx((k_i + k_f) * 4.0)
+
+    cylinder = fm.FitModel(components=(fm.new_component("vertical_cylinder", radius=4.0, structure=False),))
+    tilted = cylinder
+    for key, value in angles.items():
+        tilted = tilted.with_parameter(("globals", key), value=value)
+    np.testing.assert_allclose(fm.evaluate(tilted, q), fm.evaluate(cylinder, q), rtol=1e-12)
+
+    data = FitData.prepare(q, fm.evaluate(two, q))
+    record = lambda model: fit_record(model, data, None, side="positive", q_range=None, result=None)
+    assert record(two)["sphere_model"].startswith("two paths")
+    assert record(sphere)["sphere_model"].startswith("effective interface")

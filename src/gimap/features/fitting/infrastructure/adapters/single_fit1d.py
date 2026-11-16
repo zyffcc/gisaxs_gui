@@ -134,6 +134,9 @@ def run_single_fit1d(payload, report, is_cancelled):
     remaining = [dict(edge.to_dict(), note=remaining_note(edge).to_dict()) for edge in resolved.edges]
     result["warnings"] = row["warnings"] + [item["note"]["text"] for item in remaining]
     result["measurement_sigma"] = payload.get("sigma")
+    # fit1d's own provenance: its version, the SHA-256 of its sources, of the network's weights, of the OOD thresholds
+    # and of the form-factor tables (the kit's gui_result leaves it out)
+    result["provenance"] = raw.get("provenance")
     result["settings"] = options
     result["fit1d_constraints"] = dict(
         composition=composition, fitted_composition=result["summary"]["composition"],

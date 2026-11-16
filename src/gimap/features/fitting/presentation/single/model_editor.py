@@ -28,7 +28,7 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.theme import set_role
 
-from ...application.single_fit import FAMILIES, GLOBALS, INFO, LINEAR, Component, FitModel, new_component, parameter_text
+from ...application.single_fit import BASE_GLOBALS, FAMILIES, GRAZING, INFO, LINEAR, Component, FitModel, new_component, parameter_text
 from ..layout_primitives import ScientificDoubleSpinBox
 
 VALUE_LIMIT = 1e15
@@ -245,6 +245,7 @@ class FitModelEditor(QWidget):
             empty.setProperty("gimapRole", "muted")
             self._layout.addWidget(empty)
         self._layout.addWidget(self._globals_card())
+        self._layout.addWidget(self._grazing_card())
         self.set_show_ranges(self.show_ranges)
 
     def _card(self, name: str) -> tuple[QFrame, QVBoxLayout]:
@@ -306,7 +307,22 @@ class FitModelEditor(QWidget):
                             "reflected beam's tail and the resolution near q = 0"))
         layout.addWidget(title)
         grid = self._grid(card)
-        for line, key in enumerate(GLOBALS):
+        for line, key in enumerate(BASE_GLOBALS):
+            self._rows[("globals", key)] = _Row(self, grid, line, ("globals", key), card)
+        layout.addLayout(grid)
+        return card
+
+    def _grazing_card(self) -> QFrame:
+        card, layout = self._card("fitGrazing")
+        title = QLabel(tr("Spheres in grazing incidence"), card)
+        title.setProperty("gimapRole", "strong")
+        title.setToolTip(tr("αi = αf = 0: spheres at q_z = 0 (effective interface approximation, no substrate needed). "
+                            "With αi, αf and λ of the cut: direct and exit-reflected path, with a free effective "
+                            "reflection coefficient r = |r|·e^(i·arg r); free |r| and arg r to fit it. "
+                            "Cylinders are not affected."))
+        layout.addWidget(title)
+        grid = self._grid(card)
+        for line, key in enumerate(GRAZING):
             self._rows[("globals", key)] = _Row(self, grid, line, ("globals", key), card)
         layout.addLayout(grid)
         return card

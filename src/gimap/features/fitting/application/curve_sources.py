@@ -133,8 +133,11 @@ def source_record(token) -> dict:
     """The physical file and explicit column selection, suitable for a JSON provenance record."""
     from .models import InSituSourceFrame
 
+    from src.gimap.shared.file_digest import sha256_of
+
     source = InSituSourceFrame.from_token(str(token))
-    return {"path": str(source.path), "frame_index": source.frame_index, "source_kind": source.source_kind,
+    return {"path": str(source.path), "file": source.path.name, "sha256": sha256_of(source.path),
+            "frame_index": source.frame_index, "source_kind": source.source_kind,
             "columns": None if source.columns is None else source.columns.to_dict()}
 
 

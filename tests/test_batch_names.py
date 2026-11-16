@@ -124,6 +124,12 @@ def test_a_set_of_module_files_is_exported_under_its_scan_name_and_every_module_
     assert [Path(name).name for name in record["source_files"]] == [f"scan_00007_m{n:02d}.nxs" for n in (1, 2, 3)]
     assert record["source_layout"]["kind"] == "module_set" and record["source_layout"]["dataset"].endswith("detector/data")
     assert record["source_layout"]["transformations"]  # how the image was turned is part of where it comes from
+    # every module file by name and SHA-256, so the record identifies its input on another computer
+    import hashlib
+    assert record["input_sha256"] == [
+        {"file": f"scan_00007_m{n:02d}.nxs",
+         "sha256": hashlib.sha256((tmp_path / "raw" / f"scan_00007_m{n:02d}.nxs").read_bytes()).hexdigest()}
+        for n in (1, 2, 3)]
     for name in ("curves/scan_00007_frame0002_radial.csv", "fit_input/scan_00007_frame0002_fit_input.dat",
                  "maps/scan_00007_frame0002_qmap.csv"):
         lines = (out / name).read_text(encoding="utf-8").splitlines()
@@ -162,7 +168,10 @@ def test_a_frame_of_one_file_and_a_master_say_their_files(tmp_path: Path) -> Non
     tools = _tools(InstrumentProfile("one", geometry, None, shape))
     analysis = tools.analyze_frame(AnalysisRequest(path=stack, frame_index=4, mode="giwaxs", profile_name="one"))
     assert export_stem(analysis) == "scan_m01_frame0004" and frame_name(analysis) == "scan_m01.nxs frame 5 of 5"
-    assert "source_files" not in analysis_metadata(analysis)
+    record = analysis_metadata(analysis)
+    assert "source_files" not in record
+    import hashlib
+    assert record["input_sha256"] == [{"file": "scan_m01.nxs", "sha256": hashlib.sha256(stack.read_bytes()).hexdigest()}]
 
 
 def test_the_readme_says_how_frames_are_named_and_counted() -> None:

@@ -30,8 +30,11 @@ import math
 import os
 import sys
 import time
+from pathlib import Path
 
 import numpy as np
+
+from src.gimap.shared.file_digest import sha256_of
 
 from ...application.workflow_v5 import FIT1D_SHAPES, fit1d_kit_available, fit1d_kit_home
 
@@ -49,10 +52,6 @@ KIT_MISSING = (
 )
 KIT_BROKEN = ("The fit1d kit in {home} could not be loaded ({reason}). Copy the folder utils/gisaxs1d_gui_kit again "
               "from the GIMaP download.")
-QZ_ZERO = (
-    "No qz of the cut was given: spheres are evaluated at qz = 0 (|q| = q_par). For a Yoneda cut set "
-    "“Cut qz” (Fit step ▸ Options; in 1D Predict, Parameters…); the sphere radius depends on it."
-)
 SIGMA_ESTIMATED = (
     "The curve has no error bars: sigma was estimated by 1D Predict (Relative σ), so chi² and the errors "
     "of the parameters are relative to that estimate."
@@ -81,6 +80,16 @@ def load_kit():
     except (ImportError, OSError) as exc:
         raise RuntimeError(KIT_BROKEN.format(home=home, reason=f"{type(exc).__name__}: {exc}")) from exc
     return core
+
+
+def network_record(name) -> dict:
+    """The network a fit used, by catalogue name and the SHA-256 of its weights: the record names the exact
+    weights, also when a model folder of the same name is replaced later."""
+    try:
+        name, directory = importlib.import_module("gisaxs1d_kit._paths").model_dir(name)
+    except (ImportError, ValueError, KeyError, OSError):
+        return dict(name=name, weights_sha256=None)
+    return dict(name=name, weights_sha256=sha256_of(Path(directory) / "weights_numpy.npz"))
 
 
 def kit_arguments(item, options) -> dict:
@@ -171,8 +180,7 @@ def _warnings(result, item, options, used: int) -> list[str]:
         if row["status"] == "ambiguous" and bounds:
             line += f" (equivalent solutions: {bounds[0]:.4g}–{bounds[1]:.4g} {row.get('unit') or ''})".replace(" )", ")")
         warnings.append(line)
-    if options["fit1d_mode"] == "gisaxs" and options["fit1d_qz"] is None and 1 in options["components"]:
-        warnings.append(QZ_ZERO)
+    # No qz given is the effective interface approximation (spheres at qz = 0): the default, no warning.
     if item.get("sigma_estimated"):
         warnings.append(SIGMA_ESTIMATED)
     if used != len(item["q"]):
@@ -274,6 +282,7 @@ def fit_and_write(output, item, options, report, cancelled, core=None):
     tick = time.perf_counter()
     result = core.fit_curve(arguments)
     row = _clean(solution_row(result, item, options, time.perf_counter() - tick))
+    row["fit1d"]["network"] = network_record(arguments.get("model"))
     rows = [row]
     output.mkdir(parents=True, exist_ok=True)
     (output / "solutions.json").write_text(

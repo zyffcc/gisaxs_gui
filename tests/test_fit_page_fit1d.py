@@ -61,13 +61,20 @@ def test_main_fit_runs_without_tf_and_preserves_native_result(tmp_path, monkeypa
         assert native["summary"]["model"] == network
         assert native["summary"]["mode"] == mode
         assert native["summary"]["qz_nm_inv"] == pytest.approx(0.42 if mode == "gisaxs" and count != 2 else 0)
-        if count == 2:
-            assert any("No qz" in warning for warning in native["warnings"])
+        if count == 2:  # no Cut qz: spheres at qz = 0, the effective interface approximation, without a warning
+            assert not any("No qz" in warning or "qz" in warning.split()[:3] for warning in native["warnings"])
         if count == 3:
             assert any("Poisson errors" in warning for warning in native["warnings"])
             assert not any("Relative σ" in warning for warning in native["warnings"])
         assert len(native["populations"]) == count
         assert native["conventions"]["physics"].startswith("v2")
+        # fit1d's own provenance is kept: the weights of the network that ran, by SHA-256 (the kit's SOURCE.json)
+        import json
+        from pathlib import Path
+        source = json.loads((Path(__file__).resolve().parents[1] / "utils" / "gisaxs1d_gui_kit" / "SOURCE.json")
+                            .read_text(encoding="utf-8"))
+        assert (native["provenance"]["weights_sha256"]
+                == source["networks_unchanged"][f"models/{network}/weights_numpy.npz"])
         curves = native["curves"]
         q, y = np.asarray(curves["q_nm_inv"]), np.asarray(curves["intensity"])
         assert q == pytest.approx(np.linspace(0.06, 1.8, 48))

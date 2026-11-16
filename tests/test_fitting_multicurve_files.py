@@ -180,8 +180,9 @@ def test_source_record_and_stem_keep_physical_path_and_column_identity(tmp_path)
     path = _write(tmp_path, "q,I one,I/two\n0.1,11,21\n0.2,12,22\n", name="测量 # table.dat")
     _, sources = _sources(path)
     record = source_record(sources[1].token)
-    assert record == {"path": str(path), "frame_index": 0, "source_kind": "curve",
-                      "columns": sources[1].columns.to_dict()}
+    import hashlib
+    assert record == {"path": str(path), "file": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                      "frame_index": 0, "source_kind": "curve", "columns": sources[1].columns.to_dict()}
     assert source_stem(sources[1].token) == "测量 # table_I3"
     assert source_stem(str(path)) == path.stem
 

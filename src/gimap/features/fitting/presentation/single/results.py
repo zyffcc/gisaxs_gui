@@ -18,8 +18,11 @@ from PyQt5.QtWidgets import QFileDialog, QHeaderView, QTableWidgetItem
 from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application.single_fit import (
+    GRAZING,
     INFO,
     export_table,
+    grazing,
+    qz_plus_r,
     fit_record,
     model_to_dict,
     parameter_text,
@@ -29,6 +32,8 @@ from .fit1d_review import note_text
 from .session import path_name
 from ...application.models import InSituSourceFrame
 from ...application.curve_sources import source_stem
+
+QZ_PLUS_R = "q₊R of the spheres (q₊ = kᵢ + k_f): {values}"
 
 
 def _item(text: str, tip: str = "") -> QTableWidgetItem:
@@ -235,7 +240,7 @@ class FitResultsMixin:
             ).format(quality=self._quality_text(result), rmse=f"{result.log_rmse:.3g}", evaluations=result.evaluations,
                      seconds=f"{result.seconds:.1f}", method=tr("Search the ranges") if result.method == "global" else tr("Refine")))
             self._correlated_tip = ""
-            self.warnings_label.setText("\n".join(self._warnings(result) + search_note))
+            self.warnings_label.setText("\n".join(self._grazing_lines() + self._warnings(result) + search_note))
             self.warnings_label.setToolTip(self._correlated_tip)
             show_line(self.step_intro["results"], "")  # the box right below has it all (and a stale fit: its warnings)
         self._fill_parameters(result if session.result_is_current() else None)
@@ -268,20 +273,33 @@ class FitResultsMixin:
             lines.append("⚠ " + tr("χ²ᵣ well above 1: the model misses features of the curve, or σ is underestimated."))
         return lines
 
+    def _unused(self, path: tuple, parameter) -> bool:
+        if path[0] != "globals" or parameter.free:
+            return False
+        return parameter.value == 0 or (path[1] in GRAZING and grazing(self.session.model) is None)
+
+    def _grazing_lines(self) -> list[str]:
+        """q₊R of the spheres, as information (the range of each sphere model is in the Physics Manual)."""
+        values = qz_plus_r(self.session.model)
+        if not values:
+            return []
+        shown = ", ".join(f"{index + 1}: {value:.2f}" for index, value in values)
+        return [trf(QZ_PLUS_R, values=shown)]
+
     def _path_name(self, path: tuple) -> str:
         return path_name(self.session.model, path)
 
     def _fill_parameters(self, result) -> None:
         rows = []
         for path, parameter in self.session.model.parameters():
-            if path[0] == "globals" and not parameter.free and parameter.value == 0:
-                continue  # an unused term (no resolution peak, no background)
+            if self._unused(path, parameter):
+                continue  # an unused term (no resolution peak, no background, spheres at q_z = 0)
             error = None if result is None else result.errors.get(path)
             full = path_name(self.session.model, path, full=True)  # “1·Sphere R”, also when shown as “R”
             rows.append(((self._path_name(path), full), *value_cells(path[1], parameter.value, error, parameter.free)))
         self.parameters_table.setRowCount(len(rows))
         self._row_paths = [path for path, parameter in self.session.model.parameters()
-                           if not (path[0] == "globals" and not parameter.free and parameter.value == 0)]
+                           if not self._unused(path, parameter)]
         for line, ((name, full), *cells) in enumerate(rows):
             self.parameters_table.setItem(line, 0, _item(name, full))
             for column, text in enumerate(cells, start=1):

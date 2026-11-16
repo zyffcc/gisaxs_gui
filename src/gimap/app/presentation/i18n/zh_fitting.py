@@ -114,6 +114,17 @@ FITTING_ZH = {
     "Exponent ν of the resolution peak (its tail)": "分辨率峰的指数 ν（决定尾部）",
     "Factor k": "因子 k",
     "Overall factor of everything but the background (usually fixed at 1)": "除背景外所有项的总因子（通常固定为 1）",
+    "Spheres in grazing incidence": "掠入射下的球",
+    "αi = αf = 0: spheres at q_z = 0 (effective interface approximation, no substrate needed). With αi, αf and λ of the cut: direct and exit-reflected path, with a free effective reflection coefficient r = |r|·e^(i·arg r); free |r| and arg r to fit it. Cylinders are not affected.":
+        "αi = αf = 0：球在 q_z = 0 处计算（有效界面近似，不需要基底信息）。给出切线的 αi、αf 和 λ：直射与出射反射两条路径，"
+        "有效反射系数 r = |r|·e^(i·arg r) 可以拟合（把 |r| 和 arg r 设为自由）。圆柱不受影响。",
+    "Incidence angle of the cut; with αf = 0 too, spheres at q_z = 0 (effective interface)":
+        "切线的入射角；与 αf 都为 0 时，球在 q_z = 0 处计算（有效界面）",
+    "Exit angle of the cut (the detector row of the horizontal cut)": "切线的出射角（水平切线所在的探测器行）",
+    "Wavelength": "波长",
+    "Size of the effective reflection coefficient of the exit-reflected path (spheres)": "出射反射路径的有效反射系数的大小（球）",
+    "Phase of the effective reflection coefficient (spheres)": "有效反射系数的相位（球）",
+    "q₊R of the spheres (q₊ = kᵢ + k_f): {values}": "球的 q₊R（q₊ = kᵢ + k_f）：{values}",
     "Loaded the model from {name}.": "已从 {name} 载入模型。",
     "Could not load the model: {reason}": "无法载入模型：{reason}",
     "Could not use this solution: {reason}": "无法使用这个解：{reason}",

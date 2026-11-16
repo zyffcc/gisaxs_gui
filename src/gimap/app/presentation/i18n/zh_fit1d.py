@@ -262,9 +262,6 @@ FIT1D_ZH = {
         '一帧有几个同样好的解时，保留最接近上一帧的那个（序列最平滑）；明显更好的其他解仍会被采用，并注明',
     "Predict each frame needs Sphere / Vertical cylinder particles in Single analysis' model.":
         '逐帧预测需要单条分析的模型中有球 / 竖直圆柱粒子。',
-    'No qz of the cut was given: spheres are evaluated at qz = 0 (|q| = q_par). For a Yoneda cut set “Cut qz” (Fit step ▸ Options; in 1D Predict, Parameters…); the sphere radius depends on it.':
-        '没有给出线切的 qz：球按 qz = 0 计算（|q| = q_par）。Yoneda 线切请设置“线切的 qz”（拟合步骤 ▸ 选项；一维预测里在“参数…”中），'
-        '球的半径取决于它。',
 }
 
 __all__ = ["FIT1D_ZH"]

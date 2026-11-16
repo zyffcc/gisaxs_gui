@@ -23,6 +23,7 @@ from typing import Any, Mapping, Optional
 
 import numpy as np
 
+from src.gimap.shared.file_digest import input_digests
 from src.gimap.shared.signed_cut import FIT_HALVES
 from src.gimap.shared.version import SOFTWARE as RELEASE
 
@@ -190,6 +191,9 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
     files = source_files(analysis.path, loaded)
     if files:  # a set of module files, a master with its data files: every file the frame was read from
         record["source_files"] = files
+    # Every input by file name and SHA-256: the paths above are where the files were on this computer.
+    record["input_sha256"] = input_digests(
+        [*(files or [analysis.path]), *(path for path, _ in analysis.summed_frames or ())])
     if loaded.get("layout"):  # NeXus / HDF5: what the source is, which dataset, how the image was turned
         record["source_layout"] = {
             "kind": loaded.get("layout"), "summary": loaded.get("layout_summary"),

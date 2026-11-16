@@ -12,6 +12,22 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Analyze, records:** `<stem>_analysis.json` lists every input file by name with its SHA-256
+  (`input_sha256`: the source, its module or data files, and the frames summed with it), so a curve can be traced
+  to its frames on another computer, where the folders differ.
+- **Fitting, records:** an exported fit1d result keeps fit1d's own provenance (its version and the SHA-256 of its
+  sources, of the network's weights, of the OOD thresholds and of the form-factor tables); the source of a curve
+  is recorded with its file name and SHA-256.
+- **Physics and Methods, section 9.12:** what *Predict parameters (fit1d)* does — its model, network, refinement,
+  errors, flags and composition rule — and how well it recovers known parameters on 200 curves it had never seen
+  (the benchmark is `tools/benchmarks/fit1d_recovery.py`, with an independent forward model).
+- **Fitting, spheres in grazing incidence:** a new card in Model, *Spheres in grazing incidence*. By default
+  nothing changes: spheres are evaluated at q_z = 0 (the effective interface approximation, no substrate
+  needed). Entering αi, αf and λ of the cut evaluates spheres as the direct plus the exit-reflected path with a
+  free effective reflection coefficient |r|·e^(i·arg r); the results then show q₊R of each sphere. fit1d no
+  longer warns when *Cut qz* is not given. Physics and Methods has new sections 9.10 (why upright cylinders are
+  exact in this approximation and spheres are not, with examples on Si and on a polymer film) and 9.11 (what each
+  population of the usual three-population fit takes up).
 - **Fitting:** parameter limits and fixed values are enforced, including linear intensity/background terms;
   incompatible predictor constraints are refused. Predict stays selected after finishing. Complete equivalent
   fits can be switched as a whole from the result dropdown; components are available in the curve's right-click
