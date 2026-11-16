@@ -12,6 +12,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Fitting, mean of both halves:** the q > 0 half gives the |q| points, as in Analyze and the Series map, so one
+  cut gives one mean curve in every page (Fitting took the half with more points: a point more or less).
 - **Fitting, results:** each particle's radius by number (fit1d and microscopy count particles; Fitting's spheres
   and random cylinders are weighted by intensity) and σ_nn/D, also in the exported record (`derived`). For a broad
   sphere distribution (σ_R/R above about 0.2) the radius by number is *not defined* (Physics and Methods 9.3).

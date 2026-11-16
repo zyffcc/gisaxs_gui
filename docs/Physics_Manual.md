@@ -1035,7 +1035,7 @@ I(|q|) = ½ [ I_+(|q|) + Ĩ_−(|q|) ]                                          
 σ(|q|) = ½ √( σ_+²(|q|) + σ̃_−²(|q|) )                                               (6.17)
 ```
 
-- One half gives the |q| points of the mean. The prepared cut of Run Automatic Analysis and of the quick physical fit, and the Series map, use the `q_y > 0` half. Fitting uses the half with more points (the `q_y > 0` half when both have as many). A half with fewer than two points never gives the grid.
+- One half gives the |q| points of the mean: the `q_y > 0` half, in the prepared cut of Run Automatic Analysis and of the quick physical fit, in the Series map and in Fitting alike, so one cut gives one mean curve. A half with fewer than two points never gives the grid.
 - The tilde marks linear interpolation of the other half, and of its σ, at that |q|.
 - Points are averaged only where the other half has measured points on both sides without a hole, or a point at the same |q| (within 1 % of a step). A hole is an interval wider than 2.5 times the local step, the median of the 9 surrounding intervals.
 - Elsewhere the measured half stands alone with its own σ. Points of the other half that lie in a hole of this half, or beyond its ends, are added as measured. Nothing is interpolated across a hole.

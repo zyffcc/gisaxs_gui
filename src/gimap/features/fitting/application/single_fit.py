@@ -192,7 +192,8 @@ def prepare_points(curve: Curve, side: str = "mean", q_range: Optional[tuple] = 
             used = there[0] if there else side
         q, intensity, sigma = positive if used == "positive" else negative
     elif len(there) == 2:
-        mean, used = mean_of_halves(positive, negative), "mean"
+        # the q > 0 half gives the |q| of the mean, as in Analyze's curve and the series map: one cut, one mean curve
+        mean, used = mean_of_halves(positive, negative, grid="positive"), "mean"
         q, intensity, sigma, halves = mean.q, mean.intensity, mean.sigma, mean.halves
     else:
         used = there[0] if there else "mean"
