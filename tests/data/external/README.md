@@ -32,7 +32,8 @@ They are not GIMaP's data: keep the licences and the attribution below when you 
   (597.1, 719.6) in GIMaP's canonical pixels (row 0 at the top). Pilatus module gaps are −1.
   `galaxi_bornagain.poni` is written by GIMaP from these documented values (no tilt), for
   `tools/gimap_agent.py auto … --technique gisaxs --calibration …`. BornAgain's sample model: Ag spheres
-  (R 5.75 nm, log-normal σ 0.4) with a radial paracrystal of peak distance 53.6 nm.
+  (R 5.75 nm; a log-normal σ 0.4 is defined but commented out in r23) with a radial paracrystal of peak distance
+  53.6 nm (Physics and Methods 9.10).
 - **AgBh** (pyFAI): the `.poni` states λ = 1.0 Å and L = 1583.2 mm with 0.57° tilt. Measured ring radii of
   orders 1–5 around the `.poni` direct beam (180.0, 263.9) px give L = 1635 mm at 1.0 Å, so the stated
   wavelength is not the one of the calibration (≈ 1.033 Å would give 1583 mm). Use the image for the beam

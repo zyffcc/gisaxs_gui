@@ -616,6 +616,12 @@ that of its rows upward. Untilted, (3.15) is `(L, X, Y)`. Every quantity of a pi
   6.06°: |q|, 2θ, and q∥ and q_z against pyFAI's fiber units `qip` and `qoop` (sample orientation 4) agree to
   10⁻¹³; the solid angle agrees to 10⁻⁷ up to one constant (pyFAI normalises to the PONI, GIMaP to the direct
   beam), the polarisation factor exactly.
+- `tools/benchmarks/pygid_comparison.py` compares with pygid (0.2.20) on the two pygid example frames (P08, Xeuss):
+  q∥ and q_z of every pixel agree to 10⁻¹⁵ once GIMaP's direct beam is moved by half a pixel along both axes. pygid
+  places pixel i at i·p from the PONI, pyFAI and GIMaP at its centre, (i + ½)·p; as given, the two differ by up to
+  1.1 × 10⁻³ Å⁻¹ (P08) and 2.4 × 10⁻³ Å⁻¹ (Xeuss). The ring centres of pygid's polar map agree with GIMaP's I(q) to
+  7 × 10⁻⁴ Å⁻¹ on P08, a third of the map's q step. The polar maps published with the examples (pygid 0.1.16) put
+  the rings 1.6 to 1.7 × 10⁻³ Å⁻¹ lower; their q grid differs from that of pygid 0.2.20 by up to 1.4 × 10⁻³ Å⁻¹.
 - What the tilt changes: leaving it out puts |q| off by up to 0.20 % on the P08 file (tilt 0.31°), 0.08 % on the
   AgBh file (0.57°) and 6.3 % on the Xeuss file (6.06°, at the corner farthest from the beam). Rot3 alone leaves |q|
   unchanged and turns χ by rot_3.
@@ -2124,6 +2130,26 @@ reflection. Its limits:
 
 Implementation: `src/gimap/features/fitting/domain/fit_model.py` (`grazing`, `qz_plus_r`),
 `src/gimap/features/fitting/domain/scattering_model.py` (`sphere_two_path_pd`)
+
+**A measured cut: GALAXI against BornAgain's model of it.** BornAgain's example of the public GALAXI frame (r23,
+`hardcode_galaxi.py`) describes it by Ag spheres 18.5 nm deep in HMDSO on PTFE on Si, log-normal radii (median
+5.75 nm, σ = 0.4), a radial paracrystal (D = 53.6 nm, disorder 10.5 nm) with size–spacing coupling κ = 17.5, in
+the DWBA of the layer stack. In r23 the size distribution is commented out; with it, BornAgain 24.1 describes the
+Yoneda cut of Analyze with one scale and one background at χ²_red = 2.1 above q = 0.3 nm⁻¹, and without it at 22
+(its monodisperse spheres have a minimum at 0.78 nm⁻¹ the cut does not have).
+
+- Fitting describes the measured cut with a sphere and a paracrystal at χ²_red ≈ 1.1 (EIA or two paths, LMA or
+  DA): R = 9.5 to 11.5 nm, σ_R/R = 0.17 to 0.37. On BornAgain's model of the frame, simulated on the same cut
+  with the counts of the measurement, it finds the same: R = 8.1 to 10.1 nm, σ_R/R = 0.33 to 0.41. Fitting reads
+  the measured cut as it reads the model of it.
+- These R are not a mean of the log-normal: by number it is 6.2 nm, weighted by R⁶ 16.3 nm. A Gaussian on
+  intensity weights fitted to a broad log-normal lies between them; σ_R/R is close to the log-normal's relative
+  spread, 0.42.
+- D is not determined by this cut, measured or simulated: it shows no correlation peak, and the fitted D ends at
+  1 to 7 nm (below 2R) or several hundred nm. With D and the disorder held at BornAgain's values, χ²_red rises to
+  6 to 22: the paracrystal of (9.12) has no size–spacing coupling, which damps BornAgain's S strongly at κ = 17.5.
+
+The scripts are `physics/galaxi_bornagain.py` and `physics/galaxi_ba_model.py` of the GIMaP paper's materials.
 
 ### 9.11 The three-population model
 

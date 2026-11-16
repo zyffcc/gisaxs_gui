@@ -1,0 +1,129 @@
+{
+ "pygid": "0.2.20",
+ "frames": [
+  {
+   "frame": "giwaxs_p08_mapi",
+   "shape": [
+    2048,
+    2048
+   ],
+   "tilt_deg": 0.307,
+   "incidence_deg": 0.075,
+   "pixels": {
+    "as_given": {
+     "q_parallel_max_abs": 0.0011237275238396502,
+     "qz_max_abs": 0.0011237219680752218,
+     "same_sign": false
+    },
+    "half_pixel": {
+     "q_parallel_max_abs": 3.83026943495679e-15,
+     "qz_max_abs": 2.6645352591003757e-15,
+     "same_sign": true
+    }
+   },
+   "polar_step": 0.002248104775731785,
+   "rings": [
+    {
+     "q": 0.9982,
+     "gimap_minus_pygid": 1.3831614804837855e-05
+    },
+    {
+     "q": 1.4118,
+     "gimap_minus_pygid": 0.0002809675763832953
+    },
+    {
+     "q": 1.7265,
+     "gimap_minus_pygid": 0.0005016599848874925
+    },
+    {
+     "q": 1.9941,
+     "gimap_minus_pygid": 0.000406023590119986
+    },
+    {
+     "q": 2.2279,
+     "gimap_minus_pygid": 0.00032116128988457504
+    },
+    {
+     "q": 2.8191,
+     "gimap_minus_pygid": 5.158933908244734e-05
+    },
+    {
+     "q": 2.99,
+     "gimap_minus_pygid": 0.0006762564655500292
+    }
+   ],
+   "published": {
+    "pygid": "0.1.16",
+    "q_grid_max_abs_vs_this_pygid": 0.0013958261328177457,
+    "rings": [
+     {
+      "q": 0.9979,
+      "gimap_minus_pygid": 0.00159996031346743
+     },
+     {
+      "q": 1.726,
+      "gimap_minus_pygid": 0.0017038455692559573
+     },
+     {
+      "q": 1.9912,
+      "gimap_minus_pygid": 0.001734209563360345
+     },
+     {
+      "q": 2.2272,
+      "gimap_minus_pygid": 0.0017083181424637495
+     },
+     {
+      "q": 2.8183,
+      "gimap_minus_pygid": 0.0012668076563633335
+     },
+     {
+      "q": 2.9869,
+      "gimap_minus_pygid": 0.0015466981443426064
+     }
+    ]
+   }
+  },
+  {
+   "frame": "giwaxs_xeuss_pbte",
+   "shape": [
+    619,
+    487
+   ],
+   "tilt_deg": 6.058,
+   "incidence_deg": 0.235,
+   "pixels": {
+    "as_given": {
+     "q_parallel_max_abs": 0.0023710559103483804,
+     "qz_max_abs": 0.0023877142007351845,
+     "same_sign": false
+    },
+    "half_pixel": {
+     "q_parallel_max_abs": 1.7763568394002505e-15,
+     "qz_max_abs": 1.7763568394002505e-15,
+     "same_sign": true
+    }
+   },
+   "polar_step": 0.00479201595906209,
+   "rings": [
+    {
+     "q": 0.4265,
+     "gimap_minus_pygid": -0.0020540239488830436
+    },
+    {
+     "q": 2.5781,
+     "gimap_minus_pygid": -0.0002185735793465149
+    }
+   ],
+   "published": {
+    "pygid": "0.1.16",
+    "q_grid_max_abs_vs_this_pygid": null,
+    "rings": [
+     {
+      "q": 0.4208,
+      "gimap_minus_pygid": 0.0026507039807781574
+     }
+    ]
+   }
+  }
+ ]
+}
