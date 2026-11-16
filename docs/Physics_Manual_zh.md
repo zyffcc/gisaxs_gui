@@ -1539,7 +1539,17 @@ P(q) = Σ_j w_j P(q; x_j)                                                       
 | 随机取向圆柱 | R 和 h，分别平均 | 各 13 | ±4σ |
 | 竖直圆柱 | R | 26 | ±3σ |
 
-实现：`src/gimap/features/fitting/domain/scattering_model.py`
+**按强度还是按数目。** 球和随机取向圆柱归一化为 P(0) = 1（9.4 节），每个节点在 q = 0 处散射相同，所以 w_j 是散射强度
+的分布。按数目，球是 w_j / R_j⁶，随机取向圆柱是 w_j / R_j⁴。竖直圆柱的形状因子里保留了 R⁴（9.10），所以它的 w_j
+本身就是按数目的。fit1d 和显微镜都按数目计。拟合之后，结果给出每种颗粒按数目的半径和相对宽度（*按数目*；导出记录
+中的 `derived`），以及 9.5 节的 σ_nn/D = √(2π) σ_D。
+
+球的数目分布是 G(R)/R⁶。只有 σ_R/R < 1/√24 ≈ 0.20 时它才有极大值（随机取向圆柱为 1/√16 = 0.25）；超过之后它向小 R
+上升，平均值由 (9.2) 的网格在哪里截断决定。这时 GIMaP 写*无定义*：条件是最大的数目权重在网格内部，并且最小的节点
+不到它的 10 %。所以较宽的按强度的球分布并不能说明小颗粒有多少。
+
+实现：`src/gimap/features/fitting/domain/scattering_model.py`、`src/gimap/features/fitting/domain/fit_model.py`
+（`number_size`、`sigma_nn_over_d`）
 
 ### 9.4 代码中的形状因子
 

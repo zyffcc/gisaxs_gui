@@ -1783,7 +1783,21 @@ is a rectangle rule over the truncated Gaussian.
 | Random cylinder | R and h, averaged separately | 13 each | ±4σ |
 | Vertical cylinder | R | 26 | ±3σ |
 
-Implementation: `src/gimap/features/fitting/domain/scattering_model.py`
+**By intensity or by number.** The sphere and the random cylinder are normalised to P(0) = 1 (section 9.4), so every
+node scatters the same at q = 0 and w_j is a distribution of scattered intensity. By number it is w_j / R_j⁶ for
+spheres and w_j / R_j⁴ for random cylinders. The vertical cylinder keeps R⁴ in its form factor (9.10), so its w_j
+already counts particles. fit1d and microscopy count particles. After a fit, the results give each particle's radius
+by number and its relative spread (*By number*; `derived` in the exported record), and σ_nn/D = √(2π) σ_D of
+section 9.5.
+
+The number distribution of spheres is G(R)/R⁶. It has a maximum only for σ_R/R < 1/√24 ≈ 0.20 (1/√16 = 0.25 for
+random cylinders); above that it rises towards small R, and its mean would be set by where the grid of (9.2) is
+cut. GIMaP then writes *not defined*: the condition is that the largest number weight lies inside the grid and the
+smallest node holds less than 10 % of it. A broad intensity-weighted sphere distribution therefore does not say how
+many small particles there are.
+
+Implementation: `src/gimap/features/fitting/domain/scattering_model.py`, `src/gimap/features/fitting/domain/fit_model.py`
+(`number_size`, `sigma_nn_over_d`)
 
 ### 9.4 Form factors as coded
 

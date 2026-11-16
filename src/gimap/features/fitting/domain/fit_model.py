@@ -205,6 +205,48 @@ def qz_plus_r(model: FitModel) -> list[tuple[int, float]]:
     return [(index, paths[0] * c.value("R")) for index, c in enumerate(model.components) if c.family == "sphere"]
 
 
+NUMBER_POWER = {"sphere": 6, "cylinder": 4, "vertical_cylinder": 0}
+"""What turns the radius weights of a family into number weights: the sphere and the random cylinder are normalised
+to P(0) = 1, so their Gaussian is one of scattered intensity (number × V², V² ∝ R⁶ and R⁴ at a given height); the
+vertical cylinder keeps R⁴ in its form factor (9.10), so its Gaussian already counts particles."""
+SIZE_NODES = {"sphere": (25, 4.0), "cylinder": (13, 4.0), "vertical_cylinder": (26, 3.0)}
+
+
+TAIL_SHARE = 0.1
+"""The number distribution is reported only when it peaks inside the grid and its smallest node holds less than this
+share of its largest."""
+
+
+def number_size(component: Component) -> Optional[tuple[float, float]]:
+    """(mean, relative standard deviation) of the radius by number, on the nodes of the component's size average,
+    for comparison with sizes counted in microscopy or with fit1d (whose R is number-weighted).
+
+    ``None`` when it is not defined: an intensity-weighted Gaussian of spheres is G(R)/R⁶ by number, which rises
+    towards small R once σ_R/R exceeds about 1/√24 ≈ 0.2 (1/√16 = 0.25 for random cylinders); its mean would then be
+    set by where the size grid is cut, not by the data."""
+    from .scattering_model import _gaussian_grid
+
+    radius, spread = component.value("R"), component.value("sigma_R")
+    nodes, sigmas = SIZE_NODES[component.family]
+    x, w = _gaussian_grid(radius, radius * spread, nsig=sigmas, n=nodes, clip_min=0.0)
+    x = np.asarray(x, float)
+    w = np.asarray(w, float) / np.maximum(x, 1e-12) ** NUMBER_POWER[component.family]
+    if NUMBER_POWER[component.family] and x.size > 1 and (
+            not np.isfinite(w).all() or int(np.argmax(w)) == 0 or w[0] >= TAIL_SHARE * w.max()):
+        return None
+    w = w / w.sum()
+    mean = float(np.sum(w * x))
+    return mean, float(np.sqrt(np.sum(w * (x - mean) ** 2)) / mean) if mean > 0 else 0.0
+
+
+def sigma_nn_over_d(component: Component) -> Optional[float]:
+    """σ_nn/D, the relative standard deviation of the neighbour distance (Hosemann; fit1d's w/D), from Fitting's
+    σ_D: its paracrystal damps with exp(−π q² (σ_D D)²), Hosemann's with exp(−q² σ_nn² / 2)."""
+    if not component.structure:
+        return None
+    return math.sqrt(2.0 * math.pi) * component.value("sigma_D")
+
+
 def component_form(component: Component, q: np.ndarray, cache: Optional[dict] = None,
                    paths: Optional[tuple] = None) -> np.ndarray:
     """P(q)·S(q) of one component with scale 1 (q in nm⁻¹). ``cache``: reuse the parts that did not
@@ -369,6 +411,6 @@ def model_from_dict(data: Mapping) -> FitModel:
 
 __all__ = [
     "BASE_GLOBALS", "FAMILIES", "GLOBALS", "GRAZING", "INFO", "LINEAR", "Component", "FitModel", "Parameter",
-    "ParameterInfo", "component_form", "evaluate", "grazing", "qz_plus_r", "from_manual", "model_from_dict", "model_to_dict", "new_component",
+    "ParameterInfo", "component_form", "evaluate", "grazing", "number_size", "qz_plus_r", "sigma_nn_over_d", "from_manual", "model_from_dict", "model_to_dict", "new_component",
     "resolution_shape", "to_manual",
 ]
