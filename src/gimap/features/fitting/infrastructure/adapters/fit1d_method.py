@@ -226,7 +226,9 @@ def solution_row(result, item, options, seconds: float) -> dict:
         best_chi2_weighted=float(np.mean(residual**2)),
         signed_huber_delta2=float(np.mean(np.where(abs(residual) <= 2, 0.5 * residual**2, 2 * (abs(residual) - 1)))),
         signed_weighted_rms=float(np.sqrt(np.mean(residual**2))),
-        probability_status="Not calibrated",
+        # what the 1σ are worth, measured on 200 held-out curves (tools/benchmarks/fit1d_recovery.py)
+        probability_status=("statistical 1-sigma: 61-70 % of the values within it on curves of fit1d's own physics, "
+                            "26-43 % with a beam tail and roughness (Physics and Methods 9.12)"),
         conditions_source="user_composition",
         validation_scope=SCOPE,
         algorithm="gisaxs1d kit: network proposals, (R, D) grid alignment, Levenberg-Marquardt with linear "
