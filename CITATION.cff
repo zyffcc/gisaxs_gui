@@ -6,7 +6,7 @@ type: software
 title: "GIMaP: Grazing-Incidence Mapping Package"
 abstract: >-
   GIMaP is a desktop application for grazing-incidence small- and wide-angle X-ray scattering
-  (GISAXS, GIWAXS). It reduces detector frames to curves at the exact scattering vector,
+  (GISAXS, GIWAXS). It reduces detector frames to curves in the kinematic scattering vector of a flat detector,
   analyses them without AI (peak tables, orientation and crystallite size for GIWAXS; the Yoneda
   cut, the length scale 2π/q* and particle-model fits for GISAXS), fits 1D curves and in-situ series,
   finds stages and odd frames in series, and records where every number came from.

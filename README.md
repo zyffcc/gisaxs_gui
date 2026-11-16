@@ -1,7 +1,8 @@
 # GIMaP — Grazing-Incidence Mapping Package
 
 GIMaP is a desktop program for grazing-incidence small- and wide-angle X-ray scattering (GISAXS and
-GIWAXS). It turns detector frames into curves at the exact scattering vector, analyses them without AI
+GIWAXS). It turns detector frames into curves in the kinematic scattering vector q of a flat detector, analyses
+them without AI
 (peaks, orientation and crystallite size for GIWAXS; the Yoneda cut, the length scale 2π/q\* and particle
 models for GISAXS), fits 1D curves and whole in-situ series, and compares runs and samples. Every curve
 it exports carries a record of the frames, geometry and settings it came from. GIMaP is written for
@@ -21,7 +22,7 @@ right.*
 ## What GIMaP does
 
 - **Analyze** (GISAXS and GIWAXS): CBF, TIFF, EDF and NeXus/HDF5 frames, one by one or as a series, to
-  curves at the exact q (Å⁻¹): GISAXS cuts, I(q), sectors, q boxes and I(χ). Geometry from a calibrant or a
+  curves in q (Å⁻¹, kinematic, flat detector; a `.poni` tilt is reported with its q error): GISAXS cuts, I(q), sectors, q boxes and I(χ). Geometry from a calibrant or a
   `.poni` file, kept as the instrument profile of the detector; masks, hot and dead pixels left out per
   frame, background subtraction and optional GIWAXS intensity corrections with propagated errors.
 - **Run Automatic Analysis** (no AI): for GIWAXS a peak table with fitted positions, widths and
