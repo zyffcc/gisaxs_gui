@@ -1932,6 +1932,13 @@ Implementation: `src/gimap/features/fitting/domain/scattering_model.py`, `src/gi
 
 Each component has Int, R, σ_R/R (h and σ_h/h for random cylinders) and, with its structure factor, D and σ_D/D.
 
+**D is at least 2R.** A fit keeps the distance of a component's paracrystal at or above twice its mean radius, so
+particles of the mean radius do not overlap. With R and D both free, D is searched between max(D_min, 2R) and
+D_max at every R; with R fixed, D's minimum is raised to 2R; with D fixed, R's maximum is lowered to D/2. A D that
+ends at 2R is reported at its lower bound (section 9.8): the particles touch, and the curve does not hold D there.
+Values that are not fitted are left as they are. For a random cylinder 2R is the smallest in-plane size, so the
+limit is a minimum, not its contact distance. Before 0.2, D could fall below 2R (on the GALAXI cut of 9.10 to 1 nm).
+
 Implementation: `src/gimap/features/fitting/domain/fit_model.py`
 
 ### 9.7 Objective and the scales
@@ -2139,14 +2146,15 @@ Yoneda cut of Analyze with one scale and one background at χ²_red = 2.1 above 
 (its monodisperse spheres have a minimum at 0.78 nm⁻¹ the cut does not have).
 
 - Fitting describes the measured cut with a sphere and a paracrystal at χ²_red ≈ 1.1 (EIA or two paths, LMA or
-  DA): R = 9.5 to 11.5 nm, σ_R/R = 0.17 to 0.37. On BornAgain's model of the frame, simulated on the same cut
-  with the counts of the measurement, it finds the same: R = 8.1 to 10.1 nm, σ_R/R = 0.33 to 0.41. Fitting reads
-  the measured cut as it reads the model of it.
+  DA): R = 9.4 to 11.5 nm, σ_R/R = 0.17 to 0.35. On BornAgain's model of the frame, simulated on the same cut
+  with the counts of the measurement, it finds the same: R = 8.5 to 10.0 nm, σ_R/R = 0.18 to 0.35 (one of 12 fits,
+  with two paths, at 23 nm). Fitting reads the measured cut as it reads the model of it.
 - These R are not a mean of the log-normal: by number it is 6.2 nm, weighted by R⁶ 16.3 nm. A Gaussian on
   intensity weights fitted to a broad log-normal lies between them; σ_R/R is close to the log-normal's relative
   spread, 0.42.
-- D is not determined by this cut, measured or simulated: it shows no correlation peak, and the fitted D ends at
-  1 to 7 nm (below 2R) or several hundred nm. With D and the disorder held at BornAgain's values, χ²_red rises to
+- D is not determined by this cut, measured or simulated: it shows no correlation peak, and the fitted D ends
+  anywhere from about 200 to 3000 nm, on the simulated cut from 74 to 2500 nm (before D ≥ 2R of section 9.6, also
+  at 1 to 7 nm, overlapping particles). With D and the disorder held at BornAgain's values, χ²_red rises to
   6 to 22: the paracrystal of (9.12) has no size–spacing coupling, which damps BornAgain's S strongly at κ = 17.5.
 
 The scripts are `physics/galaxi_bornagain.py` and `physics/galaxi_ba_model.py` of the GIMaP paper's materials.

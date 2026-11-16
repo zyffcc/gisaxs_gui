@@ -29,6 +29,8 @@ TINY = 1e-300
 CORRELATED = 0.95
 EDGE = 1e-3
 """A non-linear parameter within this fraction of its range from a bound is reported as at the bound."""
+CONTACT = 2.0
+"""The paracrystal's distance D of a component is at least CONTACT · R: particles of the mean radius do not overlap."""
 LOCAL_STEP = 0.02
 """First steps of a local fit, as a fraction of each parameter's range (log range when log-scaled)."""
 SOLVING, SEARCHING, REFINING = PHASES = ("Solving the scales", "Searching the ranges", "Refining")
@@ -128,6 +130,7 @@ class _Problem:
                 raise ValueError(f"Give {path[1]} a finite range (min < max) to fit it")
         self.lower = np.array([p.lower for _path, p in self.nonlinear], dtype=float)
         self.upper = np.array([p.upper for _path, p in self.nonlinear], dtype=float)
+        self.pairs = self._contact(model)
         self.logarithmic = (self.lower > 0) & (self.upper >= 10.0 * np.maximum(self.lower, TINY))
         self.weights = 1.0 / data.sigma if data.sigma is not None else 1.0 / data.intensity
         self.evaluations = 0
@@ -136,7 +139,42 @@ class _Problem:
         self._reported = 0.0
         self.phase = ""
 
+    def _contact(self, model: FitModel) -> list[tuple[int, int]]:
+        """D ≥ CONTACT · R in every component with a paracrystal. With one of the two fixed, the other's range is
+        narrowed here; with both free, the pairs ``(index of D, index of R)`` among the non-linear values are returned and
+        D is searched between CONTACT · R and its maximum (``decode``). Values the person fixed are left as they are."""
+        where = {path: index for index, (path, _p) in enumerate(self.nonlinear)}
+        pairs = []
+        for owner, component in enumerate(model.components):
+            if "D" not in component.keys():
+                continue
+            d_index, r_index = where.get((owner, "D")), where.get((owner, "R"))
+            if d_index is not None and r_index is not None:
+                pairs.append((d_index, r_index))
+            elif d_index is not None:
+                self.lower[d_index] = min(max(self.lower[d_index], CONTACT * component.value("R")),
+                                          np.nextafter(self.upper[d_index], -np.inf))
+            elif r_index is not None:
+                self.upper[r_index] = max(min(self.upper[r_index], component.value("D") / CONTACT),
+                                          np.nextafter(self.lower[r_index], np.inf))
+        return pairs
+
     # -- the unit cube ↔ values -----------------------------------------------------
+
+    def _floor(self, values, d_index: int, r_index: int) -> float:
+        """The lowest D of a pair at the radius in ``values`` (just below D's maximum when 2R is beyond it)."""
+        return min(max(self.lower[d_index], CONTACT * values[r_index]), self.upper[d_index] * (1.0 - 1e-9))
+
+    def _to_value(self, t: float, low: float, high: float, logarithmic: bool) -> float:
+        if logarithmic:
+            return float(np.exp(np.log(low) + t * (np.log(high) - np.log(low))))
+        return low + t * (high - low)
+
+    def _to_unit(self, value: float, low: float, high: float, logarithmic: bool) -> float:
+        value = min(max(value, low), high)
+        if logarithmic:
+            return float((np.log(value) - np.log(low)) / (np.log(high) - np.log(low)))
+        return (value - low) / (high - low)
 
     def decode(self, t) -> np.ndarray:
         t = np.clip(np.asarray(t, dtype=float), 0.0, 1.0)
@@ -144,7 +182,11 @@ class _Problem:
         if self.logarithmic.any():
             lo, hi = np.log(self.lower[self.logarithmic]), np.log(self.upper[self.logarithmic])
             values[self.logarithmic] = np.exp(lo + t[self.logarithmic] * (hi - lo))
-        return np.clip(values, self.lower, self.upper)
+        values = np.clip(values, self.lower, self.upper)
+        for d_index, r_index in self.pairs:
+            values[d_index] = self._to_value(t[d_index], self._floor(values, d_index, r_index), self.upper[d_index],
+                                             bool(self.logarithmic[d_index]))
+        return values
 
     def encode(self, values) -> np.ndarray:
         values = np.clip(np.asarray(values, dtype=float), self.lower, self.upper)
@@ -152,6 +194,9 @@ class _Problem:
         if self.logarithmic.any():
             lo, hi = np.log(self.lower[self.logarithmic]), np.log(self.upper[self.logarithmic])
             t[self.logarithmic] = (np.log(values[self.logarithmic]) - lo) / (hi - lo)
+        for d_index, r_index in self.pairs:
+            t[d_index] = self._to_unit(values[d_index], self._floor(values, d_index, r_index), self.upper[d_index],
+                                       bool(self.logarithmic[d_index]))
         return np.clip(t, 1e-9, 1.0 - 1e-9)
 
     def start(self) -> np.ndarray:
