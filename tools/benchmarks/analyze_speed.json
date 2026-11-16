@@ -14,8 +14,9 @@
     981
    ],
    "megapixels": 1.023183,
-   "first_s": 0.13487529999110848,
-   "next_median_s": 0.06448699999600649
+   "first_s": 0.12828999999328516,
+   "next_median_s": 0.06304369997815229,
+   "peak_memory_mb": 177
   },
   {
    "frame": "galaxi_data.tif",
@@ -25,8 +26,9 @@
     981
    ],
    "megapixels": 1.023183,
-   "first_s": 0.13740839998354204,
-   "next_median_s": 0.087158799986355
+   "first_s": 0.13866490000509657,
+   "next_median_s": 0.08885669999290258,
+   "peak_memory_mb": 188
   },
   {
    "frame": "S121_MAI_A2_00841.tif",
@@ -36,8 +38,9 @@
     2048
    ],
    "megapixels": 4.194304,
-   "first_s": 1.0481230999866966,
-   "next_median_s": 0.6712590999959502
+   "first_s": 1.0242288000008557,
+   "next_median_s": 0.6742277000157628,
+   "peak_memory_mb": 550
   },
   {
    "frame": "PbTe_3010_r1_PT_1_10_0_00028.edf",
@@ -47,8 +50,9 @@
     487
    ],
    "megapixels": 0.301453,
-   "first_s": 0.08200779999606311,
-   "next_median_s": 0.060536100005265325
+   "first_s": 0.0789070000173524,
+   "next_median_s": 0.059912600001553074,
+   "peak_memory_mb": 550
   }
  ]
 }

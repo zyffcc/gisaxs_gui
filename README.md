@@ -117,6 +117,17 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
+On Linux or macOS:
+
+```bash
+cd gisaxs_gui
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python main.py
+```
+
 If PowerShell blocks activation in the current terminal session:
 
 ```powershell
@@ -287,6 +298,10 @@ Where you rely on a method or a data set that GIMaP builds on, cite it as well: 
 - **Disk**: about 2 GB for the Python environment, and about 1.2 GB more for PyTorch (Sputter workspace): the
   portable version installs it on the first Sputter **Predict**, and `Start_GIMaP.bat` in a source folder
   installs it at the first start.
+- **Memory and speed**: reducing one frame in Analyze takes 0.06 s for a Pilatus 1M GISAXS frame and 0.7 s for a
+  2048 × 2048 GIWAXS frame (the first frame of a detector 0.13 s and 1.0 s), and the process then holds about
+  0.2 GB and 0.6 GB (`tools/benchmarks/analyze_speed.py`, a 32-thread desktop CPU). The window, Batch Export of
+  long series and Sputter's analysis need more.
 - **CPU**: everything runs on the CPU. GPU TensorFlow setups are not configured by this repository and must
   be installed separately if required.
 

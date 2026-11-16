@@ -3,7 +3,8 @@
 For each frame: the first reduction (the q map of the detector is made then) and the median of the next ones (the
 q map is reused, as for every further frame of a series), each the full reduction of Analyze — corrections, masks,
 cuts or I(q) and I(χ) — without the automatic analysis and without writing files. One process, the BLAS threads
-numpy has. Prints a table; with --json writes it too.
+numpy has. The peak memory is that of the process so far (it grows with the largest frame). Prints a table; with
+--json writes it too.
 usage: python tools/benchmarks/analyze_speed.py [--repeat 5] [--json FILE]
 """
 from __future__ import annotations
@@ -43,6 +44,20 @@ def _profile(folder: Path, poni: str, shape, incidence: float) -> InstrumentProf
     return InstrumentProfile("bench", geometry, None, shape, dropped_tilt=read.tilt)
 
 
+def _peak_mb():
+    """The largest memory the process has held so far (MB), when psutil can say it (``None`` otherwise)."""
+    try:
+        import psutil
+    except ImportError:
+        return None
+    info = psutil.Process().memory_info()
+    peak = getattr(info, "peak_wset", None)  # Windows
+    if peak is None:
+        import resource  # POSIX: kilobytes on Linux, bytes on macOS
+        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if sys.platform == "darwin" else 1024)
+    return round(peak / 2**20)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repeat", type=int, default=5)
@@ -62,13 +77,13 @@ def main() -> None:
             times.append(time.perf_counter() - start)
         assert analysis.reduction is not None
         rows.append(dict(frame=frame, mode=mode, shape=list(shape), megapixels=shape[0] * shape[1] / 1e6,
-                         first_s=times[0], next_median_s=statistics.median(times[1:])))
+                         first_s=times[0], next_median_s=statistics.median(times[1:]), peak_memory_mb=_peak_mb()))
     machine = dict(python=platform.python_version(), processor=platform.processor(), cpus=os.cpu_count(),
                    system=platform.platform())
-    print(f"{'frame':36s} {'mode':7s} {'pixels':>12s} {'first':>8s} {'next':>8s}")
+    print(f"{'frame':36s} {'mode':7s} {'pixels':>12s} {'first':>8s} {'next':>8s} {'peak MB':>8s}")
     for row in rows:
         print(f"{row['frame']:36s} {row['mode']:7s} {row['shape'][0]:>5d}x{row['shape'][1]:<6d} "
-              f"{row['first_s']:7.2f}s {row['next_median_s']:7.2f}s")
+              f"{row['first_s']:7.2f}s {row['next_median_s']:7.2f}s {row['peak_memory_mb'] or 0:8d}")
     print(machine)
     if a.json:
         a.json.write_text(json.dumps(dict(machine=machine, frames=rows), indent=1), encoding="utf-8")
