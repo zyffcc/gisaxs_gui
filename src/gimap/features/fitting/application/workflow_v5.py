@@ -107,6 +107,16 @@ def _validate_fit1d(out: dict) -> None:
         raise ValueError("nu_res must be within [0.5, 12.0] for fit1d")
 
 
+def workflow_options_for_mode(options, run_mode):
+    """The options of a run: the saved method, or the one ``run_mode`` names (``fast``: General V5)."""
+    result = {**options, "q_unit": "nm^-1", "numerical": run_mode != "fast"}
+    if run_mode in ("stable", "experimental", "fit1d"):
+        result["method"] = run_mode
+    elif run_mode == "fast":
+        result["method"] = "model"
+    return result
+
+
 def validate_options(options: dict) -> dict:
     out = {**default_options(), **options}
     # Legacy recipes migrate this value into detector preprocessing at capture/runtime.

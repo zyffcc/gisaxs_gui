@@ -124,7 +124,6 @@ def _threads_without_a_stack(path: Path) -> list[int]:
 
 
 @pytest.mark.parametrize("module", [
-    "src/gimap/features/fitting/presentation/bindings/ai_job_execution.py",
     "src/gimap/features/calibration/presentation/bindings/calibration_run.py",
 ])
 def test_the_threads_of_the_numerical_jobs_ask_for_the_stack(module: str) -> None:

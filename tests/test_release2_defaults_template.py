@@ -51,7 +51,6 @@ from src.gimap.features.fitting.infrastructure.adapters.model_parameters import 
 from src.gimap.features.fitting.infrastructure.adapters.model_parameters_store import (
     ModelParametersManager,
 )
-from src.gimap.features.fitting.presentation.scientific_commands import COMPONENT_PARAMETER_SCHEMAS
 from src.gimap.features.fitting.presentation.single.session import starting_model
 from src.gimap.integrations.state import migrate_legacy_files
 
@@ -65,6 +64,13 @@ STORE_NAMES = {
 }
 """The names of the manual model's parameters (``params_template``) in the store."""
 
+
+STORE_KEYS = {
+    "Sphere": ["intensity", "radius", "sigma_radius", "diameter", "sigma_diameter"],
+    "Cylinder": ["intensity", "radius", "sigma_radius", "height", "sigma_height", "diameter", "sigma_diameter"],
+    "Vertical Cylinder": ["intensity", "radius", "sigma_radius", "diameter", "sigma_diameter"],
+}
+"""The values of a component's block in ``model_parameters.json``, in the order ``make_mixed_model`` takes them."""
 
 def _template() -> dict:
     return json.loads(TEMPLATE.read_text(encoding="utf-8"))
@@ -165,13 +171,13 @@ def test_the_template_has_the_structure_the_store_builds_and_the_former_page_rea
 
     particles, built_particles = template["fitting"]["particles"], built["fitting"]["particles"]
     assert list(particles) == list(built_particles)  # the components the page has: nothing left from a session
-    schemas = {_shape_key(shape): [row[0] for row in schema] for shape, schema in COMPONENT_PARAMETER_SCHEMAS.items()}
+    schemas = {_shape_key(shape): keys for shape, keys in STORE_KEYS.items()}
     for name, entry in particles.items():
         assert set(entry) == {"shape", "enabled", "parameters"}
         assert (entry["shape"], entry["enabled"]) == (built_particles[name]["shape"], built_particles[name]["enabled"])
         assert set(entry["parameters"]) == set(built_particles[name]["parameters"]) == set(schemas)
         for shape, block in entry["parameters"].items():
-            assert list(block) == schemas[shape], (name, shape)  # the values the page's fields read
+            assert list(block) == schemas[shape], (name, shape)  # the values in the order of the model
 
 
 def test_a_new_user_folder_gets_the_template_and_an_existing_file_is_never_touched(tmp_path, monkeypatch) -> None:
@@ -284,14 +290,6 @@ def test_a_start_and_a_close_leave_the_model_file_of_an_earlier_version_as_it_is
     monkeypatch.setenv("GIMAP_HOME", str(target.parent))
     app, window = _fitting_window()
     try:
-        binding = window.runtime.fitting  # the former page shows the user's model, not the template's
-        assert binding.get_particles_status() == {1: "Cylinder", 2: "None", 3: "None"}
-        shapes, widget_ids = binding._collect_active_particles()
-        values = binding._get_current_manual_param_values(shapes, widget_ids)
-        own = OLDER_USER_FILE["fitting"]["particles"]["particle_1"]["parameters"]["cylinder"]
-        assert values[:7] == [own[row[0]] for row in COMPONENT_PARAMETER_SCHEMAS["Cylinder"]]
-        assert (values[7], values[11]) == (0.5, 2.5)  # its background and factor k
-        assert np.all(np.isfinite(make_mixed_model(shapes)(Q_NM, *values)))
         # the page people see starts from the code's model whatever the file holds
         assert window.components.fitting_workspace.fit_page.session.model == starting_model()
     finally:
@@ -313,21 +311,8 @@ def test_fitting_opens_with_the_neutral_model_in_an_empty_user_folder(tmp_path, 
         page = window.components.fitting_workspace.fit_page
         assert page.session.model == starting_model() and not page.session.edited
 
-        binding = window.runtime.fitting  # the former page, fed by the file: the same model
-        assert binding.get_particles_status() == {1: "Sphere", 2: "None", 3: "None"}
-        shapes, widget_ids = binding._collect_active_particles()
-        values = binding._get_current_manual_param_values(shapes, widget_ids)
-        expected = to_manual(page.session.model)
-        component = expected.components[0].parameters
-        assert shapes == ["sphere"]
-        assert values == [
-            *(component[row[0]] for row in COMPONENT_PARAMETER_SCHEMAS["Sphere"]),
-            *(expected.global_parameters[STORE_NAMES[name]] for name in params_template(shapes)[-5:]),
-        ]
-
-        curve = np.asarray(make_mixed_model(shapes)(Q_NM, *values), dtype=float)
+        curve = evaluate(page.session.model, Q_NM)
         assert np.all(np.isfinite(curve)) and np.all(curve > 0)
-        np.testing.assert_allclose(curve, evaluate(page.session.model, Q_NM), rtol=1e-9)
         assert (home / "model_parameters.json").read_bytes() == TEMPLATE.read_bytes()  # opening changes nothing
     finally:
         window.close()

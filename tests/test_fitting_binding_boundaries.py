@@ -14,19 +14,6 @@ BINDING = (
 
 def _binding_paths():
     yield BINDING
-    yield BINDING.parent / "binding_primitives.py"
-    for name in (
-        "scientific_commands.py",
-        "refinement_workers.py",
-        "independent_image_window.py",
-        "independent_fit_window.py",
-        "display_manager.py",
-        "image_loading_workers.py",
-    ):
-        path = BINDING.parent / name
-        if path.exists():  # detector-era modules are removed as the curve-first page lands
-            yield path
-    yield from sorted((BINDING.parent / "bindings").glob("*.py"))
 
 
 def _binding_source():
@@ -87,23 +74,6 @@ def test_view_binding_routes_scientific_work_through_view_model():
     assert not any("fitting.domain" in name for name in imported)
     assert "def _sort_filter_pairs" not in source
     assert "def _interpolate_series(x, y, x_new" not in source
-
-
-def test_dynamic_particle_stack_receives_injected_fitting_view_model():
-    tree = ast.parse(_binding_source())
-    calls = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "CurrentPageHeightStackedWidget"
-    ]
-
-    assert calls
-    assert all(
-        any(keyword.arg == "fitting_view_model" for keyword in call.keywords)
-        for call in calls
-    )
 
 
 def test_fitting_view_models_remain_below_architecture_review_threshold():

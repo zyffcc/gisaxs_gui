@@ -147,19 +147,14 @@ def test_trainset_job_status_exposes_progress_widgets_and_percent_range():
     page.close()
 
 
-def test_fitting_layout_is_curve_card_model_and_plot_without_replacing_actions():
+def test_fitting_layout_is_single_analysis_and_the_series():
     _app()
     window = MainWindow(_context())
     workspace = window.components.fitting_workspace
 
-    assert workspace.page_splitter.count() == 2
-    assert workspace.controls_scroll_area.widget() is workspace.controls_content
-    assert workspace.curve_card.parent() is workspace.controls_content
-    assert workspace.results_scroll_area.widget() is workspace.results_panel
-    assert workspace.plot_controls_section.is_expanded() is False
-    assert workspace.log_section.is_expanded() is False
-    assert window.FittingExportButton.parent() is workspace.results_panel
-    assert window.fitExportPlotButton.parent() is workspace.results_panel
+    assert workspace.context_stack.count() == 2
+    assert workspace.context_stack.currentWidget() is workspace.fit_page
+    assert workspace.context_container.parent() is window.gisaxsFittingPage
     window.close()
 
 

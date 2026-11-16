@@ -35,11 +35,9 @@ shared pyqtgraph `CurvePlot`, like Analyze.
 and `auto_range` choices to `CurvePlot`: data and total model set the default limits, optional components
 retain their original values, and visibility changes preserve the current view.
 
-Matplotlib remains where the older views still are: the 1D Predict window (`workflow_v5_dialog.py`), the classic
-single-curve page and the former in-situ page, which are still built but never shown
-(`fitting/presentation/workspace.py`; the in-situ heatmap with its colour bar is in
-`bindings/insitu_monitoring.py`), and the independent curve windows. Their curve plots go through one
-specification and renderer, `render_curve_plot` (`curve_rendering.py`), which reuses its artists across refreshes.
+Matplotlib remains in the 1D Predict window (`workflow_v5_dialog.py`); `curve_rendering.py` gives its figure the
+screen theme and a font with Chinese glyphs. The classic single-curve page, the former in-situ page and their
+independent curve windows were removed on 2026-11-16 (they had been built but never shown).
 
 `ScientificImageViewer` (`components/scientific_image_viewer.py`) is exported by the components package and has
 its own test (`tests/test_scientific_image_viewer.py`), but no feature uses it now.

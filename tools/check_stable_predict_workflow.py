@@ -133,71 +133,6 @@ def check_rows(rows, *, payload=None):
     return scores
 
 
-def check_gui_export(fitting, out, stage):
-    """Exercise the ordinary Export path with deterministic dialog selections."""
-    from PyQt5.QtWidgets import QDialog
-    from src.gimap.features.fitting.presentation.bindings import fit_result_export
-    from src.gimap.features.fitting.presentation.export_dialog import FittingExportSelection
-
-    target = out / f"native_fit_{stage}_{time.time_ns()}.txt"
-    original_dialog = fit_result_export.FittingDataExportDialog
-    original_save = fit_result_export.QFileDialog.getSaveFileName
-
-    class SelectedExport:
-        def __init__(self, *_args):
-            pass
-
-        def exec_(self):
-            return QDialog.Accepted
-
-        def selection(self):
-            return FittingExportSelection("Fitting Data", "raw")
-
-    try:
-        fit_result_export.FittingDataExportDialog = SelectedExport
-        fit_result_export.QFileDialog.getSaveFileName = lambda *_a, **_k: (str(target), "")
-        fitting._export_fitting_data()
-    finally:
-        fit_result_export.FittingDataExportDialog = original_dialog
-        fit_result_export.QFileDialog.getSaveFileName = original_save
-    text = target.read_text(encoding="utf-8")
-    assert "# Parameter Source: native_v5_candidate_snapshot" in text
-    assert "Fitting parameter export error" not in text
-    side = None
-    exported = {}
-    for line in text.splitlines():
-        if line.startswith("# Side: "):
-            side = line.split(": ", 1)[1]
-            exported[side] = {}
-        elif side is not None and line.startswith("#   ") and " = " in line:
-            key, value = line[4:].split(" = ", 1)
-            if value not in ("True", "False"):
-                exported[side][key] = float(value)
-    meta = fitting.fitting["meta"]
-    candidates = meta.get("side_candidates") or [meta["candidate"]]
-    assert set(exported) == {row["side"] for row in candidates}
-    for row in candidates:
-        assert f"# Forward Version: {row['forward_version']}" in text
-        expected = dict(row["global_params"])
-        for index, component in enumerate(row["components"], 1):
-            values = {
-                **component["params"],
-                **{key: component[key] for key in ("amplitude", "weight", "type_id")},
-            }
-            expected.update({f"component_{index}_{key}": value for key, value in values.items()})
-        for key, value in expected.items():
-            if value is not None:
-                assert exported[row["side"]][key] == float(value), (row["side"], key)
-    numeric_lines = [line for line in text.splitlines() if line and not line.startswith("#")]
-    actual = np.loadtxt(numeric_lines[1:])
-    expected_q = fitting._convert_q_values_for_display(
-        fitting.fitting["q"], source=meta.get("data_source")
-    )
-    np.testing.assert_allclose(actual[:, 0], expected_q, rtol=1e-6, atol=1e-10)
-    np.testing.assert_allclose(actual[:, 1], fitting.fitting["I"], rtol=1e-6, atol=1e-10)
-    return dict(path=str(target), sides=sorted(exported), candidate_parameters_preserved=True)
-
-
 def run_worker_checks(out):
     from src.gimap.app.jobs import JobRequest
     from src.gimap.integrations.jobs import LocalProcessJobRunner
@@ -333,7 +268,7 @@ def saved_geometry_profile(saved):
     )
 
 
-def run_ui_checks(out, *, insitu=False):
+def run_ui_checks(out):
     """Analyze opens the CBF, refines x by symmetry and sends the cut; Fitting predicts."""
     import shutil
 
@@ -411,18 +346,18 @@ def run_ui_checks(out, *, insitu=False):
         refined_x = analyze.view_model.state.analysis.geometry.beam_center_x_px
         analyze.fit_button.click()
         fitting = window.runtime.fitting
-        until(lambda: fitting._initialized and fitting.current_1d_data is not None)
+        page = window.components.fitting_workspace.fit_page
+        until(lambda: fitting._initialized and page.session.curve is not None)
         messages = []
         fitting.status_updated.connect(messages.append)
-        # Limit the fitting range (|q| in the default folded view) to the validated profile.
-        limit = validated_q_max_angstrom(fitting.current_1d_data["q"])
-        window.fitFittingRegionMaxValue.setValue(fitting._roi_data_to_control_range(0.0, limit)[1])
-        window.fitFittingRegionMaxValue.editingFinished.emit()
+        # Limit the fitting range (|q|, nm⁻¹ on the page) to the validated profile.
+        curve_path = page.session.curve.path
+        data, _side, _range, _excluded = fitting._current_curve_data()
+        limit = validated_q_max_angstrom(data["q"])
+        q_max = 10.0 * limit
+        page.set_range((0.0, q_max))
         app.processEvents()
-        # The control shows the plot's unit (nm⁻¹); q_max is the data limit in Å⁻¹ as it rounds.
-        q_max = fitting._roi_control_to_data_values(0.0, window.fitFittingRegionMaxValue.value())[1]
-        assert abs(fitting._roi_max - q_max) < 1e-9, (fitting._roi_min, fitting._roi_max)
-        assert window.fitFittingRegionMaxValue.suffix().strip() == "nm⁻¹"
+        assert page.session.q_range is not None and abs(max(page.session.q_range) - q_max) < 1e-9
         assert fitting._workflow_options()["method"] == "model"
         # The specialist requires an explicit composition prior; never select it
         # for unknown samples merely because they have the same detector grid.
@@ -435,22 +370,15 @@ def run_ui_checks(out, *, insitu=False):
         count = np.asarray(metadata["valid_pixel_counts"])
         assert count.shape == q.shape and np.all(count > 0)
         assert len(q) > 1000 and len(q) != 500
-        assert metadata["input_selection"]["roi_abs"]
+        assert metadata["input_selection"]["q_range"] is not None
         assert np.any(q < 0) and np.any(q > 0)
         input_payload = dict(q=q.tolist(), intensity=y.tolist(), sigma=sigma.tolist())
-        workspace = window.components.fitting_workspace
-        workspace.show_fit_curve()
-        window.fittingModeTabs.setCurrentIndex(3)
         tick = time.perf_counter()
-        window.aiFittingFullAutoFitButton.click()
-        until(
-            lambda: (
-                getattr(fitting, "_workflow_v5_dialog", None) is not None
-                and fitting._ai_job_thread is None
-            ),
-            timeout=900,
-        )
+        page.batch_button.click()  # 1D Predict, on the curve of Single analysis
         dialog = fitting._workflow_v5_dialog
+        assert dialog is not None
+        dialog.start()
+        until(lambda: dialog.job is None and bool(dialog.rows), timeout=900)
         scores = check_rows(dialog.rows, payload=input_payload)
         assert {row["side"] for row in scores} == {"positive", "negative"}
         request = json.loads((dialog.output_dir / "request.json").read_text(encoding="utf-8"))
@@ -461,12 +389,12 @@ def run_ui_checks(out, *, insitu=False):
         dialog.grab().save(str(out / "stable_prediction.png"))
         evidence = dict(
             passed=True,
-            button="aiFittingFullAutoFitButton",
+            button="1D Predict",
             method="stable",
-            curve=str(fitting.current_1d_data["file_path"]),
+            curve=str(curve_path),
             beam_center_x_px=dict(profile=initial_x, symmetry=refined_x),
             horizontal_band_rows=dict(yoneda=list(yoneda_band), used=[first, last + 1]),
-            fitting_range_abs_q_max_angstrom=q_max,
+            fitting_range_abs_q_max_nm=q_max,
             fixture_equivalence=equivalence,
             native_points=dict(
                 positive=int(np.count_nonzero(q > 0)), negative=int(np.count_nonzero(q < 0))
@@ -477,84 +405,7 @@ def run_ui_checks(out, *, insitu=False):
             count_metadata_preserved=True,
             saved_geometry_sha256=hashlib.sha256(saved_bytes).hexdigest(),
         )
-        evidence["export"] = check_gui_export(fitting, out, "single")
         dialog.close()
-        if insitu:
-            from src.gimap.features.fitting.application.insitu_records import ManageInSituRecords
-            from src.gimap.features.fitting.infrastructure.adapters.local_insitu_records import (
-                LocalInSituRecordRepository,
-            )
-
-            class TestRecords(LocalInSituRecordRepository):
-                def cache_directory(self):
-                    return out / "cache"
-
-            fitting.fitting_view_model.storage._insitu_records = ManageInSituRecords(TestRecords())
-            curve = Path(fitting.current_1d_data["file_path"])
-            workspace.show_context("insitu")
-            page = window.fittingInsituSeriesPage
-            page.ui.captureRecipeButton.click()
-            recipe = fitting.fitting_view_model.insitu.recipe
-            assert recipe is not None and recipe.model["workflow_v5"]["method"] == "stable"
-            assert recipe.cut["source"] == "curve"
-            widgets = page.workflow_widgets()
-            widgets["run_mode"].setCurrentText("Process Existing Sequence")
-            widgets["sequence_folder"].setText(str(curve.parent))
-            widgets["sequence_pattern"].setText(curve.name)
-            widgets["recursive"].setChecked(False)
-            tick = time.perf_counter()
-            widgets["process"].click()
-            until(
-                lambda: (
-                    len(fitting._insitu_workflow_results) > 0
-                    and not fitting._insitu_workflow_busy
-                    and fitting._insitu_workflow_state == "Idle"
-                ),
-                timeout=900,
-            )
-            records = fitting._insitu_workflow_results
-            assert len(records) == 1 and records[0]["fit_status"] == "ok", records
-            insitu_rows = records[0]["v5_side_candidates"]
-            assert len(insitu_rows) == 2
-            evidence["insitu"] = dict(
-                seconds=time.perf_counter() - tick,
-                results=check_rows(insitu_rows, payload=input_payload),
-                recipe=recipe.to_dict(),
-                fit_output=records[0]["v5_output_dir"],
-            )
-            insitu_request = json.loads(
-                (Path(records[0]["v5_output_dir"]) / "request.json").read_text(encoding="utf-8")
-            )
-            np.testing.assert_array_equal(
-                insitu_request["observation_metadata"]["valid_pixel_counts"], count
-            )
-            evidence["insitu"]["same_native_observations_as_single"] = True
-            for row in insitu_rows:
-                side = row["side"]
-                assert records[0]["v5_forward_versions"][side] == row["forward_version"]
-                assert records[0]["v5_candidate_sources"][side] == row["best_source"]
-                assert records[0]["v5_unit_contracts"][side] == row["unit_contract"]
-                flat = json.loads(records[0]["fitted_parameters"])
-                for index, component in enumerate(row["components"], 1):
-                    for key in ("amplitude", "weight", "type_id"):
-                        assert flat[f"{side}_component_{index}_{key}"] == component[key]
-                for key, value in row["global_params"].items():
-                    assert flat[f"{side}_{key}"] == value
-            evidence["insitu"]["complete_scalar_parameters_persisted"] = True
-            evidence["insitu"]["export"] = check_gui_export(fitting, out, "insitu")
-            write_json(out / "completed_insitu_records.json", records)
-            page.grab().save(str(out / "stable_insitu.png"))
-            # Stop a newly queued sequence before its first load starts, ensuring
-            # recipe/runtime state returns cleanly without touching the saved curve.
-            widgets["process"].click()
-            widgets["stop"].click()
-            until(
-                lambda: (
-                    fitting._insitu_workflow_state == "Idle" and not fitting._insitu_workflow_busy
-                )
-            )
-            assert not fitting._insitu_workflow_queue
-            evidence["insitu"]["queued_sequence_cancelled"] = True
         (out / "messages.txt").write_text("\n".join(messages), encoding="utf-8")
         write_json(out / "VERIFIED.json", evidence)
         return evidence
@@ -567,14 +418,14 @@ def run_ui_checks(out, *, insitu=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("worker", "ui", "insitu", "all"), default="all")
+    parser.add_argument("--mode", choices=("worker", "ui", "all"), default="all")
     parser.add_argument("--output", type=Path, default=ROOT / "validation/stable_release_20260922")
     args = parser.parse_args()
     results = {}
     if args.mode in ("worker", "all"):
         results["worker"] = run_worker_checks(args.output / "worker")
-    if args.mode in ("ui", "insitu", "all"):
-        results["ui"] = run_ui_checks(args.output / "ui", insitu=args.mode in ("insitu", "all"))
+    if args.mode in ("ui", "all"):
+        results["ui"] = run_ui_checks(args.output / "ui")
     write_json(
         args.output / "VERIFIED.json",
         dict(passed=True, runtime=runtime_provenance(), checks=results),

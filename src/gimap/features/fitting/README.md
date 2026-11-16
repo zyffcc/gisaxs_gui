@@ -10,10 +10,12 @@ Fitting 只拟合 1D 曲线：输入是 Analyze 写出的 `*_fit_input.dat`（`q
 Curve → Model → Fit → Results），In-situ series 用 Single 的模型拟合一个文件夹里的每条曲线
 （`presentation/single/series_page.py` 的 `FitSeriesPage`：Curves → Start → Results）。
 
-显示的页面、静态布局（`presentation/views/`）、typed state 和 ViewModel 均位于 `presentation/`。旧的单曲线页
-（Components / Global / Refine / 1D Predict 标签，`FittingViewBinding`）不再显示，但仍在后台构造：它的 binding
-运行 1D Predict 窗口（Tools ▸ 1D Predict — Fit Many Curves…）并跟随新页面的曲线与模型
-（`presentation/workspace.py` 的 `attach_legacy`）。旧的 `controllers/fitting_controller.py`、`utils/*.py`、
+显示的页面、静态布局（`presentation/views/`）、typed state 和 ViewModel 均位于 `presentation/`。
+`presentation/view_binding.py` 的 `FittingViewBinding` 只剩页面之外的部分：1D Predict 窗口（Fitting ▸ 1D Predict，
+以及 Single analysis 的按钮；输入是 Single analysis 的曲线及其两半、拟合范围和排除的点）、工程参数
+（`app/workspace_parameters.py`）和关闭时保存的会话。旧的单曲线页（Components / Global / Refine / 1D Predict 标签、
+`bindings/` 下的 53 个 mixin）与旧的 In-situ 页（Recipe、Live Watch）已于 2026-11-16 删除：它们早已不显示。
+旧的 `controllers/fitting_controller.py`、`utils/*.py`、
 feature `legacy_bridge.py` 与 Cut & Fitting 的探测器部分已删除。`bootstrap.create_quick_fit()` 把数值物理拟合
 交给组合根，供自动分析和 Batch Export 使用。
 

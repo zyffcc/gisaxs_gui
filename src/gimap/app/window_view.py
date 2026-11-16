@@ -3,10 +3,7 @@
 from PyQt5 import QtCore
 
 from src.gimap.app.presentation.views import MainWindowView
-from src.gimap.features.fitting.presentation import (
-    build_fitting_controls,
-    translate_fitting_controls,
-)
+from src.gimap.features.fitting.presentation import build_fitting_controls
 from src.gimap.features.prediction.presentation import (
     build_prediction_controls,
     translate_prediction_controls,
@@ -27,9 +24,6 @@ class ApplicationWindowView(MainWindowView):
         self.retranslateUi(MainWindow)
         self.mainWindowWidget.setCurrentIndex(2)
         self.gisaxsPredictImageShowTabWidget.setCurrentIndex(0)
-        self.fitParticleStackWidget_1.setCurrentIndex(0)
-        self.fitParticleStackWidget_2.setCurrentIndex(0)
-        self.fitParticleStackWidget_3.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow) -> None:
@@ -38,8 +32,6 @@ class ApplicationWindowView(MainWindowView):
         translate = QtCore.QCoreApplication.translate
         if hasattr(self, "gisaxsPredictPredictButton"):
             translate_prediction_controls(self, translate)
-        if hasattr(self, "FittingManualFittingButton"):
-            translate_fitting_controls(self, translate)
 
     def _remove_legacy_feature_host(self, attribute_name: str) -> None:
         host = getattr(self, attribute_name)

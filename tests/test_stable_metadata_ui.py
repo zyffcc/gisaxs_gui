@@ -10,23 +10,15 @@ import pytest
 
 from src.gimap.features.fitting.application.workflow_v5 import default_options
 from src.gimap.features.fitting.infrastructure.adapters.workflow_v5 import prepare_sides
-from src.gimap.features.fitting.presentation.bindings.ai_job_execution import (
-    workflow_options_for_mode,
-)
-from src.gimap.features.fitting.presentation.bindings.insitu_curve_processing import (
-    InsituCurveProcessingMixin,
-)
-from src.gimap.features.fitting.presentation.bindings.workflow_v5_binding import (
-    WorkflowV5BindingMixin,
-)
+from src.gimap.features.fitting.application.single_fit import point_key
+from src.gimap.features.fitting.application.workflow_v5 import workflow_options_for_mode
+from src.gimap.features.fitting.presentation.view_binding import FittingViewBinding
 
 
-def test_curve_selection_filters_counts_with_exact_observation_mask():
-    binding = WorkflowV5BindingMixin()
-    binding.ui = SimpleNamespace()
-    binding.fitting_view_model = SimpleNamespace(insitu=SimpleNamespace(recipe=None))
+def _owner(side, q_range, excluded=()):
+    """What 1D Predict reads of Single analysis: native detector columns written by Analyze (q in Å⁻¹)."""
     q = np.arange(-3, 4, dtype=float)
-    binding.current_1d_data = {  # native detector columns written by Analyze
+    data = {
         "q": q,
         "I": np.ones(7),
         "err": np.ones(7),
@@ -34,45 +26,35 @@ def test_curve_selection_filters_counts_with_exact_observation_mask():
         "observation": {"source": "native_detector_columns", "file_format": "cbf"},
         "q_source_unit": "angstrom",
     }
-    binding._workflow_options = default_options
-    binding._workflow_input_selection = lambda: dict(
-        axis_filter="all", roi=[-2.5, 3.1], excluded_q=["2.0"]
+    return SimpleNamespace(
+        _current_curve_data=lambda: (data, side, q_range, set(excluded)),
+        _workflow_options=default_options,
     )
-    binding._ai_q_key = lambda value: str(float(value))
-    binding._convert_q_values_for_model = lambda q, **_: q
-    selected_q, _, _ = binding._current_ai_curve_arrays()
-    np.testing.assert_array_equal(selected_q, [-1, 1, 3])
-    assert binding._workflow_observation_metadata["valid_pixel_counts"] == [4.0, 6.0, 8.0]
-    assert binding._workflow_observation_metadata["selected_points"] == 3
+
+
+def test_curve_selection_filters_counts_with_exact_observation_mask():
+    owner = _owner("mean", (5.0, 31.0), {point_key(20.0)})
+    selected_q, _, _ = FittingViewBinding._current_ai_curve_arrays(owner)
+    np.testing.assert_array_equal(selected_q, [-30, -10, 10, 30])  # nm⁻¹; ±20 left out on |q|
+    assert owner._workflow_observation_metadata["valid_pixel_counts"] == [2.0, 4.0, 6.0, 8.0]
+    assert owner._workflow_observation_metadata["selected_points"] == 4
+    assert owner._workflow_sigma_estimated  # σ of native columns is the working tolerance
 
 
 @pytest.mark.parametrize(
-    "axis_filter,expected_q",
-    [("all", [-3, -2, -1, 1, 2, 3]), ("negative", [-3, -2, -1]), ("positive", [1, 2, 3])],
+    "side,expected_q",
+    [("mean", [-30, -20, -10, 10, 20, 30]), ("both", [-30, -20, -10, 10, 20, 30]),
+     ("negative", [-30, -20, -10]), ("positive", [10, 20, 30])],
 )
-def test_folded_views_select_the_fitting_range_in_abs_q(axis_filter, expected_q):
-    """|q| overlay, ±q average and −q as |q| show the range in |q|: both signs are kept."""
-    binding = WorkflowV5BindingMixin()
-    binding.ui = SimpleNamespace()
-    binding.fitting_view_model = SimpleNamespace(insitu=SimpleNamespace(recipe=None))
-    q = np.arange(-3, 4, dtype=float)
-    binding.current_1d_data = {
-        "q": q,
-        "I": np.ones(7),
-        "err": np.ones(7),
-        "pixels": np.full(7, 5.0),
-        "observation": {"source": "native_detector_columns", "file_format": "cbf"},
-        "q_source_unit": "angstrom",
-    }
-    binding._workflow_options = default_options
-    binding._workflow_input_selection = lambda: dict(
-        axis_filter=axis_filter, roi=[0.5, 3.5], roi_abs=True, excluded_q=[]
-    )
-    binding._ai_q_key = lambda value: str(float(value))
-    binding._convert_q_values_for_model = lambda q, **_: q
-    selected_q, _, _ = binding._current_ai_curve_arrays()
+def test_the_halves_of_the_page_select_the_sign_and_its_range_is_in_abs_q(side, expected_q):
+    owner = _owner(side, (5.0, 35.0))
+    selected_q, _, _ = FittingViewBinding._current_ai_curve_arrays(owner)
     np.testing.assert_array_equal(selected_q, expected_q)
-    assert binding._workflow_observation_metadata["selected_points"] == len(expected_q)
+    assert owner._workflow_observation_metadata["selected_points"] == len(expected_q)
+
+
+
+
 
 
 def test_side_sort_indices_align_count_metadata_without_sigma_inference():
@@ -94,33 +76,6 @@ def test_main_fit_preserves_saved_method(method):
     assert neural["method"] == "model" and neural["numerical"] is False
 
 
-@pytest.mark.parametrize(
-    "method,numerical,expected",
-    [("stable", False, "stable"), ("stable", True, "stable"),
-     ("experimental", False, "experimental"), ("model", False, "fast"),
-     ("model", True, "full")],
-)
-def test_insitu_routes_captured_method_without_legacy_coercion(method, numerical, expected):
-    binding = InsituCurveProcessingMixin()
-    binding._insitu_workflow_settings = lambda: dict(
-        use_previous=False, full_auto_fit=True, auto_refine=False
-    )
-    binding._log_insitu_workflow = lambda *args: None
-    binding.ui = SimpleNamespace()
-    binding.fitting_view_model = SimpleNamespace(
-        insitu=SimpleNamespace(recipe=SimpleNamespace(
-            model={"workflow_v5": dict(method=method, numerical=numerical)}
-        ))
-    )
-    calls = []
-
-    def start(mode):
-        calls.append(mode)
-        binding._ai_job_thread = object()
-
-    binding._start_ai_prediction = start
-    binding._run_insitu_workflow_fit({})
-    assert calls == [expected]
 
 
 def test_dialog_defaults_general_and_preserves_explicit_saved_methods():
@@ -177,17 +132,6 @@ def test_amplitude_calibration_is_independent_of_legacy_numerical_setting():
     app.processEvents()
 
 
-@pytest.mark.parametrize(
-    "method,label", [("stable", "Single RC specialist (experimental"), ("model", "General V5 (experimental)"),
-                     ("experimental", "Numerical physical")]
-)
-def test_workspace_status_identifies_selected_method(method, label):
-    binding = WorkflowV5BindingMixin()
-    binding._workflow_options = lambda: {**default_options(), "method": method}
-    statuses = []
-    binding._set_ai_workspace_status = lambda message, _: statuses.append(message)
-    binding._refresh_ai_fitting_models()
-    assert label in statuses[0]
 
 
 def test_stable_stage_labels_explain_fallback_without_changing_exports(tmp_path):
@@ -221,17 +165,3 @@ def test_stable_stage_labels_explain_fallback_without_changing_exports(tmp_path)
     app.processEvents()
 
 
-def test_insitu_mode_labels_do_not_promise_legacy_execution_for_stable():
-    from PyQt5.QtWidgets import QApplication
-    from src.gimap.features.fitting.presentation.views.insitu_workflow_controls import (
-        InSituWorkflowControls,
-    )
-
-    app = QApplication.instance() or QApplication([])
-    controls = InSituWorkflowControls(None)
-    assert controls.workflowModeCombo.itemText(0) == "Fit curves · selected method"
-    assert controls.workflowModeCombo.itemText(1) == "Fit curves · legacy correction off"
-    assert "single-RC specialist" in controls.workflowModeCombo.toolTip()
-    assert controls.workflowModeCombo.itemText(2) == "Plot curves only"
-    controls.close()
-    app.processEvents()

@@ -75,9 +75,6 @@ class ApplicationRuntime(QObject):
             print("Application runtime: Starting delayed feature initialization...")
             self._initialize_ui()
             self.fitting.initialize()
-            workspace = getattr(self.ui, "fittingWorkspace", None)
-            if workspace is not None and hasattr(workspace, "attach_legacy"):
-                workspace.attach_legacy(self.fitting)  # In-situ series follows the Single analysis page
             self.prediction.initialize()
             QTimer.singleShot(1000, self.fitting_session.load_last_session)
             print("Application runtime: Feature initialization complete")

@@ -262,22 +262,17 @@ def test_without_a_reader_the_window_says_the_rule() -> None:
 
 def test_fitting_hands_the_header_reader_to_the_window() -> None:
     from src.gimap.features.fitting.application import LoadCurve
-    from src.gimap.features.fitting.presentation.bindings.workflow_v5_binding import WorkflowV5BindingMixin
+    from src.gimap.features.fitting.presentation.view_binding import FittingViewBinding
+    from src.gimap.integrations.state import InMemoryUserPreferencesRepository
 
     QApplication.instance() or QApplication([])
     reader = LoadCurve(LocalCurveRepository()).stated_q_unit
-
-    class Owner(WorkflowV5BindingMixin):
-        main_window = None
-        fitting_view_model = SimpleNamespace(stated_q_unit=reader, context=SimpleNamespace(jobs=None))
-
-        def _ai_fitting_settings(self):
-            return {}
-
-        def _save_ai_fitting_settings(self, **_values):
-            pass
-
-    owner = Owner()
+    view_model = SimpleNamespace(
+        stated_q_unit=reader,
+        context=SimpleNamespace(jobs=None, preferences=InMemoryUserPreferencesRepository()),
+        storage=SimpleNamespace(model_parameters=object()),
+    )
+    owner = FittingViewBinding(SimpleNamespace(), fitting_view_model=view_model)
     owner.open_ai_fitting_workspace()
     try:
         assert owner._workflow_v5_dialog.stated_q_unit is reader

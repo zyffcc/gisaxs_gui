@@ -15,7 +15,6 @@ from PyQt5.QtWidgets import (
 
 
 from .fitting_theme import apply_fitting_style
-from .insitu_series_page import InSituSeriesPage
 
 
 class _CurrentContextStack(QStackedWidget):
@@ -39,7 +38,7 @@ class _CurrentContextStack(QStackedWidget):
 class FittingContextContainer(QWidget):
     """Switch work contexts while preserving both child pages in memory."""
 
-    def __init__(self, single_page: QWidget, insitu_view_model, parent=None, *, series_page: QWidget = None) -> None:
+    def __init__(self, single_page: QWidget, series_page: QWidget, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("fittingContextContainer")
         root = QVBoxLayout(self)
@@ -74,21 +73,14 @@ class FittingContextContainer(QWidget):
         self.stack = _CurrentContextStack(self)
         apply_fitting_style(self.stack)
         self.stack.setObjectName("fittingContextStack")
-        self.insitu_page = InSituSeriesPage(insitu_view_model, self.stack)
         self.series_page = series_page
         self.stack.addWidget(single_page)
-        # The In-situ series tab: the new series page; the former one stays built (its binding runs it), unseen.
-        self.stack.addWidget(series_page if series_page is not None else self.insitu_page)
-        if series_page is not None:
-            self.stack.addWidget(self.insitu_page)
+        self.stack.addWidget(series_page)
         root.addWidget(self.context_bar)
         root.addWidget(self.stack, 1)
 
         self.button_group.buttonClicked[int].connect(
             lambda index: self.show_context("insitu" if index == 1 else "single")
-        )
-        self.insitu_page.return_to_single_requested.connect(
-            lambda: self.show_context("single")
         )
         self.show_context("single")
 
@@ -97,11 +89,8 @@ class FittingContextContainer(QWidget):
         self.stack.setCurrentIndex(1 if insitu else 0)
         self.single_button.setChecked(not insitu)
         self.insitu_button.setChecked(insitu)
-        if insitu and self.series_page is not None:
+        if insitu:
             self.series_page.refresh()
-        elif insitu:
-            self.insitu_page.render_recipe(self.insitu_page.view_model.recipe)
-            self.insitu_page.render_workflow(self.insitu_page.view_model.state)
 
 
 __all__ = ["FittingContextContainer"]

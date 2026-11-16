@@ -385,7 +385,7 @@ class FitRunMixin:
         return self._as_solutions(rows, data, base, "shape search")
 
     def _ai_solutions(self, data, base) -> list[Solution]:
-        from ..bindings.ai_job_execution import workflow_options_for_mode
+        from ...application.workflow_v5 import workflow_options_for_mode
 
         catalog = self.view_model.storage.ai_catalog
         if catalog is None:

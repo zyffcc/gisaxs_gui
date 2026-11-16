@@ -1083,7 +1083,7 @@ def test_every_sentence_of_the_hand_overs_has_its_chinese_with_the_same_values()
             sources.NO_TABLE, sources.NOT_NUMBERS, fit_handover.FOLDER_REFUSED, fit_handover.DATA_REFUSED,
             compare_page_view.FOLDER_TIP, workspace.NOTE_RUN, workspace.NOTE_RUN_POOR,
             *workspace.NOTE_TITLE.values(), *workspace.NOTE_TEXT.values(), workspace.GIWAXS_OPENED,
-            workspace.LEGACY_CURVE_FAILED, workspace.LEGACY_MODEL_FAILED, "Close this note",
+            "Close this note",
             *(tip for links in TASK_LINKS.values() for _request, _text, tip in links),
             *(text for links in TASK_LINKS.values() for _request, text, _tip in links)]
 

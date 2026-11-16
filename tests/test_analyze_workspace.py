@@ -464,13 +464,13 @@ def main():
     page.add_paths([frame])
     page.tasks.wait(60)
     page.fit_button.click()
-    fitting = window.runtime.fitting
+    fit_page = window.components.fitting_workspace.fit_page
     single = {
-        "data_source": fitting.data_source,
-        "file": fitting.current_1d_data["file_path"],
-        "points": len(fitting.current_1d_data["q"]),
-        "q_view": window.fitQViewModeComboBox.currentData(),
-        "curve_name": window.components.fitting_workspace.fit_page.curve_chip.text(),
+        "file": fit_page.session.curve.path,
+        "points": int(fit_page.session.curve.q.size),
+        "side": fit_page.session.side,
+        "curve_name": fit_page.curve_chip.text(),
+        "predict_file": window.runtime.fitting.get_imported_file(),
     }
     # Send Series to Fitting: every listed frame is exported, then the series opens.
     second = Path(sys.argv[1]) / ("second_" + CBF.name)
@@ -528,10 +528,9 @@ def test_fit_opens_the_curve_and_the_series_in_fitting(tmp_path: Path) -> None:
     result = json.loads(result_line)
     assert result["start_is_home"]  # a new user starts on the Start page
     assert result["page_after_fit"] == 2
-    assert result["data_source"] == "1d"
-    assert result["file"].endswith("_fit_input.dat")
+    assert result["file"].endswith("_fit_input.dat") and result["predict_file"] == result["file"]
     assert result["points"] > 100
-    assert result["q_view"] == "fold"
+    assert result["side"] == "both"
     assert result["curve_name"].endswith("_fit_input.dat")
     assert "Exported 2/2 frames" in result["status"]
     assert result["series_context"]

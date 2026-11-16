@@ -115,14 +115,14 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   之后才结束的拟合不保留（并提示）。
 - 保存是“全有或全无”：表格与 JSON 记录先写成 `.part` 再替换；写失败时原来的文件不变，并说明原因（例如文件只读）。
 - `Ctrl+O` 在 Fitting 页打开曲线（Open Curve…），在其他页打开数据。
-- 旧的单曲线页仍在后台（不显示）：它的 binding 运行 1D Predict 窗口，并跟随新页面的曲线与模型，见
-  `workspace.attach_legacy`。旧的 In-situ 页（Recipe、Live Watch）不再显示，由下面的新页面代替。
-- 旧页的模型存在用户数据目录的 `model_parameters.json` 里，每个组分每种形状一个块（`sphere`、`cylinder`、
+- 1D Predict 窗口（`view_binding.py` 的 `FittingViewBinding`）拟合 Single analysis 的曲线：从文件重新读取（保留 Analyze
+  写的探测器列像素数），按页面选的两半取符号，按拟合范围（|q|）和排除的点取列。旧的单曲线页与旧的 In-situ 页
+  （Recipe、Live Watch）原本仍在后台构造但不显示，2026-11-16 删除。
+- 手动模型存在用户数据目录的 `model_parameters.json` 里（File ▸ Save / Load Labs Parameters… 带着它），每个组分每种形状一个块（`sphere`、`cylinder`、
   `vertical_cylinder`）；形状名不论怎么写（“Vertical Cylinder”、`vertical_cylinder`）都指同一个块
   （`model_parameters_store.shape_block_name`）。早先的版本只把名字转成小写，在 1D Predict 窗口里选中一个竖直圆柱的解之后，
   文件里会多出一个 `vertical cylinder` 块，而 `vertical_cylinder` 还是原来的数。这样的文件照常读取（两个块都在时以
-  `vertical_cylinder` 为准，另一个只补它没有的值），读取不改文件；下次保存该形状的值时多余的块去掉。旧页按形状下拉框里
-  选中的条目读形状，不读框里显示的文字（中文界面下那些文字是翻译过的）。回归测试 `tests/test_release2_fitting_cylinder_key.py`。
+  `vertical_cylinder` 为准，另一个只补它没有的值），读取不改文件；下次保存该形状的值时多余的块去掉。回归测试 `tests/test_release2_fitting_cylinder_key.py`。
 - `config/model_parameters.json` 是这个存储的出厂模板：用户数据目录里没有 `model_parameters.json` 时复制过去，之后不再动它。
   它就是 Fitting 的起始模型（`single/session.py` 的 `starting_model()`，即 `fitting/domain/fit_model.py` 里 `new_component`
   和 `FitModel` 的默认值）按存储的单位写出来的样子，所以改了 `fit_model.py` 的默认值，也要改这个 JSON：
@@ -220,7 +220,7 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   - **q 的单位**：文件头写明单位的文件按写明的单位读（Analyze 的 `_fit_input.dat` 首行 `(q in 1/A)`、
     `# columns: qy (1/A) …`）；设置 *q unit of files without one in their header* 只用于没写明的文件。识别在
     `infrastructure/adapters/curve_units.py`（`LocalCurveRepository.stated_q_unit` → `LoadCurve.stated_q_unit` →
-    `FittingViewModel.stated_q_unit`，由 `workflow_v5_binding` 交给窗口），规则 `application/curve_units.q_unit_read`（经
+    `FittingViewModel.stated_q_unit`，由 `view_binding.py` 交给窗口），规则 `application/curve_units.q_unit_read`（经
     `workflow_v5.q_unit_of_file`，与 Single analysis、原位序列同一条）由窗口（`presentation/workflow_v5_units.py`：按钮下一行、表格的 Curve / side 列）和 job（`run_workflow_job`）共用；
     `request.json`、`fitting_run_summary.json` 的 `q_units`，`batch_summary.json` 与候选行的 `q_unit_read` / `q_unit_from`
     记下每条曲线按什么单位读。同时写明两种单位的文件不拟合。测试 `tests/test_release3_predict_units.py`。
@@ -302,7 +302,8 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   Analyze → Fitting（单条与序列）端到端测试。
 - 发布回放：从项目根目录运行 `python tools/check_stable_predict_workflow.py --mode all`：
   worker（固定 native fixture、文本 batch、取消）、UI（Analyze 打开真实 CBF → 拖到验证过的带 →
-  Refine x by Symmetry → Send to Fitting → fitting range → 1D Predict）与单帧 in-situ。保存的几何只读入
+  Refine x by Symmetry → Send to Fitting → Single analysis 的拟合范围 → 1D Predict）。单帧 in-situ 那部分跑在已删除的
+  旧 In-situ 页上，2026-11-16 随该页去掉。保存的几何只读入
   内存 profile，不修改用户设置。2026-09-28：Analyze 的 1148 列与旧探测器路径的固定样本逐列强度、
   像素数完全相同，q 差不到一列；学习分支运行后按结构残差转数值拟合，lnRMSE 0.166／0.148
   （旧记录 0.171／0.155）。这些回放不代表独立样品泛化验证。

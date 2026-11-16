@@ -274,7 +274,7 @@ def test_find_the_particle_shape_lists_solutions_and_puts_the_best_in_the_model(
     page.dispose()
 
 
-def test_in_the_window_analyze_sends_curves_here_and_in_situ_takes_the_model(tmp_path) -> None:
+def test_in_the_window_analyze_sends_curves_here(tmp_path) -> None:
     from tests.test_fitting_presentation import _fitting_window
 
     app, window = _fitting_window()
@@ -284,13 +284,7 @@ def test_in_the_window_analyze_sends_curves_here_and_in_situ_takes_the_model(tmp
     app.processEvents()
     page = components.fitting_workspace.fit_page
     assert page.session.curve is not None and page.session.side == "mean"
-    assert window.runtime.fitting.current_1d_data is not None  # the former page follows (In-situ series)
-    page.set_model(FitModel((new_component("cylinder", radius=4.0),)))
-    components.fitting_workspace.insitu_series_page.capture_recipe_requested.emit()
-    binding = window.runtime.fitting
-    widget = binding._iter_particle_widget_ids()[0]
-    assert binding.get_particle_shape(widget) == "Cylinder"
-    assert binding._get_particle_parameter(widget, "R", 0.0) == pytest.approx(4.0)
+    assert window.runtime.fitting.get_imported_file() == str(path)  # 1D Predict reads this curve
     window.close()
 
 

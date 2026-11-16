@@ -160,7 +160,8 @@ Recipe 版本、结果目录、耗时与误差写入帧记录。不同侧参数�
 
 `tools/check_stable_predict_workflow.py` 的 UI 部分改为用户路径：Analyze 用保存的几何打开真实 CBF，
 把水平带拖到验证过的行（1171–1176），Refine x by Symmetry，Send to Fitting，fitting range 设为
-|q| ≤ 4.23 nm⁻¹（0.423 Å⁻¹，保留这 1148 列），然后 1D Predict；再用该曲线跑单帧 in-situ。结果：Analyze 的 1148 个原生列与
+|q| ≤ 4.23 nm⁻¹（0.423 Å⁻¹，保留这 1148 列），然后 1D Predict；再用该曲线跑单帧 in-situ（这一部分在旧 In-situ 页上，
+2026-11-16 随该页从检查里去掉；现在的范围设在 Single analysis 上）。结果：Analyze 的 1148 个原生列与
 旧探测器路径的固定样本**逐列强度和像素数完全相同**，q 只差不到一列（精确 q 模型 + 对称中心
 791.296 px 对旧 791.32 px），因此最靠近中心的一列换到了另一侧（570／578 对 571／577）。学习
 分支可用并运行；其候选被判为结构残差，按设计转数值拟合，双侧 lnRMSE 0.166／0.148（旧记录

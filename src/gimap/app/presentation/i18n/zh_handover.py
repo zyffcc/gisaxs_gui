@@ -54,8 +54,6 @@ HANDOVER_ZH = {
         "“开始”用颗粒形状因子拟合了每一帧：拟合的 {fitted} 帧中有 {poor} 帧拟合很差（χ²ᵣ 大于 {limit}）。"
         "这类模型不能描述衍射峰：这些数值不是结果。要跟踪整个序列中的峰，请用“分析 ▸ 批量导出 ▸ 环区域中的峰”。",
     "Close this note": "关闭这条提示",
-    "The former fitting page could not take this curve: {error}": "旧版拟合页无法载入这条曲线：{error}",
-    "The former fitting page could not take this model: {error}": "旧版拟合页无法载入这个模型：{error}",
     # -- Analyze to Fitting: where the file went ---------------------------------------------------------
     "Sent to Fitting — the curve file is in {folder}": "已发送到拟合——曲线文件位于 {folder}",
     "Opened {name} in Fitting. The folder of the data cannot be written: the file is in {folder}":

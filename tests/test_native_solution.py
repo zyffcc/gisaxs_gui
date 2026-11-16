@@ -63,36 +63,6 @@ def test_a_solution_without_components_or_with_an_unknown_family_is_refused() ->
         native_solution_mapping({"components": [{"type": "core_shell", "params": SPHERE}]})
 
 
-def test_show_in_fitting_puts_the_solution_into_components_and_global(tmp_path) -> None:
-    from tests.test_fitting_presentation import _fitting_window
-
-    app, window = _fitting_window()
-    binding = window.runtime.fitting
-    curve = tmp_path / "galaxi_fit_input.dat"
-    row = _row("sphere", SPHERE)
-    q_file = -Q_NM / 10.0  # the curve Analyze writes: q in Å⁻¹
-    np.savetxt(curve, np.column_stack([q_file, row["native_fit"], np.sqrt(row["native_fit"])]))
-    binding.import_1d_file(curve, q_view="fold")
-    window.components.fitting_workspace.show_fit_curve()
-    app.processEvents()
-
-    assert binding.show_workflow_candidate(row) is True
-    widget = binding._iter_particle_widget_ids()[0]
-    assert binding.get_particle_shape(widget) == "Sphere"
-    assert binding._get_particle_parameter(widget, "R", 0.0) == pytest.approx(9.4)
-    assert binding._get_particle_parameter(widget, "sigma_R", 0.0) == pytest.approx(9.4 * 0.3, rel=1e-6)
-    assert binding._get_particle_parameter(widget, "Int", 0.0) == pytest.approx(1200.0, rel=1e-4)
-    assert window.fitBGValue.value() == pytest.approx(1.3, abs=1e-3)
-    assert window.fitIntResValue.value() == pytest.approx(800.0, rel=1e-4)
-    assert binding.has_fitting_data and binding.fitting.get("meta", {}).get("source") != "native_v5"  # Fitting's model
-    assert "draws the same curve" in window.fittingInlineFeedback.text()
-    drawn = binding.fitting  # q as shown (Å⁻¹); the model works in nm⁻¹
-    assert drawn["meta"]["q_source_unit"] == "angstrom"
-    expected = forward(10.0 * np.abs(np.asarray(drawn["q"])), row["components"], GLOBALS)
-    np.testing.assert_allclose(drawn["I"], expected, rtol=1e-4)  # the solution's curve, drawn by Fitting's model
-    window.close()
-
-
 def test_a_1d_predict_row_without_distance_or_resolution_peak_converts() -> None:
     """1D Predict gives D = None (no interference) and normalised background terms (sigma_Res None)."""
     components = [{"type": "sphere", "type_id": 1, "weight": 0.7, "amplitude": 900.0,

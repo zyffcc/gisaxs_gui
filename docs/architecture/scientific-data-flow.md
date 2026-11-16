@@ -10,7 +10,7 @@
   `use_cases.py`、`export_record.py`、
   `src/gimap/features/analyze/infrastructure/adapters/csv_export.py`、
   `src/gimap/features/fitting/infrastructure/adapters/local_files.py`、
-  `src/gimap/features/fitting/presentation/bindings/workflow_v5_binding.py`、
+  `src/gimap/features/fitting/presentation/view_binding.py`、
   `src/gimap/features/prediction/infrastructure/adapters/module_preprocessing.py`
 - **Related tests**: `tests/test_analyze_domain.py`、`tests/test_analyze_frames_and_center.py`、
   `tests/test_analyze_fit_input_contract.py`、`tests/test_analyze_workspace.py`、

@@ -23,10 +23,7 @@ def main():
         InMemorySettingsRepository,
         InMemoryUserPreferencesRepository,
     )
-    from src.gimap.features.fitting.infrastructure.adapters.workflow_v5 import (
-        read_curve,
-        bundled_workflow,
-    )
+    from src.gimap.features.fitting.infrastructure.adapters.workflow_v5 import read_curve
 
     app = QApplication.instance() or QApplication([])
     from PyQt5.QtGui import QFontDatabase, QFont
@@ -63,13 +60,12 @@ def main():
         )
     )
     fitting = window.runtime.fitting
-    q, y, _ = read_curve(bundled_workflow().parent / "development/fixtures/Cut_Data.txt")
+    q, y, _ = read_curve(ROOT / "TestSAXSdata/Cut_Data.txt")  # q in nm⁻¹
     keep = q > 0
-    fitting.current_1d_data = dict(
-        q=q[keep], I=y[keep], err=np.hypot(0.1 * y[keep], 50), q_source_unit="nm"
-    )
-    window.fitCurrentDataCheckBox.setChecked(False)
-    fitting._roi_min = fitting._roi_max = None
+    out = ROOT / "validation/workflow_v5"
+    out.mkdir(parents=True, exist_ok=True)
+    curve = out / "Cut_Data_positive_fit_input.dat"  # q in Å⁻¹, as Analyze writes it
+    np.savetxt(curve, np.column_stack([q[keep] / 10.0, y[keep], np.hypot(0.1 * y[keep], 50)]))
     fitting._save_workflow_options(
         dict(
             method="model",
@@ -80,26 +76,19 @@ def main():
         )
     )
     workspace = window.components.fitting_workspace
-    workspace.show_workflow_step("fit")
-    window.fittingModeTabs.setCurrentIndex(3)
+    assert workspace.open_curve(curve, "positive")
     from PyQt5.QtWidgets import QMessageBox
 
     QMessageBox.warning = lambda _p, title, message, *a: (_ for _ in ()).throw(
         RuntimeError(f"{title}: {message}")
     )
     assert fitting._current_ai_curve_arrays() is not None
-    window.aiFittingFastPredictButton.click()
-    until(
-        lambda: (
-            getattr(fitting, "_workflow_v5_dialog", None) is not None
-            and fitting._ai_job_thread is None
-        ),
-        180,
-    )
+    page = workspace.fit_page
+    page.batch_button.click()  # 1D Predict on the curve of Single analysis
     dialog = fitting._workflow_v5_dialog
-    assert dialog.rows and abs(dialog.rows[0]["best_log_rmse"] - 0.17658074125669987) < 1e-5
-    out = ROOT / "validation/workflow_v5"
-    out.mkdir(parents=True, exist_ok=True)
+    dialog.start()
+    until(lambda: dialog.job is None and bool(dialog.rows), 180)
+    assert abs(dialog.rows[0]["best_log_rmse"] - 0.17658074125669987) < 1e-5
     for _ in range(4):
         app.processEvents()
         time.sleep(0.1)
@@ -108,20 +97,11 @@ def main():
     app.processEvents()
     dialog.grab().save(str(out / "prediction_settings.png"))
     dialog.close()
-    workspace.show_context("insitu")
-    app.processEvents()
-    page = window.fittingInsituSeriesPage
-    page.setParent(None)
-    page.resize(1280, 850)
-    page.show()
-    app.processEvents()
-    page.ui.workflowControls.show_step("fit")
-    page.grab().save(str(out / "insitu.png"))
     (out / "UI_VERIFIED.json").write_text(
         json.dumps(
             dict(
                 passed=True,
-                actual_button="aiFittingFastPredictButton",
+                actual_button="1D Predict",
                 actual_worker="spawned LocalProcessJobRunner",
                 candidate_count=len(dialog.rows),
                 logrmse=dialog.rows[0]["best_log_rmse"],
@@ -129,7 +109,6 @@ def main():
             indent=2,
         )
     )
-    page.close()
     window.close()
     app.processEvents()
 

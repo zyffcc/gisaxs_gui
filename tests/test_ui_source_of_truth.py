@@ -21,9 +21,6 @@ EXPECTED_VIEWS_BY_OWNER = {
         "fit1d_settings_view.py",
         "fit_series_view.py",
         "fit_steps_view.py",
-        "fitting_page_view.py",
-        "independent_fit_window_view.py",
-        "insitu_series_page_view.py",
     },
     "format_converter": {
         "conversion_progress_dialog_view.py",

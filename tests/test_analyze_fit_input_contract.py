@@ -19,9 +19,7 @@ from src.gimap.features.analyze.domain.models import Curve
 from src.gimap.features.analyze.infrastructure.adapters import CsvCurveWriter
 from src.gimap.features.fitting.application import LoadCurveRequest
 from src.gimap.features.fitting.infrastructure.adapters.local_files import LocalCurveRepository
-from src.gimap.features.fitting.presentation.bindings.workflow_v5_binding import (
-    WorkflowV5BindingMixin,
-)
+from src.gimap.features.fitting.presentation.view_binding import native_curve_input
 
 
 def _reference_column_observations(image, region):
@@ -126,10 +124,8 @@ def test_v5_gets_the_native_cbf_contract_and_the_working_tolerance(tmp_path: Pat
         "observation": curve.observation,
         "q_source_unit": "angstrom",
     }
-    owner = SimpleNamespace()
     options = {"relative_noise": 0.1, "absolute_noise": 0.0}
-    native = WorkflowV5BindingMixin._native_curve_input(owner, data, options)
-    metadata = owner._workflow_observation_metadata
+    native, metadata = native_curve_input(data, options)
     assert metadata["source"] == "native_cbf_columns"
     assert metadata["valid_pixel_counts"] == [5.0] * 20
     assert metadata["intensity_unit"] == "counts_per_pixel"
@@ -139,13 +135,13 @@ def test_v5_gets_the_native_cbf_contract_and_the_working_tolerance(tmp_path: Pat
     # Summed or background-subtracted curves are flagged, so the learned
     # branch falls back to numerical fitting exactly as before.
     summed = {**data, "observation": {**OBSERVATION, "summed_frames": 4, "counting_model_valid": False}}
-    WorkflowV5BindingMixin._native_curve_input(owner, summed, options)
-    assert owner._workflow_observation_metadata["stack_count"] == 4
-    assert owner._workflow_observation_metadata["counting_model_valid"] is False
+    _native, metadata = native_curve_input(summed, options)
+    assert metadata["stack_count"] == 4
+    assert metadata["counting_model_valid"] is False
 
     # GIWAXS radial bins and foreign files keep the plain 1D path.
     radial = {**data, "observation": {**OBSERVATION, "source": "radial_bins"}}
-    assert WorkflowV5BindingMixin._native_curve_input(SimpleNamespace(), radial, options) is None
+    assert native_curve_input(radial, options) is None
 
 
 def test_v5_batch_reader_accepts_the_pixels_column(tmp_path: Path) -> None:
@@ -167,10 +163,9 @@ def test_the_halves_of_a_fit_travel_in_the_observation_and_leave_the_counting_co
     assert table.shape == (20, 4) and (table[:, 0] < 0).sum() == (table[:, 0] > 0).sum() == 10  # both halves, signed
     data = {"q": curve.q, "I": curve.intensity, "err": curve.error, "pixels": curve.pixels,
             "observation": curve.observation, "q_source_unit": "angstrom"}
-    owner = SimpleNamespace()
-    native = WorkflowV5BindingMixin._native_curve_input(owner, data, {"relative_noise": 0.1, "absolute_noise": 0.0})
-    assert native is not None and owner._workflow_observation_metadata["source"] == "native_cbf_columns"
-    assert "halves" not in owner._workflow_observation_metadata  # a choice of the fit, not of the counting
+    native = native_curve_input(data, {"relative_noise": 0.1, "absolute_noise": 0.0})
+    assert native is not None and native[1]["source"] == "native_cbf_columns"
+    assert "halves" not in native[1]  # a choice of the fit, not of the counting
 
     from src.gimap.features.analyze.application import fit_input_observation
     from src.gimap.features.analyze.domain import Corrections

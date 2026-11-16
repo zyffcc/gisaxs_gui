@@ -55,6 +55,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 - **Earlier 1D models removed:** the Keras models K1–K4 of 1D Predict (`k1_k2_k3_k4_phys`, `saved_model_K3K4`,
   22 MB) and their research code `utils/ML_Fitting_1D_GISAXS` (490 files). 1D Predict runs V5 models; fit1d in
   Fitting is the default 1D machine learning. A folder of an earlier model is refused with what to use instead.
+- **1D Predict, Use current curve:** the curve of Single analysis, as the page selects its points: the halves chosen,
+  the fitting range (|q|) and the points left out. Before, it took every point of the halves chosen. The former
+  Fitting pages, built but no longer shown, are removed.
 - **Fitting, beam tail:** the term A / (1 + (|q|/w)^ν) is labelled what it is, the empirical tail of the direct
   and reflected beam (**Background and beam tail**, **Tail A / w / ν**; it was the *resolution peak*). The q
   resolution is σ_q. Keys and records are unchanged (`res_amplitude`, `res_width`, `res_exponent`).

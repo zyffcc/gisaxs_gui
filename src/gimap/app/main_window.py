@@ -76,7 +76,6 @@ class MainWindowComponents(HandoverMixin):
         self.fitting_view_model = create_fitting_view_model(ui.app_context)
         self.fitting_workspace = FittingWorkspace(
             ui,
-            LAYOUT,
             preferences=ui.app_context.preferences,
             view_model=self.fitting_view_model,
             quick_fit=create_quick_fit(),
@@ -512,7 +511,6 @@ class MainWindowComponents(HandoverMixin):
         return binding if callable(getattr(binding, "refresh_language", None)) else page
 
     def save_state(self) -> None:
-        self.fitting_workspace.save_state()
         self.preferences.save()
 
     def shutdown(self) -> None:

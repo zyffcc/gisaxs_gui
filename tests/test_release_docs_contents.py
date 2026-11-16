@@ -209,8 +209,7 @@ def test_the_readme_counts_the_pages_of_the_smoke_check() -> None:
 def test_where_1d_predict_writes_is_what_the_documents_say() -> None:
     """Each caller uses the same writable user-data output root."""
     fitting = ROOT / "src/gimap/features/fitting/presentation"
-    for source in (fitting / "workflow_v5_dialog.py", fitting / "single/run.py",
-                   fitting / "bindings/ai_job_execution.py"):
+    for source in (fitting / "workflow_v5_dialog.py", fitting / "single/run.py"):
         code = _text(source)
         assert "src.gimap.integrations.state.run_paths" in code
         assert "Path.cwd()" not in code

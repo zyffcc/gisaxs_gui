@@ -4,11 +4,10 @@
 - **Scope**：Fitting 一维散射模型、分量累加、q 单位和绘图数据对齐
 - **Related code**：`src/gimap/features/fitting/domain/scattering_model.py`（公式与手动模型）、
   `fit_model.py`（当前页面的模型）、`fit_engine.py`（Refine 与 Search）、`native_solution.py`（快速物理拟合与
-  1D Predict 的解 → 手动模型）、`curve_transformations.py`、`manual_refinement.py`（旧页面的 Local Refine /
-  Global Search）
+  1D Predict 的解 → 手动模型）、`curve_transformations.py`、`manual_refinement.py`（已删除的旧页面的 Local Refine /
+  Global Search，现无界面调用）
 - **Related tests**：`tests/test_fitting_domain_scattering_model.py`、`tests/test_fit_engine.py`、
   `tests/test_native_solution.py`、
-  `tests/test_fitting_curve_rendering.py`、
   `tests/test_fitting_domain_constraints_scoring.py`、
   `tests/test_fitting_domain_manual_refinement.py`、
   `tests/test_ai_curve_loader.py`
@@ -21,7 +20,7 @@
 
 **两套参数存储，同一套公式。** 显示的页面（Single analysis、In-situ series）用 `fit_model.FitModel`：每个族的分布宽度
 都是**相对**的（σR/R、σh/h、σD/D），拟合在 `fit_engine.py`。下文的参数顺序、Local Refine / Global Search 说的是
-`scattering_model` 的手动模型（旧的单曲线页与用户数据目录的 `model_parameters.json`）：Sphere / Cylinder 的 σR、σh
+`scattering_model` 的手动模型（用户数据目录的 `model_parameters.json`；读它的旧单曲线页已删除）：Sphere / Cylinder 的 σR、σh
 和所有 σD 是绝对宽度（nm），Vertical Cylinder 的 σR 是相对的。两者公式与采样相同，`fit_model.to_manual` /
 `from_manual` 换算宽度；快速物理拟合与 1D Predict 的正演（`modules/Fitting_1D_Model/Workflow_v5/conditional_v2/numpy_forward64.py`）
 另有约定（竖直圆柱归一化为 (2J₁(x)/x)²，背景与分辨率峰的幅度相对粒子曲线），它们的解经 `native_solution.py`
@@ -182,8 +181,7 @@ Fold overlay 可以让 `+q` 与 `−q` 共享相同的 `|q|` 横坐标，但必�
 
 ## AI proposal 与传统优化交接
 
-> 本节写的是更早的 AI 路径：旧单曲线页（仍建、不显示）的 `Fast Predict`（`presentation/ai_controls.py`、
-> `bindings/ai_job_execution.py`）。显示的页面上的 AI 是 1D Predict（Workflow V5 `conditional_v2`）：Single analysis 的
+> 本节写的是更早的 AI 路径：旧单曲线页的 `Fast Predict`（该页与其控件、binding 已于 2026-11-16 删除，保留本节作记录）。显示的页面上的 AI 是 1D Predict（Workflow V5 `conditional_v2`）：Single analysis 的
 > Fit 步骤 ▸ AI proposal (1D Predict)，以及 Tools ▸ / Fitting ▸ 1D Predict — Fit Many Curves…；它的排序分数没有校准成
 > 概率（候选的 `probability_status` 为 “Not calibrated”），方法见 Physics Manual 第 10 章。下面的契约只约束旧路径。
 
@@ -211,7 +209,7 @@ residual calls 计数，并在相同 optimization q grid 上比较初始值和�
 
 ## Global Search 与 Local Refine
 
-> 本节说的是手动模型的 `manual_refinement.py`（旧单曲线页的两个弹窗）。显示的页面的 Refine 与 Search 在
+> 本节说的是手动模型的 `manual_refinement.py`（旧单曲线页的两个弹窗；该页已于 2026-11-16 删除，函数仍在 domain，现无界面调用）。显示的页面的 Refine 与 Search 在
 > `fit_engine.py`，做法不同：σ 已知时残差为 (I − m)/σ，否则 ln(I/m)；跨度 ≥ 10 倍且为正的范围按对数搜索；
 > Search 默认共 4000 次计算（约 3/4 给差分进化，其余分给最好的 3 个起点的局部精修）；线性幅度（Int、BG、分辨率峰 A）
 > 每步用 NNLS 求解，只要求非负；局部精修的范围就是参数自己的上下限（`fit_model.INFO`）。公式与误差见

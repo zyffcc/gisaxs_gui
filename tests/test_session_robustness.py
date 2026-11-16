@@ -285,20 +285,3 @@ def test_the_last_set_up_is_kept_and_offered_once_in_the_next_session(tmp_path: 
     second.close()
 
 
-def test_the_fitting_curve_card_shows_q_in_both_units() -> None:
-    from src.gimap.features.fitting.presentation.curve_card import CurveSourceCard
-
-    class Ui:
-        pass
-
-    from PyQt5.QtWidgets import QLineEdit, QPushButton
-
-    _app()
-    ui = Ui()
-    ui.fitImport1dFileButton = QPushButton()
-    ui.fitImport1dFileValue = QLineEdit()
-    card = CurveSourceCard(ui)
-    card.show_curve("cut.dat", np.array([0.01, 0.2]))
-    assert "q 0.1 … 2 nm⁻¹ (0.01 … 0.2 Å⁻¹)" in card.detail_label.text()
-    card.show_curve("cut_nm.dat", np.array([0.1, 2.0]), unit="nm")
-    assert "q 0.1 … 2 nm⁻¹ (0.01 … 0.2 Å⁻¹)" in card.detail_label.text()

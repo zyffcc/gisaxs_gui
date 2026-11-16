@@ -104,18 +104,6 @@ def test_imported_assets_remain_identical():
         assert hashlib.sha256((root / name).read_bytes()).hexdigest() == sha, name
 
 
-def test_single_candidate_selection_cannot_replace_active_insitu_frame():
-    from src.gimap.features.fitting.presentation.bindings.workflow_v5_binding import (
-        WorkflowV5BindingMixin,
-    )
-
-    binding = WorkflowV5BindingMixin()
-    binding._insitu_workflow_state = "Processing"
-    binding.fitting = {"frame": "active"}
-    assert binding._apply_workflow_candidate({}) is False
-    assert binding.fitting == {"frame": "active"}
-
-
 def test_completed_job_reports_observed_residual_without_mandatory_cutoff(tmp_path):
     from PyQt5.QtWidgets import QApplication
     from src.gimap.features.fitting.presentation.workflow_v5_dialog import WorkflowV5Dialog
@@ -181,26 +169,11 @@ def test_the_1d_predict_figure_follows_the_light_and_dark_theme(tmp_path):
         apply_theme("light", 9.0)  # the suite's theme (and a deleted dialog no longer follows it)
 
 
-def test_simplified_insitu_controls_and_dialog_settings():
-    from PyQt5.QtWidgets import QApplication, QWidget
-    from src.gimap.features.fitting.presentation.views.insitu_series_page_view import (
-        InSituSeriesPageView,
-    )
+def test_dialog_settings_keep_the_components_and_resolution():
+    from PyQt5.QtWidgets import QApplication
     from src.gimap.features.fitting.presentation.workflow_v5_dialog import WorkflowV5Dialog
 
     app = QApplication.instance() or QApplication([])
-    page = QWidget()
-    view = InSituSeriesPageView()
-    view.setupUi(page)
-    page.show()
-    assert tuple(view.workflowButtons) == ("source", "fit", "results")
-    controls = view.workflowControls
-    controls.show_step("fit")
-    assert controls.stack.currentWidget() is controls.pages["fit"]
-    controls.workflowModeCombo.setCurrentIndex(2)
-    assert controls.fit_mode() == 2 and controls.workflowModeCombo.currentText() == "Plot curves only"
-    controls.show_step("geometry")  # detector steps are gone: unknown keys are ignored
-    assert controls.stack.currentWidget() is controls.pages["fit"]
     dialog = WorkflowV5Dialog(
         options=dict(components=[2, 2], sigma_res=0.01, nu_res=7, numerical=False)
     )
@@ -208,50 +181,4 @@ def test_simplified_insitu_controls_and_dialog_settings():
     assert dialog.options()["sigma_res"] == 0.01
     assert not dialog.options()["numerical"]
     dialog.close()
-    page.close()
     app.processEvents()
-
-
-def test_insitu_keeps_both_native_forward_sides_without_legacy_recalculation(tmp_path):
-    from src.gimap.features.fitting.presentation.bindings.insitu_refinement_lifecycle import (
-        InsituRefinementLifecycleMixin,
-    )
-    from src.gimap.features.fitting.presentation.bindings.workflow_v5_binding import (
-        WorkflowV5BindingMixin,
-    )
-
-    class Binding(WorkflowV5BindingMixin, InsituRefinementLifecycleMixin):
-        def _perform_manual_fitting(self):
-            raise AssertionError("V5 output must never be recomputed by the legacy forward")
-
-        def _complete_insitu_workflow_fit(self, record, status):
-            self.completed = (record, status)
-
-    binding = Binding()
-    binding._ai_output_dir = tmp_path
-    rows = []
-    for side, sign in (("positive", 1), ("negative", -1)):
-        for rank in (1, 2):
-            rows.append(
-                dict(
-                    workflow="native_v5",
-                    side=side,
-                    rank=rank,
-                    native_q=(sign * np.arange(1, 9)).tolist(),
-                    native_fit=(rank * np.arange(1, 9)).tolist(),
-                    observed=np.arange(1, 9).tolist(),
-                    sigma=np.ones(8).tolist(),
-                    components=[dict(params=dict(R=4.0, h=None))],
-                    global_params={},
-                    signed_weighted_rms=0.0,
-                )
-            )
-            rows[-1]["components"][0]["weight"] = 1.0
-    binding._on_insitu_ai_full_fit_finished(
-        {}, 0, SimpleNamespace(candidates=rows, runtime_seconds=1.2)
-    )
-    assert binding.completed[1] == "ok"
-    assert len(binding.fitting["q"]) == 16
-    np.testing.assert_array_equal(binding.fitting["I"], np.abs(binding.fitting["q"]))
-    assert binding._calculate_current_chi_square() == 0
-    assert len(binding.completed[0]["v5_side_candidates"]) == 2

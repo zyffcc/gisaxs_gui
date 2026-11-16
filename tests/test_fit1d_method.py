@@ -118,7 +118,7 @@ def test_the_settings_offer_fit1d_and_keep_its_values():
 
 
 def test_main_fit_and_in_situ_keep_the_saved_fit1d_method():
-    from src.gimap.features.fitting.presentation.bindings.ai_job_execution import workflow_options_for_mode
+    from src.gimap.features.fitting.application.workflow_v5 import workflow_options_for_mode
 
     saved = {**default_options(), "method": "fit1d", "components": [1, 3]}
     assert workflow_options_for_mode(saved, "full")["method"] == "fit1d"
@@ -232,35 +232,13 @@ def test_files_are_fitted_per_half_and_a_bad_file_does_not_stop_the_batch(tmp_pa
     assert json.loads((tmp_path / "output/top20_candidates.json").read_text(encoding="utf-8"))[0]["best_source"] == "fit1d"
 
 
-def test_in_situ_routes_a_recipe_with_fit1d_to_fit1d():
-    from types import SimpleNamespace
-
-    from src.gimap.features.fitting.presentation.bindings.insitu_curve_processing import InsituCurveProcessingMixin
-
-    binding = InsituCurveProcessingMixin()
-    binding._insitu_workflow_settings = lambda: dict(use_previous=False, full_auto_fit=True, auto_refine=False)
-    binding._log_insitu_workflow = lambda *args: None
-    binding.ui = SimpleNamespace()
-    binding.fitting_view_model = SimpleNamespace(insitu=SimpleNamespace(recipe=SimpleNamespace(
-        model={"workflow_v5": dict(method="fit1d", components=[1, 3])})))
-    calls = []
-
-    def start(mode):
-        calls.append(mode)
-        binding._ai_job_thread = object()
-
-    binding._start_ai_prediction = start
-    binding._run_insitu_workflow_fit({})
-    assert calls == ["fit1d"]
-
-
 @needs_kit
 def test_the_fit_of_the_open_curve_and_of_in_situ_frames_reaches_fit1d(tmp_path):
     """Main Fit and in-situ frames go through ``GenerateCandidates(AiPipelinePredictor)`` with the saved options."""
     from src.gimap.features.fitting.application import CandidateGenerationRequest, GenerateCandidates
     from src.gimap.features.fitting.application.workflow_v5 import bundled_workflow
     from src.gimap.features.fitting.infrastructure.adapters.ai_pipeline import AiPipelinePredictor
-    from src.gimap.features.fitting.presentation.bindings.ai_job_execution import workflow_options_for_mode
+    from src.gimap.features.fitting.application.workflow_v5 import workflow_options_for_mode
 
     q, intensity, sigma = _example(step=4)
     saved = validate_options(dict(method="fit1d", components=[1, 3], fit1d_qz=QZ, side="both"))
@@ -276,32 +254,6 @@ def test_the_fit_of_the_open_curve_and_of_in_situ_frames_reaches_fit1d(tmp_path)
     for row in result.candidates:  # what the in-situ record keeps of a native_v5 row
         assert row["signed_weighted_rms"] > 0 and row["unit_contract"]["q"] == "nm^-1"
         assert row["components"][0]["params"]["R"] > 0
-
-
-@needs_kit
-def test_a_fit1d_row_goes_into_components_as_a_start_and_says_its_curve_differs(tmp_path):
-    from tests.test_fitting_presentation import _fitting_window
-
-    q, intensity, sigma = _example(step=4)
-    result = _run(dict(output_dir=str(tmp_path / "output"), q=q.tolist(), intensity=intensity.tolist(),
-                       sigma=sigma.tolist(),
-                       options=dict(method="fit1d", components=[1, 3], side="positive", fit1d_qz=QZ)))
-    (row,) = result.value["candidates"]
-    app, window = _fitting_window()
-    binding = window.runtime.fitting
-    curve = tmp_path / "cut_fit_input.dat"
-    np.savetxt(curve, np.column_stack([q / 10.0, intensity, sigma]))  # the curve Analyze writes: q in Å⁻¹
-    binding.import_1d_file(curve, q_view="fold")
-    window.components.fitting_workspace.show_fit_curve()
-    app.processEvents()
-    assert binding.show_workflow_candidate(row) is True
-    shapes = [binding.get_particle_shape(widget) for widget in binding._iter_particle_widget_ids()]
-    assert shapes[:2] == ["Sphere", "Vertical Cylinder"] and set(shapes[2:]) <= {"None"}  # unused slots
-    first = binding._iter_particle_widget_ids()[0]
-    assert binding._get_particle_parameter(first, "R", 0.0) == pytest.approx(row["components"][0]["params"]["R"])
-    feedback = window.fittingInlineFeedback.text()
-    assert "as a start" in feedback and "fit1d's curve" in feedback and "own physics" in feedback
-    window.close()
 
 
 @needs_kit
