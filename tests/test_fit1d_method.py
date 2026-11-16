@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -173,6 +174,10 @@ def test_current_curve_gives_a_native_row_with_fit1d_s_own_curve(tmp_path):
     assert math.isclose(row["best_chi2_weighted"], row["fit1d"]["chi2_per_point"], rel_tol=1e-6)
     assert math.isclose(row["signed_weighted_rms"] ** 2, row["best_chi2_weighted"], rel_tol=1e-9)
     assert row["fit1d"]["qz_nm_inv"] == QZ and row["fit1d"]["qz_given"] and row["fit1d"]["composition"] == "sphere,vc"
+    # the record names the exact network: the default network's weights by SHA-256, as in the kit's SOURCE.json
+    source = json.loads((Path(__file__).resolve().parents[1] / "utils" / "gisaxs1d_gui_kit" / "SOURCE.json").read_text(encoding="utf-8"))
+    assert row["fit1d"]["network"] == {
+        "name": "general", "weights_sha256": source["networks_unchanged"]["models/general/weights_numpy.npz"]}
     assert "number-weighted" in row["unit_contract"]["sigma_R"] and "legacy_sigma_D" in row["unit_contract"]["sigma_D"]
     assert "different curve" in row["validation_scope"]
     assert not any("qz = 0" in warning for warning in row["warnings"])

@@ -15,6 +15,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 - **Analyze, records:** `<stem>_analysis.json` lists every input file by name with its SHA-256
   (`input_sha256`: the source, its module or data files, and the frames summed with it), so a curve can be traced
   to its frames on another computer, where the folders differ.
+- **Fitting, records:** an exported fit1d result keeps fit1d's own provenance (its version and the SHA-256 of its
+  sources, of the network's weights, of the OOD thresholds and of the form-factor tables); the source of a curve
+  is recorded with its file name and SHA-256.
 - **Fitting, spheres in grazing incidence:** a new card in Model, *Spheres in grazing incidence*. By default
   nothing changes: spheres are evaluated at q_z = 0 (the effective interface approximation, no substrate
   needed). Entering αi, αf and λ of the cut evaluates spheres as the direct plus the exit-reflected path with a
