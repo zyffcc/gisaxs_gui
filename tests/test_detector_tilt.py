@@ -293,3 +293,30 @@ def test_the_tilt_texts_are_shown_in_chinese_with_their_numbers() -> None:
         assert words("0.31° left out") == "略去 0.31°"
     finally:
         apply_language(DEFAULT_LANGUAGE)
+
+
+def test_the_command_line_csv_says_its_input_and_geometry_in_its_header(tmp_path) -> None:
+    """Every CSV of the command line begins with the release, each input by SHA-256 and the geometry."""
+    import hashlib
+
+    from src.gimap.app.headless_assistant import open_headless_session, write_outputs
+    from src.gimap.features.assistant.application import PipelineOptions
+
+    for item in (EXTERNAL / "saxs_agbh_pyfai").iterdir():
+        if item.is_file():
+            shutil.copy(item, tmp_path / item.name)
+    session = open_headless_session(tmp_path / "Pilatus1M.edf", saved_profiles=False, out_dir=tmp_path / "out")
+    try:
+        report = session.run_pipeline(PipelineOptions(calibration=str(tmp_path / "Pilatus1M.poni"), energy_kev=12.398,
+                                                      incidence_deg=0.2, technique="gisaxs", fit=False))
+        written = write_outputs(session, report, tmp_path / "cli")
+    finally:
+        session.close()
+    tables = [path for path in written if path.suffix == ".csv"]
+    assert tables
+    digest = hashlib.sha256((tmp_path / "Pilatus1M.edf").read_bytes()).hexdigest()
+    for table in tables:
+        head = [line for line in table.read_text(encoding="utf-8").splitlines() if line.startswith("#")]
+        assert head[0].startswith("# GIMaP v") and f"# input: Pilatus1M.edf sha256 {digest}" in head
+        assert any(line.startswith("# geometry: distance ") and "detector tilt 0.57" in line for line in head)
+        np.loadtxt(table, delimiter=",", comments="#", encoding="utf-8")  # still a plain table for numpy

@@ -2718,7 +2718,7 @@ GIMaP 从不改动你的数据文件。分析的导出默认写到**数据旁边
 | **文件 ▸ 实验室参数 ▸ 另存为…** | `gimap_parameters.json` | 对话框，从启动 GIMaP 时所在的文件夹开始 | — |
 | 错误（自动） | `logs/errors.log`（超过 2 MB 时改名为 `errors.old.log`） | 用户数据文件夹 | — |
 | **帮助 ▸ 示例数据**（Help ▸ Example Data） | 示例的帧及其 `.poni`（和掩膜），以及 `SOURCE_AND_LICENCE.md` | 你选的文件夹，默认 `Documents/GIMaP examples/<示例>/`；那里已有的文件保留不动 | `SOURCE_AND_LICENCE.md`（数据的来源和许可证） |
-| `tools/gimap_agent.py` | 每帧一个子文件夹（一组模块文件：每次扫描一个；`--series`：`<名称>_series/`），含 `report.md`、`report.json`、曲线、q 图；`summary.md` + `summary.json` | `--out`；不给时为用户数据文件夹里的 `assistant_runs/cli/<时间>/`；从不写到数据旁边 | `report.json` |
+| `tools/gimap_agent.py` | 每帧一个子文件夹（一组模块文件：每次扫描一个；`--series`：`<名称>_series/`），含 `report.md`、`report.json`、曲线（CSV 的 `#` 行写明版本、每个输入文件的 SHA-256 和几何）、q 图；`summary.md` + `summary.json` | `--out`；不给时为用户数据文件夹里的 `assistant_runs/cli/<时间>/`；从不写到数据旁边 | `report.json` |
 
 **文件是哪个版本写的。** 分析工作区的记录（`_analysis.json`、设置文件、序列表和阶段表旁的 JSON）、批量导出和把序列发送到拟合的记录
 （`<batch>_batch.json`；`README.txt` 里写 *Written by GIMaP v…*）、拟合的记录（`<curve>_fit.json`、`series_fit.json`），以及比较、

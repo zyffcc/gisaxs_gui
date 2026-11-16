@@ -171,8 +171,10 @@ def test_the_command_line_writes_the_cuts_and_the_fit(galaxi_run, tmp_path: Path
     session, report = galaxi_run
     names = {path.name for path in write_outputs(session, report, tmp_path)}
     assert {"horizontal.csv", "vertical.csv", "fit_curve.csv", "fit_solutions.csv", "report.md"} <= names
-    header = (tmp_path / "fit_curve.csv").read_text(encoding="utf-8").splitlines()[0]
-    assert header.startswith("# q (A^-1), I, sigma, I_fit")
+    lines = (tmp_path / "fit_curve.csv").read_text(encoding="utf-8").splitlines()
+    header = [line for line in lines if line.startswith("#")]
+    assert header[0].startswith("# GIMaP v")  # where the curve comes from, then its columns
+    assert header[-1].startswith("# q (A^-1), I, sigma, I_fit")
     table = (tmp_path / "fit_solutions.csv").read_text(encoding="utf-8").splitlines()
     assert table[0].startswith("# GISAXS fit solutions") and "in nm" in table[1]  # what it is, then the units
     assert table[2].startswith("rank,model,chi2") and len(table) == 5
