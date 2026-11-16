@@ -597,6 +597,11 @@ X、Y 是相对直射束的位移 (1.3)、(1.4)，ĉ 是探测器列的方向，
 - `tools/benchmarks/pyfai_comparison.py` 在四帧公开数据（倾斜 0 到 6.06°）上与 pyFAI 本身（2026.9）比较：|q|、2θ，
   以及 q∥、q_z 与 pyFAI 纤维单位 `qip`、`qoop`（样品取向 4）相差 10⁻¹³；立体角除一个常数外相差 10⁻⁷（pyFAI 以 PONI
   归一，GIMaP 以直通光束归一），偏振因子完全相同。
+- `tools/benchmarks/pygid_comparison.py` 在 pygid 的两个示例帧（P08、Xeuss）上与 pygid（0.2.20）比较：把 GIMaP 的
+  直通光束沿两个轴各移动半个像素后，每个像素的 q∥ 和 q_z 相差 10⁻¹⁵。pygid 把像素 i 放在离 PONI i·p 处，pyFAI 和
+  GIMaP 放在像素中心 (i + ½)·p；不移动时两者最多相差 1.1 × 10⁻³ Å⁻¹（P08）和 2.4 × 10⁻³ Å⁻¹（Xeuss）。pygid 极坐标
+  图中各环的中心与 GIMaP 的 I(q) 在 P08 上相差 7 × 10⁻⁴ Å⁻¹ 以内，是该图 q 步长的三分之一。示例附带发布的极坐标图
+  （pygid 0.1.16）把环放低 1.6 到 1.7 × 10⁻³ Å⁻¹；它的 q 网格与 pygid 0.2.20 的相差最多 1.4 × 10⁻³ Å⁻¹。
 - 倾斜改变了什么：略去它时，P08 文件（倾斜 0.31°）上 |q| 最多偏 0.20 %，AgBh 文件（0.57°）上 0.08 %，Xeuss 文件
   （6.06°）上 6.3 %（在离光束最远的角上）。单独的 Rot3 不改变 |q|，只把 χ 转动 rot_3。
 - 自动分析在*决定*里列出倾斜（`detector tilt: 6.06° in the geometry`），几何步骤和它的摘要写
@@ -1802,6 +1807,23 @@ r 是自由的有效系数，所以仍然不需要基底信息，只需要测量
 
 实现：`src/gimap/features/fitting/domain/fit_model.py`（`grazing`、`qz_plus_r`）、
 `src/gimap/features/fitting/domain/scattering_model.py`（`sphere_two_path_pd`）
+
+**一条实测切线：GALAXI 与 BornAgain 对它的模型。** BornAgain 对公开 GALAXI 帧的示例（r23，`hardcode_galaxi.py`）
+这样描述它：Ag 球位于 PTFE/Si 上 HMDSO 中 18.5 nm 深处，半径为对数正态分布（中位数 5.75 nm，σ = 0.4），径向准晶
+（D = 53.6 nm，无序 10.5 nm），尺寸–间距耦合 κ = 17.5，按层叠结构做 DWBA。r23 中尺寸分布被注释掉了；加上它，
+BornAgain 24.1 只用一个比例因子和一个背景描述 Analyze 的 Yoneda 切线，q > 0.3 nm⁻¹ 处 χ²_red = 2.1；不加它为 22
+（单分散球在 0.78 nm⁻¹ 处有一个极小，切线上没有）。
+
+- Fitting 用一个球加准晶描述实测切线，χ²_red ≈ 1.1（EIA 或双路径，LMA 或 DA）：R = 9.5 到 11.5 nm，
+  σ_R/R = 0.17 到 0.37。在 BornAgain 对该帧的模型上（在同一条切线上、按实测计数模拟），结果相同：R = 8.1 到
+  10.1 nm，σ_R/R = 0.33 到 0.41。Fitting 读实测切线和读它的模型得到的是同样的数。
+- 这些 R 不是对数正态分布的某个平均：按数目为 6.2 nm，按 R⁶ 加权为 16.3 nm。按强度权重的高斯拟合一个宽的对数正态
+  分布，结果落在两者之间；σ_R/R 接近对数正态的相对宽度 0.42。
+- 这条切线（实测或模拟）都定不出 D：没有相关峰，拟合的 D 落在 1 到 7 nm（小于 2R）或几百 nm。把 D 和无序固定为
+  BornAgain 的值时，χ²_red 升到 6 到 22：(9.12) 的准晶没有尺寸–间距耦合，而 κ = 17.5 时这个耦合把 BornAgain 的 S
+  压得很低。
+
+脚本是 GIMaP 论文材料中的 `physics/galaxi_bornagain.py` 和 `physics/galaxi_ba_model.py`。
 
 ### 9.11 三群模型
 

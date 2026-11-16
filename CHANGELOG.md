@@ -40,6 +40,10 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   10⁻¹³, and the azimuthal I(q) to 10⁻⁷ on the same pixels and bins; pyFAI's Σ I / Σ F differs from GIMaP's mean of
   I / F by up to 1.3 % on a frame close to the sample (Physics and Methods 3.7, 6.1;
   `tools/benchmarks/pyfai_comparison.py`).
+- **Checked against pygid and BornAgain:** every pixel's q∥ and q_z agree with pygid to 10⁻¹⁵ once its pixel
+  convention (pixel i at i·p, half a pixel from pyFAI's centre) is taken into account. On the public GALAXI frame,
+  Fitting finds the same sphere radius and spread on the measured cut as on BornAgain's model of it simulated on that
+  cut; the cut does not determine the distance D (Physics and Methods 3.7, 9.10).
 - **Fitting, q resolution:** σ_q in *Background and resolution peak* (0, off, by default) convolves the particle
   terms with a Gaussian in q, so an ordered film's peak width is not read as disorder (Physics and Methods 9.2).
 - **Fitting, Coupling:** a particle with Distance D has *Coupling* LMA (P·S, as before) or DA (P + |⟨F⟩|²(S − 1):
