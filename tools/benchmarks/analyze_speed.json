@@ -1,0 +1,54 @@
+{
+ "machine": {
+  "python": "3.10.18",
+  "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+  "cpus": 32,
+  "system": "Windows-10-10.0.26300-SP0"
+ },
+ "frames": [
+  {
+   "frame": "Pilatus1M.edf",
+   "mode": "gisaxs",
+   "shape": [
+    1043,
+    981
+   ],
+   "megapixels": 1.023183,
+   "first_s": 0.13487529999110848,
+   "next_median_s": 0.06448699999600649
+  },
+  {
+   "frame": "galaxi_data.tif",
+   "mode": "gisaxs",
+   "shape": [
+    1043,
+    981
+   ],
+   "megapixels": 1.023183,
+   "first_s": 0.13740839998354204,
+   "next_median_s": 0.087158799986355
+  },
+  {
+   "frame": "S121_MAI_A2_00841.tif",
+   "mode": "giwaxs",
+   "shape": [
+    2048,
+    2048
+   ],
+   "megapixels": 4.194304,
+   "first_s": 1.0481230999866966,
+   "next_median_s": 0.6712590999959502
+  },
+  {
+   "frame": "PbTe_3010_r1_PT_1_10_0_00028.edf",
+   "mode": "giwaxs",
+   "shape": [
+    619,
+    487
+   ],
+   "megapixels": 0.301453,
+   "first_s": 0.08200779999606311,
+   "next_median_s": 0.060536100005265325
+  }
+ ]
+}
