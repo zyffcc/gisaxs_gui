@@ -1904,9 +1904,9 @@ Analysis** to inspect its contributions here.
 - **Ranges** shows each value's min – max. The fit keeps the value inside it; *Search the ranges* searches
   across it. A value typed outside its range widens the range. For linear terms such as intensity and background,
   **∞** means no upper limit; untick it to enter a finite maximum.
-- **Background and resolution peak**: a constant background, and a peak at q = 0 for the tail of the direct and
-  reflected beam and the resolution there; an overall factor k, fixed at 1 by default, multiplies the particles and
-  the peak. The model as a formula, and how **σD/D** relates to the usual paracrystal spread, are in Physics and
+- **Background and beam tail**: a constant background, the beam tail A / (1 + (|q|/w)^ν) at q = 0 (**Tail A**,
+  **Tail w**, **Tail ν**: the empirical tail of the direct and reflected beam), and the q resolution **σ_q** (0, off,
+  by default); an overall factor k, fixed at 1 by default, multiplies the particles and the tail. The model as a formula, and how **σD/D** relates to the usual paracrystal spread, are in Physics and
   Methods, [section 9.2](Physics_Manual.md#92-the-intensity-model) and
   [section 9.5](Physics_Manual.md#95-structure-factor-one-dimensional-paracrystal).
 - **Spheres in grazing incidence**: αi, αf, λ and the effective reflection coefficient |r|, arg r. With αi = αf = 0

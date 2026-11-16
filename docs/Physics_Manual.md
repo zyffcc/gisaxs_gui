@@ -1937,9 +1937,9 @@ Implementation: `src/gimap/features/fitting/domain/scattering_model.py`, `src/gi
 | D | D | nm | 30 (a new component: max(3R, 1)) | 1–3000 | yes |
 | sigma_D | σD/D | – | 0.3 | 0.02–1.0 | yes |
 | background | Background (BG) | – | 0 | ≥ 0 (solved) | yes |
-| res_amplitude | Peak A | – | 0 | ≥ 0 (solved) | yes |
-| res_width | Peak w | nm⁻¹ | 0.02 | 0.001–0.1 | yes |
-| res_exponent | Peak ν | – | 3 | 1–20 | yes |
+| res_amplitude | Tail A | – | 0 | ≥ 0 (solved) | yes |
+| res_width | Tail w | nm⁻¹ | 0.02 | 0.001–0.1 | yes |
+| res_exponent | Tail ν | – | 3 | 1–20 | yes |
 | k | Factor k | – | 1 | 10⁻⁶–10⁶ | no |
 | q_resolution | σ_q | nm⁻¹ | 0 | 0–0.1 | no |
 | alpha_i | αi | ° | 0 | 0–5 | no |

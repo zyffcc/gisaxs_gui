@@ -305,16 +305,16 @@ def test_single_analysis_composes_its_texts_again_after_a_language_switch(tmp_pa
     try:
         assert single.open_curve(folder / "run_00001_fit_input.dat")
         width = single.model_editor.row(("globals", "res_width"))
-        assert width.name.text() == "Peak w (nm⁻¹)"
+        assert width.name.text() == "Tail w (nm⁻¹)"
         apply_language("zh", [single])
         single.refresh_language()
-        assert single.model_editor.row(("globals", "res_width")).name.text() == "峰 w (nm⁻¹)"
+        assert single.model_editor.row(("globals", "res_width")).name.text() == "尾 w (nm⁻¹)"
         assert "拟合范围内" in single.curve_info.text() and "拟合" in single.step_rail.detail("curve")
         opened = translate("Opened {name}.", "zh").format(name="run_00001_fit_input.dat")
         assert single.status_label.text() == opened != "Opened run_00001_fit_input.dat."
         apply_language(DEFAULT_LANGUAGE, [single])
         single.refresh_language()
-        assert single.model_editor.row(("globals", "res_width")).name.text() == "Peak w (nm⁻¹)"
+        assert single.model_editor.row(("globals", "res_width")).name.text() == "Tail w (nm⁻¹)"
         assert "in the fitting range" in single.curve_info.text()
         assert single.status_label.text() == "Opened run_00001_fit_input.dat."
     finally:

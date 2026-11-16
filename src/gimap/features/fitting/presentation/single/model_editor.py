@@ -52,7 +52,7 @@ def _set(spin: ScientificDoubleSpinBox, value: float) -> None:
 
 
 def _label(key: str) -> str:
-    """“Peak w (nm⁻¹)”: the name in the interface language, the unit as it is."""
+    """“Tail w (nm⁻¹)”: the name in the interface language, the unit as it is."""
     info = INFO[key]
     return tr(info.label) + (f" ({info.unit})" if info.unit else "")
 
@@ -320,7 +320,7 @@ class FitModelEditor(QWidget):
 
     def _globals_card(self) -> QFrame:
         card, layout = self._card("fitGlobals")
-        title = QLabel(tr("Background and resolution peak"), card)
+        title = QLabel(tr("Background and beam tail"), card)
         title.setProperty("gimapRole", "strong")
         title.setToolTip(tr("I(q) = BG + k·[Σ particles + A/(1 + (|q|/w)^ν)]: the peak is the direct and "
                             "reflected beam's tail and the resolution near q = 0"))

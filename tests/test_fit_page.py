@@ -500,7 +500,7 @@ def test_the_page_has_no_open_shortcut_of_its_own_and_short_residual_labels(tmp_
     page.open_curve(_curve_file(tmp_path, sigma=False, name="no_sigma_fit_input.dat"))
     assert page.residual_plot.figure_state()["y_label"] == "Δ ln I" and "ln(I / model)" in page.residual_plot.toolTip()
     assert page.add_component_button.text() == "Add Particle"
-    assert page.model_editor.row(("globals", "res_width")).name.text() == "Peak w (nm⁻¹)"
+    assert page.model_editor.row(("globals", "res_width")).name.text() == "Tail w (nm⁻¹)"
     page.dispose()
 
 
@@ -514,7 +514,7 @@ def test_a_parameter_name_is_translated_and_its_unit_kept() -> None:
     try:
         editor = FitModelEditor()
         editor.set_model(_truth())
-        assert editor.row(("globals", "res_width")).name.text() == "峰 w (nm⁻¹)"
+        assert editor.row(("globals", "res_width")).name.text() == "尾 w (nm⁻¹)"
     finally:
         state.language = language
 

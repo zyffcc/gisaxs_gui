@@ -94,7 +94,7 @@ FITTING_ZH = {
     "Remove this component": "删除这个组分",
     "No particle yet: add one above, or let Fit ▸ Find the particle shape choose.":
         "还没有颗粒：在上面添加一个，或让 拟合 ▸ 寻找颗粒形状 来选择。",
-    "Background and resolution peak": "背景与分辨率峰",
+    "Background and beam tail": "背景与光束尾项",
     "I(q) = BG + k·[Σ particles + A/(1 + (|q|/w)^ν)]: the peak is the direct and reflected beam's tail and the resolution near q = 0":
         "I(q) = BG + k·[Σ 颗粒 + A/(1 + (|q|/w)^ν)]：这个峰是直射束和反射束的尾部以及 q = 0 附近的分辨率",
     "Intensity of this component (sphere and random cylinder: the form factor is 1 at q = 0; vertical cylinder: 10⁻⁶·⟨R⁴⟩/4 at q = 0, R in nm)":
@@ -106,12 +106,13 @@ FITTING_ZH = {
     "Mean distance between neighbours (paracrystal)": "相邻颗粒的平均间距（次晶）",
     "Relative disorder of the distance": "间距的相对无序度",
     "Constant added to the whole curve": "加在整条曲线上的常数",
-    "Peak A": "峰 A",
-    "Height of the resolution peak A / (1 + (|q|/w)^ν) at q = 0": "分辨率峰 A / (1 + (|q|/w)^ν) 在 q = 0 处的高度",
-    "Peak w": "峰 w",
-    "Width w of the resolution peak": "分辨率峰的宽度 w",
-    "Peak ν": "峰 ν",
-    "Exponent ν of the resolution peak (its tail)": "分辨率峰的指数 ν（决定尾部）",
+    "Tail A": "尾 A",
+    "Height at q = 0 of the beam tail A / (1 + (|q|/w)^ν): the empirical tail of the direct and reflected beam":
+        "光束尾项 A / (1 + (|q|/w)^ν) 在 q = 0 处的高度：直射束和反射束的经验尾巴",
+    "Tail w": "尾 w",
+    "Width w of the beam tail": "光束尾项的宽度 w",
+    "Tail ν": "尾 ν",
+    "Exponent ν of the beam tail (how fast it falls)": "光束尾项的指数 ν（下降的快慢）",
     "Factor k": "因子 k",
     "Overall factor of everything but the background (usually fixed at 1)": "除背景外所有项的总因子（通常固定为 1）",
     "Spheres in grazing incidence": "掠入射下的球",

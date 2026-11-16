@@ -1664,9 +1664,9 @@ DA:   I = P(q) + |⟨F⟩|² (S(q) − 1)                                       
 | D | D | nm | 30（新组分：max(3R, 1)） | 1–3000 | 是 |
 | sigma_D | σD/D | – | 0.3 | 0.02–1.0 | 是 |
 | background | Background (BG)（背景） | – | 0 | ≥ 0（求解） | 是 |
-| res_amplitude | Peak A（峰 A） | – | 0 | ≥ 0（求解） | 是 |
-| res_width | Peak w（峰 w） | nm⁻¹ | 0.02 | 0.001–0.1 | 是 |
-| res_exponent | Peak ν（峰 ν） | – | 3 | 1–20 | 是 |
+| res_amplitude | Tail A（尾 A） | – | 0 | ≥ 0（求解） | 是 |
+| res_width | Tail w（尾 w） | nm⁻¹ | 0.02 | 0.001–0.1 | 是 |
+| res_exponent | Tail ν（尾 ν） | – | 3 | 1–20 | 是 |
 | k | Factor k（因子 k） | – | 1 | 10⁻⁶–10⁶ | 否 |
 | q_resolution | σ_q | nm⁻¹ | 0 | 0–0.1 | 否 |
 | alpha_i | αi | ° | 0 | 0–5 | 否 |

@@ -46,6 +46,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   (Physics and Methods 2.6). Off by default.
 - **Fitting, D ≥ 2R:** a fit keeps the paracrystal's distance at or above twice the mean radius, so the particles
   do not overlap (D could fall to 1 nm before); a D at 2R is reported at its lower bound (Physics and Methods 9.6).
+- **Fitting, beam tail:** the term A / (1 + (|q|/w)^ν) is labelled what it is, the empirical tail of the direct
+  and reflected beam (**Background and beam tail**, **Tail A / w / ν**; it was the *resolution peak*). The q
+  resolution is σ_q. Keys and records are unchanged (`res_amplitude`, `res_width`, `res_exponent`).
 - **Tests against pyFAI and pygid:** q, 2θ, q∥ and q_z at fixed pixels of the four public frames are checked
   against stored pyFAI and pygid values to 10⁻¹¹ Å⁻¹ in every test run, without either program installed; the P08
   ring positions are now held to 0.0025 Å⁻¹ (was 0.01).

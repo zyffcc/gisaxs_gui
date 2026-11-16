@@ -6,7 +6,8 @@
   size distribution; its spreads are **relative** here (σR/R, σh/h) whatever the family;
 * S_i: the paracrystal (1D) interference of distance D and relative disorder σD/D, when the
   component has one (``structure``), else 1;
-* BG a constant background, A/(1+(|q|/w)^ν) the resolution peak at q = 0, k an overall factor.
+* BG a constant background, A/(1+(|q|/w)^ν) the empirical beam tail at q = 0 (key ``resolution peak``), k an overall
+  factor.
 
 Spheres of a horizontal GISAXS cut: with αi = αf = 0 (the default) the sphere is evaluated at q_z = 0, the
 effective interface approximation, which needs nothing about the substrate. With the angles and λ of the cut
@@ -86,10 +87,11 @@ INFO = {
     "D": ParameterInfo("D", "nm", 30.0, 1.0, 3000.0, tip="Mean distance between neighbours (paracrystal)"),
     "sigma_D": ParameterInfo("σD/D", "", 0.3, 0.02, 1.0, tip="Relative disorder of the distance"),
     "background": ParameterInfo("Background", "", 0.0, 0.0, INF, tip="Constant added to the whole curve"),
-    "res_amplitude": ParameterInfo("Peak A", "", 0.0, 0.0, INF,
-                                   tip="Height of the resolution peak A / (1 + (|q|/w)^ν) at q = 0"),
-    "res_width": ParameterInfo("Peak w", "nm⁻¹", 0.02, 0.001, 0.1, tip="Width w of the resolution peak"),
-    "res_exponent": ParameterInfo("Peak ν", "", 3.0, 1.0, 20.0, tip="Exponent ν of the resolution peak (its tail)"),
+    "res_amplitude": ParameterInfo("Tail A", "", 0.0, 0.0, INF,
+                                   tip="Height at q = 0 of the beam tail A / (1 + (|q|/w)^ν): the empirical tail of "
+                                       "the direct and reflected beam"),
+    "res_width": ParameterInfo("Tail w", "nm⁻¹", 0.02, 0.001, 0.1, tip="Width w of the beam tail"),
+    "res_exponent": ParameterInfo("Tail ν", "", 3.0, 1.0, 20.0, tip="Exponent ν of the beam tail (how fast it falls)"),
     "k": ParameterInfo("Factor k", "", 1.0, 1e-6, 1e6, free=False,
                        tip="Overall factor of everything but the background (usually fixed at 1)"),
     "q_resolution": ParameterInfo("σ_q", "nm⁻¹", 0.0, 0.0, 0.1, free=False,
