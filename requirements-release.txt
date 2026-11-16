@@ -1,4 +1,4 @@
-# Reproducible direct dependencies for Python 3.10 on Windows x64 and macOS arm64 / x86_64.
+# Reproducible direct dependencies for Python 3.10 on Windows x64, macOS arm64 / x86_64 and Linux x86_64 (CI only).
 # Archive pip-freeze.txt and conda-explicit.txt with each build to pin transitive dependencies too.
 -r requirements.txt
 numpy==1.26.4
