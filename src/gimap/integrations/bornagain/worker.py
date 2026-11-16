@@ -27,7 +27,7 @@ def _import_supported_bornagain():
     except ModuleNotFoundError as exc:
         if exc.name == "bornagain":
             raise BornAgainNotInstalledError(
-                "BornAgain is not installed in this Python environment."
+                "BornAgain is not installed in this Python environment (python -m pip install -r requirements-bornagain.txt)."
             ) from exc
         raise BornAgainBrokenError(f"BornAgain dependency is missing: {exc}") from exc
     except Exception as exc:

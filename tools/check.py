@@ -6,12 +6,9 @@ Steps, in this order; each runs even when an earlier one failed, and a summary f
 2. Offscreen smoke  ``python tools/offscreen_smoke.py`` (gate): the real window starts and closes
 3. Ruff             ``python -m ruff check .`` (gate): syntax errors, invalid control flow,
                     undefined names
-4. Research tests   ``python -m pytest utils/ML_Fitting_1D_GISAXS/tests
-                    --continue-on-collection-errors``: reported only, never fails the check
 
-The research tests belong to the fitting research code that the GUI runs only as a subprocess.
-On Windows they are skipped by default: one of them imports the POSIX-only ``resource`` module,
-which stops pytest at collection (``--research run`` tries them anyway).
+The research tests of the earlier 1D fitting code went with that code (GIMaP 0.2); ``--research`` is still
+accepted, and does nothing, so older command lines keep working.
 
 Qt runs offscreen (``QT_QPA_PLATFORM``), and the steps use a temporary user data folder
 (``GIMAP_HOME``) unless one is set, so a check never writes into the real one. Arguments after
@@ -20,7 +17,7 @@ name test files or folders, only those run instead of ``tests`` (an option's val
 ``-k tests`` or ``--deselect tests/test_x.py::t``, does not count).
 
 Exit code: 0 when every gate step that ran passed, 1 when one failed or the run was interrupted
-(2 for a wrong command line). The research tests never change it.
+(2 for a wrong command line).
 """
 
 from __future__ import annotations
@@ -37,12 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RESEARCH_TESTS = "utils/ML_Fitting_1D_GISAXS/tests"
-STEP_NAMES = ("tests", "smoke", "ruff", "research")
-WINDOWS_RESEARCH_REASON = (
-    "skipped on Windows: a research test imports the POSIX-only 'resource' module and stops "
-    "collection (--research run to try anyway)"
-)
+STEP_NAMES = ("tests", "smoke", "ruff")
 _PYTEST_COUNTS = re.compile(
     r"\b\d+ (passed|failed|errors?|skipped|deselected|xfailed|xpassed|warnings?)\b.* in [\d.]+s"
 )
@@ -169,18 +161,10 @@ def _steps(arguments) -> list[Step]:
         Step("tests", "Main test suite", [python, "-m", "pytest", *suite, *extra]),
         Step("smoke", "Offscreen smoke", [python, "tools/offscreen_smoke.py"]),
         Step("ruff", "Ruff", [python, "-m", "ruff", "check", "."]),
-        Step(
-            "research", "Research tests",
-            [python, "-m", "pytest", RESEARCH_TESTS, "--continue-on-collection-errors"], gate=False,
-        ),
     ]
     for step in steps:
         if step.key in arguments.skip:
             step.skip_reason = "skipped (--skip)"
-        elif step.key == "research" and arguments.research == "skip":
-            step.skip_reason = "skipped (--research skip)"
-        elif step.key == "research" and arguments.research == "auto" and os.name == "nt":
-            step.skip_reason = WINDOWS_RESEARCH_REASON
         if step.skip_reason:
             step.status = "skipped"  # also when the run is interrupted before reaching it
     return steps
@@ -194,7 +178,7 @@ def _arguments(argv=None):
     )
     parser.add_argument(
         "--research", choices=("auto", "run", "skip"), default="auto",
-        help="the research tests: auto (default) skips them on Windows and runs them elsewhere",
+        help="accepted for older command lines; there are no research tests any more",
     )
     parser.add_argument(
         "pytest_args", nargs="*",

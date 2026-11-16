@@ -1,7 +1,5 @@
 [tool.pytest.ini_options]
 minversion = "8.0"
-# The research tests (utils/ML_Fitting_1D_GISAXS/tests) run as their own step of tools/check.py:
-# one of them imports the POSIX-only "resource" module and would stop the whole collection on Windows.
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 pythonpath = ["."]

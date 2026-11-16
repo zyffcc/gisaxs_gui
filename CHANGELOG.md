@@ -46,6 +46,15 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   (Physics and Methods 2.6). Off by default.
 - **Fitting, D ≥ 2R:** a fit keeps the paracrystal's distance at or above twice the mean radius, so the particles
   do not overlap (D could fall to 1 nm before); a D at 2R is reported at its lower bound (Physics and Methods 9.6).
+- **Lighter install:** `requirements.txt` is the core (Analyze, Calibration, Fitting with fit1d, Series, Batch
+  Export, the automatic analysis, XRR, Sputter, SEM). TensorFlow (1D Predict V5, 2D Prediction, Trainset training),
+  BornAgain and the AI clients are optional: `requirements-tensorflow.txt`, `requirements-bornagain.txt`,
+  `requirements-ai.txt`, all of them `requirements-full.txt`. GIMaP starts and opens every workspace without them,
+  and a feature that needs one says which file to install. `Start_GIMaP.bat` and the portable packages still set up
+  everything.
+- **Earlier 1D models removed:** the Keras models K1–K4 of 1D Predict (`k1_k2_k3_k4_phys`, `saved_model_K3K4`,
+  22 MB) and their research code `utils/ML_Fitting_1D_GISAXS` (490 files). 1D Predict runs V5 models; fit1d in
+  Fitting is the default 1D machine learning. A folder of an earlier model is refused with what to use instead.
 - **Fitting, beam tail:** the term A / (1 + (|q|/w)^ν) is labelled what it is, the empirical tail of the direct
   and reflected beam (**Background and beam tail**, **Tail A / w / ν**; it was the *resolution peak*). The q
   resolution is σ_q. Keys and records are unchanged (`res_amplitude`, `res_width`, `res_exponent`).

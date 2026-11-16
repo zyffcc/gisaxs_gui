@@ -248,7 +248,7 @@ Qt 无法从含中文的路径加载插件，`Start_GIMaP.bat` 发现这种路�
 或者仓库的 ZIP（GitHub 上 **Code ▸ Download ZIP**；Windows 可能把它解压成一个 `gisaxs_gui-main` 文件夹，里面还有一个
 `gisaxs_gui-main`，含有 `main.py` 的是里面那个）。和便携版一样，文件夹路径只能用英文字母，并且要短、可写（2.1 节）。
 第一次启动会在文件夹里的 `.gimap` 中建立一个专用环境：下载 uv（一个小的 Python 安装工具，固定版本，并核对 SHA-256）、
-Python 3.10 和 `requirements.txt` 里的包（约 2 GB），视网速需要 3–20 分钟，然后打开 GIMaP。以后的启动是即时的。安装包失败时（例如空闲内存不够），
+Python 3.10 和 `requirements-full.txt` 里的包（核心和全部可选部分，约 2 GB），视网速需要 3–20 分钟，然后打开 GIMaP。以后的启动是即时的。安装包失败时（例如空闲内存不够），
 它会自动改为一次只装一个包再试一次，占内存少得多，只是慢一些。更新改动了 `requirements.txt` 时，
 下一次启动会先补上缺少的包。文件夹以外的东西都不会被改动；删掉 `.gimap` 就去掉了这个环境。
 
@@ -276,6 +276,10 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
+`requirements.txt` 是核心：分析、几何标定、拟合（含 fit1d）、序列、批量导出、自动分析、XRR、溅射和 SEM。可选部分各有
+自己的文件：`requirements-tensorflow.txt`（一维预测 V5、二维预测、训练集训练）、`requirements-bornagain.txt`（BornAgain
+模拟）和 `requirements-ai.txt`（用 AI 处理）；`requirements-full.txt` 装全部。缺少某个包的功能会说明要装哪个文件。
+
 在这样的环境里用 `python main.py` 启动 GIMaP。`Start_GIMaP.bat` 从不用它：它总是用自己的 `.gimap` 环境，
 会在你的环境之外再建一个。
 
@@ -288,7 +292,7 @@ python main.py
 
 | 部分 | 用于 | 怎样装 |
 |---|---|---|
-| AI 账号或本地模型 | **问 AI…**（Ask AI…）、**工具 ▸ 用 AI 处理…**（Tools ▸ Process with AI…） | Python 包已在 `requirements.txt` 里；在**工具 ▸ 设置… ▸ AI 助手**（Tools ▸ Settings… ▸ Assistant）里设置 AI（第 10 章） |
+| AI 账号或本地模型 | **问 AI…**（Ask AI…）、**工具 ▸ 用 AI 处理…**（Tools ▸ Process with AI…） | Python 包在 `requirements-ai.txt` 里（`requirements-full.txt` 和 `Start_GIMaP.bat` 都包含）；在**工具 ▸ 设置… ▸ AI 助手**（Tools ▸ Settings… ▸ Assistant）里设置 AI（第 10 章） |
 | StarDist | **工具 ▸ SEM 粒径分析…**（Tools ▸ SEM Particle Analysis…）里分开相互接触的颗粒 | 单独的 Python 环境，装 `requirements-sem-stardist.txt`，再加一个本地模型文件夹（第 9 章） |
 | 分析包 | 溅射工作区的**分析**（Analyze）和**静态帧**（Static Frames） | 随 GIMaP 提供（`utils/sputter_client`），不需要再装 Python 包。用**选择文件夹…**（Choose Folder…）或 `GIMAP_SPUTTER_CLIENT` 可以改用另一个分析包（8.1 节） |
 
@@ -2716,8 +2720,9 @@ Claude API：`pip install anthropic`、密钥、**测试连接**（Test Connecti
 
 ### 14.7 溅射不分析，或缺少 TensorFlow
 
-**TensorFlow 和其他软件包。** `requirements.txt` 要求 TensorFlow `>=2.15,<=2.16`（Windows 上为 `tensorflow-intel`），实际装上的是
-2.15 的某个版本；测试过的版本是 2.15.1。缺少软件包时，激活正确的 Python 环境，运行 `pip install -r requirements.txt`。
+**TensorFlow 和其他软件包。** `requirements-tensorflow.txt` 要求 TensorFlow `>=2.15,<=2.16`（Windows 上为 `tensorflow-intel`），
+实际装上的是 2.15 的某个版本；测试过的版本是 2.15.1。缺少软件包时，激活正确的 Python 环境，用消息里说的文件运行 `pip install -r`
+（装全部用 `requirements-full.txt`）。
 
 **溅射 ▸ 分析。** 输入栏里的任务状态会说明是什么让它停下：
 

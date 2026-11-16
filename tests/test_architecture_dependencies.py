@@ -301,8 +301,6 @@ def test_settings_live_in_the_user_store_only() -> None:
 def test_runtime_python_modules_do_not_regrow_into_monoliths() -> None:
     """Require an explicit architecture review before a runtime module exceeds 600 lines."""
 
-    # ``utils/ML_Fitting_1D_GISAXS`` is research tooling that the GUI only
-    # launches as a subprocess; it is not part of the application runtime.
     runtime_roots = ("src",)
     violations: list[str] = []
     for root_name in runtime_roots:

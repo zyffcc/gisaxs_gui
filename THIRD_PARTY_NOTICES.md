@@ -74,7 +74,6 @@ redistribute them. `tests/data/external/README.md` gives their sources and geome
 The following files come with no licence or source of their own. Their provenance is **to be confirmed
 by the authors**:
 
-- `utils/ML_Fitting_1D_GISAXS/Training/Cut_Data_unmasked.txt`: a 1D curve used by the research code;
 - `WAXS/n4_glass_0cl_air_0_vd_00001-00002.jpg`: an image the program does not use.
 
 ### Manual screenshots
@@ -219,10 +218,8 @@ where present. This confirmation does not change the separate licences of third-
     and `stable_blue_rc_v1/MANIFEST.json`.
   - The model card is `conditional_v2/MODEL_CARD_zh.md` (in Chinese). It states that the validation used
     simulated data.
-- **Earlier 1D models** (`modules/Fitting_1D_Model/k1_k2_k3_k4_phys/`, `modules/Fitting_1D_Model/saved_model_K3K4/`)
-  and the 1D fitting research code in `utils/ML_Fitting_1D_GISAXS/`. `saved_model_K3K4/` and the research
-  code were added to the repository on 2026-06-08 with the first 1D Predict; `k1_k2_k3_k4_phys/` was added
-  on 2026-08-11.
+- The earlier 1D models (`k1_k2_k3_k4_phys/`, `saved_model_K3K4/`) and the research code `utils/ML_Fitting_1D_GISAXS/`
+  were removed in 0.2.0; they remain in the repository's history (added 2026-06-08 and 2026-08-11).
 - **Sputter analysis package** (`utils/sputter_client/`): a release build of the research code `iampred` (the
   physical forward model of in-situ sputter GISAXS and the networks trained on its simulations) with numpy
   networks for Au and Ag on Si and porous TiO₂, Ag on polymer films, Cu on PEO, and static Au films. It runs

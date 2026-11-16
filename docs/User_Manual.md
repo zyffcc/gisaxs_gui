@@ -294,7 +294,7 @@ may extract it into a folder `gisaxs_gui-main` that holds another `gisaxs_gui-ma
 `main.py`). As for the portable version, the folder path must use English letters only, and it
 should be short and writable (section 2.1). The first start sets up a private environment in the
 folder `.gimap`: it downloads uv (a small Python installer, pinned version, checked against its
-SHA-256), Python 3.10 and the packages of `requirements.txt` (about 2 GB), which takes 3-20 minutes
+SHA-256), Python 3.10 and the packages of `requirements-full.txt` (the core and every optional part, about 2 GB), which takes 3-20 minutes
 depending on the connection, then opens GIMaP. Later starts are immediate. When installing the packages fails (for
 example for lack of free memory), it tries again one package at a time, which needs much less memory
 and takes longer. When an update changes `requirements.txt`, the next
@@ -326,6 +326,12 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
+`requirements.txt` is the core: Analyze, Geometry Calibration, Fitting with fit1d, Series, Batch Export, the
+automatic analysis, XRR, Sputter and SEM. The optional parts have their own files: `requirements-tensorflow.txt`
+(1D Predict V5, 2D Prediction, Trainset training), `requirements-bornagain.txt` (BornAgain simulations) and
+`requirements-ai.txt` (Process with AI); `requirements-full.txt` installs everything. A function whose package is
+missing says which file to install.
+
 Start GIMaP from such an environment with `python main.py`. `Start_GIMaP.bat` never uses it: it always
 uses its own `.gimap` environment and would set one up beside yours.
 
@@ -340,7 +346,7 @@ GIMaP runs without these. Each is needed only for the function named.
 
 | Part | Needed for | How |
 |---|---|---|
-| An AI account or a local model | **Ask AI…**, **Tools ▸ Process with AI…** | The Python packages come with `requirements.txt`; set up the AI in **Tools ▸ Settings… ▸ Assistant** (chapter 10) |
+| An AI account or a local model | **Ask AI…**, **Tools ▸ Process with AI…** | The Python packages come with `requirements-ai.txt` (in `requirements-full.txt` and `Start_GIMaP.bat`); set up the AI in **Tools ▸ Settings… ▸ Assistant** (chapter 10) |
 | StarDist | Separating touching particles in **Tools ▸ SEM Particle Analysis…** | A separate Python environment with `requirements-sem-stardist.txt`, and a local model folder (chapter 9) |
 | The analysis package | **Analyze** and **Static Frames** of the Sputter workspace | Comes with GIMaP (`utils/sputter_client`); it needs no further Python package. **Choose Folder…** or `GIMAP_SPUTTER_CLIENT` use another one (section 8.1) |
 
@@ -3424,9 +3430,10 @@ expired, replace it, or **Remove** it to use the variable.
 
 ### 14.7 Sputter does not analyse, or TensorFlow is missing
 
-**TensorFlow and other packages.** `requirements.txt` asks for TensorFlow `>=2.15,<=2.16` (`tensorflow-intel`
-on Windows), which in practice installs a 2.15 release; 2.15.1 is the tested version. For a missing package,
-activate the right Python environment and run `pip install -r requirements.txt`.
+**TensorFlow and other packages.** `requirements-tensorflow.txt` asks for TensorFlow `>=2.15,<=2.16`
+(`tensorflow-intel` on Windows), which in practice installs a 2.15 release; 2.15.1 is the tested version. For a
+missing package, activate the right Python environment and run `pip install -r` with the file the message names
+(`requirements-full.txt` for everything).
 
 **Sputter ▸ Analyze.** The job status in the input bar says what stopped it:
 

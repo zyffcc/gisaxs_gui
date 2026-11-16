@@ -1,6 +1,8 @@
-"""``requirements.txt`` names what the program imports: nothing more, nothing missing.
+"""The requirement files name what the program imports: nothing more, nothing missing.
 
-A source install is ``pip install -r requirements.txt``.  A package nobody imports only makes that
+``requirements.txt`` is the core (``pip install -r requirements.txt``); TensorFlow, BornAgain and the AI clients are
+optional, each in its own file (``OPTIONAL``), and ``requirements-full.txt`` names them all. The program starts and
+opens every workspace without the optional ones.  A package nobody imports only makes that
 install longer (``tqdm`` was one).  A package the program imports that the file does not name is not
 there after the install: ``psutil`` was one -- Batch Export reads the physical cores and the free
 memory with it, and falls back to the operating system without it, so it is listed as optional.
@@ -40,6 +42,14 @@ EXTERNAL_RUNTIME = {"threadpoolctl"}
 ISOLATED_RUNTIMES = {
     "src/gimap/features/sem/infrastructure/stardist_worker.py": "requirements-sem-stardist.txt",
 }
+
+
+OPTIONAL = {
+    "requirements-tensorflow.txt": {"tensorflow", "tensorflow-intel"},
+    "requirements-bornagain.txt": {"bornagain"},
+    "requirements-ai.txt": {"anthropic", "openai"},
+}
+"""Each optional part and the packages it adds."""
 
 
 def _requirements(name: str) -> set[str]:
@@ -98,18 +108,62 @@ def code():
     return imported - set(sys.stdlib_module_names), own
 
 
+def _listed() -> set[str]:
+    """Every package of the core and of the optional parts."""
+    return _requirements("requirements.txt").union(*(_requirements(name) for name in OPTIONAL))
+
+
 def test_every_requirement_is_imported_by_the_program(code):
     imported = {module.lower() for module in code[0]}
-    unused = sorted(
-        name for name in _requirements("requirements.txt")
-        if IMPORTED_AS.get(name, name).lower() not in imported
-    )
-    assert not unused, f"requirements.txt lists packages no code imports: {unused}"
+    unused = sorted(name for name in _listed() if IMPORTED_AS.get(name, name).lower() not in imported)
+    assert not unused, f"the requirement files list packages no code imports: {unused}"
+
+
+def test_the_core_install_has_none_of_the_optional_parts_and_full_has_them_all():
+    core = _requirements("requirements.txt")
+    for name, packages in OPTIONAL.items():
+        assert _requirements(name) == packages, name
+        assert not core & packages, f"{packages & core} belong to {name}, not to requirements.txt"
+    full = (ROOT / "requirements-full.txt").read_text(encoding="utf-8")
+    assert all(f"-r {name}" in full for name in ("requirements.txt", *OPTIONAL))
+    assert "-r requirements-full.txt" in (ROOT / "requirements-release.txt").read_text(encoding="utf-8")
+
+
+def test_the_program_starts_and_opens_every_workspace_without_the_optional_packages(tmp_path):
+    import os
+    import subprocess
+    import textwrap
+
+    script = textwrap.dedent("""
+        import sys
+        for name in ("tensorflow", "keras", "bornagain", "anthropic", "openai"):
+            sys.modules[name] = None  # importing it raises ImportError, as when it is not installed
+        from PyQt5.QtWidgets import QApplication
+        app = QApplication([])
+        from main import MainWindow
+        from src.gimap.app import AppContext
+        from src.gimap.integrations.jobs import LocalProcessJobRunner
+        from src.gimap.integrations.state import (
+            InMemorySessionRepository, InMemorySettingsRepository, InMemoryUserPreferencesRepository)
+        window = MainWindow(AppContext(
+            settings=InMemorySettingsRepository(), session=InMemorySessionRepository(),
+            preferences=InMemoryUserPreferencesRepository(), jobs=LocalProcessJobRunner()))
+        window.show()
+        for index in range(window.mainWindowWidget.count()):
+            window.mainWindowWidget.setCurrentIndex(index)
+            app.processEvents()
+        print("opened", window.mainWindowWidget.count())
+    """)
+    environment = {**os.environ, "QT_QPA_PLATFORM": "offscreen", "GIMAP_HOME": str(tmp_path)}
+    result = subprocess.run([sys.executable, "-c", script], cwd=ROOT, env=environment, capture_output=True,
+                            text=True, timeout=600)
+    assert result.returncode == 0, result.stderr[-3000:]
+    assert "opened" in result.stdout
 
 
 def test_every_package_the_program_imports_is_a_requirement(code):
     imported, own = code
-    listed = _requirements("requirements.txt")
+    listed = _listed()
     development = _requirements("requirements-dev.txt")  # pytest: the research code's own tests
     assert set(COMES_WITH.values()) <= listed
     modules = {IMPORTED_AS.get(name, name).lower() for name in listed | development}

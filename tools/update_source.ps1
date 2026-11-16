@@ -566,12 +566,13 @@ try {
         Say "  They are on the backup branch, not on ${Branch}. To bring your own over to the new history, oldest first:"
         Say "    git cherry-pick $Which"
     }
-    $Lists = @(@("requirements.txt") | Where-Object { $Updated.Contains($_) })
+    $Lists = @(@("requirements.txt", "requirements-tensorflow.txt", "requirements-bornagain.txt", "requirements-ai.txt") |
+        Where-Object { $Updated.Contains($_) })
     if ($Lists.Count -gt 0) {
         Say "", "The Python packages GIMaP needs changed: $($Lists -join ', ')."
         Say "  Started with Start_GIMaP.bat: nothing to do, its next start adds the new packages itself."
         Say "  Run from an environment you set up yourself (conda, venv): in that environment run"
-        if ($Lists -contains "requirements.txt") { Say "    python -m pip install -r requirements.txt" }
+        foreach ($List in $Lists) { Say "    python -m pip install -r $List" }
     }
 
     Say "", "To go back to what you had"

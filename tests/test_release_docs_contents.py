@@ -185,9 +185,11 @@ def test_the_documents_say_which_curve_files_fitting_reads() -> None:
 
 def test_the_readme_lists_the_requirements() -> None:
     pattern = r"^(?:- )?([A-Za-z0-9][A-Za-z0-9_.\-]*)\s*(?:>=|==)"
-    required = {
+    files = ("requirements.txt", "requirements-tensorflow.txt", "requirements-bornagain.txt", "requirements-ai.txt")
+    required = {  # the core and the optional parts, all named in the README's Dependencies
         match.group(1).lower()
-        for line in _text(ROOT / "requirements.txt").splitlines()
+        for name in files
+        for line in _text(ROOT / name).splitlines()
         if (match := re.match(pattern, line.strip()))
     }
     listed = set()

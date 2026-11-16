@@ -111,7 +111,7 @@ def test_the_update_script_does_what_the_documents_say() -> None:
         "reports only with -DryRun": "[switch]$DryRun" in script,
         # Both ways of starting: Start_GIMaP.bat adds the packages itself at its next start.
         "says when the packages changed": (
-            "python -m pip install -r requirements.txt" in script
+            "python -m pip install -r $List" in script and '"requirements.txt", "requirements-tensorflow.txt"' in script
             and "Started with Start_GIMaP.bat: nothing to do" in script),
         "says what a folder without .git needs": (
             "run the installer of the new version" in script and "'Download ZIP': download the ZIP again" in script),

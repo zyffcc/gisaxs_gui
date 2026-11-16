@@ -42,7 +42,8 @@ $UvVersion = "0.5.11"
 $UvAsset = "uv-x86_64-pc-windows-msvc.zip"
 $UvUrl = "https://github.com/astral-sh/uv/releases/download/$UvVersion/$UvAsset"
 $PythonVersion = "3.10"
-$RequirementNames = @("requirements.txt")
+# Start_GIMaP.bat sets up everything: the core and the optional parts (TensorFlow, BornAgain, the AI clients).
+$RequirementNames = @("requirements.txt", "requirements-tensorflow.txt", "requirements-bornagain.txt", "requirements-ai.txt")
 
 function Say([string]$Text) { Write-Host "[GIMaP] $Text" }
 

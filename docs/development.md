@@ -73,7 +73,6 @@ a summary with one line per step (result, time, pytest's counts) comes at the en
 | Main test suite | `python -m pytest tests` | gate |
 | Offscreen smoke | `python tools/offscreen_smoke.py` | gate |
 | Ruff | `python -m ruff check .` | gate |
-| Research tests | `python -m pytest utils/ML_Fitting_1D_GISAXS/tests --continue-on-collection-errors` | reported only; skipped on Windows by default |
 
 - The **offscreen smoke** starts and closes the real main window with in-memory
   settings, session and preferences. It requires 7 pages (Start, Analyze, Fitting,
@@ -82,10 +81,8 @@ a summary with one line per step (result, time, pytest's counts) comes at the en
 - **Ruff** selects only `E9`, `F63`, `F7` and `F82`: syntax errors, invalid
   comparisons and control flow, and undefined names. A pass says nothing about style.
   Do not run a broad formatter; it would rewrite many files.
-- The **research tests** belong to the fitting research code in
-  `utils/ML_Fitting_1D_GISAXS`, which the GUI only runs as a subprocess. One of
-  them imports the POSIX-only `resource` module, which stops collection on Windows,
-  and many others fail there. Their result never changes the exit code.
+- The research tests of the earlier 1D fitting code went with that code in 0.2; `--research` is still accepted
+  and does nothing.
 - Exit code: `0` when every gate step that ran passed, `1` when one failed or the
   run was interrupted (`2` for a wrong command line).
 - Qt runs offscreen (`QT_QPA_PLATFORM=offscreen` unless set), and `GIMAP_HOME`
@@ -96,7 +93,6 @@ Options:
 
 ```bash
 python tools/check.py --skip tests              # smoke and ruff only (seconds)
-python tools/check.py --research run            # also the research tests (on Windows too)
 python tools/check.py -- -x -k analyze          # arguments after -- go to the main suite's pytest
 python tools/check.py -- tests/test_ui_source_of_truth.py   # test paths replace tests/
 ```
@@ -105,7 +101,7 @@ An option's value (`-k tests`, `--deselect tests/test_x.py::t`) is not a test pa
 so `tests/` still runs.
 
 Times on the development machine (2026-10-06): main suite 14–15 minutes
-(about 1,380 tests), smoke about 7 s, ruff under 1 s, research tests about 5 minutes.
+(about 1,380 tests), smoke about 7 s, ruff under 1 s.
 
 When the output goes to a file or a pipe (a log, an agent), `check.py` writes UTF-8
 so that units such as `Å⁻¹` survive; set `PYTHONIOENCODING` to choose another encoding.

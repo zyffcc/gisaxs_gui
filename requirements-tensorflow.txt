@@ -1,0 +1,3 @@
+# Optional: 1D Predict (V5), 2D Prediction and Trainset training need TensorFlow. fit1d and Fitting do not.
+tensorflow-intel>=2.15,<=2.16; platform_system=="Windows"
+tensorflow>=2.15,<=2.16; platform_system!="Windows"

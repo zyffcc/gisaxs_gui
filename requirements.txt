@@ -1,23 +1,22 @@
+# The core of GIMaP: Analyze, Geometry Calibration, Fitting, fit1d, Series, Batch Export, the automatic analysis,
+# XRR, Sputter and SEM. Optional parts have their own files:
+#   requirements-tensorflow.txt  1D Predict (V5), 2D Prediction and Trainset training
+#   requirements-bornagain.txt   BornAgain simulations (Trainset, the Sputter reference)
+#   requirements-ai.txt          Process with AI (Claude, DeepSeek, Qwen, OpenAI, local models)
+#   requirements-full.txt        all of them (what the portable packages contain)
 numpy>=1.24,<2.0
 scipy>=1.10
 # fit1d workers limit already-loaded BLAS runtimes to one thread per fitting process.
 threadpoolctl>=3.1
 matplotlib>=3.7
 pyqtgraph>=0.13.7,<0.15
-BornAgain==24.1; platform_system != "Darwin"
 PyQt5>=5.15
 opencv-python>=4.8
 h5py>=3.9
 # Registers the bitshuffle / LZ4 filters with HDF5: Eiger and MAX IV NeXus files are compressed with them.
 hdf5plugin>=4
 fabio>=2023.4.0
-tensorflow-intel>=2.15,<=2.16; platform_system=="Windows"
-tensorflow>=2.15,<=2.16; platform_system!="Windows"
 PyYAML>=6.0
-# Process with AI (Analyze): Claude through anthropic; DeepSeek, Qwen, OpenAI, local models through openai.
-# Optional: GIMaP runs without them (the automatic analysis, Series and Batch Export need no AI).
-anthropic>=1.8
-openai>=1.40
 # Optional: Batch Export reads the number of physical cores and the free memory with it, to choose
 # how many frames to reduce at once. Without it GIMaP asks the operating system and takes half of
 # the logical cores as physical.

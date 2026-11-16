@@ -16,7 +16,7 @@ def _import_tensorflow():
     except ModuleNotFoundError as exc:
         if exc.name == "tensorflow":
             raise TensorFlowNotInstalledError(
-                "TensorFlow is not installed in this Python environment."
+                "TensorFlow is not installed in this Python environment (python -m pip install -r requirements-tensorflow.txt)."
             ) from exc
         raise TensorFlowModelError(f"A TensorFlow dependency is missing: {exc}") from exc
     except Exception as exc:
@@ -30,19 +30,6 @@ def _known_custom_objects() -> dict[str, Any]:
         "FORCE_EXIST_LOGIT": 20.0,
         "FORCE_EMPTY_LOGIT": -20.0,
     }
-    try:
-        import sys
-
-        legacy_package_root = (
-            Path(__file__).resolve().parents[4] / "utils" / "ML_Fitting_1D_GISAXS"
-        )
-        if str(legacy_package_root) not in sys.path:
-            sys.path.insert(0, str(legacy_package_root))
-        from Training.model import SlotQueryBase
-
-        custom_objects["SlotQueryBase"] = SlotQueryBase
-    except Exception:
-        pass
     return custom_objects
 
 

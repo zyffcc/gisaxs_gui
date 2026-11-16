@@ -15,7 +15,7 @@
 
 | 规则 | 测试 |
 | --- | --- |
-| `src/` 下每个 `.py` 不超过 **600 行**（`utils/ML_Fitting_1D_GISAXS` 研究代码不算）。为了模块可读、可 review；按职责拆分，不为凑行数切碎内聚的代码。 | `test_runtime_python_modules_do_not_regrow_into_monoliths` |
+| `src/` 下每个 `.py` 不超过 **600 行**。为了模块可读、可 review；按职责拆分，不为凑行数切碎内聚的代码。 | `test_runtime_python_modules_do_not_regrow_into_monoliths` |
 | 每个 feature 的 `view_model.py` 不超过 **300 行**。 | `test_feature_view_models_stay_within_review_threshold` |
 | **domain** 不导入 PyQt5/6、PySide2/6、TensorFlow、Keras、BornAgain。 | `test_domain_files_do_not_import_forbidden_runtimes` |
 | **application** 不导入路径中含 `presentation`、`infrastructure` 的模块，也不导入 PyQt/PySide、TensorFlow、Keras、BornAgain。 | `test_application_cannot_depend_on_presentation`、`test_application_files_do_not_import_gui_runtimes_or_concrete_adapters` |

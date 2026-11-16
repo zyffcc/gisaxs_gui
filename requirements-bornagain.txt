@@ -1,0 +1,3 @@
+# Optional: BornAgain simulations (Trainset's reference preview and physical generation). On macOS install it
+# separately (README).
+BornAgain==24.1; platform_system != "Darwin"

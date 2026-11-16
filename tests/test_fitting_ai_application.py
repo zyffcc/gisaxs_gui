@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -21,8 +20,6 @@ from src.gimap.features.fitting.infrastructure.adapters import (
     JsonCandidateRepository,
     LocalAiFittingArtifactRepository,
 )
-from src.gimap.integrations.jobs import LocalProcessJobRunner
-from src.gimap.features.fitting.infrastructure.adapters.fitting_pipeline import FittingPipeline
 from src.gimap.features.fitting.application.fitting_profiles import profile_registry
 
 
@@ -168,78 +165,12 @@ def test_candidate_parameter_mapping_is_framework_neutral():
     }
 
 
-def test_ai_pipeline_adapter_runs_in_job_process_without_tensorflow(tmp_path, monkeypatch):
-    script = tmp_path / "fake_predict.py"
-    script.write_text(
-        "import argparse, json\n"
-        "from pathlib import Path\n"
-        "p=argparse.ArgumentParser(add_help=False)\n"
-        "p.add_argument('--output_dir', required=True)\n"
-        "args,_=p.parse_known_args()\n"
-        "out=Path(args.output_dir); out.mkdir(parents=True, exist_ok=True)\n"
-        "rows=[{'rank': 1, 'best_log_rmse': 0.05, 'components': []}]\n"
-        "(out/'top20_candidates.json').write_text(json.dumps(rows), encoding='utf-8')\n"
-        "print('Progress 1/1')\n",
-        encoding="utf-8",
-    )
-    model = tmp_path / "model"
-    model.mkdir()
-    (model / "model.keras").write_bytes(b"placeholder")
-    import src.gimap.features.fitting.infrastructure.adapters.ai_pipeline as adapter_module
-
-    monkeypatch.setattr(adapter_module, "fitting_pipeline", FittingPipeline(script))
-    runner = LocalProcessJobRunner()
-    try:
-        result = GenerateCandidates(AiPipelinePredictor(), runner).execute(
-            CandidateGenerationRequest(
-                model_path=model,
-                output_dir=tmp_path / "result",
-                q=np.linspace(0.01, 0.2, 20),
-                intensity=np.linspace(10.0, 1.0, 20),
-                sigma=np.ones(20),
-                profile=profile_registry.get("Fast").to_dict(),
-            )
-        )
-    finally:
-        runner.shutdown()
-
-    assert result.exit_code == 0
-    assert result.candidates[0]["best_log_rmse"] == pytest.approx(0.05)
-
-
-def test_ai_pipeline_adapter_owns_guarded_reusable_output_cleanup(tmp_path):
-    output = tmp_path / "current_prediction"
-    output.mkdir()
-    (output / "stale.txt").write_text("old", encoding="utf-8")
+def test_a_model_folder_that_is_not_v5_is_refused_with_what_to_use_instead(tmp_path):
     request = _request(tmp_path)
     request.model_path.mkdir()
-    (request.model_path / "model.keras").write_bytes(b"placeholder")
-    request = CandidateGenerationRequest(
-        model_path=request.model_path,
-        output_dir=output,
-        q=request.q,
-        intensity=request.intensity,
-        sigma=request.sigma,
-        profile=request.profile,
-        clear_output_dir=True,
-    )
-
-    AiPipelinePredictor().create_job_request(request)
-
-    assert not (output / "stale.txt").exists()
-    assert (output / "input_curve.csv").is_file()
-
-    unsafe = CandidateGenerationRequest(
-        model_path=request.model_path,
-        output_dir=tmp_path / "arbitrary-output",
-        q=request.q,
-        intensity=request.intensity,
-        sigma=request.sigma,
-        profile=request.profile,
-        clear_output_dir=True,
-    )
-    with pytest.raises(ValueError, match="current_prediction"):
-        AiPipelinePredictor().create_job_request(unsafe)
+    (request.model_path / "model.keras").write_bytes(b"placeholder")  # an earlier Keras model (K1–K4)
+    with pytest.raises(ValueError, match="not a 1D Predict \(V5\) model.*fit1d"):
+        AiPipelinePredictor().create_job_request(request)
 
 
 def test_load_candidate_results_uses_json_repository_without_gui(tmp_path):

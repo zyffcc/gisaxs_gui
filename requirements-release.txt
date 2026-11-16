@@ -1,6 +1,6 @@
 # Reproducible direct dependencies for Python 3.10 on Windows x64, macOS arm64 / x86_64 and Linux x86_64 (CI only).
 # Archive pip-freeze.txt and conda-explicit.txt with each build to pin transitive dependencies too.
--r requirements.txt
+-r requirements-full.txt
 numpy==1.26.4
 # The macOS 14 Accelerate wheels have a Mach-O zero-fill defect on macOS 27 (scipy/scipy#25635).
 # Use the official OpenBLAS wheels, with their published hashes, on both Mac architectures.

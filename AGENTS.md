@@ -65,7 +65,6 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
   - `src/gimap/app/presentation/`：应用壳与共用界面，包括 `components/`、`theme/`、`i18n/` 和 `task_runner.py`；
   - `src/gimap/shared/`：探测器读取、几何、`series_stages`（阶段与异常帧）、`figures`；
   - `src/gimap/integrations/`：用户数据（UserStore）、任务、BornAgain、TensorFlow；
-  - `utils/ML_Fitting_1D_GISAXS/`：研究代码，GUI 只按路径用子进程调用它。
   - `utils/gisaxs1d_gui_kit/`：fit1d 工具包（Fitting 的 Predict parameters (fit1d)、1D Predict 的 fit1d），含两个 numpy 网络
     和形状因子表，随仓库提供，只在任务子进程里导入（`fitting/infrastructure/adapters/fit1d_method.py`）；环境变量
     `GISAXS1D_KIT_HOME` 可以指向另一份。只放运行时文件，例子数据和引用实测数据的研究笔记都不放；改动记在 `SOURCE.json`，
@@ -196,7 +195,6 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
   - 模态框会卡住 offscreen 测试：monkeypatch `QMessageBox` 的静态方法、`QFileDialog.get*`，以及任何会 `exec_()` 的对话框。
 - 完整检查：`python tools/check.py`。
   - 主测试集（`tests/`，约 14 分钟）、offscreen smoke、ruff 是三道关，任何一道失败，退出码就是 1。
-  - 研究代码的测试（`utils/ML_Fitting_1D_GISAXS/tests`）只报告、不算关，Windows 上默认跳过，因为它导入了 POSIX 专用的模块。
   - check.py 自己把 `GIMAP_HOME` 设到临时目录。`--` 后面的参数交给 pytest，例如 `python tools/check.py -- -x -k analyze`。
   - 直接运行 `python -m pytest` 只跑 `tests/`。
 - ruff 只选了 E9、F63、F7、F82：语法错误、无效比较和控制流、未定义的名字。它通过不代表风格没问题，

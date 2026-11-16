@@ -1,0 +1,5 @@
+# Everything: the core and every optional part (the portable packages contain all of it).
+-r requirements.txt
+-r requirements-tensorflow.txt
+-r requirements-bornagain.txt
+-r requirements-ai.txt

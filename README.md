@@ -93,7 +93,7 @@ For a clone of the repository (`git clone https://github.com/zyffcc/gisaxs_gui.g
 (**Code ▸ Download ZIP**, extracted to a short path that you may write to): double-click
 `Start_GIMaP.bat` in the folder. The first start sets up a private environment in `.gimap\` inside the
 folder: it downloads uv (a small Python installer, pinned version, checked against its SHA-256),
-Python 3.10 and the packages of `requirements.txt` (about 2 GB) — 3-20 minutes depending on the connection. Then GIMaP
+Python 3.10 and the packages of `requirements-full.txt` (the core and every optional part, about 2 GB) — 3-20 minutes depending on the connection. Then GIMaP
 opens; later starts are immediate. Nothing outside the folder is changed; delete `.gimap\` to remove the
 environment.
 To update a clone, double-click `Update_GIMaP.bat` (see
@@ -125,6 +125,14 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python main.py
 ```
+
+`requirements.txt` is the core: Analyze, Geometry Calibration, Fitting with fit1d, Series, Batch Export, the
+automatic analysis, XRR, Sputter and SEM. Add the optional parts you need, or all of them with
+`python -m pip install -r requirements-full.txt`:
+
+- `requirements-tensorflow.txt`: 1D Predict (V5), 2D Prediction and Trainset training;
+- `requirements-bornagain.txt`: BornAgain simulations (Trainset);
+- `requirements-ai.txt`: Process with AI.
 
 If PowerShell blocks activation in the current terminal session:
 
@@ -300,28 +308,29 @@ Where you rely on a method or a data set that GIMaP builds on, cite it as well: 
 
 ## Dependencies
 
-Dependencies are listed in `requirements.txt`:
+The core, `requirements.txt`:
 
 - numpy>=1.24,<2.0
 - scipy>=1.10
 - threadpoolctl>=3.1 (limits BLAS threads in fit1d workers)
 - matplotlib>=3.7
 - pyqtgraph>=0.13.7,<0.15
-- BornAgain==24.1 on Windows and Linux; installed separately on macOS
 - PyQt5>=5.15
 - opencv-python>=4.8
 - h5py>=3.9
 - hdf5plugin>=4 (reads NeXus/HDF5 frames compressed with bitshuffle or LZ4, as Eiger detectors write them)
 - fabio>=2023.4.0
-- tensorflow-intel>=2.15,<=2.16; platform_system=="Windows"
-- tensorflow>=2.15,<=2.16; platform_system!="Windows"
 - PyYAML>=6.0
-- anthropic>=1.8 and openai>=1.40 (optional: Process with AI; GIMaP runs without them)
 - psutil>=5.9 (optional: Batch Export reads the physical cores and the free memory with it to choose how
   many frames to reduce at once; without it GIMaP asks the operating system)
 
-Optional parts, each needed only for the function named:
+Optional parts, each needed only for the function named; GIMaP starts without them and says which file to install:
 
+- `requirements-tensorflow.txt`: tensorflow>=2.15,<=2.16 on Linux and macOS, tensorflow-intel>=2.15,<=2.16 on
+  Windows, for 1D Predict (V5), 2D Prediction and Trainset training;
+- `requirements-bornagain.txt`: BornAgain==24.1 on Windows and Linux (installed separately on macOS);
+- `requirements-ai.txt`: anthropic>=1.8 and openai>=1.40, for Process with AI;
+- `requirements-full.txt`: all of them.
 - StarDist, to separate touching particles in SEM Particle Analysis, runs in a separate Python environment
   made from `requirements-sem-stardist.txt`, with a model folder of your own.
 

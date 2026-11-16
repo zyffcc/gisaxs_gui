@@ -1,0 +1,4 @@
+# Optional: Process with AI (Analyze). Claude through anthropic; DeepSeek, Qwen, OpenAI and local models through
+# openai. GIMaP runs without them: the automatic analysis, Series and Batch Export need no AI.
+anthropic>=1.8
+openai>=1.40
