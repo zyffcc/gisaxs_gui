@@ -42,6 +42,7 @@ from ..domain.fit_model import (
     GRAZING,
     INFO,
     LINEAR,
+    RESOLUTION,
     Component,
     FitModel,
     Parameter,
@@ -320,7 +321,7 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
 
 
 __all__ = [
-    "ANALYZE_SIDES", "BASE_GLOBALS", "FAMILIES", "GLOBALS", "GRAZING", "INFO", "grazing", "qz_plus_r", "derived_values",
+    "ANALYZE_SIDES", "BASE_GLOBALS", "FAMILIES", "GLOBALS", "GRAZING", "INFO", "RESOLUTION", "grazing", "qz_plus_r", "derived_values",
     "number_size", "sigma_nn_over_d", "LINEAR", "NM_PER_A", "PHASES", "PROGRESS_LINE", "SIDES",
     "BOTH_USES_MEAN", "ONE_CURVE_METHODS", "QUICK_FIT_MIN_POINTS", "SERIES_SIDES", "TOO_FEW_FOR_QUICK_FIT",
     "Component", "Curve", "FitData", "FitModel", "FitResult", "FitStopped", "MissingHalf", "Parameter", "PreparedCurve",

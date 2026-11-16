@@ -12,6 +12,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Fitting, q resolution:** σ_q in *Background and resolution peak* (0, off, by default) convolves the particle
+  terms with a Gaussian in q, so an ordered film's peak width is not read as disorder (Physics and Methods 9.2).
 - **Fitting, Coupling:** a particle with Distance D has *Coupling* LMA (P·S, as before) or DA (P + |⟨F⟩|²(S − 1):
   sizes independent of positions), so the part of a size spread that the spacing does not modulate is described by
   the particles themselves instead of a further population (Physics and Methods 9.5, 9.11).

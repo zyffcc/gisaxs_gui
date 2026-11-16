@@ -53,9 +53,11 @@ FAMILIES = {
 MANUAL_NAMES = {"sphere": "Sphere", "cylinder": "Cylinder", "vertical_cylinder": "Vertical Cylinder"}
 STRUCTURE = ("D", "sigma_D")
 BASE_GLOBALS = ("background", "res_amplitude", "res_width", "res_exponent", "k")
+RESOLUTION = ("q_resolution",)
+"""The Gaussian q resolution (1σ) of the particle terms; 0, the default, is none."""
 GRAZING = ("alpha_i", "alpha_f", "wavelength", "refl_amp", "refl_phase")
 """Geometry of the cut and the effective reflection coefficient r of the two-path sphere (fixed by default)."""
-GLOBALS = BASE_GLOBALS + GRAZING
+GLOBALS = BASE_GLOBALS + RESOLUTION + GRAZING
 LINEAR = frozenset({"Int", "background", "res_amplitude"})
 """Scales: with the others fixed, the intensity is linear in them (solved exactly while fitting)."""
 INF = math.inf
@@ -90,6 +92,8 @@ INFO = {
     "res_exponent": ParameterInfo("Peak ν", "", 3.0, 1.0, 20.0, tip="Exponent ν of the resolution peak (its tail)"),
     "k": ParameterInfo("Factor k", "", 1.0, 1e-6, 1e6, free=False,
                        tip="Overall factor of everything but the background (usually fixed at 1)"),
+    "q_resolution": ParameterInfo("σ_q", "nm⁻¹", 0.0, 0.0, 0.1, free=False,
+                                  tip="Gaussian q resolution (1σ) applied to the particle terms; 0: none"),
     "alpha_i": ParameterInfo("αi", "°", 0.0, 0.0, 5.0, free=False,
                              tip="Incidence angle of the cut; with αf = 0 too, spheres at q_z = 0 (effective interface)"),
     "alpha_f": ParameterInfo("αf", "°", 0.0, 0.0, 5.0, free=False,
@@ -310,14 +314,54 @@ def resolution_shape(model: FitModel, q: np.ndarray) -> np.ndarray:
     return np.asarray(_resolution_peak(q, model.globals["res_width"].value, model.globals["res_exponent"].value), float)
 
 
+RESOLUTION_SPAN = 5.0
+"""The Gaussian is cut at ±5σ."""
+RESOLUTION_POINTS = 5
+"""Points per σ of the grid the particle terms are smeared on."""
+RESOLUTION_GRID_MAX = 6000
+
+
+def _smeared_forms(model: FitModel, q: np.ndarray, sigma: float, cache: Optional[dict], paths) -> list[np.ndarray]:
+    """Each component's P·S convolved with a Gaussian of 1σ ``sigma`` in q, at ``q``.
+
+    The terms are made on a uniform grid from max(0, q_min − 5σ) to q_max + 5σ, at most σ/5 apart (and no coarser
+    than the points), folded at q = 0 (the cut is symmetric, I(−q) = I(q)), convolved and interpolated back. The
+    beam-tail term and the background are not smeared: the first describes the resolution near q = 0 itself."""
+    finite = np.diff(np.unique(q))
+    step = sigma / RESOLUTION_POINTS
+    if finite.size:
+        step = min(step, float(np.median(finite)))
+    low, high = max(0.0, float(q.min()) - RESOLUTION_SPAN * sigma), float(q.max()) + RESOLUTION_SPAN * sigma
+    count = min(RESOLUTION_GRID_MAX, int(np.ceil((high - low) / step)) + 1)
+    step = (high - low) / (count - 1)
+    # folded at q = 0: points at ±step/2, ±3step/2 …, so q = 0 itself (where S is a special case) is not one
+    grid = low + (np.arange(count) + (0.5 if low == 0.0 else 0.0)) * step
+    half = int(np.ceil(RESOLUTION_SPAN * sigma / step))
+    kernel = np.exp(-0.5 * (np.arange(-half, half + 1) * step / sigma) ** 2)
+    kernel /= kernel.sum()
+    fine = None if cache is None else cache.setdefault(("smearing grid", low, high, count), {})
+    out = []
+    for component in model.components:
+        values = component_form(component, grid, fine, paths)
+        if low == 0.0:  # fold: the values at −q are those at q
+            full = np.concatenate([values[::-1], values])
+            smeared = np.convolve(np.pad(full, half, mode="edge"), kernel, mode="valid")[values.size:]
+        else:
+            smeared = np.convolve(np.pad(values, half, mode="edge"), kernel, mode="valid")
+        out.append(np.interp(q, grid, smeared))
+    return out
+
+
 def evaluate(model: FitModel, q: np.ndarray, *, parts: bool = False, cache: Optional[dict] = None):
     """The model on ``q`` (nm⁻¹); with ``parts``, also each term: ``(total, {name: curve})``."""
     q = np.abs(np.asarray(q, dtype=float))
     g = {key: float(parameter.value) for key, parameter in model.globals.items()}
     terms, paths = {}, grazing(model)
-    for index, component in enumerate(model.components):
-        terms[f"{index + 1}: {FAMILIES[component.family][0]}"] = (
-            g["k"] * component.value("Int") * component_form(component, q, cache, paths))
+    sigma = g.get("q_resolution", 0.0)
+    forms = (_smeared_forms(model, q, sigma, cache, paths) if sigma > 0 and q.size
+             else [component_form(component, q, cache, paths) for component in model.components])
+    for index, (component, form) in enumerate(zip(model.components, forms)):
+        terms[f"{index + 1}: {FAMILIES[component.family][0]}"] = g["k"] * component.value("Int") * form
     if g["res_amplitude"] != 0:
         terms["resolution peak"] = g["k"] * g["res_amplitude"] * resolution_shape(model, q)
     total = g["background"] + (np.sum(list(terms.values()), axis=0) if terms else np.zeros_like(q))
@@ -439,7 +483,7 @@ def model_from_dict(data: Mapping) -> FitModel:
 
 
 __all__ = [
-    "BASE_GLOBALS", "COUPLINGS", "FAMILIES", "GLOBALS", "GRAZING", "INFO", "LINEAR", "Component", "FitModel", "Parameter",
+    "BASE_GLOBALS", "COUPLINGS", "FAMILIES", "RESOLUTION", "GLOBALS", "GRAZING", "INFO", "LINEAR", "Component", "FitModel", "Parameter",
     "ParameterInfo", "component_form", "evaluate", "grazing", "number_size", "qz_plus_r", "sigma_nn_over_d", "from_manual", "model_from_dict", "model_to_dict", "new_component",
     "resolution_shape", "to_manual",
 ]

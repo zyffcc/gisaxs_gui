@@ -123,6 +123,7 @@ FITTING_ZH = {
     "Exit angle of the cut (the detector row of the horizontal cut)": "切线的出射角（水平切线所在的探测器行）",
     "Wavelength": "波长",
     "Size of the effective reflection coefficient of the exit-reflected path (spheres)": "出射反射路径的有效反射系数的大小（球）",
+    "Gaussian q resolution (1σ) applied to the particle terms; 0: none": "作用于颗粒项的高斯 q 分辨率（1σ）；0：不展宽",
     "Phase of the effective reflection coefficient (spheres)": "有效反射系数的相位（球）",
     "q₊R of the spheres (q₊ = kᵢ + k_f): {values}": "球的 q₊R（q₊ = kᵢ + k_f）：{values}",
     "By number: {values}": "按数目：{values}",

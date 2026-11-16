@@ -1753,8 +1753,15 @@ I(q) = BG + k · [ Σ_i Int_i · P_i(q) · S_i(q) + A / ( 1 + (q / w)^ν ) ],   
 Int_i is the scale of component i, BG a constant background (not multiplied by k), A, w and ν the amplitude, width
 and exponent of the beam-tail term, and k an overall factor fixed at 1 by default. By default the model depends on
 `abs(q)` only: spheres are evaluated at q_z = 0, the effective interface approximation. Given the angles of the cut,
-spheres can instead use the direct and the exit-reflected path of the DWBA (section 9.10). The beam-tail term is additive, not a resolution convolution (a Gaussian smearing
-function exists in the code but the model does not use it). With w ≤ 0 or ν ≤ 0 the term is 1.
+spheres can instead use the direct and the exit-reflected path of the DWBA (section 9.10). The beam-tail term is additive, not a resolution convolution. With w ≤ 0 or ν ≤ 0 the term is 1.
+
+**q resolution (σ_q, off by default).** With σ_q > 0 each particle term `Int_i·P_i·S_i` is convolved with a Gaussian
+of standard deviation σ_q in q; the beam-tail term and BG are not. The terms are made on a uniform grid from
+max(0, q_min − 5σ_q) to q_max + 5σ_q, at most σ_q/5 apart, folded at q = 0 (the cut is symmetric: I(−q) = I(q)),
+convolved with the Gaussian cut at ±5σ_q and interpolated back to the points. A test compares the result with a
+direct convolution of the symmetric cut (within 10⁻³). Smearing matters for well-ordered films: when σ_q is above
+about 0.3 of the width of the structure peak, the fitted σ_nn/D otherwise takes up the resolution as disorder. fit1d
+has no such term and refuses a σ_q set in Model.
 
 The plot's **Components** are these additive intensities: `k·Int_i·P_i·S_i`, the scaled beam-tail term and
 `BG`; their sum is the total model. They are not normalised population fractions. A current fit1d result instead
@@ -1905,6 +1912,7 @@ Implementation: `src/gimap/features/fitting/domain/scattering_model.py`, `src/gi
 | res_width | Peak w | nm⁻¹ | 0.02 | 0.001–0.1 | yes |
 | res_exponent | Peak ν | – | 3 | 1–20 | yes |
 | k | Factor k | – | 1 | 10⁻⁶–10⁶ | no |
+| q_resolution | σ_q | nm⁻¹ | 0 | 0–0.1 | no |
 | alpha_i | αi | ° | 0 | 0–5 | no |
 | alpha_f | αf | ° | 0 | 0–5 | no |
 | wavelength | λ | nm | 0.1 | 0.005–1 | no |

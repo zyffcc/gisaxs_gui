@@ -28,7 +28,7 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.theme import set_role
 
-from ...application.single_fit import BASE_GLOBALS, FAMILIES, GRAZING, INFO, LINEAR, Component, FitModel, new_component, parameter_text
+from ...application.single_fit import BASE_GLOBALS, FAMILIES, GRAZING, INFO, LINEAR, RESOLUTION, Component, FitModel, new_component, parameter_text
 from ..layout_primitives import ScientificDoubleSpinBox
 
 VALUE_LIMIT = 1e15
@@ -326,7 +326,7 @@ class FitModelEditor(QWidget):
                             "reflected beam's tail and the resolution near q = 0"))
         layout.addWidget(title)
         grid = self._grid(card)
-        for line, key in enumerate(BASE_GLOBALS):
+        for line, key in enumerate(BASE_GLOBALS + RESOLUTION):
             self._rows[("globals", key)] = _Row(self, grid, line, ("globals", key), card)
         layout.addLayout(grid)
         return card
