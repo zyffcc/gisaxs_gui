@@ -76,6 +76,10 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   so far. A click on a step that has started shows what it found. The analysis package that comes with GIMaP sends
   what the view shows (an older package chosen in Details is followed by its steps alone); the results are the same
   as before. Between the two networks of an analysis the view keeps the last solved window instead of going blank.
+  While the solutions are found, the step says what the network is doing and how far it has come — network inputs
+  prepared, candidates proposed, windows solved and model images computed, windows refined, iterations of the
+  whole-scan refinement — and the bar of the job status moves on inside each step. In Refine mode every window gets
+  its candidates before the refinements start, so the evolution fills early (the results are the same).
 - Sputter: **In Situ | After Deposition** at the left of the input bar. **After Deposition** is for a sample measured
   after its deposition, which has no deposition rate and no frames from before it: the bar asks for its frames, its
   name, its **nominal thickness** (in place of the rate; its place on the axis of the series) and, optionally, the

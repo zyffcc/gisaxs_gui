@@ -119,6 +119,54 @@ def test_the_run_keeps_the_frames_the_solutions_and_the_network_chosen(tmp_path)
     assert (run.drawing, run.drawn) == (2, 1)
 
 
+def _progress(phase: str, done: int, total: int, worker: int, family: str = "zz_net", **more) -> LiveEvent:
+    return _event("progress", "predict", phase=phase, done=done, total=total, worker=worker, family=family, **more)
+
+
+def test_the_phases_of_a_network_add_up_the_workers_and_say_how_far_the_step_has_come():
+    from src.gimap.features.sputter.application import ClientProgress
+
+    run = LiveRun()
+    run.feed(_event("models", "predict", families=["zz_net", "zz_other"], mode="refine"))
+    run.feed(_event("windows", "predict", family="zz_net", total=4, refine=8))
+    assert run.phase() == "" and run.step_share("predict") == 0.0
+    assert run.feed(_progress("features", 1, 4, 11)) == "progress"
+    run.feed(_progress("features", 2, 4, 12))
+    run.feed(_progress("features", 2, 4, 11))  # each worker counts its own share: the latest count of each is added
+    assert run.phase() == "features" and run.phase_count("features") == (4, 4)
+    run.feed(_progress("network", 0, 4, 10))
+    assert run.phase() == "network" and run.phase_count("network") == (0, 4)
+    share = run.step_share("predict")
+    run.feed(_progress("network", 4, 4, 10))
+    for time_s in (2.0, 4.0):
+        run.feed(_window(time_s, "candidate 1", 1.5, 4.0))
+    assert run.phase() == "render" and run.step_share("predict") > share
+    run.feed(_progress("refine", 0, 4, 11, evaluations=120))
+    run.feed(_progress("refine", 1, 4, 12, evaluations=300))
+    run.feed(_window(4.0, "refined", 1.8, 2.0))
+    assert run.phase() == "refine" and run.refined() == 1 and run.phase_count("refine", key="evaluations") == (420, 4)
+    first = run.step_share("predict")
+    assert 0 < first < 0.5  # the first of two networks, not refined through
+    run.feed(_progress("refine", 0, 4, 11, evaluations=150, current=30, budget=60))  # half of its window at work
+    assert run.step_share("predict") > first
+    run.feed(_event("windows", "predict", family="zz_other", total=4, refine=8))
+    assert 0.5 <= run.step_share("predict") < 1 and run.phase() == ""
+    run.feed(_event("chosen", "predict", family="zz_net", deviations={}))
+    assert run.step_share("predict") == 1.0
+    assert run.feed(_progress("an unknown phase", 1, 2, 11)) == ""
+    # the bar of the job status: the step's share as the events tell it (also after the step's first network ended)
+    tracker = ClientProgress()
+    for line in ("[1/4] intake ...", "      done in 3 s", "[2/4] predict ..."):
+        tracker.feed(line)
+    assert tracker.fraction == pytest.approx(0.35)
+    tracker.within = 0.5
+    assert tracker.fraction == pytest.approx(0.35 + 0.45 * 0.5)
+    tracker.feed("      done in 9 s")  # the first network: the analysis runs the next one
+    assert tracker.fraction == pytest.approx(0.35 + 0.45 * 0.5)
+    tracker.feed("[3/4] report ...")
+    assert tracker.within is None and tracker.fraction == pytest.approx(0.8)
+
+
 def test_the_runner_hands_live_lines_over_with_their_arrays(tmp_path):
     from src.gimap.features.sputter.application import ClientPackage
     from src.gimap.features.sputter.infrastructure.client import ClientPackageRunner
@@ -266,6 +314,56 @@ def test_a_failed_or_stopped_run_shows_again_what_was_shown_before(tmp_path):
     assert page.live_steps.detail("intake") == "Beam centre (2.0, 3.0) px"
     page._live_end()
     assert page.result_stack.currentIndex() == 1 and page.client_result.folder == tmp_path / "before"
+    page.dispose()
+    page.close()
+
+
+def test_until_its_first_window_the_view_says_what_the_network_does_and_the_bar_moves(tmp_path):
+    from src.gimap.features.sputter.application import ClientProgress
+
+    page = _page(tmp_path, FakeClientRunner())
+    page.show()
+    tracker = page._client_tracker = ClientProgress()
+    for line in ("[1/4] intake ...", "      done in 3 s", "[2/4] predict ..."):
+        tracker.feed(line)
+    page._live_begin(tmp_path / "out")
+    for event in (_event("models", "predict", families=["zz_net", "zz_other"], mode="refine"),
+                  _event("windows", "predict", family="zz_net", total=400, refine=8),
+                  _progress("features", 120, 400, 1), _progress("features", 80, 400, 2)):
+        page._live_event(event)
+    page._live_draw()
+    line = "Network 1 of 2: Network inputs ready for 200 of 400 time windows"
+    assert page.live_steps.detail("predict") == line
+    assert page.live_patterns._last == ("message", line + "\nThe measured and the model image of a time window "
+                                                          "appear here once the first one is solved.")
+    moved = page.analyze_status.progress_bar.value()
+    assert moved > 350  # the bar goes on inside the step (0.35 when the frames were read)
+    page._live_event(_progress("network", 0, 400, 3))
+    page._live_draw()
+    assert page.live_steps.detail("predict") == "Network 1 of 2: The network proposes candidates for 400 time windows…"
+    page._live_event(_progress("network", 400, 400, 3))
+    page._live_event(_window(2.0, "candidate 1", 1.5, 4.0))
+    page._live_draw()
+    assert page.live_steps.detail("predict") == "Network 1 of 2: 1 of 400 time windows"
+    page._live_event(_progress("render", 1, 400, 2, images=4))  # the model images move on between windows
+    page._live_draw()
+    assert page.live_steps.detail("predict") == "Network 1 of 2: 1 of 400 time windows solved (4 model images computed)"
+    page._live_event(_progress("refine", 0, 400, 1, evaluations=1234))  # a worker refines, others may still solve
+    page._live_event(_window(2.0, "refined", 1.6, 3.0))
+    page._live_draw()
+    line = "Network 1 of 2: 1 of 400 time windows solved, 1 refined (1,238 model images computed)"
+    assert page.live_steps.detail("predict") == line
+    shown = page.live_steps._steps["predict"].detail
+    assert shown.text() == line and shown.wordWrap()  # whole on the screen, wrapped, not cut with "…"
+    assert page.analyze_status.progress_bar.value() > moved
+    from src.gimap.app.presentation.i18n import apply_language
+
+    apply_language("zh", [page])
+    page.refresh_language()
+    page._live_draw()
+    assert page.live_steps.detail("predict") == "网络 1/2：已求解 1 / 400 个时间窗，已精修 1 个（已计算 1,238 幅模型图）"
+    apply_language("en", [page])
+    page._live_end()
     page.dispose()
     page.close()
 
