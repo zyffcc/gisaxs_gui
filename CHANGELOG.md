@@ -12,6 +12,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Command line:** every CSV of `tools/gimap_agent.py` begins with `#` lines that give the release, each input
+  file with its SHA-256 and the geometry, so a curve says where it came from without `report.json` beside it.
 - **Fitting, mean of both halves:** the q > 0 half gives the |q| points, as in Analyze and the Series map, so one
   cut gives one mean curve in every page (Fitting took the half with more points: a point more or less).
 - **Fitting, results:** each particle's radius by number (fit1d and microscopy count particles; Fitting's spheres

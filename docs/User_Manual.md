@@ -3423,7 +3423,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | **File ▸ Labs Parameters ▸ Save As…** | `gimap_parameters.json` | dialog in the GIMaP user data folder | — |
 | Errors (automatic) | `logs/errors.log` (moved to `errors.old.log` above 2 MB) | user data folder | — |
 | **Help ▸ Example Data** | the example's frame with its `.poni` (and mask), and `SOURCE_AND_LICENCE.md` | a folder you choose, by default `Documents/GIMaP examples/<example>/`; files already there are kept | `SOURCE_AND_LICENCE.md` (source and licence of the data) |
-| `tools/gimap_agent.py` | a subfolder per frame (a set of module files: per scan; `--series`: `<name>_series/`) with `report.md`, `report.json`, curves, q map; `summary.md` + `summary.json` | `--out`; without it `assistant_runs/cli/<time>/` in the user data folder; never next to the data | `report.json` |
+| `tools/gimap_agent.py` | a subfolder per frame (a set of module files: per scan; `--series`: `<name>_series/`) with `report.md`, `report.json`, curves (CSV whose `#` lines give the release, each input by SHA-256 and the geometry), q map; `summary.md` + `summary.json` | `--out`; without it `assistant_runs/cli/<time>/` in the user data folder; never next to the data | `report.json` |
 
 **Which release wrote a file.** The records of Analyze (`_analysis.json`, the settings file, the series and
 stages tables' JSON), of Batch Export and Send Series to Fitting (`<batch>_batch.json`; `README.txt` says *Written by

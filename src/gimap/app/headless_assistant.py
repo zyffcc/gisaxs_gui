@@ -302,6 +302,26 @@ def open_headless_session(
     return HeadlessSession(page, catalog, results, notes=notes, output=output, source=source)
 
 
+def provenance_lines(session: HeadlessSession) -> str:
+    """The lines above the column names of every CSV the command line writes: the release, each input file by name
+    and SHA-256, and the geometry, so a curve says where it came from also without report.json beside it."""
+    from ..features.analyze.application.export_record import analysis_metadata
+
+    analysis = session.page.view_model.state.analysis
+    lines = [f"{SOFTWARE} (command line); settings and decisions in report.json"]
+    if analysis is not None:
+        record = analysis_metadata(analysis)
+        lines += [f"input: {item['file']} sha256 {item['sha256']}" for item in record.get("input_sha256") or ()]
+        lines.append(f"frame: {record.get('frame')}")
+        geometry = analysis.geometry
+        if geometry is not None:
+            lines.append(
+                f"geometry: distance {geometry.distance_m * 1e3:.4f} mm, direct beam ({geometry.beam_center_x_px:.3f}, "
+                f"{geometry.beam_center_y_px:.3f}) px, wavelength {geometry.wavelength_angstrom:.6g} A, "
+                f"alpha_i {geometry.incidence_deg:.4g} deg, detector tilt {geometry.tilt_deg:.4g} deg")
+    return "\n".join(lines)
+
+
 def write_outputs(session: HeadlessSession, report: dict, folder: Path) -> list[Path]:
     """report.json, report.md, the curves as CSV (GISAXS: the cuts and the fit) and the q-map as PNG."""
     import numpy as np
@@ -311,6 +331,7 @@ def write_outputs(session: HeadlessSession, report: dict, folder: Path) -> list[
     written = [folder / "report.json", folder / "report.md"]
     written[0].write_text(json.dumps(report, indent=1, ensure_ascii=False, default=str), encoding="utf-8")
     written[1].write_text(pipeline_markdown(report), encoding="utf-8")
+    provenance = provenance_lines(session)
     for key in CURVES:
         curve = session.curve(key)
         if curve is None or len(curve["x"]) == 0:
@@ -319,10 +340,10 @@ def write_outputs(session: HeadlessSession, report: dict, folder: Path) -> list[
         with open(folder / name, "w", encoding="utf-8", newline="\n") as stream:
             np.savetxt(
                 stream, np.column_stack([curve["x"], curve["y"], curve["sigma"]]), delimiter=",",
-                header=f"{curve['x_label']}, I, sigma", comments="# ",
+                header=f"{provenance}\n{curve['x_label']}, I, sigma", comments="# ",
             )
         written.append(folder / name)
-    written += _write_fit(((report.get("gisaxs") or {}).get("fit")), folder)
+    written += _write_fit(((report.get("gisaxs") or {}).get("fit")), folder, provenance)
     png = session.preview_png(1100, rings=ring_overlays(report))
     if png:
         (folder / "qmap.png").write_bytes(png)
@@ -330,7 +351,7 @@ def write_outputs(session: HeadlessSession, report: dict, folder: Path) -> list[
     return written
 
 
-def _write_fit(fit: Optional[dict], folder: Path) -> list[Path]:
+def _write_fit(fit: Optional[dict], folder: Path, provenance: str = "") -> list[Path]:
     """GISAXS: the fitted curve (data and the fit the run reports) and the solutions table."""
     import numpy as np
 
@@ -341,7 +362,8 @@ def _write_fit(fit: Optional[dict], folder: Path) -> list[Path]:
     if len(columns):
         written.append(folder / "fit_curve.csv")
         with open(written[-1], "w", encoding="utf-8", newline="\n") as stream:
-            np.savetxt(stream, columns, delimiter=",", header=header, comments="# ")
+            np.savetxt(stream, columns, delimiter=",", header=f"{provenance}\n{header}" if provenance else header,
+                       comments="# ")
     if fit.get("solutions"):
         written.append(folder / "fit_solutions.csv")
         written[-1].write_text(fit_solutions_csv(fit), encoding="utf-8")
