@@ -92,6 +92,16 @@ class Geometry:
     def random_cylinder_qz(self) -> float:
         return self.qz_born if self.mode in ("born", "dwba") else 0.0
 
+    @classmethod
+    def born_at(cls, qz: float) -> "Geometry":
+        """The Born term at a given vacuum q_z (any unit of q): λ = 2π (k = 1), α_i = α_f = asin(q_z/2)."""
+        if not 0.0 <= qz <= 2.0:
+            raise ValueError("born_at needs 0 <= q_z <= 2 k")
+        if qz == 0.0:
+            return cls()
+        angle = math.degrees(math.asin(qz / 2.0))
+        return cls("born", 2.0 * math.pi, angle, angle)
+
 
 def from_angles(alpha_i_deg: float, alpha_f_deg: float, wavelength_nm: float, refl_amp: float = 0.0,
                 refl_phase: float = 0.0) -> Geometry:

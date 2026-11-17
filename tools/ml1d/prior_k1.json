@@ -1,0 +1,21 @@
+{
+ "name": "k1_v1",
+ "description": "One population (sphere or upright cylinder), Gaussian sizes by number, LMA, a paracrystal in 3 of 4 cuts; the bounds of the parameters are those of posterior/encoding.py",
+ "families": {"sphere": 0.5, "vertical_cylinder": 0.5},
+ "law": "number_gauss",
+ "coupling": "lma",
+ "structure_probability": 0.75,
+ "ratio": [10, 300],
+ "born_probability": 0.5,
+ "born_qz": [0.0, 1.0],
+ "resolution_probability": 0.3,
+ "resolution": [0.0005, 0.01],
+ "tail_relative": [0.001, 100],
+ "background_relative": [0.001, 100],
+ "peak_counts": [100, 10000000],
+ "model_error": 0.0,
+ "gap_probability": 0.5,
+ "gap_fraction": [0.0, 0.15],
+ "edge_probability": 0.3,
+ "edge_fraction": 0.1
+}

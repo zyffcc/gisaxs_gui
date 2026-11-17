@@ -239,3 +239,13 @@ def test_the_tables_are_the_direct_average_and_a_stale_file_is_not_used(tmp_path
     np.savez(stale, parameters=np.array("{}"))
     assert tables._load("number_gauss", "sinc") is None
 
+
+
+def test_born_at_a_given_qz():
+    """The training simulator's Born term at a dimensionless q_z: the same paths as a beam at those angles."""
+    geometry = Geometry.born_at(0.37)
+    assert geometry.mode == "born" and geometry.qz_born == pytest.approx(0.37, rel=1e-12)
+    assert geometry.sphere_terms()[0][1] == pytest.approx(0.37, rel=1e-12)
+    assert Geometry.born_at(0.0) == Geometry()
+    with pytest.raises(ValueError):
+        Geometry.born_at(2.5)

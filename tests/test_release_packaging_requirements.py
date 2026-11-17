@@ -42,6 +42,9 @@ EXTERNAL_RUNTIME = {"threadpoolctl"}
 ISOLATED_RUNTIMES = {
     "src/gimap/features/sem/infrastructure/stardist_worker.py": "requirements-sem-stardist.txt",
 }
+# Training the 1D proposal network: run by hand with PyTorch (requirements-training.txt), never by the program.
+TRAINING_RUNTIME = "requirements-training.txt"
+TRAINING_FILES = ("tools/ml1d/flow_torch.py", "tools/ml1d/train_flow.py", "tools/ml1d/make_flow_fixture.py")
 
 
 OPTIONAL = {
@@ -93,6 +96,8 @@ def code():
                 continue
             if path.relative_to(ROOT).as_posix() in ISOLATED_RUNTIMES:
                 continue  # checked against its own runtime manifest below
+            if path.relative_to(ROOT).as_posix() in TRAINING_FILES:
+                continue  # checked against the training requirements below
             if parts[0] != "src":
                 # The research and model code imports its neighbours by their bare names. ``src`` is
                 # only ever imported as ``src.gimap...``: its folders (``integrations/tensorflow``
@@ -179,6 +184,16 @@ def test_every_package_the_program_imports_is_a_requirement(code):
 def test_fit1d_blas_controller_is_installed_in_the_host_runtime():
     assert "threadpoolctl" in _requirements("requirements.txt")
     assert "threadpoolctl" in EXTERNAL_RUNTIME
+
+
+def test_the_training_requirements_name_what_the_training_imports():
+    allowed = {IMPORTED_AS.get(name, name).lower() for name in _requirements(TRAINING_RUNTIME)
+               | _requirements("requirements.txt")}
+    own = {"src", "simulate", "flow_torch"}
+    for name in TRAINING_FILES:
+        imported = _imports(ast.parse((ROOT / name).read_text(encoding="utf-8"))) - set(sys.stdlib_module_names)
+        assert {module.lower() for module in imported - own} <= allowed, name
+    assert "torch" in _requirements(TRAINING_RUNTIME) and "torch" not in _listed()
 
 
 def test_isolated_sem_runtime_declares_every_worker_dependency():
