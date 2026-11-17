@@ -5,9 +5,35 @@ from datetime import datetime
 import json,hashlib,re,time
 import numpy as np
 from scipy.ndimage import gaussian_filter,maximum_filter,label
-from .cbfio import read_cbf
+from .cbfio import read_cbf_bytes
 from .stage5_input import AtomicMap
 from .neural_refine_report import read,write,sha
+
+
+READERS=int(__import__('os').environ.get('IAM_READERS','0'))
+RAW_CACHE_N=0
+_READ_GATE=None
+_RAW_CACHE={}
+READ_STATS=dict(seconds=0.,bytes=0,files=0)
+
+
+def _init_reader(gate):
+    global _READ_GATE,RAW_CACHE_N
+    _READ_GATE=gate;RAW_CACHE_N=0
+
+
+def _read_raw(path):
+    key=str(path)
+    if key in _RAW_CACHE:return _RAW_CACHE[key]
+    t0=time.perf_counter()
+    if _READ_GATE is not None:
+        with _READ_GATE:raw=Path(path).read_bytes()
+    else:raw=Path(path).read_bytes()
+    READ_STATS['seconds']+=time.perf_counter()-t0;READ_STATS['bytes']+=len(raw);READ_STATS['files']+=1
+    if RAW_CACHE_N>0:
+        _RAW_CACHE[key]=raw
+        while len(_RAW_CACHE)>RAW_CACHE_N:_RAW_CACHE.pop(next(iter(_RAW_CACHE)))
+    return raw
 
 
 def frames(path):
@@ -18,6 +44,7 @@ def frames(path):
 
 
 def load_frame(path):
+
     for attempt in range(6):
         try:
             return _load_frame_once(path)
@@ -27,14 +54,15 @@ def load_frame(path):
 
 
 def _load_frame_once(path):
-    with Path(path).open('rb') as stream:header=stream.read(16384).decode('latin1')
+    raw=_read_raw(path);header=raw[:16384].decode('latin1')
     cutoff=re.search(r'Count_cutoff\s+([\d.eE+-]+)',header)
-    image,meta=read_cbf(path,count_limit=float('inf'))
+    image,meta=read_cbf_bytes(raw,count_limit=float('inf'))
     limit=float(cutoff.group(1)) if cutoff else None
     removed=int(np.sum(image>=limit)) if limit is not None else 0
     if limit is not None:image[image>=limit]=np.nan
     if not meta.get('exposure_s',0)>0:raise ValueError('Positive header exposure required')
-    meta.update(count_cutoff=limit,cutoff_removed_pixels=removed,header_sha256=hashlib.sha256(header.encode('latin1')).hexdigest())
+    meta.update(count_cutoff=limit,cutoff_removed_pixels=removed,header_sha256=hashlib.sha256(header.encode('latin1')).hexdigest(),
+                raw_sha256=hashlib.sha256(raw).hexdigest())
     return image,meta
 
 
@@ -105,39 +133,45 @@ def extract_chunk(task):
     dest=out/f'chunk_{index:05d}.npz';meta=dest.with_suffix('.json')
     if meta.exists():
         record=read(meta)
-        if sha(dest)!=record['array_sha256'] or record['files']!=files or record['geometry']!=geometry:raise ValueError('Existing intake chunk differs')
-        return record
-    first,_=load_frame(files[0]);shape=first.shape
+        if dest.exists() and sha(dest)==record['array_sha256'] and record['files']==files and record['geometry']==geometry:return record
+        if record['geometry']!=geometry:raise ValueError('Existing intake chunk has another geometry')
+        meta.unlink();dest.unlink(missing_ok=True)
+    stats0=dict(READ_STATS);start=time.perf_counter()
+    first,h_first=load_frame(files[0]);shape=first.shape
 
 
     crop=[max(0,int(round(geometry['db_row']-939.))),min(shape[0],int(round(geometry['db_row']+31.))),max(0,int(round(geometry['db_col']-556.3))),min(shape[1],int(round(geometry['db_col']+553.7)))]
     mapping=AtomicMap(geometry,shape,geometry['alpha_i_deg'],crop=crop,exclude_rings=((2.1,.13),))
     second=AtomicMap(dict(geometry,energy_ev=12000.),shape,geometry['alpha_i_deg'],crop=crop,exclude_rings=((2.1,.13),)) if comparison else None
     mask=np.load(maskpath).astype(bool) if maskpath else None
-    ys=[];ps=[];alt_y=[];alt_p=[];rows=[];start=time.perf_counter()
-    for file in files:
-        image,h=load_frame(file);Y,E=mapping.project(image,h['exposure_s'],mask)
+    ys=[];ps=[];alt_y=[];alt_p=[];rows=[]
+    for i,file in enumerate(files):
+        image,h=(first.copy(),dict(h_first)) if i==0 else load_frame(file);Y,E=mapping.project(image,h['exposure_s'],mask)
         P=E/h['exposure_s'];assert np.allclose(P,np.rint(P)) and np.max(P)<65535 and np.max(Y)<2**32
         ys.append(Y.astype(np.uint32));ps.append(np.rint(P).astype(np.uint16))
         if second:
             Y2,E2=second.project(image,h['exposure_s'],mask);alt_y.append(Y2.astype(np.uint32));alt_p.append(np.rint(E2/h['exposure_s']).astype(np.uint16))
         rows.append(dict(frame=Path(file).name,frame_id=int(Path(file).stem.rsplit('_',1)[-1]),timestamp=h.get('timestamp'),exposure_s=h['exposure_s'],
-            count_cutoff=h['count_cutoff'],cutoff_removed_pixels=h['cutoff_removed_pixels'],header_sha256=h['header_sha256'],raw_sha256=sha(file),
+            count_cutoff=h['count_cutoff'],cutoff_removed_pixels=h['cutoff_removed_pixels'],header_sha256=h['header_sha256'],raw_sha256=h['raw_sha256'],
             selected_counts=int(Y.sum()),valid_pixel_count=int(P.sum())))
     arrays=dict(Y=np.asarray(ys),P=np.asarray(ps))
     if second:arrays.update(Y_12keV=np.asarray(alt_y),P_12keV=np.asarray(alt_p))
     np.savez_compressed(dest,**arrays)
     record=dict(files=files,geometry=geometry,crop=crop,mask=maskpath or 'Native finite/nonnegative/header-cutoff pixels; no transferred mask',
-        rows=rows,array_file=dest.name,array_sha256=sha(dest),wall_seconds=time.perf_counter()-start,raw_saved=False)
+        rows=rows,array_file=dest.name,array_sha256=sha(dest),wall_seconds=time.perf_counter()-start,raw_saved=False,
+        read_seconds=READ_STATS['seconds']-stats0['seconds'],read_bytes=READ_STATS['bytes']-stats0['bytes'])
     write(meta,record);print('INTAKE_CHUNK',out.name,index,len(files),round(record['wall_seconds'],1),flush=True);return record
 
 
 def prepare(input_path,out,*,energy_ev,sdd_mm,alpha_i_deg,metal,beam_col=None,beam_row=None,sample_roll_deg=0.,
-            max_frames=None,maskpath=None,workers=8,compare_12keV=False,system_note='Polymer'):
+            max_frames=None,maskpath=None,workers=8,compare_12keV=False,system_note='Polymer',indices=None):
+    'indices (2026-11-17): the frame numbers to read (sorted; default all, or max_frames spread over the scan). A'
     from concurrent.futures import ProcessPoolExecutor,as_completed
     import multiprocessing
     out=Path(out);files=frames(input_path);all_count=len(files)
-    selected=np.unique(np.linspace(0,len(files)-1,min(len(files),max_frames),dtype=int)) if max_frames else np.arange(len(files))
+    if indices is not None:selected=np.unique(np.asarray(indices,int))
+    else:selected=np.unique(np.linspace(0,len(files)-1,min(len(files),max_frames),dtype=int)) if max_frames else np.arange(len(files))
+    blocks=selected//128
     files=[files[i] for i in selected]
     if (beam_col is None)!=(beam_row is None):raise ValueError('Provide both beam coordinates or neither')
     centre=auto_center(files,sdd_mm,alpha_i_deg) if beam_col is None else dict(db_col=float(beam_col),db_row=float(beam_row),sample_roll_deg=sample_roll_deg,
@@ -145,9 +179,13 @@ def prepare(input_path,out,*,energy_ev,sdd_mm,alpha_i_deg,metal,beam_col=None,be
     geometry=dict(energy_ev=energy_ev,sdd_mm=sdd_mm,pixel_mm=.172,alpha_i_deg=alpha_i_deg,
         db_col=centre['db_col'],db_row=centre['db_row'],sample_roll_deg=centre['sample_roll_deg'])
     out.mkdir(parents=True,exist_ok=True);write(out/'geometry.json',centre|dict(geometry=geometry))
-    tasks=[([str(p) for p in files[i:i+128]],geometry,str(maskpath) if maskpath else None,str(out),i//128,compare_12keV) for i in range(0,len(files),128)]
+    tasks=[([str(p) for p,b in zip(files,blocks) if b==k],geometry,str(maskpath) if maskpath else None,str(out),int(k),compare_12keV) for k in np.unique(blocks)]
+    for stale in out.glob('chunk_*.json'):
+        if int(stale.stem.split('_')[1]) not in set(int(k) for k in np.unique(blocks)):
+            stale.unlink();stale.with_suffix('.npz').unlink(missing_ok=True)
     records=[]
-    with ProcessPoolExecutor(max_workers=workers,mp_context=multiprocessing.get_context('spawn')) as pool:
+    ctx=multiprocessing.get_context('spawn')
+    with ProcessPoolExecutor(max_workers=workers,mp_context=ctx,initializer=_init_reader,initargs=(ctx.BoundedSemaphore(READERS) if READERS>0 else None,)) as pool:
         for future in as_completed([pool.submit(extract_chunk,t) for t in tasks]):records.append(future.result())
     records.sort(key=lambda r:r['array_file']);rows=[r for chunk in records for r in chunk['rows']]
     if len(rows)!=len(files):raise ValueError('Frame denominator changed')

@@ -12,12 +12,13 @@ from __future__ import annotations
 
 import gc
 import re
+import sys
 import tempfile
 from functools import lru_cache
 from pathlib import Path
 
 from PyQt5.QtCore import QCoreApplication, QEvent, QObject, pyqtSignal
-from PyQt5.QtGui import QColor, QFont, QPalette
+from PyQt5.QtGui import QColor, QFont, QFontDatabase, QFontInfo, QPalette
 from PyQt5.QtWidgets import QApplication, QWidget
 
 from .tokens import (
@@ -46,6 +47,23 @@ ICONS = {
     "icon_check": ("check", "on_accent"),
     "icon_dash": ("dash", "on_accent"),
 }
+
+LINUX_FAMILIES = ("Ubuntu Sans", "Ubuntu", "Liberation Sans", "Arimo")
+"""On Linux, Qt as pip installs it does not know the desktop's font and falls back to DejaVu Sans, about 13 % wider
+than Segoe UI: the first of these that is installed (Ubuntu's interface font, or one as wide as Arial) is used
+instead, so the panels laid out for Windows and macOS fit there too."""
+
+
+def interface_font(font: QFont) -> QFont:
+    """``font`` in the family the interface uses: unchanged, except DejaVu Sans on Linux (``LINUX_FAMILIES``)."""
+    if not sys.platform.startswith("linux") or QFontInfo(font).family() != "DejaVu Sans":
+        return font
+    installed = set(QFontDatabase().families())
+    family = next((name for name in LINUX_FAMILIES if name in installed), None)
+    if family is not None:
+        font = QFont(font)
+        font.setFamily(family)
+    return font
 
 
 class ThemeManager(QObject):
@@ -101,7 +119,7 @@ class ThemeManager(QObject):
             gc.collect()
             QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
         app.setPalette(_palette(THEMES[self.mode]))
-        font = QFont(app.font())
+        font = QFont(interface_font(app.font()))
         font.setPointSizeF(self.font_pt)
         app.setFont(font)
         app.setStyleSheet(self.render(_template(BASE_TEMPLATE)))
@@ -217,9 +235,11 @@ def _palette(tokens: dict[str, str]) -> QPalette:
 
 __all__ = [
     "ICONS",
+    "LINUX_FAMILIES",
     "TEMPLATE_PROPERTY",
     "ThemeManager",
     "apply_theme",
+    "interface_font",
     "repolish",
     "set_role",
     "set_state",

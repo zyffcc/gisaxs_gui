@@ -2504,7 +2504,8 @@ measured after its deposition, see *Samples measured after their deposition* bel
 
    - At the left, the four steps — **Read the frames**, **Find the solutions**, **Write the report**, **Draw the
      images** — each with its state and one line of what it found (frames read so far, time windows solved, the
-     network that fits the data better, windows drawn), and the time since the start. While the solutions are
+     network that fits the data better, windows drawn), and the time since the start with the number of processes
+     at work. While the solutions are
      found the line says what the network is doing and how far it has come: the network inputs prepared, the
      network proposing candidates, the windows solved and the model images computed, the windows refined (Refine:
      every window gets its candidates first, then each is refined), the iterations of the whole-scan refinement
@@ -2515,6 +2516,13 @@ measured after its deposition, see *Samples measured after their deposition* bel
      frame read so far, which rises as the metal is deposited. Finding the solutions (and the two steps after it):
      the measured image of the window solved last beside the model image of its solution, its values in the line
      under them, and the radius, height, distance and coverage of every window solved so far.
+   - **Reading from disk.** A newer analysis package also says how long its processes spend reading the frame files
+     from disk: the line of **Read the frames** becomes, for example, *Reading 312 of 1,241 frames · disk 0.82 s per
+     frame (85 % of the time)*, and keeps the disk part once the frames are read. When the disk takes at least
+     0.15 s per frame and at least half of the time (or the package says so), a note above the pictures says that
+     reading the frames from this disk is the slow part — a USB or network drive, or an on-access virus scan of every
+     file — and that copying the scan folder to a local SSD first makes the import faster. More processes do not
+     help then. With a fast disk, or an older package, nothing more is shown.
    - A click on a step that has started shows what it found; a click on the step at work follows the analysis
      again. When the analysis ends, its result replaces the live view (after a failure or **Cancel**, what was shown
      before comes back). What the live view shows is not the result: the result is what the package writes at the
@@ -2525,6 +2533,7 @@ Analysing the same request again shows the result it has. **Details ▸ Analyze 
 | Field | What it is for |
 |---|---|
 | **Mode** | **Auto**: Quick for Si and TiO₂, Refine for polymer substrates. **Quick**: the network's candidates, each drawn by the physical model (about a second per time window). **Refine**: also refines the solution of every window (minutes per window on a polymer). **Full**: a longer refinement of every window and of the whole scan together (hours). |
+| **Parallel processes** | How many processes the analysis runs at once, for Analyze and Static Frames. **Automatic (N)** (the default): one per core, two cores left free and at most 16, fewer when the free memory is short; N is worked out again whenever the box is shown and when the analysis starts. Or a number from 1 to the computer's cores. Kept for the next session. The live view and **Details ▸ Report** say how many ran. |
 | **Start of deposition (s)** | The time of the scan at which the deposition started. Empty: found in the data. |
 | **Deposition duration (s)** | How long the deposition lasted after its start; the metal amount stays constant afterwards. Empty: to the end of the scan. |
 | **Polymer film thickness (nm)** | Shown for a polymer substrate. Empty: the package's own value for that polymer. |
@@ -2651,7 +2660,11 @@ open a result*):
   the solution shown on the main screen — the time, the nominal thickness, its values, its fit deviation and which
   solution it is. Choosing another solution on the main screen changes its row. `Ctrl+C` copies the selected rows.
 - **Report**: the network the analysis used and the networks it tried with their fit deviation, the mode, the pixel
-  mask and the run time, above the package's report (`REPORT.md`).
+  mask and the run time; then **Time per step**, a small table of every step with its time (m:ss) — the import row
+  adds the frames read of how many and the disk's seconds per frame with their share of the time — the total of all
+  steps and the number of processes; a note when reading the frames from disk was the slow part (as in the live
+  view); and the package's report (`REPORT.md`). A result of an older package has the rows it can (no reading facts,
+  no processes).
 - **Logs**: the log of each step of the analysis (`analyze_*.log`), one at a time.
 
 ![Details of the Sputter workspace with a scan folder chosen](manual_images/en/22a_sputter_details.png)

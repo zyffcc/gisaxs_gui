@@ -70,6 +70,22 @@ def read_cbf(path, count_limit: float = 1e6) -> tuple[np.ndarray, dict]:
     return img, _parse_header(hdr_text)
 
 
+def read_cbf_bytes(raw: bytes, count_limit: float = 1e6) -> tuple[np.ndarray, dict]:
+    'read_cbf of the bytes of a file already in memory (2026-11-17: one read per frame instead of three, for frames on'
+    try:
+        import io
+        from fabio import cbfimage
+        obj = cbfimage.CbfImage()
+        obj.read(io.BytesIO(raw))
+        img = obj.data.astype(np.float64)
+        hdr_text = "\n".join(f"# {k} {v}" for k, v in obj.header.items()) + str(obj.header.get("_array_data.header_contents", ""))
+    except Exception:
+        arr, hdr_text = _decode_byte_offset(raw)
+        img = arr.astype(np.float64)
+    img[(img < 0) | (img > count_limit)] = np.nan
+    return img, _parse_header(hdr_text)
+
+
 def sum_frames(paths) -> tuple[np.ndarray, np.ndarray, float]:
     'Sum frames; returns (sum of counts, number of valid frames per pixel, total exposure).'
     total = None

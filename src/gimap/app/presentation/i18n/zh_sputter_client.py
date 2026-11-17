@@ -153,6 +153,8 @@ SPUTTER_CLIENT_ZH = {
     "This request was analysed before: its result is shown ({windows} time windows).":
         "这个请求以前分析过：显示的是它已有的结果（{windows} 个时间窗）。",
     "The analysis of {name} is ready.": "{name} 的分析已完成。",
+    "network result: the joint fit of the whole scan is running and replaces it when it is done":
+        "网络初步结果：整条扫描联合精修进行中，完成后自动替换",
     "The analysis failed.": "分析失败。",
     "The choice could not be saved: {reason}": "无法保存所选的解：{reason}",
     # -- Analyze: problems and failures ------------------------------------------------------------------------------
@@ -338,6 +340,21 @@ SPUTTER_CLIENT_ZH = {
         "到最后一帧约沉积 {thickness} nm（样品处 {rate} nm/s）",
     "The geometry and the options of Analyze, and the windows, the report and the log of the result shown.":
         "几何与“分析”的选项，以及所示结果的时间窗、报告和日志。",
+    # -- Details: the parallel processes (workers_flow.py) and the time per step (result_tabs.py) ---------------------
+    "Parallel processes": "并行进程数",
+    "Automatic ({count})": "自动（{count}）",
+    "Automatic": "自动",
+    "How many processes the analysis runs at once (Analyze and Static Frames). Automatic: one per core, two cores left "
+    "free and at most 16, fewer when the free memory is short; worked out again when the analysis starts. More "
+    "processes do not help when reading the frames from the disk is the slow part.":
+        "分析同时运行几个进程（“分析”和静态帧都用这个设置）。自动：每个核心一个进程，留出两个核心，最多 16 个；"
+        "空闲内存不够时更少；每次开始分析时重新计算。如果慢在从磁盘读帧，增加进程也没有帮助。",
+    "Time per step": "各步用时",
+    "Step": "步骤",
+    "Time (m:ss)": "用时（分:秒）",
+    "All steps": "全部步骤",
+    "{read} of {total} frames read": "已读入 {read} 帧（共 {total} 帧）",
+    "{read} frames read": "已读入 {read} 帧",
     # -- the solutions (client_texts.py) ------------------------------------------------------------------------------
     "Joint fit (whole scan)": "联合精修解",
 }

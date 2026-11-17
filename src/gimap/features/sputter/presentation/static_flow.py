@@ -22,6 +22,7 @@ file names; choosing one fills the mask field beside it.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
@@ -341,7 +342,7 @@ class SputterStaticMixin:
         static = self._static_service()
         if static is None or self._static_busy or self._client_busy:
             return
-        request = self._static_request()
+        request = replace(self._static_request(), workers=self.run_workers())  # Automatic: worked out now
         problems = request.problems()
         unsupported = static.defaults().problem
         if unsupported:
@@ -412,7 +413,7 @@ class SputterStaticMixin:
                 series = None
         self._live_begin(folder, kind="static", label=request.label(), nominal_nm=request.nominal_nm,
                          series=series if series is not None and series.static else None,
-                         reference=bool(request.reference_frames.strip()))
+                         reference=bool(request.reference_frames.strip()), workers=request.workers)
 
     def _static_finished(self, outcome) -> None:
         self._live_end()

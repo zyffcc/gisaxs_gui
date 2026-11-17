@@ -121,6 +121,10 @@ def main():
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--shadow", action="store_true")
     ap.add_argument("--shadow-only", action="store_true", help="only extract the shadow table of an existing intake")
+    ap.add_argument("--windows-only", type=float, default=None, metavar="STEP",
+                    help="read only the frames the analysis windows of predict --times all --step STEP use (with at "
+                         "most 24 and at most 60 windows: the refine and quick modes of iampred.analyze), plus the first "
+                         f"{SELECT_FULL_S:g} s and the last seconds (select_frames)")
     ap.add_argument("--auto-mask", choices=["on", "off"], default="on",
                     help="mask the pixels the frames show to be unusable (dead, hot, beamstop) as well (iampred.automask)")
     a = ap.parse_args()
@@ -174,6 +178,124 @@ def main():
         shadow(a, root)
 
 
+SELECT_FULL_S, SELECT_TAIL_S, SELECT_MARGIN_S = float(os.environ.get("IAM_SELECT_FULL_S", "30")), 3.0, 0.6
+SELECT_MAXW = tuple(int(v) for v in os.environ.get("IAM_SELECT_MAXW", "24,60").split(","))
+
+
+SLOW_READ_S, SLOW_SHARE = 0.15, 0.5
+
+
+def reading_summary(intake_dir, run, workers, t_import):
+    'Frames read and the time the import spent reading them (dict for the scan marker and the live event).'
+    import time as _time
+    read_s = wall_s = mb = 0.0
+    frames = 0
+    for meta in Path(intake_dir).glob("chunk_*.json"):
+        try:
+            doc = json.loads(meta.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        frames += len(doc.get("rows", []))
+        read_s += float(doc.get("read_seconds") or 0.0)
+        wall_s += float(doc.get("wall_seconds") or 0.0)
+        mb += float(doc.get("read_bytes") or 0) / 1e6
+    per = read_s / frames if frames else None
+    share = read_s / wall_s if wall_s > 0 else None
+    out = dict(frames_read=frames, frames_total=run.get("received_frames"), workers=int(workers),
+               seconds=round(_time.perf_counter() - t_import, 1), read_s_per_frame=None if per is None else round(per, 4),
+               read_share=None if share is None else round(share, 3), mb_read=round(mb, 1),
+               slow=bool(per is not None and share is not None and per >= SLOW_READ_S and share >= SLOW_SHARE))
+    print(f"reading: {frames} of {out['frames_total']} frames in {out['seconds']:.0f} s with {workers} processes; disk "
+          f"{out['read_s_per_frame']} s per frame ({100 * (share or 0):.0f} % of the processes' time)"
+          + (": the disk is the slow part" if out["slow"] else ""), flush=True)
+    LV.emit("reading", **out)
+    return out
+
+
+def _windows(t_dep, t_first, t_last, step, nmax):
+    'predict._all_times with the first and last bin time of the scan.'
+    import numpy as np
+    t_end = t_last - 0.5
+    t0 = max(t_dep + 1.0, t_first + 0.5)
+    tt = np.arange(np.ceil(t0), t_end, step)
+    if nmax and len(tt) > nmax:
+        tt = np.arange(np.ceil(t0), t_end, step * int(np.ceil(len(tt) / nmax)))
+    return [float(t) for t in tt]
+
+
+def _bins_and_onsets(out, t_dep_given):
+    '(first and last bin time, onset candidates, selection indices, header times) of the import read so far: its bins'
+    import numpy as np
+    import iam as M
+    from tio2_explore import onset
+    from sputtergisaxs.polymer_review_data import intake_rows, bin_ids, aggregate
+    run, rows = intake_rows(out / "intake")
+    shutil.rmtree(out / "binned", ignore_errors=True)
+    aggregate(out / "intake", out / "binned", run, rows, bin_ids([r["time_s"] for r in rows], seconds=0.5), nominal_seconds=0.5)
+    try:
+        grid = M.scan_grid()
+        res = M.Result(out, grid)
+        t_on = onset(res, grid)[0]
+        dark = dark_start_onset(out)
+        times = np.asarray(res.time, float)
+    finally:
+        shutil.rmtree(out / "binned", ignore_errors=True)
+    cands = sorted({float(t) for t in (t_on, dark[0] if dark else None, t_dep_given) if t is not None})
+    return (float(times[0]), float(times[-1]), cands, np.asarray(run["selection_indices"], int),
+            np.array([r["time_s"] for r in rows], float))
+
+
+def select_frames(a, out, read):
+    'Reads the frames --windows-only needs (see above); returns what was read, or None when every frame was read.'
+    import numpy as np
+    from sputtergisaxs.polymer_dev_intake import frames, load_frame
+    n = len(frames(Path(a.frames)))
+    _, meta = load_frame(frames(Path(a.frames))[0])
+    dt = float(meta.get("period_s") or meta["exposure_s"])
+    head = min(n, int(np.ceil((SELECT_FULL_S / dt + 1) / 128.0)) * 128)
+    tail = int(np.ceil(SELECT_TAIL_S / dt)) + 1
+    if head + tail >= 0.8 * n:
+        read()
+        return None
+    sel = set(range(head)) | set(range(n - tail, n))
+    for rnd in range(4):
+        read(sorted(sel))
+        t_first, t_last, cands, idx, ts = _bins_and_onsets(out, a.t_dep)
+        full_end = ts[idx < head].max()
+        if not cands or max(cands) + 3.0 > full_end:
+            print(f"frames: the onset is not within the first {full_end:.1f} s read in full: reading every frame", flush=True)
+            read()
+            return None
+        wins = sorted({t for c in cands for nm in SELECT_MAXW for t in _windows(c, t_first, t_last, a.windows_only, nm)})
+        add = set()
+        for t in wins:
+            lo, hi = t - 0.5 - SELECT_MARGIN_S, t + 0.5 + SELECT_MARGIN_S
+            before, after = idx[ts <= lo], idx[ts >= hi]
+            if not len(before) and idx[0] == 0:
+                before = idx[:1]
+            if not len(after) and idx[-1] == n - 1:
+                after = idx[-1:]
+            if len(before) and len(after):
+                i0, i1 = before.max(), after.min()
+                if np.isin(np.arange(i0, i1 + 1), idx).all():
+                    continue
+            j0 = int(np.floor(np.interp(lo, ts, idx))) - 3
+            j1 = int(np.ceil(np.interp(hi, ts, idx))) + 3
+            add |= set(range(max(j0, 0), min(j1, n - 1) + 1))
+        if not add - sel:
+            if add:
+                break
+            done = dict(frames_read=len(sel), frames=n, windows=len(wins), onsets=cands, step=a.windows_only,
+                        max_windows=list(SELECT_MAXW), rounds=rnd + 1)
+            print(f"frames: {len(sel)} of {n} read for {len(wins)} windows (onset {', '.join(f'{c:.2f}' for c in cands)} s)",
+                  flush=True)
+            return done
+        sel |= add
+    print("frames: the windows could not be covered by a selection: reading every frame", flush=True)
+    read()
+    return None
+
+
 def _detector_event(total, keep, auto, geo, a, binning=4):
     "The live view's picture of the detector: the summed frames of the automatic mask and what the mask leaves out,"
     from . import automask as AM
@@ -189,8 +311,13 @@ def _intake(a, root, mask, msha, energy, lam, out):
     from sputtergisaxs.polymer_review_data import intake_rows, bin_ids, aggregate
     geo = dict(energy_ev=energy, sdd_mm=a.sdd_mm, alpha_i_deg=a.alpha_i, metal=a.metal, sample_roll_deg=a.roll)
     if a.auto_centre:
-        from sputtergisaxs.polymer_dev_intake import auto_center
-        cen = auto_center(lit_frames(frames(Path(a.frames))), a.sdd_mm, a.alpha_i)
+        from sputtergisaxs import polymer_dev_intake as PDI
+        PDI.RAW_CACHE_N = 30
+        try:
+            cen = PDI.auto_center(lit_frames(frames(Path(a.frames))), a.sdd_mm, a.alpha_i)
+        finally:
+            PDI.RAW_CACHE_N = 0
+            PDI._RAW_CACHE.clear()
         geo.update(beam_col=float(cen["db_col"]), beam_row=float(cen["db_row"]))
         print(f"auto centre: col {cen['db_col']:.1f} row {cen['db_row']:.1f} (roll kept at {a.roll})")
         LV.emit("centre", col=LV.rounded(cen["db_col"], 2), row=LV.rounded(cen["db_row"], 2))
@@ -215,18 +342,28 @@ def _intake(a, root, mask, msha, energy, lam, out):
                 _detector_event(picture.pop("total"), combined, auto, geo, a)
             except Exception:
                 pass
-    with LV.ChunkWatcher(out / "intake", root / "native_grid.npz", len(frames(Path(a.frames)))):
-        for attempt in range(3):
-            try:
-                prepare(Path(a.frames), out / "intake", **geo, maskpath=used, workers=a.workers,
-                        system_note=f"iampred intake {a.label}")
-                break
-            except OSError as e:
-                if attempt == 2:
-                    raise
-                print(f"reading the frames failed ({type(e).__name__}: {e}); trying again in 20 s", flush=True)
-                import time
-                time.sleep(20)
+    def read(indices=None):
+        n_read = len(frames(Path(a.frames))) if indices is None else len(indices)
+        with LV.ChunkWatcher(out / "intake", root / "native_grid.npz", n_read):
+            for attempt in range(3):
+                try:
+                    prepare(Path(a.frames), out / "intake", **geo, maskpath=used, workers=a.workers,
+                            system_note=f"iampred intake {a.label}", indices=indices)
+                    return
+                except OSError as e:
+                    if attempt == 2:
+                        raise
+                    print(f"reading the frames failed ({type(e).__name__}: {e}); trying again in 20 s", flush=True)
+                    import time
+                    time.sleep(20)
+
+    import time as _time
+    t_import = _time.perf_counter()
+    selection = None
+    if a.windows_only:
+        selection = select_frames(a, out, read)
+    else:
+        read()
     run, rows = intake_rows(out / "intake")
     ids = bin_ids([r["time_s"] for r in rows], seconds=0.5)
     aggregate(out / "intake", out / "binned", run, rows, ids, nominal_seconds=0.5)
@@ -236,7 +373,8 @@ def _intake(a, root, mask, msha, energy, lam, out):
                   started_utc=t0.strftime("%Y-%m-%dT%H:%M:%SZ"),
                   built_utc=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), frames=run["selected_frames"],
                   received_frames=run["received_frames"], time_first_s=rows[0]["time_s"], time_last_s=rows[-1]["time_s"],
-                  geometry=b.get("geometry"), auto_mask=auto)
+                  geometry=b.get("geometry"), auto_mask=auto, selection=selection,
+                  reading=reading_summary(out / "intake", run, a.workers, t_import))
     (out / "pixmask.json").write_text(json.dumps(marker, indent=1) + "\n", encoding="utf-8", newline="\n")
     qcm = a.qcm_nm_s if a.qcm_nm_s is not None else a.rate_nm_s / 0.6
     scan = dict(metal=a.metal, sub=a.substrate, qcm=qcm, growth=a.label, ai=a.alpha_i, lam=lam,

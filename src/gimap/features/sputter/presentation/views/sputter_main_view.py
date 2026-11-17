@@ -19,14 +19,14 @@ host for the evolution over the scan. A series of static samples is shown the sa
 time window. Before there is a result an empty state says what to do; while Analyze runs, the live view
 (``sputter_live_view.py``) is the third page of the same stack.
 
-**Analyze options** (a section of Details): the mode, the optional onset and duration of the deposition and polymer
-film thickness, the analysis package and its folder, Open Report and Open Folder (of the result shown), and the
-messages of the run (the job status's Details shows them).
+**Analyze options** (a section of Details): the mode, the parallel processes (Automatic or a number), the optional
+onset and duration of the deposition and polymer film thickness, the analysis package and its folder, Open Report and
+Open Folder (of the result shown), and the messages of the run (the job status's Details shows them).
 """
 
 from __future__ import annotations
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (QCheckBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
                              QPushButton, QSizePolicy, QSlider, QStackedWidget, QToolButton, QVBoxLayout, QWidget)
 
@@ -94,6 +94,23 @@ FILM_TIP = "Thickness of the polymer film on the wafer. Empty: the analysis uses
 ONSET_TIP = "Time of the scan (s) at which the deposition started. Empty: found in the data."
 DURATION_TIP = ("How long the deposition lasted after its start (s): the metal amount stays constant afterwards. "
                 "Empty: to the end of the scan.")
+WORKERS_TIP = ("How many processes the analysis runs at once (Analyze and Static Frames). Automatic: one per core, two "
+               "cores left free and at most 16, fewer when the free memory is short; worked out again when the "
+               "analysis starts. More processes do not help when reading the frames from the disk is the slow part.")
+
+
+class ShownComboBox(SafeWheelComboBox):
+    """A combo box that says when it is shown or opened (``aboutToShow``): its choices can be worked out again."""
+
+    aboutToShow = pyqtSignal()
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().showEvent(event)
+        self.aboutToShow.emit()
+
+    def showPopup(self) -> None:  # noqa: N802 - Qt API
+        self.aboutToShow.emit()
+        super().showPopup()
 
 
 class ElidedLabel(QLabel):
@@ -459,11 +476,17 @@ class SputterMainView:
         self.film_thickness = number_edit(section, "optional")
         self.film_thickness.setToolTip(FILM_TIP)
         self.film_label = QLabel("Polymer film thickness (nm)", section)
+        self.workers_box = ShownComboBox(section)  # the page fills it (Automatic with its number, then 1 … cores)
+        self.workers_box.setObjectName("sputterWorkers")
+        self.workers_box.setProperty(DATA_VALUES, True)  # numbers; the page says Automatic in its language
+        self.workers_box.setSizeAdjustPolicy(SafeWheelComboBox.AdjustToContents)
+        self.workers_box.setToolTip(WORKERS_TIP)
         self.package_label = meta(section)
         self.package_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.package_button = QPushButton("Choose Folder…", section)
         self.package_button.setToolTip("The folder of the analysis package (it holds code and models).")
         form.addRow("Mode", self.mode_box)
+        form.addRow("Parallel processes", self.workers_box)
         form.addRow("Start of deposition (s)", self.onset)
         form.addRow("Deposition duration (s)", self.duration)
         form.addRow(self.film_label, self.film_thickness)
@@ -490,4 +513,4 @@ class SputterMainView:
 
 
 __all__ = ["RATE_UNITS", "RATE_UNIT_TIP", "DEVIATION_CAPTION", "ENTRY_HINT", "ElidedLabel", "IMAGE_CHOICES", "KIND_CHOICES", "MODE_CHOICES", "SAMPLE_METALS", "SUBSTRATE_CHOICES",
-           "SputterMainView", "TILES", "VIEW_CHOICES"]
+           "ShownComboBox", "SputterMainView", "TILES", "VIEW_CHOICES", "WORKERS_TIP"]

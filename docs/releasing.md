@@ -265,7 +265,8 @@ Read the current JAC *Notes for Authors* before submitting; the points below are
 
 The release targets Windows x64 and macOS 15+ (Apple Silicon and Intel, separate packages).
 `.github/workflows/desktop.yml` checks the same source on Windows Server 2022, macOS 15 arm64 and
-macOS 15 Intel. Every required job must pass on the commit being published.
+macOS 15 Intel. Every required job must pass on the commit being published. It also runs on Ubuntu 24.04 from
+source (no package; not required), with Ubuntu's interface font installed as on a desktop.
 A skipped optional-runtime test is not evidence that the runtime works; record such coverage separately. Never call an untested
 architecture supported merely because the source imports there.
 
