@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 
 import pytest
 
@@ -230,7 +231,9 @@ def test_an_unusual_rate_at_the_sample_asks_whether_its_unit_is_right(tmp_path, 
         assert said == [] and len(runner.requests) == 1
         _close(page)
         return
-    assert len(said) == 1 and said[0][0] == "Check the Deposition Rate" and runner.requests == []  # cancelled
+    # Qt on macOS ignores a message box's window title (Apple's guidelines), so the title reads empty there
+    title = "" if sys.platform == "darwin" else "Check the Deposition Rate"
+    assert len(said) == 1 and said[0][0] == title and runner.requests == []  # cancelled
     if (rate, unit, qcm) == ("2.2", "nm/s", False):
         assert said[0][1] == ("This rate is unusual for sputtering (2.2 nm/s = 22 Å/s at the sample). Is the unit "
                               "right?")
