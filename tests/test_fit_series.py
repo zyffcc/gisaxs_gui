@@ -20,7 +20,7 @@ RADII = (5.0, 5.4, 5.8, 6.2, 6.6)
 
 def _model(radius: float) -> FitModel:
     model = FitModel((new_component("sphere", radius=radius, distance=40.0),))
-    return model.with_values({(0, "Int"): 2000.0, (0, "sigma_R"): 0.15, (0, "sigma_D"): 0.3,
+    return model.with_values({(0, "Int"): 2000.0, (0, "sigma_R"): 0.15, (0, "sigma_nn"): 0.25,
                               ("globals", "background"): 3.0})
 
 

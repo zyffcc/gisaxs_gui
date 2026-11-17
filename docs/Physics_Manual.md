@@ -184,9 +184,10 @@ The table lists the symbols that occur in more than one chapter. Every other sym
 | f | – | Hermans orientation factor (the program writes "Herman's f") | section 7.7 |
 | q* | Å⁻¹ (nm⁻¹ in Sputter) | position of the in-plane correlation peak of a GISAXS cut | section 8.4 |
 | R | nm | radius of a particle or an island | section 9.4 |
-| σ_R/R, σ_h/h, σ_D/D | – | relative spreads of R, h and D (the parameters labelled σ_R/R, σ_h/h and σ_D/D); σ_D is the absolute spread of D, and σ_D/D is GIMaP's paracrystal spread, defined in section 9.5 | sections 9.3, 9.5 |
+| σ_R/R, σ_h/h, σnn/D | – | relative spreads of R and h (by the size distribution chosen, section 9.3) and relative standard deviation of the neighbour distance D (Hosemann; fit1d's w/D) | sections 9.3, 9.5 |
+| σ_D/D | – | the paracrystal spread of the quick fit, 1D Predict and earlier Fitting: (σnn/D)/√(2π) | (9.13) |
 | P(q), S(q) | – | form factor and structure factor | sections 9.4, 9.5 |
-| φ | – | paracrystal factor exp(−π q² σ_D²) | (9.13) |
+| p | – | paracrystal factor exp(−q² σ_nn² / 2) | (9.12) |
 | δ, β | – | refractive-index decrement and absorption index, n = 1 − δ + iβ | section 13.5 |
 | α_c | ° | critical angle of total external reflection | section 8.6 |
 | t | s | time; t_exp is an exposure time | chapters 11, 12 |
@@ -1733,7 +1734,7 @@ and *Find the particle shape (no AI)*. *Predict parameters (fit1d)* uses the fit
 (`utils/gisaxs1d_gui_kit`), described in section 9.12; *AI proposal (1D Predict)* is chapter 10.
 
 **Units: Fitting works in nm⁻¹ internally.** A curve read in Å⁻¹ (an Analyze `_fit_input.dat`) is multiplied by 10.
-Sizes and distances are in nm, w in nm⁻¹, the spreads σ_R/R, σ_h/h, σ_D/D are relative.
+Sizes and distances are in nm, w in nm⁻¹, the spreads σ_R/R, σ_h/h, σnn/D are relative.
 
 **fit1d cut qz** is a user-supplied vacuum value in nm⁻¹, associated with the curve being fitted.
 Opening a curve clears it; a project or session restores the value explicitly saved for its curve.
@@ -1776,154 +1777,202 @@ Implementation: `src/gimap/features/fitting/application/curve_sources.py`, `src/
 ### 9.2 The intensity model
 
 ```text
-I(q) = BG + k · [ Σ_i Int_i · P_i(q) · S_i(q) + A / ( 1 + (q / w)^ν ) ],   q = abs(q) in nm⁻¹        (9.1)
+I(q) = BG + k · [ Σ_i Int_i · T_i(q) + A / ( 1 + (q / w)^ν ) ],   q = abs(q) in nm⁻¹        (9.1)
+T_i = P_i · S_i  (LMA)   or   P_i + C_i (S_i − 1)  (DA),   P_i(0) = 1
 ```
 
-Int_i is the scale of component i, BG a constant background (not multiplied by k), A, w and ν the amplitude, width
-and exponent of the beam-tail term, and k an overall factor fixed at 1 by default. By default the model depends on
+Int_i is the scale of component i. Every family is normalised to P(0) = 1 (section 9.4), so Int_i is the intensity
+of component i at q = 0 (times S_i(0)). BG is a constant background (not multiplied by k), A, w and ν the amplitude,
+width and exponent of the beam-tail term, and k an overall factor fixed at 1 by default. By default the model depends on
 `abs(q)` only: spheres are evaluated at q_z = 0, the effective interface approximation. Given the angles of the cut,
 spheres can instead use the direct and the exit-reflected path of the DWBA (section 9.10). The beam-tail term is additive, not a resolution convolution. With w ≤ 0 or ν ≤ 0 the term is 1.
 
-**q resolution (σ_q, off by default).** With σ_q > 0 each particle term `Int_i·P_i·S_i` is convolved with a Gaussian
+**q resolution (σ_q, off by default).** With σ_q > 0 each particle term `Int_i·T_i` is convolved with a Gaussian
 of standard deviation σ_q in q; the beam-tail term and BG are not. The terms are made on a uniform grid from
 max(0, q_min − 5σ_q) to q_max + 5σ_q, at most σ_q/5 apart, folded at q = 0 (the cut is symmetric: I(−q) = I(q)),
 convolved with the Gaussian cut at ±5σ_q and interpolated back to the points. A test compares the result with a
 direct convolution of the symmetric cut (within 10⁻³). Smearing matters for well-ordered films: when σ_q is above
-about 0.3 of the width of the structure peak, the fitted σ_nn/D otherwise takes up the resolution as disorder. fit1d
+about 0.3 of the width of the structure peak, the fitted σnn/D otherwise takes up the resolution as disorder. fit1d
 has no such term and refuses a σ_q set in Model.
 
-The plot's **Components** are these additive intensities: `k·Int_i·P_i·S_i`, the scaled beam-tail term and
+The plot's **Components** are these additive intensities: `k·Int_i·T_i`, the scaled beam-tail term and
 `BG`; their sum is the total model. They are not normalised population fractions. A current fit1d result instead
 displays the native engine's scaled particle, background and low-q contributions, which sum to its native total;
 the mapped manual model is not used to reconstruct them. Component visibility and axis limits do not change the
 fit, residuals or numerical exports. Zero and negative values are omitted only from logarithmic display.
 
-Implementation: `src/gimap/features/fitting/domain/fit_model.py`
+**One forward model.** Fitting now computes (9.1) with `cut_model`, GIMaP's one implementation of a 1D cut,
+which the proposal network's training and refinement are to use as well. Before, the same physics existed four times
+with different conventions: Fitting's model, the quick fit of section 8.5 (which uses 1D Predict's forward model),
+the fit1d kit's tables and 1D Predict V5's own forward model. `cut_model` was checked against each of them, against an
+independent implementation and against BornAgain (`tools/benchmarks/cut_model_checks.py` and `cut_model_bornagain.py`,
+q = 0.02–3 nm⁻¹, the largest relative deviation over the curve):
+
+| Reference | Cases | Largest deviation |
+|---|---|---|
+| `tools/benchmarks/yoneda_truth.py` (no shared code; its size rule refined to 1500 nodes) | spheres R 4–6 nm and upright cylinders, σR/R 0.2–0.3, paracrystal; Born at the cut's q_z and four-term DWBA on Si; LMA and DA | 1.4 · 10⁻⁶ |
+| fit1d's tables (sizes by number, Hosemann paracrystal) | spheres, upright and random cylinders, R 2–10 nm, Born at q_z; spheres in the four-term DWBA | 2.5 · 10⁻⁵ |
+| 1D Predict V5's forward model | one size with a paracrystal | 6 · 10⁻¹⁴ |
+| Fitting's earlier formulas on 20001 nodes | spheres R 2–20 nm, σR/R 0.05–0.4; DA; two paths | 2 · 10⁻⁶ to 1.8 · 10⁻³ (the fine rectangle rule's own error) |
+| BornAgain 24, average layer materials off | spheres and upright cylinders on Si in the four-term DWBA, σR/R 0.2 (BornAgain gets the same radii and number weights) | 3.9 · 10⁻⁴ (sphere), 2.8 · 10⁻⁴ (cylinder) |
+
+For one size BornAgain and `cut_model` agree to 10⁻³ (median), more only at the zeros of the form factor, where both
+curves go to zero. BornAgain's default gives the layer holding the particles their volume-averaged refractive index,
+which changes the reflection the DWBA terms carry: for spheres R = 4 nm on a paracrystal of D = 14 nm (about 17 % of
+the layer) the curve then differs by 32 % (median). `cut_model`, like fit1d and `yoneda_truth.py`, uses the reflection
+of the bare substrate; the free effective r of the two-path model can take up such a difference (section 9.10). One
+core computes 1000 curves of 500 points in 3.0 s (spheres), 2.2 s (upright cylinders) and 14 s (random cylinders).
+
+**Conventions of the earlier models** (`cut_model/conventions.py` is the one place that converts them):
+
+| Quantity | Fitting now | Fitting earlier | fit1d | 1D Predict V5 and the quick fit |
+|---|---|---|---|---|
+| sizes | Sizes of each component (section 9.3) | Gaussian by intensity (spheres, random cylinders), by number ±3σ (vertical cylinders) | Gaussian by number | Gaussian by intensity (all three) |
+| spacing disorder | σnn/D | σD/D = (σnn/D)/√(2π) | w = σnn (nm) | σD/D, as earlier Fitting |
+| vertical cylinder at q = 0 | P = 1 | 10⁻⁶ ⟨R⁴⟩/4 (R in nm) | P = 1 | P = 1 |
+| low-q term | A / (1 + (q/w)^ν) | the same | C / (1 + (q/w)^ν), ν = 2 by default | relative to the particle curve (10.5) |
+
+A model saved by an earlier version (`gimap_fit_model_v1`) is converted when it is read: σnn/D = √(2π)·σD/D (with its limits),
+a vertical cylinder's Int times 10⁻⁶ ⟨R⁴⟩/4, and the sizes it had (Gaussian by intensity for spheres and random
+cylinders, by number for vertical cylinders). Its curve then changes only by the size rule (section 9.3).
+
+Implementation: `src/gimap/features/fitting/domain/cut_model/`, `src/gimap/features/fitting/domain/fit_model.py`
 
 ### 9.3 Size distributions
 
-Every size average is a quadrature over a Gaussian of mean μ and absolute width σ = μ · (σμ/μ), truncated at 0:
+Each component's **Sizes** say what R and σR/R are (number weights n, intensity weights g; σ = R · σR/R):
 
 ```text
-x_j = linspace( max(0, μ − n_σ σ), μ + n_σ σ, n ),   j = 1 … n                                   (9.2)
-w_j = exp( −½ ((x_j − μ)/σ)² ) / Σ_l exp( −½ ((x_l − μ)/σ)² )                                    (9.3)
-P(q) = Σ_j w_j P(q; x_j)                                                                         (9.4)
+Gaussian, by number (default)    n(x) ∝ exp( −½ ((x − R)/σ)² ),   max(0, R − 4σ) ≤ x ≤ R + 4σ                 (9.2)
+Log-normal, by number             n(x) ∝ exp( −½ ((ln x − μ)/s)² ) / x,   s² = ln(1 + (σR/R)²),  μ = ln R − s²/2  (9.3)
+Gaussian, by intensity            g(x) ∝ exp( −½ ((x − R)/σ)² ),   n(x) = g(x)/V(x)²,   same range as (9.2)
+P(q) = Σ_j n_j V_j² |A_j(q)|² / Σ_j n_j V_j²,     C(q) = | Σ_j n_j V_j A_j(q) |² / Σ_j n_j V_j²                  (9.4)
 ```
 
-With σ = 0 a single node at μ is used. The weights sum to 1 over the nodes. The nodes are equally spaced, so (9.4)
-is a rectangle rule over the truncated Gaussian.
+A_j is the amplitude of a particle of size x_j normalised to A(0) = 1 (section 9.4) and V_j its volume, so P(0) = 1
+whatever the law. The Gaussian by number is the size distribution of fit1d and of `tools/benchmarks/yoneda_truth.py`,
+cut at ±4σ; the cut is part of the definition: weighted by R⁶ the upper cut removes about 1.5 % of a sphere's
+intensity at σR/R = 0.35, more above. In the log-normal R and σR/R are again the number mean and relative standard
+deviation; it is integrated from 4s below its median to 4s above the median of its V²-weighted form (a log-normal of
+the same s with the median times exp(p s²), V² ∝ R^p), so its largest particles, which dominate the intensity of a
+broad distribution, are not cut off. The Gaussian by intensity is Fitting's earlier distribution for spheres and
+random cylinders: every size scatters the same at q = 0.
 
-| Family | Variable | Nodes n | Range n_σ |
-|---|---|---|---|
-| Sphere | R | 25 | ±4σ |
-| Random cylinder | R and h, averaged separately | 13 each | ±4σ |
-| Vertical cylinder | R | 26 | ±3σ |
+**Quadrature.** Composite Gauss–Legendre with 8 nodes per panel. A form factor squared oscillates in x with
+period π/q, so the panels are the number of such periods across the distribution at the largest q of the curve,
+rounded up to a power of 2, at least 2 (at most 4096). The tests require 3 · 10⁻⁵ against a rule with 1024 panels;
+typical is 10⁻⁶. Earlier, Fitting used rectangle rules of fixed size (25 radii of a sphere, 13 radii and 13 heights
+of a random cylinder, 26 radii over ±3σ of a vertical cylinder). They alias at large q·R·σ: on q ≤ 3 nm⁻¹ a sphere
+of R = 5 nm and σR/R = 0.2 is off by up to 1.8 %, R = 10 nm and 0.3 by 26 %, R = 20 nm and 0.4 by 67 %
+(`tools/benchmarks/cut_model_checks.json`). Fits of large or broad particles to high q therefore change with this version.
 
-**By intensity or by number.** The sphere and the random cylinder are normalised to P(0) = 1 (section 9.4), so every
-node scatters the same at q = 0 and w_j is a distribution of scattered intensity. By number it is w_j / R_j⁶ for
-spheres and w_j / R_j⁴ for random cylinders. The vertical cylinder keeps R⁴ in its form factor (9.10), so its w_j
-already counts particles. fit1d and microscopy count particles. After a fit, the results give each particle's radius
-by number and its relative spread (*By number*; `derived` in the exported record), and σ_nn/D = √(2π) σ_D of
-section 9.5.
+**By number and by intensity.** After a fit the results give each particle's mean radius and relative spread both
+ways (*Sizes by number | by intensity*; `derived` in the exported record: `R_number_mean_nm`, `sigma_R_number_rel`,
+`R_intensity_mean_nm`, `sigma_R_intensity_rel`), weighted by V² ∝ R⁶ for spheres and R⁴ for cylinders. Microscopy
+counts particles; the curve is dominated by the intensity. For the log-normal the moments are exact: by intensity it
+is a log-normal with the same width and the mean R (1 + (σR/R)²)^p.
 
-The number distribution of spheres is G(R)/R⁶. It has a maximum only for σ_R/R < 1/√24 ≈ 0.20 (1/√16 = 0.25 for
-random cylinders); above that it rises towards small R, and its mean would be set by where the grid of (9.2) is
-cut. GIMaP then writes *not defined*: the condition is that the largest number weight lies inside the grid and the
-smallest node holds less than 10 % of it. A broad intensity-weighted sphere distribution therefore does not say how
-many small particles there are.
+The number distribution of a Gaussian by intensity is G(R)/R⁶ for spheres. It has a maximum only for
+σR/R < 1/√24 ≈ 0.20 (1/√16 = 0.25 for cylinders); above that it rises towards small R, and its mean would be set by
+where the distribution is cut. GIMaP then writes *not defined*: the condition is that the largest number weight lies
+inside the range and the smallest node holds less than 10 % of it. A broad intensity-weighted sphere distribution
+therefore does not say how many small particles there are.
 
-Implementation: `src/gimap/features/fitting/domain/scattering_model.py`, `src/gimap/features/fitting/domain/fit_model.py`
-(`number_size`, `sigma_nn_over_d`)
+New components have sizes by number; models saved in earlier versions keep the sizes they had (section 9.2).
+
+Implementation: `src/gimap/features/fitting/domain/cut_model/sizes.py`, `src/gimap/features/fitting/domain/fit_model.py`
+(`number_size`, `intensity_size`)
 
 ### 9.4 Form factors as coded
 
-**Sphere** (amplitude normalised to F(0) = 1; series `1 − x²/10 + x⁴/280` for x below 10⁻⁶):
+**Sphere** (amplitude normalised to F(0) = 1; series `1 − x²/10 + x⁴/280 − x⁶/15120` for x below 0.05; V ∝ R³):
 
 ```text
 F_s(x) = 3 ( sin x − x cos x ) / x³,   x = q R                                                      (9.5)
-P_sphere(q) = Σ_j w_j F_s(q R_j)²                                                                   (9.6)
 ```
 
-**Random cylinder** (homogeneous cylinder of radius R and height h, isotropic orientation):
+**Random cylinder** (homogeneous cylinder of radius R and height h, isotropic orientation, V ∝ R² h; R and h have
+independent distributions):
 
 ```text
 F_c(q, R, h, α) = [ 2 J_1(q R sin α) / (q R sin α) ] · sinc( q h cos α / 2 ),   sinc(u) = sin u / u     (9.7)
-α_a = (a − 1) · (π/2) / 23,   ω_a = sin α_a / Σ_b sin α_b,   a = 1 … 24                              (9.8)
-P_cyl(q) = Σ_a ω_a · [ Σ_j w_j (2 J_1(q R_j sin α_a)/(q R_j sin α_a))² ] · [ Σ_l v_l sinc²(q h_l cos α_a / 2) ]   (9.9)
+P_cyl(q) = ∫₀¹ du  ⟨R⁴ (2 J_1(q R √(1−u²)) / (q R √(1−u²)))²⟩ / ⟨R⁴⟩  ·  ⟨h² sinc²(q h u / 2)⟩ / ⟨h²⟩,   u = cos α   (9.9)
 ```
 
-w_j and v_l are the radius and height weights (9.3). Because the square of (9.7) is separable, the radius and height
-averages are taken separately for each α. The orientation average is a 24-point rectangle rule with sin α weights on
-[0, π/2]; its first node (α = 0) has weight 0. This coarse quadrature is part of the numerical definition of the
-model.
+⟨ ⟩ are averages by number (9.4). The orientation average is uniform in u = cos α (isotropic) and uses composite
+Gauss–Legendre with one panel per period π/(q · max(R, h/2)) at the largest q (at least 3). The radius average depends
+on q sin α only and the height average on q cos α only: each is made once on a uniform 1D grid with 64 points per period
+of the largest size and taken at every (α, q) by four-point interpolation. For one size the result agrees with adaptive
+quadrature to 10⁻⁵. Earlier the orientation average was a 24-point rectangle rule in α with sin α weights; it is off
+by up to 18 % (R = 3 nm, h = 10 nm) and 55 % (R = 5 nm, h = 30 nm) at q ≤ 3 nm⁻¹.
 
-**Vertical cylinder** at q_z = 0 (cylinders standing on the substrate, q in the plane):
+**Vertical cylinder** at q_z = 0 (cylinders standing on the substrate, q in the plane; V ∝ R² at a fixed height):
 
 ```text
-P_vc(q) = 10⁻⁶ Σ_j w_j [ R_j J_1(q R_j) / q ]²  =  10⁻⁶ Σ_j w_j (R_j⁴ / 4) (2 J_1(q R_j)/(q R_j))²      (9.10)
-P_vc(0) = 10⁻⁶ Σ_j w_j R_j⁴ / 4      (R in nm)                                                       (9.11)
+P_vc(q) = ⟨R⁴ (2 J_1(q R)/(q R))²⟩ / ⟨R⁴⟩,   P_vc(0) = 1                                                (9.10)
 ```
 
-**Normalisation differs between the families.** The sphere and the random cylinder have P(0) = 1, so every node of the
-size distribution contributes the same forward intensity: the Gaussian describes an intensity-weighted (V²-weighted)
-size distribution, and Int is not proportional to number density × V² × Δρ². The vertical cylinder is not normalised:
-each radius is weighted by R⁴ (cross-section squared at a fixed height), scaled by 10⁻⁶. Example: R = 5 nm gives
-P_vc(0) = 1.56 · 10⁻⁴ for σ_R/R = 0 and 1.94 · 10⁻⁴ for σ_R/R = 0.2. (The tip of the Scale parameter says so: the form
-factor is 1 at q = 0 for spheres and random cylinders, and 10⁻⁶ ⟨R⁴⟩/4 for vertical cylinders.) The quick fit of section 8.5 and 1D Predict use a normalised vertical
-cylinder; see section 9.9 for the conversion.
+The height drops out: the q_z-dependent factor of a cylinder is the same for every radius and every DWBA path
+(section 9.10). Earlier, Fitting's vertical cylinder was not normalised, `P_vc = 10⁻⁶ ⟨R⁴ (2 J_1(qR)/(qR))²⟩/4`
+(R in nm; 1.56 · 10⁻⁴ at R = 5 nm, 1.94 · 10⁻⁴ with σR/R = 0.2), so its Int was in other units than a sphere's; a model
+saved then is converted (section 9.2).
 
-Implementation: `src/gimap/features/fitting/domain/scattering_model.py`, `src/gimap/features/fitting/domain/fit_model.py`
+In the two-path or DWBA geometry the sphere's amplitude is the sum of its paths (9.29, 9.27). Random cylinders are
+averaged at |q| = √(q² + q_z²): with q_z = 0 in the effective interface and the two-path model (as in earlier versions), with the
+cut's vacuum q_z in the Born and DWBA geometries of `cut_model` (as fit1d).
+
+Implementation: `src/gimap/features/fitting/domain/cut_model/shapes.py`
 
 ### 9.5 Structure factor: one-dimensional paracrystal
 
-For a component whose structure factor is switched on, with `D > 0` and `σ_D/D > 0`:
+For a component whose structure factor is switched on, with `D > 0` and `σnn/D > 0` (Hosemann & Bagchi, 1962; for
+GISAXS see Renaud et al., 2009):
 
 ```text
-S(q) = ( 1 − φ² ) / ( 1 + φ² − 2 φ cos(q D) )                                                    (9.12)
-φ = exp( −π q² σ_D² )                                                                            (9.13)
+S(q) = ( 1 − p² ) / ( 1 − 2 p cos(q D) + p² ),   p = exp( −q² σ_nn² / 2 ),   σ_nn = (σnn/D) · D             (9.12)
 ```
 
-σ_D is the absolute spread in nm: the parameter σ_D/D times D. The denominator is limited to at least 10⁻¹⁵. Otherwise S = 1.
+σnn/D is the relative standard deviation of the distance between neighbours, a Gaussian of mean D; fit1d calls it w/D.
+S is evaluated as `−expm1(2 ln p) / (expm1(ln p)² + 4p sin²(qD/2))`, without cancellation at small q, and
+`S(0) = (σnn/D)²`. Otherwise S = 1.
 
-**Relation to the usual form.** The one-dimensional paracrystal with a Gaussian distribution of nearest-neighbour
-distances of mean D and standard deviation σ_nn (Hosemann & Bagchi, 1962; for GISAXS see Renaud et al., 2009) has the
-same expression with `φ = exp(−q² σ_nn² / 2)`. The two are identical when
+In **earlier versions** Fitting's parameter was σD/D with `p = exp(−π q² σ_D²)`, σ_D = (σD/D)·D: the same function for
 
 ```text
-σ_nn = √(2π) · σ_D,   i.e.   (σ_D/D)_GIMaP = σ_nn / ( √(2π) D )                                     (9.14)
+σ_nn = √(2π) · σ_D,   i.e.   σnn/D = √(2π) · σD/D ≈ 2.507 · σD/D                                       (9.13)
 ```
 
-(numerically identical within 2 · 10⁻¹⁶). **GIMaP's σ_D/D is therefore not the relative standard deviation of the
-neighbour distance**; that is √(2π) ≈ 2.507 times larger. The low-q limit is `S(0) = 2π (σ_D/D)² = (σ_nn/D)²`. Example
-(invented): D = 20 nm and σ_D/D = 0.2 mean σ_D = 4 nm, σ_nn = 10.0 nm and S(0) = 0.251.
+(identical within 10⁻¹⁴). A model saved by an earlier version is converted when read, its limits too. Example (invented):
+σD/D = 0.2 of an old model is σnn/D = 0.50.
 
-No hard-core condition D ≥ 2R is applied in Refine or Search; the quick fit and 1D Predict enforce D ≥ 2.002 R.
+D is kept at or above 2R by the fits (section 9.6).
 
 **Coupling: LMA or DA.** With **Coupling** of a card (shown when Distance D is on) the paracrystal enters in one of
 two ways:
 
 ```text
 LMA:  I = P(q) · S(q)                                                                              (9.14a)
-DA:   I = P(q) + |⟨F⟩|² (S(q) − 1)                                                                 (9.14b)
+DA:   I = P(q) + C(q) (S(q) − 1)                                                                   (9.14b)
 ```
 
 - LMA (the default, and the only one before 0.2) takes every size among neighbours of its own size. DA takes sizes
   and positions as independent.
-- ⟨F⟩ is the amplitude averaged by number. Spheres and random cylinders carry intensity weights (section 9.3), so
-  ⟨F⟩ uses `w_j / V_j²`; normalised like P, the term is `(Σ_j w_j F_j / V_j)² / Σ_j (w_j / V_j²)`. Random cylinders
-  average the amplitude over orientation too. A test checks the sphere against a direct average by number (10⁻¹⁰).
-- With one size, DA and LMA are the same curve. With a size spread, DA keeps the part `P − |⟨F⟩|²` free of the
-  spacing: more intensity below the structure peak, a weaker peak. At σ_R/R = 0.2 spheres, the low-q intensity is
-  about 1.5 times that of LMA.
+- C = |⟨VA⟩|²/⟨V²⟩ is the coherent term of (9.4), the amplitude averaged by number (random cylinders also over
+  orientation). A test checks the sphere against a direct average by number (10⁻⁶).
+- With one size, DA and LMA are the same curve for spheres and vertical cylinders; randomly oriented cylinders differ,
+  their orientation being a disorder of its own. With a size spread, DA keeps the part `P − C` free of the spacing:
+  more intensity below the structure peak, a weaker peak. At σR/R = 0.2 and σnn/D = 0.75, the low-q intensity of
+  spheres is about 1.5 times that of the LMA with a Gaussian by intensity, 1.2 times with a Gaussian by number.
 - This is the part that a same-size population without a structure factor takes up in a three-population fit
   (section 9.11). On the simulated films of 9.11 (spheres R = 4 nm, four-term DWBA, resolution, beam tail and
-  roughness; main population and a large one, low-q term free), a film made in the DA is fitted with χ²ᵣ ≈ 2.5 in
-  DA and 8.3 in LMA; a film made in the LMA with 11 in LMA and 32 in DA. The curve therefore tells the two apart.
-  A third, same-size population brings the DA film to 1.1–1.4 in LMA as well, because it also takes up the
-  difference of the sphere's shape (section 9.10). D and σ_nn/D stay within 0.3 % and 0.005 in every case.
+  roughness; main population and a large one, low-q term free; fitted with Fitting's earlier model), a film made in
+  the DA is fitted with χ²ᵣ ≈ 2.5 in DA and 8.3 in LMA; a film made in the LMA with 11 in LMA and 32 in DA. The curve
+  therefore tells the two apart. A third, same-size population brings the DA film to 1.1–1.4 in LMA as well, because
+  it also takes up the difference of the sphere's shape (section 9.10). D and σnn/D stay within 0.3 % and 0.005 in
+  every case.
 - fit1d uses the LMA.
 
-Implementation: `src/gimap/features/fitting/domain/scattering_model.py`, `src/gimap/features/fitting/domain/coherent_terms.py`
+Implementation: `src/gimap/features/fitting/domain/cut_model/structure.py`, `src/gimap/features/fitting/domain/cut_model/model.py`
 
 ### 9.6 Parameters and defaults
 
@@ -1935,7 +1984,7 @@ Implementation: `src/gimap/features/fitting/domain/scattering_model.py`, `src/gi
 | h | h | nm | 10 | 0.5–1000 | yes |
 | sigma_h | σh/h | – | 0.2 | 0.01–1.0 | yes |
 | D | D | nm | 30 (a new component: max(3R, 1)) | 1–3000 | yes |
-| sigma_D | σD/D | – | 0.3 | 0.02–1.0 | yes |
+| sigma_nn | σnn/D | – | 0.25 | 0.01–1.0 | yes |
 | background | Background (BG) | – | 0 | ≥ 0 (solved) | yes |
 | res_amplitude | Tail A | – | 0 | ≥ 0 (solved) | yes |
 | res_width | Tail w | nm⁻¹ | 0.02 | 0.001–0.1 | yes |
@@ -1948,7 +1997,8 @@ Implementation: `src/gimap/features/fitting/domain/scattering_model.py`, `src/gi
 | refl_amp | \|r\| | – | 0 | 0–1 | no |
 | refl_phase | arg r | rad | 0 | −π–π | no |
 
-Each component has Int, R, σ_R/R (h and σ_h/h for random cylinders) and, with its structure factor, D and σ_D/D.
+Each component has Int, R, σR/R (h and σh/h for random cylinders) and, with its structure factor, D and σnn/D; its
+**Sizes** (Gaussian by number, the default; log-normal by number; Gaussian by intensity) and, with D, its **Coupling**.
 
 **D is at least 2R.** A fit keeps the distance of a component's paracrystal at or above twice its mean radius, so
 particles of the mean radius do not overlap. With R and D both free, D is searched between max(D_min, 2R) and
@@ -2064,9 +2114,10 @@ been edited and its first component has a distance. At most 5 distinct solutions
 Each solution is converted into Fitting's model. Sizes are taken over, the spreads stay relative, and every Int is
 solved again by NNLS against the solution's own fitted curve with relative residuals, in two trials (with the
 solution's BG and A, or with all linear terms refitted); the closer trial is kept, and its largest relative deviation
-`max abs(m_GIMaP / m_solution − 1)` is reported. For spheres and random cylinders the forms agree and the conversion is
-exact up to rounding. For vertical cylinders the R⁴ weighting of (9.10) makes the curves differ when `σ_R/R > 0`, and the
-deviation says by how much. Converted proposals retain fixed values and are clipped to Model's limits; with custom constraints they are then refined with the manual model. Compositions incompatible with constrained populations are not offered. The resulting solutions are scored with Fitting's residuals (9.15–9.16) and
+`max abs(m_GIMaP / m_solution − 1)` is reported. The quick fit's sizes are Gaussians by intensity and its σD/D is
+converted (9.13). Spheres and random cylinders get Sizes *Gaussian, by intensity*, and the curves differ only by the
+quick fit's coarser size and orientation rules (section 9.3); vertical cylinders get *Gaussian, by number* (Fitting's
+earlier convention for them), so the curves differ when `σ_R/R > 0`, and the deviation says by how much. Converted proposals retain fixed values and are clipped to Model's limits; with custom constraints they are then refined with the manual model. Compositions incompatible with constrained populations are not offered. The resulting solutions are scored with Fitting's residuals (9.15–9.16) and
 χ²_red (9.23) and **sorted by that χ²_red** (the automatic analysis of chapter 8 sorts the same fit by M_H). The best goes
 into Model, and Refine is proposed next.
 
@@ -2229,9 +2280,9 @@ I(q) = Σ_j A_j F_j(q) S_j(q) + B + C / (1 + (q/w)^ν),      A_j, B, C ≥ 0    
   (variable projection).
 - ν is fixed at 2 unless it is freed.
 
-Fitting's own model differs in two conventions: its sizes are weighted by intensity, and its spread is
-σ_D = (σ_nn/D)/√(2π). A fit1d result sent to Model as a start has σ_D converted, while R and σ_R/R are copied as
-they are; Model's curve therefore differs from fit1d's until Refine has run.
+A fit1d result sent to Model as a start keeps its σnn/D (fit1d's w/D) and its R and σ_R/R; its spheres get Sizes
+*Gaussian, by intensity* and its vertical cylinders *Gaussian, by number* (the conventions of Fitting's parameter store), while fit1d's sizes are by number. Model's curve therefore differs from fit1d's for spheres until Refine
+has run or Sizes is set to *Gaussian, by number*.
 
 **The network.**
 
@@ -3525,12 +3576,12 @@ This chapter collects the limits stated in chapters 1 to 14, so that they can be
 
 - **Refraction and the DWBA.** Every q of Analyze, Fitting and 1D Predict is the kinematic vacuum value unless Analyze is given the film's critical angle (q_z of one film, section 2.6), and no reflected-wave terms of the distorted-wave Born approximation are computed (sections 2.5, 8.6, 9.2), except
 Fitting's optional two-path sphere with a free effective reflection coefficient (section 9.10). The Yoneda band is located empirically, without any critical angle (sections 6.7, 8.1). The film absorption correction and the q_z of the XRR extractor also ignore refraction (sections 5.4, 13.1). The only refraction-corrected quantity is the Sputter island height H(t), which uses the refracted wavevector transfer for the positions of fringe minima, not a DWBA intensity (section 12.12). The GIWAXS report says that q is kinematic in its *Decisions*, with the q_z shift of up to about k sin α_i that refraction can cause near or below the film's critical angle at the frame's α_i (section 7.9); the GISAXS report says so too, with the Yoneda band's q_z shifted most (section 8.6).
-- **Absolute intensity.** Intensities are mean counts per pixel. No monitor, transmission, exposure-time, sample-volume, flat-field, detector-efficiency, air- or window-absorption correction is applied (section 2.5). Only the optional GIWAXS geometric factors divide the intensities (chapter 5), and a series can be normalised to a reference peak (section 6.10). The scales of the Fitting models are therefore relative. The sphere and random-cylinder form factors are normalised to P(0) = 1, so Int is not number density × V² × Δρ², and the vertical cylinder is weighted by R⁴ instead (section 9.4).
+- **Absolute intensity.** Intensities are mean counts per pixel. No monitor, transmission, exposure-time, sample-volume, flat-field, detector-efficiency, air- or window-absorption correction is applied (section 2.5). Only the optional GIWAXS geometric factors divide the intensities (chapter 5), and a series can be normalised to a reference peak (section 6.10). The scales of the Fitting models are therefore relative. Every family's form factor is normalised to P(0) = 1, so Int is not number density × ⟨V²⟩ × Δρ² (section 9.4).
 - **Lorentz and Ewald-sphere corrections.** I(χ) and the ring intensities are intensities on the detector. No Lorentz factor is applied, and the missing wedge near χ = 0 is not reconstructed (sections 2.2, 7.7).
 - **Texture.** The Hermans factor assumes a fibre texture about the surface normal; the missing wedge enters only through the coverage C_w and the isotropic reference f_iso, and the background under a ring is one χ-independent constant (section 7.7). No exit-angle correction (film absorption, transmission function, shadowing) is applied to I(χ), and the sin χ weight makes the bins next to the sample horizon count most: f can depend on them by many σ_f, which the report states but does not correct (section 7.7). The in-plane and out-of-plane comparison uses two sectors of 20°; it is not a pole figure (section 7.6).
 - **Phases.** No phase is assigned. Lamellar and hexagonal series are reported as hints (section 7.4).
-- **GISAXS models.** The 1D models depend on the magnitude of q_y only; q_z at the Yoneda row and the Yoneda enhancement are not modelled (sections 8.6, 9.2). The beam-tail term is an additive empirical term; no resolution convolution or instrumental smearing is applied (sections 8.6, 9.2, 10.3). The size distributions are intensity-weighted for spheres and random cylinders (section 9.4). Refine and Search apply no hard-core condition D ≥ 2R (section 9.5). The automatic analysis screens single-component families only, so it never proposes a mixture by itself (section 8.6).
-- **Paracrystal spread.** GIMaP's σ_D/D is √(2π) ≈ 2.51 times smaller than the relative standard deviation of the neighbour distance (sections 9.5, 13.5).
+- **GISAXS models.** The 1D models depend on the magnitude of q_y only; q_z at the Yoneda row and the Yoneda enhancement are not modelled (sections 8.6, 9.2). The beam-tail term is an additive empirical term; no resolution convolution or instrumental smearing is applied (sections 8.6, 9.2, 10.3). The quick fit and 1D Predict use size distributions weighted by intensity; Fitting's are by number unless a component's Sizes says otherwise (section 9.3). The automatic analysis screens single-component families only, so it never proposes a mixture by itself (section 8.6).
+- **Paracrystal spread.** The quick fit and 1D Predict report σ_D/D, √(2π) ≈ 2.51 times smaller than the relative standard deviation of the neighbour distance σnn/D that Fitting now uses (sections 9.5, 13.5).
 
 ### 15.2 Instrument and geometry
 

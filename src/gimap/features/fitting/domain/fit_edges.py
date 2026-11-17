@@ -23,7 +23,7 @@ from .fit1d_edges import ACCEPT, ROUNDS
 from .fit_model import LINEAR, FitModel
 from .fit_engine import stopped_result
 
-SPREADS = frozenset({"sigma_R", "sigma_h", "sigma_D"})
+SPREADS = frozenset({"sigma_R", "sigma_h", "sigma_nn"})
 LEFT_ALONE = LINEAR | {"k"}
 WIDENED = ("{name} stopped at the {side} edge of its range ({old}): widened to {new} and fitted again "
            "(χ²ᵣ {before} → {after}).")

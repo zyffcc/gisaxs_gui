@@ -331,14 +331,14 @@ def test_the_model_s_fixed_values_and_changed_ranges_become_fit1d_constraints():
     from src.gimap.features.fitting.domain.fit1d_bounds import as_kit, model_constraints
 
     model = _sphere_and_cylinder({(1, "R"): dict(value=3.0, free=False), (0, "D"): dict(lower=50.0, upper=400.0),
-                                    (0, "sigma_D"): dict(value=0.1, free=False)})
+                                    (0, "sigma_nn"): dict(value=0.25, free=False)})
     model = model.with_parameter(("globals", "background"), value=0.0, free=False)
     constraints = model_constraints(model)
     kit = as_kit(constraints)
     # Defaults are also hard limits; populations remain associated with Model's order.
     assert kit["pop1"]["R_nm"] == 3.0
     assert kit["pop2"]["D_nm"] == [50.0, 400.0]
-    assert kit["pop2"]["w_rel"] == pytest.approx(0.1 * math.sqrt(2 * math.pi))
+    assert kit["pop2"]["w_rel"] == pytest.approx(0.25)  # σnn/D is the kit's w/D
     assert kit["background"] == 0.0
     assert all(item.source in ("model", "model_default") for item in constraints)
     with pytest.raises(ValueError, match="SAXS has no structure factor"):

@@ -96,8 +96,8 @@ def model_order(model: FitModel) -> list[int]:
     return population_order([c.family for c in model.components])
 
 
-ERRORS = {"R_nm_err": "R", "sigma_R_rel_err": "sigma_R", "D_nm_err": "D", "w_rel_err": "sigma_D"}
-"""The kit's 1σ errors → the Model's parameter (σD/D = w/D / sqrt(2π), its error likewise)."""
+ERRORS = {"R_nm_err": "R", "sigma_R_rel_err": "sigma_R", "D_nm_err": "D", "w_rel_err": "sigma_nn"}
+"""The kit's 1σ errors → the Model's parameter (σnn/D is the kit's w/D)."""
 
 
 def fit1d_result(value: dict, base: FitModel, data) -> FitResult:

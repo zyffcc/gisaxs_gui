@@ -410,6 +410,20 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Fitting
 
+- **One forward model.** Fitting computes its curves with one implementation of a 1D cut (Physics and Methods 9.2),
+  checked against fit1d's, 1D Predict's, an independent model and BornAgain. What you see:
+  - Each particle card has **Sizes**: *Gaussian, by number* (the default for a new particle: the mean and spread of
+    the particle count, as fit1d and a microscope count), *Log-normal, by number* (new, for broad distributions), or
+    *Gaussian, by intensity* (what Fitting used before). Results give every particle's sizes by number and by
+    intensity.
+  - The spacing disorder is **σnn/D**, the relative standard deviation of the distance between neighbours (fit1d's
+    w/D), √(2π) ≈ 2.51 times the former σD/D. Default 0.25.
+  - Every family's form factor is 1 at q = 0, so a vertical cylinder's **Scale** is in the same units as a sphere's.
+  - The size and orientation averages converge at large q: the former fixed rules were off by up to 67 % (spheres
+    of 20 nm with σR/R = 0.4 at q = 3 nm⁻¹) and 55 % (random cylinders) at high q.
+  - A model saved before opens with the sizes it had, its σD/D converted to σnn/D and a vertical cylinder's scale
+    converted; its curve changes only where the former rules were off.
+
 - **Single analysis** has one **Method** drop-down, and the button carries the method's name. When a curve is
   opened the page chooses the method: a curve whose model is not yet edited gets **Find the particle shape (no
   AI)**, which needs nothing beyond GIMaP; an unfitted GISAXS cut gets **Predict parameters (fit1d)**, or
@@ -886,6 +900,8 @@ hold.
 - **The sidebar has a page more**: Sputter is `Ctrl+5`; 2D Prediction moved to `Ctrl+6` and Trainset Build to
   `Ctrl+7`.
 - **Results that can differ from those of 0.1.0** (each is described above):
+  - Fitting's curves of large or broadly distributed particles at high q (the size and orientation averages now
+    converge), and its spacing disorder, now σnn/D = √(2π)·σD/D. New particles have sizes by number.
   - 1D Predict on Analyze's `_fit_input.dat`: 0.1.0 read q ten times too small. Run such fits again.
   - GIWAXS curves with **Fill gaps from the mirror side**: the error bars come from the scatter of the pixels
     (those of 0.1.0 were too small), and so do the errors of fits made on them.

@@ -25,7 +25,7 @@ from scipy.special import j1
 
 from . import sizes
 
-CHUNK = 4_000_000
+CHUNK = 1_000_000
 """Elements of the largest temporary (B × nodes × q) evaluated at once."""
 
 

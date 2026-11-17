@@ -74,25 +74,20 @@ def _column(value, rows: int) -> np.ndarray:
     return np.broadcast_to(np.atleast_1d(np.asarray(value, float)), (rows,)).astype(float)
 
 
-def population_terms(family: str, q, *, radius, radius_spread, law: str = "number_gauss", height=10.0,
-                     height_spread=0.0, distance=0.0, distance_spread=0.0, coupling: str = "lma",
-                     geometry: Geometry = Geometry(), panels: Optional[int] = None) -> np.ndarray:
-    """T(q) of B populations of one family (parameters scalars or arrays of length B); result (B, len(q)).
+def size_averages(family: str, q, *, radius, radius_spread, law: str = "number_gauss", height=10.0,
+                  height_spread=0.0, coherent: bool = False, geometry: Geometry = Geometry(),
+                  panels: Optional[int] = None) -> tuple[np.ndarray, Optional[np.ndarray]]:
+    """(P̂, C or None) of B populations of one family (parameters scalars or arrays of length B), each (B, len(q)).
 
     ``panels``: the size rule's panels for every row (default: enough for the largest q, per row,
     ``sizes.panel_counts``; rows needing the same rule are evaluated together)."""
     if family not in shapes.FAMILIES:
         raise ValueError(f"Unknown particle family {family!r}")
-    if coupling not in COUPLINGS:
-        raise ValueError(f"Unknown coupling {coupling!r}")
     q = np.abs(np.asarray(q, float))
     radius = np.atleast_1d(np.asarray(radius, float))
     rows = radius.size
     spread = _column(radius_spread, rows)
     height, h_spread = _column(height, rows), _column(height_spread, rows)
-    distance, d_spread = _column(distance, rows), _column(distance_spread, rows)
-    structured = (distance > 0) & (d_spread > 0)
-    coherent = coupling == "da" and bool(np.any(structured))
     terms = geometry.sphere_terms()
     qz = {"sphere": max(abs(z) for _c, z in terms), "cylinder": geometry.random_cylinder_qz()}.get(family, 0.0)
     q_eff = float(np.hypot(q.max(), qz)) if q.size else 0.0
@@ -101,16 +96,14 @@ def population_terms(family: str, q, *, radius, radius_spread, law: str = "numbe
     else:
         r_counts = sizes.panel_counts(q_eff, sizes.extent(law, radius, spread, shapes.RADIUS_POWER[family]))
         h_counts = (sizes.panel_counts(q_eff, sizes.extent(law, height, h_spread, shapes.HEIGHT_POWER))
-                    if family == "cylinder"
-                    else np.zeros(rows, int))
+                    if family == "cylinder" else np.zeros(rows, int))
     form = np.empty((rows, q.size))
     coh = np.empty_like(form) if coherent else None
     keys = r_counts * MAX_KEY + h_counts
     for key in np.unique(keys):
         group = np.flatnonzero(keys == key)
-        count = int(r_counts[group[0]])
         radii, weights = sizes.nodes(law, radius[group], spread[group], power=shapes.RADIUS_POWER[family],
-                                     panels=count)
+                                     panels=int(r_counts[group[0]]))
         if family == "sphere":
             part, part_c = shapes.sphere(q, radii, weights, terms, coherent)
         elif family == "vertical_cylinder":
@@ -122,11 +115,35 @@ def population_terms(family: str, q, *, radius, radius_spread, law: str = "numbe
         form[group] = part
         if coherent:
             coh[group] = part_c
+    return form, coh
+
+
+def couple(form, coherent, q, distance, distance_spread, coupling: str = "lma") -> np.ndarray:
+    """T from the size averages: P̂·S (LMA) or P̂ + C (S − 1) (DA); rows without a structure factor keep P̂."""
+    if coupling not in COUPLINGS:
+        raise ValueError(f"Unknown coupling {coupling!r}")
+    rows = form.shape[0]
+    distance, d_spread = _column(distance, rows), _column(distance_spread, rows)
+    structured = (distance > 0) & (d_spread > 0)
     if not np.any(structured):
         return form
     s = paracrystal(q, distance, d_spread)
-    out = form + coh * (s - 1.0) if coherent else form * s
+    out = form + coherent * (s - 1.0) if coupling == "da" else form * s
     return np.where(structured[:, None], out, form)
+
+
+def population_terms(family: str, q, *, radius, radius_spread, law: str = "number_gauss", height=10.0,
+                     height_spread=0.0, distance=0.0, distance_spread=0.0, coupling: str = "lma",
+                     geometry: Geometry = Geometry(), panels: Optional[int] = None) -> np.ndarray:
+    """T(q) of B populations of one family (parameters scalars or arrays of length B); result (B, len(q))."""
+    if coupling not in COUPLINGS:
+        raise ValueError(f"Unknown coupling {coupling!r}")
+    rows = np.atleast_1d(np.asarray(radius, float)).size
+    structured = (_column(distance, rows) > 0) & (_column(distance_spread, rows) > 0)
+    form, coh = size_averages(family, q, radius=radius, radius_spread=radius_spread, law=law, height=height,
+                              height_spread=height_spread, coherent=coupling == "da" and bool(np.any(structured)),
+                              geometry=geometry, panels=panels)
+    return couple(form, coh, np.abs(np.asarray(q, float)), distance, distance_spread, coupling)
 
 
 def population_term(population: Population, q, geometry: Geometry = Geometry()) -> np.ndarray:
@@ -168,5 +185,5 @@ def size_moments(population: Population) -> dict:
                              shapes.RADIUS_POWER[population.family])
 
 
-__all__ = ["COUPLINGS", "Population", "Settings", "evaluate", "population_term", "population_terms", "size_moments",
-           "tail", "unit_terms"]
+__all__ = ["COUPLINGS", "Population", "Settings", "couple", "evaluate", "population_term", "population_terms",
+           "size_averages", "size_moments", "tail", "unit_terms"]

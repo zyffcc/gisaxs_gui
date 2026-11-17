@@ -1,26 +1,25 @@
 """The model of one curve in Fitting: its parameters (value, free or fixed, range) and its intensity.
 
-    I(q) = BG + k · [ Σ_i Int_i · P_i(q) · S_i(q)  +  A / (1 + (|q| / w)^ν) ]
+    I(q) = BG + k · [ Σ_i Int_i · T_i(q)  +  A / (1 + (|q| / w)^ν) ]
 
-* P_i: a particle family — sphere, random cylinder, vertical cylinder — averaged over a Gaussian
-  size distribution; its spreads are **relative** here (σR/R, σh/h) whatever the family;
-* S_i: the paracrystal (1D) interference of distance D and relative disorder σD/D, when the
-  component has one (``structure``), else 1;
+The intensity is GIMaP's one forward model of a cut, ``cut_model`` (Physics and Methods, chapter 9):
+
+* T_i: a particle family — sphere, random cylinder, vertical cylinder — averaged over its size distribution, each
+  normalised to T(0) = 1, so Int_i is the forward intensity of component i whatever its family. The sizes follow the
+  component's ``law``: a Gaussian by number (the default now), a log-normal by number, or a Gaussian by
+  intensity (earlier Fitting); the spreads are relative (σR/R, σh/h);
+* with ``structure``, the 1D paracrystal of mean distance D and σnn/D, the relative standard deviation of the
+  neighbour distance (Hosemann), in the LMA (P·S) or the DA (P + |<F>|²(S − 1));
 * BG a constant background, A/(1+(|q|/w)^ν) the empirical beam tail at q = 0 (key ``resolution peak``), k an overall
-  factor.
+  factor; with σ_q > 0 the particle terms are convolved with a Gaussian q resolution.
 
 Spheres of a horizontal GISAXS cut: with αi = αf = 0 (the default) the sphere is evaluated at q_z = 0, the
-effective interface approximation, which needs nothing about the substrate. With the angles and λ of the cut
-the sphere amplitude is the sum of the direct and the exit-reflected path of the DWBA,
-    A = f(√(q² + q₊²) R) e^{-i q₊ R} + r f(√(q² + q₋²) R) e^{-i q₋ R},  q₊ = k_i + k_f,  q₋ = k_i − k_f,
-with r = |r| e^{i arg r} a free effective reflection coefficient (|r| = 0: Born at the vacuum q_z).
-Cylinders keep their form: a vertical cylinder's paths share the in-plane factor (exact), and a random
-cylinder is orientation-averaged at |q|.
+effective interface approximation. With the angles and λ of the cut it is the sum of the direct and the
+exit-reflected path, A = f(√(q² + q₊²) R) e^{-i q₊ R} + r f(√(q² + q₋²) R) e^{-i q₋ R}, r = |r| e^{i arg r} free.
 
-q in nm⁻¹, sizes in nm. The formulas are those of ``scattering_model`` (the manual model) with
-the same sampling, so a model here and the same model in the manual parameter store give the
-same curve; ``to_manual`` / ``from_manual`` convert the spreads (nm for spheres and random
-cylinders, σR/R for vertical cylinders, σD in nm).
+q in nm⁻¹, sizes in nm. Model files of earlier versions (``gimap_fit_model_v1``: σD/D = (σnn/D)/√(2π), intensity-weighted
+spheres and random cylinders, a vertical cylinder scaled by 10⁻⁶⟨R⁴⟩/4) are converted when read
+(``cut_model.conventions``).
 """
 
 from __future__ import annotations
@@ -32,17 +31,13 @@ from typing import Mapping, Optional
 import numpy as np
 
 from .candidates import CandidateComponentParameters, CandidateParameterMapping
-from .coherent_terms import cylinder_coherent_pd, sphere_coherent_pd, vertical_cylinder_coherent_pd
-from .scattering_model import (
-    _resolution_peak,
-    cylinder_axial_average,
-    cylinder_orientation_average,
-    cylinder_radial_average,
-    sphere_form_factor_pd,
-    sphere_two_path_pd,
-    structure_factor_1d,
-    vertical_cylinder_form_factor_pd,
-)
+from .cut_model import Geometry, size_averages
+from .cut_model import conventions, sizes
+from .cut_model.geometry import from_angles
+from .cut_model.model import tail
+from .cut_model.resolution import smeared
+from .cut_model.shapes import RADIUS_POWER
+from .cut_model.structure import paracrystal
 
 CACHE_SIZE = 96
 
@@ -52,7 +47,7 @@ FAMILIES = {
     "vertical_cylinder": ("Vertical cylinder", ("R", "sigma_R")),
 }
 MANUAL_NAMES = {"sphere": "Sphere", "cylinder": "Cylinder", "vertical_cylinder": "Vertical Cylinder"}
-STRUCTURE = ("D", "sigma_D")
+STRUCTURE = ("D", "sigma_nn")
 BASE_GLOBALS = ("background", "res_amplitude", "res_width", "res_exponent", "k")
 RESOLUTION = ("q_resolution",)
 """The Gaussian q resolution (1σ) of the particle terms; 0, the default, is none."""
@@ -62,6 +57,13 @@ GLOBALS = BASE_GLOBALS + RESOLUTION + GRAZING
 LINEAR = frozenset({"Int", "background", "res_amplitude"})
 """Scales: with the others fixed, the intensity is linear in them (solved exactly while fitting)."""
 INF = math.inf
+SIZE_LAWS = {"number_gauss": "Gaussian, by number", "lognormal": "Log-normal, by number",
+             "intensity_gauss": "Gaussian, by intensity"}
+"""The size laws of a component (``cut_model.sizes``) and their labels; the first is the default."""
+DEFAULT_LAW = "number_gauss"
+LEGACY_LAWS = {"sphere": "intensity_gauss", "cylinder": "intensity_gauss", "vertical_cylinder": "number_gauss"}
+"""The sizes of earlier Fitting, per family (what a ``gimap_fit_model_v1`` file means)."""
+SCHEMA, LEGACY_SCHEMA = "gimap_fit_model_v2", "gimap_fit_model_v1"
 
 
 @dataclass(frozen=True)
@@ -76,16 +78,14 @@ class ParameterInfo:
 
 
 INFO = {
-    "Int": ParameterInfo("Scale", "", 1.0, 0.0, INF, tip=(
-        "Intensity of this component (sphere and random cylinder: the form factor is 1 at q = 0; "
-        "vertical cylinder: 10⁻⁶·⟨R⁴⟩/4 at q = 0, R in nm)"
-    )),
-    "R": ParameterInfo("R", "nm", 5.0, 0.3, 500.0, tip="Mean radius"),
-    "sigma_R": ParameterInfo("σR/R", "", 0.2, 0.01, 1.0, tip="Relative spread of the radius (Gaussian)"),
+    "Int": ParameterInfo("Scale", "", 1.0, 0.0, INF, tip="Intensity of this component at q = 0 (its form factor is 1 there)"),
+    "R": ParameterInfo("R", "nm", 5.0, 0.3, 500.0, tip="Mean radius (of the size distribution chosen in Sizes)"),
+    "sigma_R": ParameterInfo("σR/R", "", 0.2, 0.01, 1.0, tip="Relative spread of the radius (of the size distribution chosen in Sizes)"),
     "h": ParameterInfo("h", "nm", 10.0, 0.5, 1000.0, tip="Mean height (length) of the cylinders"),
-    "sigma_h": ParameterInfo("σh/h", "", 0.2, 0.01, 1.0, tip="Relative spread of the height (Gaussian)"),
+    "sigma_h": ParameterInfo("σh/h", "", 0.2, 0.01, 1.0, tip="Relative spread of the height"),
     "D": ParameterInfo("D", "nm", 30.0, 1.0, 3000.0, tip="Mean distance between neighbours (paracrystal)"),
-    "sigma_D": ParameterInfo("σD/D", "", 0.3, 0.02, 1.0, tip="Relative disorder of the distance"),
+    "sigma_nn": ParameterInfo("σnn/D", "", 0.25, 0.01, 1.0,
+                              tip="Relative standard deviation of the distance between neighbours (Hosemann paracrystal)"),
     "background": ParameterInfo("Background", "", 0.0, 0.0, INF, tip="Constant added to the whole curve"),
     "res_amplitude": ParameterInfo("Tail A", "", 0.0, 0.0, INF,
                                    tip="Height at q = 0 of the beam tail A / (1 + (|q|/w)^ν): the empirical tail of "
@@ -129,6 +129,8 @@ class Component:
     coupling: str = "lma"
     """How the paracrystal enters (``COUPLINGS``): ``lma``, P(q)·S(q) (local monodisperse approximation), or
     ``da``, P(q) + |<F>|²(S(q) − 1) (decoupling approximation: the sizes are uncorrelated with the positions)."""
+    law: str = DEFAULT_LAW
+    """The size distribution (``SIZE_LAWS``)."""
 
     def keys(self) -> tuple[str, ...]:
         return ("Int", *FAMILIES[self.family][1], *(STRUCTURE if self.structure else ()))
@@ -173,9 +175,11 @@ class FitModel:
 
 
 def new_component(family: str, *, radius: Optional[float] = None, distance: Optional[float] = None,
-                  structure: bool = True) -> Component:
+                  structure: bool = True, law: str = DEFAULT_LAW) -> Component:
     if family not in FAMILIES:
         raise ValueError(f"Unknown particle family {family!r}")
+    if law not in SIZE_LAWS:
+        raise ValueError(f"Unknown size law {law!r}")
     params = {key: Parameter.default(key) for key in ("Int", *FAMILIES[family][1], *STRUCTURE)}
     if radius is not None:
         params["R"] = replace(params["R"], value=float(radius))
@@ -183,7 +187,7 @@ def new_component(family: str, *, radius: Optional[float] = None, distance: Opti
         params["D"] = replace(params["D"], value=float(distance))
     elif radius is not None:
         params["D"] = replace(params["D"], value=max(3.0 * float(radius), params["D"].lower))
-    return Component(family, params, structure)
+    return Component(family, params, structure, law=law)
 
 
 def _cached(cache: Optional[dict], key: tuple, compute):
@@ -197,171 +201,90 @@ def _cached(cache: Optional[dict], key: tuple, compute):
     return cache[key]
 
 
-def grazing(model: FitModel) -> Optional[tuple]:
-    """(q₊, q₋, k_f, |r|, arg r) of the two-path sphere, or None for the effective interface (q_z = 0)."""
+def grazing(model: FitModel) -> Optional[Geometry]:
+    """The geometry of the two-path sphere, or None for the effective interface (q_z = 0)."""
     g = {key: float(model.globals[key].value) for key in GRAZING}
-    if g["alpha_i"] == 0 and g["alpha_f"] == 0 and g["refl_amp"] == 0:
-        return None
-    k = 2 * math.pi / g["wavelength"]
-    k_i, k_f = k * math.sin(math.radians(g["alpha_i"])), k * math.sin(math.radians(g["alpha_f"]))
-    return (k_i + k_f, k_i - k_f, k_f, g["refl_amp"], g["refl_phase"])
+    geometry = from_angles(g["alpha_i"], g["alpha_f"], g["wavelength"], g["refl_amp"], g["refl_phase"])
+    return None if geometry.mode == "eia" else geometry
 
 
 def qz_plus_r(model: FitModel) -> list[tuple[int, float]]:
     """q₊·R of every sphere (component index, value), q₊ = k_i + k_f; empty without the angles of the cut."""
-    paths = grazing(model)
-    if paths is None or paths[0] <= 0:
+    geometry = grazing(model)
+    if geometry is None or geometry.qz_born <= 0:
         return []
-    return [(index, paths[0] * c.value("R")) for index, c in enumerate(model.components) if c.family == "sphere"]
-
-
-NUMBER_POWER = {"sphere": 6, "cylinder": 4, "vertical_cylinder": 0}
-"""What turns the radius weights of a family into number weights: the sphere and the random cylinder are normalised
-to P(0) = 1, so their Gaussian is one of scattered intensity (number × V², V² ∝ R⁶ and R⁴ at a given height); the
-vertical cylinder keeps R⁴ in its form factor (9.10), so its Gaussian already counts particles."""
-SIZE_NODES = {"sphere": (25, 4.0), "cylinder": (13, 4.0), "vertical_cylinder": (26, 3.0)}
-
-
-TAIL_SHARE = 0.1
-"""The number distribution is reported only when it peaks inside the grid and its smallest node holds less than this
-share of its largest."""
+    return [(index, geometry.qz_born * c.value("R")) for index, c in enumerate(model.components) if c.family == "sphere"]
 
 
 def number_size(component: Component) -> Optional[tuple[float, float]]:
-    """(mean, relative standard deviation) of the radius by number, on the nodes of the component's size average,
-    for comparison with sizes counted in microscopy or with fit1d (whose R is number-weighted).
+    """(mean, relative standard deviation) of the radius by number, for comparison with sizes counted in
+    microscopy. ``None`` when not defined: a Gaussian by intensity is G(R)/R⁶ by number, which rises towards small R
+    once σR/R exceeds about 1/√24 ≈ 0.2 (1/√16 = 0.25 for cylinders); its mean would be set by the grid, not the data
+    (``cut_model.sizes.size_report``)."""
+    return sizes.size_report(component.law, component.value("R"), component.value("sigma_R"),
+                             RADIUS_POWER[component.family])["number"]
 
-    ``None`` when it is not defined: an intensity-weighted Gaussian of spheres is G(R)/R⁶ by number, which rises
-    towards small R once σ_R/R exceeds about 1/√24 ≈ 0.2 (1/√16 = 0.25 for random cylinders); its mean would then be
-    set by where the size grid is cut, not by the data."""
-    from .scattering_model import _gaussian_grid
 
-    radius, spread = component.value("R"), component.value("sigma_R")
-    nodes, sigmas = SIZE_NODES[component.family]
-    x, w = _gaussian_grid(radius, radius * spread, nsig=sigmas, n=nodes, clip_min=0.0)
-    x = np.asarray(x, float)
-    w = np.asarray(w, float) / np.maximum(x, 1e-12) ** NUMBER_POWER[component.family]
-    if NUMBER_POWER[component.family] and x.size > 1 and (
-            not np.isfinite(w).all() or int(np.argmax(w)) == 0 or w[0] >= TAIL_SHARE * w.max()):
-        return None
-    w = w / w.sum()
-    mean = float(np.sum(w * x))
-    return mean, float(np.sqrt(np.sum(w * (x - mean) ** 2)) / mean) if mean > 0 else 0.0
+def intensity_size(component: Component) -> tuple[float, float]:
+    """(mean, relative standard deviation) of the radius weighted by V² (the scattered intensity at q = 0)."""
+    return sizes.size_report(component.law, component.value("R"), component.value("sigma_R"),
+                             RADIUS_POWER[component.family])["intensity"]
 
 
 def sigma_nn_over_d(component: Component) -> Optional[float]:
-    """σ_nn/D, the relative standard deviation of the neighbour distance (Hosemann; fit1d's w/D), from Fitting's
-    σ_D: its paracrystal damps with exp(−π q² (σ_D D)²), Hosemann's with exp(−q² σ_nn² / 2)."""
-    if not component.structure:
-        return None
-    return math.sqrt(2.0 * math.pi) * component.value("sigma_D")
+    """σnn/D, the relative standard deviation of the neighbour distance (Hosemann; fit1d's w/D)."""
+    return component.value("sigma_nn") if component.structure else None
 
 
 COUPLINGS = ("lma", "da")
 
 
-def _coherent_form(component: Component, q: np.ndarray, paths: Optional[tuple]) -> np.ndarray:
-    radius, spread = component.value("R"), component.value("sigma_R")
-    if component.family == "sphere":
-        return sphere_coherent_pd(q, radius, radius * spread, n_samples=25, nsig=4.0, paths=paths)
-    if component.family == "cylinder":
-        height, height_spread = component.value("h"), component.value("sigma_h")
-        return cylinder_coherent_pd(q, radius, radius * spread, height, height * height_spread, n_R=13, n_h=13,
-                                    nsig=4.0, n_orient=24)
-    return vertical_cylinder_coherent_pd(q, radius, spread, n_samples=25, nsig=3.0)
-
-
 def component_form(component: Component, q: np.ndarray, cache: Optional[dict] = None,
-                   paths: Optional[tuple] = None) -> np.ndarray:
-    """P(q)·S(q) of one component with scale 1 (q in nm⁻¹). ``cache``: reuse the parts that did not
-    change during one fit (a random cylinder's radius and height averages are separate). ``paths``:
-    :func:`grazing` of the model (used by spheres only)."""
+                   geometry: Optional[Geometry] = None) -> np.ndarray:
+    """T(q) of one component with scale 1 (q in nm⁻¹). ``cache``: reuse the size average while only the spacing
+    changes during one fit, and the reverse. ``geometry``: :func:`grazing` of the model (spheres only)."""
     q = np.asarray(q, dtype=float)
+    geometry = geometry or Geometry()
+    family, law = component.family, component.law
     radius, spread = component.value("R"), component.value("sigma_R")
-    if component.family == "sphere" and paths is not None:
-        form = _cached(cache, ("sphere2", radius, spread, *paths),
-                       lambda: sphere_two_path_pd(q, radius, radius * spread, *paths, n_samples=25, nsig=4.0))
-    elif component.family == "sphere":
-        form = _cached(cache, ("sphere", radius, spread),
-                       lambda: sphere_form_factor_pd(q, radius, radius * spread, n_samples=25, nsig=4.0))
-    elif component.family == "cylinder":
-        height, height_spread = component.value("h"), component.value("sigma_h")
-        radial = _cached(cache, ("radial", radius, spread),
-                         lambda: cylinder_radial_average(q, radius, radius * spread, n_R=13, nsig=4.0, n_orient=24))
-        axial = _cached(cache, ("axial", height, height_spread),
-                        lambda: cylinder_axial_average(q, height, height * height_spread, n_h=13, nsig=4.0, n_orient=24))
-        form = _cached(cache, ("cylinder", radius, spread, height, height_spread),
-                       lambda: cylinder_orientation_average(radial, axial, 24))
-    else:
-        form = _cached(cache, ("vertical", radius, spread),
-                       lambda: vertical_cylinder_form_factor_pd(q, radius, spread, n_samples=25, nsig=3.0))
-    if component.structure:
-        distance, disorder = component.value("D"), component.value("sigma_D")
-        if distance > 0 and disorder > 0:
-            structure = _cached(cache, ("S", distance, disorder),
-                                lambda: structure_factor_1d(q, distance, distance * disorder))
-            if component.coupling == "da":
-                key = ("coherent", component.family, radius, spread, *(
-                    (component.value("h"), component.value("sigma_h")) if component.family == "cylinder" else ()),
-                       *((paths or ()) if component.family == "sphere" else ()))
-                coherent = _cached(cache, key, lambda: _coherent_form(component, q, paths
-                                                                      if component.family == "sphere" else None))
-                form = form + coherent * (structure - 1.0)
-            else:
-                form = form * structure
-    return np.asarray(form, dtype=float)
+    height, height_spread = ((component.value("h"), component.value("sigma_h")) if family == "cylinder" else (10.0, 0.0))
+    distance, disorder = (component.value("D"), component.value("sigma_nn")) if component.structure else (0.0, 0.0)
+    structured = distance > 0 and disorder > 0
+    coherent = structured and component.coupling == "da"
+    key = ("sizes", family, law, radius, spread, height, height_spread, geometry if family != "vertical_cylinder" else None,
+           coherent)
+    form, average = _cached(cache, key, lambda: size_averages(
+        family, q, radius=radius, radius_spread=spread, law=law, height=height, height_spread=height_spread,
+        coherent=coherent, geometry=geometry))
+    if not structured:
+        return np.asarray(form[0], dtype=float)
+    structure = _cached(cache, ("S", distance, disorder), lambda: paracrystal(q, distance, disorder))
+    out = form + average * (structure - 1.0) if coherent else form * structure
+    return np.asarray(out[0], dtype=float)
 
 
 def resolution_shape(model: FitModel, q: np.ndarray) -> np.ndarray:
-    return np.asarray(_resolution_peak(q, model.globals["res_width"].value, model.globals["res_exponent"].value), float)
+    return np.asarray(tail(q, model.globals["res_width"].value, model.globals["res_exponent"].value), float)
 
 
-RESOLUTION_SPAN = 5.0
-"""The Gaussian is cut at ±5σ."""
-RESOLUTION_POINTS = 5
-"""Points per σ of the grid the particle terms are smeared on."""
-RESOLUTION_GRID_MAX = 6000
+def _smeared_forms(model: FitModel, q: np.ndarray, sigma: float, cache: Optional[dict], geometry) -> list[np.ndarray]:
+    """Each component's T convolved with a Gaussian of 1σ ``sigma`` in q (``cut_model.resolution``); the beam tail
+    and the background are not smeared: the first describes the resolution near q = 0 itself."""
+    def terms_on(grid):
+        fine = None if cache is None else cache.setdefault(("smearing grid", grid.size, float(grid[0]), float(grid[-1])), {})
+        return [component_form(component, grid, fine, geometry) for component in model.components]
 
-
-def _smeared_forms(model: FitModel, q: np.ndarray, sigma: float, cache: Optional[dict], paths) -> list[np.ndarray]:
-    """Each component's P·S convolved with a Gaussian of 1σ ``sigma`` in q, at ``q``.
-
-    The terms are made on a uniform grid from max(0, q_min − 5σ) to q_max + 5σ, at most σ/5 apart (and no coarser
-    than the points), folded at q = 0 (the cut is symmetric, I(−q) = I(q)), convolved and interpolated back. The
-    beam-tail term and the background are not smeared: the first describes the resolution near q = 0 itself."""
-    finite = np.diff(np.unique(q))
-    step = sigma / RESOLUTION_POINTS
-    if finite.size:
-        step = min(step, float(np.median(finite)))
-    low, high = max(0.0, float(q.min()) - RESOLUTION_SPAN * sigma), float(q.max()) + RESOLUTION_SPAN * sigma
-    count = min(RESOLUTION_GRID_MAX, int(np.ceil((high - low) / step)) + 1)
-    step = (high - low) / (count - 1)
-    # folded at q = 0: points at ±step/2, ±3step/2 …, so q = 0 itself (where S is a special case) is not one
-    grid = low + (np.arange(count) + (0.5 if low == 0.0 else 0.0)) * step
-    half = int(np.ceil(RESOLUTION_SPAN * sigma / step))
-    kernel = np.exp(-0.5 * (np.arange(-half, half + 1) * step / sigma) ** 2)
-    kernel /= kernel.sum()
-    fine = None if cache is None else cache.setdefault(("smearing grid", low, high, count), {})
-    out = []
-    for component in model.components:
-        values = component_form(component, grid, fine, paths)
-        if low == 0.0:  # fold: the values at −q are those at q
-            full = np.concatenate([values[::-1], values])
-            smeared = np.convolve(np.pad(full, half, mode="edge"), kernel, mode="valid")[values.size:]
-        else:
-            smeared = np.convolve(np.pad(values, half, mode="edge"), kernel, mode="valid")
-        out.append(np.interp(q, grid, smeared))
-    return out
+    return smeared(q, sigma, terms_on)
 
 
 def evaluate(model: FitModel, q: np.ndarray, *, parts: bool = False, cache: Optional[dict] = None):
     """The model on ``q`` (nm⁻¹); with ``parts``, also each term: ``(total, {name: curve})``."""
     q = np.abs(np.asarray(q, dtype=float))
     g = {key: float(parameter.value) for key, parameter in model.globals.items()}
-    terms, paths = {}, grazing(model)
+    terms, geometry = {}, grazing(model)
     sigma = g.get("q_resolution", 0.0)
-    forms = (_smeared_forms(model, q, sigma, cache, paths) if sigma > 0 and q.size
-             else [component_form(component, q, cache, paths) for component in model.components])
+    forms = (_smeared_forms(model, q, sigma, cache, geometry) if sigma > 0 and q.size
+             else [component_form(component, q, cache, geometry) for component in model.components])
     for index, (component, form) in enumerate(zip(model.components, forms)):
         terms[f"{index + 1}: {FAMILIES[component.family][0]}"] = g["k"] * component.value("Int") * form
     if g["res_amplitude"] != 0:
@@ -372,19 +295,28 @@ def evaluate(model: FitModel, q: np.ndarray, *, parts: bool = False, cache: Opti
     return total
 
 
-# -- the manual parameter store (spreads in nm) and quick-fit solutions ------------------
+# -- the manual parameter store (Fitting's conventions in earlier versions) and quick-fit solutions --------------
+
+
+def _legacy_scale(family: str, radius: float, spread: float) -> float:
+    """Manual-store Int × this = Int here: the vertical cylinder's form factor there is 10⁻⁶⟨R⁴⟩/4 at q = 0."""
+    return conventions.legacy_vertical_cylinder_scale(radius, spread) if family == "vertical_cylinder" else 1.0
 
 
 def to_manual(model: FitModel) -> CandidateParameterMapping:
+    """The manual store's values (σ_D in nm = D·(σnn/D)/√(2π); spreads in nm, σR/R for vertical cylinders). Its sizes
+    are those of ``LEGACY_LAWS``: a component with another size law is written with its R and σR/R as they are."""
     components = []
     for component in model.components:
-        radius = component.value("R")
-        values = {"intensity": component.value("Int"), "radius": radius}
-        values["sigma_radius"] = component.value("sigma_R") * (1.0 if component.family == "vertical_cylinder" else radius)
+        radius, spread = component.value("R"), component.value("sigma_R")
+        values = {"intensity": component.value("Int") / _legacy_scale(component.family, radius, spread),
+                  "radius": radius,
+                  "sigma_radius": spread * (1.0 if component.family == "vertical_cylinder" else radius)}
         if component.family == "cylinder":
             values.update(height=component.value("h"), sigma_height=component.value("h") * component.value("sigma_h"))
         distance = component.value("D") if component.structure else 0.0
-        values.update(diameter=distance, sigma_diameter=distance * component.value("sigma_D") if component.structure else 0.0)
+        sigma_d = float(conventions.sigma_d_from_sigma_nn(component.value("sigma_nn"))) if component.structure else 0.0
+        values.update(diameter=distance, sigma_diameter=distance * sigma_d)
         components.append(CandidateComponentParameters(MANUAL_NAMES[component.family], 1.0, values))
     g = model.globals
     return CandidateParameterMapping(tuple(components), {
@@ -394,7 +326,8 @@ def to_manual(model: FitModel) -> CandidateParameterMapping:
 
 
 def from_manual(mapping: CandidateParameterMapping, base: Optional[FitModel] = None) -> FitModel:
-    """A model from manual-store values (sizes and spreads converted); free/fixed and ranges from ``base``."""
+    """A model from manual-store values (Fitting's conventions in earlier versions, ``LEGACY_LAWS``), sizes and spreads
+    converted; free/fixed and ranges from ``base``."""
     families = {name: key for key, name in MANUAL_NAMES.items()}
     components = []
     for index, source in enumerate(mapping.components):
@@ -405,18 +338,21 @@ def from_manual(mapping: CandidateParameterMapping, base: Optional[FitModel] = N
         radius = float(values.get("radius", INFO["R"].value))
         distance = float(values.get("diameter", 0.0) or 0.0)
         structure = distance > 0 and float(values.get("sigma_diameter", 0.0) or 0.0) > 0
-        component = new_component(family, radius=radius, distance=distance if structure else None, structure=structure)
+        component = new_component(family, radius=radius, distance=distance if structure else None, structure=structure,
+                                   law=LEGACY_LAWS[family])
         spread = float(values.get("sigma_radius", 0.0) or 0.0)
-        relative = {"Int": float(values.get("intensity", 1.0)), "R": radius,
-                    "sigma_R": spread if family == "vertical_cylinder" else spread / radius if radius else 0.0}
+        relative = spread if family == "vertical_cylinder" else spread / radius if radius else 0.0
+        converted = {"Int": float(values.get("intensity", 1.0)) * _legacy_scale(family, radius, relative), "R": radius,
+                     "sigma_R": relative}
         if family == "cylinder":
             height = float(values.get("height", INFO["h"].value))
-            relative.update(h=height, sigma_h=float(values.get("sigma_height", 0.0) or 0.0) / height if height else 0.0)
+            converted.update(h=height, sigma_h=float(values.get("sigma_height", 0.0) or 0.0) / height if height else 0.0)
         if structure:
-            relative.update(D=distance, sigma_D=float(values["sigma_diameter"]) / distance)
+            converted.update(D=distance, sigma_nn=float(conventions.sigma_nn_from_sigma_d(
+                float(values["sigma_diameter"]) / distance)))
         previous = base.components[index] if base is not None and index < len(base.components) else None
         params = dict(component.params)
-        for key, value in relative.items():
+        for key, value in converted.items():
             template = previous.params.get(key) if previous is not None and previous.family == family else None
             params[key] = replace(template or params[key], value=float(value))
             params[key] = _widened(params[key])
@@ -450,16 +386,35 @@ def model_to_dict(model: FitModel) -> dict:
                 "upper": p.upper if math.isfinite(p.upper) else None}
 
     return {
-        "schema": "gimap_fit_model_v1", "q_unit": "nm^-1", "spreads": "relative",
-        "components": [{"family": c.family, "structure": c.structure, "coupling": c.coupling,
+        "schema": SCHEMA, "q_unit": "nm^-1", "spreads": "relative", "spacing_disorder": "sigma_nn/D (Hosemann)",
+        "components": [{"family": c.family, "structure": c.structure, "coupling": c.coupling, "sizes": c.law,
                         "params": {key: parameter(c.params[key]) for key in c.keys()}} for c in model.components],
         "globals": {key: parameter(model.globals[key]) for key in GLOBALS},
     }
 
 
+def _legacy_params(family: str, raw: Mapping) -> dict:
+    """A component's parameters of a ``gimap_fit_model_v1`` file in this model's conventions: σD/D → σnn/D
+    (× √(2π)); a vertical cylinder's Int × 10⁻⁶⟨R⁴⟩/4."""
+    params = {key: dict(value) for key, value in raw.items() if key != "sigma_D"}
+    if "sigma_D" in raw:
+        params["sigma_nn"] = {name: (None if raw["sigma_D"].get(name) is None else
+                                     float(conventions.sigma_nn_from_sigma_d(raw["sigma_D"][name])))
+                              if name in ("value", "lower", "upper") else value
+                              for name, value in raw["sigma_D"].items()}
+    if family == "vertical_cylinder" and "Int" in params:
+        radius = float((raw.get("R") or {}).get("value", INFO["R"].value))
+        spread = float((raw.get("sigma_R") or {}).get("value", INFO["sigma_R"].value))
+        scale = _legacy_scale(family, radius, spread)
+        params["Int"] = {name: (value * scale if name in ("value", "lower", "upper") and value is not None else value)
+                         for name, value in params["Int"].items()}
+    return params
+
+
 def model_from_dict(data: Mapping) -> FitModel:
-    if data.get("schema") != "gimap_fit_model_v1":
-        raise ValueError("Not a GIMaP fit model (schema gimap_fit_model_v1)")
+    schema = data.get("schema")
+    if schema not in (SCHEMA, LEGACY_SCHEMA):
+        raise ValueError("Not a GIMaP fit model (schema gimap_fit_model_v2 or v1)")
 
     def parameter(key: str, raw: Mapping) -> Parameter:
         info = INFO[key]
@@ -469,11 +424,16 @@ def model_from_dict(data: Mapping) -> FitModel:
 
     components = []
     for raw in data.get("components") or ():
-        component = new_component(str(raw["family"]), structure=bool(raw.get("structure", True)))
+        family = str(raw["family"])
+        legacy = schema == LEGACY_SCHEMA
+        law = LEGACY_LAWS.get(family, DEFAULT_LAW) if legacy else str(raw.get("sizes") or DEFAULT_LAW)
+        component = new_component(family, structure=bool(raw.get("structure", True)),
+                                  law=law if law in SIZE_LAWS else DEFAULT_LAW)
         coupling = str(raw.get("coupling") or "lma")
         component = replace(component, coupling=coupling if coupling in COUPLINGS else "lma")
         params = dict(component.params)
-        for key, value in (raw.get("params") or {}).items():
+        source = _legacy_params(family, raw.get("params") or {}) if legacy else (raw.get("params") or {})
+        for key, value in source.items():
             if key in params:
                 params[key] = parameter(key, value)
         components.append(replace(component, params=params))
@@ -485,7 +445,8 @@ def model_from_dict(data: Mapping) -> FitModel:
 
 
 __all__ = [
-    "BASE_GLOBALS", "COUPLINGS", "FAMILIES", "RESOLUTION", "GLOBALS", "GRAZING", "INFO", "LINEAR", "Component", "FitModel", "Parameter",
-    "ParameterInfo", "component_form", "evaluate", "grazing", "number_size", "qz_plus_r", "sigma_nn_over_d", "from_manual", "model_from_dict", "model_to_dict", "new_component",
-    "resolution_shape", "to_manual",
+    "BASE_GLOBALS", "COUPLINGS", "DEFAULT_LAW", "FAMILIES", "RESOLUTION", "GLOBALS", "GRAZING", "INFO", "LEGACY_LAWS",
+    "LINEAR", "SIZE_LAWS", "Component", "FitModel", "Parameter", "ParameterInfo", "component_form", "evaluate",
+    "grazing", "intensity_size", "number_size", "qz_plus_r", "sigma_nn_over_d", "from_manual", "model_from_dict",
+    "model_to_dict", "new_component", "resolution_shape", "to_manual",
 ]

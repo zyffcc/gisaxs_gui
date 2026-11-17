@@ -89,22 +89,31 @@ FITTING_ZH = {
     "The fit stopped at a bound of the range: widen the range or fix this value": "拟合停在了范围的边界：放宽范围或固定这个值",
     "1σ error of the last fit": "上次拟合的 1σ 误差",
     "Distance D": "间距 D",
-    "Interference between neighbours: a paracrystal of distance D and disorder σD/D":
-        "相邻颗粒之间的干涉：间距 D、无序度 σD/D 的次晶模型",
+    "Interference between neighbours: a paracrystal of distance D and disorder σnn/D":
+        "相邻颗粒之间的干涉：间距 D、无序度 σnn/D 的次晶模型",
+    "Sizes": "尺寸分布",
+    "Gaussian, by number": "高斯，按数目",
+    "Log-normal, by number": "对数正态，按数目",
+    "Gaussian, by intensity": "高斯，按强度",
+    "How R and σR/R are meant: the mean and relative spread of a Gaussian or a log-normal of the particle count, or of a "
+    "Gaussian of the intensity each size scatters (earlier Fitting). The results give the sizes both by number and by "
+    "intensity.":
+        "R 和 σR/R 的含义：颗粒数目的高斯或对数正态分布的平均值和相对宽度，或每种尺寸散射强度的高斯分布的平均值和相对宽度"
+        "（早期的拟合页）。结果同时给出按数目和按强度的尺寸。",
     "Remove this component": "删除这个组分",
     "No particle yet: add one above, or let Fit ▸ Find the particle shape choose.":
         "还没有颗粒：在上面添加一个，或让 拟合 ▸ 寻找颗粒形状 来选择。",
     "Background and beam tail": "背景与光束尾项",
     "I(q) = BG + k·[Σ particles + A/(1 + (|q|/w)^ν)]: the peak is the direct and reflected beam's tail and the resolution near q = 0":
         "I(q) = BG + k·[Σ 颗粒 + A/(1 + (|q|/w)^ν)]：这个峰是直射束和反射束的尾部以及 q = 0 附近的分辨率",
-    "Intensity of this component (sphere and random cylinder: the form factor is 1 at q = 0; vertical cylinder: 10⁻⁶·⟨R⁴⟩/4 at q = 0, R in nm)":
-        "这个组分的强度（球和随机取向圆柱：形状因子在 q = 0 处为 1；竖直圆柱：q = 0 处为 10⁻⁶·⟨R⁴⟩/4，R 以 nm 计）",
-    "Mean radius": "平均半径",
-    "Relative spread of the radius (Gaussian)": "半径的相对分布宽度（高斯）",
+    "Intensity of this component at q = 0 (its form factor is 1 there)": "这个组分在 q = 0 处的强度（形状因子在那里为 1）",
+    "Mean radius (of the size distribution chosen in Sizes)": "平均半径（尺寸分布中所选的分布）",
+    "Relative spread of the radius (of the size distribution chosen in Sizes)": "半径的相对分布宽度（尺寸分布中所选的分布）",
     "Mean height (length) of the cylinders": "圆柱的平均高度（长度）",
-    "Relative spread of the height (Gaussian)": "高度的相对分布宽度（高斯）",
+    "Relative spread of the height": "高度的相对分布宽度",
     "Mean distance between neighbours (paracrystal)": "相邻颗粒的平均间距（次晶）",
-    "Relative disorder of the distance": "间距的相对无序度",
+    "Relative standard deviation of the distance between neighbours (Hosemann paracrystal)":
+        "相邻颗粒间距的相对标准差（Hosemann 次晶）",
     "Constant added to the whole curve": "加在整条曲线上的常数",
     "Tail A": "尾 A",
     "Height at q = 0 of the beam tail A / (1 + (|q|/w)^ν): the empirical tail of the direct and reflected beam":
@@ -127,7 +136,7 @@ FITTING_ZH = {
     "Gaussian q resolution (1σ) applied to the particle terms; 0: none": "作用于颗粒项的高斯 q 分辨率（1σ）；0：不展宽",
     "Phase of the effective reflection coefficient (spheres)": "有效反射系数的相位（球）",
     "q₊R of the spheres (q₊ = kᵢ + k_f): {values}": "球的 q₊R（q₊ = kᵢ + k_f）：{values}",
-    "By number: {values}": "按数目：{values}",
+    "Sizes by number | by intensity: {values}": "尺寸 按数目 | 按强度：{values}",
     "Coupling": "耦合",
     "LMA: P·S": "LMA：P·S",
     "DA: P + |⟨F⟩|²(S − 1)": "DA：P + |⟨F⟩|²(S − 1)",

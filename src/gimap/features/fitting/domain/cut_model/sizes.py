@@ -10,7 +10,7 @@ Three laws, all truncated at ±``SPAN`` widths:
   deviation ``rel``: σ_ln² = ln(1 + rel²), median = mean / √(1 + rel²); in ln R from 4 σ_ln below its median to
   4 σ_ln above the median of its V²-weighted form (``_lognormal_span``), so effectively not truncated.
 * ``intensity_gauss``: a Gaussian of the scattered intensity at q = 0 in R (each node weighted by count × V²), the
-  sizes of GIMaP's Fitting before 0.3 for spheres and random cylinders; by number it is that Gaussian / V².
+  sizes of GIMaP's earlier Fitting for spheres and random cylinders; by number it is that Gaussian / V².
 
 ``mean`` and ``rel`` are the parameters of the law, not the moments of the truncated distribution; ``moments``
 gives those, by number and by V² (intensity).

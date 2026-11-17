@@ -900,7 +900,14 @@ def test_the_first_fitting_model_is_neutral_as_the_manual_says() -> None:
     assert "A new installation starts with a neutral model" in _flat(MANUAL)
     assert "Fitting starts a new user with a neutral model" in _flat(CHANGELOG)
     template = json.loads(_text(ROOT / "config" / "model_parameters.json"))
-    values = list(_numbers(template.get("fitting", {})))
+    fitting = template.get("fitting", {})
+    values = list(_numbers(fitting.get("global_parameters", {})))
+    for entry in (fitting.get("particles") or {}).values():
+        for family, block in entry["parameters"].items():
+            # exact conversions of round defaults into the store's conventions (σD = D·(σnn/D)/√(2π), a vertical
+            # cylinder's scale in 10⁻⁶⟨R⁴⟩/4: tests/test_release2_defaults_template.py) are not values of a fit
+            values += list(_numbers({key: value for key, value in block.items() if key != "sigma_diameter"
+                                     and not (family == "vertical_cylinder" and key == "intensity")}))
     assert values
     # A value left by a fit has many digits; a default somebody chose has few.
     fitted = [value for value in values if float(f"{value:.4g}") != value]

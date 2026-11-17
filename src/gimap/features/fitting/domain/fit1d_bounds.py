@@ -9,8 +9,7 @@ w/D in [0.02, 0.5]. It accepts a fixed value or a range for any of them (``resea
 Here:
 
 * ``model_constraints``: the Model's fixed values and all parameter ranges, in the kit's units —
-  R, D in nm; σR/R as is; Fitting's σD/D is the kit's w/D divided by sqrt(2π) (the spread with the same
-  paracrystal damping, as the adapter maps the kit's result back), so w/D = σD/D · sqrt(2π);
+  R, D in nm; σR/R and σnn/D (the kit's w/D) as they are;
 * ``range_notes``: before a fit, a user range reaching beyond what the curve can resolve (a narrower one needs
   no word: a value that stops at its edge is reported after the fit, ``fit1d_edges``);
 * what happens to a parameter that stops at an edge after the fit is in ``fit1d_edges``.
@@ -26,13 +25,12 @@ from typing import Iterable, Mapping, Optional
 
 from .fit_model import GRAZING, INFO, FitModel
 
-SQRT_2PI = math.sqrt(2.0 * math.pi)
 TYPE_CODE = {"sphere": 1, "vertical_cylinder": 3}
 """Fitting's family → the kit's type code (its populations are numbered in the order of these codes)."""
-KIT_KEYS = {"R": "R_nm", "sigma_R": "sigma_R_rel", "D": "D_nm", "sigma_D": "w_rel"}
+KIT_KEYS = {"R": "R_nm", "sigma_R": "sigma_R_rel", "D": "D_nm", "sigma_nn": "w_rel"}
 MODEL_KEYS = {kit: model for model, kit in KIT_KEYS.items()}
-TO_KIT = {"sigma_D": SQRT_2PI}
-"""Model value × factor = the kit's value (only σD/D differs: w/D = σD/D · sqrt(2π))."""
+TO_KIT: dict = {}
+"""Model value × factor = the kit's value (none differs now: σnn/D is the kit's w/D)."""
 LIMITS = {"R_nm": (1e-3, 1e6), "D_nm": (1e-3, 1e7), "sigma_R_rel": (0.02, 0.6), "w_rel": (1e-3, 1.0)}
 """What the kit accepts as a fixed value or a range (``research.fit1d.constraints.LIMITS``)."""
 WIDTHS = {"sigma_R_rel": (0.03, 0.5), "w_rel": (0.02, 0.5)}
@@ -146,14 +144,14 @@ def model_constraints(model: FitModel, *, structure_factor: bool = True) -> list
         supported = key in KIT_KEYS or key == "background" or key == "res_exponent"
         if not supported and (custom or fixed):
             raise ValueError(f"fit1d cannot preserve {owner}:{key} in its native model. Use Refine or Search for this constraint.")
-        if key in ("D", "sigma_D") and not structure_factor and (custom or fixed):
+        if key in ("D", "sigma_nn") and not structure_factor and (custom or fixed):
             raise ValueError("SAXS has no structure factor: choose GISAXS to constrain D or its disorder.")
     if structure_factor and any(not c.structure for c in model.components):
         raise ValueError("fit1d applies the structure factor to every population: enable it in Model or choose SAXS.")
     constraints = []
     for number, index in enumerate(population_order(families), start=1):
         component = model.components[index]
-        keys = ["R", "sigma_R"] + (["D", "sigma_D"] if structure_factor and component.structure else [])
+        keys = ["R", "sigma_R"] + (["D", "sigma_nn"] if structure_factor and component.structure else [])
         for key in keys:
             parameter, info = component.params[key], INFO[key]
             factor = TO_KIT.get(key, 1.0)

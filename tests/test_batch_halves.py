@@ -88,8 +88,9 @@ def _signed_cut(points_per_half: int = 60, *, positive: bool = True, negative: b
     """A signed cut I(qy) of a sphere model, q in Å⁻¹ (the q > 0 half ``scale`` times the other)."""
     from src.gimap.features.fitting.application.single_fit import FitModel, evaluate, new_component
 
-    model = FitModel((new_component("sphere", radius=4.0, distance=40.0),)).with_values(
-        {(0, "Int"): 2000.0, (0, "sigma_R"): 0.15, (0, "sigma_D"): 0.3, ("globals", "background"): 3.0})
+    # sizes by intensity: the quick fit's convention (it still uses 1D Predict's forward model)
+    model = FitModel((new_component("sphere", radius=4.0, distance=40.0, law="intensity_gauss"),)).with_values(
+        {(0, "Int"): 2000.0, (0, "sigma_R"): 0.15, (0, "sigma_nn"): 0.25, ("globals", "background"): 3.0})
     q = np.linspace(0.004, 0.2, points_per_half)
     rng = np.random.default_rng(5)
     parts = []

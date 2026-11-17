@@ -221,7 +221,8 @@ solutions under **Other solutions**; press **Refine These Values** to refine the
 errors. The same curve opens with **Refine in Fitting** in Analyze's Results tab.
 
 Sizes depend on the model and on its size distribution. BornAgain's model uses a log-normal
-distribution of radii, GIMaP's models another one: compare radii with care.
+distribution of radii; Fitting's default is a Gaussian by number (choose *Log-normal, by number* under **Sizes** to
+compare like with like), and the automatic analysis uses a Gaussian by intensity: compare radii with care.
 
 ![Fitting with the curve sent from Analyze](manual_images/en/11_fitting_single.png)
 *Fitting ▸ Single analysis after a refining fit: the curve, the model over it, the fitting range
@@ -1836,8 +1837,9 @@ Other ways to get a single curve in:
 3. **Analyze ▸ Results ▸ Fit details ▸ Show in Fitting** (after a GISAXS automatic analysis, section 5.5) —
    opens the same curve and puts the selected solution into **Model**. Sizes and spreads are converted and the
    scales are solved on the solution's own curve. The status line says how closely Fitting's model reproduces
-   it: the same curve for spheres and random cylinders; Fitting's vertical cylinder weights radii by R⁴, so it
-   is loaded as a start to refine. **Refine in Fitting** opens the curve without a solution.
+   it: nearly the same curve for spheres and random cylinders, which get Sizes *Gaussian, by intensity* as the
+   automatic analysis has them; a vertical cylinder gets *Gaussian, by number*, so it is loaded as a start to
+   refine. **Refine in Fitting** opens the curve without a solution.
 
 ### 6.2 Single analysis: one curve in four steps
 
@@ -1902,17 +1904,22 @@ Analysis** to inspect its contributions here.
 - Each card has **Distance D** on or off (the paracrystal interference between neighbours), with **Coupling**
   LMA (P·S, the default) or DA (sizes independent of positions;
   [Physics and Methods, section 9.5](Physics_Manual.md#95-structure-factor-one-dimensional-paracrystal)), and its values:
-  scale, R and **σR/R**, h and **σh/h** for random cylinders, D and **σD/D**. Spreads are relative everywhere
-  (as in Analyze's results and in 1D Predict). The scale multiplies the form factor, which is 1 at q = 0 for
-  spheres and random cylinders but 10⁻⁶·⟨R⁴⟩/4 (R in nm) for vertical cylinders: compare scales only within
-  one family.
+  scale, R and **σR/R**, h and **σh/h** for random cylinders, D and **σnn/D** (the relative standard deviation of the
+  distance between neighbours, fit1d's w/D). Spreads are relative everywhere (as in Analyze's results and in
+  1D Predict). The scale is the intensity of the particles at q = 0: every form factor is 1 there.
+- **Sizes** under the values says what R and σR/R are: *Gaussian, by number* (the default: the mean and relative
+  spread of the particle count, as fit1d and a microscope count), *Log-normal, by number* (for broad distributions)
+  or *Gaussian, by intensity* (each size scatters the same at q = 0; Fitting's earlier sizes). After a fit the
+  results give every particle's sizes both by number and by intensity
+  ([Physics and Methods, section 9.3](Physics_Manual.md#93-size-distributions)). A model saved by an earlier version
+  opens with the sizes it had, its σD/D converted to σnn/D (× √(2π)) and the scale of a vertical cylinder converted.
 - **fit** ticked: the fit may change the value. Unticked: the value stays fixed.
 - **Ranges** shows each value's min – max. The fit keeps the value inside it; *Search the ranges* searches
   across it. A value typed outside its range widens the range. For linear terms such as intensity and background,
   **∞** means no upper limit; untick it to enter a finite maximum.
 - **Background and beam tail**: a constant background, the beam tail A / (1 + (|q|/w)^ν) at q = 0 (**Tail A**,
   **Tail w**, **Tail ν**: the empirical tail of the direct and reflected beam), and the q resolution **σ_q** (0, off,
-  by default); an overall factor k, fixed at 1 by default, multiplies the particles and the tail. The model as a formula, and how **σD/D** relates to the usual paracrystal spread, are in Physics and
+  by default); an overall factor k, fixed at 1 by default, multiplies the particles and the tail. The model as a formula, and how **σnn/D** relates to the σD/D of earlier versions and of 1D Predict, are in Physics and
   Methods, [section 9.2](Physics_Manual.md#92-the-intensity-model) and
   [section 9.5](Physics_Manual.md#95-structure-factor-one-dimensional-paracrystal).
 - **Spheres in grazing incidence**: αi, αf, λ and the effective reflection coefficient |r|, arg r. With αi = αf = 0

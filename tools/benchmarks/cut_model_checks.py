@@ -1,7 +1,7 @@
 """cut_model, GIMaP's one 1D forward model, against the models it replaces and an independent one (Physics and Methods 9.2).
 
 References, each on q = 0.02–3 nm⁻¹ (600 points):
-  fitting   Fitting's formulas before 0.3 (scattering_model, coherent_terms): on their own default rules, and on fine
+  fitting   Fitting's earlier formulas (scattering_model, coherent_terms): on their own default rules, and on fine
             rules of the same formulas (the integral they approximate)
   v5        1D Predict V5's float64 forward (modules/Fitting_1D_Model/Workflow_v5/conditional_v2/numpy_forward64.py)
   fit1d     the fit1d kit's tabulated physics (number weights, Hosemann paracrystal; utils/gisaxs1d_gui_kit)

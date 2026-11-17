@@ -17,7 +17,7 @@
                         "radius": 5.0,
                         "sigma_radius": 1.0,
                         "diameter": 30.0,
-                        "sigma_diameter": 9.0
+                        "sigma_diameter": 2.9920671030107453
                     },
                     "cylinder": {
                         "intensity": 1.0,
@@ -26,14 +26,14 @@
                         "height": 10.0,
                         "sigma_height": 2.0,
                         "diameter": 30.0,
-                        "sigma_diameter": 9.0
+                        "sigma_diameter": 2.9920671030107453
                     },
                     "vertical_cylinder": {
-                        "intensity": 1.0,
+                        "intensity": 5161.783003534261,
                         "radius": 5.0,
                         "sigma_radius": 0.2,
                         "diameter": 30.0,
-                        "sigma_diameter": 9.0
+                        "sigma_diameter": 2.9920671030107453
                     }
                 }
             },
@@ -46,7 +46,7 @@
                         "radius": 5.0,
                         "sigma_radius": 1.0,
                         "diameter": 30.0,
-                        "sigma_diameter": 9.0
+                        "sigma_diameter": 2.9920671030107453
                     },
                     "cylinder": {
                         "intensity": 1.0,
@@ -55,14 +55,14 @@
                         "height": 10.0,
                         "sigma_height": 2.0,
                         "diameter": 30.0,
-                        "sigma_diameter": 9.0
+                        "sigma_diameter": 2.9920671030107453
                     },
                     "vertical_cylinder": {
-                        "intensity": 1.0,
+                        "intensity": 5161.783003534261,
                         "radius": 5.0,
                         "sigma_radius": 0.2,
                         "diameter": 30.0,
-                        "sigma_diameter": 9.0
+                        "sigma_diameter": 2.9920671030107453
                     }
                 }
             },
@@ -75,7 +75,7 @@
                         "radius": 5.0,
                         "sigma_radius": 1.0,
                         "diameter": 30.0,
-                        "sigma_diameter": 9.0
+                        "sigma_diameter": 2.9920671030107453
                     },
                     "cylinder": {
                         "intensity": 1.0,
@@ -84,14 +84,14 @@
                         "height": 10.0,
                         "sigma_height": 2.0,
                         "diameter": 30.0,
-                        "sigma_diameter": 9.0
+                        "sigma_diameter": 2.9920671030107453
                     },
                     "vertical_cylinder": {
-                        "intensity": 1.0,
+                        "intensity": 5161.783003534261,
                         "radius": 5.0,
                         "sigma_radius": 0.2,
                         "diameter": 30.0,
-                        "sigma_diameter": 9.0
+                        "sigma_diameter": 2.9920671030107453
                     }
                 }
             }

@@ -6,7 +6,7 @@ deviation of the neighbour distance):
     S(q) = (1 − p²) / (1 − 2p cos(qD) + p²),   p = exp(−q² σ_nn² / 2),   S(0) = (σ_nn/D)²
 
 evaluated as −expm1(2 ln p) / (expm1(ln p)² + 4p sin²(qD/2)), which has no cancellation at small q. GIMaP's Fitting
-before 0.3 wrote p = exp(−π q² σ_D²): the same function with σ_nn = √(2π) σ_D (``conventions``).
+in earlier versions wrote p = exp(−π q² σ_D²): the same function with σ_nn = √(2π) σ_D (``conventions``).
 """
 
 from __future__ import annotations

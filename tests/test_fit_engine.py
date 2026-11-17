@@ -1,15 +1,18 @@
-"""The single-curve model and fitting engine: the manual model's curve, relative spreads, fits and errors."""
+"""The single-curve model and fitting engine: the model is cut_model's, the manual store, fits and errors."""
 
 from __future__ import annotations
 
 import json
 import math
+from dataclasses import replace
 
 import numpy as np
 import pytest
 
+from src.gimap.features.fitting.domain import cut_model
 from src.gimap.features.fitting.domain.fit_engine import FitData, FitStopped, fit, residuals
 from src.gimap.features.fitting.domain.fit_model import (
+    LEGACY_LAWS,
     FitModel,
     evaluate,
     from_manual,
@@ -18,14 +21,13 @@ from src.gimap.features.fitting.domain.fit_model import (
     new_component,
     to_manual,
 )
-from src.gimap.features.fitting.domain.scattering_model import make_mixed_model
 
 Q = np.linspace(0.05, 2.0, 300)
 
 
 def _truth(family="sphere") -> FitModel:
     model = FitModel((new_component(family, radius=6.0, distance=40.0),))
-    values = {(0, "Int"): 1000.0, (0, "sigma_R"): 0.15, (0, "sigma_D"): 0.3,
+    values = {(0, "Int"): 1000.0, (0, "sigma_R"): 0.15, (0, "sigma_nn"): 0.25,
               ("globals", "background"): 2.0, ("globals", "res_amplitude"): 300.0,
               ("globals", "res_width"): 0.03, ("globals", "res_exponent"): 4.0}
     if family == "cylinder":
@@ -33,27 +35,28 @@ def _truth(family="sphere") -> FitModel:
     return model.with_values(values)
 
 
-def _manual_curve(model: FitModel, q) -> np.ndarray:
-    mapping = to_manual(model)
-    order = {"Sphere": ("intensity", "radius", "sigma_radius", "diameter", "sigma_diameter"),
-             "Cylinder": ("intensity", "radius", "sigma_radius", "height", "sigma_height", "diameter", "sigma_diameter"),
-             "Vertical Cylinder": ("intensity", "radius", "sigma_radius", "diameter", "sigma_diameter")}
-    params = []
-    for component in mapping.components:
-        params += [component.parameters[key] for key in order[component.shape]]
-    g = mapping.global_parameters
-    params += [g["background"], g["sigma_res"], g["nu_res"], g["int_res"], g["k_value"]]
-    spec = [component.shape.lower().replace(" ", "_") for component in mapping.components]
-    return make_mixed_model(spec)(q, *params)
+@pytest.mark.parametrize("family", ["sphere", "cylinder", "vertical_cylinder"])
+@pytest.mark.parametrize("law", ["number_gauss", "lognormal", "intensity_gauss"])
+def test_the_model_is_cut_model(family, law) -> None:
+    model = _truth(family)
+    model = replace(model, components=(replace(model.components[0], law=law),))
+    population = cut_model.Population(family, 6.0, 0.15, law=law, height=15.0, height_spread=0.2, distance=40.0,
+                                       distance_spread=0.25, scale=1000.0)
+    settings = cut_model.Settings(background=2.0, tail_amplitude=300.0, tail_width=0.03, tail_exponent=4.0)
+    np.testing.assert_allclose(evaluate(model, Q), cut_model.evaluate([population], settings, Q), rtol=1e-12)
 
 
 @pytest.mark.parametrize("family", ["sphere", "cylinder", "vertical_cylinder"])
-def test_the_model_is_the_manual_model_with_relative_spreads(family) -> None:
+def test_the_manual_store_keeps_the_sizes_of_before(family) -> None:
+    """The manual store has Fitting's conventions in earlier versions (spreads in nm, σ_D, a vertical cylinder's scale):
+    a model with those sizes goes there and back unchanged."""
     model = _truth(family)
-    np.testing.assert_allclose(evaluate(model, Q), _manual_curve(model, Q), rtol=1e-12)
+    model = replace(model, components=(replace(model.components[0], law=LEGACY_LAWS[family]),))
     back = from_manual(to_manual(model))  # spreads: relative → nm → relative
-    np.testing.assert_allclose(evaluate(back, Q), evaluate(model, Q), rtol=1e-12)
+    np.testing.assert_allclose(evaluate(back, Q), evaluate(model, Q), rtol=1e-10)
     assert back.components[0].value("sigma_R") == pytest.approx(0.15)
+    assert back.components[0].value("sigma_nn") == pytest.approx(0.25)
+    assert to_manual(model).components[0].parameters["sigma_diameter"] == pytest.approx(40.0 * 0.25 / math.sqrt(2 * math.pi))
 
 
 def test_a_model_is_saved_and_read_back() -> None:
@@ -232,7 +235,8 @@ def _counted_cut(points: int, seed: int = 4):
     """A cut through the beam as Analyze hands it over (q in Å⁻¹, counts with Poisson noise, every column an
     observation — zero counts too), made with the app's own model; ``points`` on each half."""
     q_nm = np.linspace(0.06, 2.4, points)
-    exact = evaluate(_truth(), q_nm) * 5.0
+    truth = _truth()  # sizes by intensity: the quick fit's convention (it still uses 1D Predict's forward model)
+    exact = evaluate(replace(truth, components=(replace(truth.components[0], law="intensity_gauss"),)), q_nm) * 5.0
     rng = np.random.default_rng(seed)
     left, right = rng.poisson(exact[::-1]).astype(float), rng.poisson(exact).astype(float)
     counts = np.concatenate([left, right])
@@ -419,11 +423,12 @@ def test_spheres_at_qz_zero_by_default_and_two_paths_with_the_angles_of_the_cut(
 
     from src.gimap.features.fitting.application.single_fit import fit_record
     from src.gimap.features.fitting.domain import fit_model as fm
-    from src.gimap.features.fitting.domain.scattering_model import _F_sphere_amp, sphere_form_factor_pd
+    from src.gimap.features.fitting.domain.scattering_model import _F_sphere_amp
 
     q = np.linspace(0.02, 2.0, 200)
     sphere = fm.FitModel(components=(fm.new_component("sphere", radius=4.0, structure=False),))
-    np.testing.assert_allclose(fm.evaluate(sphere, q), sphere_form_factor_pd(q, 4.0, 0.8), rtol=1e-12)
+    np.testing.assert_allclose(fm.evaluate(sphere, q),
+                               cut_model.population_terms("sphere", q, radius=4.0, radius_spread=0.2)[0], rtol=1e-12)
     assert fm.grazing(sphere) is None and fm.qz_plus_r(sphere) == []
 
     angles = {"alpha_i": 0.4, "alpha_f": 0.15, "wavelength": 0.1045, "refl_amp": 0.8, "refl_phase": -0.3}

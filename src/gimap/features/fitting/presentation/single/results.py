@@ -35,7 +35,7 @@ from ...application.models import InSituSourceFrame
 from ...application.curve_sources import source_stem
 
 QZ_PLUS_R = "q₊R of the spheres (q₊ = kᵢ + k_f): {values}"
-BY_NUMBER = "By number: {values}"
+BY_NUMBER = "Sizes by number | by intensity: {values}"
 
 
 def _item(text: str, tip: str = "") -> QTableWidgetItem:
@@ -282,8 +282,8 @@ class FitResultsMixin:
         return parameter.value == 0 or (path[1] in GRAZING and grazing(self.session.model) is None)
 
     def _size_lines(self) -> list[str]:
-        """Each particle's radius by number and σ_nn/D, as information: Fitting's R of spheres and random cylinders
-        is weighted by intensity, fit1d's and a microscope's by number (Physics and Methods, section 9.3)."""
+        """Each particle's mean radius and relative spread by number (as a microscope counts) and by intensity (V²,
+        what dominates the curve), as information (Physics and Methods, section 9.3)."""
         parts = []
         for index, component in enumerate(self.session.model.components, start=1):
             values = derived_values(component)
@@ -291,8 +291,7 @@ class FitResultsMixin:
                 text = f"{index}: R " + tr("not defined (the distribution rises towards small R)")
             else:
                 text = f"{index}: R {values['R_number_mean_nm']:.3g} nm, σR/R {values['sigma_R_number_rel']:.2g}"
-            if values["sigma_nn_over_D"] is not None:
-                text += f", σ_nn/D {values['sigma_nn_over_D']:.2g}"
+            text += f" | R {values['R_intensity_mean_nm']:.3g} nm, σR/R {values['sigma_R_intensity_rel']:.2g}"
             parts.append(text)
         return [trf(BY_NUMBER, values="; ".join(parts))] if parts else []
 

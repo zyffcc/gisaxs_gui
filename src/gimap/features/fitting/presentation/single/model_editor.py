@@ -2,7 +2,8 @@
 
 Each parameter is a row — name (unit), value, ± error of the last fit, “fit” (free or fixed), and,
 when ranges are shown, its min and max. A card's header chooses the family, switches the
-interparticle distance (paracrystal S(q)) on or off, and removes the component. Every edit emits
+interparticle distance (paracrystal S(q)) on or off, and removes the component; under its parameters, the size
+distribution and (with D) the coupling. Every edit emits
 ``edited`` with the new model; values typed outside their range widen the range.
 """
 
@@ -28,7 +29,19 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.theme import set_role
 
-from ...application.single_fit import BASE_GLOBALS, FAMILIES, GRAZING, INFO, LINEAR, RESOLUTION, Component, FitModel, new_component, parameter_text
+from ...application.single_fit import (
+    BASE_GLOBALS,
+    FAMILIES,
+    GRAZING,
+    INFO,
+    LINEAR,
+    RESOLUTION,
+    SIZE_LAWS,
+    Component,
+    FitModel,
+    new_component,
+    parameter_text,
+)
 from ..layout_primitives import ScientificDoubleSpinBox
 
 VALUE_LIMIT = 1e15
@@ -210,7 +223,7 @@ class FitModelEditor(QWidget):
         old = self.model.components[index]
         if family == old.family:
             return
-        fresh = new_component(family, structure=old.structure)
+        fresh = new_component(family, structure=old.structure, law=old.law)
         params = {key: old.params.get(key, value) for key, value in fresh.params.items()}
         self._replace_component(index, replace(fresh, params=params, coupling=old.coupling))
 
@@ -278,7 +291,7 @@ class FitModelEditor(QWidget):
         family.currentIndexChanged.connect(lambda _i, box=family, at=index: self._family(at, box.currentData()))
         structure = QCheckBox(tr("Distance D"), card)
         structure.setObjectName(f"fitStructure_{index}")
-        structure.setToolTip(tr("Interference between neighbours: a paracrystal of distance D and disorder σD/D"))
+        structure.setToolTip(tr("Interference between neighbours: a paracrystal of distance D and disorder σnn/D"))
         structure.setChecked(component.structure)
         structure.toggled.connect(lambda on, at=index: self._replace_component(
             at, replace(self.model.components[at], structure=bool(on))))
@@ -297,9 +310,29 @@ class FitModelEditor(QWidget):
         for line, key in enumerate(component.keys()):
             self._rows[(index, key)] = _Row(self, grid, line, (index, key), card)
         layout.addLayout(grid)
+        layout.addLayout(self._sizes_row(index, component, card))
         if component.structure:
             layout.addLayout(self._coupling_row(index, component, card))
         return card
+
+    def _sizes_row(self, index: int, component: Component, card: QFrame) -> QHBoxLayout:
+        """The size distribution of R (and h): a Gaussian or a log-normal of the particle count, or a Gaussian of the
+        scattered intensity (earlier Fitting; Physics and Methods, section 9.3)."""
+        row = QHBoxLayout()
+        label = QLabel(tr("Sizes"), card)
+        box = QComboBox(card)
+        box.setObjectName(f"fitSizes_{index}")
+        for key, name in SIZE_LAWS.items():
+            box.addItem(tr(name), key)
+        box.setToolTip(tr("How R and σR/R are meant: the mean and relative spread of a Gaussian or a log-normal of the "
+                          "particle count, or of a Gaussian of the intensity each size scatters (earlier Fitting). "
+                          "The results give the sizes both by number and by intensity."))
+        box.setCurrentIndex(max(0, box.findData(component.law)))
+        box.currentIndexChanged.connect(lambda _i, at=index, combo=box: self._replace_component(
+            at, replace(self.model.components[at], law=str(combo.currentData()))))
+        row.addWidget(label)
+        row.addWidget(box, 1)
+        return row
 
     def _coupling_row(self, index: int, component: Component, card: QFrame) -> QHBoxLayout:
         """How the paracrystal enters: P·S (LMA) or P + |<F>|²(S − 1) (DA; Physics and Methods, section 9.5)."""

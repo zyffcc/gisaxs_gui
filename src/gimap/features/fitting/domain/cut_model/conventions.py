@@ -1,6 +1,6 @@
 """How the conventions of GIMaP's earlier 1D models map onto ``cut_model`` (Physics and Methods, section 9.2).
 
-| Quantity | cut_model | Fitting before 0.3 | fit1d kit | 1D Predict V5 / quick fit |
+| Quantity | cut_model | earlier Fitting | fit1d kit | 1D Predict V5 / quick fit |
 |---|---|---|---|---|
 | q | nm⁻¹ | nm⁻¹ (Å⁻¹ × 10) | nm⁻¹ | nm⁻¹ |
 | sizes | ``law``: number_gauss, lognormal, intensity_gauss | intensity Gaussian (sphere, random cylinder); number Gaussian ±3σ (vertical cylinder) | number Gaussian | intensity Gaussian (all three) |
@@ -42,7 +42,7 @@ def fit1d_w(distance, sigma_nn_over_d):
 
 
 def legacy_vertical_cylinder_scale(radius: float, spread: float) -> float:
-    """What Fitting's vertical-cylinder form factor before 0.3 was at q = 0, 10⁻⁶ ⟨R⁴⟩/4, on its own grid (26 equally
+    """What Fitting's vertical-cylinder form factor in earlier versions was at q = 0, 10⁻⁶ ⟨R⁴⟩/4, on its own grid (26 equally
     spaced radii over ±3σ, number weights). A legacy scale Int times this is the forward intensity c of
     ``cut_model``: c = Int · 10⁻⁶ ⟨R⁴⟩/4."""
     if spread <= 0:

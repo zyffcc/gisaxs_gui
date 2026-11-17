@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from PyQt5.QtWidgets import QApplication
 
-from src.gimap.features.fitting.application.single_fit import FitModel, evaluate, new_component
+from src.gimap.features.fitting.application.single_fit import FitModel, evaluate, new_component, number_size
 from tests.test_assistant_gui import _app
 
 Q_NM = np.linspace(0.08, 2.0, 240)
@@ -18,7 +18,7 @@ Q_NM = np.linspace(0.08, 2.0, 240)
 
 def _truth() -> FitModel:
     model = FitModel((new_component("sphere", radius=6.0, distance=40.0),))
-    return model.with_values({(0, "Int"): 2000.0, (0, "sigma_R"): 0.15, (0, "sigma_D"): 0.3,
+    return model.with_values({(0, "Int"): 2000.0, (0, "sigma_R"): 0.15, (0, "sigma_nn"): 0.25,
                               ("globals", "background"): 3.0})
 
 
@@ -267,7 +267,9 @@ def test_find_the_particle_shape_lists_solutions_and_puts_the_best_in_the_model(
     assert page.session.model == solutions[0].model and page.method() == "local"  # next: refine it here
     assert page.solutions_table.rowCount() == len(solutions) and not page.solutions_table.isHidden()
     best = solutions[0].model.components[0]
-    assert best.family == "sphere" and best.value("R") == pytest.approx(6.0, rel=0.1)
+    # the shape search's sizes are by intensity (its convention, kept in the model); by number R is the truth's
+    assert best.family == "sphere" and best.law == "intensity_gauss"
+    assert number_size(best)[0] == pytest.approx(6.0, rel=0.1)
     page.solutions_table.selectRow(min(1, len(solutions) - 1))
     page.use_selected_solution()
     assert page.session.model == solutions[min(1, len(solutions) - 1)].model

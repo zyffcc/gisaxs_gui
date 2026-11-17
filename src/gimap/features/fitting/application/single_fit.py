@@ -43,6 +43,7 @@ from ..domain.fit_model import (
     INFO,
     LINEAR,
     RESOLUTION,
+    SIZE_LAWS,
     Component,
     FitModel,
     Parameter,
@@ -52,6 +53,7 @@ from ..domain.fit_model import (
     model_from_dict,
     model_to_dict,
     new_component,
+    intensity_size,
     number_size,
     qz_plus_r,
     sigma_nn_over_d,
@@ -276,8 +278,10 @@ def export_table(model: FitModel, data: FitData) -> tuple[list[str], np.ndarray]
 
 def derived_values(component: Component) -> dict:
     size = number_size(component)  # None: not defined for this intensity-weighted width (fit_model.number_size)
+    by_intensity = intensity_size(component)
     return {"R_number_mean_nm": None if size is None else round(size[0], 6),
             "sigma_R_number_rel": None if size is None else round(size[1], 6),
+            "R_intensity_mean_nm": round(by_intensity[0], 6), "sigma_R_intensity_rel": round(by_intensity[1], 6),
             "sigma_nn_over_D": None if not component.structure else round(sigma_nn_over_d(component), 6)}
 
 
@@ -290,8 +294,9 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
     record = {
         "software_version": SOFTWARE,
         "model": model_to_dict(model),
-        "equation": "I(q) = BG + k * [sum_i Int_i * P_i(q) * S_i(q; D_i, sigma_D_i/D_i) + A / (1 + (|q|/w)^nu)]; "
-                    "a component with coupling 'da' has P_i + |<F_i>|^2 (S_i - 1) in place of P_i * S_i",
+        "equation": "I(q) = BG + k * [sum_i Int_i * P_i(q) * S_i(q; D_i, sigma_nn_i/D_i) + A / (1 + (|q|/w)^nu)]; "
+                    "P_i(0) = 1; S_i the Hosemann paracrystal; a component with coupling 'da' has "
+                    "P_i + |<F_i>|^2 (S_i - 1) in place of P_i * S_i; sizes per component ('sizes')",
         "curve": None if curve is None else {"name": curve.name, "path": curve.path, "q_unit_of_file": curve.source_unit,
                                              "q_unit_from": curve.unit_from},
         "points": {"side": side, "q_range_nm^-1": None if q_range is None else [float(v) for v in q_range],
@@ -304,7 +309,7 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
         # spheres of a horizontal cut: q_z = 0 (effective interface) or the two-path model with the cut's angles
         "sphere_model": "effective interface (q_z = 0)" if grazing(model) is None else "two paths (direct + exit-reflected)",
         "qz_plus_R": {f"{index}": round(value, 4) for index, value in qz_plus_r(model)},
-        # every particle's radius by number (as microscopy and fit1d count) and σ_nn/D (Hosemann, fit1d's w/D)
+        # every particle's radius by number (as microscopy and fit1d count) and by intensity (V²), and σ_nn/D
         "derived": [derived_values(component) for component in model.components],
     }
     if curve is not None and curve.path:
@@ -322,7 +327,7 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
 
 __all__ = [
     "ANALYZE_SIDES", "BASE_GLOBALS", "FAMILIES", "GLOBALS", "GRAZING", "INFO", "RESOLUTION", "grazing", "qz_plus_r", "derived_values",
-    "number_size", "sigma_nn_over_d", "LINEAR", "NM_PER_A", "PHASES", "PROGRESS_LINE", "SIDES",
+    "intensity_size", "number_size", "sigma_nn_over_d", "SIZE_LAWS", "LINEAR", "NM_PER_A", "PHASES", "PROGRESS_LINE", "SIDES",
     "BOTH_USES_MEAN", "ONE_CURVE_METHODS", "QUICK_FIT_MIN_POINTS", "SERIES_SIDES", "TOO_FEW_FOR_QUICK_FIT",
     "Component", "Curve", "FitData", "FitModel", "FitResult", "FitStopped", "MissingHalf", "Parameter", "PreparedCurve",
     "evaluate", "export_table", "fit", "fit_record", "fit_resolving", "fit_scales", "from_manual", "left_out_points", "log_rmse",

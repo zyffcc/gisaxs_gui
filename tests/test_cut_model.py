@@ -129,7 +129,7 @@ def test_the_dwba_exit_angle_defaults_to_the_critical_angle() -> None:
 
 
 def test_fitting_formulas_on_a_fine_rule_are_reproduced() -> None:
-    """Fitting before 0.3 on 20001 nodes (its own default rule aliases: Physics and Methods 9.3)."""
+    """earlier Fitting on 20001 nodes (its own default rule aliases: Physics and Methods 9.3)."""
     for radius, spread in ((3.0, 0.1), (6.0, 0.25)):
         np.testing.assert_allclose(
             population_terms("sphere", Q, radius=radius, radius_spread=spread, law="intensity_gauss")[0],
