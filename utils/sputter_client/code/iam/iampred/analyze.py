@@ -153,6 +153,12 @@ def main(argv=None):
         print(f"      {name} ({tag}): {'done' if rc == 0 else 'failed'} in {steps[-1]['seconds']:.0f} s", flush=True)
         return rc == 0
 
+    def finish(fam_, preliminary=False):
+        return _finish(a, out, data, fam_, tried, like, steps, run, run_quiet, lambda: status, preliminary)
+
+    def write_analysis(fam_, st):
+        _analysis(a, out, data, fam_, tried, like, steps, st)
+
     have = bool(data and (data / a.label / "scan.json").exists())
     ok = True
     if have:
@@ -164,6 +170,9 @@ def main(argv=None):
         args += ["--rate-nm-s", a.rate_nm_s] if a.rate_nm_s is not None else ["--qcm-nm-s", a.qcm_nm_s]
         args += ["--data", data] if data is not None else []
         args += ["--shadow"] if a.substrate == "Si" and "--shadow" not in extra else []
+
+
+        args += ["--windows-only", a.step] if a.mode != "full" and "--windows-only" not in extra else []
         ok = run("intake", args + extra)
     tried = {}
     if ok:
@@ -191,27 +200,46 @@ def main(argv=None):
         if ok:
             fam = min(tried, key=tried.get)
             LV.say("chosen", "predict", family=fam, deviations={k: LV.rounded(v, 3) for k, v in tried.items()})
+            status = "ok" if status.startswith("failed at predict") else status
             if later:
+
+
+                ok = finish(fam, preliminary=True)
+                if ok:
+                    LV.say("preliminary", "predict", family=fam, folder=str(out))
                 LV.say("refine", "predict", family=fam, refine=mode["refine"], iterations=mode["sequence"])
                 run_quiet("predict", predict_args(fam, mode["refine"], mode["sequence"]), "refine")
-            for v in ("windows.csv", "summary.json", "evolution.png", "patterns.png", "sequence_record.json"):
-                if (out / fam / v).exists():
-                    shutil.copyfile(out / fam / v, out / v)
-            status = "ok" if status.startswith("failed at predict") else status
     if ok:
-        ok = run("report", [out])
+        finish(fam)
+    else:
+        write_analysis(fam, status)
+    LV.clear(live)
+    return 0 if status == "ok" else 1
+
+
+def _finish(a, out, data, fam, tried, like, steps, run, run_quiet, status_of, preliminary=False):
+    "Copies the chosen network's tables, runs report and present (the main-screen data) and writes analysis.json;"
+    for v in ("windows.csv", "summary.json", "evolution.png", "patterns.png", "sequence_record.json"):
+        if (out / fam / v).exists():
+            shutil.copyfile(out / fam / v, out / v)
+    ok = run("report", [out])
     if ok:
         print("[4/4] present ...", flush=True)
         args = [out / fam, "--k", 3, "--workers", a.workers] + (["--data", data] if data is not None else [])
         if run_quiet("present", args, "main") and (out / fam / "main" / "main.json").exists():
             shutil.copytree(out / fam / "main", out / "main", dirs_exist_ok=True)
+    _analysis(a, out, data, fam, tried, like, steps, "preliminary" if (ok and preliminary) else status_of())
+    return ok
+
+
+def _analysis(a, out, data, fam, tried, like, steps, status):
     files = {k: (str(out / v) if (out / v).exists() else None) for k, v in FILES.items()}
     res = dict(status=status, label=a.label, metal=a.metal, substrate=a.substrate, host=host_of(a.metal, a.substrate), family=fam, families_tried=tried, like=like, mode=a.mode, steps=steps, files=files,
                mask=_mask_used(data, a.label), note="development reference: not validated against independent characterisation")
+    if status == "preliminary":
+        res["preliminary"] = "the network's candidates and time path; the whole-scan refinement is running"
     (out / "analysis.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
     print(f"status: {status}; report: {files['report_md']}", flush=True)
-    LV.clear(live)
-    return 0 if status == "ok" else 1
 
 
 if __name__ == "__main__":

@@ -153,6 +153,8 @@ SPUTTER_CLIENT_ZH = {
     "This request was analysed before: its result is shown ({windows} time windows).":
         "这个请求以前分析过：显示的是它已有的结果（{windows} 个时间窗）。",
     "The analysis of {name} is ready.": "{name} 的分析已完成。",
+    "network result: the joint fit of the whole scan is running and replaces it when it is done":
+        "网络初步结果：整条扫描联合精修进行中，完成后自动替换",
     "The analysis failed.": "分析失败。",
     "The choice could not be saved: {reason}": "无法保存所选的解：{reason}",
     # -- Analyze: problems and failures ------------------------------------------------------------------------------

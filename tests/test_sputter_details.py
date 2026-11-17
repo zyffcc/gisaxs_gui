@@ -158,6 +158,23 @@ def test_the_joint_fit_of_the_whole_scan_is_shown_first_and_named(tmp_path):
     _close(page)
 
 
+def test_a_preliminary_result_replaces_the_live_view_until_the_final_one(tmp_path):
+    from src.gimap.features.sputter.application import LiveEvent
+
+    page = _page(tmp_path)
+    page.show()
+    out = write_result(tmp_path / "out")
+    analysis = json.loads((out / "analysis.json").read_text(encoding="utf-8"))
+    (out / "analysis.json").write_text(json.dumps(dict(analysis, status="preliminary")), encoding="utf-8")
+    page._client_event(LiveEvent(kind="preliminary", step="predict", fields={"folder": str(out)}))
+    assert page.client_result is not None and page.result_stack.currentIndex() == 1
+    assert page.result_name.text().endswith("network result: the joint fit of the whole scan is running and replaces "
+                                            "it when it is done")
+    page._client_event(LiveEvent(kind="preliminary", step="predict", fields={"folder": str(tmp_path / "zz_none")}))
+    assert page.client_result is not None  # a folder without a result leaves what is shown
+    _close(page)
+
+
 # -- the deposition rate and its unit -----------------------------------------------------------------------------------
 
 

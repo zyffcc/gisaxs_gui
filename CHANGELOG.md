@@ -30,6 +30,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   scan at once: one metal-amount factor for the scan, sizes, coverage and amount that do not decrease, smooth in
   time. Windows are no longer refined one by one, and only one network is fitted, so a 60 s scan takes about a
   quarter of the time it took before (about 20 min instead of about an hour on a small office PC).
+- **Sputter ▸ Analyze, faster import and a result first:** every frame is read from disk once (three times before),
+  and only the frames the analysis uses are read: the first 30 s, the last seconds and the time windows with a
+  margin — on a long scan a fraction of the frames, with exactly the same values in every window. For polymer and Cu
+  samples the network's result (its solutions and their time path) is on the main screen within minutes, marked as
+  preliminary, while the joint fit of the whole scan runs; the joint fit replaces it when it is done.
 - **Sputter ▸ Real Space:** a solution with a continuous base layer is drawn as a closed film: the top view is the
   metal of the layer over the whole square, with the grains as relief on it, and the line says *Continuous film …
   nm, grains on top: …*.

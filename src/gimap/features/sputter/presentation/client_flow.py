@@ -34,7 +34,7 @@ from ..application import (FILM_SUBSTRATES, ClientFailed, ClientProgress, Client
                            LiveEvent, Stopped, folder_key)
 from .client_texts import (DONE, FAILED_TOAST, GEOMETRY_ALPHA, GEOMETRY_CENTRE, GEOMETRY_CENTRE_AUTO, GEOMETRY_DISTANCE,
                            GEOMETRY_ENERGY, GEOMETRY_MISSING, GEOMETRY_ROLL, GEOMETRY_TO_ENTER, GEOMETRY_WAVELENGTH,
-                           NO_REPORT, PACKAGE_LINE, PACKAGE_NONE, READY_TOAST, SHOWN_AGAIN, STARTING,
+                           NO_REPORT, PACKAGE_LINE, PACKAGE_NONE, PRELIMINARY, READY_TOAST, SHOWN_AGAIN, STARTING,
                            STOPPING_ANALYSIS, WAITING_TO_ANALYZE, wrappable)
 from .geometry import warning_style
 from .rate_flow import stored_unit
@@ -434,6 +434,8 @@ class SputterClientMixin:
 
     def _client_event(self, event) -> None:
         if isinstance(event, LiveEvent):  # what a step found so far: the live view
+            if event.kind == "preliminary" and event.get("folder"):
+                self._client_preliminary(Path(str(event.get("folder"))))
             self._live_event(event)
             return
         if isinstance(event, ClientStarted):
@@ -452,6 +454,21 @@ class SputterClientMixin:
         template, values = tracker.message()
         if template:
             self._client_status("running", [(template, values)], tracker.fraction)
+
+    def _client_preliminary(self, folder: Path) -> None:
+        """The package's preliminary result (mode refine: the network's solutions and their time path) replaces the
+        live view on the main screen while the whole-scan joint fit runs; the final result replaces it when the run
+        ends. A preliminary result that cannot be read leaves the live view."""
+        client = self.service.client
+        if client is None:
+            return
+        try:
+            result = client.open(folder)
+        except (OSError, ValueError):
+            return
+        self.show_client_result(result)
+        if self.client_result is not None:
+            self.result_name.setText(f"{self.result_name.text()}  ·  {tr(PRELIMINARY)}")
 
     def _client_finished(self, outcome) -> None:
         self._live_end()
