@@ -110,6 +110,15 @@ SPUTTER_LIVE_ZH = {
     # -- the bar, After Deposition (views/sputter_main_view.py, static_flow.py) ------------------------------------
     "Nominal (nm)": "名义厚度（nm）",
     "CBF File or Zip Archive…": "CBF 文件或 zip 压缩包…",
+    # -- reading the frames from disk and the processes (reading_texts.py) ------------------------------------------
+    "disk {seconds} s per frame ({share} % of the time)": "磁盘每帧 {seconds} s（占用时的 {share} %）",
+    "disk {seconds} s per frame": "磁盘每帧 {seconds} s",
+    "Reading {done} of {total} frames": "正在读入第 {done} 帧（共 {total} 帧）",
+    "Processes: {count}": "进程数：{count}",
+    "Reading the frames from this disk is the slow part (a USB or network drive, or an on-access virus scan of every "
+    "file). Copying the scan folder to a local SSD first makes the import faster.":
+        "慢在从这个磁盘读帧（USB 或网络驱动器，或者杀毒软件在访问时扫描每个文件）。"
+        "先把扫描文件夹复制到本机 SSD，读入会快得多。",
 }
 
 __all__ = ["SPUTTER_LIVE_ZH"]

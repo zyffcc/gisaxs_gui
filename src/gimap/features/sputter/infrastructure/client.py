@@ -219,10 +219,11 @@ class ClientPackageRunner:
     def command(self, request: ClientRequest, out_folder: Path, data_root: Path, label: str = "") -> list:
         """The command line of a request (``label``: its label when it is known already)."""
         rate = "--qcm-nm-s" if request.rate_is_qcm else "--rate-nm-s"
+        workers = request.workers or self._workers()  # the number the user chose, else what the computer takes now
         args = [self.python, "-u", "-m", "iampred.analyze", "--frames", str(request.scan_folder),
                 "--label", label or request.label(), "--metal", request.metal, "--substrate", request.substrate,
                 rate, _number(request.rate_nm_s), "--alpha-i", _number(request.alpha_i_deg), "--out", str(out_folder),
-                "--mode", request.mode, "--workers", str(self._workers()), "--data", str(data_root), "--",
+                "--mode", request.mode, "--workers", str(workers), "--data", str(data_root), "--",
                 "--sdd-mm", _number(request.sdd_mm)]
         args += ["--energy-ev", _number(request.energy_ev)] if request.energy_ev is not None else \
             ["--wavelength-nm", _number(request.wavelength_nm)]

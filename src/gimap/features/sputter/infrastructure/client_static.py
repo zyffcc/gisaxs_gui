@@ -198,7 +198,7 @@ class StaticPackageRunner:
         args = [self.runner.python, "-u", "-m", "iampred.static", "--frames", join_frames(Path(frames), inner),
                 "--label", request.label(), "--nominal-nm", _number(request.nominal_nm),
                 "--out", str(request.series_folder), "--sample", request.name.strip(), "--mode", request.mode,
-                "--workers", str(self.runner.workers()), "--data", str(data_root)]
+                "--workers", str(request.workers or self.runner.workers()), "--data", str(data_root)]
         if request.reference_frames.strip():
             frames, inner = split_frames(request.reference_frames)
             args += ["--reference-frames", join_frames(Path(frames), inner)]

@@ -2,7 +2,8 @@
 in ``presentation/live_panel.py``).
 
 Left, the four steps of the analysis — each with its state and one line of what it found — and the time since the
-start. Right, the step shown: its name, one paragraph on what it does, a picture with a line under it, and a plot.
+start with the processes at work. Right, the step shown: its name, one paragraph on what it does, a note when reading
+the frames from disk is the slow part (hidden otherwise), a picture with a line under it, and a plot.
 Reading the frames: the detector summed (the pixels the mask leaves out marked) beside the frames read last on the
 grid of q_y and exit angle; below, the count rate of every frame read so far. Finding the solutions: the measured
 image of the window solved last beside the model image of its solution; below, the sizes found so far. Writing the
@@ -13,7 +14,7 @@ from __future__ import annotations
 
 from PyQt5.QtWidgets import QHBoxLayout, QLabel, QStackedWidget, QVBoxLayout, QWidget
 
-from src.gimap.app.presentation.components import StepRail
+from src.gimap.app.presentation.components import ErrorBanner, StepRail
 
 from .sputter_main_view import ElidedLabel
 
@@ -81,6 +82,11 @@ class SputterLiveView:
         self.live_explain.setObjectName("sputterLiveExplain")
         self.live_explain.setWordWrap(True)
         self.live_explain.setProperty("gimapMeta", True)
+        # shown only when reading the frames from disk is the slow part (the page sets its words)
+        self.live_disk_note = ErrorBanner("", "", view, level="warning", dismissible=False)
+        self.live_disk_note.setObjectName("sputterLiveDiskNote")
+        self.live_disk_note.title_label.setVisible(False)
+        self.live_disk_note.setVisible(False)
         self.live_picture_host, (self.live_frames_layout, self.live_patterns_layout) = _stacked(view, 2)
         self.live_caption = ElidedLabel(view)
         self.live_caption.setObjectName("sputterLiveCaption")
@@ -88,6 +94,7 @@ class SputterLiveView:
         self.live_plot_host, (self.live_trace_layout, self.live_evolution_layout) = _stacked(view, 2)
         right.addWidget(self.live_title)
         right.addWidget(self.live_explain)
+        right.addWidget(self.live_disk_note)
         right.addWidget(self.live_picture_host, 5)
         right.addWidget(self.live_caption)
         right.addWidget(self.live_plot_host, 4)

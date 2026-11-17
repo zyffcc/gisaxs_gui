@@ -12,7 +12,10 @@ at the right the step at work, in one paragraph, with what it has found so far (
   image of its solution, with its values in the line under them, and the radius, height, distance and coverage of
   every window solved so far (the network at work; once the data have chosen between two networks, the one chosen).
 
-A click on a step that has started shows what it found; a click on the step at work follows the analysis again. When
+A newer package also says how long its processes spend reading the frames from disk: the line of the import step adds
+the seconds per frame and their share of the time, and when the disk is the slow part a note above the pictures says
+so, with what helps (``reading_texts.py``); the clock line says how many processes run. A click on a step that has
+started shows what it found; a click on the step at work follows the analysis again. When
 the analysis ends the result is shown (or, when it failed or was stopped, what was shown before). A package that
 sends no live events is followed by its steps alone.
 
@@ -36,6 +39,7 @@ from .evolution_view import EvolutionPlot
 from .live_pictures import FramesPicture, TracePlot
 from .live_static import STATIC_EXPLAIN, STATIC_STEP_NAMES, LiveStaticMixin
 from .pattern_view import PatternPair
+from .reading_texts import PROCESSES, READING_LINE, SLOW_DISK_NOTE, disk_words
 from .texts import text
 from .views.sputter_live_view import LIVE_STEP_TITLES
 from .views.sputter_main_view import TILES
@@ -142,11 +146,14 @@ class LivePanelMixin(LiveStaticMixin):
         return getattr(self, "_live", None) is not None
 
     def _live_begin(self, folder, *, kind: str = "insitu", label: str = "", nominal_nm=None, series=None,
-                    reference: bool = False) -> None:
+                    reference: bool = False, workers: Optional[int] = None) -> None:
         """Analyze started a run (not a result it had already): the live view replaces the main screen. ``kind``
         ``static``: one sample measured after its deposition (``label``, ``nominal_nm``; ``series``: the series as
-        it was before; ``reference``: frames of a bare substrate were given)."""
+        it was before; ``reference``: frames of a bare substrate were given). ``workers``: the processes the package
+        was asked to run with."""
         self._live, self._live_folder, self._live_events, self._live_reused = LiveRun(kind=kind), folder, 0, False
+        self._live.workers = int(workers or 0)
+        self.live_disk_note.setVisible(False)
         self._live_sample = {"label": label, "nominal_nm": nominal_nm, "series": series, "reference": reference}
         self._live_started = time.monotonic()
         self._live_shown, self._live_pinned = "", ""
@@ -217,7 +224,9 @@ class LivePanelMixin(LiveStaticMixin):
 
     def _live_tick(self) -> None:
         if self._live is not None:
-            self.live_clock.setText(text(CLOCK, time=_clock(time.monotonic() - self._live_started)))
+            words = text(CLOCK, time=_clock(time.monotonic() - self._live_started))
+            processes = self._live.processes()
+            self.live_clock.setText(words + " · " + text(PROCESSES, count=processes) if processes else words)
 
     def _live_step_chosen(self, key: str) -> None:
         """A click on a step: what it found (one that has started), or — the step at work — follow the analysis."""
@@ -267,6 +276,7 @@ class LivePanelMixin(LiveStaticMixin):
         names, explain = (STATIC_STEP_NAMES, STATIC_EXPLAIN) if self._live_static() else (STEP_NAMES, EXPLAIN)
         self.live_title.setText(text(TITLE, index=steps.index(step) + 1, count=len(steps), name=tr(names[step])))
         self.live_explain.setText(tr(explain[step]))
+        self._show_disk_note(run)
         if self._live_static():
             self._live_draw_static(run, step, turned, dirty)
             return
@@ -296,6 +306,13 @@ class LivePanelMixin(LiveStaticMixin):
             self.live_evolution.draw(result, None, mark)
         self.live_caption.set_full_text(self._window_caption(run, latest))
 
+    def _show_disk_note(self, run: LiveRun) -> None:
+        """The note that reading the frames from disk is the slow part (from then on, whatever step is shown)."""
+        slow = run.disk_slow()
+        if slow:
+            self.live_disk_note.message_label.setText(tr(SLOW_DISK_NOTE))
+        self.live_disk_note.setVisible(slow)
+
     def _live_show_steps(self, run: LiveRun) -> None:
         tracker, steps = self._live_tracker(), self._live_steps_of()
         running = self._live_running_step()
@@ -306,7 +323,9 @@ class LivePanelMixin(LiveStaticMixin):
             if key == "predict" and run.families and not run.chosen and running == "predict":
                 done = False  # the next network of the analysis is still at work
             state = "error" if failed else "ok" if done or before else "busy" if key == running else "pending"
-            self.live_steps.set_state(key, state, self._step_line(key, run, tracker))
+            line = self._step_line(key, run, tracker)
+            disk = disk_words(run.disk_per_frame(), run.disk_share()) if key == "intake" else ""
+            self.live_steps.set_state(key, state, " · ".join(part for part in (line, disk) if part))
 
     def _step_line(self, key: str, run: LiveRun, tracker) -> str:
         if run.kind == "static":
@@ -321,8 +340,9 @@ class LivePanelMixin(LiveStaticMixin):
                           "last": shown_number(last, 4)}
                 return text(IMPORTED_ONSET, onset=shown_number(onset, 4), **values) if onset is not None else \
                     text(IMPORTED_LINE, **values)
-            if run.frames_total:
-                return text(FRAMES_LINE, done=_count(run.frames_done), total=_count(run.frames_total))
+            if run.frames_total:  # a package that says the disk time: "Reading 312 of 1,241 frames · disk …"
+                return text(READING_LINE if run.disk_per_frame() is not None else FRAMES_LINE,
+                            done=_count(run.frames_done), total=_count(run.frames_total))
             if run.centre is not None:
                 return text(CENTRE_LINE, col=f"{run.centre[0]:.1f}", row=f"{run.centre[1]:.1f}")
             return ""

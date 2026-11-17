@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -100,6 +101,9 @@ class ClientRequest:
     """How long the deposition lasted after its start (None: to the end of the scan)."""
     film_nm: Optional[float] = None
     """Thickness of the polymer film (None: the package's own value for the substrate)."""
+    workers: Optional[int] = None
+    """Processes the package runs its steps with (None: as many as the computer can take when it starts). Not part of
+    the result's name: the same request with another number shows the result it has."""
 
     def problems(self) -> list:
         out = []
@@ -186,6 +190,8 @@ class ClientStarted:
     folder: Path
     label: str
     reused: bool = False
+    workers: Optional[int] = None
+    """The processes the package was asked to run with (None: its runner's own number)."""
 
 
 class ClientMissing(RuntimeError):
@@ -310,6 +316,21 @@ class ClientService:
         """The report, the facts and the logs of a result, for Details."""
         return self.reader.texts(result)
 
+    # -- processes --------------------------------------------------------------------------------------------
+    def automatic_workers(self) -> Optional[int]:
+        """The processes the package would run with now when the user names no number (the runner's
+        ``workers()``: cores and free memory); None for a runner that does not say."""
+        workers = getattr(self.runner, "workers", None)
+        try:
+            return max(1, int(workers())) if callable(workers) else None
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def cores() -> int:
+        """The cores of the computer: the most processes the user can choose."""
+        return max(1, os.cpu_count() or 1)
+
     # -- analysing --------------------------------------------------------------------------------------------
     def analyze(self, request: ClientRequest, scan_results: Path, on_event: Callable[[object], None],
                 should_stop: Callable[[], object] = lambda: False) -> ClientResult:
@@ -326,7 +347,7 @@ class ClientService:
         if self.reader.complete(out):
             on_event(ClientStarted(out, label, reused=True))
             return self.reader.read(out)
-        on_event(ClientStarted(out, label))
+        on_event(ClientStarted(out, label, workers=request.workers))
         run = self.runner.run(request, out, on_event, should_stop)
         if run.stopped or should_stop():
             raise Stopped(CLIENT_STOPPED)

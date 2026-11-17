@@ -29,10 +29,22 @@ geometry in one line with **Edit**, **Open Result…**):
   gui_<scan>_<hash> --metal … --substrate … (--rate-nm-s | --qcm-nm-s) … --alpha-i … --out … --mode … --workers N
   --data … -- --sdd-mm … (--energy-ev | --wavelength-nm) … (--beam-col … --beam-row … | --auto-centre) --roll …
   [--mask …] [--t-dep …] [--t-sput …] [--poly-t …]`, cwd `<package>/code/iam`, `IAM_*`, `IAMPRED_MODELS`,
-  `PYTHONPATH`, `TZ`, `OMP_NUM_THREADS` set; workers = max(1, min(16, cores − 2, (free memory − 1.5 GB) / 0.3 GB),
-  `infrastructure/process.py` `default_workers`). The beam centre is entered in GIMaP's pixel coordinates and handed
-  over as pixel-centre indices (− 0.5). Progress from the package's `[n/N] step ...` lines (`ClientProgress`); Cancel
-  ends the process tree (`process.run_streaming`: polled every 0.2 s, `taskkill /T /F` on Windows).
+  `PYTHONPATH`, `TZ`, `OMP_NUM_THREADS` set; workers N = `ClientRequest.workers`: the number chosen in Details ▸
+  Analyze options ▸ **Parallel processes** (1 … cores), or for **Automatic (N)** (the default) max(1, min(16, cores − 2,
+  (free memory − 1.5 GB) / 0.3 GB), `infrastructure/process.py` `default_workers`, through
+  `ClientService.automatic_workers`) worked out when the analysis starts (`presentation/workers_flow.py`; kept in the
+  preferences as `workers`, a number or `auto`; Static Frames use the same number). Not part of the request's hash: the
+  same request with another number shows the result it has; `ClientStarted.workers` hands it to the live view). The
+  beam centre is entered in GIMaP's pixel coordinates and handed over as pixel-centre indices (− 0.5). Progress from
+  the package's `[n/N] step ...` lines (`ClientProgress`); Cancel ends the process tree (`process.run_streaming`:
+  polled every 0.2 s, `taskkill /T /F` on Windows).
+- **The live view** (`live_panel.py`, events in `application/client_live.py`): while Analyze runs, the main screen
+  shows the steps and what each found so far. The clock line adds *Processes: n* (`reading.workers`, else the number
+  GIMaP passed). A newer package's `frames` events carry `frames`, `read_s`, `wall_s`, `mb`, and a `reading` event ends
+  the import: `LiveRun` adds the chunks up (`disk_per_frame`, `disk_share`, the `reading` values first), the import's
+  line says *Reading a of b frames · disk x s per frame (y % of the time)* (`reading_texts.py`), and when the disk takes
+  ≥ 0.15 s per frame and ≥ 50 % of the time, or `reading.slow`, a warning banner (`live_disk_note`) says that reading
+  from this disk is the slow part and that copying the scan folder to a local SSD helps. An older package: neither.
 - **Deposition rate** (`presentation/rate_flow.py`): typed in the unit chosen beside it, **Å/s** (the default: what a
   quartz balance shows) or **nm/s**; the request carries nm/s (Å/s ÷ 10, to 12 significant digits). The unit is kept
   with the rate per scan folder and as the last used one; a folder or project an older page remembered has its rate in
@@ -93,8 +105,8 @@ geometry in one line with **Edit**, **Open Result…**):
 
 - **Left** (`views/sputter_page_view.py`): Sample and geometry (X-rays, distance, incidence, beam centre; each field
   says where its value comes from, `application/scan.py`: `prefill`, `remember`, `matching_preset`; **Save Geometry
-  as Preset…**); Analyze options (`views/sputter_main_view.py`: mode, onset, duration, polymer film thickness, the
-  package and its folder, Open Report, Open Folder, the messages of the run); Static Frames (collapsed); More options
+  as Preset…**); Analyze options (`views/sputter_main_view.py`: mode, parallel processes, onset, duration, polymer
+  film thickness, the package and its folder, Open Report, Open Folder, the messages of the run); Static Frames (collapsed); More options
   (collapsed): the pixel mask with **Masks of the Package**, the sample roll, the folder results go to.
 - **The form** (`geometry.py`): `CbfHeaderInspector` reads the first frame's text header (detector, serial number,
   pixel size, exposure and period, time stamp, flat field; an energy hint from a `Wavelength` line, a companion NeXus
@@ -108,8 +120,11 @@ geometry in one line with **Edit**, **Open Result…**):
   window (a static series: per sample) of the solution the main screen shows — time or sample, nominal thickness, the
   tiles the result has, fit deviation, which solution; a window without one says why; the rows follow a choice on the
   main screen; copy with Ctrl+C. **Report**: the facts of `analysis.json` (the network used, the networks tried with
-  their fit deviation, the mode, the pixel mask, the run time of the steps) above `REPORT.md` rendered as Markdown
-  (its images found in the result folder). **Logs**: the `analyze_*.log` of every step, in the order of the steps.
+  their fit deviation, the mode, the pixel mask, the run time of the steps); **Time per step** (`steps_html`): every
+  step of `steps` with its time (m:ss), the import row with `reading` (frames read of how many, the disk's seconds per
+  frame and share of the time), the total and the processes (`workers`); a note when `reading` says the disk was the
+  slow part (`reading_was_slow`); then `REPORT.md` rendered as Markdown (its images found in the result folder). An
+  older result without `reading` / `workers` has the rows it can. **Logs**: the `analyze_*.log` of every step, in the order of the steps.
   Without a result each tab says *Analyze a scan or open a result*.
 
 Layers: `domain` (`client.py`: the windows, entries and images of an Analyze result; `real_space.py`: where the grains
@@ -120,10 +135,10 @@ and where each value comes from), `infrastructure` (`client.py`: `ClientPackageR
 `locate_package`; `client_static.py`: `StaticPackageRunner`; `process.py`; `scan_header.py`: `CbfHeaderInspector`),
 `presentation` (`SputterPage` = `views/sputter_page_view.py` + `views/sputter_main_view.py` +
 `views/sputter_live_view.py` + `views/sputter_static_view.py` + `client_flow.py`, `rate_flow.py`, `client_panel.py`,
-`result_tabs.py`, `client_texts.py`, `live_panel.py`, `live_pictures.py`, `live_static.py`, `pattern_view.py`,
+`result_tabs.py`, `client_texts.py`, `reading_texts.py`, `workers_flow.py`, `live_panel.py`, `live_pictures.py`, `live_static.py`, `pattern_view.py`,
 `real_space_view.py`, `evolution_view.py`, `static_flow.py`, `geometry.py`, `project_state.py`, `texts.py`,
 `preset_dialog.py`), `bootstrap.py`. Chinese texts: `app/presentation/i18n/zh_sputter.py`, `zh_sputter_client.py`,
 `zh_sputter_live.py`. Tests: `tests/test_sputter_feature.py`, `tests/test_sputter_page.py` (fakes in
 `tests/sputter_fixtures.py`), `tests/test_sputter_client.py`, `tests/test_sputter_main_screen.py`,
-`tests/test_sputter_details.py`, `tests/test_sputter_live.py` (a fake of the package's process and invented results in
+`tests/test_sputter_details.py`, `tests/test_sputter_live.py`, `tests/test_sputter_reading.py` (a fake of the package's process and invented results in
 `tests/sputter_client_fixtures.py`), `tests/test_sputter_client_bundle.py`. Page: `docs/ui/workspaces/sputter.md`.
