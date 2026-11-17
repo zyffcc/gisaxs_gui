@@ -38,11 +38,38 @@ def test_every_family_scatters_one_at_q_zero(family, law) -> None:
 
 @pytest.mark.parametrize("family", ["sphere", "vertical_cylinder"])
 @pytest.mark.parametrize("law", ["number_gauss", "lognormal", "intensity_gauss"])
-def test_the_size_rule_has_converged(family, law) -> None:
-    for radius, spread in ((2.0, 0.05), (12.0, 0.35), (40.0, 0.5)):
+def test_the_size_average_agrees_with_the_fully_resolved_one(family, law) -> None:
+    """Below q_cut the rule has converged; above it the envelope leaves out only the ringing of the hard cut of a
+    distribution by number, which grows with σR/R (``envelope``). Sizes by intensity are always resolved."""
+    for radius, spread, tolerance in ((2.0, 0.05, 3e-5), (7.0, 0.2, 3e-5), (12.0, 0.35, 1e-3), (40.0, 0.5, 1e-2)):
         default = population_terms(family, Q, radius=radius, radius_spread=spread, law=law)
         fine = population_terms(family, Q, radius=radius, radius_spread=spread, law=law, panels=1024)
-        np.testing.assert_allclose(default, fine, rtol=3e-5)
+        np.testing.assert_allclose(default, fine, rtol=3e-5 if law == "intensity_gauss" else tolerance)
+
+
+def test_the_random_cylinder_average_agrees_with_the_fully_resolved_one() -> None:
+    q = Q[::3]
+    for radius, spread, height, tolerance in ((5.0, 0.2, 40.0, 3e-5), (12.0, 0.35, 30.0, 1e-3)):
+        common = dict(radius=radius, radius_spread=spread, height=height, height_spread=0.2)
+        np.testing.assert_allclose(population_terms("cylinder", q, **common),
+                                   population_terms("cylinder", q, panels=256, **common), rtol=tolerance)
+
+
+@pytest.mark.parametrize("name", ["sphere", "disc", "sinc"])
+def test_an_envelope_is_the_average_over_one_oscillation(name) -> None:
+    from src.gimap.features.fitting.domain.cut_model import envelope, shapes
+
+    exact, smooth, period = {
+        "sphere": (lambda x: shapes.sphere_amplitude(x) ** 2, envelope.sphere_square, np.pi),
+        "disc": (lambda x: shapes.disc_amplitude(x) ** 2, envelope.disc_square, np.pi),
+        "sinc": (lambda x: shapes.sinc_half(x) ** 2, envelope.sinc_square, 2 * np.pi),
+    }[name]
+    for centre in (200.0, 600.0):
+        x = np.linspace(centre - 12 * period, centre + 12 * period, 200001)
+        window = np.exp(-(((x - centre) / (3 * period)) ** 2))  # a Gaussian over several periods: no leakage
+        assert np.sum(window * exact(x)) / np.sum(window * smooth(x)) == pytest.approx(1.0, rel=1e-4)
+    pair = envelope.sphere_pair(np.array([50.0]), np.array([50.0]))
+    assert pair[0] == pytest.approx(envelope.sphere_square(np.array([50.0]))[0], rel=1e-12)
 
 
 def test_a_random_cylinder_of_one_size_is_the_orientation_integral() -> None:

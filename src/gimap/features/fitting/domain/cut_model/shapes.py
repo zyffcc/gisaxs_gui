@@ -13,7 +13,7 @@ so a population's scale is its forward intensity, whatever its family. Families:
   height (the height factor is common to every radius and every path, so it drops out of P̂ and C).
 * ``cylinder``: randomly oriented cylinders of radius R and height h with independent distributions,
   A = [2 J₁(|q| R sin α)/(|q| R sin α)] · sin(|q| h cos α / 2)/(|q| h cos α / 2), V ∝ R² h, averaged over
-  u = cos α uniform on [0, 1] (isotropic orientation) by composite Gauss–Legendre.
+  α on [0, π/2] with weights sin α (isotropic orientation) by composite Gauss–Legendre.
 
 Arrays: ``q`` (N,), radii and weights (B, n) for B parameter sets at once; results (B, N).
 """
@@ -23,6 +23,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.special import j1
 
+from . import envelope as env
 from . import sizes
 
 CHUNK = 1_000_000
@@ -62,9 +63,34 @@ def _blocks(rows: int, columns: int, per_element: int):
     return [(slice(a, a + 1), slice(b, min(b + width, columns))) for a in range(rows) for b in range(0, columns, width)]
 
 
-def sphere(q, radii, weights, terms, coherent=False):
-    """(P̂, C or None) of spheres with the paths ``terms`` = ((c_k, Q_k), …)."""
+def _sphere_envelope(q, radii, weights, terms):
+    """P̂ of spheres with every |F|² (or product of two paths) replaced by its envelope where x ≥ ``X_MIN``."""
+    p_out = np.empty((radii.shape[0], q.size))
+    for rows, cols in _blocks(radii.shape[0], q.size, radii.shape[1] * 4 * len(terms)):
+        r, qq = radii[rows][:, :, None], q[cols]
+        v2 = weights[rows] * radii[rows] ** 6
+        x = [np.hypot(qq, qz)[None, None, :] * r for _c, qz in terms]
+        total = 0.0
+        for k, (c_k, qz_k) in enumerate(terms):
+            for m in range(k, len(terms)):
+                c_m, qz_m = terms[m]
+                exact = sphere_amplitude(x[k]) * sphere_amplitude(x[m])
+                smooth = env.sphere_square(x[k]) if m == k else env.sphere_pair(x[k], x[m])
+                pair = np.where(np.minimum(x[k], x[m]) < env.X_MIN, exact, smooth)
+                if m == k:
+                    total = total + abs(c_k) ** 2 * pair
+                else:
+                    total = total + 2.0 * np.real(c_k * np.conj(c_m) * np.exp(-1j * (qz_k - qz_m) * r)) * pair
+        p_out[rows, cols] = np.einsum("bn,bnq->bq", v2, total) / v2.sum(axis=1)[:, None]
+    return p_out
+
+
+def sphere(q, radii, weights, terms, coherent=False, envelope=False):
+    """(P̂, C or None) of spheres with the paths ``terms`` = ((c_k, Q_k), …); with ``envelope``, P̂ of the envelopes
+    and C = 0 (``envelope``: for q beyond the size distribution's q_cut)."""
     q = np.asarray(q, float)
+    if envelope:
+        return _sphere_envelope(q, radii, weights, terms), (np.zeros((radii.shape[0], q.size)) if coherent else None)
     p_out = np.empty((radii.shape[0], q.size))
     c_out = np.empty_like(p_out) if coherent else None
     single = len(terms) == 1 and terms[0][1] == 0.0
@@ -85,45 +111,56 @@ def sphere(q, radii, weights, terms, coherent=False):
     return p_out, c_out
 
 
-def vertical_cylinder(q, radii, weights, coherent=False):
-    """(P̂, C or None) of upright cylinders, in the plane."""
+def vertical_cylinder(q, radii, weights, coherent=False, envelope=False):
+    """(P̂, C or None) of upright cylinders, in the plane; with ``envelope``, P̂ of the envelopes and C = 0."""
     q = np.asarray(q, float)
     p_out = np.empty((radii.shape[0], q.size))
-    c_out = np.empty_like(p_out) if coherent else None
+    c_out = np.zeros_like(p_out) if coherent and envelope else (np.empty_like(p_out) if coherent else None)
     for rows, cols in _blocks(radii.shape[0], q.size, radii.shape[1]):
-        amplitude = disc_amplitude(q[cols][None, None, :] * radii[rows][:, :, None])
+        x = q[cols][None, None, :] * radii[rows][:, :, None]
+        amplitude = disc_amplitude(x)
+        square = np.where(x < env.X_MIN, amplitude**2, env.disc_square(np.maximum(x, env.X_MIN))) if envelope else amplitude**2
         v2 = weights[rows] * radii[rows] ** 4
         norm = v2.sum(axis=1)
-        p_out[rows, cols] = np.einsum("bn,bnq->bq", v2, amplitude**2) / norm[:, None]
-        if coherent:
+        p_out[rows, cols] = np.einsum("bn,bnq->bq", v2, square) / norm[:, None]
+        if coherent and not envelope:
             mean = np.einsum("bn,bnq->bq", weights[rows] * radii[rows] ** 2, amplitude)
             c_out[rows, cols] = mean**2 / norm[:, None]
     return p_out, c_out
 
 
 def orientation_nodes(q_max: float, size_extent) -> tuple[np.ndarray, np.ndarray]:
-    """Nodes u = cos α on [0, 1] and their weights (sum 1) for the largest size ``size_extent`` (nm)."""
+    """Nodes u = cos α and their weights (sum 1) of the isotropic average for the largest size ``size_extent`` (nm).
+
+    The rule is composite Gauss–Legendre in α on [0, π/2] with weights sin α: q sin α and q cos α are smooth in α,
+    whereas in u the argument q √(1 − u²) oscillates ever faster towards u = 1, which a rule in u resolves badly."""
     panels = max(3, sizes.panel_count(q_max, size_extent))
-    u, w = sizes._composite(np.zeros(1), np.ones(1), panels)
-    return u[0], w[0] / w[0].sum()
+    alpha, w = sizes._composite(np.zeros(1), np.full(1, np.pi / 2), panels)
+    w = w[0] * np.sin(alpha[0])
+    return np.cos(alpha[0]), w / w.sum()
 
 
 GRID_PER_PERIOD = 64
 """Points of the 1D grids of a random cylinder's size averages per period π/R of |F|² (cubic interpolation)."""
 
 
-def _size_average(grid, nodes_, weights, amplitude, power, coherent):
+def _size_average(grid, nodes_, weights, amplitude, power, coherent, square_envelope, cut):
     """Σ n V² A²/Σ n V² (and the signed Σ n V A/√Σ n V² when ``coherent``) on ``grid`` (B, G), with V ∝ x^(power/2)
-    and A = ``amplitude``(grid · x)."""
+    and A = ``amplitude``(grid · x); beyond each row's ``cut`` the envelope ``square_envelope`` and a mean of 0."""
     mean_sq = np.empty((nodes_.shape[0], grid.size))
     mean = np.empty_like(mean_sq) if coherent else None
     for rows, cols in _blocks(nodes_.shape[0], grid.size, nodes_.shape[1]):
-        a = amplitude(grid[cols][None, None, :] * nodes_[rows][:, :, None])
+        x = grid[cols][None, None, :] * nodes_[rows][:, :, None]
+        a = amplitude(x)
+        step = env.blend(grid[cols], cut[rows])
+        smooth = np.where(x >= env.X_MIN, square_envelope(np.maximum(x, env.X_MIN)), a * a)
+        square = (1.0 - step[:, None, :]) * a * a + step[:, None, :] * smooth
         v2 = weights[rows] * nodes_[rows] ** power
         norm = v2.sum(axis=1)
-        mean_sq[rows, cols] = np.einsum("bn,bnq->bq", v2, a * a) / norm[:, None]
+        mean_sq[rows, cols] = np.einsum("bn,bnq->bq", v2, square) / norm[:, None]
         if coherent:
-            mean[rows, cols] = np.einsum("bn,bnq->bq", weights[rows] * nodes_[rows] ** (power / 2), a) / np.sqrt(norm)[:, None]
+            amp = np.einsum("bn,bnq->bq", weights[rows] * nodes_[rows] ** (power / 2), a) / np.sqrt(norm)[:, None]
+            mean[rows, cols] = (1.0 - step) * amp
     return mean_sq, mean
 
 
@@ -137,39 +174,80 @@ def _cubic(values, step, x):
     return sum(wk[None] * values[:, i + k] for k, wk in enumerate(w))
 
 
-def _grid(q_max, largest, period):
-    """Uniform grid from 0 past ``q_max`` with ``GRID_PER_PERIOD`` points per ``period``/``largest``."""
+def _grid(q_end, largest, period):
+    """Uniform grid from 0 past ``q_end`` with ``GRID_PER_PERIOD`` points per ``period``/``largest``."""
     step = period / (GRID_PER_PERIOD * max(largest, 1e-12))
-    count = max(8, int(np.ceil(q_max / step)) + 4)
+    count = max(8, int(np.ceil(q_end / step)) + 4)
     return np.arange(count) * step, step
 
 
-def cylinder(q, radii, r_weights, heights, h_weights, qz=0.0, coherent=False):
+def _envelope_average(x, nodes_, weights, amplitude, power, square_envelope):
+    """Σ n V² env(x·R)/Σ n V² at the arguments ``x`` (any shape), each node's exact square below ``X_MIN``: (B, *x.shape)."""
+    v2 = weights * nodes_**power
+    out = np.zeros((nodes_.shape[0],) + x.shape)
+    for j in range(nodes_.shape[1]):
+        arg = x[None] * nodes_[:, j].reshape((-1,) + (1,) * x.ndim)
+        exact = amplitude(arg) ** 2
+        value = np.where(arg >= env.X_MIN, square_envelope(np.maximum(arg, env.X_MIN)), exact)
+        out += v2[:, j].reshape((-1,) + (1,) * x.ndim) * value
+    return out / v2.sum(axis=1).reshape((-1,) + (1,) * x.ndim)
+
+
+def _lookup(values, step, end, x, envelope_part):
+    """``values`` on the grid at ``x`` ≤ ``end`` (cubic), the envelope average ``envelope_part(x)`` beyond."""
+    inside = x <= end
+    out = _cubic(values, step, np.where(inside, x, 0.0))
+    if not inside.all():
+        out = np.where(inside[None], out, envelope_part(np.where(inside, end, x)))
+    return out
+
+
+def cylinder(q, radii, r_weights, heights, h_weights, qz=0.0, coherent=False, cut_r=None, cut_h=None,
+             envelope_radii=None, envelope_heights=None):
     """(P̂, C or None) of randomly oriented cylinders at |q| = √(q² + qz²).
 
     The radius average ⟨R⁴ (2J₁(xR)/(xR))²⟩/⟨R⁴⟩ depends on x = |q| sin α only, the height average on |q| cos α
     only: both are made once per row on a 1D grid of x (``GRID_PER_PERIOD`` points per period of the largest size)
-    and taken at every (α, q) by cubic interpolation, then averaged over α."""
+    and taken at every (α, q) by cubic interpolation, then averaged over α. With a cut (``envelope``), each average
+    goes over to its envelope between ``cut`` and ``BLEND`` · ``cut``; the grid then ends there, and beyond it the
+    envelope average is taken directly on the nodes ``envelope_radii`` / ``envelope_heights`` ((nodes, weights))."""
     q_total = np.hypot(np.asarray(q, float), qz)
     q_max = float(q_total.max()) if q_total.size else 0.0
-    # |F|² oscillates in u = cos α with period π/(q R) (radius) and 2π/(q h) (height)
-    u, wu = orientation_nodes(q_max, max(float(np.max(radii)), 0.5 * float(np.max(heights))))
+    rows_out = radii.shape[0]
+    cut_r = np.full(rows_out, np.inf) if cut_r is None else np.asarray(cut_r, float)
+    cut_h = np.full(rows_out, np.inf) if cut_h is None else np.asarray(cut_h, float)
+    end_r = min(q_max, env.BLEND * float(np.max(cut_r)))
+    end_h = min(q_max, env.BLEND * float(np.max(cut_h)))
+    # |F|² oscillates in u = cos α with period π/(q R) (radius) and 2π/(q h) (height), up to the grids' ends
+    u, wu = orientation_nodes(max(end_r, end_h), max(float(np.max(radii)), 0.5 * float(np.max(heights))))
     sin_a = np.sqrt(np.maximum(1.0 - u * u, 0.0))
-    r_grid, r_step = _grid(q_max, float(np.max(radii)), np.pi)
-    h_grid, h_step = _grid(q_max, float(np.max(heights)), 2.0 * np.pi)
-    radial_sq, radial = _size_average(r_grid, radii, r_weights, disc_amplitude, 4, coherent)
-    axial_sq, axial = _size_average(h_grid, heights, h_weights, sinc_half, 2, coherent)
+    r_grid, r_step = _grid(end_r, float(np.max(radii)), np.pi)
+    h_grid, h_step = _grid(end_h, float(np.max(heights)), 2.0 * np.pi)
+    radial_sq, radial = _size_average(r_grid, radii, r_weights, disc_amplitude, 4, coherent, env.disc_square, cut_r)
+    axial_sq, axial = _size_average(h_grid, heights, h_weights, sinc_half, 2, coherent, env.sinc_square, cut_h)
     x_r = sin_a[:, None] * q_total[None, :]
     x_h = u[:, None] * q_total[None, :]
-    rows_out = radii.shape[0]
     p_out = np.empty((rows_out, q_total.size))
     c_out = np.empty_like(p_out) if coherent else None
-    for rows, cols in _blocks(rows_out, q_total.size, 4 * u.size):
+    for rows, cols in _blocks(rows_out, q_total.size, 8 * u.size):
         xr, xh = x_r[:, cols], x_h[:, cols]
-        p_out[rows, cols] = np.einsum("u,buq->bq", wu, _cubic(radial_sq[rows], r_step, xr)
-                                      * _cubic(axial_sq[rows], h_step, xh))
+
+        def radial_envelope(x, rows=rows):
+            nodes_, node_weights = envelope_radii
+            return _envelope_average(x, nodes_[rows], node_weights[rows], disc_amplitude, 4, env.disc_square)
+
+        def axial_envelope(x, rows=rows):
+            nodes_, node_weights = envelope_heights
+            return _envelope_average(x, nodes_[rows], node_weights[rows], sinc_half, 2, env.sinc_square)
+
+        radial_part = _lookup(radial_sq[rows], r_step, end_r, xr, radial_envelope)
+        axial_part = _lookup(axial_sq[rows], h_step, end_h, xh, axial_envelope)
+        p_out[rows, cols] = np.einsum("u,buq->bq", wu, radial_part * axial_part)
         if coherent:
-            mean = np.einsum("u,buq->bq", wu, _cubic(radial[rows], r_step, xr) * _cubic(axial[rows], h_step, xh))
+            inside = (xr <= end_r)[None] & (xh <= end_h)[None]
+            amplitude = (_cubic(radial[rows], r_step, np.minimum(xr, end_r))
+                         * _cubic(axial[rows], h_step, np.minimum(xh, end_h)))
+            mean = np.einsum("u,buq->bq", wu, np.where(inside, amplitude, 0.0))
             c_out[rows, cols] = mean**2
     return p_out, c_out
 

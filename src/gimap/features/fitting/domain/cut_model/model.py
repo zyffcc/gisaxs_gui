@@ -20,7 +20,7 @@ from typing import Callable, Optional, Sequence
 
 import numpy as np
 
-from . import resolution, shapes, sizes
+from . import envelope, resolution, shapes, sizes
 from .geometry import Geometry
 from .structure import paracrystal
 
@@ -90,31 +90,73 @@ def size_averages(family: str, q, *, radius, radius_spread, law: str = "number_g
     height, h_spread = _column(height, rows), _column(height_spread, rows)
     terms = geometry.sphere_terms()
     qz = {"sphere": max(abs(z) for _c, z in terms), "cylinder": geometry.random_cylinder_qz()}.get(family, 0.0)
-    q_eff = float(np.hypot(q.max(), qz)) if q.size else 0.0
+    q_top = float(q.max()) if q.size else 0.0
+    power = shapes.RADIUS_POWER[family]
+    extent_r = sizes.extent(law, radius, spread, power)
+    extent_h = sizes.extent(law, height, h_spread, shapes.HEIGHT_POWER) if family == "cylinder" else np.zeros(rows)
+    # beyond q_cut a row's size average goes over to its envelope's (``envelope``): its quadrature only has to resolve
+    # BLEND · q_cut
+    cut_r = envelope.q_cut(law, radius, spread, power) if panels is None else np.full(rows, np.inf)
+    cut_h = (envelope.q_cut(law, height, h_spread, shapes.HEIGHT_POWER) if family == "cylinder" and panels is None
+             else np.full(rows, np.inf))
     if panels is not None:
         r_counts = h_counts = np.full(rows, int(panels))
     else:
-        r_counts = sizes.panel_counts(q_eff, sizes.extent(law, radius, spread, shapes.RADIUS_POWER[family]))
-        h_counts = (sizes.panel_counts(q_eff, sizes.extent(law, height, h_spread, shapes.HEIGHT_POWER))
+        reach = envelope.BLEND
+        r_counts = sizes.panel_counts(np.hypot(np.minimum(q_top, reach * cut_r), qz), extent_r)
+        h_counts = (sizes.panel_counts(np.hypot(np.minimum(q_top, reach * cut_h), qz), extent_h)
                     if family == "cylinder" else np.zeros(rows, int))
     form = np.empty((rows, q.size))
     coh = np.empty_like(form) if coherent else None
     keys = r_counts * MAX_KEY + h_counts
     for key in np.unique(keys):
         group = np.flatnonzero(keys == key)
-        radii, weights = sizes.nodes(law, radius[group], spread[group], power=shapes.RADIUS_POWER[family],
-                                     panels=int(r_counts[group[0]]))
-        if family == "sphere":
-            part, part_c = shapes.sphere(q, radii, weights, terms, coherent)
-        elif family == "vertical_cylinder":
-            part, part_c = shapes.vertical_cylinder(q, radii, weights, coherent)
-        else:
+        radii, weights = sizes.nodes(law, radius[group], spread[group], power=power, panels=int(r_counts[group[0]]))
+        if family == "cylinder":
             heights, h_weights = sizes.nodes(law, height[group], h_spread[group], power=shapes.HEIGHT_POWER,
                                              panels=int(h_counts[group[0]]))
-            part, part_c = shapes.cylinder(q, radii, weights, heights, h_weights, qz, coherent)
+            part, part_c = shapes.cylinder(
+                q, radii, weights, heights, h_weights, qz, coherent, cut_r[group], cut_h[group],
+                sizes.nodes(law, radius[group], spread[group], power=power, panels=ENVELOPE_PANELS),
+                sizes.nodes(law, height[group], h_spread[group], power=shapes.HEIGHT_POWER, panels=ENVELOPE_PANELS))
+        else:
+            part, part_c = _direct_and_envelope(family, q, radii, weights, terms, coherent, cut_r[group], law,
+                                                radius[group], spread[group], power, qz)
         form[group] = part
         if coherent:
             coh[group] = part_c
+    return form, coh
+
+
+ENVELOPE_PANELS = 4
+"""Panels of the size rule of an envelope average (smooth in R; more when two DWBA paths beat)."""
+
+
+def _direct_and_envelope(family, q, radii, weights, terms, coherent, cut, law, radius, spread, power, qz):
+    """Spheres or upright cylinders of one quadrature group: resolved up to each row's ``cut``, its envelope from
+    ``BLEND`` · ``cut`` on, a smoothstep between (``envelope``)."""
+    def evaluate(columns, nodes_, node_weights, envelope_part):
+        if family == "sphere":
+            return shapes.sphere(q[columns], nodes_, node_weights, terms, coherent, envelope_part)
+        return shapes.vertical_cylinder(q[columns], nodes_, node_weights, coherent, envelope_part)
+
+    step = envelope.blend(q, cut)
+    if not np.any(step > 0):
+        return evaluate(slice(None), radii, weights, False)
+    form = np.zeros((radii.shape[0], q.size))
+    coh = np.zeros_like(form) if coherent else None
+    resolved = np.any(step < 1, axis=0)
+    if resolved.any():
+        part, part_c = evaluate(resolved, radii, weights, False)
+        form[:, resolved] = (1.0 - step[:, resolved]) * part
+        if coherent:
+            coh[:, resolved] = (1.0 - step[:, resolved]) * part_c
+    outer = np.any(step > 0, axis=0)
+    slow = max((abs(a - b) for _c, a in terms for _d, b in terms), default=0.0)  # beating of two DWBA paths
+    count = max(ENVELOPE_PANELS, int(np.max(sizes.panel_counts(slow, sizes.extent(law, radius, spread, power)))))
+    env_nodes, env_weights = sizes.nodes(law, radius, spread, power=power, panels=count)
+    part, _zero = evaluate(outer, env_nodes, env_weights, True)
+    form[:, outer] += step[:, outer] * part
     return form, coh
 
 

@@ -1821,7 +1821,8 @@ curves go to zero. BornAgain's default gives the layer holding the particles the
 which changes the reflection the DWBA terms carry: for spheres R = 4 nm on a paracrystal of D = 14 nm (about 17 % of
 the layer) the curve then differs by 32 % (median). `cut_model`, like fit1d and `yoneda_truth.py`, uses the reflection
 of the bare substrate; the free effective r of the two-path model can take up such a difference (section 9.10). One
-core computes 1000 curves of 500 points in 3.0 s (spheres), 2.2 s (upright cylinders) and 14 s (random cylinders).
+core computes 1000 curves of 500 points (R 1–15 nm, σR/R 0.05–0.4) in 4.7 s (spheres), 3.8 s (upright cylinders)
+and 45 s (random cylinders); a fit's Search therefore takes longer than with the fixed rules used before (section 9.3).
 
 **Conventions of the earlier models** (`cut_model/conventions.py` is the one place that converts them):
 
@@ -1860,8 +1861,19 @@ random cylinders: every size scatters the same at q = 0.
 
 **Quadrature.** Composite Gauss–Legendre with 8 nodes per panel. A form factor squared oscillates in x with
 period π/q, so the panels are the number of such periods across the distribution at the largest q of the curve,
-rounded up to a power of 2, at least 2 (at most 4096). The tests require 3 · 10⁻⁵ against a rule with 1024 panels;
-typical is 10⁻⁶. Earlier, Fitting used rectangle rules of fixed size (25 radii of a sphere, 13 radii and 13 heights
+rounded up to a power of 2, at least 2 (at most 4096).
+
+**Large q·σ: the envelope.** Averaged over sizes that vary on a scale σ (σ = R·σR/R; for the log-normal the lower
+end of its intensity-weighted part), the oscillating part of |F|² is damped by about e^{−2(qσ)²}. From
+q_cut = 6/σ on it is negligible, and the average is that of the envelope of |F|², its average over one oscillation:
+9(1 + x²)/(2x⁶) for a sphere (for two DWBA paths (9/(2ab)) Re[h₁(a)h₁(b)*] with the spherical Hankel function h₁),
+2(J₁² + Y₁²)/x² for a disc and 2/x² for the height factor of a cylinder. Between q_cut and 2·q_cut the average goes over
+smoothly (a smoothstep in q) from the resolved one to the envelope's, so the model stays a smooth function of R and σ,
+and the rule only has to resolve 2·q_cut; the coherent term C fades to 0 with the same step (it is damped by
+e^{−(qσ)²/2}). What the envelope leaves out is the ringing of the hard cut at R + 4σ of the Gaussian by number, an
+artefact of the cut: compared with the fully resolved average the curve differs by at most 3 · 10⁻⁵ for σR/R ≤ 0.2,
+10⁻³ at 0.35 and 10⁻² at 0.5 (tests). A Gaussian by intensity keeps much weight at small R; it is always fully resolved.
+Earlier, Fitting used rectangle rules of fixed size (25 radii of a sphere, 13 radii and 13 heights
 of a random cylinder, 26 radii over ±3σ of a vertical cylinder). They alias at large q·R·σ: on q ≤ 3 nm⁻¹ a sphere
 of R = 5 nm and σR/R = 0.2 is off by up to 1.8 %, R = 10 nm and 0.3 by 26 %, R = 20 nm and 0.4 by 67 %
 (`tools/benchmarks/cut_model_checks.json`). Fits of large or broad particles to high q therefore change with this version.
@@ -1899,11 +1911,15 @@ F_c(q, R, h, α) = [ 2 J_1(q R sin α) / (q R sin α) ] · sinc( q h cos α / 2 
 P_cyl(q) = ∫₀¹ du  ⟨R⁴ (2 J_1(q R √(1−u²)) / (q R √(1−u²)))²⟩ / ⟨R⁴⟩  ·  ⟨h² sinc²(q h u / 2)⟩ / ⟨h²⟩,   u = cos α   (9.9)
 ```
 
-⟨ ⟩ are averages by number (9.4). The orientation average is uniform in u = cos α (isotropic) and uses composite
-Gauss–Legendre with one panel per period π/(q · max(R, h/2)) at the largest q (at least 3). The radius average depends
-on q sin α only and the height average on q cos α only: each is made once on a uniform 1D grid with 64 points per period
-of the largest size and taken at every (α, q) by four-point interpolation. For one size the result agrees with adaptive
-quadrature to 10⁻⁵. Earlier the orientation average was a 24-point rectangle rule in α with sin α weights; it is off
+⟨ ⟩ are averages by number (9.4). The orientation average is taken in α on [0, π/2] with weights sin α (u = cos α
+is uniform for an isotropic orientation; q sin α and q cos α are smooth in α, whereas in u the radius argument
+q√(1 − u²) oscillates ever faster towards u = 1), by composite Gauss–Legendre with one panel per period
+π/(q · max(R, h/2)). The radius average depends on q sin α only and the height average on q cos α only: each is made once
+on a uniform 1D grid with 64 points per period of the largest size and taken at every (α, q) by four-point
+interpolation; with the envelope of section 9.3 the grids and the orientation rule end at 2·q_cut, and beyond it the
+envelope averages are taken directly. For one size the result agrees with adaptive quadrature to 10⁻⁵; a random
+cylinder takes 0.1–0.6 s to evaluate once when it is large and broad (R 5–20 nm, σR/R 0.2–0.5), much more than a
+sphere. Earlier the orientation average was a 24-point rectangle rule in α with sin α weights; it is off
 by up to 18 % (R = 3 nm, h = 10 nm) and 55 % (R = 5 nm, h = 30 nm) at q ≤ 3 nm⁻¹.
 
 **Vertical cylinder** at q_z = 0 (cylinders standing on the substrate, q in the plane; V ∝ R² at a fixed height):

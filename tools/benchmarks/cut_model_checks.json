@@ -86,40 +86,40 @@
   {
    "name": "vertical cylinder R=8.0 σ=0.3 (number), old formula fine, ±4σ",
    "reference": "fitting",
-   "max_rel": 3.6754322252363636e-07,
-   "median_rel": 3.126394396701926e-07,
-   "q_at_max": 1.1144908180300501,
+   "max_rel": 0.00010505573781727229,
+   "median_rel": 3.2666334692788013e-07,
+   "q_at_max": 3.0,
    "note": ""
   },
   {
    "name": "random cylinder R=3.0 h=10.0, old rule 24 orientations",
    "reference": "fitting",
-   "max_rel": 0.17706943211061077,
-   "median_rel": 0.07930915383735504,
+   "max_rel": 0.17706942949849347,
+   "median_rel": 0.07930916552268119,
    "q_at_max": 2.995025041736227,
    "note": "old orientation rule converges as 1/n"
   },
   {
    "name": "random cylinder R=3.0 h=10.0, old rule 800 orientations",
    "reference": "fitting",
-   "max_rel": 0.006438312405365076,
-   "median_rel": 0.00259902216374297,
+   "max_rel": 0.006438309251636576,
+   "median_rel": 0.002599034811870904,
    "q_at_max": 2.995025041736227,
    "note": "old orientation rule converges as 1/n"
   },
   {
    "name": "random cylinder R=5.0 h=30.0, old rule 24 orientations",
    "reference": "fitting",
-   "max_rel": 0.5497497911125623,
-   "median_rel": 0.2909370267076539,
+   "max_rel": 0.5497497921528869,
+   "median_rel": 0.29093702619398515,
    "q_at_max": 2.995025041736227,
    "note": "old orientation rule converges as 1/n"
   },
   {
    "name": "random cylinder R=5.0 h=30.0, old rule 800 orientations",
    "reference": "fitting",
-   "max_rel": 0.03600695827108036,
-   "median_rel": 0.013863054887879256,
+   "max_rel": 0.03600696049843244,
+   "median_rel": 0.013863054175990208,
    "q_at_max": 2.995025041736227,
    "note": "old orientation rule converges as 1/n"
   },
@@ -214,24 +214,24 @@
   {
    "name": "sphere R=10.0 σ=0.35, Born at q_z=0.577",
    "reference": "fit1d",
-   "max_rel": 4.765486333324631e-07,
-   "median_rel": 1.7180003136774147e-07,
-   "q_at_max": 0.6219699499165275,
+   "max_rel": 0.00023532734372677666,
+   "median_rel": 3.1919831056104186e-07,
+   "q_at_max": 2.3781302170283807,
    "note": ""
   },
   {
    "name": "vertical cylinder R=10.0 σ=0.35",
    "reference": "fit1d",
-   "max_rel": 2.7453303352853453e-06,
-   "median_rel": 1.6682736647677388e-07,
-   "q_at_max": 0.29859766277128547,
+   "max_rel": 0.0006500311084980392,
+   "median_rel": 6.967967986493129e-07,
+   "q_at_max": 2.2935559265442405,
    "note": ""
   },
   {
    "name": "random cylinder R=3 h=12, Born at q_z",
    "reference": "fit1d",
-   "max_rel": 4.4277947006676754e-06,
-   "median_rel": 1.0617076429131345e-06,
+   "max_rel": 4.427030161346934e-06,
+   "median_rel": 1.0626079284259404e-06,
    "q_at_max": 1.0697161936560935,
    "note": ""
   },
@@ -357,8 +357,8 @@
   }
  ],
  "seconds_1000x500_one_core": {
-  "sphere": 3.0372770999674685,
-  "vertical_cylinder": 2.1959421999636106,
-  "cylinder": 13.994665700010955
+  "sphere": 4.7225364000187255,
+  "vertical_cylinder": 3.7807248000171967,
+  "cylinder": 45.01207420002902
  }
 }
