@@ -605,3 +605,15 @@ def test_no_cut_qz_is_the_effective_interface_default_without_a_warning():
     from src.gimap.features.fitting.infrastructure.adapters import fit1d_method
 
     assert not hasattr(fit1d_method, "QZ_ZERO")
+
+
+def test_a_population_too_small_for_the_curve_is_named_as_background():
+    """On the GALAXI cut fit1d's composition rule adds a sphere of R = 0.18 nm (q_max·R ≈ 0.5): a flat term."""
+    from src.gimap.features.fitting.infrastructure.adapters.fit1d_method import _warnings
+
+    result = dict(summary={}, table=[], curves=dict(q_nm_inv=[0.01, 1.0, 2.77]),
+                  populations=[dict(R_nm=5.0), dict(R_nm=0.18), dict(R_nm=0.1, inactive=True)])
+    item = dict(q=[0.01, 1.0, 2.77])
+    warnings = _warnings(result, item, {}, used=3)
+    assert len([w for w in warnings if "smaller than this curve resolves" in w]) == 1
+    assert any(w.startswith("Population 2: R = 0.18 nm") and "q_max·R = 0.5" in w for w in warnings)

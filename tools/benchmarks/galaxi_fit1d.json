@@ -1,0 +1,1226 @@
+{
+ "truth": {
+  "R_number_mean": 6.228900639131012,
+  "sR": 0.41654636115540644,
+  "D": 53.6,
+  "w_rel": 0.19589552238805968
+ },
+ "qz": 0.5262108602499626,
+ "fits": [
+  {
+   "variant": "born1",
+   "source": "bornagain_2",
+   "composition": "sphere",
+   "chi2": 6.140420526991364,
+   "populations": [
+    {
+     "R": 4.922341223969754,
+     "R_number_mean": 4.922341223969753,
+     "sR": 0.1550811588555747,
+     "D": 57.58057805997382,
+     "w_rel": 0.4133306888296106,
+     "R_err": 0.03602235342405446,
+     "D_err": 1.999710599462829,
+     "D_range": [
+      57.49111976301923,
+      57.746879220950866
+     ],
+     "weight": null
+    }
+   ],
+   "flags": {
+    "at_bound": [],
+    "at_bound_reportable": [],
+    "weakly_constrained": [],
+    "weakly_constrained_reportable": [],
+    "weakly_constrained_detail": {},
+    "alternatives": {},
+    "ambiguity": {
+     "pop1.R_nm": {
+      "value": 4.922341223969754,
+      "min": 4.921282842998093,
+      "max": 4.922933416708446,
+      "n_solutions": 27,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     },
+     "pop1.D_nm": {
+      "value": 57.58057805997382,
+      "min": 57.49111976301923,
+      "max": 57.746879220950866,
+      "n_solutions": 27,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     }
+    },
+    "ambiguous": [],
+    "inactive_populations": [],
+    "uncertainties": "gauss-newton covariance",
+    "quality": true,
+    "quality_detail": {
+     "flag": true,
+     "chi2_per_point": 6.140420526991364,
+     "chi2_per_point_threshold": 1.3821427302922116,
+     "chi2_high": true,
+     "runs_p": 4.775422672032731e-42,
+     "runs_z": -13.536276782731347,
+     "runs_z_threshold": -3.090232306167813,
+     "runs": 101,
+     "runs_expected": 251.72332015810278,
+     "runs_points_used": 506,
+     "runs_fail": true,
+     "snr_stratum": 5,
+     "thresholds_available": true
+    },
+    "sigma_assumed": false,
+    "fallback": true,
+    "ood": false,
+    "raised": [
+     "quality",
+     "fallback"
+    ]
+   },
+   "in_set": [
+    "sphere"
+   ]
+  },
+  {
+   "variant": "born1",
+   "source": "bornagain_3",
+   "composition": "sphere",
+   "chi2": 6.492762598847193,
+   "populations": [
+    {
+     "R": 4.881535164295659,
+     "R_number_mean": 4.881535164295659,
+     "sR": 0.15521172696401833,
+     "D": 56.969809956789106,
+     "w_rel": 0.4077549048785817,
+     "R_err": 0.03831977098599672,
+     "D_err": 1.9881772141960845,
+     "D_range": [
+      56.913167414858236,
+      56.97004930464831
+     ],
+     "weight": null
+    }
+   ],
+   "flags": {
+    "at_bound": [],
+    "at_bound_reportable": [],
+    "weakly_constrained": [],
+    "weakly_constrained_reportable": [],
+    "weakly_constrained_detail": {},
+    "alternatives": {},
+    "ambiguity": {
+     "pop1.R_nm": {
+      "value": 4.881535164295659,
+      "min": 4.881424776029511,
+      "max": 4.881575001975766,
+      "n_solutions": 22,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     },
+     "pop1.D_nm": {
+      "value": 56.969809956789106,
+      "min": 56.913167414858236,
+      "max": 56.97004930464831,
+      "n_solutions": 22,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     }
+    },
+    "ambiguous": [],
+    "inactive_populations": [],
+    "uncertainties": "gauss-newton covariance",
+    "quality": true,
+    "quality_detail": {
+     "flag": true,
+     "chi2_per_point": 6.492762598847193,
+     "chi2_per_point_threshold": 1.3821427302922116,
+     "chi2_high": true,
+     "runs_p": 2.8447555703855382e-39,
+     "runs_z": -13.058421721759066,
+     "runs_z_threshold": -3.090232306167813,
+     "runs": 103,
+     "runs_expected": 247.22177419354838,
+     "runs_points_used": 496,
+     "runs_fail": true,
+     "snr_stratum": 5,
+     "thresholds_available": true
+    },
+    "sigma_assumed": false,
+    "fallback": true,
+    "ood": false,
+    "raised": [
+     "quality",
+     "fallback"
+    ]
+   },
+   "in_set": [
+    "sphere"
+   ]
+  },
+  {
+   "variant": "born1",
+   "source": "bornagain_1",
+   "composition": "sphere",
+   "chi2": 6.322028283616704,
+   "populations": [
+    {
+     "R": 4.9294840942350735,
+     "R_number_mean": 4.9294840942350735,
+     "sR": 0.15303754323398655,
+     "D": 56.90491672543809,
+     "w_rel": 0.4237724233104237,
+     "R_err": 0.03683702965668521,
+     "D_err": 2.197274189544691,
+     "D_range": [
+      56.87286246010778,
+      56.90491672543809
+     ],
+     "weight": null
+    }
+   ],
+   "flags": {
+    "at_bound": [],
+    "at_bound_reportable": [],
+    "weakly_constrained": [],
+    "weakly_constrained_reportable": [],
+    "weakly_constrained_detail": {},
+    "alternatives": {},
+    "ambiguity": {
+     "pop1.R_nm": {
+      "value": 4.9294840942350735,
+      "min": 4.9294840942350735,
+      "max": 4.929803144363237,
+      "n_solutions": 26,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     },
+     "pop1.D_nm": {
+      "value": 56.90491672543809,
+      "min": 56.87286246010778,
+      "max": 56.90491672543809,
+      "n_solutions": 26,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     }
+    },
+    "ambiguous": [],
+    "inactive_populations": [],
+    "uncertainties": "gauss-newton covariance",
+    "quality": true,
+    "quality_detail": {
+     "flag": true,
+     "chi2_per_point": 6.322028283616704,
+     "chi2_per_point_threshold": 1.3821427302922116,
+     "chi2_high": true,
+     "runs_p": 7.416907239684635e-42,
+     "runs_z": -13.503887221284065,
+     "runs_z_threshold": -3.090232306167813,
+     "runs": 101,
+     "runs_expected": 251.56746031746033,
+     "runs_points_used": 504,
+     "runs_fail": true,
+     "snr_stratum": 5,
+     "thresholds_available": true
+    },
+    "sigma_assumed": false,
+    "fallback": true,
+    "ood": false,
+    "raised": [
+     "quality",
+     "fallback"
+    ]
+   },
+   "in_set": [
+    "sphere"
+   ]
+  },
+  {
+   "variant": "born1",
+   "source": "measured",
+   "composition": "sphere",
+   "chi2": 14.431367889349708,
+   "populations": [
+    {
+     "R": 5.199732739626439,
+     "R_number_mean": 5.199732739626439,
+     "sR": 0.14499994817688694,
+     "D": 56.414090802515865,
+     "w_rel": 0.3930654733985484,
+     "R_err": 0.0412975206772612,
+     "D_err": 1.8156444402489378,
+     "D_range": [
+      56.1307507915147,
+      56.45239307164344
+     ],
+     "weight": null
+    }
+   ],
+   "flags": {
+    "at_bound": [],
+    "at_bound_reportable": [],
+    "weakly_constrained": [],
+    "weakly_constrained_reportable": [],
+    "weakly_constrained_detail": {},
+    "alternatives": {},
+    "ambiguity": {
+     "pop1.R_nm": {
+      "value": 5.199732739626439,
+      "min": 5.1969784302769195,
+      "max": 5.200133858121969,
+      "n_solutions": 23,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     },
+     "pop1.D_nm": {
+      "value": 56.414090802515865,
+      "min": 56.1307507915147,
+      "max": 56.45239307164344,
+      "n_solutions": 23,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     }
+    },
+    "ambiguous": [],
+    "inactive_populations": [],
+    "uncertainties": "gauss-newton covariance",
+    "quality": true,
+    "quality_detail": {
+     "flag": true,
+     "chi2_per_point": 14.431367889349708,
+     "chi2_per_point_threshold": 1.3821427302922116,
+     "chi2_high": true,
+     "runs_p": 1.5814959431713628e-48,
+     "runs_z": -14.59189268284894,
+     "runs_z_threshold": -3.090232306167813,
+     "runs": 73,
+     "runs_expected": 227.2844638949672,
+     "runs_points_used": 457,
+     "runs_fail": true,
+     "snr_stratum": 5,
+     "thresholds_available": true
+    },
+    "sigma_assumed": false,
+    "fallback": true,
+    "ood": false,
+    "raised": [
+     "quality",
+     "fallback"
+    ]
+   },
+   "in_set": [
+    "sphere"
+   ]
+  },
+  {
+   "variant": "dwba1",
+   "source": "bornagain_2",
+   "composition": "sphere",
+   "chi2": 1.7511097455571878,
+   "populations": [
+    {
+     "R": 4.084771587433607,
+     "R_number_mean": 4.197332989178655,
+     "sR": 0.4999999999999999,
+     "D": 54.26741790775833,
+     "w_rel": 0.49999999999999994,
+     "R_err": 0.22040414278816234,
+     "D_err": 1.3449953799603762,
+     "D_range": null,
+     "weight": null
+    }
+   ],
+   "flags": {
+    "at_bound": [
+     "pop1.sigma_R_rel@upper",
+     "pop1.w_rel@upper"
+    ],
+    "at_bound_reportable": [],
+    "weakly_constrained": [
+     "pop1.sigma_R_rel",
+     "pop1.w_rel"
+    ],
+    "weakly_constrained_reportable": [],
+    "weakly_constrained_detail": {
+     "pop1.sigma_R_rel": [
+      "at_bound"
+     ],
+     "pop1.w_rel": [
+      "at_bound"
+     ]
+    },
+    "alternatives": {},
+    "ambiguity": {},
+    "ambiguous": [],
+    "inactive_populations": [],
+    "uncertainties": "gauss-newton covariance",
+    "quality": true,
+    "quality_detail": {
+     "flag": true,
+     "chi2_per_point": 1.7511097455571878,
+     "chi2_per_point_threshold": 1.3821427302922116,
+     "chi2_high": true,
+     "runs_p": 6.984739505853033e-06,
+     "runs_z": -4.344340353545814,
+     "runs_z_threshold": -3.090232306167813,
+     "runs": 243,
+     "runs_expected": 295.27805695142376,
+     "runs_points_used": 597,
+     "runs_fail": true,
+     "snr_stratum": 5,
+     "thresholds_available": true
+    },
+    "sigma_assumed": false,
+    "fallback": true,
+    "ood": false,
+    "raised": [
+     "at_bound",
+     "quality",
+     "fallback"
+    ]
+   },
+   "in_set": [
+    "sphere"
+   ]
+  },
+  {
+   "variant": "dwba1",
+   "source": "bornagain_3",
+   "composition": "sphere",
+   "chi2": 1.7524668375845638,
+   "populations": [
+    {
+     "R": 4.084160853004045,
+     "R_number_mean": 4.196705425136466,
+     "sR": 0.4999999999999999,
+     "D": 53.81749556150118,
+     "w_rel": 0.49999999999999994,
+     "R_err": 0.2259035312222396,
+     "D_err": 1.3435691534444605,
+     "D_range": null,
+     "weight": null
+    }
+   ],
+   "flags": {
+    "at_bound": [
+     "pop1.sigma_R_rel@upper",
+     "pop1.w_rel@upper"
+    ],
+    "at_bound_reportable": [],
+    "weakly_constrained": [
+     "pop1.sigma_R_rel",
+     "pop1.w_rel"
+    ],
+    "weakly_constrained_reportable": [],
+    "weakly_constrained_detail": {
+     "pop1.sigma_R_rel": [
+      "at_bound"
+     ],
+     "pop1.w_rel": [
+      "at_bound"
+     ]
+    },
+    "alternatives": {},
+    "ambiguity": {},
+    "ambiguous": [],
+    "inactive_populations": [],
+    "uncertainties": "gauss-newton covariance",
+    "quality": true,
+    "quality_detail": {
+     "flag": true,
+     "chi2_per_point": 1.7524668375845638,
+     "chi2_per_point_threshold": 1.3821427302922116,
+     "chi2_high": true,
+     "runs_p": 6.70588883482809e-08,
+     "runs_z": -5.273128240417155,
+     "runs_z_threshold": -3.090232306167813,
+     "runs": 233,
+     "runs_expected": 296.7788944723618,
+     "runs_points_used": 597,
+     "runs_fail": true,
+     "snr_stratum": 5,
+     "thresholds_available": true
+    },
+    "sigma_assumed": false,
+    "fallback": true,
+    "ood": false,
+    "raised": [
+     "at_bound",
+     "quality",
+     "fallback"
+    ]
+   },
+   "in_set": [
+    "sphere"
+   ]
+  },
+  {
+   "variant": "dwba1",
+   "source": "measured",
+   "composition": "sphere",
+   "chi2": 2.0005691053612544,
+   "populations": [
+    {
+     "R": 4.667847852578368,
+     "R_number_mean": 4.7964767088491165,
+     "sR": 0.4999999999999999,
+     "D": 43.05694313165554,
+     "w_rel": 0.49999999999999994,
+     "R_err": 0.264091421320902,
+     "D_err": 0.9416570174594201,
+     "D_range": null,
+     "weight": null
+    }
+   ],
+   "flags": {
+    "at_bound": [
+     "pop1.sigma_R_rel@upper",
+     "pop1.w_rel@upper"
+    ],
+    "at_bound_reportable": [],
+    "weakly_constrained": [
+     "pop1.sigma_R_rel",
+     "pop1.w_rel"
+    ],
+    "weakly_constrained_reportable": [],
+    "weakly_constrained_detail": {
+     "pop1.sigma_R_rel": [
+      "at_bound"
+     ],
+     "pop1.w_rel": [
+      "at_bound"
+     ]
+    },
+    "alternatives": {},
+    "ambiguity": {},
+    "ambiguous": [],
+    "inactive_populations": [],
+    "uncertainties": "gauss-newton covariance",
+    "quality": true,
+    "quality_detail": {
+     "flag": true,
+     "chi2_per_point": 2.0005691053612544,
+     "chi2_per_point_threshold": 1.3821427302922116,
+     "chi2_high": true,
+     "runs_p": 1.4316811749592743e-15,
+     "runs_z": -7.896721042897868,
+     "runs_z_threshold": -3.090232306167813,
+     "runs": 201,
+     "runs_expected": 296.3835845896147,
+     "runs_points_used": 597,
+     "runs_fail": true,
+     "snr_stratum": 5,
+     "thresholds_available": true
+    },
+    "sigma_assumed": false,
+    "fallback": true,
+    "ood": false,
+    "raised": [
+     "at_bound",
+     "quality",
+     "fallback"
+    ]
+   },
+   "in_set": [
+    "sphere"
+   ]
+  },
+  {
+   "variant": "dwba1",
+   "source": "bornagain_1",
+   "composition": "sphere",
+   "chi2": 1.731442191499353,
+   "populations": [
+    {
+     "R": 4.109627516026627,
+     "R_number_mean": 4.222873856477358,
+     "sR": 0.4999999999999999,
+     "D": 55.135731002724924,
+     "w_rel": 0.49999999999999994,
+     "R_err": 0.21578069906264896,
+     "D_err": 1.3480978774337644,
+     "D_range": null,
+     "weight": null
+    }
+   ],
+   "flags": {
+    "at_bound": [
+     "pop1.sigma_R_rel@upper",
+     "pop1.w_rel@upper"
+    ],
+    "at_bound_reportable": [],
+    "weakly_constrained": [
+     "pop1.sigma_R_rel",
+     "pop1.w_rel"
+    ],
+    "weakly_constrained_reportable": [],
+    "weakly_constrained_detail": {
+     "pop1.sigma_R_rel": [
+      "at_bound"
+     ],
+     "pop1.w_rel": [
+      "at_bound"
+     ]
+    },
+    "alternatives": {},
+    "ambiguity": {},
+    "ambiguous": [],
+    "inactive_populations": [],
+    "uncertainties": "gauss-newton covariance",
+    "quality": true,
+    "quality_detail": {
+     "flag": true,
+     "chi2_per_point": 1.731442191499353,
+     "chi2_per_point_threshold": 1.3821427302922116,
+     "chi2_high": true,
+     "runs_p": 1.712796957734735e-09,
+     "runs_z": -5.90978266303975,
+     "runs_z_threshold": -3.090232306167813,
+     "runs": 225,
+     "runs_expected": 296.3835845896147,
+     "runs_points_used": 597,
+     "runs_fail": true,
+     "snr_stratum": 5,
+     "thresholds_available": true
+    },
+    "sigma_assumed": false,
+    "fallback": true,
+    "ood": false,
+    "raised": [
+     "at_bound",
+     "quality",
+     "fallback"
+    ]
+   },
+   "in_set": [
+    "sphere"
+   ]
+  },
+  {
+   "variant": "auto3",
+   "source": "bornagain_1",
+   "composition": "sphere,sphere",
+   "chi2": 4.907498896279075,
+   "populations": [
+    {
+     "R": 4.9510269792321715,
+     "R_number_mean": 4.9510269792321715,
+     "sR": 0.16116027241197176,
+     "D": 57.04799074759828,
+     "w_rel": 0.43401835026628693,
+     "R_err": 0.03320339626138,
+     "D_err": 2.0389854507376914,
+     "D_range": [
+      56.90760950778514,
+      57.18230761218178
+     ],
+     "weight": null
+    },
+    {
+     "R": 0.18034545605026597,
+     "R_number_mean": 0.18034545605026597,
+     "sR": 0.03000000000762324,
+     "D": 2.513912594368447,
+     "w_rel": 0.26597788182898036,
+     "R_err": 12.557208890953346,
+     "D_err": 0.1554547320371071,
+     "D_range": [
+      2.4939255777976017,
+      2.5162775795191132
+     ],
+     "weight": null
+    }
+   ],
+   "flags": {
+    "at_bound": [
+     "pop2.R_nm@lower",
+     "pop2.sigma_R_rel@lower"
+    ],
+    "at_bound_reportable": [
+     "pop2.R_nm"
+    ],
+    "weakly_constrained": [
+     "pop2.R_nm",
+     "pop2.sigma_R_rel"
+    ],
+    "weakly_constrained_reportable": [
+     "pop2.R_nm"
+    ],
+    "weakly_constrained_detail": {
+     "pop2.R_nm": [
+      "relative_error",
+      "at_bound",
+      "multimodal"
+     ],
+     "pop2.sigma_R_rel": [
+      "relative_error",
+      "at_bound"
+     ]
+    },
+    "alternatives": {},
+    "ambiguity": {
+     "pop1.R_nm": {
+      "value": 4.9510269792321715,
+      "min": 4.950105505530284,
+      "max": 4.951255100837267,
+      "n_solutions": 39,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     },
+     "pop1.D_nm": {
+      "value": 57.04799074759828,
+      "min": 56.90760950778514,
+      "max": 57.18230761218178,
+      "n_solutions": 39,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     },
+     "pop2.R_nm": {
+      "value": 0.18034545605026597,
+      "min": 0.18034545605026597,
+      "max": 0.39784163226308966,
+      "n_solutions": 39,
+      "n_disagree": 3,
+      "activity_mismatch": 0,
+      "ambiguous": true
+     },
+     "pop2.D_nm": {
+      "value": 2.513912594368447,
+      "min": 2.4939255777976017,
+      "max": 2.5162775795191132,
+      "n_solutions": 39,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     }
+    },
+    "ambiguous": [
+     "pop2.R_nm"
+    ],
+    "inactive_populations": [],
+    "uncertainties": "gauss-newton covariance",
+    "quality": true,
+    "quality_detail": {
+     "flag": true,
+     "chi2_per_point": 4.907498896279075,
+     "chi2_per_point_threshold": 1.3821427302922116,
+     "chi2_high": true,
+     "runs_p": 2.6819662362306243e-24,
+     "runs_z": -10.10288711478524,
+     "runs_z_threshold": -3.090232306167813,
+     "runs": 175,
+     "runs_expected": 297.4891122278057,
+     "runs_points_used": 597,
+     "runs_fail": true,
+     "snr_stratum": 5,
+     "thresholds_available": true
+    },
+    "sigma_assumed": false,
+    "fallback": true,
+    "ood": false,
+    "raised": [
+     "at_bound",
+     "weakly_constrained",
+     "quality",
+     "fallback"
+    ]
+   },
+   "in_set": [
+    "sphere,sphere"
+   ]
+  },
+  {
+   "variant": "auto3",
+   "source": "measured",
+   "composition": "sphere,sphere",
+   "chi2": 10.94176923774208,
+   "populations": [
+    {
+     "R": 5.107469217821977,
+     "R_number_mean": 5.107469217821977,
+     "sR": 0.11981998874860725,
+     "D": 66.1654824960888,
+     "w_rel": 0.3401473898516996,
+     "R_err": 0.040791210116323424,
+     "D_err": 2.1402934815222343,
+     "D_range": [
+      50.45676049701452,
+      67.40991847772693
+     ],
+     "weight": null
+    },
+    {
+     "R": 11.165476774354604,
+     "R_number_mean": 11.165476774354604,
+     "sR": 0.031670243294564374,
+     "D": 43.67264602039832,
+     "w_rel": 0.2731954094831526,
+     "R_err": 0.072110502855139,
+     "D_err": 1.033012565822582,
+     "D_range": [
+      43.23838667364337,
+      83.81157605499479
+     ],
+     "weight": null
+    }
+   ],
+   "flags": {
+    "at_bound": [],
+    "at_bound_reportable": [],
+    "weakly_constrained": [
+     "pop1.D_nm",
+     "pop2.sigma_R_rel",
+     "pop2.D_nm"
+    ],
+    "weakly_constrained_reportable": [
+     "pop1.D_nm",
+     "pop2.D_nm"
+    ],
+    "weakly_constrained_detail": {
+     "pop1.D_nm": [
+      "multimodal"
+     ],
+     "pop2.sigma_R_rel": [
+      "relative_error"
+     ],
+     "pop2.D_nm": [
+      "multimodal"
+     ]
+    },
+    "alternatives": {
+     "pop1.D_nm": {
+      "value": 66.1654824960888,
+      "alternative_min": 51.1074554881532,
+      "alternative_max": 51.134738726998116,
+      "n_alternatives": 5,
+      "max_n_sigma": 7.035496364370519,
+      "min_delta_chi2": 179.37031690502772
+     },
+     "pop2.D_nm": {
+      "value": 43.67264602039832,
+      "alternative_min": 82.45050347320932,
+      "alternative_max": 82.51454922824415,
+      "n_alternatives": 5,
+      "max_n_sigma": 11.353816303417856,
+      "min_delta_chi2": 179.37031690502772
+     }
+    },
+    "ambiguity": {
+     "pop1.R_nm": {
+      "value": 5.107469217821977,
+      "min": 5.10485390866703,
+      "max": 5.10865468208048,
+      "n_solutions": 20,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     },
+     "pop1.D_nm": {
+      "value": 66.1654824960888,
+      "min": 50.45676049701452,
+      "max": 67.40991847772693,
+      "n_solutions": 20,
+      "n_disagree": 8,
+      "activity_mismatch": 0,
+      "ambiguous": true
+     },
+     "pop2.R_nm": {
+      "value": 11.165476774354604,
+      "min": 11.152048049719147,
+      "max": 11.170226006263094,
+      "n_solutions": 20,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     },
+     "pop2.D_nm": {
+      "value": 43.67264602039832,
+      "min": 43.23838667364337,
+      "max": 83.81157605499479,
+      "n_solutions": 20,
+      "n_disagree": 8,
+      "activity_mismatch": 0,
+      "ambiguous": true
+     }
+    },
+    "ambiguous": [
+     "pop1.D_nm",
+     "pop2.D_nm"
+    ],
+    "inactive_populations": [],
+    "uncertainties": "gauss-newton covariance",
+    "quality": true,
+    "quality_detail": {
+     "flag": true,
+     "chi2_per_point": 10.94176923774208,
+     "chi2_per_point_threshold": 1.3821427302922116,
+     "chi2_high": true,
+     "runs_p": 4.0220129936953375e-49,
+     "runs_z": -14.684994905542904,
+     "runs_z_threshold": -3.090232306167813,
+     "runs": 63,
+     "runs_expected": 211.64814814814815,
+     "runs_points_used": 432,
+     "runs_fail": true,
+     "snr_stratum": 5,
+     "thresholds_available": true
+    },
+    "sigma_assumed": false,
+    "fallback": true,
+    "ood": false,
+    "raised": [
+     "weakly_constrained",
+     "quality",
+     "fallback"
+    ]
+   },
+   "in_set": [
+    "sphere,sphere"
+   ]
+  },
+  {
+   "variant": "auto3",
+   "source": "bornagain_3",
+   "composition": "sphere,sphere",
+   "chi2": 4.991326308306498,
+   "populations": [
+    {
+     "R": 4.90255507395905,
+     "R_number_mean": 4.90255507395905,
+     "sR": 0.1645546558449009,
+     "D": 57.276200278319436,
+     "w_rel": 0.41845913422264613,
+     "R_err": 0.03502452541985971,
+     "D_err": 1.8452317274262342,
+     "D_range": [
+      57.204452797877636,
+      57.332087030111076
+     ],
+     "weight": null
+    },
+    {
+     "R": 0.18034591191916044,
+     "R_number_mean": 0.1803459119191604,
+     "sR": 0.03,
+     "D": 2.578975629514355,
+     "w_rel": 0.26324540350688574,
+     "R_err": 11.726773702462074,
+     "D_err": 0.15461317851854534,
+     "D_range": [
+      2.56541300394149,
+      2.5812654766932117
+     ],
+     "weight": null
+    }
+   ],
+   "flags": {
+    "at_bound": [
+     "pop2.R_nm@lower",
+     "pop2.sigma_R_rel@lower"
+    ],
+    "at_bound_reportable": [
+     "pop2.R_nm"
+    ],
+    "weakly_constrained": [
+     "pop2.R_nm",
+     "pop2.sigma_R_rel"
+    ],
+    "weakly_constrained_reportable": [
+     "pop2.R_nm"
+    ],
+    "weakly_constrained_detail": {
+     "pop2.R_nm": [
+      "relative_error",
+      "at_bound",
+      "multimodal"
+     ],
+     "pop2.sigma_R_rel": [
+      "relative_error",
+      "at_bound"
+     ]
+    },
+    "alternatives": {},
+    "ambiguity": {
+     "pop1.R_nm": {
+      "value": 4.90255507395905,
+      "min": 4.902013705976712,
+      "max": 4.902715566986554,
+      "n_solutions": 38,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     },
+     "pop1.D_nm": {
+      "value": 57.276200278319436,
+      "min": 57.204452797877636,
+      "max": 57.332087030111076,
+      "n_solutions": 38,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     },
+     "pop2.R_nm": {
+      "value": 0.18034591191916044,
+      "min": 0.1803455541612775,
+      "max": 0.28675904607785563,
+      "n_solutions": 38,
+      "n_disagree": 5,
+      "activity_mismatch": 0,
+      "ambiguous": true
+     },
+     "pop2.D_nm": {
+      "value": 2.578975629514355,
+      "min": 2.56541300394149,
+      "max": 2.5812654766932117,
+      "n_solutions": 38,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     }
+    },
+    "ambiguous": [
+     "pop2.R_nm"
+    ],
+    "inactive_populations": [],
+    "uncertainties": "gauss-newton covariance",
+    "quality": true,
+    "quality_detail": {
+     "flag": true,
+     "chi2_per_point": 4.991326308306498,
+     "chi2_per_point_threshold": 1.3821427302922116,
+     "chi2_high": true,
+     "runs_p": 1.8828557080904479e-25,
+     "runs_z": -10.36009923630054,
+     "runs_z_threshold": -3.090232306167813,
+     "runs": 173,
+     "runs_expected": 299.4321608040201,
+     "runs_points_used": 597,
+     "runs_fail": true,
+     "snr_stratum": 5,
+     "thresholds_available": true
+    },
+    "sigma_assumed": false,
+    "fallback": true,
+    "ood": false,
+    "raised": [
+     "at_bound",
+     "weakly_constrained",
+     "quality",
+     "fallback"
+    ]
+   },
+   "in_set": [
+    "sphere,sphere"
+   ]
+  },
+  {
+   "variant": "auto3",
+   "source": "bornagain_2",
+   "composition": "sphere,sphere,sphere",
+   "chi2": 3.7533503523630376,
+   "populations": [
+    {
+     "R": 0.1803608944287081,
+     "R_number_mean": 0.18036089442870806,
+     "sR": 0.03,
+     "D": 2.5600306472649845,
+     "w_rel": 0.27568384570046583,
+     "R_err": 11.95657782700109,
+     "D_err": 0.14383070719424806,
+     "D_range": [
+      2.5392629553915196,
+      2.564606643976621
+     ],
+     "weight": null
+    },
+    {
+     "R": 11.067014070124648,
+     "R_number_mean": 11.067014070124648,
+     "sR": 0.04643340036112499,
+     "D": 46.2889578981488,
+     "w_rel": 0.28489046148853664,
+     "R_err": 0.08974142987573754,
+     "D_err": 1.2685113198607978,
+     "D_range": [
+      45.960012649337514,
+      91.51313831669188
+     ],
+     "weight": null
+    },
+    {
+     "R": 4.8793758629699395,
+     "R_number_mean": 4.8793758629699395,
+     "sR": 0.13742867660967906,
+     "D": 68.3706163155011,
+     "w_rel": 0.36938245523215285,
+     "R_err": 0.03199006216337953,
+     "D_err": 2.22250409053818,
+     "D_range": [
+      55.17571483269057,
+      68.64207708612165
+     ],
+     "weight": null
+    }
+   ],
+   "flags": {
+    "at_bound": [
+     "pop1.R_nm@lower",
+     "pop1.sigma_R_rel@lower"
+    ],
+    "at_bound_reportable": [
+     "pop1.R_nm"
+    ],
+    "weakly_constrained": [
+     "pop1.R_nm",
+     "pop1.sigma_R_rel",
+     "pop2.D_nm",
+     "pop3.D_nm"
+    ],
+    "weakly_constrained_reportable": [
+     "pop1.R_nm",
+     "pop2.D_nm",
+     "pop3.D_nm"
+    ],
+    "weakly_constrained_detail": {
+     "pop1.R_nm": [
+      "relative_error",
+      "at_bound",
+      "multimodal"
+     ],
+     "pop1.sigma_R_rel": [
+      "relative_error",
+      "at_bound"
+     ],
+     "pop2.D_nm": [
+      "multimodal"
+     ],
+     "pop3.D_nm": [
+      "multimodal"
+     ]
+    },
+    "alternatives": {
+     "pop3.D_nm": {
+      "value": 68.3706163155011,
+      "alternative_min": 55.29907827174493,
+      "alternative_max": 55.55956029141145,
+      "n_alternatives": 17,
+      "max_n_sigma": 5.8814461127002415,
+      "min_delta_chi2": 57.53325456299535
+     },
+     "pop2.D_nm": {
+      "value": 46.2889578981488,
+      "alternative_min": 90.82414080630167,
+      "alternative_max": 91.51313831669188,
+      "n_alternatives": 17,
+      "max_n_sigma": 12.702924526823095,
+      "min_delta_chi2": 57.53325456299535
+     }
+    },
+    "ambiguity": {
+     "pop1.R_nm": {
+      "value": 0.1803608944287081,
+      "min": 0.18034545504607766,
+      "max": 0.3113989340084207,
+      "n_solutions": 28,
+      "n_disagree": 5,
+      "activity_mismatch": 0,
+      "ambiguous": true
+     },
+     "pop1.D_nm": {
+      "value": 2.5600306472649845,
+      "min": 2.5392629553915196,
+      "max": 2.564606643976621,
+      "n_solutions": 28,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     },
+     "pop2.R_nm": {
+      "value": 11.067014070124648,
+      "min": 11.066880247846036,
+      "max": 11.081341590425803,
+      "n_solutions": 28,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     },
+     "pop2.D_nm": {
+      "value": 46.2889578981488,
+      "min": 45.960012649337514,
+      "max": 91.51313831669188,
+      "n_solutions": 28,
+      "n_disagree": 18,
+      "activity_mismatch": 0,
+      "ambiguous": true
+     },
+     "pop3.R_nm": {
+      "value": 4.8793758629699395,
+      "min": 4.876522616124053,
+      "max": 4.887159592280314,
+      "n_solutions": 28,
+      "n_disagree": 0,
+      "activity_mismatch": 0,
+      "ambiguous": false
+     },
+     "pop3.D_nm": {
+      "value": 68.3706163155011,
+      "min": 55.17571483269057,
+      "max": 68.64207708612165,
+      "n_solutions": 28,
+      "n_disagree": 18,
+      "activity_mismatch": 0,
+      "ambiguous": true
+     }
+    },
+    "ambiguous": [
+     "pop1.R_nm",
+     "pop2.D_nm",
+     "pop3.D_nm"
+    ],
+    "inactive_populations": [],
+    "uncertainties": "gauss-newton covariance",
+    "quality": true,
+    "quality_detail": {
+     "flag": true,
+     "chi2_per_point": 3.7533503523630376,
+     "chi2_per_point_threshold": 1.3821427302922116,
+     "chi2_high": true,
+     "runs_p": 6.79687809030871e-14,
+     "runs_z": -7.400240998576676,
+     "runs_z_threshold": -3.090232306167813,
+     "runs": 209,
+     "runs_expected": 299.2579564489112,
+     "runs_points_used": 597,
+     "runs_fail": true,
+     "snr_stratum": 5,
+     "thresholds_available": true
+    },
+    "sigma_assumed": false,
+    "fallback": true,
+    "ood": false,
+    "raised": [
+     "at_bound",
+     "weakly_constrained",
+     "quality",
+     "fallback"
+    ]
+   },
+   "in_set": [
+    "sphere,sphere,sphere"
+   ]
+  }
+ ]
+}

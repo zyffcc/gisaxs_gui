@@ -46,6 +46,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   (Physics and Methods 2.6). Off by default.
 - **Fitting, D ≥ 2R:** a fit keeps the paracrystal's distance at or above twice the mean radius, so the particles
   do not overlap (D could fall to 1 nm before); a D at 2R is reported at its lower bound (Physics and Methods 9.6).
+- **fit1d, a population too small for the curve:** a population with q_max·R < 1 (its form factor is flat over the
+  curve) is named among the warnings as a background term, not particles of that size. On the public GALAXI cut
+  fit1d's composition rule added such a sphere (R ≈ 0.18 nm); Physics and Methods 9.12 gives fit1d's results there.
 - **Lighter install:** `requirements.txt` is the core (Analyze, Calibration, Fitting with fit1d, Series, Batch
   Export, the automatic analysis, XRR, Sputter, SEM). TensorFlow (1D Predict V5, 2D Prediction, Trainset training),
   BornAgain and the AI clients are optional: `requirements-tensorflow.txt`, `requirements-bornagain.txt`,

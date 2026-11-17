@@ -168,6 +168,12 @@ def _components(result, structure_factor: bool) -> list[dict]:
     return components
 
 
+UNRESOLVED_QR = 1.0
+"""Below q_max·R = 1 a sphere's form factor changes by less than about 20 % over the curve."""
+UNRESOLVED = ("Population {n}: R = {radius} nm is smaller than this curve resolves (q_max·R = {qr} < 1): its form "
+              "factor is nearly flat here, so it acts as a background, not as particles of that size.")
+
+
 def _warnings(result, item, options, used: int) -> list[str]:
     summary = result["summary"]
     warnings = [str(message) for message in summary.get("messages") or ()]
@@ -180,6 +186,11 @@ def _warnings(result, item, options, used: int) -> list[str]:
         if row["status"] == "ambiguous" and bounds:
             line += f" (equivalent solutions: {bounds[0]:.4g}–{bounds[1]:.4g} {row.get('unit') or ''})".replace(" )", ")")
         warnings.append(line)
+    q_max = max((float(v) for v in (result.get("curves") or {}).get("q_nm_inv") or () if v == v), default=0.0)
+    for index, population in enumerate(result.get("populations") or (), start=1):
+        radius = _number(population.get("R_nm"))
+        if q_max > 0 and 0 < radius * q_max < UNRESOLVED_QR and not population.get("inactive"):
+            warnings.append(UNRESOLVED.format(n=index, radius=f"{radius:.3g}", qr=f"{radius * q_max:.2g}"))
     # No qz given is the effective interface approximation (spheres at qz = 0): the default, no warning.
     if item.get("sigma_estimated"):
         warnings.append(SIGMA_ESTIMATED)

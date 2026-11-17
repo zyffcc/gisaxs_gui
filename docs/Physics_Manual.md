@@ -2307,6 +2307,29 @@ The true composition is given. The errors are the median and the 90th percentile
   with the low-q physics. A single population then usually gets a second one that takes up the roughness, as the
   large population of section 9.11. Take the composition from Model when it is known; take *auto* as a suggestion.
 
+**A measured cut: GALAXI.** fit1d on the Yoneda cut of the public GALAXI frame and on BornAgain's model of it
+(section 9.10: log-normal radii, number mean 6.2 nm and relative spread 0.42; radial paracrystal D = 53.6 nm,
+σ_nn/D = 0.196), simulated on that cut with the counts of the measurement (three noise draws;
+`tools/benchmarks/galaxi_fit1d.py`). fit1d's sizes are by number, so they compare with these directly.
+
+| | one sphere, Born at the cut's q_z | one sphere, DWBA (Si substrate) |
+|---|---|---|
+| BornAgain's model: χ²/N | 6.1–6.5 | 1.7–1.8 |
+| R by number, σ_R/R | 4.9 nm, 0.15–0.16 | 4.2 nm, 0.50 (at its upper limit) |
+| D ± 1σ, σ_nn/D | 56.9–57.6 nm, 0.41–0.42 | 53.8–55.1 ± 1.3 nm, 0.50 (at its upper limit) |
+| measured cut: χ²/N, R, D | 14.4, 5.2 nm, 56.4 nm | 2.0, 4.8 nm, 43.1 ± 0.9 nm |
+
+- With the DWBA, D of BornAgain's model comes back within about 1σ, which Fitting's EIA cannot find on this cut
+  (section 9.10). The width of the sizes and of the distances does not: both stop at the upper limit of fit1d's
+  range, and fit1d flags them (*at bound*, *weakly constrained*). R by number is then 33 % low: a Gaussian on number
+  weights at σ_R/R = 0.5 does not describe the log-normal's tail of large particles, which dominates the intensity.
+- fit1d has one substrate; BornAgain's sample is a film stack (HMDSO, PTFE, Si) with size–spacing coupling κ = 17.5.
+  χ²/N stays above fit1d's quality threshold (1.38 here), and the quality flag is set.
+- *auto* (up to three spheres) adds a sphere of R ≈ 0.18 nm on two of the three simulated cuts. At q_max·R ≈ 0.5
+  its form factor is flat over the curve, so it is a background term, not particles. GIMaP names such a population
+  among the warnings (*R … is smaller than this curve resolves*) whenever q_max·R < 1. This is what took the first
+  trial on this frame to three populations.
+
 Implementation: `src/gimap/features/fitting/infrastructure/adapters/fit1d_method.py`,
 `src/gimap/features/fitting/infrastructure/adapters/single_fit1d.py`, `utils/gisaxs1d_gui_kit` (fit1d);
 benchmark: `tools/benchmarks/fit1d_recovery.py`, summary `tools/benchmarks/fit1d_recovery_summary.json`

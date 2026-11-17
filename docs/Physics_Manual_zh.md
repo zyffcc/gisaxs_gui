@@ -1972,6 +1972,26 @@ BIC = χ² + k ln N                                                             
 - *auto*（最多两群）在只含 fit1d 物理的切线上 69 % 找到真实组成，加上低 q 物理后只有 30 %。这时单群通常会多出
   第二群来吸收粗糙度，就像 9.11 节的大群。组成已知时从模型取；*auto* 的结果当作建议。
 
+**一条实测切线：GALAXI。** 在公开 GALAXI 帧的 Yoneda 切线上，以及在 BornAgain 对它的模型上（9.10 节：对数正态半径，
+按数目平均 6.2 nm，相对宽度 0.42；径向准晶 D = 53.6 nm，σ_nn/D = 0.196；按实测计数在同一切线上模拟，三次噪声；
+`tools/benchmarks/galaxi_fit1d.py`）运行 fit1d。fit1d 的尺寸按数目，可以直接比较。
+
+| | 一个球群，Born，切线的 q_z | 一个球群，DWBA（Si 基底） |
+|---|---|---|
+| BornAgain 模型：χ²/N | 6.1–6.5 | 1.7–1.8 |
+| 按数目的 R、σ_R/R | 4.9 nm、0.15–0.16 | 4.2 nm、0.50（在上限） |
+| D ± 1σ、σ_nn/D | 56.9–57.6 nm、0.41–0.42 | 53.8–55.1 ± 1.3 nm、0.50（在上限） |
+| 实测切线：χ²/N、R、D | 14.4、5.2 nm、56.4 nm | 2.0、4.8 nm、43.1 ± 0.9 nm |
+
+- 用 DWBA 时，BornAgain 模型的 D 在约 1σ 内找回，而拟合工作区的 EIA 在这条切线上找不到 D（9.10 节）。尺寸和距离的
+  宽度找不回：两者都停在 fit1d 范围的上限，fit1d 也标出了（*at bound*、*weakly constrained*）。此时按数目的 R 低 33 %：
+  σ_R/R = 0.5 的按数目高斯描述不了对数正态分布中大颗粒的尾巴，而强度主要来自这些大颗粒。
+- fit1d 只有一层基底；BornAgain 的样品是膜层叠（HMDSO、PTFE、Si），并有尺寸–间距耦合 κ = 17.5。χ²/N 高于 fit1d 的
+  质量阈值（这里为 1.38），质量标记被设置。
+- *auto*（最多三个球群）在三条模拟切线中的两条上加了一个 R ≈ 0.18 nm 的球群。q_max·R ≈ 0.5 时它的形状因子在整条
+  曲线上几乎不变，所以它是一个背景项，不是颗粒。只要 q_max·R < 1，GIMaP 就在警告里指出这样的群
+  （*R … is smaller than this curve resolves*）。这一帧第一次试算得到三个群，原因就在这里。
+
 实现：`src/gimap/features/fitting/infrastructure/adapters/fit1d_method.py`、
 `src/gimap/features/fitting/infrastructure/adapters/single_fit1d.py`、`utils/gisaxs1d_gui_kit`（fit1d）；
 基准：`tools/benchmarks/fit1d_recovery.py`，汇总 `tools/benchmarks/fit1d_recovery_summary.json`
