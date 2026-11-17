@@ -209,13 +209,65 @@ def main(argv=None):
                 if ok:
                     LV.say("preliminary", "predict", family=fam, folder=str(out))
                 LV.say("refine", "predict", family=fam, refine=mode["refine"], iterations=iterations)
-                run_quiet("predict", predict_args(fam, mode["refine"], iterations), "refine")
+
+
+                workers0 = a.workers
+                a.workers = _workers_for_memory(a.workers)
+                if a.workers < workers0:
+                    print(f"      whole-scan refinement with {a.workers} processes (free memory)", flush=True)
+                ok_joint = run_quiet("predict", predict_args(fam, mode["refine"], iterations), "refine")
+                if not ok_joint and a.workers > 1:
+                    a.workers = max(1, a.workers // 2)
+                    print(f"      whole-scan refinement failed: once more with {a.workers} processes", flush=True)
+                    ok_joint = run_quiet("predict", predict_args(fam, mode["refine"], iterations), "refine")
+                a.joint_note = dict(done=bool(ok_joint), workers=a.workers, iterations=iterations)
+                a.workers = workers0
     if ok:
         finish(fam)
     else:
         write_analysis(fam, status)
     LV.clear(live)
     return 0 if status == "ok" else 1
+
+
+JOINT_WORKER_BYTES, JOINT_KEEP_BYTES = 0.35e9, 1.0e9
+
+
+def _available_bytes():
+    'Physical memory available now (bytes), or None when it cannot be read (psutil, else the OS directly).'
+    try:
+        import psutil
+        return float(psutil.virtual_memory().available)
+    except Exception:
+        pass
+    try:
+        if sys.platform == "win32":
+            import ctypes
+
+            class MS(ctypes.Structure):
+                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong), ("ullTotalPhys", ctypes.c_ulonglong),
+                            ("ullAvailPhys", ctypes.c_ulonglong), ("ullTotalPageFile", ctypes.c_ulonglong),
+                            ("ullAvailPageFile", ctypes.c_ulonglong), ("ullTotalVirtual", ctypes.c_ulonglong),
+                            ("ullAvailVirtual", ctypes.c_ulonglong), ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+            m = MS()
+            m.dwLength = ctypes.sizeof(MS)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m)):
+                return float(m.ullAvailPhys)
+        else:
+            for line in open("/proc/meminfo", encoding="ascii"):
+                if line.startswith("MemAvailable:"):
+                    return float(line.split()[1]) * 1024.0
+    except Exception:
+        pass
+    return None
+
+
+def _workers_for_memory(workers):
+    'At most the processes the free memory holds for the whole-scan refinement (JOINT_WORKER_BYTES each beyond'
+    avail = _available_bytes()
+    if avail is None:
+        return int(workers)
+    return max(1, min(int(workers), int((avail - JOINT_KEEP_BYTES) // JOINT_WORKER_BYTES)))
 
 
 def _joint_iterations(fam, default):
@@ -265,6 +317,8 @@ def _analysis(a, out, data, fam, tried, like, steps, status):
         if reading:
             res["reading"] = reading
     res["workers"] = int(a.workers)
+    if getattr(a, "joint_note", None) and status != "preliminary":
+        res["joint_fit"] = a.joint_note
     (out / "analysis.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
     print(f"status: {status}; report: {files['report_md']}", flush=True)
 
