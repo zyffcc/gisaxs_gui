@@ -39,9 +39,10 @@ def test_every_family_scatters_one_at_q_zero(family, law) -> None:
 @pytest.mark.parametrize("family", ["sphere", "vertical_cylinder"])
 @pytest.mark.parametrize("law", ["number_gauss", "lognormal", "intensity_gauss"])
 def test_the_size_average_agrees_with_the_fully_resolved_one(family, law) -> None:
-    """Below q_cut the rule has converged; above it the envelope leaves out only the ringing of the hard cut of a
-    distribution by number, which grows with σR/R (``envelope``). Sizes by intensity are always resolved."""
-    for radius, spread, tolerance in ((2.0, 0.05, 3e-5), (7.0, 0.2, 3e-5), (12.0, 0.35, 1e-3), (40.0, 0.5, 1e-2)):
+    """Below q_cut the average has converged (tables: their interpolation, ≤ 1e-4); above it the envelope leaves out
+    only the ringing of the hard cut of a distribution by number, which grows with σR/R (``envelope``). Sizes by
+    intensity are always resolved directly."""
+    for radius, spread, tolerance in ((2.0, 0.05, 1e-4), (7.0, 0.2, 1e-4), (12.0, 0.35, 1e-3), (40.0, 0.5, 1e-2)):
         default = population_terms(family, Q, radius=radius, radius_spread=spread, law=law)
         fine = population_terms(family, Q, radius=radius, radius_spread=spread, law=law, panels=1024)
         np.testing.assert_allclose(default, fine, rtol=3e-5 if law == "intensity_gauss" else tolerance)
@@ -49,7 +50,7 @@ def test_the_size_average_agrees_with_the_fully_resolved_one(family, law) -> Non
 
 def test_the_random_cylinder_average_agrees_with_the_fully_resolved_one() -> None:
     q = Q[::3]
-    for radius, spread, height, tolerance in ((5.0, 0.2, 40.0, 3e-5), (12.0, 0.35, 30.0, 1e-3)):
+    for radius, spread, height, tolerance in ((5.0, 0.2, 40.0, 1e-4), (12.0, 0.35, 30.0, 1e-3)):
         common = dict(radius=radius, radius_spread=spread, height=height, height_spread=0.2)
         np.testing.assert_allclose(population_terms("cylinder", q, **common),
                                    population_terms("cylinder", q, panels=256, **common), rtol=tolerance)
@@ -139,14 +140,17 @@ def test_agrees_with_the_independent_truth_model(truth, scattering, mode, coupli
         got = population_terms(family, q, radius=film["R"], radius_spread=film["sR"], distance=film["D"],
                                distance_spread=film["s_nn"], coupling=coupling, geometry=ours)[0]
         ratio = got / reference
-        np.testing.assert_allclose(ratio / np.median(ratio), 1.0, rtol=1e-6)
+        np.testing.assert_allclose(ratio / np.median(ratio), 1.0, rtol=1e-4)  # the tables' interpolation
 
 
 def test_two_paths_without_reflection_are_the_born_term() -> None:
     two = Geometry("two_path", 0.1, 0.4, 0.15, 0.0, 0.0)
     born = Geometry("born", 0.1, 0.4, 0.15)
     np.testing.assert_allclose(population_terms("sphere", Q, radius=5.0, radius_spread=0.2, geometry=two),
-                               population_terms("sphere", Q, radius=5.0, radius_spread=0.2, geometry=born), rtol=1e-12)
+                               population_terms("sphere", Q, radius=5.0, radius_spread=0.2, geometry=born),
+                               rtol=1e-4)  # two paths: direct quadrature; one path: the tables
+    np.testing.assert_allclose(population_terms("sphere", Q, radius=5.0, radius_spread=0.0, geometry=two),
+                               population_terms("sphere", Q, radius=5.0, radius_spread=0.0, geometry=born), rtol=1e-12)
 
 
 def test_the_dwba_exit_angle_defaults_to_the_critical_angle() -> None:
@@ -164,7 +168,7 @@ def test_fitting_formulas_on_a_fine_rule_are_reproduced() -> None:
     legacy = old.vertical_cylinder_form_factor_pd(Q, 4.0, 0.2, n_samples=20000, nsig=4.0)
     at_zero = old.vertical_cylinder_form_factor_pd(np.array([1e-9]), 4.0, 0.2, n_samples=20000, nsig=4.0)
     np.testing.assert_allclose(population_terms("vertical_cylinder", Q, radius=4.0, radius_spread=0.2)[0],
-                               legacy / at_zero, rtol=1e-5)
+                               legacy / at_zero, rtol=1e-4)
 
 
 def test_the_resolution_is_the_convolution_of_the_symmetric_cut() -> None:
@@ -214,3 +218,24 @@ def test_invalid_input_is_refused() -> None:
         Geometry("dwba", 0.1, 0.4, 0.2)  # no substrate
     with pytest.raises(ValueError):
         Population("sphere", 4.0, coupling="ssca")
+
+
+def test_the_tables_are_the_direct_average_and_a_stale_file_is_not_used(tmp_path, monkeypatch) -> None:
+    """The tabulated path and the direct quadrature are the same definition (resolved below q_cut, the envelope
+    above); a prebuilt table is used only when it was built with the current ``PARAMETERS``."""
+    from src.gimap.features.fitting.domain.cut_model import model, tables
+
+    q = np.geomspace(0.02, 4.0, 300)
+    for law in ("number_gauss", "lognormal"):
+        for radius, spread in ((3.0, 0.05), (20.0, 0.3)):
+            fast, fast_c = model.size_averages("sphere", q, radius=radius, radius_spread=spread, law=law, coherent=True)
+            monkeypatch.setattr(tables, "usable", lambda law, rel: np.zeros(np.atleast_1d(rel).size, bool))
+            slow, slow_c = model.size_averages("sphere", q, radius=radius, radius_spread=spread, law=law, coherent=True)
+            monkeypatch.undo()
+            np.testing.assert_allclose(fast, slow, rtol=1e-3 if spread > 0.25 else 2e-4)
+            np.testing.assert_allclose(fast_c, slow_c, atol=1e-4 * float(slow.max()))
+    monkeypatch.setattr(tables, "DATA", tmp_path)
+    stale = tables.path("number_gauss", "sinc", tmp_path)
+    np.savez(stale, parameters=np.array("{}"))
+    assert tables._load("number_gauss", "sinc") is None
+

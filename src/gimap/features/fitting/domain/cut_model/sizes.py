@@ -87,6 +87,25 @@ def extent(law: str, mean, rel, power: float = 6.0) -> np.ndarray:
     return mean * (1.0 + SPAN * rel) - mean * np.maximum(1.0 - SPAN * rel, 0.0)
 
 
+def upper(law: str, mean, rel, power: float = 6.0) -> np.ndarray:
+    """The largest size (nm) of the truncated distribution of every row."""
+    mean, rel = _arrays(mean, rel)
+    if law == "lognormal":
+        return np.exp(_lognormal_span(mean, rel, power)[1])
+    return mean * (1.0 + SPAN * rel)
+
+
+def characteristic(law: str, mean, rel, power: float = 6.0) -> np.ndarray:
+    """A size (nm) above which a row's intensity-weighted distribution has little weight: the upper cut of a Gaussian,
+    and two widths above the median of a log-normal weighted by V² ∝ R^power (the scale of the oscillations that
+    survive the size average, for the grids of a random cylinder)."""
+    mean, rel = _arrays(mean, rel)
+    if law == "lognormal":
+        s = np.sqrt(np.log1p(rel**2))
+        return np.exp(np.log(mean) - 0.5 * s**2 + power * s**2 + 2.0 * s)
+    return mean * (1.0 + SPAN * rel)
+
+
 def _lognormal_span(mean, rel, power):
     """ln R from 4 σ_ln below the median by number to 4 σ_ln above the median weighted by V² ∝ R^power (that one
     is log-normal too, its median times exp(power σ_ln²)): the largest particles, which dominate the intensity of a
@@ -166,4 +185,4 @@ def lognormal_moments(mean: float, rel: float, power: float) -> dict:
 
 
 __all__ = ["LAWS", "SPAN", "extent", "lognormal_moments", "moments", "nodes", "panel_count", "panel_counts",
-           "size_report"]
+           "characteristic", "size_report", "upper"]

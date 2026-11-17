@@ -36,7 +36,8 @@ def test_the_sphere_da_is_the_number_average_of_the_amplitudes(law) -> None:
     mean_square = (amplitudes**2 @ number) / (number @ volumes**2)
     coherent = (amplitudes @ number) ** 2 / (number @ volumes**2)
     structure = paracrystal(Q, 13.0, component.value("sigma_nn"))[0]
-    np.testing.assert_allclose(fm.component_form(component, Q), mean_square + coherent * (structure - 1), rtol=1e-6)
+    # sizes by number come from the tables of cut_model (their interpolation: 1e-4)
+    np.testing.assert_allclose(fm.component_form(component, Q), mean_square + coherent * (structure - 1), rtol=1e-4)
 
 
 def test_da_adds_intensity_at_low_q_and_the_coupling_is_saved() -> None:

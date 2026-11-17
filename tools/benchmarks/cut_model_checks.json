@@ -78,17 +78,17 @@
   {
    "name": "vertical cylinder R=3.0 σ=0.1 (number), old formula fine, ±4σ",
    "reference": "fitting",
-   "max_rel": 3.473626314365319e-07,
-   "median_rel": 5.154181942357283e-08,
-   "q_at_max": 1.2587646076794656,
+   "max_rel": 3.963819114649603e-05,
+   "median_rel": 5.730446922092014e-06,
+   "q_at_max": 1.2687145242070117,
    "note": ""
   },
   {
    "name": "vertical cylinder R=8.0 σ=0.3 (number), old formula fine, ±4σ",
    "reference": "fitting",
-   "max_rel": 0.00010505573781727229,
-   "median_rel": 3.2666334692788013e-07,
-   "q_at_max": 3.0,
+   "max_rel": 1.6008139599232862e-05,
+   "median_rel": 3.3376412655883314e-07,
+   "q_at_max": 0.43292153589315524,
    "note": ""
   },
   {
@@ -182,57 +182,57 @@
   {
    "name": "sphere R=2.0 σ=0.1, Born at q_z=0.577",
    "reference": "fit1d",
-   "max_rel": 1.9613307051136175e-05,
-   "median_rel": 1.2064387472365823e-06,
-   "q_at_max": 2.109482470784641,
+   "max_rel": 3.45254838556297e-05,
+   "median_rel": 1.6346486588214582e-06,
+   "q_at_max": 2.1393322203672787,
    "note": ""
   },
   {
    "name": "vertical cylinder R=2.0 σ=0.1",
    "reference": "fit1d",
-   "max_rel": 2.4705211777331648e-05,
-   "median_rel": 1.5456738075014798e-06,
-   "q_at_max": 1.8607345575959933,
+   "max_rel": 3.185384039983141e-05,
+   "median_rel": 1.8471795548702374e-06,
+   "q_at_max": 1.980133555926544,
    "note": ""
   },
   {
    "name": "sphere R=5.0 σ=0.2, Born at q_z=0.577",
    "reference": "fit1d",
-   "max_rel": 4.865125764363931e-06,
-   "median_rel": 2.2327581788994522e-07,
-   "q_at_max": 0.5523205342237062,
+   "max_rel": 2.3787752551518437e-05,
+   "median_rel": 2.152328268778536e-06,
+   "q_at_max": 0.6070450751252087,
    "note": ""
   },
   {
    "name": "vertical cylinder R=5.0 σ=0.2",
    "reference": "fit1d",
-   "max_rel": 6.243809702044523e-06,
-   "median_rel": 1.7254196371663255e-07,
-   "q_at_max": 0.6916193656093489,
+   "max_rel": 2.4635537906103622e-05,
+   "median_rel": 1.0498205885722811e-06,
+   "q_at_max": 0.7264440734557596,
    "note": ""
   },
   {
    "name": "sphere R=10.0 σ=0.35, Born at q_z=0.577",
    "reference": "fit1d",
-   "max_rel": 0.00023532734372677666,
-   "median_rel": 3.1919831056104186e-07,
-   "q_at_max": 2.3781302170283807,
+   "max_rel": 2.8142656641749753e-05,
+   "median_rel": 3.4879166027623754e-07,
+   "q_at_max": 2.990050083472454,
    "note": ""
   },
   {
    "name": "vertical cylinder R=10.0 σ=0.35",
    "reference": "fit1d",
-   "max_rel": 0.0006500311084980392,
-   "median_rel": 6.967967986493129e-07,
-   "q_at_max": 2.2935559265442405,
+   "max_rel": 1.4133270473060122e-05,
+   "median_rel": 5.266531409864328e-07,
+   "q_at_max": 0.2289482470784641,
    "note": ""
   },
   {
    "name": "random cylinder R=3 h=12, Born at q_z",
    "reference": "fit1d",
-   "max_rel": 4.427030161346934e-06,
-   "median_rel": 1.0626079284259404e-06,
-   "q_at_max": 1.0697161936560935,
+   "max_rel": 1.618307157746912e-05,
+   "median_rel": 3.846389979522691e-06,
+   "q_at_max": 1.1990651085141903,
    "note": ""
   },
   {
@@ -262,9 +262,9 @@
   {
    "name": "sphere R=4.0 σ=0.2 LMA born_qz",
    "reference": "truth",
-   "max_rel": 1.9731549727453057e-11,
-   "median_rel": 5.484501741648273e-14,
-   "q_at_max": 2.7860767946577627,
+   "max_rel": 2.6555269121431024e-05,
+   "median_rel": 3.655892896525792e-06,
+   "q_at_max": 0.8756928213689482,
    "note": ""
   },
   {
@@ -278,9 +278,9 @@
   {
    "name": "sphere R=6.0 σ=0.3 LMA born_qz",
    "reference": "truth",
-   "max_rel": 2.1291857166261252e-12,
-   "median_rel": 1.1102230246251565e-15,
-   "q_at_max": 3.0,
+   "max_rel": 1.3617232840879012e-05,
+   "median_rel": 5.6311947105314175e-08,
+   "q_at_max": 0.28864774624373957,
    "note": ""
   },
   {
@@ -294,17 +294,17 @@
   {
    "name": "vertical_cylinder R=4.0 σ=0.2 LMA born_qz",
    "reference": "truth",
-   "max_rel": 2.916245023243391e-11,
-   "median_rel": 3.375077994860476e-14,
-   "q_at_max": 3.0,
+   "max_rel": 2.742587686355158e-05,
+   "median_rel": 1.0009039888014826e-06,
+   "q_at_max": 0.900567612687813,
    "note": ""
   },
   {
    "name": "vertical_cylinder R=4.0 σ=0.2 DA born_qz",
    "reference": "truth",
-   "max_rel": 2.916245023243391e-11,
-   "median_rel": 3.3861802251067274e-14,
-   "q_at_max": 3.0,
+   "max_rel": 2.711082463080494e-05,
+   "median_rel": 9.758782040791836e-07,
+   "q_at_max": 0.900567612687813,
    "note": ""
   },
   {
@@ -342,23 +342,23 @@
   {
    "name": "vertical_cylinder R=4.0 σ=0.2 LMA dwba",
    "reference": "truth",
-   "max_rel": 2.916356045545854e-11,
-   "median_rel": 3.441691376337985e-14,
-   "q_at_max": 3.0,
+   "max_rel": 2.7425876863329535e-05,
+   "median_rel": 1.0009039875802372e-06,
+   "q_at_max": 0.900567612687813,
    "note": ""
   },
   {
    "name": "vertical_cylinder R=4.0 σ=0.2 DA dwba",
    "reference": "truth",
-   "max_rel": 2.916356045545854e-11,
-   "median_rel": 3.441691376337985e-14,
-   "q_at_max": 3.0,
+   "max_rel": 2.7110824625031782e-05,
+   "median_rel": 9.758782085200757e-07,
+   "q_at_max": 0.900567612687813,
    "note": ""
   }
  ],
  "seconds_1000x500_one_core": {
-  "sphere": 4.7225364000187255,
-  "vertical_cylinder": 3.7807248000171967,
-  "cylinder": 45.01207420002902
+  "sphere": 1.393923400028143,
+  "vertical_cylinder": 1.1662224999745376,
+  "cylinder": 11.130803500011098
  }
 }

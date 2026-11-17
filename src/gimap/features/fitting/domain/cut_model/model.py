@@ -20,7 +20,7 @@ from typing import Callable, Optional, Sequence
 
 import numpy as np
 
-from . import envelope, resolution, shapes, sizes
+from . import envelope, resolution, shapes, sizes, tables
 from .geometry import Geometry
 from .structure import paracrystal
 
@@ -84,12 +84,32 @@ def size_averages(family: str, q, *, radius, radius_spread, law: str = "number_g
     if family not in shapes.FAMILIES:
         raise ValueError(f"Unknown particle family {family!r}")
     q = np.abs(np.asarray(q, float))
-    radius = np.atleast_1d(np.asarray(radius, float))
+    radius, spread = sizes._arrays(radius, radius_spread)  # refuses a mean ≤ 0 or a width < 0
     rows = radius.size
-    spread = _column(radius_spread, rows)
     height, h_spread = _column(height, rows), _column(height_spread, rows)
     terms = geometry.sphere_terms()
     qz = {"sphere": max(abs(z) for _c, z in terms), "cylinder": geometry.random_cylinder_qz()}.get(family, 0.0)
+    form = np.empty((rows, q.size))
+    coh = np.empty_like(form) if coherent else None
+    fast = _tabulated_rows(family, law, spread, h_spread, terms, coherent) if panels is None else np.zeros(rows, bool)
+    if fast.any():
+        index = np.flatnonzero(fast)
+        if family == "cylinder":
+            part, part_c = tables.cylinder(q, law, radius[index], spread[index], height[index], h_spread[index], qz,
+                                           coherent)
+        else:
+            kind = "sphere" if family == "sphere" else "disc"
+            xbar = np.hypot(q, qz)[None, :] * radius[index, None]
+            part, mean = tables.averages(law, kind, xbar, spread[index], coherent)
+            part_c = None if mean is None else mean**2
+        form[index] = part
+        if coherent:
+            coh[index] = part_c
+        if fast.all():
+            return form, coh
+    rest = np.flatnonzero(~fast)
+    radius, spread, height, h_spread = radius[rest], spread[rest], height[rest], h_spread[rest]
+    rows = rest.size
     q_top = float(q.max()) if q.size else 0.0
     power = shapes.RADIUS_POWER[family]
     extent_r = sizes.extent(law, radius, spread, power)
@@ -106,8 +126,6 @@ def size_averages(family: str, q, *, radius, radius_spread, law: str = "number_g
         r_counts = sizes.panel_counts(np.hypot(np.minimum(q_top, reach * cut_r), qz), extent_r)
         h_counts = (sizes.panel_counts(np.hypot(np.minimum(q_top, reach * cut_h), qz), extent_h)
                     if family == "cylinder" else np.zeros(rows, int))
-    form = np.empty((rows, q.size))
-    coh = np.empty_like(form) if coherent else None
     keys = r_counts * MAX_KEY + h_counts
     for key in np.unique(keys):
         group = np.flatnonzero(keys == key)
@@ -122,13 +140,24 @@ def size_averages(family: str, q, *, radius, radius_spread, law: str = "number_g
         else:
             part, part_c = _direct_and_envelope(family, q, radii, weights, terms, coherent, cut_r[group], law,
                                                 radius[group], spread[group], power, qz)
-        form[group] = part
+        form[rest[group]] = part
         if coherent:
-            coh[group] = part_c
+            coh[rest[group]] = part_c
     return form, coh
 
 
-ENVELOPE_PANELS = 4
+def _tabulated_rows(family, law, spread, h_spread, terms, coherent) -> np.ndarray:
+    """Rows the tables of ``tables`` evaluate: their widths covered, and for spheres one path (the coherent term
+    of the Born path at q_z ≠ 0 carries a phase the tables do not)."""
+    ok = tables.usable(law, spread)
+    if family == "cylinder":
+        return ok & tables.usable(law, h_spread)
+    if family == "sphere" and (len(terms) > 1 or (coherent and terms[0][1] != 0.0)):
+        return np.zeros_like(ok)
+    return ok
+
+
+ENVELOPE_PANELS = 16
 """Panels of the size rule of an envelope average (smooth in R; more when two DWBA paths beat)."""
 
 

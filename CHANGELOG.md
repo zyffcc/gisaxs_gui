@@ -433,8 +433,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
     of 20 nm with σR/R = 0.4 at q = 3 nm⁻¹) and 55 % (random cylinders) at high q.
   - A model saved before opens with the sizes it had, its σD/D converted to σnn/D and a vertical cylinder's scale
     converted; its curve changes only where the former rules were off.
-  - The converged averages cost time: **Search the ranges** takes tens of seconds instead of a few, and minutes with
-    a large, broad random cylinder or a broad log-normal (*Known limitations* in the manual).
+  - Sizes by number come from small tables of the exact averages (about 1 ms per evaluation, as fast as before).
+    Where no table applies the converged averages cost time: **Search the ranges** with *Gaussian, by intensity* takes
+    tens of seconds, with a random cylinder up to minutes (*Known limitations* in the manual).
 
 - **Single analysis** has one **Method** drop-down, and the button carries the method's name. When a curve is
   opened the page chooses the method: a curve whose model is not yet edited gets **Find the particle shape (no
