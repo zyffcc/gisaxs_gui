@@ -11,7 +11,7 @@ from .neural_refine_report import read,write,sha
 
 
 READERS=int(__import__('os').environ.get('IAM_READERS','0'))
-RAW_CACHE_N=40
+RAW_CACHE_N=0
 _READ_GATE=None
 _RAW_CACHE={}
 

@@ -241,6 +241,10 @@ def select_frames(a, out, read):
         for t in wins:
             lo, hi = t - 0.5 - SELECT_MARGIN_S, t + 0.5 + SELECT_MARGIN_S
             before, after = idx[ts <= lo], idx[ts >= hi]
+            if not len(before) and idx[0] == 0:
+                before = idx[:1]
+            if not len(after) and idx[-1] == n - 1:
+                after = idx[-1:]
             if len(before) and len(after):
                 i0, i1 = before.max(), after.min()
                 if np.isin(np.arange(i0, i1 + 1), idx).all():
@@ -277,8 +281,13 @@ def _intake(a, root, mask, msha, energy, lam, out):
     from sputtergisaxs.polymer_review_data import intake_rows, bin_ids, aggregate
     geo = dict(energy_ev=energy, sdd_mm=a.sdd_mm, alpha_i_deg=a.alpha_i, metal=a.metal, sample_roll_deg=a.roll)
     if a.auto_centre:
-        from sputtergisaxs.polymer_dev_intake import auto_center
-        cen = auto_center(lit_frames(frames(Path(a.frames))), a.sdd_mm, a.alpha_i)
+        from sputtergisaxs import polymer_dev_intake as PDI
+        PDI.RAW_CACHE_N = 30
+        try:
+            cen = PDI.auto_center(lit_frames(frames(Path(a.frames))), a.sdd_mm, a.alpha_i)
+        finally:
+            PDI.RAW_CACHE_N = 0
+            PDI._RAW_CACHE.clear()
         geo.update(beam_col=float(cen["db_col"]), beam_row=float(cen["db_row"]))
         print(f"auto centre: col {cen['db_col']:.1f} row {cen['db_row']:.1f} (roll kept at {a.roll})")
         LV.emit("centre", col=LV.rounded(cen["db_col"], 2), row=LV.rounded(cen["db_row"], 2))
