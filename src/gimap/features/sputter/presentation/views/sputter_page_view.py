@@ -12,7 +12,8 @@ shows the live view instead (``sputter_live_view.py``): the steps and what each 
 value comes from); Analyze options (``sputter_main_view.py``); Static Frames (``sputter_static_view.py``, collapsed);
 More options (collapsed): the pixel mask with the Masks of the Package, the sample roll and the folder results go to.
 Right, about the result the main screen shows: Windows (one row per time window: the values of the solution shown),
-Report (the package's report and the facts of the analysis) and Logs (the logs of its steps); each says in one line
+Report (the facts of the analysis, the time of each step with how the frames were read, a note when the disk was the
+slow part, and the package's report) and Logs (the logs of its steps); each says in one line
 what to do while there is no result.
 """
 
@@ -24,7 +25,7 @@ from PyQt5.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineE
                              QScrollArea, QSizePolicy, QStackedWidget, QTableWidget, QTabWidget, QTextBrowser,
                              QVBoxLayout, QWidget)
 
-from src.gimap.app.presentation.components import AdvancedSection, FilePicker, ParameterSection
+from src.gimap.app.presentation.components import AdvancedSection, ErrorBanner, FilePicker, ParameterSection
 from src.gimap.app.presentation.components.table_copy import enable_table_copy
 from src.gimap.app.presentation.i18n import DATA_VALUES
 
@@ -209,10 +210,20 @@ class SputterPageView(SputterMainView, SputterLiveView, SputterStaticView):
         self.report_facts.setWordWrap(True)
         self.report_facts.setTextFormat(Qt.RichText)
         self.report_facts.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.report_steps = QLabel("", report)  # Time per step: a small table (the page fills it)
+        self.report_steps.setObjectName("sputterReportSteps")
+        self.report_steps.setTextFormat(Qt.RichText)
+        self.report_steps.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.report_disk_note = ErrorBanner("", "", report, level="warning", dismissible=False)
+        self.report_disk_note.setObjectName("sputterReportDiskNote")
+        self.report_disk_note.title_label.setVisible(False)
+        self.report_disk_note.setVisible(False)  # only when reading the frames from disk was the slow part
         self.report_view = QTextBrowser(report)
         self.report_view.setObjectName("sputterReport")
         self.report_view.setOpenExternalLinks(True)
         layout.addWidget(self.report_facts)
+        layout.addWidget(self.report_steps)
+        layout.addWidget(self.report_disk_note)
         layout.addWidget(self.report_view, 1)
         self.tab_report = self._empty_or(report)
         logs = QWidget()

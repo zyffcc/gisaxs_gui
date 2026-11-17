@@ -118,6 +118,8 @@ class StaticRequest:
     beam_row: Optional[float] = None
     sample_roll_deg: Optional[float] = None
     mask_file: Optional[Path] = None
+    workers: Optional[int] = None
+    """Processes the package runs with (None: as many as the computer can take); not part of the sample's digest."""
 
     def label(self) -> str:
         """The name of the sample in the files of the series."""
@@ -226,7 +228,7 @@ class StaticService:
         if self.runner.analysed(request) and self.reader.complete(out):
             on_event(ClientStarted(out, label, reused=True))
             return self.reader.read(out)
-        on_event(ClientStarted(out, label))
+        on_event(ClientStarted(out, label, workers=request.workers))
         run = self.runner.run(request, on_event, should_stop)
         if run.stopped or should_stop():
             raise Stopped(STATIC_STOPPED)

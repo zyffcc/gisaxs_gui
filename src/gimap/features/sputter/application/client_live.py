@@ -10,8 +10,12 @@ The events, by step:
 * reading the frames (``intake``): ``centre`` — the beam centre found in the frames; ``detector`` — the summed frames
   the automatic mask was made from (log10 of the counts on blocks of pixels), the share of each block the mask leaves
   out, the beam centre and the sample horizon; ``frames`` — one chunk of frames read (how many of how many, their
-  times, the count rate of each frame and their count rate on the grid of q_y and exit angle); ``imported`` — the
-  scan is read (frames, times, the start of the deposition when it was found);
+  times, the count rate of each frame and their count rate on the grid of q_y and exit angle; a newer package adds
+  ``frames``, ``read_s``, ``wall_s`` and ``mb``: the frames of the chunk, the seconds its process spent opening and
+  reading their files from disk, its whole seconds and the MB read); ``reading`` — at the end of the import, how it
+  spent its time (``frames_read``, ``frames_total``, ``workers``, ``seconds``, ``read_s_per_frame``, ``read_share``,
+  ``mb_read``, ``slow``); ``imported`` — the scan is read (frames, times, the start of the deposition when it was
+  found);
 * finding the solutions (``predict``): ``models`` — the networks the analysis runs, the first being the current one;
   ``windows`` — a network starts on that many time windows; ``window`` — one window solved: its best candidate (and,
   when the mode refines, later its refined solution) with the quantities of the main screen, the fit deviation, and
@@ -51,6 +55,18 @@ PHASES = ("features", "network", "render", "refine", "sequence")
 PHASE_WEIGHTS = {"features": 1.0, "network": 0.3, "render": 2.0, "refine": 6.0, "sequence": 8.0}
 """The rough share of a network's time each phase takes (refining and the whole-scan refinement take most of it when
 the mode has them): only for the bar of the job status, which says how far the analysis has come."""
+SLOW_DISK_S_PER_FRAME, SLOW_DISK_SHARE = 0.15, 0.5
+"""Reading the frames from disk is the slow part of the import when it takes at least this long per frame and at
+least this share of the processes' time (the package's own thresholds)."""
+
+
+def disk_slow(per_frame: Optional[float], share: Optional[float], said=None) -> bool:
+    """The disk is the slow part of the import: the package says so (``said``), or the seconds per frame and the
+    share of the time are both at their thresholds."""
+    if said is True:
+        return True
+    return per_frame is not None and share is not None and per_frame >= SLOW_DISK_S_PER_FRAME and \
+        share >= SLOW_DISK_SHARE
 
 
 @dataclass(frozen=True)
@@ -102,6 +118,15 @@ class LiveRun:
     frames_total: int = 0
     trace: dict = field(default_factory=dict)
     """Time of a frame (s) -> its count rate per pixel."""
+    read_frames: int = 0
+    """Frames of the chunks that said how long reading them from disk took (a newer package), and their sums:"""
+    read_s: float = 0.0
+    wall_s: float = 0.0
+    read_mb: float = 0.0
+    reading: Optional[LiveEvent] = None
+    """How the import spent its time, said at its end (a newer package)."""
+    workers: int = 0
+    """The processes GIMaP asked the package to run with (0: not known)."""
     imported: Optional[LiveEvent] = None
     families: list = field(default_factory=list)
     mode: str = ""
@@ -169,6 +194,9 @@ class LiveRun:
                         self.trace[time_s] = rate
             if "rate" in event.arrays:
                 self.frames = event
+            self._timing(event)
+        elif kind == "reading":
+            self.reading = event
         elif kind == "imported":
             self.imported = event
             self.frames_done = int(event.number("frames") or self.frames_done)
@@ -202,6 +230,40 @@ class LiveRun:
         else:
             return ""
         return kind
+
+    def _timing(self, event: LiveEvent) -> None:
+        """The disk time of a chunk of frames, added up (a chunk without it, from an older package, adds nothing)."""
+        frames, read_s = event.number("frames"), event.number("read_s")
+        if frames is None or read_s is None or frames <= 0:
+            return
+        self.read_frames += int(frames)
+        self.read_s += read_s
+        self.wall_s += event.number("wall_s") or 0.0
+        self.read_mb += event.number("mb") or 0.0
+
+    # -- reading the frames from disk --------------------------------------------------------------------------------
+    def disk_per_frame(self) -> Optional[float]:
+        """Seconds a process spent reading one frame from disk (the import's own figure once it has ended)."""
+        said = self.reading.number("read_s_per_frame") if self.reading is not None else None
+        if said is not None:
+            return said
+        return self.read_s / self.read_frames if self.read_frames else None
+
+    def disk_share(self) -> Optional[float]:
+        """The share (0–1) of the processes' time spent reading the frames from disk."""
+        said = self.reading.number("read_share") if self.reading is not None else None
+        if said is not None:
+            return said
+        return min(1.0, self.read_s / self.wall_s) if self.read_frames and self.wall_s > 0 else None
+
+    def disk_slow(self) -> bool:
+        return disk_slow(self.disk_per_frame(), self.disk_share(),
+                         self.reading.get("slow") if self.reading is not None else None)
+
+    def processes(self) -> int:
+        """The processes the run works with: as the import said them, else as GIMaP asked (0: not known)."""
+        said = self.reading.number("workers") if self.reading is not None else None
+        return int(said) if said else self.workers
 
     def _solution(self, event: LiveEvent) -> bool:
         time_s, label = event.number("t"), str(event.get("label") or "")
@@ -418,4 +480,4 @@ def _matrix(values) -> np.ndarray:
 
 
 __all__ = ["FRAME_LABEL", "LIVE_PREFIX", "LIVE_STEPS", "LiveEvent", "LiveRun", "PHASES", "PHASE_WEIGHTS",
-           "STATIC_LIVE_STEPS", "live_event", "parse_live"]
+           "SLOW_DISK_SHARE", "SLOW_DISK_S_PER_FRAME", "STATIC_LIVE_STEPS", "disk_slow", "live_event", "parse_live"]

@@ -201,20 +201,36 @@ def main(argv=None):
             fam = min(tried, key=tried.get)
             LV.say("chosen", "predict", family=fam, deviations={k: LV.rounded(v, 3) for k, v in tried.items()})
             status = "ok" if status.startswith("failed at predict") else status
+            iterations = _joint_iterations(fam, mode["sequence"])
             if later:
 
 
                 ok = finish(fam, preliminary=True)
                 if ok:
                     LV.say("preliminary", "predict", family=fam, folder=str(out))
-                LV.say("refine", "predict", family=fam, refine=mode["refine"], iterations=mode["sequence"])
-                run_quiet("predict", predict_args(fam, mode["refine"], mode["sequence"]), "refine")
+                LV.say("refine", "predict", family=fam, refine=mode["refine"], iterations=iterations)
+                run_quiet("predict", predict_args(fam, mode["refine"], iterations), "refine")
     if ok:
         finish(fam)
     else:
         write_analysis(fam, status)
     LV.clear(live)
     return 0 if status == "ok" else 1
+
+
+def _joint_iterations(fam, default):
+    "Iterations of the whole-scan refinement for the family's shipped network: its meta 'joint_iterations' when set"
+    try:
+        import numpy as np
+        path = Path(os.environ.get("IAMPRED_MODELS", "")) / fam / "nn" / "model.npz"
+        if os.environ.get("IAMPRED_MODELS") and path.is_file():
+            with np.load(path, allow_pickle=False) as z:
+                n = json.loads(str(z["meta"])).get("joint_iterations")
+            if n:
+                return int(n)
+    except (OSError, ValueError, KeyError):
+        pass
+    return default
 
 
 def _finish(a, out, data, fam, tried, like, steps, run, run_quiet, status_of, preliminary=False):
@@ -238,6 +254,17 @@ def _analysis(a, out, data, fam, tried, like, steps, status):
                mask=_mask_used(data, a.label), note="development reference: not validated against independent characterisation")
     if status == "preliminary":
         res["preliminary"] = "the network's candidates and time path; the whole-scan refinement is running"
+
+
+    marker = data / a.label / "pixmask.json" if data is not None else None
+    if marker is not None and marker.exists():
+        try:
+            reading = json.loads(marker.read_text(encoding="utf-8")).get("reading")
+        except (OSError, ValueError):
+            reading = None
+        if reading:
+            res["reading"] = reading
+    res["workers"] = int(a.workers)
     (out / "analysis.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
     print(f"status: {status}; report: {files['report_md']}", flush=True)
 

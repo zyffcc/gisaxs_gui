@@ -8,7 +8,8 @@ choose from (the network's candidates, the refined one and the joint fit of the 
 solution shown — radius, height, distance, gap, size distribution width, coverage — and their evolution over the scan.
 
 **Details** (the second view): the geometry, the options of Analyze, Static Frames (samples measured after their
-deposition, analysed one at a time into a series the main screen shows: ``static_flow.py``) and More options; at the
+deposition, analysed one at a time into a series the main screen shows: ``static_flow.py``; the parallel processes of
+both: ``workers_flow.py``) and More options; at the
 right the result shown, from the files of its folder: Windows, Report and Log (``result_tabs.py``).
 
 The layout is in ``views/sputter_page_view.py`` and ``views/sputter_main_view.py``; the folder and the form in
@@ -37,10 +38,11 @@ from .rate_flow import RateMixin
 from .result_tabs import ResultTabsMixin
 from .static_flow import STATIC_KEY, SputterStaticMixin
 from .views.sputter_page_view import SputterPageView
+from .workers_flow import WorkersMixin
 
 
 class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, ResultTabsMixin, LivePanelMixin,
-                  SputterStaticMixin, RateMixin, SputterGeometryMixin, QWidget, SputterPageView):
+                  SputterStaticMixin, RateMixin, WorkersMixin, SputterGeometryMixin, QWidget, SputterPageView):
     clientEvent = pyqtSignal(object)
     """A line or a step of Analyze, from its background task (delivered in the GUI thread)."""
     staticEvent = pyqtSignal(object)
@@ -67,6 +69,7 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Res
         self._init_client_panel()
         self._init_result_tabs()
         self._init_live()
+        self._init_workers()
         self._connect_geometry()
         self._connect_client()
         self._connect_static()
@@ -116,6 +119,7 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Res
         self.refresh_client_language()
         self.refresh_static_language()
         self.refresh_result_tabs_language()
+        self._fill_workers()  # Automatic (N) in the new language
 
     def running(self) -> bool:
         """Analyze or Analyze Sample is at work (the window asks before it closes)."""

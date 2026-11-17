@@ -228,25 +228,26 @@ class ChunkWatcher:
             return
         for meta in new:
             try:
-                rows = json.loads(meta.read_text(encoding="utf-8"))["rows"]
+                doc = json.loads(meta.read_text(encoding="utf-8"))
+                rows = doc["rows"]
                 index = int(meta.stem.split("_")[-1])
             except (OSError, ValueError, KeyError):
                 continue
             self.seen.add(meta.name)
-            self.waiting[index] = (meta, rows)
+            self.waiting[index] = (meta, rows, doc)
             if index == 0 and rows:
                 self.t0 = datetime.fromisoformat(rows[0]["timestamp"]).timestamp()
         if self.t0 is None:
             return
         for index in sorted(self.waiting):
-            meta, rows = self.waiting.pop(index)
+            meta, rows, doc = self.waiting.pop(index)
             self.done += len(rows)
             try:
-                self._event(index, meta, rows)
+                self._event(index, meta, rows, doc)
             except Exception:
                 pass
 
-    def _event(self, index, meta, rows):
+    def _event(self, index, meta, rows, doc=None):
         from datetime import datetime
         times = [datetime.fromisoformat(r["timestamp"]).timestamp() - self.t0 for r in rows]
         trace = [[round(t, 3), rounded(r["selected_counts"] / max(r["valid_pixel_count"] * r["exposure_s"], 1e-12), 6)]
@@ -257,8 +258,13 @@ class ChunkWatcher:
                 rate = native_rate(z["Y"], z["P"], [r["exposure_s"] for r in rows])
             q, af = native_axes(self.grid)
             arrays = dict(q=q, af=af, rate=rate)
+        doc = doc or {}
+
+
         emit("frames", arrays, chunk=index, done=min(self.done, self.total), total=self.total,
-             t_first=rounded(min(times), 3), t_last=rounded(max(times), 3), trace=trace)
+             t_first=rounded(min(times), 3), t_last=rounded(max(times), 3), trace=trace, frames=len(rows),
+             read_s=rounded(doc.get("read_seconds"), 3), wall_s=rounded(doc.get("wall_seconds"), 3),
+             mb=rounded((doc.get("read_bytes") or 0) / 1e6, 2) if doc.get("read_bytes") is not None else None)
 
 
 def native_rate_YE(Y, E):

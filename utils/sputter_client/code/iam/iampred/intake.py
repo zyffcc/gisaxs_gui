@@ -182,6 +182,36 @@ SELECT_FULL_S, SELECT_TAIL_S, SELECT_MARGIN_S = float(os.environ.get("IAM_SELECT
 SELECT_MAXW = tuple(int(v) for v in os.environ.get("IAM_SELECT_MAXW", "24,60").split(","))
 
 
+SLOW_READ_S, SLOW_SHARE = 0.15, 0.5
+
+
+def reading_summary(intake_dir, run, workers, t_import):
+    'Frames read and the time the import spent reading them (dict for the scan marker and the live event).'
+    import time as _time
+    read_s = wall_s = mb = 0.0
+    frames = 0
+    for meta in Path(intake_dir).glob("chunk_*.json"):
+        try:
+            doc = json.loads(meta.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        frames += len(doc.get("rows", []))
+        read_s += float(doc.get("read_seconds") or 0.0)
+        wall_s += float(doc.get("wall_seconds") or 0.0)
+        mb += float(doc.get("read_bytes") or 0) / 1e6
+    per = read_s / frames if frames else None
+    share = read_s / wall_s if wall_s > 0 else None
+    out = dict(frames_read=frames, frames_total=run.get("received_frames"), workers=int(workers),
+               seconds=round(_time.perf_counter() - t_import, 1), read_s_per_frame=None if per is None else round(per, 4),
+               read_share=None if share is None else round(share, 3), mb_read=round(mb, 1),
+               slow=bool(per is not None and share is not None and per >= SLOW_READ_S and share >= SLOW_SHARE))
+    print(f"reading: {frames} of {out['frames_total']} frames in {out['seconds']:.0f} s with {workers} processes; disk "
+          f"{out['read_s_per_frame']} s per frame ({100 * (share or 0):.0f} % of the processes' time)"
+          + (": the disk is the slow part" if out["slow"] else ""), flush=True)
+    LV.emit("reading", **out)
+    return out
+
+
 def _windows(t_dep, t_first, t_last, step, nmax):
     'predict._all_times with the first and last bin time of the scan.'
     import numpy as np
@@ -327,6 +357,8 @@ def _intake(a, root, mask, msha, energy, lam, out):
                     import time
                     time.sleep(20)
 
+    import time as _time
+    t_import = _time.perf_counter()
     selection = None
     if a.windows_only:
         selection = select_frames(a, out, read)
@@ -341,7 +373,8 @@ def _intake(a, root, mask, msha, energy, lam, out):
                   started_utc=t0.strftime("%Y-%m-%dT%H:%M:%SZ"),
                   built_utc=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), frames=run["selected_frames"],
                   received_frames=run["received_frames"], time_first_s=rows[0]["time_s"], time_last_s=rows[-1]["time_s"],
-                  geometry=b.get("geometry"), auto_mask=auto, selection=selection)
+                  geometry=b.get("geometry"), auto_mask=auto, selection=selection,
+                  reading=reading_summary(out / "intake", run, a.workers, t_import))
     (out / "pixmask.json").write_text(json.dumps(marker, indent=1) + "\n", encoding="utf-8", newline="\n")
     qcm = a.qcm_nm_s if a.qcm_nm_s is not None else a.rate_nm_s / 0.6
     scan = dict(metal=a.metal, sub=a.substrate, qcm=qcm, growth=a.label, ai=a.alpha_i, lam=lam,

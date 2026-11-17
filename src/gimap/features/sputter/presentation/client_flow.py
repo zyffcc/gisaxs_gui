@@ -19,7 +19,7 @@ second view.
 from __future__ import annotations
 
 import traceback
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
 
@@ -375,7 +375,7 @@ class SputterClientMixin:
         if picker and self.scan_info.problem:
             self._client_refused(self.scan_info.problem)
             return
-        request = self._client_request()
+        request = replace(self._client_request(), workers=self.run_workers())  # Automatic: worked out now
         problems = request.problems()
         if problems:
             self._client_status("failed", [(problem, {}) for problem in problems], 0.0)
@@ -441,7 +441,7 @@ class SputterClientMixin:
         if isinstance(event, ClientStarted):
             self.client_log.appendPlainText(f"{event.label} -> {event.folder}")
             if not event.reused:
-                self._live_begin(event.folder)
+                self._live_begin(event.folder, workers=event.workers)
             return
         line = str(event)
         self.client_log.appendPlainText(line)

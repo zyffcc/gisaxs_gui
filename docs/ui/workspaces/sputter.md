@@ -6,7 +6,8 @@
   切换；2026-11-16 早先的方法“预测”（Predict，随仓库的 PyTorch 网络、文献方法、干涉条纹求 H、在分析中查看）整个删除：
   详情只为“分析”服务——左栏几何、分析选项、静态帧、更多选项（掩膜、样品滚转角、结果位置），右边关于所示结果的
   **时间窗 / 报告 / 日志**三个标签页；速率加单位 Å/s ｜ nm/s（默认 Å/s）、不寻常速率的询问和到最后一帧的名义厚度；
-  联合精修解 `joint` 作为一个解；实空间俯视图把有连续底层的解画成闭合的膜）
+  联合精修解 `joint` 作为一个解；实空间俯视图把有连续底层的解画成闭合的膜；2026-11-17 分析选项加**并行进程数**，实时视图和
+  报告写出从磁盘读帧的耗时、慢盘提示与各步用时）
 - **科学说明**：各量的定义、规则和阈值见 [Physics and Methods Reference](../../Physics_Manual.md) 第 12 章；本文写调用链、
   文件与界面约定。
 - **Scope**: 原位溅射序列逐时间窗的结构（分析包）：晶粒半径 R、高度 H、中心间距 D、间隙、尺寸分布宽度、覆盖率，
@@ -20,6 +21,7 @@
   `presentation/views/sputter_main_view.py`、`presentation/client_flow.py`、`rate_flow.py`（速率与单位）、`client_panel.py`、
   `client_texts.py`、`pattern_view.py`、`evolution_view.py`、`real_space_view.py` 与 `domain/real_space.py`（实空间示意）；
   详情：`presentation/views/sputter_page_view.py`、`geometry.py`、`result_tabs.py`（时间窗、报告、日志）、`project_state.py`；
+  并行进程数：`presentation/workers_flow.py`；读帧耗时的文字：`presentation/reading_texts.py`；
   实时视图：`application/client_live.py`、`presentation/live_panel.py`、`live_pictures.py`、`live_static.py`（沉积后的样品）、
   `presentation/views/sputter_live_view.py`；静态帧：`application/client_static.py`、`infrastructure/client_static.py`、
   `presentation/static_flow.py`、`presentation/views/sputter_static_view.py`；分析包随仓库提供（`utils/sputter_client/`，
@@ -37,8 +39,10 @@
   分析与取消、语言、项目；多孔基底的数值块、输入栏的“沉积后”与静态帧系列、实空间示意的切换与闭合的膜、长路径不撑宽详情左栏；
   假的分析包进程与编造的结果：[`tests/sputter_client_fixtures.py`](../../../tests/sputter_client_fixtures.py)）、
   [`tests/test_sputter_live.py`](../../../tests/test_sputter_live.py)（实时视图）、
+  [`tests/test_sputter_reading.py`](../../../tests/test_sputter_reading.py)（并行进程数到请求和命令行、读帧耗时与慢盘提示、
+  报告的各步用时、中文）、
   [`tests/test_sputter_client_bundle.py`](../../../tests/test_sputter_client_bundle.py)（随仓库的分析包）
-- **Last verified**: 2026-11-16（删除“预测”、新的详情、速率单位、联合精修解、闭合的膜：离线测试，编造的结果）；
+- **Last verified**: 2026-11-17（并行进程数、读帧耗时、各步用时：离线测试，编造的事件与结果）；2026-11-16（删除“预测”、新的详情、速率单位、联合精修解、闭合的膜：离线测试，编造的结果）；
   2026-11-16（输入栏的“沉积后”与静态帧的实时视图：离线测试；另在本机用一份真实的沉积后样品在离屏窗口里经输入栏走完三步
   并截图，数值不进仓库）；2026-11-15（实时视图）；2026-11-14（主屏与分析）
 
@@ -61,18 +65,30 @@
   条目动态建立：候选 1…3、精修解、联合精修解，各带拟合偏差）、**恢复默认解**、一句说明；数值块（半径 R、高度 H、间距 D、间隙、
   尺寸分布宽度、覆盖率；没有的量不显示）和所显示解的拟合偏差；演化图（`EvolutionPlot`）。
 - **详情**（`_details_view`）：左栏（`details_scroll`）依次是**样品与几何**（X 射线、距离、入射角、光束中心，各带来源一行；
-  把几何存为预设）、**分析选项**（`_analysis_section`：模式（自动 / 快速 / 精修 / 完整）、沉积开始、沉积持续时间、聚合物膜厚
+  把几何存为预设）、**分析选项**（`_analysis_section`：模式（自动 / 快速 / 精修 / 完整）、并行进程数（见下）、沉积开始、沉积持续时间、聚合物膜厚
   （只在基底是聚合物膜时显示）、分析包的文件夹与“选择文件夹…”、打开报告、打开文件夹、分析的消息 `client_log`）、
   **静态帧（沉积之后测量）**（`sputter_static_view.py`，默认收起）、**更多选项**（默认收起：掩膜与“分析包自带的掩膜”、样品
   滚转角及其来源、结果保存在）。右边 `tabs`（`result_tabs.py`，读所示结果的文件夹：`ClientService.texts` →
   `ClientFolderReader.texts`）：
   - **时间窗**（`windows_table`）：每个时间窗一行（静态系列每个样品一行）——时间或样品、名义厚度、结果有值的数值块各一列、
     拟合偏差、哪一个解；没有解的时间窗在“解”一列写原因；主屏换解后这一行跟着变；`enable_table_copy`。
-  - **报告**：`analysis.json` 的要点（所用网络、试过的网络及拟合偏差、模式、像素掩膜、各步骤运行时间之和）在上，
-    `REPORT.md` 用 `QTextBrowser.setMarkdown` 显示在下（搜索路径是结果文件夹，报告里的图能显示）。
+  - **报告**：`analysis.json` 的要点（所用网络、试过的网络及拟合偏差、模式、像素掩膜、各步骤运行时间之和）在上；然后
+    **各步用时**（`report_steps`，`result_tabs.steps_html`，富文本小表）：`steps` 里每一步及其秒数（m:ss，一小时以上
+    h:mm:ss；同名步骤可出现两次，例如初步结果和最终结果各一次 `present (main)`；括号里的标签是分析包的原词），读帧那一行加上
+    `reading` 的“已读入 a 帧（共 b 帧）· 磁盘每帧 x s（占用时的 y %）”（读过的扫描另写“此扫描此前已读入”；`reading.workers`
+    与 `workers` 不同时写导入的进程数），最后一行合计，表下“进程数：`workers`”；`reading_was_slow` 时一条提示
+    （`report_disk_note`，`ErrorBanner` 警告级，与实时视图相同的文字）；没有这些键的旧结果只列有的行。`REPORT.md` 用
+    `QTextBrowser.setMarkdown` 显示在最下（搜索路径是结果文件夹，报告里的图能显示）。
   - **日志**：`analyze_*.log`，按 `analysis.json` 里各步骤的顺序，下拉框选一份（日志很长时只显示最后 400 000 个字符）。
   - 没有结果时每页只有一行“请分析一个扫描，或打开一个结果”（`NO_RESULT`）。
   标签页名用 “Logs”：单独的 “Log” 在翻译表里已是“对数”。
+- **并行进程数**（`workers_flow.py` 的 `WorkersMixin`，`workers_box`：`ShownComboBox`，显示或打开时发 `aboutToShow`）：
+  第一项“自动（N）”，N = `ClientService.automatic_workers()`（即运行器的 `workers()`，`infrastructure/process.py`
+  `default_workers`：min(16, 核心数 − 2)，再受空闲内存限制），每次显示或打开选择框时重算；其后 1 … `ClientService.cores()`。
+  选择存在偏好 `sputter_page.workers`（数字或 `auto`；大于本机核心数的数字按核心数算）。分析或静态帧开始时
+  `run_workers()` 把数字放进 `ClientRequest.workers` / `StaticRequest.workers`（自动时就在这一刻算出），运行器给
+  `--workers <该数>`（为 None 时用运行器自己的数）；这个数不进请求的代码和标签（同一请求换进程数仍显示已有结果）。
+  `ClientStarted.workers` 把它交给实时视图。
 
 1440×900 和 1280×800 下主屏不需要展开任何东西（`test_the_main_screen_fits_the_window…`）。
 
@@ -140,7 +156,7 @@
 - **左栏**：`StepRail` 四步——读入帧、求解结构、写报告、绘制图像——各带状态（按 `ClientProgress` 的步骤行；有两个网络时，
   第二个网络跑完、`chosen` 到达之前“求解结构”仍在进行）和一行产出：已读入 n / N 帧 → “N 帧，起–止 s，沉积自 … s 开始”
   （或“此扫描此前已读入”）；“网络 i/n：已求解 k / m 个时间窗” → “<网络> 与数据更吻合（拟合偏差 …）”；“已绘制 k / m 个时间窗”。
-  下面是已运行时间。点一个已开始的步骤显示它的产出；点正在进行的步骤回到跟随分析；点尚未开始的步骤不变。
+  下面是已运行时间和进程数（“进程数：n”，取 `reading.workers`，没有时取 GIMaP 交给分析包的数）。点一个已开始的步骤显示它的产出；点正在进行的步骤回到跟随分析；点尚未开始的步骤不变。
 - **右边**：“第 n 步（共 4 步）：…”、这一步做什么（一段话），一幅图、图下一行、一幅曲线：
   - 读入帧：`FramesPicture`——左边是自动掩膜所用抽样帧的求和（分析包按 4×4 像素合并后的 log₁₀ 计数），掩膜去掉的部分
     红色半透明、直射束 “+”、样品地平线虚线；右边是最近读入的一块帧（128 帧）在 q_y–出射角网格上的计数率（两侧各自的格子，
@@ -150,6 +166,14 @@
     （复用 `PatternPair`，同一套格子与色标规则），图下一行
     “t = … s · 候选 k（或精修解）· 半径 R … · 高度 H … · 间距 D … · 覆盖率 … · 拟合偏差 …”；演化图复用 `EvolutionPlot`，
     画到目前为止各时间窗拟合偏差最小的解（正在工作的网络；选定网络后画选定的那个），最近的时间窗用竖线标出。
+- **从磁盘读帧**（2026-11-17）：较新的分析包在每个 `frames` 事件里加 `frames`（这一块的帧数）、`read_s`（这块的进程
+  打开、读取帧文件的秒数）、`wall_s`（这块的总秒数：读 + 解码 + 投影）、`mb`；导入结束时发 `reading`（`frames_read`、
+  `frames_total`、`workers`、`seconds`、`read_s_per_frame`、`read_share`、`mb_read`、`slow`）。`LiveRun` 累加各块
+  （`read_frames`、`read_s`、`wall_s`、`read_mb`），`disk_per_frame` / `disk_share` 优先取 `reading` 的值。读帧这一步的行变成
+  “正在读入第 a 帧（共 b 帧）· 磁盘每帧 x s（占用时的 y %）”，读完后在“N 帧，…”后面保留磁盘这一段。每帧 ≥ 0.15 s 且占比
+  ≥ 50 %（`SLOW_DISK_S_PER_FRAME`、`SLOW_DISK_SHARE`，与分析包的阈值相同），或 `reading.slow` 为真时，说明下方出现警告级
+  `ErrorBanner`（`live_disk_note`）：慢在从这个磁盘读帧（USB／网络驱动器或杀毒软件逐个扫描文件），先把扫描文件夹复制到本机
+  SSD。之后各步都保留。没有这些字段的旧版分析包：行与以前相同，不出提示。
 - **效率**：事件在后台线程里读好数组（每个几十到几百 kB，`LIVE_ARRAYS_LIMIT` 以上不读），界面线程只更新 `LiveRun`；
   图由单发定时器最多每 `REDRAW_MS`（400 ms）画一次，只画变了的部分；帧图和实测／模型图在格子不变时只换数值。
   `LiveRun` 只留每个网络最近求解的一个时间窗和最近一块帧的数组，其余只留数值。
@@ -177,7 +201,7 @@
 **分析包的约定**（研究代码 `iampred.live`，2026-11-15）：每一步的进程从环境变量 `IAMPRED_LIVE` 得到一个文件夹，在其中写
 `<时间>_<pid>.json`（和需要时同名 `.npz`，先写临时名再改名）；`iampred.analyze` 在步骤运行时每 0.5 s 把新事件打印成一行
 `@live {json}`（加 `step` 和 `arrays`：npz 的绝对路径），结束时删掉 `<输出>/live/`。事件：`centre`、`detector`、`frames`、
-`imported`（读入帧）；`models`、`windows`、`window`、`chosen`（求解；`models`、`chosen` 由 `analyze` 自己发）；`drawing`、
+`reading`、`imported`（读入帧）；`models`、`windows`、`window`、`chosen`（求解；`models`、`chosen` 由 `analyze` 自己发）；`drawing`、
 `drawn`（绘图）。字段见 `application/client_live.py` 的说明。事件不改变任何结果（同一扫描有无事件，`windows.csv` 逐字节相同）。
 `progress`（求解：`family`、`phase`、`done`、`total`、`worker`，`images` / `evaluations`）见上。
 `iampred.static` 同样转发：`detector`（`role`：`sample` 或 `bare substrate`）、`sample`（可用帧之和、帧数、未用的帧及原因）、
