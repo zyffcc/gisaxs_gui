@@ -107,6 +107,7 @@ class ClientPanelMixin:
         self.client_result = result
         self._pattern_cache = {}
         self.client_choices = {}
+        self.evolution.set_overlay(None, redraw=False)  # the joint fit at work belongs to the result it was drawn on
         has_report = result is not None and result.file("report_md") is not None
         self.report_button.setEnabled(has_report)
         self.result_folder_button.setEnabled(result is not None)

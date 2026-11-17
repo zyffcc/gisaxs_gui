@@ -24,17 +24,25 @@ The events, by step:
   for the refinement also ``evaluations``: model images computed) at most once a second: ``features`` (the network
   input of each window), ``network`` (the network's candidates for all windows, 0 at its start and all at its end),
   ``render`` (the candidates of each window drawn by the model), ``refine`` (each window's best candidate refined),
-  ``sequence`` (the whole-scan refinement: its iteration);
+  ``sequence`` (the whole-scan refinement: its iteration); ``preliminary`` — the network's result is written (its
+  folder) while the refinement goes on; ``refine`` — the refinement of every window and the joint fit of the whole scan
+  start (``iterations``); a newer package then says ``joint_stage`` (``stage`` ``pool``: the solutions of neighbouring
+  windows are drawn at each window; ``fit``: the iterations start; ``windows``, ``total``) and, after every iteration,
+  ``joint`` (``iteration``, ``total``, ``seconds`` since the fit started, ``median`` fit deviation and ``windows``: per
+  window ``t`` and the quantities of the main screen of the current solution);
 * drawing the images (``present``): ``drawing`` — how many windows; ``drawn`` — one window drawn.
 
 ``LiveRun`` keeps what the page shows: the pictures of the latest events and every solution found so far, as a
-``ClientResult`` (one window per time, its entries the solutions of the network) that the main screen's plots draw.
-Nothing here is a result: the result is what the package writes at the end, and the page shows it then.
+``ClientResult`` (one window per time, its entries the solutions of the network) that the main screen's plots draw,
+and what the run is doing now (``activity``: the kind of the latest event, or ``step`` after a step line) with the
+pace of its counts (``left``: the seconds still to go, estimated from the arrival times). Nothing here is a result: the
+result is what the package writes at the end, and the page shows it then.
 """
 
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -45,6 +53,7 @@ from src.gimap.shared.geometry.conventions import canonical_from_index_center
 
 from ..domain import ClientEntry, ClientResult, ClientWindow, WindowPatterns
 from ..domain.client import STATIC_KIND, number
+from .live_progress import LiveProgressMixin
 
 LIVE_PREFIX = "@live "
 LIVE_STEPS = ("intake", "predict", "report", "present")
@@ -107,7 +116,7 @@ def live_event(record: dict, arrays: Optional[dict] = None) -> LiveEvent:
 
 
 @dataclass
-class LiveRun:
+class LiveRun(LiveProgressMixin):
     """Everything the live view shows of one run (fed event by event, in the GUI thread)."""
 
     centre: Optional[tuple] = None
@@ -147,6 +156,20 @@ class LiveRun:
     """Network -> the latest of its phases that has begun."""
     drawing: int = 0
     drawn: int = 0
+    activity: str = ""
+    """What the run does now: the kind of the latest event the run took, or ``step`` when a step line came last."""
+    preliminary: bool = False
+    """The network's result was written (the page shows it) and the refinement goes on."""
+    refining: Optional[LiveEvent] = None
+    """The ``refine`` event: the refinement of every window and the joint fit of the whole scan have started."""
+    joint_stage: Optional[LiveEvent] = None
+    joint_stage_at: float = 0.0
+    joint: Optional[LiveEvent] = None
+    """The latest iteration of the joint fit of the whole scan (with its solution of every window)."""
+    joint_at: float = 0.0
+    paces: dict = field(default_factory=dict)
+    """A count -> (time of its first event, its count then, time of its latest event, its count then): the
+    ``frames`` read, a network's phase ``(family, phase)``, the windows ``drawn`` (monotonic seconds)."""
     # a sample measured after its deposition (the package's static command)
     kind: str = "insitu"
     """``insitu`` or ``static``."""
@@ -160,9 +183,24 @@ class LiveRun:
     """Frame number -> {stage: (ClientEntry, values)}."""
     latest_frame: Optional[LiveEvent] = None
 
-    def feed(self, event: LiveEvent) -> str:
-        """Take one event; returns its kind when the view changes ("" for an event it does not know)."""
+    def feed(self, event: LiveEvent, now: Optional[float] = None) -> str:
+        """Take one event (arrived at ``now``, monotonic seconds; by default now); returns its kind when the view
+        changes ("" for an event it does not know)."""
+        now = time.monotonic() if now is None else float(now)
+        kind = self._take(event, now)
+        if kind:
+            self.activity = kind
+        return kind
+
+    def note_step(self) -> None:
+        """A step line of the package came (a step started or ended): it says what the run does until the next
+        event."""
+        self.activity = "step"
+
+    def _take(self, event: LiveEvent, now: float) -> str:
         kind = event.kind
+        if kind in ("preliminary", "refine", "joint_stage", "joint"):
+            return self._refinement(event, now)
         if kind == "centre":  # the package counts pixel centres from 0: GIMaP's pixel coordinates are shown
             col, row = event.number("col"), event.number("row")
             self.centre = canonical_from_index_center(col, row) if col is not None and row is not None else None
@@ -195,6 +233,7 @@ class LiveRun:
             if "rate" in event.arrays:
                 self.frames = event
             self._timing(event)
+            self._pace("frames", self.frames_done, now)
         elif kind == "reading":
             self.reading = event
         elif kind == "imported":
@@ -206,6 +245,8 @@ class LiveRun:
             self.mode = str(event.get("mode") or "")
         elif kind == "windows":
             self.family = str(event.get("family") or "")
+            if self.family in self.totals:  # the network starts again (refining after its preliminary result)
+                self._restart(self.family)
             self.totals[self.family] = int(event.number("total") or 0)
             self.refine = int(event.number("refine") or 0)
             self.solutions.setdefault(self.family, {})
@@ -223,10 +264,13 @@ class LiveRun:
             self.progress.setdefault((family, phase), {})[str(event.get("worker") or "")] = dict(event.fields)
             if PHASES.index(phase) >= PHASES.index(self.phases.get(family, PHASES[0])):
                 self.phases[family] = phase
+            self._pace((family, phase), self.phase_count(phase, family)[0], now)
         elif kind == "drawing":
             self.drawing, self.drawn = int(event.number("total") or 0), 0
+            self.paces.pop("drawn", None)
         elif kind == "drawn":
             self.drawn += 1
+            self._pace("drawn", self.drawn, now)
         else:
             return ""
         return kind

@@ -1,8 +1,9 @@
 """Static layout of the live view of the main screen: what a running Analyze is doing and has found so far (behaviour
 in ``presentation/live_panel.py``).
 
-Left, the four steps of the analysis — each with its state and one line of what it found — and the time since the
-start with the processes at work. Right, the step shown: its name, one paragraph on what it does, a note when reading
+At the top, one line across the view says what the analysis does now (``live_status.py``). Left, the four steps of the
+analysis — each with its state and one line of what it found — and the time since the start with the processes at
+work. Right, the step shown: its name, one paragraph on what it does, a note when reading
 the frames from disk is the slow part (hidden otherwise), a picture with a line under it, and a plot.
 Reading the frames: the detector summed (the pixels the mask leaves out marked) beside the frames read last on the
 grid of q_y and exit angle; below, the count rate of every frame read so far. Finding the solutions: the measured
@@ -46,9 +47,17 @@ class SputterLiveView:
         view = QWidget(parent)
         view.setObjectName("sputterLiveView")
         self.live_view = view
-        layout = QHBoxLayout(view)
+        outer = QVBoxLayout(view)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(6)
+        self.live_status = ElidedLabel(view)  # what the analysis does now: the page sets it
+        self.live_status.setObjectName("sputterLiveStatus")
+        self.live_status.setProperty("gimapRole", "info")
+        outer.addWidget(self.live_status)
+        layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
+        outer.addLayout(layout, 1)
 
         side = QWidget(view)
         side.setFixedWidth(STEPS_WIDTH)

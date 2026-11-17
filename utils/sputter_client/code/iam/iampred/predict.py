@@ -522,8 +522,28 @@ def main():
                 LV.progress("sequence", int(it_.group(1)), a.sequence, family=cfg["family"])
 
         sq = SQ.Sequence(cfg, a.scan, [r["t"] for r in use], a.workers, data=a.data, shadow=a.shadow, log=seq_log)
+
+
+        from .present import wanted as _wanted
+        rn_ = [r["name"] for r in reps]
+        tt_ = [r["t"] for r in use]
+
+        def on_iter(k, state, xs_, seconds):
+            nf_ = len(xs_[0])
+            wins = []
+            for i, t_ in enumerate(tt_):
+                v_ = _wanted(info["pnames"][:nf_], rn_, list(xs_[i]), [float(q_) for q_ in sq._rep[i]], float(sq._h[i]))
+                wins.append(dict(t=float(t_), fit_deviation=LV.rounded(sq._d5[i], 3),
+                                 **{kk: vv for kk, vv in v_.items() if kk in ("R_nm", "H_nm", "D_nm", "gap_nm", "width",
+                                                                             "coverage", "amount_nm", "base_nm")}))
+            LV.emit("joint", family=cfg["family"], iteration=int(k), total=int(a.sequence), seconds=LV.rounded(seconds, 1),
+                    median=LV.rounded(state["median_dev5"], 3), windows=wins)
+
+        sq.on_iter = on_iter
         try:
+            LV.emit("joint_stage", family=cfg["family"], stage="pool", windows=len(use), total=int(a.sequence))
             pools = scan_pools(sq, use, a.transplant, sq.log)
+            LV.emit("joint_stage", family=cfg["family"], stage="fit", windows=len(use), total=int(a.sequence))
             cont = [(k, sc, GROW * sc) for k, (_, sc) in enumerate(scales) if sc > 0]
             path = time_path(pools, reps, mono, TOL, a.path_weight, sq.tx, cont, a.smooth_weight, a.jump_cost)
             chosen = {t: es[path[t]] for t, es in pools}

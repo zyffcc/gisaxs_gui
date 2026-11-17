@@ -312,7 +312,16 @@ class Sequence:
                  f"penalty monotone {s['penalty_monotone']:.3f} "
                  + (f"far {s['penalty_far']:.3f} " if self.sf > 0 else "") + f"smooth {s['penalty_smooth']:.3f}"
                  + (f"  kappa {math.exp(sh[0]):.3f}  dt {sh[1]:+.2f} s" if ns else "") + f"  ({time.time() - self.t0:.0f} s)")
+        if self.on_iter is not None:
+            try:
+                self.on_iter(self.njac, s, xs, time.time() - self.t0)
+            except Exception:
+                pass
         return J
+
+    on_iter = None
+    """Callable (iteration, state, per-window local parameter vectors, seconds) called after every iteration (the
+    state of the current solution: self._rep, self._h and self._d5 hold its reported quantities, masses, dev5)."""
 
     def solve(self, nfev):
         from scipy.optimize import least_squares

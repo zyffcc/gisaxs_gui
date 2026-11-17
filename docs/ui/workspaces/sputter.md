@@ -7,7 +7,8 @@
   详情只为“分析”服务——左栏几何、分析选项、静态帧、更多选项（掩膜、样品滚转角、结果位置），右边关于所示结果的
   **时间窗 / 报告 / 日志**三个标签页；速率加单位 Å/s ｜ nm/s（默认 Å/s）、不寻常速率的询问和到最后一帧的名义厚度；
   联合精修解 `joint` 作为一个解；实空间俯视图把有连续底层的解画成闭合的膜；2026-11-17 分析选项加**并行进程数**，实时视图和
-  报告写出从磁盘读帧的耗时、慢盘提示与各步用时）
+  报告写出从磁盘读帧的耗时、慢盘提示与各步用时；同日一行**状态**说分析此刻在做什么（实时视图顶部、任务状态、初步结果下的
+  提示行），初步结果的演化图上用虚线画联合精修当前的解）
 - **科学说明**：各量的定义、规则和阈值见 [Physics and Methods Reference](../../Physics_Manual.md) 第 12 章；本文写调用链、
   文件与界面约定。
 - **Scope**: 原位溅射序列逐时间窗的结构（分析包）：晶粒半径 R、高度 H、中心间距 D、间隙、尺寸分布宽度、覆盖率，
@@ -22,7 +23,8 @@
   `client_texts.py`、`pattern_view.py`、`evolution_view.py`、`real_space_view.py` 与 `domain/real_space.py`（实空间示意）；
   详情：`presentation/views/sputter_page_view.py`、`geometry.py`、`result_tabs.py`（时间窗、报告、日志）、`project_state.py`；
   并行进程数：`presentation/workers_flow.py`；读帧耗时的文字：`presentation/reading_texts.py`；
-  实时视图：`application/client_live.py`、`presentation/live_panel.py`、`live_pictures.py`、`live_static.py`（沉积后的样品）、
+  实时视图：`application/client_live.py`、`application/live_progress.py`（初步结果之后的精修、联合精修、计数的速度）、
+  `presentation/live_panel.py`、`live_status.py`（状态行、联合精修的虚线）、`live_pictures.py`、`live_static.py`（沉积后的样品）、
   `presentation/views/sputter_live_view.py`；静态帧：`application/client_static.py`、`infrastructure/client_static.py`、
   `presentation/static_flow.py`、`presentation/views/sputter_static_view.py`；分析包随仓库提供（`utils/sputter_client/`，
   研究代码的发布版：只有这些命令用到的文件，不含开发时所用私有数据的名字，`MANIFEST.json` 与
@@ -39,10 +41,13 @@
   分析与取消、语言、项目；多孔基底的数值块、输入栏的“沉积后”与静态帧系列、实空间示意的切换与闭合的膜、长路径不撑宽详情左栏；
   假的分析包进程与编造的结果：[`tests/sputter_client_fixtures.py`](../../../tests/sputter_client_fixtures.py)）、
   [`tests/test_sputter_live.py`](../../../tests/test_sputter_live.py)（实时视图）、
+  [`tests/test_sputter_status.py`](../../../tests/test_sputter_status.py)（状态行的各种事件与剩余时间、任务状态、初步结果上
+  联合精修的虚线及其消失、中文）、
   [`tests/test_sputter_reading.py`](../../../tests/test_sputter_reading.py)（并行进程数到请求和命令行、读帧耗时与慢盘提示、
   报告的各步用时、中文）、
   [`tests/test_sputter_client_bundle.py`](../../../tests/test_sputter_client_bundle.py)（随仓库的分析包）
-- **Last verified**: 2026-11-17（并行进程数、读帧耗时、各步用时：离线测试，编造的事件与结果）；2026-11-16（删除“预测”、新的详情、速率单位、联合精修解、闭合的膜：离线测试，编造的结果）；
+- **Last verified**: 2026-11-17（状态行与联合精修的虚线：离线测试，编造的事件与结果，另在离屏窗口里浅色、深色截图核对）；
+  2026-11-17（并行进程数、读帧耗时、各步用时：离线测试，编造的事件与结果）；2026-11-16（删除“预测”、新的详情、速率单位、联合精修解、闭合的膜：离线测试，编造的结果）；
   2026-11-16（输入栏的“沉积后”与静态帧的实时视图：离线测试；另在本机用一份真实的沉积后样品在离屏窗口里经输入栏走完三步
   并截图，数值不进仓库）；2026-11-15（实时视图）；2026-11-14（主屏与分析）
 
@@ -187,6 +192,27 @@
   “已求解 k / m 个时间窗（已计算 n 幅模型图）”“已求解 k / m 个时间窗，已精修 j 个（已计算 n 幅模型图）”“整条扫描联合
   精修：第 i 轮（最多 N 轮）”；两个网络时前面加“网络 i/n：”。第一个时间窗求出之前，图的位置也显示这一行。精修模式下
   分析包先给每个时间窗求出候选（演化图很快画满），再逐个精修（每个精修只从它自己时间窗的最佳候选出发，结果与顺序无关）。
+- **状态行**（2026-11-17，`live_status.py` 的 `status_line` 与 `LiveStatusMixin`）：一行白话说分析此刻在做什么，取自最近的
+  事件（`LiveRun.activity`：最近一个被接受的事件的种类；步骤行到达时 `note_step()` 设为 `step`）：读帧“正在读入帧：a / b”、
+  束心与掩膜、“已读入 N 帧，网络即将开始”、“正在启动网络 …”、各网络阶段（“网络 …：正在准备网络输入 / 网络正在给出候选 /
+  正在用正向模型绘制候选 / 正在精修各时间窗的最佳候选，第 k/m 个时间窗”）、“比较网络：a 21.5, b 12.5 → b”、初步结果与逐窗
+  精修开始、联合精修（`joint_stage` 的 pool：“准备中（每个时间窗试用相邻时间窗的解，共 n 个时间窗）”；fit 之后第一次迭代
+  完成前“正在进行第 1/n 次迭代 · 已用 m:ss”，之后“第 k/n 次迭代 · 拟合偏差中位数 … · 已用 m:ss，约剩 … 分钟”）、
+  “正在绘制主屏：第 k/m 个时间窗”。剩余时间：计数类按第一个和最近一个事件之间的速度（`LiveRun.paces`、`left`，两事件相隔
+  至少 `PACE_MIN_S` = 1 s 才估计，减去最近事件之后已过的时间；不到 1 分钟说“剩不到 1 分钟”）；联合精修按
+  `seconds / iteration × (total − iteration)`（`joint_left`：迭代全部做完所需时间，提前收敛会更早结束），已用时间是
+  `seconds` 加上事件到达后的时间（`joint_elapsed`）。事件没有比步骤行更多的信息时（`activity == "step"`、旧版分析包）显示
+  步骤行（“第 n 步，共 N 步：…”）。这一行在实时视图顶部（`live_status`，`ElidedLabel`，`gimapRole` = `info`），在任务状态里
+  （`STATUS_FIELD`；取消后的“正在停止…”不被覆盖；同样的内容不重设），初步结果显示在主屏时也在时间窗选择下面的提示行
+  （`run_note`，只在这时显示）。重画定时器（≤ 400 ms）和每秒的时钟更新它。初步结果之后、写报告之前（`AFTER_PRELIMINARY`），
+  任务状态的进度条跟随这一行所说的份额（阶段的 k/m、联合精修的 k/n；没有份额时为忙碌条），不再停在初步结果画完时的 100 %。
+  同一网络再次收到 `windows`（初步结果之后的逐窗精修）时，它的阶段计数、速度和联合精修从头开始（`_restart`），解保留。
+- **联合精修的虚线**：每个 `joint` 事件（每次迭代后各时间窗当前的 R、H、D、间隙、覆盖率…）由 `LiveRun.joint_points` 按时间
+  排好，`EvolutionPlot.set_overlay((时间, 各量, 名称))` 以各量自己的颜色画成虚线，图例最后一项用灰色虚线写“联合精修 第 k/n 次”，
+  下一次迭代替换它。画在主屏的演化图上——只在主屏显示的就是本次运行的初步结果时（`_live_preliminary`，`_preliminary_shown`）；
+  否则（没有初步结果的模式、或初步结果读不出）画在实时视图的演化图上（网络相同时）。数值块不显示联合精修的值：卡片只说
+  所选的那个解，两个结果不混在同一排数字里。运行结束（`_live_end` → `_live_status_end`）或主屏换成别的结果
+  （`show_client_result`）时虚线去掉；最终结果本身含联合精修解。多孔基底和静态系列不画。
 - **进度条**：`ClientProgress.within` 是正在运行的步骤内部已完成的份额（`LiveRun.step_share`：读帧按帧数，求解按各网络
   阶段的大致权重 `PHASE_WEIGHTS`，绘图按窗数），进度条在步骤内部也前进；求解那一步在第一个网络结束时就打印 done，第二个
   网络运行时进度条仍按 `within` 前进，直到数据选定网络。
@@ -203,7 +229,11 @@
 `@live {json}`（加 `step` 和 `arrays`：npz 的绝对路径），结束时删掉 `<输出>/live/`。事件：`centre`、`detector`、`frames`、
 `reading`、`imported`（读入帧）；`models`、`windows`、`window`、`chosen`（求解；`models`、`chosen` 由 `analyze` 自己发）；`drawing`、
 `drawn`（绘图）。字段见 `application/client_live.py` 的说明。事件不改变任何结果（同一扫描有无事件，`windows.csv` 逐字节相同）。
-`progress`（求解：`family`、`phase`、`done`、`total`、`worker`，`images` / `evaluations`）见上。
+`progress`（求解：`family`、`phase`、`done`、`total`、`worker`，`images` / `evaluations`）见上。精修模式下 `analyze` 还发
+`preliminary`（`family`、`folder`：初步结果已写好）和 `refine`（`family`、`refine`、`iterations`）；较新的分析包在联合精修中发
+`joint_stage`（`family`、`stage`：`pool` 或 `fit`、`windows`、`total` = 迭代次数）和每次迭代后的 `joint`（`family`、
+`iteration`、`total`、`seconds`：从开始迭代起的秒数、`median`：拟合偏差中位数、`windows`：各时间窗 `{t, fit_deviation, R_nm,
+H_nm, D_nm, gap_nm, width, coverage, amount_nm, base_nm}`）。缺的字段照样显示能显示的部分。
 `iampred.static` 同样转发：`detector`（`role`：`sample` 或 `bare substrate`）、`sample`（可用帧之和、帧数、未用的帧及原因）、
 `solving`（要求解的帧数）、`frame`（一帧的解，`stage`：`network` 或 `refined`，带实测图与模型图）。
 

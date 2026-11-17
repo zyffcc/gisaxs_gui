@@ -38,6 +38,7 @@ from .client_texts import entry_name, shown_number
 from .evolution_view import EvolutionPlot
 from .live_pictures import FramesPicture, TracePlot
 from .live_static import STATIC_EXPLAIN, STATIC_STEP_NAMES, LiveStaticMixin
+from .live_status import LiveStatusMixin
 from .pattern_view import PatternPair
 from .reading_texts import PROCESSES, READING_LINE, SLOW_DISK_NOTE, disk_words
 from .texts import text
@@ -113,12 +114,13 @@ def _count(value) -> str:
     return f"{int(value or 0):,}"
 
 
-class LivePanelMixin(LiveStaticMixin):
+class LivePanelMixin(LiveStatusMixin, LiveStaticMixin):
     """Needs the widgets of ``views/sputter_live_view.py``, ``result_stack``, ``_client_tracker``,
     ``_static_tracker`` and ``_show_client_empty``."""
 
     def _init_live(self) -> None:
         self._live: Optional[LiveRun] = None
+        self._live_preliminary = None  # the preliminary result of the run, while the main screen shows it
         self._live_folder = None
         self._live_started = 0.0
         self._live_events = 0
@@ -153,6 +155,8 @@ class LivePanelMixin(LiveStaticMixin):
         was asked to run with."""
         self._live, self._live_folder, self._live_events, self._live_reused = LiveRun(kind=kind), folder, 0, False
         self._live.workers = int(workers or 0)
+        self._live_preliminary = None
+        self.live_evolution.set_overlay(None)
         self.live_disk_note.setVisible(False)
         self._live_sample = {"label": label, "nominal_nm": nominal_nm, "series": series, "reference": reference}
         self._live_started = time.monotonic()
@@ -180,26 +184,33 @@ class LivePanelMixin(LiveStaticMixin):
         if changed:
             self._live_changed(changed)
             self._live_update_bar()
+            if changed == "joint":
+                self._live_show_joint()
 
     def _live_update_bar(self) -> None:
-        """The bar of the job status: how far the step at work has come, as the events tell it (``within``)."""
+        """The job status: how far the step at work has come, as the events tell it (``within``), and — Analyze of a
+        scan — what happens now (``live_status.py``)."""
         tracker = self._live_tracker()
         if tracker is None or not tracker.step or self._live is None:
             return
         share = self._live.step_share(tracker.step)
+        if not self._live_static():
+            if share is not None:
+                tracker.within = share
+            self._live_job_status(tracker)
+            return
         if share is None or (tracker.within is not None and abs(share - tracker.within) < 0.005):
             return
         tracker.within = share
         template, values = tracker.message()
-        static = self._live_static()
-        if not template or (self._static_stop if static else self._client_stop):
-            return
-        (self._static_status if static else self._client_status)("running", [(template, values)], tracker.fraction)
+        if template and not self._static_stop:
+            self._static_status("running", [(template, values)], tracker.fraction)
 
     def _live_progress(self, tracker) -> None:
-        """A step line of the package (``tracker`` has taken it)."""
+        """A step line of the package (``tracker`` has taken it): until the next event it says what the run does."""
         if self._live is None:
             return
+        self._live.note_step()
         if tracker.step == "intake" and tracker.reused:
             self._live_reused = True
         self._live_changed("steps")
@@ -216,6 +227,7 @@ class LivePanelMixin(LiveStaticMixin):
         caller's."""
         self._live_redraw.stop()
         self._live_clock.stop()
+        self._live_status_end()
         if self._live is None:
             return
         self._live = None
@@ -227,6 +239,7 @@ class LivePanelMixin(LiveStaticMixin):
             words = text(CLOCK, time=_clock(time.monotonic() - self._live_started))
             processes = self._live.processes()
             self.live_clock.setText(words + " · " + text(PROCESSES, count=processes) if processes else words)
+            self._live_show_status()  # the time so far and left move on
 
     def _live_step_chosen(self, key: str) -> None:
         """A click on a step: what it found (one that has started), or — the step at work — follow the analysis."""
@@ -266,6 +279,7 @@ class LivePanelMixin(LiveStaticMixin):
         if run is None:
             return
         dirty, self._live_dirty = self._live_dirty, set()
+        self._live_show_status()
         self._live_show_steps(run)
         step = self._live_pinned or self._live_running_step()
         turned = step != self._live_shown or "all" in dirty
@@ -421,6 +435,7 @@ class LivePanelMixin(LiveStaticMixin):
         self._live_tick()
         self._live_titles()
         self.redraw_live_plots()
+        self._live_show_joint()  # its label in the new language
         self._live_dirty.add("all")
         self._live_draw()
 

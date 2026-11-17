@@ -45,6 +45,27 @@ geometry in one line with **Edit**, **Open Result…**):
   line says *Reading a of b frames · disk x s per frame (y % of the time)* (`reading_texts.py`), and when the disk takes
   ≥ 0.15 s per frame and ≥ 50 % of the time, or `reading.slow`, a warning banner (`live_disk_note`) says that reading
   from this disk is the slow part and that copying the scan folder to a local SSD helps. An older package: neither.
+- **What it does now** (`live_status.py`: `status_line`, `LiveStatusMixin`): one line in plain words from the latest
+  event (`LiveRun.activity`; a step line sets `step`): *Reading frames: a of b*, each phase of a network (*Network
+  x: reading the network's input / the network proposes candidates / drawing the candidates with the forward model /
+  refining the best candidate of each window, window k of m*), *Comparing the networks: x 21.5, y 12.5 → y*, the
+  preliminary result and the refinement, the joint fit (`joint_stage` pool: *preparing (each window tries its
+  neighbours' solutions, n windows)*; fit, before its first iteration: *working on iteration 1 of n · m:ss so far*;
+  then *iteration k of n · median fit deviation … · m:ss so far, about … min left*), *Drawing the main screen: window
+  k of m*. Time left: a count at the pace between its first and latest event (`LiveRun.left`, `paces`, from
+  `PACE_MIN_S` apart), the joint fit as `seconds / iteration × (total − iteration)` (`joint_left`: if it takes every
+  iteration). Where the events say no more than the step lines (or an older package), the step's line. It stands at
+  the top of the live view (`live_status`), in the job status (`STATUS_FIELD`; a requested stop is not written over)
+  and, while the main screen shows the run's preliminary result (`_live_preliminary`), in the note line under the
+  window selector (`run_note`). From the preliminary result to the report (`AFTER_PRELIMINARY`) the job status's bar
+  follows the share the line speaks of (busy where there is none). A second `windows` event of one network (the
+  refinement after the preliminary result) starts its counts again (`live_progress.py` `_restart`).
+- **The joint fit at work**: every `joint` event (`LiveRun.joint_points`) is drawn dashed over the main screen's
+  evolution while it shows the preliminary result (else over the live view's, for the same network) —
+  `EvolutionPlot.set_overlay`: R, H, D, the gap and the coverage in their colours, named once in the legend *Joint
+  fit, iteration k of n* — and the next iteration replaces it. The tiles keep the solution shown (the joint fit's
+  values only on the plot, so one row of numbers never mixes two solutions). It goes when the run ends or another
+  result is shown; the final result holds the joint fit as a solution.
 - **Deposition rate** (`presentation/rate_flow.py`): typed in the unit chosen beside it, **Å/s** (the default: what a
   quartz balance shows) or **nm/s**; the request carries nm/s (Å/s ÷ 10, to 12 significant digits). The unit is kept
   with the rate per scan folder and as the last used one; a folder or project an older page remembered has its rate in
@@ -130,15 +151,17 @@ geometry in one line with **Edit**, **Open Result…**):
 Layers: `domain` (`client.py`: the windows, entries and images of an Analyze result; `real_space.py`: where the grains
 of an entry sit), `application` (`use_cases.py`: `SputterService`, the scan's results folder, `METALS`, `PROBLEMS`,
 `Stopped`; `client.py`: `ClientService`, `ClientRequest`, `ResultTexts` and the ports; `client_progress.py`,
-`client_static.py`; `client_live.py`: the live events of a running Analyze and `LiveRun`; `scan.py`: the scan header
+`client_static.py`; `client_live.py`: the live events of a running Analyze and `LiveRun`; `live_progress.py`: its
+refinement after the preliminary result, the joint fit and the pace of its counts; `scan.py`: the scan header
 and where each value comes from), `infrastructure` (`client.py`: `ClientPackageRunner`, `ClientFolderReader`,
 `locate_package`; `client_static.py`: `StaticPackageRunner`; `process.py`; `scan_header.py`: `CbfHeaderInspector`),
 `presentation` (`SputterPage` = `views/sputter_page_view.py` + `views/sputter_main_view.py` +
 `views/sputter_live_view.py` + `views/sputter_static_view.py` + `client_flow.py`, `rate_flow.py`, `client_panel.py`,
-`result_tabs.py`, `client_texts.py`, `reading_texts.py`, `workers_flow.py`, `live_panel.py`, `live_pictures.py`, `live_static.py`, `pattern_view.py`,
+`result_tabs.py`, `client_texts.py`, `reading_texts.py`, `workers_flow.py`, `live_panel.py`, `live_status.py`, `live_pictures.py`, `live_static.py`, `pattern_view.py`,
 `real_space_view.py`, `evolution_view.py`, `static_flow.py`, `geometry.py`, `project_state.py`, `texts.py`,
 `preset_dialog.py`), `bootstrap.py`. Chinese texts: `app/presentation/i18n/zh_sputter.py`, `zh_sputter_client.py`,
 `zh_sputter_live.py`. Tests: `tests/test_sputter_feature.py`, `tests/test_sputter_page.py` (fakes in
 `tests/sputter_fixtures.py`), `tests/test_sputter_client.py`, `tests/test_sputter_main_screen.py`,
-`tests/test_sputter_details.py`, `tests/test_sputter_live.py`, `tests/test_sputter_reading.py` (a fake of the package's process and invented results in
+`tests/test_sputter_details.py`, `tests/test_sputter_live.py`, `tests/test_sputter_reading.py`,
+`tests/test_sputter_status.py` (a fake of the package's process and invented results in
 `tests/sputter_client_fixtures.py`), `tests/test_sputter_client_bundle.py`. Page: `docs/ui/workspaces/sputter.md`.
