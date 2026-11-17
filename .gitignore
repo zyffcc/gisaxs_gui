@@ -229,3 +229,8 @@ docs/agents/eval/local/
 # The analysis package of the Sputter page (utils/sputter_client) is part of the repository too; its networks
 # and two tables are *.npz files, which the general rule above leaves out.
 !utils/sputter_client/**/*.npz
+
+# The size-average tables of the 1D forward model (cut_model/data) and the small reference network of
+# tests/test_ml1d_flow.py are *.npz files as well.
+!src/gimap/features/fitting/domain/cut_model/data/*.npz
+!tests/data/ml1d/*.npz
