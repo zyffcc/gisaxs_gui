@@ -137,7 +137,10 @@ class CalibrationToolsMixin:
         for name in file_name_mentions(text or ""):
             if not any(Path(path).name.lower() == name.lower() for path in found):  # not the path already taken
                 places = (str(Path(folder) / name) for folder in folders)
-                take(next((place for place in places if self.explorer.kind(place) == "file"), None))
+                exact = next((place for place in places if self.explorer.kind(place) == "file"), None)
+                # Windows and macOS ignore the case of a name; on Linux the folder's file of that name in other cases
+                take(exact or next((entry["path"] for folder in folders for entry in self.explorer.search(
+                    folder, name, 0)["entries"] if Path(entry["path"]).name.lower() == name.lower()), None))
         return found
 
     def _open_folders(self) -> list[str]:

@@ -160,8 +160,11 @@ class CommandBar(QFrame):
         for button, full, brief in self._texts:  # the texts the buttons would have, against those they have
             if not button.isHidden():
                 metrics = button.fontMetrics()
-                need += (metrics.horizontalAdvance(tr(brief if short or compact else full))
-                         - metrics.horizontalAdvance(tr(brief if self.short else full)))
+                wanted, now = tr(brief if short or compact else full), tr(brief if self.short else full)
+                # measured as QPushButton measures its text: rounded up (horizontalAdvance rounds to the nearest,
+                # which differs by a pixel where a font's widths are fractional, as on Linux)
+                need += (metrics.size(Qt.TextShowMnemonic, wanted).width()
+                         - metrics.size(Qt.TextShowMnemonic, now).width())
         layout = self.layout()
         margins = layout.contentsMargins() if layout is not None else self.contentsMargins()
         spacing = max(0, self._row.spacing() if self._row is not None else layout.spacing() if layout is not None else 0)

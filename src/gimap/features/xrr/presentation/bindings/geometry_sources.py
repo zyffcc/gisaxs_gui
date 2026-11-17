@@ -186,14 +186,19 @@ class GeometrySourcesMixin:
         self._align_geometry_tags()
 
     def _align_geometry_tags(self) -> None:
-        """While any value shows a tag, a hidden tag keeps its place: the value fields line up."""
+        """While any value shows a tag, a hidden tag keeps its place and every tag is at least as wide as the
+        widest word of those shown needs (a longer word would take room from its value alone): the value fields
+        line up."""
         labels = list(self.geometry_source_labels.values())
-        tagged = any(not label.isHidden() for label in labels)
+        shown = [label for label in labels if not label.isHidden()]
+        tagged = bool(shown)
+        least = max((label.minimumSizeHint().width() for label in shown), default=0)
         for label in labels:
             policy = label.sizePolicy()
             if policy.retainSizeWhenHidden() != tagged:
                 policy.setRetainSizeWhenHidden(tagged)
                 label.setSizePolicy(policy)
+            label.setMinimumWidth(least)
 
     def _source_tip(self, source: str) -> str:
         if source == "calibration" and self._calibration is not None:

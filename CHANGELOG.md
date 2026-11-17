@@ -578,6 +578,13 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Fixed
 
+- **Linux (from source):** the interface uses Ubuntu's font, Ubuntu Sans (else Liberation Sans or Arimo), where it
+  is installed, instead of DejaVu Sans, which is about 13 % wider: the panels fit as on Windows and macOS. A
+  calibration file named in the notes in other letter cases (`GEOMETRY.PONI` for `geometry.poni`) is found there
+  too, as on Windows and macOS. Seen first on Linux, fixed everywhere: a wrapped line of Fitting ▸ In-situ series's
+  list of frames could lose its last letters at the right edge; Analyze's command bar could misjudge by a pixel or two
+  when to use its shorter texts; the value fields of XRR's geometry did not line up when a tag's longest word was
+  wider than half the row.
 - Analyze said “1 frames imported”; the tooltip of the file name in Analyze's command bar stayed at “reading…”
   after the file was read; the Export step said that everything is written next to the data, although Batch
   Export and saved images go where you choose (each button's tooltip now says where it writes). Sputter asked to

@@ -30,6 +30,8 @@ from PyQt5.QtWidgets import (
     QSpinBox,
     QSplitter,
     QStackedWidget,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -55,6 +57,20 @@ RESULTS_TIP = ("Every frame: the quality of its fit and each value ± 1σ. Click
                "below follows a value through the series.")
 RESULTS_WIDTH = 560
 """The steps panel is at least this wide while the Results step is shown (the table of every frame)."""
+
+
+class WrappedLines(QStyledItemDelegate):
+    """A long line of the list wraps within the room the item's padding leaves (``QListView::item`` in base.qss,
+    6 px on each side): Qt lays the text out in the whole width and adds the padding after, so a wrapped line
+    could be up to 12 px wider than the list and lose its end."""
+
+    PADDING = 12
+
+    def sizeHint(self, option, index):  # noqa: N802 - Qt API
+        option = QStyleOptionViewItem(option)
+        if option.rect.width() > self.PADDING:
+            option.rect.setWidth(option.rect.width() - self.PADDING)
+        return super().sizeHint(option, index)
 
 
 class FitSeriesView:
@@ -274,6 +290,7 @@ class FitSeriesView:
         self.frame_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # a long line wraps: nothing is cut
         self.frame_list.setTextElideMode(Qt.ElideNone)
         self.frame_list.setWordWrap(True)
+        self.frame_list.setItemDelegate(WrappedLines(self.frame_list))
         self.frame_list.setResizeMode(QListView.Adjust)
         self.frame_list.setToolTip("Select a frame to see it and its fit on the right.")  # (the first one is shown)
         layout.addWidget(self.frame_list, 1)
