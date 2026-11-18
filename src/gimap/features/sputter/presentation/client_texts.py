@@ -74,6 +74,9 @@ STOPPING_ANALYSIS = "Stopping…"
 DONE = "Done: {windows} time windows."
 SHOWN_AGAIN = "This request was analysed before: its result is shown ({windows} time windows)."
 READY_TOAST = "The analysis of {name} is ready."
+JOINT_FAILED = ("network result: the joint fit of the whole scan did not finish (Details ▸ Logs), so the evolution "
+                "can jump between windows")
+"""Appended to the result's name when the package says its joint fit did not finish (analysis.json joint_fit)."""
 PRELIMINARY = "network result: the joint fit of the whole scan is running and replaces it when it is done"
 """Appended to the result's name while the package's preliminary result is shown (mode refine: the network's
 solutions and their time path, before the whole-scan joint fit)."""

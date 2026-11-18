@@ -23,9 +23,10 @@ from typing import Optional
 
 from src.gimap.app.presentation.components import SegmentedControl
 from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.theme import set_role
 
 from ..application import ClientResult, ClientWindow
-from .client_texts import (CHOICE_NOT_SAVED, EMPTY_ACTION, EMPTY_MESSAGE, EMPTY_TITLE, PACKAGE_ACTION, PACKAGE_TITLE,
+from .client_texts import (JOINT_FAILED, CHOICE_NOT_SAVED, EMPTY_ACTION, EMPTY_MESSAGE, EMPTY_TITLE, PACKAGE_ACTION, PACKAGE_TITLE,
                            MASK_AUTO, MASK_AUTO_ONLY, MASK_FILE, RELATIVE_RADIUS_TIP, RESULT_NAME, SAMPLE_CONTROLS, SAMPLE_ERROR, WINDOW_CONTROLS,
                            WINDOW_ERROR, entry_name, entry_segment, entry_tip, range_text, shown_number, window_text,
                            window_tip)
@@ -123,6 +124,9 @@ class ClientPanelMixin:
         self.result_name.setText(RESULT_NAME.format(scan=result.scan or result.folder.name, sample=named,
                                                     family=result.family or "?"))
         self.result_name.setToolTip("\n".join(part for part in (str(result.folder), mask_text(result.mask)) if part))
+        if result.joint_failed:  # the package's joint fit did not finish: the network's solutions are shown
+            self.result_name.setText(f"{self.result_name.text()}  ·  {tr(JOINT_FAILED)}")
+        set_role(self.result_name, "warning" if result.joint_failed else "muted")
         self.window_slider.blockSignals(True)
         self.window_slider.setRange(0, len(result.windows) - 1)
         first = next((index for index, window in enumerate(result.windows) if window.entries), 0)

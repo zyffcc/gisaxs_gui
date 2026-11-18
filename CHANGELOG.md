@@ -30,6 +30,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   scan at once: one metal-amount factor for the scan, sizes, coverage and amount that do not decrease, smooth in
   time. Windows are no longer refined one by one, and only one network is fitted, so a 60 s scan takes about a
   quarter of the time it took before (about 20 min instead of about an hour on a small office PC).
+- **Sputter ▸ Analyze:** when the joint fit of the whole scan could not finish (it is tried once more with fewer
+  processes when memory runs short), the result says so in the line above the window selector, in the warning
+  colour: the solutions shown are the network's, and the evolution can jump between windows.
 - **Sputter ▸ Analyze, faster import and a result first:** every frame is read from disk once (three times before),
   and only the frames the analysis uses are read: the first 30 s, the last seconds and the time windows with a
   margin — on a long scan a fraction of the frames, with exactly the same values in every window. For polymer and Cu

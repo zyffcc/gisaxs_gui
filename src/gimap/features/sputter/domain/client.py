@@ -181,6 +181,9 @@ class ClientResult:
     mask: dict = field(default_factory=dict)
     """The pixel mask the frames were read with (``analysis.json``: its file, and the pixels the automatic mask of the
     package took: ``shadow`` beamstop and holder, ``dead``, ``hot``); empty for a package that does not say."""
+    joint_failed: bool = False
+    """The package's whole-scan joint fit did not finish (``analysis.json`` ``joint_fit.done`` false): the solutions
+    shown are the network's."""
 
     @property
     def static(self) -> bool:
@@ -329,7 +332,8 @@ def client_result(folder: Path, main: dict, analysis: Optional[dict] = None) -> 
         str(main.get("note") or analysis.get("note") or ""), wanted, tuple(unique),
         {str(key): value for key, value in files.items()}, tuple(step for step in steps if isinstance(step, dict)),
         str(main.get("kind") or analysis.get("kind") or ""), str(axis.get("label") or ""), str(axis.get("unit") or ""),
-        dict(analysis["mask"]) if isinstance(analysis.get("mask"), dict) else {})
+        dict(analysis["mask"]) if isinstance(analysis.get("mask"), dict) else {},
+        isinstance(analysis.get("joint_fit"), dict) and analysis["joint_fit"].get("done") is False)
 
 
 def window_patterns(window: ClientWindow, arrays) -> WindowPatterns:
