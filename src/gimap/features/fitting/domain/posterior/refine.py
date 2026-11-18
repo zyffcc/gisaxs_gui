@@ -1,5 +1,5 @@
 """From the proposal network's posterior to Fitting's models: each mode refined by least squares, and one result
-record for every method (``Solution``).
+record for every method (``PosteriorSolution``).
 
 ``predict`` is the entry point: the posterior of the compositions (``infer``), their modes, and per mode a Fitting
 ``FitModel`` started at the mode's heaviest sample and refined by ``fit_engine`` (bounded least squares, the scales
@@ -46,7 +46,7 @@ class Interval:
 
 
 @dataclass
-class Solution:
+class PosteriorSolution:
     composition: int
     name: str
     probability: float
@@ -73,8 +73,11 @@ def _clip(parameter: fm.Parameter, value: float) -> fm.Parameter:
     return fm.Parameter(float(value), parameter.free, lower, upper)
 
 
-def fit_model(values, composition: int, data: Cut, law: str = "number_gauss", coupling: str = "lma") -> fm.FitModel:
-    """Fitting's model of physical values (DIMS,) of a composition, scales solved for the cut."""
+def fit_model(values, composition: int, data: Cut, law: str = "number_gauss", coupling: str = "lma",
+              grazing: Optional[dict] = None) -> fm.FitModel:
+    """Fitting's model of physical values (DIMS,) of a composition, scales solved for the cut. ``grazing``: the
+    values of ``fit_model.GRAZING`` to keep (the cut's angles, λ and reflection of the person's model); else the
+    Born term at the cut's q_z (or the effective interface)."""
     components = []
     for slot, (family, structure) in enumerate(E.composition_types(composition)):
         j = slot * E.PER_SLOT
@@ -92,7 +95,10 @@ def fit_model(values, composition: int, data: Cut, law: str = "number_gauss", co
         parameter = _clip(model.globals[key], values[g + offset])
         model = model.with_parameter(("globals", key), value=parameter.value, lower=parameter.lower,
                                      upper=parameter.upper, free=True)
-    if data.qz > 0:
+    if grazing:
+        for key, value in grazing.items():
+            model = model.with_parameter(("globals", key), value=float(value))
+    elif data.qz > 0:
         angle = math.degrees(math.asin(data.qz * 0.1 / (4 * math.pi)))
         for key, value in (("alpha_i", angle), ("alpha_f", angle), ("wavelength", 0.1)):
             model = model.with_parameter(("globals", key), value=value)
@@ -119,7 +125,8 @@ SEEDS = 16
 
 def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions: Optional[Sequence[int]] = None,
             allowed=None, shortlist: int = 4, samples: int = 2000, method: str = "lm", seed: int = 0,
-            law: str = "number_gauss", coupling: str = "lma", min_probability: float = 0.01) -> list[Solution]:
+            law: str = "number_gauss", coupling: str = "lma", min_probability: float = 0.01,
+            grazing: Optional[dict] = None) -> list[PosteriorSolution]:
     """Solutions of a cut (q in nm⁻¹, qz the vacuum q_z of the Born term in nm⁻¹, 0: the effective interface), most
     probable first: every mode of every composition holding at least ``min_probability`` of the posterior
     (``global``: the best of each composition)."""
@@ -136,13 +143,13 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
         modes = result.modes
         if method == "global" and modes:
             heaviest = np.argsort(-result.weights)[:SEEDS]
-            seeds = tuple(fit_model(result.samples[i], result.index, data, law, coupling) for i in heaviest)
+            seeds = tuple(fit_model(result.samples[i], result.index, data, law, coupling, grazing) for i in heaviest)
             modes = [modes[0]]
         for mode in modes:
             probability = result.probability * (1.0 if method == "global" else mode.weight)
             if probability < min_probability:
                 continue
-            model = fit_model(mode.best, result.index, data, law, coupling)
+            model = fit_model(mode.best, result.index, data, law, coupling, grazing)
             refined = None
             if method == "lm":
                 refined = fit_engine.fit(model, fit_data, method="local")
@@ -170,7 +177,7 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
                 flags.append("low_ess")
             chi2 = refined.chi2_reduced if refined is not None else mode.chi2_reduced
             rmse = refined.log_rmse if refined is not None else fit_engine.log_rmse(model, fit_data)
-            out.append(Solution(result.index, result.name, probability, model, float(chi2), float(rmse), values,
+            out.append(PosteriorSolution(result.index, result.name, probability, model, float(chi2), float(rmse), values,
                                 tuple(flags), method, result.log_evidence,
                                 result.ess, int(result.samples.shape[0]), 0.0,
                                 {"head_log_prob": result.head_log_prob, "mode_weight": mode.weight,
@@ -186,4 +193,4 @@ def _label(path) -> str:
     return key if owner == "globals" else f"{key}_{owner + 1}"
 
 
-__all__ = ["ESS_MIN", "METHODS", "Interval", "Solution", "UNCONSTRAINED", "fit_model", "predict"]
+__all__ = ["ESS_MIN", "METHODS", "Interval", "PosteriorSolution", "UNCONSTRAINED", "fit_model", "predict"]

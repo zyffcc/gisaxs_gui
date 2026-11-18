@@ -51,7 +51,7 @@ from .fit1d_review import fit_error_text
 
 FAMILY_IDS = {"sphere": 1, "cylinder": 2, "vertical_cylinder": 3}
 METHOD_NAMES = {"local": "Refine", "global": "Search the ranges", "shapes": "Find the particle shape",
-                "ai": "AI proposal", "fit1d": "Predict parameters (fit1d)"}
+                "ai": "AI proposal", "fit1d": "Predict parameters (fit1d)", "predict": "Predict parameters"}
 START, START_OF = "Trying start {n} of {total}", "Trying start {n} of {total}: {model}"
 """One start of the shape search (each family is tried from several starting sizes)."""
 EVALUATED = "{line} — {evaluations} evaluations"
@@ -133,6 +133,7 @@ class FitRunMixin:
         method = self.method()
         self.families_row.setVisible(method == "shapes")
         self.fit1d_row.setVisible(method == "fit1d")
+        self.predict_row.setVisible(method == "predict")
         self.fit_step_button.setText(tr(METHOD_NAMES[method]))
         self.fit_step_button.setToolTip(tr(self.method_combo.itemData(self.method_combo.currentIndex(), Qt.ToolTipRole)
                                            or ""))
@@ -157,6 +158,11 @@ class FitRunMixin:
         method = method or self.method()
         if method not in METHOD_NAMES:
             method = self.method()
+        if method == "predict" and not self.predict_available():
+            from ...domain.posterior import network as posterior_network
+            from .predict import MISSING
+            self._status(trf(MISSING, name=posterior_network.path().name), "warning")
+            return
         if method == "shapes" and self.quick_fit is None:
             self._status(tr("Finding the particle shape is not available here: choose another method."), "warning")
             return
@@ -200,6 +206,11 @@ class FitRunMixin:
                 self._start_fit1d(data, model, selection, curve)
             except (ValueError, TypeError, RuntimeError) as exc:
                 failed(str(exc))
+        elif method == "predict":
+            try:
+                self._start_predict(data, model, selection, curve)
+            except (ValueError, TypeError, RuntimeError) as exc:
+                failed(str(exc))
         else:
             self.tasks.submit("fit", lambda: self._ai_solutions(data, model),
                               on_done=lambda solutions: self._solutions_found(solutions, curve, selection),
@@ -219,6 +230,8 @@ class FitRunMixin:
         self._stop_event.set()
         if self._running == "fit1d":
             self._cancel_fit1d()
+        if self._running == "predict":
+            self._cancel_predict()
         if self._running == "ai":
             try:
                 self.view_model.cancel_ai_candidates()
@@ -280,7 +293,7 @@ class FitRunMixin:
         if self._of_another_curve(curve):
             return
         # Stop during a search for solutions ends as an error of its fitter (“Fitting cancelled”): not a failure.
-        stopped = self._stop_event.is_set() and self._running in ("shapes", "ai", "fit1d")
+        stopped = self._stop_event.is_set() and self._running in ("shapes", "ai", "fit1d", "predict")
         self._finish()
         if stopped:
             self._status(lambda: tr("Stopped before the search finished: no new solutions."), "warning")

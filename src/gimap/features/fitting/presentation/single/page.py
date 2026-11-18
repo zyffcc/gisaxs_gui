@@ -40,6 +40,7 @@ from .curve_unit import SETTING_KEY, CurveUnitMixin
 from .drops import CurveDropMixin, SplitterMemoryMixin
 from .exclusion import FitExclusionMixin
 from .fit1d import Fit1DPageMixin
+from .predict import PredictPageMixin
 from .fit1d_review import Fit1DReviewMixin
 from .equivalent_solutions import EquivalentSolutionsMixin
 from .result_actions import ResultActionsMixin
@@ -64,7 +65,7 @@ def _saved_source(token):
 
 
 class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunMixin, FitResultsMixin,
-              FitExclusionMixin, Fit1DPageMixin, Fit1DReviewMixin, EquivalentSolutionsMixin, ResultActionsMixin, CurveUnitMixin, CurveInfoMixin, FitPlotMixin):
+              FitExclusionMixin, PredictPageMixin, Fit1DPageMixin, Fit1DReviewMixin, EquivalentSolutionsMixin, ResultActionsMixin, CurveUnitMixin, CurveInfoMixin, FitPlotMixin):
     curveOpened = pyqtSignal(str)
     """The file of the curve now on the page (In-situ series takes its set-up from it)."""
     batchRequested = pyqtSignal()
@@ -101,6 +102,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.setup_component_plot()
         self._connect()
         self.setup_fit1d()
+        self.setup_predict()
         self.setup_run()
         self.setup_results()
         self.setup_result_actions()

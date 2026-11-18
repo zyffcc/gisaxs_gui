@@ -128,7 +128,7 @@ def build_results_step(owner, page: QWidget, layout) -> None:
     owner.alternatives.setObjectName("fitAlternatives")
     owner.solutions_title = QLabel("Solutions", owner.alternatives)
     owner.solutions_title.setProperty("gimapRole", "strong")
-    owner.solutions_table = _stretching(read_only_table(("#", "model", "R (nm)", "D (nm)", "χ²"), owner.alternatives,
+    owner.solutions_table = _stretching(read_only_table(("#", "model", "R (nm)", "D (nm)", "χ²", "p"), owner.alternatives,
                                                         "fitSolutionsTable"), 1)
     owner.use_solution_button = QPushButton("Use This Solution", owner.alternatives)
     owner.use_solution_button.setObjectName("fitUseSolution")

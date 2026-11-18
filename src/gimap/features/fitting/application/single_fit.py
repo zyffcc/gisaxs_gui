@@ -73,7 +73,7 @@ SIDES = (
 SERIES_SIDES = tuple(item for item in SIDES if item[0] != "both")
 """What a series offers (``shared/signed_cut.FIT_HALVES``): every frame is fitted on one curve."""
 ANALYZE_SIDES = {"both_abs": "both", "mean": "mean", "positive": "positive", "negative": "negative"}
-ONE_CURVE_METHODS = ("shapes", "ai", "fit1d")
+ONE_CURVE_METHODS = ("shapes", "ai", "fit1d", "predict")
 """The methods that take one curve with one measurement per |q| (Refine and Search also fit both halves)."""
 BOTH_USES_MEAN = "Both halves on |q| cannot be fitted by this method: the mean of both halves is used."
 """Said when one of ``ONE_CURVE_METHODS`` runs while both halves are chosen: the page goes over to the mean,

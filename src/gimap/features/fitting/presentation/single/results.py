@@ -170,7 +170,7 @@ class FitResultsMixin:
 
     def setup_results(self) -> None:
         self.parameters_table.setHorizontalHeaderLabels(["", tr("value"), "±"])
-        self.solutions_table.setHorizontalHeaderLabels(["#", tr("model"), "R (nm)", "D (nm)", "χ²"])
+        self.solutions_table.setHorizontalHeaderLabels(["#", tr("model"), "R (nm)", "D (nm)", "χ²", "p"])
         self.use_solution_button.clicked.connect(self.use_selected_solution)
         self.solutions_table.cellDoubleClicked.connect(lambda _row, _column: self.use_selected_solution())
         self.solutions_table.itemSelectionChanged.connect(
@@ -226,7 +226,7 @@ class FitResultsMixin:
         if result is None and session.solutions:
             self.quality_label.setText(tr("{count} solutions below; the best is in Model. Fit (Refine) gives its quality "
                                           "and the error of every value.").format(count=len(session.solutions)))
-            self.warnings_label.setText("\n".join(search_note))
+            self.warnings_label.setText("\n".join(self.posterior_lines() + search_note))
             self.warnings_label.setToolTip("")
             stale = tr("Changed after the fit: Fit again") + " · " if old_search else ""
             show_line(self.step_intro["results"],
@@ -331,7 +331,8 @@ class FitResultsMixin:
         curve = self.session.curve
         searched = self.session.solutions_searched()  # its χ²ᵣ computed here (run.py); else Analyze's quick fit
         chi = "χ²/N" if not searched else "var ln I" if curve is not None and curve.sigma is None else "χ²ᵣ"
-        self.solutions_table.setHorizontalHeaderLabels(["#", tr("model"), "R (nm)", "D (nm)", chi])
+        self.solutions_table.setHorizontalHeaderLabels(["#", tr("model"), "R (nm)", "D (nm)", chi, "p"])
+        self.solutions_table.setColumnHidden(5, not any(s.probability is not None for s in solutions))
         shown = tuple(solutions)
         fresh = shown != getattr(self, "_solutions_shown", None)
         self._solutions_shown = shown
@@ -347,7 +348,8 @@ class FitResultsMixin:
             cells = (str(line + 1), solution.label,
                      "—" if component is None else f"{component.value('R'):.3g}",
                      "—" if component is None or not component.structure else f"{component.value('D'):.3g}",
-                     f"{solution.chi2:.3g}" if math.isfinite(solution.chi2) else "—")
+                     f"{solution.chi2:.3g}" if math.isfinite(solution.chi2) else "—",
+                     "—" if solution.probability is None else f"{solution.probability:.2f}")
             for column, text in enumerate(cells):
                 self.solutions_table.setItem(line, column, _item(text, tip))
         if fresh or self.solutions_table.currentRow() < 0:  # new solutions: the one in Model is selected

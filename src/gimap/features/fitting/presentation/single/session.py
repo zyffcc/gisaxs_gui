@@ -37,6 +37,11 @@ class Solution:
     source: str
     deviation: float = 0.0
     """How much the model's curve differs from the solution's own (quick fit, AI)."""
+    probability: Optional[float] = None
+    """Predict parameters: the posterior probability of this solution (its composition and mode)."""
+    intervals: tuple = ()
+    """Predict parameters: (name, (best, median, low68, high68, low95, high95, error)) of every value."""
+    flags: tuple = ()
 
     @property
     def label(self) -> str:

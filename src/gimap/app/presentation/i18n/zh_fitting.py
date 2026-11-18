@@ -435,6 +435,47 @@ FITTING_ZH = {
         "{count} 条曲线不拟合，读不出 q 的单位：{name}——{reason}",
     "The header states q both in 1/A and in 1/nm; correct it to one unit.":
         "文件头同时注明了 q 的单位 1/A 和 1/nm；请改成只注明一种单位。",
+    # -- Predict parameters (the proposal network) --------------------------------------------
+    'Predict parameters':
+        '预测参数',
+    "GIMaP's network proposes the particles and their sizes from the curve; the proposals are weighted against the model (a posterior with 68 % intervals and the probability of each solution), and each solution is refined by least squares. Values fixed in Model are not kept: Refine afterwards keeps them.":
+        'GIMaP 的网络从曲线给出颗粒及其尺寸的建议；这些建议按模型加权（得到带 68 % 区间的后验和每个解的概率），每个解再用最小二乘精修。模型中固定的值不保留：之后精修会保留它们。',
+    'Particles':
+        '颗粒',
+    'The particles in Model':
+        '模型中的颗粒',
+    'Spheres and upright cylinders (1–2)':
+        '球和竖直圆柱（1–2 种）',
+    'Any particles (1–3)':
+        '任意颗粒（1–3 种）',
+    'The particles in Model: their families, with or without a paracrystal, in the order of their radii. A choice: the network proposes the compositions it finds most probable among these, and their posterior probabilities decide.':
+        '模型中的颗粒：它们的形状、是否有准晶结构因子，按半径排序。选择一类：网络在其中给出它认为最可能的组成，由后验概率决定。',
+    'Predict: the solutions':
+        '预测：解的得出方式',
+    'Refine each solution (least squares)':
+        '逐个精修（最小二乘）',
+    'Search from the samples':
+        '从样本出发搜索',
+    'Posterior samples only':
+        '只用后验样本',
+    "Refine each solution: least squares from the most probable sample of every mode (the default). Search from the samples: a search of the ranges whose first population is the network's samples, one per composition. Posterior samples only: no least squares.":
+        '逐个精修：从每个模态最可能的样本出发做最小二乘（默认）。从样本出发搜索：在范围内搜索，初始种群为网络的样本，每个组成一次。只用后验样本：不做最小二乘。',
+    "Predict parameters needs GIMaP's proposal network, which is missing in this installation ({name}).":
+        '预测参数需要 GIMaP 的建议网络，此安装中缺少它（{name}）。',
+    'Posterior of this solution (median [68 %]): {values}; probability {p}.':
+        '这个解的后验（中位数 [68 %]）：{values}；概率 {p}。',
+    'the curve says little about {name} (its 68 % interval spans most of the prior)':
+        '曲线对 {name} 约束很少（其 68 % 区间覆盖了先验的大部分）',
+    '{name} stopped at a bound of its range':
+        '{name} 停在其范围的边界上',
+    '{name} are strongly correlated':
+        '{name} 强相关',
+    'few effective samples: the intervals are rough':
+        '有效样本很少：区间只是粗略的',
+    'Loading the proposal network':
+        '正在载入建议网络',
+    "Weighting the network's samples and refining each solution":
+        '正在为网络的样本加权并精修每个解',
 }
 
 __all__ = ["FITTING_ZH"]
