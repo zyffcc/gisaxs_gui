@@ -314,7 +314,8 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
         new_stage = self._new_stage(index)
         start = next_start(self._previous, self._start_model, self._settings, new_stage=new_stage)
         settings, stop = self._settings, self._stop.is_set
-        predict = self.predictor(settings, self._previous, new_stage) if settings.method == "fit1d" else None
+        predict = self.predictor(settings, self._previous, new_stage) if settings.method in ("fit1d", "predict") \
+            else None
         load, unit, epoch = self.series_curve_loader(), self._unit, self._loading_epoch
 
         def work():

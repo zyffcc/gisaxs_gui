@@ -159,6 +159,10 @@ def _fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: S
     if prepared.points < 3:
         return FrameFit(index, path, error=TOO_FEW_POINTS, **made_of)
     try:
+        if settings.method == "predict":  # the network's solution, then least squares for its errors and χ²
+            result, actions, _remaining = fit_resolving(predict(prepared.data, start), prepared.data, method="local",
+                                                        stop=stop, resolve=False)
+            return FrameFit(index, path, result, **made_of)
         if settings.method == "fit1d":
             value = predict(prepared.data, start)
             result = fit1d_result(value, start, prepared.data)
@@ -183,7 +187,7 @@ def next_start(previous: Optional[FrameFit], single: FitModel, settings: SeriesS
                new_stage: bool = False) -> FitModel:
     """Where the next frame starts: the previous frame's result (when it converged) or the Single model —
     also at the first frame of a new stage when ``start`` is ``"stages"``."""
-    if settings.method == "fit1d":  # its particles and constraints are the model's; it follows by itself
+    if settings.method in ("fit1d", "predict"):  # their particles are the model's; they follow by themselves
         return single
     follows = settings.start == "previous" or (settings.start == "stages" and not new_stage)
     if follows and previous is not None and previous.ok and previous.result.converged:
@@ -370,7 +374,8 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
         "settings": {"side": settings.side, "q_range_nm^-1": None if settings.q_range is None else list(settings.q_range),
                      "left_out_q_nm^-1": sorted(settings.excluded), "method": settings.method, "start": settings.start,
                      "resolve_edges": settings.resolve_edges,
-                     **({"follow": settings.follow, "fit1d": dict(settings.fit1d or {})} if settings.method == "fit1d" else {})},
+                     **({"follow": settings.follow, "fit1d": dict(settings.fit1d or {})} if settings.method == "fit1d"
+                        else {"follow": settings.follow} if settings.method == "predict" else {})},
         "frames": len(frames), "counts": series_counts(frames), "failed": failed,
         "not_converged": [frame.index + 1 for frame in ordered if frame.state == "not converged"],
         "stopped": [frame.index + 1 for frame in ordered if frame.state == "stopped"],

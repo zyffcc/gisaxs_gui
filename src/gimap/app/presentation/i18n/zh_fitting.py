@@ -479,6 +479,12 @@ FITTING_ZH = {
         '正在载入建议网络',
     "Weighting the network's samples and refining each solution":
         '正在为网络的样本加权并精修每个解',
+    'Predict each frame (network + posterior)':
+        '逐帧预测（网络 + 后验）',
+    "Predict parameters on every frame with the particles of Single analysis' model; with the box below, of solutions about as probable the one closest to the previous frame; each frame then refined":
+        '对每一帧用单曲线分析模型中的颗粒做预测参数；勾选下方选项时，在概率相近的解中取最接近上一帧的那个；每帧随后精修',
+    "Predict each frame needs 1–3 particles in Single analysis' model.":
+        '逐帧预测需要单曲线分析的模型中有 1–3 种颗粒。',
 }
 
 __all__ = ["FITTING_ZH"]

@@ -140,7 +140,7 @@ class FitSeriesImportsMixin:
         self.watch_check.setToolTip(tr(FIXED_SELECTION) if imported else tr(self._folder_watch_tip))
         self.start_previous.setEnabled(not independent)
         self.start_stages.setEnabled(not independent)
-        self.follow_check.setEnabled(self.method_fit1d.isChecked() and not independent)
+        self.follow_check.setEnabled(self.predicts_frames() and not independent)
         self.skip_odd_check.setEnabled(not independent)
         self.import_button.setEnabled(not self.running)
         if imported:

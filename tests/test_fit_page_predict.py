@@ -116,3 +116,52 @@ def test_the_batch_window_runs_predict(tmp_path, monkeypatch):
     stored = json.loads((side / "solutions.json").read_text(encoding="utf-8"))
     assert stored["method"] == "posterior" and stored["network"]["sha256"]
     assert (side / "display.npz").is_file() and (side / "fitting_curves.csv").is_file()
+
+
+def test_following_the_previous_frame_picks_the_closest_solution():
+    from src.gimap.features.fitting.presentation.single.series_fit1d import closest
+    from src.gimap.features.fitting.presentation.single.session import Solution
+
+    def solution(radius, probability):
+        return Solution(FitModel((new_component("sphere", radius=radius),)), 1.0, "Predict", 0.0, probability)
+
+    solutions = [solution(5.0, 0.6), solution(3.1, 0.3), solution(9.0, 0.1)]
+    previous = FitModel((new_component("sphere", radius=3.0),))
+    assert closest(solutions, None) is solutions[0]
+    assert closest(solutions, previous) is solutions[1]  # about as probable, and continuous
+    assert closest([solution(5.0, 0.95), solution(3.1, 0.05)], previous).model.components[0].value("R") == 5.0
+
+
+def test_the_series_predicts_every_frame(tmp_path, monkeypatch):
+    import json
+
+    from tests.test_fit_series import _open_series, _pages, _wait as _wait_series
+
+    monkeypatch.setenv("GIMAP_ML1D_NETWORK", str(NETWORK))
+    folder = tmp_path / "series"
+    folder.mkdir()
+    radii = (3.6, 3.8, 4.0)
+    q = np.linspace(0.02, 2.0, 250)
+    for frame, radius in enumerate(radii):
+        population = cut.Population("sphere", radius, 0.15, distance=14.0, distance_spread=0.2)
+        y = np.random.default_rng(frame).poisson(1e4 * cut.unit_terms([population], cut.Settings(), q)[0] + 2.0)
+        np.savetxt(folder / f"run_{frame + 1:05d}_fit_input.dat", np.column_stack([q / 10, y, np.sqrt(np.maximum(y, 1))]))
+    single, series = _pages()
+    try:
+        assert single.open_curve(folder / "run_00001_fit_input.dat")
+        single.set_model(FitModel((new_component("sphere", radius=3.0),)))
+        _open_series(series, folder)
+        series.set_series_method("predict")
+        assert series.series_method() == "predict" and series.follow_check.isEnabled()
+        series.start()
+        _wait_series(series, 600)
+        frames = [series.fits[index] for index in sorted(series.fits)]
+        assert len(frames) == 3 and all(frame.ok for frame in frames), [frame.error for frame in frames]
+        fitted = [frame.result.model.components[0].value("R") for frame in frames]
+        assert fitted == pytest.approx(radii, rel=0.05)
+        path = series.save_table(str(tmp_path / "series.csv"))
+        record = json.loads(open(path.replace(".csv", ".json"), encoding="utf-8").read())
+        assert record["settings"]["method"] == "predict" and record["settings"]["follow"] is True
+    finally:
+        series.dispose()
+        single.dispose()
