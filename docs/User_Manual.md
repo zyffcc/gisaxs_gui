@@ -2562,6 +2562,7 @@ Analysing the same request again shows the result it has. **Details ▸ Analyze 
 | **Polymer film thickness (nm)** | Shown for a polymer substrate. Empty: the package's own value for that polymer. |
 | **Analysis package** | The folder in use, and **Choose Folder…**. |
 | **Open Report**, **Open Folder** | The package's report of the result shown (every quantity with its range and where it comes from) in the program that opens Markdown files, and the result's folder in the file manager. The report is also in **Details ▸ Report**. |
+| **Export…** | Also in the top bar beside **Open Result…**. Asks for a folder and writes `<scan>_export` into it: `evolution` and `patterns` as PDF and SVG (fonts embedded) and PNG at 300 dpi, `solution.csv` (the solution shown in each window — the joint fit, or the one you chose — with its fit deviation; units in the column names), `all_solutions.csv` (every solution of every window), `METHODS.md` (geometry, frames, mask, network, the joint fit's κ and Δt, the fit deviation's definition and median, the package — all taken from this result's records) and a README. Nothing is computed again; a package older than the export says so. |
 
 **Reading the result.** The main screen shows one time window:
 

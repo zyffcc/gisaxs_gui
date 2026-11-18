@@ -3,7 +3,7 @@
 
 **The live view** (``sputter_live_view.py``) puts the step tree (``step_tree.StepChecklist``, in a scroll area) at
 its left when the package reports its steps, and a second page at its right for what a step found: its name with
-*Back to the Analysis*, a line of numbers and a picture (``step_pictures.py`` fills the host).
+*Back to the Analysis*, the whole line of what it found, a line of numbers and a picture (``step_pictures.py`` fills the host).
 
 **Details ▸ Steps**: the same tree for the result shown (left: one line about it, then the tree) and what the chosen
 step found (right).
@@ -50,6 +50,16 @@ def _scroll(widget: QWidget, parent: QWidget) -> QScrollArea:
     return scroll
 
 
+def _summary(parent: QWidget) -> QLabel:
+    """The whole line of what a step found, under its name (the tree cuts it to its width)."""
+    label = QLabel("", parent)
+    label.setWordWrap(True)
+    label.setProperty("gimapMeta", True)
+    label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+    label.setVisible(False)
+    return label
+
+
 def _link(text: str, parent: QWidget) -> QPushButton:
     button = QPushButton(text, parent)
     button.setProperty("gimapRole", "link")
@@ -87,6 +97,8 @@ class SputterStepsView:
         top.addWidget(self.live_detail_title, 1)
         top.addWidget(self.live_detail_back)
         layout.addLayout(top)
+        self.live_detail_summary = _summary(page)
+        layout.addWidget(self.live_detail_summary)
         self.live_detail_layout = QVBoxLayout()
         self.live_detail_layout.setContentsMargins(0, 0, 0, 0)
         layout.addLayout(self.live_detail_layout, 1)
@@ -124,6 +136,8 @@ class SputterStepsView:
         self.steps_detail_layout = QVBoxLayout()
         self.steps_detail_layout.setContentsMargins(0, 0, 0, 0)
         right.addWidget(self.steps_detail_title)
+        self.steps_detail_summary = _summary(tab)
+        right.addWidget(self.steps_detail_summary)
         right.addLayout(self.steps_detail_layout, 1)
         layout.addLayout(right, 1)
         return tab

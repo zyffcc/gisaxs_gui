@@ -1,7 +1,7 @@
 {
- "created_utc": "2026-11-18T13:27:05.664461+00:00",
+ "created_utc": "2026-11-18T18:50:14.427766+00:00",
  "release": true,
- "git_head": "0cbe07b94184f0ae5b3ce99ab208e6026cf657ff",
+ "git_head": "02fb2b79159421bbde239e4f5733e5848f118e68",
  "families": [
   "si_p3h",
   "si_v6",
@@ -26,7 +26,7 @@
   "static_nn_v1/static_analytic": false,
   "static_nn_v1/static_ref": false
  },
- "n_files": 182,
+ "n_files": 183,
  "files": {
   "code/assets/p03_2021_pixmask_v1.npy": "f48698177a765ae43f54865912537461b176b7d0c11edb9fe9343d89027fe76a",
   "code/assets/p03_2025_pixmask_v1.npy": "00a29e295663bcc4e78da4cb0b2b60f096fe99b982ad8dd6157f6c5da245c473",
@@ -48,9 +48,10 @@
   "code/iam/iam_static.py": "1c09820014bb94d369c17008bb2ea8f46c39bc329acd5bbba7dada5af8a83494",
   "code/iam/iampred/__init__.py": "624c9becf764926027594ff4a55334112395268cc2d4e079bb982071357a6fac",
   "code/iam/iampred/adapter.py": "d213e07fcda0726b0575f409aadd4193497f9ca230061a2592a0b1a717918f31",
-  "code/iam/iampred/analyze.py": "1dd487b20df643ead2b15ff67d5be7c8094788e18875eacc255229d0eeac3ee7",
+  "code/iam/iampred/analyze.py": "40990c7b489e659ef9d5601500ebb93d456929f494a533c9d47c97500c229910",
   "code/iam/iampred/automask.py": "24b7d19715fad2655ffcfc6827bee692b9ba8387e6d91d4ae1a071c638348a60",
   "code/iam/iampred/batch_scans.json": "40dbebf7137b04160a80d48ddb7cbb9cb96f3b06952de8b7b2c7a1a5ff0b480d",
+  "code/iam/iampred/export.py": "3a830ff8b0ac6679e35772c82fc3abb8964a14facebf85cd07db152b637a23da",
   "code/iam/iampred/families/cu_p5.json": "683c754c57a50417bba14d29e75fc75fd27d9fa45e4e9bd7d9effeb76f5249b5",
   "code/iam/iampred/families/cu_v4.json": "4e31fb67f2a0bb365f3ded27f5d2d96ad41be1c043041256db894f97328fdc71",
   "code/iam/iampred/families/polyag_p3.json": "44c709a37c3dc9a0ab5bb7dc1ad0b0c0117185371d76e3f7208f45834d1ea763",

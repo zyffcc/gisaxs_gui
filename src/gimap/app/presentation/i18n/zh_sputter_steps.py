@@ -16,6 +16,20 @@ SPUTTER_STEPS_ZH = {
     "Joint fit: iteration {iteration} of {total} · {phase}: {done} of {windows} windows":
         "联合精修：第 {iteration}/{total} 次迭代 · {phase}：{done}/{windows} 个时间窗",
     "Joint fit: preparing · {done} of {windows} windows": "联合精修：准备中 · {done}/{windows} 个时间窗",
+    "Joint fit: the starting point · {done} of {windows} windows": "联合精修：计算起点 · {done}/{windows} 个时间窗",
+    # -- the export (export_flow.py, application/client.py) ------------------------------------------------------------
+    "Export…": "导出…",
+    "Write the result shown for a paper or a talk: figures as PDF, SVG and PNG (300 dpi), the solution shown in each "
+    "window as a CSV with units, every solution, and a methods text with this run's numbers.":
+        "把显示的结果写成可用于论文或报告的文件：图（PDF、SVG 和 300 dpi 的 PNG）、每个时间窗显示的解（带单位的 CSV）、"
+        "全部解，以及带本次运行数字的方法说明。",
+    "Choose the Folder for the Export": "选择导出到的文件夹",
+    "Exporting {scan}…": "正在导出 {scan}…",
+    "Exported {count} files to {folder}": "已导出 {count} 个文件到 {folder}",
+    "This analysis package cannot export (it is older than the export): update GIMaP or choose a newer package.":
+        "这个分析包不能导出（它早于导出功能）：请更新 GIMaP，或选择较新的分析包。",
+    "The export stopped with an error; its last lines are under Details.": "导出出错停止；最后几行在“详情”里。",
+    "The result shown has no window with a solution to export.": "显示的结果里没有带解的时间窗，无法导出。",
     "derivatives": "求导数",
     "trial step": "试探步",
     # -- the titles of the steps -----------------------------------------------------------------------------------

@@ -47,9 +47,9 @@ import numpy as np
 from src.gimap.shared.geometry.conventions import index_center_from_canonical
 from src.gimap.shared.version import SOFTWARE
 
-from ..application import (CLIENT_FALLBACK, CLIENT_INCOMPLETE, CLIENT_MISSING, ENGINE_FOLDER, LABEL_PREFIX, MASK_UNREADABLE,
-                           ClientPackage, ClientProgress, ClientRequest, ClientRun, ResultTexts, live_event,
-                           parse_live)
+from ..application import (CLIENT_FALLBACK, CLIENT_INCOMPLETE, CLIENT_MISSING, ENGINE_FOLDER, EXPORT_FAILED, EXPORT_OLD,
+                           LABEL_PREFIX, MASK_UNREADABLE, ClientFailed, ClientPackage, ClientProgress, ClientRequest,
+                           ClientRun, ResultTexts, live_event, parse_live)
 from ..domain import (ANALYSIS_FILE, BAD_ARRAYS, BAD_MAIN, MAIN_FILE, MAIN_FOLDER, NO_ARRAYS, NO_MAIN, ClientResult,
                       ClientWindow, WindowPatterns, client_result, window_patterns)
 from ..application.storage import DEFAULT_LIMIT_BYTES, PLACE_LOCAL, PLACE_USER, prune
@@ -63,6 +63,7 @@ IAM = Path("code") / "iam"
 PACKAGE_PARTS = (IAM / "iampred" / "analyze.py", Path("code") / "gimap", Path("code") / "toolkit", Path("models"))
 CLIENT_REQUEST_FILE = "gimap_request.json"
 CHOICES_FILE = "choices.json"
+EXPORT_SHOWN = "shown.json"
 CACHES_REMOVED = "Import caches over the limit of {limit}: removed {count} not used for the longest time ({size})"
 """The line Analyze writes to its messages when it removed caches (the package's own lines are English too)."""
 PACKAGE_MASK = "package-mask"
@@ -232,6 +233,28 @@ class ClientPackageRunner:
                                     cwd=str(Path(package.home) / IAM))
         kept = tail or [line for line in outcome.tail if parse_live(line) is None]
         return ClientRun(outcome.code, bool(outcome.stopped), tuple(kept))
+
+    def export(self, result_folder: Path, out_folder: Path, shown: list) -> list:
+        """``python -m iampred.export RESULT OUT --shown <the solutions shown>`` (a package without ``iampred.export``
+        says it is too old). The list of the solutions shown is written into OUT for the run and removed after it."""
+        package = self.package()
+        if package.problem:
+            raise FileNotFoundError(package.problem)
+        if not (Path(package.home) / IAM / "iampred" / "export.py").is_file():
+            raise ClientFailed(EXPORT_OLD)
+        out = Path(out_folder)
+        out.mkdir(parents=True, exist_ok=True)
+        listed = out / EXPORT_SHOWN
+        listed.write_text(json.dumps(shown), encoding="utf-8")
+        command = [self.python, "-u", "-m", "iampred.export", str(result_folder), str(out), "--shown", str(listed)]
+        root = Path(self.storage_root())
+        try:
+            run = self.launch(command, package, root, root, lambda _line: None, lambda: False)
+        finally:
+            listed.unlink(missing_ok=True)
+        if run.code != 0:
+            raise ClientFailed(EXPORT_FAILED, "\n".join(run.tail[-15:]))
+        return sorted(path for path in out.iterdir() if path.is_file())
 
     # -- where the package keeps its data ---------------------------------------------------------------------
     def roots(self, package: ClientPackage, request: ClientRequest) -> tuple:

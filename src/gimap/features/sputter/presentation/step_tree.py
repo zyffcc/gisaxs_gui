@@ -215,6 +215,12 @@ class StepChecklist(QWidget):
     def current(self) -> str:
         return self._current
 
+    def open_children(self, parent: str) -> None:
+        """Show the children of ``parent`` (as its arrow does)."""
+        if parent in self._parents:
+            self._opened[parent] = True
+            self._fold()
+
     def row(self, step_id: str) -> Optional[_Row]:
         return self._rows.get(step_id)
 

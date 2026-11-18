@@ -6,7 +6,8 @@ in-situ scan: the scan folder, Metal, Substrate, the deposition rate with its un
 box; a sample measured after
 its deposition: its frames (folder, or a CBF file or zip archive), its name, its nominal thickness and, optionally,
 frames of the bare substrate (another piece of the same substrate without metal) — and the primary button Analyze;
-one line about the scan; one line with the geometry used and Edit; Open Result… and the switch between the main
+one line about the scan; one line with the geometry used and Edit; Open Result…, Export… (``export_flow.py``) and
+the switch between the main
 screen and Details; at the right the job status of Analyze (of both kinds).
 
 **The main screen** shows one time window of a result: the window selector (previous, slider, next, its time and
@@ -20,8 +21,8 @@ time window. Before there is a result an empty state says what to do; while Anal
 (``sputter_live_view.py``) is the third page of the same stack.
 
 **Analyze options** (a section of Details): the mode, the parallel processes (Automatic or a number), the optional
-onset and duration of the deposition and polymer film thickness, the analysis package and its folder, Open Report and
-Open Folder (of the result shown), and the messages of the run (the job status's Details shows them).
+onset and duration of the deposition and polymer film thickness, the analysis package and its folder, Open Report,
+Open Folder and Export… (of the result shown), and the messages of the run (the job status's Details shows them).
 """
 
 from __future__ import annotations
@@ -252,6 +253,9 @@ class SputterMainView:
         self.geometry_edit_button.setToolTip("Show the geometry in Details to enter or change it.")
         self.open_result_button = QPushButton("Open Result…", bar)
         self.open_result_button.setToolTip("Show the result in a folder analysed before.")
+        self.export_button = QPushButton("Export…", bar)
+        self.export_button.setObjectName("sputterExport")
+        self.export_button.setEnabled(False)
         self.view_switch = SegmentedControl(bar)
         self.view_switch.setObjectName("sputterViewSwitch")
         for label, key in VIEW_CHOICES:
@@ -262,6 +266,7 @@ class SputterMainView:
         first.addWidget(self.geometry_edit_button)
         first.addSpacing(12)
         first.addWidget(self.open_result_button)
+        first.addWidget(self.export_button)
         first.addWidget(self.view_switch)
         lines.addLayout(first)
         self.scan_summary = meta(bar)  # one line about the scan once a folder is chosen
@@ -519,7 +524,9 @@ class SputterMainView:
         self.result_folder_button = QPushButton("Open Folder", section)
         self.result_folder_button.setToolTip("Open the folder of the result shown in the file manager.")
         self.result_folder_button.setEnabled(False)
-        section.add_widget(_row(section, self.report_button, self.result_folder_button))
+        self.details_export_button = QPushButton("Export…", section)
+        self.details_export_button.setEnabled(False)
+        section.add_widget(_row(section, self.report_button, self.result_folder_button, self.details_export_button))
         self.client_log = QPlainTextEdit(section)
         self.client_log.setReadOnly(True)
         self.client_log.setMaximumBlockCount(600)

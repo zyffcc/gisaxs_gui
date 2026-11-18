@@ -112,6 +112,8 @@ class ClientPanelMixin:
         has_report = result is not None and result.file("report_md") is not None
         self.report_button.setEnabled(has_report)
         self.result_folder_button.setEnabled(result is not None)
+        if hasattr(self, "sync_export_buttons"):
+            self.sync_export_buttons()
         self._show_result_kind()
         if result is None:
             self.evolution.draw(None, None, None)

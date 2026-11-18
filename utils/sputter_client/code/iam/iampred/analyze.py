@@ -252,11 +252,11 @@ def main(argv=None):
                 if a.workers < workers0:
                     print(f"      whole-scan refinement with {a.workers} processes (free memory)", flush=True)
                 LV.say_step("joint", "running")
-                ok_joint = run_quiet("predict", predict_args(fam, mode["refine"], iterations) + ["--no-network-step"], "refine")
+                ok_joint = run_quiet("predict", predict_args(fam, mode["refine"], iterations) + ["--no-network-step", "--reuse"], "refine")
                 if not ok_joint and a.workers > 1:
                     a.workers = max(1, a.workers // 2)
                     print(f"      whole-scan refinement failed: once more with {a.workers} processes", flush=True)
-                    ok_joint = run_quiet("predict", predict_args(fam, mode["refine"], iterations) + ["--no-network-step"], "refine")
+                    ok_joint = run_quiet("predict", predict_args(fam, mode["refine"], iterations) + ["--no-network-step", "--reuse"], "refine")
                 a.joint_note = dict(done=bool(ok_joint), workers=a.workers, iterations=iterations)
                 LV.say_step("joint", "done" if ok_joint else "failed",
                             summary=(f"{iterations} iterations with {a.workers} processes" if ok_joint else

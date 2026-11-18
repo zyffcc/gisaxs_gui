@@ -56,6 +56,8 @@ LEFT_HOURS = "about {hours} h {minutes} min left"
 LEFT_SOON = "less than a minute left"
 JOINT_BATCH = "Joint fit: iteration {iteration} of {total} · {phase}: {done} of {windows} windows"
 JOINT_POOL_BATCH = "Joint fit: preparing · {done} of {windows} windows"
+JOINT_START_BATCH = "Joint fit: the starting point · {done} of {windows} windows"
+"""Before the first iteration the fit is computed once at its start (``joint_progress`` of iteration 0)."""
 JOINT_PHASES = {"derivatives": "derivatives", "step": "trial step"}
 """The phases of an iteration of the joint fit (``joint_progress``): the derivatives are its long part."""
 DRAWING = "Drawing the main screen: window {drawn} of {total}"
@@ -66,7 +68,7 @@ STATUS_FIELD = "{status}"
 TEMPLATES = (READING, READING_FIRST, IMPORTED, STARTING_NETWORK, STARTING_NETWORKS, NETWORK_WINDOWS,
              *NETWORK_PHASES.values(), SEQUENCE, COMPARING, SOLVED, PRELIMINARY_SHOWN, REFINING, REFINING_JOINT,
              JOINT_POOL, JOINT_FIRST, JOINT, MEDIAN, SO_FAR, SO_FAR_LEFT, LEFT_MINUTES, LEFT_HOURS, LEFT_SOON, DRAWING,
-             JOINT_LABEL, JOINT_BATCH, JOINT_POOL_BATCH, *JOINT_PHASES.values())
+             JOINT_LABEL, JOINT_BATCH, JOINT_POOL_BATCH, JOINT_START_BATCH, *JOINT_PHASES.values())
 """The texts of the status line that need Chinese (numbers and network names are data)."""
 AFTER_PRELIMINARY = {"preliminary", "refine", "windows", "progress", "window", "joint_stage", "joint", "joint_progress"}
 """What the run does after its preliminary result until the report: the job status's bar then follows the line."""
@@ -189,12 +191,18 @@ def _joint_batch_line(run: LiveRun, now: float) -> tuple:
     event = run.joint_progress
     done, windows = _count(event.number("done")), _count(event.number("windows"))
     phase = str(event.get("phase") or "")
+    iteration = int(event.number("iteration") or 0)
     if phase == "pool":
         words = text(JOINT_POOL_BATCH, done=done, windows=windows)
+    elif iteration == 0:
+        words = text(JOINT_START_BATCH, done=done, windows=windows)
     else:
         words = text(JOINT_BATCH, iteration=int(event.number("iteration") or 0), total=int(event.number("total") or 0),
                      phase=tr(JOINT_PHASES.get(phase, phase)), done=done, windows=windows)
-    elapsed, left = run.joint_elapsed(now), left_words(run.joint_batch_left(now))
+    # before the first iteration the pace of an iteration is not known: no time left is said (it would be the
+    # preparation's or the starting point's own, and jump once the iterations start)
+    elapsed = run.joint_elapsed(now)
+    left = left_words(run.joint_batch_left(now)) if iteration > 0 and phase != "pool" else ""
     if elapsed is not None:
         words += " · " + (text(SO_FAR_LEFT, elapsed=clock_time(elapsed), left=left) if left else
                           text(SO_FAR, elapsed=clock_time(elapsed)))

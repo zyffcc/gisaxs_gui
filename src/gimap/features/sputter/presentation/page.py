@@ -5,7 +5,8 @@ rate with its unit (``rate_flow.py``); **Analyze** runs the client analysis pack
 the main screen shows its steps and what each has found so far (``live_panel.py``). The result is shown one time
 window at a time (``client_panel.py``): the measured image beside the model image of a solution, the solutions to
 choose from (the network's candidates, the refined one and the joint fit of the whole scan), the values of the
-solution shown — radius, height, distance, gap, size distribution width, coverage — and their evolution over the scan.
+solution shown — radius, height, distance, gap, size distribution width, coverage — and their evolution over the scan. **Export…**
+writes the result shown for a paper (``export_flow.py``).
 
 **Details** (the second view): the geometry, the options of Analyze, Static Frames (samples measured after their
 deposition, analysed one at a time into a series the main screen shows: ``static_flow.py``; the parallel processes of
@@ -31,6 +32,7 @@ from src.gimap.app.presentation.theme.engine import theme_manager
 from ..application import SputterService
 from .client_flow import CLIENT_KEY, SputterClientMixin
 from .client_panel import ClientPanelMixin
+from .export_flow import EXPORT_KEY, ExportMixin
 from .geometry import INSPECT_KEY, SputterGeometryMixin
 from .live_panel import LivePanelMixin
 from .project_state import SputterProjectMixin
@@ -42,7 +44,7 @@ from .views.sputter_page_view import SputterPageView
 from .workers_flow import WorkersMixin
 
 
-class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, ResultTabsMixin, LivePanelMixin,
+class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, ExportMixin, ResultTabsMixin, LivePanelMixin,
                   SputterStaticMixin, RateMixin, WorkersMixin, StoragePanelMixin, SputterGeometryMixin, QWidget,
                   SputterPageView):
     clientEvent = pyqtSignal(object)
@@ -69,6 +71,7 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Res
         self._init_client()
         self._init_static()
         self._init_client_panel()
+        self._init_export()
         self._init_result_tabs()
         self._init_live()
         self._init_workers()
@@ -135,6 +138,7 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Res
         self._dispose_static()
         self.tasks.cancel(INSPECT_KEY)
         self.tasks.cancel(STORAGE_KEY)
+        self.tasks.cancel(EXPORT_KEY)
         try:
             theme_manager().changed.disconnect(self._theme_changed)
         except (TypeError, RuntimeError):  # already disconnected

@@ -141,6 +141,8 @@ def test_the_joint_fit_says_its_iteration_batch_and_time_left():
     run.feed(_progress(0, 3, 10.0, phase="pool"), now=10.0)
     assert status_line(run, 10.0)[0] == "Joint fit: preparing · 3 of 20 windows · 0:10 so far"
     run.feed(_event("joint_stage", stage="fit", windows=20, total=6), now=50.0)
+    run.feed(_progress(0, 4, 2.0, phase="step"), now=52.0)  # the starting point: no time left said yet
+    assert status_line(run, 52.0)[0] == "Joint fit: the starting point · 4 of 20 windows · 0:02 so far"
     run.feed(_progress(1, 2, 60.0), now=60.0)
     assert status_line(run, 60.0)[0] == "Joint fit: iteration 1 of 6 · derivatives: 2 of 20 windows · 1:00 so far"
     run.feed(_progress(1, 6, 180.0), now=180.0)
@@ -275,6 +277,10 @@ def test_the_result_keeps_its_steps_for_details(tmp_path):
     assert page.steps_tree.row("import").summary.full_text() == "300 of 1000 frames in 75 s"
     page._result_step_chosen("compare")
     assert page.steps_picture.kind == "compare" and page.steps_picture.words.text() == "zz_v4 12.5 (chosen)\nzz_p5 21.5"
+    page._result_step_chosen("import")  # a parent that saved nothing itself: its first child that did
+    assert page.steps_tree.current() == "import.centre" and page.steps_picture.kind == "detector"
+    assert page.steps_tree.row("import.centre").isVisibleTo(page)
+    assert page.steps_detail_summary.text() == "given: column 12.5, row 30.0"
     page._result_step_chosen("windows")  # no detail recorded for it in this run
     assert page.steps_picture.detail is None and page.steps_picture.words.text() == "This step saved no details."
     for name in ("reading", "onset", "windows", "joint"):  # every kind of detail draws
@@ -304,7 +310,10 @@ def test_the_steps_speak_chinese(tmp_path):
     from src.gimap.features.sputter.presentation import step_pictures, step_texts, storage_panel
     from src.gimap.features.sputter.presentation.step_texts import summary_text
 
-    for template in (*step_texts.STEP_TEMPLATES, *step_pictures.PICTURE_TEMPLATES, *storage_panel.STORAGE_TEMPLATES):
+    from src.gimap.features.sputter.presentation.export_flow import EXPORT_TEMPLATES
+
+    for template in (*step_texts.STEP_TEMPLATES, *step_pictures.PICTURE_TEMPLATES, *storage_panel.STORAGE_TEMPLATES,
+                     *EXPORT_TEMPLATES):
         assert template in ZH, template
         assert sorted(set(re.findall(r"{(\w+)}", ZH[template]))) == sorted(set(re.findall(r"{(\w+)}", template))), template
     page = _page(tmp_path)
@@ -360,3 +369,42 @@ def test_the_live_view_keeps_only_the_pictures_it_shows():
     assert len(run.latest) == 1 and run.latest["zz_v4"].number("t") == 49.0  # one picture: the latest
     assert all(not isinstance(value, LiveEvent) for entries in run.solutions["zz_v4"].values()
                for value in entries.values())
+
+
+# -- Export --------------------------------------------------------------------------------------------------------------
+
+
+def test_export_writes_the_solutions_shown_with_the_users_choices(tmp_path):
+    from tests.sputter_client_fixtures import FakeClientRunner
+    from tests.test_sputter_main_screen import _settle
+
+    runner = FakeClientRunner()
+    page = _page(tmp_path, client=runner)
+    assert not page.export_button.isEnabled() and not page.details_export_button.isEnabled()  # nothing shown
+    out = write_result(tmp_path / "out")
+    page.open_client_result(out)
+    assert page.export_button.isEnabled() and page.details_export_button.isEnabled()
+    result = page.client_result
+    window = next(w for w in result.windows if len(w.labels()) > 1)
+    other = next(label for label in window.labels() if label != window.chosen_label(page.client_choices))
+    page.client_choices = page.service.client.with_choice(window, other, page.client_choices)
+    page.export_result(tmp_path / "paper")
+    assert not page.export_button.isEnabled()  # while it writes
+    _settle(lambda: page.export_button.isEnabled())
+    folder, target, shown = runner.exports[-1]
+    assert folder == out and target.parent == tmp_path / "paper" and target.name.endswith("_export")
+    chosen = {item["t"]: item["label"] for item in shown}
+    assert chosen[window.time_s] == other and len(chosen) == sum(1 for w in result.windows if w.labels())
+    _close(page)
+
+
+def test_a_package_without_the_export_says_so(tmp_path):
+    from src.gimap.features.sputter.application import EXPORT_OLD, ClientFailed
+    from src.gimap.features.sputter.infrastructure.client import ClientPackageRunner
+    from tests.sputter_client_fixtures import package_folder
+
+    home = package_folder(tmp_path / "package")
+    runner = ClientPackageRunner(lambda: tmp_path / "store", chosen=home)
+    with pytest.raises(ClientFailed) as caught:
+        runner.export(tmp_path / "result", tmp_path / "out", [{"t": 1.0, "label": "joint"}])
+    assert str(caught.value) == EXPORT_OLD
