@@ -434,6 +434,8 @@ class SputterClientMixin:
         self._live_end()
 
     def _client_event(self, event) -> None:
+        if self._live_heard(event):  # a sample of the package's processes (live_panel.py)
+            return
         if isinstance(event, LiveEvent):  # what a step found so far: the live view
             if event.kind == "preliminary" and event.get("folder"):
                 self._client_preliminary(Path(str(event.get("folder"))))

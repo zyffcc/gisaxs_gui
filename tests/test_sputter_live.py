@@ -180,7 +180,7 @@ def test_the_runner_hands_live_lines_over_with_their_arrays(tmp_path):
              "@live " + json.dumps({"kind": "drawn", "step": "present", "arrays": str(tmp_path / "gone.npz")}),
              "      done in 1 s"]
 
-    def process(command, *, on_line, should_stop, env, cwd):
+    def process(command, *, on_line, should_stop, env, cwd, **_more):
         for line in lines:
             on_line(line)
         return Outcome(0, list(lines))

@@ -233,6 +233,18 @@
   （`run_note`，只在这时显示）。重画定时器（≤ 400 ms）和每秒的时钟更新它。初步结果之后、写报告之前（`AFTER_PRELIMINARY`），
   任务状态的进度条跟随这一行所说的份额（阶段的 k/m、联合精修的 k/n；没有份额时为忙碌条），不再停在初步结果画完时的 100 %。
   同一网络再次收到 `windows`（初步结果之后的逐窗精修）时，它的阶段计数、速度和联合精修从头开始（`_restart`），解保留。
+- **分析包是否在工作**（2026-11-18，`application/activity.py`，`infrastructure/process.py` 的 `TreeWatch`）：
+  `run_streaming` 每 5 s（`SAMPLE_SECONDS`）用 psutil 采样分析包的进程树——进程数，以及自上次采样以来用了至少 1/5 个核心或
+  从磁盘读了至少 256 kB 的进程数（`TreeSample`）——，`ClientPackageRunner.launch` 把它作为 `ClientActivity` 交给界面
+  （没有进程在工作时附上 `last_log_line`：本次运行文件夹里最新的 `analyze_*.log` 的最后一行）。`LiveRun.watch`
+  （`ActivityWatch`）保存最近的采样，以及分析包最近一次工作或发出任何行、事件的时间（两个运行处理函数都经
+  `LivePanelMixin._live_heard`）。时钟行加上“其中 n 个正在工作”／“都在等待”。`STALL_S`（60 s）内没有进程工作、也没有
+  任何消息时（`stalled`），状态行写“已有 m:ss 没有进展：分析包的进程都在等待”（任务状态和提示行同此），实时视图顶部出现
+  警告级 `ErrorBanner`（`live_stall_note`）：分析包很可能因错误停下、不会自己继续，附日志最后一行，按钮“停止分析”停止运行；
+  GIMaP 不自动停止。针对的情况：`multiprocessing` 进程池的工作进程因 `SystemExit` 退出（分析包的 `iam.Scan` 遇到波长与网络
+  不符的扫描就这样拒绝），`pool.map` 永远等待，所有进程都闲着。没有自己计数的行（`live_status.so_far`：网络启动、`network`
+  阶段、联合精修准备、比较网络、初步结果、开始精修、步骤行）满 `SO_FAR_MIN_S`（10 s）后加“已用 m:ss”（从
+  `LiveRun.activity_at` 算）。没有 psutil 时没有采样，这些都不显示。测试：`tests/test_sputter_activity.py`。
 - **联合精修的虚线**：每个 `joint` 事件（每次迭代后各时间窗当前的 R、H、D、间隙、覆盖率…）由 `LiveRun.joint_points` 按时间
   排好，`EvolutionPlot.set_overlay((时间, 各量, 名称))` 以各量自己的颜色画成虚线，图例最后一项用灰色虚线写“联合精修 第 k/n 次”，
   下一次迭代替换它。画在主屏的演化图上——只在主屏显示的就是本次运行的初步结果时（`_live_preliminary`，`_preliminary_shown`）；

@@ -1,7 +1,8 @@
 """Static layout of the live view of the main screen: what a running Analyze is doing and has found so far (behaviour
 in ``presentation/live_panel.py``).
 
-At the top, one line across the view says what the analysis does now (``live_status.py``). Left, the four steps of the
+At the top, one line across the view says what the analysis does now (``live_status.py``) and, under it when the
+analysis package has stopped working, a note with **Stop Analysis** (hidden otherwise). Left, the four steps of the
 analysis — each with its state and one line of what it found — and the time since the start with the processes at
 work. Right, the step shown: its name, one paragraph on what it does, a note when reading
 the frames from disk is the slow part (hidden otherwise), a picture with a line under it, and a plot.
@@ -31,6 +32,7 @@ LIVE_STEP_TITLES = (("intake", "Read the frames"), ("predict", "Find the solutio
 LIVE_TITLE = "Analysis at work"
 LIVE_HINT = "Click a step that has started to see what it found."
 PRELIMINARY_BUTTON = "Show the Preliminary Result"
+STOP_BUTTON = "Stop Analysis"
 STEPS_WIDTH = 360
 
 
@@ -71,6 +73,13 @@ class SputterLiveView(SputterStepsView):
         top.addWidget(self.live_status, 1)
         top.addWidget(self.live_preliminary_button)
         outer.addLayout(top)
+        # shown only when the package has stopped working (the page sets its words; its button stops the analysis)
+        self.live_stall_note = ErrorBanner("", "", view, level="warning", dismissible=False, show_details=True)
+        self.live_stall_note.setObjectName("sputterLiveStallNote")
+        self.live_stall_note.title_label.setVisible(False)
+        self.live_stall_note.details_button.setText(STOP_BUTTON)
+        self.live_stall_note.setVisible(False)
+        outer.addWidget(self.live_stall_note)
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
@@ -136,4 +145,4 @@ class SputterLiveView(SputterStepsView):
         return view
 
 
-__all__ = ["LIVE_HINT", "LIVE_STEP_TITLES", "LIVE_TITLE", "PRELIMINARY_BUTTON", "SputterLiveView"]
+__all__ = ["LIVE_HINT", "LIVE_STEP_TITLES", "LIVE_TITLE", "PRELIMINARY_BUTTON", "STOP_BUTTON", "SputterLiveView"]

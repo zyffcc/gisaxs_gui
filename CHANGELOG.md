@@ -71,6 +71,16 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   still used. They are limited to 5 GB together by default (the least recently used are removed first, never the one
   in use, never a result); **Details ▸ Storage** lists them with their size and last use, removes chosen ones or those
   unused for some days, and sets the limit.
+- **Sputter ▸ Analyze, when nothing happens:** the clock line of the live view says how many of the analysis's
+  processes are at work now (*Running for 03:12 · Processes: 16 · 14 at work now*), and a line without a count of its
+  own says how long the run has been at it (*Starting network cu_p5 (the first of 2 to compare) · 0:45 so far*). When
+  none of the processes has computed or read for a minute and the package has said nothing, a note across the live
+  view says that it has most likely stopped on an error and will not go on, with the last line of its log, and
+  **Stop Analysis**; the line at the top and the job status say *No progress for 1:10: the analysis package's
+  processes are all waiting*. Before, such a run showed the same line for ever.
+- **Known limitation, Sputter ▸ Analyze of Cu:** the analysis package's Cu networks and Cu optics are computed for a
+  wavelength of 0.105 nm (11.81 keV). For a Cu scan at another photon energy a process of the package ends at the
+  networks step and the analysis waits without ending; the note above says so after a minute (manual chapter 13).
 
 - **Checked against pyFAI:** on the four public frames, every pixel's q, 2θ, q∥ and q_z agree with pyFAI to
   10⁻¹³, and the azimuthal I(q) to 10⁻⁷ on the same pixels and bins; pyFAI's Σ I / Σ F differs from GIMaP's mean of

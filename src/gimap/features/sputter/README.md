@@ -60,6 +60,22 @@ geometry in one line with **Edit**, **Open Result…**):
   window selector (`run_note`). From the preliminary result to the report (`AFTER_PRELIMINARY`) the job status's bar
   follows the share the line speaks of (busy where there is none). A second `windows` event of one network (the
   refinement after the preliminary result) starts its counts again (`live_progress.py` `_restart`).
+- **Whether the package works** (`application/activity.py`, `infrastructure/process.py` `TreeWatch`): every 5 s
+  (`SAMPLE_SECONDS`) `run_streaming` samples the package's process tree with psutil — its processes and how many of
+  them used a fifth of a core or read 256 kB from disk since the sample before (`TreeSample`) —, and
+  `ClientPackageRunner.launch` hands it on as `ClientActivity` (while none works, with `last_log_line`: the last line
+  of the newest `analyze_*.log` of the run's folder). `LiveRun.watch` (`ActivityWatch`) keeps the latest sample and
+  when the package last worked or said anything (any line or event: `LivePanelMixin._live_heard`, from both run
+  handlers). The clock line adds *n at work now* / *none at work now*. When none has worked and nothing came for
+  `STALL_S` (60 s), `stalled`: the status line says *No progress for m:ss: the analysis package's processes are all
+  waiting* (also in the job status and the note line), and the warning banner `live_stall_note` across the live view
+  says that the package has most likely stopped on an error and will not go on, with the log line, and **Stop
+  Analysis** (its button) stops the run; GIMaP does not stop it by itself. The case it is for: a worker of a
+  `multiprocessing` pool that ends on `SystemExit` (the package's `iam.Scan` refuses a scan whose wavelength is not the
+  network's that way) leaves `pool.map` waiting for ever, with every process idle. A line without a count of its own
+  (`live_status.so_far`: a network starting, its `network` phase, the joint fit's pool, the comparison, the preliminary
+  result, the refinement starting, a step line) adds *m:ss so far* from `LiveRun.activity_at` once that is
+  `SO_FAR_MIN_S` (10 s). Without psutil there are no samples and nothing of this is said.
 - **The step tree** (`application/live_steps.py` `StepTree`, `presentation/step_tree.py` `StepChecklist`,
   `live_steps_panel.py` `LiveStepsMixin`, layout `views/sputter_steps_view.py`): a newer package sends `@live` events of
   kind `step` (`id` of a fixed tree — `import` (`import.centre`, `.mask`, `.read`, `.onset`), `windows`, `networks`
@@ -213,7 +229,8 @@ of an entry sit), `application` (`use_cases.py`: `SputterService`, the scan's re
 `Stopped`; `client.py`: `ClientService`, `ClientRequest`, `ResultTexts` and the ports; `client_progress.py`,
 `client_static.py`; `client_live.py`: the live events of a running Analyze and `LiveRun`; `live_progress.py`: its
 refinement after the preliminary result, the joint fit (with its progress inside an iteration) and the pace of its
-counts; `live_steps.py`: the step tree; `step_details.py`: what a step found; `storage.py`: the import caches and
+counts; `activity.py`: whether the package's processes work; `live_steps.py`: the step tree; `step_details.py`: what
+a step found; `storage.py`: the import caches and
 their limit; `scan.py`: the scan header
 and where each value comes from), `infrastructure` (`client.py`: `ClientPackageRunner`, `ClientFolderReader`,
 `locate_package`; `client_static.py`: `StaticPackageRunner`; `cache_store.py`: the local folder and the import caches;\n`trace_files.py`: the result's `trace` folder; `process.py`; `scan_header.py`: `CbfHeaderInspector`),
@@ -225,5 +242,6 @@ and where each value comes from), `infrastructure` (`client.py`: `ClientPackageR
 `zh_sputter_live.py`, `zh_sputter_steps.py`. Tests: `tests/test_sputter_feature.py`, `tests/test_sputter_page.py` (fakes in
 `tests/sputter_fixtures.py`), `tests/test_sputter_client.py`, `tests/test_sputter_main_screen.py`,
 `tests/test_sputter_details.py`, `tests/test_sputter_live.py`, `tests/test_sputter_reading.py`,
-`tests/test_sputter_status.py`, `tests/test_sputter_steps.py`, `tests/test_sputter_storage.py` (a fake of the package's process and invented results in
+`tests/test_sputter_status.py`, `tests/test_sputter_steps.py`, `tests/test_sputter_storage.py`,
+`tests/test_sputter_activity.py` (a pool that lost its worker, the stall note) (a fake of the package's process and invented results in
 `tests/sputter_client_fixtures.py`), `tests/test_sputter_client_bundle.py`. Page: `docs/ui/workspaces/sputter.md`.

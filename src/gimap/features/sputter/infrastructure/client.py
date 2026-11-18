@@ -48,8 +48,8 @@ from src.gimap.shared.geometry.conventions import index_center_from_canonical
 from src.gimap.shared.version import SOFTWARE
 
 from ..application import (CLIENT_FALLBACK, CLIENT_INCOMPLETE, CLIENT_MISSING, ENGINE_FOLDER, EXPORT_FAILED, EXPORT_OLD,
-                           LABEL_PREFIX, MASK_UNREADABLE, ClientFailed, ClientPackage, ClientProgress, ClientRequest,
-                           ClientRun, ResultTexts, live_event, parse_live)
+                           LABEL_PREFIX, MASK_UNREADABLE, ClientActivity, ClientFailed, ClientPackage, ClientProgress,
+                           ClientRequest, ClientRun, ResultTexts, live_event, parse_live)
 from ..domain import (ANALYSIS_FILE, BAD_ARRAYS, BAD_MAIN, MAIN_FILE, MAIN_FOLDER, NO_ARRAYS, NO_MAIN, ClientResult,
                       ClientWindow, WindowPatterns, client_result, window_patterns)
 from ..application.storage import DEFAULT_LIMIT_BYTES, PLACE_LOCAL, PLACE_USER, prune
@@ -73,6 +73,8 @@ TEXT_LIMIT = 400_000
 """The end of a report or log that Details shows (characters; a log of a long run can be larger)."""
 REPORT_FILE = "REPORT.md"
 LOG_PATTERN = "analyze_*.log"
+LOG_LINE_BYTES, LOG_LINE_CHARS = 8192, 300
+"""The end of a step log read for its last line, and the most of that line shown."""
 LIVE_ARRAYS_LIMIT = 32 << 20
 """The largest file of a live-view event that is read (bytes; the package writes a few hundred kB at most)."""
 _SEE_LOG = re.compile(r"\(see (.+?)\)")
@@ -163,6 +165,22 @@ def _tail(path: Optional[Path]) -> str:
     return words if len(words) <= TEXT_LIMIT else "…\n" + words[-TEXT_LIMIT:]
 
 
+def last_log_line(folder: Path) -> str:
+    """The last line with text of the step log written last in a run's folder (its end only; "" without one)."""
+    try:
+        logs = [path for path in Path(folder).glob(LOG_PATTERN) if path.is_file()]
+        newest = max(logs, key=lambda path: path.stat().st_mtime) if logs else None
+        if newest is None:
+            return ""
+        with open(newest, "rb") as handle:
+            handle.seek(max(0, newest.stat().st_size - LOG_LINE_BYTES))
+            words = handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+    lines = [line.strip() for line in words.splitlines() if line.strip()]
+    return lines[-1][:LOG_LINE_CHARS] if lines else ""
+
+
 def _gb(size: float) -> str:
     return f"{size / (1 << 30):.1f} GB"
 
@@ -212,10 +230,13 @@ class ClientPackageRunner:
         return self._workers()
 
     def launch(self, command: list, package: ClientPackage, data_root: Path, work_root: Path,
-               on_line: Callable[[object], None], should_stop: Callable[[], object], **environment) -> ClientRun:
+               on_line: Callable[[object], None], should_stop: Callable[[], object], *, logs: Optional[Path] = None,
+               **environment) -> ClientRun:
         """Run a command of the package in its folder with its environment (and ``environment`` on top). A line of
         the live view (``@live …``) reaches ``on_line`` as a ``LiveEvent`` with its arrays read here, in the
-        background; the others as they are. The tail kept for a failure holds the others only."""
+        background; the others as they are. The tail kept for a failure holds the others only. Every few seconds a
+        ``ClientActivity`` says how many of its processes work — while none does, with the last line of the newest
+        step log in ``logs`` (the run's folder)."""
         env = self.environment(package, data_root, work_root)
         env.update({key: str(value) for key, value in environment.items()})
         tail: list = []
@@ -229,8 +250,12 @@ class ClientPackageRunner:
             else:
                 on_line(live_event(found[0], live_arrays(found[1])))
 
+        def sampled(sample) -> None:
+            line = last_log_line(logs) if sample.busy == 0 and logs is not None else ""
+            on_line(ClientActivity(sample.processes, sample.busy, line))
+
         outcome = self._run_process(command, on_line=line_or_event, should_stop=should_stop, env=env,
-                                    cwd=str(Path(package.home) / IAM))
+                                    cwd=str(Path(package.home) / IAM), on_sample=sampled)
         kept = tail or [line for line in outcome.tail if parse_live(line) is None]
         return ClientRun(outcome.code, bool(outcome.stopped), tuple(kept))
 
@@ -378,7 +403,7 @@ class ClientPackageRunner:
             on_line(line)
 
         try:
-            return self.launch(command, package, data_root, work_root, keep, should_stop)
+            return self.launch(command, package, data_root, work_root, keep, should_stop, logs=out)
         finally:  # the new import counts now (it is kept: it is the one in use)
             self._prune(request.cache_limit, label, on_line)
 

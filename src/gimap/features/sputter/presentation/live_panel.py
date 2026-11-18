@@ -14,7 +14,10 @@ at the right the step at work, in one paragraph, with what it has found so far (
 
 A newer package also says how long its processes spend reading the frames from disk: the line of the import step adds
 the seconds per frame and their share of the time, and when the disk is the slow part a note above the pictures says
-so, with what helps (``reading_texts.py``); the clock line says how many processes run. A click on a step that has
+so, with what helps (``reading_texts.py``); the clock line says how many processes run and how many of them are at
+work now (``application/activity.py``). When none has worked and nothing has come from the package for a minute, a
+note across the view says that it has most likely stopped on an error and will not go on, with the last line of its
+log and **Stop Analysis** (the package is not stopped for the user). A click on a step that has
 started shows what it found; a click on the step at work follows the analysis again. When
 the analysis ends the result is shown (or, when it failed or was stopped, what was shown before). A package that
 sends no live events is followed by its steps alone.
@@ -33,7 +36,7 @@ from PyQt5.QtCore import QTimer
 
 from src.gimap.app.presentation.i18n import tr
 
-from ..application import LIVE_STEPS, STATIC_LIVE_STEPS, LiveEvent, LiveRun
+from ..application import LIVE_STEPS, STATIC_LIVE_STEPS, ClientActivity, LiveEvent, LiveRun
 from .client_texts import entry_name, shown_number
 from .evolution_view import EvolutionPlot
 from .live_pictures import FramesPicture, TracePlot
@@ -41,7 +44,7 @@ from .live_static import STATIC_EXPLAIN, STATIC_STEP_NAMES, LiveStaticMixin
 from .live_status import LiveStatusMixin
 from .live_steps_panel import LiveStepsMixin
 from .pattern_view import PatternPair
-from .reading_texts import PROCESSES, READING_LINE, SLOW_DISK_NOTE, disk_words
+from .reading_texts import PROCESSES, READING_LINE, SLOW_DISK_NOTE, clock_time, disk_words
 from .texts import text
 from .views.sputter_live_view import LIVE_STEP_TITLES
 from .views.sputter_main_view import TILES
@@ -95,10 +98,16 @@ DEVIATION_PART = "fit deviation {deviation}"
 WAITING_SOLUTIONS = "The first time windows are being solved…"
 WAITING_FRAMES = "The frames are being read…"
 NOTHING_LIVE = "This analysis package does not show what it finds while it works: its result opens at the end."
+AT_WORK = "{busy} at work now"
+NONE_AT_WORK = "none at work now"
+STALL_NOTE = ("Nothing has happened for {time}: none of the analysis package's processes is computing or reading, and "
+              "it has said nothing new. It has most likely stopped on an error inside one of its processes and will "
+              "not go on by itself.")
+STALL_LOG = "Last line of its log: {line}"
 TEMPLATES = (*STEP_NAMES.values(), *EXPLAIN.values(), TITLE, CLOCK, CENTRE_LINE, FRAMES_LINE, IMPORTED_LINE,
              IMPORTED_ONSET, REUSED_LINE, NETWORK_PREFIX, *PHASE_LINES.values(), FIRST_WINDOW, CHOSEN_LINE,
              CHOSEN_DEVIATION, DRAWN_LINE, DETECTOR_CAPTION, DEVIATION_PART, WAITING_SOLUTIONS, WAITING_FRAMES,
-             NOTHING_LIVE)
+             NOTHING_LIVE, AT_WORK, NONE_AT_WORK, STALL_NOTE, STALL_LOG)
 """The templates of the live view that need Chinese (numbers, units and network names are data)."""
 CAPTION_KEYS = ("R_nm", "H_nm", "D_nm", "coverage")
 """The quantities said under the images of the window solved last (those the solution has)."""
@@ -142,6 +151,7 @@ class LivePanelMixin(LiveStatusMixin, LiveStaticMixin, LiveStepsMixin):
         self.live_patterns = PatternPair(self.live_patterns_layout)
         self.live_evolution = EvolutionPlot(self.live_evolution_layout)
         self.live_steps.stepChosen.connect(self._live_step_chosen)
+        self.live_stall_note.detailsRequested.connect(self._stop_stalled)
         self._init_live_steps()
 
     # -- the run -------------------------------------------------------------------------------------------------
@@ -158,6 +168,8 @@ class LivePanelMixin(LiveStatusMixin, LiveStaticMixin, LiveStepsMixin):
         self._live, self._live_folder, self._live_events, self._live_reused = LiveRun(kind=kind), folder, 0, False
         self._live_steps_begin(trace_folders)
         self._live.workers = int(workers or 0)
+        self._live.watch.started = time.monotonic()
+        self.live_stall_note.setVisible(False)
         self._live_preliminary = None
         self.live_evolution.set_overlay(None)
         self.live_disk_note.setVisible(False)
@@ -178,6 +190,25 @@ class LivePanelMixin(LiveStatusMixin, LiveStaticMixin, LiveStepsMixin):
         self._live_tick()
         self._live_dirty = {"all"}
         self._live_draw()
+
+    def _live_heard(self, event) -> bool:
+        """Anything from the running package: a sample of its processes (True: there is nothing else to do with it),
+        else news — a line or an event."""
+        run = self._live
+        if isinstance(event, ClientActivity):
+            if run is not None:
+                run.watch.feed(event, time.monotonic())
+            return True
+        if run is not None:
+            run.watch.news(time.monotonic())
+        return False
+
+    def _stop_stalled(self) -> None:
+        """**Stop Analysis** of the note that the package stopped working."""
+        if self._live_static():
+            self.stop_static()
+        else:
+            self.stop_analysis()
 
     def _live_event(self, event: LiveEvent) -> None:
         if self._live is None:
@@ -231,6 +262,7 @@ class LivePanelMixin(LiveStatusMixin, LiveStaticMixin, LiveStepsMixin):
         caller's. ``folder``: the result it made (its step tree is kept with it)."""
         self._live_redraw.stop()
         self._live_clock.stop()
+        self.live_stall_note.setVisible(False)
         self._live_status_end()
         if self._live is None:
             return
@@ -240,11 +272,27 @@ class LivePanelMixin(LiveStatusMixin, LiveStaticMixin, LiveStepsMixin):
             self._show_client_empty()  # the result shown before, else the empty state
 
     def _live_tick(self) -> None:
-        if self._live is not None:
-            words = text(CLOCK, time=_clock(time.monotonic() - self._live_started))
-            processes = self._live.processes()
-            self.live_clock.setText(words + " · " + text(PROCESSES, count=processes) if processes else words)
+        run = self._live
+        if run is not None:
+            parts = [text(CLOCK, time=_clock(time.monotonic() - self._live_started))]
+            processes, busy = run.processes(), run.watch.busy()
+            if processes:
+                parts.append(text(PROCESSES, count=processes))
+            if busy is not None:
+                parts.append(text(AT_WORK, busy=busy) if busy else tr(NONE_AT_WORK))
+            self.live_clock.setText(" · ".join(parts))
+            self._show_stall_note(run)
             self._live_show_status()  # the time so far and left move on
+
+    def _show_stall_note(self, run: LiveRun) -> None:
+        """The note that the package has stopped working (``ActivityWatch.stalled``), with the last line of its log."""
+        now = time.monotonic()
+        stalled = run.watch.stalled(now)
+        if stalled:
+            words = text(STALL_NOTE, time=clock_time(run.watch.quiet(now)))
+            line = run.watch.log_line()
+            self.live_stall_note.message_label.setText(words + ("\n" + text(STALL_LOG, line=line) if line else ""))
+        self.live_stall_note.setVisible(stalled)
 
     def _live_step_chosen(self, key: str) -> None:
         """A click on a step: what it found (one that has started), or — the step at work — follow the analysis."""
@@ -446,4 +494,5 @@ class LivePanelMixin(LiveStatusMixin, LiveStaticMixin, LiveStepsMixin):
         self._live_draw()
 
 
-__all__ = ["CAPTION_KEYS", "EXPLAIN", "LIVE_PAGE", "LivePanelMixin", "REDRAW_MS", "STEP_NAMES", "TEMPLATES"]
+__all__ = ["CAPTION_KEYS", "EXPLAIN", "LIVE_PAGE", "LivePanelMixin", "REDRAW_MS", "STALL_NOTE", "STEP_NAMES",
+           "TEMPLATES"]

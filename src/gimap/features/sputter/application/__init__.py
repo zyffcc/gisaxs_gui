@@ -8,6 +8,7 @@ from .client import (CLIENT_FAILED, CLIENT_FALLBACK, CLIENT_INCOMPLETE, CLIENT_M
                      EXPORT_FAILED, EXPORT_FOLDER, EXPORT_NOTHING, EXPORT_OLD, CLIENT_STOPPED, CLIENT_TEMPLATES, ENGINE_FOLDER, FILM_SUBSTRATES, LABEL_PREFIX, MASK_UNREADABLE,
                      MODES, QCM_FACTOR, SUBSTRATES, ClientFailed, ClientMissing, ClientPackage, ClientReader,
                      ClientRequest, ClientRun, ClientRunner, ClientService, ClientStarted, ResultTexts)
+from .activity import STALL_S, ActivityWatch, ClientActivity
 from .client_progress import (STATIC_STEP_TEXT, STATIC_STEP_WEIGHTS, STEP_OF, STEP_REUSED, STEP_TEXT, STEP_WEIGHTS,
                               ClientProgress)
 from .client_live import (FRAME_LABEL, LIVE_PREFIX, LIVE_STEPS, SLOW_DISK_S_PER_FRAME, SLOW_DISK_SHARE,
@@ -32,6 +33,7 @@ __all__ = [
     "ClientProgress", "ClientQuantity", "ClientReader", "ClientRequest", "ClientResult", "ClientRun", "ClientRunner",
     "ClientService", "ClientStarted", "ClientWindow", "ENGINE_FOLDER", "FILM_SUBSTRATES", "LABEL_PREFIX",
     "MASK_UNREADABLE", "MODES", "QCM_FACTOR", "ResultTexts",
+    "STALL_S", "ActivityWatch", "ClientActivity",
     "FRAME_LABEL", "LIVE_PREFIX", "LIVE_STEPS", "STATIC_LIVE_STEPS", "LiveEvent", "LiveRun", "live_event", "parse_live",
     "SLOW_DISK_SHARE", "SLOW_DISK_S_PER_FRAME", "disk_slow",
     "STEP_TITLES", "STEPS_RECORD", "StepNode", "StepTree", "DETAIL_KINDS", "JOINT_KEYS", "RANGES_SHOWN", "StepDetail",

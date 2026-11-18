@@ -2501,7 +2501,10 @@ measured after its deposition, see *Samples measured after their deposition* bel
      forward model, window 7 of 24*, *Comparing the networks: cu_p5 21.5, cu_v4 12.5 → cu_v4*, *Joint fit: iteration 2
      of 6 · median fit deviation 11.3 · 5:40 so far, about 11 min left* (seconds per iteration so far times the
      iterations left: the time if the fit takes all of them), *Drawing the main screen: window 5 of 20*. Between the
-     events of the package it names the step (*Step 3 of 4: Writing the report…*). With a newer analysis package the
+     events of the package it names the step (*Step 3 of 4: Writing the report…*). A line without a count of its own —
+     a network starting, the network proposing candidates for every window, the joint fit preparing, a step — adds how
+     long the run has been at it once that is 10 s: *Starting network cu_p5 (the first of 2 to compare) · 0:45 so
+     far*. With a newer analysis package the
      joint fit also says how far it is inside an iteration, several times a minute: *Joint fit: iteration 3 of 6 ·
      derivatives: 12 of 20 windows · 6:12 so far, about 9 min left* (the derivatives are the long part of an
      iteration; the time left is seconds per window × the windows left in this iteration + seconds per iteration ×
@@ -2509,7 +2512,8 @@ measured after its deposition, see *Samples measured after their deposition* bel
    - At the left, the four steps — **Read the frames**, **Find the solutions**, **Write the report**, **Draw the
      images** — each with its state and one line of what it found (frames read so far, time windows solved, the
      network that fits the data better, windows drawn), and the time since the start with the number of processes
-     at work. While the solutions are
+     and how many of them are at work now (*Running for 03:12 · Processes: 16 · 14 at work now*; a process at work
+     computes or reads from disk). While the solutions are
      found the line says what the network is doing and how far it has come: the network inputs prepared, the
      network proposing candidates, the windows solved and the model images computed, the windows refined (Refine:
      every window gets its candidates first, then each is refined), the iterations of the whole-scan refinement
@@ -2538,6 +2542,13 @@ measured after its deposition, see *Samples measured after their deposition* bel
      reading the frames from this disk is the slow part — a USB or network drive, or an on-access virus scan of every
      file — and that copying the scan folder to a local SSD first makes the import faster. More processes do not
      help then. With a fast disk, or an older package, nothing more is shown.
+   - **When nothing happens.** When none of the analysis's processes has computed or read for a minute and the
+     package has said nothing new, a note across the live view says so — the package has most likely stopped on an
+     error inside one of its processes and will not go on by itself — with the last line of its log, and **Stop
+     Analysis** ends it. The line at the top and the job status then say *No progress for 1:10: the analysis
+     package's processes are all waiting*. GIMaP does not stop it for you: a disk that does not answer looks the same
+     for a while. A last line that names *SCANS lam* and *model LAM* means that the network was made for another
+     wavelength (chapter 13).
    - A click on a step that has started shows what it found; a click on the step at work follows the analysis
      again. When the analysis ends, its result replaces the live view (after a failure or **Cancel**, what was shown
      before comes back). What the live view shows is not the result: the result is what the package writes at the
@@ -3418,6 +3429,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Research runtimes do not all expose a controllable seed.** 1D Predict records this limitation explicitly. Run records identify `software_version`; masks are counted, not stored as pixel lists. | Keep the input, settings and model files with the exported records. |
 | **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`, `assistant_provider_keys.json`; section 10.1): whoever can read that folder can read them. | On a shared computer, or with `GIMAP_HOME` on a shared drive, set the key as an environment variable instead, or **Remove** it after use. |
 | **Sputter ▸ Analyze reads Cu with networks trained for Cu on two polymer films (a homopolymer and a block copolymer)**. | For Cu on another substrate, choose **Polymer** for a polymer film and compare the model image with the measured one before using the values. |
+| **Sputter ▸ Analyze of Cu needs a wavelength of 0.105 nm (11.81 keV).** The analysis package's Cu networks and its Cu optics are computed for it; for a Cu scan at another photon energy a process of the package ends at the networks step and the analysis waits without ending (section 8.1, *When nothing happens*). | After a minute the live view says so, with the last line of the package's log (*… SCANS lam … nm, model LAM 0.105 nm …*); press **Stop Analysis**. Keep the photon energy that was measured: changing it to make the analysis run scales every q. |
 | **Sputter ▸ Analyze runs the analysis package that comes with GIMaP**, which analyses only the pairs of metal and substrate the package has a network for; its values are model values that were not compared with an independent measurement of your sample (section 8.1). The frames it reads are kept, one copy per request that changes the import (rate, geometry, mask, substrate …), in GIMaP's local folder, at most 5 GB together by default: the ones not used for the longest time are removed first. | Judge a solution by its model image beside the measured one, and compare with SEM, AFM or XRR where you can. **Details ▸ Storage** lists the imports, removes them and sets the limit. |
 | **Sputter reads folders of CBF frames only** (chapter 8). | For NeXus series, use Analyze's series map (section 5.6) and Fitting's in-situ series (section 6.6). |
 | **Sputter keeps every result folder** in the user data folder unless you chose another place; nothing removes them, and **File ▸ Save Project** holds the Sputter form and references its result folder. | For long scans choose **More options ▸ Save results in** on a data disk; delete old folders yourself; open a result again with **Open Result…**. |
@@ -3509,6 +3521,10 @@ missing package, activate the right Python environment and run `pip install -r` 
 - *The analysis stopped with an error (failed at …)* or *(exit code …)*: press **Details**; the log under
   **Analyze options** ends with the package's last lines. A last line *no network for … on …* means that the
   package has no network for this metal on this substrate; the line names the pairs it has.
+- *No progress for …: the analysis package's processes are all waiting*: the package has stopped working without
+  ending. The note in the live view shows the last line of its log, and **Stop Analysis** ends it (section 8.1,
+  *When nothing happens*). A last line with *SCANS lam … nm, model LAM … nm*: the scan's wavelength is not the one
+  the network was made for (chapter 13).
 - *The analysis finished, but this package does not write the data of the main screen*: the package is an older
   one; its report is in the folder named. Use a newer package.
 - **Open Result…** says *… holds no result of the analysis (main/main.json)*: the folder holds no finished

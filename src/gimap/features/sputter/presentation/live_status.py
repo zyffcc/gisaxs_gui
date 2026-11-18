@@ -6,7 +6,10 @@ with its counts and, where the pace is known, the time still to go: reading the 
 the comparison of the networks, the refinement after the preliminary result, the joint fit of the whole scan (its
 iteration, the median fit deviation, the time so far and — seconds per iteration times the iterations left — the time
 left if it takes all of them) and drawing the main screen. Where the events say nothing more than the step lines, the
-line is the step's (``ClientProgress.message``).
+line is the step's (``ClientProgress.message``). A line without a count of its own (a network starting, the network
+computing the candidates of every window, the joint fit preparing, a step line) adds how long the run has been at it
+once that is ``SO_FAR_MIN_S``; when the package has stopped working (``ActivityWatch.stalled``: none of its processes
+has worked and nothing has come from it for a minute) the line says that instead.
 
 The line stands at the top of the live view, in the job status of the bar and — once the preliminary result has
 replaced the live view — in the note line of the main screen. There, each iteration of the joint fit also draws its
@@ -61,6 +64,10 @@ JOINT_START_BATCH = "Joint fit: the starting point · {done} of {windows} window
 JOINT_PHASES = {"derivatives": "derivatives", "step": "trial step"}
 """The phases of an iteration of the joint fit (``joint_progress``): the derivatives are its long part."""
 DRAWING = "Drawing the main screen: window {drawn} of {total}"
+STALLED = "No progress for {time}: the analysis package's processes are all waiting"
+"""The package has stopped working (``ActivityWatch.stalled``): what the line says instead of the step at work."""
+SO_FAR_MIN_S = 10.0
+"""A line without a count of its own says how long the run has been at it, once that is this long."""
 JOINT_LABEL = "Joint fit, iteration {iteration} of {total}"
 """The overlay of the joint fit at work on the evolution plot."""
 STATUS_FIELD = "{status}"
@@ -68,7 +75,7 @@ STATUS_FIELD = "{status}"
 TEMPLATES = (READING, READING_FIRST, IMPORTED, STARTING_NETWORK, STARTING_NETWORKS, NETWORK_WINDOWS,
              *NETWORK_PHASES.values(), SEQUENCE, COMPARING, SOLVED, PRELIMINARY_SHOWN, REFINING, REFINING_JOINT,
              JOINT_POOL, JOINT_FIRST, JOINT, MEDIAN, SO_FAR, SO_FAR_LEFT, LEFT_MINUTES, LEFT_HOURS, LEFT_SOON, DRAWING,
-             JOINT_LABEL, JOINT_BATCH, JOINT_POOL_BATCH, JOINT_START_BATCH, *JOINT_PHASES.values())
+             JOINT_LABEL, JOINT_BATCH, JOINT_POOL_BATCH, JOINT_START_BATCH, *JOINT_PHASES.values(), STALLED)
 """The texts of the status line that need Chinese (numbers and network names are data)."""
 AFTER_PRELIMINARY = {"preliminary", "refine", "windows", "progress", "window", "joint_stage", "joint", "joint_progress"}
 """What the run does after its preliminary result until the report: the job status's bar then follows the line."""
@@ -96,36 +103,45 @@ def _with_left(words: str, seconds: Optional[float]) -> str:
     return f"{words} · {left}" if left else words
 
 
+def so_far(words: str, since: Optional[float], now: float) -> str:
+    """``words`` and, once the run has been at it for ``SO_FAR_MIN_S``, "· 1:12 so far" (since ``since``)."""
+    if not words or since is None or now - since < SO_FAR_MIN_S:
+        return words
+    return f"{words} · {text(SO_FAR, elapsed=clock_time(now - since))}"
+
+
 def status_line(run: Optional[LiveRun], now: Optional[float] = None) -> tuple:
     """(what the run does now in the interface language — "" where the step line says as much —, the share of it
     that is done (0–1) or None)."""
     if run is None or run.kind == "static":
         return "", None
     now = time.monotonic() if now is None else now
-    kind = run.activity
+    if run.watch.stalled(now):
+        return text(STALLED, time=clock_time(run.watch.quiet(now))), None
+    kind, since = run.activity, run.activity_at
     if kind == "frames" and run.frames_total:
         words = text(READING, done=_count(run.frames_done), total=_count(run.frames_total))
         return _with_left(words, run.left("frames", run.frames_total, now)), run.frames_done / run.frames_total
     if kind in ("centre", "detector"):
-        return tr(READING_FIRST), None
+        return so_far(tr(READING_FIRST), since, now), None
     if kind in ("reading", "imported"):
         frames = run.imported.number("frames") if run.imported is not None else None
         frames = frames if frames is not None else run.reading.number("frames_read") if run.reading else None
-        return (text(IMPORTED, frames=_count(frames)), 1.0) if frames is not None else ("", None)
+        return (so_far(text(IMPORTED, frames=_count(frames)), since, now), 1.0) if frames is not None else ("", None)
     if kind == "models" and run.families:
         family, count = run.families[0], len(run.families)
-        return (text(STARTING_NETWORKS, family=family, count=count) if count > 1 else
-                text(STARTING_NETWORK, family=family)), None
+        return so_far(text(STARTING_NETWORKS, family=family, count=count) if count > 1 else
+                      text(STARTING_NETWORK, family=family), since, now), None
     if kind in NETWORK_KINDS:
         return _network_line(run, now)
     if kind == "chosen":
-        return _chosen_line(run), None
+        return so_far(_chosen_line(run), since, now), None
     if kind == "preliminary":
-        return tr(PRELIMINARY_SHOWN), None
+        return so_far(tr(PRELIMINARY_SHOWN), since, now), None
     if kind == "refine" and run.refining is not None:
         family = str(run.refining.get("family") or run.family)
         joint = (run.refining.number("iterations") or 0) > 0
-        return text(REFINING_JOINT if joint else REFINING, family=family), None
+        return so_far(text(REFINING_JOINT if joint else REFINING, family=family), since, now), None
     if kind == "joint_progress" and run.joint_progress is not None:
         return _joint_batch_line(run, now)
     if kind in ("joint_stage", "joint"):
@@ -145,14 +161,16 @@ def _network_line(run: LiveRun, now: float) -> tuple:
     if not phase and run.solved(family):  # a package that does not count its phases: the windows solved
         phase = "render"
     if not phase:
-        return (text(NETWORK_WINDOWS, family=family, total=_count(total)), 0.0) if family else ("", None)
+        if not family:
+            return "", None
+        return so_far(text(NETWORK_WINDOWS, family=family, total=_count(total)), run.activity_at, now), 0.0
     done, phase_total = run.phase_count(phase, family)
     if phase == "render" and not run.progress.get((family, "render")):
         done = run.solved(family)
     total = phase_total or total
     words = text(NETWORK_PHASES[phase], family=family, done=_count(done), total=_count(total))
-    if phase == "network":
-        return words, None
+    if phase == "network":  # one computation for every window: no count, the time it has taken
+        return so_far(words, (run.paces.get((family, phase)) or (None,))[0], now), None
     return _with_left(words, run.left((family, phase), total, now)), (min(1.0, done / total) if total else None)
 
 
@@ -171,7 +189,7 @@ def _joint_line(run: LiveRun, now: float) -> tuple:
             return "", None
         total = int(stage.number("total") or 0)
         if stage.get("stage") != "fit":
-            return text(JOINT_POOL, windows=_count(stage.number("windows"))), None
+            return so_far(text(JOINT_POOL, windows=_count(stage.number("windows"))), run.joint_stage_at, now), None
         words = text(JOINT_FIRST, total=total)
         elapsed = run.joint_elapsed(now)
         return (words if elapsed is None else f"{words} · {text(SO_FAR, elapsed=clock_time(elapsed))}"), 0.0
@@ -218,10 +236,11 @@ class LiveStatusMixin:
         line, _share = status_line(self._live)
         if line:
             return line
-        tracker = self._live_tracker()
+        tracker, run = self._live_tracker(), self._live
         if tracker is not None and tracker.step:
             template, values = tracker.message()
-            return text(template, **dict(values, stage=tr(str(values.get("stage", "")))))
+            words = text(template, **dict(values, stage=tr(str(values.get("stage", "")))))
+            return so_far(words, run.activity_at, time.monotonic()) if run.activity == "step" else words
         return tr(STARTING)
 
     def _live_show_status(self) -> None:
@@ -291,4 +310,5 @@ class LiveStatusMixin:
         self._live_preliminary = None
 
 
-__all__ = ["JOINT_LABEL", "LiveStatusMixin", "STATUS_FIELD", "TEMPLATES", "left_words", "status_line"]
+__all__ = ["JOINT_LABEL", "LiveStatusMixin", "SO_FAR_MIN_S", "STALLED", "STATUS_FIELD", "TEMPLATES", "left_words",
+           "so_far", "status_line"]

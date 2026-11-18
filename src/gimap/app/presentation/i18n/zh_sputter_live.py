@@ -153,6 +153,17 @@ SPUTTER_LIVE_ZH = {
     "file). Copying the scan folder to a local SSD first makes the import faster.":
         "慢在从这个磁盘读帧（USB 或网络驱动器，或者杀毒软件在访问时扫描每个文件）。"
         "先把扫描文件夹复制到本机 SSD，读入会快得多。",
+    # -- whether the package's processes work (live_panel.py, live_status.py) ---------------------------------------
+    "{busy} at work now": "其中 {busy} 个正在工作",
+    "none at work now": "都在等待",
+    "No progress for {time}: the analysis package's processes are all waiting": "已有 {time} 没有进展：分析包的进程都在等待",
+    "Nothing has happened for {time}: none of the analysis package's processes is computing or reading, and it has "
+    "said nothing new. It has most likely stopped on an error inside one of its processes and will not go on by "
+    "itself.":
+        "已有 {time} 什么都没发生：分析包的进程都没有在计算或读数据，它也没有新的消息。"
+        "它很可能在某个进程里因错误停下了，不会自己继续。",
+    "Last line of its log: {line}": "它日志的最后一行：{line}",
+    "Stop Analysis": "停止分析",
 }
 
 __all__ = ["SPUTTER_LIVE_ZH"]

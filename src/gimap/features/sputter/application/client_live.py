@@ -38,8 +38,9 @@ The events, by step:
 ``LiveRun`` keeps what the page shows: the pictures of the latest events and every solution found so far, as a
 ``ClientResult`` (one window per time, its entries the solutions of the network) that the main screen's plots draw,
 and what the run is doing now (``activity``: the kind of the latest event, or ``step`` after a step line) with the
-pace of its counts (``left``: the seconds still to go, estimated from the arrival times). Nothing here is a result: the
-result is what the package writes at the end, and the page shows it then.
+pace of its counts (``left``: the seconds still to go, estimated from the arrival times), and whether the package's
+processes work at all (``watch``: ``activity.py``). Nothing here is a result: the result is what the package writes at
+the end, and the page shows it then.
 """
 
 from __future__ import annotations
@@ -56,6 +57,7 @@ from src.gimap.shared.geometry.conventions import canonical_from_index_center
 
 from ..domain import LISTED_ONLY, ClientEntry, ClientQuantity, ClientResult, ClientWindow, WindowPatterns
 from ..domain.client import STATIC_KIND, number
+from .activity import ActivityWatch
 from .live_progress import LiveProgressMixin
 from .live_steps import StepTree
 
@@ -162,6 +164,10 @@ class LiveRun(LiveProgressMixin):
     drawn: int = 0
     activity: str = ""
     """What the run does now: the kind of the latest event the run took, or ``step`` when a step line came last."""
+    activity_at: float = 0.0
+    """When it began doing that (monotonic seconds: the first event of that kind in a row)."""
+    watch: ActivityWatch = field(default_factory=ActivityWatch)
+    """Whether the package's processes work, and when it last said anything (``activity.py``)."""
     preliminary: bool = False
     """The network's result was written (the page shows it) and the refinement goes on."""
     refining: Optional[LiveEvent] = None
@@ -200,13 +206,17 @@ class LiveRun(LiveProgressMixin):
         now = time.monotonic() if now is None else float(now)
         kind = self._take(event, now)
         if kind and kind != "step":  # a step of the tree started or ended: what happens now is still the counts' line
-            self.activity = kind
+            self._doing(kind, now)
         return kind
 
-    def note_step(self) -> None:
+    def note_step(self, now: Optional[float] = None) -> None:
         """A step line of the package came (a step started or ended): it says what the run does until the next
         event."""
-        self.activity = "step"
+        self._doing("step", time.monotonic() if now is None else float(now))
+
+    def _doing(self, kind: str, now: float) -> None:
+        if kind != self.activity:
+            self.activity, self.activity_at = kind, now
 
     def _take(self, event: LiveEvent, now: float) -> str:
         kind = event.kind
