@@ -18,7 +18,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   particles in Model*, *Spheres and upright cylinders (1–2)* or *Any particles (1–3)*; there is one way through
   (no *Options ▸ Predict: the solutions* any more), and without σ in the file Predict takes a relative σ from the
   scatter of the curve about its trend. On one core it takes about 5 s per curve with the composition given, about
-  14 s choosing among one or two populations and about 50 s among one to three. **The fit1d kit and the quick
+  20 s choosing among one or two populations and 30–60 s among one to three. **The fit1d kit and the quick
   physical fit are removed:** *Predict parameters (fit1d)* with `utils/gisaxs1d_gui_kit` (about 62 MB) and the
   dependency `threadpoolctl`, *Find the particle shape (no AI)*, and the *Physical fit (numerical)* and *fit1d*
   methods of the 1D Predict window, which now has the one method (its settings: composition, q unit and sides, the
@@ -35,7 +35,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   more, the run asks which model you expect (**model**); a reported value at a bound of its range is a point to
   check, and χ²/N above 10 a poor fit, as before. 2π/q\* no longer starts the fit (it stays a result of its own),
   and the solutions are no longer ranked by the Huber misfit with the rule of 10 % of χ²/N. Batch Export takes
-  about 15 s per frame and needs no start values for the particle model. On the public GALAXI example the run now
+  about 20 s per frame and needs no start values for the particle model. On the public GALAXI example the run now
   reports two upright cylinders without a paracrystal (R 3.11 nm and 5.49 nm, χ²/N 1.27, probability 1.00) with
   *ν_Res at its lower bound* to check: for these spheres, fit a sphere in Fitting (manual, section 1.3).
 - **Fitting ▸ Predict parameters (new):** GIMaP's own network finds the particles of a 1D GISAXS cut and their
@@ -46,9 +46,13 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   (about 13 MB, in the repository and the packages) was trained on simulated cuts of Fitting's model and runs with
   numpy; GIMaP checks it against the SHA-256 of its record. It is also the one method of the 1D Predict window and of
   the In-situ series' **Predict each frame**. Physics and Methods 9.13 describes it and its benchmarks: on fit1d's 200
-  held-out curves it chooses the composition right in 87 % / 48 % of them (fit1d's own physics / with beam tail and
-  roughness; fit1d 69 % / 30 %), with median errors of 0.7–0.9 % in R (fit1d 0.5–1.0 %); its large errors are larger
-  than fit1d's, and its 68 % intervals hold the truth in 39–62 % of the cases.
+  held-out curves it chooses the composition right in 87 % / 68 % of them (fit1d's own physics / with beam tail and
+  roughness; fit1d 69 % / 30 %), with median errors of 0.6–0.8 % in R (fit1d 0.5–1.0 %) and large errors about
+  fit1d's (90th percentile of R 9.5 % / 18 %; fit1d 7.1 % / 19 %). Its intervals allow Fitting's model an error of 5 %
+  of the intensity at every point (the fit and χ²ᵣ keep the curve's σ), and its 68 % intervals hold the truth in
+  60–91 % of the cases (fit1d's errors 18–70 %). Besides the network's most probable modes it refines three modes of
+  its tempered weights, so that fewer solutions end in a wrong mode (curves with a population more than 20 % off in R:
+  22 instead of 34 of the 200, 286 instead of 386 of 1200 curves of one to three populations).
 - **1D Predict: General V5 and Single RC specialist removed.** On fit1d's 200 held-out curves V5 recovered R with a
   median error of 31 % and D of 22 % (20 s per curve); Predict parameters 0.7 % and 0.0–0.1 %. Settings saved with
   a V5 method open as Predict parameters. Fitting's *AI proposal (1D Predict)* is replaced by **Predict

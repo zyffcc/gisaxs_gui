@@ -1625,7 +1625,7 @@ scan, without `_m01`.
   one sphere, random cylinder or vertical cylinder with a paracrystal; a cut of more than 1000 points is merged
   first). Every frame is predicted from its own data, without start values. The two halves are never fitted
   together. One row per frame, the most probable solution: `halves`, `points`, model, `chi2` (χ²/N, as in section
-  5.5), `probability` and the parameters in nm. About 15 s per frame. The choice starts on the Cuts step's halves
+  5.5), `probability` and the parameters in nm. About 20 s per frame. The choice starts on the Cuts step's halves
   when they are the mean or one half, else on the last batch's. A frame without counts, or without points on the
   chosen half (*No points on the q > 0 half*), is not fitted and its reason is listed. The curves for Fitting still
   hold both halves with signed qy and name the choice.
@@ -2019,7 +2019,9 @@ range it knows, and a value at a bound of that range is flagged (section 6.4).
 method. GIMaP's network, trained on simulated cuts of Fitting's own model, proposes compositions and values; the
 model weighs them against the measured points (a posterior), and every solution is refined by least squares. Each
 solution comes with how probable it is and with the range in which each value lies (its 68 % interval). The
-network (about 13 MB) comes with GIMaP and runs with numpy: nothing has to be installed.
+intervals and probabilities allow the model an error of 5 % of the intensity at every point, since Fitting's model
+describes a measured curve only to a few per cent; the fit itself and its χ²ᵣ use the curve's own σ. The network
+(about 13 MB) comes with GIMaP and runs with numpy: nothing has to be installed.
 [Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters) describes the method and its
 benchmarks.
 
@@ -2046,8 +2048,8 @@ benchmarks.
    others the model reweights its proposals).
 3. Without σ in the file, Predict takes a relative σ from the scatter of the curve about its trend (at least 1 %).
 4. Press **Fit**. It runs in a separate process; **Stop** ends it without a result. For a curve of a few hundred
-   points on one core it takes about 5 s with **The particles in Model**, about 14 s with **Spheres and upright
-   cylinders (1–2)** and about 50 s with **Any particles (1–3)**.
+   points on one core it takes about 5 s with **The particles in Model**, about 20 s with **Spheres and upright
+   cylinders (1–2)** and 30–60 s with **Any particles (1–3)**.
 
 There is one way through, and nothing else to set: the network's 1000 samples of each composition are weighted
 against the curve; the most probable values of each composition are refined by least squares; when none of them

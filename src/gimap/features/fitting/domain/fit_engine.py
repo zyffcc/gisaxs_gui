@@ -425,5 +425,11 @@ def _at_bounds(model: FitModel, problem: _Problem) -> tuple:
     return tuple(edges)
 
 
-__all__ = ["PHASES", "PROGRESS_LINE", "FitData", "FitResult", "FitStopped", "fit", "fit_scales", "log_rmse",
-           "residuals", "stopped_result"]
+def errors(model: FitModel, data: FitData) -> tuple[dict, tuple]:
+    """The errors of the free parameters at the model's values for ``data`` (and the strongly correlated pairs), as
+    a fit reports them, without fitting: e.g. with σ that include a model error."""
+    return _errors(model, data, _Problem(model, data, None, None, 1))
+
+
+__all__ = ["PHASES", "PROGRESS_LINE", "FitData", "FitResult", "FitStopped", "errors", "fit", "fit_scales",
+           "log_rmse", "residuals", "stopped_result"]

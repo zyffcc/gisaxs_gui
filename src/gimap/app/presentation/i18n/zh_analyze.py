@@ -249,7 +249,7 @@ ANALYZE_ZH = {
     'In-plane spacing from the correlation peak': '由关联峰求面内间距',
     'Predicting the particles of the horizontal cut': '预测水平切线的颗粒',
     'can take up to a minute': '可能需要一分钟左右',
-    'takes about 15 s': '大约需要 15 s',
+    'takes about 20 s': '大约需要 20 s',
     'a few seconds': '需要几秒',
     'a few seconds when many frames are summed': '求和很多帧时需要几秒',
     'Each frame: the detector image (PNG)': '每帧：探测器图像（PNG）',
@@ -327,12 +327,12 @@ ANALYZE_ZH = {
     'No solution.': '没有解。',
     'Most probable: {model} (p = {p}), {params} nm, χ²/N = {chi}': '最可能：{model}（p = {p}），{params} nm，χ²/N = {chi}',
     'Probability': '概率',
-    'Each frame: Predict parameters on the mean of both halves of the horizontal cut (Halves of the cut, above); about 15 s per frame.':
-        '每帧：对水平切线两半的平均做预测参数（见上方“切线的两半”）；每帧约 15 s。',
-    'Each frame: Predict parameters on the q > 0 half of the horizontal cut (Halves of the cut, above); about 15 s per frame.':
-        '每帧：对水平切线 q > 0 的一半做预测参数（见上方“切线的两半”）；每帧约 15 s。',
-    'Each frame: Predict parameters on the q < 0 half of the horizontal cut (Halves of the cut, above); about 15 s per frame.':
-        '每帧：对水平切线 q < 0 的一半做预测参数（见上方“切线的两半”）；每帧约 15 s。',
+    'Each frame: Predict parameters on the mean of both halves of the horizontal cut (Halves of the cut, above); about 20 s per frame.':
+        '每帧：对水平切线两半的平均做预测参数（见上方“切线的两半”）；每帧约 20 s。',
+    'Each frame: Predict parameters on the q > 0 half of the horizontal cut (Halves of the cut, above); about 20 s per frame.':
+        '每帧：对水平切线 q > 0 的一半做预测参数（见上方“切线的两半”）；每帧约 20 s。',
+    'Each frame: Predict parameters on the q < 0 half of the horizontal cut (Halves of the cut, above); about 20 s per frame.':
+        '每帧：对水平切线 q < 0 的一半做预测参数（见上方“切线的两半”）；每帧约 20 s。',
     ' (fitting the peaks)': '（拟合峰）',
     ' (fitting the particle model)': '（拟合颗粒模型）',
     '{name}: q = {q} ± {dq} Å⁻¹ (d = {d} Å), FWHM {w} Å⁻¹, area {a}, χ²ᵣ {chi}': '{name}：q = {q} ± {dq} Å⁻¹（d = {d} Å），FWHM {w} Å⁻¹，面积 {a}，χ²ᵣ {chi}',

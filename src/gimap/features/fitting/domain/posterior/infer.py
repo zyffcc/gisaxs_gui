@@ -36,6 +36,9 @@ AMPLITUDE_RANGE = 10.0
 TAIL_WIDTH_MAX = E.TAIL_WIDTH_MAX
 MODE_SPACING, MODE_SPREAD = 0.1, 0.05
 MAX_MODES = 4
+EXPLORE_ESS = 50.0
+"""The effective samples of the tempered weights from which the ``explore`` modes of a composition are found: on a
+bright curve the weights sit on one or two samples, and modes of slightly lower likelihood would never be refined."""
 SHARP = 0.25
 """A sample's resolution σ_q below this fraction of the smallest spacing of the measured points is not applied."""
 TABLE_POINTS = 256
@@ -227,6 +230,8 @@ class Composition:
     head_log_prob: float
     probability: float = 0.0
     modes: list = field(default_factory=list)
+    explore: list = field(default_factory=list)
+    """Modes of the tempered weights (``tempered``): more starting points for least squares."""
 
     @property
     def weights(self) -> np.ndarray:
@@ -277,9 +282,32 @@ def _distance(a, b, types) -> np.ndarray:
     return worst
 
 
-def modes(result: Composition, points: int) -> list[Mode]:
-    """The weighted samples grouped around the heaviest ones (at most MAX_MODES, each ≥ 1 % of the mass)."""
-    weights = result.weights
+def tempered(log_weights, ess: float) -> np.ndarray:
+    """The normalised weights raised to the largest power β ≤ 1 that gives ``ess`` effective samples."""
+    shifted = np.asarray(log_weights, float) - np.max(log_weights)
+    shifted = np.where(np.isfinite(shifted), shifted, -np.inf)
+
+    def weights(beta):
+        w = np.exp(beta * shifted)
+        return w / w.sum()
+
+    def effective(beta):
+        w = weights(beta)
+        return 1.0 / np.sum(w * w)
+
+    low, high = 0.0, 1.0
+    if effective(1.0) < ess:
+        for _ in range(40):
+            middle = 0.5 * (low + high)
+            low, high = (middle, high) if effective(middle) >= ess else (low, middle)
+        return weights(low)
+    return weights(1.0)
+
+
+def modes(result: Composition, points: int, weights: Optional[np.ndarray] = None) -> list[Mode]:
+    """The weighted samples grouped around the heaviest ones (at most MAX_MODES, each ≥ 1 % of the mass); ``weights``
+    instead of the composition's own (e.g. tempered)."""
+    weights = result.weights if weights is None else weights
     types = E.composition_types(result.index)
     order = np.argsort(-weights)
     seeds = []
@@ -359,8 +387,9 @@ def infer(network, data: Cut, compositions: Optional[Sequence[int]] = None, *, a
     for r, p in zip(out, probabilities):
         r.probability = float(p)
         r.modes = modes(r, data.q.size)
+        r.explore = modes(r, data.q.size, tempered(r.log_weights, EXPLORE_ESS))
     return sorted(out, key=lambda r: -r.probability)
 
 
-__all__ = ["AMPLITUDE_RANGE", "TAIL_WIDTH_MAX", "Composition", "Cut", "Likelihood", "Mode", "PHYSICAL_NAMES", "candidates",
-           "dimensionless", "infer", "modes", "physical", "sample_composition"]
+__all__ = ["AMPLITUDE_RANGE", "EXPLORE_ESS", "TAIL_WIDTH_MAX", "Composition", "Cut", "Likelihood", "Mode", "PHYSICAL_NAMES",
+           "candidates", "dimensionless", "infer", "modes", "physical", "sample_composition", "tempered"]

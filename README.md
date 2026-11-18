@@ -236,7 +236,7 @@ Physics and Methods, section 9.13, describes the method and its benchmarks.
 - **One curve**: Fitting ▸ Fit ▸ **Predict parameters**, then **Fit**; **Particles** chooses what it tries
   (*The particles in Model*, *Spheres and upright cylinders (1–2)* or *Any particles (1–3)*). The solutions go to
   Results with their probability, the most probable one into Model; **Refine These Values** refines it. On one
-  core it takes about 5 s with the particles of Model and about 14 s choosing among one or two populations.
+  core it takes about 5 s with the particles of Model and about 20 s choosing among one or two populations.
 - **Many curves**: **Tools ▸ 1D Predict — Fit Many Curves…** (also in the **Fitting** menu): **Add
   curves…** or **Use current cut**, set the composition, the q unit and sides, the cut's q_z and the σ of files
   without one in **Parameters…**, then **Fit curve**. The window has this one method.

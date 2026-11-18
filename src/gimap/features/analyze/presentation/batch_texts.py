@@ -39,11 +39,11 @@ HALVES_UNUSED = "Used when the curve for Fitting is saved (Data, above) or a par
 says nothing under the combo, which is off."""
 MODEL_LINES = {
     "mean": "Each frame: Predict parameters on the mean of both halves of the horizontal cut (Halves of the cut, "
-            "above); about 15 s per frame.",
+            "above); about 20 s per frame.",
     "positive": "Each frame: Predict parameters on the q > 0 half of the horizontal cut (Halves of the cut, "
-                "above); about 15 s per frame.",
+                "above); about 20 s per frame.",
     "negative": "Each frame: Predict parameters on the q < 0 half of the horizontal cut (Halves of the cut, "
-                "above); about 15 s per frame.",
+                "above); about 20 s per frame.",
 }
 """What the particle model of the batch (Predict parameters) is fitted to."""
 SENT_TO_FITTING = ("Each frame: the curve for Fitting (q in Å⁻¹, I, σ, pixels) → {file}. The folder then opens in "
