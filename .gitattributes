@@ -17,3 +17,6 @@ utils/gisaxs1d_gui_kit/** -text
 # MANIFEST.json (sha256 of the bytes); its launcher run.cmd ends its lines with CRLF and the rest with LF:
 # no line-ending conversion in this folder.
 utils/sputter_client/** -text
+# Slurm and shell scripts run on Linux (tools/ml1d/maxwell): LF in every checkout.
+*.sbatch text eol=lf
+*.sh text eol=lf
