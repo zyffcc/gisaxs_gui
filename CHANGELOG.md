@@ -45,6 +45,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   scan at once: one metal-amount factor for the scan, sizes, coverage and amount that do not decrease, smooth in
   time. Windows are no longer refined one by one, and only one network is fitted, so a 60 s scan takes about a
   quarter of the time it took before (about 20 min instead of about an hour on a small office PC).
+- **Sputter ▸ Analyze:** when the joint fit of the whole scan could not finish (it is tried once more with fewer
+  processes when memory runs short), the result says so in the line above the window selector, in the warning
+  colour: the solutions shown are the network's, and the evolution can jump between windows.
 - **Sputter ▸ Analyze, faster import and a result first:** every frame is read from disk once (three times before),
   and only the frames the analysis uses are read: the first 30 s, the last seconds and the time windows with a
   margin — on a long scan a fraction of the frames, with exactly the same values in every window. For polymer and Cu
@@ -55,6 +58,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   Frames too. The live view says how many processes run and, with a newer analysis package, how long reading the
   frames from disk takes per frame; when the disk is the slow part (a USB or network drive, or a virus scan of every
   file) it says so and suggests copying the scan folder to a local SSD. **Details ▸ Report** adds *Time per step*.
+- **Sputter ▸ Analyze says what it is doing now:** one line at the top of the live view, in the job status and,
+  under the preliminary result, on the main screen — for example *Reading frames: 400 of 1,200 · about 4 min left*,
+  *Network cu_v4: drawing the candidates with the forward model, window 7 of 24*, *Joint fit: iteration 2 of 6 ·
+  median fit deviation 11.3 · 5:40 so far, about 11 min left*. While the joint fit runs, its current solution is
+  drawn dashed over the preliminary result's evolution after every iteration, until the final result replaces it.
 - **Sputter ▸ Real Space:** a solution with a continuous base layer is drawn as a closed film: the top view is the
   metal of the layer over the whole square, with the grains as relief on it, and the line says *Continuous film …
   nm, grains on top: …*.

@@ -9,6 +9,10 @@ nominal thickness), with the range of a value where the package gives one.
 Each point is the entry shown for its window (the user's choice, else the window's default); a quantity a window does
 not have leaves a gap in its line; samples at one position are joined through their median. The window shown above is
 marked on both plots (a line at its position, a ring around its points); a click selects the window nearest to it.
+
+An overlay (``set_overlay``: times, values per quantity and a name) draws a second solution dashed over the lines in
+their colours, named once in the legend with a dashed grey line — the joint fit of the whole scan at work while the
+main screen shows the preliminary result. It stays through redraws until it is set to None.
 """
 
 from __future__ import annotations
@@ -48,6 +52,10 @@ WIDTHS_SHARES = (1.9, 1.5)
 """The same when the share plot holds several lines (their names stand above it)."""
 SAME_POSITION = 3.0
 """Windows no farther apart than this (pixels along the axis) are told apart by the height of the click."""
+OVERLAY_KEYS = (("R_nm", "gap_nm", "H_nm", "D_nm"), ("coverage",))
+"""The quantities an overlay draws on the size plot and on the share plot."""
+OVERLAY_COLOUR = "#8a8a8a"
+"""The dashed line that names the overlay in the legend (readable in both themes)."""
 
 
 def _finite(values) -> list:
@@ -77,6 +85,10 @@ class EvolutionPlot:
         self._positions: list = []
         self.series: dict = {}
         """Quantity -> (positions, values) as drawn."""
+        self.overlay: Optional[tuple] = None
+        """(times, {quantity: values}, name) drawn dashed over the lines, or None."""
+        self.overlay_series: dict = {}
+        """Quantity -> (positions, values) of the overlay as drawn."""
         try:
             from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
             from matplotlib.figure import Figure
@@ -96,6 +108,15 @@ class EvolutionPlot:
         """The chosen entries of every window of ``result`` (None: nothing), window ``current`` marked."""
         self._last = (result, dict(choices or {}), current)
         self._draw()
+
+    def set_overlay(self, overlay: Optional[tuple], *, redraw: bool = True) -> None:
+        """Draw (times, {quantity: values}, name) dashed over the lines; None: no overlay. Drawn again at once unless
+        ``redraw`` is False (a ``draw`` follows)."""
+        if overlay == self.overlay:
+            return
+        self.overlay = overlay
+        if redraw and self._last is not None:
+            self._draw()
 
     def mark(self, current: Optional[int]) -> None:
         """Move the mark to window ``current`` (the lines stay)."""
@@ -146,7 +167,7 @@ class EvolutionPlot:
         result, choices, current = self._last
         figure = self.figure
         figure.clear()
-        self._marks, self._rings, self._axes, self.series = [], [], None, {}
+        self._marks, self._rings, self._axes, self.series, self.overlay_series = [], [], None, {}, {}
         self._drawn, self._positions = ([], []), []
         if result is not None and result.windows:
             self._plots(result, choices)
@@ -226,6 +247,7 @@ class EvolutionPlot:
                 self._line(axes, values, spread, colour, tr(RELATIVE_RADIUS if porous and key == "R_nm" else name))
                 self._drawn[plot].append(values)
                 limits[plot].extend(_finite(values) + _finite(spread[0]) + _finite(spread[1]))
+        overlaid = self._overlay_lines(result, limits)
         several = len(self._drawn[1]) > 1
         sizes.set_ylabel(tr(SIZE_LABEL))
         shares.set_ylabel(tr(SHARE_LABEL if several or (self._drawn[1] and "coverage" not in self._shown(1))
@@ -236,8 +258,15 @@ class EvolutionPlot:
             shares.set_ylim(0.0, max(1.0, 1.05 * max(limits[1])))
         for axes, drawn in ((sizes, self._drawn[0]), (shares, self._drawn[1] if several else [])):
             if drawn:  # above the plot: never over a line
-                axes.legend(loc="lower left", bbox_to_anchor=(0.0, 1.0), ncol=max(1, len(drawn)), fontsize=8,
-                            frameon=False, handlelength=1.4, columnspacing=1.2, borderaxespad=0.2)
+                handles, names = axes.get_legend_handles_labels()
+                if overlaid and axes is sizes:  # the overlay, named once
+                    from matplotlib.lines import Line2D
+
+                    handles.append(Line2D([], [], color=OVERLAY_COLOUR, linestyle="--", linewidth=1.5))
+                    names.append(overlaid)
+                axes.legend(handles, names, loc="lower left", bbox_to_anchor=(0.0, 1.0), ncol=max(1, len(handles)),
+                            fontsize=8, frameon=False, handlelength=1.4 if not overlaid else 2.0, columnspacing=1.2,
+                            borderaxespad=0.2)
         label = axis_label(result)
         for axes in (sizes, shares):
             axes.set_xlabel(label)
@@ -246,6 +275,24 @@ class EvolutionPlot:
             self._rings.append(axes.plot([], [], "o", markersize=9, markerfacecolor="none",
                                          markeredgecolor=MARK_COLOUR, markeredgewidth=1.3, zorder=5)[0])
         self._place()
+
+    def _overlay_lines(self, result, limits: tuple) -> str:
+        """The overlay, dashed in the colours of its quantities (an in-situ result only); returns its name ("" when
+        nothing of it was drawn)."""
+        if self.overlay is None or result.static or result.porous:
+            return ""
+        times, values, name = self.overlay
+        colours = {key: colour for key, _name, colour in (*SIZE_SERIES, *SHARE_SERIES)}
+        for plot, (axes, keys) in enumerate(zip(self._axes, OVERLAY_KEYS)):
+            for key in keys:
+                found = list(values.get(key) or ())
+                if len(found) != len(times) or not _finite(found):
+                    continue
+                axes.plot(times, found, "--", color=colours[key], linewidth=1.5, alpha=0.95, label="_nolegend_",
+                          zorder=4)
+                self.overlay_series[key] = (list(times), found)
+                limits[plot].extend(_finite(found))
+        return name if self.overlay_series else ""
 
     def _shown(self, plot: int) -> list:
         """The quantities drawn in a plot."""

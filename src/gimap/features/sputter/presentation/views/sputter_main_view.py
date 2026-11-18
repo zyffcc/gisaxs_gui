@@ -369,6 +369,11 @@ class SputterMainView:
         selector.addSpacing(8)
         selector.addWidget(self.image_switch)
         layout.addLayout(selector)
+        self.run_note = ElidedLabel(view)  # while Analyze goes on after its preliminary result: what it does now
+        self.run_note.setObjectName("sputterRunNote")
+        self.run_note.setProperty("gimapRole", "info")
+        self.run_note.setVisible(False)
+        layout.addWidget(self.run_note)
 
         self.pattern_host = QStackedWidget(view)  # 0: the two images, 1: the real-space picture
         patterns_page, space_page = QWidget(self.pattern_host), QWidget(self.pattern_host)

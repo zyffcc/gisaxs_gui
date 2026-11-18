@@ -115,6 +115,40 @@ SPUTTER_LIVE_ZH = {
     "disk {seconds} s per frame": "磁盘每帧 {seconds} s",
     "Reading {done} of {total} frames": "正在读入第 {done} 帧（共 {total} 帧）",
     "Processes: {count}": "进程数：{count}",
+    # -- what the analysis does now, in one line (live_status.py) --------------------------------------------------
+    "Reading frames: {done} of {total}": "正在读入帧：{done} / {total}",
+    "Reading the frames: finding the beam centre and the pixel mask": "正在读入帧：寻找束心，生成像素掩膜",
+    "{frames} frames read; the networks start": "已读入 {frames} 帧，网络即将开始",
+    "Starting network {family}": "正在启动网络 {family}",
+    "Starting network {family} (the first of {count} to compare)": "正在启动网络 {family}（要比较的 {count} 个网络中的第一个）",
+    "Network {family}: starting on {total} time windows": "网络 {family}：开始处理 {total} 个时间窗",
+    "Network {family}: reading the network's input, window {done} of {total}":
+        "网络 {family}：正在准备网络输入，第 {done}/{total} 个时间窗",
+    "Network {family}: the network proposes candidates for {total} windows":
+        "网络 {family}：网络正在为 {total} 个时间窗给出候选结构",
+    "Network {family}: drawing the candidates with the forward model, window {done} of {total}":
+        "网络 {family}：正在用正向模型绘制候选，第 {done}/{total} 个时间窗",
+    "Network {family}: refining the best candidate of each window, {done} of {total}":
+        "网络 {family}：正在精修各时间窗的最佳候选，{done}/{total}",
+    "Joint fit: iteration {done} of at most {total}": "联合精修：第 {done} 次迭代（最多 {total} 次）",
+    "Comparing the networks: {scores} → {family}": "比较网络：{scores} → {family}",
+    "Network {family}: every window solved": "网络 {family}：所有时间窗已求解",
+    "Preliminary result shown; the refinement of every window starts": "已显示初步结果；开始逐个精修时间窗",
+    "Network {family}: refining every window": "网络 {family}：正在逐个精修时间窗",
+    "Network {family}: refining every window, then the joint fit of the whole scan":
+        "网络 {family}：正在逐个精修时间窗，之后联合精修整条扫描",
+    "Joint fit: preparing (each window tries its neighbours' solutions, {windows} windows)":
+        "联合精修：准备中（每个时间窗试用相邻时间窗的解，共 {windows} 个时间窗）",
+    "Joint fit: working on iteration 1 of {total}": "联合精修：正在进行第 1/{total} 次迭代",
+    "Joint fit: iteration {iteration} of {total}": "联合精修：第 {iteration}/{total} 次迭代",
+    "median fit deviation {median}": "拟合偏差中位数 {median}",
+    "{elapsed} so far": "已用 {elapsed}",
+    "{elapsed} so far, {left}": "已用 {elapsed}，{left}",
+    "about {minutes} min left": "约剩 {minutes} 分钟",
+    "about {hours} h {minutes} min left": "约剩 {hours} 小时 {minutes} 分钟",
+    "less than a minute left": "剩不到 1 分钟",
+    "Drawing the main screen: window {drawn} of {total}": "正在绘制主屏：第 {drawn}/{total} 个时间窗",
+    "Joint fit, iteration {iteration} of {total}": "联合精修 第 {iteration}/{total} 次",
     "Reading the frames from this disk is the slow part (a USB or network drive, or an on-access virus scan of every "
     "file). Copying the scan folder to a local SSD first makes the import faster.":
         "慢在从这个磁盘读帧（USB 或网络驱动器，或者杀毒软件在访问时扫描每个文件）。"

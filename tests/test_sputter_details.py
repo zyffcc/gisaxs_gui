@@ -175,6 +175,24 @@ def test_a_preliminary_result_replaces_the_live_view_until_the_final_one(tmp_pat
     _close(page)
 
 
+def test_a_result_whose_joint_fit_did_not_finish_says_so(tmp_path):
+    page = _page(tmp_path)
+    page.show()
+    out = write_result(tmp_path / "out")
+    analysis = json.loads((out / "analysis.json").read_text(encoding="utf-8"))
+    (out / "analysis.json").write_text(json.dumps(dict(analysis, joint_fit={"done": False, "workers": 2, "iterations": 6})),
+                                       encoding="utf-8")
+    assert page.open_client_result(out)
+    assert page.client_result.joint_failed
+    assert "the joint fit of the whole scan did not finish" in page.result_name.text()
+    assert page.result_name.property("gimapRole") == "warning"
+    good = write_result(tmp_path / "good")
+    assert page.open_client_result(good)
+    assert not page.client_result.joint_failed and "did not finish" not in page.result_name.text()
+    assert page.result_name.property("gimapRole") == "muted"
+    _close(page)
+
+
 # -- the deposition rate and its unit -----------------------------------------------------------------------------------
 
 

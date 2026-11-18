@@ -449,16 +449,13 @@ class SputterClientMixin:
         if tracker is None or not tracker.feed(line):
             return
         self._live_progress(tracker)
-        if self._client_stop:
-            return
-        template, values = tracker.message()
-        if template:
-            self._client_status("running", [(template, values)], tracker.fraction)
+        self._live_job_status(tracker)  # what happens now (live_status.py), else the step
 
     def _client_preliminary(self, folder: Path) -> None:
         """The package's preliminary result (mode refine: the network's solutions and their time path) replaces the
-        live view on the main screen while the whole-scan joint fit runs; the final result replaces it when the run
-        ends. A preliminary result that cannot be read leaves the live view."""
+        live view on the main screen while the whole-scan joint fit runs (its note line says what the run does, the
+        evolution shows the joint fit at work: ``live_status.py``); the final result replaces it when the run ends. A
+        preliminary result that cannot be read leaves the live view."""
         client = self.service.client
         if client is None:
             return
@@ -469,6 +466,8 @@ class SputterClientMixin:
         self.show_client_result(result)
         if self.client_result is not None:
             self.result_name.setText(f"{self.result_name.text()}  ·  {tr(PRELIMINARY)}")
+            self._live_preliminary = self.client_result
+            self._live_show_status()
 
     def _client_finished(self, outcome) -> None:
         self._live_end()

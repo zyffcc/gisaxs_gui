@@ -2526,11 +2526,17 @@ measured after its deposition, see *Samples measured after their deposition* bel
    themselves show to be unusable: dead and hot pixels, the beamstop and its holder (the automatic mask; a mask of
    another detector size is not used, the automatic mask then stands alone). Hover over the name of the result to
    see the mask it was read with.
-5. **Analyze**. The job status at the right names the step — reading the frames, finding the solutions of every
-   time window, writing the report, drawing the images — and its bar shows the steps that are done. **Cancel** ends
-   it at once; frames that were read completely are kept for the next run. **Details** shows the package's messages.
-   While the analysis runs, the main screen shows what it is doing and what it has found so far (the live view):
+5. **Analyze**. The job status at the right says in one line what the analysis is doing now, and its bar shows the
+   share that is done. **Cancel** ends it at once; frames that were read completely are kept for the next run.
+   **Details** shows the package's messages. While the analysis runs, the main screen shows what it is doing and what
+   it has found so far (the live view):
 
+   - At the top, the same line across the view, with counts and, where the pace is known, the time still to go — for
+     example *Reading frames: 400 of 1,200 · about 4 min left*, *Network cu_v4: drawing the candidates with the
+     forward model, window 7 of 24*, *Comparing the networks: cu_p5 21.5, cu_v4 12.5 → cu_v4*, *Joint fit: iteration 2
+     of 6 · median fit deviation 11.3 · 5:40 so far, about 11 min left* (seconds per iteration so far times the
+     iterations left: the time if the fit takes all of them), *Drawing the main screen: window 5 of 20*. Between the
+     events of the package it names the step (*Step 3 of 4: Writing the report…*).
    - At the left, the four steps — **Read the frames**, **Find the solutions**, **Write the report**, **Draw the
      images** — each with its state and one line of what it found (frames read so far, time windows solved, the
      network that fits the data better, windows drawn), and the time since the start with the number of processes
@@ -2556,6 +2562,13 @@ measured after its deposition, see *Samples measured after their deposition* bel
      again. When the analysis ends, its result replaces the live view (after a failure or **Cancel**, what was shown
      before comes back). What the live view shows is not the result: the result is what the package writes at the
      end, with every candidate of every window.
+   - **Preliminary result.** In mode Refine the network's result (its candidates and their time path) is shown on the
+     main screen within minutes, its name followed by a note that the joint fit of the whole scan is running; the
+     analysis goes on. A line under the window selector says what it does now (the same line as above). After every
+     iteration of the joint fit, its current solution is drawn dashed over the evolution — radius, height, distance,
+     gap and coverage in their colours, named *Joint fit, iteration k of n* in the legend — and the next iteration
+     replaces it. The tiles keep the values of the solution shown. When the analysis ends, the final result (which
+     holds the joint fit) replaces the preliminary one and the dashed lines go.
 
 Analysing the same request again shows the result it has. **Details ▸ Analyze options** has the rest:
 
