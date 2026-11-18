@@ -3,7 +3,8 @@ record for every method (``PosteriorSolution``).
 
 ``predict`` is the entry point: the posterior of the compositions (``infer``), their modes, and per mode a Fitting
 ``FitModel`` started at the mode's heaviest sample and refined by ``fit_engine`` (bounded least squares, the scales
-solved exactly). A solution carries the refined values with their errors (Jacobian), the posterior median and the
+solved exactly); when no mode of a composition refines below ``CHI2_RETRY`` (the network's proposals miss the curve),
+one search of the ranges started from the heaviest samples is added. A solution carries the refined values with their errors (Jacobian), the posterior median and the
 68 % and 95 % intervals of the importance-sampled posterior, χ²/N, its probability (the composition's posterior
 times the mode's share of it) and flags:
 
@@ -134,6 +135,8 @@ After ``lm`` and ``global`` the posterior of every refined solution is sampled a
 and evidence; the compositions' probabilities follow from the evidences of their solutions."""
 SEEDS = 16
 REFINED = 3
+CHI2_RETRY = 2.0
+"""``lm``: when no mode of a composition refines below this χ²/N, one search of the ranges from the samples too."""
 """Modes of a composition refined by least squares, the heaviest first."""
 
 
@@ -214,12 +217,13 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
             seeds = tuple(fit_model(result.samples[i], result.index, data, law, coupling, grazing) for i in heaviest)
             modes = modes[:1]
         entries = []
-        for mode in modes:
+
+        def add(mode, refine_method, seeds=()):
             model = fit_model(mode.best, result.index, data, law, coupling, grazing)
             refined, local = None, None
-            if method == "lm":
+            if refine_method == "lm":
                 refined = fit_engine.fit(model, fit_data, method="local")
-            elif method == "global":
+            elif refine_method == "global":
                 refined = fit_engine.fit(model, fit_data, method="global", seeds=seeds, seed=seed)
             if refined is not None:
                 model = refined.model
@@ -229,8 +233,17 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
                     local = local_posterior(data, result.index, centre, tau, rng, local_samples, law, coupling)
                     if any(e[3] is not None and _same(e[3].centre, local.centre, E.composition_types(result.index))
                            for e in entries):
-                        continue  # the same solution again
+                        return  # the same solution again
             entries.append((mode, model, refined, local))
+
+        for mode in modes:
+            add(mode, method, seeds)
+        refined_chi2 = [e[2].chi2_reduced for e in entries if e[2] is not None]
+        if method == "lm" and modes and refined_chi2 and min(refined_chi2) > CHI2_RETRY:
+            # None of the modes' refinements describes the curve: one search of the ranges started from the samples
+            heaviest = np.argsort(-result.weights)[:SEEDS]
+            add(modes[0], "global",
+                tuple(fit_model(result.samples[i], result.index, data, law, coupling, grazing) for i in heaviest))
         if entries and all(e[3] is not None for e in entries):
             evidences = np.array([e[3].log_evidence for e in entries])
             top = evidences.max()
@@ -268,5 +281,5 @@ def _label(path) -> str:
     return key if owner == "globals" else f"{key}_{owner + 1}"
 
 
-__all__ = ["ESS_MIN", "METHODS", "Interval", "PosteriorSolution", "UNCONSTRAINED", "fit_model", "model_values",
+__all__ = ["CHI2_RETRY", "ESS_MIN", "METHODS", "Interval", "PosteriorSolution", "UNCONSTRAINED", "fit_model", "model_values",
            "predict"]

@@ -25,14 +25,21 @@ def card(network: dict, evaluation: dict, benchmarks: list[tuple[str, dict]]) ->
     prior = network.get("prior", {})
     data = network.get("data", {})
     arch = network.get("architecture", {})
+    trained = Path(training.get("out", "flow")).name or "flow"
+    name = network.get("shipped_as") or trained
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from src.gimap.features.fitting.domain.posterior import encoding
+    tail_width, tail_exponent = encoding.TAIL_WIDTH_MAX, encoding.TAIL_EXPONENT
     lines = [
-        f"# Model card: {Path(training.get('out', 'flow')).name or 'flow'} (GIMaP's proposal network of 1D cuts)", "",
+        f"# Model card: {name} (GIMaP's proposal network of 1D cuts)", "",
+        f"Trained as `{trained}`, shipped as `{name}`." if trained != name else "", "",
         "**What it is.** An amortised posterior p(composition, values | curve) for horizontal GISAXS cuts: a 1D CNN "
         "summary, a head over the 258 compositions of one to three populations (sphere, upright or random cylinder, "
         "each with or without a paracrystal) and a conditional rational-quadratic spline flow over their values "
         "(Physics and Methods, section 9.13). GIMaP uses it only to propose: the values, intervals and probabilities "
         "of a solution come from the model and the curve (importance sampling and least squares).", "",
-        f"**Files.** `{Path(training.get('out', 'flow')).name}.npz` (float32 arrays, SHA-256 "
+        f"**Files.** `{name}.npz` (float32 arrays, SHA-256 "
         f"`{network.get('sha256')}`), `.json` (architecture, prior, data, training), this card. Encoding version "
         f"{network.get('encoding')}; format `{network.get('format')}`.", "",
         "**Architecture.** " + ", ".join(f"{k} {v}" for k, v in arch.items()) + ".", "",
@@ -72,7 +79,8 @@ def card(network: dict, evaluation: dict, benchmarks: list[tuple[str, dict]]) ->
     lines += ["", "## Where it does not apply", "",
               "- cuts spanning less than a factor 10 in q; points below q_max/300 are left out;",
               "- more than three populations, other families, random cylinders larger than R q_max = 50 or "
-              "h q_max = 200, beam tails wider than 3 q_min;",
+              f"h q_max = 200, beam tails wider than {tail_width:g} q_min or with an exponent outside "
+              f"{tail_exponent[0]:g}–{tail_exponent[1]:g} (encoding {network.get('encoding')});",
               "- the network itself knows Gaussian sizes by number and the LMA; other laws and the DA are weighted "
               "from its proposals; the four-term DWBA is not in the model;",
               "- its own probabilities are those of the simulated prior; GIMaP reports the importance-weighted ones."]
