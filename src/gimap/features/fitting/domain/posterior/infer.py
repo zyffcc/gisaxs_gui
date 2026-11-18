@@ -6,8 +6,8 @@ For a measured cut and each composition considered (given, or the network's most
 2. per sample the cut_model terms on the measured points — every population T_j (with the sample's resolution), the
    beam tail and a constant — and their amplitudes by non-negative least squares; the likelihood is Gaussian in the
    counts' σ, with the smooth multiplicative model error of amplitude τ (``encoding.error_basis``) integrated out
-   exactly (Woodbury) and the amplitudes integrated out in the Laplace approximation under log-uniform priors over
-   ``AMPLITUDE_DECADES``;
+   exactly (Woodbury) and the amplitudes integrated out under uniform priors on [0, ``AMPLITUDE_RANGE`` × the curve's
+   maximum] (each column is 1 at its maximum): Laplace for the positive ones, a half Gaussian for those at 0;
 3. weights w = L π(z)/q(z), the effective sample size (Σw)²/Σw² and the evidence Z = mean w (Dax et al. 2023).
 
 The compositions' posterior is ∝ Z (each composition considered equally likely beforehand). The weighted samples are
@@ -29,7 +29,7 @@ from ..cut_model import resolution
 from ..cut_model.geometry import Geometry
 from . import encoding as E
 
-AMPLITUDE_DECADES = 12.0
+AMPLITUDE_RANGE = 10.0
 MODE_SPACING, MODE_SPREAD = 0.1, 0.05
 MAX_MODES = 4
 FINE_POINTS = 1024
@@ -95,6 +95,20 @@ def physical(values, q_max: float) -> np.ndarray:
     return out
 
 
+def dimensionless(values, q_max: float) -> np.ndarray:
+    """The inverse of ``physical``."""
+    out = np.array(values, float)
+    for slot in range(E.SLOTS):
+        j = slot * E.PER_SLOT
+        out[..., j + 2] = out[..., j + 2] / (2.0 * out[..., j])
+        out[..., j + 4] = out[..., j + 4] / (2.0 * out[..., j])
+        out[..., j] = out[..., j] * q_max
+    g = E.GLOBAL.start
+    out[..., g] = out[..., g] / q_max
+    out[..., g + 2] = out[..., g + 2] / q_max
+    return out
+
+
 PHYSICAL_NAMES = tuple(n.replace("h_over_2R", "h").replace("D_over_2R", "D") for n in E.NAMES)
 
 
@@ -140,19 +154,25 @@ class Likelihood:
         out[:, k + 1] = 1.0
         return out
 
-    def __call__(self, values) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """(log marginal likelihood, amplitudes (B, K + 2), χ² at the amplitudes) of physical values (B, DIMS)."""
-        values = np.atleast_2d(values)
+    def model_curves(self, values):
+        """(columns (B, K + 2, n), amplitudes (B, K + 2) by non-negative least squares in σ, model curves (B, n))."""
         x = self.columns(values)
         y, s = self.data.intensity, self.data.sigma
-        rows, m, n = x.shape
         scaled = x / s[None, None, :]
-        amplitudes = np.zeros((rows, m))
-        for b in range(rows):
+        amplitudes = np.zeros(x.shape[:2])
+        for b in range(x.shape[0]):
             norms = np.maximum(np.linalg.norm(scaled[b], axis=1), 1e-300)
             solution, _ = nnls((scaled[b] / norms[:, None]).T, y / s)
             amplitudes[b] = solution / norms
-        model = np.einsum("bm,bmn->bn", amplitudes, x)
+        return x, amplitudes, np.einsum("bm,bmn->bn", amplitudes, x)
+
+    def __call__(self, values) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(log marginal likelihood, amplitudes (B, K + 2), χ² at the amplitudes) of physical values (B, DIMS)."""
+        values = np.atleast_2d(values)
+        x, amplitudes, model = self.model_curves(values)
+        y, s = self.data.intensity, self.data.sigma
+        m = x.shape[1]
+        scaled = x / s[None, None, :]
         r = (y[None, :] - model) / s[None, :]
         chi2 = np.sum(r * r, axis=1)
         tau = values[:, E.GLOBAL.start + 3]
@@ -163,15 +183,17 @@ class Likelihood:
         solved = np.linalg.solve(inner, projected[..., None])[..., 0]
         _sign, log_det = np.linalg.slogdet(np.eye(E.ERROR_BASIS)[None] + tau[:, None, None] ** 2 * gram)
         log_like = self.log_norm - 0.5 * (chi2 - np.sum(projected * solved, axis=1)) - 0.5 * log_det
-        # the amplitudes: Laplace approximation under log-uniform priors, at the positive ones
+        # the amplitudes, uniform on [0, top]: Laplace at the positive ones, a half Gaussian at those at 0
+        top = AMPLITUDE_RANGE * float(np.max(np.abs(y)))
         positive = amplitudes > 0
-        hessian = np.einsum("bmn,bln->bml", scaled, scaled)
-        hessian = np.where(positive[:, :, None] & positive[:, None, :], hessian, 0.0)
+        full = np.einsum("bmn,bln->bml", scaled, scaled)
+        hessian = np.where(positive[:, :, None] & positive[:, None, :], full, 0.0)
         hessian += np.eye(m)[None] * (~positive)[:, :, None]
         _sign, log_det_h = np.linalg.slogdet(hessian)
-        prior = np.where(positive, -np.log(np.where(positive, amplitudes, 1.0) * AMPLITUDE_DECADES * math.log(10)), 0.0)
-        log_marginal = log_like + np.sum(prior, axis=1) + 0.5 * positive.sum(axis=1) * math.log(2 * math.pi) \
-            - 0.5 * log_det_h
+        diagonal = np.maximum(np.einsum("bmm->bm", full), 1e-300)
+        at_zero = np.where(positive, 0.0, 0.5 * math.log(0.5 * math.pi) - 0.5 * np.log(diagonal))
+        log_marginal = (log_like - m * math.log(top) + 0.5 * positive.sum(axis=1) * math.log(2 * math.pi)
+                        - 0.5 * log_det_h + np.sum(at_zero, axis=1))
         return log_marginal, amplitudes, chi2
 
 
@@ -326,5 +348,5 @@ def infer(network, data: Cut, compositions: Optional[Sequence[int]] = None, *, a
     return sorted(out, key=lambda r: -r.probability)
 
 
-__all__ = ["AMPLITUDE_DECADES", "Composition", "Cut", "Likelihood", "Mode", "PHYSICAL_NAMES", "candidates", "infer",
-           "modes", "physical", "sample_composition"]
+__all__ = ["AMPLITUDE_RANGE", "Composition", "Cut", "Likelihood", "Mode", "PHYSICAL_NAMES", "candidates",
+           "dimensionless", "infer", "modes", "physical", "sample_composition"]

@@ -61,10 +61,12 @@ def test_likelihood_equals_the_dense_gaussian():
         _s, log_det = np.linalg.slogdet(cov)
         dense = -0.5 * (r @ np.linalg.solve(cov, r) + log_det + q.size * math.log(2 * math.pi))
         positive = amplitudes[b] > 0
-        scaled = x[b][positive] / sigma[None, :]
-        _s, log_det_h = np.linalg.slogdet(scaled @ scaled.T)
-        laplace = (np.sum(-np.log(amplitudes[b][positive] * infer.AMPLITUDE_DECADES * math.log(10)))
-                   + 0.5 * positive.sum() * math.log(2 * math.pi) - 0.5 * log_det_h)
+        top = infer.AMPLITUDE_RANGE * counts.max()
+        scaled = x[b] / sigma[None, :]
+        _s, log_det_h = np.linalg.slogdet(scaled[positive] @ scaled[positive].T)
+        half = [0.5 * math.log(math.pi / 2) - 0.5 * math.log(scaled[k] @ scaled[k]) for k in np.flatnonzero(~positive)]
+        laplace = (-len(amplitudes[b]) * math.log(top) + 0.5 * positive.sum() * math.log(2 * math.pi) - 0.5 * log_det_h
+                   + sum(half))
         assert log_marginal[b] == pytest.approx(dense + laplace, rel=1e-9)
         assert chi2[b] == pytest.approx(np.sum((r / sigma) ** 2), rel=1e-9)
 

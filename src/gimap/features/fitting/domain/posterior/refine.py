@@ -27,6 +27,7 @@ from .. import fit_engine
 from .. import fit_model as fm
 from . import encoding as E
 from .infer import PHYSICAL_NAMES, Cut, infer
+from .laplace import local_posterior
 
 UNCONSTRAINED = 0.7
 ESS_MIN = 50
@@ -119,69 +120,133 @@ def _path(composition: int, dim: int):
 METHODS = ("lm", "global", "posterior")
 """``lm``: each mode refined by least squares from its heaviest sample (the default); ``global``: one search per
 composition (differential evolution, its first population the modes and the heaviest samples), then least squares;
-``posterior``: no least squares, the heaviest sample of each mode and the importance-sampled intervals."""
+``posterior``: no least squares, the heaviest sample of each mode and the network's importance-sampled intervals.
+After ``lm`` and ``global`` the posterior of every refined solution is sampled around it (``laplace``): its intervals
+and evidence; the compositions' probabilities follow from the evidences of their solutions."""
 SEEDS = 16
+REFINED = 3
+"""Modes of a composition refined by least squares, the heaviest first."""
+
+
+def model_values(model: fm.FitModel, composition: int) -> Optional[np.ndarray]:
+    """Physical values (DIMS,) of a model of ``composition`` (its components in the order of their radii); None when
+    the refined radii no longer keep the composition's order of types."""
+    ordered = sorted(model.components, key=lambda c: c.value("R"))
+    if tuple((c.family, bool(c.structure)) for c in ordered) != E.composition_types(composition):
+        return None
+    values = np.full(E.DIMS, np.nan)
+    for slot, component in enumerate(ordered):
+        for offset, key in enumerate(KEYS):
+            if key in component.keys():
+                values[slot * E.PER_SLOT + offset] = component.value(key)
+    for offset, key in enumerate(GLOBAL_KEYS.values()):
+        values[E.GLOBAL.start + offset] = model.globals[key].value
+    return values
+
+
+def _same(a, b, types) -> bool:
+    from .infer import _distance
+    return bool(_distance(a[None, :], b, types)[0] <= 1.0)
+
+
+def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra) -> PosteriorSolution:
+    mode, model, refined, local = entry
+    quantiles = (local.quantiles([0.5, 0.16, 0.84, 0.025, 0.975]) if local is not None
+                 else np.stack([mode.median, mode.low68, mode.high68, mode.low95, mode.high95]))
+    values, flags = {}, []
+    for dim, name in _names(result.index):
+        path = _path(result.index, dim)
+        error = refined.errors.get(path) if refined is not None else None
+        values[name] = Interval(float(model.get(path).value), *(float(x) for x in quantiles[:, dim]),
+                                None if error is None else float(error))
+        low, high = quantiles[1, dim], quantiles[2, dim]
+        span = np.log(high / low) if E.LOGARITHMIC[dim] else high - low
+        width = hi[0, dim] - lo[0, dim]
+        if np.isfinite(width) and width > 0 and span / width > UNCONSTRAINED:
+            flags.append(f"unconstrained:{name}")
+    if refined is not None:
+        flags += [f"at_bound:{_label(p)}" for p in refined.at_bounds]
+        flags += [f"correlated:{_label(a)}~{_label(b)}" for a, b, _rho in refined.correlated]
+    ess = local.ess if local is not None else result.ess
+    if ess < ESS_MIN:
+        flags.append("low_ess")
+    chi2 = refined.chi2_reduced if refined is not None else mode.chi2_reduced
+    rmse = refined.log_rmse if refined is not None else fit_engine.log_rmse(model, fit_data)
+    evidence = local.log_evidence if local is not None else result.log_evidence
+    count = local.samples.shape[0] if local is not None else result.samples.shape[0]
+    return PosteriorSolution(result.index, result.name, probability, model, float(chi2), float(rmse), values,
+                             tuple(flags), method, evidence, ess, int(count), 0.0, extra)
 
 
 def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions: Optional[Sequence[int]] = None,
             allowed=None, shortlist: int = 4, samples: int = 2000, method: str = "lm", seed: int = 0,
             law: str = "number_gauss", coupling: str = "lma", min_probability: float = 0.01,
-            grazing: Optional[dict] = None) -> list[PosteriorSolution]:
+            grazing: Optional[dict] = None, local_samples: int = 600) -> list[PosteriorSolution]:
     """Solutions of a cut (q in nm⁻¹, qz the vacuum q_z of the Born term in nm⁻¹, 0: the effective interface), most
-    probable first: every mode of every composition holding at least ``min_probability`` of the posterior
-    (``global``: the best of each composition)."""
+    probable first: every distinct refined solution of every composition holding at least ``min_probability`` of
+    the posterior (``global``: the best of each composition)."""
     if method not in METHODS:
         raise ValueError(f"Unknown method {method!r} (one of {', '.join(METHODS)})")
     tick = time.perf_counter()
+    rng = np.random.default_rng(seed + 7919)
     data = Cut.prepare(q, intensity, sigma, qz)
     fit_data = fit_engine.FitData.prepare(data.q, data.intensity, data.sigma)
     results = infer(network, data, compositions, allowed=allowed, shortlist=shortlist, samples=samples, seed=seed,
                     law=law, coupling=coupling)
     lo, hi = E.bounds([data.ratio])
-    out = []
+    tau_dim = E.GLOBAL.start + 3
+    per_composition = []
     for result in results:
-        modes = result.modes
+        modes = result.modes[:REFINED]
+        seeds = ()
         if method == "global" and modes:
             heaviest = np.argsort(-result.weights)[:SEEDS]
             seeds = tuple(fit_model(result.samples[i], result.index, data, law, coupling, grazing) for i in heaviest)
-            modes = [modes[0]]
+            modes = modes[:1]
+        entries = []
         for mode in modes:
-            probability = result.probability * (1.0 if method == "global" else mode.weight)
-            if probability < min_probability:
-                continue
             model = fit_model(mode.best, result.index, data, law, coupling, grazing)
-            refined = None
+            refined, local = None, None
             if method == "lm":
                 refined = fit_engine.fit(model, fit_data, method="local")
             elif method == "global":
                 refined = fit_engine.fit(model, fit_data, method="global", seeds=seeds, seed=seed)
             if refined is not None:
                 model = refined.model
-            values, flags = {}, []
-            for dim, name in _names(result.index):
-                path = _path(result.index, dim)
-                best = float(model.get(path).value)
-                error = refined.errors.get(path) if refined is not None else None
-                values[name] = Interval(best, float(mode.median[dim]), float(mode.low68[dim]), float(mode.high68[dim]),
-                                        float(mode.low95[dim]), float(mode.high95[dim]),
-                                        None if error is None else float(error))
-                span = (np.log(mode.high68[dim] / mode.low68[dim]) if E.LOGARITHMIC[dim]
-                        else mode.high68[dim] - mode.low68[dim])
-                width = hi[0, dim] - lo[0, dim]
-                if np.isfinite(width) and width > 0 and span / width > UNCONSTRAINED:
-                    flags.append(f"unconstrained:{name}")
-            if refined is not None:
-                flags += [f"at_bound:{_label(p)}" for p in refined.at_bounds]
-                flags += [f"correlated:{_label(a)}~{_label(b)}" for a, b, _rho in refined.correlated]
-            if result.ess < ESS_MIN:
-                flags.append("low_ess")
-            chi2 = refined.chi2_reduced if refined is not None else mode.chi2_reduced
-            rmse = refined.log_rmse if refined is not None else fit_engine.log_rmse(model, fit_data)
-            out.append(PosteriorSolution(result.index, result.name, probability, model, float(chi2), float(rmse), values,
-                                tuple(flags), method, result.log_evidence,
-                                result.ess, int(result.samples.shape[0]), 0.0,
-                                {"head_log_prob": result.head_log_prob, "mode_weight": mode.weight,
-                                 "dropped_points": data.dropped}))
+                centre = model_values(model, result.index)
+                if centre is not None:
+                    tau = float(mode.median[tau_dim]) if np.isfinite(mode.median[tau_dim]) else 0.02
+                    local = local_posterior(data, result.index, centre, tau, rng, local_samples, law, coupling)
+                    if any(e[3] is not None and _same(e[3].centre, local.centre, E.composition_types(result.index))
+                           for e in entries):
+                        continue  # the same solution again
+            entries.append((mode, model, refined, local))
+        if entries and all(e[3] is not None for e in entries):
+            evidences = np.array([e[3].log_evidence for e in entries])
+            top = evidences.max()
+            log_z = float(top + np.log(np.sum(np.exp(evidences - top))))
+            shares = np.exp(evidences - log_z)
+        else:
+            log_z = result.log_evidence
+            total = sum(e[0].weight for e in entries) or 1.0
+            shares = np.array([e[0].weight / total for e in entries])
+        per_composition.append((result, entries, log_z, shares))
+    if not per_composition:
+        return []
+    log_z = np.array([c[2] for c in per_composition])
+    probabilities = np.exp(log_z - log_z.max())
+    probabilities /= probabilities.sum()
+    out = []
+    for (result, entries, composition_log_z, shares), p in zip(per_composition, probabilities):
+        result.probability = float(p)
+        for entry, share in zip(entries, shares):
+            probability = float(p * share)
+            if probability < min_probability:
+                continue
+            out.append(_solution(result, entry, data, fit_data, lo, hi, method, probability,
+                                 {"head_log_prob": result.head_log_prob, "mode_weight": float(share),
+                                  "composition_log_evidence": composition_log_z, "network_ess": result.ess,
+                                  "dropped_points": data.dropped}))
     seconds = time.perf_counter() - tick
     for solution in out:
         solution.seconds = seconds
@@ -193,4 +258,5 @@ def _label(path) -> str:
     return key if owner == "globals" else f"{key}_{owner + 1}"
 
 
-__all__ = ["ESS_MIN", "METHODS", "Interval", "PosteriorSolution", "UNCONSTRAINED", "fit_model", "predict"]
+__all__ = ["ESS_MIN", "METHODS", "Interval", "PosteriorSolution", "UNCONSTRAINED", "fit_model", "model_values",
+           "predict"]
