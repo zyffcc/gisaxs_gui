@@ -29,7 +29,7 @@ from src.gimap.app.presentation.i18n import tr
 from .texts import text
 
 BASE_COLOUR = "#8c564b"
-"""The continuous metal layer under the grains: dark gold, apart from the other sizes and readable in both themes."""
+"""The continuous metal layer under the grains: brown, apart from the other sizes (the gap is orange) and readable in both themes."""
 SIZE_SERIES = (("R_nm", "Radius R", "#1f77b4"), ("H_nm", "Height H", "#2a9d5c"),
                ("base_nm", "Continuous layer t_b", BASE_COLOUR), ("D_nm", "Distance D", "#9467bd"),
                ("gap_nm", "Gap", "#e08a1e"), ("depth_nm", "Vertical correlation", "#2a9d5c"),
