@@ -13,7 +13,8 @@ times the mode's share of it) and flags:
   little about it);
 * ``correlated:A~B``    the refined values are correlated beyond ±0.95;
 * ``bic``               the sampling of a solution did not converge (fewer than ``ESS_FAILED`` effective samples):
-  the solutions and compositions are compared by BIC (χ² + k ln N), not by their evidence;
+  the solutions and compositions are compared by BIC (χ² + k ln N), not by their evidence, and the intervals are
+  the least-squares errors (scaled by χ²/N);
 * ``low_ess``           fewer than ``ESS_MIN`` effective samples: the intervals are taken with tempered weights
   (``laplace.Local.tempered``), wider, and are rough.
 """
@@ -165,7 +166,10 @@ def _same(a, b, types) -> bool:
     return bool(_distance(a[None, :], b, types)[0] <= 1.0)
 
 
-def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra) -> PosteriorSolution:
+def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra,
+              from_errors: bool = False) -> PosteriorSolution:
+    """``from_errors``: the intervals from the least-squares errors (the refined value ± 1 and 1.96 errors), for
+    solutions compared by BIC, whose posterior sampling did not converge."""
     mode, model, refined, local = entry
     quantiles = (local.quantiles([0.5, 0.16, 0.84, 0.025, 0.975], ESS_MIN) if local is not None
                  else np.stack([mode.median, mode.low68, mode.high68, mode.low95, mode.high95]))
@@ -173,6 +177,11 @@ def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra)
     for dim, name in _names(result.index):
         path = _path(result.index, dim)
         error = refined.errors.get(path) if refined is not None else None
+        if from_errors and error is not None and np.isfinite(error):
+            best = float(model.get(path).value)
+            quantiles[:, dim] = [best, best - error, best + error, best - 1.96 * error, best + 1.96 * error]
+            if E.LOGARITHMIC[dim]:  # positive: the interval on a log scale, its width as the error's
+                quantiles[1:, dim] = best * np.exp(np.array([-1, 1, -1.96, 1.96]) * error / best)
         values[name] = Interval(float(model.get(path).value), *(float(x) for x in quantiles[:, dim]),
                                 None if error is None else float(error))
         low, high = quantiles[1, dim], quantiles[2, dim]
@@ -285,7 +294,8 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
             solution = _solution(result, entry, data, fit_data, lo, hi, method, probability,
                                  {"head_log_prob": result.head_log_prob, "mode_weight": float(share),
                                   "composition_log_evidence": composition_log_z, "network_ess": result.ess,
-                                  "dropped_points": data.dropped, "compared_by": "bic" if by_bic else "evidence"})
+                                  "dropped_points": data.dropped, "compared_by": "bic" if by_bic else "evidence"},
+                                 from_errors=by_bic)
             if by_bic:
                 solution.flags = solution.flags + ("bic",)
             out.append(solution)
