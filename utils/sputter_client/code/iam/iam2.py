@@ -20,6 +20,7 @@ TIO2_FIX = TIO2_FIX_A or TIO2_FIX_B
 
 
 import tio2_dwba as TD
+import tio2_qzcorr as QZC
 TD.check_config(_TF == "1", M.TIO2_NUM)
 
 
@@ -467,7 +468,24 @@ class Model2(M.Model):
         born = self.born_pop_tio2(m.S, m.nS, m.D, m.omega, True, eta=m.eta_hd)
         if m.fL > 0:
             born = born + self.born_pop_tio2(m.L, m.nL, 1.0, 0.0, False)
-        isl = f_isl * Ei * (Ef[:, None] if Ef2 is None else Ef2) * rho2 * born
+        Efq = Ef[:, None] if Ef2 is None else Ef2
+        if QZC.ON:
+            if not TIO2_FIX_B or Ef2 is not None or TD.ISLAND:
+                raise SystemExit("IAM_TIO2_QZCORR needs IAM_TIO2_FIX=1, no IAM_TFILM_MET and no tio2_dwba island switch")
+            kc_b = kc if Icap is not None else 0.0
+            buried = avgprod(wt)
+            reg = [(1.0, False)] if self.cap is None else ([(1.0 - c, False), (c, True)] if c < 1.0 else [(1.0, True)])
+            Cq = QZC.factor_full(self, phm, wt, reg, m.S)
+            top = (EiEf - (1 - kc_b) * buried)[:, None]
+            if Icap is not None:
+                if CAP_PLACE != "on":
+                    raise SystemExit("IAM_TIO2_QZCORR with a cap needs IAM_CAP_PLACE=on (islands on the top surface)")
+                Ct = QZC.factor_top_full(self, phm, m.S)
+                top = top * Ct
+                self._qzcorr_top = Ct
+            Efq = top + (1 - kc_b) * buried[:, None] * Cq
+            self._qzcorr = Cq
+        isl = f_isl * Ei * Efq * rho2 * born
         if self.oz is not None:
             A, xi, H = self.oz[:3]
             vz = np.exp(-(self._qz() * self.oz[3]) ** 2) if len(self.oz) > 3 else 1.0

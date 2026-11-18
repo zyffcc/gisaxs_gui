@@ -8,7 +8,8 @@ from typing import Callable, Optional
 from src.gimap.integrations.state.user_store import user_data_dir
 
 from .application import ClientService, SputterService, StaticService
-from .infrastructure import CbfHeaderInspector, ClientFolderReader, ClientPackageRunner, StaticPackageRunner
+from .infrastructure import (CbfHeaderInspector, ClientFolderReader, ClientPackageRunner, StaticPackageRunner,
+                             local_data_dir)
 
 
 def default_results_root() -> Path:
@@ -32,8 +33,10 @@ def default_series_root() -> Path:
 
 def create_client_service(*, runner=None, reader=None, static_runner=None) -> ClientService:
     """Analyze: the package's process and the reader of its output folders (tests give fakes). Static frames run
-    through the same package: ``static_runner``, by default made from a real ``runner`` (a fake one has none)."""
-    runner = runner or ClientPackageRunner(user_data_dir)
+    through the same package: ``static_runner``, by default made from a real ``runner`` (a fake one has none). The
+    import caches go to the local folder (``local_data_dir``); those made before in the user data folder are used
+    where they are."""
+    runner = runner or ClientPackageRunner(local_data_dir, legacy_root=user_data_dir)  # caches: local, not roaming
     reader = reader or ClientFolderReader(user_data_dir)
     if static_runner is None and isinstance(runner, ClientPackageRunner):
         static_runner = StaticPackageRunner(runner, default_series_root)

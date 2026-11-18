@@ -183,11 +183,12 @@ class ResultTabsMixin:
                 self._result_texts = self.service.client.texts(result)
             except (OSError, ValueError):
                 self._result_texts = ResultTexts()
-        for tab in (self.tab_windows, self.tab_report, self.tab_log):
+        for tab in (self.tab_windows, self.tab_report, self.tab_log, self.tab_steps):
             tab.setCurrentIndex(0 if result is None else 1)
         self.refresh_windows_table()
         self._show_report_tab()
         self._fill_logs()
+        self.show_result_steps()  # Details ▸ Steps (live_steps_panel.py)
 
     # -- Windows -------------------------------------------------------------------------------------------------
     def _windows_columns(self) -> list:
@@ -197,7 +198,7 @@ class ResultTabsMixin:
         columns = first + [("nominal", tr(COLUMN_NOMINAL))]
         chosen = [window.chosen(self.client_choices) for window in result.windows]
         for key, caption, unit, _tip in TILES:
-            if any(entry is not None and entry.value(key) is not None for entry in chosen):
+            if result.shows(key) and any(entry is not None and entry.value(key) is not None for entry in chosen):
                 name = tr(RELATIVE_RADIUS if result.porous and key == "R_nm" else caption)
                 columns.append((key, f"{name} ({unit})" if unit else name))
         return columns + [("deviation", tr(COLUMN_DEVIATION)), ("solution", tr(COLUMN_SOLUTION))]

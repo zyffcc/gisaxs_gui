@@ -1,6 +1,7 @@
 """The evolution of the solutions chosen for the windows of a result (Matplotlib).
 
-Left, the lengths the result has (nm): grain radius R, grain height H, centre distance D and the gap between grains;
+Left, the lengths the result has (nm): grain radius R, grain height H, the thickness t_b of the continuous metal layer
+under the grains (only when the result lists it: ``ClientResult.shows``), centre distance D and the gap between grains;
 on a porous substrate the island radius (a relative size) and the vertical and lateral correlation lengths of the
 metal network. Right, its shares: the coverage, or on a porous substrate the island, cap and film shares. Both
 against the time in the scan — or, for a series of static samples, against what the series says its axis is (the
@@ -27,7 +28,10 @@ from src.gimap.app.presentation.i18n import tr
 
 from .texts import text
 
-SIZE_SERIES = (("R_nm", "Radius R", "#1f77b4"), ("H_nm", "Height H", "#2a9d5c"), ("D_nm", "Distance D", "#9467bd"),
+BASE_COLOUR = "#b8860b"
+"""The continuous metal layer under the grains: dark gold, apart from the other sizes and readable in both themes."""
+SIZE_SERIES = (("R_nm", "Radius R", "#1f77b4"), ("H_nm", "Height H", "#2a9d5c"),
+               ("base_nm", "Continuous layer t_b", BASE_COLOUR), ("D_nm", "Distance D", "#9467bd"),
                ("gap_nm", "Gap", "#e08a1e"), ("depth_nm", "Vertical correlation", "#2a9d5c"),
                ("xi_nm", "Lateral correlation", "#9467bd"))
 """(quantity, name, colour) of the lines of the size plot: data colours, readable in both themes."""
@@ -52,7 +56,7 @@ WIDTHS_SHARES = (1.9, 1.5)
 """The same when the share plot holds several lines (their names stand above it)."""
 SAME_POSITION = 3.0
 """Windows no farther apart than this (pixels along the axis) are told apart by the height of the click."""
-OVERLAY_KEYS = (("R_nm", "gap_nm", "H_nm", "D_nm"), ("coverage",))
+OVERLAY_KEYS = (("R_nm", "gap_nm", "H_nm", "base_nm", "D_nm"), ("coverage",))
 """The quantities an overlay draws on the size plot and on the share plot."""
 OVERLAY_COLOUR = "#8a8a8a"
 """The dashed line that names the overlay in the legend (readable in both themes)."""
@@ -239,6 +243,8 @@ class EvolutionPlot:
         limits = ([], [])
         for plot, (axes, listed) in enumerate(((sizes, SIZE_SERIES), (shares, SHARE_SERIES))):
             for key, name, colour in listed:
+                if not result.shows(key):
+                    continue
                 _positions, values = result.series(key, choices)
                 self.series[key] = (self._positions, values)
                 if not _finite(values):
@@ -285,6 +291,8 @@ class EvolutionPlot:
         colours = {key: colour for key, _name, colour in (*SIZE_SERIES, *SHARE_SERIES)}
         for plot, (axes, keys) in enumerate(zip(self._axes, OVERLAY_KEYS)):
             for key in keys:
+                if not result.shows(key):
+                    continue
                 found = list(values.get(key) or ())
                 if len(found) != len(times) or not _finite(found):
                     continue

@@ -15,7 +15,9 @@ from . import live as LV
 from . import registry as REG
 from . import runner
 
-WANTED = [("R_nm", "grain radius R", "nm"), ("H_nm", "grain height H", "nm"), ("D_nm", "centre distance D", "nm"),
+WANTED = [("R_nm", "grain radius R", "nm"), ("H_nm", "grain height H", "nm"),
+          ("base_nm", "thickness of the continuous metal layer under the grains (0: separate islands)", "nm"),
+          ("D_nm", "centre distance D", "nm"),
           ("gap_nm", "gap between grains D - 2R", "nm"), ("width", "width of the radius distribution (log-normal)", ""),
           ("coverage", "coverage", ""), ("amount_nm", "metal amount", "nm"),
 

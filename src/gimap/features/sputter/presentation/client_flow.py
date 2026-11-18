@@ -375,7 +375,8 @@ class SputterClientMixin:
         if picker and self.scan_info.problem:
             self._client_refused(self.scan_info.problem)
             return
-        request = replace(self._client_request(), workers=self.run_workers())  # Automatic: worked out now
+        request = replace(self._client_request(), workers=self.run_workers(),  # Automatic: worked out now
+                          cache_limit=self.cache_limit())  # Details ▸ Storage (storage_panel.py)
         problems = request.problems()
         if problems:
             self._client_status("failed", [(problem, {}) for problem in problems], 0.0)
@@ -440,8 +441,9 @@ class SputterClientMixin:
             return
         if isinstance(event, ClientStarted):
             self.client_log.appendPlainText(f"{event.label} -> {event.folder}")
+            self._running_label = event.label  # its import is never removed while it runs
             if not event.reused:
-                self._live_begin(event.folder, workers=event.workers)
+                self._live_begin(event.folder, workers=event.workers, trace_folders=event.trace_folders())
             return
         line = str(event)
         self.client_log.appendPlainText(line)
@@ -470,10 +472,11 @@ class SputterClientMixin:
             self._live_show_status()
 
     def _client_finished(self, outcome) -> None:
-        self._live_end()
+        self._live_end(outcome.folder if isinstance(outcome, ClientResult) else None)  # the result keeps its steps
         tracker, self._client_tracker = self._client_tracker, None
         self._client_busy = False
         self._sync_run_buttons()
+        self.refresh_storage()  # an import may have come or gone (when Details ▸ Storage is open)
         if isinstance(outcome, ClientResult):
             ran = tracker is not None and bool(tracker.step)
             self._client_status("succeeded", [(DONE if ran else SHOWN_AGAIN, {"windows": len(outcome.windows)})], 1.0)

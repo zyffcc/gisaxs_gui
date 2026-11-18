@@ -39,6 +39,7 @@ from .evolution_view import EvolutionPlot
 from .live_pictures import FramesPicture, TracePlot
 from .live_static import STATIC_EXPLAIN, STATIC_STEP_NAMES, LiveStaticMixin
 from .live_status import LiveStatusMixin
+from .live_steps_panel import LiveStepsMixin
 from .pattern_view import PatternPair
 from .reading_texts import PROCESSES, READING_LINE, SLOW_DISK_NOTE, disk_words
 from .texts import text
@@ -114,7 +115,7 @@ def _count(value) -> str:
     return f"{int(value or 0):,}"
 
 
-class LivePanelMixin(LiveStatusMixin, LiveStaticMixin):
+class LivePanelMixin(LiveStatusMixin, LiveStaticMixin, LiveStepsMixin):
     """Needs the widgets of ``views/sputter_live_view.py``, ``result_stack``, ``_client_tracker``,
     ``_static_tracker`` and ``_show_client_empty``."""
 
@@ -141,6 +142,7 @@ class LivePanelMixin(LiveStatusMixin, LiveStaticMixin):
         self.live_patterns = PatternPair(self.live_patterns_layout)
         self.live_evolution = EvolutionPlot(self.live_evolution_layout)
         self.live_steps.stepChosen.connect(self._live_step_chosen)
+        self._init_live_steps()
 
     # -- the run -------------------------------------------------------------------------------------------------
     def live_running(self) -> bool:
@@ -148,12 +150,13 @@ class LivePanelMixin(LiveStatusMixin, LiveStaticMixin):
         return getattr(self, "_live", None) is not None
 
     def _live_begin(self, folder, *, kind: str = "insitu", label: str = "", nominal_nm=None, series=None,
-                    reference: bool = False, workers: Optional[int] = None) -> None:
+                    reference: bool = False, workers: Optional[int] = None, trace_folders=()) -> None:
         """Analyze started a run (not a result it had already): the live view replaces the main screen. ``kind``
         ``static``: one sample measured after its deposition (``label``, ``nominal_nm``; ``series``: the series as
         it was before; ``reference``: frames of a bare substrate were given). ``workers``: the processes the package
-        was asked to run with."""
+        was asked to run with; ``trace_folders``: where the details of its steps are written."""
         self._live, self._live_folder, self._live_events, self._live_reused = LiveRun(kind=kind), folder, 0, False
+        self._live_steps_begin(trace_folders)
         self._live.workers = int(workers or 0)
         self._live_preliminary = None
         self.live_evolution.set_overlay(None)
@@ -184,6 +187,7 @@ class LivePanelMixin(LiveStatusMixin, LiveStaticMixin):
         if changed:
             self._live_changed(changed)
             self._live_update_bar()
+            self._live_steps_changed(changed)
             if changed == "joint":
                 self._live_show_joint()
 
@@ -222,14 +226,15 @@ class LivePanelMixin(LiveStatusMixin, LiveStaticMixin):
         if not self._live_redraw.isActive():
             self._live_redraw.start()
 
-    def _live_end(self) -> None:
+    def _live_end(self, folder=None) -> None:
         """The run ended (any way): the view goes; what follows (the result, or what was shown before) is the
-        caller's."""
+        caller's. ``folder``: the result it made (its step tree is kept with it)."""
         self._live_redraw.stop()
         self._live_clock.stop()
         self._live_status_end()
         if self._live is None:
             return
+        self._live_steps_end(folder)
         self._live = None
         if self.result_stack.currentIndex() == LIVE_PAGE:
             self._show_client_empty()  # the result shown before, else the empty state
@@ -428,6 +433,7 @@ class LivePanelMixin(LiveStatusMixin, LiveStaticMixin):
     def redraw_live_plots(self) -> None:
         for picture in (self.live_frames, self.live_trace, self.live_patterns, self.live_evolution):
             picture.redraw()
+        self.redraw_step_pictures()
 
     def refresh_live_language(self) -> None:
         if self._live is None:

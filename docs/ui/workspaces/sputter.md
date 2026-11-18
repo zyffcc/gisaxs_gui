@@ -8,7 +8,9 @@
   **时间窗 / 报告 / 日志**三个标签页；速率加单位 Å/s ｜ nm/s（默认 Å/s）、不寻常速率的询问和到最后一帧的名义厚度；
   联合精修解 `joint` 作为一个解；实空间俯视图把有连续底层的解画成闭合的膜；2026-11-17 分析选项加**并行进程数**，实时视图和
   报告写出从磁盘读帧的耗时、慢盘提示与各步用时；同日一行**状态**说分析此刻在做什么（实时视图顶部、任务状态、初步结果下的
-  提示行），初步结果的演化图上用虚线画联合精修当前的解）
+  提示行），初步结果的演化图上用虚线画联合精修当前的解；2026-11-18 实时视图左栏改为**步骤树**（较新的分析包；点带 › 的步骤看它的产出），
+  联合精修在一次迭代内部也报告进度与剩余时间，**连续金属层 t_b** 作为数值块、演化曲线和时间窗一列，详情加**步骤**标签页和**存储**区，
+  读入数据（缓存）改放本机文件夹并有大小上限）
 - **科学说明**：各量的定义、规则和阈值见 [Physics and Methods Reference](../../Physics_Manual.md) 第 12 章；本文写调用链、
   文件与界面约定。
 - **Scope**: 原位溅射序列逐时间窗的结构（分析包）：晶粒半径 R、高度 H、中心间距 D、间隙、尺寸分布宽度、覆盖率，
@@ -16,7 +18,7 @@
 - **Related code**: [`src/gimap/features/sputter/`](../../../src/gimap/features/sputter/)（说明见其 `README.md`）、
   `app/main_window.py`（`_create_sputter_page`、`running_jobs`、`_language_pages`、`shutdown`）、
   `app/project.py`（`missing`：也查主屏结果的文件夹）、
-  `app/presentation/i18n/zh_sputter.py`（详情、几何、标签页）、`zh_sputter_client.py`（主屏、分析与速率）、`zh_sputter_live.py`；
+  `app/presentation/i18n/zh_sputter.py`（详情、几何、标签页）、`zh_sputter_client.py`（主屏、分析与速率）、`zh_sputter_live.py`、`zh_sputter_steps.py`（步骤树、存储、连续金属层）；
   主屏与分析：`domain/client.py`、`application/client.py`、`application/client_progress.py`、`application/use_cases.py`
   （`SputterService`、扫描的结果文件夹）、`infrastructure/client.py`、`infrastructure/process.py`、
   `presentation/views/sputter_main_view.py`、`presentation/client_flow.py`、`rate_flow.py`（速率与单位）、`client_panel.py`、
@@ -25,7 +27,10 @@
   并行进程数：`presentation/workers_flow.py`；读帧耗时的文字：`presentation/reading_texts.py`；
   实时视图：`application/client_live.py`、`application/live_progress.py`（初步结果之后的精修、联合精修、计数的速度）、
   `presentation/live_panel.py`、`live_status.py`（状态行、联合精修的虚线）、`live_pictures.py`、`live_static.py`（沉积后的样品）、
-  `presentation/views/sputter_live_view.py`；静态帧：`application/client_static.py`、`infrastructure/client_static.py`、
+  `presentation/views/sputter_live_view.py`；步骤树：`application/live_steps.py`、`application/step_details.py`、
+  `infrastructure/trace_files.py`、`presentation/live_steps_panel.py`、`step_tree.py`、`step_texts.py`、`step_pictures.py`、
+  `presentation/views/sputter_steps_view.py`；存储：`application/storage.py`、`infrastructure/cache_store.py`、
+  `presentation/storage_panel.py`；静态帧：`application/client_static.py`、`infrastructure/client_static.py`、
   `presentation/static_flow.py`、`presentation/views/sputter_static_view.py`；分析包随仓库提供（`utils/sputter_client/`，
   研究代码的发布版：只有这些命令用到的文件，不含开发时所用私有数据的名字，`MANIFEST.json` 与
   `tests/test_sputter_client_bundle.py` 检查它；`GIMAP_SPUTTER_CLIENT` 或用户选的文件夹优先）
@@ -45,8 +50,13 @@
   联合精修的虚线及其消失、中文）、
   [`tests/test_sputter_reading.py`](../../../tests/test_sputter_reading.py)（并行进程数到请求和命令行、读帧耗时与慢盘提示、
   报告的各步用时、中文）、
+  [`tests/test_sputter_steps.py`](../../../tests/test_sputter_steps.py)（步骤树、步骤的产出、联合精修迭代内的进度、结果的
+  步骤标签页、连续金属层、实时视图只留所示的图）、
+  [`tests/test_sputter_storage.py`](../../../tests/test_sputter_storage.py)（本机文件夹、用户数据文件夹里旧的读入数据、
+  上限与最久未用者先删、存储区）、
   [`tests/test_sputter_client_bundle.py`](../../../tests/test_sputter_client_bundle.py)（随仓库的分析包）
-- **Last verified**: 2026-11-17（状态行与联合精修的虚线：离线测试，编造的事件与结果，另在离屏窗口里浅色、深色截图核对）；
+- **Last verified**: 2026-11-18（步骤树、步骤的产出、联合精修迭代内的进度、连续金属层、存储：离线测试，编造的事件、细节文件与
+  缓存；另在离屏窗口里浅色英文、深色中文截图核对）；2026-11-17（状态行与联合精修的虚线：离线测试，编造的事件与结果，另在离屏窗口里浅色、深色截图核对）；
   2026-11-17（并行进程数、读帧耗时、各步用时：离线测试，编造的事件与结果）；2026-11-16（删除“预测”、新的详情、速率单位、联合精修解、闭合的膜：离线测试，编造的结果）；
   2026-11-16（输入栏的“沉积后”与静态帧的实时视图：离线测试；另在本机用一份真实的沉积后样品在离屏窗口里经输入栏走完三步
   并截图，数值不进仓库）；2026-11-15（实时视图）；2026-11-14（主屏与分析）
@@ -68,7 +78,8 @@
   “t = … s · 已沉积 … nm”）与切换**图样 ｜ 实空间**（`image_switch`）；实测图与模型图（`PatternPair`），或所选解的实空间
   示意（`RealSpacePicture`，同一个位置，`pattern_host` 是两页的 `QStackedWidget`）；解的选择（`SegmentedControl`，页面按时间窗的
   条目动态建立：候选 1…3、精修解、联合精修解，各带拟合偏差）、**恢复默认解**、一句说明；数值块（半径 R、高度 H、间距 D、间隙、
-  尺寸分布宽度、覆盖率；没有的量不显示）和所显示解的拟合偏差；演化图（`EvolutionPlot`）。
+  尺寸分布宽度、覆盖率；没有的量不显示；连续金属层 t_b（`base_nm`）只在结果的 `wanted` 列出它时显示，`ClientResult.shows`）
+  和所显示解的拟合偏差；演化图（`EvolutionPlot`；t_b 用暗金色画在尺寸轴上）。
 - **详情**（`_details_view`）：左栏（`details_scroll`）依次是**样品与几何**（X 射线、距离、入射角、光束中心，各带来源一行；
   把几何存为预设）、**分析选项**（`_analysis_section`：模式（自动 / 快速 / 精修 / 完整）、并行进程数（见下）、沉积开始、沉积持续时间、聚合物膜厚
   （只在基底是聚合物膜时显示）、分析包的文件夹与“选择文件夹…”、打开报告、打开文件夹、分析的消息 `client_log`）、
@@ -87,6 +98,13 @@
   - **日志**：`analyze_*.log`，按 `analysis.json` 里各步骤的顺序，下拉框选一份（日志很长时只显示最后 400 000 个字符）。
   - 没有结果时每页只有一行“请分析一个扫描，或打开一个结果”（`NO_RESULT`）。
   标签页名用 “Logs”：单独的 “Log” 在翻译表里已是“对数”。
+  - **步骤**（`tab_steps`，第四个标签页，`live_steps_panel.show_result_steps`）：左边一行说明和所示结果的步骤树
+    （`ClientService.steps`：`trace/gimap_steps.json`，没有时由 `analysis.json` 和 `trace/` 里的细节文件重建），右边所点步骤的
+    产出（点时读取，换结果时丢掉）；没有 `trace/` 的结果一行说它由较早的分析包生成。
+- **存储**（`storage_panel.py`，`_storage_section`，左栏最后，默认收起）：展开时在后台（任务键 `sputter_storage`）列出每份读入
+  数据（标签，运行中的那份加“（正在使用）”；大小；上次使用；本机文件夹或“用户数据文件夹（旧版 GIMaP）”）、合计与本机文件夹、
+  结果根的大小（“从不自动删除”）。**删除所选**、**删除未使用超过 n 天**先询问（`QMessageBox.question`），从不删除正在使用的那份。
+  **读入数据上限**（GB，偏好 `cache_limit_gb`，默认 5，0 为“不设上限”）随每次分析放进 `ClientRequest.cache_limit`。
 - **并行进程数**（`workers_flow.py` 的 `WorkersMixin`，`workers_box`：`ShownComboBox`，显示或打开时发 `aboutToShow`）：
   第一项“自动（N）”，N = `ClientService.automatic_workers()`（即运行器的 `workers()`，`infrastructure/process.py`
   `default_workers`：min(16, 核心数 − 2)，再受空闲内存限制），每次显示或打开选择框时重算；其后 1 … `ClientService.cores()`。
@@ -125,8 +143,16 @@
      （`ClientRequest.intake_values`：文件夹、金属、基底、速率及是否 QCM、几何、掩膜、开始、持续时间、膜厚）；模式不在内。
    - **光束中心**：页面用 GIMaP 的像素坐标，交给分析包前减 0.5（`index_center_from_canonical`）；留空时给 `--auto-centre`（页面说“由帧估计”；否则分析包会用它自己束线的默认值）。
    - **滚转角**总是给出（留空为 0，与页面说的一致）；**掩膜**留空时不给 `--mask`，分析包用它自带的像素掩膜。
-   - **数据与工作文件夹**：`<用户数据>/sputter_client/<包版本前 12 位>/data/<package-mask 或 mask-<掩膜 SHA-256 前 12 位>>`
+   - **数据与工作文件夹**：`<本机文件夹>/sputter_client/<包版本前 12 位>/data/<package-mask 或 mask-<掩膜 SHA-256 前 12 位>>`
      和 `…/work`（分析包要求一个数据文件夹只用一种像素掩膜）。包版本 = `MANIFEST.json` 的 SHA-256，没有时是文件指纹。
+     本机文件夹（`infrastructure/cache_store.py` `local_data_dir`）：Windows `%LOCALAPPDATA%\GIMaP`，macOS
+     `~/Library/Caches/GIMaP`，其他 `$XDG_CACHE_HOME/gimap`（`~/.cache/gimap`），设了 `GIMAP_HOME` 时 `<GIMAP_HOME>/cache`——
+     不放在用户数据文件夹：Windows 上那是漫游配置文件，在很多研究所电脑上是有配额的慢速网络目录。以前放在
+     `<用户数据>/sputter_client/` 的读入数据不搬动也不丢：请求的读入在那里已完成而本机没有时，`roots` 直接用那里的数据文件夹；
+     静态系列的数据同样先找本机、再找那里（`storage_folder`）；存储区把它们列为“用户数据文件夹（旧版 GIMaP）”。
+   - **上限**：每次运行前后，GIMaP 自己的读入数据（本机和用户数据文件夹里的，按标记 `<标签>.gimap.json` 的时间算最近使用，
+     每次运行都更新它）合计超过 `ClientRequest.cache_limit`（默认 5 GB，0 不限）时，从最久未用的删起，直到不超过；不删本次请求的，
+     也从不删结果。删了时消息里有一行 `CACHES_REMOVED`。
    - **中断的导入**：导入被取消后，标签文件夹留在数据文件夹里，分析包会永远拒绝这个标签（“exists: never overwritten”）。
      GIMaP 在导入那一步说“done”时写标记 `<数据根>/<标签>.gimap.json`；下次运行前，标签文件夹存在但没有 `scan.json` 或没有
      标记时把它删掉（只删 `gui_` 开头、GIMaP 自己建的那个文件夹）。
@@ -223,6 +249,27 @@
   拟合偏差 …”；演化图是此前已分析的样品加上这个样品已求解的各帧（都画在名义厚度处，经中位数连线——结果里样品的数值就是各帧的
   中位数），最近一帧标出。步骤行“N 帧中 n 帧可用”“已求解 k / m 帧”（快速、精修模式只取可用帧中的 4 帧，这时加上
   “取 n 个可用帧中的 m 帧”）。
+- **步骤树**（`application/live_steps.py` 的 `StepTree`，`presentation/step_tree.py` 的 `StepChecklist`，`live_steps_panel.py`
+  的 `LiveStepsMixin`，布局 `views/sputter_steps_view.py`）：较新的分析包发 `step` 事件后（`StepTree.reported`），左栏的四个
+  步骤行换成步骤树：○ 待做、● 进行中（下面一行是状态行，见上；联合精修时是“联合精修：第 k/n 次迭代 · 求导数：12/20 个时间窗 ·
+  已用 6:12，约剩 9 分钟”）、✓ 完成（右边是这一步的一行结论）、✗ 失败、– 跳过。父步骤在它或子步骤进行中 / 失败时展开，其余时候
+  收起（▸ / ▾ 可手动切换）。标题用 `STEP_TITLES` 的译文（网络的步骤用网络名）；分析包写的英文结论与 `step_texts.SUMMARY_TEMPLATES`
+  匹配，用同样的数值显示译文，其余照原样。带细节文件的步骤标题后有“›”，点它在右半边打开（`live_right` 第 2 页：
+  `step_pictures.StepDetailPicture`，由 `ClientService.step_detail` 依次在结果的 `trace/` 和读入的 `<数据根>/<标签>.trace/`
+  里找）：束心与掩膜——合并后的探测器图、掩膜去掉的份额（红）、束心 +、样品地平线（虚线），束心按 GIMaP 像素坐标
+  (col + 0.5) × 合并倍数给出；读帧——数字和读入的帧段；沉积开始——计数率随时间、基线及其取值区间、开始时刻（规则自己的结果
+  不同时用点线）；时间窗——每个时间窗一个刻度；比较网络——各网络拟合偏差中位数的条形（选用的用强调色）；联合精修——每次迭代的
+  拟合偏差中位数，以及最后一次迭代后的解（R、H、D、t_b，覆盖率用右轴）。“回到分析”关闭它并丢掉数组；打开着的联合精修每次
+  `joint` 事件后重读。初步结果显示时，提示行旁的**步骤**（`steps_button`）回到实时视图，实时视图顶部的**显示初步结果**
+  （`live_preliminary_button`）回去。运行以结果结束时，树写进 `trace/gimap_steps.json`（`ClientService.save_steps`）。
+  较早的分析包没有 `step` 事件：保留四个步骤行。
+- **联合精修迭代内的进度**（`application/live_progress.py`）：`joint_progress`（`family`、`iteration`：正在计算的那次、`total`、
+  `phase`：`derivatives` 求导数（一次迭代的大部分时间）/ `step` 试探步 / `pool` 准备、`done`、`windows`、`seconds`：从联合精修开始
+  起的秒数）。剩余时间 `joint_batch_left` = 每个时间窗的秒数（这一批从第一个到最近一个事件；一次迭代求导数的第一个事件则从上一次
+  迭代结束算起）× 这一批剩下的时间窗 + 每次迭代的秒数（已完成迭代的平均，没有时用这一批的速度 × 时间窗数）× 之后的迭代次数，
+  再减去最近事件之后已过的时间。任务状态的进度条：之前的迭代加上本次迭代的份额（求导数按 0.9 次迭代算，`joint_batch_share`）。
+- **内存**：实时视图只留它显示的图（最近一批帧、每个网络最近求解的时间窗、一个打开的步骤细节）；细节文件点开时读、关闭或换结果时
+  丢掉。
 
 **分析包的约定**（研究代码 `iampred.live`，2026-11-15）：每一步的进程从环境变量 `IAMPRED_LIVE` 得到一个文件夹，在其中写
 `<时间>_<pid>.json`（和需要时同名 `.npz`，先写临时名再改名）；`iampred.analyze` 在步骤运行时每 0.5 s 把新事件打印成一行
@@ -234,6 +281,9 @@
 `joint_stage`（`family`、`stage`：`pool` 或 `fit`、`windows`、`total` = 迭代次数）和每次迭代后的 `joint`（`family`、
 `iteration`、`total`、`seconds`：从开始迭代起的秒数、`median`：拟合偏差中位数、`windows`：各时间窗 `{t, fit_deviation, R_nm,
 H_nm, D_nm, gap_nm, width, coverage, amount_nm, base_nm}`）。缺的字段照样显示能显示的部分。
+2026-11-17 起的分析包还发 `step`（`id`、`state`、`title`、`summary`、`detail`，见上）和 `joint_progress`，把每一步的细节写进
+`<输出>/trace/`（JSON，图像为压缩的 float16 `.npz`：`detector`、`reading`、`onset`、`windows`、`compare`、`joint`），读入的细节
+还留在 `<数据根>/<标签>.trace/` 并复制进每个结果；`main.json` 的 `wanted` 列出 `base_nm`（晶粒下连续金属层的厚度，0 为分开的岛）。
 `iampred.static` 同样转发：`detector`（`role`：`sample` 或 `bare substrate`）、`sample`（可用帧之和、帧数、未用的帧及原因）、
 `solving`（要求解的帧数）、`frame`（一帧的解，`stage`：`network` 或 `refined`，带实测图与模型图）。
 

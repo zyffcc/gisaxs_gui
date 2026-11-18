@@ -132,6 +132,9 @@ def main(argv=None):
     live = out / "live"
     LV.clear(live)
 
+    shutil.rmtree(out / "trace", ignore_errors=True)
+    os.environ[LV.TRACE_ENV] = str(out / "trace")
+
     def run(name, args):
         nonlocal status
         t0 = time.time()
@@ -160,9 +163,16 @@ def main(argv=None):
         _analysis(a, out, data, fam_, tried, like, steps, st)
 
     have = bool(data and (data / a.label / "scan.json").exists())
+    LV.say_step("import", "running")
     ok = True
     if have:
         steps.append(dict(step="intake", returncode=0, seconds=0.0, log=None, note="scan already imported: reused"))
+        kept = data / f"{a.label}.trace" if data is not None else None
+        for sub, name in (("import.centre", "detector.json"), ("import.mask", "detector.json"),
+                          ("import.read", "reading.json"), ("import.onset", "onset.json")):
+            LV.say_step(sub, "skipped", summary="imported before",
+                        detail=name if kept is not None and (kept / name).exists() else None)
+        LV.say_step("import", "done", summary="imported before: no frame read again")
         print("[1/4] intake ... reused the imported scan", flush=True)
     else:
         args = ["--frames", a.frames, "--label", a.label, "--metal", a.metal, "--substrate", host_of(a.metal, a.substrate),
@@ -173,11 +183,28 @@ def main(argv=None):
 
 
         args += ["--windows-only", a.step] if a.mode != "full" and "--windows-only" not in extra else []
-        ok = run("intake", args + extra)
+
+
+        if data is not None:
+            shutil.rmtree(data / f"{a.label}.trace", ignore_errors=True)
+            os.environ[LV.TRACE_ENV] = str(data / f"{a.label}.trace")
+        try:
+            ok = run("intake", args + extra)
+        finally:
+            os.environ[LV.TRACE_ENV] = str(out / "trace")
+        reading = _reading_of(data, a.label)
+        LV.say_step("import", "done" if ok else "failed",
+                    summary=(f"{reading['frames_read']} of {reading['frames_total']} frames in {reading['seconds']:.0f} s"
+                             if ok and reading else "see the log of the import" if not ok else None))
+    if data is not None and (data / f"{a.label}.trace").is_dir():
+        (out / "trace").mkdir(parents=True, exist_ok=True)
+        for f in (data / f"{a.label}.trace").iterdir():
+            shutil.copyfile(f, out / "trace" / f.name)
     tried = {}
     if ok:
         alts = ALTERNATIVES.get(fam, []) if (a.alternatives == "on" or (a.alternatives == "auto" and a.mode != "full")) and not a.family else []
         LV.say("models", "predict", families=[fam] + alts, mode=a.mode)
+        LV.say_step("networks", "running")
 
 
         later = a.mode == "refine" and bool(alts)
@@ -200,6 +227,15 @@ def main(argv=None):
         if ok:
             fam = min(tried, key=tried.get)
             LV.say("chosen", "predict", family=fam, deviations={k: LV.rounded(v, 3) for k, v in tried.items()})
+            dev_text = ", ".join(f"{k} {v:.1f}" for k, v in tried.items())
+            LV.say_step("networks", "done", summary=f"median fit deviation {dev_text}")
+            LV.say_step("compare", "done", detail=LV.trace("compare", dict(deviations=tried, chosen=fam)),
+                        summary=(f"{fam} fits better ({dev_text})" if len(tried) > 1 else f"{fam}")
+                                + ("; its result is shown first" if later else ""))
+            if not later and not mode["sequence"]:
+                LV.say_step("joint", "skipped", summary=f"mode {a.mode}: the network's solutions and their time path")
+            elif not later:
+                LV.say_step("joint", "done", summary="run with the network (mode full)")
             status = "ok" if status.startswith("failed at predict") else status
             iterations = _joint_iterations(fam, mode["sequence"])
             if later:
@@ -215,12 +251,16 @@ def main(argv=None):
                 a.workers = _workers_for_memory(a.workers)
                 if a.workers < workers0:
                     print(f"      whole-scan refinement with {a.workers} processes (free memory)", flush=True)
-                ok_joint = run_quiet("predict", predict_args(fam, mode["refine"], iterations), "refine")
+                LV.say_step("joint", "running")
+                ok_joint = run_quiet("predict", predict_args(fam, mode["refine"], iterations) + ["--no-network-step"], "refine")
                 if not ok_joint and a.workers > 1:
                     a.workers = max(1, a.workers // 2)
                     print(f"      whole-scan refinement failed: once more with {a.workers} processes", flush=True)
-                    ok_joint = run_quiet("predict", predict_args(fam, mode["refine"], iterations), "refine")
+                    ok_joint = run_quiet("predict", predict_args(fam, mode["refine"], iterations) + ["--no-network-step"], "refine")
                 a.joint_note = dict(done=bool(ok_joint), workers=a.workers, iterations=iterations)
+                LV.say_step("joint", "done" if ok_joint else "failed",
+                            summary=(f"{iterations} iterations with {a.workers} processes" if ok_joint else
+                                     "did not finish (see the log of this step): the network's solutions are shown"))
                 a.workers = workers0
     if ok:
         finish(fam)
@@ -285,17 +325,37 @@ def _joint_iterations(fam, default):
     return default
 
 
+def _reading_of(data, label):
+    "The import's reading summary from the scan's marker (None when absent)."
+    marker = data / label / "pixmask.json" if data is not None else None
+    try:
+        return json.loads(marker.read_text(encoding="utf-8")).get("reading") if marker is not None else None
+    except (OSError, ValueError):
+        return None
+
+
 def _finish(a, out, data, fam, tried, like, steps, run, run_quiet, status_of, preliminary=False):
     "Copies the chosen network's tables, runs report and present (the main-screen data) and writes analysis.json;"
     for v in ("windows.csv", "summary.json", "evolution.png", "patterns.png", "sequence_record.json"):
         if (out / fam / v).exists():
             shutil.copyfile(out / fam / v, out / v)
+    if not preliminary:
+        LV.say_step("finish", "running")
+        LV.say_step("finish.report", "running")
     ok = run("report", [out])
+    if not preliminary:
+        LV.say_step("finish.report", "done" if ok else "failed")
+        LV.say_step("finish.present", "running")
     if ok:
         print("[4/4] present ...", flush=True)
         args = [out / fam, "--k", 3, "--workers", a.workers] + (["--data", data] if data is not None else [])
-        if run_quiet("present", args, "main") and (out / fam / "main" / "main.json").exists():
+        drawn = run_quiet("present", args, "main") and (out / fam / "main" / "main.json").exists()
+        if drawn:
             shutil.copytree(out / fam / "main", out / "main", dirs_exist_ok=True)
+        if not preliminary:
+            LV.say_step("finish.present", "done" if drawn else "failed")
+    if not preliminary:
+        LV.say_step("finish", "done" if ok else "failed")
     _analysis(a, out, data, fam, tried, like, steps, "preliminary" if (ok and preliminary) else status_of())
     return ok
 

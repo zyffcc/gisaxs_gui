@@ -10,11 +10,12 @@ shows the live view instead (``sputter_live_view.py``): the steps and what each 
 
 **Details**: left, from the top, Sample and geometry (X-rays, distance, incidence, beam centre, each with where its
 value comes from); Analyze options (``sputter_main_view.py``); Static Frames (``sputter_static_view.py``, collapsed);
-More options (collapsed): the pixel mask with the Masks of the Package, the sample roll and the folder results go to.
+More options (collapsed): the pixel mask with the Masks of the Package, the sample roll and the folder results go to;
+Storage (collapsed, ``sputter_steps_view.py``): the import caches of Analyze and their limit.
 Right, about the result the main screen shows: Windows (one row per time window: the values of the solution shown),
 Report (the facts of the analysis, the time of each step with how the frames were read, a note when the disk was the
-slow part, and the package's report) and Logs (the logs of its steps); each says in one line
-what to do while there is no result.
+slow part, and the package's report), Logs (the logs of its steps) and Steps (the step tree of the run and what each
+step found); each says in one line what to do while there is no result.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from src.gimap.app.presentation.i18n import DATA_VALUES
 from .sputter_live_view import SputterLiveView
 from .sputter_main_view import SputterMainView
 from .sputter_static_view import MASKS_BUTTON, MASKS_TIP, SputterStaticView
+from .sputter_steps_view import TAB_STEPS
 
 LEFT_WIDTH = 470
 NO_RESULT = "Analyze a scan or open a result"
@@ -127,6 +129,7 @@ class SputterPageView(SputterMainView, SputterLiveView, SputterStaticView):
         column.addWidget(self._analysis_section(left, _number_edit, _meta))
         column.addWidget(self._static_section(left, _number_edit, _meta))
         column.addWidget(self._options_section(left))
+        column.addWidget(self._storage_section(left))  # sputter_steps_view.py
         column.addStretch(1)
         outer.addWidget(scroll)
         outer.addWidget(self._tabs(details), 1)
@@ -241,9 +244,11 @@ class SputterPageView(SputterMainView, SputterLiveView, SputterStaticView):
         layout.addWidget(self.log_choice, 0, Qt.AlignLeft)
         layout.addWidget(self.log_view, 1)
         self.tab_log = self._empty_or(logs)
+        self.tab_steps = self._empty_or(self._steps_tab())  # sputter_steps_view.py
         self.tabs.addTab(self.tab_windows, TAB_WINDOWS)
         self.tabs.addTab(self.tab_report, TAB_REPORT)
         self.tabs.addTab(self.tab_log, TAB_LOG)
+        self.tabs.addTab(self.tab_steps, TAB_STEPS)
         return self.tabs
 
     @staticmethod

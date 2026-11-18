@@ -10,7 +10,7 @@ geometry in one line with **Edit**, **Open Result…**):
   of the solution shown (grain radius R, height H, distance D, gap, size distribution width, coverage) and their
   evolution over the scan. Nothing on it grades a value: solutions the data cannot tell apart are simply all offered;
 - **Details**: at the left the geometry, the options of Analyze, Static Frames and More options; at the right the
-  result the main screen shows, from the files of its folder: **Windows**, **Report** and **Logs**.
+  result the main screen shows, from the files of its folder: **Windows**, **Report**, **Logs** and **Steps**; at the left\n  also **Storage** (the import caches and their limit).
 
 ## Analyze (the main screen)
 
@@ -60,6 +60,38 @@ geometry in one line with **Edit**, **Open Result…**):
   window selector (`run_note`). From the preliminary result to the report (`AFTER_PRELIMINARY`) the job status's bar
   follows the share the line speaks of (busy where there is none). A second `windows` event of one network (the
   refinement after the preliminary result) starts its counts again (`live_progress.py` `_restart`).
+- **The step tree** (`application/live_steps.py` `StepTree`, `presentation/step_tree.py` `StepChecklist`,
+  `live_steps_panel.py` `LiveStepsMixin`, layout `views/sputter_steps_view.py`): a newer package sends `@live` events of
+  kind `step` (`id` of a fixed tree — `import` (`import.centre`, `.mask`, `.read`, `.onset`), `windows`, `networks`
+  (`networks.<family>`, created pending from the `models` event), `compare`, `joint` (`joint.pool`, `joint.fit`),
+  `finish` (`finish.report`, `finish.present`) —, `state` running / done / failed / skipped, `title`, `summary`,
+  `detail`). The last report of a step counts (`windows` comes once per network); a parent whose child runs runs; a
+  step event never changes `LiveRun.activity` (the status line stays the counts'). Once one came
+  (`StepTree.reported`) the tree replaces the four step lines at the left of the live view: ○ pending, ● running with the
+  status line under the step at work (`hint`), ✓ done with the step's summary at the right, ✗ failed, – skipped; a parent
+  shows its children while it or a child runs or failed and folds them away otherwise (▸ / ▾ by hand). Titles come from
+  `STEP_TITLES` (a network's step: its name); the package's English summaries are matched against
+  `step_texts.SUMMARY_TEMPLATES` and said in the interface language with the same values (others as written). A step
+  with a detail file ends in “›”; a click opens it in the right half of the live view (`live_right` page 1:
+  `step_pictures.StepDetailPicture`, read by `ClientService.step_detail` from `ClientStarted.trace_folders()` — the
+  result's `trace/`, then the import's `<data root>/<label>.trace/`), **Back to the Analysis** closes it and drops its
+  arrays; an open joint fit is read again after every `joint` event. Kinds (`application/step_details.py`):
+  `detector.json` (+ `.npz`: the binned detector, the masked share tinted, + the centre, dashed the horizon; the centre
+  said in GIMaP's pixel coordinates, (col + 0.5) × binning), `reading.json` (numbers and the runs of frames read),
+  `onset.json` (rate over time, baseline over its window, the onset and the rule's own), `windows.json` (a tick per
+  window), `compare.json` (bars of the median fit deviation, the chosen one in the accent colour), `joint.json` (median
+  per iteration; the solution after the last iteration: R, H, D, t_b, coverage on its own axis). While the preliminary
+  result is shown, **Steps** beside its note line (`steps_button`) opens the live view and **Show the Preliminary
+  Result** (`live_preliminary_button`) goes back. When the run ends with a result, the tree is written to
+  `trace/gimap_steps.json` (`ClientService.save_steps`). An older package: no step events, the four step lines.
+- **The joint fit inside an iteration** (`application/live_progress.py`): `joint_progress` (family, iteration being
+  computed, total, phase `derivatives` / `step` / `pool`, done, windows, seconds since the fit started) gives the
+  status line *Joint fit: iteration k of n · derivatives: 12 of 20 windows · 6:12 so far, about 9 min left*
+  (`_joint_batch_line`; pool: *Joint fit: preparing · 3 of 20 windows*). Time left (`joint_batch_left`): seconds per
+  window (from the batch's first event to its latest; for the first event of an iteration's derivatives, from the end
+  of the iteration before) × windows left in the batch + seconds per iteration (the finished iterations', else the
+  batch's pace × windows) × the iterations after this one, minus the time since the latest event. The job status's bar:
+  the iterations before plus 0.9 of an iteration for its derivatives (`joint_batch_share`).
 - **The joint fit at work**: every `joint` event (`LiveRun.joint_points`) is drawn dashed over the main screen's
   evolution while it shows the preliminary result (else over the live view's, for the same network) —
   `EvolutionPlot.set_overlay`: R, H, D, the gap and the coverage in their colours, named once in the legend *Joint
@@ -80,14 +112,29 @@ geometry in one line with **Edit**, **Open Result…**):
   folder is `<results root>/<scan>-<hash of the folder, metal and geometry>` (`application/use_cases.py`
   `scan_results_folder`; the hash keeps the values the page used to send to the earlier model, `FOLDER_VALUES`, so
   that results analysed then are found again); the results root is `<user data>/sputter` unless More options ▸ Save
-  results in names another. Data and work folders: `<user data>/sputter_client/<package version>/data/<pixel mask>`
-  and `…/work`. An import that was cut off is removed before the next run (the package would refuse its label for
-  ever); a finished one has the marker `<label>.gimap.json`. `gimap_request.json` in the output folder records the
-  request, the package and the command.
+  results in names another. Data and work folders (the import caches, often gigabytes) are in GIMaP's **local**
+  folder, not the user data folder (on Windows the roaming profile, on many institute PCs a slow network home with a
+  quota): `infrastructure/cache_store.py` `local_data_dir` — `%LOCALAPPDATA%\GIMaP` on Windows,
+  `~/Library/Caches/GIMaP` on macOS, `$XDG_CACHE_HOME/gimap` (`~/.cache/gimap`) elsewhere, `<GIMAP_HOME>/cache` when
+  `GIMAP_HOME` is set — then `sputter_client/<package version>/data/<pixel mask>` and `…/work`. **Imports made before
+  in the user data folder are not lost**: `ClientPackageRunner.roots` uses a request's import there when it finished
+  there and not locally (`legacy_root`); a static series' data are found there too (`storage_folder`); Details ▸
+  Storage lists them (*user data folder (older GIMaP)*) and can remove them. Nothing is moved. An import that was cut
+  off is removed before the next run (the package would refuse its label for ever); a finished one has the marker
+  `<label>.gimap.json`, whose time is its last use (every run touches it). **The limit**: before and after every run
+  the least recently used imports (GIMaP's own labels, local and in the user data folder; never the request's own,
+  never a result) are removed while all of them together exceed `ClientRequest.cache_limit` (Details ▸ Storage, default
+  5 GB, 0: none; `application/storage.py` `over_limit`, `prune`); a line in the messages of the run says so
+  (`CACHES_REMOVED`). `gimap_request.json` in the output folder records the request, the package and the command.
 - **Result** (`ClientFolderReader` → `domain/client.py`): `analysis.json`, `main/main.json` (windows with their
   entries, `pick`, `smooth`; a window may be `{t, error}`) and `main/w_<t>.npz` (the measured image and the model of
   every entry on cells of exit angle × q_y). The entry shown first is `smooth` (the smooth evolution over the scan;
   the joint fit of the whole scan, label `joint`, when the package made one), else `pick` (the lowest fit deviation).
+  `base_nm`, the thickness t_b of the continuous metal layer under the grains (0: separate islands), is shown — tile
+  *Continuous layer t_b*, a dark-gold curve on the size axis of the evolution (and in the joint fit's overlay), a
+  column of Details ▸ Windows — only when `main.json` lists it among its `wanted` quantities
+  (`ClientResult.shows`, `domain/client.py` `LISTED_ONLY`); an older result keeps it for the real-space picture only. The
+  live view's own result lists it once the package reports its steps.
   Entries are named in `client_texts.entry_name`: *Candidate n*, *Refined*, *Joint fit (whole scan)*, *Model
   solution*; refined and joint entries have no network weight. A choice of the user is kept per window in
   `main/choices.json` (only where it differs from the default; in the user data folder when the result cannot be
@@ -101,7 +148,7 @@ geometry in one line with **Edit**, **Open Result…**):
   the continuous base layer `base_nm`, caps of radius r and height (H − base)·r/R) and the top view of a square of
   7 D (log-normal radii around R on a hexagonal arrangement of distance D, each shifted at random by about 0.12 D).
   The arrangement is `domain/real_space.py` (pure Python, one seed: another window or entry changes the sizes, not
-  the dice). `base_nm` is not a shown quantity; the reader keeps it for the picture (`SKETCH_KEYS`). Grains that
+  the dice). `base_nm` is kept for the picture of every result (`SKETCH_KEYS`) and shown as a value only when the result lists it (see **Result**). Grains that
   touch form a cluster (`clusters`) drawn as one piece; a cluster across the view has percolated (`spanning`,
   `arrangement`: islands, coalescing, network) and is drawn darker; a line above the picture says the arrangement.
   An entry with a base layer (`RealSpace.continuous`: `base_nm` > 0) is a closed film: the top view is the metal of
@@ -118,7 +165,7 @@ geometry in one line with **Edit**, **Open Result…**):
   `live_static.py`, `LiveRun(kind="static")`): one sample measured after its deposition is analysed into a series
   (`StaticService` in `application/client_static.py`, `StaticPackageRunner` in `infrastructure/client_static.py`:
   `-u -m iampred.static --frames … --label … --nominal-nm … --out <series> …`, the package's own geometry for static
-  frames unless a field is filled in, `IAM_STATIC_DATA` = `<user data>/sputter_client/static/<series id>`). The series
+  frames unless a field is filled in, `IAM_STATIC_DATA` = `<local folder>/sputter_client/static/<series id>`, a series made before in the user data folder keeps its data there). The series
   is shown like a scan, one sample in the place of a time window, along the nominal thickness. `gimap_series.json` in
   the series folder records what each sample was analysed from; the same name with other inputs replaces the sample.
 
@@ -146,22 +193,37 @@ geometry in one line with **Edit**, **Open Result…**):
   frame and share of the time), the total and the processes (`workers`); a note when `reading` says the disk was the
   slow part (`reading_was_slow`); then `REPORT.md` rendered as Markdown (its images found in the result folder). An
   older result without `reading` / `workers` has the rows it can. **Logs**: the `analyze_*.log` of every step, in the order of the steps.
+  **Steps** (`live_steps_panel.show_result_steps`): the step tree of the result (`ClientService.steps`: its
+  `trace/gimap_steps.json`, else rebuilt from `analysis.json` and the detail files in `trace/`, `StepTree.from_files`)
+  at the left, what the chosen step found at the right (read on the click, dropped when another result is shown); a
+  result without `trace/` says in one line that an older package made it.
   Without a result each tab says *Analyze a scan or open a result*.
+- **Storage** (left, collapsed; `storage_panel.py`, layout `views/sputter_steps_view.py`): when opened, in the
+  background (`TaskRunner` key `sputter_storage`), one row per import cache (label — *(in use)* while its Analyze runs —,
+  size, last used, *local folder* or *user data folder (older GIMaP)*), the total with the local folder, and the size
+  of the results root (*never removed automatically*). **Remove Selected** and **Remove Unused For n days** ask first
+  (`QMessageBox.question`) and never remove the import in use. **Limit of the imports** (GB, preference
+  `cache_limit_gb`, default 5, 0 *No limit*) goes with every Analyze as `ClientRequest.cache_limit`.
+- **Memory**: the live view keeps the pictures it shows only (the latest chunk of frames, the latest window of each
+  network, one open step detail); a step's detail file is read when it is opened and its arrays dropped when it is
+  closed or another result is shown.
 
 Layers: `domain` (`client.py`: the windows, entries and images of an Analyze result; `real_space.py`: where the grains
 of an entry sit), `application` (`use_cases.py`: `SputterService`, the scan's results folder, `METALS`, `PROBLEMS`,
 `Stopped`; `client.py`: `ClientService`, `ClientRequest`, `ResultTexts` and the ports; `client_progress.py`,
 `client_static.py`; `client_live.py`: the live events of a running Analyze and `LiveRun`; `live_progress.py`: its
-refinement after the preliminary result, the joint fit and the pace of its counts; `scan.py`: the scan header
+refinement after the preliminary result, the joint fit (with its progress inside an iteration) and the pace of its
+counts; `live_steps.py`: the step tree; `step_details.py`: what a step found; `storage.py`: the import caches and
+their limit; `scan.py`: the scan header
 and where each value comes from), `infrastructure` (`client.py`: `ClientPackageRunner`, `ClientFolderReader`,
-`locate_package`; `client_static.py`: `StaticPackageRunner`; `process.py`; `scan_header.py`: `CbfHeaderInspector`),
+`locate_package`; `client_static.py`: `StaticPackageRunner`; `cache_store.py`: the local folder and the import caches;\n`trace_files.py`: the result's `trace` folder; `process.py`; `scan_header.py`: `CbfHeaderInspector`),
 `presentation` (`SputterPage` = `views/sputter_page_view.py` + `views/sputter_main_view.py` +
-`views/sputter_live_view.py` + `views/sputter_static_view.py` + `client_flow.py`, `rate_flow.py`, `client_panel.py`,
-`result_tabs.py`, `client_texts.py`, `reading_texts.py`, `workers_flow.py`, `live_panel.py`, `live_status.py`, `live_pictures.py`, `live_static.py`, `pattern_view.py`,
+`views/sputter_live_view.py` + `views/sputter_steps_view.py` + `views/sputter_static_view.py` + `client_flow.py`, `rate_flow.py`, `client_panel.py`,
+`result_tabs.py`, `client_texts.py`, `reading_texts.py`, `workers_flow.py`, `live_panel.py`, `live_status.py`, `live_pictures.py`, `live_static.py`,\n`live_steps_panel.py`, `step_tree.py`, `step_texts.py`, `step_pictures.py`, `storage_panel.py`, `pattern_view.py`,
 `real_space_view.py`, `evolution_view.py`, `static_flow.py`, `geometry.py`, `project_state.py`, `texts.py`,
 `preset_dialog.py`), `bootstrap.py`. Chinese texts: `app/presentation/i18n/zh_sputter.py`, `zh_sputter_client.py`,
-`zh_sputter_live.py`. Tests: `tests/test_sputter_feature.py`, `tests/test_sputter_page.py` (fakes in
+`zh_sputter_live.py`, `zh_sputter_steps.py`. Tests: `tests/test_sputter_feature.py`, `tests/test_sputter_page.py` (fakes in
 `tests/sputter_fixtures.py`), `tests/test_sputter_client.py`, `tests/test_sputter_main_screen.py`,
 `tests/test_sputter_details.py`, `tests/test_sputter_live.py`, `tests/test_sputter_reading.py`,
-`tests/test_sputter_status.py` (a fake of the package's process and invented results in
+`tests/test_sputter_status.py`, `tests/test_sputter_steps.py`, `tests/test_sputter_storage.py` (a fake of the package's process and invented results in
 `tests/sputter_client_fixtures.py`), `tests/test_sputter_client_bundle.py`. Page: `docs/ui/workspaces/sputter.md`.

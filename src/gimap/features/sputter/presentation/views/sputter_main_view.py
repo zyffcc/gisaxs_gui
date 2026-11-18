@@ -71,6 +71,8 @@ ANALYZE_TIP = ("Read the frames, find the solutions of every time window and dra
                "measured one.")
 TILES = (("R_nm", "Radius R", "nm", "Radius of the grains."),
          ("H_nm", "Height H", "nm", "Height of the grains."),
+         ("base_nm", "Continuous layer t_b", "nm", "Thickness t_b of the continuous metal layer under the grains (0: "
+                                                   "separate islands)."),
          ("D_nm", "Distance D", "nm", "Centre-to-centre distance of neighbouring grains."),
          ("gap_nm", "Gap", "nm", "Gap between neighbouring grains: D − 2R."),
          ("width", "Size distribution width", "", "Width σ of the log-normal distribution of the grain radius."),
@@ -84,8 +86,8 @@ TILES = (("R_nm", "Radius R", "nm", "Radius of the grains."),
          ("film_share", "Film share", "", "Share of the scattering of the layer that leaves through the metal film "
                                           "(0 to 1)."))
 """(quantity, caption, unit, tooltip) of the value tiles, in their order. A result shows the tiles of the quantities
-it has: a flat substrate the first six, a porous one the radius (as a relative size: the page says so in its
-caption), the width and the last five."""
+it has: a flat substrate the first seven (the continuous layer only when the result lists it), a porous one the
+radius (as a relative size: the page says so in its caption), the width and the last five."""
 DEVIATION_CAPTION = "Fit deviation (lower is better)"
 DEVIATION_TIP = ("How far the model image is from the measured image, per cell and with an allowance for the model: "
                  "it compares the solutions of one measured image.")
@@ -94,6 +96,8 @@ FILM_TIP = "Thickness of the polymer film on the wafer. Empty: the analysis uses
 ONSET_TIP = "Time of the scan (s) at which the deposition started. Empty: found in the data."
 DURATION_TIP = ("How long the deposition lasted after its start (s): the metal amount stays constant afterwards. "
                 "Empty: to the end of the scan.")
+STEPS_BUTTON = "Steps"
+STEPS_TIP = "The steps of the analysis at work and what each has found (the live view)."
 WORKERS_TIP = ("How many processes the analysis runs at once (Analyze and Static Frames). Automatic: one per core, two "
                "cores left free and at most 16, fewer when the free memory is short; worked out again when the "
                "analysis starts. More processes do not help when reading the frames from the disk is the slow part.")
@@ -373,7 +377,17 @@ class SputterMainView:
         self.run_note.setObjectName("sputterRunNote")
         self.run_note.setProperty("gimapRole", "info")
         self.run_note.setVisible(False)
-        layout.addWidget(self.run_note)
+        self.steps_button = QPushButton(STEPS_BUTTON, view)  # the steps of the run at work (its live view)
+        self.steps_button.setObjectName("sputterRunSteps")
+        self.steps_button.setProperty("gimapRole", "link")
+        self.steps_button.setCursor(Qt.PointingHandCursor)
+        self.steps_button.setToolTip(STEPS_TIP)
+        self.steps_button.setVisible(False)
+        note = QHBoxLayout()
+        note.setSpacing(8)
+        note.addWidget(self.run_note, 1)
+        note.addWidget(self.steps_button)
+        layout.addLayout(note)
 
         self.pattern_host = QStackedWidget(view)  # 0: the two images, 1: the real-space picture
         patterns_page, space_page = QWidget(self.pattern_host), QWidget(self.pattern_host)
@@ -518,4 +532,4 @@ class SputterMainView:
 
 
 __all__ = ["RATE_UNITS", "RATE_UNIT_TIP", "DEVIATION_CAPTION", "ENTRY_HINT", "ElidedLabel", "IMAGE_CHOICES", "KIND_CHOICES", "MODE_CHOICES", "SAMPLE_METALS", "SUBSTRATE_CHOICES",
-           "ShownComboBox", "SputterMainView", "TILES", "VIEW_CHOICES", "WORKERS_TIP"]
+           "STEPS_BUTTON", "STEPS_TIP", "ShownComboBox", "SputterMainView", "TILES", "VIEW_CHOICES", "WORKERS_TIP"]

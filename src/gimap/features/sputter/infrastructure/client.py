@@ -11,10 +11,17 @@ NumPy, SciPy and Matplotlib only.
 entered in GIMaP's pixel coordinates and handed over as the 0-based pixel-centre indices the package's toolkit counts
 (``shared/geometry/conventions.py``); an empty centre becomes ``--auto-centre``.
 
-**Data and work folders** are in the user data folder: ``sputter_client/<package version>/data/<mask>`` (the package
-keeps one pixel mask per data folder) and ``…/work``. An import that was cut off leaves its folder without the
-package's ``scan.json`` or without GIMaP's marker ``<label>.gimap.json``: the package would refuse the label for ever
-("exists: never overwritten"), so such a folder — GIMaP's own cache of that request — is removed before the run.
+**Data and work folders** are in GIMaP's local folder (``cache_store.local_data_dir``, not the roaming user data
+folder): ``sputter_client/<package version>/data/<mask>`` (the package keeps one pixel mask per data folder) and
+``…/work``; an import finished before in the user data folder is still used there. An import that was cut off leaves
+its folder without the package's ``scan.json`` or without GIMaP's marker ``<label>.gimap.json``: the package would
+refuse the label for ever ("exists: never overwritten"), so such a folder — GIMaP's own cache of that request — is
+removed before the run. Every run touches the marker of its import (its last use) and, before and after the run,
+removes the least recently used imports while they exceed the request's limit (``ClientRequest.cache_limit``; never
+the import in use, never a result).
+
+**The steps** (``ClientFolderReader.steps``, ``detail``, ``save_steps``): the result's ``trace`` folder
+(``trace_files.py``).
 
 **The result** (``ClientFolderReader``): ``analysis.json``, ``main/main.json`` and ``main/w_<t>.npz`` of an output
 folder; the user's choices in ``main/choices.json`` (in the user data folder when the result cannot be written to).
@@ -45,16 +52,19 @@ from ..application import (CLIENT_FALLBACK, CLIENT_INCOMPLETE, CLIENT_MISSING, E
                            parse_live)
 from ..domain import (ANALYSIS_FILE, BAD_ARRAYS, BAD_MAIN, MAIN_FILE, MAIN_FOLDER, NO_ARRAYS, NO_MAIN, ClientResult,
                       ClientWindow, WindowPatterns, client_result, window_patterns)
+from ..application.storage import DEFAULT_LIMIT_BYTES, PLACE_LOCAL, PLACE_USER, prune
+from .cache_store import IMPORT_MARKER, STORAGE_FOLDER, TRACE_SUFFIX, ImportCacheStore
 from .process import TAIL_LINES, child_environment, console_python, default_workers, run_streaming
+from .trace_files import read_detail, save_steps, steps_record, trace_files
 
 CLIENT_OVERRIDE = "GIMAP_SPUTTER_CLIENT"
 LOCAL_PACKAGE = Path(__file__).resolve().parents[5] / "utils" / "sputter_client"
 IAM = Path("code") / "iam"
 PACKAGE_PARTS = (IAM / "iampred" / "analyze.py", Path("code") / "gimap", Path("code") / "toolkit", Path("models"))
-STORAGE_FOLDER = "sputter_client"
 CLIENT_REQUEST_FILE = "gimap_request.json"
 CHOICES_FILE = "choices.json"
-IMPORT_MARKER = ".gimap.json"
+CACHES_REMOVED = "Import caches over the limit of {limit}: removed {count} not used for the longest time ({size})"
+"""The line Analyze writes to its messages when it removed caches (the package's own lines are English too)."""
 PACKAGE_MASK = "package-mask"
 MASK_FOLDER = Path("code") / "assets"
 LOG_TAIL = 15
@@ -108,6 +118,11 @@ def locate_package(chosen: Optional[Path] = None, local: Path = LOCAL_PACKAGE) -
     return ClientPackage(home, source, CLIENT_INCOMPLETE.format(folder=home, missing=missing.as_posix()))
 
 
+def _finished(data_root: Path, label: str) -> bool:
+    """The import of ``label`` in ``data_root`` finished (the package's ``scan.json`` and GIMaP's marker)."""
+    return (Path(data_root) / label / "scan.json").is_file() and (Path(data_root) / (label + IMPORT_MARKER)).is_file()
+
+
 def _file_digest(path: Path) -> str:
     digest = hashlib.sha256()
     with Path(path).open("rb") as handle:
@@ -147,11 +162,34 @@ def _tail(path: Optional[Path]) -> str:
     return words if len(words) <= TEXT_LIMIT else "…\n" + words[-TEXT_LIMIT:]
 
 
+def _gb(size: float) -> str:
+    return f"{size / (1 << 30):.1f} GB"
+
+
 class ClientPackageRunner:
     def __init__(self, storage_root: Callable[[], Path], python: Optional[str] = None, *, run=run_streaming,
-                 chosen: Optional[Path] = None, local: Path = LOCAL_PACKAGE, workers: Callable[[], int] = default_workers):
+                 chosen: Optional[Path] = None, local: Path = LOCAL_PACKAGE, workers: Callable[[], int] = default_workers,
+                 legacy_root: Optional[Callable[[], Path]] = None):
+        """``storage_root()``: the folder of the import caches (the local one); ``legacy_root()``: where GIMaP kept
+        them before (the user data folder) — an import found there is still used."""
         self.storage_root, self.python, self._run_process = storage_root, python or console_python(), run
         self._chosen, self._local, self._workers = chosen, local, workers
+        self.legacy_root = legacy_root
+        self.caches = ImportCacheStore(self._cache_roots)
+
+    def _cache_roots(self) -> list:
+        roots = [(Path(self.storage_root()), PLACE_LOCAL)]
+        return roots + ([(Path(self.legacy_root()), PLACE_USER)] if self.legacy_root is not None else [])
+
+    def storage_folder(self, relative) -> Path:
+        """``<storage root>/sputter_client/<relative>`` — or the same under the user data folder when only that one
+        exists (made before the caches moved)."""
+        local = Path(self.storage_root()) / STORAGE_FOLDER / relative
+        if self.legacy_root is not None and not local.exists():
+            older = Path(self.legacy_root()) / STORAGE_FOLDER / relative
+            if older.exists():
+                return older
+        return local
 
     def choose(self, folder: Optional[Path]) -> None:
         self._chosen = Path(folder) if folder else None
@@ -197,7 +235,8 @@ class ClientPackageRunner:
 
     # -- where the package keeps its data ---------------------------------------------------------------------
     def roots(self, package: ClientPackage, request: ClientRequest) -> tuple:
-        """(data folder, work folder) of a request: one data folder per package version and pixel mask."""
+        """(data folder, work folder) of a request: one data folder per package version and pixel mask, in the local
+        folder — or in the user data folder when the request's import was finished there before the caches moved."""
         base = Path(self.storage_root()) / STORAGE_FOLDER / package.identity[:12]
         mask = PACKAGE_MASK
         if request.mask_file:
@@ -205,7 +244,34 @@ class ClientPackageRunner:
                 mask = "mask-" + _file_digest(Path(request.mask_file))[:12]
             except OSError as exc:
                 raise OSError(MASK_UNREADABLE.format(file=request.mask_file)) from exc
-        return base / "data" / mask, base / "work"
+        data, label = base / "data" / mask, request.label()
+        if self.legacy_root is not None and not _finished(data, label):
+            older = Path(self.legacy_root()) / STORAGE_FOLDER / package.identity[:12] / "data" / mask
+            if _finished(older, label):
+                data = older
+        return data, base / "work"
+
+    def import_trace(self, request: ClientRequest) -> Optional[Path]:
+        """Where the import of a request keeps the details of its steps (``<data folder>/<label>.trace``; None when
+        the package or the mask cannot be found)."""
+        package = self.package()
+        if package.problem or not package.identity:
+            return None
+        try:
+            return self.roots(package, request)[0] / (request.label() + TRACE_SUFFIX)
+        except OSError:
+            return None
+
+    def _prune(self, limit: Optional[int], label: str, on_line: Callable[[object], None]) -> None:
+        """Remove the import caches over the limit, the least recently used first (never ``label``'s)."""
+        limit = DEFAULT_LIMIT_BYTES if limit is None else limit
+        try:
+            removed = prune(self.caches, limit, keep=(label,))
+        except OSError:  # a folder that cannot be listed: the caches stay as they are
+            return
+        if removed:
+            on_line(CACHES_REMOVED.format(limit=_gb(limit), count=len(removed),
+                                          size=_gb(sum(cache.size for cache in removed))))
 
     def environment(self, package: ClientPackage, data_root: Path, work_root: Path) -> dict:
         home = Path(package.home)
@@ -246,8 +312,7 @@ class ClientPackageRunner:
     def _clear_unfinished(self, data_root: Path, label: str) -> None:
         """Remove the folder of an import of this label that did not finish (GIMaP's own cache of the request)."""
         folder = data_root / label
-        finished = (folder / "scan.json").is_file() and (data_root / (label + IMPORT_MARKER)).is_file()
-        if label.startswith(LABEL_PREFIX) and folder.is_dir() and not finished:
+        if label.startswith(LABEL_PREFIX) and folder.is_dir() and not _finished(data_root, label):
             shutil.rmtree(folder)
 
     def _record(self, package: ClientPackage, request: ClientRequest, out: Path, command: list, label: str) -> None:
@@ -274,6 +339,8 @@ class ClientPackageRunner:
         for folder in (data_root, work_root):
             folder.mkdir(parents=True, exist_ok=True)
         self._clear_unfinished(data_root, label)
+        self.caches.touch(data_root, label)  # used now: the last to go when the caches exceed their limit
+        self._prune(request.cache_limit, label, on_line)
         command = self.command(request, out, data_root, label)
         self._record(package, request, out, command, label)
         progress = ClientProgress()
@@ -287,7 +354,10 @@ class ClientPackageRunner:
                     encoding="utf-8")
             on_line(line)
 
-        return self.launch(command, package, data_root, work_root, keep, should_stop)
+        try:
+            return self.launch(command, package, data_root, work_root, keep, should_stop)
+        finally:  # the new import counts now (it is kept: it is the one in use)
+            self._prune(request.cache_limit, label, on_line)
 
 
 class ClientFolderReader:
@@ -384,6 +454,19 @@ class ClientFolderReader:
         order = [name for name in named if name in found] + sorted(name for name in found if name not in named)
         return ResultTexts(report, analysis, tuple((name, _tail(found[name])) for name in dict.fromkeys(order)))
 
+    # -- the steps of the run ------------------------------------------------------------------------------------
+    def steps(self, folder: Path) -> tuple:
+        """(GIMaP's record of the step tree or None, the names in ``trace/`` or None, ``analysis.json``)."""
+        return steps_record(folder), trace_files(folder), self.analysis(folder)
+
+    @staticmethod
+    def detail(folders, name: str):
+        return read_detail(folders, name)
+
+    @staticmethod
+    def save_steps(folder: Path, record: dict) -> Path:
+        return save_steps(folder, record)
+
     def failure_details(self, folder: Path, analysis: dict) -> str:
         """The last lines of the log of the step that failed; a step that names no log (the ``static`` command
         gives its reason as a note, with the log in brackets when there is one) gives its note."""
@@ -404,6 +487,7 @@ class ClientFolderReader:
         return "\n".join(part for part in (note, tail) if part)
 
 
-__all__ = ["CHOICES_FILE", "CLIENT_OVERRIDE", "CLIENT_REQUEST_FILE", "ClientFolderReader", "ClientPackageRunner",
+__all__ = ["CACHES_REMOVED", "CHOICES_FILE", "CLIENT_OVERRIDE", "CLIENT_REQUEST_FILE", "ClientFolderReader",
+           "ClientPackageRunner",
            "IMPORT_MARKER", "LOCAL_PACKAGE", "LOG_PATTERN", "PACKAGE_MASK", "PACKAGE_PARTS", "REPORT_FILE",
            "STORAGE_FOLDER", "locate_package"]

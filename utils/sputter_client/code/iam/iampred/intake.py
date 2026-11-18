@@ -301,15 +301,38 @@ def _detector_event(total, keep, auto, geo, a, binning=4):
     from . import automask as AM
     image, masked = LV.binned_log(total, keep, binning)
     at = lambda v: LV.rounded((float(v) + 0.5) / binning - 0.5, 2)
-    LV.emit("detector", dict(image=image, masked=masked), binning=binning, col=at(geo["beam_col"]), row=at(geo["beam_row"]),
-            horizon_row=at(AM.horizon_row(geo["beam_row"], a.sdd_mm, a.alpha_i)),
-            **{k: auto.get(k) for k in ("frames_summed", "dead", "hot", "shadow", "kept", "pixels")})
+    fields = dict(binning=binning, col=at(geo["beam_col"]), row=at(geo["beam_row"]),
+                  horizon_row=at(AM.horizon_row(geo["beam_row"], a.sdd_mm, a.alpha_i)),
+                  **{k: auto.get(k) for k in ("frames_summed", "dead", "hot", "shadow", "kept", "pixels")})
+    LV.emit("detector", dict(image=image, masked=masked), **fields)
+    LV.trace("detector", fields, dict(image=image, masked=masked))
+
+
+def _onset_step(out, scan, a):
+    "Step import.onset with its detail: the rate of the onset rule's band in every bin, the rule's baseline and the"
+    try:
+        import iam as M
+        from tio2_explore import onset
+        grid = M.scan_grid()
+        res = M.Result(out, grid)
+        t_on, r0, rate = onset(res, grid)
+        used = scan.get("t_dep", t_on)
+        how = ("given" if a.t_dep is not None else "dark first frames: from the lit bare plateau" if "t_dep" in scan
+               else "the rate rises above 1.05 x the 0.3-1.0 s baseline")
+        detail = LV.trace("onset", dict(times=[float(t) for t in res.time], rate=[float(r) for r in rate],
+                                       baseline=float(r0), base_window=[0.3, 1.0], onset_rule=t_on, onset=used, how=how,
+                                       pre_window=[scan.get("pre_start", 0.3), scan.get("pre_end", (used or 1.05) - 0.05)]))
+        LV.step("import.onset", "done", detail=detail,
+                summary=(f"{used:.2f} s ({how})" if used is not None else "not found in the frames"))
+    except Exception as e:
+        LV.step("import.onset", "done", summary=f"found when the windows are made ({type(e).__name__})")
 
 
 def _intake(a, root, mask, msha, energy, lam, out):
     from sputtergisaxs.polymer_dev_intake import prepare, frames
     from sputtergisaxs.polymer_review_data import intake_rows, bin_ids, aggregate
     geo = dict(energy_ev=energy, sdd_mm=a.sdd_mm, alpha_i_deg=a.alpha_i, metal=a.metal, sample_roll_deg=a.roll)
+    LV.step("import.centre", "running")
     if a.auto_centre:
         from sputtergisaxs import polymer_dev_intake as PDI
         PDI.RAW_CACHE_N = 30
@@ -321,8 +344,12 @@ def _intake(a, root, mask, msha, energy, lam, out):
         geo.update(beam_col=float(cen["db_col"]), beam_row=float(cen["db_row"]))
         print(f"auto centre: col {cen['db_col']:.1f} row {cen['db_row']:.1f} (roll kept at {a.roll})")
         LV.emit("centre", col=LV.rounded(cen["db_col"], 2), row=LV.rounded(cen["db_row"], 2))
+        LV.step("import.centre", "done", summary=f"found in the frames: column {cen['db_col']:.1f}, row {cen['db_row']:.1f}",
+                detail="detector.json" if a.auto_mask == "on" else None)
     else:
         geo.update(beam_col=a.beam_col, beam_row=a.beam_row)
+        LV.step("import.centre", "done", summary=f"given: column {a.beam_col:.1f}, row {a.beam_row:.1f}")
+    LV.step("import.mask", "running")
     t0 = datetime.now(timezone.utc)
     used, auto = mask, None
     if a.auto_mask == "on":
@@ -330,7 +357,7 @@ def _intake(a, root, mask, msha, energy, lam, out):
         from . import automask as AM
         picture = {}
         combined, auto = AM.build(a.frames, mask, geo["beam_row"], a.sdd_mm, a.alpha_i,
-                                  on_sum=(lambda total: picture.update(total=total)) if LV.folder() else None)
+                                  on_sum=(lambda total: picture.update(total=total)) if (LV.folder() or LV.trace_dir()) else None)
         out.mkdir(parents=True, exist_ok=True)
         used = out / "pixmask_used.npy"
         np.save(used, combined)
@@ -342,6 +369,11 @@ def _intake(a, root, mask, msha, energy, lam, out):
                 _detector_event(picture.pop("total"), combined, auto, geo, a)
             except Exception:
                 pass
+        LV.step("import.mask", "done", detail="detector.json",
+                summary=f"{auto['dead']} dead, {auto['hot']} hot, {auto['shadow']} beamstop / holder pixels besides {mask.name}")
+    else:
+        LV.step("import.mask", "done", summary=f"{mask.name} only (no automatic mask)")
+
     def read(indices=None):
         n_read = len(frames(Path(a.frames))) if indices is None else len(indices)
         with LV.ChunkWatcher(out / "intake", root / "native_grid.npz", n_read):
@@ -360,6 +392,7 @@ def _intake(a, root, mask, msha, energy, lam, out):
     import time as _time
     t_import = _time.perf_counter()
     selection = None
+    LV.step("import.read", "running")
     if a.windows_only:
         selection = select_frames(a, out, read)
     else:
@@ -368,13 +401,25 @@ def _intake(a, root, mask, msha, energy, lam, out):
     ids = bin_ids([r["time_s"] for r in rows], seconds=0.5)
     aggregate(out / "intake", out / "binned", run, rows, ids, nominal_seconds=0.5)
     b = json.loads((out / "binned" / "run.json").read_text(encoding="utf-8"))
+    reading = reading_summary(out / "intake", run, a.workers, t_import)
+    sel = run.get("selection_indices") or []
+    ranges, start = [], None
+    for i, v in enumerate(sel):
+        if start is None:
+            start = v
+        if i + 1 == len(sel) or sel[i + 1] != v + 1:
+            ranges.append([start, v]); start = None
+    LV.step("import.read", "done", detail=LV.trace("reading", dict(reading, selection=selection, frames_read_ranges=ranges)),
+            summary=(f"{reading['frames_read']} of {reading['frames_total']} frames in {reading['seconds']:.0f} s, "
+                     f"{len(set(ids.tolist()))} bins; disk {reading['read_s_per_frame']} s per frame"
+                     + (" (the disk is the slow part)" if reading.get("slow") else "")))
     marker = dict(file=mask.name, path=str(mask), sha256=msha, label=a.label, source=str(Path(a.frames).resolve()),
                   alpha_i_deg=a.alpha_i, energy_ev=energy, metal=a.metal, builder="iampred.intake",
                   started_utc=t0.strftime("%Y-%m-%dT%H:%M:%SZ"),
                   built_utc=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), frames=run["selected_frames"],
                   received_frames=run["received_frames"], time_first_s=rows[0]["time_s"], time_last_s=rows[-1]["time_s"],
                   geometry=b.get("geometry"), auto_mask=auto, selection=selection,
-                  reading=reading_summary(out / "intake", run, a.workers, t_import))
+                  reading=reading)
     (out / "pixmask.json").write_text(json.dumps(marker, indent=1) + "\n", encoding="utf-8", newline="\n")
     qcm = a.qcm_nm_s if a.qcm_nm_s is not None else a.rate_nm_s / 0.6
     scan = dict(metal=a.metal, sub=a.substrate, qcm=qcm, growth=a.label, ai=a.alpha_i, lam=lam,
@@ -394,6 +439,7 @@ def _intake(a, root, mask, msha, energy, lam, out):
     if a.t_sput is not None:
         scan["t_sput"] = a.t_sput
     (out / "scan.json").write_text(json.dumps(scan, indent=1) + "\n", encoding="utf-8", newline="\n")
+    _onset_step(out, scan, a)
     print(f"{a.label}: {run['selected_frames']} frames, {rows[0]['time_s']:.2f}-{rows[-1]['time_s']:.2f} s -> {out}")
     LV.emit("imported", frames=run["selected_frames"], t_first=LV.rounded(rows[0]["time_s"], 3),
             t_last=LV.rounded(rows[-1]["time_s"], 3), onset=LV.rounded(scan.get("t_dep"), 3))

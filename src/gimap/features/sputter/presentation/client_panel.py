@@ -259,7 +259,7 @@ class ClientPanelMixin:
             if found:
                 words.append(f"{found} {unit}".rstrip())
             self.tiles[key].setToolTip("\n".join(words))
-            self.tiles[key].setVisible(value is not None)
+            self.tiles[key].setVisible(value is not None and result.shows(key))
         deviation = entry.fit_deviation if entry is not None else None
         self.deviation_value.setText(shown_number(deviation))
         self.deviation_caption.setVisible(deviation is not None)

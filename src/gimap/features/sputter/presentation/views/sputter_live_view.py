@@ -9,22 +9,29 @@ Reading the frames: the detector summed (the pixels the mask leaves out marked) 
 grid of q_y and exit angle; below, the count rate of every frame read so far. Finding the solutions: the measured
 image of the window solved last beside the model image of its solution; below, the sizes found so far. Writing the
 report and drawing the images show the solutions too. A click on a step that has started shows what it found.
+
+A newer package reports its steps as a tree: the tree (``sputter_steps_view.py``) then takes the place of the four
+steps, and the right half has a second page for what a step of the tree found. *Show the Preliminary Result* (top
+right, hidden otherwise) goes back to the preliminary result when the user came here with **Steps**.
 """
 
 from __future__ import annotations
 
-from PyQt5.QtWidgets import QHBoxLayout, QLabel, QStackedWidget, QVBoxLayout, QWidget
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QHBoxLayout, QLabel, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 
 from src.gimap.app.presentation.components import ErrorBanner, StepRail
 
 from .sputter_main_view import ElidedLabel
+from .sputter_steps_view import SputterStepsView
 
 LIVE_STEP_TITLES = (("intake", "Read the frames"), ("predict", "Find the solutions"), ("report", "Write the report"),
                     ("present", "Draw the images"))
 """(step of the package, its name) in their order."""
 LIVE_TITLE = "Analysis at work"
 LIVE_HINT = "Click a step that has started to see what it found."
-STEPS_WIDTH = 300
+PRELIMINARY_BUTTON = "Show the Preliminary Result"
+STEPS_WIDTH = 360
 
 
 def _stacked(parent: QWidget, count: int) -> tuple:
@@ -40,7 +47,7 @@ def _stacked(parent: QWidget, count: int) -> tuple:
     return stack, layouts
 
 
-class SputterLiveView:
+class SputterLiveView(SputterStepsView):
     """The live view: a page of the main screen's stack (``_main_view`` adds it)."""
 
     def _live_view(self, parent: QWidget) -> QWidget:
@@ -50,10 +57,20 @@ class SputterLiveView:
         outer = QVBoxLayout(view)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(6)
+        top = QHBoxLayout()
+        top.setSpacing(12)
         self.live_status = ElidedLabel(view)  # what the analysis does now: the page sets it
         self.live_status.setObjectName("sputterLiveStatus")
         self.live_status.setProperty("gimapRole", "info")
-        outer.addWidget(self.live_status)
+        # while the preliminary result exists: back to it (the user came here with Steps)
+        self.live_preliminary_button = QPushButton(PRELIMINARY_BUTTON, view)
+        self.live_preliminary_button.setObjectName("sputterLivePreliminary")
+        self.live_preliminary_button.setProperty("gimapRole", "link")
+        self.live_preliminary_button.setCursor(Qt.PointingHandCursor)
+        self.live_preliminary_button.setVisible(False)
+        top.addWidget(self.live_status, 1)
+        top.addWidget(self.live_preliminary_button)
+        outer.addLayout(top)
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
@@ -77,12 +94,18 @@ class SputterLiveView:
         hint.setProperty("gimapMeta", True)
         column.addWidget(heading)
         column.addWidget(self.live_steps)
+        column.addWidget(self._live_tree_area(side), 1)  # a newer package's steps as a tree (sputter_steps_view.py)
         column.addWidget(self.live_clock)
-        column.addStretch(1)
+        self.live_steps_stretch = QWidget(side)  # takes the room the tree takes when there is one
+        column.addWidget(self.live_steps_stretch, 1)
         column.addWidget(hint)
+        self.live_hint = hint
         layout.addWidget(side)
 
-        right = QVBoxLayout()
+        self.live_right = QStackedWidget(view)  # 0: the step at work, 1: what a step of the tree found
+        work = QWidget(self.live_right)
+        right = QVBoxLayout(work)
+        right.setContentsMargins(0, 0, 0, 0)
         right.setSpacing(6)
         self.live_title = QLabel("", view)
         self.live_title.setObjectName("sputterLiveTitle")
@@ -107,8 +130,10 @@ class SputterLiveView:
         right.addWidget(self.live_picture_host, 5)
         right.addWidget(self.live_caption)
         right.addWidget(self.live_plot_host, 4)
-        layout.addLayout(right, 1)
+        self.live_right.addWidget(work)
+        self.live_right.addWidget(self._live_detail_page(self.live_right))
+        layout.addWidget(self.live_right, 1)
         return view
 
 
-__all__ = ["LIVE_HINT", "LIVE_STEP_TITLES", "LIVE_TITLE", "SputterLiveView"]
+__all__ = ["LIVE_HINT", "LIVE_STEP_TITLES", "LIVE_TITLE", "PRELIMINARY_BUTTON", "SputterLiveView"]
