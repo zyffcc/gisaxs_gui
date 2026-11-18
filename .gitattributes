@@ -3,12 +3,8 @@
 # The folder rules below come later and win for their own files.
 *.bat text eol=crlf
 *.cmd text eol=crlf
-# The bundled 1D Predict model (Workflow V5) is checked file by file against SHA-256 manifests
-# (conditional_v2/conditional_fast_manifest_v2.json and stable_blue_rc_v1/MANIFEST.json) before it
-# runs. The checksums were taken from the bytes on disk, where some files end their lines with
-# CRLF and others with LF, so git must hand out exactly those bytes on every computer:
-# no line-ending conversion in this folder.
-modules/Fitting_1D_Model/Workflow_v5/** -text
+# The proposal network of Predict parameters is checked against the SHA-256 of its record before it runs: binary.
+src/gimap/features/fitting/domain/posterior/data/*.npz binary
 # The bundled fit1d kit (utils/gisaxs1d_gui_kit) is checked file by file against FILES_SHA256.json (sha256
 # of the bytes) before a release packs it; its text files end their lines with LF: no line-ending
 # conversion in this folder.

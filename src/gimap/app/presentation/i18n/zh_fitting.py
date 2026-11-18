@@ -485,6 +485,20 @@ FITTING_ZH = {
         '对每一帧用单曲线分析模型中的颗粒做预测参数；勾选下方选项时，在概率相近的解中取最接近上一帧的那个；每帧随后精修',
     "Predict each frame needs 1–3 particles in Single analysis' model.":
         '逐帧预测需要单曲线分析的模型中有 1–3 种颗粒。',
+    "Predict parameters: GIMaP's proposal network and its posterior, refined by least squares (Complete composition: 1–3 components; Auto: the network chooses). Physical fit: the quick numerical fit of Find the particle shape. fit1d: a separate kit with its own physics; it needs the Complete composition (Sphere / Vertical cylinder).":
+        '预测参数：GIMaP 的建议网络及其后验，再经最小二乘精修（完整组成：1–3 个组分；自动：由网络选择）。物理拟合：“寻找颗粒形状”所用的快速数值拟合。fit1d：一个有自己物理模型的独立工具包；它需要完整组成（球 / 竖直圆柱）。',
+    'Physical fit: the width of the low-q term, 0.001–0.1 nm⁻¹ (unticked: fitted).':
+        '物理拟合：低 q 项的宽度，0.001–0.1 nm⁻¹（不勾选：拟合得出）。',
+    'Physical fit: 1–20; fit1d: 0.5–12 (unticked: fitted).':
+        '物理拟合：1–20；fit1d：0.5–12（不勾选：拟合得出）。',
+    'Physical fit':
+        '物理拟合',
+    "Check every candidate's fit; refine it in Fitting before reporting it.":
+        '请检查每个候选的拟合；报告之前先在拟合页精修。',
+    "Predict parameters gives each candidate's probability and the posterior intervals of its values; the physical fit and fit1d give starts to check. logRMSE and RMS/σ include the measurement noise. The method is chosen in Parameters… ▸ Fit method.":
+        '预测参数给出每个候选的概率及其数值的后验区间；物理拟合和 fit1d 给出的是待检查的起点。logRMSE 和 RMS/σ 包含测量噪声。方法在“参数…› 拟合方法”中选择。',
+    'Starting Predict parameters (network + posterior)…':
+        '正在开始预测参数（网络 + 后验）…',
 }
 
 __all__ = ["FITTING_ZH"]

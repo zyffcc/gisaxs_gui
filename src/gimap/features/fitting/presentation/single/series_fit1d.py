@@ -12,8 +12,7 @@ from __future__ import annotations
 from src.gimap.app.presentation.i18n import tr
 
 from ...application.single_fit1d import SHAPES, fit1d_request
-from ...application.single_predict import predict_request, predicted
-from ...domain.posterior import encoding as posterior_encoding
+from ...application.single_predict import MAX_PARTICLES, predict_request, predicted
 
 METHODS = ("local", "global", "fit1d", "predict")
 NOT_FIT1D = "Predict each frame needs Sphere / Vertical cylinder particles in Single analysis' model."
@@ -76,7 +75,7 @@ class FitSeriesFit1DMixin:
     def fit1d_can_start(self, model) -> bool:
         """Whether the model can be predicted frame by frame; says why not."""
         if self.series_method() == "predict":
-            if 1 <= len(model.components) <= posterior_encoding.SLOTS:
+            if 1 <= len(model.components) <= MAX_PARTICLES:
                 return True
             self._status(tr(NOT_PREDICT), "warning")
             return False

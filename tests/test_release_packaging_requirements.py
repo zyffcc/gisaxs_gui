@@ -44,7 +44,8 @@ ISOLATED_RUNTIMES = {
 }
 # Training the 1D proposal network: run by hand with PyTorch (requirements-training.txt), never by the program.
 TRAINING_RUNTIME = "requirements-training.txt"
-TRAINING_FILES = ("tools/ml1d/flow_torch.py", "tools/ml1d/train_flow.py", "tools/ml1d/make_flow_fixture.py")
+TRAINING_FILES = ("tools/ml1d/flow_torch.py", "tools/ml1d/train_flow.py", "tools/ml1d/make_flow_fixture.py",
+                  "tools/ml1d/export_checkpoint.py")
 
 
 OPTIONAL = {

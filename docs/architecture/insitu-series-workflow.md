@@ -64,8 +64,8 @@ Recipe 记录影响科学结果的配置，而不是窗口布局或颜色等显�
 | 分组 | 内容 | 序列中的常见策略 |
 | --- | --- | --- |
 | Cut | `source = "curve"`：输入是曲线文件，q 与像素数已由 Analyze 决定 | 固定 |
-| Model | workflow_v5 方法、幅度校准开关、条件、组分、分辨率、噪声、候选预算及输入选择（正/负/两侧、fitting range 及其是否按 \|q\|、排除点） | 捕获快照；不跟随 Single 修改 |
-| Fitting | Fit curves · selected method / legacy correction off / Plot curves only；失败策略 | 实际方法以捕获的 Fit method 为准；RC specialist 独立控制幅度校准；continue / stop |
+| Model | workflow_v5 方法、组分、分辨率、噪声及输入选择（正/负/两侧、fitting range 及其是否按 \|q\|、排除点） | 捕获快照；不跟随 Single 修改 |
+| Fitting | Fit curves · selected method / legacy correction off / Plot curves only；失败策略 | 实际方法以捕获的 Fit method 为准；continue / stop |
 
 图的色图、范围、缩放、当前标签页等显示状态不进入 Recipe，因为它们不改变科学输入。旧版 Recipe
 中的 experiment setup / preprocessing / tracking 字段仍可读取，但曲线序列不再使用它们。
@@ -119,42 +119,21 @@ Live/Batch controls、预览和状态内嵌在 feature-owned In-situ 页面。�
 选择；Single 后续修改不会影响序列。1D parameters 保存后生成作用于未来曲线的新 Recipe，不修改
 Single 设置。每个结果 record 记录 `recipe_version` 以及 load、fit 的独立状态。
 
-## 实验性预测执行与输出
+## 预测执行与输出
 
-单条、文本 batch 和 in-situ 共用 `infrastructure/adapters/workflow_v5.py`。
-默认恢复为 **General V5 (experimental)**，使用原多组分候选网络；恢复默认不代表其拟合不足或
-泛化问题已经解决。此前将局部单 RC 设为默认 Stable 的定位撤回。该分支保留为 **Single RC
-specialist (experimental)**，只在 Recipe 显式 `components=[2]` 且原生 CBF 计数／q 范围适用时
-使用神经快速路径；不能把未知组分 Auto 当作已知单 RC。
+单条、文本 batch 和 in-situ 共用 `infrastructure/adapters/workflow_v5.py`。默认方法为 **Predict parameters
+(network + posterior)**（`posterior_job.py`：GIMaP 的建议网络、cut_model 上的后验与最小二乘精修；Physics and Methods
+9.13）；另有 **Physical fit (numerical)** 与 **fit1d**。三者都只用 NumPy／SciPy，不需要 TensorFlow。
 
-该局部分支默认校准粒子、背景和分辨函数线性幅度，固定形状参数；`amplitude_calibration`
-独立于 General V5 的 `numerical` 四步校正。已有方法选择与 Recipe 不强制改写，内部方法键
-`stable` 仅为兼容旧记录。通过 **1D parameters…** 检查方法和完整组分，再保存未来帧 Recipe。
+正负 q 独立拟合；有符号强度与原测量点保留，500 点仅用于显示正演。每帧保存两侧各自 rank 1 的曲线与候选参数，
+Predict parameters 的行另带概率、后验区间、提示与有效样本数。Recipe 版本、结果目录、耗时与误差写入帧记录。不同侧
+参数带 side 前缀，避免覆盖。文本多文件 batch 在一个进程内复用 runtime；in-situ 当前仍按帧启动隔离 worker。
 
-RC specialist 下的 Auto／`[]` 组分、没有原生计数契约的文本、固定任一分辨率、非单 RC 完整先验、改变计数条件的 threshold／
-镜像替换／stack、超出已验证 q／计数范围、快速曲线出现结构残差或模型不可用时，自动转遵守
-用户先验的数值拟合。Auto 回退只比较单组分族；指定组合时保留完整组合，最多四组分及重复类型。
-宽范围回退仍使用历史 V5 求积，不继承局部收敛正演的验证结论。Stage 与回退原因必须随结果保存。
-局部单 RC 候选不表示通用组分识别、多参数模式完整覆盖或概率后验；Auto 数值单组分筛选也
-不保证未知混合物覆盖。0.05 不是强制通过线。
-
-正负 q 独立拟合；有符号强度与原测量点保留，500 点仅用于显示正演。每点实际有效像素数随
-曲线文件的 `pixels` 列传递，并按完全相同的 ROI／删点／分侧排序同步；不能从加入容差后的 sigma 反推。
-学习分支的计数契约另要求每侧 450–700 个原生列、q 覆盖到 4.0–4.3 nm⁻¹、每列 3–12 个有效像素；
-不满足时按记录的原因数值回退。
-每帧保存两侧各自 rank 1 的曲线与候选参数，不用旧手工 forward 重新计算。
-Recipe 版本、结果目录、耗时与误差写入帧记录。不同侧参数带 side 前缀，避免覆盖。
-文本多文件 batch 在一个进程内复用 runtime；in-situ 当前仍按帧启动隔离 worker，存在每帧加载
-开销。RC specialist 与数值回退使用 NumPy／SciPy；默认 General V5 与训练使用 TensorFlow。旧多候选
-条件模型仍可显式选择，其已知条件验证不等于自动组分准确率。
-
-2026-09-22 早期局部分支验证覆盖真实 CBF 主窗口按钮、同帧 in-situ、精确原生输入一致性、文本 batch、
-取消、Recipe／调度测试及双侧结果回调。开发帧两侧观测 lnRMSE 为 0.17120／0.15523；本机
-双侧 worker 计算约 0.68 s，完整 GUI 点击约 3.70 s，单帧 in-situ 约 3.07 s，三者计时范围不同。
-本次范围纠正未改变权重，也未新增独立样品泛化证据；这些指标不是恢复后的 General V5 默认
-方法指标。历史测试通过不证明未知组分可用，真实长序列／NXS 仍未完成全流程验收。检查命令保留为
-`python tools/check_stable_predict_workflow.py --mode all`，范围与证据见
-[`RELEASE_zh.md`](../../modules/Fitting_1D_Model/Workflow_v5/development/evidence/stable_blue_20260922/RELEASE_zh.md)。
+0.2.0 删除了 **General V5** 与 **Single RC specialist**（`modules/Fitting_1D_Model/Workflow_v5/`，TensorFlow）：在 fit1d 的
+200 条留出曲线上 V5 的 R 中位误差 31 %、D 22 %，Predict parameters 在所有基准上都更好（Physics and Methods 10.3）。
+旧 Recipe 与保存的选项里的方法键 `model`、`stable` 打开为 Predict parameters，其专属选项（`numerical`、
+`amplitude_calibration`、候选预算、`normalizer`）丢弃（`application/workflow_v5.RETIRED_METHODS`、`RETIRED`）。
+早期局部分支的验证记录与检查脚本留在提交 06e7395 及之前的历史中。
 
 ## 2026-09-28 Analyze → Fitting 回放
 

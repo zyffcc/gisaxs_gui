@@ -12,10 +12,6 @@ extend-exclude = [
     ".gimap_cache",
     "AI_Fitting_Output",
     "trainset_jobs",
-    # Imported research records are preserved verbatim, not GUI runtime modules.
-    "modules/Fitting_1D_Model/Workflow_v5/development",
-    # Frozen upstream model code is checked against its SHA256 manifest instead.
-    "modules/Fitting_1D_Model/Workflow_v5/conditional_v2",
     # The bundled fit1d kit is frozen research code, imported only inside a job process.
     "utils/gisaxs1d_gui_kit",
     # The analysis package of the Sputter page is a release build of research code, run only as a subprocess.

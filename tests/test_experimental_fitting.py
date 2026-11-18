@@ -65,7 +65,7 @@ def test_known_composition_resolution_and_forward_reconstruction():
 
 def test_cancellation_and_prior_validation():
     with pytest.raises(ValueError):
-        validate_options(dict(method="model", nu_res=2))
+        validate_options(dict(method="experimental", nu_res=40))
     options = validate_options(dict(method="experimental", nu_res=2))
     with pytest.raises(RuntimeError, match="cancelled"):
         fit_candidates(synthetic_item(), options, lambda *a: None, lambda: True)

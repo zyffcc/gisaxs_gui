@@ -70,7 +70,7 @@ def test_fit1d_options_are_validated():
     # The other methods keep their rules; the fit1d values travel with them unchanged.
     assert validate_options(dict(method="experimental", components=[2], fit1d_policy="robust"))["fit1d_policy"] == "robust"
     with pytest.raises(ValueError):
-        validate_options(dict(method="model", nu_res=2))
+        validate_options(dict(method="experimental", nu_res=40))
 
 
 def test_the_kit_arguments_follow_the_options():
@@ -91,11 +91,11 @@ def test_the_settings_offer_fit1d_and_keep_its_values():
 
     dialog = WorkflowV5Dialog()
     assert dialog.method.findData("fit1d") >= 0
+    dialog.method.setCurrentIndex(dialog.method.findData("experimental"))
     assert not dialog.fit1d_policy.isEnabled() and dialog.fix_sigma.isEnabled()
     assert dialog.options()["fit1d_qz"] is None and dialog.options()["fit1d_policy"] == "fast"
     dialog.method.setCurrentIndex(dialog.method.findData("fit1d"))
     assert dialog.fit1d_policy.isEnabled() and dialog.fit1d_qz.isEnabled() and not dialog.fix_sigma.isEnabled()
-    assert not dialog.numerical.isEnabled() and not dialog.amplitude_calibration.isEnabled()
     with pytest.raises(ValueError, match="needs the complete composition"):
         dialog.options()
     dialog.save_settings()  # said in the status line, not raised
@@ -115,15 +115,6 @@ def test_the_settings_offer_fit1d_and_keep_its_values():
     saved = WorkflowV5Dialog(options=dict(options, fit1d_model="my_network", fit1d_mode="saxs"))
     assert saved.options() == validate_options(dict(options, fit1d_model="my_network", fit1d_mode="saxs"))
     saved.close()
-
-
-def test_main_fit_and_in_situ_keep_the_saved_fit1d_method():
-    from src.gimap.features.fitting.application.workflow_v5 import workflow_options_for_mode
-
-    saved = {**default_options(), "method": "fit1d", "components": [1, 3]}
-    assert workflow_options_for_mode(saved, "full")["method"] == "fit1d"
-    assert workflow_options_for_mode(saved, "fit1d")["method"] == "fit1d"
-    assert workflow_options_for_mode(saved, "fast")["method"] == "model"
 
 
 def test_a_missing_kit_says_where_to_put_it(tmp_path, monkeypatch):
@@ -236,16 +227,14 @@ def test_files_are_fitted_per_half_and_a_bad_file_does_not_stop_the_batch(tmp_pa
 def test_the_fit_of_the_open_curve_and_of_in_situ_frames_reaches_fit1d(tmp_path):
     """Main Fit and in-situ frames go through ``GenerateCandidates(AiPipelinePredictor)`` with the saved options."""
     from src.gimap.features.fitting.application import CandidateGenerationRequest, GenerateCandidates
-    from src.gimap.features.fitting.application.workflow_v5 import bundled_workflow
     from src.gimap.features.fitting.infrastructure.adapters.ai_pipeline import AiPipelinePredictor
-    from src.gimap.features.fitting.application.workflow_v5 import workflow_options_for_mode
 
     q, intensity, sigma = _example(step=4)
     saved = validate_options(dict(method="fit1d", components=[1, 3], fit1d_qz=QZ, side="both"))
     request = CandidateGenerationRequest(
-        model_path=bundled_workflow(), output_dir=tmp_path / "v5_run",
+        model_path=tmp_path / "unused", output_dir=tmp_path / "v5_run",
         q=np.r_[-q[::-1], q], intensity=np.r_[intensity[::-1], intensity], sigma=np.r_[sigma[::-1], sigma],
-        profile={"name": "Full"}, constraints={"workflow_v5": workflow_options_for_mode(saved, "fit1d")},
+        profile={"name": "Full"}, constraints={"workflow_v5": {**saved, "q_unit": "nm^-1"}},
     )
     result = GenerateCandidates(AiPipelinePredictor(), LocalProcessJobRunner()).execute(request)
     assert result.profile_name.startswith("fit1d") and result.exit_code == 0

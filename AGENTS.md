@@ -12,7 +12,7 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
 - **Labs**：2D Prediction。Trainset Build 已从导航、菜单和应用启动移除，研究组件不随发布包提供。
 - **Tools 菜单**：Geometry Calibration、Format Converter（含 Convert Current File）、XRR Series Extractor、
   SEM Particle Analysis（SEM 图像粒径分析；2D Prediction 结果区的 SEM comparison… 也打开它）、
-  1D Predict — Fit Many Curves（机器学习一维拟合，调用研究代码）、Process with AI、Settings。
+  1D Predict — Fit Many Curves（一维曲线批量拟合：Predict parameters、物理拟合、fit1d）、Process with AI、Settings。
 - **其他菜单**：Edit（Undo / Redo）、Analyze、Fitting 列出这两个工作区的命令，键仍归页面
   （`app/presentation/workspace_menus.py`，命令由 `app/workspace_commands.py` 注入）；Help 有 User Manual（F1）、
   Physics and Methods、Keyboard Shortcuts、Example Data、Report a Problem、错误日志和用户数据文件夹、GitHub、
@@ -65,6 +65,9 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
   - `src/gimap/app/presentation/`：应用壳与共用界面，包括 `components/`、`theme/`、`i18n/` 和 `task_runner.py`；
   - `src/gimap/shared/`：探测器读取、几何、`series_stages`（阶段与异常帧）、`figures`；
   - `src/gimap/integrations/`：用户数据（UserStore）、任务、BornAgain、TensorFlow；
+  - `src/gimap/features/fitting/domain/posterior/`：Predict parameters（建议网络、cut_model 上的后验与精修，numpy），网络权重
+    `data/flow_v1.npz` 用 `git add -f` 跟踪，记录 `flow_v1.json` 写有它的 SHA-256（载入和发布构建时校验）；训练、模拟与检查在
+    `tools/ml1d/`（PyTorch 只在那里需要），基准在 `tools/benchmarks/posterior_recovery.py`。
   - `utils/gisaxs1d_gui_kit/`：fit1d 工具包（Fitting 的 Predict parameters (fit1d)、1D Predict 的 fit1d），含两个 numpy 网络
     和形状因子表，随仓库提供，只在任务子进程里导入（`fitting/infrastructure/adapters/fit1d_method.py`）；环境变量
     `GISAXS1D_KIT_HOME` 可以指向另一份。只放运行时文件，例子数据和引用实测数据的研究笔记都不放；改动记在 `SOURCE.json`，

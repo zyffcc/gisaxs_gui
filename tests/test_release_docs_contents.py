@@ -207,12 +207,12 @@ def test_the_readme_counts_the_pages_of_the_smoke_check() -> None:
 
 
 def test_where_1d_predict_writes_is_what_the_documents_say() -> None:
-    """Each caller uses the same writable user-data output root."""
+    """The 1D Predict window writes its runs under the writable user-data folder (Fitting's Predict parameters writes
+    no run folder since the AI proposal was removed in 0.2.0)."""
     fitting = ROOT / "src/gimap/features/fitting/presentation"
-    for source in (fitting / "workflow_v5_dialog.py", fitting / "single/run.py"):
-        code = _text(source)
-        assert "src.gimap.integrations.state.run_paths" in code
-        assert "Path.cwd()" not in code
+    code = _text(fitting / "workflow_v5_dialog.py")
+    assert "src.gimap.integrations.state.run_paths" in code and "Path.cwd()" not in code
+    assert "Path.cwd()" not in _text(fitting / "single/run.py")
     helper = _text(ROOT / "src/gimap/integrations/state/run_paths.py")
     assert 'user_data_dir() / "AI_Fitting_Output"' in helper
     zh = MANUAL.with_name("User_Manual_zh.md")
@@ -224,23 +224,21 @@ def test_where_1d_predict_writes_is_what_the_documents_say() -> None:
 
 
 def test_the_files_of_a_1d_predict_run_are_the_ones_the_documents_list() -> None:
-    """Three methods, three writers: what every one writes for a curve, and what only General V5 writes."""
+    """Three methods, three writers (fit1d's as the physical fit's): what every one writes for a curve."""
     adapters = ROOT / "src" / "gimap" / "features" / "fitting" / "infrastructure" / "adapters"
-    writers = {name: _text(adapters / f"{name}.py") for name in ("workflow_v5", "experimental_fit", "stable_blue")}
+    writers = {name: _text(adapters / f"{name}.py") for name in ("workflow_v5", "experimental_fit", "posterior_job")}
     for_the_run = ("request.json", "batch_summary.json", "top20_candidates.json", "fitting_run_summary.json")
     for_every_curve = ("solutions.json", "display.npz", "fitting_curves.csv")
     for name in for_the_run:
         assert f'"{name}"' in writers["workflow_v5"], name
-    for name in for_every_curve:
-        assert all(f'"{name}"' in code for code in writers.values()), name
-    assert '"candidates.npz"' in writers["workflow_v5"]
-    only_general = not any('"candidates.npz"' in writers[name] for name in ("experimental_fit", "stable_blue"))
+    for name in for_every_curve:  # the job (workflow_v5) leaves a curve's files to its method
+        assert all(f'"{name}"' in writers[method] for method in ("experimental_fit", "posterior_job")), name
+    assert not any('"candidates.npz"' in code for code in writers.values())  # V5's, removed in 0.2.0
     for path in (README, MANUAL):
         text = _text(path)
-        for name in for_the_run + for_every_curve + ("candidates.npz",):
+        for name in for_the_run + for_every_curve:
             assert f"`{name}`" in text, (path.name, name)
-        said = re.search(r"General V5\*\s+also\s+writes\s+`candidates\.npz`", text) is not None
-        assert said == only_general, f"{path.name}: which method writes candidates.npz changed"
+        assert "`candidates.npz`" not in text, path.name
 
 
 def test_the_documents_say_where_the_manual_opens(monkeypatch) -> None:
@@ -295,8 +293,7 @@ def test_statements_about_removed_things_are_gone() -> None:
     assert "### 9.1 Format Converter" in manual and "Remove Source from List" in manual and "Copy Table" in manual
 
 
-V5 = "modules/Fitting_1D_Model/Workflow_v5"
-V5_MANIFESTS = (f"{V5}/conditional_v2/conditional_fast_manifest_v2.json", f"{V5}/stable_blue_rc_v1/MANIFEST.json")
+NETWORK_RECORD = "src/gimap/features/fitting/domain/posterior/data/flow_v1.json"
 WEIGHTS_SAID_MISSING = (
     "not in the Git repository", "not of the Git repository", "not tracked by Git", "weights are missing",
     "until the weight files", "until they are placed", "weight files are added",
@@ -305,13 +302,10 @@ WEIGHTS_SAID_MISSING = (
 
 
 def _model_weights() -> list[str]:
-    """The weight files (``*.h5``, ``*.npz``) the manifests of the bundled 1D Predict model name."""
-    weights = []
-    for manifest in V5_MANIFESTS:
-        folder = manifest.rsplit("/", 1)[0]
-        files = json.loads(_text(ROOT / manifest))["files"]
-        weights.extend(f"{folder}/{name}" for name in files if name.endswith((".h5", ".npz")))
-    return weights
+    """The weights of Predict parameters' network: the ``.npz`` beside its record, whose SHA-256 the record names."""
+    record = json.loads(_text(ROOT / NETWORK_RECORD))
+    assert len(record["sha256"]) == 64
+    return [NETWORK_RECORD[:-len(".json")] + ".npz"]
 
 
 def test_the_documents_do_not_say_the_model_weights_are_missing() -> None:
@@ -325,8 +319,8 @@ def test_the_documents_do_not_say_the_model_weights_are_missing() -> None:
             if re.search(r"\bweights?\b", sentence):
                 assert not re.search(r"\bnot\b[^.]*\b(?:in|of|part of|tracked by)\b[^.]*\b(?:Git|repository)\b",
                                      sentence), (path.name, sentence)
-    for path in (README, MANUAL):
-        assert "weights of 1D Predict are in the Git repository" in " ".join(_text(path).split()), path.name
+    assert "is in the Git repository and in the portable version" in " ".join(_text(README).split())
+    assert "both in the portable version and in the Git repository" in " ".join(_text(MANUAL).split())
     assert "1D Predict also runs from a source checkout" in " ".join(_text(CHANGELOG).split())
     assert "### Known limitations" in _text(CHANGELOG)
     limitations = _text(CHANGELOG).split("### Known limitations", 1)[1].split("\n### ", 1)[0]
@@ -334,17 +328,17 @@ def test_the_documents_do_not_say_the_model_weights_are_missing() -> None:
 
 
 def test_git_tracks_the_model_weights_the_documents_promise() -> None:
-    """README, the manual and the changelog say a source checkout runs 1D Predict: true while git tracks
-    every weight file the model's manifests name."""
+    """README, the manual and the changelog say a source checkout runs Predict parameters: true while git tracks
+    the network's weights, which its record names."""
     weights = _model_weights()
-    assert len(weights) >= 8, weights
+    assert (ROOT / weights[0]).is_file(), weights
     if not shutil.which("git") or not (ROOT / ".git").exists():
         pytest.skip("not a git checkout (or git is not installed)")
     tracked = set(subprocess.run(
-        ["git", "ls-files", "-z", "--", V5], cwd=ROOT, capture_output=True, check=True, timeout=120,
+        ["git", "ls-files", "-z", "--", *weights], cwd=ROOT, capture_output=True, check=True, timeout=120,
     ).stdout.decode("utf-8").split("\0"))
     missing = [name for name in weights if name not in tracked]
     assert not missing, (
-        "git does not track these weight files, so a clone cannot run 1D Predict although the documents say "
+        "git does not track these weight files, so a clone cannot run Predict parameters although the documents say "
         "it can (.gitignore ignores *.h5 and *.npz: add them with `git add -f`): " + ", ".join(missing)
     )

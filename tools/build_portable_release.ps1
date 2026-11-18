@@ -140,7 +140,6 @@ $Forbidden = @(
     @{ Pattern = '^config/instrument_profiles\.json$'; Why = "a person's own instrument geometry" },
     @{ Pattern = '(^|/)(_handoff|research|validation)/'; Why = "personal or research material" },
     @{ Pattern = '^docs/agents/eval/local/'; Why = "an evaluation case on a person's own data" },
-    @{ Pattern = '^modules/Fitting_1D_Model/Workflow_v5/development/'; Why = "development records" },
     @{ Pattern = '\.ipynb$'; Why = "a notebook" },
     @{ Pattern = '(^|/)(__pycache__|\.pytest_cache|\.ruff_cache|\.mypy_cache|\.gimap_cache|\.ipynb_checkpoints)/'; Why = "a cache" },
     @{ Pattern = '\.py[co]$'; Why = "a cache" },
@@ -156,11 +155,9 @@ $DocumentPaths = @("docs", "CITATION.cff", "README.md", "CHANGELOG.md", "tests/d
 # The files Help opens: each one must be in the package.
 $HelpFiles = @("docs/User_Manual.md", "docs/User_Manual_zh.md", "docs/Physics_Manual.md",
     "docs/Physics_Manual_zh.md", "CITATION.cff", "tests/data/external/manifest.json")
-# The model manifests the program checks, file by file (SHA-256), before 1D Predict runs.
-$ModelManifests = @(
-    "modules/Fitting_1D_Model/Workflow_v5/conditional_v2/conditional_fast_manifest_v2.json",
-    "modules/Fitting_1D_Model/Workflow_v5/stable_blue_rc_v1/MANIFEST.json"
-)
+# The records of the proposal network of Predict parameters: the program checks the weights beside each against the
+# SHA-256 the record names before it uses them.
+$NetworkRecords = @("src/gimap/features/fitting/domain/posterior/data/flow_v1.json")
 
 $Problems = [System.Collections.Generic.List[string]]::new()
 $Warnings = [System.Collections.Generic.List[string]]::new()
@@ -252,26 +249,22 @@ foreach ($RelativePath in $ApplicationFiles) {
     $CountByTop[$Top] = [int]$CountByTop[$Top] + 1
 }
 
-foreach ($Manifest in $ModelManifests) {
-    $ManifestPath = Join-Path $ProjectRoot $Manifest
-    if (-not $Listed.Contains($Manifest) -or -not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
-        $Problems.Add("The model manifest is not in the file list: $Manifest")
+foreach ($Record in $NetworkRecords) {
+    $RecordPath = Join-Path $ProjectRoot $Record
+    if (-not $Listed.Contains($Record) -or -not (Test-Path -LiteralPath $RecordPath -PathType Leaf)) {
+        $Problems.Add("The proposal network's record is not in the file list: $Record")
         continue
     }
-    $Folder = $Manifest.Substring(0, $Manifest.LastIndexOf("/"))
-    $Checksums = (Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json).files
-    foreach ($Entry in $Checksums.PSObject.Properties) {
-        $RelativePath = "$Folder/$($Entry.Name)"
-        $FullPath = Join-Path $ProjectRoot $RelativePath
-        if (-not $Listed.Contains($RelativePath)) {
-            $Problems.Add("1D Predict needs this model file, and it is missing: $RelativePath")
-        }
-        elseif (-not (Test-Path -LiteralPath $FullPath -PathType Leaf)) {
-            continue  # reported above: tracked by git but not on disk
-        }
-        elseif ((Get-FileHash -LiteralPath $FullPath -Algorithm SHA256).Hash -ne [string]$Entry.Value) {
-            $Problems.Add("Differs from the checksum in $($Manifest.Substring($Manifest.LastIndexOf('/') + 1)) " +
-                "(changed, or its line endings were converted): $RelativePath")
+    $Weights = $Record.Substring(0, $Record.Length - 5) + ".npz"
+    $WeightsPath = Join-Path $ProjectRoot $Weights
+    if (-not $Listed.Contains($Weights)) {
+        $Problems.Add("Predict parameters needs this network file, and it is missing: $Weights")
+    }
+    elseif (Test-Path -LiteralPath $WeightsPath -PathType Leaf) {
+        $Expected = [string](Get-Content -LiteralPath $RecordPath -Raw -Encoding UTF8 | ConvertFrom-Json).sha256
+        if ((Get-FileHash -LiteralPath $WeightsPath -Algorithm SHA256).Hash -ne $Expected) {
+            $Problems.Add("Differs from the SHA-256 in $($Record.Substring($Record.LastIndexOf('/') + 1)) " +
+                "(changed, or its line endings were converted): $Weights")
         }
     }
 }

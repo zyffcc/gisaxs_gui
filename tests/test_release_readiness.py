@@ -86,14 +86,16 @@ def test_project_restores_sputter_and_clears_it_for_an_older_project(tmp_path):
         window.close()
 
 
-def test_model_manifest_fingerprint_changes_with_the_selected_bundle(tmp_path):
+def test_model_record_fingerprint_changes_with_the_selected_network(tmp_path, monkeypatch):
+    from src.gimap.features.fitting.domain.posterior import network
     from src.gimap.features.fitting.infrastructure.adapters.run_provenance import model_provenance
-    manifest = tmp_path / 'conditional_fast_manifest_v2.json'
-    manifest.write_text('{"files": {"model": "a"}}')
-    first = model_provenance('v5', tmp_path)
-    manifest.write_text('{"files": {"model": "b"}}')
-    assert model_provenance('v5', tmp_path)['manifest_sha256'] != first['manifest_sha256']
-    assert first['folder'] == str(tmp_path)
+    monkeypatch.setenv(network.VARIABLE, str(tmp_path / 'net'))
+    record = tmp_path / 'net.json'
+    record.write_text('{"sha256": "a"}')
+    first = model_provenance('posterior')
+    record.write_text('{"sha256": "b"}')
+    assert model_provenance('posterior')['manifest_sha256'] != first['manifest_sha256']
+    assert first['folder'] == str(tmp_path) and first['manifest'] == 'net.json'
 
 
 def test_old_scan_inspection_cannot_overwrite_a_new_project(tmp_path, monkeypatch):

@@ -584,18 +584,20 @@ def test_the_methods_that_take_one_curve_go_over_to_the_mean_when_both_halves_ar
     assert record["points"]["side"] == record["points"]["halves_used"] == "mean" and record["points"]["count"] == 240
     assert np.loadtxt(tmp_path / "shape.csv", delimiter=",", skiprows=1).shape[0] == 240
 
-    # The AI proposal and fit1d get the same points (their fitters are not run here).
+    # Predict parameters and fit1d get the same points (their fitters are not run here).
     given = {}
-    page._ai_solutions = lambda data, model: given.setdefault("ai", data) and []
+    page.predict_available = lambda: True
+    page._start_predict = lambda data, model, selection, curve: (given.setdefault("predict", (data, selection)),
+                                                                 page._finish())
     page._start_fit1d = lambda data, model, selection, curve: (given.setdefault("fit1d", (data, selection)), page._finish())
-    for method in ("ai", "fit1d"):
+    for method in ("predict", "fit1d"):
         page.set_side("both")
         page.set_method(method)
         page.set_range((0.3, 1.2))
         assert page._data().q.size == 2 * int(((mean.q >= 0.3) & (mean.q <= 1.2)).sum())
         page.run_fit(method)
         _wait(page)
-        data = given[method][0] if method == "fit1d" else given[method]
+        data = given[method][0]
         assert np.all(np.diff(data.q) > 0) and data.q.min() >= 0.3 and data.q.max() <= 1.2
         assert np.allclose(data.q, mean.q[(mean.q >= 0.3) & (mean.q <= 1.2)])
         assert page.session.side == "mean" and np.array_equal(page._data().q, data.q)

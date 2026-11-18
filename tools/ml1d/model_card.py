@@ -30,7 +30,7 @@ def card(network: dict, evaluation: dict, benchmarks: list[tuple[str, dict]]) ->
         "**What it is.** An amortised posterior p(composition, values | curve) for horizontal GISAXS cuts: a 1D CNN "
         "summary, a head over the 258 compositions of one to three populations (sphere, upright or random cylinder, "
         "each with or without a paracrystal) and a conditional rational-quadratic spline flow over their values "
-        "(Physics and Methods, section 9.12). GIMaP uses it only to propose: the values, intervals and probabilities "
+        "(Physics and Methods, section 9.13). GIMaP uses it only to propose: the values, intervals and probabilities "
         "of a solution come from the model and the curve (importance sampling and least squares).", "",
         f"**Files.** `{Path(training.get('out', 'flow')).name}.npz` (float32 arrays, SHA-256 "
         f"`{network.get('sha256')}`), `.json` (architecture, prior, data, training), this card. Encoding version "

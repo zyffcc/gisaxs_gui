@@ -13,8 +13,7 @@ from PyQt5.QtCore import QSignalBlocker
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application.single_predict import METHOD_TITLES, PARTICLES, predict_request, predicted
-from ...domain.posterior import network as posterior_network
+from ...application.single_predict import METHOD_TITLES, PARTICLES, network_available, predict_request, predicted
 from .session import Solution
 
 UNITS = {"R": "nm", "h": "nm", "D": "nm", "tail_width": "nm⁻¹", "q_resolution": "nm⁻¹"}
@@ -53,7 +52,7 @@ class PredictPageMixin:
             del blocker
 
     def predict_available(self) -> bool:
-        return posterior_network.available()
+        return network_available()
 
     def _start_predict(self, data, model, selection, curve) -> None:
         settings = self.predict_settings()

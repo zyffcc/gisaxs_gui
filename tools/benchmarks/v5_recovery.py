@@ -6,7 +6,8 @@ otherwise (neural proposals, then four numerical steps), the q > 0 half (the cur
 by intensity and its σD/D is (σnn/D)/√(2π): R and σR/R are compared in V5's convention, the truth's (Gaussian by
 number) converted to its intensity-weighted mean and relative spread (cut_model.conventions.intensity_from_number);
 σD is converted to σnn.
-Needs TensorFlow (requirements-tensorflow.txt).
+Needs TensorFlow (requirements-tensorflow.txt). V5 was retired in 0.2.0: run this in a checkout of commit 06e7395
+(git worktree add <folder> 06e7395); its summary stays here as the record the retirement was decided on.
 usage: python tools/benchmarks/v5_recovery.py [--n 200] [--workers 4] [--seed0 20261116]
 Writes tools/benchmarks/v5_recovery_summary.json and every curve to results/.
 """

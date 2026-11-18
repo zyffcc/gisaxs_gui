@@ -9,8 +9,22 @@ from src.gimap.app.jobs import JobRequest
 
 from ..domain import fit_model as fm
 from ..domain.posterior import encoding as E
+from ..domain.posterior import network as _network
 
 HANDLER = "src.gimap.features.fitting.infrastructure.adapters.posterior_job:run_predict"
+MAX_PARTICLES = E.SLOTS
+"""Predict takes one to this many populations."""
+
+
+def network_available() -> bool:
+    """Whether the proposal network (its weights and record) is where GIMaP looks for it."""
+    return _network.available()
+
+
+def network_file() -> str:
+    """The file name of the proposal network's weights (for the message when it is missing)."""
+    return _network.path().name
+
 PARTICLES = (("The particles in Model", "model"),
              ("Spheres and upright cylinders (1–2)", "spheres_cylinders"),
              ("Any particles (1–3)", "any"))
@@ -79,5 +93,5 @@ def predicted(value: dict) -> list[Predicted]:
     return out
 
 
-__all__ = ["HANDLER", "METHOD_TITLES", "PARTICLES", "Predicted", "compositions", "cut_geometry", "predict_request",
-           "predicted"]
+__all__ = ["HANDLER", "MAX_PARTICLES", "METHOD_TITLES", "PARTICLES", "Predicted", "compositions", "cut_geometry",
+           "network_available", "network_file", "predict_request", "predicted"]

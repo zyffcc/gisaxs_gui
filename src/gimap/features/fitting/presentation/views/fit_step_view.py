@@ -30,8 +30,6 @@ METHODS = (
      "Tries values across the min–max range of every free parameter first; slower, for a poor start."),
     ("shapes", "Find the particle shape (no AI)",
      "Fits sphere, random cylinder and vertical cylinder from several starts and lists the solutions."),
-    ("ai", "AI proposal (1D Predict)",
-     "The V5 model proposes compositions and parameters, then corrects them numerically."),
 )
 FIT1D_MISSING_TIP = (
     "Finds the particles and their sizes from the curve (network proposals and a physical fit), with errors and "

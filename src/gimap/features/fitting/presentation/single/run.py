@@ -5,7 +5,7 @@ progress and Stop (the work runs in the background).
 * Find the particle shape (no AI) — the quick physical fit (sphere, random and vertical cylinder
   from several starts, injected by the composition root); its solutions go to Results, the best
   into Model;
-* AI proposal — 1D Predict (V5) with its numerical correction; its solutions likewise.
+* Predict parameters — the proposal network and its posterior (``predict.py``); its solutions likewise.
 
 A fit replaces the model (Undo brings the previous one back). A stopped fit of the engine keeps the best
 values so far; a stopped search for solutions (the last two methods) brings none.
@@ -26,12 +26,10 @@ from pathlib import Path
 
 from typing import Optional
 
-import numpy as np
 from PyQt5.QtCore import QObject, Qt, pyqtSignal
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application import CandidateGenerationRequest
 from ...application.single_fit import (
     BOTH_USES_MEAN,
     FAMILIES,
@@ -45,13 +43,12 @@ from ...application.single_fit import (
     residuals,
     stopped_result,
 )
-from ...application.workflow_v5 import bundled_workflow, default_options
 from .session import Solution
 from .fit1d_review import fit_error_text
 
 FAMILY_IDS = {"sphere": 1, "cylinder": 2, "vertical_cylinder": 3}
 METHOD_NAMES = {"local": "Refine", "global": "Search the ranges", "shapes": "Find the particle shape",
-                "ai": "AI proposal", "fit1d": "Predict parameters (fit1d)", "predict": "Predict parameters"}
+                "fit1d": "Predict parameters (fit1d)", "predict": "Predict parameters"}
 START, START_OF = "Trying start {n} of {total}", "Trying start {n} of {total}: {model}"
 """One start of the shape search (each family is tried from several starting sizes)."""
 EVALUATED = "{line} — {evaluations} evaluations"
@@ -159,9 +156,9 @@ class FitRunMixin:
         if method not in METHOD_NAMES:
             method = self.method()
         if method == "predict" and not self.predict_available():
-            from ...domain.posterior import network as posterior_network
+            from ...application.single_predict import network_file
             from .predict import MISSING
-            self._status(trf(MISSING, name=posterior_network.path().name), "warning")
+            self._status(trf(MISSING, name=network_file()), "warning")
             return
         if method == "shapes" and self.quick_fit is None:
             self._status(tr("Finding the particle shape is not available here: choose another method."), "warning")
@@ -211,10 +208,6 @@ class FitRunMixin:
                 self._start_predict(data, model, selection, curve)
             except (ValueError, TypeError, RuntimeError) as exc:
                 failed(str(exc))
-        else:
-            self.tasks.submit("fit", lambda: self._ai_solutions(data, model),
-                              on_done=lambda solutions: self._solutions_found(solutions, curve, selection),
-                              on_error=failed)
 
     def stop_fit(self) -> None:
         if not self.fit_running():
@@ -232,11 +225,6 @@ class FitRunMixin:
             self._cancel_fit1d()
         if self._running == "predict":
             self._cancel_predict()
-        if self._running == "ai":
-            try:
-                self.view_model.cancel_ai_candidates()
-            except (AttributeError, RuntimeError):
-                pass
 
     def _busy(self, on: bool) -> None:
         for widget in (self.stop_button, self.stop_step_button, self.fit_progress, self.status_progress):
@@ -293,7 +281,7 @@ class FitRunMixin:
         if self._of_another_curve(curve):
             return
         # Stop during a search for solutions ends as an error of its fitter (“Fitting cancelled”): not a failure.
-        stopped = self._stop_event.is_set() and self._running in ("shapes", "ai", "fit1d", "predict")
+        stopped = self._stop_event.is_set() and self._running in ("shapes", "fit1d", "predict")
         self._finish()
         if stopped:
             self._status(lambda: tr("Stopped before the search finished: no new solutions."), "warning")
@@ -396,31 +384,6 @@ class FitRunMixin:
                               distance_nm=distance, report=report, cancelled=self._stop_event.is_set,
                               evaluated=evaluated)
         return self._as_solutions(rows, data, base, "shape search")
-
-    def _ai_solutions(self, data, base) -> list[Solution]:
-        from ...application.workflow_v5 import workflow_options_for_mode
-
-        catalog = self.view_model.storage.ai_catalog
-        if catalog is None:
-            raise RuntimeError(tr("1D Predict is not available in this installation"))
-        profile = catalog.profile(catalog.default_profile_name)
-        sigma = data.sigma
-        if sigma is None:
-            floor = max(float(np.max(np.abs(data.intensity))) * 0.001, 1e-12)
-            sigma = np.hypot(0.10 * np.abs(data.intensity), floor)
-        options = workflow_options_for_mode({**default_options(), "side": "positive"}, "full")
-        from src.gimap.integrations.state.run_paths import fitting_run_directory
-        output = fitting_run_directory()
-        request = CandidateGenerationRequest(
-            model_path=bundled_workflow(), output_dir=output, q=data.q, intensity=data.intensity, sigma=sigma,
-            profile=profile.to_dict(),
-            constraints={"workflow_v5": options, "sigma_estimated": data.sigma is None, "observation_metadata": {}},
-        )
-        result = self.view_model.run_ai_candidates(
-            request, refine=False, on_progress=lambda p: self._progress.changed.emit(float(p.fraction), str(p.message)))
-        if result is None:
-            raise RuntimeError(self.view_model.state.error_message or tr("1D Predict failed"))
-        return self._as_solutions(result.candidates, data, base, "1D Predict")
 
 
 __all__ = ["FitRunMixin", "progress_line", "start_fraction"]

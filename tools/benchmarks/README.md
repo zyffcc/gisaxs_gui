@@ -6,6 +6,10 @@ only and write their summaries next to themselves.
 | Script | What it measures | Summary |
 |---|---|---|
 | `fit1d_recovery.py` | how well *Predict parameters (fit1d)* recovers known parameters on 200 curves it has never seen, made with the independent forward model `yoneda_truth.py` (Physics and Methods, section 9.12) | `fit1d_recovery_summary.json` |
+| `posterior_recovery.py` | how well *Predict parameters* (the proposal network, its posterior and refinement) recovers known parameters on fit1d's 200 held-out curves (`--set fit1d`) or on 1200 curves of `heldout_cases.py` (`--set extended`): errors, coverage of the 68 %/95 % intervals, the composition chosen, time per curve on one core (Physics and Methods, section 9.13) | `posterior_recovery_summary.json`, `posterior_extended_summary.json` |
+| `heldout_cases.py` | a second held-out set drawn as fit1d's, on a seed range never used during development (20261201): one to three populations, the LMA or the DA | – |
+| `v5_recovery.py` | 1D Predict V5 (removed in 0.2.0; runs in a checkout of commit 06e7395) on fit1d's 200 held-out curves, the true composition given (Physics and Methods, section 10.3) | `v5_recovery_summary.json` |
+| `galaxi_posterior.py` | *Predict parameters* on the measured GALAXI cut and on BornAgain's model of it (Physics and Methods, section 9.13) | `galaxi_posterior.json` |
 | `analyze_speed.py` | how long Analyze takes to reduce the public frames of `tests/data/external` with their own `.poni` (first frame and every further one) | `analyze_speed.json` |
 | `pyfai_comparison.py` | GIMaP against pyFAI on the public frames: |q|, 2θ, q∥, q_z, solid angle and polarisation of every pixel, and the azimuthal I(q) on the same pixels and bins (Physics and Methods 3.7, 6.1). Needs pyFAI, which GIMaP does not install | `pyfai_comparison.json` |
 | `pygid_comparison.py` | GIMaP against pygid on its two example frames: q∥ and q_z of every pixel, and the rings of pygid's polar map; with `--published DIR`, also the maps published with the examples (Zenodo 10.5281/zenodo.17466183) (Physics and Methods 3.7). Needs pygid | `pygid_comparison.json` |
@@ -19,6 +23,10 @@ only and write their summaries next to themselves.
 
 ```bash
 python tools/benchmarks/fit1d_recovery.py --n 200 --workers 10
+python tools/benchmarks/fit1d_recovery.py --set extended --n 1200 --seed0 20261201 --out fit1d_extended
+python tools/benchmarks/posterior_recovery.py --network src/gimap/features/fitting/domain/posterior/data/flow_v1 --n 200
+python tools/benchmarks/posterior_recovery.py --network src/gimap/features/fitting/domain/posterior/data/flow_v1 --set extended --n 1200 --seed0 20261201 --out posterior_extended
+python tools/benchmarks/galaxi_posterior.py   # in an environment with BornAgain 24
 python tools/benchmarks/analyze_speed.py --repeat 5 --json tools/benchmarks/analyze_speed.json
 python tools/benchmarks/pyfai_comparison.py --json tools/benchmarks/pyfai_comparison.json  # in an environment with pyFAI
 python tools/benchmarks/pygid_comparison.py --json tools/benchmarks/pygid_comparison.json --published FOLDER  # with pygid

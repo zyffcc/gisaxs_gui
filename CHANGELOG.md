@@ -12,6 +12,21 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Fitting ▸ Predict parameters (new):** GIMaP's own network finds the particles of a 1D GISAXS cut and their
+  values from the curve. It proposes compositions (one to three spheres, upright or random cylinders, with or
+  without the paracrystal) and values; Fitting's model weighs them against the measured points, and every solution
+  is refined by least squares. Each solution comes with its probability and the 68 % interval of every value
+  (**Results ▸ Posterior of this solution**, and the column **p** of the solutions). The network (about 13 MB, in
+  the repository and the packages) was trained on simulated cuts of Fitting's model and runs with numpy; GIMaP checks
+  it against the SHA-256 of its record. It is also the default method of the 1D Predict window and a method of the
+  In-situ series (**Predict each frame (network + posterior)**). Physics and Methods 9.13 describes it and its benchmarks: TBD_BENCH.
+- **1D Predict: General V5 and Single RC specialist removed.** On fit1d's 200 held-out curves V5 recovered R with a
+  median error of 31 % and D of 22 % (20 s per curve); Predict parameters TBD_V5COMPARE. The window keeps
+  *Physical fit (numerical)* and *fit1d*; settings saved with a V5 method open as Predict parameters. Fitting's
+  *AI proposal (1D Predict)* is replaced by **Predict parameters**. 1D Predict no longer needs TensorFlow, and
+  `modules/Fitting_1D_Model/Workflow_v5` (about 56 MB) is gone from the repository and the packages.
+- **Fitting ▸ Find the particle shape** and Analyze's quick model fit use Fitting's model (sizes Gaussian by
+  number, σnn/D) instead of V5's forward model (Physics and Methods 8.5).
 - **Sputter: the earlier method is removed.** Predict with its PyTorch networks, the Size Trend, Literature,
   Structure Sketch and Reliability tabs, the island height from the q_z fringes and Show in Analyze are gone; GIMaP
   no longer installs PyTorch. Sputter is Analyze on the main screen; a result folder of Predict no longer opens.
@@ -60,14 +75,14 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   curve) is named among the warnings as a background term, not particles of that size. On the public GALAXI cut
   fit1d's composition rule added such a sphere (R ≈ 0.18 nm); Physics and Methods 9.12 gives fit1d's results there.
 - **Lighter install:** `requirements.txt` is the core (Analyze, Calibration, Fitting with fit1d, Series, Batch
-  Export, the automatic analysis, XRR, Sputter, SEM). TensorFlow (1D Predict V5, 2D Prediction, Trainset training),
+  Export, the automatic analysis, XRR, Sputter, SEM). TensorFlow (2D Prediction, Trainset training),
   BornAgain and the AI clients are optional: `requirements-tensorflow.txt`, `requirements-bornagain.txt`,
   `requirements-ai.txt`, all of them `requirements-full.txt`. GIMaP starts and opens every workspace without them,
   and a feature that needs one says which file to install. `Start_GIMaP.bat` and the portable packages still set up
   everything.
 - **Earlier 1D models removed:** the Keras models K1–K4 of 1D Predict (`k1_k2_k3_k4_phys`, `saved_model_K3K4`,
-  22 MB) and their research code `utils/ML_Fitting_1D_GISAXS` (490 files). 1D Predict runs V5 models; fit1d in
-  Fitting is the default 1D machine learning. A folder of an earlier model is refused with what to use instead.
+  22 MB) and their research code `utils/ML_Fitting_1D_GISAXS` (490 files). 1D Predict runs GIMaP's own
+  network (Predict parameters). A folder of an earlier model is refused with what to use instead.
 - **1D Predict, Use current curve:** the curve of Single analysis, as the page selects its points: the halves chosen,
   the fitting range (|q|) and the points left out. Before, it took every point of the halves chosen. The former
   Fitting pages, built but no longer shown, are removed.
@@ -871,8 +886,10 @@ hold.
   own preprocessing is all that runs. **The Ag and Cu distribution modules declare no axes**: their maps and
   curves are drawn on a placeholder axis (0.05–15 nm), which is not a physical scale.
 
-- **1D Predict (Workflow V5) is validated on simulated curves only**, with the composition and resolution given;
-  finding the composition, an unknown resolution and measured data are not validated.
+- **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA, spheres at the Born term of
+  the cut's q_z or the effective interface). It was checked on simulated curves of an independent model and on
+  BornAgain simulations, not on measured curves of known particles; physics outside the model can give a
+  composition a probability it does not deserve. Judge every solution by its residuals.
 - **The quick model fit of a GISAXS cut** (Run Automatic Analysis; *Find the particle shape (no AI)*) **is a
   screening step, not a size measurement.** On 14 BornAgain simulations of Ag-sphere cuts with known parameters it
   ranked a random cylinder first in 12 and a sphere in 1, and the best sphere's R was a median 11 % above the

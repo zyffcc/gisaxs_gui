@@ -33,7 +33,7 @@ SCRIPT = ROOT / "tools" / "build_portable_release.ps1"
 KIT_HELPER = ROOT / "tools" / "list_fit1d_release_files.py"
 LICENSE_HELPER = ROOT / "tools" / "collect_licenses.py"
 APPEND_HELPER = ROOT / "tools" / "append_release_files.py"
-V5 = "modules/Fitting_1D_Model/Workflow_v5"
+NETWORK = "src/gimap/features/fitting/domain/posterior/data/flow_v1"
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "win32" or not shutil.which("powershell") or not shutil.which("git"),
@@ -54,7 +54,7 @@ TRACKED = {
     ".gitignore": (
         "config/user_parameters.json\nconfig/user_settings.json\nconfig/instrument_profiles.json\n"
         "research/\nvalidation/\nresults/\n*.h5\n*.npz\n__pycache__/\ngimap_analysis/\ntest.ipynb\n"
-        f"{V5}/development/\n{KIT}/\n"
+        f"{KIT}/\n"
     ),
     "main.py": "print('GIMaP')\n",
     "Start_GIMaP.bat": "@echo off\n",
@@ -69,8 +69,6 @@ TRACKED = {
     "tests/data/external/manifest.json": "{}\n",
     "LICENSE": "MIT License\n",
     "THIRD_PARTY_NOTICES.md": "# Third-party notices\n",
-    f"{V5}/conditional_v2/predict.py": "print('predict')\r\n",
-    f"{V5}/stable_blue_rc_v1/protocol.json": "{}\r\n",
 }
 # Tracked, but working papers: git knows them, the package leaves them out.
 WORKING_PAPERS = {
@@ -88,22 +86,18 @@ LOCAL = {
     "test.ipynb": "{}\n",
     "src/gimap/__pycache__/app.cpython-310.pyc": "cache",
     "TestSAXSdata/gimap_analysis/frame_fit_input.dat": "# output\n",
-    f"{V5}/development/evidence/dataset.npz": "development record",
+    "modules/Example/development/evidence/dataset.npz": "development record",
     "_handoff/report.md": "personal report\n",
 }
-# Weights as a new one is until `git add -f`: ignored by git (*.h5, *.npz, results/), named by the
-# manifests, needed to run. (The weights of this repository are tracked; the builder packs both kinds.)
+# Weights of a model of the modules folder as a new one is until `git add -f`: ignored by git (*.h5, *.npz); the builder
+# packs them too.
 MODEL = {
-    f"{V5}/conditional_v2/results/r1/final.weights.h5": "condition weights",
-    f"{V5}/conditional_v2/bundle/example_input.npz": "example input",
-    f"{V5}/stable_blue_rc_v1/network.npz": "network",
+    "modules/Example/weights.h5": "weights",
 }
-MANIFESTS = {
-    f"{V5}/conditional_v2/conditional_fast_manifest_v2.json": (
-        "predict.py", "results/r1/final.weights.h5", "bundle/example_input.npz"),
-    f"{V5}/stable_blue_rc_v1/MANIFEST.json": ("protocol.json", "network.npz"),
-}
-PACKED = set(TRACKED) | set(MODEL) | set(MANIFESTS) | {
+# The proposal network of Predict parameters: its weights tracked (`git add -f`, as in this repository) and its record
+# naming their SHA-256.
+NETWORK_FILES = {f"{NETWORK}.npz": "network"}
+PACKED = set(TRACKED) | set(MODEL) | set(NETWORK_FILES) | {f"{NETWORK}.json"} | {
     "tools/build_portable_release.ps1", "tools/list_fit1d_release_files.py", "tools/collect_licenses.py",
     "tools/append_release_files.py",
 }
@@ -138,16 +132,13 @@ def _list(root: Path, *arguments: str):
 def developer_folder(tmp_path):
     """A small git repository that looks like a developer's folder, personal files included."""
     root = tmp_path / "gimap"
-    for name, text in {**TRACKED, **WORKING_PAPERS, **LOCAL, **MODEL}.items():
+    for name, text in {**TRACKED, **WORKING_PAPERS, **LOCAL, **MODEL, **NETWORK_FILES}.items():
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(text.encode("utf-8"))
-    for name, files in MANIFESTS.items():
-        folder = (root / name).parent
-        checksums = {
-            file: hashlib.sha256((folder / file).read_bytes()).hexdigest() for file in files
-        }
-        (root / name).write_text(json.dumps({"files": checksums}), encoding="utf-8")
+    weights = (root / f"{NETWORK}.npz").read_bytes()
+    (root / f"{NETWORK}.json").write_text(json.dumps({"sha256": hashlib.sha256(weights).hexdigest()}),
+                                          encoding="utf-8")
     (root / "tools").mkdir()
     shutil.copy2(SCRIPT, root / "tools" / SCRIPT.name)
     shutil.copy2(KIT_HELPER, root / "tools" / KIT_HELPER.name)
@@ -158,8 +149,8 @@ def developer_folder(tmp_path):
     _git(root, "add", "--", ".gitignore", "main.py", "Start_GIMaP.bat", "src", "config", "docs",
          "work", "GISAXS_HANDOFF_20260909.md", "modules", "tools", "LICENSE", "THIRD_PARTY_NOTICES.md",
          "CITATION.cff", "tests")
-    # As in this repository: tracked although ``research/`` is ignored.
-    _git(root, "add", "--force", "--", "docs/research/outline.md")
+    # As in this repository: tracked although ``research/`` and ``*.npz`` are ignored.
+    _git(root, "add", "--force", "--", "docs/research/outline.md", f"{NETWORK}.npz")
     return root
 
 
@@ -169,7 +160,7 @@ def test_the_list_is_what_git_tracks_plus_the_model_files(developer_folder):
     assert set(listed) == PACKED
     assert len(listed) == len(set(listed))
     assert not [path for path in listed if _personal(path)]
-    assert "model files git ignores: 3; tracked but left out (working papers): 3" in said
+    assert "model files git ignores: 1; tracked but left out (working papers): 3" in said
     # The version is the program's own, so the package cannot be named after another release.
     assert "GIMaP-9.8.7-windows-x64-portable" in said
     assert not (developer_folder / "release").exists()  # nothing is written
@@ -221,7 +212,7 @@ def test_the_package_holds_the_list_and_nothing_else(developer_folder, tmp_path,
     zip_path = developer_folder / "release" / f"{package}.zip"
     with zipfile.ZipFile(zip_path) as archive:
         names = {name[len(package) + 1:] for name in archive.namelist()}
-        predict = archive.read(f"{package}/{V5}/conditional_v2/predict.py")
+        network = archive.read(f"{package}/{NETWORK}.npz")
         pyqt_gpl = archive.read(f"{package}/licenses/python/PyQt5-5.15.11/GPL-3.0.txt")
         notices = archive.read(f"{package}/licenses/THIRD_PARTY_NOTICES.md")
         if with_fit1d:
@@ -232,7 +223,7 @@ def test_the_package_holds_the_list_and_nothing_else(developer_folder, tmp_path,
     licences |= {"licenses/THIRD_PARTY_NOTICES.md", "licenses/GIMaP/LICENSE"}
     assert names == PACKED | kit_paths | {"runtime/pythonw.exe"} | licences
     assert not [name for name in names - {"runtime/pythonw.exe"} if _personal(name)]
-    assert predict == b"print('predict')\r\n"  # the bytes on disk: the manifests are made from them
+    assert network == b"network"  # the bytes on disk: the record's SHA-256 is made from them
     assert b"GNU GENERAL PUBLIC LICENSE" in pyqt_gpl  # the PyQt5 wheel has no text of its own
     assert notices == (developer_folder / "THIRD_PARTY_NOTICES.md").read_bytes()
     assert not list(temporary.glob("gimap-licenses-*"))  # the staging folder is gone
@@ -342,22 +333,21 @@ def test_a_file_help_opens_that_is_missing_is_a_problem(developer_folder):
     assert "Help opens this file, and it is not in the package: docs/Physics_Manual_zh.md" in said
 
 
-def test_a_model_file_that_is_missing_or_was_changed_is_a_problem(developer_folder):
-    """1D Predict checks every file of the manifests before it runs: so does the builder."""
-    name = f"{V5}/stable_blue_rc_v1/network.npz"
-    (developer_folder / name).unlink()
+def test_a_network_file_that_is_missing_or_was_changed_is_a_problem(developer_folder):
+    """Predict parameters checks its weights against the SHA-256 of their record before it runs: so does the builder."""
+    name = f"{NETWORK}.npz"
+    _git(developer_folder, "rm", "--cached", "--quiet", "--", name)
     code, _listed, said = _list(developer_folder)
     assert code == 1
-    assert f"1D Predict needs this model file, and it is missing: {name}" in said
-    (developer_folder / name).write_bytes(b"network")
+    assert f"Predict parameters needs this network file, and it is missing: {name}" in said
+    _git(developer_folder, "add", "--force", "--", name)
     code, _listed, said = _list(developer_folder)
     assert code == 0, said
     # A checkout that converts line endings changes the bytes the checksum was taken from.
-    (developer_folder / V5 / "conditional_v2" / "predict.py").write_bytes(b"print('predict')\n")
+    (developer_folder / name).write_bytes(b"network\r\n")
     code, _listed, said = _list(developer_folder)
     assert code == 1
-    assert "Differs from the checksum in conditional_fast_manifest_v2.json" in said
-    assert f"{V5}/conditional_v2/predict.py" in said
+    assert f"Differs from the SHA-256 in flow_v1.json (changed, or its line endings were converted): {name}" in said
 
 
 def test_this_repository_lists_no_personal_file():
@@ -368,14 +358,12 @@ def test_this_repository_lists_no_personal_file():
     _code, listed, said = _list(ROOT)
     assert listed, said
     for name in ("main.py", "Start_GIMaP.bat", "src/gimap/app/main_window.py",
-                 "config/detectors.json", "docs/User_Manual.md",
-                 f"{V5}/conditional_v2/conditional_fast_manifest_v2.json"):
+                 "config/detectors.json", "docs/User_Manual.md", f"{NETWORK}.json", f"{NETWORK}.npz"):
         assert name in listed
     assert not [path for path in listed if _personal(path)]
     assert not [path for path in listed if path.startswith("docs/research/")]
     on_disk = [
         path.relative_to(ROOT).as_posix()
-        for path in (ROOT / V5).rglob("*")
-        if path.suffix in {".h5", ".npz"} and "development" not in path.relative_to(ROOT).parts
+        for path in (ROOT / "src").rglob("*.npz")
     ]
     assert set(on_disk) <= set(listed)  # the weights that are here go into the package

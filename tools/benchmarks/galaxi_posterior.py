@@ -1,5 +1,5 @@
 """Predict parameters (the proposal network and its posterior) on the GALAXI Yoneda cut, measured and simulated with
-BornAgain's model of the frame: the counterpart of galaxi_fit1d.py (Physics and Methods 9.12).
+BornAgain's model of the frame: the counterpart of galaxi_fit1d.py (Physics and Methods 9.13).
 
 The same cut, angles and BornAgain sources as galaxi_fit1d.py (BornAgain's log-normal radii: number mean 6.24 nm,
 relative spread 0.42; radial paracrystal 53.6 nm, σnn/D 0.196). Variants:
@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
-import math
 import sys
 from pathlib import Path
 

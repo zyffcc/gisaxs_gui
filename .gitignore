@@ -203,7 +203,6 @@ raman_*/
 # 研究、验证与开发资料（本地保留，不进仓库）
 research/
 validation/
-modules/Fitting_1D_Model/Workflow_v5/development/
 
 # 个人笔记与交接报告（本地保留，不进仓库，也不进发布包）
 _handoff/
@@ -233,4 +232,6 @@ docs/agents/eval/local/
 # The size-average tables of the 1D forward model (cut_model/data) and the small reference network of
 # tests/test_ml1d_flow.py are *.npz files as well.
 !src/gimap/features/fitting/domain/cut_model/data/*.npz
+# The proposal network of Predict parameters (its record names the SHA-256 of these weights).
+!src/gimap/features/fitting/domain/posterior/data/*.npz
 !tests/data/ml1d/*.npz

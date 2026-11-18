@@ -3,7 +3,8 @@
 References, each on q = 0.02–3 nm⁻¹ (600 points):
   fitting   Fitting's earlier formulas (scattering_model, coherent_terms): on their own default rules, and on fine
             rules of the same formulas (the integral they approximate)
-  v5        1D Predict V5's float64 forward (modules/Fitting_1D_Model/Workflow_v5/conditional_v2/numpy_forward64.py)
+  v5        1D Predict V5's float64 forward (modules/Fitting_1D_Model/Workflow_v5/conditional_v2/numpy_forward64.py;
+            V5 was retired in 0.2.0, so this part is skipped from then on: run it in a checkout of commit 06e7395)
   fit1d     the fit1d kit's tabulated physics (number weights, Hosemann paracrystal; utils/gisaxs1d_gui_kit)
   truth     tools/benchmarks/yoneda_truth.py (no code shared), its size rule refined to 1500 nodes: Born at the cut's
             q_z and the four-term DWBA on Si, LMA and DA

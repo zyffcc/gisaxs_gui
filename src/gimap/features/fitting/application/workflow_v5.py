@@ -1,4 +1,6 @@
-"""V5 options and portable artifact location; no runtime imports."""
+"""The options of the 1D Predict window (its methods: Predict parameters, Physical fit, fit1d) and where the fit1d kit
+is; no runtime imports. (The window's V5 network and Single RC specialist were retired in 0.2.0; options saved with
+them open as Predict parameters.)"""
 
 import os
 from pathlib import Path
@@ -6,6 +8,11 @@ import numpy as np
 
 from .curve_units import FROM_FILE, FROM_REQUEST, FROM_SETTING, q_unit_read  # noqa: F401 - the origins, also from here
 
+METHODS = ("posterior", "experimental", "fit1d")
+RETIRED_METHODS = ("model", "stable")
+"""V5's network and the Single RC specialist (retired in 0.2.0): Predict parameters instead."""
+RETIRED = ("numerical", "amplitude_calibration", "search_combinations", "condition_combinations", "normalizer")
+"""Options only those had."""
 FIT1D_SHAPES = {1: "sphere", 3: "vc"}
 """Component id → the shape name of the fit1d kit. It has no random cylinder (2)."""
 FIT1D_POLICIES = ("fast", "auto", "robust")
@@ -30,12 +37,6 @@ def q_unit_of_file(stated_unit, path, options: dict) -> dict:
     return dict(q_unit_read=STATED_UNITS[unit], q_unit_from=origin)
 
 
-def bundled_workflow() -> Path:
-    return (
-        Path(__file__).resolve().parents[5] / "modules/Fitting_1D_Model/Workflow_v5/conditional_v2"
-    )
-
-
 def fit1d_kit_home() -> Path:
     """The folder of the fit1d kit (it contains ``gisaxs1d_kit/``): the environment variable
     ``GISAXS1D_KIT_HOME``, else ``utils/gisaxs1d_gui_kit`` in the program folder. Not imported here."""
@@ -53,18 +54,13 @@ def fit1d_kit_available(home: Path | None = None) -> bool:
 
 def default_options() -> dict:
     return dict(
-        method="model",
+        method="posterior",
         components=[],
         sigma_res=None,
         nu_res=None,
-        numerical=True,
-        amplitude_calibration=True,
-        search_combinations=12,
-        condition_combinations=3,
         max_solutions=8,
         relative_noise=0.10,
         absolute_noise=0.0,
-        normalizer=None,
         q_unit="nm^-1",
         render_points=500,
         side="both",
@@ -107,24 +103,16 @@ def _validate_fit1d(out: dict) -> None:
         raise ValueError("nu_res must be within [0.5, 12.0] for fit1d")
 
 
-def workflow_options_for_mode(options, run_mode):
-    """The options of a run: the saved method, or the one ``run_mode`` names (``fast``: General V5)."""
-    result = {**options, "q_unit": "nm^-1", "numerical": run_mode != "fast"}
-    if run_mode in ("stable", "experimental", "fit1d"):
-        result["method"] = run_mode
-    elif run_mode == "fast":
-        result["method"] = "model"
-    return result
-
-
 def validate_options(options: dict) -> dict:
     out = {**default_options(), **options}
     # Legacy recipes migrate this value into detector preprocessing at capture/runtime.
     out.pop("cbf_gap_margin", None)
-    if out["method"] not in ("posterior", "stable", "model", "experimental", "fit1d"):
+    for retired in RETIRED:  # options saved with V5's network or the Single RC specialist
+        out.pop(retired, None)
+    if out["method"] in RETIRED_METHODS:
+        out["method"] = "posterior"
+    if out["method"] not in METHODS:
         raise ValueError("Unknown fitting method")
-    if not isinstance(out["amplitude_calibration"], bool):
-        raise ValueError("amplitude_calibration must be true or false")
     if out["q_unit"] not in ("nm^-1", "A^-1"):
         raise ValueError("q unit must be nm^-1 or A^-1")
     if out["side"] not in ("both", "positive", "negative"):
@@ -141,19 +129,12 @@ def validate_options(options: dict) -> dict:
         )
     out["components"] = list(types)
     _validate_fit1d(out)
-    if out["method"] in ("fit1d", "posterior"):
-        resolution_bounds = ()
-    elif out["method"] in ("stable", "experimental"):
-        resolution_bounds = (("sigma_res", 0.001, 0.1), ("nu_res", 1.0, 20.0))
-    else:
-        resolution_bounds = (("sigma_res", 0.007, 0.013), ("nu_res", 5.0, 10.0))
+    resolution_bounds = (("sigma_res", 0.001, 0.1), ("nu_res", 1.0, 20.0)) if out["method"] == "experimental" else ()
     for key, lo, hi in resolution_bounds:
         value = out[key]
         if value is not None and (not np.isfinite(value) or not lo <= value <= hi):
             raise ValueError(f"{key} must be within [{lo}, {hi}]")
     for key, lo, hi in (
-        ("search_combinations", 1, 34),
-        ("condition_combinations", 1, 34),
         ("max_solutions", 1, 100),
         ("render_points", 2, 2000),
     ):
@@ -162,8 +143,4 @@ def validate_options(options: dict) -> dict:
     for key in ("relative_noise", "absolute_noise"):
         if not np.isfinite(out[key]) or out[key] < 0:
             raise ValueError(f"{key} must be finite and nonnegative")
-    if out["normalizer"] is not None and (
-        not np.isfinite(out["normalizer"]) or out["normalizer"] <= 0
-    ):
-        raise ValueError("Intensity normalizer must be positive")
     return out

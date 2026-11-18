@@ -16,7 +16,6 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QPushButton,
-    QSpinBox,
 )
 
 from src.gimap.app.presentation.i18n import tr
@@ -32,11 +31,13 @@ COMPONENTS = ("Auto / unused", "Sphere", "Random cylinder", "Vertical cylinder")
 """The composition's choices; their position is the option value (0: none)."""
 FIT_METHODS = (
     ("Predict parameters (network + posterior)", "posterior"),
-    ("General V5 (experimental)", "model"),
-    ("Single RC specialist (experimental)", "stable"),
     ("Physical fit (numerical)", "experimental"),
     ("fit1d (network + physical fit)", "fit1d"),
 )
+METHOD_TIP = ("Predict parameters: GIMaP's proposal network and its posterior, refined by least squares (Complete "
+              "composition: 1–3 components; Auto: the network chooses). Physical fit: the quick numerical fit of "
+              "Find the particle shape. fit1d: a separate kit with its own physics; it needs the Complete composition "
+              "(Sphere / Vertical cylinder).")
 FIT1D_POLICIES = (
     ("Fast (one search)", "fast"),
     ("Auto (more starts when needed)", "auto"),
@@ -100,56 +101,26 @@ class WorkflowV5SettingsMixin:
         self.unit = _choices(Q_UNITS, self._options["q_unit"])
         self.unit.setToolTip(UNIT_TIP)
         self.side = _choices(Q_SIDES, self._options["side"])
-        self.numerical = QCheckBox("General V5: improve fit with four numerical steps")
-        self.numerical.setChecked(self._options["numerical"])
-        self.amplitude_calibration = QCheckBox("Calibrate intensity amplitudes")
-        self.amplitude_calibration.setChecked(self._options.get("amplitude_calibration", True))
-        self.amplitude_calibration.setToolTip(
-            "The single-RC specialist can adjust particle, background and resolution amplitudes while keeping "
-            "the neural shape parameters fixed. Broader fitting may still run when curve agreement is poor."
-        )
         self.method = _choices(FIT_METHODS, self._options["method"])
-        self.method.setToolTip(
-            "General V5 proposes multiple compositions but remains experimental. "
-            "The specialist requires Complete composition = one Random cylinder and eligible native CBF counts. "
-            "Other inputs, fixed resolution and poor curve agreement use numerical fallback; "
-            "that fallback does not make the specialist a general model. Scores are not probabilities. "
-            "fit1d is a separate kit with its own physics and needs the Complete composition "
-            "(Sphere / Vertical cylinder)."
-        )
+        self.method.setToolTip(METHOD_TIP)
         left.addRow("Fit method", self.method)
         left.addRow(UNIT_LABEL, self.unit)
         left.addRow("q sides", self.side)
-        left.addRow(self.amplitude_calibration)
-        left.addRow(self.numerical)
         self.fix_sigma = QCheckBox("Fix σ res (nm⁻¹)")
         self.fix_sigma.setChecked(self._options["sigma_res"] is not None)
         self.sigma_res = _spin(0.001, 0.1, self._options["sigma_res"] or 0.01, 8)
         self.fix_nu = QCheckBox("Fix ν res")
         self.fix_nu.setChecked(self._options["nu_res"] is not None)
         self.nu_res = _spin(1, 20, self._options["nu_res"] or 7, 6)
-        self.sigma_res.setToolTip("General V5: 0.007–0.013 nm⁻¹. RC specialist / physical fit: 0.001–0.1 nm⁻¹; "
-                                  "fixed resolution uses numerical fallback.")
-        self.nu_res.setToolTip("General V5: 5–10. RC specialist / physical fit: 1–20; fixed resolution uses "
-                               "numerical fallback.")
+        self.sigma_res.setToolTip("Physical fit: the width of the low-q term, 0.001–0.1 nm⁻¹ (unticked: fitted).")
+        self.nu_res.setToolTip("Physical fit: 1–20; fit1d: 0.5–12 (unticked: fitted).")
         right.addRow(self.fix_sigma, self.sigma_res)
         right.addRow(self.fix_nu, self.nu_res)
         self.relative_noise = _spin(0, 10, self._options["relative_noise"], 4)
         self.noise_floor = _spin(0, 1e12, self._options["absolute_noise"], 6)
         self.noise_floor.setSpecialValueText("Auto: 0.1% peak")
-        self.normalizer = _spin(0, 1e20, self._options["normalizer"] or 0, 6)
-        self.normalizer.setSpecialValueText("Auto: measured max")
         right.addRow("Relative σ (if missing)", self.relative_noise)
         right.addRow("Absolute σ floor", self.noise_floor)
-        right.addRow("Intensity normalizer", self.normalizer)
-        self.search = QSpinBox()
-        self.search.setRange(1, 34)
-        self.search.setValue(self._options["search_combinations"])
-        self.conditions = QSpinBox()
-        self.conditions.setRange(1, 34)
-        self.conditions.setValue(self._options["condition_combinations"])
-        left.addRow("Discover combinations", self.search)
-        left.addRow("Condition best combinations", self.conditions)
         self._build_fit1d(right)
         self.method.currentIndexChanged.connect(self._update_method_controls)
         self._update_method_controls()
@@ -189,12 +160,8 @@ class WorkflowV5SettingsMixin:
                                self.fit1d_qz, self.fit1d_sigma_floor)
 
     def _update_method_controls(self) -> None:
-        legacy = self.method.currentData() == "model"
         fit1d = self.method.currentData() == "fit1d"
         posterior = self.method.currentData() == "posterior"
-        self.amplitude_calibration.setEnabled(self.method.currentData() == "stable")
-        for widget in (self.numerical, self.normalizer, self.search, self.conditions):
-            widget.setEnabled(legacy)
         for widget in self._fit1d_widgets:
             widget.setEnabled(fit1d or (posterior and widget in (self.fit1d_use_qz, self.fit1d_qz)))
         for widget in (self.fix_sigma, self.sigma_res, self.fix_nu, self.nu_res):  # these fit their low-q term
@@ -215,11 +182,6 @@ class WorkflowV5SettingsMixin:
                 if self.fix_nu.isChecked() and self.method.currentData() != "posterior" else None,
                 "relative_noise": self.relative_noise.value(),
                 "absolute_noise": self.noise_floor.value(),
-                "normalizer": self.normalizer.value() or None,
-                "numerical": self.numerical.isChecked(),
-                "amplitude_calibration": self.amplitude_calibration.isChecked(),
-                "search_combinations": self.search.value(),
-                "condition_combinations": self.conditions.value(),
                 "fit1d_policy": self.fit1d_policy.currentData(),
                 "fit1d_mode": self.fit1d_mode.currentData(),
                 "fit1d_model": self.fit1d_model.currentData(),

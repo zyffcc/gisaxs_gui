@@ -50,9 +50,6 @@ def test_main_fit_runs_without_tf_and_preserves_native_result(tmp_path, monkeypa
         assert "added to σ in quadrature" in page.fit1d_sigma_floor.toolTip()  # what fit1d does with σ
         if count == 3:  # no σ: a warning in the Fit step, what each action does then in its tooltip
             assert "Poisson errors" in page.weighting_note.toolTip() and not page.weighting_note.isHidden()
-        # This path must not even ask for the old V5 model directory.
-        monkeypatch.setattr("src.gimap.features.fitting.presentation.single.run.bundled_workflow",
-                            lambda: pytest.fail("fit1d must not require V5/TensorFlow assets"))
         page.run_fit("fit1d")
         _wait(page)
         native = page.session.native_result

@@ -195,14 +195,14 @@ orange (section 4.1).
 | **Length scale 2π/q\*** | *2π/q\* = 55.6 nm at a shoulder of the cut (\|qy\| = 0.0113 Å⁻¹, no resolved peak): not necessarily the particle spacing.* | It is not the particle spacing: near the documented 53.6 nm by coincidence (a BornAgain simulation of the same particles without interference shows a shoulder too) |
 | **Fit of I(qy)** | A table of solutions: model, R, h, D (nm), χ²/N; a value at a search bound is marked ⚠ (*500 ⚠*) and named under the table in a warning (*⚠ Not determined by the curve (at a search bound) — 1: D, σh/h; …*; which bound: its tooltip) | Several models may fit about equally well |
 
-Here the Results tab also shows *1 point(s) to check*: **Model choice**. The first-ranked solution, a
-random cylinder (χ²/N 1.26), has D at its upper bound (500 nm), and the second also has a value at a
-bound. The run reports rank 3, a sphere (R = 9.44 nm, D = 48.3 nm, χ²/N 1.36): the best-ranked
-solution within 10 % of the first's χ²/N with no non-linear value at a search bound. The table selects it, and the
-line under it says so. Several families fit within those 10 %, so the curve alone does not decide the
-model: GIMaP names the solutions whose D is within 15 % of 2π/q\* (a coincidence of two lengths, not
-evidence) and leaves the choice to you. For this sample you know the particles are spheres. The quick
-fit is a screening step: confirm the model in Fitting (step 5).
+Here the Results tab also shows *1 point(s) to check*: **fit**. The first-ranked solution, a random
+cylinder (R = 3.31 nm with σR/R 0.83, χ²/N 1.05), has D at its lower bound (twice its radius) and the exponent
+of the beam tail at its bound, and no solution within 10 % of its χ²/N is free of a bound: the run reports it and
+says that these values are not determined by the curve. The best sphere (rank 4: R = 3.00 nm with σR/R at its
+bound of 0.9, D = 36.0 nm, χ²/N 2.05) fits worse. The quick fit's Gaussian sizes by number do not describe the
+broad log-normal sizes of this sample well, so the curve alone does not decide the model here. For this sample you
+know the particles are spheres. The quick fit is a screening step: confirm the model in Fitting (step 5), where
+**Predict parameters** also gives the probability of each solution.
 
 ![GISAXS results](manual_images/en/08_gisaxs_results.png)
 *The Results tab of a GISAXS frame: the cut, the length scale 2π/q\*, the fitted curve and the table of solutions.*
@@ -215,14 +215,13 @@ q in Å⁻¹) and opens it in **Fitting ▸ Single analysis**: **Curve** ✓ `59
 The Fit step has chosen **Predict parameters (fit1d)** for this curve, and the line under **Method**
 says why: *Recommended for this curve: a GISAXS cut not fitted yet.* (fit1d comes with GIMaP, section 6.4.)
 To follow this walkthrough, choose **Find the particle shape (no AI)** in **Method** instead, then press
-**Find the particle shape**. After about 15 s the status line says *5 solutions; the best, Sphere (χ²ᵣ
-1.39), is in Model*. Results lists the other
-solutions under **Other solutions**; press **Refine These Values** to refine the sphere and get its
-errors. The same curve opens with **Refine in Fitting** in Analyze's Results tab.
+**Find the particle shape**. After about 15 s the status line names the best of its solutions, which is in
+Model. Results lists the other solutions under **Other solutions**; choose the sphere there with **Use This
+Solution**, then press **Refine These Values** to refine it and get its errors. The same curve opens with **Refine in Fitting** in Analyze's Results tab.
 
 Sizes depend on the model and on its size distribution. BornAgain's model uses a log-normal
-distribution of radii; Fitting's default is a Gaussian by number (choose *Log-normal, by number* under **Sizes** to
-compare like with like), and the automatic analysis uses a Gaussian by intensity: compare radii with care.
+distribution of radii; Fitting's default and the automatic analysis use a Gaussian by number (choose *Log-normal, by
+number* under **Sizes** to compare like with like): compare radii with care.
 
 ![Fitting with the curve sent from Analyze](manual_images/en/11_fitting_single.png)
 *Fitting ▸ Single analysis after a refining fit: the curve, the model over it, the fitting range
@@ -329,7 +328,7 @@ python main.py
 
 `requirements.txt` is the core: Analyze, Geometry Calibration, Fitting with fit1d, Series, Batch Export, the
 automatic analysis, XRR, Sputter and SEM. The optional parts have their own files: `requirements-tensorflow.txt`
-(1D Predict V5, 2D Prediction, Trainset training), `requirements-bornagain.txt` (BornAgain simulations) and
+(2D Prediction, Trainset training), `requirements-bornagain.txt` (BornAgain simulations) and
 `requirements-ai.txt` (Process with AI); `requirements-full.txt` installs everything. A function whose package is
 missing says which file to install.
 
@@ -1883,9 +1882,9 @@ Analysis** to inspect its contributions here.
   tooltips of those controls; the steps themselves only say where things stand.
 - **Halves of the cut**, for a cut through the beam (q < 0 and q > 0): **Mean of both halves** (averaged where
   both halves were measured; across a gap of one half, and beyond its end, the other half alone — never
-  interpolated), **Both halves on |q|**, **q > 0 half** or **q < 0 half**. *Predict parameters*, *Find the
-  particle shape* and the *AI proposal* take one curve: on **Both halves on |q|** they switch the box to the mean
-  and say so; *Refine* and *Search* fit both halves.
+  interpolated), **Both halves on |q|**, **q > 0 half** or **q < 0 half**. *Predict parameters*, *Predict
+  parameters (fit1d)* and *Find the particle shape* take one curve: on **Both halves on |q|** they switch the box
+  to the mean and say so; *Refine* and *Search* fit both halves.
 - **Fitting range** in nm⁻¹, or drag the orange band; **Whole Curve** fits every point.
 - Under *File* (folded): **q unit of files without one in their header** — Å⁻¹ by default; the In-situ series uses
   it too. A file whose header states its unit (Analyze's curves: Å⁻¹) is read in that unit, whatever is set here.
@@ -1977,10 +1976,10 @@ sizes for your sample, or let the Fit step find them.
 - The values, each ± its 1σ error (the covariance at the solution, scaled by χ²ᵣ). Select values and press
   **Fix**, **Let It Fit** or **Range…** (or right-click): the next **Fit Again** uses them. **Range…** shows the
   value's min – max in Model.
-- **Other solutions** (folded): the solutions of *Find the particle shape* or of the AI proposal, each with its
-  χ²ᵣ on these points; a solution from **Show in Fitting** shows Analyze's χ²/N (section 5.5) until you fit it.
+- **Other solutions** (folded): the solutions of *Predict parameters* (with their probability **p**) or of *Find
+  the particle shape*, each with its χ²ᵣ on these points; a solution from **Show in Fitting** shows Analyze's χ²/N (section 5.5) until you fit it.
   **Use This Solution** puts one into Model (Undo brings the previous model back). After
-  Predict with several compositions, **Other compositions** instead (section 6.4).
+  *Predict parameters (fit1d)* with several compositions, **Other compositions** instead (section 6.4).
 - **Constraints and ranges** (folded, after Predict): every constraint passed to fit1d and where it came from.
 - **Save Data and Fit…** writes a CSV — q (nm⁻¹ and Å⁻¹), I, σ, the model, the residuals and every term — with a
   JSON record next to it: the model, the fit (errors, bounds, correlations, what was done at the edges) and the
@@ -2006,22 +2005,21 @@ One **Fit** button runs the method chosen in **Method**:
 
 | Method | What it does | When to use it |
 |---|---|---|
+| **Predict parameters** | GIMaP's network proposes compositions and values; Fitting's model weighs them against the curve (a posterior) and each solution is refined by least squares. Every solution has its probability and the 68 % interval of each value (section 6.5). | A start for a GISAXS cut when the family or the sizes are unknown, with how probable each solution is and how well the curve fixes every value. |
 | **Predict parameters (fit1d)** | A separate kit: network proposals and its own physical fit, for spheres and vertical cylinders, with errors and equivalent solutions (section 6.4). | A start for a GISAXS cut, with its errors and equivalent solutions (section 6.4). Chosen for an unfitted GISAXS cut. |
 | **Refine the values in Model** | Bounded least squares from the values in Model, with Fitting's own model; stays near them. | The model is close: after a prediction or a solution, after Analyze, or to get errors. |
 | **Search the ranges, then refine** | Differential evolution across the ranges of the free values (log scale when a range spans 10× or more), then refinement from the three best starts. | The start is poor but you know the family and sensible ranges. Slower. |
 | **Find the particle shape (no AI)** | The numerical fit of sphere, random cylinder and vertical cylinder from several starts, as in Analyze's automatic analysis. The solutions go to Results, the best into Model. | The first look at a new curve, a GISAXS cut included: chosen for an unfitted GISAXS cut when the fit1d kit is missing. Uses no network. |
-| **AI proposal (1D Predict)** | The experimental V5 network proposes compositions and parameters, then corrects them numerically. Its solutions go to Results. | A second opinion on the family. Check and refine its solutions; do not report them as results. |
 
 - The scales (every particle's scale, the background, the peak A) are solved within their limits (bounded weighted
   least squares) at every step. The search therefore moves only sizes, spreads, distances and the peak's shape.
 - **Stop**: *Refine* and *Search* keep the best values so far. A stop while results wait to be displayed remains
-  a stopped outcome; it is not reported as convergence. Stopping *Find the particle shape*, the AI
-  proposal or Predict produces no new result.
-- The AI proposal also writes a run folder in `AI_Fitting_Output/` (section 6.5).
+  a stopped outcome; it is not reported as convergence. Stopping *Find the particle shape* or a Predict produces
+  no new result.
 
 **Values at the edge of their range.** Model's fixed values and min–max ranges are hard limits, including
 population scales and global terms. Refine and Search never widen them or fix a free value automatically.
-Shape/AI proposals are brought inside these limits; with custom constraints they are refined before they are offered. A method that cannot
+Shape proposals are brought inside these limits; with custom constraints they are refined before they are offered. A method that cannot
 represent a constraint refuses it with an explanation; it never silently ignores it. Boundary diagnostics are
 under **Fit details…**. Only an automatic composition search without custom constraints can extend fit1d's
 own default ranges when **Resolve default ranges during composition search** is enabled.
@@ -2033,7 +2031,7 @@ fit1d is a separate kit with its own networks and physics. It comes with GIMaP i
 Fitting works without it.
 
 **The kit.** The folder `utils/gisaxs1d_gui_kit` holds `gisaxs1d_kit/`, `app/`, `models/` (the two networks) and
-`tables_packed/`. It needs numpy, scipy and threadpoolctl from `requirements.txt`, no TensorFlow and no V5 files.
+`tables_packed/`. It needs numpy, scipy and threadpoolctl from `requirements.txt`, and no TensorFlow.
 The environment variable `GISAXS1D_KIT_HOME` points GIMaP to another copy. The first fit unpacks the form-factor
 tables once into `%USERPROFILE%\.cache\gisaxs1d_tables` (`~/.cache/gisaxs1d_tables` on macOS and Linux), about
 74 MB; the environment variable `GISAXS1D_TABLES` chooses another folder. If the kit is missing from the GIMaP
@@ -2108,7 +2106,55 @@ spheres on a Yoneda cut evaluated at |q| = √(q∥² + qz²) and vertical cylin
 Fitting's model, which [Physics and Methods, chapter 9](Physics_Manual.md#9-model-fitting-of-1d-curves-fitting)
 describes.
 
-### 6.5 1D Predict
+### 6.5 Predict parameters and 1D Predict
+
+**Predict parameters** finds the particles of a cut and their values from the curve. GIMaP's network, trained on
+simulated cuts of Fitting's own model, proposes compositions and values; the model weighs them against the measured
+points (a posterior), and every solution is refined by least squares. Each solution comes with how probable it is
+and with the range in which each value lies (its 68 % interval). The network (about 13 MB) comes with GIMaP and runs
+with numpy: nothing has to be installed. [Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters)
+describes the method and its benchmarks.
+
+- **For the curve open in Fitting**: the method **Predict parameters** of the Fit step (below).
+- **For a list of curve files**: **Tools ▸ 1D Predict — Fit Many Curves…** (or **1D Predict Batch Window…**
+  under *Options* in the Fit step) opens the 1D Predict window (further below). To fit every curve of a folder with
+  your model, use the In-situ series instead (section 6.6).
+
+**What to enter in the Fit step**
+
+1. In **Fit**, select **Predict parameters**. Under it, **Particles** chooses what it tries:
+   - **The particles in Model**: the 1–3 particles of Model — their families, and whether each has the paracrystal
+     (**Structure factor**). The populations are taken in the order of their radii.
+   - **Spheres and upright cylinders (1–2)** or **Any particles (1–3)**: the network proposes the compositions it
+     finds most probable among these (four of them), and their probabilities decide.
+2. The cut's q_z comes from Model's geometry (αi, αf and λ under *Grazing incidence*): spheres are taken at the Born
+   term of that q_z, or at q_z = 0 (the effective interface, Physics and Methods, section 9.10) when the angles are 0.
+   Model's **Sizes** and coupling are used too (*Gaussian, by number* and the LMA are the network's own; with the
+   others the model reweights its proposals).
+3. **Options ▸ Predict: the solutions**: **Refine each solution (least squares)** (the default), **Search from the
+   samples** (a search of the ranges per composition, started from the network's samples; slower) or **Posterior
+   samples only** (no least squares).
+4. Press **Fit**. It runs in a separate process (about 20 s for a curve of a few hundred points on one core, more
+   with several compositions); **Stop** ends it without a result.
+
+Model's fixed values and ranges are not used by Predict: the network looks at the whole range of every value. The
+solution that comes into Model keeps Model's geometry; **Refine** afterwards keeps the values you fix.
+
+**Reading the result**
+
+- The solutions go to **Results ▸ Other solutions**, most probable first, with χ²ᵣ and their probability **p**; the
+  most probable is in Model. The probabilities compare the compositions tried and the distinct solutions of each: a
+  solution with p 0.6 next to one with 0.4 means that the curve does not decide between them.
+- Under the quality line, **Posterior of this solution**: each value's median and 68 % interval, e.g.
+  `R 4.12 [4.08, 4.16] nm`. Below it, what to keep in mind: a value the curve says little about (*unconstrained*: its
+  interval spans most of the range the network knows), a value at a bound, strongly correlated values, or few
+  effective samples (the intervals are then rough).
+- **Refine the values in Model** then gives the least-squares errors under Model's own limits, as for any model.
+
+The network knows cuts spanning a factor 10–300 in q (points below q_max/300 are left out, and said), one to three
+populations, and radii from 0.5/q_max to 5/q_min.
+
+**The 1D Predict window**
 
 ![The 1D Predict window](manual_images/en/13_1d_predict.png)
 
@@ -2116,27 +2162,16 @@ describes.
 The second line under the buttons, “q in Å⁻¹, as their header states”, says how the three Analyze curve files
 (`_fit_input.dat`) are read, with no unit set by hand; **Curve / side** repeats it after each name (“· Å⁻¹”).*
 
-**1D Predict** is the experimental neural model (Workflow V5). It proposes compositions and parameters for a curve
-and corrects each proposal numerically against the measured points. Take its solutions as starts to check and
-refine, not as results.
-
-- **For the curve open in Fitting**: choose **AI proposal (1D Predict)** in the Fit step and press **Fit**; the
-  solutions are listed in Results.
-- **For a list of curve files**: **Tools ▸ 1D Predict — Fit Many Curves…** (or **1D Predict Batch Window…**
-  under *Options* in the Fit step) opens the 1D Predict window. To fit every curve of a folder with your model,
-  use the In-situ series instead (section 6.6).
-
-**In the window**
-
 1. **Add curves…** lists text curve files (`q I [σ]`; `.dat`, `.txt`, also comma-separated `.csv`). **Use current
    cut** takes the curve open in Fitting instead. The line under the buttons says in which unit of q each file is
    read: the unit its header states or, for a file whose header states none, the setting **q unit of files without
    one in their header**. A file whose header states both Å⁻¹ and nm⁻¹ is not fitted and is named there.
 2. **Parameters…** sets:
-   - **Fit method**: *General V5 (experimental)* (default), *Single RC specialist (experimental)*,
-     *Physical fit (numerical)*, which uses no network, or *fit1d (network + physical fit)*, with the fit1d kit
-     (section 6.4); fit1d needs the **Complete composition** (spheres and vertical cylinders only).
-   - **Complete composition**: the particle families when you know them.
+   - **Fit method**: *Predict parameters (network + posterior)* (default), *Physical fit (numerical)*, which uses no
+     network, or *fit1d (network + physical fit)*, with the fit1d kit (section 6.4); fit1d needs the **Complete
+     composition** (spheres and vertical cylinders only).
+   - **Complete composition**: the particle families when you know them (for Predict parameters 1–3, each with the
+     paracrystal); *Auto* lets the network choose among all compositions.
    - **q unit of files without one in their header**: nm⁻¹ by default. A file whose header states its unit of q is
      read in that unit, whatever is set here; Analyze's `_fit_input.dat` files state Å⁻¹ and need no setting. A
      header states the unit with `q in <unit>` in a `#` line or in the name of the first column (`q (1/A)`,
@@ -2144,7 +2179,8 @@ refine, not as results.
      *Note:* this default differs from Fitting's (Å⁻¹, section 6.1), so a curve without a unit in its header is read
      10× apart in q in the two places. Check the line under the buttons, or give the file a header with its unit.
    - **q sides**: *Each half separately*, *q > 0 half* or *q < 0 half*.
-   - For fit1d: its search (**Fast** by default in this window), curve type, network, qz and systematic error.
+   - The cut's q_z (Predict parameters and fit1d; unticked: the effective interface) and, for fit1d, its search
+     (**Fast** by default in this window), curve type, network and systematic error.
 
    **Save Settings** keeps them.
 3. **Fit curve** (**Fit N files** when several are listed) starts, **Cancel** stops (finished files stay saved),
@@ -2154,30 +2190,23 @@ refine, not as results.
    file, **Curve / side** also gives the unit its q was read in (hover to see where it comes from).
    Select one to see, in the tabs on the right, its **Fit plot**, its **Parameters and units** and the **Batch log**.
 
-The **Stage** says what produced a candidate. For *Single RC specialist* it is *Neural model*, *Model + amplitude*
-or *Numerical fallback*; fit1d rows say *fit1d*; *General V5* and *Physical fit* show the name of the step that
-produced it (for example `discovery_neural`). Hover for the details and, for a fallback, the reason. The scores are
-not probabilities.
+The **Stage** says what produced a candidate: *Network + posterior* (Predict parameters; hover for its probability
+and flags), *Physical fit* or *fit1d*. Selecting a fit1d row keeps its original curve and components visible; a
+manual model is copied only as a starting point.
 
-*Single RC specialist* uses its network only for one **Random cylinder** in **Complete composition** and a curve
-with native detector counts (Analyze's horizontal cut). Otherwise it falls back to its numerical fit and says why.
-
-Selecting a fit1d row keeps its original curve and components visible; a manual model is copied only as a starting
-point.
-
-**Where the results go.** Each run writes a new folder `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the GIMaP user data folder (also for the portable version). **Help ▸ Open User Data Folder** opens it. It holds `request.json`, `batch_summary.json`,
+**Where the results go.** Each run of the window writes a new folder `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the GIMaP user data folder (also for the portable version). **Help ▸ Open User Data Folder** opens it. It holds `request.json`, `batch_summary.json`,
 `top20_candidates.json`, `fitting_run_summary.json` and, for every curve and half, `solutions.json` (parameters,
-units, the stage that ran and why), `display.npz` and `fitting_curves.csv` (*General V5* also writes
-`candidates.npz`). `request.json` and `fitting_run_summary.json` list the unit each curve's q was read in
+units, the stage that ran and, for Predict parameters, the probabilities and intervals), `display.npz` and
+`fitting_curves.csv`. `request.json` and `fitting_run_summary.json` list the unit each curve's q was read in
 (`q_units`); each file's entry in `batch_summary.json` and its candidates in `top20_candidates.json` carry it as
 `q_unit_read` and `q_unit_from`. The folders are not removed automatically. Fits you save yourself (**Save**) go
 where you choose.
 
-**Model files.** The model and its trained weights are in `modules/Fitting_1D_Model/Workflow_v5/`, both in the
-portable version and in the Git repository, so 1D Predict runs from a source checkout too. Each network checks its
-files against their checksums before it is used. With a changed or missing file *General V5* does not start, and
-the message names the file. *Single RC specialist* goes on with its numerical fit and gives *Fast model
-unavailable* as the reason (section 14.3). fit1d does not use these files: it uses the optional kit (section 6.4).
+**The network file.** The weights of Predict parameters are in `src/gimap/features/fitting/domain/posterior/data/`
+(`flow_v1.npz`, with its record `flow_v1.json` and model card `MODEL_CARD.md`), both in the portable version and in
+the Git repository. Predict checks them against the SHA-256 in the record before it uses them; with a changed or
+missing file it does not start, and the message names the file (section 14.3). The earlier networks of 1D Predict,
+*General V5* and *Single RC specialist*, were removed in 0.2.0 (Physics and Methods, chapter 10, gives why).
 
 ### 6.6 In-situ series
 
@@ -3237,10 +3266,14 @@ For the SEM comparison, the module must declare the radius axis: `outputs: axes:
 drawn on a placeholder axis (0.05–15 nm on both axes), which is not a physical scale, and is not attached
 to the SEM comparison.
 
-The V5 methods of 1D Predict use their bundled model in `modules/Fitting_1D_Model/Workflow_v5`; fit1d
+Predict parameters uses its network in `src/gimap/features/fitting/domain/posterior/data/` (section 6.5); fit1d
 uses its own kit in `utils/gisaxs1d_gui_kit` instead (section 6.4).
 
-The 1D Predict `request.json` and `fitting_run_summary.json` identify the selected model manifest by SHA-256. This identifies the declared bundle; it does not verify every model file at each run. The request records normalized options and the runtime-default random-seed policy, without claiming a fixed run seed.
+The 1D Predict `request.json` and `fitting_run_summary.json` identify the selected model record by SHA-256: for
+Predict parameters the network's record (which names the SHA-256 of the weights, checked when they are loaded), for
+fit1d the kit's manifest (the declared bundle; it does not verify every file at each run). The request records
+normalized options and the random-seed policy: a fixed seed for Predict parameters, the runtime default for the
+physical fit and fit1d, without claiming a fixed run seed for them.
 
 ## 12. Output files
 
@@ -3271,7 +3304,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Fitting ▸ **Save ▸ Plot…**, **Save ▸ Model…** | `<curve>_fit.png` / `.svg`; `<curve>_model.json` | as above | none; the model file |
 | Fitting ▸ Batch / In-situ series ▸ **Save ▸ Table of Every Frame…** | `series_fit.csv` + `series_fit.json` | the series folder | the JSON (`gimap_series_fit_v2`: start model, halves and where they came from, every frame's state and reason; for detector frames Analyze's settings) |
 | Fitting ▸ Batch / In-situ series ▸ **Trend Plot…**, **Selected Frame's Plot…** | `series_trend_<value>.png` (the table column of the value, for example `series_trend_chi2_reduced.png`) and `series_frame_<NNNNN>.png` (the frame counted from 1, five digits), or `.svg`; `series_trend.png`, `series_frame.png` while nothing is fitted | the series folder | none (the title in the picture names the value or frame) |
-| **Tools ▸ 1D Predict — Fit Many Curves…**, and Fitting's *AI proposal (1D Predict)* | a run folder: `request.json`, `batch_summary.json` …, a subfolder per curve with `solutions.json`, `fitting_curves.csv` … | `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the GIMaP user data folder; never removed automatically | `request.json` |
+| **Tools ▸ 1D Predict — Fit Many Curves…** | a run folder: `request.json`, `batch_summary.json` …, a subfolder per curve with `solutions.json`, `fitting_curves.csv` … | `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the GIMaP user data folder; never removed automatically | `request.json` |
 | Compare ▸ **Save ▸ Table of Every Series… / Table of Every Frame…** | `compare_series.csv` / `compare_frames.csv` + `.json` | the folder of the first series added from files, else the folder a series was last added from (while it is there), else your home folder | `#` header lines and the JSON |
 | Compare ▸ **Change Plot… / Paths Plot… / End States Plot…** | `compare_*.png` or `.svg` | as above | none |
 | Sputter ▸ **Analyze** (section 8.1) | a folder per request: `analysis.json` (status, model family, steps, the files), the package's `REPORT.md`, `report.png`, `report.csv`, `windows.csv`, `summary.json`, `evolution.png`, `patterns.png` and step logs, and `main/` with `main.json` and one `w_<t>.npz` + `w_<t>.png` per time window (the measured image and the model image of every solution) | the scan's folder in the user data folder (or **More options ▸ Save results in**): `sputter/<scan>-<code>/iampred-<code>/`; the same request to the same package shows the result it has. The frames as the package read them are kept in the user data folder: `sputter_client/<package version>/data/` | `gimap_request.json` (the request, the label of the imported scan, the package and its version, the Python, the command) |
@@ -3373,8 +3406,8 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | Quitting GIMaP during a Batch Export keeps the files of the frames done, but the batch tables, `README.txt` and the batch's JSON record are not written. | End a batch with **Stop**: it writes them. |
 | **The quick model fit of a GISAXS cut** (Run Automatic Analysis; *Find the particle shape (no AI)* in Fitting) **is a screening step, not a size measurement.** On 14 BornAgain simulations of cuts of Ag spheres with known radius, distance and disorder (the GALAXI model, Poisson noise at the data's count level), the fit ranked a random cylinder first in 12 and a sphere in 1, 10 first-ranked solutions had a value at a search bound, and the best sphere solution's R was a median 11 % above the R⁶-weighted mean radius of the simulation (from −29 % to +26 %); D and its disorder were not recovered. 2π/q\* of a peak or shoulder was within 10 % of the true distance in 1 of 10 simulations with interference, and a peak or shoulder appeared in all 4 without (sections 1.3 and 5.5; [Physics and Methods, section 8.5](Physics_Manual.md#85-the-quick-model-fit-and-how-the-solution-is-chosen)). | Choose the model from what you know of the sample and confirm it in **Fitting** (refine it, judge the residuals). Do not quote 2π/q\* or the quick fit's D as the particle spacing. |
 | **Fitting is slower with sizes by intensity and with random cylinders.** With a sphere or vertical cylinder and sizes by number or log-normal, **Search the ranges** takes a few seconds as before; with *Gaussian, by intensity* (models of earlier versions) tens of seconds, and with a random cylinder (15–800 ms per evaluation) up to minutes. | Set **Sizes** to *Gaussian, by number*, narrow the ranges of R, h and σR/R before a search, or start **Refine** from values close to the curve. |
-| **1D Predict (Workflow V5) is validated on simulated curves only**, with the composition and resolution given; finding the composition (none given in **Complete composition**), an unknown resolution and measured data are not validated ([Physics and Methods, section 10.8](Physics_Manual.md#108-validation-status)). | Treat its solutions as a second opinion: refine them in Fitting and judge them by the residuals. |
-| **Research runtimes do not all expose a controllable seed.** 1D Predict records this limitation explicitly. Run records identify `software_version`; masks are counted, not stored as pixel lists. | Keep the input, settings and model files with the exported records. |
+| **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA, spheres at the Born term of the cut's q_z or the effective interface). It was checked on simulated curves of an independent model with the four-term DWBA and on BornAgain simulations, not on measured curves of known particles; physics outside the model (roughness, a four-term DWBA, other shapes) can give a composition a high probability that it does not deserve ([Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters)). | Judge every solution by its residuals and by what you know of the sample; refine it in Fitting. |
+| **Research runtimes do not all expose a controllable seed.** The physical fit and fit1d of 1D Predict record this limitation explicitly (Predict parameters uses a fixed seed). Run records identify `software_version`; masks are counted, not stored as pixel lists. | Keep the input, settings and model files with the exported records. |
 | **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`, `assistant_provider_keys.json`; section 10.1): whoever can read that folder can read them. | On a shared computer, or with `GIMAP_HOME` on a shared drive, set the key as an environment variable instead, or **Remove** it after use. |
 | **Sputter ▸ Analyze reads Cu with networks trained for Cu on two polymer films (a homopolymer and a block copolymer)**. | For Cu on another substrate, choose **Polymer** for a polymer film and compare the model image with the measured one before using the values. |
 | **Sputter ▸ Analyze runs the analysis package that comes with GIMaP**, which analyses only the pairs of metal and substrate the package has a network for; its values are model values that were not compared with an independent measurement of your sample (section 8.1). The frames it read are kept in the user data folder (`sputter_client/`), one copy per request that changes the import (rate, geometry, mask, substrate …); nothing removes them. | Judge a solution by its model image beside the measured one, and compare with SEM, AFM or XRR where you can. Delete old folders of `sputter_client/` yourself. |
@@ -3401,20 +3434,16 @@ Fitting reads `.dat` and `.txt` curves. For a curve from Analyze use **Send to F
 
 ### 14.3 1D Predict Does Not Start
 
-*General V5* checks its model files (`modules/Fitting_1D_Model/Workflow_v5/`) against their checksums
-before it runs, and does not start when one is missing or was changed: the message names the file.
-*Single RC specialist* does not stop in that case; it goes on with its numerical fit and gives *Fast
-model unavailable* as the reason of the solution. The portable version and the Git repository both
-contain the files. In a source checkout:
+*Predict parameters* (in Fitting and in the 1D Predict window) checks its network
+(`src/gimap/features/fitting/domain/posterior/data/flow_v1.npz`) against the SHA-256 in its record `flow_v1.json`
+before it runs, and does not start when one of the two is missing or the weights were changed: the message names
+the file. The portable version and the Git repository both contain them. In a source checkout:
 
-- A checkout last updated before the weights were added does not have them yet: update it (section 2.4).
-- A checkout made on Windows before 2026-10-13 holds some of these files with converted line endings,
-  also after it was moved to the new `main` with the two plain commands, and `git status` does not show
-  it. Run `tools\update_source.ps1`: it writes these files again, also when there is nothing new to
-  download.
-- A model file that you changed yourself is left alone by the script; `git status` lists it as modified.
-  `git checkout -- modules/Fitting_1D_Model/Workflow_v5` puts the files of the repository back (and
+- A checkout last updated before the network was added does not have it yet: update it (section 2.4).
+- A network file that you changed yourself is left alone by the update script; `git status` lists it as modified.
+  `git checkout -- src/gimap/features/fitting/domain/posterior/data` puts the files of the repository back (and
   discards your changes in that folder).
+- Git hands the weights out as binary (`.gitattributes`), so a checkout does not convert them.
 
 The numerical methods of Fitting (*Refine the values in Model*, *Search the ranges, then refine*, *Find the
 particle shape (no AI)*) use no model files: the check does not concern them. *Predict parameters (fit1d)*
@@ -3504,7 +3533,7 @@ and check results that matter.
 
 **Can I use my own trained model?** For 2D Prediction, yes, if it can be described by a module
 configuration with a supported loader (section 11.3). For SEM Particle Analysis, any local StarDist model
-folder. 1D Predict's V5 methods use their bundled model; fit1d offers the *General network* and *Au
+folder. Predict parameters uses the network that comes with GIMaP (`tools/ml1d` trains another one); fit1d offers the *General network* and *Au
 nanoparticles on Si (adapted)* networks in its settings. Sputter uses the analysis package that comes with GIMaP in
 `utils/sputter_client/`, or another one you choose (section 8.1); a new package comes with a GIMaP update.
 
@@ -3523,7 +3552,7 @@ curves are sent as numbers, never the detector file, and the small q-map image o
 does not go online by itself. **Help ▸ GitHub Repository**, **Check for Updates…**, **Report a Problem…** and
 the model library of 2D Prediction open a page in your browser. **Report a Problem…** puts the versions of
 GIMaP and of your system (no paths, no data) on the clipboard and opens a new issue on GitHub: nothing is sent
-until you paste it there and submit the issue yourself. StarDist, the V5 methods of 1D Predict and 2D
+until you paste it there and submit the issue yourself. StarDist, Predict parameters, fit1d and 2D
 Prediction run on your computer and download nothing.
 
 ### 14.12 Version and Contact

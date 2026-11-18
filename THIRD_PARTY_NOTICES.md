@@ -202,17 +202,14 @@ code in subprocesses. Their author, **Yufeng Zhai**, confirmed on 2026-11-10 tha
 are released under the **MIT License**. Each bundle includes `LICENSE`; `SOURCE.json` records authorship
 where present. This confirmation does not change the separate licences of third-party dependencies.
 
-- **1D Predict Workflow V5** (`modules/Fitting_1D_Model/Workflow_v5/`): code and trained network weights
-  (`*.h5`, `*.npz`) for Tools ▸ 1D Predict. They propose candidate fits of a 1D GISAXS curve with up to
-  four sphere or cylinder components.
-  - It was integrated on 2026-09-22 from a research source archive. `IMPORT_MANIFEST.json` records the
-    SHA-256 of that archive and of every imported file.
-  - Before 1D Predict runs, the program checks the weights against `conditional_v2/conditional_fast_manifest_v2.json`
-    and `stable_blue_rc_v1/MANIFEST.json`.
-  - The model card is `conditional_v2/MODEL_CARD_zh.md` (in Chinese). It states that the validation used
-    simulated data.
-- The earlier 1D models (`k1_k2_k3_k4_phys/`, `saved_model_K3K4/`) and the research code `utils/ML_Fitting_1D_GISAXS/`
-  were removed in 0.2.0; they remain in the repository's history (added 2026-06-08 and 2026-08-11).
+- **The network of Predict parameters** (`src/gimap/features/fitting/domain/posterior/data/flow_v1.npz`, its
+  record `flow_v1.json` and model card `MODEL_CARD.md`) is GIMaP's own work under GIMaP's licence: trained with
+  `tools/ml1d` on curves simulated by GIMaP's own model, with no measured data. The program checks the weights
+  against the SHA-256 in the record before it uses them.
+- The earlier 1D models (`k1_k2_k3_k4_phys/`, `saved_model_K3K4/`), the research code `utils/ML_Fitting_1D_GISAXS/`
+  and the networks of 1D Predict Workflow V5 (`modules/Fitting_1D_Model/Workflow_v5/`: *General V5* and *Single RC
+  specialist*) were removed in 0.2.0; they remain in the repository's history (added 2026-06-08, 2026-08-11 and
+  2026-09-22).
 - **Sputter analysis package** (`utils/sputter_client/`): a release build of the research code `iampred` (the
   physical forward model of in-situ sputter GISAXS and the networks trained on its simulations) with numpy
   networks for Au and Ag on Si and porous TiO₂, Ag on polymer films, Cu on PEO, and static Au films. It runs
