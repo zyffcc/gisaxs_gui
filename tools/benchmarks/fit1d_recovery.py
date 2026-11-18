@@ -13,7 +13,9 @@ For every curve fit1d runs three times with GIMaP's default network ('general'):
   choose    composition 'auto:sphere,vc:2': does the BIC rule pick the true composition?
 Reported per parameter (R, sigma_R/R, D, sigma_nn/D; populations matched by R): median and 90th percentile of the
 relative error, bias, the share of |z| <= 1 with the reported 1-sigma error (coverage), and the time per curve.
-usage: python tools/benchmarks/fit1d_recovery.py [--n 200] [--workers 10] [--quick]
+With --set extended (and --seed0) the cases are heldout_cases.py's: three populations and the DA as well (fit1d's
+structure factor is the LMA's whatever the case's coupling; 'choose' is then among up to three populations).
+usage: python tools/benchmarks/fit1d_recovery.py [--n 200] [--workers 10] [--quick] [--set fit1d|extended] [--seed0 N]
 The summary of the run quoted in Physics and Methods, section 9.12, is fit1d_recovery_summary.json; every curve is in results/ (not committed).
 """
 from __future__ import annotations
@@ -106,17 +108,30 @@ def _populations(result):
     return best, sorted(pops, key=lambda r: r["R"] or 0.0)
 
 
+SET = {"name": "fit1d", "seed0": 20261116}
+
+
+def _set(name, seed0):
+    SET.update(name=name, seed0=seed0)
+
+
 def run(index):
     os.environ.setdefault("OMP_NUM_THREADS", "1")
     # By name, as GIMaP loads the kit: an optional folder beside the program, not a package of requirements.txt.
     fit1d = importlib.import_module("research.fit1d.api").fit1d
-    case = draw(index)
-    I, s = curve(case)
+    if SET["name"] == "extended":
+        import heldout_cases
+        case = heldout_cases.draw(index, SET["seed0"])
+        I, s = heldout_cases.curve(case)
+    else:
+        case = draw(index, SET["seed0"])
+        I, s = curve(case)
+    auto = "auto:sphere,vc:3" if SET["name"] == "extended" else "auto:sphere,vc:2"
     out = dict(case=case)
     common = dict(mode="gisaxs", qz=float(GEOM.qz_vacuum), workers=1, seed=0, model_dir=str(MODEL_DIR))
     for name, kw in (("network", dict(composition=case["composition"], policy="preview")),
                      ("fit", dict(composition=case["composition"], policy="auto")),
-                     ("choose", dict(composition="auto:sphere,vc:2", policy="auto"))):
+                     ("choose", dict(composition=auto, policy="auto"))):
         t0 = time.perf_counter()
         try:
             res = fit1d(Q, I, s, **kw, **common)
@@ -166,8 +181,13 @@ def summary(results):
     choose = {}
     for level in ("model", "measured", "all"):
         rows = [r for r in results if (level == "all" or r["case"]["level"] == level) and r.get("choose", {}).get("ok")]
-        exact = [r["choose"]["composition"] == r["case"]["composition"] for r in rows]
-        in_set = [r["case"]["composition"] in (r["choose"].get("in_set") or []) for r in rows]
+        if any("coupling" in r["case"] for r in rows):  # the extended set: the same families in any order
+            key = lambda text: sorted(str(text or "").split(","))  # noqa: E731
+            exact = [key(r["choose"]["composition"]) == key(r["case"]["composition"]) for r in rows]
+            in_set = [key(r["case"]["composition"]) in [key(t) for t in r["choose"].get("in_set") or []] for r in rows]
+        else:
+            exact = [r["choose"]["composition"] == r["case"]["composition"] for r in rows]
+            in_set = [r["case"]["composition"] in (r["choose"].get("in_set") or []) for r in rows]
         choose[level] = dict(n=len(rows), exact=float(np.mean(exact)) if rows else None,
                              true_in_equivalent_set=float(np.mean(in_set)) if rows else None)
     seconds = {stage: float(np.median([r[stage]["seconds"] for r in results if stage in r]))
@@ -180,11 +200,14 @@ def main():
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--workers", type=int, default=10)
     ap.add_argument("--quick", action="store_true")
+    ap.add_argument("--set", default="fit1d", choices=("fit1d", "extended"))
+    ap.add_argument("--seed0", type=int, default=20261116)
+    ap.add_argument("--out", default=None)
     a = ap.parse_args()
     n = 8 if a.quick else a.n
     t0 = time.perf_counter()
     results = []
-    with Pool(min(a.workers, n)) as pool:
+    with Pool(min(a.workers, n), initializer=_set, initargs=(a.set, a.seed0)) as pool:
         for i, r in enumerate(pool.imap_unordered(run, range(n)), 1):
             results.append(r)
             c = r["case"]
@@ -192,10 +215,11 @@ def main():
                   + " ".join(f"{k}:{'ok' if r[k].get('ok') else 'ERR'} {r[k]['seconds']:.1f}s" for k in ("network", "fit", "choose"))
                   + f" chose {r['choose'].get('composition')}", flush=True)
     s = summary(results)
-    name = "fit1d_recovery_quick.json" if a.quick else "fit1d_recovery.json"
+    stem = a.out or "fit1d_recovery"
+    name = f"{stem}_quick.json" if a.quick else f"{stem}.json"
     (HERE / "results").mkdir(exist_ok=True)
     if not a.quick:
-        (HERE / "fit1d_recovery_summary.json").write_text(json.dumps(s, indent=1))
+        (HERE / f"{stem}_summary.json").write_text(json.dumps(s, indent=1))
     (HERE / "results" / name).write_text(json.dumps(dict(summary=s, results=results, q=[float(Q[0]), float(Q[-1]), len(Q)],
                                                          geometry=dict(wavelength_nm=GEOM.wavelength_nm,
                                                                        alpha_i_deg=GEOM.alpha_i_deg,

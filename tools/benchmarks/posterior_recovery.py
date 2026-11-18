@@ -11,8 +11,10 @@ draw. For every curve, GIMaP's posterior path (src/gimap/features/fitting/domain
 Reported as in fit1d_recovery.py (median and 90th percentile of the error, bias, |z| ≤ 1 with the least-squares
 error), and in addition the coverage of the posterior's 68 % and 95 % intervals, the effective sample size and the time
 per curve on one core.
+With --set extended the cases are heldout_cases.py's (three populations and the DA as well; the coupling of a case is
+given to the fit, and the choice is among one to three populations).
 usage: python tools/benchmarks/posterior_recovery.py --network PATH/NAME [--n 200] [--workers 8] [--seed0 20261116]
-           [--samples 2000] [--out NAME]
+           [--samples 2000] [--set fit1d|extended] [--out NAME]
 Writes the summary to tools/benchmarks/NAME_summary.json (default posterior_recovery) and every curve to results/.
 """
 from __future__ import annotations
@@ -38,6 +40,7 @@ for p in (str(HERE), str(GIMAP)):
         sys.path.insert(0, p)
 
 import fit1d_recovery as fr  # noqa: E402
+import heldout_cases as hc  # noqa: E402
 from src.gimap.features.fitting.domain.posterior import encoding as E  # noqa: E402
 from src.gimap.features.fitting.domain.posterior import infer, refine  # noqa: E402
 from src.gimap.features.fitting.domain.posterior.flow import Network  # noqa: E402
@@ -55,8 +58,8 @@ def _composition(case) -> int:
     return E.composition_index([(FAMILY[p["shape"]], True) for p in pops])
 
 
-def _allowed() -> list[int]:
-    return E.select(("sphere", "vertical_cylinder"), 2, structure=True)
+def _allowed(populations: int = 2) -> list[int]:
+    return E.select(("sphere", "vertical_cylinder"), populations, structure=True)
 
 
 def _families(index: int) -> list[str]:
@@ -87,8 +90,10 @@ def _init(network_path: str, options: dict):
 
 
 def run(index: int) -> dict:
-    case = fr.draw(index, OPTIONS["seed0"])
-    I, s = fr.curve(case)
+    extended = OPTIONS.get("set") == "extended"
+    case = (hc.draw if extended else fr.draw)(index, OPTIONS["seed0"])
+    I, s = (hc.curve if extended else fr.curve)(case)
+    coupling = case.get("coupling", "lma")
     out = dict(case=case)
     qz = float(fr.GEOM.qz_vacuum)
     truth = _composition(case)
@@ -106,10 +111,12 @@ def run(index: int) -> dict:
         j = slot * E.PER_SLOT
         pops.append(dict(R=median[j], sR=median[j + 1], D=median[j + 4], s_nn=median[j + 5]))
     out["network"] = dict(ok=True, populations=pops, seconds=time.perf_counter() - tick)
-    for name, kwargs in (("fit", dict(compositions=[truth])), ("choose", dict(allowed=_allowed(), shortlist=4))):
+    for name, kwargs in (("fit", dict(compositions=[truth])),
+                         ("choose", dict(allowed=_allowed(3 if extended else 2), shortlist=4))):
         tick = time.perf_counter()
         try:
-            solutions = refine.predict(NETWORK, fr.Q, I, s, qz=qz, samples=OPTIONS["samples"], seed=index, **kwargs)
+            solutions = refine.predict(NETWORK, fr.Q, I, s, qz=qz, samples=OPTIONS["samples"], seed=index,
+                                       coupling=coupling, **kwargs)
             best = solutions[0]
             k_best = len(E.COMPOSITIONS[best.composition])
             out[name] = dict(ok=True, composition=best.name, composition_index=best.composition,
@@ -192,10 +199,11 @@ def main():
     ap.add_argument("--seed0", type=int, default=20261116)
     ap.add_argument("--samples", type=int, default=2000)
     ap.add_argument("--out", default="posterior_recovery")
+    ap.add_argument("--set", default="fit1d", choices=("fit1d", "extended"))
     a = ap.parse_args()
     t0 = time.perf_counter()
     results = []
-    options = dict(seed0=a.seed0, samples=a.samples)
+    options = dict(seed0=a.seed0, samples=a.samples, set=a.set)
     with Pool(min(a.workers, a.n), initializer=_init, initargs=(a.network, options)) as pool:
         for i, r in enumerate(pool.imap_unordered(run, range(a.n)), 1):
             results.append(r)
@@ -208,6 +216,7 @@ def main():
     s["network"] = Path(a.network).name
     s["network_sha256"] = Network.load(a.network).meta["sha256"]
     s["seed0"] = a.seed0
+    s["set"] = a.set
     (HERE / "results").mkdir(exist_ok=True)
     (HERE / f"{a.out}_summary.json").write_text(json.dumps(s, indent=1))
     (HERE / "results" / f"{a.out}.json").write_text(json.dumps(dict(summary=s, results=results,
