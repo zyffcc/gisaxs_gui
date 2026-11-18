@@ -10,8 +10,8 @@ For a measured cut and each composition considered (given, or the network's most
    maximum] (each column is 1 at its maximum): Laplace for the positive ones, a half Gaussian for those at 0;
 3. weights w = L π(z)/q(z), the effective sample size (Σw)²/Σw² and the evidence Z = mean w (Dax et al. 2023).
 
-The beam tail's width is at most ``TAIL_WIDTH_MAX`` × the window's q_min, as in ``encoding`` (a wider "tail" takes over
-the particles' own scattering at low q); the weights of wider samples are 0.
+The beam tail's width is at most ``TAIL_WIDTH_MAX`` × the window's q_min and its exponent in ``TAIL_EXPONENT``, as in
+``encoding``; the weights of wider samples are 0.
 
 The compositions' posterior is ∝ Z (each composition considered equally likely beforehand). The weighted samples are
 grouped into modes (``modes``): sizes and distances apart by more than ``MODE_SPACING`` (relative) or spreads by more

@@ -1,6 +1,6 @@
 {
  "format": "gimap_ml1d_flow_v2",
- "encoding": 2,
+ "encoding": 3,
  "names": [
   "R_1",
   "sigma_R_1",

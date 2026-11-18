@@ -14,8 +14,9 @@ increasing mean radius (``COMPOSITIONS``; slot 1 is the smallest). Every populat
     D/2R                   [1, 20]     with a paracrystal only
     σnn/D                  [0.02, 0.5] with a paracrystal only
 
-and four values belong to the cut: the beam tail's width w̃ = w/q_max in [0.3/ρ, ``TAIL_WIDTH_MAX``/ρ] (at most a few
-q_min: a wider "tail" would take over the particles' own scattering at low q) and exponent ν in [1, 6], the
+and four values belong to the cut: the beam tail's width w̃ = w/q_max in [0.3/ρ, ``TAIL_WIDTH_MAX``/ρ] and exponent ν
+in ``TAIL_EXPONENT`` (the Lorentzian wings of a beam profile, ∝ q⁻²: a steeper "tail" with a free exponent takes over the
+particles' own scattering at low q, and a narrow one cannot describe a measured low-q rise), the
 Gaussian resolution σ_q/q_max in [10⁻⁴, 10⁻²], and the amplitude τ in [0.003, 0.15] of a smooth multiplicative model
 error exp(Σ b_k B_k), b_k ~ N(0, τ²) over the ``ERROR_BASIS`` cubic B-splines of ``error_basis``.
 
@@ -53,10 +54,12 @@ CONDITIONS = 2
 SLOT_CODE = 2 + len(FAMILIES)
 """Per slot of ``composition_code``: in use, the family (one-hot), a paracrystal."""
 ERROR_BASIS = 8
-TAIL_WIDTH_MAX = 3.0
-VERSION = 2
-"""Of this encoding, recorded with a network (``flow.Network`` refuses another): 2 since the tail's width is at most
-``TAIL_WIDTH_MAX`` q_min (1: 0.1 q_max)."""
+TAIL_WIDTH_MAX = 30.0
+TAIL_EXPONENT = (1.8, 2.2)
+VERSION = 3
+"""Of this encoding, recorded with a network (``flow.Network`` refuses another): 3 since the tail's exponent is
+``TAIL_EXPONENT`` and its width at most ``TAIL_WIDTH_MAX`` q_min (2: ν in [1, 6], w at most 3 q_min; 1: at most
+0.1 q_max)."""
 CYLINDER_RADIUS, CYLINDER_HEIGHT = 50.0, 200.0
 
 
@@ -65,8 +68,8 @@ def bounds(ratio) -> tuple[np.ndarray, np.ndarray]:
     ratio = np.atleast_1d(np.asarray(ratio, float))[:, None]
     slot_lo = [np.log(0.5), 0.02, np.log(0.1), 0.02, 0.0, 0.02]
     slot_hi = [np.nan, 0.5, np.log(10.0), 0.5, np.log(20.0), 0.5]
-    lo = np.concatenate([np.tile(slot_lo, SLOTS), [0.0, 1.0, np.log(1e-4), np.log(3e-3)]])[None, :] * np.ones_like(ratio)
-    hi = np.concatenate([np.tile(slot_hi, SLOTS), [0.0, 6.0, np.log(1e-2), np.log(0.15)]])[None, :] * np.ones_like(ratio)
+    lo = np.concatenate([np.tile(slot_lo, SLOTS), [0.0, TAIL_EXPONENT[0], np.log(1e-4), np.log(3e-3)]])[None, :]         * np.ones_like(ratio)
+    hi = np.concatenate([np.tile(slot_hi, SLOTS), [0.0, TAIL_EXPONENT[1], np.log(1e-2), np.log(0.15)]])[None, :]         * np.ones_like(ratio)
     lo[:, GLOBAL.start] = np.log(0.3 / ratio[:, 0])
     hi[:, GLOBAL.start] = np.log(TAIL_WIDTH_MAX / ratio[:, 0])
     hi[:, 0:GLOBAL.start:PER_SLOT] = np.log(5.0 * ratio)
@@ -295,7 +298,7 @@ def bin_curve(q, intensity, sigma, q_max: float, ratio: float, points: int = POI
     return out_i, out_s, mask
 
 
-__all__ = ["CHANNELS", "COMPOSITIONS", "CONDITIONS", "CYLINDER_HEIGHT", "CYLINDER_RADIUS", "DIMS", "TAIL_WIDTH_MAX", "VERSION", "ERROR_BASIS", "FAMILIES", "GLOBAL", "NAMES", "PER_SLOT",
+__all__ = ["CHANNELS", "COMPOSITIONS", "CONDITIONS", "CYLINDER_HEIGHT", "CYLINDER_RADIUS", "DIMS", "TAIL_EXPONENT", "TAIL_WIDTH_MAX", "VERSION", "ERROR_BASIS", "FAMILIES", "GLOBAL", "NAMES", "PER_SLOT",
            "POINTS", "RATIO_MAX", "RATIO_MIN", "SLOTS", "SLOT_CODE", "TYPES", "active", "bin_curve", "bounds",
            "composition_code", "composition_index", "composition_name", "composition_types", "conditions",
            "error_basis", "features", "from_unit", "from_z", "grid", "log_prior", "select", "to_unit", "to_z", "window"]

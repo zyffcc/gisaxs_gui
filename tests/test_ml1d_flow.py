@@ -179,6 +179,28 @@ def test_a_changed_network_file_is_refused(tmp_path):
         Network.load(tmp_path / "flow_fixture.npz")
 
 
+def test_the_network_that_comes_with_gimap_is_the_one_its_record_names(monkeypatch):
+    """The shipped weights pass their SHA-256 check, were trained in this encoding, and propose for a curve."""
+    from src.gimap.features.fitting.domain.posterior import network
+
+    monkeypatch.delenv(network.VARIABLE, raising=False)
+    assert network.path() == network.FOLDER / f"{network.DEFAULT}.npz" and network.available()
+    net = Network.load(network.path())  # refuses weights that differ from the record's SHA-256
+    meta = net.meta
+    assert meta["encoding"] == E.VERSION and meta["names"] == list(E.NAMES)
+    assert meta["compositions"] == len(E.COMPOSITIONS) and meta["points"] == E.POINTS
+    text = network.path().with_suffix(".json").read_text(encoding="utf-8")
+    assert "/data/" not in text and "\\\\" not in text  # no path of the computer it was trained on
+    assert (network.FOLDER / "MODEL_CARD.md").is_file()
+    q = np.geomspace(0.05, 2.0, 300)
+    curve = model.population_terms("sphere", q, radius=4.0, radius_spread=0.1)[0] + 1e-3
+    q_max, ratio = E.window(q)
+    binned = E.bin_curve(q, curve, 0.05 * curve, q_max, ratio)
+    h = net.summary(E.features(*(np.asarray(a)[None] for a in binned)), E.conditions(ratio, 0.0))
+    probabilities = np.exp(net.composition_log_probs(h))[0]
+    assert np.isfinite(h).all() and abs(probabilities.sum() - 1) < 1e-6
+
+
 def test_simulator_rows_are_reproducible_and_usable():
     sys.path.insert(0, str(TOOLS))
     try:

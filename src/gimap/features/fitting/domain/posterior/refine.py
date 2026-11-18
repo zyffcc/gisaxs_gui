@@ -98,6 +98,9 @@ def fit_model(values, composition: int, data: Cut, law: str = "number_gauss", co
             top = TAIL_WIDTH_MAX * data.q_max / data.ratio
             value = min(value, top)
             model = model.with_parameter(("globals", key), upper=top, lower=min(model.globals[key].lower, value))
+        elif key == "res_exponent":  # Lorentzian wings (``encoding.TAIL_EXPONENT``)
+            value = min(max(value, E.TAIL_EXPONENT[0]), E.TAIL_EXPONENT[1])
+            model = model.with_parameter(("globals", key), lower=E.TAIL_EXPONENT[0], upper=E.TAIL_EXPONENT[1])
         parameter = _clip(model.globals[key], value)
         model = model.with_parameter(("globals", key), value=parameter.value, lower=parameter.lower,
                                      upper=parameter.upper, free=True)
