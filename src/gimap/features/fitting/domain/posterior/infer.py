@@ -36,7 +36,10 @@ AMPLITUDE_RANGE = 10.0
 TAIL_WIDTH_MAX = E.TAIL_WIDTH_MAX
 MODE_SPACING, MODE_SPREAD = 0.1, 0.05
 MAX_MODES = 4
-FINE_POINTS = 1024
+SHARP = 0.25
+"""A sample's resolution σ_q below this fraction of the smallest spacing of the measured points is not applied."""
+TABLE_POINTS = 256
+"""Logarithmic points (besides the measured ones) on which the terms of the other samples are convolved."""
 
 
 @dataclass(frozen=True)
@@ -126,12 +129,8 @@ class Likelihood:
         self.position = np.log(q / (data.q_max / data.ratio)) / np.log(data.ratio)
         self.basis = E.error_basis(self.position)  # (8, n)
         self.log_norm = -float(np.sum(np.log(data.sigma))) - 0.5 * q.size * math.log(2 * math.pi)
-
-    def _grid(self, sigma_max: float) -> np.ndarray:
-        q = self.data.q
-        low, high = q[0], q[-1]
-        return np.concatenate([np.geomspace(low / 20, low, 65)[:-1], np.geomspace(low, high, FINE_POINTS),
-                               np.linspace(high, high + resolution.SPAN * sigma_max + 1e-12, 33)[1:]])
+        steps = np.diff(np.unique(q))
+        self.spacing = float(steps.min()) if steps.size else 0.0
 
     def columns(self, values) -> np.ndarray:
         """(B, K + 2, n) of physical values (B, DIMS): each population's T on the measured points with the sample's
@@ -139,19 +138,29 @@ class Likelihood:
         v = np.atleast_2d(np.asarray(values, float))
         rows, n, k = v.shape[0], self.data.q.size, len(self.types)
         g = E.GLOBAL.start
-        grid = self._grid(float(np.max(v[:, g + 2])))
         out = np.empty((rows, k + 2, n))
         geometry = self.data.geometry()
+        sigma = v[:, g + 2]
+        sharp = sigma <= SHARP * self.spacing  # the resolution does not matter between the points: no convolution
+        groups = [(np.flatnonzero(sharp), self.data.q), (np.flatnonzero(~sharp), None)]
         for slot, (family, structure) in enumerate(self.types):
             j = slot * E.PER_SLOT
-            terms = cut.population_terms(
-                family, grid, radius=v[:, j], radius_spread=v[:, j + 1], law=self.law,
-                height=v[:, j + 2] if family == "cylinder" else 10.0,
-                height_spread=v[:, j + 3] if family == "cylinder" else 0.0,
-                distance=v[:, j + 4] if structure else 0.0, distance_spread=v[:, j + 5] if structure else 0.0,
-                coupling=self.coupling, geometry=geometry)
-            for b in range(rows):
-                out[b, slot] = resolution.tabulated(self.data.q, grid, terms[b], float(v[b, g + 2]))[0]
+            for rows_, grid in groups:
+                if not rows_.size:
+                    continue
+                if grid is None:
+                    grid = resolution.table_grid(self.data.q, float(np.max(sigma[rows_])), TABLE_POINTS)
+                terms = cut.population_terms(
+                    family, grid, radius=v[rows_, j], radius_spread=v[rows_, j + 1], law=self.law,
+                    height=v[rows_, j + 2] if family == "cylinder" else 10.0,
+                    height_spread=v[rows_, j + 3] if family == "cylinder" else 0.0,
+                    distance=v[rows_, j + 4] if structure else 0.0,
+                    distance_spread=v[rows_, j + 5] if structure else 0.0, coupling=self.coupling, geometry=geometry)
+                if grid is self.data.q:
+                    out[rows_, slot] = terms
+                else:
+                    for i, b in enumerate(rows_):
+                        out[b, slot] = resolution.tabulated(self.data.q, grid, terms[i], float(sigma[b]))[0]
             out[:, slot] /= np.maximum(out[:, slot].max(axis=1, keepdims=True), 1e-300)
         for b in range(rows):
             out[b, k] = cut.tail(self.data.q, float(v[b, g]), float(v[b, g + 1]))
