@@ -103,7 +103,7 @@ class Sequence:
         self.owner = [k % n for k in range(W)]
         mpc = mp.get_context("spawn")
         self.pools = [mpc.Pool(1, initializer=runner._init, initargs=(env,)) for _ in range(n)]
-        res = [self.pools[i].apply_async(_open, ((cfg, scan, [self.t[k] for k in range(W) if self.owner[k] == i]),))
+        res = [self.pools[i].apply_async(runner.Guard(_open), ((cfg, scan, [self.t[k] for k in range(W) if self.owner[k] == i]),))
                for i in range(n)]
         info = {}
         for r in res:
@@ -174,7 +174,7 @@ class Sequence:
         for i, pool in enumerate(self.pools):
             for k in sorted(jobs):
                 if self.owner[k] == i:
-                    res.append(pool.apply_async(_eval, ((self.scan, [(self.t[k], jobs[k][0], jobs[k][1])], save, lite),)))
+                    res.append(pool.apply_async(runner.Guard(_eval), ((self.scan, [(self.t[k], jobs[k][0], jobs[k][1])], save, lite),)))
         got = {}
         if self.on_progress is not None:
             done = 0

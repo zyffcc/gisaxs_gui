@@ -62,6 +62,8 @@ P_L3, OMEGA_L3, EFF_RATIO = 0.58, 0.32, 1.1
 
 N_CU = 8.96 / 63.546 * NA21
 LAM_CU, FL_KEV_CU = 0.105, 8.048
+CU_LAM_TOL = 0.05
+
 CU_F1, CU_F2, CU_F1_FL, CU_F2_FL = 28.2, 2.45, 27.04, 0.589
 OPT["Cu"] = ((pref(LAM) * N_CU * CU_F1, pref(LAM) * N_CU * CU_F2), (pref(LAM_FL) * N_CU * CU_F1_FL, pref(LAM_FL) * N_CU * CU_F2_FL))
 MU_CU = 4 * np.pi * pref(LAM) * N_CU * CU_F2 / LAM
@@ -499,9 +501,9 @@ class Scan:
             raise SystemExit(f"{label}: the Au optics and L fluorescence are 12 keV values; IAM_LAM_NM={LAM:g} refused")
         if self.metal == "Au" and abs(FL_KEV - 9.70) > 1e-9:
             raise SystemExit(f"{label}: Au L fluorescence needs IAM_FL_KEV unset (9.70), got {FL_KEV:g}")
-        if self.metal == "Cu" and (abs(LAM - LAM_CU) > 1e-9 or abs(FL_KEV - FL_KEV_CU) > 1e-9):
-            raise SystemExit(f"{label}: the Cu optics are lambda {LAM_CU} nm values and its K fluorescence needs "
-                             f"IAM_FL_KEV={FL_KEV_CU}; got IAM_LAM_NM={LAM:g}, IAM_FL_KEV={FL_KEV:g}")
+        if self.metal == "Cu" and (abs(LAM / LAM_CU - 1) > CU_LAM_TOL or abs(FL_KEV - FL_KEV_CU) > 1e-9):
+            raise SystemExit(f"{label}: the Cu optics are lambda {LAM_CU} nm values (used within {CU_LAM_TOL:.0%}) and "
+                             f"its K fluorescence needs IAM_FL_KEV={FL_KEV_CU}; got IAM_LAM_NM={LAM:g}, IAM_FL_KEV={FL_KEV:g}")
         if self.cfg.get("pre_invalid") and os.environ.get("IAM_ALLOW_INVALID_PRE") != "1":
             raise SystemExit(f"{label}: {self.cfg['pre_invalid']} (IAM_ALLOW_INVALID_PRE=1 for data-only use)")
         self.t_dep, _, _ = onset(self.res, self.grid)

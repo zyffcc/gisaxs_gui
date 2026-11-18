@@ -11,6 +11,29 @@ IAM_DIR = HERE.parent
 FAM_DIR = HERE / "families"
 
 REQUIRED = ("family", "fitter", "env", "scans", "reported")
+LAM_12KEV = 0.103320165
+LAM_TOL = 0.05
+"""Relative difference between a new scan's wavelength and its family's (the wavelength its network was trained at)
+up to which the family is used (2026-11-19): the network gives the starting solutions, the forward model renders and
+fits at the scan's own wavelength (predict sets IAM_LAM_NM to it); beyond it the scan is refused at import with the
+reason. Au is the exception: its optics are 12 keV values next to the L3 edge (11.92 keV), so it stays at 12 keV."""
+
+
+def model_lam(cfg):
+    "The wavelength (nm) a family's network was trained at."
+    return float((cfg.get("env") or {}).get("IAM_LAM_NM", LAM_12KEV))
+
+
+def lam_problem(metal, lam):
+    "Why a scan of ``metal`` at wavelength ``lam`` (nm) cannot be analysed ('' when it can)."
+    model = 0.105 if metal == "Cu" else LAM_12KEV
+    if metal == "Au" and abs(lam / LAM_12KEV - 1) > 1e-4:
+        return (f"Au is modelled at 12.000 keV only (its optics are 12 keV values next to the L3 edge at 11.92 keV); "
+                f"this scan is at {1.239841984 / lam:.3f} keV (wavelength {lam:.5f} nm)")
+    if abs(lam / model - 1) > LAM_TOL:
+        return (f"the {metal} networks were trained at {model:g} nm ({1.239841984 / model:.2f} keV); this scan is at "
+                f"{lam:.5f} nm ({1.239841984 / lam:.2f} keV), more than {LAM_TOL:.0%} away")
+    return ""
 DEFAULTS = dict(
     context_step=[[25.0, 1.0], [1e9, 5.0]],
     prior=dict(near=0.55, interp=0.2, cross=0.1, uniform=0.15, sigma_u=0.06, sigma_mass=0.15, t_jitter=1.0,
