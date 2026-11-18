@@ -13,7 +13,7 @@ from PyQt5.QtCore import QSignalBlocker
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application.single_predict import METHOD_TITLES, PARTICLES, network_available, predict_request, predicted
+from ...application.single_predict import PARTICLES, network_available, predict_request, predicted
 from .session import Solution
 
 UNITS = {"R": "nm", "h": "nm", "D": "nm", "tail_width": "nm⁻¹", "q_resolution": "nm⁻¹"}
@@ -34,19 +34,16 @@ class PredictPageMixin:
         self._predict_job_id = None
         for text, value in PARTICLES:
             self.predict_particles.addItem(tr(text), value)
-        for value, text in METHOD_TITLES.items():
-            self.predict_method.addItem(tr(text), value)
         stored = self._remembered("predict_settings")
         self.apply_predict_settings(stored if isinstance(stored, dict) else {})
-        for combo in (self.predict_particles, self.predict_method):
-            combo.currentIndexChanged.connect(lambda _index: self._remember(predict_settings=self.predict_settings()))
+        self.predict_particles.currentIndexChanged.connect(
+            lambda _index: self._remember(predict_settings=self.predict_settings()))
 
     def predict_settings(self) -> dict:
-        return {"particles": self.predict_particles.currentData(), "method": self.predict_method.currentData()}
+        return {"particles": self.predict_particles.currentData()}
 
     def apply_predict_settings(self, settings: dict) -> None:
-        for key, combo, default in (("particles", self.predict_particles, "model"),
-                                    ("method", self.predict_method, "lm")):
+        for key, combo, default in (("particles", self.predict_particles, "model"),):
             blocker = QSignalBlocker(combo)
             index = combo.findData(settings.get(key, default))
             combo.setCurrentIndex(index if index >= 0 else combo.findData(default))
@@ -60,7 +57,7 @@ class PredictPageMixin:
         particles = settings["particles"]
         if particles == "model" and not model.components:
             particles = "spheres_cylinders"  # nothing in Model yet: the network chooses
-        request = predict_request(data, model, particles, method=settings["method"])
+        request = predict_request(data, model, particles)
         self._predict_job_id = request.job_id
         self.tasks.submit("fit", lambda: self._run_predict_job(request),
                           on_done=lambda value: self._predict_finished(value, curve, selection),

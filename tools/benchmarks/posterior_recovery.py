@@ -14,7 +14,8 @@ per curve on one core.
 With --set extended the cases are heldout_cases.py's (three populations and the DA as well; the coupling of a case is
 given to the fit, and the choice is among one to three populations).
 usage: python tools/benchmarks/posterior_recovery.py --network PATH/NAME [--n 200] [--workers 8] [--seed0 20261116]
-           [--samples 2000] [--local-samples 600] [--shortlist 4] [--refined 3] [--set fit1d|extended] [--out NAME]
+           [--samples N] [--local-samples N] [--shortlist N] [--refined 3] [--set fit1d|extended] [--out NAME]
+  (defaults: Predict parameters' own, refine.SAMPLES, LOCAL_SAMPLES, SHORTLIST)
 Writes the summary to tools/benchmarks/NAME_summary.json (default posterior_recovery) and every curve to results/.
 """
 from __future__ import annotations
@@ -198,11 +199,11 @@ def main():
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--seed0", type=int, default=20261116)
-    ap.add_argument("--samples", type=int, default=2000)
+    ap.add_argument("--samples", type=int, default=refine.SAMPLES)
     ap.add_argument("--out", default="posterior_recovery")
     ap.add_argument("--set", default="fit1d", choices=("fit1d", "extended"))
-    ap.add_argument("--local-samples", type=int, default=600)
-    ap.add_argument("--shortlist", type=int, default=4)
+    ap.add_argument("--local-samples", type=int, default=refine.LOCAL_SAMPLES)
+    ap.add_argument("--shortlist", type=int, default=refine.SHORTLIST)
     ap.add_argument("--refined", type=int, default=3)
     a = ap.parse_args()
     t0 = time.perf_counter()

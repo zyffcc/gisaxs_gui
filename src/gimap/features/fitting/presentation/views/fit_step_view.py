@@ -42,9 +42,6 @@ QUICK_FAMILIES = (("Try every family", "auto"), ("The families in Model", "model
 PREDICT_PARTICLES_TIP = ("The particles in Model: their families, with or without a paracrystal, in the order of their "
                          "radii. A choice: the network proposes the compositions it finds most probable among these, "
                          "and their posterior probabilities decide.")
-PREDICT_METHOD_TIP = ("Refine each solution: least squares from the most probable sample of every mode (the default). "
-                      "Search from the samples: a search of the ranges whose first population is the network's "
-                      "samples, one per composition. Posterior samples only: no least squares.")
 RESOLVE_TIP = ("Only automatic composition searches may extend the predictor's default ranges. "
                "Model's fixed values and min–max ranges are always kept. See Fit details for boundary diagnostics.")
 
@@ -121,13 +118,6 @@ def build_fit_step(owner, page: QWidget, layout) -> None:
 
     options = AdvancedSection("Options", "", page)
     options.setObjectName("fitAdvanced")
-    finish = QHBoxLayout()
-    finish.addWidget(QLabel("Predict: the solutions", options))
-    owner.predict_method = QComboBox(options)
-    owner.predict_method.setObjectName("fitPredictMethod")
-    owner.predict_method.setToolTip(PREDICT_METHOD_TIP)
-    finish.addWidget(owner.predict_method, 1)
-    options.add_layout(finish)
     setup_fit1d_options(owner, options)  # (each of its rows is named “fit1d …”)
     budget = QHBoxLayout()
     budget.addWidget(QLabel("Evaluations at most (Refine, Search)", options))
@@ -147,5 +137,5 @@ def build_fit_step(owner, page: QWidget, layout) -> None:
     layout.addWidget(options)
 
 
-__all__ = ["FIT1D_MISSING_TIP", "METHODS", "PREDICT_METHOD_TIP", "PREDICT_PARTICLES_TIP", "QUICK_FAMILIES",
+__all__ = ["FIT1D_MISSING_TIP", "METHODS", "PREDICT_PARTICLES_TIP", "QUICK_FAMILIES",
            "RESOLVE_TIP", "build_fit_step"]

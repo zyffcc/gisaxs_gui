@@ -42,8 +42,7 @@ def run_predict(payload: dict, report, cancelled) -> dict:
     solutions = refine.predict(
         network, payload["q"], payload["intensity"], payload.get("sigma"), qz=float(payload.get("qz") or 0.0),
         compositions=payload.get("compositions"), allowed=payload.get("allowed"),
-        shortlist=int(payload.get("shortlist", 4)), samples=int(payload.get("samples", 2000)),
-        method=payload.get("method", "lm"), seed=int(payload.get("seed", 0)),
+        seed=int(payload.get("seed", 0)),
         law=payload.get("law", "number_gauss"), coupling=payload.get("coupling", "lma"),
         grazing=payload.get("grazing"))
     if cancelled():

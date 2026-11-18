@@ -1,10 +1,9 @@
-"""From the proposal network's posterior to Fitting's models: each mode refined by least squares, and one result
-record for every method (``PosteriorSolution``).
+"""From the proposal network's posterior to Fitting's models: the solutions of a cut and their result record
+(``PosteriorSolution``).
 
-``predict`` is the entry point: the posterior of the compositions (``infer``), their modes, and per mode a Fitting
-``FitModel`` started at the mode's heaviest sample and refined by ``fit_engine`` (bounded least squares, the scales
-solved exactly); when no mode of a composition refines below ``CHI2_RETRY`` (the network's proposals miss the curve),
-one search of the ranges started from the heaviest samples is added. A solution carries the refined values with their errors (Jacobian), the posterior median and the
+``predict`` is the one entry point (its docstring lists the steps): the posterior of the compositions (``infer``),
+their modes refined by ``fit_engine`` (bounded least squares, the scales solved exactly), a search of the ranges where
+the network's proposals miss the curve, and the posterior of the best solutions sampled around them (``laplace``). A solution carries the refined values with their errors (Jacobian), the posterior median and the
 68 % and 95 % intervals of the importance-sampled posterior, χ²/N, its probability (the composition's posterior
 times the mode's share of it) and flags:
 
@@ -130,19 +129,27 @@ def _path(composition: int, dim: int):
     return (dim // E.PER_SLOT, KEYS[dim % E.PER_SLOT])
 
 
-METHODS = ("lm", "global", "posterior")
-"""``lm``: each mode refined by least squares from its heaviest sample (the default); ``global``: one search per
-composition (differential evolution, its first population the modes and the heaviest samples), then least squares;
-``posterior``: no least squares, the heaviest sample of each mode and the network's importance-sampled intervals.
-After ``lm`` and ``global`` the posterior of every refined solution is sampled around it (``laplace``): its intervals
-and evidence; the compositions' probabilities follow from the evidences of their solutions."""
+SAMPLES = 1000
+"""Samples of the network per composition."""
+SHORTLIST = 3
+"""Compositions tried when the network chooses (the head's most probable among those allowed)."""
+LOCAL_SAMPLES = 400
+"""Samples per round of the local posterior of a solution."""
 SEEDS = 16
+"""The heaviest samples that start a search of the ranges."""
 REFINED = 3
+"""Modes of a composition refined by least squares, the heaviest first."""
 CHI2_RETRY = 2.0
-"""``lm``: when no mode of a composition refines below this χ²/N, one search of the ranges from the samples too."""
+"""When no solution of one of the ``RETRY_COMPOSITIONS`` best compositions refines below this χ²/N (the network's
+proposals miss the curve), one search of the ranges from its heaviest samples is added."""
+RETRY_COMPOSITIONS = 2
+DELTA_BIC = 20.0
+"""Solutions more than this above the best BIC are dropped before their posterior is sampled (their probability
+would be below e⁻¹⁰ of the best's)."""
+LOCAL_MAX = 4
+"""At most this many solutions get their posterior sampled (the best by BIC)."""
 ESS_FAILED = 10
 """Below this many effective samples at any solution, the solutions are compared by BIC (``bic`` flag)."""
-"""Modes of a composition refined by least squares, the heaviest first."""
 
 
 def model_values(model: fm.FitModel, composition: int) -> Optional[np.ndarray]:
@@ -181,7 +188,7 @@ def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra,
             best = float(model.get(path).value)
             quantiles[:, dim] = [best, best - error, best + error, best - 1.96 * error, best + 1.96 * error]
             if E.LOGARITHMIC[dim]:  # positive: the interval on a log scale, its width as the error's
-                quantiles[1:, dim] = best * np.exp(np.array([-1, 1, -1.96, 1.96]) * error / best)
+                quantiles[1:, dim] = best * np.exp(np.array([-1, 1, -1.96, 1.96]) * min(error / best, 5.0))
         values[name] = Interval(float(model.get(path).value), *(float(x) for x in quantiles[:, dim]),
                                 None if error is None else float(error))
         low, high = quantiles[1, dim], quantiles[2, dim]
@@ -204,15 +211,21 @@ def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra,
 
 
 def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions: Optional[Sequence[int]] = None,
-            allowed=None, shortlist: int = 4, samples: int = 2000, method: str = "lm", seed: int = 0,
+            allowed=None, shortlist: int = SHORTLIST, samples: int = SAMPLES, seed: int = 0,
             law: str = "number_gauss", coupling: str = "lma", min_probability: float = 0.01,
-            grazing: Optional[dict] = None, local_samples: int = 600,
+            grazing: Optional[dict] = None, local_samples: int = LOCAL_SAMPLES,
             refine_modes: int = REFINED) -> list[PosteriorSolution]:
     """Solutions of a cut (q in nm⁻¹, qz the vacuum q_z of the Born term in nm⁻¹, 0: the effective interface), most
     probable first: every distinct refined solution of every composition holding at least ``min_probability`` of
-    the posterior (``global``: the best of each composition)."""
-    if method not in METHODS:
-        raise ValueError(f"Unknown method {method!r} (one of {', '.join(METHODS)})")
+    the posterior.
+
+    1. The network's importance-weighted samples of each composition (given, or the head's ``shortlist`` among
+       ``allowed``) and their modes (``infer``).
+    2. Each mode refined by least squares from its heaviest sample; one search of the ranges for the
+       ``RETRY_COMPOSITIONS`` best compositions whose solutions all stay above χ²/N = ``CHI2_RETRY``.
+    3. The posterior of the solutions within ``DELTA_BIC`` of the best (at most ``LOCAL_MAX``) sampled around each
+       (``laplace``): intervals and evidence.
+    4. Their probabilities from the evidences, or from BIC when a sampling did not converge (``ESS_FAILED``)."""
     tick = time.perf_counter()
     rng = np.random.default_rng(seed + 7919)
     data = Cut.prepare(q, intensity, sigma, qz)
@@ -221,84 +234,62 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
                     law=law, coupling=coupling)
     lo, hi = E.bounds([data.ratio])
     tau_dim = E.GLOBAL.start + 3
-    per_composition = []
+    found = {r.index: [] for r in results}  # composition -> [(mode, refined, centre)]
+
+    def add(result, mode, refined) -> None:
+        centre = model_values(refined.model, result.index)
+        if centre is None:
+            return  # the refined radii no longer keep the composition's order of types
+        types = E.composition_types(result.index)
+        if not any(_same(c, centre, types) for _m, _r, c in found[result.index]):
+            found[result.index].append((mode, refined, centre))
+
     for result in results:
-        modes = result.modes[:refine_modes]
-        seeds = ()
-        if method == "global" and modes:
+        for mode in result.modes[:refine_modes]:
+            add(result, mode, fit_engine.fit(fit_model(mode.best, result.index, data, law, coupling, grazing),
+                                             fit_data, method="local"))
+    by_score = sorted((r for r in results if found[r.index]), key=lambda r: min(_bic(e[1]) for e in found[r.index]))
+    for result in by_score[:RETRY_COMPOSITIONS]:
+        if result.modes and min(e[1].chi2_reduced for e in found[result.index]) > CHI2_RETRY:
             heaviest = np.argsort(-result.weights)[:SEEDS]
             seeds = tuple(fit_model(result.samples[i], result.index, data, law, coupling, grazing) for i in heaviest)
-            modes = modes[:1]
-        entries = []
-
-        def add(mode, refine_method, seeds=()):
-            model = fit_model(mode.best, result.index, data, law, coupling, grazing)
-            refined, local = None, None
-            if refine_method == "lm":
-                refined = fit_engine.fit(model, fit_data, method="local")
-            elif refine_method == "global":
-                refined = fit_engine.fit(model, fit_data, method="global", seeds=seeds, seed=seed)
-            if refined is not None:
-                model = refined.model
-                centre = model_values(model, result.index)
-                if centre is not None:
-                    tau = float(mode.median[tau_dim]) if np.isfinite(mode.median[tau_dim]) else 0.02
-                    local = local_posterior(data, result.index, centre, tau, rng, local_samples, law, coupling)
-                    if any(e[3] is not None and _same(e[3].centre, local.centre, E.composition_types(result.index))
-                           for e in entries):
-                        return  # the same solution again
-            entries.append((mode, model, refined, local))
-
-        for mode in modes:
-            add(mode, method, seeds)
-        refined_chi2 = [e[2].chi2_reduced for e in entries if e[2] is not None]
-        if method == "lm" and modes and refined_chi2 and min(refined_chi2) > CHI2_RETRY:
-            # None of the modes' refinements describes the curve: one search of the ranges started from the samples
-            heaviest = np.argsort(-result.weights)[:SEEDS]
-            add(modes[0], "global",
-                tuple(fit_model(result.samples[i], result.index, data, law, coupling, grazing) for i in heaviest))
-        per_composition.append([result, entries, None, None])
-    if not per_composition:
+            start = fit_model(result.modes[0].best, result.index, data, law, coupling, grazing)
+            add(result, result.modes[0], fit_engine.fit(start, fit_data, method="global", seeds=seeds, seed=seed))
+    ranked = sorted(((_bic(e[1]), result, e) for result in results for e in found[result.index]),
+                    key=lambda t: t[0])
+    if not ranked:
         return []
+    kept = [(result, e) for score, result, e in ranked[:LOCAL_MAX] if score <= ranked[0][0] + DELTA_BIC]
+    entries = []  # (result, mode, model, refined, local)
+    for result, (mode, refined, centre) in kept:
+        tau = float(mode.median[tau_dim]) if np.isfinite(mode.median[tau_dim]) else 0.02
+        local = local_posterior(data, result.index, centre, tau, rng, local_samples, law, coupling)
+        entries.append((result, mode, refined.model, refined, local))
     # The solutions are compared by their evidence (importance sampling); when the sampling of one of them did not
-    # converge (fewer than ESS_FAILED effective samples, e.g. a curve the model does not describe, whose posterior
-    # with the model error lies away from the least-squares optimum), all of them are compared by BIC, as fit1d does.
-    by_bic = method != "posterior" and any(e[3] is None or e[3].ess < ESS_FAILED
-                                           for c in per_composition for e in c[1])
-    for c in per_composition:
-        result, entries = c[0], c[1]
-        if by_bic and entries and all(e[2] is not None for e in entries):
-            evidences = np.array([-0.5 * _bic(e[2]) for e in entries])
-        elif entries and all(e[3] is not None for e in entries):
-            evidences = np.array([e[3].log_evidence for e in entries])
-        else:
-            evidences = None
-        if evidences is not None:
-            top = evidences.max()
-            c[2] = float(top + np.log(np.sum(np.exp(evidences - top))))
-            c[3] = np.exp(evidences - c[2])
-        else:
-            c[2] = result.log_evidence
-            total = sum(e[0].weight for e in entries) or 1.0
-            c[3] = np.array([e[0].weight / total for e in entries])
-    log_z = np.array([c[2] for c in per_composition])
-    probabilities = np.exp(log_z - log_z.max())
-    probabilities /= probabilities.sum()
+    # converge (e.g. a curve the model does not describe, whose posterior with the model error lies away from the
+    # least-squares optimum), all of them are compared by BIC, as fit1d does.
+    by_bic = any(e[4].ess < ESS_FAILED for e in entries)
+    log_z = np.array([-0.5 * _bic(e[3]) if by_bic else e[4].log_evidence for e in entries])
+    weights = np.exp(log_z - log_z.max())
+    weights /= weights.sum()
+    composition_weight = {}
+    for (result, *_rest), w in zip(entries, weights):
+        composition_weight[result.index] = composition_weight.get(result.index, 0.0) + float(w)
+    for result in results:
+        result.probability = composition_weight.get(result.index, 0.0)
     out = []
-    for (result, entries, composition_log_z, shares), p in zip(per_composition, probabilities):
-        result.probability = float(p)
-        for entry, share in zip(entries, shares):
-            probability = float(p * share)
-            if probability < min_probability:
-                continue
-            solution = _solution(result, entry, data, fit_data, lo, hi, method, probability,
-                                 {"head_log_prob": result.head_log_prob, "mode_weight": float(share),
-                                  "composition_log_evidence": composition_log_z, "network_ess": result.ess,
-                                  "dropped_points": data.dropped, "compared_by": "bic" if by_bic else "evidence"},
-                                 from_errors=by_bic)
-            if by_bic:
-                solution.flags = solution.flags + ("bic",)
-            out.append(solution)
+    for (result, mode, model, refined, local), w, z in zip(entries, weights, log_z):
+        if w < min_probability:
+            continue
+        share = float(w / composition_weight[result.index])
+        solution = _solution(result, (mode, model, refined, local), data, fit_data, lo, hi, "lm", float(w),
+                             {"head_log_prob": result.head_log_prob, "mode_weight": share,
+                              "composition_log_evidence": float(z), "network_ess": result.ess,
+                              "dropped_points": data.dropped, "compared_by": "bic" if by_bic else "evidence"},
+                             from_errors=by_bic)
+        if by_bic:
+            solution.flags = solution.flags + ("bic",)
+        out.append(solution)
     seconds = time.perf_counter() - tick
     for solution in out:
         solution.seconds = seconds
@@ -316,5 +307,5 @@ def _label(path) -> str:
     return key if owner == "globals" else f"{key}_{owner + 1}"
 
 
-__all__ = ["CHI2_RETRY", "ESS_FAILED", "ESS_MIN", "METHODS", "Interval", "PosteriorSolution", "UNCONSTRAINED", "fit_model", "model_values",
-           "predict"]
+__all__ = ["CHI2_RETRY", "DELTA_BIC", "ESS_FAILED", "ESS_MIN", "Interval", "LOCAL_MAX", "LOCAL_SAMPLES",
+           "PosteriorSolution", "SAMPLES", "SHORTLIST", "UNCONSTRAINED", "fit_model", "model_values", "predict"]

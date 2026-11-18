@@ -119,18 +119,6 @@ def test_predict_refines_to_the_truth():
     assert set(best.values) == {"R_1", "sigma_R_1", "D_1", "sigma_nn_1", "tail_width", "tail_exponent", "q_resolution"}
 
 
-@pytest.mark.parametrize("method", ["global", "posterior"])
-def test_the_other_methods(method):
-    network = Network.load(DATA / "flow_fixture.npz")
-    q, counts, sigma = _curve(seed=4)
-    solutions = refine.predict(network, q, counts, sigma, compositions=[SPHERE], samples=200, method=method, seed=2)
-    assert solutions and all(s.method == method for s in solutions)
-    if method == "global":
-        assert len(solutions) == 1 and solutions[0].values["R_1"].best == pytest.approx(4.0, rel=0.03)
-    with pytest.raises(ValueError):
-        refine.predict(network, q, counts, sigma, compositions=[SPHERE], method="mcmc")
-
-
 def test_several_compositions_at_once():
     network = Network.load(DATA / "flow_fixture.npz")
     q, counts, sigma = _curve(seed=5)

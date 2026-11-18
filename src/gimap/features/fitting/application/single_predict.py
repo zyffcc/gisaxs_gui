@@ -30,9 +30,6 @@ PARTICLES = (("The particles in Model", "model"),
              ("Any particles (1–3)", "any"))
 """What Predict tries: the particles of Model (their families, and a paracrystal or not), or a choice of the network
 among compositions of these families."""
-METHOD_TITLES = {"lm": "Refine each solution (least squares)", "global": "Search from the samples",
-                 "posterior": "Posterior samples only"}
-
 
 @dataclass(frozen=True)
 class Predicted:
@@ -70,14 +67,13 @@ def cut_geometry(model: fm.FitModel) -> tuple[float, dict]:
     return float(geometry.qz_born), {key: float(model.globals[key].value) for key in fm.GRAZING}
 
 
-def predict_request(data, model: fm.FitModel, particles: str, *, method: str = "lm", samples: int = 2000,
-                    seed: int = 0) -> JobRequest:
+def predict_request(data, model: fm.FitModel, particles: str, *, seed: int = 0) -> JobRequest:
     qz, grazing = cut_geometry(model)
     law = model.components[0].law if model.components else fm.DEFAULT_LAW
     coupling = model.components[0].coupling if model.components else "lma"
     return JobRequest(handler=HANDLER, payload=dict(
         q=data.q.tolist(), intensity=data.intensity.tolist(), sigma=None if data.sigma is None else data.sigma.tolist(),
-        qz=qz, grazing=grazing or None, method=method, samples=int(samples), seed=int(seed), law=law,
+        qz=qz, grazing=grazing or None, seed=int(seed), law=law,
         coupling=coupling, **compositions(model, particles)), timeout_seconds=None)
 
 
@@ -93,5 +89,5 @@ def predicted(value: dict) -> list[Predicted]:
     return out
 
 
-__all__ = ["HANDLER", "MAX_PARTICLES", "METHOD_TITLES", "PARTICLES", "Predicted", "compositions", "cut_geometry",
+__all__ = ["HANDLER", "MAX_PARTICLES", "PARTICLES", "Predicted", "compositions", "cut_geometry",
            "network_available", "network_file", "predict_request", "predicted"]
