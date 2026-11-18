@@ -53,11 +53,36 @@ class Local:
         w = np.exp(self.log_weights - np.max(self.log_weights))
         return w / w.sum()
 
-    def quantiles(self, levels) -> np.ndarray:
-        """Weighted quantiles (len(levels), DIMS) of the active values; NaN elsewhere."""
+    def tempered(self, ess_min: float) -> np.ndarray:
+        """Normalised weights w^β with the largest β ≤ 1 whose effective sample size is at least ``ess_min``.
+
+        With few effective samples the weighted quantiles sit on those few and the intervals come out too narrow;
+        tempering moves them towards the proposal, which is wider than the posterior by construction (a t with
+        ``DOF`` degrees of freedom, scale ×``INFLATE``)."""
+        finite = np.isfinite(self.log_weights)
+        log_w = np.where(finite, self.log_weights - np.max(self.log_weights), -np.inf)
+
+        def weights(beta):
+            w = np.where(finite, np.exp(beta * np.where(finite, log_w, 0.0)), 0.0)
+            return w / w.sum()
+
+        def ess(w):
+            return 1.0 / np.sum(w * w)
+
+        if ess(weights(1.0)) >= ess_min or finite.sum() <= ess_min:
+            return weights(1.0) if ess(weights(1.0)) >= ess_min else weights(0.0)
+        low, high = 0.0, 1.0
+        for _ in range(30):
+            mid = 0.5 * (low + high)
+            low, high = (mid, high) if ess(weights(mid)) >= ess_min else (low, mid)
+        return weights(low)
+
+    def quantiles(self, levels, ess_min: float = 0.0) -> np.ndarray:
+        """Weighted quantiles (len(levels), DIMS) of the active values; NaN elsewhere. ``ess_min``: the weights are
+        tempered (``tempered``) when fewer samples than that are effective."""
         out = np.full((len(levels), E.DIMS), np.nan)
         active = E.active(self.composition)[0]
-        w = self.weights
+        w = self.tempered(ess_min) if ess_min > 0 else self.weights
         for d in np.flatnonzero(active):
             order = np.argsort(self.samples[:, d])
             cum = np.cumsum(w[order]) - 0.5 * w[order]

@@ -138,3 +138,22 @@ def test_several_compositions_at_once():
                                shortlist=3, samples=100, local_samples=100)
     assert solutions and abs(sum(s.probability for s in solutions) - 1.0) < 0.05
     assert len({s.composition for s in solutions}) >= 1
+
+
+def test_few_effective_samples_widen_the_intervals():
+    """With one dominant weight the quantiles would sit on one sample; tempered weights give at least ESS_MIN."""
+    from src.gimap.features.fitting.domain.posterior.laplace import Local
+
+    rng = np.random.default_rng(3)
+    composition = E.composition_index([("sphere", False)])
+    samples = np.full((400, E.DIMS), np.nan)
+    samples[:, 0] = rng.normal(5.0, 0.5, 400)
+    log_w = rng.normal(0.0, 0.1, 400)
+    log_w[0] = 40.0  # one sample carries all the weight
+    local = Local(composition, samples, log_w, np.zeros((400, 1)), np.zeros(400), 0.0, 1.0, samples[0])
+    assert 1.0 / np.sum(local.weights**2) < 1.5
+    narrow = local.quantiles([0.16, 0.84])[:, 0]
+    wide = local.quantiles([0.16, 0.84], 50)[:, 0]
+    assert narrow[1] - narrow[0] < 0.1 and wide[1] - wide[0] > 0.5
+    assert 1.0 / np.sum(local.tempered(50) ** 2) >= 50 - 1e-6
+    np.testing.assert_allclose(local.tempered(1), local.weights)

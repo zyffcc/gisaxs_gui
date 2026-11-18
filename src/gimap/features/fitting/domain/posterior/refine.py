@@ -11,7 +11,8 @@ times the mode's share of it) and flags:
 * ``unconstrained:NAME`` the 68 % interval covers more than ``UNCONSTRAINED`` of the prior's range (the curve says
   little about it);
 * ``correlated:A~B``    the refined values are correlated beyond ±0.95;
-* ``low_ess``           fewer than ``ESS_MIN`` effective samples: the intervals rest on few samples.
+* ``low_ess``           fewer than ``ESS_MIN`` effective samples: the intervals are taken with tempered weights
+  (``laplace.Local.tempered``), wider, and are rough.
 """
 
 from __future__ import annotations
@@ -159,7 +160,7 @@ def _same(a, b, types) -> bool:
 
 def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra) -> PosteriorSolution:
     mode, model, refined, local = entry
-    quantiles = (local.quantiles([0.5, 0.16, 0.84, 0.025, 0.975]) if local is not None
+    quantiles = (local.quantiles([0.5, 0.16, 0.84, 0.025, 0.975], ESS_MIN) if local is not None
                  else np.stack([mode.median, mode.low68, mode.high68, mode.low95, mode.high95]))
     values, flags = {}, []
     for dim, name in _names(result.index):
