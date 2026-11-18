@@ -1,18 +1,31 @@
 {
- "format": "gimap_ml1d_flow_v1",
+ "format": "gimap_ml1d_flow_v2",
  "names": [
-  "ln_R",
-  "sigma_R",
-  "ln_D_over_2R",
-  "sigma_nn",
-  "ln_tail_width",
-  "tail_exponent"
+  "R_1",
+  "sigma_R_1",
+  "h_over_2R_1",
+  "sigma_h_1",
+  "D_over_2R_1",
+  "sigma_nn_1",
+  "R_2",
+  "sigma_R_2",
+  "h_over_2R_2",
+  "sigma_h_2",
+  "D_over_2R_2",
+  "sigma_nn_2",
+  "R_3",
+  "sigma_R_3",
+  "h_over_2R_3",
+  "sigma_h_3",
+  "D_over_2R_3",
+  "sigma_nn_3",
+  "tail_width",
+  "tail_exponent",
+  "q_resolution",
+  "model_error"
  ],
  "points": 128,
- "families": [
-  "sphere",
-  "vertical_cylinder"
- ],
+ "compositions": 258,
  "architecture": {
   "channels": [
    4,
@@ -20,35 +33,69 @@
   ],
   "kernel": 3,
   "dense": 16,
+  "summary": 8,
   "context": 8,
   "layers": 4,
   "hidden": 16,
   "blocks": 2,
   "bins": 4,
-  "bound": 3.0
+  "bound": 3.0,
+  "head": 8
  },
  "transformed": [
   [
-   2,
-   4,
-   5
-  ],
-  [
-   0,
-   1,
-   3
-  ],
-  [
    0,
    3,
-   5
+   6,
+   8,
+   9,
+   12,
+   13,
+   15,
+   17,
+   18,
+   20
   ],
   [
    1,
    2,
-   4
+   4,
+   5,
+   7,
+   10,
+   11,
+   14,
+   16,
+   19,
+   21
+  ],
+  [
+   2,
+   3,
+   6,
+   7,
+   11,
+   12,
+   13,
+   16,
+   17,
+   20,
+   21
+  ],
+  [
+   0,
+   1,
+   4,
+   5,
+   8,
+   9,
+   10,
+   14,
+   15,
+   18,
+   19
   ]
  ],
  "purpose": "reference network of tests/test_ml1d_flow.py (random weights)",
- "sha256": "3a39b8a8077e654d7cd5287e0b83aa0234f0450de958b4096035663ab157e233"
+ "sha256": "ce8289f3de59b57963b03e571e980d736bf20bbf0f1c98b7021856a4da69bd32"
 }

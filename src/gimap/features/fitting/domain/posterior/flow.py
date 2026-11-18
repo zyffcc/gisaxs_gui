@@ -1,9 +1,12 @@
-"""An exported proposal network evaluated in numpy: a 1D CNN that summarises the curve, and a conditional normalising
-flow of rational-quadratic spline couplings (Durkan et al. 2019) over the parameters z of ``encoding``.
+"""An exported proposal network evaluated in numpy.
 
-The flow maps z to u ~ N(0, I) layer by layer; each coupling leaves some of the coordinates as they are and moves the
-others by monotone splines on [−B, B] (identity outside) whose knots an MLP computes from the unchanged coordinates and
-the curve's context. log q(z | curve) = log N(u) + Σ log|∂u/∂z|. Sampling runs the layers backwards.
+* A 1D CNN summarises the curve (``encoding.features``) with the cut's conditions into h;
+* a head gives the probabilities of the compositions (``encoding.COMPOSITIONS``) from h;
+* a conditional normalising flow of rational-quadratic spline couplings (Durkan et al. 2019) gives the density of z
+  (``encoding``) given h and a composition: the flow maps z to u ~ N(0, I) layer by layer; each coupling leaves some
+  coordinates as they are and moves the others by monotone splines on [−B, B] (identity outside) whose knots an MLP
+  computes from the unchanged coordinates and the context. Coordinates a composition does not have are set to 0 before
+  every MLP and never moved, so the density of the active ones, log N(u_active) + Σ log|∂u/∂z|, is exact.
 
 The architecture and the arrays come from ``tools/ml1d/train_flow.py`` (PyTorch); a test compares the two on a stored
 network. Files: NAME.npz (the arrays) and NAME.json (architecture, encoding, training record, SHA-256 of the npz).
@@ -22,7 +25,7 @@ from . import encoding
 
 MIN_BIN = 1e-3
 MIN_DERIVATIVE = 1e-3
-FORMAT = "gimap_ml1d_flow_v1"
+FORMAT = "gimap_ml1d_flow_v2"
 
 
 def _silu(x):
@@ -66,17 +69,12 @@ def knots(raw, bound: float, bins: int):
     return edges(raw[..., :bins]), edges(raw[..., bins:2 * bins]), np.concatenate([ones, inner, ones], axis=-1)
 
 
-def _bin(locations, values):
-    index = np.sum(values[..., None] >= locations[..., 1:-1], axis=-1)
-    return index[..., None]
-
-
 def spline(x, raw, bound: float, bins: int, inverse: bool = False):
     """(y, log|dy/dx|) of the monotone rational-quadratic splines, identity outside [−bound, bound]."""
     inside = np.abs(x) < bound
     xs, ys, d = knots(raw, bound, bins)
     xc = np.clip(x, -bound, bound)
-    k = _bin(ys if inverse else xs, xc)
+    k = np.sum(xc[..., None] >= (ys if inverse else xs)[..., 1:-1], axis=-1)[..., None]
     take = lambda a: np.take_along_axis(a, k, axis=-1)[..., 0]  # noqa: E731
     x0, w = take(xs), take(np.diff(xs, axis=-1))
     y0, h = take(ys), take(np.diff(ys, axis=-1))
@@ -100,17 +98,20 @@ def spline(x, raw, bound: float, bins: int, inverse: bool = False):
 
 
 class Network:
-    """An exported network: ``context`` of curves, then ``log_prob`` of parameters or ``sample``."""
+    """An exported network: ``summary`` of curves, ``composition_log_probs``, then for a composition ``context`` and
+    ``log_prob`` of parameters or ``sample``."""
 
     def __init__(self, arrays: dict, meta: dict):
         if meta.get("format") != FORMAT:
             raise ValueError(f"Not a {FORMAT} network")
-        if tuple(meta["names"]) != encoding.NAMES or meta["points"] != encoding.POINTS:
+        if tuple(meta["names"]) != encoding.NAMES or meta["points"] != encoding.POINTS or \
+                meta["compositions"] != len(encoding.COMPOSITIONS):
             raise ValueError("The network was trained on another encoding of the parameters")
         self.arrays = {k: np.asarray(v, float) for k, v in arrays.items()}
         self.meta = meta
         self.arch = meta["architecture"]
-        self.masks = [np.asarray(m, int) for m in meta["transformed"]]
+        self.moved = [np.asarray(m, int) for m in meta["transformed"]]
+        self.kept = [np.setdiff1d(np.arange(encoding.DIMS), m) for m in self.moved]
 
     @classmethod
     def load(cls, path, check: bool = True) -> "Network":
@@ -125,8 +126,8 @@ class Network:
             arrays = {k: data[k] for k in data.files}
         return cls(arrays, meta)
 
-    def context(self, features, conditions) -> np.ndarray:
-        """The flow's context of curves (``encoding.features``, ``encoding.conditions``): (B, context)."""
+    def summary(self, features, conditions) -> np.ndarray:
+        """h of curves (``encoding.features``, ``encoding.conditions``): (B, context)."""
         a = self.arrays
         x = np.asarray(features, float)
         for i in range(len(self.arch["channels"])):
@@ -137,6 +138,18 @@ class Network:
         x = _linear(a, "encoder.embed", x)
         return _silu(_linear(a, "encoder.join", np.concatenate([x, np.asarray(conditions, float)], axis=1)))
 
+    def composition_log_probs(self, h) -> np.ndarray:
+        """log p(composition | curve) (B, len(COMPOSITIONS)) under the training prior of compositions."""
+        logits = _linear(self.arrays, "head.out", _silu(_linear(self.arrays, "head.hidden", h)))
+        logits = logits - logits.max(axis=1, keepdims=True)
+        return logits - np.log(np.exp(logits).sum(axis=1, keepdims=True))
+
+    def context(self, h, composition) -> np.ndarray:
+        """The flow's context of curves h (B, C) for compositions ``composition`` (B,) or one for all."""
+        h = np.asarray(h, float)
+        code = encoding.composition_code(np.broadcast_to(np.asarray(composition, int), (h.shape[0],)))
+        return _silu(_linear(self.arrays, "context", np.concatenate([h, code], axis=1)))
+
     def _raw(self, layer: int, identity, context):
         a = self.arrays
         x = _silu(_linear(a, f"layers.{layer}.inp", np.concatenate([identity, context], axis=1)))
@@ -145,44 +158,41 @@ class Network:
         x = _linear(a, f"layers.{layer}.out", x)
         return x.reshape(x.shape[0], -1, 3 * self.arch["bins"] - 1)
 
-    def _split(self, layer):
-        transformed = self.masks[layer]
-        kept = np.setdiff1d(np.arange(len(encoding.NAMES)), transformed)
-        return kept, transformed
+    def _flow(self, x, context, active, inverse: bool):
+        x = np.where(active, np.asarray(x, float), 0.0)
+        total = np.zeros(x.shape[0])
+        order = reversed(range(len(self.moved))) if inverse else range(len(self.moved))
+        for layer in order:
+            kept, moved = self.kept[layer], self.moved[layer]
+            raw = self._raw(layer, x[:, kept], context)
+            y, log_det = spline(x[:, moved], raw, self.arch["bound"], self.arch["bins"], inverse=inverse)
+            on = active[:, moved]
+            x[:, moved] = np.where(on, y, 0.0)
+            total += np.sum(np.where(on, log_det, 0.0), axis=1)
+        return x, total
 
-    def forward(self, z, context):
-        """(u, Σ log|∂u/∂z|) of parameters z (B, D) given the context (B, C)."""
-        u = np.array(z, float)
-        total = np.zeros(u.shape[0])
-        for layer in range(len(self.masks)):
-            kept, moved = self._split(layer)
-            raw = self._raw(layer, u[:, kept], context)
-            u[:, moved], log_det = spline(u[:, moved], raw, self.arch["bound"], self.arch["bins"])
-            total += log_det.sum(axis=1)
-        return u, total
+    def forward(self, z, context, active):
+        """(u, Σ log|∂u/∂z|) of parameters z (B, DIMS) given contexts (B, C) and active coordinates (B, DIMS)."""
+        return self._flow(z, context, np.asarray(active, bool), inverse=False)
 
-    def inverse(self, u, context):
-        """(z, Σ log|∂z/∂u|) of base points u (B, D)."""
-        z = np.array(u, float)
-        total = np.zeros(z.shape[0])
-        for layer in reversed(range(len(self.masks))):
-            kept, moved = self._split(layer)
-            raw = self._raw(layer, z[:, kept], context)
-            z[:, moved], log_det = spline(z[:, moved], raw, self.arch["bound"], self.arch["bins"], inverse=True)
-            total += log_det.sum(axis=1)
-        return z, total
+    def inverse(self, u, context, active):
+        """(z, Σ log|∂z/∂u|) of base points u (B, DIMS); inactive coordinates come back as 0."""
+        return self._flow(u, context, np.asarray(active, bool), inverse=True)
 
-    def log_prob(self, z, context) -> np.ndarray:
-        """log q(z | curve) of each row."""
-        u, log_det = self.forward(z, context)
-        return -0.5 * np.sum(u * u, axis=1) - 0.5 * u.shape[1] * np.log(2 * np.pi) + log_det
+    def log_prob(self, z, context, active) -> np.ndarray:
+        """log q(z_active | curve, composition) of each row."""
+        active = np.asarray(active, bool)
+        u, log_det = self.forward(z, context, active)
+        return np.sum(np.where(active, -0.5 * u * u - 0.5 * np.log(2 * np.pi), 0.0), axis=1) + log_det
 
-    def sample(self, context, count: int, rng: Optional[np.random.Generator] = None):
-        """(z (count, D), log q(z)) for one curve's context (1, C)."""
+    def sample(self, context, composition: int, count: int, rng: Optional[np.random.Generator] = None):
+        """(z (count, DIMS), log q(z)) for one curve's context (1, C) of composition ``composition``."""
         rng = rng or np.random.default_rng()
-        u = rng.standard_normal((count, len(encoding.NAMES)))
-        z, log_det = self.inverse(u, np.repeat(np.asarray(context, float)[:1], count, axis=0))
-        return z, -0.5 * np.sum(u * u, axis=1) - 0.5 * u.shape[1] * np.log(2 * np.pi) - log_det
+        active = np.repeat(encoding.active(composition), count, axis=0)
+        u = np.where(active, rng.standard_normal((count, encoding.DIMS)), 0.0)
+        z, log_det = self.inverse(u, np.repeat(np.asarray(context, float)[:1], count, axis=0), active)
+        base = np.sum(np.where(active, -0.5 * u * u - 0.5 * np.log(2 * np.pi), 0.0), axis=1)
+        return z, base - log_det
 
 
 __all__ = ["FORMAT", "Network", "knots", "spline"]

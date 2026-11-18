@@ -17,11 +17,12 @@ POINTS = 5
 GRID_MAX = 6000
 
 
-def grid(q: np.ndarray, sigma: float) -> tuple[np.ndarray, float, bool]:
-    """(grid, step, folded) of the convolution for the points ``q`` (|q|, nm⁻¹)."""
+def grid(q: np.ndarray, sigma: float, finer: bool = True, per_sigma: int = POINTS) -> tuple[np.ndarray, float, bool]:
+    """(grid, step, folded) of the convolution for the points ``q`` (|q|, nm⁻¹), ``per_sigma`` points per σ;
+    ``finer``: no coarser than the points either."""
     finite = np.diff(np.unique(q))
-    step = sigma / POINTS
-    if finite.size:
+    step = sigma / per_sigma
+    if finer and finite.size:
         step = min(step, float(np.median(finite)))
     low, high = max(0.0, float(q.min()) - SPAN * sigma), float(q.max()) + SPAN * sigma
     count = min(GRID_MAX, int(np.ceil((high - low) / step)) + 1)
@@ -30,23 +31,42 @@ def grid(q: np.ndarray, sigma: float) -> tuple[np.ndarray, float, bool]:
     return low + (np.arange(count) + (0.5 if folded else 0.0)) * step, step, folded
 
 
+def _convolve(values, step: float, folded: bool, sigma: float) -> np.ndarray:
+    half = int(np.ceil(SPAN * sigma / step))
+    kernel = np.exp(-0.5 * (np.arange(-half, half + 1) * step / sigma) ** 2)
+    kernel /= kernel.sum()
+    values = np.asarray(values, float)
+    if folded:
+        full = np.concatenate([values[::-1], values])
+        return np.convolve(np.pad(full, half, mode="edge"), kernel, mode="valid")[values.size:]
+    return np.convolve(np.pad(values, half, mode="edge"), kernel, mode="valid")
+
+
 def smeared(q: np.ndarray, sigma: float, terms_on: Callable[[np.ndarray], list]) -> list[np.ndarray]:
     """Each curve that ``terms_on(grid)`` returns, convolved with the Gaussian and taken at ``q``."""
     q = np.abs(np.asarray(q, float))
     points, step, folded = grid(q, sigma)
-    half = int(np.ceil(SPAN * sigma / step))
-    kernel = np.exp(-0.5 * (np.arange(-half, half + 1) * step / sigma) ** 2)
-    kernel /= kernel.sum()
-    out = []
-    for values in terms_on(points):
-        values = np.asarray(values, float)
-        if folded:
-            full = np.concatenate([values[::-1], values])
-            result = np.convolve(np.pad(full, half, mode="edge"), kernel, mode="valid")[values.size:]
-        else:
-            result = np.convolve(np.pad(values, half, mode="edge"), kernel, mode="valid")
-        out.append(np.interp(q, points, result))
+    return [np.interp(q, points, _convolve(values, step, folded, sigma)) for values in terms_on(points)]
+
+
+def tabulated(q_out, table_q, curves, sigma: float) -> np.ndarray:
+    """The same resolution for curves already tabulated on a sorted grid ``table_q`` (K, len(table_q)), taken at
+    ``q_out``: where σ exceeds half the table's local spacing, the curves are interpolated onto a uniform grid of σ/20
+    (``grid``; taken back linearly, which σ/5 would do to 1 %), convolved and taken back; elsewhere they are interpolated. The table has to reach q_out ± SPAN σ (or
+    q → 0). Used by the training simulator, which tabulates on a fine logarithmic grid."""
+    q_out = np.abs(np.asarray(q_out, float))
+    table_q = np.asarray(table_q, float)
+    curves = np.atleast_2d(np.asarray(curves, float))
+    out = np.stack([np.interp(q_out, table_q, c) for c in curves])
+    if sigma <= 0:
+        return out
+    wide = sigma > 0.5 * np.interp(q_out, table_q, np.gradient(table_q))
+    if np.any(wide):
+        points, step, folded = grid(q_out[wide], sigma, finer=False, per_sigma=20)
+        for k, c in enumerate(curves):
+            out[k, wide] = np.interp(q_out[wide], points, _convolve(np.interp(points, table_q, c), step, folded,
+                                                                   sigma))
     return out
 
 
-__all__ = ["smeared"]
+__all__ = ["smeared", "tabulated"]

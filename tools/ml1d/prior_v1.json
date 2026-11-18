@@ -1,0 +1,22 @@
+{
+ "name": "posterior_v1",
+ "description": "One to three populations (sphere, upright or random cylinder, each with or without a paracrystal), Gaussian sizes by number, LMA; the bounds of the values are those of posterior/encoding.py",
+ "k_weights": [0.3, 0.4, 0.3],
+ "family_weights": {"sphere": 0.4, "vertical_cylinder": 0.35, "cylinder": 0.25},
+ "structure_probability": 0.7,
+ "law": "number_gauss",
+ "coupling": "lma",
+ "ratio": [10, 300],
+ "born_probability": 0.6,
+ "born_qz": [0.0, 1.0],
+ "share_decades": 2.5,
+ "tail_relative": [0.001, 10],
+ "background_relative": [0.00001, 0.05],
+ "peak_counts": [100, 10000000],
+ "points": [100, 1000],
+ "log_spacing_probability": 0.4,
+ "gap_probability": 0.5,
+ "gap_fraction": [0.0, 0.15],
+ "edge_probability": 0.3,
+ "edge_fraction": 0.1
+}
