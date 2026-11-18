@@ -223,9 +223,46 @@ def prepare_curve(curve: Curve, side: str = "mean", q_range: Optional[tuple] = N
     return prepare_points(curve, side, q_range, excluded, strict=strict).data
 
 
+CUT_MODEL_FAMILIES = {"sphere": "sphere", "random_cylinder": "cylinder", "cylinder": "cylinder",
+                      "vertical_cylinder": "vertical_cylinder"}
+
+
+def cut_model_solution(row: Mapping) -> FitModel:
+    """A solution in Fitting's own conventions (``physics_backend`` "cut_model": the quick fit): its values as they
+    are, amplitudes as Int."""
+    components = []
+    for item in row.get("components") or ():
+        p = item["params"]
+        family = CUT_MODEL_FAMILIES[str(item["type"])]
+        component = new_component(family, radius=float(p["R"]), distance=float(p["D"]),
+                                  structure=bool(item.get("structure_factor", True)), law=row.get("law", "number_gauss"))
+        params = dict(component.params)
+        for key in ("sigma_R", "h", "sigma_h", "sigma_nn"):
+            if key in params and p.get(key) is not None:
+                params[key] = _within(params[key], float(p[key]))
+        params["Int"] = _within(params["Int"], float(item.get("amplitude", 1.0)))
+        components.append(Component(family, params, component.structure, component.coupling, component.law))
+    model = FitModel(tuple(components))
+    g = row.get("global_params") or {}
+    for key, source in (("background", "background"), ("res_amplitude", "resolution_amplitude"),
+                        ("res_width", "sigma_Res"), ("res_exponent", "nu_Res")):
+        if g.get(source) is not None:
+            model = model.with_parameter(("globals", key), **_within(model.globals[key], float(g[source])).__dict__)
+    return model
+
+
+def _within(parameter: Parameter, value: float) -> Parameter:
+    """``parameter`` at ``value``, its range widened to hold it."""
+    return Parameter(value, parameter.free, min(parameter.lower, value), max(parameter.upper, value))
+
+
 def model_from_solution(row: Mapping, base: Optional[FitModel] = None) -> tuple[FitModel, float]:
     """A quick-fit or 1D Predict solution as a model (free/fixed and ranges from ``base``), and the
     largest relative difference between the model's curve and the solution's own curve."""
+    if row.get("physics_backend") == "cut_model":
+        proposed = cut_model_solution(row)
+        model = constrain_proposal(proposed, base) if base is not None else proposed
+        return model, solution_deviation(model, row)
     converted = native_solution_mapping(row)
     proposed = from_manual(converted.mapping)
     model = constrain_proposal(proposed, base) if base is not None else proposed

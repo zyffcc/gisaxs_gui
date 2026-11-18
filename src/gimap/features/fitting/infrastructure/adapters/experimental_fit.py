@@ -3,16 +3,21 @@
 This is numerical variable projection, not a neural-network prediction. Auto
 compares single-component families; a user-specified composition is fitted whole.
 Candidate scores are not posterior probabilities or proof of unique parameters.
+
+The model is GIMaP's one forward model of a cut, ``cut_model``, in Fitting's conventions: Gaussian sizes by number,
+the paracrystal's σnn/D (Hosemann), every family normalised to T(0) = 1, so an amplitude is Fitting's Int. A solution
+says so (``physics_backend`` "cut_model", ``law``) and also gives σD/D = (σnn/D)/√(2π) under ``sigma_D`` for the
+reports that show it.
 """
 
 import json
-import sys
+import math
 import time
 
 import numpy as np
 from scipy.optimize import least_squares, nnls
 
-from ...application.workflow_v5 import bundled_workflow
+from ...domain.cut_model.model import population_terms
 
 NAMES = {1: "sphere", 2: "random_cylinder", 3: "vertical_cylinder"}
 MAX_NFEV = 150
@@ -20,7 +25,7 @@ MAX_NFEV = 150
 evaluates the model at most ``MAX_NFEV * (free values + 1)`` times: the ``budget`` given to ``evaluated``."""
 
 
-SHAPE_VALUES = ("R", "sigma_R", "D", "sigma_D")
+SHAPE_VALUES = ("R", "sigma_R", "D", "sigma_nn")
 """The fitted values of every component, in the order of the fit vector (D through η: η = 0 is D_min, 1 is 500 nm)."""
 CYLINDER_VALUES = ("h", "sigma_h")
 """… followed by these for a random cylinder."""
@@ -31,7 +36,7 @@ BOUND_TOLERANCE = 1e-4
 def ended_on_bounds(z, lower, upper, types, options):
     """The fitted values that ended on a bound of their search range, as ``(j, name, "lower" | "upper")``: ``j`` the
     component in the order of ``types`` (``None`` for the beam-tail values ``sigma_Res``, ``nu_Res``), ``name`` as
-    the solution names it (``R``, ``sigma_R``, ``D``, ``sigma_D``, ``h``, ``sigma_h``). Such a value is not
+    the solution names it (``R``, ``sigma_R``, ``D``, ``sigma_nn``, ``h``, ``sigma_h``). Such a value is not
     determined by the curve: the condition of the "reached a search bound" warning."""
     names = []
     for j, typ in enumerate(types):
@@ -48,33 +53,41 @@ def ended_on_bounds(z, lower, upper, types, options):
     return ended
 
 
-def component_function():
-    root = str(bundled_workflow())
-    if root not in sys.path:
-        sys.path.insert(0, root)
-    from numpy_forward64 import component
+LAW = "number_gauss"
+FAMILY_OF = {1: "sphere", 2: "cylinder", 3: "vertical_cylinder"}
+SQRT_2PI = math.sqrt(2.0 * math.pi)
 
+
+def component(q, type_id, radius, spread, height, height_spread, distance, sigma_nn, structured=True):
+    """T(q) of one component (normalised to 1 at q = 0) from cut_model: sizes ``LAW``, relative spreads, the
+    paracrystal of mean distance D and σnn/D."""
+    family = FAMILY_OF[int(type_id)]
+    cylinder = family == "cylinder"
+    return population_terms(family, np.abs(np.asarray(q, float)), radius=radius, radius_spread=spread, law=LAW,
+                            height=height if cylinder else 10.0, height_spread=height_spread if cylinder else 0.0,
+                            distance=distance if structured else 0.0,
+                            distance_spread=sigma_nn if structured else 0.0)[0]
+
+
+def component_function():
     return component
 
 
 def forward(q, components, globals_):
-    """Reconstruct in input intensity units; no data-dependent normalization."""
-    component = component_function()
+    """Reconstruct in input intensity units; no data-dependent normalization. A component with ``sigma_nn`` is one of
+    this fit (sizes by number); one with ``sigma_D`` only is of 1D Predict's earlier solutions (sizes by intensity,
+    σnn/D = √(2π) σD/D), drawn in those conventions."""
     q = np.abs(np.asarray(q, float))
     result = np.full_like(q, globals_["background"])
     for c in components:
         p = c["params"]
-        result += c["amplitude"] * component(
-            q,
-            c["type_id"],
-            p["R"],
-            p["sigma_R"],
-            p.get("h") or 10,
-            p.get("sigma_h") or 0.2,
-            p["D"],
-            p["sigma_D"],
-            True,
-        )
+        legacy = "sigma_nn" not in p
+        family = FAMILY_OF[int(c["type_id"])]
+        cylinder = family == "cylinder"
+        result += c["amplitude"] * population_terms(
+            family, q, radius=p["R"], radius_spread=p["sigma_R"], law="intensity_gauss" if legacy else LAW,
+            height=(p.get("h") or 10) if cylinder else 10.0, height_spread=(p.get("sigma_h") or 0.2) if cylinder else 0.0,
+            distance=p["D"], distance_spread=SQRT_2PI * p["sigma_D"] if legacy else p["sigma_nn"])[0]
     result += globals_["resolution_amplitude"] / (
         1 + (q / globals_["sigma_Res"]) ** globals_["nu_Res"]
     )
@@ -112,9 +125,9 @@ def fit_candidates(item, options, report, cancelled, evaluated=None):
                 eta = np.log(1.5) / np.log(500 / dmin)
                 if distance:
                     eta = float(np.clip(np.log(max(distance, 1.01 * dmin) / dmin) / np.log(500 / dmin), 0.01, 0.99))
-                initial.extend([np.log(r), 0.2, eta, 0.12])
+                initial.extend([np.log(r), 0.2, eta, 0.3])
                 lower.extend([0, 0.02, 0, 0.05])
-                upper.extend([np.log(100), 0.9, 1, 0.9])
+                upper.extend([np.log(100), 0.9, 1, 1.0])
                 if typ == 2:
                     initial.extend([np.log(10), 0.2])
                     lower.extend([np.log(2), 0.02])
@@ -136,7 +149,8 @@ def fit_candidates(item, options, report, cancelled, evaluated=None):
                         R=r,
                         sigma_R=float(sr),
                         D=float(dmin * (500 / dmin) ** eta),
-                        sigma_D=float(sd),
+                        sigma_nn=float(sd),
+                        sigma_D=float(sd) / SQRT_2PI,
                     )
                     if typ == 2:
                         p.update(h=float(np.exp(z[offset])), sigma_h=float(z[offset + 1]))
@@ -170,7 +184,7 @@ def fit_candidates(item, options, report, cancelled, evaluated=None):
                             p.get("h", 10),
                             p.get("sigma_h", 0.2),
                             p["D"],
-                            p["sigma_D"],
+                            p["sigma_nn"],
                             True,
                         )
                     )
@@ -238,7 +252,8 @@ def fit_candidates(item, options, report, cancelled, evaluated=None):
             results.append(
                 dict(
                     workflow="native_v5",
-                    physics_backend="experimental_calibrated",
+                    physics_backend="cut_model",
+                    law=LAW,
                     side=item["side"],
                     combination=" + ".join(c["type"] for c in cs),
                     components=cs,
@@ -259,6 +274,7 @@ def fit_candidates(item, options, report, cancelled, evaluated=None):
                         q="nm^-1",
                         R_h_D="nm",
                         sigma_R_h_D="relative standard deviation",
+                        sigma_nn="sigma_nn/D, Hosemann; sigma_D = sigma_nn / sqrt(2 pi)",
                         sigma_Res="nm^-1",
                         nu_Res="dimensionless",
                         amplitudes="input intensity units",

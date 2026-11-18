@@ -1,12 +1,32 @@
-"""A quick-fit solution (``native_v5``) put into Fitting's manual model: the same curve, stated when not."""
+"""A solution of 1D Predict's earlier engines (``native_v5``: sizes by intensity, σD/D) put into Fitting's manual
+model: the same curve, stated when not. Its curves come from those engines' own forward model (V5's
+numpy_forward64), as their solutions do; the quick fit gives its solutions in Fitting's conventions now
+(test_experimental_fitting.py)."""
 
 from __future__ import annotations
+
+import importlib
+import sys
 
 import numpy as np
 import pytest
 
+from src.gimap.features.fitting.application.workflow_v5 import bundled_workflow
 from src.gimap.features.fitting.domain.native_solution import native_solution_mapping
-from src.gimap.features.fitting.infrastructure.adapters.experimental_fit import forward
+
+
+def forward(q, components, globals_):
+    root = str(bundled_workflow())
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    component = importlib.import_module("numpy_forward64").component
+    q = np.abs(np.asarray(q, float))
+    result = np.full_like(q, globals_["background"])
+    for c in components:
+        p = c["params"]
+        result += c["amplitude"] * component(q, c["type_id"], p["R"], p["sigma_R"], p.get("h") or 10,
+                                             p.get("sigma_h") or 0.2, p["D"], p["sigma_D"], True)
+    return result + globals_["resolution_amplitude"] / (1 + (q / globals_["sigma_Res"]) ** globals_["nu_Res"])
 
 Q_NM = np.linspace(0.05, 2.5, 240)
 GLOBALS = {"background": 1.3, "resolution_amplitude": 800.0, "sigma_Res": 0.02, "nu_Res": 4.0}

@@ -267,8 +267,8 @@ def test_find_the_particle_shape_lists_solutions_and_puts_the_best_in_the_model(
     assert page.session.model == solutions[0].model and page.method() == "local"  # next: refine it here
     assert page.solutions_table.rowCount() == len(solutions) and not page.solutions_table.isHidden()
     best = solutions[0].model.components[0]
-    # the shape search's sizes are by intensity (its convention, kept in the model); by number R is the truth's
-    assert best.family == "sphere" and best.law == "intensity_gauss"
+    # the shape search's sizes are by number, Fitting's convention (cut_model); by number R is the truth's
+    assert best.family == "sphere" and best.law == "number_gauss"
     assert number_size(best)[0] == pytest.approx(6.0, rel=0.1)
     page.solutions_table.selectRow(min(1, len(solutions) - 1))
     page.use_selected_solution()

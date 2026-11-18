@@ -24,7 +24,7 @@ CLOSE_CHI2 = 1.1
 The fit ranks its solutions by a robust misfit, the mean Huber loss (δ = 2) of the σ-normalised residuals r, so
 that a few outlying points do not decide; χ²/N is the mean of r² over the N points, with no degrees-of-freedom
 correction (unlike Fitting's χ²ᵣ). All solutions are fitted to the same points, so their ratio is that of χ²."""
-BOUND_NAMES = {"R": "R", "sigma_R": "σR/R", "h": "h", "sigma_h": "σh/h", "D": "D", "sigma_D": "σD/D",
+BOUND_NAMES = {"R": "R", "sigma_R": "σR/R", "h": "h", "sigma_h": "σh/h", "D": "D", "sigma_D": "σD/D", "sigma_nn": "σnn/D",
                "sigma_Res": "σ_Res", "nu_Res": "ν_Res"}
 """How a value at a bound is named (as the report's table names the parameters; σ_Res, ν_Res: the beam tail)."""
 AT_UPPER = "{name} at its upper bound"
