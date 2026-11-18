@@ -29,8 +29,12 @@ the beam tail and a constant by non-negative least squares and integrated out in
 model error integrated out exactly; weights L·π/q, effective sample size, and the evidence of the composition
 (Dax et al. 2023). The weighted samples fall into modes; each mode is refined by Fitting's least squares
 (`fit_engine`, method `lm`), or one search per composition starts from the samples (`global`), or the samples alone
-give the solution (`posterior`). Every solution carries the refined values and errors, the posterior's median and
-68 %/95 % intervals, χ²/N, its probability and flags (at a bound, unconstrained, correlated, few effective samples).
+give the solution (`posterior`). When no mode of a composition refines below χ²/N = 2, one search of the ranges from
+the samples is added. Around each refined solution its posterior is sampled locally (`posterior/laplace.py`); with
+fewer than 50 effective samples its intervals are taken with tempered weights, and when any solution has fewer than 10
+the solutions are compared by BIC instead of their evidence. Every solution carries the refined values and errors, the
+posterior's median and 68 %/95 % intervals, χ²/N, its probability and flags (at a bound, unconstrained, correlated,
+few effective samples, compared by BIC).
 
 ## Files
 
@@ -40,18 +44,32 @@ give the solution (`posterior`). Every solution carries the refined values and e
 | `prior_v1.json` | the prior of the first network: K = 1, 2, 3 with weights 0.3, 0.4, 0.3; spheres 0.4, upright cylinders 0.35, random cylinders 0.25; a paracrystal in 70 %; the Born term at a q_z/q_max up to 1 in 60 % |
 | `flow_torch.py` | the network in PyTorch, with the names and layout of the numpy version |
 | `train_flow.py` | −log q(θ | curve, composition) + cross-entropy of the head; GPU, noise drawn in worker processes; the state of the lowest validation loss is exported as `NAME.npz` and `NAME.json` (architecture, prior, data manifest with the SHA-256 of every shard, history, SHA-256 of the npz) |
+| `export_checkpoint.py` | the best state so far of a run (its `NAME.pt`) as a numpy network, while it still trains |
+| `model_card.py` | `MODEL_CARD.md` of an exported network from its record, `evaluate_flow.py`'s report and benchmark summaries |
 | `evaluate_flow.py` | simulation-based calibration on curves not trained on: ranks of the truth, 68 %/95 % coverage per kind of value and K, the head's accuracy, time per curve on one thread |
 | `make_flow_fixture.py` | the small random network and PyTorch's numbers with which `tests/test_ml1d_flow.py` checks the numpy flow without PyTorch |
 | `build_tables.py` | the size-average tables of `cut_model` |
 | `maxwell/` | Slurm scripts of the runs on DESY's Maxwell cluster (array simulation on CPU nodes, training on one GPU) |
 | `../benchmarks/posterior_recovery.py` | the recovery benchmark of fit1d (same curves, same scoring) for the network, the refined solutions and the choice of composition |
 
+## The network that comes with GIMaP
+
+`src/gimap/features/fitting/domain/posterior/data/flow_v1.npz` was trained as `flow_v3` (encoding 3: the beam tail's
+exponent 1.8–2.2, its width up to 30 q_min) at commit e5a609e, on one V100S in 1.9 h, with:
+
 ```bash
-python tools/ml1d/simulate.py --prior tools/ml1d/prior_v1.json --count 5000000 --seed 101 --out DATA/train_v1 --workers 64
-python tools/ml1d/simulate.py --prior tools/ml1d/prior_v1.json --count 20000 --seed 202 --out DATA/test_v1
-python tools/ml1d/train_flow.py --data DATA/train_v1 --prior tools/ml1d/prior_v1.json --out NET/flow_v1 --device cuda --loaders 24
-python tools/ml1d/evaluate_flow.py --network NET/flow_v1 --data DATA/test_v1 --prior tools/ml1d/prior_v1.json --out report.json --figure ranks.png
-python tools/benchmarks/posterior_recovery.py --network NET/flow_v1 --n 200 --workers 8
+python tools/ml1d/simulate.py --prior tools/ml1d/prior_v1.json --count 5000000 --seed 333 --out DATA/train_v3 --shard 10000 --workers 64
+python tools/ml1d/simulate.py --prior tools/ml1d/prior_v1.json --count 20000 --seed 444 --out DATA/test_v3 --shard 10000
+python tools/ml1d/train_flow.py --data DATA/train_v3 --prior tools/ml1d/prior_v1.json --out NET/flow_v3 --device cuda --loaders 24 --epochs 30 --batch 2048 --lr 7e-4 --validation 20000 --patience 6
+python tools/ml1d/evaluate_flow.py --network NET/flow_v3 --data DATA/test_v3 --prior tools/ml1d/prior_v1.json --curves 2000 --samples 1000 --out report.json --figure ranks.png
+python tools/benchmarks/posterior_recovery.py --network NET/flow_v3 --n 200 --workers 60
+python tools/ml1d/model_card.py --network NET/flow_v3 --evaluation report.json --benchmark tools/benchmarks/posterior_recovery_summary.json tools/benchmarks/posterior_extended_summary.json --out MODEL_CARD.md
 ```
+
+(On Maxwell `maxwell/simulate.sbatch` ran the simulation as an array of tasks with `--first-shard/--shards`, joined
+with `--join`, and `maxwell/train.sbatch` the training.) Its record names the
+SHA-256 of the shards; the shipped record leaves out the paths of the computer it was trained on. On 2000 simulated
+cuts not trained on, its 68 %/95 % intervals hold the truth in 66–71 %/94–96 % for every value; the benchmarks against
+fit1d and V5 are in Physics and Methods, section 9.13, and `MODEL_CARD.md`.
 
 The seeds fix every shard (`numpy.random.SeedSequence(seed).spawn`); the shards are not kept in the repository.

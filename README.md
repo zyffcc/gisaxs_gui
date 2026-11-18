@@ -246,8 +246,9 @@ Physics and Methods, section 9.13, describes the method and its benchmarks.
 - **The network file**: Predict checks the weights against the SHA-256 in their record
   (`src/gimap/features/fitting/domain/posterior/data/flow_v1.json`) before it uses them; with a changed or
   missing file it does not start, and the message names the file.
-- The earlier networks of 1D Predict (*General V5* and *Single RC specialist*) were removed in 0.2.0: on every
-  benchmark Predict parameters recovers the values better (Physics and Methods, section 10).
+- The earlier networks of 1D Predict (*General V5* and *Single RC specialist*) were removed in 0.2.0: on fit1d's
+  held-out curves V5's median error of R was 31 %, that of Predict parameters is 0.7 % (Physics and Methods,
+  section 10). fit1d stays: it is faster and its large errors are smaller (section 9.13).
 
 ## Command Line and MCP
 

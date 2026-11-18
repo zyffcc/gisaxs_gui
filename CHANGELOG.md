@@ -19,9 +19,14 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   (**Results ▸ Posterior of this solution**, and the column **p** of the solutions). The network (about 13 MB, in
   the repository and the packages) was trained on simulated cuts of Fitting's model and runs with numpy; GIMaP checks
   it against the SHA-256 of its record. It is also the default method of the 1D Predict window and a method of the
-  In-situ series (**Predict each frame (network + posterior)**). Physics and Methods 9.13 describes it and its benchmarks: TBD_BENCH.
+  In-situ series (**Predict each frame (network + posterior)**). Physics and Methods 9.13 describes it and its benchmarks: on fit1d's 200 held-out curves it
+  chooses the composition right in 84 % / 45 % of them (fit1d's own physics / with beam tail and roughness; fit1d
+  69 % / 30 %), with median errors of 0.7 % in R (fit1d 0.5–1.0 %); its large errors are larger than fit1d's,
+  its 68 % intervals hold the truth in 37–65 % of the cases, and it takes 8 s per curve with the composition given
+  and 50 s choosing it (fit1d 3.5 s and 6.3 s). fit1d therefore stays, and stays the recommendation for an unfitted
+  GISAXS cut.
 - **1D Predict: General V5 and Single RC specialist removed.** On fit1d's 200 held-out curves V5 recovered R with a
-  median error of 31 % and D of 22 % (20 s per curve); Predict parameters TBD_V5COMPARE. The window keeps
+  median error of 31 % and D of 22 % (20 s per curve); Predict parameters 0.7 % and 0.0–0.1 % (8 s). The window keeps
   *Physical fit (numerical)* and *fit1d*; settings saved with a V5 method open as Predict parameters. Fitting's
   *AI proposal (1D Predict)* is replaced by **Predict parameters**. 1D Predict no longer needs TensorFlow, and
   `modules/Fitting_1D_Model/Workflow_v5` (about 56 MB) is gone from the repository and the packages.

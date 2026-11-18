@@ -2437,8 +2437,11 @@ Born term at the cut's vacuum q_z, k_i + k_f; 0: the effective interface).
 
 **The prior.** Uniform in a box: ln R̃ from 0.5 to 5ρ (every population above the previous one, by stick-breaking),
 σR/R 0.02–0.5, h/2R 0.1–10 with h̃ ≤ 200 and R̃ ≤ 50 for random cylinders, D/2R 1–20, σnn/D 0.02–0.5, w from 0.3 to
-3 q_min (a wider "tail" would take over the particles' own scattering at low q), ν 1–6, σ_q/q_max 10⁻⁴–10⁻²
-(log), τ 0.003–0.15 (log). The scales: uniform from 0 to 10 times the curve's maximum.
+30 q_min (log), ν 1.8–2.2, σ_q/q_max 10⁻⁴–10⁻² (log), τ 0.003–0.15 (log). The scales: uniform from 0 to 10 times the
+curve's maximum. The tail is held to the Lorentzian wings of a beam profile (∝ q⁻², as fit1d's ν = 2): with ν free in
+1–6 a wide tail takes over the particles' own scattering at low q (on BornAgain's GALAXI model D fell to 14–22 nm), and
+a tail capped at 3 q_min (encoding 2) cannot describe a low-q rise (D rose to about 105 nm); with ν near 2 least
+squares from different starts reaches one solution there (D 51 nm, true 53.6 nm). GALAXI was used to find this.
 
 **The network** (`src/gimap/features/fitting/domain/posterior/flow.py`):
 
@@ -2454,7 +2457,7 @@ It was trained by maximum likelihood (neural posterior estimation) with the cros
 simulated cuts of `cut_model` (`tools/ml1d`): every population's term on 8 points per bin (then averaged, as a
 measured bin is), convolved with the cut's resolution; for every batch anew the populations' shares (2.5 decades),
 the tail, the background, the model error, 100–1000 measured points (linear or logarithmic in q), Poisson counts
-(10²–10⁷ at the highest point) and gaps. TBD epochs on one GPU; the weights (13 MB, float32) come with GIMaP with
+(10²–10⁷ at the highest point) and gaps. 30 epochs (2 h) on one GPU; the weights (13 MB, float32) come with GIMaP with
 their SHA-256 and model card, and GIMaP evaluates them with numpy: neither PyTorch nor TensorFlow is needed.
 
 **From the proposals to the solutions** (`posterior/infer.py`, `laplace.py`, `refine.py`):
@@ -2468,18 +2471,27 @@ their SHA-256 and model card, and GIMaP evaluates them with numpy: neither PyTor
    than any proposal amortised over all curves: the weights sit on a few samples (effective sample size of order 1),
    which therefore only point at the modes.
 3. The samples fall into modes (radii and distances 10 % apart, spreads 0.05 apart start a new one); the up to three
-   heaviest modes are refined by least squares (section 9.8; σ_q free; the tail's width at most 3 q_min).
+   heaviest modes are refined by least squares (section 9.8; σ_q free; the tail within the prior's ranges). When none
+   of them refines below χ²/N = 2 (the network's proposals miss the curve, as on GALAXI), one search of the ranges
+   (section 9.8) started from the 16 heaviest samples is added.
 4. Around every refined solution its posterior is sampled: a Student t (5 degrees of freedom) over the values the
    curve constrains, its scale from the Gauss–Newton curvature of the residuals plus the prior's, inflated by 1.4;
    the others (an absent tail, a resolution at its bound, τ) from piecewise densities that a scan of the likelihood
    along each sets; up to three rounds of population Monte Carlo until 200 effective samples. The weighted samples
    give every value's median and 68 %/95 % interval, and the evidence Z of the solution.
 5. A composition's evidence is the sum of those of its distinct solutions; the probabilities of the compositions are
-   ∝ Z (equally likely beforehand), a solution's is its composition's times its share.
+   ∝ Z (equally likely beforehand), a solution's is its composition's times its share. When the sampling of any
+   solution did not converge (fewer than 10 effective samples), all are compared by BIC instead, Z ∝ exp(−BIC/2) with
+   BIC = χ² + k ln N (k the free values, the scales included), as fit1d ranks its solutions, and their intervals are the least-squares errors of section 9.8 (scaled by χ²/N; on a
+   log scale for the lengths); the solutions say so. This
+   happens on curves the model does not describe within σ: with the model error near its bound the posterior lies away
+   from the least-squares optimum, and the evidences cannot be estimated (on BornAgain's GALAXI model they ranked a
+   solution with χ²/N = 11.5 above one with 4.4). There the proposal of step 4 is also widened by √(χ²/N).
 
 Each solution carries the refined values with their least-squares errors (9.8), the posterior median and intervals,
 χ²ᵣ, its probability and flags: a value at a bound of its range; *unconstrained* when its 68 % interval covers more
-than 0.7 of the prior's range; strongly correlated pairs; few effective samples (below 50). The other ways to finish
+than 0.7 of the prior's range; strongly correlated pairs; few effective samples (below 50: the intervals are then taken with the weights raised to the
+largest power β ≤ 1 that gives 50 effective samples, which moves them towards the wider proposal). The other ways to finish
 (**Options ▸ Predict: the solutions**): one search of the ranges per composition whose first population holds the
 heaviest samples (*Search from the samples*), or the network's weighted samples alone (*Posterior samples only*,
 no least squares; intervals from step 2).
@@ -2488,19 +2500,89 @@ Model's coupling (DA) and size law (log-normal) are used in steps 2–4: the net
 sizes, is then only a proposal, which the weights correct. Fitting has no four-term DWBA: Predict uses the Born term
 at the cut's q_z, or the effective interface.
 
-**Calibration in the model.** On TBD simulated cuts not trained on (`tools/ml1d/evaluate_flow.py`), the network's
-own 68 % and 95 % intervals hold the truth in TBD and TBD of the cases; the ranks of the truth among the samples are
-uniform (TBD).
+**Calibration in the model.** On 2000 simulated cuts not trained on (`tools/ml1d/evaluate_flow.py`, the true
+composition given, 1000 samples each), the network's own 68 % and 95 % intervals hold the truth in 66–71 % and
+94–96 % of the cases, for every value; the ranks of the truth among the samples are uniform within the statistics
+(χ² of 20 rank bins 10–28, 19 degrees of freedom). The head ranks the true composition first in 21 % of the cuts:
+many of the 258 compositions describe a cut about equally well (a paracrystal on a weak population, two populations
+of similar size), and the likelihood decides among the head's four.
 
-**Benchmark.** The 200 held-out curves of fit1d's benchmark (the independent truth model `yoneda_truth.py`;
-section 9.12), with the same scoring (`tools/benchmarks/posterior_recovery.py`), and a second set
-of 1200 curves drawn the same way with three populations and the DA as well (`heldout_cases.py`, seed range never used
-while the method was developed). Median and 90th percentile of the errors over all populations; coverage of the
-68 % intervals; the true composition given (*fit*) or chosen (*choose*); time per curve on one core:
+**Benchmark.** The 200 held-out curves of fit1d's benchmark (the independent truth model `yoneda_truth.py`; section
+9.12), with the same scoring (`tools/benchmarks/posterior_recovery.py`): half of them in fit1d's own physics
+(*model*), half with a resolution, a beam tail and roughness (*measured*). Medians and 90th percentiles of the errors
+over all populations, R and D relative, the spreads absolute; the true composition given. The "68 %" columns give how
+often the 68 % interval of the solution (Predict) or ±1 least-squares error (fit1d) holds the truth; the composition
+chosen among spheres and upright cylinders, one or two; time per curve on one core (`*_summary.json` beside the
+scripts):
 
-TBD table: Predict vs fit1d vs V5
+| level | value | Predict: median / P90 | Predict: 68 % | fit1d: median / P90 | fit1d: 68 % |
+|---|---|---|---|---|---|
+| model | R | 0.7 % / 35 % | 54 % | 0.5 % / 7.1 % | 61 % |
+| model | σR/R | 0.006 / 0.10 | 65 % | 0.005 / 0.062 | 69 % |
+| model | D | 0.0 % / 0.5 % | 65 % | 0.0 % / 0.2 % | 70 % |
+| model | σnn/D | 0.001 / 0.005 | 61 % | 0.000 / 0.002 | 68 % |
+| measured | R | 0.7 % / 25 % | 44 % | 1.0 % / 19 % | 34 % |
+| measured | σR/R | 0.008 / 0.14 | 46 % | 0.010 / 0.10 | 36 % |
+| measured | D | 0.1 % / 0.9 % | 45 % | 0.1 % / 0.3 % | 43 % |
+| measured | σnn/D | 0.002 / 0.006 | 37 % | 0.001 / 0.006 | 26 % |
+| | composition right (model / measured) | 84 % / 45 % | | 69 % / 30 % | |
+| | seconds: composition given / chosen | 7.5 / 50 | | 3.5 / 6.3 | |
 
-**GALAXI.** TBD
+On 1200 curves drawn the same way on a seed range never used while the method was developed (`heldout_cases.py`):
+one to three populations, the LMA or the DA (given to both methods), the composition chosen among one to three
+populations:
+
+| level | value | Predict: median / P90 | Predict: 68 % | fit1d: median / P90 | fit1d: 68 % |
+|---|---|---|---|---|---|
+| model | R | 2.6 % / 58 % | 53 % | 4.5 % / 40 % | 47 % |
+| model | D | 0.1 % / 33 % | 50 % | 0.1 % / 4.5 % | 48 % |
+| measured | R | 3.1 % / 62 % | 48 % | 7.2 % / 49 % | 30 % |
+| measured | D | 0.2 % / 53 % | 44 % | 0.3 % / 12 % | 28 % |
+| | composition right (model / measured) | 63 % / 34 % | | 32 % / 16 % | |
+| | seconds: composition given / chosen | 15 / 162 | | 8.9 / 26 | |
+
+What this says:
+
+- Predict chooses the composition more often right than fit1d, and its median errors are as small or smaller (except
+  R in fit1d's own physics, 0.7 % against 0.5 %).
+- Its large errors are larger: the 90th percentiles of R and D are several times fit1d's. Nearly all are curves of
+  two or three populations (a population off by more than 20 %: 32 of the 200 curves, 31 of them with two; 379 of the
+  1200, 375 with two or three). About two thirds of these the solution describes within its errors (χ²/N ≤ 1.5) with
+  other sizes: the curve does not separate the populations, and the posterior's most probable mode is not the truth's.
+  The rest are refinements that stay in another mode (χ²/N above 3 in 4 of the 32 and 68 of the 379).
+- Its 68 % intervals hold the truth in 37–65 % of the cases (fit1d's set) and 41–59 % (the extended set), its
+  least-squares errors in 29–72 %, fit1d's in 18–70 %: the network's own intervals are calibrated (above), the loss
+  comes at the refined mode (a mode other than the truth's, few effective samples). Read the intervals as a lower bound
+  of the uncertainty.
+- It is slower: about twice fit1d's time when the composition is given, 6–8 times when it chooses.
+- The measured curves have roughness falling as q⁻³ at low q, which the tail (ν near 2) cannot take up, and many of
+  them are compared by BIC (step 5; 30 % of the 200 solutions, 45 % of the 1200): there Predict chooses the composition
+  right less often (45 % against 84 % in fit1d's own physics).
+
+A first run on the same curves, before the search of the ranges (step 3) and the comparison by BIC (step 5) were added
+after GALAXI (below) showed solutions with χ²/N 11 chosen over ones with 4, gave the same medians, the composition right
+more often on the measured curves (65 % and 40 %), intervals that held the truth less often (43–62 % and 30–44 %), and
+took 40 s and 86 s to choose (`posterior_*_first_summary.json`).
+
+fit1d therefore stays, and Fitting still recommends it for an unfitted GISAXS cut; Predict replaces 1D Predict V5,
+which on the same 200 curves had median errors of 31 % (R) and 22 % (D) (chapter 10).
+
+**GALAXI.** The cut of the public GALAXI frame and three Poisson draws of BornAgain's model of it (log-normal radii,
+number mean 6.24 nm, radial paracrystal of 53.6 nm; four-term DWBA), as in section 9.12
+(`tools/benchmarks/galaxi_posterior.py`, `galaxi_posterior.json`). One sphere population with a paracrystal, Born at
+the cut's q_z:
+
+| source | Predict: R (nm) | Predict: D (nm), 68 % | χ²/N | fit1d: R, D (nm) | χ²/N |
+|---|---|---|---|---|---|
+| BornAgain's model, three draws | 4.78–4.84 | 49.2–51.3, each interval holds 53.6 | 4.3–4.5 | 4.88–4.93, 56.9–57.6 | 6.1–6.5 |
+| measured cut | 5.16 | 46.5 [43.8, 49.3] | 8.8 | 5.20, 56.4 | 14.4 |
+
+With the composition chosen among one to three sphere populations, Predict takes two (a broad log-normal is two
+Gaussians), the first with D 48.4–50.7 nm on the simulated cuts and 48.4 nm on the measured one; fit1d chose a sphere of
+R 0.18 nm on one of the draws. All these solutions were compared by BIC (the model does not describe the cut within σ:
+χ²/N 3–9), and their intervals are least-squares errors. fit1d's four-term DWBA, which Fitting does not have, describes
+the simulated cuts better (χ²/N 1.75, D 53.8–55.1 nm). Time: 12–23 s per variant, about 100 s for the choice among
+compositions. GALAXI was used to set the tail's prior and the rules of step 5, so this is no independent test.
 
 Implementation: `src/gimap/features/fitting/domain/posterior/`, `application/single_predict.py`,
 `infrastructure/adapters/posterior_job.py`; training and checks: `tools/ml1d/`; benchmarks:
@@ -2550,7 +2632,15 @@ Both were removed when *Predict parameters* recovered the parameters better on e
 curves of fit1d's benchmark (section 9.12; `tools/benchmarks/v5_recovery.py`, the true composition given, V5's
 default options, the q > 0 half, sizes compared in V5's convention):
 
-TBD_V5TABLE
+| level | value | Predict: median / P90 | V5: median / P90 |
+|---|---|---|---|
+| model | R | 0.7 % / 35 % | 31 % / 141 % |
+| model | σR/R | 0.006 / 0.10 | 0.14 / 0.36 |
+| model | D | 0.0 % / 0.5 % | 39 % / 311 % |
+| measured | R | 0.7 % / 25 % | 34 % / 87 % |
+| measured | σR/R | 0.008 / 0.14 | 0.16 / 0.42 |
+| measured | D | 0.1 % / 0.9 % | 15 % / 274 % |
+| | seconds per curve | 7.5 | 19.8 |
 
 V5 also gave no probability and no interval. The code, the weights and their records remain in the repository's
 history (the last commit that has them: 06e7395), and `v5_recovery.py` runs there.

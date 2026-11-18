@@ -2134,8 +2134,8 @@ describes the method and its benchmarks.
 3. **Options ▸ Predict: the solutions**: **Refine each solution (least squares)** (the default), **Search from the
    samples** (a search of the ranges per composition, started from the network's samples; slower) or **Posterior
    samples only** (no least squares).
-4. Press **Fit**. It runs in a separate process (about 20 s for a curve of a few hundred points on one core, more
-   with several compositions); **Stop** ends it without a result.
+4. Press **Fit**. It runs in a separate process (for a curve of a few hundred points on one core about 8 s with the
+   particles of Model, about 50 s when it chooses among compositions); **Stop** ends it without a result.
 
 Model's fixed values and ranges are not used by Predict: the network looks at the whole range of every value. The
 solution that comes into Model keeps Model's geometry; **Refine** afterwards keeps the values you fix.
@@ -2147,8 +2147,10 @@ solution that comes into Model keeps Model's geometry; **Refine** afterwards kee
   solution with p 0.6 next to one with 0.4 means that the curve does not decide between them.
 - Under the quality line, **Posterior of this solution**: each value's median and 68 % interval, e.g.
   `R 4.12 [4.08, 4.16] nm`. Below it, what to keep in mind: a value the curve says little about (*unconstrained*: its
-  interval spans most of the range the network knows), a value at a bound, strongly correlated values, or few
-  effective samples (the intervals are then rough).
+  interval spans most of the range the network knows), a value at a bound, strongly correlated values, few
+  effective samples (the intervals are then rough), or that the solutions were compared by χ² and their number of
+  values (BIC) because the posterior's sampling did not converge — usually a curve the model does not describe within
+  its errors; the intervals are then the least-squares errors.
 - **Refine the values in Model** then gives the least-squares errors under Model's own limits, as for any model.
 
 The network knows cuts spanning a factor 10–300 in q (points below q_max/300 are left out, and said), one to three
