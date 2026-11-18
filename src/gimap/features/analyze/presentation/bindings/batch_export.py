@@ -44,6 +44,7 @@ from ...application import (
     fit_halves,
     fit_input_curve,
     frame_stem,
+    model_name,
     module_files,
     parts_missing,
     peak_targets,
@@ -304,7 +305,7 @@ class BatchExportMixin:
         return " · ".join(parts)
 
     def set_model_fitter(self, fitter) -> None:
-        """The quick particle-model fit of Fitting (the application passes it in), for batch fits of GISAXS."""
+        """Predict parameters of Fitting (the application passes it in), for the particle model of GISAXS batches."""
         self.view_model.model_fitter = fitter
 
     def refresh_batch_entry(self) -> None:
@@ -546,9 +547,10 @@ def fit_summary(result, choices: BatchChoices) -> tuple[str, str]:
         params = component.get("params") or {}
         parts.append(", ".join(f"{key} = {float(value):.3g}" for key, value in params.items()
                                if isinstance(value, (int, float)) and key in ("R", "h", "D", "sigma_R", "pdi")))
-    text = tr("Best: {model}, {params} nm, χ²/N = {chi}").format(  # χ²/N: mean r², no dof correction
-        model=best.get("combination", ""), params="; ".join(part for part in parts if part),
-        chi=f"{float(best.get('best_chi2_weighted', math.nan)):.3g}",
+    chance = best.get("probability")
+    text = tr("Most probable: {model} (p = {p}), {params} nm, χ²/N = {chi}").format(  # χ²/N: mean r², no dof correction
+        model=model_name(best), p="—" if chance is None else f"{float(chance):.2f}",
+        params="; ".join(part for part in parts if part), chi=f"{float(best.get('best_chi2_weighted', math.nan)):.3g}",
     )
     made_of = made_of_text(best)  # the halves and the points it was fitted on
     return (f"{text}\n{made_of}" if made_of else text), "ok"

@@ -12,8 +12,6 @@ extend-exclude = [
     ".gimap_cache",
     "AI_Fitting_Output",
     "trainset_jobs",
-    # The bundled fit1d kit is frozen research code, imported only inside a job process.
-    "utils/gisaxs1d_gui_kit",
     # The analysis package of the Sputter page is a release build of research code, run only as a subprocess.
     "utils/sputter_client",
 ]

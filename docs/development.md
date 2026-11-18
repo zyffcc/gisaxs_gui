@@ -218,25 +218,16 @@ Zenodo DOI and paper submission, is [docs/releasing.md](releasing.md).
   `tools/ml1d/export_checkpoint.py`) names its SHA-256, which the loader and the release builder check;
   `tools/ml1d/model_card.py` writes `MODEL_CARD.md`. `.gitattributes` marks the weights binary. The networks of
   1D Predict V5 (`modules/Fitting_1D_Model/Workflow_v5/`, about 56 MB) were removed in 0.2.0. A checkout made on
-  Windows before 2026-10-13 may hold files of the folders marked `-text` (the fit1d kit, the analysis package of
-  Sputter) with converted line endings, and Git does not notice it: `tools/update_source.ps1` writes them again.
+  Windows before 2026-10-13 may hold files of the folders marked `-text` (the analysis package of Sputter) with
+  converted line endings, and Git does not notice it: `tools/update_source.ps1` writes them again. The fit1d kit
+  (`utils/gisaxs1d_gui_kit/`, about 62 MB), its release check `tools/list_fit1d_release_files.py` and the dependency
+  `threadpoolctl` were removed in 0.2.0: Fitting has one network method, Predict parameters.
 - 0.2.0 is a pre-release: `PRE_RELEASE` in `src/gimap/shared/version.py` (the About box), `README.md`, the
   manual (introduction, Known limitations, FAQ, Version and Contact) and `CHANGELOG.md` say so. Change them
   together when a version is released as final (see [releasing.md](releasing.md)).
 
-- The builder also validates the bundled `utils/gisaxs1d_gui_kit/` against its `FILES_SHA256.json`
-  with `tools/list_fit1d_release_files.py` (standard-library Python, including for `-ListOnly`). It
-  includes only the declared runtime code, networks, packed tables and launchers. The only
-  `research/` exception is the checked kit's `app/research/`; other research and personal folders
-  remain forbidden. Missing resources or a checksum mismatch stop before packing the environment.
-- The public portable package excludes the personal kit's `examples/`, `expected.json`, recorded
-  selftest results, personal `README_zh.md` and the selftest/example launchers. Use GIMaP's User
-  Manual for the distributed fit1d instructions. It writes a subset `FILES_SHA256.json` into
-  the ZIP so the shipped runtime can be validated again without those private files. The personal
-  update package may include them for its owner. The host environment must install `threadpoolctl`
-  from `requirements.txt`, so fit1d limits BLAS even when NumPy was loaded before the job begins.
-  The builder checks NumPy/SciPy compatibility and threadpoolctl inside the selected Conda
-  environment before creating a ZIP; it does not install dependencies or modify the environment.
+- Research and personal folders (`research/`, `_handoff/`, `validation/`) stay forbidden in the package without
+  exception; the builder does not install dependencies or modify the environment.
 - New GUI source files, and new documents that Help or the manuals use (`docs/`, `CITATION.cff`,
   screenshots), still need to be tracked before a normal release. `-AllowUntracked` leaves them out; it
   does not make an incomplete application releasable. Modified tracked files are
@@ -251,8 +242,8 @@ Zenodo DOI and paper submission, is [docs/releasing.md](releasing.md).
 fast-forward when origin only added commits; when the histories diverged, a branch
 `backup/<date>-<time>-<commit>` of the state before, then `git reset --hard origin/<branch>`. Modifications
 of tracked files go through `git stash` and back; untracked and ignored files are never changed (the script
-stops when the new version would overwrite one). Tracked files that `.gitattributes` marks `-text` (the fit1d
-kit, the analysis package of Sputter) and that the checkout holds with converted line endings are written again, also
+stops when the new version would overwrite one). Tracked files that `.gitattributes` marks `-text` (the analysis
+package of Sputter) and that the checkout holds with converted line endings are written again, also
 when there is nothing to update. Exit code 0: updated or nothing to do; 1: not updated, or not completely;
 2: updated, but the modifications wait in the stash. `README.md` describes it for users, with the two plain
 commands for a checkout that does not have the script yet.

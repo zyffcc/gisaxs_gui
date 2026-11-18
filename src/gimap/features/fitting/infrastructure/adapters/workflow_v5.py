@@ -1,6 +1,6 @@
-"""The 1D Predict window's job: every half of every curve with the method chosen — Predict parameters (the proposal
-network and its posterior, ``posterior_job``), the quick physical fit (``experimental_fit``) or fit1d — and the files
-of the run (request, per curve, summary). Also ``prepare_sides`` and ``read_curve`` of the quick fit."""
+"""The 1D Predict window's job: every half of every curve with Predict parameters (the proposal network and its
+posterior, ``posterior_job``), and the files of the run (request, per curve, summary). Also ``prepare_sides`` (the
+halves of a curve as the fits take them) and ``read_curve``."""
 
 from __future__ import annotations
 
@@ -117,19 +117,11 @@ def run_workflow_job(payload, report, is_cancelled):
     model_record = model_provenance(options["method"])
     (output / "request.json").write_text(
         json.dumps({**payload, "options": options, "software_version": SOFTWARE,
-                    "randomness": ({"policy": "Predict parameters: numpy generator, fixed seed", "seed": 0}
-                                   if options["method"] == "posterior" else
-                                   {"policy": "research runtime defaults; no run-level seed override", "seed": None}),
+                    "randomness": {"policy": "Predict parameters: numpy generator, fixed seed", "seed": 0},
                     "model": model_record, "q_units": units}, indent=2, allow_nan=False), encoding="utf-8"
     )
-    experimental = options["method"] == "experimental"
-    posterior = options["method"] == "posterior"
-    fit1d = options["method"] == "fit1d"
-    kit = None
-    if fit1d:
-        from .fit1d_method import fit_and_write as fit1d_and_write, load_kit
+    from .posterior_job import fit_and_write
 
-        kit = load_kit()  # a missing kit stops the job here, with where to put it
     records, all_rows = [], []
     for index, source in enumerate(sources):
         if is_cancelled():
@@ -163,18 +155,7 @@ def run_workflow_job(payload, report, is_cancelled):
                     item["sigma_estimated"] = True
             rows = []
             for item in sides:
-                if experimental:
-                    from .experimental_fit import fit_and_write
-
-                    rows.extend(fit_and_write(directory / item["side"], item, file_options, report, is_cancelled))
-                elif posterior:
-                    from .posterior_job import fit_and_write as posterior_and_write
-
-                    rows.extend(posterior_and_write(directory / item["side"], item, file_options, report,
-                                                    is_cancelled))
-                else:
-                    rows.extend(fit1d_and_write(directory / item["side"], item, file_options, report, is_cancelled,
-                                                kit))
+                rows.extend(fit_and_write(directory / item["side"], item, file_options, report, is_cancelled))
             for row in rows:
                 row["file"] = name
                 row.update(unit)
@@ -218,8 +199,7 @@ def run_workflow_job(payload, report, is_cancelled):
         report(index + 1, len(sources), f"{index + 1}/{len(sources)} files finished — {name}", {})
     summary = dict(
         software_version=SOFTWARE, model=model_record,
-        profile=("Predict parameters (network + posterior)" if posterior else
-                 "Experimental physical fit (numerical)" if experimental else "fit1d (network + physical fit)"),
+        profile="Predict parameters (network + posterior)",
         runtime_seconds=time.perf_counter() - started,
         configured_candidates=len(all_rows),
         best_log_rmse=all_rows[0]["best_log_rmse"] if all_rows else None,

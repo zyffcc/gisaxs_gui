@@ -37,13 +37,9 @@ ZH_ENTRIES = {
         "预测设置——保存后用于单条曲线以及之后的批处理 / 原位运行",
     "Auto / unused": "自动 / 不用",
     "Complete composition": "完整组成",
-    "Fit method": "拟合方法",
     "q unit of files without one in their header": "文件头未注明时的 q 单位",
     "q sides": "q 的两侧",
     "Each half separately": "两半分别拟合",
-    "Physical fit (numerical)": "物理拟合（数值）",
-    "Fix σ res (nm⁻¹)": "固定 σ res（nm⁻¹）",
-    "Fix ν res": "固定 ν res",
     "Auto: 0.1% peak": "自动：峰值的 0.1%",
     "Relative σ (if missing)": "相对 σ（文件里没有时）",
     "Absolute σ floor": "σ 绝对下限",
@@ -76,7 +72,6 @@ ZH_ENTRIES = {
     "Ready.": "就绪。",
     "A fitting / in-situ job is already running. Finish or cancel it first.": "已有拟合 / 原位任务在运行。请先等它完成或取消。",
     "Load a curve or select files first": "请先载入曲线或选择文件",
-    "Starting numerical physical fitting…": "正在开始数值物理拟合…",
     "Finished in {seconds} s · {failures} failed files · {count} candidates saved.":
         "用时 {seconds} s 完成 · {failures} 个文件失败 · 保存了 {count} 个候选。",
     "{count} candidates saved. Review curve shape and residuals; observed-data scores include noise and are not "
@@ -84,18 +79,8 @@ ZH_ENTRIES = {
     "Settings saved. Existing in-situ recipes keep their captured settings.": "设置已保存。已有的原位配方保留它们记录时的设置。",
     "Cancelling… completed file results remain saved.": "正在取消…已完成文件的结果仍会保留。",
     "Saved settings v{version} for future frames.": "已为之后的帧保存设置 v{version}。",
-    "Predict parameters: GIMaP's proposal network and its posterior, refined by least squares (Complete composition: 1–3 components; Auto: the network chooses). Physical fit: the quick numerical fit of Find the particle shape. fit1d: a separate kit with its own physics; it needs the Complete composition (Sphere / Vertical cylinder).":
-        '预测参数：GIMaP 的建议网络及其后验，再经最小二乘精修（完整组成：1–3 个组分；自动：由网络选择）。物理拟合：“寻找颗粒形状”所用的快速数值拟合。fit1d：一个有自己物理模型的独立工具包；它需要完整组成（球 / 竖直圆柱）。',
-    'Physical fit: the width of the low-q term, 0.001–0.1 nm⁻¹ (unticked: fitted).':
-        '物理拟合：低 q 项的宽度，0.001–0.1 nm⁻¹（不勾选：拟合得出）。',
-    'Physical fit: 1–20; fit1d: 0.5–12 (unticked: fitted).':
-        '物理拟合：1–20；fit1d：0.5–12（不勾选：拟合得出）。',
-    'Physical fit':
-        '物理拟合',
     "Check every candidate's fit; refine it in Fitting before reporting it.":
         '请检查每个候选的拟合；报告之前先在拟合页精修。',
-    "Predict parameters gives each candidate's probability and the posterior intervals of its values; the physical fit and fit1d give starts to check. logRMSE and RMS/σ include the measurement noise. The method is chosen in Parameters… ▸ Fit method.":
-        '预测参数给出每个候选的概率及其数值的后验区间；物理拟合和 fit1d 给出的是待检查的起点。logRMSE 和 RMS/σ 包含测量噪声。方法在“参数…› 拟合方法”中选择。',
     'Starting Predict parameters (network + posterior)…':
         '正在开始预测参数（网络 + 后验）…',
 }
@@ -104,10 +89,10 @@ ALLOWED = {"#", "logRMSE", "RMS/σ", "nm⁻¹", "Å⁻¹"}
 """Texts that stay as they are in Chinese: data headers and units."""
 OPTIONS = (
     {},
-    dict(q_unit="A^-1", side="negative", method="experimental", components=[2], sigma_res=0.05, nu_res=3.5),
-    dict(q_unit="nm^-1", side="positive", method="experimental", components=[1, 3, 3], relative_noise=0.25,
-         absolute_noise=2.5),
+    dict(q_unit="A^-1", side="negative", components=[2], cut_qz=0.25),
+    dict(q_unit="nm^-1", side="positive", components=[1, 3, 3], relative_noise=0.25, absolute_noise=2.5),
     dict(method="posterior", components=[2, 2]),
+    dict(method="experimental", components=[1], sigma_res=0.05, nu_res=3.5),  # a retired method opens as Predict
 )
 
 
@@ -140,7 +125,7 @@ def _close(dialog) -> None:
 
 def _candidate(**extra) -> dict:
     row = dict(file="Current curve", side="positive", rank=1, combination="random_cylinder", best_log_rmse=.05,
-               signed_weighted_rms=1.2, best_source="experimental_physical", fallback_reason="poor agreement",
+               signed_weighted_rms=1.2, best_source="posterior", warnings=["few effective samples"],
                native_q=[1, 2, 3], observed=[3, 2, 1], sigma=[.1, .1, .1], display_q=[1, 2, 3], display_fit=[3, 2, 1])
     row.update(extra)
     return row
@@ -155,16 +140,16 @@ def test_the_options_keep_their_values(options) -> None:
 
 
 def test_the_spin_boxes_show_their_values_without_trailing_zeros() -> None:
-    options = dict(method="experimental", sigma_res=0.00855, nu_res=7.25, relative_noise=0.1)
+    options = dict(cut_qz=0.00855, relative_noise=0.1, absolute_noise=7.25)
     dialog = _dialog(options=options)
-    assert dialog.sigma_res.text() == "0.00855" and dialog.nu_res.text() == "7.25"
-    assert dialog.relative_noise.text() == "0.1" and dialog.noise_floor.text() == "Auto: 0.1% peak"
-    assert dialog.sigma_res.decimals() == 8 and dialog.nu_res.decimals() == 6  # the values keep every decimal
-    dialog.fix_sigma.setChecked(True)
-    dialog.fix_nu.setChecked(True)
-    dialog.sigma_res.lineEdit().setText(dialog.sigma_res.text())  # the text shown reads back as the same value
-    dialog.sigma_res.interpretText()
-    assert dialog.options()["sigma_res"] == 0.00855 and dialog.options()["nu_res"] == 7.25
+    assert dialog.cut_qz.text() == "0.00855" and dialog.use_qz.isChecked()
+    assert dialog.relative_noise.text() == "0.1" and dialog.noise_floor.text() == "7.25"
+    assert dialog.cut_qz.decimals() == 6 and dialog.noise_floor.decimals() == 6  # the values keep every decimal
+    dialog.cut_qz.lineEdit().setText(dialog.cut_qz.text())  # the text shown reads back as the same value
+    dialog.cut_qz.interpretText()
+    assert dialog.options()["cut_qz"] == 0.00855 and dialog.options()["absolute_noise"] == 7.25
+    dialog.noise_floor.setValue(0)
+    assert dialog.noise_floor.text() == "Auto: 0.1% peak"
     _close(dialog)
 
 
@@ -204,7 +189,7 @@ def test_no_english_is_left_in_the_window_in_chinese(chinese) -> None:
         left = [text for text in texts if text and text not in ALLOWED and not re.search(r"[一-鿿]", text)]
         assert left == []
         tips = [dialog.table.horizontalHeaderItem(i).toolTip() for i in (2, 3, 4)]
-        tips += [dialog.method.toolTip(), dialog.sigma_res.toolTip(), dialog.nu_res.toolTip()]
+        tips += [dialog.component_boxes[0].toolTip(), dialog.use_qz.toolTip(), dialog.cut_qz.toolTip()]
         assert all(re.search(r"[一-鿿]", tip) for tip in tips)
         assert re.search(r"[一-鿿]", dialog.parameters.placeholderText())
         assert re.search(r"[一-鿿]", dialog.log.placeholderText())
@@ -228,12 +213,13 @@ def test_run_time_texts_are_in_the_interface_language_and_follow_a_switch(chines
                                                             summary=dict(runtime_seconds=1.5)))
         dialog._completed(result)
         assert dialog.status.text() == "用时 1.50 s 完成 · 0 个文件失败 · 保存了 1 个候选。"
-        assert dialog.table.item(0, 0).text() == "当前 / +" and dialog.table.item(0, 5).text() == "物理拟合"
-        assert dialog.table.item(0, 5).toolTip().startswith("阶段：experimental_physical\n原因：poor agreement")
+        assert dialog.table.item(0, 0).text() == "当前 / +" and dialog.table.item(0, 5).text() == "网络 + 后验"
+        assert dialog.table.item(0, 5).toolTip() == "阶段：posterior\nfew effective samples"
         assert dialog.parameters.toPlainText().startswith("长度：nm。")
         chinese.apply_language("en")  # the window follows a switch while open
         assert dialog.status.text() == "Finished in 1.50 s · 0 failed files · 1 candidates saved."
-        assert dialog.table.item(0, 5).text() == "Physical fit" and dialog.table.currentRow() == 0
+        assert dialog.table.item(0, 5).text() == "Network + posterior" and dialog.table.currentRow() == 0
+        assert dialog.table.item(0, 5).toolTip() == "Stage: posterior\nfew effective samples"
         assert dialog.table.horizontalHeaderItem(0).text() == "Curve / side"
         assert dialog.table.horizontalHeaderItem(3).toolTip().startswith("Natural-log RMSE")
         assert dialog.parameters.toPlainText().startswith("Lengths: nm.")

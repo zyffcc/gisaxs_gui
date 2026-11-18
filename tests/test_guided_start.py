@@ -222,8 +222,8 @@ def test_only_questions_with_a_field_are_called_questions() -> None:
     guided._stepped({"state": "start", "tool": "set_halves", "arguments": {"side": "both_abs"}})
     guided._progress("set_halves: halves: both_abs")
     assert guided.status_label.text() == "Choosing the halves of the cut — Both halves on |qy|"
-    guided._progress("fit_horizontal_cut: fitting spheres and cylinders to I(qy) (about half a minute)…")
-    assert guided.status_label.text().startswith("Fitting form-factor models to the horizontal cut — fitting spheres")
+    guided._progress("fit_horizontal_cut: predicting the particles of I(qy) (about 15 s)…")
+    assert guided.status_label.text().startswith("Predicting the particles of the horizontal cut — predicting the")
     guided.results.deleteLater()
 
 

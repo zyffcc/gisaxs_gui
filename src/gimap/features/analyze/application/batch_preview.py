@@ -1,6 +1,6 @@
 """Small in-memory fit previews, independent of whether fitted curves are written to disk.
 
-Particle-model fits return their actual prepared points in nm⁻¹. The preview copies just the best
+Particle-model fits return their actual prepared points in nm⁻¹. The preview copies just the most probable
 solution and converts that axis to Å⁻¹ for Analyze; intensities and the fitted values are unchanged.
 No detector frames or discarded candidate solutions are retained.
 """
@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
+from .batch_fit import model_name
 
 
 @dataclass(frozen=True)
@@ -50,11 +52,11 @@ def model_preview(outcome, rows, values: dict, *, error: str = "") -> FrameFitPr
         preparation = dict(best.get("preparation") or {})
         q, observed, fitted = (_array(best.get(key)) for key in ("native_q", "observed", "native_fit"))
         if q.size and q.size == observed.size == fitted.size:
-            curves.append(FitCurvePreview(str(best.get("combination") or ""), np.abs(q) * 0.1, observed, fitted))
+            curves.append(FitCurvePreview(model_name(best), np.abs(q) * 0.1, observed, fitted))
         else:
             q, fitted = (_array(best.get(key)) for key in ("display_q", "display_fit"))
             if q.size and q.size == fitted.size:
-                curves.append(FitCurvePreview(str(best.get("combination") or ""), np.abs(q) * 0.1,
+                curves.append(FitCurvePreview(model_name(best), np.abs(q) * 0.1,
                                               np.array([], dtype=float), fitted))
     return FrameFitPreview(outcome.label, outcome.number, _ref(outcome), bool(rows), dict(values), tuple(curves),
                            error or str(values.get("note") or ""), preparation)

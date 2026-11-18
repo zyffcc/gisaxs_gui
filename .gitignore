@@ -220,10 +220,6 @@ docs/agents/eval/local/
 # user's weights): the user's own, never committed
 /modules/generated_*/
 
-# The fit1d kit (utils/gisaxs1d_gui_kit) is part of the repository. Two general rules above would leave
-# out its fitting code (research/) and its two networks (*.npz).
-!utils/gisaxs1d_gui_kit/app/research/
-!utils/gisaxs1d_gui_kit/models/*/weights_numpy.npz
 
 # The analysis package of the Sputter page (utils/sputter_client) is part of the repository too; its networks
 # and two tables are *.npz files, which the general rule above leaves out.

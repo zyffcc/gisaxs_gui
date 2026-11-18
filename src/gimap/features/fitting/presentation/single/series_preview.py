@@ -117,13 +117,7 @@ class FitSeriesPreviewMixin:
             self._frame_not_drawn(index, TOO_FEW_POINTS)
             return
         curves, colors, markers = [(tr("measured"), data.q, data.intensity)], [DATA_COLOR], [True]
-        if frame is not None and frame.ok and frame.native:  # fit1d: its own v2 curve, not Fitting's model of it
-            native = frame.native["curves"]
-            curves.append((tr("fit1d v2 model"), np.asarray(native["q_nm_inv"], float),
-                           np.asarray(native["model"], float)))
-            colors.append(MODEL_COLOR)
-            markers.append(False)
-        elif frame is not None and frame.ok:
+        if frame is not None and frame.ok:
             q = np.geomspace(max(data.q.min(), 1e-6), data.q.max(), 400)
             curves.append((tr("model"), q, evaluate(frame.result.model, q)))
             colors.append(MODEL_COLOR)

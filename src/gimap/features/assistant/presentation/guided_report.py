@@ -3,7 +3,7 @@
 Everything is in the file (pictures as data URIs), so it opens in any browser without GIMaP.
 The text is the same Markdown report the page shows, converted by Qt. The pictures follow the
 procedure: GIWAXS gets the q map with the analysed rings and I(q) with its peaks; GISAXS gets the
-q map and the fit of the horizontal cut (the data and the best fit on |qy|, log–log, as in the
+q map and the fit of the horizontal cut (the data and the most probable solution on |qy|, log–log, as in the
 Results tab), or the horizontal cut itself when it was not fitted; Find Geometry (no technique
 analysed) gets a “Geometry report” with the q map only.
 """
@@ -13,6 +13,7 @@ from __future__ import annotations
 import base64
 import html
 import io
+import math
 import time
 from typing import Callable, Optional
 
@@ -25,6 +26,7 @@ from ..application import (
     fit_on,
     peak_markers,
     pipeline_markdown,
+    probability,
     ring_overlays,
     series_markdown,
 )
@@ -49,8 +51,8 @@ CAPTIONS = {
     ),
     "gisaxs": (
         "The q map (q∥–qz, log intensity) of the analysed frames.",
-        "The fitted horizontal cut I(|qy|) on log–log axes: the data (points) and the fit the run reports, the best "
-        "fit free of search bounds (line).",
+        "The fitted horizontal cut I(|qy|) on log–log axes: the data (points) and the fit the run reports, the most "
+        "probable solution of Predict parameters (line).",
     ),
     "geometry": ("The q map of the frame with the geometry found.", ""),
 }
@@ -145,7 +147,7 @@ def _geometry_markdown(text: str) -> str:
 
 
 def fit_png(report: dict, width: int = 1000) -> Optional[bytes]:
-    """The GISAXS fit as in the Results tab: the fitted data and the best fit on |qy| (Å⁻¹), log–log."""
+    """The GISAXS fit as in the Results tab: the fitted data and the most probable solution on |qy| (Å⁻¹), log–log."""
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
 
@@ -175,11 +177,13 @@ def fit_png(report: dict, width: int = 1000) -> Optional[bytes]:
         radius = component.get("R")
         name = str(top.get("model") or "").replace("_", " ")
         detail = f" R {float(radius):.3g} nm" if radius is not None else ""
-        which = f"chosen fit (rank {top.get('rank')})" if index else "best fit"
+        chance = probability(top)
+        which = "best fit" if math.isnan(chance) else "most probable fit"  # (a report before Predict: no probability)
         bounds = ", ".join(bound_phrases(top))
         axes.loglog(q[fitted], model[fitted], "-", color=FIT_COLOURS[1], linewidth=1.4,
-                    label=f"{which}: {name}{detail} (χ²/N {float(top.get('chi2') or 0):.3g})"
-                    + (f" ⚠ {bounds}" if bounds else ""))
+                    label=f"{which}: {name}{detail} ("
+                    + ("" if math.isnan(chance) else f"p {chance:.2f}, ")
+                    + f"χ²/N {float(top.get('chi2') or 0):.3g})" + (f" ⚠ {bounds}" if bounds else ""))
     axes.set_xlabel("|qy| (Å⁻¹)")
     axes.set_ylabel("Intensity")
     axes.set_title(str(fit.get("curve") or "horizontal cut"), fontsize=9)

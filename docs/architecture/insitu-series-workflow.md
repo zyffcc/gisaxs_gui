@@ -121,9 +121,9 @@ Single 设置。每个结果 record 记录 `recipe_version` 以及 load、fit �
 
 ## 预测执行与输出
 
-单条、文本 batch 和 in-situ 共用 `infrastructure/adapters/workflow_v5.py`。默认方法为 **Predict parameters
+单条、文本 batch 和 in-situ 共用 `infrastructure/adapters/workflow_v5.py`。只有一种方法：**Predict parameters
 (network + posterior)**（`posterior_job.py`：GIMaP 的建议网络、cut_model 上的后验与最小二乘精修；Physics and Methods
-9.13）；另有 **Physical fit (numerical)** 与 **fit1d**。三者都只用 NumPy／SciPy，不需要 TensorFlow。
+9.13），只用 NumPy／SciPy，不需要 TensorFlow。**Physical fit (numerical)** 与 **fit1d** 已在 0.2.0 删除。
 
 正负 q 独立拟合；有符号强度与原测量点保留，500 点仅用于显示正演。每帧保存两侧各自 rank 1 的曲线与候选参数，
 Predict parameters 的行另带概率、后验区间、提示与有效样本数。Recipe 版本、结果目录、耗时与误差写入帧记录。不同侧
@@ -131,8 +131,9 @@ Predict parameters 的行另带概率、后验区间、提示与有效样本数�
 
 0.2.0 删除了 **General V5** 与 **Single RC specialist**（`modules/Fitting_1D_Model/Workflow_v5/`，TensorFlow）：在 fit1d 的
 200 条留出曲线上 V5 的 R 中位误差 31 %、D 22 %，Predict parameters 在同样曲线上为 0.7 % 和 0.0–0.1 %（Physics and Methods 10.3）。
-旧 Recipe 与保存的选项里的方法键 `model`、`stable` 打开为 Predict parameters，其专属选项（`numerical`、
-`amplitude_calibration`、候选预算、`normalizer`）丢弃（`application/workflow_v5.RETIRED_METHODS`、`RETIRED`）。
+旧 Recipe 与保存的选项里的方法键 `model`、`stable`、`experimental`（Physical fit）与 `fit1d` 打开为 Predict parameters，
+其专属选项（`numerical`、`amplitude_calibration`、候选预算、`normalizer`、`fit1d_policy` 等）丢弃，fit1d 的 `fit1d_qz`
+保留为 `cut_qz`（`application/workflow_v5.RETIRED_METHODS`、`RETIRED`）。
 早期局部分支的验证记录与检查脚本留在提交 06e7395 及之前的历史中。
 
 ## 2026-09-28 Analyze → Fitting 回放

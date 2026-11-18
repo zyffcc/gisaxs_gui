@@ -44,6 +44,7 @@ from ..application import (
     is_gisaxs,
     model_fit_curve,
     model_fit_frame,
+    model_name,
     model_row,
     model_preview,
     failed_preview,
@@ -67,17 +68,26 @@ def _trend_panels(table: FitTable, kind: str) -> list:
         return [(label, table.trend(suffix, error)) for label, suffix, error in (
             ("q (1/A)", " q (1/A)", " q err"), ("FWHM (1/A)", " FWHM (1/A)", " FWHM err"), ("area", " area", " area err"),
         )]
-    panels = [("χ²/N", table.trend("chi2"))]  # the quick fit's mean r² (no degrees-of-freedom correction)
+    panels = [("χ²/N", table.trend("chi2"))]  # the mean r² of Predict parameters (no degrees-of-freedom correction)
     for label, suffix in (("R (nm)", " R"), ("D (nm)", " D"), ("h (nm)", " h")):
         panels.append((label, table.trend(suffix)))
     return [panel for panel in panels if panel[1]]
+
+
+def _latest_model(rows) -> str:
+    """The most probable solution of a frame in a few words (the panel's latest fit)."""
+    best = rows[0]
+    chance = best.get("probability")
+    return (f"{model_name(best)}" + ("" if chance is None else f", p {float(chance):.2f}")
+            + f", χ²/N {float(best.get('best_chi2_weighted', float('nan'))):.3g}")
 
 
 class BatchModelMixin:
     """Needs ``state``, ``settings``, ``_analyze_frame``, ``_export``, ``_profiles`` and ``_save_frame_images``."""
 
     model_fitter = None
-    """The quick particle-model fit of Fitting (injected by the application; ``None``: not available)."""
+    """Predict parameters of Fitting, for the particle model of a batch (injected by the application; ``None``: not
+    available)."""
     frame_workers = None
     """``frame_workers(count, profiles)`` → worker processes for ``FrameJob``s (injected by the bootstrap;
     ``None``: every frame in the application)."""
@@ -140,7 +150,8 @@ class BatchModelMixin:
         run = BatchRun(choices=choices, destination=Path(destination), stem=stem, series=series, live_key=live_key)
         if choices.fit != FIT_NONE:
             run.fit_table = FitTable(choices.fit)
-            run.starts = FitStarts(choices.fit_start)
+            if choices.fit == FIT_PEAKS:  # Predict parameters needs no start: every frame from its own data
+                run.starts = FitStarts(choices.fit_start)
             if self.preview_cache_factory is not None:
                 run.preview_cache = self.preview_cache_factory()
         return run
@@ -188,7 +199,7 @@ class BatchModelMixin:
         return self.fold_outcome(run, outcome)
 
     def fold_outcome(self, run: "BatchRun", outcome: FrameOutcome) -> list[Path]:
-        """Add one frame's outcome to the batch — in frame order: the tables, the fit (whose start may be
+        """Add one frame's outcome to the batch — in frame order: the tables, the fit (the peaks' start may be
         the previous frame's result), the first frame's record. Returns every file of the frame."""
         info = outcome.series_info
         if run.series is not None and "normalization_factor" in info and not run.series.per_frame:
@@ -237,14 +248,14 @@ class BatchModelMixin:
             error = NO_FITTER
         else:
             try:
-                rows = fit_model_curve(outcome.model_curve, self.model_fitter, choices.fit_model, run.starts, halves=halves)
+                rows = fit_model_curve(outcome.model_curve, self.model_fitter, choices.fit_model, halves=halves)
             except (ValueError, RuntimeError) as exc:
                 error = str(exc)
         values = model_row(label, rows, error=error, halves=halves)
         run.fit_table.add(values, outcome.number)
         self._remember_batch_preview(run, model_preview(outcome, rows, values, error=error))
         run.fit_frames.append(model_fit_frame(label, rows, error=error, halves=halves))  # a failed fit is counted
-        run.last_fit = f"{rows[0].get('combination', '')}, χ²/N {float(rows[0].get('best_chi2_weighted', float('nan'))):.3g}" if rows else error
+        run.last_fit = _latest_model(rows) if rows else error
         if rows and choices.fit_curves:  # the points that were fitted (the mean or the one half) and the model
             path = run.destination / FOLDERS["fit_curves"] / f"{stem}_model_fit.{text}"
             written.append(self._export.writer.write_table(path, *model_fit_curve(label, rows, halves=halves)))
@@ -326,9 +337,10 @@ class BatchModelMixin:
         halves = choices.fit_halves if is_gisaxs(run) else None
         if run.fit_table is not None and run.fit_table.rows:
             comments = [
-                f"start values: {choices.fit_start}; "
-                + (f"peak shape: {choices.fit_profile} on a straight background" if choices.fit == FIT_PEAKS
-                   else f"model: {choices.fit_model} (q of the fit in 1/nm, sizes in nm)"),
+                f"start values: {choices.fit_start}; peak shape: {choices.fit_profile} on a straight background"
+                if choices.fit == FIT_PEAKS else
+                f"model: {choices.fit_model} (Predict parameters, the most probable solution of each frame; q of the "
+                "fit in 1/nm, sizes in nm)",
             ]
             if choices.fit == FIT_MODEL:
                 chosen = fit_halves(choices.fit_halves)

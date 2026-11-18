@@ -37,56 +37,59 @@ def _geometry() -> dict:
 
 
 class FakeFitter:
-    """Two solutions of different families with close χ²; records what it was asked."""
+    """Two solutions of Predict parameters, both probable (p 0.62 and 0.38); records what it was asked."""
 
     def __init__(self):
         self.calls = []
 
-    def __call__(self, q, intensity, sigma, *, components=(), distance_nm=None, report=None, cancelled=None):
-        self.calls.append({"points": len(q), "distance_nm": distance_nm, "q_min": float(np.min(q))})
-        return [_row(q, intensity, sigma, 1, "random_cylinder", 6.1, 398.0, 1.22),
-                _row(q, intensity, sigma, 2, "sphere", 9.4, 53.4, 1.31)]
+    def __call__(self, q, intensity, sigma, *, components=(), report=None, cancelled=None):
+        self.calls.append({"points": len(q), "components": components, "q_min": float(np.min(q))})
+        return [_row(q, intensity, sigma, 1, "random_cylinder", 6.1, 398.0, 1.22, probability=0.62),
+                _row(q, intensity, sigma, 2, "sphere", 9.4, 53.4, 1.31, probability=0.38)]
 
 
-BOUND_WARNING = "One or more shape/resolution parameters reached a search bound; values may be unidentifiable."
+UNCONSTRAINED = "the curve says little about sigma_h_1"
+"""A warning of Predict parameters (Fitting's ``posterior_job.FLAG_SENTENCES``) the report passes on."""
 
 
 class BoundFitter(FakeFitter):
-    """The ranking of the real quick fit on GALAXI (invented values of the same kind): the first two solutions have
-    values at a search bound (D at 500 nm), the third (a sphere, D = 48.3484 nm) none."""
+    """Solutions of Predict parameters with values at a bound of their range (invented values of the kind GALAXI
+    gives): the most probable has D at its upper bound, the second (p 0.25) σh/h at its lower bound, the third (a
+    sphere, D = 48.3484 nm) none."""
 
-    def __init__(self, everything_bound: bool = False):
-        super().__init__()
-        self.everything_bound = everything_bound
-
-    def __call__(self, q, intensity, sigma, *, components=(), distance_nm=None, report=None, cancelled=None):
-        self.calls.append({"points": len(q), "distance_nm": distance_nm, "q_min": float(np.min(q))})
+    def __call__(self, q, intensity, sigma, *, components=(), report=None, cancelled=None):
+        self.calls.append({"points": len(q), "components": components, "q_min": float(np.min(q))})
         upper_d = [{"parameter": "D", "bound": "upper", "component": 0},
                    {"parameter": "sigma_h", "bound": "upper", "component": 0}]
-        sphere_bounds = [{"parameter": "nu_Res", "bound": "upper", "component": None}] if self.everything_bound else []
         return [
-            _row(q, intensity, sigma, 1, "random_cylinder", 8.5961, 500.0, 1.26, upper_d),
+            _row(q, intensity, sigma, 1, "random_cylinder", 8.5961, 500.0, 1.26, upper_d, probability=0.55,
+                 warnings=["D_1 stopped at a bound of its range", UNCONSTRAINED]),
             _row(q, intensity, sigma, 2, "random_cylinder", 6.0117, 30.862, 1.279,
-                 [{"parameter": "sigma_h", "bound": "lower", "component": 0}]),
-            _row(q, intensity, sigma, 3, "sphere", 9.4416, 48.3484, 1.358, sphere_bounds),
+                 [{"parameter": "sigma_h", "bound": "lower", "component": 0}], probability=0.25),
+            _row(q, intensity, sigma, 3, "sphere", 9.4416, 48.3484, 1.358, probability=0.15),
             _row(q, intensity, sigma, 4, "vertical_cylinder", 7.7732, 30.8046, 1.45,
-                 [{"parameter": "nu_Res", "bound": "upper", "component": None}]),
+                 [{"parameter": "nu_Res", "bound": "upper", "component": None}], probability=0.05),
         ]
 
 
-def _row(q, intensity, sigma, rank, model, radius, distance, chi2, at_bounds=()):
-    """One solution as Fitting's quick fit gives it (q in nm⁻¹; ``at_bounds``: the values that ended on a bound)."""
+def _row(q, intensity, sigma, rank, model, radius, distance, chi2, at_bounds=(), *, probability=1.0, warnings=None):
+    """One solution as Fitting's Predict parameters gives it (q in nm⁻¹; ``at_bounds``: the values that ended on a
+    bound of their range; ``posterior``: best, median, 68 % and 95 % limits, error of each value)."""
     grid = np.linspace(0.05, 2.5, 50)
     native = 10.0 * np.asarray(q, dtype=float)
     return {
-        "rank": rank, "combination": model, "best_chi2_weighted": chi2, "best_log_rmse": 0.15, "converged": True,
-        "warnings": [BOUND_WARNING] if at_bounds else [], "at_bounds": list(at_bounds),
+        "rank": rank, "combination": model, "composition": model, "probability": probability,
+        "best_chi2_weighted": chi2, "best_log_rmse": 0.15, "converged": True,
+        "warnings": list(warnings or ()), "at_bounds": list(at_bounds),
+        "posterior": {"R_1": [radius, radius, 0.97 * radius, 1.03 * radius, 0.94 * radius, 1.06 * radius, 0.02],
+                      "D_1": [distance, distance, 0.9 * distance, 1.1 * distance, 0.8 * distance, 1.2 * distance, 1.0]},
         "display_q": grid.tolist(), "display_fit": (1e3 / (1 + (grid * radius) ** 4)).tolist(),
         "components": [{"type": model, "weight": 1.0, "amplitude": 2.5e4,
                         "params": {"R": radius, "sigma_R": 0.3, "D": distance, "sigma_D": 0.4}}],
         "global_params": {"background": 0.8, "resolution_amplitude": 0.0, "sigma_Res": 0.01, "nu_Res": 1.0},
-        "nfev": 140, "seconds": 2.34, "conditions_source": "single_component_screen",
-        "algorithm": "Bounded soft-L1 least_squares with weighted nonnegative linear-amplitude least squares",
+        "nfev": None, "seconds": 13.2, "conditions_source": "network_choice",
+        "algorithm": "Predict parameters: the proposal network's importance-weighted samples, each mode refined by "
+                     "bounded least squares, the posterior sampled around the best solutions",
         "native_q": native.tolist(), "native_fit": (1e3 / (1 + (native * radius) ** 4)).tolist(),
         "observed": list(map(float, intensity)), "sigma": list(map(float, sigma)),
     }
@@ -148,21 +151,44 @@ def test_the_shoulder_gives_a_length_scale_that_is_never_called_the_spacing(gala
     assert steps and "2π/q* = " in steps[0] and "not necessarily the particle spacing" in steps[0]
 
 
-def test_the_fit_starts_from_the_spacing_and_asks_for_the_model_when_families_tie(galaxi_run) -> None:
+def test_the_fit_reports_the_most_probable_and_asks_for_the_model_when_another_is_probable(galaxi_run) -> None:
+    """Predict parameters needs no start (no D from 2π/q*); the run reports the most probable solution with its
+    intervals, and asks for the model when another solution has a probability of at least 0.2."""
     session, report = galaxi_run
     call = session.catalog.fitter.calls[-1]
-    assert call["distance_nm"] == pytest.approx(report["gisaxs"]["spacing"]["distance_nm"])
-    assert 500 <= call["points"] <= 1000 and call["q_min"] >= 0
+    assert call["components"] == () and 500 <= call["points"] <= 1000 and call["q_min"] >= 0  # the network chooses
     fit = report["gisaxs"]["fit"]
-    assert [row["model"] for row in fit["solutions"]] == ["random_cylinder", "sphere"]
+    assert [row["model"] for row in fit["solutions"]] == ["random_cylinder", "sphere"] and fit["chosen"] == 0
+    assert [row["probability"] for row in fit["solutions"]] == [0.62, 0.38] and "distance_start_nm" not in fit
+    assert fit["solutions"][1]["intervals"]["R_1"]["low68"] == pytest.approx(0.97 * 9.4)
     assert len(fit["curves"]) == 2 and len(fit["data"]["q_inv_angstrom"]) == call["points"]
+    decision = _decision(report, "fit")
+    assert decision["decision"] == "random_cylinder: R = 6.1 nm, D = 398 nm, χ²/N = 1.22, probability 0.62"
+    assert decision["why"].startswith("the most probable solution of Predict parameters on ")
+    assert _decision(report, "fit intervals")["decision"] == "R 5.92–6.28 nm, D 358–438 nm (68 % of the posterior)"
     assert any(item["what"] == "fit caveat" and "no interparticle correlation" in item["decision"] for item in report["decisions"])
     model = next(item for item in report["needs_attention"] if item["item"] == "model")
+    assert model["why"] == (
+        "2 solutions have a probability of at least 0.2 (rank 1, random_cylinder: R = 6.1 nm, D = 398 nm, χ²/N = 1.22, "
+        "probability 0.62; rank 2, sphere: R = 9.4 nm, D = 53.4 nm, χ²/N = 1.31, probability 0.38): the curve alone "
+        "does not decide the model.")
     assert "sphere" in model["hint"] and "53.4" in model["hint"]  # the solution that agrees with the spacing
     compact = compact_report(report)
     assert "data" not in compact["gisaxs"]["fit"] and "curves" not in compact["gisaxs"]["fit"]
     text = pipeline_markdown(report)
     assert text.startswith("# GISAXS") and "## 拟合 / Fit of I(qy)" in text and "Peaks (radial" not in text
+    assert "| 1 (chosen) | random_cylinder | 0.62 | R 6.10 nm, σR/R 0.300, D 398.0 nm, σD/D 0.400 | 1.22 |  |" in text
+    assert "Predict parameters: GIMaP's network proposes compositions" in text and "Huber" not in text
+
+
+def test_a_close_second_solution_below_the_limit_is_not_a_question() -> None:
+    from src.gimap.features.assistant.application.gisaxs_choice import ASK_PROBABILITY, probability, rivals
+
+    assert ASK_PROBABILITY == 0.2
+    solutions = [{"probability": 0.7}, {"probability": 0.2}, {"probability": 0.19}, {"probability": None}]
+    assert rivals(solutions) == [solutions[1]] and rivals(solutions[:1]) == []
+    assert rivals([{"chi2": 1.2}, {"chi2": 1.21}]) == []  # a record without probabilities: nothing to ask
+    assert probability({"probability": "x"}) != probability({"probability": "x"})  # NaN
 
 
 def test_the_command_line_writes_the_cuts_and_the_fit(galaxi_run, tmp_path: Path) -> None:
@@ -194,8 +220,9 @@ def test_the_results_panel_shows_the_fit_and_saves_it(galaxi_run, tmp_path: Path
     assert section.fit_table.rowCount() == 2 and section.fit_plot.curve_count() == 2
     section.fit_table.selectRow(1)
     assert section.fit_plot.figure_state()["curves"][1][0] == "fit 2: sphere"
-    assert section.fit_table.columnCount() == 5 and section.fit_table.item(0, 0).text() == "random cylinder"
-    assert section.fit_table.horizontalHeaderItem(4).text() == "χ²/N"  # the quick fit's mean r², not a χ²ᵣ
+    assert section.fit_table.columnCount() == 6 and section.fit_table.item(0, 0).text() == "random cylinder"
+    assert section.fit_table.horizontalHeaderItem(1).text() == "p" and section.fit_table.item(0, 1).text() == "0.62"
+    assert section.fit_table.horizontalHeaderItem(5).text() == "χ²/N"  # the mean r², not a χ²ᵣ
     assert section.fit_plot.log_x_check.isChecked()
     curve = Path(section.save_curve(str(tmp_path / "curve.csv")))
     table = Path(section.save_table(str(tmp_path / "table.csv")))
@@ -209,9 +236,12 @@ def test_the_results_panel_shows_the_fit_and_saves_it(galaxi_run, tmp_path: Path
     section.fit_details.set_expanded(True)
     details = section.solution_details
     texts = [item.text() for item in details.values.findChildren(QLabel)]
-    for expected in ("sphere: R", "9.4 nm", "σR / R", "constant background", "σ_Res", "0.01 nm⁻¹", "140", "2.3 s"):
+    for expected in ("sphere: R", "9.4 nm (68 %: 9.12–9.68)", "σR / R", "constant background", "σ_Res", "0.01 nm⁻¹",
+                     "probability", "0.38", "13.2 s"):
         assert expected in texts, (expected, texts)
-    assert "D started at 2π/q* of the cut" in details.settings.text() and "soft-L1" in details.settings.text()
+    assert "evaluations" not in texts and "D started" not in details.settings.text()
+    assert "the composition the network chose" in details.settings.text()
+    assert "Predict parameters: the proposal network's" in details.settings.text()
     assert details.warnings.text() == "No warnings for this solution."
     shown = []
     panel.solutionRequested.connect(shown.append)
@@ -226,9 +256,11 @@ def test_the_results_panel_shows_the_fit_and_saves_it(galaxi_run, tmp_path: Path
     state, line = automatic_outcome(report)
     assert state == "ok" and line.startswith("GISAXS — halves: mean of both halves, 2π/q* = ")
     assert line.endswith("; 1 point(s) to check.") and "question" not in line and "both_abs" not in line
+    assert "most probable fit random cylinder R 6.1 nm (p 0.62, χ²/N 1.22)" in line
     texts = [item.text() for item in panel.findChildren(QLabel)]
     assert texts[0].startswith("GISAXS — halves: mean of both halves") and not any("question" in text for text in texts)
     assert "1 point(s) to check — see below" in texts and any(text.startswith("Model choice: ") for text in texts)
+    assert any(text.startswith("2 solutions have p ≥ 0.2: the curve alone does not decide the model.") for text in texts)
     # The decision on the line, its reason in the tooltip (2026-11 small-text review).
     halves = panel.findChild(QLabel, "guidedHalves")
     assert halves.text() == "Halves: Mean of both halves" and halves.toolTip() and " — " not in halves.text()
@@ -380,7 +412,7 @@ def test_the_saved_gisaxs_report_has_its_title_and_pictures(galaxi_run) -> None:
     assert "Automatic analysis, no AI" in page and page.count("data:image/png;base64,") >= 2
     captions = re.findall(r"<figcaption>(.*?)</figcaption>", page)
     assert len(captions) == 2 and not any("ring" in caption.lower() for caption in captions), captions
-    assert "best fit" in captions[1]
+    assert "most probable solution of Predict parameters" in captions[1]
 
 
 def test_the_results_built_in_chinese_are_in_chinese(galaxi_run) -> None:
@@ -483,7 +515,7 @@ def test_the_halves_the_analysis_chooses_are_for_its_frame_not_the_stored_choice
         page._sync_halves()
 
 
-# -- solutions at a search bound (the referees of the JAC draft: rank 1 on GALAXI has D at its 500 nm bound) ----------
+# -- solutions at a bound of their range (the referees of the JAC draft: a solution on GALAXI had D at its bound) ----
 
 
 @pytest.fixture(scope="module")
@@ -493,61 +525,47 @@ def bounded_runs():
     session = open_headless_session(DATA / GALAXI["frame"], saved_profiles=False)
     options = PipelineOptions(technique="gisaxs", geometry=_geometry(), incidence_deg=GALAXI["incidence_deg"])
     session.catalog.fitter = BoundFitter()
-    preferred = session.run_pipeline(options)
-    session.catalog.fitter = BoundFitter(everything_bound=True)
-    stuck = session.run_pipeline(options)
-    yield session, preferred, stuck
+    report = session.run_pipeline(options)
+    yield session, report
     session.close()
 
 
-def test_a_solution_at_a_search_bound_gives_way_to_a_close_one_without(bounded_runs) -> None:
-    """Among the solutions within 10 % of the first-ranked χ²/N the run reports the best-ranked one that converged
-    with no non-linear value at a search bound, and the tables name the values at a bound. Every number is formatted once,
-    from the fit record at full precision: 48.3484 is 48.3 in the table and in the open point (it was 48.4 there,
-    from the tool's answer rounded to four significant digits first)."""
+def test_the_most_probable_solution_is_reported_and_its_values_at_a_bound_are_a_point_to_check(bounded_runs) -> None:
+    """The run reports the most probable solution even with a value at a bound of its range; that value is a point
+    to check, and the tables name every value at a bound. Every number is formatted once, from the fit record at
+    full precision: 48.3484 is 48.3 in the table (it was 48.4 from the tool's answer rounded to four digits first)."""
     from src.gimap.features.assistant.application import fit_solutions_csv
     from src.gimap.features.assistant.application.gisaxs_report import gisaxs_batch_row
 
-    _session, report, _stuck = bounded_runs
+    _session, report = bounded_runs
     fit = report["gisaxs"]["fit"]
-    assert fit["chosen"] == 2 and fit["solutions"][2]["model"] == "sphere"
+    assert fit["chosen"] == 0 and fit["solutions"][0]["model"] == "random_cylinder"
+    # the fit's own warning for D at its bound is said once, by at_bounds (which bound); the others pass on
+    assert fit["solutions"][0]["warnings"] == [UNCONSTRAINED]
     decision = _decision(report, "fit")
-    assert decision["decision"] == "sphere: R = 9.44 nm, D = 48.3 nm, χ²/N = 1.36 (rank 3)"
-    assert "(rank 1, random_cylinder, has D at its upper bound, σh/h at its upper bound)" in decision["why"]
-    assert not any("no interparticle correlation" in item["decision"] for item in report["decisions"])
-    model = next(item for item in report["needs_attention"] if item["item"] == "model")
-    assert model["hint"].startswith("The run reports rank 3 (sphere: R = 9.44 nm, D = 48.3 nm, χ²/N = 1.36), the "
-                                    "best-ranked of them with no non-linear value at a search bound: rank 1 "
-                                    "(random_cylinder) has D at its upper bound, σh/h at its upper bound. ")
-    assert "Solutions whose D is within 15% of 2π/q* of the cut: sphere: R = 9.44 nm, D = 48.3 nm" in model["hint"]
-    assert "48.4" not in model["hint"] and not any(item["item"] == "fit" for item in report["needs_attention"])
-    text = pipeline_markdown(report)
-    assert f"| D at its upper bound, σh/h at its upper bound; {BOUND_WARNING} |" in text
-    # One number of decimals per quantity in every row: R 8.60 next to R 9.44, σR/R 0.300 (not 0.3).
-    assert "| 3 (chosen) | sphere | R 9.44 nm, σR/R 0.300, D 48.3 nm, σD/D 0.400 | 1.36 |  |" in text
-    assert "| random_cylinder | R 8.60 nm, " in text and "D 500.0 nm" in text
-    assert gisaxs_batch_row(report)[2] == "sphere R 9.44, D 48.3 nm, χ²/N 1.36 (rank 3)"
-    table = fit_solutions_csv(fit).splitlines()
-    assert table[2].endswith(",at_bounds,chosen") and table[3].endswith(",D:upper sigma_h:upper,False")
-    assert table[5].startswith("3,sphere,") and table[5].endswith(",,True")
-
-
-def test_a_first_solution_at_a_bound_without_a_free_alternative_is_a_point_to_check(bounded_runs) -> None:
-    from src.gimap.features.assistant.application.gisaxs_report import gisaxs_batch_row
-
-    _session, _report, report = bounded_runs
-    assert report["gisaxs"]["fit"]["chosen"] == 0
-    decision = _decision(report, "fit")
-    assert decision["decision"] == "random_cylinder: R = 8.6 nm, D = 500 nm, χ²/N = 1.26"
-    assert decision["why"].endswith(
-        "every solution within 10% of its χ²/N has a non-linear value at a search bound or did not converge")
+    assert decision["decision"] == "random_cylinder: R = 8.6 nm, D = 500 nm, χ²/N = 1.26, probability 0.55"
     assert any(item["what"] == "fit caveat" and item["decision"] == "D at its upper bound, σh/h at its upper bound"
                for item in report["decisions"])
+    assert any(item["what"] == "fit caveat" and item["decision"] == UNCONSTRAINED for item in report["decisions"])
     point = next(item for item in report["needs_attention"] if item["item"] == "fit")
-    assert point["why"].startswith("The first-ranked solution (random_cylinder) has D at its upper bound, σh/h at its "
-                                   "upper bound, and no solution within 10% of its χ²/N is free of search bounds")
-    assert "| 1 (chosen) | random_cylinder |" in pipeline_markdown(report)
-    assert gisaxs_batch_row(report)[2].endswith(" ⚠ D at its upper bound, σh/h at its upper bound")
+    assert point["why"] == ("The reported solution (random_cylinder) has D at its upper bound, σh/h at its upper "
+                            "bound: those values are not determined by the curve.")
+    model = next(item for item in report["needs_attention"] if item["item"] == "model")
+    assert model["why"].startswith("2 solutions have a probability of at least 0.2 (rank 1, random_cylinder: R = 8.6 nm")
+    assert "rank 2, random_cylinder: R = 6.01 nm, D = 30.9 nm, χ²/N = 1.28, probability 0.25" in model["why"]
+    assert "rank 3" not in model["why"]  # p 0.15: below the limit
+    text = pipeline_markdown(report)
+    assert f"| D at its upper bound, σh/h at its upper bound; {UNCONSTRAINED} |" in text
+    # One number of decimals per quantity in every row: R 8.60 next to R 9.44, σR/R 0.300 (not 0.3).
+    assert "| 3 | sphere | 0.15 | R 9.44 nm, σR/R 0.300, D 48.3 nm, σD/D 0.400 | 1.36 |  |" in text
+    assert "| 1 (chosen) | random_cylinder | 0.55 | R 8.60 nm, " in text and "D 500.0 nm" in text
+    assert gisaxs_batch_row(report)[2] == (
+        "random_cylinder R 8.60, D 500.0 nm, χ²/N 1.26, p 0.55 ⚠ D at its upper bound, σh/h at its upper bound")
+    table = fit_solutions_csv(fit).splitlines()
+    assert table[2].startswith("rank,model,chi2,probability,") and table[2].endswith(",at_bounds,chosen")
+    assert "R_low68,R_high68,h_low68,h_high68,D_low68,D_high68" in table[2]
+    assert table[3].startswith("1,random_cylinder,1.26,0.55,") and table[3].endswith(",D:upper sigma_h:upper,True")
+    assert table[5].startswith("3,sphere,") and table[5].endswith(",,False")
 
 
 def test_the_results_tab_selects_the_reported_solution_and_names_the_bounds(bounded_runs) -> None:
@@ -556,52 +574,42 @@ def test_the_results_tab_selects_the_reported_solution_and_names_the_bounds(boun
     from src.gimap.features.assistant.presentation.guided_words import words
 
     _app()
-    session, report, _stuck = bounded_runs
+    session, report = bounded_runs
     panel = GuidedResultsPanel(session.page.automation)
     panel.show_report(report)
     section = panel.gisaxs
-    assert section.fit_table.currentRow() == 2  # the solution the run reports, drawn on the plot
-    assert section.fit_table.item(0, 0).text() == "random cylinder ⚠" and section.fit_table.item(0, 3).text() == "500 ⚠"
-    assert section.fit_table.item(2, 0).text() == "sphere" and section.fit_table.item(2, 3).text() == "48.3"
+    assert section.fit_table.currentRow() == 0  # the solution the run reports, drawn on the plot
+    assert section.fit_table.item(0, 0).text() == "random cylinder ⚠" and section.fit_table.item(0, 4).text() == "500 ⚠"
+    assert section.fit_table.item(2, 0).text() == "sphere" and section.fit_table.item(2, 4).text() == "48.3"
+    assert [section.fit_table.item(row, 1).text() for row in range(4)] == ["0.55", "0.25", "0.15", "0.05"]
     bounds = section.findChild(QLabel, "guidedFitBounds")  # values the curve does not determine: a warning
     assert bounds.text() == "⚠ Not determined by the curve (at a search bound) — 1: D, σh/h; 2: σh/h; 4: ν_Res"
     assert bounds.property("gimapRole") == "warning"
     assert bounds.toolTip() == ("Values at a search bound, not determined by the curve — 1: D at its upper bound, σh/h at "
                                 "its upper bound; 2: σh/h at its lower bound; 4: ν_Res at its upper bound.")
     texts = [item.text() for item in panel.findChildren(QLabel)]
-    assert any(text.startswith("Reported: rank 3 (sphere), the best-ranked converged solution within 10%")
-               for text in texts), texts
+    assert not any(text.startswith("Reported: rank") for text in texts), texts
+    assert any(text.startswith("2 solutions have p ≥ 0.2") for text in texts)
     assert any(text.startswith("2π/q* = ") and text.endswith("not necessarily the particle spacing.") for text in texts)
     fitted = next(text for text in texts if text.startswith("Fitted: "))
     assert fitted.endswith(" · R, h and D in nm.")  # (what the fits are: the tooltip of “Fit of I(qy)”)
     heading = next(label for label in panel.findChildren(QLabel) if label.text() == "Fit of I(qy)")
-    assert heading.toolTip().startswith("Numerical fits of single particle families")
-    section.fit_table.selectRow(0)
+    assert heading.toolTip().startswith("Predict parameters: GIMaP's network proposes the particles")
     assert "⚠ D at its upper bound" in section.solution_details.warnings.text()
-    assert "chosen fit sphere R 9.44 nm (rank 3, χ²/N 1.36)" in automatic_outcome(report)[1]
+    assert ("most probable fit random cylinder R 8.6 nm (p 0.55, χ²/N 1.26) ⚠ D at its upper bound, σh/h at its upper "
+            "bound") in automatic_outcome(report)[1]
     panel.gisaxs.dispose()
     panel.deleteLater()
-    hint = next(item for item in report["needs_attention"] if item["item"] == "model")["hint"]
+    point = next(item for item in report["needs_attention"] if item["item"] == "fit")
+    model = next(item for item in report["needs_attention"] if item["item"] == "model")
     apply_language("zh")
-    try:  # the hint of three sentences, each by its form; the values at a bound as a list
-        shown = words(hint)
-        assert shown.startswith("本次运行报告第 3 名（sphere: R = 9.44 nm") and "D 处于搜索上界、σh/h 处于搜索上界" in shown
-        assert "不一定是粒子间距" in shown and shown.endswith("请选择你预期的粒子形状，在拟合中精修这个模型，并比较拟合曲线。")
+    try:  # by its form; the values at a bound as a list, the warnings of Predict parameters too
+        assert words(point["why"]) == "报告的解（random_cylinder）：D 处于搜索上界、σh/h 处于搜索上界；这些数值不由曲线确定。"
+        assert words(model["why"]).startswith("2 个解的概率都不低于 0.2（rank 1, random_cylinder: R = 8.6 nm")
+        assert words(model["hint"]) == "请选择你预期的粒子形状，在拟合中精修这个模型，并比较拟合曲线。"
+        assert words(UNCONSTRAINED) == "曲线对 sigma_h_1 约束很少"
     finally:
         apply_language(DEFAULT_LANGUAGE)
-
-
-def test_the_quick_fit_names_the_values_that_ended_on_a_bound() -> None:
-    from src.gimap.features.fitting.infrastructure.adapters.experimental_fit import ended_on_bounds
-
-    # ln R, σR/R, η (D), σD/D, ln h, σh/h for a random cylinder, then σ_Res and ν_Res (as the quick fit orders them).
-    lower = [0, 0.02, 0, 0.05, math.log(2), 0.02, 0.001, 1]
-    upper = [math.log(100), 0.9, 1, 0.9, math.log(500), 0.9, 0.1, 20]
-    z = [math.log(8), 0.3, 1.0, 0.2, math.log(10), 0.9, 0.05, 20.0]
-    assert ended_on_bounds(z, lower, upper, [2], {"sigma_res": None, "nu_res": None}) == [
-        (0, "D", "upper"), (0, "sigma_h", "upper"), (None, "nu_Res", "upper")]
-    z[2] = 0.0  # η = 0: D at its lower bound, the contact distance
-    assert ended_on_bounds(z[:4], lower[:4], upper[:4], [1], {"sigma_res": 0.02, "nu_res": 2.0}) == [(0, "D", "lower")]
 
 
 def test_the_gisaxs_report_says_what_its_numbers_are(galaxi_run) -> None:
@@ -616,7 +624,8 @@ def test_the_gisaxs_report_says_what_its_numbers_are(galaxi_run) -> None:
     assert q["why"].endswith("q_y and the length scale 2π/q* of the horizontal cut barely change")
     errors = _decision(report, "uncertainties")
     assert errors["decision"] == "statistical only" and report["error_model"] == "poisson"
-    assert "Poisson counting statistics of each bin" in errors["why"] and "no ± for R, h or D" in errors["why"]
+    assert "Poisson counting statistics of each bin" in errors["why"]
+    assert "the intervals of R, h and D are the posterior of Predict parameters" in errors["why"]
     whats = [item["what"] for item in report["decisions"]]
     assert whats.index("q") < whats.index("uncertainties") < whats.index("horizontal cut")
 
@@ -624,8 +633,8 @@ def test_the_gisaxs_report_says_what_its_numbers_are(galaxi_run) -> None:
 def test_the_length_scale_decision_says_what_it_is_once(galaxi_run) -> None:
     _session, report = galaxi_run
     decision = _decision(report, "length scale")
-    assert decision["why"] == ("a length scale, not necessarily the particle spacing; check it with a model fit, which "
-                               "starts one of its distances D from it; a form factor or the beam tail makes a shoulder too")
+    assert decision["why"] == ("a length scale, not necessarily the particle spacing; check it with a model fit; a form "
+                               "factor or the beam tail makes a shoulder too")
     line = next(text for text in pipeline_markdown(report).splitlines() if text.startswith("- **length scale**"))
     assert line.count("a length scale") == 1 and line.count("shoulder of the cut") == 1 and line.count("2π/q*") == 1
 
@@ -633,27 +642,32 @@ def test_the_length_scale_decision_says_what_it_is_once(galaxi_run) -> None:
 def test_a_linear_term_at_zero_is_said_and_not_counted_as_a_search_bound(galaxi_run) -> None:
     """The amplitudes, BG and the beam-tail amplitude A are solved non-negative: one at 0 is a caveat of the reported
     solution, not a value at a search bound (the GALAXI sphere the run reports has BG = 0)."""
-    from src.gimap.features.assistant.application.gisaxs_choice import chosen_index, zero_terms
+    from src.gimap.features.assistant.application.gisaxs_choice import zero_terms
 
     _session, report = galaxi_run
     fit = report["gisaxs"]["fit"]
     assert fit["chosen"] == 0 and fit["solutions"][0]["globals"]["resolution_amplitude"] == 0.0
     caveat = next(item for item in report["decisions"] if item["what"] == "fit caveat" and "non-negativity" in item["decision"])
     assert caveat["decision"] == "beam-tail amplitude A at 0, the non-negativity limit"
-    assert "not counted among the values at a search bound" in caveat["why"]
+    assert "not counted among the values at a bound of their range" in caveat["why"]
     assert caveat["why"].endswith("σ_Res and ν_Res do not change the curve")
-    assert "no non-linear value at a bound" in pipeline_markdown(report)
+    assert "A non-linear value at a bound of its range (the note column)" in pipeline_markdown(report)
     sphere = {"chi2": 1.36, "converged": True, "at_bounds": [], "globals": {"background": 0.0, "resolution_amplitude": 252.5}}
-    bound = {"chi2": 1.26, "converged": True, "at_bounds": [{"parameter": "D", "bound": "upper", "component": 0}]}
-    assert zero_terms(sphere) == ["background BG"] and chosen_index([bound, sphere]) == 1  # BG = 0 does not flag it
+    assert zero_terms(sphere) == ["background BG"]
+    # the fit's own warning for a linear term at its limit is not said twice (the caveat above says it)
+    from src.gimap.features.assistant.application.gisaxs_tools import _solution
+
+    row = _row([0.01, 0.02], [1.0, 2.0], [0.1, 0.1], 1, "sphere", 5.0, 40.0, 1.1,
+               warnings=["res_amplitude stopped at a bound of its range", "R_1 stopped at a bound of its range"])
+    assert _solution(row)["warnings"] == ["R_1 stopped at a bound of its range"]  # at_bounds empty: kept
 
 
 class PoorFitter(FakeFitter):
-    """One converged solution far from its curve: χ²/N of hundreds, as the quick fit gives the public AgBh SAXS frame
+    """One converged solution far from its curve: χ²/N of hundreds, as a fit of the public AgBh SAXS frame gives
     (the Bragg rings of a calibrant, no particles)."""
 
-    def __call__(self, q, intensity, sigma, *, components=(), distance_nm=None, report=None, cancelled=None):
-        self.calls.append({"points": len(q), "distance_nm": distance_nm, "q_min": float(np.min(q))})
+    def __call__(self, q, intensity, sigma, *, components=(), report=None, cancelled=None):
+        self.calls.append({"points": len(q), "components": components, "q_min": float(np.min(q))})
         return [_row(q, intensity, sigma, 1, "sphere", 7.18, 16.9, 472.0)]
 
 

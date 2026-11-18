@@ -20,7 +20,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tools.collect_licenses import collect
-from tools.list_fit1d_release_files import KIT, MANIFEST, release_files
 
 EXCLUDE = re.compile(
     r'^(\.github/|docs/research/|docs/agents/eval/local/|work/|src/gimap/features/trainset/)'
@@ -31,16 +30,14 @@ EXCLUDE = re.compile(
 )
 
 
-def source_files(root: Path) -> tuple[list[str], dict | None]:
+def source_files(root: Path) -> list[str]:
     names = subprocess.check_output(['git', '-C', str(root), 'ls-files', '-z']).decode().split('\0')
-    kit = release_files(root)
-    selected = {name for name in names if name and not name.startswith(KIT + '/') and not EXCLUDE.search(name)}
-    selected.update(kit['files'])
+    selected = {name for name in names if name and not EXCLUDE.search(name)}
     for name in selected:
         path = root / name
         if not path.is_file() or path.is_symlink():
             raise ValueError(f'Not a regular release file: {name}')
-    return sorted(selected), kit['manifest']
+    return sorted(selected)
 
 
 def build(prefix: Path, output: Path) -> Path:
@@ -62,7 +59,7 @@ def build(prefix: Path, output: Path) -> Path:
                     'from PyQt5 import QtCore; import tensorflow; print("Release runtime imports passed")'], check=True)
 
     from src.gimap.shared.version import __version__
-    names, kit_manifest = source_files(ROOT)
+    names = source_files(ROOT)
     output.mkdir(parents=True, exist_ok=True)
     package_name = f'GIMaP-{__version__}-macos-{arch}-portable'
     with tempfile.TemporaryDirectory(prefix='gimap-package-') as temporary:
@@ -72,8 +69,6 @@ def build(prefix: Path, output: Path) -> Path:
             target = application / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / name, target)
-        if kit_manifest:
-            (application / KIT / MANIFEST).write_text(json.dumps(kit_manifest, indent=1) + '\n')
         # Test the files that will actually ship, where omitted optional workspaces are absent.
         check_home = Path(temporary) / 'check-home'
         check_home.mkdir()

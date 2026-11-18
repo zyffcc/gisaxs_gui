@@ -57,17 +57,14 @@ FIGURE_EMPTY = "Add curves (or Use current cut), then Fit curve.\nSelect a candi
 PARAMETERS_EMPTY = "Select a candidate on the left: its components and parameters, with units."
 LOG_EMPTY = "What each curve's fit did, while the batch runs."
 STAGE_LABELS = {
-    "experimental_physical": "Physical fit",
-    "fit1d": "fit1d",
     "posterior": "Network + posterior",
 }
 RMSE_TIP = ("Natural-log RMSE over the measured curve, including measurement noise. "
             "Review peak positions, overall shape and residuals; no mandatory cutoff is applied.")
 EXPERIMENTAL = "Check every candidate's fit; refine it in Fitting before reporting it."
 """The line under the title (the window's one caveat; the details are its tooltip, ``EXPERIMENTAL_TIP``)."""
-EXPERIMENTAL_TIP = ("Predict parameters gives each candidate's probability and the posterior intervals of its values; "
-                    "the physical fit and fit1d give starts to check. logRMSE and RMS/σ include the measurement "
-                    "noise. The method is chosen in Parameters… ▸ Fit method.")
+EXPERIMENTAL_TIP = ("Predict parameters gives each candidate's probability and the posterior intervals of its values. "
+                    "logRMSE and RMS/σ include the measurement noise.")
 CURRENT_CUT = "Input: the current cut of Fitting (q in nm⁻¹); each side fitted separately"
 """The input line for Use current cut (Fitting converts its q to nm⁻¹; the halves are fitted one by one)."""
 FINISHED = "Finished in {seconds} s · {failures} failed files · {count} candidates saved."
@@ -359,15 +356,7 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
             self.job.completed.connect(self._completed)
             self.job.finished.connect(self._finished)
             self._set_running(True)
-            method = payload["options"]["method"]
-            starting = (
-                "Starting numerical physical fitting…"
-                if method == "experimental"
-                else "Starting fit1d (network + physical fit)…"
-                if method == "fit1d"
-                else "Starting Predict parameters (network + posterior)…"
-            )
-            self.show_status(lambda: tr(starting))
+            self.show_status(lambda: tr("Starting Predict parameters (network + posterior)…"))
             self.job.start()
         except Exception as exc:
             QMessageBox.warning(self, tr("1D Predict"), str(exc))
@@ -497,8 +486,8 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
             r["display_fit"],
             color="#2563eb",
             lw=1.8,
-            label=({"experimental_physical": "Physical fit", "fit1d": "fit1d model", "posterior": "Predicted, refined"}
-                   .get(r.get("best_source"), "Model forward")) + f" · {len(r['display_q'])} display points",
+            label=({"posterior": "Predicted, refined"}.get(r.get("best_source"), "Model forward"))
+            + f" · {len(r['display_q'])} display points",
         )
         for name, values in r.get("display_components", {}).items():
             ax.plot(r["display_q"], values, lw=1.1, ls="--", label=name)

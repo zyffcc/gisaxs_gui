@@ -1,4 +1,4 @@
-"""The single-curve page of Fitting: open a curve, fit it (four methods, one button), results, save."""
+"""The single-curve page of Fitting: open a curve, fit it (three methods, one button), results, save."""
 
 from __future__ import annotations
 
@@ -68,8 +68,82 @@ def _wait(page, limit: float = 120.0) -> None:
     QApplication.processEvents()
 
 
+def _sphere(radius: float) -> FitModel:
+    """The truth with another radius."""
+    return _truth().with_values({(0, "R"): radius})
+
+
+def _analyze_solution(radius: float) -> dict:
+    """A row of Analyze's automatic analysis (Predict parameters' rows, Fitting's conventions: ``cut_model``): the
+    truth with this radius, and the curve it draws."""
+    params = {"R": radius, "sigma_R": 0.15, "D": 40.0, "sigma_nn": 0.25}
+    components = [{"type": "sphere", "type_id": 1, "weight": 1.0, "amplitude": 2000.0, "params": params,
+                   "structure_factor": True}]
+    return {"physics_backend": "cut_model", "law": "number_gauss", "combination": "sphere", "components": components,
+            "global_params": {"background": 3.0}, "native_q": Q_NM.tolist(),
+            "native_fit": evaluate(_sphere(radius), Q_NM).tolist()}
+
+
+class PredictJobs:
+    """In place of the job runner for Predict parameters (``posterior_job.run_predict``): ``answer(payload, report,
+    cancelled)`` gives the job's value; ``report(done, total, message)`` is its progress, ``cancelled()`` whether the
+    page cancelled it. ``payloads``: what the page asked, in order."""
+
+    def __init__(self, answer):
+        self.answer, self.payloads, self.cancelled = answer, [], set()
+
+    def run(self, request, on_progress):
+        from src.gimap.app.jobs import JobError, JobProgress, JobResult
+
+        self.payloads.append(request.payload)
+
+        def report(done, total, message=""):
+            on_progress(JobProgress(request.job_id, done, total, message))
+
+        try:
+            value = self.answer(request.payload, report, lambda: request.job_id in self.cancelled)
+        except RuntimeError as exc:
+            status = "cancelled" if request.job_id in self.cancelled else "failed"
+            return JobResult(request.job_id, status, error=JobError(status, str(exc)))
+        return JobResult(request.job_id, "succeeded", value=value)
+
+    def cancel(self, job_id):
+        self.cancelled.add(job_id)
+        return True
+
+
+def _solutions(payload, radii, probabilities=None) -> dict:
+    """The value of a Predict job: spheres of these radii (the rest as the truth), in this order, each with its χ²ᵣ on
+    the points the job was asked to fit."""
+    from src.gimap.features.fitting.application.single_fit import FitData, model_to_dict, residuals
+
+    data = FitData.prepare(payload["q"], payload["intensity"], payload["sigma"])
+    probabilities = probabilities or [round(1.0 / len(radii), 3)] * len(radii)
+    rows = []
+    for radius, probability in zip(radii, probabilities):
+        model = _sphere(radius)
+        r = residuals(model, data)
+        free = sum(1 for _path, parameter in model.parameters() if parameter.free)
+        rows.append({"composition": 0, "name": "sphere (S)", "probability": probability,
+                     "model": model_to_dict(model), "chi2": float(r @ r) / (data.q.size - free), "values": {},
+                     "flags": []})
+    return {"solutions": rows}
+
+
+def _predicting(page, answer) -> PredictJobs:
+    """``page`` with a stand-in for Predict parameters: its network there, its job answered by ``answer`` — radii (the
+    solutions ``_solutions`` makes of them, most probable first) or a function of (payload, report, cancelled)."""
+    if not callable(answer):
+        radii = list(answer)
+        answer = lambda payload, *_rest: _solutions(payload, radii)  # noqa: E731
+    jobs = PredictJobs(answer)
+    page.predict_available = lambda: True
+    page.view_model.context.jobs = jobs
+    return jobs
+
+
 def test_a_curve_opens_on_the_first_step_that_needs_the_person(tmp_path) -> None:
-    page = _page(quick_fit=lambda *args, **kwargs: [])
+    page = _page()
     assert page.step_rail.state("curve") == "pending" and not page.fit_button.isEnabled()
     assert page.open_curve(_curve_file(tmp_path))
     assert page.step_rail.state("curve") == "ok" and page.fit_button.isEnabled()
@@ -82,8 +156,18 @@ def test_a_curve_opens_on_the_first_step_that_needs_the_person(tmp_path) -> None
     # The starting model is brought to the level of the curve (its scales solved), not three decades below.
     level = evaluate(model, Q_NM[:5]).mean() / evaluate(_truth(), Q_NM[:5]).mean()
     assert 0.1 < level < 10
-    assert page.step_stack.currentWidget() is page.step_pages["fit"]  # a first curve: find the shape first
+    assert page.step_stack.currentWidget() is page.step_pages["model"]  # not known to be a GISAXS cut: set up Model
     page.dispose()
+
+    page = _page()
+    _predicting(page, [])
+    try:  # a horizontal cut through the beam, not fitted yet: Predict parameters first
+        assert page.open_curve(_curve_file(tmp_path, signed=True, name="cut_fit_input.dat"))
+        assert page.recommended_method() == "predict" and page.method() == "predict"
+        assert page.step_stack.currentWidget() is page.step_pages["fit"]
+        assert page.method_hint.text() == "Recommended for this curve: a GISAXS cut not fitted yet."
+    finally:
+        page.dispose()
 
 
 def test_refine_finds_the_values_with_errors_and_undo_brings_the_start_back(tmp_path) -> None:
@@ -129,7 +213,7 @@ def test_each_thing_is_said_once_and_a_missing_sigma_or_a_bound_is_a_warning(tmp
         assert page.curve_chip.text() == "sample_fit_input.dat" and "σ from the file" not in page.curve_info.text()
         assert not page.sigma_warning.isHidden() and page.sigma_warning.property("gimapRole") == "warning"
         assert page.sigma_warning.text() == "⚠ No σ in the file: every point weighted alike (ln I fitted)"
-        assert "Poisson" in page.sigma_warning.toolTip() and page.weighting_note.toolTip() == page.sigma_warning.toolTip()
+        assert "Predict parameters takes a relative σ" in page.sigma_warning.toolTip() and page.weighting_note.toolTip() == page.sigma_warning.toolTip()
         assert page.weighting_note.text() == "⚠ No σ in the file: every point weighted alike"
         assert not page.weighting_note.isHidden()
         assert "Å⁻¹" in page.curve_card.toolTip() and "Å⁻¹" not in page.curve_info.text().splitlines()[0]
@@ -181,7 +265,7 @@ def test_the_range_and_the_halves_choose_the_points(tmp_path) -> None:
 
 
 def test_the_log_q_band_keeps_the_fitting_range_in_data_units(tmp_path) -> None:
-    page = _page(quick_fit=lambda *args, **kwargs: [])
+    page = _page()
     try:
         assert page.open_curve(_curve_file(tmp_path))
         page.set_range((0.2, 1.5))
@@ -209,21 +293,15 @@ def test_the_log_q_band_keeps_the_fitting_range_in_data_units(tmp_path) -> None:
 
 
 def test_a_solution_from_analyze_becomes_the_model(tmp_path) -> None:
-    from src.gimap.features.fitting.infrastructure.adapters.experimental_fit import forward
-
     page = _page()
     page.open_curve(_curve_file(tmp_path))
-    params = {"R": 6.0, "sigma_R": 0.15, "D": 40.0, "sigma_D": 0.3}
-    components = [{"type": "sphere", "type_id": 1, "weight": 1.0, "amplitude": 2000.0, "params": params}]
-    globals_ = {"background": 3.0, "resolution_amplitude": 0.0, "sigma_Res": 0.02, "nu_Res": 3.0}
-    row = {"combination": "sphere", "components": components, "global_params": globals_, "best_chi2_weighted": 1.1,
-           "native_q": Q_NM.tolist(), "native_fit": forward(Q_NM, components, globals_).tolist()}
+    row = dict(_analyze_solution(6.0), best_chi2_weighted=1.1)
     assert page.show_solution(row)
     model = page.session.model
     assert model.get((0, "R")).value == 6.0 and model.get((0, "sigma_R")).value == pytest.approx(0.15)
     assert "draws the same curve" in page.status_label.text()
     assert page.solutions_table.rowCount() == 1
-    # Analyze's number is the quick fit's χ²/N (mean r², no degrees-of-freedom correction), not a χ²ᵣ of this page.
+    # Analyze's number is its fit's χ²/N (mean r², no degrees-of-freedom correction), not a χ²ᵣ of this page.
     assert page.solutions_table.horizontalHeaderItem(4).text() == "χ²/N"
     assert page.solutions_table.item(0, 4).text() == "1.1" and "χ²/N" in page.solutions_table.item(0, 4).toolTip()
     page.dispose()
@@ -234,7 +312,7 @@ def test_save_the_fit_the_plot_and_the_model_and_load_a_model(tmp_path, monkeypa
 
     page = _page()
     page.open_curve(_curve_file(tmp_path))
-    page.run_fit()  # method: find the shape is not available without a quick fit → refine
+    page.run_fit()  # a curve that is not a GISAXS cut: Refine
     _wait(page)
     table = page.export_data_dialog(str(tmp_path / "fit.csv"))
     header = (tmp_path / "fit.csv").read_text(encoding="utf-8").splitlines()[0]
@@ -254,25 +332,24 @@ def test_save_the_fit_the_plot_and_the_model_and_load_a_model(tmp_path, monkeypa
     page.dispose()
 
 
-def test_find_the_particle_shape_lists_solutions_and_puts_the_best_in_the_model(tmp_path) -> None:
-    from src.gimap.features.fitting.bootstrap import create_quick_fit
-
-    page = _page(quick_fit=create_quick_fit())
+def test_predict_parameters_lists_solutions_and_puts_the_most_probable_in_the_model(tmp_path) -> None:
+    page = _page()
+    jobs = _predicting(page, lambda payload, *_rest: _solutions(payload, (6.0, 5.0, 7.0), (0.6, 0.3, 0.1)))
     page.open_curve(_curve_file(tmp_path))
-    assert page.method() == "shapes" and page.fit_step_button.text() == "Find the particle shape"
+    page.set_method("predict")
+    assert page.fit_step_button.text() == "Predict parameters"
     page.run_fit()
-    _wait(page, 300)
+    _wait(page)
     solutions = page.session.solutions
-    assert solutions and solutions == sorted(solutions, key=lambda item: item.chi2)
+    assert [s.probability for s in solutions] == [0.6, 0.3, 0.1] and len(jobs.payloads) == 1
     assert page.session.model == solutions[0].model and page.method() == "local"  # next: refine it here
     assert page.solutions_table.rowCount() == len(solutions) and not page.solutions_table.isHidden()
+    assert not page.solutions_table.isColumnHidden(5) and page.solutions_table.item(1, 5).text() == "0.30"
     best = solutions[0].model.components[0]
-    # the shape search's sizes are by number, Fitting's convention (cut_model); by number R is the truth's
-    assert best.family == "sphere" and best.law == "number_gauss"
-    assert number_size(best)[0] == pytest.approx(6.0, rel=0.1)
-    page.solutions_table.selectRow(min(1, len(solutions) - 1))
+    assert best.family == "sphere" and number_size(best)[0] == pytest.approx(number_size(_truth().components[0])[0])
+    page.solutions_table.selectRow(1)
     page.use_selected_solution()
-    assert page.session.model == solutions[min(1, len(solutions) - 1)].model
+    assert page.session.model == solutions[1].model
     page.dispose()
 
 
@@ -408,17 +485,6 @@ def test_saves_report_errors_and_leave_no_table_without_its_record(tmp_path, mon
     page.dispose()
 
 
-def _shape_solution(radius: float) -> dict:
-    """A row of the quick physical fit (Find the particle shape): a sphere of this radius."""
-    from src.gimap.features.fitting.infrastructure.adapters.experimental_fit import forward
-
-    params = {"R": radius, "sigma_R": 0.15, "D": 40.0, "sigma_D": 0.3}
-    components = [{"type": "sphere", "type_id": 1, "weight": 1.0, "amplitude": 2000.0, "params": params}]
-    globals_ = {"background": 3.0, "resolution_amplitude": 0.0, "sigma_Res": 0.02, "nu_Res": 3.0}
-    return {"combination": "sphere", "components": components, "global_params": globals_,
-            "native_q": Q_NM.tolist(), "native_fit": forward(Q_NM, components, globals_).tolist()}
-
-
 def test_a_fit_that_ends_after_another_curve_was_opened_is_not_kept(tmp_path) -> None:
     first = _curve_file(tmp_path, name="a_fit_input.dat")
     q, intensity, sigma = np.loadtxt(first, unpack=True)
@@ -439,9 +505,10 @@ def test_a_fit_that_ends_after_another_curve_was_opened_is_not_kept(tmp_path) ->
     assert "fit" not in json.loads((tmp_path / "b.json").read_text(encoding="utf-8"))
     page.dispose()
 
-    page = _page(quick_fit=lambda *args, **kwargs: [_shape_solution(radius) for radius in (5.0, 6.0, 7.0)])
+    page = _page()
+    _predicting(page, (5.0, 6.0, 7.0))
     page.open_curve(first)
-    assert page.method() == "shapes"
+    page.set_method("predict")
     page.run_fit()
     page.open_curve(second)
     model = page.session.model
@@ -451,9 +518,9 @@ def test_a_fit_that_ends_after_another_curve_was_opened_is_not_kept(tmp_path) ->
     page.dispose()
 
 
-def test_find_the_particle_shape_shows_on_the_rail_and_its_row_is_selected(tmp_path) -> None:
-    solution = _shape_solution
-    page = _page(quick_fit=lambda *args, **kwargs: [solution(radius) for radius in (5.0, 5.5, 6.0, 6.5, 7.0)])
+def test_predict_parameters_shows_on_the_rail_and_its_row_is_selected(tmp_path) -> None:
+    page = _page()
+    _predicting(page, (6.0, 5.5, 6.5, 5.0, 7.0))
     page.open_curve(_curve_file(tmp_path))
 
     def cells(name: str) -> tuple:
@@ -462,7 +529,7 @@ def test_find_the_particle_shape_shows_on_the_rail_and_its_row_is_selected(tmp_p
         return table.item(line, 1).text(), table.item(line, 2).text()
 
     assert cells("R")[0].endswith(" nm")  # before any fit: the unit in the value column
-    assert page.method() == "shapes"
+    page.set_method("predict")
     page.run_fit()
     _wait(page)
     solutions = page.session.solutions
@@ -541,33 +608,27 @@ def test_points_are_left_out_by_a_click_or_a_box_and_taken_back(tmp_path) -> Non
 
 
 def test_the_methods_that_take_one_curve_go_over_to_the_mean_when_both_halves_are_chosen(tmp_path) -> None:
-    """Analyze sends a cut with both halves on |q| by default: Find the particle shape, the AI proposal and fit1d
-    take one measurement per |q|. The page goes over to the mean of the halves and says so — what it shows, the
-    points a result is of and the record of an export are then the points that were fitted. Refine and Search
-    fit both halves, as they did."""
+    """Analyze sends a cut with both halves on |q| by default: Predict parameters takes one measurement per |q|. The
+    page goes over to the mean of the halves and says so — what it shows, the points a result is of and the record of
+    an export are then the points that were fitted. Refine and Search fit both halves, as they did."""
     from src.gimap.app.presentation.components.toast import visible_toasts
     from src.gimap.features.fitting.application.single_fit import BOTH_USES_MEAN, prepare_curve, residuals
-
-    asked = []
-
-    def quick_fit(q, intensity, sigma, **_options):
-        asked.append(np.asarray(q, dtype=float))
-        return [_shape_solution(radius) for radius in (5.5, 6.0, 6.5)]
 
     def said() -> int:
         return len([line for line in page.log_view.toPlainText().splitlines() if line.endswith(BOTH_USES_MEAN)])
 
-    page = _page(quick_fit=quick_fit)
+    page = _page()
+    jobs = _predicting(page, (5.5, 6.0, 6.5))
     page.open_curve(_curve_file(tmp_path, signed=True), "both_abs")
     assert page.session.side == "both" and page._data().q.size == 480
-    assert page.recommended_method() == ("fit1d" if page._fit1d_kit else "shapes")  # without the optional kit: shapes
-    page.set_method("shapes")  # a signed cut recommends fit1d when its kit is there; the shape search is chosen here
+    assert page.recommended_method() == "predict" == page.method()  # a GISAXS cut not fitted yet
     page.run_fit()
     _wait(page)
-    assert len(asked) == 1 and np.allclose(asked[0], Q_NM / 10.0)  # one measurement per |q|: the 240 points of the mean
+    asked = [np.asarray(payload["q"], dtype=float) for payload in jobs.payloads]
+    assert len(asked) == 1 and np.allclose(asked[0], Q_NM)  # one measurement per |q|: the 240 points of the mean
     assert page.session.solutions and "The fit failed" not in page.log_view.toPlainText()
     assert said() == 1 and any(toast.text() == BOTH_USES_MEAN for toast in visible_toasts(page.window()))
-    assert "Find the particle shape: 240 points" in page.log_view.toPlainText()
+    assert "Predict parameters: 240 points" in page.log_view.toPlainText()
     # The page is on the mean now, and shows it: the points drawn and the points the χ² is of are the fitted ones.
     assert page.session.side == "mean" and page.side_combo.currentData() == "mean" and page._data().q.size == 240
     assert page.session.solutions_are_current() and page.session.solutions_selection[0] == "mean"
@@ -579,31 +640,25 @@ def test_the_methods_that_take_one_curve_go_over_to_the_mean_when_both_halves_ar
     on_the_page = residuals(best.model, page._data())
     assert best.chi2 == pytest.approx(float(on_the_page @ on_the_page) / (240 - free))
     # A record written now says the mean (the q < 0 half is 2 % higher: both halves would be other points).
-    assert page.export_data_dialog(tmp_path / "shape.csv")
-    record = json.loads((tmp_path / "shape.json").read_text(encoding="utf-8"))
+    assert page.export_data_dialog(tmp_path / "predicted.csv")
+    record = json.loads((tmp_path / "predicted.json").read_text(encoding="utf-8"))
     assert record["points"]["side"] == record["points"]["halves_used"] == "mean" and record["points"]["count"] == 240
-    assert np.loadtxt(tmp_path / "shape.csv", delimiter=",", skiprows=1).shape[0] == 240
+    assert np.loadtxt(tmp_path / "predicted.csv", delimiter=",", skiprows=1).shape[0] == 240
 
-    # Predict parameters and fit1d get the same points (their fitters are not run here).
-    given = {}
-    page.predict_available = lambda: True
-    page._start_predict = lambda data, model, selection, curve: (given.setdefault("predict", (data, selection)),
-                                                                 page._finish())
-    page._start_fit1d = lambda data, model, selection, curve: (given.setdefault("fit1d", (data, selection)), page._finish())
-    for method in ("predict", "fit1d"):
-        page.set_side("both")
-        page.set_method(method)
-        page.set_range((0.3, 1.2))
-        assert page._data().q.size == 2 * int(((mean.q >= 0.3) & (mean.q <= 1.2)).sum())
-        page.run_fit(method)
-        _wait(page)
-        data = given[method][0]
-        assert np.all(np.diff(data.q) > 0) and data.q.min() >= 0.3 and data.q.max() <= 1.2
-        assert np.allclose(data.q, mean.q[(mean.q >= 0.3) & (mean.q <= 1.2)])
-        assert page.session.side == "mean" and np.array_equal(page._data().q, data.q)
-        page.set_range(None)
-    assert given["fit1d"][1][0] == "mean"  # the selection a fit1d result is of
-    assert said() == 3
+    # Within a fitting range: the same, on the points of the mean inside it.
+    page.set_side("both")
+    page.set_method("predict")
+    page.set_range((0.3, 1.2))
+    assert page._data().q.size == 2 * int(((mean.q >= 0.3) & (mean.q <= 1.2)).sum())
+    page.run_fit("predict")
+    _wait(page)
+    data = np.asarray(jobs.payloads[-1]["q"], dtype=float)
+    assert np.all(np.diff(data) > 0) and data.min() >= 0.3 and data.max() <= 1.2
+    assert np.allclose(data, mean.q[(mean.q >= 0.3) & (mean.q <= 1.2)])
+    assert page.session.side == "mean" and np.array_equal(page._data().q, data)
+    assert page.session.solutions_selection[0] == "mean"  # the selection the solutions are of
+    page.set_range(None)
+    assert said() == 2
 
     # Refine fits both halves on |q|, and nothing is said about a mean.
     page.set_side("both")
@@ -611,75 +666,27 @@ def test_the_methods_that_take_one_curve_go_over_to_the_mean_when_both_halves_ar
     page.run_fit()
     _wait(page)
     assert page.session.result is not None and page.session.result.points == 480 and page.session.side == "both"
-    assert said() == 3
-    # With one half or the mean chosen, the same methods take those points and have nothing to say.
+    assert said() == 2
+    # With one half or the mean chosen, Predict takes those points and has nothing to say.
     page.set_side("negative")
-    page.set_method("shapes")
+    page.set_method("predict")
     page.run_fit()
     _wait(page)
-    assert len(asked) == 2 and asked[1].size == 240 and page.session.side == "negative"
-    assert said() == 3
+    assert len(jobs.payloads) == 3 and len(jobs.payloads[2]["q"]) == 240 and page.session.side == "negative"
+    assert said() == 2
     page.dispose()
-
-
-def test_a_fit1d_result_of_a_cut_opened_on_both_halves_is_recorded_as_the_mean(tmp_path) -> None:
-    """fit1d on “Both halves on |q|” fitted the 240 points of the mean while the record of Save Data said side
-    “both” and the plot drew the 480 points of both halves under the model."""
-    from src.gimap.app.jobs import JobResult
-
-    class Runner:
-        """In place of the fit1d job: a result of its form for the points it was asked to fit."""
-
-        def run(self, request, on_progress):
-            payload = request.payload
-            q, intensity = payload["q"], payload["intensity"]
-            native = {
-                "summary": {"chi2_per_point": 1.0, "n_points": len(q), "status": "ok", "model": "general", "messages": []},
-                "curves": {"q_nm_inv": q, "intensity": intensity, "sigma": payload["sigma"], "model": intensity,
-                           "residual": [0.0] * len(q), "components": {}},
-                "table": [], "warnings": [], "settings": payload["options"],
-            }
-            return JobResult(request.job_id, "succeeded", value={"native": native, "mapping_row": {}})
-
-        def cancel(self, job_id):
-            return True
-
-    page = _page()
-    page.view_model.context.jobs = Runner()
-    try:
-        page.open_curve(_curve_file(tmp_path, signed=True), "both_abs")
-        assert page.session.side == "both" and page._data().q.size == 480
-        page.fit1d_composition.setCurrentIndex(page.fit1d_composition.findData("model"))
-        page.run_fit("fit1d")
-        _wait(page)
-        native = page.session.native_result
-        assert native is not None and native["summary"]["n_points"] == 240, page.status_label.text()
-        assert page.session.side == "mean" and page.side_combo.currentData() == "mean"
-        assert page.session.native_is_current() and page.session.native_selection[0] == "mean"
-        shown = {str(item[0]): len(item[1]) for item in page.plot._source}
-        assert shown["measured"] == 240  # the points under the fit1d curve are the ones it was fitted on
-        target = tmp_path / "fit1d.csv"
-        assert page.export_data_dialog(target) == target
-        record = json.loads(target.with_suffix(".json").read_text(encoding="utf-8"))
-        assert record["selection"]["side"] == "mean" and record["native_result"]["summary"]["n_points"] == 240
-        assert record["software_version"].startswith("GIMaP v")  # also the record of a fit1d result
-        assert np.loadtxt(target, delimiter=",", skiprows=1).shape[0] == 240
-        # Back on both halves the result is of other points: it is stale, and is not saved as theirs.
-        page.set_side("both")
-        assert not page.session.native_is_current() and page.export_data_dialog(tmp_path / "stale.csv") is None
-    finally:
-        page.dispose()
 
 
 def test_the_sentence_about_both_halves_is_said_in_chinese(tmp_path) -> None:
     from src.gimap.app.presentation.i18n import apply_language
     from src.gimap.features.fitting.application.single_fit import BOTH_USES_MEAN
 
-    page = _page(quick_fit=lambda *args, **kwargs: [])
+    page = _page()
+    _predicting(page, [])
     try:
         apply_language("zh", [page])
         page.open_curve(_curve_file(tmp_path, signed=True), "both_abs")
-        page.set_method("shapes")
+        page.set_method("predict")
         page.run_fit()
         said = [line for line in page.log_view.toPlainText().splitlines() if "两半取平均" in line]
         assert said and BOTH_USES_MEAN not in page.log_view.toPlainText()

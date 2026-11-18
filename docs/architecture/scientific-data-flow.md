@@ -167,8 +167,8 @@ Refine x by Symmetry 只在当前水平带内求左右对称轴并改会话中�
   `nan`），数值不变。`frames/` 中的探测器数据为读取原样（模块拼接、帧求和、缝隙码保留），不经掩膜与校正。
 - 批量拟合（`application/batch_fit.py`）：GIWAXS 峰为区域 χ 范围内、区域 q 窗口两侧各扩一个宽度的 I(q)（探测器 q 步长，
   σ 按帧类型为泊松或像素离散度），`fit_peak` 加权最小二乘（高斯、洛伦兹的 η 固定为 0 / 1）；GISAXS 模型为带符号的
-  `fit_input_curve` 连同所选的两半（`BatchChoices.fit_halves`）交给注入的快速物理拟合（`create_quick_fit(halves=…)`）。
-  起始值（上一帧 / 第一帧 / 每帧重新）只影响初值，不改变数据；失败帧不作为下一帧起点。
+  `fit_input_curve` 连同所选的两半（`BatchChoices.fit_halves`）交给注入的 Predict parameters（`create_curve_fit()`，
+  `halves=…`），每帧只用自己的数据。峰的起始值（上一帧 / 第一帧 / 每帧重新）只影响初值，不改变数据；失败帧不作为下一帧起点。
 - 设置文件 `gimap-analyze-settings` 只保存处理参数（不含数据）；仪器配置随文件保存几何，保证换电脑后 q 相同。
 - in-situ 序列只处理这些曲线文件；Recipe 捕获 Fitting 的模型与输入选择，不含任何探测器预处理。
 
@@ -180,8 +180,8 @@ Refine x by Symmetry 只在当前水平带内求左右对称轴并改会话中�
 - 平均（`mean_of_halves`）只在另一半两侧 `HOLE_STEPS`（2.5）个步长内都有测量点，或在同一 |q| 有点时才求平均；其余处用
   这一半原样，不插值。说明（note）写出平均到哪里、之后哪一半单独到哪里；有缺口时写出平均了几个点、几个点只来自一半。
 - 选了某一半而它没有点时抛 `MissingHalf`，消息恰为 “No points on the q > 0 half” / “No points on the q < 0 half”，
-  从不换成另一半（序列、快速拟合、Batch Export 为严格模式；Single analysis 不严格，记录的 `points.halves_used`
-  写出实际用的一半）。快速物理拟合（`create_quick_fit`：Find the particle shape、Batch Export、自动分析）对多于
+  从不换成另一半（序列、`create_curve_fit`、Batch Export 为严格模式；Single analysis 不严格，记录的 `points.halves_used`
+  写出实际用的一半）。`create_curve_fit`（Predict parameters：自动分析、Batch Export、Process with AI、命令行）对多于
   `MAX_FIT_POINTS`（1000）个点的曲线先合并相邻点，所以任意长的切线都能拟合；每个解附带 `prepared`（说明）与
   `preparation`（两半、点数、平均与合并）。
 

@@ -224,15 +224,17 @@ def test_where_1d_predict_writes_is_what_the_documents_say() -> None:
 
 
 def test_the_files_of_a_1d_predict_run_are_the_ones_the_documents_list() -> None:
-    """Three methods, three writers (fit1d's as the physical fit's): what every one writes for a curve."""
+    """One method, two writers: the job (workflow_v5) writes the run's files, Predict parameters (posterior_job) a
+    curve's. The physical fit and fit1d, which wrote a curve's files too, were removed in 0.2.0."""
     adapters = ROOT / "src" / "gimap" / "features" / "fitting" / "infrastructure" / "adapters"
-    writers = {name: _text(adapters / f"{name}.py") for name in ("workflow_v5", "experimental_fit", "posterior_job")}
+    writers = {name: _text(adapters / f"{name}.py") for name in ("workflow_v5", "posterior_job")}
+    assert not (adapters / "experimental_fit.py").exists() and not (adapters / "fit1d_method.py").exists()
     for_the_run = ("request.json", "batch_summary.json", "top20_candidates.json", "fitting_run_summary.json")
     for_every_curve = ("solutions.json", "display.npz", "fitting_curves.csv")
     for name in for_the_run:
         assert f'"{name}"' in writers["workflow_v5"], name
     for name in for_every_curve:  # the job (workflow_v5) leaves a curve's files to its method
-        assert all(f'"{name}"' in writers[method] for method in ("experimental_fit", "posterior_job")), name
+        assert f'"{name}"' in writers["posterior_job"], name
     assert not any('"candidates.npz"' in code for code in writers.values())  # V5's, removed in 0.2.0
     for path in (README, MANUAL):
         text = _text(path)
@@ -291,6 +293,54 @@ def test_statements_about_removed_things_are_gone() -> None:
         assert not [phrase for phrase in stale if phrase in text], path.name
     manual = _text(MANUAL)
     assert "### 9.1 Format Converter" in manual and "Remove Source from List" in manual and "Copy Table" in manual
+
+
+REMOVED_FITTING_CONTROLS = (
+    "Predict: the solutions", "Resolve default ranges during composition search",
+    "Resolve values at the edge of their range automatically", "Other compositions", "Constraints and ranges",
+    "fit1d network", "fit1d search", "fit1d curve type", "fit1d systematic error", "Try spheres and vertical cylinders",
+    "Try 1–3 vertical cylinders", "Use This Composition", "Predict each frame (fit1d)", "gisaxs1d_tables",
+    "threadpoolctl", "预测：解的得出方式", "搜索组成时处理默认范围边界", "其他组成", "约束与范围", "逐帧预测（fit1d）",
+)
+"""Controls and files of fit1d, the quick physical fit and Predict's options, all removed in 0.2.0: no document a
+user or a developer reads describes them (the changelog says that they were removed)."""
+
+
+def _manual_section(text: str, heading: str) -> str:
+    """One ``### heading`` of a manual, up to the next heading of any level."""
+    start = text.index(heading)
+    return text[start:text.index("\n#", start + len(heading))]
+
+
+def test_the_documents_describe_the_one_network_method_of_fitting() -> None:
+    """Fitting has one network method since 0.2.0, so the choice is simple: the Fit step's Method is Predict
+    parameters, Refine or Search, the 1D Predict window has no method to choose, and the analyses that fit a cut on
+    their own call Predict parameters. Both manuals' table of the methods lists exactly the Fit step's methods, and
+    no document describes the controls of the removed methods."""
+    from src.gimap.features.fitting.application.workflow_v5 import METHODS as WINDOW_METHODS, RETIRED_METHODS
+    from src.gimap.features.fitting.presentation.views.fit_step_view import METHODS
+
+    titles = [title for _key, title, _tip in METHODS]
+    assert titles == ["Predict parameters", "Refine the values in Model", "Search the ranges, then refine"]
+    assert WINDOW_METHODS == ("posterior",) and {"experimental", "fit1d"} <= set(RETIRED_METHODS)
+    bootstrap = _text(ROOT / "src" / "gimap" / "features" / "fitting" / "bootstrap.py")
+    assert "def create_curve_fit" in bootstrap and "create_quick_fit" not in bootstrap
+    zh = MANUAL.with_name("User_Manual_zh.md")
+    table = _manual_section(_text(MANUAL), "### 6.3 Fit methods")
+    assert re.findall(r"^\| \*\*(.+?)\*\* \|", table, flags=re.M) == titles
+    table_zh = _manual_section(_text(zh), "### 6.3 拟合方法")
+    assert re.findall(r"^\| \*\*[^*|]+\*\*（(.+?)） \|", table_zh, flags=re.M) == titles
+    # The 1D Predict window: one method, and the settings its Parameters… panel has.
+    window = _manual_section(_text(MANUAL), "### 6.4 Predict parameters and 1D Predict")
+    settings = _text(ROOT / "src" / "gimap" / "features" / "fitting" / "presentation" / "workflow_v5_settings.py")
+    for label in ("Complete composition", "Cut qz (nm⁻¹)", "Relative σ (if missing)", "Absolute σ floor", "Save Settings"):
+        assert f'"{label}"' in settings and f"**{label}**" in window, label
+    assert "**Fit method**" not in window and "Fit method" not in settings
+    documents = (README, MANUAL, zh, MANUAL.with_name("Physics_Manual.md"), MANUAL.with_name("Physics_Manual_zh.md"),
+                 ROOT / "docs" / "ui" / "workspaces" / "fitting.md", ROOT / "AGENTS.md")
+    for path in documents:
+        text = _text(path)
+        assert not [phrase for phrase in REMOVED_FITTING_CONTROLS if phrase in text], path.name
 
 
 NETWORK_RECORD = "src/gimap/features/fitting/domain/posterior/data/flow_v1.json"

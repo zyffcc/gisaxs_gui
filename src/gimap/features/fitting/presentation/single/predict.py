@@ -2,9 +2,9 @@
 (``application/single_predict.py``, ``infrastructure/adapters/posterior_job.py``).
 
 The particles to try (those of Model, or a choice of families for the network to choose among) are shown under the
-method; how the solutions are finished (least squares, a search from the samples, or the samples alone) is in
-Options. The solutions go to Results with their probability, the most probable into Model; the posterior's 68 %
-intervals of the solution in Model are listed there (``posterior_lines``).
+method; every solution is refined by least squares (``domain.posterior.refine.predict``, one path). The solutions go
+to Results with their probability, the most probable into Model; the posterior's 68 % intervals of the solution in
+Model are listed in Fit details (``posterior_lines``).
 """
 
 from __future__ import annotations

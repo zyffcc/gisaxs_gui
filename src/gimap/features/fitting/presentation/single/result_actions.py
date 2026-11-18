@@ -4,8 +4,8 @@
   is now), Fit Every Curve in This Folder… (In-situ series, each curve from this model);
 * the values: select rows of the table to fix them or let them fit (right-click does the same), or to see their
   range in Model — the next fit uses them;
-* what the fit did by itself (values at an edge it resolved, ``domain.fit_edges`` / ``fit1d_edges``);
-* the folds: other solutions or compositions to choose from, the constraints and ranges fit1d used.
+* what the fit did by itself and what stays at an edge of its range (``domain.fit_edges``);
+* the fold: the other solutions to choose from (Predict parameters, Analyze).
 """
 
 from __future__ import annotations
@@ -14,16 +14,15 @@ from PyQt5.QtWidgets import QAction
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from .fit1d_review import note_text
+from .method_hint import note_text
 from ...application.models import InSituSourceFrame
 
 DONE = "Done automatically:"
 FIXED = "{names}: fixed in Model. Fit Again to keep them there."
 FREED = "{names}: the next fit changes them. Fit Again to fit them."
-NOT_IN_MODEL = "The values selected are not in Model (a global term of fit1d): set them in Model."
+NOT_IN_MODEL = "The values selected are not in Model: set them in Model."
 RANGE_SHOWN = "The range of {name} is shown in Model: change its min or max there, then Fit Again."
 OTHER_SOLUTIONS = "Other solutions ({count})"
-OTHER_COMPOSITIONS = "Other compositions ({count})"
 FIT_INPUT_SUFFIX = "_fit_input.dat"
 
 
@@ -118,8 +117,7 @@ class ResultActionsMixin:
 
     def render_result_actions(self) -> None:
         session = self.session
-        native = session.native_result if session.result is None else None
-        fitted = session.result is not None or native is not None or bool(session.solutions)
+        fitted = session.result is not None or bool(session.solutions)
         running = self.fit_running()
         selected = (session.curve is not None and session.curve.path
                     and InSituSourceFrame.from_token(session.curve.path).columns is not None)
@@ -133,26 +131,18 @@ class ResultActionsMixin:
                                       and bool(session.model.components))
         for button in (self.next_refine_button, self.fit_again_button, self.series_button):
             button.setEnabled(not running)
-        if native is not None:
-            notes = list((native.get("fit1d_bounds") or {}).get("actions") or ())
-        elif self._fit_notes and self._fit_notes.get("result") is session.result and session.result is not None:
+        if self._fit_notes and self._fit_notes.get("result") is session.result and session.result is not None:
             notes = [note.to_dict() for note in self._fit_notes["actions"]]
         else:
             notes = []
         self.actions_label.setText("\n".join([tr(DONE)] + ["• " + note_text(note, self._path_name) for note in notes]))
         self.actions_label.setVisible(bool(notes))
-        candidates = self.fill_fit1d_candidates(native)
         solutions = bool(session.solutions)
-        self.alternatives.setVisible(candidates or solutions)
-        if candidates:
-            self.alternatives.toggle_button.setText(trf(OTHER_COMPOSITIONS, count=len(self._fit1d_candidates)))
-        elif solutions:
+        self.alternatives.setVisible(solutions)
+        if solutions:
             self.alternatives.toggle_button.setText(trf(OTHER_SOLUTIONS, count=len(session.solutions)))
         if solutions and session.result is None and not self.alternatives.is_expanded():
             self.alternatives.set_expanded(True)  # choosing among them is what they are for
-        self.constraints_section.setVisible(native is not None)
-        if native is not None:
-            self.fit1d_constraints_label.setText(self.fit1d_constraints_text(native))
         has_values = bool(self._row_paths) and fitted
         for widget in (self.fix_button, self.free_button, self.range_button):  # how: the table's tooltip
             widget.setVisible(has_values)

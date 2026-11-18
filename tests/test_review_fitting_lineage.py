@@ -11,7 +11,7 @@ import time
 import pytest
 from PyQt5.QtWidgets import QApplication
 
-from tests.test_fit_page import _curve_file, _page, _shape_solution
+from tests.test_fit_page import _analyze_solution, _curve_file, _page, _predicting, _solutions
 from tests.test_fit_page import _wait as _wait_fit
 from tests.test_fit_series import _model, _pages, _series
 from tests.test_fit_series import _wait as _wait_series
@@ -22,13 +22,14 @@ STALE = "Changed after the fit: Fit again"
 def test_solutions_hold_only_on_the_points_they_were_searched_on(tmp_path) -> None:
     gate = threading.Event()
 
-    def quick_fit(*_args, **_kwargs):
-        gate.wait(30)  # the search runs while the band is dragged
-        return [_shape_solution(radius) for radius in (5.0, 6.0, 7.0)]
+    def answer(payload, *_rest):
+        gate.wait(30)  # Predict parameters runs while the band is dragged
+        return _solutions(payload, (6.0, 5.0, 7.0))
 
-    page = _page(quick_fit=quick_fit)
+    page = _page()
+    _predicting(page, answer)
     page.open_curve(_curve_file(tmp_path))
-    assert page.method() == "shapes"
+    page.set_method("predict")
     searched_on = page.session.selection()
     page.run_fit()
     assert page.fit_running()
@@ -57,7 +58,7 @@ def test_solutions_hold_only_on_the_points_they_were_searched_on(tmp_path) -> No
 def test_a_solution_of_analyze_is_a_start_not_a_fit(tmp_path) -> None:
     page = _page()
     page.open_curve(_curve_file(tmp_path))
-    row = dict(_shape_solution(6.0), best_chi2_weighted=0.9)
+    row = dict(_analyze_solution(6.0), best_chi2_weighted=0.9)
     assert page.show_solution(row)
     assert page.session.solutions_selection is None and page.solutions_table.rowCount() == 1
     assert page.step_rail.state("fit") == "pending" and page.step_rail.detail("fit") == "From Analyze: Fit to refine it"

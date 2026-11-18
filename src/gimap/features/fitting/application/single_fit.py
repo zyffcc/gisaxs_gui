@@ -6,7 +6,7 @@ solutions from the other fitting methods, and what is exported.
   has measured points; in a hole of it, and where one half reaches further, the measured half alone),
   or one half — with σ carried along (σ of a mean: ½·√(σ₊² + σ₋²)); then the fitting range and the
   points left out. ``prepare_points`` also says what the points are made of.
-* ``model_from_solution``: a solution of the quick physical fit or of 1D Predict (``native_v5``)
+* ``model_from_solution``: a solution of Predict parameters (a row of 1D Predict or of Analyze, ``native_v5``)
   as a model, and how closely the model reproduces its curve.
 * ``export_table`` / ``fit_record``: the points, the model and its terms, the residuals; and the
   JSON record of the model, the fit and its settings written next to them.
@@ -73,20 +73,21 @@ SIDES = (
 SERIES_SIDES = tuple(item for item in SIDES if item[0] != "both")
 """What a series offers (``shared/signed_cut.FIT_HALVES``): every frame is fitted on one curve."""
 ANALYZE_SIDES = {"both_abs": "both", "mean": "mean", "positive": "positive", "negative": "negative"}
-ONE_CURVE_METHODS = ("shapes", "fit1d", "predict")
+ONE_CURVE_METHODS = ("predict",)
 """The methods that take one curve with one measurement per |q| (Refine and Search also fit both halves)."""
 BOTH_USES_MEAN = "Both halves on |q| cannot be fitted by this method: the mean of both halves is used."
 """Said when one of ``ONE_CURVE_METHODS`` runs while both halves are chosen: the page goes over to the mean,
 so that the points it shows and records are the points that were fitted."""
-QUICK_FIT_MIN_POINTS = 8
-"""The quick physical fit needs this many points of the curve it fits (more than ``MAX_FIT_POINTS`` are merged)."""
-TOO_FEW_FOR_QUICK_FIT = {
+CURVE_FIT_MIN_POINTS = 8
+"""Predict parameters on one cut (``bootstrap.create_curve_fit``) needs this many points (more than ``MAX_FIT_POINTS``
+are merged)."""
+TOO_FEW_FOR_CURVE_FIT = {
     "positive": "Only {points} points on the q > 0 half: this fit needs at least {minimum}",
     "negative": "Only {points} points on the q < 0 half: this fit needs at least {minimum}",
     "mean": "Only {points} points in the mean of both halves: this fit needs at least {minimum}",
     "": "Only {points} points in the curve: this fit needs at least {minimum}",
 }
-"""Why the quick physical fit refuses a curve, by what it would have fitted (``preparation["halves"]`` of
+"""Why the fit of one cut (``bootstrap.create_curve_fit``) refuses a curve, by what it would have fitted (``preparation["halves"]`` of
 its rows; ``""``: a curve with one side, taken as it came). Templates: ``{points}``, ``{minimum}``."""
 
 
@@ -228,7 +229,7 @@ CUT_MODEL_FAMILIES = {"sphere": "sphere", "random_cylinder": "cylinder", "cylind
 
 
 def cut_model_solution(row: Mapping) -> FitModel:
-    """A solution in Fitting's own conventions (``physics_backend`` "cut_model": the quick fit): its values as they
+    """A solution in Fitting's own conventions (``physics_backend`` "cut_model": Predict parameters): its values as they
     are, amplitudes as Int."""
     components = []
     for item in row.get("components") or ():
@@ -366,7 +367,7 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
 __all__ = [
     "ANALYZE_SIDES", "BASE_GLOBALS", "FAMILIES", "GLOBALS", "GRAZING", "INFO", "RESOLUTION", "grazing", "qz_plus_r", "derived_values",
     "intensity_size", "number_size", "sigma_nn_over_d", "SIZE_LAWS", "LINEAR", "NM_PER_A", "PHASES", "PROGRESS_LINE", "SIDES",
-    "BOTH_USES_MEAN", "ONE_CURVE_METHODS", "QUICK_FIT_MIN_POINTS", "SERIES_SIDES", "TOO_FEW_FOR_QUICK_FIT",
+    "BOTH_USES_MEAN", "ONE_CURVE_METHODS", "CURVE_FIT_MIN_POINTS", "SERIES_SIDES", "TOO_FEW_FOR_CURVE_FIT",
     "Component", "Curve", "FitData", "FitModel", "FitResult", "FitStopped", "MissingHalf", "Parameter", "PreparedCurve",
     "evaluate", "export_table", "fit", "fit_record", "fit_resolving", "fit_scales", "from_manual", "left_out_points", "log_rmse",
     "model_from_dict", "model_from_solution", "model_to_dict", "new_component", "parameter_text", "point_key",

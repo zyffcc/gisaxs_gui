@@ -1,4 +1,5 @@
-"""A solution of the quick physical fit (``native_v5``) in the parameters of the manual model.
+"""A solution row (``native_v5``: Predict parameters, or the quick fit of records before 0.2.0) in the parameters
+of the manual model.
 
 The quick fit and the manual model share their formulas — sphere, random cylinder (the manual
 “Cylinder”), vertical cylinder, the paracrystal S(q; D, σD) and the resolution peak

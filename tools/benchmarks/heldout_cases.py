@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 
-import fit1d_recovery as fr
+import recovery_cases as fr
 import yoneda_truth as yt
 
 COMPOSITIONS = {"sphere": ("sphere",), "vc": ("vc",), "sphere,sphere": ("sphere", "sphere"),

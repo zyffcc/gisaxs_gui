@@ -126,7 +126,7 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
-`requirements.txt` is the core: Analyze, Geometry Calibration, Fitting with fit1d, Series, Batch Export, the
+`requirements.txt` is the core: Analyze, Geometry Calibration, Fitting with Predict parameters, Series, Batch Export, the
 automatic analysis, XRR, Sputter and SEM. Add the optional parts you need, or all of them with
 `python -m pip install -r requirements-full.txt`:
 
@@ -152,8 +152,6 @@ python main.py
 
 The analysis package of Sputter's **Analyze** and **Static Frames** is part of the repository (`utils/sputter_client`, about 75 MB) and needs only
 `requirements.txt`; another folder chosen in the workspace or `GIMAP_SPUTTER_CLIENT` use another package.
-The fit1d kit of **Predict parameters (fit1d)** is part of the repository too (`utils/gisaxs1d_gui_kit`, about
-62 MB) and needs only `requirements.txt`.
 
 **macOS and BornAgain.** The released analysis workspaces do not require BornAgain. It is optional for
 research simulations and their tests; install it from the Homebrew formula `mlz/homebrew/bornagain@24.1` as a wheel built for the same
@@ -214,11 +212,11 @@ nanoparticles, GALAXI), about ten minutes each.
    Fitting…** exports every frame into a folder `<name>_fitting/` and opens **Fitting ▸ In-situ series**,
    which fits every frame on the mean of both halves or on one half (**Halves of the cut**).
 2. Fitting has four steps: **Curve → Model → Fit → Results**. In **Fit**, choose a method — **Predict
-   parameters** (GIMaP's network and posterior, below), **Find the particle shape (no AI)** (sphere, random
-   and vertical cylinder from several starts), **Refine the values in Model** or **Search the ranges, then
-   refine** — and press **Fit** (`Ctrl+Return`); **Stop** keeps the best values so far of *Refine* and
-   *Search* (a stopped shape search or Predict gives no new result). **Predict parameters (fit1d)** uses the
-   fit1d kit, which comes with GIMaP (`utils/gisaxs1d_gui_kit`; manual, section 6.4).
+   parameters** (GIMaP's network and posterior, below; chosen for a GISAXS cut not fitted yet), **Refine the
+   values in Model** or **Search the ranges, then refine** — and press **Fit** (`Ctrl+Return`); **Stop** keeps
+   the best values so far of *Refine* and *Search* (a stopped Predict gives no new result). Predict parameters is
+   Fitting's one network method: the fit1d kit and the quick physical fit (*Find the particle shape*) were
+   removed in 0.2.0, so the choice is simple.
 3. **Results** gives χ²ᵣ, every value ± 1σ and warnings (a value at a bound, strongly correlated values).
    The **Fitting** menu saves the data and fit (CSV with a JSON record), the plot and the model.
 
@@ -235,11 +233,15 @@ solution comes with its probability and the 68 % interval of every value. The ne
 Git repository and in the portable version and runs with numpy: neither TensorFlow nor PyTorch is needed.
 Physics and Methods, section 9.13, describes the method and its benchmarks.
 
-- **One curve**: Fitting ▸ Fit ▸ **Predict parameters**, then **Fit**; the solutions go to Results, the most
-  probable one into Model.
+- **One curve**: Fitting ▸ Fit ▸ **Predict parameters**, then **Fit**; **Particles** chooses what it tries
+  (*The particles in Model*, *Spheres and upright cylinders (1–2)* or *Any particles (1–3)*). The solutions go to
+  Results with their probability, the most probable one into Model; **Refine These Values** refines it. On one
+  core it takes about 5 s with the particles of Model and about 14 s choosing among one or two populations.
 - **Many curves**: **Tools ▸ 1D Predict — Fit Many Curves…** (also in the **Fitting** menu): **Add
-  curves…** or **Use current cut**, choose the method in **Parameters…** — *Predict parameters* (the
-  default), *Physical fit (numerical)*, which uses no network, or *fit1d* — then **Fit curve**.
+  curves…** or **Use current cut**, set the composition, the q unit and sides, the cut's q_z and the σ of files
+  without one in **Parameters…**, then **Fit curve**. The window has this one method.
+- **Without the window**: Run Automatic Analysis, Batch Export's particle model, Process with AI and the command
+  line fit a GISAXS cut with Predict parameters too.
 - **Output**: every run of the window writes a new folder `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the GIMaP user data folder: `request.json`, `batch_summary.json`,
   `top20_candidates.json`, `fitting_run_summary.json` and, for every curve and half, `solutions.json`,
   `display.npz` and `fitting_curves.csv`. The folders are not removed automatically.
@@ -248,7 +250,8 @@ Physics and Methods, section 9.13, describes the method and its benchmarks.
   missing file it does not start, and the message names the file.
 - The earlier networks of 1D Predict (*General V5* and *Single RC specialist*) were removed in 0.2.0: on fit1d's
   held-out curves V5's median error of R was 31 %, that of Predict parameters is 0.7 % (Physics and Methods,
-  section 10). fit1d stays: it is faster and its large errors are smaller (section 9.13).
+  section 10). fit1d and the quick physical fit were removed in 0.2.0 too; Physics and Methods, sections 9.12 and
+  9.13, keep fit1d's benchmark for comparison.
 
 ## Command Line and MCP
 
@@ -312,7 +315,6 @@ The core, `requirements.txt`:
 
 - numpy>=1.24,<2.0
 - scipy>=1.10
-- threadpoolctl>=3.1 (limits BLAS threads in fit1d workers)
 - matplotlib>=3.7
 - pyqtgraph>=0.13.7,<0.15
 - PyQt5>=5.15
@@ -372,7 +374,7 @@ found and what it did:
   the settings and instrument profiles are outside the checkout anyway (`%APPDATA%\GIMaP`). When the new
   version brings a file to a place where you have a different file of your own, the script stops before it
   changes anything.
-- Files that GIMaP checks byte for byte (the fit1d kit, the analysis package of Sputter) and that an older
+- Files that GIMaP checks byte for byte (the analysis package of Sputter) and that an older
   checkout holds with converted line endings are written again as the repository has them, also when there is
   nothing new to download. Git does not notice the difference on its own.
 - When Git cannot replace a file because another program has it open (GIMaP itself, an editor), the
@@ -409,7 +411,7 @@ git reset --hard origin/main
 ```
 
 Then run the script once, with the command at the top of this section. On Windows the two commands can leave
-files that GIMaP checks byte for byte (the fit1d kit, the analysis package of Sputter) with the line endings the
+files that GIMaP checks byte for byte (the analysis package of Sputter) with the line endings the
 older checkout had given them, and those parts do not start until the script has written them again. From then
 on, update with the script. (On Linux or macOS, where Windows PowerShell is missing, nothing was converted, and `git pull`
 works again after the two commands.)
@@ -418,8 +420,8 @@ works again after the two commands.)
 branch. To keep them, run `git stash` (edits) or `git branch my-work` (commits) first; afterwards
 `git stash pop` puts the edits back, and `git cherry-pick <commit>` brings a commit over. Do not merge or
 push `my-work` itself: it carries the old history. Files Git does not track stay, with one exception: where
-the new version has a file at the same place — for example files of the fit1d kit that you had copied into
-`utils/gisaxs1d_gui_kit/` by hand — the file of the new version replaces yours without asking.
+the new version has a file at the same place — for example a file you had copied by hand into a folder the new
+version brings, such as `utils/sputter_client/` — the file of the new version replaces yours without asking.
 
 To keep all of that instead, let the script do the first update: `git fetch origin`, then
 `git checkout origin/main -- tools/update_source.ps1`, then the script. It keeps the state you have as a
@@ -448,8 +450,8 @@ Third-party Notices**) lists it all:
   among others), so the package is distributed under the terms of the GPL-3.0 for those parts. Its
   `licenses\` folder holds the licence files of every bundled component (see `licenses\README.txt`).
 - The example data in `tests/data/external/` keep their own licences (GPL-3.0, CC BY 4.0 and others).
-- Section 5 of the notices covers the trained networks and research code bundled for Predict parameters,
-  fit1d and the Sputter workspace.
+- Section 5 of the notices covers the trained networks and research code bundled for Predict parameters
+  and the Sputter workspace.
 
 ## Feedback and Contact
 

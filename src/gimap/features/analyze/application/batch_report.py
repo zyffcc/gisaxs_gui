@@ -127,10 +127,11 @@ _MEANING = {
     "fit_plot": "the fitted values against the frame number",
     "fit_curves": "per frame and fitted peak: q (1/A), the data and the fit",
     "model_curves": "per frame: |q| in 1/nm (q in 1/A = q in 1/nm / 10), the points fitted, their sigma and the model",
-    "model_fit": "the model fit of every frame, one row per frame: the halves and points it was fitted on, the best "
-                 "model, chi2 = chi2/N (the mean of the squared sigma-normalised residuals over the points fitted; no "
-                 "degrees-of-freedom correction, not Fitting's reduced chi2), log RMSE, each component's weight and "
-                 "parameters in nm, and a note (the reason when a frame has no solution)",
+    "model_fit": "the model fit of every frame (Predict parameters), one row per frame: the halves and points it was "
+                 "fitted on, the most probable model ((S): with a paracrystal distance D), chi2 = chi2/N (the mean of "
+                 "the squared sigma-normalised residuals over the points fitted; no degrees-of-freedom correction, not "
+                 "Fitting's reduced chi2), log RMSE, its probability, each component's weight and parameters in nm, and "
+                 "a note (its warnings, or the reason when a frame has no solution)",
     "record": "the choices, every frame with its cuts, the frames that failed, every file written and the full "
               "settings of the first frame",
 }

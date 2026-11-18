@@ -81,7 +81,7 @@ from .operations import (
     inverse_arguments,
     setting_state,
 )
-from .gisaxs_choice import CLOSE_CHI2, LENGTH_SCALE, bound_phrases
+from .gisaxs_choice import ASK_PROBABILITY, LENGTH_SCALE, bound_phrases, interval, probability, rivals
 from .gisaxs_choice import chosen as chosen_solution
 from .gisaxs_export import fit_curve_table, fit_on, fit_solutions_csv
 from .gisaxs_report import cut_spans, pixel_span
@@ -220,9 +220,12 @@ __all__ = [
     "compact_report",
     "cut_spans",
     "pixel_span",
-    "CLOSE_CHI2",
+    "ASK_PROBABILITY",
     "LENGTH_SCALE",
     "bound_phrases",
+    "interval",
+    "probability",
+    "rivals",
     "chosen_solution",
     "fit_curve_table",
     "fit_on",

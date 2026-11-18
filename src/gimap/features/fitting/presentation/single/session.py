@@ -30,13 +30,13 @@ class Snapshot:
 
 @dataclass(frozen=True)
 class Solution:
-    """One solution of ``Find the particle shape``, 1D Predict or a wide search, as a model."""
+    """One solution of Predict parameters or of Analyze, as a model."""
 
     model: FitModel
     chi2: float
     source: str
     deviation: float = 0.0
-    """How much the model's curve differs from the solution's own (quick fit, AI)."""
+    """How much the model's curve differs from the solution's own."""
     probability: Optional[float] = None
     """Predict parameters: the posterior probability of this solution (its composition and mode)."""
     intervals: tuple = ()
@@ -84,12 +84,6 @@ class FitSession:
     solutions_selection: Optional[tuple] = None
     """The points the solutions' χ² is of: ``selection()`` when their search started; ``None`` for a
     solution of Analyze (no search on this page; its χ² is Analyze's)."""
-    native_result: Optional[dict] = None
-    """The original fit1d v2 result, including its curves, effective sigma, errors and warnings."""
-    native_selection: Optional[tuple] = None
-    native_model: Optional[FitModel] = None
-    native_settings: dict = field(default_factory=dict)
-    """The current fit1d controls; comparing with the saved result marks changed settings as stale."""
     edited: bool = False
     """Whether the person or a fit has changed the starting model."""
     excluded: set = field(default_factory=set)
@@ -119,7 +113,7 @@ class FitSession:
         return self.side, self.q_range, frozenset(self.excluded)
 
     def clear_curve(self) -> None:
-        """Close every result of a curve, including native research results, while keeping its model."""
+        """Close every result of a curve, while keeping its model."""
         self.set_curve(None)
         self.clear_history()
 
@@ -130,9 +124,6 @@ class FitSession:
         self.result_selection = None
         self.solutions = []  # the solutions of the curve before
         self.solutions_selection = None
-        self.native_result = None
-        self.native_selection = None
-        self.native_model = None
         self.excluded = set()
         self._last_kind = ""  # a range change on this curve is a step of its own
         if curve is None or not curve.signed:
@@ -231,12 +222,6 @@ class FitSession:
 
     def result_model_is_current(self) -> bool:
         return self.result is not None and self.result.model == self.model
-
-    def native_is_current(self) -> bool:
-        return (self.curve is not None and self.native_result is not None and self.result is None and self.native_model == self.model
-                and self.native_selection == self.selection()
-                and all(self.native_result.get("settings", {}).get(key) == value
-                        for key, value in self.native_settings.items()))
 
     def result_selection_is_current(self) -> bool:
         return self.result is not None and self.result_selection == self.selection()

@@ -73,6 +73,67 @@ def batch_compositions(types) -> dict:
     return {"compositions": [encoding.composition_index([(families[int(t)], True) for t in types])]}
 
 
+FLAG_SENTENCES = {
+    "unconstrained": "the curve says little about {name}",
+    "at_bound": "{name} stopped at a bound of its range",
+    "correlated": "{name} are strongly correlated",
+    "low_ess": "few effective samples: the intervals are rough",
+    "bic": "compared by χ² and the number of values (BIC): the posterior's sampling did not converge",
+}
+"""The flags of a solution as the sentences of a row's ``warnings``."""
+ROW_NAMES = {"res_width": "sigma_Res", "res_exponent": "nu_Res"}
+"""Fitting's global names as the rows name them (the other values keep their keys)."""
+
+
+def flag_sentences(flags) -> list[str]:
+    out = []
+    for flag in flags:
+        kind, _, name = flag.partition(":")
+        if kind in FLAG_SENTENCES:
+            out.append(FLAG_SENTENCES[kind].format(name=name.replace("~", " and ")))
+    return out
+
+
+def at_bounds(model, tolerance: float = 1e-4) -> list[dict]:
+    """The free shape and tail values of ``model`` on a bound of their range (within ``tolerance`` of it), as the
+    rows list them: ``parameter``, ``bound`` (lower / upper), ``component`` (index; None for the tail)."""
+    import math
+
+    out = []
+    for path, parameter in model.parameters():
+        owner, key = path
+        if not parameter.free or key in ("Int", "background", "res_amplitude", "k", "q_resolution"):
+            continue
+        if owner == "globals" and key not in ROW_NAMES:
+            continue
+        lower, upper = parameter.lower, parameter.upper
+        width = (upper - lower) if math.isfinite(upper) and math.isfinite(lower) else max(abs(parameter.value), 1.0)
+        for bound, edge in (("lower", lower), ("upper", upper)):
+            if math.isfinite(edge) and abs(parameter.value - edge) <= tolerance * width:
+                out.append(dict(parameter=ROW_NAMES.get(key, key), bound=bound,
+                                component=None if owner == "globals" else int(owner)))
+    return out
+
+
+def curve_rows(item, solutions, render_q, *, chosen_by: str) -> list[dict]:
+    """Rows of a curve's solutions with what the analyses that screened a cut read of a row: ``rank``, ``converged``,
+    ``at_bounds``, sentences in ``warnings``, ``seconds``, ``algorithm``, ``conditions_source`` (``chosen_by``),
+    ``unit_contract``."""
+    rows = []
+    for rank, solution in enumerate(solutions, start=1):
+        row = solution_row(solution, item, render_q)
+        row.update(
+            rank=rank, converged=True, at_bounds=at_bounds(solution.model), warnings=flag_sentences(solution.flags),
+            flags=list(solution.flags), seconds=float(solution.seconds), nfev=None, conditions_source=chosen_by,
+            algorithm="Predict parameters: the proposal network's importance-weighted samples, each mode refined by "
+                      "bounded least squares, the posterior sampled around the best solutions",
+            unit_contract=dict(q="nm^-1", R_h_D="nm", sigma_R_h_D="relative standard deviation",
+                               sigma_nn="sigma_nn/D, Hosemann; sigma_D = sigma_nn / sqrt(2 pi)", sigma_Res="nm^-1",
+                               nu_Res="dimensionless", amplitudes="input intensity units"))
+        rows.append(row)
+    return rows
+
+
 def solution_row(solution, item, render_q) -> dict:
     """A solution as a row of the 1D Predict window (``native_v5`` layout, Fitting's conventions: cut_model)."""
     import numpy as np
@@ -122,7 +183,7 @@ def fit_and_write(output, item, options, report, cancelled) -> list:
     network = posterior_network.load()
     report(0, 1, f"{item['side']}: weighting the network's samples", {})
     solutions = refine.predict(network, item["q"], item["observed"], item["sigma"],
-                               qz=float(options.get("fit1d_qz") or 0.0), **batch_compositions(options["components"]))
+                               qz=float(options.get("cut_qz") or 0.0), **batch_compositions(options["components"]))
     if cancelled():
         raise RuntimeError("Prediction cancelled")
     q = np.asarray(item["q"], float)

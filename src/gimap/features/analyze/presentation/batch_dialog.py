@@ -397,6 +397,8 @@ class BatchExportDialog(BatchFolderMixin, QDialog, BatchExportView):
             widget.setVisible(kind == FIT_PEAKS)
         for widget in (self.fit_model_caption, self.fit_model_combo):
             widget.setVisible(kind == FIT_MODEL)
+        for widget in (self.fit_start_caption, *self.fit_start_radios.values()):  # Predict parameters needs no start
+            widget.setVisible(kind == FIT_PEAKS)
         if kind == FIT_PEAKS:
             self.fit_targets_label.setText(tr("Peaks: {names} (the regions with a q window; add more with Cuts ▸ Ring)").format(
                 names=", ".join(self._fit_targets)))

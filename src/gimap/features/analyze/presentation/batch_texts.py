@@ -38,14 +38,14 @@ HALVES_UNUSED = "Used when the curve for Fitting is saved (Data, above) or a par
 """When the halves count (the end of the combo's tooltip): a batch that neither writes fit inputs nor fits a model
 says nothing under the combo, which is off."""
 MODEL_LINES = {
-    "mean": "Each frame: the model is fitted to the mean of both halves of the horizontal cut (Halves of the cut, "
-            "above); up to half a minute per frame.",
-    "positive": "Each frame: the model is fitted to the q > 0 half of the horizontal cut (Halves of the cut, "
-                "above); up to half a minute per frame.",
-    "negative": "Each frame: the model is fitted to the q < 0 half of the horizontal cut (Halves of the cut, "
-                "above); up to half a minute per frame.",
+    "mean": "Each frame: Predict parameters on the mean of both halves of the horizontal cut (Halves of the cut, "
+            "above); about 15 s per frame.",
+    "positive": "Each frame: Predict parameters on the q > 0 half of the horizontal cut (Halves of the cut, "
+                "above); about 15 s per frame.",
+    "negative": "Each frame: Predict parameters on the q < 0 half of the horizontal cut (Halves of the cut, "
+                "above); about 15 s per frame.",
 }
-"""What the particle-model fit of the batch is fitted to."""
+"""What the particle model of the batch (Predict parameters) is fitted to."""
 SENT_TO_FITTING = ("Each frame: the curve for Fitting (q in Å⁻¹, I, σ, pixels) → {file}. The folder then opens in "
                    "Fitting ▸ In-situ series.")
 """Send Series to Fitting: what is written, and what happens to it."""
@@ -54,13 +54,13 @@ SENT_GIWAXS = ("Fitting ▸ In-situ series fits particle form factors, made for 
                "ring regions.")
 """Send Series to Fitting of a GIWAXS series: what Fitting will fit its I(q) with, and where its peaks are fitted."""
 
-QUICK_FIT_REASONS = (
+CURVE_FIT_REASONS = (
     "Only {points} points on the q > 0 half: this fit needs at least {minimum}",
     "Only {points} points on the q < 0 half: this fit needs at least {minimum}",
     "Only {points} points in the mean of both halves: this fit needs at least {minimum}",
     "Only {points} points in the curve: this fit needs at least {minimum}",
 )
-"""The reasons of the quick physical fit that carry numbers (Fitting's ``TOO_FEW_FOR_QUICK_FIT``, written out
+"""The reasons of the fit of one cut that carry numbers (Fitting's ``TOO_FEW_FOR_CURVE_FIT``, written out
 here: a feature does not import another; a test keeps the two alike). Its reasons without a number — a half
 without points, a σ that cannot weight its point — are entries of the table as they are."""
 REASONS_SHOWN = 3
@@ -77,7 +77,7 @@ def _pattern(template: str) -> re.Pattern:
                               for index, part in enumerate(parts)), re.DOTALL)
 
 
-_PATTERNS = tuple((template, _pattern(template)) for template in QUICK_FIT_REASONS)
+_PATTERNS = tuple((template, _pattern(template)) for template in CURVE_FIT_REASONS)
 
 
 def halves_text(halves: str) -> str:
@@ -104,7 +104,7 @@ def try_failed_text(reason) -> str:
 
 
 def made_of_text(row: dict) -> str:
-    """What a solution of the model fit was fitted on (``preparation`` of the quick fit's rows): “Fitted:
+    """What a solution of the model fit was fitted on (``preparation`` of the rows of Predict parameters): “Fitted:
     Mean of both halves, 635 points (2 neighbouring points merged into one)”; ``""`` when the fit does not say."""
     made_of = row.get("preparation") or {}
     if not made_of.get("points"):
@@ -330,7 +330,7 @@ def batch_end_text(run, *, seconds: float, tables_error: str = "") -> tuple[str,
 
 __all__ = [
     "HALVES_FITTED", "HALVES_KEPT", "HALVES_NOTES", "HALVES_TEXTS", "HALVES_UNUSED", "MODEL_LINES", "ONE_HALF_REASONS",
-    "FAILED_SHOWN", "QUICK_FIT_REASONS", "SENT_GIWAXS", "SENT_TO_FITTING", "TRY_OTHER_HALVES", "batch_end_text", "end_title",
+    "CURVE_FIT_REASONS", "FAILED_SHOWN", "SENT_GIWAXS", "SENT_TO_FITTING", "TRY_OTHER_HALVES", "batch_end_text", "end_title",
     "end_toast_text", "failed_line", "failed_lines", "failure_reason", "fit_end_text", "fit_reason_text",
     "fit_toast_text", "fits_failed", "halves_text", "latest_fit_text", "made_of_text", "short_folder", "try_failed_text",
     "with_fits", "written_text",

@@ -71,14 +71,13 @@ class MainWindowComponents(HandoverMixin):
         self.analyze_page = self._create_analyze_page()
         self.compare_page = self._create_compare_page()
         self.sputter_page = self._create_sputter_page()
-        from src.gimap.features.fitting.bootstrap import create_fitting_view_model, create_quick_fit
+        from src.gimap.features.fitting.bootstrap import create_fitting_view_model
 
         self.fitting_view_model = create_fitting_view_model(ui.app_context)
         self.fitting_workspace = FittingWorkspace(
             ui,
             preferences=ui.app_context.preferences,
             view_model=self.fitting_view_model,
-            quick_fit=create_quick_fit(),
             frames=SeriesFrames(lambda: getattr(self.analyze_page, "view_model", None)),  # frames cut as in Analyze
         )
         self.predict_workspace = GisaxsPredictWorkspace(ui, LAYOUT)
@@ -185,18 +184,18 @@ class MainWindowComponents(HandoverMixin):
         """The automatic analysis (no AI) lives in the Analyze workspace: Results step and tab."""
         from src.gimap.features.assistant.bootstrap import create_guided_analysis
         from src.gimap.features.calibration.bootstrap import create_headless_calibration
-        from src.gimap.features.fitting.bootstrap import create_quick_fit
+        from src.gimap.features.fitting.bootstrap import create_curve_fit
 
         page = self.analyze_page
         guided = create_guided_analysis(
             self.ui.app_context, automation=page.automation, calibrator=create_headless_calibration(),
-            fitter=create_quick_fit(), parent=page,
+            fitter=create_curve_fit(), parent=page,
         )
         page.add_step_panel("results", guided.controls)
         page.add_result_panel(guided.progress_panel)
         page.add_result_panel(guided.results)
         page.set_automatic_analysis(run=guided.run, find_geometry=guided.find_geometry, stop=guided.stop)
-        page.set_model_fitter(create_quick_fit())  # batch fits of GISAXS cuts use Fitting's quick physical fit
+        page.set_model_fitter(create_curve_fit())  # batch fits of GISAXS cuts use Fitting's Predict parameters
         guided.stopping.connect(page.automatic_stopping)
         guided.started.connect(page.automatic_started)
         guided.progressed.connect(page.automatic_progress)
@@ -316,7 +315,7 @@ class MainWindowComponents(HandoverMixin):
         if self._assistant is None:
             from src.gimap.features.assistant.bootstrap import create_assistant_controller
             from src.gimap.features.calibration.bootstrap import create_headless_calibration
-            from src.gimap.features.fitting.bootstrap import create_quick_fit
+            from src.gimap.features.fitting.bootstrap import create_curve_fit
 
             self._assistant = create_assistant_controller(
                 self.ui,
@@ -324,7 +323,7 @@ class MainWindowComponents(HandoverMixin):
                 automation=self.analyze_page.automation,
                 show_analyze=lambda: self._page_requested("analyze"),
                 calibrator=create_headless_calibration(),
-                fitter=create_quick_fit(),
+                fitter=create_curve_fit(),
             )
         return self._assistant
 

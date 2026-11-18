@@ -17,7 +17,7 @@
 > [Physics and Methods Reference](../Physics_Manual.md) 9.13 与第 10 章；0.2.0 之前是 Workflow V5 `conditional_v2`（已删除）。因此：
 >
 > - 下文的打分（`RMS((log I_pred − log I_obs)/σ_log)`）、分支枚举、聚类与门禁都只属于 PosteriorV8，不是发布版本的行为；
-> - 下文说正向模型“以 `fitting-scientific-model.md` 为唯一权威”：发布版本的 Predict parameters 与快速物理拟合都用
+> - 下文说正向模型“以 `fitting-scientific-model.md` 为唯一权威”：发布版本的 Predict parameters（Fitting 唯一的网络方法；快速物理拟合与 fit1d 已在 0.2.0 删除）用
 >   `cut_model`（Physics and Methods 9.2）；
 > - “Sphere 和 Cylinder 的 sigma 为绝对宽度”只对手动模型的参数存储成立，当前的 `FitModel` 全部用相对宽度；
 > - 下文的阈值是协议要求，相应的 run、模型与 holdout artifact 没有冻结，不能当作结果引用。

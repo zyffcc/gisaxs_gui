@@ -51,7 +51,7 @@ def test_predict_on_the_page(tmp_path, monkeypatch):
         assert page.open_curve(_sphere_file(tmp_path)), page.status_label.text()
         page.set_model(FitModel((new_component("sphere", radius=3.0),)))
         page.set_method("predict")
-        assert not page.predict_row.isHidden() and page.fit1d_row.isHidden()
+        assert not page.predict_row.isHidden()
         page.predict_particles.setCurrentIndex(page.predict_particles.findData("model"))
         page.run_fit()
         _wait(page)
@@ -119,7 +119,7 @@ def test_the_batch_window_runs_predict(tmp_path, monkeypatch):
 
 
 def test_following_the_previous_frame_picks_the_closest_solution():
-    from src.gimap.features.fitting.presentation.single.series_fit1d import closest
+    from src.gimap.features.fitting.presentation.single.series_predict import closest
     from src.gimap.features.fitting.presentation.single.session import Solution
 
     def solution(radius, probability):

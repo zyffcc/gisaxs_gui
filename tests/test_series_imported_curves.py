@@ -201,7 +201,7 @@ def test_independent_import_does_not_change_folder_defaults_or_legacy_project_se
         original = dict(series.preferences.get("fitting_series_page", {}))
         series.open_imported_sources(sources, independent=True)
         _loaded(series)
-        series.set_series_method("fit1d")
+        series.set_series_method("predict")
         state = json.loads(json.dumps(series.project_state()))
         assert not series.follow_check.isEnabled() and not series.follow_check.isChecked()
         assert series.preferences.get("fitting_series_page", {}) == original
@@ -210,7 +210,7 @@ def test_independent_import_does_not_change_folder_defaults_or_legacy_project_se
         assert series.skip_odd_check.isChecked() and series.series_method() == "local"
         assert series.apply_project_state(state) == []
         _loaded(series)
-        assert series.series_method() == "fit1d"
+        assert series.series_method() == "predict"
         assert series.preferences.get("fitting_series_page", {}) == original
         series.open_imported_sources(sources, independent=True)
         _loaded(series)

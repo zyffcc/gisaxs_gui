@@ -23,18 +23,21 @@ composition does not have are never seen or moved by the flow, so the density of
 
 ## From samples to solutions (`posterior/infer.py`, `posterior/refine.py`)
 
-For a measured cut and each composition considered (given, or the head's most probable ones), N samples of the
-network are weighted by importance sampling against cut_model on the measured points: amplitudes of the populations,
-the beam tail and a constant by non-negative least squares and integrated out in the Laplace approximation, the
-model error integrated out exactly; weights L·π/q, effective sample size, and the evidence of the composition
-(Dax et al. 2023). The weighted samples fall into modes; each mode is refined by Fitting's least squares
-(`fit_engine`, method `lm`), or one search per composition starts from the samples (`global`), or the samples alone
-give the solution (`posterior`). When no mode of a composition refines below χ²/N = 2, one search of the ranges from
-the samples is added. Around each refined solution its posterior is sampled locally (`posterior/laplace.py`); with
-fewer than 50 effective samples its intervals are taken with tempered weights, and when any solution has fewer than 10
-the solutions are compared by BIC instead of their evidence. Every solution carries the refined values and errors, the
-posterior's median and 68 %/95 % intervals, χ²/N, its probability and flags (at a bound, unconstrained, correlated,
-few effective samples, compared by BIC).
+`refine.predict` is the one path that Predict parameters takes (Fitting, the 1D Predict window, Analyze's automatic
+analysis, Batch Export and the command line all call it; there are no options for how the solutions are finished).
+For a measured cut and each composition considered (given, or the head's three most probable among those allowed),
+1000 samples of the network are weighted by importance sampling against cut_model on the measured points: amplitudes
+of the populations, the beam tail and a constant by non-negative least squares and integrated out in the Laplace
+approximation, the model error integrated out exactly; weights L·π/q, effective sample size, and the evidence of the
+composition (Dax et al. 2023). The weighted samples fall into modes; the three heaviest modes of each composition are
+refined by Fitting's bounded least squares (`fit_engine`, method `local`). When no solution of one of the two best
+compositions refines below χ²/N = 2, one search of the ranges started from its 16 heaviest samples is added. Only the
+solutions within a BIC of 20 of the best (at most four) get their posterior sampled locally (`posterior/laplace.py`,
+400 samples per round); with fewer than 50 effective samples their intervals are taken with tempered weights, and when
+any of them has fewer than 10 the solutions are compared by BIC instead of their evidence, with the least-squares
+errors as intervals. Without σ, a relative σ is taken from the scatter of ln I about its local trend (at least 1 %).
+Every solution carries the refined values and errors, the posterior's median and 68 %/95 % intervals, χ²/N, its
+probability and flags (at a bound, unconstrained, correlated, few effective samples, compared by BIC).
 
 ## Files
 
@@ -50,7 +53,7 @@ few effective samples, compared by BIC).
 | `make_flow_fixture.py` | the small random network and PyTorch's numbers with which `tests/test_ml1d_flow.py` checks the numpy flow without PyTorch |
 | `build_tables.py` | the size-average tables of `cut_model` |
 | `maxwell/` | Slurm scripts of the runs on DESY's Maxwell cluster (array simulation on CPU nodes, training on one GPU) |
-| `../benchmarks/posterior_recovery.py` | the recovery benchmark of fit1d (same curves, same scoring) for the network, the refined solutions and the choice of composition |
+| `../benchmarks/posterior_recovery.py` | the recovery benchmark of fit1d (removed in 0.2.0; same curves of `../benchmarks/recovery_cases.py`, same scoring) for the network, the refined solutions and the choice of composition |
 
 ## The network that comes with GIMaP
 
@@ -70,6 +73,6 @@ python tools/ml1d/model_card.py --network NET/flow_v3 --evaluation report.json -
 with `--join`, and `maxwell/train.sbatch` the training.) Its record names the
 SHA-256 of the shards; the shipped record leaves out the paths of the computer it was trained on. On 2000 simulated
 cuts not trained on, its 68 %/95 % intervals hold the truth in 66–71 %/94–96 % for every value; the benchmarks against
-fit1d and V5 are in Physics and Methods, section 9.13, and `MODEL_CARD.md`.
+fit1d and V5 (both removed in 0.2.0) are in Physics and Methods, section 9.13, and `MODEL_CARD.md`.
 
 The seeds fix every shard (`numpy.random.SeedSequence(seed).spawn`); the shards are not kept in the repository.

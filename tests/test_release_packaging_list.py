@@ -23,14 +23,11 @@ from pathlib import Path
 
 import pytest
 
-from test_fit1d_release_manifest import install_kit
 from test_release_packaging_licenses import make_environment
 from tools.collect_licenses import collect
-from tools.list_fit1d_release_files import KIT, MANIFEST, release_files
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "tools" / "build_portable_release.ps1"
-KIT_HELPER = ROOT / "tools" / "list_fit1d_release_files.py"
 LICENSE_HELPER = ROOT / "tools" / "collect_licenses.py"
 APPEND_HELPER = ROOT / "tools" / "append_release_files.py"
 NETWORK = "src/gimap/features/fitting/domain/posterior/data/flow_v1"
@@ -54,7 +51,6 @@ TRACKED = {
     ".gitignore": (
         "config/user_parameters.json\nconfig/user_settings.json\nconfig/instrument_profiles.json\n"
         "research/\nvalidation/\nresults/\n*.h5\n*.npz\n__pycache__/\ngimap_analysis/\ntest.ipynb\n"
-        f"{KIT}/\n"
     ),
     "main.py": "print('GIMaP')\n",
     "Start_GIMaP.bat": "@echo off\n",
@@ -98,14 +94,13 @@ MODEL = {
 # naming their SHA-256.
 NETWORK_FILES = {f"{NETWORK}.npz": "network"}
 PACKED = set(TRACKED) | set(MODEL) | set(NETWORK_FILES) | {f"{NETWORK}.json"} | {
-    "tools/build_portable_release.ps1", "tools/list_fit1d_release_files.py", "tools/collect_licenses.py",
+    "tools/build_portable_release.ps1", "tools/collect_licenses.py",
     "tools/append_release_files.py",
 }
 
 
 def _personal(path: str) -> bool:
-    # The single research exception contains only independently verified frozen runtime files.
-    return bool(PERSONAL.search(path)) and not path.startswith(f"{KIT}/app/research/")
+    return bool(PERSONAL.search(path))
 
 
 def _git(root: Path, *arguments: str) -> None:
@@ -141,7 +136,6 @@ def developer_folder(tmp_path):
                                           encoding="utf-8")
     (root / "tools").mkdir()
     shutil.copy2(SCRIPT, root / "tools" / SCRIPT.name)
-    shutil.copy2(KIT_HELPER, root / "tools" / KIT_HELPER.name)
     shutil.copy2(LICENSE_HELPER, root / "tools" / LICENSE_HELPER.name)
     shutil.copy2(APPEND_HELPER, root / "tools" / APPEND_HELPER.name)
     _git(root, "init", "--quiet")
@@ -166,19 +160,13 @@ def test_the_list_is_what_git_tracks_plus_the_model_files(developer_folder):
     assert not (developer_folder / "release").exists()  # nothing is written
 
 
-@pytest.mark.parametrize("with_fit1d", [False, True])
-def test_the_package_holds_the_list_and_nothing_else(developer_folder, tmp_path, monkeypatch, with_fit1d):
+def test_the_package_holds_the_list_and_nothing_else(developer_folder, tmp_path, monkeypatch):
     """The whole build on the small repository, with stand-ins for ``conda`` and ``conda-pack``.
 
     The stand-in "environment" is one file, so nothing large is packed; what is tested is which
     files of the folder go into the ZIP beside it.
     """
     import zipfile
-
-    kit_paths = set()
-    if with_fit1d:
-        install_kit(developer_folder)
-        kit_paths = set(release_files(developer_folder)["files"])
 
     stand_ins = tmp_path / "stand_ins"
     stand_ins.mkdir()
@@ -215,13 +203,9 @@ def test_the_package_holds_the_list_and_nothing_else(developer_folder, tmp_path,
         network = archive.read(f"{package}/{NETWORK}.npz")
         pyqt_gpl = archive.read(f"{package}/licenses/python/PyQt5-5.15.11/GPL-3.0.txt")
         notices = archive.read(f"{package}/licenses/THIRD_PARTY_NOTICES.md")
-        if with_fit1d:
-            subset = json.loads(archive.read(f"{package}/{KIT}/{MANIFEST}"))
-            assert subset == release_files(developer_folder)["manifest"]
-            archive.extractall(tmp_path / "extracted")
     licences = {f"licenses/{name}" for name in collect(environment, tmp_path / "expected")["written"]}
     licences |= {"licenses/THIRD_PARTY_NOTICES.md", "licenses/GIMaP/LICENSE"}
-    assert names == PACKED | kit_paths | {"runtime/pythonw.exe"} | licences
+    assert names == PACKED | {"runtime/pythonw.exe"} | licences
     assert not [name for name in names - {"runtime/pythonw.exe"} if _personal(name)]
     assert network == b"network"  # the bytes on disk: the record's SHA-256 is made from them
     assert b"GNU GENERAL PUBLIC LICENSE" in pyqt_gpl  # the PyQt5 wheel has no text of its own
@@ -230,52 +214,6 @@ def test_the_package_holds_the_list_and_nothing_else(developer_folder, tmp_path,
     # SHA256SUMS.txt beside the ZIP, in the format of sha256sum (the ZIP is small: one part, no installer).
     sums = (developer_folder / "release" / "SHA256SUMS.txt").read_bytes()
     assert sums == f"{hashlib.sha256(zip_path.read_bytes()).hexdigest()}  {package}.zip\n".encode("ascii")
-    if with_fit1d:
-        assert release_files(tmp_path / "extracted" / package) == release_files(developer_folder)
-
-
-def test_fit1d_runtime_is_listed_without_tracking_private_examples(developer_folder):
-    install_kit(developer_folder)
-    # Even accidentally tracked private examples must be filtered out of the public kit subset.
-    _git(developer_folder, "add", "--force", "--", f"{KIT}/examples/private_curve.npz")
-    code, listed, said = _list(developer_folder)
-    assert code == 0, said
-    assert set(listed) == PACKED | set(release_files(developer_folder)["files"])
-    assert not [path for path in listed if _personal(path)]
-    assert not any("private_curve" in path or "selftest" in path or "expected" in path for path in listed)
-    assert not (developer_folder / "release").exists()
-
-
-def test_fit1d_checksum_failure_stops_before_packing(developer_folder):
-    install_kit(developer_folder)
-    (developer_folder / KIT / "models/general/weights_numpy.npz").write_bytes(b"wrong weights")
-    code, listed, said = _list(developer_folder)
-    assert code == 1 and "fit1d checksum mismatch" in said
-    assert not any(path.startswith(f"{KIT}/") for path in listed)
-    assert not (developer_folder / "release").exists()
-
-
-def test_fit1d_missing_runtime_dependency_stops_before_packing(developer_folder, tmp_path, monkeypatch):
-    install_kit(developer_folder)
-    stand_ins = tmp_path / "dependency_stand_ins"
-    stand_ins.mkdir()
-    python = stand_ins / "python_stand_in.py"
-    python.write_text(
-        "import sys, runpy\n"
-        "arguments = sys.argv[1:]\n"
-        "if '--root' in arguments:\n"
-        "    sys.argv = arguments\n"
-        "    runpy.run_path(arguments[0], run_name='__main__')\n",
-        encoding="utf-8")
-    (stand_ins / "python.cmd").write_text(f'@"{sys.executable}" "{python}" %*\r\n')
-    (stand_ins / "conda.cmd").write_text(
-        '@echo off\r\nif "%1"=="run" exit /b 1\r\n'
-        'echo {"envs": ["C:/stand-in/gimap-stand-in"]}\r\n')
-    monkeypatch.setenv("PATH", str(stand_ins), prepend=";")
-    build = _builder(developer_folder, "-EnvironmentName", "gimap-stand-in")
-    assert build.returncode != 0
-    assert "hostruntimeisincompleteorincompatible" in re.sub(r"\s+", "", build.stderr)
-    assert not (developer_folder / "release").exists()
 
 
 def test_a_personal_file_that_git_was_told_to_track_stops_the_build(developer_folder):

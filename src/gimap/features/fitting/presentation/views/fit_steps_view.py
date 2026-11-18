@@ -26,13 +26,13 @@ from src.gimap.app.presentation.components import AdvancedSection, StepRail
 
 from ..layout_primitives import ScientificDoubleSpinBox
 from .fit_results_view import build_results_step
-from .fit_step_view import METHODS, QUICK_FAMILIES, build_fit_step
+from .fit_step_view import METHODS, build_fit_step
 from .step_widgets import fit_to_rows, info_card, muted, read_only_table
 
 STEPS = (("curve", "Curve"), ("model", "Model"), ("fit", "Fit"), ("results", "Results"))
 RANGE_TIP = "Only the points inside the fitting range are fitted. Type the limits, or drag the orange band on the plot."
-ADD_PARTICLE_TIP = ("Add a particle family to the model. Not sure which? Fit ▸ Find the particle shape (no AI) tries "
-                    "every family.")
+ADD_PARTICLE_TIP = ("Add a particle family to the model. Not sure which? Fit ▸ Predict parameters finds the "
+                    "particles from the curve.")
 
 
 class FitStepsView:
@@ -210,5 +210,5 @@ class FitStepsView:
         build_results_step(self, page, layout)
 
 
-__all__ = ["ADD_PARTICLE_TIP", "FitStepsView", "METHODS", "QUICK_FAMILIES", "RANGE_TIP", "STEPS", "fit_to_rows",
+__all__ = ["ADD_PARTICLE_TIP", "FitStepsView", "METHODS", "RANGE_TIP", "STEPS", "fit_to_rows",
            "info_card", "muted", "read_only_table"]

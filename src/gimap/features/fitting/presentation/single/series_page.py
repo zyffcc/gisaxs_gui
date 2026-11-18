@@ -36,7 +36,7 @@ from ...application.series_fit import (
 from ...application.single_fit import Curve
 from ..views.fit_series_view import FitSeriesView
 from .drops import FolderDropMixin, SplitterMemoryMixin
-from .series_fit1d import FitSeriesFit1DMixin
+from .series_predict import FitSeriesPredictMixin
 from .series_frames import FitSeriesFramesMixin
 from .series_halves import FitSeriesHalvesMixin
 from .series_imports import FitSeriesImportsMixin
@@ -64,7 +64,7 @@ END_SENTENCES = {
 not said like a success (said at the level of a warning)."""
 
 
-class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin, FitSeriesStagesMixin, FitSeriesFit1DMixin,
+class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin, FitSeriesStagesMixin, FitSeriesPredictMixin,
                     FitSeriesFramesMixin, FitSeriesUnitsMixin,
                     FitSeriesPreviewMixin, FitSeriesHalvesMixin, FitSeriesResultsMixin, FitSeriesWatchMixin, QWidget,
                     FitSeriesView):
@@ -137,7 +137,7 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
         self.start_group.buttonToggled.connect(lambda *_: self._remember_choices())
         self.method_group.buttonToggled.connect(lambda *_: self._remember_choices())
         self.follow_check.toggled.connect(lambda _on: self._remember_choices())
-        self.setup_series_fit1d()
+        self.setup_series_predict()
 
     # -- steps --------------------------------------------------------------------------------
 
@@ -251,7 +251,7 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
     def start(self) -> None:
         session = self.single.session
         model = session.model
-        if self.running or self._listing_busy or not self._listed() or not model.components or not self.fit1d_can_start(model) \
+        if self.running or self._listing_busy or not self._listed() or not model.components or not self.predict_can_start(model) \
                 or not self.ready_to_cut() or not self._may_drop_results():
             return
         self._probe_signed()  # a half is only chosen for curves that have two (other frames chosen since the listing)
@@ -259,8 +259,7 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
         self._settings = SeriesSettings(
             side=self.series_side(), q_range=session.q_range, excluded=frozenset(session.excluded),
             method=self.series_method(), start=self._start_choice(),
-            resolve_edges=self.single.resolve_edges_check.isChecked(),  # as in Single analysis' Fit step
-            follow=self.follow_check.isChecked(), fit1d={**self.single.fit1d_settings(), "fit1d_composition": "model"})
+            resolve_edges=True, follow=self.follow_check.isChecked())
         self._side_from, self._untouched_start = self.halves_source(), not session.edited
         self._unit = "angstrom" if self.frames_mode() else self.source_unit_setting()  # for files without a unit
         self._start_model = model
@@ -314,8 +313,7 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
         new_stage = self._new_stage(index)
         start = next_start(self._previous, self._start_model, self._settings, new_stage=new_stage)
         settings, stop = self._settings, self._stop.is_set
-        predict = self.predictor(settings, self._previous, new_stage) if settings.method in ("fit1d", "predict") \
-            else None
+        predict = self.predictor(settings, self._previous, new_stage) if settings.method == "predict" else None
         load, unit, epoch = self.series_curve_loader(), self._unit, self._loading_epoch
 
         def work():

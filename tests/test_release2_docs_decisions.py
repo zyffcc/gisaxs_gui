@@ -145,9 +145,13 @@ def test_the_update_script_does_what_the_documents_say() -> None:
                       "delete that copy with `git stash drop`", "it would write conflict markers into the file",
                       "`git checkout HEAD -- config/model_parameters.json`"):
             assert words in text, (path.name, words)
-    # The folders .gitattributes hands out byte for byte, and the network of Predict parameters as binary.
+    # The folder .gitattributes hands out byte for byte (the analysis package of Sputter; the fit1d kit was removed in
+    # 0.2.0), and the network of Predict parameters as binary.
     attributes = _text(ROOT / ".gitattributes")
-    assert "utils/gisaxs1d_gui_kit/** -text" in attributes and "utils/sputter_client/** -text" in attributes
+    assert "utils/sputter_client/** -text" in attributes and "gisaxs1d_gui_kit" not in attributes
+    for path in (README, DEVELOPMENT):  # the documents name the folder that is handed out byte for byte, and only it
+        said = re.findall(r"byte for byte \(([^)]*)\)", _flat(path)) + re.findall(r"marks `-text` \(([^)]*)\)", _flat(path))
+        assert said and all(item == "the analysis package of Sputter" for item in said), (path.name, said)
     assert "src/gimap/features/fitting/domain/posterior/data/*.npz binary" in attributes
     development = _flat(DEVELOPMENT)
     assert "1: not updated, or not completely" in development and "After the two plain commands, run the script once" in development

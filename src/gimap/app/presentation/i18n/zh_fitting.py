@@ -501,6 +501,26 @@ FITTING_ZH = {
         '正在开始预测参数（网络 + 后验）…',
     "the posterior's sampling did not converge: the solutions are compared by χ² and their number of values (BIC)":
         "后验抽样没有收敛：各个解按 χ² 和数值个数（BIC）比较",
+    'Add a particle in Model, or use Predict parameters.':
+        '在模型中添加一种颗粒，或者用预测参数。',
+    "χ²/N: Analyze's fit (Predict parameters), the mean squared σ-normalised residual over the points Analyze fitted (no degrees-of-freedom correction). Fit (Refine) gives χ²ᵣ here.":
+        'χ²/N：分析页的拟合（预测参数），即分析页所拟合各点上 σ 归一化残差平方的平均值（不做自由度修正）。在这里拟合（精修）给出 χ²ᵣ。',
+    'No σ in the file: Predict parameters takes a relative σ from the scatter of the curve about its trend.':
+        '文件中没有 σ：预测参数从曲线围绕其趋势的散布取一个相对 σ。',
+    'Residuals: {formula}. Each point is weighted by 1/σ from the file.':
+        '残差：{formula}。每个点按文件中 σ 的 1/σ 加权。',
+    'No particle yet: add one above, or let Fit ▸ Predict parameters find them.':
+        '还没有颗粒：在上面添加一个，或者让拟合 ▸ 预测参数来找。',
+    'Add a particle family to the model. Not sure which? Fit ▸ Predict parameters finds the particles from the curve.':
+        '向模型添加一种颗粒。不确定是哪种？拟合 ▸ 预测参数会从曲线找出颗粒。',
+    'Predict each frame':
+        '逐帧预测',
+    "Predict parameters: GIMaP's proposal network and its posterior, each solution refined by least squares. Complete composition: 1–3 components, each with a paracrystal; Auto: the network chooses.":
+        '预测参数：GIMaP 的建议网络及其后验，每个解再经最小二乘精修。完整组成：1–3 个组分，每个都带次晶；自动：由网络选择。',
+    'The out-of-plane q of the horizontal cut: spheres are evaluated at the Born term of that q_z. Unticked: q_z = 0 (the effective interface).':
+        '水平线切的面外 q：球在该 q_z 处取 Born 项。不勾选：q_z = 0（有效界面）。',
+    "Predict parameters gives each candidate's probability and the posterior intervals of its values. logRMSE and RMS/σ include the measurement noise.":
+        '预测参数给出每个候选的概率及其数值的后验区间。logRMSE 和 RMS/σ 包含测量噪声。',
 }
 
 __all__ = ["FITTING_ZH"]

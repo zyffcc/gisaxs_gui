@@ -1,5 +1,5 @@
 """The Results step of the single-curve page (static layout; behaviour in ``single/results.py``,
-``single/fit1d.py`` and ``single/result_actions.py``).
+``single/predict.py`` and ``single/result_actions.py``).
 
 From the top: how good the fit is; what to do next (Refine these values, Fit again, every curve of the folder);
 what the fit did by itself (values at an edge it resolved); what is still to know; the values — select some to fix
@@ -28,8 +28,6 @@ from src.gimap.app.presentation.components import AdvancedSection, FlowLayout
 
 from .step_widgets import fit_to_rows, info_card, muted, read_only_table
 
-CANDIDATE_COLUMNS = ("#", "composition", "χ²/point", "ΔBIC", "note")
-DETAIL_COLUMNS = ("parameter", "value ± error", "equivalent range", "state")
 VALUES_TIP = "Select values, then Fix, Let It Fit or Range… (or right-click); Fit Again uses them."
 
 
@@ -133,33 +131,10 @@ def build_results_step(owner, page: QWidget, layout) -> None:
     owner.use_solution_button = QPushButton("Use This Solution", owner.alternatives)
     owner.use_solution_button.setObjectName("fitUseSolution")
     owner.use_solution_button.setToolTip("Put the selected solution into Model (Undo brings the previous model back)")
-    owner.fit1d_candidates_intro = muted(
-        "Every composition fit1d tried, best (lowest BIC) first. Compositions within ΔBIC ≤ 10 of the best cannot be "
-        "told apart on this curve: choose from what you know of the sample.", owner.alternatives)
-    owner.fit1d_candidates_table = _stretching(read_only_table(CANDIDATE_COLUMNS, owner.alternatives,
-                                                               "fit1dCandidates"), 4)
-    owner.fit1d_candidate_details = _stretching(read_only_table(DETAIL_COLUMNS, owner.alternatives,
-                                                                "fit1dCandidateDetails",
-                                                                QAbstractItemView.ExtendedSelection), 0)
-    owner.fit1d_use_candidate_button = QPushButton("Use This Composition", owner.alternatives)
-    owner.fit1d_use_candidate_button.setObjectName("fit1dUseCandidate")
-    owner.fit1d_use_candidate_button.setToolTip(
-        "Predict again with this composition (its values as the start; values at an edge resolved) — Undo brings "
-        "the previous model back")
-    for widget in (owner.solutions_title, owner.solutions_table, owner.use_solution_button,
-                   owner.fit1d_candidates_intro, owner.fit1d_candidates_table, owner.fit1d_candidate_details,
-                   owner.fit1d_use_candidate_button):
+    for widget in (owner.solutions_title, owner.solutions_table, owner.use_solution_button):
         owner.alternatives.add_widget(widget)
     owner.alternatives.hide()
     layout.addWidget(owner.alternatives)
-
-    owner.constraints_section = AdvancedSection("Constraints and ranges", "", page)
-    owner.constraints_section.setObjectName("fitConstraintsSection")
-    owner.fit1d_constraints_label = _label(owner.constraints_section, "fit1dConstraints", "muted")
-    owner.fit1d_constraints_label.show()
-    owner.constraints_section.add_widget(owner.fit1d_constraints_label)
-    owner.constraints_section.hide()
-    layout.addWidget(owner.constraints_section)
 
     exports = FlowLayout()
     owner.export_data_step_button = QPushButton("Save Data and Fit…", page)
@@ -186,4 +161,4 @@ def build_results_step(owner, page: QWidget, layout) -> None:
     layout.addWidget(log)
 
 
-__all__ = ["CANDIDATE_COLUMNS", "DETAIL_COLUMNS", "VALUES_TIP", "build_results_step"]
+__all__ = ["VALUES_TIP", "build_results_step"]

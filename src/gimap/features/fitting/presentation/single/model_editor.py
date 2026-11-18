@@ -253,7 +253,7 @@ class FitModelEditor(QWidget):
         for index, component in enumerate(self.model.components):
             self._layout.addWidget(self._component_card(index, component))
         if not self.model.components:
-            empty = QLabel(tr("No particle yet: add one above, or let Fit ▸ Find the particle shape choose."), self)
+            empty = QLabel(tr("No particle yet: add one above, or let Fit ▸ Predict parameters find them."), self)
             empty.setWordWrap(True)
             empty.setProperty("gimapRole", "muted")
             self._layout.addWidget(empty)

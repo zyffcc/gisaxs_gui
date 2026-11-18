@@ -27,7 +27,6 @@ from ..domain.fit_engine import FitResult
 from ..domain.fit_model import FAMILIES, INFO, FitModel, model_to_dict
 from .single_fit import Curve, PreparedCurve, fit_resolving, prepare_points
 from .models import InSituSourceFrame
-from .single_fit1d import fit1d_result
 
 STARTS = (("previous", "Each frame starts from the previous frame's result"),
           ("same", "Every frame starts from the model in Single analysis"),
@@ -53,9 +52,7 @@ class SeriesSettings:
     resolve_edges: bool = True
     """Answer the parameters that stop at an edge of their range (``single_fit.fit_resolving``)."""
     follow: bool = True
-    """``fit1d``: keep the solution that continues the previous frame when it fits as well (``domain.fit1d_follow``)."""
-    fit1d: Optional[Mapping] = None
-    """``fit1d``: its settings (``fit1d_*`` of Single analysis' Fit step; the particles are those of the start model)."""
+    """``predict``: of the solutions about as probable, keep the one closest to the previous frame."""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "side", fit_halves(self.side))
@@ -93,8 +90,6 @@ class FrameFit:
     """How many points the left-out names of the series took away in this frame."""
     resolved: tuple = ()
     """What was done to parameters that stopped at an edge (English sentences, ``domain.fit_edges``)."""
-    native: Optional[dict] = None
-    """``fit1d``: the kit's own result of the frame (its v2 curve, errors, bounds, whether it followed the previous)."""
     q_unit: str = ""
     """The unit the q of the frame's file was read in (``angstrom`` / ``nm``), and where it came from
     (``curve_units``: stated in the file, the setting for files without one, a cut frame); empty: not read."""
@@ -141,8 +136,8 @@ def prepare_frame(curve: Curve, settings: SeriesSettings) -> PreparedCurve:
 
 def fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: SeriesSettings,
               stop: Optional[Callable[[], bool]] = None, predict: Optional[Callable] = None) -> FrameFit:
-    """The fit of one frame (``prepare_frame``). ``fit1d``: ``predict(data, start) -> value`` runs fit1d's job on
-    the frame's points (the page knows the job runner and the previous frame). The frame keeps the unit its q was
+    """The fit of one frame (``prepare_frame``). ``predict``: ``predict(data, start) -> model`` runs Predict
+    parameters on the frame's points (the page knows the job runner and the previous frame). The frame keeps the unit its q was
     read in (``FrameFit.q_unit``)."""
     frame = _fit_frame(index, path, curve, start, settings, stop, predict)
     return replace(frame, q_unit=curve.source_unit, q_unit_from=curve.unit_from)
@@ -163,12 +158,6 @@ def _fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: S
             result, actions, _remaining = fit_resolving(predict(prepared.data, start), prepared.data, method="local",
                                                         stop=stop, resolve=False)
             return FrameFit(index, path, result, **made_of)
-        if settings.method == "fit1d":
-            value = predict(prepared.data, start)
-            result = fit1d_result(value, start, prepared.data)
-            actions = (value["native"].get("fit1d_bounds") or {}).get("actions") or ()
-            return FrameFit(index, path, result, resolved=tuple(note["text"] for note in actions),
-                            native=value["native"], **made_of)
         result, actions, _remaining = fit_resolving(start, prepared.data, method=settings.method, stop=stop,
                                                     resolve=settings.resolve_edges)
         return FrameFit(index, path, result, resolved=tuple(note.text for note in actions), **made_of)
@@ -187,7 +176,7 @@ def next_start(previous: Optional[FrameFit], single: FitModel, settings: SeriesS
                new_stage: bool = False) -> FitModel:
     """Where the next frame starts: the previous frame's result (when it converged) or the Single model —
     also at the first frame of a new stage when ``start`` is ``"stages"``."""
-    if settings.method in ("fit1d", "predict"):  # their particles are the model's; they follow by themselves
+    if settings.method == "predict":  # its particles are the model's; it follows by itself
         return single
     follows = settings.start == "previous" or (settings.start == "stages" and not new_stage)
     if follows and previous is not None and previous.ok and previous.result.converged:
@@ -374,8 +363,7 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
         "settings": {"side": settings.side, "q_range_nm^-1": None if settings.q_range is None else list(settings.q_range),
                      "left_out_q_nm^-1": sorted(settings.excluded), "method": settings.method, "start": settings.start,
                      "resolve_edges": settings.resolve_edges,
-                     **({"follow": settings.follow, "fit1d": dict(settings.fit1d or {})} if settings.method == "fit1d"
-                        else {"follow": settings.follow} if settings.method == "predict" else {})},
+                     **({"follow": settings.follow} if settings.method == "predict" else {})},
         "frames": len(frames), "counts": series_counts(frames), "failed": failed,
         "not_converged": [frame.index + 1 for frame in ordered if frame.state == "not converged"],
         "stopped": [frame.index + 1 for frame in ordered if frame.state == "stopped"],
@@ -386,9 +374,7 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
                        "q_unit": frame.q_unit, "q_unit_from": frame.q_unit_from,
                        "weighting": frame.result.weighting if frame.result is not None else "",
                        **curve_source_record(frame.path),
-                       **({"resolved": list(frame.resolved)} if frame.resolved else {}),
-                       **({"followed_previous": bool((frame.native.get("fit1d_follow") or {}).get("followed"))}
-                          if frame.native and frame.native.get("fit1d_follow") else {})} for frame in ordered],
+                       **({"resolved": list(frame.resolved)} if frame.resolved else {})} for frame in ordered],
     }
     if side_from:
         record["settings"]["side_from"] = side_from

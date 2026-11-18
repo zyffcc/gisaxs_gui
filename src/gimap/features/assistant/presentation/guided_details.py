@@ -6,9 +6,10 @@ closed until opened, then following the selected row — gives everything behind
 * **a peak**: the points the Gaussian was fitted to, the fit and its local background drawn together;
   every parameter with its error; how it was fitted (weights, window, error scaling) and found (the
   search thresholds); its warnings; where on the detector it was measured;
-* **a model solution**: every parameter of every component and the global ones (background,
-  resolution), the quality numbers, the fit settings (q range, points, halves, start of D, screen,
-  algorithm, evaluations, time), its warnings, and **Show in Fitting** to continue from it.
+* **a model solution** (Predict parameters): every parameter of every component with the 68 % posterior
+  interval of R, h and D, the global ones (background, resolution), its probability and the quality
+  numbers, the fit settings (q range, points, who chose the composition, algorithm, time), its warnings,
+  and **Show in Fitting** to continue from it.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from src.gimap.app.presentation.components import CurvePlot
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.theme import theme_manager
 
-from ..application import bound_phrases
+from ..application import bound_phrases, interval, probability
 from .guided_text import ScaledPixmapLabel, label
 from .guided_words import words
 
@@ -216,7 +217,8 @@ def candidate_row(fit: dict, index: int) -> Optional[dict]:
     if not points.get("q_inv_nm") or not points.get("observed") or not points.get("display_q"):
         return None
     return {
-        "workflow": "native_v5", "rank": solution.get("rank", index + 1), "combination": solution.get("model"),
+        "workflow": "native_v5", "rank": solution.get("rank", index + 1),
+        "combination": solution.get("combination") or solution.get("model"),
         "side": fit.get("side") or "", "components": components, "global_params": dict(solution.get("globals") or {}),
         "native_q": list(points["q_inv_nm"]), "native_fit": list(points.get("fit") or ()),
         "observed": list(points["observed"]), "sigma": list(points.get("sigma") or ()),
@@ -267,30 +269,33 @@ class SolutionDetails(QWidget):
             prefix = str(component.get("type", "")).replace("_", " ") + (f" {number}" if len(solution["components"]) > 1 else "")
             for key, name, unit in COMPONENT_VALUES:
                 if component.get(key) is not None:
-                    pairs.append((f"{prefix}: {name}" if key == "R" else name, f"{_number(component[key])} {unit}".strip()))
+                    found = interval(solution, key, number - 1)  # the 68 % posterior interval, where the fit gives one
+                    shown = f"{_number(component[key])} {unit}".strip() + (
+                        "" if found is None else f" (68 %: {_number(found[0], 3)}–{_number(found[1], 3)})")
+                    pairs.append((f"{prefix}: {name}" if key == "R" else name, shown))
         for key, name, unit in GLOBAL_VALUES:
             value = (solution.get("globals") or {}).get(key)
             if value is not None:
                 pairs.append((name, f"{_number(value)} {unit}".strip()))
-        pairs += [("χ²/N", _number(solution.get("chi2"))), ("log RMSE", _number(solution.get("log_rmse"))),
-                  ("converged", tr("yes") if solution.get("converged") else tr("no")),
-                  ("evaluations", _number(solution.get("evaluations"), 6)),
+        chance = probability(solution)
+        pairs += [("probability", "—" if math.isnan(chance) else _number(chance, 3)),
+                  ("χ²/N", _number(solution.get("chi2"))), ("log RMSE", _number(solution.get("log_rmse"))),
+                  ("converged", tr("yes") if solution.get("converged", True) else tr("no")),
                   ("time", "—" if solution.get("seconds") is None else f"{solution['seconds']:.1f} s")]
         self.values.set_values(pairs)
         low, high = (fit.get("q_range_inv_angstrom") or [math.nan, math.nan])[:2]
-        screen = tr("the single particle families screened") if solution.get("screen") != "user_composition" else tr(
-            "the composition you gave")
-        start = fit.get("distance_start_nm")
+        screen = tr("the composition you gave") if solution.get("screen") == "user_composition" else tr(
+            "the composition the network chose")
         self.settings.setText(tr(
-            "{points} points, |qy| {low}–{high} Å⁻¹ ({low_nm}–{high_nm} nm⁻¹); {screen}; D started at {start}. "
-            "{algorithm}. Sizes in nm; σ/value are relative size spreads; the weight is the share of the fitted "
-            "amplitude, not a volume fraction."
+            "{points} points, |qy| {low}–{high} Å⁻¹ ({low_nm}–{high_nm} nm⁻¹); {screen}. {algorithm}. Sizes in nm; "
+            "σ/value are relative size spreads; the weight is the share of the fitted amplitude, not a volume "
+            "fraction; the intervals hold 68 % of the posterior."
         ).format(points=fit.get("points", "—"), low=_number(low), high=_number(high),
                  low_nm=_number(NM_PER_A * low), high_nm=_number(NM_PER_A * high),
-                 screen=screen, start=tr("2π/q* of the cut, {d} nm").format(d=_number(start)) if start else tr("free"),
-                 algorithm=words(solution.get("algorithm")) or tr("Bounded least squares")))
-        notes = [tr(note) for note in list(solution.get("warnings") or ()) + ([] if solution.get("converged") else ["not converged"])]
-        notes += [words(phrase) for phrase in bound_phrases(solution)]  # which values ended on a search bound
+                 screen=screen, algorithm=words(solution.get("algorithm")) or tr("Bounded least squares")))
+        notes = [words(note) for note in list(solution.get("warnings") or ())
+                 + ([] if solution.get("converged", True) else ["not converged"])]
+        notes += [words(phrase) for phrase in bound_phrases(solution)]  # which values ended on a bound of their range
         self.warnings.setText("\n".join("⚠ " + note for note in notes) if notes else tr("No warnings for this solution."))
         self.show_button.setEnabled(self.allowed and candidate_row(fit, self._index) is not None)
 

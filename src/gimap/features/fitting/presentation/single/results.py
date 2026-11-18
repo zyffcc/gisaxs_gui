@@ -29,7 +29,7 @@ from ...application.single_fit import (
     parameter_text,
 )
 from ..views.step_widgets import fit_to_rows, show_line
-from .fit1d_review import note_text
+from .method_hint import note_text
 from .session import path_name
 from ...application.models import InSituSourceFrame
 from ...application.curve_sources import source_stem
@@ -161,8 +161,8 @@ def value_cells(key: str, value: float, error, free: bool) -> tuple[str, str]:
 
 CORRELATED_SHOWN = 2
 MORE_PAIRS = "and {count} more (hover)"
-ANALYZE_CHI2 = ("χ²/N: Analyze's quick fit, the mean squared σ-normalised residual over the points Analyze fitted "
-                "(no degrees-of-freedom correction). Fit (Refine) gives χ²ᵣ here.")
+ANALYZE_CHI2 = ("χ²/N: Analyze's fit (Predict parameters), the mean squared σ-normalised residual over the points "
+                "Analyze fitted (no degrees-of-freedom correction). Fit (Refine) gives χ²ᵣ here.")
 
 
 class FitResultsMixin:
@@ -207,8 +207,7 @@ class FitResultsMixin:
                    state=cls._state_text(result))
 
     def render_results(self) -> None:
-        if not self._render_fit1d_results():
-            self._render_model_results()
+        self._render_model_results()
         self.render_result_actions()  # next steps, what the fit did by itself, the folds (result_actions.py)
         self.fit_notes_button.setVisible(bool(self.warnings_label.text() or not self.actions_label.isHidden()))
         self.refresh_equivalent_selector()
@@ -329,7 +328,7 @@ class FitResultsMixin:
         self.solutions_table.setVisible(bool(solutions))
         self.use_solution_button.setVisible(bool(solutions))
         curve = self.session.curve
-        searched = self.session.solutions_searched()  # its χ²ᵣ computed here (run.py); else Analyze's quick fit
+        searched = self.session.solutions_searched()  # its χ²ᵣ computed here (run.py); else Analyze's fit
         chi = "χ²/N" if not searched else "var ln I" if curve is not None and curve.sigma is None else "χ²ᵣ"
         self.solutions_table.setHorizontalHeaderLabels(["#", tr("model"), "R (nm)", "D (nm)", chi, "p"])
         self.solutions_table.setColumnHidden(5, not any(s.probability is not None for s in solutions))
@@ -393,17 +392,11 @@ class FitResultsMixin:
         path = path or self._save_path("Save Data and Fit", f"{self._stem()}_fit.csv", "CSV (*.csv)")
         if not path:
             return None
-        if self.session.native_result is not None and self.session.result is None:
-            if not self.session.native_is_current():
-                self._status(tr("Changed after the fit: Fit again"), "warning")
-                return None
-            names, table, record = self._fit1d_export()
-        else:
-            names, table = export_table(self.session.model, data)
-            record = fit_record(self.session.model, data, self.session.curve, side=self.session.side,
-                                q_range=self.session.q_range,
-                                result=self.session.result if self.session.result_is_current() else None,
-                                excluded=self.session.excluded)
+        names, table = export_table(self.session.model, data)
+        record = fit_record(self.session.model, data, self.session.curve, side=self.session.side,
+                            q_range=self.session.q_range,
+                            result=self.session.result if self.session.result_is_current() else None,
+                            excluded=self.session.excluded)
         try:
             record_path = write_pair(path, lambda target: np.savetxt(
                 target, table, delimiter=",", header=",".join(names), comments="", fmt="%.8g"), record)

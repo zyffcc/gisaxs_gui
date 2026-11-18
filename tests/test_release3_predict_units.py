@@ -44,7 +44,7 @@ def _plain_curve(folder: Path, name: str = "other_program.dat") -> Path:
 
 def _run(tmp_path, monkeypatch, files, q_unit="nm^-1"):
     """The job with the fit replaced by a recorder of what it was given (no fitting, no network)."""
-    from src.gimap.features.fitting.infrastructure.adapters import experimental_fit
+    from src.gimap.features.fitting.infrastructure.adapters import posterior_job
 
     given = []
 
@@ -52,11 +52,11 @@ def _run(tmp_path, monkeypatch, files, q_unit="nm^-1"):
         given.append((item, options))
         return [dict(side=item["side"], best_log_rmse=0.1)]
 
-    monkeypatch.setattr(experimental_fit, "fit_and_write", fit)
+    monkeypatch.setattr(posterior_job, "fit_and_write", fit)
     output = tmp_path / "AI_Fitting_Output" / "v5_test"
     result = workflow_v5.run_workflow_job(
         dict(output_dir=str(output), files=[str(path) for path in files],
-             options=dict(method="experimental", q_unit=q_unit, side="positive")),
+             options=dict(method="posterior", q_unit=q_unit, side="positive")),
         lambda *_args: None, lambda: False)
     return result, given, output
 
@@ -169,7 +169,7 @@ def _add(dialog, monkeypatch, files) -> None:
 
 def _row(file: str, unit: str, origin: str) -> dict:
     return dict(file=file, side="positive", rank=1, combination="sphere", best_log_rmse=.05, signed_weighted_rms=1.0,
-                best_source="experimental_physical", native_q=[1, 2], observed=[1, 1], sigma=[.1, .1],
+                best_source="posterior", native_q=[1, 2], observed=[1, 1], sigma=[.1, .1],
                 display_q=[1, 2], display_fit=[1, 1], q_unit_read=unit, q_unit_from=origin)
 
 

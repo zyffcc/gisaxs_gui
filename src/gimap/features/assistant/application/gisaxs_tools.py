@@ -1,8 +1,8 @@
-"""GISAXS tools of the catalog: symmetry axis, cuts, halves, and a physical fit of I(qy).
+"""GISAXS tools of the catalog: symmetry axis, cuts, halves, and Predict parameters on I(qy).
 
 The settings (beam centre, cuts, halves) go through ``_tracked`` like every other settings
 change, so they can be previewed, applied and undone. ``fit_horizontal_cut`` needs a
-``CurveFitter`` (the Fitting feature's numerical fit, injected by the composition root).
+``CurveFitter`` (the Fitting feature's Predict parameters, injected by the composition root).
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import math
 from typing import Optional
 
 from ..domain import Profile, choose_halves, find_peaks, fit_curve, spacing_from_peaks
-from .gisaxs_choice import bounds_text, chosen_index
+from .gisaxs_choice import bounds_text, probability, rivals
 from .models import ToolInputError, ToolOutcome
 
 MIN_SHIFT_PX = 0.0001
@@ -20,13 +20,50 @@ SPACING_MIN_POINTS = 10
 """A side maximum closer to qy = 0 than this many bins belongs to the central (Yoneda / beam-stop) peak."""
 SPACING_WINDOW = 0.02
 """Background window of the GISAXS peak search (Å⁻¹): a small-angle curve spans only a few 0.1 Å⁻¹."""
+AT_BOUND_FLAG = " stopped at a bound of its range"
+"""The end of the fit's warning for a value at a bound: ``at_bounds`` names a non-linear one more exactly (which
+bound), the report names a linear term at 0 itself (``gisaxs_choice.zero_terms``)."""
+LINEAR_NAMES = ("background", "res_amplitude", "Int")
+"""How the fit names the linear terms in its warnings (``Int_1``: the amplitude of the first population)."""
+INTERVAL_NAMES = ("median", "low68", "high68", "low95", "high95")
+"""The posterior of a value as a row gives it: best, then these, then the least-squares error."""
+
+
+def _intervals(row: dict) -> dict:
+    """The posterior intervals of a solution's values (``R_1``, ``D_2`` …; nm, nm⁻¹, spreads relative)."""
+    found = {}
+    for name, values in (row.get("posterior") or {}).items():
+        try:
+            numbers = [None if value is None else float(value) for value in list(values)[1:6]]
+        except (TypeError, ValueError):
+            continue
+        if len(numbers) == len(INTERVAL_NAMES):
+            found[str(name)] = dict(zip(INTERVAL_NAMES, numbers))
+    return found
+
+
+def _warnings(row: dict) -> list[str]:
+    """The fit's warnings; one for a value at a bound only when nothing else names it: not for a linear term, not
+    when ``at_bounds`` lists the values at a bound."""
+    kept = []
+    for item in map(str, row.get("warnings") or ()):
+        if item.endswith(AT_BOUND_FLAG):
+            name = item[: -len(AT_BOUND_FLAG)]
+            if row.get("at_bounds") or name.split("_")[0] in LINEAR_NAMES or name in LINEAR_NAMES:
+                continue
+        kept.append(item)
+    return kept
 
 
 def _solution(row: dict) -> dict:
-    """What a person reads of one fit solution (units: nm; q in nm⁻¹ in the fit itself)."""
+    """What a person reads of one solution (units: nm; q in nm⁻¹ in the fit itself). ``model``: the composition
+    as Predict names it ("sphere (S) + upright cylinder"; "(S)": with a paracrystal), ``combination``: its particle
+    types as Fitting takes them."""
     return {
         "rank": row.get("rank"),
-        "model": row.get("combination"),
+        "model": row.get("composition") or row.get("combination"),
+        "combination": row.get("combination"),
+        "probability": None if math.isnan(probability(row)) else round(probability(row), 4),
         "components": [
             {"type": component["type"], "weight": round(float(component.get("weight", 0.0)), 3),
              "amplitude": float(component.get("amplitude", math.nan)),
@@ -36,11 +73,11 @@ def _solution(row: dict) -> dict:
         "globals": {key: float(value) for key, value in (row.get("global_params") or {}).items() if value is not None},
         "chi2": round(float(row.get("best_chi2_weighted", math.nan)), 3),
         "log_rmse": round(float(row.get("best_log_rmse", math.nan)), 4),
-        "converged": bool(row.get("converged")),
-        "warnings": list(row.get("warnings") or ()),
-        # The values that ended on a search bound ({"parameter": "D", "bound": "upper", "component": 0}).
+        "converged": bool(row.get("converged", True)),
+        "warnings": _warnings(row),
+        # The values that ended on a bound of their range ({"parameter": "D", "bound": "upper", "component": 0}).
         "at_bounds": [dict(item) for item in row.get("at_bounds") or ()],
-        "evaluations": row.get("nfev"),
+        "intervals": _intervals(row),
         "seconds": None if row.get("seconds") is None else round(float(row["seconds"]), 2),
         "algorithm": row.get("algorithm"),
         "screen": row.get("conditions_source"),
@@ -49,8 +86,9 @@ def _solution(row: dict) -> dict:
 
 def _brief(solution: dict) -> str:
     params = solution["components"][0] if solution["components"] else {}
-    return (f"{solution['model']}, R = {params.get('R', math.nan):.3g} nm, D = {params.get('D', math.nan):.3g} nm, "
-            f"χ²/N = {solution['chi2']:.3g}")
+    distance = f", D = {params['D']:.3g} nm" if params.get("D") is not None else ""
+    chance = "" if solution.get("probability") is None else f", probability {solution['probability']:.2f}"
+    return f"{solution['model']}, R = {params.get('R', math.nan):.3g} nm{distance}, χ²/N = {solution['chi2']:.3g}{chance}"
 
 
 def _curve(row: dict) -> dict:
@@ -168,37 +206,30 @@ class GisaxsToolsMixin:
         return self._ok(data, f"{spacing.kind} of the cut at |qy| = {spacing.q:.4g} Å⁻¹ → 2π/q* = "
                               f"{spacing.distance_nm:.3g} nm (a length scale, not necessarily the particle spacing)")
 
-    def _tool_fit_horizontal_cut(self, side: Optional[str] = None, components=None, distance_nm=None) -> ToolOutcome:
+    def _tool_fit_horizontal_cut(self, side: Optional[str] = None, components=None) -> ToolOutcome:
         if self.fitter is None:
             raise ToolInputError("No curve fitter is available in this session: use Send to Fitting in the GUI.")
         side, x, y, sigma, note = self._fit_input(side)
-        if distance_nm is None:
-            distance_nm = (self.results.gisaxs.get("spacing") or {}).get("distance_nm")
-        rows = self.fitter(
-            x, y, sigma, components=tuple(components or ()), distance_nm=distance_nm, cancelled=self.cancelled,
-        )
+        rows = self.fitter(x, y, sigma, components=tuple(components or ()), cancelled=self.cancelled)
         if not rows:
-            raise ToolInputError("The fit found no solution.")
-        solutions = [_solution(row) for row in rows]
-        index = chosen_index(solutions)  # the best-ranked close solution with no non-linear value at a search bound
+            raise ToolInputError("Predict parameters found no solution.")
+        solutions = [_solution(row) for row in rows]  # most probable first: the first is the one reported
         self.results.gisaxs["fit"] = {
             "side": side, "curve": note, "points": int(x.size), "q_range_inv_angstrom": [float(x.min()), float(x.max())],
-            "distance_start_nm": distance_nm,
             "solutions": solutions,
-            "chosen": index,
-            "best_curve": _curve(rows[index]),  # the reported (chosen) solution's curve: fit_curve.csv's I_fit
+            "chosen": 0,
+            "best_curve": _curve(rows[0]),  # the reported (most probable) solution's curve: fit_curve.csv's I_fit
             "curves": [_curve(row) for row in rows],
             "native": [_native(row) for row in rows],
             "data": {"q_inv_angstrom": x.tolist(), "intensity": y.tolist(), "sigma": sigma.tolist()},
         }
         head = solutions[0]
-        summary = f"best: {_brief(head)}" + (f" ({bounds_text(head)})" if bounds_text(head) else "")
-        if index:
-            summary = (f"rank 1: {_brief(head)} ({bounds_text(head) or 'not converged'}); chosen: rank "
-                       f"{solutions[index]['rank']}, {_brief(solutions[index])}, the best-ranked close solution with "
-                       "no non-linear value at a search bound")
+        summary = f"most probable: {_brief(head)}" + (f" ({bounds_text(head)})" if bounds_text(head) else "")
+        others = rivals(solutions)
+        if others:
+            summary += "; also probable: " + "; ".join(f"rank {item['rank']}, {_brief(item)}" for item in others)
         return self._ok({"side": side, "curve": note, "points": int(x.size), "solutions": solutions[:TOP_SOLUTIONS],
-                         "chosen": solutions[index]}, summary)
+                         "chosen": head}, summary)
 
 
 __all__ = ["GisaxsToolsMixin"]

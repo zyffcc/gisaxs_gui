@@ -102,8 +102,7 @@ class FitPlotMixin:
         data = self._data()
         if data is None:
             return
-        tip = (tr("fit1d residual: (I − model) / effective σ") if self.session.native_is_current()
-               else self._residuals_tip(data.sigma is not None))
+        tip = self._residuals_tip(data.sigma is not None)
         self.residual_plot.setToolTip(tip)
         self.residual_plot.plot.getAxis("left").setToolTip(tip)
 
@@ -131,18 +130,11 @@ class FitPlotMixin:
                 markers.append(True)
             q_model = np.geomspace(max(full.q.min(), 1e-6), full.q.max(), MODEL_POINTS)
             try:
-                if session.native_is_current():
-                    native = session.native_result["curves"]
-                    q_model = np.asarray(native["q_nm_inv"], float)
-                    total, parts = native["model"], native.get("components", {})
-                else:
-                    total, parts = evaluate(session.model, q_model, parts=True)
+                total, parts = evaluate(session.model, q_model, parts=True)
             except (ValueError, FloatingPointError):
                 total, parts = None, {}
             if total is not None:
-                label = ("fit1d v2 model" if session.native_is_current() else "manual starting model"
-                         if session.native_result is not None and session.result is None else "model")
-                curves.append((tr(label), q_model, total))
+                curves.append((tr("model"), q_model, total))
                 colors.append(MODEL_COLOR)
                 markers.append(False)
                 styles = [LineStyle(z=2) for _ in curves[:-1]] + [LineStyle(width=2.3, z=3)]
@@ -173,8 +165,6 @@ class FitPlotMixin:
         self.plot.show_window(low, high)
 
     def _draw_residuals(self, data) -> None:
-        if self._draw_fit1d_residuals():
-            return
         if data is None or not data.q.size:
             self.residual_plot.set_curves([])
             return

@@ -18,7 +18,6 @@ EXPECTED_VIEWS_BY_OWNER = {
         "fit_page_view.py",
         "fit_results_view.py",
         "fit_step_view.py",
-        "fit1d_settings_view.py",
         "fit_series_view.py",
         "fit_steps_view.py",
     },

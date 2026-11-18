@@ -37,7 +37,7 @@ WORKER_MODULES = (
     "src.gimap.features.analyze.infrastructure.frame_workers",
     "src.gimap.features.fitting.infrastructure.adapters.workflow_v5",
     "src.gimap.features.fitting.infrastructure.adapters.ai_pipeline",
-    "src.gimap.features.fitting.infrastructure.adapters.single_fit1d",
+    "src.gimap.features.fitting.infrastructure.adapters.posterior_job",
     "src.gimap.features.trainset.infrastructure.adapters.model_contract",
 )
 """What a job or batch worker imports before its handler runs (every job handler's module included)."""

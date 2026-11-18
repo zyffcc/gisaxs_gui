@@ -19,11 +19,10 @@ SIGMA_FROM_FILE = "σ from the file"
 NO_SIGMA_CARD = "⚠ No σ in the file: every point weighted alike (ln I fitted)"
 NO_SIGMA_FIT = "⚠ No σ in the file: every point weighted alike"
 NO_SIGMA_WHY = ("No σ in the file: every point gets the same relative weight (ln I is fitted).",
-                "No σ in the file: fit1d assumes Poisson errors; the selected systematic error floor is added in "
-                "quadrature.")
+                "No σ in the file: Predict parameters takes a relative σ from the scatter of the curve about its "
+                "trend.")
 """What “every point weighted alike” means for each action of the Fit step (the warnings' tooltip)."""
-WEIGHTED_TIP = ("Residuals: {formula}. Each point is weighted by 1/σ from the file; fit1d adds the systematic error "
-                "floor (Options).")
+WEIGHTED_TIP = "Residuals: {formula}. Each point is weighted by 1/σ from the file."
 
 
 class CurveInfoMixin:

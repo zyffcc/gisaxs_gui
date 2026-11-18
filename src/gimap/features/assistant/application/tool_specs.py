@@ -203,19 +203,20 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
         ),
         ToolSpec(
             "fit_horizontal_cut",
-            "GISAXS: a numerical physical fit of the horizontal cut (the halves chosen, or 'side'): spheres, "
-            "vertical and random cylinders with size dispersity and an interparticle distance D, or the "
-            "composition given (1 = sphere, 2 = random cylinder, 3 = vertical cylinder). Returns the distinct "
-            "solutions, best first, with R, D (nm), χ²/N (chi2: mean squared σ-normalised residual), warnings and "
-            "at_bounds (non-linear values that ended on a search bound, not determined by the curve; the amplitudes "
-            "and background are solved non-negative and not listed), and 'chosen': the best-ranked solution within "
-            "10 % of the first's χ²/N that converged with no non-linear value at a bound (else the first) — the one "
-            "the standard procedure reports. Also starts D from the 2π/q* in_plane_spacing "
-            "found (or distance_nm). A screening fit: confirm the model in Fitting. Takes 10–60 s.",
+            "GISAXS: Predict parameters on the horizontal cut (the halves chosen, or 'side'). GIMaP's network "
+            "proposes the composition — one or two populations of spheres and upright cylinders with size "
+            "dispersity, with or without a paracrystal distance D ('(S)' in the model's name) — or takes the one "
+            "given (1 = sphere, 2 = random cylinder, 3 = vertical cylinder, each with a paracrystal; random "
+            "cylinders take far longer); each solution is refined by least squares. Returns the distinct solutions, "
+            "most probable first, with probability (posterior probability of the solution), R, h, D (nm), "
+            "intervals (median and 68 %/95 % posterior intervals per value: R_1, D_2 …), χ²/N (chi2: mean squared "
+            "σ-normalised residual), warnings and at_bounds (non-linear values that ended on a bound of their range, "
+            "not determined by the curve), and 'chosen': the most probable, the one the standard procedure reports. "
+            "Another solution with a probability of 0.2 or more means the curve does not decide the model. "
+            "Confirm the model in Fitting. Takes about 15 s.",
             _object({
                 "side": {"type": "string", "enum": ["mean", "negative", "positive"]},
-                "components": {"type": "array", "items": {"type": "integer", "enum": [1, 2, 3]}, "maxItems": 4},
-                "distance_nm": NUMBER,
+                "components": {"type": "array", "items": {"type": "integer", "enum": [1, 2, 3]}, "maxItems": 3},
             }, ()),
         ),
         ToolSpec(

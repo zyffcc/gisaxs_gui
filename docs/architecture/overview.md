@@ -239,7 +239,7 @@ application 真正需要的能力，不能照搬 BornAgain、TensorFlow 或操�
 跨 feature 协作只允许通过：
 
 - 组合根注入：`src/gimap/app/`（`main_window.py`、`menus.py`、`runtime.py`、`headless_assistant.py`）创建一个
-  feature 的对象，作为参数交给另一个 feature（例如 Fitting 的 `create_quick_fit()`、Calibration 的
+  feature 的对象，作为参数交给另一个 feature（例如 Fitting 的 `create_curve_fit()`（Predict parameters）、Calibration 的
   `create_headless_calibration()` 注入自动分析）；接收方只依赖自己定义的 port 或 protocol；
 - 具有清晰所有权的稳定 shared domain/scientific primitive（`src/gimap/shared/`）。
 
@@ -260,7 +260,7 @@ Fitting ────┘
 Calibration、XRR、Trainset 与 `gimap_agent` 共用，见 [`scientific-data-flow.md`](scientific-data-flow.md)）、
 `shared/geometry`（探测器几何、像素 → q 映射、仪器配置，约定见
 [`geometry.md`](geometry.md)）、`shared/signed_cut.py`（带符号 GISAXS 切线的两半：平均、选一半、合并长曲线；
-Fitting 的单条与序列、快速物理拟合、Analyze 的 Batch Export 和自动分析共用，纯 NumPy）和 `shared/series_stages`（一组曲线的异常帧、主成分与分段：
+Fitting 的单条与序列、Predict parameters 的 `create_curve_fit`、Analyze 的 Batch Export 和自动分析共用，纯 NumPy）和 `shared/series_stages`（一组曲线的异常帧、主成分与分段：
 Analyze 的 Series、Fitting 的 In-situ series 与 Compare 三处共用，纯 NumPy）。
 
 `shared/` 不是默认放置位置。只有至少两个 feature 已经稳定需要同一项领域能力，且其

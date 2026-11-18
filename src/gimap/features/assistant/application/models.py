@@ -45,7 +45,7 @@ GOALS = {
     GOAL_SIZE: "Crystallite size (Scherrer coherence length) of the resolved peaks",
     GOAL_GISAXS_CUT: "GISAXS horizontal cut I(qy): at the Yoneda band, centred on the symmetry axis, halves chosen with the reason",
     GOAL_SPACING: "GISAXS length scale 2π/q* of a side maximum (or shoulder) of I(qy), not necessarily the particle spacing",
-    GOAL_GISAXS_FIT: "GISAXS fit of I(qy): particle family, radius, size spread and distance D, with the close alternatives",
+    GOAL_GISAXS_FIT: "GISAXS fit of I(qy): particles, radius, size spread and distance D with their intervals, and the other probable solutions",
 }
 """The results a user can ask for, in dialog order."""
 GIWAXS_GOALS = (GOAL_PEAKS, GOAL_ORIENTATION, GOAL_RING, GOAL_SIZE)

@@ -5,10 +5,6 @@
 *.cmd text eol=crlf
 # The proposal network of Predict parameters is checked against the SHA-256 of its record before it runs: binary.
 src/gimap/features/fitting/domain/posterior/data/*.npz binary
-# The bundled fit1d kit (utils/gisaxs1d_gui_kit) is checked file by file against FILES_SHA256.json (sha256
-# of the bytes) before a release packs it; its text files end their lines with LF: no line-ending
-# conversion in this folder.
-utils/gisaxs1d_gui_kit/** -text
 # The bundled analysis package of the Sputter page (utils/sputter_client) is checked file by file against its
 # MANIFEST.json (sha256 of the bytes); its launcher run.cmd ends its lines with CRLF and the rest with LF:
 # no line-ending conversion in this folder.

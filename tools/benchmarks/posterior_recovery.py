@@ -40,7 +40,7 @@ for p in (str(HERE), str(GIMAP)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-import fit1d_recovery as fr  # noqa: E402
+import recovery_cases as fr  # noqa: E402
 import heldout_cases as hc  # noqa: E402
 from src.gimap.features.fitting.domain.posterior import encoding as E  # noqa: E402
 from src.gimap.features.fitting.domain.posterior import infer, refine  # noqa: E402

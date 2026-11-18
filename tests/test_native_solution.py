@@ -1,7 +1,7 @@
 """A solution of 1D Predict's earlier engines (``native_v5``: sizes by intensity, σD/D) put into Fitting's manual
 model: the same curve, stated when not. Its curves come from those engines' own forward model (V5's
-numpy_forward64), as their solutions do; the quick fit gives its solutions in Fitting's conventions now
-(test_experimental_fitting.py)."""
+numpy_forward64), as their solutions do; Predict parameters gives its solutions in Fitting's conventions
+(``physics_backend`` "cut_model")."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from src.gimap.features.fitting.domain.native_solution import native_solution_ma
 
 # The forward model of 1D Predict's earlier solutions (V5's numpy_forward64.component, retired in 0.2.0, as it was):
 # sizes Gaussian by intensity on 25 (sphere), 26 (vertical cylinder) or 13 × 13 nodes and 24 orientations (random
-# cylinder), the paracrystal with σD/D; fit1d's rows are converted the same way.
+# cylinder), the paracrystal with σD/D; the rows of fit1d (retired in 0.2.0) were converted the same way.
 def _nodes(mu, sigma, n, nsig):
     xx = np.linspace(max(mu - nsig * sigma, 0.0), mu + nsig * sigma, n)
     w = np.exp(-0.5 * ((xx - mu) / max(sigma, 1e-12)) ** 2)

@@ -254,7 +254,7 @@ def open_headless_session(
     from ..features.analyze.presentation.page import AnalyzePage
     from ..features.assistant.infrastructure import LocalFileExplorer
     from ..features.calibration.bootstrap import create_headless_calibration
-    from ..features.fitting.bootstrap import create_quick_fit
+    from ..features.fitting.bootstrap import create_curve_fit
     from ..integrations.state import (
         InMemoryInstrumentProfileRepository,
         InMemorySessionRepository,
@@ -293,7 +293,7 @@ def open_headless_session(
         explorer=LocalFileExplorer(),
         calibrator=create_headless_calibration(),
         chooser=chooser,
-        fitter=create_quick_fit(),
+        fitter=create_curve_fit(),
         store=_headless_store(output),
         output=output,
         load_error=failures[-1] if failures else None,
@@ -352,7 +352,7 @@ def write_outputs(session: HeadlessSession, report: dict, folder: Path) -> list[
 
 
 def _write_fit(fit: Optional[dict], folder: Path, provenance: str = "") -> list[Path]:
-    """GISAXS: the fitted curve (data and the fit the run reports) and the solutions table."""
+    """GISAXS: the fitted curve (data and the fit the run reports, the most probable) and the solutions table."""
     import numpy as np
 
     if not fit:
@@ -477,20 +477,20 @@ def _analyse_series(sources, options: PipelineOptions, out: Path, progress, save
 # -- MCP over stdio -----------------------------------------------------------------------
 
 MCP_INSTRUCTIONS = (
-    "GIMaP tools for grazing-incidence X-ray scattering frames, GIWAXS and GISAXS. Start with "
-    "open_frame(path, notes, out_dir). run_standard_pipeline gives a baseline in one call: the geometry "
-    "(calibrations the notes name first), the frames of a series, then the procedure of the technique "
-    "GIMaP's Auto detection gives once the geometry is applied (technique='giwaxs' or 'gisaxs' forces "
-    "one) — GIWAXS: peaks, sectors, ring orientation and sizes; GISAXS: the Yoneda cut, the symmetry "
-    "axis, the halves, the length scale 2π/q* (not necessarily the particle spacing) and a fit. Each "
-    "decision comes with its reason; "
-    "needs_attention lists values only the notes or the person know (with the argument that supplies "
-    "them) and judgements left open, such as the GISAXS model. The baseline's choices are defaults: "
-    "investigate further with the other tools when the question needs it — other frames of a series, "
-    "lines every sample shares, peaks it skipped, custom sectors, the cut position. Measured values come "
-    "from the tools; show how derived values follow from them; mark interpretations as hypotheses. "
-    "Files are written only under the session's output folder (out_dir; export_results writes to "
-    "gimap_analysis/ there), never next to the data. Guides in the GIMaP repository: "
+    "GIMaP tools for grazing-incidence X-ray scattering frames, GIWAXS and GISAXS. Start with open_frame(path, "
+    "notes, out_dir). run_standard_pipeline gives a baseline in one call: the geometry (calibrations the notes "
+    "name first), the frames of a series, then the procedure of the technique GIMaP's Auto detection gives once "
+    "the geometry is applied (technique='giwaxs' or 'gisaxs' forces one) — GIWAXS: peaks, sectors, ring "
+    "orientation and sizes; GISAXS: the Yoneda cut, the symmetry axis, the halves, the length scale 2π/q* (not "
+    "necessarily the particle spacing) and Predict parameters on the cut (the most probable particles with "
+    "their probability and intervals, and the other probable solutions). Each decision comes with its reason; "
+    "needs_attention lists values only the notes or the person know (with the argument that supplies them) and "
+    "judgements left open, such as the GISAXS model. The baseline's choices are defaults: investigate further "
+    "with the other tools when the question needs it — other frames of a series, lines every sample shares, "
+    "peaks it skipped, custom sectors, the cut position. Measured values come from the tools; show how derived "
+    "values follow from them; mark interpretations as hypotheses. Files are written only under the session's "
+    "output folder (out_dir; export_results writes to gimap_analysis/ there), never next to the data. Guides in "
+    "the GIMaP repository: "
     f"{PLAYBOOKS[0]} (GIWAXS) and {PLAYBOOKS[1]} (GISAXS)."
 )
 OPEN_FRAME = {

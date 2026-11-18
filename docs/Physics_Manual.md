@@ -82,7 +82,7 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [8.2 Beam-centre column from mirror symmetry](#82-beam-centre-column-from-mirror-symmetry)
   - [8.3 The halves of the cut](#83-the-halves-of-the-cut)
   - [8.4 Length scale 2π/q* of the cut](#84-length-scale-2πq-of-the-cut)
-  - [8.5 The quick model fit and how the solution is chosen](#85-the-quick-model-fit-and-how-the-solution-is-chosen)
+  - [8.5 The model fit and how the solution is chosen](#85-the-model-fit-and-how-the-solution-is-chosen)
   - [8.6 What the GISAXS analysis does not model](#86-what-the-gisaxs-analysis-does-not-model)
 - [9. Model fitting of 1D curves (Fitting)](#9-model-fitting-of-1d-curves-fitting)
   - [9.1 Points that are fitted](#91-points-that-are-fitted)
@@ -93,14 +93,14 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [9.6 Parameters and defaults](#96-parameters-and-defaults)
   - [9.7 Objective and the scales](#97-objective-and-the-scales)
   - [9.8 Refine, Search, goodness of fit and the errors](#98-refine-search-goodness-of-fit-and-the-errors)
-  - [9.9 Find the particle shape](#99-find-the-particle-shape)
+  - [9.9 Find the particle shape (removed in 0.2.0)](#99-find-the-particle-shape-removed-in-020)
   - [9.10 Spheres and cylinders in a horizontal cut: the effective interface approximation](#910-spheres-and-cylinders-in-a-horizontal-cut-the-effective-interface-approximation)
   - [9.11 The three-population model](#911-the-three-population-model)
-  - [9.12 Predict parameters (fit1d)](#912-predict-parameters-fit1d)
+  - [9.12 fit1d (removed in 0.2.0)](#912-fit1d-removed-in-020)
   - [9.13 Predict parameters](#913-predict-parameters)
 - [10. 1D Predict (many curves)](#10-1d-predict-many-curves)
   - [10.1 Input](#101-input)
-  - [10.2 The methods](#102-the-methods)
+  - [10.2 The method](#102-the-method)
   - [10.3 Workflow V5, removed in 0.2.0](#103-workflow-v5-removed-in-020)
 - [11. Series](#11-series)
   - [11.1 The series map](#111-the-series-map)
@@ -180,8 +180,8 @@ The table lists the symbols that occur in more than one chapter. Every other sym
 | f | – | Hermans orientation factor (the program writes "Herman's f") | section 7.7 |
 | q* | Å⁻¹ (nm⁻¹ in Sputter) | position of the in-plane correlation peak of a GISAXS cut | section 8.4 |
 | R | nm | radius of a particle or an island | section 9.4 |
-| σ_R/R, σ_h/h, σnn/D | – | relative spreads of R and h (by the size distribution chosen, section 9.3) and relative standard deviation of the neighbour distance D (Hosemann; fit1d's w/D) | sections 9.3, 9.5 |
-| σ_D/D | – | the paracrystal spread of earlier Fitting, and of the quick fit and 1D Predict V5 until 0.2.0: (σnn/D)/√(2π) | (9.13) |
+| σ_R/R, σ_h/h, σnn/D | – | relative spreads of R and h (by the size distribution chosen, section 9.3) and relative standard deviation of the neighbour distance D (Hosemann; the w/D of fit1d, removed in 0.2.0) | sections 9.3, 9.5 |
+| σ_D/D | – | the paracrystal spread of earlier Fitting, and of the quick fit and 1D Predict V5 (both removed in 0.2.0): (σnn/D)/√(2π) | (9.13) |
 | P(q), S(q) | – | form factor and structure factor | sections 9.4, 9.5 |
 | p | – | paracrystal factor exp(−q² σ_nn² / 2) | (9.12) |
 | δ, β | – | refractive-index decrement and absorption index, n = 1 − δ + iβ | section 13.5 |
@@ -191,7 +191,7 @@ The table lists the symbols that occur in more than one chapter. Every other sym
 ### 0.2 Units
 
 - **Analyze, Geometry Calibration and XRR Series Extractor** use q in Å⁻¹ and d in Å. The curves Analyze exports, `<stem>_fit_input.dat` included, are in Å⁻¹.
-- **Fitting works in nm⁻¹ internally.** A curve read in Å⁻¹ is multiplied by 10 (1 Å⁻¹ = 10 nm⁻¹; 1 nm = 10 Å). Sizes and distances of the models are in nm. The quick physical fit converts in the same way (section 8.5).
+- **Fitting works in nm⁻¹ internally.** A curve read in Å⁻¹ is multiplied by 10 (1 Å⁻¹ = 10 nm⁻¹; 1 nm = 10 Å). Sizes and distances of the models are in nm. The model fit of the GISAXS automatic analysis (Predict parameters) converts in the same way (section 8.5).
 - **Angles** are in degrees in the windows and the records. Formulas use radians wherever an angle enters a trigonometric function or is a width in radians (for example β in (7.30)).
 - **Detector lengths.** Pixel coordinates are in px. L, X, Y and the pixel sizes are in metres in the formulas; the windows take L in mm and pixel sizes in µm.
 - **Intensities** are mean counts per pixel (`I (counts/pixel)`), not absolute intensities (section 2.5).
@@ -1059,12 +1059,12 @@ I(|q|) = ½ [ I_+(|q|) + Ĩ_−(|q|) ]                                          
 σ(|q|) = ½ √( σ_+²(|q|) + σ̃_−²(|q|) )                                               (6.17)
 ```
 
-- One half gives the |q| points of the mean: the `q_y > 0` half, in the prepared cut of Run Automatic Analysis and of the quick physical fit, in the Series map and in Fitting alike, so one cut gives one mean curve. A half with fewer than two points never gives the grid.
+- One half gives the |q| points of the mean: the `q_y > 0` half, in the prepared cut of Run Automatic Analysis and of its model fit, in the Series map and in Fitting alike, so one cut gives one mean curve. A half with fewer than two points never gives the grid.
 - The tilde marks linear interpolation of the other half, and of its σ, at that |q|.
 - Points are averaged only where the other half has measured points on both sides without a hole, or a point at the same |q| (within 1 % of a step). A hole is an interval wider than 2.5 times the local step, the median of the 9 surrounding intervals.
 - Elsewhere the measured half stands alone with its own σ. Points of the other half that lie in a hole of this half, or beyond its ends, are added as measured. Nothing is interpolated across a hole.
 
-**Automatic choice** (Run Automatic Analysis and the quick physical fit). Only points with finite values, `I > 0` and at least one pixel are used. For each half GIMaP takes:
+**Automatic choice** (Run Automatic Analysis and its model fit). Only points with finite values, `I > 0` and at least one pixel are used. For each half GIMaP takes:
 
 - the **reach**: its largest |q_y|;
 - the **coverage**: the share of bins of width 1.5 × the median |q_y| step that hold at least one point. The bins run from the larger of the two halves' fourth |q_y| values to the half's reach, so the three points next to `q_y = 0` (specular rod, beam stop) are skipped.
@@ -1481,8 +1481,8 @@ Implementation: `src/gimap/features/assistant/application/pipeline_rows.py`
 
 For a GISAXS frame the automatic analysis places the horizontal cut at the Yoneda band, moves the beam-centre column
 to the mirror axis of the cut, decides which halves of the cut to use, gives the length scale 2π/q* of a side maximum
-or shoulder (a length the curve shows, not necessarily the particle spacing), and fits the prepared cut with a quick
-numerical model. It runs from **Run Automatic Analysis** in
+or shoulder (a length the curve shows, not necessarily the particle spacing), and fits the prepared cut with
+Predict parameters (section 8.5). It runs from **Run Automatic Analysis** in
 Analyze and from the command line. The technique and the frames are chosen as in section 7.1.
 
 Units: q_y and q_z in Å⁻¹ in Analyze; the fit converts to nm⁻¹ (q_nm = 10 q_Å); lengths in nm.
@@ -1560,8 +1560,8 @@ D* = 2π / q*                                                                   
 ```
 
 is reported as a **length scale of the cut** (in nm: 2π/q*/10): the decision *2π/q\* = … nm at the peak of the cut
-(|qy| = … Å⁻¹)*, with the reason *a length scale, not necessarily the particle spacing; check it with a model fit,
-which starts one of its distances D from it*. If there is none, the strongest broad or fit_failed feature with
+(|qy| = … Å⁻¹)*, with the reason *a length scale, not necessarily the particle spacing; check it with a model fit*.
+If there is none, the strongest broad or fit_failed feature with
 SNR ≥ 5 is reported as a **shoulder** (a change of slope, not a resolved peak): *… at a shoulder of the cut (…), no
 resolved peak*, with the same reason and *a form factor or the beam tail makes a shoulder too*. The 0.15 q_0 "broad" limit of GIWAXS is reused, so a wide correlation peak is often classed a shoulder.
 Example (invented): q* = 0.020 Å⁻¹ gives D* = 314 Å = 31.4 nm.
@@ -1572,136 +1572,96 @@ the fitted D differs from 2π/q* when the disorder is large. On BornAgain 24.1 s
 model of the GALAXI frame, placed on the measured q grid, the search found a shoulder at 2π/q* = 73.9 nm for a peak
 distance of 53.6 nm, and a shoulder at 60.6 nm for the same particles without interference. On 14 simulated cuts with
 known parameters, 2π/q* was within 10 % of the true distance in 1 of 10 cuts with interference, and a maximum or
-shoulder was found on all 4 cuts without interference. D* is therefore only a start for the distance D of the fit
-(section 8.5). The records keep its value under the earlier key (`spacing.distance_nm`).
+shoulder was found on all 4 cuts without interference. D* is therefore a result of its own: the fit of section 8.5
+needs no start and does not take one from it. The records keep its value under the earlier key (`spacing.distance_nm`).
 
 Implementation: `src/gimap/features/assistant/domain/gisaxs_cut.py`, `src/gimap/features/assistant/application/gisaxs_tools.py`
 
-### 8.5 The quick model fit and how the solution is chosen
+### 8.5 The model fit and how the solution is chosen
 
-The prepared curve is fitted by a numerical variable-projection fit (no neural network). The same fit is Fitting's
-**Find the particle shape (no AI)** (section 9.9) and the *Physical fit (numerical)* method of 1D Predict.
+The prepared curve (section 8.3; q = 10 `abs(q_y)` in nm⁻¹) is fitted with **Predict parameters**, the network method
+of Fitting (section 9.13): GIMaP's network proposes compositions and values, every solution is refined by bounded
+least squares in Fitting's model (9.1), its posterior is sampled around it, and the solutions are weighted by their
+posterior probability. The same function fits the cut in Batch Export's *Particle model of the horizontal cut*, in
+Process with AI and the MCP tool `fit_horizontal_cut`, and on the command line (`tools/gimap_agent.py`). It takes about
+15 s per cut on one core.
 
-**Model.** With q = 10 `abs(q_y)` in nm⁻¹:
+**Model and compositions.** The cut is taken at the effective interface (q_z = 0, section 9.10), with Fitting's
+defaults: sizes Gaussian by number, the paracrystal of section 9.5 in the LMA, the beam tail A / (1 + (q/w)^ν) and a
+constant background (9.1). Without a given composition (as in Run Automatic Analysis) the network chooses among one
+or two populations of spheres and upright cylinders, each with or without a paracrystal (the head's three most
+probable of these). A given composition (1 sphere, 2 random cylinder, 3 vertical cylinder, each population with a
+paracrystal: Batch Export's **Model**, the `components` of the tool) is fitted whole; random cylinders are fitted only
+then, since they take far longer. The network needs no start: nothing is taken from D* of section 8.4, which stays a
+result of its own. The fit needs at least 8 points; a cut of more than 1000 points is merged first (section 6.9).
 
-```text
-I(q) = BG + Σ_j a_j P_j(q) S_j(q) + A / ( 1 + (q / w)^ν )                                      (8.6)
-```
-
-P_j is a sphere, random-cylinder or vertical-cylinder term of GIMaP's one forward model of a cut (`cut_model`,
-section 9.2), with Fitting's defaults: a Gaussian size distribution by number, every family normalised to P(0) = 1 (so
-a_j is Fitting's Int), and S_j the Hosemann paracrystal of mean distance D and σnn/D (section 9.5). Every component
-carries a structure factor. Until 0.2.0 the quick fit took its model from 1D Predict (V5): sizes Gaussian by
-intensity on 25 or 26 nodes and σ_D/D = (σnn/D)/√(2π); its solutions still give σ_D/D next to σnn/D for the reports
-that show it.
-
-**Families and starts.** Without a given composition (as in the automatic analysis) three single-component families
-are screened: sphere, vertical cylinder, random cylinder. Each family is started from R = 1.5 nm and R = 4.0 nm, and,
-when D* of section 8.4 is known, from R = 4.0 nm with D = D* (maximum or shoulder alike): 6 or 9 fits. A given composition is
-fitted whole; component j starts at R (1 + 0.6 j). Other starts: σ_R/R = 0.2, σnn/D = 0.3, h = 10 nm, σ_h/h = 0.2,
-w = 0.02 nm⁻¹, ν = 2.5, D = 1.5 D_min when no D* is given.
-
-**Parameters and bounds.**
+**Scores.** For each solution, with r_i = (I_model(q_i) − I_i)/σ_i:
 
 ```text
-D = D_min · (500 nm / D_min)^η,   η ∈ [0, 1],   D_min = max(3 nm, 2.002 R)                       (8.7)
+χ²/N = (1/N) Σ_i r_i²                                                                         (8.6)
+logRMSE = √( mean over I_i > 0 of ( ln(I_model,i / I_i) )² )                                      (8.7)
 ```
 
-| Parameter | Range |
-|---|---|
-| R (fitted as ln R) | 1–100 nm |
-| σ_R/R | 0.02–0.9 |
-| D | from 2.002 R (and 3 nm) to 500 nm, through η |
-| σnn/D | 0.05–1 |
-| h (random cylinder, fitted as ln h) | 2–500 nm |
-| σ_h/h | 0.02–0.9 |
-| w | 0.001–0.1 nm⁻¹ |
-| ν | 1–20 |
+χ²/N has no degrees-of-freedom correction and is not Fitting's χ²_red (9.23). The probability p of a solution is its
+composition's posterior probability times the solution's share of it (section 9.13); the solutions are sorted by p,
+most probable first, and the five most probable are kept. A solution's "weight" `a_j / Σ a` is a normalised
+amplitude, not a probability or a volume fraction.
 
-(8.7) enforces the hard-core condition D ≥ 2.002 R.
+**Values at a bound.** The least squares of Predict parameters keep every population inside the box of the network's
+prior (section 9.13: R from 0.5/q_max to 5/q_min, σR/R, σh/h and σnn/D 0.02–0.5, D and h within the prior's D/2R and
+h/2R at radii up to 1.5 times the start's, the tail's ν 1.8–2.2 and w at most 30 q_min). A free shape or tail value
+within 10⁻⁴ of its range of a bound has *ended on the bound*; the solution names it in `at_bounds` (parameter, lower
+or upper bound, component; the reports call w and ν σ_Res and ν_Res). A value on a bound is not determined by the
+curve: the bound, not the data, holds it. These are the non-linear values only. The linear terms a_j, BG and A are
+solved by non-negative least squares and are not in `at_bounds`: one at 0 is held by that limit (a background the
+curve would want below zero, a beam tail that is absent, so that w and ν no longer change the curve), and the report
+names it for the reported solution among the *Decisions* (*fit caveat*: *background BG at 0, the non-negativity
+limit*).
 
-**Fit.** At every evaluation the amplitudes a_j, BG and A are solved by non-negative least squares on the σ-weighted
-design matrix, with its columns normalised. The shape parameters are fitted by bounded least squares
-(`scipy.optimize.least_squares`, trust-region reflective) with a soft-L1 loss on
+**The solution the automatic analysis reports** is the most probable one, the first. The fit record keeps its index
+(`chosen`), the Results tab selects it, and `fit_curve.csv` holds its curve. The report's *Decisions* give it
+(*fit*: model, R, D, χ²/N and probability), the 68 % posterior intervals of its R, h and D for every population
+(*fit intervals*: the posterior given the σ of the points, sampled around the solution; the geometry and the choice of
+model are not in it), the warnings of the fit (the flags of section 9.13) and its values at a bound (*fit caveat*).
+Further rules of the report (`gisaxs_choice.py`):
 
-```text
-r_i = ( I_model(q_i) − I_i ) / σ_i,   cost = ½ Σ_i 2 ( √(1 + r_i²) − 1 )                          (8.8)
-```
-
-with at most 150 function evaluations per start (plus those of the finite-difference Jacobian, relative step 10⁻⁴)
-and tolerances 10⁻⁷.
-
-**Scores.** For each solution:
-
-```text
-M_H = (1/N) Σ_i Huber_2( abs(r_i) ) = (1/N) Σ_i { ½ r_i² if abs(r_i) ≤ 2;  2 (abs(r_i) − 1) otherwise }   (8.9)
-χ²/N = (1/N) Σ_i r_i²                                                                         (8.10)
-logRMSE = √( mean over I_i > 0 of ( ln(I_model,i / I_i) )² )                                      (8.11)
-```
-
-M_H is the robust misfit of the program, the mean Huber loss (δ = 2) of the σ-normalised residuals (Huber, 1964). χ²/N has no degrees-of-freedom correction and is not Fitting's χ²_red (9.23).
-
-**Ranking.** The solutions are sorted by **M_H, not by χ²**. A solution of the same composition whose
-parameters, amplitudes and global values all lie within 1 % (relative) of a better one is a duplicate. At most 5
-distinct solutions are kept (8 in the 1D Predict window). The fit needs at least 8 points.
-
-**Values at a bound.** A fitted value closer to a bound of its range than 10⁻⁴ of the range (in the fitted variable:
-ln R, σ_R/R, η, σnn/D, ln h, σ_h/h, w, ν; the reports call w and ν σ_Res and ν_Res) has *ended on the bound*. The fit
-names each such value in `at_bounds` (parameter, lower or upper bound, component), with the warning that values may
-be unidentifiable. η = 1 is D = 500 nm,
-η = 0 is D = D_min (contact). A value on a bound is not determined by the curve: the bound, not the data, holds it.
-These are the non-linear values only. The linear terms a_j, BG and A are solved by non-negative least squares and are
-not in `at_bounds`: one at 0 is held by that limit (a background the curve would want below zero, a beam tail that is
-absent, so that w and ν no longer change the curve), and the report names it for the reported solution among the
-*Decisions* (*fit caveat*: *background BG at 0, the non-negativity limit*) without counting it in the choice below.
-
-**The solution the automatic analysis reports.** Let χ²_1/N be that of the first-ranked solution. Among the solutions
-with χ²/N ≤ 1.1 χ²_1/N (the first included), which the curve does not tell apart (the same 10 % as the model rule
-below), the report takes the **best-ranked one that converged with no non-linear value at a bound**; when there is none, it
-takes the first. This is the minimal rule that avoids reporting a bound without hiding the ranking: it never
-reaches beyond the solutions the curve cannot distinguish, it never reorders them, and the table keeps every solution
-with its rank. The fit record keeps the index of the reported solution (`chosen`); the table marks it (*chosen*),
-names the values at a bound of every solution (*D at its upper bound*), the Results tab selects it, and `fit_curve.csv`
-holds its curve. On the GALAXI frame the first-ranked solution, a random cylinder with χ²/N = 1.05, has D at its lower
-bound (D = D_min) and ν at its lower bound; the second (a vertical cylinder, χ²/N = 1.33) is beyond 1.1 × 1.05, so the
-first is reported, with its values at a bound in *Needs attention*. (With the model before 0.2.0, sizes Gaussian by
-intensity, the third, a sphere with R = 9.44 nm and D = 48.3 nm, was reported.) The rule is the automatic analysis' own: Fitting's
-*Find the particle shape (no AI)* (section 9.9) ranks by its own χ²_red. The report's *Decisions* state which solution
-was reported and why. Further rules of the report:
-
-- When the reported solution is the first and has a value at a bound (no close solution is free of one), *Needs
-  attention* says so (**fit**), and the *Decisions* name the values at a bound.
-- D ≥ 250 nm (half of the 500 nm bound) in the reported solution: it has no interparticle correlation in the q range,
-  and D is not determined by the curve.
-- Among the kept solutions, solutions of more than one family whose χ²/N is at most 1.1 times that of the first: the
-  curve alone does not decide the model (*Needs attention*). The point says which solution is reported when it is not
-  the first, and names those whose D is within 15 % of D* (two lengths that happen to agree, not evidence for the
-  model, since D* is not necessarily a spacing, section 8.4).
-- A reported solution that did not converge (budget reached) is put under *Needs attention*.
-- A reported solution that converged with χ²/N > 10 is a **poor fit** (*Needs attention*, **fit**): it misses the
-  curve by far more than the σ of its points, so none of the families describes the cut and its R and D are not
-  measurements. The limit is that of Fitting's poor fits of a series (χ²_red > 10; User Manual, section 6.6), which
-  differs from χ²/N only by the degrees-of-freedom correction. On the public AgBh SAXS frame (Bragg rings of a
-  calibrant, no particles) the reported sphere has χ²/N = 472.
+- Another solution with p ≥ 0.2: the curve alone does not decide the model (*Needs attention*, **model**). The point
+  lists the probable solutions with their rank and probability and names those whose D is within 15 % of D* (two
+  lengths that happen to agree, not evidence for the model, since D* is not necessarily a spacing, section 8.4).
+- A value of the reported solution at a bound: *Needs attention* (**fit**) says that those values are not determined
+  by the curve.
+- D ≥ 250 nm in the reported solution: it has no interparticle correlation in the q range, and D is not determined by
+  the curve.
+- A reported solution with χ²/N > 10 is a **poor fit** (*Needs attention*, **fit**): it misses the curve by far more
+  than the σ of its points, so none of the compositions tried describes the cut and its R and D are not measurements.
+  The limit is that of Fitting's poor fits of a series (χ²_red > 10; User Manual, section 6.5), which differs from
+  χ²/N only by the degrees-of-freedom correction.
 
 Every number of these texts is formatted once from the fit record (R, h, D to 4 decimals of nm), so a value reads the
-same in the table and in *Needs attention* (48.3484 nm is 48.3 nm in both).
+same in the table and in *Needs attention* (48.3484 nm is 48.3 nm in both). **Save Fit Table…** writes one line per
+population of each solution: rank, model, χ²/N, probability, log RMSE, the parameters (nm; the spreads relative), the
+68 % intervals of R, h and D, `at_bounds` (`name:upper` or `name:lower`) and `chosen`.
 
-Each solution also carries warnings: a shape or resolution value closer to a bound than 10⁻⁴ of its range, the
-budget reached, a component with an amplitude below 10⁻⁶ of the total. Its "weight" `a_j / Σ a` is a normalised amplitude,
-not a probability or a volume fraction.
+**GALAXI.** On the public GALAXI frame (α_i = 0.463°, `galaxi_bornagain.poni`) the run reports two upright cylinders
+without a paracrystal, R 3.11 nm and 5.49 nm, χ²/N = 1.27, probability 1.00, and puts *ν_Res at its lower bound* under
+*Needs attention*. The cut's broad log-normal sizes and its low-q rise are described by two populations; the sample's
+particles are spheres (BornAgain's model, section 9.10), which a fit with a sphere in Model and the particles of
+Model as the composition describes (section 9.13). The choice of model is the user's: the automatic analysis
+describes the cut and gives Fitting a start.
 
-**A screening step.** The quick fit describes the cut and gives Fitting a start; it does not measure sizes. With
-the model before 0.2.0 (sizes Gaussian by intensity), on 14
-BornAgain simulations of cuts of Ag spheres with known parameters (the GALAXI model with R, scale, D and disorder
-varied, Poisson noise at the data's count level), it ranked a random cylinder first in 12, a vertical cylinder in 1 and
-a sphere in 1; 10 first-ranked solutions had a value at a bound; the best sphere solution's R was a median 11 % above
-the R⁶-weighted mean radius of the simulation (−29 % to +26 %); D and the disorder were not recovered. The model
-evaluates P at q_z = 0 (section 8.6), which is part of this bias. Confirm the model in Fitting (User Manual,
-chapter 13).
+**Until 0.2.0** the analysis fitted the cut with a quick numerical fit (no network; the same fit was Fitting's *Find
+the particle shape (no AI)*, section 9.9): single-component spheres, vertical and random cylinders from fixed starts
+(one with D = D*), ranked by a robust misfit (the mean Huber loss of r, Huber 1964), the reported solution the
+best-ranked one free of bounds within 10 % of the first's χ²/N, and no ± for R, h or D. On 14 BornAgain simulations
+of cuts of Ag spheres with known parameters (the GALAXI model with R, scale, D and disorder varied, Poisson noise at
+the data's count level) it ranked a random cylinder first in 12 and a sphere in 1, 10 first-ranked solutions had a
+value at a bound, the best sphere's R was a median 11 % above the R⁶-weighted mean radius (−29 % to +26 %), and D and
+the disorder were not recovered. On the GALAXI frame it reported a random cylinder with χ²/N = 1.05 and D at its lower
+bound.
 
-Implementation: `src/gimap/features/fitting/infrastructure/adapters/experimental_fit.py`, entry
-`create_quick_fit()` in `src/gimap/features/fitting/bootstrap.py`, forward model `cut_model`
+Implementation: `create_curve_fit()` in `src/gimap/features/fitting/bootstrap.py` (Predict parameters as a function:
+`domain/posterior/refine.py`, the rows of `infrastructure/adapters/posterior_job.py`), the choice and its texts in
+`src/gimap/features/assistant/application/gisaxs_choice.py` and `gisaxs_procedure.py`, forward model `cut_model`
 (`src/gimap/features/fitting/domain/cut_model/`)
 
 ### 8.6 What the GISAXS analysis does not model
@@ -1711,8 +1671,8 @@ Implementation: `src/gimap/features/fitting/infrastructure/adapters/experimental
 - The term `A / (1 + (q/w)^ν)` is an additive empirical tail of the direct and reflected beam; no resolution
   convolution is applied.
 - The Yoneda row is found without αc; the beam-centre row is not refined; the centre has no uncertainty.
-- Only single-component families are screened automatically, so a mixture is never proposed without a given
-  composition.
+- Without a given composition the network chooses among one or two populations of spheres and upright cylinders;
+  random cylinders and three populations are fitted only when given as the composition (section 8.5).
 
 Like the GIWAXS report (section 7.9), the GISAXS report's *Decisions* always say what its numbers are:
 
@@ -1722,23 +1682,24 @@ Like the GIWAXS report (section 7.9), the GISAXS report's *Decisions* always say
   With the film's critical angle given (section 2.6) it reads *q_z corrected for refraction in the film (αc = …)*;
 - *uncertainties*: statistical only — the σ of the cuts' points, by which χ²/N is normalised, with the error model of
   the frame (Poisson counting statistics, or the pixel scatter of each bin); the geometry and refraction are not
-  included, and the quick fit gives no ± for R, h or D.
+  included. The 68 % intervals of R, h and D (*fit intervals*, section 8.5) are those of the posterior within the
+  model given these σ: the choice of model is not in them.
 
 ## 9. Model fitting of 1D curves (Fitting)
 
-Fitting fits one curve, or every frame of a series, with its own model. This chapter describes the model and the
-numerical methods *Refine the values in Model* (Refine) and *Search the ranges, then refine* (Search) of the Fit step,
-and *Find the particle shape (no AI)*. *Predict parameters (fit1d)* uses the fit1d kit that comes with GIMaP
-(`utils/gisaxs1d_gui_kit`), described in section 9.12; *Predict parameters*, GIMaP's network and the posterior of
-this model, is section 9.13, and the 1D Predict window chapter 10.
+Fitting fits one curve, or every frame of a series, with its own model. The Fit step has three methods: the
+numerical *Refine the values in Model* (Refine) and *Search the ranges, then refine* (Search), described in this
+chapter, and *Predict parameters*, GIMaP's network and the posterior of this model (section 9.13), which also fits
+the cut of the GISAXS automatic analysis (section 8.5); the 1D Predict window is chapter 10. *Find the particle shape
+(no AI)* and *Predict parameters (fit1d)* were removed in 0.2.0, so that Fitting has one network method; sections 9.9
+and 9.12 keep what they were.
 
 **Units: Fitting works in nm⁻¹ internally.** A curve read in Å⁻¹ (an Analyze `_fit_input.dat`) is multiplied by 10.
 Sizes and distances are in nm, w in nm⁻¹, the spreads σ_R/R, σ_h/h, σnn/D are relative.
 
-**fit1d cut qz** is a user-supplied vacuum value in nm⁻¹, associated with the curve being fitted.
-Opening a curve clears it; a project or session restores the value explicitly saved for its curve.
-Analyze's finite-width horizontal band is not automatically replaced by a single inferred qz.
-This changes the ownership and restoration of the input, not the model equations.
+**The cut's q_z.** Predict parameters takes the vacuum q_z of the cut from Model's grazing-incidence values (αi, αf
+and λ; section 9.10), and the 1D Predict window from its **Cut qz (nm⁻¹)** (chapter 10); without them, q_z = 0, the
+effective interface. Analyze's finite-width horizontal band is not automatically replaced by a single inferred q_z.
 
 ### 9.1 Points that are fitted
 
@@ -1791,19 +1752,16 @@ of standard deviation σ_q in q; the beam-tail term and BG are not. The terms ar
 max(0, q_min − 5σ_q) to q_max + 5σ_q, at most σ_q/5 apart, folded at q = 0 (the cut is symmetric: I(−q) = I(q)),
 convolved with the Gaussian cut at ±5σ_q and interpolated back to the points. A test compares the result with a
 direct convolution of the symmetric cut (within 10⁻³). Smearing matters for well-ordered films: when σ_q is above
-about 0.3 of the width of the structure peak, the fitted σnn/D otherwise takes up the resolution as disorder. fit1d
-has no such term and refuses a σ_q set in Model.
+about 0.3 of the width of the structure peak, the fitted σnn/D otherwise takes up the resolution as disorder.
 
 The plot's **Components** are these additive intensities: `k·Int_i·T_i`, the scaled beam-tail term and
-`BG`; their sum is the total model. They are not normalised population fractions. A current fit1d result instead
-displays the native engine's scaled particle, background and low-q contributions, which sum to its native total;
-the mapped manual model is not used to reconstruct them. Component visibility and axis limits do not change the
+`BG`; their sum is the total model. They are not normalised population fractions. Component visibility and axis limits do not change the
 fit, residuals or numerical exports. Zero and negative values are omitted only from logarithmic display.
 
 **One forward model.** Fitting now computes (9.1) with `cut_model`, GIMaP's one implementation of a 1D cut,
 which the proposal network's training and refinement are to use as well. Before, the same physics existed four times
-with different conventions: Fitting's model, the quick fit of section 8.5 (which used 1D Predict's forward model),
-the fit1d kit's tables and 1D Predict V5's own forward model. `cut_model` was checked against each of them, against an
+with different conventions: Fitting's model, the quick fit of the automatic analysis (which used 1D Predict's
+forward model; removed in 0.2.0), the fit1d kit's tables (removed in 0.2.0) and 1D Predict V5's own forward model. `cut_model` was checked against each of them, against an
 independent implementation and against BornAgain (`tools/benchmarks/cut_model_checks.py` and `cut_model_bornagain.py`,
 q = 0.02–3 nm⁻¹, the largest relative deviation over the curve):
 
@@ -1818,14 +1776,14 @@ q = 0.02–3 nm⁻¹, the largest relative deviation over the curve):
 For one size BornAgain and `cut_model` agree to 10⁻³ (median), more only at the zeros of the form factor, where both
 curves go to zero. BornAgain's default gives the layer holding the particles their volume-averaged refractive index,
 which changes the reflection the DWBA terms carry: for spheres R = 4 nm on a paracrystal of D = 14 nm (about 17 % of
-the layer) the curve then differs by 32 % (median). `cut_model`, like fit1d and `yoneda_truth.py`, uses the reflection
+the layer) the curve then differs by 32 % (median). `cut_model`, like `yoneda_truth.py` (and fit1d), uses the reflection
 of the bare substrate; the free effective r of the two-path model can take up such a difference (section 9.10). One
 core computes 1000 curves of 500 points (R 1–15 nm, σR/R 0.05–0.4) in 1.4 s (spheres), 1.2 s (upright cylinders)
 and 11 s (random cylinders).
 
 **Conventions of the earlier models** (`cut_model/conventions.py` is the one place that converts them):
 
-| Quantity | Fitting now | Fitting earlier | fit1d | 1D Predict V5 and the quick fit (until 0.2.0) |
+| Quantity | Fitting now | Fitting earlier | fit1d (until 0.2.0) | 1D Predict V5 and the quick fit (until 0.2.0) |
 |---|---|---|---|---|
 | sizes | Sizes of each component (section 9.3) | Gaussian by intensity (spheres, random cylinders), by number ±3σ (vertical cylinders) | Gaussian by number | Gaussian by intensity (all three) |
 | spacing disorder | σnn/D | σD/D = (σnn/D)/√(2π) | w = σnn (nm) | σD/D, as earlier Fitting |
@@ -1850,7 +1808,7 @@ P(q) = Σ_j n_j V_j² |A_j(q)|² / Σ_j n_j V_j²,     C(q) = | Σ_j n_j V_j A_j
 ```
 
 A_j is the amplitude of a particle of size x_j normalised to A(0) = 1 (section 9.4) and V_j its volume, so P(0) = 1
-whatever the law. The Gaussian by number is the size distribution of fit1d and of `tools/benchmarks/yoneda_truth.py`,
+whatever the law. The Gaussian by number is the size distribution of `tools/benchmarks/yoneda_truth.py` (and of fit1d),
 cut at ±4σ; the cut is part of the definition: weighted by R⁶ the upper cut removes about 1.5 % of a sphere's
 intensity at σR/R = 0.35, more above. In the log-normal R and σR/R are again the number mean and relative standard
 deviation; it is integrated from 4s below its median to 4s above the median of its V²-weighted form (a log-normal of
@@ -1946,7 +1904,7 @@ saved then is converted (section 9.2).
 
 In the two-path or DWBA geometry the sphere's amplitude is the sum of its paths (9.29, 9.27). Random cylinders are
 averaged at |q| = √(q² + q_z²): with q_z = 0 in the effective interface and the two-path model (as in earlier versions), with the
-cut's vacuum q_z in the Born and DWBA geometries of `cut_model` (as fit1d).
+cut's vacuum q_z in the Born and DWBA geometries of `cut_model` (as fit1d did).
 
 Implementation: `src/gimap/features/fitting/domain/cut_model/shapes.py`
 
@@ -1959,7 +1917,7 @@ GISAXS see Renaud et al., 2009):
 S(q) = ( 1 − p² ) / ( 1 − 2 p cos(q D) + p² ),   p = exp( −q² σ_nn² / 2 ),   σ_nn = (σnn/D) · D             (9.12)
 ```
 
-σnn/D is the relative standard deviation of the distance between neighbours, a Gaussian of mean D; fit1d calls it w/D.
+σnn/D is the relative standard deviation of the distance between neighbours, a Gaussian of mean D; fit1d (section 9.12) called it w/D.
 S is evaluated as `−expm1(2 ln p) / (expm1(ln p)² + 4p sin²(qD/2))`, without cancellation at small q, and
 `S(0) = (σnn/D)²`. Otherwise S = 1.
 
@@ -1997,7 +1955,7 @@ DA:   I = P(q) + C(q) (S(q) − 1)                                              
   therefore tells the two apart. A third, same-size population brings the DA film to 1.1–1.4 in LMA as well, because
   it also takes up the difference of the sphere's shape (section 9.10). D and σnn/D stay within 0.3 % and 0.005 in
   every case.
-- fit1d uses the LMA.
+- fit1d (section 9.12) used the LMA.
 
 Implementation: `src/gimap/features/fitting/domain/cut_model/structure.py`, `src/gimap/features/fitting/domain/cut_model/model.py`
 
@@ -2124,31 +2082,27 @@ Pairs with `abs(ρ) ≥ 0.95` are listed as strongly correlated. A non-linear pa
 
 Implementation: `src/gimap/features/fitting/domain/fit_engine.py`
 
-**Values at the edge of their range.** Model's fixed values and limits are hard constraints. Refine and Search report boundary diagnostics without widening ranges or fixing free parameters automatically. The returned curve has the smallest residual sum of squares among the feasible starting curve and the evaluated curves, so refinement cannot replace a better feasible start.
+**Values at the edge of their range.** Model's fixed values and limits are hard constraints. Refine and Search report boundary diagnostics without widening ranges or fixing free parameters automatically. The returned curve has the smallest residual sum of squares among the feasible starting curve and the evaluated curves, so refinement cannot replace a better feasible start. The values still at an edge are named under **Fit details…**
+(*… is still at the … edge of its range: the curve does not determine it beyond there*); there is no option to widen
+the ranges automatically.
 
-For fit1d with The particles in Model, radius, distance and spread ranges (including defaults) are intersected with the kit's physical limits; fixed values are retained. Only unconstrained automatic composition searches may extend default ranges and perform the existing one-sided-bound analysis. Complete equivalent solutions use the kit's existing criterion Δχ² ≤ max(25, 0.02N)·max(1, χ²_best/N). At most six distinct alternatives are reconstructed from already computed fits without further optimisation; the entire parameter set and curve switch together. Endpoints of equivalent ranges are not treated as complete solutions.
+Implementation: `src/gimap/features/fitting/domain/fit_engine.py`, `src/gimap/features/fitting/domain/fit_edges.py`,
+`src/gimap/features/fitting/application/single_fit.py` (`fit_resolving`)
 
-Implementation: `domain/fit_engine.py`, `domain/fit1d_bounds.py`, `infrastructure/adapters/fit1d_alternatives.py` under the fitting feature.
+### 9.9 Find the particle shape (removed in 0.2.0)
 
-### 9.9 Find the particle shape
+Until 0.2.0 the Fit step had a fourth method, *Find the particle shape (no AI)*: the quick numerical fit that the
+GISAXS automatic analysis used then (a variable-projection fit of sphere, vertical cylinder and random cylinder from
+the starts R = 1.5 nm and 4.0 nm, and R = 4.0 nm with Model's D; at most 5 solutions, sorted by Fitting's χ²_red), its
+solutions converted into Fitting's model (Int solved again against the solution's own curve, the largest relative
+deviation reported). It and *Predict parameters (fit1d)* (section 9.12) were removed in 0.2.0, so that Fitting has
+one network method, *Predict parameters* (section 9.13), beside Refine and Search. The automatic analysis fits its cut
+with Predict parameters as well (section 8.5); a solution of it sent with **Show in Fitting** is taken over as it is
+(its values are in Fitting's own conventions, its amplitudes become the Int). `native_solution.py` still converts the
+quick fit's solutions of records made before 0.2.0.
 
-*Find the particle shape (no AI)* runs the quick fit of section 8.5 on the points of section 9.1 (q passed in Å⁻¹ and converted back
-to nm⁻¹; without σ it uses `σ = √((0.1 I)² + (0.001 max abs(I))²)`). *Try every family* screens sphere, vertical cylinder
-and random cylinder as single components; *The families in Model* fits the composition of Model as a whole. Each
-family is started from several points: R = 1.5 nm and R = 4.0 nm, and R = 4.0 nm with the Model's D when the Model has
-been edited and its first component has a distance. At most 5 distinct solutions are returned.
-
-Each solution is converted into Fitting's model. Sizes are taken over, the spreads stay relative, and every Int is
-solved again by NNLS against the solution's own fitted curve with relative residuals, in two trials (with the
-solution's BG and A, or with all linear terms refitted); the closer trial is kept, and its largest relative deviation
-`max abs(m_GIMaP / m_solution − 1)` is reported. The quick fit's sizes are Gaussians by intensity and its σD/D is
-converted (9.13). Spheres and random cylinders get Sizes *Gaussian, by intensity*, and the curves differ only by the
-quick fit's coarser size and orientation rules (section 9.3); vertical cylinders get *Gaussian, by number* (Fitting's
-earlier convention for them), so the curves differ when `σ_R/R > 0`, and the deviation says by how much. Converted proposals retain fixed values and are clipped to Model's limits; with custom constraints they are then refined with the manual model. Compositions incompatible with constrained populations are not offered. The resulting solutions are scored with Fitting's residuals (9.15–9.16) and
-χ²_red (9.23) and **sorted by that χ²_red** (the automatic analysis of chapter 8 sorts the same fit by M_H). The best goes
-into Model, and Refine is proposed next.
-
-Implementation: `src/gimap/features/fitting/presentation/single/run.py`, `src/gimap/features/fitting/domain/native_solution.py`
+Implementation (now): `src/gimap/features/fitting/application/single_fit.py` (`model_from_solution`,
+`cut_model_solution`), `src/gimap/features/fitting/domain/native_solution.py`
 
 ### 9.10 Spheres and cylinders in a horizontal cut: the effective interface approximation
 
@@ -2165,7 +2119,7 @@ under the particles (polymer film, oxide, roughness, the particle layer itself),
 Example: at the Si critical angle, r_f = 0.82 − 0.15i on bare Si and −0.64 − 0.29i on Si covered with 100 nm
 polystyrene (λ = 0.1045 nm).
 
-**What GIMaP does by default.** Fitting (and fit1d without *Cut qz*) uses the effective interface approximation
+**What GIMaP does by default.** Fitting (and Predict parameters without the angles in Model or *Cut qz*) uses the effective interface approximation
 (EIA) of the Müller-Buschbaum group: the transmission factors are constant along a horizontal cut, so they go into
 the scale, and the form factor is taken at q_z = 0. No substrate information is needed.
 
@@ -2288,10 +2242,13 @@ then Refine):
 - Take the other two populations as descriptions of their q windows. Read them as particles only with independent
   support: SEM or AFM, the same population at another α_f, or a size that evolves smoothly in a series.
 
-### 9.12 Predict parameters (fit1d)
+### 9.12 fit1d (removed in 0.2.0)
 
-*Predict parameters (fit1d)* fits the cut with a model of its own. A network proposes starting values; a
-least-squares fit refines them. The network only chooses where the fit starts; the result is the fit.
+Until 0.2.0 the Fit step and the 1D Predict window offered *Predict parameters (fit1d)*, a separate kit
+(`utils/gisaxs1d_gui_kit`, about 62 MB) with a model of its own: a network proposed starting values, a least-squares
+fit refined them. It was removed in 0.2.0, with *Find the particle shape* (section 9.9), so that Fitting has one
+network method, *Predict parameters* (section 9.13). Its record stays here because section 9.13 is compared with it;
+the kit remains in the history of the repository.
 
 **The model.**
 
@@ -2299,74 +2256,25 @@ least-squares fit refines them. The network only chooses where the fit starts; t
 I(q) = Σ_j A_j F_j(q) S_j(q) + B + C / (1 + (q/w)^ν),      A_j, B, C ≥ 0                            (9.30)
 ```
 
-- Up to four populations. Each one is a sphere, evaluated at |q| = √(q_∥² + q_z²) with the q_z of the cut
-  (q_z = 0 when no *Cut qz* is given: the EIA of section 9.10), or an upright cylinder, evaluated at q_∥.
-- Sizes follow a number-weighted Gaussian, cut at ±4σ.
-- S_j is the Hosemann paracrystal with neighbour distance D and spread w = (σ_nn/D)·D.
-- For every set of the nonlinear parameters, the amplitudes A_j, B and C are solved by non-negative least squares
-  (variable projection).
-- ν is fixed at 2 unless it is freed.
-
-A fit1d result sent to Model as a start keeps its σnn/D (fit1d's w/D) and its R and σ_R/R; its spheres get Sizes
-*Gaussian, by intensity* and its vertical cylinders *Gaussian, by number* (the conventions of Fitting's parameter store), while fit1d's sizes are by number. Model's curve therefore differs from fit1d's for spheres until Refine
-has run or Sizes is set to *Gaussian, by number*.
-
-**The network.**
-
-- Input: the cut, rebinned to at most 192 points. Each point gives log(q/q_max), q/q_max, asinh(I/m) and
-  asinh(σ/m), where m is the median intensity.
-- Conditions: the composition (one of 34) and three numbers, q_z/q_max, GISAXS or SAXS, and log₁₀(q_max/q_min).
-- Its parameter ranges are set by the q window of the cut itself: R from 0.5/q_max to 5/q_min, D from 2R to 40R,
-  σ_R/R from 0.03 to 0.5, σ_nn/D from 0.02 to 0.5. The same network therefore serves cuts measured at any
-  distance and energy.
-- Architecture: five masked convolutions along q (kernels of 3 to 33 points, 256 channels), each modulated by the
-  conditions; mean and maximum pooling; three dense layers. It gives eight sets of starting values (heads).
-- Training: 2.05 million synthetic curves of the model (9.30), with a loss on the parameters and a small χ² term.
-  The weights of `general` are distributed with GIMaP and checked by SHA-256. The second network, `au_np_si`, is
-  `general` adapted without labels to measured in-situ curves of Au particles on Si (curves not distributed).
-- Inference runs in numpy; neither PyTorch nor TensorFlow is needed.
-
-**From the proposals to the fit.**
-
-1. The eight heads are evaluated; the amplitudes come from non-negative least squares.
-2. The two best heads (plus, with two or more populations, one start built without the network) are aligned on an
-   (R, D) grid and refined by Levenberg–Marquardt.
-3. Heads whose χ² is still falling continue, up to 40 evaluations.
-4. With the policy *auto*, a robust search runs only when a check fires: χ² still falling at the end, two heads
-   with the same χ² but different R or D, a size at its bound, a population with zero amplitude, or no head that
-   describes the curve. It refines all eight heads and 16 Latin-hypercube starts, then restarts D over a grid.
-
-The result is the lowest χ² over everything evaluated, so the search never replaces a solution by a worse one.
-
-**Errors and flags.**
-
-- 1σ comes from the local covariance (JᵀJ)⁻¹, scaled by max(1, χ²/dof). A direction that the cut does not
-  constrain is reported as unconstrained.
-- *weakly constrained*: relative error above 50 %, a value at its bound, a population with zero amplitude, or
-  another solution of equivalent χ² whose R or D differs by more than 5σ.
-- *quality*: χ² per point above the 99th percentile of reference fits at the same signal-to-noise, or a runs test
-  of the residual signs that fails (p < 10⁻³).
-- *ood*: the Mahalanobis distance of five descriptors of the input (q range, number of points, dynamic range,
-  median σ/I, fraction of unusable points) from those of the development curves is above their 99.5th percentile.
-- Thresholds are taken from the development curves only.
-
-**Composition.** With *auto*, every candidate composition is fitted and ranked by
+Up to four populations, each a sphere evaluated at |q| = √(q_∥² + q_z²) with the q_z of the cut (*Cut qz*; q_z = 0:
+the EIA of section 9.10), optionally in a four-term DWBA on Si, or an upright cylinder evaluated at q_∥; sizes a
+number-weighted Gaussian cut at ±4σ; S_j the Hosemann paracrystal in the LMA with spread w = (σ_nn/D)·D; the amplitudes
+by non-negative least squares (variable projection); ν fixed at 2 unless freed. Its network (eight heads of starting
+values, trained on 2.05 million curves of (9.30); `general` and `au_np_si`) ran in numpy. The best heads were refined by
+Levenberg–Marquardt, with a robust search when a check fired; the errors were the local covariance scaled by
+max(1, χ²/dof). With *auto*, every candidate composition was fitted and ranked by
 
 ```text
 BIC = χ² + k ln N                                                                                    (9.31)
 ```
 
-with k free parameters and N points. Compositions within ΔBIC ≤ 10 of the lowest are reported together as
-indistinguishable.
+(k free parameters, N points); compositions within ΔBIC ≤ 10 of the lowest were reported as indistinguishable.
 
-**Benchmark.** 200 curves fit1d had never seen, made with an independent forward model (`tools/benchmarks`, no
-code shared with fit1d):
-
-- populations: one sphere, one upright cylinder, two spheres, or a sphere and a cylinder;
-- ranges: R 1.2–10 nm (two populations 1.8–3 times apart), σ_R/R 0.1–0.35, D/2R 1.3–2.5, σ_nn/D 0.1–0.3, 10³–10⁵ counts at the peak, q 0.02–2 nm⁻¹;
-- half with fit1d's own physics, half with a resolution of 0.005 nm⁻¹, a beam tail and roughness added.
-
-The true composition is given. The errors are the median and the 90th percentile over all populations:
+**Benchmark.** 200 curves fit1d had never seen, made with an independent forward model (`yoneda_truth.py`, no shared
+code): one sphere, one upright cylinder, two spheres, or a sphere and a cylinder; R 1.2–10 nm, σ_R/R 0.1–0.35, D/2R
+1.3–2.5, σ_nn/D 0.1–0.3, 10³–10⁵ counts at the peak, q 0.02–2 nm⁻¹; half with fit1d's own physics, half with a
+resolution of 0.005 nm⁻¹, a beam tail and roughness. The true composition given, median / 90th percentile over all
+populations:
 
 | | network alone | after the fit |
 |---|---|---|
@@ -2376,19 +2284,12 @@ The true composition is given. The errors are the median and the 90th percentile
 | σ_nn/D (absolute) | 0.011 / 0.049 | 0.001 / 0.005 |
 | time per curve (one core) | 0.12 s | 3.5 s |
 
-- The large errors come from the cuts with two populations, where the weaker one is partly hidden (90th percentile
-  of R 8–29 %). One population alone is within 5 % in nine cases out of ten.
-- On the cuts with fit1d's own physics, 61–70 % of the values lie within their 1σ (68 % expected): the errors are
-  the statistical errors. With the beam tail and roughness, 26–43 %: the low-q term does not describe them
-  exactly, and the errors do not contain that.
-- *auto* (up to two populations) finds the true composition in 69 % of the cuts with fit1d's own physics and in 30 %
-  with the low-q physics. A single population then usually gets a second one that takes up the roughness, as the
-  large population of section 9.11. Take the composition from Model when it is known; take *auto* as a suggestion.
+On the cuts with fit1d's own physics 61–70 % of the values lay within their 1σ, with the beam tail and roughness
+26–43 %; *auto* (up to two populations) found the true composition in 69 % and 30 % of the cuts.
 
-**A measured cut: GALAXI.** fit1d on the Yoneda cut of the public GALAXI frame and on BornAgain's model of it
-(section 9.10: log-normal radii, number mean 6.2 nm and relative spread 0.42; radial paracrystal D = 53.6 nm,
-σ_nn/D = 0.196), simulated on that cut with the counts of the measurement (three noise draws;
-`tools/benchmarks/galaxi_fit1d.py`). fit1d's sizes are by number, so they compare with these directly.
+**GALAXI.** On the Yoneda cut of the public GALAXI frame and on BornAgain's model of it (section 9.10: log-normal
+radii, number mean 6.2 nm, relative spread 0.42; radial paracrystal D = 53.6 nm, σ_nn/D = 0.196), simulated with the
+counts of the measurement (three noise draws; `tools/benchmarks/galaxi_fit1d.py`):
 
 | | one sphere, Born at the cut's q_z | one sphere, DWBA (Si substrate) |
 |---|---|---|
@@ -2397,20 +2298,14 @@ The true composition is given. The errors are the median and the 90th percentile
 | D ± 1σ, σ_nn/D | 56.9–57.6 nm, 0.41–0.42 | 53.8–55.1 ± 1.3 nm, 0.50 (at its upper limit) |
 | measured cut: χ²/N, R, D | 14.4, 5.2 nm, 56.4 nm | 2.0, 4.8 nm, 43.1 ± 0.9 nm |
 
-- With the DWBA, D of BornAgain's model comes back within about 1σ, which Fitting's EIA cannot find on this cut
-  (section 9.10). The width of the sizes and of the distances does not: both stop at the upper limit of fit1d's
-  range, and fit1d flags them (*at bound*, *weakly constrained*). R by number is then 33 % low: a Gaussian on number
-  weights at σ_R/R = 0.5 does not describe the log-normal's tail of large particles, which dominates the intensity.
-- fit1d has one substrate; BornAgain's sample is a film stack (HMDSO, PTFE, Si) with size–spacing coupling κ = 17.5.
-  χ²/N stays above fit1d's quality threshold (1.38 here), and the quality flag is set.
-- *auto* (up to three spheres) adds a sphere of R ≈ 0.18 nm on two of the three simulated cuts. At q_max·R ≈ 0.5
-  its form factor is flat over the curve, so it is a background term, not particles. GIMaP names such a population
-  among the warnings (*R … is smaller than this curve resolves*) whenever q_max·R < 1. This is what took the first
-  trial on this frame to three populations.
+With the DWBA, D of BornAgain's model came back within about 1σ, while the widths stopped at the upper limit of
+fit1d's range. *auto* (up to three spheres) added a sphere of R ≈ 0.18 nm, a background term, on two of the three
+simulated cuts.
 
-Implementation: `src/gimap/features/fitting/infrastructure/adapters/fit1d_method.py`,
-`src/gimap/features/fitting/infrastructure/adapters/single_fit1d.py`, `utils/gisaxs1d_gui_kit` (fit1d);
-benchmark: `tools/benchmarks/fit1d_recovery.py`, summary `tools/benchmarks/fit1d_recovery_summary.json`
+The benchmarks still run with a copy of the kit: `tools/benchmarks/fit1d_recovery.py` (summary
+`fit1d_recovery_summary.json`) takes it from the environment variable `GISAXS1D_KIT_HOME`, and
+`tools/benchmarks/galaxi_fit1d.py` from `utils/gisaxs1d_gui_kit` of a checkout that still has it;
+`tools/benchmarks/recovery_cases.py` holds the held-out curves that fit1d and Predict parameters are both scored on.
 
 ### 9.13 Predict parameters
 
@@ -2460,41 +2355,51 @@ the tail, the background, the model error, 100–1000 measured points (linear or
 (10²–10⁷ at the highest point) and gaps. 30 epochs (2 h) on one GPU; the weights (13 MB, float32) come with GIMaP with
 their SHA-256 and model card, and GIMaP evaluates them with numpy: neither PyTorch nor TensorFlow is needed.
 
-**From the proposals to the solutions** (`posterior/infer.py`, `laplace.py`, `refine.py`):
+**From the proposals to the solutions** (`posterior/infer.py`, `laplace.py`, `refine.py` `predict`). The Fit step
+has one path; **Particles** chooses the compositions: *The particles in Model* (their families and whether each has
+the paracrystal, in the order of their radii; with an empty Model it takes the next choice), *Spheres and upright
+cylinders (1–2)* or *Any particles (1–3)*.
 
-1. The compositions: those of Model, or the head's four most probable among a choice (spheres and upright cylinders,
-   one or two; any, one to three).
-2. For each, N = 2000 samples of the flow. Per sample, the terms of cut_model on the measured points (with the
-   sample's resolution), the scales by non-negative least squares, and the likelihood: Gaussian in σ, the model error
-   integrated out exactly (Woodbury identity), the scales integrated out under their uniform priors (Laplace for the
-   positive ones, a half Gaussian for those at 0). Weights L·π/q. For a bright curve the likelihood is far narrower
-   than any proposal amortised over all curves: the weights sit on a few samples (effective sample size of order 1),
-   which therefore only point at the modes.
+1. The compositions: that of Model, or the head's three most probable among the choice.
+2. For each, N = 1000 samples of the flow (300 for a composition with a random cylinder). Per sample, the terms of
+   cut_model on the measured points (with the sample's resolution), the scales by non-negative least squares, and the
+   likelihood: Gaussian in σ, the model error integrated out exactly (Woodbury identity), the scales integrated out
+   under their uniform priors (Laplace for the positive ones, a half Gaussian for those at 0). Weights L·π/q. For a
+   bright curve the likelihood is far narrower than any proposal amortised over all curves: the weights sit on a few
+   samples (effective sample size of order 1), which therefore only point at the modes. Without σ in the file, σ is a
+   relative error from the scatter of ln I about its local trend (the robust second difference; at least 1 %).
 3. The samples fall into modes (radii and distances 10 % apart, spreads 0.05 apart start a new one); the up to three
-   heaviest modes are refined by least squares (section 9.8; σ_q free; the tail within the prior's ranges). When none
-   of them refines below χ²/N = 2 (the network's proposals miss the curve, as on GALAXI), one search of the ranges
-   (section 9.8) started from the 16 heaviest samples is added.
-4. Around every refined solution its posterior is sampled: a Student t (5 degrees of freedom) over the values the
-   curve constrains, its scale from the Gauss–Newton curvature of the residuals plus the prior's, inflated by 1.4;
-   the others (an absent tail, a resolution at its bound, τ) from piecewise densities that a scan of the likelihood
-   along each sets; up to three rounds of population Monte Carlo until 200 effective samples. The weighted samples
-   give every value's median and 68 %/95 % interval, and the evidence Z of the solution.
+   heaviest modes of each composition are refined by least squares from their heaviest sample (section 9.8; σ_q free;
+   every population held to the prior's box: R from 0.5/q_max to 5/q_min, the spreads 0.02–0.5, D/2R and h/2R in the
+   prior's ranges at radii up to 1.5 times the start's; the tail within the prior's ranges). When no solution of one of
+   the two best compositions (by BIC) refines below χ²/N = 2 (the network's proposals miss the curve, as on GALAXI),
+   one search of the ranges (section 9.8) started from its 16 heaviest samples is added.
+4. The refined solutions are ranked by BIC = χ² + k ln N (k the free values, the scales included); those more than 20
+   above the best are dropped, and around each of the others (at most four) the posterior is sampled: a Student t (5
+   degrees of freedom) over the values the curve constrains, its scale from the Gauss–Newton curvature of the
+   residuals plus the prior's, inflated by 1.4 (and by √(χ²/N) on a curve the model does not describe within σ); the
+   others (an absent tail, a resolution at its bound, τ) from piecewise densities that a scan of the likelihood along
+   each sets; up to three rounds of 400 samples (population Monte Carlo) until 200 effective samples. The weighted
+   samples give every value's median and 68 %/95 % interval, and the evidence Z of the solution.
 5. A composition's evidence is the sum of those of its distinct solutions; the probabilities of the compositions are
    ∝ Z (equally likely beforehand), a solution's is its composition's times its share. When the sampling of any
-   solution did not converge (fewer than 10 effective samples), all are compared by BIC instead, Z ∝ exp(−BIC/2) with
-   BIC = χ² + k ln N (k the free values, the scales included), as fit1d ranks its solutions, and their intervals are the least-squares errors of section 9.8 (scaled by χ²/N; on a
-   log scale for the lengths); the solutions say so. This
-   happens on curves the model does not describe within σ: with the model error near its bound the posterior lies away
-   from the least-squares optimum, and the evidences cannot be estimated (on BornAgain's GALAXI model they ranked a
-   solution with χ²/N = 11.5 above one with 4.4). There the proposal of step 4 is also widened by √(χ²/N).
+   solution did not converge (fewer than 10 effective samples, or a refined solution whose radii left the
+   composition's order and has no local posterior), all are compared by BIC instead, Z ∝ exp(−BIC/2), and their
+   intervals are the least-squares errors of section 9.8 (scaled by χ²/N; on a log scale for the lengths); the
+   solutions carry the flag *bic* (*compared by χ² and the number of values (BIC): the posterior's sampling did not
+   converge*). This happens on curves the model does not describe within σ: with the model error near its bound the
+   posterior lies away from the least-squares optimum, and the evidences cannot be estimated (on BornAgain's GALAXI
+   model they ranked a solution with χ²/N = 11.5 above one with 4.4).
 
-Each solution carries the refined values with their least-squares errors (9.8), the posterior median and intervals,
-χ²ᵣ, its probability and flags: a value at a bound of its range; *unconstrained* when its 68 % interval covers more
-than 0.7 of the prior's range; strongly correlated pairs; few effective samples (below 50: the intervals are then taken with the weights raised to the
-largest power β ≤ 1 that gives 50 effective samples, which moves them towards the wider proposal). The other ways to finish
-(**Options ▸ Predict: the solutions**): one search of the ranges per composition whose first population holds the
-heaviest samples (*Search from the samples*), or the network's weighted samples alone (*Posterior samples only*,
-no least squares; intervals from step 2).
+Every solution holding at least 1 % of the posterior is returned, most probable first. Each carries the refined
+values with their least-squares errors (9.8), the posterior median and intervals, χ²ᵣ, its probability and flags: a
+value at a bound of its range; *unconstrained* when its 68 % interval covers more than 0.7 of the prior's range;
+strongly correlated pairs (beyond ±0.95); few effective samples (below 50: the intervals are then taken with the
+weights raised to the largest power β ≤ 1 that gives 50 effective samples, which moves them towards the wider
+proposal); *bic*. The most probable goes into Model, the others to **Other solutions**. Model's fixed values and
+ranges are not used; **Refine the values in Model** afterwards keeps them. Time per curve on one core (development
+curves): about 5 s with the composition given, about 14 s choosing among one or two populations, about 50 s among one
+to three.
 
 Model's coupling (DA) and size law (log-normal) are used in steps 2–4: the network, trained on the LMA and Gaussian
 sizes, is then only a proposal, which the weights correct. Fitting has no four-term DWBA: Predict uses the Born term
@@ -2505,7 +2410,7 @@ composition given, 1000 samples each), the network's own 68 % and 95 % intervals
 94–96 % of the cases, for every value; the ranks of the truth among the samples are uniform within the statistics
 (χ² of 20 rank bins 10–28, 19 degrees of freedom). The head ranks the true composition first in 21 % of the cuts:
 many of the 258 compositions describe a cut about equally well (a paracrystal on a weak population, two populations
-of similar size), and the likelihood decides among the head's four.
+of similar size), and the likelihood decides among the head's most probable (three in GIMaP's Predict parameters).
 
 **Benchmark.** The 200 held-out curves of fit1d's benchmark (the independent truth model `yoneda_truth.py`; section
 9.12), with the same scoring (`tools/benchmarks/posterior_recovery.py`): half of them in fit1d's own physics
@@ -2517,16 +2422,16 @@ scripts):
 
 | level | value | Predict: median / P90 | Predict: 68 % | fit1d: median / P90 | fit1d: 68 % |
 |---|---|---|---|---|---|
-| model | R | 0.7 % / 35 % | 54 % | 0.5 % / 7.1 % | 61 % |
-| model | σR/R | 0.006 / 0.10 | 65 % | 0.005 / 0.062 | 69 % |
-| model | D | 0.0 % / 0.5 % | 65 % | 0.0 % / 0.2 % | 70 % |
-| model | σnn/D | 0.001 / 0.005 | 61 % | 0.000 / 0.002 | 68 % |
-| measured | R | 0.7 % / 25 % | 44 % | 1.0 % / 19 % | 34 % |
-| measured | σR/R | 0.008 / 0.14 | 46 % | 0.010 / 0.10 | 36 % |
-| measured | D | 0.1 % / 0.9 % | 45 % | 0.1 % / 0.3 % | 43 % |
-| measured | σnn/D | 0.002 / 0.006 | 37 % | 0.001 / 0.006 | 26 % |
-| | composition right (model / measured) | 84 % / 45 % | | 69 % / 30 % | |
-| | seconds: composition given / chosen | 7.5 / 50 | | 3.5 / 6.3 | |
+| model | R | 0.7 % / 36 % | 52 % | 0.5 % / 7.1 % | 61 % |
+| model | σR/R | 0.007 / 0.13 | 55 % | 0.005 / 0.062 | 69 % |
+| model | D | 0.0 % / 0.6 % | 62 % | 0.0 % / 0.2 % | 70 % |
+| model | σnn/D | 0.001 / 0.005 | 62 % | 0.000 / 0.002 | 68 % |
+| measured | R | 0.9 % / 24 % | 42 % | 1.0 % / 19 % | 34 % |
+| measured | σR/R | 0.009 / 0.12 | 45 % | 0.010 / 0.10 | 36 % |
+| measured | D | 0.1 % / 0.9 % | 40 % | 0.1 % / 0.3 % | 43 % |
+| measured | σnn/D | 0.002 / 0.007 | 39 % | 0.001 / 0.006 | 26 % |
+| | composition right (model / measured) | 87 % / 48 % | | 69 % / 30 % | |
+| | seconds: composition given / chosen | 2.7 / 9.4 | | 3.5 / 6.3 | |
 
 On 1200 curves drawn the same way on a seed range never used while the method was developed (`heldout_cases.py`):
 one to three populations, the LMA or the DA (given to both methods), the composition chosen among one to three
@@ -2534,38 +2439,40 @@ populations:
 
 | level | value | Predict: median / P90 | Predict: 68 % | fit1d: median / P90 | fit1d: 68 % |
 |---|---|---|---|---|---|
-| model | R | 2.6 % / 58 % | 53 % | 4.5 % / 40 % | 47 % |
-| model | D | 0.1 % / 33 % | 50 % | 0.1 % / 4.5 % | 48 % |
-| measured | R | 3.1 % / 62 % | 48 % | 7.2 % / 49 % | 30 % |
-| measured | D | 0.2 % / 53 % | 44 % | 0.3 % / 12 % | 28 % |
-| | composition right (model / measured) | 63 % / 34 % | | 32 % / 16 % | |
-| | seconds: composition given / chosen | 15 / 162 | | 8.9 / 26 | |
+| model | R | 2.7 % / 58 % | 52 % | 4.5 % / 40 % | 47 % |
+| model | D | 0.1 % / 50 % | 49 % | 0.1 % / 4.5 % | 48 % |
+| measured | R | 3.8 % / 66 % | 48 % | 7.2 % / 49 % | 30 % |
+| measured | D | 0.2 % / 70 % | 42 % | 0.3 % / 12 % | 28 % |
+| | composition right (model / measured) | 58 % / 37 % | | 32 % / 16 % | |
+| | seconds: composition given / chosen | 4.3 / 20.5 | | 8.9 / 26 | |
 
 What this says:
 
 - Predict chooses the composition more often right than fit1d, and its median errors are as small or smaller (except
   R in fit1d's own physics, 0.7 % against 0.5 %).
 - Its large errors are larger: the 90th percentiles of R and D are several times fit1d's. Nearly all are curves of
-  two or three populations (a population off by more than 20 %: 32 of the 200 curves, 31 of them with two; 379 of the
-  1200, 375 with two or three). About two thirds of these the solution describes within its errors (χ²/N ≤ 1.5) with
-  other sizes: the curve does not separate the populations, and the posterior's most probable mode is not the truth's.
-  The rest are refinements that stay in another mode (χ²/N above 3 in 4 of the 32 and 68 of the 379).
-- Its 68 % intervals hold the truth in 37–65 % of the cases (fit1d's set) and 41–59 % (the extended set), its
-  least-squares errors in 29–72 %, fit1d's in 18–70 %: the network's own intervals are calibrated (above), the loss
-  comes at the refined mode (a mode other than the truth's, few effective samples). Read the intervals as a lower bound
-  of the uncertainty.
-- It is slower: about twice fit1d's time when the composition is given, 6–8 times when it chooses.
-- The measured curves have roughness falling as q⁻³ at low q, which the tail (ν near 2) cannot take up, and many of
-  them are compared by BIC (step 5; 30 % of the 200 solutions, 45 % of the 1200): there Predict chooses the composition
-  right less often (45 % against 84 % in fit1d's own physics).
+  two or three populations (a population off by more than 20 %: 34 of the 200 curves, 33 of them with two; 377 of the
+  1200, 371 with two or three). Most of these the solution describes within its errors (χ²/N ≤ 1.5 in 24 of the 34
+  and 218 of the 377) with other sizes: the curve does not separate the populations, and the posterior's most probable
+  mode is not the truth's. The rest are refinements that stay in another mode (χ²/N above 3 in 4 and 85).
+- Its 68 % intervals hold the truth in 39–62 % of the cases (fit1d's set) and 40–60 % (the extended set), its
+  least-squares errors in 29–70 %, fit1d's in 18–70 %: the network's own intervals are calibrated (above), the loss
+  comes at the refined mode (a mode other than the truth's, few effective samples; 31 % and 46 % of the solutions
+  were compared by BIC). Read the intervals as a lower bound of the uncertainty.
+- It is as fast as fit1d or faster with the composition given (2.7 s against 3.5 s; 4.3 s against 8.9 s) and when it
+  chooses among one to three populations (20.5 s against 26 s); choosing among one or two it takes 9.4 s against 6.3 s.
+- The measured curves have roughness falling as q⁻³ at low q, which the tail (ν near 2) cannot take up: there Predict
+  chooses the composition right less often (48 % against 87 % in fit1d's own physics).
 
-A first run on the same curves, before the search of the ranges (step 3) and the comparison by BIC (step 5) were added
-after GALAXI (below) showed solutions with χ²/N 11 chosen over ones with 4, gave the same medians, the composition right
-more often on the measured curves (65 % and 40 %), intervals that held the truth less often (43–62 % and 30–44 %), and
-took 40 s and 86 s to choose (`posterior_*_first_summary.json`).
+Earlier runs on the same curves: before the search of the ranges (step 3), the comparison by BIC (step 5), the
+prior's box for least squares and the faster settings (2000 samples, four compositions, the posterior of every
+solution), Predict had the same medians, the composition right more often on the measured curves (65 % and 40 %),
+intervals that held the truth less often (43–62 % and 30–44 %), and took 40 s and 86 s to choose
+(`posterior_*_first_summary.json`).
 
-fit1d therefore stays, and Fitting still recommends it for an unfitted GISAXS cut; Predict replaces 1D Predict V5,
-which on the same 200 curves had median errors of 31 % (R) and 22 % (D) (chapter 10).
+fit1d was nevertheless removed from GIMaP in 0.2.0, so that Fitting has one network method: its benchmark stays the
+reference (section 9.12). 1D Predict V5, on the same 200 curves, had median errors of 31 % (R) and 22 % (D)
+(chapter 10).
 
 **GALAXI.** The cut of the public GALAXI frame and three Poisson draws of BornAgain's model of it (log-normal radii,
 number mean 6.24 nm, radial paracrystal of 53.6 nm; four-term DWBA), as in section 9.12
@@ -2575,14 +2482,15 @@ the cut's q_z:
 | source | Predict: R (nm) | Predict: D (nm), 68 % | χ²/N | fit1d: R, D (nm) | χ²/N |
 |---|---|---|---|---|---|
 | BornAgain's model, three draws | 4.78–4.84 | 49.2–51.3, each interval holds 53.6 | 4.3–4.5 | 4.88–4.93, 56.9–57.6 | 6.1–6.5 |
-| measured cut | 5.16 | 46.5 [43.8, 49.3] | 8.8 | 5.20, 56.4 | 14.4 |
+| measured cut | 5.16 | 46.4 [43.8, 49.2] | 8.8 | 5.20, 56.4 | 14.4 |
 
-With the composition chosen among one to three sphere populations, Predict takes two (a broad log-normal is two
-Gaussians), the first with D 48.4–50.7 nm on the simulated cuts and 48.4 nm on the measured one; fit1d chose a sphere of
-R 0.18 nm on one of the draws. All these solutions were compared by BIC (the model does not describe the cut within σ:
-χ²/N 3–9), and their intervals are least-squares errors. fit1d's four-term DWBA, which Fitting does not have, describes
-the simulated cuts better (χ²/N 1.75, D 53.8–55.1 nm). Time: 12–23 s per variant, about 100 s for the choice among
-compositions. GALAXI was used to set the tail's prior and the rules of step 5, so this is no independent test.
+With the composition chosen among one to three sphere populations, Predict takes two spheres with a paracrystal (a
+broad log-normal is two Gaussians), with D 42–53 nm on the simulated cuts and 45 nm on the measured one; fit1d chose a
+sphere of R 0.18 nm on one of the draws. All these solutions were compared by BIC (the model does not describe the cut
+within σ: χ²/N 4–9), and their intervals are least-squares errors. fit1d's four-term DWBA, which Fitting does not
+have, describes the simulated cuts better (χ²/N 1.75, D 53.8–55.1 nm). Time: 15–33 s per variant, 40–57 s for the
+choice among compositions. GALAXI was used to set the tail's prior and the rules of steps 3 and 5, so this is no
+independent test.
 
 Implementation: `src/gimap/features/fitting/domain/posterior/`, `application/single_predict.py`,
 `infrastructure/adapters/posterior_job.py`; training and checks: `tools/ml1d/`; benchmarks:
@@ -2591,12 +2499,13 @@ Implementation: `src/gimap/features/fitting/domain/posterior/`, `application/sin
 ## 10. 1D Predict (many curves)
 
 The 1D Predict window (**Tools ▸ 1D Predict — Fit Many Curves…**) fits a list of curve files, or the curve open in
-Fitting, one half at a time, with one of three methods: *Predict parameters* (section 9.13, the default), the physical
-fit of section 8.5, or fit1d (section 9.12). It runs in a separate, cancellable process. Neither method needs
-TensorFlow.
+Fitting, one half at a time, with *Predict parameters* (section 9.13), its one method. It runs in a separate,
+cancellable process and needs no TensorFlow. Settings saved with the methods of earlier versions (*General V5*,
+*Single RC specialist*, the physical fit, fit1d) open as Predict parameters: their own options are dropped, and
+fit1d's *Cut qz* is kept as the cut's q_z.
 
 Implementation: `src/gimap/features/fitting/infrastructure/adapters/workflow_v5.py` (the job, its files),
-`posterior_job.py`, `experimental_fit.py`, `fit1d_method.py`.
+`posterior_job.py`, `src/gimap/features/fitting/application/workflow_v5.py` (the options).
 
 ### 10.1 Input
 
@@ -2608,17 +2517,18 @@ Each side of a signed curve is fitted separately (no folding). A side needs 8–
 ```
 
 (**Relative σ (if missing)** and **Absolute σ floor** in **Parameters…** replace r and a). The side's largest intensity is recorded
-as its normalizer; the methods see the curve as measured. The scores of a candidate are those of the measured points:
+as its normalizer; the method sees the curve as measured. The scores of a candidate are those of the measured points:
 logRMSE (natural logarithm, positive points), RMS/σ and the mean of the squared normalised residuals.
 
-### 10.2 The methods
+### 10.2 The method
 
-- **Predict parameters**: section 9.13 on each half, with **Complete composition** as the compositions (1–3
-  populations, each with the paracrystal) or, with *Auto*, the network's four most probable among all; q_z of the
-  cut from **Cut qz** (unticked: the effective interface). Each candidate carries its probability, its posterior
-  intervals and flags (`solutions.json`: `probability`, `posterior`, `warnings`, `ess`).
-- **Physical fit (numerical)**: the quick fit of section 8.5 with the families of **Complete composition**.
-- **fit1d**: the kit of section 9.12 with the composition given.
+Section 9.13 on each half, with **Complete composition** as the composition (1–3 populations, each with the
+paracrystal) or, with *Auto*, the head's three most probable among all compositions; q_z of the cut from **Cut qz
+(nm⁻¹)** (unticked: the effective interface). The eight most probable solutions of a half are its candidates, with
+the stage *Network + posterior*; each carries its probability, its posterior intervals and flags (`solutions.json`:
+`probability`, `posterior`, `warnings`, `ess`). The run writes the files it wrote before 0.2.0 (`request.json`,
+`batch_summary.json`, `top20_candidates.json`, `fitting_run_summary.json`, and per half `solutions.json`,
+`display.npz`, `fitting_curves.csv`).
 
 ### 10.3 Workflow V5, removed in 0.2.0
 
@@ -2634,13 +2544,13 @@ default options, the q > 0 half, sizes compared in V5's convention):
 
 | level | value | Predict: median / P90 | V5: median / P90 |
 |---|---|---|---|
-| model | R | 0.7 % / 35 % | 31 % / 141 % |
-| model | σR/R | 0.006 / 0.10 | 0.14 / 0.36 |
-| model | D | 0.0 % / 0.5 % | 39 % / 311 % |
-| measured | R | 0.7 % / 25 % | 34 % / 87 % |
-| measured | σR/R | 0.008 / 0.14 | 0.16 / 0.42 |
+| model | R | 0.7 % / 36 % | 31 % / 141 % |
+| model | σR/R | 0.007 / 0.13 | 0.14 / 0.36 |
+| model | D | 0.0 % / 0.6 % | 39 % / 311 % |
+| measured | R | 0.9 % / 24 % | 34 % / 87 % |
+| measured | σR/R | 0.009 / 0.12 | 0.16 / 0.42 |
 | measured | D | 0.1 % / 0.9 % | 15 % / 274 % |
-| | seconds per curve | 7.5 | 19.8 |
+| | seconds per curve | 2.7 | 19.8 |
 
 V5 also gave no probability and no interval. The code, the weights and their records remain in the repository's
 history (the last commit that has them: 06e7395), and `v5_recovery.py` runs there.
@@ -2751,7 +2661,7 @@ The start centre is clipped into the window. A failed fit is not remembered, so 
 
 The table gives per frame and peak: q (Å⁻¹) and its error, d (Å), FWHM (Å⁻¹) and its error, area and its error, height, η, χ²_red and the note.
 
-For GISAXS frames, the batch fit instead sends each frame's horizontal cut to the quick physical fit of Fitting (sphere, random cylinder or vertical cylinder with size dispersity and a spacing D; section 8.5). With *previous* or *first*, only the particle family and D are carried to the next frame. Its results are in nm⁻¹ and nm.
+For GISAXS frames, the batch fit instead sends each frame's horizontal cut (the halves chosen) to Predict parameters, as the automatic analysis does (section 8.5): the network chooses among one or two populations of spheres and upright cylinders, with or without a paracrystal, or **Model** gives the composition (a sphere, a random cylinder or a vertical cylinder, with a paracrystal). It needs no starting values, so the starting-value rule applies to the peaks only and every frame is predicted from its own data; nothing is carried from frame to frame. The table has the most probable solution of each frame with its probability, χ²/N and log RMSE; lengths are in nm, q in nm⁻¹. About 15 s per frame.
 
 Implementation: `src/gimap/features/analyze/application/batch_fit.py`, `src/gimap/features/analyze/domain/peak_fit.py`, `src/gimap/features/analyze/domain/regions.py`
 
@@ -3602,6 +3512,7 @@ Where an algorithm draws random numbers, the seed is fixed, so the same input an
 | Where | Seed | Use |
 |---|---|---|
 | Fitting, global search | 1729 | Latin-hypercube start population and differential evolution |
+| Predict parameters (Fit step, 1D Predict window, the GISAXS automatic analysis) | 0 | the network's samples, the local posterior and the search of the ranges (numpy generators) |
 | Fitting, manual refinement | `random_seed`, default 1729 | Latin-hypercube population and differential evolution, or Sobol candidates |
 | Fitting, AI fitting profile | `random_seed`, default 123 (can be set in the AI settings) | passed to the research code in its subprocess |
 | Geometry Calibration, centre estimate | 0 | random pairs of gradient pixels |
@@ -3610,7 +3521,7 @@ Where an algorithm draws random numbers, the seed is fixed, so the same input an
 StarDist inference and the 2D Prediction networks draw no random numbers in GIMaP. The seeds are part of the code
 or of the saved settings. Research run records state their seed policy; not every runtime exposes a controllable seed.
 
-The 1D Predict request and summary also record the SHA-256 of the selected model record: for Predict parameters the network's record, which names the SHA-256 of the weights, checked when they are loaded; for fit1d the kit's manifest, a fingerprint of the declared bundle, not a per-run check of every file. Requests preserve normalized options and state the random-seed policy: Predict parameters uses a fixed seed (0); the physical fit and fit1d use their runtime defaults, and no fixed run seed is claimed for them.
+The 1D Predict request and summary also record the SHA-256 of the network's record, which names the SHA-256 of the weights, checked when they are loaded. Requests preserve normalized options and state the random-seed policy: Predict parameters uses a fixed seed (0), so a run repeats with the same curve, settings and network. (The physical fit and fit1d, which used their runtime defaults without a fixed seed, were removed in 0.2.0.)
 
 ### 14.9 What the records do not yet contain
 
@@ -3642,8 +3553,8 @@ Fitting's optional two-path sphere with a free effective reflection coefficient 
 - **Lorentz and Ewald-sphere corrections.** I(χ) and the ring intensities are intensities on the detector. No Lorentz factor is applied, and the missing wedge near χ = 0 is not reconstructed (sections 2.2, 7.7).
 - **Texture.** The Hermans factor assumes a fibre texture about the surface normal; the missing wedge enters only through the coverage C_w and the isotropic reference f_iso, and the background under a ring is one χ-independent constant (section 7.7). No exit-angle correction (film absorption, transmission function, shadowing) is applied to I(χ), and the sin χ weight makes the bins next to the sample horizon count most: f can depend on them by many σ_f, which the report states but does not correct (section 7.7). The in-plane and out-of-plane comparison uses two sectors of 20°; it is not a pole figure (section 7.6).
 - **Phases.** No phase is assigned. Lamellar and hexagonal series are reported as hints (section 7.4).
-- **GISAXS models.** The 1D models depend on the magnitude of q_y only; q_z at the Yoneda row and the Yoneda enhancement are not modelled (sections 8.6, 9.2). The beam-tail term is an additive empirical term; no resolution convolution or instrumental smearing is applied (sections 8.6, 9.2). Fitting, the quick fit and Predict parameters use sizes by number unless a component's Sizes says otherwise (sections 8.5, 9.3). The automatic analysis screens single-component families only, so it never proposes a mixture by itself (section 8.6).
-- **Paracrystal spread.** Until 0.2.0 the quick fit and 1D Predict reported σ_D/D, √(2π) ≈ 2.51 times smaller than the relative standard deviation of the neighbour distance σnn/D that Fitting, the quick fit and Predict parameters now use (sections 9.5, 13.5); the 1D Predict window gives both.
+- **GISAXS models.** The 1D models depend on the magnitude of q_y only; q_z at the Yoneda row and the Yoneda enhancement are not modelled (sections 8.6, 9.2). The beam-tail term is an additive empirical term; no resolution convolution or instrumental smearing is applied (sections 8.6, 9.2). Fitting and Predict parameters use sizes by number unless a component's Sizes says otherwise (sections 8.5, 9.3). Without a given composition the automatic analysis lets the network choose among one or two populations of spheres and upright cylinders; random cylinders and three populations only when given (section 8.6).
+- **Paracrystal spread.** Until 0.2.0 the quick fit and 1D Predict reported σ_D/D, √(2π) ≈ 2.51 times smaller than the relative standard deviation of the neighbour distance σnn/D that Fitting and Predict parameters now use (sections 9.5, 13.5); the 1D Predict window gives both.
 
 ### 15.2 Instrument and geometry
 
@@ -3663,7 +3574,7 @@ Fitting's optional two-path sphere with a free effective reflection coefficient 
 - **Fitted parameters.** All parameter errors are linearised (Wald) errors, not profile intervals. The GIWAXS peak errors are only inflated by χ²_red, the Fitting errors are scaled by it in both directions (sections 7.4, 9.8). σ_f of the Hermans factor is statistical only: it propagates the bin errors (Poisson counting errors or the pixel scatter), not the background, the window, the geometry or the bins next to the sample horizon (section 7.7).
 - **Geometry in the uncertainties.** No reported ± of a peak position, a d-spacing, a size or f contains the uncertainty of the beam centre, the distance or α_i, or the q_z shift of refraction; the GIWAXS report says so in *Decisions* (section 7.9).
 - **Quantities without an uncertainty.** The symmetry centre (section 8.2), the reference-peak position (section 6.10), the moment width of a peak in a window (section 11.2), stage boundaries, odd-frame flags and Compare groups (section 11.11), XRR points (section 13.1), 2D Prediction outputs (section 13.4).
-- **Scores.** The scores of the quick fit, fit1d and the 1D Predict window (M_H, RMS/σ, logRMSE) are not probabilities, and mixture weights are not volume or mass fractions. The probabilities and intervals of Predict parameters are those of Fitting's model and its prior (section 9.13): physics outside the model is not in them, and its benchmarks are simulated curves (an independent model, BornAgain). The Sputter reliability numbers come from simulation within the hemisphere model and are exploratory (sections 12.5, 12.14).
+- **Scores.** The scores of the automatic analysis and the 1D Predict window (χ²/N, RMS/σ, logRMSE) are not probabilities, and mixture weights are not volume or mass fractions. The probabilities and intervals of Predict parameters are those of Fitting's model and its prior (section 9.13): physics outside the model is not in them, and its benchmarks are simulated curves (an independent model, BornAgain). The Sputter reliability numbers come from simulation within the hemisphere model and are exploratory (sections 12.5, 12.14).
 - **SEM.** No summary statistic, distribution fit or test of agreement is computed (section 13.2).
 
 ### 15.4 Data preparation

@@ -1,16 +1,17 @@
-"""Which solution of the quick GISAXS fit the automatic analysis reports, and how a value at a search bound is said.
+"""Which solution of Predict parameters the automatic analysis reports, when it asks the person to choose, and how a
+value at a bound of its range is said.
 
-The fit ranks its solutions by a robust misfit (the mean Huber loss). A non-linear value that ended on a bound of
-its search range (``at_bounds`` of a solution, e.g. D at 500 nm) is not determined by the curve. Among the solutions
-the curve does not tell apart — χ²/N at most ``CLOSE_CHI2`` times that of the first-ranked solution — the run reports
-the best-ranked one that converged with no non-linear value at a bound; when there is none, the first-ranked solution
-stays and the report says that it sits at a bound. The fit record keeps the index of the reported solution
-(``chosen``).
+Predict parameters (Fitting's ``create_curve_fit``) gives the distinct solutions of a cut most probable first: GIMaP's
+network proposes compositions and values, each solution is refined by least squares and weighted by its posterior
+probability. The run reports the most probable solution (the first; the fit record keeps its index, ``chosen``).
+When another solution is probable too — its probability at least ``ASK_PROBABILITY`` — the curve alone does not
+decide the model and the run asks the person to choose (``rivals``). A non-linear value that ended on a bound of its
+range (``at_bounds`` of a solution, e.g. D at its upper bound) is not determined by the curve: a point to check.
 
-The linear terms — the particle amplitudes, the background BG and the beam-tail amplitude A — are solved by
-non-negative least squares at every step and are not in ``at_bounds``: one that ends at 0 is held there by that
-limit, which the report says for the reported solution (``zero_terms``) without counting it in the choice. A
-converged reported solution with χ²/N above ``POOR_CHI2`` misses the curve by far more than its σ (``poor_fit``).
+The linear terms — the particle amplitudes, the background BG and the beam-tail amplitude A — cannot go below 0 and
+are not in ``at_bounds``: one that ends at 0 is held there by that limit, which the report says for the reported
+solution (``zero_terms``). A converged reported solution with χ²/N above ``POOR_CHI2`` misses the curve by far more
+than its σ (``poor_fit``).
 """
 
 from __future__ import annotations
@@ -18,12 +19,9 @@ from __future__ import annotations
 import math
 from typing import Optional
 
-CLOSE_CHI2 = 1.1
-"""Solutions whose χ²/N is within 10 % of the first solution's are not distinguished by the curve.
-
-The fit ranks its solutions by a robust misfit, the mean Huber loss (δ = 2) of the σ-normalised residuals r, so
-that a few outlying points do not decide; χ²/N is the mean of r² over the N points, with no degrees-of-freedom
-correction (unlike Fitting's χ²ᵣ). All solutions are fitted to the same points, so their ratio is that of χ²."""
+ASK_PROBABILITY = 0.2
+"""A solution after the first with at least this posterior probability makes the run ask the person to choose the
+model: the curve does not tell the two apart well enough for the run to decide."""
 BOUND_NAMES = {"R": "R", "sigma_R": "σR/R", "h": "h", "sigma_h": "σh/h", "D": "D", "sigma_D": "σD/D", "sigma_nn": "σnn/D",
                "sigma_Res": "σ_Res", "nu_Res": "ν_Res"}
 """How a value at a bound is named (as the report's table names the parameters; σ_Res, ν_Res: the beam tail)."""
@@ -39,8 +37,23 @@ of its points. The limit is Fitting's (``fitting/application/series_fit.POOR_CHI
 χ²/N only by the degrees-of-freedom correction, a few parameters in hundreds of points); features import nothing of
 each other, so a test keeps the two equal."""
 LINEAR_TERMS = (("background", "background BG"), ("resolution_amplitude", "beam-tail amplitude A"))
-"""The linear terms of a solution's ``globals`` that can end at their non-negativity limit, as the report names them
-(the particle amplitudes too, which the fit warns of itself: "negligible fitted amplitude")."""
+"""The linear terms of a solution's ``globals`` that can end at their non-negativity limit, as the report names them."""
+INTERVAL_KEYS = ("R", "h", "D")
+"""The values whose posterior intervals the report gives (per component: ``R_1``, ``h_2`` … of ``intervals``)."""
+
+
+def probability(solution: Optional[dict]) -> float:
+    """The posterior probability of a solution (NaN when the fit did not give one)."""
+    try:
+        value = float((solution or {}).get("probability"))
+    except (TypeError, ValueError):
+        return math.nan
+    return value if math.isfinite(value) else math.nan
+
+
+def rivals(solutions: list[dict]) -> list[dict]:
+    """The solutions after the first whose probability is at least ``ASK_PROBABILITY`` (empty: the run decides)."""
+    return [item for item in solutions[1:] if probability(item) >= ASK_PROBABILITY]
 
 
 def poor_fit(solution: Optional[dict]) -> bool:
@@ -65,8 +78,8 @@ def zero_terms(solution: Optional[dict]) -> list[str]:
 
 
 def bound_phrases(solution: dict) -> list[str]:
-    """``["D at its upper bound", …]``: the values of a solution that ended on a search bound (empty when the fit
-    did not say). With more than one component the component's number follows the name (``R 2``)."""
+    """``["D at its upper bound", …]``: the values of a solution that ended on a bound of their range (empty when the
+    fit did not say). With more than one component the component's number follows the name (``R 2``)."""
     phrases = []
     many = len(solution.get("components") or ()) > 1
     for item in solution.get("at_bounds") or ():
@@ -82,10 +95,15 @@ def bounds_text(solution: dict) -> str:
     return ", ".join(bound_phrases(solution))
 
 
-def flagged(solution: dict) -> bool:
-    """A non-linear value at a search bound, or a fit that did not converge: what the run does not report when it can
-    avoid it (a linear term at 0 is not counted: ``zero_terms``)."""
-    return bool(solution.get("at_bounds")) or not solution.get("converged", True)
+def interval(solution: Optional[dict], key: str, component: int = 0, level: int = 68) -> Optional[tuple[float, float]]:
+    """``(low, high)`` of the ``level`` % posterior interval of a component's value (``key``: R, h, D; ``component``
+    from 0), or ``None`` when the fit gave none."""
+    found = ((solution or {}).get("intervals") or {}).get(f"{key}_{component + 1}") or {}
+    try:
+        low, high = float(found[f"low{level}"]), float(found[f"high{level}"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return (low, high) if math.isfinite(low) and math.isfinite(high) else None
 
 
 def _chi2(solution: dict) -> float:
@@ -95,25 +113,9 @@ def _chi2(solution: dict) -> float:
         return math.nan
 
 
-def close_solutions(solutions: list[dict]) -> list[dict]:
-    """The solutions whose χ²/N is at most ``CLOSE_CHI2`` times the first-ranked solution's (the first included)."""
-    if not solutions:
-        return []
-    limit = CLOSE_CHI2 * _chi2(solutions[0])
-    return [solutions[0]] + [item for item in solutions[1:] if _chi2(item) <= limit]
-
-
-def chosen_index(solutions: list[dict]) -> int:
-    """The solution the run reports: the best-ranked of ``close_solutions`` that is not ``flagged``, else the first."""
-    if not solutions:
-        return 0
-    limit = CLOSE_CHI2 * _chi2(solutions[0])
-    return next((index for index, item in enumerate(solutions)
-                 if (index == 0 or _chi2(item) <= limit) and not flagged(item)), 0)
-
-
 def chosen(fit: Optional[dict]) -> tuple[int, Optional[dict]]:
-    """``(index, solution)`` the run reports (``fit["chosen"]``; the first solution in a record without it)."""
+    """``(index, solution)`` the run reports (``fit["chosen"]``: the most probable, the first; a record without it:
+    the first)."""
     solutions = (fit or {}).get("solutions") or []
     if not solutions:
         return 0, None
@@ -126,6 +128,6 @@ def chosen(fit: Optional[dict]) -> tuple[int, Optional[dict]]:
 
 
 __all__ = [
-    "AT_LOWER", "AT_UPPER", "BOUND_NAMES", "CLOSE_CHI2", "LENGTH_SCALE", "LINEAR_TERMS", "POOR_CHI2", "bound_phrases",
-    "bounds_text", "chosen", "chosen_index", "close_solutions", "flagged", "poor_fit", "zero_terms",
+    "ASK_PROBABILITY", "AT_LOWER", "AT_UPPER", "BOUND_NAMES", "INTERVAL_KEYS", "LENGTH_SCALE", "LINEAR_TERMS", "POOR_CHI2",
+    "bound_phrases", "bounds_text", "chosen", "interval", "poor_fit", "probability", "rivals", "zero_terms",
 ]

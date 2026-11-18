@@ -57,11 +57,11 @@ TOOL_TEXT = {
     "choose_halves": "Checking both halves of the horizontal cut",
     "set_halves": "Choosing the halves of the cut",
     "in_plane_spacing": "Length scale 2π/q* of the cut",
-    "fit_horizontal_cut": "Fitting form-factor models to the horizontal cut",
+    "fit_horizontal_cut": "Predicting the particles of the horizontal cut",
 }
 SLOW = {
     "calibrate_geometry": "can take up to a minute",
-    "fit_horizontal_cut": "can take up to half a minute",
+    "fit_horizontal_cut": "takes about 15 s",
     "find_calibration_files": "a few seconds",
     "set_frame": "a few seconds when many frames are summed",
 }

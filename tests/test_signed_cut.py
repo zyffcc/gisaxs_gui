@@ -214,7 +214,7 @@ def test_points_are_not_merged_with_a_sigma_that_cannot_weight_them() -> None:
         with pytest.raises(ValueError, match=f"^{BAD_SIGMA}$"):
             merge_points(q, intensity, bad, 1000)
         assert merge_points(q[1000:2000], intensity[1000:2000], bad[1000:2000], 1000)[3] == 1  # nothing to merge: as it comes
-    # The cut of a fit that takes every point (the quick fit): refused for the points it would use, short or long.
+    # The cut of a fit that takes every point (the curve fit of Predict parameters): refused for the points it would use, short or long.
     for points in (2523, 401):
         q, intensity, sigma, _pixels = _cut(points)
         at = int(np.flatnonzero(q > 0)[points // 4])  # a point of the q > 0 half

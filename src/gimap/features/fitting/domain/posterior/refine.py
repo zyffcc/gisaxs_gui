@@ -78,11 +78,39 @@ def _clip(parameter: fm.Parameter, value: float) -> fm.Parameter:
     return fm.Parameter(float(value), parameter.free, lower, upper)
 
 
+SPREAD_BOX = (0.02, 0.5)
+"""The prior's range of σR/R, σh/h and σnn/D (``encoding.bounds``)."""
+GROWTH = 1.5
+"""Least squares may take a population's radius this factor beyond the start; D/2R and h/2R keep the prior's ranges
+(1–20, 0.1–10) of radii that far."""
+
+
+def _box(params: dict, family: str, data: Cut) -> dict:
+    """The parameters of one population held to the box of the network's prior: a refinement does not leave the
+    model the posterior is of (on BornAgain's GALAXI cut least squares otherwise reached σR/R = 1 and D = 490 R)."""
+    out = dict(params)
+    q_max, q_min = data.q_max, data.q_max / data.ratio
+    radius = float(out["R"].value)
+    tops = {"R": min(5.0 / q_min, E.CYLINDER_RADIUS / q_max) if family == "cylinder" else 5.0 / q_min}
+    boxes = {"R": (0.5 / q_max, tops["R"]),
+             "sigma_R": SPREAD_BOX, "sigma_h": SPREAD_BOX, "sigma_nn": SPREAD_BOX,
+             "D": (2.0 * radius / GROWTH, 40.0 * radius * GROWTH),
+             "h": (0.2 * radius / GROWTH, min(20.0 * radius * GROWTH, E.CYLINDER_HEIGHT / q_max))}
+    for key, (low, high) in boxes.items():
+        if key not in out:
+            continue
+        parameter = out[key]
+        low, high = max(parameter.lower, low), min(parameter.upper, high)
+        value = min(max(float(parameter.value), low), high)
+        out[key] = fm.Parameter(value, parameter.free, min(low, value), max(high, value))
+    return out
+
+
 def fit_model(values, composition: int, data: Cut, law: str = "number_gauss", coupling: str = "lma",
               grazing: Optional[dict] = None) -> fm.FitModel:
-    """Fitting's model of physical values (DIMS,) of a composition, scales solved for the cut. ``grazing``: the
-    values of ``fit_model.GRAZING`` to keep (the cut's angles, λ and reflection of the person's model); else the
-    Born term at the cut's q_z (or the effective interface)."""
+    """Fitting's model of physical values (DIMS,) of a composition, scales solved for the cut, its shape values held
+    to the prior's box (``_box``). ``grazing``: the values of ``fit_model.GRAZING`` to keep (the cut's angles, λ and
+    reflection of the person's model); else the Born term at the cut's q_z (or the effective interface)."""
     components = []
     for slot, (family, structure) in enumerate(E.composition_types(composition)):
         j = slot * E.PER_SLOT
@@ -92,7 +120,7 @@ def fit_model(values, composition: int, data: Cut, law: str = "number_gauss", co
         for offset, key in enumerate(KEYS):
             if key in params and np.isfinite(values[j + offset]):
                 params[key] = _clip(params[key], values[j + offset])
-        components.append(fm.Component(family, params, structure, coupling, law))
+        components.append(fm.Component(family, _box(params, family, data), structure, coupling, law))
     model = fm.FitModel(tuple(components))
     g = E.GLOBAL.start
     model = model.with_parameter(("globals", "res_amplitude"), value=1.0, free=True)
@@ -214,7 +242,7 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
             allowed=None, shortlist: int = SHORTLIST, samples: int = SAMPLES, seed: int = 0,
             law: str = "number_gauss", coupling: str = "lma", min_probability: float = 0.01,
             grazing: Optional[dict] = None, local_samples: int = LOCAL_SAMPLES,
-            refine_modes: int = REFINED) -> list[PosteriorSolution]:
+            refine_modes: int = REFINED, cancelled=None) -> list[PosteriorSolution]:
     """Solutions of a cut (q in nm⁻¹, qz the vacuum q_z of the Born term in nm⁻¹, 0: the effective interface), most
     probable first: every distinct refined solution of every composition holding at least ``min_probability`` of
     the posterior.
@@ -225,8 +253,15 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
        ``RETRY_COMPOSITIONS`` best compositions whose solutions all stay above χ²/N = ``CHI2_RETRY``.
     3. The posterior of the solutions within ``DELTA_BIC`` of the best (at most ``LOCAL_MAX``) sampled around each
        (``laplace``): intervals and evidence.
-    4. Their probabilities from the evidences, or from BIC when a sampling did not converge (``ESS_FAILED``)."""
+    4. Their probabilities from the evidences, or from BIC when a sampling did not converge (``ESS_FAILED``).
+
+    ``cancelled``: a function asked between the steps; when it returns True, ``RuntimeError("Fitting cancelled")``."""
     tick = time.perf_counter()
+
+    def check() -> None:
+        if cancelled is not None and cancelled():
+            raise RuntimeError("Fitting cancelled")
+
     rng = np.random.default_rng(seed + 7919)
     data = Cut.prepare(q, intensity, sigma, qz)
     fit_data = fit_engine.FitData.prepare(data.q, data.intensity, data.sigma)
@@ -238,13 +273,15 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
 
     def add(result, mode, refined) -> None:
         centre = model_values(refined.model, result.index)
-        if centre is None:
-            return  # the refined radii no longer keep the composition's order of types
+        if centre is None:  # the refined radii no longer keep the composition's order of types: no local posterior
+            found[result.index].append((mode, refined, None))
+            return
         types = E.composition_types(result.index)
-        if not any(_same(c, centre, types) for _m, _r, c in found[result.index]):
+        if not any(c is not None and _same(c, centre, types) for _m, _r, c in found[result.index]):
             found[result.index].append((mode, refined, centre))
 
     for result in results:
+        check()
         for mode in result.modes[:refine_modes]:
             add(result, mode, fit_engine.fit(fit_model(mode.best, result.index, data, law, coupling, grazing),
                                              fit_data, method="local"))
@@ -262,13 +299,16 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
     kept = [(result, e) for score, result, e in ranked[:LOCAL_MAX] if score <= ranked[0][0] + DELTA_BIC]
     entries = []  # (result, mode, model, refined, local)
     for result, (mode, refined, centre) in kept:
-        tau = float(mode.median[tau_dim]) if np.isfinite(mode.median[tau_dim]) else 0.02
-        local = local_posterior(data, result.index, centre, tau, rng, local_samples, law, coupling)
+        check()
+        local = None
+        if centre is not None:
+            tau = float(mode.median[tau_dim]) if np.isfinite(mode.median[tau_dim]) else 0.02
+            local = local_posterior(data, result.index, centre, tau, rng, local_samples, law, coupling)
         entries.append((result, mode, refined.model, refined, local))
     # The solutions are compared by their evidence (importance sampling); when the sampling of one of them did not
     # converge (e.g. a curve the model does not describe, whose posterior with the model error lies away from the
     # least-squares optimum), all of them are compared by BIC, as fit1d does.
-    by_bic = any(e[4].ess < ESS_FAILED for e in entries)
+    by_bic = any(e[4] is None or e[4].ess < ESS_FAILED for e in entries)
     log_z = np.array([-0.5 * _bic(e[3]) if by_bic else e[4].log_evidence for e in entries])
     weights = np.exp(log_z - log_z.max())
     weights /= weights.sum()

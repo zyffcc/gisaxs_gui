@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import copy
-import json
-
 import numpy as np
 import pytest
 from PyQt5.QtWidgets import QApplication
 
 from src.gimap.app.presentation.i18n import apply_language, tr
-from src.gimap.features.fitting.application.single_fit import evaluate
+from src.gimap.features.fitting.application.single_fit import FitModel, evaluate, new_component
 from src.gimap.features.fitting.presentation.single.plotting import component_label
 from tests.test_fit_page import _curve_file, _page, _truth
 
@@ -51,30 +48,19 @@ def _curves(plot):
     return {name: (np.asarray(q).copy(), np.asarray(y).copy()) for name, q, y in plot.figure_state()["curves"]}
 
 
-def _install_native(page, tmp_path):
-    """A small synthetic native result: no optional runtime or fitting search is needed."""
+def _install_weak(page, tmp_path):
+    """A flat curve and a model of it with a particle term twenty decades below the rest: only presentation is
+    tested, no fit runs."""
     q = np.linspace(0.1, 1.0, 40)
     y = 100 + q
     path = tmp_path / "synthetic_components.dat"
     np.savetxt(path, np.column_stack([q, y, np.ones_like(q)]), header="q (nm^-1) I sigma")
     assert page.open_curve(path)
-    tiny = 1e-20 * np.exp(-q)
-    native = {
-        "settings": dict(page.session.native_settings),
-        "curves": {
-            "q_nm_inv": q.tolist(), "intensity": y.tolist(), "sigma": np.ones_like(q).tolist(),
-            "model": y.tolist(), "residual": np.zeros_like(q).tolist(),
-            "components": {"pop1_sphere": (y - tiny).tolist(), "pop2_sphere": tiny.tolist(),
-                           "background_B": np.zeros_like(q).tolist()},
-        },
-    }
-    page.session.native_result = native
-    page.session.native_model = page.session.model
-    page.session.native_selection = page.session.selection()
-    assert page.session.native_is_current()
-    page._redraw()
+    model = FitModel((new_component("sphere", radius=5.0),)).with_values(
+        {(0, "Int"): 1e-20, ("globals", "background"): 100.0})
+    page.set_model(model)
     _settle()
-    return native
+    return model
 
 
 def test_manual_contributions_are_additive_and_visibility_keeps_full_export(page, tmp_path):
@@ -133,8 +119,8 @@ def test_component_switches_keep_manual_zoom_and_residuals(page, log_y):
 
 
 @pytest.mark.parametrize("log_y", [False, True])
-def test_weak_native_components_affect_limits_only_when_requested(page, tmp_path, log_y):
-    _install_native(page, tmp_path)
+def test_weak_components_affect_limits_only_when_requested(page, tmp_path, log_y):
+    _install_weak(page, tmp_path)
     page.plot.log_check.setChecked(log_y)
     page.plot.reset_view()
     _settle()
@@ -157,41 +143,20 @@ def test_weak_native_components_affect_limits_only_when_requested(page, tmp_path
     np.testing.assert_allclose(view.viewRange()[1], limits[1], rtol=0, atol=1e-10)
 
 
-def test_native_arrays_and_export_keys_survive_display_selection(page, tmp_path):
-    native = _install_native(page, tmp_path)
-    before = copy.deepcopy(native)
-    page.terms_check.setChecked(True)
-    shown = _curves(page.plot)
-    np.testing.assert_array_equal(shown[tr("fit1d v2 model")][1], native["curves"]["model"])
-    for name, values in native["curves"]["components"].items():
-        np.testing.assert_array_equal(shown[component_label(name)][1], values)
-    # Zero intensity stays zero in the source. Only its logarithmic rendering is absent.
-    zero_index = list(shown).index(component_label("background_B"))
-    x, y = page.plot._items[zero_index].getData()
-    assert y is None or not np.isfinite(y).any()
-    page._component_actions["pop2_sphere"].setChecked(False)
-    page._component_actions["background_B"].setChecked(False)
-    assert native == before
-    target = tmp_path / "native.csv"
-    assert page.export_data_dialog(target) == target
-    names = target.read_text().splitlines()[0]
-    assert "pop2_sphere" in names and "background_B" in names
-    record = json.loads(target.with_suffix(".json").read_text())
-    assert record["native_result"] == before
-
-
-def test_component_labels_follow_language_without_exposing_native_keys(page, tmp_path):
-    native = _install_native(page, tmp_path)
+def test_component_labels_follow_language_without_exposing_their_keys(page, tmp_path):
+    model = _install_weak(page, tmp_path).with_values({("globals", "res_amplitude"): 5.0})
+    page.set_model(model)
     page.terms_check.setChecked(True)
     apply_language("zh", [page])
     page._redraw(preserve_view=True)
     assert page.terms_check.text() == "组分"
-    assert page._component_actions["pop1_sphere"].text() == f"1: {tr('Sphere')}"
-    assert page._component_actions["background_B"].text() == tr("constant background")
-    assert "Sphere" not in page._component_actions["pop1_sphere"].text()
+    assert page._component_actions["1: Sphere"].text() == f"1: {tr('Sphere')}"
+    assert page._component_actions["constant background"].text() == tr("constant background")
+    assert page._component_actions["resolution peak"].text() == tr("beam-tail term")
+    assert "Sphere" not in page._component_actions["1: Sphere"].text()
     assert component_label("low_q_term") == tr("low-q term") != "low-q term"
     assert component_label("2: Random cylinder") == f"2: {tr('Random cylinder')}"
-    assert list(native["curves"]["components"]) == ["pop1_sphere", "pop2_sphere", "background_B"]
+    assert page.session.model == model  # labels only: the model's terms keep their names
 
 
 def test_language_switch_keeps_zoom_and_refreshes_residual_explanation(page):
