@@ -69,4 +69,21 @@ def tabulated(q_out, table_q, curves, sigma: float) -> np.ndarray:
     return out
 
 
-__all__ = ["smeared", "tabulated"]
+TABLE_POINTS = 1024
+
+
+def table_grid(q, sigma: float, points: int = TABLE_POINTS) -> np.ndarray:
+    """A grid for ``tabulated`` at the points ``q`` (|q|): the points themselves, ``points`` logarithmically spaced
+    over their range, and SPAN σ beyond both ends (at σ/4, down to q → 0 for the fold)."""
+    q = np.unique(np.abs(np.asarray(q, float)))
+    q = q[q > 0]
+    low, high = float(q[0]), float(q[-1])
+    core = np.geomspace(low, high, points) if high > low else np.array([low])
+    reach = SPAN * sigma
+    bottom = max(low - reach, 0.125 * sigma, low * 1e-3)
+    lower = np.linspace(bottom, low, int(min(256, np.ceil((low - bottom) / (0.25 * sigma)))) + 2)[:-1] if low > bottom         else np.zeros(0)
+    upper = np.linspace(high, high + reach, int(min(64, np.ceil(reach / (0.25 * sigma)))) + 2)[1:]
+    return np.unique(np.concatenate([lower, core, q, upper]))
+
+
+__all__ = ["smeared", "table_grid", "tabulated"]

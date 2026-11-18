@@ -84,6 +84,8 @@ class Geometry:
         if self.mode == "born":
             return ((1.0 + 0.0j, k_i + k_f),)
         if self.mode == "two_path":
+            if self.refl_amp == 0:
+                return ((1.0 + 0.0j, k_i + k_f),)  # the Born term alone (and the tables of a single path)
             r = self.refl_amp * complex(math.cos(self.refl_phase), math.sin(self.refl_phase))
             return ((1.0 + 0.0j, k_i + k_f), (r, k_i - k_f))
         r_i, r_f = self.fresnel(self.alpha_i_deg), self.fresnel(self.exit_angle_deg)

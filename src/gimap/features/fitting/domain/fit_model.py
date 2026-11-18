@@ -35,7 +35,7 @@ from .cut_model import Geometry, size_averages
 from .cut_model import conventions, sizes
 from .cut_model.geometry import from_angles
 from .cut_model.model import tail
-from .cut_model.resolution import smeared
+from .cut_model.resolution import table_grid, tabulated
 from .cut_model.shapes import RADIUS_POWER
 from .cut_model.structure import paracrystal
 
@@ -268,13 +268,15 @@ def resolution_shape(model: FitModel, q: np.ndarray) -> np.ndarray:
 
 
 def _smeared_forms(model: FitModel, q: np.ndarray, sigma: float, cache: Optional[dict], geometry) -> list[np.ndarray]:
-    """Each component's T convolved with a Gaussian of 1σ ``sigma`` in q (``cut_model.resolution``); the beam tail
+    """Each component's T convolved with a Gaussian of 1σ ``sigma`` in q (``cut_model.resolution``: tabulated on the
+    points and a logarithmic grid, ``table_grid``, then convolved where σ exceeds the grid's spacing); the beam tail
     and the background are not smeared: the first describes the resolution near q = 0 itself."""
-    def terms_on(grid):
-        fine = None if cache is None else cache.setdefault(("smearing grid", grid.size, float(grid[0]), float(grid[-1])), {})
-        return [component_form(component, grid, fine, geometry) for component in model.components]
-
-    return smeared(q, sigma, terms_on)
+    if not model.components:
+        return []
+    grid = table_grid(q, sigma)
+    fine = None if cache is None else cache.setdefault(("smearing grid", grid.size, float(grid[0]), float(grid[-1])), {})
+    forms = [component_form(component, grid, fine, geometry) for component in model.components]
+    return list(tabulated(q, grid, np.array(forms), sigma))
 
 
 def evaluate(model: FitModel, q: np.ndarray, *, parts: bool = False, cache: Optional[dict] = None):

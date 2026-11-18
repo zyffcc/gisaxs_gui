@@ -235,8 +235,8 @@ def _counted_cut(points: int, seed: int = 4):
     """A cut through the beam as Analyze hands it over (q in Å⁻¹, counts with Poisson noise, every column an
     observation — zero counts too), made with the app's own model; ``points`` on each half."""
     q_nm = np.linspace(0.06, 2.4, points)
-    truth = _truth()  # sizes by intensity: the quick fit's convention (it still uses 1D Predict's forward model)
-    exact = evaluate(replace(truth, components=(replace(truth.components[0], law="intensity_gauss"),)), q_nm) * 5.0
+    truth = _truth()  # sizes by number: the quick fit's convention (Fitting's, cut_model)
+    exact = evaluate(replace(truth, components=(replace(truth.components[0], law="number_gauss"),)), q_nm) * 5.0
     rng = np.random.default_rng(seed)
     left, right = rng.poisson(exact[::-1]).astype(float), rng.poisson(exact).astype(float)
     counts = np.concatenate([left, right])
