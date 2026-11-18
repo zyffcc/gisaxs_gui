@@ -31,6 +31,7 @@ Q_SIDES = (("Each half separately", "both"), ("q > 0 half", "positive"), ("q < 0
 COMPONENTS = ("Auto / unused", "Sphere", "Random cylinder", "Vertical cylinder")
 """The composition's choices; their position is the option value (0: none)."""
 FIT_METHODS = (
+    ("Predict parameters (network + posterior)", "posterior"),
     ("General V5 (experimental)", "model"),
     ("Single RC specialist (experimental)", "stable"),
     ("Physical fit (numerical)", "experimental"),
@@ -190,13 +191,14 @@ class WorkflowV5SettingsMixin:
     def _update_method_controls(self) -> None:
         legacy = self.method.currentData() == "model"
         fit1d = self.method.currentData() == "fit1d"
+        posterior = self.method.currentData() == "posterior"
         self.amplitude_calibration.setEnabled(self.method.currentData() == "stable")
         for widget in (self.numerical, self.normalizer, self.search, self.conditions):
             widget.setEnabled(legacy)
         for widget in self._fit1d_widgets:
-            widget.setEnabled(fit1d)
-        for widget in (self.fix_sigma, self.sigma_res):  # fit1d fits the width of its low-q term itself
-            widget.setEnabled(not fit1d)
+            widget.setEnabled(fit1d or (posterior and widget in (self.fit1d_use_qz, self.fit1d_qz)))
+        for widget in (self.fix_sigma, self.sigma_res, self.fix_nu, self.nu_res):  # these fit their low-q term
+            widget.setEnabled(not (fit1d or posterior) or widget in (self.fix_nu, self.nu_res) and fit1d)
 
     def options(self) -> dict:
         """The options as set in the panel (the values, never the text shown), validated."""
@@ -208,8 +210,9 @@ class WorkflowV5SettingsMixin:
                 "q_unit": self.unit.currentData(),
                 "side": self.side.currentData(),
                 "sigma_res": self.sigma_res.value()
-                if self.fix_sigma.isChecked() and self.method.currentData() != "fit1d" else None,
-                "nu_res": self.nu_res.value() if self.fix_nu.isChecked() else None,
+                if self.fix_sigma.isChecked() and self.method.currentData() not in ("fit1d", "posterior") else None,
+                "nu_res": self.nu_res.value()
+                if self.fix_nu.isChecked() and self.method.currentData() != "posterior" else None,
                 "relative_noise": self.relative_noise.value(),
                 "absolute_noise": self.noise_floor.value(),
                 "normalizer": self.normalizer.value() or None,

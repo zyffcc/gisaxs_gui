@@ -8,6 +8,12 @@ from ...application.workflow_v5 import bundled_workflow, fit1d_kit_home
 def model_provenance(method: str, model_path=None) -> dict:
     if method == 'experimental':
         return {'kind': 'numerical', 'manifest_sha256': None}
+    if method == 'posterior':
+        from ...domain.posterior import network
+        record = network.path().with_suffix('.json')
+        return {'kind': 'posterior', 'folder': str(record.parent), 'manifest': record.name,
+                'manifest_sha256': sha256(record.read_bytes()).hexdigest() if record.is_file() else None,
+                'identity_scope': "the network's record (it names the SHA-256 of its weights, checked when loaded)"}
     if method == 'fit1d':
         root, name = fit1d_kit_home(), 'FILES_SHA256.json'
     elif method == 'stable':

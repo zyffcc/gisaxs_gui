@@ -245,7 +245,8 @@ def cut_model_solution(row: Mapping) -> FitModel:
     model = FitModel(tuple(components))
     g = row.get("global_params") or {}
     for key, source in (("background", "background"), ("res_amplitude", "resolution_amplitude"),
-                        ("res_width", "sigma_Res"), ("res_exponent", "nu_Res")):
+                        ("res_width", "sigma_Res"), ("res_exponent", "nu_Res"), ("q_resolution", "q_resolution"),
+                        ("alpha_i", "alpha_i"), ("alpha_f", "alpha_f"), ("wavelength", "wavelength")):
         if g.get(source) is not None:
             model = model.with_parameter(("globals", key), **_within(model.globals[key], float(g[source])).__dict__)
     return model

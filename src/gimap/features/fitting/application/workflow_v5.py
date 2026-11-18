@@ -121,7 +121,7 @@ def validate_options(options: dict) -> dict:
     out = {**default_options(), **options}
     # Legacy recipes migrate this value into detector preprocessing at capture/runtime.
     out.pop("cbf_gap_margin", None)
-    if out["method"] not in ("stable", "model", "experimental", "fit1d"):
+    if out["method"] not in ("posterior", "stable", "model", "experimental", "fit1d"):
         raise ValueError("Unknown fitting method")
     if not isinstance(out["amplitude_calibration"], bool):
         raise ValueError("amplitude_calibration must be true or false")
@@ -141,7 +141,7 @@ def validate_options(options: dict) -> dict:
         )
     out["components"] = list(types)
     _validate_fit1d(out)
-    if out["method"] == "fit1d":
+    if out["method"] in ("fit1d", "posterior"):
         resolution_bounds = ()
     elif out["method"] in ("stable", "experimental"):
         resolution_bounds = (("sigma_res", 0.001, 0.1), ("nu_res", 1.0, 20.0))

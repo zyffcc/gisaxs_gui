@@ -54,4 +54,94 @@ def run_predict(payload: dict, report, cancelled) -> dict:
             "seconds": time.perf_counter() - tick}
 
 
-__all__ = ["encode", "run_predict"]
+
+
+
+TYPE_IDS = {"sphere": 1, "cylinder": 2, "vertical_cylinder": 3}
+TYPE_NAMES = {"sphere": "sphere", "cylinder": "random_cylinder", "vertical_cylinder": "vertical_cylinder"}
+
+
+def batch_compositions(types) -> dict:
+    """The 1D Predict window's Complete composition (1 sphere, 2 random cylinder, 3 vertical cylinder; each with a
+    paracrystal) as compositions; empty: the network chooses among all."""
+    from ...domain.posterior import encoding
+
+    if not types:
+        return {"allowed": encoding.select()}
+    if len(types) > encoding.SLOTS:
+        raise ValueError(f"Predict parameters takes 1–{encoding.SLOTS} components")
+    families = {1: "sphere", 2: "cylinder", 3: "vertical_cylinder"}
+    return {"compositions": [encoding.composition_index([(families[int(t)], True) for t in types])]}
+
+
+def solution_row(solution, item, render_q) -> dict:
+    """A solution as a row of the 1D Predict window (``native_v5`` layout, Fitting's conventions: cut_model)."""
+    import numpy as np
+
+    from ...domain.fit_model import evaluate
+
+    model = solution.model
+    q, y, sigma = (np.asarray(item[k], float) for k in ("q", "observed", "sigma"))
+    fitted = evaluate(model, q)
+    residual = (fitted - y) / sigma
+    positive = (y > 0) & (fitted > 0)
+    components = []
+    for component in model.components:
+        p = {key: float(component.value(key)) for key in component.keys() if key != "Int"}
+        if "sigma_nn" in p:
+            p["sigma_D"] = p["sigma_nn"] / math.sqrt(2 * math.pi)
+        components.append(dict(type=TYPE_NAMES[component.family], type_id=TYPE_IDS[component.family], params=p,
+                               amplitude=float(component.value("Int")), structure_factor=bool(component.structure)))
+    total = sum(c["amplitude"] for c in components)
+    for c in components:
+        c["weight"] = c["amplitude"] / total if total > 0 else 0.0
+    g = model.globals
+    return dict(
+        workflow="native_v5", physics_backend="cut_model", law=model.components[0].law if components else None,
+        best_source="posterior", side=item["side"], combination=" + ".join(c["type"] for c in components),
+        composition=solution.name, components=components,
+        global_params=dict(background=float(g["background"].value), resolution_amplitude=float(g["res_amplitude"].value),
+                           sigma_Res=float(g["res_width"].value), nu_Res=float(g["res_exponent"].value),
+                           q_resolution=float(g["q_resolution"].value),
+                           **{key: float(g[key].value) for key in ("alpha_i", "alpha_f", "wavelength")}),
+        probability=_number(solution.probability), posterior={k: v for k, v in encode(solution)["values"].items()},
+        best_log_rmse=float(np.sqrt(np.mean(np.log(fitted[positive] / y[positive]) ** 2))) if positive.any() else None,
+        best_chi2_weighted=float(np.mean(residual**2)), signed_weighted_rms=float(np.sqrt(np.mean(residual**2))),
+        signed_huber_delta2=float(np.mean(np.where(abs(residual) <= 2, 0.5 * residual**2, 2 * (abs(residual) - 1)))),
+        probability_status="Posterior probability of the composition and mode (importance sampling)",
+        warnings=list(solution.flags), ess=_number(solution.ess),
+        native_q=(q * item["sign"]).tolist(), observed=y.tolist(), sigma=sigma.tolist(), native_fit=fitted.tolist(),
+        display_q=(render_q * item["sign"]).tolist(), display_fit=evaluate(model, render_q).tolist())
+
+
+def fit_and_write(output, item, options, report, cancelled) -> list:
+    """Predict parameters for one half of a curve of the 1D Predict window; its files as the other methods write."""
+    import json
+
+    import numpy as np
+
+    network = posterior_network.load()
+    report(0, 1, f"{item['side']}: weighting the network's samples", {})
+    solutions = refine.predict(network, item["q"], item["observed"], item["sigma"],
+                               qz=float(options.get("fit1d_qz") or 0.0), **batch_compositions(options["components"]))
+    if cancelled():
+        raise RuntimeError("Prediction cancelled")
+    q = np.asarray(item["q"], float)
+    render_q = np.linspace(q.min(), q.max(), options["render_points"])
+    rows = [solution_row(s, item, render_q) for s in solutions[:options["max_solutions"]]]
+    if not rows:
+        raise RuntimeError("Predict parameters found no solution for this curve")
+    for rank, row in enumerate(rows, start=1):
+        row["rank"] = rank
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "solutions.json").write_text(json.dumps(dict(method="posterior", options=options, network={
+        "name": posterior_network.path().stem, "sha256": network.meta.get("sha256")}, solutions=rows),
+        indent=2, allow_nan=False), encoding="utf-8")
+    np.savez_compressed(output / "display.npz", reference_q=item["q"], observed=item["observed"], sigma=item["sigma"],
+                        render_q=np.abs(rows[0]["display_q"]), rendered_curves=[r["display_fit"] for r in rows])
+    np.savetxt(output / "fitting_curves.csv", np.column_stack([rows[0]["display_q"], *[r["display_fit"] for r in rows]]),
+               delimiter=",", header="q_nm^-1," + ",".join(f"candidate_{i + 1}" for i in range(len(rows))), comments="")
+    return rows
+
+
+__all__ = ["batch_compositions", "encode", "fit_and_write", "run_predict", "solution_row"]

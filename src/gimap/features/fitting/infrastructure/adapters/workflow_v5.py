@@ -318,6 +318,7 @@ def run_workflow_job(payload, report, is_cancelled):
                     "model": model_record, "q_units": units}, indent=2, allow_nan=False), encoding="utf-8"
     )
     experimental = options["method"] == "experimental"
+    posterior = options["method"] == "posterior"
     stable = options["method"] == "stable"
     fit1d = options["method"] == "fit1d"
     kit = None
@@ -329,7 +330,7 @@ def run_workflow_job(payload, report, is_cancelled):
 
         engine, kit = None, load_kit()  # a missing kit stops the job here, with where to put it
     else:
-        engine = None if experimental else WorkflowEngine(payload.get("model_path"))
+        engine = None if experimental or posterior else WorkflowEngine(payload.get("model_path"))
     records, all_rows = [], []
     for index, source in enumerate(sources):
         if is_cancelled():
@@ -369,6 +370,11 @@ def run_workflow_job(payload, report, is_cancelled):
                     from .experimental_fit import fit_and_write
 
                     rows.extend(fit_and_write(directory / item["side"], item, file_options, report, is_cancelled))
+                elif posterior:
+                    from .posterior_job import fit_and_write as posterior_and_write
+
+                    rows.extend(posterior_and_write(directory / item["side"], item, file_options, report,
+                                                    is_cancelled))
                 elif fit1d:
                     rows.extend(fit1d_and_write(directory / item["side"], item, file_options, report, is_cancelled,
                                                 kit))
@@ -418,7 +424,7 @@ def run_workflow_job(payload, report, is_cancelled):
         report(index + 1, len(sources), f"{index + 1}/{len(sources)} files finished — {name}", {})
     summary = dict(
         software_version=SOFTWARE, model=model_record,
-        profile="Single RC specialist (experimental) + numerical fallback" if stable else ("Experimental physical fit (numerical)" if experimental else ("fit1d (network + physical fit)" if fit1d else ("V5 + four-step correction" if options["numerical"] else "V5 neural only"))),
+        profile="Predict parameters (network + posterior)" if posterior else "Single RC specialist (experimental) + numerical fallback" if stable else ("Experimental physical fit (numerical)" if experimental else ("fit1d (network + physical fit)" if fit1d else ("V5 + four-step correction" if options["numerical"] else "V5 neural only"))),
         runtime_seconds=time.perf_counter() - started,
         configured_candidates=len(all_rows),
         best_log_rmse=all_rows[0]["best_log_rmse"] if all_rows else None,

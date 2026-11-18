@@ -89,3 +89,30 @@ def test_decoding_a_job_result():
                             "values": {"R_1": [5.0, 5.1, 4.9, 5.3, 4.7, 5.5, 0.1]}, "flags": ["low_ess"], "ess": 12}]}
     (one,) = predicted(value)
     assert one.probability == 0.7 and one.intervals["R_1"][2] == 4.9 and one.flags == ("low_ess",)
+
+
+def test_the_batch_window_runs_predict(tmp_path, monkeypatch):
+    """1D Predict's batch job with Predict parameters: rows in the window's layout, its files, a model of Fitting."""
+    import json
+
+    from src.gimap.features.fitting.application.single_fit import model_from_solution
+    from src.gimap.features.fitting.application.workflow_v5 import default_options, validate_options
+    from src.gimap.features.fitting.infrastructure.adapters.workflow_v5 import run_workflow_job
+
+    monkeypatch.setenv("GIMAP_ML1D_NETWORK", str(NETWORK))
+    path = _sphere_file(tmp_path)
+    options = validate_options({**default_options(), "method": "posterior", "components": [1], "side": "positive",
+                                "q_unit": "A^-1", "max_solutions": 3})
+    value = run_workflow_job({"options": options, "output_dir": str(tmp_path / "out"), "files": [str(path)]},
+                             lambda *args: None, lambda: False)
+    rows = value["candidates"]
+    assert rows and all(r["best_source"] == "posterior" and r["physics_backend"] == "cut_model" for r in rows)
+    assert value["summary"]["profile"].startswith("Predict parameters")
+    best = rows[0]
+    assert best["components"][0]["params"]["R"] == pytest.approx(4.0, rel=0.05) and 0 <= best["probability"] <= 1
+    model, deviation = model_from_solution(best)
+    assert model.components[0].family == "sphere" and deviation < 1e-6
+    side = next((tmp_path / "out").glob("0001_*")) / "positive"
+    stored = json.loads((side / "solutions.json").read_text(encoding="utf-8"))
+    assert stored["method"] == "posterior" and stored["network"]["sha256"]
+    assert (side / "display.npz").is_file() and (side / "fitting_curves.csv").is_file()

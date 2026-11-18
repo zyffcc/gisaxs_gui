@@ -61,6 +61,7 @@ STAGE_LABELS = {
     "stable_neural": "Neural model",
     "stable_numerical_fallback": "Numerical fallback",
     "fit1d": "fit1d",
+    "posterior": "Network + posterior",
 }
 RMSE_TIP = ("Natural-log RMSE over the measured curve, including measurement noise. "
             "Review peak positions, overall shape and residuals; no mandatory cutoff is applied.")
@@ -501,7 +502,8 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
             r["display_fit"],
             color="#2563eb",
             lw=1.8,
-            label=("Physical fit" if r.get("physics_backend") == "experimental_calibrated" else "fit1d model" if r.get("best_source") == "fit1d" else "Model forward") + f" · {len(r['display_q'])} display points",
+            label=({"experimental_physical": "Physical fit", "fit1d": "fit1d model", "posterior": "Predicted, refined"}
+                   .get(r.get("best_source"), "Model forward")) + f" · {len(r['display_q'])} display points",
         )
         for name, values in r.get("display_components", {}).items():
             ax.plot(r["display_q"], values, lw=1.1, ls="--", label=name)
