@@ -1,7 +1,7 @@
 {
- "created_utc": "2026-11-18T18:50:14.427766+00:00",
+ "created_utc": "2026-11-18T19:30:02.672120+00:00",
  "release": true,
- "git_head": "02fb2b79159421bbde239e4f5733e5848f118e68",
+ "git_head": "3e876431a7f9b0a2a1eeb7780d6e310a7b127672",
  "families": [
   "si_p3h",
   "si_v6",
@@ -72,7 +72,7 @@
   "code/iam/iampred/references.py": "30b93f5cb77f4568aef0a66b0c1b57953cf58e0adf3711584dea733487f4a4d7",
   "code/iam/iampred/registry.py": "23b0b30c746d6fe91381825aa36e5157a55b931cc9430971286f472e34ed8b56",
   "code/iam/iampred/replot.py": "a66df68a60adb486446671125364d8c19aaa291b8b247568059e73061dcbeea7",
-  "code/iam/iampred/report.py": "d737d937664486fd5e8538e7d93b64251268ea75fc64911d3faf12dec5e786d7",
+  "code/iam/iampred/report.py": "ca79160386c44a97ccc4f4c85d29bad4e98b2de60786bf43b250b051975d44c5",
   "code/iam/iampred/runner.py": "d8f385505d10f80ea5328322398f4192c67dd1ec8582b170c939ca5b68f63592",
   "code/iam/iampred/sequence.py": "d49f09f1c245e751427b83432fdc5d51a801977502f58fc8b20965f58c49b8de",
   "code/iam/iampred/static.py": "1f38ef22afa7f6438699dc946b0cf0a051592f34d862b4980532929c7262b270",
