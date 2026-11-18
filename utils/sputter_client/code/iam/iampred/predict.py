@@ -391,6 +391,8 @@ def main():
                     "earlier windows (2 ... 64 places back, beyond one scale; dev5 units; 0 = neighbouring windows only)")
     ap.add_argument("--transplant", type=int, default=1, help="--sequence: 1 = the solutions of neighbouring windows "
                     "join the pool of a window, 0 = candidates and own refined solution only")
+    ap.add_argument("--no-network-step", action="store_true", help="a GUI's step tree: this run only refines (analyze "
+                    "runs the chosen network a second time), the network steps were reported by the first run")
     ap.add_argument("--reuse", action="store_true", help="take features, candidates and per-window refinement from "
                     "OUT/state.json.gz when it was written for the same model, windows, --k and --refine")
     ap.add_argument("--like", default=None)
@@ -453,6 +455,12 @@ def main():
     if not times:
         raise SystemExit(f"{a.scan}: no windows for --times {how} (new scans have no reference windows: use all or t1,t2)")
     LV.emit("windows", family=cfg["family"], total=len(times), refine=a.refine)
+    if not a.no_network_step:
+        tt = [float(t) for t in times]
+        LV.step("windows", "done", detail=LV.trace("windows", dict(times=tt, step=a.step, max_windows=a.max_windows)),
+                summary=(f"{len(tt)} windows of 1 s, {tt[0]:g}-{tt[-1]:g} s" + (f", every {tt[1] - tt[0]:g} s" if len(tt) > 1 else "")))
+        LV.step(f"networks.{cfg['family']}", "running")
+    t_start_ = time.time()
     nw = max(1, min(a.workers, len(times)))
     key = json.loads(json.dumps(dict(family=cfg["family"], scan=a.scan, family_hash=cfg["family_hash"],
                                      forward_hash=cfg["forward_hash"], model=_sha(a.model), k=a.k, refine=a.refine,
@@ -538,12 +546,26 @@ def main():
                                                                              "coverage", "amount_nm", "base_nm")}))
             LV.emit("joint", family=cfg["family"], iteration=int(k), total=int(a.sequence), seconds=LV.rounded(seconds, 1),
                     median=LV.rounded(state["median_dev5"], 3), windows=wins)
+            history.append(dict(iteration=int(k), seconds=LV.rounded(seconds, 1), median=LV.rounded(state["median_dev5"], 3),
+                                sum_dev5=LV.rounded(state["sum_dev5"], 3), penalty=LV.rounded(state["penalty"], 3),
+                                windows=wins))
+            LV.trace("joint", dict(family=cfg["family"], total=int(a.sequence), iterations=history))
 
-        sq.on_iter = on_iter
+        def on_progress(phase, done, n, seconds):
+            LV.emit("joint_progress", family=cfg["family"], iteration=int(sq.njac) + (1 if phase == "derivatives" else 0),
+                    total=int(a.sequence), phase=phase, done=int(done), windows=int(n), seconds=LV.rounded(seconds, 1))
+
+        history = []
+        sq.on_iter, sq.on_progress = on_iter, on_progress
         try:
             LV.emit("joint_stage", family=cfg["family"], stage="pool", windows=len(use), total=int(a.sequence))
+            LV.step("joint.pool", "running")
+            t_pool = time.time()
             pools = scan_pools(sq, use, a.transplant, sq.log)
+            LV.step("joint.pool", "done", summary=f"{len(use)} windows, {sum(len(es) for _, es in pools)} solutions tried "
+                                                  f"in {time.time() - t_pool:.0f} s")
             LV.emit("joint_stage", family=cfg["family"], stage="fit", windows=len(use), total=int(a.sequence))
+            LV.step("joint.fit", "running")
             cont = [(k, sc, GROW * sc) for k, (_, sc) in enumerate(scales) if sc > 0]
             path = time_path(pools, reps, mono, TOL, a.path_weight, sq.tx, cont, a.smooth_weight, a.jump_cost)
             chosen = {t: es[path[t]] for t, es in pools}
@@ -553,6 +575,14 @@ def main():
                                              chosen=[path[t] for t, _ in pools]))
             sw, seq = SQ.refine(sq, [chosen[t]["x"] for t, _ in pools], reps, mono, TOL, a.path_weight, scales,
                                 a.smooth_weight, a.sequence, out, a.far_weight)
+            sh_ = seq.get("shared") or {}
+            LV.step("joint.fit", "done", detail="joint.json" if history else None,
+                    summary=f"{len(history)} iterations, median fit deviation {seq['end']['median_dev5']:.1f}"
+                            + (f", metal amount {sh_['kappa']:.2f} x nominal" if sh_.get("kappa") else "")
+                            + f", {(time.time() - t_pool) / 60:.0f} min")
+        except BaseException:
+            LV.step("joint.fit", "failed", summary="stopped: see the log of this step")
+            raise
         finally:
             sq.close()
         for r in rows:
@@ -709,6 +739,10 @@ def main():
                 note=("development reference; " + ("TRAIN scan of the family: consistency, not validation" if not client
                                                    else "new scan: no adopted fit to compare with")))
     (out / "summary.json").write_text(json.dumps(summ, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    if not a.no_network_step:
+        LV.step(f"networks.{cfg['family']}", "done", summary=(f"median fit deviation {summ['median_dev5_best']:.1f} (best "
+                f"candidate), {summ['n_usable']} windows, {time.time() - t_start_:.0f} s" if summ.get("median_dev5_best") is not None
+                else f"{summ['n_usable']} windows"))
     print(json.dumps({k: summ[k] for k in ("scan", "n_usable", "median_dev5_first", "median_dev5_best", "median_dev5_path",
                                            "median_dev5_refined", "median_dev5_sequence", "median_ratio_best_to_fit",
                                            "seconds")}))

@@ -54,6 +54,10 @@ SO_FAR_LEFT = "{elapsed} so far, {left}"
 LEFT_MINUTES = "about {minutes} min left"
 LEFT_HOURS = "about {hours} h {minutes} min left"
 LEFT_SOON = "less than a minute left"
+JOINT_BATCH = "Joint fit: iteration {iteration} of {total} · {phase}: {done} of {windows} windows"
+JOINT_POOL_BATCH = "Joint fit: preparing · {done} of {windows} windows"
+JOINT_PHASES = {"derivatives": "derivatives", "step": "trial step"}
+"""The phases of an iteration of the joint fit (``joint_progress``): the derivatives are its long part."""
 DRAWING = "Drawing the main screen: window {drawn} of {total}"
 JOINT_LABEL = "Joint fit, iteration {iteration} of {total}"
 """The overlay of the joint fit at work on the evolution plot."""
@@ -62,9 +66,9 @@ STATUS_FIELD = "{status}"
 TEMPLATES = (READING, READING_FIRST, IMPORTED, STARTING_NETWORK, STARTING_NETWORKS, NETWORK_WINDOWS,
              *NETWORK_PHASES.values(), SEQUENCE, COMPARING, SOLVED, PRELIMINARY_SHOWN, REFINING, REFINING_JOINT,
              JOINT_POOL, JOINT_FIRST, JOINT, MEDIAN, SO_FAR, SO_FAR_LEFT, LEFT_MINUTES, LEFT_HOURS, LEFT_SOON, DRAWING,
-             JOINT_LABEL)
+             JOINT_LABEL, JOINT_BATCH, JOINT_POOL_BATCH, *JOINT_PHASES.values())
 """The texts of the status line that need Chinese (numbers and network names are data)."""
-AFTER_PRELIMINARY = {"preliminary", "refine", "windows", "progress", "window", "joint_stage", "joint"}
+AFTER_PRELIMINARY = {"preliminary", "refine", "windows", "progress", "window", "joint_stage", "joint", "joint_progress"}
 """What the run does after its preliminary result until the report: the job status's bar then follows the line."""
 NETWORK_KINDS = {"windows", "progress", "window"}
 
@@ -120,6 +124,8 @@ def status_line(run: Optional[LiveRun], now: Optional[float] = None) -> tuple:
         family = str(run.refining.get("family") or run.family)
         joint = (run.refining.number("iterations") or 0) > 0
         return text(REFINING_JOINT if joint else REFINING, family=family), None
+    if kind == "joint_progress" and run.joint_progress is not None:
+        return _joint_batch_line(run, now)
     if kind in ("joint_stage", "joint"):
         return _joint_line(run, now)
     if kind in ("drawing", "drawn") and run.drawing:
@@ -178,6 +184,23 @@ def _joint_line(run: LiveRun, now: float) -> tuple:
     return " · ".join(parts), (min(1.0, iteration / total) if total else None)
 
 
+def _joint_batch_line(run: LiveRun, now: float) -> tuple:
+    """"Joint fit: iteration 3 of 6 · derivatives: 12 of 20 windows · 6:12 so far, about 9 min left"."""
+    event = run.joint_progress
+    done, windows = _count(event.number("done")), _count(event.number("windows"))
+    phase = str(event.get("phase") or "")
+    if phase == "pool":
+        words = text(JOINT_POOL_BATCH, done=done, windows=windows)
+    else:
+        words = text(JOINT_BATCH, iteration=int(event.number("iteration") or 0), total=int(event.number("total") or 0),
+                     phase=tr(JOINT_PHASES.get(phase, phase)), done=done, windows=windows)
+    elapsed, left = run.joint_elapsed(now), left_words(run.joint_batch_left(now))
+    if elapsed is not None:
+        words += " · " + (text(SO_FAR_LEFT, elapsed=clock_time(elapsed), left=left) if left else
+                          text(SO_FAR, elapsed=clock_time(elapsed)))
+    return words, run.joint_batch_share()
+
+
 class LiveStatusMixin:
     """Needs ``_live``, ``_live_tracker``, ``_client_stop``, ``_client_status``, ``_client_status_parts``, the
     ``live_status`` label of the live view, ``run_note`` of the main screen and the two evolution plots."""
@@ -204,6 +227,8 @@ class LiveStatusMixin:
         if shown:
             self.run_note.set_full_text(words)
         self.run_note.setVisible(shown)
+        self._show_steps_button(shown)  # Steps beside the note; back to the preliminary result in the live view
+        self._live_show_tree()  # the line under the step at work
         if not self._live_static():
             self._live_job_status(self._live_tracker())
 

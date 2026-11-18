@@ -168,20 +168,43 @@ class Sequence:
 
     def _run(self, jobs, save=None, lite=False):
         'jobs {window k: (xs (m, nf), shared (m, 2) | None)} -> {k: (residual, reported, dev5, h_m, ok)}.'
+
+
         res = []
         for i, pool in enumerate(self.pools):
-            mine = [(self.t[k], jobs[k][0], jobs[k][1]) for k in sorted(jobs) if self.owner[k] == i]
-            if mine:
-                res.append(pool.apply_async(_eval, ((self.scan, mine, save, lite),)))
+            for k in sorted(jobs):
+                if self.owner[k] == i:
+                    res.append(pool.apply_async(_eval, ((self.scan, [(self.t[k], jobs[k][0], jobs[k][1])], save, lite),)))
         got = {}
+        if self.on_progress is not None:
+            done = 0
+            while done < len(res):
+                time.sleep(0.5)
+                now = sum(r.ready() for r in res)
+                if now != done:
+                    done = now
+                    try:
+                        self.on_progress(self.phase, done, len(res), time.time() - getattr(self, "t0", time.time()))
+                    except Exception:
+                        pass
         for r in res:
             for t, *v in r.get():
                 got[t] = v
         return {k: got[self.t[k]] for k in jobs}
 
+    on_progress = None
+    """Callable (phase, windows done, windows, seconds) while a batch of window evaluations runs: phase 'derivatives'
+    (the parameter steps of every window for the Jacobian, the long part of an iteration), 'step' (a trial step of the
+    optimiser) or 'pool' (the neighbours' solutions before the fit)."""
+    phase = "step"
+
     def cross(self, jobs):
         'jobs {window k: complete parameter vectors (m, len(pnames))}, e.g. the solutions of other windows'
-        res = self._run({k: (np.asarray(x, float), None) for k, x in jobs.items()}, lite=True)
+        phase, self.phase = self.phase, "pool"
+        try:
+            res = self._run({k: (np.asarray(x, float), None) for k, x in jobs.items()}, lite=True)
+        finally:
+            self.phase = phase
         return {k: tuple(v[1:]) for k, v in res.items()}
 
     def _base(self, z, save=None):
@@ -257,7 +280,11 @@ class Sequence:
                 else:
                     S[j, j - nf] += h
             jobs[k] = (P, S); steps.append(hk)
-        res = self._run(jobs)
+        self.phase = "derivatives"
+        try:
+            res = self._run(jobs)
+        finally:
+            self.phase = "step"
         data, indices, dR = [], [], []
         for k in range(W):
             R, rep, _, _, good = res[k]

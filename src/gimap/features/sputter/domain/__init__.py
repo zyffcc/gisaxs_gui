@@ -1,14 +1,14 @@
 """Pure description of an Analyze result of a sputter series and of its real-space pictures."""
 
-from .client import (ANALYSIS_FILE, BAD_ARRAYS, BAD_MAIN, CLIENT_RESULT_TEMPLATES, MAIN_FILE, MAIN_FOLDER, NO_ARRAYS,
-                     NO_MAIN, NO_SOLUTION, POROUS_KEYS, STATIC_KIND, ClientEntry, ClientQuantity, ClientResult,
+from .client import (ANALYSIS_FILE, BAD_ARRAYS, BAD_MAIN, CLIENT_RESULT_TEMPLATES, LISTED_ONLY, MAIN_FILE, MAIN_FOLDER,
+                     NO_ARRAYS, NO_MAIN, NO_SOLUTION, POROUS_KEYS, STATIC_KIND, ClientEntry, ClientQuantity, ClientResult,
                      ClientWindow, WindowPatterns, client_result, window_key, window_patterns)
 from .real_space import (FIELD_DISTANCES, SIDE_DISTANCES, SKETCH_KEYS, Grain, PorousSpace, RealSpace, arrangement,
                          clusters, drawn_coverage, layer_particles, pore_density, porous_space, real_space,
                          side_grains, spanning, top_grains, visible)
 
 __all__ = ["ANALYSIS_FILE", "BAD_ARRAYS", "BAD_MAIN", "CLIENT_RESULT_TEMPLATES", "ClientEntry", "ClientQuantity",
-           "ClientResult", "ClientWindow", "MAIN_FILE", "MAIN_FOLDER", "NO_ARRAYS", "NO_MAIN", "NO_SOLUTION",
+           "ClientResult", "ClientWindow", "LISTED_ONLY", "MAIN_FILE", "MAIN_FOLDER", "NO_ARRAYS", "NO_MAIN", "NO_SOLUTION",
            "POROUS_KEYS", "STATIC_KIND", "WindowPatterns", "client_result", "window_key", "window_patterns",
            "FIELD_DISTANCES", "Grain", "PorousSpace", "RealSpace", "SIDE_DISTANCES", "SKETCH_KEYS", "arrangement",
            "clusters", "drawn_coverage", "layer_particles", "pore_density", "porous_space", "real_space",

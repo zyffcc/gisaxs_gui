@@ -5,7 +5,9 @@ the candidates of its network, ranked, and — when it refined — the refined s
 (label and kind ``joint``: every window refined together over the scan, smooth in time; then also ``smooth``). Refined
 and joint entries have no network weight. Each entry holds the quantities
 of the main screen (grain radius R, grain height H, centre distance D, the gap between grains, the width of the
-log-normal radius distribution, the coverage; a quantity a model family does not have is missing) and its fit
+log-normal radius distribution, the coverage, and — shown only when the result lists it among its wanted quantities —
+the thickness of the continuous metal layer under the grains, ``base_nm``; a quantity a model family does not have is
+missing) and its fit
 deviation (how far the model image is from the measured one: lower is better). ``pick`` names the entry with the
 lowest fit deviation, ``smooth`` the one a smooth evolution over the whole scan selects: the one shown first.
 A window the package could not use is ``{t, error}``.
@@ -50,6 +52,10 @@ QUANTITIES = (("R_nm", "grain radius R", "nm"), ("H_nm", "grain height H", "nm")
 """The quantities of an entry (key, the package's label, unit), used when a result does not list its own."""
 POROUS_KEYS = ("f_islands", "cap_share", "depth_nm", "xi_nm", "film_share")
 """Quantities only a result on a porous substrate has."""
+LISTED_ONLY = ("base_nm",)
+"""Quantities shown (tile, curve, column) only when the result lists them among its wanted quantities: the thickness
+of the continuous metal layer under the grains is in every entry of an older result too, for its real-space picture,
+but only a newer package says it is a result."""
 STATIC_KIND = "static"
 NO_MAIN = "{folder} holds no result of the analysis (main/main.json)."
 BAD_MAIN = "The result in {folder} cannot be read: {reason}"
@@ -193,6 +199,11 @@ class ClientResult:
     def porous(self) -> bool:
         """The entries hold the quantities of a porous substrate (their radius is a relative size)."""
         return any(key in entry.values for window in self.windows for entry in window.entries for key in POROUS_KEYS)
+
+    def shows(self, key: str) -> bool:
+        """The page shows this quantity of the result (a tile, a curve, a column) when an entry has it: always, except
+        the quantities shown only when the result lists them (``LISTED_ONLY``)."""
+        return key not in LISTED_ONLY or any(quantity.key == key for quantity in self.wanted)
 
     def position(self, window: ClientWindow) -> float:
         """Where a window is on the result's axis: the nominal thickness of a static sample, else the time."""
@@ -357,6 +368,6 @@ def window_patterns(window: ClientWindow, arrays) -> WindowPatterns:
 
 
 __all__ = ["ANALYSIS_FILE", "BAD_ARRAYS", "BAD_MAIN", "CLIENT_RESULT_TEMPLATES", "ClientEntry", "ClientQuantity",
-           "ClientResult", "ClientWindow", "MAIN_FILE", "MAIN_FOLDER", "NO_ARRAYS", "NO_MAIN", "NO_SOLUTION",
+           "ClientResult", "ClientWindow", "LISTED_ONLY", "MAIN_FILE", "MAIN_FOLDER", "NO_ARRAYS", "NO_MAIN", "NO_SOLUTION",
            "POROUS_KEYS", "QUANTITIES", "STATIC_KIND", "WindowPatterns", "client_result", "window_key",
            "window_patterns"]

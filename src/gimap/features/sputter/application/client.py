@@ -28,6 +28,8 @@ from pathlib import Path
 from typing import Callable, Optional, Protocol
 
 from ..domain import CLIENT_RESULT_TEMPLATES, NO_MAIN, ClientResult, ClientWindow, WindowPatterns
+from .live_steps import TRACE_FOLDER, StepTree
+from .step_details import DETAIL_TEMPLATES, StepDetail
 from .use_cases import METALS, PROBLEMS, Stopped, scan_label
 
 QCM_FACTOR = 0.6
@@ -59,7 +61,7 @@ CLIENT_NO_MAIN = ("The analysis finished, but this package does not write the da
                   "(main/main.json): a newer package is needed. Its report is in {folder}.")
 MASK_UNREADABLE = "The mask file cannot be read: {file}"
 CLIENT_TEMPLATES = (*CLIENT_PROBLEMS, CLIENT_MISSING, CLIENT_INCOMPLETE, CLIENT_FALLBACK, CLIENT_FAILED, CLIENT_STOPPED, CLIENT_NO_MAIN,
-                    MASK_UNREADABLE, *CLIENT_RESULT_TEMPLATES)
+                    MASK_UNREADABLE, *CLIENT_RESULT_TEMPLATES, *DETAIL_TEMPLATES)
 """Messages of the engine the page says in its language (the package's own lines stay as they are)."""
 
 
@@ -104,6 +106,9 @@ class ClientRequest:
     workers: Optional[int] = None
     """Processes the package runs its steps with (None: as many as the computer can take when it starts). Not part of
     the result's name: the same request with another number shows the result it has."""
+    cache_limit: Optional[int] = None
+    """The most the import caches may take together (bytes; None: ``storage.DEFAULT_LIMIT_BYTES``, 0: no limit). Not
+    part of the result's name either."""
 
     def problems(self) -> list:
         out = []
@@ -192,6 +197,13 @@ class ClientStarted:
     reused: bool = False
     workers: Optional[int] = None
     """The processes the package was asked to run with (None: its runner's own number)."""
+    import_trace: Optional[Path] = None
+    """Where the import keeps the details of its steps (``<data folder>/<label>.trace``) until they are copied into
+    the result's ``trace`` folder (None: not known)."""
+
+    def trace_folders(self) -> tuple:
+        """The folders a step's detail file may be in, the result's first."""
+        return (Path(self.folder) / TRACE_FOLDER,) + ((Path(self.import_trace),) if self.import_trace else ())
 
 
 class ClientMissing(RuntimeError):
@@ -247,6 +259,10 @@ class ClientReader(Protocol):
 
     def failure_details(self, folder: Path, analysis: dict) -> str:
         """The last lines of the log of the step that failed."""
+        ...
+
+    def detail(self, folders: list, name: str) -> StepDetail:
+        """A step's detail file from the first of ``folders`` that has it."""
         ...
 
     def texts(self, result: ClientResult) -> ResultTexts:
@@ -316,6 +332,36 @@ class ClientService:
         """The report, the facts and the logs of a result, for Details."""
         return self.reader.texts(result)
 
+    # -- the steps of a run -----------------------------------------------------------------------------------
+    def steps(self, folder) -> Optional[StepTree]:
+        """The step tree of a result: as GIMaP kept it after the run, else rebuilt from ``analysis.json`` and the
+        detail files of its ``trace`` folder; None for a result without either (an older package), or a reader that
+        does not know."""
+        found = getattr(self.reader, "steps", None)
+        if not callable(found):
+            return None
+        record, files, analysis = found(Path(folder))
+        tree = StepTree.from_record(record) if record is not None else None
+        if tree is None and files is not None:
+            tree = StepTree.from_files(analysis or {}, files)
+        return tree
+
+    def step_detail(self, folders, name: str) -> StepDetail:
+        """What a step found: its detail file from the first of ``folders`` that has it (read now, kept nowhere).
+        Raises ``OSError`` / ``ValueError`` with the reason."""
+        return self.reader.detail([Path(folder) for folder in folders], name)
+
+    def save_steps(self, folder, tree: StepTree) -> None:
+        """Keep the step tree of a finished run with its result (nothing when the reader cannot; ``OSError`` when
+        the folder cannot be written to)."""
+        found = getattr(self.reader, "save_steps", None)
+        if callable(found) and tree.reported:
+            found(Path(folder), tree.to_record())
+
+    def storage(self):
+        """The import caches (``storage.CacheStore``), or None for a runner that keeps none."""
+        return getattr(self.runner, "caches", None)
+
     # -- processes --------------------------------------------------------------------------------------------
     def automatic_workers(self) -> Optional[int]:
         """The processes the package would run with now when the user names no number (the runner's
@@ -347,7 +393,9 @@ class ClientService:
         if self.reader.complete(out):
             on_event(ClientStarted(out, label, reused=True))
             return self.reader.read(out)
-        on_event(ClientStarted(out, label, workers=request.workers))
+        trace = getattr(self.runner, "import_trace", None)
+        on_event(ClientStarted(out, label, workers=request.workers,
+                               import_trace=trace(request) if callable(trace) else None))
         run = self.runner.run(request, out, on_event, should_stop)
         if run.stopped or should_stop():
             raise Stopped(CLIENT_STOPPED)

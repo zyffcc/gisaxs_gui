@@ -51,6 +51,15 @@ def _pattern(template: str) -> re.Pattern:
     return re.compile("".join(parts), re.DOTALL)
 
 
+def matched(templates, message: str):
+    """(template, values) of the first of ``templates`` that ``message`` was made from, or None."""
+    for template in templates:
+        found = _pattern(template).fullmatch(message) if "{" in template else None
+        if found is not None or message == template:
+            return template, (found.groupdict() if found is not None else {})
+    return None
+
+
 def text(template: str, **values) -> str:
     """``trf`` that never fails on a template the table holds differently (the English is used then)."""
     try:
@@ -102,5 +111,5 @@ def source_tip(source: Source) -> str:
     return "\n".join(tips) or source_text(source)
 
 
-__all__ = ["HINT_TIPS", "LABEL_TEMPLATES", "SOURCE_TIPS", "SUMMARY_TIPS", "TEMPLATES", "message_text", "source_text",
-           "source_tip", "source_warns", "text"]
+__all__ = ["HINT_TIPS", "LABEL_TEMPLATES", "SOURCE_TIPS", "SUMMARY_TIPS", "TEMPLATES", "matched", "message_text",
+           "source_text", "source_tip", "source_warns", "text"]

@@ -29,8 +29,11 @@ The events, by step:
   start (``iterations``); a newer package then says ``joint_stage`` (``stage`` ``pool``: the solutions of neighbouring
   windows are drawn at each window; ``fit``: the iterations start; ``windows``, ``total``) and, after every iteration,
   ``joint`` (``iteration``, ``total``, ``seconds`` since the fit started, ``median`` fit deviation and ``windows``: per
-  window ``t`` and the quantities of the main screen of the current solution);
-* drawing the images (``present``): ``drawing`` — how many windows; ``drawn`` — one window drawn.
+  window ``t`` and the quantities of the main screen of the current solution) and, several times a minute,
+  ``joint_progress`` (the windows done in the batch at work: ``live_progress.py``);
+* drawing the images (``present``): ``drawing`` — how many windows; ``drawn`` — one window drawn;
+* any step of a newer package: ``step`` — a node of the step tree started, ended, failed or was skipped, with one line
+  of what it found and the file of its details (``live_steps.py``).
 
 ``LiveRun`` keeps what the page shows: the pictures of the latest events and every solution found so far, as a
 ``ClientResult`` (one window per time, its entries the solutions of the network) that the main screen's plots draw,
@@ -51,9 +54,10 @@ import numpy as np
 
 from src.gimap.shared.geometry.conventions import canonical_from_index_center
 
-from ..domain import ClientEntry, ClientResult, ClientWindow, WindowPatterns
+from ..domain import LISTED_ONLY, ClientEntry, ClientQuantity, ClientResult, ClientWindow, WindowPatterns
 from ..domain.client import STATIC_KIND, number
 from .live_progress import LiveProgressMixin
+from .live_steps import StepTree
 
 LIVE_PREFIX = "@live "
 LIVE_STEPS = ("intake", "predict", "report", "present")
@@ -167,6 +171,13 @@ class LiveRun(LiveProgressMixin):
     joint: Optional[LiveEvent] = None
     """The latest iteration of the joint fit of the whole scan (with its solution of every window)."""
     joint_at: float = 0.0
+    joint_progress: Optional[LiveEvent] = None
+    """The latest count of the windows done in the batch of the joint fit at work (a newer package)."""
+    joint_progress_at: float = 0.0
+    joint_batch: Optional[tuple] = None
+    """((iteration, phase), seconds, done) of the first ``joint_progress`` event of the batch at work."""
+    steps: StepTree = field(default_factory=StepTree)
+    """The steps as a tree (a newer package's ``step`` events; ``steps.reported`` False for an older one)."""
     paces: dict = field(default_factory=dict)
     """A count -> (time of its first event, its count then, time of its latest event, its count then): the
     ``frames`` read, a network's phase ``(family, phase)``, the windows ``drawn`` (monotonic seconds)."""
@@ -188,7 +199,7 @@ class LiveRun(LiveProgressMixin):
         changes ("" for an event it does not know)."""
         now = time.monotonic() if now is None else float(now)
         kind = self._take(event, now)
-        if kind:
+        if kind and kind != "step":  # a step of the tree started or ended: what happens now is still the counts' line
             self.activity = kind
         return kind
 
@@ -199,8 +210,10 @@ class LiveRun(LiveProgressMixin):
 
     def _take(self, event: LiveEvent, now: float) -> str:
         kind = event.kind
-        if kind in ("preliminary", "refine", "joint_stage", "joint"):
+        if kind in ("preliminary", "refine", "joint_stage", "joint", "joint_progress"):
             return self._refinement(event, now)
+        if kind == "step":
+            return kind if self.steps.feed(event.fields) else ""
         if kind == "centre":  # the package counts pixel centres from 0: GIMaP's pixel coordinates are shown
             col, row = event.number("col"), event.number("row")
             self.centre = canonical_from_index_center(col, row) if col is not None and row is not None else None
@@ -243,6 +256,7 @@ class LiveRun(LiveProgressMixin):
         elif kind == "models":
             self.families = [str(name) for name in event.get("families") or () if name]
             self.mode = str(event.get("mode") or "")
+            self.steps.families(self.families)
         elif kind == "windows":
             self.family = str(event.get("family") or "")
             if self.family in self.totals:  # the network starts again (refining after its preliminary result)
@@ -475,7 +489,10 @@ class LiveRun(LiveProgressMixin):
             entries = found[time_s]
             first = next(iter(entries.values()))
             windows.append(ClientWindow(time_s, first[1], first[2], entries=tuple(item[0] for item in entries.values())))
-        return ClientResult(Path(folder), scan="", family=family, windows=tuple(windows))
+        said = {key for window in windows for entry in window.entries for key in entry.values}
+        newer = self.steps.reported  # a package that reports its steps lists the continuous layer among its quantities
+        wanted = tuple(ClientQuantity(key) for key in LISTED_ONLY if newer and key in said)
+        return ClientResult(Path(folder), scan="", family=family, wanted=wanted, windows=tuple(windows))
 
     def shown_family(self) -> str:
         """The network whose solutions the view shows: the one the data chose, else the one at work — or, until that

@@ -2404,10 +2404,11 @@ one scan, taken while a metal is sputtered onto a substrate. Under its input bar
 
 - the **main screen** (shown first, section 8.1) shows the result of **Analyze**: for each time window the measured
   image beside the image of a model, and the grains that model stands for — radius R, height H, distance D, gap,
-  size distribution width and coverage — with their evolution over the scan. Analyze runs a separate analysis
-  package;
+  size distribution width, coverage and, when there is one, the thickness of the continuous metal layer under the
+  grains — with their evolution over the scan. Analyze runs a separate analysis package;
 - **Details** (section 8.2) holds the geometry, the options of Analyze and of samples measured after their
-  deposition, and three tabs about the result the main screen shows: **Windows**, **Report** and **Logs**.
+  deposition, the room the frames Analyze imports take (**Storage**), and four tabs about the result the main screen
+  shows: **Windows**, **Report**, **Logs** and **Steps**.
 
 What the main screen shows is in [Physics and Methods, section 12.1](Physics_Manual.md#121-analyze-what-the-main-screen-shows).
 
@@ -2459,7 +2460,11 @@ measured after its deposition, see *Samples measured after their deposition* bel
      forward model, window 7 of 24*, *Comparing the networks: cu_p5 21.5, cu_v4 12.5 → cu_v4*, *Joint fit: iteration 2
      of 6 · median fit deviation 11.3 · 5:40 so far, about 11 min left* (seconds per iteration so far times the
      iterations left: the time if the fit takes all of them), *Drawing the main screen: window 5 of 20*. Between the
-     events of the package it names the step (*Step 3 of 4: Writing the report…*).
+     events of the package it names the step (*Step 3 of 4: Writing the report…*). With a newer analysis package the
+     joint fit also says how far it is inside an iteration, several times a minute: *Joint fit: iteration 3 of 6 ·
+     derivatives: 12 of 20 windows · 6:12 so far, about 9 min left* (the derivatives are the long part of an
+     iteration; the time left is seconds per window × the windows left in this iteration + seconds per iteration ×
+     the iterations after it).
    - At the left, the four steps — **Read the frames**, **Find the solutions**, **Write the report**, **Draw the
      images** — each with its state and one line of what it found (frames read so far, time windows solved, the
      network that fits the data better, windows drawn), and the time since the start with the number of processes
@@ -2468,6 +2473,17 @@ measured after its deposition, see *Samples measured after their deposition* bel
      network proposing candidates, the windows solved and the model images computed, the windows refined (Refine:
      every window gets its candidates first, then each is refined), the iterations of the whole-scan refinement
      (Full). The bar of the job status moves on inside each step as well.
+   - **The steps as a tree** (a newer analysis package): the four steps become a checklist of the steps and their
+     sub-steps — reading the frames (beam centre, pixel mask, reading, start of the deposition), the time windows,
+     each network, the comparison of the networks, the joint fit (preparing, iterations) and writing the result. ○ is
+     still to come, ● at work — with the line of what happens now under it —, ✓ done, with what it found at the
+     right (cut when long; hover for all of it), ✗ failed, – skipped. A step folds its sub-steps away once it is done;
+     ▸ opens them again. A step that saved what it found ends in ›: click it to see it at the right — the beam centre
+     and the pixel mask on the detector summed (masked pixels in red, the beam +, the sample horizon dashed), the
+     frames read, the count rate with its baseline and the start of the deposition, the time windows, the fit
+     deviation of each network, the joint fit's median fit deviation per iteration with its current solution (R, H, D,
+     the continuous layer t_b and the coverage; it follows every iteration while it is open). **Back to the
+     Analysis** closes it.
    - At the right, the step at work in one paragraph, with a picture and a plot. Reading the frames: the detector
      summed over sampled frames, with the pixels the mask leaves out in red, the direct beam (+) and the sample
      horizon (dashed), beside the frames read last on the grid of q_y and exit angle; below, the count rate of every
@@ -2487,7 +2503,8 @@ measured after its deposition, see *Samples measured after their deposition* bel
      end, with every candidate of every window.
    - **Preliminary result.** In mode Refine the network's result (its candidates and their time path) is shown on the
      main screen within minutes, its name followed by a note that the joint fit of the whole scan is running; the
-     analysis goes on. A line under the window selector says what it does now (the same line as above). After every
+     analysis goes on. A line under the window selector says what it does now (the same line as above); **Steps**
+     beside it shows the live view with its steps again, and **Show the Preliminary Result** there comes back. After every
      iteration of the joint fit, its current solution is drawn dashed over the evolution — radius, height, distance,
      gap and coverage in their colours, named *Joint fit, iteration k of n* in the legend — and the next iteration
      replaces it. The tiles keep the values of the solution shown. When the analysis ends, the final result (which
@@ -2519,11 +2536,13 @@ Analysing the same request again shows the result it has. **Details ▸ Analyze 
   scan selects — the joint fit when there is one —, which removes most of the ambiguity of a single window; it need
   not be the one with the lowest fit deviation. Choose another one when its image matches better by eye: the values, the
   model image and the evolution follow, and the choice is kept with the result. **Back to Default** takes it back.
-- **The values**: **Radius R**, **Height H**, **Distance D** (centre to centre), **Gap** (D − 2R), **Size
+- **The values**: **Radius R**, **Height H**, **Continuous layer t_b** (the thickness of the continuous metal layer
+  under the grains; 0 while they are separate islands), **Distance D** (centre to centre), **Gap** (D − 2R), **Size
   distribution width** (σ of a log-normal distribution of the radius) and **Coverage** of the solution shown. A
-  quantity that the model of this sample does not have is not shown.
-- **The evolution**: R, H, D and the gap (nm) and the coverage over the time in the scan, for the solution shown
-  in each window; the dashed line marks the window shown.
+  quantity that the model of this sample does not have is not shown; t_b only for a result of a newer analysis
+  package, which lists it.
+- **The evolution**: R, H, t_b (dark gold), D and the gap (nm) and the coverage over the time in the scan, for the
+  solution shown in each window; the dashed line marks the window shown.
 - **Patterns | Real Space**, at the right of the window line: **Real Space** draws the solution shown in place of
   the two images, in nm. Left a cut through a row of grains: the substrate (a polymer film is drawn, its
   thickness not to scale), the continuous layer under the grains when there is one, and the grains with their
@@ -2618,7 +2637,17 @@ is not opened. Chapter 12 says where the results are.
 | **Sample roll (°)** | 0 when neither this folder nor a preset gives one (the page says so). |
 | **Save results in** | Where the result folders go (default: the folder `sputter` in the user data folder). |
 
-At the right, three tabs about the result the main screen shows (before there is one, each says *Analyze a scan or
+**Storage** (folded, under More options): the frames Analyze imports are kept so that the same scan is not read
+again — often a few gigabytes per scan. They are in GIMaP's local folder (on Windows
+`%LOCALAPPDATA%\GIMaP\sputter_client`, on macOS `~/Library/Caches/GIMaP/sputter_client`), not in the user data folder,
+which on Windows roams with the profile. Opened, the section lists each import (its size, when an analysis last used it,
+where it is), their total and the size of the results. **Remove Selected** and **Remove Unused For** *n* **days** remove
+imports after asking; the one an analysis is using stays. **Limit of the imports** (default 5 GB, 0 for no limit): when
+an analysis starts and when it ends, the imports not used for the longest time are removed until the rest fit — never
+the one in use, never a result. Imports an older GIMaP kept in the user data folder are still used and are listed as
+*user data folder (older GIMaP)*; nothing moves them.
+
+At the right, four tabs about the result the main screen shows (before there is one, each says *Analyze a scan or
 open a result*):
 
 - **Windows**: one row per time window (for a series of samples measured after their deposition, per sample) with
@@ -2631,6 +2660,8 @@ open a result*):
   view); and the package's report (`REPORT.md`). A result of an older package has the rows it can (no reading facts,
   no processes).
 - **Logs**: the log of each step of the analysis (`analyze_*.log`), one at a time.
+- **Steps**: the steps of the analysis as the live view showed them, each with what it found; click a step marked ›
+  to see its picture at the right. A result of an older analysis package says that it has no record of its steps.
 
 ![Details of the Sputter workspace with a scan folder chosen](manual_images/en/22a_sputter_details.png)
 *Details with a folder chosen. Here three PILATUS CBF frames from the repository's `TestSAXSdata/` folder stand in
@@ -3241,7 +3272,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | **Tools ▸ 1D Predict — Fit Many Curves…** | a run folder: `request.json`, `batch_summary.json` …, a subfolder per curve with `solutions.json`, `fitting_curves.csv` … | `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the GIMaP user data folder; never removed automatically | `request.json` |
 | Compare ▸ **Save ▸ Table of Every Series… / Table of Every Frame…** | `compare_series.csv` / `compare_frames.csv` + `.json` | the folder of the first series added from files, else the folder a series was last added from (while it is there), else your home folder | `#` header lines and the JSON |
 | Compare ▸ **Change Plot… / Paths Plot… / End States Plot…** | `compare_*.png` or `.svg` | as above | none |
-| Sputter ▸ **Analyze** (section 8.1) | a folder per request: `analysis.json` (status, model family, steps, the files), the package's `REPORT.md`, `report.png`, `report.csv`, `windows.csv`, `summary.json`, `evolution.png`, `patterns.png` and step logs, and `main/` with `main.json` and one `w_<t>.npz` + `w_<t>.png` per time window (the measured image and the model image of every solution) | the scan's folder in the user data folder (or **More options ▸ Save results in**): `sputter/<scan>-<code>/iampred-<code>/`; the same request to the same package shows the result it has. The frames as the package read them are kept in the user data folder: `sputter_client/<package version>/data/` | `gimap_request.json` (the request, the label of the imported scan, the package and its version, the Python, the command) |
+| Sputter ▸ **Analyze** (section 8.1) | a folder per request: `analysis.json` (status, model family, steps, the files), the package's `REPORT.md`, `report.png`, `report.csv`, `windows.csv`, `summary.json`, `evolution.png`, `patterns.png` and step logs, and `main/` with `main.json` and one `w_<t>.npz` + `w_<t>.png` per time window (the measured image and the model image of every solution) | the scan's folder in the user data folder (or **More options ▸ Save results in**): `sputter/<scan>-<code>/iampred-<code>/`; the same request to the same package shows the result it has. The frames as the package read them are kept in GIMaP's local folder (`%LOCALAPPDATA%\GIMaP\sputter_client\` on Windows, `~/Library/Caches/GIMaP/sputter_client/` on macOS), at most 5 GB by default (**Details ▸ Storage**); the steps' details are in the result's `trace/` | `gimap_request.json` (the request, the label of the imported scan, the package and its version, the Python, the command) |
 | Sputter ▸ another **Solution shown** on the main screen | `choices.json`: the solution chosen per time window, where it is not the default | the result's `main/`; when it cannot be written, the user data folder: `sputter_client/choices/` | the file itself (result folder, GIMaP version, time) |
 | XRR Series Extractor ▸ **Export CSV…** | `<source>_xrr.csv` + `.json` | next to the source file; for a folder chosen with **Folder…**, inside it, named after it | the JSON (every value that determines qz and its origin; `center_convention`; `source_layout` with every file read) |
 | Format Converter | converted frames: `<source>.<ext>` for a single-frame source; for a multi-frame source by default `<source>_<frame counted from 1, 6 digits>.<ext>`; `_001` … added on a name collision; or one `converted_images.h5` (`converted_images_001.h5` … when it exists) | `converted/` next to the first input | `conversion_report.json`, `conversion_metadata.json` (or one JSON per frame) |
@@ -3299,8 +3330,12 @@ affected.
 and what the pages remember, section 3.9), `instrument_profiles.json`, `session.json`, `model_parameters.json`
 (Fitting's model), `last_analyze_setup.json` and `logs/`; the AI assistant's `assistant_runs/`,
 `assistant_feature_requests.jsonl` and saved keys (`claude_api_key.txt`, `assistant_provider_keys.json`, plain
-text); and Sputter's result folders in `sputter/` and the frames its analysis package read in `sputter_client/`, which are never removed. Delete old
-result folders yourself, or choose **More options ▸ Save results in** on a data disk for long scans. Outside
+text); and Sputter's result folders in `sputter/`, which are never removed. Delete old
+result folders yourself, or choose **More options ▸ Save results in** on a data disk for long scans. The frames Sputter ▸
+Analyze imports are in the local folder `%LOCALAPPDATA%\GIMaP\sputter_client` (macOS
+`~/Library/Caches/GIMaP/sputter_client`, Linux `~/.cache/gimap/sputter_client`), kept under a limit (**Details ▸
+Storage**, default 5 GB); those an older GIMaP kept in `sputter_client/` of the user data folder are still used, and
+Storage lists and removes them. Outside
 that folder, `Start_GIMaP.bat` keeps Matplotlib's font cache in `%LOCALAPPDATA%\GIMaP\matplotlib`, and on
 Windows whether a few cards of Fitting and 2D Prediction are folded is kept in the registry, under
 `HKEY_CURRENT_USER\Software\GIMaP`.
@@ -3343,9 +3378,9 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Run records do not hold everything needed to repeat a run.** They identify `software_version`, the network's record and Predict parameters' fixed seed; masks are counted, not stored as pixel lists. | Keep the input, settings and model files with the exported records. |
 | **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`, `assistant_provider_keys.json`; section 10.1): whoever can read that folder can read them. | On a shared computer, or with `GIMAP_HOME` on a shared drive, set the key as an environment variable instead, or **Remove** it after use. |
 | **Sputter ▸ Analyze reads Cu with networks trained for Cu on two polymer films (a homopolymer and a block copolymer)**. | For Cu on another substrate, choose **Polymer** for a polymer film and compare the model image with the measured one before using the values. |
-| **Sputter ▸ Analyze runs the analysis package that comes with GIMaP**, which analyses only the pairs of metal and substrate the package has a network for; its values are model values that were not compared with an independent measurement of your sample (section 8.1). The frames it read are kept in the user data folder (`sputter_client/`), one copy per request that changes the import (rate, geometry, mask, substrate …); nothing removes them. | Judge a solution by its model image beside the measured one, and compare with SEM, AFM or XRR where you can. Delete old folders of `sputter_client/` yourself. |
+| **Sputter ▸ Analyze runs the analysis package that comes with GIMaP**, which analyses only the pairs of metal and substrate the package has a network for; its values are model values that were not compared with an independent measurement of your sample (section 8.1). The frames it reads are kept, one copy per request that changes the import (rate, geometry, mask, substrate …), in GIMaP's local folder, at most 5 GB together by default: the ones not used for the longest time are removed first. | Judge a solution by its model image beside the measured one, and compare with SEM, AFM or XRR where you can. **Details ▸ Storage** lists the imports, removes them and sets the limit. |
 | **Sputter reads folders of CBF frames only** (chapter 8). | For NeXus series, use Analyze's series map (section 5.6) and Fitting's in-situ series (section 6.5). |
-| **Sputter keeps every result folder**, and the frames its analysis package read (`sputter_client/`), in the user data folder unless you chose another place; nothing removes them, and **File ▸ Save Project** holds the Sputter form and references its result folder. | For long scans choose **More options ▸ Save results in** on a data disk; delete old folders yourself; open a result again with **Open Result…**. |
+| **Sputter keeps every result folder** in the user data folder unless you chose another place; nothing removes them, and **File ▸ Save Project** holds the Sputter form and references its result folder. | For long scans choose **More options ▸ Save results in** on a data disk; delete old folders yourself; open a result again with **Open Result…**. |
 | **TensorFlow runs on the CPU on Windows and macOS**; a GPU set-up is not configured. | Use the bundled CPU runtime. |
 
 ## 14. Troubleshooting, FAQ, version and contact

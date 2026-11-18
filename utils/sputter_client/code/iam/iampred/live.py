@@ -13,8 +13,55 @@ from pathlib import Path
 import numpy as np
 
 ENV = "IAMPRED_LIVE"
+TRACE_ENV = "IAMPRED_TRACE"
 PREFIX = "@live "
 POLL_S = 0.5
+STEP_TITLES = {
+    "import": "Read the frames", "import.centre": "Find the beam centre", "import.mask": "Find the pixel mask",
+    "import.read": "Read and bin the frames", "import.onset": "Find the start of the deposition",
+    "windows": "Lay out the time windows", "networks": "The networks' solutions", "compare": "Compare the networks",
+    "joint": "Joint fit of the whole scan", "joint.pool": "Prepare (every window tries its neighbours' solutions)",
+    "joint.fit": "Iterations", "finish": "Write the result", "finish.report": "Report",
+    "finish.present": "Pictures of the main screen"}
+
+
+def trace_dir():
+    "The result's trace folder (IAMPRED_TRACE), created; None when the step does not run for a result folder."
+    value = os.environ.get(TRACE_ENV, "").strip()
+    if not value:
+        return None
+    path = Path(value)
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return None
+    return path
+
+
+def trace(name, doc=None, arrays=None):
+    'Writes trace/<name>.json (doc) and, with arrays, trace/<name>.npz (float arrays as float16, compressed);'
+    where = trace_dir()
+    if where is None:
+        return None
+    try:
+        if arrays:
+            small = {k: (np.asarray(v, np.float16) if np.asarray(v).dtype.kind == "f" else np.asarray(v))
+                     for k, v in arrays.items()}
+            np.savez_compressed(where / f"{name}.npz", **small)
+        body = dict(doc or {})
+        if arrays:
+            body["arrays"] = f"{name}.npz"
+        tmp = where / f".{name}.json.tmp"
+        tmp.write_text(json.dumps(body, ensure_ascii=False, default=float), encoding="utf-8")
+        os.replace(tmp, where / f"{name}.json")
+        return f"{name}.json"
+    except Exception:
+        return None
+
+
+def step(id_, state, summary=None, detail=None, **fields):
+    "A step of the GUI's step tree (see Steps above)."
+    emit("step", id=id_, state=state, title=STEP_TITLES.get(id_, id_), summary=summary, detail=detail, **fields)
 
 
 def folder():
@@ -67,6 +114,11 @@ def _plain(value):
     if isinstance(value, np.ndarray):
         return value.tolist()
     return str(value)
+
+
+def say_step(id_, state, summary=None, detail=None):
+    "A step of the GUI's step tree reported by iampred.analyze itself (see Steps above)."
+    say("step", "analyze", id=id_, state=state, title=STEP_TITLES.get(id_, id_), summary=summary, detail=detail)
 
 
 def say(kind, step, **fields):

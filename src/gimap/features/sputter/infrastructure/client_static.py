@@ -133,13 +133,20 @@ class StaticPackageRunner:
     def _storage(self) -> Path:
         return Path(self.runner.storage_root()) / STORAGE_FOLDER
 
+    def _series_data(self, series_id: str) -> Path:
+        """The data folder of a series of GIMaP's: in the local folder, or in the user data folder when it was made
+        there before the caches moved."""
+        found = getattr(self.runner, "storage_folder", None)
+        return Path(found(Path(STATIC_FOLDER) / series_id)) if callable(found) else \
+            self._storage() / STATIC_FOLDER / series_id
+
     def series(self, folder: Path) -> tuple:
         """(data folder, record, GIMaP's own) of the series in ``folder`` — a new record for an empty folder.
         Raises ``ValueError`` for a folder that cannot take a sample."""
         folder = Path(folder)
         record = _json(folder / SERIES_FILE)
         if isinstance(record.get("series_id"), str) and _SERIES_ID.fullmatch(record["series_id"]):
-            return self._storage() / STATIC_FOLDER / record["series_id"], record, True
+            return self._series_data(record["series_id"]), record, True
         analysis = _json(folder / ANALYSIS_FILE)
         if analysis.get("kind") == STATIC_KIND:
             root = analysis.get("data_root")

@@ -95,6 +95,24 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   nm, grains on top: …*.
 - **Sputter ▸ Analyze** starts up to 16 workers (two cores left free) and no more than the free memory holds after
   1.5 GB, 0.3 GB each.
+- **Sputter: the continuous metal layer t_b.** A result of a newer analysis package shows the thickness of the
+  continuous metal layer under the grains (0 while they are separate islands): a tile *Continuous layer t_b*, a
+  dark-gold curve in the evolution (and in the joint fit's dashed overlay) and a column of **Details ▸ Windows**.
+  Older results, which do not list it, show none of these.
+- **Sputter ▸ Analyze, the steps as a tree:** with a newer analysis package the live view lists every step and
+  sub-step like a task list (○ to come, ● at work with what happens now under it, ✓ done with what it found, ✗ failed,
+  – skipped; done steps fold their sub-steps). A step marked › shows what it found: the beam centre and the pixel mask
+  on the detector, the frames read, the start of the deposition, the time windows, the networks compared, the joint
+  fit's iterations and solution. **Steps** beside the preliminary result's note opens them again; after the run
+  **Details ▸ Steps** shows them for the result.
+- **Sputter ▸ Analyze, the joint fit at work:** with a newer analysis package the line says how far an iteration
+  has come, several times a minute — *Joint fit: iteration 3 of 6 · derivatives: 12 of 20 windows · 6:12 so far,
+  about 9 min left* — with the time left from the pace of its windows.
+- **Sputter ▸ Analyze, storage:** the frames Analyze imports go to a local folder (`%LOCALAPPDATA%\GIMaP` on Windows,
+  `~/Library/Caches/GIMaP` on macOS), no longer the roaming user data folder; imports kept there by an older GIMaP are
+  still used. They are limited to 5 GB together by default (the least recently used are removed first, never the one
+  in use, never a result); **Details ▸ Storage** lists them with their size and last use, removes chosen ones or those
+  unused for some days, and sets the limit.
 
 - **Checked against pyFAI:** on the four public frames, every pixel's q, 2θ, q∥ and q_z agree with pyFAI to
   10⁻¹³, and the azimuthal I(q) to 10⁻⁷ on the same pixels and bins; pyFAI's Σ I / Σ F differs from GIMaP's mean of
@@ -258,9 +276,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   folder name widened Details).
 - Sputter ▸ Analyze, limitations: the analysis package analyses only the pairs of metal and substrate it has a
   network for; its values are
-  model values that were not compared with an independent measurement of the sample; a step of the analysis does
-  not report progress while it works; the frames it read stay in the user data folder (`sputter_client/`) until
-  you delete them.
+  model values that were not compared with an independent measurement of the sample; with an older package a step of
+  the analysis does not report progress while it works.
 - Fitting's **Components** control shows additive particle, background and beam-tail/low-q contributions with
   separate visibility choices and thinner dashed/dotted lines below the total model. Toggling contributions
   preserves the current view. Automatic limits use data and total model by default; **Include components in
