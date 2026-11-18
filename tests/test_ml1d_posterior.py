@@ -129,3 +129,12 @@ def test_the_other_methods(method):
         assert len(solutions) == 1 and solutions[0].values["R_1"].best == pytest.approx(4.0, rel=0.03)
     with pytest.raises(ValueError):
         refine.predict(network, q, counts, sigma, compositions=[SPHERE], method="mcmc")
+
+
+def test_several_compositions_at_once():
+    network = Network.load(DATA / "flow_fixture.npz")
+    q, counts, sigma = _curve(seed=5)
+    solutions = refine.predict(network, q, counts, sigma, allowed=E.select(("sphere", "vertical_cylinder"), 1),
+                               shortlist=3, samples=100, local_samples=100)
+    assert solutions and abs(sum(s.probability for s in solutions) - 1.0) < 0.05
+    assert len({s.composition for s in solutions}) >= 1

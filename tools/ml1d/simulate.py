@@ -229,6 +229,9 @@ def _sha256(path: Path) -> str:
 
 
 def _commit() -> str:
+    """The commit of the code: git's, or the COMMIT file an archive of it carries (Maxwell)."""
+    if (ROOT / "COMMIT").is_file():
+        return (ROOT / "COMMIT").read_text(encoding="utf-8").strip()
     try:
         return subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True,
                               check=True).stdout.strip()

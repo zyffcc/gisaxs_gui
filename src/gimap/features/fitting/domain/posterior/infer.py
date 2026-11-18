@@ -10,6 +10,9 @@ For a measured cut and each composition considered (given, or the network's most
    maximum] (each column is 1 at its maximum): Laplace for the positive ones, a half Gaussian for those at 0;
 3. weights w = L π(z)/q(z), the effective sample size (Σw)²/Σw² and the evidence Z = mean w (Dax et al. 2023).
 
+The beam tail's width is at most ``TAIL_WIDTH_MAX`` × the window's q_min, as in ``encoding`` (a wider "tail" takes over
+the particles' own scattering at low q); the weights of wider samples are 0.
+
 The compositions' posterior is ∝ Z (each composition considered equally likely beforehand). The weighted samples are
 grouped into modes (``modes``): sizes and distances apart by more than ``MODE_SPACING`` (relative) or spreads by more
 than ``MODE_SPREAD`` start a mode of their own.
@@ -30,6 +33,7 @@ from ..cut_model.geometry import Geometry
 from . import encoding as E
 
 AMPLITUDE_RANGE = 10.0
+TAIL_WIDTH_MAX = E.TAIL_WIDTH_MAX
 MODE_SPACING, MODE_SPREAD = 0.1, 0.05
 MAX_MODES = 4
 FINE_POINTS = 1024
@@ -194,7 +198,8 @@ class Likelihood:
         at_zero = np.where(positive, 0.0, 0.5 * math.log(0.5 * math.pi) - 0.5 * np.log(diagonal))
         log_marginal = (log_like - m * math.log(top) + 0.5 * positive.sum(axis=1) * math.log(2 * math.pi)
                         - 0.5 * log_det_h + np.sum(at_zero, axis=1))
-        return log_marginal, amplitudes, chi2
+        wide = values[:, E.GLOBAL.start] > TAIL_WIDTH_MAX * self.data.q_max / self.data.ratio
+        return np.where(wide, -np.inf, log_marginal), amplitudes, chi2
 
 
 
@@ -348,5 +353,5 @@ def infer(network, data: Cut, compositions: Optional[Sequence[int]] = None, *, a
     return sorted(out, key=lambda r: -r.probability)
 
 
-__all__ = ["AMPLITUDE_RANGE", "Composition", "Cut", "Likelihood", "Mode", "PHYSICAL_NAMES", "candidates",
+__all__ = ["AMPLITUDE_RANGE", "TAIL_WIDTH_MAX", "Composition", "Cut", "Likelihood", "Mode", "PHYSICAL_NAMES", "candidates",
            "dimensionless", "infer", "modes", "physical", "sample_composition"]

@@ -105,7 +105,7 @@ class Network:
         if meta.get("format") != FORMAT:
             raise ValueError(f"Not a {FORMAT} network")
         if tuple(meta["names"]) != encoding.NAMES or meta["points"] != encoding.POINTS or \
-                meta["compositions"] != len(encoding.COMPOSITIONS):
+                meta["compositions"] != len(encoding.COMPOSITIONS) or meta.get("encoding") != encoding.VERSION:
             raise ValueError("The network was trained on another encoding of the parameters")
         self.arrays = {k: np.asarray(v, float) for k, v in arrays.items()}
         self.meta = meta

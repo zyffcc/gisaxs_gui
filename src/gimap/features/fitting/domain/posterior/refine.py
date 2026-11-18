@@ -26,7 +26,7 @@ import numpy as np
 from .. import fit_engine
 from .. import fit_model as fm
 from . import encoding as E
-from .infer import PHYSICAL_NAMES, Cut, infer
+from .infer import PHYSICAL_NAMES, TAIL_WIDTH_MAX, Cut, infer
 from .laplace import local_posterior
 
 UNCONSTRAINED = 0.7
@@ -93,7 +93,12 @@ def fit_model(values, composition: int, data: Cut, law: str = "number_gauss", co
     g = E.GLOBAL.start
     model = model.with_parameter(("globals", "res_amplitude"), value=1.0, free=True)
     for offset, (name, key) in enumerate(GLOBAL_KEYS.items()):
-        parameter = _clip(model.globals[key], values[g + offset])
+        value = values[g + offset]
+        if key == "res_width":  # the tail stays a tail (``infer.TAIL_WIDTH_MAX``)
+            top = TAIL_WIDTH_MAX * data.q_max / data.ratio
+            value = min(value, top)
+            model = model.with_parameter(("globals", key), upper=top, lower=min(model.globals[key].lower, value))
+        parameter = _clip(model.globals[key], value)
         model = model.with_parameter(("globals", key), value=parameter.value, lower=parameter.lower,
                                      upper=parameter.upper, free=True)
     if grazing:
@@ -182,7 +187,7 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
             allowed=None, shortlist: int = 4, samples: int = 2000, method: str = "lm", seed: int = 0,
             law: str = "number_gauss", coupling: str = "lma", min_probability: float = 0.01,
             grazing: Optional[dict] = None, local_samples: int = 600,
-            refined: int = REFINED) -> list[PosteriorSolution]:
+            refine_modes: int = REFINED) -> list[PosteriorSolution]:
     """Solutions of a cut (q in nm⁻¹, qz the vacuum q_z of the Born term in nm⁻¹, 0: the effective interface), most
     probable first: every distinct refined solution of every composition holding at least ``min_probability`` of
     the posterior (``global``: the best of each composition)."""
@@ -198,7 +203,7 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
     tau_dim = E.GLOBAL.start + 3
     per_composition = []
     for result in results:
-        modes = result.modes[:refined]
+        modes = result.modes[:refine_modes]
         seeds = ()
         if method == "global" and modes:
             heaviest = np.argsort(-result.weights)[:SEEDS]

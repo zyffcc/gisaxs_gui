@@ -117,7 +117,7 @@ def run(index: int) -> dict:
         try:
             solutions = refine.predict(NETWORK, fr.Q, I, s, qz=qz, samples=OPTIONS["samples"], seed=index,
                                        coupling=coupling, local_samples=OPTIONS["local_samples"],
-                                       refined=OPTIONS["refined"], **kwargs)
+                                       refine_modes=OPTIONS["refined"], **kwargs)
             best = solutions[0]
             k_best = len(E.COMPOSITIONS[best.composition])
             out[name] = dict(ok=True, composition=best.name, composition_index=best.composition,

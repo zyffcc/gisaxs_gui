@@ -189,7 +189,7 @@ class Flow(nn.Module):
         """(arrays, metadata) for posterior/flow.py; the caller adds the SHA-256 of the written npz."""
         arrays = {k: v.detach().cpu().float().numpy() for k, v in self.state_dict().items()
                   if k not in ("codes", "actives")}
-        meta = {"format": FORMAT, "names": list(encoding.NAMES), "points": encoding.POINTS,
+        meta = {"format": FORMAT, "encoding": encoding.VERSION, "names": list(encoding.NAMES), "points": encoding.POINTS,
                 "compositions": len(encoding.COMPOSITIONS), "architecture": self.arch,
                 "transformed": self.transformed, **extra}
         return arrays, meta
