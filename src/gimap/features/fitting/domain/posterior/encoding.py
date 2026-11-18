@@ -83,6 +83,17 @@ def composition_name(index: int) -> str:
     return " + ".join(names[f] + (" (S)" if s else "") for f, s in composition_types(index))
 
 
+def select(families=FAMILIES, max_populations: int = SLOTS, structure=None) -> list[int]:
+    """Compositions of up to ``max_populations`` populations of the given families; ``structure`` True (every one
+    with a paracrystal), False (none) or None (either)."""
+    out = []
+    for c, slots in enumerate(COMPOSITIONS):
+        types = composition_types(c)
+        if len(slots) <= max_populations and all(f in families for f, _s in types) and                 (structure is None or all(s == structure for _f, s in types)):
+            out.append(c)
+    return out
+
+
 def active(index) -> np.ndarray:
     """Which values compositions ``index`` (B,) have: (B, DIMS)."""
     index = np.atleast_1d(np.asarray(index, int))
@@ -282,4 +293,4 @@ def bin_curve(q, intensity, sigma, q_max: float, ratio: float, points: int = POI
 __all__ = ["CHANNELS", "COMPOSITIONS", "CONDITIONS", "CYLINDER_HEIGHT", "CYLINDER_RADIUS", "DIMS", "ERROR_BASIS", "FAMILIES", "GLOBAL", "NAMES", "PER_SLOT",
            "POINTS", "RATIO_MAX", "RATIO_MIN", "SLOTS", "SLOT_CODE", "TYPES", "active", "bin_curve", "bounds",
            "composition_code", "composition_index", "composition_name", "composition_types", "conditions",
-           "error_basis", "features", "from_unit", "from_z", "grid", "log_prior", "to_unit", "to_z", "window"]
+           "error_basis", "features", "from_unit", "from_z", "grid", "log_prior", "select", "to_unit", "to_z", "window"]

@@ -144,7 +144,7 @@ def _layout(rng, ratio, prior, rows):
     """Measured points per bin (B, POINTS): N points, linearly or logarithmically spaced over the window."""
     count = np.round(_log_uniform(rng, *prior["points"], rows)).astype(int)
     log_spaced = rng.uniform(size=rows) < prior["log_spacing_probability"]
-    centres = np.log(np.stack([E.grid(r) for r in ratio]))
+    centres = -np.log(ratio)[:, None] * (1.0 - np.linspace(0.0, 1.0, E.POINTS))[None, :]  # ln of E.grid, every row
     edges = np.concatenate([centres[:, :1] - 0.5 * (centres[:, 1:2] - centres[:, :1]),
                             0.5 * (centres[:, 1:] + centres[:, :-1]),
                             centres[:, -1:] + 0.5 * (centres[:, -1:] - centres[:, -2:-1])], axis=1)

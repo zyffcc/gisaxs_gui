@@ -35,6 +35,8 @@ def test_compositions_and_their_values():
     names = np.array(E.NAMES)
     assert set(names[on]) == {"R_1", "sigma_R_1", "D_over_2R_1", "sigma_nn_1", "R_2", "sigma_R_2", "h_over_2R_2",
                               "sigma_h_2", *E.GLOBAL_NAMES}
+    assert len(E.select(("sphere", "vertical_cylinder"), 2, structure=True)) == 2 + 4
+    assert len(E.select(max_populations=1)) == 6 and len(E.select()) == len(E.COMPOSITIONS)
     code = E.composition_code(index)[0].reshape(E.SLOTS, E.SLOT_CODE)
     assert list(code[0]) == [1, 1, 0, 0, 1] and list(code[1]) == [1, 0, 0, 1, 0] and not code[2].any()
 
