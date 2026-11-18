@@ -147,6 +147,10 @@ def local_posterior(data: Cut, composition: int, centre, tau: float, rng: np.ran
     tau_dim = E.GLOBAL.start + 3
     dims = [d for d in np.flatnonzero(active) if d != tau_dim]
     gram = curvature(likelihood, z_star, data, composition, dims)
+    # A curve the model does not describe within σ (χ²/N > 1): its model error widens the likelihood beyond the
+    # curvature of the σ-weighted residuals, so the proposal is widened by √(χ²/N), as least squares scales its errors.
+    residual = _residuals(likelihood, z_star[None, :], data, composition)[0]
+    gram = gram / max(1.0, float(residual @ residual) / max(1, residual.size - len(dims)))
     informed = [i for i, d in enumerate(dims) if gram[i, i] > INFORMED]
     chosen = [dims[i] for i in informed]
     others = [d for i, d in enumerate(dims) if i not in informed] + [tau_dim]

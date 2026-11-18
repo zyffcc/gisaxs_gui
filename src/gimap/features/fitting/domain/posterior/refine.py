@@ -12,6 +12,8 @@ times the mode's share of it) and flags:
 * ``unconstrained:NAME`` the 68 % interval covers more than ``UNCONSTRAINED`` of the prior's range (the curve says
   little about it);
 * ``correlated:A~B``    the refined values are correlated beyond ±0.95;
+* ``bic``               the sampling of a solution did not converge (fewer than ``ESS_FAILED`` effective samples):
+  the solutions and compositions are compared by BIC (χ² + k ln N), not by their evidence;
 * ``low_ess``           fewer than ``ESS_MIN`` effective samples: the intervals are taken with tempered weights
   (``laplace.Local.tempered``), wider, and are rough.
 """
@@ -137,6 +139,8 @@ SEEDS = 16
 REFINED = 3
 CHI2_RETRY = 2.0
 """``lm``: when no mode of a composition refines below this χ²/N, one search of the ranges from the samples too."""
+ESS_FAILED = 10
+"""Below this many effective samples at any solution, the solutions are compared by BIC (``bic`` flag)."""
 """Modes of a composition refined by least squares, the heaviest first."""
 
 
@@ -244,18 +248,30 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
             heaviest = np.argsort(-result.weights)[:SEEDS]
             add(modes[0], "global",
                 tuple(fit_model(result.samples[i], result.index, data, law, coupling, grazing) for i in heaviest))
-        if entries and all(e[3] is not None for e in entries):
-            evidences = np.array([e[3].log_evidence for e in entries])
-            top = evidences.max()
-            log_z = float(top + np.log(np.sum(np.exp(evidences - top))))
-            shares = np.exp(evidences - log_z)
-        else:
-            log_z = result.log_evidence
-            total = sum(e[0].weight for e in entries) or 1.0
-            shares = np.array([e[0].weight / total for e in entries])
-        per_composition.append((result, entries, log_z, shares))
+        per_composition.append([result, entries, None, None])
     if not per_composition:
         return []
+    # The solutions are compared by their evidence (importance sampling); when the sampling of one of them did not
+    # converge (fewer than ESS_FAILED effective samples, e.g. a curve the model does not describe, whose posterior
+    # with the model error lies away from the least-squares optimum), all of them are compared by BIC, as fit1d does.
+    by_bic = method != "posterior" and any(e[3] is None or e[3].ess < ESS_FAILED
+                                           for c in per_composition for e in c[1])
+    for c in per_composition:
+        result, entries = c[0], c[1]
+        if by_bic and entries and all(e[2] is not None for e in entries):
+            evidences = np.array([-0.5 * _bic(e[2]) for e in entries])
+        elif entries and all(e[3] is not None for e in entries):
+            evidences = np.array([e[3].log_evidence for e in entries])
+        else:
+            evidences = None
+        if evidences is not None:
+            top = evidences.max()
+            c[2] = float(top + np.log(np.sum(np.exp(evidences - top))))
+            c[3] = np.exp(evidences - c[2])
+        else:
+            c[2] = result.log_evidence
+            total = sum(e[0].weight for e in entries) or 1.0
+            c[3] = np.array([e[0].weight / total for e in entries])
     log_z = np.array([c[2] for c in per_composition])
     probabilities = np.exp(log_z - log_z.max())
     probabilities /= probabilities.sum()
@@ -266,14 +282,23 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
             probability = float(p * share)
             if probability < min_probability:
                 continue
-            out.append(_solution(result, entry, data, fit_data, lo, hi, method, probability,
+            solution = _solution(result, entry, data, fit_data, lo, hi, method, probability,
                                  {"head_log_prob": result.head_log_prob, "mode_weight": float(share),
                                   "composition_log_evidence": composition_log_z, "network_ess": result.ess,
-                                  "dropped_points": data.dropped}))
+                                  "dropped_points": data.dropped, "compared_by": "bic" if by_bic else "evidence"})
+            if by_bic:
+                solution.flags = solution.flags + ("bic",)
+            out.append(solution)
     seconds = time.perf_counter() - tick
     for solution in out:
         solution.seconds = seconds
     return sorted(out, key=lambda s: -s.probability)
+
+
+def _bic(refined: fit_engine.FitResult) -> float:
+    """χ² + k ln N of a least-squares solution (k its free values, the scales included)."""
+    chi2 = refined.chi2_reduced * max(1, refined.points - refined.free)
+    return float(chi2 + refined.free * math.log(max(refined.points, 2)))
 
 
 def _label(path) -> str:
@@ -281,5 +306,5 @@ def _label(path) -> str:
     return key if owner == "globals" else f"{key}_{owner + 1}"
 
 
-__all__ = ["CHI2_RETRY", "ESS_MIN", "METHODS", "Interval", "PosteriorSolution", "UNCONSTRAINED", "fit_model", "model_values",
+__all__ = ["CHI2_RETRY", "ESS_FAILED", "ESS_MIN", "METHODS", "Interval", "PosteriorSolution", "UNCONSTRAINED", "fit_model", "model_values",
            "predict"]

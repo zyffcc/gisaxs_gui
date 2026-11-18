@@ -24,6 +24,7 @@ FLAG_TEXTS = {
     "at_bound": "{name} stopped at a bound of its range",
     "correlated": "{name} are strongly correlated",
     "low_ess": "few effective samples: the intervals are rough",
+    "bic": "the posterior's sampling did not converge: the solutions are compared by χ² and their number of values (BIC)",
 }
 MISSING = "Predict parameters needs GIMaP's proposal network, which is missing in this installation ({name})."
 

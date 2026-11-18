@@ -499,6 +499,8 @@ FITTING_ZH = {
         '预测参数给出每个候选的概率及其数值的后验区间；物理拟合和 fit1d 给出的是待检查的起点。logRMSE 和 RMS/σ 包含测量噪声。方法在“参数…› 拟合方法”中选择。',
     'Starting Predict parameters (network + posterior)…':
         '正在开始预测参数（网络 + 后验）…',
+    "the posterior's sampling did not converge: the solutions are compared by χ² and their number of values (BIC)":
+        "后验抽样没有收敛：各个解按 χ² 和数值个数（BIC）比较",
 }
 
 __all__ = ["FITTING_ZH"]
