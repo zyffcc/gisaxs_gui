@@ -181,7 +181,8 @@ def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra)
 def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions: Optional[Sequence[int]] = None,
             allowed=None, shortlist: int = 4, samples: int = 2000, method: str = "lm", seed: int = 0,
             law: str = "number_gauss", coupling: str = "lma", min_probability: float = 0.01,
-            grazing: Optional[dict] = None, local_samples: int = 600) -> list[PosteriorSolution]:
+            grazing: Optional[dict] = None, local_samples: int = 600,
+            refined: int = REFINED) -> list[PosteriorSolution]:
     """Solutions of a cut (q in nm⁻¹, qz the vacuum q_z of the Born term in nm⁻¹, 0: the effective interface), most
     probable first: every distinct refined solution of every composition holding at least ``min_probability`` of
     the posterior (``global``: the best of each composition)."""
@@ -197,7 +198,7 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
     tau_dim = E.GLOBAL.start + 3
     per_composition = []
     for result in results:
-        modes = result.modes[:REFINED]
+        modes = result.modes[:refined]
         seeds = ()
         if method == "global" and modes:
             heaviest = np.argsort(-result.weights)[:SEEDS]

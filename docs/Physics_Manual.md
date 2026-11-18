@@ -1592,16 +1592,17 @@ The prepared curve is fitted by a numerical variable-projection fit (no neural n
 I(q) = BG + Σ_j a_j P_j(q) S_j(q) + A / ( 1 + (q / w)^ν )                                      (8.6)
 ```
 
-P_j is a sphere, random-cylinder or vertical-cylinder form factor with a Gaussian size distribution, and S_j the
-paracrystal structure factor; the formulas and the size sampling are those of chapter 9, with one difference: the
-vertical cylinder is **normalised**, `P = Σ_j w_j (2 J_1(q R_j)/(q R_j))²` (26 nodes, ±3σ), so every family has P(0) = 1.
-Every component carries a structure factor. The sphere series threshold differs slightly from Fitting's (x below 0.1,
-up to x⁶).
+P_j is a sphere, random-cylinder or vertical-cylinder term of GIMaP's one forward model of a cut (`cut_model`,
+section 9.2), with Fitting's defaults: a Gaussian size distribution by number, every family normalised to P(0) = 1 (so
+a_j is Fitting's Int), and S_j the Hosemann paracrystal of mean distance D and σnn/D (section 9.5). Every component
+carries a structure factor. Until 0.2.0 the quick fit took its model from 1D Predict (V5): sizes Gaussian by
+intensity on 25 or 26 nodes and σ_D/D = (σnn/D)/√(2π); its solutions still give σ_D/D next to σnn/D for the reports
+that show it.
 
 **Families and starts.** Without a given composition (as in the automatic analysis) three single-component families
 are screened: sphere, vertical cylinder, random cylinder. Each family is started from R = 1.5 nm and R = 4.0 nm, and,
 when D* of section 8.4 is known, from R = 4.0 nm with D = D* (maximum or shoulder alike): 6 or 9 fits. A given composition is
-fitted whole; component j starts at R (1 + 0.6 j). Other starts: σ_R/R = 0.2, σ_D/D = 0.12, h = 10 nm, σ_h/h = 0.2,
+fitted whole; component j starts at R (1 + 0.6 j). Other starts: σ_R/R = 0.2, σnn/D = 0.3, h = 10 nm, σ_h/h = 0.2,
 w = 0.02 nm⁻¹, ν = 2.5, D = 1.5 D_min when no D* is given.
 
 **Parameters and bounds.**
@@ -1615,7 +1616,7 @@ D = D_min · (500 nm / D_min)^η,   η ∈ [0, 1],   D_min = max(3 nm, 2.002 R) 
 | R (fitted as ln R) | 1–100 nm |
 | σ_R/R | 0.02–0.9 |
 | D | from 2.002 R (and 3 nm) to 500 nm, through η |
-| σ_D/D | 0.05–0.9 |
+| σnn/D | 0.05–1 |
 | h (random cylinder, fitted as ln h) | 2–500 nm |
 | σ_h/h | 0.02–0.9 |
 | w | 0.001–0.1 nm⁻¹ |
@@ -1649,7 +1650,7 @@ parameters, amplitudes and global values all lie within 1 % (relative) of a bett
 distinct solutions are kept (8 in the 1D Predict window). The fit needs at least 8 points.
 
 **Values at a bound.** A fitted value closer to a bound of its range than 10⁻⁴ of the range (in the fitted variable:
-ln R, σ_R/R, η, σ_D/D, ln h, σ_h/h, w, ν; the reports call w and ν σ_Res and ν_Res) has *ended on the bound*. The fit
+ln R, σ_R/R, η, σnn/D, ln h, σ_h/h, w, ν; the reports call w and ν σ_Res and ν_Res) has *ended on the bound*. The fit
 names each such value in `at_bounds` (parameter, lower or upper bound, component), with the warning that values may
 be unidentifiable. η = 1 is D = 500 nm,
 η = 0 is D = D_min (contact). A value on a bound is not determined by the curve: the bound, not the data, holds it.

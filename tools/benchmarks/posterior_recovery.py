@@ -14,7 +14,7 @@ per curve on one core.
 With --set extended the cases are heldout_cases.py's (three populations and the DA as well; the coupling of a case is
 given to the fit, and the choice is among one to three populations).
 usage: python tools/benchmarks/posterior_recovery.py --network PATH/NAME [--n 200] [--workers 8] [--seed0 20261116]
-           [--samples 2000] [--set fit1d|extended] [--out NAME]
+           [--samples 2000] [--local-samples 600] [--shortlist 4] [--refined 3] [--set fit1d|extended] [--out NAME]
 Writes the summary to tools/benchmarks/NAME_summary.json (default posterior_recovery) and every curve to results/.
 """
 from __future__ import annotations
@@ -112,11 +112,12 @@ def run(index: int) -> dict:
         pops.append(dict(R=median[j], sR=median[j + 1], D=median[j + 4], s_nn=median[j + 5]))
     out["network"] = dict(ok=True, populations=pops, seconds=time.perf_counter() - tick)
     for name, kwargs in (("fit", dict(compositions=[truth])),
-                         ("choose", dict(allowed=_allowed(3 if extended else 2), shortlist=4))):
+                         ("choose", dict(allowed=_allowed(3 if extended else 2), shortlist=OPTIONS["shortlist"]))):
         tick = time.perf_counter()
         try:
             solutions = refine.predict(NETWORK, fr.Q, I, s, qz=qz, samples=OPTIONS["samples"], seed=index,
-                                       coupling=coupling, **kwargs)
+                                       coupling=coupling, local_samples=OPTIONS["local_samples"],
+                                       refined=OPTIONS["refined"], **kwargs)
             best = solutions[0]
             k_best = len(E.COMPOSITIONS[best.composition])
             out[name] = dict(ok=True, composition=best.name, composition_index=best.composition,
@@ -200,10 +201,14 @@ def main():
     ap.add_argument("--samples", type=int, default=2000)
     ap.add_argument("--out", default="posterior_recovery")
     ap.add_argument("--set", default="fit1d", choices=("fit1d", "extended"))
+    ap.add_argument("--local-samples", type=int, default=600)
+    ap.add_argument("--shortlist", type=int, default=4)
+    ap.add_argument("--refined", type=int, default=3)
     a = ap.parse_args()
     t0 = time.perf_counter()
     results = []
-    options = dict(seed0=a.seed0, samples=a.samples, set=a.set)
+    options = dict(seed0=a.seed0, samples=a.samples, set=a.set, local_samples=a.local_samples, shortlist=a.shortlist,
+                   refined=a.refined)
     with Pool(min(a.workers, a.n), initializer=_init, initargs=(a.network, options)) as pool:
         for i, r in enumerate(pool.imap_unordered(run, range(a.n)), 1):
             results.append(r)
@@ -217,6 +222,7 @@ def main():
     s["network_sha256"] = Network.load(a.network).meta["sha256"]
     s["seed0"] = a.seed0
     s["set"] = a.set
+    s["settings"] = options
     (HERE / "results").mkdir(exist_ok=True)
     (HERE / f"{a.out}_summary.json").write_text(json.dumps(s, indent=1))
     (HERE / "results" / f"{a.out}.json").write_text(json.dumps(dict(summary=s, results=results,
