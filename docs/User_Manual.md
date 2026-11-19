@@ -2653,13 +2653,18 @@ and of Details (the switch **Sample List** at the right of the bar hides or show
    — its value is the median over its frames — and the evolution along the nominal thickness. Choose a sample in the
    list to see its series at that sample; moving along the series on the main screen chooses its row.
 6. **Export…** (beside **Open Result…**, and in Details) writes `samples_report` into a folder you choose:
-   `report.html`, one file to send, with every series of the list — its table (nominal thickness, stage, metal amount
-   h_m, base layer and its density, grain height T, radius R, spacing D, coverage, fit deviation), its evolution
-   along the nominal thickness and each sample's measured and model images with two cuts —, in the interface
-   language; and `samples.csv` with every sample. The stage is named by one rule, written in the report: without a
-   continuous layer under the grains (thinner than 0.3 nm) *separate islands* below a coverage of 0.8 and *grains in
-   contact* above; a layer thinner than the grains stand above it, *grains on a thin layer*; a thicker one, a
-   *continuous film*, or a *film with a density below 1* below 0.95 of the bulk density.
+   `report.html`, one file to send, in the interface language, with every series of the list in two parts. **Separate
+   particles** — the grains stand apart or touch without joining across the picture: radius R, height H, spacing D,
+   the gap D − 2R and the coverage. **Connected film** — a continuous layer under the grains, or grains joined into a
+   network: there are no separate particles any more, so the film's thickness and density, its height and the relief
+   of its surface (height, radius, spacing) are given. Each part has its table (with the nominal thickness, the
+   stage, the metal amount h_m and the fit deviation) and its panel of the figure against the nominal thickness; the
+   report says from which thickness on the film is connected, and shows each sample's measured and model images with
+   two cuts. `samples.csv` lists every sample with its part. Parts and stages follow the **Real Space** picture of the
+   main screen and the captions of its tiles: *separate islands*, *grains in contact* (touching, no cluster across
+   the picture), *grains joined into a network*; with a continuous layer, *grains on a thin layer* while it is
+   thinner than the grains stand above it, else a *continuous film*, or a *film with a density below 1* below 0.95 of
+   the bulk density.
 
 Under **Details ▸ Static Frames (after deposition)**: the **Results folder** (each series goes into a folder of its
 own in it, named after the series; a series already there is added to), the **Mode** (Quick, Refine or Full), the

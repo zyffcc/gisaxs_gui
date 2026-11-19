@@ -3,8 +3,9 @@
 
 While the main screen shows a series of static samples, **Export…** (beside Open Result…, and in Details) asks for a
 folder and writes ``samples_report`` into it in the background: ``report.html`` — every series of the sample list (and
-the series shown, if it is not in the list) with its table of values, the stage of each sample, and the package's two
-figures of the series, in one file — and ``samples.csv`` with every sample of every series. The words are those of the
+the series shown, if it is not in the list) in two parts, separate particles and the connected film, each with its
+table and the stage of each sample, the figure of the parts (``static_figures.py``) and the package's figure of the
+fits, in one file — and ``samples.csv`` with every sample of every series. The words are those of the
 interface language. A toast says where, with Open Report.
 """
 
@@ -23,6 +24,7 @@ from src.gimap.shared.version import __version__
 
 from ..application import read_series, report_html, series_of, write_csv
 from .client_flow import Failure, _guarded
+from .static_figures import parts_figure
 from .texts import text
 
 STATIC_EXPORT_KEY = "sputter_static_export"
@@ -41,9 +43,13 @@ STATIC_EXPORT_TEMPLATES = (STATIC_EXPORT_TIP, STATIC_EXPORT_TITLE, STATIC_EXPORT
 
 def _write(series: list, folder: Path, facts: dict) -> list:
     folder.mkdir(parents=True, exist_ok=True)
+    say = lambda template, **values: text(template, **values)  # noqa: E731
+    for one in series:
+        drawn = parts_figure(one, say)
+        if drawn:
+            one.figures["evolution"] = drawn
     page = folder / "report.html"
-    page.write_text(report_html(series, lambda template, **values: text(template, **values), facts),
-                    encoding="utf-8")
+    page.write_text(report_html(series, say, facts), encoding="utf-8")
     return [page, write_csv(series, folder / "samples.csv")]
 
 

@@ -123,22 +123,43 @@ SPUTTER_SAMPLES_ZH = {
     "The metal amount h_m comes from the shape of the pattern, not from an absolute intensity (the incident flux is not "
     "known): within about 30 % of the nominal thickness is normal.":
         "金属等效厚度 h_m 来自图样的形状，不是绝对强度（入射通量未知）：和名义厚度相差 30 % 以内属于正常。",
-    "Stage: without a continuous layer under the grains (thinner than 0.3 nm), separate islands below a coverage of "
-    "0.8 and grains in contact above; a layer thinner than the grains stand above it: grains on a thin layer; a thicker "
-    "one: a continuous film, or a film with a density below 1 when its density is below 0.95 of the bulk metal's.":
-        "阶段：晶粒下没有连续底层（薄于 0.3 nm）时，覆盖率低于 0.8 为分立的岛，高于 0.8 为相互接触的晶粒；"
-        "底层比晶粒高出底层的部分薄：薄底层上的晶粒；更厚：连续膜，底层密度低于块体金属的 0.95 时为密度低于 1 的膜。",
+    "grains joined into a network": "连成网络的晶粒",
+    "Each series is in two parts. Separate particles: the grains stand apart or touch without joining across the "
+    "picture — their radius, height, spacing and the gap between them. Connected film: a continuous layer under the "
+    "grains, or grains joined into a network — there are no separate particles any more, so the film's thickness, "
+    "density and height are given, and the radius and spacing are those of the relief of its surface.":
+        "每个系列分两部分。孤立颗粒：晶粒彼此分开，或相互接触但没有连成贯穿整个图的网络——给出它们的半径、高度、间距和相邻颗粒的间隙。"
+        "连成的膜：晶粒下有连续底层，或晶粒连成网络——这时已经没有单个颗粒，所以给出膜的厚度、密度和高度，半径和间距是膜表面起伏的尺度。",
+    "Stage, as the Real Space picture of the main screen draws the solution: separate islands, grains in contact "
+    "(touching, no cluster across the picture) or grains joined into a network (a cluster across it); with a "
+    "continuous layer, grains on a thin layer while the layer is thinner than the grains stand above it, else a "
+    "continuous film — a film with a density below 1 when its density is below 0.95 of the bulk metal's.":
+        "阶段与主屏“实空间”图画出的解一致：分立的岛、相互接触的晶粒（接触，但没有贯穿整个图的团簇）或连成网络的晶粒（有团簇贯穿全图）；"
+        "有连续底层时，底层比晶粒高出底层的部分薄为“薄底层上的晶粒”，否则为“连续膜”——底层密度低于块体金属的 0.95 时为“密度低于 1 的膜”。",
+    "Separate particles": "孤立颗粒",
+    "Connected film": "连成的膜",
+    "The film is connected from {nominal} nm on.": "从 {nominal} nm 起连成膜。",
+    "The two parts against the nominal thickness": "两部分随名义厚度的变化",
+    "Height H (nm)": "高度 H（nm）",
+    "Spacing D (nm)": "间距 D（nm）",
+    "Gap D − 2R (nm)": "间隙 D − 2R（nm）",
+    "Film thickness (nm)": "膜厚（nm）",
+    "Film density": "膜密度",
+    "Film height (nm)": "膜高（nm）",
+    "Relief height (nm)": "起伏高度（nm）",
+    "Relief radius (nm)": "起伏半径（nm）",
+    "Relief spacing (nm)": "起伏间距（nm）",
+    "Spacing D": "间距 D",
+    "Film thickness": "膜厚",
+    "Film height": "膜高",
+    "Relief height": "起伏高度",
+    "Relief spacing": "起伏间距",
     "No independent measurement (AFM, SEM, XRR) checked these values.": "这些数值没有经过独立测量（AFM、SEM、XRR）核对。",
     "Series {series}": "系列 {series}",
     "Bare substrate: {bare} · folder: {folder}": "裸基底：{bare} · 文件夹：{folder}",
     "none (the film directly on Si)": "无（膜直接在 Si 上）",
-    "Each quantity against the nominal thickness": "各量随名义厚度的变化",
     "Measured and model images, their ratio and two cuts, sample by sample": "逐个样品的实测图、模型图、两者之比和两条切线",
     "h_m (nm)": "h_m（nm）",
-    "Base layer (nm)": "底层（nm）",
-    "Base density": "底层密度",
-    "Grain height T (nm)": "晶粒高度 T（nm）",
-    "Spacing D (nm)": "间距 D（nm）",
 }
 
 __all__ = ["SPUTTER_SAMPLES_ZH"]

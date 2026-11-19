@@ -21,8 +21,8 @@ from .client_static import (REFERENCE_SUFFIX, SAMPLE_EXISTS, SERIES_ELSEWHERE, S
                             STATIC_FAILED, STATIC_MODES, STATIC_PROBLEMS, STATIC_STOPPED, STATIC_TEMPLATES,
                             STATIC_UNSUPPORTED, StaticDefaults, StaticRequest, StaticRunner, StaticService,
                             frames_found, join_frames, split_frames)
-from .static_report import (REPORT_TEMPLATES, STAGES, ReportSeries, read_series, report_html, sample_stage, stage,
-                            write_csv)
+from .static_report import (PART_FILM, PART_PARTICLES, REPORT_TEMPLATES, STAGES, ReportSeries, gap, joined,
+                            read_series, report_html, sample_stage, stage, write_csv)
 from .static_samples import (DC, HIPIMS, NO_SAMPLE_FRAMES, NO_THICKNESS, OTHER_METAL, SAMPLE_NOTES, STATIC_METALS,
                              NameParts, StaticSample, complete, find_samples, merged, name_parts, series_of,
                              series_slug)
@@ -52,7 +52,8 @@ __all__ = [
     "frames_found", "join_frames", "split_frames",
     "DC", "HIPIMS", "NO_SAMPLE_FRAMES", "NO_THICKNESS", "OTHER_METAL", "SAMPLE_NOTES", "STATIC_METALS", "NameParts",
     "StaticSample", "complete", "find_samples", "merged", "name_parts", "series_of", "series_slug",
-    "REPORT_TEMPLATES", "STAGES", "ReportSeries", "read_series", "report_html", "sample_stage", "stage", "write_csv",
+    "PART_FILM", "PART_PARTICLES", "REPORT_TEMPLATES", "STAGES", "ReportSeries", "gap", "joined", "read_series",
+    "report_html", "sample_stage", "stage", "write_csv",
     "CHECK_SOURCES", "FILLING_HINTS", "GROUPS", "HINT_TEXT", "NO_FRAMES", "SOURCE_TEXT", "Prefill", "ScanInfo",
     "Source", "add_preset", "energy_kev", "folder_key", "make_preset", "matching_preset", "prefill", "remember",
     "FOLDER_VALUES", "METALS", "PROBLEMS", "ScanInspector", "SputterService", "Stopped", "scan_label",

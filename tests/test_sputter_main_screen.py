@@ -1191,13 +1191,15 @@ def test_every_template_of_static_frames_and_of_a_porous_result_is_in_the_chines
     from src.gimap.app.presentation.i18n.zh import ZH
     from src.gimap.features.sputter.application import (REPORT_TEMPLATES, SAMPLE_NOTES, STATIC_STEP_TEXT,
                                                          STATIC_TEMPLATES)
-    from src.gimap.features.sputter.presentation import static_export, static_flow, static_list, static_queue
+    from src.gimap.features.sputter.presentation import (static_export, static_figures, static_flow, static_list,
+                                                         static_queue)
     from src.gimap.features.sputter.presentation.views import sputter_main_view as bar
     from src.gimap.features.sputter.presentation.views import sputter_samples_view as samples
     from src.gimap.features.sputter.presentation.views import sputter_static_view as view
 
     held = [*STATIC_TEMPLATES, *STATIC_STEP_TEXT.values(), *static_flow.TEMPLATES, *static_list.LIST_TEMPLATES,
             *static_queue.QUEUE_TEMPLATES, *static_export.STATIC_EXPORT_TEMPLATES, *REPORT_TEMPLATES, *SAMPLE_NOTES,
+            *static_figures.FIGURE_TEMPLATES,
             view.STATIC_TITLE, view.STATIC_TIP, *(text for label, _key, tip in view.STATIC_MODE_CHOICES
                                                   for text in (label, tip)),
             view.REFERENCE_TIP, view.SERIES_TIP, view.GEOMETRY_NOTE, view.CENTRE_TIP, view.MASKS_BUTTON, view.MASKS_TIP,

@@ -228,8 +228,10 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   not stop the others, and a right-click analyses one sample or one series. While a sample runs the main screen shows
   three steps live: the frames read (which are usable, which are left out and why), the solution of each frame as it
   is found with its measured and model image, and the series with every frame solved so far. Choosing a sample shows
-  its series at that sample. **Export…** writes one HTML report of every series of the list (a table of values with
-  the stage of each sample, the evolution and the fits) and a CSV of every sample. **Details ▸ Static Frames** keeps
+  its series at that sample. **Export…** writes one HTML report of every series of the list, each in two parts —
+  separate particles (radius, height, spacing, gap, coverage) and the connected film (thickness, density, height and
+  the relief of its surface: a connected film has no separate particles) — with their tables, the stage of each
+  sample as the Real Space picture names it, a figure of both parts and the fits, and a CSV of every sample. **Details ▸ Static Frames** keeps
   the results folder (one folder per series in it), the mode and the geometry; **Analyze Sample** there is gone.
 - **Geometry Calibration**: the **Distance range** is a limit, not a starting point. No solution outside it is shown,
   also not after the fit of centre and distance (before, the fit could leave a custom range); when none lies in it,

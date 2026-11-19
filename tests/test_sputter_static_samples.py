@@ -10,9 +10,9 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from src.gimap.features.sputter.application import (DC, HIPIMS, NO_SAMPLE_FRAMES, NO_THICKNESS, OTHER_METAL,
-                                                     STAGES, StaticSample, complete, find_samples, merged, name_parts,
-                                                     read_series, report_html, series_of, series_slug, stage,
-                                                     write_csv)
+                                                     STAGES, StaticSample, complete, find_samples, joined, merged,
+                                                     name_parts, read_series, report_html, series_of, series_slug,
+                                                     stage, write_csv)
 
 
 def _frames(folder, *names) -> None:
@@ -83,40 +83,65 @@ def test_the_list_takes_frames_once_and_names_dc_beside_hipims():
     assert StaticSample.from_dict(sample.to_dict()) == sample and StaticSample.from_dict({}) is None
 
 
-@pytest.mark.parametrize("t_b, height, coverage, density, named", [
-    (0.0, 7.4, 0.51, 1.0, "separate islands"), (0.1, 8.2, 0.98, 1.0, "grains in contact"),
-    (3.2, 4.0, 0.59, 1.0, "grains on a thin layer"), (7.0, 3.1, 0.70, 1.0, "continuous film"),
-    (6.6, 4.2, 0.50, 0.80, "film with a density below 1"), (None, 1.0, 1.0, 1.0, ""), (0.0, 1.0, None, 1.0, "")])
-def test_the_stage_follows_the_rule_of_the_report(t_b, height, coverage, density, named):
-    assert stage(t_b, height, coverage, density) == named and (named in STAGES or not named)
+@pytest.mark.parametrize("radius, spacing, height, base, relief, density, named", [
+    (3.0, 12.0, 4.0, 0.0, None, None, "separate islands"),  # far apart
+    (5.0, 10.4, 6.0, 0.0, None, None, "grains in contact"),  # touching, not across the picture
+    (6.0, 10.0, 6.0, 0.0, None, None, "grains joined into a network"),  # overlapping: a cluster across the picture
+    (5.5, 16.0, 7.7, 2.4, 5.3, 0.99, "grains on a thin layer"), (8.5, 21.0, 10.1, 7.0, 3.1, 1.0, "continuous film"),
+    (6.8, 15.0, 9.3, 6.3, 3.0, 0.87, "film with a density below 1"), (None, 12.0, 4.0, 0.0, None, None, "")])
+def test_the_stage_is_named_as_the_real_space_picture_draws_the_solution(radius, spacing, height, base, relief,
+                                                                          density, named):
+    assert stage(radius, spacing, height, base, relief, density) == named and (named in STAGES or not named)
+    row = {"R": radius, "d_hex": spacing, "height": height, "t_b": base, "T": relief, "rb": density}
+    assert joined(row) == (named in ("grains joined into a network", "grains on a thin layer", "continuous film",
+                                     "film with a density below 1"))
 
 
 def _series(folder, rows) -> None:
     folder.mkdir(parents=True, exist_ok=True)
-    columns = ["label", "nominal_nm", "frames", "fit", "h_m_model", "t_b", "rb", "T", "R", "d_hex", "eta"]
+    columns = ["label", "nominal_nm", "frames", "fit", "h_m_model", "height", "t_b", "rb", "T", "R", "d_hex", "eta"]
     with (folder / "report.csv").open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(columns)
         writer.writerows(rows)
-    (folder / "report.png").write_bytes(b"\x89PNG zz evolution")
+    (folder / "patterns.png").write_bytes(b"\x89PNG zz fits")
 
 
-def test_the_report_holds_every_series_with_its_stages_and_figures(tmp_path):
-    _series(tmp_path / "850_DC", [["850_10Au", 10, 8, 1.83, 8.8, 7.0, 1.0, 3.1, 8.5, 21, 0.7],
-                                  ["850_4Au", 4, 7, 12.5, 3.6, 0.0, "", 7.4, 5.8, 16, 0.51]])
-    assert read_series("850 · DC", tmp_path / "missing") is None
-    series = [read_series("850 · DC", tmp_path / "850_DC", "850")]
-    assert [row["label"] for row in series[0].rows] == ["850_4Au", "850_10Au"]  # by nominal thickness
-    assert list(series[0].figures) == ["evolution"]
+def test_the_report_holds_each_series_in_two_parts_with_its_stages_and_figures(tmp_path):
+    _series(tmp_path / "zz_DC", [["zz_10Au", 10, 8, 1.83, 8.8, 10.1, 7.0, 1.0, 3.1, 8.5, 21, 0.7],
+                                 ["zz_4Au", 4, 7, 12.5, 3.6, 4.0, 0.0, "", "", 3.0, 12.0, 0.31]])
+    assert read_series("zz · DC", tmp_path / "missing") is None
+    series = [read_series("zz · DC", tmp_path / "zz_DC", "zz")]
+    assert [row["label"] for row in series[0].rows] == ["zz_4Au", "zz_10Au"]  # by nominal thickness
+    assert [row["label"] for row in series[0].particles()] == ["zz_4Au"]
+    assert [row["label"] for row in series[0].film()] == ["zz_10Au"] and list(series[0].figures) == ["patterns"]
     said = []
     page = report_html(series, lambda template, **values: said.append(template) or template.format(**values),
                        {"date": "2026-11-19", "version": "0.2", "package": "abc", "geometry": "12 keV", "mode": "Quick"})
-    assert "Series 850 · DC" in page and "Bare substrate: 850" in page and "separate islands" in page
-    assert "continuous film" in page and 'class="poor">12.50<' in page and 'class="good">1.83<' in page
+    particles, film = page.index("<h3>Separate particles</h3>"), page.index("<h3>Connected film</h3>")
+    assert particles < page.index("separate islands", particles) < film < page.index("continuous film", film)
+    assert "Gap D − 2R (nm)" in page[particles:film] and "Film thickness (nm)" in page[film:]
+    assert "Radius R (nm)" not in page[film:] and "Relief radius (nm)" in page[film:]  # no particles in a film
+    assert "The film is connected from 10.0 nm on." in page and "Bare substrate: zz" in page
+    assert 'class="poor">12.50<' in page and 'class="good">1.83<' in page
     assert page.count("data:image/png;base64,") == 1 and "Au films after their deposition: structure from GISAXS" in said
     rows = list(csv.DictReader(write_csv(series, tmp_path / "samples.csv").open(encoding="utf-8")))
-    assert [(row["sample"], row["stage"], row["bare_substrate"]) for row in rows] == [
-        ("850_4Au", "separate islands", "850"), ("850_10Au", "continuous film", "850")]
+    assert [(row["sample"], row["part"], row["stage"], row["gap_nm"], row["film_thickness_nm"]) for row in rows] == [
+        ("zz_4Au", "separate particles", "separate islands", "6.0", ""),
+        ("zz_10Au", "connected film", "continuous film", "", "7.0")]
+
+
+def test_the_figure_has_a_panel_for_each_part_on_one_axis(tmp_path):
+    from src.gimap.features.sputter.presentation.static_figures import parts_figure
+
+    _series(tmp_path / "zz_DC", [["zz_10Au", 10, 8, 1.83, 8.8, 10.1, 7.0, 1.0, 3.1, 8.5, 21, 0.7],
+                                 ["zz_4Au", 4, 7, 2.5, 3.6, 4.0, 0.0, "", "", 3.0, 12.0, 0.31]])
+    series = read_series("zz · DC", tmp_path / "zz_DC")
+    said = []
+    drawn = parts_figure(series, lambda template, **values: said.append(template) or template)
+    assert drawn.startswith(b"\x89PNG") and {"Separate particles", "Connected film", "Gap", "Film density"} <= set(said)
+    series.rows = []
+    assert parts_figure(series, lambda template, **values: template) == b""
 
 
 def test_export_writes_the_report_of_the_list_and_offers_it(tmp_path, monkeypatch):
@@ -132,12 +157,12 @@ def test_export_writes_the_report_of_the_list_and_offers_it(tmp_path, monkeypatc
     page.analyze_static()
     _settle(lambda: not page.static_analyzing())
     assert page.export_button.isEnabled() and "report of every series" in page.export_button.toolTip()
-    _series(page.series_folder("zz"), [["zz_4Au", 4, 1, 3.3, 3.5, 0.0, "", 4.0, 3.0, 9, 0.4]])
+    _series(page.series_folder("zz"), [["zz_4Au", 4, 1, 3.3, 3.5, 4.0, 0.0, "", "", 3.0, 9, 0.4]])
     monkeypatch.setattr("PyQt5.QtWidgets.QFileDialog.getExistingDirectory", lambda *args: str(tmp_path / "out"))
     page.export_button.click()
     _settle(lambda: not page._exporting)
     report = tmp_path / "out" / "samples_report" / "report.html"
     assert report.is_file() and (tmp_path / "out" / "samples_report" / "samples.csv").is_file()
-    assert "Series zz" in report.read_text(encoding="utf-8")
+    assert "Series zz" in report.read_text(encoding="utf-8") and "Separate particles" in report.read_text(encoding="utf-8")
     assert any("Report of 1 series written" in toast.text() for toast in visible_toasts(page))
     _close(page)
