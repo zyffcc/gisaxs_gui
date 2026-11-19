@@ -37,7 +37,8 @@ def main() -> int:
     counts = rng.poisson(1e3 * np.exp(-np.linspace(0, 6, encoding.POINTS)), (rows, encoding.POINTS)).astype(float)
     mask = rng.uniform(size=counts.shape) > 0.05
     features = encoding.features(counts, np.sqrt(np.maximum(counts, 1)), mask).astype(np.float64)
-    conditions = encoding.conditions([10, 30, 100, 300, 50, 20], [0, 0, 0.3, 0.8, 0, 0.5]).astype(np.float64)
+    conditions = encoding.conditions([10, 30, 100, 300, 50, 20], [0, 0, 0.3, 0.8, 0, 0.5],
+                                     [np.nan, np.nan, 0.1, np.nan, np.nan, -0.2]).astype(np.float64)
     composition = np.array([0, 5, 17, 100, 257, 40], dtype=np.int64)
     z = rng.normal(0, 2.0, (rows, encoding.DIMS))
     z[0, 1] = 3.5  # beyond the bound (identity there)

@@ -29,6 +29,17 @@ def truth_geometry() -> yt.Geometry:
     return yt.replace(GEOM, **SUBSTRATES[TRUTH["substrate"]])
 
 
+def qz_minus() -> float:
+    """k_i − k_f of the cut (nm⁻¹): with q_z = k_i + k_f what Predict is given when both angles are known."""
+    return float(GEOM.terms()[2][1])
+
+
+def exit_reflection() -> complex:
+    """The truth's reflection coefficient at the exit angle (r_f), on its substrate."""
+    geometry = truth_geometry()
+    return complex(geometry.fresnel(geometry.alpha_f))
+
+
 def draw(index, seed0=20261116):
     """One held-out case: composition, populations, counts and the level of physics."""
     rng = np.random.default_rng(seed0 + index)
@@ -76,4 +87,5 @@ def curve(case):
     return counts, np.sqrt(np.maximum(counts, 1.0))
 
 
-__all__ = ["COMPOSITIONS", "GEOM", "Q", "SUBSTRATES", "TRUTH", "curve", "draw", "set_truth", "truth_geometry"]
+__all__ = ["COMPOSITIONS", "GEOM", "Q", "SUBSTRATES", "TRUTH", "curve", "draw", "exit_reflection", "qz_minus", "set_truth",
+           "truth_geometry"]

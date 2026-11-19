@@ -1,9 +1,10 @@
 """Predict parameters in a job process: GIMaP's proposal network, the importance-weighted posterior of the
 compositions asked for, each mode refined by least squares (``domain.posterior.refine.predict``).
 
-Payload: q (nm⁻¹), intensity, sigma (or None), qz (nm⁻¹; 0: the effective interface), compositions (indices of
+Payload: q (nm⁻¹), intensity, sigma (or None), qz (k_i + k_f, nm⁻¹; 0: the effective interface), qz_minus (k_i − k_f
+when both angles are known: spheres with the exit-reflected path; None otherwise), compositions (indices of
 ``encoding.COMPOSITIONS``) or allowed (the head chooses among them), method, samples, seed, law, coupling, grazing
-(the person's angles, λ and reflection to keep). The result is JSON: every solution's model (``model_to_dict``),
+(the person's angles and λ to keep; the reflection too when qz_minus is None). The result is JSON: every solution's model (``model_to_dict``),
 χ²/N, probability, values with their posterior intervals, flags; and the network's name and SHA-256.
 """
 
@@ -41,6 +42,7 @@ def run_predict(payload: dict, report, cancelled) -> dict:
     report(0, 1, "Weighting the network's samples and refining each solution")
     solutions = refine.predict(
         network, payload["q"], payload["intensity"], payload.get("sigma"), qz=float(payload.get("qz") or 0.0),
+        qz_minus=None if payload.get("qz_minus") is None else float(payload["qz_minus"]),
         compositions=payload.get("compositions"), allowed=payload.get("allowed"),
         seed=int(payload.get("seed", 0)),
         law=payload.get("law", "number_gauss"), coupling=payload.get("coupling", "lma"),

@@ -4,6 +4,7 @@ geometry) and what comes back (solutions as models, with their probability and p
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Optional
 
 from src.gimap.app.jobs import JobRequest
 
@@ -67,13 +68,23 @@ def cut_geometry(model: fm.FitModel) -> tuple[float, dict]:
     return float(geometry.qz_born), {key: float(model.globals[key].value) for key in fm.GRAZING}
 
 
+def cut_qz_minus(model: fm.FitModel) -> Optional[float]:
+    """k_i − k_f of the cut (nm⁻¹) when Model has both angles (spheres then get the exit-reflected path with a free
+    effective reflection coefficient), else None (the Born term at q_z, or the effective interface)."""
+    geometry = fm.grazing(model)
+    if geometry is None or geometry.qz_born <= 0:
+        return None
+    minus = geometry.k_i - geometry.k_f
+    return float(minus) if abs(minus) < geometry.qz_born else None
+
+
 def predict_request(data, model: fm.FitModel, particles: str, *, seed: int = 0) -> JobRequest:
     qz, grazing = cut_geometry(model)
     law = model.components[0].law if model.components else fm.DEFAULT_LAW
     coupling = model.components[0].coupling if model.components else "lma"
     return JobRequest(handler=HANDLER, payload=dict(
         q=data.q.tolist(), intensity=data.intensity.tolist(), sigma=None if data.sigma is None else data.sigma.tolist(),
-        qz=qz, grazing=grazing or None, seed=int(seed), law=law,
+        qz=qz, qz_minus=cut_qz_minus(model), grazing=grazing or None, seed=int(seed), law=law,
         coupling=coupling, **compositions(model, particles)), timeout_seconds=None)
 
 
@@ -89,5 +100,5 @@ def predicted(value: dict) -> list[Predicted]:
     return out
 
 
-__all__ = ["HANDLER", "MAX_PARTICLES", "PARTICLES", "Predicted", "compositions", "cut_geometry",
+__all__ = ["HANDLER", "MAX_PARTICLES", "PARTICLES", "Predicted", "compositions", "cut_geometry", "cut_qz_minus",
            "network_available", "network_file", "predict_request", "predicted"]

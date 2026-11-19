@@ -27,7 +27,7 @@ def _random_values(count, seed):
 
 
 def test_compositions_and_their_values():
-    assert len(E.COMPOSITIONS) == 6 + 36 + 216 and E.DIMS == 22
+    assert len(E.COMPOSITIONS) == 6 + 36 + 216 and E.DIMS == 24
     index = E.composition_index([("sphere", True), ("cylinder", False)])
     assert E.composition_types(index) == (("sphere", True), ("cylinder", False))
     assert E.composition_name(index) == "sphere (S) + random cylinder"
@@ -207,12 +207,15 @@ def test_simulator_rows_are_reproducible_and_usable():
         import simulate
     finally:
         sys.path.remove(str(TOOLS))
-    prior = simulate.load_prior(TOOLS / "prior_v1.json")
+    prior = simulate.load_prior(TOOLS / "prior_v2.json")
     one, two = simulate.shard(prior, 30, 7), simulate.shard(prior, 30, 7)
-    assert all(np.array_equal(one[k], two[k], equal_nan=k == "values") for k in one)
+    assert all(np.array_equal(one[k], two[k], equal_nan=k in ("values", "qz_minus")) for k in one)
     used = E.active(one["composition"].astype(int))[:, 0:E.GLOBAL.start:E.PER_SLOT]
     assert np.all((one["term"].max(axis=2) > 0) == used) and np.all(np.isfinite(one["term"]))
     features, conditions, composition, z, active = simulate.inputs(one, np.arange(30), prior,
                                                                   np.random.default_rng(0))
     assert features.shape == (30, E.CHANNELS, E.POINTS) and np.all(np.isfinite(features))
     assert conditions.shape == (30, E.CONDITIONS) and np.all(np.isfinite(z)) and np.all(z[~active] == 0)
+    reflected = np.isfinite(one["qz_minus"])
+    assert reflected.any() and np.array_equal(conditions[:, 3] == 1, reflected)
+    assert np.all(np.abs(one["qz_minus"][reflected]) < one["qz"][reflected])

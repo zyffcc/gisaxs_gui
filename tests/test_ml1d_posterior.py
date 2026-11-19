@@ -30,7 +30,7 @@ def _values(radius=4.0, distance=14.0, tau=0.01, sigma_q=1e-4):
     v = np.full(E.DIMS, np.nan)
     v[0:2] = radius, 0.15
     v[4:6] = distance, 0.2
-    v[E.GLOBAL] = 0.01, 3.0, sigma_q, tau
+    v[E.GLOBAL] = 0.01, 3.0, sigma_q, tau, 0.0, 0.0
     return v
 
 
@@ -88,6 +88,74 @@ def test_the_right_values_are_more_likely():
     log_marginal, _a, chi2 = like(np.stack([_values(), _values(radius=5.0), _values(distance=20.0)]))
     assert log_marginal[0] > log_marginal[1] and log_marginal[0] > log_marginal[2]
     assert chi2[0] / q.size < 1.5
+
+
+QZ, QZ_MINUS = 0.577, 0.262
+"""k_i ± k_f (nm⁻¹) of a cut at the Si Yoneda angle, α_i = 0.4°, λ = 0.1045 nm."""
+REFLECTION = 0.7 * complex(math.cos(-0.3), math.sin(-0.3))
+
+
+def _two_path_curve(seed=0, radius=4.0, distance=14.0):
+    q = np.linspace(0.02, 2.0, 300)
+    data = infer.Cut.prepare(q, np.ones_like(q), np.ones_like(q), QZ, QZ_MINUS)
+    population = cut.Population("sphere", radius, 0.15, distance=distance, distance_spread=0.2)
+    truth = 1e4 * cut.unit_terms([population], cut.Settings(geometry=data.geometry(REFLECTION)), q)[0]
+    counts = np.random.default_rng(seed).poisson(1e4 * truth / truth.max() + 2.0).astype(float)
+    return q, counts, np.sqrt(np.maximum(counts, 1.0))
+
+
+def test_two_paths_give_every_sphere_sample_its_reflection():
+    """On a cut with both angles each sample's r enters its sphere term as cut_model's two paths; with q_z alone
+    (the Born term) or upright cylinders r changes nothing."""
+    q = np.linspace(0.02, 2.0, 300)
+    data = infer.Cut.prepare(q, np.ones_like(q), np.ones_like(q), QZ, QZ_MINUS)
+    assert data.reflected
+    alpha_i, alpha_f = data.angles()
+    k = 2 * math.pi / 0.1
+    assert k * (math.sin(math.radians(alpha_i)) - math.sin(math.radians(alpha_f))) == pytest.approx(QZ_MINUS)
+    values = np.stack([_values(), _values()])
+    values[:, E.GLOBAL.start + 4:E.GLOBAL.start + 6] = [[REFLECTION.real, REFLECTION.imag], [-0.2, 0.5]]
+    columns = infer.Likelihood(data, SPHERE).columns(values)
+    for b, r in enumerate((REFLECTION, complex(-0.2, 0.5))):
+        direct = cut.population_terms("sphere", q, radius=4.0, radius_spread=0.15, distance=14.0,
+                                      distance_spread=0.2, geometry=data.geometry(r))[0]
+        assert np.allclose(columns[b, 0], direct / direct.max(), rtol=1e-10)
+    assert not np.allclose(columns[0, 0], columns[1, 0])
+    born = infer.Cut.prepare(q, np.ones_like(q), np.ones_like(q), QZ)
+    assert not born.reflected and born.qz_minus is None
+    plain = infer.Likelihood(born, SPHERE).columns(values)
+    assert np.allclose(plain[0, 0], plain[1, 0])
+    cylinder = E.composition_index([("vertical_cylinder", True)])
+    upright = infer.Likelihood(data, cylinder).columns(values)
+    assert np.allclose(upright[0, 0], upright[1, 0])
+    with pytest.raises(ValueError):
+        infer.Cut.prepare(q, np.ones_like(q), np.ones_like(q), QZ, 1.2 * QZ)
+
+
+def test_conditions_tell_the_network_the_two_paths():
+    c = E.conditions([30, 30, 30], [0.0, 0.4, 0.4], [np.nan, np.nan, 0.1])
+    assert c.shape == (3, E.CONDITIONS)
+    assert np.allclose(c[:, 1:], [[0, 0, 0], [0.4, 0, 0], [0.4, 0.1, 1]])
+    q, counts, sigma = _two_path_curve()
+    data = infer.Cut.prepare(q, counts, sigma, QZ, QZ_MINUS)
+    assert np.allclose(infer.conditions(data)[0, 1:], [QZ / data.q_max, QZ_MINUS / data.q_max, 1.0])
+
+
+def test_predict_fits_the_reflection_of_two_paths():
+    """Least squares frees r on a two-path cut, and the solution's model carries it (not one of the reported values)."""
+    network = Network.load(DATA / "flow_fixture.npz")
+    q, counts, sigma = _two_path_curve(seed=2)
+    solutions = refine.predict(network, q, counts, sigma, qz=QZ, qz_minus=QZ_MINUS, compositions=[SPHERE],
+                               samples=300, seed=1)
+    best = solutions[0]
+    assert best.chi2_reduced < 1.5
+    assert best.values["R_1"].best == pytest.approx(4.0, rel=0.05)
+    assert not any(name.startswith("reflection") for name in best.values)
+    r = refine.reflection(best.model)
+    assert best.model.globals["refl_amp"].free and best.model.globals["refl_phase"].free
+    assert abs(r) == pytest.approx(best.extras["reflection"]["amplitude"]) and 0.0 < abs(r) <= 1.0
+    centre = refine.model_values(best.model, SPHERE)
+    assert centre[E.GLOBAL.start + 4] == pytest.approx(r.real) and centre[E.GLOBAL.start + 5] == pytest.approx(r.imag)
 
 
 def test_weights_evidence_and_modes():

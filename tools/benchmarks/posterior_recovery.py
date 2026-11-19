@@ -21,11 +21,13 @@ coverage when the model is exactly right.
 With --scattering dwba the independent truth adds the waves the surface reflects (the four DWBA terms of
 yoneda_truth.py), on bare Si or with --substrate ps100 on 100 nm polystyrene on Si (recovery_cases.SUBSTRATES); the
 same cases, counts and noise as the frozen sets (the Born term at the cut's q_z on Si), so the two pair curve by curve.
---eia runs Predict without the cut's q_z (the effective interface, as without angles in Model).
+--cut says what Predict is given of the cut: its q_z = k_i + k_f ('born', the default: the Born term, as the 1D Predict
+window's Cut qz), both angles ('two_path': k_i − k_f too, spheres with the exit-reflected path and a free effective
+reflection coefficient, as with the angles in Model), or nothing ('eia': the effective interface).
 usage: python tools/benchmarks/posterior_recovery.py --network PATH/NAME [--n 200] [--workers 8] [--seed0 20261116]
            [--samples N] [--local-samples N] [--shortlist N] [--refined 3] [--set fit1d|extended]
            [--truth independent|own] [--model-error-floor F] [--explored N] [--moves N] [--widths 1,2]
-           [--scattering born_qz|dwba] [--substrate si|ps100] [--eia] [--out NAME]
+           [--scattering born_qz|dwba] [--substrate si|ps100] [--cut born|two_path|eia] [--out NAME]
   (defaults: Predict parameters' own, refine.SAMPLES, LOCAL_SAMPLES, SHORTLIST, MODEL_ERROR_FLOOR, EXPLORED, MOVES,
   infer.PROPOSAL_WIDTHS)
 Writes the summary to tools/benchmarks/NAME_summary.json (default posterior_recovery) and every curve to results/.
@@ -118,13 +120,17 @@ def own_curve(case) -> tuple[np.ndarray, np.ndarray]:
     """The case in Predict parameters' own model: each population's column of its likelihood (the peak at 1), the
     later ones at their share of the first one's peak, the background, Poisson counts as in recovery_cases.curve."""
     pops = sorted(case["populations"], key=lambda p: p["R"])
-    data = infer.Cut.prepare(fr.Q, np.ones_like(fr.Q), np.ones_like(fr.Q), float(fr.GEOM.qz_vacuum))
+    qz, qz_minus = _cut()
+    data = infer.Cut.prepare(fr.Q, np.ones_like(fr.Q), np.ones_like(fr.Q), qz, qz_minus)
     values = np.zeros(E.DIMS)
     for slot, p in enumerate(pops):
         j = slot * E.PER_SLOT
         values[j:j + E.PER_SLOT] = (p["R"], p["sR"], 2.0 * p["R"], 0.0, p["D"], p["s_nn"])
     g = E.GLOBAL.start
     values[g:g + 4] = (data.q_max / data.ratio, 2.0, 1e-6 * data.q_max, 0.003)
+    if data.reflected:  # the substrate's own reflection at the exit angle
+        r = fr.exit_reflection()
+        values[g + 4:g + 6] = (r.real, r.imag)
     columns = infer.Likelihood(data, _composition(case), coupling=case.get("coupling", "lma")).columns(values)[0]
     slot = {id(p): i for i, p in enumerate(pops)}
     total = np.zeros_like(fr.Q)
@@ -138,20 +144,28 @@ def own_curve(case) -> tuple[np.ndarray, np.ndarray]:
     return counts, np.sqrt(np.maximum(counts, 1.0))
 
 
+def _cut() -> tuple[float, float | None]:
+    """(q_z, k_i − k_f or None) Predict is given (``--cut``)."""
+    kind = OPTIONS.get("cut", "born")
+    if kind == "eia":
+        return 0.0, None
+    return float(fr.GEOM.qz_vacuum), (fr.qz_minus() if kind == "two_path" else None)
+
+
 def run(index: int) -> dict:
     extended = OPTIONS.get("set") == "extended"
     case = (hc.draw if extended else fr.draw)(index, OPTIONS["seed0"])
     I, s = own_curve(case) if OPTIONS.get("truth") == "own" else (hc.curve if extended else fr.curve)(case)
     coupling = case.get("coupling", "lma")
     out = dict(case=case)
-    qz = 0.0 if OPTIONS.get("eia") else float(fr.GEOM.qz_vacuum)
+    qz, qz_minus = _cut()
     truth = _composition(case)
     k = len(case["populations"])
     # network: samples of the true composition, their median
     tick = time.perf_counter()
-    data = infer.Cut.prepare(fr.Q, I, s, qz)
+    data = infer.Cut.prepare(fr.Q, I, s, qz, qz_minus)
     binned = E.bin_curve(data.q, data.intensity, data.sigma, data.q_max, data.ratio)
-    h = NETWORK.summary(E.features(*(a[None] for a in binned)), E.conditions([data.ratio], [qz / data.q_max]))
+    h = NETWORK.summary(E.features(*(a[None] for a in binned)), infer.conditions(data))
     z, _ = NETWORK.sample(NETWORK.context(h, truth), truth, OPTIONS["samples"], np.random.default_rng(index))
     values = infer.physical(E.from_z(z, np.full(z.shape[0], data.ratio), truth), data.q_max)
     median = np.median(values, axis=0)
@@ -164,7 +178,8 @@ def run(index: int) -> dict:
                          ("choose", dict(allowed=_allowed(3 if extended else 2), shortlist=OPTIONS["shortlist"]))):
         tick = time.perf_counter()
         try:
-            solutions = refine.predict(NETWORK, fr.Q, I, s, qz=qz, samples=OPTIONS["samples"], seed=index,
+            solutions = refine.predict(NETWORK, fr.Q, I, s, qz=qz, qz_minus=qz_minus, samples=OPTIONS["samples"],
+                                       seed=index,
                                        coupling=coupling, local_samples=OPTIONS["local_samples"],
                                        refine_modes=OPTIONS["refined"],
                                        explored=OPTIONS.get("explored", refine.EXPLORED),
@@ -174,6 +189,8 @@ def run(index: int) -> dict:
             out[name] = dict(ok=True, composition=best.name, composition_index=best.composition,
                              families=_families(best.composition), chi2=best.chi2_reduced, flags=list(best.flags),
                              ess=best.ess, probability=best.probability,
+                             reflection=[float(abs(refine.reflection(best.model))),
+                                         float(np.angle(refine.reflection(best.model)))],
                              populations=_populations(best.values, k_best, "best", "error"),
                              posterior=_populations(best.values, k_best, "median"),
                              in_set=[_families(x.composition) for x in solutions if x.probability >= 0.05],
@@ -291,7 +308,8 @@ def main():
     ap.add_argument("--widths", default=",".join(str(w) for w in infer.PROPOSAL_WIDTHS))
     ap.add_argument("--scattering", default="born_qz", choices=("born_qz", "dwba"))
     ap.add_argument("--substrate", default="si", choices=tuple(fr.SUBSTRATES))
-    ap.add_argument("--eia", action="store_true", help="Predict without the cut's q_z (the effective interface)")
+    ap.add_argument("--cut", default="born", choices=("born", "two_path", "eia"),
+                    help="what Predict is given of the cut: q_z, both angles, or nothing")
     a = ap.parse_args()
     t0 = time.perf_counter()
     results = []
@@ -299,7 +317,7 @@ def main():
                    refined=a.refined, truth=a.truth, floor=a.model_error_floor,
                    explored=a.explored, moves=a.moves, widths=[float(w) for w in a.widths.split(",")],
                    moved_solutions=a.moved_solutions, per_count=a.per_count, constants=a.constant,
-                   scattering=a.scattering, substrate=a.substrate, eia=a.eia)
+                   scattering=a.scattering, substrate=a.substrate, cut=a.cut)
     with Pool(min(a.workers, a.n), initializer=_init, initargs=(a.network, options)) as pool:
         for i, r in enumerate(pool.imap_unordered(run, range(a.n)), 1):
             results.append(r)
