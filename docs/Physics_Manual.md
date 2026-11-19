@@ -1842,8 +1842,20 @@ ln x̄ (respectively u = q·σ) and ln(σR/R) and are interpolated with four-poi
 has a node at σR/R = 0.25, where the Gaussian starts to be cut at R = 0. The tables carry the definition above (resolved
 below q_cut, the envelope beyond) and agree with the direct quadrature to 10⁻⁴ (typically 2 · 10⁻⁵); for broad
 distributions (σR/R ≥ 0.45) they are closer to a fully resolved reference than the direct quadrature. One evaluation of
-a sphere or an upright cylinder then takes about 1 ms at 750 points, whatever R and σ. Narrower distributions (below
-x̄ = qR̄ = 2 too), sizes by intensity, two paths, the DWBA and the coherent term at q_z ≠ 0 use the direct quadrature.
+a sphere or an upright cylinder then takes about 1 ms at 750 points, whatever R and σ. Spheres with two paths
+(A = c₁ f(aR) e^{−iQ₁R} + c₂ f(bR) e^{−iQ₂R}, a = √(q² + Q₁²), b = √(q² + Q₂²)) are the two Born terms from the
+tables and a cross term X = ⟨f(aR) f(bR) e^{−i(Q₁−Q₂)R}⟩, P̂ = |c₁|²⟨f(aR)²⟩ + |c₂|²⟨f(bR)²⟩ + 2 Re(c₁c₂* X). With
+f(x) = Re[A(x) e^{ix}], A(x) = −3/x² − 3i/x³ exactly, X is a sum of four terms e^{iωR̄} times exact powers of aR̄ and bR̄
+times the moments m_k(ν) = ⟨n t^{6−k} e^{iν(t−1)}⟩/⟨n t⁶⟩ (k = 4, 5, 6, ν = ωR̄, ω = ±a ± b − (Q₁ − Q₂)), which depend
+on ν and σR/R only; they are tabulated on the nodes of the direct quadrature (3.6 MB more) and interpolated in the
+same way. As in the direct quadrature, the terms the envelope of the pair leaves out (ω ≈ ±(a + b) − (Q₁ − Q₂)) fade
+with the smoothstep of the in-plane q, and below bR̄ = 2 X is taken on the nodes. On random rows (R from 0.3 to 400 nm,
+σR/R 0.02–0.8, both laws, k_i above and below k_f; 800 rows) they agree with the direct quadrature to 3.5 · 10⁻⁶
+of the curve's largest value (median; 99 % within 4.4 · 10⁻⁴); the largest differences, up to 6 · 10⁻³, are where
+|r| ≈ 1 with a phase near π and the two paths cancel to 10⁻³ of either (there 10⁻⁵ of each path). They are 20–30
+times faster (130 times for broad log-normal distributions). Narrower distributions
+(below x̄ = qR̄ = 2 too), sizes by intensity, the DWBA, two paths in the decoupling approximation and the coherent term
+at q_z ≠ 0 use the direct quadrature.
 Earlier, Fitting used rectangle rules of fixed size (25 radii of a sphere, 13 radii and 13 heights
 of a random cylinder, 26 radii over ±3σ of a vertical cylinder). They alias at large q·R·σ: on q ≤ 3 nm⁻¹ a sphere
 of R = 5 nm and σR/R = 0.2 is off by up to 1.8 %, R = 10 nm and 0.3 by 26 %, R = 20 nm and 0.4 by 67 %

@@ -2,7 +2,9 @@
  "lognormal_disc.npz": "3f4ca4d1112c8ae296317b9bbb22c68f42bae7acef8127f4fa01f6e9ef6901f3",
  "lognormal_sinc.npz": "70c002b2981642d6185954431848bb1af487215b760eb65060c42cc9b4dbd2f4",
  "lognormal_sphere.npz": "36013e4e1b17ee9a76f980da7f932d0ea02a52f0b737c0dd71ba4f131210035a",
+ "lognormal_sphere_moments.npz": "d9e94e3f782dca17cf4c58a2982a55f8305b5a62e164f7ee57e7d983ce5dd616",
  "number_gauss_disc.npz": "fab6eef8f0772acb2ad85d6355de6f8812293c5e18ac083368e221f792020461",
  "number_gauss_sinc.npz": "165d48fca25c3ae0ec1082116364f5c3625fca1c521dfff160981567895fe3d3",
- "number_gauss_sphere.npz": "fc077a6da65d89b1a5be8212c9cb586d6f6e2d8b7512d09a3c868aab3dc7cd0b"
+ "number_gauss_sphere.npz": "fc077a6da65d89b1a5be8212c9cb586d6f6e2d8b7512d09a3c868aab3dc7cd0b",
+ "number_gauss_sphere_moments.npz": "7de97085a8b7abd5e15be7718cdc66c35ce861024a5d795d27d0a4c9d8fc5883"
 }

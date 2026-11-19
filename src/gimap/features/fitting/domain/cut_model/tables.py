@@ -286,5 +286,139 @@ def cylinder(q, law, radius, radius_spread, height, height_spread, qz=0.0, coher
     return p_out, c_out
 
 
-__all__ = ["KINDS", "KINK", "LAWS", "S_MAX", "S_MIN", "S_TABLE", "X_SMALL", "averages", "build", "compute", "cylinder",
-           "path", "save", "usable"]
+# --- spheres with two paths ------------------------------------------------------------------------------------------
+# A sphere seen by two paths, A = c₁ f(aR) e^{−iQ₁R} + c₂ f(bR) e^{−iQ₂R} (a = √(q² + Q₁²), b = √(q² + Q₂²)), has
+#
+#     P̂ = |c₁|² <f(aR)²> + |c₂|² <f(bR)²> + 2 Re[c₁ c₂* X],   X = <f(aR) f(bR) e^{−iΔR}>,  Δ = Q₁ − Q₂
+#
+# (averages by n R⁶). The first two are the tables above. With f(x) = Re[A(x) e^{ix}], A(x) = −3/x² − 3i/x³, exactly,
+# f(aR) f(bR) e^{−iΔR} = ¼ Σ_{σ₁,σ₂ = ±1} Ã_σ₁(aR) Ã_σ₂(bR) e^{iωR}, ω = σ₁a + σ₂b − Δ, Ã₊ = A, Ã₋ = A*; the product
+# of the Ã is a sum of powers t^{−4}, t^{−5}, t^{−6} of t = R/mean, so X is a sum of the moments
+#
+#     m_k(ν) = <n t^{6−k} e^{iν(t−1)}>/<n t⁶>,  k = 4, 5, 6,  ν = ω · mean
+#
+# times e^{iν} and exact powers of a·mean and b·mean. m_k depends on ν and the relative width only, is smooth in
+# v = |ν| σ_d (σ_d of ``_relative_damping``) and decays like e^{−v²/2}; m_k(−ν) = m_k(ν)*. It is tabulated on the
+# nodes of the direct quadrature (the same truncated distribution), so X is the direct average up to the
+# interpolation. As in the direct quadrature, the terms σ₁ = σ₂ are weighted by 1 − the smoothstep of the in-plane q
+# (``envelope.blend``: they are what the envelope of the pair, ``envelope.sphere_pair``, leaves out) and the terms
+# σ₁ ≠ σ₂ are kept everywhere; with Q₂ < 0 (k_i < k_f) a term σ₁ = σ₂ is slow at small q, so the in-plane q, not
+# a + b, decides. Where b·mean < ``X_SMALL`` (the terms cancel there) X is taken directly on the nodes.
+
+MOMENTS = (4, 5, 6)
+V_MAX = 2.0 * U_MAX + 2.0
+"""The moments are 0 beyond this v (e^{−v²/2} < 10⁻¹⁴⁶ for a Gaussian)."""
+
+
+def _moment_segment(law, ln_s, v):
+    m = np.zeros((len(MOMENTS), ln_s.size, v.size), complex)
+    for i, rel in enumerate(np.exp(ln_s)):
+        sigma = float(_relative_damping(law, rel, 6)[0])
+        span = float(sizes.extent(law, 1.0, rel, 6)[0])
+        panels = int(np.clip(np.ceil(V_MAX * span / (sigma * np.pi)), *BUILD_PANELS))
+        t, n = (a[0] for a in sizes.nodes(law, 1.0, rel, power=6, panels=panels))
+        norm = float(np.sum(n * t**6))
+        weights = np.stack([n * t ** (6 - k) / norm for k in MOMENTS], axis=1)
+        nu = v / sigma
+        for block in range(0, t.size, 512):
+            tt = t[block:block + 512]
+            m[:, i] += (np.exp(1j * nu[:, None] * (tt[None, :] - 1.0)) @ weights[block:block + 512]).T
+    return dict(ln_s=ln_s, m=m)
+
+
+def compute_moments(law: str) -> dict:
+    """The moments m_k of spheres with two paths for one law: two width segments split at ``KINK``, a grid in v."""
+    v = np.arange(0.0, V_MAX + 4 * U_STEP, U_STEP)
+    bounds = ((S_MIN, KINK), (KINK, S_MAX[law]))
+    return dict(segments=[_moment_segment(law, np.linspace(np.log(lo), np.log(hi), S_POINTS), v) for lo, hi in bounds],
+                v=v)
+
+
+MOMENT_PARAMETERS = dict(PARAMETERS, MOMENTS=list(MOMENTS), V_MAX=V_MAX)
+
+
+def moments_path(law: str, folder=None) -> Path:
+    return Path(DATA if folder is None else folder) / f"{law}_sphere_moments.npz"
+
+
+def save_moments(law: str, folder=None) -> Path:
+    """Write the moments of ``law`` as ``data/<law>_sphere_moments.npz``."""
+    table = compute_moments(law)
+    arrays = dict(v=table["v"], parameters=np.array(json.dumps(MOMENT_PARAMETERS, sort_keys=True)))
+    for number, segment in enumerate(table["segments"]):
+        arrays[f"ln_s{number}"] = segment["ln_s"]
+        arrays[f"m{number}"] = segment["m"].astype(np.complex64)
+    target = moments_path(law, folder)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(target, **arrays)
+    return target
+
+
+def _load_moments(law: str):
+    target = moments_path(law)
+    if not target.is_file():
+        return None
+    with np.load(target, allow_pickle=False) as data:
+        if json.loads(str(data["parameters"])) != json.loads(json.dumps(MOMENT_PARAMETERS, sort_keys=True)):
+            return None
+        return dict(segments=[dict(ln_s=data[f"ln_s{n}"], m=data[f"m{n}"].astype(complex)) for n in range(2)],
+                    v=data["v"])
+
+
+@lru_cache(maxsize=4)
+def build_moments(law: str) -> dict:
+    """The moments of ``law``: the prebuilt file when it matches, else computed now."""
+    table = _load_moments(law) or compute_moments(law)
+    # one table (B, v) per moment, as ``_rows`` takes them
+    for segment in table["segments"]:
+        for j, k in enumerate(MOMENTS):
+            segment[f"m{k}"] = segment["m"][j]
+    return table
+
+
+def _cross_direct(law, a, b, delta, radius, rel):
+    """X of one row on the nodes of the direct quadrature, at in-plane points with path wavenumbers a, b (N,)."""
+    span = sizes.extent(law, radius, rel, 6)
+    panels = int(sizes.panel_counts(float(np.max(a)) + abs(delta), span)[0])
+    r, n = (x[0] for x in sizes.nodes(law, radius, rel, power=6, panels=panels))
+    w = n * r**6
+    w = w * np.exp(-1j * delta * r) / w.sum()
+    return (shapes.sphere_amplitude(a[:, None] * r[None, :]) * shapes.sphere_amplitude(b[:, None] * r[None, :])) @ w
+
+
+def sphere_cross(law: str, q, q_1: float, q_2: float, radius, rel) -> np.ndarray:
+    """X = <f(aR) f(bR) e^{−iΔR}> by n R⁶ (B, N) at the in-plane ``q`` (N,), a = √(q² + Q₁²), b = √(q² + Q₂²),
+    Δ = Q₁ − Q₂, |Q₁| ≥ |Q₂|, for rows (B,) that ``usable`` accepts."""
+    q = np.abs(np.asarray(q, float))
+    a, b, delta = np.hypot(q, q_1), np.hypot(q, q_2), float(q_1 - q_2)
+    radius, rel = np.atleast_1d(radius).astype(float), np.atleast_1d(rel).astype(float)
+    tab = build_moments(law)
+    sigma = _relative_damping(law, rel, 6)[:, None]
+    alpha, beta = a[None, :] * radius[:, None], b[None, :] * radius[:, None]
+    small = beta < X_SMALL
+    alpha_s, beta_s = np.maximum(alpha, X_SMALL), np.maximum(beta, X_SMALL)
+    rows = {k: _rows(tab, f"m{k}", rel) for k in MOMENTS}
+    keep = 1.0 - _smoothstep(q[None, :] * radius[:, None] * sigma)
+    out = np.zeros(alpha.shape, complex)
+    for s1 in (1.0, -1.0):
+        for s2 in (1.0, -1.0):
+            nu = (s1 * a[None, :] + s2 * b[None, :] - delta) * radius[:, None]
+            v = np.abs(nu) * sigma
+            inside = v <= V_MAX
+            m = {}
+            for k in MOMENTS:
+                value = _along(rows[k], tab["v"], np.minimum(v, V_MAX))
+                m[k] = np.where(inside, np.where(nu < 0, np.conj(value), value), 0.0)
+            term = (m[4] / (alpha_s**2 * beta_s**2) + 1j * (s2 / (alpha_s**2 * beta_s**3) + s1 / (alpha_s**3 * beta_s**2))
+                    * m[5] - s1 * s2 * m[6] / (alpha_s**3 * beta_s**3))
+            term = 2.25 * np.exp(1j * nu) * term
+            out += keep * term if s1 == s2 else term
+    for row in np.flatnonzero(small.any(axis=1)):
+        columns = small[row]
+        out[row, columns] = _cross_direct(law, a[columns], b[columns], delta, radius[row], rel[row])
+    return out
+
+
+__all__ = ["KINDS", "KINK", "LAWS", "MOMENTS", "S_MAX", "S_MIN", "S_TABLE", "X_SMALL", "averages", "build",
+           "build_moments", "compute", "compute_moments", "cylinder", "moments_path", "path", "save", "save_moments",
+           "sphere_cross", "usable"]

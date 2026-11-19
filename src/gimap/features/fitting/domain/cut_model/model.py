@@ -97,6 +97,16 @@ def size_averages(family: str, q, *, radius, radius_spread, law: str = "number_g
         if family == "cylinder":
             part, part_c = tables.cylinder(q, law, radius[index], spread[index], height[index], h_spread[index], qz,
                                            coherent)
+        elif family == "sphere" and len(terms) == 2:  # two paths: two Born terms and their cross term
+            (c_1, q_1), (c_2, q_2) = terms
+            a, b = np.hypot(q, q_1), np.hypot(q, q_2)
+            if abs(q_2) > abs(q_1):
+                (c_1, q_1, a), (c_2, q_2, b) = (c_2, q_2, b), (c_1, q_1, a)
+            first, _m = tables.averages(law, "sphere", a[None, :] * radius[index, None], spread[index])
+            second, _m = tables.averages(law, "sphere", b[None, :] * radius[index, None], spread[index])
+            cross = tables.sphere_cross(law, q, q_1, q_2, radius[index], spread[index])
+            part = abs(c_1) ** 2 * first + abs(c_2) ** 2 * second + 2.0 * np.real(c_1 * np.conj(c_2) * cross)
+            part_c = None
         else:
             kind = "sphere" if family == "sphere" else "disc"
             xbar = np.hypot(q, qz)[None, :] * radius[index, None]
@@ -147,12 +157,13 @@ def size_averages(family: str, q, *, radius, radius_spread, law: str = "number_g
 
 
 def _tabulated_rows(family, law, spread, h_spread, terms, coherent) -> np.ndarray:
-    """Rows the tables of ``tables`` evaluate: their widths covered, and for spheres one path (the coherent term
-    of the Born path at q_z ≠ 0 carries a phase the tables do not)."""
+    """Rows the tables of ``tables`` evaluate: their widths covered, and for spheres one path or two paths without
+    the coherent term (the coherent term of a path at q_z ≠ 0 carries a phase the tables do not; four DWBA paths are
+    averaged directly)."""
     ok = tables.usable(law, spread)
     if family == "cylinder":
         return ok & tables.usable(law, h_spread)
-    if family == "sphere" and (len(terms) > 1 or (coherent and terms[0][1] != 0.0)):
+    if family == "sphere" and (len(terms) > 2 or (coherent and any(z != 0.0 for _c, z in terms))):
         return np.zeros_like(ok)
     return ok
 
