@@ -11,6 +11,22 @@ GEOM = yt.Geometry(wavelength_nm=0.1045, alpha_i_deg=0.40)       # P03, Yoneda r
 Q = np.linspace(0.02, 2.0, 397)                                  # nm^-1
 COMPOSITIONS = {"sphere": ("sphere",), "vc": ("vc",), "sphere,sphere": ("sphere", "sphere"),
                 "sphere,vc": ("sphere", "vc")}
+# What the particles sit on. 'ps100': 100 nm polystyrene on Si (1.05 g/cm³: δ 1.67e-6, β 2e-9 at 0.1045 nm); the cut
+# stays at the Yoneda angle of Si, so the vacuum q_z of the cut is the same on both.
+SUBSTRATES = {"si": {}, "ps100": dict(film_delta=1.67e-6, film_beta=2e-9, film_thickness=100.0)}
+TRUTH = dict(scattering="born_qz", substrate="si")
+"""The truth's physics: the frozen held-out sets are the Born term at the cut's q_z ('born_qz') on Si; 'dwba' adds
+the waves the surface reflects (the four terms of yoneda_truth). Set with set_truth()."""
+
+
+def set_truth(scattering: str = "born_qz", substrate: str = "si") -> None:
+    if scattering not in ("born_qz", "dwba") or substrate not in SUBSTRATES:
+        raise ValueError(f"Unknown truth {scattering!r} on {substrate!r}")
+    TRUTH.update(scattering=scattering, substrate=substrate)
+
+
+def truth_geometry() -> yt.Geometry:
+    return yt.replace(GEOM, **SUBSTRATES[TRUTH["substrate"]])
 
 
 def draw(index, seed0=20261116):
@@ -43,9 +59,10 @@ def curve(case):
         inst = yt.replace(inst, sigma_g=0.005, central=30.0, eta=0.03, gamma=0.004, rough=1.0, xi=50.0, hurst=0.5)
     total, peak_of_particles = np.zeros_like(Q), None
     for k, p in enumerate(case["populations"]):
-        film = yt.Film(R=p["R"], sR=p["sR"], D=p["D"], s_nn=p["s_nn"], coupling="lma", scattering="born_qz",
+        film = yt.Film(R=p["R"], sR=p["sR"], D=p["D"], s_nn=p["s_nn"], coupling="lma", scattering=TRUTH["scattering"],
                        cyl_h=2.0 * p["R"] if p["shape"] == "vc" else 0.0)
-        own = yt.measured_curve(Q, yt.Case(GEOM, film, inst if k == 0 else yt.replace(inst, central=0.0, rough=0.0)))
+        own = yt.measured_curve(Q, yt.Case(truth_geometry(), film,
+                                           inst if k == 0 else yt.replace(inst, central=0.0, rough=0.0)))
         particles = own["parts"]["particles"]
         if peak_of_particles is None:
             peak_of_particles = float(particles.max())
@@ -59,4 +76,4 @@ def curve(case):
     return counts, np.sqrt(np.maximum(counts, 1.0))
 
 
-__all__ = ["COMPOSITIONS", "GEOM", "Q", "curve", "draw"]
+__all__ = ["COMPOSITIONS", "GEOM", "Q", "SUBSTRATES", "TRUTH", "curve", "draw", "set_truth", "truth_geometry"]

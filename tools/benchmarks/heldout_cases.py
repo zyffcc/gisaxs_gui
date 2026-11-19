@@ -42,16 +42,16 @@ def draw(index: int, seed0: int = SEED0) -> dict:
 
 
 def curve(case: dict):
-    """fit1d_recovery.curve with the case's coupling."""
+    """fit1d_recovery.curve with the case's coupling (and recovery_cases.TRUTH's physics)."""
     inst = yt.Instrument(peak_counts=0.0)
     if case["level"] == "measured":
         inst = yt.replace(inst, sigma_g=0.005, central=30.0, eta=0.03, gamma=0.004, rough=1.0, xi=50.0, hurst=0.5)
     total, peak_of_particles = np.zeros_like(fr.Q), None
     for k, p in enumerate(case["populations"]):
         film = yt.Film(R=p["R"], sR=p["sR"], D=p["D"], s_nn=p["s_nn"], coupling=case.get("coupling", "lma"),
-                       scattering="born_qz", cyl_h=2.0 * p["R"] if p["shape"] == "vc" else 0.0)
-        own = yt.measured_curve(fr.Q, yt.Case(fr.GEOM, film, inst if k == 0 else yt.replace(inst, central=0.0,
-                                                                                           rough=0.0)))
+                       scattering=fr.TRUTH["scattering"], cyl_h=2.0 * p["R"] if p["shape"] == "vc" else 0.0)
+        own = yt.measured_curve(fr.Q, yt.Case(fr.truth_geometry(), film,
+                                              inst if k == 0 else yt.replace(inst, central=0.0, rough=0.0)))
         particles = own["parts"]["particles"]
         if peak_of_particles is None:
             peak_of_particles = float(particles.max())

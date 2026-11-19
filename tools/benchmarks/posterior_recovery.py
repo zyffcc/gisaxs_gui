@@ -18,10 +18,14 @@ given to the fit, and the choice is among one to three populations).
 With --truth own the same cases are drawn in Predict parameters' own model instead (cut_model as its likelihood
 evaluates it: the cut's q_z, the case's coupling, no beam tail, no resolution), both levels alike: the intervals'
 coverage when the model is exactly right.
+With --scattering dwba the independent truth adds the waves the surface reflects (the four DWBA terms of
+yoneda_truth.py), on bare Si or with --substrate ps100 on 100 nm polystyrene on Si (recovery_cases.SUBSTRATES); the
+same cases, counts and noise as the frozen sets (the Born term at the cut's q_z on Si), so the two pair curve by curve.
+--eia runs Predict without the cut's q_z (the effective interface, as without angles in Model).
 usage: python tools/benchmarks/posterior_recovery.py --network PATH/NAME [--n 200] [--workers 8] [--seed0 20261116]
            [--samples N] [--local-samples N] [--shortlist N] [--refined 3] [--set fit1d|extended]
            [--truth independent|own] [--model-error-floor F] [--explored N] [--moves N] [--widths 1,2]
-           [--out NAME]
+           [--scattering born_qz|dwba] [--substrate si|ps100] [--eia] [--out NAME]
   (defaults: Predict parameters' own, refine.SAMPLES, LOCAL_SAMPLES, SHORTLIST, MODEL_ERROR_FLOOR, EXPLORED, MOVES,
   infer.PROPOSAL_WIDTHS)
 Writes the summary to tools/benchmarks/NAME_summary.json (default posterior_recovery) and every curve to results/.
@@ -97,6 +101,7 @@ def _init(network_path: str, options: dict):
     global NETWORK
     NETWORK = Network.load(network_path)
     OPTIONS.update(options)
+    fr.set_truth(options.get("scattering", "born_qz"), options.get("substrate", "si"))
     refine.MOVES = options.get("moves", refine.MOVES)
     refine.MOVED_SOLUTIONS = options.get("moved_solutions", refine.MOVED_SOLUTIONS)
     infer.PER_COUNT = options.get("per_count", infer.PER_COUNT)
@@ -139,7 +144,7 @@ def run(index: int) -> dict:
     I, s = own_curve(case) if OPTIONS.get("truth") == "own" else (hc.curve if extended else fr.curve)(case)
     coupling = case.get("coupling", "lma")
     out = dict(case=case)
-    qz = float(fr.GEOM.qz_vacuum)
+    qz = 0.0 if OPTIONS.get("eia") else float(fr.GEOM.qz_vacuum)
     truth = _composition(case)
     k = len(case["populations"])
     # network: samples of the true composition, their median
@@ -284,13 +289,17 @@ def main():
     ap.add_argument("--per-count", type=int, default=infer.PER_COUNT)
     ap.add_argument("--constant", action="append", default=[], help="module.NAME=value (refine or infer), repeatable")
     ap.add_argument("--widths", default=",".join(str(w) for w in infer.PROPOSAL_WIDTHS))
+    ap.add_argument("--scattering", default="born_qz", choices=("born_qz", "dwba"))
+    ap.add_argument("--substrate", default="si", choices=tuple(fr.SUBSTRATES))
+    ap.add_argument("--eia", action="store_true", help="Predict without the cut's q_z (the effective interface)")
     a = ap.parse_args()
     t0 = time.perf_counter()
     results = []
     options = dict(seed0=a.seed0, samples=a.samples, set=a.set, local_samples=a.local_samples, shortlist=a.shortlist,
                    refined=a.refined, truth=a.truth, floor=a.model_error_floor,
                    explored=a.explored, moves=a.moves, widths=[float(w) for w in a.widths.split(",")],
-                   moved_solutions=a.moved_solutions, per_count=a.per_count, constants=a.constant)
+                   moved_solutions=a.moved_solutions, per_count=a.per_count, constants=a.constant,
+                   scattering=a.scattering, substrate=a.substrate, eia=a.eia)
     with Pool(min(a.workers, a.n), initializer=_init, initargs=(a.network, options)) as pool:
         for i, r in enumerate(pool.imap_unordered(run, range(a.n)), 1):
             results.append(r)
