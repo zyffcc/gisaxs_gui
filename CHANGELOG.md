@@ -61,9 +61,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   exchanged); choosing the composition it tries the network's four most probable and the most probable of every
   number of populations. The true solution is among those listed in 92 % and 87 % of these curves. Drawn with the
   four-term DWBA (on Si and on 100 nm polystyrene), spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i 0.4°, 12 keV) come out
-  about 6 % off in R (median) with both angles, and the composition of such curves right in 57–67 %; with the q_z
+  about 6 % off in R (median) with both angles, and the composition of such curves right in 57–68 %; with the q_z
   alone 10 % (q₊R 2.3–3.5) to 40 % off and usually taken for upright cylinders (right in 4–18 %). With both angles
-  Predict takes about three times as long, and on a curve without a reflected wave a smaller sphere with a large |r|
+  Predict takes about 2.4 times as long, and on a curve without a reflected wave a smaller sphere with a large |r|
   can fit as well (`posterior_recovery.py --scattering dwba --cut two_path`, Physics and Methods 9.13).
 - **1D Predict: General V5 and Single RC specialist removed.** On fit1d's 200 held-out curves V5 recovered R with a
   median error of 31 % and D of 22 % (20 s per curve); Predict parameters 0.7 % and 0.0–0.1 %. Settings saved with

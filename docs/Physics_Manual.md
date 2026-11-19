@@ -2446,7 +2446,7 @@ probable goes into Model, the others to **Other solutions**. Model's fixed value
 ranges are not used; **Refine the values in Model** afterwards keeps them. Time per curve on one core (development
 curves): about 5 s with the composition given, about 25 s choosing among one or two populations, 30–70 s among one
 to three of spheres and upright cylinders, a few minutes when random cylinders are among the choice; with both angles
-(two paths) about three times as long.
+(two paths) about 2.4 times as long.
 
 Model's coupling (DA) and size law (log-normal) are used in steps 2–4: the network, trained on the LMA and Gaussian
 sizes, is then only a proposal, which the weights correct. Fitting has no four-term DWBA: with both angles Predict
@@ -2559,8 +2559,9 @@ What this says:
   tempered modes, the moves and the longer shortlist (2.7/9.4 s and 4.3/20.5 s), Predict takes 1.5–2 times as long.
   The network with two paths takes the same time on these cuts (one node, 48 development curves of each set: −11 % and
   −1 % on fit1d's kind, +8 % and −7 % on the extended kind). Given both angles (two paths, the DWBA curves below)
-  Predict takes 2.6–3.2 times as long with the composition given and 2.7–3.5 times to choose: about 11 s and 50 s on
-  fit1d's set, 23 s and 105 s on the extended set.
+  Predict takes 2.4 times as long, with the composition given and to choose (one node, 48 development curves of each
+  set): about 10 s and 36 s on fit1d's set, 17 s and 95 s on the extended set. Before the two paths were tabulated
+  (section 9.3) it took 2.8–3.6 times as long; the tables save 18–33 % on fit1d's kind and 16–22 % on the extended kind.
 - The measured curves have roughness falling as q⁻³ at low q, which the tail (ν near 2) cannot take up: there Predict
   chooses the composition right less often (60 % against 88 % in fit1d's own physics); on 13 of the 100 *measured*
   curves of fit1d's set it chose a composition with one more population that describes the curve better than the
@@ -2576,30 +2577,33 @@ What this says:
 
   | q₊R of the sphere | fit1d's set | extended set |
   |---|---|---|
-  | up to 1.7 | 0.4–0.6 % → 1.6–2.4 % → 1.9–3.8 % → 2.8–3.5 % | 0.8–5.5 % → 2.8–6.9 % → 2.6–6.7 % → 3.4–8.3 % |
-  | 1.7–2.3 | 0.5 % → 4 % (−2 %) → 4 % (−3 %) → 3 % (+2 %) | 0.9 % → 4 % (−1 %) → 4 % (0 %) → 4 % (+2 %) |
-  | 2.3–3.5 | 0.8 % → 11 % (−11 %) → 7 % (+1 %) → 4 % (+3 %) | 0.7 % → 12 % (−10 %) → 6 % (+1 %) → 4 % (+2 %) |
-  | above 3.5 | 5 % → 40 % (−30 %) → 6 % (0 %) → 3 % (+1 %) | 3 % → 38 % (−24 %) → 7 % (+3 %) → 5 % (+2 %) |
+  | up to 1.7 | 0.4–0.6 % → 1.6–2.4 % → 2.3–3.8 % → 2.8–3.5 % | 0.8–5.5 % → 2.8–6.9 % → 2.6–6.7 % → 3.5–8.5 % |
+  | 1.7–2.3 | 0.5 % → 4 % (−2 %) → 4 % (−3 %) → 3 % (+2 %) | 0.9 % → 4 % (−1 %) → 4 % (0 %) → 4 % (+1 %) |
+  | 2.3–3.5 | 0.8 % → 11 % (−11 %) → 8 % (+1 %) → 4 % (+3 %) | 0.7 % → 12 % (−10 %) → 6 % (0 %) → 4 % (+3 %) |
+  | above 3.5 | 5 % → 40 % (−30 %) → 8 % (0 %) → 3 % (+2 %) | 3 % → 38 % (−24 %) → 7 % (+3 %) → 5 % (+2 %) |
 
   - Upright cylinders alone give the same results with the four terms (all 50 and 200 such curves): their cut has
     the in-plane shape exactly (section 9.10).
-  - Spheres above q₊R 1.7: given both angles, R is off by 5.7 % and 5.8 % (median, Si; P90 19 % and 40 %) and by
-    3.2 % and 4.1 % on PS, and their 68 % intervals hold the truth in 57 % and 65 % (PS 61–62 %). Given q_z alone
+  - Spheres above q₊R 1.7: given both angles, R is off by 6.5 % and 5.9 % (median, Si; P90 19 % and 40 %) and by
+    3.3 % and 4.1 % on PS, and their 68 % intervals hold the truth in 54 % and 65 % (PS 62 %). With the direct
+    quadrature of the two paths instead of the tables (section 9.3; the same network and curves) R was off by 5.7 % and
+    5.8 %: values that differ by at most 10⁻³ change the solution of a few curves, and a median over 145 spheres moves
+    by that much. Given q_z alone
     they are off by 12 % and 17 % (P90 48 % and 54 %), mostly too small, and the intervals hold the truth in 6–11 %;
     the previous network gave the same (12 % and 17 %).
   - The composition. Of the curves whose largest sphere has q₊R above 1.7, Predict given both angles chooses the right
-    one in 63 % on Si and 67 % on PS (fit1d's set) and 57 % and 61 % (extended), against 4 % and 18 % on Si given q_z
+    one in 62 % on Si and 68 % on PS (fit1d's set) and 57 % and 62 % (extended), against 4 % and 18 % on Si given q_z
     alone (the previous network: 6–20 % on Si and PS; 72 % and 68 % with the Born-term truth) — there a single sphere is mostly taken for one or
     two upright cylinders on Si and for a sphere with a cylinder on PS. The truth's mode is listed for 96 % and 84 % of
     the curves with a sphere above q₊R 2.3 (given q_z alone 50 % and 36 %; Born-term truth 85 % and 84 %).
-  - Over all curves, on Si given both angles: composition right in 76 %/57 % (*model*/*measured*) on fit1d's set and
-    60 %/51 % on the extended set (on PS 78 %/60 % and 63 %/53 %), against 39 %/25 % and 34 %/32 % given q_z alone and
-    88 %/60 % and 69 %/56 % with the Born-term truth; P90 of R 17 %/20 % and 33 %/42 % (given q_z alone 48 %/40 % and
+  - Over all curves, on Si given both angles: composition right in 74 %/56 % (*model*/*measured*) on fit1d's set and
+    60 %/51 % on the extended set (on PS 78 %/61 % and 63 %/53 %), against 39 %/25 % and 34 %/32 % given q_z alone and
+    88 %/60 % and 69 %/56 % with the Born-term truth; P90 of R 16 %/21 % and 34 %/42 % (given q_z alone 48 %/40 % and
     52 %/52 %).
-  - Below q₊R 1.7 the two paths are a little worse than q_z alone: on fit1d's set 7 of 45 spheres at q₊R 1.2–1.7
+  - Below q₊R 1.7 the two paths are a little worse than q_z alone: on fit1d's set 6 of 45 spheres at q₊R 1.2–1.7
     off by more than 20 % (none given q_z alone), and the composition of the curves without a larger sphere right in
-    72 % and 53 % against 80 % and 54 %.
-  - χ²/N > 2 marks only 4 % and 8 % of the curves where a sphere's R is off by more than 10 % (61 % and 49 % given q_z
+    70 % and 53 % against 80 % and 54 %.
+  - χ²/N > 2 marks only 3 % and 8 % of the curves where a sphere's R is off by more than 10 % (61 % and 49 % given q_z
     alone): what is left fits the curve within its errors, so χ²/N does not point at it.
   - Predict without the cut's q_z (the effective interface, `--cut eia`) on the same Si curves, as before: R of
     spheres at q₊R 1.7–3.5 low by 16 % (fit1d's set), D and σnn/D within about 1 % as in section 9.10, χ²/N > 2 for
@@ -2611,15 +2615,16 @@ What this says:
     with a strong r describes such a curve as well. At the Yoneda angle of the substrate |r_f| is near 1 and the
     reflected wave strong; on a cut well above the critical angle it is weak, and a solution with a large |r| and a
     small sphere there is suspect (fix `refl_amp` to the substrate's |r_f|, or to 0, and refine).
-  - So, on a real substrate at the Yoneda angle, Predict given both angles holds the sizes of spheres to about 6 %
-    (median) at every q₊R and chooses their composition right in about 60 % of the curves; given q_z alone the error
+  - So, on a real substrate at the Yoneda angle, Predict given both angles holds the sizes of spheres to 2–9 %
+    (median, by q₊R) and chooses their composition right in about 60 % of the curves; given q_z alone the error
     of R grows to about 10 % at q₊R 2.3–3.5 and 40 % above (too small), as before.
   - The stop rule set before training (development seed: composition of the curves with a sphere above q₊R 1.7 right
     in ≥ 50 %, R of these spheres ≤ 6 % median, on the Born-term truth given q_z alone the composition no more than 3
     points and the P90 of R no more than 1.2 times worse) was missed narrowly there (R 6.5 % and 6.3 %; composition
     −3.0 and −4.7 points). The network was kept: these curves had 5–20 % and 14.6–20.6 % before. On the held-out
-    curves R is within the rule (5.7 % and 5.8 %) and the composition (−2.0 and +0.4 points), but the P90 of R on
-    fit1d's set is 1.9 times worse (above, *Against the previous network*).
+    curves the composition is within the rule (−2.0 and +0.4 points) and R on the extended set (5.9 %); R on fit1d's
+    set is just outside it (6.5 %; 5.7 % with the direct quadrature, above), and the P90 of R on fit1d's set is 1.9
+    times worse (above, *Against the previous network*).
 
 Earlier runs on the same curves: before the search of the ranges (step 3), the comparison by BIC (step 5), the
 prior's box for least squares and the faster settings (2000 samples, four compositions, the posterior of every
@@ -2661,16 +2666,16 @@ within σ: χ²/N 4–9), and their intervals are least-squares errors with the 
 resolved peak, so D is fixed to ±7–10 nm (±3 nm without the model error). fit1d's four-term DWBA, which Fitting does
 not have, describes the simulated cuts better (χ²/N 1.75, D 53.8–55.1 nm).
 
-*Both angles* (two paths, r free). The two paths describe these cuts within their errors (χ²/N 0.96–1.46 against
-4.2–8.8), but they do not recover the particles: with one sphere population, R 8.0 nm on the measured cut and 11.3 nm,
-500 nm and 500 nm (at the bound, flagged *large*) on the draws, D 450–2600 nm instead of 53.6 nm; with the composition chosen
+*Both angles* (two paths, r free). The two paths describe these cuts within their errors (χ²/N 0.96–1.55 against
+4.2–8.8), but they do not recover the particles: with one sphere population, R 8.4 nm on the measured cut and 500 nm
+(at the bound, flagged *large*), 110 nm and 16 nm on the draws, D 460–6700 nm instead of 53.6 nm; with the composition chosen
 among one to three spheres, two spheres on the measured cut (R 6.06 nm with D 43.8 nm [31.1, 61.7], and 8.8 nm), on
 one draw R 5.0 nm with D 104 nm [68, 159] and a sphere of 525 nm at the bound, on the other two one sphere of
-15.6–16.1 nm without a paracrystal; the fitted |r| 0.31–0.94 at phases spread over the whole circle. On this cut
+15.5–16.1 nm without a paracrystal; the fitted |r| 0.31–1.0 at phases spread over the whole circle. On this cut
 (broad log-normal sizes, α_f at the critical angle) the free r takes up what the sizes and the paracrystal should
 describe; the solutions it gives carry flags (*at bound*, *large*, *unconstrained*) and should not be taken without
 them being checked against what is known of the sample. Time (this PC): 12–14 s per variant with one sphere and 46–63 s
-for the choice at the Born term; 14–31 s and 141–193 s with two paths (56 min for the choice on the measured cut
+for the choice at the Born term; 12–26 s and 97–139 s with two paths (56 min for the choice on the measured cut
 before the cross term was tabulated, section 9.3). GALAXI was used to set the tail's prior and the rules of steps 3
 and 5, so this is no independent test.
 
