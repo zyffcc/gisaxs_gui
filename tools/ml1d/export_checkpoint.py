@@ -1,6 +1,6 @@
 """Export the best state so far of a training run (its NAME.pt) as a network for numpy, while it still trains.
 
-usage: python tools/ml1d/export_checkpoint.py --checkpoint PATH/NAME.pt --data DIR --prior tools/ml1d/prior_v1.json
+usage: python tools/ml1d/export_checkpoint.py --checkpoint PATH/NAME.pt --data DIR --prior tools/ml1d/prior_v2.json
            --out PATH/OTHER [--architecture '{}'] [--seed 0]
   writes PATH/OTHER.npz and .json as train_flow.py does at its end (the history so far in the record)
 """

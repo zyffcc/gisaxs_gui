@@ -5,7 +5,7 @@ composition head (neural posterior estimation). Every batch gets fresh shares, t
 noise and gaps (``simulate.inputs``, in ``--loaders`` worker processes); the last ``--validation`` rows are held out
 with one fixed draw, and the state of the lowest validation loss is exported.
 
-usage: python tools/ml1d/train_flow.py --data DIR --prior tools/ml1d/prior_v1.json --out PATH/NAME
+usage: python tools/ml1d/train_flow.py --data DIR --prior tools/ml1d/prior_v2.json --out PATH/NAME
            [--epochs 40] [--batch 1024] [--lr 5e-4] [--seed 0] [--validation 20000] [--threads 4] [--loaders 0]
            [--device cpu|cuda] [--architecture '{"layers": 8}'] [--patience 8] [--hours 0]
   writes PATH/NAME.npz (arrays), PATH/NAME.json (architecture, data manifest, prior, history, SHA-256 of the npz) and

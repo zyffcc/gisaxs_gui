@@ -1,5 +1,6 @@
 """Pairs of posterior_recovery.py runs on the same held-out cases that differ only in the truth's physics (the Born
-term or the four DWBA terms, Si or polystyrene on Si: --scattering, --substrate) or in Predict's geometry (--eia).
+term or the four DWBA terms, Si or polystyrene on Si: --scattering, --substrate), in what Predict is given of the
+cut (--cut born, two_path or eia) or in the network (--network).
 Per population, the error of R and D (the true composition given, the most probable solution) binned by q+R, the
 vacuum q_z of the cut times the true R, for spheres and upright cylinders; per curve, by its largest sphere's q+R,
 how often the composition is chosen right (``comp``), the true composition listed (``set``), the truth's mode first

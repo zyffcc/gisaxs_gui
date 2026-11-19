@@ -82,7 +82,9 @@ def card(network: dict, evaluation: dict, benchmarks: list[tuple[str, dict]]) ->
               f"h q_max = 200, beam tails wider than {tail_width:g} q_min or with an exponent outside "
               f"{tail_exponent[0]:g}–{tail_exponent[1]:g} (encoding {network.get('encoding')});",
               "- the network itself knows Gaussian sizes by number and the LMA; other laws and the DA are weighted "
-              "from its proposals; the four-term DWBA is not in the model;",
+              "from its proposals; the four-term DWBA is not in the model (with both angles of the cut, spheres "
+              "have the direct and the exit-reflected path with a free effective reflection coefficient: two paths); "
+              "on a cut without a reflected wave a smaller sphere with a large |r| can describe the curve as well;",
               "- its own probabilities are those of the simulated prior; GIMaP reports the importance-weighted ones."]
     return "\n".join(lines) + "\n"
 

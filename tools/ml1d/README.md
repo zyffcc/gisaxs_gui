@@ -12,7 +12,10 @@ samples from it (neural posterior estimation). The program evaluates the exporte
 Everything is dimensionless: q̃ = q/q_max and lengths × q_max, so one network serves cuts of any distance and energy.
 The curve is binned on 128 log-spaced points from q_max/ρ to q_max (ρ = q_max/q_min in [10, 300]); the network sees
 ln I relative to its median, ln(σ/I), the mask of bins with measured points and the position on the grid, and is told
-ρ and the cut's q_z/q_max (the Born term at that q_z; 0 for the effective interface) (`posterior/encoding.py`).
+ρ, the cut's q₊/q_max = (k_i + k_f)/q_max, q₋/q_max = (k_i − k_f)/q_max and whether the cut has two paths
+(`posterior/encoding.py`, encoding 4): with both angles known, spheres have the direct and the exit-reflected path with
+an effective reflection coefficient r (`cut_model.geometry`, `two_path`), whose real and imaginary parts are two more
+values of the cut; with q₊ alone the Born term at q₊; with neither the effective interface.
 
 A composition is one to three populations listed by increasing radius, each a sphere, an upright cylinder or a random
 cylinder, with or without a paracrystal: 258 compositions. A population has R̃, σR/R, h/2R and σh/h (random cylinders),
@@ -44,6 +47,7 @@ probability and flags (at a bound, unconstrained, correlated, few effective samp
 | File | What it does |
 |---|---|
 | `simulate.py` | compositions and values from a prior file; every population's term from `cut_model` on 8 points per bin (then averaged, as a measured bin), convolved with the cut's resolution (`resolution.tabulated`); shards of noise-free terms. `augment` draws shares, beam tail, background, model error, measured-point layout (100–1000 points, linear or logarithmic), Poisson counts and gaps anew for every batch |
+| `prior_v2.json` | the prior of the network that comes with GIMaP (encoding 4): as `prior_v1.json`, and 70 % of the cuts at a q₊ have two paths, q₋ = q₊ × U(−0.5, 0.9), r uniform in [−1, 1]² |
 | `prior_v1.json` | the prior of the first network: K = 1, 2, 3 with weights 0.3, 0.4, 0.3; spheres 0.4, upright cylinders 0.35, random cylinders 0.25; a paracrystal in 70 %; the Born term at a q_z/q_max up to 1 in 60 % |
 | `flow_torch.py` | the network in PyTorch, with the names and layout of the numpy version |
 | `train_flow.py` | −log q(θ | curve, composition) + cross-entropy of the head; GPU, noise drawn in worker processes; the state of the lowest validation loss is exported as `NAME.npz` and `NAME.json` (architecture, prior, data manifest with the SHA-256 of every shard, history, SHA-256 of the npz) |
@@ -57,22 +61,26 @@ probability and flags (at a bound, unconstrained, correlated, few effective samp
 
 ## The network that comes with GIMaP
 
-`src/gimap/features/fitting/domain/posterior/data/flow_v1.npz` was trained as `flow_v3` (encoding 3: the beam tail's
-exponent 1.8–2.2, its width up to 30 q_min) at commit e5a609e, on one V100S in 1.9 h, with:
+`src/gimap/features/fitting/domain/posterior/data/flow_v1.npz` was trained as `flow_v4` (encoding 4: q₋/q_max and
+whether the cut has two paths among the conditions, the real and imaginary part of r among the values) at commit
+a10d26d, on one V100 in 1.8 h, with:
 
 ```bash
-python tools/ml1d/simulate.py --prior tools/ml1d/prior_v1.json --count 5000000 --seed 333 --out DATA/train_v3 --shard 10000 --workers 64
-python tools/ml1d/simulate.py --prior tools/ml1d/prior_v1.json --count 20000 --seed 444 --out DATA/test_v3 --shard 10000
-python tools/ml1d/train_flow.py --data DATA/train_v3 --prior tools/ml1d/prior_v1.json --out NET/flow_v3 --device cuda --loaders 24 --epochs 30 --batch 2048 --lr 7e-4 --validation 20000 --patience 6
-python tools/ml1d/evaluate_flow.py --network NET/flow_v3 --data DATA/test_v3 --prior tools/ml1d/prior_v1.json --curves 2000 --samples 1000 --out report.json --figure ranks.png
-python tools/benchmarks/posterior_recovery.py --network NET/flow_v3 --n 200 --workers 60
-python tools/ml1d/model_card.py --network NET/flow_v3 --evaluation report.json --benchmark tools/benchmarks/posterior_recovery_summary.json tools/benchmarks/posterior_extended_summary.json --out MODEL_CARD.md
+python tools/ml1d/simulate.py --prior tools/ml1d/prior_v2.json --count 5000000 --seed 555 --out DATA/train_v4 --shard 10000 --workers 64
+python tools/ml1d/simulate.py --prior tools/ml1d/prior_v2.json --count 20000 --seed 666 --out DATA/test_v4 --shard 10000
+python tools/ml1d/train_flow.py --data DATA/train_v4 --prior tools/ml1d/prior_v2.json --out NET/flow_v4 --device cuda --loaders 24 --epochs 30 --batch 2048 --lr 7e-4 --validation 20000 --patience 6
+python tools/ml1d/evaluate_flow.py --network NET/flow_v4 --data DATA/test_v4 --prior tools/ml1d/prior_v2.json --curves 2000 --samples 1000 --out report.json --figure ranks.png
+python tools/benchmarks/posterior_recovery.py --network NET/flow_v4 --n 200 --workers 60
+python tools/benchmarks/posterior_recovery.py --network NET/flow_v4 --n 200 --workers 60 --scattering dwba --cut two_path --out posterior_dwba_si_fit1d
+python tools/ml1d/model_card.py --network NET/flow_v4 --evaluation report.json --benchmark tools/benchmarks/posterior_recovery_summary.json tools/benchmarks/posterior_extended_summary.json tools/benchmarks/posterior_dwba_si_fit1d_summary.json tools/benchmarks/posterior_dwba_si_extended_summary.json --out MODEL_CARD.md
 ```
 
 (On Maxwell `maxwell/simulate.sbatch` ran the simulation as an array of tasks with `--first-shard/--shards`, joined
 with `--join`, and `maxwell/train.sbatch` the training.) Its record names the
 SHA-256 of the shards; the shipped record leaves out the paths of the computer it was trained on. On 2000 simulated
-cuts not trained on, its 68 %/95 % intervals hold the truth in 66–71 %/94–96 % for every value; the benchmarks against
-fit1d and V5 (both removed in 0.2.0) are in Physics and Methods, section 9.13, and `MODEL_CARD.md`.
+cuts not trained on, its 68 %/95 % intervals hold the truth in 66–70 %/92–95 % for every value (the head ranks the
+true composition first in 20 %); the benchmarks are in Physics and Methods, section 9.13, and `MODEL_CARD.md`. The
+network shipped before it, `flow_v3` (encoding 3: the Born term at q_z, no reflected path), was trained the same way
+from `prior_v1.json` (seeds 333 and 444) at commit e5a609e.
 
 The seeds fix every shard (`numpy.random.SeedSequence(seed).spawn`); the shards are not kept in the repository.

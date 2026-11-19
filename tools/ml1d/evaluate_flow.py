@@ -5,7 +5,7 @@ them (simulation-based calibration: uniform ranks for a calibrated posterior), w
 intervals hold it, and the error of the posterior median; the composition head's probability of the true composition
 and its top-1 accuracy; the time per curve.
 
-usage: python tools/ml1d/evaluate_flow.py --network PATH/NAME --data DIR --prior tools/ml1d/prior_v1.json
+usage: python tools/ml1d/evaluate_flow.py --network PATH/NAME --data DIR --prior tools/ml1d/prior_v2.json
            [--curves 1000] [--samples 1000] [--seed 5] [--out report.json] [--figure ranks.png]
 """
 from __future__ import annotations
