@@ -51,7 +51,7 @@ def mask_text(mask: dict) -> str:
     return text(MASK_AUTO if mask.get("base_used", True) else MASK_AUTO_ONLY, file=mask["file"], **counts)
 
 
-SPACE_KEYS = ("R_nm", "D_nm", "width", "H_nm", "base_nm")
+SPACE_KEYS = ("R_nm", "D_nm", "width", "H_nm", "base_nm", "coverage")
 """The values a real-space picture of grains is drawn from (``domain.real_space.real_space``)."""
 
 

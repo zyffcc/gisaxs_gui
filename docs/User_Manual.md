@@ -2590,9 +2590,13 @@ Analysing the same request again shows the result it has. **Details ▸ Analyze 
   thickness not to scale), the continuous layer under the grains when there is one, and the grains with their
   radius and height. Right the view from above: grains with the radius and size distribution of the solution. The
   whole scan is drawn as one growing film: the view has the same size in nm in every window, and the grains of a
-  window are those of the window before - they keep their place and grow with the solution's radius, neighbours
-  merge where the distance D grows (coalescence) and new nuclei appear in free places where it shrinks
-  (nucleation). Samples measured after deposition are drawn the same way, ordered by their nominal thickness. The
+  window are those of the window before. While the film is open, new nuclei appear in free places where the
+  distance D shrinks (nucleation) and neighbouring islands merge into one round island where it grows
+  (coalescence). From about half coverage on, nothing disappears or moves any more: the islands grow together into
+  worm-like clusters and then a connected film, and what stays open are channels down to the substrate. The metal
+  drawn covers the share of the view the solution's coverage gives and never less than before (with a continuous
+  layer at least 85 %: the model's layer has no lateral structure of its own, so the channels of the picture are an
+  illustration). Samples measured after deposition are drawn the same way, ordered by their nominal thickness. The
   positions are an illustration; the sizes are those of the solution. The cut on the left runs through the middle
   of the view from above. It follows the window and the solution you choose. Grains that touch are drawn as one piece; a
   piece that runs across the whole view is darker, and the line above the picture says whether the grains are

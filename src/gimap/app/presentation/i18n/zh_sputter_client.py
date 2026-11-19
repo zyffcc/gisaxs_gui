@@ -26,6 +26,10 @@ SPUTTER_CLIENT_ZH = {
     "nuclei where it shrinks; radius, size distribution, height and base layer are those of the solution: "
     "{name}":
         "同一片膜的生长：晶粒沿用前面各窗的晶粒，D 变大处合并，D 变小处出现新核；半径、尺寸分布、高度和底层取自所选的解：{name}",
+    "Connected film {thickness} nm; channels down to the substrate: {share} % of the view":
+        "连通的膜 {thickness} nm；通到基底的沟道占视场的 {share} %",
+    "Connected network across the view; channels down to the substrate: {share} % of the view":
+        "贯穿视场的连通网络；通到基底的沟道占视场的 {share} %",
     "Separate islands": "分立的岛",
     "Coalescing: neighbouring grains touch": "聚并中：相邻晶粒相接",
     "Connected network across the view (percolated)": "连成贯穿视场的网络（已逾渗）",

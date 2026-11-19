@@ -726,25 +726,26 @@ def test_coalescing_grains_and_a_porous_layer_are_drawn_as_they_are(tmp_path):
 
     page = _page(tmp_path)
     page.show()
-    windows = [window(2.0, [entry("candidate 1", 3.0, 1.0, rank=1, D_nm=10.0)], smooth="candidate 1"),
+    windows = [window(2.0, [entry("candidate 1", 3.0, 1.0, rank=1, D_nm=10.0, coverage=0.05)], smooth="candidate 1"),
                window(4.0, [entry("candidate 1", 3.0, 5.2, rank=1, D_nm=10.0, base_nm=2.0)], smooth="candidate 1")]
     assert page.open_client_result(write_result(tmp_path / "out", windows=windows))
     page.image_switch.button(1).click()
     assert page.real_space.arrangement == "islands" and "Separate islands" in _picture_texts(page)
-    page.select_window(1)  # grains of 5.2 nm at 10 nm: a network across the view, on a continuous layer
+    page.select_window(1)  # the same grains grown together on a continuous layer: a film with channels
     assert page.real_space.arrangement == "network"
-    assert "Continuous film 2 nm, grains on top: connected across the view" in _picture_texts(page)
+    caption = next(words for words in _picture_texts(page) if words.startswith("Connected film 2 nm; channels"))
+    assert 0 < float(caption.split(": ")[1].split(" %")[0]) <= 100 * (1 - 0.85) + 1
     # the tiles of a joined film: the grains are its relief, no gap
     assert page.tile_captions["D_nm"].full_text() == "Relief spacing D" and not page.tiles["gap_nm"].isVisibleTo(page)
     assert page.tile_captions["H_nm"].full_text() == "Film height H"
-    # a closed film: drawn as the film - the height of the metal over the whole square (no holes, no grain outlines),
-    # lighter where it is low and darker where the grains rise; the side view is its cut
+    # a connected film: drawn as the film - the height of the metal (no grain outlines), lighter where it is low and
+    # darker where the grains rise, the channels down to the substrate as holes; the side view is its cut
     side, top = page.real_space.figure.axes
     square = top.patches[0]
     assert (square.get_width(), square.get_height()) == (page.real_space.drawn.field,) * 2
     fill, edge = (to_rgba(colour) for colour in real_space_view.METAL_COLOURS["Ag"])
     (image,) = top.images
-    assert not top.collections and not np.ma.getmaskarray(image.get_array()).any()
+    assert np.ma.getmaskarray(image.get_array()).any() and not np.ma.getmaskarray(image.get_array()).all()
     low, high = image.cmap(0.0), image.cmap(1.0)
     assert sum(low[:3]) > sum(fill[:3]) > sum(high[:3])
     assert len(side.collections) == 1

@@ -18,9 +18,11 @@ height and distance. Below, where the metal is, as equivalent thicknesses of den
 
 The positions are drawn at random once (``domain/real_space.py``); the sizes are the solution's. Given the whole
 scan (or a series of samples by thickness), the picture is one growing film: the top view has the same size in nm in
-every window, and a window's grains are those of the window before - grown, merged where the solution's distance D
-grows (coalescence), joined by new nuclei where it shrinks (nucleation); the side view is the cut through the middle
-of the top view.
+every window, and a window's grains are those of the window before: while the film is open, islands are joined by
+new nuclei where the solution's distance D shrinks and round up in pairs where it grows; from about half coverage on
+they only grow together, into worm-like clusters and a connected film whose open parts are channels down to the
+substrate (the drawn coverage follows the solution's and never falls). The side view is the cut through the middle of
+the top view.
 """
 
 from __future__ import annotations
@@ -59,6 +61,8 @@ ARRANGEMENTS = {"islands": "Separate islands",
                 "coalescing": "Coalescing: neighbouring grains touch",
                 "network": "Connected network across the view (percolated)"}
 ON_LAYER = "Continuous film {thickness} nm, grains on top: {grains}"
+CHANNEL_FILM = "Connected film {thickness} nm; channels down to the substrate: {share} % of the view"
+CHANNEL_NETWORK = "Connected network across the view; channels down to the substrate: {share} % of the view"
 GRAINS_ON_LAYER = {"islands": "separate", "coalescing": "touching their neighbours",
                    "network": "connected across the view"}
 LAYER_TITLE = "cross-section of the TiO₂ layer"
@@ -72,6 +76,7 @@ POROUS_NOTE = ("Of the {deposited} nm deposited, as dense-metal thickness: islan
 NO_GRAINS = ("This solution has no arrangement to draw: the package gave neither a grain radius and distance nor where "
              "the metal sits in a porous layer.")
 TEMPLATES = (SIDE_TITLE, TOP_TITLE, X_LABEL, Y_LABEL, HEIGHT_LABEL, POLYMER_NOTE, BASE_NOTE, DRAWN_NOTE, GROWN_NOTE,
+             CHANNEL_FILM, CHANNEL_NETWORK,
              *ARRANGEMENTS.values(), ON_LAYER, *GRAINS_ON_LAYER.values(), LAYER_TITLE, ZOOM_TITLE, DEPTH_LABEL, PORE_NOTE, CAP_NOTE, NO_CAP,
              POROUS_NOTE, NO_GRAINS)
 RELIEF = 0.25
@@ -289,6 +294,10 @@ class RealSpacePicture:
         self._frame(side, SIDE_TITLE, X_LABEL, HEIGHT_LABEL)
         words = (text(ON_LAYER, thickness=_number(space.base), grains=tr(GRAINS_ON_LAYER[self.arrangement]))
                  if space.continuous else tr(ARRANGEMENTS["network"]))
+        if getattr(space, "channels", False) and holes.any():  # a growing film: the channels between the metal
+            share = f"{100.0 * float(holes.mean()):.0f}"
+            words = (text(CHANNEL_FILM, thickness=_number(space.base), share=share) if space.continuous
+                     else text(CHANNEL_NETWORK, share=share))
         figure.text(0.96, 0.93, words, ha="right", va="bottom", fontsize=8.5, fontweight="bold")
         note = GROWN_NOTE if growing is not None else DRAWN_NOTE
         figure.text(0.07, 0.03, text(note, name=name), ha="left", va="bottom", fontsize=7.5)

@@ -66,3 +66,19 @@ def test_the_after_deposition_report_names_stages_from_the_growing_series():
     named = series_stages(rows)
     assert len(named) == 3
     assert named[2] == stage("3.0", "8.0", "5.5", "2.0", "1.0", "0.95") == FILM   # a continuous layer keeps its own
+
+
+def test_the_film_closes_with_channels_and_never_opens_up_again():
+    from src.gimap.features.sputter.domain.real_space import CLOSED_COVER, drawn_coverage, height_map
+
+    spaces = [RealSpace(1.0, 4.0, 0.25, 1.6, 0.0, cover=0.2), RealSpace(2.0, 6.0, 0.25, 3.0, 0.0, cover=0.6),
+              RealSpace(2.2, 6.5, 0.25, 3.2, 0.0, cover=0.5),                 # the solution's coverage dips
+              RealSpace(3.0, 8.0, 0.25, 5.0, 2.0, cover=0.7)]                 # a continuous layer
+    covers = [drawn_coverage(*grown(spaces, index)) for index in range(len(spaces))]
+    assert covers == sorted(covers)                                           # drawn coverage never falls
+    assert abs(covers[1] - 0.6) < 0.05 and covers[3] >= CLOSED_COVER - 0.05
+    space, grains = grown(spaces, 3)
+    _, _, height = height_map(space, grains)
+    holes = height <= 0.0
+    assert space.channels and 0.0 < holes.mean() <= 1.0 - CLOSED_COVER + 0.05   # channels down to the substrate
+    assert height[~holes].min() >= space.base                                 # the layer under the metal footprint
