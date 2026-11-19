@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
-from ..domain import arrangement, real_space, top_grains, visible
+from ..domain import arrangement, grown, real_space, top_grains, visible
 
 DENSE = 0.95
 ISLANDS, IN_CONTACT, NETWORK = "separate islands", "grains in contact", "grains joined into a network"
@@ -105,7 +105,26 @@ def stage(radius, spacing, height, base, relief=None, density=None) -> str:
 
 
 def sample_stage(row: dict) -> str:
+    """The stage of a sample; within a series read by ``read_series`` the one of the growing film (``series_stages``)."""
+    if row.get("stage_in_series"):
+        return row["stage_in_series"]
     return stage(row.get("R"), row.get("d_hex"), row.get("height"), row.get("t_b"), row.get("T"), row.get("rb"))
+
+
+def series_stages(rows: list) -> list:
+    """The stage of every sample of a series (rows by nominal thickness) as the main screen's real-space picture draws
+    them: the samples as one growing film (``grown``), so whether grains are separate, touch or form a network follows
+    the same grains from sample to sample. A sample with a continuous layer keeps its own stage."""
+    spaces = [real_space({"R_nm": row.get("R"), "D_nm": row.get("d_hex"), "H_nm": row.get("height"),
+                          "base_nm": row.get("t_b")}) for row in rows]
+    stages = []
+    for index, row in enumerate(rows):
+        own = stage(row.get("R"), row.get("d_hex"), row.get("height"), row.get("t_b"), row.get("T"), row.get("rb"))
+        growing = grown(spaces, index) if own in (ISLANDS, IN_CONTACT, NETWORK) else None
+        if growing is not None:
+            own = {"islands": ISLANDS, "coalescing": IN_CONTACT}.get(arrangement(*growing), NETWORK)
+        stages.append(own)
+    return stages
 
 
 def joined(row: dict) -> bool:
@@ -140,6 +159,8 @@ def read_series(name: str, folder, bare: str = "") -> Optional[ReportSeries]:
     with table.open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
     rows.sort(key=lambda row: (_number(row.get("nominal_nm")) or 0.0, row.get("label") or ""))
+    for row, named in zip(rows, series_stages(rows)):
+        row["stage_in_series"] = named
     figures = {}
     if (folder / "patterns.png").is_file():
         figures["patterns"] = (folder / "patterns.png").read_bytes()

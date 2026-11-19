@@ -56,3 +56,13 @@ def test_the_series_reaches_a_network_and_the_cut_shows_its_grains():
     row = cut(grains, space.field / 2.0)
     assert row and all(0.0 < grain.radius <= max(g.radius for g in grains) for grain in row)
     assert [grain.x for grain in row] == sorted(grain.x for grain in row)
+
+
+def test_the_after_deposition_report_names_stages_from_the_growing_series():
+    from src.gimap.features.sputter.application.static_report import FILM, series_stages, stage
+
+    rows = [dict(R="1.0", d_hex="4.0", height="1.6", t_b="0"), dict(R="2.4", d_hex="8.0", height="3.6", t_b="0"),
+            dict(R="3.0", d_hex="8.0", height="5.5", t_b="2.0", T="1.0", rb="0.95")]
+    named = series_stages(rows)
+    assert len(named) == 3
+    assert named[2] == stage("3.0", "8.0", "5.5", "2.0", "1.0", "0.95") == FILM   # a continuous layer keeps its own
