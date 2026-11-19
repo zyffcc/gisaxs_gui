@@ -22,6 +22,10 @@ SPUTTER_CLIENT_ZH = {
     "Grains placed at random around the distance D; radius, size distribution, height and base layer are "
     "those of the solution: {name}":
         "晶粒位置按间距 D 随机排布；半径、尺寸分布、高度和底层取自所选的解：{name}",
+    "One growing film: the grains of the earlier windows, grown, merged where D grows and joined by new "
+    "nuclei where it shrinks; radius, size distribution, height and base layer are those of the solution: "
+    "{name}":
+        "同一片膜的生长：晶粒沿用前面各窗的晶粒，D 变大处合并，D 变小处出现新核；半径、尺寸分布、高度和底层取自所选的解：{name}",
     "Separate islands": "分立的岛",
     "Coalescing: neighbouring grains touch": "聚并中：相邻晶粒相接",
     "Connected network across the view (percolated)": "连成贯穿视场的网络（已逾渗）",

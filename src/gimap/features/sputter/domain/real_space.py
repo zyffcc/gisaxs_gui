@@ -29,7 +29,8 @@ tops, and the clusters on top (``layer_particles``, ``pore_density``).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import lru_cache
 import math
 import random
 from typing import Optional
@@ -76,6 +77,8 @@ class RealSpace:
     """Top of the metal above the substrate (base layer + grains), nm."""
     base: float
     """Thickness of the continuous layer under the grains, nm (0: separate islands)."""
+    field_nm: Optional[float] = None
+    """Side of the top view fixed for a whole series (``grown``), nm; None: ``FIELD_DISTANCES`` x D."""
 
     @property
     def continuous(self) -> bool:
@@ -89,12 +92,12 @@ class RealSpace:
     @property
     def field(self) -> float:
         """Side of the square of the top view, nm."""
-        return FIELD_DISTANCES * self.distance
+        return self.field_nm if self.field_nm else FIELD_DISTANCES * self.distance
 
     @property
     def side(self) -> float:
-        """Length of the side view, nm."""
-        return SIDE_DISTANCES * self.distance
+        """Length of the side view, nm (a growing series: the cut across the whole top view)."""
+        return self.field_nm if self.field_nm else SIDE_DISTANCES * self.distance
 
 
 def _positive(value) -> Optional[float]:
@@ -151,6 +154,110 @@ def side_grains(space: RealSpace, seed: int = SEED + 1) -> list:
     draws = _draws(random.Random(seed), count)
     return [_grain(space, (index - 0.5) * space.distance + SHIFT * space.distance * dx, 0.0, size)
             for index, (dx, _dy, size) in enumerate(draws)]
+
+
+# -- a series drawn as one growing film ---------------------------------------------------------------------------
+MAX_GROWN = 1200
+"""At most this many grains in the field of a growing series: the field is made smaller when the densest window
+(the smallest D) would need more."""
+NUCLEUS_TRIES = 40
+"""Random places tried for a new nucleus; the one farthest from the grains already there is taken."""
+
+
+def series_field(spaces) -> Optional[float]:
+    """Side of the top view shared by every window of a series, nm: ``FIELD_DISTANCES`` x the largest D, smaller when
+    the smallest D would put more than ``MAX_GROWN`` grains into it."""
+    drawn = [space for space in spaces if space is not None]
+    if not drawn:
+        return None
+    densest = 2.0 / (math.sqrt(3.0) * min(space.distance for space in drawn) ** 2)
+    return min(FIELD_DISTANCES * max(space.distance for space in drawn), math.sqrt(MAX_GROWN / densest))
+
+
+def _count(space: RealSpace, field: float) -> int:
+    """Grains of the hexagonal number density of the distance D in the field."""
+    return max(1, int(round(2.0 / (math.sqrt(3.0) * space.distance ** 2) * field * field)))
+
+
+@lru_cache(maxsize=8)
+def _growth(spaces: tuple, seed: int) -> tuple:
+    """The grains of every window of a series as one growing film: (x, y, z) arrays per window (None where the
+    window has no picture). Window by window, in order: when the number density of the solution (1 / D^2) asks for
+    more grains, new nuclei appear at free places (nucleation); when it asks for fewer, the pairs of grains that
+    overlap most merge (coalescence), the merged grain at their volume-weighted centre with the larger size draw. A
+    grain keeps its place and its size draw z (a standard normal number), so its radius R exp(width z) follows the
+    solution's R: nothing is drawn again from one window to the next."""
+    field = series_field(spaces)
+    rng = random.Random(seed)
+    x, y, z = np.zeros(0), np.zeros(0), np.zeros(0)
+    states = []
+    for space in spaces:
+        if space is None:
+            states.append(None)
+            continue
+        target = _count(space, field)
+        if target > len(x):                                      # nucleation: new grains at free places
+            new_x, new_y, new_z = list(x), list(y), list(z)
+            for _ in range(target - len(x)):
+                tries = [(rng.uniform(0.0, field), rng.uniform(0.0, field)) for _ in range(NUCLEUS_TRIES)]
+                if new_x:
+                    px, py = np.asarray(new_x), np.asarray(new_y)
+                    room = [float(np.min((px - a) ** 2 + (py - b) ** 2)) for a, b in tries]
+                    a, b = tries[int(np.argmax(room))]
+                else:
+                    a, b = tries[0]
+                new_x.append(a); new_y.append(b)
+                new_z.append(max(-SPREAD_LIMIT, min(SPREAD_LIMIT, rng.gauss(0.0, 1.0))))
+            x, y, z = np.asarray(new_x), np.asarray(new_y), np.asarray(new_z)
+        while len(x) > target:                                   # coalescence: the most overlapping pairs merge
+            r = space.radius * np.exp(space.width * z)
+            gap = np.sqrt((x[:, None] - x[None, :]) ** 2 + (y[:, None] - y[None, :]) ** 2) - (r[:, None] + r[None, :])
+            first, second = np.triu_indices(len(x), 1)
+            order = np.argsort(gap[first, second], kind="stable")
+            used, merges = set(), []
+            for pair in order:
+                i, j = int(first[pair]), int(second[pair])
+                if i in used or j in used:
+                    continue
+                used.update((i, j)); merges.append((i, j))
+                if len(merges) >= len(x) - target:
+                    break
+            keep = np.ones(len(x), bool)
+            for i, j in merges:
+                wi, wj = r[i] ** 3, r[j] ** 3
+                x[i], y[i] = (wi * x[i] + wj * x[j]) / (wi + wj), (wi * y[i] + wj * y[j]) / (wi + wj)
+                z[i] = max(z[i], z[j])
+                keep[j] = False
+            x, y, z = x[keep], y[keep], z[keep]
+        states.append((x.copy(), y.copy(), z.copy()))
+    return tuple(states)
+
+
+def grown(spaces, index: int, seed: int = SEED):
+    """Window ``index`` of a series (one ``RealSpace`` or None per window, in time or thickness order) drawn as one
+    growing film: (space with the series' fixed field, grains of the top view), or None when that window has no
+    picture. The grains of a window are those of the window before, grown, merged or joined by new nuclei
+    (``_growth``)."""
+    spaces = tuple(spaces)
+    if not 0 <= index < len(spaces) or spaces[index] is None:
+        return None
+    state = _growth(spaces, seed)[index]
+    space = replace(spaces[index], field_nm=series_field(spaces))
+    xs, ys, zs = state
+    grains = [_grain(space, float(a), float(b), float(c)) for a, b, c in zip(xs, ys, zs)]
+    return space, visible(space, grains)
+
+
+def cut(grains: list, y: float) -> list:
+    """The grains crossed by the line y of the top view, as caps of the side view: the chord half-width and the cap
+    height on that line."""
+    row = []
+    for grain in grains:
+        dy = y - grain.y
+        if abs(dy) < grain.radius:
+            share = math.sqrt(max(1.0 - (dy / grain.radius) ** 2, 0.0))
+            row.append(Grain(grain.x, 0.0, grain.radius * share, grain.height * share))
+    return sorted(row, key=lambda grain: grain.x)
 
 
 def clusters(grains: list) -> list:
@@ -344,6 +451,6 @@ def drawn_coverage(space: RealSpace, grains: list) -> float:
     return covered / (count * count)
 
 
-__all__ = ["FIELD_DISTANCES", "Grain", "POROUS_SKETCH_KEYS", "PorousSpace", "RealSpace", "SHIFT",
+__all__ = ["FIELD_DISTANCES", "Grain", "MAX_GROWN", "cut", "grown", "series_field", "POROUS_SKETCH_KEYS", "PorousSpace", "RealSpace", "SHIFT",
            "SIDE_DISTANCES", "SKETCH_KEYS", "arrangement", "clusters", "drawn_coverage", "layer_particles",
            "pore_density", "porous_space", "real_space", "side_grains", "spanning", "top_grains", "visible"]

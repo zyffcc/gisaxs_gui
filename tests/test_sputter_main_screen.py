@@ -704,8 +704,11 @@ def test_the_solution_shown_can_be_seen_in_real_space(tmp_path):
     assert any("Candidate 1" in words for words in _picture_texts(page))
     page.entry_control.button(1).click()  # another solution: no base layer, another radius
     assert (page.real_space.drawn.radius, page.real_space.drawn.base) == (3.0, 0.0)
+    field = page.real_space.drawn.field
     page.select_window(1)
     assert page.real_space.drawn.radius == 4.0
+    assert page.real_space.drawn.field == field  # one growing film: the same field in every window
+    assert any("One growing film" in words for words in _picture_texts(page))
     page.image_switch.button(0).click()
     assert page.pattern_host.currentIndex() == 0 and page.patterns.titles[1] == "Model image: Candidate 1"
     # a porous result without the geometry of its metal: nothing to draw, and the picture says why

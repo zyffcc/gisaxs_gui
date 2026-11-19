@@ -16,7 +16,11 @@ the pores as a tint whose strength follows its Gaussian in depth, the cap layer 
 covers. Right the top of one capped particle, enlarged: the cap at its thickness and the clusters at their radius,
 height and distance. Below, where the metal is, as equivalent thicknesses of dense metal.
 
-The positions are drawn at random once (``domain/real_space.py``); the sizes are the solution's.
+The positions are drawn at random once (``domain/real_space.py``); the sizes are the solution's. Given the whole
+scan (or a series of samples by thickness), the picture is one growing film: the top view has the same size in nm in
+every window, and a window's grains are those of the window before - grown, merged where the solution's distance D
+grows (coalescence), joined by new nuclei where it shrinks (nucleation); the side view is the cut through the middle
+of the top view.
 """
 
 from __future__ import annotations
@@ -29,8 +33,8 @@ from PyQt5.QtWidgets import QLabel, QSizePolicy
 
 from src.gimap.app.presentation.i18n import tr
 
-from ..application import (FILM_SUBSTRATES, arrangement, clusters, height_map, layer_particles, pore_density,
-                           porous_space, profile, real_space, side_grains, spanning, top_grains, visible)
+from ..application import (FILM_SUBSTRATES, arrangement, clusters, cut, grown, height_map, layer_particles,
+                           pore_density, porous_space, profile, real_space, side_grains, spanning, top_grains, visible)
 from .texts import text
 
 METAL_COLOURS = {"Ag": ("#b8c0c8", "#5f6b76"), "Au": ("#e3b23c", "#8a6512"), "Cu": ("#d08a5c", "#7a4220")}
@@ -48,6 +52,9 @@ POLYMER_NOTE = "polymer (thickness not to scale)"
 BASE_NOTE = "continuous layer {thickness} nm"
 DRAWN_NOTE = ("Grains placed at random around the distance D; radius, size distribution, height and base layer are "
               "those of the solution: {name}")
+GROWN_NOTE = ("One growing film: the grains of the earlier windows, grown, merged where D grows and joined by new "
+              "nuclei where it shrinks; radius, size distribution, height and base layer are those of the solution: "
+              "{name}")
 ARRANGEMENTS = {"islands": "Separate islands",
                 "coalescing": "Coalescing: neighbouring grains touch",
                 "network": "Connected network across the view (percolated)"}
@@ -64,7 +71,7 @@ POROUS_NOTE = ("Of the {deposited} nm deposited, as dense-metal thickness: islan
                "pores {pores} nm. TiO₂ particles of {particle} nm radius; positions drawn at random: {name}")
 NO_GRAINS = ("This solution has no arrangement to draw: the package gave neither a grain radius and distance nor where "
              "the metal sits in a porous layer.")
-TEMPLATES = (SIDE_TITLE, TOP_TITLE, X_LABEL, Y_LABEL, HEIGHT_LABEL, POLYMER_NOTE, BASE_NOTE, DRAWN_NOTE,
+TEMPLATES = (SIDE_TITLE, TOP_TITLE, X_LABEL, Y_LABEL, HEIGHT_LABEL, POLYMER_NOTE, BASE_NOTE, DRAWN_NOTE, GROWN_NOTE,
              *ARRANGEMENTS.values(), ON_LAYER, *GRAINS_ON_LAYER.values(), LAYER_TITLE, ZOOM_TITLE, DEPTH_LABEL, PORE_NOTE, CAP_NOTE, NO_CAP,
              POROUS_NOTE, NO_GRAINS)
 RELIEF = 0.25
@@ -120,9 +127,12 @@ class RealSpacePicture:
         self.canvas.setMinimumHeight(220)
         layout.addWidget(self.canvas, 1)
 
-    def show(self, values: dict, metal: str, substrate: str, name: str) -> None:
-        """The solution with ``values`` (its quantities and the picture's own keys), shown as ``name``."""
-        self._last = ("space", dict(values), metal, substrate, name)
+    def show(self, values: dict, metal: str, substrate: str, name: str, series=None, index: int = 0) -> None:
+        """The solution with ``values`` (its quantities and the picture's own keys), shown as ``name``. ``series``:
+        the values of every window of the scan (or every sample of a series, by thickness; None where a window has no
+        solution) with this one at ``index``: the grains are then those of one growing film (``domain.grown``)."""
+        shown = tuple(dict(item) if item else None for item in series) if series else None
+        self._last = ("space", dict(values), metal, substrate, name, shown, int(index))
         self._draw()
 
     def show_message(self, message: str) -> None:
@@ -147,12 +157,13 @@ class RealSpacePicture:
         if self._last[0] == "message":
             figure.text(.5, .5, self._last[1], ha="center", va="center", fontsize=10, wrap=True)
         else:
-            values, metal, substrate, name = self._last[1:]
+            values, metal, substrate, name, series, index = self._last[1:]
             grains, porous = real_space(values), porous_space(values)
             if porous is not None:
                 self._porous(porous, metal, name)
             elif grains is not None:
-                self._grains(grains, metal, substrate, name)
+                growing = grown([real_space(item) if item else None for item in series], index) if series else None
+                self._grains(grains, metal, substrate, name, growing)
             else:
                 figure.text(.5, .5, tr(NO_GRAINS), ha="center", va="center", fontsize=10, wrap=True)
         restyle_figure(figure)
@@ -172,7 +183,7 @@ class RealSpacePicture:
         axes.tick_params(labelsize=7)
 
     # -- grains on a flat substrate or a polymer film -------------------------------------------------------------
-    def _grains(self, space, metal: str, substrate: str, name: str) -> None:
+    def _grains(self, space, metal: str, substrate: str, name: str, growing=None) -> None:
         from matplotlib.patches import Circle, Polygon, Rectangle
 
         fill, edge = METAL_COLOURS.get(metal, METAL_COLOURS["Ag"])
@@ -184,17 +195,21 @@ class RealSpacePicture:
         self._axes, self.drawn = (side, top), space
 
         # top view first: which clusters cross it (they are drawn darker in both views)
-        grains = visible(space, top_grains(space))
+        if growing is not None:                        # one growing film: the grains of the windows before, grown on
+            space, grains = growing
+            self.drawn = space
+        else:
+            grains = visible(space, top_grains(space))
         labels = clusters(grains)
         crossing = spanning(grains, labels, space.field)
         self.arrangement = arrangement(space, grains)
 
         if space.continuous or self.arrangement == "network":   # a connected film: the film itself, not grain outlines
-            self._film(space, grains, side, top, fill, edge, polymer, substrate, name)
+            self._film(space, grains, side, top, fill, edge, polymer, substrate, name, growing)
             return
 
         # side view: substrate (or polymer film), base layer, grains (touching caps as one piece)
-        row = side_grains(space)
+        row = cut(grains, space.field / 2.0) if growing is not None else side_grains(space)
         tallest = max([space.base + grain.height for grain in row] + [space.height, space.radius])
         below = max(0.3 * tallest, 0.15 * space.side / 4.0)
         side.add_patch(Rectangle((0, -below), space.side, below, facecolor=POLYMER if polymer else SUBSTRATE,
@@ -232,9 +247,10 @@ class RealSpacePicture:
         if space.continuous:  # a closed film: what is said is the film, then the grains on it
             words = text(ON_LAYER, thickness=_number(space.base), grains=tr(GRAINS_ON_LAYER[self.arrangement]))
         figure.text(0.96, 0.93, words, ha="right", va="bottom", fontsize=8.5, fontweight="bold")
-        figure.text(0.07, 0.03, text(DRAWN_NOTE, name=name), ha="left", va="bottom", fontsize=7.5)
+        note = GROWN_NOTE if growing is not None else DRAWN_NOTE
+        figure.text(0.07, 0.03, text(note, name=name), ha="left", va="bottom", fontsize=7.5)
 
-    def _film(self, space, grains, side, top, fill, edge, polymer, substrate, name) -> None:
+    def _film(self, space, grains, side, top, fill, edge, polymer, substrate, name, growing=None) -> None:
         """A connected film: the top view is the height of the metal (darker = higher), the holes of a network in the
         colour of what is under it; the side view is the cut through the film along the middle of the top view."""
         from matplotlib.colors import LinearSegmentedColormap
@@ -274,7 +290,8 @@ class RealSpacePicture:
         words = (text(ON_LAYER, thickness=_number(space.base), grains=tr(GRAINS_ON_LAYER[self.arrangement]))
                  if space.continuous else tr(ARRANGEMENTS["network"]))
         figure.text(0.96, 0.93, words, ha="right", va="bottom", fontsize=8.5, fontweight="bold")
-        figure.text(0.07, 0.03, text(DRAWN_NOTE, name=name), ha="left", va="bottom", fontsize=7.5)
+        note = GROWN_NOTE if growing is not None else DRAWN_NOTE
+        figure.text(0.07, 0.03, text(note, name=name), ha="left", va="bottom", fontsize=7.5)
 
     # -- a porous TiO₂ layer ----------------------------------------------------------------------------------------
     def _porous(self, space, metal: str, name: str) -> None:

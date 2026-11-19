@@ -2588,10 +2588,13 @@ Analysing the same request again shows the result it has. **Details ▸ Analyze 
 - **Patterns | Real Space**, at the right of the window line: **Real Space** draws the solution shown in place of
   the two images, in nm. Left a cut through a row of grains: the substrate (a polymer film is drawn, its
   thickness not to scale), the continuous layer under the grains when there is one, and the grains with their
-  radius and height. Right the view from above of a square seven distances D wide: grains with the radius and
-  size distribution of the solution, placed at random around the distance D. The positions are an illustration
-  (the same for every window, so only the sizes change when you move through the scan); the sizes are those of
-  the solution. It follows the window and the solution you choose. Grains that touch are drawn as one piece; a
+  radius and height. Right the view from above: grains with the radius and size distribution of the solution. The
+  whole scan is drawn as one growing film: the view has the same size in nm in every window, and the grains of a
+  window are those of the window before - they keep their place and grow with the solution's radius, neighbours
+  merge where the distance D grows (coalescence) and new nuclei appear in free places where it shrinks
+  (nucleation). Samples measured after deposition are drawn the same way, ordered by their nominal thickness. The
+  positions are an illustration; the sizes are those of the solution. The cut on the left runs through the middle
+  of the view from above. It follows the window and the solution you choose. Grains that touch are drawn as one piece; a
   piece that runs across the whole view is darker, and the line above the picture says whether the grains are
   separate, coalescing or a connected network (percolated). Once the film is joined - a continuous layer under the
   grains, or grains joined into a network across the view - it is drawn as the film itself, not as grains: the view

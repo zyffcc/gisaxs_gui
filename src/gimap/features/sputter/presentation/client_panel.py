@@ -25,7 +25,7 @@ from src.gimap.app.presentation.components import SegmentedControl
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.theme import set_role
 
-from ..application import ClientResult, ClientWindow, arrangement, real_space, top_grains, visible
+from ..application import ClientResult, ClientWindow, arrangement, grown, real_space, top_grains, visible
 from .client_texts import (JOINT_FAILED, CHOICE_NOT_SAVED, EMPTY_ACTION, EMPTY_MESSAGE, EMPTY_TITLE, PACKAGE_ACTION, PACKAGE_TITLE,
                            MASK_AUTO, MASK_AUTO_ONLY, MASK_FILE, RELATIVE_RADIUS_TIP, RESULT_NAME, SAMPLE_CONTROLS, SAMPLE_ERROR, WINDOW_CONTROLS,
                            WINDOW_ERROR, entry_name, entry_segment, entry_tip, range_text, shown_number, window_text,
@@ -51,14 +51,26 @@ def mask_text(mask: dict) -> str:
     return text(MASK_AUTO if mask.get("base_used", True) else MASK_AUTO_ONLY, file=mask["file"], **counts)
 
 
-def _joined(entry) -> bool:
+SPACE_KEYS = ("R_nm", "D_nm", "width", "H_nm", "base_nm")
+"""The values a real-space picture of grains is drawn from (``domain.real_space.real_space``)."""
+
+
+def _space_values(entry) -> Optional[dict]:
+    return {key: entry.value(key) for key in SPACE_KEYS} if entry is not None else None
+
+
+def _joined(entry, series=None, index: int = 0) -> bool:
     """The solution is a joined film: a continuous layer under the grains, or grains joined into a network across the
-    real-space picture (``domain.real_space.arrangement``)."""
-    values = {key: entry.value(key) for key in ("R_nm", "D_nm", "width", "H_nm", "base_nm")}
-    space = real_space(values)
+    real-space picture (``domain.real_space.arrangement``; of the growing film when the series is given)."""
+    space = real_space(_space_values(entry))
     if space is None:
         return False
-    return space.continuous or arrangement(space, visible(space, top_grains(space))) == "network"
+    if space.continuous:
+        return True
+    growing = grown([real_space(item) if item else None for item in series], index) if series else None
+    if growing is not None:
+        return arrangement(*growing) == "network"
+    return arrangement(space, visible(space, top_grains(space))) == "network"
 
 
 class ClientPanelMixin:
@@ -262,7 +274,7 @@ class ClientPanelMixin:
         entry = window.chosen(self.client_choices) if window is not None else None
         porous = result is not None and result.porous
         self.default_button.setVisible(entry is not None and entry.label != window.default_label())
-        joined = not porous and entry is not None and _joined(entry)
+        joined = not porous and entry is not None and _joined(entry, *self._space_series())
         for key, caption, unit, tip in TILES:
             value = entry.value(key) if entry is not None else None
             digits = TILE_DIGITS.get(key, 3)
@@ -313,7 +325,27 @@ class ClientPanelMixin:
             self.real_space.show_message(text(SAMPLE_ERROR if static else WINDOW_ERROR, reason=reason))
             return
         substrate = getattr(window, "substrate", "") or result.substrate
-        self.real_space.show(entry.values, result.metal, substrate, entry_name(entry.label))
+        series, index = self._space_series()
+        self.real_space.show(entry.values, result.metal, substrate, entry_name(entry.label), series, index)
+
+    def _space_series(self) -> tuple:
+        """(values of the chosen solution of every window of the shown window's series, its place): the windows of a
+        scan in time order; the samples of a series on the same substrate by nominal thickness. (None, 0) without a
+        window. The real-space picture draws them as one growing film."""
+        window, result = self.client_window(), self.client_result
+        if window is None or result is None:
+            return None, 0
+        windows = list(result.windows)
+        if result.static:
+            substrate = window.substrate or result.substrate
+            same = [(position, item) for position, item in enumerate(windows)
+                    if (item.substrate or result.substrate) == substrate]
+            same.sort(key=lambda pair: (pair[1].nominal_nm is None, pair[1].nominal_nm or 0.0, pair[0]))
+            windows = [item for _, item in same]
+        index = next((place for place, item in enumerate(windows) if item is window), None)
+        if index is None:
+            return None, 0
+        return [_space_values(item.chosen(self.client_choices)) for item in windows], index
 
     def _patterns(self, window: ClientWindow):
         """The images of a window (the last few are kept: going back and forth does not read them again)."""
