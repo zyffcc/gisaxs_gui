@@ -92,6 +92,8 @@ def size_averages(family: str, q, *, radius, radius_spread, law: str = "number_g
     form = np.empty((rows, q.size))
     coh = np.empty_like(form) if coherent else None
     fast = _tabulated_rows(family, law, spread, h_spread, terms, coherent) if panels is None else np.zeros(rows, bool)
+    if family == "sphere" and len(terms) == 2 and fast.any():
+        fast &= _direct_panels(law, q, radius, spread, qz) >= TWO_PATH_PANELS
     if fast.any():
         index = np.flatnonzero(fast)
         if family == "cylinder":
@@ -166,6 +168,19 @@ def _tabulated_rows(family, law, spread, h_spread, terms, coherent) -> np.ndarra
     if family == "sphere" and (len(terms) > 2 or (coherent and any(z != 0.0 for _c, z in terms))):
         return np.zeros_like(ok)
     return ok
+
+
+TWO_PATH_PANELS = 16
+"""Spheres with two paths come from the tables (two Born terms and ``tables.sphere_cross``) when the direct quadrature
+would need at least this many panels (128 nodes): on fewer it is as fast and exact."""
+
+
+def _direct_panels(law, q, radius, spread, qz) -> np.ndarray:
+    """Panels of the direct quadrature of every row of spheres (as ``size_averages`` chooses them)."""
+    q_top = float(q.max()) if q.size else 0.0
+    cut = envelope.q_cut(law, radius, spread, shapes.RADIUS_POWER["sphere"])
+    reach = np.hypot(np.minimum(q_top, envelope.BLEND * cut), qz)
+    return sizes.panel_counts(reach, sizes.extent(law, radius, spread, shapes.RADIUS_POWER["sphere"]))
 
 
 ENVELOPE_PANELS = 16

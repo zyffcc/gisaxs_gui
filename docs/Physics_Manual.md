@@ -1849,11 +1849,14 @@ f(x) = Re[A(x) e^{ix}], A(x) = −3/x² − 3i/x³ exactly, X is a sum of four t
 times the moments m_k(ν) = ⟨n t^{6−k} e^{iν(t−1)}⟩/⟨n t⁶⟩ (k = 4, 5, 6, ν = ωR̄, ω = ±a ± b − (Q₁ − Q₂)), which depend
 on ν and σR/R only; they are tabulated on the nodes of the direct quadrature (3.6 MB more) and interpolated in the
 same way. As in the direct quadrature, the terms the envelope of the pair leaves out (ω ≈ ±(a + b) − (Q₁ − Q₂)) fade
-with the smoothstep of the in-plane q, and below bR̄ = 2 X is taken on the nodes. On random rows (R from 0.3 to 400 nm,
-σR/R 0.02–0.8, both laws, k_i above and below k_f; 800 rows) they agree with the direct quadrature to 3.5 · 10⁻⁶
-of the curve's largest value (median; 99 % within 4.4 · 10⁻⁴); the largest differences, up to 6 · 10⁻³, are where
-|r| ≈ 1 with a phase near π and the two paths cancel to 10⁻³ of either (there 10⁻⁵ of each path). They are 20–30
-times faster (130 times for broad log-normal distributions). Narrower distributions
+with the smoothstep of the in-plane q, and below bR̄ = 2 X is taken on the nodes. A row comes from these tables
+when the direct quadrature would need 16 panels (128 nodes) or more; on fewer the direct quadrature is as fast and
+is kept. On random rows (R from 0.3 to 400 nm, σR/R 0.02–0.8, both laws, k_i above and below k_f; 800 rows) the
+result differs from the direct quadrature by at most 1.4 · 10⁻³ of the curve's largest value (99 % within
+4.2 · 10⁻⁵; the rows left to the direct quadrature not at all); with the tables for every row, by 3.5 · 10⁻⁶
+(median), 99 % within 4.4 · 10⁻⁴ and up to 6 · 10⁻³ where |r| ≈ 1 with a phase near π and the two paths cancel to
+10⁻³ of either (there 10⁻⁵ of each path). Two paths are 23 times faster on these rows, 1.6–2 times on small
+spheres of moderate width (R 2–10 nm, σR/R 0.1–0.35) and up to 130 times on broad log-normal distributions. Narrower distributions
 (below x̄ = qR̄ = 2 too), sizes by intensity, the DWBA, two paths in the decoupling approximation and the coherent term
 at q_z ≠ 0 use the direct quadrature.
 Earlier, Fitting used rectangle rules of fixed size (25 radii of a sphere, 13 radii and 13 heights
@@ -2638,23 +2641,38 @@ reference (section 9.12). 1D Predict V5, on the same 200 curves, had median erro
 (chapter 10).
 
 **GALAXI.** The cut of the public GALAXI frame and three Poisson draws of BornAgain's model of it (log-normal radii,
-number mean 6.24 nm, radial paracrystal of 53.6 nm; four-term DWBA), as in section 9.12
-(`tools/benchmarks/galaxi_posterior.py`, `galaxi_posterior.json`). One sphere population with a paracrystal, Born at
-the cut's q_z:
+number mean 6.24 nm, radial paracrystal of 53.6 nm; four-term DWBA; α_i = 0.463°, α_f = 0.18°, near the critical
+angle of Si), as in section 9.12 (`tools/benchmarks/galaxi_posterior.py`, `galaxi_posterior.json`). One sphere
+population with a paracrystal, Born at the cut's q_z:
 
 | source | Predict: R (nm) | Predict: D (nm), 68 % | χ²/N | fit1d: R, D (nm) | χ²/N |
 |---|---|---|---|---|---|
-| BornAgain's model, three draws | 4.78–4.84 | 49.2–52.1, intervals [41–44, 59–63], each holds 53.6 | 4.3–4.5 | 4.88–4.93, 56.9–57.6 | 6.1–6.5 |
+| BornAgain's model, three draws | 4.84–4.88 | 49.2 [39.7, 61.0] on one draw; 676 and 1350 (*unconstrained*) on the others | 4.4–5.4 | 4.88–4.93, 56.9–57.6 | 6.1–6.5 |
+| the same, log-normal sizes | 4.84–4.90 | 49.3–51.3, intervals [41–43, 59–62], each holds 53.6 | 4.2–4.4 | | |
 | measured cut | 5.16 | 46.4 [40.0, 53.9] | 8.8 | 5.20, 56.4 | 14.4 |
 
-With the composition chosen among one to three sphere populations, Predict takes two spheres (a broad log-normal is
-two Gaussians) on two of the draws and one sphere on the third, with D 42–53 nm, and on the measured cut two spheres,
-one with a paracrystal, D 48.4 nm [42.5, 55.2]; fit1d chose a sphere of R 0.18 nm on one of the draws. All these solutions were compared by BIC (the model does not describe the cut
+With the network that came before this one (Born term only) the Gaussian sizes gave D 49.2–52.1 nm on all three draws
+(intervals [41–44, 59–63], each holding 53.6). With the composition chosen among one to three sphere populations,
+Predict now takes one sphere with a paracrystal on the measured cut (R 5.16 nm, D 46.4 nm), and on the draws a sphere
+with a second one whose paracrystal is at a bound or unconstrained (twice) or three spheres, one of R 0.21 nm flagged
+*small* (D of the second 51.2 nm); before: two spheres on two draws and one on the third, D 42–53 nm. fit1d chose a
+sphere of R 0.18 nm on one of the draws. All these solutions were compared by BIC (the model does not describe the cut
 within σ: χ²/N 4–9), and their intervals are least-squares errors with the model error: the cut has a shoulder, not a
-resolved peak, so D is fixed to ±7–10 nm (±3 nm without the model error). fit1d's four-term DWBA, which
-Fitting does not have, describes the simulated cuts better (χ²/N 1.75, D 53.8–55.1 nm). Time: 9–12 s per variant,
-45–53 s for the choice among compositions (this PC). GALAXI was used to set the tail's prior and the rules of steps 3 and 5, so
-this is no independent test.
+resolved peak, so D is fixed to ±7–10 nm (±3 nm without the model error). fit1d's four-term DWBA, which Fitting does
+not have, describes the simulated cuts better (χ²/N 1.75, D 53.8–55.1 nm).
+
+*Both angles* (two paths, r free). The two paths describe these cuts within their errors (χ²/N 0.96–1.46 against
+4.2–8.8), but they do not recover the particles: with one sphere population, R 8.0 nm on the measured cut and 11.3 nm,
+500 nm and 500 nm (at the bound, flagged *large*) on the draws, D 450–2600 nm instead of 53.6 nm; with the composition chosen
+among one to three spheres, two spheres on the measured cut (R 6.06 nm with D 43.8 nm [31.1, 61.7], and 8.8 nm), on
+one draw R 5.0 nm with D 104 nm [68, 159] and a sphere of 525 nm at the bound, on the other two one sphere of
+15.6–16.1 nm without a paracrystal; the fitted |r| 0.31–0.94 at phases spread over the whole circle. On this cut
+(broad log-normal sizes, α_f at the critical angle) the free r takes up what the sizes and the paracrystal should
+describe; the solutions it gives carry flags (*at bound*, *large*, *unconstrained*) and should not be taken without
+them being checked against what is known of the sample. Time (this PC): 12–14 s per variant with one sphere and 46–63 s
+for the choice at the Born term; 14–31 s and 141–193 s with two paths (56 min for the choice on the measured cut
+before the cross term was tabulated, section 9.3). GALAXI was used to set the tail's prior and the rules of steps 3
+and 5, so this is no independent test.
 
 Implementation: `src/gimap/features/fitting/domain/posterior/`, `application/single_predict.py`,
 `infrastructure/adapters/posterior_job.py`; training and checks: `tools/ml1d/`; benchmarks:

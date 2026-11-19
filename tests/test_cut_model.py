@@ -242,7 +242,8 @@ def test_the_tables_are_the_direct_average_and_a_stale_file_is_not_used(tmp_path
 
 def test_two_paths_from_the_tables_are_the_direct_average(monkeypatch) -> None:
     """Spheres with two paths: two Born terms from the tables and the cross term from the moments m_k
-    (``tables.sphere_cross``), against the direct quadrature of the same definition; k_i > k_f and k_i < k_f."""
+    (``tables.sphere_cross``; every row, also those the default leaves to the direct quadrature, ``TWO_PATH_PANELS``),
+    against the direct quadrature of the same definition; k_i > k_f and k_i < k_f."""
     from src.gimap.features.fitting.domain.cut_model import model, tables
 
     q = np.geomspace(0.01, 3.0, 300)
@@ -251,6 +252,7 @@ def test_two_paths_from_the_tables_are_the_direct_average(monkeypatch) -> None:
         for law in ("number_gauss", "lognormal"):
             for radius, spread in ((1.5, 0.05), (4.0, 0.15), (12.0, 0.3), (60.0, 0.5)):
                 common = dict(radius=radius, radius_spread=spread, law=law, geometry=geometry)
+                monkeypatch.setattr(model, "TWO_PATH_PANELS", 0)
                 fast, _c = model.size_averages("sphere", q, **common)
                 monkeypatch.setattr(tables, "usable", lambda law, rel: np.zeros(np.atleast_1d(rel).size, bool))
                 slow, _c = model.size_averages("sphere", q, **common)

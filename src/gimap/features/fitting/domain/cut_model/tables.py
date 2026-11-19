@@ -303,9 +303,13 @@ def cylinder(q, law, radius, radius_spread, height, height_spread, qz=0.0, coher
 # interpolation. As in the direct quadrature, the terms σ₁ = σ₂ are weighted by 1 − the smoothstep of the in-plane q
 # (``envelope.blend``: they are what the envelope of the pair, ``envelope.sphere_pair``, leaves out) and the terms
 # σ₁ ≠ σ₂ are kept everywhere; with Q₂ < 0 (k_i < k_f) a term σ₁ = σ₂ is slow at small q, so the in-plane q, not
-# a + b, decides. Where b·mean < ``X_SMALL`` (the terms cancel there) X is taken directly on the nodes.
+# a + b, decides. Where b·mean < ``X_CROSS`` (the terms cancel there) X is taken directly on the nodes.
 
 MOMENTS = (4, 5, 6)
+X_CROSS = X_SMALL
+"""Below b·mean = X_CROSS the cross term is taken on the nodes: its four terms, each up to 2.25/(a b mean²)³, cancel
+there, and the moments' interpolation error grows with them (at 1 instead of 2 the largest difference from the direct
+quadrature on random rows rose from 6 · 10⁻³ to 1.6 · 10⁻², where two paths of |r| ≈ 1 cancel, for no gain in time)."""
 V_MAX = 2.0 * U_MAX + 2.0
 """The moments are 0 beyond this v (e^{−v²/2} < 10⁻¹⁴⁶ for a Gaussian)."""
 
@@ -376,14 +380,26 @@ def build_moments(law: str) -> dict:
     return table
 
 
-def _cross_direct(law, a, b, delta, radius, rel):
-    """X of one row on the nodes of the direct quadrature, at in-plane points with path wavenumbers a, b (N,)."""
-    span = sizes.extent(law, radius, rel, 6)
-    panels = int(sizes.panel_counts(float(np.max(a)) + abs(delta), span)[0])
-    r, n = (x[0] for x in sizes.nodes(law, radius, rel, power=6, panels=panels))
-    w = n * r**6
-    w = w * np.exp(-1j * delta * r) / w.sum()
-    return (shapes.sphere_amplitude(a[:, None] * r[None, :]) * shapes.sphere_amplitude(b[:, None] * r[None, :])) @ w
+def _cross_direct(law, a, b, small, delta, radius, rel):
+    """X on the nodes of the direct quadrature where ``small`` (B, N): rows with the same rule together."""
+    out = np.zeros(small.shape, complex)
+    rows = np.flatnonzero(small.any(axis=1))
+    top = np.max(np.where(small[rows], a[None, :], 0.0), axis=1)
+    panels = sizes.panel_counts(top + abs(delta), sizes.extent(law, radius[rows], rel[rows], 6))
+    for count in np.unique(panels):
+        group = rows[panels == count]
+        columns = np.flatnonzero(small[group].any(axis=0))
+        r, n = sizes.nodes(law, radius[group], rel[group], power=6, panels=int(count))
+        w = n * r**6
+        w = w * np.exp(-1j * delta * r) / w.sum(axis=1, keepdims=True)
+        f = (shapes.sphere_amplitude(a[columns][None, :, None] * r[:, None, :])
+             * shapes.sphere_amplitude(b[columns][None, :, None] * r[:, None, :]))
+        values = np.einsum("gcn,gn->gc", f, w)
+        mine = small[np.ix_(group, columns)]
+        block = out[np.ix_(group, columns)]
+        block[mine] = values[mine]
+        out[np.ix_(group, columns)] = block
+    return out
 
 
 def sphere_cross(law: str, q, q_1: float, q_2: float, radius, rel) -> np.ndarray:
@@ -395,27 +411,33 @@ def sphere_cross(law: str, q, q_1: float, q_2: float, radius, rel) -> np.ndarray
     tab = build_moments(law)
     sigma = _relative_damping(law, rel, 6)[:, None]
     alpha, beta = a[None, :] * radius[:, None], b[None, :] * radius[:, None]
-    small = beta < X_SMALL
-    alpha_s, beta_s = np.maximum(alpha, X_SMALL), np.maximum(beta, X_SMALL)
-    rows = {k: _rows(tab, f"m{k}", rel) for k in MOMENTS}
+    small = beta < X_CROSS
+    inv_a, inv_b = 1.0 / np.maximum(alpha, X_CROSS), 1.0 / np.maximum(beta, X_CROSS)
+    c_4 = (inv_a * inv_b) ** 2
+    c_5a, c_5b = c_4 * inv_b, c_4 * inv_a
+    c_6 = c_4 * inv_a * inv_b
+    moments = np.stack([_rows(tab, f"m{k}", rel) for k in MOMENTS], axis=-1)  # (B, v, 3)
+    every = np.arange(radius.size)[:, None, None]
     keep = 1.0 - _smoothstep(q[None, :] * radius[:, None] * sigma)
     out = np.zeros(alpha.shape, complex)
-    for s1 in (1.0, -1.0):
-        for s2 in (1.0, -1.0):
-            nu = (s1 * a[None, :] + s2 * b[None, :] - delta) * radius[:, None]
-            v = np.abs(nu) * sigma
-            inside = v <= V_MAX
-            m = {}
-            for k in MOMENTS:
-                value = _along(rows[k], tab["v"], np.minimum(v, V_MAX))
-                m[k] = np.where(inside, np.where(nu < 0, np.conj(value), value), 0.0)
-            term = (m[4] / (alpha_s**2 * beta_s**2) + 1j * (s2 / (alpha_s**2 * beta_s**3) + s1 / (alpha_s**3 * beta_s**2))
-                    * m[5] - s1 * s2 * m[6] / (alpha_s**3 * beta_s**3))
-            term = 2.25 * np.exp(1j * nu) * term
-            out += keep * term if s1 == s2 else term
-    for row in np.flatnonzero(small.any(axis=1)):
-        columns = small[row]
-        out[row, columns] = _cross_direct(law, a[columns], b[columns], delta, radius[row], rel[row])
+    for s1, s2 in ((1.0, 1.0), (-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0)):
+        fast = s1 == s2
+        if fast and not np.any(keep > 0):
+            continue
+        nu = (s1 * a[None, :] + s2 * b[None, :] - delta) * radius[:, None]
+        v = np.abs(nu) * sigma
+        inside = v <= V_MAX
+        if not inside.any():
+            continue
+        index, weights = _lagrange(tab["v"], np.minimum(v, V_MAX))
+        m = np.einsum("bnk,bnkj->bnj", weights, moments[every, index])
+        m = np.where((nu < 0)[..., None], np.conj(m), m)
+        term = m[..., 0] * c_4 + 1j * (s2 * c_5a + s1 * c_5b) * m[..., 1] - (s1 * s2) * c_6 * m[..., 2]
+        term *= np.exp(1j * nu) * (inside * keep if fast else inside)
+        out += term
+    out *= 2.25
+    if small.any():
+        out = np.where(small, _cross_direct(law, a, b, small, delta, radius, rel), out)
     return out
 
 
