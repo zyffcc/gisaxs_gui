@@ -45,6 +45,9 @@ from .client import IAM, IMPORT_MARKER, PACKAGE_MASK, STORAGE_FOLDER, ClientPack
 STATIC_ENTRY = IAM / "iampred" / "static.py"
 STATIC_FOLDER = "static"
 STATIC_WORK = "static_work"
+SERIES_SWEEPS = 1
+"""Sweeps of the series fit (``iampred.static --series-sweeps``): on the after-deposition test series the second sweep
+changed the fit deviation by 1-6 % and doubled the time (about 10 minutes per sweep for two samples on a desktop)."""
 SERIES_FILE = "gimap_series.json"
 DEFAULT_SERIES = "series_1"
 _SERIES_ID = re.compile(r"[0-9a-f]{8,32}")
@@ -246,7 +249,8 @@ class StaticPackageRunner:
         work = self._storage() / STATIC_WORK
         work.mkdir(parents=True, exist_ok=True)
         command = [self.runner.python, "-u", "-m", "iampred.static", "--out", str(folder), "--series",
-                   "--workers", str(workers or self.runner.workers()), "--data", str(root)]
+                   "--series-sweeps", str(SERIES_SWEEPS), "--workers", str(workers or self.runner.workers()),
+                   "--data", str(root)]
         return self.runner.launch(command, package, root, work, on_line, should_stop, IAM_STATIC_DATA=root)
 
     def run(self, request: StaticRequest, on_line: Callable[[str], None],

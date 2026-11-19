@@ -2655,7 +2655,8 @@ and of Details (the switch **Sample List** at the right of the bar hides or show
    When the samples are done, the samples of each series analysed are fitted together as one growing film (*Fitting
    the samples of … together as one growing film*): ordered by nominal thickness, a thicker sample is built on the
    thinner one - radius, spacing, continuous layer, film height, metal amount and coverage (below closure) may not
-   decrease from one sample to the next. A few minutes per series; the samples keep their own solutions if it fails.
+   decrease from one sample to the next. About 5-10 minutes per series on a desktop; the samples keep their own
+   solutions if it fails.
    A series of one sample, or an older analysis package, skips this step.
 5. Afterwards the main screen shows the series of the last sample analysed: one sample in place of each time window
    — its value is the median over its frames — and the evolution along the nominal thickness. Choose a sample in the
