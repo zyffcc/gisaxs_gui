@@ -17,8 +17,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   ranges, then refine**; an unfitted GISAXS cut gets Predict parameters. Under Predict, **Particles** is *The
   particles in Model*, *Spheres and upright cylinders (1–2)* or *Any particles (1–3)*; there is one way through
   (no *Options ▸ Predict: the solutions* any more), and without σ in the file Predict takes a relative σ from the
-  scatter of the curve about its trend. On one core it takes about 7 s per curve with the composition given, about
-  25 s choosing among one or two populations and 35–70 s among one to three. **The fit1d kit and the quick
+  scatter of the curve about its trend. On one core it takes about 5 s per curve with the composition given, about
+  25 s choosing among one or two populations and 30–70 s among one to three. **The fit1d kit and the quick
   physical fit are removed:** *Predict parameters (fit1d)* with `utils/gisaxs1d_gui_kit` (about 62 MB) and the
   dependency `threadpoolctl`, *Find the particle shape (no AI)*, and the *Physical fit (numerical)* and *fit1d*
   methods of the 1D Predict window, which now has the one method (its settings: composition, q unit and sides, the
@@ -46,15 +46,17 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   (about 13 MB, in the repository and the packages) was trained on simulated cuts of Fitting's model and runs with
   numpy; GIMaP checks it against the SHA-256 of its record. It is also the one method of the 1D Predict window and of
   the In-situ series' **Predict each frame**. Physics and Methods 9.13 describes it and its benchmarks: on fit1d's 200
-  held-out curves it chooses the composition right in 87 % / 67 % of them (fit1d's own physics / with beam tail and
-  roughness; fit1d 69 % / 30 %), with median errors of 0.6–0.7 % in R (fit1d 0.5–1.0 %) and large errors about
-  fit1d's (90th percentile of R 9.7 % / 14 %; fit1d 7.1 % / 19 %). Its intervals allow Fitting's model an error of 5 %
+  held-out curves it chooses the composition right in 88 % / 64 % of them (fit1d's own physics / with beam tail and
+  roughness; fit1d 69 % / 30 %) and lists it among its solutions in 97 % / 83 %, with median errors of 0.5–0.7 % in R
+  (fit1d 0.5–1.0 %) and large errors about fit1d's (90th percentile of R 7.2 % / 14 %; fit1d 7.1 % / 19 %); on 1200
+  curves of one to three populations 68 % / 57 % (fit1d 32 % / 16 %). Its intervals allow Fitting's model an error of 5 %
   of the intensity at every point (the fit and χ²ᵣ keep the curve's σ), and its 68 % intervals hold the truth in
-  61–91 % of the cases (fit1d's errors 18–70 %). Besides the network's most probable modes it refines three modes of
+  61–93 % of the cases (fit1d's errors 18–70 %). Besides the network's most probable modes it refines three modes of
   its tempered weights and, for two or three populations, starts at their degeneracies (another R at the same D, the
-  paracrystals of two populations exchanged): fewer solutions end in a wrong mode (curves with a population more
-  than 20 % off in R: 20 instead of 34 of the 200, 260 instead of 386 of 1200 curves of one to three populations),
-  and the true solution is among those listed in 93 % and 85 % of these curves.
+  paracrystals of two populations exchanged); choosing the composition it tries the network's four most probable and
+  the most probable of every number of populations. Fewer solutions end in a wrong mode (curves with a population
+  more than 20 % off in R: 17 instead of 34 of the 200, 250 instead of 386 of 1200 curves of one to three
+  populations), and the true solution is among those listed in 95 % and 87 % of these curves.
 - **1D Predict: General V5 and Single RC specialist removed.** On fit1d's 200 held-out curves V5 recovered R with a
   median error of 31 % and D of 22 % (20 s per curve); Predict parameters 0.7 % and 0.0–0.1 %. Settings saved with
   a V5 method open as Predict parameters. Fitting's *AI proposal (1D Predict)* is replaced by **Predict

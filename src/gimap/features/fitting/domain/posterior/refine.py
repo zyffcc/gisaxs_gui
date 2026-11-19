@@ -160,8 +160,9 @@ def _path(composition: int, dim: int):
 
 SAMPLES = 1000
 """Samples of the network per composition."""
-SHORTLIST = 3
-"""Compositions tried when the network chooses (the head's most probable among those allowed)."""
+SHORTLIST = 4
+"""Compositions tried when the network chooses: the head's most probable among those allowed, and its most probable
+of every number of populations (``infer.PER_COUNT``)."""
 LOCAL_SAMPLES = 400
 """Samples per round of the local posterior of a solution."""
 SEEDS = 16
@@ -171,6 +172,8 @@ REFINED = 3
 MOVES = 2
 """Moved starts (``moves``) refined from the best solution of each of the ``RETRY_COMPOSITIONS`` best compositions of
 two or three populations: the best of them by χ² with the scales solved."""
+MOVED_SOLUTIONS = 2
+"""The best solutions of a composition (by BIC) the moves start from."""
 EXPLORED = 3
 """Modes of the tempered weights (``infer.Composition.explore``) refined as well, when their start is another sample."""
 CHI2_RETRY = 2.0
@@ -329,14 +332,14 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
         if not MOVES or not placed:
             continue
         check()
-        mode, _refined, centre = min(placed, key=lambda e: _bic(e[1]))
-        tried = []
-        for values in moved_starts(centre, result.index):
-            start = fit_model(values, result.index, counts, law, coupling, grazing)
-            residual = fit_engine.residuals(start, fit_data)
-            tried.append((float(residual @ residual), len(tried), start))
-        for _chi2, _i, start in sorted(tried)[:MOVES]:
-            add(result, mode, fit_engine.fit(start, fit_data, method="local"))
+        for mode, _refined, centre in sorted(placed, key=lambda e: _bic(e[1]))[:MOVED_SOLUTIONS]:
+            tried = []
+            for values in moved_starts(centre, result.index):
+                start = fit_model(values, result.index, counts, law, coupling, grazing)
+                residual = fit_engine.residuals(start, fit_data)
+                tried.append((float(residual @ residual), len(tried), start))
+            for _chi2, _i, start in sorted(tried)[:MOVES]:
+                add(result, mode, fit_engine.fit(start, fit_data, method="local"))
     by_score = sorted((r for r in results if found[r.index]), key=lambda r: min(_bic(e[1]) for e in found[r.index]))
     for result in by_score[:RETRY_COMPOSITIONS]:
         if result.modes and min(e[1].chi2_reduced for e in found[result.index]) > CHI2_RETRY:

@@ -185,3 +185,28 @@ def test_wider_proposal_is_the_exact_mixture_density():
     d = active.sum(axis=1)
     log_two = log_one + np.sum(np.where(active, 0.375 * u * u, 0.0), axis=1) - d * np.log(2.0)
     assert np.allclose(log_mix, np.logaddexp(log_one, log_two) - np.log(2.0), atol=1e-6)
+
+
+def test_shortlist_keeps_every_number_of_populations():
+    """Besides the head's most probable compositions, the most probable one of every number of populations
+    (``infer.PER_COUNT``), most probable first."""
+
+    class Head:
+        def composition_log_probs(self, _h):
+            out = np.full((1, len(E.COMPOSITIONS)), -50.0)
+            for rank, c in enumerate(allowed):
+                out[0, c] = -float(rank) if len(E.COMPOSITIONS[c]) == 3 else -10.0 - rank
+            return out
+
+    allowed = E.select(("sphere", "vertical_cylinder"), 3, structure=True)
+    old = infer.PER_COUNT
+    try:
+        infer.PER_COUNT = 0
+        assert {len(E.COMPOSITIONS[c]) for c, _p in infer.candidates(Head(), None, allowed, 3)} == {3}
+        infer.PER_COUNT = 1
+        chosen = infer.candidates(Head(), None, allowed, 3)
+        counts = [len(E.COMPOSITIONS[c]) for c, _p in chosen]
+        assert counts[:3] == [3, 3, 3] and sorted(counts[3:]) == [1, 2]
+        assert [p for _c, p in chosen] == sorted((p for _c, p in chosen), reverse=True)
+    finally:
+        infer.PER_COUNT = old

@@ -98,6 +98,14 @@ def _init(network_path: str, options: dict):
     NETWORK = Network.load(network_path)
     OPTIONS.update(options)
     refine.MOVES = options.get("moves", refine.MOVES)
+    refine.MOVED_SOLUTIONS = options.get("moved_solutions", refine.MOVED_SOLUTIONS)
+    infer.PER_COUNT = options.get("per_count", infer.PER_COUNT)
+    for setting in options.get("constants", []):  # module.NAME=value, e.g. refine.LOCAL_MAX=6
+        target, value = setting.split("=", 1)
+        module, name = target.split(".", 1)
+        owner = {"refine": refine, "infer": infer}[module]
+        old = getattr(owner, name)
+        setattr(owner, name, tuple(float(v) for v in value.split(",")) if isinstance(old, tuple) else type(old)(value))
     infer.PROPOSAL_WIDTHS = tuple(options.get("widths", infer.PROPOSAL_WIDTHS))
 
 
@@ -272,13 +280,17 @@ def main():
     ap.add_argument("--model-error-floor", type=float, default=refine.MODEL_ERROR_FLOOR)
     ap.add_argument("--explored", type=int, default=refine.EXPLORED)
     ap.add_argument("--moves", type=int, default=refine.MOVES)
+    ap.add_argument("--moved-solutions", type=int, default=refine.MOVED_SOLUTIONS)
+    ap.add_argument("--per-count", type=int, default=infer.PER_COUNT)
+    ap.add_argument("--constant", action="append", default=[], help="module.NAME=value (refine or infer), repeatable")
     ap.add_argument("--widths", default=",".join(str(w) for w in infer.PROPOSAL_WIDTHS))
     a = ap.parse_args()
     t0 = time.perf_counter()
     results = []
     options = dict(seed0=a.seed0, samples=a.samples, set=a.set, local_samples=a.local_samples, shortlist=a.shortlist,
                    refined=a.refined, truth=a.truth, floor=a.model_error_floor,
-                   explored=a.explored, moves=a.moves, widths=[float(w) for w in a.widths.split(",")])
+                   explored=a.explored, moves=a.moves, widths=[float(w) for w in a.widths.split(",")],
+                   moved_solutions=a.moved_solutions, per_count=a.per_count, constants=a.constant)
     with Pool(min(a.workers, a.n), initializer=_init, initargs=(a.network, options)) as pool:
         for i, r in enumerate(pool.imap_unordered(run, range(a.n)), 1):
             results.append(r)

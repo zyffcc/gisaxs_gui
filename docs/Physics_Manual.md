@@ -1589,8 +1589,8 @@ Process with AI and the MCP tool `fit_horizontal_cut`, and on the command line (
 **Model and compositions.** The cut is taken at the effective interface (q_z = 0, section 9.10), with Fitting's
 defaults: sizes Gaussian by number, the paracrystal of section 9.5 in the LMA, the beam tail A / (1 + (q/w)^ν) and a
 constant background (9.1). Without a given composition (as in Run Automatic Analysis) the network chooses among one
-or two populations of spheres and upright cylinders, each with or without a paracrystal (the head's three most
-probable of these). A given composition (1 sphere, 2 random cylinder, 3 vertical cylinder, each population with a
+or two populations of spheres and upright cylinders, each with or without a paracrystal (the head's four most
+probable of these, and its most probable of one and of two populations). A given composition (1 sphere, 2 random cylinder, 3 vertical cylinder, each population with a
 paracrystal: Batch Export's **Model**, the `components` of the tool) is fitted whole; random cylinders are fitted only
 then, since they take far longer. The network needs no start: nothing is taken from D* of section 8.4, which stays a
 result of its own. The fit needs at least 8 points; a cut of more than 1000 points is merged first (section 6.9).
@@ -2360,7 +2360,10 @@ has one path; **Particles** chooses the compositions: *The particles in Model* (
 the paracrystal, in the order of their radii; with an empty Model it takes the next choice), *Spheres and upright
 cylinders (1–2)* or *Any particles (1–3)*.
 
-1. The compositions: that of Model, or the head's three most probable among the choice.
+1. The compositions: that of Model, or the head's four most probable among the choice and its most probable of every
+   number of populations among them (`infer.PER_COUNT`): the head often prefers one number of populations, and a
+   composition that is not tried cannot be chosen (on the development curves this raised the share of curves whose
+   composition is chosen right from 57 %/47 % to 63 %/62 % with one to three populations, *model*/*measured*).
 2. For each, N = 1000 samples of the flow (300 for a composition with a random cylinder). Per sample, the terms of
    cut_model on the measured points (with the sample's resolution), the scales by non-negative least squares, and the
    likelihood: Gaussian in σ, the model error integrated out exactly (Woodbury identity), the scales integrated out
@@ -2375,7 +2378,7 @@ cylinders (1–2)* or *Any particles (1–3)*.
    modes of the weights tempered to 50 effective samples (w^β, the largest β ≤ 1 that gives them) whose heaviest sample
    is another: on a bright curve the weights sit on one or two samples, and a mode the network proposed with a
    slightly lower likelihood would otherwise never be refined. For the two best compositions (by BIC) of two or three
-   populations, two more starts come from their best solution (`posterior/moves.py`): a population's paracrystal
+   populations, two more starts come from each of their two best solutions (`posterior/moves.py`): a population's paracrystal
    peak fixes its D to a fraction of a per cent while its form factor fixes R only loosely, so another R at the same
    D, or the paracrystals of two populations exchanged, often describe the curve as well, and the network seldom
    proposes them. Every population's R × 0.5 and × 2 at its D and every pair's (D, σnn/D) exchanged (where the order
@@ -2411,7 +2414,7 @@ strongly correlated pairs (beyond ±0.95); few effective samples (below 50: the 
 weights raised to the largest power β ≤ 1 that gives 50 effective samples, which moves them towards the wider
 proposal); *bic*. The most probable goes into Model, the others to **Other solutions**. Model's fixed values and
 ranges are not used; **Refine the values in Model** afterwards keeps them. Time per curve on one core (development
-curves): about 7 s with the composition given, about 25 s choosing among one or two populations, 35–70 s among one
+curves): about 5 s with the composition given, about 25 s choosing among one or two populations, 30–70 s among one
 to three.
 
 Model's coupling (DA) and size law (log-normal) are used in steps 2–4: the network, trained on the LMA and Gaussian
@@ -2440,7 +2443,8 @@ composition given, 1000 samples each), the network's own 68 % and 95 % intervals
 94–96 % of the cases, for every value; the ranks of the truth among the samples are uniform within the statistics
 (χ² of 20 rank bins 10–28, 19 degrees of freedom). The head ranks the true composition first in 21 % of the cuts:
 many of the 258 compositions describe a cut about equally well (a paracrystal on a weak population, two populations
-of similar size), and the likelihood decides among the head's most probable (three in GIMaP's Predict parameters).
+of similar size), and the likelihood decides among the head's most probable (four in GIMaP's Predict parameters, and
+the best of every number of populations).
 
 **Benchmark.** The 200 held-out curves of fit1d's benchmark (the independent truth model `yoneda_truth.py`; section
 9.12), with the same scoring (`tools/benchmarks/posterior_recovery.py`): half of them in fit1d's own physics
@@ -2452,16 +2456,16 @@ scripts):
 
 | level | value | Predict: median / P90 | Predict: 68 % | fit1d: median / P90 | fit1d: 68 % |
 |---|---|---|---|---|---|
-| model | R | 0.6 % / 9.7 % | 71 % | 0.5 % / 7.1 % | 61 % |
-| model | σR/R | 0.006 / 0.074 | 74 % | 0.005 / 0.062 | 69 % |
-| model | D | 0.0 % / 0.3 % | 91 % | 0.0 % / 0.2 % | 70 % |
-| model | σnn/D | 0.000 / 0.003 | 89 % | 0.000 / 0.002 | 68 % |
+| model | R | 0.5 % / 7.2 % | 73 % | 0.5 % / 7.1 % | 61 % |
+| model | σR/R | 0.005 / 0.054 | 77 % | 0.005 / 0.062 | 69 % |
+| model | D | 0.0 % / 0.3 % | 93 % | 0.0 % / 0.2 % | 70 % |
+| model | σnn/D | 0.000 / 0.002 | 93 % | 0.000 / 0.002 | 68 % |
 | measured | R | 0.7 % / 14 % | 61 % | 1.0 % / 19 % | 34 % |
-| measured | σR/R | 0.008 / 0.087 | 67 % | 0.010 / 0.10 | 36 % |
-| measured | D | 0.1 % / 0.5 % | 78 % | 0.1 % / 0.3 % | 43 % |
-| measured | σnn/D | 0.002 / 0.007 | 64 % | 0.001 / 0.006 | 26 % |
-| | composition right (model / measured) | 87 % / 67 % | | 69 % / 30 % | |
-| | seconds: composition given / chosen | 4.1 / 12.1 | | 3.5 / 6.3 | |
+| measured | σR/R | 0.008 / 0.087 | 66 % | 0.010 / 0.10 | 36 % |
+| measured | D | 0.1 % / 0.5 % | 79 % | 0.1 % / 0.3 % | 43 % |
+| measured | σnn/D | 0.002 / 0.006 | 63 % | 0.001 / 0.006 | 26 % |
+| | composition right (model / measured) | 88 % / 64 % | | 69 % / 30 % | |
+| | seconds: composition given / chosen | 4.1 / ≈ 15 | | 3.5 / 6.3 | |
 
 On 1200 curves drawn the same way on a seed range never used while the method was developed (`heldout_cases.py`):
 one to three populations, the LMA or the DA (given to both methods), the composition chosen among one to three
@@ -2469,46 +2473,50 @@ populations:
 
 | level | value | Predict: median / P90 | Predict: 68 % | fit1d: median / P90 | fit1d: 68 % |
 |---|---|---|---|---|---|
-| model | R | 1.3 % / 34 % | 81 % | 4.5 % / 40 % | 47 % |
-| model | D | 0.1 % / 2.1 % | 86 % | 0.1 % / 4.5 % | 48 % |
-| measured | R | 2.4 % / 53 % | 72 % | 7.2 % / 49 % | 30 % |
-| measured | D | 0.1 % / 51 % | 75 % | 0.3 % / 12 % | 28 % |
-| | composition right (model / measured) | 57 % / 44 % | | 32 % / 16 % | |
-| | seconds: composition given / chosen | ≈ 9 / ≈ 34 | | 8.9 / 26 | |
+| model | R | 1.4 % / 33 % | 81 % | 4.5 % / 40 % | 47 % |
+| model | D | 0.1 % / 1.3 % | 87 % | 0.1 % / 4.5 % | 48 % |
+| measured | R | 2.4 % / 54 % | 70 % | 7.2 % / 49 % | 30 % |
+| measured | D | 0.1 % / 45 % | 76 % | 0.3 % / 12 % | 28 % |
+| | composition right (model / measured) | 68 % / 57 % | | 32 % / 16 % | |
+| | seconds: composition given / chosen | ≈ 7 / ≈ 40 | | 8.9 / 26 | |
 
 What this says:
 
-- Predict chooses the composition right more often than fit1d (87 % and 67 % against 69 % and 30 %; 57 % and 44 %
-  against 32 % and 16 %), and its median errors are as small or smaller (R 0.6–0.7 % against 0.5–1.0 %, 1.3–2.4 %
+- Predict chooses the composition right more often than fit1d (88 % and 64 % against 69 % and 30 %; 68 % and 57 %
+  against 32 % and 16 %), and lists the true composition among its solutions in 97 % and 83 %, and 78 % and 72 %
+  (`true_in_equivalent_set`); its median errors are as small or smaller (R 0.5–0.7 % against 0.5–1.0 %, 1.4–2.4 %
   against 4.5–7.2 %).
-- Its large errors are about fit1d's on fit1d's set (P90 of R 9.7 % and 14 % against 7.1 % and 19 %) and on the
-  extended set for R (34 % and 53 % against 40 % and 49 %); D's on the measured curves of the extended set are larger
-  (51 % against 12 %). Nearly all are curves of two or three populations (a population off by more than 20 % in R:
-  20 of the 200 curves, 19 of them with two; 260 of the 1200, 254 with two or three). For most of these the solution
-  describes the curve within its errors with other sizes (χ²/N ≤ 1.5 in 15 of the 20 and 189 of the 260): the curve
+- Its large errors are about fit1d's on fit1d's set (P90 of R 7.2 % and 14 % against 7.1 % and 19 %) and on the
+  extended set for R (33 % and 54 % against 40 % and 49 %); D's on the measured curves of the extended set are larger
+  (45 % against 12 %). Nearly all are curves of two or three populations (a population off by more than 20 % in R:
+  17 of the 200 curves, 16 of them with two; 250 of the 1200, 244 with two or three). For most of these the solution
+  describes the curve within its errors with other sizes (χ²/N ≤ 1.5 in 13 of the 17 and 187 of the 250): the curve
   does not separate the populations.
-- **Several solutions.** The truth's mode is the most probable solution in 90 % of the curves of fit1d's set and 78 %
-  of the extended set, and among the solutions listed (probability ≥ 0.05) in 93 % and 85 % (88 % and 81 % for the
+- **Several solutions.** The truth's mode is the most probable solution in 92 % of the curves of fit1d's set and 78 %
+  of the extended set, and among the solutions listed (probability ≥ 0.05) in 95 % and 87 % (90 % and 84 % for the
   *model* and *measured* curves of the extended set; `truth_mode` in the summaries). One solution is listed for 78 %
-  and 66 % of the curves, two to four for the others. On the development curves, every curve whose list missed the truth's mode had not
+  and 65 % of the curves, two to four for the others. On the development curves, every curve whose list missed the truth's mode had not
   found that mode at all — none was dropped by its probability or by the cut at ΔBIC 20 — and least squares started at
   the true values reached a χ²_m lower by more than 10 for 4 of 12 (one or two populations) and 29 of 66 (extended)
   of them: the search missed it; for nearly all others it fitted as well, a mode the curve cannot tell apart that the
   search did not reach. Step 3's tempered modes and moves were added for these: on the development curves the truth's mode is
-  listed in 96 % and 84 % (94 % and 78 % without the moves). Half of the network's samples drawn from a base normal of
+  listed in 96 % and 86 % (94 % and 78 % without the moves). Half of the network's samples drawn from a base normal of
   width 2 (`infer.PROPOSAL_WIDTHS`) reached other missing modes but lost others (81 % listed on the extended
   development curves against 84 %, larger P90 errors there), so it is not used.
-- Its 68 % intervals hold the truth in 71–91 % (*model*) and 61–78 % (*measured*) of the cases on fit1d's set, and in
-  81–87 % and 71–75 % on the extended set; its 95 % intervals in 88–96 % and 84–93 %, and 90–95 % and 82–89 %. fit1d's
+- Its 68 % intervals hold the truth in 73–93 % (*model*) and 61–79 % (*measured*) of the cases on fit1d's set, and in
+  81–88 % and 70–76 % on the extended set; its 95 % intervals in 93–99 % and 84–93 %, and 89–95 % and 82–88 %. fit1d's
   ±1 errors hold it in 18–70 %. Read the intervals as including a model error of 5 % per point (*The model error*,
   above): curves of three populations whose solution is in another mode (above) are not covered by any interval.
-- Time: 4.1 s and 12.1 s on fit1d's set (fit1d 3.5 s and 6.3 s); on the extended set about 9 s and 34 s
-  (fit1d 8.9 s and 26 s): the run of this table shared a node about twice as slow, so these are the times of the
-  version without the moves (6.8 s and 28.5 s) scaled by the moves' cost measured on one node (+32 % and +20 %; +34 %
-  and +16 % on fit1d's set). Against the version without the model error, the tempered modes and the moves
-  (2.7/9.4 s and 4.3/20.5 s), Predict now takes 1.3–2 times as long.
+- Time: 4.1 s and about 15 s on fit1d's set (fit1d 3.5 s and 6.3 s), about 7 s and 40 s on the extended set (fit1d
+  8.9 s and 26 s). The runs of this table shared slower nodes, so these are the previous versions' times on a normal
+  node scaled by the change measured on one node: against commit 96f000c, unchanged and +24 % on fit1d's set, −18 %
+  and +16 % on the extended set (a faster sphere amplitude in `cut_model.shapes`, with the same values, pays for most
+  of the moves from two solutions and the longer shortlist). Against the version without the model error, the
+  tempered modes, the moves and the longer shortlist (2.7/9.4 s and 4.3/20.5 s), Predict takes 1.5–2 times as long.
 - The measured curves have roughness falling as q⁻³ at low q, which the tail (ν near 2) cannot take up: there Predict
-  chooses the composition right less often (67 % against 87 % in fit1d's own physics).
+  chooses the composition right less often (64 % against 88 % in fit1d's own physics); on 12 of the 100 *measured*
+  curves of fit1d's set it chose a composition with one more population that describes the curve better than the
+  true one, the extra population taking up the roughness.
 
 Earlier runs on the same curves: before the search of the ranges (step 3), the comparison by BIC (step 5), the
 prior's box for least squares and the faster settings (2000 samples, four compositions, the posterior of every
@@ -2519,7 +2527,9 @@ summaries at commit a0c597c): the same medians, P90 of R 36 % and 24 % (fit1d's 
 the composition right in 87 %/48 % and 58 %/37 %, intervals holding the truth in 39–62 % and 40–60 %, 2.7/9.4 s and
 4.3/20.5 s. With the model error and the tempered modes but without the moves (commit 98a7cc8): P90 of R 9.5 %/18 %
 and 43 %/55 %, the truth's mode listed in 91 % and 79 %, the composition right in 87 %/68 % and 58 %/45 %, intervals
-holding the truth in 60–91 % and 70–85 %, 3.0/10.1 s and 6.8/28.5 s.
+holding the truth in 60–91 % and 70–85 %, 3.0/10.1 s and 6.8/28.5 s. With the moves from one solution and the
+head's three most probable compositions (commit 96f000c): the truth's mode listed in 93 % and 85 %, the
+composition right in 87 %/67 % and 57 %/44 %, P90 of R 9.7 %/14 % and 34 %/53 %.
 
 fit1d was nevertheless removed from GIMaP in 0.2.0, so that Fitting has one network method: its benchmark stays the
 reference (section 9.12). 1D Predict V5, on the same 200 curves, had median errors of 31 % (R) and 22 % (D)
@@ -2535,13 +2545,13 @@ the cut's q_z:
 | BornAgain's model, three draws | 4.78–4.84 | 49.2–52.1, intervals [41–44, 59–63], each holds 53.6 | 4.3–4.5 | 4.88–4.93, 56.9–57.6 | 6.1–6.5 |
 | measured cut | 5.16 | 46.4 [40.0, 53.9] | 8.8 | 5.20, 56.4 | 14.4 |
 
-With the composition chosen among one to three sphere populations, Predict takes two spheres with a paracrystal (a
-broad log-normal is two Gaussians), with D 42–53 nm on the simulated cuts and 45 nm on the measured one; fit1d chose a
-sphere of R 0.18 nm on one of the draws. All these solutions were compared by BIC (the model does not describe the cut
+With the composition chosen among one to three sphere populations, Predict takes two spheres (a broad log-normal is
+two Gaussians) on two of the draws and one sphere on the third, with D 42–53 nm, and on the measured cut two spheres,
+one with a paracrystal, D 48.4 nm [42.5, 55.2]; fit1d chose a sphere of R 0.18 nm on one of the draws. All these solutions were compared by BIC (the model does not describe the cut
 within σ: χ²/N 4–9), and their intervals are least-squares errors with the model error: the cut has a shoulder, not a
 resolved peak, so D is fixed to ±7–10 nm (±3 nm without the model error). fit1d's four-term DWBA, which
-Fitting does not have, describes the simulated cuts better (χ²/N 1.75, D 53.8–55.1 nm). Time: 15–34 s per variant,
-59–85 s for the choice among compositions (this PC). GALAXI was used to set the tail's prior and the rules of steps 3 and 5, so
+Fitting does not have, describes the simulated cuts better (χ²/N 1.75, D 53.8–55.1 nm). Time: 9–12 s per variant,
+45–53 s for the choice among compositions (this PC). GALAXI was used to set the tail's prior and the rules of steps 3 and 5, so
 this is no independent test.
 
 Implementation: `src/gimap/features/fitting/domain/posterior/`, `application/single_predict.py`,
@@ -2575,7 +2585,8 @@ logRMSE (natural logarithm, positive points), RMS/σ and the mean of the squared
 ### 10.2 The method
 
 Section 9.13 on each half, with **Complete composition** as the composition (1–3 populations, each with the
-paracrystal) or, with *Auto*, the head's three most probable among all compositions; q_z of the cut from **Cut qz
+paracrystal) or, with *Auto*, the head's four most probable among all compositions and its most probable of every
+number of populations; q_z of the cut from **Cut qz
 (nm⁻¹)** (unticked: the effective interface). The eight most probable solutions of a half are its candidates, with
 the stage *Network + posterior*; each carries its probability, its posterior intervals and flags (`solutions.json`:
 `probability`, `posterior`, `warnings`, `ess`). The run writes the files it wrote before 0.2.0 (`request.json`,

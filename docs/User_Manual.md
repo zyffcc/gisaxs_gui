@@ -2040,16 +2040,17 @@ benchmarks.
    - **The particles in Model**: the 1–3 particles of Model — their families, and whether each has the paracrystal
      (**Distance D**). The populations are taken in the order of their radii. With no particle in Model, Predict
      takes **Spheres and upright cylinders (1–2)**.
-   - **Spheres and upright cylinders (1–2)** or **Any particles (1–3)**: the network proposes the three
-     compositions it finds most probable among these, and their probabilities decide.
+   - **Spheres and upright cylinders (1–2)** or **Any particles (1–3)**: the network proposes the four
+     compositions it finds most probable among these, and its most probable of every number of populations; their
+     probabilities decide.
 2. The cut's q_z comes from Model's geometry (αi, αf and λ under *Grazing incidence*): spheres are taken at the Born
    term of that q_z, or at q_z = 0 (the effective interface, Physics and Methods, section 9.10) when the angles are 0.
    Model's **Sizes** and coupling are used too (*Gaussian, by number* and the LMA are the network's own; with the
    others the model reweights its proposals).
 3. Without σ in the file, Predict takes a relative σ from the scatter of the curve about its trend (at least 1 %).
 4. Press **Fit**. It runs in a separate process; **Stop** ends it without a result. For a curve of a few hundred
-   points on one core it takes about 7 s with **The particles in Model**, about 25 s with **Spheres and upright
-   cylinders (1–2)** and 35–70 s with **Any particles (1–3)**.
+   points on one core it takes about 5 s with **The particles in Model**, about 25 s with **Spheres and upright
+   cylinders (1–2)** and 30–70 s with **Any particles (1–3)**.
 
 There is one way through, and nothing else to set: the network's 1000 samples of each composition are weighted
 against the curve; the most probable values of each composition are refined by least squares; when none of them
@@ -2066,8 +2067,8 @@ solution that comes into Model keeps Model's geometry; **Refine** afterwards kee
   compositions tried and the distinct solutions of each: a solution with p 0.6 next to one with 0.4 means that the
   curve does not decide between them. With two or three populations this is common: another R of one population at
   the same D, or the paracrystals of two populations exchanged, can describe the curve as well; Predict tries these
-  too and lists them. On simulated curves the true solution was among those listed in 93 % (one or two populations)
-  and 85 % (one to three) of the cases: look at the others before you report one.
+  too and lists them. On simulated curves the true solution was among those listed in 95 % (one or two populations)
+  and 87 % (one to three) of the cases: look at the others before you report one.
 - **Fit details…** gives **Posterior of this solution**: each value's median and 68 % interval, e.g.
   `R 4.12 [4.08, 4.16] nm`, and the probability. Below it, what to keep in mind: a value the curve says little about
   (*unconstrained*: its interval spans most of the range the network knows), a value at a bound, strongly

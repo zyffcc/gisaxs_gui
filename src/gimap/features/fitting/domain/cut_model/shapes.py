@@ -31,13 +31,22 @@ CHUNK = 1_000_000
 
 
 def sphere_amplitude(x):
-    """3 (sin x − x cos x)/x³ (1 at 0); the series below 0.05 avoids the cancellation."""
+    """3 (sin x − x cos x)/x³ (1 at 0); the series below 0.05 avoids the cancellation. In place on one temporary
+    or two: it is most of the time of a sphere population's likelihood."""
     x = np.asarray(x, float)
+    out = np.cos(x)
+    out *= x
+    np.subtract(np.sin(x), out, out=out)
+    cube = x * x
+    cube *= x
+    with np.errstate(divide="ignore", invalid="ignore"):
+        out /= cube
+    out *= 3.0
     small = np.abs(x) < 0.05
-    xs = np.where(small, 1.0, x)
-    out = 3.0 * (np.sin(xs) - xs * np.cos(xs)) / xs**3
-    x2 = x * x
-    return np.where(small, 1.0 - x2 / 10.0 + x2 * x2 / 280.0 - x2**3 / 15120.0, out)
+    if np.any(small):
+        x2 = x[small] ** 2
+        out[small] = 1.0 - x2 / 10.0 + x2 * x2 / 280.0 - x2**3 / 15120.0
+    return out
 
 
 def disc_amplitude(x):
@@ -93,17 +102,27 @@ def sphere(q, radii, weights, terms, coherent=False, envelope=False):
         return _sphere_envelope(q, radii, weights, terms), (np.zeros((radii.shape[0], q.size)) if coherent else None)
     p_out = np.empty((radii.shape[0], q.size))
     c_out = np.empty_like(p_out) if coherent else None
-    single = len(terms) == 1 and terms[0][1] == 0.0
+    single = len(terms) == 1
     for rows, cols in _blocks(radii.shape[0], q.size, radii.shape[1] * (1 if single else 2 * len(terms))):
         r, n, qq = radii[rows][:, :, None], weights[rows], q[cols]
         v2 = n * radii[rows] ** 6
         norm = v2.sum(axis=1)
-        if single:
-            amplitude = sphere_amplitude(qq[None, None, :] * r)
-        else:
-            amplitude = 0j
-            for c, qz in terms:
-                amplitude = amplitude + c * sphere_amplitude(np.hypot(qq, qz)[None, None, :] * r) * np.exp(-1j * qz * r)
+        if len(terms) == 1:  # one path: |A|² = |c|² f², the phase e^{−iQR} only in the coherent mean
+            c, qz = terms[0]
+            f = sphere_amplitude((qq if qz == 0.0 else np.hypot(qq, qz))[None, None, :] * r)
+            p_out[rows, cols] = abs(c) ** 2 * np.einsum("bn,bnq->bq", v2, f * f) / norm[:, None]
+            if coherent:
+                volume = n * radii[rows] ** 3
+                if qz == 0.0:
+                    mean = np.einsum("bn,bnq->bq", volume, f) ** 2
+                else:
+                    mean = (np.einsum("bn,bnq->bq", volume * np.cos(qz * radii[rows]), f) ** 2
+                            + np.einsum("bn,bnq->bq", volume * np.sin(qz * radii[rows]), f) ** 2)
+                c_out[rows, cols] = abs(c) ** 2 * mean / norm[:, None]
+            continue
+        amplitude = 0j
+        for c, qz in terms:
+            amplitude = amplitude + c * sphere_amplitude(np.hypot(qq, qz)[None, None, :] * r) * np.exp(-1j * qz * r)
         p_out[rows, cols] = np.einsum("bn,bnq->bq", v2, np.abs(amplitude) ** 2) / norm[:, None]
         if coherent:
             mean = np.einsum("bn,bnq->bq", n * radii[rows] ** 3, amplitude)

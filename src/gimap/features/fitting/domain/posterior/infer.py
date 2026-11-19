@@ -41,6 +41,9 @@ PROPOSAL_WIDTHS = (1.0,)
 further from the network's most probable values. Half of 1000 samples at width 2 found more modes of curves that
 the moves of ``refine`` did not, but lost more elsewhere (Physics and Methods 9.13), so the network's own width is
 used."""
+PER_COUNT = 1
+"""When the head chooses the compositions: at least this many of every number of populations among those allowed
+(``candidates``), besides its ``shortlist`` most probable."""
 EXPLORE_ESS = 50.0
 """The effective samples of the tempered weights from which the ``explore`` modes of a composition are found: on a
 bright curve the weights sit on one or two samples, and modes of slightly lower likelihood would never be refined."""
@@ -361,10 +364,16 @@ def sample_composition(network, h, data: Cut, composition: int, count: int, rng,
 
 
 def candidates(network, h, allowed: Optional[Sequence[int]] = None, count: int = 4) -> list[tuple[int, float]]:
-    """The ``count`` most probable compositions under the head among ``allowed`` (default all): (index, log p)."""
+    """The ``count`` most probable compositions under the head among ``allowed`` (default all), and the
+    ``PER_COUNT`` most probable of every number of populations among them: (index, log p), most probable first."""
     log_probs = network.composition_log_probs(h)[0]
     pool = np.arange(len(E.COMPOSITIONS)) if allowed is None else np.asarray(list(allowed), int)
-    best = pool[np.argsort(-log_probs[pool])[:count]]
+    ranked = pool[np.argsort(-log_probs[pool])]
+    best = list(ranked[:count])
+    for k in sorted({len(E.COMPOSITIONS[c]) for c in ranked}):
+        best += [c for c in ranked if len(E.COMPOSITIONS[c]) == k and c not in best][:max(
+            0, PER_COUNT - sum(len(E.COMPOSITIONS[c]) == k for c in best))]
+    best.sort(key=lambda c: -log_probs[c])
     return [(int(c), float(log_probs[c])) for c in best]
 
 
