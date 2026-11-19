@@ -145,6 +145,9 @@ ASSISTANT_RUNTIME_ZH = {
     "{name} at its lower bound": "{name} 处于搜索下界",
     "R (nm): the particle radius.": "R (nm)：粒子半径。",
     "the curve says little about {name}": "曲线对 {name} 约束很少",
+    "{name}: its Guinier region lies at or below the curve's lowest q, so the curve shows only its decay, which roughness or a rise at low q produce as well":
+        "{name}：它的 Guinier 区在曲线的最低 q 处或更低，曲线只显示它的衰减，而粗糙度或低 q 处的上升也会产生这样的衰减",
+    "{name}: smaller than the curve resolves, it acts as a smooth background": "{name}：比曲线能分辨的更小，它起平滑背景的作用",
     "compared by χ² and the number of values (BIC): the posterior's sampling did not converge":
         "按 χ² 和数值个数（BIC）比较：后验抽样没有收敛",
     "Predict parameters: the proposal network's importance-weighted samples, each mode refined by bounded least squares, the posterior sampled around the best solutions":

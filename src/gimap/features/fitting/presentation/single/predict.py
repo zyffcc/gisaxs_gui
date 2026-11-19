@@ -25,6 +25,8 @@ FLAG_TEXTS = {
     "correlated": "{name} are strongly correlated",
     "low_ess": "few effective samples: the intervals are rough",
     "bic": "the posterior's sampling did not converge: the solutions are compared by χ² and their number of values (BIC)",
+    "large": "{name}: its Guinier region lies at or below the curve's lowest q, so the curve shows only its decay, which roughness or a rise at low q produce as well",
+    "small": "{name}: smaller than the curve resolves, it acts as a smooth background",
 }
 MISSING = "Predict parameters needs GIMaP's proposal network, which is missing in this installation ({name})."
 

@@ -2414,7 +2414,11 @@ values with their least-squares errors (9.8), the posterior median and intervals
 value at a bound of its range; *unconstrained* when its 68 % interval covers more than 0.7 of the prior's range;
 strongly correlated pairs (beyond ±0.95); few effective samples (below 50: the intervals are then taken with the
 weights raised to the largest power β ≤ 1 that gives 50 effective samples, which moves them towards the wider
-proposal); *bic*. The most probable goes into Model, the others to **Other solutions**. Model's fixed values and
+proposal); *bic*; *large* and *small* for a population whose size the measured q range does not show (q_min·R ≥ 0.7:
+its Guinier region lies at or below the lowest q, and the decay the curve shows is also what roughness or a rise at low
+q produce — on the *measured* benchmark curves an extra population of R 35–55 nm took up the roughness on 12 of 100
+and 54 of 600 curves; q_max·R < 1: it acts as a smooth background, as fit1d named such a population). The most
+probable goes into Model, the others to **Other solutions**. Model's fixed values and
 ranges are not used; **Refine the values in Model** afterwards keeps them. Time per curve on one core (development
 curves): about 5 s with the composition given, about 25 s choosing among one or two populations, 30–70 s among one
 to three of spheres and upright cylinders, a few minutes when random cylinders are among the choice.

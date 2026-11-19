@@ -2075,7 +2075,10 @@ solution that comes into Model keeps Model's geometry; **Refine** afterwards kee
   (*unconstrained*: its interval spans most of the range the network knows), a value at a bound, strongly
   correlated values, few effective samples (the intervals are then rough), or that the solutions were compared by
   χ² and their number of values (BIC) because the posterior's sampling did not converge — usually a curve the model
-  does not describe within its errors; the intervals are then the least-squares errors.
+  does not describe within its errors; the intervals are then the least-squares errors. A population whose size
+  the curve does not show is named too: one whose Guinier region lies at or below the lowest q (the curve shows only
+  its decay, which roughness or a rise at low q produce as well: check it before you report particles of that size),
+  or one smaller than the curve resolves (a smooth background).
 - **Refine These Values** (or **Refine the values in Model**) then gives the least-squares errors under Model's own
   limits, as for any model.
 

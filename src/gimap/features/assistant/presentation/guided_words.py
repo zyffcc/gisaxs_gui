@@ -72,6 +72,8 @@ SENTENCES = (
     "{name} at its lower bound",
     # The warnings of a solution of Predict parameters (Fitting: infrastructure/adapters/posterior_job.py).
     "the curve says little about {name}",
+    "{name}: its Guinier region lies at or below the curve's lowest q, so the curve shows only its decay, which roughness or a rise at low q produce as well",
+    "{name}: smaller than the curve resolves, it acts as a smooth background",
     "{name} stopped at a bound of its range",
     "{name} are strongly correlated",
     "The symmetry axis is {shift} px from the calibrated centre: check the calibration or the sample alignment.",

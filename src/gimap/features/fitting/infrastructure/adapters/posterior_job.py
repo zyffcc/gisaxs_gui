@@ -79,6 +79,8 @@ FLAG_SENTENCES = {
     "correlated": "{name} are strongly correlated",
     "low_ess": "few effective samples: the intervals are rough",
     "bic": "compared by χ² and the number of values (BIC): the posterior's sampling did not converge",
+    "large": "{name}: its Guinier region lies at or below the curve's lowest q, so the curve shows only its decay, which roughness or a rise at low q produce as well",
+    "small": "{name}: smaller than the curve resolves, it acts as a smooth background",
 }
 """The flags of a solution as the sentences of a row's ``warnings``."""
 ROW_NAMES = {"res_width": "sigma_Res", "res_exponent": "nu_Res"}

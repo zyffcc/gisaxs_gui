@@ -210,3 +210,19 @@ def test_shortlist_keeps_every_number_of_populations():
         assert [p for _c, p in chosen] == sorted((p for _c, p in chosen), reverse=True)
     finally:
         infer.PER_COUNT = old
+
+
+def test_window_flags_name_populations_the_curve_does_not_resolve():
+    """``large`` when q_min·R ≥ 0.7 (only the decay is measured), ``small`` when q_max·R < 1 (refine.window_flags)."""
+    from src.gimap.features.fitting.domain import fit_model as fm
+
+    q = np.linspace(0.02, 2.0, 50)
+    model = fm.FitModel(tuple(fm.new_component("sphere", radius=r, distance=None, structure=False)
+                              for r in (40.0, 0.3, 5.0)))
+    assert refine.window_flags(model, q) == ["small:R_1", "large:R_3"]
+    assert refine.window_flags(fm.FitModel((fm.new_component("sphere", radius=5.0, distance=None,
+                                                             structure=False),)), q) == []
+    from src.gimap.features.fitting.infrastructure.adapters import posterior_job
+
+    sentences = posterior_job.flag_sentences(["large:R_3", "small:R_1"])
+    assert sentences[0].startswith("R_3: its Guinier region") and sentences[1].startswith("R_1: smaller than")

@@ -15,7 +15,11 @@ times the mode's share of it) and flags:
   the solutions and compositions are compared by BIC (χ² + k ln N, σ with the model error), not by their
   evidence, and the intervals are the least-squares errors (σ with the model error; scaled by χ²/N when above 1);
 * ``low_ess``           fewer than ``ESS_MIN`` effective samples: the intervals are taken with tempered weights
-  (``laplace.Local.tempered``), wider, and are rough.
+  (``laplace.Local.tempered``), wider, and are rough;
+* ``large:R_n``         q_min·R of population n at least ``LARGE``: its Guinier region lies at or below the curve's
+  lowest q, and the curve shows only its decay, which roughness or a rise at low q produce as well;
+* ``small:R_n``         q_max·R of population n below ``SMALL``: smaller than the curve resolves, it acts as a smooth
+  background (as fit1d named such a population).
 """
 
 from __future__ import annotations
@@ -186,6 +190,8 @@ would be below e⁻¹⁰ of the best's)."""
 LOCAL_MAX = 4
 """At most this many solutions get their posterior sampled (the best by BIC)."""
 ESS_FAILED = 10
+LARGE, SMALL = 0.7, 1.0
+"""q_min·R and q_max·R limits of the ``large`` and ``small`` flags (``window_flags``)."""
 """Below this many effective samples at any solution, the solutions are compared by BIC (``bic`` flag)."""
 MODEL_ERROR_FLOOR = 0.05
 """A relative model error per point, added to the σ of the counts (σ² + (f·I)²) in the posterior, the solutions'
@@ -212,6 +218,21 @@ def model_values(model: fm.FitModel, composition: int) -> Optional[np.ndarray]:
 def _same(a, b, types) -> bool:
     from .infer import _distance
     return bool(_distance(a[None, :], b, types)[0] <= 1.0)
+
+
+def window_flags(model: fm.FitModel, q) -> list[str]:
+    """``large:R_n`` / ``small:R_n`` for the populations (in the order of their radii) whose size the measured q
+    range does not show: q_min·R ≥ ``LARGE`` or q_max·R < ``SMALL``."""
+    q = np.asarray(q, float)
+    q_min, q_max = float(np.min(q)), float(np.max(q))
+    radii = sorted(c.value("R") for c in model.components)
+    out = []
+    for n, radius in enumerate(radii, 1):
+        if q_min * radius >= LARGE:
+            out.append(f"large:R_{n}")
+        elif q_max * radius < SMALL:
+            out.append(f"small:R_{n}")
+    return out
 
 
 def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra, lsq=None,
@@ -245,6 +266,7 @@ def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra,
     if refined is not None:
         flags += [f"at_bound:{_label(p)}" for p in refined.at_bounds]
         flags += [f"correlated:{_label(a)}~{_label(b)}" for a, b, _rho in refined.correlated]
+    flags += window_flags(model, data.q)
     ess = local.ess if local is not None else result.ess
     if ess < ESS_MIN:
         flags.append("low_ess")
@@ -403,6 +425,6 @@ def _label(path) -> str:
     return key if owner == "globals" else f"{key}_{owner + 1}"
 
 
-__all__ = ["CHI2_RETRY", "DELTA_BIC", "ESS_FAILED", "ESS_MIN", "EXPLORED", "Interval", "LOCAL_MAX", "LOCAL_SAMPLES",
-           "MODEL_ERROR_FLOOR", "MOVES", "PosteriorSolution", "SAMPLES", "SHORTLIST", "UNCONSTRAINED", "fit_model",
-           "model_values", "predict"]
+__all__ = ["CHI2_RETRY", "DELTA_BIC", "ESS_FAILED", "ESS_MIN", "EXPLORED", "LARGE", "LOCAL_MAX", "LOCAL_SAMPLES",
+           "MODEL_ERROR_FLOOR", "MOVES", "SAMPLES", "SHORTLIST", "SMALL", "UNCONSTRAINED", "Interval",
+           "PosteriorSolution", "fit_model", "model_values", "predict", "window_flags"]
