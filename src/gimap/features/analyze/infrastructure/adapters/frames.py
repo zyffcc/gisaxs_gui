@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -80,6 +81,24 @@ def readable_read_error(path: Path, exc: BaseException) -> str:
     return f"{name} could not be read ({type(exc).__name__}: {text})."
 
 
+AGAIN_S = (0.05, 0.15, 0.3)
+"""Pauses before a frame of a NeXus / HDF5 file changed a moment ago is read again when reading it failed: the
+writer's flush of the next frame can leave the file shorter for a moment than its header says (HDF5 "truncated
+file", an ``OSError``); one of the retries reads it whole. Files not written to, files their writer keeps closed to
+readers (``BeingWritten``) and other failures (no image, a frame beyond the last) fail at once as before."""
+FRESH_S = 5.0
+"""A file changed less than this long ago (s) is taken to be still written."""
+
+
+def _written_now(path: Path, error: BaseException) -> bool:
+    if not isinstance(error, OSError) or isinstance(error, BeingWritten) or not is_hdf5(path):
+        return False
+    try:
+        return abs(time.time() - path.stat().st_mtime) < FRESH_S
+    except OSError:
+        return False
+
+
 class FrameReadError(ValueError):
     """A frame file could not be read; the message says why in words."""
 
@@ -113,12 +132,16 @@ def _frames_in(folder: Path) -> list[Path]:
 
 class DetectorIoFrameSource:
     def load(self, path: str | Path, frame_index: int = 0) -> DetectorImage:
-        try:
-            return load_detector_image(path, frame_idx=int(frame_index))
-        except (KeyboardInterrupt, SystemExit, MemoryError):
-            raise
-        except Exception as exc:  # noqa: BLE001 - every reader failure becomes one readable message
-            raise FrameReadError(readable_read_error(Path(path), exc)) from exc
+        for pause in (*AGAIN_S, None):
+            try:
+                return load_detector_image(path, frame_idx=int(frame_index))
+            except (KeyboardInterrupt, SystemExit, MemoryError):
+                raise
+            except Exception as exc:  # noqa: BLE001 - every reader failure becomes one readable message
+                if pause is not None and _written_now(Path(path), exc):  # caught in the middle of a write
+                    time.sleep(pause)
+                    continue
+                raise FrameReadError(readable_read_error(Path(path), exc)) from exc
 
     def describe(self, path: str | Path) -> Optional[NexusLayout]:
         """What a NeXus / HDF5 source consists of (``None``: a frame of another format). Asking again costs
