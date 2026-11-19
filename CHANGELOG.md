@@ -18,7 +18,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   particles in Model*, *Spheres and upright cylinders (1–2)* or *Any particles (1–3)*; there is one way through
   (no *Options ▸ Predict: the solutions* any more), and without σ in the file Predict takes a relative σ from the
   scatter of the curve about its trend. On one core it takes about 5 s per curve with the composition given, about
-  25 s choosing among one or two populations and 30–70 s among one to three. **The fit1d kit and the quick
+  25 s choosing among one or two populations, 30–70 s among one to three of spheres and upright cylinders, and a few
+  minutes when random cylinders are among the choice (*Any particles*: 20–30 s per least-squares fit). **The fit1d kit and the quick
   physical fit are removed:** *Predict parameters (fit1d)* with `utils/gisaxs1d_gui_kit` (about 62 MB) and the
   dependency `threadpoolctl`, *Find the particle shape (no AI)*, and the *Physical fit (numerical)* and *fit1d*
   methods of the 1D Predict window, which now has the one method (its settings: composition, q unit and sides, the

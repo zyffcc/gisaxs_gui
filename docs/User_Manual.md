@@ -2050,7 +2050,8 @@ benchmarks.
 3. Without σ in the file, Predict takes a relative σ from the scatter of the curve about its trend (at least 1 %).
 4. Press **Fit**. It runs in a separate process; **Stop** ends it without a result. For a curve of a few hundred
    points on one core it takes about 5 s with **The particles in Model**, about 25 s with **Spheres and upright
-   cylinders (1–2)** and 30–70 s with **Any particles (1–3)**.
+   cylinders (1–2)** and a few minutes with **Any particles (1–3)**, whose random cylinders are slow (20–30 s per
+   least-squares fit).
 
 There is one way through, and nothing else to set: the network's 1000 samples of each composition are weighted
 against the curve; the most probable values of each composition are refined by least squares; when none of them

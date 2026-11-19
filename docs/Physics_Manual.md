@@ -2382,7 +2382,9 @@ cylinders (1–2)* or *Any particles (1–3)*.
    peak fixes its D to a fraction of a per cent while its form factor fixes R only loosely, so another R at the same
    D, or the paracrystals of two populations exchanged, often describe the curve as well, and the network seldom
    proposes them. Every population's R × 0.5 and × 2 at its D and every pair's (D, σnn/D) exchanged (where the order
-   of the radii and D ≥ 2R still hold) are scored by χ² with the scales solved; the best two are refined. When no
+   of the radii and D ≥ 2R still hold) are scored by χ² with the scales solved; the best two are refined. A
+   composition with a random cylinder gets neither the tempered modes nor the moves: its least-squares fits take
+   20–30 s each, and the benchmarks below have no random cylinders. When no
    solution of one of the two best compositions
    (by BIC) refines below χ²/N = 2 (the network's proposals miss the curve, as on GALAXI), one search of the ranges
    (section 9.8) started from its 16 heaviest samples is added. Steps 1–3 use the σ of the counts, so the solutions
@@ -2415,7 +2417,7 @@ weights raised to the largest power β ≤ 1 that gives 50 effective samples, wh
 proposal); *bic*. The most probable goes into Model, the others to **Other solutions**. Model's fixed values and
 ranges are not used; **Refine the values in Model** afterwards keeps them. Time per curve on one core (development
 curves): about 5 s with the composition given, about 25 s choosing among one or two populations, 30–70 s among one
-to three.
+to three of spheres and upright cylinders, a few minutes when random cylinders are among the choice.
 
 Model's coupling (DA) and size law (log-normal) are used in steps 2–4: the network, trained on the LMA and Gaussian
 sizes, is then only a proposal, which the weights correct. Fitting has no four-term DWBA: Predict uses the Born term

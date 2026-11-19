@@ -170,8 +170,8 @@ SEEDS = 16
 REFINED = 3
 """Modes of a composition refined by least squares, the heaviest first."""
 MOVES = 2
-"""Moved starts (``moves``) refined from the best solution of each of the ``RETRY_COMPOSITIONS`` best compositions of
-two or three populations: the best of them by χ² with the scales solved."""
+"""Moved starts (``moves``) refined from the best solutions of each of the ``RETRY_COMPOSITIONS`` best compositions of
+two or three populations without a random cylinder: the best of them by χ² with the scales solved."""
 MOVED_SOLUTIONS = 2
 """The best solutions of a composition (by BIC) the moves start from."""
 EXPLORED = 3
@@ -317,10 +317,15 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
         if not any(c is not None and _same(c, centre, types) for _m, _r, c in found[result.index]):
             found[result.index].append((mode, refined, centre))
 
+    def slow(index) -> bool:
+        """A random cylinder (15–800 ms per evaluation, 20–30 s per least-squares fit): only its heaviest modes are
+        refined, without the tempered modes and the moves (their benchmarks have no random cylinders)."""
+        return any(family == "cylinder" for family, _s in E.composition_types(index))
+
     for result in results:
         check()
         started = []
-        for mode in result.modes[:refine_modes] + result.explore[:explored]:
+        for mode in result.modes[:refine_modes] + ([] if slow(result.index) else result.explore[:explored]):
             if any(np.array_equal(mode.best, s, equal_nan=True) for s in started):
                 continue
             started.append(mode.best)
@@ -329,7 +334,7 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
     by_score = sorted((r for r in results if found[r.index]), key=lambda r: min(_bic(e[1]) for e in found[r.index]))
     for result in by_score[:RETRY_COMPOSITIONS]:
         placed = [e for e in found[result.index] if e[2] is not None]
-        if not MOVES or not placed:
+        if not MOVES or not placed or slow(result.index):
             continue
         check()
         for mode, _refined, centre in sorted(placed, key=lambda e: _bic(e[1]))[:MOVED_SOLUTIONS]:
