@@ -2523,6 +2523,40 @@ What this says:
   chooses the composition right less often (64 % against 88 % in fit1d's own physics); on 12 of the 100 *measured*
   curves of fit1d's set it chose a composition with one more population that describes the curve better than the
   true one, the extra population taking up the roughness.
+- **The waves the surface reflects.** Both sets draw their curves with the Born term at the cut's q_z, the term
+  Predict itself uses (and the effective interface when no q_z is given), so they do not test the other three DWBA
+  terms of section 9.10. The same cases, counts and noise drawn with all four terms (`--scattering dwba`, on bare Si
+  and on 100 nm polystyrene on Si, `--substrate ps100`; the cut at the Si Yoneda angle, q₊ = 0.577 nm⁻¹, so
+  q₊R = 1.7 at R = 2.9 nm) pair curve by curve with the table above (`posterior_dwba_*_summary.json`,
+  `posterior_dwba_pairs_*.json`, `tools/benchmarks/posterior_pairs.py`). Errors of R of the spheres, the true
+  composition given, median (bias) on fit1d's set and the extended set, Born-term truth → DWBA on Si → DWBA on PS:
+
+  | q₊R of the sphere | fit1d's set | extended set |
+  |---|---|---|
+  | up to 1.7 | 0.4–0.6 % → 1.6–2.5 % → 4–5 % | 0.8–4.9 % → 2.8–5.9 % → 8 % |
+  | 1.7–2.3 | 0.5 % → 4 % (−1 %) → 7 % (+4 %) | 0.9 % → 4 % (−1 %) → 5.5 % (+4 %) |
+  | 2.3–3.5 | 0.7 % → 11 % (−10 %) → 9 % (−5 %) | 0.7 % → 13 % (−10 %) → 11 % (−4 %) |
+  | above 3.5 | 4.5 % → 40 % (−30 %) → 40 % (−11 %) | 3.3 % → 39 % (−24 %) → 43 % (−1 %) |
+
+  - Upright cylinders alone give the same results with the four terms (all 50 and 200 such curves): their cut has
+    the in-plane shape exactly (section 9.10).
+  - The composition suffers most. Of the curves whose largest sphere has q₊R above 1.7, Predict chooses the right one
+    in 4–13 % (fit1d's set; 72–85 % with the Born-term truth) and 9–21 % (extended; 60–77 %); a single sphere is
+    mostly taken for one or two upright cylinders on Si and for a sphere with a cylinder on PS. The truth's mode is
+    listed for 49–50 % and 35–37 % of the curves with a sphere above q₊R 2.3 (90 % and 84 %). Curves without a
+    sphere above q₊R 1.7 keep their rates (composition right in 78–81 % and 56–62 %).
+  - Over all curves, on Si: composition right in 40 %/27 % (*model*/*measured*) on fit1d's set and 36 %/32 % on the
+    extended set, against 88 %/64 % and 68 %/57 % (on PS 43 %/30 % and 38 %/32 %).
+  - χ²/N > 2 marks 58–67 % (fit1d's set) and 49–50 % (extended) of the curves where a sphere's R is off by more
+    than 10 %; the others fit within their errors.
+  - Predict without the cut's q_z (the effective interface, `--eia`) on the same Si curves: R of spheres at q₊R
+    1.7–3.5 low by 16–20 % (fit1d's set), D and σnn/D within about 1 % as in section 9.10, χ²/N > 2 for only 20–30 %
+    of the curves with a sphere off by more than 10 %, composition right in 47 %/29 % and 44 %/38 %.
+  - So Predict's sizes of spheres hold to about q₊R 1.7 (R ≈ 3 nm at α_i = 0.4°, 12 keV) on a real substrate;
+    beyond it the error of R grows to about 10 % at q₊R 2.3–3.5 and 40 % above (mostly too small on Si), and the
+    composition is usually wrong, on Si and on PS alike. Two paths with
+    a free reflection coefficient (section 9.10) take up these terms in least squares; Predict's network and
+    likelihood do not have them.
 
 Earlier runs on the same curves: before the search of the ranges (step 3), the comparison by BIC (step 5), the
 prior's box for least squares and the faster settings (2000 samples, four compositions, the posterior of every

@@ -57,7 +57,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   paracrystals of two populations exchanged); choosing the composition it tries the network's four most probable and
   the most probable of every number of populations. Fewer solutions end in a wrong mode (curves with a population
   more than 20 % off in R: 17 instead of 34 of the 200, 250 instead of 386 of 1200 curves of one to three
-  populations), and the true solution is among those listed in 95 % and 87 % of these curves.
+  populations), and the true solution is among those listed in 95 % and 87 % of these curves. These curves have the
+  Born term at the cut's q_z, the term Predict uses; drawn with the four-term DWBA (on Si and on 100 nm polystyrene),
+  spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i 0.4°, 12 keV) come out about 10 % (q₊R 2.3–3.5) to 40 % off in R and are
+  usually taken for upright cylinders (composition right in 4–21 % of such curves); upright cylinders are unchanged
+  (`posterior_recovery.py --scattering dwba`, Physics and Methods 9.13).
 - **1D Predict: General V5 and Single RC specialist removed.** On fit1d's 200 held-out curves V5 recovered R with a
   median error of 31 % and D of 22 % (20 s per curve); Predict parameters 0.7 % and 0.0–0.1 %. Settings saved with
   a V5 method open as Predict parameters. Fitting's *AI proposal (1D Predict)* is replaced by **Predict
