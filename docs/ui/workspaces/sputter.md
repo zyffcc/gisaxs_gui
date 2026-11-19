@@ -31,7 +31,8 @@
   `infrastructure/trace_files.py`、`presentation/live_steps_panel.py`、`step_tree.py`、`step_texts.py`、`step_pictures.py`、
   `presentation/views/sputter_steps_view.py`；存储：`application/storage.py`、`infrastructure/cache_store.py`、
   `presentation/storage_panel.py`；静态帧：`application/client_static.py`、`infrastructure/client_static.py`、
-  `presentation/static_flow.py`、`presentation/views/sputter_static_view.py`；分析包随仓库提供（`utils/sputter_client/`，
+  `presentation/static_flow.py`、`static_list.py`、`static_queue.py`、`static_export.py`、`application/static_samples.py`、
+  `application/static_report.py`、`presentation/views/sputter_static_view.py`、`views/sputter_samples_view.py`；分析包随仓库提供（`utils/sputter_client/`，
   研究代码的发布版：只有这些命令用到的文件，不含开发时所用私有数据的名字，`MANIFEST.json` 与
   `tests/test_sputter_client_bundle.py` 检查它；`GIMAP_SPUTTER_CLIENT` 或用户选的文件夹优先）
 - **Related tests**: [`tests/test_sputter_feature.py`](../../../tests/test_sputter_feature.py)（几何的来源与预设、扫描的结果
@@ -70,7 +71,7 @@
   “静态帧”一节；“原位”一页：扫描文件夹（`scan_picker`）、金属 `sample_metal`（Ag / Au / Cu）、基底 `substrate`、速率
   `sample_rate` 与它的单位 `rate_unit`（`RATE_UNITS`：Å/s、nm/s，默认 Å/s）、**QCM 读数** `qcm_check`、主按钮**分析**
   `analyze_button`；下一行是一句几何 `geometry_summary`（能量、距离、入射角、光束中心、滚转角；缺什么就只说“还需填写的几何：…”，
-  选了文件夹后用警示色）和**编辑**（切到详情、滚到几何区、光标放在第一个空字段）、**打开结果…**、视图开关 `view_switch`
+  选了文件夹后用警示色）和**编辑**（切到详情、滚到几何区、光标放在第一个空字段）、**打开结果…**、**导出…**（`export_flow.py`：选文件夹，后台用分析包的 `iampred.export` 写 `<扫描名>_export`——演化图和实测/模型图的 PDF、SVG、300 dpi PNG，每窗显示的解（含用户手选）及全部解的 CSV，方法说明；详情的“打开报告 / 打开文件夹”旁也有）、视图开关 `view_switch`
   （主屏 / 详情）；再下一行是扫描的一句话 `scan_summary`（帧数、探测器、曝光、时间，有速率时加“到最后一帧约沉积 … nm”）；
   右边是分析的 `JobStatus`（`analyze_status`：取消、详情——详情按钮切到详情视图并显示分析的消息）。
 - **主屏**（`_main_view`，默认）：没有结果时是空状态（`client_empty`：没有分析包时说明怎么给出它，按钮“选择文件夹…”；
@@ -252,9 +253,9 @@
 - **步骤树**（`application/live_steps.py` 的 `StepTree`，`presentation/step_tree.py` 的 `StepChecklist`，`live_steps_panel.py`
   的 `LiveStepsMixin`，布局 `views/sputter_steps_view.py`）：较新的分析包发 `step` 事件后（`StepTree.reported`），左栏的四个
   步骤行换成步骤树：○ 待做、● 进行中（下面一行是状态行，见上；联合精修时是“联合精修：第 k/n 次迭代 · 求导数：12/20 个时间窗 ·
-  已用 6:12，约剩 9 分钟”）、✓ 完成（右边是这一步的一行结论）、✗ 失败、– 跳过。父步骤在它或子步骤进行中 / 失败时展开，其余时候
+  已用 6:12，约剩 9 分钟”；第一次迭代前是“联合精修：计算起点 · 4/20 个时间窗”，准备和起点阶段不报剩余时间）、✓ 完成（右边是这一步的一行结论）、✗ 失败、– 跳过。父步骤在它或子步骤进行中 / 失败时展开，其余时候
   收起（▸ / ▾ 可手动切换）。标题用 `STEP_TITLES` 的译文（网络的步骤用网络名）；分析包写的英文结论与 `step_texts.SUMMARY_TEMPLATES`
-  匹配，用同样的数值显示译文，其余照原样。带细节文件的步骤标题后有“›”，点它在右半边打开（`live_right` 第 2 页：
+  匹配，用同样的数值显示译文，其余照原样。带细节文件的步骤标题后有“›”，点它在右半边打开，标题下是这一步完整的一行结论（树里会截断；点本身没有细节的父步骤——读入帧、整条扫描联合精修——会展开它并显示第一个有细节的子步骤）（`live_right` 第 2 页：
   `step_pictures.StepDetailPicture`，由 `ClientService.step_detail` 依次在结果的 `trace/` 和读入的 `<数据根>/<标签>.trace/`
   里找）：束心与掩膜——合并后的探测器图、掩膜去掉的份额（红）、束心 +、样品地平线（虚线），束心按 GIMaP 像素坐标
   (col + 0.5) × 合并倍数给出；读帧——数字和读入的帧段；沉积开始——计数率随时间、基线及其取值区间、开始时刻（规则自己的结果
@@ -309,28 +310,56 @@ H_nm, D_nm, gap_nm, width, coverage, amount_nm, base_nm}`）。缺的字段照�
 
 ## 静态帧（Static Frames，沉积之后测量）
 
-沉积之后测量的样品没有沉积速率，也没有沉积之前的帧，所以输入栏的“沉积后”一页（`kind_switch` 选 `static`；行为在
-`static_flow.py`）问的是别的：样品的帧（`static_frames`；“选择…”菜单：文件夹，或一个 CBF 文件 / zip 包——zip 包加 `::` 后的包内
-文件夹，包里有 CBF 的文件夹不止一个时让用户选）、样品名 `static_name`、**名义厚度**（nm，`static_nominal`：代替沉积速率，也是
-样品在系列横轴上的位置）、可选的**裸基底**（`static_reference`：另一片同种基底、未镀金属、同样测量的帧，给出图像里的基底部分；
-不给时分析包用 Si 的模型）。主按钮仍是**分析**（`analyze` 按 `analysis_kind()` 分给 `analyze_static`），任务状态是输入栏的同一个
-（`static_status` 就是 `analyze_status`，`_status_owner` 记住最近是哪一种分析在说话）。几何一行这时说这些帧的几何。所选种类记在
-偏好 `analysis_kind` 和项目里。详情里一节（`sputter_static_view.py`，默认收起）只留系列文件夹、模式（快速 / 精修 / 完整）、
-这些帧的几何（能量、距离、光束中心、滚转角、掩膜；留空用分析包自己的值，“分析包的值”把它们填进来；“分析包自带的掩膜”按文件名
-列出包里的 `.npy`）和日志。运行时主屏显示实时视图的三步（见“实时视图”）。
+沉积之后测量的样品没有沉积速率，也没有沉积之前的帧，所以输入栏的“沉积后”一页（`kind_switch` 选 `static`）不问单个样品，而是
+**添加样品…**（`static_add_button`，菜单：文件夹… / CBF 文件…；不再打开 zip 包）、一行概况（`static_summary`：几个样品、几个系列、
+已分析几个、几个暂不分析）和**样品列表**开关（`static_list_button`）。列表（`views/sputter_samples_view.py`，行为在
+`static_list.py`）在主屏和详情的左边，与它们同在一个分割器里，只在“沉积后”显示：
+
+- **找样品**（`application/static_samples.py`，`find_samples`）：选的文件夹里每个下面有 CBF 帧的子文件夹算一个样品（帧多深都行，
+  文件名含 GIWAXS 的不算）；里面只有一个说明不了什么的文件夹时（压缩包解压进同名文件夹）往里找，至多三层；子文件夹的名字都没有
+  厚度时，选的文件夹本身是一个样品（同级里与前缀同名的文件夹作裸基底）；单个 CBF 文件也是一个样品。
+- **从名字读**（`name_parts`）：后面跟 `nm` 或金属符号的数字是名义厚度（`10Au`、`6.5nm`、`6p5_Au`），紧挨着的 `H` / `HiPIMS`
+  为 HiPIMS、`DC` 为 DC；前面的部分是前缀（基底）。与前缀同名、没有厚度的文件夹是这些样品的裸基底（不列为样品）；同一前缀里
+  有 HiPIMS 样品时，其余的记为 DC（`complete`）。前缀加沉积方式是**系列**（`850 · HiPIMS`），每个系列分析进
+  `<结果文件夹>/<系列名>`（`series_slug`）。名字说不出厚度、或写着别的金属时，样品列出但不勾选，状态栏写原因（缺厚度 / 不是 Au /
+  没有帧），提示里是全文；不猜。
+- **列表**（`QTreeWidget`）：系列行（跨列：系列名、裸基底、已分析几个；勾选框勾选整组）下面是样品行——勾选框、名字、名义厚度
+  （双击可改；补上厚度的样品自动勾上）、状态（等待中 / 分析中 / 偏差 x.xx / 失败，失败原因在提示里）。选一个样品，主屏显示它的
+  系列并停在这个样品（`show_client_result(…, sample=…)`）；主屏上沿系列移动，列表跟着选中（`_choose_row_of_window`）。右键：
+  分析这个样品 / 这个系列、显示结果、整组的裸基底…/不用裸基底、打开文件夹、移除；“编辑”菜单：全选、全不选、移除没勾选的、
+  全部移除。列表记在偏好 `static_samples` 和项目的 `static.samples` 里。
+
+**分析**（`static_queue.py`）：按列表显示的顺序依次分析勾选且有厚度的样品。先查所有样品共用的值（结果文件夹、模式、几何），
+不对就不开始；单个样品的值不对（文件夹没了）就标为失败、跳过。要替换以前用别的帧或数值分析过的样品时，问一次，列出全部名字。
+每个样品是 `static_flow.py` 里的一次运行：任务状态写“第 i/n 个样品：名字 — 步骤”，进度条覆盖整个列表，行状态跟着变，主屏显示
+这个样品的实时视图。某个失败就标出来、接着下一个（只有一个样品时原因写在任务状态里，同以前）；取消停止当前和后面的样品。
+结束后任务状态汇总，主屏显示最后分析的样品所在的系列，提示条给出结果文件夹。
+
+**导出…**（`static_export.py`，显示的是静态系列时；按钮提示随之改变）：问一个文件夹，在后台写 `samples_report/report.html`
+（`application/static_report.py`：每个系列分“孤立颗粒”和“连成的膜”两部分，判据与主屏的实空间图和数值块标题相同（`domain/real_space.py`：
+有连续底层，或晶粒连成贯穿全图的网络，就是连成的膜，`joined`）。孤立颗粒的表列 R、高度 H、间距 D、间隙 D − 2R、覆盖率；连成的膜的表列
+膜厚（底层）、膜密度、膜高、起伏高度、起伏半径、起伏间距——膜里没有单个颗粒；两张表都有名义厚度、阶段、h_m、拟合偏差（按 ≤4 / ≤10 /
+更大着色）。另有一张两部分随名义厚度的图（`static_figures.py`，matplotlib Agg，同一横轴）和分析包的 `patterns.png`，以 base64 嵌入；
+文字用界面语言）和 `samples.csv`（每行带所属部分）。阶段（`stage`）：分立的岛 / 相互接触的晶粒 / 连成网络的晶粒（实空间图的排布）；
+有连续底层时，底层比晶粒高出底层的部分薄为薄底层上的晶粒，否则为连续膜，底层密度低于 0.95 时为密度低于 1 的膜。
+
+任务状态是输入栏的同一个（`static_status` 就是 `analyze_status`，`_status_owner` 记住最近是哪一种分析在说话）。几何一行这时说这些帧
+的几何。所选种类记在偏好 `analysis_kind` 和项目里。详情里一节（`sputter_static_view.py`，默认收起）只留**结果文件夹**（各系列的
+子文件夹放在里面）、模式（快速 / 精修 / 完整）、这些帧的几何（能量、距离、光束中心、滚转角、掩膜；留空用分析包自己的值，“分析包
+的值”把它们填进来；“分析包自带的掩膜”按文件名列出包里的 `.npy`）和日志。运行时主屏显示实时视图的三步（见“实时视图”）。
 
 1. `StaticService.analyze`（`application/client_static.py`）→ `StaticPackageRunner`（`infrastructure/client_static.py`）：
    `python -u -m iampred.static --frames … --label … --nominal-nm … --out <系列> [--reference-frames …] [--sample …]
    [--substrate …] --mode … --workers N [--sdd-mm …] [--energy-ev …] [--beam-row … --beam-col …] [--roll …] [--mask …]`，
    环境同“分析”，另加 `IAM_STATIC_DATA`。分析包的默认几何从它 `static` 模块的源码里读（不导入）；没有这个模块的包不能
    分析静态帧，页面这样说。
-2. **系列**是一个输出文件夹；GIMaP 在里面写 `gimap_series.json`（编号、像素掩膜、每个样品由什么分析得到）。导入的帧在
-   `<用户数据>/sputter_client/static/<系列编号>`，与原位的数据文件夹分开（像素掩膜不同）。同一个样品名换了帧或数值再分析时，
-   先问，再把旧的导入和系列里的那个样品删掉重做；完全相同的请求直接显示系列。
+2. **系列**是一个输出文件夹（`<结果文件夹>/<系列名>`）；GIMaP 在里面写 `gimap_series.json`（编号、像素掩膜、每个样品由什么分析
+   得到）。导入的帧在 `<用户数据>/sputter_client/static/<系列编号>`，与原位的数据文件夹分开（像素掩膜不同）。同一个样品名换了帧或
+   数值再分析时，先问（一次问全部），再把旧的导入和系列里的那个样品删掉重做；完全相同的请求直接显示系列，不再运行分析包。
 3. 结束后主屏显示整个系列：样品代替时间窗（选择器写“样品名 · 名义厚度 … nm”），每个样品一个解（`模型解`，各帧的中位数），
    演化图横轴是名义厚度，不出现“时间”字样；数值的范围（各帧与网络区间）在数值块的提示里。**打开结果…**也能打开系列。
 4. 一次只运行一个分析：一种在跑时“分析”不可用（切到另一种也一样）；所选的包不认识静态帧时，“沉积后”下的“分析”不可用。
-   系列文件夹、模式、几何、掩膜记为上次用的值，整节和所选种类进项目文件（旧项目为“原位”）。
+   结果文件夹、模式、几何、掩膜记为上次用的值，整节、样品列表和所选种类进项目文件（旧项目为“原位”，列表为空）。
 
 ## 实空间示意（Real Space）
 
@@ -344,6 +373,17 @@ H_nm, D_nm, gap_nm, width, coverage, amount_nm, base_nm}`）。缺的字段照�
   0.12 D（没有长程有序，与模型的干涉函数一致），半径取自以 R 为中位数的对数正态分布。
 - 随机数只有一个种子、每次按同样的顺序取，所以换解或换时间窗只改变大小，不改变“骰子”。示意下面一行说明位置是随机排布的，
   大小取自所选的解。
+- **整条扫描是同一片膜的生长**（`domain.real_space.grown`，2026-11-20 用户：“溅射过程肯定是连续的…第二个图是基于第一个图
+  的加性的”）：主屏把各时间窗所选解的值按时间顺序（沉积后的系列样品：同一基底、按名义厚度）交给示意
+  （`client_panel._space_series`）。视场边长整条扫描共用（`series_field`：7 × 最大 D，最小 D 时超过 `MAX_GROWN` 个晶粒就缩小）。
+  逐窗：所画覆盖率低于 `ROUND_UP`（0.45）时，解的数密度 2/(√3 D²) 要更多晶粒就在空位加新核（每个核试 `NUCLEUS_TRIES` 个
+  随机位置、取离已有晶粒最远的），要更少就让最接近相接的岛成对合成一个圆岛（面积相加、面积加权的中心）；之后不再增减晶粒、
+  也不移动，只长大。半径 = s·exp(宽度·z)，公共尺度 s 使晶粒的并集覆盖视场的目标份额（`_cover_scale`：格点上
+  min_i |g − x_i|·exp(−宽度·z_i) 的分位数）；目标是解的覆盖率（没有时按 R、D 估），有连续底层时至少 `CLOSED_COVER`（0.85），
+  且不低于前一窗。于是早期是分立的岛，覆盖率约一半后长成蠕虫状团簇，再成连通的膜；这时 `RealSpace.channels` 为真，
+  底层只铺在金属的覆盖范围内，其余是通到基底的沟道（`height_map`、`profile` 在那里为 0，图上方写沟道占视场的份额）。
+  2026-11-20 用户：“最终阶段应该是连续的沟道，而不是 nm 颗粒”。截面是俯视图中线的切线（`cut`）。整条序列计算一次
+  （`lru_cache`），换窗不重算。“连续膜／网络”的判断（数值方块的标题）也用这片生长的膜。
 - **聚并与逾渗**：相接的晶粒（中心距不大于两半径之和）连成一个团簇（`clusters`，并查集），画成一整块——先画所有轮廓，
   再把填充盖在上面，团簇内部不留边线；截面里相接的晶粒帽同样连成一片。连通视场两条对边的团簇（`spanning`）画得深一些。
   图上方一行说这一时刻的排布（`arrangement`）：分立的岛 / 聚并中：相邻晶粒相接 / 连成贯穿视场的网络（已逾渗）。

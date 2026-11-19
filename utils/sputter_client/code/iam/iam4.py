@@ -248,6 +248,9 @@ class Model4b(Model4):
 class GrainsB(Grains2):
     'Grains2 on a laterally homogeneous base layer (the coalesced film; its grain-boundary voids are not resolved).'
 
+
+    fill_d = None
+
     def __init__(self, R, s, eta, fcap, omega, h_m, fb=0.0, rb=1.0, **kw):
         self.fb, self.rb, self.h_tot = float(fb), float(rb), float(h_m)
         self.t_b = self.fb * self.h_tot / self.rb
@@ -262,7 +265,8 @@ class GrainsB(Grains2):
             return top, phi
         nb = M.SMOOTH_NB if M.SMOOTH else max(1, int(np.ceil(self.t_b / 2.0)))
         dm = dc(metal, f1_au=f1_au)
-        return top + [(self.rb * dm, self.t_b / nb)] * nb, np.r_[phi, np.full(nb, self.rb)]
+        db = self.rb * dm if self.fill_d is None else self.rb * dm + (1.0 - self.rb) * self.fill_d
+        return top + [(db, self.t_b / nb)] * nb, np.r_[phi, np.full(nb, self.rb)]
 
 
 class Model4c(Model4b):
@@ -285,11 +289,23 @@ class Model4c(Model4b):
             return list(self.host)
         return list(self.flat_layers()) if self.pfilm else []
 
+    _fill_dt = 0.0
+
     def _below(self):
         if self.buried is None:
-            return self._host()
+            host = self._host()
+            if self._fill_dt > 0 and host:
+                (d0, t0), rest = host[0], host[1:]
+                host = [(d0, max(t0 - self._fill_dt, 0.0))] + list(rest)
+            return host
+        if self._fill_dt > 0:
+            raise NotImplementedError("IAM_PFILL with IAM_BURIED")
         import underlayer as U
         return U.buried_layers(self, self._host())
+
+    def _fill_rho(self, m):
+        'Electron density of the polymer filling the base (0 without IAM_PFILL).'
+        return self.rho_top if getattr(m, "fill_d", None) is not None else 0.0
 
     def _sub_rho(self, below):
         return self.rho_top if below else rho_e("Si")
@@ -341,7 +357,7 @@ class Model4c(Model4b):
         rS = self._sub_rho(below)
         if len(slab) > nt:
             Et = A[nt + 1] + B[nt + 1]
-            P_top, r_b = Et[0] * Et[1:], self.nu_isl * m.rb * rho_e(self.s.metal, self.f1)
+            P_top, r_b = Et[0] * Et[1:], self.nu_isl * m.rb * rho_e(self.s.metal, self.f1) + (1.0 - m.rb) * self._fill_rho(m)
         else:
             P_top, r_b = P_bot, 0.0
         return np.abs(rS * P_bot + r_b * (P_top - P_bot)) ** 2 / np.abs(rS * P_bare) ** 2
@@ -353,7 +369,37 @@ class Model4c(Model4b):
 
     fluct_psd = False
     fluct_h = 0.5
+
+
+    fluct_d = None
     _ff = None
+
+
+    dom = None
+    _dom = None
+
+    def domain_term(self, m, slab0):
+        'dsigma/dOmega (n_af, n_q) of the metal-fraction modulation inside the composite base, or None when off.'
+        if self.dom is None or not self.dom[2] > 2e-6:
+            return None
+        nt = m.n_top if getattr(m, "n_top", None) is not None else len(slab0)
+        if len(slab0) <= nt or getattr(m, "t_b", 0.0) <= 1e-6:
+            return np.zeros((len(self.af_c), len(self.q)))
+        Ld, xd, Ad = (float(v) for v in self.dom)
+        layers = [(self.nu_isl * d, t) for d, t in slab0]
+        a = np.r_[self.ai, np.maximum(self.af_c, 1e-4)]
+        kzs, A, B, ts = stack(a, layers + self._below(), self.d_sub)
+        rM = rho_e(self.s.metal, self.f1)
+        c = rM - self._fill_rho(m)
+        amp = 0.0
+        for j in range(nt + 1, len(layers) + 1):
+            for u, w in zip(GL4_U, GL4_W):
+                dz = u * ts[j]
+                E = A[j] * np.exp(1j * kzs[j] * dz) + B[j] * np.exp(-1j * kzs[j] * dz)
+                amp = amp + m.rb * w * ts[j] * E[0] * E[1:]
+        k2, xi2 = (2.0 * np.pi / Ld) ** 2, xd ** -2.0
+        C = np.pi * xd ** 2 * (k2 + xi2) ** 2 / ((self.q ** 2 - k2 + xi2) ** 2 + 4.0 * k2 * xi2)
+        return RE ** 2 * abs(c) ** 2 * Ad * (np.abs(amp) ** 2)[:, None] * C[None, :]
 
     def film_fluct(self, m, slab0):
         'dsigma/dOmega per area of the film-density fluctuation, (n_af, n_q), or None when off:'
@@ -364,13 +410,23 @@ class Model4c(Model4b):
         a = np.r_[self.ai, np.maximum(self.af_c, 1e-4)]
         kzs, A, B, ts = stack(a, layers + self._below(), self.d_sub)
         dm = dc(self.s.metal, f1_au=self.f1)
+        nt = m.n_top if getattr(m, "n_top", None) is not None else len(slab0)
+        filled = getattr(m, "fill_d", None) is not None
+        cbase = (1.0 - self._fill_rho(m) / rho_e(self.s.metal, self.f1)) if filled else 1.0
         amp = 0.0
         for j in range(1, len(layers) + 1):
-            phi = float(np.real(slab0[j - 1][0] / dm))
+            if filled and j > nt:
+                phi = m.rb * cbase
+            else:
+                phi = float(np.real(slab0[j - 1][0] / dm))
             for u, w in zip(GL4_U, GL4_W):
                 dz = u * ts[j]
                 E = A[j] * np.exp(1j * kzs[j] * dz) + B[j] * np.exp(-1j * kzs[j] * dz)
                 amp = amp + phi * w * ts[j] * E[0] * E[1:]
+        if self.fluct_d is not None:
+            k2, xi2 = (2.0 * np.pi / self.fluct_d) ** 2, RP ** -2.0
+            C = np.pi * RP ** 2 * (k2 + xi2) ** 2 / ((self.q ** 2 - k2 + xi2) ** 2 + 4.0 * k2 * xi2)
+            return RE ** 2 * abs(rho_e(self.s.metal, self.f1)) ** 2 * AP * (np.abs(amp) ** 2)[:, None] * C[None, :]
         if self.fluct_psd:
             C = np.pi * RP ** 2 * (1.0 + (self.q * RP) ** 2) ** -(1.0 + self.fluct_h)
             return RE ** 2 * abs(rho_e(self.s.metal, self.f1)) ** 2 * AP * (np.abs(amp) ** 2)[:, None] * C[None, :]
@@ -383,6 +439,9 @@ class Model4c(Model4b):
         if self.void is not None or self.buried is not None:
             import underlayer as U
             out = out + U.void_term(self, m, slab0) + U.buried_term(self, m, slab0)
+        self._dom = dt = self.domain_term(m, slab0)
+        if dt is not None:
+            out = out + dt
         self._ff = ff = self.film_fluct(m, slab0)
         if ff is None:
             return out
@@ -394,6 +453,12 @@ class Model4c(Model4b):
         if self.s.sub == "TiO2":
             raise NotImplementedError("base-layer model on TiO2")
         self.nu_sub = self.nu_isl
+        if getattr(m, "fill_d", None) is not None:
+            if abs(self.nu_isl - 1.0) > 1e-12:
+                raise NotImplementedError("IAM_PFILL needs nu = 1")
+            self._fill_dt = (1.0 - m.rb) * getattr(m, "t_b", 0.0)
+        else:
+            self._fill_dt = 0.0
         slab0, phi = m.slab(self.s.metal, f1_au=self.f1)
         slab = [(self.nu_isl * d, t) for d, t in slab0]
         ratio = self.bg + (1 - self.bg) * self.substrate_ratio(m, slab)
@@ -403,7 +468,11 @@ class Model4c(Model4b):
         isl = self.grains_sliced(m, slab0) + self.base_rough(m, slab)
         Ise = M.layer_mid_int(self.a_all, slab + self.sub_layers, self.d_sub)[: len(slab)]
         h_tot = getattr(m, "h_tot", m.h_m)
-        fl = self.fluor(M.Morph(1.0, 1.0, 0.1, 0.3, h_tot), slab, phi, Ise) if h_tot > 0 else np.zeros(len(self.af))
+        if self.buried is not None and self.s.metal in ("Au", "Cu"):
+            import underlayer as U
+            fl = U.buried_fluor(self, slab, phi, Ise, h_tot)
+        else:
+            fl = self.fluor(M.Morph(1.0, 1.0, 0.1, 0.3, h_tot), slab, phi, Ise) if h_tot > 0 else np.zeros(len(self.af))
         metal, L = self.smear_metal(isl, fl)
         if self.Kaf is not None:
             sub = sub * (self.smear_ratio(ratio) / np.maximum(ratio, 1e-12))[None, :, None]
@@ -417,6 +486,8 @@ class Model4c(Model4b):
                 extra["isl_L"] = L
             if self._ff is not None:
                 extra["film_fluct"] = self._ff
+            if self._dom is not None:
+                extra["domain"] = self._dom
             return mu, dict(sub=sub, isl=isl, fl=fl, G=ratio, T=m.T, D=m.D, t_b=getattr(m, "t_b", 0.0), **extra)
         return mu, sub, metal
 

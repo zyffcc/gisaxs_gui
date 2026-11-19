@@ -79,7 +79,10 @@
  },
  "monotone": [
   "cov",
-  "lnh_mass"
+  "lnh_mass",
+  "lnD_mass",
+  "lnR_mass",
+  "lnt_film"
  ],
  "reported": [
   {

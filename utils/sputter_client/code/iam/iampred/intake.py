@@ -170,6 +170,10 @@ def main():
             lam = ref
             break
     energy = HC / lam
+    from . import registry as REG
+    problem = REG.lam_problem(a.metal, lam)
+    if problem:
+        raise SystemExit(f"{a.label}: {problem}")
     if a.shadow_only:
         a.shadow = True
     else:

@@ -1,8 +1,9 @@
 """Static layout of the Sputter page (behaviour in ``presentation/page.py`` and its mixins).
 
 From the top: the input bar (``sputter_main_view.py``: the scan folder, metal, substrate, deposition rate with its
-unit, Analyze and its job status, the geometry in one line, Open Result… and the switch of the view), then one of two
-views.
+unit — or, after the deposition, Add Samples… —, Analyze and its job status, the geometry in one line, Open Result…
+and the switch of the view), then one of two views; with After Deposition chosen the sample list
+(``sputter_samples_view.py``) stands left of them, in a splitter.
 
 **The main screen** (``sputter_main_view.py``, shown first): one time window of a result — the measured image beside
 the model image, the solutions to choose from, the value tiles and the evolution over the scan. While Analyze runs it
@@ -23,7 +24,8 @@ from __future__ import annotations
 from PyQt5.QtCore import QLocale, Qt
 from PyQt5.QtGui import QDoubleValidator
 from PyQt5.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton,
-                             QScrollArea, QSizePolicy, QStackedWidget, QTableWidget, QTabWidget, QTextBrowser,
+                             QScrollArea, QSizePolicy, QSplitter, QStackedWidget, QTableWidget, QTabWidget,
+                             QTextBrowser,
                              QVBoxLayout, QWidget)
 
 from src.gimap.app.presentation.components import AdvancedSection, ErrorBanner, FilePicker, ParameterSection
@@ -32,6 +34,7 @@ from src.gimap.app.presentation.i18n import DATA_VALUES
 
 from .sputter_live_view import SputterLiveView
 from .sputter_main_view import SputterMainView
+from .sputter_samples_view import LIST_WIDTH, SputterSamplesView
 from .sputter_static_view import MASKS_BUTTON, MASKS_TIP, SputterStaticView
 from .sputter_steps_view import TAB_STEPS
 
@@ -97,7 +100,7 @@ def _row(parent: QWidget, *widgets, stretch_last: bool = False) -> QWidget:
     return row
 
 
-class SputterPageView(SputterMainView, SputterLiveView, SputterStaticView):
+class SputterPageView(SputterMainView, SputterLiveView, SputterStaticView, SputterSamplesView):
     def setup_ui(self, page: QWidget) -> None:
         page.setObjectName("sputterPage")
         outer = QVBoxLayout(page)
@@ -108,7 +111,16 @@ class SputterPageView(SputterMainView, SputterLiveView, SputterStaticView):
         self.view_stack.setObjectName("sputterViews")
         self.view_stack.addWidget(self._main_view(self.view_stack))
         self.view_stack.addWidget(self._details_view(self.view_stack))
-        outer.addWidget(self.view_stack, 1)
+        # the sample list of After Deposition beside both views (hidden for an in-situ scan)
+        self.body_splitter = QSplitter(Qt.Horizontal, page)
+        self.body_splitter.setObjectName("sputterBody")
+        self.body_splitter.setChildrenCollapsible(False)
+        self.body_splitter.addWidget(self._samples_panel(self.body_splitter))
+        self.body_splitter.addWidget(self.view_stack)
+        self.body_splitter.setStretchFactor(0, 0)
+        self.body_splitter.setStretchFactor(1, 1)
+        self.body_splitter.setSizes([LIST_WIDTH, 4 * LIST_WIDTH])
+        outer.addWidget(self.body_splitter, 1)
 
     def _details_view(self, parent: QWidget) -> QWidget:
         details = QWidget(parent)

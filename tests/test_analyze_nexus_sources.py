@@ -1805,3 +1805,32 @@ def test_every_sentence_about_a_source_has_its_chinese() -> None:
         assert chinese and chinese != template, template
         fields = lambda text: sorted(name for _text, name, _spec, _conversion in string.Formatter().parse(text) if name)  # noqa: E731
         assert fields(chinese) == fields(template), template  # the same values are filled in
+
+
+def test_a_frame_caught_in_the_middle_of_a_write_is_read_again(tmp_path: Path, monkeypatch) -> None:
+    """The writer's flush of the next frame can leave the file shorter for a moment than its header says: a file
+    changed just now is read again after a short pause; a file nobody writes fails at once, as before."""
+    from src.gimap.features.analyze.infrastructure.adapters import frames
+
+    path = tmp_path / "scan_00001_m01.nxs"
+    path.write_bytes(b"")
+    calls: list[int] = []
+
+    def caught_while_written(_source, frame_idx=0):
+        calls.append(frame_idx)
+        if len(calls) < 3:
+            raise OSError("Unable to synchronously open file (truncated file: eof = 43520, stored_eof = 46976)")
+        return "frame"
+
+    monkeypatch.setattr(frames, "load_detector_image", caught_while_written)
+    pauses: list[float] = []
+    monkeypatch.setattr(frames.time, "sleep", pauses.append)
+    assert DetectorIoFrameSource().load(path, 8) == "frame" and calls == [8, 8, 8]
+    assert pauses == list(frames.AGAIN_S[:2])
+    calls.clear()
+    pauses.clear()
+    long_ago = time.time() - 60
+    os.utime(path, (long_ago, long_ago))
+    with pytest.raises(FrameReadError, match="scan_00001_m01.nxs"):
+        DetectorIoFrameSource().load(path, 8)
+    assert calls == [8] and pauses == []

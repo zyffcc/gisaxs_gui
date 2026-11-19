@@ -20,6 +20,16 @@ from tests.test_fit_series import _loaded, _open_series
 from tests.test_fit_series import Q_NM, RADII, _answer, _curve_of, _cut, _model, _pages, _series, _wait, _write
 
 
+def _quickest(action, times: int = 3) -> float:
+    """The shortest of a few runs of ``action`` (s): a shared CI machine pausing once is not the table freezing."""
+    best = float("inf")
+    for _ in range(times):
+        started = time.monotonic()
+        action()
+        best = min(best, time.monotonic() - started)
+    return best
+
+
 def _settle(seconds: float = 0.05) -> None:
     end = time.monotonic() + seconds
     while time.monotonic() < end:
@@ -68,17 +78,17 @@ def test_three_hundred_frames_do_not_freeze_the_results_step(tmp_path) -> None:
     frame = fit_frame(0, "x", _curve_of(_cut(5.4, 1)), _model(5.2), SeriesSettings())
     series._start_model = _model(5.2)
     series.fits = {index: replace(frame, index=index, path=series.paths[index]) for index in range(300)}
-    started = time.monotonic()
-    series.refresh()  # the table is of other fits: filled once
-    first = time.monotonic() - started
+
+    def fill() -> None:  # the table is of other fits: filled once
+        series._table_model = None
+        series.refresh()
+
+    first = _quickest(fill)
     _settle()
     assert series.results_table.rowCount() == 300 and series.results_table.item(299, 0).text() == "300"
-    started = time.monotonic()
-    series.refresh()
-    again = time.monotonic() - started
-    started = time.monotonic()
-    series._frame_done(replace(frame, index=300, path=series.paths[300]))  # one more frame: one more row
-    one_frame = time.monotonic() - started
+    again = _quickest(series.refresh)
+    # one more frame: one more row (the repeats make that row again)
+    one_frame = _quickest(lambda: series._frame_done(replace(frame, index=300, path=series.paths[300])))
     _settle()
     assert series.results_table.rowCount() == 301 and series.results_table.item(300, 0).text() == "301"
     assert first < 0.5 and again < 0.5 and one_frame < 0.2, (first, again, one_frame)

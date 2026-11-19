@@ -4,10 +4,11 @@ A newer analysis package reports its steps as a tree (``application/live_steps.p
 the place of the four step lines at the left of the live view: ○ pending, ● running — with the line of what happens
 now under the step at work (``live_status.py``; under the joint fit: its iteration, the windows of the batch at work,
 the time so far and left) —, ✓ done with what it found at the right, ✗ failed, – skipped; a parent folds its children
-away once it is done. A click on a step marked › opens what it found in the right half of the live view
-(``step_pictures.py``: the beam centre and the mask on the detector, the frames read, the start of the deposition, the
+away once it is done. A click on a step marked › opens what it found in the right half of the live view, under its name the whole
+line of what it found (``step_pictures.py``: the beam centre and the mask on the detector, the frames read, the start of the deposition, the
 time windows, the networks compared, the joint fit's iterations and solution — the joint fit's picture follows every
-iteration while it is open); *Back to the Analysis* closes it. The details are read from the result's ``trace``
+iteration while it is open); *Back to the Analysis* closes it. A click on a parent step that saved nothing itself (*Read the frames*, *Joint
+fit of the whole scan*) opens its children and shows the first of them that found something. The details are read from the result's ``trace``
 folder (during the import from the import's own, ``ClientStarted.import_trace``) when the step is opened and dropped
 when it is closed.
 
@@ -33,6 +34,24 @@ from .views.sputter_live_view import LIVE_HINT, PRELIMINARY_BUTTON
 from .views.sputter_main_view import STEPS_BUTTON
 
 LIVE_PAGE = 2
+
+
+def _with_detail(tree, step_id: str) -> Optional[str]:
+    """The step to show for a click on ``step_id``: itself when it saved details, else its first child that did
+    (None: neither)."""
+    node = tree.get(step_id) if tree is not None else None
+    if node is None:
+        return None
+    if node.detail:
+        return step_id
+    child = next((other for other in tree.ordered() if other.parent == step_id and other.detail), None)
+    return child.id if child is not None else None
+
+
+def _show_summary(label, node) -> None:
+    words = node_summary(node) if node is not None else ""
+    label.setText(words)
+    label.setVisible(bool(words))
 
 
 class LiveStepsMixin:
@@ -96,17 +115,21 @@ class LiveStepsMixin:
                 self._live_open(self._live_detail)
 
     def _live_tree_chosen(self, step_id: str) -> None:
-        node = self._live.steps.get(step_id) if self._live is not None else None
-        if node is None or not node.detail:  # nothing saved to show: follow the analysis
+        tree = self._live.steps if self._live is not None else None
+        shown = _with_detail(tree, step_id)
+        if shown is None:  # nothing saved to show: follow the analysis
             self._live_close_detail()
             return
-        self._live_open(step_id)
+        if shown != step_id:  # a parent: its children open, the first that found something is shown
+            self.live_tree.open_children(step_id)
+        self._live_open(shown)
 
     def _live_open(self, step_id: str) -> None:
         node = self._live.steps.get(step_id)
         self._live_detail = step_id
         self.live_tree.set_current(step_id)
         self.live_detail_title.setText(step_title(node))
+        _show_summary(self.live_detail_summary, node)
         self.live_detail_back.setText(tr(BACK_TO_RUN))
         try:
             self.live_detail_picture.show(self.service.client.step_detail(self._live_trace, node.detail))
@@ -151,6 +174,7 @@ class LiveStepsMixin:
             return
         self.steps_picture.clear()
         self.steps_detail_title.setText("")
+        self.steps_detail_summary.setVisible(False)
         tree = None
         if result is not None and self.service.client is not None:
             try:
@@ -171,8 +195,13 @@ class LiveStepsMixin:
         node = tree.get(step_id) if tree is not None else None
         if node is None or result is None:
             return
+        shown = _with_detail(tree, step_id)
+        if shown is not None and shown != step_id:  # a parent: its children open, the first that found something
+            self.steps_tree.open_children(step_id)
+            step_id, node = shown, tree.get(shown)
         self.steps_tree.set_current(step_id)
         self.steps_detail_title.setText(step_title(node))
+        _show_summary(self.steps_detail_summary, node)
         if not node.detail:
             self.steps_picture.show(None, tr(NO_DETAILS))
             return

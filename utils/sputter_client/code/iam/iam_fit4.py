@@ -60,13 +60,26 @@ if os.environ.get("IAM_SQ", "lma") == "free":
 
 BASEVOID = os.environ.get("IAM_BASEVOID", "0") == "1"
 BURIED = os.environ.get("IAM_BURIED", "0") == "1"
+
+
+PFILL = os.environ.get("IAM_PFILL", "0") == "1"
+if PFILL and (not BASE or CB or BURIED):
+    raise SystemExit("IAM_PFILL needs IAM_BASE=1 without IAM_CB / IAM_SCALE / IAM_BURIED")
+
+
+PDOM = os.environ.get("IAM_PDOM", "0") == "1"
+if PDOM and not PFILL:
+    raise SystemExit("IAM_PDOM needs IAM_PFILL=1")
+if PDOM:
+    PAR = PAR + [("lnLd", np.log(8.0), np.log(100.0), np.log(30.0)), ("lnXd", np.log(2.0), np.log(60.0), np.log(10.0)),
+                 ("lnAd", np.log(1e-6), np.log(2.0), np.log(1e-6))]
 if (BASEVOID or BURIED) and (not BASE or CB):
     raise SystemExit("IAM_BASEVOID / IAM_BURIED need IAM_BASE=1 without IAM_CB / IAM_SCALE (Model4c, GrainsB)")
 if BASEVOID:
     PAR = PAR + [("lnRv", np.log(0.5), np.log(4.0), np.log(2.0)), ("omv", 0.15, 0.6, 0.3)]
 if BURIED:
     PAR = PAR + [("fbur", 0.0, float(os.environ.get("IAM_FBURMAX", "0.5")), 0.1),
-                 ("lnRbur", np.log(0.5), np.log(4.0), np.log(1.5)), ("zbur", 0.0, 5.0, 0.5)]
+                 ("lnRbur", np.log(0.5), np.log(4.0), np.log(1.5)), ("zbur", 0.0, float(os.environ.get("IAM_ZBURMAX", "5.0")), 0.5)]
 VOID_LZ = float(os.environ["IAM_BASEVOID_LZ"]) if os.environ.get("IAM_BASEVOID_LZ") else None
 VOID_AMP = os.environ.get("IAM_BASEVOID_AMP", "0") == "1"
 if VOID_AMP and not BASEVOID:
@@ -110,10 +123,17 @@ FLUCT_PSD = os.environ.get("IAM_FLUCT_PSD", "0") == "1"
 if FLUCT_PSD and not FILMFLUCT:
     raise SystemExit("IAM_FLUCT_PSD needs IAM_FILMFLUCT=1")
 if FILMFLUCT:
-    PAR = PAR + [("lnRP", np.log(2.0 if FLUCT_PSD else 8.0), np.log(150.0), np.log(30.0)), ("lnAP", np.log(1e-6), np.log(5.0), np.log(1e-6))]
+    PAR = PAR + [("lnRP", np.log(2.0 if (FLUCT_PSD or os.environ.get("IAM_FLUCT_TS", "0") == "1") else 8.0), np.log(150.0), np.log(30.0)), ("lnAP", np.log(1e-6), np.log(5.0), np.log(1e-6))]
     UL_STARTS = [dict(a, **b) for a in UL_STARTS for b in ({}, {"lnRP": float(np.log(30.0)), "lnAP": float(np.log(0.3))})]
 if FLUCT_PSD:
     PAR = PAR + [("Hf", 0.0, 1.0, 0.5)]
+
+
+FLUCT_TS = os.environ.get("IAM_FLUCT_TS", "0") == "1"
+if FLUCT_TS and (not FILMFLUCT or FLUCT_PSD):
+    raise SystemExit("IAM_FLUCT_TS needs IAM_FILMFLUCT=1 without IAM_FLUCT_PSD")
+if FLUCT_TS:
+    PAR = PAR + [("lnDN", np.log(5.0), np.log(200.0), np.log(30.0))]
 
 
 def lc_start(t):
@@ -165,6 +185,10 @@ class Fit:
                           RL=np.exp(p["lnRL"]), aL=np.exp(p["lnaL"]), fL=np.exp(p["lnfL"]))
         if GSH:
             m.set_height_spread(p["sH"])
+        if PFILL and getattr(self.mdl, "pfilm", False) and self.s.sub in M.POLY:
+            m.fill_d = M.dc(self.s.sub)
+        if PDOM:
+            self.mdl.dom = (float(np.exp(p["lnLd"])), float(np.exp(p["lnXd"])), float(np.exp(p["lnAd"])))
         if "lnkD" in p:
             m.kD = float(np.exp(p["lnkD"]))
         self.mdl.nu_isl = p["nu"]
@@ -191,6 +215,8 @@ class Fit:
             self.mdl.fluct = (float(np.exp(p["lnRP"])), float(np.exp(p["lnAP"])))
         if FLUCT_PSD:
             self.mdl.fluct_psd, self.mdl.fluct_h = True, float(p["Hf"])
+        if FLUCT_TS:
+            self.mdl.fluct_d = float(np.exp(p["lnDN"]))
         if abs(self.mdl.sig_af - p["sig"]) > 1e-12:
             self.mdl.set_smear(p["sig"])
         return self.mdl.predict_grains(self.w, m, np.exp(p["lnK"]), g=p["g"], parts=parts), m, p

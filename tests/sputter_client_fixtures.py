@@ -268,6 +268,15 @@ class FakeClientRunner:
         code = self.code if self.code is not None else (0 if self.status == "ok" else 1)
         return ClientRun(code, False, (*PROGRESS_LINES, f"status: {self.status}; report: none"))
 
+    def export(self, result_folder, out_folder, shown) -> list:
+        """Writes two invented files and keeps what it was asked."""
+        self.exports = getattr(self, "exports", []) + [(Path(result_folder), Path(out_folder), list(shown))]
+        out = Path(out_folder)
+        out.mkdir(parents=True, exist_ok=True)
+        for name in ("solution.csv", "evolution.pdf"):
+            (out / name).write_text("invented", encoding="utf-8")
+        return sorted(out.iterdir())
+
 
 class FakeStaticRunner:
     """The package's ``static`` command: says its steps and writes the series with one more sample (or fails, or

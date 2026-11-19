@@ -60,7 +60,13 @@ CLIENT_STOPPED = "Stopped. Frames that were read completely are kept and reused 
 CLIENT_NO_MAIN = ("The analysis finished, but this package does not write the data of the main screen "
                   "(main/main.json): a newer package is needed. Its report is in {folder}.")
 MASK_UNREADABLE = "The mask file cannot be read: {file}"
-CLIENT_TEMPLATES = (*CLIENT_PROBLEMS, CLIENT_MISSING, CLIENT_INCOMPLETE, CLIENT_FALLBACK, CLIENT_FAILED, CLIENT_STOPPED, CLIENT_NO_MAIN,
+EXPORT_OLD = ("This analysis package cannot export (it is older than the export): update GIMaP or choose a newer "
+              "package.")
+EXPORT_FAILED = "The export stopped with an error; its last lines are under Details."
+EXPORT_NOTHING = "The result shown has no window with a solution to export."
+EXPORT_FOLDER = "{scan}_export"
+"""The folder the export writes into, under the folder the user picks."""
+CLIENT_TEMPLATES = (EXPORT_OLD, EXPORT_FAILED, EXPORT_NOTHING, *CLIENT_PROBLEMS, CLIENT_MISSING, CLIENT_INCOMPLETE, CLIENT_FALLBACK, CLIENT_FAILED, CLIENT_STOPPED, CLIENT_NO_MAIN,
                     MASK_UNREADABLE, *CLIENT_RESULT_TEMPLATES, *DETAIL_TEMPLATES)
 """Messages of the engine the page says in its language (the package's own lines stay as they are)."""
 
@@ -235,6 +241,11 @@ class ClientRunner(Protocol):
     def run(self, request: ClientRequest, out_folder: Path, on_line: Callable[[str], None],
             should_stop: Callable[[], object]) -> ClientRun: ...
 
+    def export(self, result_folder: Path, out_folder: Path, shown: list) -> list:
+        """Write the export of a result (``iampred.export``: figures, tables, methods) into ``out_folder``; ``shown``:
+        [{"t": s, "label": entry}] — the solution shown in each window. Returns the files written."""
+        ...
+
 
 class ClientReader(Protocol):
     def locate(self, folder: Path) -> Optional[Path]:
@@ -377,6 +388,18 @@ class ClientService:
         """The cores of the computer: the most processes the user can choose."""
         return max(1, os.cpu_count() or 1)
 
+    # -- exporting ------------------------------------------------------------------------------------------------
+    def export(self, result: ClientResult, folder, choices: Optional[dict] = None) -> list:
+        """Figures (PDF, SVG, PNG 300 dpi), the solution shown per window as a CSV with units, every solution and a
+        methods text of ``result`` in ``<folder>/<scan>_export`` — the solutions as shown, the user's choices
+        included. Returns the files written; raises ``ClientFailed`` / ``ClientMissing`` / ``ValueError``."""
+        shown = [{"t": window.time_s, "label": window.chosen_label(choices or {})} for window in result.windows
+                 if window.labels()]
+        if not shown:
+            raise ValueError(EXPORT_NOTHING)
+        name = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(result.scan or Path(result.folder).name)).strip("_") or "result"
+        return self.runner.export(Path(result.folder), Path(folder) / EXPORT_FOLDER.format(scan=name), shown)
+
     # -- analysing --------------------------------------------------------------------------------------------
     def analyze(self, request: ClientRequest, scan_results: Path, on_event: Callable[[object], None],
                 should_stop: Callable[[], object] = lambda: False) -> ClientResult:
@@ -409,7 +432,7 @@ class ClientService:
         return self.reader.read(out)
 
 
-__all__ = ["CLIENT_FAILED", "CLIENT_FALLBACK", "CLIENT_INCOMPLETE", "CLIENT_MISSING", "CLIENT_NO_MAIN", "CLIENT_PROBLEMS",
+__all__ = ["CLIENT_FAILED", "EXPORT_FAILED", "EXPORT_FOLDER", "EXPORT_NOTHING", "EXPORT_OLD", "CLIENT_FALLBACK", "CLIENT_INCOMPLETE", "CLIENT_MISSING", "CLIENT_NO_MAIN", "CLIENT_PROBLEMS",
            "CLIENT_STOPPED", "CLIENT_TEMPLATES", "ClientFailed", "ClientMissing", "ClientPackage", "ClientReader",
            "ClientRequest", "ClientRun", "ClientRunner", "ClientService", "ClientStarted", "ENGINE_FOLDER",
            "FILM_SUBSTRATES", "LABEL_PREFIX", "MASK_UNREADABLE", "MODES", "QCM_FACTOR", "RATE_HIGH_NM_S",

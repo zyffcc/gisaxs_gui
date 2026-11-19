@@ -68,7 +68,7 @@ def rows_of(lines, main, porous):
             top = max(top, STAGES.index(st))
             if STAGES[top] != st:
                 st, ss = STAGES[top], "earlier window"
-        r = dict(t=L["t"], t_rel=L.get("t_rel"), h_nom=h, stage=st, stage_source=ss, fit=fit,
+        r = dict(t=L["t"], t_rel=L.get("t_rel"), h_nom=h, stage=st, stage_source=ss, fit=fit, joint=suf == "_seq",
                  fit_grade="good" if fit <= GOOD else "fair" if fit <= FAIR else "poor", q={})
         q = r["q"]
         if not porous:
@@ -97,7 +97,7 @@ def rows_of(lines, main, porous):
             if v is None:
                 continue
             alt = [float(L[k]) for k in (c, c + "_path", c + "_refined", c + "_seq", c + "_net_p16", c + "_net_p84") if k in L]
-            q[c] = (float(v), min(alt), max(alt), "model" if fit <= FAIR else "estimate")
+            q[c] = (float(v), min(alt), max(alt), "model" if fit <= FAIR or r["joint"] else "estimate")
         out.append(r)
     return out
 
@@ -237,7 +237,9 @@ def markdown(path, scan, fam_zh, rows, main, summ):
         fg = [r["fit_grade"] for r in rr]
         fit = f"好 {fg.count('good')}／一般 {fg.count('fair')}／差 {fg.count('poor')}"
         txt.append(f"| {STAGE_ZH[st]} | {a['t']:g}–{b['t']:g} | {a['h_nom']:.1f}–{b['h_nom']:.1f} | " + " | ".join(cells) + f" | {fit} |")
-    txt += ["", "每格是该阶段第一个窗 → 最后一个窗的数值。“拟合”是该阶段里模型回图偏差为好（≤4）、一般（4–10）、差（>10）的窗数；差的窗里模型量只作估计。", "",
+    joint = any(r.get("joint") for r in rows)
+    txt += ["", "每格是该阶段第一个窗 → 最后一个窗的数值。“拟合”是该阶段里模型回图偏差为好（≤4）、一般（4–10）、差（>10）的窗数"
+            + ("；模型量都来自整条扫描联合精修，差的窗照样算模型值，偏差照列。" if joint else "；差的窗里模型量只作估计。"), "",
             "## 几个时刻的数值", "", "| t (s) | 名义沉积量 (nm) | 阶段 | " + " | ".join(k[1] for k in keys) + " | 拟合偏差 |", "|---|---|---|" + "---|" * (len(keys) + 1)]
     pick = sorted({int(round(i)) for i in np.linspace(0, len(rows) - 1, min(8, len(rows)))})
     for i in pick:
@@ -252,8 +254,12 @@ def markdown(path, scan, fam_zh, rows, main, summ):
                 f"这一段里模型拟合偏差的中位数是 {comp['fit_in']:.1f}，其余窗是 {comp['fit_out']:.1f}。"]
     txt += ["", "![演化](report.png)", "", "## 怎么读", "",
             "- **读数**：不经过模型，直接从计数读出。膜厚来自低 q 的膜干涉条纹，晶粒高度来自晶粒尺度的同一种条纹，横向尺度是水平切线上 q²I 最大处对应的 2π/q（特征长度，不是半径也不是间距）。光学致密度是金属散射峰所在出射角与致密金属临界角之比的平方：分立岛时峰在基底的临界角（Si 上 Ag 约 0.26、Au 约 0.15），膜致密后接近 1；薄膜时它是指标，不等于密度本身。",
-            "- **模型值**：网络给出候选、正向模型画回去与实测比较后的解；只在拟合偏差不超过 10 的窗里算模型值。括号里的范围是这个窗几种解（网络区间、单窗精修、整条扫描精修）的极值。",
-            "- **估计**：数据在这里定不了。膜厚和晶粒高度用 19 条扫描的经验关系（膜厚≈沉积量＋1 nm；晶粒未连片时高度≈沉积量＋2.1 nm）；拟合偏差超过 10 的窗里的模型量也归为估计。估计可以用来了解量级，不要当测量值引用。",
+            ("- **模型值**：网络给出候选、正向模型画回去与实测比较后的解。整条扫描联合精修（各窗共用样品常数、金属量随时间只增不减、形貌随时间平滑变化）的解在每个窗都算模型值，"
+             "不论拟合偏差大小；偏差列在旁边，偏差高的窗说明图样里有模型没描述的部分，数值是模型对它最接近的描述。" if joint else
+             "- **模型值**：网络给出候选、正向模型画回去与实测比较后的解；没有整条扫描联合精修时，只在拟合偏差不超过 10 的窗里算模型值。")
+            + "括号里的范围是这个窗几种解（网络区间、单窗精修、整条扫描精修）的极值。",
+            "- **估计**：数据在这里定不了。膜厚和晶粒高度用 19 条扫描的经验关系（膜厚≈沉积量＋1 nm；晶粒未连片时高度≈沉积量＋2.1 nm）"
+            + ("" if joint else "；拟合偏差超过 10 的窗里的模型量也归为估计") + "。估计可以用来了解量级，不要当测量值引用。",
             "- **阶段**由读数划分：只有晶粒高度条纹是分立岛；两种条纹都有是聚并；只剩膜条纹是成膜。没有读数的窗按名义沉积量划分。",
             f"- 本扫描 {n} 个窗：拟合好 {ng}、一般 {nf}、差 {n - ng - nf}。",
             "- 逐窗数值在 `report.csv`（每个量四列：值、下限、上限、来源）；全部细节在 `windows.csv`。", ""]

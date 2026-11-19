@@ -2440,8 +2440,8 @@ passed over: the package that comes with GIMaP runs, and the **Analysis package*
 tooltip. Without any package the main screen says so; **Open Result…** shows a folder analysed before all the
 same.
 
-**The input bar**, from the left (with **In Situ** chosen at its left end; **After Deposition** is for a sample
-measured after its deposition, see *Samples measured after their deposition* below):
+**The input bar**, from the left (with **In Situ** chosen at its left end; **After Deposition** is for samples
+measured after their deposition, see *Samples measured after their deposition* below):
 
 1. **Choose…**: the folder of one scan (its CBF frames, or a scan folder with them in one subfolder such as
    `p2m/`). A line under the bar then sums up the frames, the detector, the exposure and the time.
@@ -2538,6 +2538,7 @@ Analysing the same request again shows the result it has. **Details ▸ Analyze 
 | **Polymer film thickness (nm)** | Shown for a polymer substrate. Empty: the package's own value for that polymer. |
 | **Analysis package** | The folder in use, and **Choose Folder…**. |
 | **Open Report**, **Open Folder** | The package's report of the result shown (every quantity with its range and where it comes from) in the program that opens Markdown files, and the result's folder in the file manager. The report is also in **Details ▸ Report**. |
+| **Export…** | Also in the top bar beside **Open Result…**. Asks for a folder and writes `<scan>_export` into it: `evolution` and `patterns` as PDF and SVG (fonts embedded) and PNG at 300 dpi, `solution.csv` (the solution shown in each window — the joint fit, or the one you chose — with its fit deviation; units in the column names), `all_solutions.csv` (every solution of every window), `METHODS.md` (geometry, frames, mask, network, the joint fit's κ and Δt, the fit deviation's definition and median, the package — all taken from this result's records) and a README. Nothing is computed again; a package older than the export says so. |
 
 **Reading the result.** The main screen shows one time window:
 
@@ -2563,14 +2564,25 @@ Analysing the same request again shows the result it has. **Details ▸ Analyze 
 - **Patterns | Real Space**, at the right of the window line: **Real Space** draws the solution shown in place of
   the two images, in nm. Left a cut through a row of grains: the substrate (a polymer film is drawn, its
   thickness not to scale), the continuous layer under the grains when there is one, and the grains with their
-  radius and height. Right the view from above of a square seven distances D wide: grains with the radius and
-  size distribution of the solution, placed at random around the distance D. The positions are an illustration
-  (the same for every window, so only the sizes change when you move through the scan); the sizes are those of
-  the solution. It follows the window and the solution you choose. Grains that touch are drawn as one piece; a
+  radius and height. Right the view from above: grains with the radius and size distribution of the solution. The
+  whole scan is drawn as one growing film: the view has the same size in nm in every window, and the grains of a
+  window are those of the window before. While the film is open, new nuclei appear in free places where the
+  distance D shrinks (nucleation) and neighbouring islands merge into one round island where it grows
+  (coalescence). From about half coverage on, nothing disappears or moves any more: the islands grow together into
+  worm-like clusters and then a connected film, and what stays open are channels down to the substrate. The metal
+  drawn covers the share of the view the solution's coverage gives and never less than before (with a continuous
+  layer at least 85 %: the model's layer has no lateral structure of its own, so the channels of the picture are an
+  illustration). Samples measured after deposition are drawn the same way, ordered by their nominal thickness. The
+  positions are an illustration; the sizes are those of the solution. The cut on the left runs through the middle
+  of the view from above. It follows the window and the solution you choose. Grains that touch are drawn as one piece; a
   piece that runs across the whole view is darker, and the line above the picture says whether the grains are
-  separate, coalescing or a connected network (percolated). A solution with a continuous layer under the grains is a
-  closed film: the view from above is then the metal of that layer over the whole square, with the grains on it as
-  relief (slightly darker, thin outlines), and the line says *Continuous film … nm, grains on top: …*.
+  separate, coalescing or a connected network (percolated). Once the film is joined - a continuous layer under the
+  grains, or grains joined into a network across the view - it is drawn as the film itself, not as grains: the view
+  from above shows the height of the metal (lighter where it is low, darker where the relief rises) with the holes of
+  a network in the colour of the substrate, the cut is the film's profile along the middle of that view, and the line
+  says *Continuous film … nm, grains on top: …* or that the network crosses the view. The tiles then speak of the film
+  too: **Film height H**, **Relief radius R** and **Relief spacing D** (the lateral correlation length of the film's
+  surface, not the distance of separate particles); **Gap** is not shown.
 
 When the data cannot tell two solutions apart, both are there, as candidates with similar fit deviations: compare
 their images. A window the package could not use (no frames in it, for example) says why in place of its images.
@@ -2588,32 +2600,76 @@ in the pores.
 
 **Samples measured after their deposition.** A sample measured after its deposition — one of a thickness series
 of Au films, for example — has no deposition rate and no frames from before the deposition. Choose **After
-Deposition** at the left of the input bar (**In Situ** is a scan recorded during the deposition); the bar then asks
-for this sample, and each sample is analysed into a *series*:
+Deposition** at the left of the input bar (**In Situ** is a scan recorded during the deposition). The bar then holds
+**Add Samples…** and a line that sums up the samples, and the **Sample List** stands at the left of the main screen
+and of Details (the switch **Sample List** at the right of the bar hides or shows it):
 
-1. **Frames** (**Choose…**): the GISAXS frames of one sample — a folder, or one CBF file or a zip archive. For an
-   archive GIMaP lists the folders in it that hold frames; the folder inside the archive follows after two colons
-   (`archive.zip::folder/`).
-2. **Sample**: its name in the series.
-3. **Nominal (nm)**: the nominal thickness of the film, as deposited. It takes the place of the deposition rate and
-   is the sample's place on the axis of the series.
-4. **Bare substrate** (optional): frames of *another piece* of the same substrate without metal, measured the same
-   way; they give the substrate part of the image. Empty, the film is taken to lie directly on Si.
-5. **Analyze**. While it runs the main screen shows three steps: the frames of the sample read (the detector summed,
-   the usable frames summed, which frames are left out and why), the solution of each frame as it is found
-   (measured and model image of the frame solved last; below, the series with every frame solved so far at the
-   sample's nominal thickness), and the sample added to the series. Afterwards the main screen shows the series: one
-   sample in place of each time window — its value is the median over its frames —, the evolution along the
-   nominal thickness. A sample name that the series has already, with other frames or values, is replaced after a
-   question.
+1. **Add Samples… ▸ Folder…**: a folder of samples — each folder in it with CBF frames is one sample, however deep
+   the frames lie (measurement folders, `run1` …; frames whose file name says GIWAXS are left out) — or one sample's
+   folder; **CBF File…** takes one frame as a sample. A folder that holds nothing but one folder (an archive unpacked
+   into a folder of the same name) is looked into. Zip archives are not opened: unpack them first. Samples in the
+   list already are not added again.
+2. GIMaP reads each folder's name. The **nominal thickness** is a number followed by `nm` or by the metal (`10Au`,
+   `6.5nm`, `6p5_Au`); `H` or `HiPIMS` right before it marks a HiPIMS deposition. What stands before it is the
+   substrate (`850` of `850_H10Au`): a folder beside the samples named just that (`850`) is their **bare substrate**
+   — another piece of the same substrate without metal, measured the same way, which gives the substrate part of the
+   images; without one the film is taken to lie directly on Si. The samples of one substrate and one deposition
+   method are a **series** (`850 · DC`, `850 · HiPIMS`; DC is named only where HiPIMS samples of the same substrate
+   are listed too), analysed into a folder of its own. A sample whose name gives no thickness is listed unticked
+   with *Thickness?*: double-click its **nm** to enter it. Only Au films can be analysed: a folder named with another
+   metal is listed unticked (*Not Au*).
+3. **The list** shows each series — its bare substrate and how many of its samples are analysed — with its samples:
+   a box (ticked: Analyze runs it; the box of a series ticks all of its samples), the name and the nominal thickness
+   (double-click either to change it) and the state: *Waiting*, *At work…*, *Fit 2.91* once analysed (its fit
+   deviation), *Failed* (the reason in the tooltip). A right-click offers **Analyze This Sample**, **Analyze This
+   Series**, **Show Result**, **Bare Substrate…** or **No Bare Substrate (on Si)** for the whole series, **Open
+   Folder** and **Remove**; **Edit** selects all or none and removes samples.
+4. **Analyze** runs the ticked samples one after another, in the order of the list. The job status says *Sample 3 of
+   12: 850_6Au* and its step, and the bar covers the whole list. While a sample runs the main screen shows three
+   steps: the frames of the sample read (the detector summed, the usable frames summed, which frames are left out and
+   why), the solution of each frame as it is found (measured and model image of the frame solved last; below, the
+   series with every frame solved so far at the sample's nominal thickness), and the sample added to its series. A
+   sample that fails is marked and the next one starts; **Cancel** stops the sample at work and the ones after it
+   (those analysed stay in their series). A sample analysed before with the same frames and values is not run
+   again; samples analysed before with other frames or values are replaced after one question that names them all.
+   When the samples are done, the samples of each series analysed are fitted together as one growing film (*Fitting
+   the samples of … together as one growing film*): ordered by nominal thickness, a thicker sample is built on the
+   thinner one - radius, spacing, continuous layer, film height, metal amount and coverage (below closure) may not
+   decrease from one sample to the next. About 5-10 minutes per series on a desktop; the samples keep their own
+   solutions if it fails.
+   A series of one sample, or an older analysis package, skips this step.
+5. Afterwards the main screen shows the series of the last sample analysed: one sample in place of each time window
+   — its value is the median over its frames — and the evolution along the nominal thickness. Choose a sample in the
+   list to see its series at that sample; moving along the series on the main screen chooses its row.
+6. **Export…** (beside **Open Result…**, and in Details) writes `samples_report` into a folder you choose:
+   `report.html`, one file to send, in the interface language, with every series of the list in two parts. **Separate
+   particles** — the grains stand apart or touch without joining across the picture: radius R, height H, spacing D,
+   the gap D − 2R and the coverage. **Connected film** — a continuous layer under the grains, or grains joined into a
+   network: there are no separate particles any more, so the film's thickness and density, its height and the relief
+   of its surface (height, radius, spacing) are given. Each part has its table (with the nominal thickness, the
+   stage, the metal amount h_m and the fit deviation) and its panel of the figure against the nominal thickness; the
+   report says from which thickness on the film is connected, and shows each sample's measured and model images with
+   two cuts. `samples.csv` lists every sample with its part. Parts and stages follow the **Real Space** picture of the
+   main screen and the captions of its tiles: *separate islands*, *grains in contact* (touching, no cluster across
+   the picture), *grains joined into a network*; with a continuous layer, *grains on a thin layer* while it is
+   thinner than the grains stand above it, else a *continuous film*, or a *film with a density below 1* below 0.95 of
+   the bulk density.
 
-Under **Details ▸ Static Frames (after deposition)**: the **Series folder** (every sample analysed into it is added
-to the same series; choose an existing series to add to it), the **Mode** (Quick, Refine or Full), the geometry of
-these frames (empty fields keep the package's own values, which **Package Values** fills in; **Masks of the Package**
-lists the pixel masks it brings) and the log. One analysis runs at a time.
+Under **Details ▸ Static Frames (after deposition)**: the **Results folder** (each series goes into a folder of its
+own in it, named after the series; a series already there is added to), the **Mode** (Quick, Refine or Full), the
+geometry of these frames (empty fields keep the package's own values, which **Package Values** fills in; **Masks of
+the Package** lists the pixel masks it brings) and the log. One analysis runs at a time. The list is kept with the
+project and for the next session.
 
 The package supports Au films at an incidence angle near 0.40°; what it says about other cases appears in the
 section's log.
+
+![After Deposition: the sample list beside the main screen](manual_images/en/22b_sputter_samples.png)
+*After Deposition with a folder of samples added — here invented folders and the test suite's made-up results
+(synthetic images, invented values). Left the Sample List: three series with their bare substrate, each sample with
+its nominal thickness read from the folder name and its fit deviation; a sample whose name gives no thickness is
+left out (*Thickness?*) and its series listed last; one sample is not analysed yet. Right the series of the sample
+chosen, at that sample.*
 
 ![The main screen of Sputter with a result](manual_images/en/22_sputter.png)
 *The main screen with a result — here a made-up one: synthetic images and invented values, and three PILATUS CBF
