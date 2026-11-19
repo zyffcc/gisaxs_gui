@@ -36,6 +36,11 @@ AMPLITUDE_RANGE = 10.0
 TAIL_WIDTH_MAX = E.TAIL_WIDTH_MAX
 MODE_SPACING, MODE_SPREAD = 0.1, 0.05
 MAX_MODES = 4
+PROPOSAL_WIDTHS = (1.0,)
+"""The flow's base normal widths, equal shares of the samples (``flow.Network.sample``): above 1 the proposals reach
+further from the network's most probable values. Half of 1000 samples at width 2 found more modes of curves that
+the moves of ``refine`` did not, but lost more elsewhere (Physics and Methods 9.13), so the network's own width is
+used."""
 EXPLORE_ESS = 50.0
 """The effective samples of the tempered weights from which the ``explore`` modes of a composition are found: on a
 bright curve the weights sit on one or two samples, and modes of slightly lower likelihood would never be refined."""
@@ -340,7 +345,7 @@ def modes(result: Composition, points: int, weights: Optional[np.ndarray] = None
 def sample_composition(network, h, data: Cut, composition: int, count: int, rng, law: str = "number_gauss",
                        coupling: str = "lma", head_log_prob: float = 0.0) -> Composition:
     """Importance-sampled posterior of one composition."""
-    z, log_q = network.sample(network.context(h, composition), composition, count, rng)
+    z, log_q = network.sample(network.context(h, composition), composition, count, rng, widths=PROPOSAL_WIDTHS)
     values = E.from_z(z, np.full(count, data.ratio), composition)
     samples = physical(values, data.q_max)
     likelihood = Likelihood(data, composition, law, coupling)
@@ -391,5 +396,6 @@ def infer(network, data: Cut, compositions: Optional[Sequence[int]] = None, *, a
     return sorted(out, key=lambda r: -r.probability)
 
 
-__all__ = ["AMPLITUDE_RANGE", "EXPLORE_ESS", "TAIL_WIDTH_MAX", "Composition", "Cut", "Likelihood", "Mode", "PHYSICAL_NAMES",
-           "candidates", "dimensionless", "infer", "modes", "physical", "sample_composition", "tempered"]
+__all__ = ["AMPLITUDE_RANGE", "EXPLORE_ESS", "PROPOSAL_WIDTHS", "TAIL_WIDTH_MAX", "Composition", "Cut", "Likelihood",
+           "Mode", "PHYSICAL_NAMES", "candidates", "dimensionless", "infer", "modes", "physical",
+           "sample_composition", "tempered"]

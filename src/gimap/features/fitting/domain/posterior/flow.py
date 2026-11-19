@@ -185,13 +185,20 @@ class Network:
         u, log_det = self.forward(z, context, active)
         return np.sum(np.where(active, -0.5 * u * u - 0.5 * np.log(2 * np.pi), 0.0), axis=1) + log_det
 
-    def sample(self, context, composition: int, count: int, rng: Optional[np.random.Generator] = None):
-        """(z (count, DIMS), log q(z)) for one curve's context (1, C) of composition ``composition``."""
+    def sample(self, context, composition: int, count: int, rng: Optional[np.random.Generator] = None,
+               widths=(1.0,)):
+        """(z (count, DIMS), log q(z)) for one curve's context (1, C) of composition ``composition``. ``widths``: the
+        base normal's standard deviations, equal shares of the samples each; log q is that mixture's density."""
         rng = rng or np.random.default_rng()
         active = np.repeat(encoding.active(composition), count, axis=0)
-        u = np.where(active, rng.standard_normal((count, encoding.DIMS)), 0.0)
+        scale = np.asarray(widths, float)[np.arange(count) % len(widths)][:, None]
+        u = np.where(active, rng.standard_normal((count, encoding.DIMS)) * scale, 0.0)
         z, log_det = self.inverse(u, np.repeat(np.asarray(context, float)[:1], count, axis=0), active)
-        base = np.sum(np.where(active, -0.5 * u * u - 0.5 * np.log(2 * np.pi), 0.0), axis=1)
+        dims = active.sum(axis=1)
+        parts = [np.sum(np.where(active, -0.5 * (u / w) ** 2, 0.0), axis=1)
+                 - dims * (0.5 * np.log(2 * np.pi) + np.log(w)) for w in widths]
+        top = np.max(parts, axis=0)
+        base = top + np.log(np.mean(np.exp(np.array(parts) - top), axis=0))
         return z, base - log_det
 
 

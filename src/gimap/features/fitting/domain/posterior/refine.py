@@ -32,6 +32,7 @@ from .. import fit_model as fm
 from . import encoding as E
 from .infer import PHYSICAL_NAMES, TAIL_WIDTH_MAX, Cut, infer
 from .laplace import local_posterior
+from .moves import starts as moved_starts
 
 UNCONSTRAINED = 0.7
 ESS_MIN = 50
@@ -167,6 +168,9 @@ SEEDS = 16
 """The heaviest samples that start a search of the ranges."""
 REFINED = 3
 """Modes of a composition refined by least squares, the heaviest first."""
+MOVES = 2
+"""Moved starts (``moves``) refined from the best solution of each of the ``RETRY_COMPOSITIONS`` best compositions of
+two or three populations: the best of them by χ² with the scales solved."""
 EXPLORED = 3
 """Modes of the tempered weights (``infer.Composition.explore``) refined as well, when their start is another sample."""
 CHI2_RETRY = 2.0
@@ -265,8 +269,9 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
     1. The network's importance-weighted samples of each composition (given, or the head's ``shortlist`` among
        ``allowed``) and their modes (``infer``).
     2. Each mode (``refine_modes`` of them, and ``explored`` modes of the tempered weights) refined by least squares
-       from its heaviest sample; one search of the ranges for the ``RETRY_COMPOSITIONS`` best compositions whose
-       solutions all stay above χ²/N = ``CHI2_RETRY``. Steps 1–2 use the curve's σ.
+       from its heaviest sample; for the ``RETRY_COMPOSITIONS`` best compositions of two or three populations,
+       ``MOVES`` starts at their degeneracies (``moves``); one search of the ranges for those whose solutions all stay
+       above χ²/N = ``CHI2_RETRY``. Steps 1–2 use the curve's σ.
     3. The posterior of the solutions within ``DELTA_BIC`` of the best (at most ``LOCAL_MAX``) sampled around each
        (``laplace``): intervals and evidence, with the model error ``model_error_floor`` (``MODEL_ERROR_FLOOR``)
        added to σ, as in BIC and the least-squares errors.
@@ -318,6 +323,20 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
             started.append(mode.best)
             add(result, mode, fit_engine.fit(fit_model(mode.best, result.index, counts, law, coupling, grazing),
                                              fit_data, method="local"))
+    by_score = sorted((r for r in results if found[r.index]), key=lambda r: min(_bic(e[1]) for e in found[r.index]))
+    for result in by_score[:RETRY_COMPOSITIONS]:
+        placed = [e for e in found[result.index] if e[2] is not None]
+        if not MOVES or not placed:
+            continue
+        check()
+        mode, _refined, centre = min(placed, key=lambda e: _bic(e[1]))
+        tried = []
+        for values in moved_starts(centre, result.index):
+            start = fit_model(values, result.index, counts, law, coupling, grazing)
+            residual = fit_engine.residuals(start, fit_data)
+            tried.append((float(residual @ residual), len(tried), start))
+        for _chi2, _i, start in sorted(tried)[:MOVES]:
+            add(result, mode, fit_engine.fit(start, fit_data, method="local"))
     by_score = sorted((r for r in results if found[r.index]), key=lambda r: min(_bic(e[1]) for e in found[r.index]))
     for result in by_score[:RETRY_COMPOSITIONS]:
         if result.modes and min(e[1].chi2_reduced for e in found[result.index]) > CHI2_RETRY:
@@ -376,6 +395,6 @@ def _label(path) -> str:
     return key if owner == "globals" else f"{key}_{owner + 1}"
 
 
-__all__ = ["CHI2_RETRY", "DELTA_BIC", "ESS_FAILED", "ESS_MIN", "Interval", "LOCAL_MAX", "LOCAL_SAMPLES",
-           "MODEL_ERROR_FLOOR", "PosteriorSolution", "SAMPLES", "SHORTLIST", "UNCONSTRAINED", "fit_model",
+__all__ = ["CHI2_RETRY", "DELTA_BIC", "ESS_FAILED", "ESS_MIN", "EXPLORED", "Interval", "LOCAL_MAX", "LOCAL_SAMPLES",
+           "MODEL_ERROR_FLOOR", "MOVES", "PosteriorSolution", "SAMPLES", "SHORTLIST", "UNCONSTRAINED", "fit_model",
            "model_values", "predict"]

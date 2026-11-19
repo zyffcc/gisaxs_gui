@@ -145,3 +145,43 @@ def test_few_effective_samples_widen_the_intervals():
     assert narrow[1] - narrow[0] < 0.1 and wide[1] - wide[0] > 0.5
     assert 1.0 / np.sum(local.tempered(50) ** 2) >= 50 - 1e-6
     np.testing.assert_allclose(local.tempered(1), local.weights)
+
+
+def test_moved_starts_keep_the_order_and_the_paracrystal():
+    """R × 0.5 and × 2 at the same D, and the paracrystals of two populations exchanged, where the order of the radii
+    and D ≥ 2R still hold (posterior/moves.py)."""
+    from src.gimap.features.fitting.domain.posterior import moves
+
+    two = E.composition_index([("sphere", True), ("sphere", True)])
+    v = np.full(E.DIMS, np.nan)
+    v[0:6] = 2.0, 0.2, np.nan, np.nan, 30.0, 0.15
+    v[6:12] = 6.0, 0.2, np.nan, np.nan, 14.0, 0.25
+    starts = moves.starts(v, two)
+    radii = {(round(s[0], 3), round(s[6], 3)) for s in starts}
+    assert radii == {(1.0, 6.0), (4.0, 6.0), (2.0, 3.0), (2.0, 6.0)}  # the second not doubled: D = 14 < 2 × 12
+    swapped = [s for s in starts if s[4] == 14.0]
+    assert len(swapped) == 1 and swapped[0][10] == 30.0 and swapped[0][5] == 0.25 and swapped[0][11] == 0.15
+    for s in starts:
+        assert s[0] < s[6] and s[4] >= 2 * s[0] and s[10] >= 2 * s[6]
+    assert moves.starts(_values(), SPHERE) == []
+
+
+def test_wider_proposal_is_the_exact_mixture_density():
+    """Samples from base widths (1, 2) carry log q of the equal mixture of both widths (flow.Network.sample)."""
+    network = Network.load(DATA / "flow_fixture.npz")
+    q, counts, sigma = _curve()
+    data = infer.Cut.prepare(q, counts, sigma)
+    binned = E.bin_curve(data.q, data.intensity, data.sigma, data.q_max, data.ratio)
+    h = network.summary(E.features(*(a[None] for a in binned)), E.conditions([data.ratio], [0.0]))
+    context = network.context(h, SPHERE)
+    z1, log1 = network.sample(context, SPHERE, 50, np.random.default_rng(4))
+    z2, log2 = network.sample(context, SPHERE, 50, np.random.default_rng(4), widths=(1.0, 1.0))
+    assert np.allclose(z1, z2) and np.allclose(log1, log2)
+    z, log_mix = network.sample(context, SPHERE, 40, np.random.default_rng(5), widths=(1.0, 2.0))
+    active = np.repeat(E.active(SPHERE), z.shape[0], axis=0)
+    rows = np.repeat(np.asarray(context, float)[:1], z.shape[0], axis=0)
+    log_one = network.log_prob(z, rows, active)
+    u, _log_det = network.forward(z, rows, active)
+    d = active.sum(axis=1)
+    log_two = log_one + np.sum(np.where(active, 0.375 * u * u, 0.0), axis=1) - d * np.log(2.0)
+    assert np.allclose(log_mix, np.logaddexp(log_one, log_two) - np.log(2.0), atol=1e-6)

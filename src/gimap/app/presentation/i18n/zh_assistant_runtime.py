@@ -362,7 +362,7 @@ ASSISTANT_RUNTIME_ZH = {
     "near the frame": "这一帧附近",
     "Neither the options, the notes, Analyze's command bar nor an instrument profile give αi, so 0° is used. qy and the in-plane spacing barely change, but the sample horizon is then put at the direct beam: the exit angle αf of every row, the one quoted for the Yoneda band too, is too large by αi, and the rows between the direct beam and the real horizon count as above the sample.":
         "选项、笔记、分析的命令栏和仪器配置都没有给出 αi，因此使用 0°。qy 和面内间距几乎不变，但样品地平线会被放在直射束处：每一行的出射角 αf（包括 Yoneda 带标出的 αf）都偏大 αi，直射束和真实地平线之间的那些行也被算作样品上方。",
-    "predicting the particles of I(qy) (about 20 s)…": "正在预测 I(qy) 的颗粒（大约 20 s）…",
+    "predicting the particles of I(qy) (about 25 s)…": "正在预测 I(qy) 的颗粒（大约 25 s）…",
     "GISAXS fit of I(qy): particles, radius, size spread and distance D with their intervals, and the other probable solutions":
         "GISAXS I(qy) 拟合：颗粒、半径、尺寸分布和距离 D 及其区间，以及其他可能的解",
     "no side maximum or shoulder away from qy = 0": "在 qy = 0 之外没有侧峰或肩峰",

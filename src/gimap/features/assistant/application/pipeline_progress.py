@@ -61,7 +61,7 @@ TOOL_TEXT = {
 }
 SLOW = {
     "calibrate_geometry": "can take up to a minute",
-    "fit_horizontal_cut": "takes about 20 s",
+    "fit_horizontal_cut": "takes about 25 s",
     "find_calibration_files": "a few seconds",
     "set_frame": "a few seconds when many frames are summed",
 }

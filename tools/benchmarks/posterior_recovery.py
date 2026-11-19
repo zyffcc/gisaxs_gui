@@ -20,8 +20,10 @@ evaluates it: the cut's q_z, the case's coupling, no beam tail, no resolution), 
 coverage when the model is exactly right.
 usage: python tools/benchmarks/posterior_recovery.py --network PATH/NAME [--n 200] [--workers 8] [--seed0 20261116]
            [--samples N] [--local-samples N] [--shortlist N] [--refined 3] [--set fit1d|extended]
-           [--truth independent|own] [--model-error-floor F] [--explored N] [--out NAME]
-  (defaults: Predict parameters' own, refine.SAMPLES, LOCAL_SAMPLES, SHORTLIST, MODEL_ERROR_FLOOR, EXPLORED)
+           [--truth independent|own] [--model-error-floor F] [--explored N] [--moves N] [--widths 1,2]
+           [--out NAME]
+  (defaults: Predict parameters' own, refine.SAMPLES, LOCAL_SAMPLES, SHORTLIST, MODEL_ERROR_FLOOR, EXPLORED, MOVES,
+  infer.PROPOSAL_WIDTHS)
 Writes the summary to tools/benchmarks/NAME_summary.json (default posterior_recovery) and every curve to results/.
 """
 from __future__ import annotations
@@ -95,6 +97,8 @@ def _init(network_path: str, options: dict):
     global NETWORK
     NETWORK = Network.load(network_path)
     OPTIONS.update(options)
+    refine.MOVES = options.get("moves", refine.MOVES)
+    infer.PROPOSAL_WIDTHS = tuple(options.get("widths", infer.PROPOSAL_WIDTHS))
 
 
 def own_curve(case) -> tuple[np.ndarray, np.ndarray]:
@@ -267,12 +271,14 @@ def main():
     ap.add_argument("--truth", default="independent", choices=("independent", "own"))
     ap.add_argument("--model-error-floor", type=float, default=refine.MODEL_ERROR_FLOOR)
     ap.add_argument("--explored", type=int, default=refine.EXPLORED)
+    ap.add_argument("--moves", type=int, default=refine.MOVES)
+    ap.add_argument("--widths", default=",".join(str(w) for w in infer.PROPOSAL_WIDTHS))
     a = ap.parse_args()
     t0 = time.perf_counter()
     results = []
     options = dict(seed0=a.seed0, samples=a.samples, set=a.set, local_samples=a.local_samples, shortlist=a.shortlist,
                    refined=a.refined, truth=a.truth, floor=a.model_error_floor,
-                   explored=a.explored)
+                   explored=a.explored, moves=a.moves, widths=[float(w) for w in a.widths.split(",")])
     with Pool(min(a.workers, a.n), initializer=_init, initargs=(a.network, options)) as pool:
         for i, r in enumerate(pool.imap_unordered(run, range(a.n)), 1):
             results.append(r)

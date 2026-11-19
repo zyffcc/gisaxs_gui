@@ -213,7 +213,7 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
             "σ-normalised residual), warnings and at_bounds (non-linear values that ended on a bound of their range, "
             "not determined by the curve), and 'chosen': the most probable, the one the standard procedure reports. "
             "Another solution with a probability of 0.2 or more means the curve does not decide the model. "
-            "Confirm the model in Fitting. Takes about 20 s.",
+            "Confirm the model in Fitting. Takes about 25 s.",
             _object({
                 "side": {"type": "string", "enum": ["mean", "negative", "positive"]},
                 "components": {"type": "array", "items": {"type": "integer", "enum": [1, 2, 3]}, "maxItems": 3},
