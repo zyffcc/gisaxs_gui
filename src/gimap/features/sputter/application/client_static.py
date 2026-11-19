@@ -53,8 +53,10 @@ SAMPLE_EXISTS = ("The data of the series in {folder} already hold a sample named
                  "name.")
 STATIC_FAILED = "The analysis of the static frames stopped with an error ({status}); its last lines are in the log."
 STATIC_STOPPED = "Stopped. The samples analysed before stay in the series."
+SERIES_FAILED = ("Fitting the samples of the series together stopped with an error ({status}); the samples keep their own "
+                 "solutions. The last lines are in the log.")
 STATIC_TEMPLATES = (*STATIC_PROBLEMS, STATIC_UNSUPPORTED, SERIES_NOT_EMPTY, SERIES_ELSEWHERE, SERIES_OTHER_MASK,
-                    SAMPLE_EXISTS, STATIC_FAILED, STATIC_STOPPED)
+                    SAMPLE_EXISTS, STATIC_FAILED, STATIC_STOPPED, SERIES_FAILED)
 """Messages about static frames the page says in its language (the package's own lines stay as they are)."""
 
 
@@ -191,6 +193,13 @@ class StaticRunner(Protocol):
     def run(self, request: StaticRequest, on_line: Callable[[str], None],
             should_stop: Callable[[], object]) -> ClientRun: ...
 
+    def supports_series(self) -> bool:
+        """The package can fit the samples of a series together as one growing film."""
+        ...
+
+    def fit_series(self, folder: Path, on_line: Callable[[str], None], should_stop: Callable[[], object],
+                   workers: int = 0) -> ClientRun: ...
+
 
 class StaticService:
     def __init__(self, runner: StaticRunner, reader: ClientReader):
@@ -241,7 +250,28 @@ class StaticService:
         return self.reader.read(out)
 
 
-__all__ = ["ARCHIVE_MARK", "REFERENCE_SUFFIX", "SAMPLE_EXISTS", "SERIES_ELSEWHERE", "SERIES_NOT_EMPTY",
+    def fit_series(self, folder, on_event: Callable[[object], None], should_stop: Callable[[], object] = lambda: False,
+                   workers: int = 0) -> Optional[ClientResult]:
+        """The samples of the series in ``folder`` fitted together as one growing film (thickness order, growth
+        quantities may not decrease) and read again; None when the package cannot, or the series has one sample."""
+        supports = getattr(self.runner, "supports_series", None)
+        if not callable(supports) or not supports():
+            return None
+        out = Path(folder)
+        if len([part for part in out.iterdir() if (part / "frames.csv").is_file()]) < 2:
+            return None
+        run = self.runner.fit_series(out, on_event, should_stop, workers)
+        if run.stopped or should_stop():
+            raise Stopped(STATIC_STOPPED)
+        analysis = self.reader.analysis(out)
+        status = str(analysis.get("status") or "")
+        if run.code != 0 or status != "ok":
+            details = self.reader.failure_details(out, analysis) or "\n".join(run.tail[-15:])
+            raise ClientFailed(SERIES_FAILED.format(status=status or f"exit code {run.code}"), details)
+        return self.reader.read(out)
+
+
+__all__ = ["ARCHIVE_MARK", "REFERENCE_SUFFIX", "SAMPLE_EXISTS", "SERIES_FAILED", "SERIES_ELSEWHERE", "SERIES_NOT_EMPTY",
            "SERIES_OTHER_MASK", "STATIC_FAILED", "STATIC_MODES", "STATIC_PROBLEMS", "STATIC_STOPPED",
            "STATIC_TEMPLATES", "STATIC_UNSUPPORTED", "StaticDefaults", "StaticRequest", "StaticRunner",
            "StaticService", "frames_found", "join_frames", "split_frames"]

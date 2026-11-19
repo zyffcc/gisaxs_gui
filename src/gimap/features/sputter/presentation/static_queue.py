@@ -11,13 +11,17 @@ Each sample is one run of the package (``static_flow.py``): the job status says 
 and its step, the bar moves over the whole list, the sample's row says it is at work and the main screen shows the
 live view of that sample. A sample that fails is marked failed with its reason (in the row's tooltip and the log) and
 the next one starts. Cancel stops the sample at work and the ones after it; the samples analysed stay in their series.
-At the end the job status sums up, the main screen shows the series of the last sample analysed at that sample, and a
-toast offers the folder of the series. A sample analysed before with the same request is shown as it is, at once.
+When the samples are done, each series analysed in the run is fitted together as one growing film (the package's
+``iampred.static --series``: the samples by nominal thickness, radius, spacing, base layer, film height, amount and
+coverage may not decrease); a package without it, or a series of one sample, skips this. At the end the job status sums
+up, the main screen shows the series of the last sample analysed at that sample, and a toast offers the folder of the
+series. A sample analysed before with the same request is shown as it is, at once.
 """
 
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 from typing import Optional
 
 from PyQt5.QtCore import QUrl
@@ -42,8 +46,9 @@ BATCH_STOPPED = "Stopped after {done} samples. The samples analysed stay in thei
 NO_SAMPLES = "Add samples first: Add Samples… takes a folder of samples."
 NOTHING_TICKED = "Tick the samples to analyse in the list (each needs its nominal thickness)."
 DONE_TOAST = "{done} samples analysed into {series} series."
+SERIES_STEP = "Fitting the samples of {series} together as one growing film"
 QUEUE_TEMPLATES = (SAMPLE_OF, BATCH_DONE, BATCH_DONE_FAILED, BATCH_FAILED, BATCH_STOPPED, NO_SAMPLES, NOTHING_TICKED,
-                   DONE_TOAST)
+                   DONE_TOAST, SERIES_STEP)
 """The run-time texts of Analyze over the list that need Chinese."""
 SHARED_PROBLEMS = STATIC_PROBLEMS[5:]
 """Problems of the values every sample shares (the series folder, the mode, the geometry)."""
@@ -60,6 +65,8 @@ class StaticQueueMixin:
         self._static_outcomes: dict = {}
         self._static_last = None
         """(result, label) of the last sample analysed."""
+        self._static_series: Optional[list] = None
+        """The series folders still to fit together after the samples (None until the samples are done)."""
 
     def _confirm_static_replace(self, names: list) -> bool:
         answer = QMessageBox.question(self, tr(STATIC_REPLACE_TITLE), text(STATIC_REPLACE, names=", ".join(names)),
@@ -111,6 +118,7 @@ class StaticQueueMixin:
         self._static_count, self._static_index = len(todo), 0
         self._static_outcomes = {sample.source: "failed" for sample in refused}
         self._static_last = None
+        self._static_series = None
         for sample, _request in todo:
             self.set_sample_state(sample, "waiting")
         self._static_stop = False
@@ -120,6 +128,13 @@ class StaticQueueMixin:
 
     def _run_next_static(self) -> None:
         if self._static_stop or not self._static_queue:
+            if not self._static_stop and self._static_series is None:   # all samples done: fit each series together
+                self._static_series = list(dict.fromkeys(
+                    str(self.series_folder(sample.series)) for sample in self.static_samples
+                    if self._static_outcomes.get(sample.source) == "done"))
+            if not self._static_stop and self._static_series:
+                self._run_next_series()
+                return
             self._static_batch_done()
             return
         static = self._static_service()
@@ -136,6 +151,35 @@ class StaticQueueMixin:
         self.tasks.submit(STATIC_KEY, lambda: _guarded(lambda: static.analyze(request, emit, should_stop)),
                           on_done=self._static_sample_finished,
                           on_error=lambda message, details: self._static_sample_finished(Failure(message, details)))
+
+    def _run_next_series(self) -> None:
+        """The samples of the next series analysed in this run fitted together as one growing film (the package's
+        ``--series``; skipped by a package without it or for a series of one sample)."""
+        static = self._static_service()
+        folder = self._static_series.pop(0)
+        self._static_tracker, self._static_request_shown = None, None
+        name = Path(folder).name
+        self.static_log.appendPlainText("— " + text(SERIES_STEP, series=name))
+        self._static_status("running", [(SERIES_STEP, {"series": name})], 1.0)
+        emit, should_stop = self.staticEvent.emit, self._static_should_stop
+        lines = lambda event: emit(event) if isinstance(event, str) else None  # noqa: E731 - no live view here
+        workers = self.run_workers()
+        self.tasks.submit(STATIC_KEY, lambda: _guarded(lambda: static.fit_series(folder, lines, should_stop, workers)),
+                          on_done=lambda outcome: self._series_finished(folder, outcome),
+                          on_error=lambda message, details: self._series_finished(folder, Failure(message, details)))
+
+    def _series_finished(self, folder: str, outcome) -> None:
+        if isinstance(outcome, ClientResult) and outcome.static:
+            self._series_results[folder] = outcome
+            if self._static_last is not None and str(self._static_last[0].folder) == folder:
+                self._static_last = (outcome, self._static_last[1])
+        elif isinstance(outcome, Failure):          # the samples keep their own solutions
+            self.static_log.appendPlainText(message_text(outcome.message))
+            if outcome.details:
+                self.static_log.appendPlainText(outcome.details)
+            if outcome.kind == "cancelled":
+                self._static_stop = True
+        self._run_next_static()
 
     def _static_which(self) -> tuple:
         name = self._static_current.name if self._static_current is not None else ""
@@ -209,4 +253,4 @@ class StaticQueueMixin:
         self._run_queued()  # an Analyze that waited for this analysis
 
 
-__all__ = ["NOTHING_TICKED", "NO_SAMPLES", "QUEUE_TEMPLATES", "SAMPLE_OF", "StaticQueueMixin"]
+__all__ = ["NOTHING_TICKED", "NO_SAMPLES", "QUEUE_TEMPLATES", "SAMPLE_OF", "SERIES_STEP", "StaticQueueMixin"]

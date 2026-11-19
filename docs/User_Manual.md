@@ -2652,6 +2652,11 @@ and of Details (the switch **Sample List** at the right of the bar hides or show
    sample that fails is marked and the next one starts; **Cancel** stops the sample at work and the ones after it
    (those analysed stay in their series). A sample analysed before with the same frames and values is not run
    again; samples analysed before with other frames or values are replaced after one question that names them all.
+   When the samples are done, the samples of each series analysed are fitted together as one growing film (*Fitting
+   the samples of … together as one growing film*): ordered by nominal thickness, a thicker sample is built on the
+   thinner one - radius, spacing, continuous layer, film height, metal amount and coverage (below closure) may not
+   decrease from one sample to the next. A few minutes per series; the samples keep their own solutions if it fails.
+   A series of one sample, or an older analysis package, skips this step.
 5. Afterwards the main screen shows the series of the last sample analysed: one sample in place of each time window
    — its value is the median over its frames — and the evolution along the nominal thickness. Choose a sample in the
    list to see its series at that sample; moving along the series on the main screen chooses its row.

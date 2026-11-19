@@ -86,6 +86,7 @@ SPUTTER_SAMPLES_ZH = {
         "没有找到裸基底的帧：请重新选择它的文件夹，或者不用裸基底。",
     # -- Analyze over the list (static_queue.py) ----------------------------------------------------------------------
     "Sample {index} of {count}: {name}": "第 {index}/{count} 个样品：{name}",
+    "Fitting the samples of {series} together as one growing film": "把 {series} 的样品作为同一片生长的膜联合拟合",
     "Done: {done} samples analysed.": "完成：分析了 {done} 个样品。",
     "Done: {done} samples analysed, {failed} failed (the reason of each is in its row's tooltip).":
         "完成：分析了 {done} 个样品，{failed} 个失败（原因见各行的提示）。",

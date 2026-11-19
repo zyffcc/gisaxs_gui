@@ -284,6 +284,9 @@ SPUTTER_CLIENT_ZH = {
     "The analysis of the static frames stopped with an error ({status}); its last lines are in the log.":
         "静态帧的分析出错结束（{status}）；最后几行在日志里。",
     "Stopped. The samples analysed before stay in the series.": "已停止。之前分析的样品仍在系列里。",
+    "Fitting the samples of the series together stopped with an error ({status}); the samples keep their own "
+    "solutions. The last lines are in the log.":
+        "系列样品的联合拟合出错结束（{status}）；各样品保留各自的解。最后几行在日志里。",
     # -- the bar: the deposition rate and its unit (views/sputter_main_view.py, rate_flow.py) -------------------------
     "Rate": "速率",
     "Deposition rate, in the unit chosen beside it: needed, the solutions depend on the metal deposited at each time.":

@@ -228,6 +228,27 @@ class StaticPackageRunner:
         folder.mkdir(parents=True, exist_ok=True)
         (folder / SERIES_FILE).write_text(json.dumps(record, indent=2, default=str), encoding="utf-8")
 
+    def supports_series(self) -> bool:
+        """The package can fit the samples of a series together (``iampred.static --series``)."""
+        package = self.runner.package()
+        if package.problem or package.home is None:
+            return False
+        try:
+            return '"--series"' in (Path(package.home) / STATIC_ENTRY).read_text(encoding="utf-8")
+        except OSError:
+            return False
+
+    def fit_series(self, folder: Path, on_line: Callable[[str], None], should_stop: Callable[[], object],
+                   workers: int = 0) -> ClientRun:
+        """The samples in ``folder`` fitted together as one growing film, then the series' report written again."""
+        package = self.runner.package()
+        root, _record, _owned = self.series(Path(folder))
+        work = self._storage() / STATIC_WORK
+        work.mkdir(parents=True, exist_ok=True)
+        command = [self.runner.python, "-u", "-m", "iampred.static", "--out", str(folder), "--series",
+                   "--workers", str(workers or self.runner.workers()), "--data", str(root)]
+        return self.runner.launch(command, package, root, work, on_line, should_stop, IAM_STATIC_DATA=root)
+
     def run(self, request: StaticRequest, on_line: Callable[[str], None],
             should_stop: Callable[[], object]) -> ClientRun:
         package = self.runner.package()
