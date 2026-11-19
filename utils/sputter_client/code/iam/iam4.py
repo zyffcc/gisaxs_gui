@@ -154,13 +154,14 @@ class Model4(M2.Model2):
             Pe = np.c_[P[:, cyl].sum(1), P[:, ~cyl]]
             rre = np.r_[1.0, rr[~cyl]]
             out = out + wk * M.incoherent_sum(Pe, m.Rj[:, None] * rre[None, :], self.q, m.n * m.wj, S)
-        self._islL = None
+        self._islL = self._accL = None
         if m.fL > 0:
             PL = self._p_soft(wz) if self.sL > 0 else P
             accL = M.incoherent_sum(PL, M.hemi_radius(z_up, m.L.Rj, m.L.Hj), self.q, m.nL * m.L.wj)
             out = out + accL
+            self._accL = rho2 * accL
             if self.sigL is not None:
-                self._islL = rho2 * accL
+                self._islL = self._accL
         return rho2 * out
 
     def r_rep_grains(self, m: Grains, nz=None):
@@ -436,9 +437,11 @@ class Model4c(Model4b):
 
     def grains_sliced(self, m, slab0):
         out = super().grains_sliced(m, slab0)
+        self._void_part = self._bur_part = None
         if self.void is not None or self.buried is not None:
             import underlayer as U
-            out = out + U.void_term(self, m, slab0) + U.buried_term(self, m, slab0)
+            self._void_part, self._bur_part = U.void_term(self, m, slab0), U.buried_term(self, m, slab0)
+            out = out + self._void_part + self._bur_part
         self._dom = dt = self.domain_term(m, slab0)
         if dt is not None:
             out = out + dt
@@ -510,6 +513,7 @@ class Model4g(Model4c):
         if w is None:
             return out
         L, F1 = self._islL, self._ff
+        kept = {k: getattr(self, k, None) for k in ("_accL", "_void_part", "_bur_part", "_dom")}
         nu = self.nu_isl
         try:
             self.nu_isl = 0.0
@@ -520,6 +524,9 @@ class Model4g(Model4c):
             self._islL = (1 - w)[None, :] * L + w[None, :] * self._islL
         if F1 is not None and self._ff is not None:
             self._ff = (1 - w)[None, :] * F1 + w[None, :] * self._ff
+        for k, a in kept.items():
+            b = getattr(self, k, None)
+            setattr(self, k, None if a is None or b is None else (1 - w)[None, :] * a + w[None, :] * b)
         return (1 - w)[None, :] * out + w[None, :] * out0
 
 

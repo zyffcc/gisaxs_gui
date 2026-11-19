@@ -43,8 +43,9 @@ def test_details_shows_the_windows_the_report_and_the_logs_of_the_result_shown(t
     page = _page(tmp_path)
     page.show()
     page.show_details(True)
-    assert [page.tabs.tabText(index) for index in range(page.tabs.count())] == ["Windows", "Report", "Logs", "Steps"]
-    for tab in (page.tab_windows, page.tab_report, page.tab_log, page.tab_steps):  # no result: one line says what to do
+    assert [page.tabs.tabText(index) for index in range(page.tabs.count())] == ["Windows", "Growth Process", "Report",
+                                                                                "Logs", "Steps"]
+    for tab in (page.tab_windows, page.tab_process, page.tab_report, page.tab_log, page.tab_steps):  # no result: one line says what to do
         assert tab.currentIndex() == 0 and tab.widget(0).text() == "Analyze a scan or open a result"
     out = write_result(tmp_path / "out")
     (out / "REPORT.md").write_text("# An invented report\n\nThe *invented* summary.\n", encoding="utf-8")
@@ -115,7 +116,7 @@ def test_the_tabs_speak_chinese(tmp_path):
     try:
         apply_language("zh", roots=(page,))
         page.refresh_language()
-        assert [page.tabs.tabText(index) for index in range(3)] == ["时间窗", "报告", "日志"]
+        assert [page.tabs.tabText(index) for index in range(4)] == ["时间窗", "生长过程", "报告", "日志"]
         assert _headers(page.windows_table)[-2:] == ["拟合偏差", "解"]
         assert _cells(page.windows_table)[0][-1] == "候选 2"
         assert "所用网络：zz_family" in page.report_facts.text() and "运行时间：4 s" in page.report_facts.text()

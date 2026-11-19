@@ -11,7 +11,9 @@ from pathlib import Path
 
 import numpy as np
 
+from . import components as CO
 from . import live as LV
+from . import process as PRC
 from . import registry as REG
 from . import runner
 
@@ -176,14 +178,26 @@ def _windows(args):
                 entries.append(("refined", "refined", None, row["refined"]))
             if "seq" in row:
                 entries.append(("joint", "joint", None, row["seq"]))
-            imgs, recs = [], []
+            imgs, recs, cimgs = [], [], []
             for label, kind, rank, c in entries:
-                (mu, _, _), m, p, h = ctx.render(np.asarray(c["x"], float))
+                x = np.asarray(c["x"], float)
+                try:
+                    mu, comps, closure, (m, p, h) = CO.split(ctx, x)
+                except Exception as e:
+                    (mu, _, _), m, p, h = ctx.render(x)
+                    comps, closure = {}, None
+                    LV.emit("components_skipped", t=t, reason=f"{type(e).__name__}: {str(e)[:120]}")
                 d5, _ = ctx.dev5(mu)
+                rep = ctx.reported(m, p, h)
                 imgs.append(np.where(good, (np.where(ok, mu, 0.0) * E).sum(0) / np.maximum(Es, 1e-30), np.nan))
-                recs.append(dict(label=label, kind=kind, rank=rank, weight=(round(float(c["weight"]), 4) if "weight" in c else None),
-                                 fit_deviation=round(float(d5), 3),
-                                 **wanted(pn, rn, c["x"], ctx.reported(m, p, h), h, getattr(m, "t_b", 0.0), m)))
+                cimgs.append(dict(zip(comps, CO.images(ctx, comps))) if comps else {})
+                rec = dict(label=label, kind=kind, rank=rank, weight=(round(float(c["weight"]), 4) if "weight" in c else None),
+                           fit_deviation=round(float(d5), 3), **wanted(pn, rn, c["x"], rep, h, getattr(m, "t_b", 0.0), m))
+                rec["growth"] = PRC.growth_point(cfg["family"], rn, rep, h)
+                if comps:
+                    rec["components"] = CO.shares(ctx, mu, comps)
+                    rec["components_closure"] = float(f"{closure:.1e}")
+                recs.append(rec)
             if not recs:
                 raise ValueError("no candidate to show")
             pos = meas[np.isfinite(meas) & (meas > 0)]
@@ -205,9 +219,12 @@ def _windows(args):
             name = f"w_{t:g}.png"
             fig.savefig(Path(outdir) / name, dpi=100, bbox_inches="tight")
             plt.close(fig)
+            keys = [k for k in CO.ORDER if any(k in ci for ci in cimgs)]
             np.savez_compressed(Path(outdir) / f"w_{t:g}.npz", q=q.astype(np.float32), af=af.astype(np.float32),
                                 measured=meas.astype(np.float32), models=np.asarray(imgs, np.float32),
-                                labels=np.array([r_["label"] for r_ in recs]))
+                                labels=np.array([r_["label"] for r_ in recs]),
+                                component_keys=np.array(keys, dtype=str),
+                                component_fractions=_fractions(imgs, cimgs, keys))
             best = min(range(len(recs)), key=lambda i: recs[i]["fit_deviation"])
             out.append(dict(t=t, t_rel=round(float(t - s.t_dep), 3), h_nom=round(float(ctx.h_nom_ctx), 4), image=name, arrays=f"w_{t:g}.npz",
                             entries=recs, pick=recs[best]["label"]))
@@ -215,6 +232,137 @@ def _windows(args):
             out.append(dict(t=t, error=f"{type(e).__name__}: {str(e)[:160]}"))
         LV.emit("drawn", t=t, entries=len(out[-1].get("entries") or ()))
     return out
+
+
+COMPONENT_COLOURS = dict(grains="#1f77b4", large_clusters="#e08a1e", film="#2a9d5c", voids="#8c564b", buried="#9467bd",
+                         domains="#e377c2", base_roughness="#bcbd22", clusters_in_pores="#1f77b4",
+                         clusters_on_cap="#e08a1e", pore_network="#2a9d5c", substrate="#7f7f7f",
+                         fluorescence="#d62728", background="#17becf")
+STAGE_COLOURS = dict(islands="#dbe9f6", coalescence="#fde8c8", film="#d5efdc", after="#ececec", tio2_clusters="#dbe9f6",
+                     tio2_film="#d5efdc")
+
+
+def _shown(wins):
+    "(window, entry) of every window with entries: the entry a GUI shows by default ('smooth', else 'pick')."
+    out = []
+    for w in wins:
+        lab = w.get("smooth") or w.get("pick")
+        e = next((e for e in w.get("entries") or () if e["label"] == lab), None)
+        if e is not None:
+            out.append((w, e))
+    return out
+
+
+def process_analysis(wins, family, metal, substrate):
+    'Process analysis of the scan (iampred.process) on the entries a GUI shows by default: the growth-law'
+    shown = [(w, e) for w, e in _shown(wins) if e.get("growth")]
+    if len(shown) < 2:
+        return dict(source=None, note="process analysis needs at least two windows with a solution")
+    joint = all(e["kind"] == "joint" for _, e in shown)
+    path = PRC.path_from_points([w["t"] for w, _ in shown], [e["growth"] for _, e in shown],
+                                [e["fit_deviation"] for _, e in shown])
+    desc = PRC.descriptors(path, family)
+    stage = PRC.stages(path, family)
+    for (w, _), s_ in zip(shown, stage):
+        w["stage"] = s_
+    timeline = []
+    for (w, e), s_ in zip(shown, stage):
+        if timeline and timeline[-1]["stage"] == s_:
+            timeline[-1].update(t_end=w["t"], h_end=e["growth"]["h"])
+        else:
+            timeline.append(dict(stage=s_, label=PRC.STAGES[s_], t_start=w["t"], t_end=w["t"], h_start=e["growth"]["h"],
+                                 h_end=e["growth"]["h"]))
+    ref = PRC.reference(metal, substrate)
+    clean = lambda v: (round(float(v), 4) if isinstance(v, float) and math.isfinite(v) else v)
+    return dict(source=("joint fit of the whole scan" if joint else "smooth path through the windows' solutions"),
+                note=("growth laws against the metal amount h (nm; wavelength independent): coverage, share of the metal "
+                      "in the continuous layer, D = D1 h^p_D and R = R1 h^p_R before the film forms; stages from the "
+                      "running maximum of coverage and film share (sputtering only adds metal)"),
+                descriptors={k: clean(v) for k, v in desc.items()}, stages=timeline, reference=ref,
+                compare=PRC.compare(desc, ref), substrate=substrate)
+
+
+def process_figure(main_dir, wins, process):
+    'main/process.png: component shares against time, R and D against the metal amount, coverage and film share'
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    shown = _shown(wins)
+    if len(shown) < 2:
+        return None
+    t = np.array([w["t"] for w, _ in shown])
+    g = [e.get("growth") or {} for _, e in shown]
+    h = np.array([x.get("h") if x.get("h") is not None else np.nan for x in g], float)
+    fig, ax = plt.subplots(1, 3, figsize=(13.5, 3.8))
+    for k in CO.ORDER:
+        v = np.array([(e.get("components") or {}).get(k, np.nan) for _, e in shown], float)
+        if not np.isfinite(v).any() or np.nanmax(np.abs(v)) < 1e-3:
+            continue
+        ax[0].plot(t, np.where(v > 0, v, np.nan), "-o", ms=3, lw=1.6, color=COMPONENT_COLOURS.get(k, "#444444"),
+                   label=CO.LABELS[k])
+    ax[0].set_yscale("log")
+    ax[0].set_ylim(1e-3, 1.5)
+    ax[0].set_xlabel("time (s)", fontsize=8)
+    ax[0].set_ylabel("share of the model counts", fontsize=8)
+    ax[0].set_title("components of the pattern", fontsize=9)
+    if ax[0].lines:
+        ax[0].legend(fontsize=6.5, loc="lower left", frameon=False)
+    from matplotlib.patches import Patch
+    st = [s_ for s_ in process.get("stages") or () if s_["stage"] != "after"]
+    edges = [max(s_["h_start"], 1e-3) for s_ in st] + [max(st[-1]["h_end"], 1e-3) if st else 1e-3]
+    for i in range(1, len(st)):
+        edges[i] = math.sqrt(max(st[i - 1]["h_end"], 1e-3) * max(st[i]["h_start"], 1e-3))
+    for i, s_ in enumerate(st):
+        for a_ in ax[1:]:
+            a_.axvspan(edges[i], edges[i + 1], color=STAGE_COLOURS.get(s_["stage"], "#eeeeee"), zorder=0, lw=0)
+    stage_handles = [Patch(color=STAGE_COLOURS.get(s_["stage"], "#eeeeee"), label=s_["stage"].replace("tio2_", ""))
+                     for s_ in st]
+    for key, name, colour in (("R", "radius R", "#1f77b4"), ("D", "distance D", "#e08a1e"),
+                              ("R_rel", "relative island size", "#1f77b4")):
+        v = np.array([x.get(key) if x.get(key) is not None else np.nan for x in g], float)
+        if np.isfinite(v).any():
+            ax[1].plot(h, v, "-o", ms=3, lw=1.6, color=colour, label=name)
+    d = process.get("descriptors") or {}
+    if np.isfinite(h).any() and np.nanmax(h) > 0:
+        hh = np.geomspace(max(np.nanmin(h[h > 0]), 1e-3), np.nanmax(h), 50)
+        for p_, v1, colour in ((d.get("p_D"), d.get("D1"), "#e08a1e"), (d.get("p_R"), d.get("R1"), "#1f77b4")):
+            if p_ is not None and v1 is not None:
+                ax[1].plot(hh, v1 * hh ** p_, ":", color=colour, lw=1.2)
+    ax[1].set_xscale("log")
+    ax[1].set_yscale("log")
+    ax[1].set_xlabel("metal amount h (nm)", fontsize=8)
+    ax[1].set_ylabel("relative size" if "R_rel" in (g[0] if g else {}) else "nm", fontsize=8)
+    ax[1].set_title("lateral sizes (dotted: power law before the film)", fontsize=9)
+    if ax[1].lines:
+        ax[1].legend(fontsize=7, frameon=False)
+    shares = (("cov", "coverage", "#2a9d5c"), ("b", "metal share in the continuous layer", "#9467bd"))
+    if "cap" in (g[0] if g else {}):
+        shares = (("cap", "cap layer share", "#e08a1e"), ("film", "film share", "#2a9d5c"))
+    for key, name, colour in shares:
+        v = np.array([x.get(key) if x.get(key) is not None else np.nan for x in g], float)
+        if np.isfinite(v).any():
+            ax[2].plot(h, v, "-o", ms=3, lw=1.6, color=colour, label=name)
+    ax[2].set_xscale("log")
+    ax[2].set_xlabel("metal amount h (nm)", fontsize=8)
+    ax[2].set_title("coverage and film (bands: stages)", fontsize=9)
+    if ax[2].lines:
+        ax[2].legend(handles=ax[2].get_legend_handles_labels()[0] + stage_handles, fontsize=7, frameon=False)
+    for a_ in ax:
+        a_.tick_params(labelsize=7)
+    fig.tight_layout()
+    fig.savefig(Path(main_dir) / "process.png", dpi=100)
+    plt.close(fig)
+    return "process.png"
+
+
+def _fractions(imgs, cimgs, keys):
+    "(entry, component, af, q) share of each component in the entry's model image per cell (float16; they add up to"
+    out = np.full((len(imgs), len(keys)) + np.shape(imgs[0]), np.nan, np.float32)
+    for i, (im, ci) in enumerate(zip(imgs, cimgs)):
+        with np.errstate(divide="ignore", invalid="ignore"):
+            for j, k in enumerate(keys):
+                out[i, j] = np.where(np.isfinite(im) & (im > 0), ci.get(k, 0.0 * im) / im, np.nan)
+    return out.astype(np.float16)
 
 
 def main():
@@ -258,12 +406,26 @@ def main():
     for w in wins:
         w["path"] = path.get(round(w["t"], 3))
     smooth_path(wins)
+    substrate = (summ.get("scan_json") or {}).get("sub") or (cfg["scans"].get(scan) or {}).get("sub")
+    try:
+        process = process_analysis(wins, summ["family"], st["info"].get("metal"), substrate)
+        fig = process_figure(main_dir, wins, process) if process.get("source") else None
+        if fig:
+            process["figure"] = fig
+    except Exception as e:
+        process = dict(source=None, note=f"process analysis failed: {type(e).__name__}: {str(e)[:160]}")
+    used = [k for k in CO.ORDER if any(k in (e.get("components") or {}) for w in wins for e in w.get("entries") or ())]
     doc = dict(scan=scan, family=summ["family"], metal=st["info"].get("metal"), model=summ.get("model"),
                wanted=[dict(key=k_, label=l_, unit=u_) for k_, l_, u_ in WANTED],
                sources=sources_text([r["name"] for r in cfg["reported"]]),
                note="development reference; fit deviation = deviance per cell with a 5 % model-error floor (lower is better)",
                choice="per window: 'pick' = lowest fit deviation, 'smooth' = smooth evolution over the scan (default to show), "
                       "'path' = the source of the time path of iampred.predict",
+               components=[dict(key=k_, label=CO.LABELS[k_]) for k_ in used],
+               components_note=("per entry 'components': share of each physical term in the model counts on the fitted "
+                                "cells; per cell in w_<t>.npz: component_fractions (entry x term x af x q, float16, adding up to 1; the "
+                                "term's image is its fraction times the entry's model image), component_keys"),
+               process=process,
                windows=wins)
     (main_dir / "main.json").write_bytes((json.dumps(doc, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
     ok = [w for w in wins if "entries" in w]

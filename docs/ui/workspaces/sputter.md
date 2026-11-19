@@ -22,8 +22,10 @@
   主屏与分析：`domain/client.py`、`application/client.py`、`application/client_progress.py`、`application/use_cases.py`
   （`SputterService`、扫描的结果文件夹）、`infrastructure/client.py`、`infrastructure/process.py`、
   `presentation/views/sputter_main_view.py`、`presentation/client_flow.py`、`rate_flow.py`（速率与单位）、`client_panel.py`、
-  `client_texts.py`、`pattern_view.py`、`evolution_view.py`、`real_space_view.py` 与 `domain/real_space.py`（实空间示意）；
-  详情：`presentation/views/sputter_page_view.py`、`geometry.py`、`result_tabs.py`（时间窗、报告、日志）、`project_state.py`；
+  `client_texts.py`、`pattern_view.py`、`evolution_view.py`、`real_space_view.py` 与 `domain/real_space.py`（实空间示意）、
+  `components_view.py` 与 `domain/process.py`（组分与生长过程）；
+  详情：`presentation/views/sputter_page_view.py`、`geometry.py`、`result_tabs.py`（时间窗、报告、日志）、`process_tab.py`
+  （生长过程）、`project_state.py`；
   并行进程数：`presentation/workers_flow.py`；读帧耗时的文字：`presentation/reading_texts.py`；
   实时视图：`application/client_live.py`、`application/live_progress.py`（初步结果之后的精修、联合精修、计数的速度）、
   `presentation/live_panel.py`、`live_status.py`（状态行、联合精修的虚线）、`live_pictures.py`、`live_static.py`（沉积后的样品）、
@@ -395,6 +397,25 @@ H_nm, D_nm, gap_nm, width, coverage, amount_nm, base_nm}`）。缺的字段照�
   （`pore_density`）画成颗粒后面的色带，并标出中心深度；最上一排按帽层覆盖率给一部分颗粒戴上帽层。右边放大一个颗粒的
   顶部：帽层按厚度、团簇按半径、高度和间距。下面一行是已沉积量和折合成致密金属的岛、帽层、孔内厚度。没有这些位置的解
   （旧的分析包）说明没有可画的形貌。
+
+## 组分与生长过程（Components、Growth Process）
+
+较新的分析包（研究代码 `iampred.components`、`iampred.process`）在 `main.json` 里另给：每个条目的 `components`（各物理项占
+模型计数的比例）和 `growth`；顶层的 `components`（项的 key 与名称）和 `process`（`source`、`descriptors`、`stages`、
+`reference`、`compare`）；每个时间窗的 `stage`；`w_<t>.npz` 里的 `component_keys` 与 `component_fractions`（条目 × 项 × α_f ×
+q_y，float16，各项之和为 1）。读取：`domain/process.py`（`ProcessAnalysis`、`components_listed`、`entry_components`、
+`process_analysis`），`domain/client.py`（`ClientEntry.components`、`ClientWindow.stage`、`ClientResult.components`、
+`ClientResult.process`、`ClientResult.component_series`、`WindowPatterns.components`）；形状不合的组分数组被忽略，图像照常显示。
+旧结果没有这些：组分为空、`process` 为 None。
+
+- 主屏切换 **图样 ｜ 实空间 ｜ 组分**：组分页（`presentation/components_view.py`，`pattern_host` 第 2 页）画所选解占比 ≥ 0.1 %
+  的项（最多 6 幅，大的在前），每幅是该项占比 × 模型图，用实测图的色标（`pattern_view.colour_limits`），标题是名称和占比；
+  右边是各项占比随时间的变化（对数轴，颜色按项固定：`COLOURS`），标出当前时间窗。只在这一页显示时才画。
+- 演化图（`evolution_view.py`）：结果有 `process.stages` 时（原位扫描），两幅图后面画各阶段的浅色色带（`STAGE_COLOURS`，
+  `STAGE_ALPHA`；边界在相邻阶段时间窗的中间，首尾到图边），色带够宽（≥ `STAGE_LABEL_ROOM`）时在尺寸图顶部写名称。
+- 详情 ▸ **生长过程**（`presentation/process_tab.py`，标签页第 2 个）：依据的解、生长阶段表、生长规律表（这条扫描的值、
+  同一金属与基底的中位数和范围、位置）、各时间窗所显示解的各项占比表（跟着主屏的选择变）；旧结果或静态系列一行说明原因。
+- 文字：`i18n/zh_sputter_process.py`。测试：`tests/test_sputter_process.py`。
 
 ## 记住的内容（偏好 `sputter_page`）
 

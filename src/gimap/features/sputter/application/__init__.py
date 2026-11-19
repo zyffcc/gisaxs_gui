@@ -1,6 +1,7 @@
 """Sputter use cases and their ports (and the result types the page shows)."""
 
 from ..domain import (NO_SOLUTION, ClientEntry, ClientQuantity, ClientResult, ClientWindow, WindowPatterns)
+from ..domain import COMPONENT_NAMES, COMPONENTS, DESCRIPTORS, STAGE_NAMES, ProcessAnalysis
 from ..domain import (FIELD_DISTANCES, SIDE_DISTANCES, Grain, PorousSpace, RealSpace, arrangement, clusters,
                       layer_particles, pore_density, porous_space, real_space, side_grains, spanning, top_grains,
                       visible, height_map, profile, cap_height, cut, grown, series_field)
@@ -42,6 +43,7 @@ __all__ = [
     "STEP_TITLES", "STEPS_RECORD", "StepNode", "StepTree", "DETAIL_KINDS", "JOINT_KEYS", "RANGES_SHOWN", "StepDetail",
     "detector_image", "deviations", "frame_ranges", "joint_iterations", "joint_solution",
     "DEFAULT_LIMIT_GB", "GB", "PLACE_LOCAL", "PLACE_USER", "ImportCache", "over_limit", "total_size", "unused_for",
+    "COMPONENT_NAMES", "COMPONENTS", "DESCRIPTORS", "STAGE_NAMES", "ProcessAnalysis",
     "NO_SOLUTION", "STEP_OF", "STEP_REUSED", "STEP_TEXT", "STEP_WEIGHTS", "SUBSTRATES", "WindowPatterns",
     "FIELD_DISTANCES", "Grain", "PorousSpace", "RealSpace", "SIDE_DISTANCES", "arrangement", "clusters",
     "layer_particles", "pore_density", "porous_space", "real_space", "side_grains", "spanning", "top_grains", "height_map", "profile", "cap_height", "cut", "grown", "series_field",

@@ -39,6 +39,7 @@ from .client_panel import ClientPanelMixin
 from .export_flow import EXPORT_KEY, ExportMixin
 from .geometry import INSPECT_KEY, SputterGeometryMixin
 from .live_panel import LivePanelMixin
+from .process_tab import ProcessTabMixin
 from .project_state import SputterProjectMixin
 from .rate_flow import RateMixin
 from .result_tabs import ResultTabsMixin
@@ -51,7 +52,8 @@ from .views.sputter_page_view import SputterPageView
 from .workers_flow import WorkersMixin
 
 
-class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, ExportMixin, ResultTabsMixin, LivePanelMixin,
+class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, ExportMixin, ResultTabsMixin, ProcessTabMixin,
+                  LivePanelMixin,
                   SputterStaticMixin, StaticListMixin, StaticQueueMixin, StaticExportMixin, RateMixin, WorkersMixin,
                   StoragePanelMixin, SputterGeometryMixin, QWidget, SputterPageView):
     clientEvent = pyqtSignal(object)

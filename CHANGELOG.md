@@ -106,6 +106,16 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   *Network cu_v4: drawing the candidates with the forward model, window 7 of 24*, *Joint fit: iteration 2 of 6 ·
   median fit deviation 11.3 · 5:40 so far, about 11 min left*. While the joint fit runs, its current solution is
   drawn dashed over the preliminary result's evolution after every iteration, until the final result replaces it.
+- **Sputter: the model split into its physical terms, and the growth process.** With a newer analysis package the
+  switch beside the window selector has **Components**: the model image of the solution shown split into its terms
+  (grains and islands, large clusters, film fluctuation and network, voids under the film, substrate seen through the
+  metal, fluorescence, beam-path background; on porous TiO₂ the clusters in the pores and on the cap and the metal
+  network in the pores), each with its share of the counts, and the shares over the scan. The evolution shows the
+  stages of the growth (separate islands, coalescence, continuous film, after the deposition) as bands, and the new
+  tab **Details ▸ Growth Process** lists the stages, the growth laws against the metal amount (coverage 0.5 and film
+  formation at, D = D₁ h^p and R = R₁ h^q before the film, D after it, coarsening after the stop) beside the range of
+  the same metal on the same substrate, and the shares of the terms per window. Results of an older package say that
+  they have none of this.
 - **Sputter ▸ Real Space:** a solution with a continuous base layer is drawn as a closed film: the top view is the
   metal of the layer over the whole square, with the grains as relief on it, and the line says *Continuous film …
   nm, grains on top: …*.

@@ -186,6 +186,7 @@ class ResultTabsMixin:
         for tab in (self.tab_windows, self.tab_report, self.tab_log, self.tab_steps):
             tab.setCurrentIndex(0 if result is None else 1)
         self.refresh_windows_table()
+        self.show_process_tab()  # Details ▸ Process (process_tab.py)
         self._show_report_tab()
         self._fill_logs()
         self.show_result_steps()  # Details ▸ Steps (live_steps_panel.py)
@@ -278,6 +279,7 @@ class ResultTabsMixin:
 
     def refresh_result_tabs_language(self) -> None:
         self.refresh_windows_table()
+        self.show_process_tab()
         self._show_report_tab()
         if self.client_result is not None and not (self._result_texts and self._result_texts.logs):
             self._show_log()

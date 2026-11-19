@@ -2424,8 +2424,8 @@ one scan, taken while a metal is sputtered onto a substrate. Under its input bar
   size distribution width, coverage and, when there is one, the thickness of the continuous metal layer under the
   grains — with their evolution over the scan. Analyze runs a separate analysis package;
 - **Details** (section 8.2) holds the geometry, the options of Analyze and of samples measured after their
-  deposition, the room the frames Analyze imports take (**Storage**), and four tabs about the result the main screen
-  shows: **Windows**, **Report**, **Logs** and **Steps**.
+  deposition, the room the frames Analyze imports take (**Storage**), and five tabs about the result the main screen
+  shows: **Windows**, **Growth Process**, **Report**, **Logs** and **Steps**.
 
 What the main screen shows is in [Physics and Methods, section 12.1](Physics_Manual.md#121-analyze-what-the-main-screen-shows).
 
@@ -2560,8 +2560,11 @@ Analysing the same request again shows the result it has. **Details ▸ Analyze 
   quantity that the model of this sample does not have is not shown; t_b only for a result of a newer analysis
   package, which lists it.
 - **The evolution**: R, H, t_b (dark gold), D and the gap (nm) and the coverage over the time in the scan, for the
-  solution shown in each window; the dashed line marks the window shown.
-- **Patterns | Real Space**, at the right of the window line: **Real Space** draws the solution shown in place of
+  solution shown in each window; the dashed line marks the window shown. With a newer analysis package faint bands
+  behind both plots mark the stages of the growth — **Separate islands**, **Coalescence** (coverage above 0.5),
+  **Continuous film** (half of the metal in the continuous layer) and **After the deposition** — named where the band
+  is wide enough (see **Details ▸ Growth Process**).
+- **Patterns | Real Space | Components**, at the right of the window line: **Real Space** draws the solution shown in place of
   the two images, in nm. Left a cut through a row of grains: the substrate (a polymer film is drawn, its
   thickness not to scale), the continuous layer under the grains when there is one, and the grains with their
   radius and height. Right the view from above: grains with the radius and size distribution of the solution. The
@@ -2583,6 +2586,14 @@ Analysing the same request again shows the result it has. **Details ▸ Analyze 
   says *Continuous film … nm, grains on top: …* or that the network crosses the view. The tiles then speak of the film
   too: **Film height H**, **Relief radius R** and **Relief spacing D** (the lateral correlation length of the film's
   surface, not the distance of separate particles); **Gap** is not shown.
+- **Components** splits the model image of the solution shown into its physical terms — **Grains and islands**,
+  **Large clusters**, **Film fluctuation and network**, **Voids under the film**, **Substrate seen through the metal**,
+  **Fluorescence**, **Beam-path background** …; on porous TiO₂ **Clusters in the pores**, **Clusters on the cap layer**
+  and **Metal network in the pores**. Each term with at least 0.1 % of the model counts gets a small image (at most
+  six, the largest first), on the colour scale of the measured image, so a term that contributes little looks dark;
+  its title gives its share of the counts. The terms add up to the model image. At the right, **Share of the model
+  counts**: every term over the scan for the solution shown in each window, the window shown marked. A result of an
+  older analysis package says that it does not split its model.
 
 When the data cannot tell two solutions apart, both are there, as candidates with similar fit deviations: compare
 their images. A window the package could not use (no frames in it, for example) says why in place of its images.
@@ -2720,12 +2731,20 @@ an analysis starts and when it ends, the imports not used for the longest time a
 the one in use, never a result. Imports an older GIMaP kept in the user data folder are still used and are listed as
 *user data folder (older GIMaP)*; nothing moves them.
 
-At the right, four tabs about the result the main screen shows (before there is one, each says *Analyze a scan or
+At the right, five tabs about the result the main screen shows (before there is one, each says *Analyze a scan or
 open a result*):
 
 - **Windows**: one row per time window (for a series of samples measured after their deposition, per sample) with
   the solution shown on the main screen — the time, the nominal thickness, its values, its fit deviation and which
   solution it is. Choosing another solution on the main screen changes its row. `Ctrl+C` copies the selected rows.
+- **Growth Process** (an in-situ scan analysed with a newer package): which solutions it is made from (the joint fit
+  of the whole scan, or the smooth path through the windows); **Stages of the growth** with their time range and metal
+  amount; **Growth laws** against the metal amount h — the amount at coverage 0.5 and at which the film forms, D = D₁ h^p
+  and R = R₁ h^q before the film, D and R once the film has formed, the coarsening after the deposition stopped, the
+  median fit deviation and the steps back between windows — each beside the median and range of the same metal on
+  the same substrate over the scans the package was built from, and whether this scan lies within, below or above
+  it; and **Physical terms of the model**: per window the share of each term for the solution shown (it follows your
+  choices). Metal amounts are equivalent thicknesses: they do not depend on the X-ray wavelength.
 - **Report**: the network the analysis used and the networks it tried with their fit deviation, the mode, the pixel
   mask and the run time; then **Time per step**, a small table of every step with its time (m:ss) — the import row
   adds the frames read of how many and the disk's seconds per frame with their share of the time — the total of all

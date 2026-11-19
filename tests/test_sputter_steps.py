@@ -272,7 +272,7 @@ def test_the_result_keeps_its_steps_for_details(tmp_path):
     page._client_finished(page.service.client.open(out))
     assert (out / "trace" / "gimap_steps.json").is_file()
     page.show_details(True)
-    page.tabs.setCurrentIndex(3)
+    page.tabs.setCurrentIndex(4)
     assert page.tab_steps.currentIndex() == 1 and page.steps_note.text() == "Click a step marked › to see what it found."
     assert page.steps_tree.row("import").summary.full_text() == "300 of 1000 frames in 75 s"
     page._result_step_chosen("compare")

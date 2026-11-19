@@ -3,7 +3,8 @@
 A result is a list of time windows; each has several solutions (the network's candidates and, when the analysis
 refined, the refined one). The page shows one window at a time — the slider, the arrows or a click on the evolution
 choose it — and one solution of it: the measured image beside that solution's model image (or, with the switch
-Patterns | Real Space, the solution drawn in real space: ``real_space_view.py``), its values on the tiles
+Patterns | Real Space | Components, the solution drawn in real space: ``real_space_view.py``, or its model split into
+its physical terms with their shares over the scan: ``components_view.py``), its values on the tiles
 and its fit deviation. The solution shown first is the window's default (the one the smooth evolution over the scan
 selects, else the lowest fit deviation). Choosing another one is kept per window in ``main/choices.json`` next to the
 result (only where it differs from the default) and read again when the result is opened; the evolution plots follow
@@ -25,12 +26,14 @@ from src.gimap.app.presentation.components import SegmentedControl
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.theme import set_role
 
-from ..application import ClientResult, ClientWindow, arrangement, grown, real_space, top_grains, visible
+from ..application import (COMPONENT_NAMES, ClientResult, ClientWindow, arrangement, grown, real_space, top_grains,
+                           visible)
 from .client_texts import (JOINT_FAILED, CHOICE_NOT_SAVED, EMPTY_ACTION, EMPTY_MESSAGE, EMPTY_TITLE, PACKAGE_ACTION, PACKAGE_TITLE,
                            MASK_AUTO, MASK_AUTO_ONLY, MASK_FILE, RELATIVE_RADIUS_TIP, RESULT_NAME, SAMPLE_CONTROLS, SAMPLE_ERROR, WINDOW_CONTROLS,
                            WINDOW_ERROR, entry_name, entry_segment, entry_tip, range_text, shown_number, window_text,
                            window_tip)
-from .evolution_view import RELATIVE_RADIUS, EvolutionPlot
+from .components_view import ComponentsPicture
+from .evolution_view import RELATIVE_RADIUS, EvolutionPlot, axis_label
 from .pattern_view import PatternPair
 from .real_space_view import RealSpacePicture
 from .texts import message_text, text
@@ -86,6 +89,7 @@ class ClientPanelMixin:
         self._empty_kind = ""
         self.patterns = PatternPair(self.pattern_layout)
         self.real_space = RealSpacePicture(self.space_layout)
+        self.components = ComponentsPicture(self.components_layout)
         self.image_switch.currentIndexChanged.connect(self._show_image_kind)
         self.evolution = EvolutionPlot(self.evolution_layout, self.select_window)
         self.window_slider.valueChanged.connect(self.select_window)
@@ -262,6 +266,7 @@ class ClientPanelMixin:
         self._show_entry()
         self._draw_evolution()
         self.refresh_windows_table()
+        self.show_process_tab()
 
     def _back_to_default(self) -> None:
         window = self.client_window()
@@ -294,6 +299,7 @@ class ClientPanelMixin:
         self.deviation_caption.setVisible(deviation is not None)
         self.deviation_value.setVisible(deviation is not None)
         self._draw_space()
+        self._draw_components()
         if entry is None:
             reason = message_text(window.error) if window is not None and window.error else ""
             static = result is not None and result.static
@@ -307,11 +313,34 @@ class ClientPanelMixin:
         self.patterns.show(patterns, entry.label, entry_name(entry.label))
 
     def _show_image_kind(self, _index: int = 0) -> None:
-        """The patterns or the solution in real space, as the switch says."""
-        space = self.image_switch.currentData() == "space"
-        self.pattern_host.setCurrentIndex(1 if space else 0)
-        if space:
+        """The patterns, the solution in real space or the model's terms, as the switch says."""
+        page = {"space": 1, "components": 2}.get(self.image_switch.currentData(), 0)
+        self.pattern_host.setCurrentIndex(page)
+        if page == 1:
             self._draw_space()
+        elif page == 2:
+            self._draw_components()
+
+    def _draw_components(self) -> None:
+        """The model of the chosen solution split into its physical terms, and their shares over the scan (drawn only
+        while that picture is shown)."""
+        if self.pattern_host.currentIndex() != 2:
+            return
+        window, result = self.client_window(), self.client_result
+        entry = window.chosen(self.client_choices) if window is not None else None
+        if entry is None:
+            reason = message_text(window.error) if window is not None and window.error else ""
+            static = result is not None and result.static
+            self.components.show_message(text(SAMPLE_ERROR if static else WINDOW_ERROR, reason=reason))
+            return
+        try:
+            patterns = self._patterns(window)
+        except (OSError, ValueError) as exc:
+            self.components.show_message(message_text(exc))
+            return
+        names = {key: tr(COMPONENT_NAMES.get(key, name)) for key, name in result.components}
+        self.components.show(patterns, entry.label, entry.components, names, result.component_series(self.client_choices),
+                             self.client_window_index, axis_label(result))
 
     def _draw_space(self) -> None:
         """The chosen solution of the window shown, in real space (drawn only while that picture is shown)."""
@@ -365,6 +394,7 @@ class ClientPanelMixin:
     def redraw_client_plots(self) -> None:
         self.patterns.redraw()
         self.real_space.redraw()
+        self.components.redraw()
         self.evolution.redraw()
 
     def refresh_client_panel_language(self) -> None:

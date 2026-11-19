@@ -364,9 +364,14 @@ def _client_entry(cfg, a, data_root):
     lam = meta.get("lam")
     if lam is not None and abs(float(lam) - REG.model_lam(cfg)) > 1e-9:
         problem = REG.lam_problem(meta.get("metal", "?"), float(lam))
-        if problem or abs(float(lam) / REG.model_lam(cfg) - 1) > REG.LAM_TOL:
-            raise SystemExit(f"{a.scan}: {problem or 'wavelength %g nm, family %s at %g nm' % (float(lam), cfg['family'], REG.model_lam(cfg))}")
+        if problem:
+            raise SystemExit(f"{a.scan}: {problem}")
         env["IAM_LAM_NM"] = repr(float(lam))
+        if REG.lam_outside(meta.get("metal", "?"), float(lam), cfg):
+            env["IAM_OPTICS"] = "table"
+            print(f"{a.scan}: {float(lam):.5f} nm is away from the wavelength of {cfg['family']} "
+                  f"({REG.model_lam(cfg):g} nm): tabulated optics at the scan's energy, the network gives starts only",
+                  flush=True)
     pm = data_root / a.scan / "pixmask.json"
     env["IAM_PIXMASK"] = json.loads(pm.read_text(encoding="utf-8"))["sha256"][:12] if pm.exists() else "none"
     return dict(metal=meta.get("metal", "?"), env=env, client=True), meta

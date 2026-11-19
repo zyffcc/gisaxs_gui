@@ -14,7 +14,8 @@ value comes from); Analyze options (``sputter_main_view.py``); Static Frames (``
 More options (collapsed): the pixel mask with the Masks of the Package, the sample roll and the folder results go to;
 Storage (collapsed, ``sputter_steps_view.py``): the import caches of Analyze and their limit.
 Right, about the result the main screen shows: Windows (one row per time window: the values of the solution shown),
-Report (the facts of the analysis, the time of each step with how the frames were read, a note when the disk was the
+Growth Process (the stages of the growth, its growth laws against the metal amount with the range of the same metal and
+substrate, and the share of each physical term of the model per window), Report (the facts of the analysis, the time of each step with how the frames were read, a note when the disk was the
 slow part, and the package's report), Logs (the logs of its steps) and Steps (the step tree of the run and what each
 step found); each says in one line what to do while there is no result.
 """
@@ -41,7 +42,7 @@ from .sputter_steps_view import TAB_STEPS
 LEFT_WIDTH = 470
 NO_RESULT = "Analyze a scan or open a result"
 """What each tab of Details says while the main screen shows no result."""
-TAB_WINDOWS, TAB_REPORT, TAB_LOG = "Windows", "Report", "Logs"
+TAB_WINDOWS, TAB_REPORT, TAB_LOG, TAB_PROCESS = "Windows", "Report", "Logs", "Growth Process"
 """('Log' alone is the logarithmic scale elsewhere in the table of translations.)"""
 
 
@@ -257,7 +258,11 @@ class SputterPageView(SputterMainView, SputterLiveView, SputterStaticView, Sputt
         layout.addWidget(self.log_view, 1)
         self.tab_log = self._empty_or(logs)
         self.tab_steps = self._empty_or(self._steps_tab())  # sputter_steps_view.py
+        self.process_view = QTextBrowser()  # the growth process of the result (process_tab.py fills it)
+        self.process_view.setObjectName("sputterProcess")
+        self.tab_process = self._empty_or(self.process_view)
         self.tabs.addTab(self.tab_windows, TAB_WINDOWS)
+        self.tabs.addTab(self.tab_process, TAB_PROCESS)
         self.tabs.addTab(self.tab_report, TAB_REPORT)
         self.tabs.addTab(self.tab_log, TAB_LOG)
         self.tabs.addTab(self.tab_steps, TAB_STEPS)
@@ -275,4 +280,4 @@ class SputterPageView(SputterMainView, SputterLiveView, SputterStaticView, Sputt
         return stack
 
 
-__all__ = ["LEFT_WIDTH", "NO_RESULT", "SputterPageView", "TAB_LOG", "TAB_REPORT", "TAB_WINDOWS"]
+__all__ = ["LEFT_WIDTH", "NO_RESULT", "SputterPageView", "TAB_LOG", "TAB_PROCESS", "TAB_REPORT", "TAB_WINDOWS"]

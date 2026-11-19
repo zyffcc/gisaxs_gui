@@ -70,6 +70,36 @@ MU_CU = 4 * np.pi * pref(LAM) * N_CU * CU_F2 / LAM
 P_K_CU, OMEGA_K_CU, EFF_RATIO_CU = 0.873, 0.445, 1.26
 
 
+OPTICS = os.environ.get("IAM_OPTICS", "const")
+if OPTICS not in ("const", "table"):
+    raise SystemExit(f"IAM_OPTICS={OPTICS}: const or table")
+E_EV, E_FL_EV = 1239.841984 / LAM, 1000.0 * FL_KEV
+if OPTICS == "table":
+    import xray_optics as XO
+    for _name in list(OPT):
+        _d, _f = XO.decrement(_name, E_EV), XO.decrement(_name, E_FL_EV)
+        OPT[_name] = ((_d.real, -_d.imag), (_f.real, -_f.imag))
+    AU_F1_12, AU_F2_12 = XO.f12("Au", E_EV)
+    AU_F1_FL, AU_F2_FL = XO.f12("Au", E_FL_EV)
+    MU_AU_12 = 4 * np.pi * pref(LAM) * N_AU * AU_F2_12 / LAM
+    CU_F1, CU_F2 = XO.f12("Cu", E_EV)
+    CU_F1_FL, CU_F2_FL = XO.f12("Cu", E_FL_EV)
+    OPT["Cu"] = ((pref(LAM) * N_CU * CU_F1, pref(LAM) * N_CU * CU_F2),
+                 (pref(LAM_FL) * N_CU * CU_F1_FL, pref(LAM_FL) * N_CU * CU_F2_FL))
+    MU_CU = 4 * np.pi * pref(LAM) * N_CU * CU_F2 / LAM
+    if not XO.fluoresces("Au", E_EV):
+        P_L3 = 0.0
+    if not XO.fluoresces("Cu", E_EV):
+        P_K_CU = 0.0
+
+
+def fluorescence_on(metal):
+    "The metal's fluorescence line is excited at the beam energy (always with the hand constants: 12 keV Au, Cu"
+    if OPTICS != "table":
+        return True
+    return XO.fluoresces(metal, E_EV)
+
+
 def dc(name, fl=False, f1_au=AU_F1_12):
     'Complex optical decrement d = delta - i beta (n = 1 - d).'
     if name == "Au":
@@ -497,11 +527,12 @@ class Scan:
             raise SystemExit(f"{label}: cache binned at {ev} eV, SCANS lam {lam} nm")
         if abs(lam - LAM) > 1e-9:
             raise SystemExit(f"{label}: SCANS lam {lam} nm, model LAM {LAM} nm (run with IAM_LAM_NM={lam!r})")
-        if self.metal == "Au" and abs(LAM - LAM_12) > 1e-9:
-            raise SystemExit(f"{label}: the Au optics and L fluorescence are 12 keV values; IAM_LAM_NM={LAM:g} refused")
+        if self.metal == "Au" and abs(LAM - LAM_12) > 1e-9 and OPTICS != "table":
+            raise SystemExit(f"{label}: the Au optics and L fluorescence are 12 keV values; IAM_LAM_NM={LAM:g} refused "
+                             f"(IAM_OPTICS=table: tabulated optics at any energy)")
         if self.metal == "Au" and abs(FL_KEV - 9.70) > 1e-9:
             raise SystemExit(f"{label}: Au L fluorescence needs IAM_FL_KEV unset (9.70), got {FL_KEV:g}")
-        if self.metal == "Cu" and (abs(LAM / LAM_CU - 1) > CU_LAM_TOL or abs(FL_KEV - FL_KEV_CU) > 1e-9):
+        if self.metal == "Cu" and ((abs(LAM / LAM_CU - 1) > CU_LAM_TOL and OPTICS != "table") or abs(FL_KEV - FL_KEV_CU) > 1e-9):
             raise SystemExit(f"{label}: the Cu optics are lambda {LAM_CU} nm values (used within {CU_LAM_TOL:.0%}) and "
                              f"its K fluorescence needs IAM_FL_KEV={FL_KEV_CU}; got IAM_LAM_NM={LAM:g}, IAM_FL_KEV={FL_KEV:g}")
         if self.cfg.get("pre_invalid") and os.environ.get("IAM_ALLOW_INVALID_PRE") != "1":
@@ -871,7 +902,7 @@ class Model:
 
     def fluor(self, m: Morph, slab, phi, Ise, rows_fl=None, tail_fl=None):
         'rows_fl / tail_fl (underlayer.buried_fluor): explicit fluorescence-energy decrements of the slab rows and the'
-        if self.s.metal not in ("Au", "Cu") or m.h_m <= 0:
+        if self.s.metal not in ("Au", "Cu") or m.h_m <= 0 or not fluorescence_on(self.s.metal):
             return np.zeros(len(self.af))
         if SMOOTH:
             wt = np.asarray(phi, float) * np.array([t for _, t in slab][: len(phi)], float)

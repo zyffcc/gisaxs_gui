@@ -57,7 +57,9 @@ KIND_CHOICES = (("In Situ", "insitu", "Frames recorded during the deposition: th
 """What the bar analyses: an in-situ scan, or a sample measured after its deposition."""
 IMAGE_CHOICES = (("Patterns", "patterns", "The measured image beside the model image of the solution shown."),
                  ("Real Space", "space", "The solution shown drawn in real space: a cut through a row of grains and "
-                                         "the view from above, in nm."))
+                                         "the view from above, in nm."),
+                 ("Components", "components", "The model image of the solution shown split into its physical terms "
+                                              "(grains, film, substrate, …), and how each term's share changes."))
 SCAN_FOLDER_TIP = ("The folder of one scan (its CBF frames, or a scan folder with them in one subfolder such as p2m/): "
                    "its first frame tells the detector, the exposure and the time.")
 RATE_TIP = ("Deposition rate, in the unit chosen beside it: needed, the solutions depend on the metal deposited at "
@@ -391,14 +393,18 @@ class SputterMainView:
         note.addWidget(self.steps_button)
         layout.addLayout(note)
 
-        self.pattern_host = QStackedWidget(view)  # 0: the two images, 1: the real-space picture
+        self.pattern_host = QStackedWidget(view)  # 0: the two images, 1: the real-space picture, 2: the model's terms
         patterns_page, space_page = QWidget(self.pattern_host), QWidget(self.pattern_host)
+        components_page = QWidget(self.pattern_host)
         self.pattern_layout = QVBoxLayout(patterns_page)
         self.pattern_layout.setContentsMargins(0, 0, 0, 0)
         self.space_layout = QVBoxLayout(space_page)
         self.space_layout.setContentsMargins(0, 0, 0, 0)
+        self.components_layout = QVBoxLayout(components_page)
+        self.components_layout.setContentsMargins(0, 0, 0, 0)
         self.pattern_host.addWidget(patterns_page)
         self.pattern_host.addWidget(space_page)
+        self.pattern_host.addWidget(components_page)
         layout.addWidget(self.pattern_host, 5)
 
         entries = QHBoxLayout()
