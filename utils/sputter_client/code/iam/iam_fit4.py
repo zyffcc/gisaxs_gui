@@ -110,10 +110,17 @@ FLUCT_PSD = os.environ.get("IAM_FLUCT_PSD", "0") == "1"
 if FLUCT_PSD and not FILMFLUCT:
     raise SystemExit("IAM_FLUCT_PSD needs IAM_FILMFLUCT=1")
 if FILMFLUCT:
-    PAR = PAR + [("lnRP", np.log(2.0 if FLUCT_PSD else 8.0), np.log(150.0), np.log(30.0)), ("lnAP", np.log(1e-6), np.log(5.0), np.log(1e-6))]
+    PAR = PAR + [("lnRP", np.log(2.0 if (FLUCT_PSD or os.environ.get("IAM_FLUCT_TS", "0") == "1") else 8.0), np.log(150.0), np.log(30.0)), ("lnAP", np.log(1e-6), np.log(5.0), np.log(1e-6))]
     UL_STARTS = [dict(a, **b) for a in UL_STARTS for b in ({}, {"lnRP": float(np.log(30.0)), "lnAP": float(np.log(0.3))})]
 if FLUCT_PSD:
     PAR = PAR + [("Hf", 0.0, 1.0, 0.5)]
+
+
+FLUCT_TS = os.environ.get("IAM_FLUCT_TS", "0") == "1"
+if FLUCT_TS and (not FILMFLUCT or FLUCT_PSD):
+    raise SystemExit("IAM_FLUCT_TS needs IAM_FILMFLUCT=1 without IAM_FLUCT_PSD")
+if FLUCT_TS:
+    PAR = PAR + [("lnDN", np.log(5.0), np.log(200.0), np.log(30.0))]
 
 
 def lc_start(t):
@@ -191,6 +198,8 @@ class Fit:
             self.mdl.fluct = (float(np.exp(p["lnRP"])), float(np.exp(p["lnAP"])))
         if FLUCT_PSD:
             self.mdl.fluct_psd, self.mdl.fluct_h = True, float(p["Hf"])
+        if FLUCT_TS:
+            self.mdl.fluct_d = float(np.exp(p["lnDN"]))
         if abs(self.mdl.sig_af - p["sig"]) > 1e-12:
             self.mdl.set_smear(p["sig"])
         return self.mdl.predict_grains(self.w, m, np.exp(p["lnK"]), g=p["g"], parts=parts), m, p

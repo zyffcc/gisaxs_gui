@@ -353,6 +353,9 @@ class Model4c(Model4b):
 
     fluct_psd = False
     fluct_h = 0.5
+
+
+    fluct_d = None
     _ff = None
 
     def film_fluct(self, m, slab0):
@@ -371,6 +374,10 @@ class Model4c(Model4b):
                 dz = u * ts[j]
                 E = A[j] * np.exp(1j * kzs[j] * dz) + B[j] * np.exp(-1j * kzs[j] * dz)
                 amp = amp + phi * w * ts[j] * E[0] * E[1:]
+        if self.fluct_d is not None:
+            k2, xi2 = (2.0 * np.pi / self.fluct_d) ** 2, RP ** -2.0
+            C = np.pi * RP ** 2 * (k2 + xi2) ** 2 / ((self.q ** 2 - k2 + xi2) ** 2 + 4.0 * k2 * xi2)
+            return RE ** 2 * abs(rho_e(self.s.metal, self.f1)) ** 2 * AP * (np.abs(amp) ** 2)[:, None] * C[None, :]
         if self.fluct_psd:
             C = np.pi * RP ** 2 * (1.0 + (self.q * RP) ** 2) ** -(1.0 + self.fluct_h)
             return RE ** 2 * abs(rho_e(self.s.metal, self.f1)) ** 2 * AP * (np.abs(amp) ** 2)[:, None] * C[None, :]
