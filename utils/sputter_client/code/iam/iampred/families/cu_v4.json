@@ -45,7 +45,9 @@
  "monotone": [
   "lnD_mass",
   "cov",
-  "lnh_mass"
+  "lnh_mass",
+  "lnR_mass",
+  "lnt_film"
  ],
  "reported": [
   {

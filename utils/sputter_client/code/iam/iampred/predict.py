@@ -393,8 +393,9 @@ def main():
                     "(stored transform; 0 = quantity left free)")
     ap.add_argument("--jump-cost", type=float, default=25.0, help="--sequence: largest continuity cost of one step of the "
                     "time path = summed dev5 a change of branch has to gain")
-    ap.add_argument("--far-weight", type=float, default=0.0, help="--sequence: weight of the no-decrease rule against "
-                    "earlier windows (2 ... 64 places back, beyond one scale; dev5 units; 0 = neighbouring windows only)")
+    ap.add_argument("--far-weight", type=float, default=1.0, help="--sequence: weight of the no-decrease rule against "
+                    "earlier windows (2 ... 64 places back, beyond one scale; dev5 units; 0 = neighbouring windows only; "
+                    "default 1 since 2026-11-20: growth is additive)")
     ap.add_argument("--transplant", type=int, default=1, help="--sequence: 1 = the solutions of neighbouring windows "
                     "join the pool of a window, 0 = candidates and own refined solution only")
     ap.add_argument("--no-network-step", action="store_true", help="a GUI's step tree: this run only refines (analyze "

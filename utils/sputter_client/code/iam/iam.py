@@ -869,7 +869,8 @@ class Model:
         val = np.abs(1 + 1j * qa * (rM / rT) * Phi) ** 2
         return np.where(np.degrees(np.arccos(np.clip(cpsi, 0, 1))) <= self.theta_max, val, 1.0)
 
-    def fluor(self, m: Morph, slab, phi, Ise):
+    def fluor(self, m: Morph, slab, phi, Ise, rows_fl=None, tail_fl=None):
+        'rows_fl / tail_fl (underlayer.buried_fluor): explicit fluorescence-energy decrements of the slab rows and the'
         if self.s.metal not in ("Au", "Cu") or m.h_m <= 0:
             return np.zeros(len(self.af))
         if SMOOTH:
@@ -879,8 +880,9 @@ class Model:
             wt = phi / max(phi.sum(), 1e-12)
         Ei = float(np.sum(wt * Ise[:, 0]))
         dmf = dc(self.s.metal, fl=True)
-        slab_fl = [(p * self.nu_sub * dmf, t) for p, (d, t) in zip(phi, slab)]
-        If = layer_mid_int(self.af, slab_fl + self.sub_layers_fl, self.d_sub_fl, k=K_FL)[: len(slab)]
+        slab_fl = [(p * self.nu_sub * dmf, t) for p, (d, t) in zip(phi, slab)] if rows_fl is None else list(rows_fl)
+        tail = self.sub_layers_fl if tail_fl is None else list(tail_fl)
+        If = layer_mid_int(self.af, slab_fl + tail, self.d_sub_fl, k=K_FL)[: len(slab)]
         Ef = np.sum(wt[:, None] * If, axis=0)
         if self.s.metal == "Cu":
             return self.eps_fl * EFF_RATIO_CU * P_K_CU * MU_CU * m.h_m * Ei * OMEGA_K_CU / (4 * np.pi) * Ef

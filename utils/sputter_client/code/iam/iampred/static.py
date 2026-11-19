@@ -35,7 +35,7 @@ QUANT = [("h_m_model", "金属等效厚度", "nm", "ln_hm", True), ("height", "�
          ("R", "晶粒半径", "nm", "ln_R", True), ("d_hex", "晶粒中心间距", "nm", "ln_D", True),
          ("eta", "晶粒覆盖率", "", "eta", False), ("rb", "底层相对密度", "", "rb", False)]
 FILES = dict(report_md="REPORT.md", report_png="report.png", report_csv="report.csv", patterns_png="patterns.png",
-             main_json="main/main.json")
+             main_json="main/main.json", series_json="series.json")
 
 
 def static_root(arg):
@@ -536,6 +536,10 @@ def main(argv=None):
     ap.add_argument("--beam-row", type=float, default=GEOMETRY["db_row"])
     ap.add_argument("--beam-col", type=float, default=GEOMETRY["db_col"])
     ap.add_argument("--roll", type=float, default=GEOMETRY["sample_roll_deg"])
+    ap.add_argument("--series", action="store_true",
+                    help="without --label: fit the samples in OUT together as one growing film (static_series.py: "
+                         "ordered by nominal thickness, growth quantities may not decrease), then write the report")
+    ap.add_argument("--series-sweeps", type=int, default=2)
     a = ap.parse_args(argv)
     out = Path(a.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -610,6 +614,22 @@ def main(argv=None):
         ok = step("intake", do_intake) and step("predict", do_predict)
     elif a.frames:
         raise SystemExit("give --label with --frames")
+    elif a.series:
+        def do_series():
+            samples = sorted(p_.name for p_ in out.iterdir() if (p_ / "frames.csv").is_file())
+            if len(samples) < 2:
+                return "fewer than two samples: nothing to fit together"
+            cmd = [sys.executable, str(IAM / "static_series.py"), "--out", str(out), "--sweeps", str(a.series_sweeps),
+                   "--workers", str(a.workers)]
+            log = out / "analyze_series.log"
+            with open(log, "w", encoding="utf-8") as fh:
+                rc = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT, cwd=str(IAM),
+                                    env=dict(os.environ, IAM_DATA=str(root))).returncode
+            if rc != 0:
+                raise SystemExit(f"static_series.py failed (see {log})")
+            return None
+
+        ok = step("series", do_series)
     labels = []
     if ok:
         def do_report():

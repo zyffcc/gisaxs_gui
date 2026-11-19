@@ -77,6 +77,12 @@
    "metal": "Ag"
   }
  },
+ "monotone": [
+  "lnD",
+  "cov",
+  "lnR",
+  "base_mass"
+ ],
  "reported": [
   {
    "name": "lnR",
