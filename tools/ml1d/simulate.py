@@ -6,7 +6,7 @@ tail's shape); the shares of the populations, the tail amplitude, the background
 points, the counting noise and the gaps are drawn anew whenever a curve is used (``augment``), so one shard serves
 many epochs. Everything is dimensionless (q̃ = q/q_max, ``posterior.encoding``).
 
-usage: python tools/ml1d/simulate.py --prior tools/ml1d/prior_v1.json --count 200000 --seed 1 --out DIR
+usage: python tools/ml1d/simulate.py --prior tools/ml1d/prior_v2.json --count 200000 --seed 1 --out DIR
            [--shard 10000] [--workers 4] [--first-shard 0] [--shards N]
   writes DIR/shard_NNNN.npz and DIR/manifest_NNNN.json (the prior, seed, commit and SHA-256 of the shard); with
   --first-shard/--shards only those shards (one array job per range); ``manifest`` joins them
@@ -66,13 +66,32 @@ def draw_compositions(prior: dict, count: int, rng) -> np.ndarray:
 
 
 def draw(prior: dict, count: int, rng: np.random.Generator) -> dict:
-    """Compositions, conditions and values (uniform in the unit box of ``encoding``) of ``count`` cuts."""
+    """Compositions, conditions and values (uniform in the unit box of ``encoding``) of ``count`` cuts: with
+    ``born_probability`` a vacuum q₊ = k_i + k_f from ``born_qz`` (× q_max), else the effective interface; of those,
+    with ``reflected_probability`` both angles known, q₋ = k_i − k_f = q₊ × U(``qz_minus_fraction``) (``qz_minus``,
+    NaN otherwise), and spheres with the exit-reflected path at the values' r."""
     composition = draw_compositions(prior, count, rng)
     ratio = _log_uniform(rng, *prior["ratio"], count)
     values = E.from_unit(rng.uniform(size=(count, E.DIMS)), ratio, composition)
     born = rng.uniform(size=count) < prior["born_probability"]
     qz = np.where(born, rng.uniform(*prior["born_qz"], count), 0.0)
-    return {"composition": composition, "ratio": ratio, "qz": qz, "values": values}
+    reflected = born & (rng.uniform(size=count) < prior.get("reflected_probability", 0.0))
+    fraction = rng.uniform(*prior.get("qz_minus_fraction", (0.0, 0.0)), count)
+    qz_minus = np.where(reflected, qz * fraction, np.nan)
+    return {"composition": composition, "ratio": ratio, "qz": qz, "qz_minus": qz_minus, "values": values}
+
+
+def geometry(qz: float, qz_minus: float, values_row) -> Geometry:
+    """The cut's geometry in q̃ (k = 1): the effective interface, the Born term at q₊, or two paths with r."""
+    if qz <= 0:
+        return Geometry()
+    if not np.isfinite(qz_minus):
+        return Geometry.born_at(qz)
+    g = E.GLOBAL.start
+    r = complex(float(values_row[g + 4]), float(values_row[g + 5]))
+    alpha_i = np.degrees(np.arcsin(0.5 * (qz + qz_minus)))
+    alpha_f = np.degrees(np.arcsin(0.5 * (qz - qz_minus)))
+    return Geometry("two_path", 2.0 * np.pi, float(alpha_i), float(alpha_f), abs(r), float(np.angle(r)))
 
 
 def populations(values_row, composition: int, law: str, coupling: str) -> list:
@@ -121,7 +140,7 @@ def terms(params: dict, law: str, coupling: str) -> tuple[np.ndarray, np.ndarray
         v = params["values"][i]
         sigma = float(v[g + 2])
         grid = evaluation_grid(fine, sigma)
-        settings = model.Settings(geometry=Geometry.born_at(float(params["qz"][i])))
+        settings = model.Settings(geometry=geometry(float(params["qz"][i]), float(params["qz_minus"][i]), v))
         pops = populations(v, int(params["composition"][i]), law, coupling)
         smeared = resolution.tabulated(fine, grid, model.unit_terms(pops, settings, grid), sigma)
         for slot, t in enumerate(smeared):
@@ -137,7 +156,8 @@ def shard(prior: dict, count: int, seed) -> dict:
     return {"values": params["values"].astype(np.float32),
             "z": E.to_z(params["values"], params["ratio"], params["composition"]).astype(np.float32),
             "composition": params["composition"].astype(np.int16), "ratio": params["ratio"].astype(np.float32),
-            "qz": params["qz"].astype(np.float32), "term": term.astype(np.float32), "tail": tail.astype(np.float32)}
+            "qz": params["qz"].astype(np.float32), "qz_minus": params["qz_minus"].astype(np.float32),
+            "term": term.astype(np.float32), "tail": tail.astype(np.float32)}
 
 
 def _layout(rng, ratio, prior, rows):
@@ -203,7 +223,8 @@ def inputs(data: dict, rows, prior: dict, rng: np.random.Generator):
     part = {key: value[rows] for key, value in data.items()}
     intensity, sigma, mask = augment(part, prior, rng)
     composition = part["composition"].astype(int)
-    return (E.features(intensity, sigma, mask), E.conditions(part["ratio"], part["qz"]), composition,
+    minus = part.get("qz_minus", np.full(part["qz"].shape, np.nan))
+    return (E.features(intensity, sigma, mask), E.conditions(part["ratio"], part["qz"], minus), composition,
             part["z"].astype(np.float32), E.active(composition))
 
 

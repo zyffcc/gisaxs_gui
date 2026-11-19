@@ -14,11 +14,14 @@ increasing mean radius (``COMPOSITIONS``; slot 1 is the smallest). Every populat
     D/2R                   [1, 20]     with a paracrystal only
     σnn/D                  [0.02, 0.5] with a paracrystal only
 
-and four values belong to the cut: the beam tail's width w̃ = w/q_max in [0.3/ρ, ``TAIL_WIDTH_MAX``/ρ] and exponent ν
+and six values belong to the cut: the beam tail's width w̃ = w/q_max in [0.3/ρ, ``TAIL_WIDTH_MAX``/ρ] and exponent ν
 in ``TAIL_EXPONENT`` (the Lorentzian wings of a beam profile, ∝ q⁻²: a steeper "tail" with a free exponent takes over the
 particles' own scattering at low q, and a narrow one cannot describe a measured low-q rise), the
-Gaussian resolution σ_q/q_max in [10⁻⁴, 10⁻²], and the amplitude τ in [0.003, 0.15] of a smooth multiplicative model
-error exp(Σ b_k B_k), b_k ~ N(0, τ²) over the ``ERROR_BASIS`` cubic B-splines of ``error_basis``.
+Gaussian resolution σ_q/q_max in [10⁻⁴, 10⁻²], the amplitude τ in [0.003, 0.15] of a smooth multiplicative model
+error exp(Σ b_k B_k), b_k ~ N(0, τ²) over the ``ERROR_BASIS`` cubic B-splines of ``error_basis``, and the real and
+imaginary part of the effective reflection coefficient r of the exit-reflected path of spheres, each in [−1, 1]
+(``cut_model.geometry``, ``two_path``): they matter only when the cut's two paths are known (``conditions``), and
+are drawn from the prior otherwise.
 
 The prior is uniform in the unit box v of these values: ln for R̃, h/2R, D/2R, w̃, σ_q and τ, linear for the others,
 and for R̃ of slot j > 1 the fraction of the way from the previous slot's ln R̃ to the top (so the slots stay ordered).
@@ -40,26 +43,26 @@ TYPES = tuple((family, structure) for family in FAMILIES for structure in (True,
 COMPOSITIONS = tuple(itertools.chain.from_iterable(
     itertools.product(range(len(TYPES)), repeat=k) for k in range(1, SLOTS + 1)))
 SLOT_NAMES = ("R", "sigma_R", "h_over_2R", "sigma_h", "D_over_2R", "sigma_nn")
-GLOBAL_NAMES = ("tail_width", "tail_exponent", "q_resolution", "model_error")
+GLOBAL_NAMES = ("tail_width", "tail_exponent", "q_resolution", "model_error", "reflection_re", "reflection_im")
 NAMES = tuple(f"{name}_{slot + 1}" for slot in range(SLOTS) for name in SLOT_NAMES) + GLOBAL_NAMES
 PER_SLOT = len(SLOT_NAMES)
 DIMS = len(NAMES)
 GLOBAL = slice(SLOTS * PER_SLOT, DIMS)
 LOGARITHMIC = np.array([n.rsplit("_", 1)[0] in ("R", "h_over_2R", "D_over_2R") for n in NAMES[:GLOBAL.start]]
-                       + [True, False, True, True])
+                       + [True, False, True, True, False, False])
 POINTS = 128
 RATIO_MIN, RATIO_MAX = 10.0, 300.0
 CHANNELS = 4
-CONDITIONS = 2
+CONDITIONS = 4
 SLOT_CODE = 2 + len(FAMILIES)
 """Per slot of ``composition_code``: in use, the family (one-hot), a paracrystal."""
 ERROR_BASIS = 8
 TAIL_WIDTH_MAX = 30.0
 TAIL_EXPONENT = (1.8, 2.2)
-VERSION = 3
-"""Of this encoding, recorded with a network (``flow.Network`` refuses another): 3 since the tail's exponent is
-``TAIL_EXPONENT`` and its width at most ``TAIL_WIDTH_MAX`` q_min (2: ν in [1, 6], w at most 3 q_min; 1: at most
-0.1 q_max)."""
+VERSION = 4
+"""Of this encoding, recorded with a network (``flow.Network`` refuses another): 4 since spheres can have the
+exit-reflected path (r and the cut's k_i − k_f); 3: the tail's exponent is ``TAIL_EXPONENT`` and its width at most
+``TAIL_WIDTH_MAX`` q_min (2: ν in [1, 6], w at most 3 q_min; 1: at most 0.1 q_max)."""
 CYLINDER_RADIUS, CYLINDER_HEIGHT = 50.0, 200.0
 
 
@@ -68,8 +71,8 @@ def bounds(ratio) -> tuple[np.ndarray, np.ndarray]:
     ratio = np.atleast_1d(np.asarray(ratio, float))[:, None]
     slot_lo = [np.log(0.5), 0.02, np.log(0.1), 0.02, 0.0, 0.02]
     slot_hi = [np.nan, 0.5, np.log(10.0), 0.5, np.log(20.0), 0.5]
-    lo = np.concatenate([np.tile(slot_lo, SLOTS), [0.0, TAIL_EXPONENT[0], np.log(1e-4), np.log(3e-3)]])[None, :]         * np.ones_like(ratio)
-    hi = np.concatenate([np.tile(slot_hi, SLOTS), [0.0, TAIL_EXPONENT[1], np.log(1e-2), np.log(0.15)]])[None, :]         * np.ones_like(ratio)
+    lo = np.concatenate([np.tile(slot_lo, SLOTS), [0.0, TAIL_EXPONENT[0], np.log(1e-4), np.log(3e-3), -1.0, -1.0]])[None, :]         * np.ones_like(ratio)
+    hi = np.concatenate([np.tile(slot_hi, SLOTS), [0.0, TAIL_EXPONENT[1], np.log(1e-2), np.log(0.15), 1.0, 1.0]])[None, :]         * np.ones_like(ratio)
     lo[:, GLOBAL.start] = np.log(0.3 / ratio[:, 0])
     hi[:, GLOBAL.start] = np.log(TAIL_WIDTH_MAX / ratio[:, 0])
     hi[:, 0:GLOBAL.start:PER_SLOT] = np.log(5.0 * ratio)
@@ -248,13 +251,19 @@ def features(intensity, sigma, mask) -> np.ndarray:
     return out
 
 
-def conditions(ratio, qz=0.0) -> np.ndarray:
-    """What the network is told of the cut (B, CONDITIONS): ln ρ / ln RATIO_MAX and q_z/q_max (0: the effective
-    interface; else the Born term at that vacuum q_z)."""
+def conditions(ratio, qz=0.0, qz_minus=np.nan) -> np.ndarray:
+    """What the network is told of the cut (B, CONDITIONS): ln ρ / ln RATIO_MAX, q₊/q_max = (k_i + k_f)/q_max (0: the
+    effective interface), q₋/q_max = (k_i − k_f)/q_max and 1 when spheres have the exit-reflected path (two paths:
+    ``qz_minus`` given, finite, with q₊ > 0); else 0 and 0 (the Born term at q₊ alone)."""
     ratio = np.atleast_1d(np.asarray(ratio, float))
+    qz = np.broadcast_to(np.asarray(qz, float), ratio.shape)
+    minus = np.broadcast_to(np.asarray(qz_minus, float), ratio.shape)
+    reflected = np.isfinite(minus) & (qz > 0)
     out = np.zeros((ratio.size, CONDITIONS), np.float32)
     out[:, 0] = np.log(ratio) / np.log(RATIO_MAX)
-    out[:, 1] = np.broadcast_to(np.asarray(qz, float), ratio.shape)
+    out[:, 1] = qz
+    out[:, 2] = np.where(reflected, minus, 0.0)
+    out[:, 3] = reflected
     return out
 
 

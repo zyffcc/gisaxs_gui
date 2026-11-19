@@ -114,8 +114,10 @@ def _box(params: dict, family: str, data: Cut) -> dict:
 def fit_model(values, composition: int, data: Cut, law: str = "number_gauss", coupling: str = "lma",
               grazing: Optional[dict] = None) -> fm.FitModel:
     """Fitting's model of physical values (DIMS,) of a composition, scales solved for the cut, its shape values held
-    to the prior's box (``_box``). ``grazing``: the values of ``fit_model.GRAZING`` to keep (the cut's angles, λ and
-    reflection of the person's model); else the Born term at the cut's q_z (or the effective interface)."""
+    to the prior's box (``_box``). ``grazing``: the values of ``fit_model.GRAZING`` to keep (the cut's angles and λ of
+    the person's model); else angles at λ = 0.1 nm that give the cut's q₊ and q₋ (or the effective interface). On a
+    cut with two paths (``Cut.reflected``) the effective reflection coefficient is the values' r, free (|r| ≤ 1, its
+    phase within ±π of the start); else the person's r is kept."""
     components = []
     for slot, (family, structure) in enumerate(E.composition_types(composition)):
         j = slot * E.PER_SLOT
@@ -143,17 +145,38 @@ def fit_model(values, composition: int, data: Cut, law: str = "number_gauss", co
                                      upper=parameter.upper, free=True)
     if grazing:
         for key, value in grazing.items():
-            model = model.with_parameter(("globals", key), value=float(value))
+            if not (data.reflected and key in REFLECTION_KEYS):
+                model = model.with_parameter(("globals", key), value=float(value))
     elif data.qz > 0:
-        angle = math.degrees(math.asin(data.qz * 0.1 / (4 * math.pi)))
-        for key, value in (("alpha_i", angle), ("alpha_f", angle), ("wavelength", 0.1)):
+        alpha_i, alpha_f = data.angles()
+        for key, value in (("alpha_i", alpha_i), ("alpha_f", alpha_f), ("wavelength", 0.1)):
             model = model.with_parameter(("globals", key), value=value)
+    if data.reflected:
+        r = complex(*(float(x) if np.isfinite(x) else 0.0 for x in values[g + 4:g + 6]))
+        size, phase = min(abs(r), 1.0), math.atan2(r.imag, r.real)
+        model = model.with_parameter(("globals", "refl_amp"), value=size, free=True, lower=0.0, upper=1.0)
+        model = model.with_parameter(("globals", "refl_phase"), value=phase, free=True, lower=phase - math.pi,
+                                     upper=phase + math.pi)
     return fit_engine.fit_scales(model, fit_engine.FitData.prepare(data.q, data.intensity, data.sigma))
+
+
+REFLECTION_KEYS = ("refl_amp", "refl_phase")
+NUISANCE = ("model_error", "reflection_re", "reflection_im")
+"""Values of the posterior that are not reported as the solution's: the model error and the reflection coefficient
+(in ``extras``)."""
 
 
 def _names(composition: int) -> list[tuple[int, str]]:
     active = E.active(composition)[0]
-    return [(d, PHYSICAL_NAMES[d]) for d in range(E.DIMS) if active[d] and E.NAMES[d] != "model_error"]
+    return [(d, PHYSICAL_NAMES[d]) for d in range(E.DIMS) if active[d] and E.NAMES[d] not in NUISANCE]
+
+
+def reflection(model: fm.FitModel) -> complex:
+    """The effective reflection coefficient r of a model's spheres (0 without the exit-reflected path)."""
+    geometry = fm.grazing(model)
+    if geometry is None or geometry.mode != "two_path":
+        return 0j
+    return geometry.refl_amp * complex(math.cos(geometry.refl_phase), math.sin(geometry.refl_phase))
 
 
 def _path(composition: int, dim: int):
@@ -212,6 +235,8 @@ def model_values(model: fm.FitModel, composition: int) -> Optional[np.ndarray]:
                 values[slot * E.PER_SLOT + offset] = component.value(key)
     for offset, key in enumerate(GLOBAL_KEYS.values()):
         values[E.GLOBAL.start + offset] = model.globals[key].value
+    r = reflection(model)
+    values[E.GLOBAL.start + 4:E.GLOBAL.start + 6] = (r.real, r.imag)
     return values
 
 
@@ -281,14 +306,16 @@ def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra,
                              tuple(flags), method, evidence, ess, int(count), 0.0, extra)
 
 
-def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions: Optional[Sequence[int]] = None,
+def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Optional[float] = None,
+            compositions: Optional[Sequence[int]] = None,
             allowed=None, shortlist: int = SHORTLIST, samples: int = SAMPLES, seed: int = 0,
             law: str = "number_gauss", coupling: str = "lma", min_probability: float = 0.01,
             grazing: Optional[dict] = None, local_samples: int = LOCAL_SAMPLES,
             refine_modes: int = REFINED, explored: int = EXPLORED, model_error_floor: float = MODEL_ERROR_FLOOR,
             cancelled=None) -> list[PosteriorSolution]:
-    """Solutions of a cut (q in nm⁻¹, qz the vacuum q_z of the Born term in nm⁻¹, 0: the effective interface), most
-    probable first: every distinct refined solution of every composition holding at least ``min_probability`` of
+    """Solutions of a cut (q in nm⁻¹, qz the vacuum q₊ = k_i + k_f of the Born term in nm⁻¹, 0: the effective
+    interface; ``qz_minus`` k_i − k_f when both angles are known: spheres get the exit-reflected path with a free
+    effective reflection coefficient, ``Cut.reflected``), most probable first: every distinct refined solution of every composition holding at least ``min_probability`` of
     the posterior.
 
     1. The network's importance-weighted samples of each composition (given, or the head's ``shortlist`` among
@@ -312,7 +339,7 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
     rng = np.random.default_rng(seed + 7919)
     # The network's samples, their modes and the least-squares fits use the counts' σ (``counts``, ``fit_data``); the
     # posterior of each solution, the probabilities and the errors the model error added to σ (``data``, ``weighed``).
-    counts = Cut.prepare(q, intensity, sigma, qz)
+    counts = Cut.prepare(q, intensity, sigma, qz, qz_minus)
     fit_data = fit_engine.FitData.prepare(counts.q, counts.intensity, counts.sigma)
     data = counts
     if model_error_floor > 0:
@@ -408,6 +435,7 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
         lsq_chi2 = float(np.sum(fit_engine.residuals(model, weighed) ** 2)) / max(1, refined.points - refined.free)
         solution = _solution(result, (mode, model, refined, local), data, fit_data, lo, hi, "lm", float(w),
                              {"head_log_prob": result.head_log_prob, "mode_weight": share,
+                              "reflection": _reflection_extra(model) if counts.reflected else None,
                               "composition_log_evidence": float(z), "network_ess": result.ess,
                               "dropped_points": data.dropped, "compared_by": "bic" if by_bic else "evidence"},
                              lsq=(lsq_errors, lsq_chi2), from_errors=by_bic)
@@ -420,6 +448,11 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, compositions:
     return sorted(out, key=lambda s: -s.probability)
 
 
+def _reflection_extra(model: fm.FitModel) -> dict:
+    r = reflection(model)
+    return {"amplitude": float(abs(r)), "phase": float(math.atan2(r.imag, r.real))}
+
+
 def _label(path) -> str:
     owner, key = path
     return key if owner == "globals" else f"{key}_{owner + 1}"
@@ -427,4 +460,4 @@ def _label(path) -> str:
 
 __all__ = ["CHI2_RETRY", "DELTA_BIC", "ESS_FAILED", "ESS_MIN", "EXPLORED", "LARGE", "LOCAL_MAX", "LOCAL_SAMPLES",
            "MODEL_ERROR_FLOOR", "MOVES", "SAMPLES", "SHORTLIST", "SMALL", "UNCONSTRAINED", "Interval",
-           "PosteriorSolution", "fit_model", "model_values", "predict", "window_flags"]
+           "NUISANCE", "PosteriorSolution", "fit_model", "model_values", "predict", "reflection", "window_flags"]

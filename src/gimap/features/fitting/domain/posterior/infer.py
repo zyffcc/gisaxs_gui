@@ -55,8 +55,9 @@ TABLE_POINTS = 256
 
 @dataclass(frozen=True)
 class Cut:
-    """A measured cut in the network's window: |q| (nm⁻¹, sorted), I, σ, and the vacuum q_z of the Born term
-    (0: the effective interface)."""
+    """A measured cut in the network's window: |q| (nm⁻¹, sorted), I, σ, the vacuum q₊ = k_i + k_f of the Born term
+    (0: the effective interface) and, when both angles are known, q₋ = k_i − k_f: then spheres have the exit-reflected
+    path too, with the effective reflection coefficient r of the values (``geometry``)."""
     q: np.ndarray
     intensity: np.ndarray
     sigma: np.ndarray
@@ -65,9 +66,15 @@ class Cut:
     ratio: float = 1.0
     dropped: int = 0
     """Points below the window (q < q_max / RATIO_MAX), not used."""
+    qz_minus: Optional[float] = None
+
+    @property
+    def reflected(self) -> bool:
+        """Two paths (q₋ known and q₊ > 0)."""
+        return self.qz_minus is not None and self.qz > 0
 
     @classmethod
-    def prepare(cls, q, intensity, sigma=None, qz: float = 0.0) -> "Cut":
+    def prepare(cls, q, intensity, sigma=None, qz: float = 0.0, qz_minus: Optional[float] = None) -> "Cut":
         q = np.abs(np.asarray(q, float)).ravel()
         y = np.asarray(intensity, float).ravel()
         s = None if sigma is None else np.asarray(sigma, float).ravel()
@@ -80,14 +87,27 @@ class Cut:
         q, y, s = q[order], y[order], s[order]
         q_max, ratio = E.window(q)
         inside = q >= q_max / ratio * (1 - 1e-12)
-        return cls(q[inside], y[inside], s[inside], float(qz), q_max, ratio, int(np.sum(~inside)))
+        if qz_minus is not None and not abs(float(qz_minus)) < float(qz):
+            raise ValueError("k_i − k_f must lie between −(k_i + k_f) and k_i + k_f")
+        return cls(q[inside], y[inside], s[inside], float(qz), q_max, ratio, int(np.sum(~inside)),
+                   None if qz_minus is None or qz <= 0 else float(qz_minus))
 
-    def geometry(self) -> Geometry:
-        """The Born term at the cut's q_z (λ = 0.1 nm; only k_i + k_f matters), or the effective interface."""
+    def angles(self) -> tuple[float, float]:
+        """(α_i, α_f) in degrees at λ = 0.1 nm that give the cut's q₊ and q₋ (only k_i ± k_f matter)."""
+        k = 2 * math.pi / 0.1
+        minus = self.qz_minus if self.reflected else 0.0
+        return (math.degrees(math.asin(0.5 * (self.qz + minus) / k)),
+                math.degrees(math.asin(0.5 * (self.qz - minus) / k)))
+
+    def geometry(self, reflection: complex = 0j) -> Geometry:
+        """The effective interface (q₊ = 0), the Born term at q₊, or (``reflected``) the two paths of a sphere with
+        the effective reflection coefficient ``reflection`` (λ = 0.1 nm; only k_i ± k_f matter)."""
         if self.qz <= 0:
             return Geometry()
-        angle = math.degrees(math.asin(self.qz * 0.1 / (4 * math.pi)))
-        return Geometry("born", 0.1, angle, angle)
+        alpha_i, alpha_f = self.angles()
+        if not self.reflected:
+            return Geometry("born", 0.1, alpha_i, alpha_f)
+        return Geometry("two_path", 0.1, alpha_i, alpha_f, abs(reflection), math.atan2(reflection.imag, reflection.real))
 
 
 def _noise(q, y) -> np.ndarray:
@@ -161,12 +181,19 @@ class Likelihood:
                     continue
                 if grid is None:
                     grid = resolution.table_grid(self.data.q, float(np.max(sigma[rows_])), TABLE_POINTS)
-                terms = cut.population_terms(
-                    family, grid, radius=v[rows_, j], radius_spread=v[rows_, j + 1], law=self.law,
-                    height=v[rows_, j + 2] if family == "cylinder" else 10.0,
-                    height_spread=v[rows_, j + 3] if family == "cylinder" else 0.0,
-                    distance=v[rows_, j + 4] if structure else 0.0,
-                    distance_spread=v[rows_, j + 5] if structure else 0.0, coupling=self.coupling, geometry=geometry)
+                kwargs = dict(law=self.law, coupling=self.coupling)
+                if family == "sphere" and self.data.reflected:  # every sample its own r
+                    terms = np.stack([cut.population_terms(
+                        family, grid, radius=v[b, j], radius_spread=v[b, j + 1],
+                        distance=v[b, j + 4] if structure else 0.0, distance_spread=v[b, j + 5] if structure else 0.0,
+                        geometry=self.data.geometry(complex(v[b, g + 4], v[b, g + 5])), **kwargs)[0] for b in rows_])
+                else:
+                    terms = cut.population_terms(
+                        family, grid, radius=v[rows_, j], radius_spread=v[rows_, j + 1],
+                        height=v[rows_, j + 2] if family == "cylinder" else 10.0,
+                        height_spread=v[rows_, j + 3] if family == "cylinder" else 0.0,
+                        distance=v[rows_, j + 4] if structure else 0.0,
+                        distance_spread=v[rows_, j + 5] if structure else 0.0, geometry=geometry, **kwargs)
                 if grid is self.data.q:
                     out[rows_, slot] = terms
                 else:
@@ -363,6 +390,12 @@ def sample_composition(network, h, data: Cut, composition: int, count: int, rng,
                        log_evidence, ess, head_log_prob)
 
 
+def conditions(data: Cut) -> np.ndarray:
+    """``encoding.conditions`` of a cut (1, CONDITIONS)."""
+    return E.conditions([data.ratio], [data.qz / data.q_max],
+                        [data.qz_minus / data.q_max if data.reflected else np.nan])
+
+
 def candidates(network, h, allowed: Optional[Sequence[int]] = None, count: int = 4) -> list[tuple[int, float]]:
     """The ``count`` most probable compositions under the head among ``allowed`` (default all), and the
     ``PER_COUNT`` most probable of every number of populations among them: (index, log p), most probable first."""
@@ -384,7 +417,7 @@ def infer(network, data: Cut, compositions: Optional[Sequence[int]] = None, *, a
     first; ``probability`` from the evidences, ``modes`` of each."""
     rng = np.random.default_rng(seed)
     binned = E.bin_curve(data.q, data.intensity, data.sigma, data.q_max, data.ratio)
-    h = network.summary(E.features(*(a[None] for a in binned)), E.conditions([data.ratio], [data.qz / data.q_max]))
+    h = network.summary(E.features(*(a[None] for a in binned)), conditions(data))
     if compositions is None:
         chosen = candidates(network, h, allowed, shortlist)
     else:
@@ -406,5 +439,5 @@ def infer(network, data: Cut, compositions: Optional[Sequence[int]] = None, *, a
 
 
 __all__ = ["AMPLITUDE_RANGE", "EXPLORE_ESS", "PROPOSAL_WIDTHS", "TAIL_WIDTH_MAX", "Composition", "Cut", "Likelihood",
-           "Mode", "PHYSICAL_NAMES", "candidates", "dimensionless", "infer", "modes", "physical",
+           "Mode", "PHYSICAL_NAMES", "candidates", "conditions", "dimensionless", "infer", "modes", "physical",
            "sample_composition", "tempered"]
