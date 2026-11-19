@@ -25,7 +25,7 @@ from src.gimap.app.presentation.components import SegmentedControl
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.theme import set_role
 
-from ..application import ClientResult, ClientWindow
+from ..application import ClientResult, ClientWindow, arrangement, real_space, top_grains, visible
 from .client_texts import (JOINT_FAILED, CHOICE_NOT_SAVED, EMPTY_ACTION, EMPTY_MESSAGE, EMPTY_TITLE, PACKAGE_ACTION, PACKAGE_TITLE,
                            MASK_AUTO, MASK_AUTO_ONLY, MASK_FILE, RELATIVE_RADIUS_TIP, RESULT_NAME, SAMPLE_CONTROLS, SAMPLE_ERROR, WINDOW_CONTROLS,
                            WINDOW_ERROR, entry_name, entry_segment, entry_tip, range_text, shown_number, window_text,
@@ -34,7 +34,7 @@ from .evolution_view import RELATIVE_RADIUS, EvolutionPlot
 from .pattern_view import PatternPair
 from .real_space_view import RealSpacePicture
 from .texts import message_text, text
-from .views.sputter_main_view import ENTRY_HINT, TILES
+from .views.sputter_main_view import CONNECTED_HIDDEN, CONNECTED_TILES, ENTRY_HINT, TILES
 
 TILE_DIGITS = {"width": 2, "coverage": 2, "f_islands": 2, "cap_share": 2, "film_share": 2}
 """Significant digits of a tile's value (3 where not named)."""
@@ -49,6 +49,16 @@ def mask_text(mask: dict) -> str:
         return text(MASK_FILE, file=mask["file"])
     counts = {key: f"{int(mask.get(key) or 0):,}" for key in ("shadow", "dead", "hot")}  # shadow includes the holder
     return text(MASK_AUTO if mask.get("base_used", True) else MASK_AUTO_ONLY, file=mask["file"], **counts)
+
+
+def _joined(entry) -> bool:
+    """The solution is a joined film: a continuous layer under the grains, or grains joined into a network across the
+    real-space picture (``domain.real_space.arrangement``)."""
+    values = {key: entry.value(key) for key in ("R_nm", "D_nm", "width", "H_nm", "base_nm")}
+    space = real_space(values)
+    if space is None:
+        return False
+    return space.continuous or arrangement(space, visible(space, top_grains(space))) == "network"
 
 
 class ClientPanelMixin:
@@ -252,16 +262,21 @@ class ClientPanelMixin:
         entry = window.chosen(self.client_choices) if window is not None else None
         porous = result is not None and result.porous
         self.default_button.setVisible(entry is not None and entry.label != window.default_label())
-        for key, _caption, unit, tip in TILES:
+        joined = not porous and entry is not None and _joined(entry)
+        for key, caption, unit, tip in TILES:
             value = entry.value(key) if entry is not None else None
             digits = TILE_DIGITS.get(key, 3)
             self.tile_values[key].setText(shown_number(value, digits))
+            if not porous:
+                self.tile_captions[key].set_full_text(tr(CONNECTED_TILES[key][0] if joined and key in CONNECTED_TILES
+                                                         else caption))
+                tip = CONNECTED_TILES[key][1] if joined and key in CONNECTED_TILES else tip
             words = [tr(RELATIVE_RADIUS_TIP if porous and key == "R_nm" else tip)]
             found = range_text(entry.range(key) if entry is not None else None, digits)
             if found:
                 words.append(f"{found} {unit}".rstrip())
             self.tiles[key].setToolTip("\n".join(words))
-            self.tiles[key].setVisible(value is not None and result.shows(key))
+            self.tiles[key].setVisible(value is not None and result.shows(key) and not (joined and key in CONNECTED_HIDDEN))
         deviation = entry.fit_deviation if entry is not None else None
         self.deviation_value.setText(shown_number(deviation))
         self.deviation_caption.setVisible(deviation is not None)

@@ -89,6 +89,15 @@ TILES = (("R_nm", "Radius R", "nm", "Radius of the grains."),
 """(quantity, caption, unit, tooltip) of the value tiles, in their order. A result shows the tiles of the quantities
 it has: a flat substrate the first seven (the continuous layer only when the result lists it), a porous one the
 radius (as a relative size: the page says so in its caption), the width and the last five."""
+CONNECTED_TILES = {
+    "R_nm": ("Relief radius R", "Radius of the grains that make up the relief of the joined film."),
+    "H_nm": ("Film height H", "Height of the film's top above the substrate: continuous layer and relief."),
+    "D_nm": ("Relief spacing D", "Spacing of the relief of the joined film (the centre distance of the grains it is "
+                                 "made of): the lateral correlation length of its surface, not of separate particles."),
+}
+"""Captions and tooltips of the tiles while the solution shown is a joined film (a continuous layer, or grains joined
+into a network across the picture): the grains are then its relief. The gap D − 2R is not shown then."""
+CONNECTED_HIDDEN = ("gap_nm",)
 DEVIATION_CAPTION = "Fit deviation (lower is better)"
 DEVIATION_TIP = ("How far the model image is from the measured image, per cell and with an allowance for the model: "
                  "it compares the solutions of one measured image.")
@@ -538,5 +547,5 @@ class SputterMainView:
         return section
 
 
-__all__ = ["RATE_UNITS", "RATE_UNIT_TIP", "DEVIATION_CAPTION", "ENTRY_HINT", "ElidedLabel", "IMAGE_CHOICES", "KIND_CHOICES", "MODE_CHOICES", "SAMPLE_METALS", "SUBSTRATE_CHOICES",
+__all__ = ["CONNECTED_HIDDEN", "CONNECTED_TILES", "RATE_UNITS", "RATE_UNIT_TIP", "DEVIATION_CAPTION", "ENTRY_HINT", "ElidedLabel", "IMAGE_CHOICES", "KIND_CHOICES", "MODE_CHOICES", "SAMPLE_METALS", "SUBSTRATE_CHOICES",
            "STEPS_BUTTON", "STEPS_TIP", "ShownComboBox", "SputterMainView", "TILES", "VIEW_CHOICES", "WORKERS_TIP"]

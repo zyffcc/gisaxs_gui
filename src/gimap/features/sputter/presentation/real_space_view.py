@@ -5,9 +5,11 @@ polymer film is drawn, its thickness not to scale), the continuous base layer an
 and height, on one nm scale in both directions. Right the top view of a square of 7 distances D: the grains (log-normal
 radii around R, arranged at the distance D without long-range order). Grains that touch are drawn as one piece (an
 outline around the cluster only); a cluster that crosses the view — the film has percolated — is drawn darker, and a
-line says whether the grains are separate, coalescing or a connected network. A solution with a continuous base layer
-is a closed film: the whole square is the metal of the base, the grains on it are relief (slightly darker, with thin
-outlines), and the line says the film's thickness and the grains on top.
+line says whether the grains are separate, coalescing or a connected network. A connected film - a continuous base
+layer, or grains joined into a network across the view - is drawn as the film itself, not as grain outlines: the top
+view is the height of the metal (base plus the caps; darker = higher) with the holes of a network in the colour of
+what is under it, the side view the cut through the film along the middle of the top view, and the line says the
+film's thickness and the grains on top (or that the network crosses the view).
 
 **A porous TiO₂ layer.** Left a cross-section of the layer to scale: TiO₂ particles of the model's radius, the metal in
 the pores as a tint whose strength follows its Gaussian in depth, the cap layer on the share of the particle tops it
@@ -27,8 +29,8 @@ from PyQt5.QtWidgets import QLabel, QSizePolicy
 
 from src.gimap.app.presentation.i18n import tr
 
-from ..application import (FILM_SUBSTRATES, arrangement, clusters, layer_particles, pore_density, porous_space,
-                           real_space, side_grains, spanning, top_grains, visible)
+from ..application import (FILM_SUBSTRATES, arrangement, clusters, height_map, layer_particles, pore_density,
+                           porous_space, profile, real_space, side_grains, spanning, top_grains, visible)
 from .texts import text
 
 METAL_COLOURS = {"Ag": ("#b8c0c8", "#5f6b76"), "Au": ("#e3b23c", "#8a6512"), "Cu": ("#d08a5c", "#7a4220")}
@@ -187,6 +189,10 @@ class RealSpacePicture:
         crossing = spanning(grains, labels, space.field)
         self.arrangement = arrangement(space, grains)
 
+        if space.continuous or self.arrangement == "network":   # a connected film: the film itself, not grain outlines
+            self._film(space, grains, side, top, fill, edge, polymer, substrate, name)
+            return
+
         # side view: substrate (or polymer film), base layer, grains (touching caps as one piece)
         row = side_grains(space)
         tallest = max([space.base + grain.height for grain in row] + [space.height, space.radius])
@@ -225,6 +231,48 @@ class RealSpacePicture:
         words = tr(ARRANGEMENTS[self.arrangement])
         if space.continuous:  # a closed film: what is said is the film, then the grains on it
             words = text(ON_LAYER, thickness=_number(space.base), grains=tr(GRAINS_ON_LAYER[self.arrangement]))
+        figure.text(0.96, 0.93, words, ha="right", va="bottom", fontsize=8.5, fontweight="bold")
+        figure.text(0.07, 0.03, text(DRAWN_NOTE, name=name), ha="left", va="bottom", fontsize=7.5)
+
+    def _film(self, space, grains, side, top, fill, edge, polymer, substrate, name) -> None:
+        """A connected film: the top view is the height of the metal (darker = higher), the holes of a network in the
+        colour of what is under it; the side view is the cut through the film along the middle of the top view."""
+        from matplotlib.colors import LinearSegmentedColormap
+        from matplotlib.patches import Rectangle
+
+        figure = self.figure
+        under = POLYMER if polymer else SUBSTRATE
+        x_axis, y_axis, height = height_map(space, grains)
+        holes = height <= 0.0
+        shades = LinearSegmentedColormap.from_list("metal", [_mix(fill, "#ffffff", 0.2), fill, _mix(fill, edge, 0.45)])
+        top.add_patch(Rectangle((0, 0), space.field, space.field, facecolor=under, lw=0, zorder=1))
+        top.imshow(np.ma.masked_where(holes, height), origin="lower", extent=(0, space.field, 0, space.field),
+                   cmap=shades, vmin=float(np.min(height[~holes])) if (~holes).any() else 0.0,
+                   vmax=float(np.max(height)) if height.size else 1.0, interpolation="bilinear", zorder=2)
+        if holes.any():
+            top.contour(x_axis, y_axis, (~holes).astype(float), levels=[0.5], colors=[edge], linewidths=.6, zorder=3)
+        top.set_xlim(0, space.field)
+        top.set_ylim(0, space.field)
+        top.set_aspect("equal", adjustable="box")
+        self._frame(top, TOP_TITLE, X_LABEL, Y_LABEL)
+
+        x, h = profile(space, grains, space.field / 2.0)
+        tallest = max(float(h.max()) if h.size else 0.0, space.height, space.radius)
+        below = max(0.3 * tallest, 0.15 * space.side / 4.0)
+        side.add_patch(Rectangle((0, -below), space.side, below, facecolor=under,
+                                 edgecolor=POLYMER_EDGE if polymer else "none", lw=.6, zorder=1))
+        side.text(space.side * .985, -below * .5, tr(POLYMER_NOTE) if polymer else substrate, ha="right",
+                  va="center", fontsize=7, color=INK, zorder=6)
+        side.fill_between(x, 0.0, h, where=h > 0, facecolor=fill, edgecolor=edge, linewidth=.6, zorder=3)
+        if space.base > 0:
+            side.text(space.side * .015, space.base * .5, text(BASE_NOTE, thickness=_number(space.base)), ha="left",
+                      va="center", fontsize=7, color=INK, zorder=6)
+        side.set_xlim(0, space.side)
+        side.set_ylim(-below, tallest * 1.25)
+        side.set_aspect("equal", adjustable="box")
+        self._frame(side, SIDE_TITLE, X_LABEL, HEIGHT_LABEL)
+        words = (text(ON_LAYER, thickness=_number(space.base), grains=tr(GRAINS_ON_LAYER[self.arrangement]))
+                 if space.continuous else tr(ARRANGEMENTS["network"]))
         figure.text(0.96, 0.93, words, ha="right", va="bottom", fontsize=8.5, fontweight="bold")
         figure.text(0.07, 0.03, text(DRAWN_NOTE, name=name), ha="left", va="bottom", fontsize=7.5)
 

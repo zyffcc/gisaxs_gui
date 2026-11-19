@@ -1,4 +1,4 @@
-"""Real-space picture of one solution of the analysis package (pure Python): where its grains sit, in nm.
+"""Real-space picture of one solution of the analysis package (Python and NumPy): where its grains sit, in nm.
 
 A solution of a grain model family gives the grain radius R, the centre distance D, the log-normal width of the radius
 distribution, the height H of the metal above the substrate and the thickness of the continuous layer under the grains
@@ -18,6 +18,9 @@ no grain arrangement, e.g. metal in a porous layer) has no grain picture: ``real
 Coalescence: grains that touch form a cluster (``clusters``); a cluster that connects two opposite edges of the
 top view has percolated (``arrangement``: islands, coalescing or network). The picture draws a cluster as one
 piece.
+A connected film - a continuous base, or grains joined into a network across the view - is drawn as the film itself:
+``height_map`` gives the height of the metal over the top view (base plus the highest cap, 0 in the holes) and
+``profile`` the cut along one line for the side view, instead of grain outlines.
 
 A porous TiO₂ layer (``porous_space``) is drawn from where the package says its metal sits: TiO₂
 particles of the model's radius, the pore metal as a Gaussian in depth, the cap layer on a share of the particle
@@ -30,6 +33,8 @@ from dataclasses import dataclass
 import math
 import random
 from typing import Optional
+
+import numpy as np
 
 POROUS_SKETCH_KEYS = ("particle_nm", "pore_depth_nm", "pore_width_nm", "cap_cover", "cap_thickness_nm",
                       "island_amount_nm", "cap_amount_nm", "pore_amount_nm", "cluster_height_nm",
@@ -194,6 +199,48 @@ def arrangement(space: RealSpace, grains: list) -> str:
     if len(set(labels)) == len(inside):
         return "islands"
     return "network" if spanning(inside, labels, space.field) else "coalescing"
+
+
+MAP_POINTS = 220
+"""Points per side of the height map of a connected film (top view)."""
+
+
+def cap_height(grain: Grain, dx, dy):
+    """Height of a grain's cap above the base at the offsets (dx, dy) from its centre (0 outside it): a half
+    spheroid of the grain's radius and height. Works on numbers and on NumPy arrays."""
+    r2 = (np.asarray(dx, float) ** 2 + np.asarray(dy, float) ** 2) / max(grain.radius, 1e-9) ** 2
+    return grain.height * np.sqrt(np.clip(1.0 - r2, 0.0, None))
+
+
+def height_map(space: RealSpace, grains: list, points: int = MAP_POINTS):
+    """(x, y, h): the height of the metal above the substrate on a square grid over the top view - the base plus the
+    highest cap at each point; 0 where neither covers (a hole of a connected network). For a film whose grains have
+    joined, the picture of the film itself instead of grain outlines."""
+    axis = (np.arange(points) + 0.5) * space.field / points
+    x, y = np.meshgrid(axis, axis)
+    caps = np.zeros_like(x)
+    for grain in grains:
+        reach = grain.radius
+        cols = np.flatnonzero(np.abs(axis - grain.x) <= reach)
+        rows = np.flatnonzero(np.abs(axis - grain.y) <= reach)
+        if not len(cols) or not len(rows):
+            continue
+        block = np.ix_(rows, cols)
+        caps[block] = np.maximum(caps[block], cap_height(grain, x[block] - grain.x, y[block] - grain.y))
+    covered = caps > 0
+    height = np.where(covered, space.base + caps, space.base)
+    return axis, axis, height
+
+
+def profile(space: RealSpace, grains: list, y: float, points: int = 600):
+    """(x, h): the height of the metal along the line y of the top view (the side view of a connected film)."""
+    x = (np.arange(points) + 0.5) * space.side / points
+    caps = np.zeros_like(x)
+    for grain in grains:
+        dy = y - grain.y
+        if abs(dy) < grain.radius:
+            caps = np.maximum(caps, cap_height(grain, x - grain.x, dy))
+    return x, np.where(caps > 0, space.base + caps, space.base)
 
 
 @dataclass(frozen=True)

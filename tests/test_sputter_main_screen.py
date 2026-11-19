@@ -663,6 +663,7 @@ def test_every_template_of_the_main_screen_is_in_the_chinese_table():
     held = [*CLIENT_TEMPLATES, *client_texts.TEMPLATES, *pattern_view.TEMPLATES, *evolution_view.TEMPLATES,
             *real_space_view.TEMPLATES, *(text for label, _key, tip in view.IMAGE_CHOICES for text in (label, tip)),
             *(text for _key, caption, _unit, tip in view.TILES for text in (caption, tip)),
+            *(text for caption, tip in view.CONNECTED_TILES.values() for text in (caption, tip)),
             *(text for label, _key, tip in view.MODE_CHOICES for text in (label, tip)),
             *(label for label, _key in view.VIEW_CHOICES), view.DEVIATION_CAPTION, view.DEVIATION_TIP, view.ENTRY_HINT,
             view.RATE_TIP, view.QCM_TIP, view.ANALYZE_TIP, view.FILM_TIP, view.ONSET_TIP, view.DURATION_TIP,
@@ -695,8 +696,8 @@ def test_the_solution_shown_can_be_seen_in_real_space(tmp_path):
     side, top = page.real_space.figure.axes
     assert side.get_title(loc="left") == "side view (cut)" and top.get_title(loc="left") == "top view"
     assert side.get_xlim() == (0.0, space.side) and top.get_xlim() == (0.0, space.field)
-    # the caps of one row, twice: their outlines, then their fills over the inner outlines (touching caps as one piece)
-    assert [len(collection.get_paths()) for collection in side.collections] == [6, 6]
+    # a continuous layer: the film itself - its height over the top view, its cut in the side view (no grain outlines)
+    assert len(top.images) == 1 and len(side.collections) == 1
     assert any("Candidate 1" in words for words in _picture_texts(page))
     page.entry_control.button(1).click()  # another solution: no base layer, another radius
     assert (page.real_space.drawn.radius, page.real_space.drawn.base) == (3.0, 0.0)
@@ -727,18 +728,23 @@ def test_coalescing_grains_and_a_porous_layer_are_drawn_as_they_are(tmp_path):
     page.select_window(1)  # grains of 5.2 nm at 10 nm: a network across the view, on a continuous layer
     assert page.real_space.arrangement == "network"
     assert "Continuous film 2 nm, grains on top: connected across the view" in _picture_texts(page)
-    # a closed film: the whole square is the metal of the base, the grains are relief on it
-    _side, top = page.real_space.figure.axes
+    # the tiles of a joined film: the grains are its relief, no gap
+    assert page.tile_captions["D_nm"].full_text() == "Relief spacing D" and not page.tiles["gap_nm"].isVisibleTo(page)
+    assert page.tile_captions["H_nm"].full_text() == "Film height H"
+    # a closed film: drawn as the film - the height of the metal over the whole square (no holes, no grain outlines),
+    # lighter where it is low and darker where the grains rise; the side view is its cut
+    side, top = page.real_space.figure.axes
     square = top.patches[0]
     assert (square.get_width(), square.get_height()) == (page.real_space.drawn.field,) * 2
     fill, edge = (to_rgba(colour) for colour in real_space_view.METAL_COLOURS["Ag"])
-    assert square.get_facecolor() == fill and square.get_alpha() is None
-    outlines, grains = top.collections
-    assert set(outlines.get_linewidths()) == {0.6}
-    relief = grains.get_facecolors()[0]
-    assert all(r <= f for r, f in zip(relief[:3], fill[:3])) and tuple(relief) != fill  # darker than the film
+    (image,) = top.images
+    assert not top.collections and not np.ma.getmaskarray(image.get_array()).any()
+    low, high = image.cmap(0.0), image.cmap(1.0)
+    assert sum(low[:3]) > sum(fill[:3]) > sum(high[:3])
+    assert len(side.collections) == 1
     page.select_window(0)  # separate islands without a base layer: on the substrate, as before
     assert "Separate islands" in _picture_texts(page)
+    assert page.tile_captions["D_nm"].full_text() == "Distance D"
     assert top is not page.real_space.figure.axes[1]
     assert to_rgba(page.real_space.figure.axes[1].patches[0].get_facecolor()) == to_rgba(real_space_view.SUBSTRATE)
     porous = dict(R_nm=0.9, width=0.2, f_islands=0.2, cap_share=0.2, depth_nm=2.0, xi_nm=5.0, film_share=0.05,
@@ -1157,3 +1163,22 @@ def test_every_template_of_static_frames_and_of_a_porous_result_is_in_the_chines
     assert missing == []
     for template in held:  # a translated template keeps its fields
         assert sorted(re.findall(r"\{(\w+)\}", template)) == sorted(re.findall(r"\{(\w+)\}", ZH[template])), template
+
+
+def test_a_network_is_drawn_as_a_film_with_holes():
+    """Grains joined across the view without a base: the height map is the metal where the grains are (up to H) and
+    0 in the holes between them; the cut follows the same film."""
+    from src.gimap.features.sputter.application import (arrangement, height_map, profile, real_space, top_grains,
+                                                         visible)
+
+    space = real_space(dict(R_nm=10.0, D_nm=21.0, width=0.2, H_nm=8.0, base_nm=0.0))
+    grains = visible(space, top_grains(space))
+    assert arrangement(space, grains) == "network"
+    _x, _y, height = height_map(space, grains)
+    holes = height <= 0
+    assert 0.05 < holes.mean() < 0.6 and height.max() <= max(g.height for g in grains) + 1e-9
+    x, h = profile(space, grains, space.field / 2)
+    assert x.shape == h.shape and (h > 0).any() and (h == 0).any()
+    layered = real_space(dict(R_nm=10.0, D_nm=21.0, width=0.2, H_nm=10.0, base_nm=2.0))
+    _x, _y, film = height_map(layered, visible(layered, top_grains(layered)))
+    assert film.min() >= 2.0 - 1e-12  # on a continuous layer there are no holes

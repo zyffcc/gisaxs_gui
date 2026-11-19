@@ -2593,9 +2593,13 @@ Analysing the same request again shows the result it has. **Details ▸ Analyze 
   (the same for every window, so only the sizes change when you move through the scan); the sizes are those of
   the solution. It follows the window and the solution you choose. Grains that touch are drawn as one piece; a
   piece that runs across the whole view is darker, and the line above the picture says whether the grains are
-  separate, coalescing or a connected network (percolated). A solution with a continuous layer under the grains is a
-  closed film: the view from above is then the metal of that layer over the whole square, with the grains on it as
-  relief (slightly darker, thin outlines), and the line says *Continuous film … nm, grains on top: …*.
+  separate, coalescing or a connected network (percolated). Once the film is joined - a continuous layer under the
+  grains, or grains joined into a network across the view - it is drawn as the film itself, not as grains: the view
+  from above shows the height of the metal (lighter where it is low, darker where the relief rises) with the holes of
+  a network in the colour of the substrate, the cut is the film's profile along the middle of that view, and the line
+  says *Continuous film … nm, grains on top: …* or that the network crosses the view. The tiles then speak of the film
+  too: **Film height H**, **Relief radius R** and **Relief spacing D** (the lateral correlation length of the film's
+  surface, not the distance of separate particles); **Gap** is not shown.
 
 When the data cannot tell two solutions apart, both are there, as candidates with similar fit deviations: compare
 their images. A window the package could not use (no frames in it, for example) says why in place of its images.

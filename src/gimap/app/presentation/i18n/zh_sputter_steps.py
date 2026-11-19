@@ -17,6 +17,15 @@ SPUTTER_STEPS_ZH = {
         "联合精修：第 {iteration}/{total} 次迭代 · {phase}：{done}/{windows} 个时间窗",
     "Joint fit: preparing · {done} of {windows} windows": "联合精修：准备中 · {done}/{windows} 个时间窗",
     "Joint fit: the starting point · {done} of {windows} windows": "联合精修：计算起点 · {done}/{windows} 个时间窗",
+    # -- a joined film (client_panel.py, views/sputter_main_view.py, real_space_view.py) ---------------------------------
+    "Relief radius R": "起伏半径 R",
+    "Radius of the grains that make up the relief of the joined film.": "连成一片的膜上起伏（组成它的晶粒）的半径。",
+    "Film height H": "膜高 H",
+    "Height of the film's top above the substrate: continuous layer and relief.": "膜顶到基底的高度：连续层加起伏。",
+    "Relief spacing D": "起伏间距 D",
+    "Spacing of the relief of the joined film (the centre distance of the grains it is made of): the lateral correlation "
+    "length of its surface, not of separate particles.":
+        "连成一片的膜上起伏的间距（组成它的晶粒的中心距）：是膜表面的横向相关长度，不是分开颗粒的间距。",
     # -- the export (export_flow.py, application/client.py) ------------------------------------------------------------
     "Export…": "导出…",
     "Write the result shown for a paper or a talk: figures as PDF, SVG and PNG (300 dpi), the solution shown in each "
