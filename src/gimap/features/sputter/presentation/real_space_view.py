@@ -54,9 +54,7 @@ POLYMER_NOTE = "polymer (thickness not to scale)"
 BASE_NOTE = "continuous layer {thickness} nm"
 DRAWN_NOTE = ("Grains placed at random around the distance D; radius, size distribution, height and base layer are "
               "those of the solution: {name}")
-GROWN_NOTE = ("One growing film: the grains of the earlier windows, grown, merged where D grows and joined by new "
-              "nuclei where it shrinks; radius, size distribution, height and base layer are those of the solution: "
-              "{name}")
+GROWN_NOTE = "One growing film, built on the windows before (positions illustrative); sizes from the solution: {name}"
 ARRANGEMENTS = {"islands": "Separate islands",
                 "coalescing": "Coalescing: neighbouring grains touch",
                 "network": "Connected network across the view (percolated)"}
