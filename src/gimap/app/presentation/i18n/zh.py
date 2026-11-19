@@ -29,6 +29,7 @@ from .zh_sem import SEM_ZH
 from .zh_sputter import SPUTTER_ZH
 from .zh_sputter_client import SPUTTER_CLIENT_ZH
 from .zh_sputter_live import SPUTTER_LIVE_ZH
+from .zh_sputter_samples import SPUTTER_SAMPLES_ZH
 from .zh_sputter_steps import SPUTTER_STEPS_ZH
 from .zh_menus import MENUS_ZH
 from .zh_giwaxs_auto import GIWAXS_AUTO_ZH
@@ -580,7 +581,7 @@ ZH.update(SERIES_RESULTS_ZH)
 ZH.update(FRAME_IMPORT_ZH)
 ZH.update(SEM_ZH)
 ZH.update(SPUTTER_ZH)
-ZH.update({**SPUTTER_CLIENT_ZH, **SPUTTER_LIVE_ZH, **SPUTTER_STEPS_ZH})
+ZH.update({**SPUTTER_CLIENT_ZH, **SPUTTER_LIVE_ZH, **SPUTTER_STEPS_ZH, **SPUTTER_SAMPLES_ZH})
 ZH.update(MENUS_ZH)
 ZH.update(GIWAXS_AUTO_ZH)
 ZH.update(FLAT_DETECTOR_ZH)

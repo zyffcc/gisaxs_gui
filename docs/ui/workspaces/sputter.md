@@ -31,7 +31,8 @@
   `infrastructure/trace_files.py`、`presentation/live_steps_panel.py`、`step_tree.py`、`step_texts.py`、`step_pictures.py`、
   `presentation/views/sputter_steps_view.py`；存储：`application/storage.py`、`infrastructure/cache_store.py`、
   `presentation/storage_panel.py`；静态帧：`application/client_static.py`、`infrastructure/client_static.py`、
-  `presentation/static_flow.py`、`presentation/views/sputter_static_view.py`；分析包随仓库提供（`utils/sputter_client/`，
+  `presentation/static_flow.py`、`static_list.py`、`static_queue.py`、`static_export.py`、`application/static_samples.py`、
+  `application/static_report.py`、`presentation/views/sputter_static_view.py`、`views/sputter_samples_view.py`；分析包随仓库提供（`utils/sputter_client/`，
   研究代码的发布版：只有这些命令用到的文件，不含开发时所用私有数据的名字，`MANIFEST.json` 与
   `tests/test_sputter_client_bundle.py` 检查它；`GIMAP_SPUTTER_CLIENT` 或用户选的文件夹优先）
 - **Related tests**: [`tests/test_sputter_feature.py`](../../../tests/test_sputter_feature.py)（几何的来源与预设、扫描的结果
@@ -309,28 +310,54 @@ H_nm, D_nm, gap_nm, width, coverage, amount_nm, base_nm}`）。缺的字段照�
 
 ## 静态帧（Static Frames，沉积之后测量）
 
-沉积之后测量的样品没有沉积速率，也没有沉积之前的帧，所以输入栏的“沉积后”一页（`kind_switch` 选 `static`；行为在
-`static_flow.py`）问的是别的：样品的帧（`static_frames`；“选择…”菜单：文件夹，或一个 CBF 文件 / zip 包——zip 包加 `::` 后的包内
-文件夹，包里有 CBF 的文件夹不止一个时让用户选）、样品名 `static_name`、**名义厚度**（nm，`static_nominal`：代替沉积速率，也是
-样品在系列横轴上的位置）、可选的**裸基底**（`static_reference`：另一片同种基底、未镀金属、同样测量的帧，给出图像里的基底部分；
-不给时分析包用 Si 的模型）。主按钮仍是**分析**（`analyze` 按 `analysis_kind()` 分给 `analyze_static`），任务状态是输入栏的同一个
-（`static_status` 就是 `analyze_status`，`_status_owner` 记住最近是哪一种分析在说话）。几何一行这时说这些帧的几何。所选种类记在
-偏好 `analysis_kind` 和项目里。详情里一节（`sputter_static_view.py`，默认收起）只留系列文件夹、模式（快速 / 精修 / 完整）、
-这些帧的几何（能量、距离、光束中心、滚转角、掩膜；留空用分析包自己的值，“分析包的值”把它们填进来；“分析包自带的掩膜”按文件名
-列出包里的 `.npy`）和日志。运行时主屏显示实时视图的三步（见“实时视图”）。
+沉积之后测量的样品没有沉积速率，也没有沉积之前的帧，所以输入栏的“沉积后”一页（`kind_switch` 选 `static`）不问单个样品，而是
+**添加样品…**（`static_add_button`，菜单：文件夹… / CBF 文件…；不再打开 zip 包）、一行概况（`static_summary`：几个样品、几个系列、
+已分析几个、几个暂不分析）和**样品列表**开关（`static_list_button`）。列表（`views/sputter_samples_view.py`，行为在
+`static_list.py`）在主屏和详情的左边，与它们同在一个分割器里，只在“沉积后”显示：
+
+- **找样品**（`application/static_samples.py`，`find_samples`）：选的文件夹里每个下面有 CBF 帧的子文件夹算一个样品（帧多深都行，
+  文件名含 GIWAXS 的不算）；里面只有一个说明不了什么的文件夹时（压缩包解压进同名文件夹）往里找，至多三层；子文件夹的名字都没有
+  厚度时，选的文件夹本身是一个样品（同级里与前缀同名的文件夹作裸基底）；单个 CBF 文件也是一个样品。
+- **从名字读**（`name_parts`）：后面跟 `nm` 或金属符号的数字是名义厚度（`10Au`、`6.5nm`、`6p5_Au`），紧挨着的 `H` / `HiPIMS`
+  为 HiPIMS、`DC` 为 DC；前面的部分是前缀（基底）。与前缀同名、没有厚度的文件夹是这些样品的裸基底（不列为样品）；同一前缀里
+  有 HiPIMS 样品时，其余的记为 DC（`complete`）。前缀加沉积方式是**系列**（`850 · HiPIMS`），每个系列分析进
+  `<结果文件夹>/<系列名>`（`series_slug`）。名字说不出厚度、或写着别的金属时，样品列出但不勾选，状态栏写原因（缺厚度 / 不是 Au /
+  没有帧），提示里是全文；不猜。
+- **列表**（`QTreeWidget`）：系列行（跨列：系列名、裸基底、已分析几个；勾选框勾选整组）下面是样品行——勾选框、名字、名义厚度
+  （双击可改；补上厚度的样品自动勾上）、状态（等待中 / 分析中 / 偏差 x.xx / 失败，失败原因在提示里）。选一个样品，主屏显示它的
+  系列并停在这个样品（`show_client_result(…, sample=…)`）；主屏上沿系列移动，列表跟着选中（`_choose_row_of_window`）。右键：
+  分析这个样品 / 这个系列、显示结果、整组的裸基底…/不用裸基底、打开文件夹、移除；“编辑”菜单：全选、全不选、移除没勾选的、
+  全部移除。列表记在偏好 `static_samples` 和项目的 `static.samples` 里。
+
+**分析**（`static_queue.py`）：按列表显示的顺序依次分析勾选且有厚度的样品。先查所有样品共用的值（结果文件夹、模式、几何），
+不对就不开始；单个样品的值不对（文件夹没了）就标为失败、跳过。要替换以前用别的帧或数值分析过的样品时，问一次，列出全部名字。
+每个样品是 `static_flow.py` 里的一次运行：任务状态写“第 i/n 个样品：名字 — 步骤”，进度条覆盖整个列表，行状态跟着变，主屏显示
+这个样品的实时视图。某个失败就标出来、接着下一个（只有一个样品时原因写在任务状态里，同以前）；取消停止当前和后面的样品。
+结束后任务状态汇总，主屏显示最后分析的样品所在的系列，提示条给出结果文件夹。
+
+**导出…**（`static_export.py`，显示的是静态系列时；按钮提示随之改变）：问一个文件夹，在后台写 `samples_report/report.html`
+（`application/static_report.py`：每个系列一张表——名义厚度、阶段、h_m、底层及密度、晶粒高度 T、R、间距 D、覆盖率、拟合偏差（按
+≤4 / ≤10 / 更大着色）——加分析包画的 `report.png`、`patterns.png`，以 base64 嵌入；文字用界面语言）和 `samples.csv`。阶段按报告里写明的
+规则命名（`stage`）：底层薄于 0.3 nm 时，覆盖率低于 0.8 为分立的岛、否则为相互接触的晶粒；底层比晶粒高出底层的部分薄为薄底层上的晶粒；
+更厚为连续膜，底层密度低于 0.95 时为密度低于 1 的膜。
+
+任务状态是输入栏的同一个（`static_status` 就是 `analyze_status`，`_status_owner` 记住最近是哪一种分析在说话）。几何一行这时说这些帧
+的几何。所选种类记在偏好 `analysis_kind` 和项目里。详情里一节（`sputter_static_view.py`，默认收起）只留**结果文件夹**（各系列的
+子文件夹放在里面）、模式（快速 / 精修 / 完整）、这些帧的几何（能量、距离、光束中心、滚转角、掩膜；留空用分析包自己的值，“分析包
+的值”把它们填进来；“分析包自带的掩膜”按文件名列出包里的 `.npy`）和日志。运行时主屏显示实时视图的三步（见“实时视图”）。
 
 1. `StaticService.analyze`（`application/client_static.py`）→ `StaticPackageRunner`（`infrastructure/client_static.py`）：
    `python -u -m iampred.static --frames … --label … --nominal-nm … --out <系列> [--reference-frames …] [--sample …]
    [--substrate …] --mode … --workers N [--sdd-mm …] [--energy-ev …] [--beam-row … --beam-col …] [--roll …] [--mask …]`，
    环境同“分析”，另加 `IAM_STATIC_DATA`。分析包的默认几何从它 `static` 模块的源码里读（不导入）；没有这个模块的包不能
    分析静态帧，页面这样说。
-2. **系列**是一个输出文件夹；GIMaP 在里面写 `gimap_series.json`（编号、像素掩膜、每个样品由什么分析得到）。导入的帧在
-   `<用户数据>/sputter_client/static/<系列编号>`，与原位的数据文件夹分开（像素掩膜不同）。同一个样品名换了帧或数值再分析时，
-   先问，再把旧的导入和系列里的那个样品删掉重做；完全相同的请求直接显示系列。
+2. **系列**是一个输出文件夹（`<结果文件夹>/<系列名>`）；GIMaP 在里面写 `gimap_series.json`（编号、像素掩膜、每个样品由什么分析
+   得到）。导入的帧在 `<用户数据>/sputter_client/static/<系列编号>`，与原位的数据文件夹分开（像素掩膜不同）。同一个样品名换了帧或
+   数值再分析时，先问（一次问全部），再把旧的导入和系列里的那个样品删掉重做；完全相同的请求直接显示系列，不再运行分析包。
 3. 结束后主屏显示整个系列：样品代替时间窗（选择器写“样品名 · 名义厚度 … nm”），每个样品一个解（`模型解`，各帧的中位数），
    演化图横轴是名义厚度，不出现“时间”字样；数值的范围（各帧与网络区间）在数值块的提示里。**打开结果…**也能打开系列。
 4. 一次只运行一个分析：一种在跑时“分析”不可用（切到另一种也一样）；所选的包不认识静态帧时，“沉积后”下的“分析”不可用。
-   系列文件夹、模式、几何、掩膜记为上次用的值，整节和所选种类进项目文件（旧项目为“原位”）。
+   结果文件夹、模式、几何、掩膜记为上次用的值，整节、样品列表和所选种类进项目文件（旧项目为“原位”，列表为空）。
 
 ## 实空间示意（Real Space）
 

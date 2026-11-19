@@ -109,7 +109,6 @@ SPUTTER_LIVE_ZH = {
     "The first frames are being solved…": "正在求解最初的几帧…",
     # -- the bar, After Deposition (views/sputter_main_view.py, static_flow.py) ------------------------------------
     "Nominal (nm)": "名义厚度（nm）",
-    "CBF File or Zip Archive…": "CBF 文件或 zip 压缩包…",
     # -- reading the frames from disk and the processes (reading_texts.py) ------------------------------------------
     "disk {seconds} s per frame ({share} % of the time)": "磁盘每帧 {seconds} s（占用时的 {share} %）",
     "disk {seconds} s per frame": "磁盘每帧 {seconds} s",

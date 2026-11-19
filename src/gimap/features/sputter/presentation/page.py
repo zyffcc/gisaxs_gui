@@ -8,9 +8,13 @@ choose from (the network's candidates, the refined one and the joint fit of the 
 solution shown — radius, height, distance, gap, size distribution width, coverage — and their evolution over the scan. **Export…**
 writes the result shown for a paper (``export_flow.py``).
 
-**Details** (the second view): the geometry, the options of Analyze, Static Frames (samples measured after their
-deposition, analysed one at a time into a series the main screen shows: ``static_flow.py``; the parallel processes of
-both: ``workers_flow.py``), More options and Storage (the import caches: ``storage_panel.py``); at the right the result
+**After Deposition** (the switch of the bar): Add Samples… fills the sample list beside the main screen
+(``static_list.py``) and Analyze works through its ticked samples, each into the series of its folder name
+(``static_queue.py``, one sample's run: ``static_flow.py``).
+
+**Details** (the second view): the geometry, the options of Analyze, Static Frames (the folder the series go to, the
+mode and the geometry of samples measured after their deposition; the parallel processes of both analyses:
+``workers_flow.py``), More options and Storage (the import caches: ``storage_panel.py``); at the right the result
 shown, from the files of its folder: Windows, Report, Log (``result_tabs.py``) and Steps (``live_steps_panel.py``).
 
 The layout is in ``views/sputter_page_view.py`` and ``views/sputter_main_view.py``; the folder and the form in
@@ -38,15 +42,18 @@ from .live_panel import LivePanelMixin
 from .project_state import SputterProjectMixin
 from .rate_flow import RateMixin
 from .result_tabs import ResultTabsMixin
+from .static_export import STATIC_EXPORT_KEY, StaticExportMixin
 from .static_flow import STATIC_KEY, SputterStaticMixin
+from .static_list import StaticListMixin
+from .static_queue import StaticQueueMixin
 from .storage_panel import STORAGE_KEY, StoragePanelMixin
 from .views.sputter_page_view import SputterPageView
 from .workers_flow import WorkersMixin
 
 
 class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, ExportMixin, ResultTabsMixin, LivePanelMixin,
-                  SputterStaticMixin, RateMixin, WorkersMixin, StoragePanelMixin, SputterGeometryMixin, QWidget,
-                  SputterPageView):
+                  SputterStaticMixin, StaticListMixin, StaticQueueMixin, StaticExportMixin, RateMixin, WorkersMixin,
+                  StoragePanelMixin, SputterGeometryMixin, QWidget, SputterPageView):
     clientEvent = pyqtSignal(object)
     """A line or a step of Analyze, from its background task (delivered in the GUI thread)."""
     staticEvent = pyqtSignal(object)
@@ -139,6 +146,7 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Exp
         self.tasks.cancel(INSPECT_KEY)
         self.tasks.cancel(STORAGE_KEY)
         self.tasks.cancel(EXPORT_KEY)
+        self.tasks.cancel(STATIC_EXPORT_KEY)
         try:
             theme_manager().changed.disconnect(self._theme_changed)
         except (TypeError, RuntimeError):  # already disconnected

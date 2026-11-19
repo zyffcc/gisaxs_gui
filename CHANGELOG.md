@@ -164,8 +164,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   picture says whether the grains are separate, coalescing or percolated. Results on porous TiO₂ show their own
   values (island radius, relative; island, cap and film shares; the correlation lengths of the metal in the pores),
   and Real Space draws the TiO₂ layer with the metal in its pores, the cap on the particle tops and the clusters.
-  **Details ▸ Static Frames (after deposition)** analyses samples measured after their deposition (a folder, a CBF
-  file or a zip archive) one at a time into a series, which the main screen shows along the nominal thickness.
+  **After Deposition** (the input bar) analyses samples measured after their deposition, a whole folder of them at
+  once, into series the main screen shows along the nominal thickness.
 - The analysis package of Sputter ▸ Analyze and Static Frames comes with GIMaP (`utils/sputter_client`): nothing
   has to be chosen. **Choose Folder…** or `GIMAP_SPUTTER_CLIENT` still use another package; a folder named so that is
   not an analysis package (chosen once and moved since, or the wrong folder) is passed over for the one that comes
@@ -216,14 +216,21 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   prepared, candidates proposed, windows solved and model images computed, windows refined, iterations of the
   whole-scan refinement — and the bar of the job status moves on inside each step. In Refine mode every window gets
   its candidates before the refinements start, so the evolution fills early (the results are the same).
-- Sputter: **In Situ | After Deposition** at the left of the input bar. **After Deposition** is for a sample measured
-  after its deposition, which has no deposition rate and no frames from before it: the bar asks for its frames, its
-  name, its **nominal thickness** (in place of the rate; its place on the axis of the series) and, optionally, the
-  frames of a **bare substrate** (another piece of the same substrate without metal; without it the film is taken to
-  lie on Si), and **Analyze** analyses it into the series. While it runs the main screen shows three steps live: the
-  frames read (which are usable, which are left out and why), the solution of each frame as it is found with its
-  measured and model image, and the series with every frame solved so far. **Details ▸ Static Frames** keeps the
-  series folder, the mode and the geometry; **Analyze Sample** there is gone.
+- Sputter: **In Situ | After Deposition** at the left of the input bar. **After Deposition** is for samples
+  measured after their deposition, which have no deposition rate and no frames from before it. **Add Samples…** takes
+  a folder of samples — each folder in it with CBF frames is one sample, however deep the frames lie — or one
+  sample's folder or one CBF file (zip archives are no longer opened: unpack them first). The **nominal thickness**
+  (`10Au`, `6.5nm`), a HiPIMS deposition (`H10Au`) and the **bare substrate** (a folder named like the part before the
+  thickness, `850` for `850_10Au`; without one the film is taken to lie on Si) are read from the folder names; what a
+  name does not say is asked for in the list, not guessed. The **Sample List** at the left of the main screen groups
+  the samples into series (substrate and deposition method), with a box to tick each, its thickness (double-click to
+  change it) and its state; **Analyze** runs the ticked samples one after another (*Sample 3 of 12*), a failed one does
+  not stop the others, and a right-click analyses one sample or one series. While a sample runs the main screen shows
+  three steps live: the frames read (which are usable, which are left out and why), the solution of each frame as it
+  is found with its measured and model image, and the series with every frame solved so far. Choosing a sample shows
+  its series at that sample. **Export…** writes one HTML report of every series of the list (a table of values with
+  the stage of each sample, the evolution and the fits) and a CSV of every sample. **Details ▸ Static Frames** keeps
+  the results folder (one folder per series in it), the mode and the geometry; **Analyze Sample** there is gone.
 - **Geometry Calibration**: the **Distance range** is a limit, not a starting point. No solution outside it is shown,
   also not after the fit of centre and distance (before, the fit could leave a custom range); when none lies in it,
   the calibration says so. An image of the standard taken at grazing incidence (AgBH on a wafer: arcs above the

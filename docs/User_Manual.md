@@ -2464,8 +2464,8 @@ passed over: the package that comes with GIMaP runs, and the **Analysis package*
 tooltip. Without any package the main screen says so; **Open Result…** shows a folder analysed before all the
 same.
 
-**The input bar**, from the left (with **In Situ** chosen at its left end; **After Deposition** is for a sample
-measured after its deposition, see *Samples measured after their deposition* below):
+**The input bar**, from the left (with **In Situ** chosen at its left end; **After Deposition** is for samples
+measured after their deposition, see *Samples measured after their deposition* below):
 
 1. **Choose…**: the folder of one scan (its CBF frames, or a scan folder with them in one subfolder such as
    `p2m/`). A line under the bar then sums up the frames, the detector, the exposure and the time.
@@ -2617,32 +2617,65 @@ in the pores.
 
 **Samples measured after their deposition.** A sample measured after its deposition — one of a thickness series
 of Au films, for example — has no deposition rate and no frames from before the deposition. Choose **After
-Deposition** at the left of the input bar (**In Situ** is a scan recorded during the deposition); the bar then asks
-for this sample, and each sample is analysed into a *series*:
+Deposition** at the left of the input bar (**In Situ** is a scan recorded during the deposition). The bar then holds
+**Add Samples…** and a line that sums up the samples, and the **Sample List** stands at the left of the main screen
+and of Details (the switch **Sample List** at the right of the bar hides or shows it):
 
-1. **Frames** (**Choose…**): the GISAXS frames of one sample — a folder, or one CBF file or a zip archive. For an
-   archive GIMaP lists the folders in it that hold frames; the folder inside the archive follows after two colons
-   (`archive.zip::folder/`).
-2. **Sample**: its name in the series.
-3. **Nominal (nm)**: the nominal thickness of the film, as deposited. It takes the place of the deposition rate and
-   is the sample's place on the axis of the series.
-4. **Bare substrate** (optional): frames of *another piece* of the same substrate without metal, measured the same
-   way; they give the substrate part of the image. Empty, the film is taken to lie directly on Si.
-5. **Analyze**. While it runs the main screen shows three steps: the frames of the sample read (the detector summed,
-   the usable frames summed, which frames are left out and why), the solution of each frame as it is found
-   (measured and model image of the frame solved last; below, the series with every frame solved so far at the
-   sample's nominal thickness), and the sample added to the series. Afterwards the main screen shows the series: one
-   sample in place of each time window — its value is the median over its frames —, the evolution along the
-   nominal thickness. A sample name that the series has already, with other frames or values, is replaced after a
-   question.
+1. **Add Samples… ▸ Folder…**: a folder of samples — each folder in it with CBF frames is one sample, however deep
+   the frames lie (measurement folders, `run1` …; frames whose file name says GIWAXS are left out) — or one sample's
+   folder; **CBF File…** takes one frame as a sample. A folder that holds nothing but one folder (an archive unpacked
+   into a folder of the same name) is looked into. Zip archives are not opened: unpack them first. Samples in the
+   list already are not added again.
+2. GIMaP reads each folder's name. The **nominal thickness** is a number followed by `nm` or by the metal (`10Au`,
+   `6.5nm`, `6p5_Au`); `H` or `HiPIMS` right before it marks a HiPIMS deposition. What stands before it is the
+   substrate (`850` of `850_H10Au`): a folder beside the samples named just that (`850`) is their **bare substrate**
+   — another piece of the same substrate without metal, measured the same way, which gives the substrate part of the
+   images; without one the film is taken to lie directly on Si. The samples of one substrate and one deposition
+   method are a **series** (`850 · DC`, `850 · HiPIMS`; DC is named only where HiPIMS samples of the same substrate
+   are listed too), analysed into a folder of its own. A sample whose name gives no thickness is listed unticked
+   with *Thickness?*: double-click its **nm** to enter it. Only Au films can be analysed: a folder named with another
+   metal is listed unticked (*Not Au*).
+3. **The list** shows each series — its bare substrate and how many of its samples are analysed — with its samples:
+   a box (ticked: Analyze runs it; the box of a series ticks all of its samples), the name and the nominal thickness
+   (double-click either to change it) and the state: *Waiting*, *At work…*, *Fit 2.91* once analysed (its fit
+   deviation), *Failed* (the reason in the tooltip). A right-click offers **Analyze This Sample**, **Analyze This
+   Series**, **Show Result**, **Bare Substrate…** or **No Bare Substrate (on Si)** for the whole series, **Open
+   Folder** and **Remove**; **Edit** selects all or none and removes samples.
+4. **Analyze** runs the ticked samples one after another, in the order of the list. The job status says *Sample 3 of
+   12: 850_6Au* and its step, and the bar covers the whole list. While a sample runs the main screen shows three
+   steps: the frames of the sample read (the detector summed, the usable frames summed, which frames are left out and
+   why), the solution of each frame as it is found (measured and model image of the frame solved last; below, the
+   series with every frame solved so far at the sample's nominal thickness), and the sample added to its series. A
+   sample that fails is marked and the next one starts; **Cancel** stops the sample at work and the ones after it
+   (those analysed stay in their series). A sample analysed before with the same frames and values is not run
+   again; samples analysed before with other frames or values are replaced after one question that names them all.
+5. Afterwards the main screen shows the series of the last sample analysed: one sample in place of each time window
+   — its value is the median over its frames — and the evolution along the nominal thickness. Choose a sample in the
+   list to see its series at that sample; moving along the series on the main screen chooses its row.
+6. **Export…** (beside **Open Result…**, and in Details) writes `samples_report` into a folder you choose:
+   `report.html`, one file to send, with every series of the list — its table (nominal thickness, stage, metal amount
+   h_m, base layer and its density, grain height T, radius R, spacing D, coverage, fit deviation), its evolution
+   along the nominal thickness and each sample's measured and model images with two cuts —, in the interface
+   language; and `samples.csv` with every sample. The stage is named by one rule, written in the report: without a
+   continuous layer under the grains (thinner than 0.3 nm) *separate islands* below a coverage of 0.8 and *grains in
+   contact* above; a layer thinner than the grains stand above it, *grains on a thin layer*; a thicker one, a
+   *continuous film*, or a *film with a density below 1* below 0.95 of the bulk density.
 
-Under **Details ▸ Static Frames (after deposition)**: the **Series folder** (every sample analysed into it is added
-to the same series; choose an existing series to add to it), the **Mode** (Quick, Refine or Full), the geometry of
-these frames (empty fields keep the package's own values, which **Package Values** fills in; **Masks of the Package**
-lists the pixel masks it brings) and the log. One analysis runs at a time.
+Under **Details ▸ Static Frames (after deposition)**: the **Results folder** (each series goes into a folder of its
+own in it, named after the series; a series already there is added to), the **Mode** (Quick, Refine or Full), the
+geometry of these frames (empty fields keep the package's own values, which **Package Values** fills in; **Masks of
+the Package** lists the pixel masks it brings) and the log. One analysis runs at a time. The list is kept with the
+project and for the next session.
 
 The package supports Au films at an incidence angle near 0.40°; what it says about other cases appears in the
 section's log.
+
+![After Deposition: the sample list beside the main screen](manual_images/en/22b_sputter_samples.png)
+*After Deposition with a folder of samples added — here invented folders and the test suite's made-up results
+(synthetic images, invented values). Left the Sample List: three series with their bare substrate, each sample with
+its nominal thickness read from the folder name and its fit deviation; a sample whose name gives no thickness is
+left out (*Thickness?*) and its series listed last; one sample is not analysed yet. Right the series of the sample
+chosen, at that sample.*
 
 ![The main screen of Sputter with a result](manual_images/en/22_sputter.png)
 *The main screen with a result — here a made-up one: synthetic images and invented values, and three PILATUS CBF

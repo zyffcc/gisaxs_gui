@@ -32,9 +32,8 @@ STATIC_MODES = ("quick", "refine", "full")
 REFERENCE_SUFFIX = "_ref"
 """The package imports the frames of the bare substrate of sample ``x`` under ``x_ref``."""
 ARCHIVE_MARK = "::"
-FRAMES_PROBLEM = "Choose the frames of the sample: a folder, one CBF file or a zip archive."
-REFERENCE_PROBLEM = ("The frames of the bare substrate were not found: choose a folder, one CBF file or a zip "
-                     "archive, or leave the field empty.")
+FRAMES_PROBLEM = "The frames of the sample were not found: its folder or CBF file is not there."
+REFERENCE_PROBLEM = "The frames of the bare substrate were not found: choose its folder again, or none."
 NAME_PROBLEM = "Give the sample a name with letters or digits."
 NAME_RESERVED = "A sample name cannot end in _ref: the frames of a bare substrate are kept under such a name."
 NOMINAL_PROBLEM = "Give the nominal thickness of the sample (nm)."
