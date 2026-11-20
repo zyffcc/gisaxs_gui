@@ -161,12 +161,12 @@ class GeometryCalibrator(Protocol):
 
 
 class CurveFitter(Protocol):
-    """A numerical physical fit of one curve (|q| > 0, q in Å⁻¹): solutions, best first."""
+    """Predict parameters on one curve (|q| > 0, q in Å⁻¹): the distinct solutions, most probable first
+    (Fitting's ``create_curve_fit``: rows with ``probability``, values, ``posterior`` intervals, curves)."""
 
-    def __call__(
-        self, q_inv_angstrom, intensity, sigma, *, components=(), distance_nm=None, report=None, cancelled=None,
-    ) -> list[dict]:
-        """``distance_nm``: an interparticle distance to start from as well (a peak or shoulder of the curve)."""
+    def __call__(self, q_inv_angstrom, intensity, sigma, *, components=(), report=None, cancelled=None) -> list[dict]:
+        """``components``: the composition to fit (1 sphere, 2 random cylinder, 3 vertical cylinder; empty: the
+        network chooses)."""
         ...
 
 

@@ -16,7 +16,6 @@ from src.gimap.features.fitting.application import (
 )
 from src.gimap.features.fitting.domain import prepare_ai_curve
 from src.gimap.features.fitting.infrastructure.adapters import (
-    AiPipelinePredictor,
     JsonCandidateRepository,
     LocalAiFittingArtifactRepository,
 )
@@ -163,14 +162,6 @@ def test_candidate_parameter_mapping_is_framework_neutral():
         "sigma_res": 0.02,
         "k_value": 3.0,
     }
-
-
-def test_a_model_folder_that_is_not_v5_is_refused_with_what_to_use_instead(tmp_path):
-    request = _request(tmp_path)
-    request.model_path.mkdir()
-    (request.model_path / "model.keras").write_bytes(b"placeholder")  # an earlier Keras model (K1–K4)
-    with pytest.raises(ValueError, match="not a 1D Predict \(V5\) model.*fit1d"):
-        AiPipelinePredictor().create_job_request(request)
 
 
 def test_load_candidate_results_uses_json_repository_without_gui(tmp_path):

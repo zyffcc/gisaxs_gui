@@ -1,0 +1,4 @@
+# Training the 1D proposal network (tools/ml1d/train_flow.py): PyTorch on top of the core. The program and its
+# releases never import it; they evaluate the exported network with numpy.
+-r requirements.txt
+torch>=2.1

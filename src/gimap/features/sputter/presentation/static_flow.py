@@ -1,20 +1,17 @@
-"""Samples measured after their deposition: analyse one sample into a series (a mixin of ``SputterPage``).
+"""Samples measured after their deposition: the bar, the package's values and one sample's run (a mixin of
+``SputterPage``).
 
-With After Deposition chosen in the input bar, the bar takes the sample — its frames, name, nominal thickness (in
-the place of the deposition rate) and, optionally, frames of the bare substrate: another piece of the same substrate
-without metal, since such a sample has no frames from before its deposition — and Analyze runs it
-(``analyze_static``); Details ▸ Static Frames holds the series folder, the mode and the geometry. The analysis is one
-background task (``StaticService.analyze``): the package's ``static`` command runs as a subprocess, its three steps move
-the bar's job status, Cancel ends its whole process tree, its lines go to the section's log, and the main screen shows
-what each step finds while it runs (``live_panel.py``). When it ends, the series — every sample analysed into that
-folder so far — is shown on the main screen with the new sample selected; Open Result… shows a series like any other
-result.
+With After Deposition chosen in the input bar, Add Samples… fills the sample list beside the main screen
+(``static_list.py``) and Analyze works through the ticked samples one after another (``static_queue.py``); Details ▸
+Static Frames holds the folder the series go to, the mode and the geometry. Each sample is one background task
+(``StaticService.analyze``): the package's ``static`` command runs as a subprocess, its three steps move the bar's job
+status, Cancel ends its whole process tree, its lines go to the section's log, and the main screen shows what each step
+finds while it runs (``live_panel.py``).
 
 The geometry fields are filled with the values the package itself uses for static frames (Package Values fills them
-again); an empty field leaves the package's value. The kind of analysis of the bar, the series folder, the mode, the
-geometry and the mask are remembered as the last used ones; everything of the section is part of a project. A sample
-name the series already has, with other frames or values, is replaced after a question. Only one analysis runs at a
-time; the job status belongs to the one that ran last.
+again); an empty field leaves the package's value. The kind of analysis of the bar, the results folder, the mode, the
+geometry and the mask are remembered as the last used ones; everything of the section and the sample list are part of
+a project.
 
 Masks of the Package (here and under the mask of More options) lists the pixel masks the package brings by their
 file names; choosing one fills the mask field beside it.
@@ -22,47 +19,29 @@ file names; choosing one fills the mask field beside it.
 
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
-from PyQt5.QtCore import QUrl
-from PyQt5.QtGui import QDesktopServices
-from PyQt5.QtWidgets import QFileDialog, QInputDialog, QMenu, QMessageBox, QSizePolicy
+from PyQt5.QtWidgets import QFileDialog, QMenu, QSizePolicy
 
-from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr
 
-from ..application import (ClientProgress, ClientResult, ClientStarted, LiveEvent, StaticRequest, join_frames,
-                           split_frames)
-from .client_flow import Failure, _guarded
-from .client_texts import STARTING, STOPPING_ANALYSIS
+from ..application import ClientProgress, ClientStarted, LiveEvent, StaticRequest, StaticSample
+from .client_texts import STOPPING_ANALYSIS
 from .geometry import warning_style
 from .texts import message_text, text
 
 STATIC_KEY = "sputter_static"
-STATIC_NUMBERS = ("static_nominal", "static_energy", "static_sdd", "static_beam_col", "static_beam_row",
-                  "static_roll")
+STATIC_NUMBERS = ("static_energy", "static_sdd", "static_beam_col", "static_beam_row", "static_roll")
 STATIC_GEOMETRY = ("static_energy", "static_sdd", "static_beam_col", "static_beam_row", "static_roll")
-STATIC_SCOPE = "Au films measured after the deposition, one sample at a time into a series."
-STATIC_SCOPE_ALPHA = ("Au films measured after the deposition at an incidence angle near {alpha}°, one sample at a "
-                      "time into a series.")
-STATIC_DONE = "Done: {samples} samples in the series."
-STATIC_SHOWN_AGAIN = "This sample was analysed before: the series is shown ({samples} samples)."
-STATIC_READY_TOAST = "Sample {name} is in the series."
-STATIC_REPLACE_TITLE = "Replace the Sample?"
-STATIC_REPLACE = ("The series already has a sample named {name}, analysed from other frames or values. Analysing it "
-                  "again replaces that sample in the series.")
-ARCHIVE_EMPTY = "{file} holds no CBF frames."
-ARCHIVE_TITLE = "Folder Inside the Archive"
-ARCHIVE_QUESTION = "The archive holds frames in several folders. Frames to use:"
-ARCHIVE_TOP = "(frames at the top of the archive)"
+STATIC_SCOPE = "Au films measured after the deposition, analysed sample by sample into their series."
+STATIC_SCOPE_ALPHA = ("Au films measured after the deposition at an incidence angle near {alpha}°, analysed sample by "
+                      "sample into their series.")
+STATIC_REPLACE_TITLE = "Replace the Samples?"
+STATIC_REPLACE = ("{names}: analysed before from other frames or values. Analysing again replaces them in their "
+                  "series.")
 NO_PACKAGE_MASKS = "The analysis package brings no masks"
-CHOOSE_FOLDER = "Folder…"
-CHOOSE_FILE = "CBF File or Zip Archive…"
-TEMPLATES = (STATIC_SCOPE, STATIC_SCOPE_ALPHA, STATIC_DONE, STATIC_SHOWN_AGAIN, STATIC_READY_TOAST,
-             STATIC_REPLACE_TITLE, STATIC_REPLACE, ARCHIVE_EMPTY, ARCHIVE_TITLE, ARCHIVE_QUESTION, ARCHIVE_TOP,
-             NO_PACKAGE_MASKS, CHOOSE_FOLDER, CHOOSE_FILE)
+TEMPLATES = (STATIC_SCOPE, STATIC_SCOPE_ALPHA, STATIC_REPLACE_TITLE, STATIC_REPLACE, NO_PACKAGE_MASKS)
 """The run-time texts of the section that need Chinese."""
 
 
@@ -82,6 +61,8 @@ class SputterStaticMixin:
     main screen (``show_client_result``)."""
 
     def _init_static(self) -> None:
+        self._init_static_list()
+        self._init_static_queue()
         self._static_busy = False
         self._static_stop = False
         self._static_tracker: Optional[ClientProgress] = None
@@ -109,6 +90,7 @@ class SputterStaticMixin:
             self.input_stack.widget(index).setSizePolicy(QSizePolicy.Preferred if shown else QSizePolicy.Ignored,
                                                          QSizePolicy.Preferred if shown else QSizePolicy.Ignored)
         self.input_stack.updateGeometry()
+        self._show_samples_panel()
         self._show_scan_summary()
         self._show_geometry_summary()
         self._sync_run_buttons()
@@ -118,10 +100,11 @@ class SputterStaticMixin:
             self._store(stored)
 
     def _restore_static_last(self) -> None:
-        """The series folder, the mode, the geometry and the mask as they were used last; the package's own
-        geometry where nothing was."""
+        """The results folder, the mode, the geometry and the mask as they were used last (the package's own
+        geometry where nothing was), and the sample list."""
         last = self._stored().get("static_last")
         self._apply_static_values(last if isinstance(last, dict) else {}, defaults=True)
+        self._restore_static_samples()
 
     def _connect_static(self) -> None:
         # the job status is the bar's: Cancel and Details go through the in-situ flow, which passes them on
@@ -129,12 +112,9 @@ class SputterStaticMixin:
         self.staticEvent.connect(self._static_event)
         for name in ("static_energy", "static_sdd", "static_beam_col", "static_beam_row", "static_roll"):
             getattr(self, name).textChanged.connect(lambda _text: self._show_geometry_summary())
-        for picker in (self.static_frames, self.static_reference):  # Choose…: a folder, or one CBF file or zip archive
-            menu = QMenu(picker.browse_button)
-            menu.addAction(tr(CHOOSE_FOLDER), lambda picker=picker: self._choose_static_folder(picker))
-            menu.addAction(tr(CHOOSE_FILE), lambda picker=picker: self._choose_static_file(picker))
-            picker.browse_button.setMenu(menu)
         self.static_series.browseRequested.connect(self._choose_static_series)
+        self.static_series.path_edit.textChanged.connect(  # the series of the list are now in other folders
+            lambda _text: self.set_static_samples(self.static_samples, remember=False))
         self.static_mask.browseRequested.connect(lambda: self._choose_mask_into(self.static_mask))
         self.static_defaults_button.clicked.connect(lambda: self._fill_static_defaults(replace=True))
         for button, picker in ((self.static_masks_button, self.static_mask),
@@ -142,6 +122,7 @@ class SputterStaticMixin:
             menu = QMenu(button)
             menu.aboutToShow.connect(lambda menu=menu, picker=picker: self._fill_masks_menu(menu, picker))
             button.setMenu(menu)
+        self._connect_static_list()
         self._show_static_package()
         stored = self._stored().get("analysis_kind")
         self.set_analysis_kind(stored if stored in ("insitu", "static") else "insitu", remember=False)
@@ -168,7 +149,7 @@ class SputterStaticMixin:
         self.static_note.setVisible(bool(words))
         warning_style(self.static_note, bool(problem))
         if static is not None:
-            self.static_series.path_edit.setPlaceholderText(str(static.default_series()))
+            self.static_series.path_edit.setPlaceholderText(str(static.default_series().parent))
         self._sync_run_buttons()
 
     def _fill_static_defaults(self, *, replace: bool = False) -> None:
@@ -188,48 +169,10 @@ class SputterStaticMixin:
             self.static_mask.set_path("")
 
     # -- pickers --------------------------------------------------------------------------------------------------
-    def _choose_static_folder(self, picker) -> None:
-        start = split_frames(picker.path())[0] or str(Path.home())
-        folder = QFileDialog.getExistingDirectory(self, tr("Choose the Folder of the Frames"), start)
-        if folder:
-            picker.set_path(folder)
-
-    def _choose_static_file(self, picker) -> None:
-        start = split_frames(picker.path())[0] or str(Path.home())
-        path, _ = QFileDialog.getOpenFileName(self, tr("Choose a CBF File or a Zip Archive"), start,
-                                              "Frames (*.cbf *.zip);;All files (*)")
-        if path:
-            self.set_static_source(picker, path)
-
-    def set_static_source(self, picker, path: str) -> None:
-        """Put a chosen file into a frames field; for a zip archive with frames in several folders, ask which."""
-        inner = ""
-        if str(path).lower().endswith(".zip"):
-            static = self._static_service()
-            try:
-                folders = static.archive_folders(path) if static is not None else []
-            except (OSError, ValueError, RuntimeError) as exc:
-                self._notify(str(exc), error=True)
-                return
-            if not folders:
-                self._notify(text(ARCHIVE_EMPTY, file=Path(path).name), error=True)
-                return
-            if len(folders) > 1:
-                inner = self._ask_archive_folder(folders)
-                if inner is None:
-                    return
-        picker.set_path(join_frames(path, inner))
-
-    def _ask_archive_folder(self, folders: list) -> Optional[str]:
-        """The folder of an archive the user picks ("" for the frames at its top; None: cancelled)."""
-        names = [folder or tr(ARCHIVE_TOP) for folder in folders]
-        chosen, accepted = QInputDialog.getItem(self, tr(ARCHIVE_TITLE), tr(ARCHIVE_QUESTION), names, 0, False)
-        return folders[names.index(chosen)] if accepted and chosen in names else None
-
     def _choose_static_series(self) -> None:
         static = self._static_service()
         start = self.static_series.path() or (str(static.default_series().parent) if static is not None else "")
-        folder = QFileDialog.getExistingDirectory(self, tr("Choose the Folder of the Series"), start)
+        folder = QFileDialog.getExistingDirectory(self, tr("Choose the Folder the Series Go To"), start)
         if folder:
             self.static_series.set_path(folder)
 
@@ -254,9 +197,8 @@ class SputterStaticMixin:
     # -- the values -----------------------------------------------------------------------------------------------
     def _static_values(self) -> dict:
         values = {name: getattr(self, name).text().strip() for name in STATIC_NUMBERS}
-        values.update(frames=self.static_frames.path(), name=self.static_name.text().strip(),
-                      reference=self.static_reference.path(), series=self.static_series.path(),
-                      mode=self.static_mode.currentData(), mask=self.static_mask.path())
+        values.update(series=self.static_series.path(), mode=self.static_mode.currentData(),
+                      mask=self.static_mask.path())
         return values
 
     def _apply_static_values(self, values: dict, *, defaults: bool = False) -> None:
@@ -265,26 +207,22 @@ class SputterStaticMixin:
         for name in STATIC_NUMBERS:
             if name in values:
                 getattr(self, name).setText(str(values[name] or ""))
-        for key, picker in (("frames", self.static_frames), ("reference", self.static_reference),
-                            ("series", self.static_series), ("mask", self.static_mask)):
+        for key, picker in (("series", self.static_series), ("mask", self.static_mask)):
             if key in values:
                 picker.set_path(str(values[key] or ""))
-        if "name" in values:
-            self.static_name.setText(str(values["name"] or ""))
         index = self.static_mode.findData(values.get("mode")) if "mode" in values else -1
         if index >= 0:
             self.static_mode.setCurrentIndex(index)
         if defaults:
             self._fill_static_defaults()
 
-    def _static_request(self) -> StaticRequest:
+    def static_request_for(self, sample: StaticSample) -> StaticRequest:
+        """What Analyze asks the package for one sample of the list: into the folder of its series."""
         values = self._static_values()
-        static = self._static_service()
-        series = values["series"] or (str(static.default_series()) if static is not None else "")
         energy = _float(values["static_energy"])
         return StaticRequest(
-            frames=values["frames"], name=values["name"], nominal_nm=_float(values["static_nominal"]),
-            series_folder=Path(series), reference_frames=values["reference"], mode=values["mode"],
+            frames=sample.source, name=sample.name, nominal_nm=sample.nominal_nm,
+            series_folder=self.series_folder(sample.series), reference_frames=sample.reference, mode=values["mode"],
             energy_ev=None if energy is None else energy * 1000.0, sdd_mm=_float(values["static_sdd"]),
             beam_col=_float(values["static_beam_col"]), beam_row=_float(values["static_beam_row"]),
             sample_roll_deg=_float(values["static_roll"]), mask_file=Path(values["mask"]) if values["mask"] else None)
@@ -333,40 +271,6 @@ class SputterStaticMixin:
         self.static_log.setVisible(True)
         self.details_scroll.ensureWidgetVisible(self.static_log)
 
-    def _confirm_static_replace(self, name: str) -> bool:
-        answer = QMessageBox.question(self, tr(STATIC_REPLACE_TITLE), text(STATIC_REPLACE, name=name),
-                                      QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel)
-        return answer == QMessageBox.Yes
-
-    def analyze_static(self) -> None:
-        static = self._static_service()
-        if static is None or self._static_busy or self._client_busy:
-            return
-        request = replace(self._static_request(), workers=self.run_workers())  # Automatic: worked out now
-        problems = request.problems()
-        unsupported = static.defaults().problem
-        if unsupported:
-            problems = [unsupported]
-        if problems:
-            self._static_status("failed", [(problem, {}) for problem in problems], 0.0)
-            self._notify(" ".join(message_text(problem) for problem in problems), error=True)
-            return
-        if static.replaces(request) and not self._confirm_static_replace(request.label()):
-            return
-        self._remember_static()
-        self._static_stop = False
-        self._static_busy = True
-        self._static_tracker = ClientProgress.static()
-        self._static_label = request.label()
-        self._static_request_shown = request
-        self.static_log.appendPlainText("— " + request.frames)
-        self._sync_run_buttons()
-        self._static_status("running", [(STARTING, {})], None)
-        emit, should_stop = self.staticEvent.emit, self._static_should_stop
-        self.tasks.submit(STATIC_KEY, lambda: _guarded(lambda: static.analyze(request, emit, should_stop)),
-                          on_done=self._static_finished,
-                          on_error=lambda message, details: self._static_finished(Failure(message, details)))
-
     def stop_static(self) -> None:
         if not self._static_busy or self._static_stop:
             return
@@ -402,7 +306,7 @@ class SputterStaticMixin:
             return
         template, values = tracker.message()
         if template:
-            self._static_status("running", [(template, values)], tracker.fraction)
+            self._static_step(template, values, tracker.fraction)
 
     def _live_begin_static(self, folder, request: StaticRequest) -> None:
         """The live view for a sample: with the series as far as it is (its samples analysed before)."""
@@ -417,48 +321,28 @@ class SputterStaticMixin:
                          series=series if series is not None and series.static else None,
                          reference=bool(request.reference_frames.strip()), workers=request.workers)
 
-    def _static_finished(self, outcome) -> None:
-        self._live_end()
-        tracker, self._static_tracker = self._static_tracker, None
-        self._static_busy = False
-        self._sync_run_buttons()
-        if isinstance(outcome, ClientResult):
-            ran = tracker is not None and bool(tracker.step)
-            template = STATIC_DONE if ran else STATIC_SHOWN_AGAIN
-            self._static_status("succeeded", [(template, {"samples": len(outcome.windows)})], 1.0)
-            self.show_client_result(outcome, sample=self._static_label)
-            self._remember_client_result(outcome.folder)
-            self.show_details(False)
-            folder = outcome.folder
-            show_toast(self, text(STATIC_READY_TOAST, name=self._static_label), level="success",
-                       action=(tr("Open Folder"), lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))))
-        elif isinstance(outcome, Failure):
-            if outcome.details:
-                self.static_log.appendPlainText(outcome.details)
-            state = "cancelled" if outcome.kind == "cancelled" else "failed"
-            self._static_status(state, [("{error}", {"error": outcome.message})], 0.0)
-            message = message_text(outcome.message)
-            self._notify(message.splitlines()[0] if message else outcome.message, error=state == "failed")
-        self._run_queued()  # an Analyze that waited for this analysis
-
     # -- the project and the language ------------------------------------------------------------------------------
     def static_project_state(self) -> dict:
-        return self._static_values() | {"expanded": self.static_section.is_expanded(), "kind": self.analysis_kind()}
+        return self._static_values() | {"expanded": self.static_section.is_expanded(), "kind": self.analysis_kind(),
+                                        "samples": [sample.to_dict() for sample in self.static_samples]}
 
     def apply_static_project_state(self, state) -> None:
         """The section as a project holds it (None: empty, as an older project has none); a project without any
         geometry of static frames gets the package's. The kind of analysis of the bar comes back (an older project:
         In Situ)."""
         state = state if isinstance(state, dict) else {}
-        keys = (*STATIC_NUMBERS, "frames", "name", "reference", "series", "mask")
+        keys = (*STATIC_NUMBERS, "series", "mask")
         self._apply_static_values({key: state.get(key, "") for key in keys} | {"mode": state.get("mode") or "quick"},
                                   defaults=not any(state.get(name) for name in STATIC_GEOMETRY))
+        samples = [StaticSample.from_dict(values) for values in state.get("samples") or []]
+        self.set_static_samples([sample for sample in samples if sample is not None])
         self.static_section.set_expanded(bool(state.get("expanded")))
         self.set_analysis_kind("static" if state.get("kind") == "static" else "insitu", remember=False)
 
     def refresh_static_language(self) -> None:
         self._show_static_package()
         self._show_static_status()
+        self.refresh_static_list_language()
 
 
 __all__ = ["STATIC_KEY", "SputterStaticMixin", "TEMPLATES"]

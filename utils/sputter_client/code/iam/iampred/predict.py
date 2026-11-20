@@ -361,6 +361,17 @@ def _client_entry(cfg, a, data_root):
                          f"choose the one that fits the new sample with --like <scan>")
     if "t_dep" in meta or "pre_start" in meta:
         env["IAM_ONSET"] = "override"
+    lam = meta.get("lam")
+    if lam is not None and abs(float(lam) - REG.model_lam(cfg)) > 1e-9:
+        problem = REG.lam_problem(meta.get("metal", "?"), float(lam))
+        if problem:
+            raise SystemExit(f"{a.scan}: {problem}")
+        env["IAM_LAM_NM"] = repr(float(lam))
+        if REG.lam_outside(meta.get("metal", "?"), float(lam), cfg):
+            env["IAM_OPTICS"] = "table"
+            print(f"{a.scan}: {float(lam):.5f} nm is away from the wavelength of {cfg['family']} "
+                  f"({REG.model_lam(cfg):g} nm): tabulated optics at the scan's energy, the network gives starts only",
+                  flush=True)
     pm = data_root / a.scan / "pixmask.json"
     env["IAM_PIXMASK"] = json.loads(pm.read_text(encoding="utf-8"))["sha256"][:12] if pm.exists() else "none"
     return dict(metal=meta.get("metal", "?"), env=env, client=True), meta
@@ -387,8 +398,9 @@ def main():
                     "(stored transform; 0 = quantity left free)")
     ap.add_argument("--jump-cost", type=float, default=25.0, help="--sequence: largest continuity cost of one step of the "
                     "time path = summed dev5 a change of branch has to gain")
-    ap.add_argument("--far-weight", type=float, default=0.0, help="--sequence: weight of the no-decrease rule against "
-                    "earlier windows (2 ... 64 places back, beyond one scale; dev5 units; 0 = neighbouring windows only)")
+    ap.add_argument("--far-weight", type=float, default=1.0, help="--sequence: weight of the no-decrease rule against "
+                    "earlier windows (2 ... 64 places back, beyond one scale; dev5 units; 0 = neighbouring windows only; "
+                    "default 1 since 2026-11-20: growth is additive)")
     ap.add_argument("--transplant", type=int, default=1, help="--sequence: 1 = the solutions of neighbouring windows "
                     "join the pool of a window, 0 = candidates and own refined solution only")
     ap.add_argument("--no-network-step", action="store_true", help="a GUI's step tree: this run only refines (analyze "

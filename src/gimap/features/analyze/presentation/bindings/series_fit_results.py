@@ -19,7 +19,7 @@ def parameter_label(column: str) -> str:
     text = column.replace("(1/A)", "(Å⁻¹)")
     if column.split()[-1:] and column.split()[-1] in ("R", "D", "h"):
         text += " (nm)"
-    return {"chi2": "χ²/N", "log rmse": "log RMSE"}.get(text, text)  # χ²/N: mean r² of the quick fit
+    return {"chi2": "χ²/N", "log rmse": "log RMSE"}.get(text, text)  # χ²/N: mean r² of Predict parameters
 
 
 def _number(value) -> str:
@@ -100,7 +100,7 @@ class SeriesFitResultsMixin:
         columns = run.fit_table.columns() if run.fit_table is not None else ["frame", "note"]
         columns = ["frame", "state", *[column for column in columns if column != "frame"]]
         labels = {"frame": tr("Frame"), "state": tr("State"), "halves": tr("Halves"), "points": tr("Points"),
-                  "model": tr("Model"), "note": tr("Note")}
+                  "model": tr("Model"), "probability": tr("Probability"), "note": tr("Note")}
         with QSignalBlocker(table):
             table.setColumnCount(len(columns))
             table.setHorizontalHeaderLabels([labels.get(column, parameter_label(column)) for column in columns])

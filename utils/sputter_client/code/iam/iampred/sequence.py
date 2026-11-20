@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import multiprocessing as mp
 import time
 from pathlib import Path
@@ -103,7 +104,7 @@ class Sequence:
         self.owner = [k % n for k in range(W)]
         mpc = mp.get_context("spawn")
         self.pools = [mpc.Pool(1, initializer=runner._init, initargs=(env,)) for _ in range(n)]
-        res = [self.pools[i].apply_async(_open, ((cfg, scan, [self.t[k] for k in range(W) if self.owner[k] == i]),))
+        res = [self.pools[i].apply_async(runner.Guard(_open), ((cfg, scan, [self.t[k] for k in range(W) if self.owner[k] == i]),))
                for i in range(n)]
         info = {}
         for r in res:
@@ -174,7 +175,7 @@ class Sequence:
         for i, pool in enumerate(self.pools):
             for k in sorted(jobs):
                 if self.owner[k] == i:
-                    res.append(pool.apply_async(_eval, ((self.scan, [(self.t[k], jobs[k][0], jobs[k][1])], save, lite),)))
+                    res.append(pool.apply_async(runner.Guard(_eval), ((self.scan, [(self.t[k], jobs[k][0], jobs[k][1])], save, lite),)))
         got = {}
         if self.on_progress is not None:
             done = 0
@@ -258,27 +259,39 @@ class Sequence:
                     penalty=float(pm @ pm + pf @ pf + ps @ ps), penalty_monotone=float(pm @ pm),
                     penalty_far=float(pf @ pf), penalty_smooth=float(ps @ ps))
 
+    JAC_REFRESH = int(os.environ.get("IAMPRED_JAC_REFRESH", "3"))
+    """2026-11-19: every JAC_REFRESH-th Jacobian takes every column by finite differences; in between only the active
+    columns of a window (those whose effect over the parameter range, |dR/dx| (ub - lb), reaches JAC_ACTIVE of the
+    window's largest) and the inactive ones are kept from the last full Jacobian. 1 = every column, every time (as
+    before 2026-11-19). Default 3 / 0.3 (Maxwell 25846070, 25846150: ref13 cu_v4 220 -> 132 s, median dev5 10.98 ->
+    11.02; ref07 si_p3h 693 -> 331 s, 3.87 -> 3.84; ref03 polyag_p3 234 -> 132 s, 3.86 -> 4.02; 6 iterations, 16
+    processes)."""
+    JAC_ACTIVE = float(os.environ.get("IAMPRED_JAC_ACTIVE", "0.3"))
+
     def jac(self, z):
         sp = self.sp
         self._base(z)
         W, nf, ns = self.W, self.nf, self.ns
         nc = nf + ns
         xs, sh = self.split(z)
-        jobs, steps = {}, []
+        full = self.JAC_REFRESH <= 1 or not getattr(self, "_jcache", None) or self.njac % self.JAC_REFRESH == 0
+        jobs, steps, used = {}, [], []
         for k in range(W):
-            P = np.repeat(xs[k][None], nc, 0)
-            S = np.repeat(sh[None], nc, 0) if ns else None
-            hk = np.empty(nc)
-            for j in range(nc):
+            cols = np.arange(nc) if full else np.flatnonzero(self._jactive[k])
+            used.append(cols)
+            P = np.repeat(xs[k][None], len(cols), 0)
+            S = np.repeat(sh[None], len(cols), 0) if ns else None
+            hk = np.empty(len(cols))
+            for i, j in enumerate(cols):
                 v, u = (xs[k][j], self.ub[k * nf + j]) if j < nf else (sh[j - nf], self.ub[W * nf + j - nf])
                 h = 1e-3 * max(1.0, abs(v))
                 if v + h > u:
                     h = -h
-                hk[j] = h
+                hk[i] = h
                 if j < nf:
-                    P[j, j] += h
+                    P[i, j] += h
                 else:
-                    S[j, j - nf] += h
+                    S[i, j - nf] += h
             jobs[k] = (P, S); steps.append(hk)
         self.phase = "derivatives"
         try:
@@ -286,11 +299,25 @@ class Sequence:
         finally:
             self.phase = "step"
         data, indices, dR = [], [], []
+        if full:
+            self._jcache, self._jactive = [None] * W, [None] * W
         for k in range(W):
             R, rep, _, _, good = res[k]
-            Jk = np.where(good[:, None], (R - self._R[k][None]) / steps[k][:, None], 0.0).T
-            dk = (rep - self._rep[k][None]) / steps[k][:, None]
-            dR.append(np.where(np.isfinite(dk) & good[:, None], dk, 0.0))
+            Jp = np.where(good[:, None], (R - self._R[k][None]) / steps[k][:, None], 0.0).T
+            dp = (rep - self._rep[k][None]) / steps[k][:, None]
+            dp = np.where(np.isfinite(dp) & good[:, None], dp, 0.0)
+            if full:
+                Jk, dk = Jp, dp
+                rng = np.r_[self.ub[k * nf:(k + 1) * nf] - self.lb[k * nf:(k + 1) * nf],
+                            self.ub[W * nf:] - self.lb[W * nf:]]
+                eff = np.sqrt((Jk ** 2).sum(0)) * rng
+                self._jactive[k] = eff >= self.JAC_ACTIVE * max(float(eff.max()), 1e-300)
+                self._jactive[k][nf:] = True
+            else:
+                Jk, dk = self._jcache[k][0].copy(), self._jcache[k][1].copy()
+                Jk[:, used[k]], dk[used[k]] = Jp, dp
+            self._jcache[k] = (Jk, dk)
+            dR.append(dk)
             cols = np.r_[k * nf + np.arange(nf), W * nf + np.arange(ns)]
             data.append(Jk.ravel()); indices.append(np.tile(cols, Jk.shape[0]))
         ntot = int(self.rows[-1])
@@ -338,7 +365,8 @@ class Sequence:
         self.log(f"sequence {self.scan}: iteration {self.njac}  sum dev5 {s['sum_dev5']:.2f}  median {s['median_dev5']:.2f}  "
                  f"penalty monotone {s['penalty_monotone']:.3f} "
                  + (f"far {s['penalty_far']:.3f} " if self.sf > 0 else "") + f"smooth {s['penalty_smooth']:.3f}"
-                 + (f"  kappa {math.exp(sh[0]):.3f}  dt {sh[1]:+.2f} s" if ns else "") + f"  ({time.time() - self.t0:.0f} s)")
+                 + (f"  kappa {math.exp(sh[0]):.3f}  dt {sh[1]:+.2f} s" if ns else "") + f"  ({time.time() - self.t0:.0f} s)"
+                 + (f"  columns {sum(len(c) for c in used)}/{W * nc}" if self.JAC_REFRESH > 1 else ""))
         if self.on_iter is not None:
             try:
                 self.on_iter(self.njac, s, xs, time.time() - self.t0)

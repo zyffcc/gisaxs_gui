@@ -38,7 +38,7 @@ from tests.assistant_fakes import FakeWorkbench
 
 ROOT = Path(__file__).resolve().parents[1] / "src" / "gimap" / "features"
 SOURCES = [*(ROOT / "assistant" / "domain").glob("*.py"), *(ROOT / "assistant" / "application").glob("*.py"),
-           ROOT / "fitting" / "infrastructure" / "adapters" / "experimental_fit.py"]
+           ROOT / "fitting" / "infrastructure" / "adapters" / "posterior_job.py"]  # the warnings of Predict parameters
 ZH_TEST = {
     "tilted: maximum at χ ≈ ±{chi}°": "倾斜取向：极大值位于 χ ≈ ±{chi}°",
     "oriented along the surface normal (out-of-plane, χ ≈ 0°)": "沿表面法线取向（面外，χ ≈ 0°）",

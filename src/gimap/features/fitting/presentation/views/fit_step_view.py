@@ -1,44 +1,34 @@
-"""The Fit step of the single-curve page (static layout; behaviour in ``single/run.py`` and ``single/fit1d*.py``).
+"""The Fit step of the single-curve page (static layout; behaviour in ``single/run.py`` and ``single/predict.py``).
 
-One choice and one button: the method (the page selects the one recommended for the curve and says why; what each
-method does is its tooltip), what it needs right under it (the particles for Predict, the families for the shape search), then Fit. Parameters that
-stop at an edge of their range are dealt with by the fit itself (the check box). Everything changed rarely is in
-Options: fit1d's network, search, curve type, qz and systematic error; the evaluation budget; many curves.
+One choice and one button: the method — Predict parameters (GIMaP's network, then least squares), Refine (least
+squares from Model) or Search (the ranges, then least squares); the page selects Predict for a GISAXS cut not fitted
+yet and says why — what Predict needs right under it (the particles), then Fit. Parameters that stop at an edge of
+their range are reported (Fit details), never widened. Everything changed rarely is in Options: the evaluation budget, many
+curves.
 """
 
 from __future__ import annotations
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSpinBox, QWidget
+from PyQt5.QtWidgets import QComboBox, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSpinBox, QWidget
 
 from src.gimap.app.presentation.components import AdvancedSection
 
-from .fit1d_settings_view import setup_fit1d_choice, setup_fit1d_options
 from .step_widgets import muted
 
 METHODS = (
-    ("fit1d", "Predict parameters (fit1d)",
-     "Finds the particles and their sizes from the curve (network proposals and a physical fit), with errors and "
-     "equivalent solutions. The first step for a GISAXS cut."),
+    ("predict", "Predict parameters",
+     "GIMaP's network proposes the particles and their sizes from the curve; the proposals are weighted against the "
+     "model (a posterior with 68 % intervals and the probability of each solution), and each solution is refined by "
+     "least squares. Values fixed in Model are not kept: Refine afterwards keeps them."),
     ("local", "Refine the values in Model",
      "Least squares from the values in Model, with Fitting's own model: fast; finds the nearest good fit."),
     ("global", "Search the ranges, then refine",
      "Tries values across the min–max range of every free parameter first; slower, for a poor start."),
-    ("shapes", "Find the particle shape (no AI)",
-     "Fits sphere, random cylinder and vertical cylinder from several starts and lists the solutions."),
-    ("ai", "AI proposal (1D Predict)",
-     "The V5 model proposes compositions and parameters, then corrects them numerically."),
 )
-FIT1D_MISSING_TIP = (
-    "Finds the particles and their sizes from the curve (network proposals and a physical fit), with errors and "
-    "equivalent solutions. Its kit is missing here. It comes with GIMaP in utils/gisaxs1d_gui_kit: copy that "
-    "folder again from the GIMaP download, or set the environment variable GISAXS1D_KIT_HOME to a copy of it, "
-    "then start GIMaP again. Without it, use Find the particle shape (no AI)."
-)
-"""The tooltip of Predict parameters (fit1d) when its kit is missing (``single/fit1d_review.py``)."""
-QUICK_FAMILIES = (("Try every family", "auto"), ("The families in Model", "model"))
-RESOLVE_TIP = ("Only automatic composition searches may extend the predictor's default ranges. "
-               "Model's fixed values and min–max ranges are always kept. See Fit details for boundary diagnostics.")
+PREDICT_PARTICLES_TIP = ("The particles in Model: their families, with or without a paracrystal, in the order of their "
+                         "radii. A choice: the network proposes the compositions it finds most probable among these, "
+                         "and their posterior probabilities decide.")
 
 
 def build_fit_step(owner, page: QWidget, layout) -> None:
@@ -54,22 +44,22 @@ def build_fit_step(owner, page: QWidget, layout) -> None:
     owner.method_combo.setMinimumContentsLength(14)
     row.addWidget(owner.method_combo, 1)
     layout.addLayout(row)
-    owner.method_hint = muted("", page)  # only why a method is recommended, or that its kit is missing
+    owner.method_hint = muted("", page)  # only why a method is recommended, or that the network is missing
     owner.method_hint.setObjectName("fitMethodHint")
     owner.method_hint.hide()
     layout.addWidget(owner.method_hint)
 
-    setup_fit1d_choice(owner, page, layout)
-    owner.families_row = QWidget(page)
-    families = QHBoxLayout(owner.families_row)
-    families.setContentsMargins(0, 0, 0, 0)
-    families.addWidget(QLabel("Families", owner.families_row))
-    owner.families_combo = QComboBox(owner.families_row)
-    owner.families_combo.setObjectName("fitShapeFamilies")
-    for text, value in QUICK_FAMILIES:
-        owner.families_combo.addItem(text, value)
-    families.addWidget(owner.families_combo, 1)
-    layout.addWidget(owner.families_row)
+    owner.predict_row = QWidget(page)
+    predict = QHBoxLayout(owner.predict_row)
+    predict.setContentsMargins(0, 0, 0, 0)
+    predict.addWidget(QLabel("Particles", owner.predict_row))
+    owner.predict_particles = QComboBox(owner.predict_row)
+    owner.predict_particles.setObjectName("fitPredictParticles")
+    owner.predict_particles.setToolTip(PREDICT_PARTICLES_TIP)
+    owner.predict_particles.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+    owner.predict_particles.setMinimumContentsLength(12)
+    predict.addWidget(owner.predict_particles, 1)
+    layout.addWidget(owner.predict_row)
 
     owner.fit_step_button = QPushButton("Fit", page)
     owner.fit_step_button.setObjectName("fitRunStep")
@@ -89,11 +79,6 @@ def build_fit_step(owner, page: QWidget, layout) -> None:
     layout.addWidget(owner.fit_progress)
     layout.addWidget(owner.fit_progress_text)
     layout.addWidget(owner.stop_step_button, 0, Qt.AlignLeft)
-    owner.resolve_edges_check = QCheckBox("Resolve default ranges during composition search", page)
-    owner.resolve_edges_check.setObjectName("fitResolveEdges")
-    owner.resolve_edges_check.setToolTip(RESOLVE_TIP)
-    owner.resolve_edges_check.setChecked(True)
-    layout.addWidget(owner.resolve_edges_check)
     owner.weighting_note = muted("", page)  # a warning when the file has no σ (with σ: the residuals' tooltip)
     owner.weighting_note.setObjectName("fitWeightingNote")
     owner.weighting_note.setProperty("gimapRole", "warning")
@@ -102,7 +87,6 @@ def build_fit_step(owner, page: QWidget, layout) -> None:
 
     options = AdvancedSection("Options", "", page)
     options.setObjectName("fitAdvanced")
-    setup_fit1d_options(owner, options)  # (each of its rows is named “fit1d …”)
     budget = QHBoxLayout()
     budget.addWidget(QLabel("Evaluations at most (Refine, Search)", options))
     owner.budget_spin = QSpinBox(options)
@@ -121,4 +105,4 @@ def build_fit_step(owner, page: QWidget, layout) -> None:
     layout.addWidget(options)
 
 
-__all__ = ["FIT1D_MISSING_TIP", "METHODS", "QUICK_FAMILIES", "RESOLVE_TIP", "build_fit_step"]
+__all__ = ["METHODS", "PREDICT_PARTICLES_TIP", "build_fit_step"]

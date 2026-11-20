@@ -255,8 +255,8 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None) -> str:
     ]
     if not undecided:
         lines += ["", (
-            "q in Å⁻¹, sizes and distances in nm. The fit compares particle families; the model is a choice, "
-            "not a measurement." if gisaxs else
+            "q in Å⁻¹, sizes and distances in nm. The fit is the most probable solution of Predict parameters; the "
+            "model is a choice, not a measurement." if gisaxs else
             "Sizes are Scherrer lower bounds (no instrumental width subtracted). Phases are not assigned: "
             "name the material to compare q with known lines."
         )]

@@ -49,8 +49,8 @@ UNCERTAINTIES = {
     "giwaxs": ("the ± of q, d, FWHM and sizes (the peak fits) and σ_f of the Hermans f (Monte Carlo) come from {model}; "
                "the geometry (beam centre, distance, αi), the background under a ring and refraction are not included"),
     "gisaxs": ("the σ of the cuts' points (the σ column of the saved curves), by which the fit's χ²/N is normalised, "
-               "come from {model}; the geometry (beam centre, distance, αi) and refraction are not included, and the "
-               "quick fit gives no ± for R, h or D"),
+               "come from {model}; the intervals of R, h and D are the posterior of Predict parameters given these σ "
+               "and the model; the geometry (beam centre, distance, αi) and refraction are not included"),
 }
 """Which ± a report gives and what they leave out, by technique (``{model}``: the frame's error model)."""
 

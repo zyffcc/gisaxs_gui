@@ -6,13 +6,14 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
 - **工作区**：
   - **Analyze**：打开帧 → 几何 → 掩膜与校正 → 切线 → 结果 → 导出；不需要 AI 的 Run Automatic Analysis；Series 热图；
     Batch Export。
-  - **Fitting**：一维模型拟合，可以拟合单条曲线或原位序列。
+  - **Fitting**：一维模型拟合，可以拟合单条曲线或原位序列。Fit 步骤只有一种网络方法 Predict parameters，另有 Refine 和
+    Search；fit1d 工具包和快速物理拟合（Find the particle shape）已在 0.2.0 删除，不要再加回第二种网络方法。
   - **Compare**：多个序列或样品的阶段、异常帧、谁和谁相像。
   - **Sputter**：原位溅射序列逐时间窗的晶粒尺寸、高度、间距（随仓库的分析包在子进程里运行）；详情只放分析用到的选项和所示结果的时间窗、报告、日志。
 - **Labs**：2D Prediction。Trainset Build 已从导航、菜单和应用启动移除，研究组件不随发布包提供。
 - **Tools 菜单**：Geometry Calibration、Format Converter（含 Convert Current File）、XRR Series Extractor、
   SEM Particle Analysis（SEM 图像粒径分析；2D Prediction 结果区的 SEM comparison… 也打开它）、
-  1D Predict — Fit Many Curves（机器学习一维拟合，调用研究代码）、Process with AI、Settings。
+  1D Predict — Fit Many Curves（一维曲线批量拟合，只有 Predict parameters 一种方法）、Process with AI、Settings。
 - **其他菜单**：Edit（Undo / Redo）、Analyze、Fitting 列出这两个工作区的命令，键仍归页面
   （`app/presentation/workspace_menus.py`，命令由 `app/workspace_commands.py` 注入）；Help 有 User Manual（F1）、
   Physics and Methods、Keyboard Shortcuts、Example Data、Report a Problem、错误日志和用户数据文件夹、GitHub、
@@ -59,16 +60,18 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
 - **组合根**在 `src/gimap/app/`：`main_window.py`、`menus.py`、`workspace_commands.py`、`help_commands.py`、`runtime.py`、
   `bootstrap.py`、`headless_assistant.py`。
   功能之间不互相导入，需要组合时由组合根注入。例如：
-  - Fitting 的快速物理拟合经 `create_quick_fit()` 交给 assistant；
+  - Fitting 的 Predict parameters 经 `create_curve_fit()` 交给 assistant 和 Analyze 的 Batch Export；
   - Run Automatic Analysis 写在 assistant 里，由 `main_window` 放进 Analyze 的 Results 步骤。
 - **其他共用部分**：
   - `src/gimap/app/presentation/`：应用壳与共用界面，包括 `components/`、`theme/`、`i18n/` 和 `task_runner.py`；
   - `src/gimap/shared/`：探测器读取、几何、`series_stages`（阶段与异常帧）、`figures`；
   - `src/gimap/integrations/`：用户数据（UserStore）、任务、BornAgain、TensorFlow；
-  - `utils/gisaxs1d_gui_kit/`：fit1d 工具包（Fitting 的 Predict parameters (fit1d)、1D Predict 的 fit1d），含两个 numpy 网络
-    和形状因子表，随仓库提供，只在任务子进程里导入（`fitting/infrastructure/adapters/fit1d_method.py`）；环境变量
-    `GISAXS1D_KIT_HOME` 可以指向另一份。只放运行时文件，例子数据和引用实测数据的研究笔记都不放；改动记在 `SOURCE.json`，
-    每个文件按 `FILES_SHA256.json` 校验（`.gitattributes` 关掉换行转换），`tests/test_fit1d_kit_bundle.py` 检查字节和私有名称。
+  - `src/gimap/features/fitting/domain/posterior/`：Predict parameters（建议网络、cut_model 上的后验与精修，numpy），网络权重
+    `data/flow_v1.npz` 用 `git add -f` 跟踪，记录 `flow_v1.json` 写有它的 SHA-256（载入和发布构建时校验）；训练、模拟与检查在
+    `tools/ml1d/`（PyTorch 只在那里需要），基准在 `tools/benchmarks/posterior_recovery.py`。
+  - fit1d 工具包 `utils/gisaxs1d_gui_kit/`（Predict parameters (fit1d)、1D Predict 的 fit1d）已在 0.2.0 删除，留在仓库历史里；
+    `tools/benchmarks/fit1d_recovery.py` 用环境变量 `GISAXS1D_KIT_HOME` 指向的一份来重现对照记录，held-out 曲线在
+    `tools/benchmarks/recovery_cases.py`。
   - `utils/sputter_client/`：Sputter 页“分析”和“静态帧”的分析包，研究代码 `iampred` 的发布版（只有这两个命令用到的文件和
     numpy 网络，不含开发时所用私有数据的名字），随仓库提供，只按路径用子进程调用（`features/sputter/infrastructure/client.py`）；
     `GIMAP_SPUTTER_CLIENT` 或用户选的文件夹优先。不在这里改：在研究代码里用 `python -m iampred.release` 重新构建后整体替换。

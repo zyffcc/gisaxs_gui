@@ -89,22 +89,31 @@ FITTING_ZH = {
     "The fit stopped at a bound of the range: widen the range or fix this value": "拟合停在了范围的边界：放宽范围或固定这个值",
     "1σ error of the last fit": "上次拟合的 1σ 误差",
     "Distance D": "间距 D",
-    "Interference between neighbours: a paracrystal of distance D and disorder σD/D":
-        "相邻颗粒之间的干涉：间距 D、无序度 σD/D 的次晶模型",
+    "Interference between neighbours: a paracrystal of distance D and disorder σnn/D":
+        "相邻颗粒之间的干涉：间距 D、无序度 σnn/D 的次晶模型",
+    "Sizes": "尺寸分布",
+    "Gaussian, by number": "高斯，按数目",
+    "Log-normal, by number": "对数正态，按数目",
+    "Gaussian, by intensity": "高斯，按强度",
+    "How R and σR/R are meant: the mean and relative spread of a Gaussian or a log-normal of the particle count, or of a "
+    "Gaussian of the intensity each size scatters (earlier Fitting). The results give the sizes both by number and by "
+    "intensity.":
+        "R 和 σR/R 的含义：颗粒数目的高斯或对数正态分布的平均值和相对宽度，或每种尺寸散射强度的高斯分布的平均值和相对宽度"
+        "（早期的拟合页）。结果同时给出按数目和按强度的尺寸。",
     "Remove this component": "删除这个组分",
     "No particle yet: add one above, or let Fit ▸ Find the particle shape choose.":
         "还没有颗粒：在上面添加一个，或让 拟合 ▸ 寻找颗粒形状 来选择。",
     "Background and beam tail": "背景与光束尾项",
     "I(q) = BG + k·[Σ particles + A/(1 + (|q|/w)^ν)]: the peak is the direct and reflected beam's tail and the resolution near q = 0":
         "I(q) = BG + k·[Σ 颗粒 + A/(1 + (|q|/w)^ν)]：这个峰是直射束和反射束的尾部以及 q = 0 附近的分辨率",
-    "Intensity of this component (sphere and random cylinder: the form factor is 1 at q = 0; vertical cylinder: 10⁻⁶·⟨R⁴⟩/4 at q = 0, R in nm)":
-        "这个组分的强度（球和随机取向圆柱：形状因子在 q = 0 处为 1；竖直圆柱：q = 0 处为 10⁻⁶·⟨R⁴⟩/4，R 以 nm 计）",
-    "Mean radius": "平均半径",
-    "Relative spread of the radius (Gaussian)": "半径的相对分布宽度（高斯）",
+    "Intensity of this component at q = 0 (its form factor is 1 there)": "这个组分在 q = 0 处的强度（形状因子在那里为 1）",
+    "Mean radius (of the size distribution chosen in Sizes)": "平均半径（尺寸分布中所选的分布）",
+    "Relative spread of the radius (of the size distribution chosen in Sizes)": "半径的相对分布宽度（尺寸分布中所选的分布）",
     "Mean height (length) of the cylinders": "圆柱的平均高度（长度）",
-    "Relative spread of the height (Gaussian)": "高度的相对分布宽度（高斯）",
+    "Relative spread of the height": "高度的相对分布宽度",
     "Mean distance between neighbours (paracrystal)": "相邻颗粒的平均间距（次晶）",
-    "Relative disorder of the distance": "间距的相对无序度",
+    "Relative standard deviation of the distance between neighbours (Hosemann paracrystal)":
+        "相邻颗粒间距的相对标准差（Hosemann 次晶）",
     "Constant added to the whole curve": "加在整条曲线上的常数",
     "Tail A": "尾 A",
     "Height at q = 0 of the beam tail A / (1 + (|q|/w)^ν): the empirical tail of the direct and reflected beam":
@@ -127,7 +136,7 @@ FITTING_ZH = {
     "Gaussian q resolution (1σ) applied to the particle terms; 0: none": "作用于颗粒项的高斯 q 分辨率（1σ）；0：不展宽",
     "Phase of the effective reflection coefficient (spheres)": "有效反射系数的相位（球）",
     "q₊R of the spheres (q₊ = kᵢ + k_f): {values}": "球的 q₊R（q₊ = kᵢ + k_f）：{values}",
-    "By number: {values}": "按数目：{values}",
+    "Sizes by number | by intensity: {values}": "尺寸 按数目 | 按强度：{values}",
     "Coupling": "耦合",
     "LMA: P·S": "LMA：P·S",
     "DA: P + |⟨F⟩|²(S − 1)": "DA：P + |⟨F⟩|²(S − 1)",
@@ -277,6 +286,9 @@ FITTING_ZH = {
         "单 RC 专用模型可以调整颗粒、背景和分辨率的幅值，同时保持神经网络给出的形状参数不变。曲线吻合较差时，仍可能运行范围更广的拟合。",
     "General V5 (experimental)": "通用 V5（实验性）",
     "Single RC specialist (experimental)": "单 RC 专用模型（实验性）",
+    "Predict parameters (network + posterior)": "预测参数（网络 + 后验）",
+    "Network + posterior": "网络 + 后验",
+    "Predicted, refined": "预测后精修",
     "Physical fit (numerical)": "物理拟合（数值）",
     "fit1d (network + physical fit)": "fit1d（网络 + 物理拟合）",
     "Fast (one search)": "快速（一次搜索）",
@@ -426,6 +438,89 @@ FITTING_ZH = {
         "{count} 条曲线不拟合，读不出 q 的单位：{name}——{reason}",
     "The header states q both in 1/A and in 1/nm; correct it to one unit.":
         "文件头同时注明了 q 的单位 1/A 和 1/nm；请改成只注明一种单位。",
+    # -- Predict parameters (the proposal network) --------------------------------------------
+    'Predict parameters':
+        '预测参数',
+    "GIMaP's network proposes the particles and their sizes from the curve; the proposals are weighted against the model (a posterior with 68 % intervals and the probability of each solution), and each solution is refined by least squares. Values fixed in Model are not kept: Refine afterwards keeps them.":
+        'GIMaP 的网络从曲线给出颗粒及其尺寸的建议；这些建议按模型加权（得到带 68 % 区间的后验和每个解的概率），每个解再用最小二乘精修。模型中固定的值不保留：之后精修会保留它们。',
+    'Particles':
+        '颗粒',
+    'The particles in Model':
+        '模型中的颗粒',
+    'Spheres and upright cylinders (1–2)':
+        '球和竖直圆柱（1–2 种）',
+    'Any particles (1–3)':
+        '任意颗粒（1–3 种）',
+    'The particles in Model: their families, with or without a paracrystal, in the order of their radii. A choice: the network proposes the compositions it finds most probable among these, and their posterior probabilities decide.':
+        '模型中的颗粒：它们的形状、是否有准晶结构因子，按半径排序。选择一类：网络在其中给出它认为最可能的组成，由后验概率决定。',
+    'Predict: the solutions':
+        '预测：解的得出方式',
+    'Refine each solution (least squares)':
+        '逐个精修（最小二乘）',
+    'Search from the samples':
+        '从样本出发搜索',
+    'Posterior samples only':
+        '只用后验样本',
+    "Refine each solution: least squares from the most probable sample of every mode (the default). Search from the samples: a search of the ranges whose first population is the network's samples, one per composition. Posterior samples only: no least squares.":
+        '逐个精修：从每个模态最可能的样本出发做最小二乘（默认）。从样本出发搜索：在范围内搜索，初始种群为网络的样本，每个组成一次。只用后验样本：不做最小二乘。',
+    "Predict parameters needs GIMaP's proposal network, which is missing in this installation ({name}).":
+        '预测参数需要 GIMaP 的建议网络，此安装中缺少它（{name}）。',
+    'Posterior of this solution (median [68 %]): {values}; probability {p}.':
+        '这个解的后验（中位数 [68 %]）：{values}；概率 {p}。',
+    'the curve says little about {name} (its 68 % interval spans most of the prior)':
+        '曲线对 {name} 约束很少（其 68 % 区间覆盖了先验的大部分）',
+    '{name} stopped at a bound of its range':
+        '{name} 停在其范围的边界上',
+    '{name} are strongly correlated':
+        '{name} 强相关',
+    'few effective samples: the intervals are rough':
+        '有效样本很少：区间只是粗略的',
+    'Loading the proposal network':
+        '正在载入建议网络',
+    "Weighting the network's samples and refining each solution":
+        '正在为网络的样本加权并精修每个解',
+    'Predict each frame (network + posterior)':
+        '逐帧预测（网络 + 后验）',
+    "Predict parameters on every frame with the particles of Single analysis' model; with the box below, of solutions about as probable the one closest to the previous frame; each frame then refined":
+        '对每一帧用单曲线分析模型中的颗粒做预测参数；勾选下方选项时，在概率相近的解中取最接近上一帧的那个；每帧随后精修',
+    "Predict each frame needs 1–3 particles in Single analysis' model.":
+        '逐帧预测需要单曲线分析的模型中有 1–3 种颗粒。',
+    "Predict parameters: GIMaP's proposal network and its posterior, refined by least squares (Complete composition: 1–3 components; Auto: the network chooses). Physical fit: the quick numerical fit of Find the particle shape. fit1d: a separate kit with its own physics; it needs the Complete composition (Sphere / Vertical cylinder).":
+        '预测参数：GIMaP 的建议网络及其后验，再经最小二乘精修（完整组成：1–3 个组分；自动：由网络选择）。物理拟合：“寻找颗粒形状”所用的快速数值拟合。fit1d：一个有自己物理模型的独立工具包；它需要完整组成（球 / 竖直圆柱）。',
+    'Physical fit: the width of the low-q term, 0.001–0.1 nm⁻¹ (unticked: fitted).':
+        '物理拟合：低 q 项的宽度，0.001–0.1 nm⁻¹（不勾选：拟合得出）。',
+    'Physical fit: 1–20; fit1d: 0.5–12 (unticked: fitted).':
+        '物理拟合：1–20；fit1d：0.5–12（不勾选：拟合得出）。',
+    'Physical fit':
+        '物理拟合',
+    "Check every candidate's fit; refine it in Fitting before reporting it.":
+        '请检查每个候选的拟合；报告之前先在拟合页精修。',
+    "Predict parameters gives each candidate's probability and the posterior intervals of its values; the physical fit and fit1d give starts to check. logRMSE and RMS/σ include the measurement noise. The method is chosen in Parameters… ▸ Fit method.":
+        '预测参数给出每个候选的概率及其数值的后验区间；物理拟合和 fit1d 给出的是待检查的起点。logRMSE 和 RMS/σ 包含测量噪声。方法在“参数…› 拟合方法”中选择。',
+    'Starting Predict parameters (network + posterior)…':
+        '正在开始预测参数（网络 + 后验）…',
+    "the posterior's sampling did not converge: the solutions are compared by χ² and their number of values (BIC)":
+        "后验抽样没有收敛：各个解按 χ² 和数值个数（BIC）比较",
+    'Add a particle in Model, or use Predict parameters.':
+        '在模型中添加一种颗粒，或者用预测参数。',
+    "χ²/N: Analyze's fit (Predict parameters), the mean squared σ-normalised residual over the points Analyze fitted (no degrees-of-freedom correction). Fit (Refine) gives χ²ᵣ here.":
+        'χ²/N：分析页的拟合（预测参数），即分析页所拟合各点上 σ 归一化残差平方的平均值（不做自由度修正）。在这里拟合（精修）给出 χ²ᵣ。',
+    'No σ in the file: Predict parameters takes a relative σ from the scatter of the curve about its trend.':
+        '文件中没有 σ：预测参数从曲线围绕其趋势的散布取一个相对 σ。',
+    'Residuals: {formula}. Each point is weighted by 1/σ from the file.':
+        '残差：{formula}。每个点按文件中 σ 的 1/σ 加权。',
+    'No particle yet: add one above, or let Fit ▸ Predict parameters find them.':
+        '还没有颗粒：在上面添加一个，或者让拟合 ▸ 预测参数来找。',
+    'Add a particle family to the model. Not sure which? Fit ▸ Predict parameters finds the particles from the curve.':
+        '向模型添加一种颗粒。不确定是哪种？拟合 ▸ 预测参数会从曲线找出颗粒。',
+    'Predict each frame':
+        '逐帧预测',
+    "Predict parameters: GIMaP's proposal network and its posterior, each solution refined by least squares. Complete composition: 1–3 components, each with a paracrystal; Auto: the network chooses.":
+        '预测参数：GIMaP 的建议网络及其后验，每个解再经最小二乘精修。完整组成：1–3 个组分，每个都带次晶；自动：由网络选择。',
+    'The out-of-plane q of the horizontal cut: spheres are evaluated at the Born term of that q_z. Unticked: q_z = 0 (the effective interface).':
+        '水平线切的面外 q：球在该 q_z 处取 Born 项。不勾选：q_z = 0（有效界面）。',
+    "Predict parameters gives each candidate's probability and the posterior intervals of its values. logRMSE and RMS/σ include the measurement noise.":
+        '预测参数给出每个候选的概率及其数值的后验区间。logRMSE 和 RMS/σ 包含测量噪声。',
 }
 
 __all__ = ["FITTING_ZH"]

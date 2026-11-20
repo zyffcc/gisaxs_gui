@@ -39,8 +39,8 @@ from .curve_info import CurveInfoMixin
 from .curve_unit import SETTING_KEY, CurveUnitMixin
 from .drops import CurveDropMixin, SplitterMemoryMixin
 from .exclusion import FitExclusionMixin
-from .fit1d import Fit1DPageMixin
-from .fit1d_review import Fit1DReviewMixin
+from .predict import PredictPageMixin
+from .method_hint import MethodHintMixin
 from .equivalent_solutions import EquivalentSolutionsMixin
 from .result_actions import ResultActionsMixin
 from .model_editor import FitModelEditor
@@ -64,7 +64,7 @@ def _saved_source(token):
 
 
 class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunMixin, FitResultsMixin,
-              FitExclusionMixin, Fit1DPageMixin, Fit1DReviewMixin, EquivalentSolutionsMixin, ResultActionsMixin, CurveUnitMixin, CurveInfoMixin, FitPlotMixin):
+              FitExclusionMixin, PredictPageMixin, MethodHintMixin, EquivalentSolutionsMixin, ResultActionsMixin, CurveUnitMixin, CurveInfoMixin, FitPlotMixin):
     curveOpened = pyqtSignal(str)
     """The file of the curve now on the page (In-situ series takes its set-up from it)."""
     batchRequested = pyqtSignal()
@@ -74,11 +74,9 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
     """Every curve of a folder (folder, file pattern) in In-situ series, each fitted from this page's model."""
     """Open 1D Predict for a list of curves."""
 
-    def __init__(self, view_model, *, quick_fit: Optional[Callable] = None, preferences=None,
-                 parent: Optional[QWidget] = None):
+    def __init__(self, view_model, *, preferences=None, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.view_model = view_model
-        self.quick_fit = quick_fit
         self.preferences = preferences
         self.session = FitSession()
         self._status_text: Optional[Callable[[], str]] = None
@@ -100,7 +98,9 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.setAcceptDrops(True)  # a curve file dropped here opens (``drops.py``)
         self.setup_component_plot()
         self._connect()
-        self.setup_fit1d()
+        self._gisaxs_cut = False
+        self.setup_predict()
+        self.setup_equivalent_solutions()
         self.setup_run()
         self.setup_results()
         self.setup_result_actions()
@@ -160,10 +160,6 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         stale = tr("Changed after the fit: Fit again")
         if self.fit_running():
             self.step_rail.set_state("fit", "busy", tr("Fitting …"))
-        elif session.native_result is not None and result is None:
-            native = session.native_result["summary"]
-            state = "ok" if session.native_is_current() else "warn"
-            self.step_rail.set_state("fit", state, f"fit1d · χ²/point {native['chi2_per_point']:.3g}")
         elif result is not None and not session.result_is_current():
             self.step_rail.set_state("fit", "warn", stale)
         elif result is not None and result.stopped:
@@ -181,10 +177,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             self.step_rail.set_state("fit", "pending", tr("From Analyze: Fit to refine it"))
         else:
             self.step_rail.set_state("fit", "pending", tr("Choose a method, then Fit"))
-        if session.native_result is not None and result is None:
-            self.step_rail.set_state("results", "ok" if session.native_is_current() else "warn",
-                                     "" if session.native_is_current() else stale)  # ✓: the results are there
-        elif result is not None:
+        if result is not None:
             current_result = session.result_is_current()
             self.step_rail.set_state("results", "ok" if current_result else "warn", "" if current_result else stale)
         elif searched:
@@ -196,7 +189,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.redo_button.setEnabled(session.can_redo())
         self.fit_button.setEnabled(curve is not None and not self.fit_running())
         self.fit_step_button.setEnabled(curve is not None and not self.fit_running())
-        self._refresh_fit1d_action()
+        self._refresh_method_hint()
 
     # -- the curve ------------------------------------------------------------------------
 
@@ -222,7 +215,6 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
                                   unit=loaded.q_source_unit, unit_from=getattr(loaded, "q_unit_from", ""))
         self._halt_fit()  # a fit of the curve before stops; what it brings back is not kept (run.py)
         self.session.set_curve(curve)
-        self._new_fit1d_curve(getattr(loaded, "observation", None))
         if side is not None and curve.signed:  # a curve with one side has no halves to choose from
             self.session.side = ANALYZE_SIDES.get(side, side if side in dict(SIDES) else "mean")
         data = self._data()
@@ -233,7 +225,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
                                                        "unit": curve.source_unit})
         self._render_all()
         self._log(tr("Opened {name}: {points} points").format(name=name, points=curve.q.size))
-        self._curve_opened_step(getattr(loaded, "observation", None))  # fit1d first for a GISAXS cut (fit1d_review)
+        self._curve_opened_step(getattr(loaded, "observation", None))  # Predict first for a GISAXS cut (method_hint)
         self._remember_curve()
         note = self._saved_unit_note(unit)  # a header that states another unit than the one saved
         self._status(note or (lambda: tr("Opened {name}.").format(name=name)), "warning" if note else "ok")
@@ -251,7 +243,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         if curve is not None and curve.path:
             self._remember(curve={"path": curve.path, "side": self.session.side, "unit": curve.source_unit,
                                   "q_range": None if self.session.q_range is None else list(self.session.q_range),
-                                  "excluded": sorted(self.session.excluded), "fit1d_settings": self.fit1d_settings()})
+                                  "excluded": sorted(self.session.excluded)})
 
     def set_range(self, q_range, *, record: bool = True, coalesce: bool = False) -> None:
         """``record=False``: set again from a project or the last session (not a step of Undo); ``coalesce``:
@@ -431,8 +423,6 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         if self.session.curve is not None:  # a curve arrived meanwhile (Send to Fitting)
             return
         if self.open_curve(last["path"], last.get("side"), unit=last.get("unit")):
-            if isinstance(last.get("fit1d_settings"), dict):
-                self._apply_fit1d_settings(last["fit1d_settings"])
             self.session.excluded = {float(value) for value in last.get("excluded") or ()}
             q_range = last.get("q_range")
             if isinstance(q_range, list) and len(q_range) == 2:
@@ -452,12 +442,10 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
                 "q_range": None if session.q_range is None else list(session.q_range),
                 "excluded": sorted(session.excluded)},
             "model": model_to_dict(session.model), "method": self.method(), SETTING_KEY: self.unit_setting(),
-            "fit1d_settings": self.fit1d_settings(),
         }
 
     def apply_project_state(self, data: dict) -> list[str]:
         notes = []
-        self._fit1d_candidates = []
         self._gisaxs_cut = False
         if isinstance(data.get("model"), dict):
             try:
@@ -480,10 +468,6 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         elif curve.get("path"):
             notes.append(tr("the Fitting curve {name} is no longer there").format(
                 name=saved.display_name))
-        settings = data.get("fit1d_settings")
-        if curve.get("path") and self.session.curve is None and isinstance(settings, dict):
-            settings = {**settings, "fit1d_qz": None}
-        notes += self._apply_fit1d_settings(settings)
         if data.get("method") is not None:
             self.set_method(data["method"])  # a saved choice takes precedence over a new-curve recommendation
         self.session.clear_history()  # a new start: Undo does not bring back the work before the project

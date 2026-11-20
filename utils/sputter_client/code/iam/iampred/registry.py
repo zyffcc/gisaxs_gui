@@ -11,6 +11,40 @@ IAM_DIR = HERE.parent
 FAM_DIR = HERE / "families"
 
 REQUIRED = ("family", "fitter", "env", "scans", "reported")
+LAM_12KEV = 0.103320165
+LAM_TOL = 0.05
+"""Relative difference between a new scan's wavelength and its family's (the wavelength its network was trained at)
+up to which the family's own optics are used (2026-11-19): the network gives the starting solutions, the forward model
+renders and fits at the scan's own wavelength (predict sets IAM_LAM_NM to it). Beyond it - and for Au at any energy but
+12 keV (its hand optics are 12 keV values next to the L3 edge at 11.92 keV) - the scan is analysed with the tabulated
+optics of xray_optics.py at its own energy (IAM_OPTICS=table, 2026-11-20): the networks still give the starts, the
+joint fit decides (analyze --mode auto refines). Refused only outside the optics table (OPTICS_KEV)."""
+OPTICS_KEV = (4.0, 30.0)
+"""Energy range (keV) of the tabulated optics (xray_optics_table.npz)."""
+
+
+def model_lam(cfg):
+    "The wavelength (nm) a family's network was trained at."
+    return float((cfg.get("env") or {}).get("IAM_LAM_NM", LAM_12KEV))
+
+
+def lam_problem(metal, lam):
+    "Why a scan of ``metal`` at wavelength ``lam`` (nm) cannot be analysed ('' when it can): an energy outside the"
+    kev = 1.239841984 / float(lam)
+    if not OPTICS_KEV[0] <= kev <= OPTICS_KEV[1]:
+        return (f"this scan is at {kev:.3f} keV (wavelength {float(lam):.5f} nm); the optics are tabulated from "
+                f"{OPTICS_KEV[0]:g} to {OPTICS_KEV[1]:g} keV")
+    return ""
+
+
+def lam_outside(metal, lam, cfg=None):
+    "The scan is away from its networks' wavelength (more than LAM_TOL; Au: anything but 12 keV): it is analysed with"
+    model = model_lam(cfg) if cfg is not None else (0.105 if metal == "Cu" else LAM_12KEV)
+    if metal == "Au":
+        return abs(float(lam) / LAM_12KEV - 1) > 1e-4
+    return abs(float(lam) / model - 1) > LAM_TOL
+
+
 DEFAULTS = dict(
     context_step=[[25.0, 1.0], [1e9, 5.0]],
     prior=dict(near=0.55, interp=0.2, cross=0.1, uniform=0.15, sigma_u=0.06, sigma_mass=0.15, t_jitter=1.0,

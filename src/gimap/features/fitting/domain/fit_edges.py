@@ -1,7 +1,7 @@
 """Parameters of Fitting's own model (Refine, Search) that stop at an edge of their range, resolved automatically.
 
-After a fit, a free parameter at an edge of its min–max range (``FitResult.at_bounds``) is answered as fit1d's
-are (``fit1d_edges``): a size, distance or width of the resolution peak gets that side of its range widened
+After a fit, a free parameter at an edge of its min–max range (``FitResult.at_bounds``) is answered: a size,
+distance or width of the resolution peak gets that side of its range widened
 (× 2 upwards, ÷ 2 downwards), the model is fitted again from the values found, and the change is kept when χ²ᵣ
 stays within ``ACCEPT`` of before; at most ``ROUNDS`` rounds. Scales at 0 (a term the curve does not need) and the
 factor k are left alone.
@@ -16,14 +16,16 @@ the curve allows, fixed in Model (``BOUNDED``). Each step is a ``Note`` whose ``
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from typing import Callable, Optional
 
-from .fit1d_bounds import Note
-from .fit1d_edges import ACCEPT, ROUNDS
 from .fit_model import LINEAR, FitModel
 from .fit_engine import stopped_result
 
-SPREADS = frozenset({"sigma_R", "sigma_h", "sigma_D"})
+ROUNDS = 2
+ACCEPT = 1.02
+"""A change is kept when χ²/point after it is at most this factor of χ²/point before."""
+SPREADS = frozenset({"sigma_R", "sigma_h", "sigma_nn"})
 LEFT_ALONE = LINEAR | {"k"}
 WIDENED = ("{name} stopped at the {side} edge of its range ({old}): widened to {new} and fitted again "
            "(χ²ᵣ {before} → {after}).")
@@ -35,6 +37,20 @@ SIZE_STEP, SPREAD_STEP, STEP_COUNT = 1.25, 0.05, 8
 KEPT = ("Widening {count} parameters made the fit worse (χ²ᵣ {before} → {after}): the fit before is kept, "
         "with them at the edge.")
 REMAINING = "{name} = {value} is still at the {side} edge of its range: the curve does not determine it beyond there."
+
+
+@dataclass(frozen=True)
+class Note:
+    """One step of the resolution, as a template whose values the interface fills in."""
+    template: str
+    values: dict
+
+    @property
+    def text(self) -> str:
+        return self.template.format(**self.values)
+
+    def to_dict(self) -> dict:
+        return dict(template=self.template, values=dict(self.values), text=self.text)
 
 
 def _side(parameter) -> str:
@@ -166,4 +182,5 @@ def resolve(fit: Callable[[FitModel], object], result, *, rounds: int = ROUNDS,
     return result, actions, remaining
 
 
-__all__ = ["BOUNDED", "KEPT", "REMAINING", "SPREADS", "WIDENED", "answer", "resolve", "settle", "unused"]
+__all__ = ["ACCEPT", "BOUNDED", "KEPT", "Note", "REMAINING", "ROUNDS", "SPREADS", "WIDENED", "answer", "resolve", "settle",
+           "unused"]

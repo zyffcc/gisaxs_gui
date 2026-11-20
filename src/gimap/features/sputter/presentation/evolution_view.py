@@ -11,6 +11,9 @@ Each point is the entry shown for its window (the user's choice, else the window
 not have leaves a gap in its line; samples at one position are joined through their median. The window shown above is
 marked on both plots (a line at its position, a ring around its points); a click selects the window nearest to it.
 
+When the result names the stages of the growth (a newer package: islands, coalescence, continuous film, after the
+deposition), each stage is a light band behind both plots, named at the top of the size plot where it is wide enough.
+
 An overlay (``set_overlay``: times, values per quantity and a name) draws a second solution dashed over the lines in
 their colours, named once in the legend with a dashed grey line — the joint fit of the whole scan at work while the
 main screen shows the preliminary result. It stays through redraws until it is set to None.
@@ -41,6 +44,12 @@ SHARE_SERIES = (("coverage", "Coverage", "#17a2b8"), ("f_islands", "Island share
 RELATIVE_RADIUS = "Island radius (relative)"
 """The radius of a result on a porous substrate."""
 MARK_COLOUR = "#d62728"
+STAGE_COLOURS = {"islands": "#1f77b4", "coalescence": "#e08a1e", "film": "#2a9d5c", "after": "#7f7f7f",
+                 "tio2_clusters": "#1f77b4", "tio2_film": "#2a9d5c"}
+"""The hue of each stage's band (drawn faint: readable in both themes)."""
+STAGE_ALPHA = 0.10
+STAGE_LABEL_ROOM = 0.08
+"""A stage is named only when its band takes at least this share of the axis."""
 TIME_LABEL = "Time in the scan (s)"
 NOMINAL_LABEL = "Nominal thickness"
 SIZE_LABEL = "Size (nm)"
@@ -172,7 +181,7 @@ class EvolutionPlot:
         figure = self.figure
         figure.clear()
         self._marks, self._rings, self._axes, self.series, self.overlay_series = [], [], None, {}, {}
-        self._drawn, self._positions = ([], []), []
+        self._drawn, self._positions, self._stage_texts = ([], []), [], []
         if result is not None and result.windows:
             self._plots(result, choices)
             self._show_mark(current)
@@ -182,7 +191,7 @@ class EvolutionPlot:
 
     def _texts(self) -> list:
         """The texts that are in the interface language: the axis titles and the legends."""
-        texts = []
+        texts = list(getattr(self, "_stage_texts", []))
         for axes in self._axes or ():
             texts += [axes.xaxis.label, axes.yaxis.label]
             if axes.get_legend() is not None:
@@ -280,7 +289,36 @@ class EvolutionPlot:
             self._marks.append(axes.axvline(math.nan, color=MARK_COLOUR, linewidth=1.2, linestyle="--"))
             self._rings.append(axes.plot([], [], "o", markersize=9, markerfacecolor="none",
                                          markeredgecolor=MARK_COLOUR, markeredgewidth=1.3, zorder=5)[0])
+        self._stages(result)
         self._place()
+
+    def _stages(self, result) -> None:
+        """The stages of the growth as faint bands behind both plots (boundaries halfway between the windows of
+        neighbouring stages; the first and the last reach the edges), named at the top of the size plot where the band
+        is wide enough."""
+        process = getattr(result, "process", None)
+        stages = list(process.stages) if process is not None and not result.static else []
+        if not stages:
+            return
+        sizes = self._axes[0]
+        low, high = sizes.get_xlim()  # the first and the last stage reach the edges of the plot
+        edges = [low] + [0.5 * (a.t_end + b.t_start) for a, b in zip(stages, stages[1:])] + [high]
+        span = max(high - low, 1e-12)
+        from matplotlib.transforms import blended_transform_factory
+
+        for index, stage in enumerate(stages):
+            left, right = edges[index], edges[index + 1]
+            if right <= left:
+                continue
+            colour = STAGE_COLOURS.get(stage.stage, "#7f7f7f")
+            for axes in self._axes:
+                axes.axvspan(left, right, color=colour, alpha=STAGE_ALPHA, linewidth=0, zorder=0)
+            if (right - left) / span >= STAGE_LABEL_ROOM:
+                label = sizes.text(0.5 * (left + right), 0.97, tr(stage.name), ha="center", va="top", fontsize=7,
+                                   color=colour, transform=blended_transform_factory(sizes.transData, sizes.transAxes))
+                self._stage_texts.append(label)
+        for axes in self._axes:
+            axes.set_xlim(low, high)
 
     def _overlay_lines(self, result, limits: tuple) -> str:
         """The overlay, dashed in the colours of its quantities (an in-situ result only); returns its name ("" when

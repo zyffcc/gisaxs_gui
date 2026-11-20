@@ -16,7 +16,7 @@ other spelling keeps loading and is not rewritten by reading it:
   leaves the file, so the file and every series record copied from it hold one set of numbers per shape.
 
 The names of a family are also read one way where a candidate is reviewed and loaded: "random_cylinder"
-(the quick fit, 1D Predict, Analyze) is the store's Cylinder, as "random cylinder" already was.
+(Predict parameters, 1D Predict, Analyze) is the store's Cylinder, as "random cylinder" already was.
 
 Every number in this file is made up.
 """

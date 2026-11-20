@@ -340,12 +340,12 @@ class FitSeriesView:
         self.method_global = QRadioButton("Search the ranges, then refine (slow)", page)
         self.method_global.setObjectName("fitSeriesSearch")
         self.method_global.setToolTip("For frames that change a lot from one to the next")
-        self.method_fit1d = QRadioButton("Predict each frame (fit1d)", page)
-        self.method_fit1d.setObjectName("fitSeriesPredict")
-        self.method_fit1d.setToolTip(
-            "fit1d on every frame with the particles, fixed values and ranges of Single analysis' model and the "
-            "settings of its Fit step; values at an edge are resolved as there")
-        for index, button in enumerate((self.method_local, self.method_global, self.method_fit1d)):
+        self.method_predict = QRadioButton("Predict each frame", page)
+        self.method_predict.setObjectName("fitSeriesPredictPosterior")
+        self.method_predict.setToolTip(
+            "Predict parameters on every frame with the particles of Single analysis' model; with the box below, "
+            "of solutions about as probable the one closest to the previous frame; each frame then refined")
+        for index, button in enumerate((self.method_local, self.method_global, self.method_predict)):
             self.method_group.addButton(button, index)
             layout.addWidget(button)
         self.method_local.setChecked(True)

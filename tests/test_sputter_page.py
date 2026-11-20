@@ -85,7 +85,8 @@ def test_details_holds_the_geometry_the_options_of_analyze_static_frames_and_mor
     for gone in ("predict_button", "job_status", "environment_label", "choice_box", "polymer", "bin_seconds", "t0",
                  "t_end", "merge_button", "open_button", "metal", "trend", "literature", "sketch"):
         assert not hasattr(page, gone), gone
-    assert [page.tabs.tabText(index) for index in range(page.tabs.count())] == ["Windows", "Report", "Logs", "Steps"]
+    assert [page.tabs.tabText(index) for index in range(page.tabs.count())] == ["Windows", "Growth Process", "Report",
+                                                                                "Logs", "Steps"]
     _close(page)
 
 
@@ -257,11 +258,11 @@ def test_details_speaks_chinese_after_a_switch(tmp_path):
         assert kept == []  # every fixed text of Details has its Chinese
         assert page.source_labels["sdd"].text() == "文件中没有"
         assert page.source_labels["roll"].text() == "⚠ 文件中没有：假定为 0——请核对"
-        assert page.tabs.tabText(2) == "日志"
+        assert page.tabs.tabText(3) == "日志"
     finally:
         apply_language(DEFAULT_LANGUAGE, roots=(page,))
         page.refresh_language()
-    assert page.source_labels["sdd"].text() == "not in the files" and page.tabs.tabText(2) == "Logs"
+    assert page.source_labels["sdd"].text() == "not in the files" and page.tabs.tabText(3) == "Logs"
     _close(page)
 
 

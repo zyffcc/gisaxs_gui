@@ -6,7 +6,7 @@ from typing import Optional
 
 import numpy as np
 
-from .gisaxs_choice import chosen
+from .gisaxs_choice import INTERVAL_KEYS, chosen, interval
 
 A_TO_NM = 10.0
 """q in Å⁻¹ × 10 = q in nm⁻¹ (the fit works in nm⁻¹)."""
@@ -36,32 +36,49 @@ def fit_curve_table(fit: dict) -> tuple[str, np.ndarray]:
     return f"q (A^-1), I, sigma, I_fit  [{fit.get('curve')}]", columns
 
 
+def _intervals(row: dict, number: int) -> list[str]:
+    """``R_low68`` … ``D_high68`` of one component (from 0) of a solution, as text ("" where the fit gave none)."""
+    cells = []
+    for key in INTERVAL_KEYS:
+        found = interval(row, key, number)
+        cells += ["", ""] if found is None else [str(found[0]), str(found[1])]
+    return cells
+
+
 def fit_solutions_csv(fit: dict) -> str:
-    """One line per component of each solution: rank, model, χ²/N, parameters (R, h, D in nm; the σ columns are
-    relative widths σ/value, without a unit), then ``at_bounds`` (the values that ended on a search bound, as
-    ``name:upper`` or ``name:lower``, a component's number after the name when there are several) and ``chosen``
-    (the solution the run reports). Two ``#`` lines come first: what the table is (with the curve that was fitted)
+    """One line per component of each solution: rank, model, χ²/N, probability, parameters (R, h, D in nm; the σ
+    columns are relative widths σ/value, without a unit), the 68 % posterior intervals of R, h and D when the fit
+    gave them, then ``at_bounds`` (the values that ended on a bound of their range, as ``name:upper`` or
+    ``name:lower``, a component's number after the name when there are several) and ``chosen`` (the solution the
+    run reports, the most probable). Two ``#`` lines come first: what the table is (with the curve that was fitted)
     and the units; then the column names."""
     rows = fit.get("solutions") or []
     index, _solution = chosen(fit)
     keys = sorted({key for row in rows for component in row["components"] for key in component if key != "type"})
+    ranges = any(row.get("intervals") for row in rows)
+    limits = [f"{key}_{end}68" for key in INTERVAL_KEYS for end in ("low", "high")] if ranges else []
     lines = [
         f"# GISAXS fit solutions [{' '.join(str(fit.get('curve')).split())}]: one line per component of each solution",
         "# units: R, h, D in nm; sigma_R, sigma_h, sigma_D are relative widths (sigma/value, no unit); "
-        "chi2 (chi^2/N: the mean of the squared sigma-normalised residuals), log_rmse, amplitude and weight have no unit; "
-        "at_bounds: values that ended on a search bound (not determined by the curve); chosen: the solution reported",
-        "rank,model,chi2,log_rmse,converged,component," + ",".join(keys) + ",at_bounds,chosen",
+        "chi2 (chi^2/N: the mean of the squared sigma-normalised residuals), probability (posterior probability of "
+        "the solution), log_rmse, amplitude and weight have no unit; "
+        + ("R_low68 ... D_high68: the 68 % posterior interval in nm; " if ranges else "")
+        + "at_bounds: values that ended on a bound of their range (not determined by the curve); chosen: the solution "
+        "reported",
+        "rank,model,chi2,probability,log_rmse,converged,component," + ",".join(keys + limits) + ",at_bounds,chosen",
     ]
     for number, row in enumerate(rows):
         many = len(row["components"] or ()) > 1
         ended = " ".join(
             f"{item.get('parameter')}{'' if not many or item.get('component') is None else int(item['component']) + 1}"
             f":{item.get('bound')}" for item in row.get("at_bounds") or ())
-        for component in row["components"] or [{"type": ""}]:
-            values = ",".join("" if component.get(key) is None else str(component[key]) for key in keys)
+        chance = "" if row.get("probability") is None else str(row["probability"])
+        for place, component in enumerate(row["components"] or [{"type": ""}]):
+            values = ",".join(["" if component.get(key) is None else str(component[key]) for key in keys]
+                              + (_intervals(row, place) if ranges else []))
             lines.append(
-                f"{row['rank']},{row['model']},{row['chi2']},{row['log_rmse']},{row['converged']},{component['type']},{values},"
-                f"{ended},{number == index}"
+                f"{row['rank']},{row['model']},{row['chi2']},{chance},{row['log_rmse']},{row.get('converged', True)},"
+                f"{component['type']},{values},{ended},{number == index}"
             )
     return "\n".join(lines) + "\n"
 

@@ -60,20 +60,22 @@ SENTENCES = (
     "half has no points)",  # gisaxs_cut.HOLES_SENTENCE, character for character
     # The points a GISAXS run asks a person to look at (application/gisaxs_procedure.py).
     "cut of the series (rows {rows})",
-    "{n} solutions of {families} particle families fit within {percent} of the first solution's χ²/N: the curve alone "
-    "does not decide the model.",
-    "The run reports rank {rank} ({solution}), the best-ranked of them with no non-linear value at a search bound: "
-    "rank 1 ({first}) has {bounds}.",
+    "{n} solutions have a probability of at least {limit} ({solutions}): the curve alone does not decide the model.",
     "The reported solution ({model}) has χ²/N = {chi2}, above {limit}: it misses the curve by far more than the σ of "
-    "its points, so none of the particle families of the quick fit describes this cut, and its R and D are not "
+    "its points, so none of the compositions Predict parameters tried describes this cut, and its R and D are not "
     "measurements.",  # gisaxs_procedure.POOR_FIT, character for character
     "Solutions whose D is within {percent} of 2π/q* of the cut: {solutions} (2π/q* is a length scale, not necessarily "
     "the particle spacing).",
-    "The first-ranked solution ({model}) has {bounds}, and no solution within {percent} of its χ²/N is free of search "
-    "bounds: those values are not determined by the curve.",
-    # A value of a fit solution at a bound of its search range (application/gisaxs_choice.py).
+    "The reported solution ({model}) has {bounds}: those values are not determined by the curve.",
+    # A value of a fit solution at a bound of its range (application/gisaxs_choice.py).
     "{name} at its upper bound",
     "{name} at its lower bound",
+    # The warnings of a solution of Predict parameters (Fitting: infrastructure/adapters/posterior_job.py).
+    "the curve says little about {name}",
+    "{name}: its Guinier region lies at or below the curve's lowest q, so the curve shows only its decay, which roughness or a rise at low q produce as well",
+    "{name}: smaller than the curve resolves, it acts as a smooth background",
+    "{name} stopped at a bound of its range",
+    "{name} are strongly correlated",
     "The symmetry axis is {shift} px from the calibrated centre: check the calibration or the sample alignment.",
     # Why a run could not go on (application/pipeline.py, pipeline_progress.py).
     "No calibration file and no image of a standard GIMaP can fit was found ({n} folders searched).",

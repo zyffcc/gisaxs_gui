@@ -21,7 +21,7 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
    GISAXS 的小角度下误差通常很小，数值见 `report.json` 的 `geometry.flat_detector`。误差是倾斜本身的代价：比较的是
    `.poni` 和由它换算的平板几何，第 3 步对称轴移动光束中心不改变它（公开 AgBh 帧：0.08 %；拿移动后的中心比较会得到 4.1 %）。
    Decisions 还总有两行说明数值是什么：`q`（运动学值；折射主要移动 q_z，Yoneda 带的最多，量级为 k·sin αi，并给出这一帧的数）
-   和 `uncertainties`（切线的 σ 只是统计误差，写出误差模型；快速拟合不给 R、h、D 的 ±）。
+   和 `uncertainties`（切线的 σ 只是统计误差，写出误差模型；R、h、D 的区间是给定这些 σ 的 Predict parameters 后验）。
 2. **水平切线 I(qy)**：放在 Yoneda 带（αf ≈ αc 处的漫散射极大）。找不到 Yoneda 带时放在样品地平线上方，并提示检查 αi。
 3. **光束中心列**：直射束通常被 beam stop 挡住，所以用 I(qy) 的左右对称性确定（`refine_beam_center_symmetry`）。
    先用当前切带的有效像素在探测器范围内粗定位，再精修 x。列强度取有效像素均值，与显示曲线一致；
@@ -43,29 +43,31 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
    the particle spacing; check it with a model fit”（决策 `length scale` 写出位置，理由只说一次它是什么）：形状因子的拐折或直射束拖尾也会形成 shoulder。BornAgain 模拟的
    GALAXI 模型（真实峰间距 53.6 nm）上 shoulder 给出 73.9 nm，去掉干涉的同样颗粒也有 shoulder（60.6 nm）。
    转述时**不要**把它叫作间距。记录里的键仍是 `spacing`、`distance_nm`。
-6. **拟合**（`fit_horizontal_cut`，用 Fitting 的数值物理拟合）：球、竖直圆柱、随机取向圆柱，含尺寸分布和类晶距离 D；
-   也会从第 5 步的 2π/q* 出发。最多给出 5 个互不相同的解：report.md 和 fit_solutions.csv 全部列出，而在 MCP 或 call 里
-   直接调用 `fit_horizontal_cut` 只返回前 3 个，外加 `chosen`。停在搜索边界上的非线性参数列在每个解的 `at_bounds` 里
-   （表里写 “D at its upper bound”），它们不由曲线确定。报告的解（`chosen`）是 χ²/N 在第一个解的 10 % 以内、
-   已收敛且没有非线性参数处于边界的排名最靠前的一个；都碰到边界时报告第一个，Needs attention 里有一条 “fit” 说明。
-   振幅、背景 BG 和直射束拖尾振幅 A 按非负最小二乘求解，不算边界：等于 0 时 Decisions 有一条 `fit caveat`
-   （“background BG at 0, the non-negativity limit”；A = 0 时 σ_Res、ν_Res 不影响曲线）。报告的解已收敛但
-   χ²/N > 10（与 Fitting 序列 “拟合差” 的 χ²ᵣ 限值相同）时 Needs attention 里有一条 “fit”：模型远离曲线，R、D 不是测量值
-   （公开 AgBh 标样：χ²/N = 472，是布拉格环而不是颗粒）。
-   这是筛选，不是尺寸测量（手册第 13 章）。`--no-fit` 只准备切线，不拟合。
+6. **拟合**（`fit_horizontal_cut`，用 Fitting 的 Predict parameters，即 `create_curve_fit()`，约 15 秒）：GIMaP 的网络给出组成
+   和数值，每个解用最小二乘精修并按后验概率加权。没有给组成（`components`）时，网络在一种或两种球和竖直圆柱、带或不带次晶
+   的组成中选；随机取向圆柱只在给定组成时才用。切线按有效界面（q_z = 0）计算；第 5 步的 2π/q* 不作起点。最多给出 5 个
+   互不相同的解，最可能的在前：report.md 和 fit_solutions.csv 全部列出，而在 MCP 或 call 里直接调用 `fit_horizontal_cut`
+   只返回前 3 个，外加 `chosen`。报告的解（`chosen`）就是最可能的那个，带它的概率和 R、h、D 的 68 % 后验区间（决策
+   `fit intervals`；区间不含几何和模型选择）。另一个解的概率 ≥ 0.2（`ASK_PROBABILITY`）时，Needs attention 里有一条 “model”：
+   曲线本身定不了模型。停在范围边界上的非线性参数列在每个解的 `at_bounds` 里（表里写 “D at its upper bound”），它们不由
+   曲线确定；报告的解有这样的值时 Needs attention 里有一条 “fit”。振幅、背景 BG 和直射束拖尾振幅 A 按非负最小二乘求解，
+   不算边界：等于 0 时 Decisions 有一条 `fit caveat`（“background BG at 0, the non-negativity limit”；A = 0 时 σ_Res、ν_Res
+   不影响曲线）。报告的解已收敛但 χ²/N > 10（与 Fitting 序列 “拟合差” 的 χ²ᵣ 限值相同）时 Needs attention 里有一条 “fit”：
+   试过的组成都描述不了这条切线，R、D 不是测量值（粉末或标样的布拉格环会这样）。
+   网络只凭曲线选组成，所以要用用户知道的形状在 Fitting 里确认（手册第 13 章）。`--no-fit` 只准备切线，不拟合。
 
 输出：`report.md/json`、`horizontal.csv`、`vertical.csv`、`fit_curve.csv`（q、I、σ、I_fit：报告的那个解）、`fit_solutions.csv`
-（每个解的每个组分一行：R、h、D 单位 nm；sigma_R、sigma_h、sigma_D 是相对宽度 σ/值，没有单位；`at_bounds` 写
-`D:upper` 这样处于边界的数值，`chosen` 标出报告的解）和 `qmap.png`。
-给了 `.poni` 的一帧约 25 秒。
+（每个解的每个组分一行：概率；R、h、D 单位 nm；sigma_R、sigma_h、sigma_D 是相对宽度 σ/值，没有单位；R、h、D 的 68 %
+区间；`at_bounds` 写 `D:upper` 这样处于边界的数值，`chosen` 标出报告的解）和 `qmap.png`。
+拟合一步约 15 秒。
 
 ## 该怀疑的地方
 
 | 看什么 | 为什么 | 怎么做 |
 |---|---|---|
-| 模型的选择 | 解按稳健的失配量排序（σ 归一化残差 r 的平均 Huber 损失，δ = 2），表里的 χ²/N 是 r² 的平均，没有自由度修正（不同于 Fitting 的 χ²ᵣ）。几个解的 χ²/N 相差 10 % 以内时，曲线本身定不了模型。所以 Needs attention 里的 “model” 是**正常结果**，不是失败。BornAgain 模拟的 14 条球切线上，快速拟合只有 1 次把球排第一，最好的球解 R 中位偏大 11 %（−29 % 到 +26 %），D 没有还原出来 | 用户给了材料或形状就按它选；在 Fitting 里精修并比较拟合曲线和残差。D 与 2π/q* 接近不是证据 |
-| 停在搜索边界上的数值 | `at_bounds` 里的数值（例如 D = 500 nm 的上界）由边界而不是数据决定；排第一的解常常这样 | 转述报告的 `chosen` 解；第一个解处于边界时要说出来，不要引用边界上的值 |
-| 报告的解没有粒子间关联 | D ≥ 250 nm（搜索上限 500 nm 的一半）说明该解在 q 范围内没有粒子间关联 | 不要把这样的 D 当成测得的距离 |
+| 模型的选择 | 解按后验概率排序，表里的 χ²/N 是 σ 归一化残差 r² 的平均，没有自由度修正（不同于 Fitting 的 χ²ᵣ）。另一个解的概率 ≥ 0.2 时曲线本身定不了模型，所以 Needs attention 里的 “model” 是**正常结果**，不是失败。网络只凭曲线选：公开的 GALAXI 银球帧上它报告两种竖直圆柱（见下） | 用户给了材料或形状就按它选：在 Fitting 里用 Predict parameters 的 *The particles in Model* 拟合那个模型，再精修并比较拟合曲线和残差。D 与 2π/q* 接近不是证据 |
+| 停在范围边界上的数值 | `at_bounds` 里的数值由边界而不是数据决定 | 转述报告的 `chosen` 解；它处于边界时要说出来，不要引用边界上的值 |
+| 报告的解没有粒子间关联 | D ≥ 250 nm 说明该解在 q 范围内没有粒子间关联（Decisions 的 `fit caveat`） | 不要把这样的 D 当成测得的距离 |
 | 切线位置 | Yoneda 带之外的切线会混进别的散射 | `get_curve vertical` 看 Yoneda 带和镜面峰的位置是否与 αi、λ 一致；`set_gisaxs_cuts` 换位置 |
 | 两半的决定 | 遮挡、吸收体或真实的面内各向异性都会让两半不同 | 读报告里的理由；必要时在 Fitting 里分别拟合两半 |
 | 垂直切线 I(qz) | 已导出（`vertical.csv`），但没有分析（膜厚、Kiessig 条纹、Yoneda 带与 αc 是否吻合） | 问题需要时自己分析，并写出依据 |
@@ -83,14 +85,12 @@ python tools/gimap_agent.py auto tests/data/external/gisaxs_galaxi/galaxi_data.t
     --calibration tests/data/external/gisaxs_galaxi/galaxi_bornagain.poni --incidence-deg 0.463 --out <文件夹>
 ```
 
-基线结果（2026-10-14，macOS，退出码 2，只剩 “model” 这一个待回答的问题）：
+基线结果（切线部分 2026-10-14，macOS；拟合部分为 0.2.0 的 Predict parameters）：
 
 - Yoneda 带在第 605–609 行；对称轴在 597.26 px；两半取平均（到 |qy| = 0.179 Å⁻¹，之后 qy < 0 一半单独到 0.278 Å⁻¹；
   有 15 个点落在另一半的缺口里，只来自一半）；
 - shoulder 在 |qy| = 0.0113 Å⁻¹，2π/q* = 55.6 nm（特征长度；接近模型的 53.6 nm 只是巧合，去掉干涉的模拟也有 shoulder）；
-- 排第一的随机圆柱解 D 在搜索上界（500 nm）、σh/h 也在上界，第二个解的 σh/h 在下界；
-- 报告的解（`chosen`，第 3 名）是球：R = 9.44 nm、D = 48.3 nm、χ²/N 1.36（第一个解 1.26 的 1.1 倍以内）。
-  R 不能直接和模型的 5.75 nm 比，因为模型是对数正态分布（σ 0.4），GIMaP 用的是高斯 σR/R，宽分布下散射偏重大颗粒；
-  模拟上快速拟合的球 R 也系统偏大（手册第 13 章）。
+- 报告的解（`chosen`）是两种不带次晶的竖直圆柱：R = 3.11 nm 和 5.49 nm、χ²/N 1.27、概率 1.00；Needs attention 里有一条
+  “fit”：ν_Res 处于下界。很宽的对数正态尺寸分布（σ 0.4）和低 q 的上升在这里被两种颗粒群描述。
 
-这个例子正好说明：选模型要看用户知道的形状，并在 Fitting 里确认；不能只看排序或 χ²/N，也不能把 2π/q* 当间距。
+这个例子正好说明：选模型要看用户知道的形状（这里是球），并在 Fitting 里确认；不能只看概率或 χ²/N，也不能把 2π/q* 当间距。

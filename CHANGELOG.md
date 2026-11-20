@@ -12,6 +12,64 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Fitting has one network method, Predict parameters, so the choice is simple.** The Fit step offers **Predict
+  parameters** (GIMaP's network, its posterior and least squares), **Refine the values in Model** and **Search the
+  ranges, then refine**; an unfitted GISAXS cut gets Predict parameters. Under Predict, **Particles** is *The
+  particles in Model*, *Spheres and upright cylinders (1–2)* or *Any particles (1–3)*; there is one way through
+  (no *Options ▸ Predict: the solutions* any more), and without σ in the file Predict takes a relative σ from the
+  scatter of the curve about its trend. On one core it takes about 5 s per curve with the composition given, about
+  25 s choosing among one or two populations, 30–70 s among one to three of spheres and upright cylinders, and a few
+  minutes when random cylinders are among the choice (*Any particles*: 20–30 s per least-squares fit). **The fit1d kit and the quick
+  physical fit are removed:** *Predict parameters (fit1d)* with `utils/gisaxs1d_gui_kit` (about 62 MB) and the
+  dependency `threadpoolctl`, *Find the particle shape (no AI)*, and the *Physical fit (numerical)* and *fit1d*
+  methods of the 1D Predict window, which now has the one method (its settings: composition, q unit and sides, the
+  cut's q_z, the σ of files without one). Settings and projects saved with a removed method open with Predict
+  parameters (fit1d's cut qz becomes the window's **Cut qz**). The benchmark scripts that compare against fit1d run
+  with a copy of the kit you give them (`tools/benchmarks/README.md`).
+- **The automatic analysis fits with Predict parameters.** Run Automatic Analysis, Batch Export's *Particle model
+  of the horizontal cut*, Process with AI, `tools/gimap_agent.py` and the MCP tool `fit_horizontal_cut` fit the
+  horizontal cut with Predict parameters: without a composition the network chooses among one or two populations
+  of spheres and upright cylinders, with or without a paracrystal (random cylinders only when given as the
+  composition), at the effective interface as before. The run reports the most probable solution with its
+  probability and the 68 % intervals of R, h and D (*fit intervals*); the fit table has a probability column, and
+  **Save Fit Table…** writes the probability and the intervals. When another solution has a probability of 0.2 or
+  more, the run asks which model you expect (**model**); a reported value at a bound of its range is a point to
+  check, and χ²/N above 10 a poor fit, as before. 2π/q\* no longer starts the fit (it stays a result of its own),
+  and the solutions are no longer ranked by the Huber misfit with the rule of 10 % of χ²/N. Batch Export takes
+  about 25 s per frame and needs no start values for the particle model. On the public GALAXI example the run now
+  reports two upright cylinders without a paracrystal (R 3.11 nm and 5.49 nm, χ²/N 1.27, probability 1.00) with
+  *ν_Res at its lower bound* to check: for these spheres, fit a sphere in Fitting (manual, section 1.3).
+- **Fitting ▸ Predict parameters (new):** GIMaP's own network finds the particles of a 1D GISAXS cut and their
+  values from the curve. It proposes compositions (one to three spheres, upright or random cylinders, with or
+  without the paracrystal) and values; Fitting's model weighs them against the measured points, and every solution
+  is refined by least squares. Each solution comes with its probability and the 68 % interval of every value
+  (**Results ▸ Fit details… ▸ Posterior of this solution**, and the column **p** of the solutions). The network
+  (about 13 MB, in the repository and the packages) was trained on simulated cuts of Fitting's model and runs with
+  numpy; GIMaP checks it against the SHA-256 of its record. It is also the one method of the 1D Predict window and of
+  the In-situ series' **Predict each frame**. With both angles of the cut in Model, spheres have the direct and the
+  exit-reflected path with a free effective reflection coefficient r (the network was trained on such cuts too), so
+  the waves the surface reflects are taken into account. Physics and Methods 9.13 describes it and its benchmarks: on
+  fit1d's 200 held-out curves it chooses the composition right in 88 % / 60 % of them (fit1d's own physics / with
+  beam tail and roughness; fit1d 69 % / 30 %) and lists it among its solutions in 97 % / 82 %, with median errors of
+  0.6–0.7 % in R (fit1d 0.5–1.0 %) and larger large errors than fit1d's (90th percentile of R 17 % / 23 %; fit1d
+  7.1 % / 19 %: two-population curves whose second size the curve does not fix, or whose true sizes the network
+  missed); on 1200 curves of one to three populations 69 % / 56 % (fit1d 32 % / 16 %), 90th percentile of R 29 % /
+  46 % (fit1d 40 % / 49 %). Its intervals allow Fitting's model an error of 5 % of the intensity at every point (the
+  fit and χ²ᵣ keep the curve's σ), and its 68 % intervals hold the truth in 62–88 % of the cases (fit1d's errors
+  18–70 %). Besides the network's most probable modes it refines three modes of its tempered weights and, for two or
+  three populations, starts at their degeneracies (another R at the same D, the paracrystals of two populations
+  exchanged); choosing the composition it tries the network's four most probable and the most probable of every
+  number of populations. The true solution is among those listed in 92 % and 87 % of these curves. Drawn with the
+  four-term DWBA (on Si and on 100 nm polystyrene), spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i 0.4°, 12 keV) come out
+  about 6 % off in R (median) with both angles, and the composition of such curves right in 57–68 %; with the q_z
+  alone 10 % (q₊R 2.3–3.5) to 40 % off and usually taken for upright cylinders (right in 4–18 %). With both angles
+  Predict takes about 2.4 times as long, and on a curve without a reflected wave a smaller sphere with a large |r|
+  can fit as well (`posterior_recovery.py --scattering dwba --cut two_path`, Physics and Methods 9.13).
+- **1D Predict: General V5 and Single RC specialist removed.** On fit1d's 200 held-out curves V5 recovered R with a
+  median error of 31 % and D of 22 % (20 s per curve); Predict parameters 0.7 % and 0.0–0.1 %. Settings saved with
+  a V5 method open as Predict parameters. Fitting's *AI proposal (1D Predict)* is replaced by **Predict
+  parameters**. 1D Predict no longer needs TensorFlow, and `modules/Fitting_1D_Model/Workflow_v5` (about 56 MB) is
+  gone from the repository and the packages.
 - **Sputter: the earlier method is removed.** Predict with its PyTorch networks, the Size Trend, Literature,
   Structure Sketch and Reliability tabs, the island height from the q_z fringes and Show in Analyze are gone; GIMaP
   no longer installs PyTorch. Sputter is Analyze on the main screen; a result folder of Predict no longer opens.
@@ -48,6 +106,16 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   *Network cu_v4: drawing the candidates with the forward model, window 7 of 24*, *Joint fit: iteration 2 of 6 ·
   median fit deviation 11.3 · 5:40 so far, about 11 min left*. While the joint fit runs, its current solution is
   drawn dashed over the preliminary result's evolution after every iteration, until the final result replaces it.
+- **Sputter: the model split into its physical terms, and the growth process.** With a newer analysis package the
+  switch beside the window selector has **Components**: the model image of the solution shown split into its terms
+  (grains and islands, large clusters, film fluctuation and network, voids under the film, substrate seen through the
+  metal, fluorescence, beam-path background; on porous TiO₂ the clusters in the pores and on the cap and the metal
+  network in the pores), each with its share of the counts, and the shares over the scan. The evolution shows the
+  stages of the growth (separate islands, coalescence, continuous film, after the deposition) as bands, and the new
+  tab **Details ▸ Growth Process** lists the stages, the growth laws against the metal amount (coverage 0.5 and film
+  formation at, D = D₁ h^p and R = R₁ h^q before the film, D after it, coarsening after the stop) beside the range of
+  the same metal on the same substrate, and the shares of the terms per window. Results of an older package say that
+  they have none of this.
 - **Sputter ▸ Real Space:** a solution with a continuous base layer is drawn as a closed film: the top view is the
   metal of the layer over the whole square, with the grains as relief on it, and the line says *Continuous film …
   nm, grains on top: …*.
@@ -92,18 +160,15 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   (Physics and Methods 2.6). Off by default.
 - **Fitting, D ≥ 2R:** a fit keeps the paracrystal's distance at or above twice the mean radius, so the particles
   do not overlap (D could fall to 1 nm before); a D at 2R is reported at its lower bound (Physics and Methods 9.6).
-- **fit1d, a population too small for the curve:** a population with q_max·R < 1 (its form factor is flat over the
-  curve) is named among the warnings as a background term, not particles of that size. On the public GALAXI cut
-  fit1d's composition rule added such a sphere (R ≈ 0.18 nm); Physics and Methods 9.12 gives fit1d's results there.
-- **Lighter install:** `requirements.txt` is the core (Analyze, Calibration, Fitting with fit1d, Series, Batch
-  Export, the automatic analysis, XRR, Sputter, SEM). TensorFlow (1D Predict V5, 2D Prediction, Trainset training),
+- **Lighter install:** `requirements.txt` is the core (Analyze, Calibration, Fitting with Predict parameters, Series, Batch
+  Export, the automatic analysis, XRR, Sputter, SEM). TensorFlow (2D Prediction, Trainset training),
   BornAgain and the AI clients are optional: `requirements-tensorflow.txt`, `requirements-bornagain.txt`,
   `requirements-ai.txt`, all of them `requirements-full.txt`. GIMaP starts and opens every workspace without them,
   and a feature that needs one says which file to install. `Start_GIMaP.bat` and the portable packages still set up
   everything.
 - **Earlier 1D models removed:** the Keras models K1–K4 of 1D Predict (`k1_k2_k3_k4_phys`, `saved_model_K3K4`,
-  22 MB) and their research code `utils/ML_Fitting_1D_GISAXS` (490 files). 1D Predict runs V5 models; fit1d in
-  Fitting is the default 1D machine learning. A folder of an earlier model is refused with what to use instead.
+  22 MB) and their research code `utils/ML_Fitting_1D_GISAXS` (490 files). 1D Predict runs GIMaP's own
+  network (Predict parameters). A folder of an earlier model is refused with what to use instead.
 - **1D Predict, Use current curve:** the curve of Single analysis, as the page selects its points: the halves chosen,
   the fitting range (|q|) and the points left out. Before, it took every point of the halves chosen. The former
   Fitting pages, built but no longer shown, are removed.
@@ -126,7 +191,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   file with its SHA-256 and the geometry, so a curve says where it came from without `report.json` beside it.
 - **Fitting, mean of both halves:** the q > 0 half gives the |q| points, as in Analyze and the Series map, so one
   cut gives one mean curve in every page (Fitting took the half with more points: a point more or less).
-- **Fitting, results:** each particle's radius by number (fit1d and microscopy count particles; Fitting's spheres
+- **Fitting, results:** each particle's radius by number (microscopy counts particles; Fitting's spheres
   and random cylinders are weighted by intensity) and σ_nn/D, also in the exported record (`derived`). For a broad
   sphere distribution (σ_R/R above about 0.2) the radius by number is *not defined* (Physics and Methods 9.3).
 - **Geometry Calibration:** the beam centre and the distance have a 1σ, the scatter between the rings (leave one
@@ -139,25 +204,21 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 - **Analyze, records:** `<stem>_analysis.json` lists every input file by name with its SHA-256
   (`input_sha256`: the source, its module or data files, and the frames summed with it), so a curve can be traced
   to its frames on another computer, where the folders differ.
-- **Fitting, records:** an exported fit1d result keeps fit1d's own provenance (its version and the SHA-256 of its
-  sources, of the network's weights, of the OOD thresholds and of the form-factor tables); the source of a curve
-  is recorded with its file name and SHA-256.
-- **Physics and Methods, section 9.12:** what *Predict parameters (fit1d)* does — its model, network, refinement,
-  errors, flags and composition rule — and how well it recovers known parameters on 200 curves it had never seen
+- **Fitting, records:** the source of a curve is recorded with its file name and SHA-256.
+- **Physics and Methods, section 9.12:** a record of fit1d (removed in this version) — its model and how well it
+  recovered known parameters on 200 curves it had never seen, against which section 9.13 compares Predict parameters
   (the benchmark is `tools/benchmarks/fit1d_recovery.py`, with an independent forward model).
 - **Fitting, spheres in grazing incidence:** a new card in Model, *Spheres in grazing incidence*. By default
   nothing changes: spheres are evaluated at q_z = 0 (the effective interface approximation, no substrate
   needed). Entering αi, αf and λ of the cut evaluates spheres as the direct plus the exit-reflected path with a
-  free effective reflection coefficient |r|·e^(i·arg r); the results then show q₊R of each sphere. fit1d no
-  longer warns when *Cut qz* is not given. Physics and Methods has new sections 9.10 (why upright cylinders are
+  free effective reflection coefficient |r|·e^(i·arg r); the results then show q₊R of each sphere. Physics and
+  Methods has new sections 9.10 (why upright cylinders are
   exact in this approximation and spheres are not, with examples on Si and on a polymer film) and 9.11 (what each
   population of the usual three-population fit takes up).
-- **Fitting:** parameter limits and fixed values are enforced, including linear intensity/background terms;
-  incompatible predictor constraints are refused. Predict stays selected after finishing. Complete equivalent
-  fits can be switched as a whole from the result dropdown; components are available in the curve's right-click
-  menu. Detailed diagnostics move to **Fit details…**. Older external fit1d kits may supply equivalent ranges
-  without complete alternative solutions; only complete solutions can be selected. fit1d cannot enforce manual
-  intensity scales, low-q amplitude/width or background ranges: use Refine or Search for those constraints.
+- **Fitting:** parameter limits and fixed values are enforced by Refine and Search, including linear
+  intensity/background terms; a value at the edge of its range is named, never widened by itself. Complete
+  solutions can be switched as a whole from the result dropdown; components are available in the curve's
+  right-click menu. Detailed diagnostics move to **Fit details…**.
 
 - The **Sputter** workspace opens on a new **main screen**. **Analyze** (scan folder, metal, substrate and
   deposition rate in one input bar) runs a separate analysis package and shows, window by window, the measured
@@ -174,8 +235,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   picture says whether the grains are separate, coalescing or percolated. Results on porous TiO₂ show their own
   values (island radius, relative; island, cap and film shares; the correlation lengths of the metal in the pores),
   and Real Space draws the TiO₂ layer with the metal in its pores, the cap on the particle tops and the clusters.
-  **Details ▸ Static Frames (after deposition)** analyses samples measured after their deposition (a folder, a CBF
-  file or a zip archive) one at a time into a series, which the main screen shows along the nominal thickness.
+  **After Deposition** (the input bar) analyses samples measured after their deposition, a whole folder of them at
+  once, into series the main screen shows along the nominal thickness.
 - The analysis package of Sputter ▸ Analyze and Static Frames comes with GIMaP (`utils/sputter_client`): nothing
   has to be chosen. **Choose Folder…** or `GIMAP_SPUTTER_CLIENT` still use another package; a folder named so that is
   not an analysis package (chosen once and moved since, or the wrong folder) is passed over for the one that comes
@@ -226,14 +287,23 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   prepared, candidates proposed, windows solved and model images computed, windows refined, iterations of the
   whole-scan refinement — and the bar of the job status moves on inside each step. In Refine mode every window gets
   its candidates before the refinements start, so the evolution fills early (the results are the same).
-- Sputter: **In Situ | After Deposition** at the left of the input bar. **After Deposition** is for a sample measured
-  after its deposition, which has no deposition rate and no frames from before it: the bar asks for its frames, its
-  name, its **nominal thickness** (in place of the rate; its place on the axis of the series) and, optionally, the
-  frames of a **bare substrate** (another piece of the same substrate without metal; without it the film is taken to
-  lie on Si), and **Analyze** analyses it into the series. While it runs the main screen shows three steps live: the
-  frames read (which are usable, which are left out and why), the solution of each frame as it is found with its
-  measured and model image, and the series with every frame solved so far. **Details ▸ Static Frames** keeps the
-  series folder, the mode and the geometry; **Analyze Sample** there is gone.
+- Sputter: **In Situ | After Deposition** at the left of the input bar. **After Deposition** is for samples
+  measured after their deposition, which have no deposition rate and no frames from before it. **Add Samples…** takes
+  a folder of samples — each folder in it with CBF frames is one sample, however deep the frames lie — or one
+  sample's folder or one CBF file (zip archives are no longer opened: unpack them first). The **nominal thickness**
+  (`10Au`, `6.5nm`), a HiPIMS deposition (`H10Au`) and the **bare substrate** (a folder named like the part before the
+  thickness, `850` for `850_10Au`; without one the film is taken to lie on Si) are read from the folder names; what a
+  name does not say is asked for in the list, not guessed. The **Sample List** at the left of the main screen groups
+  the samples into series (substrate and deposition method), with a box to tick each, its thickness (double-click to
+  change it) and its state; **Analyze** runs the ticked samples one after another (*Sample 3 of 12*), a failed one does
+  not stop the others, and a right-click analyses one sample or one series. While a sample runs the main screen shows
+  three steps live: the frames read (which are usable, which are left out and why), the solution of each frame as it
+  is found with its measured and model image, and the series with every frame solved so far. Choosing a sample shows
+  its series at that sample. **Export…** writes one HTML report of every series of the list, each in two parts —
+  separate particles (radius, height, spacing, gap, coverage) and the connected film (thickness, density, height and
+  the relief of its surface: a connected film has no separate particles) — with their tables, the stage of each
+  sample as the Real Space picture names it, a figure of both parts and the fits, and a CSV of every sample. **Details ▸ Static Frames** keeps
+  the results folder (one folder per series in it), the mode and the geometry; **Analyze Sample** there is gone.
 - **Geometry Calibration**: the **Distance range** is a limit, not a starting point. No solution outside it is shown,
   also not after the fit of centre and distance (before, the fit could leave a custom range); when none lies in it,
   the calibration says so. An image of the standard taken at grazing incidence (AgBH on a wafer: arcs above the
@@ -289,8 +359,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 - Project reopening restores Analyze's source order, identity and original frame after missing files,
   preserving the order used for adjacent single-frame sums and series,
   including chunk-to-master frame and import-selection mapping.
-- Fitting projects and sessions restore all fit1d inputs and the chosen method. Opening another curve clears
-  its cut qz; an Analyze GISAXS cut selects GISAXS physics. Empty projects clear old native results and residuals.
+- Fitting projects and sessions restore the model and the chosen method with the curve.
 - Stop remains a stopped outcome during boundary refinement and queued result delivery, while retaining
   the completed numerical result; an interrupted boundary check does not claim convergence or a settled bound.
 - Removed Trainset Build from navigation, menus and application startup. Existing research files remain untouched.
@@ -455,36 +524,31 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Fitting
 
-- **Single analysis** has one **Method** drop-down, and the button carries the method's name. When a curve is
-  opened the page chooses the method: a curve whose model is not yet edited gets **Find the particle shape (no
-  AI)**, which needs nothing beyond GIMaP; an unfitted GISAXS cut gets **Predict parameters (fit1d)**, or
-  **Find the particle shape (no AI)** when the fit1d kit is missing, with a line that says why.
+- **One forward model.** Fitting computes its curves with one implementation of a 1D cut (Physics and Methods 9.2),
+  checked against fit1d's, 1D Predict's, an independent model and BornAgain. What you see:
+  - Each particle card has **Sizes**: *Gaussian, by number* (the default for a new particle: the mean and spread of
+    the particle count, as a microscope counts), *Log-normal, by number* (new, for broad distributions), or
+    *Gaussian, by intensity* (what Fitting used before). Results give every particle's sizes by number and by
+    intensity.
+  - The spacing disorder is **σnn/D**, the relative standard deviation of the distance between neighbours,
+    √(2π) ≈ 2.51 times the former σD/D. Default 0.25.
+  - Every family's form factor is 1 at q = 0, so a vertical cylinder's **Scale** is in the same units as a sphere's.
+  - The size and orientation averages converge at large q: the former fixed rules were off by up to 67 % (spheres
+    of 20 nm with σR/R = 0.4 at q = 3 nm⁻¹) and 55 % (random cylinders) at high q.
+  - A model saved before opens with the sizes it had, its σD/D converted to σnn/D and a vertical cylinder's scale
+    converted; its curve changes only where the former rules were off.
+  - Sizes by number come from small tables of the exact averages (about 1 ms per evaluation, as fast as before).
+    Where no table applies the converged averages cost time: **Search the ranges** with *Gaussian, by intensity* takes
+    tens of seconds, with a random cylinder up to minutes (*Known limitations* in the manual).
+
+- **Single analysis** has one **Method** drop-down — **Predict parameters**, **Refine the values in Model**, **Search
+  the ranges, then refine** — and the button carries the method's name. An unfitted GISAXS cut gets Predict
+  parameters, with a line that says why.
 - **Results** says what to do next (**Refine These Values**, **Fit Again**, **Fit Every Curve in This
-  Folder…**). With **Resolve values at the edge of their range automatically** (on by default) a value that
-  stops at the edge of a Model range stays within that limit; boundary notes are in *Fit details*; a
-  value still at the edge is reported as a one-sided bound (for example *≥ 0.549*). Select values and press
-  **Fix**, **Let It Fit** or **Range…**: the next **Fit Again** uses them.
-- **Predict parameters (fit1d)** fits spheres and vertical cylinders with fit1d, a kit with its own networks
-  and physics (number-weighted sizes, Hosemann paracrystal, spheres at |q| = √(q∥² + qz²)). It comes with GIMaP
-  in `utils/gisaxs1d_gui_kit` (about 62 MB: two numpy networks and packed form-factor tables; numpy, scipy and
-  threadpoolctl only, no TensorFlow); the environment variable `GISAXS1D_KIT_HOME` points to another copy. When
-  the kit is missing the method says where GIMaP looked, and everything else in Fitting works.
-  **Particles** chooses what it fits:
-  *The particles in Model* (1–4, with the values you fixed and the ranges you changed passed as constraints,
-  listed under **Constraints and ranges**), or *Try 1–3 vertical cylinders* / *Try spheres and vertical
-  cylinders (1–3)*, which ranks every composition by BIC and lists the others under **Other compositions**.
-  **General network** uses `cond_v2_ft4`, **Au nanoparticles on Si (adapted)** `cond_v2_ftr1`; set GISAXS / SAXS
-  and, for a Yoneda cut, the qz of the cut in nm⁻¹ (unset means zero, with a warning). It runs in a separate
-  process and supports Stop. Results, plots and CSV/JSON keep the kit's own total curve, component curves,
-  effective σ, parameter errors, states and warnings; the values copied into Model are only a starting point for
-  later refinement with Fitting's own physics. A changed Model, curve selection or fit1d setting marks the fit
-  stale and prevents exporting it as a current fit.
-- **1D Predict** has a fourth fit method, **fit1d (network + physical fit)**, with the same kit and the
-  composition you give (**Parameters…**: search, curve type, network, the qz of the cut and a systematic error).
-  The row says which parameters have another equally good solution, sit at a bound or are not pinned down.
-  Selecting a fit1d row keeps its own curve and components visible while copying a manual starting model.
-- **In-situ series**: **Predict each frame (fit1d)** as a method, preferring the solution that
-  continues the previous frame; **Fit Every Curve in This Folder…** in Single analysis starts it on the curve's
+  Folder…**). A value that stops at the edge of a Model range stays within that limit and is named in *Fit
+  details*. Select values and press **Fix**, **Let It Fit** or **Range…**: the next **Fit Again** uses them.
+- **In-situ series**: **Predict each frame** as a method (Predict parameters on every frame, then refined),
+  preferring, of solutions about as probable, the one that continues the previous frame; **Fit Every Curve in This Folder…** in Single analysis starts it on the curve's
   folder. **Files** may also name detector frames (CBF, TIFF, EDF, NeXus), which are cut as Analyze cuts the
   frame it has set up, in memory only (**Take Analyze's Set-up**).
 
@@ -499,10 +563,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   state and reason, and the poor fits (χ²ᵣ above 10).
 - A second Start, other curves or opening a project ask before results that are not saved are dropped
   (**Save**, **Discard**, **Cancel**).
-- **Single analysis** keeps its four choices. *Find the particle shape*, *AI proposal* and *fit1d* cannot fit
-  both halves on |q|: they switch to the mean of both halves and say so. A mean never interpolates across a gap
-  of the other half. *Find the particle shape* and the model fit of Batch Export take a cut of any length (more
-  than 1000 points are merged).
+- **Single analysis** keeps its four choices. *Predict parameters* cannot fit both halves on |q|: it switches to
+  the mean of both halves and says so. A mean never interpolates across a gap of the other half. The model fit of
+  Batch Export and of the automatic analysis takes a cut of any length (more than 1000 points are merged).
 - A GIWAXS I(q) sent to Fitting gets a note: Fitting's models are particle form factors, not peaks.
 
 ### Command line and tool windows
@@ -527,11 +590,6 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Installation and updating
 
-- **The fit1d kit comes with GIMaP** (`utils/gisaxs1d_gui_kit`, about 62 MB), so **Predict parameters (fit1d)**
-  and the method *fit1d* of 1D Predict work after a plain download; before, the kit had to be put there by hand.
-  Only its runtime files are bundled: `SOURCE.json` lists what was left out (example measurements, results on
-  measured data, research notes) and the text changes, `FILES_SHA256.json` the checksum of every file. The first
-  fit unpacks the form-factor tables once into `~/.cache/gisaxs1d_tables` (about 74 MB).
 - **A source folder starts with one double-click.** `Start_GIMaP.bat` in a clone or a Download ZIP of the
   repository sets up a private environment in `.gimap` of the folder at its first start: uv (pinned version,
   checked against its SHA-256), Python 3.10 and the packages of `requirements.txt` (about 2 GB), with a progress
@@ -603,14 +661,13 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Names and labels
 
-- Quick fits show **χ²/N** where they showed χ²: Run Automatic Analysis (GISAXS) and its saved report and fit
+- The model fits of Analyze show **χ²/N** where they showed χ²: Run Automatic Analysis (GISAXS) and its saved report and fit
   table, the model rows of Batch Export, the fit results of Analyze's series, and a solution that Analyze sent to
   Fitting (**Show in Fitting**). χ²/N is the mean squared σ-normalised residual without a degrees-of-freedom
   correction; Fitting's own χ²ᵣ is unchanged. The `chi2` column of the model-table CSV keeps its name, and a `#`
   line says what it holds.
-- Run Automatic Analysis (GISAXS) said it chose the fit with the lowest χ². It reports the solution ranked first
-  by a robust misfit (the mean Huber loss of the σ-normalised residuals); `report.md`, the fit table's tooltip,
-  `fit_solutions.csv` and the manual now say so.
+- Run Automatic Analysis (GISAXS) said it chose the fit with the lowest χ². It reports the most probable solution
+  of Predict parameters; `report.md`, the fit table's tooltip, `fit_solutions.csv` and the manual say so.
 - The orientation factor is spelled **Hermans** f (after P. H. Hermans), not “Herman's”, in the automatic
   analysis, its reports and the manual. The keys of exported records (`herman`, `herman_err`) are unchanged.
 - A saved AI report is titled *AI report – `<frame>`*, whichever provider ran it (the footer names the model).
@@ -732,10 +789,6 @@ Found in development copies of 0.2.0, and fixed before this release (for those w
 - The Chinese tooltip of the **Sputter** entry in the sidebar was in English.
 - **2D Prediction ▸ SEM comparison…** attached the results of the Ag and Cu distribution modules, which declare
   no axes, with a placeholder 0.05–15 nm axis that is not a physical scale.
-- Fitting chose **Predict parameters (fit1d)** for an unfitted GISAXS cut and called it recommended also without
-  the fit1d kit, and its tooltip called it *the first step for a GISAXS cut*. Without the kit such a cut now
-  gets **Find the particle shape (no AI)** (*Recommended for this curve: … (the kit of Predict parameters (fit1d)
-  is missing here)*), and the tooltip of Predict says where the kit belongs.
 - The screenshots of both manuals still showed 0.1.0 (four menus, no Sputter in the sidebar). They are taken again
   with this version, in English and Chinese, on the public example data, the example frames in `TestSAXSdata/` or
   synthetic data, and three are new: the Sputter workspace (chapter 8) and the Analyze and Help menus (section 3.6).
@@ -828,8 +881,8 @@ Found in development copies of 0.2.0, and fixed before this release (for those w
   the pixel scatter; it now names the error model, which `get_status` gives as `error_model`. The GISAXS report
   said nothing of the kind either: its *Decisions* now say the same in their own words — refraction mostly shifts
   q_z, that of the Yoneda band most, by an amount of the order of k·sin αi (0.0379 Å⁻¹ on the public GALAXI frame),
-  while q_y and 2π/q* barely change — and that the σ of the cuts, by which χ²/N is normalised, are statistical only,
-  with no ± for the quick fit's R, h or D.
+  while q_y and 2π/q* barely change — and that the σ of the cuts, by which χ²/N is normalised, are statistical only;
+  the intervals of R, h and D are the posterior of Predict parameters given those σ.
 - GISAXS automatic analysis: 2π/q* of a peak or shoulder of the horizontal cut was reported as the in-plane
   spacing D, although a form factor or the beam tail makes a shoulder too (on BornAgain simulations of the GALAXI
   model, 73.9 nm for a true 53.6 nm, and a shoulder at 60.6 nm without any interference). Every report, table
@@ -839,14 +892,12 @@ Found in development copies of 0.2.0, and fixed before this release (for those w
   unchanged. The model question names the solutions whose D is within 15 % of 2π/q*, no longer "the observed
   spacing".
 - GISAXS automatic analysis: the solution reported was the first-ranked one even with a value at a search bound
-  (on the public GALAXI frame a random cylinder with D at its 500 nm bound). The quick fit now names each value that
-  ended on a bound (`at_bounds`), and among the solutions within 10 % of the first's χ²/N the run reports the
-  best-ranked one that converged with no non-linear value at a bound (GALAXI: the sphere, rank 3, R = 9.44 nm); when
-  there is none it reports the first and *Needs attention* says it sits at a bound. The amplitudes, the background
-  and the beam-tail amplitude are solved non-negative and are not counted: one at 0 is a *fit caveat* of the
-  *Decisions* (the GALAXI sphere: *background BG at 0, the non-negativity limit*). The fit table of the Results tab marks a
-  value at a bound ⚠, names them by rank under the table (*1: D at its upper bound, …*) and selects the reported
-  solution; `report.md`
+  (on the public GALAXI frame a random cylinder with D at its 500 nm bound), and nothing said so. The fit now names
+  each value that ended on a bound (`at_bounds`), and when the reported (most probable) solution has one, *Needs
+  attention* says so. The amplitudes, the background and the beam-tail amplitude are solved non-negative and are not
+  counted: one at 0 is a *fit caveat* of the *Decisions* (*background BG at 0, the non-negativity limit*). The fit
+  table of the Results tab marks a value at a bound ⚠, names them by rank under the table (*1: D at its upper bound,
+  …*) and selects the reported solution; `report.md`
   marks it *(chosen)* and gives the values at a bound in the note column, `fit_solutions.csv` has `at_bounds` and
   `chosen` columns, the fit record `chosen`, and `fit_curve.csv` the reported solution's curve (Physics and Methods,
   section 8.5).
@@ -854,7 +905,7 @@ Found in development copies of 0.2.0, and fixed before this release (for those w
   answer rounded to four significant digits and rounded again. Every number is now formatted once from the fit
   record.
 - GISAXS automatic analysis: a reported fit far from its curve passed without a word (the public AgBh SAXS frame,
-  Bragg rings of a calibrant: a sphere with χ²/N = 472). A converged reported solution with χ²/N above 10 — the
+  Bragg rings of a calibrant, gave a sphere with χ²/N = 472). A converged reported solution with χ²/N above 10 — the
   limit of Fitting's poor fits — is now a point to check (**Fit**, exit code 2): its R and D are not measurements.
 
 ### New known limitations
@@ -883,24 +934,23 @@ hold.
   value.
 - **SEM sizes depend on the segmentation**, and the default StarDist weights are trained on cell nuclei, not
   SEM. The scale is never read from the image.
-- **fit1d** offers spheres and vertical cylinders only; with *Try …* compositions the Model's values and ranges
-  are not passed.
 - **2D Prediction reads CBF frames only and applies no geometry and no correction** to a frame: the module's
   own preprocessing is all that runs. **The Ag and Cu distribution modules declare no axes**: their maps and
   curves are drawn on a placeholder axis (0.05–15 nm), which is not a physical scale.
 
-- **1D Predict (Workflow V5) is validated on simulated curves only**, with the composition and resolution given;
-  finding the composition, an unknown resolution and measured data are not validated.
-- **The quick model fit of a GISAXS cut** (Run Automatic Analysis; *Find the particle shape (no AI)*) **is a
-  screening step, not a size measurement.** On 14 BornAgain simulations of Ag-sphere cuts with known parameters it
-  ranked a random cylinder first in 12 and a sphere in 1, and the best sphere's R was a median 11 % above the
-  R⁶-weighted mean radius (−29 % to +26 %); D and its disorder were not recovered, and 2π/q* was within 10 % of the
-  true distance in 1 of 10 cuts with interference. Choose the model from what you know of the sample and confirm it
-  in Fitting.
+- **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA, spheres at the Born term of
+  the cut's q_z or the effective interface). It was checked on simulated curves of an independent model and on
+  BornAgain simulations, not on measured curves of known particles; physics outside the model can give a
+  composition a probability it does not deserve. Judge every solution by its residuals.
+- **The model fit of the automatic analysis chooses the particles from the curve alone** (Predict parameters among
+  one or two populations of spheres and upright cylinders): on the public GALAXI frame of Ag spheres it reports two
+  upright cylinders. 2π/q* is a length scale, not the particle spacing: on BornAgain simulations it was within 10 % of
+  the true distance in 1 of 10 cuts with interference. Choose the model from what you know of the sample and confirm
+  it in Fitting.
 - Cancel/Stop records a request immediately but cannot forcibly interrupt a directory scan or single-file read.
   Unfinished Compare imports are discarded, or a Fitting frame is not fitted, when the active read returns.
-- Research runtimes do not all expose a controllable seed; their run records state this limitation.
-  Sputter, 1D Predict, AI and CLI records now identify the software version.
+- Run records do not hold everything needed to repeat a run (masks are counted, not stored as pixel lists).
+  Sputter, 1D Predict, AI and CLI records now identify the software version; Predict parameters uses a fixed seed.
 
 - **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`,
   `assistant_provider_keys.json`). On a shared computer, set the key as an environment variable instead, or
@@ -927,7 +977,7 @@ hold.
 - **Portable version:** extract the new package into a new folder (manual, section 2.4) and delete the old one
   when you no longer need it; `Update_GIMaP.bat` cannot update a portable folder.
 - **Source checkout:** double-click `Update_GIMaP.bat`, or run `powershell -ExecutionPolicy Bypass -File
-  tools\update_source.ps1`. `requirements.txt` gained `hdf5plugin` and `threadpoolctl`. With `Start_GIMaP.bat` there is nothing to do;
+  tools\update_source.ps1`. `requirements.txt` gained `hdf5plugin`. With `Start_GIMaP.bat` there is nothing to do;
   in an environment you set up yourself, run `python -m pip install -r requirements.txt`.
 - **A model folder imported in 2D Prediction** with 0.1.0 was written into the module's `module.yaml`, which no
   longer names one. Choose it once more with **Import model...**; from then on it is kept in the user data
@@ -938,6 +988,8 @@ hold.
 - **The sidebar has a page more**: Sputter is `Ctrl+5`; 2D Prediction moved to `Ctrl+6` and Trainset Build to
   `Ctrl+7`.
 - **Results that can differ from those of 0.1.0** (each is described above):
+  - Fitting's curves of large or broadly distributed particles at high q (the size and orientation averages now
+    converge), and its spacing disorder, now σnn/D = √(2π)·σD/D. New particles have sizes by number.
   - 1D Predict on Analyze's `_fit_input.dat`: 0.1.0 read q ten times too small. Run such fits again.
   - GIWAXS curves with **Fill gaps from the mirror side**: the error bars come from the scatter of the pixels
     (those of 0.1.0 were too small), and so do the errors of fits made on them.

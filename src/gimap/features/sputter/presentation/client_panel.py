@@ -3,7 +3,8 @@
 A result is a list of time windows; each has several solutions (the network's candidates and, when the analysis
 refined, the refined one). The page shows one window at a time — the slider, the arrows or a click on the evolution
 choose it — and one solution of it: the measured image beside that solution's model image (or, with the switch
-Patterns | Real Space, the solution drawn in real space: ``real_space_view.py``), its values on the tiles
+Patterns | Real Space | Components, the solution drawn in real space: ``real_space_view.py``, or its model split into
+its physical terms with their shares over the scan: ``components_view.py``), its values on the tiles
 and its fit deviation. The solution shown first is the window's default (the one the smooth evolution over the scan
 selects, else the lowest fit deviation). Choosing another one is kept per window in ``main/choices.json`` next to the
 result (only where it differs from the default) and read again when the result is opened; the evolution plots follow
@@ -25,16 +26,18 @@ from src.gimap.app.presentation.components import SegmentedControl
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.theme import set_role
 
-from ..application import ClientResult, ClientWindow
+from ..application import (COMPONENT_NAMES, ClientResult, ClientWindow, arrangement, grown, real_space, top_grains,
+                           visible)
 from .client_texts import (JOINT_FAILED, CHOICE_NOT_SAVED, EMPTY_ACTION, EMPTY_MESSAGE, EMPTY_TITLE, PACKAGE_ACTION, PACKAGE_TITLE,
                            MASK_AUTO, MASK_AUTO_ONLY, MASK_FILE, RELATIVE_RADIUS_TIP, RESULT_NAME, SAMPLE_CONTROLS, SAMPLE_ERROR, WINDOW_CONTROLS,
                            WINDOW_ERROR, entry_name, entry_segment, entry_tip, range_text, shown_number, window_text,
                            window_tip)
-from .evolution_view import RELATIVE_RADIUS, EvolutionPlot
+from .components_view import ComponentsPicture
+from .evolution_view import RELATIVE_RADIUS, EvolutionPlot, axis_label
 from .pattern_view import PatternPair
 from .real_space_view import RealSpacePicture
 from .texts import message_text, text
-from .views.sputter_main_view import ENTRY_HINT, TILES
+from .views.sputter_main_view import CONNECTED_HIDDEN, CONNECTED_TILES, ENTRY_HINT, TILES
 
 TILE_DIGITS = {"width": 2, "coverage": 2, "f_islands": 2, "cap_share": 2, "film_share": 2}
 """Significant digits of a tile's value (3 where not named)."""
@@ -51,6 +54,28 @@ def mask_text(mask: dict) -> str:
     return text(MASK_AUTO if mask.get("base_used", True) else MASK_AUTO_ONLY, file=mask["file"], **counts)
 
 
+SPACE_KEYS = ("R_nm", "D_nm", "width", "H_nm", "base_nm", "coverage")
+"""The values a real-space picture of grains is drawn from (``domain.real_space.real_space``)."""
+
+
+def _space_values(entry) -> Optional[dict]:
+    return {key: entry.value(key) for key in SPACE_KEYS} if entry is not None else None
+
+
+def _joined(entry, series=None, index: int = 0) -> bool:
+    """The solution is a joined film: a continuous layer under the grains, or grains joined into a network across the
+    real-space picture (``domain.real_space.arrangement``; of the growing film when the series is given)."""
+    space = real_space(_space_values(entry))
+    if space is None:
+        return False
+    if space.continuous:
+        return True
+    growing = grown([real_space(item) if item else None for item in series], index) if series else None
+    if growing is not None:
+        return arrangement(*growing) == "network"
+    return arrangement(space, visible(space, top_grains(space))) == "network"
+
+
 class ClientPanelMixin:
     """Needs the widgets of ``views/sputter_main_view.py``, ``service`` and ``_notify``."""
 
@@ -64,6 +89,7 @@ class ClientPanelMixin:
         self._empty_kind = ""
         self.patterns = PatternPair(self.pattern_layout)
         self.real_space = RealSpacePicture(self.space_layout)
+        self.components = ComponentsPicture(self.components_layout)
         self.image_switch.currentIndexChanged.connect(self._show_image_kind)
         self.evolution = EvolutionPlot(self.evolution_layout, self.select_window)
         self.window_slider.valueChanged.connect(self.select_window)
@@ -240,6 +266,7 @@ class ClientPanelMixin:
         self._show_entry()
         self._draw_evolution()
         self.refresh_windows_table()
+        self.show_process_tab()
 
     def _back_to_default(self) -> None:
         window = self.client_window()
@@ -252,21 +279,27 @@ class ClientPanelMixin:
         entry = window.chosen(self.client_choices) if window is not None else None
         porous = result is not None and result.porous
         self.default_button.setVisible(entry is not None and entry.label != window.default_label())
-        for key, _caption, unit, tip in TILES:
+        joined = not porous and entry is not None and _joined(entry, *self._space_series())
+        for key, caption, unit, tip in TILES:
             value = entry.value(key) if entry is not None else None
             digits = TILE_DIGITS.get(key, 3)
             self.tile_values[key].setText(shown_number(value, digits))
+            if not porous:
+                self.tile_captions[key].set_full_text(tr(CONNECTED_TILES[key][0] if joined and key in CONNECTED_TILES
+                                                         else caption))
+                tip = CONNECTED_TILES[key][1] if joined and key in CONNECTED_TILES else tip
             words = [tr(RELATIVE_RADIUS_TIP if porous and key == "R_nm" else tip)]
             found = range_text(entry.range(key) if entry is not None else None, digits)
             if found:
                 words.append(f"{found} {unit}".rstrip())
             self.tiles[key].setToolTip("\n".join(words))
-            self.tiles[key].setVisible(value is not None and result.shows(key))
+            self.tiles[key].setVisible(value is not None and result.shows(key) and not (joined and key in CONNECTED_HIDDEN))
         deviation = entry.fit_deviation if entry is not None else None
         self.deviation_value.setText(shown_number(deviation))
         self.deviation_caption.setVisible(deviation is not None)
         self.deviation_value.setVisible(deviation is not None)
         self._draw_space()
+        self._draw_components()
         if entry is None:
             reason = message_text(window.error) if window is not None and window.error else ""
             static = result is not None and result.static
@@ -280,11 +313,34 @@ class ClientPanelMixin:
         self.patterns.show(patterns, entry.label, entry_name(entry.label))
 
     def _show_image_kind(self, _index: int = 0) -> None:
-        """The patterns or the solution in real space, as the switch says."""
-        space = self.image_switch.currentData() == "space"
-        self.pattern_host.setCurrentIndex(1 if space else 0)
-        if space:
+        """The patterns, the solution in real space or the model's terms, as the switch says."""
+        page = {"space": 1, "components": 2}.get(self.image_switch.currentData(), 0)
+        self.pattern_host.setCurrentIndex(page)
+        if page == 1:
             self._draw_space()
+        elif page == 2:
+            self._draw_components()
+
+    def _draw_components(self) -> None:
+        """The model of the chosen solution split into its physical terms, and their shares over the scan (drawn only
+        while that picture is shown)."""
+        if self.pattern_host.currentIndex() != 2:
+            return
+        window, result = self.client_window(), self.client_result
+        entry = window.chosen(self.client_choices) if window is not None else None
+        if entry is None:
+            reason = message_text(window.error) if window is not None and window.error else ""
+            static = result is not None and result.static
+            self.components.show_message(text(SAMPLE_ERROR if static else WINDOW_ERROR, reason=reason))
+            return
+        try:
+            patterns = self._patterns(window)
+        except (OSError, ValueError) as exc:
+            self.components.show_message(message_text(exc))
+            return
+        names = {key: tr(COMPONENT_NAMES.get(key, name)) for key, name in result.components}
+        self.components.show(patterns, entry.label, entry.components, names, result.component_series(self.client_choices),
+                             self.client_window_index, axis_label(result))
 
     def _draw_space(self) -> None:
         """The chosen solution of the window shown, in real space (drawn only while that picture is shown)."""
@@ -298,7 +354,27 @@ class ClientPanelMixin:
             self.real_space.show_message(text(SAMPLE_ERROR if static else WINDOW_ERROR, reason=reason))
             return
         substrate = getattr(window, "substrate", "") or result.substrate
-        self.real_space.show(entry.values, result.metal, substrate, entry_name(entry.label))
+        series, index = self._space_series()
+        self.real_space.show(entry.values, result.metal, substrate, entry_name(entry.label), series, index)
+
+    def _space_series(self) -> tuple:
+        """(values of the chosen solution of every window of the shown window's series, its place): the windows of a
+        scan in time order; the samples of a series on the same substrate by nominal thickness. (None, 0) without a
+        window. The real-space picture draws them as one growing film."""
+        window, result = self.client_window(), self.client_result
+        if window is None or result is None:
+            return None, 0
+        windows = list(result.windows)
+        if result.static:
+            substrate = window.substrate or result.substrate
+            same = [(position, item) for position, item in enumerate(windows)
+                    if (item.substrate or result.substrate) == substrate]
+            same.sort(key=lambda pair: (pair[1].nominal_nm is None, pair[1].nominal_nm or 0.0, pair[0]))
+            windows = [item for _, item in same]
+        index = next((place for place, item in enumerate(windows) if item is window), None)
+        if index is None:
+            return None, 0
+        return [_space_values(item.chosen(self.client_choices)) for item in windows], index
 
     def _patterns(self, window: ClientWindow):
         """The images of a window (the last few are kept: going back and forth does not read them again)."""
@@ -318,6 +394,7 @@ class ClientPanelMixin:
     def redraw_client_plots(self) -> None:
         self.patterns.redraw()
         self.real_space.redraw()
+        self.components.redraw()
         self.evolution.redraw()
 
     def refresh_client_panel_language(self) -> None:

@@ -77,7 +77,8 @@ def test_the_documents_say_how_to_update_a_source_checkout() -> None:
         assert "git stash" in after_reset and "git branch" in after_reset, path.name
         # ... and so does what the two commands do not do, and the one kind of untracked file they replace.
         assert re.search(r"[Rr]un (?:the script|it) once", after_reset), path.name
-        assert "line endings" in after_reset and "does not start until the script has written them again" in after_reset
+        assert "line endings" in after_reset and re.search(r"do(?:es)? not start until the script has written them again",
+                                                           after_reset), path.name
         assert re.search(r"where the new version has (?:a file|one)", after_reset), path.name
         assert re.search(r"[Dd]o not merge or push (?:`my-work`|that branch)", after_reset), path.name
         assert re.search(r"history of `main`[^.]*rewritten on 2026-10-13", text), path.name
@@ -144,8 +145,14 @@ def test_the_update_script_does_what_the_documents_say() -> None:
                       "delete that copy with `git stash drop`", "it would write conflict markers into the file",
                       "`git checkout HEAD -- config/model_parameters.json`"):
             assert words in text, (path.name, words)
-    # The model folder is the one .gitattributes hands out byte for byte.
-    assert "modules/Fitting_1D_Model/Workflow_v5/** -text" in _text(ROOT / ".gitattributes")
+    # The folder .gitattributes hands out byte for byte (the analysis package of Sputter; the fit1d kit was removed in
+    # 0.2.0), and the network of Predict parameters as binary.
+    attributes = _text(ROOT / ".gitattributes")
+    assert "utils/sputter_client/** -text" in attributes and "gisaxs1d_gui_kit" not in attributes
+    for path in (README, DEVELOPMENT):  # the documents name the folder that is handed out byte for byte, and only it
+        said = re.findall(r"byte for byte \(([^)]*)\)", _flat(path)) + re.findall(r"marks `-text` \(([^)]*)\)", _flat(path))
+        assert said and all(item == "the analysis package of Sputter" for item in said), (path.name, said)
+    assert "src/gimap/features/fitting/domain/posterior/data/*.npz binary" in attributes
     development = _flat(DEVELOPMENT)
     assert "1: not updated, or not completely" in development and "After the two plain commands, run the script once" in development
     for words in ("needs Git 2.16 or newer", "another program holds it open", "`git stash drop` when the stash holds nothing else",
@@ -766,43 +773,37 @@ def test_auto_detect_and_a_wrong_estimate_on_the_public_image(tmp_path: Path) ->
 # -- what 1D Predict does with a changed model file ----------------------------------------------------
 
 
-def test_the_documents_say_what_each_network_does_with_a_changed_model_file(tmp_path: Path) -> None:
-    """README, sections 6.5 and 14.3 of the manual: *General V5* does not start and names the file,
-    *Single RC specialist* goes on with its numerical fit and gives "Fast model unavailable" as the reason."""
+def test_the_documents_say_what_predict_does_with_a_changed_network_file(tmp_path: Path) -> None:
+    """README, sections 6.5 and 14.3 of the manual: Predict parameters does not start and names the file when its
+    weights are missing or differ from the SHA-256 of their record."""
     for path in (README, MANUAL):
         text = _flat(path)
-        assert "*General V5* does not start" in text, path.name
-        assert "goes on with its numerical fit" in text, path.name
-        assert "Fast model unavailable" in text, path.name
-        assert "with a changed or missing file it does not start" not in text, path.name  # true of one network only
-    assert "the message names the file" in _flat(README) and "the message names the file" in _flat(MANUAL)
+        assert "with a changed or missing file it does not start, and the message names the file" in text, path.name
+        assert "General V5* does not start" not in text and "Fast model unavailable" not in text, path.name
 
-    # General V5: every file of its manifest is compared before anything is loaded; the assertion carries the name.
-    v5 = ROOT / "modules" / "Fitting_1D_Model" / "Workflow_v5"
-    general = _text(v5 / "conditional_v2" / "conditional_fast_predict_v2.py")
-    assert "assert hashlib.sha256((R/name).read_bytes()).hexdigest()==h,name" in general
+    # The loader compares the weights with the SHA-256 of their record before anything is used; the error names them.
+    from src.gimap.features.fitting.domain.posterior.flow import Network
 
-    # Single RC specialist: the predictor refuses a changed file ...
-    from src.gimap.features.fitting.infrastructure.adapters.stable_blue import BluePredictor
+    for suffix in (".npz", ".json"):
+        shutil.copy(ROOT / "tests" / "data" / "ml1d" / f"flow_fixture{suffix}", tmp_path / f"flow{suffix}")
+    Network.load(tmp_path / "flow")  # as it is in the repository: accepted
+    changed = tmp_path / "flow.npz"
+    changed.write_bytes(changed.read_bytes() + b"\r\n")  # what a converting checkout would do
+    with pytest.raises(ValueError, match="flow.npz is not the file the network was exported as"):
+        Network.load(tmp_path / "flow")
+    # A missing network: the message says where it belongs.
+    from src.gimap.features.fitting.domain.posterior import network
 
-    bundle = tmp_path / "stable_blue_rc_v1"
-    shutil.copytree(v5 / "stable_blue_rc_v1", bundle)
-    BluePredictor(bundle)  # as it is in the repository: accepted
-    changed = bundle / "protocol.json"
-    changed.write_bytes(changed.read_bytes().replace(b"\n", b"\r\n") + b" ")  # what a converting checkout does
-    with pytest.raises(ValueError, match="checksum mismatch: protocol.json"):
-        BluePredictor(bundle)
-    # ... and the engine that uses it catches that, records the reason and goes on with the numerical fit.
-    engine = _text(ROOT / "src" / "gimap" / "features" / "fitting" / "infrastructure" / "adapters" / "stable_blue.py")
-    assert 'reason = f"Fast model unavailable: {type(exc).__name__}: {exc}"' in engine
-    assert 'best_source="stable_numerical_fallback"' in engine and "fallback_reason=reason" in engine
-    # The reason reaches the table of the 1D Predict window.
-    dialog = _text(ROOT / "src" / "gimap" / "features" / "fitting" / "presentation" / "workflow_v5_dialog.py")
-    assert 'trf("Reason: {reason}", reason=r["fallback_reason"])' in dialog
+    os.environ[network.VARIABLE] = str(tmp_path / "absent")
+    try:
+        with pytest.raises(FileNotFoundError, match="absent.npz"):
+            network.load()
+    finally:
+        del os.environ[network.VARIABLE]
 
     section = " ".join(_part(_part(_text(MANUAL), "## 14. Troubleshooting"), "### 14.3 1D Predict Does Not Start", "### ").split())
-    for said in ("tools\\update_source.ps1", "converted line endings", "`git status` does not show it",
-                 "git checkout -- modules/Fitting_1D_Model/Workflow_v5", "also when there is nothing new to download"):
+    for said in ("`flow_v1.json`", "the message names the file", "`git status` lists it as modified",
+                 "git checkout -- src/gimap/features/fitting/domain/posterior/data", "as binary (`.gitattributes`)"):
         assert said in section, said
 
 
@@ -900,7 +901,14 @@ def test_the_first_fitting_model_is_neutral_as_the_manual_says() -> None:
     assert "A new installation starts with a neutral model" in _flat(MANUAL)
     assert "Fitting starts a new user with a neutral model" in _flat(CHANGELOG)
     template = json.loads(_text(ROOT / "config" / "model_parameters.json"))
-    values = list(_numbers(template.get("fitting", {})))
+    fitting = template.get("fitting", {})
+    values = list(_numbers(fitting.get("global_parameters", {})))
+    for entry in (fitting.get("particles") or {}).values():
+        for family, block in entry["parameters"].items():
+            # exact conversions of round defaults into the store's conventions (σD = D·(σnn/D)/√(2π), a vertical
+            # cylinder's scale in 10⁻⁶⟨R⁴⟩/4: tests/test_release2_defaults_template.py) are not values of a fit
+            values += list(_numbers({key: value for key, value in block.items() if key != "sigma_diameter"
+                                     and not (family == "vertical_cylinder" and key == "intensity")}))
     assert values
     # A value left by a fit has many digits; a default somebody chose has few.
     fitted = [value for value in values if float(f"{value:.4g}") != value]

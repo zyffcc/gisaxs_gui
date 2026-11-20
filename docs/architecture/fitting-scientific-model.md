@@ -3,8 +3,8 @@
 - **Status**：Current
 - **Scope**：Fitting 一维散射模型、分量累加、q 单位和绘图数据对齐
 - **Related code**：`src/gimap/features/fitting/domain/scattering_model.py`（公式与手动模型）、
-  `fit_model.py`（当前页面的模型）、`fit_engine.py`（Refine 与 Search）、`native_solution.py`（快速物理拟合与
-  1D Predict 的解 → 手动模型）、`curve_transformations.py`、`manual_refinement.py`（已删除的旧页面的 Local Refine /
+  `fit_model.py`（当前页面的模型）、`fit_engine.py`（Refine 与 Search）、`native_solution.py`（0.2.0 之前的快速物理拟合与
+  1D Predict V5 的解 → 手动模型，用于旧记录）、`curve_transformations.py`、`manual_refinement.py`（已删除的旧页面的 Local Refine /
   Global Search，现无界面调用）
 - **Related tests**：`tests/test_fitting_domain_scattering_model.py`、`tests/test_fit_engine.py`、
   `tests/test_native_solution.py`、
@@ -22,9 +22,9 @@
 都是**相对**的（σR/R、σh/h、σD/D），拟合在 `fit_engine.py`。下文的参数顺序、Local Refine / Global Search 说的是
 `scattering_model` 的手动模型（用户数据目录的 `model_parameters.json`；读它的旧单曲线页已删除）：Sphere / Cylinder 的 σR、σh
 和所有 σD 是绝对宽度（nm），Vertical Cylinder 的 σR 是相对的。两者公式与采样相同，`fit_model.to_manual` /
-`from_manual` 换算宽度；快速物理拟合与 1D Predict 的正演（`modules/Fitting_1D_Model/Workflow_v5/conditional_v2/numpy_forward64.py`）
-另有约定（竖直圆柱归一化为 (2J₁(x)/x)²，背景与分辨率峰的幅度相对粒子曲线），它们的解经 `native_solution.py`
-换成手动模型，并报告与原解曲线的差别。
+`from_manual` 换算宽度。Predict parameters（Fitting 唯一的网络方法；快速物理拟合与 fit1d 已在 0.2.0 删除）用 `cut_model`
+（`FitModel` 的约定）；0.2.0 之前快速物理拟合与 1D Predict V5 用 V5 的正演（`numpy_forward64.py`，竖直圆柱归一化为 (2J₁(x)/x)²，背景与分辨率峰的幅度相对粒子曲线），
+那时的解经 `native_solution.py` 换成手动模型（换算仍保留，用于旧记录）。
 
 ## 单位与参数顺序
 
@@ -181,9 +181,10 @@ Fold overlay 可以让 `+q` 与 `−q` 共享相同的 `|q|` 横坐标，但必�
 
 ## AI proposal 与传统优化交接
 
-> 本节写的是更早的 AI 路径：旧单曲线页的 `Fast Predict`（该页与其控件、binding 已于 2026-11-16 删除，保留本节作记录）。显示的页面上的 AI 是 1D Predict（Workflow V5 `conditional_v2`）：Single analysis 的
-> Fit 步骤 ▸ AI proposal (1D Predict)，以及 Tools ▸ / Fitting ▸ 1D Predict — Fit Many Curves…；它的排序分数没有校准成
-> 概率（候选的 `probability_status` 为 “Not calibrated”），方法见 Physics Manual 第 10 章。下面的契约只约束旧路径。
+> 本节写的是更早的 AI 路径：旧单曲线页的 `Fast Predict`（该页与其控件、binding 已于 2026-11-16 删除，保留本节作记录）。显示的页面上的网络是
+> Predict parameters（`fitting/domain/posterior/`：建议网络 + cut_model 上的后验 + 最小二乘精修）：Single analysis 的
+> Fit 步骤 ▸ Predict parameters，以及 Tools ▸ / Fitting ▸ 1D Predict — Fit Many Curves…；它给出组成与解的后验概率和区间，
+> 方法见 Physics Manual 9.13 与第 10 章（Workflow V5 已于 0.2.0 删除）。下面的契约只约束旧路径。
 
 `Fast Predict` 只执行神经网络 proposal、后验采样和物理 forward verification，用于给出模型拓扑与
 initial parameters；它本身不执行数值精修。其输入源与手动 fitting 完全一致：勾选

@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from . import live as LV
+from . import registry as REG
 
 HERE = Path(__file__).resolve().parent
 ASSETS = HERE.parent.parent / "assets"
@@ -33,7 +34,7 @@ MODES = dict(quick=dict(refine=0, sequence=0, max_windows=60), refine=dict(refin
              full=dict(refine=30, sequence=30, max_windows=96))
 FILES = dict(report_md="REPORT.md", report_png="report.png", report_csv="report.csv", windows_csv="windows.csv",
              evolution_png="evolution.png", patterns_png="patterns.png", summary_json="summary.json",
-             main_json="main/main.json")
+             main_json="main/main.json", process_png="main/process.png")
 
 
 def host_of(metal, substrate):
@@ -85,6 +86,18 @@ def _mask_used(data, label):
                 **{k: auto.get(k) for k in ("dead", "hot", "shadow", "holder", "invalid", "kept", "pixels") if k in auto})
 
 
+def _lam_of(extra) -> "float | None":
+    'The wavelength (nm) the intake options give (--wavelength-nm or --energy-ev), None when neither.'
+    for i, item in enumerate(extra):
+        if item in ("--wavelength-nm", "--energy-ev") and i + 1 < len(extra):
+            try:
+                value = float(extra[i + 1])
+            except ValueError:
+                return None
+            return value if item == "--wavelength-nm" else 1239.841984 / value
+    return None
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     extra = []
@@ -114,6 +127,9 @@ def main(argv=None):
     like = a.like or like
     if a.mode == "auto":
         a.mode = "quick" if fam.split("_")[0] in ("si", "tio2") else "refine"
+        lam = _lam_of(extra)
+        if a.mode == "quick" and lam is not None and REG.lam_outside(a.metal, lam, REG.load(fam)):
+            a.mode = "refine"
     out = Path(a.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     data = Path(a.data).resolve() if a.data else Path(os.environ.get("IAM_DATA", "")).resolve() if os.environ.get("IAM_DATA") else None

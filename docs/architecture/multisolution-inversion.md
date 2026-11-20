@@ -11,15 +11,14 @@
 - **Last verified**：2026-09-06；与发布版本的关系：2026-11-01
 
 > **与 GIMaP 发布版本的关系（先读）。** 本文是研究流水线 **PosteriorV8**（`utils/ML_Fitting_1D_GISAXS/PosteriorV8/`）
-> 的方法模板，不描述 GIMaP 里的 1D Predict。`src/gimap` 不导入 PosteriorV8。随 GIMaP 发布、界面上用的 1D Predict
-> （Fitting ▸ Fit 步骤的 AI proposal、Tools ▸ / Fitting ▸ 1D Predict — Fit Many Curves…）是 **Workflow_v5
-> `conditional_v2`**（`modules/Fitting_1D_Model/Workflow_v5/conditional_v2/`：proposal 网络、校正网络、update 网络和
-> 4 步阻尼 Gauss–Newton），它的方法、排序分数（σ 归一化残差的 Huber 平均）和验证状态写在
-> [Physics and Methods Reference](../Physics_Manual.md) 第 10 章。因此：
+> 的方法模板，不描述 GIMaP 里的 1D Predict。`src/gimap` 不导入 PosteriorV8。随 GIMaP 发布、界面上用的是
+> **Predict parameters**（`src/gimap/features/fitting/domain/posterior/`：条件归一化流建议网络、cut_model 上的重要性加权与
+> 局部后验、最小二乘精修；Fitting ▸ Fit 步骤与 Tools ▸ / Fitting ▸ 1D Predict — Fit Many Curves…），方法与基准写在
+> [Physics and Methods Reference](../Physics_Manual.md) 9.13 与第 10 章；0.2.0 之前是 Workflow V5 `conditional_v2`（已删除）。因此：
 >
 > - 下文的打分（`RMS((log I_pred − log I_obs)/σ_log)`）、分支枚举、聚类与门禁都只属于 PosteriorV8，不是发布版本的行为；
-> - 下文说正向模型“以 `fitting-scientific-model.md` 为唯一权威”：发布的 V5 与快速物理拟合用自己的正演
->   （`numpy_forward64.py`，约定见 `fitting-scientific-model.md` 开头），解经 `fitting/domain/native_solution.py` 换成 GUI 模型；
+> - 下文说正向模型“以 `fitting-scientific-model.md` 为唯一权威”：发布版本的 Predict parameters（Fitting 唯一的网络方法；快速物理拟合与 fit1d 已在 0.2.0 删除）用
+>   `cut_model`（Physics and Methods 9.2）；
 > - “Sphere 和 Cylinder 的 sigma 为绝对宽度”只对手动模型的参数存储成立，当前的 `FitModel` 全部用相对宽度；
 > - 下文的阈值是协议要求，相应的 run、模型与 holdout artifact 没有冻结，不能当作结果引用。
 

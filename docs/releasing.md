@@ -96,8 +96,9 @@ would reach the users.
   The build in step 6 keeps other files in `release\`; it replaces only the ZIP, its parts and
   `SHA256SUMS.txt`.)
 
-- The fit1d kit (`utils/gisaxs1d_gui_kit/`) is part of the repository. The builder packs its runtime files
-  after checking each one against the kit's `FILES_SHA256.json` (`tools/list_fit1d_release_files.py`).
+- The fit1d kit (`utils/gisaxs1d_gui_kit/`) and its release check (`tools/list_fit1d_release_files.py`) were
+  removed in 0.2.0; the builder no longer looks for them. The network of Predict parameters is checked against the
+  SHA-256 in its record (`src/gimap/features/fitting/domain/posterior/data/flow_v1.json`).
 
 ## 5. Check the file list (`-ListOnly`)
 
@@ -285,7 +286,7 @@ python -m pip install conda-pack
 python tools/build_macos_release.py --prefix /path/to/clean/conda/environment --out /path/to/release
 ```
 
-The builder collects dependency licence texts, verifies the fit1d manifest, and writes an
+The builder collects dependency licence texts and writes an
 architecture-named ZIP and SHA-256 file. The ZIP contains `app/`, `runtime.tar.gz`, the double-click
 `Start_GIMaP.command`, `BUILD.json` and `pip-freeze.txt`. On first launch the runtime is verified and
 relocated into `~/Library/Application Support/GIMaP/runtimes/<sha256>/`; application and input folders
@@ -332,6 +333,7 @@ completion times. Fix the demonstrated obstacles in small changes and repeat the
 The first round (2026-11-11, baseline `3b0e687`) reproduced three groups of state defects: Analyze source
 identity on project reopening, fitting input/result ownership, and cancellation after an earlier fit had
 converged. The established 81-test selection passed, while the initial 23 targeted cases exposed 22 failures.
-Review also added mixed All/subset chunk selections, adjacent-sum source order and invalid saved fit1d values. The dedicated workflow
+Review also added mixed All/subset chunk selections, adjacent-sum source order and invalid saved fit1d values (fit1d was
+removed in 0.2.0). The dedicated workflow
 test files retain these counterexamples for subsequent GUI changes. The navigation and model equations
 were kept unchanged in this round.

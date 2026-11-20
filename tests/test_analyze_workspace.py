@@ -497,6 +497,16 @@ def main():
     }))
     window.close()
     context.jobs.shutdown()
+    # Delete the window while the application still exists: left to the interpreter's exit, the window and the
+    # application are destroyed in no fixed order, an access violation in about one run of four.
+    import gc
+    from PyQt5.QtCore import QEvent
+
+    window.deleteLater()
+    QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    app.processEvents()
+    del window
+    gc.collect()
 
 
 if __name__ == "__main__":

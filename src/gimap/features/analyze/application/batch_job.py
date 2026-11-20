@@ -53,9 +53,9 @@ PICTURE_BYTES = {"png": 3_000_000, "tif": 14_000_000, "svg": 3_000_000, "pdf": 3
 PICTURE_SECONDS = 0.6
 WORKERS_START_SECONDS = 6.0
 """Starting the worker processes of a batch that reduces several frames at once."""
-MODEL_FIT_SECONDS = {"auto": 20.0}
-"""The particle-model fit of one frame: comparing sphere and cylinders (measured: 20 to 25 s for 800 points);
-one named model about half of that."""
+MODEL_FIT_SECONDS = 15.0
+"""Predict parameters on the horizontal cut of one frame (10 to 20 s, whether the network chooses the composition
+or it is given)."""
 
 
 def frames_at_once(speed: str, *, cores: int, free_bytes: Optional[int], frame_pixels: int, frames: int) -> int:
@@ -97,7 +97,7 @@ def batch_cost(choices: BatchChoices, *, frames: int, frame_pixels: int, curve_p
         per_frame += int(pixels * 4 * (0.3 if choices.frame_format == "hdf5" else 1.0))  # 32-bit; HDF5 is compressed
         seconds += pixels * 3e-8
     if choices.fit == FIT_MODEL:
-        seconds += MODEL_FIT_SECONDS.get(choices.fit_model, 10.0)
+        seconds += MODEL_FIT_SECONDS
     total = per_frame * frames + (curve_points * 13 * frames if choices.tables else 0)
     at_once = max(1, int(at_once))
     return int(per_frame), int(total), seconds * frames / at_once + (WORKERS_START_SECONDS if at_once > 1 else 0.0)

@@ -75,7 +75,7 @@ rings=ring_overlays(report))`）、结果（峰表：简短的面内/面外说�
 消失和出现相距 1% 以内合成一行“moved?”）、报告（“Save Report…”存成一个网页：`guided_report.py`，
 q 图带环、I(q) 标出峰（`AnalyzeAutomation.curve_png`）、序列对比表，图片内嵌，任何浏览器能开；也可存 Markdown）。
 只有人知道的值变成输入框，“Run Again” 用这些回答，之前的回答保留。GISAXS 帧走 `application/gisaxs_procedure.py`
-（Yoneda 切线、对称中心、两半、面内间距、数值物理拟合；拟合由 Fitting 的 `create_quick_fit()` 经组合根注入）。
+（Yoneda 切线、对称中心、两半、特征长度 2π/q*、预测参数；预测由 Fitting 的 `create_curve_fit()` 经组合根注入：网络提出组成和数值，每个解再做最小二乘，按后验概率排序；报告最可能的解及其 68 % 区间，第二个解的概率 ≥ 0.2 时请用户选模型，χ²/N > 10 或数值落在范围边界上列为待查）。
 由 `bootstrap.create_guided_analysis` 组装，`app/main_window.py` 把它的控件放进 Analyze 的 Results 步骤和
 Results 标签页（Start 页在 `app/presentation/home_page.py`）。
 

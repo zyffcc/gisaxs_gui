@@ -6,7 +6,7 @@ solutions from the other fitting methods, and what is exported.
   has measured points; in a hole of it, and where one half reaches further, the measured half alone),
   or one half — with σ carried along (σ of a mean: ½·√(σ₊² + σ₋²)); then the fitting range and the
   points left out. ``prepare_points`` also says what the points are made of.
-* ``model_from_solution``: a solution of the quick physical fit or of 1D Predict (``native_v5``)
+* ``model_from_solution``: a solution of Predict parameters (a row of 1D Predict or of Analyze, ``native_v5``)
   as a model, and how closely the model reproduces its curve.
 * ``export_table`` / ``fit_record``: the points, the model and its terms, the residuals; and the
   JSON record of the model, the fit and its settings written next to them.
@@ -43,6 +43,7 @@ from ..domain.fit_model import (
     INFO,
     LINEAR,
     RESOLUTION,
+    SIZE_LAWS,
     Component,
     FitModel,
     Parameter,
@@ -52,6 +53,7 @@ from ..domain.fit_model import (
     model_from_dict,
     model_to_dict,
     new_component,
+    intensity_size,
     number_size,
     qz_plus_r,
     sigma_nn_over_d,
@@ -71,20 +73,21 @@ SIDES = (
 SERIES_SIDES = tuple(item for item in SIDES if item[0] != "both")
 """What a series offers (``shared/signed_cut.FIT_HALVES``): every frame is fitted on one curve."""
 ANALYZE_SIDES = {"both_abs": "both", "mean": "mean", "positive": "positive", "negative": "negative"}
-ONE_CURVE_METHODS = ("shapes", "ai", "fit1d")
+ONE_CURVE_METHODS = ("predict",)
 """The methods that take one curve with one measurement per |q| (Refine and Search also fit both halves)."""
 BOTH_USES_MEAN = "Both halves on |q| cannot be fitted by this method: the mean of both halves is used."
 """Said when one of ``ONE_CURVE_METHODS`` runs while both halves are chosen: the page goes over to the mean,
 so that the points it shows and records are the points that were fitted."""
-QUICK_FIT_MIN_POINTS = 8
-"""The quick physical fit needs this many points of the curve it fits (more than ``MAX_FIT_POINTS`` are merged)."""
-TOO_FEW_FOR_QUICK_FIT = {
+CURVE_FIT_MIN_POINTS = 8
+"""Predict parameters on one cut (``bootstrap.create_curve_fit``) needs this many points (more than ``MAX_FIT_POINTS``
+are merged)."""
+TOO_FEW_FOR_CURVE_FIT = {
     "positive": "Only {points} points on the q > 0 half: this fit needs at least {minimum}",
     "negative": "Only {points} points on the q < 0 half: this fit needs at least {minimum}",
     "mean": "Only {points} points in the mean of both halves: this fit needs at least {minimum}",
     "": "Only {points} points in the curve: this fit needs at least {minimum}",
 }
-"""Why the quick physical fit refuses a curve, by what it would have fitted (``preparation["halves"]`` of
+"""Why the fit of one cut (``bootstrap.create_curve_fit``) refuses a curve, by what it would have fitted (``preparation["halves"]`` of
 its rows; ``""``: a curve with one side, taken as it came). Templates: ``{points}``, ``{minimum}``."""
 
 
@@ -221,9 +224,47 @@ def prepare_curve(curve: Curve, side: str = "mean", q_range: Optional[tuple] = N
     return prepare_points(curve, side, q_range, excluded, strict=strict).data
 
 
+CUT_MODEL_FAMILIES = {"sphere": "sphere", "random_cylinder": "cylinder", "cylinder": "cylinder",
+                      "vertical_cylinder": "vertical_cylinder"}
+
+
+def cut_model_solution(row: Mapping) -> FitModel:
+    """A solution in Fitting's own conventions (``physics_backend`` "cut_model": Predict parameters): its values as they
+    are, amplitudes as Int."""
+    components = []
+    for item in row.get("components") or ():
+        p = item["params"]
+        family = CUT_MODEL_FAMILIES[str(item["type"])]
+        component = new_component(family, radius=float(p["R"]), distance=float(p["D"]),
+                                  structure=bool(item.get("structure_factor", True)), law=row.get("law", "number_gauss"))
+        params = dict(component.params)
+        for key in ("sigma_R", "h", "sigma_h", "sigma_nn"):
+            if key in params and p.get(key) is not None:
+                params[key] = _within(params[key], float(p[key]))
+        params["Int"] = _within(params["Int"], float(item.get("amplitude", 1.0)))
+        components.append(Component(family, params, component.structure, component.coupling, component.law))
+    model = FitModel(tuple(components))
+    g = row.get("global_params") or {}
+    for key, source in (("background", "background"), ("res_amplitude", "resolution_amplitude"),
+                        ("res_width", "sigma_Res"), ("res_exponent", "nu_Res"), ("q_resolution", "q_resolution"),
+                        ("alpha_i", "alpha_i"), ("alpha_f", "alpha_f"), ("wavelength", "wavelength")):
+        if g.get(source) is not None:
+            model = model.with_parameter(("globals", key), **_within(model.globals[key], float(g[source])).__dict__)
+    return model
+
+
+def _within(parameter: Parameter, value: float) -> Parameter:
+    """``parameter`` at ``value``, its range widened to hold it."""
+    return Parameter(value, parameter.free, min(parameter.lower, value), max(parameter.upper, value))
+
+
 def model_from_solution(row: Mapping, base: Optional[FitModel] = None) -> tuple[FitModel, float]:
     """A quick-fit or 1D Predict solution as a model (free/fixed and ranges from ``base``), and the
     largest relative difference between the model's curve and the solution's own curve."""
+    if row.get("physics_backend") == "cut_model":
+        proposed = cut_model_solution(row)
+        model = constrain_proposal(proposed, base) if base is not None else proposed
+        return model, solution_deviation(model, row)
     converted = native_solution_mapping(row)
     proposed = from_manual(converted.mapping)
     model = constrain_proposal(proposed, base) if base is not None else proposed
@@ -276,8 +317,10 @@ def export_table(model: FitModel, data: FitData) -> tuple[list[str], np.ndarray]
 
 def derived_values(component: Component) -> dict:
     size = number_size(component)  # None: not defined for this intensity-weighted width (fit_model.number_size)
+    by_intensity = intensity_size(component)
     return {"R_number_mean_nm": None if size is None else round(size[0], 6),
             "sigma_R_number_rel": None if size is None else round(size[1], 6),
+            "R_intensity_mean_nm": round(by_intensity[0], 6), "sigma_R_intensity_rel": round(by_intensity[1], 6),
             "sigma_nn_over_D": None if not component.structure else round(sigma_nn_over_d(component), 6)}
 
 
@@ -290,8 +333,9 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
     record = {
         "software_version": SOFTWARE,
         "model": model_to_dict(model),
-        "equation": "I(q) = BG + k * [sum_i Int_i * P_i(q) * S_i(q; D_i, sigma_D_i/D_i) + A / (1 + (|q|/w)^nu)]; "
-                    "a component with coupling 'da' has P_i + |<F_i>|^2 (S_i - 1) in place of P_i * S_i",
+        "equation": "I(q) = BG + k * [sum_i Int_i * P_i(q) * S_i(q; D_i, sigma_nn_i/D_i) + A / (1 + (|q|/w)^nu)]; "
+                    "P_i(0) = 1; S_i the Hosemann paracrystal; a component with coupling 'da' has "
+                    "P_i + |<F_i>|^2 (S_i - 1) in place of P_i * S_i; sizes per component ('sizes')",
         "curve": None if curve is None else {"name": curve.name, "path": curve.path, "q_unit_of_file": curve.source_unit,
                                              "q_unit_from": curve.unit_from},
         "points": {"side": side, "q_range_nm^-1": None if q_range is None else [float(v) for v in q_range],
@@ -304,7 +348,7 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
         # spheres of a horizontal cut: q_z = 0 (effective interface) or the two-path model with the cut's angles
         "sphere_model": "effective interface (q_z = 0)" if grazing(model) is None else "two paths (direct + exit-reflected)",
         "qz_plus_R": {f"{index}": round(value, 4) for index, value in qz_plus_r(model)},
-        # every particle's radius by number (as microscopy and fit1d count) and σ_nn/D (Hosemann, fit1d's w/D)
+        # every particle's radius by number (as microscopy and fit1d count) and by intensity (V²), and σ_nn/D
         "derived": [derived_values(component) for component in model.components],
     }
     if curve is not None and curve.path:
@@ -322,8 +366,8 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
 
 __all__ = [
     "ANALYZE_SIDES", "BASE_GLOBALS", "FAMILIES", "GLOBALS", "GRAZING", "INFO", "RESOLUTION", "grazing", "qz_plus_r", "derived_values",
-    "number_size", "sigma_nn_over_d", "LINEAR", "NM_PER_A", "PHASES", "PROGRESS_LINE", "SIDES",
-    "BOTH_USES_MEAN", "ONE_CURVE_METHODS", "QUICK_FIT_MIN_POINTS", "SERIES_SIDES", "TOO_FEW_FOR_QUICK_FIT",
+    "intensity_size", "number_size", "sigma_nn_over_d", "SIZE_LAWS", "LINEAR", "NM_PER_A", "PHASES", "PROGRESS_LINE", "SIDES",
+    "BOTH_USES_MEAN", "ONE_CURVE_METHODS", "CURVE_FIT_MIN_POINTS", "SERIES_SIDES", "TOO_FEW_FOR_CURVE_FIT",
     "Component", "Curve", "FitData", "FitModel", "FitResult", "FitStopped", "MissingHalf", "Parameter", "PreparedCurve",
     "evaluate", "export_table", "fit", "fit_record", "fit_resolving", "fit_scales", "from_manual", "left_out_points", "log_rmse",
     "model_from_dict", "model_from_solution", "model_to_dict", "new_component", "parameter_text", "point_key",

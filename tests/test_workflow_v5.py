@@ -1,15 +1,16 @@
-"""Scientific input, isolated-job routing and simplified UI regression checks."""
+"""The 1D Predict window and its job: scientific input, isolated-job routing, options (V5's network, the Single RC
+specialist, the physical fit and fit1d were retired in 0.2.0: their saved options open as Predict parameters), UI
+regression checks."""
 
 from pathlib import Path
 from types import SimpleNamespace
-import json
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import numpy as np
 import pytest
 
-from src.gimap.features.fitting.application.workflow_v5 import validate_options, bundled_workflow
+from src.gimap.features.fitting.application.workflow_v5 import RETIRED, default_options, validate_options
 from src.gimap.features.fitting.infrastructure.adapters.workflow_v5 import prepare_sides, read_curve
 from src.gimap.features.fitting.infrastructure.adapters.ai_pipeline import AiPipelinePredictor
 from src.gimap.features.fitting.application.ai_models import CandidateGenerationRequest
@@ -32,11 +33,12 @@ def test_signed_native_nodes_units_and_uncertainties():
 @pytest.mark.parametrize(
     "change",
     [
-        dict(method="model", sigma_res=0.1),
-        dict(method="model", nu_res=4),
         dict(components=[4]),
-        dict(normalizer=0),
-        dict(search_combinations=35),
+        dict(components=[1, 1, 1, 1]),
+        dict(cut_qz=-0.1),
+        dict(cut_qz=float("nan")),
+        dict(method="network"),
+        dict(max_solutions=0),
         dict(q_unit="pixel"),
     ],
 )
@@ -68,40 +70,35 @@ def test_new_bundle_routes_to_new_worker_preserving_existing_outputs(tmp_path):
     sentinel = tmp_path / "previous.json"
     sentinel.write_text("previous")
     request = CandidateGenerationRequest(
-        bundled_workflow(),
+        tmp_path / "unused",
         tmp_path,
         np.arange(1, 9),
         np.arange(8.0) - 2,
         np.ones(8),
         {},
-        constraints={"workflow_v5": dict(numerical=False)},
+        constraints={"workflow_v5": dict(method="experimental", components=[2])},
         clear_output_dir=True,
     )
     job = AiPipelinePredictor().create_job_request(request)
     assert job.handler.endswith("workflow_v5:run_workflow_job")
     assert job.payload["intensity"][0] == -2
-    assert not job.payload["options"]["numerical"]
+    assert job.payload["options"]["method"] == "posterior"  # a retired method's options: Predict parameters
+    assert job.payload["options"]["components"] == [2]
     assert sentinel.read_text() == "previous"
 
 
-def test_imported_assets_remain_identical():
-    """Every file of the bundled model is the one its manifest was made from.
-
-    Git holds all of them, the weights (``*.h5``, ``*.npz``) included, so a source checkout can run
-    1D Predict. A checkout that converts line endings would change the files; a missing file is a
-    failure that names it.
-    """
-    import hashlib
-
-    root = bundled_workflow()
-    manifest = json.loads((root / "conditional_fast_manifest_v2.json").read_text())
-    absent = [name for name in manifest["files"] if not (root / name).is_file()]
-    assert not absent, (
-        f"{len(absent)} model files are missing from {root}, so 1D Predict cannot run here "
-        f"(git holds them: `git checkout -- <that folder>` brings them back): " + ", ".join(absent)
-    )
-    for name, sha in manifest["files"].items():
-        assert hashlib.sha256((root / name).read_bytes()).hexdigest() == sha, name
+def test_options_saved_with_the_retired_methods_open_as_predict_parameters():
+    saved = {**default_options(), "method": "model", "numerical": False, "search_combinations": 12, "normalizer": None,
+             "amplitude_calibration": True, "condition_combinations": 3}
+    options = validate_options(saved)
+    assert options["method"] == "posterior" and not set(RETIRED) & set(options)
+    assert validate_options({"method": "stable"})["method"] == "posterior"
+    for retired in ("experimental", "fit1d"):  # the physical fit and fit1d, with their own options
+        options = validate_options({"method": retired, "sigma_res": 0.5, "nu_res": 40, "fit1d_mode": "auto",
+                                    "fit1d_qz": 0.3})
+        assert options["method"] == "posterior" and not set(RETIRED) & set(options)
+        assert options["cut_qz"] == 0.3  # fit1d's q_z of the cut is kept under its new name
+    assert default_options()["method"] == "posterior"
 
 
 def test_completed_job_reports_observed_residual_without_mandatory_cutoff(tmp_path):
@@ -110,7 +107,7 @@ def test_completed_job_reports_observed_residual_without_mandatory_cutoff(tmp_pa
 
     app = QApplication.instance() or QApplication([])
     dialog = WorkflowV5Dialog()
-    row = dict(file="test", side="positive", rank=1, combination="sphere", best_log_rmse=.05, signed_weighted_rms=1, best_source="experimental_physical", native_q=[1,2], observed=[1,1], sigma=[.1,.1], display_q=[1,2], display_fit=[1,1])
+    row = dict(file="test", side="positive", rank=1, combination="sphere", best_log_rmse=.05, signed_weighted_rms=1, best_source="posterior", native_q=[1,2], observed=[1,1], sigma=[.1,.1], display_q=[1,2], display_fit=[1,1])
     result = SimpleNamespace(succeeded=True, value=dict(candidates=[row], output_dir=str(tmp_path), records=[dict(status="complete")], summary=dict(runtime_seconds=1)))
     dialog._completed(result)
     # The status line says what finished; what the candidates are worth is the warning under the title, how to
@@ -119,7 +116,7 @@ def test_completed_job_reports_observed_residual_without_mandatory_cutoff(tmp_pa
     from PyQt5.QtWidgets import QLabel
 
     warning = dialog.findChild(QLabel, "workflowV5Experimental")
-    assert warning.isVisibleTo(dialog) and "not calibrated probabilities" in warning.toolTip()
+    assert warning.isVisibleTo(dialog) and "probability" in warning.toolTip()
     assert "no mandatory cutoff" in dialog.table.item(0, 3).toolTip()
     assert "measurement noise" in dialog.table.item(0, 3).toolTip()
     dialog.close()
@@ -150,7 +147,7 @@ def test_the_1d_predict_figure_follows_the_light_and_dark_theme(tmp_path):
         q = np.linspace(0.1, 2.0, 40)
         observed = 100 * np.exp(-(q / 0.6) ** 2) + 1
         row = dict(file="test", side="positive", rank=1, combination="sphere", best_log_rmse=.05, signed_weighted_rms=1,
-                   best_source="experimental_physical", native_q=q.tolist(), observed=observed.tolist(),
+                   best_source="posterior", native_q=q.tolist(), observed=observed.tolist(),
                    sigma=(0.05 * observed).tolist(), display_q=q.tolist(), display_fit=(observed * 1.01).tolist())
         dialog.set_results([row], str(tmp_path))
         axes = dialog.figure.axes[0]
@@ -175,10 +172,13 @@ def test_dialog_settings_keep_the_components_and_resolution():
 
     app = QApplication.instance() or QApplication([])
     dialog = WorkflowV5Dialog(
-        options=dict(components=[2, 2], sigma_res=0.01, nu_res=7, numerical=False)
+        options=dict(method="experimental", components=[2, 2], sigma_res=0.01, nu_res=7, cut_qz=0.42)
     )
-    assert dialog.options()["components"] == [2, 2]
-    assert dialog.options()["sigma_res"] == 0.01
-    assert not dialog.options()["numerical"]
+    options = dialog.options()
+    assert options["components"] == [2, 2] and options["cut_qz"] == 0.42 and dialog.use_qz.isChecked()
+    assert options["method"] == "posterior" and "sigma_res" not in options and "nu_res" not in options
+    assert not hasattr(dialog, "method")  # one method: nothing to choose
+    dialog.use_qz.setChecked(False)
+    assert dialog.options()["cut_qz"] is None
     dialog.close()
     app.processEvents()

@@ -176,7 +176,7 @@ def test_the_report_shows_the_time_of_every_step_and_how_the_frames_were_read(tm
     page.show()
     page.open_client_result(_with(write_result(tmp_path / "new"), steps=STEPS, reading=READING, workers=8))
     page.show_details(True)
-    page.tabs.setCurrentIndex(1)  # Report
+    page.tabs.setCurrentIndex(2)  # Report
     words = _plain(page.report_steps.text())
     assert words.startswith("Time per step Step Time (m:ss) Read the frames 2:41 1,241 of 1,241 frames read · disk "
                             "0.82 s per frame (85 % of the time) Find the solutions 5:02")

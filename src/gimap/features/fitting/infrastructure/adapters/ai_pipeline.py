@@ -1,4 +1,5 @@
-"""The Predictor/JobRunner adapter of 1D Predict: V5 model folders run as a job (``workflow_v5``)."""
+"""The Predictor/JobRunner adapter of 1D Predict: one curve through the 1D Predict job (``workflow_v5``) with the
+options of the request (Predict parameters by default)."""
 
 from __future__ import annotations
 
@@ -10,30 +11,19 @@ from src.gimap.app.jobs import JobRequest
 from ...application.ai_models import CandidateGenerationRequest, CandidateGenerationResult
 
 
-LEGACY_REMOVED = (
-    "{path} is not a 1D Predict (V5) model: it has no conditional_fast_manifest_v2.json. The earlier Keras models of "
-    "1D Predict (K1–K4) and their pipeline were removed in GIMaP 0.2; use Predict parameters (fit1d) in Fitting, or a "
-    "V5 model folder."
-)
-"""What 1D Predict says of a model folder that is not V5 (an earlier Keras model)."""
-
-
 class AiPipelinePredictor:
     def create_job_request(self, request: CandidateGenerationRequest) -> JobRequest:
-        if (Path(request.model_path) / "conditional_fast_manifest_v2.json").is_file():
-            from .workflow_v5 import validate_options
-            options = validate_options(request.constraints.get("workflow_v5", {}))
-            output = Path(request.output_dir).resolve()
-            return JobRequest(
-                handler="src.gimap.features.fitting.infrastructure.adapters.workflow_v5:run_workflow_job",
-                payload=dict(model_path=str(request.model_path), output_dir=str(output),
-                             q=request.q.tolist(), intensity=request.intensity.tolist(),
-                             sigma=request.sigma.tolist(), options=options,
-                             observation_metadata=request.constraints.get("observation_metadata", {}),
-                             sigma_estimated=bool(request.constraints.get("sigma_estimated", False))),
-                timeout_seconds=3600,
-            )
-        raise ValueError(LEGACY_REMOVED.format(path=request.model_path))
+        from .workflow_v5 import validate_options
+        options = validate_options(request.constraints.get("workflow_v5", {}))
+        output = Path(request.output_dir).resolve()
+        return JobRequest(
+            handler="src.gimap.features.fitting.infrastructure.adapters.workflow_v5:run_workflow_job",
+            payload=dict(output_dir=str(output), q=request.q.tolist(), intensity=request.intensity.tolist(),
+                         sigma=request.sigma.tolist(), options=options,
+                         observation_metadata=request.constraints.get("observation_metadata", {}),
+                         sigma_estimated=bool(request.constraints.get("sigma_estimated", False))),
+            timeout_seconds=3600,
+        )
 
     def decode_result(self, request, value) -> CandidateGenerationResult:
         if not isinstance(value, dict):

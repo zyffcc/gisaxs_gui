@@ -48,9 +48,9 @@ RELATIVE_RADIUS_TIP = ("Radius of the resolvable islands. On a porous substrate 
                        "over the scan counts, not its value.")
 EMPTY_TITLE = "No result yet"
 EMPTY_MESSAGE = ("In Situ: choose the folder of a scan recorded during the deposition, give the metal, the substrate "
-                 "and the deposition rate, and press Analyze. After Deposition: choose the frames of a sample measured "
-                 "afterwards and give its name and nominal thickness instead of a rate; frames of a bare piece of the "
-                 "same substrate are optional. Open Result… shows a folder analysed before.")
+                 "and the deposition rate, and press Analyze. After Deposition: Add Samples… lists the samples of a "
+                 "folder, their nominal thickness read from the folder names, and Analyze analyses the ticked ones. "
+                 "Open Result… shows a folder analysed before.")
 EMPTY_ACTION = "Open Result…"
 PACKAGE_TITLE = "The analysis package is needed"
 PACKAGE_ACTION = "Choose Folder…"

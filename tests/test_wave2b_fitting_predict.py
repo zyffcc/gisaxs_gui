@@ -37,39 +37,12 @@ ZH_ENTRIES = {
         "预测设置——保存后用于单条曲线以及之后的批处理 / 原位运行",
     "Auto / unused": "自动 / 不用",
     "Complete composition": "完整组成",
-    "Fit method": "拟合方法",
     "q unit of files without one in their header": "文件头未注明时的 q 单位",
     "q sides": "q 的两侧",
     "Each half separately": "两半分别拟合",
-    "General V5: improve fit with four numerical steps": "通用 V5：再用四个数值步骤改进拟合",
-    "Calibrate intensity amplitudes": "校准强度幅值",
-    "The single-RC specialist can adjust particle, background and resolution amplitudes while keeping the neural "
-    "shape parameters fixed. Broader fitting may still run when curve agreement is poor.":
-        "单 RC 专用模型可以调整颗粒、背景和分辨率的幅值，同时保持神经网络给出的形状参数不变。曲线吻合较差时，"
-        "仍可能运行范围更广的拟合。",
-    "General V5 (experimental)": "通用 V5（实验性）",
-    "Single RC specialist (experimental)": "单 RC 专用模型（实验性）",
-    "Physical fit (numerical)": "物理拟合（数值）",
-    "General V5 proposes multiple compositions but remains experimental. The specialist requires Complete "
-    "composition = one Random cylinder and eligible native CBF counts. Other inputs, fixed resolution and poor "
-    "curve agreement use numerical fallback; that fallback does not make the specialist a general model. Scores "
-    "are not probabilities.":
-        "通用 V5 会给出多种组成，但仍是实验性的。专用模型要求“完整组成”只有一个随机取向圆柱，并且输入是符合条件的"
-        "原始 CBF 计数。其他输入、固定的分辨率或曲线吻合较差时会改用数值回退；这种回退并不会让专用模型变成通用模型。"
-        "得分不是概率。",
-    "Fix σ res (nm⁻¹)": "固定 σ res（nm⁻¹）",
-    "Fix ν res": "固定 ν res",
-    "General V5: 0.007–0.013 nm⁻¹. RC specialist / physical fit: 0.001–0.1 nm⁻¹; fixed resolution uses numerical "
-    "fallback.": "通用 V5：0.007–0.013 nm⁻¹。RC 专用模型 / 物理拟合：0.001–0.1 nm⁻¹；固定分辨率时改用数值回退。",
-    "General V5: 5–10. RC specialist / physical fit: 1–20; fixed resolution uses numerical fallback.":
-        "通用 V5：5–10。RC 专用模型 / 物理拟合：1–20；固定分辨率时改用数值回退。",
     "Auto: 0.1% peak": "自动：峰值的 0.1%",
-    "Auto: measured max": "自动：测量最大值",
     "Relative σ (if missing)": "相对 σ（文件里没有时）",
     "Absolute σ floor": "σ 绝对下限",
-    "Intensity normalizer": "强度归一化值",
-    "Discover combinations": "搜索的组合数",
-    "Condition best combinations": "细化的最佳组合数",
     "In-situ · 1D prediction parameters": "原位 · 一维预测参数",
     "In-situ prediction parameters": "原位预测参数",
     "Save creates a new settings snapshot for future frames. Completed frames are unchanged.":
@@ -82,9 +55,6 @@ ZH_ENTRIES = {
         "(正演 − 观测)/sigma 的均方根，包括负的观测值；不是校准过的概率。",
     "Add curves (or Use current cut), then Fit curve.\nSelect a candidate to see its fit here.":
         "添加曲线（或使用当前切线），然后拟合曲线。\n选一个候选，在这里查看它的拟合。",
-    "Model + amplitude": "模型 + 幅值",
-    "Neural model": "神经网络模型",
-    "Numerical fallback": "数值回退",
     "Current": "当前",
     "Stage: {stage}": "阶段：{stage}",
     "Reason: {reason}": "原因：{reason}",
@@ -99,15 +69,9 @@ ZH_ENTRIES = {
     "Fit {count} files": "拟合 {count} 个文件",
     "Input: the current cut of Fitting (q in nm⁻¹); each side fitted separately":
         "输入：拟合页的当前切线（q 为 nm⁻¹）；两侧分别拟合",
-    "Experimental: candidates are starts to check, not results.": "实验性：候选只是待检查的起点，不是结果。",
     "Ready.": "就绪。",
     "A fitting / in-situ job is already running. Finish or cancel it first.": "已有拟合 / 原位任务在运行。请先等它完成或取消。",
     "Load a curve or select files first": "请先载入曲线或选择文件",
-    "Starting the experimental single-RC specialist… Checking the known composition and input scope.":
-        "正在启动实验性的单 RC 专用模型…正在检查已知组成和输入范围。",
-    "Starting numerical physical fitting…": "正在开始数值物理拟合…",
-    "Loading experimental General V5… First run includes loading and compilation.":
-        "正在载入实验性的通用 V5…第一次运行包括载入和编译。",
     "Finished in {seconds} s · {failures} failed files · {count} candidates saved.":
         "用时 {seconds} s 完成 · {failures} 个文件失败 · 保存了 {count} 个候选。",
     "{count} candidates saved. Review curve shape and residuals; observed-data scores include noise and are not "
@@ -115,17 +79,20 @@ ZH_ENTRIES = {
     "Settings saved. Existing in-situ recipes keep their captured settings.": "设置已保存。已有的原位配方保留它们记录时的设置。",
     "Cancelling… completed file results remain saved.": "正在取消…已完成文件的结果仍会保留。",
     "Saved settings v{version} for future frames.": "已为之后的帧保存设置 v{version}。",
+    "Check every candidate's fit; refine it in Fitting before reporting it.":
+        '请检查每个候选的拟合；报告之前先在拟合页精修。',
+    'Starting Predict parameters (network + posterior)…':
+        '正在开始预测参数（网络 + 后验）…',
 }
 
 ALLOWED = {"#", "logRMSE", "RMS/σ", "nm⁻¹", "Å⁻¹"}
 """Texts that stay as they are in Chinese: data headers and units."""
 OPTIONS = (
     {},
-    dict(q_unit="A^-1", side="negative", method="stable", components=[2], sigma_res=0.05, nu_res=3.5),
-    dict(q_unit="nm^-1", side="positive", method="experimental", components=[1, 3, 3], relative_noise=0.25,
-         absolute_noise=2.5, normalizer=1e4, numerical=False, amplitude_calibration=False),
-    dict(method="model", components=[2, 2], sigma_res=0.00855, nu_res=7.25, search_combinations=20,
-         condition_combinations=5),
+    dict(q_unit="A^-1", side="negative", components=[2], cut_qz=0.25),
+    dict(q_unit="nm^-1", side="positive", components=[1, 3, 3], relative_noise=0.25, absolute_noise=2.5),
+    dict(method="posterior", components=[2, 2]),
+    dict(method="experimental", components=[1], sigma_res=0.05, nu_res=3.5),  # a retired method opens as Predict
 )
 
 
@@ -158,7 +125,7 @@ def _close(dialog) -> None:
 
 def _candidate(**extra) -> dict:
     row = dict(file="Current curve", side="positive", rank=1, combination="random_cylinder", best_log_rmse=.05,
-               signed_weighted_rms=1.2, best_source="stable_numerical_fallback", fallback_reason="poor agreement",
+               signed_weighted_rms=1.2, best_source="posterior", warnings=["few effective samples"],
                native_q=[1, 2, 3], observed=[3, 2, 1], sigma=[.1, .1, .1], display_q=[1, 2, 3], display_fit=[3, 2, 1])
     row.update(extra)
     return row
@@ -173,16 +140,16 @@ def test_the_options_keep_their_values(options) -> None:
 
 
 def test_the_spin_boxes_show_their_values_without_trailing_zeros() -> None:
-    options = dict(sigma_res=0.00855, nu_res=7.25, relative_noise=0.1)
+    options = dict(cut_qz=0.00855, relative_noise=0.1, absolute_noise=7.25)
     dialog = _dialog(options=options)
-    assert dialog.sigma_res.text() == "0.00855" and dialog.nu_res.text() == "7.25"
-    assert dialog.relative_noise.text() == "0.1" and dialog.noise_floor.text() == "Auto: 0.1% peak"
-    assert dialog.sigma_res.decimals() == 8 and dialog.nu_res.decimals() == 6  # the values keep every decimal
-    dialog.fix_sigma.setChecked(True)
-    dialog.fix_nu.setChecked(True)
-    dialog.sigma_res.lineEdit().setText(dialog.sigma_res.text())  # the text shown reads back as the same value
-    dialog.sigma_res.interpretText()
-    assert dialog.options()["sigma_res"] == 0.00855 and dialog.options()["nu_res"] == 7.25
+    assert dialog.cut_qz.text() == "0.00855" and dialog.use_qz.isChecked()
+    assert dialog.relative_noise.text() == "0.1" and dialog.noise_floor.text() == "7.25"
+    assert dialog.cut_qz.decimals() == 6 and dialog.noise_floor.decimals() == 6  # the values keep every decimal
+    dialog.cut_qz.lineEdit().setText(dialog.cut_qz.text())  # the text shown reads back as the same value
+    dialog.cut_qz.interpretText()
+    assert dialog.options()["cut_qz"] == 0.00855 and dialog.options()["absolute_noise"] == 7.25
+    dialog.noise_floor.setValue(0)
+    assert dialog.noise_floor.text() == "Auto: 0.1% peak"
     _close(dialog)
 
 
@@ -218,11 +185,11 @@ def test_no_english_is_left_in_the_window_in_chinese(chinese) -> None:
         for combo in dialog.findChildren(QComboBox):
             texts += [combo.itemText(i) for i in range(combo.count())]
         texts += [dialog.table.horizontalHeaderItem(i).text() for i in range(dialog.table.columnCount())]
-        texts += [dialog.noise_floor.specialValueText(), dialog.normalizer.specialValueText()]
+        texts += [dialog.noise_floor.specialValueText()]
         left = [text for text in texts if text and text not in ALLOWED and not re.search(r"[一-鿿]", text)]
         assert left == []
         tips = [dialog.table.horizontalHeaderItem(i).toolTip() for i in (2, 3, 4)]
-        tips += [dialog.method.toolTip(), dialog.sigma_res.toolTip(), dialog.amplitude_calibration.toolTip()]
+        tips += [dialog.component_boxes[0].toolTip(), dialog.use_qz.toolTip(), dialog.cut_qz.toolTip()]
         assert all(re.search(r"[一-鿿]", tip) for tip in tips)
         assert re.search(r"[一-鿿]", dialog.parameters.placeholderText())
         assert re.search(r"[一-鿿]", dialog.log.placeholderText())
@@ -246,12 +213,13 @@ def test_run_time_texts_are_in_the_interface_language_and_follow_a_switch(chines
                                                             summary=dict(runtime_seconds=1.5)))
         dialog._completed(result)
         assert dialog.status.text() == "用时 1.50 s 完成 · 0 个文件失败 · 保存了 1 个候选。"
-        assert dialog.table.item(0, 0).text() == "当前 / +" and dialog.table.item(0, 5).text() == "数值回退"
-        assert dialog.table.item(0, 5).toolTip().startswith("阶段：stable_numerical_fallback\n原因：poor agreement")
+        assert dialog.table.item(0, 0).text() == "当前 / +" and dialog.table.item(0, 5).text() == "网络 + 后验"
+        assert dialog.table.item(0, 5).toolTip() == "阶段：posterior\nfew effective samples"
         assert dialog.parameters.toPlainText().startswith("长度：nm。")
         chinese.apply_language("en")  # the window follows a switch while open
         assert dialog.status.text() == "Finished in 1.50 s · 0 failed files · 1 candidates saved."
-        assert dialog.table.item(0, 5).text() == "Numerical fallback" and dialog.table.currentRow() == 0
+        assert dialog.table.item(0, 5).text() == "Network + posterior" and dialog.table.currentRow() == 0
+        assert dialog.table.item(0, 5).toolTip() == "Stage: posterior\nfew effective samples"
         assert dialog.table.horizontalHeaderItem(0).text() == "Curve / side"
         assert dialog.table.horizontalHeaderItem(3).toolTip().startswith("Natural-log RMSE")
         assert dialog.parameters.toPlainText().startswith("Lengths: nm.")
@@ -287,8 +255,8 @@ def test_the_window_says_once_that_it_is_experimental() -> None:
     """One warning line under the title (the details in its tooltip); the status line only says where things are."""
     dialog = _dialog()
     hint = dialog.findChild(QLabel, "workflowV5Experimental")
-    assert hint.text() == "Experimental: candidates are starts to check, not results."
-    assert hint.property("gimapRole") == "warning" and "not calibrated probabilities" in hint.toolTip()
+    assert hint.text() == "Check every candidate's fit; refine it in Fitting before reporting it."
+    assert hint.property("gimapRole") == "warning" and "probability" in hint.toolTip()
     assert dialog.status.text() == "Ready."
     assert dialog.input_label.text() == "Input: the current cut of Fitting (q in nm⁻¹); each side fitted separately"
     _close(dialog)

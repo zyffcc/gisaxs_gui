@@ -10,13 +10,16 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import time
+from pathlib import Path
 
 import numpy as np
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QAbstractButton, QApplication, QFileDialog, QLabel
 
 from src.gimap.app.presentation.task_runner import TaskRunner
@@ -663,6 +666,7 @@ def test_every_template_of_the_main_screen_is_in_the_chinese_table():
     held = [*CLIENT_TEMPLATES, *client_texts.TEMPLATES, *pattern_view.TEMPLATES, *evolution_view.TEMPLATES,
             *real_space_view.TEMPLATES, *(text for label, _key, tip in view.IMAGE_CHOICES for text in (label, tip)),
             *(text for _key, caption, _unit, tip in view.TILES for text in (caption, tip)),
+            *(text for caption, tip in view.CONNECTED_TILES.values() for text in (caption, tip)),
             *(text for label, _key, tip in view.MODE_CHOICES for text in (label, tip)),
             *(label for label, _key in view.VIEW_CHOICES), view.DEVIATION_CAPTION, view.DEVIATION_TIP, view.ENTRY_HINT,
             view.RATE_TIP, view.QCM_TIP, view.ANALYZE_TIP, view.FILM_TIP, view.ONSET_TIP, view.DURATION_TIP,
@@ -695,13 +699,16 @@ def test_the_solution_shown_can_be_seen_in_real_space(tmp_path):
     side, top = page.real_space.figure.axes
     assert side.get_title(loc="left") == "side view (cut)" and top.get_title(loc="left") == "top view"
     assert side.get_xlim() == (0.0, space.side) and top.get_xlim() == (0.0, space.field)
-    # the caps of one row, twice: their outlines, then their fills over the inner outlines (touching caps as one piece)
-    assert [len(collection.get_paths()) for collection in side.collections] == [6, 6]
+    # a continuous layer: the film itself - its height over the top view, its cut in the side view (no grain outlines)
+    assert len(top.images) == 1 and len(side.collections) == 1
     assert any("Candidate 1" in words for words in _picture_texts(page))
     page.entry_control.button(1).click()  # another solution: no base layer, another radius
     assert (page.real_space.drawn.radius, page.real_space.drawn.base) == (3.0, 0.0)
+    field = page.real_space.drawn.field
     page.select_window(1)
     assert page.real_space.drawn.radius == 4.0
+    assert page.real_space.drawn.field == field  # one growing film: the same field in every window
+    assert any("One growing film" in words for words in _picture_texts(page))
     page.image_switch.button(0).click()
     assert page.pattern_host.currentIndex() == 0 and page.patterns.titles[1] == "Model image: Candidate 1"
     # a porous result without the geometry of its metal: nothing to draw, and the picture says why
@@ -719,26 +726,32 @@ def test_coalescing_grains_and_a_porous_layer_are_drawn_as_they_are(tmp_path):
 
     page = _page(tmp_path)
     page.show()
-    windows = [window(2.0, [entry("candidate 1", 3.0, 1.0, rank=1, D_nm=10.0)], smooth="candidate 1"),
+    windows = [window(2.0, [entry("candidate 1", 3.0, 1.0, rank=1, D_nm=10.0, coverage=0.05)], smooth="candidate 1"),
                window(4.0, [entry("candidate 1", 3.0, 5.2, rank=1, D_nm=10.0, base_nm=2.0)], smooth="candidate 1")]
     assert page.open_client_result(write_result(tmp_path / "out", windows=windows))
     page.image_switch.button(1).click()
     assert page.real_space.arrangement == "islands" and "Separate islands" in _picture_texts(page)
-    page.select_window(1)  # grains of 5.2 nm at 10 nm: a network across the view, on a continuous layer
+    page.select_window(1)  # the same grains grown together on a continuous layer: a film with channels
     assert page.real_space.arrangement == "network"
-    assert "Continuous film 2 nm, grains on top: connected across the view" in _picture_texts(page)
-    # a closed film: the whole square is the metal of the base, the grains are relief on it
-    _side, top = page.real_space.figure.axes
+    caption = next(words for words in _picture_texts(page) if words.startswith("Connected film 2 nm; channels"))
+    assert 0 < float(caption.split(": ")[1].split(" %")[0]) <= 100 * (1 - 0.85) + 1
+    # the tiles of a joined film: the grains are its relief, no gap
+    assert page.tile_captions["D_nm"].full_text() == "Relief spacing D" and not page.tiles["gap_nm"].isVisibleTo(page)
+    assert page.tile_captions["H_nm"].full_text() == "Film height H"
+    # a connected film: drawn as the film - the height of the metal (no grain outlines), lighter where it is low and
+    # darker where the grains rise, the channels down to the substrate as holes; the side view is its cut
+    side, top = page.real_space.figure.axes
     square = top.patches[0]
     assert (square.get_width(), square.get_height()) == (page.real_space.drawn.field,) * 2
     fill, edge = (to_rgba(colour) for colour in real_space_view.METAL_COLOURS["Ag"])
-    assert square.get_facecolor() == fill and square.get_alpha() is None
-    outlines, grains = top.collections
-    assert set(outlines.get_linewidths()) == {0.6}
-    relief = grains.get_facecolors()[0]
-    assert all(r <= f for r, f in zip(relief[:3], fill[:3])) and tuple(relief) != fill  # darker than the film
+    (image,) = top.images
+    assert np.ma.getmaskarray(image.get_array()).any() and not np.ma.getmaskarray(image.get_array()).all()
+    low, high = image.cmap(0.0), image.cmap(1.0)
+    assert sum(low[:3]) > sum(fill[:3]) > sum(high[:3])
+    assert len(side.collections) == 1
     page.select_window(0)  # separate islands without a base layer: on the substrate, as before
     assert "Separate islands" in _picture_texts(page)
+    assert page.tile_captions["D_nm"].full_text() == "Distance D"
     assert top is not page.real_space.figure.axes[1]
     assert to_rgba(page.real_space.figure.axes[1].patches[0].get_facecolor()) == to_rgba(real_space_view.SUBSTRATE)
     porous = dict(R_nm=0.9, width=0.2, f_islands=0.2, cap_share=0.2, depth_nm=2.0, xi_nm=5.0, film_share=0.05,
@@ -883,32 +896,59 @@ def _static_page(tmp_path, **more):
     runner = FakeStaticRunner(tmp_path / "series", **more)
     page = _page(tmp_path, static=runner, preferences=InMemoryUserPreferencesRepository())
     page.show()
-    frames = tmp_path / "zz frames"
-    frames.mkdir(parents=True, exist_ok=True)
-    page.static_frames.set_path(str(frames))
     return page, runner
 
 
+def _samples(root, *names, giwaxs: bool = True):
+    """Invented sample folders, each with one GISAXS frame in a measurement folder (and a GIWAXS one beside it)."""
+    for name in names:
+        scan = root / name / "zz_1_gisaxs_bs_00001" / "embl_2m"
+        scan.mkdir(parents=True, exist_ok=True)
+        (scan / f"zz_1_gisaxs_bs_00001_{len(name):05d}.cbf").write_bytes(b"x")
+        if giwaxs:
+            wide = root / name / "zz_1_giwaxs_bs_00001" / "embl_2m"
+            wide.mkdir(parents=True, exist_ok=True)
+            (wide / "zz_1_giwaxs_bs_00001_00001.cbf").write_bytes(b"x")
+    return root
+
+
+def _rows(page) -> list:
+    """(series row text, [(ticked, name, nm, state) of its samples]) of the list."""
+    tree, rows = page.samples_tree, []
+    for index in range(tree.topLevelItemCount()):
+        parent = tree.topLevelItem(index)
+        rows.append((parent.text(0), [(parent.child(row).checkState(0) == Qt.Checked, parent.child(row).text(0),
+                                       parent.child(row).text(1), parent.child(row).text(2))
+                                      for row in range(parent.childCount())]))
+    return rows
+
+
 def test_the_static_section_starts_with_the_geometry_of_the_package(tmp_path):
+    from src.gimap.features.sputter.application import StaticSample
+
     page, runner = _static_page(tmp_path)
     page.show_details(True)
     assert not page.static_section.is_expanded() and page.static_section.toggle_button.text() == "Static Frames (after deposition)"
     page.static_section.set_expanded(True)
-    assert page.static_note.text() == ("Au films measured after the deposition at an incidence angle near 0.35°, one "
-                                       "sample at a time into a series.")
-    # the package's own values (the energy in keV, the beam centre in GIMaP's coordinates), the series' default folder
+    assert page.static_note.text() == ("Au films measured after the deposition at an incidence angle near 0.35°, "
+                                       "analysed sample by sample into their series.")
+    # the package's own values (the energy in keV, the beam centre in GIMaP's coordinates), the results' default folder
     assert [getattr(page, name).text() for name in ("static_energy", "static_sdd", "static_beam_col", "static_beam_row",
                                                     "static_roll")] == ["9.5", "4321", "300.5", "700.5", "-0.25"]
-    assert page.static_series.path() == "" and page.static_series.path_edit.placeholderText() == str(
-        tmp_path / "series" / "series_1")
+    assert page.static_series.path() == "" and page.static_series.path_edit.placeholderText() == str(tmp_path / "series")
     page.set_analysis_kind("static")
     assert page.static_mode.currentData() == "quick" and page.analyze_button.isEnabled()
     page.static_sdd.setText("5000")
     page.static_roll.setText("")
     page.static_mask.set_path(str(tmp_path / "zz_mask.npy"))
-    request = page._static_request()
+    sample = StaticSample(str(tmp_path / "zz_8Au"), "zz_8Au", 8.0, "HiPIMS", "zz", str(tmp_path / "zz"))
+    request = page.static_request_for(sample)
     assert (request.energy_ev, request.sdd_mm, request.beam_col, request.sample_roll_deg) == (9500.0, 5000.0, 300.5, None)
-    assert request.series_folder == tmp_path / "series" / "series_1" and request.mask_file == tmp_path / "zz_mask.npy"
+    assert request.series_folder == tmp_path / "series" / "zz_HiPIMS" and request.mask_file == tmp_path / "zz_mask.npy"
+    assert (request.frames, request.name, request.nominal_nm, request.reference_frames) == (
+        str(tmp_path / "zz_8Au"), "zz_8Au", 8.0, str(tmp_path / "zz"))
+    page.static_series.set_path(str(tmp_path / "elsewhere"))  # the results folder: every series in a folder of it
+    assert page.static_request_for(sample).series_folder == tmp_path / "elsewhere" / "zz_HiPIMS"
     page.static_defaults_button.click()  # Package Values: all of them again, and the package's mask
     assert (page.static_sdd.text(), page.static_roll.text(), page.static_mask.path()) == ("4321", "-0.25", "")
     _close(page)
@@ -928,110 +968,137 @@ def test_the_static_section_starts_with_the_geometry_of_the_package(tmp_path):
     _close(plain)
 
 
-def test_analyze_sample_adds_to_the_series_and_shows_it(tmp_path):
+def test_analyze_runs_the_ticked_samples_into_their_series_and_shows_them(tmp_path):
     from src.gimap.app.presentation.components.toast import visible_toasts
 
     page, runner = _static_page(tmp_path)
-    page.show_details(True)
-    page.static_section.set_expanded(True)
-    page.static_name.setText("zz 8nm")
-    page.static_nominal.setText("8")
+    page.set_analysis_kind("static")
+    assert page.samples_panel.isVisible() and page.samples_hint.isVisible() and not page.samples_tree.isVisible()
+    assert page.static_summary.full_text() == "No samples yet: Add Samples… takes a folder of samples."
+    # a folder of samples unpacked into a folder of the same name: looked into; 850 is the bare substrate of 850_*
+    folder = _samples(tmp_path / "zz set" / "zz set", "850", "850_10Au", "850_4Au", "850_H6Au", "zz with NPs")
+    added = page.add_static_samples(tmp_path / "zz set")
+    assert [sample.name for sample in added] == ["850_10Au", "850_4Au", "850_H6Au", "zz with NPs"]
+    assert {sample.frames for sample in added} == {1}  # the GIWAXS frame is not counted
+    assert _rows(page) == [
+        ("850 · DC — bare: 850 · 0/2 analysed", [(True, "850_4Au", "4", ""), (True, "850_10Au", "10", "")]),
+        ("850 · HiPIMS — bare: 850 · 0/1 analysed", [(True, "850_H6Au", "6", "")]),
+        ("zz with NPs — bare: none, on Si · 0/1 analysed", [(False, "zz with NPs", "?", "Thickness?")])]
+    assert page.static_summary.full_text() == "4 samples in 3 series · 0 analysed · 1 left out"
+    assert any("4 samples added in 3 series; 1 left out" in toast.text() for toast in visible_toasts(page))
+    assert page.add_static_samples(folder / "850_4Au") == []  # in the list already
     seen = []
     page.staticEvent.connect(lambda _event: seen.append(page.static_status.message_label.text()))
-    page.set_analysis_kind("static")  # After Deposition: Analyze runs the sample of the bar
-    page.analyze_button.click()
-    assert page.static_analyzing() and page.running()
-    assert not page.analyze_button.isEnabled()  # one analysis at a time
+    page.analyze_button.click()  # the ticked samples, in the order the list shows them
+    assert page.static_analyzing() and page.running() and not page.analyze_button.isEnabled()
     _settle(lambda: not page.static_analyzing())
-    request = runner.requests[0]
-    assert (request.frames, request.name, request.nominal_nm, request.mode) == (str(tmp_path / "zz frames"), "zz 8nm",
-                                                                                8.0, "quick")
-    assert request.reference_frames == "" and request.series_folder == tmp_path / "series" / "series_1"
+    assert [(request.name, request.nominal_nm, request.series_folder.name, Path(request.reference_frames).name)
+            for request in runner.requests] == [("850_4Au", 4.0, "850_DC", "850"), ("850_10Au", 10.0, "850_DC", "850"),
+                                                ("850_H6Au", 6.0, "850_HiPIMS", "850")]
+    assert "Sample 1 of 3: 850_4Au — Step 1 of 3: Reading the frames…" in seen
+    assert "Sample 3 of 3: 850_H6Au — Step 3 of 3: Writing the report and the images of the series…" in seen
     assert page.static_status.state_label.property("gimapJobState") == "succeeded"
-    assert page.static_status.message_label.text() == "Done: 1 samples in the series."
-    assert "Step 1 of 3: Reading the frames…" in seen and "Step 2 of 3: Finding the solution of the sample…" in seen
-    assert "Step 3 of 3: Writing the report and the images of the series…" in seen
-    assert not page.details_shown() and page.client_result.static and page.window_label.text() == "zz_8nm · nominal 8 nm"
-    assert page.analyze_button.isEnabled()
-    assert "zz: 4 frames, 4 usable" in page.static_log.toPlainText()
-    assert any("zz_8nm is in the series" in toast.text() for toast in visible_toasts(page))
+    assert page.static_status.message_label.text() == "Done: 3 samples analysed."
+    assert [row[0] for row in _rows(page)][:2] == ["850 · DC — bare: 850 · 2/2 analysed",
+                                                   "850 · HiPIMS — bare: 850 · 1/1 analysed"]
+    assert _rows(page)[0][1][0] == (True, "850_4Au", "4", "Fit 3.30")
+    assert page.client_result.static and page.window_label.text() == "850_H6Au · nominal 6 nm"  # the last one
+    assert page.samples_tree.currentItem().text(0) == "850_H6Au"
+    assert any("3 samples analysed into 2 series" in toast.text() for toast in visible_toasts(page))
+    # a sample of the list shows its series at that sample; moving along the series chooses its row
+    page.samples_tree.setCurrentItem(page.samples_tree.topLevelItem(0).child(1))
+    assert page.client_result.folder.name == "850_DC" and page.window_label.text() == "850_10Au · nominal 10 nm"
+    page.window_slider.setValue(0)
+    assert page.samples_tree.currentItem().text(0) == "850_4Au"
+    # the thickness the name did not give: the sample is ticked and analysed into its own series (on Si)
+    left_out = page.samples_tree.topLevelItem(2).child(0)
+    left_out.setText(1, "5")
+    assert _rows(page)[2] == ("zz with NPs — bare: none, on Si · 0/1 analysed", [(True, "zz with NPs", "5", "")])
+    page.analyze_static()
+    _settle(lambda: not page.static_analyzing())
+    assert len(runner.requests) == 4 and runner.requests[-1].reference_frames == ""
+    assert page.static_status.message_label.text() == "Done: 4 samples analysed."  # the others shown as they were
     stored = page.preferences.get("sputter_page")
-    assert stored["last_client_result"] == str(tmp_path / "series" / "series_1")
+    assert [sample["name"] for sample in stored["static_samples"]] == ["850_10Au", "850_4Au", "850_H6Au", "zz with NPs"]
     assert stored["static_last"]["static_sdd"] == "4321" and stored["static_last"]["mode"] == "quick"
-    # a thinner sample into the same series: it is the one shown, at its place along the nominal thickness
-    reference = tmp_path / "zz bare"
-    reference.mkdir()
-    page.static_name.setText("zz 4nm")
-    page.static_nominal.setText("4")
-    page.static_reference.set_path(str(reference))
-    page.static_mode.setCurrentIndex(page.static_mode.findData("refine"))
-    page.analyze_static()
-    _settle(lambda: not page.static_analyzing())
-    assert (runner.requests[1].reference_frames, runner.requests[1].mode) == (str(reference), "refine")
-    assert [window.label for window in page.client_result.windows] == ["zz_4nm", "zz_8nm"]
-    assert page.client_window().label == "zz_4nm" and page.static_status.message_label.text().startswith("Done: 2 samples")
-    # the same request again: the series as it is
-    page.analyze_static()
-    _settle(lambda: not page.static_analyzing())
-    assert len(runner.requests) == 2 and "analysed before" in page.static_status.message_label.text()
     _close(page)
 
 
-def test_analyze_sample_says_what_is_missing_and_asks_before_it_replaces(tmp_path, monkeypatch):
+def test_analyze_says_what_is_missing_and_asks_once_before_it_replaces(tmp_path, monkeypatch):
     page, runner = _static_page(tmp_path)
-    page.static_frames.set_path("")
     page.set_analysis_kind("static")
-    page.analyze_button.click()
+    page.analyze_button.click()  # an empty list
     assert not page.static_analyzing() and runner.requests == []
     assert page.static_status.state_label.property("gimapJobState") == "failed"
-    message = page.static_status.message_label.text()
-    assert "Choose the frames of the sample" in message and "Give the sample a name" in message
-    assert "Give the nominal thickness" in message
-    page.static_frames.set_path(str(tmp_path / "zz frames"))
-    page.static_name.setText("zz_8nm")
-    page.static_nominal.setText("8")
+    assert page.static_status.message_label.text() == "Add samples first: Add Samples… takes a folder of samples."
+    _samples(tmp_path / "set", "zz_4Au", "zz_8Au")
+    page.add_static_samples(tmp_path / "set")
+    page.samples_select_none.trigger()
+    page.analyze_static()
+    assert "Tick the samples to analyse" in page.static_status.message_label.text() and runner.requests == []
+    page.samples_select_all.trigger()
+    page.static_sdd.setText("-1")  # a value every sample shares: nothing starts
+    page.analyze_static()
+    assert runner.requests == [] and "must be positive" in page.static_status.message_label.text()
+    page.static_sdd.setText("4321")
     page.analyze_static()
     _settle(lambda: not page.static_analyzing())
+    assert len(runner.requests) == 2
     asked = []
-    monkeypatch.setattr(page, "_confirm_static_replace", lambda name: asked.append(name) or False)
-    page.static_nominal.setText("9")  # the same name with another thickness
+    monkeypatch.setattr(page, "_confirm_static_replace", lambda names: asked.append(names) or False)
+    for row in range(2):  # both thicknesses changed: the same names from other values
+        item = page.samples_tree.topLevelItem(0).child(row)
+        item.setText(1, str(float(item.text(1)) + 1))
     page.analyze_static()
-    assert asked == ["zz_8nm"] and not page.static_analyzing() and len(runner.requests) == 1  # not replaced
-    monkeypatch.setattr(page, "_confirm_static_replace", lambda name: True)
+    assert asked == [["zz_4Au", "zz_8Au"]] and not page.static_analyzing() and len(runner.requests) == 2
+    monkeypatch.setattr(page, "_confirm_static_replace", lambda names: True)
     page.analyze_static()
     _settle(lambda: not page.static_analyzing())
-    assert len(runner.requests) == 2 and page.client_window().nominal_nm == 9.0
+    assert len(runner.requests) == 4 and [window.nominal_nm for window in page.client_result.windows] == [5.0, 9.0]
+    # a sample whose folder is gone: failed with its reason, the others run
+    shutil.rmtree(tmp_path / "set" / "zz_4Au")
+    page.analyze_static()
+    _settle(lambda: not page.static_analyzing())
+    assert _rows(page)[0][1][0][3] == "Failed"
+    assert page.samples_tree.topLevelItem(0).child(0).toolTip(2).startswith("The frames of the sample were not found")
     _close(page)
 
 
-def test_cancel_stops_analyze_sample_and_a_failure_keeps_its_reason(tmp_path):
+def test_cancel_stops_the_list_and_a_failure_keeps_its_reason(tmp_path):
     page, runner = _static_page(tmp_path, wait_for_stop=True)
-    page.static_name.setText("zz_8nm")
-    page.static_nominal.setText("8")
+    _samples(tmp_path / "set", "zz_4Au", "zz_8Au")
+    page.set_analysis_kind("static")
+    page.add_static_samples(tmp_path / "set")
     page.analyze_static()
     _settle(lambda: runner.requests)
     _settle(lambda: "Step 1 of 3" in page.static_status.message_label.text(), 5)
+    assert _rows(page)[0][1] == [(True, "zz_4Au", "4", "At work…"), (True, "zz_8Au", "8", "Waiting")]
     page.analyze()  # Analyze waits for this analysis
     assert page.static_analyzing() and not page.analyzing() and page.static_status.cancel_button.isEnabled()
     page.static_status.cancel_button.click()
     assert "Stopping" in page.static_status.message_label.text()
     _settle(lambda: not page.static_analyzing())
+    assert len(runner.requests) == 1  # the second sample never started
     assert page.static_status.state_label.property("gimapJobState") == "cancelled"
-    assert "stay in the series" in page.static_status.message_label.text() and page.analyze_button.isEnabled()
+    assert page.static_status.message_label.text() == "Stopped after 0 samples. The samples analysed stay in their series."
+    assert _rows(page)[0][1] == [(True, "zz_4Au", "4", "Stopped"), (True, "zz_8Au", "8", "")]
+    assert page.analyze_button.isEnabled()
     _close(page)
     failing, _runner = _static_page(tmp_path / "b", status="failed at predict")
-    failing.static_name.setText("zz_8nm")
-    failing.static_nominal.setText("8")
+    _samples(tmp_path / "b" / "set", "zz_8Au")
+    failing.set_analysis_kind("static")
+    failing.add_static_samples(tmp_path / "b" / "set")
     failing.analyze_static()
     _settle(lambda: not failing.static_analyzing())
     assert failing.static_status.state_label.property("gimapJobState") == "failed"
     assert "(failed at predict)" in failing.static_status.message_label.text() and failing.client_result is None
     assert "the last line of the invented log" in failing.static_log.toPlainText()
+    assert _rows(failing)[0][1][0][3] == "Failed"
     failing.static_status.details_button.click()  # Details: the section opens at its log
     assert failing.details_shown() and failing.static_section.is_expanded() and failing.static_log.isVisible()
     closing, runner = _static_page(tmp_path / "c", wait_for_stop=True)
-    closing.static_name.setText("zz_8nm")
-    closing.static_nominal.setText("8")
+    _samples(tmp_path / "c" / "set", "zz_8Au")
+    closing.add_static_samples(tmp_path / "c" / "set")
     closing.analyze_static()
     _settle(lambda: runner.requests)
     closing.dispose()  # the window closes: the package is told to stop
@@ -1041,26 +1108,114 @@ def test_cancel_stops_analyze_sample_and_a_failure_keeps_its_reason(tmp_path):
     _close(closing)
 
 
-def test_a_zip_archive_asks_which_of_its_folders_holds_the_frames(tmp_path, monkeypatch):
-    page, runner = _static_page(tmp_path)
-    archive = str(tmp_path / "zz frames.zip")
-    asked = []
-    monkeypatch.setattr(page, "_ask_archive_folder", lambda folders: asked.append(folders) or folders[1])
-    runner.archive = ["zz_8nm/"]
-    page.set_static_source(page.static_frames, archive)  # frames in one folder: nothing to ask
-    assert page.static_frames.path() == archive and asked == []
-    runner.archive = ["", "zz_8nm/", "zz_bare/"]
-    page.set_static_source(page.static_reference, archive)
-    assert asked == [["", "zz_8nm/", "zz_bare/"]] and page.static_reference.path() == archive + "::zz_8nm/"
-    monkeypatch.setattr(page, "_ask_archive_folder", lambda folders: None)  # cancelled: the field stays
-    page.set_static_source(page.static_reference, str(tmp_path / "another.zip"))
-    assert page.static_reference.path() == archive + "::zz_8nm/"
-    runner.archive = []
-    page.set_static_source(page.static_frames, str(tmp_path / "empty.zip"))  # no frames in it: said, not taken
-    assert page.static_frames.path() == archive
-    page.set_static_source(page.static_frames, str(tmp_path / "zz_one.cbf"))  # one frame: as it is
-    assert page.static_frames.path() == str(tmp_path / "zz_one.cbf")
+def test_a_project_keeps_the_static_section_and_the_sample_list(tmp_path):
+    page, _runner = _static_page(tmp_path)
+    _samples(tmp_path / "set", "zz", "zz_4Au", "zz_8Au")
+    page.add_static_samples(tmp_path / "set")
+    page.samples_tree.topLevelItem(0).child(1).setCheckState(0, Qt.Unchecked)
+    page.static_series.set_path(str(tmp_path / "zz_results"))
+    page.static_mode.setCurrentIndex(page.static_mode.findData("full"))
+    page.static_beam_col.setText("")
+    page.static_section.set_expanded(True)
+    state = page.project_state()
+    assert json.dumps(state) and [sample["name"] for sample in state["static"]["samples"]] == ["zz_4Au", "zz_8Au"]
+    other, _other = _static_page(tmp_path / "other")
+    assert other.apply_project_state(state) == []
+    assert _rows(other) == [("zz — bare: zz · 0/2 analysed", [(True, "zz_4Au", "4", ""), (False, "zz_8Au", "8", "")])]
+    assert other.static_mode.currentData() == "full" and other.static_section.is_expanded()
+    assert (other.static_beam_col.text(), other.static_beam_row.text()) == ("", "700.5")  # an emptied field stays empty
+    assert other.static_series.path() == str(tmp_path / "zz_results")
+    other.apply_project_state({})  # an older project: an empty section with the geometry of the package
+    assert other.static_samples == [] and other.static_mode.currentData() == "quick"
+    assert other.static_beam_col.text() == "300.5" and not other.static_section.is_expanded()
+    restarted, _again = _static_page(tmp_path / "again")  # the list is remembered with the values of After Deposition
+    restarted.preferences = page.preferences
+    restarted._restore_static_last()
+    assert [sample.name for sample in restarted.static_samples] == ["zz_4Au", "zz_8Au"]
     _close(page)
+    _close(other)
+    _close(restarted)
+
+
+def test_the_sample_list_stands_beside_the_views_only_after_deposition(tmp_path):
+    page, _runner = _static_page(tmp_path)
+    _samples(tmp_path / "set", "zz_4Au")
+    page.add_static_samples(tmp_path / "set")
+    page.set_analysis_kind("insitu")
+    assert not page.samples_panel.isVisible() and page.scan_picker.isVisible() and not page.static_add_button.isVisible()
+    page.set_analysis_kind("static")
+    assert page.samples_panel.isVisible() and page.static_add_button.isVisible() and not page.scan_picker.isVisible()
+    page.show_details(True)  # Details too
+    assert page.samples_panel.isVisible()
+    page.static_list_button.click()  # the switch of the bar hides it
+    assert not page.samples_panel.isVisible()
+    page.static_list_button.click()
+    assert page.samples_panel.isVisible()
+    _close(page)
+
+
+def test_static_frames_speak_chinese_after_a_switch(tmp_path):
+    from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_language
+
+    page, _runner = _static_page(tmp_path)
+    page.open_client_result(write_static(tmp_path / "zz_series"))
+    page.set_analysis_kind("static")
+    _samples(tmp_path / "set", "zz", "zz_4Au", "zz with NPs")
+    page.add_static_samples(tmp_path / "set")
+    page.analyze_button.click()
+    _settle(lambda: not page.static_analyzing())
+    try:
+        apply_language("zh", roots=(page,))
+        page.refresh_language()
+        assert page.window_label.text() == "zz_4Au · 名义厚度 4 nm" and page.window_next.toolTip() == "下一个样品"
+        assert page.static_section.toggle_button.text() == "静态帧（沉积之后测量）"
+        assert page.kind_switch.itemText(1) == "沉积后" and page.static_note.text().startswith("沉积之后在入射角约 0.35°")
+        assert page.static_add_button.text() == "添加样品…" and page.static_list_button.text() == "样品列表"
+        assert page.static_summary.full_text() == "2 个样品，2 个系列 · 已分析 1 个 · 1 个暂不分析"
+        assert _rows(page) == [("zz — 裸基底：zz · 已分析 1/1", [(True, "zz_4Au", "4", "偏差 3.30")]),
+                               ("zz with NPs — 裸基底：无，直接在 Si 上 · 已分析 0/1",
+                                [(False, "zz with NPs", "?", "缺厚度")])]
+        assert page.samples_tree.headerItem().text(2) == "状态"
+        assert page.static_status.message_label.text() == "完成：分析了 1 个样品。"
+        assert page.package_masks_button.text() == page.static_masks_button.text() == "分析包自带的掩膜"
+        page.open_client_result(write_result(tmp_path / "porous", windows=porous_windows(), wanted=POROUS_WANTED))
+        assert page.tile_captions["R_nm"].full_text() == "岛半径（相对值）"
+        assert _legend(page.evolution.figure.axes[1]) == ["岛份额", "帽层份额", "成膜份额"]
+        assert page.evolution.figure.axes[1].get_ylabel() == "份额"
+    finally:
+        apply_language(DEFAULT_LANGUAGE, roots=(page,))
+        page.refresh_language()
+    assert page.tile_captions["R_nm"].full_text() == "Island radius (relative)"
+    assert page.kind_switch.itemText(1) == "After Deposition" and page.static_add_button.text() == "Add Samples…"
+    assert page.static_status.message_label.text() == "Done: 1 samples analysed."
+    _close(page)
+
+
+def test_every_template_of_static_frames_and_of_a_porous_result_is_in_the_chinese_table():
+    from src.gimap.app.presentation.i18n.zh import ZH
+    from src.gimap.features.sputter.application import (REPORT_TEMPLATES, SAMPLE_NOTES, STATIC_STEP_TEXT,
+                                                         STATIC_TEMPLATES)
+    from src.gimap.features.sputter.presentation import (static_export, static_figures, static_flow, static_list,
+                                                         static_queue)
+    from src.gimap.features.sputter.presentation.views import sputter_main_view as bar
+    from src.gimap.features.sputter.presentation.views import sputter_samples_view as samples
+    from src.gimap.features.sputter.presentation.views import sputter_static_view as view
+
+    held = [*STATIC_TEMPLATES, *STATIC_STEP_TEXT.values(), *static_flow.TEMPLATES, *static_list.LIST_TEMPLATES,
+            *static_queue.QUEUE_TEMPLATES, *static_export.STATIC_EXPORT_TEMPLATES, *REPORT_TEMPLATES, *SAMPLE_NOTES,
+            *static_figures.FIGURE_TEMPLATES,
+            view.STATIC_TITLE, view.STATIC_TIP, *(text for label, _key, tip in view.STATIC_MODE_CHOICES
+                                                  for text in (label, tip)),
+            view.REFERENCE_TIP, view.SERIES_TIP, view.GEOMETRY_NOTE, view.CENTRE_TIP, view.MASKS_BUTTON, view.MASKS_TIP,
+            *(text for label, _key, tip in bar.KIND_CHOICES for text in (label, tip)), bar.ADD_SAMPLES,
+            bar.ADD_SAMPLES_TIP, "Sample List", "Show or hide the list of samples beside the main screen.",
+            samples.SAMPLES_TITLE, samples.SAMPLES_HINT, samples.COLUMNS[0], samples.COLUMNS[2], samples.EDIT_LIST, samples.SELECT_ALL,
+            samples.SELECT_NONE, samples.REMOVE_LEFT_OUT, samples.REMOVE_ALL, "Package Values", "Results folder",
+            "of the package", "of the package (.npy)", "Choose the Folder the Series Go To"]
+    missing = [template for template in held if template not in ZH]
+    assert missing == []
+    for template in held:  # a translated template keeps its fields
+        assert sorted(re.findall(r"\{(\w+)\}", template)) == sorted(re.findall(r"\{(\w+)\}", ZH[template])), template
 
 
 def test_the_masks_of_the_package_are_offered_by_their_file_names(tmp_path):
@@ -1081,79 +1236,20 @@ def test_the_masks_of_the_package_are_offered_by_their_file_names(tmp_path):
     _close(page)
 
 
-def test_a_project_keeps_the_static_section(tmp_path):
-    page, _runner = _static_page(tmp_path)
-    page.static_name.setText("zz_8nm")
-    page.static_nominal.setText("8")
-    page.static_series.set_path(str(tmp_path / "zz_series"))
-    page.static_mode.setCurrentIndex(page.static_mode.findData("full"))
-    page.static_beam_col.setText("")
-    page.static_section.set_expanded(True)
-    state = page.project_state()
-    assert json.dumps(state) and state["static"]["frames"] == str(tmp_path / "zz frames")
-    other, _other = _static_page(tmp_path / "other")
-    assert other.apply_project_state(state) == []
-    assert (other.static_name.text(), other.static_nominal.text(), other.static_mode.currentData()) == ("zz_8nm", "8", "full")
-    assert other.static_frames.path() == str(tmp_path / "zz frames") and other.static_section.is_expanded()
-    assert (other.static_beam_col.text(), other.static_beam_row.text()) == ("", "700.5")  # an emptied field stays empty
-    assert other.static_series.path() == str(tmp_path / "zz_series")
-    other.apply_project_state({})  # an older project: an empty section with the geometry of the package
-    assert (other.static_name.text(), other.static_frames.path(), other.static_mode.currentData()) == ("", "", "quick")
-    assert other.static_beam_col.text() == "300.5" and not other.static_section.is_expanded()
-    _close(page)
-    _close(other)
+def test_a_network_is_drawn_as_a_film_with_holes():
+    """Grains joined across the view without a base: the height map is the metal where the grains are (up to H) and
+    0 in the holes between them; the cut follows the same film."""
+    from src.gimap.features.sputter.application import (arrangement, height_map, profile, real_space, top_grains,
+                                                         visible)
 
-
-def test_static_frames_speak_chinese_after_a_switch(tmp_path):
-    from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_language
-
-    page, _runner = _static_page(tmp_path)
-    page.open_client_result(write_static(tmp_path / "zz_series"))
-    page.set_analysis_kind("static")
-    page.analyze_button.click()  # nothing to analyse yet: what is missing, in the status
-    try:
-        apply_language("zh", roots=(page,))
-        page.refresh_language()
-        assert page.window_label.text() == "zz_a · 名义厚度 4 nm" and page.window_next.toolTip() == "下一个样品"
-        assert page.window_label.toolTip() == "第 1 个样品，共 4 个：用了 4 帧。 基底：Si。"
-        assert page.entry_control.itemText(0) == "模型解 · 3.1" and page.patterns.titles[1] == "模型图：模型解"
-        assert page.evolution.figure.axes[0].get_xlabel() == "名义厚度 (nm)"
-        assert page.tiles["R_nm"].toolTip().splitlines()[-1] == "范围：1.8 – 2.4 nm"
-        assert page.static_section.toggle_button.text() == "静态帧（沉积之后测量）"
-        assert page.kind_switch.itemText(1) == "沉积后" and page.static_note.text().startswith("沉积之后在入射角约 0.35°")
-        assert page.static_reference.path_edit.placeholderText() == "可选：另一片未镀金属的同种基底"
-        assert "请给样品起一个含字母或数字的名字。" in page.static_status.message_label.text()
-        assert page.package_masks_button.text() == page.static_masks_button.text() == "分析包自带的掩膜"
-        page.open_client_result(write_result(tmp_path / "porous", windows=porous_windows(), wanted=POROUS_WANTED))
-        assert page.tile_captions["R_nm"].full_text() == "岛半径（相对值）"
-        assert _legend(page.evolution.figure.axes[1]) == ["岛份额", "帽层份额", "成膜份额"]
-        assert page.evolution.figure.axes[1].get_ylabel() == "份额"
-    finally:
-        apply_language(DEFAULT_LANGUAGE, roots=(page,))
-        page.refresh_language()
-    assert page.tile_captions["R_nm"].full_text() == "Island radius (relative)"
-    assert page.kind_switch.itemText(1) == "After Deposition"
-    assert "Give the sample a name" in page.static_status.message_label.text()
-    _close(page)
-
-
-def test_every_template_of_static_frames_and_of_a_porous_result_is_in_the_chinese_table():
-    from src.gimap.app.presentation.i18n.zh import ZH
-    from src.gimap.features.sputter.application import STATIC_STEP_TEXT, STATIC_TEMPLATES
-    from src.gimap.features.sputter.presentation import static_flow
-    from src.gimap.features.sputter.presentation.views import sputter_static_view as view
-
-    from src.gimap.features.sputter.presentation.views import sputter_main_view as bar
-
-    held = [*STATIC_TEMPLATES, *STATIC_STEP_TEXT.values(), *static_flow.TEMPLATES, view.STATIC_TITLE, view.STATIC_TIP,
-            *(text for label, _key, tip in view.STATIC_MODE_CHOICES for text in (label, tip)), view.FRAMES_TIP,
-            view.NAME_TIP, view.NOMINAL_TIP, view.REFERENCE_TIP, view.REFERENCE_PLACEHOLDER, view.SERIES_TIP,
-            view.GEOMETRY_NOTE, view.CENTRE_TIP, view.MASKS_BUTTON, view.MASKS_TIP,
-            *(text for label, _key, tip in bar.KIND_CHOICES for text in (label, tip)), "Package Values", "Sample",
-            "Nominal (nm)", "Bare substrate", "Series folder", "of the package", "of the package (.npy)",
-            "folder, CBF file or zip archive", "Choose the Folder of the Frames", "Choose a CBF File or a Zip Archive",
-            "Choose the Folder of the Series"]
-    missing = [template for template in held if template not in ZH]
-    assert missing == []
-    for template in held:  # a translated template keeps its fields
-        assert sorted(re.findall(r"\{(\w+)\}", template)) == sorted(re.findall(r"\{(\w+)\}", ZH[template])), template
+    space = real_space(dict(R_nm=10.0, D_nm=21.0, width=0.2, H_nm=8.0, base_nm=0.0))
+    grains = visible(space, top_grains(space))
+    assert arrangement(space, grains) == "network"
+    _x, _y, height = height_map(space, grains)
+    holes = height <= 0
+    assert 0.05 < holes.mean() < 0.6 and height.max() <= max(g.height for g in grains) + 1e-9
+    x, h = profile(space, grains, space.field / 2)
+    assert x.shape == h.shape and (h > 0).any() and (h == 0).any()
+    layered = real_space(dict(R_nm=10.0, D_nm=21.0, width=0.2, H_nm=10.0, base_nm=2.0))
+    _x, _y, film = height_map(layered, visible(layered, top_grains(layered)))
+    assert film.min() >= 2.0 - 1e-12  # on a continuous layer there are no holes

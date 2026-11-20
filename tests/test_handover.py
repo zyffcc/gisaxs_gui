@@ -488,26 +488,25 @@ def _toasts(window) -> list:
 
 
 def test_a_giwaxs_curve_or_series_in_fitting_is_said_to_be_one_and_no_particle_fit_is_set_up(tmp_path: Path, monkeypatch) -> None:
-    """critic[02]: an I(q) of a GIWAXS frame opened with “Find the particle shape” chosen and the Fit step shown,
-    and a GIWAXS series was fitted with particle models without a word."""
+    """critic[02]: an I(q) of a GIWAXS frame opened with a particle search (now Predict parameters) chosen and the Fit
+    step shown, and a GIWAXS series was fitted with particle models without a word."""
     from src.gimap.features.fitting.presentation.workspace import NOTE_TEXT
     from tests.test_fit_series import _answer
     from tests.test_fitting_presentation import _fitting_window
 
-    # The fit1d kit is there (it comes with GIMaP; without it, a GISAXS cut gets Find the particle shape instead).
-    monkeypatch.setattr("src.gimap.features.fitting.presentation.single.fit1d_review.fit1d_kit_available",
-                        lambda: True)
+    # Predict parameters' network is there (it comes with GIMaP).
+    monkeypatch.setattr("src.gimap.features.fitting.presentation.single.predict.network_available", lambda: True)
     app, window = _fitting_window()
     try:
         components = window.components
         workspace, page = components.fitting_workspace, components.fitting_workspace.fit_page
         note = workspace.handover_note
         assert note.isHidden()
-        # A GISAXS cut: Predict parameters (fit1d) is chosen for it, no note
+        # A GISAXS cut: Predict parameters is chosen for it, no note
         cut = _fit_input(tmp_path / "sample" / "gimap_analysis" / "cut_00001_fit_input.dat")
         components._send_curve_to_fitting(cut, "mean")
         _settle()
-        assert page.session.curve is not None and page.method() == "fit1d" and page.step_rail.current() == "fit"
+        assert page.session.curve is not None and page.method() == "predict" and page.step_rail.current() == "fit"
         assert note.isHidden()
         assert ("ok", "Sent to Fitting — the curve file is in " + str(Path("…", "sample", "gimap_analysis")), "Open Folder") in _toasts(window)
         # A GIWAXS I(q): the note says what Fitting's models are for; nothing is preselected
@@ -515,7 +514,7 @@ def test_a_giwaxs_curve_or_series_in_fitting_is_said_to_be_one_and_no_particle_f
         components._send_curve_to_fitting(ring, "both_abs")
         _settle()
         assert page.session.curve.name == "film_00001_fit_input.dat"
-        assert page.method() not in ("shapes", "fit1d") and page.step_rail.current() == "curve"
+        assert page.method() == "local" and page.step_rail.current() == "curve"
         assert [toast for toast in _toasts(window) if toast[2] == "Open Folder"] == [
             ("ok", "Sent to Fitting — the curve file is in " + str(Path("…", "film", "gimap_analysis")), "Open Folder")]  # one at a time
         assert note.isVisibleTo(window) and note.title_label.text() == "A GIWAXS I(q), not a GISAXS cut"
@@ -525,10 +524,10 @@ def test_a_giwaxs_curve_or_series_in_fitting_is_said_to_be_one_and_no_particle_f
         # … also when it is opened by hand, and gone again with a GISAXS cut
         page.open_curve(cut)
         _settle()
-        assert note.isHidden() and page.method() == "fit1d"
+        assert note.isHidden() and page.method() == "predict"
         page.open_curve(ring)
         _settle()
-        assert note.isVisibleTo(window) and page.method() != "shapes"
+        assert note.isVisibleTo(window) and page.method() == "local"
         # In-situ series: the same for a folder of GIWAXS curves; Single keeps its own
         series = tmp_path / "film" / "gimap_analysis" / "run" / "fit_input"
         for frame in range(5):

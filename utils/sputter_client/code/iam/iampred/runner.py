@@ -33,9 +33,33 @@ def site_env(cfg, data=None, shadow=None, work=None):
     return env
 
 
+_INIT_ERROR = None
+"""Why this worker could not be set up (None: it was): said by the first task it gets."""
+
+
 def _init(env):
-    from . import adapter
-    adapter.activate(env)
+    'Pool initializer. A failure is kept for the tasks (2026-11-19): an initializer that raises makes the pool start'
+    global _INIT_ERROR
+    try:
+        from . import adapter
+        adapter.activate(env)
+    except BaseException as e:
+        _INIT_ERROR = f"{type(e).__name__}: {e}"
+
+
+class Guard:
+    'A task function for a multiprocessing pool that cannot hang it (2026-11-19). SystemExit in a worker (the IAM'
+
+    def __init__(self, fn):
+        self.fn = fn
+
+    def __call__(self, *args):
+        if _INIT_ERROR is not None:
+            raise RuntimeError(f"worker set-up failed: {_INIT_ERROR}")
+        try:
+            return self.fn(*args)
+        except SystemExit as e:
+            raise RuntimeError(str(e.code if e.code is not None else "SystemExit")) from None
 
 
 def run(cfg, tasks, fn, workers, data=None, shadow=None, work=None):
@@ -56,6 +80,6 @@ def run(cfg, tasks, fn, workers, data=None, shadow=None, work=None):
             continue
         n = max(1, min(workers, len(idx)))
         with ctx.Pool(n, initializer=_init, initargs=(e,), maxtasksperchild=None) as pool:
-            for i, r in zip(idx, pool.map(fn, [tasks[i] for i in idx], chunksize=1)):
+            for i, r in zip(idx, pool.map(Guard(fn), [tasks[i] for i in idx], chunksize=1)):
                 res[i] = r
     return res

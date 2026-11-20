@@ -1,12 +1,71 @@
-"""A quick-fit solution (``native_v5``) put into Fitting's manual model: the same curve, stated when not."""
+"""A solution of 1D Predict's earlier engines (``native_v5``: sizes by intensity, σD/D) put into Fitting's manual
+model: the same curve, stated when not. Its curves come from those engines' own forward model (V5's
+numpy_forward64), as their solutions do; Predict parameters gives its solutions in Fitting's conventions
+(``physics_backend`` "cut_model")."""
 
 from __future__ import annotations
+
 
 import numpy as np
 import pytest
 
+from scipy.special import j1
+
 from src.gimap.features.fitting.domain.native_solution import native_solution_mapping
-from src.gimap.features.fitting.infrastructure.adapters.experimental_fit import forward
+
+
+# The forward model of 1D Predict's earlier solutions (V5's numpy_forward64.component, retired in 0.2.0, as it was):
+# sizes Gaussian by intensity on 25 (sphere), 26 (vertical cylinder) or 13 × 13 nodes and 24 orientations (random
+# cylinder), the paracrystal with σD/D; the rows of fit1d (retired in 0.2.0) were converted the same way.
+def _nodes(mu, sigma, n, nsig):
+    xx = np.linspace(max(mu - nsig * sigma, 0.0), mu + nsig * sigma, n)
+    w = np.exp(-0.5 * ((xx - mu) / max(sigma, 1e-12)) ** 2)
+    return np.maximum(xx, 1e-8), w / w.sum()
+
+
+def _sphere(x):
+    a = np.abs(x) < 0.1
+    safe = np.where(a, 1.0, x)
+    x2 = x * x
+    return np.where(a, 1 - x2 / 10 + x2 * x2 / 280 - x2**3 / 15120, 3 * (np.sin(safe) - safe * np.cos(safe)) / safe**3)
+
+
+def _radial(x):
+    a = np.abs(x) < 1e-4
+    safe = np.where(a, 1.0, x)
+    return np.where(a, 1 - x * x / 8 + x**4 / 192, 2 * j1(safe) / safe)
+
+
+def _component(q, typ, r, sr, h, sh, dist, sd):
+    if typ == 1:
+        rr, w = _nodes(r, r * sr, 25, 4)
+        form = w @ (_sphere(rr[:, None] * q[None, :]) ** 2)
+    elif typ == 3:
+        rr, w = _nodes(r, r * sr, 26, 3)
+        form = w @ (_radial(rr[:, None] * q[None, :]) ** 2)
+    else:
+        rr, wr = _nodes(r, r * sr, 13, 4)
+        hh, wh = _nodes(h, h * sh, 13, 4)
+        alpha = np.linspace(0, np.pi / 2, 24)
+        wa = np.sin(alpha)
+        wa /= wa.sum()
+        fr = _radial(rr[:, None, None] * np.sin(alpha)[None, :, None] * q[None, None, :])
+        fh = np.sinc(hh[:, None, None] * np.cos(alpha)[None, :, None] * q[None, None, :] / (2 * np.pi))
+        form = np.sum(wa[:, None] * np.sum(wr[:, None, None] * fr**2, 0) * np.sum(wh[:, None, None] * fh**2, 0), 0)
+    lp = -np.pi * q * q * (dist * sd) ** 2
+    phi = np.exp(lp)
+    return form * (-np.expm1(2 * lp)) / np.maximum((-np.expm1(lp)) ** 2 + 4 * phi * np.sin(0.5 * q * dist) ** 2, 1e-15)
+
+
+def forward(q, components, globals_):
+    q = np.abs(np.asarray(q, float))
+    result = np.full_like(q, globals_["background"])
+    for c in components:
+        p = c["params"]
+        result += c["amplitude"] * _component(q, c["type_id"], p["R"], p["sigma_R"], p.get("h") or 10,
+                                              p.get("sigma_h") or 0.2, p["D"], p["sigma_D"])
+    return result + globals_["resolution_amplitude"] / (1 + (q / globals_["sigma_Res"]) ** globals_["nu_Res"])
+
 
 Q_NM = np.linspace(0.05, 2.5, 240)
 GLOBALS = {"background": 1.3, "resolution_amplitude": 800.0, "sigma_Res": 0.02, "nu_Res": 4.0}

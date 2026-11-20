@@ -154,7 +154,6 @@ def test_fitting_views_are_python_view_owned():
         "curve_import_view.py",
         "fit_results_view.py",
         "fit_step_view.py",
-        "fit1d_settings_view.py",
         "fit_page_view.py",
         "fit_series_view.py",
         "fit_steps_view.py",

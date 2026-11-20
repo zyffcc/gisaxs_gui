@@ -66,7 +66,7 @@ ZH_NEW = {
     "near the frame": "这一帧附近",
     INCIDENCE_MISSING["gisaxs"]: "选项、笔记和仪器配置都没有给出 αi，因此使用 0°。qy 和面内间距几乎不变，但样品地平线会被放在直射束处："
                                  "每一行的出射角 αf（包括 Yoneda 带标出的 αf）都偏大 αi，直射束和真实地平线之间的那些行也被算作样品上方。",
-    "fitting spheres and cylinders to I(qy) (about half a minute)…": "正在用球和圆柱模型拟合 I(qy)（大约半分钟）…",
+    "predicting the particles of I(qy) (about 25 s)…": "正在预测 I(qy) 的颗粒（大约 25 s）…",
     "no side maximum or shoulder away from qy = 0": "在 qy = 0 之外没有侧峰或肩峰",
 }
 
@@ -108,7 +108,7 @@ def test_the_entries_of_this_release_are_in_the_table_whole_or_not_at_all() -> N
     shown = {INSTALL_HINT, NOT_FOUND_AT, SEARCHED_NOTE, SEARCHED_ABOVE, INCIDENCE_MISSING["gisaxs"], *SENTENCES,
              *(preset.name for preset in PROVIDERS)}
     literals = {"found by the search: {name}", "same folder", "parent folder", "two levels up", "three levels up",
-                "near the frame", "fitting spheres and cylinders to I(qy) (about half a minute)…",
+                "near the frame", "predicting the particles of I(qy) (about 25 s)…",
                 "no side maximum or shoulder away from qy = 0"}
     package = Path(__file__).parents[1] / "src" / "gimap" / "features" / "assistant"
     source = "\n".join(path.read_text(encoding="utf-8") for path in sorted(package.rglob("*.py")))
@@ -341,8 +341,8 @@ def test_another_language_says_only_what_it_can_say_of_a_running_step(zh, monkey
     assert live_summary("find_peaks", {"curve": "radial"}, "12 peak(s) on radial: 0.452, 0.899") == ""
     assert live_summary("use_geometry", {}, "geometry from Pilatus1M.poni → GIWAXS") == ""
     # What the table or the sentence forms know is said: the slow fit, the halves and their reason.
-    fitting = "fitting spheres and cylinders to I(qy) (about half a minute)…"
-    assert live_summary("fit_horizontal_cut", None, fitting) == "正在用球和圆柱模型拟合 I(qy)（大约半分钟）…"
+    fitting = "predicting the particles of I(qy) (about 25 s)…"
+    assert live_summary("fit_horizontal_cut", None, fitting) == "正在预测 I(qy) 的颗粒（大约 25 s）…"
     halves = live_summary("choose_halves", {}, HALVES)
     assert halves.endswith("两半都可用（100%、100%），并且相差在 8 % 以内：取平均。") and "Both halves" not in halves
     # An error is never swallowed, whatever its language.
@@ -355,7 +355,7 @@ def test_another_language_says_only_what_it_can_say_of_a_running_step(zh, monkey
     line = guided._readable("find_peaks: 12 peak(s) on radial: 0.452, 0.899")
     assert " — " not in line and not re.search(r"[A-Za-z]{3,}", line), line  # the step alone, in Chinese
     line = guided._readable("fit_horizontal_cut: " + fitting)
-    assert line.endswith(" — 正在用球和圆柱模型拟合 I(qy)（大约半分钟）…") and "fitting" not in line
+    assert line.endswith(" — 正在预测 I(qy) 的颗粒（大约 25 s）…") and "predicting" not in line
     guided._stepped({"state": "start", "tool": "find_peaks", "arguments": {}})
     guided._stepped({"state": "done", "tool": "find_peaks", "arguments": {}, "error": True})
     assert guided._readable("find_peaks: Curve 'radial' is not available").endswith(" — Curve 'radial' is not available")

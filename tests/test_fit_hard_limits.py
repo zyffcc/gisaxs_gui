@@ -1,5 +1,4 @@
 """Synthetic contracts: every displayed solution respects the requested parameters."""
-import copy
 import math
 
 import numpy as np
@@ -8,9 +7,7 @@ import pytest
 from src.gimap.features.fitting.application.single_fit import (
     FitData, FitModel, evaluate, fit_resolving, new_component, residuals,
 )
-from src.gimap.features.fitting.application.single_fit1d import fit1d_request
-from src.gimap.features.fitting.domain.fit_limits import constrain_proposal, explicit_limits
-from src.gimap.features.fitting.domain.fit1d_bounds import model_constraints
+from src.gimap.features.fitting.domain.fit_limits import constrain_proposal
 
 
 @pytest.mark.parametrize("method", ["local", "global"])
@@ -53,33 +50,22 @@ def test_refinement_without_sigma_cannot_discard_a_better_start():
     assert result.log_rmse < 1e-10
 
 
-def test_shape_and_ai_proposals_are_refined_under_the_same_constraints(tmp_path):
-    from tests.test_fit_page import _page, _curve_file, _shape_solution
+def test_a_solution_of_analyze_is_put_in_model_under_its_constraints(tmp_path):
+    from tests.test_fit_page import _analyze_solution, _curve_file, _page
 
     page = _page()
     try:
         page.open_curve(_curve_file(tmp_path))
         base = page.session.model.with_parameter((0, "R"), value=4, free=False)
         base = base.with_parameter((0, "Int"), lower=80, upper=110)
-        for source in ("shape search", "1D Predict"):
-            choices = page._as_solutions([_shape_solution(8)], page.session.data(), base, source)
-            assert len(choices) == 1
-            assert choices[0].model.get((0, "R")).value == 4
-            assert 80 <= choices[0].model.get((0, "Int")).value <= 110
+        page.set_model(base)
+        assert page.show_solution(dict(_analyze_solution(8), best_chi2_weighted=1.0))
+        model = page.session.model
+        assert model.get((0, "R")).value == 4 and not model.get((0, "R")).free
+        assert 80 <= model.get((0, "Int")).value <= 110
+        assert (model.get((0, "Int")).lower, model.get((0, "Int")).upper) == (80, 110)
     finally:
         page.dispose()
-
-
-def test_predict_refuses_inapplicable_constraints_instead_of_ignoring_them():
-    model = FitModel((new_component("sphere"),))
-    data = FitData.prepare([.1, .2, .3], [10, 8, 5])
-    with pytest.raises(ValueError, match="Choose The particles in Model"):
-        fit1d_request(data, model.with_parameter((0, "R"), free=False), {"fit1d_composition": "auto:vc:3"})
-    for path in ((0, "Int"), ("globals", "res_width"), ("globals", "res_amplitude")):
-        with pytest.raises(ValueError, match="cannot preserve"):
-            model_constraints(model.with_parameter(path, free=False))
-    with pytest.raises(ValueError, match="background range"):
-        model_constraints(model.with_parameter(("globals", "background"), upper=10))
 
 
 def test_linear_range_editor_distinguishes_infinity_from_a_finite_limit():
@@ -102,58 +88,29 @@ def test_linear_range_editor_distinguishes_infinity_from_a_finite_limit():
         page.dispose()
 
 
-def test_equivalent_dropdown_switches_whole_native_result_and_export(tmp_path):
-    from tests.test_fit_page import _page, _curve_file, _shape_solution
+def test_equivalent_dropdown_switches_whole_predicted_solutions_and_export(tmp_path):
+    import json
+
+    from tests.test_fit_page import _curve_file, _page, _predicting, _wait
 
     page = _page()
     try:
+        _predicting(page, (6.0, 5.0))
         page.open_curve(_curve_file(tmp_path))
-        data = page.session.data()
-        native = dict(settings=page.fit1d_settings(),
-                      summary=dict(chi2_per_point=1., n_points=data.q.size, model="synthetic", status="ok", composition="sphere"),
-                      populations=[], table=[], warnings=[],
-                      curves=dict(q_nm_inv=data.q.tolist(), intensity=data.intensity.tolist(), sigma=data.sigma.tolist(),
-                                  model=data.intensity.tolist(), residual=np.zeros_like(data.q).tolist(), components={}))
-        value = dict(native=native, mapping_row=_shape_solution(5), candidates=[])
-        alternative = copy.deepcopy(value)
-        alternative["native"]["curves"]["model"] = [v * 1.01 for v in value["native"]["curves"]["model"]]
-        alternative["delta_chi2"] = 1.0
-        value["equivalents"] = [alternative]
-        page._fit1d_finished(value, page.session.selection(), page.session.curve)
-        assert page.solution_selector.count() == 2
+        page.set_method("predict")
+        page.run_fit()
+        _wait(page)
+        solutions = page.session.solutions
+        assert page.solution_selector.count() == 2 and page.solution_selector.isEnabled()
+        assert page.session.model == solutions[0].model
         page.choose_equivalent_solution(1)
-        assert page.session.native_result is alternative["native"]
-        assert page.session.native_is_current()
-        _names, table, record = page._fit1d_export()
-        assert table[:, 4] == pytest.approx(alternative["native"]["curves"]["model"])
-        assert record["native_result"]["selected_solution"] == 1
+        assert page.session.model == solutions[1].model and page.solution_selector.currentIndex() == 1
+        page.export_data_dialog(str(tmp_path / "second.csv"))
+        record = json.loads((tmp_path / "second.json").read_text(encoding="utf-8"))
+        assert record["model"]["components"][0]["params"]["R"]["value"] == pytest.approx(5.0)
         page.set_range((.2, 1.0))
-        assert not page.solution_selector.isEnabled()
-    finally:
-        page.dispose()
-
-
-def test_repeat_auto_prediction_ignores_only_its_untouched_generated_start(tmp_path):
-    from tests.test_fit_page import _page, _curve_file, _shape_solution
-
-    page = _page()
-    try:
-        page.open_curve(_curve_file(tmp_path))
-        page._apply_fit1d_settings({"fit1d_composition": "auto:sphere,vc:3"})
-        data = page.session.data()
-        native = dict(settings=page.fit1d_settings(),
-                      summary=dict(chi2_per_point=1., n_points=data.q.size, model="synthetic", status="ok", composition="sphere"),
-                      populations=[], table=[], warnings=[],
-                      curves=dict(q_nm_inv=data.q.tolist(), intensity=data.intensity.tolist(), sigma=data.sigma.tolist(),
-                                  model=data.intensity.tolist(), residual=np.zeros_like(data.q).tolist(), components={}))
-        # A predicted radius can lie outside the manual model's default range.
-        page._fit1d_finished(dict(native=native, mapping_row=_shape_solution(.2)),
-                            page.session.selection(), page.session.curve)
-        assert explicit_limits(page.session.model)
-        request = fit1d_request(data, page.fit1d_request_model(), page.fit1d_settings())
-        assert not request.payload["constraints"]
-        page.set_model(page.session.model.with_parameter((0, "R"), free=False))
-        with pytest.raises(ValueError, match="Choose The particles in Model"):
-            fit1d_request(data, page.fit1d_request_model(), page.fit1d_settings())
+        assert not page.solution_selector.isEnabled()  # solutions of other points
+        page.choose_equivalent_solution(0)
+        assert page.session.model == solutions[1].model
     finally:
         page.dispose()

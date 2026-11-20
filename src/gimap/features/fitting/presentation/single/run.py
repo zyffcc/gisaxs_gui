@@ -1,63 +1,31 @@
-"""The Fit step: one method (Predict parameters with fit1d — ``fit1d.py`` — or one of four others), one button,
-progress and Stop (the work runs in the background).
+"""The Fit step: one method — Predict parameters (``predict.py``), Refine or Search — one button, progress and
+Stop (the work runs in the background).
 
 * Refine / Search — the fitting engine under Model's hard limits, with boundary diagnostics;
-* Find the particle shape (no AI) — the quick physical fit (sphere, random and vertical cylinder
-  from several starts, injected by the composition root); its solutions go to Results, the best
-  into Model;
-* AI proposal — 1D Predict (V5) with its numerical correction; its solutions likewise.
+* Predict parameters — the proposal network and its posterior (``predict.py``); its solutions go to Results, the most
+  probable into Model.
 
 A fit replaces the model (Undo brings the previous one back). A stopped fit of the engine keeps the best
-values so far; a stopped search for solutions (the last two methods) brings none.
+values so far; a stopped Predict brings none.
 
 While a fit runs, the bars show how far it is — busy (no number) until there is something to count — and
-the line under them what it is doing, in the interface language (``progress_line``). The shape search
-counts its starts and, inside one, the evaluations of its budget (``start_fraction``).
+the line under them what it is doing, in the interface language (``progress_line``).
 """
 
 from __future__ import annotations
 
-import math
 import re
 import threading
-import time
-from datetime import datetime
-from pathlib import Path
-
 from typing import Optional
 
-import numpy as np
 from PyQt5.QtCore import QObject, Qt, pyqtSignal
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application import CandidateGenerationRequest
-from ...application.single_fit import (
-    BOTH_USES_MEAN,
-    FAMILIES,
-    NM_PER_A,
-    ONE_CURVE_METHODS,
-    PROGRESS_LINE,
-    fit_resolving,
-    explicit_limits,
-    model_from_solution,
-    solution_deviation,
-    residuals,
-    stopped_result,
-)
-from ...application.workflow_v5 import bundled_workflow, default_options
-from .session import Solution
-from .fit1d_review import fit_error_text
+from ...application.single_fit import BOTH_USES_MEAN, ONE_CURVE_METHODS, PROGRESS_LINE, fit_resolving, stopped_result
+from .method_hint import fit_error_text
 
-FAMILY_IDS = {"sphere": 1, "cylinder": 2, "vertical_cylinder": 3}
-METHOD_NAMES = {"local": "Refine", "global": "Search the ranges", "shapes": "Find the particle shape",
-                "ai": "AI proposal", "fit1d": "Predict parameters (fit1d)"}
-START, START_OF = "Trying start {n} of {total}", "Trying start {n} of {total}: {model}"
-"""One start of the shape search (each family is tried from several starting sizes)."""
-EVALUATED = "{line} — {evaluations} evaluations"
-"""… and how many times this start has evaluated the model so far (one start can take most of the search)."""
-HEARTBEAT = 0.25
-"""Seconds between two lines of one start (as the fitting engine reports)."""
+METHOD_NAMES = {"local": "Refine", "global": "Search the ranges", "predict": "Predict parameters"}
 _ENGINE_LINE = re.compile("".join(
     re.escape(part) if index % 2 == 0 else f"(?P<{part}>.+?)"
     for index, part in enumerate(re.split(r"\{(\w+)\}", PROGRESS_LINE))), re.DOTALL)
@@ -65,26 +33,12 @@ _ENGINE_LINE = re.compile("".join(
 
 def progress_line(what) -> str:
     """What a running fit is doing, in the interface language. ``what``: the engine's English line
-    (``PROGRESS_LINE``: its phase is translated, its numbers stay), the details of one start of the shape
-    search (``{"start": 2, "starts": 6, "types": [3]}``, with ``evaluations`` once it has some), or any
-    other line — shown as it comes unless the table knows it."""
-    if isinstance(what, dict):
-        names = {number: FAMILIES[key][0] for key, number in FAMILY_IDS.items()}
-        model = " + ".join(tr(names[number]) for number in what.get("types") or () if number in names)
-        line = trf(START_OF if model else START, n=what.get("start", 1), total=what["starts"], model=model)
-        return trf(EVALUATED, line=line, evaluations=what["evaluations"]) if what.get("evaluations") else line
+    (``PROGRESS_LINE``: its phase is translated, its numbers stay) or any other line — shown as it comes unless the
+    table knows it."""
     found = _ENGINE_LINE.fullmatch(str(what))
     if found is None:
         return tr(str(what))
     return trf(PROGRESS_LINE, **{**found.groupdict(), "phase": tr(found["phase"])})
-
-
-def start_fraction(start: dict) -> float:
-    """How far a search of several starts is: the starts done, plus the share of its evaluation budget this
-    one has used (a start that converges early ends before its share is full, as a fit of the engine does;
-    never the whole of it while it still runs)."""
-    used = min(0.99, float(start.get("evaluations") or 0) / max(1.0, float(start.get("budget") or 1)))
-    return (float(start.get("start", 1)) - 1.0 + used) / float(start["starts"])
 
 
 class _Progress(QObject):
@@ -93,7 +47,7 @@ class _Progress(QObject):
 
 
 class FitRunMixin:
-    """Needs the page's widgets, ``session``, ``tasks``, ``quick_fit`` and ``view_model``."""
+    """Needs the page's widgets, ``session``, ``tasks`` and ``view_model``."""
 
     def setup_run(self) -> None:
         self._progress = _Progress(self)
@@ -108,9 +62,6 @@ class FitRunMixin:
         self.stop_button.clicked.connect(self.stop_fit)
         self.stop_step_button.clicked.connect(self.stop_fit)
         self.method_combo.currentIndexChanged.connect(lambda _index: self._method_chosen())
-        resolve = self._remembered("resolve_edges")
-        self.resolve_edges_check.setChecked(True if resolve is None else bool(resolve))
-        self.resolve_edges_check.toggled.connect(lambda on: self._remember(resolve_edges=bool(on)))
         self._method_chosen(remember=False)
 
     def method(self) -> str:
@@ -131,13 +82,12 @@ class FitRunMixin:
 
     def _method_chosen(self, *, remember=True) -> None:
         method = self.method()
-        self.families_row.setVisible(method == "shapes")
-        self.fit1d_row.setVisible(method == "fit1d")
+        self.predict_row.setVisible(method == "predict")
         self.fit_step_button.setText(tr(METHOD_NAMES[method]))
         self.fit_step_button.setToolTip(tr(self.method_combo.itemData(self.method_combo.currentIndex(), Qt.ToolTipRole)
                                            or ""))
         self._fill_curve_card()
-        self._refresh_fit1d_action()
+        self._refresh_method_hint()
         if remember:
             self._remember(method=method)
 
@@ -147,7 +97,7 @@ class FitRunMixin:
     # -- run ------------------------------------------------------------------------------
 
     def run_fit(self, method: Optional[str] = None) -> None:
-        """``method``: one of ``METHOD_NAMES`` (fit1d has its own button); the one chosen in the Fit step if None."""
+        """``method``: one of ``METHOD_NAMES``; the one chosen in the Fit step if None."""
         if self.fit_running():
             return
         data = self._data()
@@ -157,11 +107,13 @@ class FitRunMixin:
         method = method or self.method()
         if method not in METHOD_NAMES:
             method = self.method()
-        if method == "shapes" and self.quick_fit is None:
-            self._status(tr("Finding the particle shape is not available here: choose another method."), "warning")
+        if method == "predict" and not self.predict_available():
+            from ...application.single_predict import network_file
+            from .predict import MISSING
+            self._status(trf(MISSING, name=network_file()), "warning")
             return
         if method in ("local", "global") and not self.session.model.components:
-            self._status(tr("Add a particle in Model, or use Find the particle shape."), "warning")
+            self._status(tr("Add a particle in Model, or use Predict parameters."), "warning")
             return
         if method in ONE_CURVE_METHODS and self.session.side == "both" and self.session.curve.signed:
             # These methods take one measurement per |q|. The page goes over to the mean of the halves and says
@@ -184,31 +136,21 @@ class FitRunMixin:
             method=tr(METHOD_NAMES[method]), points=data.q.size,
             free=sum(1 for _path, parameter in model.parameters() if parameter.free)))
         if method in ("local", "global"):
-            resolve = self.resolve_edges_check.isChecked()
             job = lambda: fit_resolving(model, data, method=method, max_evaluations=budget,  # noqa: E731
                                         progress=self._progress.changed.emit, stop=self._stop_event.is_set,
-                                        resolve=resolve)
+                                        resolve=True)
             self.tasks.submit("fit", job, on_done=lambda done: self._fitted(*done, selection=selection, curve=curve),
                               on_error=failed)
-        elif method == "shapes":
-            families, edited = self.families_combo.currentData(), self.session.edited  # read here, not in the worker
-            self.tasks.submit("fit", lambda: self._find_shapes(data, model, families, edited),
-                              on_done=lambda solutions: self._solutions_found(solutions, curve, selection),
-                              on_error=failed)
-        elif method == "fit1d":
+        elif method == "predict":
             try:
-                self._start_fit1d(data, model, selection, curve)
+                self._start_predict(data, model, selection, curve)
             except (ValueError, TypeError, RuntimeError) as exc:
                 failed(str(exc))
-        else:
-            self.tasks.submit("fit", lambda: self._ai_solutions(data, model),
-                              on_done=lambda solutions: self._solutions_found(solutions, curve, selection),
-                              on_error=failed)
 
     def stop_fit(self) -> None:
         if not self.fit_running():
             return
-        keeps = self._running in ("local", "global")  # a search for solutions keeps nothing of a run cut short
+        keeps = self._running in ("local", "global")  # Predict keeps nothing of a run cut short
         self._halt_fit()
         self.fit_progress_text.setText(tr("Stopping … the best values so far are kept.") if keeps else tr("Stopping…"))
 
@@ -217,13 +159,8 @@ class FitRunMixin:
         if not self.fit_running():
             return
         self._stop_event.set()
-        if self._running == "fit1d":
-            self._cancel_fit1d()
-        if self._running == "ai":
-            try:
-                self.view_model.cancel_ai_candidates()
-            except (AttributeError, RuntimeError):
-                pass
+        if self._running == "predict":
+            self._cancel_predict()
 
     def _busy(self, on: bool) -> None:
         for widget in (self.stop_button, self.stop_step_button, self.fit_progress, self.status_progress):
@@ -237,7 +174,7 @@ class FitRunMixin:
 
     def _show_bars(self, percent: int, *, busy: bool) -> None:
         """``busy``: a moving bar without a number — the fit runs, but there is nothing to count yet (its
-        first evaluations, the first start of the shape search, the stages of the AI proposal)."""
+        first evaluations, the stages of Predict)."""
         for bar in (self.fit_progress, self.status_progress):
             bar.setRange(0, 0 if busy else 100)
             bar.setValue(percent)
@@ -263,7 +200,6 @@ class FitRunMixin:
 
     def _finish(self) -> None:
         self._running = None
-        self._fit1d_job_id = None
         self._busy(False)
 
     def _of_another_curve(self, curve) -> bool:
@@ -280,7 +216,7 @@ class FitRunMixin:
         if self._of_another_curve(curve):
             return
         # Stop during a search for solutions ends as an error of its fitter (“Fitting cancelled”): not a failure.
-        stopped = self._stop_event.is_set() and self._running in ("shapes", "ai", "fit1d")
+        stopped = self._stop_event.is_set() and self._running == "predict"
         self._finish()
         if stopped:
             self._status(lambda: tr("Stopped before the search finished: no new solutions."), "warning")
@@ -295,7 +231,6 @@ class FitRunMixin:
         self._finish()
         self._fit_notes = dict(result=result, actions=list(actions), remaining=list(remaining))
         self.session.result = result
-        self.session.native_result = None
         self.session.result_selection = self.session.selection() if selection is None else selection
         self.session.set_model(result.model)
         self._model_changed(editor=True)
@@ -316,7 +251,6 @@ class FitRunMixin:
             self._status(tr("No solution: the curve may be too short or too noisy for these families."), "warning")
             return
         self.session.solutions = list(solutions)
-        self.session.native_result = None
         # The points their χ² is of: those when the search started (the band may be dragged meanwhile).
         self.session.solutions_selection = self.session.selection() if selection is None else selection
         best = solutions[0]
@@ -329,85 +263,5 @@ class FitRunMixin:
         self._log(tr("{method}: {count} solutions").format(method=tr(METHOD_NAMES.get(method, "")), count=len(solutions)))
         self.show_step("results")
 
-    # -- the solutions of the other methods (background thread) -----------------------------
 
-    def _as_solutions(self, rows, data, base, source: str) -> list[Solution]:
-        solutions = []
-        for row in rows or ():
-            try:
-                model, deviation = model_from_solution(row, base)
-            except (ValueError, KeyError, TypeError):
-                continue
-            # Proposal engines do not share this model's parameterisation. Finish under its hard limits.
-            if explicit_limits(base):
-                fitted, _actions, _remaining = fit_resolving(model, data, stop=self._stop_event.is_set,
-                                                            progress=self._progress.changed.emit, resolve=False)
-                model = fitted.model
-                deviation = solution_deviation(model, row)
-            values = residuals(model, data)
-            free = sum(1 for _path, parameter in model.parameters() if parameter.free)
-            dof = max(1, data.q.size - free)
-            solutions.append(Solution(model, float(values @ values / dof), source, deviation))
-        if not solutions and explicit_limits(base) and rows:
-            raise ValueError("No candidate preserves Model's constraints. Use Refine or Search with the current model.")
-        return sorted(solutions, key=lambda item: item.chi2 if math.isfinite(item.chi2) else math.inf)
-
-    def _find_shapes(self, data, base, families: str, edited: bool) -> list[Solution]:
-        components = ()
-        if (families == "model" or explicit_limits(base)) and base.components:
-            components = tuple(FAMILY_IDS[component.family] for component in base.components)
-        distance = None
-        if edited and base.components and base.components[0].structure:
-            distance = base.components[0].value("D")
-
-        said = [0.0]  # when the last line of a start was sent
-
-        def report(done, total, message="", extra=None):
-            # The quick fit counts its starts in the details: (done, total) stay (0, 1) there, because the
-            # same callback counts the files of a 1D Predict job (``experimental_fit.fit_candidates``).
-            start = extra if isinstance(extra, dict) and extra.get("starts") else None
-            if start is None:
-                self._progress.changed.emit(float(done) / max(1.0, float(total)), str(message))
-            else:
-                said[0] = time.monotonic()
-                self._progress.changed.emit(start_fraction(start), dict(start))
-
-        def evaluated(start):
-            """Every evaluation of a start: a line now and then, so a long start is seen to be at work."""
-            now = time.monotonic()
-            if now - said[0] >= HEARTBEAT and isinstance(start, dict) and start.get("starts"):
-                said[0] = now
-                self._progress.changed.emit(start_fraction(start), dict(start))
-
-        rows = self.quick_fit(data.q / NM_PER_A, data.intensity, data.sigma, components=components,
-                              distance_nm=distance, report=report, cancelled=self._stop_event.is_set,
-                              evaluated=evaluated)
-        return self._as_solutions(rows, data, base, "shape search")
-
-    def _ai_solutions(self, data, base) -> list[Solution]:
-        from ...application.workflow_v5 import workflow_options_for_mode
-
-        catalog = self.view_model.storage.ai_catalog
-        if catalog is None:
-            raise RuntimeError(tr("1D Predict is not available in this installation"))
-        profile = catalog.profile(catalog.default_profile_name)
-        sigma = data.sigma
-        if sigma is None:
-            floor = max(float(np.max(np.abs(data.intensity))) * 0.001, 1e-12)
-            sigma = np.hypot(0.10 * np.abs(data.intensity), floor)
-        options = workflow_options_for_mode({**default_options(), "side": "positive"}, "full")
-        from src.gimap.integrations.state.run_paths import fitting_run_directory
-        output = fitting_run_directory()
-        request = CandidateGenerationRequest(
-            model_path=bundled_workflow(), output_dir=output, q=data.q, intensity=data.intensity, sigma=sigma,
-            profile=profile.to_dict(),
-            constraints={"workflow_v5": options, "sigma_estimated": data.sigma is None, "observation_metadata": {}},
-        )
-        result = self.view_model.run_ai_candidates(
-            request, refine=False, on_progress=lambda p: self._progress.changed.emit(float(p.fraction), str(p.message)))
-        if result is None:
-            raise RuntimeError(self.view_model.state.error_message or tr("1D Predict failed"))
-        return self._as_solutions(result.candidates, data, base, "1D Predict")
-
-
-__all__ = ["FitRunMixin", "progress_line", "start_fraction"]
+__all__ = ["FitRunMixin", "progress_line"]

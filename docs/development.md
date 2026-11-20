@@ -212,32 +212,22 @@ Zenodo DOI and paper submission, is [docs/releasing.md](releasing.md).
   `conda clean --all` before a build. Next to the files to upload (the ZIP, or its parts and the two
   installers) the build writes `SHA256SUMS.txt` (`sha256sum -c SHA256SUMS.txt`; `--ignore-missing` for a
   part of them).
-- The trained weights of 1D Predict (eight `*.h5` / `*.npz` files under
-  `modules/Fitting_1D_Model/Workflow_v5/`, about 56 MB) are tracked by Git, so a clone runs 1D Predict and
-  its tests. `.gitignore` still ignores `*.h5`, `*.npz` and every `results/` folder: a new or renamed
-  weight file is not picked up by `git add` on its own (`git add -f <file>`), and the model manifests
-  (`conditional_v2/conditional_fast_manifest_v2.json`, `stable_blue_rc_v1/MANIFEST.json`) must list its
-  checksum. `.gitattributes` switches line-ending conversion off for that folder, because the checksums
-  were taken from the bytes on disk. A checkout made on Windows before that rule (2026-10-13) holds part
-  of these files with converted line endings, and Git does not notice it: `tools/update_source.ps1`
-  writes them again.
+- The weights of Predict parameters' network (`src/gimap/features/fitting/domain/posterior/data/flow_v1.npz`,
+  about 13 MB) are tracked by Git, so a clone runs Predict and its tests. `.gitignore` still ignores `*.npz`
+  elsewhere: a new network is added with `git add -f`, and its record `flow_v1.json` (from
+  `tools/ml1d/export_checkpoint.py`) names its SHA-256, which the loader and the release builder check;
+  `tools/ml1d/model_card.py` writes `MODEL_CARD.md`. `.gitattributes` marks the weights binary. The networks of
+  1D Predict V5 (`modules/Fitting_1D_Model/Workflow_v5/`, about 56 MB) were removed in 0.2.0. A checkout made on
+  Windows before 2026-10-13 may hold files of the folders marked `-text` (the analysis package of Sputter) with
+  converted line endings, and Git does not notice it: `tools/update_source.ps1` writes them again. The fit1d kit
+  (`utils/gisaxs1d_gui_kit/`, about 62 MB), its release check `tools/list_fit1d_release_files.py` and the dependency
+  `threadpoolctl` were removed in 0.2.0: Fitting has one network method, Predict parameters.
 - 0.2.0 is a pre-release: `PRE_RELEASE` in `src/gimap/shared/version.py` (the About box), `README.md`, the
   manual (introduction, Known limitations, FAQ, Version and Contact) and `CHANGELOG.md` say so. Change them
   together when a version is released as final (see [releasing.md](releasing.md)).
 
-- The builder also validates the bundled `utils/gisaxs1d_gui_kit/` against its `FILES_SHA256.json`
-  with `tools/list_fit1d_release_files.py` (standard-library Python, including for `-ListOnly`). It
-  includes only the declared runtime code, networks, packed tables and launchers. The only
-  `research/` exception is the checked kit's `app/research/`; other research and personal folders
-  remain forbidden. Missing resources or a checksum mismatch stop before packing the environment.
-- The public portable package excludes the personal kit's `examples/`, `expected.json`, recorded
-  selftest results, personal `README_zh.md` and the selftest/example launchers. Use GIMaP's User
-  Manual for the distributed fit1d instructions. It writes a subset `FILES_SHA256.json` into
-  the ZIP so the shipped runtime can be validated again without those private files. The personal
-  update package may include them for its owner. The host environment must install `threadpoolctl`
-  from `requirements.txt`, so fit1d limits BLAS even when NumPy was loaded before the job begins.
-  The builder checks NumPy/SciPy compatibility and threadpoolctl inside the selected Conda
-  environment before creating a ZIP; it does not install dependencies or modify the environment.
+- Research and personal folders (`research/`, `_handoff/`, `validation/`) stay forbidden in the package without
+  exception; the builder does not install dependencies or modify the environment.
 - New GUI source files, and new documents that Help or the manuals use (`docs/`, `CITATION.cff`,
   screenshots), still need to be tracked before a normal release. `-AllowUntracked` leaves them out; it
   does not make an incomplete application releasable. Modified tracked files are
@@ -252,8 +242,8 @@ Zenodo DOI and paper submission, is [docs/releasing.md](releasing.md).
 fast-forward when origin only added commits; when the histories diverged, a branch
 `backup/<date>-<time>-<commit>` of the state before, then `git reset --hard origin/<branch>`. Modifications
 of tracked files go through `git stash` and back; untracked and ignored files are never changed (the script
-stops when the new version would overwrite one). Tracked files that `.gitattributes` marks `-text` (the
-model files of 1D Predict) and that the checkout holds with converted line endings are written again, also
+stops when the new version would overwrite one). Tracked files that `.gitattributes` marks `-text` (the analysis
+package of Sputter) and that the checkout holds with converted line endings are written again, also
 when there is nothing to update. Exit code 0: updated or nothing to do; 1: not updated, or not completely;
 2: updated, but the modifications wait in the stash. `README.md` describes it for users, with the two plain
 commands for a checkout that does not have the script yet.
@@ -278,8 +268,8 @@ Move such a clone to the new `main` first: with the script (a clone that does no
 and then `git reset --hard origin/main` (edits of tracked files and local commits are lost unless they were
 stashed or kept on a branch, and an untracked or ignored file at a place where the new version has a file
 is overwritten). After the two plain commands, run the script once: `git reset --hard` does not write
-again the model files whose content did not change, so on Windows they keep their converted line endings
-and 1D Predict fails its checksums. Carry own commits over with `git cherry-pick` onto the new `main`, not
+again the files whose content did not change, so on Windows they keep their converted line endings and the
+parts that check them byte for byte refuse them. Carry own commits over with `git cherry-pick` onto the new `main`, not
 by merging the old branch, and delete the `backup/…` branch once things look right: until then it keeps
 the old history on that computer.
 

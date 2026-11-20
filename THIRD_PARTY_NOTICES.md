@@ -169,7 +169,7 @@ The licences below are the ones the packages declare in their metadata (Python d
 | hdf5plugin | MIT; the compression filters it bundles keep their own licences | [github.com/silx-kit/hdf5plugin](https://github.com/silx-kit/hdf5plugin) |
 | fabio | MIT, with `ccp4_pack` under LGPL-3.0 or later | [github.com/silx-kit/fabio](https://github.com/silx-kit/fabio) |
 | PyYAML | MIT | [github.com/yaml/pyyaml](https://github.com/yaml/pyyaml) |
-| psutil, threadpoolctl | BSD-3-Clause | [github.com/giampaolo/psutil](https://github.com/giampaolo/psutil); [github.com/joblib/threadpoolctl](https://github.com/joblib/threadpoolctl) |
+| psutil | BSD-3-Clause | [github.com/giampaolo/psutil](https://github.com/giampaolo/psutil) |
 | anthropic | MIT | [github.com/anthropics/anthropic-sdk-python](https://github.com/anthropics/anthropic-sdk-python) |
 | openai | Apache-2.0 | [github.com/openai/openai-python](https://github.com/openai/openai-python) |
 | httpx, httpcore, h11, anyio, sniffio, idna, distro, jiter, pydantic, pydantic-core, annotated-types, typing-extensions (come with anthropic and openai) | BSD, MIT, Apache-2.0 or PSF-2.0 | their PyPI pages |
@@ -202,17 +202,14 @@ code in subprocesses. Their author, **Yufeng Zhai**, confirmed on 2026-11-10 tha
 are released under the **MIT License**. Each bundle includes `LICENSE`; `SOURCE.json` records authorship
 where present. This confirmation does not change the separate licences of third-party dependencies.
 
-- **1D Predict Workflow V5** (`modules/Fitting_1D_Model/Workflow_v5/`): code and trained network weights
-  (`*.h5`, `*.npz`) for Tools ▸ 1D Predict. They propose candidate fits of a 1D GISAXS curve with up to
-  four sphere or cylinder components.
-  - It was integrated on 2026-09-22 from a research source archive. `IMPORT_MANIFEST.json` records the
-    SHA-256 of that archive and of every imported file.
-  - Before 1D Predict runs, the program checks the weights against `conditional_v2/conditional_fast_manifest_v2.json`
-    and `stable_blue_rc_v1/MANIFEST.json`.
-  - The model card is `conditional_v2/MODEL_CARD_zh.md` (in Chinese). It states that the validation used
-    simulated data.
-- The earlier 1D models (`k1_k2_k3_k4_phys/`, `saved_model_K3K4/`) and the research code `utils/ML_Fitting_1D_GISAXS/`
-  were removed in 0.2.0; they remain in the repository's history (added 2026-06-08 and 2026-08-11).
+- **The network of Predict parameters** (`src/gimap/features/fitting/domain/posterior/data/flow_v1.npz`, its
+  record `flow_v1.json` and model card `MODEL_CARD.md`) is GIMaP's own work under GIMaP's licence: trained with
+  `tools/ml1d` on curves simulated by GIMaP's own model, with no measured data. The program checks the weights
+  against the SHA-256 in the record before it uses them.
+- The earlier 1D models (`k1_k2_k3_k4_phys/`, `saved_model_K3K4/`), the research code `utils/ML_Fitting_1D_GISAXS/`
+  and the networks of 1D Predict Workflow V5 (`modules/Fitting_1D_Model/Workflow_v5/`: *General V5* and *Single RC
+  specialist*) were removed in 0.2.0; they remain in the repository's history (added 2026-06-08, 2026-08-11 and
+  2026-09-22).
 - **Sputter analysis package** (`utils/sputter_client/`): a release build of the research code `iampred` (the
   physical forward model of in-situ sputter GISAXS and the networks trained on its simulations) with numpy
   networks for Au and Ag on Si and porous TiO₂, Ag on polymer films, Cu on PEO, and static Au films. It runs
@@ -220,14 +217,11 @@ where present. This confirmation does not change the separate licences of third-
   without the names of the private data it was developed on; `MANIFEST.json` checks every file. It was added to
   the repository on 2026-11-14 at the author's request, under the MIT License (`LICENSE`, decided by the author
   on 2026-11-14).
-- **fit1d kit** (`utils/gisaxs1d_gui_kit/`): the research code of the fit1d method (gisaxs1d_gui_kit
-  1.0.0, 2026-10-13) with two numpy networks (`models/general`, `models/au_np_si`) and packed form-factor
-  tables. It runs Fitting ▸ **Predict parameters (fit1d)** and the method *fit1d* of 1D Predict, imported in
-  a job process only. It was added to the repository on 2026-11-02 at the authors' request.
-  - Only its runtime files are bundled. `SOURCE.json` lists what was left out (example measurements, results
-    on measured data, research notes) and the few text changes; the networks and the tables are unchanged.
-  - `FILES_SHA256.json` holds the SHA-256 of every file; `tests/test_fit1d_kit_bundle.py` checks them.
-  - The network `au_np_si` was adapted without labels to measured curves, which are not distributed.
+- The **fit1d kit** (`utils/gisaxs1d_gui_kit/`: the research code of the fit1d method, gisaxs1d_gui_kit 1.0.0 of
+  2026-10-13, with two numpy networks and packed form-factor tables), which ran Fitting ▸ *Predict parameters
+  (fit1d)* and the method *fit1d* of 1D Predict, was removed in 0.2.0 together with that method; it remains in the
+  repository's history (added 2026-11-02, under the MIT License). The benchmark scripts
+  `tools/benchmarks/fit1d_recovery.py` and `galaxi_fit1d.py` run with a copy of it that you give them.
 - The **2D Prediction** modules (`modules/*/module.yaml`, `preprocess.py`) are configuration and
   preprocessing only. No 2D network weights are shipped.
 

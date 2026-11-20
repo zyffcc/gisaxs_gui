@@ -42,7 +42,7 @@ from src.gimap.app.presentation.task_runner import WORKER_STACK_BYTES
 from src.gimap.app.presentation.theme import set_role, theme_manager
 from src.gimap.app.jobs import JobRequest
 from src.gimap.integrations.jobs import LocalProcessJobRunner
-from ..application.workflow_v5 import validate_options, bundled_workflow
+from ..application.workflow_v5 import validate_options
 from .curve_rendering import follow_plot_theme, text_font_family, theme_figure
 from .workflow_v5_settings import WorkflowV5SettingsMixin
 from .workflow_v5_units import WorkflowV5UnitsMixin
@@ -57,18 +57,14 @@ FIGURE_EMPTY = "Add curves (or Use current cut), then Fit curve.\nSelect a candi
 PARAMETERS_EMPTY = "Select a candidate on the left: its components and parameters, with units."
 LOG_EMPTY = "What each curve's fit did, while the batch runs."
 STAGE_LABELS = {
-    "stable_amplitude_calibrated": "Model + amplitude",
-    "stable_neural": "Neural model",
-    "stable_numerical_fallback": "Numerical fallback",
-    "fit1d": "fit1d",
+    "posterior": "Network + posterior",
 }
 RMSE_TIP = ("Natural-log RMSE over the measured curve, including measurement noise. "
             "Review peak positions, overall shape and residuals; no mandatory cutoff is applied.")
-EXPERIMENTAL = "Experimental: candidates are starts to check, not results."
-"""The warning under the title (the window's one caveat; the details are its tooltip, ``EXPERIMENTAL_TIP``)."""
-EXPERIMENTAL_TIP = ("General V5 proposes several compositions; the single-RC specialist needs a known single random "
-                    "cylinder. Both are experimental. logRMSE and RMS/σ include the measurement noise and are not "
-                    "calibrated probabilities. The model is chosen in Parameters… ▸ Fit method.")
+EXPERIMENTAL = "Check every candidate's fit; refine it in Fitting before reporting it."
+"""The line under the title (the window's one caveat; the details are its tooltip, ``EXPERIMENTAL_TIP``)."""
+EXPERIMENTAL_TIP = ("Predict parameters gives each candidate's probability and the posterior intervals of its values. "
+                    "logRMSE and RMS/σ include the measurement noise.")
 CURRENT_CUT = "Input: the current cut of Fitting (q in nm⁻¹); each side fitted separately"
 """The input line for Use current cut (Fitting converts its q to nm⁻¹; the halves are fitted one by one)."""
 FINISHED = "Finished in {seconds} s · {failures} failed files · {count} candidates saved."
@@ -333,7 +329,6 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
             from src.gimap.integrations.state.run_paths import fitting_run_directory
             self.output_dir = fitting_run_directory()
             payload = dict(
-                model_path=str(bundled_workflow()),
                 output_dir=str(self.output_dir),
                 options=self.options(),
             )
@@ -361,17 +356,7 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
             self.job.completed.connect(self._completed)
             self.job.finished.connect(self._finished)
             self._set_running(True)
-            method = payload["options"]["method"]
-            starting = (
-                "Starting the experimental single-RC specialist… Checking the known composition and input scope."
-                if method == "stable"
-                else "Starting numerical physical fitting…"
-                if method == "experimental"
-                else "Starting fit1d (network + physical fit)…"
-                if method == "fit1d"
-                else "Loading experimental General V5… First run includes loading and compilation."
-            )
-            self.show_status(lambda: tr(starting))
+            self.show_status(lambda: tr("Starting Predict parameters (network + posterior)…"))
             self.job.start()
         except Exception as exc:
             QMessageBox.warning(self, tr("1D Predict"), str(exc))
@@ -501,7 +486,8 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
             r["display_fit"],
             color="#2563eb",
             lw=1.8,
-            label=("Physical fit" if r.get("physics_backend") == "experimental_calibrated" else "fit1d model" if r.get("best_source") == "fit1d" else "Model forward") + f" · {len(r['display_q'])} display points",
+            label=({"posterior": "Predicted, refined"}.get(r.get("best_source"), "Model forward"))
+            + f" · {len(r['display_q'])} display points",
         )
         for name, values in r.get("display_components", {}).items():
             ax.plot(r["display_q"], values, lw=1.1, ls="--", label=name)

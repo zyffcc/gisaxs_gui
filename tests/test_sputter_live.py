@@ -445,15 +445,13 @@ def test_after_deposition_the_main_screen_shows_the_sample_its_frames_and_the_se
     runner = LiveStaticRunner(tmp_path / "series")
     page = main_page(tmp_path, static=runner, preferences=InMemoryUserPreferencesRepository())
     page.show()
-    frames = tmp_path / "zz frames"
-    frames.mkdir()
+    frames = tmp_path / "set" / "zz_6Au"
+    frames.mkdir(parents=True)
+    (frames / "zz_00001.cbf").write_bytes(b"x")
     page.set_analysis_kind("static")
-    assert page.input_stack.currentIndex() == 1 and page.static_frames.isVisible() and not page.scan_picker.isVisible()
-    assert page.static_reference.path_edit.placeholderText() == "optional: another piece, no metal"
-    page.static_frames.set_path(str(frames))
-    page.static_name.setText("zz 6nm")
-    page.static_nominal.setText("6")
-    page.analyze_button.click()  # After Deposition: Analyze runs the sample
+    assert page.input_stack.currentIndex() == 1 and page.static_add_button.isVisible() and not page.scan_picker.isVisible()
+    page.add_static_samples(tmp_path / "set")
+    page.analyze_button.click()  # After Deposition: Analyze runs the ticked samples of the list
     _settle(lambda: runner.held.is_set())
     _settle(lambda: page._live is not None and page._live.frames_solved() == 2, 5)
     page._live_draw()

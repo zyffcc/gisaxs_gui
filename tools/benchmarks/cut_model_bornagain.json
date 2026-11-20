@@ -1,0 +1,62 @@
+{
+ "wavelength_nm": 0.1045,
+ "alpha_i_deg": 0.4,
+ "alpha_f_deg": 0.14990468592588582,
+ "si": {
+  "delta": 3.422592207191582e-06,
+  "beta": 5.444181949327292e-08
+ },
+ "cylinder_height_nm": 6.0,
+ "average_materials": false,
+ "checks": [
+  {
+   "name": "sphere one size",
+   "max_rel": 0.027763877892850397,
+   "median_rel": 0.001045228165441725,
+   "q_at_max": 1.901110301996337,
+   "points": 471
+  },
+  {
+   "name": "sphere sizes σ_R/R 0.2 (24 radii)",
+   "max_rel": 0.00038788317143612083,
+   "median_rel": 0.00014392263282392292,
+   "q_at_max": 2.4991758886274997,
+   "points": 471
+  },
+  {
+   "name": "sphere one size, radial paracrystal",
+   "max_rel": 0.02777959808721997,
+   "median_rel": 0.0010595902236707477,
+   "q_at_max": 1.901110301996337,
+   "points": 471
+  },
+  {
+   "name": "vertical_cylinder one size",
+   "max_rel": 1.122303541427002,
+   "median_rel": 0.0011889070299497817,
+   "q_at_max": 1.7554866573860946,
+   "points": 471
+  },
+  {
+   "name": "vertical_cylinder sizes σ_R/R 0.2 (24 radii)",
+   "max_rel": 0.0002840094309788377,
+   "median_rel": 3.381539173497039e-05,
+   "q_at_max": 1.0481392268208283,
+   "points": 471
+  },
+  {
+   "name": "vertical_cylinder one size, radial paracrystal",
+   "max_rel": 1.1224383923216692,
+   "median_rel": 0.0012108047922201326,
+   "q_at_max": 1.7554866573860946,
+   "points": 471
+  }
+ ],
+ "bornagain_default_average_materials": {
+  "name": "sphere paracrystal, BornAgain default (average materials)",
+  "max_rel": 3.755693677253084,
+  "median_rel": 0.31634553077478134,
+  "q_at_max": 1.932315013844589,
+  "points": 471
+ }
+}

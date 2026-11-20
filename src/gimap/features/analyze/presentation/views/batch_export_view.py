@@ -3,8 +3,8 @@
 Top to bottom: the frames and the settings they are reduced with (Load / Save Settings…); then, in a
 scrolling area, four groups — **Data** (numbers: tables, per-frame curves, the Fitting input, q maps),
 **Pictures**, **Converted detector frames** (the raw data in another format) and **Fitting**
-(optional: peaks of the ring regions or a particle model, with its starting values and a trial on
-the frame on screen) — each option with the file it writes next to it; at the bottom the folder.
+(optional: peaks of the ring regions with their starting values, or a particle model by Predict parameters;
+both with a trial on the frame on screen) — each option with the file it writes next to it; at the bottom the folder.
 Above Fitting, for GISAXS, **Curve for Fitting**: the halves of the signed cut a fit takes (the mean of
 both, or one — for the particle model here and for Fitting); in Send Series to Fitting it is the one
 group shown, with what is written.
@@ -61,11 +61,11 @@ FRAME_OUTPUT = (
 OUTPUTS = DATA_OUTPUTS + PICTURE_OUTPUTS + (FRAME_OUTPUT,)
 PEAK_SHAPES = (("Pseudo-Voigt", "pseudo_voigt"), ("Gaussian", "gaussian"), ("Lorentzian", "lorentzian"))
 MODELS = (
-    ("Automatic (compare sphere and cylinders)", "auto"), ("Sphere", "sphere"),
+    ("Automatic (the network chooses the composition)", "auto"), ("Sphere", "sphere"),
     ("Random cylinder", "random_cylinder"), ("Vertical cylinder", "vertical_cylinder"),
 )
 STARTS = (
-    ("previous", "The previous frame's result", "For a series that changes slowly: the fit follows the peak or the particles"),
+    ("previous", "The previous frame's result", "For a series that changes slowly: the fit follows the peak"),
     ("first", "The first frame's result, for every frame", "The same start everywhere: frames do not depend on each other"),
     ("fresh", "Found anew in each frame", "Every frame on its own, the start taken from its own data"),
 )
@@ -294,7 +294,8 @@ class BatchExportView:
         )
         self.fit_model_radio = QRadioButton("Particle model of the horizontal cut", self.fit_group)
         self.fit_model_radio.setToolTip(
-            "GISAXS: sphere or cylinders with size dispersity and a spacing D, fitted to the curve for Fitting"
+            "GISAXS: Predict parameters on the curve for Fitting — the most probable particles (spheres and "
+            "cylinders with size dispersity and a spacing D) and their probability"
         )
         self.fit_kind_group = QButtonGroup(self.fit_group)
         for button in (self.fit_none_radio, self.fit_peaks_radio, self.fit_model_radio):
@@ -324,7 +325,8 @@ class BatchExportView:
         details.addWidget(self.fit_profile_combo, 1, 1, Qt.AlignLeft)
         details.addWidget(self.fit_model_caption, 2, 0, Qt.AlignRight)
         details.addWidget(self.fit_model_combo, 2, 1, Qt.AlignLeft)
-        details.addWidget(QLabel("Start values", self.fit_details), 3, 0, Qt.AlignRight | Qt.AlignTop)
+        self.fit_start_caption = QLabel("Start values", self.fit_details)  # of the peaks: Predict parameters needs none
+        details.addWidget(self.fit_start_caption, 3, 0, Qt.AlignRight | Qt.AlignTop)
         starts = QVBoxLayout()
         self.fit_start_radios: dict[str, QRadioButton] = {}
         self.fit_start_group = QButtonGroup(self.fit_details)

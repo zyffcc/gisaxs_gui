@@ -29,13 +29,13 @@ from ...application.single_fit import (
     parameter_text,
 )
 from ..views.step_widgets import fit_to_rows, show_line
-from .fit1d_review import note_text
+from .method_hint import note_text
 from .session import path_name
 from ...application.models import InSituSourceFrame
 from ...application.curve_sources import source_stem
 
 QZ_PLUS_R = "q₊R of the spheres (q₊ = kᵢ + k_f): {values}"
-BY_NUMBER = "By number: {values}"
+BY_NUMBER = "Sizes by number | by intensity: {values}"
 
 
 def _item(text: str, tip: str = "") -> QTableWidgetItem:
@@ -161,8 +161,8 @@ def value_cells(key: str, value: float, error, free: bool) -> tuple[str, str]:
 
 CORRELATED_SHOWN = 2
 MORE_PAIRS = "and {count} more (hover)"
-ANALYZE_CHI2 = ("χ²/N: Analyze's quick fit, the mean squared σ-normalised residual over the points Analyze fitted "
-                "(no degrees-of-freedom correction). Fit (Refine) gives χ²ᵣ here.")
+ANALYZE_CHI2 = ("χ²/N: Analyze's fit (Predict parameters), the mean squared σ-normalised residual over the points "
+                "Analyze fitted (no degrees-of-freedom correction). Fit (Refine) gives χ²ᵣ here.")
 
 
 class FitResultsMixin:
@@ -170,7 +170,7 @@ class FitResultsMixin:
 
     def setup_results(self) -> None:
         self.parameters_table.setHorizontalHeaderLabels(["", tr("value"), "±"])
-        self.solutions_table.setHorizontalHeaderLabels(["#", tr("model"), "R (nm)", "D (nm)", "χ²"])
+        self.solutions_table.setHorizontalHeaderLabels(["#", tr("model"), "R (nm)", "D (nm)", "χ²", "p"])
         self.use_solution_button.clicked.connect(self.use_selected_solution)
         self.solutions_table.cellDoubleClicked.connect(lambda _row, _column: self.use_selected_solution())
         self.solutions_table.itemSelectionChanged.connect(
@@ -207,8 +207,7 @@ class FitResultsMixin:
                    state=cls._state_text(result))
 
     def render_results(self) -> None:
-        if not self._render_fit1d_results():
-            self._render_model_results()
+        self._render_model_results()
         self.render_result_actions()  # next steps, what the fit did by itself, the folds (result_actions.py)
         self.fit_notes_button.setVisible(bool(self.warnings_label.text() or not self.actions_label.isHidden()))
         self.refresh_equivalent_selector()
@@ -226,7 +225,7 @@ class FitResultsMixin:
         if result is None and session.solutions:
             self.quality_label.setText(tr("{count} solutions below; the best is in Model. Fit (Refine) gives its quality "
                                           "and the error of every value.").format(count=len(session.solutions)))
-            self.warnings_label.setText("\n".join(search_note))
+            self.warnings_label.setText("\n".join(self.posterior_lines() + search_note))
             self.warnings_label.setToolTip("")
             stale = tr("Changed after the fit: Fit again") + " · " if old_search else ""
             show_line(self.step_intro["results"],
@@ -282,8 +281,8 @@ class FitResultsMixin:
         return parameter.value == 0 or (path[1] in GRAZING and grazing(self.session.model) is None)
 
     def _size_lines(self) -> list[str]:
-        """Each particle's radius by number and σ_nn/D, as information: Fitting's R of spheres and random cylinders
-        is weighted by intensity, fit1d's and a microscope's by number (Physics and Methods, section 9.3)."""
+        """Each particle's mean radius and relative spread by number (as a microscope counts) and by intensity (V²,
+        what dominates the curve), as information (Physics and Methods, section 9.3)."""
         parts = []
         for index, component in enumerate(self.session.model.components, start=1):
             values = derived_values(component)
@@ -291,8 +290,7 @@ class FitResultsMixin:
                 text = f"{index}: R " + tr("not defined (the distribution rises towards small R)")
             else:
                 text = f"{index}: R {values['R_number_mean_nm']:.3g} nm, σR/R {values['sigma_R_number_rel']:.2g}"
-            if values["sigma_nn_over_D"] is not None:
-                text += f", σ_nn/D {values['sigma_nn_over_D']:.2g}"
+            text += f" | R {values['R_intensity_mean_nm']:.3g} nm, σR/R {values['sigma_R_intensity_rel']:.2g}"
             parts.append(text)
         return [trf(BY_NUMBER, values="; ".join(parts))] if parts else []
 
@@ -330,9 +328,10 @@ class FitResultsMixin:
         self.solutions_table.setVisible(bool(solutions))
         self.use_solution_button.setVisible(bool(solutions))
         curve = self.session.curve
-        searched = self.session.solutions_searched()  # its χ²ᵣ computed here (run.py); else Analyze's quick fit
+        searched = self.session.solutions_searched()  # its χ²ᵣ computed here (run.py); else Analyze's fit
         chi = "χ²/N" if not searched else "var ln I" if curve is not None and curve.sigma is None else "χ²ᵣ"
-        self.solutions_table.setHorizontalHeaderLabels(["#", tr("model"), "R (nm)", "D (nm)", chi])
+        self.solutions_table.setHorizontalHeaderLabels(["#", tr("model"), "R (nm)", "D (nm)", chi, "p"])
+        self.solutions_table.setColumnHidden(5, not any(s.probability is not None for s in solutions))
         shown = tuple(solutions)
         fresh = shown != getattr(self, "_solutions_shown", None)
         self._solutions_shown = shown
@@ -348,7 +347,8 @@ class FitResultsMixin:
             cells = (str(line + 1), solution.label,
                      "—" if component is None else f"{component.value('R'):.3g}",
                      "—" if component is None or not component.structure else f"{component.value('D'):.3g}",
-                     f"{solution.chi2:.3g}" if math.isfinite(solution.chi2) else "—")
+                     f"{solution.chi2:.3g}" if math.isfinite(solution.chi2) else "—",
+                     "—" if solution.probability is None else f"{solution.probability:.2f}")
             for column, text in enumerate(cells):
                 self.solutions_table.setItem(line, column, _item(text, tip))
         if fresh or self.solutions_table.currentRow() < 0:  # new solutions: the one in Model is selected
@@ -392,17 +392,11 @@ class FitResultsMixin:
         path = path or self._save_path("Save Data and Fit", f"{self._stem()}_fit.csv", "CSV (*.csv)")
         if not path:
             return None
-        if self.session.native_result is not None and self.session.result is None:
-            if not self.session.native_is_current():
-                self._status(tr("Changed after the fit: Fit again"), "warning")
-                return None
-            names, table, record = self._fit1d_export()
-        else:
-            names, table = export_table(self.session.model, data)
-            record = fit_record(self.session.model, data, self.session.curve, side=self.session.side,
-                                q_range=self.session.q_range,
-                                result=self.session.result if self.session.result_is_current() else None,
-                                excluded=self.session.excluded)
+        names, table = export_table(self.session.model, data)
+        record = fit_record(self.session.model, data, self.session.curve, side=self.session.side,
+                            q_range=self.session.q_range,
+                            result=self.session.result if self.session.result_is_current() else None,
+                            excluded=self.session.excluded)
         try:
             record_path = write_pair(path, lambda target: np.savetxt(
                 target, table, delimiter=",", header=",".join(names), comments="", fmt="%.8g"), record)

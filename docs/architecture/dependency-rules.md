@@ -48,7 +48,7 @@ infrastructure → 实现 application 的 ports（并使用 domain）
 
 feature 不导入另一个 feature。需要组合时在组合根注入：`src/gimap/app/main_window.py`（页面、Run Automatic Analysis 放进 Analyze、
 Process with AI）、`menus.py`（Tools 窗口）、`window_view.py`（经典 Fitting / Prediction 控件）、`runtime.py`（Labs 与 Fitting 的 binding）、
-`headless_assistant.py`（`tools/gimap_agent.py` 用）。例：Fitting 的快速物理拟合由 `create_quick_fit()` 创建，注入 Fitting workspace、
+`headless_assistant.py`（`tools/gimap_agent.py` 用）。例：Fitting 的 Predict parameters 由 `create_curve_fit()` 创建，注入
 自动分析与 Process with AI（assistant）和 Analyze 的批量拟合（`page.set_model_fitter`）；Calibration 的
 `create_headless_calibration()` 同样注入自动分析与 Process with AI。
 

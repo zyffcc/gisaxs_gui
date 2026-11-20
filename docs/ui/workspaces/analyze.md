@@ -95,17 +95,20 @@ Run Automatic Analysis（Results 步骤可写束线时笔记：αi、能量、�
   自动分析在 Data 步骤设的 Sum N 不带进 Series 热图、Batch Export 和 Send Series（对话框和 Series 标签页说明已关掉；
   要相加就自己在 Data ▸ Sum N 设）。
 - GISAXS：几何 → Yoneda 切线（找不到时提示检查 αi）→ 按左右对称移动中心列 → 选择两半（都可用且一致就平均，
-  一半被遮挡 / 有缝隙 / 太短就用另一半，并写出理由）→ 特征长度 2π/q*（侧峰或 shoulder；写明不一定是粒子间距）→ 数值物理拟合
-  （球、竖直圆柱、随机圆柱，含尺寸分布与距离 D，也从 2π/q* 起步；`at_bounds` 标出停在搜索边界的数值，报告的解 `chosen`
-  是 χ²/N 在第一个的 10 % 以内、已收敛且没有边界值的排名最靠前的解，`application/gisaxs_choice.py`）。多个模型 χ² 相差 10 % 以内时，结果里会问你选哪个模型，
-  并指出与间距一致的解。
+  一半被遮挡 / 有缝隙 / 太短就用另一半，并写出理由）→ 特征长度 2π/q*（侧峰或 shoulder；写明不一定是粒子间距；它是单独的结果，
+  不作拟合的起点）→ Fitting 的 Predict parameters（注入的 `create_curve_fit()`：没有给组成时网络在一种或两种球和竖直圆柱、
+  带或不带次晶的组成中选，随机取向圆柱只在给定组成时用；有效界面 q_z = 0）。报告最可能的解（`chosen`），带概率和 R、h、D 的
+  68 % 区间（*fit intervals*）；`at_bounds` 标出停在范围边界的非线性数值，报告的解有这种值时是一处需要查看；χ²/N > 10 为拟合差；
+  另一个解的概率 ≥ 0.2（`ASK_PROBABILITY`）时结果里会问你选哪个模型，并指出 D 与 2π/q* 相差 15 % 以内的解
+  （`application/gisaxs_choice.py`、`gisaxs_procedure.py`）。
 - Results 标签页：GISAXS 为切线与两半、间距、拟合图（数据 + 选中的解，Log q / Log I）与解的表格；Save Fitted Curve…、
   Save Fit Table…、Refine in Fitting。GIWAXS 为峰表、检查、几何、序列对比。两者都有 Save Report…（网页或 Markdown）。
 - 表格下面是折叠的 **Fit details**（默认关；打开后下一次报告也保持打开），跟随选中的行，只在打开时绘制：
   峰——拟合用到的点、高斯 + 局部线性背景、q / d / FWHM 及误差、峰高、面积、背景与斜率、S/N、χ²ᵣ、拟合窗口、
   Scherrer 尺寸、寻峰与拟合方法，以及该峰在 q 图上测到 / 阴影 / 没测到的部分；
-  模型解——每个参数（R、σR/R、h、D、σD/D、权重、振幅、常数背景、分辨率）、χ²、是否收敛、计算次数与用时、
-  q 范围、D 的初值、算法、警告，和 **Show in Fitting**（在拟合中打开曲线并画出这个解；拟合的步骤栏显示“当前画出的解”，
+  模型解——每个参数（R、σR/R、h、D、σD/D、权重、振幅、常数背景、分辨率）及 R、h、D 的 68 % 区间、概率、χ²/N、
+  log RMSE、是否收敛与用时、点数和 q 范围、组成是给定的还是网络选的、警告与处于边界的值，和 **Show in Fitting**
+  （在拟合中打开曲线并画出这个解；拟合的步骤栏显示“当前画出的解”，
   Save ▾ ▸ Data and Fit… 保存拟合与参数）。数据在报告里（`peaks[].fit`、`peak_search`、`gisaxs.fit.solutions[]`、`gisaxs.fit.native`），
   给 AI 的精简报告去掉数组。
 - 只有你能回答的问题（αi、能量、标定文件等）在 Results 步骤里变成输入框，回答后 Run Again；步骤、标记和状态行中的
@@ -327,19 +330,21 @@ Send to Fitting（命令栏和 Export 步骤的按钮都走 `bindings/fit_handov
     误差按 √χ²ᵣ 放大）。表中每帧一行、每个峰：q ± 误差、d = 2π/q、FWHM ± 误差、面积 ± 误差、峰高、η、χ²ᵣ、说明
     （不显著、太宽、点太少时写原因，该帧不影响下一帧的起点）。
   - GISAXS——“水平切线的颗粒模型”：带符号的水平切线按 Halves of the cut（对话框 *Curve for Fitting* 组：两半的平均 /
-    q > 0 半边 / q < 0 半边，`BatchChoices.fit_halves`）交给 Fitting 的快速物理拟合（球 / 随机取向圆柱 / 竖直圆柱，含尺寸分布与
-    间距 D；模型可选自动比较或指定一种；多于 1000 个点时合并相邻点），表中每帧一行：`halves`、`points`、模型、χ²、log RMSE 与
-    各组分参数（nm）。约半分钟一帧。两半永远不一起拟合。下拉的初值：Cuts 步骤选的是平均或某一半时用它，否则用上次批处理的选择。
+    q > 0 半边 / q < 0 半边，`BatchChoices.fit_halves`）交给 Fitting 的 Predict parameters（模型：Automatic (the network
+    chooses the composition)，即一种或两种球和竖直圆柱、带或不带次晶；或指定一个带次晶的球 / 随机取向圆柱 / 竖直圆柱；
+    多于 1000 个点时合并相邻点；不需要起始值，每帧只用自己的数据），表中每帧一行（最可能的解）：`halves`、`points`、模型、χ²、
+    log RMSE、`probability` 与各组分参数（nm）。约 15 秒一帧。两半永远不一起拟合。下拉的初值：Cuts 步骤选的是平均或某一半时用它，
+    否则用上次批处理的选择。
     所选的一半没有点（“No points on the q > 0 half”）、整条切线没有大于 0 的强度时，这一帧不拟合，原因写进表、记录和面板；
     选平均而某帧只有一半时拟合那一半，结束时说 “N frame(s) on one half alone”。拟合用曲线文件仍含两半（带符号 qy），所选的
     两半写在 `# observation:` 的 `"halves"` 里。
-  - 起始值：上一帧的结果（缓慢变化的序列，峰或颗粒随之移动；GISAXS 取上一帧的模型与 D）/ 第一帧的结果（所有帧同一起点，
+  - 起始值（只用于峰；选颗粒模型时这一行隐藏）：上一帧的结果（缓慢变化的序列，峰随之移动）/ 第一帧的结果（所有帧同一起点，
     帧之间互不影响）/ 每帧重新寻找。
   - “在当前帧上试拟合”：用这些选项拟合当前显示的帧，结果直接显示在对话框中，满意再批量。
   - 可选同时保存每帧的拟合曲线 `fits/<帧>_<曲线>_fit.csv`（峰）或 `fits/<帧>_model_fit.csv`（颗粒模型：拟合用到的点的
     q (1/nm)、I、σ 与拟合，注释写出两半和准备说明）；拟合值随帧的变化图 `<名称>_peak_fits.png` / `_model_fits.png`。
     高斯和洛伦兹峰的 η 固定为 0 / 1，不参与拟合。
-  - 更复杂的拟合（Fitting 的 AI 辅助模型、每帧各自的输入选择）：Send Series to Fitting… → 拟合 ▸ 原位序列。
+  - 更细的拟合（自己的模型、固定值和范围、逐帧预测并延续上一帧）：Send Series to Fitting… → 拟合 ▸ 原位序列。
 - 逐帧在后台处理，状态行显示进度、剩余时间和是否在拟合，可取消（已写的保留，表格包含已处理的帧）。选项、格式和文件夹会
   记住（设置节 `analyze_batch`），下次打开对话框即是上次的选择。只需要 q 图或 q 图图片时才计算 q 图（P03 Lambda 9M 约 2 s/帧）。
 - 开始页 Batch Export…：选一个原始数据文件夹 → 自动加载并分析第一帧（几何按探测器匹配，或设置文件中的配置）→

@@ -77,13 +77,12 @@ class FittingWorkspace(CurveImportMixin):
         *,
         preferences: UserPreferencesRepository,
         view_model,
-        quick_fit=None,
         frames=None,
     ):
         self.ui = ui
         self.preferences = preferences
         self.view_model = view_model
-        self.fit_page = FitPage(view_model, quick_fit=quick_fit, preferences=preferences)
+        self.fit_page = FitPage(view_model, preferences=preferences)
         self.fit_page.setObjectName("fittingSinglePage")
         self.series_page = FitSeriesPage(view_model, self.fit_page, preferences=preferences, frames=frames)
         self.series_page.editModelRequested.connect(lambda: self.show_context("single"))
@@ -252,11 +251,11 @@ class FittingWorkspace(CurveImportMixin):
 
     def _single_opened(self, path: str) -> None:
         """A curve opened in Single analysis, however it came (Analyze, Open Curve, a drop, a frame of the
-        series): for a GIWAXS I(q) the particle search a first curve starts with (shape search, fit1d) is taken back — the
+        series): for a GIWAXS I(q) the particle search a first curve starts with (Predict parameters) is taken back — the
         Curve step is shown and the method is Refine — and the status line says why."""
         page = self.fit_page
         if self.is_giwaxs_curve(path):
-            if page.method() in ("shapes", "fit1d"):  # particle searches are for a GISAXS cut
+            if page.method() == "predict":  # the particle search is for a GISAXS cut
                 page.set_method("local")
             page.show_step("curve")
             name = InSituSourceFrame.from_token(path).display_name

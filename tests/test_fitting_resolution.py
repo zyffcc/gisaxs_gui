@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 
 from src.gimap.features.fitting.domain import fit_model as fm
-from src.gimap.features.fitting.domain.fit1d_bounds import model_constraints
 
 Q = np.linspace(0.02, 2.0, 400)
 
@@ -38,8 +37,3 @@ def test_no_resolution_by_default_and_the_parts_add_up() -> None:
     np.testing.assert_allclose(total, np.sum(list(parts.values()), axis=0), rtol=1e-12)
     assert fm.model_from_dict(fm.model_to_dict(smeared)).globals["q_resolution"].value == 0.01
 
-
-def test_fit1d_does_not_pretend_to_apply_a_resolution() -> None:
-    with pytest.raises(ValueError, match="q_resolution"):
-        model_constraints(_model().with_parameter(("globals", "q_resolution"), value=0.01))
-    model_constraints(_model())  # the default (none) is no constraint

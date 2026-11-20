@@ -20,6 +20,7 @@ from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr
 
 from .client_flow import Failure, _guarded
+from .static_export import STATIC_EXPORT_TIP
 from .texts import message_text, text
 
 EXPORT_KEY = "sputter_export"
@@ -50,15 +51,23 @@ class ExportMixin:
                 if button is not None]
 
     def sync_export_buttons(self) -> None:
-        """Export is there for an Analyze result with windows, and not while one is written."""
+        """Export is there for an Analyze result with windows, and not while one is written; for a series of static
+        samples it writes the report of the sample list's series (``static_export.py``)."""
         result = getattr(self, "client_result", None)
         shown = result is not None and bool(result.windows) and not getattr(self, "_exporting", False)
+        static = result is not None and result.static
         for button in self._export_buttons():
             button.setEnabled(shown)
+            button.setToolTip(tr(STATIC_EXPORT_TIP if static else EXPORT_TIP))
 
     def export_result(self, folder=None) -> None:
-        """Export the result shown into ``<folder>/<scan>_export`` (``folder`` None: asked)."""
+        """Export the result shown into ``<folder>/<scan>_export`` (``folder`` None: asked); a series of static samples:
+        the report of the list's series."""
         result, client = self.client_result, self.service.client
+        folder = None if isinstance(folder, bool) else folder  # clicked() passes its checked state
+        if result is not None and result.static and hasattr(self, "export_static_report"):
+            self.export_static_report(folder)
+            return
         if result is None or client is None or self._exporting:
             return
         if folder is None:

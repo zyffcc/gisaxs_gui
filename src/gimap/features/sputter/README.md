@@ -175,10 +175,15 @@ geometry in one line with **Edit**, **Open Result…**):
   (cap thickness, clusters). An entry without any of this says why.
 - **Porous substrate** (`ClientResult.porous`): the tiles and the evolution show the island radius (relative), the
   width, the island, cap and film shares and the two correlation lengths of the metal in the pores.
-- **Static frames** (the bar's **After Deposition**, `kind_switch` → `input_stack` page 1: frames, name, nominal
-  thickness, bare substrate; Details ▸ Static Frames keeps the series, mode and geometry; `static_flow.py`,
-  `views/sputter_static_view.py`; Analyze dispatches by `analysis_kind()`; the live view's static half is
-  `live_static.py`, `LiveRun(kind="static")`): one sample measured after its deposition is analysed into a series
+- **Static frames** (the bar's **After Deposition**, `kind_switch` → `input_stack` page 1: Add Samples…, a summary
+  line and the switch of the **Sample List** — `views/sputter_samples_view.py`, `static_list.py`, left of both views:
+  `application/static_samples.py` finds the samples of a folder and reads their nominal thickness, deposition method
+  and bare substrate from the folder names, grouped into series; Analyze runs the ticked ones one after another,
+  `static_queue.py`; Export… writes one HTML report of every series and a CSV, `static_export.py` and
+  `application/static_report.py`; Details ▸ Static Frames keeps the results folder (one folder per series), mode and
+  geometry; `static_flow.py` runs one sample, `views/sputter_static_view.py`; Analyze dispatches by
+  `analysis_kind()`; the live view's static half is `live_static.py`, `LiveRun(kind="static")`): each sample
+  measured after its deposition is analysed into its series
   (`StaticService` in `application/client_static.py`, `StaticPackageRunner` in `infrastructure/client_static.py`:
   `-u -m iampred.static --frames … --label … --nominal-nm … --out <series> …`, the package's own geometry for static
   frames unless a field is filled in, `IAM_STATIC_DATA` = `<local folder>/sputter_client/static/<series id>`, a series made before in the user data folder keeps its data there). The series

@@ -1,4 +1,4 @@
-<!-- 2026-11-15: fitting constraints and result interaction updated. -->
+<!-- 2026-11-18: one network method (Predict parameters); fit1d and Find the particle shape removed. -->
 # Fitting 界面与交互说明
 
 - **Status**: Current
@@ -8,6 +8,8 @@
   [`src/gimap/app/main_window.py`](../../../src/gimap/app/main_window.py)
 - **Related tests**:
   [`tests/test_fit_page.py`](../../../tests/test_fit_page.py)、
+  [`tests/test_fit_page_predict.py`](../../../tests/test_fit_page_predict.py)、
+  [`tests/test_ml1d_posterior.py`](../../../tests/test_ml1d_posterior.py)、
   [`tests/test_fit_engine.py`](../../../tests/test_fit_engine.py)、
   [`tests/test_fit_series.py`](../../../tests/test_fit_series.py)、
   [`tests/test_fit_series_halves.py`](../../../tests/test_fit_series_halves.py)、
@@ -60,10 +62,10 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
 `EDIT_MENU`），由组合根 `app/workspace_commands.py` 注入；从别的页打开时先切到 Fitting，键仍归页面所有。
 
 - **Curve**：卡片（`single/curve_info.py`）写点数、q 范围（nm⁻¹；Å⁻¹ 在卡片提示里）、“σ from the file”；没有 σ 时卡片里和
-  Fit 步骤里各一行警告（“⚠ No σ in the file: every point weighted alike …”，提示里是对 Refine 与 fit1d 的含义）。文件名只在命令栏。
+  Fit 步骤里各一行警告（“⚠ No σ in the file: every point weighted alike …”，提示里是对各方法的含义）。文件名只在命令栏。
   步骤标题下的说明行只在步骤栏和控件没说的时候出现（`show_line`，空时隐藏），用法写在控件提示里；切线两半（Mean of both halves / Both halves on |q| / q > 0 half /
   q < 0 half，`single_fit.SIDES`）。平均（`shared/signed_cut.py`）只在另一半两侧 2.5 个步长内都有测量点处求平均，其余处
-  （另一半的缺口、另一半到头之后）用这一半原样，不跨缺口插值。Find the particle shape、AI proposal、fit1d 只能拟合一条曲线：
+  （另一半的缺口、另一半到头之后）用这一半原样，不跨缺口插值。Predict parameters 只能拟合一条曲线（`ONE_CURVE_METHODS`）：
   选着 Both halves on |q| 时 Fit 先把下拉换成平均，并说 “Both halves on |q| cannot be fitted by this method: the mean of
   both halves is used.”；Refine 与 Search 照旧拟合两半；
   拟合范围（nm⁻¹，或拖动图上的橙色区域；Whole Curve）；折叠的 *File* 里是 *q unit of files without one in their header*：
@@ -84,29 +86,26 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   并排给出 Open Curve… 和 Fit a Folder of Curves…；拟合后 Results 有 Fit Every Curve in This Folder…（同一文件夹、
   同类文件名，每条曲线从这个模型开始，见 In-situ series）。批量的推荐流程：先在这里拟合一条有代表性的曲线（预测 → 精修），
   再拟合整个文件夹。
-- **Fit**（`views/fit_step_view.py`，行为在 `single/run.py`）：一个 Method 下拉、一个按钮。方法：Predict parameters
-  (fit1d)、Refine the values in Model（局部有界最小二乘）、Search the ranges, then refine（差分进化 + 三个起点精修）、
-  Find the particle shape (no AI)、AI proposal (1D Predict)。打开曲线时页面替它选好：未拟合的 GISAXS 线切选 Predict
-  （fit1d 工具包随仓库提供）；工具包缺失时（`workflow_v5.fit1d_kit_available()`，每打开一条曲线查一次；`single/fit1d_review.py`）
-  选寻找形状，并把 Predict 的提示换成 `FIT1D_MISSING_TIP`（缺少工具包、它应该在哪里）；两种情况下面一行都写 “Recommended for this curve”；
-  其余曲线保持原来的选择（GIWAXS I(q) 从不选粒子搜索）；Predict 或寻找形状
-  之后自动换成 Refine。Predict 下面只多一行 Particles（尝试组成 / 模型中的粒子），寻找形状下面一行 Families。
-  **Resolve values at the edge of their range automatically**（默认勾选，记住；In-situ series 跟随它）：见下面“边界”。
-  进度条与 Stop：精修 / 范围搜索保留目前最好的值，取消寻找解或 fit1d 不产生新结果。不常用的都在折叠的 *Options*：
-  fit1d 的网络、搜索、曲线类型、qz、系统误差，最多计算次数，1D Predict 批量窗口。
-- **Results**（`views/fit_results_view.py`，`single/result_actions.py`）：自上而下——质量（fit1d 时第二行说明 Model 只是
-  起点）；下一步按钮 Refine These Values（预测或寻找形状之后）、Fit Again（同一方法、用 Model 现在的值）、Fit Every Curve
-  in This Folder…；绿色 “Done automatically” 列出拟合自己处理的边界；橙色只写真正要知道的（kit 的提示、仍在边上的值、
-  强相关——只列前两对，其余悬停）；值的表格：选中行后 Fix / Let It Fit / Range…（右键同样），下次 Fit Again 即用；
-  折叠的 Other solutions / Other compositions 与 Constraints and ranges；Save…；日志。
-- **边界**（`domain/fit_edges.py`、`domain/fit1d_edges.py`）：拟合后停在范围边上的值由拟合自己处理。先放宽，最多 2 轮
-  （尺寸、距离、分辨率峰宽 ×2 / ÷2；默认范围和用户范围一样放宽；用户固定的值从不动；改动后 χ² 不比之前差 2 % 以上才保留，
-  否则保留原拟合并说明）。放宽后仍在边上的值（或分布宽度 σR/R、w/D 停在下限、D = 2R 这类不能放宽的边）说明曲线朝那个方向
-  是平的，只给出一个界：拟合把它向内一步步移动（尺寸 ÷/× 1.25，相对宽度 ∓ 0.05），固定它、其余重新拟合，只要总 χ² 与最佳
-  相差不超过 1σ 容差 max(1, χ²/dof) 就继续；报告为其中**最不极端**的值，标成单侧界（“≥ 0.549”，状态 one-sided bound，
-  约束来源 `bound_upper` / `bound_lower`；精修时该值在 Model 里固定）。连一步都明显变差、而边又是模型自身的极限（如 σR/R
-  0.6）时，说明曲线想要超出模型的值、模型可能缺了什么。scale 为 0（不需要的项）和 k 不处理。全部写在 Results 的
-  “Done automatically”、`native_result.fit1d_bounds.actions` 和序列记录 `per_frame[].resolved`。
+- **Fit**（`views/fit_step_view.py`，行为在 `single/run.py`）：一个 Method 下拉、一个按钮，只有三个方法（`METHODS`）：
+  Predict parameters（唯一的网络方法：GIMaP 的建议网络 + 后验 + 最小二乘，`single/predict.py`、
+  `application/single_predict.py`、`adapters/posterior_job.py`、`domain/posterior/refine.predict`）、Refine the values in Model
+  （局部有界最小二乘）、Search the ranges, then refine（差分进化 + 三个起点精修）。fit1d 工具包（Predict parameters (fit1d)）
+  与快速物理拟合（Find the particle shape (no AI)）已在 0.2.0 删除。打开曲线时页面替它选（`single/method_hint.py`）：
+  未拟合的 GISAXS 线切选 Predict parameters，下面一行写 “Recommended for this curve: a GISAXS cut not fitted yet.”；
+  其余曲线保持原来的选择（GIWAXS I(q) 从不推荐）；网络缺失时不推荐，选了 Predict 时下面一行写 `predict.MISSING`（缺少的文件名）。
+  预测之后自动换成 Refine。Predict 下面只多一行 Particles（`single_predict.PARTICLES`：The particles in Model /
+  Spheres and upright cylinders (1–2) / Any particles (1–3)；Model 里没有颗粒时按第二项）。Predict 只有一条路径，
+  没有“解的得出方式”选项。进度条与 Stop：精修 / 范围搜索保留目前最好的值，停止 Predict 不产生新结果。
+  折叠的 *Options* 只有 Evaluations at most (Refine, Search) 和 1D Predict Batch Window…。
+- **Results**（`views/fit_results_view.py`，`single/result_actions.py`）：自上而下——质量（预测之后：几个解、最可能的已在
+  Model，Refine 给出质量和误差）；下一步按钮 Refine These Values（预测之后）、Fit Again（同一方法、用 Model 现在的值）、
+  Fit Every Curve in This Folder…；Fit details… 浮窗里是边界与强相关（只列前两对，其余悬停），预测之后是 Model 中那个解的
+  后验区间与标记（`single/predict.posterior_lines`）；值的表格：选中行后 Fix / Let It Fit / Range…（右键同样），下次
+  Fit Again 即用；折叠的 Other solutions（p 列为概率；Predict 和 Analyze 的解）；Save…；日志。
+- **边界**（`domain/fit_edges.py`，`application/single_fit.fit_resolving`）：Model 的固定值和上下限是硬限制。Refine 与
+  Search 之后停在范围边上的值只报告（“… stopped at a bound of its range: widen the range or fix it.”），不自动放宽范围，
+  也不自动固定（`fit_edges.resolve(..., rounds=0)`；没有勾选框）。scale 为 0（不需要的项）和 k 不报告。Predict 不使用
+  Model 的范围：它的值保持在网络先验的盒子里（`refine._box`），处于边界的值带标记 `at_bound:NAME`。
 - **误差**：协方差 pinv(JᵀJ)·s²，J 用中心差分；差分步长与列的单位取每个参数自己的大小（为 0 时取它的
   范围），所以一个跑到 1e30 的分辨率峰振幅不会把 R 的步长变成 1e24、也不会把其他参数的误差压成 0。
 - 每次拟合、选用解、载入模型都是一步撤销；模型、方法、选择和最近的曲线下次启动时恢复。
@@ -132,34 +131,18 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
 `scattering_model` 同一公式和采样）、`fit_engine.py`（拟合、误差、相关、边界）；Analyze 结果或
 1D Predict 的解经 `native_solution.py` 换成模型（与该解曲线的最大相对差写在状态里）。
 
-## 主单曲线页的 fit1d
+## 主单曲线页的 Predict parameters
 
-- **Predict**：Method 选 Predict parameters (fit1d)。**Particles**（`fit1d_composition`）：`auto:sphere,vc:3`、
-  `auto:vc:3` = 工具包拟合这些形状的每种组成并按 BIC 排序，最好的一种再按“边界”处理；`model` = Model 中 1–4 群
-  Sphere / Vertical cylinder（允许同类重复），带上 Model 的约束。未编辑的 Model 打开 GISAXS 线切时默认 `auto:sphere,vc:3`。
-- **其他组成**（只在 `auto:`）：Results 的折叠 Other compositions 列出至多 6 种（χ²/点、ΔBIC、“与 … 分不开”、标记），
-  选中一行显示每个参数的值 ± 误差、等价解范围和状态；Use This Composition 以它的值为起点、用这个组成重新预测（边界照样
-  自动处理），列表保留。
-- 网络：general = `cond_v2_ft4`，au_np_si = `cond_v2_ftr1`。主单页 search 默认 **Auto**，另有 Fast / Robust；
-  curve type 为 GISAXS / SAXS，systematic error 为相对误差下限。Yoneda 切线的真空 qz（nm⁻¹）需手填，
-  不自动从 Analyze 带入；不勾选按 0 计算，含球时给提示。SAXS 忽略 qz、关闭结构因子和低 q 项。
-- **约束**（`domain/fit1d_bounds.py`）：组成为 `model` 时传入所有支持的范围及固定值，范围与工具包物理范围取交集。
-  R、D 用 nm，σR/R 原样，σD/D 换成 w/D = σD/D·√(2π)，固定背景与 ν 约束也传入。
-  不支持的强度、低 q 宽度或背景范围约束明确拒绝；自动组成搜索不能丢弃自定义约束。
-  Model 的范围不自动扩大、自由值不自动固定。仅自动组成搜索可处理工具包的默认边界。
-  Constraints and ranges 与 JSON 的 `native_result.fit1d_constraints` 记录 `given` / `used` 与来源
-  `model` / `model_default`；`fit1d_bounds` 记录 `measurable` / `actions` / `edges` / `refits`。
-  v2 为数目加权截断高斯尺寸分布（相对宽度）和 Hosemann 次晶 w = w_rel·D，q 用 nm⁻¹、长度 nm；
-  球用 |q| = √(q∥² + qz²)，竖直圆柱用 q∥。手动模型的正演与宽度约定不同，映射只作为后续手动精修的起点。
-- **原结果保留**：图上的总曲线、Terms 各群分量、残差、Results 的 χ²/点及参数误差 / 状态来自原 v2 结果。
-  σ 使用文件误差与系统误差下限的平方和；无 σ 时明确提示 Poisson 假设。状态表与悬停范围说明等价解、弱约束、
-  触边界和无贡献的群；全部提示保留。Save Data and Fit 的 CSV / JSON 保存原曲线、分量、effective σ、参数和提示。
-- **过期结果**：改 Model、选区或 fit1d 设置后，旧表和 χ² 标为 previous fit1d；当前图标为手动初始模型，
-  不再宣称显示原 v2 曲线，禁止把过期结果作为当前 fit 导出。恢复相同条件可恢复有效状态，或重新拟合。
-- **进程边界**：`presentation/single/fit1d.py` → `application/single_fit1d.py` 的 JobRequest →
-  `infrastructure/adapters/single_fit1d.py` → 工具包。只在 JobRunner 子进程导入研究代码，Stop 终止该 job；
-  不依赖 V5 / TensorFlow 资产。工具包随仓库提供，位于 `utils/gisaxs1d_gui_kit`（`GISAXS1D_KIT_HOME` 可指向另一份）。
-  回归测试为 `tests/test_fit_page_fit1d.py`。
+- **请求**（`application/single_predict.predict_request`）：曲线的点（q 为 nm⁻¹，σ 可缺）、Particles 给出的组成
+  （`model`：Model 的 1–3 群按半径排序，每群的类型与是否带次晶；`spheres_cylinders` / `any`：网络在允许的组成里选头部最可能的
+  三种）、Model 的角度给出的切线 q_z（αi、αf、λ 为 0 时 q_z = 0，有效界面）、Model 的 sizes 与 coupling。
+- **路径**（`domain/posterior/refine.predict`，唯一的一条）：每种组成 1000 个网络样本按重要性加权；每种组成最重的 3 个模式
+  用最小二乘精修；最好的两种组成都精修不到 χ²/N 2 以下时，从最重的 16 个样本出发在范围内搜索一次；与最好的解 BIC 相差 20
+  以内的解（最多 4 个）做局部后验（每轮 400 个样本）；按 evidence 比较，局部抽样有效样本少于 10 时按 BIC 比较、区间取最小二乘误差
+  （标记 `bic`）。无 σ 时按 ln I 围绕局部趋势的离散取相对 σ（至少 1 %）。
+- **进程边界**：`presentation/single/predict.py` → JobRequest → `infrastructure/adapters/posterior_job.run_predict`。
+  网络按记录 `flow_v1.json` 的 SHA-256 校验后才用；Stop 取消该 job，不产生新结果。解进 Results 的 Other solutions，
+  最可能的进 Model。测试 `tests/test_fit_page_predict.py`、`tests/test_ml1d_posterior.py`。
 
 ## 从 Analyze 接收曲线
 
@@ -175,48 +158,31 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   | qy > 0 | q > 0 half |
 
   `# observation:` 里有 `"halves"`（Analyze 选的是平均或某一半时）。数据旁边写不了时 Analyze 询问另存的文件夹。
-  GIWAXS 的 I(q) 打开时页面上方出现提示（`workspace.NOTE_TEXT`）：Fitting 的模型是颗粒形状因子，不描述衍射峰，不自动
-  做形状搜索；峰用 Analyze ▸ Batch Export ▸ Peaks of the ring regions。
-- **Results ▸ Fit details ▸ Show in Fitting**：同上载入曲线，再把该解换成模型（`native_solution.py`：
-  尺寸与相对 σ 换算、各 scale 在该解自己的曲线上求解），状态里写出与该解曲线的最大相对差。
+  GIWAXS 的 I(q) 打开时页面上方出现提示（`workspace.NOTE_TEXT`）：Fitting 的模型是颗粒形状因子，不描述衍射峰，不推荐
+  方法；峰用 Analyze ▸ Batch Export ▸ Peaks of the ring regions。
+- **Results ▸ Fit details ▸ Show in Fitting**：同上载入曲线，再把该解换成模型（`single_fit.model_from_solution`：自动分析的解
+  来自 Predict parameters，`physics_backend` 为 `cut_model`，就是 Fitting 自己的模型，原样载入），状态里写出与该解曲线的最大相对差。
 
 - **Send Series to Fitting…**：先用 Batch Export 对话框的拟合模式导出列表中所有帧（可 Sum N，GISAXS 选 Halves of the
   cut），写进 `<名称>_fitting/`，完成后打开 In-situ series，folder 指向 `<名称>_fitting/fit_input`，pattern 为
   `*_fit_input.dat`，曲线已列出；序列的两半取这些文件 `# observation:` 里的 `"halves"`。
 - GISAXS 水平 cut 的 observation `source = native_detector_columns`：每个探测器列的平均计数、
-  Poisson σ 与有效像素数。V5 据此恢复与原 CBF 路径相同的 counting contract
-  （`native_cbf_columns`、`valid_pixel_counts`、working tolerance），所以 stable 学习分支的
-  适用条件和结果与旧路径一致；缺少计数的普通文本曲线会走数值回退并注明原因。
-- 学习分支（Single RC specialist）的验证范围：每侧 450–700 个原生列、q 覆盖到 4.0–4.3 nm⁻¹、
-  每列 3–12 个有效像素、单帧（不相加）。Analyze 默认切满探测器宽度、5 行带，对 P03 这类数据要
-  得到同样的观测：在 Analyze 把水平带拖到 6 行且避开模块缝隙（例如 1171–1176），在 Fitting 把
-  fitting range 设为 |q| ≤ 4.23 nm⁻¹（0.423 Å⁻¹）。不满足时结果照常给出，Stage 显示数值回退及原因。
+  Poisson σ 与有效像素数。（0.2.0 删除的 Single RC specialist 曾据此恢复原 CBF 路径的计数约定。）
 
-## Fit 方法（1D Predict）
+## 1D Predict 窗口
 
-- 1D Predict 窗口的 `Fit curve` 按 Parameters… 里保存的 Fit method 执行，默认 **General V5 (experimental)**；**Single RC
-  specialist (experimental)** 只在显式选择一个 Random cylinder（`components=[2]`）且曲线带原生
-  计数时使用局部网络，否则数值回退；第三种 **Physical fit (numerical)** 不用网络。Stage 列显示 Neural model / Model + amplitude /
-  Numerical fallback，悬停可见原因；不显示伪概率。
-- 第四种 **fit1d (network + physical fit)** 调用随仓库提供的 gisaxs1d 工具包（`utils/gisaxs1d_gui_kit`，或用环境变量
-  `GISAXS1D_KIT_HOME` 指定另一份；只需 numpy、scipy、threadpoolctl）。找不到工具包时，任务以一句说明它应该在哪里的消息失败。
-  - 组分必须由用户在 Complete composition 里给定（Sphere=1、Vertical cylinder=3；没有 Random cylinder）：
-    一条曲线识别不了组分，空着或含 2 时 `validate_options` 报错。不能固定 σ res（可以固定 ν res）。
-  - Parameters… 里 fit1d 的设置：search（`fit1d_policy`：fast / auto / robust）、curve type（`fit1d_mode`：
-    gisaxs / saxs）、network（`fit1d_model`：general / au_np_si）、Cut qz（`fit1d_qz`，nm⁻¹；不勾选时为 0，
-    含球时行的 warnings 里注明）、systematic error（`fit1d_sigma_floor`，相对值）。
-  - 每个 q 半边一行（rank 1）。物理是工具包的 v2：数目加权的尺寸分布、Hosemann 次晶 w = w_rel·D、球按
-    |q| = √(q∥² + qz²)。`native_fit` / `display_fit` 是工具包自己在测量点上的曲线；`params.sigma_D` 是
-    `legacy_sigma_D = w_rel/√(2π)`（在手动模型里给出相同次晶阻尼的值），工具包自己的值、1σ 误差、等价解范围和
-    每个参数的状态在 `components[i].fit1d` 与行的 `fit1d`。多解 / 触边界 / 弱约束 / 模型未在误差内描述曲线都写进
-    `warnings`（Stage 列悬停可见）。选中 fit1d 行后保留原 v2 总曲线与分量；复制到 Components 的模型只是
-    手动精修初值，不用它重画替代原结果。批量窗口默认 fast，主单页默认 auto。
-  - 代码：`infrastructure/adapters/fit1d_method.py`（只在 job 进程里导入工具包）；测试 `tests/test_fit1d_method.py`
-    （没有工具包时跳过拟合部分）。
-- 单条曲线的 AI 建议在新页面 Fit 步骤里（AI proposal），它的解进 Results 的 Solutions 表。
+- 1D Predict 窗口只有一种方法：Predict parameters（`adapters/posterior_job.fit_and_write`；Parameters… 里没有 Fit method
+  下拉）。Parameters…：Complete composition（最多 3 个框，各群都带次晶；全为 Auto / unused 时网络在全部组成中选头部最可能的三种）、
+  q unit of files without one in their header、q sides、Cut qz (nm⁻¹)（`cut_qz`；不勾选为有效界面）、Relative σ (if missing)
+  （默认 0.10）、Absolute σ floor、Save Settings。行带 probability、posterior、warnings、ess；Stage 列为 Network + posterior。
+- 旧设置：General V5、Single RC specialist、Physical fit (numerical) 与 fit1d 都已于 0.2.0 删除；保存的旧方法键
+  （model、stable、experimental、fit1d）按 `application/workflow_v5.RETIRED_METHODS` 打开为 posterior，其选项（`RETIRED`）丢弃，
+  fit1d 的 `fit1d_qz` 保留为 `cut_qz`。
+- 单条曲线的网络建议在 Fit 步骤里（Predict parameters），它的解进 Results 的 Other solutions 表（p 列为概率），Model 中
+  解的后验区间与提示写在 Fit details…（`single/predict.posterior_lines`）。
 - `Fit ▸ Options ▸ 1D Predict Batch Window…`（菜单 Tools ▸ 1D Predict — Fit Many Curves…，Fitting 菜单里同名的一项也是它）打开 1D Predict 窗口：
-  Add curves…（若干曲线文件）、Use current cut、Parameters…（方法、组分、q 单位与两半）、Fit curve、Cancel、
-  Open results。每次运行写到启动 GIMaP 的文件夹下的 `AI_Fitting_Output/v5_<日期>_<时间>_<微秒>/`。
+  Add curves…（若干曲线文件）、Use current cut、Parameters…（组成、q 单位与两半、q_z、σ）、Fit curve、Cancel、
+  Open results。每次运行写到 GIMaP 用户数据文件夹下的 `AI_Fitting_Output/v5_<日期>_<时间>_<微秒>/`。
   - **q 的单位**：文件头写明单位的文件按写明的单位读（Analyze 的 `_fit_input.dat` 首行 `(q in 1/A)`、
     `# columns: qy (1/A) …`）；设置 *q unit of files without one in their header* 只用于没写明的文件。识别在
     `infrastructure/adapters/curve_units.py`（`LocalCurveRepository.stated_q_unit` → `LoadCurve.stated_q_unit` →
@@ -257,16 +223,14 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   两半随项目保存，写进记录（`settings.side`、`side_from`），并写在 Start 的摘要里。
 - **Start**：Single analysis 的模型、拟合范围和排除的点，以及上面的两半（摘要写在这里，Edit in Single
   Analysis 回去改）；每帧从上一帧的结果开始（默认，上一帧没收敛时退回 Single 的模型）或都从 Single
-  的模型开始；方法 Refine（快）、Search the ranges, then refine（慢）或 **Predict each frame (fit1d)**。阶段还没找到就开始的
+  的模型开始；方法 Refine（快）、Search the ranges, then refine（慢）或 **Predict each frame**。阶段还没找到就开始的
   运行不用阶段（“No stages for this run: it started before they were found.”），运行结束后再找。各方法都保留模型的固定值和上下限。
-- **Predict each frame (fit1d)**（`single/series_fit1d.py`，`domain/fit1d_follow.py`）：每帧一个 fit1d job（粒子、固定值和
-  范围用 Single 的模型，设置用 Single 的 Fit 步骤，只报告边界而不自动改范围），表格的值是 fit1d 的值和 1σ 误差（σD/D = w/D/√(2π)），
-  帧图画 fit1d 自己的 v2 曲线。**Prefer the solution that continues the previous frame**（默认勾选；起点为 Single 的模型、或新阶段
-  的第一帧时不跟随）：每帧再拟合一次，所有参数限制在上一帧值附近的窗口里（R、D × / ÷ 1.5，相对宽度 ± 0.15；用户固定的值不变，
-  用户范围取交集，不自动放宽窗口），若它的 χ² 不比自由拟合差过工具包跟踪器的同盆容差
-  max(25, 0.02 N)·max(1, χ²/N)，就采用它（等价解中最平滑的序列），否则采用自由拟合并写明“样品在这里变了”。工具包自己的
-  series1d 跟踪器只处理探测器帧，曲线文件夹在工具包里是逐条独立拟合，所以这条规则在这里实现。记录：`settings.method`
-  = `fit1d`、`settings.follow`、`settings.fit1d`，每帧 `followed_previous` 与 `resolved`。
+- **Predict each frame**（`single/series_predict.py`）：每帧一个 Predict parameters job（`predict_request(data, start,
+  "model")`：组成取这一帧起始模型的 1–3 群；少于 1 群或多于 3 群时不开始，`NOT_PREDICT`），保留的解再在起始模型的固定值和
+  范围下用 Refine 精修（`series_fit._fit_frame`），表格的值是精修后的值和 1σ 误差。**Prefer the solution that continues the
+  previous frame**（默认勾选；起点为 Single 的模型、或新阶段的第一帧时不跟随）：在概率至少为最可能解的 `CLOSE_ENOUGH` = 0.2 倍的解里，
+  取尺寸和间距（ln R、ln D 之差，按半径对应各群）与上一帧最接近的一个（`closest`）；明显更可能的解仍被采用。记录
+  `settings.method` = `predict`、`settings.follow`。
 - **运行**：曲线在界面线程读入，拟合在后台一帧一帧做；Pause / Stop；选中最后一帧时图跟着运行走，
   选了别的帧就停在那里。Start 之前点列表中的帧就能看到它的曲线和 Single 的模型（预览）；开始后各帧都按这次运行的设置画。
   运行期间不能打开项目（先 Stop）。
@@ -292,9 +256,9 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
 ## 固定值、硬范围和结果浏览（2026-11-15）
 
 - `domain/fit_limits.py` 保留建议中的固定值和范围；`fit_engine` 使用按列缩放的 BVLS 求解有界强度项，并保留可行初始曲线作为最优结果候选。
-- `fit_resolving` 只给出边界诊断，不修改模型范围。fit1d 使用模型组成时传递全部支持范围，禁用自动放宽；不支持的约束显式拒绝。序列沿用同一请求。
-- `infrastructure/adapters/fit1d_alternatives.py` 只在隔离任务进程中捕获已经计算的完整等价解，不修改研究包；最多六个不同替代解。`single/equivalent_solutions.py` 用表格下拉框整套切换，过期后不可切换，导出记录选择。
-- `single/plotting.py` 把各群粒子与全局项显示开关接入右键。`Fit details…` 非模态浮窗收纳详细诊断；预测后保持 fit1d，不自动切换手动模型。
+- `fit_resolving` 只给出边界诊断，不修改模型范围。序列沿用同一规则。
+- `single/equivalent_solutions.py` 用表格下拉框整套切换完整的解（Predict parameters 或 Analyze 的），过期后不可切换，导出记录选择。
+- `single/plotting.py` 把各群粒子与全局项显示开关接入右键。`Fit details…` 非模态浮窗收纳详细诊断；预测之后方法换成 Refine。
 
 ## 验证
 
@@ -314,21 +278,21 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
       q 范围；Send to Fitting ▾ 的四种半边选择对应 Curve 步骤的 Halves of the cut；
 - [ ] Open Curve… 打开两列 / 三列 / 四列 `.dat` / `.txt` 曲线；坏文件或其他格式（包括 `.csv`）给出明确错误；
 - [ ] 步骤栏 Curve、Model、Fit、Results 四步都能点开，每步写出状态；窄窗口下命令栏的 Fit 与 Save 不被截断；
-- [ ] 五种方法（Predict parameters (fit1d) / Refine the values in Model / Search the ranges, then refine /
-      Find the particle shape (no AI) / AI proposal (1D Predict)）在 Method 下拉里，都由同一个 Fit 按钮（Ctrl+Return）启动；
-      未拟合的 GISAXS 线切自动选 Predict 并写 Recommended；精修的 Stop 保留最优值，fit1d 的 Stop 不产生新结果；
+- [ ] 三种方法（Predict parameters / Refine the values in Model / Search the ranges, then refine）在 Method 下拉里，
+      都由同一个 Fit 按钮（Ctrl+Return）启动；Predict 下面只有 Particles，Options 里只有最多计算次数与 1D Predict 批量窗口；
+      未拟合的 GISAXS 线切自动选 Predict 并写 Recommended；精修的 Stop 保留最优值，Predict 的 Stop 不产生新结果；
 - [ ] 范围太窄的 R（例如 1–2 nm，真值 3 nm）：Predict 和 Refine 都保留用户范围，
       边界说明在拟合详情中；固定值不变；
 - [ ] Results 选中一个值 → Fix → Fit Again：该值固定参与下一次拟合；Fit Every Curve in This Folder… 打开 In-situ series
       并列出同一文件夹的同类文件；
-      Options ▸ 1D Predict Batch Window… 打开 1D Predict 窗口，回退原因在 Stage 列的提示里；
-- [ ] fit1d 允许 1–4 群球 / 竖直圆柱、两网络和 GISAXS / SAXS；qz 手填、σ 说明准确，Terms 能显示原 v2 分量；
-      Results 状态及 CSV / JSON 保留原结果；改 Model / 选区 / qz / mode / network / search / 误差下限后标记过期并拒绝导出；
+      Options ▸ 1D Predict Batch Window… 打开 1D Predict 窗口，概率与提示在 Stage 列的提示里；
+- [ ] Predict parameters 的三种 Particles 都能运行；解进 Other solutions 并带 p，Fit details… 写出后验区间与标记；
+      Model 里的角度为 0 时按有效界面，填了 αi、αf、λ 时按切线的 q_z；
 - [ ] Halves of the cut 的四个选项（Mean of both halves / Both halves on |q| / q > 0 half / q < 0 half）切换后，
       Curve 步骤的点数和图上的点随之更新；Log q / Log I 切换正常；
 - [ ] 拟合后 Model 里每个自由值显示 ± 误差；仍在边上的值 Results 用橙色说明；参数输入不静默舍入小值；
 - [ ] Send Series to Fitting 导出所有帧后打开 In-situ series，folder（`<名称>_fitting/fit_input`）与 pattern 已填好、曲线已列出；
-- [ ] Single 选 Both halves on |q| 后用 Find the particle shape / AI proposal / fit1d：Fit 时下拉换成 Mean of both halves，
+- [ ] Single 选 Both halves on |q| 后用 Predict parameters：Fit 时下拉换成 Mean of both halves，
       状态行说明原因；Refine 与 Search 仍拟合两半；
 - [ ] In-situ series 的 Halves of the cut：Send Series 时选 q > 0 half，打开后下拉为 q > 0 half，下面写 “from the fit inputs
       written by Analyze”；只有一侧 q 的曲线时下拉不可用并说明；所选一半没有点的帧标 ✗，原因 “No points on the q > 0 half”；

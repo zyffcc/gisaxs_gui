@@ -127,19 +127,31 @@ ASSISTANT_RUNTIME_ZH = {
         "2π/q* = {d} nm，位于切线的峰处（|qy| = {q} Å⁻¹）：这是一个特征长度，不一定是粒子间距；请用模型拟合检验。",
     "2π/q* = {d} nm at a shoulder of the cut (|qy| = {q} Å⁻¹, no resolved peak): a length scale, not necessarily the particle spacing; check it with a model fit.":
         "2π/q* = {d} nm，位于切线的肩峰处（|qy| = {q} Å⁻¹，没有分辨出的峰）：这是一个特征长度，不一定是粒子间距；请用模型拟合检验。",
-    "Fitted: {curve} ({points} points); R, h and D in nm. Numerical fits of single particle families with size dispersity and a paracrystal distance D, a screening step: choose the model from what you know of the sample and confirm it in Fitting.":
-        "已拟合：{curve}（{points} 个点）；R、h 和 D 的单位为 nm。对单一粒子类型做数值拟合（含尺寸分布和次晶距离 D），只是一次筛选：请根据你对样品的了解选择模型，并在拟合中确认。",
-    "The run reports rank {rank} ({model}), selected above: the best-ranked solution within {percent} of the first's χ²/N that converged with no non-linear value at a search bound.":
-        "本次运行报告第 {rank} 名（{model}，已在上表中选中）：它是 χ²/N 在排第一的解的 {percent} 以内、已收敛且没有非线性参数处于搜索边界的解中排名最靠前的一个。",
-    "Every solution within {percent} of the first's χ²/N has a value at a search bound or did not converge: the first is reported, and its values at a bound are not determined by the curve.":
-        "χ²/N 在排第一的解的 {percent} 以内的每个解都有数值处于搜索边界，或者没有收敛：报告的是排第一的解，它处于边界的数值不由曲线确定。",
+    "Predict parameters: GIMaP's network proposes the particles (one or two populations of spheres and upright cylinders) and their values; each solution is refined by least squares, p is its posterior probability. Choose the model from what you know of the sample and refine it in Fitting.":
+        "预测参数：GIMaP 的网络提出颗粒（一种或两种球和竖直圆柱的颗粒群）及其数值；每个解再做最小二乘精修，p 是它的后验概率。请根据你对样品的了解选择模型，并在拟合中精修。",
+    "{n} solutions have p ≥ {limit}: the curve alone does not decide the model. Compare their fits (select a row) and choose from what you know of the sample.":
+        "{n} 个解的 p ≥ {limit}：仅凭这条曲线无法确定模型。请比较它们的拟合（选中一行），并根据你对样品的了解选择。",
+    "The particles of the solution: one or two populations; (S): with a paracrystal distance D. ⚠: a warning of the fit. A value marked ⚠ ended on a bound of its range, which the curve does not determine (listed under the table; Fit details below: every parameter).":
+        "解的颗粒：一种或两种颗粒群；(S)：带次晶距离 D。⚠：拟合的警告。标 ⚠ 的数值停在其范围的边界上，曲线不能确定它（列在表格下方；下方的拟合详情：每个参数）。",
+    "p: the posterior probability of the solution; the solutions are sorted by it, most probable first. Another solution with p of 0.2 or more: the curve alone does not decide the model.":
+        "p：这个解的后验概率；各个解按它排序，最可能的在前。另有解的 p 不低于 0.2 时：仅凭这条曲线无法确定模型。",
+    "χ²/N: the mean squared σ-normalised residual, with no degrees-of-freedom correction.":
+        "χ²/N：按 σ 归一化的残差平方的平均值，不做自由度修正。",
+    "most probable fit {model} R {radius} nm (p {p}, χ²/N {chi2})": "最可能的拟合 {model} R {radius} nm（p {p}，χ²/N {chi2}）",
+    "CSV: every solution with its probability, parameters (nm), intervals and χ²/N.": "CSV：每个解及其概率、参数（nm）、区间和 χ²/N。",
     "Values at a search bound, not determined by the curve — {rows}.": "处于搜索边界、不由曲线确定的数值——{rows}。",
     "{rank}: {bounds}": "第 {rank} 名：{bounds}",
     "{name} at its upper bound": "{name} 处于搜索上界",
     "{name} at its lower bound": "{name} 处于搜索下界",
     "R (nm): the particle radius.": "R (nm)：粒子半径。",
-    "One or more shape/resolution parameters reached a search bound; values may be unidentifiable.":
-        "有形状 / 分辨率参数到达了搜索边界；这些数值可能无法确定。",
+    "the curve says little about {name}": "曲线对 {name} 约束很少",
+    "{name}: its Guinier region lies at or below the curve's lowest q, so the curve shows only its decay, which roughness or a rise at low q produce as well":
+        "{name}：它的 Guinier 区在曲线的最低 q 处或更低，曲线只显示它的衰减，而粗糙度或低 q 处的上升也会产生这样的衰减",
+    "{name}: smaller than the curve resolves, it acts as a smooth background": "{name}：比曲线能分辨的更小，它起平滑背景的作用",
+    "compared by χ² and the number of values (BIC): the posterior's sampling did not converge":
+        "按 χ² 和数值个数（BIC）比较：后验抽样没有收敛",
+    "Predict parameters: the proposal network's importance-weighted samples, each mode refined by bounded least squares, the posterior sampled around the best solutions":
+        "预测参数：建议网络的重要性加权样本，每个模态用有界最小二乘精修，并在最好的解附近对后验抽样",
     "h (nm): the cylinder height (— for a sphere).": "h (nm)：圆柱高度（球体为 —）。",
     "D (nm): the paracrystal distance between particles.": "D (nm)：粒子之间的次晶距离。",
     "No detector image is open.": "没有打开探测器图像。",
@@ -177,8 +189,8 @@ ASSISTANT_RUNTIME_ZH = {
         "请检查 αi（地平线随它移动），或在图像上把黄色条带拖到 Yoneda 所在的行。",
     "The best fit did not converge.": "最佳拟合没有收敛。",
     "Open the curve in Fitting (Send to Fitting) and refine it with a chosen model.": "在拟合中打开这条曲线（发送到拟合），用选定的模型精修。",
-    "The reported solution ({model}) has χ²/N = {chi2}, above {limit}: it misses the curve by far more than the σ of its points, so none of the particle families of the quick fit describes this cut, and its R and D are not measurements.":
-        "报告的解（{model}）的 χ²/N = {chi2}，大于 {limit}：它与曲线的偏差远大于数据点的 σ，快速拟合的粒子类型没有一种能描述这条切线，它的 R 和 D 不是测量值。",
+    "The reported solution ({model}) has χ²/N = {chi2}, above {limit}: it misses the curve by far more than the σ of its points, so none of the compositions Predict parameters tried describes this cut, and its R and D are not measurements.":
+        "报告的解（{model}）的 χ²/N = {chi2}，大于 {limit}：它与曲线的偏差远大于数据点的 σ，预测参数尝试过的组成没有一种能描述这条切线，它的 R 和 D 不是测量值。",
     "Look at the fit over the curve (the Results tab, fit_curve.csv): Bragg rings of a powder or a calibrant, a cut off the Yoneda band or a second population give such a misfit. Refine a model you expect in Fitting.":
         "请对照曲线查看拟合（结果标签页、fit_curve.csv）：粉末或标样的布拉格环、偏离 Yoneda 带的切线或第二种颗粒群都会造成这样的失配。请在拟合中精修你预期的模型。",
     "{texture} — but the strongest measured |χ| ({chi}°) borders an unmeasured range, so the true maximum may lie inside it":
@@ -218,14 +230,12 @@ ASSISTANT_RUNTIME_ZH = {
     "then the {side} half alone to {q} Å⁻¹": "之后只用 {side} 这一半，至 {q} Å⁻¹",
     "the {side} half": "{side} 这一半",
     "{group} neighbouring points merged ({count} points for the fit)": "每 {group} 个相邻点合并为一个（拟合用 {count} 个点）",
-    "{n} solutions of {families} particle families fit within {percent} of the first solution's χ²/N: the curve alone does not decide the model.":
-        "{n} 个解（{families} 种粒子类型）的 χ²/N 都在排第一的解的 {percent} 以内：仅凭这条曲线无法确定模型。",
-    "The run reports rank {rank} ({solution}), the best-ranked of them with no non-linear value at a search bound: rank 1 ({first}) has {bounds}.":
-        "本次运行报告第 {rank} 名（{solution}），它是其中没有非线性参数处于搜索边界的排名最靠前的解；第 1 名（{first}）：{bounds}。",
+    "{n} solutions have a probability of at least {limit} ({solutions}): the curve alone does not decide the model.":
+        "{n} 个解的概率都不低于 {limit}（{solutions}）：仅凭这条曲线无法确定模型。",
     "Solutions whose D is within {percent} of 2π/q* of the cut: {solutions} (2π/q* is a length scale, not necessarily the particle spacing).":
         "D 与切线的 2π/q* 相差在 {percent} 以内的解：{solutions}（2π/q* 是一个特征长度，不一定是粒子间距）。",
-    "The first-ranked solution ({model}) has {bounds}, and no solution within {percent} of its χ²/N is free of search bounds: those values are not determined by the curve.":
-        "排第一的解（{model}）：{bounds}；χ²/N 在它的 {percent} 以内的解没有一个不碰搜索边界：这些数值不由曲线确定。",
+    "The reported solution ({model}) has {bounds}: those values are not determined by the curve.":
+        "报告的解（{model}）：{bounds}；这些数值不由曲线确定。",
     "Refine the model you expect in Fitting (Send to Fitting), with the value at the bound fixed or its range changed.":
         "在拟合中精修你预期的模型（发送到拟合），把处于边界的数值固定，或改变它的范围。",
     "Choose the particle shape you expect and refine that model in Fitting; compare the fitted curves.":
@@ -355,7 +365,9 @@ ASSISTANT_RUNTIME_ZH = {
     "near the frame": "这一帧附近",
     "Neither the options, the notes, Analyze's command bar nor an instrument profile give αi, so 0° is used. qy and the in-plane spacing barely change, but the sample horizon is then put at the direct beam: the exit angle αf of every row, the one quoted for the Yoneda band too, is too large by αi, and the rows between the direct beam and the real horizon count as above the sample.":
         "选项、笔记、分析的命令栏和仪器配置都没有给出 αi，因此使用 0°。qy 和面内间距几乎不变，但样品地平线会被放在直射束处：每一行的出射角 αf（包括 Yoneda 带标出的 αf）都偏大 αi，直射束和真实地平线之间的那些行也被算作样品上方。",
-    "fitting spheres and cylinders to I(qy) (about half a minute)…": "正在用球和圆柱模型拟合 I(qy)（大约半分钟）…",
+    "predicting the particles of I(qy) (about 25 s)…": "正在预测 I(qy) 的颗粒（大约 25 s）…",
+    "GISAXS fit of I(qy): particles, radius, size spread and distance D with their intervals, and the other probable solutions":
+        "GISAXS I(qy) 拟合：颗粒、半径、尺寸分布和距离 D 及其区间，以及其他可能的解",
     "no side maximum or shoulder away from qy = 0": "在 qy = 0 之外没有侧峰或肩峰",
 }
 

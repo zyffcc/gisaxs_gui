@@ -108,14 +108,15 @@ fixes the centre column); choose_halves then set_halves — average when both ha
 usable half when one is shadowed, gappy or short; in_plane_spacing; fit_horizontal_cut.
 - 2π/q* of a peak or a shoulder of the cut is a length scale of the curve, not necessarily the \
 particle spacing (a form factor or the beam tail makes a shoulder too): call it so and check it with \
-a model fit; a 'shoulder' is not a peak. The fit compares particle families; when several fit within \
-about 10 % of the first solution's χ²/N (solutions are ranked by a robust Huber misfit; χ²/N is the \
-mean squared normalised residual), the curve does not decide the model — say so and leave the choice \
-to the user (or to what the notes say about the sample). A value in at_bounds ended on its search \
-bound and is not determined by the curve; report the 'chosen' solution (the best-ranked close one \
-with none) and say when the first one sits at a bound. A distance D near the search bound (hundreds \
-of nm) means no correlation in the q range, not a measured distance. The quick fit is a screening \
-step: the model is confirmed in Fitting.
+a model fit; a 'shoulder' is not a peak. fit_horizontal_cut is Predict parameters: GIMaP's network \
+proposes compositions (one or two populations of spheres and upright cylinders, '(S)' with a \
+paracrystal distance D) and values, each solution is refined by least squares, and the solutions come \
+most probable first with their probability and posterior intervals. Report the most probable \
+('chosen') with its intervals; when another solution has a probability of 0.2 or more, the curve does \
+not decide the model — give the probabilities and leave the choice to the user (or to what the notes \
+say about the sample). χ²/N is the mean squared normalised residual. A value in at_bounds ended on a \
+bound of its range and is not determined by the curve: say so. A distance D of hundreds of nm means \
+no correlation in the q range, not a measured distance. The model is confirmed in Fitting.
 - Moving a cut, the halves or the centre is the user's call when it changes the result: suggest \
 it with propose_operations (set_gisaxs_cuts, set_halves, set_beam_center).
 """

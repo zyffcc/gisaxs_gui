@@ -3,9 +3,9 @@ and ``client_panel.py``).
 
 **The input bar** (always shown, above the two views): the switch In Situ | After Deposition and its inputs — an
 in-situ scan: the scan folder, Metal, Substrate, the deposition rate with its unit (Å/s or nm/s) and its QCM reading
-box; a sample measured after
-its deposition: its frames (folder, or a CBF file or zip archive), its name, its nominal thickness and, optionally,
-frames of the bare substrate (another piece of the same substrate without metal) — and the primary button Analyze;
+box; samples measured after
+their deposition: Add Samples… (a folder of samples, one sample's folder or one CBF file: ``static_list.py``), a line
+that sums up the sample list and the switch that shows or hides that list — and the primary button Analyze;
 one line about the scan; one line with the geometry used and Edit; Open Result…, Export… (``export_flow.py``) and
 the switch between the main
 screen and Details; at the right the job status of Analyze (of both kinds).
@@ -35,7 +35,6 @@ from src.gimap.app.presentation.components import (EmptyState, FilePicker, JobSt
                                                    SafeWheelComboBox, SegmentedControl)
 from src.gimap.app.presentation.i18n import DATA_VALUES
 
-from .sputter_static_view import FRAMES_TIP, NAME_TIP, NOMINAL_TIP, REFERENCE_PLACEHOLDER, REFERENCE_TIP
 
 STATUS_WIDTH = 400
 EMPTY_WIDTH = 720
@@ -48,15 +47,19 @@ MODE_CHOICES = (("Auto", "auto", "Quick for Si and TiO₂, Refine for polymer su
                 ("Refine", "refine", "Also refines the solution of every window (minutes per window on a polymer)."),
                 ("Full", "full", "A longer refinement of every window and of the whole scan together: hours."))
 VIEW_CHOICES = (("Main Screen", "main"), ("Details", "details"))
+ADD_SAMPLES = "Add Samples…"
+ADD_SAMPLES_TIP = ("A folder of samples (each folder in it with CBF frames is one sample), one sample's folder or one CBF "
+                   "file. The nominal thickness, HiPIMS and the bare substrate are read from the folder names.")
 KIND_CHOICES = (("In Situ", "insitu", "Frames recorded during the deposition: the deposition rate gives the metal "
                                       "deposited at each time."),
-                ("After Deposition", "static", "The frames of one sample measured after its deposition: its nominal "
-                                               "thickness takes the place of the rate, and every sample analysed into a "
-                                               "series is shown against it."))
+                ("After Deposition", "static", "Samples measured after their deposition: each one's nominal thickness "
+                                               "takes the place of the rate, and every series is shown against it."))
 """What the bar analyses: an in-situ scan, or a sample measured after its deposition."""
 IMAGE_CHOICES = (("Patterns", "patterns", "The measured image beside the model image of the solution shown."),
                  ("Real Space", "space", "The solution shown drawn in real space: a cut through a row of grains and "
-                                         "the view from above, in nm."))
+                                         "the view from above, in nm."),
+                 ("Components", "components", "The model image of the solution shown split into its physical terms "
+                                              "(grains, film, substrate, …), and how each term's share changes."))
 SCAN_FOLDER_TIP = ("The folder of one scan (its CBF frames, or a scan folder with them in one subfolder such as p2m/): "
                    "its first frame tells the detector, the exposure and the time.")
 RATE_TIP = ("Deposition rate, in the unit chosen beside it: needed, the solutions depend on the metal deposited at "
@@ -89,6 +92,15 @@ TILES = (("R_nm", "Radius R", "nm", "Radius of the grains."),
 """(quantity, caption, unit, tooltip) of the value tiles, in their order. A result shows the tiles of the quantities
 it has: a flat substrate the first seven (the continuous layer only when the result lists it), a porous one the
 radius (as a relative size: the page says so in its caption), the width and the last five."""
+CONNECTED_TILES = {
+    "R_nm": ("Relief radius R", "Radius of the grains that make up the relief of the joined film."),
+    "H_nm": ("Film height H", "Height of the film's top above the substrate: continuous layer and relief."),
+    "D_nm": ("Relief spacing D", "Spacing of the relief of the joined film (the centre distance of the grains it is "
+                                 "made of): the lateral correlation length of its surface, not of separate particles."),
+}
+"""Captions and tooltips of the tiles while the solution shown is a joined film (a continuous layer, or grains joined
+into a network across the picture): the grains are then its relief. The gap D − 2R is not shown then."""
+CONNECTED_HIDDEN = ("gap_nm",)
 DEVIATION_CAPTION = "Fit deviation (lower is better)"
 DEVIATION_TIP = ("How far the model image is from the measured image, per cell and with an allowance for the model: "
                  "it compares the solutions of one measured image.")
@@ -283,40 +295,27 @@ class SputterMainView:
         return bar
 
     def _static_inputs(self, page: QWidget, number_edit) -> None:
-        """The inputs of a sample measured after its deposition: its frames, its name, its nominal thickness (in the
-        place of the rate) and, optionally, frames of the bare substrate — another piece without metal (the series
-        folder, the mode and the geometry are in Details)."""
-        # Choose… offers a folder or one file (a CBF frame or a zip archive): a menu, set up by static_flow.py
-        self.static_frames = FilePicker(page, placeholder="folder, CBF file or zip archive", browse_text="Choose…",
-                                        clearable=False)
-        self.static_frames.setObjectName("sputterStaticFrames")
-        self.static_frames.path_edit.setToolTip(FRAMES_TIP)
-        self.static_name = QLineEdit(page)
-        self.static_name.setObjectName("sputterStaticName")
-        self.static_name.setPlaceholderText("required")
-        self.static_name.setToolTip(NAME_TIP)
-        self.static_name.setFixedWidth(88)
-        self.static_nominal = number_edit(page, "required")
-        self.static_nominal.setObjectName("sputterStaticNominal")
-        self.static_nominal.setToolTip(NOMINAL_TIP)
-        self.static_nominal.setFixedWidth(64)
-        self.static_reference = FilePicker(page, placeholder=REFERENCE_PLACEHOLDER, browse_text="Choose…",
-                                           clearable=False)
-        self.static_reference.setObjectName("sputterStaticReference")
-        self.static_reference.path_edit.setToolTip(REFERENCE_TIP)
+        """The inputs of samples measured after their deposition: Add Samples… (its menu: ``static_list.py``), one
+        line about the sample list and the switch Sample List that shows or hides the list beside the main screen (the
+        series folder, the mode and the geometry are in Details)."""
+        self.static_add_button = QPushButton(ADD_SAMPLES, page)
+        self.static_add_button.setObjectName("sputterStaticAdd")
+        self.static_add_button.setToolTip(ADD_SAMPLES_TIP)
+        self.static_summary = ElidedLabel(page)
+        self.static_summary.setObjectName("sputterStaticSummary")
+        self.static_summary.setProperty("gimapMeta", True)
+        self.static_list_button = QToolButton(page)
+        self.static_list_button.setObjectName("sputterStaticList")
+        self.static_list_button.setText("Sample List")
+        self.static_list_button.setCheckable(True)
+        self.static_list_button.setChecked(True)
+        self.static_list_button.setToolTip("Show or hide the list of samples beside the main screen.")
         row = QHBoxLayout(page)
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(4)
-        row.addWidget(self.static_frames, 3)
-        for caption, widget, tip in (("Sample", self.static_name, NAME_TIP),
-                                     ("Nominal (nm)", self.static_nominal, NOMINAL_TIP),
-                                     ("Bare substrate", self.static_reference, REFERENCE_TIP)):
-            label = QLabel(caption, page)
-            label.setBuddy(widget)
-            label.setToolTip(tip)
-            row.addSpacing(4)
-            row.addWidget(label)
-            row.addWidget(widget, 2 if widget is self.static_reference else 0)
+        row.setSpacing(8)
+        row.addWidget(self.static_add_button)
+        row.addWidget(self.static_summary, 1)
+        row.addWidget(self.static_list_button)
 
     # -- the main screen -----------------------------------------------------------------------------------------
     def _main_view(self, page: QWidget) -> QWidget:
@@ -394,14 +393,18 @@ class SputterMainView:
         note.addWidget(self.steps_button)
         layout.addLayout(note)
 
-        self.pattern_host = QStackedWidget(view)  # 0: the two images, 1: the real-space picture
+        self.pattern_host = QStackedWidget(view)  # 0: the two images, 1: the real-space picture, 2: the model's terms
         patterns_page, space_page = QWidget(self.pattern_host), QWidget(self.pattern_host)
+        components_page = QWidget(self.pattern_host)
         self.pattern_layout = QVBoxLayout(patterns_page)
         self.pattern_layout.setContentsMargins(0, 0, 0, 0)
         self.space_layout = QVBoxLayout(space_page)
         self.space_layout.setContentsMargins(0, 0, 0, 0)
+        self.components_layout = QVBoxLayout(components_page)
+        self.components_layout.setContentsMargins(0, 0, 0, 0)
         self.pattern_host.addWidget(patterns_page)
         self.pattern_host.addWidget(space_page)
+        self.pattern_host.addWidget(components_page)
         layout.addWidget(self.pattern_host, 5)
 
         entries = QHBoxLayout()
@@ -538,5 +541,5 @@ class SputterMainView:
         return section
 
 
-__all__ = ["RATE_UNITS", "RATE_UNIT_TIP", "DEVIATION_CAPTION", "ENTRY_HINT", "ElidedLabel", "IMAGE_CHOICES", "KIND_CHOICES", "MODE_CHOICES", "SAMPLE_METALS", "SUBSTRATE_CHOICES",
+__all__ = ["CONNECTED_HIDDEN", "CONNECTED_TILES", "RATE_UNITS", "RATE_UNIT_TIP", "DEVIATION_CAPTION", "ENTRY_HINT", "ElidedLabel", "IMAGE_CHOICES", "KIND_CHOICES", "MODE_CHOICES", "SAMPLE_METALS", "SUBSTRATE_CHOICES",
            "STEPS_BUTTON", "STEPS_TIP", "ShownComboBox", "SputterMainView", "TILES", "VIEW_CHOICES", "WORKERS_TIP"]

@@ -273,8 +273,9 @@ class _Problem:
 
 def fit(model: FitModel, data: FitData, *, method: str = "local", max_evaluations: Optional[int] = None,
         seed: int = 1729, progress: Optional[Callable[[float, str], None]] = None,
-        stop: Optional[Callable[[], bool]] = None) -> FitResult:
-    """Fit the free parameters of ``model`` to ``data`` (q in nm⁻¹)."""
+        stop: Optional[Callable[[], bool]] = None, seeds: tuple = ()) -> FitResult:
+    """Fit the free parameters of ``model`` to ``data`` (q in nm⁻¹). ``seeds``: models of the same parameters whose
+    values join the first population of ``global`` (the proposal network's samples)."""
     if method not in ("local", "global"):
         raise ValueError(f"Unknown fitting method {method!r}")
     if data.q.size < 3:
@@ -299,7 +300,8 @@ def fit(model: FitModel, data: FitData, *, method: str = "local", max_evaluation
         else:
             starts = [problem.start()]
             if method == "global":
-                starts = _search(problem, budget, seed)
+                starts = _search(problem, budget, seed,
+                                 [problem.encode([m.get(path).value for path, _p in problem.nonlinear]) for m in seeds])
             problem.phase = REFINING
             local_budget = max(20, (budget if method == "local" else budget // 4) // len(starts))
             steps = max(5, local_budget // (len(problem.nonlinear) + 1))  # each step also costs a Jacobian
@@ -340,13 +342,16 @@ def fit_scales(model: FitModel, data: FitData) -> FitModel:
     return model.with_values({path: solved.get(path).value for path in problem.linear})
 
 
-def _search(problem: _Problem, budget: int, seed: int) -> list[np.ndarray]:
-    """Differential evolution over the unit cube; the best three distinct members as starts."""
+def _search(problem: _Problem, budget: int, seed: int, extra=()) -> list[np.ndarray]:
+    """Differential evolution over the unit cube (the start and ``extra`` members among the first population, the rest
+    a Latin hypercube); the best three distinct members as starts."""
     problem.phase = SEARCHING
     dimension = len(problem.nonlinear)
     size = max(8, 5 * dimension)
     population = qmc.LatinHypercube(d=dimension, seed=seed).random(size)
     population[0] = problem.start()
+    for row, member in enumerate(list(extra)[:size // 2], start=1):
+        population[row] = member
     generations = max(1, (3 * budget // 4) // size - 1)
     evolution = differential_evolution(problem.cost, [(0.0, 1.0)] * dimension, init=population, maxiter=generations,
                                        seed=seed, polish=False, tol=0.0, atol=0.0, updating="immediate")
@@ -420,5 +425,11 @@ def _at_bounds(model: FitModel, problem: _Problem) -> tuple:
     return tuple(edges)
 
 
-__all__ = ["PHASES", "PROGRESS_LINE", "FitData", "FitResult", "FitStopped", "fit", "fit_scales", "log_rmse",
-           "residuals", "stopped_result"]
+def errors(model: FitModel, data: FitData) -> tuple[dict, tuple]:
+    """The errors of the free parameters at the model's values for ``data`` (and the strongly correlated pairs), as
+    a fit reports them, without fitting: e.g. with σ that include a model error."""
+    return _errors(model, data, _Problem(model, data, None, None, 1))
+
+
+__all__ = ["PHASES", "PROGRESS_LINE", "FitData", "FitResult", "FitStopped", "errors", "fit", "fit_scales",
+           "log_rmse", "residuals", "stopped_result"]

@@ -15,12 +15,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_release_sources_exclude_retired_training_workspace_and_private_files():
     from tools.build_macos_release import source_files
-    names, manifest = source_files(ROOT)
+    names = source_files(ROOT)
     assert 'src/gimap/app/main_window.py' in names
     assert not any(name.startswith('src/gimap/features/trainset/') for name in names)
     assert not any('/_handoff/' in name or name.startswith('docs/agents/eval/local/') for name in names)
-    assert 'utils/gisaxs1d_gui_kit/LICENSE' in names
-    assert 'LICENSE' in manifest['files']
+    network = 'src/gimap/features/fitting/domain/posterior/data/flow_v1'
+    assert f'{network}.npz' in names and f'{network}.json' in names  # what Predict parameters needs
+    assert not any(name.startswith('utils/gisaxs1d_gui_kit/') for name in names)  # the fit1d kit is gone
+    assert 'LICENSE' in names
 
 
 @pytest.mark.skipif(sys.platform != 'darwin', reason='Exercises the macOS shell launcher')

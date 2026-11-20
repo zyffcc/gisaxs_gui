@@ -33,9 +33,9 @@ def test_relative_model_paths_are_taken_inside_the_gimap_folder(tmp_path):
     assert resolve_model_path(tmp_path / "abs") == tmp_path / "abs"
 
 
-def test_the_shipped_v5_model_is_found_from_another_working_directory(tmp_path, monkeypatch):
-    from src.gimap.features.fitting.application.workflow_v5 import bundled_workflow
+def test_the_shipped_proposal_network_is_found_from_another_working_directory(tmp_path, monkeypatch):
+    from src.gimap.features.fitting.domain.posterior import network
 
+    monkeypatch.delenv(network.VARIABLE, raising=False)
     monkeypatch.chdir(tmp_path)
-    assert bundled_workflow() == REPO / "modules/Fitting_1D_Model/Workflow_v5/conditional_v2"
-    assert (bundled_workflow() / "conditional_fast_manifest_v2.json").is_file()
+    assert network.path() == REPO / "src/gimap/features/fitting/domain/posterior/data" / f"{network.DEFAULT}.npz"

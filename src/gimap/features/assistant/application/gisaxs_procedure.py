@@ -4,10 +4,12 @@ After the geometry and the frames (shared with GIWAXS): the horizontal cut at th
 (or a question when there is none), the beam-centre column moved to the symmetry axis, the
 halves chosen with their reason, the length scale 2π/q* of a side maximum or shoulder of I(qy)
 (a length the curve shows, not necessarily the particle spacing), and — when a fitter is
-available — a physical fit of the curve. Each step is a tool call, so the GUI shows it and the
-AI could do the same. Like the GIWAXS run, the report always says what its numbers are (q kinematic,
-uncertainties statistical only: ``giwaxs_decisions``), and a reported fit far from its curve (χ²/N
-above Fitting's poor-fit limit) is a point to check.
+available — Predict parameters on the curve: the most probable solution is reported with its
+probability and intervals, and when another solution is probable too the person chooses the model.
+Each step is a tool call, so the GUI shows it and the AI could do the same. Like the GIWAXS run, the
+report always says what its numbers are (q kinematic, uncertainties statistical only:
+``giwaxs_decisions``), and a reported fit far from its curve (χ²/N above Fitting's poor-fit limit) or
+with a value at a bound of its range is a point to check.
 """
 
 from __future__ import annotations
@@ -16,47 +18,50 @@ import math
 from typing import Optional
 
 from .gisaxs_choice import (
-    CLOSE_CHI2,
+    ASK_PROBABILITY,
+    INTERVAL_KEYS,
     LENGTH_SCALE,
     LINEAR_TERMS,
     POOR_CHI2,
     bounds_text,
     chosen,
-    close_solutions,
-    flagged,
+    interval,
     poor_fit,
+    probability,
+    rivals,
     zero_terms,
 )
 from .gisaxs_report import cut_spans
 from .giwaxs_decisions import refraction_decision, uncertainty_decision
 
-RANKING = (
-    "ranked first by the robust misfit (mean Huber loss, δ = 2, of the σ-normalised residuals r) among the "
-    "numerical physical fits of {curve}; χ²/N is the mean of r² over the points, with no degrees-of-freedom correction"
+PREDICTED = (
+    "the most probable solution of Predict parameters on {curve}: GIMaP's network proposes compositions and values, "
+    "each solution is refined by least squares and weighted by its posterior probability; χ²/N is the mean of r² "
+    "over the points, with no degrees-of-freedom correction"
 )
 """Why the first solution is the one the run reports."""
-PREFERRED = (
-    "the best-ranked solution that converged with no non-linear value at a search bound among those within {percent} "
-    "of the first-ranked χ²/N (rank 1, {first}, has {bounds}); solutions are ranked by the robust misfit (mean Huber "
-    "loss, δ = 2, of the σ-normalised residuals r) among the numerical physical fits of {curve}; χ²/N is the mean of "
-    "r² over the points, with no degrees-of-freedom correction"
+INTERVALS = "{values} (68 % of the posterior)"
+INTERVALS_WHY = (
+    "the posterior of Predict parameters given the σ of the points, sampled around the solution; the geometry and "
+    "the choice of model are not in it"
 )
-"""Why a solution after the first is the one the run reports (``gisaxs_choice.chosen_index``)."""
-NO_FREE_SOLUTION = (
-    "; every solution within {percent} of its χ²/N has a non-linear value at a search bound or did not converge"
-)
-"""Added to ``RANKING`` when the first solution is reported although it is flagged."""
+"""The intervals of the reported solution's sizes (a decision of their own)."""
 AT_ZERO = "{names} at 0, the non-negativity limit"
 AT_ZERO_WHY = (
-    "the particle amplitudes, the background and the beam-tail amplitude are solved by non-negative least squares: "
-    "a term at 0 is held there by that limit, not by the curve, and is not counted among the values at a search "
-    "bound, which are the non-linear ones"
+    "the particle amplitudes, the background and the beam-tail amplitude cannot go below 0: a term at 0 is held there "
+    "by that limit, not by the curve, and is not counted among the values at a bound of their range, which are the "
+    "non-linear ones"
 )
 BEAM_TAIL_OFF = "; with A = 0 the beam tail is absent, so σ_Res and ν_Res do not change the curve"
 """The ``fit caveat`` of a reported solution whose linear terms ended at 0 (``gisaxs_choice.zero_terms``)."""
+AT_BOUND = "The reported solution ({model}) has {bounds}: those values are not determined by the curve."
+AT_BOUND_HINT = (
+    "Refine the model you expect in Fitting (Send to Fitting), with the value at the bound fixed or its range changed."
+)
+"""A reported solution with a non-linear value at a bound of its range (``at_bounds``)."""
 POOR_FIT = (
     "The reported solution ({model}) has χ²/N = {chi2}, above {limit}: it misses the curve by far more than the σ of "
-    "its points, so none of the particle families of the quick fit describes this cut, and its R and D are not "
+    "its points, so none of the compositions Predict parameters tried describes this cut, and its R and D are not "
     "measurements."
 )
 POOR_FIT_HINT = (
@@ -64,10 +69,13 @@ POOR_FIT_HINT = (
     "off the Yoneda band or a second population give such a misfit. Refine a model you expect in Fitting."
 )
 """A converged reported solution with χ²/N above ``POOR_CHI2`` (the limit of Fitting's poor fit)."""
+PROBABLE = "{n} solutions have a probability of at least {limit} ({solutions}): the curve alone does not decide the model."
+PROBABLE_HINT = "Choose the particle shape you expect and refine that model in Fitting; compare the fitted curves."
+"""Another solution is probable too (``gisaxs_choice.rivals``): the person chooses the model."""
 SPACING = "length scale"
 """The decision about 2π/q* (the report's key)."""
 UNCORRELATED_D_NM = 250.0
-"""D beyond this (half the search bound of 500 nm): no correlation peak in a GISAXS q range."""
+"""D beyond this: no correlation peak in a GISAXS q range (a structure factor that is flat there)."""
 SAME_D = 0.15
 """A fitted D within 15 % of 2π/q* is named in the model question (a coincidence of lengths, not a proof)."""
 
@@ -79,12 +87,26 @@ def _distance(solution: dict) -> Optional[float]:
 
 def _solution_text(solution: dict) -> str:
     """Formatted once, from the fit record (the tool's answer is rounded to 4 significant digits: 48.3484 → 48.35,
-    which ``.3g`` then made 48.4 while the table said 48.3)."""
+    which ``.3g`` then made 48.4 while the table said 48.3). D only for a solution with a paracrystal."""
     component = (solution.get("components") or [{}])[0]
+    distance = f", D = {component['D']:.3g} nm" if component.get("D") is not None else ""
+    chance = probability(solution)
     return (
-        f"{solution['model']}: R = {component.get('R', math.nan):.3g} nm, D = {component.get('D', math.nan):.3g} nm, "
-        f"χ²/N = {solution['chi2']:.3g}"
+        f"{solution['model']}: R = {component.get('R', math.nan):.3g} nm{distance}, χ²/N = {solution['chi2']:.3g}"
+        + ("" if math.isnan(chance) else f", probability {chance:.2f}")
     )
+
+
+def _interval_text(solution: dict) -> str:
+    """The 68 % intervals of R, h and D of every component (``R 9.1–9.8 nm, D 45–52 nm``; "" when none)."""
+    many = len(solution.get("components") or ()) > 1
+    parts = []
+    for number, component in enumerate(solution.get("components") or ()):
+        for key in INTERVAL_KEYS:
+            found = interval(solution, key, number) if component.get(key) is not None else None
+            if found is not None:
+                parts.append(f"{key}{f' {number + 1}' if many else ''} {found[0]:.3g}–{found[1]:.3g} nm")
+    return ", ".join(parts)
 
 
 class GisaxsProcedureMixin:
@@ -161,18 +183,17 @@ class GisaxsProcedureMixin:
         elif spacing["kind"] == "maximum":  # the decision says where; the reason says what it is, once
             self._decide(
                 SPACING, f"2π/q* = {spacing['distance_nm']:.3g} nm at the peak of the cut (|qy| = {spacing['q']:.4g} Å⁻¹)",
-                f"{LENGTH_SCALE}, which starts one of its distances D from it",
+                LENGTH_SCALE,
             )
         else:
             self._decide(
                 SPACING, f"2π/q* = {spacing['distance_nm']:.3g} nm at a shoulder of the cut (|qy| = {spacing['q']:.4g} "
                 "Å⁻¹), no resolved peak",
-                f"{LENGTH_SCALE}, which starts one of its distances D from it; a form factor or the beam tail makes a "
-                "shoulder too",
+                f"{LENGTH_SCALE}; a form factor or the beam tail makes a shoulder too",
             )
 
     def _fit(self) -> None:
-        self.progress("fit_horizontal_cut: fitting spheres and cylinders to I(qy) (about half a minute)…")
+        self.progress("fit_horizontal_cut: predicting the particles of I(qy) (about 25 s)…")
         if self._call("fit_horizontal_cut") is None:
             return
         # The fit as the tool kept it, at full precision: every number below is formatted once from it.
@@ -180,20 +201,16 @@ class GisaxsProcedureMixin:
         solutions = fit.get("solutions") or []
         if not solutions:
             return
-        index, best = chosen(fit)
-        first = solutions[0]
-        percent = f"{CLOSE_CHI2 - 1:.0%}"
-        if index:
-            self._decide("fit", f"{_solution_text(best)} (rank {best['rank']})", PREFERRED.format(
-                percent=percent, first=first["model"], bounds=bounds_text(first) or "not converged", curve=fit.get("curve")))
-        else:
-            self._decide("fit", _solution_text(best), RANKING.format(curve=fit.get("curve"))
-                         + (NO_FREE_SOLUTION.format(percent=percent) if flagged(best) else ""))
+        _index, best = chosen(fit)
+        self._decide("fit", _solution_text(best), PREDICTED.format(curve=fit.get("curve")))
+        ranges = _interval_text(best)
+        if ranges:
+            self._decide("fit intervals", INTERVALS.format(values=ranges), INTERVALS_WHY)
         for warning in best.get("warnings") or ():
             self._decide("fit caveat", warning, "reported by the fit")
         if bounds_text(best):
-            self._decide("fit caveat", bounds_text(best), "a value on the edge of its search range is not determined by the curve")
-        zeros = zero_terms(best)  # linear terms at their non-negativity limit: said, not counted as a search bound
+            self._decide("fit caveat", bounds_text(best), "a value on the edge of its range is not determined by the curve")
+        zeros = zero_terms(best)  # linear terms at their non-negativity limit: said, not counted as a bound
         if zeros:
             self._decide("fit caveat", AT_ZERO.format(names=" and ".join(zeros)),
                          AT_ZERO_WHY + (BEAM_TAIL_OFF if LINEAR_TERMS[-1][1] in zeros else ""))
@@ -203,17 +220,12 @@ class GisaxsProcedureMixin:
                 "fit caveat", f"D = {distance:.3g} nm: this solution has no interparticle correlation in the q range",
                 "a structure factor that is flat here; D itself is not determined by the curve",
             )
-        close = close_solutions(solutions)
-        if len({item["model"] for item in close}) > 1:
-            self._model_question(close, index, best, first)
-        if bounds_text(best) and not index:
-            self._attention(
-                "fit", f"The first-ranked solution ({best['model']}) has {bounds_text(best)}, and no solution within "
-                f"{percent} of its χ²/N is free of search bounds: those values are not determined by the curve.", None,
-                "Refine the model you expect in Fitting (Send to Fitting), with the value at the bound fixed or its range "
-                "changed.",
-            )
-        if not best.get("converged"):
+        others = rivals(solutions)
+        if others:
+            self._model_question([best, *others])
+        if bounds_text(best):
+            self._attention("fit", AT_BOUND.format(model=best["model"], bounds=bounds_text(best)), None, AT_BOUND_HINT)
+        if not best.get("converged", True):
             self._attention(
                 "fit", "The best fit did not converge.", None,
                 "Open the curve in Fitting (Send to Fitting) and refine it with a chosen model.",
@@ -222,30 +234,22 @@ class GisaxsProcedureMixin:
             self._attention("fit", POOR_FIT.format(model=best["model"], chi2=f"{best['chi2']:.3g}", limit=f"{POOR_CHI2:g}"),
                             None, POOR_FIT_HINT)
 
-    def _model_question(self, close: list[dict], index: int, best: dict, first: dict) -> None:
-        """Several families fit about equally well: the person chooses (the run says which one it reported, and
-        names the solutions whose D is close to 2π/q*, which is a length scale and not necessarily a spacing)."""
+    def _model_question(self, probable: list[dict]) -> None:
+        """Another solution is about as probable: the person chooses (the probabilities said, and the solutions
+        whose D is close to 2π/q* named — a length scale, not necessarily a spacing)."""
         spacing = self.catalog.results.gisaxs.get("spacing")
         agree = [
-            item for item in close
+            item for item in probable
             if spacing and _distance(item) and abs(_distance(item) - spacing["distance_nm"]) <= SAME_D * spacing["distance_nm"]
         ]
         hint = ""
-        if index:
-            hint += (f"The run reports rank {best['rank']} ({_solution_text(best)}), the best-ranked of them with no "
-                     f"non-linear value at a search bound: rank 1 ({first['model']}) has "
-                     f"{bounds_text(first) or 'not converged'}. ")
         if agree:
             hint += (f"Solutions whose D is within {SAME_D:.0%} of 2π/q* of the cut: "
                      + "; ".join(_solution_text(item) for item in agree)
                      + " (2π/q* is a length scale, not necessarily the particle spacing). ")
-        self._attention(
-            "model",
-            f"{len(close)} solutions of {len({item['model'] for item in close})} particle families fit within "
-            f"{CLOSE_CHI2 - 1:.0%} of the first solution's χ²/N: the curve alone does not decide the model.",
-            None,
-            hint + "Choose the particle shape you expect and refine that model in Fitting; compare the fitted curves.",
-        )
+        listed = "; ".join(f"rank {item['rank']}, {_solution_text(item)}" for item in probable)
+        self._attention("model", PROBABLE.format(n=len(probable), limit=f"{ASK_PROBABILITY:g}", solutions=listed),
+                        None, hint + PROBABLE_HINT)
 
     def _gisaxs_report(self) -> Optional[dict]:
         results = self.catalog.results
@@ -266,4 +270,4 @@ class GisaxsProcedureMixin:
         }
 
 
-__all__ = ["AT_ZERO", "GisaxsProcedureMixin", "POOR_FIT", "POOR_FIT_HINT"]
+__all__ = ["AT_BOUND", "AT_ZERO", "GisaxsProcedureMixin", "POOR_FIT", "POOR_FIT_HINT", "PROBABLE"]

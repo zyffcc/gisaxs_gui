@@ -1,10 +1,11 @@
 """The GISAXS results of the automatic analysis: the cut and its halves, the length scale 2π/q*, the fit.
 
-The fit is shown as a plot (the curve that was fitted and the solution selected in the table)
-and a table of the solutions, the one the run reports selected first and the values at a search
-bound named in the model column; **Fit details** (closed until opened) give every number of the
-selected solution and how it was fitted, and open it in Fitting. The curve, the fitted curve and
-the table can be saved, and the prepared curve opened in Fitting to refine it with a chosen model.
+The fit (Predict parameters) is shown as a plot (the curve that was fitted and the solution selected in
+the table) and a table of the solutions, most probable first, with their probability; the one the run
+reports (the most probable) is selected first and the values at a bound of their range are named under
+the table; **Fit details** (closed until opened) give every number of the selected solution with its
+intervals and how it was fitted, and open it in Fitting. The curve, the fitted curve and the table can be
+saved, and the prepared curve opened in Fitting to refine it with a chosen model.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, Fl
 from src.gimap.app.presentation.i18n import current_language, tr, trf
 
 from ..application import (
-    CLOSE_CHI2,
+    ASK_PROBABILITY,
     bound_phrases,
     chosen_solution,
     cut_spans,
@@ -27,6 +28,8 @@ from ..application import (
     fit_on,
     fit_solutions_csv,
     pixel_span,
+    probability,
+    rivals,
 )
 from ..application.operations import halves_label
 from .guided_details import SolutionDetails
@@ -36,27 +39,32 @@ from .guided_words import parts, words
 NM_PER_A = 10.0
 FIT_PLOT_HEIGHT = 300
 COLUMNS = (("R", "R (nm)"), ("h", "h (nm)"), ("D", "D (nm)"))
-FIT_HEADERS = (("model", "Particle family; ⚠: a warning of the fit. A value marked ⚠ ended on a search bound, which the "
-                          "curve does not determine (listed under the table; Fit details below: every parameter)."),
+FIT_HEADERS = (("model", "The particles of the solution: one or two populations; (S): with a paracrystal distance D. "
+                          "⚠: a warning of the fit. A value marked ⚠ ended on a bound of its range, which the curve does "
+                          "not determine (listed under the table; Fit details below: every parameter)."),
+               ("p", "p: the posterior probability of the solution; the solutions are sorted by it, most probable "
+                     "first. Another solution with p of 0.2 or more: the curve alone does not decide the model."),
                ("R", "R (nm): the particle radius."), ("h", "h (nm): the cylinder height (— for a sphere)."),
                ("D", "D (nm): the paracrystal distance between particles."),
-               ("χ²/N", "χ²/N: the mean squared σ-normalised residual, with no degrees-of-freedom correction. The "
-                      "solutions are ranked by a robust misfit (mean Huber loss); close values do not decide between "
-                      "models."))
+               ("χ²/N", "χ²/N: the mean squared σ-normalised residual, with no degrees-of-freedom correction."))
 """The fit table's columns: short, so it fits the Results tab (the unit in the tooltip and the line under it; the
-model names in it are names, never translated)."""
-FIT_NUMBERS = (1, 2, 3, 4)
-FIT_COPY_HEADERS = ("model", "R (nm)", "h (nm)", "D (nm)", "χ²/N")
+model names in it are names, never translated). R, h and D are of the first population (Fit details: every one)."""
+FIT_NUMBERS = (1, 2, 3, 4, 5)
+FIT_COPY_HEADERS = ("model", "probability", "R (nm)", "h (nm)", "D (nm)", "χ²/N")
 """The fit table's columns with their units, for copied rows."""
 DETAILS = (("R", "R", " nm"), ("sigma_R", "σR/R", ""), ("h", "h", " nm"), ("sigma_h", "σh/h", ""), ("D", "D", " nm"),
            ("sigma_D", "σD/D", ""), ("weight", "weight", ""))
 BOUNDS_WARNING = "Not determined by the curve (at a search bound) — {rows}"
 BOUNDS_WHOLE = "Values at a search bound, not determined by the curve — {rows}."
-"""The values of the solutions that ended on a search bound: a warning with their names by rank, which bound in its
-tooltip."""
-FIT_TIP = ("Numerical fits of single particle families with size dispersity and a paracrystal distance D, a screening "
-           "step: choose the model from what you know of the sample and confirm it in Fitting.")
+"""The values of the solutions that ended on a bound of their range: a warning with their names by rank, which bound
+in its tooltip."""
+FIT_TIP = ("Predict parameters: GIMaP's network proposes the particles (one or two populations of spheres and upright "
+           "cylinders) and their values; each solution is refined by least squares, p is its posterior probability. "
+           "Choose the model from what you know of the sample and refine it in Fitting.")
 """The tooltip of “Fit of I(qy)”: what the fits are and are not."""
+PROBABLE_NOTE = ("{n} solutions have p ≥ {limit}: the curve alone does not decide the model. Compare their fits (select "
+                 "a row) and choose from what you know of the sample.")
+"""Under the table when another solution is probable too (``gisaxs_choice.rivals``)."""
 
 
 def model_name(model: str) -> str:
@@ -65,11 +73,20 @@ def model_name(model: str) -> str:
 
 def _details(row: dict) -> str:
     """Every parameter and warning of a solution (the row's tooltip), its words in the interface language."""
-    component = (row.get("components") or [{}])[0]
-    values = ", ".join(f"{tr(name)} {_number(component[key])}{unit}" for key, name, unit in DETAILS if component.get(key) is not None)
-    notes = list(row.get("warnings") or ()) + ([] if row.get("converged") else ["not converged"])
-    return (f"{model_name(row['model'])}: {values}; χ²/N {_number(row['chi2'])}" + "".join(f"\n⚠ {tr(note)}" for note in notes)
-            + "".join(f"\n⚠ {phrase}" for phrase in bound_words(row)))
+    components = row.get("components") or [{}]
+    values = "; ".join(
+        (f"{number}: " if len(components) > 1 else "")
+        + ", ".join(f"{tr(name)} {_number(component[key])}{unit}" for key, name, unit in DETAILS if component.get(key) is not None)
+        for number, component in enumerate(components, start=1))
+    notes = list(row.get("warnings") or ()) + ([] if row.get("converged", True) else ["not converged"])
+    chance = "" if _probability(row) == "—" else f"; p {_probability(row)}"
+    return (f"{model_name(row['model'])}: {values}; χ²/N {_number(row['chi2'])}{chance}"
+            + "".join(f"\n⚠ {words(note)}" for note in notes) + "".join(f"\n⚠ {phrase}" for phrase in bound_words(row)))
+
+
+def _probability(row: dict) -> str:
+    chance = probability(row)
+    return "—" if chance != chance else f"{chance:.2f}"  # NaN: the fit gave none
 
 
 def bound_words(row: dict) -> list[str]:
@@ -113,13 +130,14 @@ def outcome_summary(report: dict) -> str:
     if spacing:
         gap = "" if current_language() == "zh" else " "  # a Chinese full-width bracket needs no space before it
         parts.append(f"2π/q* = {spacing['distance_nm']:.3g} nm" + ("" if spacing.get("kind") == "maximum" else gap + tr("(shoulder)")))
-    index, best = chosen_solution(gisaxs.get("fit"))
+    _index, best = chosen_solution(gisaxs.get("fit"))
     if best is not None:
         component = (best.get("components") or [{}])[0]
         values = {"model": model_name(best["model"]), "radius": _number(component.get("R")), "chi2": _number(best["chi2"])}
-        parts.append(trf("chosen fit {model} R {radius} nm (rank {rank}, χ²/N {chi2})", rank=best.get("rank"), **values)
-                     if index else trf("best fit {model} R {radius} nm (χ²/N {chi2})", **values))
-        if bound_words(best):  # the first solution, at a bound, as no close solution is free of one
+        chance = _probability(best)  # a report written before Predict parameters gives none
+        parts.append(trf("best fit {model} R {radius} nm (χ²/N {chi2})", **values) if chance == "—" else
+                     trf("most probable fit {model} R {radius} nm (p {p}, χ²/N {chi2})", p=chance, **values))
+        if bound_words(best):  # values the curve does not determine
             parts[-1] += " ⚠ " + _joined(bound_words(best))
     return listed(parts) if parts else tr("the horizontal cut is ready")  # Chinese: its own comma
 
@@ -238,8 +256,8 @@ class GisaxsResults(QWidget):
             details = _details(row)
             bounds = bound_words(row)  # a value at a bound is not determined by the curve: ⚠ on its cell too
             ended = {item.get("parameter") for item in row.get("at_bounds") or () if item.get("component") in (0, None)}
-            flagged = bool(row.get("warnings")) or not row.get("converged") or bool(bounds)
-            rows.append([(model_name(row["model"]) + (" ⚠" if flagged else ""), details),
+            flagged = bool(row.get("warnings")) or not row.get("converged", True) or bool(bounds)
+            rows.append([(model_name(row["model"]) + (" ⚠" if flagged else ""), details), (_probability(row), details),
                          *((_number(component.get(key)) + (" ⚠" if key in ended else ""), details) for key, _name in COLUMNS),
                          (_number(row["chi2"]), details)])
             if bounds:
@@ -256,18 +274,10 @@ class GisaxsResults(QWidget):
             bounds_label.setObjectName("guidedFitBounds")
             bounds_label.setToolTip(trf(BOUNDS_WHOLE, rows=separator.join(bounded)))
             layout.addWidget(bounds_label)
-        index, best = chosen_solution(self.fit)
-        percent = f"{CLOSE_CHI2 - 1:.0%}"
-        if index:
-            layout.addWidget(badge(trf(
-                "Reported: rank {rank} ({model}), the best-ranked converged solution within {percent} of the first's "
-                "χ²/N with no non-linear value at a search bound.",
-                rank=best.get("rank"), model=model_name(best["model"]), percent=percent), NOTE, self))
-        elif bound_words(best) or not best.get("converged", True):
-            layout.addWidget(badge(trf(
-                "Every solution within {percent} of the first's χ²/N has a value at a search bound or did not "
-                "converge: the first is reported, and its values at a bound are not determined by the curve.",
-                percent=percent), WARN, self))
+        index, _best = chosen_solution(self.fit)
+        others = rivals(solutions)
+        if others:  # another solution about as probable: the person chooses the model
+            layout.addWidget(badge(trf(PROBABLE_NOTE, n=len(others) + 1, limit=f"{ASK_PROBABILITY:g}"), WARN, self))
         layout.addWidget(label(trf(
             "Fitted: {curve} ({points} points) · R, h and D in nm.",
             curve=parts(self.fit.get("curve")), points=self.fit.get("points")), self, role="muted",
@@ -279,7 +289,7 @@ class GisaxsResults(QWidget):
         save_curve.clicked.connect(self.save_curve)
         save_table = QPushButton(tr("Save Fit Table…"), self)
         save_table.setObjectName("guidedSaveFitTable")
-        save_table.setToolTip(tr("CSV: every solution with its parameters (nm) and χ²/N."))
+        save_table.setToolTip(tr("CSV: every solution with its probability, parameters (nm), intervals and χ²/N."))
         save_table.clicked.connect(self.save_table)
         for button in (save_curve, save_table, refine):
             buttons.addWidget(button)

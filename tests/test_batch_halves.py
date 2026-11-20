@@ -23,7 +23,6 @@ from src.gimap.features.analyze.application import (
     FIT_HALVES,
     AnalyzeSettings,
     BatchChoices,
-    FitStarts,
     FitTable,
     fit_halves,
     fit_input_observation,
@@ -88,8 +87,9 @@ def _signed_cut(points_per_half: int = 60, *, positive: bool = True, negative: b
     """A signed cut I(qy) of a sphere model, q in Å⁻¹ (the q > 0 half ``scale`` times the other)."""
     from src.gimap.features.fitting.application.single_fit import FitModel, evaluate, new_component
 
+    # sizes by number: the convention of Predict parameters (Fitting's, cut_model)
     model = FitModel((new_component("sphere", radius=4.0, distance=40.0),)).with_values(
-        {(0, "Int"): 2000.0, (0, "sigma_R"): 0.15, (0, "sigma_D"): 0.3, ("globals", "background"): 3.0})
+        {(0, "Int"): 2000.0, (0, "sigma_R"): 0.15, (0, "sigma_nn"): 0.25, ("globals", "background"): 3.0})
     q = np.linspace(0.004, 0.2, points_per_half)
     rng = np.random.default_rng(5)
     parts = []
@@ -127,19 +127,21 @@ def test_the_fit_input_carries_the_halves_into_fitting_and_keeps_both_halves(tmp
 
 
 class _Fitter:
-    """Stands in for the quick physical fit: records what it was asked, fails where told."""
+    """Stands in for Predict parameters (Fitting's ``create_curve_fit``): records what it was asked, fails where
+    told; one solution, most probable."""
 
     def __init__(self, fail=()):
         self.calls, self.fail = [], dict(fail)
 
-    def __call__(self, q, intensity, sigma, *, components=(), distance_nm=None, cancelled=None, halves=None):
+    def __call__(self, q, intensity, sigma, *, components=(), cancelled=None, halves=None):
         index = len(self.calls)
-        self.calls.append({"q": np.asarray(q), "halves": halves, "components": components, "distance": distance_nm})
+        self.calls.append({"q": np.asarray(q), "halves": halves, "components": components})
         if index in self.fail:
             raise self.fail[index]
         radius = 5.0 + index
         return [{
-            "combination": "sphere", "best_chi2_weighted": 1.1, "best_log_rmse": 0.1,
+            "combination": "sphere", "composition": "sphere (S)", "probability": 0.9, "best_chi2_weighted": 1.1,
+            "best_log_rmse": 0.1,
             "components": [{"type": "sphere", "weight": 1.0, "params": {"R": radius, "D": 50.0 + index}}],
             "warnings": [], "prepared": f"the {halves} of the cut", "preparation": {
                 "halves": halves, "points": 59, "averaged": 59 if halves == "mean" else 0, "one_half": 0, "merged": 1},
@@ -163,21 +165,22 @@ def test_the_fit_of_a_frame_is_asked_for_the_chosen_halves_and_the_row_says_what
     fit_model_curve(curve, fitter, "sphere", halves="both_abs")  # … and both halves together are never fitted
     assert [call["halves"] for call in fitter.calls] == ["mean", "mean"]
 
-    # a frame without the chosen half: its row says why, and the next frame starts from the last good result
-    starts, table = FitStarts("previous"), FitTable("model")
+    # a frame without the chosen half: its row says why; every frame is predicted from its own data (no start)
+    table = FitTable("model")
     fitter = _Fitter(fail={1: MissingHalf(MISSING_HALF["positive"])})
     frames = []
     for index in range(3):
         rows, error = [], ""
         try:
-            rows = fit_model_curve(curve, fitter, "auto", starts, halves="positive")
+            rows = fit_model_curve(curve, fitter, "auto", halves="positive")
         except ValueError as exc:
             error = str(exc)
         table.add(model_row(f"frame {index + 1}", rows, error=error, halves="positive"))
         frames.append(model_fit_frame(f"frame {index + 1}", rows, error=error, halves="positive"))
     assert table.rows[1] == {"frame": "frame 2", "halves": "positive", "points": 0,
                              "note": "No points on the q > 0 half"}
-    assert fitter.calls[2]["components"] == (1,) and fitter.calls[2]["distance"] == 50.0  # of frame 1, the last good one
+    assert [call["components"] for call in fitter.calls] == [(), (), ()]  # the network chooses in every frame
+    assert table.rows[2]["model"] == "sphere (S)" and table.rows[2]["probability"] == 0.9
     assert table.columns()[:3] == ["frame", "halves", "points"]
     # a first frame without a fit has only its note: the note is still the last column, after the model's values
     late = FitTable("model")
@@ -197,16 +200,16 @@ def test_the_fit_of_a_frame_is_asked_for_the_chosen_halves_and_the_row_says_what
 def test_the_real_fit_takes_a_cut_of_any_length_on_each_of_the_three_halves() -> None:
     """More than 1000 points on each half (a Lambda 9M cut): every choice gives a solution; a half that is not
     there is the reason of that frame, not another half fitted in its place."""
-    from src.gimap.features.fitting.bootstrap import create_quick_fit
+    from src.gimap.features.fitting.bootstrap import create_curve_fit
 
     from src.gimap.features.analyze.application import HALVES_WORDS
 
-    quick_fit = create_quick_fit()
+    predict = create_curve_fit()
     curve = _signed_cut(1260, scale=0.6)
     assert np.count_nonzero(curve.x > 0) == np.count_nonzero(curve.x < 0) == 1260
     radius = {}
     for halves in FIT_HALVES:
-        rows = fit_model_curve(curve, quick_fit, "sphere", halves=halves)
+        rows = fit_model_curve(curve, predict, "sphere", halves=halves)
         row = model_row("frame 1", rows, halves=halves)
         assert row["halves"] == halves and 8 <= row["points"] <= 1000, row
         entry = model_fit_frame("frame 1", rows, halves=halves)
@@ -222,8 +225,8 @@ def test_the_real_fit_takes_a_cut_of_any_length_on_each_of_the_three_halves() ->
         assert radius[halves] == pytest.approx(4.0, abs=0.3), (halves, row)
     one_sided = _signed_cut(1260, positive=False)
     with pytest.raises(ValueError, match="No points on the q > 0 half"):
-        fit_model_curve(one_sided, quick_fit, "sphere", halves="positive")
-    rows = fit_model_curve(one_sided, quick_fit, "sphere", halves="mean")  # the mean of a cut with one half is that half
+        fit_model_curve(one_sided, predict, "sphere", halves="positive")
+    rows = fit_model_curve(one_sided, predict, "sphere", halves="mean")  # the mean of a cut with one half is that half
     assert model_row("frame 1", rows, halves="mean")["halves"] == "negative"
 
 
@@ -236,7 +239,7 @@ def test_a_frame_without_counts_is_not_fitted_and_the_reason_names_the_frame_not
     one positive intensity is required” — is the wording of an algorithm; the batch says what is wrong with the
     frame, in the table, the record and on the page alike, and does not hand such a cut to the fit."""
     from src.gimap.features.analyze.application import NO_INTENSITY
-    from src.gimap.features.fitting.bootstrap import create_quick_fit
+    from src.gimap.features.fitting.bootstrap import create_curve_fit
 
     assert NO_INTENSITY == {"mean": "The horizontal cut has no intensity above zero",
                             "positive": "No intensity above zero on the q > 0 half",
@@ -266,11 +269,11 @@ def test_a_frame_without_counts_is_not_fitted_and_the_reason_names_the_frame_not
     with pytest.raises(ValueError) as refused:
         fit_model_curve(below, fitter, "sphere", halves="negative")
     assert str(refused.value) == NO_INTENSITY["negative"] and len(fitter.calls) == 2
-    quick_fit = create_quick_fit()
+    predict = create_curve_fit()
     with pytest.raises(ValueError, match="No points on the q > 0 half"):
-        fit_model_curve(_signed_cut(positive=False), quick_fit, "sphere", halves="positive")
+        fit_model_curve(_signed_cut(positive=False), predict, "sphere", halves="positive")
 
-    # what the real fit says when it is asked all the same: the sentences the page has to know (``SERIES_ZH``)
+    # what Predict parameters says when it is asked all the same: the sentences the page has to know (``SERIES_ZH``)
     twice = np.sort(np.concatenate([curve.x, curve.x[curve.x > 0][:3]]))
     doubled = Curve("fit_input", curve.title, twice, np.interp(twice, curve.x, curve.intensity),
                     np.interp(twice, curve.x, curve.sigma), np.full(twice.size, 6.0), curve.x_label)
@@ -280,7 +283,7 @@ def test_a_frame_without_counts_is_not_fitted_and_the_reason_names_the_frame_not
         (doubled, "positive", "duplicate q values; combine replicates with their uncertainties first"),
     ):
         with pytest.raises(ValueError) as refused:
-            quick_fit(cut.x, cut.intensity, cut.sigma, components=(1,), halves=halves)
+            predict(cut.x, cut.intensity, cut.sigma, components=(1,), halves=halves)
         assert str(refused.value) == sentence, (halves, str(refused.value))
 
 
@@ -440,8 +443,8 @@ def test_try_on_this_frame_fits_the_halves_of_the_dialog_and_says_what_it_fitted
     assert asked[0].fit == "model" and asked[0].fit_halves == "negative"
     rows = _Fitter()(None, None, None, halves="negative")
     text, level = fit_summary(rows, asked[0])
-    assert level == "ok" and text.splitlines()[0].startswith("Best: sphere, R = 5")
-    assert " nm, χ²/N = " in text.splitlines()[0]  # the quick fit's mean r², not a χ²ᵣ
+    assert level == "ok" and text.splitlines()[0].startswith("Most probable: sphere (S) (p = 0.90), R = 5")
+    assert " nm, χ²/N = " in text.splitlines()[0]  # the mean r², not a χ²ᵣ
     assert text.splitlines()[1] == "Fitted: q < 0 half, 59 points"
     rows[0]["preparation"].update(points=630, merged=2, halves="mean")
     assert fit_summary(rows, asked[0])[0].splitlines()[1] == (
@@ -667,7 +670,8 @@ def test_a_batch_whose_model_fits_failed_does_not_end_as_a_success(cbf_page, tmp
     assert list(rows[0])[:4] == ["frame", "frame number", "halves", "points"] and len(rows) == 3
     assert [row["frame number"] for row in rows] == ["1", "2", "3"]  # the x of the trend plot
     assert [(row["halves"], row["points"]) for row in rows] == [("positive", "59"), ("positive", "0"), ("positive", "59")]
-    assert rows[1]["note"] == "No points on the q > 0 half" and rows[1]["model"] == "" and rows[2]["model"] == "sphere"
+    assert rows[1]["note"] == "No points on the q > 0 half" and rows[1]["model"] == "" and rows[2]["model"] == "sphere (S)"
+    assert rows[2]["probability"] == "0.9"
     assert record["choices"]["fit_halves"] == "positive" and record["failed"] == []  # every frame was exported
     fits = record["model_fit"]
     assert (fits["halves"], fits["frames"], fits["fitted"]) == ("positive", 3, 2)
@@ -755,15 +759,15 @@ def test_every_new_sentence_is_said_in_chinese_and_the_reasons_are_recognised() 
     from src.gimap.features.analyze.application import NO_CURVE, NO_FITTER, NO_INTENSITY, NO_SOLUTION
     from src.gimap.features.analyze.presentation import batch_texts
     from src.gimap.features.analyze.presentation.views.batch_export_view import HALVES
-    from src.gimap.features.fitting.application.single_fit import TOO_FEW_FOR_QUICK_FIT
+    from src.gimap.features.fitting.application.single_fit import TOO_FEW_FOR_CURVE_FIT
 
-    assert set(batch_texts.QUICK_FIT_REASONS) == set(TOO_FEW_FOR_QUICK_FIT.values())  # written out: kept alike
+    assert set(batch_texts.CURVE_FIT_REASONS) == set(TOO_FEW_FOR_CURVE_FIT.values())  # written out: kept alike
     assert dict(HALVES) == batch_texts.HALVES_TEXTS
     dialog = _dialog()
     said = [
         *batch_texts.HALVES_TEXTS.values(), *batch_texts.HALVES_NOTES.values(), *batch_texts.HALVES_FITTED.values(),
         batch_texts.HALVES_UNUSED,
-        *batch_texts.MODEL_LINES.values(), batch_texts.SENT_TO_FITTING, *batch_texts.QUICK_FIT_REASONS,
+        *batch_texts.MODEL_LINES.values(), batch_texts.SENT_TO_FITTING, *batch_texts.CURVE_FIT_REASONS,
         dialog.halves_group.title(), dialog.halves_caption.text(), dialog.halves_combo.toolTip(),
         "Fitted: {halves}, {points} points", "Fitted: {halves}, {points} points ({merged} neighbouring points merged into one)",
         "Fitted: {points} points", "model fit: {fitted} of {frames} frames fitted",
@@ -771,7 +775,7 @@ def test_every_new_sentence_is_said_in_chinese_and_the_reasons_are_recognised() 
         "{n} frame(s) on one half alone", "{first}; {second}", "Batch Export done", "Batch Export stopped",
         batch_texts.TRY_OTHER_HALVES,
         *MISSING_HALF.values(), *NO_INTENSITY.values(), BAD_SIGMA, NO_CURVE, NO_FITTER, NO_SOLUTION,
-        # what the quick fit itself refuses a curve with (``prepare_sides`` of Fitting, its “positive: ” taken off):
+        # what Predict parameters itself refuses a curve with (``prepare_sides`` of Fitting, its “positive: ” taken off):
         # a batch does not let a frame without counts get there, but a reason shown on the page is never English
         "at least one positive intensity is required", "duplicate q values; combine replicates with their uncertainties first",
         "q and intensity must have equal lengths and contain finite values", "No nonzero q points in the selected side",

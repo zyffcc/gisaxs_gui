@@ -1,22 +1,19 @@
-"""Portable V5 workflow. TensorFlow is imported only inside the job worker.
-
-The frozen conditional backend is not modified. Blind discovery is an experimental
-front end; its estimated conditions do not inherit the known-condition validation.
-"""
+"""The 1D Predict window's job: every half of every curve with Predict parameters (the proposal network and its
+posterior, ``posterior_job``), and the files of the run (request, per curve, summary). Also ``prepare_sides`` (the
+halves of a curve as the fits take them) and ``read_curve``."""
 
 from __future__ import annotations
 
 from src.gimap.shared.version import SOFTWARE
 
 import json
-import sys
 import time
 from pathlib import Path
 
 import numpy as np
 
 
-from ...application.workflow_v5 import FROM_REQUEST, bundled_workflow, q_unit_of_file, validate_options
+from ...application.workflow_v5 import FROM_REQUEST, q_unit_of_file, validate_options
 from .curve_units import file_q_unit
 from .run_provenance import model_provenance
 
@@ -75,7 +72,7 @@ def prepare_sides(q, intensity, sigma, options):
             raise ValueError(
                 f"{side}: duplicate q values; combine replicates with their uncertainties first"
             )
-        norm = options["normalizer"] or float(np.max(y[indices]))
+        norm = float(np.max(y[indices]))
         if norm <= 0:
             raise ValueError(f"{side}: at least one positive intensity is required")
         result.append(
@@ -93,200 +90,6 @@ def prepare_sides(q, intensity, sigma, options):
     if not result:
         raise ValueError("No nonzero q points in the selected side")
     return result
-
-
-class WorkflowEngine:
-    """Reuse loaded networks for all files and sides within one batch job."""
-
-    def __init__(self, root=None):
-        self.root = Path(root or bundled_workflow())
-        if not (self.root / "conditional_fast_manifest_v2.json").is_file():
-            raise FileNotFoundError(f"V5 workflow assets missing: {self.root}")
-        sys.path.insert(0, str(self.root))
-        import scipy.special, scipy.optimize  # load the current environment before frozen imports
-        from native_observation_adapter import NativeObservationPredictor
-
-        self.adapter = NativeObservationPredictor()
-
-    def fit_side(self, item, options, report, cancelled):
-        from native_observation_adapter import summarize_signed
-        from conditional_fast_predict_v2 import canonical, COMBOS, KEYS, B
-        from portable_predictor import PortablePredictor
-        from predict_1d import preprocess
-        from gpu_precision import initial_candidates
-        from numpy_candidate_forward import direct_forward
-        from solution_output import denormalize, PARAMETER_UNITS, GLOBAL_UNITS, WIDTH_DEFINITIONS
-        from TrainSetBuild import schema
-
-        q, y, sigma, norm = (item[k] for k in ("q", "observed", "sigma", "normalizer"))
-        data = preprocess(q, np.maximum(y, 0.1 * sigma) / norm, sigma / norm)
-        model = self.adapter.model
-        banks = []
-        conditions = []
-        fixed = (
-            options["components"]
-            and options["sigma_res"] is not None
-            and options["nu_res"] is not None
-        )
-        if fixed:
-            conditions = [(options["components"], options["sigma_res"], options["nu_res"])]
-        else:
-            report(0, 1, f"{item['side']}: discovering component and resolution candidates", {})
-            if model.proposal is None:
-                model.proposal = PortablePredictor(B, data)
-            ids = None
-            if options["components"]:
-                from component_prior import resolve_components
-
-                ids = np.array([resolve_components(options["components"], COMBOS)[0]], "int32")
-            seed = canonical(
-                initial_candidates(model.proposal, data, ids, options["search_combinations"])
-            )
-            n = seed["combos"].shape[1]
-            seed["curves"] = np.ones((1, n, 1000))
-            valid = data["mask"][0] > 0
-            for h in range(n):
-                seed["curves"][0, h, valid] = direct_forward(
-                    seed, 0, h, data["q"][0, valid].astype(float)
-                )
-            residual = (seed["curves"][0][:, valid] * norm - y) / sigma
-            score = np.mean(
-                np.where(abs(residual) <= 2, 0.5 * residual**2, 2 * (abs(residual) - 1)), axis=1
-            )
-            seen = set()
-            physical = denormalize(
-                seed["globals"], schema.V5_GLOBAL_TARGET_NAMES[:4], schema.V5_GLOBAL_NORM_RANGES
-            )
-            for head in np.argsort(score, kind="stable"):
-                cid = int(seed["combos"][0, head])
-                if cid in seen:
-                    continue
-                seen.add(cid)
-                types = COMBOS[cid][COMBOS[cid] > 0].tolist()
-                sr = (
-                    options["sigma_res"]
-                    if options["sigma_res"] is not None
-                    else float(physical[0, head, 1])
-                )
-                nu = (
-                    options["nu_res"]
-                    if options["nu_res"] is not None
-                    else float(physical[0, head, 2])
-                )
-                conditions.append((types, sr, nu))
-                if len(conditions) >= options["condition_combinations"]:
-                    break
-            # Unconstrained seeds cannot be returned when the user fixes any resolution value.
-            if options["sigma_res"] is None and options["nu_res"] is None:
-                seed["candidate_stage"] = np.array(["discovery_neural"] * n)
-                banks.append(seed)
-        for index, (types, sr, nu) in enumerate(conditions):
-            if cancelled():
-                raise RuntimeError("Prediction cancelled")
-            report(
-                index,
-                len(conditions),
-                f"{item['side']}: fitting combination {index + 1}/{len(conditions)}",
-                {},
-            )
-            _, _, raw = self.adapter.predict(
-                q,
-                y,
-                sigma,
-                types,
-                sr,
-                nu,
-                normalizer=norm,
-                numerical=options["numerical"],
-                max_solutions=options["max_solutions"],
-                render_points=options["render_points"],
-            )
-            banks.append(raw)
-        merged = {k: np.concatenate([b[k] for b in banks], axis=1) for k in (*KEYS, "curves")}
-        merged.update({k: data[k] for k in ("q", "observed", "sigma", "mask")})
-        merged["candidate_stage"] = np.concatenate([b["candidate_stage"] for b in banks])
-        result, artifact = summarize_signed(
-            merged,
-            y,
-            sigma,
-            norm,
-            np.linspace(q[0], q[-1], options["render_points"]),
-            options["max_solutions"],
-        )
-        result.update(
-            unit_contract=dict(q="nm^-1", component_parameters=PARAMETER_UNITS,
-                               relative_width_definitions=WIDTH_DEFINITIONS,
-                               global_parameters=GLOBAL_UNITS,
-                               intensity="Input intensity units; explicit normalizer recorded",
-                               weight="Normalized model mixture weight, not probability/mass/volume fraction",
-                               reference="BG and resolution amplitudes fixed at measured q before rendering"),
-            side=item["side"],
-            conditions_source="user_fixed" if fixed else "estimated_or_partially_fixed",
-            searched_conditions=[
-                dict(components=t, sigma_res=s, nu_res=n) for t, s, n in conditions
-            ],
-            sigma_estimated=item["sigma_estimated"],
-            omitted_q_zero=True,
-            options=options,
-            validation_scope="Known complete components and resolution: conditional V2. Automatic discovery: experimental; no all-mode guarantee.",
-        )
-        return result, artifact, merged
-
-
-def write_side(output, item, result, artifact, raw):
-    output.mkdir(parents=True, exist_ok=True)
-    (output / "solutions.json").write_text(
-        json.dumps(result, indent=2, allow_nan=False), encoding="utf-8"
-    )
-    np.savez_compressed(output / "candidates.npz", **raw)
-    np.savez_compressed(output / "display.npz", **artifact)
-    rows = []
-    valid = raw["mask"][0] > 0
-    for rank, solution in enumerate(result["solutions"], 1):
-        head = solution["candidate_index"]
-        curve = raw["curves"][0, head, valid] * item["normalizer"]
-        components = [
-            dict(
-                type=c["type"],
-                weight=c["weight"],
-                params=c["parameters"],
-                absolute_widths_nm=c["absolute_widths_nm"],
-            )
-            for c in solution["components"]
-        ]
-        rows.append(
-            dict(
-                rank=rank,
-                workflow="native_v5",
-                side=item["side"],
-                combination=" + ".join(c["type"] for c in components),
-                components=components,
-                global_params=solution["global_parameters"],
-                best_source=solution["candidate_stage"],
-                best_log_rmse=solution["positive_observation_logrmse"],
-                best_chi2_weighted=solution["signed_weighted_rms"] ** 2,
-                signed_huber_delta2=solution["signed_huber_delta2"],
-                signed_weighted_rms=solution["signed_weighted_rms"],
-                probability_status="Not calibrated",
-                conditions_source=result["conditions_source"],
-                normalizer=item["normalizer"],
-                forward_reference=solution["reference_coefficients_normalized_intensity"],
-                native_q=(item["q"] * item["sign"]).tolist(),
-                observed=item["observed"].tolist(),
-                sigma=item["sigma"].tolist(),
-                native_fit=curve.tolist(),
-                display_q=(artifact["render_q"] * item["sign"]).tolist(),
-                display_fit=artifact["rendered_curves"][rank - 1].tolist(),
-            )
-        )
-    np.savetxt(
-        output / "fitting_curves.csv",
-        np.column_stack([artifact["render_q"] * item["sign"], artifact["rendered_curves"].T]),
-        delimiter=",",
-        header="q_nm^-1," + ",".join(f"candidate_{i + 1}" for i in range(len(rows))),
-        comments="",
-    )
-    return rows
 
 
 def curve_units(sources, options) -> list[dict]:
@@ -311,25 +114,14 @@ def run_workflow_job(payload, report, is_cancelled):
     output.mkdir(parents=True, exist_ok=True)
     sources = payload.get("files") or [None]
     units = curve_units(sources, options)
-    model_record = model_provenance(options["method"], payload.get("model_path"))
+    model_record = model_provenance(options["method"])
     (output / "request.json").write_text(
         json.dumps({**payload, "options": options, "software_version": SOFTWARE,
-                    "randomness": {"policy": "research runtime defaults; no run-level seed override", "seed": None},
+                    "randomness": {"policy": "Predict parameters: numpy generator, fixed seed", "seed": 0},
                     "model": model_record, "q_units": units}, indent=2, allow_nan=False), encoding="utf-8"
     )
-    experimental = options["method"] == "experimental"
-    stable = options["method"] == "stable"
-    fit1d = options["method"] == "fit1d"
-    kit = None
-    if stable:
-        from .stable_blue import StableEngine
-        engine = StableEngine()
-    elif fit1d:
-        from .fit1d_method import fit_and_write as fit1d_and_write, load_kit
+    from .posterior_job import fit_and_write
 
-        engine, kit = None, load_kit()  # a missing kit stops the job here, with where to put it
-    else:
-        engine = None if experimental else WorkflowEngine(payload.get("model_path"))
     records, all_rows = [], []
     for index, source in enumerate(sources):
         if is_cancelled():
@@ -363,18 +155,7 @@ def run_workflow_job(payload, report, is_cancelled):
                     item["sigma_estimated"] = True
             rows = []
             for item in sides:
-                if stable:
-                    rows.extend(engine.fit_and_write(directory / item["side"],item,file_options,report,is_cancelled))
-                elif experimental:
-                    from .experimental_fit import fit_and_write
-
-                    rows.extend(fit_and_write(directory / item["side"], item, file_options, report, is_cancelled))
-                elif fit1d:
-                    rows.extend(fit1d_and_write(directory / item["side"], item, file_options, report, is_cancelled,
-                                                kit))
-                else:
-                    result, artifact, raw = engine.fit_side(item, file_options, report, is_cancelled)
-                    rows.extend(write_side(directory / item["side"], item, result, artifact, raw))
+                rows.extend(fit_and_write(directory / item["side"], item, file_options, report, is_cancelled))
             for row in rows:
                 row["file"] = name
                 row.update(unit)
@@ -418,7 +199,7 @@ def run_workflow_job(payload, report, is_cancelled):
         report(index + 1, len(sources), f"{index + 1}/{len(sources)} files finished — {name}", {})
     summary = dict(
         software_version=SOFTWARE, model=model_record,
-        profile="Single RC specialist (experimental) + numerical fallback" if stable else ("Experimental physical fit (numerical)" if experimental else ("fit1d (network + physical fit)" if fit1d else ("V5 + four-step correction" if options["numerical"] else "V5 neural only"))),
+        profile="Predict parameters (network + posterior)",
         runtime_seconds=time.perf_counter() - started,
         configured_candidates=len(all_rows),
         best_log_rmse=all_rows[0]["best_log_rmse"] if all_rows else None,

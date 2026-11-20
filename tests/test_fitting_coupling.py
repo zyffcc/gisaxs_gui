@@ -8,7 +8,9 @@ import numpy as np
 import pytest
 
 from src.gimap.features.fitting.domain import fit_model as fm
-from src.gimap.features.fitting.domain.scattering_model import _F_sphere_amp, _gaussian_grid, structure_factor_1d
+from src.gimap.features.fitting.domain.cut_model import sizes
+from src.gimap.features.fitting.domain.cut_model.shapes import sphere_amplitude
+from src.gimap.features.fitting.domain.cut_model.structure import paracrystal
 
 Q = np.linspace(0.01, 2.0, 300)
 
@@ -25,17 +27,17 @@ def test_one_size_gives_the_same_curve_in_both(family) -> None:
     np.testing.assert_allclose(fm.component_form(_component(family, 0.0, "da"), Q), lma, rtol=1e-12)
 
 
-def test_the_sphere_da_is_the_number_average_of_the_amplitudes() -> None:
-    component = _component("sphere", 0.2, "da")
-    radii, weights = _gaussian_grid(4.0, 0.8, nsig=4.0, n=25)
-    number = weights / radii**6  # Fitting's sphere weights are intensity weights: by number w / V²
-    number /= number.sum()
+@pytest.mark.parametrize("law", ["number_gauss", "intensity_gauss"])
+def test_the_sphere_da_is_the_number_average_of_the_amplitudes(law) -> None:
+    component = replace(_component("sphere", 0.2, "da"), law=law)
+    radii, number = (a[0] for a in sizes.nodes(law, 4.0, 0.2, power=6, panels=256))  # number weights
     volumes = radii**3
-    amplitudes = np.column_stack([volumes[j] * _F_sphere_amp(Q, radii[j]) for j in range(radii.size)])
+    amplitudes = np.column_stack([volumes[j] * sphere_amplitude(Q * radii[j]) for j in range(radii.size)])
     mean_square = (amplitudes**2 @ number) / (number @ volumes**2)
     coherent = (amplitudes @ number) ** 2 / (number @ volumes**2)
-    structure = structure_factor_1d(Q, 13.0, 13.0 * component.value("sigma_D"))
-    np.testing.assert_allclose(fm.component_form(component, Q), mean_square + coherent * (structure - 1), rtol=1e-10)
+    structure = paracrystal(Q, 13.0, component.value("sigma_nn"))[0]
+    # sizes by number come from the tables of cut_model (their interpolation: 1e-4)
+    np.testing.assert_allclose(fm.component_form(component, Q), mean_square + coherent * (structure - 1), rtol=1e-4)
 
 
 def test_da_adds_intensity_at_low_q_and_the_coupling_is_saved() -> None:

@@ -88,7 +88,7 @@ def void_term(mdl, m, slab0, convention="full"):
         Qz = np.real(np.einsum("an,nm,am->a", P, C, np.conj(P)))
         sig2 = np.sum((pop["n"] * pop["wj"])[:, None] * M.sig_disk(pop["Rj"], mdl.q) ** 2 * pop["S"], axis=0)
         acc = Qz[:, None] * sig2[None, :]
-    rho = rho_e(mdl.s.metal, mdl.f1)
+    rho = rho_e(mdl.s.metal, mdl.f1) - (mdl._fill_rho(m) if hasattr(mdl, "_fill_rho") else 0.0)
     if convention == "avg":
         rho = rho * m.rb
     elif kv is not None:
@@ -121,8 +121,6 @@ def buried_geometry(mdl, host):
     'Composite stack replacing host[0] (the film the clusters hang into): [film z_bur] + N composite slices over the'
     if not host:
         raise ValueError("C3a (buried clusters) needs a host film under the base: IAM_PFILM=1 on a polymer scan")
-    if mdl.s.metal in ("Au", "Cu"):
-        raise NotImplementedError(f"C3a on {mdl.s.metal}: the fluorescence of the buried mass is not implemented")
     h_bur, Rb, zb = (float(v) for v in mdl.buried[:3])
     pop = buried_pop(h_bur, Rb, mdl.q, float(mdl.buried[3]) if len(mdl.buried) > 3 else S_BUR)
     d_f, t_f = host[0]
@@ -141,6 +139,33 @@ def buried_geometry(mdl, host):
 
 def buried_layers(mdl, host):
     return buried_geometry(mdl, host)[0]
+
+
+def buried_fluor(mdl, slab, phi, Ise, h_surf):
+    'Fluorescence (n_af,) of the surface metal (slab rows: grains + base, mass h_surf) and of the buried clusters (the'
+    host = mdl._host()
+    below, phib, pop, N = buried_geometry(mdl, host)
+    h_bur = float(mdl.buried[0]) if pop["n"] > 0 else 0.0
+    if h_surf + h_bur <= 0:
+        return np.zeros(len(mdl.af))
+    rows = list(slab) + below[: N + 1]
+    phi_all = np.r_[np.asarray(phi, float), 0.0, phib]
+    Ise_all = M.layer_mid_int(mdl.a_all, list(slab) + below, mdl.d_sub)[: len(rows)]
+    dmf = dc(mdl.s.metal, fl=True)
+    tail_fl = list(mdl.sub_layers_fl)
+    if not tail_fl:
+        raise ValueError("C3a fluorescence: no host film at the fluorescence energy (sub_layers_fl)")
+    dpf, tpf = tail_fl[0]
+    zb, H = float(mdl.buried[2]), H_of(below, N)
+    rows_fl = ([(p * mdl.nu_sub * dmf, t) for p, (d, t) in zip(phi, slab)] + [(dpf, zb)]
+               + [(dpf + p * (mdl.nu_sub * dmf - dpf), H / N) for p in phib])
+    tail = [(dpf, max(tpf - zb - H, 0.0))] + tail_fl[1:]
+    return mdl.fluor(M.Morph(1.0, 1.0, 0.1, 0.3, h_surf + h_bur), rows, phi_all, Ise_all, rows_fl=rows_fl, tail_fl=tail)
+
+
+def H_of(below, N):
+    'Total thickness of the N composite slices of a buried_geometry stack.'
+    return float(sum(t for _, t in below[1: N + 1]))
 
 
 def buried_term(mdl, m, slab0, convention="full"):
@@ -343,11 +368,21 @@ def selftest():
     refb = RE ** 2 * abs(rho_e("Ag")) ** 2 * pb["n"] * np.abs(F) ** 2 * pb["S"][0][None, :]
     err = float(np.max(np.abs(bt / refb - 1)))
     rec("C3a: Born limit = iam.ff_sep (inverted hemispheroid)", err < 1e-5, err)
-    try:
-        ma = _bare(metal="Au"); ma.buried = (0.5, 1.5, 0.0); buried_layers(ma, ma._host()); au_ok = False
-    except NotImplementedError:
-        au_ok = True
-    rec("C3a: Au refused (fluorescence of buried mass)", au_ok, 0.0)
+
+    mc = _bare(metal="Cu", t_film=40.0); mc.eps_fl, mc.nu_sub = 1.0, 1.0
+    mc.sub_layers_fl, mc.d_sub_fl = [(dc("PNO", fl=True), 40.0)], dc("Si", fl=True)
+    h = 0.2
+    mc.buried = None
+    sl = [(mc.nu_isl * 0.05 * dc("Cu"), 0.2)]
+    I0 = M.layer_mid_int(mc.a_all, sl + mc.sub_layers, mc.d_sub)[:1]
+    f_surf = mc.fluor(M.Morph(1.0, 1.0, 0.1, 0.3, h), sl, np.array([0.05]), I0)
+    mc.buried = (h - 1e-6, 0.6, 0.0)
+    slb = [(mc.nu_isl * 5e-6 * dc("Cu"), 0.2)]
+    I0b = M.layer_mid_int(mc.a_all, slb + mc.sub_layers, mc.d_sub)[:1]
+    f_bur = buried_fluor(mc, slb, np.array([5e-6]), I0b, 1e-6)
+    above = mc.af >= 0.3
+    err = float(np.max(np.abs(f_bur / f_surf - 1)[above]))
+    rec("C3a: Cu fluorescence of buried mass ~ surface (tiny clusters at the top, alpha_f >= 0.3)", err < 0.03, err)
     try:
         ms = _bare(sub="Si", pfilm=False); ms.buried = (0.5, 1.5, 0.0); buried_layers(ms, ms._host()); si_ok = False
     except ValueError:
@@ -360,6 +395,31 @@ def selftest():
         gc_ok = True
     mdl.void = None
     rec("GrainsC refused", gc_ok, 0.0)
+
+    mp = _bare(metal="Cu", t_film=40.0); mp.rho_top = rho_e("PNO"); mp.void = mp.buried = mp.host = None
+    gp = M4.GrainsB(1.5, 0.25, 0.4, 0.5, 0.3, 4.0, fb=0.9, rb=0.6)
+    gp.fill_d = dc("PNO")
+    sl, _ = gp.slab("Cu")
+    nb = len(sl) - gp.n_top
+    db = sl[-1][0]
+    rec("PFILL: base decrement = rb d_M + (1 - rb) d_P", abs(db - (0.6 * dc("Cu") + 0.4 * dc("PNO"))) < 1e-15,
+        float(abs(db - (0.6 * dc("Cu") + 0.4 * dc("PNO")))))
+    mp._fill_dt = (1 - gp.rb) * gp.t_b
+    vol = sum(t for _, t in mp._below()) + gp.t_b * (1 - gp.rb)
+    rec("PFILL: polymer volume kept (film below + filled share of the base)", abs(vol - 40.0) < 1e-12, abs(vol - 40.0))
+    mp.dom = (25.0, 8.0, 0.0)
+    rec("PDOM: A_d = 0 is off", mp.domain_term(gp, sl) is None, 0.0)
+    mp.dom = (25.0, 8.0, 0.1); d1 = mp.domain_term(gp, sl)
+    mp.dom = (25.0, 8.0, 0.2); d2 = mp.domain_term(gp, sl)
+    e_lin = float(np.max(np.abs(d2 / d1 - 2.0)))
+    rec("PDOM: linear in A_d", e_lin < 1e-12, e_lin)
+    mp.dom = (25.0, 8.0, 0.1); rho_p, mp.rho_top = mp.rho_top, 0.0
+    dv = mp.domain_term(gp, sl)
+    mp.rho_top = rho_p
+    want = (abs(rho_e("Cu", mp.f1) - rho_e("PNO")) / abs(rho_e("Cu", mp.f1))) ** 2
+    e_c = float(np.max(np.abs(d1 / dv / want - 1)))
+    rec("PDOM: contrast against the polymer = |rho_M - rho_P|^2 / |rho_M|^2 at fixed fields", e_c < 1e-12, e_c)
+    mp._fill_dt, mp.dom = 0.0, None
     print("UNDERLAYER SELFTEST " + ("PASS" if ok else "FAIL"))
     return ok
 

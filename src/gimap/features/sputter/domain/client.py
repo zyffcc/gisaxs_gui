@@ -21,7 +21,9 @@ its nominal thickness — the position on the series' axis, ``ClientResult.x_lab
 may come with a range (``ClientEntry.ranges``).
 
 The images of a window are arrays over the exit angle and q_y (``WindowPatterns``): the measured count rate (NaN:
-no data) and the model of every entry on the same cells.
+no data) and the model of every entry on the same cells — with a newer package also the model split into its physical
+terms (``WindowPatterns.components``; ``ClientEntry.components`` holds each term's share of the counts and
+``ClientResult.process`` the analysis of the growth process: ``process.py``).
 
 What the user chooses is a ``{window key: entry label}`` mapping that holds only the windows where the choice is not
 the window's default (``ClientWindow.default_label``).
@@ -36,6 +38,7 @@ from typing import Optional
 
 import numpy as np
 
+from .process import components_listed, entry_components, process_analysis
 from .real_space import SKETCH_KEYS
 
 MAIN_FOLDER = "main"
@@ -103,6 +106,8 @@ class ClientEntry:
     ranges: dict = field(default_factory=dict)
     """Quantity key -> (low, high), where the package gives a range."""
     source: str = ""
+    components: dict = field(default_factory=dict)
+    """Term key -> its share of the model counts ({} for an older package: ``process.py``)."""
 
     def value(self, key: str) -> Optional[float]:
         return self.values.get(key)
@@ -132,6 +137,8 @@ class ClientWindow:
     reference: str = ""
     frames: Optional[int] = None
     """How many frames of the sample were used (static frames)."""
+    stage: str = ""
+    """The stage of the growth at this window (``process.STAGES``; "" when the package does not say)."""
 
     @property
     def key(self) -> str:
@@ -190,6 +197,10 @@ class ClientResult:
     joint_failed: bool = False
     """The package's whole-scan joint fit did not finish (``analysis.json`` ``joint_fit.done`` false): the solutions
     shown are the network's."""
+    components: tuple = ()
+    """(key, name) of the physical terms the entries are split into (empty for an older package)."""
+    process: Optional[object] = None
+    """The analysis of the growth process (``process.ProcessAnalysis``), None when the package gives none."""
 
     @property
     def static(self) -> bool:
@@ -238,6 +249,17 @@ class ClientResult:
             highs.append(math.nan if found is None else found[1])
         return lows, highs
 
+    def component_series(self, choices: Optional[dict] = None) -> tuple:
+        """(positions, {term key: shares}) of the chosen entry of every window (NaN where an entry has no share)."""
+        positions, shares = [], {key: [] for key, _name in self.components}
+        for window in self.windows:
+            entry = window.chosen(choices)
+            positions.append(self.position(window))
+            for key in shares:
+                value = entry.components.get(key) if entry is not None else None
+                shares[key].append(math.nan if value is None else value)
+        return positions, shares
+
     def nearest(self, position: float) -> Optional[int]:
         """The index of the window nearest on the result's axis (None without windows)."""
         if not self.windows:
@@ -254,9 +276,20 @@ class WindowPatterns:
     measured: np.ndarray
     models: np.ndarray
     labels: tuple
+    component_keys: tuple = ()
+    fractions: Optional[np.ndarray] = None
+    """(entry, term, exit angle, q_y): each term's share of the model per cell (None for an older package)."""
 
     def model(self, label: str) -> Optional[np.ndarray]:
         return self.models[self.labels.index(label)] if label in self.labels else None
+
+    def components(self, label: str) -> list:
+        """(term key, image) of entry ``label``: each term's share times the model image ([] without them)."""
+        if self.fractions is None or label not in self.labels:
+            return []
+        index = self.labels.index(label)
+        model = self.models[index]
+        return [(key, self.fractions[index, j] * model) for j, key in enumerate(self.component_keys)]
 
 
 def _quantities(listed) -> tuple:
@@ -283,7 +316,7 @@ def _entry(record: dict, keys) -> Optional[ClientEntry]:
     return ClientEntry(label, str(record.get("kind") or "candidate"), None if rank is None else int(rank),
                        number(record.get("weight")), number(record.get("fit_deviation")),
                        {key: value for key, value in values.items() if value is not None}, ranges,
-                       str(record.get("source") or ""))
+                       str(record.get("source") or ""), entry_components(record))
 
 
 def _file_name(value) -> str:
@@ -314,7 +347,7 @@ def _window(record, keys) -> Optional[ClientWindow]:
                         str(record.get("pick") or ""), str(record.get("smooth") or ""), str(record.get("path") or ""),
                         "" if unique else NO_SOLUTION, label, str(record.get("sample") or ""),
                         str(record.get("substrate") or ""), str(record.get("reference") or ""),
-                        None if frames is None else int(frames))
+                        None if frames is None else int(frames), str(record.get("stage") or ""))
 
 
 def client_result(folder: Path, main: dict, analysis: Optional[dict] = None) -> ClientResult:
@@ -344,7 +377,8 @@ def client_result(folder: Path, main: dict, analysis: Optional[dict] = None) -> 
         {str(key): value for key, value in files.items()}, tuple(step for step in steps if isinstance(step, dict)),
         str(main.get("kind") or analysis.get("kind") or ""), str(axis.get("label") or ""), str(axis.get("unit") or ""),
         dict(analysis["mask"]) if isinstance(analysis.get("mask"), dict) else {},
-        isinstance(analysis.get("joint_fit"), dict) and analysis["joint_fit"].get("done") is False)
+        isinstance(analysis.get("joint_fit"), dict) and analysis["joint_fit"].get("done") is False,
+        components_listed(main.get("components")), process_analysis(main.get("process")))
 
 
 def window_patterns(window: ClientWindow, arrays) -> WindowPatterns:
@@ -364,7 +398,15 @@ def window_patterns(window: ClientWindow, arrays) -> WindowPatterns:
     if q.size < 2 or af.size < 2 or measured.shape != shape or models.shape[1:] != shape \
             or models.shape[0] != len(labels):
         raise ValueError(BAD_ARRAYS.format(window=window.key, reason="the arrays do not have one shape"))
-    return WindowPatterns(q, af, measured, models, labels)
+    keys, fractions = (), None
+    try:  # the model split into its terms (a newer package); left out when it does not fit the images
+        found = tuple(str(key) for key in np.asarray(arrays["component_keys"]).ravel())
+        values = np.asarray(arrays["component_fractions"], dtype=float)
+        if found and values.shape == (len(labels), len(found)) + shape:
+            keys, fractions = found, values
+    except (KeyError, TypeError, ValueError):
+        pass
+    return WindowPatterns(q, af, measured, models, labels, keys, fractions)
 
 
 __all__ = ["ANALYSIS_FILE", "BAD_ARRAYS", "BAD_MAIN", "CLIENT_RESULT_TEMPLATES", "ClientEntry", "ClientQuantity",

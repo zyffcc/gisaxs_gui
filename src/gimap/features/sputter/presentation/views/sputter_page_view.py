@@ -1,8 +1,9 @@
 """Static layout of the Sputter page (behaviour in ``presentation/page.py`` and its mixins).
 
 From the top: the input bar (``sputter_main_view.py``: the scan folder, metal, substrate, deposition rate with its
-unit, Analyze and its job status, the geometry in one line, Open Result… and the switch of the view), then one of two
-views.
+unit — or, after the deposition, Add Samples… —, Analyze and its job status, the geometry in one line, Open Result…
+and the switch of the view), then one of two views; with After Deposition chosen the sample list
+(``sputter_samples_view.py``) stands left of them, in a splitter.
 
 **The main screen** (``sputter_main_view.py``, shown first): one time window of a result — the measured image beside
 the model image, the solutions to choose from, the value tiles and the evolution over the scan. While Analyze runs it
@@ -13,7 +14,8 @@ value comes from); Analyze options (``sputter_main_view.py``); Static Frames (``
 More options (collapsed): the pixel mask with the Masks of the Package, the sample roll and the folder results go to;
 Storage (collapsed, ``sputter_steps_view.py``): the import caches of Analyze and their limit.
 Right, about the result the main screen shows: Windows (one row per time window: the values of the solution shown),
-Report (the facts of the analysis, the time of each step with how the frames were read, a note when the disk was the
+Growth Process (the stages of the growth, its growth laws against the metal amount with the range of the same metal and
+substrate, and the share of each physical term of the model per window), Report (the facts of the analysis, the time of each step with how the frames were read, a note when the disk was the
 slow part, and the package's report), Logs (the logs of its steps) and Steps (the step tree of the run and what each
 step found); each says in one line what to do while there is no result.
 """
@@ -23,7 +25,8 @@ from __future__ import annotations
 from PyQt5.QtCore import QLocale, Qt
 from PyQt5.QtGui import QDoubleValidator
 from PyQt5.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton,
-                             QScrollArea, QSizePolicy, QStackedWidget, QTableWidget, QTabWidget, QTextBrowser,
+                             QScrollArea, QSizePolicy, QSplitter, QStackedWidget, QTableWidget, QTabWidget,
+                             QTextBrowser,
                              QVBoxLayout, QWidget)
 
 from src.gimap.app.presentation.components import AdvancedSection, ErrorBanner, FilePicker, ParameterSection
@@ -32,13 +35,14 @@ from src.gimap.app.presentation.i18n import DATA_VALUES
 
 from .sputter_live_view import SputterLiveView
 from .sputter_main_view import SputterMainView
+from .sputter_samples_view import LIST_WIDTH, SputterSamplesView
 from .sputter_static_view import MASKS_BUTTON, MASKS_TIP, SputterStaticView
 from .sputter_steps_view import TAB_STEPS
 
 LEFT_WIDTH = 470
 NO_RESULT = "Analyze a scan or open a result"
 """What each tab of Details says while the main screen shows no result."""
-TAB_WINDOWS, TAB_REPORT, TAB_LOG = "Windows", "Report", "Logs"
+TAB_WINDOWS, TAB_REPORT, TAB_LOG, TAB_PROCESS = "Windows", "Report", "Logs", "Growth Process"
 """('Log' alone is the logarithmic scale elsewhere in the table of translations.)"""
 
 
@@ -97,7 +101,7 @@ def _row(parent: QWidget, *widgets, stretch_last: bool = False) -> QWidget:
     return row
 
 
-class SputterPageView(SputterMainView, SputterLiveView, SputterStaticView):
+class SputterPageView(SputterMainView, SputterLiveView, SputterStaticView, SputterSamplesView):
     def setup_ui(self, page: QWidget) -> None:
         page.setObjectName("sputterPage")
         outer = QVBoxLayout(page)
@@ -108,7 +112,16 @@ class SputterPageView(SputterMainView, SputterLiveView, SputterStaticView):
         self.view_stack.setObjectName("sputterViews")
         self.view_stack.addWidget(self._main_view(self.view_stack))
         self.view_stack.addWidget(self._details_view(self.view_stack))
-        outer.addWidget(self.view_stack, 1)
+        # the sample list of After Deposition beside both views (hidden for an in-situ scan)
+        self.body_splitter = QSplitter(Qt.Horizontal, page)
+        self.body_splitter.setObjectName("sputterBody")
+        self.body_splitter.setChildrenCollapsible(False)
+        self.body_splitter.addWidget(self._samples_panel(self.body_splitter))
+        self.body_splitter.addWidget(self.view_stack)
+        self.body_splitter.setStretchFactor(0, 0)
+        self.body_splitter.setStretchFactor(1, 1)
+        self.body_splitter.setSizes([LIST_WIDTH, 4 * LIST_WIDTH])
+        outer.addWidget(self.body_splitter, 1)
 
     def _details_view(self, parent: QWidget) -> QWidget:
         details = QWidget(parent)
@@ -245,7 +258,11 @@ class SputterPageView(SputterMainView, SputterLiveView, SputterStaticView):
         layout.addWidget(self.log_view, 1)
         self.tab_log = self._empty_or(logs)
         self.tab_steps = self._empty_or(self._steps_tab())  # sputter_steps_view.py
+        self.process_view = QTextBrowser()  # the growth process of the result (process_tab.py fills it)
+        self.process_view.setObjectName("sputterProcess")
+        self.tab_process = self._empty_or(self.process_view)
         self.tabs.addTab(self.tab_windows, TAB_WINDOWS)
+        self.tabs.addTab(self.tab_process, TAB_PROCESS)
         self.tabs.addTab(self.tab_report, TAB_REPORT)
         self.tabs.addTab(self.tab_log, TAB_LOG)
         self.tabs.addTab(self.tab_steps, TAB_STEPS)
@@ -263,4 +280,4 @@ class SputterPageView(SputterMainView, SputterLiveView, SputterStaticView):
         return stack
 
 
-__all__ = ["LEFT_WIDTH", "NO_RESULT", "SputterPageView", "TAB_LOG", "TAB_REPORT", "TAB_WINDOWS"]
+__all__ = ["LEFT_WIDTH", "NO_RESULT", "SputterPageView", "TAB_LOG", "TAB_PROCESS", "TAB_REPORT", "TAB_WINDOWS"]

@@ -1,0 +1,364 @@
+{
+ "q": [
+  0.02,
+  3.0,
+  600
+ ],
+ "wavelength_nm": 0.1045,
+ "alpha_i_deg": 0.4,
+ "si": {
+  "delta": 3.422592207191582e-06,
+  "beta": 5.444181949327292e-08
+ },
+ "checks": [
+  {
+   "name": "sphere R=2.0 σ=0.05, old default rule (25 nodes)",
+   "reference": "fitting",
+   "max_rel": 0.0006124487848367943,
+   "median_rel": 8.239868963977326e-06,
+   "q_at_max": 2.2537562604340566,
+   "note": ""
+  },
+  {
+   "name": "sphere R=2.0 σ=0.05, old formula on 20001 nodes",
+   "reference": "fitting",
+   "max_rel": 1.046493560141748e-06,
+   "median_rel": 1.8814167557223982e-08,
+   "q_at_max": 2.2438063439065106,
+   "note": ""
+  },
+  {
+   "name": "sphere R=5.0 σ=0.2, old default rule (25 nodes)",
+   "reference": "fitting",
+   "max_rel": 0.017774418356633293,
+   "median_rel": 0.004423029650900467,
+   "q_at_max": 2.9403005008347245,
+   "note": ""
+  },
+  {
+   "name": "sphere R=5.0 σ=0.2, old formula on 20001 nodes",
+   "reference": "fitting",
+   "max_rel": 2.1210803851312576e-05,
+   "median_rel": 6.396117493423503e-06,
+   "q_at_max": 2.761202003338898,
+   "note": ""
+  },
+  {
+   "name": "sphere R=10.0 σ=0.3, old default rule (25 nodes)",
+   "reference": "fitting",
+   "max_rel": 0.257440113909599,
+   "median_rel": 0.09071855398782575,
+   "q_at_max": 3.0,
+   "note": ""
+  },
+  {
+   "name": "sphere R=10.0 σ=0.3, old formula on 20001 nodes",
+   "reference": "fitting",
+   "max_rel": 0.0005213624618862767,
+   "median_rel": 0.00014496921079276692,
+   "q_at_max": 3.0,
+   "note": ""
+  },
+  {
+   "name": "sphere R=20.0 σ=0.4, old default rule (25 nodes)",
+   "reference": "fitting",
+   "max_rel": 0.6728657209770927,
+   "median_rel": 0.35270675456164946,
+   "q_at_max": 3.0,
+   "note": ""
+  },
+  {
+   "name": "sphere R=20.0 σ=0.4, old formula on 20001 nodes",
+   "reference": "fitting",
+   "max_rel": 0.0018140938368591542,
+   "median_rel": 0.0007994240404957664,
+   "q_at_max": 3.0,
+   "note": ""
+  },
+  {
+   "name": "vertical cylinder R=3.0 σ=0.1 (number), old formula fine, ±4σ",
+   "reference": "fitting",
+   "max_rel": 3.963819114649603e-05,
+   "median_rel": 5.730446922092014e-06,
+   "q_at_max": 1.2687145242070117,
+   "note": ""
+  },
+  {
+   "name": "vertical cylinder R=8.0 σ=0.3 (number), old formula fine, ±4σ",
+   "reference": "fitting",
+   "max_rel": 1.6008139599232862e-05,
+   "median_rel": 3.3376412655883314e-07,
+   "q_at_max": 0.43292153589315524,
+   "note": ""
+  },
+  {
+   "name": "random cylinder R=3.0 h=10.0, old rule 24 orientations",
+   "reference": "fitting",
+   "max_rel": 0.17706942949849347,
+   "median_rel": 0.07930916552268119,
+   "q_at_max": 2.995025041736227,
+   "note": "old orientation rule converges as 1/n"
+  },
+  {
+   "name": "random cylinder R=3.0 h=10.0, old rule 800 orientations",
+   "reference": "fitting",
+   "max_rel": 0.006438309251636576,
+   "median_rel": 0.002599034811870904,
+   "q_at_max": 2.995025041736227,
+   "note": "old orientation rule converges as 1/n"
+  },
+  {
+   "name": "random cylinder R=5.0 h=30.0, old rule 24 orientations",
+   "reference": "fitting",
+   "max_rel": 0.5497497921528869,
+   "median_rel": 0.29093702619398515,
+   "q_at_max": 2.995025041736227,
+   "note": "old orientation rule converges as 1/n"
+  },
+  {
+   "name": "random cylinder R=5.0 h=30.0, old rule 800 orientations",
+   "reference": "fitting",
+   "max_rel": 0.03600696049843244,
+   "median_rel": 0.013863054175990208,
+   "q_at_max": 2.995025041736227,
+   "note": "old orientation rule converges as 1/n"
+  },
+  {
+   "name": "paracrystal, σ_nn = √(2π) σ_D",
+   "reference": "fitting",
+   "max_rel": 1.2212453270876722e-14,
+   "median_rel": 0.0,
+   "q_at_max": 0.02,
+   "note": ""
+  },
+  {
+   "name": "sphere DA, old formula on 20001 nodes",
+   "reference": "fitting",
+   "max_rel": 5.799039954601515e-05,
+   "median_rel": 1.1537609568790241e-05,
+   "q_at_max": 0.02,
+   "note": ""
+  },
+  {
+   "name": "two-path sphere |r| 0.8, old formula on 20001 nodes",
+   "reference": "fitting",
+   "max_rel": 2.714232323919319e-05,
+   "median_rel": 9.396220624735552e-06,
+   "q_at_max": 2.726377295492487,
+   "note": ""
+  },
+  {
+   "name": "sphere R=4.0 σ=0.0 + paracrystal",
+   "reference": "v5",
+   "max_rel": 6.405986852087153e-14,
+   "median_rel": 2.220446049250313e-16,
+   "q_at_max": 0.024974958263772953,
+   "note": ""
+  },
+  {
+   "name": "sphere R=3.0 σ=0.05 + paracrystal",
+   "reference": "v5",
+   "max_rel": 0.0006124438126848819,
+   "median_rel": 1.981475646245512e-05,
+   "q_at_max": 1.5025375626043405,
+   "note": ""
+  },
+  {
+   "name": "vertical_cylinder R=4.0 σ=0.0 + paracrystal",
+   "reference": "v5",
+   "max_rel": 8.881784197001252e-16,
+   "median_rel": 2.220446049250313e-16,
+   "q_at_max": 0.07969949916527545,
+   "note": ""
+  },
+  {
+   "name": "vertical_cylinder R=3.0 σ=0.05 + paracrystal",
+   "reference": "v5",
+   "max_rel": 0.01869614334342362,
+   "median_rel": 0.0008541044429280498,
+   "q_at_max": 1.2786644407345575,
+   "note": ""
+  },
+  {
+   "name": "sphere R=2.0 σ=0.1, Born at q_z=0.577",
+   "reference": "fit1d",
+   "max_rel": 3.45254838556297e-05,
+   "median_rel": 1.6346486588214582e-06,
+   "q_at_max": 2.1393322203672787,
+   "note": ""
+  },
+  {
+   "name": "vertical cylinder R=2.0 σ=0.1",
+   "reference": "fit1d",
+   "max_rel": 3.185384039983141e-05,
+   "median_rel": 1.8471795548702374e-06,
+   "q_at_max": 1.980133555926544,
+   "note": ""
+  },
+  {
+   "name": "sphere R=5.0 σ=0.2, Born at q_z=0.577",
+   "reference": "fit1d",
+   "max_rel": 2.3787752551518437e-05,
+   "median_rel": 2.152328268778536e-06,
+   "q_at_max": 0.6070450751252087,
+   "note": ""
+  },
+  {
+   "name": "vertical cylinder R=5.0 σ=0.2",
+   "reference": "fit1d",
+   "max_rel": 2.4635537906103622e-05,
+   "median_rel": 1.0498205885722811e-06,
+   "q_at_max": 0.7264440734557596,
+   "note": ""
+  },
+  {
+   "name": "sphere R=10.0 σ=0.35, Born at q_z=0.577",
+   "reference": "fit1d",
+   "max_rel": 2.8142656641749753e-05,
+   "median_rel": 3.4879166027623754e-07,
+   "q_at_max": 2.990050083472454,
+   "note": ""
+  },
+  {
+   "name": "vertical cylinder R=10.0 σ=0.35",
+   "reference": "fit1d",
+   "max_rel": 1.4133270473060122e-05,
+   "median_rel": 5.266531409864328e-07,
+   "q_at_max": 0.2289482470784641,
+   "note": ""
+  },
+  {
+   "name": "random cylinder R=3 h=12, Born at q_z",
+   "reference": "fit1d",
+   "max_rel": 1.618307157746912e-05,
+   "median_rel": 3.846389979522691e-06,
+   "q_at_max": 1.1990651085141903,
+   "note": ""
+  },
+  {
+   "name": "paracrystal D=20 σ_nn/D=0.2",
+   "reference": "fit1d",
+   "max_rel": 0.0,
+   "median_rel": 0.0,
+   "q_at_max": 0.02,
+   "note": ""
+  },
+  {
+   "name": "sphere R=3.0 σ=0.15, four-term DWBA on Si",
+   "reference": "fit1d",
+   "max_rel": 1.82991336750149e-07,
+   "median_rel": 2.1175287079344685e-09,
+   "q_at_max": 1.3234390651085142,
+   "note": ""
+  },
+  {
+   "name": "sphere R=6.0 σ=0.25, four-term DWBA on Si",
+   "reference": "fit1d",
+   "max_rel": 3.343533609978522e-07,
+   "median_rel": 1.5943613096425224e-10,
+   "q_at_max": 0.582170283806344,
+   "note": ""
+  },
+  {
+   "name": "sphere R=4.0 σ=0.2 LMA born_qz",
+   "reference": "truth",
+   "max_rel": 2.6555269121431024e-05,
+   "median_rel": 3.655892896525792e-06,
+   "q_at_max": 0.8756928213689482,
+   "note": ""
+  },
+  {
+   "name": "sphere R=4.0 σ=0.2 DA born_qz",
+   "reference": "truth",
+   "max_rel": 1.9731438705150595e-11,
+   "median_rel": 5.5067062021407764e-14,
+   "q_at_max": 2.7860767946577627,
+   "note": ""
+  },
+  {
+   "name": "sphere R=6.0 σ=0.3 LMA born_qz",
+   "reference": "truth",
+   "max_rel": 1.3617232840879012e-05,
+   "median_rel": 5.6311947105314175e-08,
+   "q_at_max": 0.28864774624373957,
+   "note": ""
+  },
+  {
+   "name": "sphere R=6.0 σ=0.3 DA born_qz",
+   "reference": "truth",
+   "max_rel": 7.648811239935327e-07,
+   "median_rel": 2.7422508708241367e-14,
+   "q_at_max": 0.02,
+   "note": ""
+  },
+  {
+   "name": "vertical_cylinder R=4.0 σ=0.2 LMA born_qz",
+   "reference": "truth",
+   "max_rel": 2.742587686355158e-05,
+   "median_rel": 1.0009039888014826e-06,
+   "q_at_max": 0.900567612687813,
+   "note": ""
+  },
+  {
+   "name": "vertical_cylinder R=4.0 σ=0.2 DA born_qz",
+   "reference": "truth",
+   "max_rel": 2.711082463080494e-05,
+   "median_rel": 9.758782040791836e-07,
+   "q_at_max": 0.900567612687813,
+   "note": ""
+  },
+  {
+   "name": "sphere R=4.0 σ=0.2 LMA dwba",
+   "reference": "truth",
+   "max_rel": 1.8889778630182263e-11,
+   "median_rel": 5.2513549064769904e-14,
+   "q_at_max": 2.7811018363939897,
+   "note": ""
+  },
+  {
+   "name": "sphere R=4.0 σ=0.2 DA dwba",
+   "reference": "truth",
+   "max_rel": 1.8888224317947788e-11,
+   "median_rel": 5.4067861299245124e-14,
+   "q_at_max": 2.7811018363939897,
+   "note": ""
+  },
+  {
+   "name": "sphere R=6.0 σ=0.3 LMA dwba",
+   "reference": "truth",
+   "max_rel": 7.654543665580604e-12,
+   "median_rel": 1.7763568394002505e-15,
+   "q_at_max": 3.0,
+   "note": ""
+  },
+  {
+   "name": "sphere R=6.0 σ=0.3 DA dwba",
+   "reference": "truth",
+   "max_rel": 1.403889746010023e-06,
+   "median_rel": 1.559863349598345e-13,
+   "q_at_max": 0.0747245409015025,
+   "note": ""
+  },
+  {
+   "name": "vertical_cylinder R=4.0 σ=0.2 LMA dwba",
+   "reference": "truth",
+   "max_rel": 2.7425876863329535e-05,
+   "median_rel": 1.0009039875802372e-06,
+   "q_at_max": 0.900567612687813,
+   "note": ""
+  },
+  {
+   "name": "vertical_cylinder R=4.0 σ=0.2 DA dwba",
+   "reference": "truth",
+   "max_rel": 2.7110824625031782e-05,
+   "median_rel": 9.758782085200757e-07,
+   "q_at_max": 0.900567612687813,
+   "note": ""
+  }
+ ],
+ "seconds_1000x500_one_core": {
+  "sphere": 1.393923400028143,
+  "vertical_cylinder": 1.1662224999745376,
+  "cylinder": 11.130803500011098
+ }
+}

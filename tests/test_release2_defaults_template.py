@@ -4,10 +4,11 @@ The file is the template of the manual parameter store of Fitting: it is copied 
 folder when that folder has no ``model_parameters.json`` (``default_model_parameters_path`` and the
 migration of the user store) and never afterwards. It holds the starting model of Fitting
 (``starting_model()``: the defaults of the domain's ``new_component`` and ``FitModel``) written in
-the units of the store — sizes in nm, the spreads of spheres and random cylinders and σD in nm, the
-spread of a vertical cylinder as σR/R, the resolution width in nm⁻¹ — so the page people see and the
-store behind it start from the same model, inside the ranges of the domain and of the physical
-constraints. No value in it comes from a fit.
+the units and conventions of the store, those of earlier Fitting — sizes in nm, the spreads of spheres and
+random cylinders and σD = D·(σnn/D)/√(2π) in nm, the spread of a vertical cylinder as σR/R and its scale in
+10⁻⁶⟨R⁴⟩/4, the resolution width in nm⁻¹ — so the page people see and the store behind it start from the same
+model, inside the ranges of the domain and of the physical constraints. The store has no size law: read back,
+its sizes are those of earlier Fitting (``LEGACY_LAWS``). No value in it comes from a fit.
 
 A file the user already has is never rewritten by a start — whatever it holds: an earlier version's
 components, half a document, nothing — and the copy a new user gets can be written to, also when the
@@ -29,6 +30,8 @@ import pytest
 
 import src.gimap.features.fitting.infrastructure.adapters.model_parameters as template_adapter
 from src.gimap.features.fitting.application import ManageFittingModelParameters
+from dataclasses import replace
+
 from src.gimap.features.fitting.application.single_fit import (
     FAMILIES,
     FitModel,
@@ -37,6 +40,7 @@ from src.gimap.features.fitting.application.single_fit import (
     new_component,
     to_manual,
 )
+from src.gimap.features.fitting.domain.fit_model import LEGACY_LAWS
 from src.gimap.features.fitting.domain.candidates import (
     CandidateComponentParameters,
     CandidateParameterMapping,
@@ -118,7 +122,16 @@ def test_the_template_is_the_starting_model_of_fitting_in_the_units_of_the_store
         CandidateComponentParameters(entry["shape"], 1.0, entry["parameters"][_shape_key(entry["shape"])])
         for entry in active
     )
-    assert from_manual(CandidateParameterMapping(components, fitting["global_parameters"])) == starting_model()
+    _same_model(from_manual(CandidateParameterMapping(components, fitting["global_parameters"])), starting_model())
+
+
+def _same_model(read: FitModel, model: FitModel) -> None:
+    """``read`` is ``model`` with the store's sizes (``LEGACY_LAWS``): values (to rounding), free or fixed, ranges."""
+    assert [(c.family, c.law, c.structure, c.coupling) for c in read.components] == [
+        (c.family, LEGACY_LAWS[c.family], c.structure, c.coupling) for c in model.components]
+    for (path, got), (_same, expected) in zip(read.parameters(), model.parameters()):
+        assert got.value == pytest.approx(expected.value, rel=1e-12), path
+        assert (got.free, got.lower, got.upper) == (expected.free, expected.lower, expected.upper), path
 
 
 @pytest.mark.parametrize("family", sorted(FAMILIES))
@@ -134,27 +147,41 @@ def test_every_component_holds_the_defaults_of_a_new_component_of_each_family(fa
     mapping = CandidateParameterMapping(
         (CandidateComponentParameters(expected.shape, 1.0, block),), fitting["global_parameters"]
     )
-    assert from_manual(mapping) == fresh  # inside the ranges of the domain
+    _same_model(from_manual(mapping), fresh)  # inside the ranges of the domain
     assert ConstraintSet.defaults().validate_components([{"type": family, "params": block}]) == []
 
 
 @pytest.mark.parametrize("family", sorted(FAMILIES))
 def test_the_store_and_the_domain_draw_the_same_finite_curve(family: str) -> None:
+    """The store's manual model on fine rules of its own formulas is the domain's model with the store's sizes.
+    (On its default rules it is not: 25 radii and 24 orientations alias at large q, Physics and Methods 9.3.)"""
     fitting = _template()["fitting"]
     block = fitting["particles"]["particle_1"]["parameters"][family]
     values = []
     for name in params_template([family]):
         key = STORE_NAMES[name.rstrip("1")]
         values.append(block[key] if key in block else fitting["global_parameters"][key])
-
-    curve = np.asarray(make_mixed_model([family])(Q_NM, *values), dtype=float)
-
+    q = Q_NM[::4]
+    fine = make_mixed_model([family], pd_opts={"n_samples": 4001, "nsig": 4.0},
+                            cyl_opts={"n_R": 101, "n_h": 101, "n_orient": 2000, "nsig": 4.0})
+    curve = np.asarray(fine(q, *values), dtype=float)
     assert np.all(np.isfinite(curve)) and np.all(curve > 0)
-    np.testing.assert_allclose(curve, evaluate(FitModel((new_component(family),)), Q_NM), rtol=1e-9)
+    legacy = FitModel((replace(new_component(family), law=LEGACY_LAWS[family]),))
+    # the manual model cuts a vertical cylinder's sizes at ±3σ (the domain at ±4σ); its orientations converge as 1/n
+    tolerance = {"sphere": 1e-3, "vertical_cylinder": 1e-2, "cylinder": 5e-3}[family]
+    np.testing.assert_allclose(curve, evaluate(legacy, q), rtol=tolerance)
 
 
 def test_every_number_is_a_round_default_and_not_the_result_of_a_fit() -> None:
-    values = list(_numbers(_template()["fitting"]))
+    """Round, except what the store's conventions make of a round default: σD = D·(σnn/D)/√(2π) and a vertical
+    cylinder's scale in units of 10⁻⁶⟨R⁴⟩/4."""
+    fitting = _template()["fitting"]
+    converted = {"sigma_diameter"}
+    values = list(_numbers(fitting["global_parameters"]))
+    for entry in fitting["particles"].values():
+        for family, block in entry["parameters"].items():
+            values += [value for key, value in block.items()
+                       if key not in converted and not (family == "vertical_cylinder" and key == "intensity")]
     assert values
     for value in values:
         assert value == float(f"{value:.2g}"), value

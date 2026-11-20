@@ -35,13 +35,16 @@ COMES_WITH = {"PIL": "matplotlib", "keras": "tensorflow", "sip": "pyqt5"}
 # only. The frozen model code (conditional_v2/train_teacher_path_control.py) imports them inside its
 # training entry point, which the program never calls.
 TRAINING_ONLY = {"train_scaled_condition", "train_generalization_controls"}
-# The optional kit is outside the source scanner, but its released fit1d worker needs this
-# dependency to limit BLAS after NumPy has already been imported by the host's spawned job.
-EXTERNAL_RUNTIME = {"threadpoolctl"}
+EXTERNAL_RUNTIME = set()
+"""Dependencies of bundled code outside the scanner (none since the fit1d kit was removed in 0.2.0)."""
 # This worker runs under an explicitly selected, separate interpreter, never in the host GUI.
 ISOLATED_RUNTIMES = {
     "src/gimap/features/sem/infrastructure/stardist_worker.py": "requirements-sem-stardist.txt",
 }
+# Training the 1D proposal network: run by hand with PyTorch (requirements-training.txt), never by the program.
+TRAINING_RUNTIME = "requirements-training.txt"
+TRAINING_FILES = ("tools/ml1d/flow_torch.py", "tools/ml1d/train_flow.py", "tools/ml1d/make_flow_fixture.py",
+                  "tools/ml1d/export_checkpoint.py")
 
 
 OPTIONAL = {
@@ -83,8 +86,6 @@ def code():
             parts = path.relative_to(ROOT).parts
             if "development" in parts or "__pycache__" in parts:
                 continue  # research records and caches: not part of the program, nor of a release
-            if parts[:2] == ("utils", "gisaxs1d_gui_kit"):
-                continue  # the bundled, frozen fit1d kit; required host dependencies are EXTERNAL_RUNTIME above
             if parts[:2] == ("utils", "sputter_client"):
                 # the bundled analysis package of the Sputter page, a release build of research code run as a
                 # subprocess in the program's Python: its commands need NumPy, SciPy and Matplotlib (fabio when
@@ -93,6 +94,8 @@ def code():
                 continue
             if path.relative_to(ROOT).as_posix() in ISOLATED_RUNTIMES:
                 continue  # checked against its own runtime manifest below
+            if path.relative_to(ROOT).as_posix() in TRAINING_FILES:
+                continue  # checked against the training requirements below
             if parts[0] != "src":
                 # The research and model code imports its neighbours by their bare names. ``src`` is
                 # only ever imported as ``src.gimap...``: its folders (``integrations/tensorflow``
@@ -176,9 +179,14 @@ def test_every_package_the_program_imports_is_a_requirement(code):
     assert "psutil" in listed and "tqdm" not in listed
 
 
-def test_fit1d_blas_controller_is_installed_in_the_host_runtime():
-    assert "threadpoolctl" in _requirements("requirements.txt")
-    assert "threadpoolctl" in EXTERNAL_RUNTIME
+def test_the_training_requirements_name_what_the_training_imports():
+    allowed = {IMPORTED_AS.get(name, name).lower() for name in _requirements(TRAINING_RUNTIME)
+               | _requirements("requirements.txt")}
+    own = {"src", "simulate", "flow_torch"}
+    for name in TRAINING_FILES:
+        imported = _imports(ast.parse((ROOT / name).read_text(encoding="utf-8"))) - set(sys.stdlib_module_names)
+        assert {module.lower() for module in imported - own} <= allowed, name
+    assert "torch" in _requirements(TRAINING_RUNTIME) and "torch" not in _listed()
 
 
 def test_isolated_sem_runtime_declares_every_worker_dependency():

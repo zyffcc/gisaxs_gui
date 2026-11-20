@@ -101,10 +101,9 @@ def test_the_series_table_copies_and_its_headers_are_short_with_the_full_name_on
 
 
 def test_the_fit_step_says_what_to_do() -> None:
-    page = _page()  # Only automatic composition searches may resolve their own default edges.
+    page = _page()
     assert page.step_rail.detail("fit") == "Choose a method, then Fit"
     assert page.step_intro["fit"].text() == "" and page.step_intro["fit"].isHidden()
-    assert page.resolve_edges_check.text() == "Resolve default ranges during composition search"
-    assert page.resolve_edges_check.toolTip().startswith("Only automatic composition searches")
-    assert "Model's fixed values and min–max ranges are always kept" in page.resolve_edges_check.toolTip()
+    methods = [page.method_combo.itemData(index) for index in range(page.method_combo.count())]
+    assert methods == ["predict", "local", "global"] and page.method() == "local"  # one network method
     _close(page)

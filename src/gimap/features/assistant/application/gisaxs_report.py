@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from .gisaxs_choice import LENGTH_SCALE, POOR_CHI2, bounds_text, chosen
+from .gisaxs_choice import ASK_PROBABILITY, LENGTH_SCALE, POOR_CHI2, bounds_text, chosen, probability
 
 
 def pixel_span(band, limit=None, pixels=None) -> str:
@@ -80,20 +80,32 @@ def _parameters(component: dict) -> str:
     )
 
 
+def _all_parameters(solution: dict) -> str:
+    """The parameters of every component (``1: R …; 2: R …`` when there are two populations)."""
+    components = solution.get("components") or [{}]
+    if len(components) == 1:
+        return _parameters(components[0])
+    return "; ".join(f"{number}: {_parameters(component)}" for number, component in enumerate(components, start=1))
+
+
+def _probability(solution: dict) -> str:
+    chance = probability(solution)
+    return "—" if math.isnan(chance) else f"{chance:.2f}"
+
+
 def fit_rows(fit: dict) -> list[str]:
-    """The solutions as a Markdown table (units in the header); the values at a search bound named in the note,
-    the solution the run reports marked "(chosen)"."""
+    """The solutions as a Markdown table (units in the header); the values at a bound of their range named in the
+    note, the solution the run reports (the most probable) marked "(chosen)"."""
     solutions = fit.get("solutions") or []
     if not solutions:
         return ["No fit solution."]
     index, _solution = chosen(fit)
-    lines = ["| rank | model | parameters | χ²/N | note |", "|---|---|---|---|---|"]
+    lines = ["| rank | model | probability | parameters | χ²/N | note |", "|---|---|---|---|---|---|"]
     for number, row in enumerate(solutions):
-        component = (row.get("components") or [{}])[0]
         notes = [bounds_text(row)] + list(row.get("warnings") or ()) + ([] if row.get("converged", True) else ["not converged"])
         rank = f"{row['rank']} (chosen)" if number == index else row["rank"]
-        lines.append(f"| {rank} | {row['model']} | {_parameters(component)} | {_fixed(row['chi2'], 'chi2')} | "
-                     f"{'; '.join(note for note in notes if note)} |")
+        lines.append(f"| {rank} | {row['model']} | {_probability(row)} | {_all_parameters(row)} | "
+                     f"{_fixed(row['chi2'], 'chi2')} | {'; '.join(note for note in notes if note)} |")
     return lines
 
 
@@ -142,15 +154,17 @@ def gisaxs_sections(report: dict) -> list[str]:
             "",
             *fit_rows(fit),
             "",
-            "Numerical fits of single particle families with size dispersity and a paracrystal distance D, ranked by "
-            "the mean Huber loss (δ = 2) of the σ-normalised residuals r; χ²/N is the mean of r² over the points (no "
-            "degrees-of-freedom correction). χ²/N close to each other means the curve alone does not decide the "
-            "model: choose it from what is known of the sample. A non-linear value at a search bound (the note "
-            "column) is not determined by the curve: among the solutions within 10 % of the first-ranked χ²/N the "
-            "run reports (chosen) the best-ranked one that converged with no non-linear value at a bound. The "
-            "particle amplitudes, the background and the beam-tail amplitude are solved non-negative and are not "
-            f"counted; one at 0 is named in the Decisions (fit caveat). A reported solution with χ²/N above "
-            f"{POOR_CHI2:g} is a poor fit (Needs attention). A screening fit: confirm the model in Fitting.",
+            "Predict parameters: GIMaP's network proposes compositions — one or two populations of spheres and "
+            "upright cylinders with size dispersity, \"(S)\" with a paracrystal distance D — and their values; each "
+            "solution is refined by least squares, and its probability is the posterior probability of that "
+            "composition and mode. The run reports the most probable solution (chosen), with the 68 % intervals of "
+            "its sizes in the Decisions; when another solution has a probability of at least "
+            f"{ASK_PROBABILITY:g}, the curve alone does not decide the model and it is a point to check. χ²/N is the "
+            "mean of the squared σ-normalised residuals over the points (no degrees-of-freedom correction). A "
+            "non-linear value at a bound of its range (the note column) is not determined by the curve. The "
+            "particle amplitudes, the background and the beam-tail amplitude cannot go below 0; one at 0 is named in "
+            f"the Decisions (fit caveat). A reported solution with χ²/N above {POOR_CHI2:g} is a poor fit (Needs "
+            "attention). Refine the model you expect in Fitting.",
         ]
     return lines + [""]
 
@@ -162,14 +176,15 @@ def gisaxs_batch_row(report: dict) -> tuple[str, str, str]:
     spacing = gisaxs.get("spacing")
     spacing_text = "—" if not spacing else _fixed(spacing["distance_nm"], "distance_nm") + (
         "" if spacing.get("kind") == "maximum" else " (shoulder)")
-    index, best = chosen(gisaxs.get("fit"))
+    _index, best = chosen(gisaxs.get("fit"))
     if best is None:
         return halves, spacing_text, "—"
     component = (best.get("components") or [{}])[0]
-    text = (f"{best['model']} R {_fixed(component.get('R'), 'R')}, D {_fixed(component.get('D'), 'D')} nm, "
-            f"χ²/N {_fixed(best['chi2'], 'chi2')}")
-    return halves, spacing_text, text + (f" (rank {best['rank']})" if index else "") + (
-        f" ⚠ {bounds_text(best)}" if bounds_text(best) else "")
+    distance = f", D {_fixed(component['D'], 'D')}" if component.get("D") is not None else ""
+    chance = probability(best)
+    text = (f"{best['model']} R {_fixed(component.get('R'), 'R')}{distance} nm, χ²/N {_fixed(best['chi2'], 'chi2')}"
+            + ("" if math.isnan(chance) else f", p {chance:.2f}"))
+    return halves, spacing_text, text + (f" ⚠ {bounds_text(best)}" if bounds_text(best) else "")
 
 
 def gisaxs_batch_table(reports: list[dict], state_of) -> list[str]:

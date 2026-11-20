@@ -261,15 +261,21 @@ def test_formats_folders_fits_and_converted_frames(batch_page, tmp_path: Path) -
     assert "frames/<frame>.npy" in readme and "run_07_peak_fits.txt" in readme
 
 
-def test_the_model_fit_starts_from_the_previous_frame() -> None:
-    from src.gimap.features.analyze.application import FitStarts, FitTable, fit_model, model_row
+def test_the_model_fit_predicts_every_frame_from_its_own_data() -> None:
+    """Predict parameters needs no start: no composition or D is carried from one frame to the next, and the table
+    has the most probable solution of each frame with its probability."""
+    from src.gimap.features.analyze.application import FitTable, fit_model, model_row
 
     calls = []
 
-    def fitter(q, intensity, sigma, *, components=(), distance_nm=None, cancelled=None, halves=None):
-        calls.append((components, distance_nm))
-        return [{"combination": "sphere", "best_chi2_weighted": 1.1, "best_log_rmse": 0.1,
-                 "components": [{"type": "sphere", "weight": 1.0, "params": {"R": 5.0 + len(calls), "D": 50.0 + len(calls)}}]}]
+    def fitter(q, intensity, sigma, *, components=(), cancelled=None, halves=None):
+        calls.append(components)
+        return [{"combination": "sphere", "composition": "sphere (S)", "probability": 0.8, "best_chi2_weighted": 1.1,
+                 "best_log_rmse": 0.1,
+                 "components": [{"type": "sphere", "weight": 1.0, "params": {"R": 5.0 + len(calls), "D": 50.0 + len(calls)}}]},
+                {"combination": "vertical_cylinder", "composition": "upright cylinder", "probability": 0.2,
+                 "best_chi2_weighted": 1.3, "best_log_rmse": 0.1,
+                 "components": [{"type": "vertical_cylinder", "weight": 1.0, "params": {"R": 4.0, "h": 6.0}}]}]
 
     class Frame:  # just what fit_model reads
         reduction = object()
@@ -280,16 +286,16 @@ def test_the_model_fit_starts_from_the_previous_frame() -> None:
     original = batch_fit.fit_input_curve
     batch_fit.fit_input_curve = lambda _analysis: curve
     try:
-        starts, table = FitStarts("previous"), FitTable("model")
+        table = FitTable("model")
         for index in range(3):
-            table.add(model_row(f"frame {index + 1}", fit_model(Frame(), fitter, "auto", starts)))
+            table.add(model_row(f"frame {index + 1}", fit_model(Frame(), fitter, "auto")))
+        fit_model(Frame(), fitter, "vertical_cylinder")
     finally:
         batch_fit.fit_input_curve = original
-    assert calls[0] == ((), None) and calls[1] == ((1,), 51.0) and calls[2] == ((1,), 52.0)  # the previous frame's model and D
+    assert calls == [(), (), (), (3,)]  # the network chooses in every frame; a composition chosen is given as such
     assert [row["c1 sphere R"] for row in table.rows] == [6.0, 7.0, 8.0]
-    fresh = FitStarts("fresh")
-    fresh.remember("model", {"family": 1, "D": 51.0})
-    assert fresh.for_key("model") is None
+    assert [row["model"] for row in table.rows] == ["sphere (S)"] * 3 and table.rows[0]["probability"] == 0.8
+    assert table.columns()[:7] == ["frame", "halves", "points", "model", "chi2", "log rmse", "probability"]
 
 
 # ---- the text that is written: plain spellings for the application's symbols, UTF-8 for names ----
