@@ -203,6 +203,24 @@ def _shared_text(result):
         return ""
 
 
+def _prior_lines(analysis):
+    "The growth-law prior of the joint fit (analysis.json 'growth_prior', 2026-11-20), [] when it was not used."
+    gp = (analysis or {}).get("growth_prior") or {}
+    p = gp.get("prior") or {}
+    if not gp.get("used") or not p.get("laws"):
+        return []
+    laws = "; ".join(f"{law['quantity']} = {math.exp(law['ln_v1']):.2f} nm × (h / nm)^{law['p']:.2f} "
+                     f"(width {law['s_a']:.2f} in ln {law['quantity']}₁, {law['s_p']:.2f} in the exponent, "
+                     f"{law.get('n', '?')} scans)" for law in p["laws"])
+    return [f"- Growth-law prior ({'switched on by hand' if gp.get('setting') == 'on' else 'default for this system'}): "
+            f"before the film forms, ln D and ln R of every window were kept near the laws of {p.get('system', '')} "
+            f"found over the analysed reference scans - {laws} - as Gaussian terms of weight {p.get('weight', 1):g} "
+            f"(one width costs one unit of fit deviation per window), faded out over the film onset h = "
+            f"{p.get('h_film') or 0:.2f} nm by 1 / (1 + (h / h_film)^{p.get('gate_power', 6):g}) and left out after "
+            "the deposition stopped. The prior was switched on by default only for systems that passed a held-out "
+            "test fixed before the runs."]
+
+
 def methods_text(result, main, analysis, request, wins, choice, shown_t):
     req = (request or {}).get("request", {})
     dev = [e.get("fit_deviation") for e in (_shown(w, choice) for w in wins) if e and e.get("fit_deviation") is not None]
@@ -250,6 +268,7 @@ def methods_text(result, main, analysis, request, wins, choice, shown_t):
                      f"one shift Δt of the deposition start for the whole scan{_shared_text(result)}; "
                      f"{_monotone_text(main.get('family', ''))} may not decrease from one window to the next, and the "
                      "reported quantities are kept smooth in ln(time since the start).")
+        lines += _prior_lines(analysis)
         other = sum(1 for w in wins if (_shown(w, choice) or {}).get("kind") != "joint")
         if other:
             lines.append(f"- In {other} of {len(wins)} windows another solution was chosen by hand (network candidate or "

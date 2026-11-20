@@ -84,7 +84,7 @@
   尺寸分布宽度、覆盖率；没有的量不显示；连续金属层 t_b（`base_nm`）只在结果的 `wanted` 列出它时显示，`ClientResult.shows`）
   和所显示解的拟合偏差；演化图（`EvolutionPlot`；t_b 用暗金色画在尺寸轴上）。
 - **详情**（`_details_view`）：左栏（`details_scroll`）依次是**样品与几何**（X 射线、距离、入射角、光束中心，各带来源一行；
-  把几何存为预设）、**分析选项**（`_analysis_section`：模式（自动 / 快速 / 精修 / 完整）、并行进程数（见下）、沉积开始、沉积持续时间、聚合物膜厚
+  把几何存为预设）、**分析选项**（`_analysis_section`：模式（自动 / 快速 / 精修 / 完整）、生长规律先验（`prior_box`，自动 / 开 / 关，`PRIOR_CHOICES`；`ClientRequest.growth_prior`，只有开、关才给分析包 `--growth-prior` 并进结果名，自动由分析包决定；报告页由 `analysis.json` 的 `growth_prior` 写出是否用了）、并行进程数（见下）、沉积开始、沉积持续时间、聚合物膜厚
   （只在基底是聚合物膜时显示）、分析包的文件夹与“选择文件夹…”、打开报告、打开文件夹、分析的消息 `client_log`）、
   **静态帧（沉积之后测量）**（`sputter_static_view.py`，默认收起）、**更多选项**（默认收起：掩膜与“分析包自带的掩膜”、样品
   滚转角及其来源、结果保存在）。右边 `tabs`（`result_tabs.py`，读所示结果的文件夹：`ClientService.texts` →
@@ -94,7 +94,7 @@
   - **报告**：`analysis.json` 的要点（所用网络、试过的网络及拟合偏差、模式、像素掩膜、各步骤运行时间之和）在上；然后
     **各步用时**（`report_steps`，`result_tabs.steps_html`，富文本小表）：`steps` 里每一步及其秒数（m:ss，一小时以上
     h:mm:ss；同名步骤可出现两次，例如初步结果和最终结果各一次 `present (main)`；括号里的标签是分析包的原词），读帧那一行加上
-    `reading` 的“已读入 a 帧（共 b 帧）· 磁盘每帧 x s（占用时的 y %）”（读过的扫描另写“此扫描此前已读入”；`reading.workers`
+    `reading` 的“已读入 a 帧（共 b 帧）· n 帧损坏，已略过：…（`frames_left_out`、`left_out`）· 磁盘每帧 x s（占用时的 y %）”（读过的扫描另写“此扫描此前已读入”；`reading.workers`
     与 `workers` 不同时写导入的进程数），最后一行合计，表下“进程数：`workers`”；`reading_was_slow` 时一条提示
     （`report_disk_note`，`ErrorBanner` 警告级，与实时视图相同的文字）；没有这些键的旧结果只列有的行。`REPORT.md` 用
     `QTextBrowser.setMarkdown` 显示在最下（搜索路径是结果文件夹，报告里的图能显示）。

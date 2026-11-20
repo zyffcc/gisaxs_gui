@@ -187,7 +187,8 @@ def compare(desc: dict, ref: "dict | None") -> dict:
         v, r = desc.get(key), (ref or {}).get(key)
         if v is None or not r or (ref or {}).get("n", 0) < 2:
             continue
-        out[key] = "below" if v < r["min"] else "above" if v > r["max"] else "within"
+        slack = 1e-3 * max(abs(r["min"]), abs(r["max"]), 1e-9)
+        out[key] = "below" if v < r["min"] - slack else "above" if v > r["max"] + slack else "within"
     return out
 
 

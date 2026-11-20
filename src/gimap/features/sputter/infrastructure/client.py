@@ -337,8 +337,9 @@ class ClientPackageRunner:
         args = [self.python, "-u", "-m", "iampred.analyze", "--frames", str(request.scan_folder),
                 "--label", label or request.label(), "--metal", request.metal, "--substrate", request.substrate,
                 rate, _number(request.rate_nm_s), "--alpha-i", _number(request.alpha_i_deg), "--out", str(out_folder),
-                "--mode", request.mode, "--workers", str(workers), "--data", str(data_root), "--",
-                "--sdd-mm", _number(request.sdd_mm)]
+                "--mode", request.mode, "--workers", str(workers), "--data", str(data_root)]
+        args += ["--growth-prior", request.growth_prior] if request.prior_values() else []  # auto: the package decides
+        args += ["--", "--sdd-mm", _number(request.sdd_mm)]
         args += ["--energy-ev", _number(request.energy_ev)] if request.energy_ev is not None else \
             ["--wavelength-nm", _number(request.wavelength_nm)]
         if request.beam_col is not None and request.beam_row is not None:
@@ -368,7 +369,7 @@ class ClientPackageRunner:
             "software_version": SOFTWARE, "engine": ENGINE_FOLDER,
             "written": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "scan_folder": str(request.scan_folder), "label": label,
-            "request": request.intake_values() | {"mode": request.mode,
+            "request": request.intake_values() | {"mode": request.mode, "growth_prior": request.growth_prior,
                                                   "beam_centre_convention": "GIMaP pixel coordinates (corners)"},
             "package": str(package.home), "package_source": package.source, "package_id": package.identity,
             "python": self.python, "command": command,

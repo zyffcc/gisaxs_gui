@@ -207,7 +207,7 @@ def time_path(pools, reps, names, tol, lam, tx=None, cont=(), lam_c=0.0, cap=np.
     use = [i for i, (_, es) in enumerate(pools) if es]
     if not use:
         return {}
-    D = [np.array([e["dev5"] for e in pools[i][1]], float) for i in use]
+    D = [np.array([e["dev5"] + e.get("prior", 0.0) for e in pools[i][1]], float) for i in use]
     R = [np.array([e["reported"] for e in pools[i][1]], float) for i in use]
     best, back = D[0].copy(), []
     for i in range(1, len(use)):
@@ -398,6 +398,13 @@ def main():
                     "(stored transform; 0 = quantity left free)")
     ap.add_argument("--jump-cost", type=float, default=25.0, help="--sequence: largest continuity cost of one step of the "
                     "time path = summed dev5 a change of branch has to gain")
+    ap.add_argument("--growth-prior", default=None, help="--sequence: the growth laws of the metal on its substrate as a "
+                    "prior on D and R before the film forms (iampred.prior): 'default' = the package's "
+                    "process_reference.json, or a reference file of that layout; off when not given")
+    ap.add_argument("--growth-prior-weight", type=float, default=1.0, help="--growth-prior: weight (1: a one-sigma "
+                    "departure costs one unit of dev5 per window and law)")
+    ap.add_argument("--growth-prior-min-scans", type=int, default=2, help="--growth-prior: scans a law needs to be "
+                    "used (1: a law of one scan, its spread then only the floors)")
     ap.add_argument("--far-weight", type=float, default=1.0, help="--sequence: weight of the no-decrease rule against "
                     "earlier windows (2 ... 64 places back, beyond one scale; dev5 units; 0 = neighbouring windows only; "
                     "default 1 since 2026-11-20: growth is additive)")
@@ -579,6 +586,21 @@ def main():
             LV.emit("joint_stage", family=cfg["family"], stage="fit", windows=len(use), total=int(a.sequence))
             LV.step("joint.fit", "running")
             cont = [(k, sc, GROW * sc) for k, (_, sc) in enumerate(scales) if sc > 0]
+            prior = None
+            if a.growth_prior:
+                from . import prior as GP
+                ref = Path(__file__).with_name("process_reference.json") if a.growth_prior == "default" else Path(a.growth_prior)
+                prior = GP.GrowthPrior(cfg["family"], sq.meta.get("metal", ""), sq.meta.get("sub", ""), ref,
+                                       a.growth_prior_weight, a.growth_prior_min_scans).bind(rn_)
+                a.growth_prior_used = dict(prior.describe(), active=prior.active)
+                print(f"growth prior: {prior.system}, {prior.n_scans} scans, laws "
+                      + (", ".join(f"{law['quantity']} = {float(np.exp(law['ln_v1'])):.2f} h^{law['p']:.2f}" for law in prior.laws)
+                         or "none") + (f" ({prior.note})" if prior.note else "")
+                      + (f", film at {prior.h_film:.2f} nm" if prior.h_film else ""), flush=True)
+                if prior.active:
+                    for k_, (_, es) in enumerate(pools):
+                        for e in es:
+                            e["prior"] = prior.cost(e["h_m"], e["reported"], bool(sq.after[k_]))
             path = time_path(pools, reps, mono, TOL, a.path_weight, sq.tx, cont, a.smooth_weight, a.jump_cost)
             chosen = {t: es[path[t]] for t, es in pools}
             _dump(out / "pool.json.gz", dict(key=key, t=[t for t, _ in pools], tx=sq.tx, scales=scales, growth=GROW,
@@ -586,7 +608,7 @@ def main():
                                              path_weight=a.path_weight, tol=TOL, pools=[es for _, es in pools],
                                              chosen=[path[t] for t, _ in pools]))
             sw, seq = SQ.refine(sq, [chosen[t]["x"] for t, _ in pools], reps, mono, TOL, a.path_weight, scales,
-                                a.smooth_weight, a.sequence, out, a.far_weight)
+                                a.smooth_weight, a.sequence, out, a.far_weight, prior)
             sh_ = seq.get("shared") or {}
             LV.step("joint.fit", "done", detail="joint.json" if history else None,
                     summary=f"{len(history)} iterations, median fit deviation {seq['end']['median_dev5']:.1f}"
@@ -740,6 +762,10 @@ def main():
                 sequence=seq,
                 sequence_setup=(dict(smooth_weight=a.smooth_weight, scales=dict(scales), growth_scales_per_ln_time=GROW,
                                      jump_cost=a.jump_cost, far_weight=a.far_weight,
+                                     growth_prior=(dict(reference=a.growth_prior, weight=a.growth_prior_weight,
+                                                        min_scans=a.growth_prior_min_scans,
+                                                        prior=getattr(a, "growth_prior_used", None))
+                                                   if a.growth_prior else None),
                                      transplant_offsets=list(OFFSETS) if a.transplant else [])
                                 if seq else None),
                 n_seq_worse=len(worse) if seq and a.refine else None, seq_worse_t=worse if seq and a.refine else None,

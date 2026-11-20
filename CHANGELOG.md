@@ -114,6 +114,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   *Network cu_v4: drawing the candidates with the forward model, window 7 of 24*, *Joint fit: iteration 2 of 6 ·
   median fit deviation 11.3 · 5:40 so far, about 11 min left*. While the joint fit runs, its current solution is
   drawn dashed over the preliminary result's evolution after every iteration, until the final result replaces it.
+- **Sputter: the growth laws as a prior of the joint fit.** **Details ▸ Analyze options ▸ Growth-law prior**: **Auto** (the default) keeps D and R near the growth laws of the metal on its substrate before the film forms for Ag on PS, where this passed a held-out test fixed before the runs, and not for the other systems; **On** and **Off** decide for every system. Only the joint fit uses it (*Physics and Methods* 12.1 gives the terms). **Details ▸ Report** and the export's `METHODS.md` say whether it was used. An older analysis package gets **On** or **Off** as an option it does not know: keep **Auto** with it.
+- **Sputter: a damaged frame no longer stops the import.** A frame file that cannot be decoded (cut short on disk, for example) is left out, and **Details ▸ Report** names it in the row of the import; before, the whole scan could not be analysed.
 - **Sputter: the model split into its physical terms, and the growth process.** With a newer analysis package the
   switch beside the window selector has **Components**: the model image of the solution shown split into its terms
   (grains and islands, large clusters, film fluctuation and network, voids under the film, substrate seen through the

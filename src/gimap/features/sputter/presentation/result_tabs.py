@@ -7,9 +7,10 @@ and which solution it is; a window without a solution says why. The rows follow 
 copies the selected rows (``enable_table_copy``).
 
 **Report**: the facts of ``analysis.json`` — the network used and the networks tried with their fit deviation, the
-mode, the pixel mask, the run time of the steps —; *Time per step*, a small table of every step with its time (m:ss),
-the import with the frames read of how many and the disk's seconds per frame and share of the time (``reading``), the
-total and the processes the steps ran with (``workers``); a note when reading the frames from disk was the slow part;
+mode, whether the growth-law prior was used, the pixel mask, the run time of the steps —; *Time per step*, a small
+table of every step with its time (m:ss), the import with the frames read of how many, the damaged frames left out and
+the disk's seconds per frame and share of the time (``reading``), the total and the processes the steps ran with
+(``workers``); a note when reading the frames from disk was the slow part;
 then ``REPORT.md`` rendered as Markdown (its images are found in the result folder). An older result without these
 keys has the rows it can. **Logs**: the ``analyze_*.log`` of every step, one at a time.
 
@@ -41,6 +42,8 @@ NO_SOLUTION_CELL = "no solution: {reason}"
 FACT_NETWORK = "Network used: {family}"
 FACT_TRIED = "Networks tried (fit deviation): {tried}"
 FACT_MODE = "Mode: {mode}"
+FACT_PRIOR_USED = "Growth-law prior ({setting}): used, laws of {system}"
+FACT_PRIOR_UNUSED = "Growth-law prior ({setting}): not used"
 FACT_STATUS = "Status: {status}"
 FACT_TIME = "Run time: {time}"
 MINUTES = "{minutes} min"
@@ -51,9 +54,11 @@ STEPS_TITLE = "Time per step"
 COLUMN_STEP, COLUMN_STEP_TIME, TOTAL_ROW = "Step", "Time (m:ss)", "All steps"
 FRAMES_READ = "{read} of {total} frames read"
 FRAMES_READ_ONLY = "{read} frames read"
+FRAMES_LEFT_OUT = "{count} damaged frames left out: {frames}"
 TEMPLATES = (COLUMN_TIME, COLUMN_SAMPLE, COLUMN_NOMINAL, COLUMN_DEVIATION, COLUMN_SOLUTION, NO_SOLUTION_CELL,
-             FACT_NETWORK, FACT_TRIED, FACT_MODE, FACT_STATUS, FACT_TIME, MINUTES, NO_REPORT_TEXT, NO_LOGS,
-             STEPS_TITLE, COLUMN_STEP, COLUMN_STEP_TIME, TOTAL_ROW, FRAMES_READ, FRAMES_READ_ONLY)
+             FACT_NETWORK, FACT_TRIED, FACT_MODE, FACT_PRIOR_USED, FACT_PRIOR_UNUSED, FACT_STATUS, FACT_TIME, MINUTES,
+             NO_REPORT_TEXT, NO_LOGS, STEPS_TITLE, COLUMN_STEP, COLUMN_STEP_TIME, TOTAL_ROW, FRAMES_READ,
+             FRAMES_READ_ONLY, FRAMES_LEFT_OUT)
 """The texts of the three tabs that need Chinese."""
 
 
@@ -73,6 +78,12 @@ def facts_html(analysis: dict, mask_words: str) -> str:
         lines.append(text(FACT_TRIED, tried=", ".join(parts)))
     if analysis.get("mode"):
         lines.append(text(FACT_MODE, mode=html.escape(str(analysis["mode"]))))
+    prior = analysis.get("growth_prior")
+    if isinstance(prior, dict) and prior.get("setting"):  # packages since 2026-11-20
+        setting = html.escape(str(prior["setting"]))
+        system = html.escape(str((prior.get("prior") or {}).get("system") or ""))
+        lines.append(text(FACT_PRIOR_USED, setting=setting, system=system) if prior.get("used")
+                     else text(FACT_PRIOR_UNUSED, setting=setting))
     if analysis.get("status") and analysis["status"] != "ok":
         lines.append(text(FACT_STATUS, status=html.escape(str(analysis["status"]))))
     if mask_words:
@@ -102,8 +113,8 @@ def _step_name(step: str, static: bool) -> str:
 
 
 def _import_words(step: dict, reading: dict, workers: Optional[int]) -> str:
-    """What the import row adds: read before, frames read of how many, the disk's seconds per frame and share, and
-    the processes of the import when they differ from those of the steps."""
+    """What the import row adds: read before, frames read of how many, damaged frames left out, the disk's seconds per
+    frame and share, and the processes of the import when they differ from those of the steps."""
     parts = []
     if not step.get("log") and "reused" in str(step.get("note") or ""):
         parts.append(tr(REUSED_LINE))
@@ -111,6 +122,11 @@ def _import_words(step: dict, reading: dict, workers: Optional[int]) -> str:
     if read is not None:
         parts.append(text(FRAMES_READ, read=f"{int(read):,}", total=f"{int(total):,}") if total is not None else
                      text(FRAMES_READ_ONLY, read=f"{int(read):,}"))
+    left = _number(reading.get("frames_left_out"))  # frames that do not decode (packages since 2026-11-20)
+    if left:
+        names = [str(name) for name in reading.get("left_out") or ()][:3]
+        more = " …" if left > len(names) else ""
+        parts.append(text(FRAMES_LEFT_OUT, count=int(left), frames=", ".join(names) + more))
     disk = disk_words(_number(reading.get("read_s_per_frame")), _number(reading.get("read_share")))
     if disk:
         parts.append(disk)
