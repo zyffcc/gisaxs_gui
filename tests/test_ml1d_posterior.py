@@ -294,3 +294,56 @@ def test_window_flags_name_populations_the_curve_does_not_resolve():
 
     sentences = posterior_job.flag_sentences(["large:R_3", "small:R_1"])
     assert sentences[0].startswith("R_3: its Guinier region") and sentences[1].startswith("R_1: smaller than")
+
+
+def _wide_curve(seed=0):
+    """Small spheres with a wide spread: no form-factor minimum in the window, R trades against σ_R/R."""
+    q = np.geomspace(0.06, 2.4, 160)
+    population = cut.Population("sphere", 1.8, 0.45, distance=6.3, distance_spread=0.3)
+    truth = 3e4 * cut.unit_terms([population], cut.Settings(), q)[0] + 5.0
+    counts = np.random.default_rng(seed).poisson(truth).astype(float)
+    return q, counts, np.hypot(np.sqrt(np.maximum(counts, 1.0)), 0.05 * counts)
+
+
+def test_later_rounds_follow_a_posterior_the_first_proposal_misses():
+    """A spread at its bound that trades against the radius: the proposal at the least-squares optimum has no width
+    along that direction, the later rounds (all coordinates together) reach many more effective samples; the
+    evidence stays the same."""
+    from src.gimap.features.fitting.domain import fit_engine
+    from src.gimap.features.fitting.domain.posterior import laplace
+
+    q, counts, sigma = _wide_curve()
+    data = infer.Cut.prepare(q, counts, sigma)
+    start = _values(radius=1.6, distance=6.3)
+    start[1], start[5] = 0.5, 0.3
+    fitted = fit_engine.fit(refine.fit_model(start, SPHERE, data), fit_engine.FitData.prepare(q, counts, sigma),
+                            method="local")
+    centre = refine.model_values(fitted.model, SPHERE)
+    one = laplace.local_posterior(data, SPHERE, centre, 0.02, np.random.default_rng(0), 400, rounds=1)
+    more = laplace.local_posterior(data, SPHERE, centre, 0.02, np.random.default_rng(0), 400)
+    assert one.samples.shape[0] == 400 and one.ess < 100
+    assert more.ess >= 0.9 * laplace.ESS_TARGET or more.ess > 3 * one.ess
+    assert more.samples.shape[0] <= laplace.ROUNDS * 400
+    assert more.log_evidence == pytest.approx(one.log_evidence, abs=1.0)
+    low, high = more.quantiles([0.16, 0.84])[:, 0]
+    assert low < 1.8 < high and high - low > 0.05
+
+
+@pytest.mark.parametrize("by_bic", [False, True])
+def test_an_interval_holds_the_refined_value_and_stays_in_its_range(monkeypatch, by_bic):
+    """The posterior's intervals and (compared by BIC) those of the least-squares errors: each holds the refined
+    value, and none leaves the value's range (a spread is never negative)."""
+    if by_bic:
+        monkeypatch.setattr(refine, "ESS_FAILED", 1e9)
+    network = Network.load(DATA / "flow_fixture.npz")
+    q, counts, sigma = _wide_curve(seed=2)
+    solutions = refine.predict(network, q, counts, sigma, compositions=[SPHERE], samples=300, local_samples=200,
+                               seed=1)
+    assert solutions and ("bic" in solutions[0].flags) == by_bic
+    for solution in solutions:
+        for name, value in solution.values.items():
+            assert value.low95 <= value.low68 <= value.best <= value.high68 <= value.high95, name
+            if name.startswith("sigma_"):
+                assert value.low95 >= 0.02 - 1e-9 and value.high95 <= 0.5 + 1e-9, name
+            if name.startswith(("R_", "D_")):
+                assert value.low95 > 0 and value.high95 < 1e3, name

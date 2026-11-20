@@ -3,9 +3,12 @@
 
 ``predict`` is the one entry point (its docstring lists the steps): the posterior of the compositions (``infer``),
 their modes refined by ``fit_engine`` (bounded least squares, the scales solved exactly), a search of the ranges where
-the network's proposals miss the curve, and the posterior of the best solutions sampled around them (``laplace``). A solution carries the refined values with their errors (Jacobian), the posterior median and the
-68 % and 95 % intervals of the importance-sampled posterior, χ²/N, its probability (the composition's posterior
-times the mode's share of it) and flags:
+the network's proposals miss the curve, and the posterior of the best solutions sampled around them (``laplace``). A solution carries the refined values with
+their errors (Jacobian), the posterior median and the 68 % and 95 % intervals of the importance-sampled posterior,
+χ²/N, its probability (the composition's posterior times the mode's share of it) and flags. An interval always holds
+the refined value: the posterior has the model error and the prior's ranges, least squares the counts' σ, so on a
+curve the model does not describe within σ, or with a value at a bound, the refined value can lie beside the
+central interval, which is then extended to it. Flags:
 
 * ``at_bound:NAME``     the refined value sits at a bound of its range (its error means little);
 * ``unconstrained:NAME`` the 68 % interval covers more than ``UNCONSTRAINED`` of the prior's range (the curve says
@@ -212,6 +215,9 @@ DELTA_BIC = 20.0
 would be below e⁻¹⁰ of the best's)."""
 LOCAL_MAX = 4
 """At most this many solutions get their posterior sampled (the best by BIC)."""
+LOCAL_ROUNDS, SLOW_ROUNDS = 8, 3
+"""At most this many rounds of the local posterior (``laplace.local_posterior``); of a composition with a random
+cylinder, whose evaluations are slow, ``SLOW_ROUNDS``."""
 ESS_FAILED = 10
 LARGE, SMALL = 0.7, 1.0
 """q_min·R and q_max·R limits of the ``large`` and ``small`` flags (``window_flags``)."""
@@ -262,8 +268,9 @@ def window_flags(model: fm.FitModel, q) -> list[str]:
 
 def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra, lsq=None,
               from_errors: bool = False) -> PosteriorSolution:
-    """``from_errors``: the intervals from the least-squares errors (the refined value ± 1 and 1.96 errors), for
-    solutions compared by BIC, whose posterior sampling did not converge."""
+    """``from_errors``: the intervals from the least-squares errors (the refined value ± 1 and 1.96 errors, within
+    the value's range), for solutions compared by BIC, whose posterior sampling did not converge. Every interval is
+    extended to the refined value when that lies beside it (the module's docstring)."""
     mode, model, refined, local = entry
     # ``lsq``: (errors, χ²/N) with the σ the posterior uses (the model error added); least squares scales its errors
     # by χ²/N, and below 1 they keep their size.
@@ -276,13 +283,16 @@ def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra,
         path = _path(result.index, dim)
         error = lsq_errors.get(path) if refined is not None else None
         error = None if error is None else error * widen
+        parameter = model.get(path)
+        best = float(parameter.value)
         if from_errors and error is not None and np.isfinite(error):
-            best = float(model.get(path).value)
             quantiles[:, dim] = [best, best - error, best + error, best - 1.96 * error, best + 1.96 * error]
             if E.LOGARITHMIC[dim]:  # positive: the interval on a log scale, its width as the error's
                 quantiles[1:, dim] = best * np.exp(np.array([-1, 1, -1.96, 1.96]) * min(error / best, 5.0))
-        values[name] = Interval(float(model.get(path).value), *(float(x) for x in quantiles[:, dim]),
-                                None if error is None else float(error))
+            quantiles[:, dim] = np.clip(quantiles[:, dim], parameter.lower, parameter.upper)
+        quantiles[[1, 3], dim] = np.minimum(quantiles[[1, 3], dim], best)
+        quantiles[[2, 4], dim] = np.maximum(quantiles[[2, 4], dim], best)
+        values[name] = Interval(best, *(float(x) for x in quantiles[:, dim]), None if error is None else float(error))
         low, high = quantiles[1, dim], quantiles[2, dim]
         span = np.log(high / low) if E.LOGARITHMIC[dim] else high - low
         width = hi[0, dim] - lo[0, dim]
@@ -412,7 +422,8 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
         local = None
         if centre is not None:
             tau = float(mode.median[tau_dim]) if np.isfinite(mode.median[tau_dim]) else 0.02
-            local = local_posterior(data, result.index, centre, tau, rng, local_samples, law, coupling)
+            local = local_posterior(data, result.index, centre, tau, rng, local_samples, law, coupling,
+                                    rounds=SLOW_ROUNDS if slow(result.index) else LOCAL_ROUNDS)
         entries.append((result, mode, refined.model, refined, local))
     # The solutions are compared by their evidence (importance sampling); when the sampling of one of them did not
     # converge (e.g. a curve the model does not describe, whose posterior with the model error lies away from the

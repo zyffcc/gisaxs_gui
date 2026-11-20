@@ -26,6 +26,14 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   cut's q_z, the σ of files without one). Settings and projects saved with a removed method open with Predict
   parameters (fit1d's cut qz becomes the window's **Cut qz**). The benchmark scripts that compare against fit1d run
   with a copy of the kit you give them (`tools/benchmarks/README.md`).
+- **Predict parameters: intervals that hold the refined value, and a posterior that converges on measured
+  cuts.** The posterior around a solution is now sampled in up to eight rounds, the later ones over all values
+  together, so a spread at its bound that trades against the radius, or a bright cut the model describes only to a
+  few per cent, no longer leaves the weight on a handful of samples (the *few effective samples* note and the
+  comparison by BIC become rare). Every 68 %/95 % interval holds the refined value and stays inside the value's
+  range: a relative spread is never given a negative limit, and a length no longer gets limits orders of magnitude
+  apart. A value the curve does not see (the shape of a population whose amplitude is 0) is shown without an error
+  where it had an error of 0, in Fitting's own fits as well.
 - **The automatic analysis fits with Predict parameters.** Run Automatic Analysis, Batch Export's *Particle model
   of the horizontal cut*, Process with AI, `tools/gimap_agent.py` and the MCP tool `fit_horizontal_cut` fit the
   horizontal cut with Predict parameters: without a composition the network chooses among one or two populations

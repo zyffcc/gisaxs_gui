@@ -2420,21 +2420,30 @@ cylinders (1–2)* or *Any particles (1–3)*.
    degrees of freedom) over the values the curve constrains, its scale from the Gauss–Newton curvature of the
    residuals plus the prior's, inflated by 1.4 (and by √(χ²/N) on a curve the model does not describe within σ); the
    others (an absent tail, a resolution at its bound, τ) from piecewise densities that a scan of the likelihood along
-   each sets; up to three rounds of 400 samples (population Monte Carlo) until 200 effective samples. The weighted
+   each sets. That is the first of up to eight rounds of 400 samples (population Monte Carlo; three for a composition
+   with a random cylinder), run until 200 samples are effective. Each later round is a Student t over all values
+   together, the scanned ones and τ included, with the mean and the covariance (inflated by 1.4) of all samples so
+   far, their weights tempered to two effective samples per value: it follows a posterior that lies away from the
+   least-squares optimum, or along a direction the first round has no width in (a spread at its bound that trades
+   against the radius). All samples are weighted against the mixture of the rounds' proposals. The weighted
    samples give every value's median and 68 %/95 % interval, and the evidence Z of the solution.
 5. A composition's evidence is the sum of those of its distinct solutions; the probabilities of the compositions are
    ∝ Z (equally likely beforehand), a solution's is its composition's times its share. When the sampling of any
    solution did not converge (fewer than 10 effective samples, or a refined solution whose radii left the
    composition's order and has no local posterior), all are compared by BIC instead, Z ∝ exp(−BIC/2), and their
    intervals are the least-squares errors of section 9.8 with σ_m (scaled by χ²_m/N when it is above 1; on a log
-   scale for the lengths); the
+   scale for the lengths; never beyond the value's range); the
    solutions carry the flag *bic* (*compared by χ² and the number of values (BIC): the posterior's sampling did not
    converge*). This happens on curves the model does not describe within σ: with the model error near its bound the
    posterior lies away from the least-squares optimum, and the evidences cannot be estimated (on BornAgain's GALAXI
    model they ranked a solution with χ²/N = 11.5 above one with 4.4).
 
 Every solution holding at least 1 % of the posterior is returned, most probable first. Each carries the refined
-values with their least-squares errors (9.8), the posterior median and intervals, χ²ᵣ, its probability and flags: a
+values with their least-squares errors (9.8), the posterior median and intervals, χ²ᵣ, its probability and flags. An
+interval always holds the refined value. The refined value is the least-squares optimum with the counts' σ, and the
+posterior has the model error and the prior's ranges, so on a curve the model does not describe within σ, or for a
+value at a bound, the refined value can lie beside the central interval, which is then extended to it. A value the
+curve does not see at all (the shape of a population whose amplitude is 0) has no least-squares error. The flags: a
 value at a bound of its range; *unconstrained* when its 68 % interval covers more than 0.7 of the prior's range;
 strongly correlated pairs (beyond ±0.95); few effective samples (below 50: the intervals are then taken with the
 weights raised to the largest power β ≤ 1 that gives 50 effective samples, which moves them towards the wider

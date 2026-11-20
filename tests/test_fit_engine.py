@@ -452,3 +452,19 @@ def test_spheres_at_qz_zero_by_default_and_two_paths_with_the_angles_of_the_cut(
     record = lambda model: fit_record(model, data, None, side="positive", q_range=None, result=None)
     assert record(two)["sphere_model"].startswith("two paths")
     assert record(sphere)["sphere_model"].startswith("effective interface")
+
+
+def test_a_value_the_curve_does_not_see_has_no_error() -> None:
+    """The shape of a population of amplitude 0 does not change the curve: its errors are NaN, never 0, and the
+    errors of the other population stay as without it."""
+    from src.gimap.features.fitting.domain.fit_engine import errors
+
+    truth = _truth()
+    data = _noisy(truth)
+    reference, _ = errors(truth, data)
+    absent = new_component("sphere", radius=15.0, structure=False)
+    both = FitModel(truth.components + (absent,), truth.globals).with_values({(1, "Int"): 0.0})
+    found, _ = errors(both, data)
+    assert math.isnan(found[(1, "R")]) and math.isnan(found[(1, "sigma_R")])
+    for key in ("R", "sigma_R", "D"):
+        assert found[(0, key)] == pytest.approx(reference[(0, key)], rel=0.2), key

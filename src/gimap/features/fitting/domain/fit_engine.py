@@ -372,6 +372,10 @@ def _chi2(model: FitModel, data: FitData, free: int) -> float:
     return float(residual @ residual / dof) if dof > 0 else math.nan
 
 
+UNSEEN = 1e-12
+"""Eigenvalues of JᵀJ (columns in relative units) below this fraction of the largest: directions without error."""
+
+
 def _errors(model: FitModel, data: FitData, problem: _Problem) -> tuple[dict, tuple]:
     """1σ errors of every free parameter, and the strongly correlated pairs."""
     paths = [path for path, _p in problem.nonlinear] + list(problem.linear)
@@ -394,8 +398,14 @@ def _errors(model: FitModel, data: FitData, problem: _Problem) -> tuple[dict, tu
         return {path: math.nan for path in paths}, ()
     # Columns in relative units, so that no parameter pushes the others below the cut-off of the inverse.
     scaled = jacobian * scale
-    covariance = np.linalg.pinv(scaled.T @ scaled) * variance * np.outer(scale, scale)
-    diagonal = np.diag(covariance)
+    normal = scaled.T @ scaled
+    covariance = np.linalg.pinv(normal) * variance * np.outer(scale, scale)
+    diagonal = np.array(np.diag(covariance))
+    # A direction the curve does not see (the shape of a population of amplitude 0, two values that only enter
+    # together): the pseudo-inverse leaves it out, which would read as an error of 0. Its values have no error.
+    size, vectors = np.linalg.eigh(normal)
+    unseen = vectors[:, size <= UNSEEN * max(float(size[-1]), 1e-300)]
+    diagonal[np.sum(unseen * unseen, axis=1) > 1e-6] = math.nan
     errors = {path: float(np.sqrt(d)) if d > 0 else math.nan for path, d in zip(paths, diagonal)}
     correlated = []
     for i in range(len(paths)):
