@@ -42,15 +42,20 @@ FILM_SUBSTRATES = ("PS", "PET", "PSBMA", "PNO", "PEO", "Polymer")
 for each of them). Polymer: a film of another or unknown kind (a block copolymer, say); the package takes the optics
 of the polymer its network for the metal was trained on."""
 MODES = ("auto", "quick", "refine", "full")
+GROWTH_PRIORS = ("auto", "on", "off")
+"""Growth-law prior of the whole-scan refinement (the package's ``--growth-prior``): auto = the package decides (on
+for the systems that passed its held-out test, Ag on PS), on, off. Only on / off go on the command line and into the
+result's name, so an older package and the results made before keep working."""
 ENGINE_FOLDER = "iampred"
 LABEL_PREFIX = "gui_"
 RATE_PROBLEM = ("Give the deposition rate (Å/s or nm/s): the rate at the sample, or the reading of the quartz balance "
                 "with QCM reading ticked.")
 SUBSTRATE_PROBLEM = "Choose the substrate."
 MODE_PROBLEM = "The mode must be auto, quick, refine or full."
+PRIOR_PROBLEM = "The growth-law prior must be auto, on or off."
 DURATION_PROBLEM = "The deposition duration must be positive (or empty)."
 FILM_PROBLEM = "The polymer film thickness must be positive (or empty)."
-CLIENT_PROBLEMS = (RATE_PROBLEM, SUBSTRATE_PROBLEM, MODE_PROBLEM, DURATION_PROBLEM, FILM_PROBLEM)
+CLIENT_PROBLEMS = (RATE_PROBLEM, SUBSTRATE_PROBLEM, MODE_PROBLEM, PRIOR_PROBLEM, DURATION_PROBLEM, FILM_PROBLEM)
 CLIENT_MISSING = ("The analysis package was not found. Choose its folder (it holds code and models), or set the "
                   "environment variable GIMAP_SPUTTER_CLIENT to it.")
 CLIENT_INCOMPLETE = "{folder} is not an analysis package: {missing} is missing."
@@ -115,6 +120,9 @@ class ClientRequest:
     cache_limit: Optional[int] = None
     """The most the import caches may take together (bytes; None: ``storage.DEFAULT_LIMIT_BYTES``, 0: no limit). Not
     part of the result's name either."""
+    growth_prior: str = "auto"
+    """``GROWTH_PRIORS``: whether the whole-scan refinement keeps D and R near the growth laws of the metal on its
+    substrate before the film forms."""
 
     def problems(self) -> list:
         out = []
@@ -134,6 +142,8 @@ class ClientRequest:
             out.append(SUBSTRATE_PROBLEM)
         if self.mode not in MODES:
             out.append(MODE_PROBLEM)
+        if self.growth_prior not in GROWTH_PRIORS:
+            out.append(PRIOR_PROBLEM)
         if self.duration_s is not None and self.duration_s <= 0:
             out.append(DURATION_PROBLEM)
         if self.film_nm is not None and self.film_nm <= 0:
@@ -160,8 +170,12 @@ class ClientRequest:
         return f"{LABEL_PREFIX}{name}_{self._hash(self.intake_values())}"
 
     def digest(self, package: str = "") -> str:
-        """Eight hex digits of the request, its mode and the package's version."""
-        return self._hash(self.intake_values() | {"mode": self.mode, "package": package})
+        """Eight hex digits of the request, its mode, its growth-law prior (when not auto) and the package's version."""
+        return self._hash(self.intake_values() | {"mode": self.mode, "package": package} | self.prior_values())
+
+    def prior_values(self) -> dict:
+        """The growth-law prior as the request records it: nothing for auto (the package's default)."""
+        return {} if self.growth_prior == "auto" else {"growth_prior": self.growth_prior}
 
     def rate_at_sample(self) -> Optional[float]:
         """The deposition rate at the sample (nm/s): a QCM reading times ``QCM_FACTOR``, as the package takes it."""

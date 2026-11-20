@@ -1,7 +1,8 @@
 """Chinese texts of the Sputter workspace's component separation and growth-process analysis.
 
 Keys are the exact English of ``features/sputter`` (``presentation/views/sputter_main_view.py``,
-``views/sputter_page_view.py``, ``components_view.py``, ``process_tab.py``, ``domain/process.py``); templates keep
+``views/sputter_page_view.py``, ``components_view.py``, ``process_tab.py``, ``domain/process.py``; the growth-law
+prior of Analyze options: ``application/client.py``, ``result_tabs.py``); templates keep
 their ``{fields}``. Numbers, units, element and material names are not translated.
 """
 
@@ -78,4 +79,19 @@ SPUTTER_PROCESS_ZH = {
     "This result has no analysis of the growth process: analyze the scan again with the current analysis package.":
         "这个结果没有生长过程分析：请用当前的分析包重新分析这条扫描。",
     "The analysis of the growth process is made for in-situ scans.": "生长过程分析只针对原位扫描。",
+    # -- Details ▸ Analyze options: the growth-law prior (sputter_main_view.py, client.py, result_tabs.py) -----------
+    "Growth-law prior": "生长规律先验",
+    "On": "开",
+    "Off": "关",
+    "On where it passed a held-out test (Ag on PS), off for the other systems.":
+        "在通过留一检验的体系（PS 上的 Ag）打开，其他体系关闭。",
+    "Before the film forms, the whole-scan refinement keeps the size and the distance near the growth laws found for "
+    "the metal on this substrate.":
+        "成膜之前，联合精修让尺寸和间距靠近同一金属在这种基底上的生长规律。",
+    "The whole-scan refinement without the growth laws.": "联合精修不用生长规律。",
+    "The growth-law prior must be auto, on or off.": "生长规律先验必须是 auto、on 或 off。",
+    "Growth-law prior ({setting}): used, laws of {system}": "生长规律先验（{setting}）：已使用，{system} 的规律",
+    "Growth-law prior ({setting}): not used": "生长规律先验（{setting}）：未使用",
+    # -- Details ▸ Report, the import row (result_tabs.py) --------------------------------------------------------
+    "{count} damaged frames left out: {frames}": "{count} 帧损坏，已略过：{frames}",
 }

@@ -31,7 +31,8 @@ def _open(args):
     _W["ctx"] = {float(t): c for t, c in zip(times, sc.ctx)}
     s = sc.scan
     meta = dict(t_dep=float(s.t_dep), rate_h=float(s.rate_h),
-                t_sput=(float(s.cfg["t_sput"]) if "t_sput" in s.cfg else None))
+                t_sput=(float(s.cfg["t_sput"]) if "t_sput" in s.cfg else None),
+                metal=str(getattr(s, "metal", "") or ""), sub=str(getattr(s, "sub", "") or ""))
     _W["meta"] = meta
     wins = [dict(t=float(t), n=int(c.f.ok.sum()), t_mean=float(c.t_mean), h_nom=c.h_nom_ctx, names=list(c.names),
                  lb=np.asarray(c.f.lb, float), ub=np.asarray(c.f.ub, float), mass=len(c.pnames) > len(c.names))
@@ -123,6 +124,9 @@ class Sequence:
         self.sl = self.ss = self.sf = 0.0
         self.tri = np.zeros(0, int); self.ta = np.zeros(0); self.tw = np.ones(0)
         self.fi = self.fj = np.zeros(0, int)
+        self.prior = None
+        te = (self.meta["t_dep"] + self.meta["t_sput"]) if self.meta["t_sput"] is not None else np.inf
+        self.after = self.tm > te
         self.z0 = None
         self._z = None
         self.njac = 0
@@ -134,8 +138,9 @@ class Sequence:
         for p in self.pools:
             p.join()
 
-    def setup(self, x0, reps, mono, tol, weight, smooth=(), smooth_weight=0.0, far_weight=0.0):
+    def setup(self, x0, reps, mono, tol, weight, smooth=(), smooth_weight=0.0, far_weight=0.0, prior=None):
         'x0: one start vector per window (pnames order). mono: names that may not decrease (scales tol, weight).'
+        self.prior = prior if prior is not None and prior.active else None
         W, nf, ns = self.W, self.nf, self.ns
         x0 = [np.asarray(x, float) for x in x0]
         z0 = np.concatenate([x[:nf] for x in x0] + ([[float(np.median([x[nf] for x in x0])), 0.0]] if ns else []))
@@ -249,15 +254,22 @@ class Sequence:
             out.append(self.ss * huber(np.where(np.isfinite(r), r, 0.0) / (sc * self.tw)))
         return np.concatenate(out)
 
+    def pen_prior(self, rep, h):
+        if self.prior is None:
+            return np.zeros(0)
+        return np.concatenate([self.prior.residuals(float(h[k]), rep[k], bool(self.after[k])) for k in range(self.W)])
+
     def fun(self, z):
         self._base(z)
-        return np.concatenate(self._R + [self.pen_mono(self._rep), self.pen_far(self._rep), self.pen_smooth(self._rep)])
+        return np.concatenate(self._R + [self.pen_mono(self._rep), self.pen_far(self._rep), self.pen_smooth(self._rep),
+                                         self.pen_prior(self._rep, self._h)])
 
     def state(self):
         pm, pf, ps = self.pen_mono(self._rep), self.pen_far(self._rep), self.pen_smooth(self._rep)
+        pp = self.pen_prior(self._rep, self._h)
         return dict(sum_dev5=float(self._d5.sum()), median_dev5=float(np.median(self._d5)),
-                    penalty=float(pm @ pm + pf @ pf + ps @ ps), penalty_monotone=float(pm @ pm),
-                    penalty_far=float(pf @ pf), penalty_smooth=float(ps @ ps))
+                    penalty=float(pm @ pm + pf @ pf + ps @ ps + pp @ pp), penalty_monotone=float(pm @ pm),
+                    penalty_far=float(pf @ pf), penalty_smooth=float(ps @ ps), penalty_prior=float(pp @ pp))
 
     JAC_REFRESH = int(os.environ.get("IAMPRED_JAC_REFRESH", "3"))
     """2026-11-19: every JAC_REFRESH-th Jacobian takes every column by finite differences; in between only the active
@@ -298,26 +310,30 @@ class Sequence:
             res = self._run(jobs)
         finally:
             self.phase = "step"
-        data, indices, dR = [], [], []
+        data, indices, dR, dLh = [], [], [], []
         if full:
             self._jcache, self._jactive = [None] * W, [None] * W
         for k in range(W):
-            R, rep, _, _, good = res[k]
+            R, rep, _, hh, good = res[k]
             Jp = np.where(good[:, None], (R - self._R[k][None]) / steps[k][:, None], 0.0).T
             dp = (rep - self._rep[k][None]) / steps[k][:, None]
             dp = np.where(np.isfinite(dp) & good[:, None], dp, 0.0)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                dlh = (np.log(hh) - math.log(max(float(self._h[k]), 1e-12))) / steps[k]
+            dlh = np.where(np.isfinite(dlh) & good, dlh, 0.0)
             if full:
-                Jk, dk = Jp, dp
+                Jk, dk, lk = Jp, dp, dlh
                 rng = np.r_[self.ub[k * nf:(k + 1) * nf] - self.lb[k * nf:(k + 1) * nf],
                             self.ub[W * nf:] - self.lb[W * nf:]]
                 eff = np.sqrt((Jk ** 2).sum(0)) * rng
                 self._jactive[k] = eff >= self.JAC_ACTIVE * max(float(eff.max()), 1e-300)
                 self._jactive[k][nf:] = True
             else:
-                Jk, dk = self._jcache[k][0].copy(), self._jcache[k][1].copy()
-                Jk[:, used[k]], dk[used[k]] = Jp, dp
-            self._jcache[k] = (Jk, dk)
+                Jk, dk, lk = self._jcache[k][0].copy(), self._jcache[k][1].copy(), self._jcache[k][2].copy()
+                Jk[:, used[k]], dk[used[k]], lk[used[k]] = Jp, dp, dlh
+            self._jcache[k] = (Jk, dk, lk)
             dR.append(dk)
+            dLh.append(lk)
             cols = np.r_[k * nf + np.arange(nf), W * nf + np.arange(ns)]
             data.append(Jk.ravel()); indices.append(np.tile(cols, Jk.shape[0]))
         ntot = int(self.rows[-1])
@@ -358,6 +374,17 @@ class Sequence:
                     vv += (list(-c * a_ * dR[k - 1][:nf, q]) + list(c * dR[k][:nf, q]) + list(-c * b_ * dR[k + 1][:nf, q])
                            + list(c * (dR[k][nf:, q] - a_ * dR[k - 1][nf:, q] - b_ * dR[k + 1][nf:, q])))
                 row += 1
+        if self.prior is not None:
+            for k in range(W):
+                scl = self.prior.scales(float(self._h[k]), bool(self.after[k]))
+                slo = self.prior.dlnh(float(self._h[k]), self._rep[k], bool(self.after[k]))
+                for law, c, s in zip(self.prior.laws, scl, slo):
+                    if c > 0:
+                        g = c * dR[k][:, law["q"]] + s * dLh[k]
+                        rr += [row] * (nf + ns)
+                        cc += list(k * nf + loc) + list(sha)
+                        vv += list(g)
+                    row += 1
         if row:
             J = sp.vstack([J, sp.coo_matrix((vv, (rr, cc)), shape=(row, W * nf + ns))], format="csr")
         self.njac += 1
@@ -365,6 +392,7 @@ class Sequence:
         self.log(f"sequence {self.scan}: iteration {self.njac}  sum dev5 {s['sum_dev5']:.2f}  median {s['median_dev5']:.2f}  "
                  f"penalty monotone {s['penalty_monotone']:.3f} "
                  + (f"far {s['penalty_far']:.3f} " if self.sf > 0 else "") + f"smooth {s['penalty_smooth']:.3f}"
+                 + (f" prior {s['penalty_prior']:.3f}" if self.prior is not None else "")
                  + (f"  kappa {math.exp(sh[0]):.3f}  dt {sh[1]:+.2f} s" if ns else "") + f"  ({time.time() - self.t0:.0f} s)"
                  + (f"  columns {sum(len(c) for c in used)}/{W * nc}" if self.JAC_REFRESH > 1 else ""))
         if self.on_iter is not None:
@@ -384,10 +412,10 @@ class Sequence:
                              tr_solver="lsmr", x_scale="jac", max_nfev=nfev, ftol=1e-5, xtol=1e-8)
 
 
-def refine(sq, x0, reps, mono, tol, weight, smooth, smooth_weight, nfev, outdir, far_weight=0.0):
-    'sq: Sequence of the time-ordered windows; x0: their start vectors (pnames order). Returns'
+def refine(sq, x0, reps, mono, tol, weight, smooth, smooth_weight, nfev, outdir, far_weight=0.0, prior=None):
+    'sq: Sequence of the time-ordered windows; x0: their start vectors (pnames order); prior: GrowthPrior or None.'
     t0 = time.time()
-    sq.setup(x0, reps, mono, tol, weight, smooth, smooth_weight, far_weight)
+    sq.setup(x0, reps, mono, tol, weight, smooth, smooth_weight, far_weight, prior)
     sq._base(sq.z0)
     start = sq.state()
     r = sq.solve(nfev)
@@ -426,6 +454,8 @@ def refine(sq, x0, reps, mono, tol, weight, smooth, smooth_weight, nfev, outdir,
                         + (" (also against earlier windows)" if len(sq.fi) else ""))
     if sq.smooth:
         coupling.append("smooth in ln time: " + ", ".join(m for _, _, m in sq.smooth))
+    if sq.prior is not None:
+        coupling.append(f"growth-law prior of {sq.prior.system} ({sq.prior.n_scans} scans)")
     summ = dict(n_windows=sq.W, workers=sq.n, max_nfev=int(nfev), nfev=int(r.nfev), njev=int(r.njev),
                 status=int(r.status), message=str(r.message), weight=float(weight),
                 monotone=[m for _, _, m in sq.mono], start=start, end=end, decreases=dec, far=far,
@@ -435,5 +465,9 @@ def refine(sq, x0, reps, mono, tol, weight, smooth, smooth_weight, nfev, outdir,
                              dt_at_bound=bool(min(sh[1] - sq.lb[-1], sq.ub[-1] - sh[1]) < 1e-3))
                         if sh is not None else None),
                 coupling=" + ".join(coupling) if coupling else "none",
+                prior=(dict(sq.prior.describe(), windows=[dict(t=float(sq.t[k]), gate=round(sq.prior.gate(float(sq._h[k]), bool(sq.after[k])), 4),
+                                                              residuals=[round(float(v), 4) for v in sq.prior.residuals(float(sq._h[k]), sq._rep[k], bool(sq.after[k]))])
+                                                         for k in range(sq.W)])
+                       if sq.prior is not None else None),
                 seconds=time.time() - t0)
     return wins, summ

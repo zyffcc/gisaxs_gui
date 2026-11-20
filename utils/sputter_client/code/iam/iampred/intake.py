@@ -194,12 +194,14 @@ def reading_summary(intake_dir, run, workers, t_import):
     import time as _time
     read_s = wall_s = mb = 0.0
     frames = 0
+    left = []
     for meta in Path(intake_dir).glob("chunk_*.json"):
         try:
             doc = json.loads(meta.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
         frames += len(doc.get("rows", []))
+        left += [s.get("frame") for s in doc.get("skipped") or []]
         read_s += float(doc.get("read_seconds") or 0.0)
         wall_s += float(doc.get("wall_seconds") or 0.0)
         mb += float(doc.get("read_bytes") or 0) / 1e6
@@ -209,6 +211,9 @@ def reading_summary(intake_dir, run, workers, t_import):
                seconds=round(_time.perf_counter() - t_import, 1), read_s_per_frame=None if per is None else round(per, 4),
                read_share=None if share is None else round(share, 3), mb_read=round(mb, 1),
                slow=bool(per is not None and share is not None and per >= SLOW_READ_S and share >= SLOW_SHARE))
+    if left:
+        out.update(frames_left_out=len(left), left_out=sorted(left)[:20])
+        print(f"left out {len(left)} damaged frame(s) that cannot be decoded: {', '.join(sorted(left)[:20])}", flush=True)
     print(f"reading: {frames} of {out['frames_total']} frames in {out['seconds']:.0f} s with {workers} processes; disk "
           f"{out['read_s_per_frame']} s per frame ({100 * (share or 0):.0f} % of the processes' time)"
           + (": the disk is the slow part" if out["slow"] else ""), flush=True)
@@ -228,7 +233,7 @@ def _windows(t_dep, t_first, t_last, step, nmax):
 
 
 def _bins_and_onsets(out, t_dep_given):
-    '(first and last bin time, onset candidates, selection indices, header times) of the import read so far: its bins'
+    '(first and last bin time, onset candidates, indices of the frames read, header times, selection indices) of the'
     import numpy as np
     import iam as M
     from tio2_explore import onset
@@ -245,8 +250,14 @@ def _bins_and_onsets(out, t_dep_given):
     finally:
         shutil.rmtree(out / "binned", ignore_errors=True)
     cands = sorted({float(t) for t in (t_on, dark[0] if dark else None, t_dep_given) if t is not None})
-    return (float(times[0]), float(times[-1]), cands, np.asarray(run["selection_indices"], int),
-            np.array([r["time_s"] for r in rows], float))
+    sel = np.asarray(run["selection_indices"], int)
+    left = {s.get("frame") for s in run.get("skipped_frames") or []}
+    idx = sel
+    if left:
+        from sputtergisaxs.polymer_dev_intake import frames
+        names = [f.name for f in frames(Path(run["input_source"]))]
+        idx = np.array([i for i in sel if names[i] not in left], int)
+    return (float(times[0]), float(times[-1]), cands, idx, np.array([r["time_s"] for r in rows], float), sel)
 
 
 def select_frames(a, out, read):
@@ -264,7 +275,7 @@ def select_frames(a, out, read):
     sel = set(range(head)) | set(range(n - tail, n))
     for rnd in range(4):
         read(sorted(sel))
-        t_first, t_last, cands, idx, ts = _bins_and_onsets(out, a.t_dep)
+        t_first, t_last, cands, idx, ts, tried = _bins_and_onsets(out, a.t_dep)
         full_end = ts[idx < head].max()
         if not cands or max(cands) + 3.0 > full_end:
             print(f"frames: the onset is not within the first {full_end:.1f} s read in full: reading every frame", flush=True)
@@ -281,7 +292,7 @@ def select_frames(a, out, read):
                 after = idx[-1:]
             if len(before) and len(after):
                 i0, i1 = before.max(), after.min()
-                if np.isin(np.arange(i0, i1 + 1), idx).all():
+                if np.isin(np.arange(i0, i1 + 1), tried).all():
                     continue
             j0 = int(np.floor(np.interp(lo, ts, idx))) - 3
             j1 = int(np.ceil(np.interp(hi, ts, idx))) + 3
@@ -420,7 +431,7 @@ def _intake(a, root, mask, msha, energy, lam, out):
     marker = dict(file=mask.name, path=str(mask), sha256=msha, label=a.label, source=str(Path(a.frames).resolve()),
                   alpha_i_deg=a.alpha_i, energy_ev=energy, metal=a.metal, builder="iampred.intake",
                   started_utc=t0.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                  built_utc=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), frames=run["selected_frames"],
+                  built_utc=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), frames=len(rows),
                   received_frames=run["received_frames"], time_first_s=rows[0]["time_s"], time_last_s=rows[-1]["time_s"],
                   geometry=b.get("geometry"), auto_mask=auto, selection=selection,
                   reading=reading)
@@ -444,8 +455,8 @@ def _intake(a, root, mask, msha, energy, lam, out):
         scan["t_sput"] = a.t_sput
     (out / "scan.json").write_text(json.dumps(scan, indent=1) + "\n", encoding="utf-8", newline="\n")
     _onset_step(out, scan, a)
-    print(f"{a.label}: {run['selected_frames']} frames, {rows[0]['time_s']:.2f}-{rows[-1]['time_s']:.2f} s -> {out}")
-    LV.emit("imported", frames=run["selected_frames"], t_first=LV.rounded(rows[0]["time_s"], 3),
+    print(f"{a.label}: {len(rows)} frames, {rows[0]['time_s']:.2f}-{rows[-1]['time_s']:.2f} s -> {out}")
+    LV.emit("imported", frames=len(rows), t_first=LV.rounded(rows[0]["time_s"], 3),
             t_last=LV.rounded(rows[-1]["time_s"], 3), onset=LV.rounded(scan.get("t_dep"), 3))
 
 

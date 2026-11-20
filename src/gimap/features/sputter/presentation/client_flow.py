@@ -252,13 +252,14 @@ class SputterClientMixin:
     def _client_values(self) -> dict:
         return {"substrate": self.substrate.currentData(), "rate": _float(self.sample_rate.text()),
                 "unit": self.rate_unit.currentData(), "qcm": self.qcm_check.isChecked(),
-                "mode": self.mode_box.currentData(),
+                "mode": self.mode_box.currentData(), "prior": self.prior_box.currentData(),
                 "onset": _float(self.onset.text()), "duration": _float(self.duration.text()),
                 "film": _float(self.film_thickness.text())}
 
     def _apply_client_values(self, values: dict) -> None:
         """Values of the bar and of Analyze options (a key that is absent leaves its field as it is)."""
-        for key, box in (("substrate", self.substrate), ("mode", self.mode_box), ("unit", self.rate_unit)):
+        for key, box in (("substrate", self.substrate), ("mode", self.mode_box), ("prior", self.prior_box),
+                         ("unit", self.rate_unit)):
             index = box.findData(values.get(key)) if key in values else -1
             if index >= 0:
                 box.setCurrentIndex(index)
@@ -280,7 +281,8 @@ class SputterClientMixin:
             energy_ev=energy * 1000. if is_energy and energy is not None else None,
             wavelength_nm=None if is_energy else energy, beam_col=geometry["beam_col"], beam_row=geometry["beam_row"],
             sample_roll_deg=geometry["roll"], mask_file=Path(geometry["mask"]) if geometry["mask"] else None,
-            mode=client["mode"], onset_s=client["onset"], duration_s=client["duration"], film_nm=client["film"])
+            mode=client["mode"], onset_s=client["onset"], duration_s=client["duration"], film_nm=client["film"],
+            growth_prior=client["prior"] or "auto")
 
     def _remember_client(self, request: ClientRequest) -> None:
         self._remember(request.scan_folder)  # the geometry, for this folder and as the last used

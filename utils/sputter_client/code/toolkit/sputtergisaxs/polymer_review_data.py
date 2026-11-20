@@ -56,7 +56,7 @@ def intake_rows(intake):
         if sha(p)!=c['sha256'] or sha(meta)!=c['metadata_sha256']:raise ValueError('Original count/metadata SHA changed')
         doc=read(meta)
         for j,r in enumerate(doc['rows']):rows.append(dict(metadata=r,chunk=c['file'],chunk_row=j))
-    if len(rows)!=run['selected_frames']:raise ValueError('Intake denominator differs')
+    if len(rows)+len(run.get('skipped_frames') or [])!=run['selected_frames']:raise ValueError('Intake denominator differs')
     t=clock([r['metadata'] for r in rows])
     for r,ti in zip(rows,t):r['time_s']=float(ti)
     return run,rows

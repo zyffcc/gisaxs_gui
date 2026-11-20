@@ -226,3 +226,16 @@ def test_the_new_texts_speak_chinese(tmp_path):
     assert page.workers_box.itemText(0) == "Automatic (5)"
     assert _plain(page.report_steps.text()).startswith("Time per step")
     _close(page)
+
+
+def test_the_report_names_damaged_frames_and_the_growth_law_prior():
+    from src.gimap.features.sputter.presentation.result_tabs import facts_html, steps_html
+    left = dict(READING, frames_left_out=4, left_out=["zz_00007.cbf", "zz_00008.cbf", "zz_00009.cbf", "zz_00010.cbf"])
+    words = _plain(steps_html({"steps": STEPS[:1], "reading": left}))
+    assert "4 damaged frames left out: zz_00007.cbf, zz_00008.cbf, zz_00009.cbf …" in words
+    assert "damaged" not in _plain(steps_html({"steps": STEPS[:1], "reading": READING}))
+    used = {"growth_prior": {"setting": "auto", "used": True, "prior": {"system": "Ag/PS"}}}
+    assert "Growth-law prior (auto): used, laws of Ag/PS" in _plain(facts_html(used, ""))
+    unused = {"growth_prior": {"setting": "off", "used": False, "prior": None}}
+    assert "Growth-law prior (off): not used" in _plain(facts_html(unused, ""))
+    assert "Growth-law prior" not in _plain(facts_html({"mode": "refine"}, ""))  # a package before the prior

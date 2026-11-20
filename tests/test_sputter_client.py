@@ -292,6 +292,11 @@ def test_the_options_of_the_import_follow_the_request(tmp_path):
     # the film thickness belongs to a polymer film: Si has none
     runner.run(_request(tmp_path / "scan", film_nm=40.0), tmp_path / "out2", lambda _line: None, lambda: False)
     assert "--poly-t" not in process.calls[1][0]
+    # the growth-law prior goes to the package only when it is not auto (an older package knows no --growth-prior)
+    assert "--growth-prior" not in command and "--growth-prior" not in process.calls[1][0]
+    runner.run(_request(tmp_path / "scan", growth_prior="off"), tmp_path / "out4", lambda _line: None, lambda: False)
+    chosen = process.calls[2][0]
+    assert chosen[chosen.index("--growth-prior") + 1] == "off" and chosen.index("--growth-prior") < chosen.index("--")
     with pytest.raises(OSError, match="mask file cannot be read"):
         runner.run(_request(tmp_path / "scan", mask_file=tmp_path / "gone.npy"), tmp_path / "out3", lambda _l: None,
                    lambda: False)
@@ -308,6 +313,10 @@ def test_the_label_names_the_import_and_the_folder_the_whole_request(tmp_path):
     assert _request(tmp_path / "scan", mode="full").label() == request.label()
     assert _request(tmp_path / "scan", mode="full").digest("p") != request.digest("p")
     assert request.digest("p") != request.digest("another package")
+    # the growth-law prior: auto is the package's default and leaves the names as they were; on / off name their own
+    assert _request(tmp_path / "scan", growth_prior="auto").digest("p") == request.digest("p")
+    on, off = (_request(tmp_path / "scan", growth_prior=g) for g in ("on", "off"))
+    assert len({request.digest("p"), on.digest("p"), off.digest("p")}) == 3 and on.label() == request.label()
     # a film thickness changes nothing on a substrate without a polymer film
     assert _request(tmp_path / "scan", film_nm=30.0).label() == request.label()
     assert _request(tmp_path / "scan", substrate="PS", film_nm=30.0).label() != \
@@ -319,11 +328,12 @@ def test_the_label_names_the_import_and_the_folder_the_whole_request(tmp_path):
 
 def test_a_request_says_what_is_missing(tmp_path):
     assert _request(tmp_path / "scan").problems() == []
-    rate, substrate, mode, duration, film = CLIENT_PROBLEMS
+    rate, substrate, mode, prior, duration, film = CLIENT_PROBLEMS
     assert _request(tmp_path / "scan", rate_nm_s=None).problems() == [rate]
     assert _request(tmp_path / "scan", rate_nm_s=0.0).problems() == [rate]
     assert _request(tmp_path / "scan", substrate="glass").problems() == [substrate]
     assert _request(tmp_path / "scan", mode="fast").problems() == [mode]
+    assert _request(tmp_path / "scan", growth_prior="maybe").problems() == [prior]
     assert _request(tmp_path / "scan", duration_s=0.0, film_nm=-1.0).problems() == [duration, film]
     several = _request(tmp_path / "scan", energy_ev=None, sdd_mm=None, beam_row=None).problems()
     assert len(several) == 3 and all("Give" in problem for problem in several)

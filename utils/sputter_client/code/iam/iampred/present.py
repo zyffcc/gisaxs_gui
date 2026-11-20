@@ -227,7 +227,7 @@ def _windows(args):
                                 component_fractions=_fractions(imgs, cimgs, keys))
             best = min(range(len(recs)), key=lambda i: recs[i]["fit_deviation"])
             out.append(dict(t=t, t_rel=round(float(t - s.t_dep), 3), h_nom=round(float(ctx.h_nom_ctx), 4), image=name, arrays=f"w_{t:g}.npz",
-                            entries=recs, pick=recs[best]["label"]))
+                            entries=recs, pick=recs[best]["label"], _sub=str(getattr(s, "sub", "") or "")))
         except (Exception, SystemExit) as e:
             out.append(dict(t=t, error=f"{type(e).__name__}: {str(e)[:160]}"))
         LV.emit("drawn", t=t, entries=len(out[-1].get("entries") or ()))
@@ -403,10 +403,11 @@ def main():
     if any(c is None for c in res):
         raise SystemExit(f"{scan}: not a scan of family {cfg['family']} (no forward settings for it)")
     wins = sorted((w for c in res for w in c), key=lambda w: w["t"])
+    subs = sorted({w.pop("_sub") for w in wins if w.get("_sub")})
     for w in wins:
         w["path"] = path.get(round(w["t"], 3))
     smooth_path(wins)
-    substrate = (summ.get("scan_json") or {}).get("sub") or (cfg["scans"].get(scan) or {}).get("sub")
+    substrate = (summ.get("scan_json") or {}).get("sub") or (subs[0] if subs else None)
     try:
         process = process_analysis(wins, summ["family"], st["info"].get("metal"), substrate)
         fig = process_figure(main_dir, wins, process) if process.get("source") else None

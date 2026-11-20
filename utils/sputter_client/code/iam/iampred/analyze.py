@@ -30,6 +30,14 @@ FAMILIES = {("Au", "Si"): ("si_p3h", None), ("Ag", "Si"): ("si_p3h", None),
 ALTERNATIVES = {"polyag_p3": ["polyag_v5"], "si_p3h": ["si_v6"], "cu_p5": ["cu_v4"]}
 
 
+PRIOR_DEFAULT_ON = {("Ag", "PS")}
+
+
+def growth_prior_used(setting, metal, substrate):
+    'Whether the whole-scan refinement gets the growth-law prior: on, off, or auto (PRIOR_DEFAULT_ON).'
+    return setting == "on" or (setting == "auto" and (metal, substrate) in PRIOR_DEFAULT_ON)
+
+
 MODES = dict(quick=dict(refine=0, sequence=0, max_windows=60), refine=dict(refine=0, sequence=6, max_windows=24),
              full=dict(refine=30, sequence=30, max_windows=96))
 FILES = dict(report_md="REPORT.md", report_png="report.png", report_csv="report.csv", windows_csv="windows.csv",
@@ -122,9 +130,13 @@ def main(argv=None):
     ap.add_argument("--like")
     ap.add_argument("--alternatives", choices=["auto", "on", "off"], default="auto")
     ap.add_argument("--data")
+    ap.add_argument("--growth-prior", choices=["auto", "on", "off"], default="auto",
+                    help="growth-law prior of the whole-scan refinement: auto = on for Ag on PS (held-out test passed), "
+                         "on = for every system with a law in the package's reference, off = never")
     a = ap.parse_args(argv)
     fam, like = choose(a.metal, a.substrate) if not a.family else (a.family, None)
     like = a.like or like
+    a.prior_used = growth_prior_used(a.growth_prior, a.metal, a.substrate)
     if a.mode == "auto":
         a.mode = "quick" if fam.split("_")[0] in ("si", "tio2") else "refine"
         lam = _lam_of(extra)
@@ -229,6 +241,7 @@ def main(argv=None):
             args = [f, "--scan", a.label, "--out", out / f, "--times", "all", "--step", a.step, "--max-windows",
                     a.max_windows or mode["max_windows"], "--k", 3, "--workers", a.workers, "--refine", refine]
             args += ["--sequence", sequence] if sequence else []
+            args += ["--growth-prior", "default"] if sequence and a.prior_used else []
             args += ["--like", like] if like else []
             return args + (["--data", data] if data is not None else [])
 
@@ -393,6 +406,17 @@ def _analysis(a, out, data, fam, tried, like, steps, status):
         if reading:
             res["reading"] = reading
     res["workers"] = int(a.workers)
+
+
+    gp = None
+    try:
+        gp = ((json.loads((out / fam / "summary.json").read_text(encoding="utf-8")).get("sequence_setup") or {})
+              .get("growth_prior") or {}).get("prior")
+    except (OSError, ValueError, AttributeError):
+        gp = None
+    res["growth_prior"] = dict(setting=a.growth_prior, requested=bool(a.prior_used and MODES[a.mode]["sequence"]),
+                               used=bool(gp and gp.get("active")), prior=gp,
+                               default_on=sorted(f"{m}/{s}" for m, s in PRIOR_DEFAULT_ON))
     if getattr(a, "joint_note", None) and status != "preliminary":
         res["joint_fit"] = a.joint_note
     (out / "analysis.json").write_text(json.dumps(res, indent=1), encoding="utf-8")

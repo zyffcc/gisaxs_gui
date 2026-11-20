@@ -32,7 +32,7 @@ def summed(files, n_sample=N_SAMPLE):
     for i in ids:
         try:
             image, _ = load_frame(files[i])
-        except OSError:
+        except (OSError, ValueError):
             continue
         bad = ~np.isfinite(image) | (image < 0)
         good = np.where(bad, 0.0, image)

@@ -46,6 +46,10 @@ MODE_CHOICES = (("Auto", "auto", "Quick for Si and TiO₂, Refine for polymer su
                                    "time window."),
                 ("Refine", "refine", "Also refines the solution of every window (minutes per window on a polymer)."),
                 ("Full", "full", "A longer refinement of every window and of the whole scan together: hours."))
+PRIOR_CHOICES = (("Auto", "auto", "On where it passed a held-out test (Ag on PS), off for the other systems."),
+                 ("On", "on", "Before the film forms, the whole-scan refinement keeps the size and the distance "
+                              "near the growth laws found for the metal on this substrate."),
+                 ("Off", "off", "The whole-scan refinement without the growth laws."))
 VIEW_CHOICES = (("Main Screen", "main"), ("Details", "details"))
 ADD_SAMPLES = "Add Samples…"
 ADD_SAMPLES_TIP = ("A folder of samples (each folder in it with CBF frames is one sample), one sample's folder or one CBF "
@@ -496,6 +500,11 @@ class SputterMainView:
         for index, (label, key, tip) in enumerate(MODE_CHOICES):
             self.mode_box.addItem(label, key)
             self.mode_box.setItemToolTip(index, tip)
+        self.prior_box = SegmentedControl(section)
+        self.prior_box.setObjectName("sputterPrior")
+        for index, (label, key, tip) in enumerate(PRIOR_CHOICES):
+            self.prior_box.addItem(label, key)
+            self.prior_box.setItemToolTip(index, tip)
         self.onset = number_edit(section, "from the data")
         self.onset.setToolTip(ONSET_TIP)
         self.duration = number_edit(section, "end of the scan")
@@ -513,6 +522,7 @@ class SputterMainView:
         self.package_button = QPushButton("Choose Folder…", section)
         self.package_button.setToolTip("The folder of the analysis package (it holds code and models).")
         form.addRow("Mode", self.mode_box)
+        form.addRow("Growth-law prior", self.prior_box)
         form.addRow("Parallel processes", self.workers_box)
         form.addRow("Start of deposition (s)", self.onset)
         form.addRow("Deposition duration (s)", self.duration)
@@ -541,5 +551,5 @@ class SputterMainView:
         return section
 
 
-__all__ = ["CONNECTED_HIDDEN", "CONNECTED_TILES", "RATE_UNITS", "RATE_UNIT_TIP", "DEVIATION_CAPTION", "ENTRY_HINT", "ElidedLabel", "IMAGE_CHOICES", "KIND_CHOICES", "MODE_CHOICES", "SAMPLE_METALS", "SUBSTRATE_CHOICES",
+__all__ = ["CONNECTED_HIDDEN", "CONNECTED_TILES", "RATE_UNITS", "RATE_UNIT_TIP", "DEVIATION_CAPTION", "ENTRY_HINT", "ElidedLabel", "IMAGE_CHOICES", "KIND_CHOICES", "MODE_CHOICES", "PRIOR_CHOICES", "SAMPLE_METALS", "SUBSTRATE_CHOICES",
            "STEPS_BUTTON", "STEPS_TIP", "ShownComboBox", "SputterMainView", "TILES", "VIEW_CHOICES", "WORKERS_TIP"]

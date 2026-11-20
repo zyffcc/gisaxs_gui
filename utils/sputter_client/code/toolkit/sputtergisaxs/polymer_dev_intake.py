@@ -43,6 +43,10 @@ def frames(path):
     return files
 
 
+class DamagedFrame(ValueError):
+    'A frame file that cannot be decoded - truncated or damaged on disk (2026-11-20: one truncated CBF of a scan'
+
+
 def load_frame(path):
 
     for attempt in range(6):
@@ -56,7 +60,9 @@ def load_frame(path):
 def _load_frame_once(path):
     raw=_read_raw(path);header=raw[:16384].decode('latin1')
     cutoff=re.search(r'Count_cutoff\s+([\d.eE+-]+)',header)
-    image,meta=read_cbf_bytes(raw,count_limit=float('inf'))
+    try:image,meta=read_cbf_bytes(raw,count_limit=float('inf'))
+    except (ValueError,IndexError,KeyError,EOFError) as error:
+        raise DamagedFrame(f'{Path(path).name}: {type(error).__name__}: {error}'[:300]) from error
     limit=float(cutoff.group(1)) if cutoff else None
     removed=int(np.sum(image>=limit)) if limit is not None else 0
     if limit is not None:image[image>=limit]=np.nan
@@ -69,7 +75,9 @@ def _load_frame_once(path):
 def auto_center(files,sdd_mm,alpha_i_deg,pixel_mm=.172):
     ids=np.unique(np.linspace(0,len(files)-1,min(9,len(files)),dtype=int));points=[];candidates=[]
     for i in ids:
-        im,meta=load_frame(files[i]);ny,nx=im.shape
+        try:im,meta=load_frame(files[i])
+        except DamagedFrame:continue
+        ny,nx=im.shape
         sm=gaussian_filter(np.where(np.isfinite(im),im,0.),1.)
 
 
@@ -83,13 +91,16 @@ def auto_center(files,sdd_mm,alpha_i_deg,pixel_mm=.172):
         ry,cx=np.indices(sub.shape)
         if sub.sum()>0:row=float((sub*(ry+r0)).sum()/sub.sum());col=float((sub*(cx+c0)).sum()/sub.sum())
         points.append([col,row]);candidates.append(dict(frame=files[i].name,peaks=cand))
+    if not points:raise ValueError('No readable frame for the automatic centre; supply beam centre')
     points=np.asarray(points);centre=np.median(points,axis=0);mad=np.median(abs(points-centre),axis=0)
     col=float(centre[0]);separation=sdd_mm*np.tan(2*np.radians(alpha_i_deg))/pixel_mm
 
 
     profiles=[]
     for i in ids:
-        im,_=load_frame(files[int(i)]);strip=im[:,max(0,int(round(col))-3):int(round(col))+4]
+        try:im,_=load_frame(files[int(i)])
+        except DamagedFrame:continue
+        strip=im[:,max(0,int(round(col))-3):int(round(col))+4]
         valid=np.isfinite(strip).sum(axis=1)>strip.shape[1]/2
         sums=np.nansum(strip,axis=1);count=np.isfinite(strip).sum(axis=1)
         prof=np.divide(sums,count,out=np.full(len(sums),np.nan),where=valid)
@@ -112,7 +123,11 @@ def auto_center(files,sdd_mm,alpha_i_deg,pixel_mm=.172):
     dbrow=float((lower_row+row+separation)/2)
 
 
-    image,_=load_frame(files[int(ids[len(ids)//2])]);ny,nx=image.shape
+    for i in sorted(ids,key=lambda i:abs(int(i)-int(ids[len(ids)//2]))):
+        try:image,_=load_frame(files[int(i)]);break
+        except DamagedFrame:continue
+    else:raise ValueError('No readable frame for the automatic centre; supply beam centre')
+    ny,nx=image.shape
     ys=np.arange(max(0,int(row)-250),min(ny,int(row)+180),3);offset=np.arange(20,min(350,int(col)-2,nx-int(col)-2),3)
     left=image[np.ix_(ys,np.rint(col-offset).astype(int))];right=image[np.ix_(ys,np.rint(col+offset).astype(int))]
     ok=np.isfinite(left)&np.isfinite(right)
@@ -137,7 +152,12 @@ def extract_chunk(task):
         if record['geometry']!=geometry:raise ValueError('Existing intake chunk has another geometry')
         meta.unlink();dest.unlink(missing_ok=True)
     stats0=dict(READ_STATS);start=time.perf_counter()
-    first,h_first=load_frame(files[0]);shape=first.shape
+    skipped=[];first=None
+    for i0,file in enumerate(files):
+        try:first,h_first=load_frame(file);break
+        except DamagedFrame as error:skipped.append(dict(frame=Path(file).name,reason=str(error)))
+    if first is None:raise ValueError(f'No frame of intake chunk {index} can be read: '+'; '.join(s['reason'] for s in skipped))
+    shape=first.shape
 
 
     crop=[max(0,int(round(geometry['db_row']-939.))),min(shape[0],int(round(geometry['db_row']+31.))),max(0,int(round(geometry['db_col']-556.3))),min(shape[1],int(round(geometry['db_col']+553.7)))]
@@ -146,7 +166,12 @@ def extract_chunk(task):
     mask=np.load(maskpath).astype(bool) if maskpath else None
     ys=[];ps=[];alt_y=[];alt_p=[];rows=[]
     for i,file in enumerate(files):
-        image,h=(first.copy(),dict(h_first)) if i==0 else load_frame(file);Y,E=mapping.project(image,h['exposure_s'],mask)
+        if i<i0:continue
+        if i==i0:image,h=first.copy(),dict(h_first)
+        else:
+            try:image,h=load_frame(file)
+            except DamagedFrame as error:skipped.append(dict(frame=Path(file).name,reason=str(error)));continue
+        Y,E=mapping.project(image,h['exposure_s'],mask)
         P=E/h['exposure_s'];assert np.allclose(P,np.rint(P)) and np.max(P)<65535 and np.max(Y)<2**32
         ys.append(Y.astype(np.uint32));ps.append(np.rint(P).astype(np.uint16))
         if second:
@@ -158,7 +183,7 @@ def extract_chunk(task):
     if second:arrays.update(Y_12keV=np.asarray(alt_y),P_12keV=np.asarray(alt_p))
     np.savez_compressed(dest,**arrays)
     record=dict(files=files,geometry=geometry,crop=crop,mask=maskpath or 'Native finite/nonnegative/header-cutoff pixels; no transferred mask',
-        rows=rows,array_file=dest.name,array_sha256=sha(dest),wall_seconds=time.perf_counter()-start,raw_saved=False,
+        rows=rows,skipped=skipped,array_file=dest.name,array_sha256=sha(dest),wall_seconds=time.perf_counter()-start,raw_saved=False,
         read_seconds=READ_STATS['seconds']-stats0['seconds'],read_bytes=READ_STATS['bytes']-stats0['bytes'])
     write(meta,record);print('INTAKE_CHUNK',out.name,index,len(files),round(record['wall_seconds'],1),flush=True);return record
 
@@ -188,8 +213,11 @@ def prepare(input_path,out,*,energy_ev,sdd_mm,alpha_i_deg,metal,beam_col=None,be
     with ProcessPoolExecutor(max_workers=workers,mp_context=ctx,initializer=_init_reader,initargs=(ctx.BoundedSemaphore(READERS) if READERS>0 else None,)) as pool:
         for future in as_completed([pool.submit(extract_chunk,t) for t in tasks]):records.append(future.result())
     records.sort(key=lambda r:r['array_file']);rows=[r for chunk in records for r in chunk['rows']]
-    if len(rows)!=len(files):raise ValueError('Frame denominator changed')
+    skipped=[x for chunk in records for x in chunk.get('skipped',[])]
+    if len(rows)+len(skipped)!=len(files):raise ValueError('Frame denominator changed')
+    if not rows:raise ValueError('No frame of the selection can be read')
     run=dict(status='completed',input_source=str(input_path),received_frames=all_count,selected_frames=len(files),selection_indices=selected.tolist(),
+        skipped_frames=skipped,
         geometry=geometry,centre=centre,metal=metal,model_metal='Ag' if metal=='Cu' else metal,system_note=system_note,
         Cu_density_ratio=.89 if metal=='Cu' else 'Not applicable',Cu_scope='Cu以Ag模型近似' if metal=='Cu' else 'Native metal label',
         compare_12keV=compare_12keV,chunks=[dict(file=r['array_file'],sha256=r['array_sha256'],metadata_sha256=sha(out/Path(r['array_file']).with_suffix('.json'))) for r in records],
