@@ -10,7 +10,7 @@ SPUTTER_PROCESS_ZH = {
     "The model image of the solution shown split into its physical terms (grains, film, substrate, …), and how "
     "each term's share changes.":
         "把所选解的模型图拆成各个物理项（晶粒、膜、基底……），并给出每一项占比的变化。",
-    "{name} · {share}": "{name} · {share}",
+    "{name} · {share}": "{name}：{share}",
     "Share of the model counts": "占模型计数的比例",
     "This result does not split the model into its physical terms: analyze it again with the current analysis "
     "package.": "这个结果没有把模型拆成物理项：请用当前的分析包重新分析。",
