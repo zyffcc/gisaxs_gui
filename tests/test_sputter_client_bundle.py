@@ -164,7 +164,8 @@ def test_the_models_carry_the_hashes_of_this_code(tmp_path):
     manifest = _manifest()
     families = manifest["families"]
     script = ("import json, sys\nsys.path.insert(0, '.')\nfrom iampred import registry as REG\nimport static_nn as SN\n"
-              f"out = {{f: [REG.load(f)['family_hash'], REG.forward_hash(), REG.pred_hash()] for f in {families!r}}}\n"
+              # the code hash depends on the family (a k_fz family also covers the module that makes its input)
+              f"out = {{f: [REG.load(f)['family_hash'], REG.forward_hash(), REG.pred_hash(REG.load(f))] for f in {families!r}}}\n"
               "out['static'] = SN.forward_hash()\nprint(json.dumps(out))\n")
     done = subprocess.run([sys.executable, "-I", "-B", "-c", script], cwd=str(PKG / "code" / "iam"), capture_output=True,
                           text=True, timeout=300, env=_package_environment(tmp_path))

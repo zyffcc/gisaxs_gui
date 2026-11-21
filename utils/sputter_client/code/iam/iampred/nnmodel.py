@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 
@@ -216,3 +217,56 @@ def load(path, device="cpu"):
         from . import flow
         return flow.FlowPredictor(path)
     return NumpyPredictor(path) if str(path).endswith(".npz") else TorchPredictor(path, device)
+
+
+SAME_META = ("family", "params", "lb", "ub", "reported", "scalars", "features")
+
+
+class Ensemble:
+    'Several networks of one family (2026-11-21, results/iam/seedcmp_20261121: the same training with other seeds).'
+
+    def __init__(self, members, k):
+        self.members, self.k = members, int(k)
+        self.meta = members[0].meta
+        self.n_members = len(members)
+
+    def candidates(self, X, S):
+        per = [P.candidates(X, S) for P in self.members]
+        return [[dict(c, weight=c["weight"] / self.n_members, member=m) for m, cs in enumerate(win) for c in cs[:self.k]]
+                for win in zip(*per)]
+
+    def intervals(self, X, S, n=400, seed=0):
+        if all(hasattr(P, "samples") for P in self.members):
+            nm = max(1, n // self.n_members)
+            per = [P.samples(X, S, n=nm, seed=seed + i) for i, P in enumerate(self.members)]
+            return np.array([np.percentile(np.concatenate([rs for _, rs in win]), [2.5, 16, 50, 84, 97.5], axis=0).T
+                             for win in zip(*per)])
+        return np.mean([P.intervals(X, S, n=n, seed=seed) for P in self.members], axis=0)
+
+
+def member_paths(nn_dir):
+    'The networks of a family folder: model.npz first, then model_*.npz in name order (a seed ensemble).'
+    nn_dir = Path(nn_dir)
+    extra = sorted(p for p in nn_dir.glob("model_*.npz"))
+    return [nn_dir / "model.npz"] + extra
+
+
+def load_many(paths, k, device="cpu"):
+    'One path: that network (as load); several: an Ensemble, after checking that they are networks of the same'
+    paths = [str(p) for p in paths]
+    if len(paths) == 1:
+        return load(paths[0], device)
+    return ensemble_of([load(p, device) for p in paths], k, paths)
+
+
+def ensemble_of(members, k, names=None):
+    names = names or [str(i) for i in range(len(members))]
+    def same(key, a, b):
+        if key in ("lb", "ub") and a is not None and b is not None and len(a) == len(b):
+            return bool(np.allclose(np.asarray(a, float), np.asarray(b, float), rtol=1e-12, atol=1e-12))
+        return a == b
+    for nm, P in zip(names[1:], members[1:]):
+        bad = [key for key in SAME_META if not same(key, P.meta.get(key), members[0].meta.get(key))]
+        if bad:
+            raise SystemExit(f"networks of an ensemble differ in {bad}: {names[0]} / {nm}")
+    return Ensemble(members, k)

@@ -39,6 +39,9 @@ def lam_problem(metal, lam):
 
 def lam_outside(metal, lam, cfg=None):
     "The scan is away from its networks' wavelength (more than LAM_TOL; Au: anything but 12 keV): it is analysed with"
+    if cfg is not None and cfg.get("energy_range_kev"):
+        lo, hi = (float(v) for v in cfg["energy_range_kev"])
+        return not lo * (1 - 1e-6) <= 1.239841984 / float(lam) <= hi * (1 + 1e-6)
     model = model_lam(cfg) if cfg is not None else (0.105 if metal == "Cu" else LAM_12KEV)
     if metal == "Au":
         return abs(float(lam) / LAM_12KEV - 1) > 1e-4
@@ -84,10 +87,14 @@ NOT_HASHED = ("description", "needs", "notes", "monotone")
 PRED_FILES = ("adapter.py", "features.py", "generate.py", "references.py")
 
 
-def pred_hash():
-    'sha256 of the iampred code that defines the simulated samples and the network inputs.'
+KINPUT_FILES = ("kinput.py",)
+
+
+def pred_hash(cfg=None):
+    'sha256 of the iampred code that defines the simulated samples and the network inputs; for a family whose features'
     h = hashlib.sha256()
-    for nm in PRED_FILES:
+    kfz = bool(cfg) and (cfg.get("features") or {}).get("axis") == "kfz"
+    for nm in PRED_FILES + (KINPUT_FILES if kfz else ()):
         h.update(nm.encode()); h.update((HERE / nm).read_bytes().replace(b"\r\n", b"\n"))
     return h.hexdigest()
 
@@ -103,6 +110,21 @@ def forward_hash():
         if f.exists():
             h.update(nm.encode()); h.update(f.read_bytes().replace(b"\r\n", b"\n"))
     return h.hexdigest()
+
+
+def network_family(cfg):
+    "The family whose network gives this family's candidates: its own, or the one named by 'network_from'"
+    return cfg.get("network_from") or cfg["family"]
+
+
+def map_params(src_names, x, dst_names, start, lb, ub):
+    'A parameter vector given in src_names order, in dst_names order: a shared name keeps its value, a name only in'
+    import numpy as np
+    src = dict(zip(src_names, (float(v) for v in x)))
+    v = [src.get(nm, float(start[i])) for i, nm in enumerate(dst_names)]
+    new = [nm for nm in dst_names if nm not in src]
+    dropped = [nm for nm in src_names if nm not in set(dst_names)]
+    return np.clip(np.array(v, float), np.asarray(lb, float), np.asarray(ub, float)), new, dropped
 
 
 def families():
