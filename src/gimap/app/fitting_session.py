@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 from PyQt5.QtCore import QTimer
+
+logger = logging.getLogger(__name__)
 
 
 class FittingSessionCoordinator:
@@ -18,23 +21,23 @@ class FittingSessionCoordinator:
         try:
             session = self.settings.get("fitting", "last_session", {})
             if not session:
-                print("Application runtime: No last session data found")
+                logger.info("No last Fitting session")
                 return
             last_file = session.get("last_opened_file")
             if not last_file or not os.path.exists(last_file):
-                print("Application runtime: Last session file does not exist, skipping restore")
+                logger.info("The file of the last Fitting session is gone: not restored")
                 return
-            print(f"Preparing to restore last session: {os.path.basename(last_file)}")
+            logger.info("Restoring the last Fitting session: %s", os.path.basename(last_file))
             QTimer.singleShot(2000, lambda: self.restore(session))
         except Exception as exc:
-            print(f"Application runtime: Failed to load last session: {exc}")
+            logger.exception("The last Fitting session could not be read: %s", exc)
 
     def restore(self, session: dict) -> None:
         try:
             self.fitting_runtime.restore_session(session)
-            print("Application runtime: Last session restored")
+            logger.info("Last Fitting session restored")
         except Exception as exc:
-            print(f"Application runtime: Failed to restore last session: {exc}")
+            logger.exception("The last Fitting session could not be restored: %s", exc)
 
     def save(self) -> None:
         try:
@@ -42,9 +45,9 @@ class FittingSessionCoordinator:
             if session:
                 self.settings.set("fitting", "last_session", session)
                 self.settings.save()
-                print("Application runtime: Current session saved")
+                logger.info("Fitting session saved")
         except Exception as exc:
-            print(f"Application runtime: Failed to save current session: {exc}")
+            logger.exception("The Fitting session could not be saved: %s", exc)
 
 
 __all__ = ["FittingSessionCoordinator"]

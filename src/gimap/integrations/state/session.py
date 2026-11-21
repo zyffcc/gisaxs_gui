@@ -34,6 +34,13 @@ class JsonSessionRepository:
             raise ValueError("Session JSON must contain an object.")
         return payload
 
+    def load_quietly(self) -> dict[str, Any] | None:
+        """``load``, with ``None`` for a file that cannot be read."""
+        try:
+            return self.load()
+        except (OSError, ValueError):
+            return None
+
     def save(self, state: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(

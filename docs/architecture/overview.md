@@ -37,10 +37,14 @@ features/
     xrr/
 ```
 
-应用壳（`app/`）：`main.py` → `app/main_window.py`（页面与侧栏）、`app/menus.py`（菜单命令；Edit、Analyze、Fitting
+应用壳（`app/`）：`main.py`（轻量入口）→ `app/launcher.py`（命令行、启动画面 `presentation/splash.py`、
+`app/single_instance.py` 的单实例锁、`app/logging_setup.py` 的日志，然后才导入重模块）→ `app/window.py`（`MainWindow`
+与 `run_window`：`app/document_session.py` 的未保存标记、自动保存与崩溃恢复，`app/layout_memory.py` 的分隔条记忆）→
+`app/main_window.py`（页面与侧栏；比较、溅射页第一次用到时才构建，见 `app/lazy_pages.py`）、`app/menus.py`（菜单命令；Edit、Analyze、Fitting
 菜单的命令在 `app/workspace_commands.py`，Help 菜单里要读文件和页面的命令在 `app/help_commands.py`）、
 `app/runtime.py`（feature 运行时与按 key 导航）；`app/presentation/theme/` 为唯一的样式来源
-（浅色 / 深色 token），缩放交给 Qt high-DPI。用户数据（设置、偏好、仪器配置、会话、模型参数）
+（浅色 / 深色 token），缩放交给 Qt high-DPI。应用级样式表只在启动时设置一次；之后切换主题或字号时，新样式表放在
+各个无父窗口上（`theme/restyle.py`），因为 Qt 5 重设应用样式表时，每个控件会按祖先层数重复 polish（主窗口 20 秒以上）。用户数据（设置、偏好、仪器配置、会话、模型参数）
 统一保存在用户数据目录（`integrations/state/user_store.py`）。
 
 优先采用 feature-first 的原因包括：

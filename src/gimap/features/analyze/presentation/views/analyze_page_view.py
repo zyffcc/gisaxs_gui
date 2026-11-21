@@ -464,7 +464,8 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         results.setObjectName("analyzeResultsPage")
         results.setWidgetResizable(True)
         results.setFrameShape(QFrame.NoFrame)
-        results.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # everything wraps or scrolls on its own
+        # Most of it wraps or scrolls on its own; what cannot (a wide table on a 1024-pixel screen) scrolls here.
+        results.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         results_content = QWidget(results)
         self.results_panel_host = QVBoxLayout(results_content)
         self.results_panel_host.setContentsMargins(2, 2, 6, 2)

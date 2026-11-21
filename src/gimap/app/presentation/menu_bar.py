@@ -87,6 +87,8 @@ class MenuCommands:
     open_error_log: Command = None
     citation: Optional[Callable[[], object]] = None
     """How to Cite: an object with ``text``, ``bibtex`` and ``doi`` (read from ``CITATION.cff``)."""
+    current_page: Optional[Callable[[], object]] = None
+    """The key of the workspace shown: Help ▸ User Manual (F1) opens the manual at its chapter."""
     page_entries: dict = field(default_factory=dict)
     """The entries of Edit, Analyze and Fitting: ``workspace_menus.MenuEntry`` by key (``workspace_menus.py``)."""
 
@@ -316,8 +318,9 @@ class MainMenuBar(QObject):
 
     def _build_help(self) -> None:
         c, menu, window = self.commands, self.help_menu, self.window
-        self._add(menu, "user_manual", "&User Manual", lambda: open_user_manual(window),
-                  shortcut=QKeySequence.HelpContents, tip="The manual of GIMaP, opened in your web browser")
+        self._add(menu, "user_manual", "&User Manual", lambda: open_user_manual(window, self._page_shown()),
+                  shortcut=QKeySequence.HelpContents,
+                  tip="The manual of GIMaP, opened in your web browser at the chapter of the workspace shown")
         self._add(menu, "physics_manual", "&Physics and Methods", lambda: open_physics_manual(window),
                   tip="How GIMaP computes what it shows: geometry, q, corrections, cuts and models (in your web browser)")
         self._add(menu, "keyboard_shortcuts", "&Keyboard Shortcuts…", lambda: show_keyboard_shortcuts(window),
@@ -333,8 +336,9 @@ class MainMenuBar(QObject):
         self._add(menu, "report_problem", "&Report a Problem…", c.report_problem,
                   tip="Copies the versions of GIMaP and of your system (no paths, no data) and opens a new issue "
                       "on GitHub in your browser")
-        self._add(menu, "error_log", "Open Error &Log Folder", c.open_error_log,
-                  tip="The folder of errors.log, where every unexpected error is written")
+        self._add(menu, "error_log", "Open &Log Folder", c.open_error_log,
+                  tip="The folder of GIMaP's logs: gimap.log (what each session did), crash.log (native crashes) "
+                      "and errors.log (every unexpected error)")
         self._add(menu, "open_data_folder", "Open User &Data Folder", c.open_data_folder,
                   tip="Settings, instrument profiles and the session are kept here")
         menu.addSeparator()
@@ -350,6 +354,10 @@ class MainMenuBar(QObject):
         self._add(menu, "about", f"&About {APP_NAME}", lambda: show_about(window))
         menu.aboutToShow.connect(self._sync_help)
         self._sync_help()
+
+    def _page_shown(self) -> str:
+        current = self.commands.current_page
+        return str(current() or "") if current is not None else ""
 
     def _show_citation(self):
         citation = self.commands.citation()

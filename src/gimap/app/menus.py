@@ -18,6 +18,7 @@ from .presentation.app_dialogs import (
     warn,
 )
 from .presentation.components import show_toast, visible_toasts
+from .presentation.document_changes import notify_changed
 from .presentation.i18n import current_language, language_changed, tr, trf
 from .presentation.menu_bar import MainMenuBar, MenuCommands, ToolWindows
 from .presentation.navigation import NAVIGATION_ITEMS
@@ -99,6 +100,7 @@ class ApplicationMenus:
             report_problem=self.help.report_problem,
             open_error_log=self.help.open_error_log,
             citation=self.help.citation,
+            current_page=components.current_page_key,  # F1: the manual at the chapter of the workspace shown
             # Edit, Analyze and Fitting: each entry shows its workspace first, then runs the page's command.
             page_entries=WorkspaceCommands(self).entries(),
         )
@@ -118,7 +120,32 @@ class ApplicationMenus:
         failed = getattr(page, "analysisFailed", None)  # a frame that could not be read is still the current one
         if failed is not None:
             failed.connect(lambda _message: self._sync_title())
+            failed.connect(self._frame_failed)
+        # What changes the work: looked at at once by the window's DocumentSession (when it has one).
+        for signal in (page.analysisShown, cleared, getattr(page, "fileRemoved", None)):
+            if signal is not None:
+                signal.connect(notify_changed)
         self._sync_title()
+
+    document = None
+    """The window's ``DocumentSession`` (unsaved changes, autosave), attached by the launcher; ``None`` in a
+    window built by a test or a script, which then neither marks changes nor asks before replacing them."""
+
+    def attach_document(self, document) -> None:
+        self.document = document
+        document.changed.connect(lambda _dirty: self._sync_title())
+        self._sync_title()
+
+    def _frame_failed(self, _message: str) -> None:
+        """A frame that could not be read goes off Recent, and the user is told (it would fail again there)."""
+        page = self.window.components.analyze_page
+        path = getattr(page.view_model, "current_path", None)
+        forget = getattr(page, "forget_recent", None)
+        if path is None or forget is None:
+            return
+        if forget(path):  # (a folder on Recent stays: its other frames may be fine)
+            show_toast(self.window, trf("{name} could not be opened and was removed from Recent.",
+                                        name=Path(str(path)).name), level="warning")
 
     # -- workspaces ---------------------------------------------------------
 
@@ -211,21 +238,37 @@ class ApplicationMenus:
         self.window.app_context.preferences.set(RECENT_PROJECTS_KEY, recent[:6])
         self._sync_title()
 
+    def _forget_project(self, path) -> bool:
+        """Take a project that could not be opened off Recent; ``True`` when it was there."""
+        key = str(Path(path)).casefold()
+        recent = self._recent_projects()
+        kept = [item for item in recent if item.casefold() != key]
+        if len(kept) == len(recent):
+            return False
+        self.window.app_context.preferences.set(RECENT_PROJECTS_KEY, kept)
+        return True
+
     def _files_cleared(self) -> None:
         """Analyze ▸ Clear: what is open next is not the project any more (Save Project asks where)."""
         self.project_path = ""
         self._sync_title()
 
     def window_title(self) -> str:
-        """``GIMaP — project · frame``, ``GIMaP — frame``, ``GIMaP — project`` or ``GIMaP``."""
+        """``GIMaP — project · frame``, ``GIMaP — frame``, ``GIMaP — project`` or ``GIMaP``; with a
+        ``DocumentSession`` Qt's ``[*]`` follows (``*`` while the work has unsaved changes), and a second GIMaP
+        says that its settings are read-only."""
         path = getattr(self.window.components.analyze_page.view_model, "current_path", None)
         frame = Path(path).name if path else ""
         project = Path(self.project_path).stem if self.project_path else ""
         shown = " · ".join(part for part in (project, frame) if part)
-        return f"GIMaP — {shown}" if shown else "GIMaP"
+        title = f"GIMaP — {shown}" if shown else "GIMaP"
+        if getattr(self.window.app_context, "read_only", False):
+            title += " " + tr("(read-only settings)")
+        return title + "[*]" if self.document is not None else title
 
     def _sync_title(self) -> None:
         self.window.setWindowTitle(self.window_title())
+        self.window.setWindowModified(bool(self.document is not None and self.document.dirty))
 
     def open_project(self, path=None) -> bool:
         from . import project
@@ -242,15 +285,24 @@ class ApplicationMenus:
         except (OSError, ValueError) as exc:  # "not a GIMaP project" and the like are in the table; others as they are
             # A file that cannot be read: the reason in words, not "[Errno 2] …" with the whole path again.
             reason = (exc.strerror if isinstance(exc, OSError) else "") or str(exc)
-            warn(self.window, tr("Open Project"),
-                 trf("{name} could not be opened: {error}", name=Path(path).name, error=tr(reason)))
+            text = trf("{name} could not be opened: {error}", name=Path(path).name, error=tr(reason))
+            if self._forget_project(path):
+                text += "\n\n" + tr("It was removed from Recent.")
+            warn(self.window, tr("Open Project"), text)
             return False
         components = self.window.components
+        if self.document is not None and not self.document.may_close():
+            return False
         if not self._series_results_may_go():
             return False
         missing = project.missing(data, path)
         notes = project.apply(components, data, path)
+        decline = getattr(components.analyze_page, "decline_last_setup", None)
+        if decline is not None:  # the project's own set-up wins over the last session's
+            decline()
         self._remember_project(path)
+        if self.document is not None:
+            self.document.mark_clean()
         page = data.get("page") if data.get("page") in components.pages else "analyze"
         self.show_workspace(page)
         self._say_opened(Path(path).name, missing, notes)
@@ -331,6 +383,8 @@ class ApplicationMenus:
             warn(self.window, tr("Save Project"), trf("The project could not be saved: {error}", error=exc))
             return False
         self._remember_project(written)
+        if self.document is not None:
+            self.document.mark_clean(settle=0)
         show_toast(self.window, tr("Saved the project {name}").format(name=written.name), level="ok",
                    action=(tr("Open Folder"), lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(written.parent)))))
         return True

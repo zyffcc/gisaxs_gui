@@ -13,7 +13,8 @@
 
 ## AppContext
 
-`main.py` 的 `main()` 调用 `create_app_context()`（`src/gimap/app/bootstrap.py`）为一个进程创建一个 `AppContext`，
+`app/window.py` 的 `run_window()`（由 `main.py` 经 `app/launcher.py` 调用）调用 `create_app_context()`
+（`src/gimap/app/bootstrap.py`）为一个进程创建一个 `AppContext`，
 再经构造函数交给页面和 feature 的 `bootstrap.py`。字段：
 
 - `settings`：`SettingsRepository`，跨启动的用户设置（分 section）；
@@ -43,7 +44,10 @@ feature 不创建自己的全局 context 或单例；application 和 ViewModel �
 | `instrument_profiles.json` | 仪器配置（`JsonInstrumentProfileRepository`） |
 | `model_parameters.json` | Fitting 的模型参数；缺少时从程序自带的 `config/model_parameters.json` 复制 |
 | `last_analyze_setup.json` | Analyze 上次的设置（掩膜、校正、切线区域…） |
-| `logs/` | `ErrorGuard` 的错误日志 |
+| `logs/` | `gimap.log`（每次会话，轮换）、`crash.log`（`faulthandler`）、`errors.log`（`ErrorGuard`） |
+| `autosave/` | 自动保存的工作（`session.gimap`、`autosave.json`）与 `running.json`（会话正在运行；正常关闭时删除） |
+| `gimap.lock` | 单实例锁（`QLockFile`，进程不在时自动接管） |
+| `.legacy_imported` | 默认文件夹已导入过旧设置（只导入一次；`GIMAP_HOME` 指定的文件夹不导入） |
 
 **运行 `main.py` 或任何调用 `create_app_context()` 的脚本都会读写真实的用户数据文件夹。** 做实验时把 `GIMAP_HOME`
 设到临时文件夹。只用内存 repository（`InMemorySettingsRepository`、`InMemorySessionRepository`、

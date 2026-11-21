@@ -60,7 +60,8 @@ def test_appearance_changes_apply_immediately_and_are_saved() -> None:
         dialog.dark_radio.setChecked(True)
         assert theme_manager().mode == "dark"
         assert preferences.get("appearance.theme") == "dark"
-        dialog.font_size_spin.setValue(11)
+        dialog.font_size_spin.setValue(11)  # applied after the last click, or at once on Enter:
+        dialog.font_size_spin.editingFinished.emit()
         assert theme_manager().font_pt == 11
         assert preferences.get("appearance.font_pt") == 11
         dialog.header_center_check.setChecked(True)

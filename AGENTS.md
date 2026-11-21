@@ -207,12 +207,10 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
     几何和许可证见 `tests/data/external/README.md`；
   - `TestSAXSdata/`（P03 的 Pilatus CBF、Lambda NXS 帧和几条一维曲线）也在仓库里。
 - **测试之外的截图脚本**，要做 `main()` 和 conftest 做的事：
-  - 设临时的 `GIMAP_HOME`；只设它还不够：空的用户文件夹第一次打开时会把源码目录里被 git 忽略的旧文件
-    （`config/user_settings.json`、`user_parameters.json`、`instrument_profiles.json`）迁移进来
-    （`integrations/state/user_store.py`），截图就带上了这台电脑的模式、αi、最近文件和仪器配置。
-    先在临时文件夹里写好空的 `settings.json`（`{"schema_version": 1, "settings": {}, "preferences": {}}`）和
-    `instrument_profiles.json`（`{"schema_version": 1, "profiles": []}`），再建窗口。`tests/conftest.py` 只设临时文件夹，
-    所以在有这些旧文件的电脑上测试也会读到它们；
+  - 设临时的 `GIMAP_HOME`。给定 `GIMAP_HOME` 时，源码目录里被 git 忽略的旧文件（`config/user_settings.json`、
+    `user_parameters.json`、`instrument_profiles.json`）不再迁移进来（`integrations/state/user_store.py`）；只有默认用户
+    文件夹在第一次打开时导入一次设置，从不导入会话。旧版本的截图脚本为此写的空 `settings.json` 和
+    `instrument_profiles.json` 现在不再需要，但写了也无害；
   - offscreen 下设 `QT_QPA_FONTDIR=C:/Windows/Fonts`，并载入一个中文字体；
   - `app.setFont(QFont("Segoe UI"))`、`apply_theme(mode, 9.0)`；
   - 然后浅色、深色、中文、英文都看一遍。

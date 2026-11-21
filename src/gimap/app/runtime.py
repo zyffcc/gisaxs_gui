@@ -1,5 +1,6 @@
 """Application composition, navigation and feature lifecycle coordination."""
 
+import logging
 from pathlib import Path
 
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal
@@ -8,6 +9,8 @@ from .fitting_session import FittingSessionCoordinator
 from .presentation.i18n import tr
 from .presentation.parameter_validation import show_parameter_validation
 from .workspace_parameters import WorkspaceParameterCoordinator
+
+logger = logging.getLogger(__name__)
 
 class ApplicationRuntime(QObject):
     """Connect the application shell to feature-owned presentation runtimes."""
@@ -72,14 +75,14 @@ class ApplicationRuntime(QObject):
     def _delayed_feature_initialization(self) -> None:
         """Initialize feature presentation only after the shell is visible."""
         try:
-            print("Application runtime: Starting delayed feature initialization...")
+            logger.info("Starting the feature runtimes")
             self._initialize_ui()
             self.fitting.initialize()
             self.prediction.initialize()
             QTimer.singleShot(1000, self.fitting_session.load_last_session)
-            print("Application runtime: Feature initialization complete")
+            logger.info("Feature runtimes started")
         except Exception as exc:
-            print(f"Application runtime: Feature initialization failed: {exc}")
+            logger.exception("The feature runtimes could not start: %s", exc)
 
     def _setup_connections(self) -> None:
         statusbar = getattr(self.ui, "statusbar", None)
@@ -165,7 +168,7 @@ class ApplicationRuntime(QObject):
 
     def save_session_on_close(self) -> None:
         self.save_current_session()
-        print("Application runtime: Session saved on close")
+        logger.info("Session saved on close")
 
     def handle_window_close(self) -> None:
         self.save_session_on_close()

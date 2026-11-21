@@ -126,6 +126,11 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
+`python main.py` also opens what it is given (`python main.py frame_0001.cbf scan_folder sample.gimap`) and
+`python main.py --version` prints the version. `python -m pip install -e .` installs the same with a `gimap` command
+(`gimap --version`, `gimap FILE_OR_FOLDER …`); keep it editable (`-e`): the manuals, icons and example data stay in
+the checkout.
+
 To check an installation quickly, run `python tools/offscreen_smoke.py`: it starts the whole program without a
 window in a temporary user data folder, checks that its six pages are there and prints
 `Offscreen startup OK: pages=6 …` (some seconds).

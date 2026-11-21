@@ -10,13 +10,16 @@ keys of ``NAVIGATION_ITEMS`` ("analyze", "fitting", ...).  What one workspace ha
 from __future__ import annotations
 
 import inspect
+import logging
 import time
 from pathlib import Path
 
 from PyQt5.QtCore import QCoreApplication, QEventLoop
 from PyQt5.QtWidgets import QVBoxLayout
 
+from . import startup_progress
 from .handover import SERIES_TASKS, HandoverMixin
+from .lazy_pages import LazyPagesMixin
 from .series_frames import SeriesFrames
 from .presentation.collapsible_card import (
     CardContentResizeHandle,
@@ -27,6 +30,7 @@ from .presentation.components.toast import set_toast_inset
 from .presentation.i18n import DEFAULT_LANGUAGE, apply_to, current_language, language_changed, tr, translate
 from .presentation.layout_metrics import LAYOUT
 from .presentation.navigation import NAVIGATION_ITEMS, NavigationSidebar
+from .presentation.page_scroll import scroll_pages
 from .presentation.task_runner import TaskRunner
 from src.gimap.features.prediction.presentation import (
     GisaxsPredictWorkspace,
@@ -36,6 +40,7 @@ from src.gimap.features.prediction.presentation import (
 from src.gimap.features.fitting.presentation import FittingWorkspace
 from src.gimap.shared.detector_io import DETECTOR_SUFFIXES
 
+logger = logging.getLogger(__name__)
 SIDEBAR_COLLAPSED_KEY = "shell.sidebar_collapsed"
 STATUS_BAR_PAGES = ("predict",)
 """The Labs pages report through the status bar under the page; every other page has its own status line."""
@@ -60,17 +65,21 @@ def _accepts(function, name: str) -> bool:
         for parameter in parameters)
 
 
-class MainWindowComponents(HandoverMixin):
-    """Builds and owns the feature pages and the navigation sidebar."""
+class MainWindowComponents(LazyPagesMixin, HandoverMixin):
+    """Builds and owns the feature pages and the navigation sidebar (Compare and Sputter on first use:
+    ``lazy_pages.py``)."""
 
     def __init__(self, ui):
         self.ui = ui
         self.preferences = ui.app_context.preferences
         self.task_runner = TaskRunner(ui.centralwidget)
         self._assistant = None
+        # A small window scrolls the page instead of cutting it (before the pages: moving them later re-polishes).
+        self.page_scroll = scroll_pages(ui.mainWindowWidget)
+        startup_progress.report("Building Analyze…")
         self.analyze_page = self._create_analyze_page()
-        self.compare_page = self._create_compare_page()
-        self.sputter_page = self._create_sputter_page()
+        self._prepare_lazy_pages()
+        startup_progress.report("Building Fitting…")
         from src.gimap.features.fitting.bootstrap import create_fitting_view_model
 
         self.fitting_view_model = create_fitting_view_model(ui.app_context)
@@ -80,16 +89,18 @@ class MainWindowComponents(HandoverMixin):
             view_model=self.fitting_view_model,
             frames=SeriesFrames(lambda: getattr(self.analyze_page, "view_model", None)),  # frames cut as in Analyze
         )
+        startup_progress.report("Building the Labs…")
         self.predict_workspace = GisaxsPredictWorkspace(ui, LAYOUT)
         self.home_page = self._create_home_page()
+        startup_progress.report("Building the automatic analysis…")
         self.guided = self._create_guided_analysis()
         self.pages = {
             "home": self.home_page,
             "analyze": ui.analyzePage,
             "fitting": ui.gisaxsFittingPage,
             "predict": ui.gisaxsPredictPage,
-            "compare": self.compare_page,
-            "sputter": self.sputter_page,
+            "compare": self._lazy_placeholders["compare"],
+            "sputter": self._lazy_placeholders["sputter"],
         }
         importing = getattr(self.analyze_page, "frameImportStarted", None)
         if importing is not None:
@@ -113,28 +124,6 @@ class MainWindowComponents(HandoverMixin):
         self.show_page("home")
 
     # -- pages ------------------------------------------------------------
-
-    def _create_compare_page(self):
-        """Compare: Analyze's Series maps (Send to Compare) and curve files side by side."""
-        from src.gimap.features.compare.bootstrap import create_compare_service
-        from src.gimap.features.compare.presentation.page import ComparePage
-
-        page = ComparePage(create_compare_service(), task_runner=self.task_runner, preferences=self.preferences,
-                           analyze_map=self.analyze_page.current_series)
-        self._replace_page_host("comparePageHost", page)
-        self.ui.comparePage = page
-        self.analyze_page.set_compare_target(self._send_series_to_compare)
-        return page
-
-    def _create_sputter_page(self):
-        """Sputter: the grains of an in-situ sputter series, window by window (the bundled analysis package)."""
-        from src.gimap.features.sputter.bootstrap import create_sputter_service
-        from src.gimap.features.sputter.presentation.page import SputterPage
-
-        page = SputterPage(create_sputter_service(), task_runner=self.task_runner, preferences=self.preferences)
-        self.ui.mainWindowWidget.addWidget(page)
-        self.ui.sputterPage = page
-        return page
 
     def _create_analyze_page(self):
         from src.gimap.features.analyze.bootstrap import create_analyze_view_model
@@ -369,7 +358,7 @@ class MainWindowComponents(HandoverMixin):
             column.addWidget(statusbar)
 
     def show_page(self, key: str) -> None:
-        page = self.pages[key]
+        page = self.page_widget(key)
         if current_language() != DEFAULT_LANGUAGE:
             apply_to(page, current_language())  # widgets built since the language was applied
         if self.ui.mainWindowWidget.currentWidget() is not page:
@@ -427,7 +416,7 @@ class MainWindowComponents(HandoverMixin):
             # The Labs runtime starts after the window is shown: no runtime yet is an AttributeError, skipped.
             (tr("2D Prediction"), lambda: self.ui.runtime.prediction.prediction_running()),
             (tr("SEM Particle Analysis"), lambda: self.ui.menus.sem_running()),
-            (tr("Sputter analysis"), lambda: self.sputter_page.running()),
+            (tr("Sputter analysis"), lambda: self.built_page("sputter").running()),
         )
         jobs = []
         for name, busy in checks:
@@ -480,8 +469,8 @@ class MainWindowComponents(HandoverMixin):
         workspace = self.fitting_workspace
         runtime = getattr(self.ui, "runtime", None)
         tools = getattr(getattr(self.ui, "menus", None), "tools", None)
-        candidates = (self.home_page, self.analyze_page, getattr(self, "guided", None), self.compare_page,
-                      getattr(self, "sputter_page", None), workspace,
+        candidates = (self.home_page, self.analyze_page, getattr(self, "guided", None), self.built_page("compare"),
+                      self.built_page("sputter"), workspace,
                       getattr(workspace, "fit_page", None), getattr(workspace, "series_page", None),
                       self._labs_page(getattr(runtime, "prediction", None), self.predict_workspace),
                       self._assistant, *(tools.windows() if tools is not None else ()))
@@ -530,10 +519,10 @@ class MainWindowComponents(HandoverMixin):
         self._stop_automatic_analysis()
         # A Single fit and an In-situ series: stop, wait (2 s at most) for their threads, release the plots;
         # Sputter: the analysis package's whole process tree is ended.
-        for page in (self.fitting_workspace.fit_page, self.fitting_workspace.series_page, self.sputter_page):
+        for page in (self.fitting_workspace.fit_page, self.fitting_workspace.series_page, self.built_page("sputter")):
             try:
                 page.dispose()
-            except (AttributeError, RuntimeError):  # not built here, or its widgets are already gone
+            except (AttributeError, RuntimeError):  # not built (``None``), or its widgets are already gone
                 continue
         self.analyze_page.dispose()
         self.task_runner.shutdown()
@@ -546,7 +535,7 @@ class MainWindowComponents(HandoverMixin):
         try:
             stop()
         except Exception as exc:  # the other jobs are still stopped
-            print(f"Could not stop 2D Prediction on close: {exc}")
+            logger.exception("Could not stop 2D Prediction on close: %s", exc)
 
     def _stop_automatic_analysis(self, timeout_s: float = 2.0) -> None:
         """End the automatic analysis before its next step and give the step in progress up to
