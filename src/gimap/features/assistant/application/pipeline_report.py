@@ -14,6 +14,7 @@ from ..domain import AT_EDGE, assessment, herman_decimals, signed
 from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
 from .pipeline_geometry import ROTATION_WHY, SEARCHED
 from .report_language import ENGLISH, heading as section
+from .run_record import mask_lines, record_lines
 
 OPTION_FLAGS = {
     "calibration": "--calibration PATH",
@@ -71,6 +72,15 @@ def _fixed(value, decimals: int) -> str:
     return "—" if value is None else f"{float(value):.{decimals}f}"
 
 
+def _pm(value, error, decimals: int) -> str:
+    """``value ± error`` with the column's decimals; an error smaller than they show keeps one significant digit."""
+    text = _fixed(value, decimals)
+    if value is None or not isinstance(error, (int, float)) or not error > 0:
+        return text
+    shown = f"{float(error):.{decimals}f}"
+    return f"{text} ± {shown if float(shown) > 0 else f'{float(error):.1g}'}"
+
+
 PIXEL_DECIMALS = 2
 """A detector position (the beam centre) to 0.01 px, as the cuts and decisions give it."""
 PEAK_DECIMALS = {"q": 4, "d_A": 3, "fwhm": 4, "snr": 1, "size_nm": 1}
@@ -79,6 +89,7 @@ FLAG_WORDS = {
     "at_edge": AT_EDGE,
     "resolution_limited": "narrower than 3 bins (its width is set by the binning)",
     "overlap": "overlaps a neighbouring peak",
+    "poor_fit": "poor fit (χ²_r above 10): not one Gaussian on a line; its ± are scaled by √χ²_r",
 }
 """A flag without a caveat in the words of the peak table (report.json keeps the flags themselves)."""
 
@@ -164,9 +175,12 @@ def _peak_table(peaks: list[dict]) -> list[str]:
         if size is None and peak.get("size_note"):
             size_text = "n/a"
         flags = "; ".join(FLAG_WORDS.get(flag, flag) for flag in peak.get("flags") or () if flag in FLAG_WORDS)
+        fit = peak.get("fit") or {}  # the ± of the fit (statistical; Decisions: uncertainties)
+        cells = [_pm(peak.get(key), fit.get(error), decimals[key])
+                 for key, error in (("q", "q_err"), ("d_A", "d_err_A"), ("fwhm", "fwhm_err"))]
         lines.append(
-            "| " + " | ".join(_fixed(peak.get(key), decimals[key]) for key in ("q", "d_A", "fwhm", "snr")) + " | "
-            f"{peak.get('orientation') or '—'} | {size_text} | {peak.get('caveat') or flags} |"
+            "| " + " | ".join([*cells, _fixed(peak.get("snr"), decimals["snr"])]) + " | "
+            f"{peak.get('orientation') or '—'} | {size_text} | {'; '.join(filter(None, (peak.get('caveat'), flags)))} |"
         )
     notes = [
         f"- q = {_fixed(peak.get('q'), decimals['q'])}: {peak['size_note']}" for peak in peaks if peak.get("size_note")
@@ -208,22 +222,6 @@ def _hints_title(report: dict) -> str:
     return "Series hints (reliable peaks only)"
 
 
-def mask_lines(mask: dict) -> list[str]:
-    """What a report says about masks (``report["mask"]``, written by a run without a window): the mask file
-    applied, or that none was, and apart from it what is always left out."""
-    file = mask.get("file") or {}
-    if mask.get("applied"):
-        pixels = "" if mask.get("masked_pixels") is None else f"; {mask['masked_pixels']} pixels masked"
-        digest = f"; SHA-256 {file['sha256']}" if file.get("sha256") else ""
-        lines = [f"- mask applied: `{file.get('path') or file.get('file')}` ({mask.get('kind')}{pixels}{digest})"]
-    else:
-        lines = ["- mask applied: none (no mask file was given)"]
-    bad = mask.get("bad_pixels_left_out")
-    found = "not searched" if bad is None else ", ".join(f"{count} {name.replace('_', ' ')}" for name, count in bad.items())
-    return lines + [f"- left out apart from a mask: the detector's gaps (pixels without data) and bad pixels found "
-                    f"automatically ({found})"]
-
-
 def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: str = ENGLISH) -> str:
     frame = report.get("frame") or ""
     name = title or Path(frame).name or "frame"
@@ -247,6 +245,8 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: st
     lines += [section("Geometry", language), "", *_geometry_lines(report), ""]
     if report.get("mask") is not None:
         lines += [section("Mask", language), "", *mask_lines(report["mask"]), ""]
+    if record_lines(report):  # the release, the input by SHA-256, the calibration's file and profile, the corrections
+        lines += [section("Record", language), "", *record_lines(report), ""]
     if frames.get("total") and frames["total"] > 1:
         lines += [
             section("Frames", language), "",
@@ -259,8 +259,9 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: st
         lines += [section("Peaks (radial I(q))", language), "", *_peak_table(report.get("peaks") or []), ""]
         search = report.get("peak_search") or {}
         if search.get("truncated"):
-            lines += [f"Only the {search.get('max_peaks')} most prominent of {search.get('candidates')} candidate peaks "
-                      "were fitted (see Decisions: peak search).", ""]
+            lines += [f"The {search.get('max_peaks')} most prominent of {search.get('candidates')} candidate peaks "
+                      f"were fitted; {len(report.get('peaks') or [])} of them gave a peak and are in the table (see "
+                      "Decisions: peak search).", ""]
         hints = report.get("series_hints") or []
         if hints:
             lines += [_hints_title(report) + ": " + "; ".join(hints), ""]

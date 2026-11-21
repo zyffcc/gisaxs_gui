@@ -228,7 +228,7 @@ def model_name(row: dict) -> str:
 
 def model_row(label: str, rows: Sequence[dict], *, error: str = "", halves: str = "mean") -> dict[str, Any]:
     """One row of the model table: the halves and the number of points the frame was fitted on, then the most
-    probable solution (model, χ²/N as ``chi2``, log RMSE, its probability, parameters in nm); without a solution
+    probable solution (model, χ²ᵣ as ``chi2``, log RMSE, its probability, parameters in nm); without a solution
     the reason as the note."""
     used, points, _ = _made_of(rows, halves)
     row: dict[str, Any] = {"frame": label, "halves": used, "points": points}

@@ -32,6 +32,7 @@ import numpy as np
 
 from src.gimap.shared.export_text import export_text
 
+from ...application.export_record import provenance_lines
 from ...domain import Curve
 
 
@@ -97,6 +98,14 @@ def _frame_lines(metadata: Mapping[str, Any]) -> list[str]:
     return lines
 
 
+def _record_lines(metadata: Mapping[str, Any], settings: str = "") -> list[str]:
+    """The ``#`` lines the command line's CSVs start with too (``provenance_lines``): the release, each input file
+    with its SHA-256 and the geometry. None for a record that names no source (a table of several frames)."""
+    if not metadata.get("source_file") or not metadata.get("input_sha256"):
+        return []
+    return [f"# {export_text(line)}\n" for line in provenance_lines(metadata, "Analyze", settings or None, frame=False)]
+
+
 def _cell(text: str, separator: str) -> str:
     """A cell that keeps the columns: no separator inside it. The programs that read a space-separated file
     split it at any white space — also the ideographic space (U+3000) and the no-break space (U+00A0) a name
@@ -132,6 +141,7 @@ class CsvCurveWriter:
                 stream.write(f"{FIT_INPUT_MARKER} (q in 1/A)\n")
                 stream.write(_source_line(metadata))
                 stream.writelines(_frame_lines(metadata))
+                stream.writelines(_record_lines(metadata))
                 stream.write(f"# curve: {export_text(curve.title)}\n")
                 if observation:
                     stream.write(f"# observation: {json.dumps(_jsonable(observation), sort_keys=True)}\n")
@@ -179,6 +189,7 @@ class CsvCurveWriter:
             else:
                 stream.write(_source_line(metadata))
                 stream.writelines(_frame_lines({"frame_index": 0, **metadata}))
+                stream.writelines(_record_lines(metadata))
             stream.write(f"# rows: {export_text(labels[1])} (first column); columns: {export_text(labels[0])} (first row)\n")
             separator = _separator(path)
             blank = "nan" if separator == " " else ""
@@ -214,6 +225,7 @@ class CsvCurveWriter:
                 stream.write("# GIMaP Analyze export (q in 1/A, angles in deg)\n")
                 stream.write(_source_line(metadata))
                 stream.writelines(_frame_lines({"frame_index": 0, **metadata}))
+                stream.writelines(_record_lines(metadata, f"{stem}_analysis.json"))
                 stream.write(f"# curve: {export_text(curve.title)}\n")
                 stream.write(f"# region: {json.dumps(_jsonable(curve.region))}\n")
                 writer = _table(stream, separator)

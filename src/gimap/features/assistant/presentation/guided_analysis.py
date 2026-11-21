@@ -44,7 +44,7 @@ from .gui_workbench import GuiWorkbench
 from .guided_frames import GuidedFramesMixin, frame_key
 from .guided_progress import GuidedProgressPanel
 from .guided_questions import AnswerForm
-from .guided_report import report_markdown, report_page
+from .guided_report import attach_record, report_markdown, report_page
 from .guided_results import GuidedResultsPanel
 from .guided_text import (
     GEOMETRY_MESSAGE,
@@ -291,8 +291,11 @@ class GuidedAnalysis(GuidedFramesMixin, QObject):
             catalog, options, worker.progressed.emit, stop=self._stop_event, events=worker.stepped.emit,
         )
 
+        automation = self._automation()
+
         def job() -> dict:
             report = pipeline.run()
+            attach_record(report, automation)  # here, not on the GUI thread: it hashes the input files
             if restore is not None:
                 catalog.execute(ToolCall("restore", "set_frame", restore))
             return report

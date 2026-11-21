@@ -14,33 +14,20 @@ import numpy as np
 
 
 from ...application.workflow_v5 import FROM_REQUEST, q_unit_of_file, validate_options
+from ...application import curve_intake
 from .curve_units import file_q_unit
+from .scattering_curve_files import load_xy_any
 from .run_provenance import model_provenance
 
 
-def read_curve(path: Path):
-    """Read numeric text with optional header, commas/tabs/spaces, no silent row loss."""
-    rows = []
-    for line in Path(path).read_text(encoding="utf-8-sig").splitlines():
-        line = line.split("#", 1)[0].strip()
-        if not line:
-            continue
-        try:
-            values = [float(x) for x in line.replace(",", " ").split()]
-        except ValueError:
-            if not rows and (
-                any(word in line.lower() for word in ("q", "intensity", "sigma"))
-                or line.lower().split() in (["x", "y"], ["x", "y", "err"])
-            ):
-                continue
-            raise ValueError(f"Non-numeric row in {path.name}: {line[:80]}") from None
-        if len(values) not in (2, 3, 4):
-            raise ValueError("Curve files need q, intensity[, sigma[, pixels]] columns")
-        rows.append(values)
-    if not rows or len({len(row) for row in rows}) != 1:
-        raise ValueError("Empty curve or inconsistent columns")
-    a = np.asarray(rows, dtype=float)
-    return a[:, 0], a[:, 1], a[:, 2] if a.shape[1] >= 3 else None
+def read_curve(path: Path, *, details: bool = False):
+    """``(q, intensity, sigma or None)`` of a text curve, read by the reader of the Fit page
+    (``scattering_curve_files.load_xy_any``: any header lines, commas / tabs / semicolons / spaces, a fourth column
+    of pixel counts), so that a file that opens there is fitted here. ``details``: also the number of rows inside
+    the data that could not be read as numbers (left out, and said in the curve's notes)."""
+    loaded = load_xy_any(str(path))
+    values = loaded.q, loaded.I, loaded.err
+    return (*values, int(loaded.meta.get("bad_lines", 0))) if details else values
 
 
 def prepare_sides(q, intensity, sigma, options):
@@ -49,12 +36,10 @@ def prepare_sides(q, intensity, sigma, options):
         raise ValueError("q and intensity must have equal lengths and contain finite values")
     q = q * (10.0 if options["q_unit"] == "A^-1" else 1.0)
     estimated = sigma is None
-    if estimated:
-        floor = options["absolute_noise"] or max(float(np.max(np.abs(y))) * 0.001, 1e-12)
-        sigma = np.hypot(options["relative_noise"] * np.abs(y), floor)
-    sigma = np.asarray(sigma, float).reshape(-1)
-    if sigma.shape != y.shape or not np.isfinite(sigma).all() or np.any(sigma <= 0):
-        raise ValueError("Every supplied sigma must be finite and positive")
+    if not estimated:
+        sigma = np.asarray(sigma, float).reshape(-1)
+        if sigma.shape != y.shape or not np.isfinite(sigma).all() or np.any(sigma <= 0):
+            raise ValueError("Every supplied sigma must be finite and positive")
     result = []
     for side, sign in (("positive", 1), ("negative", -1)):
         if options["side"] not in ("both", side):
@@ -63,7 +48,12 @@ def prepare_sides(q, intensity, sigma, options):
         if len(indices) == 0:
             continue
         indices = indices[np.argsort(np.abs(q[indices]), kind="stable")]
+        negative, zero = curve_intake.nonpositive(y[indices])
+        if estimated:  # no σ: the relative σ of Predict parameters, on the points ln I has (as the Fit page fits)
+            indices = indices[y[indices] > 0]
         qq = np.abs(q[indices])
+        side_sigma = curve_intake.relative_sigma(qq, y[indices]) if estimated and len(indices) else (
+            np.empty(0) if estimated else sigma[indices])
         if not 8 <= len(indices) <= 1000:
             raise ValueError(
                 f"{side}: need 8–1000 measured points (received {len(indices)}); no automatic interpolation"
@@ -81,15 +71,34 @@ def prepare_sides(q, intensity, sigma, options):
                 sign=sign,
                 q=qq,
                 observed=y[indices],
-                sigma=sigma[indices],
+                sigma=side_sigma,
                 normalizer=norm,
                 indices=indices,
                 sigma_estimated=estimated,
+                sigma_level=curve_intake.sigma_level(qq, y[indices]) if estimated else None,
+                negative=negative,
+                zero=zero,
             )
         )
     if not result:
         raise ValueError("No nonzero q points in the selected side")
     return result
+
+
+SIGMA_SOURCES = {False: "given with the curve",
+                 True: "estimated: a relative sigma from the scatter of ln I about its trend"}
+"""``sigma_source`` of a candidate row (``sigma_relative``: the estimate's level, None for a given σ)."""
+
+
+def side_notes(item, unit, unreadable: int = 0) -> list[dict]:
+    """What is to be said of one half as it was taken in (``application.curve_intake``; each note a dict with
+    ``kind``, ``text`` and its numbers): an implausible q range in a unit the file did not state, the σ estimated
+    for a file without one, the negative and zero intensities (left out without σ, kept with it), unreadable rows."""
+    level = item.get("sigma_level")  # None: σ came with the curve
+    return [note.as_dict() for note in curve_intake.intake_notes(
+        item["q"], unit=unit.get("q_unit_read") or "", unit_from=unit.get("q_unit_from") or "", level=level,
+        negative=item["negative"], zero=item["zero"], points=len(item["q"]), left_out=level is not None,
+        unreadable=unreadable)]
 
 
 def curve_units(sources, options) -> list[dict]:
@@ -134,12 +143,14 @@ def run_workflow_job(payload, report, is_cancelled):
             if units[index].get("error"):
                 raise ValueError(units[index]["error"])
             file_options = {**options, "q_unit": unit["q_unit_read"]}  # what every record of this curve says
-            q, y, sigma = (
-                read_curve(Path(source))
+            q, y, sigma, unreadable = (
+                read_curve(Path(source), details=True)
                 if source
-                else (payload["q"], payload["intensity"], payload.get("sigma"))
+                else (payload["q"], payload["intensity"], payload.get("sigma"), 0)
             )
             sides = prepare_sides(q, y, sigma, file_options)
+            for item in sides:
+                item["curve_notes"] = side_notes(item, unit, unreadable)
             metadata = payload.get("observation_metadata", {}) if source is None else {}
             counts = None
             if metadata.get("source") == "native_cbf_columns" and "valid_pixel_counts" in metadata:
@@ -155,7 +166,11 @@ def run_workflow_job(payload, report, is_cancelled):
                     item["sigma_estimated"] = True
             rows = []
             for item in sides:
-                rows.extend(fit_and_write(directory / item["side"], item, file_options, report, is_cancelled))
+                side_rows = fit_and_write(directory / item["side"], item, file_options, report, is_cancelled)
+                for row in side_rows:
+                    row.update(curve_notes=item["curve_notes"], sigma_source=SIGMA_SOURCES[item.get("sigma_level") is not None],
+                               sigma_relative=item.get("sigma_level"))
+                rows.extend(side_rows)
             for row in rows:
                 row["file"] = name
                 row.update(unit)
@@ -176,6 +191,7 @@ def run_workflow_job(payload, report, is_cancelled):
                     seconds=time.perf_counter() - tick,
                     output_dir=str(directory),
                     candidates=len(rows),
+                    curve_notes=[note for item in sides for note in item["curve_notes"]],
                     **unit,
                 )
             )

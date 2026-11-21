@@ -95,7 +95,8 @@ def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08) ->
     # The I(q) points searched (it said "bins"), and the radial bins of the reduction as <stem>_analysis.json says.
     assert "bins" not in search and search["radial_bins"] >= search["points"] > 1000
     cap = _decision(report, "peak search")
-    assert re.fullmatch(r"\d+ candidate peaks found; the 12 most prominent were fitted", cap["decision"])
+    assert re.fullmatch(r"\d+ candidate peaks found; the 12 most prominent were fitted, \d+ of them gave a peak",
+                        cap["decision"])
     assert str(search["candidates"]) in cap["decision"] and "--max-peaks N" in cap["why"]
     text = pipeline_markdown(report)
     assert f"Series hints (reliable peaks among the 12 most prominent of {search['candidates']} candidates only)" in text

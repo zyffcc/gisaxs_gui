@@ -548,7 +548,7 @@ def fit_summary(result, choices: BatchChoices) -> tuple[str, str]:
         parts.append(", ".join(f"{key} = {float(value):.3g}" for key, value in params.items()
                                if isinstance(value, (int, float)) and key in ("R", "h", "D", "sigma_R", "pdi")))
     chance = best.get("probability")
-    text = tr("Most probable: {model} (p = {p}), {params} nm, χ²/N = {chi}").format(  # χ²/N: mean r², no dof correction
+    text = tr("Most probable: {model} (p = {p}), {params} nm, χ²ᵣ = {chi}").format(  # χ²ᵣ of Predict parameters, over its fitted points
         model=model_name(best), p="—" if chance is None else f"{float(chance):.2f}",
         params="; ".join(part for part in parts if part), chi=f"{float(best.get('best_chi2_weighted', math.nan)):.3g}",
     )

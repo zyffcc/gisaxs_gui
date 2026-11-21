@@ -54,6 +54,8 @@ def build_results_step(owner, page: QWidget, layout) -> None:
     owner.quality_card, owner.quality_label = info_card(page)
     owner.quality_card.setObjectName("fitQualityCard")
     layout.addWidget(owner.quality_card)
+    owner.curve_notes_label = _label(page, "fitCurveNotes", "warning")  # what was assumed of the curve (curve_info.py)
+    layout.addWidget(owner.curve_notes_label)
     next_row = FlowLayout()
     owner.next_refine_button = QPushButton("Refine These Values", page)
     owner.next_refine_button.setObjectName("fitNextRefine")

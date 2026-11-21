@@ -30,6 +30,7 @@ from ...application.single_fit import (
 )
 from ..views.step_widgets import fit_to_rows, show_line
 from .method_hint import note_text
+from . import predict_texts
 from .session import path_name
 from ...application.models import InSituSourceFrame
 from ...application.curve_sources import source_stem
@@ -161,8 +162,8 @@ def value_cells(key: str, value: float, error, free: bool) -> tuple[str, str]:
 
 CORRELATED_SHOWN = 2
 MORE_PAIRS = "and {count} more (hover)"
-ANALYZE_CHI2 = ("χ²/N: Analyze's fit (Predict parameters), the mean squared σ-normalised residual over the points "
-                "Analyze fitted (no degrees-of-freedom correction). Fit (Refine) gives χ²ᵣ here.")
+ANALYZE_CHI2 = ("χ²ᵣ of Analyze's fit (Predict parameters), over the points Analyze fitted. Fit (Refine) gives it for "
+                "the points here.")
 
 
 class FitResultsMixin:
@@ -206,6 +207,16 @@ class FitResultsMixin:
         return trf("{chi} {value} · {state}", chi=cls._chi_name(result), value=f"{result.chi2_reduced:.3g}",
                    state=cls._state_text(result))
 
+    def _rail_points(self, count: int) -> str:
+        """The Curve row of the rail: the points in the fit; after Predict parameters, how many of them it fitted
+        (it leaves out those below the network's q window)."""
+        session = self.session
+        best = session.solutions[0] if session.solutions and session.result is None \
+            and session.solutions_are_current() else None
+        if best is not None and best.points and best.points[0] != best.points[1]:
+            return trf("{fitted} of {given} points fitted", fitted=best.points[0], given=best.points[1])
+        return tr("{points} points fitted").format(points=count)
+
     def render_results(self) -> None:
         self._render_model_results()
         self.render_result_actions()  # next steps, what the fit did by itself, the folds (result_actions.py)
@@ -223,13 +234,14 @@ class FitResultsMixin:
         search_note = ["⚠ " + tr("The halves, the fitting range or the left-out points changed after the search: "
                                  "the χ² of the solutions is of the points before.")] if old_search else []
         if result is None and session.solutions:
-            self.quality_label.setText(tr("{count} solutions below; the best is in Model. Fit (Refine) gives its quality "
-                                          "and the error of every value.").format(count=len(session.solutions)))
+            self.quality_label.setText(trf("{solutions} below; the best is in Model. Fit (Refine) gives its quality "
+                                           "and the error of every value.",
+                                           solutions=predict_texts.count_solutions(len(session.solutions))))
             self.warnings_label.setText("\n".join(self.posterior_lines() + search_note))
             self.warnings_label.setToolTip("")
             stale = tr("Changed after the fit: Fit again") + " · " if old_search else ""
-            show_line(self.step_intro["results"],
-                      stale + tr("{count} solutions to compare.").format(count=len(session.solutions)))
+            show_line(self.step_intro["results"], stale + trf(
+                "{solutions} to compare.", solutions=predict_texts.count_solutions(len(session.solutions))))
         elif result is None:
             self.quality_label.setText(tr("No fit yet."))
             self.warnings_label.setText("")
@@ -245,6 +257,8 @@ class FitResultsMixin:
                                                    + search_note))
             self.warnings_label.setToolTip(self._correlated_tip)
             show_line(self.step_intro["results"], "")  # the box right below has it all (and a stale fit: its warnings)
+        self.quality_label.setToolTip("" if result is None and not session.solutions
+                                      else predict_texts.chi2_definition())
         self._fill_parameters(result if session.result_is_current() else None)
         self._fill_solutions()
 
@@ -273,6 +287,9 @@ class FitResultsMixin:
             self._correlated_tip = "\n".join(pairs)
         if result.weighting == "sigma" and result.chi2_reduced > 3 and not result.stopped:
             lines.append("⚠ " + tr("χ²ᵣ well above 1: the model misses features of the curve, or σ is underestimated."))
+        other_points = predict_texts.refine_points_line(result, self.session.solutions)
+        if other_points:  # Predict left out the points below the network's q window: another χ²ᵣ for the same values
+            lines.append(other_points)
         return lines
 
     def _unused(self, path: tuple, parameter) -> bool:
@@ -312,14 +329,18 @@ class FitResultsMixin:
                 continue  # an unused term (no resolution peak, no background, spheres at q_z = 0)
             error = None if result is None else result.errors.get(path)
             full = path_name(self.session.model, path, full=True)  # “1·Sphere R”, also when shown as “R”
-            rows.append(((self._path_name(path), full), *value_cells(path[1], parameter.value, error, parameter.free)))
+            value, plus = value_cells(path[1], parameter.value, error, parameter.free)
+            why = ""
+            if result is not None and parameter.free and not plus:  # a free value the fit gives no error for
+                plus, why = "–", predict_texts.no_error_reason(path, parameter, result, self.session.model)
+            rows.append(((self._path_name(path), full), value, (plus, why)))
         self.parameters_table.setRowCount(len(rows))
         self._row_paths = [path for path, parameter in self.session.model.parameters()
                            if not self._unused(path, parameter)]
-        for line, ((name, full), *cells) in enumerate(rows):
+        for line, ((name, full), value, (plus, why)) in enumerate(rows):
             self.parameters_table.setItem(line, 0, _item(name, full))
-            for column, text in enumerate(cells, start=1):
-                self.parameters_table.setItem(line, column, _item(text))
+            self.parameters_table.setItem(line, 1, _item(value))
+            self.parameters_table.setItem(line, 2, _item(plus, why))
         fit_to_rows(self.parameters_table)  # every row shown: only the step's page scrolls
 
     def _fill_solutions(self) -> None:
@@ -329,26 +350,34 @@ class FitResultsMixin:
         self.use_solution_button.setVisible(bool(solutions))
         curve = self.session.curve
         searched = self.session.solutions_searched()  # its χ²ᵣ computed here (run.py); else Analyze's fit
-        chi = "χ²/N" if not searched else "var ln I" if curve is not None and curve.sigma is None else "χ²ᵣ"
+        predicted = any(s.points or s.probability is not None for s in solutions) or not searched
+        chi = "χ²ᵣ" if predicted or curve is None or curve.sigma is not None else "var ln I"
         self.solutions_table.setHorizontalHeaderLabels(["#", tr("model"), "R (nm)", "D (nm)", chi, "p"])
+        for column, tip in ((2, tr(predict_texts.SIZES_TIP)), (3, tr(predict_texts.SIZES_TIP)),
+                            (4, predict_texts.chi2_definition() if chi == "χ²ᵣ" else ""), (5, tr(predict_texts.P_TIP))):
+            self.solutions_table.horizontalHeaderItem(column).setToolTip(tip)
         self.solutions_table.setColumnHidden(5, not any(s.probability is not None for s in solutions))
         shown = tuple(solutions)
         fresh = shown != getattr(self, "_solutions_shown", None)
         self._solutions_shown = shown
         self.solutions_table.setRowCount(len(solutions))
         for line, solution in enumerate(solutions):
-            component = solution.model.components[0] if solution.model.components else None
+            radii, distances = predict_texts.sizes_cells(solution.model)  # every population, by radius
             tip = tr("From {source}.").format(source=tr(solution.source))
+            for extra in (predict_texts.points_text(solution.points), predict_texts.differing_tip(solution, solutions)):
+                if extra:
+                    tip += " " + (extra if extra.endswith(".") else trf(predict_texts.POINTS, points=extra))
             if not searched:
                 tip += " " + tr(ANALYZE_CHI2)
             if solution.deviation > 0.01:
                 tip += " " + tr("This model differs from the solution by up to {percent} %.").format(
                     percent=f"{100 * solution.deviation:.3g}")
-            cells = (str(line + 1), solution.label,
-                     "—" if component is None else f"{component.value('R'):.3g}",
-                     "—" if component is None or not component.structure else f"{component.value('D'):.3g}",
+            alone = solution.tried == 1 and len(solutions) == 1  # one composition tried: p is no finding
+            if alone:
+                tip += " " + tr(predict_texts.ONLY_ONE)
+            cells = (str(line + 1), solution.label, radii, distances,
                      f"{solution.chi2:.3g}" if math.isfinite(solution.chi2) else "—",
-                     "—" if solution.probability is None else f"{solution.probability:.2f}")
+                     "—" if solution.probability is None or alone else f"{solution.probability:.2f}")
             for column, text in enumerate(cells):
                 self.solutions_table.setItem(line, column, _item(text, tip))
         if fresh or self.solutions_table.currentRow() < 0:  # new solutions: the one in Model is selected

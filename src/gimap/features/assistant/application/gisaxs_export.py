@@ -6,6 +6,8 @@ from typing import Optional
 
 import numpy as np
 
+from src.gimap.shared import fit_names
+
 from .gisaxs_choice import INTERVAL_KEYS, chosen, interval
 
 A_TO_NM = 10.0
@@ -46,7 +48,7 @@ def _intervals(row: dict, number: int) -> list[str]:
 
 
 def fit_solutions_csv(fit: dict, provenance: str = "") -> str:
-    """One line per component of each solution: rank, model, χ²/N, probability, parameters (R, h, D in nm; the σ
+    """One line per component of each solution: rank, model, χ²ᵣ, probability, parameters (R, h, D in nm; the σ
     columns are relative widths σ/value, without a unit), the 68 % posterior intervals of R, h and D when the fit
     gave them, then ``at_bounds`` (the values that ended on a bound of their range, as ``name:upper`` or
     ``name:lower``, a component's number after the name when there are several) and ``chosen`` (the solution the
@@ -61,11 +63,13 @@ def fit_solutions_csv(fit: dict, provenance: str = "") -> str:
     lines = [f"# {line}" for line in provenance.splitlines()] + [
         f"# GISAXS fit solutions [{' '.join(str(fit.get('curve')).split())}]: one line per component of each solution",
         "# units: R, h, D in nm; sigma_R, sigma_h, sigma_D are relative widths (sigma/value, no unit); "
-        "chi2 (chi^2/N: the mean of the squared sigma-normalised residuals), probability (posterior probability of "
-        "the solution), log_rmse, amplitude and weight have no unit; "
+        "chi2 (the reduced chi^2 = sum((I - model)^2 / sigma^2) / (N - number of free values) over the fitted "
+        "points, with the curve's sigma), probability (posterior probability of the solution, relative to the "
+        "compositions that were tried), log_rmse, amplitude and weight have no unit; "
         + ("R_low68 ... D_high68: the 68 % posterior interval in nm; " if ranges else "")
         + "at_bounds: values that ended on a bound of their range (not determined by the curve); chosen: the solution "
         "reported",
+        *([f"# fitted points: {fit_names.points_text(fit.get('fitted_points'))}"] if fit.get("fitted_points") else []),
         "rank,model,chi2,probability,log_rmse,converged,component," + ",".join(keys + limits) + ",at_bounds,chosen",
     ]
     for number, row in enumerate(rows):

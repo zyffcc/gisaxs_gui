@@ -118,6 +118,9 @@ class GuiWorkbench:
     def symmetry_center(self) -> dict:
         return self._call(self._automation.symmetry_center)
 
+    def ring_frame(self) -> dict:
+        return self._call(self._automation.ring_frame)
+
     def set_beam_center(self, x_px: float, y_px: float) -> dict:
         return self._apply(lambda done: self._automation.set_beam_center(x_px, y_px, done))
 

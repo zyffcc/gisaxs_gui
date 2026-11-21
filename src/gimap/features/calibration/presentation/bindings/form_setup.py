@@ -31,6 +31,7 @@ from src.gimap.app.presentation.section_bindings import (
 from ..preview_style import (
     CENTER_COLOR,
     DETECTED_RING_COLOR,
+    LEGEND_SAMPLE_BACKGROUND,
     MATCHED_RING_COLOR,
     UNMATCHED_RING_COLOR,
 )
@@ -72,7 +73,6 @@ class FormSetupMixin:
     def _apply_dialog_style(self) -> None:
         """Semantic roles only; colours come from the application theme."""
         set_role(self.calibrate_button, "primary")
-        set_role(self.overlay_legend, "overlay")
         for label in (
             self.preview_info_label,
             self.preview_cursor_label,
@@ -214,7 +214,9 @@ class FormSetupMixin:
         self.redraw_preview()
 
     def _show_overlay_legend(self) -> None:
-        """The legend of the preview overlays, in the interface language (a Qt label, not figure text)."""
+        """The legend of the preview overlays, in the interface language (a Qt label, not figure text). The words
+        take the label's own colour (the theme's text, light or dark); each line sample sits on the dark of the
+        image it is drawn over, so the overlay colours read the same in both themes."""
         entries = (
             (CENTER_COLOR, "━━", tr("Center")),
             (DETECTED_RING_COLOR, "┄┄┄", tr("Detected")),
@@ -223,7 +225,7 @@ class FormSetupMixin:
         )
         self.overlay_legend.setText(
             " &nbsp;&nbsp; ".join(
-                f'<span style="color:{colour}">{line}</span> <span style="color:#f8fafc">{word}</span>'
+                f'<span style="color:{colour}; background-color:{LEGEND_SAMPLE_BACKGROUND}">&nbsp;{line}&nbsp;</span> {word}'
                 for colour, line, word in entries
             )
         )

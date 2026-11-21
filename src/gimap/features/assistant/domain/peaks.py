@@ -34,10 +34,17 @@ FWHM_PER_SIGMA = 2.0 * math.sqrt(2.0 * math.log(2.0))
 GAUSS_AREA = math.sqrt(math.pi / (4.0 * math.log(2.0)))
 """Gaussian area = height × FWHM × GAUSS_AREA."""
 SERIES = {
-    "lamellar (1:2:3:4)": (1.0, 2.0, 3.0, 4.0, 5.0),
+    "lamellar (1:2:3:4)": (1.0, 2.0, 3.0, 4.0),
     "hexagonal (1:√3:2:√7:3)": (1.0, math.sqrt(3.0), 2.0, math.sqrt(7.0), 3.0),
 }
 SERIES_TOLERANCE = 0.02
+CONSECUTIVE_SERIES = frozenset({"lamellar (1:2:3:4)"})
+"""Series whose orders must be found one after the other: a peak at five times the first with the third and
+fourth order missing (ratios 1 : 1.99 : 4.92) is no lamellar series."""
+POOR_FIT_CHI2 = 10.0
+"""A peak fit with a reduced χ² above this is flagged ``poor_fit``: the points lie much further from the Gaussian
+on a line than their σ (another shape, a shoulder, a sloping halo). Its errors are scaled by √χ²_r, as for every
+fit with χ²_r above 1 (``_fit_peak``), but the shape they belong to does not describe the points."""
 BROAD_RELATIVE_WIDTH = 0.15
 """A peak wider than this fraction of its q is a halo (amorphous or liquid-like order)."""
 SPIKE_HEIGHT_OVER_BACKGROUND = 5.0
@@ -264,13 +271,16 @@ def _series_hints(qs: list[float]) -> tuple[str, ...]:
     hints: list[str] = []
     for base in qs[:3]:
         for name, ratios in SERIES.items():
-            orders = [base]
+            orders, own = [base], name in CONSECUTIVE_SERIES
             for ratio in ratios[1:]:
                 target = base * ratio
                 match = [q for q in qs if abs(q - target) <= SERIES_TOLERANCE * target]
                 if match:
                     orders.append(min(match, key=lambda q: abs(q - target)))
-            if len(orders) >= 3:
+                    own = own or abs(ratio - round(ratio)) > 1e-6  # √3 or √7: what tells it from 1:2:3
+                elif name in CONSECUTIVE_SERIES:
+                    break
+            if len(orders) >= 3 and own:
                 listed = ", ".join(f"{q:.4g}" for q in orders)
                 hints.append(f"q = {listed} Å⁻¹ follow a {name} series (within 2 %) from {base:.4g} Å⁻¹")
     return tuple(dict.fromkeys(hints))
@@ -367,6 +377,8 @@ def find_peaks(
             flags += ["step_edges", "spike"]
         if peak.fwhm > BROAD_RELATIVE_WIDTH * peak.q:
             flags.append("broad")
+        if peak.reduced_chi2 is not None and peak.reduced_chi2 > POOR_FIT_CHI2:
+            flags.append("poor_fit")
         if any(other is not peak and abs(peak.q - other.q) < 0.75 * (peak.fwhm + other.fwhm) for other in peaks):
             flags.append("overlap")
         finished.append(Peak(**{**peak.__dict__, "flags": tuple(flags)}))
@@ -388,5 +400,5 @@ def find_peaks(
     )
 
 
-__all__ = ["AT_EDGE", "BROAD_RELATIVE_WIDTH", "DEFAULT_BACKGROUND_WINDOW", "GAUSS_AREA", "MAX_PEAKS", "Peak", "PeakSearch",
-           "caveat", "find_peaks", "reliable"]
+__all__ = ["AT_EDGE", "BROAD_RELATIVE_WIDTH", "DEFAULT_BACKGROUND_WINDOW", "GAUSS_AREA", "MAX_PEAKS", "POOR_FIT_CHI2",
+           "Peak", "PeakSearch", "caveat", "find_peaks", "reliable"]

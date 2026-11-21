@@ -96,8 +96,12 @@ def test_a_profile_keeps_the_tilt_it_was_read_with_and_a_new_geometry_drops_it()
     profile = InstrumentProfile("Detector 300×400", geometry, detector_shape=(300, 400), dropped_tilt=tilt)
     stored = json.loads(json.dumps(profile.to_dict()))
     assert InstrumentProfile.from_dict(stored).dropped_tilt == tilt
-    assert "dropped_tilt" not in InstrumentProfile("plain", geometry).to_dict()  # older files stay as they were
-    assert InstrumentProfile.from_dict({**stored, "dropped_tilt": None}).dropped_tilt is None
+    assert "tilt" in stored and "dropped_tilt" not in stored  # the key says what it is: the tilt is applied
+    old = {**{key: value for key, value in stored.items() if key != "tilt"}, "dropped_tilt": stored["tilt"]}
+    assert InstrumentProfile.from_dict(old).dropped_tilt == tilt  # a file of 0.2.0 and before is still read
+    plain = InstrumentProfile("plain", geometry).to_dict()
+    assert "tilt" not in plain and "dropped_tilt" not in plain  # older files stay as they were
+    assert InstrumentProfile.from_dict({**stored, "tilt": None}).dropped_tilt is None
     assert profile.updated(geometry, source="calibration").dropped_tilt is None
     assert profile.updated(geometry, source="beam centre", dropped_tilt=tilt).dropped_tilt == tilt
 
@@ -250,7 +254,8 @@ def test_a_tilted_poni_gives_the_q_of_pyfai_and_is_in_the_record(xeuss_run) -> N
     assert geometry["rot1_rad"] == pytest.approx(poni.rot1_rad) and geometry["rot2_rad"] == pytest.approx(poni.rot2_rad)
     assert geometry["dropped_tilt_deg"] is None and geometry["flat_detector_q_error_max"] is None
     assert "tilted by pyFAI's rotations" in record["geometry_convention"]
-    assert record["instrument_profile"]["source"] == "automatic analysis: AgBe_250403_XENOCS.poni"
+    source = record["instrument_profile"]["source"]  # who chose it, from which file, and where that file is
+    assert source.startswith("automatic analysis: AgBe_250403_XENOCS.poni [") and source.endswith("AgBe_250403_XENOCS.poni]")
     assert not any("tilted by" in message for message in record["messages"])
     assert "detector tilt 6.06°" in session.page.summary_label.text()
     assert "detector tilt 6.06°" in session.page.step_rail.detail("geometry")

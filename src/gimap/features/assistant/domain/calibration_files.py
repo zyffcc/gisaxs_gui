@@ -50,8 +50,9 @@ LOG_WORDS = ("log", "fio", "param", "meta", "setup", "info", "notes", "readme", 
 HDF5_IMAGE_SUFFIXES = (".nxs", ".nx", ".nx5", ".h5", ".hdf5", ".hdf")
 """Every suffix of a NeXus / HDF5 file (the shared detector reader's list; no file access here)."""
 IMAGE_SUFFIXES = (".cbf", ".tif", ".tiff", *HDF5_IMAGE_SUFFIXES, ".edf")
-READABLE_IMAGE_SUFFIXES = (".cbf", ".tif", ".tiff", *HDF5_IMAGE_SUFFIXES)
-"""Image formats GIMaP reads (and can calibrate from)."""
+READABLE_IMAGE_SUFFIXES = IMAGE_SUFFIXES
+"""Image formats GIMaP reads (and can calibrate from): one list for the search, the command line and the window,
+so a format the Calibration window fits (``.edf``) is never refused by the tools."""
 TEXT_SUFFIXES = (".log", ".txt", ".fio", ".dat", ".json", ".ini", ".cfg", ".conf", ".yaml", ".yml", ".md", ".csv", ".xml", ".par", ".prm")
 
 POINT_OF_NORMAL_INCIDENCE = "poni"

@@ -228,7 +228,8 @@ def test_giwaxs_reduction_finds_ring_sectors_and_azimuthal_profile() -> None:
     # The isotropic ring is flat in χ within the sampled range.
     assert np.ptp(azimuthal.intensity) < 0.25 * azimuthal.intensity.mean()
     rsm = reduction.reciprocal_space_map
-    assert rsm.image.shape == (800, 800)
+    # No finer than the detector samples q (at most 800 × 800): cells between pixels would stay empty.
+    assert rsm.image.shape[0] <= min(800, image.shape[0]) and rsm.image.shape[1] <= min(800, 2 * image.shape[1])
     assert rsm.qz_range[0] >= 0.0
 
 

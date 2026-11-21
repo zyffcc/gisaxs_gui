@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import QPushButton, QToolButton, QVBoxLayout, QWidget
 
 from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, FlowLayout
 from src.gimap.app.presentation.i18n import current_language, tr, trf
+from src.gimap.shared import fit_names
 
 from ..application import (
     ASK_PROBABILITY,
@@ -42,15 +43,19 @@ COLUMNS = (("R", "R (nm)"), ("h", "h (nm)"), ("D", "D (nm)"))
 FIT_HEADERS = (("model", "The particles of the solution: one or two populations; (S): with a paracrystal distance D. "
                           "⚠: a warning of the fit. A value marked ⚠ ended on a bound of its range, which the curve does "
                           "not determine (listed under the table; Fit details below: every parameter)."),
-               ("p", "p: the posterior probability of the solution; the solutions are sorted by it, most probable "
-                     "first. Another solution with p of 0.2 or more: the curve alone does not decide the model."),
-               ("R", "R (nm): the particle radius."), ("h", "h (nm): the cylinder height (— for a sphere)."),
-               ("D", "D (nm): the paracrystal distance between particles."),
-               ("χ²/N", "χ²/N: the mean squared σ-normalised residual, with no degrees-of-freedom correction."))
+               ("p", "p: the posterior probability of the solution, relative to the compositions that were tried; the "
+                     "solutions are sorted by it, most probable first. Another solution with p of 0.2 or more: the "
+                     "curve alone does not decide the model."),
+               ("R", "R (nm): the particle radius of every population, in the order of the radii."),
+               ("h", "h (nm): the cylinder height of every population, in the order of the radii (– for a sphere)."),
+               ("D", "D (nm): the paracrystal distance of every population, in the order of the radii (– without a "
+                     "paracrystal)."),
+               ("χ²ᵣ", fit_names.CHI2_DEFINITION))
 """The fit table's columns: short, so it fits the Results tab (the unit in the tooltip and the line under it; the
-model names in it are names, never translated). R, h and D are of the first population (Fit details: every one)."""
+model names in it are names, never translated). R, h and D are of every population, in the order of the radii
+(“3.06 / 6.02”; Fit details: every value)."""
 FIT_NUMBERS = (1, 2, 3, 4, 5)
-FIT_COPY_HEADERS = ("model", "probability", "R (nm)", "h (nm)", "D (nm)", "χ²/N")
+FIT_COPY_HEADERS = ("model", "probability", "R (nm)", "h (nm)", "D (nm)", "χ²ᵣ")
 """The fit table's columns with their units, for copied rows."""
 DETAILS = (("R", "R", " nm"), ("sigma_R", "σR/R", ""), ("h", "h", " nm"), ("sigma_h", "σh/h", ""), ("D", "D", " nm"),
            ("sigma_D", "σD/D", ""), ("weight", "weight", ""))
@@ -71,6 +76,15 @@ def model_name(model: str) -> str:
     return str(model or "").replace("_", " ")
 
 
+def population_values(row: dict, key: str) -> str:
+    """``key`` (R, h, D) of every population of a solution, in the order of the radii: “3.06 / 6.02”, “49.4 / –”;
+    “—” when no population has it."""
+    components = sorted((c for c in row.get("components") or () if c.get("R") is not None), key=lambda c: float(c["R"]))
+    if not any(component.get(key) is not None for component in components):
+        return "—"
+    return " / ".join("–" if component.get(key) is None else _number(component[key]) for component in components)
+
+
 def _details(row: dict) -> str:
     """Every parameter and warning of a solution (the row's tooltip), its words in the interface language."""
     components = row.get("components") or [{}]
@@ -80,11 +94,15 @@ def _details(row: dict) -> str:
         for number, component in enumerate(components, start=1))
     notes = list(row.get("warnings") or ()) + ([] if row.get("converged", True) else ["not converged"])
     chance = "" if _probability(row) == "—" else f"; p {_probability(row)}"
-    return (f"{model_name(row['model'])}: {values}; χ²/N {_number(row['chi2'])}{chance}"
-            + "".join(f"\n⚠ {words(note)}" for note in notes) + "".join(f"\n⚠ {phrase}" for phrase in bound_words(row)))
+    more = [words(note) for note in row.get("more_warnings") or ()]
+    return (f"{model_name(row['model'])}: {values}; χ²ᵣ {_number(row['chi2'])}{chance}"
+            + "".join(f"\n⚠ {words(note)}" for note in notes) + "".join(f"\n⚠ {phrase}" for phrase in bound_words(row))
+            + ("\n" + trf(fit_names.MORE, notes="; ".join(more)) if more else ""))
 
 
 def _probability(row: dict) -> str:
+    if row.get("alone"):  # the one solution of a composition that was given: its 1.00 is no finding
+        return "—"
     chance = probability(row)
     return "—" if chance != chance else f"{chance:.2f}"  # NaN: the fit gave none
 
@@ -132,11 +150,11 @@ def outcome_summary(report: dict) -> str:
         parts.append(f"2π/q* = {spacing['distance_nm']:.3g} nm" + ("" if spacing.get("kind") == "maximum" else gap + tr("(shoulder)")))
     _index, best = chosen_solution(gisaxs.get("fit"))
     if best is not None:
-        component = (best.get("components") or [{}])[0]
-        values = {"model": model_name(best["model"]), "radius": _number(component.get("R")), "chi2": _number(best["chi2"])}
+        values = {"model": model_name(best["model"]), "radius": population_values(best, "R"),
+                  "chi2": _number(best["chi2"])}
         chance = _probability(best)  # a report written before Predict parameters gives none
-        parts.append(trf("best fit {model} R {radius} nm (χ²/N {chi2})", **values) if chance == "—" else
-                     trf("most probable fit {model} R {radius} nm (p {p}, χ²/N {chi2})", p=chance, **values))
+        parts.append(trf("best fit {model} R {radius} nm (χ²ᵣ {chi2})", **values) if chance == "—" else
+                     trf("most probable fit {model} R {radius} nm (p {p}, χ²ᵣ {chi2})", p=chance, **values))
         if bound_words(best):  # values the curve does not determine
             parts[-1] += " ⚠ " + _joined(bound_words(best))
     return listed(parts) if parts else tr("the horizontal cut is ready")  # Chinese: its own comma
@@ -252,13 +270,13 @@ class GisaxsResults(QWidget):
         layout.addWidget(self.fit_plot)
         rows, bounded, named = [], [], []
         for row in solutions:
-            component = (row.get("components") or [{}])[0]
             details = _details(row)
             bounds = bound_words(row)  # a value at a bound is not determined by the curve: ⚠ on its cell too
-            ended = {item.get("parameter") for item in row.get("at_bounds") or () if item.get("component") in (0, None)}
+            ended = {item.get("parameter") for item in row.get("at_bounds") or ()}
             flagged = bool(row.get("warnings")) or not row.get("converged", True) or bool(bounds)
             rows.append([(model_name(row["model"]) + (" ⚠" if flagged else ""), details), (_probability(row), details),
-                         *((_number(component.get(key)) + (" ⚠" if key in ended else ""), details) for key, _name in COLUMNS),
+                         *((population_values(row, key) + (" ⚠" if key in ended else ""), details)
+                           for key, _name in COLUMNS),
                          (_number(row["chi2"]), details)])
             if bounds:
                 bounded.append(trf("{rank}: {bounds}", rank=row.get("rank"), bounds=_joined(bounds)))
@@ -289,7 +307,7 @@ class GisaxsResults(QWidget):
         save_curve.clicked.connect(self.save_curve)
         save_table = QPushButton(tr("Save Fit Table…"), self)
         save_table.setObjectName("guidedSaveFitTable")
-        save_table.setToolTip(tr("CSV: every solution with its probability, parameters (nm), intervals and χ²/N."))
+        save_table.setToolTip(tr("CSV: every solution with its probability, parameters (nm), intervals and χ²ᵣ."))
         save_table.clicked.connect(self.save_table)
         for button in (save_curve, save_table, refine):
             buttons.addWidget(button)

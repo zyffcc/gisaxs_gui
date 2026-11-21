@@ -23,7 +23,7 @@ from src.gimap.app.presentation.i18n import tr
 from ..application.workflow_v5 import validate_options
 from .workflow_v5_units import UNIT_LABEL, UNIT_TIP
 
-Q_UNITS = (("nm⁻¹", "nm^-1"), ("Å⁻¹", "A^-1"))
+Q_UNITS = (("Å⁻¹", "A^-1"), ("nm⁻¹", "nm^-1"))
 """(shown, option value) of the unit of q in text files that state none in their header (``workflow_v5_units``)."""
 Q_SIDES = (("Each half separately", "both"), ("q > 0 half", "positive"), ("q < 0 half", "negative"))
 """(shown, option value) of the halves of q fitted."""
@@ -31,6 +31,9 @@ COMPONENTS = ("Auto / unused", "Sphere", "Random cylinder", "Vertical cylinder")
 """The composition's choices; their position is the option value (0: none)."""
 COMPOSITION_TIP = ("Predict parameters: GIMaP's proposal network and its posterior, each solution refined by least "
                    "squares. Complete composition: 1–3 components, each with a paracrystal; Auto: the network chooses.")
+COUNTING_TIP = ("Only for Use current cut on a curve Analyze wrote with the pixel counts of its detector columns: "
+                "added in quadrature to the counting σ. A curve without σ gets a relative σ estimated from the scatter "
+                "of ln I about its trend, as on the Fit page.")
 QZ_TIP = ("The out-of-plane q of the horizontal cut: spheres are evaluated at the Born term of that q_z. "
           "Unticked: q_z = 0 (the effective interface).")
 
@@ -93,9 +96,11 @@ class WorkflowV5SettingsMixin:
         right.addRow(self.use_qz, self.cut_qz)
         self.relative_noise = _spin(0, 10, self._options["relative_noise"], 4)
         self.noise_floor = _spin(0, 1e12, self._options["absolute_noise"], 6)
-        self.noise_floor.setSpecialValueText("Auto: 0.1% peak")
-        right.addRow("Relative σ (if missing)", self.relative_noise)
-        right.addRow("Absolute σ floor", self.noise_floor)
+        self.noise_floor.setSpecialValueText("None")
+        for widget in (self.relative_noise, self.noise_floor):
+            widget.setToolTip(COUNTING_TIP)
+        right.addRow("Relative σ added to counting σ", self.relative_noise)
+        right.addRow("Absolute σ added to counting σ", self.noise_floor)
         save = QPushButton("Save Settings")
         save.clicked.connect(self.save_settings)
         right.addRow(save)

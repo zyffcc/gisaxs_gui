@@ -8,7 +8,7 @@ These lines do not change a number; they say what a number means, so that a read
   its own words (for GISAXS: q_z and the Yoneda band move, q_y and 2π/q* barely);
 * ``uncertainties`` — the ± are statistical only, from the bins' own errors (Poisson counting statistics or
   the scatter of each bin's pixels, whichever the frame's reduction used); for GISAXS, the σ of the cuts that
-  the fit's χ²/N is normalised by;
+  the fit's χ²ᵣ is normalised by;
 * ``peak search`` — when more candidates qualified than were fitted (``PeakSearch.truncated``), how many,
   and how to fit more;
 * ``texture rule`` and ``ring orientation`` — what the texture sentences compare, and the rings whose f depends
@@ -47,8 +47,10 @@ REFRACTION = {
 """What refraction does to the kinematic q of each technique: (the shift, what barely changes)."""
 UNCERTAINTIES = {
     "giwaxs": ("the ± of q, d, FWHM and sizes (the peak fits) and σ_f of the Hermans f (Monte Carlo) come from {model}; "
+               "the ± of a peak fit whose reduced χ² is above 1 are multiplied by √χ²_r (a fit above χ²_r = 10 is "
+               "flagged as a poor fit in the peak table); "
                "the geometry (beam centre, distance, αi), the background under a ring and refraction are not included"),
-    "gisaxs": ("the σ of the cuts' points (the σ column of the saved curves), by which the fit's χ²/N is normalised, "
+    "gisaxs": ("the σ of the cuts' points (the σ column of the saved curves), by which the fit's χ²ᵣ is normalised, "
                "come from {model}; the intervals of R, h and D are the posterior of Predict parameters given these σ "
                "and the model; the geometry (beam centre, distance, αi) and refraction are not included"),
 }
@@ -93,7 +95,9 @@ def peak_cap_decision(search, asked: int = MAX_PEAKS) -> Optional[dict]:
     candidates, cap = int(getattr(search, "candidates", 0)), int(getattr(search, "max_peaks", MAX_PEAKS))
     if candidates > cap:
         return {
-            "what": "peak search", "decision": f"{candidates} candidate peaks found; the {cap} most prominent were fitted",
+            "what": "peak search", "decision": (
+                f"{candidates} candidate peaks found; the {cap} most prominent were fitted, "
+                f"{len(getattr(search, 'peaks', ()) or ())} of them gave a peak"),
             "why": (
                 ("the default cap, for speed" if cap == MAX_PEAKS else "the cap asked for")
                 + ": the other candidates were not fitted, so they are not in the peak table, the series hints, the "

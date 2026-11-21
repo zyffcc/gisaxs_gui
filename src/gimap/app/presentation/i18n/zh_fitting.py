@@ -68,8 +68,6 @@ FITTING_ZH = {
     "{name}\n{points} points, |q| {low}–{high} nm⁻¹ ({low_a}–{high_a} Å⁻¹); {fitted} in the fitting range.":
         "{name}\n{points} 个点，|q| {low}–{high} nm⁻¹（{low_a}–{high_a} Å⁻¹）；拟合范围内 {fitted} 个。",
     "σ from the file: the fit weights each point by 1/σ.": "σ 来自文件：拟合按 1/σ 给每个点加权。",
-    "No σ in the file: every point gets the same relative weight (ln I is fitted).":
-        "文件里没有 σ：每个点的相对权重相同（拟合 ln I）。",
     "Could not open {name}: {reason}": "无法打开 {name}：{reason}",
     "Opened {name}: {points} points": "已打开 {name}：{points} 个点",
     "Opened {name}.": "已打开 {name}。",
@@ -213,9 +211,9 @@ FITTING_ZH = {
     "χ²ᵣ well above 1: the model misses features of the curve, or σ is underestimated.": "χ²ᵣ 远大于 1：模型没描述出曲线的某些特征，或 σ 估计偏小。",
     "fixed": "固定",
     "From {source}.": "来自 {source}。",
-    "χ²/N: Analyze's quick fit, the mean squared σ-normalised residual over the points Analyze fitted "
+    "χ²ᵣ: Analyze's quick fit, the mean squared σ-normalised residual over the points Analyze fitted "
     "(no degrees-of-freedom correction). Fit (Refine) gives χ²ᵣ here.":
-        "χ²/N：分析工作区快速拟合的值，即分析工作区所拟合的那些点上按 σ 归一化的残差的均方（未做自由度修正）。"
+        "χ²ᵣ：分析工作区快速拟合的值，即分析工作区所拟合的那些点上按 σ 归一化的残差的均方（未做自由度修正）。"
         "点“拟合”（精修）会在这里给出 χ²ᵣ。",
     "shape search": "形状搜索",
     "This model differs from the solution by up to {percent} %.": "这个模型与该解最多相差 {percent} %。",
@@ -329,10 +327,9 @@ FITTING_ZH = {
         "通用 V5：0.007–0.013 nm⁻¹。RC 专用模型 / 物理拟合：0.001–0.1 nm⁻¹；固定分辨率时改用数值回退。",
     "General V5: 5–10. RC specialist / physical fit: 1–20; fixed resolution uses numerical fallback.":
         "通用 V5：5–10。RC 专用模型 / 物理拟合：1–20；固定分辨率时改用数值回退。",
-    "Auto: 0.1% peak": "自动：峰值的 0.1%",
     "Auto: measured max": "自动：测量最大值",
-    "Relative σ (if missing)": "相对 σ（文件里没有时）",
-    "Absolute σ floor": "σ 绝对下限",
+    "Relative σ added to counting σ": "加到计数 σ 上的相对 σ",
+    "Absolute σ added to counting σ": "加到计数 σ 上的绝对 σ",
     "Intensity normalizer": "强度归一化值",
     "Discover combinations": "搜索的组合数",
     "Condition best combinations": "细化的最佳组合数",
@@ -503,10 +500,8 @@ FITTING_ZH = {
         "后验抽样没有收敛：各个解按 χ² 和数值个数（BIC）比较",
     'Add a particle in Model, or use Predict parameters.':
         '在模型中添加一种颗粒，或者用预测参数。',
-    "χ²/N: Analyze's fit (Predict parameters), the mean squared σ-normalised residual over the points Analyze fitted (no degrees-of-freedom correction). Fit (Refine) gives χ²ᵣ here.":
-        'χ²/N：分析页的拟合（预测参数），即分析页所拟合各点上 σ 归一化残差平方的平均值（不做自由度修正）。在这里拟合（精修）给出 χ²ᵣ。',
-    'No σ in the file: Predict parameters takes a relative σ from the scatter of the curve about its trend.':
-        '文件中没有 σ：预测参数从曲线围绕其趋势的散布取一个相对 σ。',
+    "χ²ᵣ: Analyze's fit (Predict parameters), the mean squared σ-normalised residual over the points Analyze fitted (no degrees-of-freedom correction). Fit (Refine) gives χ²ᵣ here.":
+        'χ²ᵣ：分析页的拟合（预测参数），即分析页所拟合各点上 σ 归一化残差平方的平均值（不做自由度修正）。在这里拟合（精修）给出 χ²ᵣ。',
     'Residuals: {formula}. Each point is weighted by 1/σ from the file.':
         '残差：{formula}。每个点按文件中 σ 的 1/σ 加权。',
     'No particle yet: add one above, or let Fit ▸ Predict parameters find them.':

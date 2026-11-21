@@ -68,7 +68,7 @@ def _trend_panels(table: FitTable, kind: str) -> list:
         return [(label, table.trend(suffix, error)) for label, suffix, error in (
             ("q (1/A)", " q (1/A)", " q err"), ("FWHM (1/A)", " FWHM (1/A)", " FWHM err"), ("area", " area", " area err"),
         )]
-    panels = [("χ²/N", table.trend("chi2"))]  # the mean r² of Predict parameters (no degrees-of-freedom correction)
+    panels = [("χ²ᵣ", table.trend("chi2"))]  # the reduced χ² of Predict parameters, over the points it fitted
     for label, suffix in (("R (nm)", " R"), ("D (nm)", " D"), ("h (nm)", " h")):
         panels.append((label, table.trend(suffix)))
     return [panel for panel in panels if panel[1]]
@@ -79,7 +79,7 @@ def _latest_model(rows) -> str:
     best = rows[0]
     chance = best.get("probability")
     return (f"{model_name(best)}" + ("" if chance is None else f", p {float(chance):.2f}")
-            + f", χ²/N {float(best.get('best_chi2_weighted', float('nan'))):.3g}")
+            + f", χ²ᵣ {float(best.get('best_chi2_weighted', float('nan'))):.3g}")
 
 
 class BatchModelMixin:
@@ -348,8 +348,9 @@ class BatchModelMixin:
                     f"halves of the cut: {HALVES_WORDS[chosen]} ({chosen}); the columns halves "
                     "and points say what each frame was fitted on (a frame without a fit: its reason in note)")
                 comments.append(
-                    "chi2: chi2/N, the mean of the squared sigma-normalised residuals over the points fitted "
-                    "(no degrees-of-freedom correction; not Fitting's reduced chi2)")
+                    "chi2: the reduced chi2 = sum((I - model)^2 / sigma^2) / (N - number of free values) over the "
+                    "points Predict parameters fitted (it leaves out those below the network's q window), with the "
+                    "curve's sigma; the number Fitting shows for the same solution")
             written.append(run.fit_table.write(writer, destination / names["fit"], comments))
             panels = _trend_panels(run.fit_table, choices.fit)
             if panels and self.figures is not None:

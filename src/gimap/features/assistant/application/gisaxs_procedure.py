@@ -8,14 +8,15 @@ available — Predict parameters on the curve: the most probable solution is rep
 probability and intervals, and when another solution is probable too the person chooses the model.
 Each step is a tool call, so the GUI shows it and the AI could do the same. Like the GIWAXS run, the
 report always says what its numbers are (q kinematic, uncertainties statistical only:
-``giwaxs_decisions``), and a reported fit far from its curve (χ²/N above Fitting's poor-fit limit) or
+``giwaxs_decisions``), and a reported fit far from its curve (χ²ᵣ above Fitting's poor-fit limit) or
 with a value at a bound of its range is a point to check.
 """
 
 from __future__ import annotations
 
-import math
 from typing import Optional
+
+from src.gimap.shared import fit_names
 
 from .gisaxs_choice import (
     ASK_PROBABILITY,
@@ -24,23 +25,28 @@ from .gisaxs_choice import (
     LINEAR_TERMS,
     POOR_CHI2,
     bounds_text,
+    chance,
     chosen,
     interval,
     poor_fit,
-    probability,
     rivals,
+    sizes,
     zero_terms,
 )
 from .gisaxs_report import cut_spans
 from .giwaxs_decisions import refraction_decision, uncertainty_decision
+from .ring_frames import NO_FIT
 
 PREDICTED = (
     "the most probable solution of Predict parameters on {curve}: GIMaP's network proposes compositions and values, "
-    "each solution is refined by least squares and weighted by its posterior probability; χ²/N is the mean of r² "
-    "over the points, with no degrees-of-freedom correction"
+    "each solution is refined by least squares and weighted by its posterior probability; "
+    "χ²ᵣ = Σ((I − model)²/σ²)/(N − number of free values) over the fitted points{points}; "
+    "probabilities are relative to the compositions that were tried"
 )
 """Why the first solution is the one the run reports."""
-INTERVALS = "{values} (68 % of the posterior)"
+INTERVALS = "{values} (refined value [68 % posterior interval])"
+INTERVALS_BIC = ("{values} (refined value [68 % interval from the least-squares errors: the posterior's sampling did "
+                 "not converge])")
 INTERVALS_WHY = (
     "the posterior of Predict parameters given the σ of the points, sampled around the solution; the geometry and "
     "the choice of model are not in it"
@@ -52,7 +58,9 @@ AT_ZERO_WHY = (
     "by that limit, not by the curve, and is not counted among the values at a bound of their range, which are the "
     "non-linear ones"
 )
-BEAM_TAIL_OFF = "; with A = 0 the beam tail is absent, so σ_Res and ν_Res do not change the curve"
+BEAM_TAIL_OFF = "; with Tail A = 0 the beam tail is absent, so Tail w and Tail ν do not change the curve"
+MORE_CAVEATS = "background, beam tail and resolution: {notes}"
+MORE_CAVEATS_WHY = "reported by the fit; these are not values of the particles"
 """The ``fit caveat`` of a reported solution whose linear terms ended at 0 (``gisaxs_choice.zero_terms``)."""
 AT_BOUND = "The reported solution ({model}) has {bounds}: those values are not determined by the curve."
 AT_BOUND_HINT = (
@@ -60,7 +68,7 @@ AT_BOUND_HINT = (
 )
 """A reported solution with a non-linear value at a bound of its range (``at_bounds``)."""
 POOR_FIT = (
-    "The reported solution ({model}) has χ²/N = {chi2}, above {limit}: it misses the curve by far more than the σ of "
+    "The reported solution ({model}) has χ²ᵣ = {chi2}, above {limit}: it misses the curve by far more than the σ of "
     "its points, so none of the compositions Predict parameters tried describes this cut, and its R and D are not "
     "measurements."
 )
@@ -68,7 +76,7 @@ POOR_FIT_HINT = (
     "Look at the fit over the curve (the Results tab, fit_curve.csv): Bragg rings of a powder or a calibrant, a cut "
     "off the Yoneda band or a second population give such a misfit. Refine a model you expect in Fitting."
 )
-"""A converged reported solution with χ²/N above ``POOR_CHI2`` (the limit of Fitting's poor fit)."""
+"""A converged reported solution with χ²ᵣ above ``POOR_CHI2`` (the limit of Fitting's poor fit)."""
 PROBABLE = "{n} solutions have a probability of at least {limit} ({solutions}): the curve alone does not decide the model."
 PROBABLE_HINT = "Choose the particle shape you expect and refine that model in Fitting; compare the fitted curves."
 """Another solution is probable too (``gisaxs_choice.rivals``): the person chooses the model."""
@@ -88,24 +96,23 @@ def _distance(solution: dict) -> Optional[float]:
 def _solution_text(solution: dict) -> str:
     """Formatted once, from the fit record (the tool's answer is rounded to 4 significant digits: 48.3484 → 48.35,
     which ``.3g`` then made 48.4 while the table said 48.3). D only for a solution with a paracrystal."""
-    component = (solution.get("components") or [{}])[0]
-    distance = f", D = {component['D']:.3g} nm" if component.get("D") is not None else ""
-    chance = probability(solution)
-    return (
-        f"{solution['model']}: R = {component.get('R', math.nan):.3g} nm{distance}, χ²/N = {solution['chi2']:.3g}"
-        + ("" if math.isnan(chance) else f", probability {chance:.2f}")
-    )
+    said = chance(solution)
+    return f"{solution['model']}: {sizes(solution)}, χ²ᵣ = {solution['chi2']:.3g}" + (f", {said}" if said else "")
 
 
 def _interval_text(solution: dict) -> str:
-    """The 68 % intervals of R, h and D of every component (``R 9.1–9.8 nm, D 45–52 nm``; "" when none)."""
+    """The refined R, h and D of every component with their 68 % intervals, named as everywhere else
+    (``R (1) 3.06 [3.02, 3.23] nm, D (1) 49.4 [37.8, 65.0] nm``; one population: ``R 9.44 [9.12, 9.68] nm``; "" when
+    the fit gave no interval)."""
     many = len(solution.get("components") or ()) > 1
     parts = []
     for number, component in enumerate(solution.get("components") or ()):
         for key in INTERVAL_KEYS:
             found = interval(solution, key, number) if component.get(key) is not None else None
             if found is not None:
-                parts.append(f"{key}{f' {number + 1}' if many else ''} {found[0]:.3g}–{found[1]:.3g} nm")
+                best = float(component[key])  # an interval always holds its refined value (rounding apart)
+                parts.append(f"{fit_names.display_name(f'{key}_{number + 1}', many)} "
+                             + fit_names.interval_text(best, min(found[0], best), max(found[1], best), "nm"))
     return ", ".join(parts)
 
 
@@ -143,7 +150,9 @@ class GisaxsProcedureMixin:
             self._call("set_halves", {"side": halves["recommended"]})
             self._decide("halves", halves["recommended"], halves["reason"])
         self._spacing()
-        if self.options.fit and self.catalog.fitter is not None:
+        if getattr(self, "_transmission_frame", None):
+            self._decide("fit", "not run", NO_FIT)
+        elif self.options.fit and self.catalog.fitter is not None:
             self._fit()
         elif self.catalog.fitter is None:
             self._decide("fit", "not run here", "no fitter in this session: Send to Fitting fits the prepared curve")
@@ -203,12 +212,18 @@ class GisaxsProcedureMixin:
         if not solutions:
             return
         _index, best = chosen(fit)
-        self._decide("fit", _solution_text(best), PREDICTED.format(curve=fit.get("curve")))
+        over = fit_names.points_text(best.get("points") or fit.get("fitted_points"))
+        self._decide("fit", _solution_text(best), PREDICTED.format(curve=fit.get("curve"),
+                                                                   points=f" ({over})" if over else ""))
         ranges = _interval_text(best)
-        if ranges:
-            self._decide("fit intervals", INTERVALS.format(values=ranges), INTERVALS_WHY)
+        if ranges:  # the refined values with their intervals; from the errors when the sampling did not converge
+            by_errors = best.get("compared_by") == "bic" or "bic" in (best.get("flags") or ())
+            self._decide("fit intervals", (INTERVALS_BIC if by_errors else INTERVALS).format(values=ranges),
+                         INTERVALS_WHY)
         for warning in best.get("warnings") or ():
             self._decide("fit caveat", warning, "reported by the fit")
+        if best.get("more_warnings"):  # one line for the values that are not the particles'
+            self._decide("fit caveat", MORE_CAVEATS.format(notes="; ".join(best["more_warnings"])), MORE_CAVEATS_WHY)
         if bounds_text(best):
             self._decide("fit caveat", bounds_text(best), "a value on the edge of its range is not determined by the curve")
         zeros = zero_terms(best)  # linear terms at their non-negativity limit: said, not counted as a bound

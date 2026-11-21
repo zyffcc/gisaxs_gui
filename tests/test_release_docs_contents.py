@@ -333,7 +333,8 @@ def test_the_documents_describe_the_one_network_method_of_fitting() -> None:
     # The 1D Predict window: one method, and the settings its Parameters… panel has.
     window = _manual_section(_text(MANUAL), "### 6.4 Predict parameters and 1D Predict")
     settings = _text(ROOT / "src" / "gimap" / "features" / "fitting" / "presentation" / "workflow_v5_settings.py")
-    for label in ("Complete composition", "Cut qz (nm⁻¹)", "Relative σ (if missing)", "Absolute σ floor", "Save Settings"):
+    for label in ("Complete composition", "Cut qz (nm⁻¹)", "Relative σ added to counting σ", "Absolute σ added to counting σ",
+                  "Save Settings"):
         assert f'"{label}"' in settings and f"**{label}**" in window, label
     assert "**Fit method**" not in window and "Fit method" not in settings
     documents = (README, MANUAL, zh, MANUAL.with_name("Physics_Manual.md"), MANUAL.with_name("Physics_Manual_zh.md"),

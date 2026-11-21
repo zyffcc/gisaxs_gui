@@ -430,10 +430,10 @@ class GuidedResultsPanel(QWidget):
             form = QFormLayout()
             for name, value in (
                 ("From", source_text(geometry.get("source"))),
-                ("Distance", f"{geometry.get('distance_mm')} mm"),
+                ("Distance", f"{float(geometry.get('distance_mm')):.6g} mm"),  # the record keeps every digit
                 ("Beam centre", f"({centre[0]}, {centre[1]}) px"),
-                ("Wavelength", f"{geometry.get('wavelength_A')} Å"),
-                ("Incidence angle αi", f"{geometry.get('incidence_deg')}°"),
+                ("Wavelength", f"{float(geometry.get('wavelength_A') or 0):.6g} Å"),
+                ("Incidence angle αi", f"{float(geometry.get('incidence_deg') or 0):.6g}°"),
             ):
                 form.addRow(tr(name), label(str(value), self))
             self.layout_.addLayout(form)

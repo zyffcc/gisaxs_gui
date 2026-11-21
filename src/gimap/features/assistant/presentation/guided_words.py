@@ -13,6 +13,7 @@ import re
 from functools import lru_cache
 
 from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, current_language, tr, trf
+from src.gimap.shared import fit_names
 
 SENTENCES = (
     # A ring's orientation (domain/orientation.py): the texture, the notes and why there is no f.
@@ -61,7 +62,7 @@ SENTENCES = (
     # The points a GISAXS run asks a person to look at (application/gisaxs_procedure.py).
     "cut of the series (rows {rows})",
     "{n} solutions have a probability of at least {limit} ({solutions}): the curve alone does not decide the model.",
-    "The reported solution ({model}) has χ²/N = {chi2}, above {limit}: it misses the curve by far more than the σ of "
+    "The reported solution ({model}) has χ²ᵣ = {chi2}, above {limit}: it misses the curve by far more than the σ of "
     "its points, so none of the compositions Predict parameters tried describes this cut, and its R and D are not "
     "measurements.",  # gisaxs_procedure.POOR_FIT, character for character
     "Solutions whose D is within {percent} of 2π/q* of the cut: {solutions} (2π/q* is a length scale, not necessarily "
@@ -70,12 +71,7 @@ SENTENCES = (
     # A value of a fit solution at a bound of its range (application/gisaxs_choice.py).
     "{name} at its upper bound",
     "{name} at its lower bound",
-    # The warnings of a solution of Predict parameters (Fitting: infrastructure/adapters/posterior_job.py).
-    "the curve says little about {name}",
-    "{name}: its Guinier region lies at or below the curve's lowest q, so the curve shows only its decay, which roughness or a rise at low q produce as well",
-    "{name}: smaller than the curve resolves, it acts as a smooth background",
-    "{name} stopped at a bound of its range",
-    "{name} are strongly correlated",
+    # (The notes of a solution of Predict parameters: ``shared/fit_names.SENTENCES``, added below.)
     "The symmetry axis is {shift} px from the calibrated centre: check the calibration or the sample alignment.",
     # Why a run could not go on (application/pipeline.py, pipeline_progress.py).
     "No calibration file and no image of a standard GIMaP can fit was found ({n} folders searched).",
@@ -118,6 +114,8 @@ SENTENCES = (
     "from given; it replaces the {value}° set in Analyze's command bar",
     "from the notes; it replaces the {value}° set in Analyze's command bar",
     "compared ({name})",
+    "Your last session used αi = {value}° with another instrument profile; it is not used here, give it again if "
+    "it holds for this sample.",
     "the notes name {noted}, the file name {from_name}",
     "given; the image header says {header} µm, the given value is used",
     "did not keep the instrument profile '{name}'",
@@ -141,7 +139,23 @@ SENTENCES = (
     "The calibration's rotation about the beam (Rot3 = {rotation}°) is left out. Rot3 alone does not change |q|, "
     "but it rotates χ and changes the directional assignment of qy/qz and in-plane/out-of-plane cuts.",
     "Rot3 = {rotation}° left out",
-)
+    # A calibration of another folder that contradicts the frame (application/calibration_match.py), the header's
+    # distance against the calibration's (shared/geometry/header_check.py), a calibrant in transmission
+    # (application/ring_frames.py).
+    "{name} lies in another folder and was made for a detector of {shape} pixels, the frame has {frame_shape}: "
+    "another experiment's calibration",
+    "{name} was found by the search in another folder than the frame's and was made at {energy} keV, while the "
+    "frame was measured at {frame_energy} keV: its distance and beam centre are used with the frame's energy.",
+    "{name}: made at another energy than the frame's",
+    "The file header gives a detector distance of {header} mm, the calibration in use {used} mm ({percent} % apart).",
+    "a transmission frame of a calibrant or powder ({rings} complete rings about the beam centre)",
+    "no incidence angle is known and the frame shows {rings} sharp rings concentric with the direct beam that run "
+    "through every direction the detector covers, as a powder in transmission gives; a grazing-incidence frame is "
+    "shadowed below the sample horizon",
+    "This frame looks like a transmission measurement of a calibrant or powder ({rings} complete rings about the "
+    "beam centre, no incidence angle), not like a GISAXS sample: its cuts were written, but no particle model was "
+    "fitted.",
+) + tuple(fit_names.SENTENCES.values())  # the notes of a Predict-parameters solution, with the Model table's names
 """English templates of the sentences a run writes; ``{name}`` is a value written as it is (or ``NESTED``).
 The fixed sentences (no values) are plain keys of the table. The form with the most fixed text is tried first,
 so a short form never takes a sentence of a longer one ("clear: … beats …")."""

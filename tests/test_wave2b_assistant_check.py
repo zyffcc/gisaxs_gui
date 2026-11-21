@@ -38,7 +38,9 @@ from tests.assistant_fakes import FakeWorkbench
 
 ROOT = Path(__file__).resolve().parents[1] / "src" / "gimap" / "features"
 SOURCES = [*(ROOT / "assistant" / "domain").glob("*.py"), *(ROOT / "assistant" / "application").glob("*.py"),
-           ROOT / "fitting" / "infrastructure" / "adapters" / "posterior_job.py"]  # the warnings of Predict parameters
+           ROOT / "fitting" / "infrastructure" / "adapters" / "posterior_job.py",  # the warnings of Predict parameters
+           ROOT.parent / "shared" / "fit_names.py",  # … whose sentences and names are written there
+           ROOT.parent / "shared" / "geometry" / "header_check.py"]  # the header's distance against the calibration
 ZH_TEST = {
     "tilted: maximum at χ ≈ ±{chi}°": "倾斜取向：极大值位于 χ ≈ ±{chi}°",
     "oriented along the surface normal (out-of-plane, χ ≈ 0°)": "沿表面法线取向（面外，χ ≈ 0°）",
@@ -53,7 +55,7 @@ ZH_TEST = {
     "a spike one or two bins wide far above the background: hot pixels, a module edge or a zinger rather than "
     "diffraction (check whether the calibration image shows it too)": "一个只有一两个 bin 宽、远高于背景的尖峰",
     "halves: {halves}": "两半：{halves}", "(shoulder)": "（肩峰）",
-    "best fit {model} R {radius} nm (χ²/N {chi2})": "最佳拟合 {model} R {radius} nm（χ²/N {chi2}）",
+    "best fit {model} R {radius} nm (χ²ᵣ {chi2})": "最佳拟合 {model} R {radius} nm（χ²ᵣ {chi2}）",
     "Only you can answer these — then run again:": "只有你能回答这些问题 —— 然后再运行：",
 }
 

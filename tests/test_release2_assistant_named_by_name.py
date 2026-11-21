@@ -110,5 +110,5 @@ def test_the_named_calibration_wins_where_file_times_say_nothing(tmp_path: Path,
     tool.main(["--case", str(case), "baseline", "--out", str(tmp_path / "out")])
     printed = capsys.readouterr().out
     assert "PASS  calibration file: LaB6_2021_12_DESY_P08.poni" in printed, printed[-600:]
-    report = json.loads((tmp_path / "out" / "summary.json").read_text(encoding="utf-8"))[0]
+    report = json.loads((tmp_path / "out" / "summary.json").read_text(encoding="utf-8"))["frames"][0]
     assert not [item for item in report["decisions"] if item["what"] == SEARCHED]

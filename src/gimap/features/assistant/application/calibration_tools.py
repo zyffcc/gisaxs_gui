@@ -47,8 +47,7 @@ from ..domain import (
     wavelength_angstrom,
 )
 from .models import PERMISSION_CONFIRM, ToolInputError, ToolOutcome
-
-IMAGE_ENDINGS = (".cbf", ".tif", ".tiff", ".nxs", ".nx", ".nx5", ".h5", ".hdf5", ".hdf", ".edf")
+from .run_record import profile_source
 
 
 def file_key(path: str) -> str:
@@ -127,7 +126,7 @@ class CalibrationToolsMixin:
             if not any(file_key(item["path"]) == file_key(path) for item in self._user_paths):
                 self._grant(path, "file")  # the person named it: trusted
             named = f"{Path(path).parent.name}/{Path(path).name}"
-            if suffix(path) in (".poni", ".json") or (suffix(path) in IMAGE_ENDINGS and classify(named) == STANDARD_IMAGE):
+            if suffix(path) in (".poni", ".json") or (suffix(path) in READABLE_IMAGE_SUFFIXES and classify(named) == STANDARD_IMAGE):
                 found.append(path)
 
         for options in path_candidates(text or ""):
@@ -405,7 +404,7 @@ class CalibrationToolsMixin:
                 return self._ok({"kind": "GIMaP calibration", **result, "assessment": assessment(result)}, f"{name}: GIMaP calibration")
             keys = sorted(data)[:40] if isinstance(data, dict) else None
             return self._ok({"kind": "json", "keys": keys, "lines": text_hints(text)}, f"{name}: json")
-        if ending in IMAGE_ENDINGS:
+        if ending in READABLE_IMAGE_SUFFIXES:
             header = self.explorer.image_header(path)
             frame_shape = (self._frame().get("shape") or None)
             header["same_detector_size_as_frame"] = bool(frame_shape and list(header.get("shape") or []) == list(frame_shape))
@@ -559,7 +558,8 @@ class CalibrationToolsMixin:
 
     def _tool_use_geometry(self, source: str, **arguments) -> ToolOutcome:
         values, origin = self._geometry_values({"source": source, **arguments})
-        status = self.workbench.use_geometry(values, arguments.get("profile_name"), f"{self.actor}: {origin}")
+        source = profile_source(self.actor, origin, arguments.get("path") or values.get("source_image"))  # with its path
+        status = self.workbench.use_geometry(values, arguments.get("profile_name"), source)
         self.results.geometry_used = {**values, "source": origin}
         self.results.status = status
         kind = (status.get("measurement") or "no reduction").upper()

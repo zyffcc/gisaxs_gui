@@ -24,6 +24,7 @@ from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application.single_fit import BOTH_USES_MEAN, ONE_CURVE_METHODS, PROGRESS_LINE, fit_resolving, stopped_result
 from .method_hint import fit_error_text
+from .predict_texts import count_solutions, points_text
 
 METHOD_NAMES = {"local": "Refine", "global": "Search the ranges", "predict": "Predict parameters"}
 _ENGINE_LINE = re.compile("".join(
@@ -257,10 +258,15 @@ class FitRunMixin:
         self.session.result = None
         self.set_model(best.model)
         self.set_method("local")  # next: refine the chosen solution here
-        self._status(lambda: tr("{count} solutions; the best, {model} (χ²ᵣ {chi2}), is in Model. Fit again to refine "
-                                "it, or choose another in Results.").format(count=len(solutions), model=best.label,
-                                                                         chi2=f"{best.chi2:.3g}"), "ok")
-        self._log(tr("{method}: {count} solutions").format(method=tr(METHOD_NAMES.get(method, "")), count=len(solutions)))
+        def found() -> str:  # the same χ²ᵣ as the table and Fit details, with the points it is of
+            over = points_text(best.points)
+            chi2 = trf("{value} over {points}", value=f"{best.chi2:.3g}", points=over) if over else f"{best.chi2:.3g}"
+            return trf("{solutions}; the best, {model} (χ²ᵣ {chi2}), is in Model. Fit again to refine it, or choose "
+                       "another in Results.", solutions=count_solutions(len(solutions)), model=best.label, chi2=chi2)
+
+        self._status(found, "ok")
+        self._log(trf("{method}: {solutions}", method=tr(METHOD_NAMES.get(method, "")),
+                      solutions=count_solutions(len(solutions))))
         self.show_step("results")
 
 

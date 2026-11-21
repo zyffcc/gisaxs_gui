@@ -314,7 +314,7 @@ Where you rely on a method or a data set that GIMaP builds on, cite it as well: 
 - **Release targets**: Windows x64 and macOS 15+ (separate Apple Silicon and Intel packages). Portable
   packages include Python. Each release must pass the platform checks and clean-machine package
   acceptance in [the release guide](docs/releasing.md); see the release notes for completed acceptance.
-  BornAgain is optional on macOS. **Linux**: from source; not tested.
+  BornAgain is optional on macOS. **Linux**: from source; the test suite runs on Ubuntu 24.04 in CI.
 - **Python** 3.10 or 3.11 to run from source.
 - **Screen**: 1280 × 720 or larger (the smallest window is 1024 × 640). GIMaP follows the display scaling of
   the operating system; **View ▸ Font Size** changes the text size.

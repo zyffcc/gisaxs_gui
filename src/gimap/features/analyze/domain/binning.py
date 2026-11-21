@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 
@@ -253,4 +255,58 @@ def binned_mean_2d(
     return grid.reshape(ny, nx)
 
 
-__all__ = ["BinnedMean", "binned_mean", "binned_mean_2d", "counts_and_scale", "native_profile"]
+def pixel_step(values: np.ndarray, stride: int = 4) -> float:
+    """The largest change of a per-pixel quantity from one pixel to the next (99th percentile, on every
+    ``stride``-th pixel); 0 when the map is too small to tell."""
+    sample = np.asarray(values[::stride, ::stride], dtype=np.float64)
+    if sample.shape[0] < 2 or sample.shape[1] < 2:
+        return 0.0
+    rows, columns = np.gradient(sample)
+    step = np.hypot(rows, columns) / stride
+    finite = step[np.isfinite(step)]
+    return float(np.percentile(finite, 99)) if finite.size else 0.0
+
+
+MIN_MAP_CELLS = 32
+"""Fewest cells along one axis of a q map (a strip a few pixels wide still shows as a picture)."""
+MAP_STEP_PERCENTILE = 95.0
+"""The cell of a q map is the step between neighbouring pixels that this share of the used pixels does not exceed."""
+_STEP_SAMPLE = 2_000_000
+
+
+def neighbour_step(values: np.ndarray, usable: np.ndarray, percentile: float = MAP_STEP_PERCENTILE) -> float:
+    """How far ``values`` (one number per pixel) moves from a used pixel to its right and lower neighbours
+    (their root sum of squares; ``percentile`` over the used pixels, rows thinned on large frames); 0 when no
+    used pixel has both neighbours."""
+    values, usable = np.asarray(values), np.asarray(usable, dtype=bool)
+    if values.ndim != 2 or values.shape[0] < 2 or values.shape[1] < 2:
+        return 0.0
+    rows = np.arange(0, values.shape[0] - 1, max(1, values.size // _STEP_SAMPLE))
+    here = values[rows, :-1].astype(np.float64)
+    down = values[rows + 1, :-1] - here
+    right = values[rows, 1:] - here
+    both = usable[rows, :-1] & usable[rows + 1, :-1] & usable[rows, 1:]
+    step = np.hypot(down, right)[both]
+    step = step[np.isfinite(step)]
+    return float(np.percentile(step, percentile)) if step.size else 0.0
+
+
+def map_grid_shape(
+    x_map: np.ndarray, y_map: np.ndarray, usable: np.ndarray, x_span: float, y_span: float, limit: tuple[int, int],
+) -> tuple[int, int]:
+    """``(ny, nx)`` of a regular q-map grid that is not finer than the detector samples q: a cell is at least as
+    wide as the step of ``x_map`` (as high as that of ``y_map``) between neighbouring used pixels, so the cells
+    of the measured region hold a pixel instead of alternating with empty ones; never more cells than ``limit``.
+
+    The grid is a picture and an export of the frame; no curve is computed from it."""
+    def cells(values: np.ndarray, span: float, most: int) -> int:
+        step = neighbour_step(values, usable)
+        if not (step > 0 and span > 0):
+            return int(most)
+        return int(min(most, max(MIN_MAP_CELLS, math.floor(span / step))))
+
+    return cells(y_map, y_span, int(limit[0])), cells(x_map, x_span, int(limit[1]))
+
+
+__all__ = ["BinnedMean", "binned_mean", "binned_mean_2d", "counts_and_scale", "map_grid_shape", "native_profile",
+           "neighbour_step", "pixel_step"]

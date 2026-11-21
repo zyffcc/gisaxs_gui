@@ -325,14 +325,14 @@ ANALYZE_ZH = {
     'Files go to {folder} — README.txt there says what each file is': '文件将写入 {folder} —— 其中的 README.txt 说明每个文件是什么',
     'Fitting the frame on screen …': '正在拟合当前帧 …',
     'No solution.': '没有解。',
-    'Most probable: {model} (p = {p}), {params} nm, χ²/N = {chi}': '最可能：{model}（p = {p}），{params} nm，χ²/N = {chi}',
+    'Most probable: {model} (p = {p}), {params} nm, χ²ᵣ = {chi}': '最可能：{model}（p = {p}），{params} nm，χ²ᵣ = {chi}',
     'Probability': '概率',
-    'Each frame: Predict parameters on the mean of both halves of the horizontal cut (Halves of the cut, above); about 25 s per frame.':
-        '每帧：对水平切线两半的平均做预测参数（见上方“切线的两半”）；每帧约 25 s。',
-    'Each frame: Predict parameters on the q > 0 half of the horizontal cut (Halves of the cut, above); about 25 s per frame.':
-        '每帧：对水平切线 q > 0 的一半做预测参数（见上方“切线的两半”）；每帧约 25 s。',
-    'Each frame: Predict parameters on the q < 0 half of the horizontal cut (Halves of the cut, above); about 25 s per frame.':
-        '每帧：对水平切线 q < 0 的一半做预测参数（见上方“切线的两半”）；每帧约 25 s。',
+    'Each frame: Predict parameters on the mean of both halves of the horizontal cut (Halves of the cut, above); from some seconds to a few minutes per frame.':
+        '每帧：对水平切线两半的平均做预测参数（见上方“切线的两半”）；每帧需要几秒到几分钟。',
+    'Each frame: Predict parameters on the q > 0 half of the horizontal cut (Halves of the cut, above); from some seconds to a few minutes per frame.':
+        '每帧：对水平切线 q > 0 的一半做预测参数（见上方“切线的两半”）；每帧需要几秒到几分钟。',
+    'Each frame: Predict parameters on the q < 0 half of the horizontal cut (Halves of the cut, above); from some seconds to a few minutes per frame.':
+        '每帧：对水平切线 q < 0 的一半做预测参数（见上方“切线的两半”）；每帧需要几秒到几分钟。',
     ' (fitting the peaks)': '（拟合峰）',
     ' (fitting the particle model)': '（拟合颗粒模型）',
     '{name}: q = {q} ± {dq} Å⁻¹ (d = {d} Å), FWHM {w} Å⁻¹, area {a}, χ²ᵣ {chi}': '{name}：q = {q} ± {dq} Å⁻¹（d = {d} Å），FWHM {w} Å⁻¹，面积 {a}，χ²ᵣ {chi}',

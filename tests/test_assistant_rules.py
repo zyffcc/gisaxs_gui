@@ -254,7 +254,8 @@ def test_a_peak_list_cut_at_the_cap_says_how_many_candidates_there_were() -> Non
     capped = find_peaks(profile)
     assert capped.max_peaks == 12 and capped.candidates == 16 and capped.truncated and len(capped.peaks) <= 12
     decision = peak_cap_decision(capped)
-    assert decision["decision"] == "16 candidate peaks found; the 12 most prominent were fitted"
+    assert decision["decision"] == (
+        f"16 candidate peaks found; the 12 most prominent were fitted, {len(capped.peaks)} of them gave a peak")
     assert "--max-peaks N" in decision["why"] and "series hints" in decision["why"]
     free = find_peaks(profile, max_peaks=40)
     assert not free.truncated and len(free.peaks) == 16 and peak_cap_decision(free) is None
@@ -437,3 +438,33 @@ def test_a_lab6_ceo2_mixture_and_nexus_module_series_are_recognised() -> None:
     assert set(STANDARDS["lab6"].q_values_inv_angstrom) <= mixture and set(STANDARDS["ceo2"].q_values_inv_angstrom) <= mixture
     assert module_series(name) is not None and module_series("sample_00001.cbf") is None
     assert name_preference("calib_best_redo/x.nxs") > name_preference("calib_redone/x.nxs") > name_preference("calib/x.nxs")
+
+
+def test_complete_rings_about_the_beam_mark_a_calibrant_frame_and_a_gisaxs_frame_has_none() -> None:
+    """A silver behenate frame at a SAXS distance is "GISAXS" by its angles; it was fitted with particles for three
+    minutes. Its rings run through every direction the detector covers; a GISAXS frame's rods and Yoneda band do not."""
+    import json
+    from pathlib import Path
+
+    from src.gimap.features.analyze.domain.ring_frame import MIN_RINGS, rings_about_beam
+    from src.gimap.features.analyze.domain.validity import valid_pixels
+    from src.gimap.shared.detector_io import load_detector_image
+
+    external = Path(__file__).parent / "data" / "external"
+    if not (external / "manifest.json").exists():
+        pytest.skip("public test data not downloaded (tests/data/external)")
+    manifest = json.loads((external / "manifest.json").read_text(encoding="utf-8"))
+
+    def judged(key):
+        frame = load_detector_image(external / manifest[key]["frame"])
+        return rings_about_beam(frame.data, valid_pixels(frame.data, frame.mask), *manifest[key]["beam_center_px"])
+
+    agbh, galaxi = judged("saxs_agbh_pyfai"), judged("gisaxs_galaxi")
+    assert agbh.is_ring_frame and agbh.complete_rings == 5 >= MIN_RINGS
+    radii = [ring["radius_px"] for ring in agbh.rings if ring["complete"]]
+    assert np.allclose(np.diff(radii), radii[0], rtol=0.02)  # the orders of d = 58.38 Å: equally spaced
+    assert not galaxi.is_ring_frame and galaxi.complete_rings == 0
+    # Rings about a wrong centre are not concentric: no calibrant frame is claimed from them.
+    frame = load_detector_image(external / manifest["saxs_agbh_pyfai"]["frame"])
+    off = rings_about_beam(frame.data, valid_pixels(frame.data, frame.mask), 600.0, 700.0)
+    assert not off.is_ring_frame

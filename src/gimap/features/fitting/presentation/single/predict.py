@@ -3,31 +3,21 @@
 
 The particles to try (those of Model, or a choice of families for the network to choose among) are shown under the
 method; every solution is refined by least squares (``domain.posterior.refine.predict``, one path). The solutions go
-to Results with their probability, the most probable into Model; the posterior's 68 % intervals of the solution in
-Model are listed in Fit details (``posterior_lines``).
+to Results with their probability, the most probable into Model; the refined values of the solution in Model with
+their 68 % intervals, the points its χ²ᵣ is of and its flags are listed in Fit details (``posterior_lines``; the
+words: ``predict_texts``, the names and sentences of ``shared/fit_names``).
 """
 
 from __future__ import annotations
 
 from PyQt5.QtCore import QSignalBlocker
 
-from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.i18n import tr
 
 from ...application.single_predict import PARTICLES, network_available, predict_request, predicted
+from .predict_texts import points_tuple, solution_lines
 from .session import Solution
 
-UNITS = {"R": "nm", "h": "nm", "D": "nm", "tail_width": "nm⁻¹", "q_resolution": "nm⁻¹"}
-SHOWN = ("R", "sigma_R", "h", "sigma_h", "D", "sigma_nn")
-LABELS = {"R": "R", "sigma_R": "σR/R", "h": "h", "sigma_h": "σh/h", "D": "D", "sigma_nn": "σnn/D"}
-FLAG_TEXTS = {
-    "unconstrained": "the curve says little about {name} (its 68 % interval spans most of the prior)",
-    "at_bound": "{name} stopped at a bound of its range",
-    "correlated": "{name} are strongly correlated",
-    "low_ess": "few effective samples: the intervals are rough",
-    "bic": "the posterior's sampling did not converge: the solutions are compared by χ² and their number of values (BIC)",
-    "large": "{name}: its Guinier region lies at or below the curve's lowest q, so the curve shows only its decay, which roughness or a rise at low q produce as well",
-    "small": "{name}: smaller than the curve resolves, it acts as a smooth background",
-}
 MISSING = "Predict parameters needs GIMaP's proposal network, which is missing in this installation ({name})."
 
 
@@ -86,29 +76,17 @@ class PredictPageMixin:
     def _predict_finished(self, value, curve, selection) -> None:
         self._predict_job_id = None
         solutions = [Solution(p.model, p.chi2, f"Predict parameters · {p.name}", 0.0, probability=p.probability,
-                              intervals=tuple(p.intervals.items()), flags=p.flags) for p in predicted(value)]
+                              intervals=tuple(p.intervals.items()), flags=p.flags, points=points_tuple(p.points),
+                              tried=p.tried) for p in predicted(value)]
         self._solutions_found(solutions, curve, selection)
 
     def posterior_lines(self) -> list[str]:
-        """The posterior of the solution in Model: each value's median and 68 % interval, and its flags."""
+        """Fit details of the solution in Model: its refined values with their 68 % intervals, its probability, the
+        points of its χ²ᵣ and its flags (``predict_texts.solution_lines``)."""
         solution = next((s for s in self.session.solutions if s.model == self.session.model and s.intervals), None)
         if solution is None:
             return []
-        parts = []
-        for name, values in solution.intervals:
-            key, _, slot = name.rpartition("_")
-            if key not in SHOWN or values[1] is None:
-                continue
-            label = LABELS[key] + (slot if len(self.session.model.components) > 1 else "")
-            unit = UNITS.get(key, "")
-            parts.append(f"{label} {values[1]:.3g} [{values[2]:.3g}, {values[3]:.3g}]{(' ' + unit) if unit else ''}")
-        lines = [trf("Posterior of this solution (median [68 %]): {values}; probability {p}.",
-                     values="; ".join(parts), p=f"{solution.probability:.2f}")] if parts else []
-        for flag in solution.flags:
-            kind, _, name = flag.partition(":")
-            if kind in FLAG_TEXTS:
-                lines.append("⚠ " + trf(FLAG_TEXTS[kind], name=name.replace("~", " ↔ ")))
-        return lines
+        return solution_lines(solution, self.session.solutions, len(self.session.model.components) > 1)
 
 
 __all__ = ["MISSING", "PredictPageMixin"]

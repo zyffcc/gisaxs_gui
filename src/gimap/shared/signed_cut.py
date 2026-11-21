@@ -89,11 +89,21 @@ def _halves(q: np.ndarray, intensity: np.ndarray, pixels: Optional[np.ndarray], 
     return q, intensity, negative, positive
 
 
+COVERAGE_BINS_PER_POINT = 20
+"""Most bins of the coverage histogram per measured point of the half (bounds its memory)."""
+
+
 def _coverage(values: np.ndarray, low: float, high: float, step: float) -> float:
     if high <= low or step <= 0:
         return 0.0
-    edges = np.arange(low, high + step, step)
-    counts, _ = np.histogram(values, bins=edges)
+    bins = int(np.ceil((high - low) / step))
+    limit = COVERAGE_BINS_PER_POINT * max(int(np.size(values)), 1)
+    if bins > limit:
+        # A step far below the spacing of the points (the two halves share |qy| values, so the median spacing of
+        # their union is ~0) would ask for millions of edges; n points fill at most n bins anyway.
+        counts, _ = np.histogram(values, bins=limit, range=(low, high))
+    else:
+        counts, _ = np.histogram(values, bins=np.arange(low, high + step, step))
     return float((counts > 0).mean()) if counts.size else 0.0
 
 

@@ -301,7 +301,7 @@ def test_window_flags_name_populations_the_curve_does_not_resolve():
     from src.gimap.features.fitting.infrastructure.adapters import posterior_job
 
     sentences = posterior_job.flag_sentences(["large:R_3", "small:R_1"])
-    assert sentences[0].startswith("R_3: its Guinier region") and sentences[1].startswith("R_1: smaller than")
+    assert sentences[0].startswith("R (3): its Guinier region") and sentences[1].startswith("R (1): smaller than")
 
 
 def _wide_curve(seed=0):

@@ -411,6 +411,7 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
             else:
                 self.table.selectRow(0)
         self.export_button.setEnabled(True)
+        self._show_curve_notes(self.rows)
         self.progress.setValue(100)
         count = len(rows)
         self.show_status(lambda: trf(
@@ -447,7 +448,7 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
             for j, v in enumerate(values):
                 self.table.setItem(i, j, QTableWidgetItem(str(v)))
             self.table.item(i, 0).setToolTip("\n".join(
-                filter(None, [f"{r.get('file', '')} / {r['side']}", unit_tip])))
+                filter(None, [f"{r.get('file', '')} / {r['side']}", unit_tip, *self._row_notes(r)])))
             self.table.item(i, 2).setToolTip(r["combination"])
             stage_detail = [trf("Stage: {stage}", stage=stage)]
             if r.get("fallback_reason"):
@@ -455,7 +456,7 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
             warnings = r.get("warnings") or []
             if isinstance(warnings, str):
                 warnings = [warnings]
-            stage_detail.extend(str(warning) for warning in warnings)
+            stage_detail.extend(str(warning) for warning in [*warnings, *(r.get("more_warnings") or ())])
             self.table.item(i, 5).setToolTip("\n".join(stage_detail))
             self.table.item(i, 3).setToolTip(tr(RMSE_TIP))
         if keep:
@@ -508,7 +509,8 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
             if k not in ("native_q", "native_fit", "observed", "sigma", "measurement_sigma",
                          "display_q", "display_fit", "display_components")
         }
-        self.parameters.setPlainText(tr(UNITS_NOTE) + "\n\n" + json.dumps(detail, indent=2, ensure_ascii=False))
+        self.parameters.setPlainText("\n".join([*self._row_notes(r), tr(UNITS_NOTE)]) + "\n\n"
+                                     + json.dumps(detail, indent=2, ensure_ascii=False))
 
     def _cancel(self):
         if self.job:

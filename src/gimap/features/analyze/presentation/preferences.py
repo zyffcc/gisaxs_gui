@@ -15,6 +15,9 @@ class AnalyzePreferences:
     mode: str = "auto"
     profile_name: Optional[str] = None
     incidence_deg: Optional[float] = None
+    incidence_profile: Optional[str] = None
+    """The instrument profile in use when ``incidence_deg`` was set: in the next session the value is used only
+    for frames of that profile (``bindings/incidence.py``)."""
     last_folder: str = ""
     auto_export: bool = False
 
@@ -39,6 +42,7 @@ def load_preferences(settings: Any, profile_names: Sequence[str]) -> AnalyzePref
         mode=mode,
         profile_name=profile,
         incidence_deg=incidence,
+        incidence_profile=str(values["incidence_profile"]) if values.get("incidence_profile") else None,
         last_folder=str(values.get("last_folder") or ""),
         auto_export=bool(values.get("auto_export", False)),
     )
@@ -53,6 +57,7 @@ def save_preferences(settings: Any, preferences: AnalyzePreferences) -> None:
             "mode": preferences.mode,
             "profile_name": preferences.profile_name,
             "incidence_deg": preferences.incidence_deg,
+            "incidence_profile": preferences.incidence_profile if preferences.incidence_deg is not None else None,
             "last_folder": preferences.last_folder,
             "auto_export": preferences.auto_export,
         },

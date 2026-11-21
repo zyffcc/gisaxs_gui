@@ -4,14 +4,21 @@ compositions asked for, each mode refined by least squares (``domain.posterior.r
 Payload: q (nm⁻¹), intensity, sigma (or None), qz (k_i + k_f, nm⁻¹; 0: the effective interface), qz_minus (k_i − k_f
 when both angles are known: spheres with the exit-reflected path; None otherwise), compositions (indices of
 ``encoding.COMPOSITIONS``) or allowed (the head chooses among them), method, samples, seed, law, coupling, grazing
-(the person's angles and λ to keep; the reflection too when qz_minus is None). The result is JSON: every solution's model (``model_to_dict``),
-χ²/N, probability, values with their posterior intervals, flags; and the network's name and SHA-256.
+(the person's angles and λ to keep; the reflection too when qz_minus is None). The result is JSON: every solution's
+model (``model_to_dict``), χ²ᵣ (over the fitted points, with the curve's σ: ``refine``'s, the one number every text
+shows), probability, values with their posterior intervals, flags (``shared/fit_names.clean_flags``: none for a term
+that is absent), ``points`` (``fitted_points``: how many were fitted, how many lay below the network's q window);
+``tried`` (the compositions given; None: the network chose) and the network's name and SHA-256.
 """
 
 from __future__ import annotations
 
 import math
 import time
+
+import numpy as np
+
+from src.gimap.shared import fit_names
 
 from ...domain import fit_model as fm
 from ...domain.posterior import network as posterior_network
@@ -22,11 +29,38 @@ def _number(value):
     return None if value is None or not math.isfinite(float(value)) else float(value)
 
 
-def encode(solution) -> dict:
+def amplitudes(model) -> dict:
+    """The linear terms of a model by their keys (``res_amplitude``, ``background``, ``Int_1`` …)."""
+    found = {key: float(model.globals[key].value) for key in ("res_amplitude", "background")}
+    found.update({f"Int_{n}": float(c.value("Int")) for n, c in enumerate(model.components, start=1)})
+    return found
+
+
+def solution_flags(solution) -> tuple:
+    """The solution's flags without those of an absent term (Tail A = 0, a population with Scale 0)."""
+    return fit_names.clean_flags(solution.flags, amplitudes(solution.model))
+
+
+def fitted_points(q, intensity, sigma=None, qz: float = 0.0, qz_minus=None) -> dict:
+    """Which of the points handed to Predict parameters it fits: ``fitted``, ``given``, ``below_window`` (q below
+    q_max / 300, outside the network's window), ``unusable`` (not finite, q = 0, σ ≤ 0) and ``q_min`` of the fitted
+    ones. χ²ᵣ of a solution is over the fitted points."""
+    from ...domain.posterior.infer import Cut
+
+    cut = Cut.prepare(q, intensity, sigma, float(qz or 0.0), qz_minus)
+    given = int(np.size(q))
+    return {"fitted": int(cut.q.size), "given": given, "below_window": int(cut.dropped),
+            "unusable": max(0, given - int(cut.q.size) - int(cut.dropped)),
+            "q_min": float(cut.q.min()) if cut.q.size else None}
+
+
+def encode(solution, points=None) -> dict:
     return {
+        "points": None if points is None else dict(points),
+        "compared_by": (solution.extras or {}).get("compared_by"),
         "composition": int(solution.composition), "name": solution.name, "probability": _number(solution.probability),
         "model": fm.model_to_dict(solution.model), "chi2": _number(solution.chi2_reduced),
-        "log_rmse": _number(solution.log_rmse), "method": solution.method, "flags": list(solution.flags),
+        "log_rmse": _number(solution.log_rmse), "method": solution.method, "flags": list(solution_flags(solution)),
         "log_evidence": _number(solution.log_evidence), "ess": _number(solution.ess), "samples": solution.samples,
         "values": {name: [_number(v.best), _number(v.median), _number(v.low68), _number(v.high68), _number(v.low95),
                           _number(v.high95), _number(v.error)] for name, v in solution.values.items()},
@@ -50,12 +84,13 @@ def run_predict(payload: dict, report, cancelled) -> dict:
     if cancelled():
         raise RuntimeError("Fitting cancelled")
     report(1, 1, "Done")
-    return {"solutions": [encode(s) for s in solutions],
+    points = fitted_points(payload["q"], payload["intensity"], payload.get("sigma"), payload.get("qz") or 0.0,
+                           None if payload.get("qz_minus") is None else float(payload["qz_minus"]))
+    tried = payload.get("compositions")
+    return {"solutions": [encode(s, points) for s in solutions], "points": points,
+            "tried": None if tried is None else len(tried),
             "network": {"name": posterior_network.path().stem, "sha256": network.meta.get("sha256")},
             "seconds": time.perf_counter() - tick}
-
-
-
 
 
 TYPE_IDS = {"sphere": 1, "cylinder": 2, "vertical_cylinder": 3}
@@ -75,40 +110,30 @@ def batch_compositions(types) -> dict:
     return {"compositions": [encoding.composition_index([(families[int(t)], True) for t in types])]}
 
 
-FLAG_SENTENCES = {
-    "unconstrained": "the curve says little about {name}",
-    "at_bound": "{name} stopped at a bound of its range",
-    "correlated": "{name} are strongly correlated",
-    "low_ess": "few effective samples: the intervals are rough",
-    "bic": "compared by χ² and the number of values (BIC): the posterior's sampling did not converge",
-    "large": "{name}: its Guinier region lies at or below the curve's lowest q, so the curve shows only its decay, which roughness or a rise at low q produce as well",
-    "small": "{name}: smaller than the curve resolves, it acts as a smooth background",
-}
-"""The flags of a solution as the sentences of a row's ``warnings``."""
 ROW_NAMES = {"res_width": "sigma_Res", "res_exponent": "nu_Res"}
-"""Fitting's global names as the rows name them (the other values keep their keys)."""
+"""Fitting's global names as the keys of the rows (the other values keep their keys; what a person reads of them:
+``shared/fit_names.display_name``)."""
 
 
-def flag_sentences(flags) -> list[str]:
-    out = []
-    for flag in flags:
-        kind, _, name = flag.partition(":")
-        if kind in FLAG_SENTENCES:
-            out.append(FLAG_SENTENCES[kind].format(name=name.replace("~", " and ")))
-    return out
+def flag_sentences(flags, many: bool = True) -> list[str]:
+    """The flags as English sentences with the Model table's names (``shared/fit_names``)."""
+    return fit_names.sentences(flags, many)
 
 
 def at_bounds(model, tolerance: float = 1e-4) -> list[dict]:
     """The free shape and tail values of ``model`` on a bound of their range (within ``tolerance`` of it), as the
-    rows list them: ``parameter``, ``bound`` (lower / upper), ``component`` (index; None for the tail)."""
-    import math
-
+    rows list them: ``parameter``, ``bound`` (lower / upper), ``component`` (index; None for the tail). With
+    Tail A = 0 the tail is absent and its width and exponent are not listed; nor are the values of a population
+    whose Scale is 0."""
     out = []
+    no_tail = float(model.globals["res_amplitude"].value) <= 0.0
     for path, parameter in model.parameters():
         owner, key = path
         if not parameter.free or key in ("Int", "background", "res_amplitude", "k", "q_resolution"):
             continue
-        if owner == "globals" and key not in ROW_NAMES:
+        if owner == "globals" and (key not in ROW_NAMES or no_tail):
+            continue
+        if owner != "globals" and float(model.components[int(owner)].value("Int")) <= 0.0:
             continue
         lower, upper = parameter.lower, parameter.upper
         width = (upper - lower) if math.isfinite(upper) and math.isfinite(lower) else max(abs(parameter.value), 1.0)
@@ -121,14 +146,15 @@ def at_bounds(model, tolerance: float = 1e-4) -> list[dict]:
 
 def curve_rows(item, solutions, render_q, *, chosen_by: str) -> list[dict]:
     """Rows of a curve's solutions with what the analyses that screened a cut read of a row: ``rank``, ``converged``,
-    ``at_bounds``, sentences in ``warnings``, ``seconds``, ``algorithm``, ``conditions_source`` (``chosen_by``),
-    ``unit_contract``."""
+    ``at_bounds``, ``flags`` (cleaned of absent terms), sentences in ``warnings`` (the flags of the populations and
+    of the solution) and ``more_warnings`` (those of background, tail and resolution), ``seconds``, ``algorithm``,
+    ``conditions_source`` (``chosen_by``), ``unit_contract``."""
     rows = []
+    points = fitted_points(item["q"], item["observed"], item["sigma"])
     for rank, solution in enumerate(solutions, start=1):
-        row = solution_row(solution, item, render_q)
+        row = solution_row(solution, item, render_q, points)
         row.update(
-            rank=rank, converged=True, at_bounds=at_bounds(solution.model), warnings=flag_sentences(solution.flags),
-            flags=list(solution.flags), seconds=float(solution.seconds), nfev=None, conditions_source=chosen_by,
+            rank=rank, converged=True, at_bounds=at_bounds(solution.model), seconds=float(solution.seconds), nfev=None, conditions_source=chosen_by,
             algorithm="Predict parameters: the proposal network's importance-weighted samples, each mode refined by "
                       "bounded least squares, the posterior sampled around the best solutions",
             unit_contract=dict(q="nm^-1", R_h_D="nm", sigma_R_h_D="relative standard deviation",
@@ -138,16 +164,26 @@ def curve_rows(item, solutions, render_q, *, chosen_by: str) -> list[dict]:
     return rows
 
 
-def solution_row(solution, item, render_q) -> dict:
-    """A solution as a row of the 1D Predict window (``native_v5`` layout, Fitting's conventions: cut_model)."""
-    import numpy as np
-
+def solution_row(solution, item, render_q, points=None) -> dict:
+    """A solution as a row of the 1D Predict window (``native_v5`` layout, Fitting's conventions: cut_model).
+    ``best_chi2_weighted`` and ``chi2_reduced`` are the solution's χ²ᵣ (``refine``: over the fitted points, with the
+    degrees of freedom), the same number wherever the solution is shown; ``points`` (``fitted_points``) says how
+    many points that is and how many lay below the network's q window. The weighted RMS and the Huber loss are of
+    the fitted points too. ``flags``: the solution's, cleaned of absent terms; ``warnings``: the sentences of those
+    of the populations and of the solution, ``more_warnings``: of background, beam tail and resolution."""
     from ...domain.fit_model import evaluate
 
     model = solution.model
     q, y, sigma = (np.asarray(item[k], float) for k in ("q", "observed", "sigma"))
+    points = points or fitted_points(q, y, sigma)
     fitted = evaluate(model, q)
-    residual = (fitted - y) / sigma
+    used = np.isfinite(q) & np.isfinite(y) & (sigma > 0)
+    if points.get("q_min") is not None:
+        used &= np.abs(q) >= points["q_min"] * (1 - 1e-12)
+    residual = ((fitted - y) / sigma)[used]
+    flags = solution_flags(solution)
+    first, second = fit_names.split_flags(flags)
+    many = len(model.components) > 1
     positive = (y > 0) & (fitted > 0)
     components = []
     for component in model.components:
@@ -170,10 +206,12 @@ def solution_row(solution, item, render_q) -> dict:
                            **{key: float(g[key].value) for key in ("alpha_i", "alpha_f", "wavelength")}),
         probability=_number(solution.probability), posterior={k: v for k, v in encode(solution)["values"].items()},
         best_log_rmse=float(np.sqrt(np.mean(np.log(fitted[positive] / y[positive]) ** 2))) if positive.any() else None,
-        best_chi2_weighted=float(np.mean(residual**2)), signed_weighted_rms=float(np.sqrt(np.mean(residual**2))),
+        best_chi2_weighted=float(solution.chi2_reduced), chi2_reduced=float(solution.chi2_reduced),
+        points={key: value for key, value in points.items() if key != "q_min"}, signed_weighted_rms=float(np.sqrt(np.mean(residual**2))),
         signed_huber_delta2=float(np.mean(np.where(abs(residual) <= 2, 0.5 * residual**2, 2 * (abs(residual) - 1)))),
         probability_status="Posterior probability of the composition and mode (importance sampling)",
-        warnings=list(solution.flags), ess=_number(solution.ess),
+        flags=list(flags), warnings=flag_sentences(first, many), more_warnings=flag_sentences(second, many),
+        compared_by=(solution.extras or {}).get("compared_by"), ess=_number(solution.ess),
         native_q=(q * item["sign"]).tolist(), observed=y.tolist(), sigma=sigma.tolist(), native_fit=fitted.tolist(),
         display_q=(render_q * item["sign"]).tolist(), display_fit=evaluate(model, render_q).tolist())
 
@@ -181,8 +219,6 @@ def solution_row(solution, item, render_q) -> dict:
 def fit_and_write(output, item, options, report, cancelled) -> list:
     """Predict parameters for one half of a curve of the 1D Predict window; its files as the other methods write."""
     import json
-
-    import numpy as np
 
     network = posterior_network.load()
     report(0, 1, f"{item['side']}: weighting the network's samples", {})
@@ -208,4 +244,5 @@ def fit_and_write(output, item, options, report, cancelled) -> list:
     return rows
 
 
-__all__ = ["batch_compositions", "encode", "fit_and_write", "run_predict", "solution_row"]
+__all__ = ["amplitudes", "batch_compositions", "encode", "fit_and_write", "fitted_points", "flag_sentences",
+           "run_predict", "solution_flags", "solution_row"]

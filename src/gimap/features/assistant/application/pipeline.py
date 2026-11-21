@@ -39,6 +39,15 @@ from .pipeline_report import calibration_quality, compact_report
 from .pipeline_rows import peak_rows as _peak_rows
 from .pipeline_rows import peak_search as _peak_search
 from .pipeline_rows import ring_row as _ring_row
+from .ring_frames import (
+    TRANSMISSION_ATTENTION,
+    TRANSMISSION_DECISION,
+    TRANSMISSION_HINT,
+    TRANSMISSION_ITEM,
+    TRANSMISSION_WHY,
+    transmission_rings,
+)
+from .run_record import exact_calibration
 from .tools import ToolCatalog, clean, results_payload
 
 SERIES_SUM = 10
@@ -52,6 +61,8 @@ DETECTED = "detected: GIMaP's Auto detection classified the frame once the geome
 CHOSEN = "the mode chosen in Analyze"
 DEFAULT = "the default while Analyze is on Auto"
 FALLBACK = "Auto could not classify the frame, so GIWAXS was assumed"
+FULL_PRECISION = 15
+"""Significant digits of the geometry and the calibration in a report's record (the values as applied)."""
 AUTOMATIC = "automatic analysis"
 """Who chose the geometry of a run of the standard procedure (the instrument profile's source): code, not the AI."""
 NO_GEOMETRY = "no geometry: Auto tells GISAXS from GIWAXS only once a geometry is applied"
@@ -178,6 +189,8 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
         self._run = _Run()
         self._energy: Optional[float] = None
         self._incidence: Optional[float] = None
+        self._incidence_kept = False  # αi is Analyze's command-bar value: never written into a profile
+        self._incidence_suggestion: Optional[float] = None  # the last session's αi, set with another profile
         self._pixel: Optional[float] = None
         self._pixel_given = False
         """The pixel size is the person's (``pixel_size_um``): it beats image headers, files and profiles."""
@@ -326,6 +339,12 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
             self._decide("measurement", f"switched from {kind or 'no reduction'} to {technique.upper()}",
                          SWITCHED if why == DEFAULT else why)
         self._procedure = technique
+        rings = transmission_rings(self.catalog.workbench, status, self._incidence is not None) if (
+            technique == "gisaxs" and why == DETECTED) else None
+        if rings:  # a calibrant in transmission: the cuts are written, no particle model is fitted
+            self._transmission_frame = rings
+            self._decide(TRANSMISSION_ITEM, TRANSMISSION_DECISION.format(rings=rings), TRANSMISSION_WHY.format(rings=rings))
+            self._attention(TRANSMISSION_ITEM, TRANSMISSION_ATTENTION.format(rings=rings), "technique", TRANSMISSION_HINT)
         self._analyse_gisaxs() if technique == "gisaxs" else self._analyse()
         self._run.ok = True
         return self._report()
@@ -364,11 +383,12 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
         # αi set in Analyze's command bar (by hand, or set_incidence_angle) is what Analyze uses instead of the
         # profile's: the run takes it when neither the options nor the notes give one, and never asks for αi then.
         override = status.get("incidence_override")
+        self._incidence_suggestion = status.get("incidence_suggestion")
         for value, source in (
             (options.incidence_deg, "given"), (incidence_from_notes(options.notes), "the notes"), (override, None),
         ):
             if value is not None:
-                self._incidence = float(value)
+                self._incidence, self._incidence_kept = float(value), source is None
                 why = FROM_COMMAND_BAR if source is None else f"from {source}"
                 if source is not None and override is not None and abs(float(override) - self._incidence) > 1e-9:
                     why = REPLACES_COMMAND_BAR[source].format(value=f"{float(override):g}")
@@ -450,12 +470,9 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
         self._flat_detector_as_reported()  # the tilt's line says the estimate of the status reported below
         results, run = self.catalog.results, self._run
         status = results.status or {}
-        geometry = clean(status.get("geometry") or {})
-        center = (status.get("geometry") or {}).get("beam_center_px")
-        if center is not None:
-            # Four significant digits can erase a resolved subpixel shift.
-            # Keep the applied coordinates in the report's geometry record.
-            geometry["beam_center_px"] = clean(center, digits=15)
+        # The record keeps the geometry as applied (the CSV headers do too): four significant digits can erase a
+        # resolved subpixel shift, and 147.6 mm is not the distance q was computed with. report.md rounds for reading.
+        geometry = clean(status.get("geometry") or {}, digits=FULL_PRECISION)
         return {
             "ok": run.ok,
             "stopped": run.stopped,
@@ -475,7 +492,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
             "decisions": run.decisions,
             "needs_attention": run.attention,
             "steps": run.steps,
-            "calibration": clean(run.calibration),
+            "calibration": clean(exact_calibration(run.calibration, results.geometry_used), digits=FULL_PRECISION),
             "tables": results_payload(results),
         }
 

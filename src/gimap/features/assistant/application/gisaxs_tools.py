@@ -10,8 +10,10 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from src.gimap.shared import fit_names
+
 from ..domain import Profile, choose_halves, find_peaks, fit_curve, spacing_from_peaks
-from .gisaxs_choice import bounds_text, probability, rivals
+from .gisaxs_choice import bounds_text, chance, probability, rivals, sizes
 from .models import ToolInputError, ToolOutcome
 
 MIN_SHIFT_PX = 0.0001
@@ -55,10 +57,35 @@ def _warnings(row: dict) -> list[str]:
     return kept
 
 
+def _notes(row: dict) -> tuple[list[str], list[str]]:
+    """(the notes of the populations and of the solution, those of background, beam tail and resolution), as
+    sentences with the Model table's names (``shared/fit_names``), from the row's ``flags``; a value at a bound is
+    left to ``at_bounds`` and ``zero_terms`` as in ``_warnings``. A row without flags: its sentences as they come."""
+    if row.get("flags") is None:
+        return _warnings(row), [str(item) for item in row.get("more_warnings") or ()]
+    kept = []
+    for flag in map(str, row["flags"]):
+        kind, names = fit_names.flag_names(flag)
+        if kind == "at_bound" and (row.get("at_bounds") or any(
+                fit_names.split_name(name)[0] in LINEAR_NAMES for name in names)):
+            continue
+        kept.append(flag)
+    first, second = fit_names.split_flags(kept)
+    many = len(row.get("components") or ()) > 1
+    return fit_names.sentences(first, many), fit_names.sentences(second, many)
+
+
+def _chi2(row: dict) -> float:
+    """χ²ᵣ of the solution over the fitted points (``chi2_reduced``; a row without it: its ``best_chi2_weighted``)."""
+    value = row.get("chi2_reduced", row.get("best_chi2_weighted", math.nan))
+    return math.nan if value is None else float(value)
+
+
 def _solution(row: dict) -> dict:
     """What a person reads of one solution (units: nm; q in nm⁻¹ in the fit itself). ``model``: the composition
     as Predict names it ("sphere (S) + upright cylinder"; "(S)": with a paracrystal), ``combination``: its particle
     types as Fitting takes them."""
+    notes, more = _notes(row)
     return {
         "rank": row.get("rank"),
         "model": row.get("composition") or row.get("combination"),
@@ -71,10 +98,16 @@ def _solution(row: dict) -> dict:
             for component in row.get("components") or ()
         ],
         "globals": {key: float(value) for key, value in (row.get("global_params") or {}).items() if value is not None},
-        "chi2": round(float(row.get("best_chi2_weighted", math.nan)), 3),
+        # χ²ᵣ over the fitted points, the number Fitting shows for the same solution; ``points``: how many those
+        # are (fitted, given, below_window: below the network's q window, unusable).
+        "chi2": round(_chi2(row), 3),
+        "points": None if not row.get("points") else dict(row["points"]),
+        "compared_by": row.get("compared_by"),
         "log_rmse": round(float(row.get("best_log_rmse", math.nan)), 4),
         "converged": bool(row.get("converged", True)),
-        "warnings": _warnings(row),
+        "warnings": notes,
+        "more_warnings": more,  # of background, beam tail and resolution: said after the others, in one paragraph
+        "flags": [str(flag) for flag in row.get("flags") or ()],
         # The values that ended on a bound of their range ({"parameter": "D", "bound": "upper", "component": 0}).
         "at_bounds": [dict(item) for item in row.get("at_bounds") or ()],
         "intervals": _intervals(row),
@@ -85,10 +118,9 @@ def _solution(row: dict) -> dict:
 
 
 def _brief(solution: dict) -> str:
-    params = solution["components"][0] if solution["components"] else {}
-    distance = f", D = {params['D']:.3g} nm" if params.get("D") is not None else ""
-    chance = "" if solution.get("probability") is None else f", probability {solution['probability']:.2f}"
-    return f"{solution['model']}, R = {params.get('R', math.nan):.3g} nm{distance}, χ²/N = {solution['chi2']:.3g}{chance}"
+    """Every population's R (and D), χ²ᵣ and the probability, as the report's decision says them."""
+    said = chance(solution)
+    return f"{solution['model']}, {sizes(solution)}, χ²ᵣ = {solution['chi2']:.3g}" + (f", {said}" if said else "")
 
 
 def _curve(row: dict) -> dict:
@@ -214,8 +246,14 @@ class GisaxsToolsMixin:
         if not rows:
             raise ToolInputError("Predict parameters found no solution.")
         solutions = [_solution(row) for row in rows]  # most probable first: the first is the one reported
+        if len(solutions) == 1 and components:  # one composition, given: its probability of 1 is no finding
+            solutions[0]["alone"] = True
         self.results.gisaxs["fit"] = {
             "side": side, "curve": note, "points": int(x.size), "q_range_inv_angstrom": [float(x.min()), float(x.max())],
+            # the points χ²ᵣ is of: fitted, given, below_window (below the network's q window), unusable
+            "fitted_points": None if not rows[0].get("points") else dict(rows[0]["points"]),
+            # what the fit says of the curve as it took it: an estimated σ, negative and zero intensities
+            "curve_notes": [dict(item) for item in rows[0].get("curve_notes") or ()],
             "solutions": solutions,
             "chosen": 0,
             # What made the solutions: the proposal network by name and the SHA-256 of its weights, and the seed.

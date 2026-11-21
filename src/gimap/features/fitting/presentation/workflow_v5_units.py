@@ -15,6 +15,7 @@ from pathlib import Path
 from src.gimap.app.presentation.i18n import tr, trf
 
 from ..application.workflow_v5 import FROM_FILE, q_unit_of_file
+from .intake_texts import note_text, row_note_lines
 from .unit_texts import UNIT_LABEL, UNIT_SHOWN, read_in
 
 UNIT_TIP = ("A file whose header states the unit of q is read in that unit, whatever is set here: Analyze's "
@@ -89,6 +90,29 @@ class WorkflowV5UnitsMixin:
         if not tip:
             return "", ""
         return ("" if row.get("file") == "Current curve" else f" · {UNIT_SHOWN[row['q_unit_read']]}"), tip
+
+    def _show_curve_notes(self, rows) -> None:
+        """Under the status line, as a warning: what was assumed of each fitted curve (the unit of q when that gives
+        an implausible range, an estimated σ, negative and zero intensities); hidden when there is nothing to say."""
+        label = getattr(self, "curve_notes_label", None)
+        if label is None:
+            from PyQt5.QtWidgets import QLabel
+
+            from src.gimap.app.presentation.theme import set_role
+
+            label = self.curve_notes_label = QLabel(self)
+            label.setObjectName("workflowV5CurveNotes")
+            label.setWordWrap(True)
+            set_role(label, "warning")
+            self.layout().insertWidget(self.layout().indexOf(self.status) + 1, label)
+        rows = list(rows)
+        self._say(label, lambda: "\n".join(row_note_lines(rows)))
+        label.setVisible(bool(label.text()))
+
+    @staticmethod
+    def _row_notes(row: dict) -> list[str]:
+        """A candidate's own curve notes, for its tooltip and its Parameters text."""
+        return ["⚠ " + note_text(note) for note in row.get("curve_notes") or ()]
 
 
 __all__ = ["UNIT_LABEL", "UNIT_SHOWN", "UNIT_TIP", "WorkflowV5UnitsMixin", "names_text"]

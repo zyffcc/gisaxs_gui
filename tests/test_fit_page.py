@@ -212,15 +212,19 @@ def test_each_thing_is_said_once_and_a_missing_sigma_or_a_bound_is_a_warning(tmp
         assert page.step_rail.detail("curve") == f"{fitted} points fitted"  # the file's name: on the chip
         assert page.curve_chip.text() == "sample_fit_input.dat" and "σ from the file" not in page.curve_info.text()
         assert not page.sigma_warning.isHidden() and page.sigma_warning.property("gimapRole") == "warning"
-        assert page.sigma_warning.text() == "⚠ No σ in the file: every point weighted alike (ln I fitted)"
+        card = page.sigma_warning.text().splitlines()  # what each method does without σ, and the points ln I lacks
+        assert card[0].startswith("⚠ No σ in the file. Predict parameters: a relative σ of ")
+        assert card[0].endswith("Refine and Search: ln I is fitted, every point weighted alike.")
+        assert "weighted alike (ln I fitted)" not in card[0] and "were left out: without σ" in card[1]
         assert "Predict parameters takes a relative σ" in page.sigma_warning.toolTip() and page.weighting_note.toolTip() == page.sigma_warning.toolTip()
-        assert page.weighting_note.text() == "⚠ No σ in the file: every point weighted alike"
+        assert page.weighting_note.text().splitlines()[0] == "⚠ No σ in the file: every point weighted alike"  # Refine
         assert not page.weighting_note.isHidden()
         assert "Å⁻¹" in page.curve_card.toolTip() and "Å⁻¹" not in page.curve_info.text().splitlines()[0]
         assert page.range_min_spin.toolTip().startswith("Only the points inside the fitting range are fitted")
         apply_language("zh", [page])
         page.refresh_language()
-        assert page.sigma_warning.text() == "⚠ 文件里没有 σ：每个点权重相同（拟合 ln I）"
+        assert page.sigma_warning.text().startswith("⚠ 文件里没有 σ。预测参数：使用 ")
+        assert "精修和搜索：拟合 ln I，每个点权重相同。" in page.sigma_warning.text()
         assert page.step_rail.detail("curve") == f"拟合 {fitted} 个点"
         apply_language("en", [page])
         page.refresh_language()
@@ -301,9 +305,9 @@ def test_a_solution_from_analyze_becomes_the_model(tmp_path) -> None:
     assert model.get((0, "R")).value == 6.0 and model.get((0, "sigma_R")).value == pytest.approx(0.15)
     assert "draws the same curve" in page.status_label.text()
     assert page.solutions_table.rowCount() == 1
-    # Analyze's number is its fit's χ²/N (mean r², no degrees-of-freedom correction), not a χ²ᵣ of this page.
-    assert page.solutions_table.horizontalHeaderItem(4).text() == "χ²/N"
-    assert page.solutions_table.item(0, 4).text() == "1.1" and "χ²/N" in page.solutions_table.item(0, 4).toolTip()
+    # Analyze's number is its fit's χ²ᵣ (mean r², no degrees-of-freedom correction), not a χ²ᵣ of this page.
+    assert page.solutions_table.horizontalHeaderItem(4).text() == "χ²ᵣ"
+    assert page.solutions_table.item(0, 4).text() == "1.1" and "χ²ᵣ" in page.solutions_table.item(0, 4).toolTip()
     page.dispose()
 
 

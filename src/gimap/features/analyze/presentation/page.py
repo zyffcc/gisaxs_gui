@@ -371,6 +371,8 @@ class AnalyzePage(
         )
 
     def show_analysis(self, analysis: FrameAnalysis) -> None:
+        if self._drop_carried_incidence(analysis):
+            return  # analysed again without the αi of another profile's last session
         self._cancel_center_refinement()
         self._center_analysis_pending = False
         previous = self.view_model.state.analysis

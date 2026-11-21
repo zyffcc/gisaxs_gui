@@ -3,6 +3,11 @@
 A value set by the user is kept for every frame and remembered for the next session, so it must
 never go unnoticed: the field is marked (``override`` QSS property), its tooltip names both values,
 its context menu and the notice at the start of a session go back to the profile's value in one step.
+
+The value of the last session belongs to the instrument profile it was set with. A first frame of another
+profile (or of a detector without one) does not use it: the field goes back to the profile's value, a notice
+offers the old value in one step, and the automatic analysis asks for αi with it as a suggestion
+(``status()["incidence_suggestion"]``).
 """
 
 from __future__ import annotations
@@ -20,6 +25,12 @@ from ..views.analyze_page_view import INCIDENCE_FROM_PROFILE, INCIDENCE_TIP
 
 OVERRIDE_TIP = "αi set by you: {value}° · profile: {profile}°"
 RESTORED_NOTICE = "αi {value}° from your last session (profile: {profile}°)"
+NOT_USED_NOTICE = (
+    "αi {value}° of your last session is not used: it was set with another instrument profile "
+    "(this profile: {profile}°)"
+)
+NOT_USED_NO_PROFILE = "αi {value}° of your last session is not used: this detector has no instrument profile yet"
+USE_IT = "Use {value}°"
 
 
 def _degrees(value: Optional[float]) -> str:
@@ -31,6 +42,10 @@ class IncidenceMixin:
 
     _incidence_notice_pending = False
     """A value restored from the last session that the user has not been told about yet."""
+    _incidence_profile: Optional[str] = None
+    """The instrument profile in use when the αi in the field was set (remembered with it)."""
+    _incidence_suggestion: Optional[float] = None
+    """The last session's αi that was not used for this session's frames (another profile's)."""
 
     def _connect_incidence(self) -> None:
         self.incidence_menu = QMenu(self.incidence_spin)  # one menu, shown again on every right-click
@@ -56,6 +71,7 @@ class IncidenceMixin:
                 self.incidence_spin.setValue(analysis.geometry.incidence_deg)
         self._show_incidence_state()
         self._tell_restored_incidence(analysis)
+        self._keep_incidence_profile(analysis)
 
     def _forget_incidence(self) -> None:
         """No frame is shown (Clear, a frame that could not be read): the field no longer shows the αi of the
@@ -65,17 +81,68 @@ class IncidenceMixin:
                 self.incidence_spin.setValue(INCIDENCE_FROM_PROFILE)
         self._show_incidence_state()
 
-    def _incidence_changed(self, value: float) -> None:
-        self.view_model.set_incidence(None if value <= INCIDENCE_FROM_PROFILE + 1e-9 else value)
+    def _adopt_incidence(self, degrees: Optional[float]) -> None:
+        """αi set in this session (by hand, a notice's button, the automatic analysis): no longer the last
+        session's, and it belongs to the profile of the frame shown."""
+        self.view_model.set_incidence(degrees)
         self._incidence_notice_pending = False
+        self._incidence_suggestion = None
+        self._incidence_profile = self._profile_name(self.view_model.state.analysis) if degrees is not None else None
+
+    @staticmethod
+    def _profile_name(analysis) -> Optional[str]:
+        profile = analysis.resolution.profile if analysis is not None and analysis.resolution is not None else None
+        return profile.name if profile is not None else None
+
+    def _keep_incidence_profile(self, analysis) -> None:
+        """A value of this session goes with the profile it was last used with."""
+        name = self._profile_name(analysis)
+        if (self.view_model.state.incidence_deg is not None and not self._incidence_notice_pending
+                and name is not None and name != self._incidence_profile):
+            self._incidence_profile = name
+            self._remember()
+
+    def _drop_carried_incidence(self, analysis) -> bool:
+        """The first frame of this session was analysed with the last session's αi, which was set with another
+        instrument profile: the value is taken out, said, and offered. ``True``: the frame is being analysed
+        again without it (its first analysis is not shown)."""
+        value = self.view_model.state.incidence_deg
+        if not self._incidence_notice_pending or value is None:
+            return False
+        name = self._profile_name(analysis)
+        if analysis.resolution is None or (name is not None and name == self._incidence_profile):
+            return False
+        profile = analysis.resolution.profile
+        self.view_model.set_incidence(None)
+        self._incidence_notice_pending = False
+        self._incidence_suggestion, self._incidence_profile = float(value), None
+        with QSignalBlocker(self.incidence_spin):
+            self.incidence_spin.setValue(INCIDENCE_FROM_PROFILE if profile is None else profile.geometry.incidence_deg)
+        self._show_incidence_state()
+        self._remember()
+        text = tr(NOT_USED_NO_PROFILE).format(value=_degrees(value)) if profile is None else tr(NOT_USED_NOTICE).format(
+            value=_degrees(value), profile=_degrees(profile.geometry.incidence_deg))
+        show_toast(self.window(), text, level="warning", timeout_ms=20000,
+                   action=(tr(USE_IT).format(value=_degrees(value)), lambda: self._use_incidence(float(value))))
+        if analysis.geometry is None:
+            return False  # nothing was computed with it
+        self.run_analysis()
+        return True
+
+    def _use_incidence(self, value: float) -> None:
+        with QSignalBlocker(self.incidence_spin):
+            self.incidence_spin.setValue(value)
+        self._incidence_changed(value)
+
+    def _incidence_changed(self, value: float) -> None:
+        self._adopt_incidence(None if value <= INCIDENCE_FROM_PROFILE + 1e-9 else value)
         self._show_incidence_state()
         self._remember()
         self.run_analysis()
 
     def reset_incidence(self) -> None:
         """Back to the instrument profile's αi (for this and every following frame)."""
-        self.view_model.set_incidence(None)
-        self._incidence_notice_pending = False
+        self._adopt_incidence(None)
         profile = self._profile_incidence()
         with QSignalBlocker(self.incidence_spin):
             self.incidence_spin.setValue(INCIDENCE_FROM_PROFILE if profile is None else profile)
@@ -112,4 +179,4 @@ class IncidenceMixin:
                    timeout_ms=15000)
 
 
-__all__ = ["IncidenceMixin", "OVERRIDE_TIP", "RESTORED_NOTICE"]
+__all__ = ["IncidenceMixin", "NOT_USED_NOTICE", "NOT_USED_NO_PROFILE", "OVERRIDE_TIP", "RESTORED_NOTICE", "USE_IT"]

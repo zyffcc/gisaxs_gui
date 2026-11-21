@@ -12,6 +12,35 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Predict parameters: one χ²ᵣ per solution, every population shown, plainer notes.** A solution now has the same
+  χ²ᵣ wherever it appears — the Fit page's status line, table and Fit details, the automatic analysis's table,
+  report, CSV and JSON, Batch Export's table — computed over the points Predict fitted, and each place says how
+  many those are (*596 of 598 points; 2 below the network's q window*); a Refine afterwards says when its χ²ᵣ is
+  of other points. The reports' former χ²/N (a mean over all points) is gone: `chi2` in the saved tables and
+  records is this χ²ᵣ, and its definition is in the tooltip of the symbol. With two or three populations the
+  headline, the tables and the model question give every R and D in the order of the radii
+  (`R = 3.06 / 6.02 nm, D = 49.4 / – nm`). Fit details and the report give the value that is in Model with its 68 %
+  interval (`R 4.56 [4.56, 7.52] nm`, enough digits to tell them apart; never a median) and say when the value lies
+  at the edge of its interval; probabilities are stated as relative to the compositions tried, and one composition
+  tried shows none. Every quantity has one name, that of the Model table (Tail A, Tail w, Tail ν, σ_q, Scale,
+  σR/R (1)), in flags, tables and reports; a term that is absent (Tail A = 0) is no longer flagged, the notes about
+  background, tail and resolution follow the others in one paragraph, a free value without an error shows “–” with
+  the reason, and “1 solutions” is “1 solution”. Automatic-analysis records gain `points`, `flags` and
+  `more_warnings` per solution; scripts that read the old `warnings` texts or `ν_Res` names need a look.
+- **Fitting reads curves the same way everywhere.** Files whose header states no unit of q are read in Å⁻¹ on the
+  Fit page and in the 1D Predict window alike, and a warning next to the result names the assumed unit and how to
+  change it when the q range is implausible. A curve without σ gets the same estimated relative σ in both places,
+  files with a title line open in both, and negative or zero intensities are counted and reported.
+- **Automatic analysis and records.** An incidence angle remembered from the last session is used only with the
+  instrument profile it was set with and is never saved into a profile; for another detector GIMaP asks again and
+  offers the old value. Saved reports and the CSV files exported in the window name the GIMaP version, the input
+  file's SHA-256, the calibration file and instrument profile, mask and corrections; the peak table gives ± and
+  marks poor fits; sizes in `report.json` carry their unit, and `.edf` standard images can be calibrated from the
+  command line. The q map is no longer finer than the detector (no holes on tilted or small frames) and opens on
+  the measured area; a file-header distance more than 5 % from the calibration is a point to check; a calibrant
+  frame in transmission is recognised and no particles are fitted to it; a neighbouring folder's calibration made
+  for another detector is not adopted.
+
 - **Command line (`tools/gimap_agent.py auto`): frames no longer overwrite each other, and a run can be traced
   to its inputs.** Each frame has its own folder (frames of one name in different folders used to share one;
   they now get `<name>_<folder>`), linked from `summary.md`, whose open questions keep every frame's items and
@@ -60,9 +89,10 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   more, the run asks which model you expect (**model**); a reported value at a bound of its range is a point to
   check, and χ²/N above 10 a poor fit, as before. 2π/q\* no longer starts the fit (it stays a result of its own),
   and the solutions are no longer ranked by the Huber misfit with the rule of 10 % of χ²/N. Batch Export takes
-  about 25 s per frame and needs no start values for the particle model. On the public GALAXI example the run now
-  reports two upright cylinders without a paracrystal (R 3.11 nm and 5.49 nm, χ²/N 1.27, probability 1.00) with
-  *ν_Res at its lower bound* to check: for these spheres, fit a sphere in Fitting (manual, section 1.3).
+  from some seconds to a few minutes per frame and needs no start values for the particle model. On the public GALAXI example the run now
+  reports an upright cylinder with a paracrystal next to a second upright cylinder (R = 3.17 / 6.15 nm, D = 44 / –
+  nm, χ²ᵣ 1.07, probability 0.39) and asks for the model, two more solutions being about as probable: for these
+  spheres, fit a sphere in Fitting (manual, section 1.3).
 - **Fitting ▸ Predict parameters (new):** GIMaP's own network finds the particles of a 1D GISAXS cut and their
   values from the curve. It proposes compositions (one to three spheres, upright or random cylinders, with or
   without the paracrystal) and values; Fitting's model weighs them against the measured points, and every solution

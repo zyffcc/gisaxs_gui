@@ -8,9 +8,9 @@ When another solution is probable too — its probability at least ``ASK_PROBABI
 decide the model and the run asks the person to choose (``rivals``). A non-linear value that ended on a bound of its
 range (``at_bounds`` of a solution, e.g. D at its upper bound) is not determined by the curve: a point to check.
 
-The linear terms — the particle amplitudes, the background BG and the beam-tail amplitude A — cannot go below 0 and
+The linear terms — the particle amplitudes, the Background and the beam tail's amplitude Tail A — cannot go below 0 and
 are not in ``at_bounds``: one that ends at 0 is held there by that limit, which the report says for the reported
-solution (``zero_terms``). A converged reported solution with χ²/N above ``POOR_CHI2`` misses the curve by far more
+solution (``zero_terms``). A converged reported solution with χ²ᵣ above ``POOR_CHI2`` misses the curve by far more
 than its σ (``poor_fit``).
 """
 
@@ -19,12 +19,15 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from src.gimap.shared import fit_names
+
 ASK_PROBABILITY = 0.2
 """A solution after the first with at least this posterior probability makes the run ask the person to choose the
 model: the curve does not tell the two apart well enough for the run to decide."""
-BOUND_NAMES = {"R": "R", "sigma_R": "σR/R", "h": "h", "sigma_h": "σh/h", "D": "D", "sigma_D": "σD/D", "sigma_nn": "σnn/D",
-               "sigma_Res": "σ_Res", "nu_Res": "ν_Res"}
-"""How a value at a bound is named (as the report's table names the parameters; σ_Res, ν_Res: the beam tail)."""
+BOUND_NAMES = {key: fit_names.NAMES[key] for key in ("R", "sigma_R", "h", "sigma_h", "D", "sigma_D", "sigma_nn",
+                                                      "sigma_Res", "nu_Res")}
+"""How a value at a bound is named: the names of Fitting's Model table (``shared/fit_names``; Tail w, Tail ν: the
+beam tail), the same in the table, the flags and the decisions."""
 AT_UPPER = "{name} at its upper bound"
 AT_LOWER = "{name} at its lower bound"
 """How a value at a bound is said (one phrase per value; the interface translates them by these forms)."""
@@ -32,11 +35,10 @@ LENGTH_SCALE = "a length scale, not necessarily the particle spacing; check it w
 """What 2π/q* of a peak or shoulder of the cut is: a length the curve shows, which the form factor or the beam tail
 can make as well as the interparticle correlation (BornAgain simulations without interference show a shoulder too)."""
 POOR_CHI2 = 10.0
-"""A converged reported solution whose χ²/N is above this is a poor fit: it misses the curve by far more than the σ
-of its points. The limit is Fitting's (``fitting/application/series_fit.POOR_CHI2``, for its χ²ᵣ, which differs from
-χ²/N only by the degrees-of-freedom correction, a few parameters in hundreds of points); features import nothing of
-each other, so a test keeps the two equal."""
-LINEAR_TERMS = (("background", "background BG"), ("resolution_amplitude", "beam-tail amplitude A"))
+"""A converged reported solution whose χ²ᵣ is above this is a poor fit: it misses the curve by far more than the σ
+of its points. The limit is Fitting's (``fitting/application/series_fit.POOR_CHI2``, for the same χ²ᵣ); features
+import nothing of each other, so a test keeps the two equal."""
+LINEAR_TERMS = (("background", "Background"), ("resolution_amplitude", "Tail A"))
 """The linear terms of a solution's ``globals`` that can end at their non-negativity limit, as the report names them."""
 INTERVAL_KEYS = ("R", "h", "D")
 """The values whose posterior intervals the report gives (per component: ``R_1``, ``h_2`` … of ``intervals``)."""
@@ -57,7 +59,7 @@ def rivals(solutions: list[dict]) -> list[dict]:
 
 
 def poor_fit(solution: Optional[dict]) -> bool:
-    """A converged solution with χ²/N above ``POOR_CHI2`` (a fit that did not converge is said as such)."""
+    """A converged solution with χ²ᵣ above ``POOR_CHI2`` (a fit that did not converge is said as such)."""
     if not solution or not solution.get("converged", True):
         return False
     chi2 = _chi2(solution)
@@ -65,7 +67,7 @@ def poor_fit(solution: Optional[dict]) -> bool:
 
 
 def zero_terms(solution: Optional[dict]) -> list[str]:
-    """The names of the linear terms of ``globals`` that ended at 0 (``["background BG"]``)."""
+    """The names of the linear terms of ``globals`` that ended at 0 (``["Background"]``)."""
     values = (solution or {}).get("globals") or {}
     found = []
     for key, name in LINEAR_TERMS:
@@ -79,13 +81,13 @@ def zero_terms(solution: Optional[dict]) -> list[str]:
 
 def bound_phrases(solution: dict) -> list[str]:
     """``["D at its upper bound", …]``: the values of a solution that ended on a bound of their range (empty when the
-    fit did not say). With more than one component the component's number follows the name (``R 2``)."""
+    fit did not say). With more than one component the component's number follows the name (``R (2)``)."""
     phrases = []
     many = len(solution.get("components") or ()) > 1
     for item in solution.get("at_bounds") or ():
-        name = BOUND_NAMES.get(str(item.get("parameter")), str(item.get("parameter")))
+        name = fit_names.display_name(str(item.get("parameter")), False)
         if many and item.get("component") is not None:
-            name = f"{name} {int(item['component']) + 1}"
+            name = f"{name} ({int(item['component']) + 1})"
         phrases.append((AT_UPPER if item.get("bound") == "upper" else AT_LOWER).format(name=name))
     return phrases
 
@@ -93,6 +95,21 @@ def bound_phrases(solution: dict) -> list[str]:
 def bounds_text(solution: dict) -> str:
     """The values at a bound, in one line ("" when none)."""
     return ", ".join(bound_phrases(solution))
+
+
+def sizes(solution: Optional[dict], equals: str = " = ", decimals: Optional[dict] = None) -> str:
+    """R of every population and D of those with a paracrystal, in the order of the radii (``R = 3.06 / 6.02 nm,
+    D = 49.4 / – nm``; one population: ``R = 3.06 nm, D = 49.4 nm``)."""
+    return fit_names.sizes_text((solution or {}).get("components") or (), equals, decimals)
+
+
+def chance(solution: Optional[dict], name: str = "probability ") -> str:
+    """``probability 0.42``; ``only this composition was tried`` for the one solution of a composition that was
+    given (its probability of 1 is no finding); "" when the fit gave none."""
+    if (solution or {}).get("alone"):
+        return fit_names.ONLY_ONE
+    value = probability(solution)
+    return "" if math.isnan(value) else f"{name}{value:.2f}"
 
 
 def interval(solution: Optional[dict], key: str, component: int = 0, level: int = 68) -> Optional[tuple[float, float]]:
@@ -129,5 +146,6 @@ def chosen(fit: Optional[dict]) -> tuple[int, Optional[dict]]:
 
 __all__ = [
     "ASK_PROBABILITY", "AT_LOWER", "AT_UPPER", "BOUND_NAMES", "INTERVAL_KEYS", "LENGTH_SCALE", "LINEAR_TERMS", "POOR_CHI2",
-    "bound_phrases", "bounds_text", "chosen", "interval", "poor_fit", "probability", "rivals", "zero_terms",
+    "bound_phrases", "bounds_text", "chance", "chosen", "interval", "poor_fit", "probability", "rivals", "sizes",
+    "zero_terms",
 ]

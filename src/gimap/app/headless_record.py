@@ -21,16 +21,15 @@ Two runs on the same input with the same options differ only in ``created`` and 
 from __future__ import annotations
 
 import json
-import os
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Optional, Sequence
 
-from src.gimap.shared.file_digest import file_record
 from src.gimap.shared.version import SOFTWARE
 
 from ..features.assistant.application import fit_curve_table, fit_solutions_csv, pipeline_markdown, ring_overlays
+from ..features.assistant.application import run_record as records
 from ..features.assistant.application.report_language import ENGLISH
+from ..features.assistant.application.run_record import MASK_IMAGE, MASK_SHAPES, input_files, utc_now
 from .headless_sources import batch_summary
 
 CURVES = ("radial", "in_plane", "out_of_plane", "azimuthal", "horizontal", "vertical")
@@ -38,13 +37,6 @@ SUMMARY_LEAVES_OUT = ("tables", "analysis_record", "options")
 """Parts of a frame's report that stay in its own report.json (``options`` is the summary's own)."""
 MADE_BY_THE_RUN = "automatic analysis:"
 """How the source of an instrument profile begins when the automatic analysis chose its geometry."""
-MASK_IMAGE = "mask image: its non-zero pixels are left out"
-MASK_SHAPES = "GIMaP masks file: {count} drawn shape(s) left out"
-
-
-def utc_now() -> str:
-    """The time a record is written: UTC, ISO 8601, to the second (as ``<stem>_analysis.json``)."""
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def analysis_record(session) -> Optional[dict]:
@@ -62,80 +54,28 @@ def analysis_record(session) -> Optional[dict]:
     return record
 
 
-def _existing(path: Any) -> Optional[dict]:
-    return file_record(path) if path and os.path.isfile(str(path)) else None
-
-
 def mask_record(session, record: Optional[dict]) -> dict:
     """Which mask was applied, or that none was; apart from it, the bad pixels found automatically."""
-    record = record or {}
-    corrections = record.get("corrections") or {}
-    shapes = corrections.get("mask_shapes") or []
-    path = getattr(session, "mask", None) or corrections.get("mask_path")
-    image = bool(corrections.get("mask_path"))
-    return {
-        "applied": bool(image or shapes),
-        "file": _existing(path) if (image or shapes) else None,
-        "kind": MASK_IMAGE if image else (MASK_SHAPES.format(count=len(shapes)) if shapes else None),
-        "masked_pixels": record.get("drawn_mask_pixels"),
-        "bad_pixels_left_out": record.get("bad_pixels_left_out"),
-    }
-
-
-def input_files(report: dict, record: Optional[dict]) -> dict:
-    """Every file the result was made from, each by name, path, size and SHA-256: the frame's files (the module
-    or data files of a source, the frames summed with it), and the calibration, mask and background file when
-    one was used (``None``: none)."""
-    record = record or {}
-    frames = list(record.get("source_files") or [record.get("source_file") or report.get("frame")])
-    frames += [item.get("file") for item in record.get("summed_frames") or ()]
-    seen: list[str] = []
-    for path in frames:
-        if path and str(path) not in seen:
-            seen.append(str(path))
-    corrections = record.get("corrections") or {}
-    return {
-        "frame": [file_record(path) for path in seen],
-        "calibration": _existing((report.get("calibration") or {}).get("source_image")),
-        "mask": _existing(corrections.get("mask_path")),
-        "background": _existing(corrections.get("background_path")),
-    }
+    return records.mask_record(record, getattr(session, "mask", None))
 
 
 def run_record(session, report: dict, *, options: Optional[dict] = None, created: Optional[str] = None) -> dict:
-    """What identifies a report's inputs and settings (the keys the module docstring lists)."""
-    created = created or utc_now()
-    record = analysis_record(session)
-    if record is not None:
-        record["created"] = created  # one time for the whole record
-    inputs = input_files(report, record)
-    mask = mask_record(session, record)
-    if mask["applied"] and inputs["mask"] is None:  # a masks .json: its shapes were applied, the path is the session's
-        inputs["mask"] = mask["file"]
-    return {
-        "software_version": SOFTWARE, "created": created, "options": options, "inputs": inputs, "mask": mask,
-        "analysis_record": record,
-    }
+    """What identifies a report's inputs and settings (the keys the module docstring lists; the window's Save
+    Report attaches the same, ``assistant/application/run_record.py``)."""
+    return records.run_record(report, analysis_record(session), mask_path=getattr(session, "mask", None),
+                              options=options, created=created)
 
 
 def provenance_lines(session) -> str:
     """The lines above the column names of every CSV the command line writes: the release, each input file by name
     and SHA-256, and the geometry, so a curve says where it came from also without report.json beside it."""
     from ..features.analyze.application.export_record import analysis_metadata
+    from ..features.analyze.application.export_record import provenance_lines as provenance
 
     analysis = session.page.view_model.state.analysis
-    lines = [f"{SOFTWARE} (command line); settings and decisions in report.json"]
-    if analysis is not None:
-        record = analysis_metadata(analysis)
-        lines += [f"input: {item['file']} sha256 {item['sha256']}" for item in record.get("input_sha256") or ()]
-        lines.append(f"frame: {record.get('frame')}")
-        if (geometry := analysis.geometry) is not None:
-            lines.append(
-                f"geometry: distance {geometry.distance_m * 1e3:.4f} mm, direct beam ({geometry.beam_center_x_px:.3f}, "
-                f"{geometry.beam_center_y_px:.3f}) px, wavelength {geometry.wavelength_angstrom:.6g} A, "
-                f"alpha_i {geometry.incidence_deg:.4g} deg, detector tilt {geometry.tilt_deg:.4g} deg" + (
-                    f", q_z refracted, alpha_c {geometry.critical_angle_deg:.4g} deg" if geometry.refraction else ""))
-    return "\n".join(lines)
+    if analysis is None:
+        return f"{SOFTWARE} (command line); settings and decisions in report.json"
+    return "\n".join(provenance(analysis_metadata(analysis), "command line", "report.json"))
 
 
 def write_outputs(

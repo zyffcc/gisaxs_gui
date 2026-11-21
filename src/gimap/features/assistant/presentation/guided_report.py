@@ -21,6 +21,7 @@ import numpy as np
 from PyQt5.QtGui import QTextDocument
 
 from src.gimap.app.presentation.i18n import current_language
+from src.gimap.shared.version import SOFTWARE
 
 from ..application import (
     bound_phrases,
@@ -32,6 +33,7 @@ from ..application import (
     ring_overlays,
     series_markdown,
 )
+from ..application.run_record import run_record
 
 STYLE = """
 body { font-family: system-ui, "Segoe UI", sans-serif; max-width: 980px; margin: 24px auto; padding: 0 16px;
@@ -64,6 +66,18 @@ _GIWAXS_CLOSING = "Sizes are Scherrer lower bounds"
 GISAXS_CUT_CAPTION = "The horizontal cut I(qy) at the Yoneda band (not fitted here)."
 NO_RINGS_CAPTION = "The q map of the analysed frames."
 FIT_COLOURS = ("#1f4e79", "#c62828")
+
+
+def attach_record(report: dict, automation) -> None:
+    """The keys the command line's report.json has too (the release, the inputs with their SHA-256, the mask, the
+    frame's analysis record: ``application/run_record.py``), from the frame as the run left it, so the page and the
+    Markdown of Save Report name them (the Record section). ``automation``: Analyze's, with ``analysis_record()``."""
+    try:
+        record = getattr(automation, "analysis_record", lambda: None)()
+        if record is not None and report.get("frame") and report.get("geometry", {}).get("distance_mm"):
+            report.update(run_record(report, record))
+    except Exception:  # a report without its record is still a report
+        pass
 
 
 def _markdown_html(text: str) -> str:
@@ -116,7 +130,8 @@ def report_html(
         '<html lang="en"><head><meta charset="utf-8">',
         f"<title>{html.escape(title)}</title><style>{STYLE}</style></head><body>",
         f"<h1>{html.escape(title)}</h1>",
-        f'<p class="muted">{html.escape(frame)} · {SUBTITLE} · GIMaP, {made}</p>',
+        f'<p class="muted">{html.escape(frame)} · {SUBTITLE} · {html.escape(report.get("software_version") or SOFTWARE)}, '
+        f"{made}</p>",
         _figure(q_map, q_caption),
         _figure(curve, curve_caption),
         _markdown_html(markdown),
@@ -176,17 +191,16 @@ def fit_png(report: dict, width: int = 1000) -> Optional[bytes]:
     axes.loglog(q[shown], intensity[shown], ".", color=FIT_COLOURS[0], markersize=2.5, label="data")
     fitted = shown & np.isfinite(model) & (model > 0)
     if fitted.any():
-        component = (top.get("components") or [{}])[0]
-        radius = component.get("R")
+        radii = sorted(float(c["R"]) for c in top.get("components") or () if c.get("R") is not None)
         name = str(top.get("model") or "").replace("_", " ")
-        detail = f" R {float(radius):.3g} nm" if radius is not None else ""
+        detail = f" R {' / '.join(f'{radius:.3g}' for radius in radii)} nm" if radii else ""  # every population
         chance = probability(top)
         which = "best fit" if math.isnan(chance) else "most probable fit"  # (a report before Predict: no probability)
         bounds = ", ".join(bound_phrases(top))
         axes.loglog(q[fitted], model[fitted], "-", color=FIT_COLOURS[1], linewidth=1.4,
                     label=f"{which}: {name}{detail} ("
                     + ("" if math.isnan(chance) else f"p {chance:.2f}, ")
-                    + f"χ²/N {float(top.get('chi2') or 0):.3g})" + (f" ⚠ {bounds}" if bounds else ""))
+                    + f"χ²ᵣ {float(top.get('chi2') or 0):.3g})" + (f" ⚠ {bounds}" if bounds else ""))
     axes.set_xlabel("|qy| (Å⁻¹)")
     axes.set_ylabel("Intensity")
     axes.set_title(str(fit.get("curve") or "horizontal cut"), fontsize=9)
@@ -231,4 +245,4 @@ def report_page(report: dict, start_report: Optional[dict], automation: Callable
                        captions=(captions[0], captions[1]), **pictures)
 
 
-__all__ = ["fit_png", "procedure_of", "report_html", "report_markdown", "report_page"]
+__all__ = ["attach_record", "fit_png", "procedure_of", "report_html", "report_markdown", "report_page"]

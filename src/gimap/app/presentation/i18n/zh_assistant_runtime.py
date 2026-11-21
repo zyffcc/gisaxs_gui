@@ -135,10 +135,10 @@ ASSISTANT_RUNTIME_ZH = {
         "解的颗粒：一种或两种颗粒群；(S)：带次晶距离 D。⚠：拟合的警告。标 ⚠ 的数值停在其范围的边界上，曲线不能确定它（列在表格下方；下方的拟合详情：每个参数）。",
     "p: the posterior probability of the solution; the solutions are sorted by it, most probable first. Another solution with p of 0.2 or more: the curve alone does not decide the model.":
         "p：这个解的后验概率；各个解按它排序，最可能的在前。另有解的 p 不低于 0.2 时：仅凭这条曲线无法确定模型。",
-    "χ²/N: the mean squared σ-normalised residual, with no degrees-of-freedom correction.":
-        "χ²/N：按 σ 归一化的残差平方的平均值，不做自由度修正。",
-    "most probable fit {model} R {radius} nm (p {p}, χ²/N {chi2})": "最可能的拟合 {model} R {radius} nm（p {p}，χ²/N {chi2}）",
-    "CSV: every solution with its probability, parameters (nm), intervals and χ²/N.": "CSV：每个解及其概率、参数（nm）、区间和 χ²/N。",
+    "χ²ᵣ: the mean squared σ-normalised residual, with no degrees-of-freedom correction.":
+        "χ²ᵣ：按 σ 归一化的残差平方的平均值，不做自由度修正。",
+    "most probable fit {model} R {radius} nm (p {p}, χ²ᵣ {chi2})": "最可能的拟合 {model} R {radius} nm（p {p}，χ²ᵣ {chi2}）",
+    "CSV: every solution with its probability, parameters (nm), intervals and χ²ᵣ.": "CSV：每个解及其概率、参数（nm）、区间和 χ²ᵣ。",
     "Values at a search bound, not determined by the curve — {rows}.": "处于搜索边界、不由曲线确定的数值——{rows}。",
     "{rank}: {bounds}": "第 {rank} 名：{bounds}",
     "{name} at its upper bound": "{name} 处于搜索上界",
@@ -189,8 +189,8 @@ ASSISTANT_RUNTIME_ZH = {
         "请检查 αi（地平线随它移动），或在图像上把黄色条带拖到 Yoneda 所在的行。",
     "The best fit did not converge.": "最佳拟合没有收敛。",
     "Open the curve in Fitting (Send to Fitting) and refine it with a chosen model.": "在拟合中打开这条曲线（发送到拟合），用选定的模型精修。",
-    "The reported solution ({model}) has χ²/N = {chi2}, above {limit}: it misses the curve by far more than the σ of its points, so none of the compositions Predict parameters tried describes this cut, and its R and D are not measurements.":
-        "报告的解（{model}）的 χ²/N = {chi2}，大于 {limit}：它与曲线的偏差远大于数据点的 σ，预测参数尝试过的组成没有一种能描述这条切线，它的 R 和 D 不是测量值。",
+    "The reported solution ({model}) has χ²ᵣ = {chi2}, above {limit}: it misses the curve by far more than the σ of its points, so none of the compositions Predict parameters tried describes this cut, and its R and D are not measurements.":
+        "报告的解（{model}）的 χ²ᵣ = {chi2}，大于 {limit}：它与曲线的偏差远大于数据点的 σ，预测参数尝试过的组成没有一种能描述这条切线，它的 R 和 D 不是测量值。",
     "Look at the fit over the curve (the Results tab, fit_curve.csv): Bragg rings of a powder or a calibrant, a cut off the Yoneda band or a second population give such a misfit. Refine a model you expect in Fitting.":
         "请对照曲线查看拟合（结果标签页、fit_curve.csv）：粉末或标样的布拉格环、偏离 Yoneda 带的切线或第二种颗粒群都会造成这样的失配。请在拟合中精修你预期的模型。",
     "{texture} — but the strongest measured |χ| ({chi}°) borders an unmeasured range, so the true maximum may lie inside it":

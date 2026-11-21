@@ -61,9 +61,14 @@ def test_text_reader_header_and_invalid_rows(tmp_path):
     p.write_text("X\tY\n.1\t-2\n.2\t3\n")
     q, y, sigma = read_curve(p)
     assert y.tolist() == [-2, 3] and sigma is None
-    p.write_text("q,I\n.1,2\nbad,row\n")
-    with pytest.raises(ValueError, match="Non-numeric"):
-        read_curve(p)
+    # One reader with the Fit page (``load_xy_any``): a row inside the data that is no numbers is left out and
+    # counted (the curve's notes say it), and a title line above the column names is a header like any other.
+    p.write_text("q,I\n.1,2\nbad,row\n.2,3\n")
+    q, y, sigma, unreadable = read_curve(p, details=True)
+    assert y.tolist() == [2, 3] and unreadable == 1
+    p.write_text("Sample A, horizontal cut\nqy [1/nm], intensity, error\n0.1, 5, 1\n0.2, 4, 1\n")
+    q, y, sigma = read_curve(p)
+    assert q.tolist() == [0.1, 0.2] and sigma.tolist() == [1, 1]
 
 
 def test_new_bundle_routes_to_new_worker_preserving_existing_outputs(tmp_path):

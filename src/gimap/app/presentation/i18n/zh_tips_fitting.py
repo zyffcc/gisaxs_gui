@@ -10,7 +10,6 @@ TIPS_FITTING_ZH = {
     "{points} points, |q| {low}–{high} nm⁻¹; {fitted} in the fitting range":
         "{points} 个点，|q| {low}–{high} nm⁻¹；拟合范围内 {fitted} 个",
     "σ from the file": "σ 来自文件",
-    "⚠ No σ in the file: every point weighted alike (ln I fitted)": "⚠ 文件里没有 σ：每个点权重相同（拟合 ln I）",
     "⚠ No σ in the file: every point weighted alike": "⚠ 文件里没有 σ：每个点权重相同",
     "Residuals: {formula}. Each point is weighted by 1/σ from the file; fit1d adds the systematic error floor "
     "(Options).": "残差：{formula}。每个点按文件中的 1/σ 加权；fit1d 另加系统误差下限（选项）。",

@@ -197,7 +197,11 @@ def test_page_shows_curves_after_opening_a_cbf_with_zero_clicks(tmp_path: Path) 
     assert sorted(record["files"]) == [name for name in exported if name != f"{stem}_analysis.json"]
     assert record["instrument_profile"]["name"] == "P03 Pilatus"
     assert record["measurement"] == "gisaxs"
-    data = np.loadtxt(tmp_path / "gimap_analysis" / f"{stem}_horizontal.csv", delimiter=",", skiprows=6)
+    exported_curve = tmp_path / "gimap_analysis" / f"{stem}_horizontal.csv"
+    header = [line for line in exported_curve.read_text(encoding="utf-8").splitlines() if line.startswith("#")]
+    assert any(line.startswith("# GIMaP v") and "(Analyze)" in line for line in header)  # the release, as the CLI's
+    assert any(" sha256 " in line for line in header) and any(line.startswith("# geometry: ") for line in header)
+    data = np.loadtxt(exported_curve, delimiter=",", skiprows=len(header) + 1)
     assert data.shape[1] == 4 and data.shape[0] > 100
     page.close()
 

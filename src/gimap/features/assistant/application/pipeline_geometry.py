@@ -13,6 +13,14 @@ from pathlib import Path
 from typing import Iterable, Iterator, Optional
 
 from ..domain import READABLE_IMAGE_SUFFIXES, STANDARD_NAMES, assessment, standard_from_name, suffix
+from src.gimap.shared.geometry.header_check import (
+    HEADER_DISTANCE_HINT,
+    HEADER_DISTANCE_ITEM,
+    HEADER_DISTANCE_WHY,
+    header_distance_disagreement,
+)
+
+from .calibration_match import OTHER_ENERGY_DECISION, searched_mismatch, searched_other_energy
 from .calibration_tools import file_geometry, file_key
 from .tools import clean
 
@@ -28,6 +36,11 @@ measurement; the line is information, no question is raised for it."""
 SEEN_FROM_FRAME = "{place}, seen from the frame's folder"
 SEEN_FROM_OTHER = "{place}, seen from the folder of {frame}, the frame it was searched for"
 INCIDENCE_ITEM = "incidence angle αi"
+INCIDENCE_SUGGESTED = (
+    "Your last session used αi = {value}° with another instrument profile; it is not used here, give it again if "
+    "it holds for this sample."
+)
+"""Added to the αi question when Analyze dropped the last session's value for this frame (``incidence_suggestion``)."""
 INCIDENCE_MISSING = {
     "giwaxs": (
         "Neither the options, the notes, Analyze's command bar nor an instrument profile give αi, so 0° is used. Ring "
@@ -140,10 +153,10 @@ class GeometryStepsMixin:
     ``_declined`` (``StandardPipeline``)."""
 
     def _incidence_missing(self) -> None:
-        self._attention(
-            INCIDENCE_ITEM, INCIDENCE_MISSING["giwaxs"], "incidence_deg",
-            "Beamtime notes, the logbook or the slides usually state it (typically 0.1–0.5°); otherwise ask.",
-        )
+        hint = "Beamtime notes, the logbook or the slides usually state it (typically 0.1–0.5°); otherwise ask."
+        if self._incidence_suggestion is not None:  # never used silently, never saved in this detector's profile
+            hint += " " + INCIDENCE_SUGGESTED.format(value=f"{float(self._incidence_suggestion):g}")
+        self._attention(INCIDENCE_ITEM, INCIDENCE_MISSING["giwaxs"], "incidence_deg", hint)
 
     def _incidence_worded_for(self, technique) -> None:
         """The open αi question in the words of ``technique``: it is asked with the geometry, before the
@@ -168,6 +181,11 @@ class GeometryStepsMixin:
             said = entry(self.catalog.results.status)
             if said is not None:
                 (self._run.attention if said[0] == "attention" else self._run.decisions).append(said[1])
+        status = self.catalog.results.status or {}
+        apart = header_distance_disagreement(
+            (status.get("header") or {}).get("distance_mm"), (status.get("geometry") or {}).get("distance_mm"))
+        if apart:  # the frame's own header and the calibration disagree: only the person can tell which holds
+            self._attention(HEADER_DISTANCE_ITEM, HEADER_DISTANCE_WHY.format(**apart), None, HEADER_DISTANCE_HINT)
 
     def _flat_detector_as_reported(self) -> None:
         """The tilt said again from the status the report describes, in the place where it was said: the frames
@@ -305,7 +323,7 @@ class GeometryStepsMixin:
                 "An image of AgBh, LaB6, CeO2 or a LaB6+CeO2 mixture taken with this detector, or a .poni / "
                 "GIMaP calibration file; a log or the beamtime notes usually name it.",
             )
-        ranked = ", ".join(Path(item["path"]).name for item in files + images)
+        ranked = ", ".join(_placed(item) for item in files + images)  # the folder of each one not beside the frame
         if ranked:
             self._decide("calibration candidates", ranked, str(listing.get("ranking", "ranked by the search")))
         yield from (dict(item, searched=True) for item in files + images)  # nobody named them
@@ -332,7 +350,16 @@ class GeometryStepsMixin:
             return False
         frame = self.catalog.results.status or {}
         if candidate.get("file") or info.get("kind") in ("pyFAI calibration (.poni)", "GIMaP calibration"):
-            return self._use_file(path, name, info, frame)
+            searched = bool(candidate.get("searched"))
+            foreign = searched_mismatch(path, info, frame, self._poni_text(path)) if searched else None
+            if foreign:  # found in another folder and made for another detector shape
+                self._decide("calibration", f"skipped {name}", foreign)
+                return False
+            used = self._use_file(path, name, info, frame)
+            other = searched_other_energy(path, info, frame, self._energy) if used and searched else None
+            if other:  # adopted (distance and centre hold), but never silently: a decision of its own
+                self._decide("calibration", OTHER_ENERGY_DECISION.format(name=name), other)
+            return used
         if info.get("kind") != "detector image":
             self._decide("calibration", f"skipped {name}", f"it is a {info.get('kind')} file, not a calibration")
             return False
@@ -383,6 +410,12 @@ class GeometryStepsMixin:
             index = int(fitted["calibration_index"])
         return self._use_calibration(index, f"{name}")
 
+    def _poni_text(self, path: str) -> str:
+        try:
+            return self.catalog.explorer.read_text(path) if suffix(path) == ".poni" else ""
+        except Exception:
+            return ""
+
     def _use_calibration(self, index: int, origin: str) -> bool:
         result = self.catalog.results.calibrations[index]
         arguments: dict = {"source": "calibration", "calibration_index": index}
@@ -395,7 +428,7 @@ class GeometryStepsMixin:
                 "energy_kev": self._energy, "pixel_size_um": result["pixel_size_um"][0],
                 "note": f"{origin} (calibrated at {fit_energy:g} keV; the frame's {self._energy:g} keV used)",
             }
-        if self._incidence is not None:
+        if self._incidence is not None and not self._incidence_kept:
             arguments["incidence_deg"] = self._incidence
         if self._call("use_geometry", arguments) is None:
             self._decide("geometry", f"could not use {origin}", self._run.steps[-1]["summary"])
@@ -443,7 +476,7 @@ class GeometryStepsMixin:
             }
         if file_pixel and (arguments["source"] == "values" or self._pixel_given):
             arguments["pixel_size_um"] = float(file_pixel)
-        if self._incidence is not None:
+        if self._incidence is not None and not self._incidence_kept:
             arguments["incidence_deg"] = self._incidence
         if self._call("use_geometry", arguments) is None:
             self._decide("geometry", f"could not use {name}", self._run.steps[-1]["summary"])
@@ -454,6 +487,12 @@ class GeometryStepsMixin:
         if self._incidence is None:
             self._incidence_missing()
         return True
+
+
+def _placed(item: dict) -> str:
+    """A searched candidate's name, with where it lies when that is not the frame's folder or one below it."""
+    name, place = Path(item["path"]).name, str(item.get("folder") or "")
+    return name if not place or place.startswith("same folder") else f"{name} ({place})"
 
 
 __all__ = ["ACCEPTED", "GeometryStepsMixin", "MAX_FILES", "MAX_IMAGES", "SEARCHED", "TILT_HINT", "TILT_ITEM", "TILT_SMALL",

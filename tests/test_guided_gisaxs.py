@@ -48,8 +48,9 @@ class FakeFitter:
                 _row(q, intensity, sigma, 2, "sphere", 9.4, 53.4, 1.31, probability=0.38)]
 
 
-UNCONSTRAINED = "the curve says little about sigma_h_1"
-"""A warning of Predict parameters (Fitting's ``posterior_job.FLAG_SENTENCES``) the report passes on."""
+UNCONSTRAINED = "the curve says little about σh/h (its 68 % interval spans most of its allowed range)"
+"""A note of Predict parameters as the report says it: the flag ``unconstrained:sigma_h_1`` of Fitting's row in the
+words and with the name of ``shared/fit_names`` (one population: no number)."""
 
 
 class BoundFitter(FakeFitter):
@@ -63,7 +64,7 @@ class BoundFitter(FakeFitter):
                    {"parameter": "sigma_h", "bound": "upper", "component": 0}]
         return [
             _row(q, intensity, sigma, 1, "random_cylinder", 8.5961, 500.0, 1.26, upper_d, probability=0.55,
-                 warnings=["D_1 stopped at a bound of its range", UNCONSTRAINED]),
+                 flags=["at_bound:D_1", "unconstrained:sigma_h_1"]),
             _row(q, intensity, sigma, 2, "random_cylinder", 6.0117, 30.862, 1.279,
                  [{"parameter": "sigma_h", "bound": "lower", "component": 0}], probability=0.25),
             _row(q, intensity, sigma, 3, "sphere", 9.4416, 48.3484, 1.358, probability=0.15),
@@ -72,7 +73,8 @@ class BoundFitter(FakeFitter):
         ]
 
 
-def _row(q, intensity, sigma, rank, model, radius, distance, chi2, at_bounds=(), *, probability=1.0, warnings=None):
+def _row(q, intensity, sigma, rank, model, radius, distance, chi2, at_bounds=(), *, probability=1.0, warnings=None,
+         flags=None):
     """One solution as Fitting's Predict parameters gives it (q in nm⁻¹; ``at_bounds``: the values that ended on a
     bound of their range; ``posterior``: best, median, 68 % and 95 % limits, error of each value)."""
     grid = np.linspace(0.05, 2.5, 50)
@@ -81,6 +83,7 @@ def _row(q, intensity, sigma, rank, model, radius, distance, chi2, at_bounds=(),
         "rank": rank, "combination": model, "composition": model, "probability": probability,
         "best_chi2_weighted": chi2, "best_log_rmse": 0.15, "converged": True,
         "warnings": list(warnings or ()), "at_bounds": list(at_bounds),
+        **({} if flags is None else {"flags": list(flags)}),  # as Fitting's rows carry them (a value at a bound too)
         "posterior": {"R_1": [radius, radius, 0.97 * radius, 1.03 * radius, 0.94 * radius, 1.06 * radius, 0.02],
                       "D_1": [distance, distance, 0.9 * distance, 1.1 * distance, 0.8 * distance, 1.2 * distance, 1.0]},
         "display_q": grid.tolist(), "display_fit": (1e3 / (1 + (grid * radius) ** 4)).tolist(),
@@ -163,14 +166,15 @@ def test_the_fit_reports_the_most_probable_and_asks_for_the_model_when_another_i
     assert fit["solutions"][1]["intervals"]["R_1"]["low68"] == pytest.approx(0.97 * 9.4)
     assert len(fit["curves"]) == 2 and len(fit["data"]["q_inv_angstrom"]) == call["points"]
     decision = _decision(report, "fit")
-    assert decision["decision"] == "random_cylinder: R = 6.1 nm, D = 398 nm, χ²/N = 1.22, probability 0.62"
+    assert decision["decision"] == "random_cylinder: R = 6.1 nm, D = 398 nm, χ²ᵣ = 1.22, probability 0.62"
     assert decision["why"].startswith("the most probable solution of Predict parameters on ")
-    assert _decision(report, "fit intervals")["decision"] == "R 5.92–6.28 nm, D 358–438 nm (68 % of the posterior)"
+    assert _decision(report, "fit intervals")["decision"] == (
+        "R 6.10 [5.92, 6.28] nm, D 398 [358, 438] nm (refined value [68 % posterior interval])")
     assert any(item["what"] == "fit caveat" and "no interparticle correlation" in item["decision"] for item in report["decisions"])
     model = next(item for item in report["needs_attention"] if item["item"] == "model")
     assert model["why"] == (
-        "2 solutions have a probability of at least 0.2 (rank 1, random_cylinder: R = 6.1 nm, D = 398 nm, χ²/N = 1.22, "
-        "probability 0.62; rank 2, sphere: R = 9.4 nm, D = 53.4 nm, χ²/N = 1.31, probability 0.38): the curve alone "
+        "2 solutions have a probability of at least 0.2 (rank 1, random_cylinder: R = 6.1 nm, D = 398 nm, χ²ᵣ = 1.22, "
+        "probability 0.62; rank 2, sphere: R = 9.4 nm, D = 53.4 nm, χ²ᵣ = 1.31, probability 0.38): the curve alone "
         "does not decide the model.")
     assert "sphere" in model["hint"] and "53.4" in model["hint"]  # the solution that agrees with the spacing
     compact = compact_report(report)
@@ -225,7 +229,7 @@ def test_the_results_panel_shows_the_fit_and_saves_it(galaxi_run, tmp_path: Path
     assert section.fit_plot.figure_state()["curves"][1][0] == "fit 2: sphere"
     assert section.fit_table.columnCount() == 6 and section.fit_table.item(0, 0).text() == "random cylinder"
     assert section.fit_table.horizontalHeaderItem(1).text() == "p" and section.fit_table.item(0, 1).text() == "0.62"
-    assert section.fit_table.horizontalHeaderItem(5).text() == "χ²/N"  # the mean r², not a χ²ᵣ
+    assert section.fit_table.horizontalHeaderItem(5).text() == "χ²ᵣ"  # the reduced χ² Fitting shows for the solution
     assert section.fit_plot.log_x_check.isChecked()
     curve = Path(section.save_curve(str(tmp_path / "curve.csv")))
     table = Path(section.save_table(str(tmp_path / "table.csv")))
@@ -239,7 +243,7 @@ def test_the_results_panel_shows_the_fit_and_saves_it(galaxi_run, tmp_path: Path
     section.fit_details.set_expanded(True)
     details = section.solution_details
     texts = [item.text() for item in details.values.findChildren(QLabel)]
-    for expected in ("sphere: R", "9.4 nm (68 %: 9.12–9.68)", "σR / R", "constant background", "σ_Res", "0.01 nm⁻¹",
+    for expected in ("sphere: R", "9.4 nm (68 %: 9.12–9.68)", "σR/R", "Background", "Tail w", "0.01 nm⁻¹",
                      "probability", "0.38", "13.2 s"):
         assert expected in texts, (expected, texts)
     assert "evaluations" not in texts and "D started" not in details.settings.text()
@@ -259,7 +263,7 @@ def test_the_results_panel_shows_the_fit_and_saves_it(galaxi_run, tmp_path: Path
     state, line = automatic_outcome(report)
     assert state == "ok" and line.startswith("GISAXS — halves: mean of both halves, 2π/q* = ")
     assert line.endswith("; 1 point(s) to check.") and "question" not in line and "both_abs" not in line
-    assert "most probable fit random cylinder R 6.1 nm (p 0.62, χ²/N 1.22)" in line
+    assert "most probable fit random cylinder R 6.1 nm (p 0.62, χ²ᵣ 1.22)" in line
     texts = [item.text() for item in panel.findChildren(QLabel)]
     assert texts[0].startswith("GISAXS — halves: mean of both halves") and not any("question" in text for text in texts)
     assert "1 point(s) to check — see below" in texts and any(text.startswith("Model choice: ") for text in texts)
@@ -546,7 +550,7 @@ def test_the_most_probable_solution_is_reported_and_its_values_at_a_bound_are_a_
     # the fit's own warning for D at its bound is said once, by at_bounds (which bound); the others pass on
     assert fit["solutions"][0]["warnings"] == [UNCONSTRAINED]
     decision = _decision(report, "fit")
-    assert decision["decision"] == "random_cylinder: R = 8.6 nm, D = 500 nm, χ²/N = 1.26, probability 0.55"
+    assert decision["decision"] == "random_cylinder: R = 8.6 nm, D = 500 nm, χ²ᵣ = 1.26, probability 0.55"
     assert any(item["what"] == "fit caveat" and item["decision"] == "D at its upper bound, σh/h at its upper bound"
                for item in report["decisions"])
     assert any(item["what"] == "fit caveat" and item["decision"] == UNCONSTRAINED for item in report["decisions"])
@@ -555,7 +559,7 @@ def test_the_most_probable_solution_is_reported_and_its_values_at_a_bound_are_a_
                             "bound: those values are not determined by the curve.")
     model = next(item for item in report["needs_attention"] if item["item"] == "model")
     assert model["why"].startswith("2 solutions have a probability of at least 0.2 (rank 1, random_cylinder: R = 8.6 nm")
-    assert "rank 2, random_cylinder: R = 6.01 nm, D = 30.9 nm, χ²/N = 1.28, probability 0.25" in model["why"]
+    assert "rank 2, random_cylinder: R = 6.01 nm, D = 30.9 nm, χ²ᵣ = 1.28, probability 0.25" in model["why"]
     assert "rank 3" not in model["why"]  # p 0.15: below the limit
     text = pipeline_markdown(report)
     assert f"| D at its upper bound, σh/h at its upper bound; {UNCONSTRAINED} |" in text
@@ -563,7 +567,7 @@ def test_the_most_probable_solution_is_reported_and_its_values_at_a_bound_are_a_
     assert "| 3 | sphere | 0.15 | R 9.44 nm, σR/R 0.300, D 48.3 nm, σD/D 0.400 | 1.36 |  |" in text
     assert "| 1 (chosen) | random_cylinder | 0.55 | R 8.60 nm, " in text and "D 500.0 nm" in text
     assert gisaxs_batch_row(report)[2] == (
-        "random_cylinder R 8.60, D 500.0 nm, χ²/N 1.26, p 0.55 ⚠ D at its upper bound, σh/h at its upper bound")
+        "random_cylinder R 8.60 nm, D 500.0 nm, χ²ᵣ 1.26, p 0.55 ⚠ D at its upper bound, σh/h at its upper bound")
     table = fit_solutions_csv(fit).splitlines()
     assert table[2].startswith("rank,model,chi2,probability,") and table[2].endswith(",at_bounds,chosen")
     assert "R_low68,R_high68,h_low68,h_high68,D_low68,D_high68" in table[2]
@@ -586,10 +590,10 @@ def test_the_results_tab_selects_the_reported_solution_and_names_the_bounds(boun
     assert section.fit_table.item(2, 0).text() == "sphere" and section.fit_table.item(2, 4).text() == "48.3"
     assert [section.fit_table.item(row, 1).text() for row in range(4)] == ["0.55", "0.25", "0.15", "0.05"]
     bounds = section.findChild(QLabel, "guidedFitBounds")  # values the curve does not determine: a warning
-    assert bounds.text() == "⚠ Not determined by the curve (at a search bound) — 1: D, σh/h; 2: σh/h; 4: ν_Res"
+    assert bounds.text() == "⚠ Not determined by the curve (at a search bound) — 1: D, σh/h; 2: σh/h; 4: Tail ν"
     assert bounds.property("gimapRole") == "warning"
     assert bounds.toolTip() == ("Values at a search bound, not determined by the curve — 1: D at its upper bound, σh/h at "
-                                "its upper bound; 2: σh/h at its lower bound; 4: ν_Res at its upper bound.")
+                                "its upper bound; 2: σh/h at its lower bound; 4: Tail ν at its upper bound.")
     texts = [item.text() for item in panel.findChildren(QLabel)]
     assert not any(text.startswith("Reported: rank") for text in texts), texts
     assert any(text.startswith("2 solutions have p ≥ 0.2") for text in texts)
@@ -599,7 +603,7 @@ def test_the_results_tab_selects_the_reported_solution_and_names_the_bounds(boun
     heading = next(label for label in panel.findChildren(QLabel) if label.text() == "Fit of I(qy)")
     assert heading.toolTip().startswith("Predict parameters: GIMaP's network proposes the particles")
     assert "⚠ D at its upper bound" in section.solution_details.warnings.text()
-    assert ("most probable fit random cylinder R 8.6 nm (p 0.55, χ²/N 1.26) ⚠ D at its upper bound, σh/h at its upper "
+    assert ("most probable fit random cylinder R 8.6 nm (p 0.55, χ²ᵣ 1.26) ⚠ D at its upper bound, σh/h at its upper "
             "bound") in automatic_outcome(report)[1]
     panel.gisaxs.dispose()
     panel.deleteLater()
@@ -610,7 +614,7 @@ def test_the_results_tab_selects_the_reported_solution_and_names_the_bounds(boun
         assert words(point["why"]) == "报告的解（random_cylinder）：D 处于搜索上界、σh/h 处于搜索上界；这些数值不由曲线确定。"
         assert words(model["why"]).startswith("2 个解的概率都不低于 0.2（rank 1, random_cylinder: R = 8.6 nm")
         assert words(model["hint"]) == "请选择你预期的粒子形状，在拟合中精修这个模型，并比较拟合曲线。"
-        assert words(UNCONSTRAINED) == "曲线对 sigma_h_1 约束很少"
+        assert words(UNCONSTRAINED) == "曲线对 σh/h 约束很少（其 68 % 区间覆盖了允许范围的大部分）"
     finally:
         apply_language(DEFAULT_LANGUAGE)
 
@@ -651,12 +655,12 @@ def test_a_linear_term_at_zero_is_said_and_not_counted_as_a_search_bound(galaxi_
     fit = report["gisaxs"]["fit"]
     assert fit["chosen"] == 0 and fit["solutions"][0]["globals"]["resolution_amplitude"] == 0.0
     caveat = next(item for item in report["decisions"] if item["what"] == "fit caveat" and "non-negativity" in item["decision"])
-    assert caveat["decision"] == "beam-tail amplitude A at 0, the non-negativity limit"
+    assert caveat["decision"] == "Tail A at 0, the non-negativity limit"
     assert "not counted among the values at a bound of their range" in caveat["why"]
-    assert caveat["why"].endswith("σ_Res and ν_Res do not change the curve")
+    assert caveat["why"].endswith("Tail w and Tail ν do not change the curve")
     assert "A non-linear value at a bound of its range (the note column)" in pipeline_markdown(report)
     sphere = {"chi2": 1.36, "converged": True, "at_bounds": [], "globals": {"background": 0.0, "resolution_amplitude": 252.5}}
-    assert zero_terms(sphere) == ["background BG"]
+    assert zero_terms(sphere) == ["Background"]
     # the fit's own warning for a linear term at its limit is not said twice (the caveat above says it)
     from src.gimap.features.assistant.application.gisaxs_tools import _solution
 
@@ -666,7 +670,7 @@ def test_a_linear_term_at_zero_is_said_and_not_counted_as_a_search_bound(galaxi_
 
 
 class PoorFitter(FakeFitter):
-    """One converged solution far from its curve: χ²/N of hundreds, as a fit of the public AgBh SAXS frame gives
+    """One converged solution far from its curve: χ²ᵣ of hundreds, as a fit of the public AgBh SAXS frame gives
     (the Bragg rings of a calibrant, no particles)."""
 
     def __call__(self, q, intensity, sigma, *, components=(), report=None, cancelled=None):
@@ -675,7 +679,7 @@ class PoorFitter(FakeFitter):
 
 
 def test_a_reported_fit_far_from_its_curve_is_a_point_to_check() -> None:
-    """Fitting calls a σ-weighted fit with χ²ᵣ above 10 a poor fit; the report uses the same limit for χ²/N."""
+    """Fitting calls a σ-weighted fit with χ²ᵣ above 10 a poor fit; the report uses the same limit for χ²ᵣ."""
     import tools.gimap_agent as agent
     from src.gimap.app.headless_assistant import open_headless_session
     from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_language
@@ -693,11 +697,11 @@ def test_a_reported_fit_far_from_its_curve_is_a_point_to_check() -> None:
     finally:
         session.close()
     point = next(item for item in report["needs_attention"] if item["item"] == "fit")
-    assert point["why"].startswith("The reported solution (sphere) has χ²/N = 472, above 10: it misses the curve")
+    assert point["why"].startswith("The reported solution (sphere) has χ²ᵣ = 472, above 10: it misses the curve")
     assert "its R and D are not measurements" in point["why"] and point["option"] is None
     assert agent.exit_code([report]) == 2
     apply_language("zh")
     try:
-        assert "χ²/N = 472，大于 10" in words(point["why"]) and words(point["hint"]).startswith("请对照曲线查看拟合")
+        assert "χ²ᵣ = 472，大于 10" in words(point["why"]) and words(point["hint"]).startswith("请对照曲线查看拟合")
     finally:
         apply_language(DEFAULT_LANGUAGE)

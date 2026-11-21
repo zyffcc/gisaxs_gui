@@ -15,6 +15,7 @@ HEADINGS_ZH = {
     "Open questions": "需要处理",
     "Geometry": "几何",
     "Mask": "掩膜",
+    "Record": "记录",
     "Frames": "帧",
     "Peaks (radial I(q))": "峰（径向 I(q)）",
     "Ring orientation": "取向",

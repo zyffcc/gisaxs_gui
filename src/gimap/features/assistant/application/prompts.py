@@ -114,7 +114,7 @@ paracrystal distance D) and values, each solution is refined by least squares, a
 most probable first with their probability and posterior intervals. Report the most probable \
 ('chosen') with its intervals; when another solution has a probability of 0.2 or more, the curve does \
 not decide the model — give the probabilities and leave the choice to the user (or to what the notes \
-say about the sample). χ²/N is the mean squared normalised residual. A value in at_bounds ended on a \
+say about the sample). χ²ᵣ is the reduced χ² over the fitted points ('points': fitted of given, the rest below the network's q window). A value in at_bounds ended on a \
 bound of its range and is not determined by the curve: say so. A distance D of hundreds of nm means \
 no correlation in the q range, not a measured distance. The model is confirmed in Fitting.
 - Moving a cut, the halves or the centre is the user's call when it changes the result: suggest \

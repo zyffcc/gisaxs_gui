@@ -110,7 +110,9 @@ def create_curve_fit():
     ``MissingHalf`` and under ``mean`` a cut with one half is that half. ``None``: a signed q is fitted on the mean of
     its halves, a one-sided curve as it comes (without a point at q = 0). More than ``MAX_FIT_POINTS`` points are
     merged. Every row says what was fitted: ``prepared`` (the note, in English; empty when the curve was taken as it
-    came) and ``preparation`` (``halves``, ``points``, ``averaged``, ``one_half``, ``merged``).
+    came), ``preparation`` (``halves``, ``points``, ``averaged``, ``one_half``, ``merged``) and ``curve_notes``
+    (``application.curve_intake``: a σ estimated for a curve without one — then the points with I ≤ 0 are left out —
+    and the negative and zero intensities kept with their σ; each ``{"kind", "text", counts}``).
 
     A curve that cannot be fitted is a ``ValueError`` that names what was to be fitted: fewer than
     ``CURVE_FIT_MIN_POINTS`` points (``TOO_FEW_FOR_CURVE_FIT``, by the half), a σ that is not finite and positive
@@ -124,7 +126,7 @@ def create_curve_fit():
     from .application.workflow_v5 import default_options
     from .domain.posterior import encoding, network, refine
     from .infrastructure.adapters.posterior_job import batch_compositions, curve_rows
-    from .infrastructure.adapters.workflow_v5 import prepare_sides
+    from .infrastructure.adapters.workflow_v5 import prepare_sides, side_notes
 
     def prepared(q, intensity, sigma, halves) -> PreparedCut:
         finite = q[np.isfinite(q)]
@@ -166,7 +168,8 @@ def create_curve_fit():
         # As the 1D Predict record names it: the network and the SHA-256 of its weights (checked when it is loaded).
         used = {"name": network.path().stem, "sha256": (getattr(proposals, "meta", None) or {}).get("sha256")}
         for row in rows:
-            row.update(prepared=cut.note, preparation=dict(made_of), network=dict(used), seed=CURVE_FIT_SEED)
+            row.update(prepared=cut.note, preparation=dict(made_of), network=dict(used), seed=CURVE_FIT_SEED,
+                       curve_notes=side_notes(item, {}))  # an estimated σ, negative and zero intensities
         return rows
 
     return curve_fit

@@ -19,7 +19,7 @@ def parameter_label(column: str) -> str:
     text = column.replace("(1/A)", "(Å⁻¹)")
     if column.split()[-1:] and column.split()[-1] in ("R", "D", "h"):
         text += " (nm)"
-    return {"chi2": "χ²/N", "log rmse": "log RMSE"}.get(text, text)  # χ²/N: mean r² of Predict parameters
+    return {"chi2": "χ²ᵣ", "log rmse": "log RMSE"}.get(text, text)  # the reduced χ² of Predict parameters
 
 
 def _number(value) -> str:

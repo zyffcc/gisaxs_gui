@@ -22,7 +22,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QGridLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from src.gimap.app.presentation.components import CurvePlot
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import theme_manager
 
 from ..application import bound_phrases, interval, probability
@@ -36,10 +36,12 @@ ERROR_WORDS = {"poisson": "Poisson (counting) error", "scaled_poisson": "Poisson
 NAME_WIDTH = 64
 """The narrowest a name of Fit details wraps to (px): a few words or Chinese characters per line."""
 NM_PER_A = 10.0
-COMPONENT_VALUES = (("R", "R", "nm"), ("sigma_R", "σR / R", ""), ("h", "h", "nm"), ("sigma_h", "σh / h", ""),
-                    ("D", "D", "nm"), ("sigma_D", "σD / D", ""), ("weight", "weight", ""), ("amplitude", "amplitude", ""))
-GLOBAL_VALUES = (("background", "constant background", ""), ("resolution_amplitude", "resolution amplitude", ""),
-                 ("sigma_Res", "σ_Res", "nm⁻¹"), ("nu_Res", "ν_Res", ""))
+COMPONENT_VALUES = (("R", "R", "nm"), ("sigma_R", "σR/R", ""), ("h", "h", "nm"), ("sigma_h", "σh/h", ""),
+                    ("D", "D", "nm"), ("sigma_D", "σD/D", ""), ("weight", "weight", ""), ("amplitude", "Scale", ""))
+GLOBAL_VALUES = (("background", "Background", ""), ("resolution_amplitude", "Tail A", ""),
+                 ("sigma_Res", "Tail w", "nm⁻¹"), ("nu_Res", "Tail ν", ""), ("q_resolution", "σ_q", "nm⁻¹"))
+"""The names of Fitting's Model table (``shared/fit_names``): one name per quantity everywhere."""
+MORE_NOTES = "Background, beam tail and resolution: {notes}"
 
 
 def _number(value, digits: int = 4) -> str:
@@ -278,8 +280,12 @@ class SolutionDetails(QWidget):
             if value is not None:
                 pairs.append((name, f"{_number(value)} {unit}".strip()))
         chance = probability(solution)
-        pairs += [("probability", "—" if math.isnan(chance) else _number(chance, 3)),
-                  ("χ²/N", _number(solution.get("chi2"))), ("log RMSE", _number(solution.get("log_rmse"))),
+        fitted = solution.get("points") or fit.get("fitted_points") or {}
+        over = "" if fitted.get("fitted") is None else " (" + trf(
+            "{fitted} of {given} points", fitted=fitted["fitted"], given=fitted.get("given", fitted["fitted"])) + ")"
+        pairs += [("probability", tr("only this composition was tried") if solution.get("alone")
+                   else "—" if math.isnan(chance) else _number(chance, 3)),
+                  ("χ²ᵣ", _number(solution.get("chi2")) + over), ("log RMSE", _number(solution.get("log_rmse"))),
                   ("converged", tr("yes") if solution.get("converged", True) else tr("no")),
                   ("time", "—" if solution.get("seconds") is None else f"{solution['seconds']:.1f} s")]
         self.values.set_values(pairs)
@@ -296,7 +302,11 @@ class SolutionDetails(QWidget):
         notes = [words(note) for note in list(solution.get("warnings") or ())
                  + ([] if solution.get("converged", True) else ["not converged"])]
         notes += [words(phrase) for phrase in bound_phrases(solution)]  # which values ended on a bound of their range
-        self.warnings.setText("\n".join("⚠ " + note for note in notes) if notes else tr("No warnings for this solution."))
+        lines = ["⚠ " + note for note in notes]
+        more = [words(note) for note in solution.get("more_warnings") or ()]
+        if more:  # not the particles' values: one paragraph after the others
+            lines.append(trf(MORE_NOTES, notes="; ".join(more)))
+        self.warnings.setText("\n".join(lines) if lines else tr("No warnings for this solution."))
         self.show_button.setEnabled(self.allowed and candidate_row(fit, self._index) is not None)
 
     def _show_in_fitting(self) -> None:

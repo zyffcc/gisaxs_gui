@@ -26,6 +26,11 @@ from PyQt5.QtCore import QSignalBlocker
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.shared.detector_io.nexus_modules import MODULES_UNEQUAL
+from src.gimap.shared.geometry.header_check import (
+    HEADER_DISTANCE_HINT,
+    HEADER_DISTANCE_WHY,
+    header_distance_disagreement,
+)
 
 from ...application import FrameAnalysis
 from ...application.ports import source_name
@@ -125,6 +130,10 @@ class DataStepMixin:
             header.append(trf("exposure {value} s", value=f"{float(metadata['exposure_time_s']):g}"))
         if header:
             lines.append(trf("File header: {items}", items=", ".join(header)))
+        apart = header_distance_disagreement(
+            1e3 * float(metadata.get("header_distance_m") or 0.0), 1e3 * geometry.distance_m if geometry is not None else None)
+        if apart:  # the automatic analysis's report says the same (Needs attention)
+            lines.append("⚠ " + trf(HEADER_DISTANCE_WHY, **apart) + " " + tr(HEADER_DISTANCE_HINT))
         listed = self.view_model.listed_frames()
         if files > 1 and listed > files:  # the total Batch Export and the Series map work on (files: the list says)
             lines.append(trf("Frames listed: {n}", n=listed))

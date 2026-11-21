@@ -16,7 +16,7 @@ import numpy as np
 from src.gimap.shared.geometry import DetectorGeometry
 from src.gimap.shared.geometry.q_mapping import grazing_q_region
 
-from .binning import BinnedMean, binned_mean_2d, counts_and_scale, merge_sparse_bins
+from .binning import BinnedMean, binned_mean_2d, counts_and_scale, map_grid_shape, merge_sparse_bins, pixel_step
 from .regions import region_curves, region_key
 from .models import (
     GIWAXS,
@@ -33,6 +33,7 @@ BLOCK_ROWS = 256
 MAX_RADIAL_BINS = 3000
 CHI_BIN_DEG = 1.0
 MAP_SHAPE = (800, 800)
+"""Most cells (qz, q∥) of the q map; fewer when the detector samples q more coarsely (``map_grid_shape``)."""
 
 
 @dataclass(frozen=True)
@@ -72,15 +73,8 @@ def giwaxs_maps(shape: tuple[int, int], geometry: DetectorGeometry) -> GiwaxsMap
     return GiwaxsMaps(q, q_parallel, qz, chi, above, _pixel_q_step(q))
 
 
-def _pixel_q_step(q: np.ndarray, stride: int = 4) -> float:
-    """The largest q change from one pixel to the next (99th percentile, on every ``stride``-th pixel)."""
-    sample = np.asarray(q[::stride, ::stride], dtype=np.float64)
-    if sample.shape[0] < 2 or sample.shape[1] < 2:
-        return 0.0
-    rows, columns = np.gradient(sample)
-    step = np.hypot(rows, columns) / stride
-    finite = step[np.isfinite(step)]
-    return float(np.percentile(finite, 99)) if finite.size else 0.0
+_pixel_q_step = pixel_step
+"""The largest q change from one pixel to the next (99th percentile; ``binning.pixel_step``)."""
 
 
 def _radial_bins(maps: GiwaxsMaps, usable: np.ndarray, q_low: float, q_high: float) -> int:
@@ -295,7 +289,9 @@ def reduce_giwaxs(
             q_par, qz, image[usable],
             x_range=(float(q_par.min()), float(q_par.max()) + 1e-12),
             y_range=(float(qz.min()), float(qz.max()) + 1e-12),
-            shape=MAP_SHAPE,
+            shape=map_grid_shape(  # no finer than the detector samples q (cells between pixels would stay empty)
+                maps.q_parallel, maps.qz, usable, float(q_par.max() - q_par.min()), float(qz.max() - qz.min()), MAP_SHAPE,
+            ),
         )
         rsm = ReciprocalSpaceMap(
             image=np.flipud(grid),

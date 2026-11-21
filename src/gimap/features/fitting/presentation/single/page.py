@@ -18,7 +18,7 @@ from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import QFileDialog, QMenu, QShortcut, QWidget
 
 from src.gimap.app.presentation.components import show_toast
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.task_runner import TaskRunner
 
 from ...application import CURVE_SUFFIXES, LoadCurveRequest
@@ -40,6 +40,7 @@ from .curve_unit import SETTING_KEY, CurveUnitMixin
 from .drops import CurveDropMixin, SplitterMemoryMixin
 from .exclusion import FitExclusionMixin
 from .predict import PredictPageMixin
+from .predict_texts import count_solutions
 from .method_hint import MethodHintMixin
 from .equivalent_solutions import EquivalentSolutionsMixin
 from .result_actions import ResultActionsMixin
@@ -147,8 +148,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         if curve is None:
             self.step_rail.set_state("curve", "pending", tr("Open a curve"))
         else:
-            self.step_rail.set_state("curve", "ok", tr("{points} points fitted").format(
-                points=0 if data is None else data.q.size))
+            self.step_rail.set_state("curve", "ok", self._rail_points(0 if data is None else data.q.size))
         count = len(session.model.components)
         names = model_label(session.model)
         free = sum(1 for _path, parameter in session.model.parameters() if parameter.free)
@@ -170,9 +170,10 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             self.step_rail.set_state("fit", "warn", stale)
         elif searched:
             best = solutions[0]
-            self.step_rail.set_state("fit", "ok", tr("{count} solutions · best {model} {chi} {value}").format(
-                count=len(solutions), model=best.label, chi="var ln I" if curve is not None and curve.sigma is None
-                else "χ²ᵣ", value=f"{best.chi2:.3g}" if np.isfinite(best.chi2) else "—"))
+            self.step_rail.set_state("fit", "ok", trf(
+                "{solutions} · best {model} {chi} {value}", solutions=count_solutions(len(solutions)), model=best.label,
+                chi="χ²ᵣ" if best.points or curve is None or curve.sigma is not None else "var ln I",
+                value=f"{best.chi2:.3g}" if np.isfinite(best.chi2) else "—"))
         elif solutions:  # a solution of Analyze: its χ² is Analyze's, not of a fit here
             self.step_rail.set_state("fit", "pending", tr("From Analyze: Fit to refine it"))
         else:
@@ -182,7 +183,8 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             self.step_rail.set_state("results", "ok" if current_result else "warn", "" if current_result else stale)
         elif searched:
             self.step_rail.set_state("results", "ok" if current else "warn",
-                                     tr("{count} solutions to compare").format(count=len(solutions)) if current else stale)
+                                     trf("{solutions} to compare", solutions=count_solutions(len(solutions)))
+                                     if current else stale)
         else:
             self.step_rail.set_state("results", "pending", tr("After a fit"))
         self.undo_button.setEnabled(session.can_undo())
@@ -228,7 +230,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self._curve_opened_step(getattr(loaded, "observation", None))  # Predict first for a GISAXS cut (method_hint)
         self._remember_curve()
         note = self._saved_unit_note(unit)  # a header that states another unit than the one saved
-        self._status(note or (lambda: tr("Opened {name}.").format(name=name)), "warning" if note else "ok")
+        self._opened_status(name, note)  # and what was assumed of the curve (curve_info.py)
         self.curveOpened.emit(str(path))
         return True
 

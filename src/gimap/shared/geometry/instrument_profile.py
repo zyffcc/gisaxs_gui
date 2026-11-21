@@ -16,6 +16,9 @@ from .detector_geometry import DetectorGeometry
 from .detector_tilt import DetectorTilt
 
 SCHEMA_VERSION = 1
+TILT_KEY, OLD_TILT_KEY = "tilt", "dropped_tilt"
+"""The key a profile's ``.poni`` tilt is saved under. Up to 0.2.0 it was ``dropped_tilt`` (when the geometry left
+the tilt out); the tilt is applied now, so it is written as ``tilt`` and the old key is still read."""
 
 
 def _normalized_name(value: Optional[str]) -> str:
@@ -90,7 +93,7 @@ class InstrumentProfile:
             "updated_at": self.updated_at,
         }
         if self.dropped_tilt is not None:  # written only when there is one: older files stay as they were
-            values["dropped_tilt"] = self.dropped_tilt.to_dict()
+            values[TILT_KEY] = self.dropped_tilt.to_dict()
         return values
 
     @classmethod
@@ -103,7 +106,7 @@ class InstrumentProfile:
             detector_shape=tuple(shape) if shape else None,
             source=str(values.get("source", "")),
             updated_at=str(values.get("updated_at", "")),
-            dropped_tilt=DetectorTilt.from_dict(values.get("dropped_tilt")),
+            dropped_tilt=DetectorTilt.from_dict(values.get(TILT_KEY) or values.get(OLD_TILT_KEY)),
         )
 
 

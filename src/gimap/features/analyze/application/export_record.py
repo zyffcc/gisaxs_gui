@@ -204,6 +204,29 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
     return record
 
 
+def provenance_lines(record: Mapping[str, Any], written_by: str, settings: Optional[str] = None, *,
+                     frame: bool = True) -> list[str]:
+    """The lines above the columns of a curve or map file (without their ``#``), from the frame's record
+    (``analysis_metadata``): the release, each input file by name and SHA-256, the frame and the geometry, so a
+    table says where it came from also without its JSON record beside it. One writer for the command line's CSVs
+    and the window's exports (``frame=False``: the file already has its own frame line)."""
+    lines = [f"{RELEASE} ({written_by})" + (f"; settings and decisions in {settings}" if settings else "")]
+    lines += [f"input: {item['file']} sha256 {item['sha256']}" for item in record.get("input_sha256") or ()]
+    if frame:
+        lines.append(f"frame: {record.get('frame')}")
+    geometry = record.get("geometry")
+    if geometry:
+        tilt = math.degrees(math.acos(max(-1.0, min(1.0, math.cos(geometry.get("rot1_rad") or 0.0)
+                                                    * math.cos(geometry.get("rot2_rad") or 0.0)))))
+        critical = float(geometry.get("critical_angle_deg") or 0.0)
+        lines.append(
+            f"geometry: distance {geometry['distance_m'] * 1e3:.4f} mm, direct beam ({geometry['beam_center_x_px']:.3f}, "
+            f"{geometry['beam_center_y_px']:.3f}) px, wavelength {geometry['wavelength_angstrom']:.6g} A, "
+            f"alpha_i {geometry['incidence_deg']:.4g} deg, detector tilt {tilt:.4g} deg" + (
+                f", q_z refracted, alpha_c {critical:.4g} deg" if critical > 0.0 else ""))
+    return lines
+
+
 def error_model(analysis: FrameAnalysis) -> Optional[str]:
     """How the σ of the frame's points were computed (``POISSON``, ``PIXEL_SCATTER``, ``SCALED_POISSON``): the
     decision the reduction took (``frame_preprocessing.photon_counts``, then the GIWAXS intensity corrections).
@@ -324,5 +347,6 @@ def fit_input_metadata(analysis: FrameAnalysis, metadata: Mapping[str, Any], hal
 __all__ = [
     "GEOMETRY_CONVENTION", "MERGE_RULE", "PIXEL_SCATTER", "POISSON", "Q_LABEL", "SCALED_POISSON", "SOFTWARE",
     "analysis_metadata", "binning", "error_model", "export_stem", "fit_input_curve", "fit_input_metadata",
-    "fit_input_observation", "frame_cuts", "frame_name", "frame_name_of", "frame_stem", "source_files",
+    "fit_input_observation", "frame_cuts", "frame_name", "frame_name_of", "frame_stem", "provenance_lines",
+    "source_files",
 ]

@@ -43,6 +43,10 @@ class Predicted:
     """Name (``R_1``, ``D_1``, ``tail_width`` …) → (best, median, low68, high68, low95, high95, error)."""
     flags: tuple = ()
     ess: float = 0.0
+    points: Optional[dict] = None
+    """The points χ² is of: ``fitted``, ``given``, ``below_window`` (below the network's q window), ``unusable``."""
+    tried: Optional[int] = None
+    """How many compositions were given to try (1: the particles in Model); None: the network chose among several."""
 
 
 def compositions(model: fm.FitModel, particles: str) -> dict:
@@ -96,7 +100,8 @@ def predicted(value: dict) -> list[Predicted]:
         out.append(Predicted(fm.model_from_dict(row["model"]), float("nan") if chi2 is None else float(chi2),
                              str(row.get("name", "")), float(row.get("probability") or 0.0),
                              {k: tuple(v) for k, v in (row.get("values") or {}).items()}, tuple(row.get("flags") or ()),
-                             float(row.get("ess") or 0.0)))
+                             float(row.get("ess") or 0.0), row.get("points") or value.get("points"),
+                             value.get("tried")))
     return out
 
 

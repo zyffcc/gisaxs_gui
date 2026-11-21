@@ -150,10 +150,10 @@ def results_payload(results: RunResults) -> dict:
         "peaks": searches,
         "sectors": clean(results.sector_rows),
         "rings": clean(results.rings),
-        "crystallite_sizes": clean(results.sizes),
+        "crystallite_sizes": clean([size.record() for size in results.sizes]),
         "report": clean(results.report),
         "calibrations": clean(results.calibrations),
-        "geometry_used": clean(results.geometry_used),
+        "geometry_used": clean(results.geometry_used, digits=15),  # as applied, not as shown to the model
         "feature_requests": clean(results.feature_requests),
         "operations": [operation.record() for operation in results.operations],
         "exports": list(results.exports),
@@ -517,8 +517,7 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
             bin_width=search.step,
         )
         self.results.sizes.append(size)
-        payload = clean(size)
-        payload["size_nm"] = None if size.size is None else significant(size.size / 10.0)
+        payload = clean(size.record())  # size_A and size_nm: every length names its unit
         summary = (
             f"q = {peak.q:.3g}: L {'≥ ' if size.lower_bound else ''}{size.size / 10.0:.3g} nm"
             if size.size is not None else f"q = {peak.q:.3g}: {size.reason}"

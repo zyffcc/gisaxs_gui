@@ -205,9 +205,11 @@ class DetectorView(QWidget):
         y_label: str = "y (pixel)",
         keep_view: bool = False,
         context: str = "image",
+        fit_rect: Optional[tuple[float, float, float, float]] = None,
     ) -> None:
         """Show ``data``; ``rect = (x, y, width, height)`` places row 0 at ``y``. ``context`` (detector, q map
-        …): each keeps its own colour limits.
+        …): each keeps its own colour limits. ``fit_rect``: the part ``fit_view`` shows (the measured cells of a
+        q map) instead of the whole picture.
 
         With ``y_down`` (pixel frames) row 0 is drawn at the top; otherwise the
         y axis points up and row 0 is the bottom row.
@@ -219,6 +221,7 @@ class DetectorView(QWidget):
         self._valid = None if valid is None else np.asarray(valid, dtype=bool)
         self._rect = None if rect is None else tuple(float(value) for value in rect)
         self._y_down = bool(y_down)
+        self._fit_rect = None if fit_rect is None else QRectF(*(float(value) for value in fit_rect))
         self.levels.set_context(context)
         self.view_box.invertY(self._y_down)
         self.plot.setLabel("bottom", x_label)
@@ -342,7 +345,10 @@ class DetectorView(QWidget):
 
     def fit_view(self) -> None:
         """The whole image — and the beam centre when it is to stay in view (``show_beam_center``)."""
-        self.view_box.autoRange(items=[self.image_item], padding=0.02)
+        if getattr(self, "_fit_rect", None) is not None:
+            self.view_box.setRange(rect=self._fit_rect, padding=0.02)
+        else:
+            self.view_box.autoRange(items=[self.image_item], padding=0.02)
         if not self._beam_in_view or not (self.marks.wanted(self.beam_target) and self.marks.is_visible("beam")):
             return
         (x0, x1), (y0, y1) = self.view_box.viewRange()

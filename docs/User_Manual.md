@@ -174,8 +174,8 @@ You can also name the calibration before you press the button: type `galaxi_born
 enough). A calibration named there is tried before the instrument profile and the search, in every
 run.
 
-**3. Run the automatic analysis.** Press **Run Automatic Analysis**. This takes about half a minute
-(the model fit is the slow part). The Results step then asks for αi. Type `0.463` in
+**3. Run the automatic analysis.** Press **Run Automatic Analysis**. This takes from half a minute to a
+few minutes (the model fit is the slow part). The Results step then asks for αi. Type `0.463` in
 **Incidence angle αi (°)** and press **Run Again with These Answers**.
 
 The answer matters: with αi = 0° the Yoneda band was quoted at αf = 0.639°, with the right αi at
@@ -193,30 +193,35 @@ orange (section 4.1).
 | Beam centre | x moved to the symmetry axis, x = 597.26 px | The documented direct beam is x = 597.1 px |
 | Halves | *Halves: Mean of both halves*, the reason in its tooltip | Both halves agree; otherwise the usable one is taken |
 | **Length scale 2π/q\*** | *2π/q\* = 55.6 nm at a shoulder of the cut (\|qy\| = 0.0113 Å⁻¹, no resolved peak): not necessarily the particle spacing.* | It is not the particle spacing: near the documented 53.6 nm by coincidence (a BornAgain simulation of the same particles without interference shows a shoulder too) |
-| **Fit of I(qy)** | A table of solutions, most probable first: model, p (the probability), R, h, D (nm), χ²/N; a value at a bound of its range is marked ⚠ and named under the table in a warning (*⚠ Not determined by the curve (at a search bound) — 1: ν_Res*; which bound: its tooltip) | Whether another solution is about as probable; what is at a bound |
+| **Fit of I(qy)** | A table of solutions, most probable first: model, p (the probability), R, h, D (nm) of every population in the order of the radii (`3.17 / 6.15`; `44 / –`: the second population has no paracrystal) and χ²ᵣ; a value at a bound of its range is marked ⚠ and named under the table in a warning (*⚠ Not determined by the curve (at a search bound) — 2: Tail ν; 3: Tail ν*; which bound: its tooltip) | Whether another solution is about as probable; what is at a bound |
 
 The fit is **Predict parameters** (section 6.4): GIMaP's network proposes one or two populations of spheres and
 upright cylinders, with or without a paracrystal, each solution is refined by least squares and weighted by its
-probability, and the most probable solution is reported. Here it is two upright cylinders without a paracrystal
-(R = 3.11 nm and 5.49 nm, χ²/N 1.27, probability 1.00), and the Results tab shows a point to check, **fit**: the
-exponent of the beam tail is at its lower bound (*ν_Res at its lower bound*), so the curve does not determine it.
-The cut's broad log-normal sizes and its rise at low q are described here by two populations. For this sample you
-know the particles are spheres: fit that model in Fitting (step 5).
+probability, and the most probable solution is reported. Here it is an upright cylinder with a paracrystal next
+to a second, larger upright cylinder (R = 3.17 / 6.15 nm, D = 44 / – nm, χ²ᵣ 1.07, probability 0.39). Two more
+solutions are about as probable (0.32 and 0.30), so the Results tab shows a point to check, **Model choice**:
+*3 solutions have a probability of at least 0.2 (…): the curve alone does not decide the model.* The probabilities
+compare only the compositions that were tried. The cut's broad log-normal sizes and its rise at low q are described
+here by two populations. For this sample you know the particles are spheres: fit that model in Fitting (step 5).
 
 ![GISAXS results](manual_images/en/08_gisaxs_results.png)
 *The Results tab of a GISAXS frame: the cut, the length scale 2π/q\*, the fitted curve and the table of solutions.*
 
 **5. Send to Fitting.** Press **Send to Fitting**. GIMaP writes
 `gimap_analysis/galaxi_data_fit_input.dat` (the halves as chosen in the Cuts step, here the mean;
-q in Å⁻¹) and opens it in **Fitting ▸ Single analysis**: **Curve** ✓ `599 points fitted`, **Model**
+q in Å⁻¹) and opens it in **Fitting ▸ Single analysis**: **Curve** ✓ `598 points fitted`, **Model**
 `Sphere · 9 free`, **Fit** *Choose a method, then Fit*. Fitting shows q in nm⁻¹.
 
 The Fit step has chosen **Predict parameters** for this curve, and the line under **Method** says why:
 *Recommended for this curve: a GISAXS cut not fitted yet.* Model holds a sphere, the particle you know this sample
 has: under **Method**, set **Particles** to **The particles in Model**, then press **Predict parameters**. When it
-ends, Model holds the most probable solution, **Results ▸ Other solutions** lists the solutions with their
-probability **p**, and **Fit details…** gives the 68 % interval of each value. Press **Refine These Values** to
-refine it with least squares and get its errors; judge the residuals (section 6.2). The same curve opens with
+ends, Model holds the solution and the status line reads *1 solution; the best, Sphere (χ²ᵣ 1.82 over 596 of 598
+points; 2 below the network's q window), is in Model.* **Results ▸ Other solutions** lists it (R 4.31 nm, D 39.2 nm;
+p shows —, since only this composition was tried), and **Fit details…** gives each value in Model with its 68 %
+interval (*R 4.31 [4.31, 6.71] nm*) and what to keep in mind: here R and D lie at the edge of their intervals and
+σR/R stopped at a bound, so one Gaussian population of spheres describes this cut only roughly. Press **Refine
+These Values** to refine it with least squares and get its errors (χ²ᵣ 1.85 on all 598 points; Fit details says
+that the two χ²ᵣ are not of the same points); judge the residuals (section 6.2). The same curve opens with
 **Refine in Fitting** in Analyze's Results tab.
 
 Sizes depend on the model and on its size distribution. BornAgain's model uses a log-normal
@@ -722,6 +727,12 @@ instead.
 (*αi from profile* while no frame is shown). A value you type is shown in orange and is used for
 every frame; it is also remembered for the next session, and a note at the first frame then says
 so. Right-click the field ▸ **Back to Profile αi** to drop it; **Clear** in the step Data does not.
+The remembered value belongs to the instrument profile it was set with. When the first frame of the
+next session has another profile, or its detector has none yet, the value is not used: the field
+shows the profile's αi, a note says so and offers the old value in one step (**Use 0.075°**), and
+Run Automatic Analysis asks for αi and names the old value as a suggestion. A value from the command
+bar is never written into an instrument profile, so **Back to Profile αi** always returns the
+profile's own value.
 
 - An αi answered in the Results step (**Run Again with These Answers**) is set the same way, in orange,
   when the run keeps the profile the detector has (section 1.2).
@@ -761,8 +772,20 @@ pixel size that differs from the frame's by more than 1 %, or a frame size that 
 often states no pixel size and a `.poni` often no frame size, and then nothing tells two detectors
 apart: the calibration of another detector in a neighbouring folder can be applied when the frame's
 own folder holds none. The GIWAXS `.poni` of section 1.1, for example, fits the GALAXI TIFF as far
-as the search can tell; only its folder puts it after `galaxi_bornagain.poni`. The result is saved
-as the instrument profile of the detector.
+as the search can tell; only its folder puts it after `galaxi_bornagain.poni`. A calibration file the
+search found in another folder than the frame's (or one below it) is listed with that folder
+(*galaxi_bornagain.poni (sibling folder gisaxs_galaxi)*). It is skipped, with the reason among the
+decisions, when the detector shape it states (`max_shape` of a `.poni`) is not the frame's. When it was
+made at another energy than the frame's (more than 0.2 % apart), its distance and beam centre are used
+with the frame's energy, as for any calibration, and a decision of its own says so (**Calibration**:
+*… made at another energy than the frame's*), so that it is never adopted without a word. A file you
+named, or one beside the frame, is not second-guessed this way. The result is saved as the instrument profile of the detector.
+
+When the frame's own header states a detector distance that differs from the calibration in use by
+more than 5 %, the Data step says so (*⚠ The file header gives a detector distance of 370 mm, the
+calibration in use 147.6 mm (151 % apart).*) and the automatic analysis lists it under
+*Needs attention* as **detector distance**. A header often holds a nominal distance, and then the
+calibration stands; but this is also what the calibration of another experiment looks like.
 
 **A tilted detector.** A `.poni` with a tilt (pyFAI's `Rot1`, `Rot2`, `Rot3`) gives a tilted geometry:
 every pixel is placed where pyFAI places it, so q, χ, the solid angle and the polarisation factor are those of the
@@ -1015,6 +1038,11 @@ actions to a second row.
 The mode: **Auto** reduces a frame as GIWAXS when the detector reaches beyond a scattering angle
 2θ = 20°, otherwise as GISAXS. Auto decides again for every frame. Choose **GISAXS** or **GIWAXS**
 to force it; the status line warns when a forced mode does not look right for the frame.
+A calibrant measured in transmission at a SAXS distance (silver behenate) is "GISAXS" by this rule.
+Run Automatic Analysis recognises it when no αi is known and the frame shows at least three sharp
+rings about the beam centre, each through at least 80 % of the directions the detector covers: it
+writes the cuts, fits no particle model, and says so under **technique** (give αi or the technique if
+the frame is a grazing-incidence one after all).
 
 The αi field shows the profile's αi until you type a value; a typed value is shown in orange and
 kept until you right-click it ▸ **Back to Profile αi** (section 4.1).
@@ -1247,7 +1275,10 @@ normal and ±90° the sample plane.
 Three views above the image:
 
 - **Detector** — the frame as measured, in pixels;
-- **q map** — the intensity regridded onto q∥ (qr) and qz;
+- **q map** — the intensity regridded onto q∥ (qr) and qz. The grid is never finer than the detector
+  samples q (at most 800 × 800 cells for GIWAXS, 600 × 600 for GISAXS), so the cells of the measured
+  region hold a pixel; what stays blank was not measured (gaps, the mask, the missing wedge). The view
+  opens on the measured cells;
 - **Cake** — unwrapped onto χ against q: a ring is a vertical line, a region a rectangle.
 
 **Save ▾** above the image: **View as Figure…** (the view with its colour bar) or **View Data as
@@ -1372,9 +1403,14 @@ What the numbers are is said in the report's *Decisions* (**Show the Full Text**
 refraction correction, and the line gives how far refraction can shift q_z near or below the film's critical
 angle at your αi (up to about k·sin αi); the uncertainties are statistical only, from Poisson counting statistics
 or, for a floating-point, background-subtracted or mirror-filled frame, from the pixel scatter, without the
-geometry. At most 12 candidate peaks, the most prominent, are fitted: when more qualify, *Decisions* says how many,
-and the peak table, the rings and the series hints are those of the 12 (the command line's `--max-peaks` fits
-more). The orientation sentence compares f with f_iso, the value of a random ring over the same measured |χ|: it
+geometry. At most 12 candidate peaks, the most prominent, are fitted: when more qualify, *Decisions* and the line
+under the peak table say how many candidates there were and how many of the 12 gave a peak (a fit can merge two
+candidates or reject one), and the peak table, the rings and the series hints are those of the 12 (the command
+line's `--max-peaks` fits more). The saved report gives q, d and the FWHM of each peak with their ±. The ± of a fit
+whose reduced χ² is above 1 are multiplied by √χ²_r; a peak whose fit has χ²_r above 10 is marked *poor fit* in the
+caveat column: its shape is not one Gaussian on a line, so read its width and size with care. A *lamellar
+(1:2:3:4)* hint needs its orders one after the other: a peak near five times the first q without the third and
+fourth order is not listed. The orientation sentence compares f with f_iso, the value of a random ring over the same measured |χ|: it
 says *along the surface normal* or *in the sample plane* only when the I(χ) maximum lies below 20° or above 70°
 and |f − f_iso| reaches max(0.1, 3σ_f); a ring whose maximum lies between 20° and 70° is called *tilted* at that
 |χ| from its maximum alone, without that margin. Every ring line gives f ± σ_f, f_iso and f − f_iso with the
@@ -1406,29 +1442,39 @@ off.
    and does not start the fit.
    Confirm the model in Fitting.
 
-The solutions are listed most probable first, with their probability **p**. The table's χ²/N is the mean of r²
-over the points (r the σ-normalised residuals), with no correction for the number of free values (unlike Fitting's
-χ²ᵣ). The run reports the most probable solution; the table selects it. A non-linear value that ended on a bound
+The solutions are listed most probable first, with their probability **p**. Probabilities are relative to the
+compositions that were tried; the single solution of a composition you gave has none (*only this composition was
+tried*). R, h and D show every population, in the order of the radii (`3.06 / 6.02`, `49.4 / –`: – for a population
+without a paracrystal). The table's χ²ᵣ is Σ((I − model)²/σ²)/(N − number of free values) over the fitted points,
+with the curve's σ: the number Fitting shows for the same solution. Predict parameters leaves out the points below
+the network's q window (q < q_max/300); the report says how many (*fitted: 596 of 598 points; 2 below the network's
+q window*). The run reports the most probable solution; the table selects it. A non-linear value that ended on a bound
 of its range is not determined by the curve: the table marks it ⚠ and a warning under the table names it by rank
 (*⚠ Not determined by the curve (at a search bound) — 1: D, …*; which bound, *D at its upper bound*, is in its
 tooltip), as do **Fit details** and the report's note column; when the reported solution has one, a point to check
 (**Fit**) says so. The amplitudes, the background and the beam-tail amplitude are fitted non-negative and are not
-counted as values at a bound; one that ends at 0 is named among the report's *Decisions* (*fit caveat: background
-BG at 0, the non-negativity limit*). A reported solution with χ²/N above 10 — the limit of Fitting's poor fits
+counted as values at a bound; one that ends at 0 is named among the report's *Decisions* (*fit caveat: Background
+at 0, the non-negativity limit*). A reported solution with χ²ᵣ above 10 — the limit of Fitting's poor fits
 (section 6.5) — misses the curve by far more than its noise: a point to check (**Fit**) says that none of the
 compositions tried describes the cut and that its R and D are not measurements (the Bragg rings of a powder or a
 calibrant give such a misfit). When another solution has a probability of 0.2 or more, the curve alone does not
 decide the model: a line under the table says so, and the Results tab asks which one you expect and names the
-solutions whose D is within 15 % of 2π/q\*. The report gives the 68 % intervals of R, h and D of the reported
-solution (*fit intervals*). **Save Fitted Curve…** (q in Å⁻¹, I, σ and the fit the run reports), **Save Fit
-Table…** (every solution with its probability, parameters in nm, the 68 % intervals of R, h and D, χ²/N, the
+solutions whose D is within 15 % of 2π/q\*. The report gives the refined R, h and D of the reported
+solution with their 68 % intervals (*fit intervals: R (1) 3.17 [3.04, 3.26] nm …*: the refined value, then its
+interval; from the least-squares errors when the posterior's sampling did not converge). Every value has one name,
+that of Fitting's Model table, in the table, the notes, Fit details and the report: Tail A, Tail w and Tail ν for the
+beam tail, σ_q, Scale, and with several populations the population's number in brackets (R (2), σR/R (1)); the
+report lists the keys of its CSV and JSON files with these names. The notes about the background, the beam tail and
+the resolution come after those about the particles, in one paragraph, and a term that is absent (Tail A = 0) is
+not flagged. **Save Fitted Curve…** (q in Å⁻¹, I, σ and the fit the run reports), **Save Fit
+Table…** (every solution with its probability, parameters in nm, the 68 % intervals of R, h and D, χ²ᵣ and the number of fitted points, the
 values at a bound in `at_bounds` and the reported one in `chosen`) and **Save Plot…** save the results; **Refine
 in Fitting** opens the prepared curve (the halves chosen) in Fitting.
 
 As for GIWAXS, the report's *Decisions* (**Show the Full Text**) say what the numbers are: q is kinematic,
 and near the critical angle refraction mostly shifts q_z — that of the Yoneda band most — by an amount of
 the order of k·sin αi, which the line gives for your frame (q_y and 2π/q\* barely change); the σ of the
-cuts, by which χ²/N is normalised, are statistical only, from Poisson counting statistics or the pixel
+cuts, by which χ²ᵣ is normalised, are statistical only, from Poisson counting statistics or the pixel
 scatter, without the geometry; the intervals of R, h and D come from the posterior given those σ, so they do not
 include the geometry or the choice of model.
 
@@ -1443,8 +1489,8 @@ open for later reports) follows the selected row:
   FWHM with errors; height, area, background and slope; S/N, χ²ᵣ, the fit window, the Scherrer
   size, and where the ring is measured, shadowed or missing on the q map (how the peak was fitted and how
   peaks are found, with the thresholds of the run, is the tooltip of **Fit details**);
-- a model solution: every parameter (R, σR/R, h, D, σD/D, weight, amplitude, background, resolution), with the 68 %
-  interval of R, h and D, its probability, χ²/N, log RMSE, convergence and time, the points and q range, whether
+- a model solution: every parameter (R, σR/R, h, D, σD/D, weight, Scale, Background, Tail A, Tail w, Tail ν, σ_q),
+  with the 68 % interval of R, h and D, its probability, χ²ᵣ with the points it is of, log RMSE, convergence and time, the points and q range, whether
   you gave the composition or the network chose it, its warnings and values at a bound, and **Show in Fitting**,
   which opens the curve in Fitting with that solution drawn.
 
@@ -1461,6 +1507,10 @@ geometry fit or model fit can take a minute). What was found is kept: **Save Rep
 list is locked. When you show another frame, the Results step says which frame the results are
 from; they come back with that frame. **Save Report…** writes a web page with the pictures (`.html`,
 opens in any browser) or the text as Markdown (`.md`); the save dialog starts next to the data.
+Both carry a section **Mask** and a section **Record**: the GIMaP version, the input file with its
+SHA-256, the calibration file with its path and SHA-256 when the run took the geometry from one, the
+instrument profile with its source (a profile made from a file names that file's path), and the
+corrections (background, gap guard, bad pixels, intensity corrections).
 
 The sum the automatic analysis sets is for the frame it analyses. A Series map, Batch Export and Send
 Series to Fitting do not use it (their dialog and the Series tab say so); to sum there, set **Data ▸
@@ -1624,8 +1674,8 @@ scan, without `_m01`.
   composition)** — one or two populations of spheres and upright cylinders, with or without a paracrystal — or
   one sphere, random cylinder or vertical cylinder with a paracrystal; a cut of more than 1000 points is merged
   first). Every frame is predicted from its own data, without start values. The two halves are never fitted
-  together. One row per frame, the most probable solution: `halves`, `points`, model, `chi2` (χ²/N, as in section
-  5.5), `probability` and the parameters in nm. About 25 s per frame. The choice starts on the Cuts step's halves
+  together. One row per frame, the most probable solution: `halves`, `points`, model, `chi2` (χ²ᵣ, as in section
+  5.5), `probability` and the parameters in nm. From some seconds to a few minutes per frame, depending on the number of points and the computer. The choice starts on the Cuts step's halves
   when they are the mean or one half, else on the last batch's. A frame without counts, or without points on the
   chosen half (*No points on the q > 0 half*), is not fitted and its reason is listed. The curves for Fitting still
   hold both halves with signed qy and name the choice.
@@ -1766,8 +1816,13 @@ Fitting reads `.dat` and `.txt` text curves:
 - Any other `.dat` / `.txt` file with columns `q I [σ]` opens too. A file whose header states the unit of q is read
   in that unit — `q in <unit>` in a `#` line, or the name of the first column (`q (1/A)`, `q_nm^-1`,
   `# columns: qy (1/A) …`, `# q [1/nm]  I`); Analyze's curve files state Å⁻¹. For a file that states none, set
-  **Curve ▸ File ▸ q unit of files without one in their header** (Å⁻¹ by default). A file whose header states both
-  Å⁻¹ and nm⁻¹ is not opened: *The header states q both in 1/A and in 1/nm; correct it to one unit.*
+  **Curve ▸ File ▸ q unit of files without one in their header** (Å⁻¹ by default, in the 1D Predict window too).
+  A file whose header states both Å⁻¹ and nm⁻¹ is not opened: *The header states q both in 1/A and in 1/nm; correct
+  it to one unit.* When a file states no unit and the q range in the assumed unit is implausible for a GISAXS or
+  SAXS cut (|q| beyond 10 nm⁻¹ = 1 Å⁻¹, or a whole curve below 0.02 nm⁻¹), a warning names the assumed unit, what
+  it does to every length (R and D come out 10× too small or too large) and how to change it — in the Curve card,
+  in the Fit step, in the status line and in Results next to the values. A title line above the line of column
+  names is a header like any other; a row inside the data that is no numbers is left out.
 
 Fitting does not read `.csv` files, also not the CSV curves that Analyze exports. Use **Send to Fitting** in
 Analyze, or open the `_fit_input.dat` written next to the CSV. A `.csv` dropped on Fitting is refused with
@@ -1814,7 +1869,7 @@ The original files must remain available. **Watch for new curves** is unavailabl
 import again to change its files/columns, or use folder mode for watching ordinary single-curve files.
 
 Missing σ stays missing: Refine and Search weight ln I equally, without inventing counting errors; Predict
-parameters takes a relative σ from the scatter of the curve about its trend (section 6.4). Each imported curve
+parameters takes a relative σ from the scatter of ln I about its trend (section 6.4). Each imported curve
 keeps q, I and its supplied σ aligned by row; invalid values in one intensity column do not remove valid points
 from another curve.
 
@@ -1877,9 +1932,13 @@ Analysis** to inspect its contributions here.
 
 - The card: its points, its q range in nm⁻¹ (in Å⁻¹ in the card's tooltip), *σ from the file*, and the unit its q
   was read in and where that came from (*q read in Å⁻¹: stated in the file*, or *… not stated in the file: the
-  setting for files without one*). The fit weights each point by 1/σ; without σ every point gets the same relative
-  weight, and a warning says so in the card and again in the Fit step (*⚠ No σ in the file: every point weighted
-  alike*; hover for what that means for each method).
+  setting for files without one*). The fit weights each point by 1/σ. Without σ a warning in the card says what
+  each method does — *⚠ No σ in the file. Predict parameters: a relative σ of 3.4 %, estimated from the scatter of
+  ln I about its trend. Refine and Search: ln I is fitted, every point weighted alike.* — and the Fit step says it
+  for the method chosen. Points with a negative or zero intensity are counted: with σ they are fitted like any
+  other point (*12 of the 400 fitted points have a negative or zero intensity (9 negative, 3 zero): they are kept
+  and weighted by their σ …*, in the card and in the status line when the curve opens); without σ they are left
+  out, because ln I has no value there, and a warning says how many.
 - How to set the fitting range, what Add Particle offers, what each method does and how to fix values are the
   tooltips of those controls; the steps themselves only say where things stand.
 - **Halves of the cut**, for a cut through the beam (q < 0 and q > 0): **Mean of both halves** (averaged where
@@ -1969,9 +2028,13 @@ sizes for your sample, or let the Fit step find them.
   and low-q term separately. This only changes visibility; it does not change the fit or its scientific arrays.
 - The values, each ± its 1σ error (the covariance at the solution, scaled by χ²ᵣ). Select values and press
   **Fix**, **Let It Fit** or **Range…** (or right-click): the next **Fit Again** uses them. **Range…** shows the
-  value's min – max in Model.
-- **Other solutions** (folded): the solutions of *Predict parameters*, each with its χ²ᵣ on these points and its
-  probability **p**; a solution from **Show in Fitting** shows Analyze's χ²/N (section 5.5) until you fit it.
+  value's min – max in Model. A free value the fit gives no error for shows **–**; its tooltip says why (at a bound
+  of its range, the Scale of its population or Tail A at 0, or not constrained by the curve).
+- **Other solutions** (folded): the solutions of *Predict parameters*, each with its χ²ᵣ and its probability **p**
+  (the column names' tooltips define both; the row's tooltip says how many points χ²ᵣ is of). R and D show every
+  population, in the order of the radii (`3.06 / 6.02`, `49.4 / –`); two solutions of the same composition say in
+  their tooltip in which values they differ (σnn/D, σ_q …). A solution from **Show in Fitting** shows the χ²ᵣ of
+  Analyze's fit (section 5.5) until you fit it.
   **Use This Solution** puts one into Model (Undo brings the previous model back).
 - **Save Data and Fit…** writes a CSV — q (nm⁻¹ and Å⁻¹), I, σ, the model, the residuals and every term — with a
   JSON record next to it: the model, the fit (errors, values at a bound, correlations) and the
@@ -2053,7 +2116,8 @@ benchmarks.
    the substrate's value, or to 0, and refine. With both angles Predict takes about 2.4 times as long.
    Model's **Sizes** and coupling are used too (*Gaussian, by number* and the LMA are the network's own; with the
    others the model reweights its proposals).
-3. Without σ in the file, Predict takes a relative σ from the scatter of the curve about its trend (at least 1 %).
+3. Without σ in the file, Predict takes a relative σ from the scatter of ln I about its trend (at least 1 %); the
+   Curve card names its value, and the 1D Predict window uses the same estimate.
 4. Press **Fit**. It runs in a separate process; **Stop** ends it without a result. For a curve of a few hundred
    points on one core it takes some seconds with **The particles in Model**, from some tens of seconds to a few
    minutes with **Spheres and upright cylinders (1–2)** and a few minutes or more with **Any particles (1–3)**,
@@ -2062,7 +2126,7 @@ benchmarks.
 
 There is one way through, and nothing else to set: the network's 1000 samples of each composition are weighted
 against the curve; the most probable values of each composition are refined by least squares; when none of them
-refines below χ²/N 2, the ranges are searched for the two best compositions; then the posterior is sampled around
+refines below χ²ᵣ 2, the ranges are searched for the two best compositions; then the posterior is sampled around
 the solutions within a BIC of 20 of the best (at most four), which gives their probabilities and intervals.
 
 Model's fixed values and ranges are not used by Predict: the network looks at the whole range of every value. The
@@ -2076,13 +2140,25 @@ solution that comes into Model keeps Model's geometry; **Refine** afterwards kee
   curve does not decide between them. With two or three populations this is common: another R of one population at
   the same D, or the paracrystals of two populations exchanged, can describe the curve as well; Predict tries these
   too and lists them. On simulated curves the true solution was among those listed in 95 % (one or two populations)
-  and 87 % (one to three) of the cases: look at the others before you report one.
-- **Fit details…** gives **Posterior of this solution**: each value's median and 68 % interval, e.g.
-  `R 4.12 [4.08, 4.16] nm`, and the probability. Below it, what to keep in mind: a value the curve says little about
-  (*unconstrained*: its interval spans most of the range the network knows), a value at a bound, strongly
-  correlated values, few effective samples (the intervals are then rough), or that the solutions were compared by
-  χ² and their number of values (BIC) because the posterior's sampling did not converge — usually a curve the model
-  does not describe within its errors; the intervals are then the least-squares errors. A population whose size
+  and 87 % (one to three) of the cases: look at the others before you report one. Probabilities are relative to the
+  compositions that were tried: with **The particles in Model** only one is tried, and its single solution shows no
+  probability (*Only this composition was tried*).
+- χ²ᵣ = Σ((I − model)²/σ²)/(N − number of free values), with the curve's σ, over the points Predict fitted. It
+  leaves out the points below the network's q window, and the status line, the table's tooltip and Fit details say
+  how many (*χ²ᵣ 1.04 over 596 of 598 points; 2 below the network's q window*). The same number is shown wherever
+  the solution appears. A **Refine** afterwards fits every point of the fitting range and says so when its χ²ᵣ is
+  not of the same points.
+- **Fit details…** lists the values in Model with their 68 % intervals: the refined value first, then its
+  interval, e.g. `R 4.12 [4.08, 4.16] nm`, and the probability. When a refined value lies at an end of its interval,
+  a line says so (*the refined value lies at the edge of the posterior: the model describes this curve only within
+  the model error*). Below it, what to keep in mind, one line per kind of remark: a value the curve says little
+  about (its interval spans most of its allowed range), a value at a bound, strongly correlated values, few
+  effective samples (the intervals are then rough), that the values are those of a fit with the model error added to
+  σ, or that the solutions were compared by χ² and their number of values (BIC) because the posterior's sampling
+  did not converge — usually a curve the model does not describe within its errors; the intervals are then the
+  least-squares errors. The remarks about the background, the beam tail and the resolution follow in one paragraph
+  (*Background, beam tail and resolution: …*), and a term that is absent (Tail A = 0) is not flagged. The values
+  are named as in Model (Tail ν, σ_q, σR/R (1): the population's number in brackets). A population whose size
   the curve does not show is named too: one whose Guinier region lies at or below the lowest q (the curve shows only
   its decay, which roughness or a rise at low q produce as well: check it before you report particles of that size),
   or one smaller than the curve resolves (a smooth background).
@@ -2109,17 +2185,26 @@ The window runs Predict parameters on every curve listed; it has no other method
 2. **Parameters…** sets:
    - **Complete composition**: up to three boxes, the particle families when you know them (each population with
      the paracrystal); with every box on *Auto / unused* the network chooses among all compositions.
-   - **q unit of files without one in their header**: nm⁻¹ by default. A file whose header states its unit of q is
-     read in that unit, whatever is set here; Analyze's `_fit_input.dat` files state Å⁻¹ and need no setting. A
-     header states the unit with `q in <unit>` in a `#` line or in the name of the first column (`q (1/A)`,
-     `q_nm^-1`, `# columns: qy (1/A) …`, `# q [1/nm]  I`). **Use current cut** is converted automatically.
-     *Note:* this default differs from Fitting's (Å⁻¹, section 6.1), so a curve without a unit in its header is read
-     10× apart in q in the two places. Check the line under the buttons, or give the file a header with its unit.
+   - **q unit of files without one in their header**: Å⁻¹ by default, as on the Fit page (section 6.1; settings
+     saved with nm⁻¹ keep it). A file whose header states its unit of q is read in that unit, whatever is set here;
+     Analyze's `_fit_input.dat` files state Å⁻¹ and need no setting. A header states the unit with `q in <unit>` in
+     a `#` line or in the name of the first column (`q (1/A)`, `q_nm^-1`, `# columns: qy (1/A) …`,
+     `# q [1/nm]  I`). **Use current cut** is converted automatically. When a file states no unit and its q range
+     in the assumed unit is implausible (section 6.1), a warning under the status line names the file, the assumed
+     unit and how to change it; the candidate's tooltip and its *Parameters and units* text repeat it, and the
+     records keep it (`curve_notes`).
    - **q sides**: *Each half separately*, *q > 0 half* or *q < 0 half*.
    - **Cut qz (nm⁻¹)**: the cut's q_z, at whose Born term spheres are evaluated; unticked (the default), q_z = 0,
      the effective interface. The exit-reflected path needs both angles: fit such a curve on the Fit page with the
      angles in Model.
-   - **Relative σ (if missing)** (10 % by default) and **Absolute σ floor**: the σ of a file that has none.
+   - **Relative σ added to counting σ** (10 % by default) and **Absolute σ added to counting σ**: only for **Use
+     current cut** on a curve Analyze wrote with the pixel counts of its detector columns; they are added in
+     quadrature to the counting σ. A curve without σ gets the relative σ of Predict parameters, estimated from the
+     scatter of ln I about its trend (the same value as on the Fit page; its points with a negative or zero
+     intensity are left out); each candidate records it (`sigma_source`, `sigma_relative`, `curve_notes`).
+
+   The files are read by the reader of the Fit page: any header lines (also a title line above the column names),
+   commas, tabs, semicolons or spaces. Negative and zero intensities are counted in each candidate's `curve_notes`.
 
    **Save Settings** keeps them. Settings saved by an earlier version with *General V5*, the *Single RC
    specialist*, the *Physical fit* or *fit1d* open as Predict parameters: their own options are dropped, and fit1d's
@@ -3267,7 +3352,10 @@ hold one frame each as one series.
   input file (the frame's files, the calibration, a mask) by path, size and SHA-256; for a model fit also the
   network, the SHA-256 of its weights and the seed. `summary.json` is one object with the release, the time, the
   options and the frame reports (`frames`). Every CSV starts with `#` lines that name the release, the inputs
-  with their SHA-256 and the geometry. A run repeated on the same input gives the same files except for the
+  with their SHA-256 and the geometry; the curve, q-map, cake and fit-input files Analyze exports in the window
+  carry the same lines. `report.md` has the section **Record** of the window's saved report (section 5.5). In
+  `report.json`, `geometry` and `calibration` hold the values as applied (15 significant digits; the text rounds
+  them), and every crystallite size names its unit (`size_A`, `size_nm`). A run repeated on the same input gives the same files except for the
   time and the durations ([Physics and Methods, section 14.10](Physics_Manual.md#1410-the-record-of-a-run-without-the-window)).
 - **Language and time.** The headings of `report.md` and `summary.md` are English; `--language zh` writes them
   in Chinese (one language per report; in the window they follow the program's language). The GISAXS model

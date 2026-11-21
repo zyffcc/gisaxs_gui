@@ -239,9 +239,8 @@ class FittingViewBinding(QObject):
             )
         sigma = data.get("err")
         self._workflow_sigma_estimated = sigma is None or bool(metadata)
-        if sigma is None:
-            floor = options["absolute_noise"] or max(float(np.max(abs(y[mask]))) * 0.001, 1e-12)
-            sigma = np.hypot(options["relative_noise"] * abs(y), floor)
+        if sigma is None:  # the job estimates it for each half, as the Fit page does (``curve_intake``)
+            return q[mask], y[mask], None
         sigma = np.asarray(sigma, float).reshape(-1)
         if sigma.shape != q.shape:
             raise ValueError("Input sigma length does not match q")

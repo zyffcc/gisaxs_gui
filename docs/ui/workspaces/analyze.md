@@ -98,7 +98,7 @@ Run Automatic Analysis（Results 步骤可写束线时笔记：αi、能量、�
   一半被遮挡 / 有缝隙 / 太短就用另一半，并写出理由）→ 特征长度 2π/q*（侧峰或 shoulder；写明不一定是粒子间距；它是单独的结果，
   不作拟合的起点）→ Fitting 的 Predict parameters（注入的 `create_curve_fit()`：没有给组成时网络在一种或两种球和竖直圆柱、
   带或不带次晶的组成中选，随机取向圆柱只在给定组成时用；有效界面 q_z = 0）。报告最可能的解（`chosen`），带概率和 R、h、D 的
-  68 % 区间（*fit intervals*）；`at_bounds` 标出停在范围边界的非线性数值，报告的解有这种值时是一处需要查看；χ²/N > 10 为拟合差；
+  68 % 区间（*fit intervals*）；`at_bounds` 标出停在范围边界的非线性数值，报告的解有这种值时是一处需要查看；χ²ᵣ > 10 为拟合差；
   另一个解的概率 ≥ 0.2（`ASK_PROBABILITY`）时结果里会问你选哪个模型，并指出 D 与 2π/q* 相差 15 % 以内的解
   （`application/gisaxs_choice.py`、`gisaxs_procedure.py`）。
 - Results 标签页：GISAXS 为切线与两半、间距、拟合图（数据 + 选中的解，Log q / Log I）与解的表格；Save Fitted Curve…、
@@ -106,7 +106,7 @@ Run Automatic Analysis（Results 步骤可写束线时笔记：αi、能量、�
 - 表格下面是折叠的 **Fit details**（默认关；打开后下一次报告也保持打开），跟随选中的行，只在打开时绘制：
   峰——拟合用到的点、高斯 + 局部线性背景、q / d / FWHM 及误差、峰高、面积、背景与斜率、S/N、χ²ᵣ、拟合窗口、
   Scherrer 尺寸、寻峰与拟合方法，以及该峰在 q 图上测到 / 阴影 / 没测到的部分；
-  模型解——每个参数（R、σR/R、h、D、σD/D、权重、振幅、常数背景、分辨率）及 R、h、D 的 68 % 区间、概率、χ²/N、
+  模型解——每个参数（R、σR/R、h、D、σD/D、权重、Scale、Background、Tail A、Tail w、Tail ν、σ_q；名字见 `shared/fit_names.py`）及 R、h、D 的 68 % 区间、概率、χ²ᵣ 及其点数、
   log RMSE、是否收敛与用时、点数和 q 范围、组成是给定的还是网络选的、警告与处于边界的值，和 **Show in Fitting**
   （在拟合中打开曲线并画出这个解；拟合的步骤栏显示“当前画出的解”，
   Save ▾ ▸ Data and Fit… 保存拟合与参数）。数据在报告里（`peaks[].fit`、`peak_search`、`gisaxs.fit.solutions[]`、`gisaxs.fit.native`），

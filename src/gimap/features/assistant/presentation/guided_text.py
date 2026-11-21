@@ -43,7 +43,8 @@ OPTION_FIELDS = {
 }
 HALVES_DONE = "halves: "
 """How ``set_halves`` reports a success (``AnalyzeAutomation.set_halves``): ``halves: <side>``."""
-ATTENTION_TITLES = {"model": "Model choice", "fit": "Fit", "beam centre": "Beam centre"}
+ATTENTION_TITLES = {"model": "Model choice", "fit": "Fit", "beam centre": "Beam centre",
+                    "detector distance": "Detector distance", "technique": "Technique"}
 """Readable titles of the points a run asks a person to check (the report's item keys)."""
 RUN_TEXT, RUN_ANYWAY_TEXT = "Run Automatic Analysis", "Run as GIWAXS Anyway"
 GISAXS_NOTE = (

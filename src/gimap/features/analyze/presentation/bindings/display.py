@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 from PyQt5.QtCore import QSignalBlocker
 
+from src.gimap.app.presentation.components.image_extent import filled_extent
 from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import (
@@ -140,7 +141,7 @@ class DisplayMixin:
             view.set_image(
                 np.flipud(rsm.image), rect=(q0, z0, q1 - q0, z1 - z0), y_down=False,
                 title=analysis.path.name, x_label=rsm.x_label, y_label="qz (Å⁻¹)", keep_view=keep_view,
-                context="qmap",
+                context="qmap", fit_rect=filled_extent(np.flipud(rsm.image), (q0, z0, q1 - q0, z1 - z0)),
             )
             view.clear_overlays()
             self._show_q_map_marks(analysis, rsm, keep_view=keep_view)

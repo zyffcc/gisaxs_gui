@@ -16,7 +16,7 @@ import numpy as np
 from src.gimap.shared.geometry import DetectorGeometry
 from src.gimap.shared.geometry.q_mapping import grazing_q_region
 
-from .binning import binned_mean_2d, native_profile
+from .binning import binned_mean_2d, map_grid_shape, native_profile
 from .models import GISAXS, Curve, GisaxsCutSettings, ReciprocalSpaceMap, Reduction, YonedaEstimate
 
 YONEDA_SEARCH_MAX_DEG = 1.5
@@ -69,7 +69,8 @@ def gisaxs_q_map(image: np.ndarray, valid: np.ndarray, maps: GisaxsMaps) -> Reci
     z_range = (float(qz.min()), float(qz.max()))
     grid = binned_mean_2d(
         qy, qz, np.asarray(image)[usable],
-        x_range=(y_range[0], y_range[1] + 1e-12), y_range=(z_range[0], z_range[1] + 1e-12), shape=MAP_SHAPE,
+        x_range=(y_range[0], y_range[1] + 1e-12), y_range=(z_range[0], z_range[1] + 1e-12),
+        shape=map_grid_shape(maps.qy, maps.qz, usable, y_range[1] - y_range[0], z_range[1] - z_range[0], MAP_SHAPE),
     )
     return ReciprocalSpaceMap(np.flipud(grid), y_range, z_range, x_label="qy (Å⁻¹)")
 

@@ -78,9 +78,9 @@ TIPS_ANALYZE_ZH = {
     "2π/q* = {d} nm at a shoulder of the cut (|qy| = {q} Å⁻¹, no resolved peak): not necessarily the particle spacing.":
         "2π/q* = {d} nm，位于切线的肩峰处（|qy| = {q} Å⁻¹，没有分辨出的峰）：不一定是粒子间距。",
     "Not determined by the curve (at a search bound) — {rows}": "不由曲线确定（处于搜索边界）——{rows}",
-    "Reported: rank {rank} ({model}), the best-ranked converged solution within {percent} of the first's χ²/N with "
+    "Reported: rank {rank} ({model}), the best-ranked converged solution within {percent} of the first's χ²ᵣ with "
     "no non-linear value at a search bound.":
-        "报告第 {rank} 名（{model}）：χ²/N 在第一名的 {percent} 以内、已收敛且没有非线性参数处于搜索边界的解中排名最靠前的一个。",
+        "报告第 {rank} 名（{model}）：χ²ᵣ 在第一名的 {percent} 以内、已收敛且没有非线性参数处于搜索边界的解中排名最靠前的一个。",
     "Fitted: {curve} ({points} points) · R, h and D in nm.": "已拟合：{curve}（{points} 个点）· R、h、D 单位为 nm。",
     "Numerical fits of single particle families with size dispersity and a paracrystal distance D, a screening step: "
     "choose the model from what you know of the sample and confirm it in Fitting.":

@@ -66,7 +66,7 @@ class Operation:
 
     def __post_init__(self) -> None:
         if not self.id:
-            self.id = f"op{next(_ids)}"
+            self.id = f"op{next(_ids)}"  # standalone only: a run numbers its own (``add_operation``)
 
     def record(self) -> dict:
         """JSON-able description (without the picture)."""
@@ -281,3 +281,15 @@ __all__ = [
     "inverse_arguments",
     "setting_state",
 ]
+
+
+def add_operation(operations: list, operation: Operation) -> Operation:
+    """Append ``operation`` to a run's list under the next id of THAT list (op1, op2, ...), so a frame's record does
+    not depend on how many frames the process analysed before it."""
+    taken = {item.id for item in operations}
+    number = len(operations) + 1
+    while f"op{number}" in taken:
+        number += 1
+    operation.id = f"op{number}"
+    operations.append(operation)
+    return operation

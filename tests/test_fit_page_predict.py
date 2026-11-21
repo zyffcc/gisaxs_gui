@@ -63,7 +63,7 @@ def test_predict_on_the_page(tmp_path, monkeypatch):
         assert best.family == "sphere" and best.value("R") == pytest.approx(4.0, rel=0.05)
         assert best.value("D") == pytest.approx(14.0, rel=0.05)
         assert not page.solutions_table.isColumnHidden(5)
-        assert "Posterior of this solution" in page.warnings_label.text()
+        assert "Values in Model with their 68 % posterior intervals" in page.warnings_label.text()
         assert page.method() == "local"  # next: Refine under Model's own limits
     finally:
         page.dispose()

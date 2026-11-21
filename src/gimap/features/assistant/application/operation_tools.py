@@ -6,6 +6,7 @@ from typing import Optional
 
 from .models import ToolInputError, ToolOutcome
 from .operations import (
+    add_operation,
     APPLIED,
     DISMISSED,
     FAILED,
@@ -76,7 +77,7 @@ class OperationToolsMixin:
                 operation.no_effect = True  # changed nothing that shows: undone like the rest, never a card
             elif self._previewing():
                 operation.preview_png = self._thumbnail()
-            self.results.operations.append(operation)
+            add_operation(self.results.operations, operation)
         return outcome
 
     def _previewing(self) -> bool:
@@ -118,7 +119,7 @@ class OperationToolsMixin:
                         restore.append((tool, before))
                         operation.effect = outcome.summary
                         operation.preview_png = self._thumbnail()
-                self.results.operations.append(operation)
+                add_operation(self.results.operations, operation)
                 made.append(operation.record())
         finally:
             # Previews are cumulative in the order given; afterwards everything is as before.

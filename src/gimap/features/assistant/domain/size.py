@@ -31,6 +31,15 @@ class CrystalliteSize:
     reason: str
     notes: tuple[str, ...]
 
+    def record(self) -> dict:
+        """The size as a record writes it: every length with its unit in the key (``size_A`` and ``size_nm``, as
+        ``peaks[].size_nm`` of the report), never a bare ``size``."""
+        values = {name: getattr(self, name) for name in self.__dataclass_fields__ if name not in ("size", "size_err")}
+        for key, value in (("size", self.size), ("size_err", self.size_err)):
+            values[f"{key}_A"] = value
+            values[f"{key}_nm"] = None if value is None else value / 10.0
+        return values
+
 
 def scherrer_size(
     q: float,

@@ -5,7 +5,9 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from .gisaxs_choice import ASK_PROBABILITY, LENGTH_SCALE, POOR_CHI2, bounds_text, chosen, probability
+from src.gimap.shared import fit_names
+
+from .gisaxs_choice import ASK_PROBABILITY, LENGTH_SCALE, POOR_CHI2, bounds_text, chance, chosen, probability, sizes
 from .report_language import ENGLISH, heading
 
 
@@ -90,8 +92,10 @@ def _all_parameters(solution: dict) -> str:
 
 
 def _probability(solution: dict) -> str:
-    chance = probability(solution)
-    return "—" if math.isnan(chance) else f"{chance:.2f}"
+    if solution.get("alone"):  # the one solution of a composition that was given: 1.00 would be no finding
+        return fit_names.ONLY_ONE
+    value = probability(solution)
+    return "—" if math.isnan(value) else f"{value:.2f}"
 
 
 def fit_rows(fit: dict) -> list[str]:
@@ -101,9 +105,12 @@ def fit_rows(fit: dict) -> list[str]:
     if not solutions:
         return ["No fit solution."]
     index, _solution = chosen(fit)
-    lines = ["| rank | model | probability | parameters | χ²/N | note |", "|---|---|---|---|---|---|"]
+    lines = ["| rank | model | probability | parameters | χ²ᵣ | note |", "|---|---|---|---|---|---|"]
     for number, row in enumerate(solutions):
-        notes = [bounds_text(row)] + list(row.get("warnings") or ()) + ([] if row.get("converged", True) else ["not converged"])
+        more = len(row.get("more_warnings") or ())  # of background, beam tail and resolution: under the table
+        notes = ([bounds_text(row)] + list(row.get("warnings") or ())
+                 + ([] if row.get("converged", True) else ["not converged"])
+                 + ([f"{more} more on background, beam tail and resolution (below)"] if more else []))
         rank = f"{row['rank']} (chosen)" if number == index else row["rank"]
         lines.append(f"| {rank} | {row['model']} | {_probability(row)} | {_all_parameters(row)} | "
                      f"{_fixed(row['chi2'], 'chi2')} | {'; '.join(note for note in notes if note)} |")
@@ -152,23 +159,44 @@ def gisaxs_sections(report: dict, language: str = ENGLISH) -> list[str]:
         lines += [
             f"Curve: {fit.get('curve')} ({fit.get('points')} points, |qy| {_number((fit.get('q_range_inv_angstrom') or [None])[0], 3)}–"
             f"{_number((fit.get('q_range_inv_angstrom') or [None, None])[1], 3)} Å⁻¹).",
+            *[f"- {item['text']}" for item in fit.get("curve_notes") or () if item.get("text")],
+            *_points_lines(fit),
             *_method_lines(fit),
             "",
             *fit_rows(fit),
+            *_more_lines(fit),
             "",
             "Predict parameters: GIMaP's network proposes compositions — one or two populations of spheres and "
             "upright cylinders with size dispersity, \"(S)\" with a paracrystal distance D — and their values; each "
             "solution is refined by least squares, and its probability is the posterior probability of that "
-            "composition and mode. The run reports the most probable solution (chosen), with the 68 % intervals of "
-            "its sizes in the Decisions; when another solution has a probability of at least "
-            f"{ASK_PROBABILITY:g}, the curve alone does not decide the model and it is a point to check. χ²/N is the "
-            "mean of the squared σ-normalised residuals over the points (no degrees-of-freedom correction). A "
+            f"composition and mode; {fit_names.RELATIVE}. The run reports the most probable solution (chosen), with "
+            "its refined sizes and their 68 % intervals in the Decisions; when another solution has a probability of "
+            f"at least {ASK_PROBABILITY:g}, the curve alone does not decide the model and it is a point to check. "
+            f"{fit_names.CHI2_DEFINITION}; it is the number Fitting shows for the same solution. A "
             "non-linear value at a bound of its range (the note column) is not determined by the curve. The "
-            "particle amplitudes, the background and the beam-tail amplitude cannot go below 0; one at 0 is named in "
-            f"the Decisions (fit caveat). A reported solution with χ²/N above {POOR_CHI2:g} is a poor fit (Needs "
-            "attention). Refine the model you expect in Fitting.",
+            "particle amplitudes (Scale), the Background and the beam tail's amplitude Tail A cannot go below 0; one "
+            f"at 0 is named in the Decisions (fit caveat). A reported solution with χ²ᵣ above {POOR_CHI2:g} is a "
+            "poor fit (Needs attention). Refine the model you expect in Fitting.",
+            "",
+            "Names and units: R, h, D in nm; σR/R, σh/h, σnn/D relative; Tail w and σ_q in nm⁻¹. With several "
+            "populations a value carries its population's number, R (1), D (1), R (2): the populations as the "
+            "parameters column numbers them. Keys of the CSV and JSON records — "
+            f"{fit_names.legend(max(len(row.get('components') or ()) for row in fit.get('solutions') or [{}]))}.",
         ]
     return lines + [""]
+
+
+def _points_lines(fit: dict) -> list[str]:
+    """How many of the curve's points Predict parameters fitted and why the others were left out."""
+    text = fit_names.points_text(fit.get("fitted_points"))
+    return [f"- fitted: {text} (χ²ᵣ is over the fitted points)"] if text else []
+
+
+def _more_lines(fit: dict) -> list[str]:
+    """The notes of background, beam tail and resolution of each solution, in one paragraph under the table."""
+    rows = [(row.get("rank"), row.get("more_warnings") or ()) for row in fit.get("solutions") or ()]
+    said = [f"rank {rank}: {'; '.join(notes)}" for rank, notes in rows if notes]
+    return ["", "Background, beam tail and resolution — " + " · ".join(said) + "."] if said else []
 
 
 def _method_lines(fit: dict) -> list[str]:
@@ -192,11 +220,9 @@ def gisaxs_batch_row(report: dict) -> tuple[str, str, str]:
     _index, best = chosen(gisaxs.get("fit"))
     if best is None:
         return halves, spacing_text, "—"
-    component = (best.get("components") or [{}])[0]
-    distance = f", D {_fixed(component['D'], 'D')}" if component.get("D") is not None else ""
-    chance = probability(best)
-    text = (f"{best['model']} R {_fixed(component.get('R'), 'R')}{distance} nm, χ²/N {_fixed(best['chi2'], 'chi2')}"
-            + ("" if math.isnan(chance) else f", p {chance:.2f}"))
+    said = chance(best, "p ")
+    text = (f"{best['model']} {sizes(best, ' ', FIT_DECIMALS)}, χ²ᵣ {_fixed(best['chi2'], 'chi2')}"
+            + (f", {said}" if said else ""))
     return halves, spacing_text, text + (f" ⚠ {bounds_text(best)}" if bounds_text(best) else "")
 
 

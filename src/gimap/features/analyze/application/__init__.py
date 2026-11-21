@@ -184,6 +184,7 @@ from .use_cases import (
     header_beam_center,
     refine_center_by_symmetry,
 )
+from .ring_frame import ring_frame
 
 
 def q_at_position(geometry: DetectorGeometry, x_px: float, y_px: float) -> dict[str, float]:
@@ -345,6 +346,7 @@ __all__ = [
     "MAX_GAP_GUARD_PX",
     "SymmetryCenter",
     "refine_center_by_symmetry",
+    "ring_frame",
     "SeriesCorrection",
     "QBox",
     "Sector",

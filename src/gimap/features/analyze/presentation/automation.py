@@ -20,8 +20,8 @@ from PyQt5.QtCore import QSignalBlocker
 from src.gimap.shared.geometry import DetectorGeometry
 from src.gimap.shared.geometry.detector_tilt import DetectorTilt
 
-from ..application import q_from_two_theta, refine_center_by_symmetry, regions_from_dicts
-from ..application.export_record import binning, error_model
+from ..application import q_from_two_theta, refine_center_by_symmetry, regions_from_dicts, ring_frame
+from ..application.export_record import analysis_metadata, binning, error_model
 from .bindings.batch_watch import exported_text
 from .automation_rings import RING_STATES, _draw_rings  # noqa: F401 - imported from here too
 from .geometry_dialog import geometry_defaults
@@ -115,6 +115,7 @@ class AnalyzeAutomation:
             "files_listed": len(state.files),
             "mode": state.mode,
             "incidence_override": state.incidence_deg,
+            "incidence_suggestion": getattr(self._page, "_incidence_suggestion", None),  # last session's, not used
         }
         analysis = state.analysis
         if analysis is None or (path is not None and Path(analysis.path) != path):
@@ -257,7 +258,7 @@ class AnalyzeAutomation:
     def set_incidence(self, degrees: Optional[float], done: Done) -> None:
         page = self._page
         self._set(page.incidence_spin, INCIDENCE_FROM_PROFILE if degrees is None else float(degrees))
-        page.view_model.set_incidence(degrees)
+        page._adopt_incidence(degrees)
         page._remember()
         self.reanalyse(done)
 
@@ -383,6 +384,10 @@ class AnalyzeAutomation:
         result = refine_center_by_symmetry(analysis)
         return result.to_dict()
 
+    def ring_frame(self) -> dict:
+        """Complete sharp rings about the beam centre (a calibrant in transmission), without changing anything."""
+        return ring_frame(self._page.view_model.state.analysis)
+
     def set_beam_center(self, x_px: float, y_px: float, done: Done) -> None:
         """The beam centre for this session (canonical pixels); every frame is reduced with it."""
         page = self._page
@@ -487,6 +492,11 @@ class AnalyzeAutomation:
                 with QSignalBlocker(page.lower_choice):
                     page.lower_choice.setCurrentIndex(index)
                 page._show_lower_profile()
+
+    def analysis_record(self) -> Optional[dict]:
+        """The record Analyze writes beside its exports, for the frame as analysed now (a report's Record section)."""
+        analysis = self._page.view_model.state.analysis
+        return None if analysis is None else analysis_metadata(analysis)
 
     def export_current(self) -> list[str]:
         written = self._page.view_model.export()

@@ -42,6 +42,10 @@ class Solution:
     intervals: tuple = ()
     """Predict parameters: (name, (best, median, low68, high68, low95, high95, error)) of every value."""
     flags: tuple = ()
+    points: tuple = ()
+    """Predict parameters: (fitted, given, below the network's q window, unusable) — the points its χ²ᵣ is of."""
+    tried: Optional[int] = None
+    """Predict parameters: how many compositions were given to try (1: the particles in Model); None: a choice."""
 
     @property
     def label(self) -> str:

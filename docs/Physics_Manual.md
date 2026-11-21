@@ -407,6 +407,8 @@ When a frame has a geometry, Analyze proposes the technique from the largest sca
 
 where `W` and `H` are the numbers of columns and rows. The frame is GIWAXS when `2θ_max > 20°` and GISAXS otherwise. The user can force either mode; Analyze then points out when the forced mode disagrees with this rule. Without a geometry nothing is reduced. `tools/gimap_agent.py` uses the same rule (`--technique` forces it).
 
+A powder calibrant measured in transmission at a SAXS distance is GISAXS by this rule. The automatic analysis (not Analyze's mode) therefore looks for rings when the rule said GISAXS and no incidence angle is known (none given, noted or set, and 0° in the geometry): the valid pixels are averaged in 1-pixel rings about the beam centre and in 24 sectors of 15°; a maximum of the ring average that exceeds its 61-pixel running median by 6 robust σ and by 30 % of that median, and is at most 25 pixels wide at half height, is a ring; it is complete when the detector covers at least 90° of azimuth at its radius and at least 80 % of the covered sectors show 30 % of its height above their own background. With three or more complete rings the frame is reported as a transmission frame of a calibrant or powder: the cuts are written and no particle model is fitted (`analyze/domain/ring_frame.py`, `assistant/application/ring_frames.py`). The public silver behenate frame has five such rings, the public GALAXI GISAXS frame none.
+
 Examples from the public data: the GALAXI frame reaches `2θ_max` = 5.3° (GISAXS). The P08 GIWAXS frame (`giwaxs_p08_mapi`, PerkinElmer 2048 × 2048 px, `p` = 200 µm, `λ` = 0.6888 Å, `L` = 811.8 mm, direct beam (545.5, 1826.9) px from its `.poni`, `α_i` = 0.075°) reaches 30.2° (GIWAXS).
 
 The choice decides the reduction (chapter 6). Mirror filling and the intensity corrections are applied only to GIWAXS frames.
@@ -590,7 +592,7 @@ tilt = arccos(cos rot_1 cos rot_2)                                      (3.13)
 
 - `L_poni` is the `.poni` Distance (m); `poni_1`, `poni_2` (m) and `p_1`, `p_2` (pixel sizes) refer to the slow axis (rows, so `p_y = p_1`) and the fast axis (columns, `p_x = p_2`). They are taken as measured from the corner of pixel (0, 0) of the stored image; an `orientation` entry of newer `.poni` files is not read.
 - The pixel sizes come from `PixelSize1/2`, from `detector_config`, or from a known detector name (Pilatus 172 µm, Eiger 75 µm, PerkinElmer 200 µm, Lambda 55 µm, MAR345 100 µm, Jungfrau 75 µm). The wavelength is converted from m to Å.
-- The rotations go into the geometry with the direct beam and the distance (section 3.7); the instrument profile also keeps the file's distance, PONI, rotations and pixel sizes (`dropped_tilt`). Above 0.5° the file's inspection notes the tilt.
+- The rotations go into the geometry with the direct beam and the distance (section 3.7); the instrument profile also keeps the file's distance, PONI, rotations and pixel sizes (`tilt` in `instrument_profiles.json`; `dropped_tilt` up to 0.2.0, still read). Above 0.5° the file's inspection notes the tilt.
 - A `.poni` is applied as it is: its pixel size and frame size are not checked against the data.
 
 Examples from the public data: the P08 file gives (545.46, 1826.95) px, `L` = 811.77 mm, tilt 0.31°; the pyFAI AgBh file gives (179.98, 263.86) px, `L` = 1583.31 mm, tilt 0.57° (note); the Xeuss file gives (7.05, 589.49) px, `L` = 147.58 mm, tilt 6.06° (note).
@@ -1036,7 +1038,7 @@ The nominal band sizes are therefore "5 px high" and "10 px wide". The error mod
 
 **Make Left and Right Symmetric** (Cuts step) moves `x_c` onto the mirror axis of the horizontal band and changes nothing else. The Cuts step and Run Automatic Analysis use the same method; section 8.2 gives it.
 
-**GISAXS q map.** A 600 × 600 grid in `q_y`–`q_z` over the range of the usable pixels (section 6.8).
+**GISAXS q map.** A grid of at most 600 × 600 cells in `q_y`–`q_z` over the range of the usable pixels (section 6.8).
 
 Implementation: `src/gimap/features/analyze/domain/gisaxs.py`, `src/gimap/features/analyze/domain/binning.py`, `src/gimap/features/analyze/domain/symmetry.py`, `src/gimap/features/analyze/domain/symmetry_coarse.py`
 
@@ -1050,11 +1052,12 @@ cell(p) = ( ⌊N_y (y_p − y_0)/(y_1 − y_0)⌋ , ⌊N_x (x_p − x_0)/(x_1 �
 
 | Map | x | y | Grid | Range |
 |---|---|---|---|---|
-| GISAXS q map | `q_y` | `q_z` | 600 × 600 | min to max of the usable pixels |
-| GIWAXS q map | `q_∥` | `q_z` | 800 × 800 | min to max of the usable pixels |
+| GISAXS q map | `q_y` | `q_z` | at most 600 × 600 | min to max of the usable pixels |
+| GIWAXS q map | `q_∥` | `q_z` | at most 800 × 800 | min to max of the usable pixels |
 | Cake | q | χ | 800 (q) × 360 (χ, 0.5° each) | q from 0 to the largest q; χ from −90° to +90° |
 
 - Only usable pixels (valid and above the horizon) enter.
+- A q map is never finer than the detector samples q. Along each axis the cell is at least the step of that coordinate between a usable pixel and its right and lower neighbours (their root sum of squares; the 95th percentile over the usable pixels), so `N = min(N_max, ⌊range / step⌋)`, at least 32. A 619 × 487 frame then gets about 490 × 580 cells instead of 800 × 800, on which nearly half the cells between measured ones stayed empty.
 - Empty cells are NaN; in the cake, the missing wedge next to χ = 0° stays empty.
 - The q maps are stored with row 0 at the largest `q_z`; the cake with row 0 at χ = −90°.
 - The maps carry no σ. They are for display and for export as tables (Save ▸ View Data as CSV…); no curve is computed from them.
@@ -1269,6 +1272,7 @@ h_pk is in counts per pixel above the local linear background; A is in counts pe
 | step_edges (with spike) | a flat-topped box: its 20 %→80 % rise or fall within 3 bins of the 3-bin average, half-maximum width ≥ 15 bins and ≥ 3 × its edges, top ≥ 10 σ | caveat |
 | broad | FWHM above 0.15 q_0 (a halo) | caveat; no size |
 | overlap | another peak closer than 0.75 (FWHM_1 + FWHM_2) | reported only |
+| poor_fit | χ²_red of the peak fit above 10 | reported ("poor fit") in the peak table; the errors are those of equation 7.12 |
 | fit_failed | no usable profile fit | caveat |
 
 A peak with a caveat (step_edges, spike, fit_failed, weak or broad, in this order of precedence) is listed in the
@@ -1277,9 +1281,11 @@ at_edge, whose shape, position and width the end of the searched range may cut o
 end of the data: check". The peaks left, without a caveat and not at the edge, are the *reliable* peaks.
 
 **Series hints.** From each of the three lowest-q reliable peaks, GIMaP looks for the orders of a lamellar
-series (1 : 2 : 3 : 4 : 5) and of a hexagonal series (1 : √3 : 2 : √7 : 3), each order matched within 2 % of its
-expected q. A series is reported when at least three orders (the first included) match. This is a hint; no phase is
-assigned.
+series (1 : 2 : 3 : 4) and of a hexagonal series (1 : √3 : 2 : √7 : 3), each order matched within 2 % of its
+expected q. A series is reported when at least three orders (the first included) match. The orders of a lamellar
+series must follow one another: the search ends at the first missing order, so a peak at 4.92 times the first q with
+the third and fourth order missing is no lamellar series. A hexagonal series must include √3 or √7, the orders a
+lamellar series does not have. This is a hint; no phase is assigned.
 
 Implementation: `src/gimap/features/assistant/domain/peaks.py`
 
@@ -1611,31 +1617,45 @@ result of its own. The fit needs at least 8 points; a cut of more than 1000 poin
 **Scores.** For each solution, with r_i = (I_model(q_i) − I_i)/σ_i:
 
 ```text
-χ²/N = (1/N) Σ_i r_i²                                                                         (8.6)
+χ²ᵣ = Σ_i r_i² / (N − k)                                                                      (8.6)
 logRMSE = √( mean over I_i > 0 of ( ln(I_model,i / I_i) )² )                                      (8.7)
 ```
 
-χ²/N has no degrees-of-freedom correction and is not Fitting's χ²_red (9.23). The probability p of a solution is its
+N counts the points Predict parameters fitted and k its free values (the scales included); σ is the curve's own.
+Predict leaves out the points below the network's q window (q < q_max/300, section 9.13) and those without a usable
+value, and every report says how many (*596 of 598 points; 2 below the network's q window*; `points` of a solution:
+`fitted`, `given`, `below_window`, `unusable`). It is Fitting's χ²_red (9.23) of the same solution on those points,
+and the one number shown for a solution on the Fit page, in the automatic analysis's table, report, CSV and JSON
+and in Batch Export's table (until 0.2.0's release preparation the reports gave a mean over all points handed
+over, χ²/N, which differed from the Fit page's value). The probability p of a solution is its
 composition's posterior probability times the solution's share of it (section 9.13); the solutions are sorted by p,
-most probable first, and the five most probable are kept. A solution's "weight" `a_j / Σ a` is a normalised
+most probable first, and the five most probable are kept. Probabilities are relative to the compositions that
+were tried: the single solution of a composition that was given shows none. A solution's "weight" `a_j / Σ a` is a normalised
 amplitude, not a probability or a volume fraction.
 
 **Values at a bound.** The least squares of Predict parameters keep every population inside the box of the network's
 prior (section 9.13: R from 0.5/q_max to 5/q_min, σR/R, σh/h and σnn/D 0.02–0.5, D and h within the prior's D/2R and
 h/2R at radii up to 1.5 times the start's, the tail's ν 1.8–2.2 and w at most 30 q_min). A free shape or tail value
 within 10⁻⁴ of its range of a bound has *ended on the bound*; the solution names it in `at_bounds` (parameter, lower
-or upper bound, component; the reports call w and ν σ_Res and ν_Res). A value on a bound is not determined by the
+or upper bound, component; the keys `sigma_Res` and `nu_Res` are the tail's w and ν, which every text calls
+Tail w and Tail ν, the names of Fitting's Model table: `shared/fit_names.py` holds the one name of every quantity
+and the sentence of every flag). With Tail A = 0 the tail is absent and its w and ν are not listed, nor flagged; the
+same holds for the values of a population whose Scale is 0. A value on a bound is not determined by the
 curve: the bound, not the data, holds it. These are the non-linear values only. The linear terms a_j, BG and A are
 solved by non-negative least squares and are not in `at_bounds`: one at 0 is held by that limit (a background the
 curve would want below zero, a beam tail that is absent, so that w and ν no longer change the curve), and the report
-names it for the reported solution among the *Decisions* (*fit caveat*: *background BG at 0, the non-negativity
+names it for the reported solution among the *Decisions* (*fit caveat*: *Background at 0, the non-negativity
 limit*).
 
 **The solution the automatic analysis reports** is the most probable one, the first. The fit record keeps its index
 (`chosen`), the Results tab selects it, and `fit_curve.csv` holds its curve. The report's *Decisions* give it
-(*fit*: model, R, D, χ²/N and probability), the 68 % posterior intervals of its R, h and D for every population
-(*fit intervals*: the posterior given the σ of the points, sampled around the solution; the geometry and the choice of
-model are not in it), the warnings of the fit (the flags of section 9.13) and its values at a bound (*fit caveat*).
+(*fit*: model, the R of every population and the D of those with a paracrystal in the order of the radii,
+`R = 3.06 / 6.02 nm, D = 49.4 / – nm`, χ²ᵣ and probability), the refined R, h and D of every population with their
+68 % intervals (*fit intervals*: `R (1) 3.17 [3.04, 3.26] nm`, the refined value and then its interval — the
+posterior given the σ of the points, sampled around the solution, or the least-squares errors when the sampling did
+not converge; the geometry and the choice of model are not in it), the notes of the fit (the flags of section 9.13
+as sentences, one per kind; those about the background, the beam tail and the resolution in one line after those
+about the particles) and its values at a bound (*fit caveat*).
 Further rules of the report (`gisaxs_choice.py`):
 
 - Another solution with p ≥ 0.2: the curve alone does not decide the model (*Needs attention*, **model**). The point
@@ -1645,19 +1665,19 @@ Further rules of the report (`gisaxs_choice.py`):
   by the curve.
 - D ≥ 250 nm in the reported solution: it has no interparticle correlation in the q range, and D is not determined by
   the curve.
-- A reported solution with χ²/N > 10 is a **poor fit** (*Needs attention*, **fit**): it misses the curve by far more
+- A reported solution with χ²ᵣ > 10 is a **poor fit** (*Needs attention*, **fit**): it misses the curve by far more
   than the σ of its points, so none of the compositions tried describes the cut and its R and D are not measurements.
-  The limit is that of Fitting's poor fits of a series (χ²_red > 10; User Manual, section 6.5), which differs from
-  χ²/N only by the degrees-of-freedom correction.
+  The limit is that of Fitting's poor fits of a series (χ²_red > 10; User Manual, section 6.5).
 
 Every number of these texts is formatted once from the fit record (R, h, D to 4 decimals of nm), so a value reads the
 same in the table and in *Needs attention* (48.3484 nm is 48.3 nm in both). **Save Fit Table…** writes one line per
-population of each solution: rank, model, χ²/N, probability, log RMSE, the parameters (nm; the spreads relative), the
+population of each solution: rank, model, χ²ᵣ (`chi2`; a `#` line gives the fitted points), probability, log RMSE, the parameters (nm; the spreads relative), the
 68 % intervals of R, h and D, `at_bounds` (`name:upper` or `name:lower`) and `chosen`.
 
-**GALAXI.** On the public GALAXI frame (α_i = 0.463°, `galaxi_bornagain.poni`) the run reports two upright cylinders
-without a paracrystal, R 3.11 nm and 5.49 nm, χ²/N = 1.27, probability 1.00, and puts *ν_Res at its lower bound* under
-*Needs attention*. The cut's broad log-normal sizes and its low-q rise are described by two populations; the sample's
+**GALAXI.** On the public GALAXI frame (α_i = 0.463°, `galaxi_bornagain.poni`) the run reports an upright cylinder
+with a paracrystal next to a second upright cylinder, R = 3.17 / 6.15 nm, D = 44 / – nm, χ²ᵣ = 1.07 over 596 of 598
+points, probability 0.39; two more solutions have probabilities of 0.32 and 0.30, so *Needs attention* asks for the
+model (**model**). The cut's broad log-normal sizes and its low-q rise are described by two populations; the sample's
 particles are spheres (BornAgain's model, section 9.10), which a fit with a sphere in Model and the particles of
 Model as the composition describes (section 9.13). The choice of model is the user's: the automatic analysis
 describes the cut and gives Fitting a start.
@@ -1693,7 +1713,7 @@ Like the GIWAXS report (section 7.9), the GISAXS report's *Decisions* always say
   band (α_f ≈ α_c) most, by an amount of the order of k sin α_i, and the line gives that number for the frame
   (`2π/λ · sin α_i`; 0.0379 Å⁻¹ for the public GALAXI frame at α_i = 0.463°, λ = 1.34 Å); q_y and 2π/q* barely change.
   With the film's critical angle given (section 2.6) it reads *q_z corrected for refraction in the film (αc = …)*;
-- *uncertainties*: statistical only — the σ of the cuts' points, by which χ²/N is normalised, with the error model of
+- *uncertainties*: statistical only — the σ of the cuts' points, by which χ²ᵣ is normalised, with the error model of
   the frame (Poisson counting statistics, or the pixel scatter of each bin); the geometry and refraction are not
   included. The 68 % intervals of R, h and D (*fit intervals*, section 8.5) are those of the posterior within the
   model given these σ: the choice of model is not in them.
@@ -2719,13 +2739,18 @@ Implementation: `src/gimap/features/fitting/infrastructure/adapters/workflow_v5.
 ### 10.1 Input
 
 Each side of a signed curve is fitted separately (no folding). A side needs 8–1000 points with strictly increasing
-`q > 0`; q = 0 is dropped, nothing is interpolated or invented. q in Å⁻¹ is multiplied by 10. Without σ:
+`q > 0`; q = 0 is dropped, nothing is interpolated or invented. q in Å⁻¹ is multiplied by 10; a file whose header
+states no unit is read in the setting (Å⁻¹ by default, the default of the Fit page too). Without σ the curve gets
+the estimate of Predict parameters on the Fit page (section 9.13, step 2): the
+points with I ≤ 0 are left out, since ln I has no value there, and
 
 ```text
-σ_i = √( (r I_i)² + a² ),   r = 0.1,   a = 0.001 max abs(I)  (at least 10⁻¹²)                         (10.1)
+σ_i = r I_i,   r = max( 0.01, median |ln I_(i+1) − 2 ln I_i + ln I_(i−1)| / (0.6745 √6) )              (10.1)
 ```
 
-(**Relative σ (if missing)** and **Absolute σ floor** in **Parameters…** replace r and a). The side's largest intensity is recorded
+(the robust scatter of ln I about its local trend; r is recorded as `sigma_relative`). For **Use current cut** on a
+curve with the pixel counts of its detector columns, **Relative σ added to counting σ** (0.1) and **Absolute σ added
+to counting σ** (0) in **Parameters…** are added in quadrature to the counting σ. The side's largest intensity is recorded
 as its normalizer; the method sees the curve as measured. The scores of a candidate are those of the measured points:
 logRMSE (natural logarithm, positive points), RMS/σ and the mean of the squared normalised residuals.
 
@@ -2871,7 +2896,7 @@ The start centre is clipped into the window. A failed fit is not remembered, so 
 
 The table gives per frame and peak: q (Å⁻¹) and its error, d (Å), FWHM (Å⁻¹) and its error, area and its error, height, η, χ²_red and the note.
 
-For GISAXS frames, the batch fit instead sends each frame's horizontal cut (the halves chosen) to Predict parameters, as the automatic analysis does (section 8.5): the network chooses among one or two populations of spheres and upright cylinders, with or without a paracrystal, or **Model** gives the composition (a sphere, a random cylinder or a vertical cylinder, with a paracrystal). It needs no starting values, so the starting-value rule applies to the peaks only and every frame is predicted from its own data; nothing is carried from frame to frame. The table has the most probable solution of each frame with its probability, χ²/N and log RMSE; lengths are in nm, q in nm⁻¹. About 25 s per frame.
+For GISAXS frames, the batch fit instead sends each frame's horizontal cut (the halves chosen) to Predict parameters, as the automatic analysis does (section 8.5): the network chooses among one or two populations of spheres and upright cylinders, with or without a paracrystal, or **Model** gives the composition (a sphere, a random cylinder or a vertical cylinder, with a paracrystal). It needs no starting values, so the starting-value rule applies to the peaks only and every frame is predicted from its own data; nothing is carried from frame to frame. The table has the most probable solution of each frame with its probability, χ²ᵣ (8.6) and log RMSE; lengths are in nm, q in nm⁻¹. From some seconds to a few minutes per frame, depending on the number of points and the computer.
 
 Implementation: `src/gimap/features/analyze/application/batch_fit.py`, `src/gimap/features/analyze/domain/peak_fit.py`, `src/gimap/features/analyze/domain/regions.py`
 
@@ -3640,7 +3665,9 @@ UTF-8 without a byte-order mark; GIMaP's own symbols are written in ASCII (`1/A`
 
 - Curve CSV `<stem>_<curve>.csv`: a title line `# GIMaP Analyze export (q in 1/A, angles in deg)`, then
   `# source:` (the path as it is), `# frame:`, `# sum of …` when frames were summed, `# files:` when the frame was read
-  from several files, `# curve:` and `# region:` (JSON).
+  from several files, the record lines of section 14.10 (`# GIMaP v… (Analyze); settings and decisions in
+  <stem>_analysis.json`, one `# input: <file> sha256 <digest>` per input file, `# geometry:`), `# curve:` and
+  `# region:` (JSON). The fit input, the q map and the cake carry the same record lines.
 - Fit input `<stem>_fit_input.dat` (q in Å⁻¹, the curve Fitting reads): the title
   `# GIMaP Analyze fit input (q in 1/A)`, the source, frame and curve lines, `# observation:` (JSON) and
   `# columns:`. The observation says how the points were measured: `source` (`native_detector_columns` for
@@ -3779,7 +3806,7 @@ window's records:
 | Mask | `mask`: `applied` (true or false), `file` (as above), `kind` (a mask image whose non-zero pixels are left out, or a GIMaP masks file with its number of drawn shapes), `masked_pixels`, and `bad_pixels_left_out` (section 14.4): the pixels found automatically are counted apart from the mask. `report.md` says the same under **Mask**, also when no mask was applied |
 | Analyze's record | `analysis_record`: the record of section 14.2 for the frame as it was reduced (geometry, corrections, error model, binning, markers, `input_sha256`), without `files` |
 | Results | the decisions with their reasons (`decisions`), the open questions (`needs_attention`), the steps, the peaks and rings (GIWAXS) or `gisaxs` (cuts, symmetry axis, halves, length scale, fit), `tables` and `folder` (the frame's folder, relative to the summary); in `summary.json` each frame also has `outputs` (the files written) |
-| Model fit | `gisaxs.fit.method`: `name` (`Predict parameters`), `network` (`name`, for example `flow_v1`, and `sha256`: the SHA-256 of the weights file, the value the network's record names and the loader checks) and `seed` (0, section 14.8). `gisaxs.fit.solutions` holds every solution with its model, parameters, probability, χ²/N and `intervals` (median, 68 % and 95 % limits); `curve`, `points` and `q_range_inv_angstrom` say what was fitted, `data` holds the fitted points |
+| Model fit | `gisaxs.fit.method`: `name` (`Predict parameters`), `network` (`name`, for example `flow_v1`, and `sha256`: the SHA-256 of the weights file, the value the network's record names and the loader checks) and `seed` (0, section 14.8). `gisaxs.fit.solutions` holds every solution with its model, parameters, probability, χ²ᵣ (`chi2`, with `points`: `fitted`, `given`, `below_window`, `unusable`), `flags`, `warnings` and `more_warnings` (the flags as sentences: of the particles and the solution, and of background, beam tail and resolution) and `intervals` (median, 68 % and 95 % limits; the texts print the refined value with the 68 % limits); `fitted_points` repeats the points of the fit; `curve`, `points` and `q_range_inv_angstrom` say what was fitted, `data` holds the fitted points |
 
 - `summary.json` is one object: `software_version`, `created`, `options`, `arguments` (one sentence per pattern or
   folder among the arguments: how many files it stood for) and `frames`, the list of the frame reports without
@@ -3789,7 +3816,17 @@ window's records:
   lines: `# GIMaP v… (command line); settings and decisions in report.json`, one
   `# input: <file> sha256 <digest>` line per input file, `# frame:` and `# geometry:` (distance, direct beam,
   wavelength, α_i, detector tilt, and α_c when q_z is refracted). `fit_solutions.csv` then says what the table is
-  and the units of its columns.
+  and the units of its columns. One function writes these lines for the command line and for the files Analyze
+  exports in the window (`export_record.provenance_lines`; there the first line reads `(Analyze)`).
+- `geometry` and `calibration` hold the values as applied, to 15 significant digits (the distance q was computed
+  with, not its four-digit rounding); `report.md` rounds them for reading. `tables` keeps the tools' answers as the
+  AI saw them (four significant digits), except `geometry_used`. Every crystallite size names its unit:
+  `tables.crystallite_sizes[].size_A`, `size_err_A`, `size_nm`, `size_err_nm`, beside `peaks[].size_nm`.
+- `report.md` has a section **Record**: the release, each input file with its SHA-256, the calibration file with
+  its path and SHA-256, the instrument profile with its source (a profile a tool made from a file names the file's
+  full path in brackets), the corrections and the error model. The window's **Save Report…** attaches the same keys
+  (`software_version`, `created`, `inputs`, `mask`, `analysis_record`; `options` is `null` there) and writes the
+  same section into its web page and Markdown.
 - Each frame has its own folder, named by the frame. Frames of the same name in different folders get the nearest
   folder name that tells them apart (`<name>_<folder>`), else a number. An output folder that already holds a
   summary is refused; `--overwrite` first removes the frame folders the earlier `summary.json` lists, nothing else.
@@ -3797,7 +3834,8 @@ window's records:
   durations (`seconds`) in the JSON records. For that reason an instrument profile the run made itself is recorded
   without its time of update.
 
-Implementation: `src/gimap/app/headless_record.py`, `src/gimap/app/headless_inputs.py`,
+Implementation: `src/gimap/app/headless_record.py`, `src/gimap/features/assistant/application/run_record.py`,
+`src/gimap/app/headless_inputs.py`,
 `src/gimap/shared/file_digest.py`, `src/gimap/features/assistant/application/gisaxs_export.py`.
 
 ## 15. What GIMaP does not model
@@ -3833,7 +3871,7 @@ Fitting's optional two-path sphere with a free effective reflection coefficient 
 - **Fitted parameters.** All parameter errors are linearised (Wald) errors, not profile intervals. The GIWAXS peak errors are only inflated by χ²_red, the Fitting errors are scaled by it in both directions (sections 7.4, 9.8). σ_f of the Hermans factor is statistical only: it propagates the bin errors (Poisson counting errors or the pixel scatter), not the background, the window, the geometry or the bins next to the sample horizon (section 7.7).
 - **Geometry in the uncertainties.** No reported ± of a peak position, a d-spacing, a size or f contains the uncertainty of the beam centre, the distance or α_i, or the q_z shift of refraction; the GIWAXS report says so in *Decisions* (section 7.9).
 - **Quantities without an uncertainty.** The symmetry centre (section 8.2), the reference-peak position (section 6.10), the moment width of a peak in a window (section 11.2), stage boundaries, odd-frame flags and Compare groups (section 11.11), XRR points (section 13.1), 2D Prediction outputs (section 13.4).
-- **Scores.** The scores of the automatic analysis and the 1D Predict window (χ²/N, RMS/σ, logRMSE) are not probabilities, and mixture weights are not volume or mass fractions. The probabilities and intervals of Predict parameters are those of Fitting's model and its prior (section 9.13): physics outside the model is not in them, and its benchmarks are simulated curves (an independent model, BornAgain). The Sputter reliability numbers come from simulation within the hemisphere model and are exploratory (sections 12.5, 12.14).
+- **Scores.** The scores of the automatic analysis and the 1D Predict window (χ²ᵣ, RMS/σ, logRMSE) are not probabilities, and mixture weights are not volume or mass fractions. The probabilities and intervals of Predict parameters are those of Fitting's model and its prior (section 9.13): physics outside the model is not in them, and its benchmarks are simulated curves (an independent model, BornAgain). The Sputter reliability numbers come from simulation within the hemisphere model and are exploratory (sections 12.5, 12.14).
 - **SEM.** No summary statistic, distribution fit or test of agreement is computed (section 13.2).
 
 ### 15.4 Data preparation

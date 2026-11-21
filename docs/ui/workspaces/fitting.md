@@ -61,8 +61,13 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
 **Edit ▸ Undo / Redo** 撤销 Single analysis 里模型的改动。条目在 `app/presentation/workspace_menus.py`（`FITTING_MENU`、
 `EDIT_MENU`），由组合根 `app/workspace_commands.py` 注入；从别的页打开时先切到 Fitting，键仍归页面所有。
 
-- **Curve**：卡片（`single/curve_info.py`）写点数、q 范围（nm⁻¹；Å⁻¹ 在卡片提示里）、“σ from the file”；没有 σ 时卡片里和
-  Fit 步骤里各一行警告（“⚠ No σ in the file: every point weighted alike …”，提示里是对各方法的含义）。文件名只在命令栏。
+- **Curve**：卡片（`single/curve_info.py`）写点数、q 范围（nm⁻¹；Å⁻¹ 在卡片提示里）、“σ from the file”；没有 σ 时卡片里一行警告写明各方法怎么做
+  （“⚠ No σ in the file. Predict parameters: a relative σ of … %, estimated from the scatter of ln I about its trend. Refine and
+  Search: ln I is fitted, every point weighted alike.”），Fit 步骤里按所选方法说（Predict：`curve_intake.SIGMA_ESTIMATED`，
+  和 1D Predict 的记录同一句；其余：“⚠ No σ in the file: every point weighted alike”）。曲线接收时的说明统一由
+  `application/curve_intake.py` 给出（`IntakeNote`：`q_unit` 未注明单位而 q 范围不合理、`sigma_estimated`、`nonpositive`
+  负值和零点、`unreadable_rows`），页面用 `intake_texts.py` 翻译；页面上 `curve_notes()` 返回它们，Results 步骤的
+  `fitCurveNotes` 在数值旁边显示警告，1D Predict 的行和记录里是 `curve_notes`。文件名只在命令栏。
   步骤标题下的说明行只在步骤栏和控件没说的时候出现（`show_line`，空时隐藏），用法写在控件提示里；切线两半（Mean of both halves / Both halves on |q| / q > 0 half /
   q < 0 half，`single_fit.SIDES`）。平均（`shared/signed_cut.py`）只在另一半两侧 2.5 个步长内都有测量点处求平均，其余处
   （另一半的缺口、另一半到头之后）用这一半原样，不跨缺口插值。Predict parameters 只能拟合一条曲线（`ONE_CURVE_METHODS`）：
@@ -100,7 +105,7 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
 - **Results**（`views/fit_results_view.py`，`single/result_actions.py`）：自上而下——质量（预测之后：几个解、最可能的已在
   Model，Refine 给出质量和误差）；下一步按钮 Refine These Values（预测之后）、Fit Again（同一方法、用 Model 现在的值）、
   Fit Every Curve in This Folder…；Fit details… 浮窗里是边界与强相关（只列前两对，其余悬停），预测之后是 Model 中那个解的
-  后验区间与标记（`single/predict.posterior_lines`）；值的表格：选中行后 Fix / Let It Fit / Range…（右键同样），下次
+  精修值及其区间、χ²ᵣ 的点数与标记（`single/predict.posterior_lines`，文字在 `single/predict_texts.py`，名字和句子在 `shared/fit_names.py`）；值的表格：选中行后 Fix / Let It Fit / Range…（右键同样），下次
   Fit Again 即用；折叠的 Other solutions（p 列为概率；Predict 和 Analyze 的解）；Save…；日志。
 - **边界**（`domain/fit_edges.py`，`application/single_fit.fit_resolving`）：Model 的固定值和上下限是硬限制。Refine 与
   Search 之后停在范围边上的值只报告（“… stopped at a bound of its range: widen the range or fix it.”），不自动放宽范围，
@@ -173,13 +178,15 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
 
 - 1D Predict 窗口只有一种方法：Predict parameters（`adapters/posterior_job.fit_and_write`；Parameters… 里没有 Fit method
   下拉）。Parameters…：Complete composition（最多 3 个框，各群都带次晶；全为 Auto / unused 时网络在全部组成中选头部最可能的三种）、
-  q unit of files without one in their header、q sides、Cut qz (nm⁻¹)（`cut_qz`；不勾选为有效界面）、Relative σ (if missing)
-  （默认 0.10）、Absolute σ floor、Save Settings。行带 probability、posterior、warnings、ess；Stage 列为 Network + posterior。
+  q unit of files without one in their header、q sides、Cut qz (nm⁻¹)（`cut_qz`；不勾选为有效界面）、Relative σ added to counting σ
+  （默认 0.10）、Absolute σ added to counting σ（只用于带探测器列像素数的当前切线；没有 σ 的曲线用 `curve_intake.relative_sigma`，
+  即 Fit 页 Predict 的估计）、Save Settings。未注明单位的文件默认按 Å⁻¹ 读（与 Fit 页同一个默认值）；文件由 Fit 页的读取器
+  `load_xy_any` 读入。行带 probability、posterior、warnings、ess；Stage 列为 Network + posterior。
 - 旧设置：General V5、Single RC specialist、Physical fit (numerical) 与 fit1d 都已于 0.2.0 删除；保存的旧方法键
   （model、stable、experimental、fit1d）按 `application/workflow_v5.RETIRED_METHODS` 打开为 posterior，其选项（`RETIRED`）丢弃，
   fit1d 的 `fit1d_qz` 保留为 `cut_qz`。
 - 单条曲线的网络建议在 Fit 步骤里（Predict parameters），它的解进 Results 的 Other solutions 表（p 列为概率），Model 中
-  解的后验区间与提示写在 Fit details…（`single/predict.posterior_lines`）。
+  解的精修值及区间、χ²ᵣ 所依据的点数与提示写在 Fit details…（`single/predict.posterior_lines`、`single/predict_texts.py`）。
 - `Fit ▸ Options ▸ 1D Predict Batch Window…`（菜单 Tools ▸ 1D Predict — Fit Many Curves…，Fitting 菜单里同名的一项也是它）打开 1D Predict 窗口：
   Add curves…（若干曲线文件）、Use current cut、Parameters…（组成、q 单位与两半、q_z、σ）、Fit curve、Cancel、
   Open results。每次运行写到 GIMaP 用户数据文件夹下的 `AI_Fitting_Output/v5_<日期>_<时间>_<微秒>/`。

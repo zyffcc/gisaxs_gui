@@ -167,6 +167,9 @@ class PreparedCurve:
     """Points that are the mean of two measurements (``mean`` only); the others come from one half alone."""
     left_out: int = 0
     """Points in the fitting range that the left-out names took away."""
+    negative: int = 0
+    zero: int = 0
+    """Points of the selection with a negative / zero intensity: fitted with their σ, not fitted without σ (ln I)."""
 
     @property
     def points(self) -> int:
@@ -215,7 +218,10 @@ def prepare_points(curve: Curve, side: str = "mean", q_range: Optional[tuple] = 
         averaged = int(np.count_nonzero(halves == 2))
         if halves.size and not averaged and np.all(halves == halves[0]):
             used = "positive" if halves[0] > 0 else "negative"
-    return PreparedCurve(data, used, averaged, int(left_out.sum()))
+    measured = intensity[keep][np.isfinite(q[keep]) & (q[keep] > 0)]
+    measured = measured[np.isfinite(measured)]
+    return PreparedCurve(data, used, averaged, int(left_out.sum()), int(np.count_nonzero(measured < 0)),
+                         int(np.count_nonzero(measured == 0)))
 
 
 def prepare_curve(curve: Curve, side: str = "mean", q_range: Optional[tuple] = None, excluded=(), *,

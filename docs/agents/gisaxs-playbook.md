@@ -51,8 +51,8 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
    `fit intervals`；区间不含几何和模型选择）。另一个解的概率 ≥ 0.2（`ASK_PROBABILITY`）时，Needs attention 里有一条 “model”：
    曲线本身定不了模型。停在范围边界上的非线性参数列在每个解的 `at_bounds` 里（表里写 “D at its upper bound”），它们不由
    曲线确定；报告的解有这样的值时 Needs attention 里有一条 “fit”。振幅、背景 BG 和直射束拖尾振幅 A 按非负最小二乘求解，
-   不算边界：等于 0 时 Decisions 有一条 `fit caveat`（“background BG at 0, the non-negativity limit”；A = 0 时 σ_Res、ν_Res
-   不影响曲线）。报告的解已收敛但 χ²/N > 10（与 Fitting 序列 “拟合差” 的 χ²ᵣ 限值相同）时 Needs attention 里有一条 “fit”：
+   不算边界：等于 0 时 Decisions 有一条 `fit caveat`（“Background at 0, the non-negativity limit”；Tail A = 0 时 Tail w、Tail ν
+   不影响曲线）。报告的解已收敛但 χ²ᵣ > 10（与 Fitting 序列 “拟合差” 的 χ²ᵣ 限值相同）时 Needs attention 里有一条 “fit”：
    试过的组成都描述不了这条切线，R、D 不是测量值（粉末或标样的布拉格环会这样）。
    网络只凭曲线选组成，所以要用用户知道的形状在 Fitting 里确认（手册第 13 章）。`--no-fit` 只准备切线，不拟合。
 
@@ -65,7 +65,7 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
 
 | 看什么 | 为什么 | 怎么做 |
 |---|---|---|
-| 模型的选择 | 解按后验概率排序，表里的 χ²/N 是 σ 归一化残差 r² 的平均，没有自由度修正（不同于 Fitting 的 χ²ᵣ）。另一个解的概率 ≥ 0.2 时曲线本身定不了模型，所以 Needs attention 里的 “model” 是**正常结果**，不是失败。网络只凭曲线选：公开的 GALAXI 银球帧上它报告两种竖直圆柱（见下） | 用户给了材料或形状就按它选：在 Fitting 里用 Predict parameters 的 *The particles in Model* 拟合那个模型，再精修并比较拟合曲线和残差。D 与 2π/q* 接近不是证据 |
+| 模型的选择 | 解按后验概率排序，表里的 χ²ᵣ 是 σ 归一化残差 r² 的平均，没有自由度修正（不同于 Fitting 的 χ²ᵣ）。另一个解的概率 ≥ 0.2 时曲线本身定不了模型，所以 Needs attention 里的 “model” 是**正常结果**，不是失败。网络只凭曲线选：公开的 GALAXI 银球帧上它报告两种竖直圆柱（见下） | 用户给了材料或形状就按它选：在 Fitting 里用 Predict parameters 的 *The particles in Model* 拟合那个模型，再精修并比较拟合曲线和残差。D 与 2π/q* 接近不是证据 |
 | 停在范围边界上的数值 | `at_bounds` 里的数值由边界而不是数据决定 | 转述报告的 `chosen` 解；它处于边界时要说出来，不要引用边界上的值 |
 | 报告的解没有粒子间关联 | D ≥ 250 nm 说明该解在 q 范围内没有粒子间关联（Decisions 的 `fit caveat`） | 不要把这样的 D 当成测得的距离 |
 | 切线位置 | Yoneda 带之外的切线会混进别的散射 | `get_curve vertical` 看 Yoneda 带和镜面峰的位置是否与 αi、λ 一致；`set_gisaxs_cuts` 换位置 |
@@ -90,7 +90,8 @@ python tools/gimap_agent.py auto tests/data/external/gisaxs_galaxi/galaxi_data.t
 - Yoneda 带在第 605–609 行；对称轴在 597.26 px；两半取平均（到 |qy| = 0.179 Å⁻¹，之后 qy < 0 一半单独到 0.278 Å⁻¹；
   有 15 个点落在另一半的缺口里，只来自一半）；
 - shoulder 在 |qy| = 0.0113 Å⁻¹，2π/q* = 55.6 nm（特征长度；接近模型的 53.6 nm 只是巧合，去掉干涉的模拟也有 shoulder）；
-- 报告的解（`chosen`）是两种不带次晶的竖直圆柱：R = 3.11 nm 和 5.49 nm、χ²/N 1.27、概率 1.00；Needs attention 里有一条
-  “fit”：ν_Res 处于下界。很宽的对数正态尺寸分布（σ 0.4）和低 q 的上升在这里被两种颗粒群描述。
+- 报告的解（`chosen`）是一群带次晶的竖直圆柱加第二群竖直圆柱：R = 3.17 / 6.15 nm、D = 44 / – nm、χ²ᵣ 1.07（598 个点中的
+  596 个）、概率 0.39；另两个解的概率为 0.32 和 0.30，Needs attention 里有一条 “model”。很宽的对数正态尺寸分布（σ 0.4）和
+  低 q 的上升在这里被两种颗粒群描述。
 
-这个例子正好说明：选模型要看用户知道的形状（这里是球），并在 Fitting 里确认；不能只看概率或 χ²/N，也不能把 2π/q* 当间距。
+这个例子正好说明：选模型要看用户知道的形状（这里是球），并在 Fitting 里确认；不能只看概率或 χ²ᵣ，也不能把 2π/q* 当间距。

@@ -40,9 +40,8 @@ ZH_ENTRIES = {
     "q unit of files without one in their header": "文件头未注明时的 q 单位",
     "q sides": "q 的两侧",
     "Each half separately": "两半分别拟合",
-    "Auto: 0.1% peak": "自动：峰值的 0.1%",
-    "Relative σ (if missing)": "相对 σ（文件里没有时）",
-    "Absolute σ floor": "σ 绝对下限",
+    "Relative σ added to counting σ": "加到计数 σ 上的相对 σ",
+    "Absolute σ added to counting σ": "加到计数 σ 上的绝对 σ",
     "In-situ · 1D prediction parameters": "原位 · 一维预测参数",
     "In-situ prediction parameters": "原位预测参数",
     "Save creates a new settings snapshot for future frames. Completed frames are unchanged.":
@@ -149,7 +148,7 @@ def test_the_spin_boxes_show_their_values_without_trailing_zeros() -> None:
     dialog.cut_qz.interpretText()
     assert dialog.options()["cut_qz"] == 0.00855 and dialog.options()["absolute_noise"] == 7.25
     dialog.noise_floor.setValue(0)
-    assert dialog.noise_floor.text() == "Auto: 0.1% peak"
+    assert dialog.noise_floor.text() == "None"  # nothing added to the counting σ
     _close(dialog)
 
 

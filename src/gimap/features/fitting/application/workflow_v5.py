@@ -33,13 +33,16 @@ def q_unit_of_file(stated_unit, path, options: dict) -> dict:
 
 
 def default_options() -> dict:
+    """``q_unit``: of files whose header states none — Å⁻¹, the default of the Fit page's setting too (one default
+    for all of Fitting; settings saved with nm⁻¹ keep it). ``relative_noise`` / ``absolute_noise``: added to the
+    counting σ of detector columns (Use current cut); a curve without σ gets ``curve_intake.relative_sigma``."""
     return dict(
         method="posterior",
         components=[],
         max_solutions=8,
         relative_noise=0.10,
         absolute_noise=0.0,
-        q_unit="nm^-1",
+        q_unit="A^-1",
         render_points=500,
         side="both",
         cut_qz=None,

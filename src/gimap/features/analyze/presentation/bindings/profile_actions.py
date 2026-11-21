@@ -159,6 +159,7 @@ class ProfileActionsMixin(GeometryEditorMixin, FitHandoverMixin):
                 self.incidence_spin.setValue(preferences.incidence_deg)
         # An αi kept from the last session is said once, with the first frame (``bindings/incidence.py``).
         self._incidence_notice_pending = preferences.incidence_deg is not None
+        self._incidence_profile = preferences.incidence_profile
         with QSignalBlocker(self.auto_export_check):
             self.auto_export_check.setChecked(preferences.auto_export)
         self._refresh_profiles()
@@ -174,6 +175,7 @@ class ProfileActionsMixin(GeometryEditorMixin, FitHandoverMixin):
                     mode=getattr(self, "_kept_mode", None) or state.mode,  # not a switch the automatic run made
                     profile_name=state.profile_name,
                     incidence_deg=state.incidence_deg,
+                    incidence_profile=self._incidence_profile,
                     last_folder=self._last_folder,
                     auto_export=self.auto_export_check.isChecked(),
                 ),

@@ -287,15 +287,16 @@ def test_a_frame_without_counts_is_not_fitted_and_the_reason_names_the_frame_not
         assert str(refused.value) == sentence, (halves, str(refused.value))
 
 
-def test_the_readme_of_a_model_fit_calls_its_chi2_chi2_over_n_not_reduced() -> None:
+def test_the_readme_of_a_model_fit_says_its_chi2_is_the_reduced_one_fitting_shows() -> None:
     def fit_line(fit: str) -> str:
         text = readme_text(BatchChoices(tables=False, fit=fit), batch="run", frame="f", frames=3, curves=[],
                            halves="mean")
         return next(line for line in text.splitlines() if "_fits.csv  " in line)
 
     model = fit_line("model")
-    assert "run_model_fits.csv" in model and "chi2/N" in model and "no degrees-of-freedom correction" in model
-    assert "reduced chi2" not in model.replace("not Fitting's reduced chi2", "") and "errors" not in model
+    assert "run_model_fits.csv" in model and "chi2 = the reduced chi2" in model and "the number Fitting shows" in model
+    assert "(N - number of free values)" in model and "below the network's q window" in model
+    assert "chi2/N" not in model and "no degrees-of-freedom correction" not in model and "errors" not in model
     assert "reduced chi2" in fit_line("peaks")  # the peak table's "chi2 red" is a reduced chi2
 
 
@@ -444,7 +445,7 @@ def test_try_on_this_frame_fits_the_halves_of_the_dialog_and_says_what_it_fitted
     rows = _Fitter()(None, None, None, halves="negative")
     text, level = fit_summary(rows, asked[0])
     assert level == "ok" and text.splitlines()[0].startswith("Most probable: sphere (S) (p = 0.90), R = 5")
-    assert " nm, χ²/N = " in text.splitlines()[0]  # the mean r², not a χ²ᵣ
+    assert " nm, χ²ᵣ = " in text.splitlines()[0]  # the mean r², not a χ²ᵣ
     assert text.splitlines()[1] == "Fitted: q < 0 half, 59 points"
     rows[0]["preparation"].update(points=630, merged=2, halves="mean")
     assert fit_summary(rows, asked[0])[0].splitlines()[1] == (
@@ -810,7 +811,7 @@ def test_every_new_sentence_is_said_in_chinese_and_the_reasons_are_recognised() 
         assert batch_texts.fit_reason_text(MISSING_HALF["positive"]) == "q > 0 一半没有数据点"
         assert batch_texts.try_failed_text(MISSING_HALF["negative"]).startswith("这一帧 q < 0 一半没有数据点：请选择")
         assert batch_texts.fit_reason_text(BAD_SIGMA) == "给出的每个 σ 都必须是有限的正数"
-        assert batch_texts.fit_reason_text("sphere, χ²/N 1.1") == "sphere, χ²/N 1.1"  # no reason: as it came
+        assert batch_texts.fit_reason_text("sphere, χ²ᵣ 1.1") == "sphere, χ²ᵣ 1.1"  # no reason: as it came
         # a frame without counts: the batch's own reason and, were the fit asked all the same, the fit's
         blank = SimpleNamespace(fit_frames=[{"frame": "c", "state": "failed", "reason": NO_INTENSITY["mean"]}])
         assert batch_texts.fit_end_text(blank) == "模型拟合：1 帧中拟合了 0 帧 —— 水平切线上没有大于零的强度"
