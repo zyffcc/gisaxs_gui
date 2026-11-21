@@ -264,38 +264,31 @@ def test_a_right_click_on_a_number_field_opens_a_chinese_menu(monkeypatch) -> No
 def test_only_what_fitting_reads_is_a_curve_for_the_window() -> None:
     from src.gimap.features.fitting.application import CURVE_SUFFIXES
 
-    assert main_module.CURVE_SUFFIXES == tuple(CURVE_SUFFIXES) == (".dat", ".txt", ".h5")  # .h5: NXcanSAS curves
-    assert main_module.TABLE_SUFFIXES == (".csv",)
+    # .csv: by the names of its header (since 0.2.0); .h5: NXcanSAS curves
+    assert main_module.CURVE_SUFFIXES == tuple(CURVE_SUFFIXES) == (".dat", ".txt", ".csv", ".h5")
+    assert main_module.TABLE_SUFFIXES == ()
     assert ".dat" in main_module.NOT_A_CURVE and "_fit_input.dat" in main_module.NOT_A_CURVE
 
 
-def test_a_csv_table_dropped_on_fitting_is_not_opened_and_the_notice_says_why(window, monkeypatch, tmp_path) -> None:
+def test_a_csv_table_dropped_on_fitting_opens_there(window, monkeypatch, tmp_path) -> None:
     table = tmp_path / "film_horizontal.csv"
     table.write_text("# GIMaP Analyze cut\n# q in 1/A\nq,I,sigma,pixels\n0.01,100,1,12\n0.02,80,1,12\n", encoding="utf-8")
-    curve = tmp_path / "film_fit_input.dat"
-    curve.write_text("0.1 10 1\n0.2 8 1\n0.3 6 1\n", encoding="utf-8")
     components = window.components
     fit_page = components.fitting_workspace.fit_page
     opened, sent_on = [], []
-    monkeypatch.setattr(fit_page, "open_curve", lambda path, side=None: opened.append(path))
+    monkeypatch.setattr(fit_page, "open_curve_file", lambda path: opened.append(str(path)))
     monkeypatch.setattr(components, "open_dropped", lambda paths: sent_on.append(list(paths)))
     _navigate(window, "fitting")
     _settle()
     assert _drop(fit_page, [table])
-    assert opened == [] and sent_on == []  # neither to Fitting's reader nor to Analyze as a frame
+    assert opened == [str(table)] and sent_on == []  # Fitting's reader: q, I, σ by the header's names
     assert components.current_page_key() == "fitting"
-    notice = visible_toasts(window)[-1]
-    assert notice.text() == f"Could not open film_horizontal.csv: {main_module.NOT_A_CURVE}"
-    assert notice.property("level") == "warning"
-
-    assert _drop(fit_page, [table, curve])  # with a curve beside it, the curve opens
-    assert opened == [str(curve)] and sent_on == []
-    window.open_dropped([str(table), str(tmp_path / "frame.tif")])  # the rest goes on to Analyze
-    assert sent_on == [[str(tmp_path / "frame.tif")]]
+    window.open_dropped([str(table), str(tmp_path / "frame.tif")])  # the curve opens in Fitting
+    assert opened[-1] == str(table) and sent_on == []
 
     components.show_page("analyze")  # elsewhere a .csv is no curve of Fitting: left to the page shown, as before
     window.open_dropped([str(table)])
-    assert sent_on[-1] == [str(table)] and opened == [str(curve)]
+    assert sent_on[-1] == [str(table)]
 
 
 # -- Tools ▸ Convert Current File… with the converter already open (R12, the shell's half) ----------------

@@ -463,7 +463,7 @@ def test_saves_report_errors_and_leave_no_table_without_its_record(tmp_path, mon
         assert page.save_model_dialog(str(tmp_path / "model.json")) is None
     assert not (tmp_path / "b.csv").exists() and not (tmp_path / "b.json").exists()  # the table went with its record
     assert page.status_label.text().startswith("Could not save:")
-    assert page.export_plot_dialog(str(tmp_path / "missing" / "plot.png")) is None  # QImage.save says False
+    assert page.export_plot_dialog(str(tmp_path / "missing" / "plot.png")) is None  # no folder is made
     assert page.status_label.text().startswith("Could not save:") and "Saved" not in page.status_label.text()
     assert page.export_data_dialog(str(tmp_path / "ok.csv")) == str(tmp_path / "ok.csv")
     assert (tmp_path / "ok.csv").exists() and (tmp_path / "ok.json").exists()
@@ -543,7 +543,7 @@ def test_predict_parameters_shows_on_the_rail_and_its_row_is_selected(tmp_path) 
     solutions = page.session.solutions
     assert len(solutions) == 5 and page.session.result is None
     assert page.step_rail.state("fit") == "ok" and page.step_rail.state("results") == "ok"
-    assert page.step_rail.detail("fit").startswith("5 solutions · best Sphere χ²ᵣ")
+    assert page.step_rail.detail("fit").startswith("5 solutions · best Sphere #1 χ²ᵣ")  # five of one composition
     assert page.step_rail.detail("results") == "5 solutions to compare"
     assert page.solutions_table.horizontalHeaderItem(4).text() == "χ²ᵣ"
     best = next(line for line, item in enumerate(solutions) if item.model == page.session.model)

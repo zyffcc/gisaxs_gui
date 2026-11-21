@@ -224,9 +224,8 @@ nanoparticles, GALAXI), about ten minutes each.
 3. **Results** gives χ²ᵣ, every value ± 1σ and warnings (a value at a bound, strongly correlated values).
    The **Fitting** menu saves the data and fit (CSV with a JSON record), the plot and the model.
 
-Fitting shows q in nm⁻¹ (Analyze uses Å⁻¹; the Curve step shows both). Fitting opens `.dat` and `.txt`
-curves; the `.csv` curves that Analyze exports are not read by Fitting — use **Send to Fitting**, or the
-`<name>_fit_input.dat` file written next to them.
+Fitting shows q in nm⁻¹ (Analyze uses Å⁻¹; the Curve step shows both). Fitting opens `.dat`, `.txt` and `.csv`
+curves (a CSV by the names of its header: q, I, σ) and NXcanSAS `.h5` files.
 
 ## Predict parameters and 1D Predict
 

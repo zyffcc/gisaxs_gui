@@ -7,7 +7,9 @@ the fitting range, over the residuals. A status line with a progress bar closes 
 
 from __future__ import annotations
 
-from PyQt5.QtCore import Qt
+from typing import Optional
+
+from PyQt5.QtCore import QEvent, QObject, Qt
 from PyQt5.QtWidgets import (
     QAction,
     QCheckBox,
@@ -29,6 +31,49 @@ from src.gimap.app.presentation.components import CurvePlot
 from .fit_steps_view import FitStepsView
 
 RESIDUAL_HEIGHT = 130
+STATUS_SHARE = 0.6
+"""The status line takes at most this share of the page's width: the notices at the bottom right keep off its text."""
+
+
+class StatusLabel(QLabel):
+    """The status line: one line, shortened with “…” to fit, the whole text in its tooltip. ``text()`` is the whole
+    text (what was set; the language walker looks it up, the notices keep off it)."""
+
+    def __init__(self, parent: Optional[QWidget] = None):
+        super().__init__("", parent)
+        self._full = ""
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+
+    def setText(self, text: str) -> None:  # noqa: N802 - Qt API
+        self._full = str(text)
+        self._shorten()
+
+    def text(self) -> str:  # noqa: D401 - Qt API
+        return self._full
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().resizeEvent(event)
+        self._shorten()
+
+    def _shorten(self) -> None:
+        line = " ".join(self._full.split())
+        shown = self.fontMetrics().elidedText(line, Qt.ElideRight, max(40, self.width() - 4))
+        super().setText(shown)
+        super().setToolTip(self._full if shown != self._full else "")
+
+
+class _StatusWidth(QObject):
+    """Keeps the status line within ``STATUS_SHARE`` of the page's width as the page is resized."""
+
+    def __init__(self, page: QWidget, label: QLabel):
+        super().__init__(page)
+        self.label = label
+        page.installEventFilter(self)
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API
+        if event.type() == QEvent.Resize:
+            self.label.setMaximumWidth(max(240, int(STATUS_SHARE * watched.width())))
+        return False
 
 
 def _separator(parent: QWidget) -> QFrame:
@@ -114,7 +159,14 @@ class FitPageView(FitStepsView):
         export_menu = QMenu(self.export_button)
         self.export_data_action = export_menu.addAction("Data and Fit…")
         self.export_plot_action = export_menu.addAction("Plot…")
+        self.export_plot_action.setToolTip("The plot with the residuals: PNG, SVG or PDF, with error bars")
         self.save_model_action = export_menu.addAction("Model…")
+        self.export_solutions_action = export_menu.addAction("Solutions…")
+        self.export_solutions_action.setToolTip(
+            "Every solution of Predict parameters: probability, χ²ᵣ, flags and every value with its intervals "
+            "(CSV and JSON), and their curves")
+        self.export_solutions_action.setEnabled(False)
+        export_menu.setToolTipsVisible(True)
         self.export_button.setMenu(export_menu)
         for widget in (self.open_button, self.import_curves_button, self.undo_button, self.redo_button):
             row.addWidget(widget)
@@ -178,17 +230,18 @@ class FitPageView(FitStepsView):
     def _status_row(self, page: QWidget) -> QHBoxLayout:
         row = QHBoxLayout()
         row.setSpacing(8)
-        self.status_label = QLabel("", page)
+        self.status_label = StatusLabel(page)
         self.status_label.setObjectName("fitStatusLabel")
-        self.status_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.status_progress = QProgressBar(page)
         self.status_progress.setObjectName("fitStatusProgress")
         self.status_progress.setRange(0, 100)
         self.status_progress.setMaximumWidth(220)
         self.status_progress.hide()
         row.addWidget(self.status_label, 1)
+        row.addStretch(0)
         row.addWidget(self.status_progress)
+        self._status_width = _StatusWidth(page, self.status_label)
         return row
 
 
-__all__ = ["FitPageView", "RESIDUAL_HEIGHT"]
+__all__ = ["FitPageView", "RESIDUAL_HEIGHT", "STATUS_SHARE", "StatusLabel"]

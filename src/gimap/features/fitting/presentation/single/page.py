@@ -4,7 +4,9 @@ Built like Analyze: the steps on the left (each says where it stands), the plot 
 points (those outside the fitting range paler), the model over the whole curve and, on demand,
 each of its terms; the orange band is the fitting range and can be dragged — and the residuals
 below. Fitting itself (four methods, one Fit button) is in ``run.py``; results and export in
-``results.py``.
+``results.py`` (the solutions: ``solutions_export.py``; the figure: ``figure_export.py``); a project in ``project.py``;
+Undo and Redo in ``history.py``. A CSV whose header does not say which columns are q, I and σ is shown, and the
+columns are asked for (``curve_columns_dialog.py``).
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.task_runner import TaskRunner
 
-from ...application import CURVE_SUFFIXES, LoadCurveRequest
+from ...application import COLUMNS_TO_CHOOSE, CURVE_SUFFIXES, LoadCurveRequest
 from ...application.models import InSituSourceFrame
 from ...application.single_fit import (
     ANALYZE_SIDES,
@@ -33,14 +35,20 @@ from ...application.single_fit import (
     model_from_solution,
     model_to_dict,
 )
+from ..curve_columns_dialog import choose_columns
 from ..views.fit_page_view import FitPageView
 from ..views.step_widgets import show_line
 from .curve_info import CurveInfoMixin
-from .curve_unit import SETTING_KEY, CurveUnitMixin
+from .curve_unit import CurveUnitMixin
 from .drops import CurveDropMixin, SplitterMemoryMixin
 from .exclusion import FitExclusionMixin
+from .figure_export import FigureExportMixin
+from .history import HistoryMixin
 from .predict import PredictPageMixin
 from .predict_texts import count_solutions
+from .project import FitProjectMixin
+from .solution_texts import numbered_labels
+from .solutions_export import SolutionsExportMixin
 from .method_hint import MethodHintMixin
 from .equivalent_solutions import EquivalentSolutionsMixin
 from .result_actions import ResultActionsMixin
@@ -51,7 +59,11 @@ from .run import FitRunMixin
 from .session import FitSession, Solution, model_label
 
 CURVE_FILTER = "Curves ({});;All files (*)".format(" ".join(f"*{suffix}" for suffix in CURVE_SUFFIXES))
-"""The curve files the reader takes (``application.CURVE_SUFFIXES``: .dat, .txt, NXcanSAS .h5)."""
+"""The curve files the reader takes (``application.CURVE_SUFFIXES``: .dat, .txt, .csv, NXcanSAS .h5)."""
+NOT_CHOSEN = "{name} was not opened: its columns were not chosen."
+TOAST_LEVELS = ("warning", "error")
+"""Outcomes said in a notice as well as in the status line; an outcome without a button (Open Folder) that went
+well is said in the status line only — one place, not two that overlap."""
 CHOOSE_CURVE = "{name} holds {count} curves. Which one is to be fitted?"
 """An NXcanSAS file of several curves (Open Curve…, a dropped file): asked once, by the curves' titles."""
 PREFERENCES_KEY = "fitting_single_page"
@@ -67,7 +79,9 @@ def _saved_source(token):
 
 
 class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunMixin, FitResultsMixin,
-              FitExclusionMixin, PredictPageMixin, MethodHintMixin, EquivalentSolutionsMixin, ResultActionsMixin, CurveUnitMixin, CurveInfoMixin, FitPlotMixin):
+              FitExclusionMixin, PredictPageMixin, MethodHintMixin, EquivalentSolutionsMixin, ResultActionsMixin,
+              CurveUnitMixin, CurveInfoMixin, FitPlotMixin, FitProjectMixin, SolutionsExportMixin, FigureExportMixin,
+              HistoryMixin):
     curveOpened = pyqtSignal(str)
     """The file of the curve now on the page (In-situ series takes its set-up from it)."""
     batchRequested = pyqtSignal()
@@ -106,6 +120,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.setup_equivalent_solutions()
         self.setup_run()
         self.setup_results()
+        self.setup_solutions_export()
         self.setup_result_actions()
         self.setup_exclusion()
         self.setup_curve_unit()  # the unit of q of files without one in their header (curve_unit.py)
@@ -159,6 +174,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         result, solutions = session.result, session.solutions
         # Solutions count as a fit only when searched here, and only on the points they were searched on.
         searched, current = session.solutions_searched(), session.solutions_are_current()
+        self.refresh_solutions_export()
         stale = tr("Changed after the fit: Fit again")
         if self.fit_running():
             self.step_rail.set_state("fit", "busy", tr("Fitting …"))
@@ -173,7 +189,8 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         elif searched:
             best = solutions[0]
             self.step_rail.set_state("fit", "ok", trf(
-                "{solutions} · best {model} {chi} {value}", solutions=count_solutions(len(solutions)), model=best.label,
+                "{solutions} · best {model} {chi} {value}", solutions=count_solutions(len(solutions)),
+                model=numbered_labels(solutions)[0],
                 chi="χ²ᵣ" if best.points or curve is None or curve.sigma is not None else "var ln I",
                 value=f"{best.chi2:.3g}" if np.isfinite(best.chi2) else "—"))
         elif solutions:  # a solution of Analyze: its χ² is Analyze's, not of a fit here
@@ -189,8 +206,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
                                      if current else stale)
         else:
             self.step_rail.set_state("results", "pending", tr("After a fit"))
-        self.undo_button.setEnabled(session.can_undo())
-        self.redo_button.setEnabled(session.can_redo())
+        self.refresh_history_buttons()  # with the step each would take (history.py)
         self.fit_button.setEnabled(curve is not None and not self.fit_running())
         self.fit_step_button.setEnabled(curve is not None and not self.fit_running())
         self._refresh_method_hint()
@@ -218,7 +234,16 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             if not ok:
                 return False
             path = InSituSourceFrame(Path(path), frame_index=items.index(chosen)).token
-        return self.open_curve(path)
+        if self.open_curve(path):
+            return True
+        if self.view_model.state.error_message != COLUMNS_TO_CHOOSE:
+            return False
+        chosen = choose_columns(self, path, self.view_model.inspect_curve_table, self.unit_setting())
+        if chosen is None:
+            self._status(lambda: tr(NOT_CHOSEN).format(name=Path(path).name), "warning")
+            return False
+        columns, unit = chosen
+        return self.open_curve(InSituSourceFrame(Path(path), columns=columns).token, unit=unit)
 
     def open_curve(self, path, side: Optional[str] = None, *, unit: Optional[str] = None) -> bool:
         """Load a curve file (Analyze's cuts: q in Å⁻¹, signed); ``side`` as Analyze names it. Its q is read in the
@@ -227,9 +252,9 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         source = _saved_source(path)
         name = source.display_name if source is not None else path.name.split("::gimap", 1)[0]
         outcome = self.view_model.load_curve(LoadCurveRequest(path, unit or self.unit_setting()))
-        if outcome.error is not None:
-            self._status(lambda: tr("Could not open {name}: {reason}").format(name=name,
-                                                                              reason=tr(outcome.error.message)), "error")
+        if outcome.error is not None:  # (columns to choose: Open Curve… asks next, open_curve_file)
+            self._status(lambda: tr("Could not open {name}: {reason}").format(name=name, reason=tr(outcome.error.message)),
+                         "info" if outcome.error.message == COLUMNS_TO_CHOOSE else "error")
             return False
         loaded = outcome.value
         made = (getattr(loaded, "observation", None) or {}).get("curve_source") or {}
@@ -237,7 +262,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             name = f"{Path(str(made.get('path'))).name} · curve {made.get('curve')}"  # a name, as records keep it
         curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=name, path=str(path),
                                   unit=loaded.q_source_unit, unit_from=getattr(loaded, "q_unit_from", ""),
-                                  rows_left_out=getattr(loaded, "rows_left_out", 0))
+                                  rows_left_out=getattr(loaded, "rows_left_out", 0), columns=made.get("columns"))
         self._halt_fit()  # a fit of the curve before stops; what it brings back is not kept (run.py)
         self.session.set_curve(curve)
         if side is not None and curve.signed:  # a curve with one side has no halves to choose from
@@ -298,7 +323,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
     # -- the model ------------------------------------------------------------------------
 
     def _model_edited(self, model) -> None:
-        if self.session.set_model(model):
+        if self.session.set_model(model, label=("an edit in Model", {})):
             self._model_changed()
 
     def _model_changed(self, *, editor: bool = False) -> None:
@@ -311,27 +336,13 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self._refresh_steps()
         self.render_results()
 
-    def set_model(self, model, *, message=None) -> None:
-        """``message``: the status line (or a function that makes it), when one is wanted."""
-        if self.session.set_model(model):
+    def set_model(self, model, *, message=None, label: tuple = ()) -> None:
+        """``message``: the status line (or a function that makes it), when one is wanted; ``label``: what the
+        change is, named by Undo (``Snapshot.label``)."""
+        if self.session.set_model(model, label=label):
             self._model_changed(editor=True)
         if message:
             self._status(message, "ok")
-
-    def undo(self) -> None:
-        """The model, the fitting range and the left-out points before the last change; back at a fit's
-        own, the fit holds again (its quality and errors)."""
-        if self.session.undo():
-            self._history_moved()
-
-    def redo(self) -> None:
-        if self.session.redo():
-            self._history_moved()
-
-    def _history_moved(self) -> None:
-        self._remember(model=model_to_dict(self.session.model))
-        self._remember_curve()
-        self._render_all()
 
     def show_solution(self, row: dict) -> bool:
         """A solution of Analyze's automatic analysis (Results ▸ Show in Fitting) as the model."""
@@ -343,7 +354,8 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.session.solutions = [Solution(model, float(row.get("best_chi2_weighted") or np.nan), "Analyze", deviation)]
         self.session.solutions_selection = None  # not searched here: its χ² is Analyze's, of Analyze's points
         self.session.result = None  # as when a solution is chosen in Results: a new start
-        self.set_model(model)
+        self.session.refined_from, self.session.model_from = None, 0
+        self.set_model(model, label=("Analyze's solution in Model", {}))
         self._refresh_steps()  # also when the model was already this one
         self.render_results()
         self.show_step("model")
@@ -370,7 +382,9 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         except (OSError, ValueError, KeyError, TypeError) as exc:
             self._status(lambda reason=str(exc): tr("Could not load the model: {reason}").format(reason=reason), "error")
             return
-        self.set_model(model, message=lambda: tr("Loaded the model from {name}.").format(name=Path(path).name))
+        self.session.model_from = None
+        self.set_model(model, message=lambda: tr("Loaded the model from {name}.").format(name=Path(path).name),
+                       label=("the model from {name}", {"name": Path(path).name}))
 
     # -- the plot -------------------------------------------------------------------------
 
@@ -399,9 +413,9 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         ``text``: the line, or a function that makes it — made again after a switch of the interface language."""
         self._status_text = text if callable(text) else None
         text = text() if callable(text) else text
-        self.status_label.setText(text)
+        self.status_label.setText(text)  # one line, shortened to fit; its tooltip has it whole
         self._log(text)
-        if level in ("ok", "warning", "error") and self.isVisible():
+        if (level in TOAST_LEVELS or (level == "ok" and action is not None)) and self.isVisible():
             show_toast(self.window(), text, level=level, action=action)
 
     def _log(self, text: str) -> None:
@@ -456,49 +470,6 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
                 self._exclusions_changed()
             if last.get("method") is not None:
                 self.set_method(last["method"])
-
-    # -- a project -------------------------------------------------------------------------
-
-    def project_state(self) -> dict:
-        session, curve = self.session, self.session.curve
-        return {
-            "curve": None if curve is None or not curve.path else {
-                "path": curve.path, "unit": curve.source_unit, "side": session.side,
-                "q_range": None if session.q_range is None else list(session.q_range),
-                "excluded": sorted(session.excluded)},
-            "model": model_to_dict(session.model), "method": self.method(), SETTING_KEY: self.unit_setting(),
-        }
-
-    def apply_project_state(self, data: dict) -> list[str]:
-        notes = []
-        self._gisaxs_cut = False
-        if isinstance(data.get("model"), dict):
-            try:
-                self.session.model = model_from_dict(data["model"])
-                self.session.edited = True
-            except (ValueError, KeyError, TypeError) as exc:
-                notes.append(tr("the Fitting model could not be read: {reason}").format(reason=exc))
-        self.set_method(data.get("method"))
-        self.set_unit_setting(data.get(SETTING_KEY))  # (an older project has none: its curve's unit is used)
-        curve = data.get("curve") or {}
-        saved = _saved_source(curve.get("path")) if curve.get("path") else None
-        if curve.get("path") and (saved is None or saved.path.is_file()):
-            if self.open_curve(curve["path"], curve.get("side"), unit=curve.get("unit")):
-                notes += [note() for note in [self._saved_unit_note(curve.get("unit"))] if note]
-                self.session.excluded = {float(value) for value in curve.get("excluded") or ()}
-                if curve.get("q_range"):
-                    self.set_range(curve["q_range"], record=False)
-            else:
-                notes.append(self.status_label.text())
-        elif curve.get("path"):
-            notes.append(tr("the Fitting curve {name} is no longer there").format(
-                name=saved.display_name))
-        if data.get("method") is not None:
-            self.set_method(data["method"])  # a saved choice takes precedence over a new-curve recommendation
-        self.session.clear_history()  # a new start: Undo does not bring back the work before the project
-        self._model_changed(editor=True)
-        self._render_all()
-        return notes
 
     def refresh_language(self) -> None:
         """After a switch of the interface language (``i18n.language_changed``): what this page composed with

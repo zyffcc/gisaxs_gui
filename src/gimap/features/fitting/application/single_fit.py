@@ -112,6 +112,9 @@ class Curve:
     """Where ``source_unit`` came from (``curve_units``: stated in the file, the setting for files without one …)."""
     rows_left_out: int = 0
     """Rows of the file that are not in the curve (not numbers, NaN or inf): said with the curve."""
+    columns: Optional[dict] = None
+    """The columns of a table read as q, I and σ (``ColumnMapping.to_dict``; a CSV: chosen by its header's names, or
+    by the person); ``None``: a file read by place or an NXcanSAS curve."""
 
     @property
     def signed(self) -> bool:
@@ -119,7 +122,7 @@ class Curve:
 
     @classmethod
     def from_arrays(cls, q, intensity, sigma=None, *, name: str, path: str = "", unit: str = "angstrom",
-                    unit_from: str = "", rows_left_out: int = 0) -> "Curve":
+                    unit_from: str = "", rows_left_out: int = 0, columns: Optional[dict] = None) -> "Curve":
         factor = NM_PER_A if unit == "angstrom" else 1.0
         q = np.asarray(q, dtype=float).reshape(-1) * factor
         intensity = np.asarray(intensity, dtype=float).reshape(-1)
@@ -128,7 +131,7 @@ class Curve:
             sigma = None
         keep = np.isfinite(q) & np.isfinite(intensity)
         return cls(q[keep], intensity[keep], None if sigma is None else sigma[keep], name, path, unit, unit_from,
-                   int(rows_left_out) + int(q.size - np.count_nonzero(keep)))
+                   int(rows_left_out) + int(q.size - np.count_nonzero(keep)), columns)
 
 
 def _half(curve: Curve, positive: bool):
@@ -367,7 +370,7 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
                     "P_i(0) = 1; S_i the Hosemann paracrystal; a component with coupling 'da' has "
                     "P_i + |<F_i>|^2 (S_i - 1) in place of P_i * S_i; sizes per component ('sizes')",
         "curve": None if curve is None else {"name": curve.name, "path": curve.path, "q_unit_of_file": curve.source_unit,
-                                             "q_unit_from": curve.unit_from},
+                                             "q_unit_from": curve.unit_from, "columns_read": curve.columns},
         "points": {"side": side, "q_range_nm^-1": None if q_range is None else [float(v) for v in q_range],
                    "count": int(data.q.size), "weighting": data.weighting,
                    # what the points are (a curve with one half only is that half, whatever ``side`` says)

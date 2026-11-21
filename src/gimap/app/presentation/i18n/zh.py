@@ -35,14 +35,12 @@ from .zh_sputter_process import SPUTTER_PROCESS_ZH
 from .zh_menus import MENUS_ZH
 from .zh_giwaxs_auto import GIWAXS_AUTO_ZH
 from .zh_flat_detector import FLAT_DETECTOR_ZH
-from .zh_flat_field import FLAT_FIELD_ZH
+from .zh_features import FEATURES_ZH
 from .zh_tips_analyze import TIPS_ANALYZE_ZH
 from .zh_tips_fitting import TIPS_FITTING_ZH
 from .zh_tips_tools import TIPS_TOOLS_ZH
 from .zh_tips_labs import TIPS_LABS_ZH
 from .zh_review import REVIEW_ZH
-from .zh_nxcansas import NXCANSAS_ZH
-from .zh_gisaxs_cuts import GISAXS_CUTS_ZH
 
 ZH = {
     # -- menus --------------------------------------------------------------------------
@@ -589,11 +587,10 @@ ZH.update(SPUTTER_ZH)
 ZH.update({**SPUTTER_CLIENT_ZH, **SPUTTER_LIVE_ZH, **SPUTTER_STEPS_ZH, **SPUTTER_SAMPLES_ZH, **SPUTTER_PROCESS_ZH})
 ZH.update(MENUS_ZH)
 ZH.update(GIWAXS_AUTO_ZH)
-ZH.update({**FLAT_DETECTOR_ZH, **FLAT_FIELD_ZH})
+ZH.update(FLAT_DETECTOR_ZH)
 ZH.update(TIPS_ANALYZE_ZH)
 ZH.update(TIPS_FITTING_ZH)
 ZH.update(TIPS_TOOLS_ZH)
 ZH.update({**TIPS_LABS_ZH, **REVIEW_ZH})
-ZH.update(NXCANSAS_ZH)
-ZH.update(GISAXS_CUTS_ZH)
+ZH.update(FEATURES_ZH)
 __all__ = ["ZH"]

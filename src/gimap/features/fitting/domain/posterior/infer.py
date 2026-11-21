@@ -424,9 +424,10 @@ def candidates(network, h, allowed: Optional[Sequence[int]] = None, count: int =
 
 def infer(network, data: Cut, compositions: Optional[Sequence[int]] = None, *, allowed=None, shortlist: int = 4,
           samples: int = 2000, cylinder_samples: int = 300, seed: int = 0, law: str = "number_gauss",
-          coupling: str = "lma") -> list[Composition]:
+          coupling: str = "lma", progress=None) -> list[Composition]:
     """The posterior of each composition (given, or the head's ``shortlist`` among ``allowed``), most probable
-    first; ``probability`` from the evidences, ``modes`` of each."""
+    first; ``probability`` from the evidences, ``modes`` of each. ``progress``: given ``(done, total)`` before the
+    first composition is sampled and after each (it changes nothing that is computed)."""
     rng = np.random.default_rng(seed)
     binned = E.bin_curve(data.q, data.intensity, data.sigma, data.q_max, data.ratio)
     h = network.summary(E.features(*(a[None] for a in binned)), conditions(data))
@@ -436,10 +437,14 @@ def infer(network, data: Cut, compositions: Optional[Sequence[int]] = None, *, a
         log_probs = network.composition_log_probs(h)[0]
         chosen = [(int(c), float(log_probs[c])) for c in compositions]
     out = []
+    if progress is not None:
+        progress(0, len(chosen))
     for c, head in chosen:
         has_cylinder = any(f == "cylinder" for f, _s in E.composition_types(c))
         out.append(sample_composition(network, h, data, c, cylinder_samples if has_cylinder else samples, rng, law,
                                       coupling, head))
+        if progress is not None:
+            progress(len(out), len(chosen))
     evidences = np.array([r.log_evidence for r in out])
     probabilities = np.exp(evidences - evidences.max())
     probabilities /= probabilities.sum()

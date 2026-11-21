@@ -26,6 +26,18 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   and qy/2θf of their band edges. The automatic cuts and their numbers are unchanged; **Auto Cuts** now keeps the
   cuts you added (*Physics and Methods* 6.7).
 
+- **Fitting keeps what it finds.** *Open Curve…* reads `.csv` curves — the command line's cuts, Analyze's curve
+  tables and Fitting's own *Save ▸ Data and Fit* table — by the names of the header (q, I, σ; the q in nm⁻¹ of
+  Fitting's table, not the second q in Å⁻¹), and asks for the columns (*Choose Columns*) when the header does not
+  say. *Save ▸ Solutions…* (*Export Solutions…* in Results) writes every solution of Predict parameters — composition,
+  probability, χ²ᵣ, flags and every value with its median and 68 %/95 % intervals — as CSV and JSON, with their
+  curves and terms; *Save ▸ Data and Fit* adds them to its record, and the ± column shows half the 68 % interval of a
+  Predict solution in Model. A project keeps the last fit, the solutions and the series' fitted frames (stale when
+  the curve file changed). Predict shows its step (proposals, refinement, sampling of each solution), the time and
+  an estimate; **Stop** keeps the solutions already sampled, marked incomplete (the numbers of a run are unchanged).
+  After *Refine These Values* the results and the selector say *Refined from solution 1 (Refine)*; solutions of one
+  composition are numbered (*#1*, *#2*) and show their flags. *Save Plot…* writes the plot with its residuals and
+  error bars as PNG, SVG or PDF; the status line is one shortened line; Undo and Redo say what they took back.
 - **A sphere too large for the form factor at q_z = 0 is flagged.** Predict parameters fits a cut at q_z = 0 (the
   effective interface) unless it is given the cut's angles; for spheres that holds within about 5 % of R only up to
   q_z·R ≈ 1.7 (on the four-term DWBA benchmark the median error of R is 15–29 % above it, with both angles below
@@ -78,8 +90,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   symmetry axis and names the disorder σnn/D as Fitting does (before σD/D = σnn/D / √(2π), another number);
   `geometry.critical_angle_deg` is `null` when none was given; the manual says that `geometry` is what q was
   computed with and `calibration` the file as read. `--language zh` translates the section headings only: its
-  help and the manual now say so. Still refused: `.csv` files in Fitting (Analyze's tables differ in their
-  columns; open the `_fit_input.dat` or use Send to Fitting).
+  help and the manual now say so.
 - **Predict parameters: one χ²ᵣ per solution, every population shown, plainer notes.** A solution now has the same
   χ²ᵣ wherever it appears — the Fit page's status line, table and Fit details, the automatic analysis's table,
   report, CSV and JSON, Batch Export's table — computed over the points Predict fitted, and each place says how
@@ -1358,7 +1369,7 @@ These were found while 0.1.0 was checked; they matter to those who ran a develop
 
 ### Known limitations
 
-- **Fitting does not read `.csv` curves**, although Analyze exports its curves as CSV. Use
+- **Fitting did not read `.csv` curves** (0.2.0 reads them), although Analyze exports its curves as CSV. Use
   **Send to Fitting**, or open the `<name>_fit_input.dat` that Analyze writes; `.dat` and `.txt`
   files with columns `q I [σ]` open too.
 - **Geometry Calibration can put a wrong solution first.** Seen on a silver behenate image whose

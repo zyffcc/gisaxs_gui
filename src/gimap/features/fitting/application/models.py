@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import base64
 import json
 from pathlib import Path
-from typing import Generic, Literal, TypeVar
+from typing import Generic, Literal, Optional, TypeVar
 
 import numpy as np
 
@@ -35,13 +35,17 @@ class OperationResult(Generic[T]):
 InSituSourceKind = Literal["curve"]
 _INSITU_FRAME_MARKER = "::gimap-frame="
 _CURVE_COLUMN_MARKER = "::gimap-curve="
-CURVE_SUFFIXES = (".dat", ".txt", ".h5")
-"""1D curve files an in-situ series can fit (Analyze writes ``*_fit_input.dat``); ``.h5``: NXcanSAS curves
-(``shared.nxcansas``; an HDF5 file of detector frames is not one: ``series_frames.is_curve_file``)."""
-UNSUPPORTED_CURVE = ("Fitting reads .dat and .txt curves (q, I, σ) and NXcanSAS .h5 files. For a cut from Analyze, "
-                     "use Send to Fitting or open its _fit_input.dat file.")
-"""Why a file of another kind (Analyze's .csv tables among them) is not opened as a curve. One fixed sentence —
-the page names the file and says it in the interface language."""
+CURVE_SUFFIXES = (".dat", ".txt", ".csv", ".h5")
+"""1D curve files an in-situ series can fit (Analyze writes ``*_fit_input.dat``); ``.csv``: columns chosen by the names
+of the header (``infrastructure/adapters/curve_columns.py``); ``.h5``: NXcanSAS curves (``shared.nxcansas``; an HDF5
+file of detector frames is not one: ``series_frames.is_curve_file``)."""
+UNSUPPORTED_CURVE = ("Fitting reads .dat, .txt and .csv curves (q, I, σ) and NXcanSAS .h5 files. For a cut from "
+                     "Analyze, use Send to Fitting or open its _fit_input.dat file.")
+"""Why a file of another kind is not opened as a curve. One fixed sentence — the page names the file and says it in
+the interface language."""
+COLUMNS_TO_CHOOSE = ("The header of this table does not say which columns are q, I and σ: choose them.")
+"""A CSV whose header does not name one q, one I and at most one σ (or has no header and more than three columns):
+the page shows the table and asks for the columns (``curve_columns``)."""
 CURVE_NOT_FOUND = "Curve file was not found: {path}"
 """A curve that is not there (any more) when it is read. A form: the page says it in the interface language,
 the path as it is."""
@@ -139,6 +143,10 @@ class FigureSeries:
     y: np.ndarray
     color: str
     style: Literal["scatter", "line"] = "scatter"
+    error: Optional[np.ndarray] = None
+    """σ of the points: drawn as error bars (a ``scatter``)."""
+    marker: str = "o"
+    dashed: bool = False
 
 
 @dataclass(frozen=True)
@@ -151,6 +159,11 @@ class ExportCurveFigureRequest:
     y_label: str
     x_scale: Literal["linear", "log", "symlog"] = "linear"
     log_y: bool = False
+    residuals: tuple[FigureSeries, ...] = ()
+    """A panel of residuals under the curve, on the same x (empty: none)."""
+    residual_label: str = ""
+    band: Optional[tuple] = None
+    """The fitting range (x from, to), shaded."""
 
 
 CurveOperationResult = OperationResult[CurveData]

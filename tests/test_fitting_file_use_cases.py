@@ -44,7 +44,7 @@ def test_load_curve_succeeds_without_qapplication(tmp_path):
 
 
 def test_load_curve_returns_structured_invalid_and_missing_errors(tmp_path):
-    unsupported = tmp_path / "curve.csv"
+    unsupported = tmp_path / "curve.xy"
     unsupported.write_text("0.1,10\n0.2,20\n", encoding="utf-8")
     use_case = LoadCurve(LocalCurveRepository())
 

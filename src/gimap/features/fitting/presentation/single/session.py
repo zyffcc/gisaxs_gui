@@ -1,6 +1,7 @@
 """What the single-curve page holds (no Qt): the curve, which of its points are fitted, the model,
 the last fit, the solutions of the other methods, and the undo history — of the model, the fitting
-range and the left-out points together (``Snapshot``)."""
+range and the left-out points together (``Snapshot``), each step named (``Snapshot.label``: what Undo
+takes back, said in the status line and the buttons' tooltips)."""
 
 from __future__ import annotations
 
@@ -26,6 +27,9 @@ class Snapshot:
     q_range: Optional[tuple]
     excluded: frozenset
     curve: object = field(default=None, compare=False)
+    label: tuple = field(default=(), compare=False)
+    """The change that came after this state: ``(template, values)`` in English (``"the fit ({method})"``), what
+    Undo takes back and Redo brings again; ``()``: a change not named."""
 
 
 @dataclass(frozen=True)
@@ -46,6 +50,13 @@ class Solution:
     """Predict parameters: (fitted, given, below the network's q window, unusable) — the points its χ²ᵣ is of."""
     tried: Optional[int] = None
     """Predict parameters: how many compositions were given to try (1: the particles in Model); None: a choice."""
+    composition: str = ""
+    """Predict parameters: the composition's name (``sphere (S) + vertical cylinder (S)``), as records keep it."""
+    ess: Optional[float] = None
+    """Predict parameters: the effective samples of its posterior."""
+    incomplete: bool = False
+    """Predict parameters was stopped before every solution's posterior was sampled: this one was finished, and its
+    probability is over the solutions finished."""
 
     @property
     def label(self) -> str:
@@ -90,6 +101,16 @@ class FitSession:
     solution of Analyze (no search on this page; its χ² is Analyze's)."""
     edited: bool = False
     """Whether the person or a fit has changed the starting model."""
+    model_from: Optional[int] = None
+    """The solution (its place in ``solutions``) last put into Model; a later edit keeps it (``refined_from``)."""
+    refined_from: Optional[dict] = None
+    """Where the last fit (``result``) started: ``{"solution": n (1-based), "method": "local"/"global", "edited":
+    bool}`` when it started from a solution (Refine These Values), else ``None``."""
+    predict_run: Optional[dict] = None
+    """The last run of Predict parameters: the network, seconds, and whether it was stopped (``stopped``,
+    ``finished``/``total`` solutions sampled)."""
+    last_step: tuple = ()
+    """The label of the step the last Undo or Redo took back or brought again (``Snapshot.label``)."""
     excluded: set = field(default_factory=set)
     """Points left out of the fit (``point_key`` of their |q|)."""
     _undo: list = field(default_factory=list)
@@ -128,6 +149,7 @@ class FitSession:
         self.result_selection = None
         self.solutions = []  # the solutions of the curve before
         self.solutions_selection = None
+        self.model_from = self.refined_from = self.predict_run = None
         self.excluded = set()
         self._last_kind = ""  # a range change on this curve is a step of its own
         if curve is None or not curve.signed:
@@ -135,11 +157,12 @@ class FitSession:
 
     # -- the model ----------------------------------------------------------------------
 
-    def set_model(self, model: FitModel, *, record: bool = True) -> bool:
+    def set_model(self, model: FitModel, *, record: bool = True, label: tuple = ()) -> bool:
+        """``label``: what the change is (``Snapshot.label``), named by Undo."""
         if model == self.model:
             return False
         if record:
-            self.record()
+            self.record(label=label or ("a change of Model", {}))
         self.model = model
         self.edited = True
         return True
@@ -151,7 +174,7 @@ class FitSession:
         if q_range == self.q_range:
             return False
         if record:
-            self.record("range" if coalesce else "")
+            self.record("range" if coalesce else "", label=("the fitting range", {}))
         self.q_range = q_range
         return True
 
@@ -160,25 +183,25 @@ class FitSession:
         excluded = set(excluded)
         if excluded == self.excluded:
             return False
-        self.record()
+        self.record(label=("the left-out points", {}))
         self.excluded = excluded
         return True
 
     # -- undo -----------------------------------------------------------------------------
 
-    def snapshot(self) -> Snapshot:
-        return Snapshot(self.model, self.q_range, frozenset(self.excluded), self.curve)
+    def snapshot(self, label: tuple = ()) -> Snapshot:
+        return Snapshot(self.model, self.q_range, frozenset(self.excluded), self.curve, label)
 
-    def record(self, kind: str = "", *, now: Optional[float] = None) -> None:
-        """Remember the model, range and left-out points before a change. A change of the same ``kind``
-        (``"range"``) within ``COALESCE_SECONDS`` of the last one continues that step."""
+    def record(self, kind: str = "", *, now: Optional[float] = None, label: tuple = ()) -> None:
+        """Remember the model, range and left-out points before a change (``label``: what the change is). A change
+        of the same ``kind`` (``"range"``) within ``COALESCE_SECONDS`` of the last one continues that step."""
         now = time.monotonic() if now is None else now
         continuing = bool(kind) and kind == self._last_kind and now - self._last_time < COALESCE_SECONDS and self._undo
         self._last_kind, self._last_time = kind, now
         if continuing:
             self._redo.clear()
             return
-        self._undo.append(self.snapshot())
+        self._undo.append(self.snapshot(label))
         del self._undo[:-HISTORY]
         self._redo.clear()
 
@@ -201,9 +224,21 @@ class FitSession:
             source.pop()  # a burst that came back where it started: nothing to undo there
         if not source:
             return False
-        target.append(self.snapshot())
-        self._bring_back(source.pop())
+        back = source.pop()
+        target.append(self.snapshot(back.label))  # Redo (or Undo again) names the same step
+        self._bring_back(back)
+        self.last_step = back.label
         return True
+
+    def _next_label(self, source: list) -> tuple:
+        return next((snapshot.label for snapshot in reversed(source) if not self._is_current(snapshot)), ())
+
+    def undo_label(self) -> tuple:
+        """What Undo would take back (``()``: nothing, or a step not named)."""
+        return self._next_label(self._undo)
+
+    def redo_label(self) -> tuple:
+        return self._next_label(self._redo)
 
     def clear_history(self) -> None:
         """No step to undo or redo (a project opened: a new start, not a change of the work before)."""
