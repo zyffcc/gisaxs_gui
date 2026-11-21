@@ -12,6 +12,17 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **In-situ series: online watching, a timeline, chained fits and a results database.** The arrow of **Watch** in
+  Analyze pauses and resumes the watch, sets how long a new file must rest before it is read, adds every new frame to
+  the Series map (also without Build Map or an export; only curves are kept), records every frame in
+  `gimap_analysis/gimap_series.sqlite` and keeps a log of the files it skipped; **Fit New Frames in Fitting…** hands
+  the exports to In-situ series. The plot under the Series map has a timeline — the χ² of every frame to the one
+  before and to a reference frame, with stage boundaries, jumps and odd frames — and a click on it shows that frame.
+  Fitting ▸ In-situ series can start every frame from the previous result and ask Predict parameters only where that
+  chain breaks (a failed or flagged fit, a jump of χ²ᵣ, a new stage; Predict's method is unchanged), add a backward
+  pass, show a Flags column, draw the trend against time, and save the fits as NXcanSAS or into the results database.
+  Compare ▸ Add Series ▸ **Results Database…** reads a recorded series without its frames. Manual sections 5.1, 5.6,
+  6.5, 7.2, 12 and 13; *Physics and Methods* 11.12–11.14.
 - **Sputter ▸ Analyze: Au and Ag on TiO₂ at any energy from 8 to 15 keV.** The TiO₂ network was retrained on images
   simulated at 8–15 keV and αi 0.25–0.55°, with optical constants that follow the energy (the earlier ones exactly at
   12 keV) and with parts of the detector cut away, so a TiO₂ scan in that range is analysed as usual at its own energy,

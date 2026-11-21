@@ -116,13 +116,14 @@ class SeriesTimelineMixin:
             colors.append(ODD_COLOR)
             markers.append("x")
         self._series_whole_frames(axis)
-        plot.set_curves(curves, colors, markers=markers)
+        plot.set_curves(curves, colors, markers=markers, legend=[False] + [True] * (len(curves) - 1))  # (the title names the line)
         if stages is not None:  # a dashed line between the last frame of a stage and the first of the next
             for edge in stages.edges[1:-1]:
                 if 0 < edge < series.rows:
                     line = pg.InfiniteLine(pos=0.5 * (axis[edge - 1] + axis[edge]), angle=90,
                                            pen=pg.mkPen(BOUNDARY_COLOR, width=1, style=Qt.DashLine))
-                    plot.add_extra(line)
+                    plot.plot.addItem(line, ignoreBounds=True)
+                    plot.add_extra(line)  # (goes with the curves at the next drawing)
         return True
 
     def _series_trace_clicked(self, x: float, _y: float) -> None:

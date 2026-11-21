@@ -94,6 +94,13 @@ def test_a_click_on_the_timeline_shows_the_frame_and_the_table_names_the_jump(tm
         _done(page)
         _build(page, 12)
         page.series_trace_combo.setCurrentIndex(page.series_trace_combo.findData("neighbour"))
+        for _ in range(100):  # the stages are found in the background; the timeline then marks their boundaries
+            if page._series_stages is not None:
+                break
+            page.tasks.wait(0.1)
+            QTest.qWait(20)
+        stages = page._series_stages
+        assert stages is not None and len(page.series_trace_plot._extras) == len(stages.edges) - 2
         page._series_trace_clicked(7.2, 1.0)  # the frame axis: frame 7 is row 6, the jump
         _done(page)
         assert page._series_row == 6

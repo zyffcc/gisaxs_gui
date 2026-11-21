@@ -141,12 +141,15 @@ class WatchSeriesMixin(WatchOnlineMixin):
         self._watch_series_built = built
         token = self._watch_series_epoch
         prepared = []
+        groups = None
+        if built is not None and requests:  # the groups of the run once per look (not per frame: thousands of files)
+            with model.only_frames(built.get("first", 1), built.get("last") or None):
+                groups = model._lazy_groups()
         for request in requests:
             row_key = key if live else None
             if built is not None:
                 request = with_cut(request, built.get("cut"))
-                with model.only_frames(built.get("first", 1), built.get("last") or None):
-                    group = model.batch_group_index(request.path, request.frame_index)
+                group = groups.index_for(request.path, request.frame_index)
                 if group is None or group % max(1, built.get("every", 1)):
                     row_key = None
             prepared.append((request, row_key, token, built))
@@ -181,7 +184,7 @@ class WatchSeriesMixin(WatchOnlineMixin):
             self._series_rows[existing] = row
         else:
             self._series_rows.append(row)
-        self._watch_series_normalize()
+        # (put in order at the redraw, once a second: per frame it would read every listed source each time)
         if not self._watch_series_timer.isActive():
             self._watch_series_timer.start()
 

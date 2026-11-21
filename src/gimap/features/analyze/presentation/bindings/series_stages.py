@@ -132,8 +132,8 @@ class SeriesStagesMixin:
         self.series_stages_label.setText(trf(NO_STAGES, reason=tr(message)))
         self.series_stages_label.setToolTip("")
         self.series_changes_label.setText("")
-        if (self.series_trace_combo.currentData() or "") == "change":
-            self._series_redraw_trace()
+        if (self.series_trace_combo.currentData() or "") in ("change", "neighbour", "reference"):
+            self._series_redraw_trace()  # (the timeline marks the stage boundaries and odd frames too)
 
     def _stages_found(self, series, stages, x_range=None) -> None:
         if series is not self._series_map:  # a newer map replaced it meanwhile
@@ -178,8 +178,8 @@ class SeriesStagesMixin:
         self.series_stages_row.show()
         self.series_stages_details.show()
         self._change_item_tip()
-        if (self.series_trace_combo.currentData() or "") == "change":
-            self._series_redraw_trace()
+        if (self.series_trace_combo.currentData() or "") in ("change", "neighbour", "reference"):
+            self._series_redraw_trace()  # (the timeline marks the stage boundaries and odd frames too)
 
     def _stages_language(self) -> None:
         """The stages' sentences again in the interface language (after a language switch)."""

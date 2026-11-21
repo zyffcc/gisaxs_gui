@@ -1129,6 +1129,31 @@ written. Press **Watch** again to stop.
 - A file another program holds open is tried again at every look and said once in the status line; a
   source taken off the list comes back when it grows.
 
+**Online mode** — the arrow of **Watch**:
+
+- **Pause Watching** stops the looks; when you untick it, everything written meanwhile is listed and reduced.
+  Stopping the watch also ends a pause.
+- **Settle Time**: **Two Looks (2 s)** (the default: a new file is read once it is the same at two looks), **5 s**,
+  **10 s** or **30 s** — for a detector that pauses while it writes a file, so that a frame is never read
+  half-written.
+- **Add New Frames to the Series Map** (on by default): every complete new frame is reduced with the set-up on
+  screen and its curve appended to the Series map (section 5.6), its traces and its timeline — also when no map was
+  built and nothing is exported. Only the curves are kept, never the frames: 1000 frames of 200 points take about
+  3 MB of curves.
+- **Record Every Frame in the Results Database**: the curve of every frame appended to the map also goes into
+  `gimap_analysis/gimap_series.sqlite` next to the data (about once a second), with its frame, file, time and the
+  settings of the map, and so does every skipped file. Compare reads it (section 7.2), so a run can be compared
+  again later without its frames.
+- **Skipped Files…** opens the log of the files the watch could not take, with the time and the reason: held by
+  the program writing it, a failed reduction, a frame without the curve of the map.
+- **Fit New Frames in Fitting…** exports the frame on screen, switches **Export New Frames While Watching** on
+  and opens `gimap_analysis/` in **Fitting ▸ In-situ series**: tick **Watch for new curves** there and press
+  **Start**, and every new frame is fitted from the result of the one before (section 6.5).
+
+These choices are remembered between sessions. On a desktop computer, a watched run of 1000 frames of 20,000
+pixels took about 60 ms per frame on average to be listed, reduced, appended and recorded
+(`tools/benchmarks/insitu_online.py`).
+
 #### NeXus and HDF5 files
 
 What a source is follows from what the files hold; a file name only proposes:
@@ -1640,7 +1665,22 @@ qy 0.05 Å⁻¹); the red arrow beside the map marks it, and it does not make a 
    outside the data, has no value: the plot says so instead of drawing one.
 5. **Export ▾** (once a map is built): **Map as CSV Table…**, **Map as Figure…**, **Stages as
    Table…**, **Selected Frame's Curve as Figure… / as Table…**, **Trace as Figure… / Trace as
-   Table…** (the value of the lower plot for every frame), **Peak Table of Every Frame…**.
+   Table…** (the value of the lower plot for every frame), **Peak Table of Every Frame…**, **Save Results
+   Database…** (every frame's curve into `gimap_series.sqlite`, which Compare reads; added to a database that is
+   there, a frame recorded before replaced) and **Timeline as Table…**.
+
+![The timeline under the Series map](manual_images/en/09b_series_timeline.png)
+
+*The timeline of 40 frames made of the public GALAXI frame with a side peak that moves at once at frame 25: χ² ≈ 1 between frames that differ by noise alone, ▲ at the jump, dashed lines at the stage boundaries.*
+
+**The timeline.** The drop-down of the plot under the map also has **χ² to the frame before (timeline)** and
+**χ² to the reference frame (timeline)**: for every frame, how far its curve is from the one before it, or from
+the reference frame (**Options ▸ Reference frame**, the first by default), in units of the noise of each x
+column, which is taken from the series itself. Two frames that differ by noise alone give about 1; a transition
+stands out as a peak. Dashed lines mark the stage boundaries, ▲ the jumps (the frames where the series changes at
+once) and × the odd frames. **Click a point** of the plot under the map — of the timeline or of any other trace —
+to pick that frame and show it in Analyze. **Timeline as Table…** writes per frame both χ², whether it is a jump,
+its stage and whether it is odd. How it is computed: [Physics and Methods, section 11.12](Physics_Manual.md#1112-the-timeline-how-far-each-frame-is-from-its-neighbour-and-from-a-reference-frame).
 
 **One cut for the series.** While the cut is automatic, every frame of the map — and of a Batch
 Export, a Send Series to Fitting and a watched folder's export — is cut where the frame on screen is:
@@ -2486,6 +2526,14 @@ current frame finish before pausing. Completed results stay available.
   - **The model in Single analysis** — every frame independent of the others.
   - **The previous result; the Single model at each new stage** — follows the sample within a stage and starts
     afresh where the curves change course.
+  - **The previous result; Predict parameters where the chain breaks** — each frame from the result of the frame
+    before; where that chain breaks (the fit failed or did not converge, a new stage begins, the fit is flagged or
+    poor, or χ²ᵣ is more than 3 times the frame before's and above 2), Predict parameters (section 6.4, its method
+    unchanged) fits the frame again with the particles of Single's model, and the better fit is kept. A model with
+    no particle or more than three is refined only (the Run Log says so).
+- **Then a backward pass**: once every frame is done, from the last but one to the first, each frame is refined from
+  the result of the frame after it, and the better of its two fits is kept — a sample whose first frames are hard to
+  fit is then followed back from where the fit is sure. Not while **Watch for new curves** waits for curves.
 - **Method**: **Refine (fast)**, **Search the ranges, then refine (slow)** or **Predict each frame**.
 - **Predict each frame** runs Predict parameters (section 6.4) on every frame, with the particles of the frame's
   start model (1–3 particles: their families and paracrystals), then refines the solution kept with least squares
@@ -2503,16 +2551,26 @@ current frame finish before pausing. Completed results stay available.
 - How many frames were fitted, failed or did not converge, with the halves and points per frame. A frame whose beam
   tail stopped at an edge of its range, or with a value without a finite error, is **flagged** (marked in the list,
   counted at the end of the run and listed under `flagged` in the record).
-- A table with a row per frame: χ²ᵣ, each free value ± 1σ, the **Points** fitted and the **Halves**. Click a row
-  to see that frame's curve and model; a failed frame shows its reason.
+- A table with a row per frame: χ²ᵣ, each free value ± 1σ, the **Flags**, the **Points** fitted and the
+  **Halves**. Click a row to see that frame's curve and model; a failed frame shows its reason. **Flags** says what
+  to know before trusting the row: failed, not converged, a poor fit, values at a bound of their range, the beam
+  tail at an edge, a value the curve does not determine, *chain broke* (with why, and whether Predict parameters
+  fitted the frame again), *backward* (the fit kept came from the backward pass).
 - Below the frame plot: one value against the frame (or χ²ᵣ), with ±1σ error bars, in the colours of the stages.
-  The plot is titled with the name of the series.
+  The plot is titled with the name of the series. When the curves say when their frames were measured (curves for
+  Fitting that Analyze wrote of frames with a time stamp), the box beside the value draws it against **Time (s)**
+  since the first fitted frame.
 - **Open Frame in Single Analysis** takes a frame and its fitted model back to Single analysis to look closer.
 - **Save ▸ Table of Every Frame…** writes a CSV (frame, file, χ²ᵣ, log RMSE, converged, points, halves used, every
   value and its error) with a JSON record next to it: the start model, the halves and where they came from, range,
   left-out points, method, every frame's state, reason and the unit its q was read in (`q_unit`, `q_unit_from`;
   `q_unit_of_files` is the setting for files without one), the poor fits (χ²ᵣ above 10) and which curves or frames
-  were listed. **Trend Plot…** and **Selected Frame's Plot…** save the figures.
+  were listed. The table ends with `flags`, `start_from` (previous, next, single or predict), `chain_break` and
+  `fit_pass`, and the record says the start and the backward pass. **Fits as NXcanSAS…** writes, for every fitted
+  frame, the points fitted and the model at their q (one `.h5`, two entries per frame, each with the frame's
+  record; Q in 1/nm). **Results Database…** writes every frame's fit — state, χ²ᵣ, values and errors, flags, where
+  it started — into `gimap_series.sqlite`; one in the folder of the curves or up to two folders above it (Analyze's,
+  next to its curves) is offered first. **Trend Plot…** and **Selected Frame's Plot…** save the figures.
 - Before results that are not saved are dropped — a second Start, other curves, a project opened — GIMaP asks:
   **Save**, **Discard** or **Cancel**.
 - A series of GIWAXS I(q) curves gets the note of section 6.1 again after the run, with how many fits are poor.
@@ -2596,8 +2654,9 @@ every sample. Two or more series are compared with each other; one alone is desc
 
 **1. Series**
 
-- **Add Series** adds **The Series Map of Analyze**, a **Folder of Curves…** (one series) or **Curve Files…**
-  (together one series). Curve files need q and I columns (`.dat`, `.txt`, `.csv`, `.xy`, `.chi`; at least two
+- **Add Series** adds **The Series Map of Analyze**, a **Folder of Curves…** (one series), **Curve Files…**
+  (together one series) or a **Results Database…** (`gimap_series.sqlite`, written by Analyze's Series tab or a
+  watched folder: one curve of one series, without its frames; a question asks which when it holds several). Curve files need q and I columns (`.dat`, `.txt`, `.csv`, `.xy`, `.chi`; at least two
   per series, in counting order of their names: `frame_2` before `frame_10`). q in nm⁻¹ is converted to Å⁻¹
   when the header says so.
 - A folder written by Analyze (a Batch Export folder, its `curves/`, or `gimap_analysis/`) holds several kinds of
@@ -3688,6 +3747,9 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Analyze plots and images ▸ figures (**Plot as Figure…**, **View as Figure…**, **Analyze ▸ Figures ▸ Save Image…** …) | PNG, TIFF, SVG or PDF, light colours | dialog in `gimap_analysis/` | none |
 | Analyze ▸ **Save q-Map Data…**, **View Data as CSV…** (also **Analyze ▸ Figures**) | `<stem>_qmap.csv`, `<stem>_cake.csv` | dialog in `gimap_analysis/` | `#` header lines (source, frame, axes) |
 | Analyze ▸ Series ▸ **Export** (**Map as CSV Table…**, **Map as Figure…**, **Stages as Table…**, **Selected Frame's Curve as Figure…** / **as Table…**, **Trace as Figure…** / **Trace as Table…**, **Peak Table of Every Frame…**) | `<series>_<curve>[_<halves>]_map.csv`, `…_map.png`, `…_stages.csv`, `…_trace_<value>.csv` and `….png`, `…_peaks.csv`; the frame picked as `<frame>_<curve>[_<halves>].csv` and `.png` (figures also as TIFF, SVG or PDF) | dialog in `gimap_analysis/` | `#` header lines (curve, halves, frames, cut) and a `.json` of the settings next to each table; none for the figures |
+| Analyze ▸ Series ▸ **Export ▸ Save Results Database…**; Watch ▾ ▸ **Record Every Frame in the Results Database** | `gimap_series.sqlite` (SQLite: every frame's curve as reduced, with its frame, file and time; the skipped files) | dialog in `gimap_analysis/`; while watching, `gimap_analysis/` next to the data | the settings of the map, in the database |
+| Analyze ▸ Series ▸ **Export ▸ Timeline as Table…** | `<series>_<curve>[_<halves>]_timeline.csv` | dialog in `gimap_analysis/` | `#` header lines and a `.json` (method, reference frame, jumps) |
+| Fitting ▸ In-situ series ▸ **Save ▸ Fits as NXcanSAS…** / **Results Database…** | `series_fits.h5` (points fitted and model of every fitted frame); `gimap_series.sqlite` (every frame's fit) | the folder of the curves; a database found there or up to two folders above | each entry holds the frame's record; the database the fit settings |
 | Analyze ▸ **Send to Fitting** | `<stem>_fit_input.dat` (q in Å⁻¹) | `gimap_analysis/` next to the data; a folder you choose (kept for the session) when that cannot be written | `#` header lines (source, frame, sum, curve, observation with the halves) |
 | Analyze ▸ **Batch Export…** | per-curve tables `<batch>_<curve>_frames.csv` (or `.txt`, `.dat`); if you chose fitting, a fit table `<batch>_peak_fits.csv` (or `<batch>_model_fits.csv`) with its trend plot `<batch>_peak_fits.png` (`_model_fits.png`) and, if chosen, the fitted curves `fits/<frame>_<peak or model>_fit.csv`; subfolders `curves/`, `nxcansas/`, `fit_input/`, `maps/`, `images/`, `frames/` after your choices; frame names keep the 0-based index (`…_frame0003_sum3_…`) | the last batch folder, else `gimap_analysis/` next to the data; by default in a subfolder named after the frames' folder (one file: its name; several folders: `batch`); **Keep Both** writes into a new subfolder | `README.txt` and `<batch>_batch.json` (every file written, the cut of every frame, failed frames and why); `curves/` also gets an `_analysis.json` per frame |
 | Analyze ▸ **Send Series to Fitting…** | `fit_input/<frame>_fit_input.dat`, `README.txt`, `<batch>_batch.json` | a folder of its own, `<name>_fitting/`, next to any Batch Export of the same data | `README.txt`, batch JSON |
@@ -3786,6 +3848,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 
 | Limitation | What to do |
 |---|---|
+| **The rows of a Series map carry no σ.** The timeline's χ² takes the noise of each x column from the series itself, and a Series map recorded in the results database holds x and I only (section 5.6). | Read the timeline as a distance in units of the frame-to-frame noise, not as a goodness of fit; for σ of every point, use Batch Export ▸ Each frame: its curves, with error bars. |
 | **Cancellation does not forcibly interrupt low-level file reading.** A Compare directory scan or single-table read, or the current Fitting read, may still be returning. | Press Cancel or Stop once; the request is registered, and the unfinished import is discarded or the frame fit skipped when reading returns. Completed series and results stay (sections 6.5, 7.2). |
 | **Curve import supports `q I [sigma]` and `q I1 I2 …`, not interleaved `q I1 sigma1 I2 sigma2`.** A headerless three-column table cannot identify its meaning by numbers alone. | Choose the layout explicitly in **Import Curves…** (section 6.1). For separate errors per curve, provide one `q I sigma` file per curve. Fixed imported selections cannot watch for new columns/files. |
 | **Geometry Calibration can put a wrong solution first.** A wrong **Estimated distance** misleads, also with the right standard and with **Auto Detect**, and the field can hold a distance you did not type (section 4.3). | Choose the standard yourself when you know it. Leave **Estimated distance** on *Optional* or type the approximate distance of your set-up; set a number you did not type back to 0 unless it is that distance. Before **Apply**, check the distance and that the drawn rings lie on the rings of the image. |

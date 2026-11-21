@@ -59,6 +59,8 @@ class FolderWatch:
         stamp_of: Optional[Callable[[Path], object]] = None,
     ):
         self._expand = expand
+        self._keys: dict[str, str] = {}
+        """A path as given → its key (resolving a path asks the file system: thousands of times per look otherwise)."""
         self._size_of = size_of or (lambda path: Path(path).stat().st_size)
         self._stamp_of = stamp_of
         self.folder: Optional[Path] = None
@@ -169,9 +171,14 @@ class FolderWatch:
         new, and has not rested yet; one of its files may still be being written)."""
         return self._key(path) not in self._sizes
 
-    @staticmethod
-    def _key(path: Path) -> str:
-        return str(Path(path).resolve()).casefold()
+    def _key(self, path: Path) -> str:
+        text = str(path)
+        key = self._keys.get(text)
+        if key is None:
+            if len(self._keys) > 200_000:  # (a watch of very many files: start the cache again)
+                self._keys.clear()
+            key = self._keys[text] = str(Path(path).resolve()).casefold()
+        return key
 
 
 __all__ = ["FolderWatch", "WatchScan"]
