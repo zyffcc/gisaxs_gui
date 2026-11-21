@@ -132,6 +132,11 @@ class FitSeriesChainMixin:
 
     # -- the trend against time ---------------------------------------------------------------------
 
+    def forget_times(self) -> None:
+        """Other curves are listed: no time is known of them yet (the axis box hides until one says it)."""
+        self.__dict__["_frame_times"] = {}
+        self.trend_axis_combo.hide()
+
     def note_time(self, index: int, observation) -> None:
         """A listed curve was read: when its frame was measured (``observation_time``); the trend's axis box appears
         once a curve says it."""

@@ -59,6 +59,7 @@ class FitSeriesHalvesMixin:
         """Other curves are listed: nothing is known of them yet. ``choice``: the person's choice goes too
         (a folder opened anew), else it stays (the same folder listed again)."""
         self._halves_seen, self._curves_read, self._curves_signed = None, 0, 0
+        self.forget_times()  # (when the frames of these curves were measured: read again with them)
         if choice:
             self._halves_chosen, self._halves_origin = None, ""
 
