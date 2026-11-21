@@ -12,6 +12,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QAction,
+    QActionGroup,
     QCheckBox,
     QComboBox,
     QFrame,
@@ -204,6 +205,7 @@ class AnalyzeStepsView:
         self.watch_button.setToolTip(
             "Watch a folder: new frames are added and shown as soon as they are completely written"
         )
+        self._setup_watch_menu(page)
         self.clear_button = QToolButton(page)
         self.clear_button.setText("Clear")
         self.clear_button.setAutoRaise(True)
@@ -482,6 +484,41 @@ class AnalyzeStepsView:
         layout.addLayout(self.export_extra_host)
         layout.addStretch(1)
 
+
+    def _setup_watch_menu(self, page: QWidget) -> None:
+        """The Watch button's arrow: the online mode of a watched folder (``bindings/watch_online.py``)."""
+        self.watch_button.setPopupMode(QToolButton.MenuButtonPopup)
+        menu = QMenu(self.watch_button)
+        self.watch_pause_action = menu.addAction("Pause Watching")
+        self.watch_pause_action.setCheckable(True)
+        self.watch_pause_action.setToolTip("No looks at the folder until you resume; what is written meanwhile is "
+                                           "listed then")
+        self.watch_map_action = menu.addAction("Add New Frames to the Series Map")
+        self.watch_map_action.setCheckable(True)
+        self.watch_map_action.setChecked(True)
+        self.watch_map_action.setToolTip("Reduce every complete new frame with this set-up and append its curve to the "
+                                         "Series map, its traces and timeline (only curves are kept, not frames)")
+        settle = menu.addMenu("Settle Time")
+        self.watch_settle_group = QActionGroup(page)
+        for seconds, text in ((0.0, "Two Looks (2 s)"), (5.0, "5 s"), (10.0, "10 s"), (30.0, "30 s")):
+            action = settle.addAction(text)
+            action.setCheckable(True)
+            action.setData(seconds)
+            action.setChecked(seconds == 0.0)
+            self.watch_settle_group.addAction(action)
+        settle.setToolTip("How long a new file must stay unchanged before it is read: a frame still being written is "
+                          "never read half-written")
+        self.watch_record_action = menu.addAction("Record Every Frame in the Results Database")
+        self.watch_record_action.setCheckable(True)
+        self.watch_record_action.setToolTip("Write the curve of every frame of the map into gimap_analysis/"
+                                            "gimap_series.sqlite next to the data (Compare reads it)")
+        menu.addSeparator()
+        self.watch_log_action = menu.addAction("Skipped Files…")
+        self.watch_log_action.setToolTip("Every file the watch could not take, when and why")
+        self.watch_fitting_action = menu.addAction("Fit New Frames in Fitting…")
+        self.watch_fitting_action.setToolTip("Export every new frame and open the exports in Fitting ▸ In-situ series, "
+                                             "which fits each new frame from the result of the one before")
+        self.watch_button.setMenu(menu)
 
 __all__ = ["AnalyzeStepsView", "CENTER_TIP", "EXPORT_TIPS", "FIT_SIDE_ITEMS", "GISAXS_CUTS_TIP", "MASK_TIP", "NXCANSAS_TIP",
            "PROFILE_TIP", "STEPS"]

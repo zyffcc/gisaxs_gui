@@ -8,7 +8,8 @@ then has been in its files for a whole look and can be read, while its newest pa
 from __future__ import annotations
 
 import itertools
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
@@ -23,6 +24,8 @@ class WatchScan:
     """``(path, key, state)`` of every source that could be measured; the state is ``(bytes, stamp)``."""
     waiting: tuple[tuple[Path, str], ...]
     """``(path, why)`` of the sources that could not be measured (their writer still holds them)."""
+    moment: float = field(default_factory=time.monotonic)
+    """When the look was made (``time.monotonic``): how long a new source has rested (``FolderWatch.settle_s``)."""
 
 
 class FolderWatch:
@@ -40,6 +43,10 @@ class FolderWatch:
     known or new, that was seen changed at the look before and has changed again is in ``moving`` with
     its state at that look; a new one stays new (unreported) until it rests, unless the caller takes it
     up meanwhile (``follow``).
+
+    ``settle_s``: a new source is reported only once it has also stayed as it is for at least this many seconds
+    (0, the default: two looks the same are enough) — for a detector that pauses while it writes a file, so that
+    a half-written frame is never read.
 
     ``poll`` is ``take(scan())``.  ``scan`` only reads the folder and changes nothing here, so it may
     run on another thread while the window stays free; ``take`` applies it on the caller's thread.
@@ -59,6 +66,9 @@ class FolderWatch:
         """Source → the state it was reported with (``None``: listed, never measured)."""
         self._sizes: dict[str, tuple] = {}
         """Source → its state at the poll before, until it has rested."""
+        self._since: dict[str, float] = {}
+        """Source → when it was first seen in its state of now (``settle_s``)."""
+        self.settle_s = 0.0
         self._numbers = itertools.count(1)
         self._taken = 0
         self.changed: list[Path] = []
@@ -77,6 +87,7 @@ class FolderWatch:
         """Watch ``folder``; frames already present or listed are not reported."""
         self.folder = Path(folder)
         self._sizes.clear()
+        self._since.clear()
         self.changed, self.waiting, self.moving = [], [], []
         self._known = {self._key(path): None for path in already_listed}
         for path in self._expand([self.folder]):
@@ -86,6 +97,7 @@ class FolderWatch:
     def stop(self) -> None:
         self.folder = None
         self._sizes.clear()
+        self._since.clear()
         self.changed, self.waiting, self.moving = [], [], []
 
     def _measure(self, path: Path) -> tuple[Optional[tuple], str]:
@@ -127,10 +139,16 @@ class FolderWatch:
                 self._sizes.pop(key, None)
                 continue
             before = self._sizes.get(key)
-            if (known or state[0] > 0) and before == state:  # the same at two looks: it rests
+            if before != state:
+                self._since[key] = scan.moment
+            rested = scan.moment - self._since.get(key, scan.moment) >= float(self.settle_s or 0.0)
+            if (known or state[0] > 0) and before == state and (known or rested):  # the same at two looks: it rests
                 self._sizes.pop(key, None)
+                self._since.pop(key, None)
                 self._known[key] = state
                 (self.changed if known else ready).append(path)
+            elif before == state:  # the same, but not long enough yet (``settle_s``)
+                continue
             else:
                 if before is not None:  # changed at the look before, and again: what it was then
                     self.moving.append((path, before))

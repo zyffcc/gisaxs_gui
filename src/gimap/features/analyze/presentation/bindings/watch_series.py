@@ -13,12 +13,13 @@ from src.gimap.app.presentation.i18n import trf
 from ..frames_model import with_cut
 from ..texts import message_text
 from ..series_texts import SUM_SWITCHED_OFF
+from .watch_online import WHAT_FAILED, WHAT_NO_CURVE, WatchOnlineMixin
 
 CORRECTED_MAP = ("This map uses batch series corrections. Watching cannot append uncorrected frames: "
                  "Build Map again or rerun Batch Export with the same corrections.")
 
 
-class WatchSeriesMixin:
+class WatchSeriesMixin(WatchOnlineMixin):
     def _stop_watch_series(self) -> None:
         self._watch_series_epoch = object()
         self._watch_series_waiting = []
@@ -28,6 +29,7 @@ class WatchSeriesMixin:
         self._watch_series_jobs = set()
         self._watch_series_rereading = False
         self._watch_series_correction_warned = None
+        self._watch_online_stopped()
         self.series_watch_follow_check.hide()
         timer = getattr(self, "_watch_series_timer", None)
         if timer is not None:
@@ -114,7 +116,7 @@ class WatchSeriesMixin:
         has_map = (self._series_map is not None or self.batch_running()
                    or (self._watch_series_built is not None and self._watch_series_built is self._series_built))
         stored_key = getattr(self, "_series_key", None)
-        live = analysis.reduction is not None and (has_map or exporting)
+        live = analysis.reduction is not None and (has_map or exporting or self._watch_map_wanted())
         if has_map and self._watch_series_corrected():
             live = False
             self._series_say(CORRECTED_MAP)
@@ -162,6 +164,7 @@ class WatchSeriesMixin:
         if getattr(value, "live_error", ""):
             self._status(trf("Could not append a frame to the Series map: {error}",
                              error=message_text(value.live_error)), "warning")
+            self._log_skipped(job.split(":", 1)[-1].rsplit(":", 1)[0] or job, WHAT_NO_CURVE, message_text(value.live_error))
         if row is None or len(row) != 5:
             return
         numbers = model.frame_numbers()
@@ -189,6 +192,7 @@ class WatchSeriesMixin:
         template = ("Auto-export of {name} failed: {error}" if exporting
                     else "Could not append {name} to the Series map: {error}")
         self._status(trf(template, name=name, error=message_text(message)), "error")
+        self._log_skipped(name, WHAT_FAILED, message_text(message))
 
     def _watch_series_normalize(self) -> None:
         if not self.view_model.watch.active:
@@ -231,3 +235,4 @@ class WatchSeriesMixin:
         self._clear_stages()
         self._show_series_map(keep_view=had_map and not follow, keep_q=had_map)
         self._find_stages()
+        self._record_rows()  # (Record Every Frame in the Results Database: the rows not written yet)

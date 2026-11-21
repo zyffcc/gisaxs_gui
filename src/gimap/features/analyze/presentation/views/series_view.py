@@ -45,6 +45,8 @@ TRACE_ITEMS = (
     ("Peak area", "area"),
     ("Peak height", "height"),
     ("Change along the series", "change"),
+    ("χ² to the frame before (timeline)", "neighbour"),
+    ("χ² to the reference frame (timeline)", "reference"),
 )
 CHANGE_EMPTY = "Change along the series: once the stages are found"
 """The trace plot as “Change along the series” before the stages are found."""
@@ -143,6 +145,15 @@ class SeriesView(SeriesFitView):
         self.series_export_trace_data_action = menu.addAction("Trace as Table…")
         self.series_export_trace_data_action.setToolTip("CSV: the value of the trace plot for every frame")
         self.series_export_track_action = menu.addAction("Peak Table of Every Frame…")
+        menu.addSeparator()
+        self.series_export_store_action = menu.addAction("Save Results Database…")
+        self.series_export_store_action.setToolTip(
+            "Every frame's curve, with its frame, file, time and the settings of the map, into a results database "
+            "(gimap_series.sqlite): Compare reads it, and a watch can add to it")
+        self.series_export_timeline_action = menu.addAction("Timeline as Table…")
+        self.series_export_timeline_action.setToolTip(
+            "CSV: every frame's χ² to the frame before and to the reference frame, the jumps, its stage and whether "
+            "it is odd; a JSON record next to it")
         self.series_export_track_action.setToolTip(
             "CSV: frame, file, and the peak in the x window — centroid position, moment width (2.355 σ), area and height")
         self.series_export_button.setMenu(menu)
@@ -308,11 +319,19 @@ class SeriesView(SeriesFitView):
         self.series_stages_range_combo.setToolTip(
             "What the stages and odd frames are found in: every x of the map, or only the x range the map shows "
             "(zoom the map: the stages follow)")
-        for caption, combo in (("Frame axis", self.series_axis_combo), ("Stages compare", self.series_stages_range_combo)):
+        self.series_reference_spin = QSpinBox(section)
+        self.series_reference_spin.setObjectName("analyzeSeriesReference")
+        self.series_reference_spin.setRange(1, 10_000_000)
+        self.series_reference_spin.setToolTip(
+            "The frame the timeline “χ² to the reference frame” compares every frame with (its number on the frame "
+            "axis; the nearest frame of the map when it holds no frame of that number)")
+        for caption, combo in (("Frame axis", self.series_axis_combo), ("Stages compare", self.series_stages_range_combo),
+                               ("Reference frame", self.series_reference_spin)):
             row = QHBoxLayout()  # a row each: the tab stays as narrow as its controls
             row.setSpacing(6)
-            combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-            combo.setMinimumContentsLength(12)
+            if isinstance(combo, QComboBox):
+                combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+                combo.setMinimumContentsLength(12)
             row.addWidget(QLabel(caption, section))
             row.addWidget(combo, 1)
             section.add_layout(row)

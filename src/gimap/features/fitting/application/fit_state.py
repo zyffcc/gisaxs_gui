@@ -105,7 +105,8 @@ def frame_from_dict(data: dict) -> FrameFit:
 def settings_to_dict(settings: SeriesSettings) -> dict:
     return {"side": settings.side, "q_range": None if settings.q_range is None else [float(v) for v in settings.q_range],
             "excluded": sorted(float(v) for v in settings.excluded), "method": settings.method, "start": settings.start,
-            "resolve_edges": bool(settings.resolve_edges), "follow": bool(settings.follow)}
+            "resolve_edges": bool(settings.resolve_edges), "follow": bool(settings.follow),
+            "backward": bool(settings.backward)}
 
 
 def settings_from_dict(data: dict) -> SeriesSettings:
@@ -114,7 +115,8 @@ def settings_from_dict(data: dict) -> SeriesSettings:
                           q_range=None if q_range is None else tuple(float(v) for v in q_range),
                           excluded=frozenset(float(v) for v in data.get("excluded") or ()),
                           method=str(data.get("method") or "local"), start=str(data.get("start") or "previous"),
-                          resolve_edges=bool(data.get("resolve_edges", True)), follow=bool(data.get("follow", True)))
+                          resolve_edges=bool(data.get("resolve_edges", True)), follow=bool(data.get("follow", True)),
+                          backward=bool(data.get("backward", False)))
 
 
 __all__ = ["STATE_SCHEMA", "frame_from_dict", "frame_to_dict", "number", "path_key", "path_of", "read_number",

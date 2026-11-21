@@ -37,6 +37,7 @@ from .series_display import SeriesDisplayMixin
 from .series_exports import SeriesExportsMixin
 from .series_pick import SeriesPickMixin
 from .series_fit_results import SeriesFitResultsMixin
+from .series_timeline import SeriesTimelineMixin
 
 DEFAULT_CURVE = {GISAXS: "horizontal"}
 """The curve a series map starts with; GIWAXS and others: the radial I(q)."""
@@ -44,7 +45,7 @@ REDRAW_EVERY = 5
 """Rows added between redraws of the growing map."""
 
 
-class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, SeriesFitResultsMixin):
+class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, SeriesFitResultsMixin, SeriesTimelineMixin):
     """Needs the Series widgets (``views/series_view.py``), ``view_model``, ``tasks`` and ``_status``."""
 
     def _connect_series(self) -> None:
@@ -74,6 +75,8 @@ class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, Serie
         self._connect_series_pick()
         self._connect_series_exports()
         self._connect_series_fit_results()
+        self._connect_series_timeline()
+        self._connect_watch_online()
 
     # -- curves offered ----------------------------------------------------------------
 
@@ -297,6 +300,7 @@ class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, Serie
         self._batch_live = False
         self._series_map, self._series_name = None, None
         self._series_rows = []
+        self._forget_records()
         self._series_row = 0
         self._series_done_text = None
         self._clear_stages()
