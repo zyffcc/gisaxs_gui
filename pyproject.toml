@@ -1,3 +1,41 @@
+# `pip install .` (or `pip install -e .` in a source folder) installs GIMaP with the core requirements of
+# requirements.txt and a `gimap` command (`gimap [FILE_OR_FOLDER ...]`, `gimap --version`). The version is read
+# from src/gimap/shared/version.py, the one place it is written. The optional parts keep their own files
+# (requirements-tensorflow.txt, requirements-bornagain.txt, requirements-ai.txt).
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gimap"
+description = "GIMaP: GISAXS and GIWAXS analysis, a PyQt5 desktop program"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Yufeng Zhai"}]
+dynamic = ["version", "dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/zyffcc/gisaxs_gui"
+
+[project.scripts]
+gimap = "src.gimap.app.launcher:launch"
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src", "src.*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+"*" = ["*.qss", "*.svg", "*.css", "*.js", "*.json", "*.npz"]
+
+[tool.setuptools.dynamic]
+version = {attr = "src.gimap.shared.version.__version__"}
+dependencies = {file = ["requirements.txt"]}
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]

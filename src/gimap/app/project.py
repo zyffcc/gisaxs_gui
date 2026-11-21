@@ -44,13 +44,23 @@ def collect(components, page: str = "", path=None) -> dict:
         "analyze": components.analyze_page.project_state(),
         "fitting": {"single": workspace.fit_page.project_state(), "series": workspace.series_page.project_state()},
     }
-    compare = getattr(components, "compare_page", None)
+    compare = _page(components, "compare")
     if compare is not None:
         data["compare"] = compare.project_state(path)
-    sputter = getattr(components, "sputter_page", None)
+    sputter = _page(components, "sputter")
     if sputter is not None:
         data["sputter"] = sputter.project_state()
     return data
+
+
+def _page(components, key: str, needed: bool = False):
+    """Compare's or Sputter's page when it is built (``needed``: built now). A page built on first use that was
+    never opened has nothing to save, and a project without its part has nothing to give it."""
+    built = getattr(components, "built_page", None)
+    page = built(key) if built is not None else getattr(components, f"{key}_page", None)
+    if page is None and needed:
+        page = getattr(components, f"{key}_page", None)
+    return page
 
 
 def save(components, path, page: str = "") -> Path:
@@ -265,10 +275,10 @@ def apply(components, data: dict, path=None) -> list[str]:
         if series.get("pattern"):  # the page sets it with the folder; with none, the project's all the same
             workspace.series_page.pattern_edit.setText(str(series["pattern"]))
     notes += workspace.series_page.apply_project_state(series)
-    compare = getattr(components, "compare_page", None)
+    compare = _page(components, "compare", needed="compare" in data)
     if compare is not None:  # a project without Compare (an older file): no series, not those of before
         notes += compare.apply_project_state(_part(data, "compare"), path)
-    sputter = getattr(components, "sputter_page", None)
+    sputter = _page(components, "sputter", needed="sputter" in data)
     if sputter is not None:
         notes += sputter.apply_project_state(_part(data, "sputter"))
     return notes

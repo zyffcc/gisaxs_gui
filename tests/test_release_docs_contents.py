@@ -254,7 +254,7 @@ def test_the_documents_say_where_the_manual_opens(monkeypatch) -> None:
     monkeypatch.setattr(help_documents.QDesktopServices, "openUrl", lambda url: opened.append(url) or True)
     monkeypatch.setattr(help_documents, "warn", lambda *_args: pytest.fail("the manual was not found"))
     code = _text(ROOT / "src" / "gimap" / "app" / "presentation" / "menu_bar.py")
-    assert "open_user_manual(window)" in code  # Help ▸ User Manual calls this opener
+    assert "open_user_manual(window" in code  # Help ▸ User Manual calls this opener (at the page shown)
     page = help_documents.open_user_manual()
     in_browser = len(opened) == 1 and opened[0].isLocalFile() and opened[0].toLocalFile().endswith(".html")
     assert in_browser and page is not None and page.is_file()

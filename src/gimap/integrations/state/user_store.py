@@ -7,8 +7,11 @@ The program folder therefore stays read-only and unchanged by use, and
 unpacking a new release keeps the user's settings.
 
 Files written before this store existed (``config/user_parameters.json``,
-``config/user_settings.json``, ``config/instrument_profiles.json``,
-``.gimap_cache/session.json``) are imported once and never modified.
+``config/user_settings.json``, ``config/instrument_profiles.json``) are imported once, into the default
+user folder only (``migrate_once``), and never modified. Only settings come over, never a session: the
+last Fitting session, the recent and last folders and the old ``.gimap_cache/session.json`` stay behind,
+so a new folder never opens on another sample's data. A folder given by ``GIMAP_HOME`` (tests, figure
+scripts, a second set-up) imports nothing.
 """
 
 from __future__ import annotations
@@ -31,6 +34,15 @@ SETTINGS_FILE = "settings.json"
 PROFILES_FILE = "instrument_profiles.json"
 SESSION_FILE = "session.json"
 MODEL_PARAMETERS_FILE = "model_parameters.json"
+MIGRATION_MARKER = ".legacy_imported"
+"""Written into the default user folder after its one look at the files of the program folder."""
+SESSION_SETTINGS = {
+    "fitting": ("last_session",),
+    "analyze": ("last_folder", "recent"),
+    "gisaxs_predict": ("input_file", "input_folder"),
+    "classification": ("import_cache",),
+}
+"""Keys of the old ``user_parameters.json`` that are a session (what was open), not settings: never imported."""
 
 OBSOLETE_PREFERENCES = frozenset(
     {
@@ -51,6 +63,11 @@ OBSOLETE_PREFERENCES = frozenset(
     }
 )
 """Window-scaling preferences of the removed custom scaling code."""
+
+
+def explicit_home() -> bool:
+    """Whether ``GIMAP_HOME`` names the user folder (a folder chosen on purpose: nothing is imported into it)."""
+    return bool(os.environ.get("GIMAP_HOME", "").strip())
 
 
 def user_data_dir() -> Path:
@@ -144,7 +161,12 @@ class UserStore:
         self.preferences = deep_merge(default_preferences(), stored_preferences)
         self.migrated_from = payload.get("migrated_from")
 
+    read_only = False
+    """A second GIMaP started while one runs keeps its changes in memory: the first one's file stays as it is."""
+
     def save(self) -> None:
+        if self.read_only:
+            return
         payload = {
             "schema_version": SCHEMA_VERSION,
             "saved_at": datetime.now(timezone.utc).isoformat(),
@@ -220,10 +242,11 @@ def migrate_legacy_files(
     *,
     project_root: Path = PROJECT_ROOT,
 ) -> list[str]:
-    """Import the pre-store files once; returns what was imported.
+    """Import the pre-store settings files; returns what was imported.
 
     Nothing is imported when the store already exists, and legacy files are
-    only read (they stay where they are, untouched).
+    only read (they stay where they are, untouched). The session keys of the old settings
+    (``SESSION_SETTINGS``) and the old session file are left out. ``migrate_once`` decides whether to call it.
     """
     data_dir = Path(data_dir)
     imported: list[str] = []
@@ -241,7 +264,8 @@ def migrate_legacy_files(
             sources = [str(path) for path in (legacy_parameters, legacy_preferences) if path.is_file()]
             payload = {
                 "schema_version": SCHEMA_VERSION,
-                "settings": {key: value for key, value in settings.items() if isinstance(value, dict)},
+                "settings": {key: _without_session(key, value) for key, value in settings.items()
+                             if isinstance(value, dict)},
                 "preferences": preferences,
                 "migrated_from": {
                     "files": sources,
@@ -252,7 +276,6 @@ def migrate_legacy_files(
             imported.extend(sources)
     for legacy, name in (
         (project_root / "config" / PROFILES_FILE, PROFILES_FILE),
-        (project_root / ".gimap_cache" / SESSION_FILE, SESSION_FILE),
         (project_root / "config" / MODEL_PARAMETERS_FILE, MODEL_PARAMETERS_FILE),
     ):
         target = data_dir / name
@@ -265,9 +288,32 @@ def migrate_legacy_files(
     return imported
 
 
+def _without_session(section: str, values: dict) -> dict:
+    return {key: value for key, value in values.items() if key not in SESSION_SETTINGS.get(section, ())}
+
+
+def migrate_once(data_dir: Path, *, explicit: bool, project_root: Path = PROJECT_ROOT) -> list[str]:
+    """The one import of the old settings: into the default user folder, the first time it is opened
+    (``MIGRATION_MARKER``), never into a folder chosen on purpose (``explicit``: ``GIMAP_HOME`` or a folder
+    passed in)."""
+    data_dir = Path(data_dir)
+    marker = data_dir / MIGRATION_MARKER
+    if explicit or marker.exists():
+        return []
+    imported = migrate_legacy_files(data_dir, project_root=project_root)
+    try:
+        data_dir.mkdir(parents=True, exist_ok=True)
+        marker.write_text(datetime.now(timezone.utc).isoformat() + "\n", encoding="utf-8")
+    except OSError:
+        pass
+    return imported
+
+
 __all__ = [
+    "MIGRATION_MARKER",
     "MODEL_PARAMETERS_FILE",
     "OBSOLETE_PREFERENCES",
+    "SESSION_SETTINGS",
     "PROFILES_FILE",
     "SCHEMA_VERSION",
     "SESSION_FILE",
@@ -277,6 +323,8 @@ __all__ = [
     "UserStore",
     "atomic_write_json",
     "deep_merge",
+    "explicit_home",
     "migrate_legacy_files",
+    "migrate_once",
     "user_data_dir",
 ]

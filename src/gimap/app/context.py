@@ -28,6 +28,8 @@ class AppContext:
     instrument_profiles: InstrumentProfileRepository | None = None
     data_dir: Path | None = None
     """User data folder of this context (None for in-memory test contexts)."""
+    read_only: bool = False
+    """A second GIMaP started while one runs: settings, session and profiles are read, never written."""
     project_state: ProjectState = field(default_factory=ProjectState)
 
     def restore_session(self) -> bool:

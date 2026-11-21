@@ -19,7 +19,7 @@ what you decide, this manual names its section there.
 
 New to GIMaP? Start with chapter 1: two walk-throughs of about ten minutes each, on public data.
 
-Open **Help ▸ User Manual** (`F1`) for the offline reading page: a fixed, expandable chapter outline on
+Open **Help ▸ User Manual** (`F1`, which opens it at the chapter of the page shown) for the offline reading page: a fixed, expandable chapter outline on
 the left and **Search this document**, which searches both headings and text. Click a chapter or a
 search result to jump to it; the outline marks your current section. Press `/` to focus search, `Enter`
 to open the first result and `Esc` to clear it. In a narrow window, **Contents** opens the navigation.
@@ -340,6 +340,13 @@ missing says which file to install.
 Start GIMaP from such an environment with `python main.py`. `Start_GIMaP.bat` never uses it: it always
 uses its own `.gimap` environment and would set one up beside yours.
 
+**As a package, with a `gimap` command.** In the folder of the checkout, `python -m pip install -e .`
+installs GIMaP with the packages of `requirements.txt` and adds the command `gimap`. `gimap` starts GIMaP;
+`gimap frame_0001.cbf scan_folder sample.gimap` also opens what it names (frames and folders in Analyze, a
+project as a project); `gimap --version` prints the version and `gimap --help` the options. `python main.py`
+takes the same arguments. Install it editable (`-e`), as shown: the manuals, icons and example data stay in the
+checkout, which a plain `pip install .` does not copy.
+
 The trained network of **Predict parameters** and 1D Predict is in the Git repository (about 13 MB, section 6.4),
 so a checkout runs everything, including Predict parameters (chapter 6). On macOS, BornAgain is installed
 separately: `README.md` says how.
@@ -440,12 +447,23 @@ Frames… below it), the image in the middle, the curves on the right.*
 - **Messages** appear as short notes at the bottom right. A note about a written file has an
   **Open Folder** button. Each page also has a status line at its foot.
 
-The window title names the frame shown, and the project when one is open.
+The window title names the frame shown, and the project when one is open. A `*` after the title says that
+the work has changes that are not saved (section 3.8).
+
+**Starting.** While GIMaP starts, a small window shows its version and what it is loading; the main window
+follows a few seconds later. Compare and Sputter are built when you first open them. A second start while
+GIMaP is running asks first: **Switch to It** brings the running window to the front (and opens there what the
+second start was given), **Start Anyway (Read-only Settings)** opens a second window that saves neither
+settings nor session, so the two never overwrite each other's files.
+
+**Small screens.** When the window is smaller than a page needs (below about 1200 × 690 for Analyze), the page
+keeps its size and scroll bars appear, instead of plots and tables being cut off.
 
 **Dropping files.** Detector frames, folders and `.gimap` projects can be dropped anywhere on the
 window. A curve file (`.dat`, `.txt`) dropped while Fitting is shown opens there.
 
-**Closing.** Closing GIMaP while something still runs — Batch Export, a Series map, the automatic
+**Closing.** When the work has unsaved changes, closing asks first: **Save** (the project, or a new one),
+**Don't Save** or **Cancel**. Closing GIMaP while something still runs — Batch Export, a Series map, the automatic
 analysis, an AI analysis, a fit, an In-situ series, a 2D prediction, an SEM Particle Analysis, a
 Sputter analysis — asks first and lists what runs. **Yes** stops them and quits; **Cancel** keeps working. An SEM analysis
 that is still finishing may ask you to close the window again once it has stopped.
@@ -524,7 +542,7 @@ spreadsheet.
 | Analyze | Run Automatic Analysis, Stop Automatic Analysis, Repeat Analysis (`F5`), Export Curves… (`Ctrl+E`), Batch Export… (`Ctrl+Shift+E`), Batch Export a Folder…, Send to Fitting, Send Series to Fitting…, Send Series to Compare, Set-up Files ▸ Save Settings… / Load Settings… / Save Cuts… / Load Cuts… / Save Masks… / Load Masks…, Figures ▸ Save Image… / Save q-Map Data… / Save View Data…, Clear Frame List |
 | Fitting | Open Curve…, Import Curves…, Fit a Folder of Curves…, Fit (`Ctrl+Return`), Stop Fit, Load Model…, Save Model…, Save Data and Fit…, Save Plot…, Batch / In-situ Series ▸ Start / Stop, 1D Predict — Fit Many Curves… |
 | Tools | Geometry Calibration… (`Ctrl+Shift+G`), Format Converter… (`Ctrl+Shift+C`), Convert Current File…, XRR Series Extractor… (`Ctrl+Shift+R`), SEM Particle Analysis…, 1D Predict — Fit Many Curves…, Process with AI… (`Ctrl+Shift+L`), Settings… (`Ctrl+,`) |
-| Help | User Manual (`F1`), Physics and Methods, Keyboard Shortcuts…, Example Data ▸ GISAXS — Ag Nanoparticles (GALAXI)… / SAXS — AgBh Calibrant (pyFAI)… / GIWAXS — MAPbI₃ Film (DESY P08)… / GIWAXS — PbTe, Tilted Detector (Xeuss)…, Report a Problem…, Open Error Log Folder, Open User Data Folder, GitHub Repository, Check for Updates…, How to Cite GIMaP…, Third-party Notices, About GIMaP |
+| Help | User Manual (`F1`), Physics and Methods, Keyboard Shortcuts…, Example Data ▸ GISAXS — Ag Nanoparticles (GALAXI)… / SAXS — AgBh Calibrant (pyFAI)… / GIWAXS — MAPbI₃ Film (DESY P08)… / GIWAXS — PbTe, Tilted Detector (Xeuss)…, Report a Problem…, Open Log Folder, Open User Data Folder, GitHub Repository, Check for Updates…, How to Cite GIMaP…, Third-party Notices, About GIMaP |
 
 ![The Analyze menu open over the Analyze workspace](manual_images/en/23_analyze_menu.png)
 *The Analyze menu with one frame open in Analyze. Entries that cannot run now are greyed out; their tooltip says
@@ -634,6 +652,10 @@ or dropping a `.gimap` file on the window opens it.
   series of Fitting and the series of Compare of the sample before are closed. Save them first if you need them.
 - After **Clear** in Analyze, what you open next is no longer that project: **Save Project** asks
   where to save instead of overwriting it.
+- Work that differs from what was last saved or opened puts a `*` after the window title. Opening another
+  project or closing the window then asks first: **Save**, **Don't Save** or **Cancel**. Changing back what you
+  changed removes the `*` again; looking at another frame of the list is no change.
+- A project that cannot be opened is taken off **Open Recent**, and the message says so.
 - A project cannot be opened while a job runs (an In-situ series, Batch Export …): stop it first.
 - A project keeps no fits of the In-situ series. When frames fitted there are not saved yet, opening a
   project asks first: **Save** (the table of every frame), **Discard** or **Cancel** (nothing changes).
@@ -647,22 +669,31 @@ or dropping a `.gimap` file on the window opens it.
 - **Last set-up**: when GIMaP closes after a frame was analysed, the Analyze set-up (mode, profile,
   masks, corrections, cut regions …) is kept in `last_analyze_setup.json` in the user data folder.
   With the first frame of the next session a note offers **Use It**. It is never applied without
-  asking, since a new beamtime may need other settings.
+  asking, since a new beamtime may need other settings, and it is not offered when you open a project:
+  the project's own set-up wins. A file that could not be opened is taken off Recent (a note says so).
+- **Autosave and recovery**: changed work is saved every 2 minutes and after each long job (Batch Export, the
+  automatic analysis, a fit, an In-situ series …) to `autosave/session.gimap` in the user data folder, never
+  while a job runs. When GIMaP was not closed properly (a crash, a power cut, a window ended in the Task
+  Manager), the next start asks **GIMaP was not closed properly. Restore the work autosaved at …?**:
+  **Restore** opens that work (with a `*`: save it to keep it; **Save Project** writes to the project it came
+  from), **Discard** deletes it. A normal close deletes the autosave.
 - **Sputter**: the values of each scan folder's last Analyze (geometry, metal, mask, the substrate, the rate with
   its unit and whether it is a QCM reading, the mode, the start and duration of the deposition and the film
   thickness), the values used last (another folder does not take over the mask, the sample roll or a rate), the
   geometry presets, the folder of the analysis package and the result shown last (opened again at the next start).
   What an older version remembered for its earlier method (Predict) is not read.
-- The window size and position, the theme, the font size and the language are restored at the next
-  start.
+- The window size and position, the positions of the dividers between panels (splitters), the theme, the
+  font size and the language are restored at the next start.
 
 ### 3.10 When something goes wrong
 
 An unexpected error does not close GIMaP. A window says what happened: **Show Details** shows the
 technical report, **Copy Details** copies it for a bug report, and the work goes on. Every error is
-written to `logs/errors.log` in the user data folder. **Open Log Folder** in that window, or
-**Help ▸ Open Error Log Folder** at any time, opens the folder; when no error has been logged yet,
-the menu entry says so. To report a problem, **Help ▸ Report a Problem…** (section 3.6) copies the
+written to `logs/errors.log` in the user data folder. The same folder keeps `gimap.log`, what each session did
+(its version, warnings, failed saves; also when GIMaP runs without a console), in files of at most 1 MB with the
+three before, and `crash.log`, where the Python stack is written when GIMaP is ended by a crash of the system
+libraries. **Open Log Folder** in that window, or **Help ▸ Open Log Folder** at any time, opens the folder; when
+nothing has been logged yet, the menu entry says so. To report a problem, **Help ▸ Report a Problem…** (section 3.6) copies the
 versions to paste into the report.
 
 Files that cannot be read say why in words: empty (still being written?), not a detector image, a
@@ -671,8 +702,8 @@ Chapter 14 has more.
 
 ### 3.11 Settings and the user data folder
 
-**Tools ▸ Settings…** (`Ctrl+,`) has four pages. Changes apply immediately; only the keys of the AI
-are stored with their own **Save** button.
+**Tools ▸ Settings…** (`Ctrl+,`) has four pages. Changes apply immediately (the font size a moment after the
+last arrow click, or at once with Enter); only the keys of the AI are stored with their own **Save** button.
 
 | Page | What it sets |
 |---|---|
@@ -694,6 +725,13 @@ of the Sputter workspace (chapter 8) and the records of the AI assistant's runs 
 
 **Help ▸ Open User Data Folder** opens it. Updating the program never overwrites it, and deleting the
 program folder does not remove it.
+
+- **One GIMaP per folder.** A running GIMaP holds `gimap.lock` there; a second start asks first (section 3.1).
+  A lock left by a GIMaP that crashed is taken over without a question.
+- **Settings of older versions.** The first time the default folder is opened, GIMaP imports once the settings
+  an older version kept in the program folder (`config/user_parameters.json`, `config/user_settings.json`,
+  `config/instrument_profiles.json`): settings only, never a session (the last Fitting curve, the recent and
+  last folders stay behind). A folder named by `GIMAP_HOME` imports nothing.
 
 ## 4. Geometry and calibration
 

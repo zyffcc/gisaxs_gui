@@ -298,19 +298,55 @@ def write_page(source: Path, title: str) -> Path:
     return page_path(source)
 
 
-def open_document(parent: Optional[QWidget], source: Path, title: str, missing: str) -> Optional[Path]:
+def open_document(parent: Optional[QWidget], source: Path, title: str, missing: str,
+                  section: str = "") -> Optional[Path]:
     """Render ``source`` and open it in the default browser; the page written, or ``None`` when ``source``
-    is not there (``missing``, a template with ``{path}``, then says so) or cannot be read."""
+    is not there (``missing``, a template with ``{path}``, then says so) or cannot be read. ``section``: the
+    number of a heading (``"5"``, ``"3.2"``) to open the page at (``section_anchor``), when it has one."""
     if not source.is_file():
         warn(parent, title, missing.format(path=source))
         return None
     try:
         page = write_page(source, title)
+        shown = _at_section(page, section) if section else page
     except (OSError, UnicodeDecodeError) as exc:
         warn(parent, title, trf("{name} could not be opened: {error}", name=source.name, error=exc))
         return None
-    QDesktopServices.openUrl(QUrl.fromLocalFile(str(page)))
+    QDesktopServices.openUrl(QUrl.fromLocalFile(str(shown)))
     return page
+
+
+def section_anchor(page: str, number: str) -> Optional[str]:
+    """The ``id`` of the heading numbered ``number`` (``"5"`` → “5. Analyze”, ``"3.2"`` → “3.2 The Start
+    page”) in a page written by ``render_markdown``; the same in every language, since both manuals number
+    their chapters alike."""
+    prefix = re.compile(rf"{re.escape(number)}\.?\s")
+    for match in _ANCHORED.finditer(page):
+        text = " ".join(html.unescape(_TAG.sub("", match.group(3))).split())
+        if prefix.match(text + " "):
+            return html.unescape(match.group(2))
+    return None
+
+
+_ANCHORED = re.compile(r'<h([1-6]) id="([^"]+)"[^>]*>(.*?)</h\1>', re.S | re.I)
+
+
+def _at_section(page: Path, number: str) -> Path:
+    """A small page that forwards to ``page`` at the heading ``number`` (a browser started with a file and a
+    ``#fragment`` often drops the fragment; a forward within the browser keeps it). ``page`` itself when the
+    heading is not found."""
+    anchor = section_anchor(page.read_text(encoding="utf-8"), number)
+    if not anchor:
+        return page
+    url = QUrl.fromLocalFile(str(page))
+    url.setFragment(anchor)
+    target = html.escape(url.toString(), quote=True)
+    forward = page.with_name(page.stem + "_section.html")
+    forward.write_text(
+        f'<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0; url={target}">'
+        f'<script>location.replace({json.dumps(url.toString())});</script></head>'
+        f'<body><a href="{target}">{html.escape(page.name)}</a></body></html>', encoding="utf-8")
+    return forward
 
 
 # -- the documents of the Help menu -------------------------------------------------------------------
@@ -334,10 +370,15 @@ def notices_path() -> Path:
     return PACKAGED_NOTICES if not THIRD_PARTY_NOTICES.is_file() and PACKAGED_NOTICES.is_file() else THIRD_PARTY_NOTICES
 
 
-def open_user_manual(parent: Optional[QWidget] = None) -> Optional[Path]:
-    """Help ▸ User Manual: the manual in the interface language, as a web page in the default browser."""
+MANUAL_SECTIONS = {"home": "3.2", "analyze": "5", "fitting": "6", "compare": "7", "sputter": "8", "predict": "11.1"}
+"""The chapter of the manual about each workspace (F1 opens the manual there)."""
+
+
+def open_user_manual(parent: Optional[QWidget] = None, page: str = "") -> Optional[Path]:
+    """Help ▸ User Manual (F1): the manual in the interface language, as a web page in the default browser, at
+    the chapter of the workspace ``page`` (a key of ``MANUAL_SECTIONS``) when one is given."""
     return open_document(parent, manual_for_language(current_language()), tr("User Manual"),
-                         tr("The user manual was not found:\n{path}"))
+                         tr("The user manual was not found:\n{path}"), section=MANUAL_SECTIONS.get(page, ""))
 
 
 def open_physics_manual(parent: Optional[QWidget] = None) -> Optional[Path]:
@@ -353,6 +394,7 @@ def open_third_party_notices(parent: Optional[QWidget] = None) -> Optional[Path]
 
 
 __all__ = [
+    "MANUAL_SECTIONS",
     "PHYSICS_MANUAL",
     "PHYSICS_MANUAL_ZH",
     "THIRD_PARTY_NOTICES",
@@ -372,5 +414,6 @@ __all__ = [
     "open_user_manual",
     "physics_manual_for_language",
     "render_markdown",
+    "section_anchor",
     "write_page",
 ]

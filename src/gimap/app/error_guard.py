@@ -17,6 +17,7 @@ Worker-thread errors reach the GUI thread through a queued signal.
 
 from __future__ import annotations
 
+import logging
 import sys
 import threading
 import time
@@ -40,6 +41,7 @@ from PyQt5.QtWidgets import (
 
 LOG_NAME = "errors.log"
 MAX_LOG_BYTES = 2_000_000
+logger = logging.getLogger("gimap.errors")
 
 
 class ErrorGuard(QObject):
@@ -82,6 +84,7 @@ class ErrorGuard(QObject):
             return
         details = "".join(traceback.format_exception(exc_type, exc, tb))
         summary = f"{getattr(exc_type, '__name__', 'Error')}: {exc}"
+        logger.error("Unexpected error%s: %s\n%s", f" ({where})" if where else "", summary, details.rstrip())
         self._write(details, where)
         try:
             self.caught.emit(summary, details)

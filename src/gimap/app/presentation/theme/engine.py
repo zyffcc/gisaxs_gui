@@ -1,11 +1,15 @@
 """Render the token style sheets and apply one theme to the whole application.
 
-The application style sheet (``base.qss``) is set once on ``QApplication``;
+The application style sheet (``base.qss``) is set once on ``QApplication``, in the theme of the start;
 widgets only carry semantic properties (``gimapRole="muted"``, ``card=true``
 ...), never colours.  A feature that needs rules of its own styles its root
 widget with ``style_widget``; those sheets are re-rendered when the theme
 changes.  Qt's high-DPI support scales every length, so the sheets use one set
 of logical sizes on every screen.
+
+A later switch of theme or font size does not set the application sheet again (Qt 5 then polishes every
+widget once for each of its ancestors: 20 s for the main window). ``restyle.py`` puts the new sheet on the
+windows without a parent instead, and applies only what changed.
 """
 
 from __future__ import annotations
@@ -102,8 +106,14 @@ class ThemeManager(QObject):
 
         return _MARKER.sub(substitute, _COMMENT.sub("", template))
 
+    @property
+    def stamp(self) -> str:
+        """``mode:size``: what a sheet was rendered for."""
+        return f"{self.mode}:{self.font_pt:g}"
+
     def apply(self, mode: str | None = None, font_pt: float | None = None) -> None:
-        """Apply (or re-apply) the theme to the running application."""
+        """Apply the theme to the running application: everything the first time, then what changed."""
+        before = (self.mode, self.font_pt) if self.applied else None
         if mode is not None:
             self.mode = normalized_mode(mode)
         if font_pt is not None:
@@ -111,29 +121,50 @@ class ThemeManager(QObject):
         app = QApplication.instance()
         if app is None:
             return
+        from . import restyle
+
         if not self.applied:
             app.setStyle("Fusion")
-        else:
-            # Restyling touches every widget; widgets that only wait for the
+            app.setPalette(_palette(THEMES[self.mode]))
+            self._apply_font(app)
+            app.setStyleSheet(self.render(_template(BASE_TEMPLATE)))
+            self.start_stamp = self.stamp
+            self.applied = True
+            restyle.restyle_features(self, app)
+        elif before != (self.mode, self.font_pt):
+            # Restyling touches many widgets; widgets that only wait for the
             # garbage collector or a deferred delete must be gone first.
             gc.collect()
             QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
-        app.setPalette(_palette(THEMES[self.mode]))
+            with restyle.waiting(app):
+                if before[0] != self.mode:
+                    app.setPalette(_palette(THEMES[self.mode]))
+                if before[1] != self.font_pt:
+                    self._apply_font(app)
+                restyle.restyle_windows(self, app)
+                restyle.restyle_features(self, app)
+        self.changed.emit(self.mode)
+
+    start_stamp = ""
+    """The theme the application sheet was rendered for (the first ``apply``)."""
+
+    def window_sheet(self) -> str:
+        """The sheet a window without a parent carries: ``""`` in the theme of the start (the application's)."""
+        if not self.start_stamp or self.stamp == self.start_stamp:
+            return ""
+        return self.render(_template(BASE_TEMPLATE))
+
+    def _apply_font(self, app) -> None:
         font = QFont(interface_font(app.font()))
         font.setPointSizeF(self.font_pt)
         app.setFont(font)
-        app.setStyleSheet(self.render(_template(BASE_TEMPLATE)))
-        for widget in app.allWidgets():
-            path = widget.property(TEMPLATE_PROPERTY)
-            if path:
-                widget.setStyleSheet(self.render(_template(Path(path))))
-        self.applied = True
-        self.changed.emit(self.mode)
 
     def style_widget(self, widget: QWidget, template: Path) -> None:
         """Give ``widget`` a feature style sheet that follows theme changes."""
+        from .restyle import render_feature
+
         widget.setProperty(TEMPLATE_PROPERTY, str(template))
-        widget.setStyleSheet(self.render(_template(Path(template))))
+        render_feature(self, widget, Path(template))
 
 
 _MANAGER: ThemeManager | None = None

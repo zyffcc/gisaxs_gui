@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from .i18n import tr
+from .i18n import tr, trf
 
 JSON_FILTER = "JSON Files (*.json);;All Files (*)"
 
@@ -38,6 +38,64 @@ def inform(parent: Optional[QWidget], title: str, text: str) -> None:
 
 def warn(parent: Optional[QWidget], title: str, text: str) -> None:
     QMessageBox.warning(parent, title, text)
+
+
+def _choose(parent: Optional[QWidget], title: str, text: str, buttons, default: int, escape: int,
+            informative: str = "") -> int:
+    """A question with the buttons ``(text, role)`` given; returns the index of the one chosen (``escape`` for
+    Esc or the window's close button)."""
+    box = QMessageBox(parent)
+    box.setIcon(QMessageBox.Question)
+    box.setWindowTitle(title)
+    box.setText(text)
+    if informative:
+        box.setInformativeText(informative)
+    made = [box.addButton(label, role) for label, role in buttons]
+    box.setDefaultButton(made[default])
+    box.setEscapeButton(made[escape])
+    box.exec_()
+    clicked = box.clickedButton()
+    return made.index(clicked) if clicked in made else escape
+
+
+def ask_quit_with_jobs(parent: Optional[QWidget], jobs: str) -> bool:
+    """While ``jobs`` (their names, one phrase) run: stop them and quit?"""
+    answer = QMessageBox.question(parent, tr("Quit GIMaP"), trf("Still running: {jobs}. Stop them and quit?", jobs=jobs),
+                                  QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel)
+    return answer == QMessageBox.Yes
+
+
+def ask_save_changes(parent: Optional[QWidget], name: str) -> str:
+    """``"save"``, ``"discard"`` or ``"cancel"``: what to do with changes not saved in the project ``name``
+    (``""``: work that is in no project yet)."""
+    text = (trf("Save the changes to the project {name}?", name=name) if name
+            else tr("Save the current work as a project?"))
+    answer = _choose(parent, tr("Unsaved Changes"), text,
+                     ((tr("Save"), QMessageBox.AcceptRole), (tr("Don't Save"), QMessageBox.DestructiveRole),
+                      (tr("Cancel"), QMessageBox.RejectRole)), default=0, escape=2,
+                     informative=tr("Changes that are not saved are lost."))
+    return ("save", "discard", "cancel")[answer]
+
+
+def ask_restore_session(parent: Optional[QWidget], when: str) -> bool:
+    """After GIMaP was not closed properly: restore the work it autosaved at ``when``?"""
+    answer = _choose(parent, tr("Restore the Session"),
+                     trf("GIMaP was not closed properly. Restore the work autosaved at {time}?", time=when),
+                     ((tr("Restore"), QMessageBox.AcceptRole), (tr("Discard"), QMessageBox.DestructiveRole)),
+                     default=0, escape=1)
+    return answer == 0
+
+
+def ask_already_running(parent: Optional[QWidget]) -> str:
+    """A second start: ``"switch"`` to the GIMaP that runs, ``"read_only"`` (start anyway, settings not saved)
+    or ``"cancel"``."""
+    answer = _choose(parent, "GIMaP", tr("GIMaP is already running."),
+                     ((tr("Switch to It"), QMessageBox.AcceptRole),
+                      (tr("Start Anyway (Read-only Settings)"), QMessageBox.ActionRole),
+                      (tr("Cancel"), QMessageBox.RejectRole)), default=0, escape=2,
+                     informative=tr("Two windows on one user folder would overwrite each other's settings and "
+                                    "session. A second one started anyway keeps its settings in memory only."))
+    return ("switch", "read_only", "cancel")[answer]
 
 
 def show_details(parent: Optional[QWidget], title: str, summary: str, details: str) -> QDialog:
@@ -82,4 +140,5 @@ def close_details(parent: Optional[QWidget]) -> int:
     return len(shown)
 
 
-__all__ = ["JSON_FILTER", "ask_open_json", "ask_save_json", "close_details", "inform", "show_details", "warn"]
+__all__ = ["JSON_FILTER", "ask_already_running", "ask_open_json", "ask_quit_with_jobs", "ask_restore_session", "ask_save_changes",
+           "ask_save_json", "close_details", "inform", "show_details", "warn"]

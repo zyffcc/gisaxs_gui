@@ -12,6 +12,21 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **The application around the pages: start-up, unsaved work, crashes, theme, log, command line.** A splash
+  screen with the version and what is loading appears within a second (the window used to appear after 13–26 s
+  with nothing on screen); Compare and Sputter are built when first opened. One GIMaP per user data folder
+  (`gimap.lock`): a second start offers **Switch to It** (its files open in the running window) or **Start Anyway
+  (Read-only Settings)**. Unsaved work puts `*` in the title; closing or opening another project asks **Save /
+  Don't Save / Cancel**. Changed work is autosaved every 2 minutes and after each long job to `autosave/` in the
+  user data folder, and after a crash the next start offers it back. A theme or font-size switch restyles the
+  windows, not every widget once per ancestor: from 20 s with the window frozen to 2–3 s;
+  the font-size field applies after the last click. `logs/gimap.log` (rotating; also under `pythonw.exe`) and
+  `logs/crash.log` (native crashes) join `errors.log`: **Help ▸ Open Log Folder**. `python main.py FILE…`, the
+  `gimap` command of `pip install -e .` and `--version`. The settings of older versions are imported once, into
+  the default folder only and never a session (a `GIMAP_HOME` folder imports nothing). Also: the “Use the set-up
+  of your last session?” note is not offered after a project was opened; an old note never covers a newer status
+  line; a file or project that could not be opened leaves Recent; splitter positions are remembered; a window
+  smaller than a page scrolls it instead of cutting it off; `F1` opens the manual at the chapter of the page shown.
 - **A sphere too large for the form factor at q_z = 0 is flagged.** Predict parameters fits a cut at q_z = 0 (the
   effective interface) unless it is given the cut's angles; for spheres that holds within about 5 % of R only up to
   q_z·R ≈ 1.7 (on the four-term DWBA benchmark the median error of R is 15–29 % above it, with both angles below

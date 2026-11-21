@@ -60,6 +60,22 @@ class SessionMemoryMixin:
         except Exception:
             pass
 
+    def forget_recent(self, path) -> bool:
+        """Take ``path`` off Recent (it could not be opened); ``True`` when it was there."""
+        settings = self.view_model.settings
+        if settings is None:
+            return False
+        try:
+            known = [str(value) for value in (settings.get(SECTION, RECENT_KEY, []) or []) if isinstance(value, str)]
+            kept = [item for item in known if item.casefold() != str(Path(path)).casefold()]
+            if len(kept) == len(known):
+                return False
+            settings.set(SECTION, RECENT_KEY, kept)
+            settings.save()
+        except Exception:
+            return False
+        return True
+
     def clear_recent(self) -> None:
         settings = self.view_model.settings
         if settings is not None:
@@ -84,6 +100,18 @@ class SessionMemoryMixin:
             return None
         return Path(path)
 
+    def decline_last_setup(self) -> None:
+        """A project was opened: its own set-up wins, so the last session's is not offered (and an offer shown
+        already goes)."""
+        self._setup_offered = True
+        offer = getattr(self, "_setup_offer", None)
+        self._setup_offer = None
+        if offer is not None:
+            try:
+                offer.close()
+            except RuntimeError:  # closed already
+                pass
+
     def _offer_last_setup(self) -> None:
         """Once per session, with the first frame: “use the set-up of your last session?”."""
         if self._setup_offered:
@@ -102,7 +130,7 @@ class SessionMemoryMixin:
         if settings_record(last) == settings_record(current):
             return  # nothing would change
         summary = _setup_summary(last)
-        show_toast(
+        self._setup_offer = show_toast(
             self.window(), tr("Use the set-up of your last session? {summary}").format(summary=summary), level="info",
             action=(tr("Use It"), lambda: self._read_settings(path)), timeout_ms=15000,
         )
