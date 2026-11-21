@@ -35,6 +35,7 @@ from .giwaxs_decisions import (
 )
 from .models import ToolCall
 from .pipeline_geometry import GeometryStepsMixin
+from .pipeline_phases import PhaseStepsMixin
 from .pipeline_progress import FrameChanged, PipelineStopped, frame_changed, same_file
 from .pipeline_report import calibration_quality, compact_report
 from .pipeline_rows import peak_rows as _peak_rows
@@ -154,6 +155,9 @@ class PipelineOptions:
     the frame. Off: GIWAXS (Process with AI names its technique)."""
     fit: bool = True
     """GISAXS: fit the horizontal cut when a fitter is available."""
+    phases: tuple = ()
+    """GIWAXS: phases to assign the rings to, CIF files or ``{"cell", "orientation", "indices"}`` (``--phase``); they
+    replace those of Analyze's Phases window, whose phases are used otherwise."""
 
 
 @dataclass
@@ -170,7 +174,7 @@ class _Run:
     """Why the run ended early as a failure (the frame changed); ``None`` otherwise."""
 
 
-class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
+class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin):
     def __init__(
         self,
         catalog: ToolCatalog,
@@ -431,6 +435,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
     def _analyse(self) -> None:
         status = self.catalog.results.status or {}
         self._run.decisions.append(refraction_decision(status.get("geometry"), given=self._incidence is not None))
+        self._phases_given()
         flat = flat_field_decision(status)
         if flat is not None:
             self._run.decisions.append(flat)
@@ -445,6 +450,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
             self._decide("peaks", "none", reason)
             return
         self._run.decisions.append(uncertainty_decision(status.get("error_model")))
+        self._assign(search.peaks)
         self._call("compare_sectors")
         reliable = [peak for peak in search.peaks if is_reliable(peak)]  # no caveat, not cut off at the end of the data
         chosen = sorted(reliable, key=lambda peak: -peak.area)[: max(0, int(self.options.rings))]
@@ -460,7 +466,8 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
             centres.append(float(asked))
             self._decide("requested ring", f"q ≈ {asked:g} Å⁻¹", "the person asked for it")
         for q in sorted(centres):
-            self._call("ring_orientation", {"q_center": q})
+            if self._call("ring_orientation", {"q_center": q}) is not None:
+                self._pole()
             if any(abs(peak.q - q) <= 0.5 * peak.fwhm for peak in reliable):
                 self._call("crystallite_size", {"q_center": q})
         rings = self.catalog.results.rings
@@ -477,7 +484,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
         # The record keeps the geometry as applied (the CSV headers do too): four significant digits can erase a
         # resolved subpixel shift, and 147.6 mm is not the distance q was computed with. report.md rounds for reading.
         geometry = clean(status.get("geometry") or {}, digits=FULL_PRECISION)
-        return {
+        return self._phase_rows({
             "ok": run.ok,
             "stopped": run.stopped,
             "failed": run.failed,
@@ -498,7 +505,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
             "steps": run.steps,
             "calibration": clean(exact_calibration(run.calibration, results.geometry_used), digits=FULL_PRECISION),
             "tables": results_payload(results),
-        }
+        })
 
 
 __all__ = ["PipelineOptions", "SERIES_FRACTION", "SERIES_SUM", "StandardPipeline", "compact_report", "default_sum",

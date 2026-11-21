@@ -13,6 +13,7 @@ from typing import Optional
 from ..domain import AT_EDGE, assessment, herman_decimals, signed
 from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
 from .pipeline_geometry import ROTATION_WHY, SEARCHED
+from .pipeline_phases import assignment_lines, pole_line
 from .report_language import ENGLISH, heading as section
 from .run_record import mask_lines, record_lines
 
@@ -23,6 +24,7 @@ OPTION_FLAGS = {
     "incidence_deg": "--incidence-deg A",
     "pixel_size_um": "--pixel-size-um P",
     "technique": "--technique giwaxs|gisaxs",
+    "phase": "--phase FILE.cif",
 }
 """The command-line flag that answers an open question (``needs_attention[].option``; MCP: the argument of that name)."""
 
@@ -215,6 +217,8 @@ def _ring_lines(rings: list[dict]) -> list[str]:
         for note in ring.get("notes") or ():
             if any(word in note for word in RING_NOTES_SHOWN):
                 lines.append(f"  - {note}")
+        if ring.get("pole_figure"):  # the fit of the orientation distribution (Analyze ▸ Phases, 7.11)
+            lines.append(f"  - {pole_line(ring['pole_figure'])}")
     return lines
 
 
@@ -274,6 +278,8 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: st
         hints = report.get("series_hints") or []
         if hints:
             lines += [_hints_title(report) + ": " + "; ".join(hints), ""]
+        if assignment_lines(report):
+            lines += [section("Phase assignment", language), "", *assignment_lines(report), ""]
         lines += [section("Ring orientation", language), "", *_ring_lines(report.get("rings") or []), ""]
     lines += [section("Decisions", language), ""]
     lines += [f"- **{item['what']}**: {item['decision']} — {item['why']}" for item in report.get("decisions") or []]
@@ -286,8 +292,9 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: st
         lines += ["", (
             "q in Å⁻¹, sizes and distances in nm. The fit is the most probable solution of Predict parameters; the "
             "model is a choice, not a measurement." if gisaxs else
-            "Sizes are Scherrer lower bounds (no instrumental width subtracted). Phases are not assigned: "
-            "name the material to compare q with known lines."
+            "Sizes are Scherrer lower bounds (no instrumental width subtracted). " + (
+                "Phases: the nearest reflection of the phases given (Phase assignment)." if report.get("phase_assignment")
+                else "Phases are not assigned: name the material to compare q with known lines.")
         )]
     return "\n".join(lines) + "\n"
 

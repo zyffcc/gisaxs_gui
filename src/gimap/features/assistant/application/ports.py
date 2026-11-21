@@ -86,6 +86,20 @@ class AnalysisWorkbench(Protocol):
         detector covers (a calibrant in transmission); nothing changes. Optional: without it the run does not look."""
         ...
 
+    def set_phases(self, phases: list) -> dict:
+        """Optional: the phases of Analyze's Phases window (CIF paths or ``{"cell", "orientation", "indices"}``)."""
+        ...
+
+    def assign_peaks(self, peaks: list[dict]) -> dict:
+        """Optional: ``{"phases", "rule", "assignments"}``, each peak ``{"q", "q_err", "fwhm"}`` with its nearest
+        reflection of the phases given (empty lists without phases); nothing changes."""
+        ...
+
+    def pole_figure(self, background: Optional[float] = None, model: str = "gaussian",
+                    chi0_deg: Optional[float] = None) -> dict:
+        """Optional: the pole figure of the ring in the I(χ) window and the fit of its orientation distribution."""
+        ...
+
     def set_beam_center(self, x_px: float, y_px: float) -> dict: ...
 
     def set_halves(self, side: str) -> dict: ...

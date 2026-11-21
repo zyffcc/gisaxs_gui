@@ -23,6 +23,7 @@ from src.gimap.shared.geometry.detector_tilt import DetectorTilt
 from ..application import q_from_two_theta, refine_center_by_symmetry, regions_from_dicts, ring_frame
 from ..application.export_record import analysis_metadata, binning, error_model
 from .bindings.batch_watch import exported_text
+from .automation_indexing import IndexingAutomationMixin
 from .automation_rings import RING_STATES, _draw_rings  # noqa: F401 - imported from here too
 from .geometry_dialog import geometry_defaults
 from .views.analyze_page_view import INCIDENCE_FROM_PROFILE
@@ -67,7 +68,7 @@ def header_values(metadata: dict) -> dict:
     return {key: value for key, value in values.items() if value not in (None, [None, None])}
 
 
-class AnalyzeAutomation:
+class AnalyzeAutomation(IndexingAutomationMixin):  # set_phases, assign_peaks, pole_figure
     def __init__(self, page):
         self._page = page
         self._waiting: list[Done] = []
