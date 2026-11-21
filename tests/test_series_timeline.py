@@ -100,3 +100,17 @@ def test_map_rows_go_into_the_database_and_come_back_as_rows_of_the_same_map(tmp
     again = build_series_map(back, curve)
     np.testing.assert_allclose(again.image, build_series_map(rows, "radial").image)
     assert again.times is not None and again.times[-1] == 7.0
+
+
+def test_the_fits_of_a_batch_export_go_into_the_database_with_their_numbers(tmp_path):
+    from src.gimap.features.analyze.application import FrameFitPreview, store_fit_previews
+
+    entries = [FrameFitPreview("f1", 1, (Path("C:/run/f1.tif"), 0), True,
+                               {"frame": 1, "model": "sphere", "R": 5.1, "chi2": 1.2, "probability": 0.9}),
+               FrameFitPreview("f2", 2, (Path("C:/run/f2.tif"), 0), False, {"frame": 2, "note": "no points"},
+                               note="no points")]
+    with SeriesStore(store_path(tmp_path)) as store:
+        assert store_fit_previews(store, "film", "model", entries) == 2
+        fits = store.fits("film", "model")
+    assert fits[0].values == {"R": 5.1, "chi2": 1.2, "probability": 0.9} and fits[0].chi2 == 1.2
+    assert fits[0].record["model"] == "sphere" and fits[1].state == "failed" and fits[1].flags == ("failed: no points",)

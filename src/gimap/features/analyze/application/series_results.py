@@ -80,6 +80,20 @@ def store_rows(store: SeriesStore, name: str, rows: Sequence[tuple], curve: str,
     return store.put_curves(name, items)
 
 
+def store_fit_previews(store: SeriesStore, name: str, kind: str, entries: Sequence) -> int:
+    """Record the fits of a Batch Export (``FrameFitPreview`` of every frame: its numbers, or why it failed) under
+    ``kind`` (``peaks`` or ``model``). Returns how many were written."""
+    rows = []
+    for entry in entries:
+        values = {key: value for key, value in dict(entry.values).items()
+                  if isinstance(value, (int, float, np.number)) and not isinstance(value, bool) and key != "frame"}
+        rows.append(dict(file=str(entry.ref[0]), frame=int(entry.number or 0), state="ok" if entry.ok else "failed",
+                         chi2=values.get("chi2"), values=values, flags=[] if entry.ok else [f"failed: {entry.note}"],
+                         record={key: value for key, value in dict(entry.values).items()
+                                 if isinstance(value, (str, int, float, bool)) or value is None}))
+    return store.put_fits(name, kind, rows)
+
+
 def series_info(curve: str, title: str, built: Mapping[str, Any], kind: Optional[str]) -> dict:
     """What the database says a map was made with (its curve, cut, settings and software)."""
     return {"software_version": RELEASE, "kind": kind, "curve": curve, "curve_title": title,
@@ -102,4 +116,5 @@ def rows_from_store(path, series: Optional[str] = None, curve: Optional[str] = N
     return name, curve, rows, info
 
 
-__all__ = ["TIMELINE_METHOD", "export_series_timeline", "rows_from_store", "series_info", "store_rows", "timeline_of"]
+__all__ = ["TIMELINE_METHOD", "export_series_timeline", "rows_from_store", "series_info", "store_fit_previews",
+           "store_rows", "timeline_of"]

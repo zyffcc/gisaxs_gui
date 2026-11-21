@@ -32,7 +32,7 @@ from PyQt5.QtWidgets import QDialog, QFileDialog, QPlainTextEdit, QPushButton, Q
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.shared.series_store import STORE_NAME, SeriesStore
 
-from ...application import series_info, store_rows
+from ...application import series_info, store_fit_previews, store_rows
 from ..texts import message_text
 from .series_display import row_files
 from .series_stages import series_name
@@ -238,6 +238,13 @@ class WatchOnlineMixin:
                 return None
             path = Path(chosen)
         count = self._record_rows(Path(path), every=True)
+        run, entries = getattr(self, "_series_fit_run", None), list(getattr(self, "_series_fit_entries", []))
+        if count and run is not None and entries:  # the fits of a Batch Export shown under the map, with them
+            try:
+                with SeriesStore(Path(path)) as store:
+                    store_fit_previews(store, self._store_name(), str(run.choices.fit), entries)
+            except (OSError, ValueError) as exc:
+                self._status(trf(RECORD_FAILED, error=message_text(exc)), "warning")
         if count:
             self.notify_written(trf(RECORDED, n=count, name=Path(path).name), Path(path).parent)
             return Path(path)

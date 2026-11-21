@@ -170,6 +170,7 @@ from .series_results import (
     export_series_timeline,
     rows_from_store,
     series_info,
+    store_fit_previews,
     store_rows,
     timeline_of,
 )
@@ -353,6 +354,7 @@ __all__ = [
     "export_series_timeline",
     "rows_from_store",
     "series_info",
+    "store_fit_previews",
     "store_rows",
     "timeline_of",
     "AUTO",

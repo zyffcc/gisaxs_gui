@@ -1335,7 +1335,8 @@ SHA-256、仪器配置及其来源（由文件建立的配置写明该文件的�
    **阶段表…**（Stages as Table…）、**所选帧的曲线（图）… / （表格）…**（Selected Frame's Curve as Figure… / as Table…）、
    **随帧变化的曲线（图）… / （表格）…**（Trace as Figure… / Trace as Table…，下方曲线图每帧的值）、
    **每帧的峰表…**（Peak Table of Every Frame…）、**保存结果数据库…**（Save Results Database…，把每一帧的曲线写入
-   `gimap_series.sqlite`，比较页可以读取；已有的数据库会加入新的帧，之前记录过的帧被替换）和**时间线（表格）…**（Timeline as
+   `gimap_series.sqlite`，比较页可以读取；批量导出拟合过各帧时，*结果：批量拟合*中的拟合也一并写入；已有的数据库会加入新的帧，
+   之前记录过的帧被替换）和**时间线（表格）…**（Timeline as
    Table…）。
 
 ![序列热图下方的时间线](manual_images/zh/09b_series_timeline.png)

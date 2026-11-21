@@ -1666,8 +1666,9 @@ qy 0.05 Å⁻¹); the red arrow beside the map marks it, and it does not make a 
 5. **Export ▾** (once a map is built): **Map as CSV Table…**, **Map as Figure…**, **Stages as
    Table…**, **Selected Frame's Curve as Figure… / as Table…**, **Trace as Figure… / Trace as
    Table…** (the value of the lower plot for every frame), **Peak Table of Every Frame…**, **Save Results
-   Database…** (every frame's curve into `gimap_series.sqlite`, which Compare reads; added to a database that is
-   there, a frame recorded before replaced) and **Timeline as Table…**.
+   Database…** (every frame's curve into `gimap_series.sqlite`, which Compare reads, with the fits of *Results: batch
+   fitting* when a Batch Export fitted the frames; added to a database that is there, a frame recorded before
+   replaced) and **Timeline as Table…**.
 
 ![The timeline under the Series map](manual_images/en/09b_series_timeline.png)
 
