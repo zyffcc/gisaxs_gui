@@ -13,7 +13,7 @@ from matplotlib.patches import Ellipse
 
 from PyQt5.QtCore import QSignalBlocker, QTimer
 
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import set_role
 from src.gimap.app.presentation.theme.figures import restyle_figure
 
@@ -141,7 +141,7 @@ class ResultPreviewMixin:
                                  ("Distance", candidate.distance_sigma_mm, "mm")):
             self.result_labels[key].setToolTip("" if value is None else tr("1σ: {value} {unit} ({method})").format(
                 value=f"{value:.2g}", unit=unit, method=tr(candidate.uncertainty_method)))
-        self.result_labels["Detector rotation"].setText(f"{candidate.detector_rotation_deg:.3f}°")
+        self._show_tilt(candidate)
         self.result_labels["Matched rings"].setText(str(candidate.matched_ring_count))
         self.result_labels["RMS residual"].setText(f"{candidate.rms_residual_px:.3f} px")
         # Confidence and warnings are the engine's English (also in the exported record), shown translated.
@@ -164,6 +164,26 @@ class ResultPreviewMixin:
         self._populate_manual_rings(candidate)
         self.redraw_preview()
         self._fit_results_height()
+
+    def _show_tilt(self, candidate: CalibrationCandidate) -> None:
+        """The Detector tilt row: rot1, rot2 (± 1σ) when they were fitted, else why not."""
+        label = self.result_labels["Detector rotation"]
+        if not candidate.tilt_refined:
+            label.setText(tr("not refined"))
+            label.setToolTip(tr("Tick Refine rot1, rot2 and calibrate again; the tilt needs three or more matched rings."))
+            return
+        rot1, rot2 = candidate.rot1_deg, candidate.rot2_deg
+        angles = f"{rot1:.3f}°, {rot2:.3f}°"  # rot1, rot2: numbers and symbols only; what they are and 1σ: the tooltip
+        label.setText(angles)
+        tip = trf("pyFAI's rot1 and rot2 (rot3 = {rot3}°), fitted with the centre and the distance.",
+                  rot3=f"{candidate.rot3_deg:g}")
+        if candidate.rot1_sigma_deg is not None and candidate.rot2_sigma_deg is not None:
+            tip += " " + trf("1σ: {rot1}°, {rot2}° ({method}).", rot1=f"{candidate.rot1_sigma_deg:.2g}",
+                             rot2=f"{candidate.rot2_sigma_deg:.2g}", method=tr(candidate.uncertainty_method))
+        if candidate.point_rms_px is not None and candidate.untilted_point_rms_px is not None:
+            tip += " " + trf("Ring points: RMS {tilted} px tilted, {flat} px without the tilt.",
+                             tilted=f"{candidate.point_rms_px:.3f}", flat=f"{candidate.untilted_point_rms_px:.3f}")
+        label.setToolTip(tip)
 
     def _show_warnings(self, warnings) -> None:
         """The Warning row: the engine's warnings (translated) in the warning style, why they matter as its
@@ -324,7 +344,15 @@ class ResultPreviewMixin:
                             alpha=0.62,
                         )
                     )
-                for ring in self.view_model.theoretical_ring_overlays(candidate):
+                tilted = self.view_model.tilted_ring_grid(candidate, self.image.data.shape)
+                if tilted is not None and tilted.levels:  # conic sections: drawn as contours of tan 2θ
+                    self.axes.contour(
+                        tilted.xs, tilted.ys, tilted.values, levels=list(tilted.levels),
+                        colors=[MATCHED_RING_COLOR if flag else UNMATCHED_RING_COLOR for flag in tilted.matched],
+                        linestyles=["-" if flag else "--" for flag in tilted.matched],
+                        linewidths=[1.5 if flag else 0.8 for flag in tilted.matched],
+                    )
+                for ring in (() if tilted is not None else self.view_model.theoretical_ring_overlays(candidate)):
                     ellipse_width = ring.width_px
                     ellipse_height = ring.height_px
                     if not self._ellipse_intersects_image(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
@@ -21,6 +22,7 @@ from .peak_matcher import generate_distance_candidates, rematch_candidate
 from .preprocessing import preprocess_detector_image
 from .radial_profile import calculate_azimuthal_profile
 from .standards import STANDARDS
+from .tilt_fit import refine_tilt
 
 
 class CalibrationError(RuntimeError):
@@ -36,6 +38,8 @@ GRAZING_NOTE = "Grazing-incidence image: the specular rod is left out of the rin
 BAND_NOTE = "A horizontal band above the beam (the Yoneda band) is not taken for a ring."
 OUT_OF_RANGE = ("No solution lies within the distance range. Widen the range, or check the energy and the "
                 "pixel size.")
+TILT_MODES = ("auto", "on", "off")
+"""Refine rot1/rot2: ``auto`` with three or more matched rings, ``on`` with two or more, ``off`` never."""
 MIN_RING_RADIUS_PX = 40.0
 WINDOW_COVERAGE = 0.02
 """Least share of the azimuth with usable pixels for a radius to count as observable (AgBH order completeness)."""
@@ -163,7 +167,15 @@ class CalibrationEngine:
         pixel_size_x_m: float | None = None,
         pixel_size_y_m: float | None = None,
         subtract_background: bool = True,
+        tilt: str = "auto",
+        rot3_deg: float = 0.0,
+        energy_source: str = "",
     ) -> CalibrationResult:
+        """``tilt``: refine pyFAI's rot1 and rot2 with the centre and the distance (``TILT_MODES``); ``rot3_deg`` is
+        kept as given (a turn about the beam does not change the rings). ``energy_source`` (where the energy came
+        from) is written into the result's metadata."""
+        if tilt not in TILT_MODES:
+            raise CalibrationError(f"Unknown tilt mode {tilt!r}.")
         self._stage(5, "Preparing mask")
         px = float(pixel_size_x_m or image.pixel_size_x_m or 0.0)
         py = float(pixel_size_y_m or image.pixel_size_y_m or px)
@@ -249,8 +261,13 @@ class CalibrationEngine:
         candidates = candidates[:5]
         if not candidates:
             raise CalibrationError("Calibration candidates were rejected as physically implausible.")
-        for candidate in candidates:  # 1σ of the centre and distance of the candidates shown
-            estimate_uncertainty(analysis, candidate, wavelength, px, py)
+        if tilt != "off":
+            self._stage(92, "Refining detector tilt")
+            for candidate in candidates:
+                refine_tilt(ring_image, candidate, wavelength, px, py, rot3_rad=math.radians(rot3_deg),
+                            distance_range_mm=distance_range_mm, force=tilt == "on")
+        for candidate in candidates:  # 1σ of the centre and distance (and tilt) of the candidates shown
+            estimate_uncertainty(ring_image if candidate.tilt_refined else analysis, candidate, wavelength, px, py)
         best = candidates[0]
         for candidate in candidates:
             if rod is not None and GRAZING_NOTE not in candidate.warnings:
@@ -283,6 +300,8 @@ class CalibrationEngine:
                 "image_shape": [int(value) for value in np.shape(image.data)[:2]],
                 "estimated_distance_mm": estimated_distance_mm,
                 "distance_range_mm": list(distance_range_mm),
+                "tilt_mode": tilt,
+                **({"energy_source": energy_source} if energy_source else {}),
             },
         )
         self._stage(100, "Calibration complete")

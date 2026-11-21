@@ -28,6 +28,7 @@ CALIBRATION_ZH = {
     "Estimating center": "正在估计光束中心",
     "Detecting rings": "正在检测衍射环",
     "Matching standards": "正在匹配标样",
+    "Refining detector tilt": "精修探测器倾斜",
     "Optimizing geometry": "正在优化几何",
     "Ranking candidates": "正在给候选解排序",
     "Recording calibration": "正在记录标定",

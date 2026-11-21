@@ -232,7 +232,9 @@ def test_a_damaged_distance_of_the_applied_geometry_is_no_estimate_and_does_not_
         dialog._set_running(True)  # as ``load_image`` leaves the window while the file is read
         dialog._image_loaded(_frame())
         assert _shown(dialog) == (0.0, "Optional")
-        assert dialog.open_button.isEnabled() and dialog.calibrate_button.isEnabled()
+        assert dialog.open_button.isEnabled() and not dialog.calibrate_button.isEnabled()  # no energy in the frame
+        dialog.energy_spin.setValue(12.0)
+        assert dialog.calibrate_button.isEnabled()
     finally:
         _dispose(dialog)
 

@@ -81,6 +81,21 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   paracrystal** and **Hard spheres (Percus–Yevick)**, each checked against SasView's formulas or BornAgain
   (*Physics and Methods* 9.6, 9.14–9.16).
 
+- **Geometry: the detector tilt is calibrated, no energy is assumed, `.poni` in and out, transmission frames.**
+  Geometry Calibration fits pyFAI's rot1 and rot2 with the beam centre and the distance on points of the standard's
+  rings (**Detector tilt: Refine rot1, rot2**, on; with three or more rings), each with its 1σ (ring jackknife, or the
+  covariance for two rings), and the profile it saves is tilted; on synthetic rings the tilt is found within 0.002°,
+  and an untilted geometry keeps every q to 10⁻¹² (*Physics and Methods* 3.8). The calibration energy is no longer
+  12 keV when the file states none: the field reads *Required*, Auto Calibration waits, and the record and profile say
+  where the energy came from. Analyze's **Detector geometry** dialog has **Energy** beside the wavelength, a line saying
+  where it came from (or that none is known: *Required*), and rot1, rot2, rot3. **Load .poni…** and **Export .poni…**
+  (Geometry step, dialog, banner; Export Calibration… as `.poni`) read and write pyFAI PONI 2.1. A `.poni` beside the
+  frames is used and named; a profile picked for frames of another size is no longer applied to another detector's
+  frames (**Use “…” Anyway** in the banner); opening frames while others are listed asks **Replace** or **Add to List**,
+  and frames of another detector are not added. Batch Export says where each folder's geometry comes from and stays
+  off when no frame can have one. The new mode **SAXS** (SAXS/WAXS in transmission; Auto takes it for a calibrant without αi)
+  gives I(q) and I(χ) round the whole ring with no horizon or Yoneda cut. The cursor readout shows q, q_y or q_∥, q_z,
+  2θ, χ, αf, d and the pixel value on two lines.
 - **A sphere too large for the form factor at q_z = 0 is flagged.** Predict parameters fits a cut at q_z = 0 (the
   effective interface) unless it is given the cut's angles; for spheres that holds within about 5 % of R only up to
   q_z·R ≈ 1.7 (on the four-term DWBA benchmark the median error of R is 15–29 % above it, with both angles below

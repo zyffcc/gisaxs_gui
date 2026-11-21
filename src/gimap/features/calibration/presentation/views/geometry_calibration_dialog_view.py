@@ -124,9 +124,12 @@ class GeometryCalibrationDialogView(GeometryCalibrationSections, GeometryCalibra
         self.calibrationInputForm.setWidget(0, QtWidgets.QFormLayout.LabelRole, self.energyLabel)
         self.energy_spin = QtWidgets.QDoubleSpinBox(self.calibration_input_group)
         self.energy_spin.setDecimals(5)
-        self.energy_spin.setMinimum(0.1)
+        # No made-up default: 0 shows "Required" until the file states the energy or the user enters it.
+        self.energy_spin.setMinimum(0.0)
         self.energy_spin.setMaximum(200.0)
-        self.energy_spin.setProperty("value", 12.0)
+        self.energy_spin.setSuffix(" keV")
+        self.energy_spin.setSpecialValueText("Required")
+        self.energy_spin.setProperty("value", 0.0)
         self.energy_spin.setKeyboardTracking(False)
         self.energy_spin.setObjectName("energy_spin")
         self.calibrationInputForm.setWidget(0, QtWidgets.QFormLayout.FieldRole, self.energy_spin)
@@ -184,6 +187,18 @@ class GeometryCalibrationDialogView(GeometryCalibrationSections, GeometryCalibra
         self._compact_combo(self.detector_combo)
         self.detector_combo.setObjectName("detector_combo")
         self.calibrationInputForm.setWidget(6, QtWidgets.QFormLayout.FieldRole, self.detector_combo)
+        self.tilt_check = QtWidgets.QCheckBox("Refine rot1, rot2", self.calibration_input_group)
+        self.tilt_check.setObjectName("tilt_check")
+        self.tilt_check.setChecked(True)
+        self.tilt_check.setToolTip(
+            "Fit the detector tilt (pyFAI's rot1 and rot2) with the centre and the distance when three or more rings "
+            "are matched; rot3 (a turn about the beam) does not change the rings and stays 0"
+        )
+        self.calibrationInputForm.addRow("Detector tilt:", self.tilt_check)
+        self.energy_source_label = QtWidgets.QLabel(self.calibration_input_group)
+        self.energy_source_label.setObjectName("energy_source_label")
+        self.energy_source_label.setWordWrap(True)
+        self.calibrationInputForm.insertRow(1, "", self.energy_source_label)
         self.calibrationInputContentLayout.addWidget(self.calibration_input_group)
         self.calibrationInputSectionLayout.addWidget(self.calibrationInputContent)
         self.controlsLayout.addWidget(self.calibration_input_section)

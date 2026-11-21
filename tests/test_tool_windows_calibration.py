@@ -378,6 +378,7 @@ def calibrated_dialog():
     _settle(app, 0.2)
     dialog.load_image(str(AGBH))
     _wait(app, lambda: dialog._load_thread is None and dialog.image is not None, 60)
+    dialog.energy_spin.setValue(12.0)  # the frame states no energy: it is entered (none is assumed)
     dialog.start_calibration()
     _wait(app, lambda: dialog._cal_thread is None and dialog.result is not None, 240)
     _settle(app, 0.3)

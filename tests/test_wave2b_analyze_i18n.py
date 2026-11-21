@@ -131,9 +131,13 @@ def test_the_geometry_summary_says_nothing_of_a_detector_the_file_does_not_name(
 
 
 @requires_public
-def test_the_data_step_and_the_command_bar_follow_the_language(english, monkeypatch) -> None:
+def test_the_data_step_and_the_command_bar_follow_the_language(english, monkeypatch, tmp_path) -> None:
+    import shutil
+
     page = _public_page()
-    page.add_paths([str(GALAXI)])
+    frame = tmp_path / GALAXI.name  # the frame alone: a .poni beside it would come before the profile matched
+    shutil.copy2(GALAXI, frame)
+    page.add_paths([str(frame)])
     _done(page)
     card = page.data_info_label.text()
     detail = page.step_rail.detail("data")

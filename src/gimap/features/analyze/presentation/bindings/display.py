@@ -13,6 +13,10 @@ from ...application import (
     X_AXIS_TWO_THETA,
     FrameAnalysis,
     q_at_position,
+    cake_point,
+    detector_point,
+    map_point,
+    TRANSMISSION,
     q_from_two_theta,
     two_theta_deg,
 )
@@ -166,8 +170,11 @@ class DisplayMixin:
         axis = "qy" if str(rsm.x_label).startswith("qy") else "q_parallel"
         beam = q_at_position(geometry, geometry.beam_center_x_px, geometry.beam_center_y_px)
         view.show_beam_center(beam[axis], beam["qz"], movable=False, keep_in_view=True)
-        horizon = q_at_position(geometry, geometry.beam_center_x_px, geometry.horizon_row())
-        view.show_horizon(horizon["qz"])
+        if analysis.kind == TRANSMISSION:  # no sample surface: no horizon
+            view.show_horizon(None)
+        else:
+            horizon = q_at_position(geometry, geometry.beam_center_x_px, geometry.horizon_row())
+            view.show_horizon(horizon["qz"])
         if not keep_view:
             view.fit_view()
 
@@ -373,18 +380,30 @@ class DisplayMixin:
     # -- cursor readout ------------------------------------------------------------------
 
     def _readout(self, x: float, y: float) -> str:
+        """Every coordinate of the point under the cursor (``application/readout.py``): q and its components,
+        2θ, χ, αf (grazing incidence) and d; the detector view adds the pixel and its value in front."""
         analysis = self.view_model.state.analysis
         if analysis is None or analysis.geometry is None:
             return ""
-        if self.view_combo.currentIndex() == VIEW_Q_MAP:
-            return f"q∥ = {x:.4f}, qz = {y:.4f}, q = {np.hypot(x, y):.4f} Å⁻¹"
-        if self.view_combo.currentIndex() == VIEW_CAKE:
-            return f"q = {x:.4f} Å⁻¹, χ = {y:.1f}°"
-        q = q_at_position(analysis.geometry, x, y)
-        return (
-            f"qy = {q['qy']:.4f}, qz = {q['qz']:.4f}, q = {q['q']:.4f} Å⁻¹, "
-            f"αf = {q['alpha_f_deg']:.3f}°"
-        )
+        geometry, kind, view = analysis.geometry, analysis.kind, self.view_combo.currentIndex()
+        if view == VIEW_Q_MAP:
+            reduction = analysis.reduction
+            rsm = reduction.reciprocal_space_map if reduction is not None else None
+            name = "qy" if rsm is not None and str(rsm.x_label).startswith("qy") else "q∥"
+            point = map_point(geometry, x, y, kind)
+            parts = [f"q = {point['q']:.4f} Å⁻¹ ({name} = {x:.4f}, qz = {y:.4f})"]
+        elif view == VIEW_CAKE:
+            point = cake_point(geometry, x, y)
+            parts = [f"q = {point['q']:.4f} Å⁻¹"]
+        else:
+            point = detector_point(geometry, x, y, kind)
+            inner = f"q∥ = {point['q_parallel']:.4f}" if kind not in (GISAXS, TRANSMISSION) else f"qy = {point['qy']:.4f}"
+            parts = [f"q = {point['q']:.4f} Å⁻¹ ({inner}, qz = {point['qz']:.4f})"]
+        angles = [f"2θ = {point['two_theta_deg']:.3f}°" if point.get("two_theta_deg") is not None else "",
+                  f"χ = {point['chi_deg']:.1f}°",
+                  f"αf = {point['alpha_f_deg']:.3f}°" if point.get("alpha_f_deg") is not None else "",
+                  f"d = {point['d_angstrom']:.4g} Å" if point.get("d_angstrom") is not None else ""]
+        return "   ".join(parts) + "\n" + "   ".join(part for part in angles if part)
 
 
 __all__ = [

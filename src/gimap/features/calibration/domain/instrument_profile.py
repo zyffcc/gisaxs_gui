@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import replace
 from typing import Optional
 
 from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile
+from src.gimap.shared.geometry.poni import format_poni
 from src.gimap.shared.geometry.conventions import (
     canonical_from_index_center,
     index_center_from_canonical,
@@ -28,7 +30,7 @@ def calibrated_shape(result: CalibrationResult) -> Optional[tuple[int, int]]:
 
 
 def calibrated_geometry(result: CalibrationResult, *, incidence_deg: float = 0.0) -> DetectorGeometry:
-    """Canonical geometry of the selected candidate (numpy index centre → +0.5 px)."""
+    """Canonical geometry of the selected candidate (numpy index centre → +0.5 px), with its detector tilt."""
     candidate = result.selected_candidate
     center_x, center_y = canonical_from_index_center(candidate.center_x_px, candidate.center_y_px)
     return DetectorGeometry(
@@ -39,6 +41,9 @@ def calibrated_geometry(result: CalibrationResult, *, incidence_deg: float = 0.0
         beam_center_y_px=center_y,
         wavelength_angstrom=float(result.wavelength_angstrom),
         incidence_deg=float(incidence_deg),
+        rot1_rad=math.radians(candidate.rot1_deg),
+        rot2_rad=math.radians(candidate.rot2_deg),
+        rot3_rad=math.radians(candidate.rot3_deg),
     )
 
 
@@ -58,9 +63,25 @@ def calibration_source(result: CalibrationResult) -> str:
     if candidate.distance_sigma_mm is not None:  # the 1σ of the calibration goes wherever the profile is recorded
         source += (f" · 1σ centre ({candidate.center_x_sigma_px:.2g}, {candidate.center_y_sigma_px:.2g}) px, "
                    f"distance {candidate.distance_sigma_mm:.2g} mm ({candidate.uncertainty_method})")
+    if candidate.tilt_refined:
+        source += f" · tilt rot1 {candidate.rot1_deg:.3f}°, rot2 {candidate.rot2_deg:.3f}°"
+        if candidate.rot1_sigma_deg is not None and candidate.rot2_sigma_deg is not None:
+            source += f" (1σ {candidate.rot1_sigma_deg:.2g}°, {candidate.rot2_sigma_deg:.2g}°)"
+    energy_source = (result.metadata or {}).get("energy_source")
+    if energy_source:
+        source += f" · energy {energy_source}"
     if abs(float(candidate.detector_rotation_deg)) > ROTATION_NOTE_LIMIT_DEG:
         source += f" · detector rotation {candidate.detector_rotation_deg:.2f}° not modelled"
     return source
+
+
+def calibration_poni_text(result: CalibrationResult) -> str:
+    """The selected geometry as a pyFAI ``.poni`` (``shared/geometry/poni.format_poni``): pixel sizes, frame shape,
+    distance, PONI, rot1–rot3 and wavelength; the standard and the image as comments."""
+    candidate = result.selected_candidate
+    comments = (f"Written by GIMaP from a {candidate.standard_key} calibration of {result.source_image}",
+                f"Calibration done on {result.calibration_timestamp}")
+    return format_poni(calibrated_geometry(result), shape=calibrated_shape(result), comments=comments)
 
 
 def profile_from_calibration(
@@ -107,6 +128,7 @@ def profile_change_is_significant(
 
 
 __all__ = [
+    "calibration_poni_text",
     "calibrated_geometry",
     "calibrated_shape",
     "profile_change_is_significant",

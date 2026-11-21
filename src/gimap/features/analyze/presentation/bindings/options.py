@@ -231,13 +231,15 @@ class OptionsMixin(NormalisationMixin):
         self._box_changed()
 
     def _sync_options(self, kind) -> None:
-        """GIWAXS cuts only make sense for a GIWAXS reduction; the GISAXS ones for GISAXS."""
+        """GIWAXS cuts only make sense for a GIWAXS reduction; the GISAXS ones for GISAXS. In transmission the cut
+        regions (rings, sectors) apply, the in-/out-of-plane sectors and the GIWAXS corrections do not."""
+        grazing_wide = kind not in ("gisaxs", "transmission")
         self.giwaxs_section.setEnabled(kind == "giwaxs")
-        self.giwaxs_section.setVisible(kind != "gisaxs")
-        self.regions_panel.setVisible(kind == "giwaxs")
+        self.giwaxs_section.setVisible(grazing_wide)
+        self.regions_panel.setVisible(kind in ("giwaxs", "transmission"))
         self.gisaxs_cuts.setVisible(kind == "gisaxs")
-        self.mirror_fill_check.setVisible(kind != "gisaxs")  # a GIWAXS correction: not offered for GISAXS
-        self.intensity_section.setVisible(kind != "gisaxs")  # GIWAXS corrections: not offered for GISAXS
+        self.mirror_fill_check.setVisible(grazing_wide)  # a GIWAXS correction: not offered for GISAXS
+        self.intensity_section.setVisible(grazing_wide)  # GIWAXS corrections: not offered for GISAXS
         self._show_flat_field()  # (GISAXS and GIWAXS) what it did to the frame now shown
         self._show_normalisation()  # what the header offers, and by what the frame was multiplied
 

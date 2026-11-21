@@ -94,6 +94,7 @@ class BatchExportDialog(BatchFolderMixin, QDialog, BatchExportView):
         beside: Optional[Path] = None,
         carried: bool = False,
         reading: bool = False,
+        no_geometry: bool = False,
         parent=None,
     ):
         """``frames``: what the batch has to do, one for each request (a sum of N frames is one);
@@ -105,6 +106,7 @@ class BatchExportDialog(BatchFolderMixin, QDialog, BatchExportView):
         ``carried``: ``destination`` is the folder of a batch of other data. ``reading``: the frame on screen is
         being read again (Export waits until ``frame_shown`` says it is there)."""
         super().__init__(parent)
+        self._no_geometry = no_geometry  # no frame can have a geometry: nothing to export (the notes say why)
         self.setup_batch_export()
         self._sized = False
         self._stem = stem
@@ -423,7 +425,7 @@ class BatchExportDialog(BatchFolderMixin, QDialog, BatchExportView):
         self.fit_file_label.setText(tr("→ {table} (one row per frame) and {plot} (the values against frame)").format(
             table=names["fit"], plot=names["fit_plot"]))
         # the folder, and what it holds already; and the frame on screen, whose cut every frame gets, has been read
-        self.export_button.setEnabled(self._sync_folder(choices, curves) and not self.reading())
+        self.export_button.setEnabled(self._sync_folder(choices, curves) and not self.reading() and not self._no_geometry)
         pictures = self.output_checks["detector_image"].isChecked() or self.output_checks["q_map_image"].isChecked()
         self.image_scale_combo.setEnabled(pictures)
         self.image_scale_label.setText(

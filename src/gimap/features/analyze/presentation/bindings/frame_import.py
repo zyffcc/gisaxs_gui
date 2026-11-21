@@ -4,11 +4,13 @@
 the frames listed and are shown as one sum, Sum = their number."""
 from pathlib import Path
 from threading import Event
+from typing import Optional
 from PyQt5.QtCore import QObject, QSignalBlocker, Qt, pyqtSignal
 from PyQt5.QtGui import QKeySequence
-from PyQt5.QtWidgets import QDialog, QShortcut
+from PyQt5.QtWidgets import QDialog, QMessageBox, QShortcut
+from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
-from ...application.frame_import import ImportSource, prepare_frame_import
+from ...application.frame_import import ImportSource, other_detector, prepare_frame_import
 from ...application.ports import source_name
 from ..frame_import_dialog import FrameImportDialog
 from ..frame_listing import FrameListingModel
@@ -161,14 +163,43 @@ class FrameImportMixin:
         self._status(trf("Frame {n} is not imported. Use Choose Frames to add it.", n=frame + 1), "warning")
         return False
 
+    def _new_paths(self, paths) -> bool:
+        """Whether ``paths`` name anything that is not listed yet (a folder always may)."""
+        listed = {str(Path(path)) for path in self.view_model.state.files}
+        return any(str(Path(path)) not in listed for path in paths)
+
+    def ask_replace_or_add(self, paths) -> Optional[str]:
+        """Frames are listed and others are opened: ``replace`` them, ``add`` to them, or ``None`` (cancelled)."""
+        box = QMessageBox(QMessageBox.Question, tr("Open Frames"),
+                          trf("{count} frames are listed. Replace them with the frames opened now, or add these to "
+                              "the list?", count=len(self.view_model.state.files)), QMessageBox.Cancel, self)
+        replace = box.addButton(tr("Replace"), QMessageBox.AcceptRole)
+        add = box.addButton(tr("Add to List"), QMessageBox.ActionRole)
+        box.setDefaultButton(replace)
+        box.exec_()
+        clicked = box.clickedButton()
+        return "replace" if clicked is replace else "add" if clicked is add else None
+
     def import_paths(self, paths, *, interactive=True, selections=None, on_imported=None):
-        """Inspect headers in the background, then import references; no stack is decoded here."""
+        """Inspect headers in the background, then import references; no stack is decoded here. Opened by the
+        person (``interactive``) while other frames are listed: asks whether to replace them or add to them; frames
+        added are refused when they are of another detector (``application/frame_import.other_detector``)."""
         paths = list(paths)
         if not paths:
             return False
         if self._list_kept():
             self._status(tr("Wait for the current task before changing imported frames."), "warning")
             return False
+        appending = False
+        if interactive and self.view_model.state.files and self._new_paths(paths):
+            answer = self.ask_replace_or_add(paths)
+            if answer is None:
+                self._status(tr("Frame import cancelled."), "info")
+                return False
+            if answer == "replace":
+                self.clear_files()
+            else:
+                appending = True
         self.cancel_frame_import(silent=True)
         self._import_cancelled = cancelled = Event()
         self._importing = True
@@ -179,11 +210,14 @@ class FrameImportMixin:
         self.import_cancel_button.show()
         self.show_step("data")
         self.frameImportStarted.emit()
+        listed = self.view_model.state.analysis
+        listed = (listed.shape, listed.detector_name) if appending and listed is not None else None
         self.tasks.submit("import-frames", lambda: prepare_frame_import(
             self.view_model._frames, paths,
             progress=lambda n, total, name: self._import_signals.progress.emit(cancelled, n, total, name),
-            cancelled=cancelled.is_set),
-            on_done=lambda sources: self._frame_import_ready(sources, paths, interactive, selections, cancelled, on_imported),
+            cancelled=cancelled.is_set, probe=listed is not None),
+            on_done=lambda sources: self._frame_import_ready(sources, paths, interactive, selections, cancelled, on_imported,
+                                                             listed=listed),
             on_error=lambda message, _details: self._frame_import_failed(message, cancelled))
         return True
 
@@ -269,8 +303,17 @@ class FrameImportMixin:
         self.cancel_frame_import(silent=True)
         self._status(trf("Frame import failed: {error}", error=message_text(message)), "error")
 
-    def _frame_import_ready(self, sources, paths, interactive, selections, cancelled, on_imported=None):
+    def _frame_import_ready(self, sources, paths, interactive, selections, cancelled, on_imported=None, listed=None):
         if cancelled is not self._import_cancelled or cancelled.is_set() or sources is None:
+            return
+        refused = other_detector(sources, *listed) if listed is not None else None
+        if refused:  # never a list of two detectors (wrong q for one of them, mixed in Batch Export)
+            self._importing = False
+            self.import_cancel_button.hide()
+            self.import_status_label.hide()
+            self.choose_frames_button.setEnabled(bool(self.view_model.state.files))
+            self._status(message_text(refused), "error")
+            show_toast(self.window(), message_text(refused), level="warning")
             return
         self._importing = False
         self.import_cancel_button.hide()

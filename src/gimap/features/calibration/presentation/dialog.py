@@ -34,6 +34,7 @@ from .bindings.calibration_run import CalibrationRunMixin
 from .bindings.result_preview import ResultPreviewMixin
 from .bindings.manual_refinement import ManualRefinementMixin
 from .bindings.persistence import PersistenceMixin
+from .bindings.energy_source import EnergySourceMixin
 
 __all__ = ["CalibrationWorker", "GeometryCalibrationDialog", "ImageLoaderWorker"]
 
@@ -47,6 +48,7 @@ class GeometryCalibrationDialog(
     ResultPreviewMixin,
     ManualRefinementMixin,
     PersistenceMixin,
+    EnergySourceMixin,
     QDialog,
     GeometryCalibrationDialogView,
 ):
@@ -108,3 +110,4 @@ class GeometryCalibrationDialog(
         self._connect_signals()
         self._bind_frame_choice()
         self._set_running(False)
+        self._bind_energy_source()

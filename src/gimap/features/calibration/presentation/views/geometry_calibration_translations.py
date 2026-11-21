@@ -120,7 +120,7 @@ class GeometryCalibrationTranslations:
         self.resultDistanceTitle.setText(_translate("GeometryCalibrationDialog", "Distance:"))
         self.result_distance.setText(_translate("GeometryCalibrationDialog", "—"))
         self.resultRotationTitle.setText(
-            _translate("GeometryCalibrationDialog", "Detector rotation:")
+            _translate("GeometryCalibrationDialog", "Detector tilt:")
         )
         self.result_rotation.setText(_translate("GeometryCalibrationDialog", "—"))
         self.resultRingsTitle.setText(_translate("GeometryCalibrationDialog", "Matched rings:"))

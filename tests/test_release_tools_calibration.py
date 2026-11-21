@@ -174,8 +174,8 @@ def test_the_line_of_a_loaded_image_follows_the_language(language, chinese) -> N
         assert dialog.stage_label.text() == {"en": "Reading image...", "zh": "正在读取图像…"}[language]
         _wait(app, lambda: dialog._load_thread is None and dialog.image is not None)
         assert dialog.stage_label.text() == {
-            "en": "Image loaded. Click Auto Calibration.",
-            "zh": "已载入图像。请点击“自动标定”。",
+            "en": "Image loaded. Enter the X-ray energy, then click Auto Calibration.",  # the file states none
+            "zh": "已载入图像。请输入 X 射线能量，然后点击“自动标定”。",
         }[language]
         assert dialog.preview_info_label.text() == "Pilatus1M.edf  ·  981 × 1043 px"  # the file and its size
         assert dialog.pixel_label.text() == {
@@ -268,6 +268,7 @@ def test_a_wrong_custom_range_and_the_file_dialogs_are_chinese(tmp_path, chinese
         dialog.range_combo.setCurrentIndex(3)  # Custom
         dialog.custom_min_spin.setValue(900.0)
         dialog.custom_max_spin.setValue(300.0)
+        dialog.energy_spin.setValue(12.0)  # the frame states no energy: it is entered (none is assumed)
         dialog.start_calibration()
         assert boxes == [("warning", "标定输入", "自定义距离的下限必须小于上限。")]
         assert dialog._cal_thread is None
@@ -281,7 +282,7 @@ def test_a_wrong_custom_range_and_the_file_dialogs_are_chinese(tmp_path, chinese
         dialog.result = _result(tmp_path / "scan_agbh.cbf")
         dialog.export_result()
         dialog.import_result()
-        assert asked == [("导出标定", "JSON 文件 (*.json)"), ("导入标定", "JSON 文件 (*.json)")]
+        assert asked == [("导出标定", "JSON 文件 (*.json);;pyFAI 几何文件 (*.poni)"), ("导入标定", "JSON 文件 (*.json)")]
 
         not_a_calibration = tmp_path / "other.json"
         not_a_calibration.write_text('{"format": "something else"}', encoding="utf-8")
@@ -317,7 +318,7 @@ def _engine_sentences() -> dict[str, set[str]]:
 
 def test_every_stage_warning_and_reason_of_the_engine_has_chinese() -> None:
     sentences = _engine_sentences()
-    assert len(sentences["stage"]) == 8 and len(sentences["warning"]) >= 7 and len(sentences["reason"]) >= 6
+    assert len(sentences["stage"]) == 9 and len(sentences["warning"]) >= 7 and len(sentences["reason"]) >= 6
     missing = sorted(text for group in sentences.values() for text in group if text not in ZH)
     assert missing == []
     assert {"High", "Medium", "Low"} <= set(ZH)

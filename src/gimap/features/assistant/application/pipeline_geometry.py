@@ -212,7 +212,8 @@ class GeometryStepsMixin:
             return used
         named = self._named()
         found = self._first_fit(named)
-        if not found and not self._declined and existing and not options.recalibrate:
+        # A geometry Analyze took from the .poni beside the frame is no saved profile: the search finds that file.
+        if not found and not self._declined and existing and existing.get("resolved_by") != "file" and not options.recalibrate:
             found = self._keep_profile(existing)
         if not found and not self._declined:
             found = self._first_fit(self._candidates({file_key(item["path"]) for item in named}))

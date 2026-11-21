@@ -200,6 +200,27 @@ Ask AI… 用同样的工具（GIWAXS 或 GISAXS 的结果选项随当前模式�
   连续移动合并刷新；当前计算完成后只计算最新的中心，保留曲线的手动缩放。关闭预览或窗口会取消尚未提交的刷新。
   切换文件或帧、清空和关闭页面时关闭调整窗口，避免将旧帧的输入应用到另一个探测器。
 
+## 几何从哪里来、.poni、透射模式与光标读数（2026-11-21）
+
+- **顺序**（`application/geometry_resolution.py`）：手选且帧尺寸相符的配置 → 帧旁边的 `.poni`
+  （`application/geometry_files.SiblingPoni`：同一文件夹中名字与帧相同开头的，否则唯一的一个；帧尺寸、像素尺寸相符且有波长）
+  → 按探测器名和尺寸匹配的配置 → 无。手选配置用于另一尺寸的帧时不用（`refused_profile`，提示条 **Use “…” Anyway** 把该尺寸加入
+  `state.forced_shapes`）。`source` 写有这个 `.poni` 或帧所在文件夹的配置优先于文件（在用文件时保存的中心或几何会写上它，
+  `geometry_model._linked_source`）。
+- **Load .poni… / Export .poni…**：几何步骤、提示条和几何对话框（`bindings/geometry_files.py`；读写在
+  `shared/geometry/poni.py`）。不符的文件先询问；有波长的文件保存为配置并被选中，没有波长的打开对话框。
+- **几何对话框**：波长与能量联动，下面一行写来源（文件头、`.poni`、配置、用户）；没有时显示 *Required* 并以警告样式说明，
+  保存和导出要等输入；rot1、rot2、rot3（度）。
+- **打开帧时已有帧**（`bindings/frame_import.py`）：询问 Replace / Add to List；追加时读入第一帧的尺寸，另一台探测器的帧拒绝
+  （`application/frame_import.other_detector`）。
+- **批量导出**：每个文件夹的几何来源一行（`application/batch_geometry.py`）；没有任何帧能有几何时 Export 不可用。
+- **透射模式** `transmission`（命令栏 **SAXS**；`domain/transmission.py`，自动判断在 `application/technique.py`）：
+  整环 I(q)、−180°…180° 的 I(χ)、区域、q_y–q_z 图和 −180°…180° 的展开图；没有地平线和 Yoneda 切线。自动分析把它
+  当作 GISAXS 流程的标样帧处理（`assistant/application/pipeline.py`）。
+- **光标读数**（`application/readout.py`，`bindings/display._readout`）：两行，q 及其分量、2θ、χ、αf、d 和像素值；DetectorView
+  的读数框固定两行高，一行放不下时才截断（完整内容在提示里）。
+- 测试：`tests/test_poni_and_geometry_sources.py`、`tests/test_geometry_ui.py`。
+
 ## αi 与模式
 
 - 命令栏的 αi：没有输入时显示 “αi from profile”；为本次会话输入的值以橙色标出，右键 ▸ Back to Profile 回到配置的值。

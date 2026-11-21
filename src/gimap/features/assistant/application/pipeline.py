@@ -354,6 +354,8 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
         """The procedure to run and why: the technique given, the mode chosen in Analyze, what Auto detected
         (``follow_detection``) or GIWAXS — flagged when Auto was to be followed but could not classify the frame."""
         options, mode, kind = self.options, status.get("mode"), status.get("measurement")
+        if kind == "transmission":  # Analyze's Auto took a calibrant in transmission: its procedure is the GISAXS
+            kind = "gisaxs"         # one, which then finds the complete rings and fits no particle model
         detected = kind if kind in TECHNIQUES and mode not in TECHNIQUES else None
         if options.technique:
             return options.technique, DETECTED if options.follow_detection and detected == options.technique else FORCED

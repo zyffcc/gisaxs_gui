@@ -13,6 +13,7 @@ from ..application import (
     CENTER_HEADER,
     CENTER_SESSION,
     GISAXS,
+    TECHNIQUE_NAMES,
     AnalysisRequest,
     AnalyzeFrame,
     ExportAnalysis,
@@ -54,6 +55,8 @@ class AnalyzeState:
     corrections: Corrections = field(default_factory=Corrections)
     sum_count: int = 1
     """Consecutive frames summed into one analysis (1: none)."""
+    forced_shapes: tuple = ()
+    """Frame sizes the chosen profile is used on although it is for another size (``AnalysisRequest``)."""
 
     @property
     def beam_center_shape(self) -> Optional[tuple[int, int]]:
@@ -117,6 +120,7 @@ class AnalyzeViewModel(
             beam_center_shape=self.state.beam_center_shape,
             use_header_center=self.use_header_center,
             corrections=self.state.corrections,
+            forced_shapes=self.state.forced_shapes,
         )
 
     def clear_files(self) -> None:
@@ -166,6 +170,8 @@ class AnalyzeViewModel(
         self.state.mode = mode
 
     def set_profile(self, name: Optional[str]) -> None:
+        if (name or None) != self.state.profile_name:
+            self.state.forced_shapes = ()  # “Use Anyway” was said for the profile picked before
         self.state.profile_name = name or None
 
     def set_incidence(self, incidence_deg: Optional[float]) -> None:
@@ -265,10 +271,12 @@ class AnalyzeViewModel(
         origin = {
             "matched": translate("profile “{name}” (matched)").format(name=profile.name) if profile else "",
             "chosen": translate("profile “{name}”").format(name=profile.name) if profile else "",
+            "file": translate("{name} beside the frame").format(name=profile.name) if profile else "",
         }.get(analysis.resolution.how, "")
         parts = [
             head, f"D = {geometry.distance_m * 1e3:.1f} mm", f"λ = {geometry.wavelength_angstrom:.4f} Å",
-            f"αi = {geometry.incidence_deg:.3f}°", (analysis.kind or "").upper(), origin,
+            f"αi = {geometry.incidence_deg:.3f}°",
+            translate(TECHNIQUE_NAMES.get(analysis.kind, (analysis.kind or "").upper())), origin,
         ]
         flat = getattr(analysis, "flat_detector", None)  # a .poni tilt the flat geometry leaves out
         parts.extend((*tilt_summary(geometry, translate), *flat_detector_summary(flat, translate)))

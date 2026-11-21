@@ -40,6 +40,7 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [3.5 From a calibration to an instrument profile](#35-from-a-calibration-to-an-instrument-profile)
   - [3.6 pyFAI `.poni` files](#36-pyfai-poni-files)
   - [3.7 The detector tilt of a `.poni`](#37-the-detector-tilt-of-a-poni)
+  - [3.8 Detector tilt from the rings of the standard](#38-detector-tilt-from-the-rings-of-the-standard)
 - [4. Reading and preparing frames](#4-reading-and-preparing-frames)
   - [4.1 Stored values and valid pixels](#41-stored-values-and-valid-pixels)
   - [4.2 NeXus and HDF5 sources](#42-nexus-and-hdf5-sources)
@@ -71,6 +72,7 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [6.8 The q map and the cake](#68-the-q-map-and-the-cake)
   - [6.9 The two halves of a signed cut](#69-the-two-halves-of-a-signed-cut)
   - [6.10 Reference-peak corrections of a series](#610-reference-peak-corrections-of-a-series)
+  - [6.11 SAXS/WAXS in transmission](#611-saxswaxs-in-transmission)
 - [7. GIWAXS automatic analysis](#7-giwaxs-automatic-analysis)
   - [7.1 Input: technique, frames and the reduced curves](#71-input-technique-frames-and-the-reduced-curves)
   - [7.2 Background: SNIP on LLS-transformed data](#72-background-snip-on-lls-transformed-data)
@@ -287,9 +289,12 @@ Implementation: `src/gimap/shared/geometry/conventions.py`, `src/gimap/features/
 
 ### 1.4 Where the geometry of a frame comes from
 
-Analyze takes the geometry of a frame from an instrument profile: a stored geometry with a detector name and a frame shape. A profile is made from a calibration (chapter 3) or entered by hand (Analyze, Geometry step).
+Analyze takes the geometry of a frame from an instrument profile: a stored geometry with a detector name and a frame shape. A profile is made from a calibration (chapter 3), from a pyFAI `.poni` (section 3.6) or entered by hand (Analyze, Geometry step).
 
-- **Profile choice.** A profile named by the user is used as it is. Otherwise every profile gets a score: a profile with a stored frame shape that differs from the frame scores 0 and is never used; an equal shape adds 1; a detector name that equals or prefixes the other (case-insensitive, runs of spaces ignored) adds 2. The highest score wins; ties go to the most recently updated profile.
+- **Order.** (1) The profile picked by the user, when it is for frames of this size or has no stored size. (2) The `.poni` beside the frame: in the frame's own folder, the `.poni` whose name begins like the frame's (or the frame's like its), else the only `.poni` there; it is used when it states a wavelength, its `max_shape` (if stated) equals the frame shape and its pixel size agrees within 1 % with the header's (if stated). (3) The profile matched by score (below). (4) None: nothing is reduced.
+- **Another detector.** A profile picked by the user for frames of another size is not used on this frame: the frame then takes (2) or (3), and the message says which profile was set aside and why. Only an explicit **Use Anyway** for that frame size uses it.
+- **Score.** Every profile gets a score: a profile with a stored frame shape that differs from the frame scores 0 and is never used; an equal shape adds 1; a detector name that equals or prefixes the other (case-insensitive, runs of spaces ignored) adds 2. The highest score wins; ties go to the most recently updated profile.
+- **A `.poni` beside the frame and a matched profile.** The file wins over a profile matched by score, because a profile of the same detector may come from another experiment. A profile whose `source` names that file or the frame's folder wins over the file: a beam centre or geometry saved in Analyze while the file was in use names it, so what was saved later is used.
 - **Overrides.** Each override replaces one field and nothing else:
   - a beam centre set in the session (only on frames of the shape it was set on);
   - the beam centre written in the file header (CBF `Beam_xy`, NeXus `beam_center_x/y`), only when the user opts in; the default is off;
@@ -414,7 +419,9 @@ When a frame has a geometry, Analyze proposes the technique from the largest sca
 
 where `W` and `H` are the numbers of columns and rows. The frame is GIWAXS when `2θ_max > 20°` and GISAXS otherwise. The user can force either mode; Analyze then points out when the forced mode disagrees with this rule. Without a geometry nothing is reduced. `tools/gimap_agent.py` uses the same rule (`--technique` forces it).
 
-A powder calibrant measured in transmission at a SAXS distance is GISAXS by this rule. The automatic analysis (not Analyze's mode) therefore looks for rings when the rule said GISAXS and no incidence angle is known (none given, noted or set, and 0° in the geometry): the valid pixels are averaged in 1-pixel rings about the beam centre and in 24 sectors of 15°; a maximum of the ring average that exceeds its 61-pixel running median by 6 robust σ and by 30 % of that median, and is at most 25 pixels wide at half height, is a ring; it is complete when the detector covers at least 90° of azimuth at its radius and at least 80 % of the covered sectors show 30 % of its height above their own background. With three or more complete rings the frame is reported as a transmission frame of a calibrant or powder: the cuts are written and no particle model is fitted (`analyze/domain/ring_frame.py`, `assistant/application/ring_frames.py`). The public silver behenate frame has five such rings, the public GALAXI GISAXS frame none.
+**SAXS/WAXS in transmission.** A powder calibrant measured in transmission at a SAXS distance would be GISAXS by this rule. Analyze's Auto therefore takes a frame as transmission (mode **SAXS**, SAXS/WAXS in transmission, section 6.11) when no incidence angle is known (none set, and 0° in the geometry) and either the file name names a standard (the words `agbh`, `agbe`, `behenate`, `lab6`, `ceo2`) or the frame shows three or more complete rings by the test below. An incidence angle above 0 always means grazing incidence. The mode can also be chosen by hand. The ring test runs once per frame and beam centre (`analyze/application/technique.py`).
+
+The ring test: the valid pixels are averaged in 1-pixel rings about the beam centre and in 24 sectors of 15°; a maximum of the ring average that exceeds its 61-pixel running median by 6 robust σ and by 30 % of that median, and is at most 25 pixels wide at half height, is a ring; it is complete when the detector covers at least 90° of azimuth at its radius and at least 80 % of the covered sectors show 30 % of its height above their own background. With three or more complete rings Analyze reduces the frame in transmission; the automatic analysis reports it as a transmission frame of a calibrant or powder, runs its GISAXS procedure on it (the cuts are written) and fits no particle model (`analyze/domain/ring_frame.py`, `assistant/application/ring_frames.py`). The public silver behenate frame has five such rings, the public GALAXI GISAXS frame none.
 
 Examples from the public data: the GALAXI frame reaches `2θ_max` = 5.3° (GISAXS). The P08 GIWAXS frame (`giwaxs_p08_mapi`, PerkinElmer 2048 × 2048 px, `p` = 200 µm, `λ` = 0.6888 Å, `L` = 811.8 mm, direct beam (545.5, 1826.9) px from its `.poni`, `α_i` = 0.075°) reaches 30.2° (GIWAXS).
 
@@ -427,7 +434,7 @@ Implementation: `src/gimap/features/analyze/domain/classification.py`
 The following effects are not in the q map, nor anywhere else in Analyze:
 
 - **Refraction and the distorted-wave Born approximation (DWBA).** `q_z` is the kinematic vacuum value unless the film's critical angle is given (section 2.6). No reflected-wave terms of the DWBA are computed.
-- **Detector tilt and rotation.** A `.poni` tilt (rot1, rot2, rot3) is part of the geometry and enters q, χ, the solid angle and the polarisation factor (section 3.7). The calibration refines no tilt (section 3.3). The straight horizon row below assumes an untilted detector.
+- **Detector tilt and rotation.** A `.poni` tilt (rot1, rot2, rot3) is part of the geometry and enters q, χ, the solid angle and the polarisation factor (section 3.7). Geometry Calibration fits rot1 and rot2 (section 3.8). The straight horizon row below assumes an untilted detector.
 - **Sample azimuth and roll.** The sample is assumed to be tilted only about the horizontal axis perpendicular to the beam. A rotation about the surface normal or about the beam is not described.
 - **Parallax and sensor thickness.** A pixel is its centre; there is no depth of interaction and no pixel splitting.
 - **Flat field and efficiency.** A flat field (detector response) divides the frames only when one is chosen (section 4.10; off by default). No detector-efficiency, air or window absorption correction is applied.
@@ -468,7 +475,7 @@ Implementation: `src/gimap/shared/geometry/q_mapping.py` (`refracted_qz`), `src/
 
 ## 3. Calibration
 
-Geometry Calibration (Tools menu) finds the beam centre and the distance from a powder pattern of a standard. The energy and the pixel size are inputs and are not refined. The same engine runs without the window in Run Automatic Analysis and in `tools/gimap_agent.py`.
+Geometry Calibration (Tools menu) finds the beam centre, the distance and the detector tilt (pyFAI's rot1 and rot2, section 3.8) from a powder pattern of a standard. The energy and the pixel size are inputs and are not refined. The energy is never assumed: it comes from the file header (or the companion NXS of a CBF) or is entered, and the record says which (`metadata.energy_source`: `file header`, `companion NXS`, `entered by user`, `imported calibration`); without one, Auto Calibration does not start. The same engine runs without the window in Run Automatic Analysis and in `tools/gimap_agent.py`.
 
 ### 3.1 Calibrants
 
@@ -527,7 +534,9 @@ L = Σ_m u_m r_m / Σ_m u_m²,     u_m = tan 2θ_m / p̄     (r_m: observed radi
 
 In (3.8), `(x_p, y_p)` are the integer index coordinates of ring pixel p, `q_p` the line it was assigned to, and ρ_p is in pixels.
 
-What is not refined: the wavelength, the pixel sizes, and any detector tilt or rotation. The field `detector_rotation_deg` of a candidate stays 0.
+9. **Detector tilt.** For the candidates shown, rot1 and rot2 are then fitted with the centre and the distance (section 3.8), by default when at least three rings are matched (**Refine rot1, rot2**, on by default; off: the steps above are the result unchanged).
+
+What is not refined: the wavelength, the pixel sizes and rot3 (a turn about the beam moves no pixel's scattering angle, so the rings do not tell it; it stays 0). The field `detector_rotation_deg` of a candidate stays 0; the tilt is in `rot1_deg`, `rot2_deg`, `rot3_deg`.
 
 **Uncertainty.** The points along one ring are not independent: when a ring is slightly off, all of them move
 together. The 1σ of x_c, y_c and L is therefore the scatter between the rings: with three or more matched rings the
@@ -553,7 +562,7 @@ GIMaP uses two measures of a calibration.
 
 **Line positions (Run Automatic Analysis, `tools/gimap_agent.py`).** The ring residual depends on how many rings are fitted and on what the flat model cannot describe, such as a tilt. The automatic analysis therefore also checks where the standard's lines land in q:
 
-1. The calibration image is integrated with the candidate geometry, canonical centre and flat detector: `q = (4π/λ) sin(½ atan2(r, L))`, with r from the pixel centres. Bins are 0.0015 Å⁻¹ wide; bins with at least 20 pixels count.
+1. The calibration image is integrated with the candidate geometry, canonical centre and flat detector: `q = (4π/λ) sin(½ atan2(r, L))`, with r from the pixel centres; a tilted candidate is integrated with its rotations (GIMaP's pixel→q mapping, section 3.7). Bins are 0.0015 Å⁻¹ wide; bins with at least 20 pixels count.
 2. For every line with at least 12 such bins within ±0.025 Å⁻¹, a Gaussian on a linear background is fitted.
 3. A line is accepted when the amplitude exceeds 5 times the noise (the standard deviation of the points more than 3 widths from the centre), the fitted centre lies within 0.02 Å⁻¹ of the line, and the Gaussian σ lies between 0.0008 and 0.015 Å⁻¹.
 
@@ -571,7 +580,7 @@ GIMaP uses two measures of a calibration.
 
 Among the candidates with at least 3 accepted lines, the one with the smallest ε is chosen, even when the engine ranked another first; the record says which rule chose (`chosen_by`).
 
-"Good" means that the geometry agrees with its own calibration image. It does not show that the calibration belongs to the sample data. A known limit is recorded in the tests: on the partial arcs of the public pyFAI AgBH frame the fitted centre lies about 3 px off and the distance 0.45 % off.
+"Good" means that the geometry agrees with its own calibration image. It does not show that the calibration belongs to the sample data. On the partial arcs of the public pyFAI AgBH frame the centre-and-distance fit alone put the centre about 3 px off and the distance 0.45 % off; with the tilt stage (section 3.8) the centre lies within 0.2 px of the `.poni`'s direct beam.
 
 Implementation: `src/gimap/features/calibration/domain/candidate_ranker.py`, `src/gimap/features/calibration/domain/line_check.py`, `src/gimap/features/calibration/application/headless.py`, `src/gimap/features/assistant/domain/calibration_quality.py`
 
@@ -582,13 +591,14 @@ Apply in Geometry Calibration turns the selected candidate into an instrument pr
 - the beam centre from index to canonical coordinates (1.5), the distance from mm to m, λ from the energy, and the two pixel sizes;
 - `α_i = 0` for a new profile; an updated profile keeps its α_i;
 - GIMaP asks before an update moves the beam centre by more than 10 px or the distance by more than 5 %;
-- the profile's `source` names the standard, the time and the image. A rotation above 0.05° would be noted there as not modelled; since the engine never sets a rotation, this happens only for an imported record that carries one.
+- the detector tilt: rot1, rot2, rot3 of the candidate become the rotations of the geometry (centre and distance stay those of the direct beam);
+- the profile's `source` names the standard, the time, the image, the 1σ of centre and distance, the fitted tilt with its 1σ and where the energy came from.
 
 Implementation: `src/gimap/features/calibration/domain/instrument_profile.py`, `src/gimap/features/calibration/domain/manual_refinement.py`
 
 ### 3.6 pyFAI `.poni` files
 
-Run Automatic Analysis and `tools/gimap_agent.py` accept a pyFAI `.poni` file as the geometry. Its PONI is converted to the direct beam with the relations of pyFAI's `getFit2D` (the Fit2D geometry; Hammersley, 2016):
+Run Automatic Analysis, `tools/gimap_agent.py` and Analyze (**Load .poni…**, and the `.poni` beside a frame, section 1.4) accept a pyFAI `.poni` file as the geometry. Its PONI is converted to the direct beam with the relations of pyFAI's `getFit2D` (the Fit2D geometry; Hammersley, 2016):
 
 ```text
 x_c = (poni_2 − L_poni tan rot_1) / p_2                                     (3.10)
@@ -600,11 +610,18 @@ tilt = arccos(cos rot_1 cos rot_2)                                      (3.13)
 - `L_poni` is the `.poni` Distance (m); `poni_1`, `poni_2` (m) and `p_1`, `p_2` (pixel sizes) refer to the slow axis (rows, so `p_y = p_1`) and the fast axis (columns, `p_x = p_2`). They are taken as measured from the corner of pixel (0, 0) of the stored image; an `orientation` entry of newer `.poni` files is not read.
 - The pixel sizes come from `PixelSize1/2`, from `detector_config`, or from a known detector name (Pilatus 172 µm, Eiger 75 µm, PerkinElmer 200 µm, Lambda 55 µm, MAR345 100 µm, Jungfrau 75 µm). The wavelength is converted from m to Å.
 - The rotations go into the geometry with the direct beam and the distance (section 3.7); the instrument profile also keeps the file's distance, PONI, rotations and pixel sizes (`tilt` in `instrument_profiles.json`; `dropped_tilt` up to 0.2.0, still read). Above 0.5° the file's inspection notes the tilt.
-- A `.poni` is applied as it is: its pixel size and frame size are not checked against the data.
+- In Analyze a `.poni` is checked against the frame: a `max_shape` that differs from the frame shape, or a pixel size more than 1 % from the header's, is said and asked about (**Load .poni…**) or makes the file beside the frame unused. A file without a wavelength needs one typed. Run Automatic Analysis applies a file it was given as it is.
+- **Writing.** **Export .poni…** (Analyze, Geometry step and dialog) and **Export Calibration…** as `.poni` (Geometry Calibration) write PONI version 2.1 with pyFAI's generic `Detector` (`pixel1`, `pixel2`, `max_shape`, `orientation` 3), `Distance`, `Poni1`, `Poni2`, `Rot1`–`Rot3` and `Wavelength`, the inverse of (3.10)–(3.12):
+
+```text
+L_poni = L cos rot_1 cos rot_2,   poni_2 = x_c p_2 + L_poni tan rot_1,   poni_1 = y_c p_1 − L_poni tan rot_2 / cos rot_1      (3.16)
+```
+
+  Reading a written file gives the geometry back to rounding (the q of every pixel to 10⁻¹²). α_i is no part of a `.poni`.
 
 Examples from the public data: the P08 file gives (545.46, 1826.95) px, `L` = 811.77 mm, tilt 0.31°; the pyFAI AgBh file gives (179.98, 263.86) px, `L` = 1583.31 mm, tilt 0.57° (note); the Xeuss file gives (7.05, 589.49) px, `L` = 147.58 mm, tilt 6.06° (note).
 
-Implementation: `src/gimap/features/assistant/domain/calibration_files.py`
+Implementation: `src/gimap/shared/geometry/poni.py`, `src/gimap/features/assistant/domain/calibration_files.py`, `src/gimap/features/analyze/application/geometry_files.py`
 
 ### 3.7 The detector tilt of a `.poni`
 
@@ -651,14 +668,65 @@ that of its rows upward. Untilted, (3.15) is `(L, X, Y)`. Every quantity of a pi
 - The automatic analysis lists the tilt under *Decisions* (`detector tilt: 6.06° in the geometry`), and the
   Geometry step and its summary say `detector tilt 6.06°`. The record has the rotations in `geometry`.
 - Profiles saved by GIMaP 0.1 kept the tilt beside a flat geometry (`dropped_tilt`). They are read with the tilt
-  in the geometry. Geometry Calibration refines no tilt (section 3.3): a profile it updates is untilted.
+  in the geometry. Geometry Calibration fits rot1 and rot2 (section 3.8), and the Detector geometry dialog of
+  Analyze has fields for rot1, rot2 and rot3 (degrees).
 - What still assumes an untilted detector: the straight horizon row of section 2.5, the mirror filling of
-  section 4.8, the line check of the calibration and the XRR geometry (section 13.1). For tilts of a few degrees
+  section 4.8, the ring search of the calibration before its tilt stage (sections 3.3, 3.8) and the XRR geometry
+  (section 13.1). For tilts of a few degrees
   these are small near the beam and grow towards the edges.
 
 Implementation: `src/gimap/shared/geometry/detector_geometry.py` (`in_plane_axes`),
 `src/gimap/shared/geometry/q_mapping.py` (`lab_rays`), `src/gimap/shared/geometry/instrument_profile.py`,
 `src/gimap/shared/geometry/detector_tilt.py`
+
+### 3.8 Detector tilt from the rings of the standard
+
+A detector that is not perpendicular to the beam turns the rings into conic sections. After the centre-and-distance
+fit (section 3.3, steps 1–7), five parameters are fitted together: the direct beam `(x_c, y_c)`, the distance `L` to
+it, rot_1 and rot_2; rot_3 is kept (0, or a value given). The geometry is GIMaP's (1.3)–(1.4) with (3.15), the one
+Analyze uses, so a calibrated geometry and the q of Analyze agree by construction.
+
+**Ring points.** For each matched ring of q_m, the valid pixels within `h = 2 clip(0.012 r, 3, 10)` px (first pass)
+or `clip(0.012 r, 3, 10)` px (later passes) of the ring of the current geometry are split into azimuthal sectors
+about 2 px of arc long (36 to 720 per ring). In a sector every pixel weighs `w = max(0, S − S_25)` (S the
+preprocessed signal, S_25 the sector's lower quartile); the ring point is the weighted mean position (sub-pixel).
+A sector gives a point when its largest w is at least 0.3 times the median of that value over the ring's sectors,
+so sectors the ring does not reach (beam stop, gaps, the shadow of a grazing sample) give none.
+
+**Residual and fit.** With `t = (along, right, up)` the laboratory vector of a point (3.15) and
+`tan 2θ_p = √(right² + up²) / along`,
+
+```text
+ρ_p = L ( tan 2θ_p − tan 2θ(q_m) ) / p̄                                            (3.17)
+```
+
+in pixels; for an untilted detector (3.17) is exactly (3.8). It is minimised with `scipy.optimize.least_squares`
+(soft-L1 loss, f_scale 2 px, at most 200 evaluations); the centre may move by `clip(0.04 max(W, H), 12, 60)` px,
+L by ±25 % within the distance range, rot_1 and rot_2 within ±30°. The points are taken again around the rings of
+the new geometry and the fit repeated, four passes at most (fewer when the centre moves less than 0.01 px and the
+rotations less than 10⁻⁶ rad). The RMS of (3.17) is reported with and without the tilt (`point_rms_px`,
+`untilted_point_rms_px`).
+
+**When.** By default (**Refine rot1, rot2** ticked) with three or more matched rings; with fewer the candidate
+carries the warning *The detector tilt was not refined: it needs at least three matched rings.* Unticked, nothing
+of this step runs.
+
+**Uncertainty.** As in section 3.3: with three or more rings the jackknife over rings of all five parameters
+(`rot1_sigma_deg`, `rot2_sigma_deg` next to the centre and the distance), with two rings the covariance
+`s² (JᵀJ)⁻¹` of the five.
+
+**Validation.** Ring points of the public Xeuss `.poni` geometry (tilt 6.06°, rot_1 = −5.100°, rot_2 = −3.274°),
+from an untilted start 3 % off in distance, give rot_1 and rot_2 within 0.012° of the file's. A synthetic LaB₆
+frame (1200 × 1200 px, 172 µm, 12 keV, L = 200 mm, rot_1 = 2.0°, rot_2 = −1.5°) through the whole engine gives
+2.0006° and −1.4985° (1σ 0.003°), the centre within 0.01 px and L within 0.02 %; the ring-point RMS falls from
+4.7 to 0.17 px. On the public pyFAI AgBh frame (12 keV entered; the file states no energy) the fit gives
+rot_1 = −0.07 ± 0.17°, rot_2 = 0.48 ± 0.16° against the `.poni`'s 0.37° and 0.43°, the direct beam within 0.2 px of
+the `.poni`'s, and an RMS of 0.45 px instead of 1.80 px; at this SAXS distance (2θ below 4°) a tilt of 0.4° moves
+the outer ring by only about 0.3 px relative to the inner ones, which is why rot_1 is so loosely determined. For an
+untilted geometry the tilt fields change no pixel's q (equal to 10⁻¹²).
+
+Implementation: `src/gimap/features/calibration/domain/tilt_fit.py`, `src/gimap/features/calibration/domain/optimizer.py`
+(`estimate_uncertainty`), `src/gimap/features/calibration/domain/engine.py`
 
 ## 4. Reading and preparing frames
 
@@ -1306,6 +1374,27 @@ g = I_target / I_peak            (I and σ multiplied by g; q unchanged)        
 Equation (6.18) is a small-angle scaling. Re-reducing the frame with L′ and repeating makes it converge at wide angles too. The target `I_target` is 1 by default. The factor g is taken from the first frame for the whole series, or from each frame.
 
 Implementation: `src/gimap/features/analyze/domain/series.py`, `src/gimap/features/analyze/application/series.py`
+
+### 6.11 SAXS/WAXS in transmission
+
+A frame taken in transmission (a calibrant, or a sample in transmission) has no sample surface: no horizon, no
+Yoneda band, no missing wedge. In the mode **SAXS** (SAXS/WAXS in transmission; chosen by hand, or by Auto, section 2.4) every valid pixel
+is used:
+
+- q = 4π sin θ / λ of every pixel, and q_y (to the right), q_z (up) from (2.8) with α_i = 0, which are the
+  components of q across the beam;
+- χ = atan2(q_z, q_y): 0° to the right of the beam, 90° up, ±180° to the left (the detector azimuth); it is not the
+  GIWAXS χ of section 6.6;
+- `radial`: I(q) over the whole ring, with the bins and errors of section 6.6;
+- `azimuthal`: I(χ) from −180° to 180° in 1° bins, in the q window of the strongest ring (or the one set);
+- the cut regions (rings, sectors, spots) in this χ;
+- the q map in q_y–q_z and the cake over χ from −180° to 180° (0.5° rows).
+
+Mirror filling and the GIWAXS intensity corrections are not applied. A pinned GISAXS or GIWAXS mode on such a frame
+is pointed out like any mode that disagrees with Auto. On the public silver behenate frame (five complete rings)
+Auto takes this mode; I(χ) covers −180° to 180°, where GIWAXS kept only the half above the horizon.
+
+Implementation: `src/gimap/features/analyze/domain/transmission.py`, `src/gimap/features/analyze/application/technique.py`
 
 ## 7. GIWAXS automatic analysis
 
@@ -4317,7 +4406,7 @@ Fitting's optional two-path sphere with a free effective reflection coefficient 
 
 ### 15.2 Instrument and geometry
 
-- **Detector tilt and rotation.** The calibration refines only x_c, y_c and L; it fits no tilt. A tilt comes from a `.poni` file and is applied as pyFAI applies it (section 3.7). The straight horizon, mirror filling, the calibration's line check and the XRR geometry still assume an untilted detector (sections 2.5, 4.8, 3.3, 13.1).
+- **Detector tilt and rotation.** The calibration fits x_c, y_c, L, rot1 and rot2 (sections 3.3, 3.8); rot3 is not determined by the rings and stays 0 (or as given). A tilt from a `.poni` file is applied as pyFAI applies it (section 3.7). At SAXS distances the rings fix the tilt only loosely (section 3.8: ±0.17° on the public AgBh frame). The straight horizon, mirror filling, the calibration's ring search and the XRR geometry still assume an untilted detector (sections 2.5, 4.8, 3.3, 13.1).
 - **Sample orientation.** The sample is tilted by α_i about the horizontal axis perpendicular to the beam and by nothing else; a rotation about the surface normal or about the beam is not described in Analyze (section 2.5). Sputter alone hands a sample roll to its analysis package (section 12.1).
 - **Pixels.** A pixel is represented by its centre: there is no parallax, no sensor thickness and no pixel splitting (sections 2.5, 6.1).
 - **Beam.** Divergence, energy bandwidth and footprint are not modelled (section 2.5). The XRR extractor applies no footprint correction (section 13.1).

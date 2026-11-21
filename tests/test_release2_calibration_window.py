@@ -96,6 +96,7 @@ def _calibrated(context, frame: Path) -> GeometryCalibrationDialog:
     _settle(app, 0.2)
     dialog.load_image(str(frame))
     _wait(app, lambda: dialog._load_thread is None and dialog.image is not None, 60)
+    dialog.energy_spin.setValue(12.0)  # the frame states no energy: it is entered (none is assumed)
     dialog.start_calibration()
     _wait(app, lambda: dialog._cal_thread is None and dialog.result is not None, 240)
     _settle(app, 0.3)
@@ -171,7 +172,8 @@ def test_every_number_of_the_window_is_the_centre_of_the_saved_profile(window, y
     # The fit is what it was (pixel-centre indices); the profile is the same point in canonical pixels.
     assert (candidate.center_x_px, candidate.center_y_px, candidate.distance_mm) == fitted
     assert saved == (fitted[0] + 0.5, fitted[1] + 0.5)
-    assert saved == pytest.approx((182.97, 264.84), abs=0.05)  # the documented direct beam is (180.0, 263.9)
+    # the documented direct beam is (180.0, 263.9); without the tilt fit the centre was 3 px off (182.97, 264.84)
+    assert saved == pytest.approx((179.78, 264.03), abs=0.05)
     assert profile.geometry.distance_m == pytest.approx(fitted[2] * 1e-3)
 
     assert dialog.result_center_x.text() == f"{saved[0]:.3f} px"

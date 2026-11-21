@@ -26,6 +26,7 @@ from ..application import (
     commit_manual_refinement,
     detect_standard_keys,
     manual_ring_distance,
+    tilted_ring_grid,
     frames_made_on,
     preview_manual_candidate,
     profile_change_is_significant,
@@ -193,6 +194,10 @@ class CalibrationViewModel:
         if self.result is None:
             return ()
         return theoretical_ring_overlays(candidate, self.result)
+
+    def tilted_ring_grid(self, candidate: CalibrationCandidate, shape):
+        """The rings of a tilted candidate as contours of tan 2θ (``None``: untilted, or no result)."""
+        return None if self.result is None else tilted_ring_grid(candidate, self.result, shape)
 
     def manual_ring_distance(
         self,

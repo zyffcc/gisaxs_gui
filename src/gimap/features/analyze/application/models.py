@@ -15,7 +15,7 @@ from ..domain import BadPixels, Corrections, GisaxsCutSettings, GiwaxsSettings, 
 from .flat_field import FlatFieldUse
 
 AUTO = "auto"
-MODES = (AUTO, "gisaxs", "giwaxs")
+MODES = (AUTO, "gisaxs", "giwaxs", "transmission")
 
 CENTER_PROFILE = "profile"
 CENTER_HEADER = "header"
@@ -30,9 +30,12 @@ class AnalysisRequest:
     path: Path
     frame_index: int = 0
     mode: str = AUTO
-    """``auto`` classifies from the geometry; ``gisaxs``/``giwaxs`` force a reduction."""
+    """``auto`` classifies from the geometry; ``gisaxs``/``giwaxs``/``transmission`` force a reduction."""
     profile_name: Optional[str] = None
-    """Use this profile instead of the automatic match."""
+    """Use this profile instead of the automatic match (for frames of its size, or with ``force_profile``)."""
+    forced_shapes: tuple = ()
+    """Frame sizes ``(rows, columns)`` on which ``profile_name`` is used although it is for another size (the person
+    said so: Use Anyway)."""
     incidence_deg: Optional[float] = None
     """Grazing angle for this measurement; ``None`` keeps the profile's value."""
     gisaxs: GisaxsCutSettings = field(default_factory=GisaxsCutSettings)
@@ -78,13 +81,18 @@ class GeometryResolution:
     geometry: Optional[DetectorGeometry]
     profile: Optional[InstrumentProfile]
     how: str
-    """``matched``, ``chosen`` or ``missing``."""
+    """``chosen`` (the profile picked by hand), ``file`` (the ``.poni`` beside the frame), ``matched`` (a profile
+    matched by detector name and frame size) or ``missing``."""
     center_source: str = CENTER_PROFILE
     """Where the beam centre of ``geometry`` came from: profile, header or session."""
     header_center: Optional[tuple[float, float]] = None
     """Canonical beam centre written in the file header, if the file has one."""
     ignored_center_shape: Optional[tuple[int, int]] = None
     """The frame shape a session beam centre was set for, when it was not used for this frame (another shape)."""
+    refused_profile: Optional[str] = None
+    """The profile picked by hand when it was not used because it is for frames of another size (another
+    detector): a frame never takes the geometry of another detector without being told to."""
+    refused_shape: Optional[tuple[int, int]] = None
 
 
 @dataclass(frozen=True)

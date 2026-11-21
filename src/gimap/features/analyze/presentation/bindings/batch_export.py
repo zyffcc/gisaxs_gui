@@ -34,6 +34,9 @@ from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import (
     AUTO,
+    NO_GEOMETRY,
+    TECHNIQUE_NAMES,
+    batch_geometry_lines,
     FIT_PEAKS,
     GISAXS,
     SCALE_SCREEN,
@@ -90,6 +93,7 @@ class BatchExportMixin:
         choices, destination, subfolder, beside, carried = self._batch_folder(stem)
         subfolder = subfolder or for_fitting  # a send: always its own folder ``<name>_fitting``, beside any export
         frames_text, sum_size, source_notes = self._batch_frames(requests)
+        geometry_notes, no_geometry = self._batch_geometry(files)
         analysis, first = model.state.analysis, requests[0]
         targets = peak_targets(analysis) if analysis is not None else []
         said, set_pin = getattr(model, "series_cut_text", None), getattr(model, "set_pin_series_cuts", None)
@@ -106,7 +110,8 @@ class BatchExportMixin:
             model_available=model.model_fitter is not None, try_fit=self.try_batch_fit,
             speeds=self.batch_speed_options(len(requests)), screen_scale=self.batch_display_text(),
             halves=model.fit_side,  # the halves of the Cuts step (both halves on |qy|: those of the last batch)
-            frames_text=frames_text, sum_size=sum_size, notes=[*notes, *source_notes],
+            frames_text=frames_text, sum_size=sum_size, notes=[*notes, *source_notes, *geometry_notes],
+            no_geometry=no_geometry,
             cut_text=self._batch_cut_text if said is not None and self._batch_cut_text() else None,
             pin_cuts=None if pinned is None else bool(pinned), set_pin_cuts=set_pin,
             cost=self._batch_cost, beside=beside, carried=carried,
@@ -345,13 +350,34 @@ class BatchExportMixin:
             return []
         return [(curve.key, curve_title(curve.title)) for curve in analysis.reduction.curves if not curve.is_empty]
 
+    def _batch_geometry(self, files) -> tuple[list[str], bool]:
+        """What the dialog says about the geometry of each folder of frames, and whether none can have one."""
+        analysis = self.view_model.state.analysis
+        source = self._geometry_source_text(analysis) if analysis is not None and analysis.geometry is not None else None
+        lines, possible = batch_geometry_lines(files, self.view_model.current_path, source,
+                                               have_profiles=bool(self.view_model.profile_names()))
+        notes = [trf(template, **values) for template, values in lines]
+        if not possible:
+            notes.append(tr(NO_GEOMETRY))
+        return notes, not possible
+
+    def _geometry_source_text(self, analysis) -> str:
+        resolution = analysis.resolution
+        name = resolution.profile.name if resolution.profile is not None else ""
+        return {"chosen": trf("profile “{name}”", name=name), "matched": trf("profile “{name}” (matched)", name=name),
+                "file": trf("{name} beside the frame", name=name)}.get(resolution.how, tr("geometry in use"))
+
     def settings_summary(self) -> str:
-        """The set-up in one line: mode, profile, αi, cuts, masks, corrections."""
+        """The set-up in one line: mode, the geometry of the frame on screen, αi, cuts, masks, corrections."""
         state = self.view_model.state
-        settings = self.view_model.current_settings()
-        mode = {AUTO: tr("GISAXS or GIWAXS by angle")}.get(state.mode, state.mode.upper())
+        mode = {AUTO: tr("technique by angle (transmission for a calibrant)")}.get(
+            state.mode, TECHNIQUE_NAMES.get(state.mode, state.mode.upper()))
         parts = [mode]
-        parts.append(tr("profile “{name}”").format(name=settings.profile_name) if settings.profile_name else tr("geometry matched automatically"))
+        analysis = state.analysis
+        if analysis is not None and analysis.geometry is not None:
+            parts.append(self._geometry_source_text(analysis))
+        else:
+            parts.append(tr("no geometry"))
         if state.incidence_deg is not None:
             parts.append(f"αi {state.incidence_deg:g}°")
         regions = len(state.giwaxs.regions)

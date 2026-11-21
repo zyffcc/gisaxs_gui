@@ -9,7 +9,9 @@ import numpy as np
 
 GISAXS = "gisaxs"
 GIWAXS = "giwaxs"
-MEASUREMENT_KINDS = (GISAXS, GIWAXS)
+TRANSMISSION = "transmission"
+"""SAXS/WAXS in transmission: full rings about the direct beam, no sample horizon (``transmission.py``)."""
+MEASUREMENT_KINDS = (GISAXS, GIWAXS, TRANSMISSION)
 
 
 @dataclass(frozen=True)
@@ -159,6 +161,7 @@ __all__ = [
     "GisaxsCutSettings",
     "GiwaxsSettings",
     "MEASUREMENT_KINDS",
+    "TRANSMISSION",
     "QBox",
     "ReciprocalSpaceMap",
     "Reduction",

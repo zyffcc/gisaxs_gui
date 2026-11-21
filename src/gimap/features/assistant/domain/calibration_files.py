@@ -7,12 +7,12 @@ standard, or logs that may state the energy, distance or beam centre.
 
 from __future__ import annotations
 
-import math
 import re
 from dataclasses import dataclass
 from typing import Optional
 
 from src.gimap.shared.geometry.detector_tilt import DetectorTilt
+from src.gimap.shared.geometry.poni import DETECTOR_PIXELS_M, read_poni  # noqa: F401  (re-exported)
 
 HC_KEV_ANGSTROM = 12.398419843320026
 
@@ -208,74 +208,34 @@ class PoniGeometry:
     ``None`` when the file has no rotation. Analyze estimates from it how far |q| is off (``detector_tilt``)."""
 
 
-def _float(value) -> Optional[float]:
-    try:
-        number = float(str(value).strip())
-    except (TypeError, ValueError):
-        return None
-    return number if math.isfinite(number) else None
-
-
-DETECTOR_PIXELS_M = (
-    ("pilatus", 172e-6), ("eiger", 75e-6), ("perkin", 200e-6), ("lambda", 55e-6), ("mar3450", 100e-6),
-    ("mar345", 100e-6), ("jungfrau", 75e-6),
-)
-"""Pixel sizes of detectors a ``.poni`` file may name instead of listing ``pixel1``/``pixel2``."""
-
-
 def parse_poni(text: str) -> PoniGeometry:
     """A pyFAI ``.poni`` file as a direct-beam geometry (pyFAI's ``Geometry.getFit2D`` conversion).
 
     The PONI is where the detector normal through the sample meets the detector, not the direct
     beam: with rotations ``rot1`` (about the vertical axis) and ``rot2`` (about the horizontal
-    axis) the beam lands at ``poni2 − L·tan(rot1)`` and ``poni1 + L·tan(rot2)/cos(rot1)``.
+    axis) the beam lands at ``poni2 − L·tan(rot1)`` and ``poni1 + L·tan(rot2)/cos(rot1)``. The file is read by
+    ``shared/geometry/poni.read_poni`` (the reader of Analyze's Load .poni… too).
     """
-    values: dict[str, str] = {}
-    for line in text.splitlines():
-        if line.lstrip().startswith("#") or ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        values[key.strip().lower()] = value.strip()
-    pixel1 = _float(values.get("pixelsize1"))
-    pixel2 = _float(values.get("pixelsize2"))
-    config = values.get("detector_config")
-    if config and (pixel1 is None or pixel2 is None):
-        found1 = re.search(r'"pixel1"\s*:\s*([0-9.eE+-]+)', config)
-        found2 = re.search(r'"pixel2"\s*:\s*([0-9.eE+-]+)', config)
-        pixel1 = pixel1 if pixel1 is not None else (_float(found1.group(1)) if found1 else None)
-        pixel2 = pixel2 if pixel2 is not None else (_float(found2.group(1)) if found2 else None)
-    if not pixel1 or not pixel2:
-        name = values.get("detector", "").lower()
-        known = next((size for key, size in DETECTOR_PIXELS_M if key in name), None)
-        pixel1, pixel2 = pixel1 or known, pixel2 or known
-    distance = _float(values.get("distance"))
-    poni1, poni2 = _float(values.get("poni1")), _float(values.get("poni2"))
-    if distance is None or poni1 is None or poni2 is None or not pixel1 or not pixel2:
-        raise ValueError("The .poni file lacks Distance, Poni1, Poni2 or the pixel size.")
-    rot1 = _float(values.get("rot1")) or 0.0
-    rot2 = _float(values.get("rot2")) or 0.0
-    rot3 = _float(values.get("rot3")) or 0.0
+    stated = read_poni(text)
+    poni = stated.tilt
     # The conversion is the tilt's own (``DetectorTilt.direct_beam_px``), so Analyze's estimate of what the tilt
     # costs compares the .poni with exactly this flat geometry.
-    poni = DetectorTilt(distance, poni1, poni2, rot1, rot2, rot3, pixel1, pixel2)
     center_x, center_y = poni.direct_beam_px()
     tilt = poni.tilt_deg
-    wavelength = _float(values.get("wavelength"))
     notes = []
     if tilt > 0.5:
         notes.append(f"The detector is tilted by {tilt:.2f}°; the tilt is part of the geometry (pyFAI's rotations).")
-    dropped = poni if (rot1 or rot2 or rot3) else None
     return PoniGeometry(
         distance_mm=poni.beam_distance_m * 1e3,
         beam_center_x_px=center_x,
         beam_center_y_px=center_y,
-        pixel_size_x_m=pixel2,
-        pixel_size_y_m=pixel1,
-        wavelength_angstrom=wavelength * 1e10 if wavelength else None,
+        pixel_size_x_m=poni.pixel2_m,
+        pixel_size_y_m=poni.pixel1_m,
+        wavelength_angstrom=stated.wavelength_angstrom,
         tilt_deg=tilt,
-        detector=values.get("detector", ""),
+        detector=stated.detector,
         notes=tuple(notes),
-        tilt=dropped,
+        tilt=poni if stated.tilted else None,
     )
 
 

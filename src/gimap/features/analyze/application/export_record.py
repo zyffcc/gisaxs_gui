@@ -134,7 +134,7 @@ def frame_cuts(metadata: Optional[Mapping[str, Any]]) -> dict[str, Any]:
         cuts["horizontal_rows"] = list(rows) if rows else None
         cuts["horizontal_source"] = markers.get("horizontal_source")
         cuts["vertical_columns"] = list(columns) if columns else None
-    elif metadata.get("measurement") == GIWAXS:
+    elif metadata.get("measurement") in (GIWAXS, "transmission"):
         window = markers.get("chi_q_window")
         cuts["chi_q_window"] = [float(value) for value in window] if window else None
     if markers.get("series_cut"):

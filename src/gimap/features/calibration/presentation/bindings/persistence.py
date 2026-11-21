@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 
 from PyQt5.QtCore import QSignalBlocker, Qt
@@ -16,6 +17,7 @@ from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
 
 from ..pixel_coordinates import shown_center
+from .energy_source import FROM_IMPORT
 
 LOGGER = logging.getLogger(__name__)
 
@@ -72,9 +74,11 @@ class PersistenceMixin:
             return
         self._commit_manual_values()
         default = self.view_model.default_export_path(self.result.source_image)
-        path, _ = QFileDialog.getSaveFileName(
-            self, tr("Export Calibration"), default, tr("JSON Files (*.json)")
+        path, chosen = QFileDialog.getSaveFileName(
+            self, tr("Export Calibration"), default, f"{tr('JSON Files (*.json)')};;{tr('pyFAI geometry (*.poni)')}"
         )
+        if path and chosen == tr("pyFAI geometry (*.poni)") and not path.lower().endswith(".poni"):
+            path = str(Path(path).with_suffix(".poni"))
         if path:
             try:
                 self.view_model.export_result(path)
@@ -104,7 +108,7 @@ class PersistenceMixin:
             if self.image is not previous_image:
                 self._preview_cache.clear()
                 self._show_imported_frames()
-            self.energy_spin.setValue(self.result.energy_kev)
+            self._set_energy(self.result.energy_kev, FROM_IMPORT)
             self.pixel_x_spin.setValue(self.result.pixel_size_x_m * 1e6)
             self.pixel_y_spin.setValue(self.result.pixel_size_y_m * 1e6)
             # A new run fits the standard this calibration was made with: left on "Auto Detect" it could

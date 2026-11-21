@@ -42,7 +42,7 @@ from .series_view import SeriesScroll, SeriesView
 AUTO_PROFILE_TEXT = "Automatic (match detector)"
 FILE_FILTER = f"Detector frames ({' '.join('*' + suffix for suffix in DETECTOR_SUFFIXES)});;All files (*)"
 """A dialog that takes one detector frame (the background frame): every suffix the reader accepts."""
-MODE_ITEMS = (("Auto", "auto"), ("GISAXS", "gisaxs"), ("GIWAXS", "giwaxs"))
+MODE_ITEMS = (("Auto", "auto"), ("GISAXS", "gisaxs"), ("GIWAXS", "giwaxs"), ("SAXS", "transmission"))
 VIEW_ITEMS = ("Detector", "q map", "Cake")
 VIEW_DETECTOR, VIEW_Q_MAP, VIEW_CAKE = range(3)
 RIGHT_TABS = (("Curves", "curves"), ("Results", "results"), ("Series", "series"))
@@ -193,9 +193,15 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         self.mode_combo.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         for text, value in MODE_ITEMS:
             self.mode_combo.addItem(text, value)
-        self.mode_combo.setItemToolTip(0, "Decide from the largest scattering angle on the detector")
+        for index in range(self.mode_combo.count()):  # four techniques in the room of three: narrower padding
+            self.mode_combo.button(index).setProperty("narrowSegment", True)
         self.mode_combo.setItemToolTip(1, "Small angles: Yoneda cut, vertical cut, the symmetric halves")
         self.mode_combo.setItemToolTip(2, "Wide angles: rings, sectors, the q map and the cake")
+        self.mode_combo.setItemToolTip(
+            3, "SAXS/WAXS in transmission: full rings about the beam, I(q) and I(χ) over 360°, no horizon or Yoneda "
+               "band (a calibrant, or a sample in transmission)")
+        self.mode_combo.setItemToolTip(0, "Decide from the largest scattering angle on the detector; without an "
+                                          "incidence angle, a calibrant or complete rings mean transmission")
         self.incidence_spin = QDoubleSpinBox(bar)
         self.incidence_spin.setObjectName("analyzeIncidenceSpin")
         self.incidence_spin.setDecimals(3)
@@ -342,9 +348,15 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         self.banner_find_button.hide()
         self.enter_geometry_button = QPushButton("Enter Geometry…", self.banner)
         self.banner_calibrate_button = QPushButton("Calibrate…", self.banner)
+        self.banner_anyway_button = QPushButton("Use Profile Anyway", self.banner)
+        self.banner_anyway_button.setToolTip("Use the profile picked for frames of another size on these frames too")
+        self.banner_anyway_button.hide()
+        self.banner_poni_button = QPushButton("Load .poni…", self.banner)
         banner_layout.addWidget(self.banner_label, 1)
         banner_layout.addWidget(self.use_fitting_button)
+        banner_layout.addWidget(self.banner_anyway_button)
         banner_layout.addWidget(self.banner_find_button)
+        banner_layout.addWidget(self.banner_poni_button)
         banner_layout.addWidget(self.enter_geometry_button)
         banner_layout.addWidget(self.banner_calibrate_button)
         self.banner.hide()

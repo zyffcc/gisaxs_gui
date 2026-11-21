@@ -19,13 +19,13 @@ from src.gimap.shared.geometry.conventions import (
 from ..domain import (
     GISAXS,
     GIWAXS,
+    TRANSMISSION,
     CakeMap,
     Corrections,
     GiwaxsMaps,
     Reduction,
     SymmetryCenter,
     cake_map,
-    classify_measurement,
     curve_source_mask,
     has_intensity_corrections,
     symmetric_center_x,
@@ -36,8 +36,11 @@ from ..domain import (
     reduce_gisaxs,
     reduce_giwaxs,
     summed_header_values,
+    reduce_transmission,
+    transmission_maps,
     valid_pixels,
 )
+from ..domain.transmission import CAKE_SHAPE as TRANSMISSION_CAKE, CHI_RANGE as TRANSMISSION_CHI
 from .models import AUTO, AnalysisRequest, FrameAnalysis
 from .export_record import (  # noqa: F401 - the record of an export; these names are imported from here
     SOFTWARE,
@@ -50,8 +53,10 @@ from .export_record import (  # noqa: F401 - the record of an export; these name
 )
 from .flat_detector import detector_rotation_message, flat_detector_error, flat_detector_message
 from .frame_preprocessing import FramePreprocessingMixin, FrameSum, floating, photon_counts
-from .geometry_resolution import ResolveGeometry, center_not_used_message
+from .geometry_files import SiblingPoni
+from .geometry_resolution import ResolveGeometry, center_not_used_message, refused_profile_message
 from .nxcansas_export import nxcansas_name, sas_curves
+from .technique import TechniqueGuess
 from .ports import CurveWriter, FrameSource, InstrumentProfileStore
 
 
@@ -64,7 +69,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
 
     def __init__(self, frames: FrameSource, profiles: Optional[InstrumentProfileStore]):
         self.frames = frames
-        self.resolve = ResolveGeometry(profiles)
+        self.resolve = ResolveGeometry(profiles, SiblingPoni())
         self._maps_key: Optional[tuple] = None
         self._maps: Optional[GiwaxsMaps] = None
         self._gisaxs_maps_key: Optional[tuple] = None
@@ -72,6 +77,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
         self._q_map_key: Optional[tuple] = None
         self._q_map_source: Optional[tuple] = None
         self._q_map = None
+        self._technique = TechniqueGuess()
         self._init_preprocessing()
 
     def _load_frames(self, request: AnalysisRequest) -> tuple[np.ndarray, np.ndarray, dict]:
@@ -101,11 +107,12 @@ class AnalyzeFrame(FramePreprocessingMixin):
         common["header_values"] = headers[0] if len(headers) == 1 else summed_header_values(headers)
         return data, valid, common
 
-    def _giwaxs_maps(self, shape: tuple[int, int], geometry: DetectorGeometry) -> GiwaxsMaps:
-        key = (shape, geometry)
+    def _giwaxs_maps(self, shape: tuple[int, int], geometry: DetectorGeometry, kind: str = GIWAXS) -> GiwaxsMaps:
+        """The q maps of a GIWAXS frame, or of a frame in transmission (``kind``: their χ and horizon differ)."""
+        key = (shape, geometry, kind)
         maps, cached_key = self._maps, self._maps_key
         if maps is None or cached_key != key:
-            maps = giwaxs_maps(shape, geometry)
+            maps = transmission_maps(shape, geometry) if kind == TRANSMISSION else giwaxs_maps(shape, geometry)
             self._maps, self._maps_key = maps, key
         return maps
 
@@ -131,14 +138,18 @@ class AnalyzeFrame(FramePreprocessingMixin):
         """The q maps of a GIWAXS frame (cached for its shape and geometry)."""
         if analysis.geometry is None or analysis.kind == GISAXS:
             raise ValueError("This needs a GIWAXS frame with a geometry.")
-        return self._giwaxs_maps((int(analysis.data.shape[0]), int(analysis.data.shape[1])), analysis.geometry)
+        shape = (int(analysis.data.shape[0]), int(analysis.data.shape[1]))
+        return self._giwaxs_maps(shape, analysis.geometry, analysis.kind)
 
     def cake(self, analysis: FrameAnalysis) -> CakeMap:
         """The GIWAXS frame unwrapped onto χ–q (``cake_map``), from the q maps already computed."""
         if analysis.geometry is None or analysis.kind == GISAXS:
             raise ValueError("The unwrapped view needs a GIWAXS frame with a geometry.")
         maps = self.maps_of(analysis)
-        return cake_map(analysis.data, np.asarray(analysis.valid, dtype=bool) & maps.above_horizon, maps)
+        usable = np.asarray(analysis.valid, dtype=bool) & maps.above_horizon
+        if analysis.kind == TRANSMISSION:  # χ round the whole ring
+            return cake_map(analysis.data, usable, maps, shape=TRANSMISSION_CAKE, chi_range=TRANSMISSION_CHI)
+        return cake_map(analysis.data, usable, maps)
 
     def source_masks(self, analysis: FrameAnalysis, keys: Sequence[str]) -> dict[str, np.ndarray]:
         """The pixels each named curve of ``analysis`` averages (curves it does not have are skipped)."""
@@ -147,7 +158,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
             return {}
         shape = (int(analysis.data.shape[0]), int(analysis.data.shape[1]))
         if reduction.kind != GISAXS:
-            maps = self._giwaxs_maps(shape, analysis.geometry)
+            maps = self._giwaxs_maps(shape, analysis.geometry, reduction.kind)
         else:  # (the person's cuts are in q; the two automatic bands are rows and columns)
             maps = self._gisaxs_maps_for(shape, analysis.geometry) if has_person_cuts(reduction) else None
         masks = {}
@@ -191,6 +202,9 @@ class AnalyzeFrame(FramePreprocessingMixin):
             header_center=header_beam_center(common["metadata"], shape),
             distance_m=request.distance_m,
             beam_center_shape=request.beam_center_shape,
+            path=common["path"],
+            pixel_size_m=(common["metadata"].get("pixel_size_x_m"), common["metadata"].get("pixel_size_y_m")),
+            force_profile=shape in {tuple(int(v) for v in item) for item in request.forced_shapes},
         )
         geometry = resolution.geometry
         refraction = getattr(request.corrections, "critical_angle_deg", None)
@@ -198,7 +212,11 @@ class AnalyzeFrame(FramePreprocessingMixin):
             geometry = geometry.with_critical_angle(float(refraction))
             resolution = replace(resolution, geometry=geometry)
         # What Auto would choose, in every mode: a pinned mode that disagrees is pointed out.
-        detected = None if geometry is None else classify_measurement(shape, geometry)
+        detected, technique_note = None, None
+        if geometry is not None:
+            detected, technique_note = self._technique.detect(
+                common["path"], (int(common["frame_index"]), tuple(common["summed_frames"])), raw_data, raw_valid,
+                geometry, request.incidence_deg)
         kind = None if geometry is None else (request.mode if request.mode != AUTO else detected)
         mirror_x = geometry.beam_center_x_px if geometry is not None and kind == GIWAXS else None
         common.update(self._preprocess(raw_data, raw_valid, request.corrections, common["metadata"], mirror_x))
@@ -215,6 +233,9 @@ class AnalyzeFrame(FramePreprocessingMixin):
         data, valid = common["data"], common["valid"]
         scale = common.get("intensity_scale")
         messages: list[str] = []
+        refused = refused_profile_message(resolution, shape)
+        if refused:
+            messages.append(refused)
         if geometry is None:
             detector = common["detector_name"] or "this detector"
             messages.append(
@@ -235,7 +256,14 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 f"Profile “{resolution.profile.name}” is for {profile_shape[0]}×{profile_shape[1]} "
                 f"frames; this frame is {shape[0]}×{shape[1]}."
             )
-        if kind == GISAXS:
+        if technique_note and kind == TRANSMISSION and request.mode == AUTO:
+            messages.append(technique_note)
+        if kind == TRANSMISSION:
+            reduction = reduce_transmission(
+                data, valid, geometry, request.giwaxs, maps=self._giwaxs_maps(shape, geometry, TRANSMISSION),
+                with_map=request.with_map, counts=scale if scale is not None else counting,
+            )
+        elif kind == GISAXS:
             reduction = reduce_gisaxs(
                 data, valid, geometry, request.gisaxs, counts=scale if scale is not None else counting,
                 q_map=self._gisaxs_q_map(data, valid, geometry) if request.with_map else None,

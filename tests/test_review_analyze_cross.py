@@ -240,12 +240,16 @@ def test_the_status_names_the_pixels_of_each_cut_both_ends_included() -> None:
 
 
 @requires_public
-def test_refresh_language_composes_the_texts_of_the_frame_shown(monkeypatch, english) -> None:
+def test_refresh_language_composes_the_texts_of_the_frame_shown(monkeypatch, english, tmp_path) -> None:
+    import shutil
+
     from src.gimap.features.analyze.presentation.bindings.display import _horizontal_where, pixel_range
 
     profiles = InMemoryInstrumentProfileRepository([_galaxi_profile(), _p08_profile()])
     page = _page(_context(profiles))
-    page.add_paths([str(GALAXI)])
+    frame = tmp_path / GALAXI.name  # the frame alone: the .poni beside it (no αi) would come before the profile
+    shutil.copy2(GALAXI, frame)
+    page.add_paths([str(frame)])
     _done(page)
     english_title = page.top_plot.title_label.text()
     english_status = page.status_text()

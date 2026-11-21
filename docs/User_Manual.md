@@ -725,6 +725,18 @@ the same frame size is used. So a profile made for a TIFF without a detector nam
 TIFF of that size. When you change set-up (distance, energy) but keep the detector, make or choose
 a new profile.
 
+**A `.poni` beside the frames comes first.** When the frame's own folder holds a pyFAI `.poni` named
+like the frame (or only one `.poni`), and the file fits the frame (its frame size and pixel size, when
+it states them, and a wavelength), its geometry is used ahead of a profile matched by name and size:
+such a profile may come from another experiment with the same detector. **Geometry** then says
+*galaxi_bornagain.poni beside the frame*. A beam centre or geometry you save while that file is in use
+names it, and from then on your saved profile is used instead.
+
+**A profile picked for another detector is not used.** A profile chosen in **Instrument profile** (or
+kept from a project) that is for another frame size is set aside for frames of another size: they take
+the `.poni` beside them or the profile that matches them, and the banner says which profile was not used
+and why. **Use “…” Anyway** in the banner uses it for frames of that size all the same.
+
 The step **Geometry** shows the geometry in use (`811.8 mm · λ 0.6888 Å · αi 0°`). Its field
 **Instrument profile** is set to **Automatic (match detector)**; choose a profile there to use it
 instead.
@@ -755,9 +767,18 @@ takes the header centre as the centre of this session (section 4.5).
 
 ### 4.2 Three ways to a geometry
 
-When no profile matches, a banner over the image says so and offers three buttons. The step
-**Geometry** has **Find Calibration Automatically** and **Calibrate…** too, and **Geometry…** in
-place of **Enter Geometry…**.
+When no profile matches, a banner over the image says so and offers **Find Calibration Automatically**,
+**Load .poni…**, **Enter Geometry…** and **Calibrate…**. The step **Geometry** has **Find Calibration
+Automatically**, **Calibrate…**, **Load .poni…** and **Export .poni…** too, and **Geometry…** in place of
+**Enter Geometry…**.
+
+**Load .poni…** reads a pyFAI `.poni` you choose. A file that states another frame size, or a pixel size
+more than 1 % from the frame header's, is named with the reason and you are asked before it is used. A file
+with a wavelength becomes the instrument profile of this detector (with its tilt), is picked in
+**Instrument profile** and the frame is analysed again. A file without a wavelength opens **Detector
+geometry** filled with it, the wavelength *Required*. **Export .poni…** writes the geometry in use (or, in
+the dialog, its fields) as a pyFAI `.poni` (version 2.1: pixel sizes, frame size, distance, PONI, rot1–rot3,
+wavelength) for pyFAI, GIXSGUI and other programs; αi is no part of a `.poni`.
 
 **Find Calibration Automatically.** GIMaP takes the first of these that fits the frame:
 
@@ -799,8 +820,8 @@ tilted detector ([Physics and Methods, section 3.7](Physics_Manual.md#37-the-det
 **Geometry** and the summary say *detector tilt 6.06°*, and the automatic analysis lists it under *Decisions*. A
 beam centre moved later (the GISAXS symmetry axis, or by hand) keeps the tilt. The Xeuss example of
 **Help ▸ Example Data** is such a case: leaving its 6.06° tilt out, as GIMaP 0.1 did, put |q| off by up to 6.3 %.
-Geometry Calibration fits no tilt: a profile it calibrates is untilted, and a geometry typed in the
-**Geometry** dialog is untilted too.
+Geometry Calibration fits the tilt (rot1, rot2; section 4.3), and the **Geometry** dialog has fields for
+rot1, rot2 and rot3.
 
 The search may pick the calibration of another experiment: one in a folder beside or above the
 frame's when the frame's own folder holds none, or, among several in one folder that was copied in
@@ -810,8 +831,15 @@ profile and the search), or use one of the two other ways. A wrong profile is re
 **Geometry…** ▸ **Delete profile**.
 
 **Enter Geometry…** opens the dialog **Detector geometry**: **Profile name**,
-**Sample–detector distance**, **Pixel size x** / **y**, **Wavelength**, **Beam centre x** / **y**
-(section 4.4), **Centre step**, **Incidence angle αi**.
+**Sample–detector distance**, **Pixel size x** / **y**, **Wavelength** and **Energy** (one value in two
+units: typing one sets the other), **Detector tilt rot1**, **Detector tilt rot2**, **Rotation about the beam
+rot3** (pyFAI's rotations in degrees; 0 is a detector perpendicular to the beam), **Beam centre x** / **y**
+(section 4.4), **Centre step**, **Incidence angle αi**, and **Load .poni…** / **Export .poni…**.
+
+- The line under **Energy** says where the wavelength comes from: *Wavelength from the file header.*,
+  *Wavelength from LaB6.poni.*, *Wavelength of profile “…”.* or *Wavelength entered by you.* When the file
+  states no wavelength or energy, both fields read *Required* and the line says so in orange: no value is
+  assumed, and **Save Profile** and **Export .poni…** wait until you type one.
 
 - **Save Profile** saves every value as an instrument profile for this detector and frame size. The
   saved geometry is used at once: a centre set earlier in this session for this detector is dropped,
@@ -832,8 +860,9 @@ A fourth button, **Use Previous Geometry…**, appears only after an update from
 geometry of the former Cut & Fitting page as a profile.
 
 ![The Detector geometry dialog](manual_images/en/04_geometry_dialog.png)
-*Geometry…: the geometry of the profile in use, with Live Preview, Apply Centre and Save Profile;
-the Beam centre button on the left shows a centre set for this session.*
+*Geometry…: the geometry in use (here from the LaB₆ `.poni` beside the P08 frame), with the energy, the line saying
+where the wavelength comes from, the detector tilt rot1–rot3, Load .poni… / Export .poni…, Live Preview, Apply
+Centre and Save Profile.*
 
 ### 4.3 The Geometry Calibration window
 
@@ -848,7 +877,12 @@ Start page (*Calibrate the detector*).
    **A single frame** (its number, counted from 1) or **Sum of all frames** (summed while you wait, with
    progress; it can be cancelled). A file with several equally likely image datasets asks which one.
 2. Confirm the detected energy and pixel size. For a CBF with matching scan NXS metadata, the energy
-   is filled in automatically. Enter the energy in keV if it is still missing.
+   is filled in automatically. The line under **Energy** says where it came from (*From the file header.*,
+   *From the companion NXS file.*, *Entered by you.*). When the file states none, the field reads
+   *Required*, the line says *Not in the file: enter the X-ray energy* in orange, and **Auto Calibration**
+   waits until you type it — no energy is assumed (an earlier version silently used 12 keV). For the next
+   image without an energy, the value you typed is kept and the line asks you to check it. The calibration
+   record and the instrument profile say where the energy came from.
 3. Confirm the detector model. If it cannot be identified, choose a known detector from
    **Detector model**, or select **Custom pixel size** and enter the values in
    **Advanced configuration**. *Auto detected* keeps the pixel size of the file.
@@ -871,10 +905,13 @@ Start page (*Calibrate the detector*).
    and the fit, a horizontal band above the beam is not taken for a ring, and for AgBH every order between the
    matched ones must be there — so the Yoneda band is no longer taken for the first ring of a solution at
    half the distance. The warnings of the solution say when this applied.
-6. Click **Auto Calibration**. The calculation runs in the background; **Cancel** stops it after the
+6. **Detector tilt: Refine rot1, rot2** (on by default) fits the tilt of the detector with the centre and the
+   distance when three or more rings are matched ([Physics and Methods, section 3.8](Physics_Manual.md#38-detector-tilt-from-the-rings-of-the-standard)).
+   Click **Auto Calibration**. The calculation runs in the background; **Cancel** stops it after the
    current step.
-7. Review the result: beam centre, distance, matched rings, RMS residual, confidence and warning of
-   the **Selected solution** (a warning is marked ⚠; its tooltip says why it matters), and the
+7. Review the result: beam centre, distance, **Detector tilt** (rot1 and rot2, *0.372°, 0.433°*, or *not
+   refined*; its tooltip gives the 1σ and the RMS of the ring points with and without the tilt), matched rings, RMS residual,
+   confidence and warning of the **Selected solution** (a warning is marked ⚠; its tooltip says why it matters), and the
    **Candidate solutions** below. The line above the preview names only the image and its size. Selecting a candidate draws its
    rings. **Clean image** temporarily hides all overlays, **Reset view** restores the complete
    detector mosaic after zooming or panning, and **Focus image** hides the result panels to give tall
@@ -888,7 +925,8 @@ Start page (*Calibrate the detector*).
    profile by more than 10 px or its distance by more than 5 %, the window asks before it overwrites
    that profile.
 
-**Export Calibration…** writes the result as a `.json` file. It proposes
+**Export Calibration…** writes the result as a `.json` file, or as a pyFAI `.poni` (choose *pyFAI geometry
+(*.poni)* in the file dialog; the tilt is written as Rot1, Rot2, Rot3). It proposes
 `<image name>.gimap-calibration.json` next to the calibration image; choose another folder when the
 data folder should stay untouched. The record names the frame used, or that frames were summed. The
 note after it opens the folder. **Import Calibration…** reads such a file back and selects its standard;
@@ -1032,9 +1070,9 @@ The page has five parts (the picture in section 3.1 shows them with a GIWAXS fra
 
 | Part | What it holds |
 |---|---|
-| Command bar | **Open…** (its arrow: **Open Folder…**), ↶ ↷ (Undo / Redo), ‹ › (previous / next frame, when more than one frame is listed), the mode **Auto / GISAXS / GIWAXS**, αi, **Run Automatic Analysis** (with **Stop** while it runs), **Ask AI…**, **Export** ▾, **Batch Export…** (when more than one frame is listed), **Send to Fitting** ▾ |
+| Command bar | **Open…** (its arrow: **Open Folder…**), ↶ ↷ (Undo / Redo), ‹ › (previous / next frame, when more than one frame is listed), the mode **Auto / GISAXS / GIWAXS / SAXS**, αi, **Run Automatic Analysis** (with **Stop** while it runs), **Ask AI…**, **Export** ▾, **Batch Export…** (when more than one frame is listed), **Send to Fitting** ▾ |
 | Steps (left) | **Data**, **Geometry**, **Mask & corrections**, **Cuts**, **Results**, **Export**. Each shows its state (✓, !, × or …, as in 3.3) and one line of what it found; click a step for its controls. Rarely used options are folded away. |
-| Image (middle) | **Detector**, **q map** or **Cake** (GIWAXS), **Log**, the colour map, **Levels**, **Marks**, Zoom, **Fit view**, **Sources**, **Save** ▾, **Panels** ▾; the values under the cursor below the image. It is the widest of the three panels; **Panels ▾** hides the steps or the curves and results, so the image has the whole room, and shows them again |
+| Image (middle) | **Detector**, **q map** or **Cake** (GIWAXS), **Log**, the colour map, **Levels**, **Marks**, Zoom, **Fit view**, **Sources**, **Save** ▾, **Panels** ▾; the values under the cursor below the image, on two lines: the pixel and its value, q with q_y or q_∥ and q_z, then 2θ, χ, αf (grazing incidence) and d = 2π/q (on the q map and the cake the point is given in q). It is the widest of the three panels; **Panels ▾** hides the steps or the curves and results, so the image has the whole room, and shows them again |
 | Tabs (right) | **Curves** (an upper and a lower plot), **Results** (what the automatic analysis or the AI found, with its evidence), **Series** (every frame as intensity against frame and q) |
 | Status line | What is happening, a progress bar and **Cancel**. A note at the bottom right says when a file was written, with **Open Folder**. |
 
@@ -1044,11 +1082,14 @@ actions to a second row.
 The mode: **Auto** reduces a frame as GIWAXS when the detector reaches beyond a scattering angle
 2θ = 20°, otherwise as GISAXS. Auto decides again for every frame. Choose **GISAXS** or **GIWAXS**
 to force it; the status line warns when a forced mode does not look right for the frame.
-A calibrant measured in transmission at a SAXS distance (silver behenate) is "GISAXS" by this rule.
-Run Automatic Analysis recognises it when no αi is known and the frame shows at least three sharp
-rings about the beam centre, each through at least 80 % of the directions the detector covers: it
-writes the cuts, fits no particle model, and says so under **technique** (give αi or the technique if
-the frame is a grazing-incidence one after all).
+**SAXS** (SAXS/WAXS in transmission) reduces a frame taken in transmission: I(q) over the whole ring and I(χ) from −180° to 180°
+(χ 0° to the right of the beam, 90° up), the cut regions, the q map in q_y–q_z and the cake; there is no
+horizon, no Yoneda cut and no missing wedge. Auto takes it when no αi is known and the file name names a
+standard (AgBh, LaB₆, CeO₂), or the frame is small-angle and shows at least three sharp rings about the beam
+centre, each through at least 80 % of the directions the detector covers; the status line says so. An αi
+above 0 always means grazing incidence. Run Automatic Analysis treats such a frame as before: it writes the
+cuts, fits no particle model, and says so under **technique** (give αi or the technique if the frame is a
+grazing-incidence one after all).
 
 The αi field shows the profile's αi until you type a value; a typed value is shown in orange and
 kept until you right-click it ▸ **Back to Profile αi** (section 4.1).
@@ -1077,8 +1118,14 @@ a master is read with its data files, and every frame of a multi-frame file is a
    are listed: a frame is read when you show it, so a stack of thousands of frames opens quickly.
 4. The **Data** step names the source while the image loads, then its detector, frame size and
    frames. The curves appear without further clicks once the frame has a geometry. Without one, a
-   banner above the image offers **Find Calibration Automatically**, **Enter Geometry…** and
-   **Calibrate…** (section 4.2).
+   banner above the image offers **Find Calibration Automatically**, **Load .poni…**, **Enter Geometry…**
+   and **Calibrate…** (section 4.2).
+
+**Frames listed already.** When you open or drop files or a folder while frames are listed, GIMaP asks
+whether to **Replace** them or **Add to List**. Frames added must come from the same detector: when the
+first new frame has another size than the frame shown, nothing is added and the status line says why
+(*These frames are 1043×981 …; the frames listed are 2048×2048 …*). A list never mixes two detectors, so
+Batch Export never mixes two geometries.
 
 **The frame list** (Data step) has one row per imported frame, whether it comes from a file of its own
 or from a NeXus stack:
@@ -1704,6 +1751,12 @@ read them, is in chapter 7.
 
 Batch Export reduces every imported frame with the current settings and writes what you choose.
 Set up one frame (geometry, mask, cuts), then export all of them the same way.
+
+The dialog says where each folder of frames gets its geometry: *geometry from LaB6.poni beside them*, *profile
+“…”, as the frame on screen*, or *the profile picked or the one that fits their detector and size, read frame by
+frame; a frame without one gives no q curves*. The summary line names the geometry of the frame on screen. When
+no frame can have a geometry (none on screen, no `.poni` beside any frame, no instrument profile), the dialog
+says *No geometry: q curves cannot be made* and **Export** stays off.
 
 ![The Batch Export dialog](manual_images/en/10_batch_export.png)
 
@@ -3791,7 +3844,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Geometry Calibration can put a wrong solution first.** A wrong **Estimated distance** misleads, also with the right standard and with **Auto Detect**, and the field can hold a distance you did not type (section 4.3). | Choose the standard yourself when you know it. Leave **Estimated distance** on *Optional* or type the approximate distance of your set-up; set a number you did not type back to 0 unless it is that distance. Before **Apply**, check the distance and that the drawn rings lie on the rings of the image. |
 | **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them (section 10.5). | Calibrate such an image with pyFAI and give GIMaP the `.poni`: name it in the notes, or put it beside the frames (section 4.2). |
 | **An instrument profile is matched by detector name and frame size only**, and **a calibration found by the automatic search may belong to another experiment** (one beside or above the frame's folder is taken when that folder holds none; file times say nothing in a folder copied in one go) — or even to another detector: a `.poni` or `.json` is applied without checking its pixel size or frame size (section 4.2). | Read which file the report names and check the distance in **Geometry**. Name the calibration in the notes, or give it yourself; remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
-| **A detector tilt comes only from a `.poni`**: its rotations are applied as pyFAI applies them, but its `orientation` entry is not read; Geometry Calibration fits no tilt, and the straight horizon row, mirror filling and XRR assume an untilted detector (section 4.2). | Calibrate a tilted detector with pyFAI and use its `.poni`. Check that the `.poni` was made for images stored like yours (orientation 3, pyFAI's default). |
+| **The `orientation` entry of a `.poni` is not read**, and at SAXS distances the rings fix the detector tilt only loosely (±0.2° on the public silver behenate frame); the straight horizon row, mirror filling and XRR assume an untilted detector (sections 4.2, 4.3). | Check that a `.poni` was made for images stored like yours (orientation 3, pyFAI's default). For a precise tilt at small angles, calibrate with a wide-angle standard (LaB₆, CeO₂) or with pyFAI and use its `.poni`. |
 | **Run Automatic Analysis (GIWAXS) fits at most 12 candidate peaks**, the most prominent; the window has no setting for more. The others are left out of the peak table, the sector comparison, the rings and the series hints; *Decisions* says how many candidates there were (section 5.5). | Run `tools/gimap_agent.py auto … --max-peaks N` (section 10.7), or ask the AI to run `find_peaks` with `max_peaks`, when you need the full list. |
 | **The GIWAXS and GISAXS q are kinematic: no refraction correction.** Near or below the film's critical angle, the q_z of a peak can be off by up to about k·sin αi, and in GISAXS that of the Yoneda band most, by an amount of that order (the report's *Decisions* give the number for your frame); the ± and σ of the report contain neither that nor the geometry's uncertainty ([Physics and Methods, sections 7.9 and 8.6](Physics_Manual.md#79-what-the-report-states)). | Measure above the critical angle for positions, or correct q_z yourself for the material; quote the systematic error separately from the statistical ±. |
 | **Hermans f and the texture sentence are not corrected for the exit angle.** f weighs the bins next to the sample horizon most, where absorption in the film or a shadow can lower the intensity; on the public P08 frame leaving out the bins within 5° of the sample plane moves f − f_iso by 17–27 σ_f ([Physics and Methods, section 7.7](Physics_Manual.md#77-ring-orientation-and-the-hermans-orientation-factor)). | Read the ring's notes and the *ring orientation* line of *Decisions*; when they name the ring, check I(χ) near χ = ±90° before reading f as texture. |

@@ -33,6 +33,8 @@ class CalibrationRunMixin:
     def start_calibration(self) -> None:
         if self.image is None or (self._cal_thread is not None and self._cal_thread.isRunning()):
             return
+        if not self.energy_ready():  # never a made-up energy: the line under the field says what is missing
+            return
         try:
             options = {
                 "energy_kev": self.energy_spin.value(),
@@ -42,6 +44,8 @@ class CalibrationRunMixin:
                 "pixel_size_x_m": self.pixel_x_spin.value() * 1e-6,
                 "pixel_size_y_m": self.pixel_y_spin.value() * 1e-6,
                 "subtract_background": self.background_check.isChecked(),
+                "tilt": self.run_tilt_mode(),
+                "energy_source": self.run_energy_source(),
             }
         except ValueError as exc:
             QMessageBox.warning(self, tr("Calibration Input"), tr(str(exc)))
