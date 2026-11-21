@@ -527,6 +527,15 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Analyze
 
+- **Flat field (detector response).** Mask & corrections ▸ Corrections has a **Flat field** (**Choose…**, **×**;
+  off by default; GISAXS and GIWAXS): every frame is divided by a detector image of its size (CBF, TIFF, EDF,
+  NeXus/HDF5) or a `.npy` array, normalised to mean 1 over the pixels it keeps; pixels where it is at or below
+  0.05 are left out and counted, and one of another size is refused, never resampled. It comes right after the
+  background, and with the GIWAXS intensity corrections the factor is `F = F_Ω F_P F_A F_ff`. For photon counts
+  the error bars follow it (`scaled_poisson`: Var = I / F²). Batch Export, series and the folder watch use the same
+  flat field; settings files keep it; the JSON record has `corrections.flat_field` (file, SHA-256, normalisation
+  mean, pixels left out). `tools/gimap_agent.py auto --flat-field PATH` does the same (a missing file: exit code
+  1), and every report names the flat field among its Decisions. *Physics and Methods* 4.10.
 - **Opening data**: for a source of several frames, the new window **Import Frames** asks which frames to list
   (all, a range with every n-th, or frame numbers counted from 1); **Choose Frames…** changes it later, and only
   references are listed, so a stack of thousands of frames opens quickly. **Cancel Import** stops a slow import;

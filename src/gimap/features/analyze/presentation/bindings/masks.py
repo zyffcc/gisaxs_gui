@@ -122,6 +122,7 @@ class MaskToolsMixin:
         self.mask_remove_button.setVisible(not empty)
         self.mask_clear_button.setVisible(not empty)
         self.mask_save_button.setVisible(bool(corrections.mask_shapes))
+        self._show_flat_field()  # the flat field belongs to the set-up of the detector too (``bindings/options.py``)
 
     def _remove_mask(self) -> None:
         row = self.mask_list.currentRow()

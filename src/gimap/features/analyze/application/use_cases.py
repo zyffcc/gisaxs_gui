@@ -194,6 +194,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
         counting = photon_counts(
             common["metadata"], request.corrections, mirror_filled=common.get("filled_pixels") is not None
         )
+        self._flat_scale(common, request.corrections, counting)  # counts divided by a flat field: their variance too
         if kind == GIWAXS and geometry is not None and has_intensity_corrections(request.corrections):
             self._correct_intensity(common, raw_data, raw_valid, geometry, request.corrections, counting)
         data, valid = common["data"], common["valid"]
@@ -221,7 +222,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
             )
         if kind == GISAXS:
             reduction = reduce_gisaxs(
-                data, valid, geometry, request.gisaxs, counts=counting,
+                data, valid, geometry, request.gisaxs, counts=scale if scale is not None else counting,
                 q_map=self._gisaxs_q_map(data, valid, geometry) if request.with_map else None,
             )
         else:

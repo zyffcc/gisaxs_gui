@@ -299,6 +299,8 @@ class WorkspaceMixin:
                 parts.append(tr("intensity range"))
             if corrections is not None and corrections.background_path:
                 parts.append(tr("background"))
+            if corrections is not None and corrections.flat_field_path:
+                parts.append(tr("flat field"))
             lines.append(f"· {tr(' and ').join(parts) or tr('corrections')}: {_pixels(extra, total)}")
         show_card(self.mask_summary_label, "\n".join(lines))
         share = 100.0 * (total - int(valid.sum())) / max(total, 1)

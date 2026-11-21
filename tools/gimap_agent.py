@@ -44,7 +44,10 @@ listed in summary.json are removed first, nothing else). report.json and summary
 name the release, the time (UTC), the options as given and every input file by path,
 size and SHA-256; every CSV starts with # lines that name the release, the inputs and
 the geometry. --mask FILE applies a mask as Analyze's Load Masks does; every report
-says which mask was applied, or that none was.
+says which mask was applied, or that none was. --flat-field FILE divides every frame by
+a flat field (detector response) as Analyze's Corrections do: a detector image of the
+frame's size or a .npy, normalised to mean 1, pixels at or below 0.05 of it left out;
+report.md names it among the Decisions with the pixels it left out.
 
 Exit codes (auto):
   0  every frame was analysed and nothing is open (Status OK).
@@ -53,10 +56,10 @@ Exit codes (auto):
      --technique), a judgement no flag settles (e.g. the GISAXS model choice), or nothing
      analysed because no geometry was found (--calibration).  Answer what you can and run
      again.
-  1  at least one frame failed (a missing file, a file GIMaP cannot read, a mask that does
-     not fit it, an error); the other frames still have their reports.  1 wins over 2.
-     Also: a pattern or folder that gives no file, a --mask or --calibration file that does
-     not exist, an --incidence-deg outside (0, 90), an --out folder with an earlier run and
+  1  at least one frame failed (a missing file, a file GIMaP cannot read, a mask or flat
+     field that does not fit it, an error); the other frames still have their reports.  1 wins
+     over 2.  Also: a pattern or folder that gives no file, a --mask, --flat-field or
+     --calibration file that does not exist, an --incidence-deg outside (0, 90), an --out folder with an earlier run and
      no --overwrite (nothing is analysed then).
   Other commands: 1 when the frame file does not exist; status and call also when GIMaP
   cannot read it, find-calibration when the search fails, call when a step returned an
@@ -119,7 +122,7 @@ def command_auto(arguments) -> int:
     from src.gimap.features.assistant.application import PipelineOptions
 
     check_arguments(arguments)
-    frames, found = expand_frames(arguments.frames, exclude=(arguments.calibration, arguments.mask))
+    frames, found = expand_frames(arguments.frames, exclude=(arguments.calibration, arguments.mask, arguments.flat_field))
     notes = _notes(arguments)
     options = PipelineOptions(
         calibration=arguments.calibration, standard=arguments.standard, energy_kev=arguments.energy_kev,
@@ -133,7 +136,7 @@ def command_auto(arguments) -> int:
     progress = (lambda _text: None) if arguments.quiet else (lambda text: print(text, file=sys.stderr, flush=True))
     reports = analyse_frames(
         frames, options, out, progress=progress, saved_profiles=not arguments.no_saved_profiles,
-        series=arguments.series, mask=arguments.mask, overwrite=arguments.overwrite,
+        series=arguments.series, mask=arguments.mask, flat_field=arguments.flat_field, overwrite=arguments.overwrite,
         record=options_given(arguments, notes), found=tuple(found), language=arguments.language,
     )
     print(batch_summary(reports, notes=found, language=arguments.language))
@@ -150,10 +153,13 @@ class ArgumentProblem(ValueError):
 
 
 def check_arguments(arguments) -> None:
-    """Refuse, before anything is read, what would otherwise be analysed with nonsense or silently replaced: a mask or
-    calibration file that does not exist (the search would take another calibration) and an αi outside (0°, 90°)."""
+    """Refuse, before anything is read, what would otherwise be analysed with nonsense or silently replaced: a mask,
+    flat-field or calibration file that does not exist (the search would take another calibration) and an αi outside
+    (0°, 90°)."""
     if arguments.mask and not Path(arguments.mask).is_file():
         raise FileNotFoundError(f"No such mask file: {arguments.mask}")
+    if arguments.flat_field and not Path(arguments.flat_field).is_file():
+        raise FileNotFoundError(f"No such flat-field file: {arguments.flat_field}")
     if arguments.calibration and not Path(arguments.calibration).is_file():
         raise FileNotFoundError(f"No such calibration file: {arguments.calibration}")
     incidence = arguments.incidence_deg
@@ -272,6 +278,13 @@ def parser() -> argparse.ArgumentParser:
         help="a mask applied to every frame, as Load Masks in Analyze reads it: a GIMaP masks .json (drawn shapes) "
              "or a mask image of the frame's size whose non-zero pixels are left out. Every report says which mask "
              "was applied, or that none was",
+    )
+    auto.add_argument(
+        "--flat-field", metavar="PATH",
+        help="a flat field (detector response) every frame is divided by, as Analyze's Corrections do: a detector "
+             "image of the frame's size (its first frame) or a .npy array, normalised to mean 1 over the pixels it "
+             "keeps; pixels where it is at or below 0.05 or not finite are left out. report.md names it among the "
+             "Decisions with the pixels it left out; report.json has its SHA-256",
     )
     auto.add_argument(
         "--calibration",

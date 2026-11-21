@@ -35,6 +35,7 @@ from .zh_sputter_process import SPUTTER_PROCESS_ZH
 from .zh_menus import MENUS_ZH
 from .zh_giwaxs_auto import GIWAXS_AUTO_ZH
 from .zh_flat_detector import FLAT_DETECTOR_ZH
+from .zh_flat_field import FLAT_FIELD_ZH
 from .zh_tips_analyze import TIPS_ANALYZE_ZH
 from .zh_tips_fitting import TIPS_FITTING_ZH
 from .zh_tips_tools import TIPS_TOOLS_ZH
@@ -586,7 +587,7 @@ ZH.update(SPUTTER_ZH)
 ZH.update({**SPUTTER_CLIENT_ZH, **SPUTTER_LIVE_ZH, **SPUTTER_STEPS_ZH, **SPUTTER_SAMPLES_ZH, **SPUTTER_PROCESS_ZH})
 ZH.update(MENUS_ZH)
 ZH.update(GIWAXS_AUTO_ZH)
-ZH.update(FLAT_DETECTOR_ZH)
+ZH.update({**FLAT_DETECTOR_ZH, **FLAT_FIELD_ZH})
 ZH.update(TIPS_ANALYZE_ZH)
 ZH.update(TIPS_FITTING_ZH)
 ZH.update(TIPS_TOOLS_ZH)

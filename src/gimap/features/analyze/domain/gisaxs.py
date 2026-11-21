@@ -173,16 +173,21 @@ def horizontal_cut(
     *,
     center_row: float,
     half_height_px: float,
-    counts: bool = True,
+    counts: bool | np.ndarray = True,
 ) -> Curve:
-    """I(qy) over a band of rows: one point per detector column (native sampling)."""
+    """I(qy) over a band of rows: one point per detector column (native sampling). ``counts``: as
+    ``reduce_gisaxs``."""
     rows, columns = image.shape
     start, stop = _row_bounds(center_row, half_height_px, rows)
     region = {"rows": (start, stop), "columns": (0, columns), "center_row": float(center_row)}
     if stop <= start:
         return _empty_curve("horizontal", "Horizontal cut I(qy)", "qy (Å⁻¹)", region)
     q = grazing_q_region(geometry, (start, stop), (0, columns))
-    x, mean, sigma, pixels = native_profile(image[start:stop], valid[start:stop], q.qy, axis=0, counts_model=counts)
+    poisson, scale = _counts(counts)
+    x, mean, sigma, pixels = native_profile(
+        image[start:stop], valid[start:stop], q.qy, axis=0, counts_model=poisson,
+        scale=None if scale is None else scale[start:stop],
+    )
     if x.size == 0:
         return _empty_curve("horizontal", "Horizontal cut I(qy)", "qy (Å⁻¹)", region)
     return Curve(
@@ -197,7 +202,7 @@ def vertical_cut(
     *,
     center_column: float,
     half_width_px: float,
-    counts: bool = True,
+    counts: bool | np.ndarray = True,
 ) -> Curve:
     """I(qz) over a band of columns above the sample horizon (with refraction, above the row of α_c): one point
     per detector row."""
@@ -214,14 +219,23 @@ def vertical_cut(
     if stop <= start or last_row <= 0:
         return _empty_curve("vertical", "Vertical cut I(qz)", "qz (Å⁻¹)", region)
     q = grazing_q_region(geometry, (0, last_row), (start, stop))
+    poisson, scale = _counts(counts)
     x, mean, sigma, pixels = native_profile(
-        image[:last_row, start:stop], valid[:last_row, start:stop], q.qz, axis=1, counts_model=counts
+        image[:last_row, start:stop], valid[:last_row, start:stop], q.qz, axis=1, counts_model=poisson,
+        scale=None if scale is None else scale[:last_row, start:stop],
     )
     if x.size == 0:
         return _empty_curve("vertical", "Vertical cut I(qz)", "qz (Å⁻¹)", region)
     return Curve(
         "vertical", "Vertical cut I(qz)", x, mean, sigma, pixels, "qz (Å⁻¹)", region=region
     )
+
+
+def _counts(counts) -> tuple[bool, np.ndarray | None]:
+    """``counts`` of a cut as ``(Poisson?, per-pixel scale of the counts or None)``."""
+    if isinstance(counts, np.ndarray):
+        return True, counts
+    return bool(counts), None
 
 
 def _empty_curve(key: str, title: str, x_label: str, region: dict) -> Curve:
@@ -236,9 +250,13 @@ def reduce_gisaxs(
     settings: GisaxsCutSettings | None = None,
     *,
     q_map: ReciprocalSpaceMap | None = None,
-    counts: bool = True,
+    counts: bool | np.ndarray = True,
 ) -> Reduction:
     """Yoneda-band horizontal cut and beam-centre vertical cut, no user input needed.
+
+    ``counts``: the frame holds photon counts (Poisson errors); ``False``: not counts (the scatter of the pixels);
+    an array of the frame's shape: photon counts multiplied per pixel by it (a flat field, ``flat_field.py``), so
+    a pixel's variance is that factor × its value.
 
     ``q_map`` (``gisaxs_q_map``) is passed through: it depends on the frame, not on the cuts.
     """

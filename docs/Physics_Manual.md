@@ -50,6 +50,7 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [4.7 Gap guard](#47-gap-guard)
   - [4.8 Mirror filling (GIWAXS)](#48-mirror-filling-giwaxs)
   - [4.9 The order of the steps](#49-the-order-of-the-steps)
+  - [4.10 Flat field (detector response)](#410-flat-field-detector-response)
 - [5. Intensity corrections for GIWAXS](#5-intensity-corrections-for-giwaxs)
   - [5.1 Definition](#51-definition)
   - [5.2 Solid angle](#52-solid-angle)
@@ -423,8 +424,8 @@ The following effects are not in the q map, nor anywhere else in Analyze:
 - **Detector tilt and rotation.** A `.poni` tilt (rot1, rot2, rot3) is part of the geometry and enters q, χ, the solid angle and the polarisation factor (section 3.7). The calibration refines no tilt (section 3.3). The straight horizon row below assumes an untilted detector.
 - **Sample azimuth and roll.** The sample is assumed to be tilted only about the horizontal axis perpendicular to the beam. A rotation about the surface normal or about the beam is not described.
 - **Parallax and sensor thickness.** A pixel is its centre; there is no depth of interaction and no pixel splitting.
-- **Flat field and efficiency.** No flat-field, detector-efficiency, air or window absorption correction is applied.
-- **Absolute intensity.** Intensities are mean counts per pixel. They are not scaled by a monitor, the transmission, the exposure time or the sample volume. They are divided by a geometric factor only when the GIWAXS intensity corrections are on (chapter 5); a series can be normalised to a reference peak (section 6.10).
+- **Flat field and efficiency.** A flat field (detector response) divides the frames only when one is chosen (section 4.10; off by default). No detector-efficiency, air or window absorption correction is applied.
+- **Absolute intensity.** Intensities are mean counts per pixel. They are not scaled by a monitor, the transmission, the exposure time or the sample volume. They are divided by a geometric factor only when the GIWAXS intensity corrections are on (chapter 5), and by a flat field only when one is chosen (section 4.10); a series can be normalised to a reference peak (section 6.10).
 - **Beam properties.** Divergence, energy bandwidth and footprint are not modelled.
 
 The flat, perpendicular detector is also assumed by the straight horizon (section 2.3), by mirror filling (section 4.8) and by the solid-angle and polarisation factors (chapter 5).
@@ -760,7 +761,7 @@ valid′(p) = valid(p) ∧ no pixel of the (2N + 1) × (2N + 1) square centred o
 ```
 
 - `0 ≤ N ≤ 20`. The default is 3 px in the Analyze window (Corrections; remembered as `analyze.gap_guard_px`). The domain object and settings files without the key default to 0.
-- It grows around every pixel that is invalid at this point: reader-masked pixels and gap codes, pixels invalid in any summed frame, bad pixels, drawn and file masks, and pixels invalid in the background frame.
+- It grows around every pixel that is invalid at this point: reader-masked pixels and gap codes, pixels invalid in any summed frame, bad pixels, drawn and file masks, pixels invalid in the background frame, and pixels the flat field leaves out (section 4.10).
 - It does not grow around pixels excluded later by the value range, nor around the horizon. The border of the frame does not count as invalid.
 
 Implementation: `src/gimap/features/analyze/domain/corrections.py`
@@ -788,14 +789,58 @@ Implementation: `src/gimap/features/analyze/domain/preprocess.py`
 2. Bad pixels found in the raw frame (section 4.4).
 3. Drawn masks and mask file (section 4.5).
 4. Background subtraction (section 4.6).
-5. Gap guard (section 4.7).
-6. Valid value range (section 4.5).
-7. Mirror filling, GIWAXS only (section 4.8).
-8. Intensity corrections, GIWAXS only (chapter 5).
+5. Flat field, first part: the pixels it does not keep are left out (section 4.10).
+6. Gap guard (section 4.7).
+7. Valid value range (section 4.5), on the values before the flat-field division.
+8. Flat field, second part: the division `I / F_ff` (section 4.10).
+9. Mirror filling, GIWAXS only (section 4.8); it fills from values already divided by the flat field.
+10. Intensity corrections, GIWAXS only (chapter 5).
 
-Steps 4 to 7 run only when at least one of them is active. The raw frame is kept: changing any setting recomputes from the raw frame, so corrections never stack. Curves, q maps, the cake and every export use the result.
+Steps 4 to 9 run only when at least one of them is active. The raw frame is kept: changing any setting recomputes from the raw frame, so corrections never stack. Curves, q maps, the cake and every export use the result.
 
 Implementation: `src/gimap/features/analyze/application/frame_preprocessing.py`, `src/gimap/features/analyze/application/use_cases.py`
+
+### 4.10 Flat field (detector response)
+
+The pixels of a detector do not respond alike: gain, threshold and sensor thickness vary, and module edges respond
+less. A flat field is a frame of a uniform exposure (a fluorescence foil, an amorphous scatterer, or the detector
+maker's own calibration). Analyze divides every frame by it when one is chosen (Mask & corrections ▸ Corrections
+▸ flat field; off by default), as pyFAI, Nika, GIXSGUI and pygix do. With `F_raw` the flat-field image:
+
+```text
+F_ff,p = F_raw,p / m,      m = (1/N_kept) Σ_{p kept} F_raw,p                         (4.11)
+kept(p) = finite(F_raw,p) ∧ ¬mask_reader(p) ∧ F_ff,p > 0.05                          (4.12)
+I′_p = I_p / F_ff,p      (pixels not kept: left out of every frame)                  (4.13)
+```
+
+- **Normalisation.** `F_ff` is 1 on average over the pixels it keeps, so the corrected values stay close to counts
+  per pixel. `m` and the kept pixels depend on each other: starting from every finite pixel above 0, `m` is
+  recomputed over the pixels above `0.05 m` until they no longer change (each round can only remove pixels, and the
+  largest pixel always stays, so this ends after a few rounds).
+- **Pixels left out.** A pixel where `F_ff ≤ 0.05`, not finite or masked by the flat field's reader does not
+  respond; it is left out of every frame, and the record counts these detector pixels (`masked_pixels`). The gap
+  guard (section 4.7) grows around them.
+- **Files.** The flat field is read as any frame Analyze reads (CBF, TIFF, EDF, NeXus/HDF5; the first frame of a
+  file that holds several, with its reader's mask, section 4.1) or as a NumPy `.npy` array (read without pickle).
+  It must have the shape of the frame; one of another shape is refused with the reason, never resampled. It is
+  read once per file version and used for every frame: the frame shown, Batch Export, the folder watch and a
+  series.
+- **Order.** The division follows the background subtraction (pyFAI: `(I − dark) / flat`) and the valid value
+  range, which therefore applies to the values as measured; mirror filling and the GIWAXS intensity corrections
+  come after it (section 4.9). For every measured pixel the result is `I / (F_Ω F_P F_A F_ff)` (5.1).
+- **Uncertainty.** For photon counts the variance of a corrected pixel is `I_p / F_ff,p²` (5.9), with
+  `F_p = F_ff` when no GIWAXS correction is on: the error model becomes scaled Poisson (section 6.4 (c)) in GISAXS
+  cuts and GIWAXS bins alike, and the fit input says `counting_model_valid: false`. A frame that is not photon
+  counts keeps the pixel-scatter σ of the corrected values.
+- **Record.** `corrections.flat_field` of `<stem>_analysis.json` gives the file, its path and SHA-256, the
+  normalisation mean `m` (in the units of the file), the floor 0.05, the pixels left out and the shape; `null`
+  without a flat field. The report of an automatic analysis names the flat field among its Decisions, with the
+  pixels it left out.
+- **Limits.** The flat field is taken as it is: its own noise adds to every corrected frame (a flat field of
+  10⁴ counts per pixel adds 1 % in each pixel), and an energy or threshold other than that of the measurement
+  makes it the wrong response. No dark frame is subtracted from it.
+
+Implementation: `src/gimap/features/analyze/domain/flat_field.py`, `src/gimap/features/analyze/application/flat_field.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`
 
 ## 5. Intensity corrections for GIWAXS
 
@@ -811,6 +856,7 @@ I′_p = I_p / F_p,      F_p = F_Ω · F_P · F_A                               
 - q never changes. Peak positions therefore do not change; intensities compared across χ or q do.
 - `F_Ω` and `F_P` are 1 at the direct beam and `F_A` is 1 at `α_f = α_i`, so corrected values stay close to counts per pixel.
 - Pixels where F is not finite or not positive become invalid.
+- With a flat field (section 4.10), `F_p = F_Ω · F_P · F_A · F_ff`: the flat field is divided earlier in the order (section 4.9), the factors here last, and the counts' variance (5.9) uses the whole product.
 - They are applied after all other preparation steps (section 4.9) and need the geometry. X, Y and L_p are those of (1.3), (1.4) and (2.2), and `cos 2θ = L/L_p` (2.12). On a tilted detector the vector t of a pixel is (3.15), its length |t| takes the place of L_p, and cos 2θ is its component along the beam over |t|.
 - Comparable geometric corrections are part of other grazing-incidence packages, for example GIXSGUI (Jiang, 2015).
 
@@ -877,7 +923,7 @@ Var(I′_p) = Var(I_p) / F_p² = I_p / F_p² = I′_p / F_p                     
 σ_k = √max( Σ_{p∈k} I′_p / F_p ,  f̄_k² ) / n_k,      f̄_k = (1/n_k) Σ_{p∈k} 1/F_p      (5.10)
 ```
 
-where the sums run over the n_k pixels of bin k and `I_k = Σ I′_p / n_k`. `f̄_k²` is the variance of one count at the bin's mean factor: as in (6.5), a bin of zero counts gets the error of one count, not `σ = 0`; with every F = 1, (5.10) is (6.5). When the frame is not photon counts, the corrected values get the pixel-scatter σ of section 6.4. Values corrected in this way are no longer counts: the fit input records `counting_model_valid: false` whenever a GIWAXS correction is on. The JSON record `<stem>_analysis.json` holds `intensity_corrections` with the formulas and their parameters. The factor is computed in blocks of 512 rows and kept while shape, geometry and options stay the same.
+where the sums run over the n_k pixels of bin k and `I_k = Σ I′_p / n_k`. `F_p` includes the flat field when one is used (section 4.10); with a flat field alone, also for GISAXS, `F_p = F_ff`, and a GISAXS line l takes (5.10) with l in place of k. `f̄_k²` is the variance of one count at the bin's mean factor: as in (6.5), a bin of zero counts gets the error of one count, not `σ = 0`; with every F = 1, (5.10) is (6.5). When the frame is not photon counts, the corrected values get the pixel-scatter σ of section 6.4. Values corrected in this way are no longer counts: the fit input records `counting_model_valid: false` whenever a GIWAXS correction or a flat field is on. The JSON record `<stem>_analysis.json` holds `intensity_corrections` with the formulas and their parameters. The factor is computed in blocks of 512 rows and kept while shape, geometry and options stay the same.
 
 Implementation: `src/gimap/features/analyze/domain/intensity.py`, `src/gimap/features/analyze/domain/binning.py`, `src/gimap/features/analyze/application/export_record.py`
 
@@ -885,7 +931,7 @@ Implementation: `src/gimap/features/analyze/domain/intensity.py`, `src/gimap/fea
 
 ### 6.1 Principles
 
-- Every point of a curve is the mean of the valid pixels assigned to it. The intensity unit is counts per pixel (`I (counts/pixel)`), divided by F when the GIWAXS corrections are on.
+- Every point of a curve is the mean of the valid pixels assigned to it. The intensity unit is counts per pixel (`I (counts/pixel)`), divided by F when a flat field or the GIWAXS corrections are on.
 - **No pixel splitting.** Each pixel goes whole to the one bin or detector line that holds its centre's coordinate; pyFAI's split-pixel integrators distribute it instead.
 - **Checked against pyFAI.** On the four public frames, GIMaP's I(q) over the whole azimuth and pyFAI's `integrate1d` (2026.9, histogram, no splitting) on the same pixels, q range and bins agree to 10⁻⁷ (95 % of the bins; the largest difference 0.2 %, where pixels on a bin edge fell the other way) on every bin that holds the same pixels in both. With the solid angle and polarisation, pyFAI divides the sum of the counts by the sum of the factors (`Σ I / Σ F`), GIMaP takes the mean of `I / F`; the two differ where F and I both vary across a bin: by a median of 0.26 % (at most 1.3 %) on the Xeuss frame, close to the sample, and 0.04 % on the P08 frame (`tools/benchmarks/pyfai_comparison.py`).
 - No smoothing and no interpolation across gaps. A bin without pixels gives no point, and the plotted curve is broken there.
@@ -938,13 +984,13 @@ s_k² = ( Σ_{p∈k} I_p² − S_k² / n_k ) / (n_k − 1)                      
 
 Negative `s_k²` (rounding) is set to 0. A bin or line with a single pixel takes the median `s²` of the bins with at least two pixels (0 if there are none).
 
-**(c) Scaled Poisson, after the GIWAXS intensity corrections:** equation (5.10).
+**(c) Scaled Poisson, after a flat field or the GIWAXS intensity corrections:** equation (5.10), for fixed-edge bins and GISAXS detector lines alike.
 
 **Which model.** The choice is made once per frame:
 
 | Frame | σ |
 |---|---|
-| photon counts: stored type not floating point, no background subtracted, no mirror filling | (a); (c) when GIWAXS intensity corrections are on |
+| photon counts: stored type not floating point, no background subtracted, no mirror filling | (a); (c) when a flat field or GIWAXS intensity corrections are on |
 | floating-point frame (dark- or background-subtracted at the beamline) | (b) |
 | background subtracted in GIMaP | (b) |
 | mirror filling applied (GIWAXS with a geometry, even if no pixel needed filling) | (b) |
@@ -3673,9 +3719,9 @@ Every curve export of Analyze writes `<stem>_analysis.json` beside the curve fil
 | Program and source | `software` (the record name `GIMaP Analyze 1`), `software_version` (the release, for example `GIMaP v0.2.0`; section 14.5), `source_file`, `frame_index`, `frame_count`, `frame` (1-based label), `summed_frames` (file and index of each frame added) |
 | Detector | `detector_name`, `frame_shape`, `measurement` (GISAXS or GIWAXS) |
 | Geometry | `geometry` (pixel sizes, distance, beam centre, wavelength, α_i; `rot1_rad`, `rot2_rad`, `rot3_rad`: the detector's rotations of section 3.7; the `dropped_…` and `flat_detector_…` fields of 0.1 are `null`), `geometry_convention` (canonical pixel-corner frame, row 0 at the top, kinematic (vacuum) grazing-incidence q of a flat detector, tilted by the rotations, in Å⁻¹), `instrument_profile` (name, source, time of update; the source begins with `automatic analysis:` when Run Automatic Analysis or `tools/gimap_agent.py` chose the geometry and with `assistant:` when the AI did, as it did for both before 0.2.0) |
-| Statistics and binning | `error_model` (`poisson`, `pixel_scatter` or `scaled_poisson`: the three error models of section 6.4, as `photon_counts` and the GIWAXS intensity corrections decided; `null` without a reduction), `binning` (GIWAXS: `radial_bins`, `q_min`, `q_max`, `bin_width` and `unit` of the fixed-edge bins of every I(q), `bins_chosen`, `radial_points` (the points of I(q) after merging), `merge` (the rule of section 6.5), `chi_bin_deg` and `chi_merge`; GISAXS: one point per detector column or row, no merging) |
+| Statistics and binning | `error_model` (`poisson`, `pixel_scatter` or `scaled_poisson`: the three error models of section 6.4, as `photon_counts`, a flat field and the GIWAXS intensity corrections decided; `null` without a reduction), `binning` (GIWAXS: `radial_bins`, `q_min`, `q_max`, `bin_width` and `unit` of the fixed-edge bins of every I(q), `bins_chosen`, `radial_points` (the points of I(q) after merging), `merge` (the rule of section 6.5), `chi_bin_deg` and `chi_merge`; GISAXS: one point per detector column or row, no merging) |
 | Time | `created`: the UTC time the record was written (ISO 8601, for example `2026-11-01T05:52:31+00:00`) |
-| Corrections | `corrections` (every setting), `intensity_corrections` (GIWAXS: how applied, formulas, parameters), `bad_pixels_left_out`, `drawn_mask_pixels`, `pixels_filled_from_mirror` |
+| Corrections | `corrections` (every setting; `flat_field`: file, path, SHA-256, normalisation mean, floor, pixels left out, shape and how it was applied, section 4.10, `null` without one), `intensity_corrections` (GIWAXS: how applied, formulas, parameters), `bad_pixels_left_out`, `drawn_mask_pixels`, `pixels_filled_from_mirror` |
 | Results | `markers` (beam centre, horizon row, cut bands, Yoneda estimate, I(χ) window, peaks …), `curves` (key, title, x label, region of each curve), `messages` |
 | Files | `source_files` (every file a frame was read from: module files, master and data files), `input_sha256` (every input file by name with its SHA-256: the source, its module or data files and the frames summed with it), `source_layout` for NeXus/HDF5 (kind, summary, dataset path, `transformations`), `files` (the files written) |
 
@@ -3826,8 +3872,8 @@ window's records:
 | Group | Keys of `report.json` |
 |---|---|
 | Program and time | `software_version` (the release, section 14.5); `created` (UTC, ISO 8601, to the second; one time for every report of a batch and its `summary.json`) |
-| Options | `options`: every option of the command line under its own name, as it was given (`frames`: the arguments before patterns and folders were expanded; `calibration`, `mask`, `incidence_deg`, `technique`, `no_fit` …; `notes` and `notes_file`), and `notes_text`: the notes the analysis read. `null` when the files were written through MCP or `call` |
-| Inputs | `inputs.frame`: every file the frame was read from (module files, a master with its data files) and every frame summed with it; `inputs.calibration`: the `.poni`, calibration `.json` or image of a standard the geometry was taken from (`null` for a saved instrument profile); `inputs.mask` and `inputs.background`: the mask and the background file when one was used, else `null`. Each file is `{"file": name, "path": the path as given, "bytes": size, "sha256": SHA-256}` |
+| Options | `options`: every option of the command line under its own name, as it was given (`frames`: the arguments before patterns and folders were expanded; `calibration`, `mask`, `flat_field`, `incidence_deg`, `technique`, `no_fit` …; `notes` and `notes_file`), and `notes_text`: the notes the analysis read. `null` when the files were written through MCP or `call` |
+| Inputs | `inputs.frame`: every file the frame was read from (module files, a master with its data files) and every frame summed with it; `inputs.calibration`: the `.poni`, calibration `.json` or image of a standard the geometry was taken from (`null` for a saved instrument profile); `inputs.mask`, `inputs.background` and `inputs.flat_field`: the mask, the background and the flat-field file when one was used, else `null` (the flat field is also named among the Decisions, with the pixels it left out, section 4.10). Each file is `{"file": name, "path": the path as given, "bytes": size, "sha256": SHA-256}` |
 | Mask | `mask`: `applied` (true or false), `file` (as above), `kind` (a mask image whose non-zero pixels are left out, or a GIMaP masks file with its number of drawn shapes), `masked_pixels`, and `bad_pixels_left_out` (section 14.4): the pixels found automatically are counted apart from the mask. `report.md` says the same under **Mask**, also when no mask was applied |
 | Analyze's record | `analysis_record`: the record of section 14.2 for the frame as it was reduced (geometry, corrections, error model, binning, markers, `input_sha256`), without `files` |
 | Results | the decisions with their reasons (`decisions`), the open questions (`needs_attention`), the steps, the peaks and rings (GIWAXS) or `gisaxs` (cuts, symmetry axis, halves, length scale, fit), `tables` and `folder` (the frame's folder, relative to the summary); in `summary.json` each frame also has `outputs` (the files written) |
@@ -3876,7 +3922,7 @@ This chapter collects the limits stated in chapters 1 to 14, so that they can be
 
 - **Refraction and the DWBA.** Every q of Analyze, Fitting and 1D Predict is the kinematic vacuum value unless Analyze is given the film's critical angle (q_z of one film, section 2.6), and no reflected-wave terms of the distorted-wave Born approximation are computed (sections 2.5, 8.6, 9.2), except
 Fitting's optional two-path sphere with a free effective reflection coefficient (section 9.10). The Yoneda band is located empirically, without any critical angle (sections 6.7, 8.1). The film absorption correction and the q_z of the XRR extractor also ignore refraction (sections 5.4, 13.1). The only refraction-corrected quantity is the Sputter island height H(t), which uses the refracted wavevector transfer for the positions of fringe minima, not a DWBA intensity (section 12.12). The GIWAXS report says that q is kinematic in its *Decisions*, with the q_z shift of up to about k sin α_i that refraction can cause near or below the film's critical angle at the frame's α_i (section 7.9); the GISAXS report says so too, with the Yoneda band's q_z shifted most (section 8.6).
-- **Absolute intensity.** Intensities are mean counts per pixel. No monitor, transmission, exposure-time, sample-volume, flat-field, detector-efficiency, air- or window-absorption correction is applied (section 2.5). Only the optional GIWAXS geometric factors divide the intensities (chapter 5), and a series can be normalised to a reference peak (section 6.10). The scales of the Fitting models are therefore relative. Every family's form factor is normalised to P(0) = 1, so Int is not number density × ⟨V²⟩ × Δρ² (section 9.4).
+- **Absolute intensity.** Intensities are mean counts per pixel. No monitor, transmission, exposure-time, sample-volume, detector-efficiency, air- or window-absorption correction is applied (section 2.5). Only an optional flat field (section 4.10) and the optional GIWAXS geometric factors (chapter 5) divide the intensities, and a series can be normalised to a reference peak (section 6.10). The scales of the Fitting models are therefore relative. Every family's form factor is normalised to P(0) = 1, so Int is not number density × ⟨V²⟩ × Δρ² (section 9.4).
 - **Lorentz and Ewald-sphere corrections.** I(χ) and the ring intensities are intensities on the detector. No Lorentz factor is applied, and the missing wedge near χ = 0 is not reconstructed (sections 2.2, 7.7).
 - **Texture.** The Hermans factor assumes a fibre texture about the surface normal; the missing wedge enters only through the coverage C_w and the isotropic reference f_iso, and the background under a ring is one χ-independent constant (section 7.7). No exit-angle correction (film absorption, transmission function, shadowing) is applied to I(χ), and the sin χ weight makes the bins next to the sample horizon count most: f can depend on them by many σ_f, which the report states but does not correct (section 7.7). The in-plane and out-of-plane comparison uses two sectors of 20°; it is not a pole figure (section 7.6).
 - **Phases.** No phase is assigned. Lamellar and hexagonal series are reported as hints (section 7.4).
@@ -3894,7 +3940,7 @@ Fitting's optional two-path sphere with a free effective reflection coefficient 
 
 ### 15.3 Statistics and uncertainties
 
-- **Choice of the error model.** Poisson errors (scaled when the GIWAXS intensity corrections are on) are used only for frames stored as integers, with no background subtracted and no mirror filling. The choice follows the stored type, not the physical meaning of the values (sections 4.1, 6.4).
+- **Choice of the error model.** Poisson errors (scaled when a flat field or the GIWAXS intensity corrections are on) are used only for frames stored as integers, with no background subtracted and no mirror filling. The choice follows the stored type, not the physical meaning of the values (sections 4.1, 6.4).
 - **Independence.** Pixels are taken as independent: charge sharing and correlated noise are not modelled, and no covariance between the points of a curve is computed (section 6.4).
 - **Pixel scatter.** Real structure inside a bin inflates the pixel-scatter error; after mirror filling it is somewhat too small (section 6.4).
 - **Maps.** q maps, the cake and the series maps carry no σ (sections 6.8, 11.1).

@@ -1214,9 +1214,19 @@ remembered), which also leaves out pixels this close to gaps and bad pixels. **R
 makes q_z the one inside a film of that critical angle (q∥ does not change; pixels below αc are left out of the q
 maps and of the cuts in q_z). Off by default; Physics and Methods 2.6.
 
-The order is fixed: invalid detector pixels → hot and dead pixels → masks → background → gap guard
-→ intensity range → mirror fill → intensity corrections. Curves, q map, cake and exports all use
-the corrected frame.
+**Flat field** (detector response; off by default; GISAXS and GIWAXS): **Choose…** next to *No flat field* takes a
+detector image of the frame's size (CBF, TIFF, EDF, NeXus/HDF5: its first frame) or a NumPy `.npy` array, and **×**
+stops it. Every frame is divided by the flat field, normalised to mean 1 over the pixels it keeps; pixels where it
+is at or below 0.05 (dead, shadowed, module gaps) are left out. A flat field of another size is refused with the
+reason, never resampled. The line under it says the mean it was normalised by and how many pixels it leaves out.
+The same flat field serves every frame of a Batch Export, a series and the folder watch, and is saved with the
+settings. With photon counts the error bars follow the division (scaled Poisson); the JSON record
+(`corrections.flat_field`) names the file with its SHA-256, the mean and the pixels left out
+([Physics and Methods 4.10](Physics_Manual.md#410-flat-field-detector-response)).
+
+The order is fixed: invalid detector pixels → hot and dead pixels → masks → background → pixels the flat field
+leaves out → gap guard → intensity range (on the values as measured) → division by the flat field → mirror fill →
+intensity corrections. Curves, q map, cake and exports all use the corrected frame.
 
 **Intensity corrections (GIWAXS)** (folded, off by default). They divide each pixel by a geometric
 factor; q does not change:
@@ -3345,10 +3355,10 @@ hold one frame each as one series.
 - **Frames.** An argument may be a file, a pattern such as `*.tif` or a folder. A pattern the shell did not
   expand (PowerShell does not) is expanded by GIMaP, in natural order (`f2` before `f10`); a folder stands for
   every detector image in it (`.cbf`, `.tif`, `.tiff`, `.edf`, NeXus/HDF5; subfolders are not searched; the
-  files given as `--calibration` or `--mask` are left out). `summary.md` says how many files each pattern or
+  files given as `--calibration`, `--mask` or `--flat-field` are left out). `summary.md` says how many files each pattern or
   folder gave; one that gives none is an error (exit code 1).
-- **Values that cannot be used.** `--incidence-deg` must be above 0° and below 90°, and a `--calibration` or
-  `--mask` file must exist: otherwise the command ends with the reason and exit code 1, before anything is read
+- **Values that cannot be used.** `--incidence-deg` must be above 0° and below 90°, and a `--calibration`,
+  `--mask` or `--flat-field` file must exist: otherwise the command ends with the reason and exit code 1, before anything is read
   (it never goes on with a calibration it found itself in place of the one you named).
 - **A calibration that is not the frame's.** A calibration nobody named, which the search took from another folder
   than the frame's (or one below it), is an open item of the report with its full path (*calibration found by the
@@ -3367,8 +3377,13 @@ hold one frame each as one series.
   the mask does not fit fails with the reason. `report.md` (section **Mask**) and `report.json` (`mask`) always
   say which mask was applied, or that none was; detector gaps and the bad pixels found automatically are
   named apart from it.
+- **Flat field.** `--flat-field PATH` divides every frame by a flat field (detector response) as the **Flat
+  field** of Analyze's Corrections does: a detector image of the frame's size or a `.npy` array, normalised to
+  mean 1, pixels at or below 0.05 of it left out. A frame it does not fit fails with the reason. `report.md`
+  names it among the **Decisions** (*flat field: divided by flat.npy (120 pixels left out)*) and in **Record**
+  (the file with its SHA-256); `report.json` has it in `inputs` and in `analysis_record.corrections.flat_field`.
 - **Record.** `report.json` names the release, the UTC time, the options as given (the notes too), and every
-  input file (the frame's files, the calibration, a mask) by path, size and SHA-256; for a model fit also the
+  input file (the frame's files, the calibration, a mask, a flat field) by path, size and SHA-256; for a model fit also the
   network, the SHA-256 of its weights and the seed. `summary.json` is one object with the release, the time, the
   options and the frame reports (`frames`). Every CSV starts with `#` lines that name the release, the inputs
   with their SHA-256 and the geometry, and names its columns in plain ASCII with one spelling of the units

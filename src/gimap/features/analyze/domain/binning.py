@@ -186,7 +186,8 @@ def binned_mean(
 
 
 def native_profile(
-    values: np.ndarray, valid: np.ndarray, x: np.ndarray, *, axis: int, counts_model: bool = True
+    values: np.ndarray, valid: np.ndarray, x: np.ndarray, *, axis: int, counts_model: bool = True,
+    scale: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """One point per measured detector line: the mean over ``axis`` of its valid pixels.
 
@@ -198,6 +199,10 @@ def native_profile(
     count, so a line of zeros never gets σ = 0), or with ``counts=False`` the
     error from the scatter of the line's values (``scatter_sigma``).  Nothing is
     interpolated or rebinned, so detector gaps stay gaps.
+
+    ``scale`` (photon counts only): per pixel, the factor its counts were multiplied by (a flat field, ``1/F_ff``);
+    a pixel's Poisson variance is then ``scale × value`` and the least variance of a line that of one count at
+    the line's mean factor, as ``BinnedMean`` does.
     """
     values = np.asarray(values, dtype=np.float64)
     x = np.asarray(x, dtype=np.float64)
@@ -209,7 +214,12 @@ def native_profile(
     pixels = counts[keep]
     centres = x_sums[keep] / pixels
     mean = sums[keep] / pixels
-    if counts_model:
+    if counts_model and scale is not None:
+        scale = np.asarray(scale, dtype=np.float64)
+        variances = np.where(valid, values * scale, 0.0).sum(axis=axis)[keep]
+        least = (np.where(valid, scale, 0.0).sum(axis=axis)[keep] / pixels) ** 2
+        sigma = np.sqrt(np.maximum(variances, least)) / pixels
+    elif counts_model:
         sigma = np.sqrt(np.maximum(sums[keep], 1.0)) / pixels
     else:
         squares = np.where(valid, values**2, 0.0).sum(axis=axis)

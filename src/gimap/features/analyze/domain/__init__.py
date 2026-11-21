@@ -2,6 +2,7 @@
 
 from .bad_pixels import BadPixels, find_bad_pixels
 from .intensity import describe_intensity_corrections, film_absorption_on, has_intensity_corrections, intensity_factor
+from .flat_field import FlatField, apply_flat_field, check_flat_shape, normalise_flat_field
 from .cake import CakeMap, cake_map
 from .preprocess import POLYGON, RECTANGLE, MaskShape, mirror_fill, rasterize
 from .regions import CutRegion, default_region_near, region_key, region_outline
@@ -101,6 +102,10 @@ __all__ = [
     "film_absorption_on",
     "has_intensity_corrections",
     "intensity_factor",
+    "FlatField",
+    "apply_flat_field",
+    "check_flat_shape",
+    "normalise_flat_field",
     "Corrections",
     "Curve",
     "MAX_GAP_GUARD_PX",

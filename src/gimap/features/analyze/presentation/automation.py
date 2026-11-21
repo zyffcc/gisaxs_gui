@@ -152,6 +152,9 @@ class AnalyzeAutomation:
         corrections = state.corrections
         info["corrections"] = {
             "background": Path(corrections.background_path).name if corrections.background_path else None,
+            "flat_field": None if analysis.flat_field is None else {  # what the frame was divided by
+                "file": analysis.flat_field.name, "masked_pixels": analysis.flat_field.masked_pixels,
+                "normalisation_mean": analysis.flat_field.mean},
             "valid_range": [corrections.minimum, corrections.maximum],
             "gap_guard_px": corrections.gap_guard_px,
         }
