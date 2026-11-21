@@ -81,6 +81,8 @@ def batch_cost(choices: BatchChoices, *, frames: int, frame_pixels: int, curve_p
     per_frame, seconds = 0, pixels * SECONDS_PER_PIXEL
     if choices.per_frame:
         per_frame += curve_points * POINT_BYTES + 8_000  # the curves and the JSON record of the frame
+    if choices.nxcansas:
+        per_frame += curve_points * POINT_BYTES + 30_000  # Q, I, Idev, mask and the record in every entry
     if choices.fit_input:
         per_frame += fit_points * POINT_BYTES
     if choices.q_map:

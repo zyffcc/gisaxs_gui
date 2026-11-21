@@ -20,6 +20,8 @@ class AnalyzePreferences:
     for frames of that profile (``bindings/incidence.py``)."""
     last_folder: str = ""
     auto_export: bool = False
+    nxcansas: bool = False
+    """The Export step's “Also as NXcanSAS (.h5)”."""
 
 
 def load_preferences(settings: Any, profile_names: Sequence[str]) -> AnalyzePreferences:
@@ -45,6 +47,7 @@ def load_preferences(settings: Any, profile_names: Sequence[str]) -> AnalyzePref
         incidence_profile=str(values["incidence_profile"]) if values.get("incidence_profile") else None,
         last_folder=str(values.get("last_folder") or ""),
         auto_export=bool(values.get("auto_export", False)),
+        nxcansas=bool(values.get("nxcansas", False)),
     )
 
 
@@ -60,6 +63,7 @@ def save_preferences(settings: Any, preferences: AnalyzePreferences) -> None:
             "incidence_profile": preferences.incidence_profile if preferences.incidence_deg is not None else None,
             "last_folder": preferences.last_folder,
             "auto_export": preferences.auto_export,
+            "nxcansas": preferences.nxcansas,
         },
     )
     settings.save()

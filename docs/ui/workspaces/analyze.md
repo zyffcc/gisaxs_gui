@@ -16,6 +16,10 @@
   `series_pick.py`、`series_exports.py`、`series_stages.py`、`series_fit_results.py`）。视图模型的帧与源：
   `frames_model.py`、`sources_model.py`、`frame_selection.py`、`frame_sequences.py`、`folder_watch.py`。
 - 共享组件：`app/presentation/components/`（DetectorView、CurvePlot、StepRail、SegmentedControl、EmptyState、Toast）。
+- NXcanSAS 导出：导出步骤的 “Also as NXcanSAS (.h5)”（`export_nxcansas_check`，记在 `preferences.nxcansas`，视图模型
+  `export_nxcansas`）→ `ExportAnalysis(..., nxcansas=True)` / `.curves(..., nxcansas=True)` / `.nxcansas()`（批量导出
+  `BatchChoices.nxcansas` → `nxcansas/<帧>_nxcansas.h5`）；曲线到 SASentry 的对应在 `application/nxcansas_export.py`，
+  文件格式（写和读）在 `shared/nxcansas.py`；测试 `test_nxcansas.py`。
 - 自动化：`presentation/automation.py` 的 `AnalyzeAutomation` 让自动分析和 AI 像用户一样操作本页（每个改动同步到控件、
   重新分析一次再回调）；曲线一律以 q（Å⁻¹）返回。
 - 相关测试：`test_analyze_*.py`（NeXus 源：`test_analyze_nexus_sources.py`）、`test_live_following.py`、`test_guided_start.py`、

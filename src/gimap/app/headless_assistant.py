@@ -357,22 +357,21 @@ def analyse_frames(
     record: Optional[dict] = None,
     found: tuple = (),
     language: str = "en",
+    curve_format: str = "csv",
 ) -> list[dict]:
     """The standard pipeline on each source the files stand for: the module files of one detector are one
     stitched series, analysed once however many of them were given. Later sources of the same detector reuse
     the first calibration; without a technique each gets the procedure Auto detects for it. ``series``: the
-    files are ONE series stored as one frame per file, analysed like the frames of a multi-frame file (one
-    report).
+    files are ONE series stored as one frame per file, analysed like the frames of a multi-frame file.
 
-    Every source has its own folder in ``out`` (``headless_inputs.frame_folders``: frames of one name in
-    different folders do not share one), named in its report (``folder``) and linked from the summary.
-    ``mask``: a mask file applied to every frame (``HeadlessSession.apply_mask``), ``flat_field`` a flat field
-    every frame is divided by (``apply_flat_field``); a frame either does not fit fails. ``out`` with the summary of an earlier run is refused (``FileExistsError``) unless ``overwrite``
-    (``headless_inputs.prepare_output``). ``record``: the options as they were given, kept in every
-    report.json and in summary.json; ``found``: what patterns and folders among the arguments stood for;
-    ``language``: of the reports' headings."""
+    Every source has its own folder in ``out`` (``headless_inputs.frame_folders``), named in its report
+    (``folder``) and linked from the summary. ``mask``: a mask file for every frame (``apply_mask``);
+    ``flat_field``: a flat field every frame is divided by (``apply_flat_field``), a frame it does not fit
+    fails. ``out`` with an earlier summary is refused (``FileExistsError``) unless ``overwrite``. ``record``:
+    the options as given (every report.json, summary.json); ``found``: what the patterns and folders among
+    the arguments stood for; ``language``: of the headings; ``curve_format``: ``CURVE_FORMATS``."""
     prepare_output(out, overwrite)
-    written = {"options": record, "created": utc_now(), "language": language}
+    written = {"options": record, "created": utc_now(), "language": language, "curve_format": curve_format}
     reports: list[dict] = []
     calibration: Optional[dict] = None
     sources = given_sources(frames)

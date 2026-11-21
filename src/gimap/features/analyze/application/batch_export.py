@@ -9,6 +9,7 @@ choice                file                                                what
 ====================  ==================================================  ===========================
 ``tables``            ``<batch>_<curve>_frames.<txt>``                    a curve of every frame, one column each
 ``per_frame``         ``curves/<frame>_<curve>.<txt>`` + ``_analysis.json``  x, I, σ, pixels of one frame
+``nxcansas``          ``nxcansas/<frame>_nxcansas.h5``                    its curves against q as NXcanSAS (HDF5)
 ``fit_input``         ``fit_input/<frame>_fit_input.dat``                 what Fitting ▸ In-situ series reads
 ``q_map``             ``maps/<frame>_qmap.<txt>``                         intensity on the q∥–qz (qy–qz) grid
 ``cake``              ``maps/<frame>_cake.<txt>``                         intensity on the χ–q grid (GIWAXS)
@@ -26,6 +27,9 @@ exactly; frames whose points are the same up to rounding (another cut row, other
 range) are matched point by point, nothing interpolated; only frames on really different grids are
 interpolated linearly onto a common one, never across a hole or beyond their range — and the header of the
 table says which of the three it was (``batch_tables.py``).
+
+An NXcanSAS file (``nxcansas_export``) holds every chosen curve that is against q, one SASentry each, with
+the frame's record; I(χ) and curves shown against 2θ are not in it (NXcanSAS has no angle axis).
 
 ``curves`` names the curves to write (empty: every curve of the frame); ``every`` takes every n-th
 listed frame (1: all of them). ``fit_halves`` is what a fit takes of the signed GISAXS cut — ``mean``,
@@ -48,6 +52,7 @@ from ..domain import GISAXS, PROFILES, Curve
 from .batch_fit import FIT_MODEL, FIT_NONE, FIT_PEAKS, MODEL_COMPONENTS, STARTS
 from .batch_tables import common_x
 from .export_record import source_files
+from .nxcansas_export import nxcansas_name
 from .models import FrameAnalysis
 from .ports import CurveWriter, source_stem
 from .use_cases import SOFTWARE, ExportAnalysis, export_stem
@@ -59,7 +64,7 @@ FRAME_FORMATS = {
     "tiff": "TIFF, 32-bit (.tif)", "edf": "EDF (.edf)", "npy": "NumPy (.npy)", "hdf5": "HDF5 / NeXus (.h5)",
 }
 FOLDERS = {
-    "per_frame": "curves", "fit_input": "fit_input", "q_map": "maps", "cake": "maps",
+    "per_frame": "curves", "nxcansas": "nxcansas", "fit_input": "fit_input", "q_map": "maps", "cake": "maps",
     "detector_image": "images", "q_map_image": "images", "frames": "frames", "fit_curves": "fits",
 }
 GENTLE, BALANCED, FAST = "gentle", "balanced", "fast"
@@ -83,6 +88,8 @@ class BatchChoices:
     curves: tuple[str, ...] = ()
     tables: bool = True
     per_frame: bool = False
+    nxcansas: bool = False
+    """The curves against q of each frame as one NXcanSAS file (``nxcansas/<frame>_nxcansas.h5``)."""
     fit_input: bool = False
     q_map: bool = False
     cake: bool = False
@@ -111,7 +118,7 @@ class BatchChoices:
     @property
     def writes_anything(self) -> bool:
         return any((
-            self.tables, self.per_frame, self.fit_input, self.q_map, self.cake, self.detector_image,
+            self.tables, self.per_frame, self.nxcansas, self.fit_input, self.q_map, self.cake, self.detector_image,
             self.q_map_image, self.frames, self.fit != FIT_NONE,
         ))
 
@@ -160,6 +167,7 @@ def output_names(choices: BatchChoices, *, batch: str, frame: str, curve: str = 
     return {
         "tables": f"{batch}_{curve}_frames.{text}",
         "per_frame": f"{FOLDERS['per_frame']}/{frame}_{curve}.{text}",
+        "nxcansas": f"{FOLDERS['nxcansas']}/{nxcansas_name(frame)}",
         "fit_input": f"{FOLDERS['fit_input']}/{frame}_fit_input.dat",
         "q_map": f"{FOLDERS['q_map']}/{frame}_qmap.{text}",
         "cake": f"{FOLDERS['cake']}/{frame}_cake.{text}",
@@ -222,6 +230,11 @@ def export_frame(
             written.append(export.fit_input(analysis, destination / FOLDERS["fit_input"], halves=choices.fit_halves))
         except ValueError:
             pass  # a frame without a usable curve: nothing to fit
+    if choices.nxcansas:
+        keys = [curve.key for curve in chosen_curves(analysis, choices.curves)]
+        path = export.nxcansas(analysis, keys, destination / FOLDERS["nxcansas"], extra_metadata) if keys else None
+        if path is not None:  # (none: no chosen curve is against q)
+            written.append(path)
     if choices.q_map and analysis.reduction is not None and analysis.reduction.reciprocal_space_map is not None:
         written.append(export.q_map(analysis, destination / FOLDERS["q_map"] / f"{stem}_qmap.{text}"))
     if choices.cake and cake is not None and analysis.kind != GISAXS:

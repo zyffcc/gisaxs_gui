@@ -1318,7 +1318,7 @@ SHA-256、仪器配置及其来源（由文件建立的配置写明该文件的�
 
 | 组 | 选项 | 文件 |
 |---|---|---|
-| **数据（数值）**（Data (numbers)）—— CSV（逗号）、TXT（制表符）或 DAT（空格） | **所有帧：每条曲线一个表格**（第一列 x，之后每帧一列）；**每帧：各条曲线（含误差棒和像素数）**；**每帧：拟合用曲线**；**每帧：q 图数值**；**每帧：χ–q 展开图数值** | `<名称>_<曲线>_frames.csv`、`curves/<帧>_<曲线>.csv`（+ `_analysis.json`）、`fit_input/<帧>_fit_input.dat`、`maps/<帧>_qmap.csv`、`maps/<帧>_cake.csv` |
+| **数据（数值）**（Data (numbers)）—— CSV（逗号）、TXT（制表符）或 DAT（空格） | **所有帧：每条曲线一个表格**（第一列 x，之后每帧一列）；**每帧：各条曲线（含误差棒和像素数）**；**每帧：以 q 为横轴的曲线，NXcanSAS 格式（.h5）**（Each frame: its q curves as NXcanSAS (.h5)，见 5.8 节；不论选哪种格式，总是 HDF5）；**每帧：拟合用曲线**；**每帧：q 图数值**；**每帧：χ–q 展开图数值** | `<名称>_<曲线>_frames.csv`、`curves/<帧>_<曲线>.csv`（+ `_analysis.json`）、`nxcansas/<帧>_nxcansas.h5`、`fit_input/<帧>_fit_input.dat`、`maps/<帧>_qmap.csv`、`maps/<帧>_cake.csv` |
 | **图片**（Pictures）—— PNG、TIFF、SVG 或 PDF | **每帧：探测器图像的图片**；**每帧：q 图的图片**；**色阶**（Colour scale）：每帧自己的上下限（1–99.7 %），或屏幕上的上下限、所有帧相同（图片可以相互比较） | `images/<帧>_detector.png`、`images/<帧>_qmap.png` |
 | **转换格式的探测器帧**（Converted detector frames）—— TIFF、EDF、NumPy 或 HDF5 | **每帧：探测器数据转为其他格式**（按读取的值：模块已拼接、帧已求和；按文件存储的类型写，缝隙码和没有数据的像素按格式转换的方式标记，见 9.1 节；只被热像素检测或手绘掩膜排除的像素保留原值） | `frames/<帧>.tif` |
 | **拟合用曲线**（Curve for Fitting，GISAXS） | **切线的两半**（Halves of the cut）：**两半取平均**、**q > 0 一半** 或 **q < 0 一半**——每帧的模型拟合用哪一部分 | （写在拟合用曲线里） |
@@ -1335,7 +1335,7 @@ SHA-256、仪器配置及其来源（由文件建立的配置写明该文件的�
 时，导出会问 **替换**（Replace）、**两者都保留（写到新的子文件夹）**（Keep Both in a New Subfolder）或 **取消**；问题里写出替换
 会删掉哪些文件。只有这次导出会重写替换要删的每一种文件时，`Enter` 才是替换，否则是两者都保留。
 
-选择表格和逐帧曲线时，勾选需要的曲线（**全部** / **无**（All / None））。在所有帧的表格里，点完全相同的帧并排放；点只差一点
+选择表格、逐帧曲线和 NXcanSAS 文件时，勾选需要的曲线（**全部** / **无**（All / None））。在所有帧的表格里，点完全相同的帧并排放；点只差一点
 （舍入、缺几列）的帧逐行对齐；只有网格真的不同时才插值到第一帧的 x 上，不跨缺口、不外推。表头写明是哪一种。文件夹里总会写
 `README.txt`（每种文件是什么、曲线名称、单位、切线、求和、失败的帧）和 `<名称>_batch.json`（选项、帧列表、每个失败的帧及原因、
 写出的每个文件、每帧的切线，以及第一帧的完整设置）。
@@ -1403,7 +1403,15 @@ SHA-256、仪器配置及其来源（由文件建立的配置写明该文件的�
 
 - 每条曲线一个 CSV（`x, I, sigma, pixels`），名为 `<stem>_<曲线>.csv`；
 - `<stem>_analysis.json`：来源、几何、光束中心的来源、校正、排除的坏像素数、切线；
-- `<stem>_fit_input.dat`：拟合用曲线。
+- `<stem>_fit_input.dat`：拟合用曲线；
+- 勾选 **同时导出为 NXcanSAS（.h5）**（Also as NXcanSAS (.h5)，在导出步骤的 **导出曲线…** 下面；会话之间记住）时，还写出
+  `<stem>_nxcansas.h5`：以 q 为横轴的曲线，格式为 **NXcanSAS**（HDF5，NeXus 定义 NXcanSAS 1.1），SasView、SASfit 和其他
+  NeXus 程序都能打开，拟合页也能读（6.1 节）。每条曲线是一个单独的 SASentry，标题写明帧、曲线和它的 Q 是哪个 q：水平切线保留
+  带符号的 qy（两半都在；按 |Q| 拟合的程序会看到每个 |q| 两次，在那里请只拟合一半），垂直切线是 qz。每条含按分析计算的 Q
+  （1/angstrom）、I（任意单位：每像素平均计数）、Idev = σ、没有有限值的点的掩膜、波长、距离、像素尺寸和 αi（作为样品的
+  pitch），以及与 `_analysis.json` 相同的记录（作为 JSON 写在 SASprocess 的注释里）。I(χ) 和按 2θ 显示的曲线不在其中——NXcanSAS
+  没有角度轴——它们在各自的 CSV 里。这个选项同样用于 **保存这张图的曲线**（Save the Curves of the Plot）和 **监视时导出新帧**
+  （Export New Frames While Watching）。
 
 `<stem>` 是文件名；多帧文件中的一帧会加上 `_frame` 和帧号，求和时加上 `_sum` 和相加的帧数。
 
@@ -1465,7 +1473,7 @@ q 单位为 Å⁻¹，`#` 开头的行记录来源、缝隙保护、帧（*frame
 
 ### 6.1 拟合页读哪些曲线
 
-拟合页读 `.dat` 和 `.txt` 文本曲线：
+拟合页读 `.dat` 和 `.txt` 文本曲线，以及 NXcanSAS 文件（`.h5`）：
 
 - 分析页的曲线文件 `<name>_fit_input.dat` 有四列——q（Å⁻¹）、强度、σ、参与平均的探测器像素数——文件头记录曲线的来源。
 - 其他列为 `q I [σ]` 的 `.dat` / `.txt` 文件也能打开。文件头注明了 q 单位的文件按注明的单位读取——`#` 行里的
@@ -1477,6 +1485,11 @@ q 单位为 Å⁻¹，`#` 开头的行记录来源、缝隙保护、帧（*frame
   按所设单位读出的 q 范围对 GISAXS 或 SAXS 切线还不合理时（|q| 超过 10 nm⁻¹ = 1 Å⁻¹，或整条曲线都在 0.02 nm⁻¹ 以下），
   警告改为说明这一点，以及它对每个长度的影响（R 和 D 小了或大了 10 倍）。列名行上面的标题行同样算文件头；读不成数字的行，
   以及含 NaN 或 inf 的行被略去，卡片和状态栏写明有多少行（*文件里有 3 行无法读成数字，已被略去。*）。
+- NXcanSAS 文件（`.h5`，由分析页、SasView、Mantid 等程序写出的 HDF5；`.hdf5` 和 `.nxs` 通过“所有文件”选择）：文件里每个
+  SASdata 组是一条曲线——Q、I，Idev 作为 σ。q 按文件在 Q 上注明的单位读取：1/angstrom 和 1/nm 原样读取，1/m 换算为 nm⁻¹；
+  曲线卡片写明 *q 按 Å⁻¹ 读取：文件中注明*。拟合页不认识的 Q 单位，按文件头未注明单位的文本文件处理。文件的掩膜排除的点不参与拟合。
+  含多条曲线的文件会问打开哪一条（**打开曲线…**、拖入的文件），之后名为 *文件.h5 · curve 2*；**导入曲线…** 取其中的每一条。
+  装探测器帧的 HDF5 文件不是曲线：拖到窗口上会交给分析页。
 
 拟合页不读 `.csv` 文件，分析页导出的 CSV 曲线也不读。请在分析页用**发送到拟合**（Send to Fitting），或打开 CSV 旁边写出的
 `_fit_input.dat`。把 `.csv` 拖到拟合页上会被拒绝，并说明原因。
@@ -1488,8 +1501,9 @@ q 单位为 Å⁻¹，`#` 开头的行记录来源、缝隙保护、帧（*frame
 
 ![导入前预览共用 q 的多条曲线](manual_images/zh/11a_fitting_import.png)
 
-1. 点击**导入曲线…**，选择一个或多个 `.txt` / `.dat` 文件。可取消的预览显示前十行数据、各列用途、q 单位和曲线总数。
-   不会改写原文件，也不会生成拆分文件。
+1. 点击**导入曲线…**，选择一个或多个 `.txt` / `.dat` 文件，或 NXcanSAS `.h5` 文件。可取消的预览显示前十行数据、各列用途、
+   q 单位和曲线总数。不会改写原文件，也不会生成拆分文件。NXcanSAS 文件给出其中的每一条曲线（每个 SASdata 组一条，按文件中的
+   顺序；显示的是第一条的行）：列布局对它不适用。
 2. 逐文件核对**列布局**（Column layout）：
 
    | 布局 | 解释 |
@@ -1652,7 +1666,8 @@ refine）（6.3 节）。
   那次拟合的 χ²ᵣ（5.5 节），直到你在这里拟合。
   **使用这个解**（Use This Solution）把它放进模型（撤销可以换回原来的模型）。
 - **保存数据与拟合…**（Save Data and Fit…）写出 CSV——q（nm⁻¹ 与 Å⁻¹）、I、σ、模型、残差和每一项——旁边是 JSON 记录：
-  模型、拟合（误差、处于边界的值、相关）和用到的点。**保存图…**（Save Plot…）写 PNG 或 SVG；**保存模型…**（Save Model…）
+  模型、拟合（误差、处于边界的值、相关）和用到的点。文件类型选 **NXcanSAS (*.h5)** 时写出含两个 SASentry 的 HDF5 文件：
+  拟合用到的点（Idev = σ）和模型，Q = |q|，单位 1/nm；记录既在旁边，也在文件里。**保存图…**（Save Plot…）写 PNG 或 SVG；**保存模型…**（Save Model…）
   把模型写成 JSON，可以用**载入模型…**给另一条曲线用。
 - 最下面是折叠的**运行日志**（Run Log）。
 
@@ -2654,6 +2669,10 @@ AI 对分析的每个修改（扇区宽度、自定义扇区、q 框、帧、模
   `critical_angle_deg` 为 `null`。`report.md` 在几何里写出像素尺寸和能量，说明对称轴一行里 *asymmetry* 的定义，
   间距无序度用拟合工作区模型表的名称 σnn/D。每个晶粒尺寸都写明单位（`size_A`、`size_nm`）。对同样的输入重复运行，得到的文件相同，只有时间和耗时不同
   （[《物理与方法》14.10 节](Physics_Manual_zh.md#1410-不用窗口运行时的记录)）。
+- **曲线写成 NXcanSAS。** `--curve-format nxcansas` 把每帧以 q 为横轴的曲线写成一个 NXcanSAS 文件 `curves_nxcansas.h5`，
+  代替它们的 CSV（与分析页 **同时导出为 NXcanSAS（.h5）** 写的相同，5.8 节；最后一个环的 I(χ) 仍是
+  `azimuthal_last_ring.csv`，拟合仍是 `fit_curve.csv`）；`--curve-format both` 两者都写；默认 `csv` 只写 CSV。`call … --out`
+  也接受这个选项。
 - **语言与用时。** `report.md` 和 `summary.md` 的标题是英文；`--language zh` 只把各节的标题（`##` 行）写成中文，别的都不翻译：
   文件标题、表格及其列名、决定、问题和其他每一句话仍是英文，`report.json` 和 CSV 也是（一份报告只用一种语言；在窗口里
   标题跟随程序的语言）。
@@ -2743,13 +2762,13 @@ GIMaP 从不改动你的数据文件。分析的导出默认写到**数据旁边
 
 | 操作 | 写出的文件 | 默认位置 | 附带的记录 |
 |---|---|---|---|
-| 分析 ▸ **导出**（Export，`Ctrl+E`）、**导出曲线…**（Export Curves…） | 每条曲线一个 `<stem>_<curve>.csv`、`<stem>_fit_input.dat`、`<stem>_analysis.json`（多帧文件中的一帧加 `_frameNNNN`，帧求和时加 `_sumN`） | 数据旁边的 `gimap_analysis/`，不弹对话框；无法写入时弹出文件夹对话框 | `<stem>_analysis.json`（设置、几何（含 `.poni` 的倾斜）、校正、排除的像素、误差模型、分箱、写出时的 UTC 时间）和 `#` 头行 |
+| 分析 ▸ **导出**（Export，`Ctrl+E`）、**导出曲线…**（Export Curves…） | 每条曲线一个 `<stem>_<curve>.csv`、`<stem>_fit_input.dat`、`<stem>_analysis.json`（多帧文件中的一帧加 `_frameNNNN`，帧求和时加 `_sumN`）；勾选 **同时导出为 NXcanSAS（.h5）** 时还有 `<stem>_nxcansas.h5` | 数据旁边的 `gimap_analysis/`，不弹对话框；无法写入时弹出文件夹对话框 | `<stem>_analysis.json`（设置、几何（含 `.poni` 的倾斜）、校正、排除的像素、误差模型、分箱、写出时的 UTC 时间）和 `#` 头行 |
 | 分析的曲线图 ▸ **保存 ▸ 曲线存为数据…**（Curves as Data…） | 这张图的 CSV 和 `_analysis.json` | 文件夹对话框，从 `gimap_analysis/` 开始 | 同导出 |
 | 分析的曲线图和图像 ▸ 存为图片（**曲线图存为图片…**、**当前视图存为图片…**、**分析 ▸ 图与数据 ▸ 保存图像…**（Analyze ▸ Figures ▸ Save Image…） …） | PNG、TIFF、SVG 或 PDF，浅色配色 | 对话框，从 `gimap_analysis/` 开始 | 无 |
 | 分析 ▸ **保存 q 图数据…**、**当前视图数据存为 CSV…**（也在 **分析 ▸ 图与数据** 里） | `<stem>_qmap.csv`、`<stem>_cake.csv` | 对话框，从 `gimap_analysis/` 开始 | `#` 头行（来源、帧、坐标轴） |
 | 分析 ▸ 序列 ▸ **导出**（Export：**热图导出为 CSV 表…**、**热图导出为图片…**、**阶段表…**（Stages as Table…）、**所选帧的曲线（图）…** / **（表格）…**、**随帧变化的曲线（图）…** / **（表格）…**、**每帧的峰表…**） | `<序列>_<曲线>[_<两半>]_map.csv`、`…_map.png`、`…_stages.csv`、`…_trace_<量>.csv` 和 `….png`、`…_peaks.csv`；所选帧为 `<帧>_<曲线>[_<两半>].csv` 和 `.png`（图也可存为 TIFF、SVG 或 PDF） | 对话框，从 `gimap_analysis/` 开始 | `#` 头行（曲线、两半、帧、切线），每个表格旁边有记录设置的 `.json`；图没有记录 |
 | 分析 ▸ **发送到拟合**（Send to Fitting） | `<stem>_fit_input.dat`（q 单位 Å⁻¹） | 数据旁边的 `gimap_analysis/`；那里写不了时为你选的文件夹（本次会话记住） | `#` 头行（来源、帧、求和、曲线、带两半的观测信息） |
-| 分析 ▸ **批量导出…**（Batch Export…） | 按曲线的表 `<batch>_<curve>_frames.csv`（或 `.txt`、`.dat`）；选了拟合时，拟合表 `<batch>_peak_fits.csv`（或 `<batch>_model_fits.csv`）及其趋势图 `<batch>_peak_fits.png`（`_model_fits.png`），选了拟合曲线时还有 `fits/<帧>_<峰或模型>_fit.csv`；按你的选择生成的子文件夹 `curves/`、`fit_input/`、`maps/`、`images/`、`frames/`；帧名保留从 0 数的帧号（`…_frame0003_sum3_…`） | 上次的批量文件夹，否则数据旁边的 `gimap_analysis/`；默认再建一个以帧所在文件夹命名的子文件夹（单个文件：以文件命名；来自多个文件夹：`batch`）；**两者都保留**时写到新的子文件夹 | `README.txt` 和 `<batch>_batch.json`（写出的每个文件、每帧的切线、失败的帧及原因）；`curves/` 里每帧还有 `_analysis.json` |
+| 分析 ▸ **批量导出…**（Batch Export…） | 按曲线的表 `<batch>_<curve>_frames.csv`（或 `.txt`、`.dat`）；选了拟合时，拟合表 `<batch>_peak_fits.csv`（或 `<batch>_model_fits.csv`）及其趋势图 `<batch>_peak_fits.png`（`_model_fits.png`），选了拟合曲线时还有 `fits/<帧>_<峰或模型>_fit.csv`；按你的选择生成的子文件夹 `curves/`、`nxcansas/`、`fit_input/`、`maps/`、`images/`、`frames/`；帧名保留从 0 数的帧号（`…_frame0003_sum3_…`） | 上次的批量文件夹，否则数据旁边的 `gimap_analysis/`；默认再建一个以帧所在文件夹命名的子文件夹（单个文件：以文件命名；来自多个文件夹：`batch`）；**两者都保留**时写到新的子文件夹 | `README.txt` 和 `<batch>_batch.json`（写出的每个文件、每帧的切线、失败的帧及原因）；`curves/` 里每帧还有 `_analysis.json` |
 | 分析 ▸ **把序列发送到拟合…**（Send Series to Fitting…） | `fit_input/<帧>_fit_input.dat`、`README.txt`、`<batch>_batch.json` | 它自己的文件夹 `<名称>_fitting/`，在同一数据的批量导出旁边 | `README.txt`、批量 JSON |
 | 分析 ▸ **监视时导出新帧**（Export New Frames While Watching） | 每个新帧同导出 | 帧旁边的 `gimap_analysis/`；那里写不了时为你选一次的文件夹（本次会话记住）；不选时关闭这项导出，状态行说明原因 | 同导出 |
 | 分析 ▸ **保存设置…**（Save Settings…）；掩膜步骤 ▸ **保存…**（Save…）；区域 ▸ **添加 ▸ 保存切线…**（Add ▸ Save Cuts…） | `analyze_settings.json`；`masks.json`；`cuts.json` | 对话框，从 `gimap_analysis/` 开始 | 文件本身就是记录 |
@@ -2757,7 +2776,7 @@ GIMaP 从不改动你的数据文件。分析的导出默认写到**数据旁边
 | 用 AI 处理 ▸ **保存报告…** | `<stem>_ai_report.html` + `<stem>_ai_report.json` | 同上 | JSON |
 | 用 AI 处理（自动） | 每次运行的记录；缺少的分析 | 用户数据文件夹：`assistant_runs/`、`assistant_feature_requests.jsonl` | — |
 | 用 AI 处理，AI 导出时 | 同导出的曲线，以及 `<stem>_assistant.json` | 数据旁边的 `gimap_analysis/` | `<stem>_analysis.json`、`<stem>_assistant.json` |
-| 拟合 ▸ 单条分析 ▸ **保存 ▸ 数据与拟合…**（Data and Fit…） | `<curve>_fit.csv` + `<curve>_fit.json`（成对写出） | 上次保存的文件夹，否则上次打开曲线的文件夹，否则曲线所在文件夹 | JSON（模型、方法、范围、排除的点） |
+| 拟合 ▸ 单条分析 ▸ **保存 ▸ 数据与拟合…**（Data and Fit…） | `<curve>_fit.csv`（或 NXcanSAS 的 `<curve>_fit.h5`）+ `<curve>_fit.json`（成对写出） | 上次保存的文件夹，否则上次打开曲线的文件夹，否则曲线所在文件夹 | JSON（模型、方法、范围、排除的点） |
 | 拟合 ▸ **保存 ▸ 曲线图…**、**保存 ▸ 模型…** | `<curve>_fit.png` / `.svg`；`<curve>_model.json` | 同上 | 无；模型文件 |
 | 拟合 ▸ 批量 / 原位序列 ▸ **保存 ▸ 每一帧的结果表…** | `series_fit.csv` + `series_fit.json` | 序列所在文件夹 | JSON（`gimap_series_fit_v2`：初始模型、两半及其来源、每帧的状态和原因；探测器帧时还有分析页的设置） |
 | 拟合 ▸ 批量 / 原位序列 ▸ **趋势图…**、**所选帧的曲线图…** | `series_trend_<量>.png`（这个量在表里的列名，例如 `series_trend_chi2_reduced.png`）和 `series_frame_<NNNNN>.png`（帧号从 1 数，五位），或 `.svg`；还没有拟合时为 `series_trend.png`、`series_frame.png` | 序列所在文件夹 | 无（图里的标题写明量或帧） |
@@ -2832,7 +2851,7 @@ ASCII——`1/A`、`deg`、`2theta`、`alpha_i`、`chi`、`sigma`、`+/-`——�
 |---|---|
 | **取消不会强制打断底层文件读取。** 比较的目录扫描或单表读取、拟合的当前读取可能尚未返回。 | 按取消或停止后无需重复点击；界面会登记请求，读取返回后丢弃未完成导入或跳过该帧的拟合。已完成的序列和结果保留（6.5、7.2 节）。 |
 | **曲线导入支持 `q I [sigma]` 和 `q I1 I2 …`，不支持交错的 `q I1 sigma1 I2 sigma2`。** 无表头的三列数据无法仅凭数值判断含义。 | 在**导入曲线…**里明确选择布局（6.1 节）。每条曲线有各自误差时，请分别提供 `q I sigma` 文件。固定导入选择不能监视新增文件或列。 |
-| **拟合不读 `.csv` 曲线**，尽管分析把曲线导出为 CSV。 | 用 **发送到拟合**（Send to Fitting），或打开分析写出的 `<name>_fit_input.dat`；列为 `q I [σ]` 的 `.dat` 和 `.txt` 文件也能打开。 |
+| **拟合不读 `.csv` 曲线**，尽管分析把曲线导出为 CSV。 | 用 **发送到拟合**（Send to Fitting），或打开分析写出的 `<name>_fit_input.dat`；列为 `q I [σ]` 的 `.dat` 和 `.txt` 文件也能打开，分析的 NXcanSAS 导出（`<name>_nxcansas.h5`）也能。 |
 | **几何标定可能把错误的解排在第一。** **估计距离**（Estimated distance）不对时，选对了标样或用**自动识别**（Auto Detect）都会被误导，而且这个字段里可能有你没输入过的距离（见 4.3 节）。 | 知道标样时自己选。估计距离留在 *可选*（Optional），或输入你实验装置的大致距离；不是你输入的数字，除非正好是这个距离，否则改回 0。按 **应用**（Apply）之前，核对距离，并确认画出的环落在图像的环上。 |
 | **几何标定只拟合山嵛酸银、LaB₆、CeO₂ 以及 LaB₆ + CeO₂ 混合物。** AI 的几何搜索能按名字认出 Si、Al₂O₃ 和 Cr₂O₃ 的图像，但不能拟合它们（10.5 节）。 | 用 pyFAI 标定这种图像，再把 `.poni` 交给 GIMaP：在笔记里点名，或放在帧旁边（4.2 节）。 |
 | **仪器配置只按探测器名称和帧尺寸匹配**；**自动搜索找到的标定可能属于另一个实验**（帧所在的文件夹里没有标定时，取旁边或上面文件夹里的；整体复制过来的文件夹里，文件时间说明不了什么），甚至属于另一台探测器：`.poni` 或 `.json` 采用时不核对像素尺寸和帧尺寸（见 4.2 节）。 | 看报告写明用的是哪个文件，并核对**几何**步骤里的距离。在笔记里点名标定文件，或者自己给出；错误的配置用 **几何…** ▸ **删除配置** 删掉。 |
@@ -2874,7 +2893,8 @@ NeXus/HDF5 文件要等它关闭后才能读；写入程序没关文件就结束
 
 ### 14.2 `.csv` 曲线在拟合里打不开
 
-拟合读取 `.dat` 和 `.txt` 曲线。来自分析的曲线请用 **发送到拟合**（Send to Fitting），或打开 CSV 旁边写出的 `_fit_input.dat`。
+拟合读取 `.dat` 和 `.txt` 曲线以及 NXcanSAS `.h5` 文件。来自分析的曲线请用 **发送到拟合**（Send to Fitting），或打开 CSV 旁边写出的
+`_fit_input.dat`（勾选 **同时导出为 NXcanSAS（.h5）** 时也可以打开 `_nxcansas.h5`）。
 
 ### 14.3 一维预测无法启动
 

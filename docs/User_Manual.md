@@ -1645,7 +1645,7 @@ page opens the folder and then the dialog, once its first frame is analysed.
 
 | Group | Options | Files |
 |---|---|---|
-| **Data (numbers)** — CSV (comma), TXT (tab) or DAT (space) | **All frames in one table per curve** (x first, one column per frame); **Each frame: its curves, with error bars and pixel counts**; **Each frame: the curve for Fitting**; **Each frame: the q map as numbers**; **Each frame: the unwrapped χ–q map as numbers** | `<name>_<curve>_frames.csv`, `curves/<frame>_<curve>.csv` (+ `_analysis.json`), `fit_input/<frame>_fit_input.dat`, `maps/<frame>_qmap.csv`, `maps/<frame>_cake.csv` |
+| **Data (numbers)** — CSV (comma), TXT (tab) or DAT (space) | **All frames in one table per curve** (x first, one column per frame); **Each frame: its curves, with error bars and pixel counts**; **Each frame: its q curves as NXcanSAS (.h5)** (section 5.8; always HDF5, whatever the format); **Each frame: the curve for Fitting**; **Each frame: the q map as numbers**; **Each frame: the unwrapped χ–q map as numbers** | `<name>_<curve>_frames.csv`, `curves/<frame>_<curve>.csv` (+ `_analysis.json`), `nxcansas/<frame>_nxcansas.h5`, `fit_input/<frame>_fit_input.dat`, `maps/<frame>_qmap.csv`, `maps/<frame>_cake.csv` |
 | **Pictures** — PNG, TIFF, SVG or PDF | **Each frame: picture of the detector image**; **Each frame: picture of the q map**; **Colour scale**: each frame its own limits (1–99.7 %), or the limits on screen for every frame (comparable pictures) | `images/<frame>_detector.png`, `images/<frame>_qmap.png` |
 | **Converted detector frames** — TIFF, EDF, NumPy or HDF5 | **Each frame: the detector data in another format** (values as read: modules stitched, frames summed; in the type the file stores, with the gap codes and the pixels without data marked as the Format Converter writes them, section 9.1; pixels left out only by the hot-pixel test or a drawn mask keep their values) | `frames/<frame>.tif` |
 | **Curve for Fitting** (GISAXS) | **Halves of the cut**: **Mean of both halves**, **q > 0 half** or **q < 0 half** — what the model fit takes in every frame | (named in the curves for Fitting) |
@@ -1665,7 +1665,7 @@ Export asks **Replace**, **Keep Both in a New Subfolder** or **Cancel**; the que
 would remove, and `Enter` answers Replace only when this export writes every such kind of file again —
 otherwise Keep Both.
 
-For tables and per-frame curves, tick the curves you want (**All** / **None**). In a table of all
+For tables, per-frame curves and NXcanSAS files, tick the curves you want (**All** / **None**). In a table of all
 frames, frames with the same points are put side by side; frames whose points differ only slightly
 (rounding, a few missing columns) are matched row by row; only grids that really differ are interpolated
 onto the first frame's x, never across a gap and never extrapolated. The table header says which. The
@@ -1753,7 +1753,17 @@ writes, next to the data in `gimap_analysis/`:
 - one CSV per curve (`x, I, sigma, pixels`), named `<stem>_<curve>.csv`;
 - `<stem>_analysis.json`: the source, geometry, where the beam centre came from, corrections, the
   number of bad pixels left out, the cuts;
-- `<stem>_fit_input.dat`, the curve for Fitting.
+- `<stem>_fit_input.dat`, the curve for Fitting;
+- with **Also as NXcanSAS (.h5)** ticked (below **Export Curves…** in the Export step; remembered between sessions),
+  also `<stem>_nxcansas.h5`: the curves against q as **NXcanSAS** (HDF5, NeXus definition NXcanSAS 1.1), which
+  SasView, SASfit and other NeXus programs open, and Fitting too (section 6.1). Each curve is a SASentry of its own,
+  titled with the frame, the curve and which q its Q is: a horizontal cut keeps its signed qy (both halves; a
+  program that fits |Q| sees each |q| twice, so fit one half there), a vertical cut has qz. Each holds Q in
+  1/angstrom as Analyze computed it, I (arbitrary units: mean counts per pixel), Idev = σ, a mask of the points
+  without a finite value, the wavelength, the distance, the pixel size and αi (as the sample's pitch), and the same
+  record as `_analysis.json` (as JSON in a note of SASprocess). I(χ) and curves shown against 2θ are not in it —
+  NXcanSAS has no angle axis — but in their CSVs. The box applies to **Save the Curves of the Plot** and **Export
+  New Frames While Watching** too.
 
 `<stem>` is the file name; a frame of a multi-frame file adds `_frame` and its number, a sum adds
 `_sum` and the number of frames summed.
@@ -1825,7 +1835,7 @@ which writes the curve that Fitting fits.
 
 ### 6.1 Curves Fitting reads
 
-Fitting reads `.dat` and `.txt` text curves:
+Fitting reads `.dat` and `.txt` text curves and NXcanSAS files (`.h5`):
 
 - Analyze's curve files, `<name>_fit_input.dat`, have four columns — q (Å⁻¹), intensity, σ and the number of
   detector pixels averaged — and a header recording where the curve came from.
@@ -1842,6 +1852,13 @@ Fitting reads `.dat` and `.txt` text curves:
   too small or too large). A title line above the line of column names is a header like any other; a row that is
   no numbers, or that holds NaN or inf, is left out, and the card and the status line say how many (*3 rows of the
   file could not be read as numbers and were left out.*).
+- NXcanSAS files (`.h5`, HDF5 written by Analyze, SasView, Mantid and other programs; `.hdf5` and `.nxs` through
+  **All files**): each SASdata group of the file is a curve — Q, I and Idev as σ. q is read in the unit the file
+  states on Q: 1/angstrom and 1/nm as they are, 1/m converted to nm⁻¹; the Curve card says *q read in Å⁻¹: stated in
+  the file*. A Q whose unit Fitting does not know is read like a text file that states none. Points the file's mask
+  leaves out are not fitted. A file of several curves asks which one to open (**Open Curve…**, a dropped file) and
+  is then named *file.h5 · curve 2*; **Import Curves…** takes every curve of it. An HDF5 file of detector frames
+  is no curve: dropped on the window it goes to Analyze.
 
 Fitting does not read `.csv` files, also not the CSV curves that Analyze exports. Use **Send to Fitting** in
 Analyze, or open the `_fit_input.dat` written next to the CSV. A `.csv` dropped on Fitting is refused with
@@ -1854,8 +1871,10 @@ Single-curve inputs keep their existing interpretation: **Open Curve…** and fo
 
 ![Previewing shared-q curves before importing](manual_images/en/11a_fitting_import.png)
 
-1. Click **Import Curves…** and select one or more `.txt` / `.dat` files. The cancellable preview shows
-   the first ten data rows, column roles, q unit and total number of curves. It does not rewrite or split files.
+1. Click **Import Curves…** and select one or more `.txt` / `.dat` files, or NXcanSAS `.h5` files. The cancellable
+   preview shows the first ten data rows, column roles, q unit and total number of curves. It does not rewrite or
+   split files. An NXcanSAS file gives every curve in it (one per SASdata group, in its order; the rows shown are
+   those of the first): the column layout does not apply to it.
 2. For each file, check **Column layout**:
 
    | Layout | Interpretation |
@@ -2065,7 +2084,8 @@ sizes for your sample, or let the Fit step find them.
   **Use This Solution** puts one into Model (Undo brings the previous model back).
 - **Save Data and Fit…** writes a CSV — q (nm⁻¹ and Å⁻¹), I, σ, the model, the residuals and every term — with a
   JSON record next to it: the model, the fit (errors, values at a bound, correlations) and the
-  points used. **Save Plot…** writes PNG or SVG; **Save Model…** writes the model as JSON, to load for another
+  points used. Choose **NXcanSAS (*.h5)** as the type for an HDF5 file with two SASentry groups, the points fitted
+  (Idev = σ) and the model, Q = |q| in 1/nm; the record is next to it and inside it. **Save Plot…** writes PNG or SVG; **Save Model…** writes the model as JSON, to load for another
   curve with **Load Model…**.
 - **Run Log** (folded) at the bottom.
 
@@ -3405,6 +3425,10 @@ hold one frame each as one series.
   *asymmetry* it prints for the symmetry axis and names the disorder of the distance σnn/D, as Fitting's Model
   table does. And every crystallite size names its unit (`size_A`, `size_nm`). A run repeated on the same input gives the same files except for the
   time and the durations ([Physics and Methods, section 14.10](Physics_Manual.md#1410-the-record-of-a-run-without-the-window)).
+- **Curves as NXcanSAS.** `--curve-format nxcansas` writes the curves against q of each frame as one NXcanSAS file,
+  `curves_nxcansas.h5`, instead of their CSVs (as Analyze's **Also as NXcanSAS (.h5)** writes it, section 5.8; the
+  I(χ) of the last ring stays `azimuthal_last_ring.csv`, the fit stays `fit_curve.csv`); `--curve-format both`
+  writes both; `csv`, the default, writes the CSVs only. `call … --out` takes the option too.
 - **Language and time.** The headings of `report.md` and `summary.md` are English; `--language zh` writes the
   section headings (the `##` lines) in Chinese and nothing else: the titles, the tables and their column names,
   the decisions, the questions and every other sentence stay English, as do `report.json` and the CSVs (one
@@ -3522,13 +3546,13 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 
 | Action | Files written | Default location | Record that comes with it |
 |---|---|---|---|
-| Analyze ▸ **Export** (`Ctrl+E`), **Export Curves…** | `<stem>_<curve>.csv` per curve, `<stem>_fit_input.dat`, `<stem>_analysis.json` (`_frameNNNN` added for a frame of a multi-frame file, `_sumN` when frames are summed) | `gimap_analysis/` next to the data, without a dialog; a folder dialog if it cannot be written | `<stem>_analysis.json` (settings, geometry with the tilt of a `.poni`, corrections, pixels left out, error model, binning, UTC time of writing) and `#` header lines |
+| Analyze ▸ **Export** (`Ctrl+E`), **Export Curves…** | `<stem>_<curve>.csv` per curve, `<stem>_fit_input.dat`, `<stem>_analysis.json` (`_frameNNNN` added for a frame of a multi-frame file, `_sumN` when frames are summed); with **Also as NXcanSAS (.h5)** also `<stem>_nxcansas.h5` | `gimap_analysis/` next to the data, without a dialog; a folder dialog if it cannot be written | `<stem>_analysis.json` (settings, geometry with the tilt of a `.poni`, corrections, pixels left out, error model, binning, UTC time of writing) and `#` header lines |
 | Analyze plots ▸ **Save ▸ Curves as Data…** | the CSV files of that plot and `_analysis.json` | folder dialog in `gimap_analysis/` | as Export |
 | Analyze plots and images ▸ figures (**Plot as Figure…**, **View as Figure…**, **Analyze ▸ Figures ▸ Save Image…** …) | PNG, TIFF, SVG or PDF, light colours | dialog in `gimap_analysis/` | none |
 | Analyze ▸ **Save q-Map Data…**, **View Data as CSV…** (also **Analyze ▸ Figures**) | `<stem>_qmap.csv`, `<stem>_cake.csv` | dialog in `gimap_analysis/` | `#` header lines (source, frame, axes) |
 | Analyze ▸ Series ▸ **Export** (**Map as CSV Table…**, **Map as Figure…**, **Stages as Table…**, **Selected Frame's Curve as Figure…** / **as Table…**, **Trace as Figure…** / **Trace as Table…**, **Peak Table of Every Frame…**) | `<series>_<curve>[_<halves>]_map.csv`, `…_map.png`, `…_stages.csv`, `…_trace_<value>.csv` and `….png`, `…_peaks.csv`; the frame picked as `<frame>_<curve>[_<halves>].csv` and `.png` (figures also as TIFF, SVG or PDF) | dialog in `gimap_analysis/` | `#` header lines (curve, halves, frames, cut) and a `.json` of the settings next to each table; none for the figures |
 | Analyze ▸ **Send to Fitting** | `<stem>_fit_input.dat` (q in Å⁻¹) | `gimap_analysis/` next to the data; a folder you choose (kept for the session) when that cannot be written | `#` header lines (source, frame, sum, curve, observation with the halves) |
-| Analyze ▸ **Batch Export…** | per-curve tables `<batch>_<curve>_frames.csv` (or `.txt`, `.dat`); if you chose fitting, a fit table `<batch>_peak_fits.csv` (or `<batch>_model_fits.csv`) with its trend plot `<batch>_peak_fits.png` (`_model_fits.png`) and, if chosen, the fitted curves `fits/<frame>_<peak or model>_fit.csv`; subfolders `curves/`, `fit_input/`, `maps/`, `images/`, `frames/` after your choices; frame names keep the 0-based index (`…_frame0003_sum3_…`) | the last batch folder, else `gimap_analysis/` next to the data; by default in a subfolder named after the frames' folder (one file: its name; several folders: `batch`); **Keep Both** writes into a new subfolder | `README.txt` and `<batch>_batch.json` (every file written, the cut of every frame, failed frames and why); `curves/` also gets an `_analysis.json` per frame |
+| Analyze ▸ **Batch Export…** | per-curve tables `<batch>_<curve>_frames.csv` (or `.txt`, `.dat`); if you chose fitting, a fit table `<batch>_peak_fits.csv` (or `<batch>_model_fits.csv`) with its trend plot `<batch>_peak_fits.png` (`_model_fits.png`) and, if chosen, the fitted curves `fits/<frame>_<peak or model>_fit.csv`; subfolders `curves/`, `nxcansas/`, `fit_input/`, `maps/`, `images/`, `frames/` after your choices; frame names keep the 0-based index (`…_frame0003_sum3_…`) | the last batch folder, else `gimap_analysis/` next to the data; by default in a subfolder named after the frames' folder (one file: its name; several folders: `batch`); **Keep Both** writes into a new subfolder | `README.txt` and `<batch>_batch.json` (every file written, the cut of every frame, failed frames and why); `curves/` also gets an `_analysis.json` per frame |
 | Analyze ▸ **Send Series to Fitting…** | `fit_input/<frame>_fit_input.dat`, `README.txt`, `<batch>_batch.json` | a folder of its own, `<name>_fitting/`, next to any Batch Export of the same data | `README.txt`, batch JSON |
 | Analyze ▸ **Export New Frames While Watching** | as Export, for each new frame | `gimap_analysis/` next to the frame; when it cannot be written, a folder you choose once (kept for the session); with none, the export is switched off and the status line says why | as Export |
 | Analyze ▸ **Save Settings…**; Mask step ▸ **Save…**; Regions ▸ **Add ▸ Save Cuts…** | `analyze_settings.json`; `masks.json`; `cuts.json` | dialog in `gimap_analysis/` | the file is the record |
@@ -3536,7 +3560,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Process with AI ▸ **Save Report…** | `<stem>_ai_report.html` + `<stem>_ai_report.json` | as above | the JSON |
 | Process with AI (automatic) | a record of every run; missing analyses | user data folder: `assistant_runs/`, `assistant_feature_requests.jsonl` | — |
 | Process with AI, when the AI exports | the curves as Export, and `<stem>_assistant.json` | `gimap_analysis/` next to the data | `<stem>_analysis.json`, `<stem>_assistant.json` |
-| Fitting ▸ Single analysis ▸ **Save ▸ Data and Fit…** | `<curve>_fit.csv` + `<curve>_fit.json` (written as a pair) | the folder saved to last, else the folder a curve was last opened from, else the curve's folder | the JSON (model, method, range, left-out points) |
+| Fitting ▸ Single analysis ▸ **Save ▸ Data and Fit…** | `<curve>_fit.csv` (or NXcanSAS `<curve>_fit.h5`) + `<curve>_fit.json` (written as a pair) | the folder saved to last, else the folder a curve was last opened from, else the curve's folder | the JSON (model, method, range, left-out points) |
 | Fitting ▸ **Save ▸ Plot…**, **Save ▸ Model…** | `<curve>_fit.png` / `.svg`; `<curve>_model.json` | as above | none; the model file |
 | Fitting ▸ Batch / In-situ series ▸ **Save ▸ Table of Every Frame…** | `series_fit.csv` + `series_fit.json` | the series folder | the JSON (`gimap_series_fit_v2`: start model, halves and where they came from, every frame's state and reason; for detector frames Analyze's settings) |
 | Fitting ▸ Batch / In-situ series ▸ **Trend Plot…**, **Selected Frame's Plot…** | `series_trend_<value>.png` (the table column of the value, for example `series_trend_chi2_reduced.png`) and `series_frame_<NNNNN>.png` (the frame counted from 1, five digits), or `.svg`; `series_trend.png`, `series_frame.png` while nothing is fitted | the series folder | none (the title in the picture names the value or frame) |
@@ -3626,7 +3650,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 |---|---|
 | **Cancellation does not forcibly interrupt low-level file reading.** A Compare directory scan or single-table read, or the current Fitting read, may still be returning. | Press Cancel or Stop once; the request is registered, and the unfinished import is discarded or the frame fit skipped when reading returns. Completed series and results stay (sections 6.5, 7.2). |
 | **Curve import supports `q I [sigma]` and `q I1 I2 …`, not interleaved `q I1 sigma1 I2 sigma2`.** A headerless three-column table cannot identify its meaning by numbers alone. | Choose the layout explicitly in **Import Curves…** (section 6.1). For separate errors per curve, provide one `q I sigma` file per curve. Fixed imported selections cannot watch for new columns/files. |
-| **Fitting does not read `.csv` curves**, although Analyze exports its curves as CSV. | Use **Send to Fitting**, or open the `<name>_fit_input.dat` that Analyze writes; `.dat` and `.txt` files with columns `q I [σ]` open too. |
+| **Fitting does not read `.csv` curves**, although Analyze exports its curves as CSV. | Use **Send to Fitting**, or open the `<name>_fit_input.dat` that Analyze writes; `.dat` and `.txt` files with columns `q I [σ]` open too, and so does Analyze's NXcanSAS export (`<name>_nxcansas.h5`). |
 | **Geometry Calibration can put a wrong solution first.** A wrong **Estimated distance** misleads, also with the right standard and with **Auto Detect**, and the field can hold a distance you did not type (section 4.3). | Choose the standard yourself when you know it. Leave **Estimated distance** on *Optional* or type the approximate distance of your set-up; set a number you did not type back to 0 unless it is that distance. Before **Apply**, check the distance and that the drawn rings lie on the rings of the image. |
 | **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them (section 10.5). | Calibrate such an image with pyFAI and give GIMaP the `.poni`: name it in the notes, or put it beside the frames (section 4.2). |
 | **An instrument profile is matched by detector name and frame size only**, and **a calibration found by the automatic search may belong to another experiment** (one beside or above the frame's folder is taken when that folder holds none; file times say nothing in a folder copied in one go) — or even to another detector: a `.poni` or `.json` is applied without checking its pixel size or frame size (section 4.2). | Read which file the report names and check the distance in **Geometry**. Name the calibration in the notes, or give it yourself; remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
@@ -3670,8 +3694,8 @@ for another file format, use **Help ▸ Report a Problem…** or write to the au
 
 ### 14.2 A `.csv` curve does not open in Fitting
 
-Fitting reads `.dat` and `.txt` curves. For a curve from Analyze use **Send to Fitting**, or open the
-`_fit_input.dat` written next to the CSV.
+Fitting reads `.dat` and `.txt` curves and NXcanSAS `.h5` files. For a curve from Analyze use **Send to Fitting**,
+or open the `_fit_input.dat` written next to the CSV (or the `_nxcansas.h5`, when **Also as NXcanSAS (.h5)** is ticked).
 
 ### 14.3 1D Predict Does Not Start
 

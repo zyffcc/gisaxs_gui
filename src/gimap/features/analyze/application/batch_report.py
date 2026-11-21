@@ -110,12 +110,15 @@ class BatchRun:
         self.failures.append(f"{frame} ({why})")
 
 
-_KINDS = ("tables", "per_frame", "fit_input", "q_map", "cake", "detector_image", "q_map_image", "frames")
+_KINDS = ("tables", "per_frame", "nxcansas", "fit_input", "q_map", "cake", "detector_image", "q_map_image", "frames")
 _MEANING = {
     "tables": "one table per curve: x in the first column, then one column per frame (mean intensity per pixel; "
               "blank = no data); its header says how the frames were put on one x",
     "per_frame": "one file per frame and curve: x, I, sigma (standard error) and the pixels in each point; "
                  "a _analysis.json per frame records the settings",
+    "nxcansas": "per frame: its curves against q (not I(chi), not 2theta) as NXcanSAS (HDF5, for SasView and other "
+                "NeXus programs), one SASentry per curve: Q in 1/angstrom, I, Idev = sigma, the wavelength, distance "
+                "and alpha_i, and the frame's record as a note of SASprocess",
     "fit_input": "per frame: q (1/A), I, sigma, pixels — the curve Fitting reads (Fitting > In-situ series)",
     "q_map": "per frame: the intensity on a regular q_par-qz grid (qy-qz for GISAXS); first row = x axis, "
              "first column = qz",
@@ -142,8 +145,8 @@ NAMES = ('Names: <frame> is the name of the frame\'s source (a set of module fil
 
 def written_kinds(files: Sequence[Path], destination: Path, names: Mapping[str, str]) -> set[str]:
     """Which kinds of file (the keys of ``output_names``) are among ``files``."""
-    by_folder = {"per_frame": FOLDERS["per_frame"], "fit_input": FOLDERS["fit_input"], "frames": FOLDERS["frames"],
-                 "fit_curves": FOLDERS["fit_curves"]}
+    by_folder = {"per_frame": FOLDERS["per_frame"], "nxcansas": FOLDERS["nxcansas"], "fit_input": FOLDERS["fit_input"],
+                 "frames": FOLDERS["frames"], "fit_curves": FOLDERS["fit_curves"]}
     kinds: set[str] = set()
     for path in files:
         try:
@@ -275,7 +278,7 @@ def readme_text(choices: BatchChoices, *, batch: str, frame: str, frames: int, c
     if missing:
         lines += ["", "Chosen, but nothing of it could be written (no frame gave it):"]
         lines += [f"  {names[key]}" for key in missing]
-    if curves and (choices.tables or choices.per_frame):
+    if curves and (choices.tables or choices.per_frame or choices.nxcansas):
         # Compare reads these named curves back; keep their titles exactly.
         lines += ["", "Curves:"] + [f"  {key}: {title}" for key, title in curves]
     lines += ["", "Units: q in 1/A (Angstrom^-1), angles in degrees, intensity = mean counts per pixel.", NAMES]

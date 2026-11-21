@@ -3041,7 +3041,15 @@ P_row(i) = Σ_j M_ij,    P_col(j) = Σ_i M_ij                                   
 
 这些数字是约化所用的数字；`geometry` 是实际应用的几何。
 
-实现：`src/gimap/features/analyze/application/export_record.py`, `src/gimap/features/analyze/infrastructure/adapters/csv_export.py`。
+NXcanSAS 导出（`<stem>_nxcansas.h5`，NeXus 定义 NXcanSAS 1.1；批量导出为 `nxcansas/`，命令行为 `curves_nxcansas.h5`）带同样的记录，
+另加键 `curve`（该曲线的键、标题、x 标签和区域），作为 JSON 写在每个条目 SASprocess 下 NXnote `gimap_record` 的 `data` 里。每个
+SASentry 是一条以 q 为横轴的曲线：`Q` 以 1/angstrom 计，与约化结果完全相同（水平切线保留带符号的 q_y；条目的 `title` 写明是哪个 q），
+`I` 的单位为 `arbitrary`，`Idev` 是本节误差模型给出的 σ，`mask` 在 Q 或 I 不是有限值处为 1；SASinstrument 写出波长
+（`incident_wavelength`，angstrom）、样品到探测器的距离（`SDD`，m）和像素尺寸，SASsample 的 `pitch`（degree）是 αi，即在 NeXus
+坐标中绕垂直于光束的水平轴的转角。以 χ 或 2θ 为横轴的曲线不写入：NXcanSAS 的 Q 是动量转移。
+
+实现：`src/gimap/features/analyze/application/export_record.py`, `src/gimap/features/analyze/infrastructure/adapters/csv_export.py`；
+NXcanSAS：`src/gimap/shared/nxcansas.py`、`src/gimap/features/analyze/application/nxcansas_export.py`。
 
 ### 14.3 文本表格的头行
 
