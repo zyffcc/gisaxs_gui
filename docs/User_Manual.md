@@ -2523,8 +2523,7 @@ measured after their deposition, see *Samples measured after their deposition* b
      error inside one of its processes and will not go on by itself — with the last line of its log, and **Stop
      Analysis** ends it. The line at the top and the job status then say *No progress for 1:10: the analysis
      package's processes are all waiting*. GIMaP does not stop it for you: a disk that does not answer looks the same
-     for a while. A last line that names *SCANS lam* and *model LAM* means that the network was made for another
-     wavelength (chapter 13).
+     for a while.
    - A click on a step that has started shows what it found; a click on the step at work follows the analysis
      again. When the analysis ends, its result replaces the live view (after a failure or **Cancel**, what was shown
      before comes back). What the live view shows is not the result: the result is what the package writes at the
@@ -3482,7 +3481,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Run records do not hold everything needed to repeat a run.** They identify `software_version`, the network's record and Predict parameters' fixed seed; masks are counted, not stored as pixel lists. | Keep the input, settings and model files with the exported records. |
 | **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`, `assistant_provider_keys.json`; section 10.1): whoever can read that folder can read them. | On a shared computer, or with `GIMAP_HOME` on a shared drive, set the key as an environment variable instead, or **Remove** it after use. |
 | **Sputter ▸ Analyze reads Cu with networks trained for Cu on two polymer films (a homopolymer and a block copolymer)**. | For Cu on another substrate, choose **Polymer** for a polymer film and compare the model image with the measured one before using the values. |
-| **Sputter ▸ Analyze of Cu needs a wavelength of 0.105 nm (11.81 keV).** The analysis package's Cu networks and its Cu optics are computed for it; for a Cu scan at another photon energy a process of the package ends at the networks step and the analysis waits without ending (section 8.1, *When nothing happens*). | After a minute the live view says so, with the last line of the package's log (*… SCANS lam … nm, model LAM 0.105 nm …*); press **Stop Analysis**. Keep the photon energy that was measured: changing it to make the analysis run scales every q. |
+| **Sputter ▸ Analyze away from the networks' wavelength rests on the joint fit.** Each network was trained at one wavelength (0.105 nm for Cu, 12 keV for the others). Within 5 % of it (for Au: at 12 keV only) a scan is analysed as usual. Farther away the package computes the optical constants at the scan's own energy from its table (4–30 keV), the networks give only the starting solutions, and **Auto** picks **Refine**; the result is the joint fit's. A photon energy outside 4–30 keV is refused when the scan is imported, with the reason. | Away from the networks' wavelength use **Refine** or **Full** and judge the result by its fit deviation. Keep the photon energy that was measured: changing it to match a network scales every q. |
 | **Sputter ▸ Analyze runs the analysis package that comes with GIMaP**, which analyses only the pairs of metal and substrate the package has a network for; its values are model values that were not compared with an independent measurement of your sample (section 8.1). The frames it reads are kept, one copy per request that changes the import (rate, geometry, mask, substrate …), in GIMaP's local folder, at most 5 GB together by default: the ones not used for the longest time are removed first. | Judge a solution by its model image beside the measured one, and compare with SEM, AFM or XRR where you can. **Details ▸ Storage** lists the imports, removes them and sets the limit. |
 | **Sputter reads folders of CBF frames only** (chapter 8). | For NeXus series, use Analyze's series map (section 5.6) and Fitting's in-situ series (section 6.5). |
 | **Sputter keeps every result folder** in the user data folder unless you chose another place; nothing removes them, and **File ▸ Save Project** holds the Sputter form and references its result folder. | For long scans choose **More options ▸ Save results in** on a data disk; delete old folders yourself; open a result again with **Open Result…**. |
@@ -3571,8 +3570,10 @@ missing package, activate the right Python environment and run `pip install -r` 
   package has no network for this metal on this substrate; the line names the pairs it has.
 - *No progress for …: the analysis package's processes are all waiting*: the package has stopped working without
   ending. The note in the live view shows the last line of its log, and **Stop Analysis** ends it (section 8.1,
-  *When nothing happens*). A last line with *SCANS lam … nm, model LAM … nm*: the scan's wavelength is not the one
-  the network was made for (chapter 13).
+  *When nothing happens*).
+- An import that stops with *this scan is at … keV …; the optics are tabulated from 4 to 30 keV*: the photon energy is
+  outside the package's table of optical constants; check the energy or wavelength under **Details ▸ Sample and
+  geometry** (chapter 13).
 - *The analysis finished, but this package does not write the data of the main screen*: the package is an older
   one; its report is in the folder named. Use a newer package.
 - **Open Result…** says *… holds no result of the analysis (main/main.json)*: the folder holds no finished
