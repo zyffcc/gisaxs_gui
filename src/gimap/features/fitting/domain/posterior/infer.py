@@ -44,6 +44,9 @@ used."""
 PER_COUNT = 1
 """When the head chooses the compositions: at least this many of every number of populations among those allowed
 (``candidates``), besides its ``shortlist`` most probable."""
+SIMPLE = ("sphere", "vertical_cylinder")
+"""One population of each of these families is always among the candidates (``candidates``), with or without a
+paracrystal as the head's most probable single population: they are fast to evaluate, and their evidence decides."""
 EXPLORE_ESS = 50.0
 """The effective samples of the tempered weights from which the ``explore`` modes of a composition are found: on a
 bright curve the weights sit on one or two samples, and modes of slightly lower likelihood would never be refined."""
@@ -406,6 +409,15 @@ def candidates(network, h, allowed: Optional[Sequence[int]] = None, count: int =
     for k in sorted({len(E.COMPOSITIONS[c]) for c in ranked}):
         best += [c for c in ranked if len(E.COMPOSITIONS[c]) == k and c not in best][:max(
             0, PER_COUNT - sum(len(E.COMPOSITIONS[c]) == k for c in best))]
+    # The simplest models always compete: on measured cuts the head favours two populations (a beam tail or a
+    # roughness reads as one more), and a single sphere population that the evidence would prefer was not tried.
+    single = [c for c in ranked if len(E.COMPOSITIONS[c]) == 1]
+    if single and SIMPLE:
+        structure = E.composition_types(single[0])[0][1]  # with or without a paracrystal, as the head's best single
+        for family in SIMPLE:
+            simple = E.composition_index([(family, structure)])
+            if simple in pool and simple not in best:
+                best.append(simple)
     best.sort(key=lambda c: -log_probs[c])
     return [(int(c), float(log_probs[c])) for c in best]
 
@@ -438,6 +450,6 @@ def infer(network, data: Cut, compositions: Optional[Sequence[int]] = None, *, a
     return sorted(out, key=lambda r: -r.probability)
 
 
-__all__ = ["AMPLITUDE_RANGE", "EXPLORE_ESS", "PROPOSAL_WIDTHS", "TAIL_WIDTH_MAX", "Composition", "Cut", "Likelihood",
+__all__ = ["AMPLITUDE_RANGE", "EXPLORE_ESS", "PROPOSAL_WIDTHS", "SIMPLE", "TAIL_WIDTH_MAX", "Composition", "Cut", "Likelihood",
            "Mode", "PHYSICAL_NAMES", "candidates", "conditions", "dimensionless", "infer", "modes", "physical",
            "sample_composition", "tempered"]

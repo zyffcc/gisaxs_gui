@@ -267,17 +267,25 @@ def test_shortlist_keeps_every_number_of_populations():
             return out
 
     allowed = E.select(("sphere", "vertical_cylinder"), 3, structure=True)
-    old = infer.PER_COUNT
+    old, simple = infer.PER_COUNT, infer.SIMPLE
     try:
-        infer.PER_COUNT = 0
+        infer.PER_COUNT, infer.SIMPLE = 0, ()
         assert {len(E.COMPOSITIONS[c]) for c, _p in infer.candidates(Head(), None, allowed, 3)} == {3}
         infer.PER_COUNT = 1
         chosen = infer.candidates(Head(), None, allowed, 3)
         counts = [len(E.COMPOSITIONS[c]) for c, _p in chosen]
         assert counts[:3] == [3, 3, 3] and sorted(counts[3:]) == [1, 2]
         assert [p for _c, p in chosen] == sorted((p for _c, p in chosen), reverse=True)
+        # the simplest models always compete: one population of spheres and of upright cylinders
+        infer.SIMPLE = simple
+        chosen = [c for c, _p in infer.candidates(Head(), None, allowed, 3)]
+        for family in ("sphere", "vertical_cylinder"):
+            assert E.composition_index([(family, True)]) in chosen
+        assert len(chosen) == 6 and len(set(chosen)) == 6
+        only_cylinders = E.select(("cylinder",), 2)
+        assert all(c in only_cylinders for c, _p in infer.candidates(Head(), None, only_cylinders, 2))
     finally:
-        infer.PER_COUNT = old
+        infer.PER_COUNT, infer.SIMPLE = old, simple
 
 
 def test_window_flags_name_populations_the_curve_does_not_resolve():
