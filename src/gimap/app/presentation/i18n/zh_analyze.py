@@ -249,7 +249,7 @@ ANALYZE_ZH = {
     'In-plane spacing from the correlation peak': '由关联峰求面内间距',
     'Predicting the particles of the horizontal cut': '预测水平切线的颗粒',
     'can take up to a minute': '可能需要一分钟左右',
-    'takes about 25 s': '大约需要 25 s',
+    'takes some seconds to a few minutes': '需要几秒到几分钟',
     'a few seconds': '需要几秒',
     'a few seconds when many frames are summed': '求和很多帧时需要几秒',
     'Each frame: the detector image (PNG)': '每帧：探测器图像（PNG）',

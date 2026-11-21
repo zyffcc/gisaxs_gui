@@ -11,6 +11,9 @@ the length scale 2π/q*, fit); --technique giwaxs|gisaxs forces one.  Each FRAME
 its own, except that the module files of one detector (..._m01.nxs ... ..._m11.nxs) are
 one stitched series, analysed once however many of them are given (a glob is fine),
 and that --series takes the files given as one series stored as one frame per file.
+A FRAME may be a pattern (*.tif; expanded here in natural order when the shell did not,
+as in PowerShell) or a folder (every detector image in it, subfolders not searched);
+the summary says how many files each gave, and one that gives none is an error.
 A source with a part missing (a module file, a data file) is an open item of its
 report.  The notes are the person's own
 words: αi, the energy (keV) and the pixel size (µm) are read when the notes give exactly
@@ -32,6 +35,14 @@ Other commands:
 
 Nothing is written next to the data: results go to --out (default: the GIMaP data
 folder, assistant_runs/cli/<time>), and export_results writes to gimap_analysis/ there.
+Each frame has its own folder there (frames of one name in different folders get
+<name>_<folder>), linked from summary.md. An --out folder that already holds the
+summary of an earlier run is refused; --overwrite replaces that run (its frame folders
+listed in summary.json are removed first, nothing else). report.json and summary.json
+name the release, the time (UTC), the options as given and every input file by path,
+size and SHA-256; every CSV starts with # lines that name the release, the inputs and
+the geometry. --mask FILE applies a mask as Analyze's Load Masks does; every report
+says which mask was applied, or that none was.
 
 Exit codes (auto):
   0  every frame was analysed and nothing is open (Status OK).
@@ -40,8 +51,10 @@ Exit codes (auto):
      --technique), a judgement no flag settles (e.g. the GISAXS model choice), or nothing
      analysed because no geometry was found (--calibration).  Answer what you can and run
      again.
-  1  at least one frame failed (a missing file, a file GIMaP cannot read, an error); the
-     other frames still have their reports.  1 wins over 2.
+  1  at least one frame failed (a missing file, a file GIMaP cannot read, a mask that does
+     not fit it, an error); the other frames still have their reports.  1 wins over 2.
+     Also: a pattern or folder that gives no file, a mask file that does not exist, an
+     --out folder with an earlier run and no --overwrite (nothing is analysed then).
   Other commands: 1 when the frame file does not exist; status and call also when GIMaP
   cannot read it, find-calibration when the search fails, call when a step returned an
   error; else 0.
@@ -89,26 +102,39 @@ def _outcome_data(outcome) -> dict:
         return {"text": outcome.content}
 
 
+def options_given(arguments, notes: str) -> dict:
+    """The options of a command as they were given, for the record (report.json, summary.json): every argument
+    by its name, and ``notes_text``: the notes the analysis read (``--notes`` and the text of ``--notes-file``)."""
+    given = {key: value for key, value in vars(arguments).items() if key != "run"}
+    return {**given, "notes_text": notes}
+
+
 def command_auto(arguments) -> int:
     from src.gimap.app.headless_assistant import analyse_frames, default_output_folder
+    from src.gimap.app.headless_inputs import expand_frames
     from src.gimap.app.headless_sources import batch_summary
     from src.gimap.features.assistant.application import PipelineOptions
 
+    if arguments.mask and not Path(arguments.mask).is_file():
+        raise FileNotFoundError(f"No such mask file: {arguments.mask}")
+    frames, found = expand_frames(arguments.frames, exclude=(arguments.calibration, arguments.mask))
+    notes = _notes(arguments)
     options = PipelineOptions(
         calibration=arguments.calibration, standard=arguments.standard, energy_kev=arguments.energy_kev,
         incidence_deg=arguments.incidence_deg, critical_angle_deg=arguments.critical_angle_deg,
         pixel_size_um=arguments.pixel_size_um, frame=arguments.frame,
         sum_frames=arguments.sum,
-        rings=arguments.rings, max_peaks=arguments.max_peaks, recalibrate=arguments.recalibrate, notes=_notes(arguments),
+        rings=arguments.rings, max_peaks=arguments.max_peaks, recalibrate=arguments.recalibrate, notes=notes,
         technique=arguments.technique, follow_detection=arguments.technique is None, fit=not arguments.no_fit,
     )
     out = Path(arguments.out) if arguments.out else default_output_folder()
     progress = (lambda _text: None) if arguments.quiet else (lambda text: print(text, file=sys.stderr, flush=True))
     reports = analyse_frames(
-        arguments.frames, options, out, progress=progress, saved_profiles=not arguments.no_saved_profiles,
-        series=arguments.series,
+        frames, options, out, progress=progress, saved_profiles=not arguments.no_saved_profiles,
+        series=arguments.series, mask=arguments.mask, overwrite=arguments.overwrite,
+        record=options_given(arguments, notes), found=tuple(found), language=arguments.language,
     )
-    print(batch_summary(reports))
+    print(batch_summary(reports, notes=found, language=arguments.language))
     for report in reports:
         folder = Path(report["outputs"][0]).parent if report.get("outputs") else None
         if folder is not None:
@@ -214,7 +240,15 @@ def parser() -> argparse.ArgumentParser:
     auto.add_argument(
         "frames", nargs="+",
         help="detector images, each analysed on its own. The module files of one detector (*_m01.nxs … *_m11.nxs) "
-             "are one stitched series: give any or all of them (a glob), it is analysed once",
+             "are one stitched series: give any or all of them (a glob), it is analysed once. A pattern the shell "
+             "did not expand (PowerShell) is expanded here; a folder stands for every detector image in it "
+             "(subfolders not searched)",
+    )
+    auto.add_argument(
+        "--mask",
+        help="a mask applied to every frame, as Load Masks in Analyze reads it: a GIMaP masks .json (drawn shapes) "
+             "or a mask image of the frame's size whose non-zero pixels are left out. Every report says which mask "
+             "was applied, or that none was",
     )
     auto.add_argument(
         "--calibration",
@@ -260,6 +294,15 @@ def parser() -> argparse.ArgumentParser:
     auto.add_argument("--notes", help=notes_help)
     auto.add_argument("--notes-file", help="a text file with the notes (added to --notes)")
     auto.add_argument("--out", help="output folder (default: <GIMaP data folder>/assistant_runs/cli/<time>)")
+    auto.add_argument(
+        "--overwrite", action="store_true",
+        help="write into an --out folder that holds the summary of an earlier run: the frame folders its "
+             "summary.json lists are removed first, nothing else (without this such a folder is refused)",
+    )
+    auto.add_argument(
+        "--language", choices=("en", "zh"), default="en",
+        help="language of the section headings of report.md and summary.md (default en; one language per report)",
+    )
     auto.add_argument("--quiet", action="store_true", help="no progress on stderr")
     auto.set_defaults(run=command_auto)
 
@@ -303,7 +346,7 @@ def main(argv=None) -> int:
     arguments = parser().parse_args(argv)
     try:
         return arguments.run(arguments)
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, FileExistsError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_FAILED
 

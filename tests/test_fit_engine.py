@@ -270,6 +270,16 @@ def test_the_curve_fit_takes_a_cut_of_any_length_on_the_mean_or_one_half() -> No
     assert best["components"][0]["params"]["R"] == pytest.approx(6.0, rel=0.05) and best["best_chi2_weighted"] < 2.0
     assert best["prepared"] == "2 neighbouring points merged (700 points for the fit)" and len(best["native_q"]) == 700
     assert best["preparation"] == {"halves": "", "points": 700, "averaged": 0, "one_half": 1400, "merged": 2}
+    # Every row names what made it: the network, the SHA-256 of its weights file (as its record gives it) and the seed.
+    import hashlib
+
+    from src.gimap.features.fitting.bootstrap import CURVE_FIT_SEED
+    from src.gimap.features.fitting.domain.posterior import network
+
+    weights = network.path()
+    assert best["network"] == {"name": weights.stem, "sha256": hashlib.sha256(weights.read_bytes()).hexdigest()}
+    assert best["network"]["sha256"] == json.loads(weights.with_suffix(".json").read_text(encoding="utf-8"))["sha256"]
+    assert best["seed"] == CURVE_FIT_SEED == 0
 
 
 def test_the_curve_fit_prepares_the_curve_it_is_given(monkeypatch) -> None:

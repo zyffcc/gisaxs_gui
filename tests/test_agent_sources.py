@@ -137,8 +137,8 @@ def test_a_module_set_given_as_all_its_files_is_analysed_once_and_says_so(tmp_pa
     summary = (tmp_path / "out" / "summary.md").read_text(encoding="utf-8")
     assert "1 frame(s)" in summary and "3 files were given for scan_00007_m01.nxs" in summary
     assert _snapshot(tmp_path / "data") == before
-    records = json.loads((tmp_path / "out" / "summary.json").read_text(encoding="utf-8"))
-    assert len(records) == 1 and records[0]["source"]["layout"] == "module_set"
+    records = json.loads((tmp_path / "out" / "summary.json").read_text(encoding="utf-8"))["frames"]
+    assert len(records) == 1 and records[0]["source"]["layout"] == "module_set" and records[0]["folder"] == "scan_00007"
 
 
 def test_a_set_with_a_module_file_missing_is_an_open_point(tmp_path: Path) -> None:

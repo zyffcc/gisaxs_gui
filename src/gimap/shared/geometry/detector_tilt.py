@@ -1,13 +1,18 @@
-"""The rotations of a pyFAI ``.poni`` that GIMaP's flat geometry leaves out: |q| and direction separately.
+"""A pyFAI ``.poni`` in pyFAI's own terms, and what leaving its rotations out would cost: |q| and direction.
 
-GIMaP's geometry (``DetectorGeometry``) is a flat detector perpendicular to the direct beam. A ``.poni`` file
-describes the detector by pyFAI's distance, PONI and three rotations. When one is read
-(``assistant/domain/calibration_files.parse_poni``), GIMaP keeps the direct beam (where the ray along the beam
-meets the detector) and the distance to it (:meth:`DetectorTilt.flat_geometry`), and drops the rotations.
-:class:`DetectorTilt` keeps what was dropped, and :func:`flat_detector_q_error` says how far |q| of a flat geometry is
-from |q| of the tilted one. What the tilt alone costs is that comparison with the flat geometry made from the same
-``.poni``, not with the geometry in use: a beam centre moved afterwards (the GISAXS symmetry axis, a centre set by
-hand in Analyze) is no part of the tilt.
+The rotations of a ``.poni`` are part of GIMaP's geometry since 0.2.0: ``DetectorGeometry`` keeps them
+(``rot1_rad`` … ``rot3_rad``) and ``q_mapping.lab_rays`` places every pixel where pyFAI places it, so reading a
+``.poni`` (``assistant/domain/calibration_files.parse_poni``) drops nothing. This module is the other side of that:
+:class:`DetectorTilt` holds pyFAI's distance, PONI and three rotations, from which the direct beam (where the ray
+along the beam meets the detector) and the distance to it follow; :func:`tilted_rays` is pyFAI's pixel vector, which
+the tests compare the geometry with; and :func:`flat_detector_q_error` says how far |q| of an untilted geometry
+(:meth:`DetectorTilt.flat_geometry`: the same direct beam and distance, rotations 0) is from |q| of the tilted one.
+That comparison is what a tilt changes (the figures quoted in Physics and Methods 3.7), and what a geometry that
+still lacks the rotations of its ``.poni`` is off by: an instrument profile that carries such a tilt
+(``InstrumentProfile.dropped_tilt``, saved before the rotations became part of the geometry) is reported with it
+(``analyze/application/flat_detector``). The comparison is with the untilted geometry made from the same ``.poni``,
+not with the geometry in use: a beam centre moved afterwards (the GISAXS symmetry axis, a centre set by hand in
+Analyze) is no part of the tilt.
 
 pyFAI's convention (``pyFAI.geometry.Geometry``): a pixel centre lies at ``p1 = (i + ½)·pixel1`` (rows) and
 ``p2 = (j + ½)·pixel2`` (columns) from the corner of pixel (0, 0), and its vector from the sample, in the
@@ -17,8 +22,8 @@ laboratory frame (axis 3 along the beam), is ``R3·R2·R1`` applied to ``(p1 −
     t2 = p1 c2 s3 + p2 (c1 c3 + s1 s2 s3) − L (−c3 s1 + c1 s2 s3)
     t3 = p1 s2 − p2 c2 s1 + L c1 c2                                    (cᵢ = cos rotᵢ, sᵢ = sin rotᵢ)
 
-so ``cos 2θ = t3 / |t|``. The flat geometry's ray is ``(D, X, Y)`` with ``X, Y`` from
-``q_mapping.region_displacements`` (the one GIMaP uses), so ``cos 2θ = D / √(D² + X² + Y²)``. With
+so ``cos 2θ = t3 / |t|``. The untilted geometry's ray is ``(D, X, Y)`` with ``X, Y`` from
+``q_mapping.region_displacements``, so ``cos 2θ = D / √(D² + X² + Y²)``. With
 ``|q| = 4π sin θ / λ`` the relative error ``sin θ_flat / sin θ_tilted − 1`` depends on neither λ nor αi. A rotation
 about the beam (rot3) moves no pixel's angle to the beam: ``t3`` and ``t1² + t2²`` do not depend on it, so it
 leaves |q| unchanged (it turns χ by rot3).
@@ -56,8 +61,8 @@ _BLOCK_PIXELS = 1 << 20
 
 @dataclass(frozen=True)
 class DetectorTilt:
-    """What a ``.poni`` says that GIMaP's flat geometry leaves out: pyFAI's own distance (sample to PONI), PONI,
-    rotations (radians) and pixel sizes (metres). ``pixel1``/``poni1`` are along the rows, ``2`` along the columns."""
+    """A ``.poni`` as pyFAI describes the detector: its own distance (sample to PONI), PONI, rotations (radians) and
+    pixel sizes (metres); what an untilted geometry made from it (:meth:`flat_geometry`) leaves out. ``pixel1``/``poni1`` are along the rows, ``2`` along the columns."""
 
     distance_m: float
     poni1_m: float

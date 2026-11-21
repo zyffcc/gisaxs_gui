@@ -193,7 +193,8 @@ class GisaxsProcedureMixin:
             )
 
     def _fit(self) -> None:
-        self.progress("fit_horizontal_cut: predicting the particles of I(qy) (about 25 s)…")
+        # The time grows with the points and the compositions tried (``pipeline_progress.FIT_TAKES``): no one figure.
+        self.progress("fit_horizontal_cut: predicting the particles of I(qy) (some seconds to a few minutes)…")
         if self._call("fit_horizontal_cut") is None:
             return
         # The fit as the tool kept it, at full precision: every number below is formatted once from it.

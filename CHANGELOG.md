@@ -12,6 +12,22 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Command line (`tools/gimap_agent.py auto`): frames no longer overwrite each other, and a run can be traced
+  to its inputs.** Each frame has its own folder (frames of one name in different folders used to share one;
+  they now get `<name>_<folder>`), linked from `summary.md`, whose open questions keep every frame's items and
+  name the frames. A frame argument may be a pattern (expanded by GIMaP when the shell does not, as in
+  PowerShell) or a folder (every detector image in it); an `--out` folder that holds the summary of an earlier
+  run is refused unless `--overwrite` (which removes only the frame folders that summary lists). `--mask FILE`
+  applies a mask as Load Masks reads it, and every report says which mask was applied or that none was.
+  `report.json` now holds the UTC time, the options as given (the notes too), every input file (frame,
+  calibration, mask, background) by path, size and SHA-256, Analyze's record of the frame and, for a model
+  fit, the network, the SHA-256 of its weights and the seed; `summary.json` is an object (`software_version`,
+  `created`, `options`, `arguments`, and the former list as `frames`); `fit_solutions.csv` starts with the `#`
+  lines of the curve tables. Reports have one language (English; `--language zh`, and the program's language in
+  the window) instead of headings in both. The fit is announced as taking "some seconds to a few minutes", not
+  "about 25 s". Physics and Methods 14.10 describes the record; sections 2.1 and 5.2 state the solid-angle
+  factor as coded, (L/|t|)³, which is cos³ 2θ only for an untilted detector. `tools/benchmarks/cut_model_checks.py`
+  has `--out` and refuses to overwrite its stored summary when an optional comparison was skipped (`--force`).
 - **Fitting has one network method, Predict parameters, so the choice is simple.** The Fit step offers **Predict
   parameters** (GIMaP's network, its posterior and least squares), **Refine the values in Model** and **Search the
   ranges, then refine**; an unfitted GISAXS cut gets Predict parameters. Under Predict, **Particles** is *The

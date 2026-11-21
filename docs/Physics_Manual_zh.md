@@ -134,6 +134,7 @@
   - [14.7 校验和](#147-校验和)
   - [14.8 随机种子与确定性运行](#148-随机种子与确定性运行)
   - [14.9 记录中还缺少什么](#149-记录中还缺少什么)
+  - [14.10 不用窗口运行时的记录](#1410-不用窗口运行时的记录)
 - [15. GIMaP 不建模的内容](#15-gimap-不建模的内容)
   - [15.1 散射物理](#151-散射物理)
   - [15.2 仪器与几何](#152-仪器与几何)
@@ -317,7 +318,7 @@ k̂_f = (cos α_f cos 2θ_f,  cos α_f sin 2θ_f,  sin α_f)                  (1
 
 分析工作区的 q 图建立在以下假设上：
 
-1. 探测器是平的，并且垂直于直射束。`L` 沿光束测量。
+1. 探测器是平的。`L` 是从样品到探测器上直射束的距离，沿光束测量。探测器可以是倾斜的：`.poni` 的转角 rot_1、rot_2、rot_3 是几何的一部分（3.7 节）。本节的公式按不倾斜的探测器写出，即探测器垂直于直射束（三个转角都为 0）；对倾斜的探测器，像素的射线 `(L, X, Y)` 换成矢量 (3.15)，其后的各式不变。
 2. 样品绕与光束垂直的水平轴（探测器的 X 轴）倾斜 α_i。入射面（plane of incidence）是竖直的，它包含光束和通过直射束的那一列探测器像素。
 3. 散射是弹性的，来自原点处的一个点。没有折射（真空中的运动学 q）。
 4. 每个像素用它的中心代表。
@@ -796,19 +797,29 @@ I′_p = I_p / F_p,      F_p = F_Ω · F_P · F_A                               
 - q 从不改变。因此峰位不变；在不同 χ 或不同 q 之间比较的强度会变。
 - `F_Ω` 和 `F_P` 在直射束处为 1，`F_A` 在 `α_f = α_i` 处为 1，所以校正后的值仍接近每像素计数。
 - F 非有限或非正的像素变为无效。
-- 它们在其他所有准备步骤之后应用（4.9 节），并且需要几何。X、Y 和 L_p 即 (1.3)、(1.4) 和 (2.2) 中的量，`cos 2θ = L/L_p`（(2.12)）。
+- 它们在其他所有准备步骤之后应用（4.9 节），并且需要几何。X、Y 和 L_p 即 (1.3)、(1.4) 和 (2.2) 中的量，`cos 2θ = L/L_p`（(2.12)）。对倾斜的探测器，像素的矢量 t 是 (3.15)，它的长度 |t| 代替 L_p，cos 2θ 是 t 沿光束的分量除以 |t|。
 - 其他掠入射软件包中也有类似的几何校正，例如 GIXSGUI（Jiang, 2015）。
 
 实现：`src/gimap/features/analyze/domain/intensity.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`
 
 ### 5.2 立体角
 
-在离样品 L_p 处、垂直于光束的平面像素所张的立体角（solid angle）是
+平板探测器上的一个像素，中心位于从样品出发的矢量 t（(3.15)）处，所张的立体角（solid angle）是
+`Ω_p = p_x p_y L_n / |t|³`，其中 L_n 是样品到探测器平面的垂直距离。校正因子是这个立体角与直射束处像素的立体角之比，
+在直射束处 `|t| = L`：
 
 ```text
-Ω_p = p_x p_y L / L_p³ = (p_x p_y / L²) cos³ 2θ                                   (5.2)
-F_Ω = cos³ 2θ                                                                   (5.3)
+F_Ω = Ω_p / Ω_beam = (L / |t|)³                                                  (5.2)
 ```
+
+代码对任何几何都这样计算，不论探测器是否倾斜。L_n 被约去，F_Ω 在直射束处为 1（pyFAI 则归一到垂直入射点，
+两者只差一个常数，3.7 节）。对不倾斜的探测器（转角全为 0：垂直于直射束），`|t| = L_p`（(2.2)），`L/L_p = cos 2θ`，所以
+
+```text
+Ω_p = p_x p_y L / L_p³ = (p_x p_y / L²) cos³ 2θ,      F_Ω = cos³ 2θ      （不倾斜）      (5.3)
+```
+
+对倾斜的探测器，`L/|t|` 不是 cos 2θ（t 沿光束的分量在探测器上变化），所以 (5.3) 在那里不成立，用的是 (5.2)。
 
 实现：`src/gimap/features/analyze/domain/intensity.py`
 
@@ -2980,7 +2991,7 @@ P_row(i) = Σ_j M_ij,    P_col(j) = Σ_i M_ij                                   
 | 时间 | `created`：写出记录的 UTC 时间（ISO 8601，例如 `2026-11-01T05:52:31+00:00`） |
 | 校正 | `corrections`（每一项设置）、`intensity_corrections`（GIWAXS：如何应用、公式、参数）、`bad_pixels_left_out`、`drawn_mask_pixels`、`pixels_filled_from_mirror` |
 | 结果 | `markers`（光束中心、样品地平线所在行、切线条带、Yoneda 估计、I(χ) 窗口、峰……）、`curves`（每条曲线的键、标题、x 标签、区域）、`messages` |
-| 文件 | `source_files`（读取帧的每个文件：模块文件、主文件和数据文件）、NeXus/HDF5 的 `source_layout`（类型、摘要、数据集路径、`transformations`）、`files`（写出的文件） |
+| 文件 | `source_files`（读取帧的每个文件：模块文件、主文件和数据文件）、`input_sha256`（每个输入文件的文件名和 SHA-256：来源、它的模块文件或数据文件，以及与它求和的帧）、NeXus/HDF5 的 `source_layout`（类型、摘要、数据集路径、`transformations`）、`files`（写出的文件） |
 
 这些数字是约化所用的数字；`geometry` 是实际应用的几何。
 
@@ -3016,7 +3027,7 @@ P_row(i) = Σ_j M_ij,    P_col(j) = Σ_i M_ij                                   
 ### 14.5 软件版本
 
 发布版本只写在一个地方：`src/gimap/shared/version.py`；`SOFTWARE` 是 `GIMaP v` 后接该版本号（本版为 `GIMaP v0.2.0`）。
-下列记录写明写出它们的发布版本，键为 `software_version`，值为 `SOFTWARE`（还没有写的记录列在 14.9 节）：
+下列记录写明写出它们的发布版本，键为 `software_version`，值为 `SOFTWARE`（仍然不写的列在 14.9 节）：
 
 | 记录 | 发布版本写在哪里 | 另一个写程序名的键 |
 |---|---|---|
@@ -3029,6 +3040,7 @@ P_row(i) = Σ_j M_ij,    P_col(j) = Σ_i M_ij                                   
 | XRR 记录、SEM 的 `sem_analysis.json`、二维预测的 `<input>_*.json` 和 `prediction_results_<time>.jsonl` 的每一行 | `software_version` | — |
 | 二维预测的 `prediction_curves_<time>.txt`、`prediction_parameters_<time>.txt` | `# Software: GIMaP v…` 一行 | — |
 | 格式转换：每一帧的记录（`conversion_metadata.json`、每帧一个的 JSON、转换后 CBF、EDF 或 HDF5 帧的文件头）、`conversion_report.json` | `software_version` | — |
+| `tools/gimap_agent.py`：每一帧的 `report.json`、`summary.json`；它的 CSV 表格（14.10 节） | `software_version`；第一行 `#` 是 `# GIMaP v… (command line)` | — |
 
 本版之前写出的记录没有 `software_version`，其他键不变。分析工作区和批量导出的曲线表格在 `#` 行里只写 `GIMaP Analyze 1`：
 旁边的 `_analysis.json` 或批量记录写有发布版本。
@@ -3050,6 +3062,11 @@ SHA-256 摘要标识内容重要的文件：
 
 - SEM：源图像、标签图像和 CSV 来源；每个 StarDist 模型文件，在运行前后各算一次（有改变时拒绝结果）。
 - 几何标定：标样图像（`image_sha256`）。
+- 分析工作区：一次导出的每个输入文件，按文件名（`<stem>_analysis.json` 的 `input_sha256`：来源、它的模块文件或数据文件，
+  以及与它求和的帧）。
+- 命令行（`tools/gimap_agent.py`）：帧的各个文件、标定文件，以及用到的掩膜或背景文件，各写路径、大小和 SHA-256
+  （`report.json` 的 `inputs`）；每个 CSV 的 `#` 行里是帧的各个文件的同样摘要；模型拟合还写网络权重的 SHA-256
+  （`gisaxs.fit.method.network.sha256`；14.10 节）。
 - 二维预测：`.keras` 模型旁可选的 `manifest.json` 可以给出 SHA-256，在载入模型前检查。该摘要不写进导出记录。
 
 ### 14.8 随机种子与确定性运行
@@ -3078,9 +3095,39 @@ SHA-256 摘要标识内容重要的文件：
 - XRR 记录没有写出 CBF 序列从中取得能量的那个配套 NeXus 文件。
 - SEM 记录不含汇总统计量，因为根本不计算它们（13.2 节）。
 - 格式转换的 uint16 模式把无数据像素写为 65535；除了在 `pixel_mask` 中标记它们的 HDF5 以外，它们读回时是有效值（13.3 节）。
-- 种子不写进记录（14.8 节）。
+- 种子不写进记录（14.8 节），只有命令行的 `report.json` 写预测参数的种子（14.10 节）。
 - 坏像素、绘制的掩膜和镜像补齐的像素以计数而不是位置记录（14.4 节）。
 - `<stem>_analysis.json` 以 UTC 给出创建时间（`created`），XRR 和 SEM 记录也是如此；二维预测记录用不带时区的本地时间。
+
+### 14.10 不用窗口运行时的记录
+
+`tools/gimap_agent.py auto`（以及它的 MCP 服务器的 `run_standard_pipeline`，给了文件夹时）为每一帧写一个文件夹，并为整批写一份摘要。
+一帧的记录是 `report.json`，用的是窗口各记录的键：
+
+| 组 | `report.json` 的键 |
+|---|---|
+| 程序与时间 | `software_version`（发布版本，14.5 节）；`created`（UTC，ISO 8601，精确到秒；一批的每份报告和 `summary.json` 用同一个时间） |
+| 选项 | `options`：命令行的每个选项，按它自己的名字、原样写出（`frames`：展开通配符和文件夹之前的参数；`calibration`、`mask`、`incidence_deg`、`technique`、`no_fit`……；`notes` 和 `notes_file`），以及 `notes_text`：分析读到的笔记。经 MCP 或 `call` 写文件时为 `null` |
+| 输入 | `inputs.frame`：读取这一帧的每个文件（模块文件、主文件及其数据文件）和与它求和的每一帧；`inputs.calibration`：几何取自的 `.poni`、标定 `.json` 或标样图像（用已保存的仪器配置时为 `null`）；`inputs.mask` 和 `inputs.background`：用到的掩膜文件和背景文件，没有时为 `null`。每个文件写成 `{"file": 文件名, "path": 给出的路径, "bytes": 大小, "sha256": SHA-256}` |
+| 掩膜 | `mask`：`applied`（true 或 false）、`file`（同上）、`kind`（掩膜图像，非零像素被排除；或 GIMaP 掩膜文件及其形状个数）、`masked_pixels`，以及 `bad_pixels_left_out`（14.4 节）：自动找到的像素与掩膜分开计数。`report.md` 在 **Mask** 一节写同样的内容，没有应用掩膜时也写 |
+| 分析工作区的记录 | `analysis_record`：14.2 节的记录，对应实际约化的这一帧（几何、校正、误差模型、分箱、标记、`input_sha256`），没有 `files` |
+| 结果 | 决定及其理由（`decisions`）、待回答的问题（`needs_attention`）、步骤、峰和环（GIWAXS）或 `gisaxs`（切线、对称轴、两半、特征长度、拟合）、`tables` 和 `folder`（这一帧的文件夹，相对于摘要）；在 `summary.json` 里每一帧还有 `outputs`（写出的文件） |
+| 模型拟合 | `gisaxs.fit.method`：`name`（`Predict parameters`）、`network`（`name`，例如 `flow_v1`，和 `sha256`：权重文件的 SHA-256，即网络记录里写明、载入时检查的值）和 `seed`（0，14.8 节）。`gisaxs.fit.solutions` 是每个解及其模型、参数、概率、χ²/N 和 `intervals`（中位数、68 % 和 95 % 限）；`curve`、`points` 和 `q_range_inv_angstrom` 说明拟合的是什么，`data` 是被拟合的点 |
+
+- `summary.json` 是一个对象：`software_version`、`created`、`options`、`arguments`（参数中的每个通配符或文件夹一句话：它代表多少个文件）
+  和 `frames`，即各帧报告的列表，不含 `tables`、`analysis_record` 和 `options`。0.2.0 之前这个文件只是那个列表；
+  `tools/eval_giwaxs_agent.py --from` 两种都能读。
+- 每个 CSV（`radial.csv`、`horizontal.csv`……、`fit_curve.csv`、`fit_solutions.csv`）都以同样的 `#` 行开头：
+  `# GIMaP v… (command line); settings and decisions in report.json`，每个输入文件一行
+  `# input: <文件> sha256 <摘要>`，然后是 `# frame:` 和 `# geometry:`（距离、直射束、波长、α_i、探测器倾斜，q_z 计入折射时还有 α_c）。
+  `fit_solutions.csv` 接着说明这张表是什么以及各列的单位。
+- 每一帧有自己的文件夹，以帧命名。不同文件夹里同名的帧，加上能区分它们的最近一级文件夹名（`<名称>_<文件夹>`），否则加编号。
+  已有摘要的输出文件夹会被拒绝；`--overwrite` 先删除先前 `summary.json` 列出的帧文件夹，别的不动。
+- 同样的输入、同样的选项运行两次，得到的文件逐字节相同，只有 JSON 记录里的 `created` 和耗时（`seconds`）不同。
+  因此，运行自己建立的仪器配置在记录里不写更新时间。
+
+实现：`src/gimap/app/headless_record.py`, `src/gimap/app/headless_inputs.py`,
+`src/gimap/shared/file_digest.py`, `src/gimap/features/assistant/application/gisaxs_export.py`。
 
 ## 15. GIMaP 不建模的内容
 

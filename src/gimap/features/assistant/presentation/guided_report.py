@@ -20,6 +20,8 @@ from typing import Callable, Optional
 import numpy as np
 from PyQt5.QtGui import QTextDocument
 
+from src.gimap.app.presentation.i18n import current_language
+
 from ..application import (
     bound_phrases,
     chosen_solution,
@@ -124,11 +126,12 @@ def report_html(
 
 def report_markdown(report: dict, start_report: Optional[dict] = None) -> str:
     """The report text, with the start-versus-end comparison when the start of the series was analysed."""
-    text = pipeline_markdown(report)
+    language = current_language()  # one language per report: the headings follow the program's
+    text = pipeline_markdown(report, language=language)
     if report.get("procedure") == "geometry":
         text = _geometry_markdown(text)
     if start_report is not None:
-        text += "\n" + series_markdown(start_report, report)
+        text += "\n" + series_markdown(start_report, report, language=language)
     return text
 
 

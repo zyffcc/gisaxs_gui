@@ -222,7 +222,13 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
 先读 `docs/agents/giwaxs-playbook.md` 或 `gisaxs-playbook.md`。
 
 - **起点**：`python tools/gimap_agent.py auto <图像...> --notes "<用户笔记原文>" --out <临时或用户指定的文件夹>`。
-  - 耗时：给了 `.poni` 的单帧约 10 秒；要从标样图标定或读大的 NeXus 序列时，要几十秒到几分钟。
+  - 耗时：给了 `.poni` 的单帧约 10 秒；要从标样图标定或读大的 NeXus 序列时，要几十秒到几分钟。GISAXS 的模型拟合另需
+    几秒到几分钟（随点数和电脑而变；`--no-fit` 不做）。
+  - 帧可以是文件、通配符（shell 不展开时由它自己展开）或文件夹（其中的每个探测器图像，不搜索子文件夹）。每帧有自己的
+    文件夹，不同文件夹里同名的帧用 `<名称>_<文件夹>`。`--out` 里已有先前运行的摘要时会拒绝，除非加 `--overwrite`。
+    `--mask FILE` 应用掩膜（读法同 Analyze 的 Load Masks），报告总是写明用了哪个掩膜或没有用。
+  - `report.json` 和 `summary.json`（一个对象，各帧在 `frames` 里）写明版本、UTC 时间、原样的选项和每个输入文件的路径、
+    大小、SHA-256；记录的格式见 `docs/Physics_Manual.md` 14.10 节。
   - 输入和已保存的仪器配置相同，结果就能复现。
   - 处理数据时不要改 `GIMAP_HOME`：gimap_agent 要读那里保存的仪器配置。总是给 `--out`，不给时它会写进用户数据目录。
   - 每个样品的 `report.md` 写出它做的每个默认决定和理由（**Decisions**），以及只有用户能回答的问题（**Needs attention**）。

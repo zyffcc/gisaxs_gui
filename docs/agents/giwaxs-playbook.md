@@ -37,8 +37,8 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
   几个大面阵探测器的原位序列（每个几百帧）一起跑要几分钟。
 - 退出码：
   - **0**：全部分析完，没有待回答的问题。
-  - **2**：至少一个样品有 “Needs attention”。可能是缺一个值（会写出补这个值的选项）、一个选项定不了的判断
-    （例如略去的探测器倾斜，见下表的 detector tilt），或者没找到几何、什么也没分析。
+  - **2**：至少一个样品有 “Needs attention”。可能是缺一个值（会写出补这个值的选项）、一个选项定不了的判断，
+    或者没找到几何、什么也没分析。
   - **1**：至少一帧失败，比如读不了的文件；其他帧照样有报告。1 优先于 2：有失败也有待回答的问题时退出码是 1，
     仍要读其他样品的 Needs attention。
 
@@ -49,7 +49,7 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
 |---|---|---|---|
 | technique | GIMaP 应用几何后自动识别：探测器任一角超过 2θ = 20° 就是 GIWAXS，否则 GISAXS | 小探测器或长距离的 GIWAXS 会被认成 GISAXS | `--technique giwaxs` |
 | geometry | 依次尝试：`--calibration` → 笔记里点名的标定文件（完整路径；只写文件名时，取帧所在文件夹或笔记里点名的文件夹中同名的那个，不会为一个名字去搜索） → 已保存的仪器配置 → 在附近搜索（同目录及子目录、父目录和兄弟目录、往上两三层；2 个标定文件 + 3 张标样图） | 仪器配置只按探测器名和图像尺寸匹配，不管是哪次束线实验；搜索也可能挑到别的实验的标定，“quality: good” 只说明标定和它自己的标样一致。搜索在现成的标定文件之间先看所在的文件夹（帧所在文件夹 → 它的子目录 → 父目录 → 兄弟目录 → 更上层），同一类里再看修改时间离帧多近：帧所在文件夹里没有标定时会取旁边或上面的；同一文件夹里有几个标定、整个文件夹又是一次拷贝或下载来的时候，时间说明不了什么。这两种情况要点名。搜索采用的标定在 Decisions 里另有一行 “calibration found by the search”：完整路径，以及从帧所在文件夹看它在哪里（只是说明，不会提问），转述结果前先看这一行；`.poni` 和 GIMaP 的 `.json` 直接采用，不再用标样核对 | `--calibration <文件>`、`--no-saved-profiles`、`--recalibrate` |
-| detector tilt | GIMaP 的探测器是垂直于光束的平板：`.poni` 的倾斜（`Rot1`、`Rot2`）换算成直射束和距离后略去（`Rot3` 和 `orientation` 也不用）。GIMaP 在帧的有效像素上（离直射束 10 px 以内的除外）比较倾斜几何和由同一个 `.poni` 换算的平板几何的 \|q\|（之后移动的光束中心不计入）：倾斜 > 1° 或最大相对误差 > 0.5 % 时列进 Needs attention（“detector tilt”，没有选项能补），否则 Decisions 里写一行 “detector tilt: X° left out” 和误差。数值在 `report.json` 的 `geometry.flat_detector`（`q_error_max` 是分数） | 实验室 GIWAXS（Xeuss、SAXSpoint、Ganesha）常把探测器倾斜放置：公开 Xeuss 帧倾斜 6.06°，离光束最远的角上 \|q\| 偏 6.3 %（RMS 4.2 %），峰位都带这个误差；P08 的 0.31° 只差 0.2 % | 没有选项能修正（不建模倾斜）。转述峰位时写明误差和它随离光束的距离增大；要准确的 q 就用完整的 `.poni` 几何（如 pyFAI）约化 |
+| detector tilt | `.poni` 的倾斜（`Rot1`、`Rot2`、`Rot3`）是几何的一部分：每个像素放在 pyFAI 放的位置，q、χ、立体角和偏振因子都是倾斜探测器的值（公开 Xeuss 帧上 \|q\| 与 pyFAI 一致到 10⁻⁹）。Decisions 里写一行 “detector tilt”，Geometry 一节写出倾斜角；数值在 `report.json` 的 `geometry.tilt_deg` 和 `geometry.rotations_deg` | `.poni` 的 `orientation` 项不读（按 pyFAI 的默认 orientation 3）；几何标定不拟合倾斜，它标定的配置不倾斜。实验室 GIWAXS（Xeuss、SAXSpoint、Ganesha）常把探测器倾斜放置：公开 Xeuss 帧倾斜 6.06°，略去它（GIMaP 0.1 的做法）会使最远角上 \|q\| 偏 6.3 % | 倾斜的探测器用 pyFAI 标定，把它的 `.poni` 交给 `--calibration`；确认 `.poni` 是为同样存储方向的图像做的 |
 | frames | 序列取最后五分之一的帧求和，至多 10 帧（终态）；不到 10 帧只取最后一帧 | 问题关心的是过程，或者开头 | `--frame N --sum K`（负数从末尾数；只给 `--frame` 时从该帧起求和同样的默认帧数，单帧用 `--sum 1`；求和块不会越过最后一帧，所以和覆盖整个序列时 Decisions 会写明它是整个序列而不是一个状态） |
 | peak search | 最多拟合 12 个最显著的候选峰（为了快）；候选更多时 Decisions 的 peak search 一行写 “N candidate peaks found; the 12 most prominent were fitted”，峰表、扇区比较、环和序列提示都只来自这 12 个（序列提示的标题也这样写）。候选峰是拟合前的极大，全部拟合得到的峰比候选少（公开 P08 帧：115 个候选，全部拟合是 32 个峰） | 用户要完整的峰表、某个弱一些的峰，或序列提示 | `--max-peaks N`；`find_peaks` / `run_standard_pipeline` 的 `max_peaks` |
 | rings | 面积最大的 3 个没有警告的峰算取向和尺寸 | 用户问的是别的环 | `--rings N`；指定某个 q 要用 `call` 或 MCP 的 `ring_orientation`、`crystallite_size` |
