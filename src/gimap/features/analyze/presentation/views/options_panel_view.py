@@ -106,6 +106,7 @@ class OptionsPanelView:
         form.addRow("Scale", self.background_scale_spin)
         form.addRow("Frame", self.background_frame_spin)
         section.add_layout(form)
+        self._flat_field_row(section)
 
         limits = QGridLayout()
         limits.setHorizontalSpacing(6)
@@ -154,6 +155,33 @@ class OptionsPanelView:
         refraction.addStretch(1)
         section.add_layout(refraction)
         return section
+
+    def _flat_field_row(self, section) -> None:
+        """The flat field (detector response): its file, Choose… and ×, and what it did to the frame shown."""
+        flat = QHBoxLayout()
+        self.flat_field_label = QLabel("No flat field", section)
+        self.flat_field_label.setObjectName("analyzeFlatFieldLabel")
+        self.flat_field_label.setProperty("gimapRole", "muted")
+        self.flat_field_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.flat_field_button = QToolButton(section)
+        self.flat_field_button.setObjectName("analyzeFlatFieldButton")
+        self.flat_field_button.setText("Choose…")
+        self.flat_field_button.setToolTip(
+            "Flat field (detector response): every frame is divided by it, normalised to mean 1; pixels where it "
+            "is at or below 0.05 are left out. A detector frame of the same size or a .npy file"
+        )
+        self.flat_field_clear_button = QToolButton(section)
+        self.flat_field_clear_button.setText("×")
+        self.flat_field_clear_button.setAutoRaise(True)
+        self.flat_field_clear_button.setToolTip("Stop dividing by the flat field")
+        flat.addWidget(self.flat_field_label, 1)
+        flat.addWidget(self.flat_field_button)
+        flat.addWidget(self.flat_field_clear_button)
+        section.add_layout(flat)
+        self.flat_field_status = _hint("", section)
+        self.flat_field_status.setObjectName("analyzeFlatFieldStatus")
+        self.flat_field_status.hide()
+        section.add_widget(self.flat_field_status)
 
     def _intensity_section(self, parent) -> AdvancedSection:
         section = AdvancedSection(

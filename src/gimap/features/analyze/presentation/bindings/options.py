@@ -7,11 +7,17 @@ from pathlib import Path
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QFileDialog
 
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.detector_io import DETECTOR_SUFFIXES
 
+from ..texts import message_text
 from ..views.analyze_page_view import FILE_FILTER
 
 APPLY_DELAY_MS = 250
+FLAT_FIELD_FILTER = (
+    f"Flat fields ({' '.join('*' + suffix for suffix in DETECTOR_SUFFIXES)} *.npy);;NumPy (*.npy);;All files (*)"
+)
+"""A flat field is any frame the reader takes, or a NumPy array (``application/flat_field.py``)."""
 
 
 class OptionsMixin:
@@ -30,6 +36,8 @@ class OptionsMixin:
         self.bad_pixels_check.toggled.connect(self._bad_pixels_changed)
         self.background_button.clicked.connect(self._choose_background)
         self.background_clear_button.clicked.connect(self._clear_background)
+        self.flat_field_button.clicked.connect(lambda: self.load_flat_field())
+        self.flat_field_clear_button.clicked.connect(self._clear_flat_field)
         for spin in (self.background_scale_spin, self.background_frame_spin):
             spin.valueChanged.connect(self._background_changed)
         for widget in (self.minimum_check, self.maximum_check):
@@ -102,6 +110,46 @@ class OptionsMixin:
         path = self.view_model.state.corrections.background_path
         if path:
             self._apply_background(path)
+
+    def load_flat_field(self, path: str | Path | None = None) -> bool:
+        """Divide every frame by a flat field (asks for one when ``path`` is ``None``); ``True`` when it was taken.
+        One that cannot be read or is not of the size of the frame shown is refused with the reason."""
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(self, tr("Flat field"), self._last_folder, FLAT_FIELD_FILTER)
+            if not path:
+                return False
+        path = Path(path)
+        try:
+            use = self.view_model.check_flat_field(path)
+        except OSError as exc:
+            self._status(trf("Could not read the flat field: {error}", error=exc.strerror or exc), "error")
+            return False
+        except ValueError as exc:  # the application's sentence: another size, not an image, no pixel above 0
+            self._status(trf("Flat field not loaded: {error}", error=message_text(exc)), "error")
+            return False
+        self.view_model.set_flat_field(path)
+        self._show_flat_field()
+        self._status(trf("Flat field {name}: {count} pixels left out", name=use.name, count=use.masked_pixels), "ok")
+        self.run_analysis()  # a file chosen, as a mask loaded: at once
+        return True
+
+    def _clear_flat_field(self) -> None:
+        self.view_model.set_flat_field(None)
+        self._show_flat_field()
+        self.run_analysis()
+
+    def _show_flat_field(self) -> None:
+        """The flat field's file, and what it did to the frame shown (its mean and the pixels it leaves out)."""
+        path = self.view_model.state.corrections.flat_field_path
+        self.flat_field_label.setText(Path(path).name if path else tr("No flat field"))
+        self.flat_field_label.setToolTip(path or "")
+        analysis = self.view_model.state.analysis
+        use = getattr(analysis, "flat_field", None) if path else None
+        if use is not None and use.path == str(path):
+            self.flat_field_status.setText(trf(
+                "Normalised by its mean {mean}; {count} pixels at or below {floor} left out",
+                mean=f"{use.mean:.4g}", count=use.masked_pixels, floor=f"{use.floor:g}"))
+        self.flat_field_status.setVisible(use is not None and use.path == str(path))
 
     def _limits_changed(self, *_args) -> None:
         self.view_model.set_valid_range(
@@ -188,6 +236,7 @@ class OptionsMixin:
         self.gisaxs_cuts.setVisible(kind == "gisaxs")
         self.mirror_fill_check.setVisible(kind != "gisaxs")  # a GIWAXS correction: not offered for GISAXS
         self.intensity_section.setVisible(kind != "gisaxs")  # GIWAXS corrections: not offered for GISAXS
+        self._show_flat_field()  # (GISAXS and GIWAXS) what it did to the frame now shown
 
 
 __all__ = ["OptionsMixin"]

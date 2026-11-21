@@ -38,7 +38,7 @@ from .gisaxs_choice import (
 )
 from .gisaxs_report import cut_spans
 from .gisaxs_tools import MAX_SYMMETRY_SHIFT_PX
-from .giwaxs_decisions import refraction_decision, uncertainty_decision
+from .giwaxs_decisions import flat_field_decision, refraction_decision, uncertainty_decision
 from .ring_frames import NO_FIT
 
 PREDICTED = (
@@ -146,6 +146,9 @@ class GisaxsProcedureMixin:
         # What the numbers are, in every report (the GIWAXS run says the same in its own words).
         self._decide(**refraction_decision(status.get("geometry"), "gisaxs", given=self._incidence is not None))
         self._decide(**uncertainty_decision(status.get("error_model"), "gisaxs"))
+        flat = flat_field_decision(status)
+        if flat is not None:
+            self._decide(**flat)
         self._horizontal_cut(cuts)
         symmetry = self._call("refine_beam_center_symmetry", {"max_shift_px": MAX_SYMMETRY_SHIFT_PX})
         if symmetry is not None:

@@ -1,5 +1,5 @@
-"""Frame corrections applied before any reduction: frame sum, background, gap
-guard and valid range.
+"""Frame corrections applied before any reduction: frame sum, background, flat field,
+gap guard and valid range.
 
 All work on the raw frame, so every curve, the q map and the exports use the
 corrected values.  Nothing here changes the geometry or the array layout.
@@ -24,6 +24,10 @@ class Corrections:
     background_frame: int = 0
     background_scale: float = 1.0
     """``image − scale × background`` (for example the ratio of exposure times)."""
+    flat_field_path: Optional[str] = None
+    """A flat field (detector response) of the frame's shape: every frame is divided by it, normalised to mean 1
+    over the pixels it keeps; pixels where it is at or below 0.05 or not finite are left out (``flat_field.py``).
+    A ``.npy`` file or any frame the reader takes (its first frame)."""
     minimum: Optional[float] = None
     """Pixels below this raw value are treated as invalid (``None``: no limit)."""
     maximum: Optional[float] = None
@@ -59,6 +63,7 @@ class Corrections:
         return (
             not self.mirror_fill
             and self.background_path is None
+            and self.flat_field_path is None
             and self.minimum is None
             and self.maximum is None
             and self.gap_guard_px <= 0

@@ -70,7 +70,7 @@ def test_a_pattern_and_a_folder_stand_for_their_files_in_natural_order(tmp_path:
     frames, notes = expand_frames([str(folder)], exclude=(str(folder / "mask.edf"), None))
     assert [Path(frame).name for frame in frames] == ["film_1.tif", "film_2.tif", "film_10.tif"]  # not the subfolder
     assert "3 detector image(s) found" in notes[0] and "subfolders are not searched" in notes[0]
-    assert "1 file(s) given as calibration or mask left out" in notes[0]
+    assert "1 file(s) given as calibration, mask or flat field left out" in notes[0]
     assert len(expand_frames([str(folder)])[0]) == 4  # the mask is a detector image unless it is named as the mask
 
     # A plain name is passed on as it is: a missing file is that frame's error, not the batch's.

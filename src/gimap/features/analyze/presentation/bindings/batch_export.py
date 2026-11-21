@@ -370,6 +370,8 @@ class BatchExportMixin:
             parts.append(tr("refraction αc {value}°").format(value=f"{corrections.critical_angle_deg:g}"))
         if corrections.background_path:
             parts.append(tr("background {name}").format(name=Path(corrections.background_path).name))
+        if corrections.flat_field_path:
+            parts.append(trf("flat field {name}", name=Path(corrections.flat_field_path).name))
         if self.view_model.sum_count > 1:
             parts.append(tr("sum of {n} frames").format(n=self.view_model.sum_count))
         return " · ".join(parts)

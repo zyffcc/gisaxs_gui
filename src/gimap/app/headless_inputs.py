@@ -46,8 +46,8 @@ def _natural(paths: Iterable[str]) -> list[str]:
 def expand_frames(arguments: Sequence[str], *, exclude: Sequence[Optional[str]] = ()) -> tuple[list[str], list[str]]:
     """``(frames, notes)``: the files the arguments stand for, in the order given, and one sentence for the summary
     per pattern or folder. A plain name is passed on as it is (a missing file is that frame's error, the other
-    frames are still analysed). ``exclude``: files that are no sample frames (the calibration, the mask), left
-    out of a folder's listing. ``FileNotFoundError`` when a pattern or a folder gives nothing."""
+    frames are still analysed). ``exclude``: files that are no sample frames (the calibration, the mask, the flat
+    field), left out of a folder's listing. ``FileNotFoundError`` when a pattern or a folder gives nothing."""
     skipped = {_file_key(text) for text in exclude if text}
     frames: list[str] = []
     notes: list[str] = []
@@ -63,7 +63,7 @@ def expand_frames(arguments: Sequence[str], *, exclude: Sequence[Optional[str]] 
             left_out = len(listed) - len(found)
             notes.append(
                 f"Folder {text}: {len(found)} detector image(s) found (subfolders are not searched"
-                + (f"; {left_out} file(s) given as calibration or mask left out" if left_out else "") + ")."
+                + (f"; {left_out} file(s) given as calibration, mask or flat field left out" if left_out else "") + ")."
             )
             frames += found
         elif not os.path.isfile(text) and glob.has_magic(text):

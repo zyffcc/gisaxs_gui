@@ -56,6 +56,7 @@ def restore(view_model, setup: Setup) -> None:
 _CORRECTIONS = (
     (("mask_shapes", "mask_path"), "mask"),
     (("background_path", "background_frame", "background_scale"), "background"),
+    (("flat_field_path",), "flat field"),
     (("mirror_fill",), "mirror filling"),
     (("minimum", "maximum", "gap_guard_px", "bad_pixels"), "pixel limits"),
     (("solid_angle", "polarization", "film_thickness_nm", "attenuation_length_um"), "intensity corrections"),

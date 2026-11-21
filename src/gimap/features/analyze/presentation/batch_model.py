@@ -411,10 +411,12 @@ class BatchModelMixin:
                 notes.append(f"Instrument profile “{name}” is not here: the geometry is matched automatically.")
                 name = None
         corrections = settings.corrections
-        for label, path in (("Mask file", corrections.mask_path), ("Background frame", corrections.background_path)):
+        for label, key in (("Mask file", "mask_path"), ("Background frame", "background_path"),
+                           ("Flat-field file", "flat_field_path")):
+            path = getattr(corrections, key)
             if path and not Path(path).exists():
                 notes.append(f"{label} not found, left out: {path}")
-                corrections = replace(corrections, **({"mask_path": None} if label == "Mask file" else {"background_path": None}))
+                corrections = replace(corrections, **{key: None})
         self.state.mode = settings.mode
         self.state.profile_name = name
         self.state.incidence_deg = settings.incidence_deg

@@ -98,6 +98,7 @@ def settings_record(settings: AnalyzeSettings) -> dict[str, Any]:
             "background_path": corrections.background_path,
             "background_frame": int(corrections.background_frame),
             "background_scale": float(corrections.background_scale),
+            "flat_field_path": corrections.flat_field_path,
             "mask_path": corrections.mask_path,
             "mask_shapes": [
                 {"kind": shape.kind, "points": [list(point) for point in shape.points]} for shape in corrections.mask_shapes
@@ -147,6 +148,7 @@ def settings_from_record(record: Any) -> AnalyzeSettings:
             background_path=values.get("background_path") or None,
             background_frame=int(values.get("background_frame", 0)),
             background_scale=float(values.get("background_scale", 1.0)),
+            flat_field_path=values.get("flat_field_path") or None,
             minimum=_optional_float(values.get("minimum")),
             maximum=_optional_float(values.get("maximum")),
             gap_guard_px=int(values.get("gap_guard_px", 0)),

@@ -140,6 +140,7 @@ from .batch_folder import (
 from .batch_report import BatchRun, batch_record, is_gisaxs, readme_text, written_kinds
 from .batch_tables import common_x
 from .export_record import frame_cuts, frame_name, frame_name_of, frame_stem, source_files
+from .flat_field import FlatFieldUse
 from .cut_regions import (
     CUT_SET_FORMAT,
     PlaceRegions,
@@ -209,6 +210,7 @@ def q_at_position(geometry: DetectorGeometry, x_px: float, y_px: float) -> dict[
 
 
 __all__ = [
+    "FlatFieldUse",
     "FitCurvePreview", "FrameFitPreview", "failed_preview", "model_preview", "peak_preview",
     "BatchRun",
     "EarlierExport",

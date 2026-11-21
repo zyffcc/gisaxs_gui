@@ -44,6 +44,16 @@ class OptionsModelMixin:
             background_scale=float(scale),
         )
 
+    def set_flat_field(self, path: Optional[str | Path]) -> None:
+        """Divide every analysed frame by this flat field (``None`` stops)."""
+        self.state.corrections = replace(self.state.corrections, flat_field_path=str(path) if path else None)
+
+    def check_flat_field(self, path: str | Path):
+        """What the flat field of ``path`` is (``FlatFieldUse``: mean, pixels it leaves out); ``ValueError`` (the
+        application's sentence) or ``OSError`` when it cannot be read or is not of the size of the frame shown."""
+        analysis = self.state.analysis
+        return self._analyze_frame.check_flat_field_file(path, analysis.shape if analysis is not None else None)
+
     def set_valid_range(self, minimum: Optional[float], maximum: Optional[float]) -> None:
         if minimum is not None and maximum is not None and minimum > maximum:
             minimum, maximum = maximum, minimum
@@ -54,11 +64,12 @@ class OptionsModelMixin:
         )
 
     def reset_corrections(self) -> None:
-        """No background or range; the gap guard, bad pixels, masks and mirror filling stay (the set-up's)."""
+        """No background or range; the gap guard, bad pixels, masks, flat field and mirror filling stay (the
+        set-up's: they belong to the detector)."""
         current = self.state.corrections
         self.state.corrections = Corrections(
             gap_guard_px=current.gap_guard_px, bad_pixels=current.bad_pixels, mask_shapes=current.mask_shapes,
-            mask_path=current.mask_path, mirror_fill=current.mirror_fill,
+            mask_path=current.mask_path, mirror_fill=current.mirror_fill, flat_field_path=current.flat_field_path,
         )
 
     # -- masks and mirror filling ---------------------------------------------------------

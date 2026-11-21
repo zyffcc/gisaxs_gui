@@ -26,6 +26,7 @@ from ..domain import reliable as is_reliable
 from ..domain.notes import calibrants_in_notes
 from .gisaxs_procedure import GisaxsProcedureMixin
 from .giwaxs_decisions import (
+    flat_field_decision,
     horizon_decision,
     peak_cap_decision,
     refraction_decision,
@@ -430,6 +431,9 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
     def _analyse(self) -> None:
         status = self.catalog.results.status or {}
         self._run.decisions.append(refraction_decision(status.get("geometry"), given=self._incidence is not None))
+        flat = flat_field_decision(status)
+        if flat is not None:
+            self._run.decisions.append(flat)
         cap = max(1, int(self.options.max_peaks))
         self._call("find_peaks", {"curve": "radial"} if cap == MAX_PEAKS else {"curve": "radial", "max_peaks": cap})
         search = self.catalog.results.peak_searches.get("radial")
