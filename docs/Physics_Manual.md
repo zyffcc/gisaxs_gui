@@ -99,6 +99,9 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [9.11 The three-population model](#911-the-three-population-model)
   - [9.12 fit1d (removed in 0.2.0)](#912-fit1d-removed-in-020)
   - [9.13 Predict parameters](#913-predict-parameters)
+  - [9.14 Models for manual fitting](#914-models-for-manual-fitting)
+  - [9.15 Links and constraints between parameters](#915-links-and-constraints-between-parameters)
+  - [9.16 Uncertainty after Refine and Search](#916-uncertainty-after-refine-and-search)
 - [10. 1D Predict (many curves)](#10-1d-predict-many-curves)
   - [10.1 Input](#101-input)
   - [10.2 The method](#102-the-method)
@@ -2081,9 +2084,15 @@ Implementation: `src/gimap/features/fitting/domain/cut_model/structure.py`, `src
 | wavelength | λ | nm | 0.1 | 0.005–1 | no |
 | refl_amp | \|r\| | – | 0 | 0–1 | no |
 | refl_phase | arg r | rad | 0 | −π–π | no |
+| t_shell | t (core–shell sphere, 9.14) | nm | 2 | 0–200 | yes |
+| core_contrast | ρc/ρs (core–shell sphere) | – | 2 | 0–100 | yes |
+| R_hs | R_HS (hard spheres, 9.14) | nm | 1.1 × the outer radius | 0.3–1000 | yes |
+| phi | φ (hard spheres) | – | 0.2 | 0–0.55 | yes |
 
-Each component has Int, R, σR/R (h and σh/h for random cylinders) and, with its structure factor, D and σnn/D; its
-**Sizes** (Gaussian by number, the default; log-normal by number; Gaussian by intensity) and, with D, its **Coupling**.
+Each component has Int, R, σR/R (h and σh/h for random cylinders; t and ρc/ρs for core–shell spheres) and, with its
+structure factor (**S(q)**), the values of its **Interference** function — D and σnn/D of the 1D paracrystal (the
+default) or the 2D hexagonal paracrystal, R_HS and φ of hard spheres (9.14); its **Sizes** (Gaussian by number, the
+default; log-normal by number; Gaussian by intensity) and, with S(q), its **Coupling**.
 
 **D is at least 2R.** A fit keeps the distance of a component's paracrystal at or above twice its mean radius, so
 particles of the mean radius do not overlap. With R and D both free, D is searched between max(D_min, 2R) and
@@ -2091,8 +2100,30 @@ D_max at every R; with R fixed, D's minimum is raised to 2R; with D fixed, R's m
 ends at 2R is reported at its lower bound (section 9.8): the particles touch, and the curve does not hold D there.
 Values that are not fitted are left as they are. For a random cylinder 2R is the smallest in-plane size, so the
 limit is a minimum, not its contact distance. Before 0.2, D could fall below 2R (on the GALAXI cut of 9.10 to 1 nm).
+The contact is the switch **Particles do not overlap** of the Model step (on by default; 9.15); for core–shell spheres
+and hard spheres it is the inequality of 9.14.
 
-Implementation: `src/gimap/features/fitting/domain/fit_model.py`
+**The beam tail in Refine and Search.** With the generic ranges of the table (A ≥ 0 without an upper limit, w
+0.001–0.1 nm⁻¹, ν 1–20) a fit can trade a tail of huge A and a width far below the first point for a power law over
+the curve: in Search A ran to 10¹⁷–10²² with no defined error and ν at 20. The tail's ranges are therefore tied to the
+curve where a model meets one — when a curve is opened with the starting model (or with the ranges the page set for
+the previous curve), when Refine or Search starts from the generic ranges (said in the status line; a step of Undo),
+and for every frame of a series whose start model has them:
+
+```text
+0 ≤ A ≤ 10 · max(I) / k,    0.3 q_min ≤ w ≤ min(30 q_min, q_max),    1 ≤ ν ≤ 6       (over the fitted points)
+```
+
+The w window is that of Predict's prior (9.13). A starting model also takes w = q_min and ν = −(slope of the first six
+points in log–log) when that slope is below −1 (else 3; at most 6); A is then solved with the scales (9.17). Ranges typed
+in Model are kept, and the fit itself never changes a range (9.8). After Refine or Search a tail in use (A above the
+lower edge of its range) is flagged when A, w or ν is at an edge of its range or has no finite error: a warning in the
+Results step and in the report, and in a series the frame counts as **flagged** (as does a frame with any value
+without a finite error; the series record lists them under `flagged`). Predict parameters keeps its own prior's ranges
+(w ≤ 30 q_min, ν 1.8–2.2): a solution of it does not have the generic ranges and is never changed.
+
+Implementation: `src/gimap/features/fitting/domain/fit_model.py`, `domain/beam_tail.py`,
+`application/single_fit.py` (`tail_for_curve`)
 
 ### 9.7 Objective and the scales
 
@@ -2829,6 +2860,157 @@ Implementation: `src/gimap/features/fitting/domain/posterior/`, `application/sin
 `infrastructure/adapters/posterior_job.py`; training and checks: `tools/ml1d/`; benchmarks:
 `tools/benchmarks/posterior_recovery.py`, `posterior_pairs.py`, `summary_tables.py`, `v5_recovery.py`,
 `galaxi_posterior.py`.
+
+### 9.14 Models for manual fitting
+
+Refine and Search also fit the models below. Predict parameters proposes only the families it was trained on
+(sphere, random cylinder, vertical cylinder, each with or without the 1D paracrystal, 9.13): a model with one of these
+is for Refine and Search. In the Model step they are the family **Core–shell sphere** and, with **S(q)** on, the
+**Interference** choices **2D hexagonal paracrystal** and **Hard spheres (Percus–Yevick)**. The LMA and the DA (9.5)
+apply to every interference function. Each is unit-scale like the others: a form factor is 1 at q = 0, a structure
+factor → 1 at large q.
+
+**Core–shell sphere.** A core of radius R (its size distribution as chosen in **Sizes**, 9.3) inside a shell of fixed
+thickness t; the core's scattering contrast is ρc/ρs times the shell's (0: a hollow shell; 1: a homogeneous sphere of
+radius R + t):
+
+```text
+A(q; R) = R_s³ f(q R_s) + (ρc/ρs − 1) R³ f(q R),   R_s = R + t,   f(x) = 3 (sin x − x cos x)/x³          (9.32)
+P̂(q) = ⟨A²⟩ / ⟨A(0)²⟩,    C(q) = ⟨A⟩² / ⟨A(0)²⟩      (number averages over R)                          (9.33)
+```
+
+This is SasView's `core_shell_sphere` with ρc/ρs = (ρ_core − ρ_solvent)/(ρ_shell − ρ_solvent) (Guinier & Fournet,
+1955). It is evaluated at q_z = 0 (the effective interface; the angles of *Spheres in grazing incidence* do not apply).
+The quadrature over R is that of 9.3 (Gauss–Legendre panels following q_max times the width of the distribution),
+without the envelope at large q. With *Gaussian, by intensity* the intensity weight of a core radius is taken as R⁶
+(the core's V²), an approximation: V² of a core–shell particle depends on t and ρc/ρs too.
+
+**Hard spheres (Percus–Yevick).** The structure factor of hard spheres of radius R_HS at volume fraction φ in the
+Percus–Yevick closure (Percus & Yevick, 1958; solved by Wertheim, 1963, and Thiele, 1963), in the closed form of
+Kinning & Thomas (1984) that SasView's `hardsphere` uses:
+
+```text
+S(q) = 1 / [ 1 + 24 φ I(x) ],   x = 2 q R_HS                                                              (9.34)
+I(x) = ∫₀¹ (α s² + β s³ + γ s⁵) sin(x s)/(x s) ds
+     = α (sin x − x cos x)/x³ + β (2x sin x + (2 − x²) cos x − 2)/x⁴
+       + γ (−x⁴ cos x + 4 [(3x² − 6) cos x + (x³ − 6x) sin x + 6])/x⁶                                     (9.35)
+α = (1 + 2φ)²/(1 − φ)⁴,   β = −6φ (1 + φ/2)²/(1 − φ)⁴,   γ = φ α / 2,   S(0) = (1 − φ)⁴/(1 + 2φ)²
+```
+
+Below x = 1 the integral is summed as its Taylor series (14 terms), which avoids the cancellation of (9.35). A new
+R_HS is 1.1 × the particle's outer radius; φ is limited to 0.55 (the Percus–Yevick closure is reliable up to about 0.5).
+For particles on a surface, S of a three-dimensional hard-sphere liquid is an approximation of their arrangement in the
+plane; hard disks in 2D are not in the library.
+
+**2D hexagonal paracrystal.** A hexagonal lattice of nearest-neighbour distance D (lattice angle 120°) whose
+neighbours are displaced by an isotropic Gaussian of standard deviation ω = σ·D in each in-plane direction (σ is the
+model's σnn/D), with infinite domains, averaged over the in-plane orientation ξ of the domains (Hosemann & Bagchi,
+1962; Renaud, Lazzari & Leroy, 2009, Surf. Sci. Rep. 64, 255; BornAgain's `Paracrystal2D` with integration over ξ,
+Pospelov et al., 2020, J. Appl. Cryst. 53, 262):
+
+```text
+S(q) = (1/π) ∫₀^π s(q D cos ξ) · s(q D cos(ξ + 2π/3)) dξ                                                  (9.36)
+s(θ) = Re[ (1 + φ)/(1 − φ) ] = (1 − p²)/(1 − 2p cos θ + p²),   φ = p e^{iθ},   p = exp(−q² ω²/2)              (9.37)
+```
+
+s is evaluated as in (9.12), without cancellation near p = 1. The integrand has period π in ξ and is integrated by the
+midpoint rule with 3 points per half-width (1 − p)/(q D) of its narrowest peak (a power of 2 per q, 64 to 2¹⁸ points;
+the error of the rule falls as e^(−2π·3)). As in BornAgain and IsGISAXS, this product form rises as 1/(q D) towards
+q = 0; fit windows with q D ≳ 1.
+
+**Contact.** With **Particles do not overlap** (9.15, on by default), while both are fitted: the paracrystal's D at
+least 2(R + t) for a core–shell sphere, R_HS at least the outer radius R (+ t), applied as inequalities (9.15); for
+the other families D ≥ 2R as in 9.6.
+
+**Checks** (`tests/test_fit_model_library.py`):
+
+| Model | Against | Agreement (relative) |
+|---|---|---|
+| Hard spheres, φ = 0.05–0.5 | the 3D Fourier transform of Wertheim's direct correlation function, by adaptive quadrature | 10⁻⁸; S(0) = (1 − φ)⁴/(1 + 2φ)² |
+| Hard spheres | SasView's closed form (Kinning & Thomas) | 10⁻⁹ |
+| Core–shell, one size | SasView's amplitude with scattering-length densities | 10⁻⁹ |
+| Core–shell, Gaussian of R (σR/R 0.1) | the same, averaged by a 4001-point rule | 2 · 10⁻⁵ (P̂ and C) |
+| Core–shell, ρc/ρs = 1 and t = 0 | `cut_model`'s sphere of R + t and of R | 10⁻⁹ |
+| 2D paracrystal, D 12–35 nm, σ 0.05–0.25 | BornAgain's formula, complex, by adaptive quadrature | 10⁻⁶ |
+| 2D paracrystal, D 20 nm, σ 0.1 | a BornAgain 24.1 simulation (Born approximation, particles of 0.5 nm, divided by a dilute layout and by the lattice's density) | 2 · 10⁻³ (skipped without BornAgain) |
+
+Against BornAgain simulations over D = 12–35 nm and σ = 0.04–0.25 the largest deviation was 10⁻⁵–10⁻² (median
+10⁻⁶–10⁻³), the largest at the sharp peaks of the smallest σ, where BornAgain's adaptive integration is the coarser.
+
+Implementation: `src/gimap/features/fitting/domain/model_library.py`
+
+### 9.15 Links and constraints between parameters
+
+**Names.** Every parameter has a name: a component's `<key>_<n>` (`R_1`, `sigma_R_2`, `D_1`, `t_shell_1`, `R_hs_2`;
+n from 1), a global one its key (`background`, `res_width`). The tooltip of a parameter's name in Model gives it.
+
+**Links.** A parameter can be linked (its **=** button) to another (**Same as**) or to an expression of others
+(**Expression…**): `sigma_R_1` shares σR/R of population 1, `2*R_1` sets R₂ = 2R₁, `R_1 + t_shell_1`… Expressions are
+numbers, names, + − * / **, parentheses, the functions sqrt, exp, log, log10, sin, cos, tan, abs, min and max, and the
+constants pi and e. They are parsed with Python's `ast` and evaluated by this fixed set of operations, never by `eval`
+(at most 200 characters; an exponent above 1000 is refused). A linked parameter is not fitted: at every evaluation
+the free values are set and then the links in the order of their dependencies (a circle of links is refused). A
+linked scale (Int, BG, A) must be linear in the fitted scales it reads (`8*Int_1`, `Int_1*(R_1/R_2)**3`): its term
+joins their columns in (9.17), so the scales are still solved exactly; a size linked to a fitted scale is refused. The
+error of a linked value comes from the covariance (9.25):
+
+```text
+σ_link² = gᵀ C g,    g_k = ∂(link)/∂x_k   (central differences, step 10⁻⁴ × the size of x_k)               (9.38)
+```
+
+A linked parameter's own range is not enforced.
+
+**Inequalities.** A constraint `NAME >= expression` or `NAME <= expression` (**Add Constraint…** in the card *Links and
+constraints*) keeps a fitted non-linear value on one side of an expression of the others, e.g. `D_2 >= 2*R_2 + 3`. It
+acts by a change of variables like the contact D ≥ 2R (9.6): with the other values set, the value is searched between
+max(l, bound) and u (≥), or between l and min(u, bound) (≤), on a log scale when its range is; constraints act in the
+order listed, after the contact. A constraint on a fixed value or a scale does not act (it stays in the model). A
+value that ends at its bound is reported at a bound (9.8). **Particles do not overlap** switches the contact of 9.6 and
+9.14 off, for models where touching or interpenetrating particles are meant.
+
+Links, constraints and the contact switch are saved with the model (a parameter's `tie`, `constraints`, `contact`;
+written only when used, so that a model without them reads as in earlier versions) and in the fit's record (`links`).
+Removing a component drops the links and constraints that read it and renumbers the names of the later ones. A model
+without links or constraints is fitted exactly as before (the same code path: Predict parameters gives the same
+numbers). Predict parameters does not use links: its proposals are complete solutions of the families it knows.
+
+Implementation: `src/gimap/features/fitting/domain/fit_links.py`, `linked_fit.py`, `fit_engine.py`
+
+### 9.16 Uncertainty after Refine and Search
+
+**Correlation matrix.** The covariance C of (9.25) is kept with the fit (its parameter order with it) and shown in
+**Results ▸ Uncertainty and Report…** as the correlation matrix ρ_kl (9.26): a heat map with the values (blue −1, white
+0, red +1; grey for a direction the curve does not see, whose error is not defined), beside every free and linked value
+with its 1σ error and relative error. The pairs with |ρ| > 0.9 are listed (the Results step's own warning keeps 0.95).
+The record of **Save Data and Fit…** holds the same (`fit.correlation`, `fit.covariance`, `fit.correlated_above_0.9`).
+
+**Values not determined.** A free value whose 1σ error is not finite, or — for sizes, spreads, distances and the
+tail's shape — larger than 10 times the value, is *not determined by the curve*: ⚠ in the Results table and the report,
+`fit.undetermined` in the record. Not counted: values at a bound (said as such), a scale at 0, and the values of a term
+whose scale is 0.
+
+**χ² profile.** For one parameter x: x fixed at each value of a grid (by default 15 values over ±3σ around the fitted
+value, inside its range; its range when σ is not known, on a log grid when the range spans a decade or more), the
+other free values fitted again by Refine, from the neighbouring grid point outwards from the best fit, and
+
+```text
+Δχ²(x) = [ Σr²(x) − Σr²_best ] / s²,    s² = Σr²_best / (N − p)                                            (9.39)
+```
+
+The 68 % interval is where Δχ² ≤ 1 (linear interpolation between grid points; *open* on a side where the grid ends
+first). With χ²_red = 1 this is the usual Δχ² = 1 rule; in units of s² it is the interval that the covariance errors,
+scaled by χ²_red (9.8), linearise, so the two agree for a well-determined value, and the profile shows where they do
+not (an asymmetric or open interval). A grid point with Δχ² < 0 means the fit had not reached its minimum: Refine again.
+The profile runs in the background; **Stop** keeps the points done.
+
+**Fit report.** Markdown, HTML or plain text (**Copy**, **Save Report…**), made from the same record as **Save Data
+and Fit…**: the data file with its SHA-256, the points, their q range, halves and weighting; the model (families,
+sizes, interference function and coupling, links, constraints, contact) and its equation; the method and its outcome;
+χ²_red over the points and free values, and log RMSE; every parameter with value, ± 1σ, status (fitted, fixed,
+linked, at a bound, not determined) and range; the pairs with |ρ| > 0.9; and the warnings.
+
+Implementation: `src/gimap/features/fitting/domain/fit_profile.py`, `application/fit_uncertainty.py`,
+`application/fit_report.py`
 
 ## 10. 1D Predict (many curves)
 

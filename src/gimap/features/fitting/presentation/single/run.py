@@ -125,6 +125,8 @@ class FitRunMixin:
         if data is None or data.q.size < 3:
             self._status(tr("Too few points in the fitting range: widen it in the Curve step."), "warning")
             return
+        if method in ("local", "global"):
+            self.tie_tail_before_fit(data)  # generic beam-tail ranges: set from this curve, in Model (tail_ranges.py)
         self._stop_event.clear()
         self._running = self._last_method = method
         self._busy(True)

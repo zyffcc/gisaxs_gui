@@ -49,6 +49,8 @@ from .plotting import FitPlotMixin
 from .results import FitResultsMixin
 from .run import FitRunMixin
 from .session import FitSession, Solution, model_label
+from .tail_ranges import TailRangesMixin
+from .uncertainty import UncertaintyMixin
 
 CURVE_FILTER = "Curves ({});;All files (*)".format(" ".join(f"*{suffix}" for suffix in CURVE_SUFFIXES))
 """The curve files the reader takes (``application.CURVE_SUFFIXES``: .dat, .txt, NXcanSAS .h5)."""
@@ -67,7 +69,8 @@ def _saved_source(token):
 
 
 class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunMixin, FitResultsMixin,
-              FitExclusionMixin, PredictPageMixin, MethodHintMixin, EquivalentSolutionsMixin, ResultActionsMixin, CurveUnitMixin, CurveInfoMixin, FitPlotMixin):
+              FitExclusionMixin, PredictPageMixin, MethodHintMixin, EquivalentSolutionsMixin, ResultActionsMixin, CurveUnitMixin, CurveInfoMixin, FitPlotMixin,
+              UncertaintyMixin, TailRangesMixin):
     curveOpened = pyqtSignal(str)
     """The file of the curve now on the page (In-situ series takes its set-up from it)."""
     batchRequested = pyqtSignal()
@@ -106,6 +109,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.setup_equivalent_solutions()
         self.setup_run()
         self.setup_results()
+        self.setup_uncertainty()  # correlations, χ² profile and the fit report (uncertainty.py)
         self.setup_result_actions()
         self.setup_exclusion()
         self.setup_curve_unit()  # the unit of q of files without one in their header (curve_unit.py)
@@ -130,6 +134,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.plot.log_check.toggled.connect(lambda _on: self._redraw())
         self.show_ranges_check.toggled.connect(self.model_editor.set_show_ranges)
         self.model_editor.edited.connect(self._model_edited)
+        self.model_editor.message.connect(lambda text, level: self._status(text, level))
         self.batch_button.clicked.connect(self.batchRequested)
         for keys, slot in (("Ctrl+Z", self.undo), ("Ctrl+Shift+Z", self.redo), ("Ctrl+Y", self.redo),
                            ("Ctrl+Return", self.run_fit)):  # File ▸ Open Data opens a curve while Fitting is shown
@@ -243,6 +248,8 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         if side is not None and curve.signed:  # a curve with one side has no halves to choose from
             self.session.side = ANALYZE_SIDES.get(side, side if side in dict(SIDES) else "mean")
         data = self._data()
+        if data is not None and data.q.size >= 3:
+            self.follow_tail(data)  # the beam tail's ranges nobody chose follow this curve (tail_ranges.py)
         if not self.session.edited and data is not None and data.q.size >= 3:
             self.session.model = fit_scales(self.session.model, data)  # the starting model at the curve's level
         self._follow_saved_unit()

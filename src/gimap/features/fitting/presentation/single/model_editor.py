@@ -1,19 +1,19 @@
-"""The model of one curve as cards: one per particle component, one for background and resolution.
+"""The model of one curve as cards: one per particle component, one for background and resolution, one for the
+spheres in grazing incidence, and one for links and constraints.
 
-Each parameter is a row — name (unit), value, ± error of the last fit, “fit” (free or fixed), and,
-when ranges are shown, its min and max. A card's header chooses the family, switches the
-interparticle distance (paracrystal S(q)) on or off, and removes the component; under its parameters, the size
-distribution and (with D) the coupling. Every edit emits
-``edited`` with the new model; values typed outside their range widen the range.
+Each parameter is one line (``parameter_row``): name (unit), value, ± error of the last fit, min and max (when ranges
+are shown), fit (free or fixed) and its link button. A card's header chooses the family, switches the interference
+between neighbours S(q) on or off, and removes the component; under its parameters, the size distribution and (with
+S(q)) the interference function and the coupling. Every edit emits ``edited`` with the new model, its links applied;
+values typed outside their range widen the range.
 """
 
 from __future__ import annotations
 
-import math
 from dataclasses import replace
 from typing import Mapping, Optional
 
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -26,142 +26,48 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.gimap.app.presentation.i18n import tr
-from src.gimap.app.presentation.theme import set_role
+from src.gimap.app.presentation.i18n import tr, trf
 
+from ...application.fit_uncertainty import linked, prune_links, renumbered
 from ...application.single_fit import (
     BASE_GLOBALS,
     FAMILIES,
     GRAZING,
-    INFO,
-    LINEAR,
+    INTERFERENCES,
+    NETWORK_FAMILIES,
     RESOLUTION,
     SIZE_LAWS,
     Component,
     FitModel,
     new_component,
-    parameter_text,
+    with_interference,
 )
-from ..layout_primitives import ScientificDoubleSpinBox
+from .model_links import add_constraint, links_card, remove_constraint
+from .parameter_row import ParameterRow, header, label_text
 
-VALUE_LIMIT = 1e15
-
-
-def _spin(parent: QWidget, value: float, name: str) -> ScientificDoubleSpinBox:
-    spin = ScientificDoubleSpinBox(parent)
-    spin.setObjectName(name)
-    spin.setRange(-VALUE_LIMIT, VALUE_LIMIT)
-    spin.setDecimals(12)
-    spin.setKeyboardTracking(False)
-    _set(spin, value)
-    return spin
-
-
-def _set(spin: ScientificDoubleSpinBox, value: float) -> None:
-    spin.blockSignals(True)
-    spin.setValue(float(value) if math.isfinite(value) else VALUE_LIMIT)
-    spin.setSingleStep(max(abs(float(value)) * 0.05, 1e-6) if math.isfinite(value) else 1.0)
-    spin.blockSignals(False)
+MANUAL_ONLY = "For Refine and Search: Predict parameters does not propose this family"
+DROPPED = "Links or constraints that no longer hold were removed: {items}"
+SIZES_TIP = ("How R and σR/R are meant: the mean and relative spread of a Gaussian or a log-normal of the particle "
+             "count, or of a Gaussian of the intensity each size scatters (earlier Fitting). The results give the sizes "
+             "both by number and by intensity.")
+INTERFERENCE_TIP = ("1D paracrystal: neighbours along a line (Hosemann). 2D hexagonal paracrystal: a disordered "
+                    "hexagonal lattice in the plane, averaged over its orientation. Hard spheres: the Percus–Yevick "
+                    "liquid of radius R_HS and volume fraction φ. The last two are for Refine and Search only.")
+COUPLING_TIP = ("LMA: every size sits among neighbours of its own size. DA: sizes and positions are independent, so "
+                "the size spread adds scattering that the spacing does not modulate.")
 
 
-def _label(key: str) -> str:
-    """“Tail w (nm⁻¹)”: the name in the interface language, the unit as it is."""
-    info = INFO[key]
-    return tr(info.label) + (f" ({info.unit})" if info.unit else "")
-
-
-class _Row:
-    """The widgets of one parameter."""
-
-    def __init__(self, editor: "FitModelEditor", grid: QGridLayout, line: int, path: tuple, parent: QWidget):
-        """Two grid lines: name, value, ± error, fit; then (when ranges are shown) min – max."""
-        self.editor, self.path = editor, path
-        parameter = editor.model.get(path)
-        key = path[1]
-        self.name = QLabel(_label(key), parent)
-        self.name.setToolTip(tr(INFO[key].tip))
-        self.value = _spin(parent, parameter.value, f"fitValue_{path[0]}_{key}")
-        self.error = QLabel("", parent)
-        self.error.setObjectName(f"fitError_{path[0]}_{key}")
-        self.error.setProperty("gimapRole", "muted")
-        self.free = QCheckBox(tr("fit"), parent)
-        self.free.setObjectName(f"fitFree_{path[0]}_{key}")
-        self.free.setToolTip(tr("Ticked: the fit may change this value; unticked: it stays fixed"))
-        self.free.setChecked(parameter.free)
-        self.value.setMinimumWidth(96)
-        self.error.setMinimumWidth(56)
-        self.range = QWidget(parent)
-        span = QHBoxLayout(self.range)
-        span.setContentsMargins(0, 0, 0, 4)
-        span.setSpacing(4)
-        self.lower = _spin(self.range, parameter.lower, f"fitLower_{path[0]}_{key}")
-        self.upper = _spin(self.range, parameter.upper, f"fitUpper_{path[0]}_{key}")
-        self.unbounded = QCheckBox("∞", self.range)
-        self.unbounded.setObjectName(f"fitUnbounded_{path[0]}_{key}")
-        self.unbounded.setToolTip(tr("No upper limit"))
-        self.unbounded.setVisible(key in LINEAR)
-        self.unbounded.setChecked(math.isinf(parameter.upper))
-        self.upper.setEnabled(not self.unbounded.isChecked())
-        between = QLabel("–", self.range)
-        between.setProperty("gimapRole", "muted")
-        for spin in (self.lower, self.upper):
-            spin.setToolTip(tr("Range of this parameter: the fit keeps it inside, “Search the ranges” searches across it"))
-        span.addWidget(self.lower, 1)
-        span.addWidget(between)
-        span.addWidget(self.upper, 1)
-        span.addWidget(self.unbounded)
-        for column, widget in enumerate((self.name, self.value, self.error, self.free)):
-            grid.addWidget(widget, 2 * line, column)
-        grid.addWidget(self.range, 2 * line + 1, 1, 1, 3)
-        self.value.valueChanged.connect(self._value)
-        self.free.toggled.connect(lambda on: editor.change(path, free=bool(on)))
-        self.lower.valueChanged.connect(lambda value: editor.change(path, lower=float(value)))
-        self.upper.valueChanged.connect(lambda value: editor.change(path, upper=float(value)))
-        self.unbounded.toggled.connect(lambda on: editor.change(path, upper=math.inf if on else self.upper.value()))
-        self.show_range(editor.show_ranges)
-
-    def _value(self, value: float) -> None:
-        parameter = self.editor.model.get(self.path)
-        changes = {"value": float(value)}
-        if value < parameter.lower:
-            changes["lower"] = float(value) if value <= 0 else float(value) / 2
-        if value > parameter.upper:
-            changes["upper"] = float(value) * 2 if value > 0 else float(value)
-        self.editor.change(self.path, **changes)
-
-    def refresh(self, errors: Mapping, at_bounds) -> None:
-        parameter = self.editor.model.get(self.path)
-        _set(self.value, parameter.value)
-        _set(self.lower, parameter.lower)
-        _set(self.upper, parameter.upper)
-        self.unbounded.blockSignals(True)
-        self.unbounded.setChecked(math.isinf(parameter.upper))
-        self.unbounded.blockSignals(False)
-        self.upper.setEnabled(not self.unbounded.isChecked())
-        self.free.blockSignals(True)
-        self.free.setChecked(parameter.free)
-        self.free.blockSignals(False)
-        error = errors.get(self.path)
-        # A value at a bound has no error and may be wrong: a warning, not a muted note beside the errors.
-        set_role(self.error, "warning" if self.path in at_bounds else "muted")
-        if self.path in at_bounds:
-            self.error.setText("⚠ " + tr("at a bound"))
-            self.error.setToolTip(tr("The fit stopped at a bound of the range: widen the range or fix this value"))
-        elif error is not None:
-            shown = parameter_text(self.path[1], parameter.value, error)
-            self.error.setText("± —" if not math.isfinite(error) else "± " + shown.split("± ", 1)[-1])
-            self.error.setToolTip(tr("1σ error of the last fit") + f": {shown}")
-        else:
-            self.error.setText("")
-            self.error.setToolTip("")
-
-    def show_range(self, on: bool) -> None:
-        self.range.setVisible(on)
+def _narrow(box: QComboBox) -> None:
+    """A combo that does not ask for the width of its longest item (the Model panel is narrow)."""
+    box.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+    box.setMinimumContentsLength(10)
 
 
 class FitModelEditor(QWidget):
     edited = pyqtSignal(object)
     """The model after an edit by the person (``FitModel``)."""
+    message = pyqtSignal(str, str)
+    """(text, level): a link or constraint that could not be made, or that was removed."""
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -170,8 +76,10 @@ class FitModelEditor(QWidget):
         self.show_ranges = False
         self._errors: Mapping = {}
         self._at_bounds: tuple = ()
-        self._rows: dict[tuple, _Row] = {}
+        self._rows: dict[tuple, ParameterRow] = {}
         self._shape: tuple = ()
+        self._links_card: Optional[QFrame] = None
+        self._links_shape: tuple = ()
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(8)
@@ -185,24 +93,31 @@ class FitModelEditor(QWidget):
         if self._structure(model) != self._shape:
             self._rebuild()
         else:
-            for row in self._rows.values():
-                row.refresh(self._errors, self._at_bounds)
+            self._refresh_rows()
 
     def set_show_ranges(self, on: bool) -> None:
         self.show_ranges = bool(on)
         for row in self._rows.values():
             row.show_range(self.show_ranges)
+        for title in self.findChildren(QLabel, "fitRangeTitle"):
+            title.setVisible(self.show_ranges)
 
     def refresh_language(self) -> None:
         """After a switch of the interface language: the cards again (names with their units, families, tips)."""
         self._rebuild()
-        for row in self._rows.values():
-            row.refresh(self._errors, self._at_bounds)
+        self._refresh_rows()
 
     def add_component(self, family: str) -> None:
         radius = self.model.components[-1].value("R") if self.model.components else None
         component = new_component(family, radius=radius * 2 if radius else None)
         self._emit(replace(self.model, components=(*self.model.components, component)))
+
+    def path_title(self, path: tuple) -> str:
+        """“1·Sphere σR/R”, “Background”: a parameter in the link menu."""
+        owner, key = path
+        if owner == "globals":
+            return label_text(key)
+        return f"{owner + 1}·{tr(FAMILIES[self.model.components[owner].family][0])} {label_text(key)}"
 
     # -- edits --------------------------------------------------------------------------
 
@@ -210,37 +125,81 @@ class FitModelEditor(QWidget):
         self._errors = {key: value for key, value in self._errors.items() if key != path}
         self._emit(self.model.with_parameter(path, **changes), rebuild=False)
 
+    def link(self, path: tuple, expression: Optional[str]) -> None:
+        """Link ``path`` to ``expression`` (``None``: unlink; it keeps its value, fixed)."""
+        try:
+            model = linked(self.model, path, expression)
+        except ValueError as exc:
+            self.message.emit(trf("Could not link: {reason}", reason=str(exc)), "warning")
+            return
+        self._errors = {}
+        self._emit(model)
+
+    def set_contact(self, on: bool) -> None:
+        self._emit(replace(self.model, contact=bool(on)))
+
+    def add_constraint(self, text: str) -> None:
+        try:
+            model = add_constraint(self.model, text)
+        except ValueError as exc:
+            self.message.emit(trf("Could not add the constraint: {reason}", reason=str(exc)), "warning")
+            return
+        self._emit(model)
+
+    def remove_constraint(self, index: int) -> None:
+        self._emit(remove_constraint(self.model, index))
+
     def _replace_component(self, index: int, component: Optional[Component]) -> None:
-        components = list(self.model.components)
+        model = self.model
+        if component is None:
+            model = renumbered(model, index)  # links to later components move down; to this one they go
+        components = list(model.components)
         if component is None:
             del components[index]
         else:
             components[index] = component
         self._errors = {}
-        self._emit(replace(self.model, components=tuple(components)))
+        self._emit(replace(model, components=tuple(components)))
 
     def _family(self, index: int, family: str) -> None:
         old = self.model.components[index]
         if family == old.family:
             return
-        fresh = new_component(family, structure=old.structure, law=old.law)
+        fresh = new_component(family, structure=old.structure, law=old.law, interference=old.interference)
         params = {key: old.params.get(key, value) for key, value in fresh.params.items()}
         self._replace_component(index, replace(fresh, params=params, coupling=old.coupling))
 
+    def _interference(self, index: int, kind: str) -> None:
+        if kind != self.model.components[index].interference:
+            self._replace_component(index, with_interference(self.model.components[index], kind))
+
     def _emit(self, model: FitModel, *, rebuild: bool = True) -> None:
+        model, dropped = prune_links(model)  # linked values follow; links that lost a name go
+        if dropped:
+            self.message.emit(trf(DROPPED, items="; ".join(dropped)), "warning")
         self.model = model
         if rebuild and self._structure(model) != self._shape:
             self._rebuild()
         else:
-            for row in self._rows.values():
-                row.refresh(self._errors, self._at_bounds)
+            self._refresh_rows()
         self.edited.emit(model)
+
+    def _refresh_rows(self) -> None:
+        for row in self._rows.values():
+            row.refresh(self._errors, self._at_bounds)
+        if self._links_signature(self.model) != self._links_shape:
+            self._replace_links_card()
 
     # -- cards --------------------------------------------------------------------------
 
     @staticmethod
     def _structure(model: FitModel) -> tuple:
-        return tuple((component.family, component.structure) for component in model.components)
+        return tuple((c.family, c.structure, c.interference) for c in model.components)
+
+    @staticmethod
+    def _links_signature(model: FitModel) -> tuple:
+        ties = tuple((path, p.tie) for path, p in model.parameters() if p.tie)
+        return ties, tuple(model.inequalities), model.contact
 
     def _rebuild(self) -> None:
         while self._layout.count():
@@ -259,7 +218,20 @@ class FitModelEditor(QWidget):
             self._layout.addWidget(empty)
         self._layout.addWidget(self._globals_card())
         self._layout.addWidget(self._grazing_card())
+        self._links_card = links_card(self)
+        self._links_shape = self._links_signature(self.model)
+        self._layout.addWidget(self._links_card)
         self.set_show_ranges(self.show_ranges)
+
+    def _replace_links_card(self) -> None:
+        card = links_card(self)
+        if self._links_card is not None:
+            self._layout.replaceWidget(self._links_card, card)
+            self._links_card.setParent(None)
+            self._links_card.deleteLater()
+        else:
+            self._layout.addWidget(card)
+        self._links_card, self._links_shape = card, self._links_signature(self.model)
 
     def _card(self, name: str) -> tuple[QFrame, QVBoxLayout]:
         card = QFrame(self)
@@ -267,31 +239,42 @@ class FitModelEditor(QWidget):
         card.setProperty("gimapInfoCard", True)
         layout = QVBoxLayout(card)
         layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(6)
+        layout.setSpacing(4)
         return card, layout
 
-    @staticmethod
-    def _grid(card: QFrame) -> QGridLayout:
+    def _grid(self, card: QFrame, keys, owner) -> QGridLayout:
+        """One line per parameter of ``owner`` under the column titles."""
         grid = QGridLayout()
-        grid.setHorizontalSpacing(6)
-        grid.setVerticalSpacing(2)
-        grid.setColumnStretch(1, 1)
+        grid.setHorizontalSpacing(3)
+        grid.setVerticalSpacing(1)
+        grid.setColumnStretch(2, 1)  # the ± column takes what is left (its text is cut with “…”, the tooltip has it)
+        header(grid, card)
+        for column in (3, 4):
+            title = grid.itemAtPosition(0, column)
+            if title is not None and title.widget() is not None:
+                title.widget().setObjectName("fitRangeTitle")
+        for line, key in enumerate(keys):
+            self._rows[(owner, key)] = ParameterRow(self, grid, line, (owner, key), card)
         return grid
 
     def _component_card(self, index: int, component: Component) -> QFrame:
         card, layout = self._card(f"fitComponent_{index}")
-        header = QHBoxLayout()
+        top = QHBoxLayout()
         title = QLabel(f"{index + 1}", card)
         title.setProperty("gimapRole", "strong")
         family = QComboBox(card)
         family.setObjectName(f"fitFamily_{index}")
+        _narrow(family)
         for key, (name, _keys) in FAMILIES.items():
             family.addItem(tr(name), key)
+            if key not in NETWORK_FAMILIES:
+                family.setItemData(family.count() - 1, tr(MANUAL_ONLY), Qt.ToolTipRole)
         family.setCurrentIndex(family.findData(component.family))
         family.currentIndexChanged.connect(lambda _i, box=family, at=index: self._family(at, box.currentData()))
-        structure = QCheckBox(tr("Distance D"), card)
+        structure = QCheckBox("S(q)", card)
         structure.setObjectName(f"fitStructure_{index}")
-        structure.setToolTip(tr("Interference between neighbours: a paracrystal of distance D and disorder σnn/D"))
+        structure.setToolTip(tr("Interference between neighbours (a structure factor): choose its kind below the "
+                                "parameters"))
         structure.setChecked(component.structure)
         structure.toggled.connect(lambda on, at=index: self._replace_component(
             at, replace(self.model.components[at], structure=bool(on))))
@@ -301,53 +284,40 @@ class FitModelEditor(QWidget):
         remove.setAutoRaise(True)
         remove.setToolTip(tr("Remove this component"))
         remove.clicked.connect(lambda _checked=False, at=index: self._replace_component(at, None))
-        header.addWidget(title)
-        header.addWidget(family, 1)
-        header.addWidget(structure)
-        header.addWidget(remove)
-        layout.addLayout(header)
-        grid = self._grid(card)
-        for line, key in enumerate(component.keys()):
-            self._rows[(index, key)] = _Row(self, grid, line, (index, key), card)
-        layout.addLayout(grid)
-        layout.addLayout(self._sizes_row(index, component, card))
+        top.addWidget(title)
+        top.addWidget(family, 1)
+        top.addWidget(structure)
+        top.addWidget(remove)
+        layout.addLayout(top)
+        layout.addLayout(self._grid(card, component.keys(), index))
+        layout.addLayout(self._choice(card, "Sizes", f"fitSizes_{index}", SIZE_LAWS, component.law, index, "law",
+                                      SIZES_TIP))
         if component.structure:
-            layout.addLayout(self._coupling_row(index, component, card))
+            kinds = {key: name for key, (name, _keys) in INTERFERENCES.items()}
+            layout.addLayout(self._choice(card, "Interference", f"fitInterference_{index}", kinds,
+                                          component.interference, index, "interference", INTERFERENCE_TIP))
+            layout.addLayout(self._choice(card, "Coupling", f"fitCoupling_{index}",
+                                          {"lma": "LMA: P·S", "da": "DA: P + |⟨F⟩|²(S − 1)"}, component.coupling,
+                                          index, "coupling", COUPLING_TIP))
         return card
 
-    def _sizes_row(self, index: int, component: Component, card: QFrame) -> QHBoxLayout:
-        """The size distribution of R (and h): a Gaussian or a log-normal of the particle count, or a Gaussian of the
-        scattered intensity (earlier Fitting; Physics and Methods, section 9.3)."""
+    def _choice(self, card, label: str, name: str, items: dict, current: str, index: int, field: str,
+                tip: str) -> QHBoxLayout:
+        """A labelled combo of one of a component's choices (``field``: ``law``, ``interference``, ``coupling``)."""
         row = QHBoxLayout()
-        label = QLabel(tr("Sizes"), card)
         box = QComboBox(card)
-        box.setObjectName(f"fitSizes_{index}")
-        for key, name in SIZE_LAWS.items():
-            box.addItem(tr(name), key)
-        box.setToolTip(tr("How R and σR/R are meant: the mean and relative spread of a Gaussian or a log-normal of the "
-                          "particle count, or of a Gaussian of the intensity each size scatters (earlier Fitting). "
-                          "The results give the sizes both by number and by intensity."))
-        box.setCurrentIndex(max(0, box.findData(component.law)))
-        box.currentIndexChanged.connect(lambda _i, at=index, combo=box: self._replace_component(
-            at, replace(self.model.components[at], law=str(combo.currentData()))))
-        row.addWidget(label)
-        row.addWidget(box, 1)
-        return row
-
-    def _coupling_row(self, index: int, component: Component, card: QFrame) -> QHBoxLayout:
-        """How the paracrystal enters: P·S (LMA) or P + |<F>|²(S − 1) (DA; Physics and Methods, section 9.5)."""
-        row = QHBoxLayout()
-        label = QLabel(tr("Coupling"), card)
-        box = QComboBox(card)
-        box.setObjectName(f"fitCoupling_{index}")
-        box.addItem(tr("LMA: P·S"), "lma")
-        box.addItem(tr("DA: P + |⟨F⟩|²(S − 1)"), "da")
-        box.setToolTip(tr("LMA: every size sits among neighbours of its own size. DA: sizes and positions are "
-                          "independent, so the size spread adds scattering that the spacing does not modulate."))
-        box.setCurrentIndex(max(0, box.findData(component.coupling)))
-        box.currentIndexChanged.connect(lambda _i, at=index, combo=box: self._replace_component(
-            at, replace(self.model.components[at], coupling=str(combo.currentData()))))
-        row.addWidget(label)
+        box.setObjectName(name)
+        _narrow(box)
+        for key, text in items.items():
+            box.addItem(tr(text), key)
+        box.setToolTip(tr(tip))
+        box.setCurrentIndex(max(0, box.findData(current)))
+        if field == "interference":
+            box.currentIndexChanged.connect(lambda _i, at=index, combo=box: self._interference(at, str(combo.currentData())))
+        else:
+            box.currentIndexChanged.connect(lambda _i, at=index, combo=box, key=field: self._replace_component(
+                at, replace(self.model.components[at], **{key: str(combo.currentData())})))
+        row.addWidget(QLabel(tr(label), card))
         row.addWidget(box, 1)
         return row
 
@@ -358,10 +328,7 @@ class FitModelEditor(QWidget):
         title.setToolTip(tr("I(q) = BG + k·[Σ particles + A/(1 + (|q|/w)^ν)]: the peak is the direct and "
                             "reflected beam's tail and the resolution near q = 0"))
         layout.addWidget(title)
-        grid = self._grid(card)
-        for line, key in enumerate(BASE_GLOBALS + RESOLUTION):
-            self._rows[("globals", key)] = _Row(self, grid, line, ("globals", key), card)
-        layout.addLayout(grid)
+        layout.addLayout(self._grid(card, BASE_GLOBALS + RESOLUTION, "globals"))
         return card
 
     def _grazing_card(self) -> QFrame:
@@ -373,13 +340,10 @@ class FitModelEditor(QWidget):
                             "reflection coefficient r = |r|·e^(i·arg r); free |r| and arg r to fit it. "
                             "Cylinders are not affected."))
         layout.addWidget(title)
-        grid = self._grid(card)
-        for line, key in enumerate(GRAZING):
-            self._rows[("globals", key)] = _Row(self, grid, line, ("globals", key), card)
-        layout.addLayout(grid)
+        layout.addLayout(self._grid(card, GRAZING, "globals"))
         return card
 
-    def row(self, path: tuple) -> Optional[_Row]:
+    def row(self, path: tuple) -> Optional[ParameterRow]:
         return self._rows.get(path)
 
 

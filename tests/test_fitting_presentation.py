@@ -157,6 +157,7 @@ def test_fitting_views_are_python_view_owned():
         "fit_page_view.py",
         "fit_series_view.py",
         "fit_steps_view.py",
+        "fit_uncertainty_view.py",
     }
 
 

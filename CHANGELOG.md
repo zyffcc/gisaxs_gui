@@ -12,6 +12,22 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Fitting: links and constraints, the uncertainty of a fit, a report, a tail that stays within the curve, and more
+  models for manual fits.** In the Model step every value is one line (name, value, ±, min, max, fit and **=**), so two
+  populations fit on one screen. **=** links a value to another (one σR/R or one D for two populations) or to an
+  expression of others (`2*R_1`; parsed, never `eval`-ed); the card **Links and constraints** lists them, switches
+  **Particles do not overlap** (D ≥ 2R) and takes inequality constraints (`D_2 >= 2*R_2 + 3`); linked values follow
+  the others in every fit and get their errors by propagation; all of it is saved with the model and in the record.
+  **Results ▸ Uncertainty and Report…** shows, after Refine or Search, the correlation matrix as a heat map with its
+  values and the covariance errors, names the pairs with |r| > 0.9, draws the χ² profile of one value with its
+  Δχ² = 1 interval, and writes a fit report (Markdown, HTML or text); the record of Save Data and Fit… gains the
+  correlation matrix and covariance. The beam tail's ranges now follow the curve in Refine and Search (A ≤ 10× the
+  largest intensity, w within 0.3 q_min–min(30 q_min, q_max), ν ≤ 6) — with the old ranges A ran to 10¹⁷ and more —
+  and a tail at an edge or without a finite error is flagged; a series counts such frames as flagged. New for Refine
+  and Search (Predict parameters is unchanged): the **Core–shell sphere** and, as **Interference**, the **2D hexagonal
+  paracrystal** and **Hard spheres (Percus–Yevick)**, each checked against SasView's formulas or BornAgain
+  (*Physics and Methods* 9.6, 9.14–9.16).
+
 - **A sphere too large for the form factor at q_z = 0 is flagged.** Predict parameters fits a cut at q_z = 0 (the
   effective interface) unless it is given the cut's angles; for spheres that holds within about 5 % of R only up to
   q_z·R ≈ 1.7 (on the four-term DWBA benchmark the median error of R is 15–29 % above it, with both angles below

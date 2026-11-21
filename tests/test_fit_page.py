@@ -188,7 +188,8 @@ def test_refine_finds_the_values_with_errors_and_undo_brings_the_start_back(tmp_
     assert fitted.get((0, "R")).value == pytest.approx(6.0, rel=0.05)
     assert result.chi2_reduced == pytest.approx(1.0, abs=0.3)
     row = page.model_editor.row((0, "R"))
-    assert row.error.text().startswith("± ") and "nm" in row.error.text()
+    # one line per parameter: the ± without its unit (the name has it), the tooltip whole
+    assert row.error.text().startswith("± ") and "nm" not in row.error.text() and row.error.toolTip().endswith("nm")
     assert page.parameters_table.rowCount() >= 5 and page.step_rail.state("fit") == "ok"
     assert page.step_stack.currentWidget() is page.step_pages["results"]
     page.undo()  # the fit is one step of the history

@@ -227,6 +227,7 @@ class FitResultsMixin:
         self.render_result_actions()  # next steps, what the fit did by itself, the folds (result_actions.py)
         self.fit_notes_button.setVisible(bool(self.warnings_label.text() or not self.actions_label.isHidden()))
         self.refresh_equivalent_selector()
+        self.refresh_uncertainty()  # the Uncertainty and Report window (uncertainty.py)
 
     def _render_model_results(self) -> None:
         header = self.parameters_table.horizontalHeader()
@@ -281,6 +282,7 @@ class FitResultsMixin:
             for path in result.at_bounds:
                 lines.append("⚠ " + tr("{name} stopped at a bound of its range: widen the range or fix it.").format(
                     name=self._path_name(path)))
+        lines.extend(self.flag_lines(result))  # values the curve does not determine, a beam tail at an edge
         if result.correlated:
             pairs = [f"{self._path_name(first)} ↔ {self._path_name(second)} ({rho:+.2f})"
                      for first, second, rho in result.correlated]
@@ -338,6 +340,7 @@ class FitResultsMixin:
             why = ""
             if result is not None and parameter.free and not plus:  # a free value the fit gives no error for
                 plus, why = "–", predict_texts.no_error_reason(path, parameter, result, self.session.model)
+            plus, why = self.flag_cell(path, result, plus, why)
             rows.append(((self._path_name(path), full), value, (plus, why)))
         self.parameters_table.setRowCount(len(rows))
         self._row_paths = [path for path, parameter in self.session.model.parameters()

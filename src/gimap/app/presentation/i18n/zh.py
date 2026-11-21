@@ -9,6 +9,7 @@ from .zh_analyze import ANALYZE_ZH
 from .zh_analyze_runtime import ANALYZE_RUNTIME_ZH
 from .zh_fitting import FITTING_ZH
 from .zh_fit_controls import FIT_CONTROLS_ZH
+from .zh_fit_model import FIT_MODEL_ZH
 from .zh_curve_import import CURVE_IMPORT_ZH
 from .zh_compare import COMPARE_ZH
 from .zh_night import NIGHT_ZH
@@ -565,7 +566,7 @@ ZH = {
 }
 
 ZH.update(ANALYZE_ZH)
-ZH.update({**FITTING_ZH, **FIT_CONTROLS_ZH})
+ZH.update({**FITTING_ZH, **FIT_CONTROLS_ZH, **FIT_MODEL_ZH})
 ZH.update(CURVE_IMPORT_ZH)
 ZH.update(NIGHT_ZH)
 ZH.update(COMPARE_ZH)

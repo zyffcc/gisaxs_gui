@@ -2000,13 +2000,21 @@ Analysis** to inspect its contributions here.
 
 **2. Model**
 
-- **Add Particle** adds one card per particle: **Sphere**, **Random cylinder** or **Vertical cylinder**.
-- Each card has **Distance D** on or off (the paracrystal interference between neighbours), with **Coupling**
-  LMA (P·S, the default) or DA (sizes independent of positions;
-  [Physics and Methods, section 9.5](Physics_Manual.md#95-structure-factor-one-dimensional-paracrystal)), and its values:
-  scale, R and **σR/R**, h and **σh/h** for random cylinders, D and **σnn/D** (the relative standard deviation of the
-  distance between neighbours). Spreads are relative everywhere (as in Analyze's results and in
-  1D Predict). The scale is the intensity of the particles at q = 0: every form factor is 1 there.
+- **Add Particle** adds one card per particle: **Sphere**, **Random cylinder**, **Vertical cylinder** or
+  **Core–shell sphere** (a core of radius R in a shell of thickness **t**, the core's contrast **ρc/ρs** times the
+  shell's; for Refine and Search: Predict parameters does not propose it).
+- Each card has **S(q)** on or off (the interference between neighbours). With it, **Interference** chooses the
+  function — **1D paracrystal** (the default: D and **σnn/D**, the relative standard deviation of the distance between
+  neighbours), **2D hexagonal paracrystal** (a disordered hexagonal lattice in the plane, averaged over its orientation:
+  D and σnn/D) or **Hard spheres (Percus–Yevick)** (radius **R_HS** and volume fraction **φ**); the last two are for
+  Refine and Search — and **Coupling** LMA (P·S, the default) or DA (sizes independent of positions;
+  [Physics and Methods, sections 9.5](Physics_Manual.md#95-structure-factor-one-dimensional-paracrystal) and
+  [9.14](Physics_Manual.md#914-models-for-manual-fitting)). The values: scale, R and **σR/R**, h and **σh/h** for random
+  cylinders, t and ρc/ρs for core–shell spheres, and those of the interference function. Spreads are relative
+  everywhere (as in Analyze's results and in 1D Predict). The scale is the intensity of the particles at q = 0: every
+  form factor is 1 there.
+- Each value is one line: its name (the tooltip gives its name in links, such as `R_1`), the value, ± its error after a
+  fit, **min** and **max** (with **Ranges**), **fit** and **=** (link). Two populations fit on one screen.
 - **Sizes** under the values says what R and σR/R are: *Gaussian, by number* (the default: the mean and relative
   spread of the particle count, as a microscope counts), *Log-normal, by number* (for broad distributions)
   or *Gaussian, by intensity* (each size scatters the same at q = 0; Fitting's earlier sizes). After a fit the
@@ -2014,12 +2022,23 @@ Analysis** to inspect its contributions here.
   ([Physics and Methods, section 9.3](Physics_Manual.md#93-size-distributions)). A model saved by an earlier version
   opens with the sizes it had, its σD/D converted to σnn/D (× √(2π)) and the scale of a vertical cylinder converted.
 - **fit** ticked: the fit may change the value. Unticked: the value stays fixed.
+- **=** links the value to another (**Same as**: e.g. one σR/R for two populations) or to an expression of others
+  (**Expression…**: `2*R_1`, `R_1 + t_shell_1`; numbers, + − * / **, sqrt, exp, log, min, max …). A linked value is
+  greyed: it follows the others while you edit and in every fit, is not fitted itself, and gets its error from theirs.
+  The card **Links and constraints** lists every link (× unlinks), **Particles do not overlap** (D ≥ 2R, R_HS ≥ R
+  while both are fitted; on by default) and the inequality constraints: **Add Constraint…** takes, for example,
+  `D_2 >= 2*R_2 + 3`. Links and constraints are saved with the model and in the fit's record; removing a particle
+  removes those that read it ([Physics and Methods, section 9.15](Physics_Manual.md#915-links-and-constraints-between-parameters)).
 - **Ranges** shows each value's min – max. The fit keeps the value inside it; *Search the ranges* searches
   across it. A value typed outside its range widens the range. For linear terms such as intensity and background,
   **∞** means no upper limit; untick it to enter a finite maximum.
 - **Background and beam tail**: a constant background, the beam tail A / (1 + (|q|/w)^ν) at q = 0 (**Tail A**,
   **Tail w**, **Tail ν**: the empirical tail of the direct and reflected beam), and the q resolution **σ_q** (0, off,
-  by default); an overall factor k, fixed at 1 by default, multiplies the particles and the tail. The model as a formula, and how **σnn/D** relates to the σD/D of earlier versions and of 1D Predict, are in Physics and
+  by default); an overall factor k, fixed at 1 by default, multiplies the particles and the tail. The tail's ranges
+  follow the curve: A up to 10× its largest intensity, w from 0.3 q_min to min(30 q_min, q_max), ν from 1 to 6 — set
+  when a curve opens with the starting model and when Refine or Search starts from the generic ranges (the status
+  line says so); ranges you type are kept. A tail at an edge of its range, or with no finite error, is flagged after
+  the fit ([Physics and Methods, section 9.6](Physics_Manual.md#96-parameters-and-defaults)). The model as a formula, and how **σnn/D** relates to the σD/D of earlier versions and of 1D Predict, are in Physics and
   Methods, [section 9.2](Physics_Manual.md#92-the-intensity-model) and
   [section 9.5](Physics_Manual.md#95-structure-factor-one-dimensional-paracrystal).
 - **Spheres in grazing incidence**: αi, αf, λ and the effective reflection coefficient |r|, arg r. With αi = αf = 0
@@ -2066,6 +2085,13 @@ sizes for your sample, or let the Fit step find them.
 - **Fit details…** opens a separate, nonmodal window for boundary diagnostics, correlations and assumptions;
   after Predict parameters it gives the posterior of the solution in Model (section 6.4). Routine diagnostic notes
   do not turn a completed prediction into a yellow warning.
+- **Uncertainty and Report…** (after Refine or Search): **Errors and correlations** lists every free and linked value
+  with its 1σ error and the correlation matrix as a heat map with its values, and names the pairs with |r| > 0.9;
+  **χ² profile** fixes one value at a grid of values, fits the others again and gives the Δχ² = 1 interval (**Run
+  Profile**, **Stop**); **Fit report** shows the report — data file and its SHA-256, q range, model, every value
+  ± error with its status, χ²ᵣ, the correlated pairs, the settings — as Markdown, HTML or text, to **Copy** or **Save
+  Report…** ([Physics and Methods, section 9.16](Physics_Manual.md#916-uncertainty-after-refine-and-search)). A value
+  the curve does not determine (its error not finite, or above 10× the value) is marked ⚠ in the table and the report.
 - When there are several solutions (of Predict parameters, or of Analyze), the drop-down above the parameter table
   switches the entire solution: parameters, errors, total curve, components and residuals together. It does not
   combine individual parameter endpoints from unrelated solutions. The exported record identifies the selected
@@ -2365,7 +2391,9 @@ current frame finish before pausing. Completed results stay available.
 
 **3. Results**
 
-- How many frames were fitted, failed or did not converge, with the halves and points per frame.
+- How many frames were fitted, failed or did not converge, with the halves and points per frame. A frame whose beam
+  tail stopped at an edge of its range, or with a value without a finite error, is **flagged** (marked in the list,
+  counted at the end of the run and listed under `flagged` in the record).
 - A table with a row per frame: χ²ᵣ, each free value ± 1σ, the **Points** fitted and the **Halves**. Click a row
   to see that frame's curve and model; a failed frame shows its reason.
 - Below the frame plot: one value against the frame (or χ²ᵣ), with ±1σ error bars, in the colours of the stages.
@@ -3669,6 +3697,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | After the interface language is switched in a session, a few texts keep the old language (e.g. the outcome line of a finished automatic analysis). | Run the analysis again, or restart. |
 | Quitting GIMaP during a Batch Export keeps the files of the frames done, but the batch tables, `README.txt` and the batch's JSON record are not written. | End a batch with **Stop**: it writes them. |
 | **The model fit of the automatic analysis chooses the particles from the curve alone.** Run Automatic Analysis (and Batch Export's particle model) fits the cut with Predict parameters among one or two populations of spheres and upright cylinders, at the effective interface (a sphere too large for it, q_z·R above 1.7 at the cut, is flagged in the automatic analysis when αi is known; section 5.5); random cylinders only when you give them as the composition. On the public GALAXI frame of Ag spheres it reports two upright cylinders (section 1.3): broad sizes and a rise at low q can be described by another composition than the true one. 2π/q\* is a length scale, not the particle spacing: on BornAgain simulations of the GALAXI model it was within 10 % of the true distance in 1 of 10 simulations with interference, and a peak or shoulder appeared in all 4 without (sections 1.3 and 5.5; [Physics and Methods, section 8.5](Physics_Manual.md#85-the-model-fit-and-how-the-solution-is-chosen)). | Choose the model from what you know of the sample and confirm it in **Fitting**: Predict parameters with **The particles in Model**, then refine it and judge the residuals. Do not quote 2π/q\* as the particle spacing. |
+| **The models for manual fitting are not proposed by Predict parameters.** Core–shell spheres, the 2D hexagonal paracrystal (infinite domains) and Percus–Yevick hard spheres (a 3D liquid) are fitted by Refine and Search only; core–shell spheres at q_z = 0. | Start them from values you know, or from a Predict solution with spheres, then change the family or the interference in Model and Refine ([Physics and Methods, section 9.14](Physics_Manual.md#914-models-for-manual-fitting)). |
 | **Fitting is slower with sizes by intensity and with random cylinders.** With a sphere or vertical cylinder and sizes by number or log-normal, **Search the ranges** takes a few seconds as before; with *Gaussian, by intensity* (models of earlier versions) tens of seconds, and with a random cylinder (15–800 ms per evaluation) up to minutes. | Set **Sizes** to *Gaussian, by number*, narrow the ranges of R, h and σR/R before a search, or start **Refine** from values close to the curve. |
 | **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA; spheres with two paths and a free reflection coefficient r when Model has both angles, else at the Born term of the cut's q_z or the effective interface). It was checked on simulated curves of an independent model and on BornAgain simulations, not on measured curves of known particles; physics outside the model (roughness, other shapes) can give a composition a high probability that it does not deserve. The waves the surface reflects (the four-term DWBA) matter for spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i = 0.4°, 12 keV): with both angles R is off by about 6 % (median; P90 19–40 %) and the composition right in about 60 % of such curves; with the q_z alone R is off by about 10 % (q₊R 2.3–3.5) to 40 % (above) and a sphere is usually taken for upright cylinders; upright cylinders are not affected. With both angles on a curve whose reflected wave is weak (far above the critical angle), a smaller sphere with a large \|r\| can fit as well, and on BornAgain's model of the GALAXI frame (broad log-normal sizes, αf at the critical angle) the free r let wrong sizes fit within the errors (with one sphere population R 16–500 nm, once at the 500 nm bound, on the three simulated draws; with the composition chosen one 16 nm sphere without a paracrystal on two); and on two-sphere curves without reflection this network misses the true sizes somewhat more often than the previous one ([Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters)). | Judge every solution by its residuals and by what you know of the sample; give both angles for spheres beyond q₊R 1.7; far above the critical angle check the fitted \|r\| (`refl_amp` in Model) against the substrate's and fix it if it is far off, then refine. |
 | **Run records do not hold everything needed to repeat a run.** They identify `software_version`, the network's record and Predict parameters' fixed seed; masks are counted, not stored as pixel lists. | Keep the input, settings and model files with the exported records. |

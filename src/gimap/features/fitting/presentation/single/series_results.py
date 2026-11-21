@@ -28,6 +28,8 @@ from ...application.single_fit import FAMILIES
 from ...application.series_fit import (
     POOR_CHI2,
     file_name,
+    flag_names,
+    flagged_fit,
     parameter_columns,
     poor_fit,
     series_counts,
@@ -40,6 +42,8 @@ from .series_stages import CHI2
 from .series_text import HALF_TEXT, STATE_COLOR, STATE_MARK
 from .session import path_name
 
+FLAGGED_LINE = "Flagged (a value not determined, or the beam tail at an edge of its range): frames {frames}"
+FLAGGED_FRAME = "Flagged: {values}"
 STALE = "Changed after the fit: Start again"
 """The halves, the fitting range or the left-out points are no longer those of the run."""
 UNTOUCHED = "The model was the starting guess of Single analysis: it was never set up or fitted there."
@@ -190,6 +194,8 @@ class FitSeriesResultsMixin:
             lines.append(detail)
         if frame.ok and frame.state != "ok" and frame.reason:
             lines.append(tr(frame.reason))
+        if flagged_fit(frame):
+            lines.append(trf(FLAGGED_FRAME, values=", ".join(flag_names(frame))))
         return "\n".join(lines)
 
     def _select_table_row(self, row: int) -> None:
@@ -267,6 +273,10 @@ class FitSeriesResultsMixin:
     def _poor_frames(self) -> list[int]:
         return [index for index, frame in self.fits.items() if poor_fit(frame)]
 
+    def _flagged_frames(self) -> list[int]:
+        """Frames fitted with a value the curve does not determine or a beam tail at an edge (``flagged_fit``)."""
+        return sorted(index for index, frame in self.fits.items() if flagged_fit(frame))
+
     def _counts_text(self) -> str:
         """“17 fitted · 1 failed”: the frames by what became of them (only the states that occur)."""
         counts = series_counts(list(self.fits.values()))
@@ -278,6 +288,9 @@ class FitSeriesResultsMixin:
         poor = self._poor_frames()
         if poor:
             parts.append(trf("{count} poor fits", count=len(poor)))
+        flagged = self._flagged_frames()
+        if flagged:
+            parts.append(trf("{count} flagged", count=len(flagged)))
         return " · ".join(parts)
 
     def _points_text(self, settings, source: str) -> str:
@@ -313,6 +326,9 @@ class FitSeriesResultsMixin:
         lines = [self._counts_text(), self._fitted_on_text()]
         if poor:
             lines.append(trf("Poor fit (χ²ᵣ above {limit}): frames {frames}", limit=f"{POOR_CHI2:g}", frames=frame_numbers(poor)))
+        flagged = self._flagged_frames()
+        if flagged:
+            lines.append(trf(FLAGGED_LINE, frames=frame_numbers(flagged)))
         if self._untouched_start:
             lines.append(tr(UNTOUCHED))
         if stale:
@@ -326,7 +342,8 @@ class FitSeriesResultsMixin:
         elif not frames:
             self.step_rail.set_state("results", "pending", tr("After Start"))
         else:
-            trouble = counts["failed"] or counts["not_converged"] or counts["stopped"] or poor or self._untouched_start
+            trouble = (counts["failed"] or counts["not_converged"] or counts["stopped"] or poor or flagged
+                       or self._untouched_start)
             self.step_rail.set_state("results", "warn" if trouble or stale else "ok", tr(STALE) if stale else lines[0])
 
     def _can_open_selected(self):

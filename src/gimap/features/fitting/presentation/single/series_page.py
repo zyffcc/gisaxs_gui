@@ -29,6 +29,7 @@ from ...application.series_fit import (
     SeriesSettings,
     fit_frame,
     file_name,
+    flagged_fit,
     next_start,
     poor_fit,
     series_counts,
@@ -62,6 +63,8 @@ END_SENTENCES = {
 }
 """The end of a run, ``(stopped, with poor fits)``: a run whose fits converged far from the curves (``poor_fit``) is
 not said like a success (said at the level of a warning)."""
+FLAGGED_END = ("{flagged} of the fitted frames are flagged: a value the curve does not determine, or the beam tail at "
+               "an edge of its range.")
 
 
 class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin, FitSeriesStagesMixin, FitSeriesPredictMixin,
@@ -238,6 +241,8 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
             return "warn", detail + " · " + tr("not converged")
         if poor_fit(frame):
             return "warn", detail + " · " + tr("poor fit")
+        if flagged_fit(frame):  # a value the curve does not determine, or the beam tail at an edge (series_fit)
+            return "warn", detail + " · " + tr("flagged")
         half = ONE_HALF.get(getattr(frame, "halves_used", "")) if self._settings.side == "mean" else None
         return "done", detail + (" · " + tr(half) if half and self.curves_signed() else "")
 
@@ -398,11 +403,13 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
         self.status_progress.hide()
         counts = series_counts(list(self.fits.values()))
         fitted, failed, poor = counts["ok"] + counts["not_converged"], counts["failed"], len(self._poor_frames())
-        trouble = failed or counts["not_converged"] or counts["stopped"] or poor or self._untouched_start
+        flagged = len(self._flagged_frames())
+        trouble = failed or counts["not_converged"] or counts["stopped"] or poor or flagged or self._untouched_start
 
         def done() -> str:  # (poor fits — χ²ᵣ far above 1, e.g. a sphere on a diffraction peak — are counted)
             template = END_SENTENCES[(bool(stopped), bool(poor))]
-            return trf(template, count=fitted, failed=failed, poor=poor, limit=f"{POOR_CHI2:g}")
+            text = trf(template, count=fitted, failed=failed, poor=poor, limit=f"{POOR_CHI2:g}")
+            return text + (" " + trf(FLAGGED_END, flagged=flagged) if flagged else "")
 
         self._log(done())
         self._status(done, "warning" if trouble else "ok")

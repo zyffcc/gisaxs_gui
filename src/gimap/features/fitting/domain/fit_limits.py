@@ -4,11 +4,16 @@ from __future__ import annotations
 from .fit_model import INFO, FitModel
 
 
+TAIL_RANGES = frozenset({"res_amplitude", "res_width", "res_exponent"})
+"""The beam tail's ranges: set from the curve by GIMaP (``beam_tail``), and kept with any composition (globals)."""
+
+
 def explicit_limits(model: FitModel) -> bool:
-    """Defaults do not count as user constraints when exploring different compositions."""
-    return any((p.lower, p.upper) != (INFO[key].lower, INFO[key].upper)
+    """Defaults do not count as user constraints when exploring different compositions (nor do the beam tail's
+    ranges, which GIMaP sets from the curve and a proposal of any composition keeps)."""
+    return any(((p.lower, p.upper) != (INFO[key].lower, INFO[key].upper) and not (owner == "globals" and key in TAIL_RANGES))
                or (not p.free and (INFO[key].free or p.value != INFO[key].value))
-               for (_owner, key), p in model.parameters())
+               for (owner, key), p in model.parameters())
 
 
 def constrain_proposal(proposal: FitModel, base: FitModel) -> FitModel:
