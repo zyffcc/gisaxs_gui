@@ -12,6 +12,15 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Sputter ▸ Analyze: Au and Ag on TiO₂ at any energy from 8 to 15 keV.** The TiO₂ network was retrained on images
+  simulated at 8–15 keV and αi 0.25–0.55°, with optical constants that follow the energy (the earlier ones exactly at
+  12 keV) and with parts of the detector cut away, so a TiO₂ scan in that range is analysed as usual at its own energy,
+  Au included; before, only Au at 12 keV and Ag within 5 % of it were. It passed the tests set before it was trained,
+  on the reference scans at 12 keV and on simulated scans at other energies, angles and detector coverage. The earlier
+  network stays the alternative at 12 keV, and the better of the two is shown. A TiO₂ scan at an αi outside
+  0.25–0.55° gets a warning in the log. The networks for Si, polymers and Cu are unchanged: their retrained versions
+  did not pass those tests. The package's report under **Details** now lists the model values for Si, polymer and Cu
+  scans as well (before, only the direct readings). Manual chapter 13; *Physics and Methods* 12.1.
 - **The benchmark files of Predict parameters are the ones the paper names.** `tools/benchmarks/` now holds the
   final runs under the names of the paper's table (`posterior_recovery`, `posterior_extended`, `posterior_dwba_tp`
   / `_born` / `_eia` with `posterior_dwba_pairs.json`, `posterior_own`, `posterior_floor03`, `posterior_floor08`,

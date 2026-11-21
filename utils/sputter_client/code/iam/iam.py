@@ -71,8 +71,9 @@ P_K_CU, OMEGA_K_CU, EFF_RATIO_CU = 0.873, 0.445, 1.26
 
 
 OPTICS = os.environ.get("IAM_OPTICS", "const")
-if OPTICS not in ("const", "table"):
-    raise SystemExit(f"IAM_OPTICS={OPTICS}: const or table")
+if OPTICS not in ("const", "table", "anchored"):
+    raise SystemExit(f"IAM_OPTICS={OPTICS}: const, table or anchored")
+ANCHOR_NM = float(os.environ.get("IAM_OPTICS_ANCHOR_NM", repr(LAM_12)))
 E_EV, E_FL_EV = 1239.841984 / LAM, 1000.0 * FL_KEV
 if OPTICS == "table":
     import xray_optics as XO
@@ -91,6 +92,48 @@ if OPTICS == "table":
         P_L3 = 0.0
     if not XO.fluoresces("Cu", E_EV):
         P_K_CU = 0.0
+if OPTICS == "anchored":
+    import xray_optics as XO
+
+    def _hand_beam(lam):
+        '(delta, beta) of the beam channel at wavelength lam, built as the hand dictionary above builds them.'
+        out = {"Ag": (pref(lam) * N_AG * 47.0, pref(lam) * N_AG * 2.15), "TiO2": (pref(lam) * N_TIO2 * 38.2, 1.34e-7),
+               "Si": (pref(lam) * N_SI * 14.05, 4.16e-8)}
+        for _n, (_rho, _z, _mw, _b) in POLY.items():
+            out[_n] = (pref(lam) * (_rho / _mw * _z * NA21), _b)
+        return out
+    E_ANCHOR = 1239.841984 / ANCHOR_NM
+    for _name, (_d0, _b0) in _hand_beam(ANCHOR_NM).items():
+        _ta, _te = XO.decrement(_name, E_ANCHOR), XO.decrement(_name, E_EV)
+        OPT[_name] = ((_d0 * (_te.real / _ta.real), _b0 * (_te.imag / _ta.imag)), OPT[_name][1])
+    _fa, _fe = XO.f12("Au", 1239.841984 / LAM_12), XO.f12("Au", E_EV)
+    AU_F1_12, AU_F2_12 = 64.0 * (_fe[0] / _fa[0]), 9.7 * (_fe[1] / _fa[1])
+    MU_AU_12 = 4 * np.pi * pref(LAM) * N_AU * AU_F2_12 / LAM
+    _fa, _fe = XO.f12("Cu", 1239.841984 / LAM_CU), XO.f12("Cu", E_EV)
+    CU_F1, CU_F2 = 28.2 * (_fe[0] / _fa[0]), 2.45 * (_fe[1] / _fa[1])
+    OPT["Cu"] = ((pref(LAM) * N_CU * CU_F1, pref(LAM) * N_CU * CU_F2), OPT["Cu"][1])
+    MU_CU = 4 * np.pi * pref(LAM) * N_CU * CU_F2 / LAM
+    if not XO.fluoresces("Au", E_EV):
+        P_L3 = 0.0
+    if not XO.fluoresces("Cu", E_EV):
+        P_K_CU = 0.0
+
+
+AI_OVERRIDE = os.environ.get("IAM_AI")
+LAM_REMAP = os.environ.get("IAM_LAM_REMAP", "0") == "1"
+
+
+def af_remap(a, af, lam_from, lam_to=None):
+    'An array (..., n_af, n_q) on the alpha_f centres af (deg) measured at lam_from, moved to lam_to (default LAM)'
+    lam_to = LAM if lam_to is None else lam_to
+    a = np.asarray(a, float)
+    if abs(lam_from - lam_to) < 1e-12:
+        return a.copy()
+    af = np.asarray(af, float)
+    src = np.degrees(np.arcsin(np.clip(lam_from / lam_to * np.sin(np.radians(af)), -1.0, 1.0)))
+    flat = np.moveaxis(a, -2, -1).reshape(-1, len(af))
+    out = np.array([np.interp(src, af, row, left=0.0, right=0.0) for row in flat])
+    return np.moveaxis(out.reshape(np.moveaxis(a, -2, -1).shape), -1, -2)
 
 
 def fluorescence_on(metal):
@@ -516,6 +559,8 @@ class Scan:
         from tio2_explore import onset
         self.label = label
         self.cfg = SCANS[label]
+        if AI_OVERRIDE:
+            self.cfg = dict(self.cfg, ai=float(AI_OVERRIDE))
         self.metal, self.sub = self.cfg["metal"], self.cfg["sub"]
         self.grid = grid or scan_grid()
         self.q, self.af = self.grid.q, self.grid.native_af
@@ -525,14 +570,15 @@ class Scan:
         ev = self.res.geometry.get("energy_ev")
         if ev and abs(1.239841984 / (float(ev) / 1000.0) - lam) > 1e-6:
             raise SystemExit(f"{label}: cache binned at {ev} eV, SCANS lam {lam} nm")
-        if abs(lam - LAM) > 1e-9:
+        self.lam_cache = lam
+        if abs(lam - LAM) > 1e-9 and not LAM_REMAP:
             raise SystemExit(f"{label}: SCANS lam {lam} nm, model LAM {LAM} nm (run with IAM_LAM_NM={lam!r})")
-        if self.metal == "Au" and abs(LAM - LAM_12) > 1e-9 and OPTICS != "table":
+        if self.metal == "Au" and abs(LAM - LAM_12) > 1e-9 and OPTICS == "const":
             raise SystemExit(f"{label}: the Au optics and L fluorescence are 12 keV values; IAM_LAM_NM={LAM:g} refused "
                              f"(IAM_OPTICS=table: tabulated optics at any energy)")
         if self.metal == "Au" and abs(FL_KEV - 9.70) > 1e-9:
             raise SystemExit(f"{label}: Au L fluorescence needs IAM_FL_KEV unset (9.70), got {FL_KEV:g}")
-        if self.metal == "Cu" and ((abs(LAM / LAM_CU - 1) > CU_LAM_TOL and OPTICS != "table") or abs(FL_KEV - FL_KEV_CU) > 1e-9):
+        if self.metal == "Cu" and ((abs(LAM / LAM_CU - 1) > CU_LAM_TOL and OPTICS == "const") or abs(FL_KEV - FL_KEV_CU) > 1e-9):
             raise SystemExit(f"{label}: the Cu optics are lambda {LAM_CU} nm values (used within {CU_LAM_TOL:.0%}) and "
                              f"its K fluorescence needs IAM_FL_KEV={FL_KEV_CU}; got IAM_LAM_NM={LAM:g}, IAM_FL_KEV={FL_KEV:g}")
         if self.cfg.get("pre_invalid") and os.environ.get("IAM_ALLOW_INVALID_PRE") != "1":
@@ -572,6 +618,9 @@ class Scan:
             self.pre_window = (f"pre_ref {self.cfg['pre_ref']}",) + tuple(ref.pre_window)
             self.pre_idx = np.array([], dtype=int)
             self.c_pre = self._cmean(np.where(self.res.time < self.res.time.min() + 2.0)[0])
+        if LAM_REMAP and abs(lam - LAM) > 1e-9 and not self.cfg.get("pre_ref"):
+
+            self.I_pre, self.V_pre = af_remap(self.I_pre, self.af, lam), af_remap(self.V_pre, self.af, lam)
         self.shadow = None
         if SHADOW_BG != "0":
             import shadow_rows as SR

@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 
 from . import features as FE
+from . import kinput as KI
 from . import live as LV
 from . import observe as OB
 from . import registry as REG
@@ -47,12 +48,13 @@ def _features(args):
                 ctx = A.Context(cfg, s, t)
             if not float(np.sum(ctx.w["E"])) > 0:
                 raise ValueError("no frames in this time window")
-            X = FE.image(s, ctx.w, np.where(ctx.w["mask"], ctx.w["Y"], 0.0), cfg["features"])
-            S = FE.scalars(cfg, s, t, ctx.h_nom_ctx)
+            X = KI.image(s, ctx.w, np.where(ctx.w["mask"], ctx.w["Y"], 0.0), cfg["features"])
+            S = KI.scalars(cfg, s, t, ctx.h_nom_ctx)
             if not (np.all(np.isfinite(X)) and np.all(np.isfinite(S))):
                 raise ValueError("network input is not finite")
             if info is None:
                 info = dict(pnames=ctx.pnames, lb=ctx.lb.tolist(), ub=ctx.ub.tolist(), metal=str(s.metal),
+                            start=A.x_from_reference(ctx, {}).tolist(),
                             t_dep=float(s.t_dep), position_factor=("measured" if getattr(s, "prof", None) is not None
                                                                      else "not available (cfac = 1)"))
             mdl = getattr(ctx.f, "mdl", None)
@@ -346,6 +348,11 @@ def status(rp, t_rel):
     return st
 
 
+def NM_paths(nn_dir):
+    from . import nnmodel as NM
+    return NM.member_paths(nn_dir)
+
+
 def _client_entry(cfg, a, data_root):
     'Family entry of a scan outside the family: metal, onset override, per-scan forward settings (--like).'
     sj = data_root / a.scan / "scan.json"
@@ -380,7 +387,8 @@ def _client_entry(cfg, a, data_root):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("family")
-    ap.add_argument("--model", default=None, help="model.npz (default: $IAMPRED_MODELS/<family>/nn/model.npz)")
+    ap.add_argument("--model", default=None, help="model.npz, or several comma-separated (a seed ensemble: candidates "
+                    "pooled); default: $IAMPRED_MODELS/<family>/nn/model.npz and any model_*.npz beside it")
     ap.add_argument("--scan", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--times", default=None)
@@ -426,31 +434,38 @@ def main():
     a = ap.parse_args()
     t_start = time.time()
     cfg = REG.load(a.family)
+    netfam = REG.network_family(cfg)
+    ncfg = cfg if netfam == cfg["family"] else REG.load(netfam)
     if a.model is None:
         if not os.environ.get("IAMPRED_MODELS"):
             raise SystemExit("give --model (or set IAMPRED_MODELS, as run.cmd / run.sh of the client package do)")
-        a.model = str(Path(os.environ["IAMPRED_MODELS"]) / a.family / "nn" / "model.npz")
+        a.model = ",".join(str(p_) for p_ in NM_paths(Path(os.environ["IAMPRED_MODELS"]) / netfam / "nn"))
     from . import nnmodel as NM
-    P = NM.load(a.model)
+    model_paths = [p_ for p_ in str(a.model).split(",") if p_]
+    a.model = model_paths[0]
+    P = NM.load_many(model_paths, a.k)
+    n_net = getattr(P, "n_members", 1)
     meta = P.meta
     names = [r["name"] for r in cfg["reported"]]
-    bad = [k for k, x_, y_ in (("family", meta.get("family"), cfg["family"]), ("reported", meta["reported"], names),
+    bad = [k for k, x_, y_ in (("family", meta.get("family"), netfam), ("reported", meta["reported"], names),
                                ("scalars", meta.get("scalars"), FE.scalar_names(cfg)),
                                ("features", meta.get("features"), cfg["features"])) if x_ != y_]
     if bad:
         raise SystemExit(f"model / family config mismatch in {bad}: retrain the model for this config")
     warn, notes = [], []
-    if meta["family_hash"] != cfg["family_hash"]:
+    if n_net > 1:
+        notes.append(f"seed ensemble: candidates of {n_net} networks pooled ({a.k} from each)")
+    if meta["family_hash"] != ncfg["family_hash"]:
         warn.append("family config changed since training (retrain recommended)")
     if meta["forward_hash"] != cfg["forward_hash"]:
-        cp_ = Path(a.model).parent.parent / f"check_{cfg['family']}.json"
+        cp_ = Path(a.model).parent.parent / f"check_{netfam}.json"
         ck = json.loads(cp_.read_text(encoding="utf-8")) if cp_.exists() else {}
         if ck.get("forward_hash") == cfg["forward_hash"] and ck.get("max_rel_diff") is not None and ck["max_rel_diff"] <= 1e-6:
             notes.append("forward-model code changed since training; the current code reproduces every reference fit "
                          f"(check max rel dev5 difference {ck['max_rel_diff']:.1e}): treated as equivalent")
         else:
             warn.append("forward-model code changed since training: candidates are rendered with the current code")
-    if meta.get("pred_hash") and meta["pred_hash"] != REG.pred_hash():
+    if meta.get("pred_hash") and meta["pred_hash"] != REG.pred_hash(ncfg):
         warn.append("iampred sample / feature code changed since training")
     for w_ in warn:
         print("WARNING:", w_)
@@ -464,6 +479,12 @@ def main():
         refs = {}
     else:
         refs, _ = RF.load(cfg)
+    ai_range = ncfg.get("alpha_i_range_deg")
+    ai = scan_meta.get("ai")
+    if ai_range and ai is not None and not float(ai_range[0]) - 1e-6 <= float(ai) <= float(ai_range[1]) + 1e-6:
+        warn.append(f"incidence angle {float(ai):g} deg outside the network's training range "
+                    f"{float(ai_range[0]):g}-{float(ai_range[1]):g} deg: its starting solutions may be poor")
+        print("WARNING:", warn[-1])
     how = a.times or ("all" if client else "refs")
     if how == "refs":
         times = [r["t"] for r in refs.get(a.scan, [])]
@@ -482,7 +503,7 @@ def main():
     t_start_ = time.time()
     nw = max(1, min(a.workers, len(times)))
     key = json.loads(json.dumps(dict(family=cfg["family"], scan=a.scan, family_hash=cfg["family_hash"],
-                                     forward_hash=cfg["forward_hash"], model=_sha(a.model), k=a.k, refine=a.refine,
+                                     forward_hash=cfg["forward_hash"], model="+".join(_sha(p_) for p_ in model_paths), k=a.k, refine=a.refine,
                                      like=a.like, times=[float(t) for t in times])))
     st = None
     if a.reuse and (out / "state.json.gz").is_file():
@@ -504,17 +525,27 @@ def main():
                     wr.writerow([a.scan, d["t"], d["reason"]])
             raise SystemExit(f"{a.scan}: no usable window; reasons: " + "; ".join(sorted({d['reason'] for d in feats})))
         info = okf[0]["info"]
-        mism = [k for k, x_, y_ in (("params", meta["params"], info["pnames"]),
-                                    ("bounds", np.round(meta["lb"] + meta["ub"], 9).tolist(),
-                                     np.round(info["lb"] + info["ub"], 9).tolist())) if x_ != y_]
+        if netfam == cfg["family"]:
+            mism = [k for k, x_, y_ in (("params", meta["params"], info["pnames"]),
+                                        ("bounds", np.round(meta["lb"] + meta["ub"], 9).tolist(),
+                                         np.round(info["lb"] + info["ub"], 9).tolist())) if x_ != y_]
+        else:
+            bnd = lambda nm_, lb_, ub_: dict((n_, (round(l_, 9), round(u_, 9))) for n_, l_, u_ in zip(nm_, lb_, ub_))
+            bn, bi = bnd(meta["params"], meta["lb"], meta["ub"]), bnd(info["pnames"], info["lb"], info["ub"])
+            mism = [f"bounds of {n_}" for n_ in bn if n_ in bi and bn[n_] != bi[n_]]
         if mism:
             raise SystemExit(f"model / forward-model mismatch in {mism}: the forward code or switches changed since training")
         X = np.stack([d["X"] for d in okf]); S = np.stack([d["S"] for d in okf])
         LV.progress("network", 0, len(okf), force=True, family=cfg["family"])
         cands = P.candidates(X, S)
+        if netfam != cfg["family"]:
+            for cs_ in cands:
+                for c_ in cs_:
+                    c_["x"] = REG.map_params(meta["params"], c_["x"], info["pnames"], info["start"], info["lb"],
+                                             info["ub"])[0]
         q = P.intervals(X, S, n=300)
         LV.progress("network", len(okf), len(okf), force=True, family=cfg["family"])
-        items = [dict(t=d["t"], cands=[dict(weight=c["weight"], x=c["x"].tolist()) for c in cs[:a.k]])
+        items = [dict(t=d["t"], cands=[dict(weight=c["weight"], x=c["x"].tolist()) for c in cs[:a.k * n_net]])
                  for d, cs in zip(okf, cands)]
         chunks = [items[i::nw] for i in range(nw)]
         rows = sum(runner.run(cfg, [(cfg, a.scan, c, a.refine, str(out), len(items)) for c in chunks if c], _render, nw,
@@ -528,6 +559,12 @@ def main():
             r.pop("seq", None)
         okf = [d for d in feats if d["ok"]]
         print(f"--reuse: {len(okf)} windows (features, candidates, per-window refinement) from state.json.gz", flush=True)
+    if netfam != cfg["family"]:
+        new_ = [n_ for n_ in info["pnames"] if n_ not in meta["params"]]
+        dropped_ = [n_ for n_ in meta["params"] if n_ not in info["pnames"]]
+        notes.append(f"candidates from the network of {netfam}, parameters carried over by name; dropped (not in this "
+                     f"family's model): {', '.join(dropped_) or 'none'}; new, at their start values: "
+                     f"{', '.join(new_) or 'none'}")
     reps = cfg["reported"]
     mono = ([m_ for m_ in a.monotone.split(",") if m_] if a.monotone is not None
             else list(cfg.get("monotone", ["lnD", "cov"])))
@@ -651,7 +688,7 @@ def main():
               "obs_d_fringe_nm", "obs_fringe_contrast", "obs_fringe_status", "obs_h_grain_nm", "obs_h_grain_contrast",
               "obs_h_grain_status", "obs_yoneda_deg", "obs_yoneda_rel", "obs_yoneda_status", "obs_yoneda_grain_deg",
               "obs_yoneda_grain_rel", "obs_yoneda_grain_status", "best_rank", "best_weight", "best_dev5"]
-    header += [f"cand{j + 1}_{k}" for j in range(a.k) for k in ("weight", "dev5")]
+    header += [f"cand{j + 1}_{k}" for j in range(a.k * n_net) for k in ("weight", "dev5")]
     for r in reps:
         header += [col(r), f"{col(r)}_net_p16", f"{col(r)}_net_p84", f"{col(r)}_status"]
     header += ["path_rank", "path_source", "path_dev5"] + [f"{col(r)}_path" for r in reps]
@@ -746,8 +783,8 @@ def main():
         srcs[k_] = srcs.get(k_, 0) + 1
     worse = [r["t"] for r in rows if r.get("seq", {}).get("versus") == "worse"]
     better = [r["t"] for r in rows if r.get("seq", {}).get("versus") == "better"]
-    summ = dict(family=cfg["family"], scan=a.scan, new_scan=client, like=a.like, model=str(a.model),
-                model_family_hash=meta["family_hash"], model_forward_hash=meta["forward_hash"],
+    summ = dict(family=cfg["family"], scan=a.scan, new_scan=client, like=a.like, model=str(a.model), network_family=netfam,
+                models=model_paths if n_net > 1 else None, n_networks=n_net, model_family_hash=meta["family_hash"], model_forward_hash=meta["forward_hash"],
                 family_hash=cfg["family_hash"], forward_hash=cfg["forward_hash"], warnings=warn, notes=notes,
                 metal=info["metal"], onset_s=info["t_dep"],
                 onset_source=("scan.json (given at intake)" if client and "t_dep" in scan_meta else "forward-model rule"),

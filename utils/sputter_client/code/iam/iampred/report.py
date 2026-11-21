@@ -271,12 +271,15 @@ def report(d):
     summ = json.loads((d / "summary.json").read_text(encoding="utf-8"))
     cfg = REG.load(summ["family"])
     tab = json.loads((HERE / "batch_scans.json").read_text(encoding="utf-8"))
-    kind = summ["family"].split("_v")[0]
-    same = lambda d: d.get(summ["family"]) or next((v for k, v in d.items() if k.split("_v")[0] == kind), None)
-    fig = same(tab.get("figure", {})) or []
+
+
+    kind = summ["family"].split("_")[0]
+    same = lambda d: d.get(summ["family"]) or next((v for k, v in d.items() if k.split("_")[0] == kind), None)
+    lines = lines_of(d / "windows.csv")
+    have = {k for L in lines for k in L}
+    fig = [a for a in (same(tab.get("figure", {})) or []) if a[0] in have]
     main = [(a[0], a[1].split(" (")[0]) for a in fig]
     zh = {a[0]: a[2] for a in fig}
-    lines = lines_of(d / "windows.csv")
     porous = summ["family"].startswith("tio2")
     rows = rows_of(lines, main, porous)
     if not rows:

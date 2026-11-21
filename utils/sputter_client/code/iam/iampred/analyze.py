@@ -22,12 +22,12 @@ FILMS = POLY + ("PEO",)
 
 GENERIC_HOST = {"Ag": "PS", "Cu": "PEO"}
 FAMILIES = {("Au", "Si"): ("si_p3h", None), ("Ag", "Si"): ("si_p3h", None),
-            ("Au", "TiO2"): ("tio2_v2", None), ("Ag", "TiO2"): ("tio2_v2", None),
+            ("Au", "TiO2"): ("tio2_u1", None), ("Ag", "TiO2"): ("tio2_u1", None),
             **{("Cu", s): ("cu_p5", None) for s in FILMS},
             **{("Ag", s): ("polyag_p3", "ref04" if s == "PNO" else "ref05") for s in FILMS}}
 
 
-ALTERNATIVES = {"polyag_p3": ["polyag_v5"], "si_p3h": ["si_v6"], "cu_p5": ["cu_v4"]}
+ALTERNATIVES = {"polyag_p3": ["polyag_v5"], "si_p3h": ["si_v6"], "cu_p5": ["cu_v4"], "tio2_u1": ["tio2_v2"]}
 
 
 PRIOR_DEFAULT_ON = {("Ag", "PS")}
@@ -43,6 +43,24 @@ MODES = dict(quick=dict(refine=0, sequence=0, max_windows=60), refine=dict(refin
 FILES = dict(report_md="REPORT.md", report_png="report.png", report_csv="report.csv", windows_csv="windows.csv",
              evolution_png="evolution.png", patterns_png="patterns.png", summary_json="summary.json",
              main_json="main/main.json", process_png="main/process.png")
+
+
+def same_optics(fam, alts, metal, lam):
+    'The alternatives that render with the optics of ``fam`` at wavelength ``lam`` (nm; None: the scan carries none,'
+    cfg = REG.load(fam)
+    if not cfg.get("energy_range_kev") or lam is None:
+        return list(alts)
+    return [f for f in alts if abs(float(lam) / REG.model_lam(REG.load(f)) - 1) <= 1e-4]
+
+
+def scan_lam(data, label, extra):
+    "The scan's wavelength (nm): its scan.json (written by the import), else the intake options; None when neither."
+    sj = data / label / "scan.json" if data is not None else None
+    try:
+        lam = json.loads(sj.read_text(encoding="utf-8")).get("lam") if sj is not None and sj.exists() else None
+    except (OSError, ValueError):
+        lam = None
+    return float(lam) if lam is not None else _lam_of(extra)
 
 
 def host_of(metal, substrate):
@@ -231,6 +249,7 @@ def main(argv=None):
     tried = {}
     if ok:
         alts = ALTERNATIVES.get(fam, []) if (a.alternatives == "on" or (a.alternatives == "auto" and a.mode != "full")) and not a.family else []
+        alts = same_optics(fam, alts, a.metal, scan_lam(data, a.label, extra))
         LV.say("models", "predict", families=[fam] + alts, mode=a.mode)
         LV.say_step("networks", "running")
 
