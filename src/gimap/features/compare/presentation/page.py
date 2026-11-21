@@ -77,6 +77,7 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
         self.add_map_action.triggered.connect(self.add_from_analyze)
         self.add_folder_action.triggered.connect(lambda: self.add_folder())
         self.add_files_action.triggered.connect(lambda: self.add_files())
+        self.add_store_action.triggered.connect(lambda: self.add_store())
         self.add_button.menu().aboutToShow.connect(self._menu_shown)
         self.empty_state.actionRequested.connect(self._add_menu_at_empty_state)
         self.remove_button.clicked.connect(self.remove_selected)

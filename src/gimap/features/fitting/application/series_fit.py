@@ -31,7 +31,8 @@ from .models import InSituSourceFrame
 
 STARTS = (("previous", "Each frame starts from the previous frame's result"),
           ("same", "Every frame starts from the model in Single analysis"),
-          ("stages", "From the previous frame's result, and from the model in Single analysis at every new stage"))
+          ("stages", "From the previous frame's result, and from the model in Single analysis at every new stage"),
+          ("chain", "From the previous frame's result; Predict parameters where the chain breaks (series_chain.py)"))
 TOO_FEW_POINTS = "too few points in the fitting range"
 UNREADABLE = "the curve could not be read"
 STATES = ("ok", "not converged", "stopped", "failed")
@@ -54,6 +55,9 @@ class SeriesSettings:
     """Answer the parameters that stop at an edge of their range (``single_fit.fit_resolving``)."""
     follow: bool = True
     """``predict``: of the solutions about as probable, keep the one closest to the previous frame."""
+    backward: bool = False
+    """After the frames in order, a backward pass: each frame from the result of the frame after it, the better fit
+    kept (``series_chain.py``)."""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "side", fit_halves(self.side))
@@ -95,6 +99,12 @@ class FrameFit:
     """The unit the q of the frame's file was read in (``angstrom`` / ``nm``), and where it came from
     (``curve_units``: stated in the file, the setting for files without one, a cut frame); empty: not read."""
     q_unit_from: str = ""
+    start_from: str = ""
+    """Where the kept fit started (``series_chain.STARTS_FROM``); empty: not said (a run before the chained fit)."""
+    chain: str = ""
+    """Why the chain broke at this frame (``series_chain.chain_break``, English); empty: it held."""
+    fit_pass: str = ""
+    """``forward`` or ``backward``: the pass whose fit was kept."""
 
     @property
     def ok(self) -> bool:
@@ -200,7 +210,7 @@ def next_start(previous: Optional[FrameFit], single: FitModel, settings: SeriesS
     also at the first frame of a new stage when ``start`` is ``"stages"``."""
     if settings.method == "predict":  # its particles are the model's; it follows by itself
         return single
-    follows = settings.start == "previous" or (settings.start == "stages" and not new_stage)
+    follows = settings.start in ("previous", "chain") or (settings.start == "stages" and not new_stage)
     if follows and previous is not None and previous.ok and previous.result.converged:
         return previous.result.model
     return single
@@ -296,6 +306,7 @@ def parameter_columns(model: FitModel) -> list[tuple[tuple, str]]:
 
 
 MADE_OF_COLUMNS = ("points", "halves_used")
+FLAG_COLUMNS = ("flags", "start_from", "chain_break", "fit_pass")
 
 
 def file_name(path, folder=None) -> str:
@@ -327,12 +338,14 @@ def _resolved(folder: str) -> Path:
 
 
 def series_table(frames: list[FrameFit], model: FitModel, *, details: bool = False,
-                 folder=None) -> tuple[list[str], list[list]]:
+                 folder=None, flags: bool = False) -> tuple[list[str], list[list]]:
     """Header and rows: frame, file, χ²ᵣ, log RMSE, converged, then value and error of every free parameter.
 
     ``details``: with what each frame was fitted on after ``converged`` — ``points`` and ``halves_used``
     (``MADE_OF_COLUMNS``) — for the table that is saved. A frame without a fit has NaN values.
-    ``folder``: the folder of the series, for the ``file`` column (``file_name``)."""
+    ``folder``: the folder of the series, for the ``file`` column (``file_name``). ``flags``: then, after the values,
+    ``FLAG_COLUMNS`` — what to know before trusting a frame (``series_chain.flags_text``), where its kept fit started,
+    why the chain broke there and the pass that gave it."""
     columns = parameter_columns(model)
     with_sources = details and any(InSituSourceFrame.from_token(frame.path).columns is not None for frame in frames)
     header = ["frame", "file", "chi2_reduced", "log_rmse", "converged"] + (list(MADE_OF_COLUMNS) if details else [])
@@ -340,8 +353,11 @@ def series_table(frames: list[FrameFit], model: FitModel, *, details: bool = Fal
         header += ["source_file", "q_column_1based", "intensity_column_1based", "sigma_column_1based", "sigma_source"]
     for _path, name in columns:
         header += [name, f"{name}_error"]
+    if flags:
+        from .series_chain import flags_text
     rows = []
     for frame in sorted(frames, key=lambda item: item.index):
+        tail = [flags_text(frame), frame.start_from, frame.chain, frame.fit_pass] if flags else []
         row = [frame.index + 1, file_name(frame.path, folder)]
         made_of = [frame.points, frame.halves_used] if details else []
         if with_sources:
@@ -352,14 +368,14 @@ def series_table(frames: list[FrameFit], model: FitModel, *, details: bool = Fal
                          "none" if mapping.sigma is None else "column"] if mapping is not None else
                         [str(source.path), "", "", "", "legacy file layout"])
         if not frame.ok:
-            rows.append(row + [math.nan, math.nan, False] + made_of + [math.nan] * (2 * len(columns)))
+            rows.append(row + [math.nan, math.nan, False] + made_of + [math.nan] * (2 * len(columns)) + tail)
             continue
         result = frame.result
         row += [result.chi2_reduced, result.log_rmse, bool(result.converged)] + made_of
         for path, _name in columns:
             row += [result.model.get(path).value, result.errors.get(path, math.nan)]
-        rows.append(row)
-    return header, rows
+        rows.append(row + tail)
+    return header + (list(FLAG_COLUMNS) if flags else []), rows
 
 
 def series_record(model: FitModel, settings: SeriesSettings, folder: str, pattern: str, frames: list[FrameFit], *,
@@ -384,7 +400,7 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
         "start_model": model_to_dict(model),
         "settings": {"side": settings.side, "q_range_nm^-1": None if settings.q_range is None else list(settings.q_range),
                      "left_out_q_nm^-1": sorted(settings.excluded), "method": settings.method, "start": settings.start,
-                     "resolve_edges": settings.resolve_edges,
+                     "resolve_edges": settings.resolve_edges, "backward_pass": settings.backward,
                      **({"follow": settings.follow} if settings.method == "predict" else {})},
         "frames": len(frames), "counts": series_counts(frames), "failed": failed,
         "not_converged": [frame.index + 1 for frame in ordered if frame.state == "not converged"],
@@ -395,6 +411,8 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
                        "reason": frame.reason, "points": frame.points, "halves_used": frame.halves_used,
                        "averaged": frame.averaged, "left_out": frame.left_out,
                        "q_unit": frame.q_unit, "q_unit_from": frame.q_unit_from,
+                       **{key: value for key, value in (("start_from", frame.start_from), ("chain_break", frame.chain),
+                                                        ("fit_pass", frame.fit_pass)) if value},
                        "weighting": frame.result.weighting if frame.result is not None else "",
                        **curve_source_record(frame.path),
                        **({"resolved": list(frame.resolved)} if frame.resolved else {})} for frame in ordered],
@@ -415,7 +433,7 @@ def curve_source_record(token: str) -> dict:
                              "sigma_source": "none" if source.columns.sigma is None else "column"}}
 
 
-__all__ = ["FrameFit", "FrameStages", "MADE_OF_COLUMNS", "POOR_CHI2", "STARTS", "STATES", "SeriesSettings", "TOO_FEW_POINTS",
+__all__ = ["FLAG_COLUMNS", "FrameFit", "FrameStages", "MADE_OF_COLUMNS", "POOR_CHI2", "STARTS", "STATES", "SeriesSettings", "TOO_FEW_POINTS",
            "UNREADABLE", "file_name", "fit_frame", "flag_names", "flagged_fit", "next_start", "parameter_columns", "poor_fit",
            "prepare_frame",
            "series_counts", "series_record", "series_side", "series_table", "stages_of_curves", "unusable_curves"]

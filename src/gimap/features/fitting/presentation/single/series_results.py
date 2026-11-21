@@ -47,6 +47,9 @@ FLAGGED_FRAME = "Flagged: {values}"
 STALE = "Changed after the fit: Start again"
 """The halves, the fitting range or the left-out points are no longer those of the run."""
 UNTOUCHED = "The model was the starting guess of Single analysis: it was never set up or fitted there."
+FLAGS_TIP = ("What to know before trusting the row: failed, not converged, a poor fit, values at a bound of their range, "
+             "the beam tail at an edge, a value the curve does not determine, where the chain broke (Predict parameters "
+             "fitted the frame again), a fit kept from the backward pass")
 PLOTS_MIN_WIDTH = 460
 """The plots keep at least this width when the steps panel widens for the table."""
 NAMED_FRAMES = 8
@@ -110,13 +113,14 @@ class FitSeriesResultsMixin:
             self._table_frames = []
             if model is not None:
                 columns = parameter_columns(model)
-                table.setColumnCount(len(columns) + 4)
+                table.setColumnCount(len(columns) + 5)
                 table.setHorizontalHeaderLabels(["#", "χ²ᵣ"] + [path_name(model, path, unit=True) for path, _name in columns]
-                                                + [tr("Points"), tr("Halves")])
+                                                + [tr("Flags"), tr("Points"), tr("Halves")])
                 for column, (path, _name) in enumerate(columns, start=2):  # the whole name (“1·Sphere R (nm)”) on hover
                     table.horizontalHeaderItem(column).setToolTip(path_name(model, path, unit=True, full=True))
-                table.horizontalHeaderItem(len(columns) + 2).setToolTip(tr("The points the frame was fitted on"))
-                table.horizontalHeaderItem(len(columns) + 3).setToolTip(
+                table.horizontalHeaderItem(len(columns) + 2).setToolTip(tr(FLAGS_TIP))
+                table.horizontalHeaderItem(len(columns) + 3).setToolTip(tr("The points the frame was fitted on"))
+                table.horizontalHeaderItem(len(columns) + 4).setToolTip(
                     tr("What those points are: the mean of both halves of the cut, or one half"))
                 header = table.horizontalHeader()
                 for column in range(table.columnCount()):
@@ -161,7 +165,7 @@ class FitSeriesResultsMixin:
                 value, error = result.model.get(path).value, result.errors.get(path, np.nan)
                 cells.append("—" if not np.isfinite(value) else
                              f"{value:.4g}" + ("" if not np.isfinite(error) else f" ± {error:.2g}"))
-            cells += [str(frame.points), tr(HALF_TEXT.get(frame.halves_used, frame.halves_used))]
+            cells += [self.flags_cell(frame), str(frame.points), tr(HALF_TEXT.get(frame.halves_used, frame.halves_used))]
         token = STATE_COLOR.get(self._frame_state(frame.index)[0])
         brush = None if token is None else QBrush(theme_manager().color(token))
         tip = self._frame_tip(frame)
@@ -398,7 +402,7 @@ class FitSeriesResultsMixin:
         if not path:
             return None
         frames = list(self.fits.values())
-        header, rows = series_table(frames, self._start_model, details=True, folder=self.folder)
+        header, rows = series_table(frames, self._start_model, details=True, folder=self.folder, flags=True)
 
         def write(target) -> None:
             with open(target, "w", newline="", encoding="utf-8") as stream:

@@ -261,7 +261,7 @@ class BatchWatchMixin(WatchSeriesMixin):
 
     def _watch_tick(self) -> None:
         """The timer: look at the folder on the watch's own thread (one look at a time), then act on it here."""
-        if getattr(self, "_watch_looking", False) or not self.view_model.watch.active:
+        if getattr(self, "_watch_looking", False) or not self.view_model.watch.active or self.watch_paused():
             return
         runner = getattr(self, "_watch_runner", None)
         if runner is None:  # its own runner: a look every two seconds is no "busy" for the progress bar
@@ -301,7 +301,8 @@ class BatchWatchMixin(WatchSeriesMixin):
         exporting = self.auto_export_check.isChecked() and destination is not None
         self._watch_series_sum(exporting=exporting)
         # With frame summing only complete groups of N new frames are exported.
-        requests = model.watch_requests(added, wanted=exporting or self._series_map is not None)
+        requests = model.watch_requests(added, wanted=exporting or self._series_map is not None or self._watch_map_wanted())
+        self._watch_note_waiting()
         if self._watch_dispatch_requests(requests):
             self._say_watch(grown, exporting)
 

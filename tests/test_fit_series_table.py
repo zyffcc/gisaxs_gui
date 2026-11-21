@@ -126,7 +126,8 @@ def test_the_table_shows_every_value_the_points_and_the_halves_and_copies(tmp_pa
     table = series.results_table
     values = parameter_columns(series._start_model)
     header = _header(table)
-    assert len(values) >= 6 and table.columnCount() == len(values) + 4  # every free value has its column
+    assert len(values) >= 6 and table.columnCount() == len(values) + 5  # every free value has its column, and Flags
+    assert header[len(values) + 2] == "Flags"
     assert header[:4] == ["#", "χ²ᵣ", "Scale", "R (nm)"] and header[-2:] == ["Points", "Halves"]
     assert table.horizontalScrollBarPolicy() != Qt.ScrollBarAlwaysOff  # the columns that do not fit are scrolled to
     first = _row(table, 0)

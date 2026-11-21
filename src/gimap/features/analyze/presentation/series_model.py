@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..application import SeriesMap, settings_record
+from ..application import SeriesMap, export_series_timeline, settings_record
 from ..application.series_map import export_series_curve, export_series_trace
 
 VOLATILE = ("software", "software_version", "format", "version", "export")
@@ -64,6 +64,10 @@ class SeriesModelMixin:
     def write_series_curve(self, series: SeriesMap, row: int, path: Path) -> Path:
         """The curve of one row of the map as a table."""
         return export_series_curve(self._export.writer, series, int(row), Path(path))
+
+    def export_series_timeline(self, series: SeriesMap, timeline, path: Path, *, stages=None) -> Path:
+        """The timeline of the map (χ² to the frame before and to the reference frame) as a table."""
+        return export_series_timeline(self._export.writer, series, timeline, Path(path), stages=stages)
 
     def write_series_trace(self, series: SeriesMap, name: str, values, path: Path, *, what: str) -> Path:
         """One value per frame (the trace shown under the map) as a table."""

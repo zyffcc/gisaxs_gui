@@ -3839,6 +3839,34 @@ Implementation: `src/gimap/features/compare/domain/comparison.py`, `src/gimap/fe
 - The peak in a window (section 11.2) is a moment estimate with a fixed straight background; its width depends on the window.
 - Compare interpolates linearly in I onto the first series' points. A series measured on a much finer grid is compared only at those points.
 
+### 11.12 The timeline: how far each frame is from its neighbour and from a reference frame
+
+Under the map (Analyze ▸ Series, the plot under the map: *χ² to the frame before* or *χ² to the reference frame*), every row `r` of the map is compared with the row before it and with a reference row `r_ref` (Options ▸ Reference frame, the first by default). The rows are mean intensities without their σ, so the noise of every x column is taken from the series itself, as in Eq. (11.5) (Eq. (11.6) below 4 rows), and no column counts as quieter than the median column:
+
+```text
+s(x)      = max( ν(x), median_x ν )                                                              (11.62)
+χ²(a, b)  = 1/(2 n) · ∑_k [ (I_a(x_k) − I_b(x_k)) / s(x_k) ]²                                    (11.63)
+χ²_prev(r) = χ²(r, r − 1),   χ²_ref(r) = χ²(r, r_ref)                                            (11.64)
+```
+
+The sum runs over the `n` columns where both rows have a value (the x range shown in the map when Options ▸ Stages compare says so). Two frames that differ by noise alone give χ² ≈ 1 (their difference has twice the variance of one frame). A **jump** is a row whose `χ²_prev` is a local maximum (not smaller than its neighbours) above both 3 and `median + 5 · 1.4826 · MAD` of the finite `χ²_prev` values; at most the 10 largest are marked. The plot also draws the stage boundaries (section 11.7, dashed) and the odd frames (section 11.5, ×). A click on the plot picks the row nearest on the frame axis and shows its frame. The table (Export ▾ ▸ Timeline as Table…) writes per frame `chi2_to_previous`, `chi2_to_reference`, `jump`, `stage`, `odd` (and `time_s`), with the method in its record.
+
+`χ²` is a distance in units of the frame-to-frame noise, not a goodness of fit: σ is estimated from the series, so a series whose every frame changes (a steady drift) raises the noise estimate only through the curvature of the drift, and a column that is noisy in every frame weighs less. Implementation: `src/gimap/features/analyze/domain/series_timeline.py`, `src/gimap/features/analyze/application/series_results.py`
+
+### 11.13 Chained fit of an In-situ series
+
+Fitting ▸ In-situ series ▸ *The previous result; Predict parameters where the chain breaks* refines every frame from the converged result of the frame before (as *The previous frame's result*). The chain **breaks** at a frame whose fit failed or did not converge, at the first frame of a new stage, at a flagged fit (beam tail at an edge, a value without a finite error; section 9.16), at a poor fit (`χ²ᵣ > 10`), or where χ²ᵣ jumps:
+
+```text
+χ²ᵣ(i) > 3 · χ²ᵣ(i − 1)   and   χ²ᵣ(i) > 2                                                          (11.65)
+```
+
+There the frame is fitted again by Predict parameters with the particles of the start model (section 9.13; its method is unchanged), and of the two fits the one that converged is kept, else the one with the lower χ²ᵣ (the refined one on equal terms). With *Then a backward pass*, after the frames in order every frame from the last but one to the first is refined from the kept result of the frame after it, and the better of its two fits is kept by the same rule. Every frame records where its kept fit started (`start_from`: previous, next, single, predict), why the chain broke (`chain_break`), the pass (`fit_pass`) and its **flags**: failed, not converged, stopped, poor fit, values at a bound of their range, the beam tail at an edge, undetermined values, chain broke, backward. The thresholds 3 and 2 are working choices, not derived from a noise model. Implementation: `src/gimap/features/fitting/application/series_chain.py`
+
+### 11.14 The results database
+
+Analyze records the curve of every row of a map (as reduced: both halves of a cut as measured, on the x of the frame, with its frame number, file, frame index, sum and time) in `gimap_series.sqlite` (SQLite, WAL), Fitting the fit of every frame (state, χ²ᵣ, values and errors in nm and nm⁻¹, flags, start), and a watch the files it skipped and why. Arrays are kept as little-endian float64; a frame written again replaces its row. Compare stacks one curve of one series on the x of its first frame by linear interpolation inside each curve's own range, never across a gap wider than 10 of its steps. Implementation: `src/gimap/shared/series_store.py`
+
 ## 12. Sputter
 
 The Sputter workspace follows an in-situ sputter deposition series. Its **Analyze** runs a separate analysis package (`iampred`, bundled with GIMaP as `utils/sputter_client`) as a subprocess and shows what the package writes. The networks, the physical forward model and the refinement are the package's and are documented with it; this chapter states what GIMaP does with the package's input and output (12.1), with the deposition rate (12.2), and how it draws a solution in real space (12.3).

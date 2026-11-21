@@ -289,10 +289,13 @@ class FitSeriesStagesMixin:
 
     def _start_choice(self) -> str:
         """``previous``, ``same`` or ``stages``: where each frame starts."""
+        if self.start_chain.isChecked():
+            return "chain"
         return "same" if self.start_same.isChecked() else "stages" if self.start_stages.isChecked() else "previous"
 
     def _set_start(self, choice) -> None:
-        {"same": self.start_same, "stages": self.start_stages}.get(choice, self.start_previous).setChecked(True)
+        {"same": self.start_same, "stages": self.start_stages, "chain": self.start_chain}.get(
+            choice, self.start_previous).setChecked(True)
 
     # -- per frame -----------------------------------------------------------------------------
 
@@ -356,7 +359,7 @@ class FitSeriesStagesMixin:
     # -- the trend ------------------------------------------------------------------------------
 
     def _draw_trend(self) -> None:
-        """A value (± 1σ) or χ²ᵣ against frame, one colour per stage."""
+        """A value (± 1σ) or χ²ᵣ against frame (or time: ``trend_x``), one colour per stage."""
         import pyqtgraph as pg
 
         key = self.trend_combo.currentData()
@@ -372,7 +375,7 @@ class FitSeriesStagesMixin:
         name = tr("χ²ᵣ") if key == CHI2 else self.trend_combo.currentText()
         curves, colors, bars = [], [], []
         for stage, members in groups.items():
-            x = np.array([frame.index + 1 for frame in members], float)
+            x = np.array(self.trend_x([frame.index for frame in members])[0], float)
             if key == CHI2:
                 y, error = np.array([frame.result.chi2_reduced for frame in members]), np.full(len(members), math.nan)
             else:
@@ -388,13 +391,18 @@ class FitSeriesStagesMixin:
         # off the late frames; one value needs no legend (the list above the plot and the axis name it).
         self.trend_plot.legend.setOffset(self._legend_corner(curves) if len(groups) > 1 else (-10, 10))
         self.trend_plot.legend.setVisible(len(groups) > 1)
-        self.trend_plot.set_labels("frame", "χ²ᵣ" if key == CHI2 else path_name(self._start_model, key, unit=True, translate=False))
+        _every, axis = self.trend_x([frame.index for frame in frames])
+        self.trend_plot.set_labels(axis, "χ²ᵣ" if key == CHI2 else path_name(self._start_model, key, unit=True, translate=False))
         self.trend_plot.set_curves(curves, colors, markers=[TREND_MARKER] * len(curves))
-        first, last = frames[0].index + 1, frames[-1].index + 1
-        self.trend_plot.plot.setXRange(first - 0.5, last + 0.5, padding=0)  # no point on the edge of the plot
-        step = next(step for step in (1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10 ** 9)
-                    if (last - first) / step <= 10)
-        self.trend_plot.plot.getAxis("bottom").setTickSpacing(major=step, minor=max(1, step // 5))  # whole frames
+        if axis == "frame":
+            first, last = frames[0].index + 1, frames[-1].index + 1
+            self.trend_plot.plot.setXRange(first - 0.5, last + 0.5, padding=0)  # no point on the edge of the plot
+            step = next(step for step in (1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10 ** 9)
+                        if (last - first) / step <= 10)
+            self.trend_plot.plot.getAxis("bottom").setTickSpacing(major=step, minor=max(1, step // 5))  # whole frames
+        else:  # seconds: as they fall
+            self.trend_plot.plot.getAxis("bottom").setTickSpacing()
+            self.trend_plot.plot.enableAutoRange(axis="x")
         for x, y, error, color in bars:  # ±1σ as vertical bars, in the plot's coordinates
             keep = np.isfinite(error)
             if not keep.any():

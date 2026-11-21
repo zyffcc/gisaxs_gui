@@ -15,6 +15,7 @@ from typing import Callable, Optional, Protocol, Sequence
 
 import numpy as np
 
+from src.gimap.shared.series_store import NEWER_STORE, NO_CURVES, NO_SERIES, NOT_A_STORE, SeriesStore, read_curves, stacked
 from src.gimap.shared.version import SOFTWARE
 
 from ..domain import COMPARE_ERRORS, Comparison, SeriesData, compare
@@ -51,11 +52,13 @@ UNREAD_FILE = "{name} ({error})"
 DIFFERENT_FILE_AXES = "The files have different x axes: {axes}"
 TOO_FEW_IN_FOLDER = "Fewer than two curve files ({suffixes}) in {folder}."
 TOO_FEW_IN_TABLE = "The table {name} holds fewer than two frames."
+TOO_FEW_IN_STORE = "The results database holds fewer than two frames of {name} · {curve}."
 STAGE_PERCENT = ("change of I from the stage before, relative to the rest of the curve (the mean change of log I "
                  "over the compared range removed), in %")
 """What ``percent`` of a series' ``stage_details`` means (the record says it next to the numbers)."""
 ERRORS = (TOO_FEW_FILES, TOO_FEW_READ, DIFFERENT_FILE_AXES, TOO_FEW_IN_FOLDER, TOO_FEW_IN_TABLE, SEVERAL_KINDS,
-          NO_SUCH_KIND, NO_TABLE, NOT_NUMBERS, *COMPARE_ERRORS)
+          NO_SUCH_KIND, NO_TABLE, NOT_NUMBERS, TOO_FEW_IN_STORE, NOT_A_STORE, NEWER_STORE, NO_SERIES, NO_CURVES,
+          *COMPARE_ERRORS)
 """Every error template of Compare's files and comparison (a template without values is an exact text)."""
 
 
@@ -179,6 +182,25 @@ class CompareService:
         if chosen.table is not None:
             return self.series_from_table(chosen.table, name, source=folder)
         raise ValueError(too_few)
+
+    @staticmethod
+    def store_contents(path: Path) -> list[tuple[str, str, int]]:
+        """``(series, curve, frames)`` of every curve of every series recorded in a results database."""
+        with SeriesStore(Path(path), read_only=True) as store:
+            return [(name, curve, count) for name in store.series_names()
+                    for curve, count, _label in store.curve_keys(name)]
+
+    @staticmethod
+    def series_from_store(path: Path, series: Optional[str] = None, curve: Optional[str] = None) -> SeriesData:
+        """One curve of one series of a results database (``shared/series_store``; the series recorded last and its
+        first curve when none is named), on the x of its first frame, frames in their order."""
+        name, curve, curves = read_curves(Path(path), series, curve)
+        if len(curves) < 2:
+            raise ValueError(TOO_FEW_IN_STORE.format(name=name, curve=curve))
+        x, image = stacked(curves)
+        labels = tuple(item.label or Path(item.file).name for item in curves)
+        return SeriesData(KIND_IN_NAME.format(name=name, kind=curve), x, image, labels, x_label=curves[0].x_label,
+                          source=str(path), paths=tuple(item.file for item in curves))
 
     @staticmethod
     def series_from_map(series_map, name: str) -> SeriesData:
