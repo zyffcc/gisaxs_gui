@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .curve_columns import column_q_unit, csv_columns
 from .curve_units import file_q_unit
 from .scattering_curve_files import load_xy_any
 from .curve_tables import inspect_curve_table, load_table_curve
@@ -95,18 +96,20 @@ class LocalCurveRepository:
             return nxcansas_curves.load_curve(
                 InSituSourceFrame(source, selection.frame_index), request.q_source_unit)
         if source.suffix.lower() not in CURVE_SUFFIXES:
-            # Also Analyze's .csv tables: their columns differ by table (I(χ), q maps, Fitting's own
-            # “data and fit” with two q columns), so reading one as q, I, σ could fit the wrong axis.
             raise ValueError(UNSUPPORTED_CURVE)
-        loaded = (load_xy_any(str(source)) if selection.columns is None
-                  else load_table_curve(source, selection.columns))
+        columns, chosen_by = selection.columns, "selection"
+        if columns is None and source.suffix.lower() == ".csv":
+            # A CSV's columns differ by table (Fitting's own “data and fit” has two q columns): by the header's
+            # names, never by place alone (``curve_columns``).
+            columns, chosen_by = csv_columns(source), "header"
+        loaded = load_xy_any(str(source)) if columns is None else load_table_curve(source, columns)
         pixels, observation = read_fit_input_extras(source)
         if pixels is not None and pixels.size != np.asarray(loaded.q).size:
             pixels = None  # rows were dropped as non-finite: counts no longer align
-        if selection.columns is not None:
+        if columns is not None:
             observation = dict(observation, curve_source={
-                "path": str(source), "columns": selection.columns.to_dict(),
-                "sigma_source": "none" if selection.columns.sigma is None else "column",
+                "path": str(source), "columns": columns.to_dict(), "chosen_by": chosen_by,
+                "sigma_source": "none" if columns.sigma is None else "column",
             })
         return CurveData(
             q=loaded.q,
@@ -128,7 +131,10 @@ class LocalCurveRepository:
             raise FileNotFoundError(CURVE_NOT_FOUND.format(path=source.resolve()))  # as ``load`` says it
         if nxcansas_curves.is_nxcansas_file(source):
             return nxcansas_curves.stated_unit(source, selection.frame_index)
-        return file_q_unit(source)
+        columns = selection.columns
+        if columns is None and source.suffix.lower() == ".csv":
+            columns = csv_columns(source)
+        return file_q_unit(source) if columns is None else column_q_unit(source, columns)
 
     def inspect_table(self, path) -> CurveTablePreview:
         source = InSituSourceFrame.from_token(str(path)).path.expanduser().resolve()

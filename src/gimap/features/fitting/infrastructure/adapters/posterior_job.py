@@ -9,6 +9,13 @@ model (``model_to_dict``), χ²ᵣ (over the fitted points, with the curve's σ:
 shows), probability, values with their posterior intervals, flags (``shared/fit_names.clean_flags``: none for a term
 that is absent), ``points`` (``fitted_points``: how many were fitted, how many lay below the network's q window);
 ``tried`` (the compositions given; None: the network chose) and the network's name and SHA-256.
+
+While it runs, the job reports its stages (``StageReport``): the details of a report say the stage (``loading``,
+``proposals``, ``refinement``, ``starts``, ``search``, ``sampling``), how many of its items are done of how many, the
+seconds since the start and an estimate of the seconds left in the stage; after each solution's posterior is sampled
+(but the last) they also carry ``partial``: the solutions sampled so far, encoded as the result's, their probabilities
+over those alone — what the page keeps when Predict is stopped. The numbers computed are those of a run without
+reports (``refine.predict``).
 """
 
 from __future__ import annotations
@@ -67,25 +74,70 @@ def encode(solution, points=None) -> dict:
     }
 
 
+STAGES = {"loading": (0.0, 0.02), "proposals": (0.02, 0.15), "refinement": (0.15, 0.5), "starts": (0.5, 0.55),
+          "search": (0.5, 0.55), "sampling": (0.55, 1.0)}
+"""Each stage's share of the bar (from, to): a guide only, the stages take other times on other curves."""
+STAGE_LINES = {"loading": "Loading the proposal network", "proposals": "Network proposals: composition {number} of {total}",
+               "refinement": "Refining the modes: composition {number} of {total}",
+               "starts": "Refining from other starts: composition {number} of {total}",
+               "search": "Searching the ranges for a composition the proposals miss",
+               "sampling": "Sampling the posterior: solution {number} of {total}"}
+"""The English line of each stage (the log; the page builds its own from the details)."""
+
+
+class StageReport:
+    """The job's reports of ``refine.predict``'s stages and of the solutions finished so far (module docstring)."""
+
+    def __init__(self, report, points: dict, tick: float):
+        self.report, self.points, self.tick = report, points, tick
+        self.stage, self.started, self.last = "", tick, (0, 0)
+
+    def progress(self, stage: str, done: int, total: int, **extra) -> None:
+        """``done`` of ``total`` items of ``stage`` finished (the item after them is under way)."""
+        now = time.perf_counter()
+        if stage != self.stage:
+            self.stage, self.started = stage, now
+        self.last = (int(done), int(total))
+        low, high = STAGES.get(stage, (0.0, 1.0))
+        share = min(1.0, done / total) if total > 0 else 0.0
+        left = (now - self.started) / done * (total - done) if 0 < done < total else None
+        details = {"stage": stage, "done": int(done), "total": int(total), "elapsed": round(now - self.tick, 2),
+                   "left": None if left is None else round(left, 1), **extra}
+        line = STAGE_LINES.get(stage, stage).format(number=min(int(done) + 1, max(int(total), 1)), total=total)
+        try:  # a report never stops the run
+            self.report(low + (high - low) * share, 1, line, details)
+        except Exception:  # noqa: BLE001 - e.g. a value JSON cannot take: the run goes on without this report
+            pass
+
+    def partial(self, solutions) -> None:
+        """The solutions of those sampled so far (``refine.predict``'s ``partial``, right after a sampling)."""
+        try:
+            encoded = [encode(s, self.points) for s in solutions]
+        except Exception:  # noqa: BLE001 - nothing to keep from this report; the run goes on
+            return
+        done, total = self.last
+        self.progress("sampling", done + 1, total, partial=encoded)
+
+
 def run_predict(payload: dict, report, cancelled) -> dict:
     tick = time.perf_counter()
-    report(0, 1, "Loading the proposal network")
+    points = fitted_points(payload["q"], payload["intensity"], payload.get("sigma"), payload.get("qz") or 0.0,
+                           None if payload.get("qz_minus") is None else float(payload["qz_minus"]))
+    stages = StageReport(report, points, tick)
+    stages.progress("loading", 0, 1)
     network = posterior_network.load()
     if cancelled():
         raise RuntimeError("Fitting cancelled")
-    report(0, 1, "Weighting the network's samples and refining each solution")
     solutions = refine.predict(
         network, payload["q"], payload["intensity"], payload.get("sigma"), qz=float(payload.get("qz") or 0.0),
         qz_minus=None if payload.get("qz_minus") is None else float(payload["qz_minus"]),
         compositions=payload.get("compositions"), allowed=payload.get("allowed"),
         seed=int(payload.get("seed", 0)),
         law=payload.get("law", "number_gauss"), coupling=payload.get("coupling", "lma"),
-        grazing=payload.get("grazing"))
+        grazing=payload.get("grazing"), progress=stages.progress, partial=stages.partial)
     if cancelled():
         raise RuntimeError("Fitting cancelled")
     report(1, 1, "Done")
-    points = fitted_points(payload["q"], payload["intensity"], payload.get("sigma"), payload.get("qz") or 0.0,
-                           None if payload.get("qz_minus") is None else float(payload["qz_minus"]))
     tried = payload.get("compositions")
     return {"solutions": [encode(s, points) for s in solutions], "points": points,
             "tried": None if tried is None else len(tried),
@@ -244,5 +296,5 @@ def fit_and_write(output, item, options, report, cancelled) -> list:
     return rows
 
 
-__all__ = ["amplitudes", "batch_compositions", "encode", "fit_and_write", "fitted_points", "flag_sentences",
-           "run_predict", "solution_flags", "solution_row"]
+__all__ = ["STAGES", "STAGE_LINES", "StageReport", "amplitudes", "batch_compositions", "encode", "fit_and_write",
+           "fitted_points", "flag_sentences", "run_predict", "solution_flags", "solution_row"]

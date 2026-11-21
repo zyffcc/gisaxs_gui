@@ -134,7 +134,10 @@ def test_the_real_predict_job_tells_its_steps_through_the_page(tmp_path, monkeyp
         _wait(page, 300.0)
         assert page.session.solutions, page.status_label.text()
         lines = [line for *_bars, line, _status in seen]
-        assert lines[:2] == [LOADING, WEIGHTING]
+        assert lines[0].startswith(LOADING + " · 0:0")  # its stages (predict_progress.stage_line), with the time
+        assert any(line.startswith("Step 1 of 3 · Network proposals: composition 1 of 1 · ") for line in lines)
+        assert any(line.startswith("Step 2 of 3 · Refining the modes: composition 1 of 1") for line in lines)
+        assert any(line.startswith("Step 3 of 3 · Sampling the posterior: solution 1 of ") for line in lines)
         assert all(line == status for *_bars, line, status in seen)
         assert not page.fit_progress.isVisible() and page.fit_progress_text.text() == ""
     finally:
@@ -221,7 +224,7 @@ def test_stop_during_predict_parameters_is_said_as_a_stop_not_as_a_failure(tmp_p
     assert page.fit_progress_text.text() == "Stopping…" and page.fit_progress.maximum() == 0  # … is not said after it
     _wait(page)
     assert jobs.cancelled  # the job was asked to stop
-    assert page.status_label.text() == "Stopped before the search finished: no new solutions."
+    assert page.status_label.text() == "Stopped before any solution was finished: no new solutions."
     assert "failed" not in page.status_label.text() and "cancelled" not in page.status_label.text()
     assert page.session.solutions == [] and page.session.model == model and page.step_rail.state("fit") == "pending"
 
@@ -254,20 +257,21 @@ def test_the_solutions_and_what_is_said_of_them_follow_the_language(tmp_path, ch
     def names() -> list[str]:
         return [table.item(line, 1).text() for line in range(table.rowCount())]
 
-    assert names() == ["Sphere"] * 3 and page.step_rail.detail("fit").startswith("3 solutions · best Sphere ")
-    assert page.status_label.text().startswith("3 solutions; the best, Sphere (")
+    numbered = [f"Sphere #{number}" for number in (1, 2, 3)]  # one composition: told apart by their number
+    assert names() == numbered and page.step_rail.detail("fit").startswith("3 solutions · best Sphere #1 ")
+    assert page.status_label.text().startswith("3 solutions; the best, Sphere #1 (")
     sphere = chinese.ZH["Sphere"]
     _switch(chinese, page, "zh")
-    assert names() == [sphere] * 3  # composed again, not the text of when they were found
+    assert names() == [f"{sphere} #{number}" for number in (1, 2, 3)]  # composed again, not the text of when found
     assert sphere in page.step_rail.detail("fit") and "Sphere" not in page.step_rail.detail("fit")
     assert sphere in page.status_label.text() and "Sphere" not in page.status_label.text()
     table.selectRow(1)
     page.use_selected_solution()
     chosen = "{model} is in Model (Undo brings the previous one back)."
-    assert page.status_label.text() == chinese.ZH[chosen].format(model=sphere)
+    assert page.status_label.text() == chinese.ZH[chosen].format(model=f"{sphere} #2")
     _switch(chinese, page, "en")
-    assert names() == ["Sphere"] * 3 and page.status_label.text() == chosen.format(model="Sphere")
-    assert page.step_rail.detail("fit").startswith("3 solutions · best Sphere ")
+    assert names() == numbered and page.status_label.text() == chosen.format(model="Sphere #2")
+    assert page.step_rail.detail("fit").startswith("3 solutions · best Sphere #1 ")
     page.dispose()
 
 

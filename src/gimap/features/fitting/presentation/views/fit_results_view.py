@@ -133,8 +133,18 @@ def build_results_step(owner, page: QWidget, layout) -> None:
     owner.use_solution_button = QPushButton("Use This Solution", owner.alternatives)
     owner.use_solution_button.setObjectName("fitUseSolution")
     owner.use_solution_button.setToolTip("Put the selected solution into Model (Undo brings the previous model back)")
-    for widget in (owner.solutions_title, owner.solutions_table, owner.use_solution_button):
+    owner.export_solutions_button = QPushButton("Export Solutions…", owner.alternatives)
+    owner.export_solutions_button.setObjectName("fitExportSolutions")
+    owner.export_solutions_button.setToolTip(
+        "Every solution: probability, χ²ᵣ, flags and every value with its median and 68 % / 95 % intervals (CSV and "
+        "JSON), and the curves of every solution with their terms")
+    solution_buttons = QHBoxLayout()
+    solution_buttons.addWidget(owner.use_solution_button)
+    solution_buttons.addWidget(owner.export_solutions_button)
+    solution_buttons.addStretch(1)
+    for widget in (owner.solutions_title, owner.solutions_table):
         owner.alternatives.add_widget(widget)
+    owner.alternatives.add_layout(solution_buttons)
     owner.alternatives.hide()
     layout.addWidget(owner.alternatives)
 
@@ -145,7 +155,8 @@ def build_results_step(owner, page: QWidget, layout) -> None:
         "CSV: q, I, σ, the model, the residuals and each term; a JSON record of the model and the fit next to it")
     owner.export_plot_step_button = QPushButton("Save Plot…", page)
     owner.export_plot_step_button.setObjectName("fitExportPlot")
-    owner.export_plot_step_button.setToolTip("The plot as shown: PNG (image) or SVG (vector)")
+    owner.export_plot_step_button.setToolTip(
+        "The plot as shown with the residuals under it: PNG (image), SVG or PDF (vector), with error bars")
     owner.save_model_button = QPushButton("Save Model…", page)
     owner.save_model_button.setObjectName("fitSaveModel")
     owner.save_model_button.setToolTip("The model (values, fit/fixed, ranges) as JSON, to load for another curve")

@@ -536,8 +536,8 @@ the folders GIMaP keeps, and the links to GitHub, the citation, the notices and 
 
 - While Fitting's Single analysis is shown, **File ▸ Open Data…** opens a curve and says so
   (*Open Curve…*).
-- **Edit ▸ Undo** and **Redo** act on the page shown: Analyze, or Fitting's Single analysis. On
-  Analyze the entry names what it would change (for example *Undo: cut regions*). On the other pages
+- **Edit ▸ Undo** and **Redo** act on the page shown: Analyze, or Fitting's Single analysis. The
+  entry names what it would change (for example *Undo: cut regions*, *Undo: the fit (Refine)*). On the other pages
   they are greyed out.
 - Every entry of **Analyze** and **Fitting** first shows its page (in Fitting the Single analysis, or
   the In-situ series for Fit a Folder of Curves… and Batch / In-situ Series ▸ Start / Stop), then does what
@@ -600,8 +600,14 @@ A project (`.gimap`, a JSON file) reopens a sample as it was left:
 
 - the frames and the whole set-up of Analyze (mode, profile, masks and drawn regions, corrections,
   cuts), the frames chosen for import (section 5.1) and whether one cut is held for a series;
-- the curve, halves, fitting range, left-out points, model and selected method of Fitting;
-- the folder and choices of the In-situ series, and the series of Compare;
+- the curve, halves, fitting range, left-out points, model and selected method of Fitting, and its results: the
+  last fit (values, errors, χ²ᵣ, values at a bound, correlations), every solution of Predict parameters (probability,
+  intervals, flags) and where a fit started from. They are shown again as they were; when the curve's file changed
+  since the project was saved (its SHA-256), they are shown as stale (*Changed after the fit: Fit again*) and the
+  project's notes say so;
+- the folder and choices of the In-situ series with its fitted frames (each frame's values, errors, χ²ᵣ and points,
+  shown again once the curves are listed; a frame whose file is no longer listed is left out, and the status line
+  says how many), and the series of Compare;
 - the Sputter form (the input bar with the rate's unit, the geometry, the options of Analyze and of Static
   Frames), scan/mask/output paths and the reference to the result folder shown (the result is not copied). A project
   of an older version keeps its geometry; its result of the earlier method (Predict) is not opened.
@@ -635,7 +641,7 @@ or dropping a `.gimap` file on the window opens it.
 - After **Clear** in Analyze, what you open next is no longer that project: **Save Project** asks
   where to save instead of overwriting it.
 - A project cannot be opened while a job runs (an In-situ series, Batch Export …): stop it first.
-- A project keeps no fits of the In-situ series. When frames fitted there are not saved yet, opening a
+- Opening a project replaces the fits of the In-situ series. When frames fitted there are not saved yet, opening a
   project asks first: **Save** (the table of every frame), **Discard** or **Cancel** (nothing changes).
 
 ### 3.9 Memory between sessions
@@ -1835,7 +1841,7 @@ which writes the curve that Fitting fits.
 
 ### 6.1 Curves Fitting reads
 
-Fitting reads `.dat` and `.txt` text curves and NXcanSAS files (`.h5`):
+Fitting reads `.dat`, `.txt` and `.csv` text curves and NXcanSAS files (`.h5`):
 
 - Analyze's curve files, `<name>_fit_input.dat`, have four columns — q (Å⁻¹), intensity, σ and the number of
   detector pixels averaged — and a header recording where the curve came from.
@@ -1860,11 +1866,18 @@ Fitting reads `.dat` and `.txt` text curves and NXcanSAS files (`.h5`):
   is then named *file.h5 · curve 2*; **Import Curves…** takes every curve of it. An HDF5 file of detector frames
   is no curve: dropped on the window it goes to Analyze.
 
-Fitting does not read `.csv` files, also not the CSV curves that Analyze exports. Use **Send to Fitting** in
-Analyze, or open the `_fit_input.dat` written next to the CSV. A `.csv` dropped on Fitting is refused with
-that reason.
+A `.csv` file is read by the names of its header, not by the place of its columns: q is the column named q (`q`,
+`qy (A^-1)`, `q_nm^-1` …), I the one named I or intensity, σ the one named sigma, σ, err or dI (none: no σ); other
+columns (a model, residuals, terms, pixel counts) are not read. So the cuts of the command line (`horizontal.csv`,
+the names in its last `#` line), Analyze's curve tables and Fitting's own **Save ▸ Data and Fit…** table — which has
+q twice, in nm⁻¹ and then in Å⁻¹: the first is taken, in nm⁻¹ — open as they are. q is read in the unit the name of
+its column states. A CSV without a header of two or three columns is read as `q I [σ]`, like a `.dat` file. When the
+header does not decide (two intensities, q of two axes, or no header and more columns), **Choose Columns** shows the
+header and the first ten rows, as **Import Curves…** does, and asks which column is q, I and σ (or none), and the
+unit of q when the q column's name states none. The record of a fit names the columns that were read
+(`curve.columns_read`).
 
-Single-curve inputs keep their existing interpretation: **Open Curve…** and folder discovery read
+Single-curve `.dat` and `.txt` inputs keep their existing interpretation: **Open Curve…** and folder discovery read
 `q I [σ]`, including the third column as σ. To split `q I1 I2 …`, use **Import Curves…** explicitly.
 
 **Import selected files or several curves from one file**
@@ -1955,7 +1968,8 @@ The page is laid out like Analyze: the steps on the left, each saying where it s
 - **The command bar**: **Open Curve…** (its menu: **Load Model…**), **Undo / Redo** (`Ctrl+Z` /
   `Ctrl+Shift+Z`: every change of the model, the fitting range or the left-out points is one step, and so is every
   fit, solution used and model loaded), **Fit** (`Ctrl+Return`), **Stop** and **Save** (**Data and Fit…**,
-  **Plot…**, **Model…**).
+  **Plot…**, **Model…**, **Solutions…**). After Undo or Redo the status line names the step (*Undone: the fit
+  (Refine).*), and the buttons' tooltips name the step they would take (*Undo: solution 2 in Model (Ctrl+Z)*).
 
 Showing or hiding contributions keeps the current x/y limits, including a manual zoom. By default, automatic
 limits and **Reset** use only the data and total model; small component tails can lie below the visible range.
@@ -2069,10 +2083,17 @@ sizes for your sample, or let the Fit step find them.
 - When there are several solutions (of Predict parameters, or of Analyze), the drop-down above the parameter table
   switches the entire solution: parameters, errors, total curve, components and residuals together. It does not
   combine individual parameter endpoints from unrelated solutions. The exported record identifies the selected
-  solution.
+  solution. Each entry gives the solution's number and name — numbered (*Sphere #1*, *Sphere #2*) when two have the
+  same composition — its χ²ᵣ, p and flags in short (*⚠ at bound: Tail ν*; their sentences on hover), and
+  *incomplete* for a solution kept when Predict was stopped. After **Refine These Values** the first entry is that
+  fit (*Refined from solution 1 (Refine) · χ²ᵣ 1.04*), and the quality box says that the values come from a new
+  refinement of solution 1, not from Predict; the solution's own values and intervals stay with it below.
 - Right-click the curve: **Show components** and **Components** control each population, constant background
   and low-q term separately. This only changes visibility; it does not change the fit or its scientific arrays.
-- The values, each ± its 1σ error (the covariance at the solution, scaled by χ²ᵣ). Select values and press
+- The values, each ± its 1σ error (the covariance at the solution, scaled by χ²ᵣ). With a solution of Predict
+  parameters in Model and no fit since, ± is half the width of the solution's 68 % posterior interval (the tooltip
+  gives the interval, the column header says which ± it is); the scales and the background show **–**: Predict solves
+  them for every sample, they have no interval. Select values and press
   **Fix**, **Let It Fit** or **Range…** (or right-click): the next **Fit Again** uses them. **Range…** shows the
   value's min – max in Model. A free value the fit gives no error for shows **–**; its tooltip says why (at a bound
   of its range, the Scale of its population or Tail A at 0, or not constrained by the curve).
@@ -2081,11 +2102,18 @@ sizes for your sample, or let the Fit step find them.
   population, in the order of the radii (`3.06 / 6.02`, `49.4 / –`); two solutions of the same composition say in
   their tooltip in which values they differ (σnn/D, σ_q …). A solution from **Show in Fitting** shows the χ²ᵣ of
   Analyze's fit (section 5.5) until you fit it.
-  **Use This Solution** puts one into Model (Undo brings the previous model back).
+  **Use This Solution** puts one into Model (Undo brings the previous model back). **Export Solutions…** (also
+  **Save ▸ Solutions…**) writes every solution: `<curve>_solutions.csv` (a row per solution and parameter: the
+  composition, probability, χ²ᵣ and its points, flags, whether it is incomplete, and the value, posterior median,
+  68 % and 95 % intervals and least-squares error), `<curve>_solutions.json` (the record of Save Data and Fit with
+  every solution under `predict`) and `<curve>_solutions_curves.csv` (the points and every solution's model,
+  residual and terms).
 - **Save Data and Fit…** writes a CSV — q (nm⁻¹ and Å⁻¹), I, σ, the model, the residuals and every term — with a
   JSON record next to it: the model, the fit (errors, values at a bound, correlations) and the
-  points used. Choose **NXcanSAS (*.h5)** as the type for an HDF5 file with two SASentry groups, the points fitted
-  (Idev = σ) and the model, Q = |q| in 1/nm; the record is next to it and inside it. **Save Plot…** writes PNG or SVG; **Save Model…** writes the model as JSON, to load for another
+  points used; after Predict parameters also every solution (`predict`: composition, probability, χ²ᵣ, flags and
+  every value with its median and intervals). Choose **NXcanSAS (*.h5)** as the type for an HDF5 file with two SASentry groups, the points fitted
+  (Idev = σ) and the model, Q = |q| in 1/nm; the record is next to it and inside it. **Save Plot…** writes the plot with its residuals under it as one figure — PNG, SVG or PDF, on white, with
+  error bars from σ, the terms shown and the fitting range shaded; **Save Model…** writes the model as JSON, to load for another
   curve with **Load Model…**.
 - **Run Log** (folded) at the bottom.
 
@@ -2165,7 +2193,11 @@ benchmarks.
    others the model reweights its proposals).
 3. Without σ in the file, Predict takes a relative σ from the scatter of ln I about its trend (at least 1 %); the
    Curve card names its value, and the 1D Predict window uses the same estimate.
-4. Press **Fit**. It runs in a separate process; **Stop** ends it without a result. For a curve of a few hundred
+4. Press **Fit**. It runs in a separate process. The line under the bar says the step — *Step 1 of 3 · Network
+   proposals: composition 2 of 4*, *Step 2 of 3 · Refining the modes …*, *Step 3 of 3 · Sampling the posterior:
+   solution 2 of 3* — the time since the start and, once an item of the step is done, about how long the step still
+   takes. **Stop** ends it at once: the solutions whose posterior was sampled before Stop are kept, marked
+   *incomplete*, their probabilities over those alone (none sampled: nothing changes). For a curve of a few hundred
    points on one core it takes some seconds with **The particles in Model**, from some tens of seconds to a few
    minutes with **Spheres and upright cylinders (1–2)** and a few minutes or more with **Any particles (1–3)**,
    whose random cylinders are slow (20–30 s per least-squares fit). The time grows with the number of points and
@@ -3560,7 +3592,8 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Process with AI ▸ **Save Report…** | `<stem>_ai_report.html` + `<stem>_ai_report.json` | as above | the JSON |
 | Process with AI (automatic) | a record of every run; missing analyses | user data folder: `assistant_runs/`, `assistant_feature_requests.jsonl` | — |
 | Process with AI, when the AI exports | the curves as Export, and `<stem>_assistant.json` | `gimap_analysis/` next to the data | `<stem>_analysis.json`, `<stem>_assistant.json` |
-| Fitting ▸ Single analysis ▸ **Save ▸ Data and Fit…** | `<curve>_fit.csv` (or NXcanSAS `<curve>_fit.h5`) + `<curve>_fit.json` (written as a pair) | the folder saved to last, else the folder a curve was last opened from, else the curve's folder | the JSON (model, method, range, left-out points) |
+| Fitting ▸ Single analysis ▸ **Save ▸ Data and Fit…** | `<curve>_fit.csv` (or NXcanSAS `<curve>_fit.h5`) + `<curve>_fit.json` (written as a pair) | the folder saved to last, else the folder a curve was last opened from, else the curve's folder | the JSON (model, method, range, left-out points; every solution of Predict parameters) |
+| Fitting ▸ Single analysis ▸ **Save ▸ Solutions…** (**Export Solutions…**) | `<curve>_solutions.csv` + `<curve>_solutions.json` (written as a pair) + `<curve>_solutions_curves.csv` | as Data and Fit | the JSON (the Data and Fit record with every solution, its values and intervals) |
 | Fitting ▸ **Save ▸ Plot…**, **Save ▸ Model…** | `<curve>_fit.png` / `.svg`; `<curve>_model.json` | as above | none; the model file |
 | Fitting ▸ Batch / In-situ series ▸ **Save ▸ Table of Every Frame…** | `series_fit.csv` + `series_fit.json` | the series folder | the JSON (`gimap_series_fit_v2`: start model, halves and where they came from, every frame's state and reason; for detector frames Analyze's settings) |
 | Fitting ▸ Batch / In-situ series ▸ **Trend Plot…**, **Selected Frame's Plot…** | `series_trend_<value>.png` (the table column of the value, for example `series_trend_chi2_reduced.png`) and `series_frame_<NNNNN>.png` (the frame counted from 1, five digits), or `.svg`; `series_trend.png`, `series_frame.png` while nothing is fitted | the series folder | none (the title in the picture names the value or frame) |
@@ -3650,7 +3683,6 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 |---|---|
 | **Cancellation does not forcibly interrupt low-level file reading.** A Compare directory scan or single-table read, or the current Fitting read, may still be returning. | Press Cancel or Stop once; the request is registered, and the unfinished import is discarded or the frame fit skipped when reading returns. Completed series and results stay (sections 6.5, 7.2). |
 | **Curve import supports `q I [sigma]` and `q I1 I2 …`, not interleaved `q I1 sigma1 I2 sigma2`.** A headerless three-column table cannot identify its meaning by numbers alone. | Choose the layout explicitly in **Import Curves…** (section 6.1). For separate errors per curve, provide one `q I sigma` file per curve. Fixed imported selections cannot watch for new columns/files. |
-| **Fitting does not read `.csv` curves**, although Analyze exports its curves as CSV. | Use **Send to Fitting**, or open the `<name>_fit_input.dat` that Analyze writes; `.dat` and `.txt` files with columns `q I [σ]` open too, and so does Analyze's NXcanSAS export (`<name>_nxcansas.h5`). |
 | **Geometry Calibration can put a wrong solution first.** A wrong **Estimated distance** misleads, also with the right standard and with **Auto Detect**, and the field can hold a distance you did not type (section 4.3). | Choose the standard yourself when you know it. Leave **Estimated distance** on *Optional* or type the approximate distance of your set-up; set a number you did not type back to 0 unless it is that distance. Before **Apply**, check the distance and that the drawn rings lie on the rings of the image. |
 | **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them (section 10.5). | Calibrate such an image with pyFAI and give GIMaP the `.poni`: name it in the notes, or put it beside the frames (section 4.2). |
 | **An instrument profile is matched by detector name and frame size only**, and **a calibration found by the automatic search may belong to another experiment** (one beside or above the frame's folder is taken when that folder holds none; file times say nothing in a folder copied in one go) — or even to another detector: a `.poni` or `.json` is applied without checking its pixel size or frame size (section 4.2). | Read which file the report names and check the distance in **Geometry**. Name the calibration in the notes, or give it yourself; remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
@@ -3692,10 +3724,12 @@ writing cannot be read until it is closed; one left open by a program that ended
 `.cbf` needs `fabio`, HDF5/NeXus files need `h5py` and the dataset where the reader expects it. To ask
 for another file format, use **Help ▸ Report a Problem…** or write to the author (section 14.12).
 
-### 14.2 A `.csv` curve does not open in Fitting
+### 14.2 A `.csv` curve asks for its columns
 
-Fitting reads `.dat` and `.txt` curves and NXcanSAS `.h5` files. For a curve from Analyze use **Send to Fitting**,
-or open the `_fit_input.dat` written next to the CSV (or the `_nxcansas.h5`, when **Also as NXcanSAS (.h5)** is ticked).
+Fitting reads a CSV by the names of its header (section 6.1). When they do not say which column is q, I and σ — two
+intensity columns, q of two axes, a table without a header of more than three columns — **Choose Columns** asks; pick
+the columns there (q, I and σ must be three different columns), or rename the header to `q, I, sigma`. A file
+that is neither `.dat`, `.txt`, `.csv` nor `.h5` is refused with what Fitting reads.
 
 ### 14.3 1D Predict Does Not Start
 

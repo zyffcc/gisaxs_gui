@@ -40,11 +40,11 @@ def test_a_curve_file_dropped_on_single_analysis_opens(tmp_path) -> None:
     curve = _curve_file(tmp_path)
     project = tmp_path / "work.gimap"
     project.write_text("{}", encoding="utf-8")
-    table = tmp_path / "table.csv"
+    table = tmp_path / "table.xy"
     table.write_text("0.1,10\n0.2,20\n", encoding="utf-8")
     assert not _enter(page, _mime(tmp_path))  # a folder: In-situ series takes those
     assert not _enter(page, _mime(project))  # a project: the main window opens it
-    assert not _enter(page, _mime(table))  # not a file the curve reader takes (.dat, .txt)
+    assert not _enter(page, _mime(table))  # not a file the curve reader takes (.dat, .txt, .csv, .h5)
     assert _drop(page, _mime(curve))
     assert page.session.curve is not None and page.session.curve.path == str(curve)
     other = _curve_file(tmp_path, name="second_fit_input.dat")

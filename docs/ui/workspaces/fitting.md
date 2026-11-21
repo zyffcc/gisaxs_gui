@@ -11,6 +11,15 @@
   与探测器帧；单条分析的 Open Curve… 对多条曲线的文件用 `QInputDialog` 问选哪一条（`page.open_curve_file`），Import Curves…
   取全部（`CurveTablePreview.curve_titles`）；Save Data and Fit… 可存为 NXcanSAS（`application/fit_nxcansas.py`）。
   测试 [`tests/test_nxcansas.py`](../../../tests/test_nxcansas.py)。
+- **数据与保存**（2026-11-21）：`.csv` 按表头列名选 q、I、σ（`infrastructure/adapters/curve_columns.py`；说不清时
+  `COLUMNS_TO_CHOOSE`，页面用 `presentation/curve_columns_dialog.py` 问）；保存 ▸ 解… 与数据与拟合记录里的 `predict`
+  （`application/solution_export.py`、`single/solutions_export.py`）；项目保存拟合结果与解（`application/fit_state.py`、
+  `single/project.py`、`single/series_project.py`）；预测的阶段与停止后保留已完成的解（`posterior_job.StageReport`、
+  `refine.predict` 的 `progress` / `partial`，只报告、不改计算；`single/predict_progress.py`）；精修来源与解的编号、标记
+  （`single/solution_texts.py`、`single/equivalent_solutions.py`）；保存图带残差（`single/figure_export.py`、
+  `adapters/curve_figures.py`）；撤销 / 重做说明是哪一步（`single/history.py`）。测试
+  [`tests/test_fit_data_files.py`](../../../tests/test_fit_data_files.py)、
+  [`tests/test_fit_results_kept.py`](../../../tests/test_fit_results_kept.py)。
 - **Related tests**:
   [`tests/test_fit_page.py`](../../../tests/test_fit_page.py)、
   [`tests/test_fit_page_predict.py`](../../../tests/test_fit_page_predict.py)、
@@ -288,11 +297,12 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
 
 - [ ] Analyze 打开 CBF 后 Send to Fitting：切到 Fitting，Curve 步骤显示 `_fit_input.dat`、点数与
       q 范围；Send to Fitting ▾ 的四种半边选择对应 Curve 步骤的 Halves of the cut；
-- [ ] Open Curve… 打开两列 / 三列 / 四列 `.dat` / `.txt` 曲线；坏文件或其他格式（包括 `.csv`）给出明确错误；
+- [ ] Open Curve… 打开两列 / 三列 / 四列 `.dat` / `.txt` 曲线和按表头读的 `.csv`（命令行的 horizontal.csv、保存的
+      fit.csv）；表头说不清时弹出 Choose Columns；坏文件或其他格式给出明确错误；
 - [ ] 步骤栏 Curve、Model、Fit、Results 四步都能点开，每步写出状态；窄窗口下命令栏的 Fit 与 Save 不被截断；
 - [ ] 三种方法（Predict parameters / Refine the values in Model / Search the ranges, then refine）在 Method 下拉里，
       都由同一个 Fit 按钮（Ctrl+Return）启动；Predict 下面只有 Particles，Options 里只有最多计算次数与 1D Predict 批量窗口；
-      未拟合的 GISAXS 线切自动选 Predict 并写 Recommended；精修的 Stop 保留最优值，Predict 的 Stop 不产生新结果；
+      未拟合的 GISAXS 线切自动选 Predict 并写 Recommended；精修的 Stop 保留最优值，Predict 的 Stop 保留已完成采样的解（标为不完整）；
 - [ ] 范围太窄的 R（例如 1–2 nm，真值 3 nm）：Predict 和 Refine 都保留用户范围，
       边界说明在拟合详情中；固定值不变；
 - [ ] Results 选中一个值 → Fix → Fit Again：该值固定参与下一次拟合；Fit Every Curve in This Folder… 打开 In-situ series

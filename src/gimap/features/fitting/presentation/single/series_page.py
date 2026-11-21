@@ -43,6 +43,7 @@ from .series_imports import FitSeriesImportsMixin
 from .series_listing import FitSeriesListingMixin
 from .series_loading import FitSeriesLoadingMixin
 from .series_preview import FitSeriesPreviewMixin
+from .series_project import FitSeriesProjectMixin
 from .series_results import UNTOUCHED, FitSeriesResultsMixin
 from .series_stages import NO_STAGES_AT_START, FitSeriesStagesMixin
 from .series_text import FIGURE_SPACE, ONE_HALF, STATE_MARK
@@ -64,7 +65,7 @@ END_SENTENCES = {
 not said like a success (said at the level of a warning)."""
 
 
-class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin, FitSeriesStagesMixin, FitSeriesPredictMixin,
+class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin, FitSeriesStagesMixin, FitSeriesPredictMixin,
                     FitSeriesFramesMixin, FitSeriesUnitsMixin,
                     FitSeriesPreviewMixin, FitSeriesHalvesMixin, FitSeriesResultsMixin, FitSeriesWatchMixin, QWidget,
                     FitSeriesView):
@@ -464,7 +465,8 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
         state = {"folder": self.folder, "pattern": self.pattern_edit.text(), "subfolders": self.subfolders_check.isChecked(),
                  "first": self.first_spin.value(), "last": self.last_spin.value(), "every": self.every_spin.value(),
                  "start": self._start_choice(), "method": self.series_method(),
-                 "follow": self.follow_check.isChecked(), **self.halves_state(), **self.imported_state()}
+                 "follow": self.follow_check.isChecked(), **self.halves_state(), **self.imported_state(),
+                 "results": self.series_results_state()}  # the fitted frames (series_project.py)
         if self._listing_busy:
             # Range/halves wait for discovery and cannot be edited yet. Safe choices above stay live.
             pending = self._restore_listing or {}
@@ -502,6 +504,7 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
                 spin.setValue(int(data[key]))
         self.apply_halves_state(data)
         self.refresh()
+        self.restore_series_results(data.get("results"))
 
     def refresh_language(self) -> None:
         """After a switch of the interface language (``i18n.language_changed``): what this page composed with

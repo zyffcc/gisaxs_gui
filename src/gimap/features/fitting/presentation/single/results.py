@@ -1,5 +1,9 @@
 """The Results step: how good the fit is, every value with its error, the solutions of the other
-methods, and saving (the points with the model and its terms plus a JSON record, the plot, the model).
+methods, and saving (the points with the model and its terms plus a JSON record, the plot, the model;
+the solutions: ``solutions_export.py``; the figure: ``figure_export.py``).
+
+± of a value is its least-squares error after a fit; with a solution of Predict parameters in Model (no fit since),
+half the width of the solution's 68 % posterior interval (``solution_texts.predict_plus``, said in its tooltip).
 """
 
 from __future__ import annotations
@@ -33,10 +37,12 @@ from ..views.step_widgets import fit_to_rows, show_line
 from .method_hint import note_text
 from . import predict_texts
 from .session import path_name
+from .solution_texts import PLUS_HEADER_TIP, numbered_labels, predict_plus, refined_text
 from ...application.models import InSituSourceFrame
 from ...application.curve_sources import source_stem
 
 QZ_PLUS_R = "q₊R of the spheres (q₊ = kᵢ + k_f): {values}"
+PLOT_FILTER = "PNG image (*.png);;SVG vector (*.svg);;PDF (*.pdf)"
 SAVE_DATA_FILTER = "CSV (*.csv);;NXcanSAS (*.h5)"
 """Save Data and Fit: the table with every term, or NXcanSAS for SasView and other NeXus programs."""
 BY_NUMBER = "Sizes by number | by intensity: {values}"
@@ -174,6 +180,7 @@ class FitResultsMixin:
 
     def setup_results(self) -> None:
         self.parameters_table.setHorizontalHeaderLabels(["", tr("value"), "±"])
+        self.parameters_table.horizontalHeaderItem(2).setToolTip(tr(PLUS_HEADER_TIP))
         self.solutions_table.setHorizontalHeaderLabels(["#", tr("model"), "R (nm)", "D (nm)", "χ²", "p"])
         self.use_solution_button.clicked.connect(self.use_selected_solution)
         self.solutions_table.cellDoubleClicked.connect(lambda _row, _column: self.use_selected_solution())
@@ -233,6 +240,7 @@ class FitResultsMixin:
         header.setSectionResizeMode(0, QHeaderView.Stretch)  # a long name is cut short (its tooltip has it whole)
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.parameters_table.setHorizontalHeaderLabels(["", tr("value"), "±"])
+        self.parameters_table.horizontalHeaderItem(2).setToolTip(tr(PLUS_HEADER_TIP))
         session = self.session
         result = session.result
         old_search = session.solutions_searched() and not session.solutions_are_current()
@@ -241,7 +249,8 @@ class FitResultsMixin:
         if result is None and session.solutions:
             self.quality_label.setText(trf("{solutions} below; the best is in Model. Fit (Refine) gives its quality "
                                            "and the error of every value.",
-                                           solutions=predict_texts.count_solutions(len(session.solutions))))
+                                           solutions=predict_texts.count_solutions(len(session.solutions)))
+                                       + self._incomplete_note())
             self.warnings_label.setText("\n".join(self.posterior_lines() + search_note))
             self.warnings_label.setToolTip("")
             stale = tr("Changed after the fit: Fit again") + " · " if old_search else ""
@@ -253,10 +262,12 @@ class FitResultsMixin:
             self.warnings_label.setToolTip("")
             show_line(self.step_intro["results"], "")  # the box below and the rail's “After a fit” say it
         else:
+            origin = refined_text(session.refined_from, session.solutions) if session.result_is_current() else ""
             self.quality_label.setText(tr(
                 "{quality}\nlog RMSE {rmse} · {evaluations} evaluations · {seconds} s · {method}"
             ).format(quality=self._quality_text(result), rmse=f"{result.log_rmse:.3g}", evaluations=result.evaluations,
-                     seconds=f"{result.seconds:.1f}", method=tr("Search the ranges") if result.method == "global" else tr("Refine")))
+                     seconds=f"{result.seconds:.1f}", method=tr("Search the ranges") if result.method == "global" else tr("Refine"))
+                + (f"\n{origin}" if origin else ""))
             self._correlated_tip = ""
             self.warnings_label.setText("\n".join(self._size_lines() + self._grazing_lines() + self._warnings(result)
                                                    + search_note))
@@ -327,8 +338,16 @@ class FitResultsMixin:
     def _path_name(self, path: tuple) -> str:
         return path_name(self.session.model, path)
 
+    def _incomplete_note(self) -> str:
+        if not any(getattr(solution, "incomplete", False) for solution in self.session.solutions):
+            return ""
+        return "\n⚠ " + tr("Incomplete: Predict was stopped; these are the solutions it finished, their probabilities "
+                           "over those alone.")
+
     def _fill_parameters(self, result) -> None:
         rows = []
+        predicted = None if result is not None else next(  # a solution of Predict in Model: ± from its interval
+            (s for s in self.session.solutions if s.model == self.session.model and s.intervals), None)
         for path, parameter in self.session.model.parameters():
             if self._unused(path, parameter):
                 continue  # an unused term (no resolution peak, no background, spheres at q_z = 0)
@@ -336,6 +355,8 @@ class FitResultsMixin:
             full = path_name(self.session.model, path, full=True)  # “1·Sphere R”, also when shown as “R”
             value, plus = value_cells(path[1], parameter.value, error, parameter.free)
             why = ""
+            if predicted is not None and parameter.free:
+                plus, why = predict_plus(predicted, path)
             if result is not None and parameter.free and not plus:  # a free value the fit gives no error for
                 plus, why = "–", predict_texts.no_error_reason(path, parameter, result, self.session.model)
             rows.append(((self._path_name(path), full), value, (plus, why)))
@@ -366,6 +387,7 @@ class FitResultsMixin:
         fresh = shown != getattr(self, "_solutions_shown", None)
         self._solutions_shown = shown
         self.solutions_table.setRowCount(len(solutions))
+        labels = numbered_labels(solutions)
         for line, solution in enumerate(solutions):
             radii, distances = predict_texts.sizes_cells(solution.model)  # every population, by radius
             tip = tr("From {source}.").format(source=tr(solution.source))
@@ -380,7 +402,9 @@ class FitResultsMixin:
             alone = solution.tried == 1 and len(solutions) == 1  # one composition tried: p is no finding
             if alone:
                 tip += " " + tr(predict_texts.ONLY_ONE)
-            cells = (str(line + 1), solution.label, radii, distances,
+            if getattr(solution, "incomplete", False):
+                tip += " " + tr("Incomplete: Predict was stopped; its probability is over the solutions finished.")
+            cells = (str(line + 1), labels[line], radii, distances,
                      f"{solution.chi2:.3g}" if math.isfinite(solution.chi2) else "—",
                      "—" if solution.probability is None or alone else f"{solution.probability:.2f}")
             for column, text in enumerate(cells):
@@ -395,10 +419,13 @@ class FitResultsMixin:
         line = self.solutions_table.currentRow()
         if not 0 <= line < len(self.session.solutions):
             return
-        solution = self.session.solutions[line]
+        solution, solutions = self.session.solutions[line], list(self.session.solutions)
         self.session.result = None
-        self.set_model(solution.model, message=lambda: tr(
-            "{model} is in Model (Undo brings the previous one back).").format(model=solution.label))
+        self.session.refined_from = None
+        self.set_model(solution.model, message=lambda: tr(  # named in the language of when it is said
+            "{model} is in Model (Undo brings the previous one back).").format(model=numbered_labels(solutions)[line]),
+            label=("solution {number} in Model", {"number": line + 1}))
+        self.session.model_from = line
 
     # -- save -------------------------------------------------------------------------------
 
@@ -431,6 +458,7 @@ class FitResultsMixin:
                             q_range=self.session.q_range,
                             result=self.session.result if self.session.result_is_current() else None,
                             excluded=self.session.excluded)
+        record.update(self.solutions_record())  # every solution of Predict (solutions_export.py)
         if Path(path).suffix.lower() == ".h5":  # NXcanSAS: the points fitted and the model, q in 1/nm
             curves = fit_curves(self.session.model, data, record, self._stem())
             write = lambda target: write_curves(target, curves)  # noqa: E731
@@ -446,15 +474,11 @@ class FitResultsMixin:
         return path
 
     def export_plot_dialog(self, path=None):
-        path = path or self._save_path("Save Plot", f"{self._stem()}_fit.png", "PNG image (*.png);;SVG vector (*.svg)")
+        """The plot with its residuals as one figure (``figure_export.py``): PNG, SVG or PDF."""
+        path = path or self._save_path("Save Plot", f"{self._stem()}_fit.png", PLOT_FILTER)
         if not path:
             return None
-        try:
-            write_plot(self.plot.plot, path)
-        except OSError as exc:
-            return self._save_failed(exc)
-        self._status(lambda: tr("Saved {name}.").format(name=Path(path).name), "ok", action=folder_action(path))
-        return path
+        return self.write_figure(path)
 
     def save_model_dialog(self, path=None):
         path = path or self._save_path("Save Model", f"{self._stem()}_model.json", "Fit model (*.json)")

@@ -192,9 +192,11 @@ class WorkspaceCommands:
 
     def _history_detail(self, step: str):
         def detail() -> str:
-            if self._undo_page() != "analyze":
-                return ""  # Fitting's Undo does not say what it undoes
-            undo, redo = self._analyze.undo_names()
+            page = self._undo_page()
+            if not page:
+                return ""
+            owner = self._analyze if page == "analyze" else self._fitting.fit_page
+            undo, redo = owner.undo_names()
             return undo if step == "undo" else redo
         return detail
 
