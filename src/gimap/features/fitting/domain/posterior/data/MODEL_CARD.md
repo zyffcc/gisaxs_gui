@@ -31,49 +31,42 @@ Trained as `flow_v4`, shipped as `flow_v1`.
 | reflection_re | 2000 | 0.671 | 0.944 | 15.1 | 0.478 (absolute) |
 | reflection_im | 2000 | 0.666 | 0.947 | 19.3 | 0.478 (absolute) |
 
-## Benchmark: posterior_recovery
+## Benchmarks
 
-| stage | R (median / P90 · 68 % coverage) | σR/R | D | σnn/D |
+Predict parameters with this network on held-out curves of an independent forward model (`tools/benchmarks/posterior_recovery.py`; Physics and Methods, section 9.13). These are the runs the GIMaP paper quotes, all made with one version of the fitting code (git tree 7e68831a of `src/gimap/features/fitting/domain`, commits 2eb0243 and 7179b85); `tools/benchmarks/summary_tables.py --only card` printed this section from `tools/benchmarks/posterior_*_summary.json`, and every cut is in `tools/benchmarks/per_cut/`. Errors of R and D are relative, of the spreads absolute; *network* is the network's median alone, *fit* the most probable solution with the true composition given; *model* curves have the physics of the removed fit1d method, *measured* ones a resolution, a beam tail and roughness. "True composition most probable" is judged on the most probable solution; the truth's mode is every R and D within 20 % of the truth. Time per curve on one core (24 cuts, one worker, Intel Core i9-13900HX; `posterior_timing_summary.json`): network 0.35 s, composition given 6.2 s, chosen among one or two populations 25.6 s. Runs of earlier code are in `tools/benchmarks/history/`.
+
+### Benchmark: posterior_recovery (200 held-out curves, one or two populations)
+
+| stage | R (median / P90 · 68 % / 95 % coverage) | σR/R | D | σnn/D |
 |---|---|---|---|---|
 | network/all | 0.0824 / 0.395 | 0.0307 / 0.119 | 0.0069 / 0.090 | 0.0031 / 0.020 |
-| fit/model | 0.0055 / 0.168 · 0.73 | 0.0053 / 0.082 · 0.73 | 0.0004 / 0.004 · 0.88 | 0.0005 / 0.005 · 0.87 |
-| fit/measured | 0.0069 / 0.229 · 0.62 | 0.0081 / 0.104 · 0.65 | 0.0011 / 0.005 · 0.78 | 0.0016 / 0.006 · 0.63 |
-| fit/all | 0.0066 / 0.190 · 0.68 | 0.0070 / 0.093 · 0.69 | 0.0007 / 0.005 · 0.83 | 0.0011 / 0.005 · 0.75 |
+| fit/model | 0.0054 / 0.100 · 0.70 / 0.87 | 0.0054 / 0.074 · 0.76 / 0.95 | 0.0004 / 0.004 · 0.91 / 0.94 | 0.0005 / 0.005 · 0.89 / 0.95 |
+| fit/measured | 0.0069 / 0.143 · 0.65 / 0.83 | 0.0077 / 0.090 · 0.69 / 0.89 | 0.0010 / 0.004 · 0.78 / 0.95 | 0.0016 / 0.006 · 0.58 / 0.91 |
+| fit/all | 0.0061 / 0.138 · 0.67 / 0.85 | 0.0066 / 0.086 · 0.73 / 0.92 | 0.0007 / 0.004 · 0.85 / 0.95 | 0.0010 / 0.005 · 0.73 / 0.93 |
 
-Composition chosen: {"model": {"n": 100, "exact": 0.88, "true_in_equivalent_set": 0.97}, "measured": {"n": 100, "exact": 0.6, "true_in_equivalent_set": 0.82}, "all": {"n": 200, "exact": 0.74, "true_in_equivalent_set": 0.895}}; median seconds: {"network": 0.35584187088534236, "fit": 7.332877419190481, "choose": 29.746416351990774}.
+True composition most probable (the composition of the most probable solution is the true one), model / measured / all: 0.88 / 0.65 / 0.77; true composition listed: 0.96 / 0.84 / 0.90; truth's mode first: 0.89 / 0.89 / 0.89; listed: 0.94 / 0.92 / 0.93.
 
-## Benchmark: posterior_extended
+### Benchmark: posterior_extended (600 held-out curves of the extended set, one to three populations)
 
-| stage | R (median / P90 · 68 % coverage) | σR/R | D | σnn/D |
+| stage | R (median / P90 · 68 % / 95 % coverage) | σR/R | D | σnn/D |
 |---|---|---|---|---|
-| network/all | 0.1349 / 0.451 | 0.0520 / 0.135 | 0.0277 / 0.731 | 0.0080 / 0.063 |
-| fit/model | 0.0131 / 0.290 · 0.83 | 0.0130 / 0.138 · 0.87 | 0.0006 / 0.011 · 0.88 | 0.0008 / 0.010 · 0.88 |
-| fit/measured | 0.0214 / 0.459 · 0.75 | 0.0167 / 0.173 · 0.78 | 0.0013 / 0.307 · 0.80 | 0.0017 / 0.019 · 0.77 |
-| fit/all | 0.0171 / 0.380 · 0.79 | 0.0142 / 0.158 · 0.82 | 0.0009 / 0.034 · 0.84 | 0.0012 / 0.013 · 0.82 |
+| network/all | 0.1395 / 0.450 | 0.0526 / 0.134 | 0.0265 / 0.753 | 0.0082 / 0.061 |
+| fit/model | 0.0148 / 0.276 · 0.81 / 0.89 | 0.0114 / 0.148 · 0.84 / 0.93 | 0.0006 / 0.020 · 0.86 / 0.90 | 0.0008 / 0.016 · 0.86 / 0.92 |
+| fit/measured | 0.0212 / 0.446 · 0.67 / 0.81 | 0.0155 / 0.180 · 0.71 / 0.87 | 0.0013 / 0.062 · 0.79 / 0.89 | 0.0018 / 0.013 · 0.77 / 0.91 |
+| fit/all | 0.0170 / 0.396 · 0.74 / 0.85 | 0.0130 / 0.166 · 0.78 / 0.90 | 0.0009 / 0.034 · 0.82 / 0.89 | 0.0013 / 0.014 · 0.81 / 0.92 |
 
-Composition chosen: {"model": {"n": 600, "exact": 0.6916666666666667, "true_in_equivalent_set": 0.8033333333333333}, "measured": {"n": 600, "exact": 0.5633333333333334, "true_in_equivalent_set": 0.7133333333333334}, "all": {"n": 1200, "exact": 0.6275, "true_in_equivalent_set": 0.7583333333333333}}; median seconds: {"network": 0.36106953804846853, "fit": 16.237736282404512, "choose": 83.72140427341219}.
+True composition most probable (the composition of the most probable solution is the true one), model / measured / all: 0.69 / 0.58 / 0.64; true composition listed: 0.81 / 0.75 / 0.78; truth's mode first: 0.80 / 0.75 / 0.78; listed: 0.90 / 0.83 / 0.86.
 
-## Benchmark: posterior_dwba_si_fit1d
+### Benchmark: posterior_dwba_tp (the 200 curves drawn with the four DWBA terms on Si, both angles given)
 
-| stage | R (median / P90 · 68 % coverage) | σR/R | D | σnn/D |
+| stage | R (median / P90 · 68 % / 95 % coverage) | σR/R | D | σnn/D |
 |---|---|---|---|---|
 | network/all | 0.0489 / 0.192 | 0.0317 / 0.114 | 0.0051 / 0.025 | 0.0025 / 0.010 |
-| fit/model | 0.0235 / 0.157 · 0.67 | 0.0162 / 0.096 · 0.71 | 0.0004 / 0.002 · 0.98 | 0.0005 / 0.002 · 0.97 |
-| fit/measured | 0.0309 / 0.207 · 0.67 | 0.0191 / 0.135 · 0.75 | 0.0008 / 0.004 · 0.85 | 0.0015 / 0.004 · 0.71 |
-| fit/all | 0.0283 / 0.175 · 0.67 | 0.0171 / 0.121 · 0.73 | 0.0005 / 0.003 · 0.92 | 0.0009 / 0.004 · 0.84 |
+| fit/model | 0.0196 / 0.149 · 0.60 / 0.78 | 0.0130 / 0.090 · 0.72 / 0.91 | 0.0004 / 0.002 · 0.97 / 1.00 | 0.0005 / 0.003 · 0.97 / 0.99 |
+| fit/measured | 0.0338 / 0.226 · 0.55 / 0.67 | 0.0190 / 0.123 · 0.65 / 0.81 | 0.0011 / 0.004 · 0.80 / 0.99 | 0.0016 / 0.005 · 0.68 / 0.95 |
+| fit/all | 0.0296 / 0.198 · 0.57 / 0.73 | 0.0169 / 0.121 · 0.68 / 0.86 | 0.0006 / 0.003 · 0.88 / 0.99 | 0.0009 / 0.004 · 0.82 / 0.97 |
 
-Composition chosen: {"model": {"n": 100, "exact": 0.74, "true_in_equivalent_set": 0.99}, "measured": {"n": 100, "exact": 0.56, "true_in_equivalent_set": 0.82}, "all": {"n": 200, "exact": 0.65, "true_in_equivalent_set": 0.905}}; median seconds: {"network": 0.34977762098424137, "fit": 19.546041398542002, "choose": 69.06562970706727}.
-
-## Benchmark: posterior_dwba_si_extended
-
-| stage | R (median / P90 · 68 % coverage) | σR/R | D | σnn/D |
-|---|---|---|---|---|
-| network/all | 0.1112 / 0.456 | 0.0515 / 0.144 | 0.0211 / 0.634 | 0.0063 / 0.052 |
-| fit/model | 0.0354 / 0.343 · 0.79 | 0.0234 / 0.164 · 0.83 | 0.0006 / 0.010 · 0.88 | 0.0008 / 0.009 · 0.89 |
-| fit/measured | 0.0478 / 0.421 · 0.74 | 0.0313 / 0.184 · 0.78 | 0.0012 / 0.052 · 0.83 | 0.0017 / 0.016 · 0.80 |
-| fit/all | 0.0401 / 0.376 · 0.76 | 0.0267 / 0.173 · 0.81 | 0.0009 / 0.017 · 0.86 | 0.0012 / 0.012 · 0.84 |
-
-Composition chosen: {"model": {"n": 600, "exact": 0.5966666666666667, "true_in_equivalent_set": 0.8083333333333333}, "measured": {"n": 600, "exact": 0.5066666666666667, "true_in_equivalent_set": 0.71}, "all": {"n": 1200, "exact": 0.5516666666666666, "true_in_equivalent_set": 0.7591666666666667}}; median seconds: {"network": 0.354449343518354, "fit": 37.524687785538845, "choose": 190.46583281294443}.
+True composition most probable (the composition of the most probable solution is the true one), model / measured / all: 0.80 / 0.59 / 0.69; true composition listed: 1.00 / 0.86 / 0.93; truth's mode first: 0.94 / 0.80 / 0.87; listed: 1.00 / 0.93 / 0.96.
 
 ## Where it does not apply
 

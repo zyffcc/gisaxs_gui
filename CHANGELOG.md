@@ -12,6 +12,18 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **The benchmark files of Predict parameters are the ones the paper names.** `tools/benchmarks/` now holds the
+  final runs under the names of the paper's table (`posterior_recovery`, `posterior_extended`, `posterior_dwba_tp`
+  / `_born` / `_eia` with `posterior_dwba_pairs.json`, `posterior_own`, `posterior_floor03`, `posterior_floor08`,
+  `posterior_amplitude100`, `posterior_timing`): the summaries beside the scripts and every cut of every run in
+  `tools/benchmarks/per_cut/*.json.gz`. All were made with one version of the fitting code (git tree 7e68831a,
+  commits 2eb0243 and 7179b85). Results of earlier code and of the removed fit1d and V5 methods moved to
+  `tools/benchmarks/history/`. *Physics and Methods* 9.13 and 10.3 (English and Chinese), the network's
+  `MODEL_CARD.md` and the README of the folder quote these runs, their tables printed from the files by the new
+  `tools/benchmarks/summary_tables.py`: on the 200 held-out curves the P90 of R is 10 % and 14 % (the documents
+  said 17 % and 23 %, from an earlier run), the true composition is the most probable solution's in 88 % and 65 %,
+  and the extended set has 600 curves. "True composition most probable" is judged on the most probable solution,
+  and the documents now say so. Predict parameters itself is unchanged.
 - **Fixes from a user test (fitting, command line, records).** *Fitting:* a Refine or Search that could not
   beat its start now says *did not improve on the start values* instead of *converged* and gives no errors; points
   whose σ is zero, negative or missing are left out with their number (before, one such point silently dropped
@@ -123,24 +135,23 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   the In-situ series' **Predict each frame**. With both angles of the cut in Model, spheres have the direct and the
   exit-reflected path with a free effective reflection coefficient r (the network was trained on such cuts too), so
   the waves the surface reflects are taken into account. Physics and Methods 9.13 describes it and its benchmarks: on
-  fit1d's 200 held-out curves it chooses the composition right in 88 % / 60 % of them (fit1d's own physics / with
-  beam tail and roughness; fit1d 69 % / 30 %) and lists it among its solutions in 97 % / 82 %, with median errors of
-  0.6–0.7 % in R (fit1d 0.5–1.0 %) and larger large errors than fit1d's (90th percentile of R 17 % / 23 %; fit1d
-  7.1 % / 19 %: two-population curves whose second size the curve does not fix, or whose true sizes the network
-  missed); on 1200 curves of one to three populations 69 % / 56 % (fit1d 32 % / 16 %), 90th percentile of R 29 % /
-  46 % (fit1d 40 % / 49 %). Its intervals allow Fitting's model an error of 5 % of the intensity at every point (the
-  fit and χ²ᵣ keep the curve's σ), and its 68 % intervals hold the truth in 62–88 % of the cases (fit1d's errors
-  18–70 %). Besides the network's most probable modes it refines three modes of its tempered weights and, for two or
+  fit1d's 200 held-out curves its most probable solution has the true composition in 88 % / 65 % of them (fit1d's
+  own physics / with beam tail and roughness; fit1d 69 % / 30 %) and a listed solution has it in 96 % / 84 %, with
+  median errors of 0.5–0.7 % in R (fit1d 0.5–1.0 %) and a 90th percentile of R of 10 % / 14 % (fit1d 7.1 % / 19 %);
+  on 600 curves of one to three populations 69 % / 58 %, 90th percentile of R 28 % / 45 %. Its intervals allow
+  Fitting's model an error of 5 % of the intensity at every point (the fit and χ²ᵣ keep the curve's σ), and its 68 %
+  intervals hold the truth in 58–91 % of the cases on the 200 curves (fit1d's errors 26–70 %). (These are the final
+  runs of `tools/benchmarks/`, printed by `summary_tables.py`.) Besides the network's most probable modes it refines three modes of its tempered weights and, for two or
   three populations, starts at their degeneracies (another R at the same D, the paracrystals of two populations
   exchanged); choosing the composition it tries the network's four most probable and the most probable of every
-  number of populations. The true solution is among those listed in 92 % and 87 % of these curves. Drawn with the
-  four-term DWBA (on Si and on 100 nm polystyrene), spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i 0.4°, 12 keV) come out
-  about 6 % off in R (median) with both angles, and the composition of such curves right in 57–68 %; with the q_z
-  alone 10 % (q₊R 2.3–3.5) to 40 % off and usually taken for upright cylinders (right in 4–18 %). With both angles
+  number of populations. The true solution is among those listed in 93 % and 86 % of these curves. Drawn with the
+  four-term DWBA on Si, spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i 0.4°, 12 keV) come out 4–7 % off in R (median)
+  with both angles, and the true composition of such curves is the most probable in 50–70 %; with the q_z alone
+  11 % (q₊R 2.3–3.5) to 40 % off (most probable in 3–8 %). With both angles
   Predict takes about 2.4 times as long, and on a curve without a reflected wave a smaller sphere with a large |r|
   can fit as well (`posterior_recovery.py --scattering dwba --cut two_path`, Physics and Methods 9.13).
 - **1D Predict: General V5 and Single RC specialist removed.** On fit1d's 200 held-out curves V5 recovered R with a
-  median error of 31 % and D of 22 % (20 s per curve); Predict parameters 0.7 % and 0.0–0.1 %. Settings saved with
+  median error of 32 % and D of 22 % (20 s per curve); Predict parameters 0.6 % and 0.0–0.1 %. Settings saved with
   a V5 method open as Predict parameters. Fitting's *AI proposal (1D Predict)* is replaced by **Predict
   parameters**. 1D Predict no longer needs TensorFlow, and `modules/Fitting_1D_Model/Workflow_v5` (about 56 MB) is
   gone from the repository and the packages.

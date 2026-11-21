@@ -254,7 +254,7 @@ Physics and Methods, section 9.13, describes the method and its benchmarks.
   (`src/gimap/features/fitting/domain/posterior/data/flow_v1.json`) before it uses them; with a changed or
   missing file it does not start, and the message names the file.
 - The earlier networks of 1D Predict (*General V5* and *Single RC specialist*) were removed in 0.2.0: on fit1d's
-  held-out curves V5's median error of R was 31 %, that of Predict parameters is 0.7 % (Physics and Methods,
+  held-out curves V5's median error of R was 32 %, that of Predict parameters is 0.6 % (Physics and Methods,
   section 10). fit1d and the quick physical fit were removed in 0.2.0 too; Physics and Methods, sections 9.12 and
   9.13, keep fit1d's benchmark for comparison.
 

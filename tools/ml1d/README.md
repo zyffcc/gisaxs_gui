@@ -72,14 +72,16 @@ python tools/ml1d/train_flow.py --data DATA/train_v4 --prior tools/ml1d/prior_v2
 python tools/ml1d/evaluate_flow.py --network NET/flow_v4 --data DATA/test_v4 --prior tools/ml1d/prior_v2.json --curves 2000 --samples 1000 --out report.json --figure ranks.png
 python tools/benchmarks/posterior_recovery.py --network NET/flow_v4 --n 200 --workers 60
 python tools/benchmarks/posterior_recovery.py --network NET/flow_v4 --n 200 --workers 60 --scattering dwba --cut two_path --out posterior_dwba_si_fit1d
-python tools/ml1d/model_card.py --network NET/flow_v4 --evaluation report.json --benchmark tools/benchmarks/posterior_recovery_summary.json tools/benchmarks/posterior_extended_summary.json tools/benchmarks/posterior_dwba_si_fit1d_summary.json tools/benchmarks/posterior_dwba_si_extended_summary.json --out MODEL_CARD.md
+python tools/ml1d/model_card.py --network NET/flow_v4 --evaluation report.json --out MODEL_CARD.md
 ```
 
 (On Maxwell `maxwell/simulate.sbatch` ran the simulation as an array of tasks with `--first-shard/--shards`, joined
 with `--join`, and `maxwell/train.sbatch` the training.) Its record names the
 SHA-256 of the shards; the shipped record leaves out the paths of the computer it was trained on. On 2000 simulated
 cuts not trained on, its 68 %/95 % intervals hold the truth in 66–70 %/92–95 % for every value (the head ranks the
-true composition first in 20 %); the benchmarks are in Physics and Methods, section 9.13, and `MODEL_CARD.md`. The
+true composition first in 20 %); the benchmarks are in Physics and Methods, section 9.13, and `MODEL_CARD.md`, whose benchmark
+sections `tools/benchmarks/summary_tables.py --only card` prints from the final runs of `tools/benchmarks/` (the two
+benchmark runs above were those of the training day; their summaries are in `tools/benchmarks/history/`). The
 network shipped before it, `flow_v3` (encoding 3: the Born term at q_z, no reflected path), was trained the same way
 from `prior_v1.json` (seeds 333 and 444) at commit e5a609e.
 

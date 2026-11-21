@@ -6,7 +6,9 @@ vacuum q_z of the cut times the true R, for spheres and upright cylinders; per c
 how often the composition is chosen right (``comp``), the true composition listed (``set``), the truth's mode first
 or listed, and the median chi2/N; and whether chi2/N > 2 marks the curves where a sphere's R is off by more than 10 %.
 usage: python tools/benchmarks/posterior_pairs.py OUT.json LABEL=results/RUN.json [LABEL=results/RUN.json ...]
-(the per-curve files posterior_recovery.py writes to results/; prints a table and writes it to OUT.json)"""
+(the per-curve files posterior_recovery.py writes to results/, or their gzip-compressed copies in per_cut/; prints a
+table and writes it to OUT.json)"""
+import gzip
 import json
 import sys
 from pathlib import Path
@@ -21,7 +23,8 @@ MODE = 0.2
 
 
 def rows(path):
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    raw = Path(path).read_bytes()  # results/NAME.json, or its gzip-compressed copy in per_cut/
+    data = json.loads(gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw)
     out = {}
     for r in data["results"]:
         c = r["case"]

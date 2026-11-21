@@ -231,3 +231,6 @@ docs/agents/eval/local/
 # The proposal network of Predict parameters (its record names the SHA-256 of these weights).
 !src/gimap/features/fitting/domain/posterior/data/*.npz
 !tests/data/ml1d/*.npz
+
+# Benchmark runs before they are stored under their final names (tools/benchmarks/README.md)
+/tools/benchmarks/*_new_summary.json

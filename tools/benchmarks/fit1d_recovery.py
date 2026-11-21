@@ -16,7 +16,7 @@ relative error, bias, the share of |z| <= 1 with the reported 1-sigma error (cov
 With --set extended (and --seed0) the cases are heldout_cases.py's: three populations and the DA as well (fit1d's
 structure factor is the LMA's whatever the case's coupling; 'choose' is then among up to three populations).
 usage: python tools/benchmarks/fit1d_recovery.py [--n 200] [--workers 10] [--quick] [--set fit1d|extended] [--seed0 N]
-The summary of the run quoted in Physics and Methods, section 9.12, is fit1d_recovery_summary.json; every curve is in results/ (not committed).
+The summary of the run quoted in Physics and Methods, section 9.12, is history/fit1d_recovery_summary.json; every curve is in results/ (not committed).
 """
 from __future__ import annotations
 

@@ -130,7 +130,7 @@ Predict parameters 的行另带概率、后验区间、提示与有效样本数�
 参数带 side 前缀，避免覆盖。文本多文件 batch 在一个进程内复用 runtime；in-situ 当前仍按帧启动隔离 worker。
 
 0.2.0 删除了 **General V5** 与 **Single RC specialist**（`modules/Fitting_1D_Model/Workflow_v5/`，TensorFlow）：在 fit1d 的
-200 条留出曲线上 V5 的 R 中位误差 31 %、D 22 %，Predict parameters 在同样曲线上为 0.7 % 和 0.0–0.1 %（Physics and Methods 10.3）。
+200 条留出曲线上 V5 的 R 中位误差 32 %、D 22 %，Predict parameters 在同样曲线上为 0.6 % 和 0.0–0.1 %（Physics and Methods 10.3）。
 旧 Recipe 与保存的选项里的方法键 `model`、`stable`、`experimental`（Physical fit）与 `fit1d` 打开为 Predict parameters，
 其专属选项（`numerical`、`amplitude_calibration`、候选预算、`normalizer`、`fit1d_policy` 等）丢弃，fit1d 的 `fit1d_qz`
 保留为 `cut_qz`（`application/workflow_v5.RETIRED_METHODS`、`RETIRED`）。
