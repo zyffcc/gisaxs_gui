@@ -328,6 +328,23 @@ Send to Fitting（命令栏和 Export 步骤的按钮都走 `bindings/fit_handov
   恢复全部。Fitting 的曲线图（以及原位序列的图）直接拖出矩形放大，双击恢复；重新拟合、重画数据时保持放大，载入新曲线时恢复。
 - AI 工具 `set_cut_regions` 设置同一个区域列表（可预览、应用、撤销）。
 
+## GIWAXS：物相、指标化与极图（Phases 窗口）
+
+- 入口：图像工具栏的 **Phases** 按钮（`views/indexing_view.make_phases_button`），打开非模态窗口 `indexing_panel.IndexingPanel`
+  （布局 `views/indexing_view.py`，文字 `indexing_texts.py`，中文 `i18n/zh_indexing.py`）。
+- 物相保存在页面的 `indexing_model.IndexingModel`（不在窗口里）：自动分析和命令行 `--phase` 不打开窗口也能给出物相。
+- 叠加：`bindings/indexing.IndexingMixin._sync_reflections` 在 `display.py` 画图像、展开图和 GIWAXS 曲线后调用，按当前视图
+  （探测器像素、q∥–qz、q–χ）画点、弧线和直线（`reflection_layer.ReflectionLayer`，自己的 pyqtgraph 项，不碰页面的其他项）；
+  I(q) 上画每个环的虚线。
+- 科学部分：`domain/crystal/`（晶胞、CIF、对称操作与消光、Cromer–Mann f0、衍射与分组、纤维织构与折射两通道、环的指认、极图模型与拟合），
+  用例 `application/indexing.py`（物相、叠加、表、指认、记录）和 `application/pole_figure.py`（I(χ) 窗口所在环的极图、背景、CSV）。
+- 给其他组件：`automation_indexing.IndexingAutomationMixin`（`set_phases`、`assign_peaks`、`pole_figure`），经 assistant 的
+  `GuiWorkbench` 到 `pipeline_phases.PhaseStepsMixin`：决策 *phase assignment*、峰行的 `phase`/`hkl`/`delta_q`、环行的 `pole_figure`、
+  `report.md` 的 *Phase assignment* 一节。
+- 测试：`tests/test_crystal_indexing.py`（LaB₆、MAPbI₃ 消光、纤维点、折射、指认、P08 公开帧、极图拟合恢复）、
+  `tests/test_indexing_panel.py`（窗口、叠加、导出、中文、自动分析的指认与极图）。
+- 公式：*Physics and Methods* 7.10、7.11；手册 5.9。
+
 ## 曲线上的点从哪里来
 
 - 每个点 = 一个 bin 内有效像素的平均强度。bin 不比一个像素细（自动 bins 按像素的 q 步长选）；像素太少的 bin

@@ -83,6 +83,8 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [7.7 Ring orientation and the Hermans orientation factor](#77-ring-orientation-and-the-hermans-orientation-factor)
   - [7.8 Crystallite size (Scherrer)](#78-crystallite-size-scherrer)
   - [7.9 What the report states](#79-what-the-report-states)
+  - [7.10 Reflection overlay and phase assignment](#710-reflection-overlay-and-phase-assignment)
+  - [7.11 Pole figure of a ring and its orientation distribution](#711-pole-figure-of-a-ring-and-its-orientation-distribution)
 - [8. GISAXS automatic analysis](#8-gisaxs-automatic-analysis)
   - [8.1 Yoneda band and the cuts](#81-yoneda-band-and-the-cuts)
   - [8.2 Beam-centre column from mirror symmetry](#82-beam-centre-column-from-mirror-symmetry)
@@ -1727,7 +1729,7 @@ and the texture sentence of such a ring describe the measured intensity, includi
 horizon; whether that is texture or an exit-angle effect needs a judgement the analysis does not make.
 
 **Assumptions and what is not modelled.** The factor assumes in-plane isotropy (fibre texture). The missing wedge
-near χ = 0 is not reconstructed; it only enters through C_w and f_iso. I(χ) is the intensity on the detector:
+near χ = 0 is not reconstructed; it only enters through C_w and f_iso (the pole-figure fit of 7.11 fills it with a model). I(χ) is the intensity on the detector:
 no Lorentz or Ewald-sphere correction is applied to it, and no refraction correction of q_z. The background is a
 χ-independent constant; an anisotropic diffuse background biases f.
 
@@ -1782,6 +1784,7 @@ f, f_iso and f − f_iso with the decimals that show σ_f to two significant dig
   scatter of each bin); the geometry, the background under a ring and refraction are not included;
 - *peak search* when the list was cut at the cap (section 7.3), *texture rule*, and *ring orientation* for rings
   whose f depends on the bins next to the horizon (section 7.7).
+- *phase assignment* when phases were given, and *pole figure* when rings were analysed (sections 7.10, 7.11).
 
 *Incidence angle* names where α_i came from, in this order: the options, the notes, the value set in Analyze's
 command bar (by hand or by the tool `set_incidence_angle`; Analyze uses it instead of the instrument profile's),
@@ -1789,6 +1792,212 @@ the instrument profile. A value from the options or the notes that differs from 
 replaces it there, so the α_i reported is the α_i used. Only when none of them gives α_i is 0° used and asked for. Numbers in the JSON report are rounded to four significant digits; the beam centre keeps full precision.
 
 Implementation: `src/gimap/features/assistant/application/pipeline_rows.py`
+
+### 7.10 Reflection overlay and phase assignment
+
+Analyze ▸ **Phases** (the image toolbar) takes known phases and shows where their reflections fall; the automatic
+analysis assigns its rings to them. A phase is a unit cell `(a, b, c, α, β, γ)` with its symmetry and, optionally,
+its atom sites. It is read from a CIF (`_cell_length_*`, `_cell_angle_*`, the operations of
+`_space_group_symop_operation_xyz` or `_symmetry_equiv_pos_as_xyz`, `_atom_site_label`, `_type_symbol`,
+`_fract_x/y/z`, `_occupancy`, `_U_iso_or_equiv` or `_B_iso_or_equiv`; standard uncertainties in brackets are dropped)
+or typed in with a lattice centring (P, A, B, C, I, F, R in the hexagonal setting). A CIF without operations is used
+with the centring letter of its Hermann–Mauguin symbol only, and the window says so.
+
+**Reciprocal lattice.** With the columns of A the vectors **a**, **b**, **c** in the Cartesian frame of the cell
+(**a** along x, **b** in the x–y plane):
+
+```text
+B = 2π (A⁻¹)ᵀ,    q_hkl = B · (h, k, l)ᵀ,    d = 2π / |q_hkl|                                         (7.33)
+```
+
+Every (h, k, l) ≠ 0 with `|q| ≤ q_max` (3 Å⁻¹ by default) is tested. A reflection **h** is **systematically
+absent** when an operation `x′ = R x + t` of the space group leaves it unchanged while its phase shift is not an
+integer:
+
+```text
+h R = h   and   h · t ∉ ℤ                                                                          (7.34)
+```
+
+The contributions of an atom and its image then cancel for every position, so the rule needs no atoms.
+
+**Intensity.** With atom sites (expanded by the operations; images closer than 10⁻³ in each fractional coordinate
+count once), the squared structure factor is
+
+```text
+F(h) = Σ_j o_j f0_j(s) exp(−B_j s²) exp(2πi h · x_j),    s = sin θ / λ = |q| / 4π                     (7.35)
+f0(s) = Σ_{i=1..4} a_i exp(−b_i s²) + c                                                              (7.36)
+```
+
+o is the occupancy, B = 8π² U the isotropic displacement (0 when the CIF gives none) and (7.36) the Cromer–Mann form
+of the neutral-atom scattering factor with the coefficients of *International Tables* Vol. C, Table 6.1.1.4
+(Cromer & Mann, 1968; Prince, 2004), kept in `scattering.py` for 66 elements; each row gives f0(0) = Z to within
+0.06 electrons (tested). An element not in the table takes the f0 of the listed element nearest in Z, scaled by
+Z/Z_listed (the record names it). Ions are taken as neutral atoms; anomalous terms f′, f″ are left out. Reflections
+with |F|² below 10⁻⁶ of the strongest are not listed. Without atoms every allowed reflection has |F|² = 1.
+
+**Powder rings.** Reflections at the same |q| (within 10⁻⁶ Å⁻¹) form a ring with the multiplicity m and the
+intensity `I = Σ |F|²` (m |F|² for equivalent ones); the label names one reflection per family (related by a
+rotation of the space group or by Friedel's law; for a typed cell, the same indices up to order and sign). Rings are
+drawn as dashed lines on I(q) for every phase shown, and as arcs on the q map and the detector for a powder phase.
+
+**Fibre spots.** For crystallites at random about the surface normal with the plane (h_p k_p l_p) parallel to the
+substrate, or the axis [u v w] along the normal,
+
+```text
+n = B h_p / |B h_p|   or   n = A u / |A u|,     q_z = q · n,     q_∥ = √( |q|² − q_z² )                  (7.37)
+```
+
+Reflections at the same (q_∥, q_z) are one spot with their multiplicity and Σ|F|². Only q_z ≥ 0 is listed: the
+crystallites turned upside down put the spot of −h there. Each spot is drawn at +q_∥ and −q_∥, its size grows as
+√(I / I_max) of the phase, and its χ = atan2(q_∥, q_z) is the polar angle of the plane normal (the χ of a pole
+figure, 7.11).
+
+**Refraction and the two channels.** Optionally (*Shift the fibre spots for refraction in the film*) a spot is
+placed where refraction in a film of critical angle α_c puts it. The incident wave inside the film has
+
+```text
+k_z,i = k Re√( sin²α_i − sin²α_c )                                                                  (7.38)
+```
+
+and a reflection at the true (q_∥, q_z) leaves the film upwards in two channels of the distorted-wave Born
+approximation (Jiang, 2015; Toney & Brennan, 1989; Savikhin et al., 2020):
+
+```text
+transmitted (T):  k_z,f = q_z − k_z,i          reflected (R):  k_z,f = q_z + k_z,i                     (7.39)
+sin α_f = √( (k_z,f / k)² + sin²α_c ),     k_z,f ≥ 0                                                  (7.40)
+```
+
+The reflected channel is the wave reflected by the substrate first; the two terms with a reflected exit wave leave
+along the same two directions. The spot is drawn at the q_z of its exit angle on the map shown: `k (sin α_f +
+sin α_i)` on the kinematic map (2.7), or (2.18) when Analyze's refraction correction is on, so with the same α_c the
+T spot falls on its true q_z. A T spot with q_z < k_z,i is scattered into the substrate and not drawn. α_c of the
+shift is the one typed in the window, or else Analyze's. Without the shift every spot is drawn at its true q_z, and
+q_∥ does not change at the surface. Hand check (tested): λ = 1 Å, α_i = 0.2°, α_c = 0.15°; a spot at the true
+q_z = 0.122923 Å⁻¹ appears at 0.131583 Å⁻¹ on the kinematic map (α_f = 1.0°, the example of 2.6), and 2 k_z,i higher
+in the reflected channel on a corrected map.
+
+**Detector position and missing wedge.** The exit angle follows from the map q_z (`q_inverse.exit_sine_of_qz`), the
+in-plane angle from q_∥:
+
+```text
+cos 2θ_f = ( cos²α_f + cos²α_i − (q_∥ / k)² ) / ( 2 cos α_f cos α_i ),   q_y = sign(q_∥) k cos α_f sin 2θ_f     (7.41)
+```
+
+and the ray is met with the detector plane, tilted or not (the inverse of (2.3), `q_inverse.positions_of_q`). A
+spot with |cos 2θ_f| > 1, i.e. `q_∥ < k |cos α_f − cos α_i|`, lies in the missing wedge: it is drawn hollow on the q
+map and not on the detector. Tested: the detector position of a spot gives back its q_∥ and q_z to 10⁻⁹ Å⁻¹.
+
+**Assignment of the rings.** A peak of I(q) at q_0 ± σ(q_0) with width FWHM (7.4) is assigned to the nearest powder
+ring position |q_hkl| of the phases shown when
+
+```text
+|q_0 − q_hkl| ≤ δ,    δ = max( 3 σ(q_0), FWHM / 2 )                                                 (7.42)
+```
+
+The window takes the larger of the statistical error and the half width: σ(q_0) of a strong ring is often 10⁻⁴ Å⁻¹,
+smaller than the cell constants or the geometry are known, while a reflection within the half width still lies
+under the peak. The report gives the phase, hkl, q_hkl, `Δq = q_0 − q_hkl`, Δq/σ(q_0) and `Δd/d = −Δq/q_hkl`, and
+lists the other reflections within δ as alternatives. The orientation does not enter: |q| is the same for every
+orientation. q is kinematic unless α_c is given (2.6), so near the horizon a ring can be shifted by up to k sin α_i.
+Phases are assigned only when the person gives them (the window, or `--phase CIF` of `tools/gimap_agent.py auto`);
+the *Decisions* line *phase assignment* lists every peak and the rule, the section *Phase assignment* of
+`report.md` the alternatives too, and the peak rows of `report.json` have `phase`, `hkl`, `q_hkl`, `delta_q`,
+`delta_sigma` and `alternatives`.
+
+Validation (tested). LaB₆ (Pm3̄m, a = 4.1569 Å): the first nine rings fall on d = 4.1569, 2.9394, 2.4000, 2.0785,
+1.8590, 1.6971, 1.4697, 1.3856 and 1.3145 Å to 10⁻⁴ Å, with multiplicities 6, 12, 8, 6, 24, 24, and on GIMaP's
+LaB₆ calibrant lines (3.1) to 10⁻⁶ Å⁻¹. MAPbI₃ (I4/mcm, a = 8.874 Å, c = 12.671 Å, Pb and I only, from a CIF with
+its 32 operations): 111, 101, 100, 001, 113 and 301 are absent by (7.34). On the public P08 frame the peaks are
+assigned as 0.8989 → PbI₂ 001 (Δq = −0.0014 Å⁻¹; PbI₂ P3̄m1, a = 4.557 Å, c = 6.979 Å), 0.9972 → MAPbI₃ 110
+(Δq = −0.0041 Å⁻¹; 002 at +0.0055 Å⁻¹ is within the window too), 1.4091 → 112, 1.9902 → 004, 2.2255 → 114; the peak
+at 0.452 Å⁻¹ has no reflection within ±0.026 Å⁻¹ and is left unassigned.
+
+Not modelled: the Lorentz–polarisation and absorption factors of the ring and spot intensities (the sizes and the
+I column are m|F|²), peak widths, the DWBA amplitudes of the channels (the reflected spots are drawn without a
+weight), more than one film layer, and anomalous scattering.
+
+Implementation: `src/gimap/features/analyze/domain/crystal/` (`cell.py`, `symmetry.py`, `cif.py`,
+`scattering.py`, `reflections.py`, `fibre.py`, `assignment.py`), `src/gimap/features/analyze/application/indexing.py`,
+`src/gimap/features/assistant/application/pipeline_phases.py`
+
+### 7.11 Pole figure of a ring and its orientation distribution
+
+**Profile.** Phases ▸ **Pole Figure** takes I(χ) of the ring in Analyze's I(χ) window (6.6). The background b under
+the ring (from I(q): the local linear background of a Gaussian fitted over three times the window, else the mean of
+I(q) just beside it, or a value typed in) is subtracted, and the two halves are folded onto |χ| in 90 bins of 1° by
+inverse-variance weighting, as (7.22)–(7.23); bins without pixels and, when b > 0, bins below 0.2 b and their
+neighbours (a shadow) are unmeasured. The folded values are made Lorentz-corrected counts of crystallites per degree
+of χ:
+
+```text
+N_k = Ī_k sin χ_k   (I(χ) as measured; 1/L ≈ (q/k) sin χ, (5.12))      N_k = Ī_k   (I(χ) divided by L, 5.6)     (7.43)
+```
+
+(for a Lorentz-corrected frame b is spread as `b sin χ / ⟨sin χ⟩`, as in 7.7).
+
+**Models.** χ is the polar angle of the plane normal from the surface normal; ρ(χ) is the pole density per
+steradian, normalised over the hemisphere, and N(χ) the fraction of crystallites per radian of χ:
+
+```text
+∫₀^{π/2} ρ(χ) 2π sin χ dχ = 1,        N(χ) = 2π ρ(χ) sin χ                                         (7.44)
+ρ(χ) = (1 − φ) g(χ) + φ / 2π                                                                        (7.45)
+Gaussian:      g ∝ Σ_{c = χ₀, −χ₀, 180°−χ₀} exp( −(χ − c)² / 2s² ),   s = FWHM / 2√(2 ln 2)             (7.46)
+Maier–Saupe:   g ∝ exp( m cos²(χ − χ₀) ) + exp( m cos²(χ + χ₀) )                                     (7.47)
+```
+
+φ is the isotropic fraction, `1 − φ` the oriented fraction of the crystallites, χ₀ their direction and the FWHM
+their mosaic spread. The images in (7.46) are those that fold onto [0°, 90°]. (7.47) is the form SciAnalysis fits to
+I(χ) (Maier & Saupe, 1958); its FWHM about the maximum is `2 arccos √(1 − ln 2 / m)` for m > ln 2 (and
+`2 (90° − arccos √(ln 2 / |m|))` for m < −ln 2).
+
+**Fit.** `N_k = A · ⟨N(χ)⟩_k · 1°`, the model averaged over each 1° bin (12 points), is fitted by weighted least
+squares (`scipy.optimize.least_squares`, bounded: 0 ≤ φ ≤ 1, 0.3° ≤ FWHM ≤ 150°, −60 ≤ m ≤ 60000, 0° ≤ χ₀ ≤ 90°) to
+the measured bins with `χ_k ≤ χ_max`. χ_max is 85° by default: next to the sample horizon absorption in the film,
+the transmission function or a shadow lowers the intensity (the bins of Δ_h, 7.7). The direction is fixed at 0°
+(along the normal, the default of the window), at 90°, at a value typed in or at the χ of a reflection chosen in the
+table (*Pole Figure of This Ring*), or fitted; a fitted direction that ends within 1° of 0° or 90° is fixed there,
+where its error is not defined. Starting values come from the data (the scale from the sum, φ from the lowest pole
+densities, χ₀ from the highest), and the fit is repeated from FWHM = 4°, 15° and 45°, φ = 0.5 and, for a fitted
+direction, χ₀ = 20°, 45° and 70°; the lowest χ² is kept. Errors are `√diag((JᵀJ)⁻¹) · max(1, √χ²_red)` as (7.12);
+those of derived quantities by linear propagation through the numerical Jacobian. They are statistical: b, the
+window and the model are taken as exact.
+
+**Results.** The oriented fraction 1 − φ, the FWHM, χ₀, and the Hermans factor of the fitted distribution
+
+```text
+⟨cos²χ⟩ = ∫ ρ cos²χ sin χ dχ / ∫ ρ sin χ dχ,     f = (3⟨cos²χ⟩ − 1)/2 = (1 − φ) f_oriented             (7.48)
+```
+
+which includes the missing wedge as the model fills it, next to f from the measured bins alone (the sums of (7.25)
+on N_k) and the 2D order `2⟨cos²χ⟩ − 1` of ρ along the ring without the sin χ weight (the orientation parameter
+SciAnalysis reports). χ²_red, the bins fitted, the weighted coverage (7.24), b and its source are given too.
+
+Validation (tested): a synthetic I(χ) of a Gaussian about the normal with FWHM = 12° and φ = 0.35, Poisson noise,
+and |χ| < 4° missing, gives FWHM = 11.995 ± 0.015°, φ = 0.3500 ± 0.0014 and f = 0.6347 ± 0.0013 (true 0.6348;
+from the measured bins alone 0.558); the same profile Lorentz-corrected gives φ = 0.3514 ± 0.0014; a tilted texture
+(χ₀ = 40°, FWHM = 15°) gives χ₀ = 40.01 ± 0.02°, and a Maier–Saupe I(χ) with m = 30 gives m = 29.99 ± 0.07.
+On the public P08 frame the MAPbI₃ ring at 0.997 Å⁻¹ (window 0.985–1.010 Å⁻¹, χ ≤ 80°) gives an oriented fraction of
+0.033 ± 0.002 along the normal with FWHM = 13.5 ± 0.6° and f = 0.032 ± 0.002 (χ²_red = 2.6), against f = 0.139
+from the measured bins: most of the ring is isotropic. With χ ≤ 85° the bins next to the horizon pull the same fit
+to φ = 0 and a FWHM above 100° (χ²_red near 50): read a pole figure with its χ²_red, and lower χ_max when I(χ) falls
+towards the horizon.
+
+**Automatic analysis.** Every analysed ring (7.5) gets the Gaussian fit next to its Hermans factor, with the SNIP
+background of 7.7 and χ ≤ 85°. χ₀ is 0° when the highest maximum of the ring's I(χ) lies below 20°, 90° when above
+70°, and fitted otherwise. The ring rows of `report.json` have `pole_figure` (values, errors, χ²_red, f from the
+measured bins), `report.md` a line under each ring, flagged *poor fit* above χ²_red = 10, and the *Decisions* line
+*pole figure* states the rule.
+
+**Export.** *Export…* writes the profile as CSV (`chi_deg N sigma measured model`; the source, geometry and fit in
+`#` lines) and `<stem>_indexing.json` beside it: the record of the frame (14.2), the phases with their source files
+and SHA-256, the reflection table, the settings and the pole-figure fit at full precision.
+
+Assumptions: a fibre texture (isotropic about the surface normal), one oriented population plus an isotropic
+fraction, a background constant in χ, the Lorentz factor of (5.12) for an uncorrected I(χ); the missing wedge is
+filled by the model, not measured.
+
+Implementation: `src/gimap/features/analyze/domain/crystal/pole_figure.py`, `pole_models.py`,
+`src/gimap/features/analyze/application/pole_figure.py`
 
 ## 8. GISAXS automatic analysis
 
@@ -4398,7 +4607,7 @@ This chapter collects the limits stated in chapters 1 to 14, so that they can be
 - **Refraction and the DWBA.** Every q of Analyze, Fitting and 1D Predict is the kinematic vacuum value unless Analyze is given the film's critical angle (q_z of one film, section 2.6), and no reflected-wave terms of the distorted-wave Born approximation are computed (sections 2.5, 8.6, 9.2), except
 Fitting's optional two-path sphere with a free effective reflection coefficient (section 9.10). The Yoneda band is located empirically, without any critical angle (sections 6.7, 8.1). The film absorption correction and the q_z of the XRR extractor also ignore refraction (sections 5.4, 13.1). The only refraction-corrected quantity is the Sputter island height H(t), which uses the refracted wavevector transfer for the positions of fringe minima, not a DWBA intensity (section 12.12). The GIWAXS report says that q is kinematic in its *Decisions*, with the q_z shift of up to about k sin α_i that refraction can cause near or below the film's critical angle at the frame's α_i (section 7.9); the GISAXS report says so too, with the Yoneda band's q_z shifted most (section 8.6).
 - **Absolute intensity.** Intensities are mean counts per pixel. No monitor, transmission, exposure-time, sample-volume, detector-efficiency, air- or window-absorption correction is applied (section 2.5). Only an optional flat field (section 4.10) and the optional GIWAXS geometric factors (chapter 5) divide the intensities, and a series can be normalised to a reference peak (section 6.10). The scales of the Fitting models are therefore relative. Every family's form factor is normalised to P(0) = 1, so Int is not number density × ⟨V²⟩ × Δρ² (section 9.4).
-- **Lorentz and Ewald-sphere corrections.** I(χ) and the ring intensities are intensities on the detector. No Lorentz factor is applied, and the missing wedge near χ = 0 is not reconstructed (sections 2.2, 7.7).
+- **Lorentz and Ewald-sphere corrections.** I(χ) and the ring intensities are intensities on the detector. No Lorentz factor is applied, and the missing wedge near χ = 0 is not reconstructed from data; only the pole-figure fit fills it, with its model (sections 2.2, 7.7, 7.11).
 - **Texture.** The Hermans factor assumes a fibre texture about the surface normal; the missing wedge enters only through the coverage C_w and the isotropic reference f_iso, and the background under a ring is one χ-independent constant (section 7.7). No exit-angle correction (film absorption, transmission function, shadowing) is applied to I(χ), and the sin χ weight makes the bins next to the sample horizon count most: f can depend on them by many σ_f, which the report states but does not correct (section 7.7). The in-plane and out-of-plane comparison uses two sectors of 20°; it is not a pole figure (section 7.6).
 - **Phases.** No phase is assigned. Lamellar and hexagonal series are reported as hints (section 7.4).
 - **GISAXS models.** The 1D models depend on the magnitude of q_y only; q_z at the Yoneda row and the Yoneda enhancement are not modelled (sections 8.6, 9.2). The beam-tail term is an additive empirical term; no resolution convolution or instrumental smearing is applied (sections 8.6, 9.2). Fitting and Predict parameters use sizes by number unless a component's Sizes says otherwise (sections 8.5, 9.3). Without a given composition the automatic analysis lets the network choose among one or two populations of spheres and upright cylinders; random cylinders and three populations only when given (section 8.6).
@@ -4461,6 +4670,7 @@ The list follows the style of the IUCr journals: titles are given for books, pro
 - Black, D. R., Mendenhall, M. H., Brown, C. M., Henins, A., Filliben, J. & Cline, J. P. (2020). *Powder Diffr.* **35**, 17–22. https://doi.org/10.1017/S0885715620000068
 - Branch, M. A., Coleman, T. F. & Li, Y. (1999). *SIAM J. Sci. Comput.* **21**, 1–23. https://doi.org/10.1137/S1064827595289108
 - Bulut, Y. et al. (2024). *Langmuir*, **40**, 22591. https://doi.org/10.1021/acs.langmuir.4c02344
+- Cromer, D. T. & Mann, J. B. (1968). *Acta Cryst.* A**24**, 321–324. https://doi.org/10.1107/S0567739468000550
 - Gensch, M. et al. (2019). *ACS Appl. Mater. Interfaces*, **11**, 29416. https://doi.org/10.1021/acsami.9b08594
 - Gensch, M. et al. (2021). *ACS Appl. Nano Mater.* **4**, 4245. https://doi.org/10.1021/acsanm.1c00829
 - Golub, G. H. & Pereyra, V. (1973). *SIAM J. Numer. Anal.* **10**, 413–432. https://doi.org/10.1137/0710036
@@ -4482,6 +4692,7 @@ The list follows the style of the IUCr journals: titles are given for books, pro
 - Lawson, C. L. & Hanson, R. J. (1974). *Solving Least Squares Problems*. Englewood Cliffs: Prentice-Hall.
 - Levenberg, K. (1944). *Q. Appl. Math.* **2**, 164–168. https://doi.org/10.1090/qam/10666
 - Lorensen, W. E. & Cline, H. E. (1987). *ACM SIGGRAPH Comput. Graph.* **21**(4), 163–169. https://doi.org/10.1145/37402.37422
+- Maier, W. & Saupe, A. (1958). *Z. Naturforsch. A*, **13**, 564–566. https://doi.org/10.1515/zna-1958-0716
 - Marquardt, D. W. (1963). *J. Soc. Ind. Appl. Math.* **11**, 431–441. https://doi.org/10.1137/0111030
 - McKay, M. D., Beckman, R. J. & Conover, W. J. (1979). *Technometrics*, **21**, 239–245. https://doi.org/10.1080/00401706.1979.10489755
 - Meyer, F. (1994). *Signal Process.* **38**, 113–125. https://doi.org/10.1016/0165-1684(94)90060-4
@@ -4492,9 +4703,11 @@ The list follows the style of the IUCr journals: titles are given for books, pro
 - Parratt, L. G. (1954). *Phys. Rev.* **95**, 359–369. https://doi.org/10.1103/PhysRev.95.359
 - Patterson, A. L. (1939). *Phys. Rev.* **56**, 978–982. https://doi.org/10.1103/PhysRev.56.978
 - Pospelov, G., Van Herck, W., Burle, J., Carmona Loaiza, J. M., Durniak, C., Fisher, J. M., Ganeva, M., Yurov, D. & Wuttke, J. (2020). *J. Appl. Cryst.* **53**, 262–276. https://doi.org/10.1107/S1600576719016789
+- Prince, E. (Ed.) (2004). *International Tables for Crystallography*, Vol. C, *Mathematical, Physical and Chemical Tables*, 3rd ed. Dordrecht: Kluwer.
 - Renaud, G., Lazzari, R. & Leroy, F. (2009). *Surf. Sci. Rep.* **64**, 255–380. https://doi.org/10.1016/j.surfrep.2009.07.002
 - Robertson, T., Wright, F. T. & Dykstra, R. L. (1988). *Order Restricted Statistical Inference*. Chichester: Wiley.
 - Ryan, C. G., Clayton, E., Griffin, W. L., Sie, S. H. & Cousens, D. R. (1988). *Nucl. Instrum. Methods Phys. Res. B*, **34**, 396–402. https://doi.org/10.1016/0168-583X(88)90063-8
+- Savikhin, V., Steinrück, H.-G., Liang, R.-Z., Collins, B. A., Oosterhout, S. D., Beaujuge, P. M. & Toney, M. F. (2020). *J. Appl. Cryst.* **53**, 1108–1129. https://doi.org/10.1107/S1600576720005476
 - Schrode, B., Pachmajer, S., Dohr, M., Röthel, C., Domke, J., Fritz, T., Resel, R. & Werzer, O. (2019). *J. Appl. Cryst.* **52**, 683–689. https://doi.org/10.1107/S1600576719004485
 - Scherrer, P. (1918). *Nachr. Ges. Wiss. Göttingen Math.-Phys. Kl.* **1918**, 98–100.
 - Schmidt, U., Weigert, M., Broaddus, C. & Myers, G. (2018). *Medical Image Computing and Computer Assisted Intervention – MICCAI 2018*, Lecture Notes in Computer Science, Vol. 11071, pp. 265–273. Cham: Springer. https://doi.org/10.1007/978-3-030-00934-2_30
@@ -4506,6 +4719,7 @@ The list follows the style of the IUCr journals: titles are given for books, pro
 - Theil, H. (1950). *Proc. K. Ned. Akad. Wet.* **53**, 386–392, 521–525, 1397–1412.
 - Thompson, P., Cox, D. E. & Hastings, J. B. (1987). *J. Appl. Cryst.* **20**, 79–83. https://doi.org/10.1107/S0021889887087090
 - Tiesinga, E., Mohr, P. J., Newell, D. B. & Taylor, B. N. (2021). *Rev. Mod. Phys.* **93**, 025010. https://doi.org/10.1103/RevModPhys.93.025010
+- Toney, M. F. & Brennan, S. (1989). *Phys. Rev. B*, **39**, 7963–7966. https://doi.org/10.1103/PhysRevB.39.7963
 - Virtanen, P. et al. (2020). *Nat. Methods*, **17**, 261–272. https://doi.org/10.1038/s41592-019-0686-2
 - Ward, J. H. (1963). *J. Am. Stat. Assoc.* **58**, 236–244. https://doi.org/10.1080/01621459.1963.10500845
 - Wilkinson, M. D. et al. (2016). *Sci. Data*, **3**, 160018. https://doi.org/10.1038/sdata.2016.18

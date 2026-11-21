@@ -23,6 +23,7 @@ from .bindings.file_list import FileListMixin
 from .bindings.frame_import import FrameImportMixin
 from .bindings.frame_checks import FrameChecksMixin
 from .bindings.incidence import IncidenceMixin
+from .bindings.indexing import IndexingMixin
 from .bindings.options import OptionsMixin
 from .bindings.marks import MarksMixin
 from .bindings.masks import MaskToolsMixin
@@ -71,6 +72,7 @@ class AnalyzePage(
     MarksMixin,
     BeamCenterMixin,
     OptionsMixin,
+    IndexingMixin,
     DisplayMixin,
     QWidget,
     AnalyzePageView,
@@ -123,6 +125,7 @@ class AnalyzePage(
         self._watch_timer.setInterval(WATCH_INTERVAL_MS)
         self._watch_timer.timeout.connect(self._watch_tick)  # looks on its own thread (``bindings/batch_watch.py``)
         self.setup_ui(self)
+        self._setup_indexing()  # the Phases window and the reflection overlay (``bindings/indexing.py``)
         self.setAcceptDrops(True)
         self.calibrate_button.setEnabled(calibrate is not None)
         self.banner_calibrate_button.setEnabled(calibrate is not None)
@@ -571,6 +574,7 @@ class AnalyzePage(
         self._reset_series_fit()
         self._dispose_undo()
         self._dispose_file_list()
+        self._dispose_indexing()
         for view in (self.detector_view, self.top_plot, self.bottom_plot, self.series_map_view,
                      self.series_profile_plot, self.series_trace_plot, self.series_fit_plot, self.series_fit_trend_plot):
             view.dispose()

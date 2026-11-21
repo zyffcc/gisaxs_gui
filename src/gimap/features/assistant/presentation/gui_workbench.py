@@ -121,6 +121,15 @@ class GuiWorkbench:
     def ring_frame(self) -> dict:
         return self._call(self._automation.ring_frame)
 
+    def set_phases(self, phases) -> dict:
+        return self._call(self._automation.set_phases, list(phases))
+
+    def assign_peaks(self, peaks) -> dict:
+        return self._call(self._automation.assign_peaks, list(peaks))
+
+    def pole_figure(self, background=None, model: str = "gaussian", chi0_deg=None) -> dict:
+        return self._call(self._automation.pole_figure, background, model, chi0_deg)
+
     def set_beam_center(self, x_px: float, y_px: float) -> dict:
         return self._apply(lambda done: self._automation.set_beam_center(x_px, y_px, done))
 

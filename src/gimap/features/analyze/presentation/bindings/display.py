@@ -108,6 +108,7 @@ class DisplayMixin:
         ticks that mean nothing."""
         self.detector_view.clear()
         self.shape_layer.clear()
+        self._clear_reflections()
         for plot in (self.top_plot, self.bottom_plot):
             plot.set_curves([])
             plot.set_title("")
@@ -132,6 +133,7 @@ class DisplayMixin:
         if analysis is None:
             view.clear()
             self.shape_layer.clear()
+            self._sync_reflections()
             return
         reduction = analysis.reduction
         rsm = reduction.reciprocal_space_map if reduction is not None else None
@@ -153,6 +155,7 @@ class DisplayMixin:
             if box is not None:
                 view.show_box(box.q_parallel[0], box.qz[0], box.q_parallel[1], box.qz[1])
             self._refresh_shapes()
+            self._sync_reflections()  # the phases' reflections in this view (``bindings/indexing.py``)
             return
         view.set_image(
             analysis.data, valid=analysis.valid, title=analysis.path.name,
@@ -160,6 +163,7 @@ class DisplayMixin:
         )
         self._show_overlays(analysis)
         self._refresh_shapes()
+        self._sync_reflections()
 
     def _show_q_map_marks(self, analysis: FrameAnalysis, rsm, *, keep_view: bool) -> None:
         """The beam centre (the direct beam: q∥ = qz = 0) and the sample horizon (qz = k sin αi) on the q map."""
@@ -192,6 +196,7 @@ class DisplayMixin:
             )
             self.detector_view.clear_overlays()
             self._refresh_shapes()
+            self._sync_reflections()
             return
         self.detector_view.title_label.setText(tr("Unwrapping onto χ–q …"))
         self.tasks.submit(
@@ -309,6 +314,7 @@ class DisplayMixin:
             top.show_window(*self._window_for_display(window, analysis), color=STANDARD_COLORS["ring"])
         self._fill_lower_choice(reduction)
         self._show_lower_profile()
+        self._sync_reflections()
 
     def _fill_lower_choice(self, reduction) -> None:
         wanted = self.lower_choice.currentData() or self._lower_profile

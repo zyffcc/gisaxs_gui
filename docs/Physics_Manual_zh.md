@@ -83,6 +83,8 @@
   - [7.7 环的取向与 Hermans 取向因子](#77-环的取向与-hermans-取向因子)
   - [7.8 微晶尺寸（Scherrer）](#78-微晶尺寸scherrer)
   - [7.9 报告写什么](#79-报告写什么)
+  - [7.10 衍射点叠加与物相指认](#710-衍射点叠加与物相指认)
+  - [7.11 环的极图及其取向分布](#711-环的极图及其取向分布)
 - [8. GISAXS 自动分析](#8-gisaxs-自动分析)
   - [8.1 Yoneda 带与切线](#81-yoneda-带与切线)
   - [8.2 由镜像对称求光束中心列](#82-由镜像对称求光束中心列)
@@ -1579,7 +1581,7 @@ f^(m) = f( Ī_k + ε_k^(m) ),   ε_k^(m) ~ N(0, σ_k²),   m = 1 … 200        
 
 当 `abs(Δ_h)` 同时超过 0.01 和 3σ_f 时，环的注释给出两个值和以 σ_f 为单位的 Δ_h；去掉这些分箱后织构判据会给出另一个结论时，另有一条注释说明；*Decisions* 中 *ring orientation* 一行列出这些环。在公开的 P08 帧上，I(χ) 在样品平面约 5° 以内降到径向背景，去掉这些分箱使三个分析环的 f − f_iso 移动 17–27 σ_f（例如 q = 0.997 Å⁻¹ 处 +0.141 → +0.094），0.997 和 1.989 Å⁻¹ 两个环的结论会改变。这样的环的 f、f − f_iso 和织构描述描述的是测得的强度，包括在地平线附近使它降低的一切；那是织构还是出射角效应，需要分析本身不做的判断。
 
-**假设与不建模的内容。** 该因子假定面内各向同性（纤维织构）。χ = 0 附近的缺失楔形区不重建；它只通过 C_w 和 f_iso 起作用。I(χ) 是探测器上的强度：不对它做洛伦兹或埃瓦尔德球校正，也不对 q_z 做折射校正。背景是与 χ 无关的常数；各向异性的漫散射背景会使 f 产生偏差。
+**假设与不建模的内容。** 该因子假定面内各向同性（纤维织构）。χ = 0 附近的缺失楔形区不重建；它只通过 C_w 和 f_iso 起作用（7.11 节的极图拟合用模型补全它）。I(χ) 是探测器上的强度：不对它做洛伦兹或埃瓦尔德球校正，也不对 q_z 做折射校正。背景是与 χ 无关的常数；各向异性的漫散射背景会使 f 产生偏差。
 
 实现：`src/gimap/features/assistant/domain/orientation.py`，窗口在 `src/gimap/features/assistant/application/tools.py` 中
 
@@ -1608,10 +1610,179 @@ FWHM 大于 0.15 q_0 时（晕：报告给出 2π/FWHM 作为关联长度，而�
 - *q*：运动学值，不做折射校正。在薄膜临界角附近或以下，折射使 q_z 偏移至多约 k sin α_i，这一行给出这一帧的数值（`2π/λ · sin α_i`；公开的 P08 帧在 α_i = 0.075°、λ = 0.6888 Å 时为 0.0119 Å⁻¹），α_i 因缺少数值而为 0° 时则说明它未知。给出薄膜临界角时（2.6 节），这一行为 *q_z corrected for refraction in the film (αc = …)*；
 - *uncertainties*：只有统计误差，并写明这一帧的误差模型（泊松计数统计，或每个分箱的像素离散）；几何、环下面的背景和折射都不包括在内；
 - 峰表在上限处截断时的 *peak search*（7.3 节）、*texture rule*，以及 f 依赖地平线附近分箱的环的 *ring orientation*（7.7 节）。
+- 给出物相时的 *phase assignment*，分析了环时的 *pole figure*（7.10、7.11 节）。
 
 *Incidence angle* 写明 α_i 的来源，顺序是：选项、笔记、在分析的命令栏中设定的值（手动设定或由工具 `set_incidence_angle` 设定；分析用它代替仪器配置中的值）、仪器配置。来自选项或笔记、又与命令栏中设定的值不同的数值会替换命令栏中的值，所以报告的 α_i 就是所用的 α_i。只有这些都没有给出 α_i 时，才使用 0° 并提问。JSON 报告中的数字四舍五入到四位有效数字；光束中心保留全部精度。
 
 实现：`src/gimap/features/assistant/application/pipeline_rows.py`
+
+### 7.10 衍射点叠加与物相指认
+
+分析 ▸ **物相**（Phases，图像工具栏）读入已知物相，显示其衍射落在何处；自动分析把找到的环指认到这些衍射上。一个物相是一个晶胞
+`(a, b, c, α, β, γ)` 加上它的对称性，也可以带原子位置。它可以从 CIF 读入（`_cell_length_*`、`_cell_angle_*`，
+`_space_group_symop_operation_xyz` 或 `_symmetry_equiv_pos_as_xyz` 的对称操作，`_atom_site_label`、`_type_symbol`、
+`_fract_x/y/z`、`_occupancy`、`_U_iso_or_equiv` 或 `_B_iso_or_equiv`；括号中的标准不确定度被去掉），也可以手动输入晶胞和点阵心型
+（P、A、B、C、I、F，R 用六方坐标）。没有对称操作的 CIF 只用其 Hermann–Mauguin 符号的心型字母，窗口会说明这一点。
+
+**倒格子。** A 的三列是晶胞直角坐标系中的 **a**、**b**、**c**（**a** 沿 x，**b** 在 x–y 平面内）：
+
+```text
+B = 2π (A⁻¹)ᵀ,    q_hkl = B · (h, k, l)ᵀ,    d = 2π / |q_hkl|                                         (7.33)
+```
+
+检验每个 `|q| ≤ q_max`（默认 3 Å⁻¹）的 (h, k, l) ≠ 0。若空间群的某个操作 `x′ = R x + t` 保持衍射 **h** 不变而其相移不是整数，
+该衍射**系统消光**：
+
+```text
+h R = h   且   h · t ∉ ℤ                                                                           (7.34)
+```
+
+这时原子与其像的贡献对任何位置都相消，所以这条规则不需要原子。
+
+**强度。** 有原子位置时（用对称操作展开；各分数坐标相差小于 10⁻³ 的像只算一次），结构因子的平方为
+
+```text
+F(h) = Σ_j o_j f0_j(s) exp(−B_j s²) exp(2πi h · x_j),    s = sin θ / λ = |q| / 4π                     (7.35)
+f0(s) = Σ_{i=1..4} a_i exp(−b_i s²) + c                                                              (7.36)
+```
+
+o 是占位率，B = 8π² U 是各向同性位移参数（CIF 没有给出时为 0），(7.36) 是中性原子散射因子的 Cromer–Mann 形式，系数取自
+*International Tables* 第 C 卷表 6.1.1.4（Cromer & Mann, 1968；Prince, 2004），`scattering.py` 中有 66 个元素，每行给出的
+f0(0) 与 Z 相差不到 0.06 个电子（有测试）。表中没有的元素，取 Z 最接近的已列元素的 f0 并乘以 Z/Z_listed（记录中写明）。离子按中性原子
+处理；不含反常散射项 f′、f″。|F|² 小于最强者 10⁻⁶ 的衍射不列出。没有原子时，每个允许的衍射都取 |F|² = 1。
+
+**粉末环。** |q| 相同（相差 10⁻⁶ Å⁻¹ 以内）的衍射组成一个环，带多重度 m 和强度 `I = Σ |F|²`（等价衍射为 m |F|²）；标注为每一族
+（由空间群的转动或 Friedel 定律相联系；手动输入的晶胞则按指数的绝对值和顺序）取一个衍射。每个显示的物相的环在 I(q) 上画为虚线，
+粉末物相的环还在 q 图和探测器上画为弧线。
+
+**纤维织构衍射点。** 晶粒绕表面法线随机取向，且晶面 (h_p k_p l_p) 平行于衬底或晶轴 [u v w] 沿法线时，
+
+```text
+n = B h_p / |B h_p|   或   n = A u / |A u|,     q_z = q · n,     q_∥ = √( |q|² − q_z² )                  (7.37)
+```
+
+(q_∥, q_z) 相同的衍射合成一个点，带多重度和 Σ|F|²。只列出 q_z ≥ 0 的点：上下颠倒的晶粒把 −h 的点放在那里。每个点画在 +q_∥
+和 −q_∥ 两侧，大小随该物相的 √(I / I_max) 增大；它的 χ = atan2(q_∥, q_z) 是晶面法线的极角（即极图的 χ，7.11 节）。
+
+**折射与两个通道。** 选中 *按薄膜中的折射移动纤维织构衍射点*（Shift the fibre spots for refraction in the film）时，衍射点放在
+临界角为 α_c 的薄膜中折射后的位置。薄膜中入射波的竖直波矢为
+
+```text
+k_z,i = k Re√( sin²α_i − sin²α_c )                                                                  (7.38)
+```
+
+真实位置 (q_∥, q_z) 处的衍射在畸变波玻恩近似中沿两个通道向上离开薄膜（Jiang, 2015；Toney & Brennan, 1989；Savikhin et al., 2020）：
+
+```text
+透射通道 (T)：  k_z,f = q_z − k_z,i          反射通道 (R)：  k_z,f = q_z + k_z,i                         (7.39)
+sin α_f = √( (k_z,f / k)² + sin²α_c ),     k_z,f ≥ 0                                                  (7.40)
+```
+
+反射通道是先经衬底反射的波；出射波经反射的两项沿同样两个方向离开。衍射点画在所示 q 图上其出射角对应的 q_z 处：运动学 q 图上为
+`k (sin α_f + sin α_i)`（(2.7)），开启分析的折射校正时为 (2.18)，所以 α_c 相同时 T 点正落在真实 q_z 上。q_z < k_z,i 的 T 点
+被散射进衬底，不画出。折射移动用窗口中输入的 α_c，没有输入时用分析中的 α_c。不移动时每个点画在真实 q_z 上，q_∥ 在表面不变。
+手算检验（有测试）：λ = 1 Å、α_i = 0.2°、α_c = 0.15°，真实 q_z = 0.122923 Å⁻¹ 的点在运动学 q 图上位于 0.131583 Å⁻¹
+（α_f = 1.0°，即 2.6 节的例子），在校正后的 q 图上反射通道的点高出 2 k_z,i。
+
+**探测器位置与缺失楔。** 出射角由 q 图上的 q_z 得到（`q_inverse.exit_sine_of_qz`），面内角由 q_∥ 得到：
+
+```text
+cos 2θ_f = ( cos²α_f + cos²α_i − (q_∥ / k)² ) / ( 2 cos α_f cos α_i ),   q_y = sign(q_∥) k cos α_f sin 2θ_f     (7.41)
+```
+
+再求这条射线与探测器平面（倾斜或不倾斜）的交点（(2.3) 的逆，`q_inverse.positions_of_q`）。|cos 2θ_f| > 1，即
+`q_∥ < k |cos α_f − cos α_i|` 的点位于缺失楔中：在 q 图上画为空心，在探测器上不画。有测试：由衍射点的探测器位置算回的 q_∥ 和 q_z
+与原值相差不到 10⁻⁹ Å⁻¹。
+
+**环的指认。** I(q) 中位于 q_0 ± σ(q_0)、宽度为 FWHM（7.4 节）的峰，指认为所示物相中最近的粉末环位置 |q_hkl|，条件是
+
+```text
+|q_0 − q_hkl| ≤ δ,    δ = max( 3 σ(q_0), FWHM / 2 )                                                 (7.42)
+```
+
+窗口取统计误差和半宽中较大的一个：强环的 σ(q_0) 常为 10⁻⁴ Å⁻¹，比晶胞参数或几何的已知精度还小，而半宽以内的衍射仍在峰下。报告给出
+物相、hkl、q_hkl、`Δq = q_0 − q_hkl`、Δq/σ(q_0) 和 `Δd/d = −Δq/q_hkl`，并把 δ 以内的其他衍射列为备选。取向不参与指认：
+|q| 与取向无关。没有给出 α_c 时 q 是运动学值（2.6 节），所以靠近地平线的环可能偏移至多 k sin α_i。只有用户给出物相时才做指认（窗口，
+或 `tools/gimap_agent.py auto` 的 `--phase CIF`）；*Decisions* 中的 *phase assignment* 一行列出每个峰和规则，`report.md` 的
+*Phase assignment*（物相指认）一节还列出备选，`report.json` 的峰行有 `phase`、`hkl`、`q_hkl`、`delta_q`、`delta_sigma` 和
+`alternatives`。
+
+验证（有测试）。LaB₆（Pm3̄m，a = 4.1569 Å）：前九个环落在 d = 4.1569、2.9394、2.4000、2.0785、1.8590、1.6971、1.4697、
+1.3856 和 1.3145 Å 上，误差在 10⁻⁴ Å 以内，多重度为 6、12、8、6、24、24，并与 GIMaP 的 LaB₆ 标样谱线（3.1 节）相差不到
+10⁻⁶ Å⁻¹。MAPbI₃（I4/mcm，a = 8.874 Å，c = 12.671 Å，只含 Pb 和 I，取自带 32 个对称操作的 CIF）：111、101、100、001、113 和
+301 按 (7.34) 消光。在公开的 P08 帧上，各峰被指认为 0.8989 → PbI₂ 001（Δq = −0.0014 Å⁻¹；PbI₂ 为 P3̄m1，a = 4.557 Å，
+c = 6.979 Å），0.9972 → MAPbI₃ 110（Δq = −0.0041 Å⁻¹；+0.0055 Å⁻¹ 处的 002 也在窗口内），1.4091 → 112，1.9902 → 004，
+2.2255 → 114；0.452 Å⁻¹ 的峰在 ±0.026 Å⁻¹ 以内没有衍射，不做指认。
+
+不建模的内容：环和衍射点强度的洛伦兹–偏振因子和吸收（大小和 I 列都是 m|F|²），峰宽，两个通道的 DWBA 振幅（反射通道的点不加权），
+多于一层的薄膜，以及反常散射。
+
+实现：`src/gimap/features/analyze/domain/crystal/`（`cell.py`、`symmetry.py`、`cif.py`、`scattering.py`、`reflections.py`、
+`fibre.py`、`assignment.py`），`src/gimap/features/analyze/application/indexing.py`，
+`src/gimap/features/assistant/application/pipeline_phases.py`
+
+### 7.11 环的极图及其取向分布
+
+**剖面。** 物相 ▸ **极图**（Pole Figure）使用分析中 I(χ) 窗口所在环的 I(χ)（6.6 节）。减去环下面的背景 b（取自 I(q)：在三倍窗口
+宽度内拟合高斯峰得到的局部线性背景；拟合不成时取窗口两侧 I(q) 的平均值；也可以输入数值），再按方差倒数加权把两半折叠到 |χ| 上，
+共 90 个 1° 分档，与 (7.22)–(7.23) 相同；没有像素的分档，以及 b > 0 时低于 0.2 b 的分档及其相邻分档（遮挡），算作未测量。折叠后的
+值换成经洛伦兹校正的每度 χ 的晶粒计数：
+
+```text
+N_k = Ī_k sin χ_k   （测得的 I(χ)；1/L ≈ (q/k) sin χ，(5.12)）      N_k = Ī_k   （已除以 L 的 I(χ)，5.6 节）     (7.43)
+```
+
+（帧已做洛伦兹校正时，b 按 `b sin χ / ⟨sin χ⟩` 分配，与 7.7 节相同。）
+
+**模型。** χ 是晶面法线相对表面法线的极角；ρ(χ) 是每球面度的极密度，在半球上归一化；N(χ) 是每弧度 χ 的晶粒分数：
+
+```text
+∫₀^{π/2} ρ(χ) 2π sin χ dχ = 1,        N(χ) = 2π ρ(χ) sin χ                                         (7.44)
+ρ(χ) = (1 − φ) g(χ) + φ / 2π                                                                        (7.45)
+高斯：          g ∝ Σ_{c = χ₀, −χ₀, 180°−χ₀} exp( −(χ − c)² / 2s² ),   s = FWHM / 2√(2 ln 2)            (7.46)
+Maier–Saupe：   g ∝ exp( m cos²(χ − χ₀) ) + exp( m cos²(χ + χ₀) )                                    (7.47)
+```
+
+φ 是各向同性分数，`1 − φ` 是取向晶粒的分数，χ₀ 是它们的方向，FWHM 是镶嵌展宽。(7.46) 中的像是折叠到 [0°, 90°] 上的那些。(7.47)
+是 SciAnalysis 拟合 I(χ) 所用的形式（Maier & Saupe, 1958）；它在极大处的 FWHM 为 `2 arccos √(1 − ln 2 / m)`（m > ln 2），
+m < −ln 2 时为 `2 (90° − arccos √(ln 2 / |m|))`。
+
+**拟合。** 用加权最小二乘（`scipy.optimize.least_squares`，有界：0 ≤ φ ≤ 1，0.3° ≤ FWHM ≤ 150°，−60 ≤ m ≤ 60000，
+0° ≤ χ₀ ≤ 90°）把 `N_k = A · ⟨N(χ)⟩_k · 1°`（模型在每个 1° 分档内取 12 点平均）拟合到 `χ_k ≤ χ_max` 的已测分档上。χ_max 默认为
+85°：靠近样品地平线处，薄膜吸收、透射函数或样品遮挡会降低强度（7.7 节 Δ_h 所用的分档）。方向可以固定在 0°（沿法线，窗口的默认值）、
+90°、输入的值或表中所选衍射的 χ（*这个环的极图*，Pole Figure of This Ring），也可以拟合；拟合的方向若停在 0° 或 90° 的 1° 以内，
+就固定在那里，因为那里它的误差没有定义。初值取自数据（尺度取自求和，φ 取自最低的极密度，χ₀ 取自最高的极密度），再从 FWHM = 4°、
+15°、45°，φ = 0.5，以及（方向需拟合时）χ₀ = 20°、45°、70° 重新拟合，保留 χ² 最低的结果。误差为
+`√diag((JᵀJ)⁻¹) · max(1, √χ²_red)`，与 (7.12) 相同；派生量的误差由数值雅可比矩阵线性传递。它们是统计误差：b、窗口和模型都当作精确。
+
+**结果。** 取向分数 1 − φ、FWHM、χ₀，以及拟合分布的 Hermans 因子
+
+```text
+⟨cos²χ⟩ = ∫ ρ cos²χ sin χ dχ / ∫ ρ sin χ dχ,     f = (3⟨cos²χ⟩ − 1)/2 = (1 − φ) f_oriented             (7.48)
+```
+
+它包含由模型补全的缺失楔；同时给出只用测到的分档得到的 f（对 N_k 做 (7.25) 的求和），以及沿环不加 sin χ 权重的 ρ 的二维取向参数
+`2⟨cos²χ⟩ − 1`（SciAnalysis 报告的取向参数）。还给出 χ²_red、拟合的分档数、加权覆盖率（7.24）、b 及其来源。
+
+验证（有测试）：绕法线的高斯分布、FWHM = 12°、φ = 0.35、带泊松噪声且缺 |χ| < 4° 的合成 I(χ)，拟合得到 FWHM = 11.995 ± 0.015°、
+φ = 0.3500 ± 0.0014、f = 0.6347 ± 0.0013（真值 0.6348；只用测到的分档为 0.558）；同一剖面做洛伦兹校正后 φ = 0.3514 ± 0.0014；
+倾斜织构（χ₀ = 40°，FWHM = 15°）得到 χ₀ = 40.01 ± 0.02°；m = 30 的 Maier–Saupe I(χ) 得到 m = 29.99 ± 0.07。在公开的 P08 帧上，
+0.997 Å⁻¹ 处的 MAPbI₃ 环（窗口 0.985–1.010 Å⁻¹，χ ≤ 80°）给出沿法线的取向分数 0.033 ± 0.002，FWHM = 13.5 ± 0.6°，
+f = 0.032 ± 0.002（χ²_red = 2.6），只用测到的分档则为 f = 0.139：这个环的大部分是各向同性的。取 χ ≤ 85° 时，靠近地平线的分档把
+同一拟合拉到 φ = 0、FWHM 超过 100°（χ²_red 约 50）：看极图要连同 χ²_red 一起看；I(χ) 向地平线下降时应降低 χ_max。
+
+**自动分析。** 每个分析的环（7.5 节）在其 Hermans 因子旁边给出高斯拟合，背景用 7.7 节的 SNIP 背景，χ ≤ 85°。环的 I(χ) 最高极大
+低于 20° 时 χ₀ 取 0°，高于 70° 时取 90°，其余情况拟合。`report.json` 的环行有 `pole_figure`（数值、误差、χ²_red、只用测到的分档的
+f），`report.md` 在每个环下有一行，χ²_red 超过 10 时标为 *poor fit*，*Decisions* 中的 *pole figure* 一行写明规则。
+
+**导出。** *导出…*（Export…）把剖面写成 CSV（`chi_deg N sigma measured model`；来源、几何和拟合写在 `#` 行中），旁边写
+`<stem>_indexing.json`：该帧的记录（14.2 节）、物相及其源文件和 SHA-256、衍射表、设置和全精度的极图拟合。
+
+假设：纤维织构（绕表面法线各向同性），一个取向群体加各向同性部分，背景与 χ 无关，未校正的 I(χ) 用 (5.12) 的洛伦兹因子；缺失楔由模型
+补全，并没有测到。
+
+实现：`src/gimap/features/analyze/domain/crystal/pole_figure.py`、`pole_models.py`，
+`src/gimap/features/analyze/application/pole_figure.py`
 
 ## 8. GISAXS 自动分析
 
@@ -3562,7 +3733,7 @@ SHA-256 摘要标识内容重要的文件：
 
 - **折射与 DWBA。** 除非在分析工作区给出薄膜的临界角（一层薄膜的 q_z，2.6 节），分析、拟合和一维预测中的每个 q 都是运动学的真空值；也不计算畸变波玻恩近似的反射波项（2.5、8.6、9.2 节）；唯一的例外是拟合工作区可选的、带自由有效反射系数的两路径球（9.10 节）。Yoneda 带凭经验定位，不用任何临界角（6.7、8.1 节）。薄膜吸收校正和 XRR 提取工具的 q_z 也忽略折射（5.4、13.1 节）。唯一经过折射校正的量是溅射的岛高度 H(t)，它对条纹极小的位置使用折射后的波矢转移，而不是 DWBA 强度（12.12 节）。GIWAXS 报告在 *Decisions* 中说明 q 是运动学值，并给出在这一帧的 α_i 下、薄膜临界角附近或以下折射可能引起的至多约 k sin α_i 的 q_z 偏移（7.9 节）；GISAXS 报告也这样说明，并指出 Yoneda 带的 q_z 偏移最大（8.6 节）。
 - **绝对强度。** 强度是每像素的平均计数。不做监视器、透过率、曝光时间、样品体积、探测器效率、空气或窗口吸收的校正（2.5 节）。只有可选的平场（4.10 节）和可选的 GIWAXS 几何因子（第 5 章）会除强度，序列可以按参考峰归一化（6.10 节）。因此拟合模型的比例因子是相对的。每种类型的形状因子都归一化为 P(0) = 1，所以 Int 不是 数密度 × ⟨V²⟩ × Δρ²（9.4 节）。
-- **洛伦兹和埃瓦尔德球校正。** I(χ) 和环的强度是探测器上的强度。不施加洛伦兹因子，χ = 0 附近的缺失楔形区不重建（2.2、7.7 节）。
+- **洛伦兹和埃瓦尔德球校正。** I(χ) 和环的强度是探测器上的强度。不施加洛伦兹因子，χ = 0 附近的缺失楔形区不由数据重建；只有极图拟合用其模型补全它（2.2、7.7、7.11 节）。
 - **织构。** Hermans 因子假定绕表面法线的纤维织构；缺失楔形区只通过覆盖率 C_w 和各向同性参照 f_iso 起作用，环下面的背景是一个与 χ 无关的常数（7.7 节）。I(χ) 不做出射角校正（薄膜吸收、透射函数、阴影），而 sin χ 权重使样品地平线附近的分箱最重要：f 可能以许多个 σ_f 依赖这些分箱，报告会说明但不校正（7.7 节）。面内与面外比较使用两个 20° 的扇区；它不是极图（7.6 节）。
 - **物相。** 不指定物相。层状和六方序列作为提示报告（7.4 节）。
 - **GISAXS 模型。** 一维模型只依赖 q_y 的大小；Yoneda 行处的 q_z 和 Yoneda 增强不建模（8.6、9.2 节）。光束尾项是加性的经验项；不做分辨率卷积或仪器展宽（8.6、9.2 节）。拟合工作区和预测参数的尺寸分布按数目，除非组分的尺寸分布另有选择（8.5、9.3 节）。没有给定组成时，自动分析让网络在一到两群球和竖直圆柱中选择；随机取向圆柱和三群颗粒只在给定时才拟合（8.6 节）。
@@ -3625,6 +3796,7 @@ SHA-256 摘要标识内容重要的文件：
 - Black, D. R., Mendenhall, M. H., Brown, C. M., Henins, A., Filliben, J. & Cline, J. P. (2020). *Powder Diffr.* **35**, 17–22. https://doi.org/10.1017/S0885715620000068
 - Branch, M. A., Coleman, T. F. & Li, Y. (1999). *SIAM J. Sci. Comput.* **21**, 1–23. https://doi.org/10.1137/S1064827595289108
 - Bulut, Y. et al. (2024). *Langmuir*, **40**, 22591. https://doi.org/10.1021/acs.langmuir.4c02344
+- Cromer, D. T. & Mann, J. B. (1968). *Acta Cryst.* A**24**, 321–324. https://doi.org/10.1107/S0567739468000550
 - Gensch, M. et al. (2019). *ACS Appl. Mater. Interfaces*, **11**, 29416. https://doi.org/10.1021/acsami.9b08594
 - Gensch, M. et al. (2021). *ACS Appl. Nano Mater.* **4**, 4245. https://doi.org/10.1021/acsanm.1c00829
 - Golub, G. H. & Pereyra, V. (1973). *SIAM J. Numer. Anal.* **10**, 413–432. https://doi.org/10.1137/0710036
@@ -3646,6 +3818,7 @@ SHA-256 摘要标识内容重要的文件：
 - Lawson, C. L. & Hanson, R. J. (1974). *Solving Least Squares Problems*. Englewood Cliffs: Prentice-Hall.
 - Levenberg, K. (1944). *Q. Appl. Math.* **2**, 164–168. https://doi.org/10.1090/qam/10666
 - Lorensen, W. E. & Cline, H. E. (1987). *ACM SIGGRAPH Comput. Graph.* **21**(4), 163–169. https://doi.org/10.1145/37402.37422
+- Maier, W. & Saupe, A. (1958). *Z. Naturforsch. A*, **13**, 564–566. https://doi.org/10.1515/zna-1958-0716
 - Marquardt, D. W. (1963). *J. Soc. Ind. Appl. Math.* **11**, 431–441. https://doi.org/10.1137/0111030
 - McKay, M. D., Beckman, R. J. & Conover, W. J. (1979). *Technometrics*, **21**, 239–245. https://doi.org/10.1080/00401706.1979.10489755
 - Meyer, F. (1994). *Signal Process.* **38**, 113–125. https://doi.org/10.1016/0165-1684(94)90060-4
@@ -3656,9 +3829,11 @@ SHA-256 摘要标识内容重要的文件：
 - Parratt, L. G. (1954). *Phys. Rev.* **95**, 359–369. https://doi.org/10.1103/PhysRev.95.359
 - Patterson, A. L. (1939). *Phys. Rev.* **56**, 978–982. https://doi.org/10.1103/PhysRev.56.978
 - Pospelov, G., Van Herck, W., Burle, J., Carmona Loaiza, J. M., Durniak, C., Fisher, J. M., Ganeva, M., Yurov, D. & Wuttke, J. (2020). *J. Appl. Cryst.* **53**, 262–276. https://doi.org/10.1107/S1600576719016789
+- Prince, E. (Ed.) (2004). *International Tables for Crystallography*, Vol. C, *Mathematical, Physical and Chemical Tables*, 3rd ed. Dordrecht: Kluwer.
 - Renaud, G., Lazzari, R. & Leroy, F. (2009). *Surf. Sci. Rep.* **64**, 255–380. https://doi.org/10.1016/j.surfrep.2009.07.002
 - Robertson, T., Wright, F. T. & Dykstra, R. L. (1988). *Order Restricted Statistical Inference*. Chichester: Wiley.
 - Ryan, C. G., Clayton, E., Griffin, W. L., Sie, S. H. & Cousens, D. R. (1988). *Nucl. Instrum. Methods Phys. Res. B*, **34**, 396–402. https://doi.org/10.1016/0168-583X(88)90063-8
+- Savikhin, V., Steinrück, H.-G., Liang, R.-Z., Collins, B. A., Oosterhout, S. D., Beaujuge, P. M. & Toney, M. F. (2020). *J. Appl. Cryst.* **53**, 1108–1129. https://doi.org/10.1107/S1600576720005476
 - Schrode, B., Pachmajer, S., Dohr, M., Röthel, C., Domke, J., Fritz, T., Resel, R. & Werzer, O. (2019). *J. Appl. Cryst.* **52**, 683–689. https://doi.org/10.1107/S1600576719004485
 - Scherrer, P. (1918). *Nachr. Ges. Wiss. Göttingen Math.-Phys. Kl.* **1918**, 98–100.
 - Schmidt, U., Weigert, M., Broaddus, C. & Myers, G. (2018). *Medical Image Computing and Computer Assisted Intervention – MICCAI 2018*, Lecture Notes in Computer Science, Vol. 11071, pp. 265–273. Cham: Springer. https://doi.org/10.1007/978-3-030-00934-2_30
@@ -3670,6 +3845,7 @@ SHA-256 摘要标识内容重要的文件：
 - Theil, H. (1950). *Proc. K. Ned. Akad. Wet.* **53**, 386–392, 521–525, 1397–1412.
 - Thompson, P., Cox, D. E. & Hastings, J. B. (1987). *J. Appl. Cryst.* **20**, 79–83. https://doi.org/10.1107/S0021889887087090
 - Tiesinga, E., Mohr, P. J., Newell, D. B. & Taylor, B. N. (2021). *Rev. Mod. Phys.* **93**, 025010. https://doi.org/10.1103/RevModPhys.93.025010
+- Toney, M. F. & Brennan, S. (1989). *Phys. Rev. B*, **39**, 7963–7966. https://doi.org/10.1103/PhysRevB.39.7963
 - Virtanen, P. et al. (2020). *Nat. Methods*, **17**, 261–272. https://doi.org/10.1038/s41592-019-0686-2
 - Ward, J. H. (1963). *J. Am. Stat. Assoc.* **58**, 236–244. https://doi.org/10.1080/01621459.1963.10500845
 - Wilkinson, M. D. et al. (2016). *Sci. Data*, **3**, 160018. https://doi.org/10.1038/sdata.2016.18

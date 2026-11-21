@@ -135,6 +135,7 @@ def command_auto(arguments) -> int:
         sum_frames=arguments.sum,
         rings=arguments.rings, max_peaks=arguments.max_peaks, recalibrate=arguments.recalibrate, notes=notes,
         technique=arguments.technique, follow_detection=arguments.technique is None, fit=not arguments.no_fit,
+        phases=tuple(arguments.phase or ()),
     )
     out = Path(arguments.out) if arguments.out else default_output_folder()
     progress = (lambda _text: None) if arguments.quiet else (lambda text: print(text, file=sys.stderr, flush=True))
@@ -167,6 +168,9 @@ def check_arguments(arguments) -> None:
         raise FileNotFoundError(f"No such flat-field file: {arguments.flat_field}")
     if arguments.calibration and not Path(arguments.calibration).is_file():
         raise FileNotFoundError(f"No such calibration file: {arguments.calibration}")
+    for phase in getattr(arguments, "phase", None) or ():
+        if not Path(phase).is_file():
+            raise FileNotFoundError(f"No such phase file (CIF): {phase}")
     incidence = arguments.incidence_deg
     if incidence is not None and not 0.0 < incidence < 90.0:  # nan fails the comparison too
         raise ArgumentProblem(
@@ -311,6 +315,11 @@ def parser() -> argparse.ArgumentParser:
     auto.add_argument("--incidence-deg", type=float, help="incidence angle αi in degrees, above 0 and below 90 (beats the notes and the profile)")
     auto.add_argument("--critical-angle-deg", type=float,
                       help="critical angle αc of the film in degrees: q_z is corrected for refraction (default: kinematic)")
+    auto.add_argument(
+        "--phase", action="append", metavar="CIF",
+        help="a CIF of a phase the GIWAXS rings are assigned to (nearest reflection within max(3 σ, FWHM/2)); "
+             "repeat for several phases",
+    )
     auto.add_argument(
         "--pixel-size-um", type=float,
         help="detector pixel size in µm: used even when the image header gives another (Decisions names both)",

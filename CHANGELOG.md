@@ -12,6 +12,17 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **GIWAXS indexing and pole figures (Analyze ▸ Phases).** Give phases as a CIF (cell, symmetry operations, atom
+  sites; |F|² from Cromer–Mann scattering factors) or a cell with its centring, at random or as a fibre texture
+  ((hkl) parallel to the substrate or [uvw] along the normal): their reflections are drawn with hkl labels on the
+  q map, the detector, the cake and I(q), several phases in their colours, optionally shifted for refraction in the
+  film with the transmitted and reflected DWBA channels; a table lists hkl, d, q∥, qz, χ, m and |F|². Run Automatic
+  Analysis assigns each ring to the nearest reflection within max(3σ, FWHM/2) (a *phase assignment* decision, the
+  peak rows, a report section; `--phase FILE.cif` on the command line) and fits the pole figure of each analysed
+  ring — Gaussian or Maier–Saupe about a direction plus an isotropic fraction, Lorentz-corrected, the missing wedge
+  filled by the model — giving the oriented fraction, the FWHM and Hermans f with their errors next to the Hermans
+  factor of the measured bins. The window exports the pole figure as CSV with a JSON record. Manual 5.9;
+  *Physics and Methods* 7.10, 7.11.
 - **Sputter ▸ Analyze: Au and Ag on TiO₂ at any energy from 8 to 15 keV.** The TiO₂ network was retrained on images
   simulated at 8–15 keV and αi 0.25–0.55°, with optical constants that follow the energy (the earlier ones exactly at
   12 keV) and with parts of the detector cut away, so a TiO₂ scan in that range is analysed as usual at its own energy,
