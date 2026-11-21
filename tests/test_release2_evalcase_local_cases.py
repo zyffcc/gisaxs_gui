@@ -491,7 +491,7 @@ def test_the_baseline_of_a_case_runs_on_a_public_frame(tmp_path: Path, capsys) -
     assert "PASS  every frame analysed: all OK" in printed and "PASS  calibration file: " in printed
     # A .poni is adopted as it is: no standard image was fitted, so there is no line error to pass.
     assert code == 1 and "FAIL  line error: [None] %" in printed and "3/4 checks pass" in printed
-    assert json.loads((out / "summary.json").read_text(encoding="utf-8"))[0]["ok"] is True
+    assert json.loads((out / "summary.json").read_text(encoding="utf-8"))["frames"][0]["ok"] is True
     assert (out / "S121_MAI_A2_00841" / "report.md").is_file()
     assert sorted((path.name, path.stat().st_size, path.stat().st_mtime_ns) for path in PUBLIC.iterdir()) == before
 

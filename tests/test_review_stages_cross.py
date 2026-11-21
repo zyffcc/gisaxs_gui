@@ -310,13 +310,16 @@ def test_single_analysis_composes_its_texts_again_after_a_language_switch(tmp_pa
         single.refresh_language()
         assert single.model_editor.row(("globals", "res_width")).name.text() == "尾 w (nm⁻¹)"
         assert "拟合范围内" in single.curve_info.text() and "拟合" in single.step_rail.detail("curve")
+        # The opening message may be followed by the curve's notes (an assumed q unit, points at or below zero).
         opened = translate("Opened {name}.", "zh").format(name="run_00001_fit_input.dat")
-        assert single.status_label.text() == opened != "Opened run_00001_fit_input.dat."
+        status = single.status_label.text()
+        assert status.startswith(opened) and opened != "Opened run_00001_fit_input.dat."
+        assert not re.search(r"\b(?:the|is|are|of)\b", status), status
         apply_language(DEFAULT_LANGUAGE, [single])
         single.refresh_language()
         assert single.model_editor.row(("globals", "res_width")).name.text() == "Tail w (nm⁻¹)"
         assert "in the fitting range" in single.curve_info.text()
-        assert single.status_label.text() == "Opened run_00001_fit_input.dat."
+        assert single.status_label.text().startswith("Opened run_00001_fit_input.dat.")
     finally:
         apply_language(DEFAULT_LANGUAGE)
         series.dispose()
