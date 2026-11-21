@@ -5,8 +5,11 @@ other curve keeps the method chosen before. Also the texts of a fit's notes (``n
 
 from __future__ import annotations
 
+import re
+
 from src.gimap.app.presentation.i18n import tr, trf
 
+from ...application.single_fit import TOO_FEW_FOR_FREE
 from .predict import MISSING
 from ..views.step_widgets import show_line
 
@@ -21,7 +24,15 @@ def number(value: float) -> str:
     return f"{value:.0f}" if 1000 <= abs(value) < 1e6 else f"{value:.3g}"
 
 
+_TOO_FEW = re.compile(re.escape(TOO_FEW_FOR_FREE).replace(r"\{points\}", r"(?P<points>\d+)")
+                      .replace(r"\{free\}", r"(?P<free>\d+)").replace(r"\{minimum\}", r"(?P<minimum>\d+)"))
+
+
 def fit_error_text(message: str) -> str:
+    """A fit's error in the interface language (the application's sentences; one carries numbers)."""
+    found = _TOO_FEW.fullmatch(str(message))
+    if found:
+        return trf(TOO_FEW_FOR_FREE, **found.groupdict())
     return tr(message)
 
 

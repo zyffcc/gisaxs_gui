@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import QPushButton, QToolButton, QVBoxLayout, QWidget
 from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, FlowLayout
 from src.gimap.app.presentation.i18n import current_language, tr, trf
 from src.gimap.shared import fit_names
+from src.gimap.shared.export_text import export_text
 
 from ..application import (
     ASK_PROBABILITY,
@@ -360,7 +361,7 @@ class GisaxsResults(QWidget):
         if not path:
             return None
         return self._written(path, lambda: np.savetxt(
-            path, columns, delimiter=",", header=header, comments="# ", encoding="utf-8"))
+            path, columns, delimiter=",", header=export_text(header), comments="# ", encoding="utf-8"))
 
     def save_table(self, path: Optional[str] = None) -> Optional[str]:
         path = self._path(path, "Save Fit Table", "gisaxs_fit_solutions.csv", "CSV (*.csv)")
@@ -369,7 +370,7 @@ class GisaxsResults(QWidget):
 
         def write() -> None:
             with open(path, "w", encoding="utf-8", newline="\n") as stream:
-                stream.write(fit_solutions_csv(self.fit))
+                stream.write(export_text(fit_solutions_csv(self.fit)))
 
         return self._written(path, write)
 

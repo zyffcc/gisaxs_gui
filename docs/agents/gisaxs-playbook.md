@@ -13,7 +13,10 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
 第 2 步的切线由 GISAXS 还原自动放在 Yoneda 带，要换位置用 `set_gisaxs_cuts`。
 
 1. **几何**：顺序同 GIWAXS（`--calibration`、笔记里点名的文件、仪器配置、在附近搜索）。搜索采用的标定在
-   Decisions 里有一行 “calibration found by the search”，写出它的完整路径和位置：先确认它属于这次测量。
+   Decisions 里有一行 “calibration found by the search”，写出它的完整路径和位置：先确认它属于这次测量。它不在帧所在的
+   文件夹（或其子文件夹）里时，同一项也列在 Needs attention 里（退出码 2）；`.poni` 点名的探测器尺寸与帧不同时不采用
+   （“the calibration does not match this frame”）；对称轴离标定中心超过 100 px 时不应用并提问。`--incidence-deg` 必须在
+   (0°, 90°) 内，`--calibration` 的文件必须存在，否则以退出码 1 结束。CSV 的列名是 ASCII：`qy (A^-1), I, sigma`。
    αi 的来源顺序同 GIWAXS（选项、笔记、分析命令栏里设定的 αi、仪器配置）；之前已用 `set_incidence_angle` 或在命令栏设定的
    αi 会被采用，不再提问。都没有 αi 时先用 0°，并在 Needs attention 里提问（退出码 2）。运行中没有人可问，由调用它的 agent 补
    `--incidence-deg` 后重跑。`.poni` 的探测器倾斜（`Rot1`、`Rot2`、`Rot3`）是几何的一部分：每个像素放在 pyFAI

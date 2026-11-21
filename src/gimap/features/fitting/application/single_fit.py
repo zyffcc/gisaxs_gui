@@ -15,7 +15,7 @@ solutions from the other fitting methods, and what is exported.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Mapping, Optional
 
 import numpy as np
@@ -28,6 +28,7 @@ from ..domain.fit_engine import (
     PROGRESS_LINE,
     FitData,
     FitResult,
+    START_KEPT,
     FitStopped,
     fit,
     fit_scales,
@@ -91,6 +92,12 @@ TOO_FEW_FOR_CURVE_FIT = {
 its rows; ``""``: a curve with one side, taken as it came). Templates: ``{points}``, ``{minimum}``."""
 
 
+TOO_FEW_FOR_FREE = ("Only {points} points in the fitting range for {free} free values: a fit needs at least "
+                    "{minimum}. Fix some values or widen the fitting range.")
+NO_POSITIVE_POINT = "No point of the curve has an intensity above zero: there is nothing a model can be fitted to."
+"""Why Refine / Search refuse a curve (``fit_resolving``). ``TOO_FEW_FOR_FREE``: ``{points}``, ``{free}``, ``{minimum}``."""
+
+
 @dataclass(frozen=True)
 class Curve:
     """A loaded curve: signed q in nm⁻¹, I, σ (or None), where it came from."""
@@ -103,6 +110,8 @@ class Curve:
     source_unit: str = "angstrom"
     unit_from: str = ""
     """Where ``source_unit`` came from (``curve_units``: stated in the file, the setting for files without one …)."""
+    rows_left_out: int = 0
+    """Rows of the file that are not in the curve (not numbers, NaN or inf): said with the curve."""
 
     @property
     def signed(self) -> bool:
@@ -110,7 +119,7 @@ class Curve:
 
     @classmethod
     def from_arrays(cls, q, intensity, sigma=None, *, name: str, path: str = "", unit: str = "angstrom",
-                    unit_from: str = "") -> "Curve":
+                    unit_from: str = "", rows_left_out: int = 0) -> "Curve":
         factor = NM_PER_A if unit == "angstrom" else 1.0
         q = np.asarray(q, dtype=float).reshape(-1) * factor
         intensity = np.asarray(intensity, dtype=float).reshape(-1)
@@ -118,7 +127,8 @@ class Curve:
         if sigma is not None and (sigma.shape != q.shape or not np.any(np.isfinite(sigma) & (sigma > 0))):
             sigma = None
         keep = np.isfinite(q) & np.isfinite(intensity)
-        return cls(q[keep], intensity[keep], None if sigma is None else sigma[keep], name, path, unit, unit_from)
+        return cls(q[keep], intensity[keep], None if sigma is None else sigma[keep], name, path, unit, unit_from,
+                   int(rows_left_out) + int(q.size - np.count_nonzero(keep)))
 
 
 def _half(curve: Curve, positive: bool):
@@ -170,6 +180,8 @@ class PreparedCurve:
     negative: int = 0
     zero: int = 0
     """Points of the selection with a negative / zero intensity: fitted with their σ, not fitted without σ (ln I)."""
+    invalid_sigma: int = 0
+    """Points left out because their σ is zero, negative or not a number while other points have one."""
 
     @property
     def points(self) -> int:
@@ -220,8 +232,10 @@ def prepare_points(curve: Curve, side: str = "mean", q_range: Optional[tuple] = 
             used = "positive" if halves[0] > 0 else "negative"
     measured = intensity[keep][np.isfinite(q[keep]) & (q[keep] > 0)]
     measured = measured[np.isfinite(measured)]
+    candidates = int(np.count_nonzero(np.isfinite(q[keep]) & (q[keep] > 0) & np.isfinite(intensity[keep])))
+    invalid = candidates - int(data.q.size) if data.sigma is not None else 0
     return PreparedCurve(data, used, averaged, int(left_out.sum()), int(np.count_nonzero(measured < 0)),
-                         int(np.count_nonzero(measured == 0)))
+                         int(np.count_nonzero(measured == 0)), max(0, invalid))
 
 
 def prepare_curve(curve: Curve, side: str = "mean", q_range: Optional[tuple] = None, excluded=(), *,
@@ -289,8 +303,18 @@ def solution_deviation(model: FitModel, row: Mapping) -> float:
 
 def fit_resolving(model: FitModel, data: FitData, *, method: str = "local", max_evaluations=None, progress=None,
                   stop=None, resolve: bool = True) -> tuple:
-    """Fit under hard Model limits; return the result, no automatic changes, and boundary diagnostics."""
+    """Fit under hard Model limits; return the result, no automatic changes, and boundary diagnostics.
+
+    Refused (``ValueError``): fewer points than free values plus one, and a curve without a positive intensity.
+    A fit that kept its start values (``FitResult.start_kept``) claims no errors."""
+    free = sum(1 for _path, parameter in model.parameters() if parameter.free)
+    if not np.any(data.intensity > 0):
+        raise ValueError(NO_POSITIVE_POINT)
+    if data.q.size <= free:
+        raise ValueError(TOO_FEW_FOR_FREE.format(points=int(data.q.size), free=free, minimum=free + 1))
     result = fit(model, data, method=method, max_evaluations=max_evaluations, progress=progress, stop=stop)
+    if result.start_kept:
+        result = replace(result, errors={path: math.nan for path in result.errors}, correlated=())
     if stop is not None and stop():
         return stopped_result(result), [], []
     # Model min/max are a contract, including when the old Resolve checkbox was saved on.
@@ -373,7 +397,7 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
 __all__ = [
     "ANALYZE_SIDES", "BASE_GLOBALS", "FAMILIES", "GLOBALS", "GRAZING", "INFO", "RESOLUTION", "grazing", "qz_plus_r", "derived_values",
     "intensity_size", "number_size", "sigma_nn_over_d", "SIZE_LAWS", "LINEAR", "NM_PER_A", "PHASES", "PROGRESS_LINE", "SIDES",
-    "BOTH_USES_MEAN", "ONE_CURVE_METHODS", "CURVE_FIT_MIN_POINTS", "SERIES_SIDES", "TOO_FEW_FOR_CURVE_FIT",
+    "BOTH_USES_MEAN", "NO_POSITIVE_POINT", "START_KEPT", "TOO_FEW_FOR_FREE", "ONE_CURVE_METHODS", "CURVE_FIT_MIN_POINTS", "SERIES_SIDES", "TOO_FEW_FOR_CURVE_FIT",
     "Component", "Curve", "FitData", "FitModel", "FitResult", "FitStopped", "MissingHalf", "Parameter", "PreparedCurve",
     "evaluate", "export_table", "fit", "fit_record", "fit_resolving", "fit_scales", "from_manual", "left_out_points", "log_rmse",
     "model_from_dict", "model_from_solution", "model_to_dict", "new_component", "parameter_text", "point_key",

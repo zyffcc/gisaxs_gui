@@ -1558,7 +1558,11 @@ coarse axis, the best grid point, the minimiser and the initial centre (when ins
 lowest E wins. The result is given in canonical pixel coordinates (centre of column j at j + 0.5).
 
 **No uncertainty is reported for the centre.** The 10⁻⁴ px tolerance is a numerical stopping rule, and E is not a
-probability. A shift of more than 20 px from the calibrated centre is put under *Needs attention*.
+probability. A shift of more than 20 px from the calibrated centre is put under *Needs attention*. In the automatic
+analysis a shift of more than 100 px is not applied at all: a calibration of the measurement is off by a few pixels,
+so the run keeps the calibrated centre and reports that the calibration does not match the frame; an axis that
+could not be found is an open item as well. The report's *asymmetry a → b* is E at the calibrated and at the
+refined axis.
 
 Implementation: `src/gimap/features/analyze/domain/symmetry.py`, `src/gimap/features/analyze/domain/symmetry_coarse.py`
 
@@ -2089,6 +2093,13 @@ max_nfev = max( 5, ⌊ max(20, B) / (n_nl + 1) ⌋ )                            
 
 so that with the finite-difference Jacobian a start uses about B evaluations. The model returned is the best one
 evaluated during the whole run, not the last iterate. "Converged" means the solver ended on a convergence criterion.
+The starting curve competes too, by the reported objective. When it beats every curve the fit tried by more than a
+fraction 10⁻⁶ of its Σr² — without σ the scales are solved with relative weights while the objective is ln I, so a
+start whose scales suit ln I can stay ahead — the start values are returned unchanged and the result says so
+(`start_kept`, *did not improve on the start values*): it is not called converged, and Refine and Search give no
+errors for it, since no minimum was found. Refine and Search refuse a curve with no more points than free values
+and one without an intensity above zero. With σ in the file, points whose σ is zero, negative or not a number are
+left out and counted (`sigma_invalid` among the curve's notes); σ is dropped only when no point has one.
 
 **Search** (`method = global`). Differential evolution (Storn & Price, 1997; `scipy.optimize.differential_evolution`)
 over the unit cube of the non-linear parameters, then Refine from the best three distinct members. With the default
@@ -3812,14 +3823,19 @@ window's records:
   folder among the arguments: how many files it stood for) and `frames`, the list of the frame reports without
   `tables`, `analysis_record` and `options`. Before 0.2.0 the file was that list alone;
   `tools/eval_giwaxs_agent.py --from` reads both.
-- Every CSV (`radial.csv`, `horizontal.csv` …, `fit_curve.csv`, `fit_solutions.csv`) begins with the same `#`
-  lines: `# GIMaP v… (command line); settings and decisions in report.json`, one
+- Every CSV (`radial.csv`, `horizontal.csv` …, `fit_curve.csv`, `fit_solutions.csv`) is ASCII in its header (one
+  spelling of the units in the column names: `qy (A^-1), I, sigma`, `q (A^-1), I, sigma, I_fit`, `chi (deg)`) and
+  begins with the same `#` lines: `# GIMaP v… (command line); settings and decisions in report.json`, one
   `# input: <file> sha256 <digest>` line per input file, `# frame:` and `# geometry:` (distance, direct beam,
   wavelength, α_i, detector tilt, and α_c when q_z is refracted). `fit_solutions.csv` then says what the table is
   and the units of its columns. One function writes these lines for the command line and for the files Analyze
   exports in the window (`export_record.provenance_lines`; there the first line reads `(Analyze)`).
-- `geometry` and `calibration` hold the values as applied, to 15 significant digits (the distance q was computed
-  with, not its four-digit rounding); `report.md` rounds them for reading. `tables` keeps the tools' answers as the
+- `geometry` holds the values q was computed with, to 15 significant digits (the distance q was computed
+  with, not its four-digit rounding); `report.md` rounds them for reading. For GISAXS its `beam_center_px[0]` is
+  the symmetry axis the run moved the centre to. `calibration` and `tables.geometry_used` hold the calibration as
+  it was read and first applied, before that refinement (`gisaxs.symmetry` has both: `initial_x_px`, `x_px`, and
+  `not_applied` when the axis was too far to be used). `geometry.critical_angle_deg` is `null` when no critical
+  angle was given (q is kinematic). `tables` keeps the tools' answers as the
   AI saw them (four significant digits), except `geometry_used`. Every crystallite size names its unit:
   `tables.crystallite_sizes[].size_A`, `size_err_A`, `size_nm`, `size_err_nm`, beside `peaks[].size_nm`.
 - `report.md` has a section **Record**: the release, each input file with its SHA-256, the calibration file with

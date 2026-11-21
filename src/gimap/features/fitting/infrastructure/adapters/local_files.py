@@ -111,6 +111,7 @@ class LocalCurveRepository:
             source_path=InSituSourceFrame(source, selection.frame_index, columns=selection.columns).token,
             pixels=pixels,
             observation=observation,
+            rows_left_out=int(getattr(loaded, "meta", {}).get("rows_left_out", 0)),
         )
 
     def stated_q_unit(self, path) -> str | None:

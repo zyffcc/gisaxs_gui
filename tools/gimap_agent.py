@@ -21,9 +21,11 @@ one value, a calibration file they name (.poni, GIMaP .json, an image of a stand
 tried before the search, and the calibrant (AgBH, LaB6, CeO2, LaB6+CeO2) is used when
 they name exactly one.  Options beat the notes and the image header.  A calibration
 nobody named, found by the search around the frame, is said so with its full path and
-where it lies (report.md: Geometry and Decisions; a line under the summary table): that
-is information, not a question -- check that it belongs to the measurement, and give
---calibration when it does not.
+where it lies (report.md: Geometry and Decisions; a line under the summary table).  One
+taken from another folder than the frame's (or one below it) is an open item as well
+(exit code 2): check that it belongs to the measurement and give it as --calibration.
+A .poni that states, or names a detector of, another shape than the frame's is not
+used ("the calibration does not match this frame").
 
 Other commands:
 
@@ -53,8 +55,9 @@ Exit codes (auto):
      again.
   1  at least one frame failed (a missing file, a file GIMaP cannot read, a mask that does
      not fit it, an error); the other frames still have their reports.  1 wins over 2.
-     Also: a pattern or folder that gives no file, a mask file that does not exist, an
-     --out folder with an earlier run and no --overwrite (nothing is analysed then).
+     Also: a pattern or folder that gives no file, a --mask or --calibration file that does
+     not exist, an --incidence-deg outside (0, 90), an --out folder with an earlier run and
+     no --overwrite (nothing is analysed then).
   Other commands: 1 when the frame file does not exist; status and call also when GIMaP
   cannot read it, find-calibration when the search fails, call when a step returned an
   error; else 0.
@@ -115,8 +118,7 @@ def command_auto(arguments) -> int:
     from src.gimap.app.headless_sources import batch_summary
     from src.gimap.features.assistant.application import PipelineOptions
 
-    if arguments.mask and not Path(arguments.mask).is_file():
-        raise FileNotFoundError(f"No such mask file: {arguments.mask}")
+    check_arguments(arguments)
     frames, found = expand_frames(arguments.frames, exclude=(arguments.calibration, arguments.mask))
     notes = _notes(arguments)
     options = PipelineOptions(
@@ -141,6 +143,27 @@ def command_auto(arguments) -> int:
             print(f"- {Path(report.get('frame') or '').name}: {folder / 'report.md'}")
     print(f"\nAll outputs: {out}")
     return exit_code(reports)
+
+
+class ArgumentProblem(ValueError):
+    """A value given on the command line that no analysis can use: said as an error, exit code 1."""
+
+
+def check_arguments(arguments) -> None:
+    """Refuse, before anything is read, what would otherwise be analysed with nonsense or silently replaced: a mask or
+    calibration file that does not exist (the search would take another calibration) and an αi outside (0°, 90°)."""
+    if arguments.mask and not Path(arguments.mask).is_file():
+        raise FileNotFoundError(f"No such mask file: {arguments.mask}")
+    if arguments.calibration and not Path(arguments.calibration).is_file():
+        raise FileNotFoundError(f"No such calibration file: {arguments.calibration}")
+    incidence = arguments.incidence_deg
+    if incidence is not None and not 0.0 < incidence < 90.0:  # nan fails the comparison too
+        raise ArgumentProblem(
+            f"--incidence-deg {incidence:g}: the incidence angle must be above 0° and below 90° "
+            "(grazing incidence is typically 0.1–0.5°). Leave the option out when αi is not known.")
+    critical = arguments.critical_angle_deg
+    if critical is not None and not 0.0 <= critical < 90.0:
+        raise ArgumentProblem(f"--critical-angle-deg {critical:g}: the critical angle must be within [0°, 90°).")
 
 
 def exit_code(reports: list[dict]) -> int:
@@ -261,7 +284,7 @@ def parser() -> argparse.ArgumentParser:
              "else compared)",
     )
     auto.add_argument("--energy-kev", type=float, help="X-ray energy in keV (beats the header and the notes)")
-    auto.add_argument("--incidence-deg", type=float, help="incidence angle αi in degrees (beats the notes and the profile)")
+    auto.add_argument("--incidence-deg", type=float, help="incidence angle αi in degrees, above 0 and below 90 (beats the notes and the profile)")
     auto.add_argument("--critical-angle-deg", type=float,
                       help="critical angle αc of the film in degrees: q_z is corrected for refraction (default: kinematic)")
     auto.add_argument(
@@ -301,7 +324,10 @@ def parser() -> argparse.ArgumentParser:
     )
     auto.add_argument(
         "--language", choices=("en", "zh"), default="en",
-        help="language of the section headings of report.md and summary.md (default en; one language per report)",
+        help="zh writes the section headings (the ## lines: Geometry, Decisions, Needs attention, Open questions …) "
+             "of report.md and summary.md in Chinese; nothing else is translated: the titles, the tables and their "
+             "column names, the decisions, the questions and every other sentence stay English, as do report.json "
+             "and the CSVs (default en)",
     )
     auto.add_argument("--quiet", action="store_true", help="no progress on stderr")
     auto.set_defaults(run=command_auto)
@@ -346,7 +372,7 @@ def main(argv=None) -> int:
     arguments = parser().parse_args(argv)
     try:
         return arguments.run(arguments)
-    except (FileNotFoundError, FileExistsError) as exc:
+    except (FileNotFoundError, FileExistsError, ArgumentProblem) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_FAILED
 

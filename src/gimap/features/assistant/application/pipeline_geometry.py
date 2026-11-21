@@ -20,7 +20,8 @@ from src.gimap.shared.geometry.header_check import (
     header_distance_disagreement,
 )
 
-from .calibration_match import OTHER_ENERGY_DECISION, searched_mismatch, searched_other_energy
+from .calibration_match import (OTHER_ENERGY_DECISION, SEARCHED_HINT, SEARCHED_ITEM, SEARCHED_WHY, beside_frame,
+                                searched_mismatch, searched_other_energy, shape_mismatch)
 from .calibration_tools import file_geometry, file_key
 from .tools import clean
 
@@ -206,6 +207,8 @@ class GeometryStepsMixin:
             searched = options.geometry.get("found_by_search")
             if used and searched:  # this frame's report says it too: nobody named that calibration
                 self._decide(SEARCHED, str(searched["path"]), SEEN_FROM_OTHER.format(place=searched["place"], frame=searched["frame"]))
+                if searched.get("file"):
+                    self._searched_question(str(searched["path"]), str(searched["place"]))
             return used
         named = self._named()
         found = self._first_fit(named)
@@ -263,8 +266,19 @@ class GeometryStepsMixin:
         Later frames of a batch that reuse the calibration say it again (``found_by_search`` of the record)."""
         path, place = str(candidate["path"]), str(candidate.get("folder") or "near the frame")
         self._decide(SEARCHED, path, SEEN_FROM_FRAME.format(place=place))
+        is_file = bool(candidate.get("file"))  # a ready .poni / .json, adopted as it is; an image was fitted here
+        if is_file:
+            self._searched_question(path, place)
         frame = Path(str(self._start_path or (self.catalog.results.status or {}).get("path") or "")).name
-        self._run.calibration = {**(self._run.calibration or {}), "found_by_search": {"path": path, "place": place, "frame": frame}}
+        self._run.calibration = {**(self._run.calibration or {}), "found_by_search": {"path": path, "place": place, "frame": frame, "file": is_file}}
+
+    def _searched_question(self, path: str, place: str) -> None:
+        """A calibration file nobody named (a ``.poni`` or GIMaP ``.json``, adopted without a check against a
+        standard image), taken from another folder than the frame's (or one below it), is an open item with its
+        path: only the person knows whether it belongs to this measurement."""
+        frame = str(self._start_path or (self.catalog.results.status or {}).get("path") or "")
+        if not beside_frame(frame, path):
+            self._attention(SEARCHED_ITEM, SEARCHED_WHY.format(path=path, place=place), "calibration", SEARCHED_HINT)
 
     def _named(self) -> list[dict]:
         """The calibration given (``calibration``), then the calibration files the notes name: tried first."""
@@ -351,8 +365,9 @@ class GeometryStepsMixin:
         frame = self.catalog.results.status or {}
         if candidate.get("file") or info.get("kind") in ("pyFAI calibration (.poni)", "GIMaP calibration"):
             searched = bool(candidate.get("searched"))
-            foreign = searched_mismatch(path, info, frame, self._poni_text(path)) if searched else None
-            if foreign:  # found in another folder and made for another detector shape
+            text = self._poni_text(path)
+            foreign = (searched_mismatch(path, info, frame, text) if searched else None) or shape_mismatch(path, info, frame, text)
+            if foreign:  # made for another detector shape (stated, or that of the detector it names)
                 self._decide("calibration", f"skipped {name}", foreign)
                 return False
             used = self._use_file(path, name, info, frame)

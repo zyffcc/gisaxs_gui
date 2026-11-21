@@ -35,6 +35,10 @@ UNIT_TOO_LARGE = ("The file states no unit of q and was read in {unit}: |q| then
 UNIT_TOO_SMALL = ("The file states no unit of q and was read in {unit}: |q| then reaches only {q_max} nm⁻¹ "
                   "({q_max_a} Å⁻¹), less than a GISAXS or SAXS cut covers. If its q is in {other}, every length found "
                   "(R, D) is 10× too large. " + HOW_TO_CHANGE)
+UNIT_ASSUMED = ("Unit of q assumed: {unit} (not stated in the file). If its q is in {other}, every length found "
+                "(R, D) is wrong by a factor of 10. " + HOW_TO_CHANGE)
+"""Said of every file that states no unit, also when the q range it gives is plausible: a cut below 1 Å⁻¹ read in
+Å⁻¹ looks like any other, and only the person knows the unit."""
 SIGMA_ESTIMATED = ("No σ in the file: a relative σ of {percent} % is used, estimated from the scatter of ln I about "
                    "its trend")
 NONPOSITIVE_KEPT = ("{count} of the {points} fitted points have a negative or zero intensity ({negative} negative, "
@@ -43,12 +47,14 @@ NONPOSITIVE_KEPT = ("{count} of the {points} fitted points have a negative or ze
 NONPOSITIVE_LEFT_OUT = ("{count} points with a negative or zero intensity ({negative} negative, {zero} zero) were "
                         "left out: without σ the fit is on ln I, which they do not have.")
 ROWS_LEFT_OUT = "{count} rows of the file could not be read as numbers and were left out."
+SIGMA_INVALID = ("{count} points with a zero, negative or missing σ were left out: they cannot be weighted. The other "
+                 "{points} points are fitted with the σ of the file.")
 
 
 @dataclass(frozen=True)
 class IntakeNote:
     kind: str
-    """``q_unit`` / ``sigma_estimated`` / ``nonpositive`` / ``unreadable_rows``."""
+    """``q_unit`` / ``sigma_estimated`` / ``sigma_invalid`` / ``nonpositive`` / ``unreadable_rows``."""
     template: str
     values: dict = field(default_factory=dict)
 
@@ -84,8 +90,9 @@ def nonpositive(intensity) -> tuple[int, int]:
 
 
 def unit_note(q_nm, unit: str, unit_from: str) -> Optional[IntakeNote]:
-    """The remark on a unit the file did not state (``unit_from`` is ``FROM_SETTING``) when the q range it gives is
-    implausible for a GISAXS / SAXS cut; ``q_nm``: the curve's q in nm⁻¹ as read."""
+    """The remark on a unit the file did not state (``unit_from`` is ``FROM_SETTING``): that it was assumed, and
+    when the q range it gives is implausible for a GISAXS / SAXS cut, that instead; ``q_nm``: the curve's q in nm⁻¹
+    as read."""
     if unit_from != FROM_SETTING or unit not in UNIT_NAMES:
         return None
     q = np.abs(np.asarray(q_nm, float).ravel())
@@ -93,10 +100,10 @@ def unit_note(q_nm, unit: str, unit_from: str) -> Optional[IntakeNote]:
     if not q.size:
         return None
     q_max = float(q.max())
-    if Q_MAX_TOO_SMALL <= q_max <= Q_MAX_PLAUSIBLE:
-        return None
     shown = UNIT_NAMES[unit]
     other = _OTHER[shown]
+    if Q_MAX_TOO_SMALL <= q_max <= Q_MAX_PLAUSIBLE:  # nothing in the numbers tells the units apart: said, not guessed
+        return IntakeNote("q_unit", UNIT_ASSUMED, dict(unit=shown, other=other, example=_EXAMPLE[other]))
     return IntakeNote("q_unit", UNIT_TOO_LARGE if q_max > Q_MAX_PLAUSIBLE else UNIT_TOO_SMALL,
                       dict(unit=shown, other=other, q_max=f"{q_max:.3g}", q_max_a=f"{q_max / 10:.3g}",
                            example=_EXAMPLE[other]))
@@ -118,12 +125,18 @@ def nonpositive_note(negative: int, zero: int, points: int, *, left_out: bool) -
     return IntakeNote("nonpositive", NONPOSITIVE_LEFT_OUT if left_out else NONPOSITIVE_KEPT, values)
 
 
+def sigma_invalid_note(count: int, points: int) -> Optional[IntakeNote]:
+    """The remark on points left out for their σ (``PreparedCurve.invalid_sigma``) among a curve fitted with σ."""
+    return IntakeNote("sigma_invalid", SIGMA_INVALID, dict(count=int(count), points=int(points))) if count else None
+
+
 def rows_note(count: int) -> Optional[IntakeNote]:
     return IntakeNote("unreadable_rows", ROWS_LEFT_OUT, dict(count=int(count))) if count else None
 
 
-TEMPLATES = {"q_unit": (UNIT_TOO_LARGE, UNIT_TOO_SMALL), "sigma_estimated": (SIGMA_ESTIMATED,),
-             "nonpositive": (NONPOSITIVE_LEFT_OUT, NONPOSITIVE_KEPT), "unreadable_rows": (ROWS_LEFT_OUT,)}
+TEMPLATES = {"q_unit": (UNIT_TOO_LARGE, UNIT_TOO_SMALL, UNIT_ASSUMED), "sigma_estimated": (SIGMA_ESTIMATED,),
+             "nonpositive": (NONPOSITIVE_LEFT_OUT, NONPOSITIVE_KEPT), "unreadable_rows": (ROWS_LEFT_OUT,),
+             "sigma_invalid": (SIGMA_INVALID,)}
 
 
 def note_from_dict(record) -> Optional[IntakeNote]:
@@ -142,13 +155,14 @@ def note_from_dict(record) -> Optional[IntakeNote]:
 
 
 def intake_notes(q_nm, *, unit: str = "", unit_from: str = "", level: Optional[float] = None, negative: int = 0,
-                 zero: int = 0, points: int = 0, left_out: bool = False, unreadable: int = 0) -> list[IntakeNote]:
+                 zero: int = 0, points: int = 0, left_out: bool = False, unreadable: int = 0,
+                 invalid_sigma: int = 0) -> list[IntakeNote]:
     """Every remark on a curve, the unit first (it changes every length)."""
-    notes = [unit_note(q_nm, unit, unit_from), sigma_note(level),
+    notes = [unit_note(q_nm, unit, unit_from), sigma_note(level), sigma_invalid_note(invalid_sigma, points),
              nonpositive_note(negative, zero, points, left_out=left_out), rows_note(unreadable)]
     return [note for note in notes if note is not None]
 
 
 __all__ = ["HOW_TO_CHANGE", "IntakeNote", "NONPOSITIVE_KEPT", "NONPOSITIVE_LEFT_OUT", "Q_MAX_PLAUSIBLE",
-           "Q_MAX_TOO_SMALL", "ROWS_LEFT_OUT", "SIGMA_ESTIMATED", "UNIT_TOO_LARGE", "UNIT_TOO_SMALL", "intake_notes",
-           "nonpositive", "nonpositive_note", "note_from_dict", "relative_sigma", "rows_note", "sigma_level", "sigma_note", "unit_note"]
+           "Q_MAX_TOO_SMALL", "ROWS_LEFT_OUT", "SIGMA_ESTIMATED", "SIGMA_INVALID", "UNIT_ASSUMED", "UNIT_TOO_LARGE", "UNIT_TOO_SMALL", "intake_notes",
+           "nonpositive", "nonpositive_note", "note_from_dict", "relative_sigma", "rows_note", "sigma_invalid_note", "sigma_level", "sigma_note", "unit_note"]

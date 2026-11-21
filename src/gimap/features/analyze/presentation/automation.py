@@ -147,7 +147,7 @@ class AnalyzeAutomation:
             "tilt_deg": geometry.tilt_deg,
             "rotations_deg": [math.degrees(geometry.rot1_rad), math.degrees(geometry.rot2_rad),
                               math.degrees(geometry.rot3_rad)],
-            "critical_angle_deg": geometry.critical_angle_deg,
+            "critical_angle_deg": geometry.critical_angle_deg or None,  # None: none given, q is kinematic
         }
         corrections = state.corrections
         info["corrections"] = {

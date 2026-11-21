@@ -34,6 +34,7 @@ from .gisaxs_choice import (
     zero_terms,
 )
 from .gisaxs_report import cut_spans
+from .gisaxs_tools import MAX_SYMMETRY_SHIFT_PX
 from .giwaxs_decisions import refraction_decision, uncertainty_decision
 from .ring_frames import NO_FIT
 
@@ -116,6 +117,21 @@ def _interval_text(solution: dict) -> str:
     return ", ".join(parts)
 
 
+SYMMETRY_FAR = (
+    "The calibration does not match this frame: the symmetry axis of the horizontal cut is at x {x} px, {shift} px "
+    "from the calibrated beam centre. A calibration of this measurement is off by a few pixels at most, so the "
+    "refined centre was not applied and every qy is that of the calibrated centre."
+)
+SYMMETRY_FAR_DECISION = ("the symmetry axis found (x {x} px) is {shift} px away, more than a calibration of this "
+                         "measurement can be off: not applied")
+SYMMETRY_FAR_HINT = ("Give the calibration of this measurement (--calibration); if it is the right one, check the "
+                     "horizontal cut: its halves should mirror each other about the beam.")
+SYMMETRY_FAILED = ("The symmetry axis of the horizontal cut could not be found ({reason}): the beam-centre column is "
+                   "the calibration's, not checked against the frame.")
+SYMMETRY_FAILED_HINT = ("Check that the calibration belongs to this frame and that the cut has measured pixels on "
+                        "both sides of the beam.")
+
+
 class GisaxsProcedureMixin:
     """Needs ``catalog``, ``options``, ``progress``, ``_call``, ``_decide``, ``_attention`` and ``_incidence`` (the αi
     given or noted, ``None`` when none was: ``StandardPipeline``)."""
@@ -128,23 +144,32 @@ class GisaxsProcedureMixin:
         self._decide(**refraction_decision(status.get("geometry"), "gisaxs", given=self._incidence is not None))
         self._decide(**uncertainty_decision(status.get("error_model"), "gisaxs"))
         self._horizontal_cut(cuts)
-        symmetry = self._call("refine_beam_center_symmetry")
+        symmetry = self._call("refine_beam_center_symmetry", {"max_shift_px": MAX_SYMMETRY_SHIFT_PX})
         if symmetry is not None:
             # The tool's answer is rounded to 4 significant digits (597.263 → 597.3): the decision states the
             # centre applied, from the record the tool kept at full precision.
             symmetry = {**symmetry, **(results.gisaxs.get("symmetry") or {})}
             shift = float(symmetry.get("shift_px", 0.0))
-            self._decide(
-                "beam centre", f"x {symmetry['initial_x_px']:.2f} → {symmetry['x_px']:.2f} px ({shift:+.2f} px)"
-                if symmetry.get("changed") else "already on the symmetry axis",
-                "the horizontal cut must be symmetric about qy = 0; the direct beam itself is hidden by the beam stop",
-            )
-            if abs(shift) > 20:
+            if symmetry.get("not_applied"):
+                self._decide("beam centre", f"kept at x {symmetry['initial_x_px']:.2f} px", SYMMETRY_FAR_DECISION.format(
+                    x=f"{symmetry['x_px']:.2f}", shift=f"{shift:+.0f}"))
+                self._attention("calibration", SYMMETRY_FAR.format(shift=f"{shift:+.0f}", x=f"{symmetry['x_px']:.2f}"),
+                                "calibration", SYMMETRY_FAR_HINT)
+            else:
+                self._decide(
+                    "beam centre", f"x {symmetry['initial_x_px']:.2f} → {symmetry['x_px']:.2f} px ({shift:+.2f} px)"
+                    if symmetry.get("changed") else "already on the symmetry axis",
+                    "the horizontal cut must be symmetric about qy = 0; the direct beam itself is hidden by the beam stop",
+                )
+            if abs(shift) > 20 and not symmetry.get("not_applied"):
                 self._attention(
                     "beam centre",
                     f"The symmetry axis is {shift:+.0f} px from the calibrated centre: check the calibration or "
                     "the sample alignment.", None, "Look at the horizontal cut: its halves should mirror each other.",
                 )
+        else:  # never plain OK on a centre nobody could check
+            self._attention("beam centre", SYMMETRY_FAILED.format(reason=self._run.steps[-1]["summary"]), None,
+                            SYMMETRY_FAILED_HINT)
         halves = self._call("choose_halves")
         if halves is not None:
             self._call("set_halves", {"side": halves["recommended"]})

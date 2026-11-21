@@ -27,7 +27,8 @@ def read_curve(path: Path, *, details: bool = False):
     the data that could not be read as numbers (left out, and said in the curve's notes)."""
     loaded = load_xy_any(str(path))
     values = loaded.q, loaded.I, loaded.err
-    return (*values, int(loaded.meta.get("bad_lines", 0))) if details else values
+    left_out = loaded.meta.get("rows_left_out", loaded.meta.get("bad_lines", 0))  # not numbers, or NaN / inf
+    return (*values, int(left_out)) if details else values
 
 
 def prepare_sides(q, intensity, sigma, options):

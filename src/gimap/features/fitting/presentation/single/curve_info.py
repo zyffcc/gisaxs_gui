@@ -55,7 +55,8 @@ class CurveInfoMixin:
         for spin in (self.range_min_spin, self.range_max_spin):
             spin.blockSignals(False)
         fitted = 0 if data is None else data.q.size
-        weighted = curve.sigma is not None
+        # as the fit weights them: σ of the file only when the fitted points have one (``FitData.prepare``)
+        weighted = curve.sigma is not None if data is None else data.sigma is not None
         lines = [trf(CURVE_LINE, points=full.q.size, low=f"{low:.4g}", high=f"{high:.4g}", fitted=fitted)]
         lines += [tr(SIGMA_FROM_FILE)] if weighted else []
         notes = self.curve_notes()
@@ -92,13 +93,14 @@ class CurveInfoMixin:
         estimated = data.sigma is None
         return intake_notes(curve.q, unit=curve.source_unit, unit_from=curve.unit_from,
                             level=sigma_level(data.q, data.intensity) if estimated else None,
-                            negative=made.negative, zero=made.zero, points=int(data.q.size), left_out=estimated)
+                            negative=made.negative, zero=made.zero, points=int(data.q.size), left_out=estimated,
+                            invalid_sigma=made.invalid_sigma, unreadable=getattr(curve, "rows_left_out", 0))
 
     def _opened_status(self, name: str, note=None) -> None:
         """The status line after a curve opened: ``note`` (its unit differs from the saved one) or “Opened …”, and
         what was assumed of the curve that changes a result (the unit's range, negative and zero intensities)."""
-        said = [n for n in self.curve_notes() if n.kind in ("q_unit", "nonpositive")]
-        warn = note or any(n.kind == "q_unit" or n.values.get("left_out") for n in said)
+        said = [n for n in self.curve_notes() if n.kind in ("q_unit", "nonpositive", "sigma_invalid", "unreadable_rows")]
+        warn = note or any(n.kind in ("q_unit", "sigma_invalid", "unreadable_rows") or n.values.get("left_out") for n in said)
         first = note or (lambda: trf(OPENED, name=name))
         self._status(lambda: " ".join([first(), *(note_text(n) for n in said)]), "warning" if warn else "ok")
 

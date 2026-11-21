@@ -17,6 +17,12 @@ from .gisaxs_choice import bounds_text, chance, probability, rivals, sizes
 from .models import ToolInputError, ToolOutcome
 
 MIN_SHIFT_PX = 0.0001
+MAX_SYMMETRY_SHIFT_PX = 100.0
+"""The bound the automatic analysis gives ``refine_beam_center_symmetry`` (``max_shift_px``): a symmetry axis
+further than this from the calibrated beam-centre column is not applied. A calibration of the measurement is off by
+a few pixels, so such a distance is the mark of a calibration that is not this frame's (or of a cut that is not
+symmetric about the beam). The run says so and keeps the calibrated centre. The tool called without a bound moves
+the centre whatever the distance, as before."""
 TOP_SOLUTIONS = 3
 SPACING_MIN_POINTS = 10
 """A side maximum closer to qy = 0 than this many bins belongs to the central (Yoneda / beam-stop) peak."""
@@ -149,7 +155,7 @@ class GisaxsToolsMixin:
             raise ToolInputError("This needs a GISAXS reduction (set_measurement_mode gisaxs, and a geometry).")
         return status
 
-    def _tool_refine_beam_center_symmetry(self) -> ToolOutcome:
+    def _tool_refine_beam_center_symmetry(self, max_shift_px: Optional[float] = None) -> ToolOutcome:
         status = self._gisaxs_status()
         found = self.workbench.symmetry_center()
         shift = float(found["x_px"]) - float(found["initial_x_px"])
@@ -157,6 +163,14 @@ class GisaxsToolsMixin:
         self.results.gisaxs["symmetry"] = record
         if abs(shift) < MIN_SHIFT_PX:
             return self._ok({**record, "changed": False}, f"already symmetric (shift {shift:+.2f} px)")
+        if max_shift_px is not None and abs(shift) > float(max_shift_px):
+            record["not_applied"] = True
+            self.results.gisaxs["symmetry"] = record
+            return self._ok(
+                {**record, "changed": False},
+                f"symmetry axis at x {found['x_px']:.2f} px, {shift:+.0f} px from the calibrated centre: not applied "
+                f"(more than {float(max_shift_px):g} px; the calibration does not match this frame)",
+            )
         centre_y = float((status.get("geometry") or {}).get("beam_center_px", [0, 0])[1])
         outcome = self._tracked("set_beam_center", {"x_px": float(found["x_px"]), "y_px": centre_y})
         if outcome.is_error:

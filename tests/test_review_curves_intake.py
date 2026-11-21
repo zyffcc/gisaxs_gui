@@ -83,7 +83,8 @@ def test_one_default_unit_for_the_fit_page_and_the_1d_predict_window(tmp_path) -
 def test_an_unstated_unit_is_doubted_when_the_q_range_is_implausible(q_max_nm, kind) -> None:
     q = np.linspace(0.02, 1.0, 50) * q_max_nm
     note = curve_intake.unit_note(q, "angstrom", FROM_SETTING)
-    assert (note is None) if kind is None else (note.template == kind and note.kind == "q_unit")
+    # a plausible range: the unit is still said to be assumed (nothing in the numbers tells Å⁻¹ from nm⁻¹)
+    assert note.kind == "q_unit" and note.template == (kind or curve_intake.UNIT_ASSUMED)
     assert curve_intake.unit_note(q, "angstrom", FROM_FILE) is None  # a stated unit is the file's own word
     if note is not None:
         assert note.values["unit"] == "Å⁻¹" and note.values["other"] == "nm⁻¹"
@@ -107,9 +108,11 @@ def test_the_fit_page_warns_next_to_the_result_of_a_file_read_in_the_wrong_unit(
         assert results.isAncestorOf(page.curve_notes_label) and not page.fit_notes_dialog.isAncestorOf(page.curve_notes_label)
         assert "read in Å⁻¹" in page.status_label.text()
         page.set_unit_setting("nm")
-        page._unit_setting_changed()  # the person follows the message: the file is read again, nothing to doubt
-        assert page.session.curve.source_unit == "nm" and page.curve_notes() == []
-        assert page.curve_notes_label.isHidden() and page.sigma_warning.isHidden()
+        page._unit_setting_changed()  # the person follows the message: the file is read again, in a plausible range
+        assumed = page.curve_notes()  # the unit is still the setting's, not the file's: said, no longer doubted
+        assert page.session.curve.source_unit == "nm" and [note.template for note in assumed] == [curve_intake.UNIT_ASSUMED]
+        assert page.curve_notes_label.text().startswith("⚠ Unit of q assumed: nm⁻¹ (not stated in the file).")
+        assert "10× too" not in page.sigma_warning.text()
         assert page.open_curve(stated) and page.curve_notes() == []
     finally:
         page.dispose()

@@ -63,13 +63,16 @@ def test_a_calibration_found_in_a_sibling_folder_is_said_to_be_searched_and_asks
 
 
 def test_a_calibration_file_three_folders_up_is_adopted_and_the_report_says_from_where(tmp_path: Path) -> None:
-    """The case of the release audit: a ready .poni of another folder tree is used as saved; the person at
-    least reads where it came from (it is still no question: the search is what they asked for)."""
+    """The case of the release audit: a ready .poni of another folder tree is used as saved; the person reads
+    where it came from, and since the user test of 0.2.0 it is an open item with its path (a file adopted without
+    a check against a standard image, from a folder that is not the frame's: never plain OK)."""
     catalog, _workbench, calibrator = setup(tmp_path)
     poni = touch(tmp_path / "data" / "saxs" / "agbh.poni", POOR_AGBH)
     report = StandardPipeline(catalog, PipelineOptions(energy_kev=10.0, incidence_deg=0.2)).run()
 
-    assert report["ok"] and calibrator.calls == [] and report["needs_attention"] == []
+    assert report["ok"] and calibrator.calls == []
+    (asked,) = report["needs_attention"]
+    assert asked["item"] == SEARCHED and asked["option"] == "calibration" and "agbh.poni" in asked["why"]
     (said,) = _searched(report)
     assert Path(said["decision"]).samefile(poni)
     assert said["why"] == "folder data three levels up, subfolder data/saxs, seen from the frame's folder"

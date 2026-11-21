@@ -148,7 +148,10 @@ def test_a_curve_opens_on_the_first_step_that_needs_the_person(tmp_path) -> None
     assert page.open_curve(_curve_file(tmp_path))
     assert page.step_rail.state("curve") == "ok" and page.fit_button.isEnabled()
     assert "240 points" in page.curve_info.text() and "σ from the file" in page.curve_info.text()
-    assert page.sigma_warning.isHidden() and page.weighting_note.isHidden()  # σ there: nothing to warn of
+    # σ there: nothing to warn of but the unit of q, which this file does not state (assumed, and said so)
+    for label in (page.sigma_warning, page.weighting_note):
+        assert label.text().startswith("⚠ Unit of q assumed: Å⁻¹ (not stated in the file).") and "σ" not in label.text()
+        assert len(label.text().splitlines()) == 1
     assert "1/σ from the file" in page.residual_plot.toolTip()
     assert page.side_combo.isHidden()  # one half only: nothing to choose
     model = page.session.model
@@ -215,7 +218,8 @@ def test_each_thing_is_said_once_and_a_missing_sigma_or_a_bound_is_a_warning(tmp
         card = page.sigma_warning.text().splitlines()  # what each method does without σ, and the points ln I lacks
         assert card[0].startswith("⚠ No σ in the file. Predict parameters: a relative σ of ")
         assert card[0].endswith("Refine and Search: ln I is fitted, every point weighted alike.")
-        assert "weighted alike (ln I fitted)" not in card[0] and "were left out: without σ" in card[1]
+        assert "weighted alike (ln I fitted)" not in card[0] and "were left out: without σ" in card[-1]
+        assert card[1].startswith("⚠ Unit of q assumed: Å⁻¹ (not stated in the file).") and len(card) == 3
         assert "Predict parameters takes a relative σ" in page.sigma_warning.toolTip() and page.weighting_note.toolTip() == page.sigma_warning.toolTip()
         assert page.weighting_note.text().splitlines()[0] == "⚠ No σ in the file: every point weighted alike"  # Refine
         assert not page.weighting_note.isHidden()

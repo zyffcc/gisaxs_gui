@@ -158,8 +158,9 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
             "refine_beam_center_symmetry",
             "GISAXS: find the left–right symmetry axis of the horizontal cut (qy = 0) and move the "
             "beam-centre column there for this session (the direct beam is usually behind the beam stop). "
-            "Returns the shift and the asymmetry before and after; no change below 0.05 px.",
-            _object({}, ()),
+            "Returns the shift and the asymmetry before and after; no change below 0.05 px. max_shift_px: an "
+            "axis further than this from the current centre is reported (not_applied) and not applied.",
+            _object({"max_shift_px": NUMBER_OR_NULL}, ()),
         ),
         ToolSpec(
             "set_beam_center",

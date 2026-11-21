@@ -1818,11 +1818,14 @@ Fitting reads `.dat` and `.txt` text curves:
   `# columns: qy (1/A) …`, `# q [1/nm]  I`); Analyze's curve files state Å⁻¹. For a file that states none, set
   **Curve ▸ File ▸ q unit of files without one in their header** (Å⁻¹ by default, in the 1D Predict window too).
   A file whose header states both Å⁻¹ and nm⁻¹ is not opened: *The header states q both in 1/A and in 1/nm; correct
-  it to one unit.* When a file states no unit and the q range in the assumed unit is implausible for a GISAXS or
-  SAXS cut (|q| beyond 10 nm⁻¹ = 1 Å⁻¹, or a whole curve below 0.02 nm⁻¹), a warning names the assumed unit, what
-  it does to every length (R and D come out 10× too small or too large) and how to change it — in the Curve card,
-  in the Fit step, in the status line and in Results next to the values. A title line above the line of column
-  names is a header like any other; a row inside the data that is no numbers is left out.
+  it to one unit.* A file that states no unit is always said so — *Unit of q assumed: Å⁻¹ (not stated in the file).
+  If its q is in nm⁻¹, every length found (R, D) is wrong by a factor of 10 …* with how to change it — in the Curve
+  card, in the Fit step, in the status line when the curve opens and in Results next to the values. When the q
+  range in the assumed unit is also implausible for a GISAXS or SAXS cut (|q| beyond 10 nm⁻¹ = 1 Å⁻¹, or a whole
+  curve below 0.02 nm⁻¹), the warning says that instead, and what it does to every length (R and D come out 10×
+  too small or too large). A title line above the line of column names is a header like any other; a row that is
+  no numbers, or that holds NaN or inf, is left out, and the card and the status line say how many (*3 rows of the
+  file could not be read as numbers and were left out.*).
 
 Fitting does not read `.csv` files, also not the CSV curves that Analyze exports. Use **Send to Fitting** in
 Analyze, or open the `_fit_input.dat` written next to the CSV. A `.csv` dropped on Fitting is refused with
@@ -1932,7 +1935,10 @@ Analysis** to inspect its contributions here.
 
 - The card: its points, its q range in nm⁻¹ (in Å⁻¹ in the card's tooltip), *σ from the file*, and the unit its q
   was read in and where that came from (*q read in Å⁻¹: stated in the file*, or *… not stated in the file: the
-  setting for files without one*). The fit weights each point by 1/σ. Without σ a warning in the card says what
+  setting for files without one*). The fit weights each point by 1/σ. Points whose σ is zero, negative or missing
+  are left out of the fit, and the card says how many (*4 points with a zero, negative or missing σ were left out:
+  they cannot be weighted …*); the card says *σ from the file* only when the fitted points are weighted by it.
+  Without σ a warning in the card says what
   each method does — *⚠ No σ in the file. Predict parameters: a relative σ of 3.4 %, estimated from the scatter of
   ln I about its trend. Refine and Search: ln I is fitted, every point weighted alike.* — and the Fit step says it
   for the method chosen. Points with a negative or zero intensity are counted: with σ they are fitted like any
@@ -2011,7 +2017,12 @@ sizes for your sample, or let the Fit step find them.
 
 **4. Results**, from the top:
 
-- The quality: χ²ᵣ (with σ) or the variance of ln I (without σ), the points, the free values, converged or not.
+- The quality: χ²ᵣ (with σ) or the variance of ln I (without σ), the points, the free values, converged or not —
+  or *did not improve on the start values* when no curve Refine or Search tried was better than the one it started
+  from: the start values are kept, the fit is not called converged and no errors are given (without σ this happens
+  when the start already describes ln I better than any curve whose scales the fit solves; change a value, or use
+  Search). Refine and Search refuse a curve with fewer points than free values plus one (*Only 5 points in the
+  fitting range for 9 free values: a fit needs at least 10 …*) and a curve without an intensity above zero.
   After Predict parameters it says how many solutions there are and that the most probable is in Model: **Refine**
   gives its quality and the error of every value.
 - What to do next: **Refine These Values** (after a prediction), **Fit Again** (the same
@@ -2189,8 +2200,7 @@ The window runs Predict parameters on every curve listed; it has no other method
      saved with nm⁻¹ keep it). A file whose header states its unit of q is read in that unit, whatever is set here;
      Analyze's `_fit_input.dat` files state Å⁻¹ and need no setting. A header states the unit with `q in <unit>` in
      a `#` line or in the name of the first column (`q (1/A)`, `q_nm^-1`, `# columns: qy (1/A) …`,
-     `# q [1/nm]  I`). **Use current cut** is converted automatically. When a file states no unit and its q range
-     in the assumed unit is implausible (section 6.1), a warning under the status line names the file, the assumed
+     `# q [1/nm]  I`). **Use current cut** is converted automatically. When a file states no unit (section 6.1), a warning under the status line names the file, the assumed
      unit and how to change it; the candidate's tooltip and its *Parameters and units* text repeat it, and the
      records keep it (`curve_notes`).
    - **q sides**: *Each half separately*, *q > 0 half* or *q < 0 half*.
@@ -3337,6 +3347,16 @@ hold one frame each as one series.
   every detector image in it (`.cbf`, `.tif`, `.tiff`, `.edf`, NeXus/HDF5; subfolders are not searched; the
   files given as `--calibration` or `--mask` are left out). `summary.md` says how many files each pattern or
   folder gave; one that gives none is an error (exit code 1).
+- **Values that cannot be used.** `--incidence-deg` must be above 0° and below 90°, and a `--calibration` or
+  `--mask` file must exist: otherwise the command ends with the reason and exit code 1, before anything is read
+  (it never goes on with a calibration it found itself in place of the one you named).
+- **A calibration that is not the frame's.** A calibration nobody named, which the search took from another folder
+  than the frame's (or one below it), is an open item of the report with its full path (*calibration found by the
+  search*; exit code 2): give it as `--calibration` when it is the right one. A `.poni` that states another
+  detector shape than the frame's — in `max_shape`, or by the detector it names (a Pilatus 300K file on a Pilatus
+  1M frame) — is not used: *the calibration does not match this frame*. In a GISAXS run, a symmetry axis more than
+  100 px from the calibrated beam centre is not applied (the report says *not applied* and asks for the
+  calibration of this measurement), and a symmetry axis that could not be found is an open item too.
 - **Folders.** Each frame has its own folder under `--out`, named by the frame, and `summary.md` links every
   row to its `report.md`. Frames of the same name in different folders get the nearest folder name that tells
   them apart (`<name>_<folder>`), else a number. An `--out` folder that already holds the summary of an earlier
@@ -3351,13 +3371,20 @@ hold one frame each as one series.
   input file (the frame's files, the calibration, a mask) by path, size and SHA-256; for a model fit also the
   network, the SHA-256 of its weights and the seed. `summary.json` is one object with the release, the time, the
   options and the frame reports (`frames`). Every CSV starts with `#` lines that name the release, the inputs
-  with their SHA-256 and the geometry; the curve, q-map, cake and fit-input files Analyze exports in the window
+  with their SHA-256 and the geometry, and names its columns in plain ASCII with one spelling of the units
+  (`qy (A^-1), I, sigma`; `chi (deg)`), so that a program reading in the system's code page reads them; the curve, q-map, cake and fit-input files Analyze exports in the window
   carry the same lines. `report.md` has the section **Record** of the window's saved report (section 5.5). In
-  `report.json`, `geometry` and `calibration` hold the values as applied (15 significant digits; the text rounds
-  them), and every crystallite size names its unit (`size_A`, `size_nm`). A run repeated on the same input gives the same files except for the
+  `report.json`, `geometry` holds the values q was computed with (15 significant digits; the text rounds them) —
+  for GISAXS its beam-centre x is the refined symmetry axis — while `calibration` and `tables.geometry_used` hold the
+  calibration as it was read, before that refinement (`gisaxs.symmetry` has both columns); `critical_angle_deg` is
+  `null` when none was given. `report.md` states the pixel size and the energy with the geometry, defines the
+  *asymmetry* it prints for the symmetry axis and names the disorder of the distance σnn/D, as Fitting's Model
+  table does. And every crystallite size names its unit (`size_A`, `size_nm`). A run repeated on the same input gives the same files except for the
   time and the durations ([Physics and Methods, section 14.10](Physics_Manual.md#1410-the-record-of-a-run-without-the-window)).
-- **Language and time.** The headings of `report.md` and `summary.md` are English; `--language zh` writes them
-  in Chinese (one language per report; in the window they follow the program's language). The GISAXS model
+- **Language and time.** The headings of `report.md` and `summary.md` are English; `--language zh` writes the
+  section headings (the `##` lines) in Chinese and nothing else: the titles, the tables and their column names,
+  the decisions, the questions and every other sentence stay English, as do `report.json` and the CSVs (one
+  language per report; in the window the headings follow the program's language). The GISAXS model
   fit takes from some seconds to a few minutes per frame, depending on the number of points and the computer;
   `--no-fit` leaves it out.
 

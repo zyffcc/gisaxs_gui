@@ -188,6 +188,8 @@ class FitResultsMixin:
 
     @staticmethod
     def _state_text(result) -> str:
+        if getattr(result, "start_kept", False):  # nothing tried was better than the start: not a minimum found
+            return tr("did not improve on the start values")
         return tr("converged") if result.converged else tr("stopped") if result.stopped else tr("not converged")
 
     @staticmethod

@@ -24,6 +24,7 @@ import json
 from pathlib import Path
 from typing import Optional, Sequence
 
+from src.gimap.shared.export_text import export_text
 from src.gimap.shared.version import SOFTWARE
 
 from ..features.assistant.application import fit_curve_table, fit_solutions_csv, pipeline_markdown, ring_overlays
@@ -78,6 +79,13 @@ def provenance_lines(session) -> str:
     return "\n".join(provenance(analysis_metadata(analysis), "command line", "report.json"))
 
 
+def csv_text(text: str) -> str:
+    """A header of the command line's CSVs in ASCII, one spelling in every file: ``qy (A^-1)``, ``q (nm^-1)``,
+    ``chi (deg)``. A program that reads the file in the system's code page (numpy on a Chinese Windows: GBK)
+    then reads it too; names of files stay as they are."""
+    return export_text(str(text).replace("Å⁻¹", "A^-1"))
+
+
 def write_outputs(
     session, report: dict, folder: Path, *, options: Optional[dict] = None, created: Optional[str] = None,
     language: str = ENGLISH,
@@ -100,7 +108,7 @@ def write_outputs(
         with open(folder / name, "w", encoding="utf-8", newline="\n") as stream:
             np.savetxt(
                 stream, np.column_stack([curve["x"], curve["y"], curve["sigma"]]), delimiter=",",
-                header=f"{provenance}\n{curve['x_label']}, I, sigma", comments="# ",
+                header=csv_text(f"{provenance}\n{curve['x_label']}, I, sigma"), comments="# ",
             )
         written.append(folder / name)
     written += _write_fit(((report.get("gisaxs") or {}).get("fit")), folder, provenance)
@@ -123,12 +131,12 @@ def _write_fit(fit: Optional[dict], folder: Path, provenance: str = "") -> list[
     if len(columns):
         written.append(folder / "fit_curve.csv")
         with open(written[-1], "w", encoding="utf-8", newline="\n") as stream:
-            np.savetxt(stream, columns, delimiter=",", header=f"{provenance}\n{header}" if provenance else header,
-                       comments="# ")
+            np.savetxt(stream, columns, delimiter=",",
+                       header=csv_text(f"{provenance}\n{header}" if provenance else header), comments="# ")
     if fit.get("solutions"):
         written.append(folder / "fit_solutions.csv")
         with open(written[-1], "w", encoding="utf-8", newline="\n") as stream:
-            stream.write(fit_solutions_csv(fit, provenance))
+            stream.write(csv_text(fit_solutions_csv(fit, provenance)))
     return written
 
 
@@ -149,6 +157,6 @@ def write_summary(
 
 
 __all__ = [
-    "CURVES", "analysis_record", "input_files", "mask_record", "provenance_lines", "run_record", "utc_now",
+    "CURVES", "analysis_record", "csv_text", "input_files", "mask_record", "provenance_lines", "run_record", "utc_now",
     "write_outputs", "write_summary",
 ]

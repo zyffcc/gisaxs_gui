@@ -214,7 +214,8 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             return False
         loaded = outcome.value
         curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=name, path=str(path),
-                                  unit=loaded.q_source_unit, unit_from=getattr(loaded, "q_unit_from", ""))
+                                  unit=loaded.q_source_unit, unit_from=getattr(loaded, "q_unit_from", ""),
+                                  rows_left_out=getattr(loaded, "rows_left_out", 0))
         self._halt_fit()  # a fit of the curve before stops; what it brings back is not kept (run.py)
         self.session.set_curve(curve)
         if side is not None and curve.signed:  # a curve with one side has no halves to choose from

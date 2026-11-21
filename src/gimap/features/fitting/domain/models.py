@@ -34,6 +34,8 @@ class CurveData:
     q_unit_from: str = ""
     """Where ``q_source_unit`` came from (``application.curve_units``: stated in the file, the setting for files
     without one, a cut detector frame); empty when nobody said."""
+    rows_left_out: int = 0
+    """Rows of the file that are not in the curve: not numbers, or NaN / inf in q, I or σ."""
 
     def __post_init__(self) -> None:
         q = _one_dimensional(self.q, "q")

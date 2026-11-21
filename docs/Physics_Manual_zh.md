@@ -1409,7 +1409,7 @@ E(c) = Σ_d w_d Huber_1( abs(T(c − d) − T(c + d)) ) / Σ_d w_d,   w_d = 1/d,
 
 先在间距约 1 px 的网格上，然后在最好的网格点的两个邻点之间做有界的标量最小化，停止容差为 10⁻⁴ px。偏移量 d 在离较近帧边一个余量（至多 80 px）处停止，并且只使用插值支撑在整个搜索区间上都有测量值的偏移量（至少 40 个，且至少占 60 %）。权重 1/d 使距离上相等的对数区间得到相近的权重，因此众多远处的像素不会压过低 q 的结构；距离以像素计，近似正比于 `abs(q_y)`。粗扫描的轴、最好的网格点、最小化结果和初始中心（在区间内时）相互竞争，E 最低者胜出。结果用规范像素坐标给出（第 j 列的中心在 j + 0.5）。
 
-**中心不报告不确定度。** 10⁻⁴ px 的容差是数值停止规则，E 也不是概率。偏离标定中心超过 20 px 的移动会放进 *Needs attention*。
+**中心不报告不确定度。** 10⁻⁴ px 的容差是数值停止规则，E 也不是概率。偏离标定中心超过 20 px 的移动会放进 *Needs attention*。自动分析里，超过 100 px 的移动根本不应用：属于这次测量的标定只会差几个像素，所以运行保留标定的中心，并报告标定与这一帧不符；找不到对称轴同样是一个待回答问题。报告里的 *asymmetry a → b* 是标定的轴和精修后的轴上的 E。
 
 实现：`src/gimap/features/analyze/domain/symmetry.py`, `src/gimap/features/analyze/domain/symmetry_coarse.py`
 
@@ -1769,7 +1769,7 @@ x = exp( ln l + t (ln u − ln l) )            当 l > 0 且 u ≥ 10 l      (�
 max_nfev = max( 5, ⌊ max(20, B) / (n_nl + 1) ⌋ )                                                   (9.20)
 ```
 
-这样加上有限差分雅可比矩阵，一个初值大约用 B 次求值。返回的模型是整个运行中求值过的最好模型，而不是最后一次迭代。“已收敛”表示求解器因收敛判据而结束。
+这样加上有限差分雅可比矩阵，一个初值大约用 B 次求值。返回的模型是整个运行中求值过的最好模型，而不是最后一次迭代。“已收敛”表示求解器因收敛判据而结束。起始曲线也按报告所用的目标函数参加比较。它比拟合试过的每条曲线都好、且超出其 Σr² 的 10⁻⁶ 时——没有 σ 时比例因子按相对权重求解，而目标函数是 ln I，所以比例因子适合 ln I 的起始值可能一直领先——原样返回起始值，结果里写明（`start_kept`，*未能比起始值更好*）：不算收敛，精修和搜索也不给误差，因为没有找到极小值。点数不多于自由量个数的曲线和没有强度大于零的点的曲线，精修和搜索会拒绝。文件里有 σ 时，σ 为零、为负或不是数的点被略去并计数（曲线备注里的 `sigma_invalid`）；只有没有任何一个点带 σ 时才不用 σ。
 
 **搜索**（`method = global`）。在非线性参数的单位立方体上做差分进化（Storn & Price, 1997；`scipy.optimize.differential_evolution`），然后从最好的三个不同成员出发精修。默认预算 B = 4000 时：
 
@@ -3122,13 +3122,16 @@ SHA-256 摘要标识内容重要的文件：
 - `summary.json` 是一个对象：`software_version`、`created`、`options`、`arguments`（参数中的每个通配符或文件夹一句话：它代表多少个文件）
   和 `frames`，即各帧报告的列表，不含 `tables`、`analysis_record` 和 `options`。0.2.0 之前这个文件只是那个列表；
   `tools/eval_giwaxs_agent.py --from` 两种都能读。
-- 每个 CSV（`radial.csv`、`horizontal.csv`……、`fit_curve.csv`、`fit_solutions.csv`）都以同样的 `#` 行开头：
+- 每个 CSV（`radial.csv`、`horizontal.csv`……、`fit_curve.csv`、`fit_solutions.csv`）的文件头只用 ASCII（列名里的单位只有一种写法：
+  `qy (A^-1), I, sigma`、`q (A^-1), I, sigma, I_fit`、`chi (deg)`），并都以同样的 `#` 行开头：
   `# GIMaP v… (command line); settings and decisions in report.json`，每个输入文件一行
   `# input: <文件> sha256 <摘要>`，然后是 `# frame:` 和 `# geometry:`（距离、直射束、波长、α_i、探测器倾斜，q_z 计入折射时还有 α_c）。
   `fit_solutions.csv` 接着说明这张表是什么以及各列的单位。命令行和窗口里分析工作区导出的文件由同一个函数写这几行
   （`export_record.provenance_lines`；窗口里第一行写的是 `(Analyze)`）。
-- `geometry` 和 `calibration` 是实际应用的值，保留 15 位有效数字（计算 q 所用的距离，而不是它舍入到四位的值）；`report.md`
-  为便于阅读做了舍入。`tables` 保留工具回答给 AI 的样子（四位有效数字），`geometry_used` 除外。每个晶粒尺寸都写明单位：
+- `geometry` 是计算 q 所用的值，保留 15 位有效数字（计算 q 所用的距离，而不是它舍入到四位的值）；`report.md`
+  为便于阅读做了舍入。GISAXS 时它的 `beam_center_px[0]` 是运行把中心移到的对称轴。`calibration` 和 `tables.geometry_used`
+  是读入并最初应用的标定，即这次精修之前的值（`gisaxs.symmetry` 里两者都有：`initial_x_px`、`x_px`，轴太远而没有采用时
+  还有 `not_applied`）。没有给临界角时 `geometry.critical_angle_deg` 为 `null`（q 是运动学的）。`tables` 保留工具回答给 AI 的样子（四位有效数字），`geometry_used` 除外。每个晶粒尺寸都写明单位：
   `tables.crystallite_sizes[].size_A`、`size_err_A`、`size_nm`、`size_err_nm`，与 `peaks[].size_nm` 并列。
 - `report.md` 有**记录**（Record）一节：发布版本、每个输入文件及其 SHA-256、标定文件的路径和 SHA-256、仪器配置及其来源
   （工具由文件建立的配置在方括号里写出该文件的完整路径）、各项校正和误差模型。窗口里的**保存报告…**（Save Report…）附上同样的键

@@ -122,6 +122,10 @@ def found_by_search(report: dict) -> Optional[dict]:
     return next((item for item in report.get("decisions") or () if item.get("what") == SEARCHED), None)
 
 
+HC_KEV_ANGSTROM = 12.398419843
+"""E (keV) · λ (Å)."""
+
+
 def _geometry_lines(report: dict) -> list[str]:
     geometry = report.get("geometry") or {}
     if not geometry.get("distance_mm"):
@@ -133,6 +137,11 @@ def _geometry_lines(report: dict) -> list[str]:
         f"{_fixed(centre[1], PIXEL_DECIMALS)}) px, λ {_number(geometry.get('wavelength_A'))} Å, "
         f"αi {_number(geometry.get('incidence_deg'))}°",
     ]
+    pixel, wavelength = geometry.get("pixel_size_um") or (), geometry.get("wavelength_A")
+    if len(pixel) == 2 and pixel[0] and wavelength:
+        size = _number(pixel[0]) if pixel[0] == pixel[1] else f"{_number(pixel[0])} × {_number(pixel[1])}"
+        lines.append(f"- pixel size {size} µm, energy {_number(HC_KEV_ANGSTROM / float(wavelength))} keV "
+                     "(from λ; the beam centre is the one q was computed with, after any refinement below)")
     flat = geometry.get("flat_detector")
     rotations = geometry.get("rotations_deg") or ()
     if any(rotations) and not flat:

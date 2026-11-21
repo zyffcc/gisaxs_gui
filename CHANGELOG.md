@@ -12,6 +12,26 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Fixes from a user test (fitting, command line, records).** *Fitting:* a Refine or Search that could not
+  beat its start now says *did not improve on the start values* instead of *converged* and gives no errors; points
+  whose σ is zero, negative or missing are left out with their number (before, one such point silently dropped
+  the whole σ column while the card still said *σ from the file*); a curve with fewer points than free values
+  plus one, or without an intensity above zero, is refused with the reason; a file that states no unit of q
+  always says *Unit of q assumed: … (not stated in the file)*, in the card, the status line and Results; rows
+  with NaN or inf are counted and said like rows that are no numbers. *Command line (`tools/gimap_agent.py
+  auto`):* `--incidence-deg` outside (0°, 90°) and a `--calibration` file that does not exist end with exit code
+  1 before anything is read; a calibration the search took from another folder than the frame's is an open item
+  with its path (exit code 2, before: Status OK); a `.poni` that names a detector of another shape than the frame
+  (a Pilatus 300K file on a Pilatus 1M frame) is not used — *the calibration does not match this frame*; a
+  GISAXS symmetry axis more than 100 px from the calibrated centre is not applied, and one that cannot be found
+  is an open item. *Records:* the headers of the run's CSVs are ASCII with one spelling of the units
+  (`qy (A^-1), I, sigma`; before `qy (Å⁻¹)`, which numpy on a Chinese Windows could not read) — scripts that
+  matched the old header need a look; `report.md` states pixel size and energy, defines the *asymmetry* of the
+  symmetry axis and names the disorder σnn/D as Fitting does (before σD/D = σnn/D / √(2π), another number);
+  `geometry.critical_angle_deg` is `null` when none was given; the manual says that `geometry` is what q was
+  computed with and `calibration` the file as read. `--language zh` translates the section headings only: its
+  help and the manual now say so. Still refused: `.csv` files in Fitting (Analyze's tables differ in their
+  columns; open the `_fit_input.dat` or use Send to Fitting).
 - **Predict parameters: one χ²ᵣ per solution, every population shown, plainer notes.** A solution now has the same
   χ²ᵣ wherever it appears — the Fit page's status line, table and Fit details, the automatic analysis's table,
   report, CSV and JSON, Batch Export's table — computed over the points Predict fitted, and each place says how

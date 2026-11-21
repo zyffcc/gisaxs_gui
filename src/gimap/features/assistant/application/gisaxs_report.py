@@ -11,6 +11,13 @@ from .gisaxs_choice import ASK_PROBABILITY, LENGTH_SCALE, POOR_CHI2, bounds_text
 from .report_language import ENGLISH, heading
 
 
+ASYMMETRY_DEFINITION = (
+    "asymmetry: the mean difference between the two halves of the cut mirrored about the axis — of asinh(I / scale) "
+    "at equal distances left and right, large differences counted linearly, weighted by 1 / distance; 0 when the "
+    "halves are equal, before → after the axis was refined (a score, not a probability or an uncertainty)"
+)
+
+
 def pixel_span(band, limit=None, pixels=None) -> str:
     """The detector pixels a cut uses, both ends included, as Analyze's Cuts card counts them (``605–609``).
 
@@ -67,7 +74,8 @@ def _pixel(value) -> str:
     return "—" if value is None else f"{float(value):.2f}"
 
 
-FIT_DECIMALS = {"R": 2, "h": 2, "D": 1, "sigma_R": 3, "sigma_h": 3, "sigma_D": 3, "chi2": 2, "distance_nm": 1}
+FIT_DECIMALS = {"R": 2, "h": 2, "D": 1, "sigma_R": 3, "sigma_h": 3, "sigma_D": 3, "sigma_nn": 3, "chi2": 2,
+                "distance_nm": 1}
 """The decimals of each fitted quantity in the tables, the same in every row (R 8.60 next to R 9.44, not R 8.6)."""
 
 
@@ -76,7 +84,10 @@ def _fixed(value, key: str) -> str:
 
 
 def _parameters(component: dict) -> str:
-    names = (("R", "R"), ("sigma_R", "σR/R"), ("h", "h"), ("sigma_h", "σh/h"), ("D", "D"), ("sigma_D", "σD/D"))
+    # The disorder of the distance under the name of Fitting's Model table, σnn/D (a row of an earlier version has
+    # only σD/D = σnn/D / √(2π), and keeps that name).
+    disorder = ("sigma_nn", "σnn/D") if component.get("sigma_nn") is not None else ("sigma_D", "σD/D")
+    names = (("R", "R"), ("sigma_R", "σR/R"), ("h", "h"), ("sigma_h", "σh/h"), ("D", "D"), disorder)
     units = {"R": " nm", "h": " nm", "D": " nm"}
     return ", ".join(
         f"{label} {_fixed(component[key], key)}{units.get(key, '')}" for key, label in names if component.get(key) is not None
@@ -138,7 +149,10 @@ def gisaxs_sections(report: dict, language: str = ENGLISH) -> list[str]:
         lines.append(
             f"- symmetry axis x = {_pixel(symmetry.get('x_px'))} px (calibrated {_pixel(symmetry.get('initial_x_px'))} px; "
             f"asymmetry {_number(symmetry.get('loss_before'), 3)} → {_number(symmetry.get('loss_after'), 3)})"
+            + (" — **not applied**: too far from the calibrated centre (see Needs attention)"
+               if symmetry.get("not_applied") else "")
         )
+        lines.append(f"  - {ASYMMETRY_DEFINITION}")
     halves = gisaxs.get("halves")
     if halves:
         lines.append(f"- halves: **{halves['side']}** — {halves['reason']}")

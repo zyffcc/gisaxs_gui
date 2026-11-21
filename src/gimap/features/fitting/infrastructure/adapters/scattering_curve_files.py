@@ -182,6 +182,7 @@ def load_xy_any(path: str, options: LoadOptions = LoadOptions()) -> XYData:
     mask = np.isfinite(q) & np.isfinite(I)
     if err is not None:
         mask &= np.isfinite(err)
+    nonfinite_rows = int(mask.size - np.count_nonzero(mask))  # NaN or inf in q, I or σ: left out, and counted
     q, I = q[mask], I[mask]
     if err is not None:
         err = err[mask]
@@ -195,6 +196,8 @@ def load_xy_any(path: str, options: LoadOptions = LoadOptions()) -> XYData:
         "data_start_line": start_idx + 1,
         "delimiter": {"\t": "tab", ",": "comma", ";": "semicolon"}.get(delim, "whitespace"),
         "bad_lines": bad_lines,
+        "nonfinite_rows": nonfinite_rows,
+        "rows_left_out": bad_lines + nonfinite_rows,
         "has_error": err is not None,
     }
     return XYData(q=q, I=I, err=err, meta=meta)

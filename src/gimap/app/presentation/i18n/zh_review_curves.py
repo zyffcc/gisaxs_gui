@@ -5,6 +5,12 @@ Fit step and Results, the 1D Predict window): the unit of q assumed for a file t
 a file without one, negative and zero intensities."""
 
 REVIEW_CURVES_ZH: dict[str, str] = {
+    "Unit of q assumed: {unit} (not stated in the file). If its q is in {other}, every length found "
+    "(R, D) is wrong by a factor of 10. Set “q unit of files without one in their header” to {other} (Fit page: "
+    "Curve ▸ File; 1D Predict: Parameters…), or state the unit in the file's header, for example “{example}”.":
+        "q 的单位是假定的：{unit}（文件里没有注明）。如果它的 q 其实是 {other}，得到的每个长度（R、D）都会差 10 倍。"
+        "把“文件头未注明时的 q 单位”设为 {other}（拟合页：曲线 ▸ 文件；一维预测：参数…），"
+        "或在文件头里注明单位，例如“{example}”。",
     "The file states no unit of q and was read in {unit}: |q| then reaches {q_max} nm⁻¹ ({q_max_a} Å⁻¹), "
     "beyond what a GISAXS or SAXS cut covers. If its q is in {other}, every length found (R, D) is 10× "
     "too small. Set “q unit of files without one in their header” to {other} (Fit page: Curve ▸ File; 1D Predict: "

@@ -39,6 +39,13 @@ PROGRESS_LINE = "{phase} — {evaluations} evaluations, best χ²ᵣ {chi2}"
 English, like every text of the domain; the page says it in the interface language."""
 
 
+START_KEPT = "The fit did not improve on the start values: they are kept."
+"""``FitResult.message`` when ``start_kept``."""
+KEPT_MARGIN = 1e-6
+"""The best curve tried must be worse than the start by more than this fraction of the start's Σr² for the start to
+count as kept unimproved (a start already at the minimum is found again within rounding, and is converged)."""
+
+
 class FitStopped(Exception):
     """Raised inside the optimiser when the person stops the fit; the best values so far are kept."""
 
@@ -51,14 +58,18 @@ class FitData:
 
     @classmethod
     def prepare(cls, q, intensity, sigma=None) -> "FitData":
-        """|q| > 0 in nm⁻¹, finite points, sorted; σ kept only when every kept point has σ > 0."""
+        """|q| > 0 in nm⁻¹, finite points, sorted. With σ, the points whose σ is not a number above 0 are left out
+        (``PreparedCurve.invalid_sigma`` counts them); σ is dropped only when no point has one."""
         q = np.abs(np.asarray(q, dtype=float)).reshape(-1)
         y = np.asarray(intensity, dtype=float).reshape(-1)
         keep = np.isfinite(q) & np.isfinite(y) & (q > 0)
         s = None if sigma is None else np.asarray(sigma, dtype=float).reshape(-1)
         if s is not None and s.shape == q.shape:
             keep_sigma = keep & np.isfinite(s) & (s > 0)
-            s = s if keep_sigma.sum() == keep.sum() else None
+            if keep_sigma.any():
+                keep = keep_sigma
+            else:
+                s = None
         else:
             s = None
         if s is None:
@@ -88,6 +99,9 @@ class FitResult:
     errors: Mapping[tuple, float] = field(default_factory=dict)
     correlated: tuple = ()
     at_bounds: tuple = ()
+    start_kept: bool = False
+    """No curve the fit tried was better than the starting one (by the reported objective), so the start values are
+    returned unchanged: not a converged fit, and ``errors`` are not those of a minimum that was found."""
 
 
 def stopped_result(result: FitResult) -> FitResult:
@@ -136,6 +150,7 @@ class _Problem:
         self.evaluations = 0
         self.cache: dict = {}
         self.best = (math.inf, model)
+        self.lowest = math.inf  # the best Σr² among the curves tried (bookkeeping only: ``fit`` reports with it)
         self._reported = 0.0
         self.phase = ""
 
@@ -219,6 +234,7 @@ class _Problem:
         if not np.all(np.isfinite(residual)):
             residual = np.where(np.isfinite(residual), residual, 1e6)
         cost = float(residual @ residual)
+        self.lowest = min(self.lowest, cost)
         if cost < self.best[0]:
             self.best = (cost, model)
         self._report(cost)
@@ -292,6 +308,7 @@ def fit(model: FitModel, data: FitData, *, method: str = "local", max_evaluation
         if np.all(np.isfinite(initial)):
             problem.best = (float(initial @ initial), model)
     stopped, converged, message = False, True, ""
+    start_cost = problem.best[0]
     try:
         if not problem.nonlinear:
             problem.phase = SOLVING
@@ -319,12 +336,17 @@ def fit(model: FitModel, data: FitData, *, method: str = "local", max_evaluation
     except FitStopped:
         stopped, converged, message = True, False, "Stopped: the best values so far are kept."
     fitted = problem.best[1]
+    # Reported, never acted on: the values returned are the same either way.
+    kept = (not stopped and fitted is model and count > 0 and math.isfinite(start_cost)
+            and problem.lowest > start_cost * (1.0 + KEPT_MARGIN))
+    if kept:
+        converged, message = False, START_KEPT
     errors, correlated = _errors(fitted, data, problem)
     return FitResult(
         model=fitted, method=method, weighting=data.weighting, points=int(data.q.size), free=count,
         chi2_reduced=_chi2(fitted, data, count), log_rmse=log_rmse(fitted, data), evaluations=problem.evaluations,
         seconds=time.perf_counter() - tick, converged=converged and not stopped, stopped=stopped, message=message,
-        errors=errors, correlated=correlated, at_bounds=_at_bounds(fitted, problem),
+        errors=errors, correlated=correlated, at_bounds=_at_bounds(fitted, problem), start_kept=kept,
     )
 
 
@@ -441,5 +463,5 @@ def errors(model: FitModel, data: FitData) -> tuple[dict, tuple]:
     return _errors(model, data, _Problem(model, data, None, None, 1))
 
 
-__all__ = ["PHASES", "PROGRESS_LINE", "FitData", "FitResult", "FitStopped", "errors", "fit", "fit_scales",
+__all__ = ["PHASES", "PROGRESS_LINE", "START_KEPT", "FitData", "FitResult", "FitStopped", "errors", "fit", "fit_scales",
            "log_rmse", "residuals", "stopped_result"]
