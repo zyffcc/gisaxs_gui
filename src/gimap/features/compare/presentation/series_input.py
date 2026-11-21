@@ -47,6 +47,10 @@ OTHER_TITLE = "other files"
 """What the two kinds that are no curve of Analyze's are (``kind_title``); ``{title}``: the curve's own title."""
 KIND_PREFERENCE = "kind"
 FIRST_CHOICES = ("radial", "horizontal")
+STORE_TITLE = "Results Database"
+STORE_QUESTION = "{name} holds {n} curves of series. One is one series — which one?"
+STORE_ITEM = "{series} · {curve} · {n} frames"
+
 """The curve offered first when none was chosen before: I(q) of a GIWAXS frame, the horizontal cut of a GISAXS one."""
 
 
@@ -152,6 +156,36 @@ class CompareInputMixin(CompareReadingMixin):
             return None
         self._remember(folder=str(Path(paths[0]).parent))
         self._enqueue_import(paths=tuple(Path(path) for path in paths))
+
+    def add_store(self, path=None, series: Optional[str] = None, curve: Optional[str] = None) -> Optional[SeriesData]:
+        """Add Series ▸ Results Database…: one curve of one series that Analyze recorded (``gimap_series.sqlite``); with
+        several, the person chooses (``series`` and ``curve``: without asking)."""
+        from .errors import error_text
+
+        if sip.isdeleted(self) or self._disposed:
+            return None
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(self, tr("Results Database of a Series"), self._remembered("folder") or "",
+                                                  tr("Results database") + " (*.sqlite)")
+        if not path:
+            return None
+        path = Path(path)
+        self._remember(folder=str(path.parent))
+        try:
+            contents = self.service.store_contents(path)
+            if series is None and curve is None and len(contents) > 1:
+                items = [trf(STORE_ITEM, series=name, curve=key, n=count) for name, key, count in contents]
+                answer, accepted = QInputDialog.getItem(self, tr(STORE_TITLE), trf(STORE_QUESTION, name=path.name,
+                                                                                    n=len(contents)),
+                                                        items, len(items) - 1, False)
+                if not accepted or answer not in items:
+                    return None
+                series, curve, _count = contents[items.index(answer)]
+            data = self.service.series_from_store(path, series, curve)
+        except ValueError as exc:
+            self._status(lambda error=str(exc): error_text(error), "error")
+            return None
+        return self.add_series(data)
 
     # -- dropping --------------------------------------------------------------------------------
 

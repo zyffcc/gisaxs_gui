@@ -68,6 +68,60 @@ INSITU_ZH = {
         "“拟合 ▸ 原位序列”列出了目前写好的曲线：勾选“监视新曲线”并按“开始”——之后每个新帧都从上一帧的结果开始拟合。",
     "Save Results Database": "保存结果数据库",
     "Results database": "结果数据库",
+    # -- the chained fit of an In-situ series (fitting/presentation/views/fit_series_view.py, single/series_chain.py) --
+    "Fits as NXcanSAS…": "拟合结果（NXcanSAS）…",
+    "For every fitted frame the points fitted and the model, one HDF5 file (SasView and other NXcanSAS programs open it)":
+        "每个已拟合帧的拟合数据点和模型，写入一个 HDF5 文件（SasView 等 NXcanSAS 程序可以打开）",
+    "Results Database…": "结果数据库…",
+    "Every frame's fit into the series' results database (gimap_series.sqlite), beside the curves Analyze recorded":
+        "把每一帧的拟合写入序列的结果数据库（gimap_series.sqlite），与分析页记录的曲线放在一起",
+    "The previous result; Predict parameters where the chain breaks": "上一帧的结果；链断开处用“预测参数”",
+    "Each frame from the result of the frame before; where that chain breaks — a failed or unconverged fit, a new stage, "
+    "a flagged or poor fit, χ²ᵣ more than 3× the frame before's — Predict parameters fits the frame again and the better "
+    "fit is kept":
+        "每一帧从上一帧的结果开始；在链断开处——拟合失败或未收敛、进入新阶段、拟合被标记或拟合差、χ²ᵣ 超过上一帧的 3 倍——"
+        "用“预测参数”重新拟合这一帧，并保留较好的结果",
+    "Then a backward pass: each frame from the result of the frame after it": "然后反向再拟合一遍：每一帧从下一帧的结果开始",
+    "Once every frame is done, from the last but one to the first, each frame is refined from the result of the frame "
+    "after it; the better of its two fits is kept (its row says “backward”)":
+        "所有帧拟合完后，从倒数第二帧到第一帧，每一帧从下一帧的结果开始精修；保留两次拟合中较好的一次（该行注明“反向”）",
+    "Draw the trend against the frame, or against the time since the first fitted frame (when the curves say when their "
+    "frames were measured)":
+        "按帧或按距第一个已拟合帧的时间绘制趋势（曲线文件写明测量时间时）",
+    "from the previous frame, Predict where the chain breaks": "从上一帧开始，链断开处预测",
+    "Flags": "标记",
+    "What to know before trusting the row: failed, not converged, a poor fit, values at a bound of their range, the beam "
+    "tail at an edge, a value the curve does not determine, where the chain broke (Predict parameters fitted the frame "
+    "again), a fit kept from the backward pass":
+        "采信这一行之前需要知道的：失败、未收敛、拟合差、参数停在范围边界、光束拖尾在范围边缘、曲线确定不了的参数、"
+        "链在此断开（用“预测参数”重新拟合了这一帧）、保留的是反向拟合的结果",
+    "at a bound": "在边界上",
+    "beam tail": "光束拖尾",
+    "undetermined": "未确定",
+    "chain broke": "链断开",
+    "backward": "反向",
+    "Backward pass: {count} frames, each from the result of the frame after it.":
+        "反向拟合：{count} 帧，每一帧从下一帧的结果开始。",
+    "Backward pass: {count} frames fitted better from the frame after them.": "反向拟合：{count} 帧从下一帧开始拟合得更好。",
+    "Predict parameters needs 1–3 particles: where the chain breaks the frame is refined only.":
+        "“预测参数”需要 1–3 种颗粒：链断开处只做精修。",
+    "No fitted frame to save.": "没有可保存的已拟合帧。",
+    "Saved the fits of {count} frames to {name}.": "已把 {count} 帧的拟合保存到 {name}。",
+    "Saved {count} frames' fits to {name}.": "已把 {count} 帧的拟合保存到 {name}。",
+    "Save Fits as NXcanSAS": "把拟合保存为 NXcanSAS",
+    # -- Compare ▸ Add Series ▸ Results Database… (compare/presentation/series_input.py, application/use_cases.py) --
+    "A series Analyze recorded in a results database (gimap_series.sqlite): every frame's curve, without its frames":
+        "分析页记录在结果数据库（gimap_series.sqlite）中的序列：每一帧的曲线，不需要原始帧",
+    "Results Database": "结果数据库",
+    "{name} holds {n} curves of series. One is one series — which one?": "{name} 中有 {n} 条序列曲线。一条就是一个序列——选哪一条？",
+    "{series} · {curve} · {n} frames": "{series} · {curve} · {n} 帧",
+    "Results Database of a Series": "序列的结果数据库",
+    "The results database holds fewer than two frames of {name} · {curve}.": "结果数据库中 {name} · {curve} 不到两帧。",
+    "{name} is not a GIMaP results database ({error}).": "{name} 不是 GIMaP 结果数据库（{error}）。",
+    "{name} was written by a newer GIMaP (database schema {schema}); this version reads schema {known}.":
+        "{name} 由更新版本的 GIMaP 写入（数据库结构 {schema}）；本版本只能读取结构 {known}。",
+    "{name} holds no series.": "{name} 中没有序列。",
+    "{name} holds no curve “{curve}” of the series “{series}”.": "{name} 中没有序列“{series}”的曲线“{curve}”。",
 }
 
 __all__ = ["INSITU_ZH"]

@@ -142,6 +142,12 @@ class FitSeriesView:
         menu = QMenu(self.save_button)
         self.save_table_action = menu.addAction("Table of Every Frame…")
         self.save_table_action.setToolTip("CSV: every frame's parameters with their errors and fit quality, and a JSON record")
+        self.save_nxcansas_action = menu.addAction("Fits as NXcanSAS…")
+        self.save_nxcansas_action.setToolTip("For every fitted frame the points fitted and the model, one HDF5 file "
+                                             "(SasView and other NXcanSAS programs open it)")
+        self.save_store_action = menu.addAction("Results Database…")
+        self.save_store_action.setToolTip("Every frame's fit into the series' results database (gimap_series.sqlite), "
+                                          "beside the curves Analyze recorded")
         self.save_trend_action = menu.addAction("Trend Plot…")
         self.save_frame_action = menu.addAction("Selected Frame's Plot…")
         self.save_button.setMenu(menu)
@@ -326,10 +332,22 @@ class FitSeriesView:
         self.start_stages.setObjectName("fitSeriesStartStages")
         self.start_stages.setToolTip(
             "Follows the sample within a stage, and starts afresh where the curves change course (Curves step)")
-        for index, button in enumerate((self.start_previous, self.start_same, self.start_stages)):
+        self.start_chain = QRadioButton("The previous result; Predict parameters where the chain breaks", page)
+        self.start_chain.setObjectName("fitSeriesStartChain")
+        self.start_chain.setToolTip(
+            "Each frame from the result of the frame before; where that chain breaks — a failed or unconverged fit, a "
+            "new stage, a flagged or poor fit, χ²ᵣ more than 3× the frame before's — Predict parameters fits the frame "
+            "again and the better fit is kept")
+        for index, button in enumerate((self.start_previous, self.start_same, self.start_stages, self.start_chain)):
             self.start_group.addButton(button, index)
             layout.addWidget(button)
         self.start_previous.setChecked(True)
+        self.backward_check = QCheckBox("Then a backward pass: each frame from the result of the frame after it", page)
+        self.backward_check.setObjectName("fitSeriesBackward")
+        self.backward_check.setToolTip(
+            "Once every frame is done, from the last but one to the first, each frame is refined from the result of the "
+            "frame after it; the better of its two fits is kept (its row says “backward”)")
+        layout.addWidget(self.backward_check)
         method_title = QLabel("Method", page)
         method_title.setProperty("gimapRole", "strong")
         layout.addWidget(method_title)
@@ -421,6 +439,14 @@ class FitSeriesView:
         self.trend_combo.setToolTip("Which parameter to follow through the series")
         self.trend_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.trend_plot.header_layout.insertWidget(0, self.trend_combo)
+        self.trend_axis_combo = QComboBox(self.trend_plot)
+        self.trend_axis_combo.setObjectName("fitSeriesTrendAxis")
+        self.trend_axis_combo.addItem("Frame", "frame")
+        self.trend_axis_combo.addItem("Time (s)", "time")
+        self.trend_axis_combo.setToolTip("Draw the trend against the frame, or against the time since the first fitted "
+                                         "frame (when the curves say when their frames were measured)")
+        self.trend_axis_combo.hide()  # shown once the curves carry a time
+        self.trend_plot.header_layout.insertWidget(1, self.trend_axis_combo)
         # A splitter, not a box: a plot whose title has gone onto its own row (a narrow panel) asks a box for
         # the height it happens to have and then never gives it back — the trend ends as a strip under it.
         self.plot_splitter = QSplitter(Qt.Vertical, panel)

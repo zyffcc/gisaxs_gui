@@ -12,6 +12,7 @@ run came to and saving are in ``series_results.py``.
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
@@ -37,6 +38,7 @@ from ...application.series_fit import (
 from ...application.single_fit import Curve
 from ..views.fit_series_view import FitSeriesView
 from .drops import FolderDropMixin, SplitterMemoryMixin
+from .series_chain import FitSeriesChainMixin
 from .series_predict import FitSeriesPredictMixin
 from .series_frames import FitSeriesFramesMixin
 from .series_halves import FitSeriesHalvesMixin
@@ -69,7 +71,7 @@ FLAGGED_END = ("{flagged} of the fitted frames are flagged: a value the curve do
 
 
 class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin, FitSeriesStagesMixin, FitSeriesPredictMixin,
-                    FitSeriesFramesMixin, FitSeriesUnitsMixin,
+                    FitSeriesFramesMixin, FitSeriesUnitsMixin, FitSeriesChainMixin,
                     FitSeriesPreviewMixin, FitSeriesHalvesMixin, FitSeriesResultsMixin, FitSeriesWatchMixin, QWidget,
                     FitSeriesView):
     editModelRequested = pyqtSignal()
@@ -141,6 +143,10 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
         self.start_group.buttonToggled.connect(lambda *_: self._remember_choices())
         self.method_group.buttonToggled.connect(lambda *_: self._remember_choices())
         self.follow_check.toggled.connect(lambda _on: self._remember_choices())
+        self.backward_check.toggled.connect(lambda _on: self._remember_choices())
+        self.trend_axis_combo.currentIndexChanged.connect(lambda _index: self._draw_trend())
+        self.save_nxcansas_action.triggered.connect(lambda: self.save_fits_nxcansas())
+        self.save_store_action.triggered.connect(lambda: self.save_results_database())
         self.setup_series_predict()
 
     # -- steps --------------------------------------------------------------------------------
@@ -177,7 +183,8 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
             model=model_label(model), free=free, side=self.halves_text(), range=self._range_text(self._stage_settings()),
             left_out=""))
         start = {"previous": tr("from the previous frame"), "same": tr("from the same model"),
-                 "stages": tr("from the previous frame, afresh at each stage")}[self._start_choice()]
+                 "stages": tr("from the previous frame, afresh at each stage"),
+                 "chain": tr("from the previous frame, Predict where the chain breaks")}[self._start_choice()]
         untouched = bool(model.components) and not session.edited  # the starting guess: nobody set it up
         self.step_rail.set_state("start", "ok" if model.components and not untouched else "warn",
                                  tr("No model: set one in Single analysis") if not model.components else
@@ -265,7 +272,7 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
         self._settings = SeriesSettings(
             side=self.series_side(), q_range=session.q_range, excluded=frozenset(session.excluded),
             method=self.series_method(), start=self._start_choice(),
-            resolve_edges=True, follow=self.follow_check.isChecked())
+            resolve_edges=True, follow=self.follow_check.isChecked(), backward=self.backward_check.isChecked())
         self._side_from, self._untouched_start = self.halves_source(), not session.edited
         self._unit = "angstrom" if self.frames_mode() else self.source_unit_setting()  # for files without a unit
         self._start_model = model
@@ -276,6 +283,7 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
         self._stop = threading.Event()
         self._watch_scan += 1
         self._watch_busy = False
+        self._chain_reset()
         self.pause_button.setChecked(False)  # (before the run is on: un-pausing a run starts its next frame)
         self.running = True
         self._fill_trend_choices()
@@ -305,7 +313,7 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
     def _next(self) -> None:
         if not self.running or self.tasks.is_busy():
             return  # a fit is under way and goes on from its end: never two at once (Watch and a finished fit)
-        if self._stop.is_set() or (not self.queue and not self._watch.isActive()):
+        if self._stop.is_set() or (not self.queue and not self._watch.isActive() and not self._begin_backward()):
             self._finish()
             return
         if self.pause_button.isChecked():
@@ -320,6 +328,8 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
         start = next_start(self._previous, self._start_model, self._settings, new_stage=new_stage)
         settings, stop = self._settings, self._stop.is_set
         predict = self.predictor(settings, self._previous, new_stage) if settings.method == "predict" else None
+        chained = self.chain_fitter(settings, self._previous, new_stage)  # (Predict where the chain breaks)
+        marks = self.fit_marks(settings, self._previous, start)
         load, unit, epoch = self.series_curve_loader(), self._unit, self._loading_epoch
 
         def work():
@@ -332,7 +342,9 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
             value = outcome.value
             curve = Curve.from_arrays(value.q, value.intensity, value.error, name=file_name(path), path=path,
                                       unit=value.q_source_unit, unit_from=value.q_unit_from)
-            return fit_frame(index, path, curve, start, settings, stop, predict), curve, stamp, value
+            frame = chained(index, path, curve, start) if chained is not None else replace(
+                fit_frame(index, path, curve, start, settings, stop, predict), **marks)
+            return frame, curve, stamp, value
 
         def done(value):
             if not self._loading_current(epoch) or not self.running:
@@ -358,6 +370,7 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
         self._set_item(index)
 
     def _frame_done(self, frame: FrameFit, curve: Optional[Curve] = None) -> None:
+        frame = self._chain_kept(frame)  # (the backward pass keeps the better of a frame's two fits)
         self.fits[frame.index] = frame
         self._frames_done += 1
         if frame.ok:
@@ -412,6 +425,7 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
             text = trf(template, count=fitted, failed=failed, poor=poor, limit=f"{POOR_CHI2:g}")
             return text + (" " + trf(FLAGGED_END, flagged=flagged) if flagged else "")
 
+        self._chain_finished()
         self._log(done())
         self._status(done, "warning" if trouble else "ok")
         self._frames_changed()
@@ -453,7 +467,8 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
 
     def _remember_choices(self) -> None:
         if not self.imported_mode():
-            self._remember(start=self._start_choice(), method=self.series_method(), follow=self.follow_check.isChecked())
+            self._remember(start=self._start_choice(), method=self.series_method(), follow=self.follow_check.isChecked(),
+                           backward=self.backward_check.isChecked())
         self.refresh()
 
     def _restore(self) -> None:
@@ -465,6 +480,7 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
         self.set_series_method(self._remembered("method"))
         if self._remembered("follow") is not None:
             self.follow_check.setChecked(bool(self._remembered("follow")))
+        self.backward_check.setChecked(bool(self._remembered("backward")))
 
     # -- a project -------------------------------------------------------------------------
 

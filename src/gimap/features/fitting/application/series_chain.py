@@ -20,7 +20,9 @@ Fits of a series as NXcanSAS (``series_nxcansas``): for every fitted frame the p
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import replace
+from datetime import datetime
 from typing import Callable, Optional, Sequence
 
 from ..domain import beam_tail
@@ -140,6 +142,34 @@ def flags_text(frame: FrameFit) -> str:
     return "; ".join(f"{kind}: {detail}" if detail else kind for kind, detail in frame_flags(frame))
 
 
+_STAMP = re.compile(r"(?P<moment>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?)(?:[.,](?P<fraction>\d+))?\s*"
+                    r"(?P<zone>Z|[+-]\d{2}(?::?\d{2})?)?")
+
+
+def observation_time(observation) -> Optional[float]:
+    """When a fit input's frame was measured, in seconds (``frame_time_s``, else its ``timestamp`` as POSIX seconds;
+    detectors write “+0200”, “Z”, a space for the “T” and fractions of any length); ``None`` when it does not say."""
+    if not isinstance(observation, dict):
+        return None
+    try:
+        value = float(observation.get("frame_time_s"))
+        if math.isfinite(value):
+            return value
+    except (TypeError, ValueError):
+        pass
+    found = _STAMP.fullmatch(str(observation.get("timestamp") or "").strip())
+    if found is None:
+        return None
+    zone = found["zone"] or ""
+    zone = "+00:00" if zone == "Z" else (zone if len(zone) != 5 else f"{zone[:3]}:{zone[3:]}")
+    zone = f"{zone}:00" if len(zone) == 3 else zone
+    fraction = f".{found['fraction'][:6].ljust(6, '0')}" if found["fraction"] else ""
+    try:
+        return datetime.fromisoformat(found["moment"].replace(" ", "T") + fraction + zone).timestamp()
+    except ValueError:
+        return None
+
+
 def backward_order(indices: Sequence[int]) -> list[int]:
     """The frames of the backward pass: from the last but one to the first (the last starts it as it is)."""
     ordered = sorted(indices)
@@ -166,4 +196,5 @@ def series_nxcansas(frames: Sequence[FrameFit], curves: dict, settings: SeriesSe
 
 
 __all__ = ["BACKWARD", "BREAKS", "CHAIN", "CHI2_JUMP", "CHI2_JUMP_LEAST", "FLAG_KINDS", "FORWARD", "STARTS_FROM",
-           "backward_order", "better", "chain_break", "chained_fit", "flags_text", "frame_flags", "series_nxcansas"]
+           "backward_order", "better", "chain_break", "chained_fit", "flags_text", "frame_flags", "observation_time",
+           "series_nxcansas"]

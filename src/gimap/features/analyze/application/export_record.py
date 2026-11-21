@@ -342,7 +342,9 @@ def fit_input_observation(analysis: FrameAnalysis, halves: Optional[str] = None)
     which has no halves, leave the key out: Fitting decides.
 
     A frame of a source that holds several also says which: ``"frame_index"`` (0-based, as in the file name)
-    and ``"frame_count"`` — what a series in Fitting needs to plot against the frame of the measurement.
+    and ``"frame_count"`` — what a series in Fitting needs to plot against the frame of the measurement. When the
+    file says when the frame was measured, ``"timestamp"`` (as the file writes it) and ``"frame_time_s"`` (a time of
+    each frame of a series) are recorded too: Fitting's trend can then be drawn against time.
     """
     corrections = analysis.corrections
     record = {
@@ -365,6 +367,15 @@ def fit_input_observation(analysis: FrameAnalysis, halves: Optional[str] = None)
     count = int(getattr(analysis, "frame_count", 1) or 1)
     if count > 1:
         record["frame_index"], record["frame_count"] = int(getattr(analysis, "frame_index", 0)), count
+    metadata = getattr(analysis, "metadata", None) or {}
+    if metadata.get("timestamp"):
+        record["timestamp"] = str(metadata["timestamp"])
+    try:
+        frame_time = float(metadata.get("frame_time_s"))
+    except (TypeError, ValueError):
+        frame_time = None
+    if frame_time is not None and np.isfinite(frame_time):
+        record["frame_time_s"] = frame_time
     return record
 
 

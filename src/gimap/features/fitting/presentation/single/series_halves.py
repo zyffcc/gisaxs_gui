@@ -67,6 +67,7 @@ class FitSeriesHalvesMixin:
         q = np.asarray(q, dtype=float)
         self._curves_read += 1
         self._curves_signed += int(bool(np.any(q < 0) and np.any(q > 0)))
+        self.note_time(index, observation)  # (the trend against time: ``series_chain.py``)
         halves = (observation or {}).get("halves") if isinstance(observation, dict) else None
         if self._halves_seen is None or index < self._halves_seen[0]:
             self._halves_seen = (index, halves if isinstance(halves, str) else None)
