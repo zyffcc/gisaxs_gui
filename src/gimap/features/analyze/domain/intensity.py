@@ -5,11 +5,15 @@ is; the corrected intensity is ``I / factor``. Solid angle and polarisation are 
 the film absorption at the specular exit angle, so corrected values stay close to counts per pixel.
 They change only intensities, never q:
 
-* **Solid angle** — a flat detector perpendicular to the direct beam, pixel at ``(X, Y)`` from the
-  beam, distance ``D``, ``R² = D² + X² + Y²``: the pixel sees ``Ω ∝ D/R³ = cos³2θ / D²``; factor
-  ``cos³2θ``.
-* **Polarisation** — ``P = ½ [1 + cos²2θ − f · cos 2φ · sin²2θ]`` (pyFAI's convention), ``φ`` the
-  azimuth on the detector from the horizontal, ``f`` the polarisation factor: about 0.95–0.99 for a
+* **Solid angle** — a flat detector, tilted or not (the rotations of a ``.poni`` are part of the
+  geometry: ``q_mapping.lab_rays``), pixel at the vector ``t`` from the sample, direct beam at the
+  distance ``D``: the pixel sees ``Ω ∝ 1/|t|³``; factor ``(D/|t|)³``, its solid angle relative to
+  the pixel at the direct beam. Perpendicular to the beam (no rotations), with the pixel at
+  ``(X, Y)`` from the beam, ``|t|² = D² + X² + Y²`` and the factor is ``cos³2θ``; on a tilted
+  detector ``D/|t|`` is not ``cos 2θ`` and the factor is not ``cos³2θ``.
+* **Polarisation** — ``P = ½ [1 + cos²2θ − f · cos 2φ · sin²2θ]`` (pyFAI's convention), ``2θ`` and
+  ``φ`` those of the pixel's ray (of the tilted detector when it is tilted), ``φ`` the
+  azimuth from the horizontal, ``f`` the polarisation factor: about 0.95–0.99 for a
   synchrotron (horizontal), 0 for an unpolarised laboratory source.
 * **Absorption in the film** — a film of thickness ``t`` and attenuation length ``L`` (1/µ), beam in
   at ``αi``, out at ``αf``: the scattering from depth ``z`` is attenuated by ``exp(−z·s/L)`` with

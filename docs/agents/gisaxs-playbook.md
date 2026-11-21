@@ -16,10 +16,10 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
    Decisions 里有一行 “calibration found by the search”，写出它的完整路径和位置：先确认它属于这次测量。
    αi 的来源顺序同 GIWAXS（选项、笔记、分析命令栏里设定的 αi、仪器配置）；之前已用 `set_incidence_angle` 或在命令栏设定的
    αi 会被采用，不再提问。都没有 αi 时先用 0°，并在 Needs attention 里提问（退出码 2）。运行中没有人可问，由调用它的 agent 补
-   `--incidence-deg` 后重跑。`.poni` 的探测器倾斜被略去（GIMaP 的探测器是垂直于光束的平板）：倾斜 > 1° 或 |q| 的最大
-   相对误差 > 0.5 % 时 Needs attention 里有 “detector tilt”（退出码 2，没有选项能补），否则 Decisions 写出误差；
-   GISAXS 的小角度下误差通常很小，数值见 `report.json` 的 `geometry.flat_detector`。误差是倾斜本身的代价：比较的是
-   `.poni` 和由它换算的平板几何，第 3 步对称轴移动光束中心不改变它（公开 AgBh 帧：0.08 %；拿移动后的中心比较会得到 4.1 %）。
+   `--incidence-deg` 后重跑。`.poni` 的探测器倾斜（`Rot1`、`Rot2`、`Rot3`）是几何的一部分：每个像素放在 pyFAI
+   放的位置，q 是倾斜探测器的值。Decisions 里有一行 “detector tilt”，Geometry 一节写出倾斜角，数值在 `report.json`
+   的 `geometry.tilt_deg` 和 `geometry.rotations_deg`；第 3 步对称轴移动光束中心时倾斜保留。几何标定不拟合倾斜，
+   `.poni` 的 `orientation` 项不读。
    Decisions 还总有两行说明数值是什么：`q`（运动学值；折射主要移动 q_z，Yoneda 带的最多，量级为 k·sin αi，并给出这一帧的数）
    和 `uncertainties`（切线的 σ 只是统计误差，写出误差模型；R、h、D 的区间是给定这些 σ 的 Predict parameters 后验）。
 2. **水平切线 I(qy)**：放在 Yoneda 带（αf ≈ αc 处的漫散射极大）。找不到 Yoneda 带时放在样品地平线上方，并提示检查 αi。

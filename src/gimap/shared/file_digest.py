@@ -39,3 +39,15 @@ def input_digests(paths: Iterable[str | Path]) -> list[dict[str, Optional[str]]]
         if text and text not in seen:
             seen.append(text)
     return [{"file": Path(text).name, "sha256": sha256_of(text)} for text in seen]
+
+
+def file_record(path: str | Path) -> dict:
+    """``{"file": name, "path": path as given, "bytes": size, "sha256": hex}`` of one input file: the keys of
+    ``input_digests`` (``file``, ``sha256``) and of the SEM record (``path``, ``bytes``). ``bytes`` and ``sha256``
+    are ``None`` for a file that cannot be read."""
+    text = os.fspath(path)
+    try:
+        size: Optional[int] = os.stat(text).st_size
+    except OSError:
+        size = None
+    return {"file": Path(text).name, "path": text, "bytes": size, "sha256": sha256_of(text)}

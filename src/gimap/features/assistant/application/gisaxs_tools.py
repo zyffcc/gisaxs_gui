@@ -218,6 +218,8 @@ class GisaxsToolsMixin:
             "side": side, "curve": note, "points": int(x.size), "q_range_inv_angstrom": [float(x.min()), float(x.max())],
             "solutions": solutions,
             "chosen": 0,
+            # What made the solutions: the proposal network by name and the SHA-256 of its weights, and the seed.
+            "method": {"name": "Predict parameters", "network": rows[0].get("network"), "seed": rows[0].get("seed")},
             "best_curve": _curve(rows[0]),  # the reported (most probable) solution's curve: fit_curve.csv's I_fit
             "curves": [_curve(row) for row in rows],
             "native": [_native(row) for row in rows],

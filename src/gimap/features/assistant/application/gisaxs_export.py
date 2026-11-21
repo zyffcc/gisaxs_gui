@@ -45,19 +45,20 @@ def _intervals(row: dict, number: int) -> list[str]:
     return cells
 
 
-def fit_solutions_csv(fit: dict) -> str:
+def fit_solutions_csv(fit: dict, provenance: str = "") -> str:
     """One line per component of each solution: rank, model, χ²/N, probability, parameters (R, h, D in nm; the σ
     columns are relative widths σ/value, without a unit), the 68 % posterior intervals of R, h and D when the fit
     gave them, then ``at_bounds`` (the values that ended on a bound of their range, as ``name:upper`` or
     ``name:lower``, a component's number after the name when there are several) and ``chosen`` (the solution the
-    run reports, the most probable). Two ``#`` lines come first: what the table is (with the curve that was fitted)
-    and the units; then the column names."""
+    run reports, the most probable). ``#`` lines come first: the lines of ``provenance`` when given (the release,
+    the inputs by SHA-256 and the geometry, as in the curve tables), then what the table is (with the curve that was
+    fitted) and the units; then the column names."""
     rows = fit.get("solutions") or []
     index, _solution = chosen(fit)
     keys = sorted({key for row in rows for component in row["components"] for key in component if key != "type"})
     ranges = any(row.get("intervals") for row in rows)
     limits = [f"{key}_{end}68" for key in INTERVAL_KEYS for end in ("low", "high")] if ranges else []
-    lines = [
+    lines = [f"# {line}" for line in provenance.splitlines()] + [
         f"# GISAXS fit solutions [{' '.join(str(fit.get('curve')).split())}]: one line per component of each solution",
         "# units: R, h, D in nm; sigma_R, sigma_h, sigma_D are relative widths (sigma/value, no unit); "
         "chi2 (chi^2/N: the mean of the squared sigma-normalised residuals), probability (posterior probability of "

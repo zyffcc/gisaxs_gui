@@ -11,11 +11,12 @@ defaults so a run is reproducible.  Two rules differ from the GUI:
 - every file is written under the session's output folder (``--out``,
   ``out_dir``, else ``<GIMaP data folder>/assistant_runs/<cli|mcp>/<time>/<frame>``),
   never next to the data: ``export_results`` writes to ``gimap_analysis/`` there.
+
+What the arguments stand for and where each frame's files go is in ``headless_inputs``; the record and the
+files of a run are in ``headless_record``.
 """
 
 from __future__ import annotations
-
-from src.gimap.shared.version import SOFTWARE
 
 import dataclasses
 import json
@@ -36,18 +37,19 @@ from ..features.assistant.application import (
     ToolCall,
     ToolCatalog,
     ToolOutcome,
-    fit_curve_table,
-    fit_solutions_csv,
-    pipeline_markdown,
-    ring_overlays,
     tool_specs,
 )
 from ..features.assistant.application.pipeline import compact_report, frames_reason
-from .headless_sources import GivenSource, batch_summary, describe_source, given_note, given_sources, series_block, series_name
+from .headless_inputs import frame_folders, prepare_output
+from .headless_record import CURVES, provenance_lines, utc_now, write_outputs, write_summary
+from .headless_sources import GivenSource, describe_source, given_note, given_sources, series_block, series_name
 
 LOAD_TIMEOUT_S = 900.0
 """Reading a large NeXus series (a few GB) can take minutes."""
-CURVES = ("radial", "in_plane", "out_of_plane", "azimuthal", "horizontal", "vertical")
+MASK_UNREADABLE = (
+    "The mask {name} was not applied: it is neither a GIMaP masks file (.json) nor a mask image GIMaP can read "
+    "(a detector image of the frame's size; its non-zero pixels are left out)."
+)
 PLAYBOOKS = ("docs/agents/giwaxs-playbook.md", "docs/agents/gisaxs-playbook.md")
 EXPORT_FOLDER = "gimap_analysis"
 """``export_results`` writes here inside the output folder (the GUI: next to the data)."""
@@ -194,6 +196,8 @@ class HeadlessSession:
     """The calibration the last pipeline run used (full precision)."""
     source: Optional[GivenSource] = None
     """What the file opened stands for; a pipeline report says so (``describe_source``)."""
+    mask: Optional[str] = None
+    """The mask file applied with ``apply_mask`` (``None``: none)."""
     _calls: int = field(default=0, repr=False)
 
     def call(self, name: str, arguments: Optional[dict] = None) -> ToolOutcome:
@@ -212,6 +216,20 @@ class HeadlessSession:
         if self.source is not None:
             describe_source(report, self.source)
         return report
+
+    def apply_mask(self, mask: str | Path) -> None:
+        """Apply a mask file exactly as Analyze's Load Masks does (its loader): a GIMaP masks ``.json`` (drawn
+        shapes) or a mask image of the frame's size whose non-zero pixels are left out. ``ValueError`` says why
+        a mask was not applied (another size, not a mask)."""
+        path = Path(mask)
+        if not path.is_file():
+            raise FileNotFoundError(f"No such mask file: {path}")
+        if path.suffix.lower() != ".json":
+            self.page.view_model.check_mask_image(path)  # the application's sentence when it does not fit
+        if not self.page.load_masks(path):
+            raise ValueError(MASK_UNREADABLE.format(name=path.name))
+        self.page.tasks.wait(LOAD_TIMEOUT_S)
+        self.mask = str(path)
 
     def unreadable(self) -> Optional[str]:
         """Why GIMaP could not read the frame (``None``: it was read): such a frame failed, it asks nothing."""
@@ -302,74 +320,6 @@ def open_headless_session(
     return HeadlessSession(page, catalog, results, notes=notes, output=output, source=source)
 
 
-def provenance_lines(session: HeadlessSession) -> str:
-    """The lines above the column names of every CSV the command line writes: the release, each input file by name
-    and SHA-256, and the geometry, so a curve says where it came from also without report.json beside it."""
-    from ..features.analyze.application.export_record import analysis_metadata
-
-    analysis = session.page.view_model.state.analysis
-    lines = [f"{SOFTWARE} (command line); settings and decisions in report.json"]
-    if analysis is not None:
-        record = analysis_metadata(analysis)
-        lines += [f"input: {item['file']} sha256 {item['sha256']}" for item in record.get("input_sha256") or ()]
-        lines.append(f"frame: {record.get('frame')}")
-        if (geometry := analysis.geometry) is not None:
-            lines.append(
-                f"geometry: distance {geometry.distance_m * 1e3:.4f} mm, direct beam ({geometry.beam_center_x_px:.3f}, "
-                f"{geometry.beam_center_y_px:.3f}) px, wavelength {geometry.wavelength_angstrom:.6g} A, "
-                f"alpha_i {geometry.incidence_deg:.4g} deg, detector tilt {geometry.tilt_deg:.4g} deg" + (
-                    f", q_z refracted, alpha_c {geometry.critical_angle_deg:.4g} deg" if geometry.refraction else ""))
-    return "\n".join(lines)
-
-
-def write_outputs(session: HeadlessSession, report: dict, folder: Path) -> list[Path]:
-    """report.json, report.md, the curves as CSV (GISAXS: the cuts and the fit) and the q-map as PNG."""
-    import numpy as np
-
-    folder.mkdir(parents=True, exist_ok=True)
-    report = {**report, "software_version": SOFTWARE}
-    written = [folder / "report.json", folder / "report.md"]
-    written[0].write_text(json.dumps(report, indent=1, ensure_ascii=False, default=str), encoding="utf-8")
-    written[1].write_text(pipeline_markdown(report), encoding="utf-8")
-    provenance = provenance_lines(session)
-    for key in CURVES:
-        curve = session.curve(key)
-        if curve is None or len(curve["x"]) == 0:
-            continue
-        name = "azimuthal_last_ring.csv" if key == "azimuthal" else f"{key}.csv"
-        with open(folder / name, "w", encoding="utf-8", newline="\n") as stream:
-            np.savetxt(
-                stream, np.column_stack([curve["x"], curve["y"], curve["sigma"]]), delimiter=",",
-                header=f"{provenance}\n{curve['x_label']}, I, sigma", comments="# ",
-            )
-        written.append(folder / name)
-    written += _write_fit(((report.get("gisaxs") or {}).get("fit")), folder, provenance)
-    png = session.preview_png(1100, rings=ring_overlays(report))
-    if png:
-        (folder / "qmap.png").write_bytes(png)
-        written.append(folder / "qmap.png")
-    return written
-
-
-def _write_fit(fit: Optional[dict], folder: Path, provenance: str = "") -> list[Path]:
-    """GISAXS: the fitted curve (data and the fit the run reports, the most probable) and the solutions table."""
-    import numpy as np
-
-    if not fit:
-        return []
-    written = []
-    header, columns = fit_curve_table(fit)
-    if len(columns):
-        written.append(folder / "fit_curve.csv")
-        with open(written[-1], "w", encoding="utf-8", newline="\n") as stream:
-            np.savetxt(stream, columns, delimiter=",", header=f"{provenance}\n{header}" if provenance else header,
-                       comments="# ")
-    if fit.get("solutions"):
-        written.append(folder / "fit_solutions.csv")
-        written[-1].write_text(fit_solutions_csv(fit), encoding="utf-8")
-    return written
-
-
 def analyse_frames(
     frames: list[str],
     options: PipelineOptions,
@@ -379,19 +329,34 @@ def analyse_frames(
     saved_profiles: bool = True,
     data_dir: Optional[Path] = None,
     series: bool = False,
+    mask: Optional[str | Path] = None,
+    overwrite: bool = False,
+    record: Optional[dict] = None,
+    found: tuple = (),
+    language: str = "en",
 ) -> list[dict]:
-    """The standard pipeline on each source the files stand for (files in ``out/<source name>/``): the module
-    files of one detector are one stitched series, analysed once however many of them were given. Later
-    sources of the same detector reuse the first calibration; without a technique each gets the procedure
-    Auto detects for it. ``series``: the files are ONE series stored as one frame per file, analysed like
-    the frames of a multi-frame file (one report)."""
+    """The standard pipeline on each source the files stand for: the module files of one detector are one
+    stitched series, analysed once however many of them were given. Later sources of the same detector reuse
+    the first calibration; without a technique each gets the procedure Auto detects for it. ``series``: the
+    files are ONE series stored as one frame per file, analysed like the frames of a multi-frame file (one
+    report).
+
+    Every source has its own folder in ``out`` (``headless_inputs.frame_folders``: frames of one name in
+    different folders do not share one), named in its report (``folder``) and linked from the summary.
+    ``mask``: a mask file applied to every frame (``HeadlessSession.apply_mask``); a frame it does not fit
+    fails. ``out`` with the summary of an earlier run is refused (``FileExistsError``) unless ``overwrite``
+    (``headless_inputs.prepare_output``). ``record``: the options as they were given, kept in every
+    report.json and in summary.json; ``found``: what patterns and folders among the arguments stood for;
+    ``language``: of the reports' headings."""
+    prepare_output(out, overwrite)
+    written = {"options": record, "created": utc_now(), "language": language}
     reports: list[dict] = []
     calibration: Optional[dict] = None
     sources = given_sources(frames)
     if series:
-        reports.append(_analyse_series(sources, options, out, progress, saved_profiles, data_dir))
+        reports.append(_analyse_series(sources, options, out, progress, saved_profiles, data_dir, mask, written))
         sources = []
-    for source in sources:
+    for source, folder in zip(sources, frame_folders(sources)):
         frame = source.path
         progress(f"== {frame}")
         if given_note(source):  # the files of one source, or one file named more than once
@@ -399,7 +364,7 @@ def analyse_frames(
         try:
             session = open_headless_session(
                 frame, notes=options.notes, saved_profiles=saved_profiles, data_dir=data_dir,
-                out_dir=out / source.stem, source=source,
+                out_dir=out / folder, source=source,
             )
         except Exception as exc:  # one unreadable frame must not stop the batch
             reports.append({"ok": False, "frame": str(frame), "error": str(exc) or type(exc).__name__, "needs_attention": []})
@@ -407,6 +372,12 @@ def analyse_frames(
                 reports[-1]["given"] = list(source.given)
             continue
         try:
+            if mask and not session.unreadable():
+                try:
+                    session.apply_mask(mask)
+                except (OSError, ValueError) as exc:  # a mask of another detector: this frame fails, the others go on
+                    reports.append({"ok": False, "frame": str(frame), "error": str(exc), "needs_attention": []})
+                    continue
             shape = (session.call("get_status").data or {}).get("shape")
             frame_options = options
             if calibration is not None and options.calibration is None and list(calibration.get("shape") or []) == list(shape or []):
@@ -415,21 +386,24 @@ def analyse_frames(
             if session.unreadable():  # a file GIMaP cannot read failed (exit 1); there is nothing to answer
                 report["failed"] = session.unreadable()
             calibration = session.calibration or calibration
-            report["outputs"] = [str(path) for path in write_outputs(session, report, session.output.resolve())]
+            _write(session, report, folder, written)
             reports.append(report)
         finally:
             session.close()
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "summary.md").write_text(batch_summary(reports), encoding="utf-8")
-    (out / "summary.json").write_text(
-        json.dumps([{key: value for key, value in report.items() if key != "tables"} for report in reports],
-                   indent=1, ensure_ascii=False, default=str),
-        encoding="utf-8",
-    )
+    write_summary(out, reports, options=record, notes=found, created=written["created"], language=language)
     return reports
 
 
-def _analyse_series(sources, options: PipelineOptions, out: Path, progress, saved_profiles: bool, data_dir) -> dict:
+def _write(session: HeadlessSession, report: dict, folder: str, written: dict) -> None:
+    """A frame's files into its folder; the report names the folder (relative to the summary) and the files."""
+    report["folder"] = folder
+    report["outputs"] = [str(path) for path in write_outputs(session, report, session.output.resolve(), **written)]
+
+
+def _analyse_series(
+    sources, options: PipelineOptions, out: Path, progress, saved_profiles: bool, data_dir, mask=None,
+    written: Optional[dict] = None,
+) -> dict:
     """One report for files that are one series stored as one frame per file: the block ``--frame`` /
     ``--sum`` choose by position (default: the last files) is listed in Analyze and summed there."""
     try:
@@ -448,6 +422,11 @@ def _analyse_series(sources, options: PipelineOptions, out: Path, progress, save
     except Exception as exc:  # noqa: BLE001 - reported like any file that cannot be opened
         return {"ok": False, "frame": str(block[0].path), "error": str(exc) or type(exc).__name__, "needs_attention": []}
     try:
+        if mask and not session.unreadable():
+            try:
+                session.apply_mask(mask)
+            except (OSError, ValueError) as exc:
+                return {"ok": False, "frame": str(block[0].path), "error": str(exc), "needs_attention": []}
         summed = 1
         if count > 1:  # Analyze adds the following listed files of the same kind
             summed = int(session.catalog.workbench.set_frame(1, count).get("summed_frames") or 1)
@@ -468,7 +447,7 @@ def _analyse_series(sources, options: PipelineOptions, out: Path, progress, save
                 "item": "frames", "why": f"{count} files were to be summed, Analyze summed {summed}.", "option": None,
                 "hint": "The files must be of one detector and hold one frame each.",
             })
-        report["outputs"] = [str(path) for path in write_outputs(session, report, session.output.resolve())]
+        _write(session, report, series_name(ordered), written or {})
         return report
     finally:
         session.close()
@@ -595,6 +574,7 @@ __all__ = [
     "default_output_folder",
     "mcp_tools",
     "open_headless_session",
+    "provenance_lines",
     "serve_mcp_stdio",
     "write_outputs",
 ]

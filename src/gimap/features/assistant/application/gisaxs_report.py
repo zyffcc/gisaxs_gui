@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 
 from .gisaxs_choice import ASK_PROBABILITY, LENGTH_SCALE, POOR_CHI2, bounds_text, chosen, probability
+from .report_language import ENGLISH, heading
 
 
 def pixel_span(band, limit=None, pixels=None) -> str:
@@ -109,10 +110,10 @@ def fit_rows(fit: dict) -> list[str]:
     return lines
 
 
-def gisaxs_sections(report: dict) -> list[str]:
+def gisaxs_sections(report: dict, language: str = ENGLISH) -> list[str]:
     gisaxs = report.get("gisaxs") or {}
     cuts = gisaxs.get("cuts") or {}
-    lines = ["## 切线 / Cuts", ""]
+    lines = [heading("Cuts", language), ""]
     # The pixels each cut uses, both ends included (as Analyze's Cuts card and the Results tab say them).
     rows, columns = cut_spans(cuts, (report.get("tables") or {}).get("status"))
     source = {"yoneda": "at the Yoneda band", "horizon": "just above the horizon (no Yoneda band found)",
@@ -135,7 +136,7 @@ def gisaxs_sections(report: dict) -> list[str]:
     if halves:
         lines.append(f"- halves: **{halves['side']}** — {halves['reason']}")
     spacing = gisaxs.get("spacing")
-    lines += ["", "## 特征长度 / Length scale 2π/q*", ""]
+    lines += ["", heading("Length scale 2π/q*", language), ""]
     if spacing is None:
         lines.append("No side maximum or shoulder away from qy = 0: the cut gives no length scale 2π/q* in the q range.")
     else:
@@ -144,13 +145,14 @@ def gisaxs_sections(report: dict) -> list[str]:
         lines.append(f"- 2π/q* = {_number(spacing['distance_nm'], 3)} nm {where}, |qy| = {_number(spacing['q'])} Å⁻¹: "
                      f"{LENGTH_SCALE}.")
     fit = gisaxs.get("fit")
-    lines += ["", "## 拟合 / Fit of I(qy)", ""]
+    lines += ["", heading("Fit of I(qy)", language), ""]
     if not fit:
         lines.append("Not fitted here: Send to Fitting in GIMaP fits the prepared curve with a chosen model.")
     else:
         lines += [
             f"Curve: {fit.get('curve')} ({fit.get('points')} points, |qy| {_number((fit.get('q_range_inv_angstrom') or [None])[0], 3)}–"
             f"{_number((fit.get('q_range_inv_angstrom') or [None, None])[1], 3)} Å⁻¹).",
+            *_method_lines(fit),
             "",
             *fit_rows(fit),
             "",
@@ -167,6 +169,17 @@ def gisaxs_sections(report: dict) -> list[str]:
             "attention). Refine the model you expect in Fitting.",
         ]
     return lines + [""]
+
+
+def _method_lines(fit: dict) -> list[str]:
+    """Which network and seed made the solutions (``fit["method"]``; nothing for a record without it)."""
+    method = fit.get("method") or {}
+    network = method.get("network") or {}
+    if not network.get("name"):
+        return []
+    digest = f" (weights SHA-256 {network['sha256']})" if network.get("sha256") else ""
+    seed = "" if method.get("seed") is None else f", seed {method['seed']}"
+    return ["", f"Network: {network['name']}{digest}{seed}."]
 
 
 def gisaxs_batch_row(report: dict) -> tuple[str, str, str]:
@@ -187,7 +200,9 @@ def gisaxs_batch_row(report: dict) -> tuple[str, str, str]:
     return halves, spacing_text, text + (f" ⚠ {bounds_text(best)}" if bounds_text(best) else "")
 
 
-def gisaxs_batch_table(reports: list[dict], state_of) -> list[str]:
+def gisaxs_batch_table(reports: list[dict], state_of, labels=None) -> list[str]:
+    """The GISAXS frames of a batch; ``labels``: what each frame is called, by ``id(report)`` (default: its name)."""
+    labels = labels or {}
     lines = [
         "| frame | status | halves | 2π/q* (nm) | chosen fit | open questions |",
         "|---|---|---|---|---|---|",
@@ -196,7 +211,8 @@ def gisaxs_batch_table(reports: list[dict], state_of) -> list[str]:
         halves, spacing, fit = gisaxs_batch_row(report)
         attention = report.get("needs_attention") or []
         lines.append(
-            f"| {Path(report.get('frame') or '').name} | {state_of(report)} | {halves} | {spacing} | {fit} | "
+            f"| {labels.get(id(report)) or Path(report.get('frame') or '').name} | {state_of(report)} | {halves} | "
+            f"{spacing} | {fit} | "
             f"{', '.join(item['item'] for item in attention) or '—'} |"
         )
     return lines

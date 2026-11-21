@@ -144,7 +144,7 @@ def test_the_shoulder_gives_a_length_scale_that_is_never_called_the_spacing(gala
     assert decision["decision"].startswith(f"2π/q* = {spacing['distance_nm']:.3g} nm at a shoulder of the cut")
     assert "not necessarily the particle spacing; check it with a model fit" in decision["why"]
     text = pipeline_markdown(report)
-    section = text.split("## 特征长度 / Length scale 2π/q*")[1].split("##")[0]
+    section = text.split("## Length scale 2π/q*")[1].split("##")[0]
     assert "not necessarily the particle spacing; check it with a model fit" in section and "D ≈" not in text
     assert "In-plane spacing" not in text and "observed spacing" not in text
     steps = [step["summary"] for step in report["steps"] if step["tool"] == "in_plane_spacing"]
@@ -176,7 +176,7 @@ def test_the_fit_reports_the_most_probable_and_asks_for_the_model_when_another_i
     compact = compact_report(report)
     assert "data" not in compact["gisaxs"]["fit"] and "curves" not in compact["gisaxs"]["fit"]
     text = pipeline_markdown(report)
-    assert text.startswith("# GISAXS") and "## 拟合 / Fit of I(qy)" in text and "Peaks (radial" not in text
+    assert text.startswith("# GISAXS") and "## Fit of I(qy)" in text and "Peaks (radial" not in text
     assert "| 1 (chosen) | random_cylinder | 0.62 | R 6.10 nm, σR/R 0.300, D 398.0 nm, σD/D 0.400 | 1.22 |  |" in text
     assert "Predict parameters: GIMaP's network proposes compositions" in text and "Huber" not in text
 
@@ -202,8 +202,11 @@ def test_the_command_line_writes_the_cuts_and_the_fit(galaxi_run, tmp_path: Path
     assert header[0].startswith("# GIMaP v")  # where the curve comes from, then its columns
     assert header[-1].startswith("# q (A^-1), I, sigma, I_fit")
     table = (tmp_path / "fit_solutions.csv").read_text(encoding="utf-8").splitlines()
-    assert table[0].startswith("# GISAXS fit solutions") and "in nm" in table[1]  # what it is, then the units
-    assert table[2].startswith("rank,model,chi2") and len(table) == 5
+    comments = [line for line in table if line.startswith("#")]
+    assert comments[:-2] == header[:-1]  # the same lines as the curve tables: release, input with SHA-256, geometry
+    assert comments[-2].startswith("# GISAXS fit solutions") and "in nm" in comments[-1]  # what it is, then the units
+    assert table[len(comments)].startswith("rank,model,chi2") and len(table) == len(comments) + 3
+    assert any(line.startswith("# input: ") and " sha256 " in line for line in comments)
 
 
 def test_the_results_panel_shows_the_fit_and_saves_it(galaxi_run, tmp_path: Path) -> None:

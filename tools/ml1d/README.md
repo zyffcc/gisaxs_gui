@@ -28,7 +28,7 @@ composition does not have are never seen or moved by the flow, so the density of
 
 `refine.predict` is the one path that Predict parameters takes (Fitting, the 1D Predict window, Analyze's automatic
 analysis, Batch Export and the command line all call it; there are no options for how the solutions are finished).
-For a measured cut and each composition considered (given, or the head's three most probable among those allowed),
+For a measured cut and each composition considered (given, or the head's four most probable among those allowed: `refine.SHORTLIST`),
 1000 samples of the network are weighted by importance sampling against cut_model on the measured points: amplitudes
 of the populations, the beam tail and a constant by non-negative least squares and integrated out in the Laplace
 approximation, the model error integrated out exactly; weights L·π/q, effective sample size, and the evidence of the

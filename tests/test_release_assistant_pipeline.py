@@ -162,13 +162,13 @@ def test_a_batch_summary_is_titled_by_the_procedure_that_ran() -> None:
     assert batch_markdown([_giwaxs(), _gisaxs()]).startswith("# GIMaP — batch\n")
     # Nothing got a technique (no geometry, a file that cannot be read): neither GIWAXS nor GISAXS.
     nothing = batch_markdown([NO_GEOMETRY, UNREADABLE])
-    assert nothing.startswith("# GIMaP — batch\n") and "peaks q" not in nothing and "##" not in nothing.split("## 需要处理")[0]
+    assert nothing.startswith("# GIMaP — batch\n") and "peaks q" not in nothing and "##" not in nothing.split("## Open questions")[0]
     assert "| lonely.tif | needs input | — | calibration |" in nothing
     assert "| missing.tif | error: No such file: missing.tif | — | — |" in nothing
     assert "- **calibration** — No calibration candidate gave a good geometry. → `--calibration PATH`" in nothing
     # One procedure ran: the frames it did not run on are rows of its table, as before.
     one = batch_markdown([NO_GEOMETRY, _giwaxs(), UNREADABLE])
-    assert one.startswith("# GIWAXS — batch\n") and "##" not in one.split("## 需要处理")[0]
+    assert one.startswith("# GIWAXS — batch\n") and "##" not in one.split("## Open questions")[0]
     assert "| lonely.tif | needs input | 1 | — | — | — | calibration |" in one
     assert "| film.tif | OK | 1 | agbh.poni | 0.899, 1.409* | 0.899: 0.61 | — |" in one
     assert batch_markdown([_gisaxs(), UNREADABLE]).startswith("# GISAXS — batch\n")
@@ -178,7 +178,7 @@ def test_a_mixed_batch_keeps_the_results_of_its_gisaxs_frames() -> None:
     reports = [_giwaxs(needs_attention=[ALPHA_GIWAXS]), _gisaxs(needs_attention=[ALPHA_GISAXS]), UNREADABLE]
     text = batch_markdown(reports)
     assert text.startswith("# GIMaP — batch\n\n3 frame(s); each has its own report.md.\n")
-    giwaxs, gisaxs, rest = text.index("## GIWAXS"), text.index("## GISAXS"), text.index("## 未分析 / Not analysed")
+    giwaxs, gisaxs, rest = text.index("## GIWAXS"), text.index("## GISAXS"), text.index("## Not analysed")
     assert giwaxs < gisaxs < rest < text.index("Open questions")
     assert "| film.tif | needs input | 1 | agbh.poni | 0.899, 1.409* | 0.899: 0.61 | incidence angle αi |" in text[giwaxs:gisaxs]
     # Halves, spacing and best fit of the GISAXS frame: they were dropped from a table of GIWAXS columns.
@@ -217,9 +217,58 @@ def test_a_technique_asked_for_but_never_started_is_not_what_ran(tmp_path: Path)
     assert technique_run(changed) == "gisaxs" and batch_markdown([changed]).startswith("# GISAXS — batch\n")
 
 
-def test_frames_of_one_procedure_share_one_question() -> None:
+def test_frames_asked_the_same_thing_share_one_question_that_names_them() -> None:
     text = batch_markdown([_gisaxs(needs_attention=[ALPHA_GISAXS]), _gisaxs("b.tif", needs_attention=[ALPHA_GISAXS])])
     assert text.count("- **incidence angle αi**") == 1 and "→ `--incidence-deg A`" in text
+    assert "  - asked for: dots.tif, b.tif" in text
+
+
+def test_the_summary_keeps_the_open_questions_of_every_frame_and_names_the_frame() -> None:
+    """Later frames used to lose theirs: one item was kept per item name and technique, whatever it said."""
+    def model(count: int) -> dict:
+        return {"item": "model", "why": f"{count} solutions are probable.", "option": None, "hint": ""}
+
+    reports = [_gisaxs("a.tif", needs_attention=[model(2), ALPHA_GISAXS]), _gisaxs("b.tif", needs_attention=[model(3)]),
+               _gisaxs("c.tif", needs_attention=[ALPHA_GISAXS])]
+    questions = batch_markdown(reports).split("## Open questions")[1]
+    lines = questions.strip().splitlines()
+    assert lines[0] == "- **model** — 2 solutions are probable." and lines[1] == "  - asked for: a.tif"
+    assert "- **model** — 3 solutions are probable." in lines
+    assert lines[lines.index("- **model** — 3 solutions are probable.") + 1] == "  - asked for: b.tif"
+    asked = lines[next(index for index, line in enumerate(lines) if line.startswith("- **incidence angle αi**")) + 1]
+    assert asked == "  - asked for: a.tif, c.tif"
+
+
+def test_frames_of_one_name_are_told_apart_and_linked_to_their_own_reports() -> None:
+    reports = [_gisaxs("dots.tif", folder="dots_a", needs_attention=[ALPHA_GISAXS]),
+               _gisaxs("dots.tif", folder="dots_b", needs_attention=[ALPHA_GISAXS]), _gisaxs("other.tif", folder="other")]
+    text = batch_markdown(reports)
+    rows = [line for line in text.splitlines() if line.startswith("| dots.tif") or line.startswith("| other.tif")]
+    assert rows[0].startswith("| dots.tif (dots_a) |") and rows[0].endswith("| [report.md](dots_a/report.md) |")
+    assert rows[1].startswith("| dots.tif (dots_b) |") and rows[1].endswith("| [report.md](dots_b/report.md) |")
+    assert rows[2].startswith("| other.tif |") and rows[2].endswith("| [report.md](other/report.md) |")
+    assert "| open questions | report |" in text and "  - asked for: dots.tif (dots_a), dots.tif (dots_b)" in text
+    assert "report |" not in batch_markdown([_gisaxs()])  # reports without a folder of their own: the table as it was
+
+
+def test_a_report_has_one_language_english_unless_asked() -> None:
+    from src.gimap.features.assistant.application.report_language import HEADINGS_ZH
+
+    report = _gisaxs(needs_attention=[ALPHA_GISAXS], mask={"applied": False, "file": None, "bad_pixels_left_out": None},
+                     gisaxs={"halves": {"side": "mean", "reason": "both halves are usable"}, "spacing": None})
+    english, chinese = pipeline_markdown(report), pipeline_markdown(report, language="zh")
+    for title, translated in HEADINGS_ZH.items():
+        assert translated not in english, title
+    for title in ("Needs attention (answer, then run again)", "Geometry", "Mask", "Cuts", "Decisions", "Steps"):
+        assert f"## {title}\n" in english and f"## {HEADINGS_ZH[title]}\n" in chinese and f"## {title}\n" not in chinese
+
+    def body(text: str) -> list[str]:
+        return [line for line in text.splitlines() if not line.startswith("## ")]
+
+    assert body(english) == body(chinese)  # the same report: only the headings differ
+    summary = batch_markdown([report, _giwaxs(needs_attention=[ALPHA_GISAXS]), NO_GEOMETRY])
+    assert "## Open questions" in summary and "## Not analysed" in summary and "需要处理" not in summary
+    assert "## 需要处理" in batch_markdown([report], language="zh")
 
 
 # -- the αi question in the words of the technique (R11) ---------------------------------------------------
@@ -254,7 +303,7 @@ def test_a_gisaxs_run_asks_for_alpha_i_with_what_it_changes_for_the_cut(galaxi) 
         assert word not in alpha["why"]
     assert "0° is used" in alpha["why"] and "exit angle αf" in alpha["why"] and "too large by αi" in alpha["why"]
     text = pipeline_markdown(report)
-    assert text.startswith("# GISAXS") and "too large by αi" in text.split("## 几何 / Geometry")[0]
+    assert text.startswith("# GISAXS") and "too large by αi" in text.split("## Geometry")[0]
     assert "→ `--incidence-deg A`" in text and "missing wedge" not in text
 
 
@@ -277,6 +326,9 @@ def test_the_fit_solutions_table_starts_with_what_it_is_and_the_units() -> None:
         {"rank": 2, "model": "cylinder", "chi2": 1.6, "log_rmse": 0.2, "converged": False,
          "components": [{"type": "cylinder", "R": 6.1, "sigma_R": 0.2, "h": 12.0, "sigma_h": 0.1, "weight": 1.0}]},
     ]}
+    headed = fit_solutions_csv(fit, "GIMaP v9 (command line)\ninput: a.tif sha256 0f").splitlines()
+    assert headed[:2] == ["# GIMaP v9 (command line)", "# input: a.tif sha256 0f"]  # the lines of the curve tables first
+    assert headed[2:] == fit_solutions_csv(fit).splitlines()
     lines = fit_solutions_csv(fit).splitlines()
     assert lines[0] == "# GISAXS fit solutions [mean of both halves up to |qy| = 0.179 Å⁻¹]: one line per component of each solution"
     assert lines[1].startswith("# units: R, h, D in nm; sigma_R, sigma_h, sigma_D are relative widths")

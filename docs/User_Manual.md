@@ -2055,9 +2055,10 @@ benchmarks.
    others the model reweights its proposals).
 3. Without σ in the file, Predict takes a relative σ from the scatter of the curve about its trend (at least 1 %).
 4. Press **Fit**. It runs in a separate process; **Stop** ends it without a result. For a curve of a few hundred
-   points on one core it takes about 5 s with **The particles in Model**, about 25 s with **Spheres and upright
-   cylinders (1–2)** and a few minutes with **Any particles (1–3)**, whose random cylinders are slow (20–30 s per
-   least-squares fit).
+   points on one core it takes some seconds with **The particles in Model**, from some tens of seconds to a few
+   minutes with **Spheres and upright cylinders (1–2)** and a few minutes or more with **Any particles (1–3)**,
+   whose random cylinders are slow (20–30 s per least-squares fit). The time grows with the number of points and
+   of compositions tried, and depends on the computer.
 
 There is one way through, and nothing else to set: the network's 1000 samples of each composition are weighted
 against the curve; the most probable values of each composition are refined by least squares; when none of them
@@ -3244,7 +3245,35 @@ frame with every decision and what needs your answer. A series is analysed in it
 fifth of its frames summed, at most 10 (below ten frames the last frame alone); `--frame N` and `--sum K`
 choose other frames; `--max-peaks N` fits more than the 12 most prominent candidate peaks. The module files of one detector are analysed once, however many of them are given,
 in a folder named by the scan (a part missing is an open item of its report); `--series` takes files that
-hold one frame each as one series. Its options, exit codes, where its defaults may
+hold one frame each as one series.
+
+- **Frames.** An argument may be a file, a pattern such as `*.tif` or a folder. A pattern the shell did not
+  expand (PowerShell does not) is expanded by GIMaP, in natural order (`f2` before `f10`); a folder stands for
+  every detector image in it (`.cbf`, `.tif`, `.tiff`, `.edf`, NeXus/HDF5; subfolders are not searched; the
+  files given as `--calibration` or `--mask` are left out). `summary.md` says how many files each pattern or
+  folder gave; one that gives none is an error (exit code 1).
+- **Folders.** Each frame has its own folder under `--out`, named by the frame, and `summary.md` links every
+  row to its `report.md`. Frames of the same name in different folders get the nearest folder name that tells
+  them apart (`<name>_<folder>`), else a number. An `--out` folder that already holds the summary of an earlier
+  run is refused (exit code 1); `--overwrite` replaces that run: the frame folders its `summary.json` lists
+  are removed first, nothing else.
+- **Mask.** `--mask FILE` applies one mask to every frame, read as **Load Masks** in Analyze reads it: a GIMaP
+  masks `.json` (drawn shapes) or a mask image of the frame's size whose non-zero pixels are left out. A frame
+  the mask does not fit fails with the reason. `report.md` (section **Mask**) and `report.json` (`mask`) always
+  say which mask was applied, or that none was; detector gaps and the bad pixels found automatically are
+  named apart from it.
+- **Record.** `report.json` names the release, the UTC time, the options as given (the notes too), and every
+  input file (the frame's files, the calibration, a mask) by path, size and SHA-256; for a model fit also the
+  network, the SHA-256 of its weights and the seed. `summary.json` is one object with the release, the time, the
+  options and the frame reports (`frames`). Every CSV starts with `#` lines that name the release, the inputs
+  with their SHA-256 and the geometry. A run repeated on the same input gives the same files except for the
+  time and the durations ([Physics and Methods, section 14.10](Physics_Manual.md#1410-the-record-of-a-run-without-the-window)).
+- **Language and time.** The headings of `report.md` and `summary.md` are English; `--language zh` writes them
+  in Chinese (one language per report; in the window they follow the program's language). The GISAXS model
+  fit takes from some seconds to a few minutes per frame, depending on the number of points and the computer;
+  `--no-fit` leaves it out.
+
+Its options, exit codes, where its defaults may
 not fit your question, and how to check it on a GIWAXS measurement you know (`tools/eval_giwaxs_agent.py`;
 a case built on your own data goes in `docs/agents/eval/local/`, which Git ignores) are described in
 `docs/agents/giwaxs-playbook.md` and `docs/agents/gisaxs-playbook.md`.
@@ -3354,7 +3383,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 
 | Action | Files written | Default location | Record that comes with it |
 |---|---|---|---|
-| Analyze ▸ **Export** (`Ctrl+E`), **Export Curves…** | `<stem>_<curve>.csv` per curve, `<stem>_fit_input.dat`, `<stem>_analysis.json` (`_frameNNNN` added for a frame of a multi-frame file, `_sumN` when frames are summed) | `gimap_analysis/` next to the data, without a dialog; a folder dialog if it cannot be written | `<stem>_analysis.json` (settings, geometry and a `.poni` tilt left out, corrections, pixels left out, error model, binning, UTC time of writing) and `#` header lines |
+| Analyze ▸ **Export** (`Ctrl+E`), **Export Curves…** | `<stem>_<curve>.csv` per curve, `<stem>_fit_input.dat`, `<stem>_analysis.json` (`_frameNNNN` added for a frame of a multi-frame file, `_sumN` when frames are summed) | `gimap_analysis/` next to the data, without a dialog; a folder dialog if it cannot be written | `<stem>_analysis.json` (settings, geometry with the tilt of a `.poni`, corrections, pixels left out, error model, binning, UTC time of writing) and `#` header lines |
 | Analyze plots ▸ **Save ▸ Curves as Data…** | the CSV files of that plot and `_analysis.json` | folder dialog in `gimap_analysis/` | as Export |
 | Analyze plots and images ▸ figures (**Plot as Figure…**, **View as Figure…**, **Analyze ▸ Figures ▸ Save Image…** …) | PNG, TIFF, SVG or PDF, light colours | dialog in `gimap_analysis/` | none |
 | Analyze ▸ **Save q-Map Data…**, **View Data as CSV…** (also **Analyze ▸ Figures**) | `<stem>_qmap.csv`, `<stem>_cake.csv` | dialog in `gimap_analysis/` | `#` header lines (source, frame, axes) |
@@ -3389,15 +3418,16 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | **File ▸ Labs Parameters ▸ Save As…** | `gimap_parameters.json` | dialog in the GIMaP user data folder | — |
 | Errors (automatic) | `logs/errors.log` (moved to `errors.old.log` above 2 MB) | user data folder | — |
 | **Help ▸ Example Data** | the example's frame with its `.poni` (and mask), and `SOURCE_AND_LICENCE.md` | a folder you choose, by default `Documents/GIMaP examples/<example>/`; files already there are kept | `SOURCE_AND_LICENCE.md` (source and licence of the data) |
-| `tools/gimap_agent.py` | a subfolder per frame (a set of module files: per scan; `--series`: `<name>_series/`) with `report.md`, `report.json`, curves (CSV whose `#` lines give the release, each input by SHA-256 and the geometry), q map; `summary.md` + `summary.json` | `--out`; without it `assistant_runs/cli/<time>/` in the user data folder; never next to the data | `report.json` |
+| `tools/gimap_agent.py` | a subfolder per frame (a set of module files: per scan; `--series`: `<name>_series/`; frames of one name in different folders: `<name>_<folder>/`) with `report.md`, `report.json`, curves and fit tables (CSV whose `#` lines give the release, each input by SHA-256 and the geometry), q map; `summary.md` (links every frame's report) + `summary.json` | `--out`; without it `assistant_runs/cli/<time>/` in the user data folder; never next to the data. An `--out` folder with the summary of an earlier run is refused unless `--overwrite` | `report.json` (release, UTC time, the options as given, every input file by path, size and SHA-256, the mask applied or none, Analyze's record of the frame; for a fit the network, the SHA-256 of its weights and the seed) |
 
 **Which release wrote a file.** The records of Analyze (`_analysis.json`, the settings file, the series and
 stages tables' JSON), of Batch Export and Send Series to Fitting (`<batch>_batch.json`; `README.txt` says *Written by
 GIMaP v…*), of Fitting (`<curve>_fit.json`, `series_fit.json`), Compare, Geometry Calibration, the XRR Series
 Extractor, SEM Particle Analysis, 2D Prediction and the Format Converter name the GIMaP release that wrote them:
 `software_version`, for example `GIMaP v0.2.0`. In Analyze's records `software` stays `GIMaP Analyze 1`, the name
-of the record format. The records of Sputter, the AI assistant, `tools/gimap_agent.py` and 1D Predict's run
-folders do not name the release yet ([Physics and Methods, section 14.5](Physics_Manual.md#145-version-of-the-software)).
+of the record format. The records of Sputter, the AI assistant, `tools/gimap_agent.py` (`report.json`,
+`summary.json` and the `#` lines of its CSV tables) and 1D Predict's run folders name it too; records written by
+earlier versions may not ([Physics and Methods, section 14.5](Physics_Manual.md#145-version-of-the-software)).
 
 **What `<stem>_analysis.json` says besides the settings.** `created` is the UTC time the record was written
 (ISO 8601). `error_model` says how the σ of the points were computed: `poisson` (photon counts),

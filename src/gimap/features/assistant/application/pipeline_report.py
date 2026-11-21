@@ -13,6 +13,7 @@ from typing import Optional
 from ..domain import AT_EDGE, assessment, herman_decimals, signed
 from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
 from .pipeline_geometry import ROTATION_WHY, SEARCHED
+from .report_language import ENGLISH, heading as section
 
 OPTION_FLAGS = {
     "calibration": "--calibration PATH",
@@ -207,7 +208,23 @@ def _hints_title(report: dict) -> str:
     return "Series hints (reliable peaks only)"
 
 
-def pipeline_markdown(report: dict, *, title: Optional[str] = None) -> str:
+def mask_lines(mask: dict) -> list[str]:
+    """What a report says about masks (``report["mask"]``, written by a run without a window): the mask file
+    applied, or that none was, and apart from it what is always left out."""
+    file = mask.get("file") or {}
+    if mask.get("applied"):
+        pixels = "" if mask.get("masked_pixels") is None else f"; {mask['masked_pixels']} pixels masked"
+        digest = f"; SHA-256 {file['sha256']}" if file.get("sha256") else ""
+        lines = [f"- mask applied: `{file.get('path') or file.get('file')}` ({mask.get('kind')}{pixels}{digest})"]
+    else:
+        lines = ["- mask applied: none (no mask file was given)"]
+    bad = mask.get("bad_pixels_left_out")
+    found = "not searched" if bad is None else ", ".join(f"{count} {name.replace('_', ' ')}" for name, count in bad.items())
+    return lines + [f"- left out apart from a mask: the detector's gaps (pixels without data) and bad pixels found "
+                    f"automatically ({found})"]
+
+
+def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: str = ENGLISH) -> str:
     frame = report.get("frame") or ""
     name = title or Path(frame).name or "frame"
     attention = report.get("needs_attention") or []
@@ -219,7 +236,7 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None) -> str:
     heading = "GISAXS" if gisaxs else ("GIMaP" if undecided else "GIWAXS")
     lines = [f"# {heading} — {name}", "", f"Status: **{state}**  ", f"File: `{frame}`", ""]
     if attention:
-        lines += ["## 需要处理 / Needs attention (answer, then run again)", ""]
+        lines += [section("Needs attention (answer, then run again)", language), ""]
         for number, item in enumerate(attention, 1):
             option = OPTION_FLAGS.get(item.get("option") or "", "")
             fix = f" → `{option}`" if option else ""
@@ -227,17 +244,19 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None) -> str:
             lines.append(f"   {item.get('hint', '')}")
         lines.append("")
     frames = report.get("frames") or {}
-    lines += ["## 几何 / Geometry", "", *_geometry_lines(report), ""]
+    lines += [section("Geometry", language), "", *_geometry_lines(report), ""]
+    if report.get("mask") is not None:
+        lines += [section("Mask", language), "", *mask_lines(report["mask"]), ""]
     if frames.get("total") and frames["total"] > 1:
         lines += [
-            "## 帧 / Frames", "",
+            section("Frames", language), "",
             f"- series of {frames['total']} frames; analysed from frame {frames.get('first')}, "
             f"{frames.get('summed')} summed", "",
         ]
     if report.get("ok") and gisaxs:
-        lines += gisaxs_sections(report)
+        lines += gisaxs_sections(report, language)
     elif report.get("ok") and report.get("procedure") != "geometry":
-        lines += ["## 峰 / Peaks (radial I(q))", "", *_peak_table(report.get("peaks") or []), ""]
+        lines += [section("Peaks (radial I(q))", language), "", *_peak_table(report.get("peaks") or []), ""]
         search = report.get("peak_search") or {}
         if search.get("truncated"):
             lines += [f"Only the {search.get('max_peaks')} most prominent of {search.get('candidates')} candidate peaks "
@@ -245,10 +264,10 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None) -> str:
         hints = report.get("series_hints") or []
         if hints:
             lines += [_hints_title(report) + ": " + "; ".join(hints), ""]
-        lines += ["## 取向 / Ring orientation", "", *_ring_lines(report.get("rings") or []), ""]
-    lines += ["## 决策 / Decisions", ""]
+        lines += [section("Ring orientation", language), "", *_ring_lines(report.get("rings") or []), ""]
+    lines += [section("Decisions", language), ""]
     lines += [f"- **{item['what']}**: {item['decision']} — {item['why']}" for item in report.get("decisions") or []]
-    lines += ["", "## 步骤 / Steps", ""]
+    lines += ["", section("Steps", language), ""]
     lines += [
         f"{number}. `{step['tool']}` {'ERROR ' if step.get('error') else ''}{step.get('summary', '')}"
         for number, step in enumerate(report.get("steps") or [], 1)
@@ -321,7 +340,31 @@ def _asked(report: dict) -> str:
     return ", ".join(item["item"] for item in report.get("needs_attention") or []) or "—"
 
 
-def _giwaxs_batch_table(reports: list[dict]) -> list[str]:
+def frame_labels(reports: list[dict]) -> dict[int, str]:
+    """What each report's frame is called in a summary (by ``id(report)``): its file name, and with its output
+    folder when several frames of the batch have that name (reports without a folder of their own keep the name)."""
+    names = [Path(report.get("frame") or "").name for report in reports]
+    return {
+        id(report): f"{name} ({report['folder']})" if names.count(name) > 1 and report.get("folder") else name
+        for report, name in zip(reports, names)
+    }
+
+
+def report_link(report: dict) -> str:
+    """The Markdown link from summary.md to a frame's own report ('—' when it has no folder of its own)."""
+    folder = report.get("folder")
+    return f"[report.md]({folder}/report.md)" if folder else "—"
+
+
+def _linked(lines: list[str], reports: list[dict]) -> list[str]:
+    """A summary table with a last column that links every row to its frame's report (frames with a folder)."""
+    if not any(report.get("folder") for report in reports):
+        return lines
+    cells = [" report |", "---|", *(f" {report_link(report)} |" for report in reports)]
+    return [line + cell for line, cell in zip(lines, cells)] + lines[len(cells):]
+
+
+def _giwaxs_batch_table(reports: list[dict], labels: dict[int, str]) -> list[str]:
     lines = [
         "| frame | status | frames | geometry | peaks q (Å⁻¹) | ring f | open questions |",
         "|---|---|---|---|---|---|---|",
@@ -334,16 +377,17 @@ def _giwaxs_batch_table(reports: list[dict]) -> list[str]:
             f"{ring['q']:.3g}: {ring['herman']:.2f}" for ring in report.get("rings") or [] if ring.get("herman") is not None
         ) or "—"
         lines.append(
-            f"| {Path(report.get('frame') or '').name} | {_state(report)} | {_frames_text(report)} | "
+            f"| {labels[id(report)]} | {_state(report)} | {_frames_text(report)} | "
             f"{(report.get('geometry') or {}).get('source') or '—'} | {peaks} | {rings} | {_asked(report)} |"
         )
+    lines = _linked(lines, reports)
     lines += ["", "Peaks marked * have a caveat (spike, halo, failed fit or weak) or lie at the end of the data: see that "
               "frame's report.md.", ""]
     cut = [report for report in reports if (report.get("peak_search") or {}).get("truncated")]
     if cut:
         lines += [
             "Peak lists cut at the cap (the most prominent candidates fitted; their series hints use these only): "
-            + ", ".join(f"{Path(report.get('frame') or '').name} ({report['peak_search'].get('max_peaks')} of "
+            + ", ".join(f"{labels[id(report)]} ({report['peak_search'].get('max_peaks')} of "
                         f"{report['peak_search'].get('candidates')})" for report in cut)
             + ". `--max-peaks N` fits more.", "",
         ]
@@ -359,14 +403,14 @@ def _giwaxs_batch_table(reports: list[dict]) -> list[str]:
     return lines
 
 
-def _unanalysed_table(reports: list[dict]) -> list[str]:
+def _unanalysed_table(reports: list[dict], labels: dict[int, str]) -> list[str]:
     """Frames no procedure ran on: why (the status) and what is asked."""
     lines = ["| frame | status | geometry | open questions |", "|---|---|---|---|"]
     lines += [
-        f"| {Path(report.get('frame') or '').name} | {_state(report)} | "
+        f"| {labels[id(report)]} | {_state(report)} | "
         f"{(report.get('geometry') or {}).get('source') or '—'} | {_asked(report)} |" for report in reports
     ]
-    return lines + [""]
+    return _linked(lines, reports) + [""]
 
 
 def _searched_notes(reports: list[dict]) -> list[str]:
@@ -382,9 +426,12 @@ def _searched_notes(reports: list[dict]) -> list[str]:
     )]
 
 
-def batch_markdown(reports: list[dict]) -> str:
+def batch_markdown(reports: list[dict], *, language: str = ENGLISH) -> str:
     """The frames of a batch in tables by the procedure that ran, the lines the GIWAXS frames share and the
-    questions still open. Titled by what ran: GIWAXS, GISAXS, or GIMaP when both did or neither."""
+    questions still open: every frame's, each with the frames that have it (frames asked the same thing in the
+    same words share one line that names them all). Titled by what ran: GIWAXS, GISAXS, or GIMaP when both did or
+    neither. A frame with a folder of its own (``report["folder"]``, relative to the summary) is linked."""
+    labels = frame_labels(reports)
     groups: dict[Optional[str], list[dict]] = {"giwaxs": [], "gisaxs": [], None: []}
     for report in reports:
         groups[technique_run(report)].append(report)
@@ -395,21 +442,24 @@ def batch_markdown(reports: list[dict]) -> str:
     heading = ran[0].upper() if len(ran) == 1 else "GIMaP"
     lines = [f"# {heading} — batch", "", f"{len(reports)} frame(s); each has its own report.md.", ""]
     if groups["giwaxs"]:
-        lines += (["## GIWAXS", ""] if mixed else []) + _giwaxs_batch_table(groups["giwaxs"])
+        lines += (["## GIWAXS", ""] if mixed else []) + _giwaxs_batch_table(groups["giwaxs"], labels)
     if groups["gisaxs"]:
-        lines += (["## GISAXS", ""] if mixed else []) + gisaxs_batch_table(groups["gisaxs"], _state) + [""]
+        table = gisaxs_batch_table(groups["gisaxs"], _state, labels)
+        lines += (["## GISAXS", ""] if mixed else []) + _linked(table, groups["gisaxs"]) + [""]
     if groups[None]:
-        lines += (["## 未分析 / Not analysed", ""] if mixed else []) + _unanalysed_table(groups[None])
+        lines += ([section("Not analysed", language), ""] if mixed else []) + _unanalysed_table(groups[None], labels)
     lines += _searched_notes(reports)
-    questions: dict[tuple, dict] = {}  # one per item and procedure: αi is asked in the words of each
+    questions: dict[tuple, tuple[dict, list[str]]] = {}  # the same question in the same words: one line, its frames
     for report in reports:
         for item in report.get("needs_attention") or []:
-            questions.setdefault((item["item"], technique_run(report)), item)
+            key = (item["item"], item.get("why"), item.get("option"))
+            questions.setdefault(key, (item, []))[1].append(labels[id(report)])
     if questions:
-        lines += ["## 需要处理 / Open questions", ""]
-        for item in questions.values():
+        lines += [section("Open questions", language), ""]
+        for item, frames in questions.values():
             option = OPTION_FLAGS.get(item.get("option") or "", "")
             lines.append(f"- **{item['item']}** — {item['why']}" + (f" → `{option}`" if option else ""))
+            lines.append(f"  - asked for: {', '.join(frames)}")
         lines.append("")
     return "\n".join(lines) + "\n"
 
@@ -479,7 +529,7 @@ def series_changes(start: dict, end: dict, tolerance: float = SAME_Q) -> list[di
     return sorted(rows, key=lambda row: row["q"])
 
 
-def series_markdown(start: dict, end: dict) -> str:
+def series_markdown(start: dict, end: dict, *, language: str = ENGLISH) -> str:
     """The start-versus-end comparison of a series as a Markdown section (empty without both reports)."""
     if not start.get("ok") or not end.get("ok"):
         return ""
@@ -489,7 +539,7 @@ def series_markdown(start: dict, end: dict) -> str:
         return f"{first}–{first + summed - 1}"
 
     lines = [
-        "## 序列 / Start versus end of the series", "",  # bilingual like the report's other sections
+        section("Start versus end of the series", language), "",
         f"Frames {frames(start)} compared with frames {frames(end)}. Reliable peaks only; peaks closer than "
         "half their width are the same line.", "",
         "| q (Å⁻¹) | at the start | at the end | change |", "|---|---|---|---|",
@@ -517,6 +567,7 @@ def ring_overlays(report: dict) -> list[dict]:
 
 __all__ = [
     "FLAG_WORDS", "OPTION_FLAGS", "PEAK_DECIMALS", "SAME_Q", "batch_markdown", "calibration_quality", "common_peaks",
-    "compact_report", "found_by_search", "herman_texts", "peak_markers", "pipeline_markdown", "reliable_row", "ring_overlays",
+    "compact_report", "found_by_search", "frame_labels", "herman_texts", "mask_lines", "peak_markers", "pipeline_markdown",
+    "reliable_row", "report_link", "ring_overlays",
     "series_changes", "series_markdown", "technique_run",
 ]

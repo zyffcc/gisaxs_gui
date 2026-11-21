@@ -316,6 +316,8 @@ def _saved_reports(folder: Path) -> list[dict]:
         reports = json.loads(_text(path, "The summary of the earlier run"))
     except ValueError as error:
         raise NothingToEvaluate(f"The summary of the earlier run is not valid JSON: {path} ({error}).") from error
+    if isinstance(reports, dict):  # since 0.2.0 an object: the frame reports are its "frames"
+        reports = reports.get("frames")
     if not isinstance(reports, list) or not all(isinstance(report, dict) for report in reports):
         raise NothingToEvaluate(f"The summary of the earlier run is not a list of reports: {path}.")
     if not reports:  # no report fails no check

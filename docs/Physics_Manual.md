@@ -134,6 +134,7 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [14.7 Checksums](#147-checksums)
   - [14.8 Seeds and deterministic runs](#148-seeds-and-deterministic-runs)
   - [14.9 What the records do not yet contain](#149-what-the-records-do-not-yet-contain)
+  - [14.10 The record of a run without the window](#1410-the-record-of-a-run-without-the-window)
 - [15. What GIMaP does not model](#15-what-gimap-does-not-model)
   - [15.1 Scattering physics](#151-scattering-physics)
   - [15.2 Instrument and geometry](#152-instrument-and-geometry)
@@ -317,7 +318,7 @@ Implementation: `src/gimap/shared/geometry/legacy_conventions.py`
 
 The q map of Analyze rests on these assumptions:
 
-1. The detector is flat and perpendicular to the direct beam. `L` is measured along the beam.
+1. The detector is flat. `L` is the distance from the sample to the direct beam on the detector, measured along the beam. The detector may be tilted: the rotations rot_1, rot_2, rot_3 of a `.poni` are part of the geometry (section 3.7). The formulas of this section are written for the untilted detector, perpendicular to the direct beam (all three rotations 0); for a tilted one the ray `(L, X, Y)` of a pixel is replaced by the vector (3.15), and everything after it is unchanged.
 2. The sample is tilted by α_i about the horizontal axis perpendicular to the beam (the detector's X axis). The plane of incidence is vertical. It contains the beam and the detector column through the direct beam.
 3. The scattering is elastic and comes from a point at the origin. There is no refraction (the vacuum, kinematic q).
 4. Each pixel is represented by its centre.
@@ -808,19 +809,31 @@ I′_p = I_p / F_p,      F_p = F_Ω · F_P · F_A                               
 - q never changes. Peak positions therefore do not change; intensities compared across χ or q do.
 - `F_Ω` and `F_P` are 1 at the direct beam and `F_A` is 1 at `α_f = α_i`, so corrected values stay close to counts per pixel.
 - Pixels where F is not finite or not positive become invalid.
-- They are applied after all other preparation steps (section 4.9) and need the geometry. X, Y and L_p are those of (1.3), (1.4) and (2.2), and `cos 2θ = L/L_p` (2.12).
+- They are applied after all other preparation steps (section 4.9) and need the geometry. X, Y and L_p are those of (1.3), (1.4) and (2.2), and `cos 2θ = L/L_p` (2.12). On a tilted detector the vector t of a pixel is (3.15), its length |t| takes the place of L_p, and cos 2θ is its component along the beam over |t|.
 - Comparable geometric corrections are part of other grazing-incidence packages, for example GIXSGUI (Jiang, 2015).
 
 Implementation: `src/gimap/features/analyze/domain/intensity.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`
 
 ### 5.2 Solid angle
 
-A flat pixel perpendicular to the beam at distance L_p from the sample subtends
+A pixel of a flat detector, with its centre at the vector t from the sample (3.15), subtends
+`Ω_p = p_x p_y L_n / |t|³`, where L_n is the perpendicular distance from the sample to the detector plane. The
+correction is this solid angle relative to that of the pixel at the direct beam, where `|t| = L`:
 
 ```text
-Ω_p = p_x p_y L / L_p³ = (p_x p_y / L²) cos³ 2θ                                   (5.2)
-F_Ω = cos³ 2θ                                                                   (5.3)
+F_Ω = Ω_p / Ω_beam = (L / |t|)³                                                  (5.2)
 ```
+
+This is what the code computes for every geometry, tilted or not. L_n cancels, and F_Ω is 1 at the direct beam
+(pyFAI normalises to the point of normal incidence instead; the two differ by one constant, section 3.7). For an
+untilted detector (all rotations 0: perpendicular to the direct beam) `|t| = L_p` (2.2) and `L/L_p = cos 2θ`, so
+
+```text
+Ω_p = p_x p_y L / L_p³ = (p_x p_y / L²) cos³ 2θ,      F_Ω = cos³ 2θ      (untilted)      (5.3)
+```
+
+On a tilted detector `L/|t|` is not cos 2θ (the component of t along the beam changes across the detector), so
+(5.3) does not hold there and (5.2) is used.
 
 Implementation: `src/gimap/features/analyze/domain/intensity.py`
 
@@ -3614,7 +3627,7 @@ Every curve export of Analyze writes `<stem>_analysis.json` beside the curve fil
 | Time | `created`: the UTC time the record was written (ISO 8601, for example `2026-11-01T05:52:31+00:00`) |
 | Corrections | `corrections` (every setting), `intensity_corrections` (GIWAXS: how applied, formulas, parameters), `bad_pixels_left_out`, `drawn_mask_pixels`, `pixels_filled_from_mirror` |
 | Results | `markers` (beam centre, horizon row, cut bands, Yoneda estimate, I(χ) window, peaks …), `curves` (key, title, x label, region of each curve), `messages` |
-| Files | `source_files` (every file a frame was read from: module files, master and data files), `source_layout` for NeXus/HDF5 (kind, summary, dataset path, `transformations`), `files` (the files written) |
+| Files | `source_files` (every file a frame was read from: module files, master and data files), `input_sha256` (every input file by name with its SHA-256: the source, its module or data files and the frames summed with it), `source_layout` for NeXus/HDF5 (kind, summary, dataset path, `transformations`), `files` (the files written) |
 
 The numbers are those of the reduction; `geometry` is the geometry that was applied.
 
@@ -3667,7 +3680,7 @@ not the pixel positions; the positions follow again from the same frame and sett
 
 The release version is written in one place, `src/gimap/shared/version.py`; `SOFTWARE` is `GIMaP v` followed by that
 version (`GIMaP v0.2.0` for this release). These records name the release that wrote them, under the key
-`software_version` with the value `SOFTWARE` (the records that do not yet are listed in section 14.9):
+`software_version` with the value `SOFTWARE` (section 14.9 lists what still does not):
 
 | Record | Where the release is | Other key that names the program |
 |---|---|---|
@@ -3680,6 +3693,7 @@ version (`GIMaP v0.2.0` for this release). These records name the release that w
 | XRR record, SEM `sem_analysis.json`, 2D Prediction `<input>_*.json` and every line of `prediction_results_<time>.jsonl` | `software_version` | — |
 | 2D Prediction `prediction_curves_<time>.txt`, `prediction_parameters_<time>.txt` | the line `# Software: GIMaP v…` | — |
 | Format Converter: the record of every frame (`conversion_metadata.json`, the JSON per frame, the header of a converted CBF, EDF or HDF5 frame), `conversion_report.json` | `software_version` | — |
+| `tools/gimap_agent.py`: `report.json` of every frame, `summary.json`; its CSV tables (section 14.10) | `software_version`; the first `#` line `# GIMaP v… (command line)` | — |
 
 Records written before this release have no `software_version`; their other keys are unchanged. The curve tables
 of Analyze and Batch Export name only `GIMaP Analyze 1` in their `#` lines: the `_analysis.json` or batch record
@@ -3705,6 +3719,12 @@ SHA-256 digests identify files whose content matters:
 - SEM: the source image, a label image and a CSV source; every StarDist model file, before and after the run
   (a change refuses the result).
 - Geometry Calibration: the calibrant image (`image_sha256`).
+- Analyze: every input file of an export, by file name (`input_sha256` of `<stem>_analysis.json`: the source, its
+  module or data files and the frames summed with it).
+- Command line (`tools/gimap_agent.py`): the frame's files, the calibration file and a mask or background file
+  when one was used, each with its path, size and SHA-256 (`inputs` of `report.json`); the same digests of the
+  frame's files in the `#` lines of every CSV; and for a model fit the SHA-256 of the network's weights
+  (`gisaxs.fit.method.network.sha256`; section 14.10).
 - 2D Prediction: an optional `manifest.json` beside a `.keras` model may give a SHA-256, which is checked before
   the model is loaded. The digest is not written to the export record.
 
@@ -3739,10 +3759,46 @@ These gaps are known at the time of writing. A reader who needs the information 
 - The SEM record holds no summary statistics, because none are computed (section 13.2).
 - The uint16 modes of the Format Converter write pixels without data as 65535; outside HDF5, which marks them in
   its `pixel_mask`, they read back as valid values (section 13.3).
-- Seeds are not written into the records (section 14.8).
+- Seeds are not written into the records (section 14.8), except the seed of Predict parameters in the command
+  line's `report.json` (section 14.10).
 - Bad pixels, drawn masks and mirror-filled pixels are recorded as counts, not as positions (section 14.4).
 - `<stem>_analysis.json` gives its time of creation in UTC (`created`), as the XRR and SEM records do; the 2D
   Prediction record gives local time without a time zone.
+
+### 14.10 The record of a run without the window
+
+`tools/gimap_agent.py auto` (and `run_standard_pipeline` of its MCP server, when it is given a folder) writes one
+folder per frame and a summary of the batch. The record of a frame is `report.json`; it uses the keys of the
+window's records:
+
+| Group | Keys of `report.json` |
+|---|---|
+| Program and time | `software_version` (the release, section 14.5); `created` (UTC, ISO 8601, to the second; one time for every report of a batch and its `summary.json`) |
+| Options | `options`: every option of the command line under its own name, as it was given (`frames`: the arguments before patterns and folders were expanded; `calibration`, `mask`, `incidence_deg`, `technique`, `no_fit` …; `notes` and `notes_file`), and `notes_text`: the notes the analysis read. `null` when the files were written through MCP or `call` |
+| Inputs | `inputs.frame`: every file the frame was read from (module files, a master with its data files) and every frame summed with it; `inputs.calibration`: the `.poni`, calibration `.json` or image of a standard the geometry was taken from (`null` for a saved instrument profile); `inputs.mask` and `inputs.background`: the mask and the background file when one was used, else `null`. Each file is `{"file": name, "path": the path as given, "bytes": size, "sha256": SHA-256}` |
+| Mask | `mask`: `applied` (true or false), `file` (as above), `kind` (a mask image whose non-zero pixels are left out, or a GIMaP masks file with its number of drawn shapes), `masked_pixels`, and `bad_pixels_left_out` (section 14.4): the pixels found automatically are counted apart from the mask. `report.md` says the same under **Mask**, also when no mask was applied |
+| Analyze's record | `analysis_record`: the record of section 14.2 for the frame as it was reduced (geometry, corrections, error model, binning, markers, `input_sha256`), without `files` |
+| Results | the decisions with their reasons (`decisions`), the open questions (`needs_attention`), the steps, the peaks and rings (GIWAXS) or `gisaxs` (cuts, symmetry axis, halves, length scale, fit), `tables` and `folder` (the frame's folder, relative to the summary); in `summary.json` each frame also has `outputs` (the files written) |
+| Model fit | `gisaxs.fit.method`: `name` (`Predict parameters`), `network` (`name`, for example `flow_v1`, and `sha256`: the SHA-256 of the weights file, the value the network's record names and the loader checks) and `seed` (0, section 14.8). `gisaxs.fit.solutions` holds every solution with its model, parameters, probability, χ²/N and `intervals` (median, 68 % and 95 % limits); `curve`, `points` and `q_range_inv_angstrom` say what was fitted, `data` holds the fitted points |
+
+- `summary.json` is one object: `software_version`, `created`, `options`, `arguments` (one sentence per pattern or
+  folder among the arguments: how many files it stood for) and `frames`, the list of the frame reports without
+  `tables`, `analysis_record` and `options`. Before 0.2.0 the file was that list alone;
+  `tools/eval_giwaxs_agent.py --from` reads both.
+- Every CSV (`radial.csv`, `horizontal.csv` …, `fit_curve.csv`, `fit_solutions.csv`) begins with the same `#`
+  lines: `# GIMaP v… (command line); settings and decisions in report.json`, one
+  `# input: <file> sha256 <digest>` line per input file, `# frame:` and `# geometry:` (distance, direct beam,
+  wavelength, α_i, detector tilt, and α_c when q_z is refracted). `fit_solutions.csv` then says what the table is
+  and the units of its columns.
+- Each frame has its own folder, named by the frame. Frames of the same name in different folders get the nearest
+  folder name that tells them apart (`<name>_<folder>`), else a number. An output folder that already holds a
+  summary is refused; `--overwrite` first removes the frame folders the earlier `summary.json` lists, nothing else.
+- Two runs on the same input with the same options give the same files byte for byte, except `created` and the
+  durations (`seconds`) in the JSON records. For that reason an instrument profile the run made itself is recorded
+  without its time of update.
+
+Implementation: `src/gimap/app/headless_record.py`, `src/gimap/app/headless_inputs.py`,
+`src/gimap/shared/file_digest.py`, `src/gimap/features/assistant/application/gisaxs_export.py`.
 
 ## 15. What GIMaP does not model
 

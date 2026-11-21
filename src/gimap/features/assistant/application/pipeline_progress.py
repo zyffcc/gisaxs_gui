@@ -59,9 +59,12 @@ TOOL_TEXT = {
     "in_plane_spacing": "Length scale 2π/q* of the cut",
     "fit_horizontal_cut": "Predicting the particles of the horizontal cut",
 }
+FIT_TAKES = "some seconds to a few minutes"
+"""How long Predict parameters takes on one cut: it grows with the number of points and of compositions tried, and
+depends on the computer, so no single figure is true."""
 SLOW = {
     "calibrate_geometry": "can take up to a minute",
-    "fit_horizontal_cut": "takes about 25 s",
+    "fit_horizontal_cut": "takes some seconds to a few minutes",
     "find_calibration_files": "a few seconds",
     "set_frame": "a few seconds when many frames are summed",
 }

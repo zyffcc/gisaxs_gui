@@ -17,6 +17,8 @@ central interval, which is then extended to it. Flags:
 * ``bic``               the sampling of a solution did not converge (fewer than ``ESS_FAILED`` effective samples):
   the solutions and compositions are compared by BIC (χ² + k ln N, σ with the model error), not by their
   evidence, and the intervals are the least-squares errors (σ with the model error; scaled by χ²/N when above 1);
+* ``model_error``       the values are those of a least-squares fit with the model error in σ: the fit with the
+  counts' σ alone lay outside the posterior's 95 % interval (``_within_posterior``);
 * ``low_ess``           fewer than ``ESS_MIN`` effective samples: the intervals are taken with tempered weights
   (``laplace.Local.tempered``), wider, and are rough;
 * ``large:R_n``         q_min·R of population n at least ``LARGE``: its Guinier region lies at or below the curve's
@@ -299,6 +301,8 @@ def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra,
         if np.isfinite(width) and width > 0 and span / width > UNCONSTRAINED:
             flags.append(f"unconstrained:{name}")
     if refined is not None:
+        if refined.message == MODEL_ERROR_NOTE:
+            flags.append("model_error")
         flags += [f"at_bound:{_label(p)}" for p in refined.at_bounds]
         flags += [f"correlated:{_label(a)}~{_label(b)}" for a, b, _rho in refined.correlated]
     flags += window_flags(model, data.q)
@@ -422,8 +426,16 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
         local = None
         if centre is not None:
             tau = float(mode.median[tau_dim]) if np.isfinite(mode.median[tau_dim]) else 0.02
-            local = local_posterior(data, result.index, centre, tau, rng, local_samples, law, coupling,
+            # The posterior has the model error in σ: it is sampled around the least-squares optimum with that σ,
+            # which on a bright curve the model describes only in part lies away from the optimum of the counts' σ.
+            again = None if slow(result.index) else fit_engine.fit(refined.model, weighed, method="local")
+            around = None if again is None else model_values(again.model, result.index)
+            local = local_posterior(data, result.index, centre if around is None else around, tau, rng,
+                                    local_samples, law, coupling,
                                     rounds=SLOW_ROUNDS if slow(result.index) else LOCAL_ROUNDS)
+            if around is not None and local.ess >= ESS_FAILED:
+                refined = _within_posterior(result.index, refined, again, local, data, weighed, law, coupling,
+                                            grazing)
         entries.append((result, mode, refined.model, refined, local))
     # The solutions are compared by their evidence (importance sampling); when the sampling of one of them did not
     # converge (e.g. a curve the model does not describe, whose posterior with the model error lies away from the
@@ -457,6 +469,40 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
     for solution in out:
         solution.seconds = seconds
     return sorted(out, key=lambda s: -s.probability)
+
+
+def _outside(composition: int, model: fm.FitModel, limits) -> int:
+    """How many of the populations' values of the solution lie outside ``limits`` (2, DIMS)."""
+    values = model_values(model, composition)
+    if values is None:
+        return 0
+    return sum(not limits[0, dim] <= values[dim] <= limits[1, dim] for dim, _name in _names(composition)
+               if dim < E.GLOBAL.start)  # the populations: a tail or a resolution at its bound is no disagreement
+
+
+def _within_posterior(composition: int, refined, again, local, data: Cut, weighed, law, coupling, grazing):
+    """The least-squares solution the posterior of ``local`` is of: ``refined`` (the counts' σ), ``again`` (the same
+    fit continued with the model error in σ) or a fit with that σ from the posterior's medians.
+
+    On a curve the model describes within σ they agree, and ``refined`` is the solution. Where a value of
+    ``refined`` lies outside the posterior's central 95 % interval, the counts' optimum is set by the points the
+    model describes worst, or is a local one beside the posterior's mass: the candidate with the fewest values
+    outside is the solution (flag ``model_error`` when it is not ``refined``)."""
+    limits = local.quantiles([0.025, 0.975], ESS_MIN)
+    best, fewest = refined, _outside(composition, refined.model, limits)
+    if not fewest:
+        return refined
+    start = fit_model(local.quantiles([0.5], ESS_MIN)[0], composition, data, law, coupling, grazing)
+    for candidate in (again, fit_engine.fit(start, weighed, method="local")):
+        if model_values(candidate.model, composition) is None:
+            continue
+        outside = _outside(composition, candidate.model, limits)
+        if outside < fewest:
+            best, fewest = replace(candidate, message=MODEL_ERROR_NOTE), outside
+    return best
+
+
+MODEL_ERROR_NOTE = "model_error"
 
 
 def _reflection_extra(model: fm.FitModel) -> dict:

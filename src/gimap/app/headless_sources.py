@@ -275,10 +275,11 @@ def source_notes(reports: Sequence[dict]) -> list[str]:
     return lines
 
 
-def batch_summary(reports: Sequence[dict]) -> str:
-    """``summary.md`` of a batch: the tables of ``batch_markdown`` and what the files given stood for."""
-    notes = source_notes(reports)
-    return batch_markdown(list(reports)) + ("\n".join(notes) + "\n" if notes else "")
+def batch_summary(reports: Sequence[dict], *, notes: Sequence[str] = (), language: str = "en") -> str:
+    """``summary.md`` of a batch: the tables of ``batch_markdown`` and what the files given stood for.
+    ``notes``: one sentence per pattern or folder among the arguments (how many files it gave)."""
+    lines = [line for note in notes for line in (note, "")] + source_notes(reports)
+    return batch_markdown(list(reports), language=language) + ("\n".join(lines) + "\n" if lines else "")
 
 
 __all__ = [

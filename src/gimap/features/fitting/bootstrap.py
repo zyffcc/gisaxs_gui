@@ -85,6 +85,10 @@ def create_fitting_view_model(context: AppContext) -> FittingViewModel:
     )
 
 
+CURVE_FIT_SEED = 0
+"""The seed of every random draw of ``create_curve_fit``'s Predict parameters (Physics and Methods 14.8)."""
+
+
 def create_curve_fit():
     """Predict parameters as a plain function, for the analyses that fit one cut on their own (Run Automatic
     Analysis, Batch Export's particle model, Process with AI and the command line).
@@ -95,6 +99,8 @@ def create_curve_fit():
     one or two populations of spheres and upright cylinders, with or without a paracrystal (random cylinders cost far
     more time: give them as the composition). It returns the distinct solutions, most probable first, as the rows of
     the 1D Predict window (``posterior_job.curve_rows``: values, curves, ``probability``, ``at_bounds``, ``warnings``).
+    Every row also names what made it: ``network`` (``{"name", "sha256"}``: the proposal network and the SHA-256 of
+    its weights file, as the 1D Predict record writes them) and ``seed`` (``CURVE_FIT_SEED``).
     Units of the result: q, σ_Res in nm⁻¹; R, h, D in nm. ``distance_nm`` and ``evaluated`` are accepted for the
     callers of the former quick fit and not used (the network needs no start); ``report`` hears the steps.
 
@@ -147,8 +153,9 @@ def create_curve_fit():
         (report or (lambda *_args: None))(0, 1, "Predict parameters: the network's proposals, then least squares")
         chosen = (batch_compositions(list(components)) if components else
                   {"allowed": encoding.select(("sphere", "vertical_cylinder"), 2)})
-        solutions = refine.predict(network.load(), item["q"], item["observed"], item["sigma"], cancelled=cancelled,
-                                   **chosen)
+        proposals = network.load()
+        solutions = refine.predict(proposals, item["q"], item["observed"], item["sigma"], cancelled=cancelled,
+                                   seed=CURVE_FIT_SEED, **chosen)
         if not solutions:
             raise ValueError("Predict parameters found no solution for this curve")
         q = np.asarray(item["q"], float)
@@ -156,8 +163,10 @@ def create_curve_fit():
                           chosen_by="user_composition" if components else "network_choice")
         made_of = {"halves": cut.halves_used, "points": int(len(item["q"])), "averaged": cut.averaged,
                    "one_half": cut.single, "merged": cut.merged}
+        # As the 1D Predict record names it: the network and the SHA-256 of its weights (checked when it is loaded).
+        used = {"name": network.path().stem, "sha256": (getattr(proposals, "meta", None) or {}).get("sha256")}
         for row in rows:
-            row.update(prepared=cut.note, preparation=dict(made_of))
+            row.update(prepared=cut.note, preparation=dict(made_of), network=dict(used), seed=CURVE_FIT_SEED)
         return rows
 
     return curve_fit

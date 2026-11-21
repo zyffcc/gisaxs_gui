@@ -22,7 +22,7 @@ right.*
 ## What GIMaP does
 
 - **Analyze** (GISAXS and GIWAXS): CBF, TIFF, EDF and NeXus/HDF5 frames, one by one or as a series, to
-  curves in q (Å⁻¹, kinematic, flat detector; a `.poni` tilt is reported with its q error): GISAXS cuts, I(q), sectors, q boxes and I(χ). Geometry from a calibrant or a
+  curves in q (Å⁻¹, kinematic; a flat detector, tilted when the `.poni` gives rotations): GISAXS cuts, I(q), sectors, q boxes and I(χ). Geometry from a calibrant or a
   `.poni` file, kept as the instrument profile of the detector; masks, hot and dead pixels left out per
   frame, background subtraction and optional GIWAXS intensity corrections with propagated errors.
 - **Run Automatic Analysis** (no AI): for GIWAXS a peak table with fitted positions, widths and
@@ -56,8 +56,8 @@ right.*
   name their sources in `#` header lines.
 
 What GIMaP does not model: q is the kinematic (vacuum) value, without refraction or the DWBA; the detector
-is taken as flat and perpendicular to the beam (the tilt of a `.poni` file is folded into the beam centre
-and distance); intensities are counts per pixel, not absolute. The
+is flat (the rotations of a `.poni` file are part of the geometry, as pyFAI applies them; Geometry
+Calibration itself fits no tilt); intensities are counts per pixel, not absolute. The
 [Physics and Methods reference](docs/Physics_Manual.md) states every formula GIMaP uses and lists all of
 these limits in its last chapter.
 
@@ -125,6 +125,10 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python main.py
 ```
+
+To check an installation quickly, run `python tools/offscreen_smoke.py`: it starts the whole program without a
+window in a temporary user data folder, checks that its six pages are there and prints
+`Offscreen startup OK: pages=6 …` (some seconds).
 
 `requirements.txt` is the core: Analyze, Geometry Calibration, Fitting with Predict parameters, Series, Batch Export, the
 automatic analysis, XRR, Sputter and SEM. Add the optional parts you need, or all of them with
@@ -235,8 +239,9 @@ Physics and Methods, section 9.13, describes the method and its benchmarks.
 
 - **One curve**: Fitting ▸ Fit ▸ **Predict parameters**, then **Fit**; **Particles** chooses what it tries
   (*The particles in Model*, *Spheres and upright cylinders (1–2)* or *Any particles (1–3)*). The solutions go to
-  Results with their probability, the most probable one into Model; **Refine These Values** refines it. On one
-  core it takes about 5 s with the particles of Model and about 25 s choosing among one or two populations.
+  Results with their probability, the most probable one into Model; **Refine These Values** refines it. It takes
+  from some seconds (the particles of Model) to a few minutes: the time grows with the number of points and of
+  compositions tried, and depends on the computer.
 - **Many curves**: **Tools ▸ 1D Predict — Fit Many Curves…** (also in the **Fitting** menu): **Add
   curves…** or **Use current cut**, set the composition, the q unit and sides, the cut's q_z and the σ of files
   without one in **Parameters…**, then **Fit curve**. The window has this one method.
@@ -266,6 +271,18 @@ python tools/gimap_agent.py auto <frame> [<frame> ...] --notes "<your notes>" --
   forces one) and writes, for every frame, a `report.md` with each decision and its reason, the curves as
   CSV and the q map, plus a `summary.md` for the batch. Nothing is written next to the data: results go
   to `--out` (without it, to `assistant_runs/cli/` in the user data folder).
+- A frame argument may be a file, a pattern such as `*.tif` (expanded by GIMaP when the shell does not, as
+  in PowerShell) or a folder (every detector image in it, subfolders not searched). Each frame gets its own
+  folder under `--out`; frames of the same name in different folders get `<name>_<folder>`. An `--out`
+  folder that already holds the summary of an earlier run is refused unless `--overwrite` is given.
+- `--mask FILE` applies a mask as **Load Masks** in Analyze reads it (a GIMaP masks `.json` or a mask image
+  whose non-zero pixels are left out). Every report says which mask was applied, or that none was.
+- `report.json` and `summary.json` name the release, the UTC time, the options as given (the notes too) and
+  every input file (frame, calibration, mask) by path, size and SHA-256; a model fit also names its network,
+  the SHA-256 of the network's weights and the seed. Every CSV starts with `#` lines that name the release,
+  the inputs and the geometry. A run repeated on the same input gives the same files except for the time
+  and the durations.
+- A GISAXS model fit takes from some seconds to a few minutes per frame (`--no-fit` leaves it out).
 - A series is analysed in its final state: the last fifth of its frames summed, at most 10 (below ten
   frames the last frame alone); `--frame` and `--sum` choose other frames.
 - Exit codes: `0` everything analysed and nothing open; `2` at least one frame has a question under *Needs

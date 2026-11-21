@@ -7,6 +7,10 @@ The fit1d kit (*Predict parameters (fit1d)*) was removed from GIMaP in 0.2.0; it
 (`utils/gisaxs1d_gui_kit`). The scripts that compare against it keep the record of that comparison and need a copy of
 the kit: `fit1d_recovery.py` takes it from the environment variable `GISAXS1D_KIT_HOME`; `galaxi_fit1d.py` and the
 fit1d part of `cut_model_checks.py` look for it in `utils/gisaxs1d_gui_kit` (the latter skips that part without it).
+`cut_model_checks.py` writes the stored `cut_model_checks.json` by default; `--out PATH` writes elsewhere. When an
+optional comparison (V5, fit1d) was skipped because its old code is not in the checkout, the run refuses to
+overwrite the stored file, which would lose those rows: give `--out PATH`, or `--force` to overwrite it anyway. The
+summary names what was skipped (`skipped`).
 The held-out curves themselves (`recovery_cases.py`, `heldout_cases.py`) need neither the kit nor GIMaP.
 
 | Script | What it measures | Summary |
@@ -44,7 +48,7 @@ python tools/benchmarks/pyfai_comparison.py --json tools/benchmarks/pyfai_compar
 python tools/benchmarks/pygid_comparison.py --json tools/benchmarks/pygid_comparison.json --published FOLDER  # with pygid
 python tools/benchmarks/galaxi_fit.py
 python tools/benchmarks/galaxi_bornagain_model.py
-python tools/benchmarks/cut_model_checks.py
+python tools/benchmarks/cut_model_checks.py            # on a clean checkout: add --out <file> (or --force)
 python tools/benchmarks/cut_model_bornagain.py   # in an environment with BornAgain 24
 ```
 
