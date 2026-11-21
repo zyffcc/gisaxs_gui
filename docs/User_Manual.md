@@ -1034,7 +1034,7 @@ The page has five parts (the picture in section 3.1 shows them with a GIWAXS fra
 |---|---|
 | Command bar | **Open…** (its arrow: **Open Folder…**), ↶ ↷ (Undo / Redo), ‹ › (previous / next frame, when more than one frame is listed), the mode **Auto / GISAXS / GIWAXS**, αi, **Run Automatic Analysis** (with **Stop** while it runs), **Ask AI…**, **Export** ▾, **Batch Export…** (when more than one frame is listed), **Send to Fitting** ▾ |
 | Steps (left) | **Data**, **Geometry**, **Mask & corrections**, **Cuts**, **Results**, **Export**. Each shows its state (✓, !, × or …, as in 3.3) and one line of what it found; click a step for its controls. Rarely used options are folded away. |
-| Image (middle) | **Detector**, **q map** or **Cake** (GIWAXS), **Log**, the colour map, **Levels**, **Marks**, Zoom, **Fit view**, **Sources**, **Save** ▾; the values under the cursor below the image |
+| Image (middle) | **Detector**, **q map** or **Cake** (GIWAXS), **Log**, the colour map, **Levels**, **Marks**, Zoom, **Fit view**, **Sources**, **Save** ▾, **Panels** ▾; the values under the cursor below the image. It is the widest of the three panels; **Panels ▾** hides the steps or the curves and results, so the image has the whole room, and shows them again |
 | Tabs (right) | **Curves** (an upper and a lower plot), **Results** (what the automatic analysis or the AI found, with its evidence), **Series** (every frame as intensity against frame and q) |
 | Status line | What is happening, a progress bar and **Cancel**. A note at the bottom right says when a file was written, with **Open Folder**. |
 
@@ -1214,7 +1214,10 @@ so while this is on the error bars of every GIWAXS curve come from the scatter o
 from counting statistics (section 5.4). The record counts the filled pixels, and Fitting is told
 that the counting statistics no longer hold.
 
-**Corrections** (folded): a background frame (**Choose…**, with **Scale** and, for NeXus, **Frame**),
+**Corrections** (folded): a **dark frame** (**Choose…** next to *No dark frame*, with **Dark scale** and, for NeXus,
+**Dark frame**; off by default), subtracted from every frame before the background; with it the error bars come
+from the scatter of the pixels ([Physics and Methods 4.11](Physics_Manual.md#411-dark-frame)). Then a background
+frame (**Choose…**, with **Scale** and, for NeXus, **Frame**),
 a valid raw intensity range (**Min** / **Max**), and the **Gap guard** (default 3 px; 0–20 px,
 remembered), which also leaves out pixels this close to gaps and bad pixels. **Refraction in the film, αc**
 makes q_z the one inside a film of that critical angle (q∥ does not change; pixels below αc are left out of the q
@@ -1230,9 +1233,28 @@ settings. With photon counts the error bars follow the division (scaled Poisson)
 (`corrections.flat_field`) names the file with its SHA-256, the mean and the pixels left out
 ([Physics and Methods 4.10](Physics_Manual.md#410-flat-field-detector-response)).
 
-The order is fixed: invalid detector pixels → hot and dead pixels → masks → background → pixels the flat field
-leaves out → gap guard → intensity range (on the values as measured) → division by the flat field → mirror fill →
-intensity corrections. Curves, q map, cake and exports all use the corrected frame.
+The order is fixed: invalid detector pixels → hot and dead pixels → masks → dark frame → background → pixels the
+flat field leaves out → gap guard → intensity range (on the values as measured) → division by the flat field →
+mirror fill → intensity corrections → normalisation. Curves, q map, cake and exports all use the corrected frame.
+
+**Normalisation** (folded, every term off by default; GISAXS and GIWAXS). Its first line always says which header
+values the frame shown offers (*In the file header: exposure 20 s; Monitor = 5000*). After every other correction
+each frame is multiplied by **A / (t · M · T · d)**:
+
+| Term | Enter |
+|---|---|
+| **Exposure t** | *From the file header* (the exposure time the file states; of a sum of frames, their sum) or *Typed* (s) |
+| **Monitor M** | a monitor of the header (*Header: I0 = …*: EDF keywords, the `Flux` of a Pilatus CBF, a NeXus `NXmonitor`; of a sum of frames, their sum) or *Typed* |
+| **Transmission T** | 0 < T ≤ 1 |
+| **Thickness d** | mm |
+| **Absolute scale A** | a factor from a glassy-carbon or water measurement in the same set-up |
+
+The line under the fields says by what the frame was multiplied, each term with its source, and the unit of the
+intensity, which the plots, the CSV column and the fit input then carry (*counts/(pixel·s·monitor)*). The error
+bars are multiplied by the same factor; photon counts keep their Poisson errors. A frame whose header lacks the
+value chosen is not analysed, and the status line says why. The JSON record (`normalisation`) and every curve file
+(`# intensity: …` line) state the factor and each term with its source; the settings file keeps the choice
+([Physics and Methods 4.12](Physics_Manual.md#412-normalisation-exposure-monitor-transmission-thickness-absolute-scale)).
 
 **Intensity corrections (GIWAXS)** (folded, off by default). They divide each pixel by a geometric
 factor; q does not change:
@@ -1242,12 +1264,19 @@ factor; q does not change:
 | **Solid angle of each pixel (cos³2θ)** | — |
 | **Polarisation, factor** | f (default 0.99): 0.95–0.99 at a synchrotron (horizontal), 0 for an unpolarised laboratory source, −1 vertical |
 | **Absorption in the film** | **Thickness** (nm), **Attenuation length** 1/µ (µm, from tables such as CXRO or NIST) |
+| **Lorentz factor (fibre texture)** | — (L = 1/(cos αi cos αf \|sin 2θf\|), as in GIXSGUI) |
 
 Peak positions do not change; intensities compared across χ or q do — orientation, pole figures,
 crystallinity ratios. The film absorption leaves out refraction, so it holds well above the critical
 angle; with it on, pixels at or below the sample horizon are left out. The factors, and how the error
 bars follow them, are in [Physics and Methods, chapter 5](Physics_Manual.md#5-intensity-corrections-for-giwaxs);
 the JSON record (`intensity_corrections`) gives the formulas and parameters.
+
+The **Lorentz factor** is for orientation and pole analysis of crystallites oriented at random about the surface
+normal: after it, I(χ) counts the crystallites per degree of χ, and the Hermans factor of Run Automatic Analysis is
+then not weighted by sin χ a second time. It is meant for crystalline peaks only: it also changes diffuse
+scattering, the amorphous halo and the I(q) of a whole ring, and pixels on the specular rod are left out
+([Physics and Methods 5.6](Physics_Manual.md#56-lorentz-factor-of-a-fibre-texture)).
 
 ### 5.3 Cuts
 
@@ -1413,6 +1442,12 @@ for finer moves. **Levels ▾** has:
 Limits you drag or type stay — for other frames, re-analysis and the live Series map — until you
 choose Auto; the button then reads **Levels (fixed)**. They mean the same in log and linear
 display. The detector, q map, cake and Series map each keep their own limits.
+
+In **Log** display, pixels at or below 0 — the noise of a dark- or background-subtracted frame — are drawn in the
+lowest colour of the map (at the 0.1 % percentile of the positive values), not left without colour, and the
+automatic limits come from the positive values only; masked pixels stay without colour. In linear display the
+limits are the percentiles of every value, and the bar is drawn around them, so a frame whose brightest pixels are
+a thousand times its typical ones keeps a readable bar. Only the display changes, never the data.
 
 **Marks.** Every image has **Marks ▾**, every curve plot an eye button: one switch per kind of
 mark — beam centre, sample horizon, cut bands, masks and cut regions, the pixel overlay, marked hot
@@ -1791,10 +1826,14 @@ listed and ignored.
 
 ### 5.8 Export and Send to Fitting
 
-**Export** (command bar, `Ctrl+E`; **Export Curves…** in the Export step and in the **Analyze** menu)
-writes, next to the data in `gimap_analysis/`:
+**Export** (command bar, `Ctrl+E`, and the **Analyze** menu) writes, next to the data in `gimap_analysis/`;
+**Export Curves…** in the Export step asks for the folder first — it starts in the folder chosen last (remembered
+between sessions), else next to the data — and writes the same files there:
 
-- one CSV per curve (`x, I, sigma, pixels`), named `<stem>_<curve>.csv`;
+- one CSV per curve (`x, I, sigma, pixels`), named `<stem>_<curve>.csv`; a cut region's curves carry the region's
+  name (`<stem>_ring_q1_0.csv` and `<stem>_ring_q1_0_chi.csv` for a region *ring q1.0*), with its key added when
+  two regions share a name or a name is that of another curve (`<stem>_ring_q1_0_region3.csv`); Batch Export
+  keeps the keys (`region1`), as its tables do;
 - `<stem>_analysis.json`: the source, geometry, where the beam centre came from, corrections, the
   number of bad pixels left out, the cuts;
 - `<stem>_fit_input.dat`, the curve for Fitting;
@@ -3729,6 +3768,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **The GIWAXS and GISAXS q are kinematic: no refraction correction.** Near or below the film's critical angle, the q_z of a peak can be off by up to about k·sin αi, and in GISAXS that of the Yoneda band most, by an amount of that order (the report's *Decisions* give the number for your frame); the ± and σ of the report contain neither that nor the geometry's uncertainty ([Physics and Methods, sections 7.9 and 8.6](Physics_Manual.md#79-what-the-report-states)). | Measure above the critical angle for positions, or correct q_z yourself for the material; quote the systematic error separately from the statistical ±. |
 | **Hermans f and the texture sentence are not corrected for the exit angle.** f weighs the bins next to the sample horizon most, where absorption in the film or a shadow can lower the intensity; on the public P08 frame leaving out the bins within 5° of the sample plane moves f − f_iso by 17–27 σ_f ([Physics and Methods, section 7.7](Physics_Manual.md#77-ring-orientation-and-the-hermans-orientation-factor)). | Read the ring's notes and the *ring orientation* line of *Decisions*; when they name the ring, check I(χ) near χ = ±90° before reading f as texture. |
 | **NeXus/HDF5 files not written by the Lambda server are now read as stored** (earlier versions transposed and flipped them). A geometry or mask made on such a file with an earlier version no longer fits it (section 5.1). | Check the beam centre and masks of such data; calibrate again if needed. |
+| **The normalisation divides the frame after the background and dark frame are subtracted** in the frame's own units, with the scales you type: the header exposure or monitor of the background is not used. Transmission and thickness are typed, not measured; the absolute factor is yours (section 5.2). | Set the background's **Scale** (and the **Dark scale**) to the ratio of exposure times or monitors of the frame and the background. |
 | **XRR intensities are raw**: no monitor normalisation, footprint, background, resolution correction or θ offset. Analyze masks and bad-pixel search are not applied (section 9.2). | Apply the required corrections to the exported curve and check the ROI and valid-pixel counts. |
 | **Format Converter does not read EDF.** | Use **Analyze ▸ Batch Export ▸ Converted detector frames**. |
 | **The uint16 modes of the Format Converter mark pixels without data only in HDF5**: in a TIFF or CBF such a pixel holds 65535 and reads back as a valid value (section 9.1). | Keep the stored data type (the default), or write HDF5, when the gaps and bad pixels matter. |

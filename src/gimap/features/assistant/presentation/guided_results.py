@@ -240,6 +240,7 @@ class GuidedResultsPanel(QWidget):
         self._dispose()
         clear_layout(self.layout_)
         self.peak_table = self.peak_details = self.peak_map = self.q_map = self.gisaxs = None
+        self._incidence_label = None
         self._outcome(report)
         if report.get("procedure") == "gisaxs":
             if report.get("ok"):
@@ -433,9 +434,11 @@ class GuidedResultsPanel(QWidget):
                 ("Distance", f"{float(geometry.get('distance_mm')):.6g} mm"),  # the record keeps every digit
                 ("Beam centre", f"({centre[0]}, {centre[1]}) px"),
                 ("Wavelength", f"{float(geometry.get('wavelength_A') or 0):.6g} Å"),
-                ("Incidence angle αi", f"{float(geometry.get('incidence_deg') or 0):.6g}°"),
             ):
                 form.addRow(tr(name), label(str(value), self))
+            self._incidence_label = label(self._incidence_text(report), self)
+            self._incidence_label.setObjectName("guidedIncidence")
+            form.addRow(tr("Incidence angle αi"), self._incidence_label)
             self.layout_.addLayout(form)
             searched = searched_note(report)
             if searched:  # its quality says it fits its own standard, not that it belongs to this measurement
@@ -453,6 +456,30 @@ class GuidedResultsPanel(QWidget):
                 line = label(text, self, role="muted")
                 line.setToolTip(tip)
                 self.layout_.addWidget(line)
+
+    def _incidence_text(self, report: dict) -> str:
+        """αi as Analyze uses it now for the frame shown (the command bar's), and the run's when it was another."""
+        used = float((report.get("geometry") or {}).get("incidence_deg") or 0.0)
+        now = None
+        try:
+            status = self._automation().status()
+        except Exception:  # noqa: BLE001 - no page (a report shown alone): the run's value
+            status = {}
+        shown, ran = status.get("path"), report.get("frame")
+        if shown and (not ran or Path(str(shown)).resolve() == Path(str(ran)).resolve()):
+            now = (status.get("geometry") or {}).get("incidence_deg")
+        if now is None or abs(float(now) - used) < 1e-9:
+            return f"{used:.6g}°"
+        return trf("{now}° (the run used {used}°)", now=f"{float(now):.6g}", used=f"{used:.6g}")
+
+    def refresh_incidence(self) -> None:
+        """Analyze shows its frame again (αi may have changed): the geometry block says the αi in use."""
+        incidence = getattr(self, "_incidence_label", None)
+        if self.report is not None and incidence is not None:
+            try:
+                incidence.setText(self._incidence_text(self.report))
+            except RuntimeError:  # the block was rebuilt
+                self._incidence_label = None
 
     def _series(self, report: dict) -> None:
         self.layout_.addWidget(_heading("Series", self))

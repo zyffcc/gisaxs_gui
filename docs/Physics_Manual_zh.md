@@ -51,12 +51,15 @@
   - [4.8 镜像补齐（GIWAXS）](#48-镜像补齐giwaxs)
   - [4.9 步骤的顺序](#49-步骤的顺序)
   - [4.10 平场（探测器响应）](#410-平场探测器响应)
+  - [4.11 暗场](#411-暗场)
+  - [4.12 归一化：曝光时间、监视器、透射率、厚度、绝对强度](#412-归一化曝光时间监视器透射率厚度绝对强度)
 - [5. GIWAXS 的强度校正](#5-giwaxs-的强度校正)
   - [5.1 定义](#51-定义)
   - [5.2 立体角](#52-立体角)
   - [5.3 偏振](#53-偏振)
   - [5.4 薄膜中的吸收](#54-薄膜中的吸收)
   - [5.5 校正后光子计数的不确定度](#55-校正后光子计数的不确定度)
+  - [5.6 纤维织构的 Lorentz 因子](#56-纤维织构的-lorentz-因子)
 - [6. 约化为曲线及其不确定度](#6-约化为曲线及其不确定度)
   - [6.1 原则](#61-原则)
   - [6.2 固定边界的分箱](#62-固定边界的分箱)
@@ -736,7 +739,7 @@ dead:  I ≤ 0    and    每个有效邻居 ≥ 20 counts         (仅整数帧)
 I′ = I − s · B                                                          (4.6)
 ```
 
-`B` 是同一探测器、同一形状的一帧（对 NeXus 是文件中选定的一帧），`s` 是一个比例因子，例如曝光时间之比。只有两帧都有效的像素才有效；背景的有效性按 (4.1) 用它自己的存储类型判定。负的结果仍然有效。扣除后的帧不再是光子计数，因此它的误差来自像素离散度（6.4 节）。
+`B` 是同一探测器、同一形状的一帧（对 NeXus 是文件中选定的一帧），`s` 是一个比例因子，例如曝光时间之比。只有两帧都有效的像素才有效；背景的有效性按 (4.1) 用它自己的存储类型判定。负的结果仍然有效。扣除后的帧不再是光子计数，因此它的误差来自像素离散度（6.4 节）。暗场有自己的输入，在背景之前扣除（4.11 节）。
 
 实现：`src/gimap/features/analyze/domain/corrections.py`
 
@@ -776,13 +779,14 @@ I_fill(i, j) = (1 − w) I(i, j_0) + w I(i, j_0 + 1)                            
 1. 载入帧或帧之和；有效性 (4.1)。
 2. 在原始帧中找坏像素（4.4 节）。
 3. 绘制的掩膜和掩膜文件（4.5 节）。
-4. 背景扣除（4.6 节）。
+4. 暗场（4.11 节），然后背景扣除（4.6 节）。
 5. 平场的第一部分：排除平场不保留的像素（4.10 节）。
 6. 缝隙保护（4.7 节）。
 7. 有效数值范围（4.5 节），作用于除以平场之前的值。
 8. 平场的第二部分：除法 `I / F_ff`（4.10 节）。
 9. 镜像补齐，仅 GIWAXS（4.8 节）；它用已经除过平场的值来补齐。
-10. 强度校正，仅 GIWAXS（第 5 章）。
+10. 强度校正，仅 GIWAXS（第 5 章），其中包括 Lorentz 因子（5.6 节）。
+11. 归一化（4.12 节）：每帧一个常数，最后乘。
 
 第 4 到 9 步只有在其中至少一步启用时才运行。原始帧被保留：改动任何设置都从原始帧重新计算，所以校正永远不会叠加。曲线、q 图、展开图和每一种导出都使用这个结果。
 
@@ -821,6 +825,61 @@ I′_p = I_p / F_ff,p      （不保留的像素：从每一帧中排除）     
 
 实现：`src/gimap/features/analyze/domain/flat_field.py`, `src/gimap/features/analyze/application/flat_field.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`
 
+### 4.11 暗场
+
+暗场 `D`（无光束时探测器的读数：积分型探测器、CCD 或平板探测器的暗电流和偏置）最先扣除，有它自己的比例 `s_D`，
+背景 `B`（4.6 节）在它之后：
+
+```text
+I′ = I − s_D · D − s · B                                                        (4.14)
+```
+
+- `D` 是同一探测器、同一形状的一帧（掩膜与校正 ▸ 校正 ▸ 暗场；对 NeXus 是文件中选定的一帧），默认关闭。`s_D` 通常是
+  曝光时间之比。只有帧和暗场都有效的像素才有效（`D` 的有效性按 (4.1) 判定）；负的结果仍然有效。
+- **不确定度。** 读出噪声和偏置不是计数：有暗场时误差模型是像素离散度（6.4 节 (b)），与背景相同，拟合输入记录
+  `counting_model_valid: false`。
+- **记录。** `<stem>_analysis.json` 的 `corrections.dark_path`、`dark_frame` 和 `dark_scale`，以及每个曲线文件中的头行
+  `dark frame: <文件> (index i) x s_D, subtracted before the background`。设置文件保存它；暗场文件已不存在的设置会说明并略过它。
+
+实现：`src/gimap/features/analyze/domain/corrections.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`
+
+### 4.12 归一化：曝光时间、监视器、透射率、厚度、绝对强度
+
+在其他所有校正之后（4.9 节），每个像素乘以该帧的一个常数 `c`（掩膜与校正 ▸ 归一化；各项默认关闭）：
+
+```text
+I_norm,p = c · I′_p,      c = A / (t · M · T · d)                              (4.15)
+```
+
+| 项 | 含义 | 来源 |
+| --- | --- | --- |
+| `t` | 曝光时间（s） | 文件头（读取器的 `exposure_time_s`：CBF 的 `Exposure_time`，EDF 的 `ExposureTime` / `count_time`，NeXus 的 `count_time` / `frame_time`）或手动输入 |
+| `M` | 监视器读数（电离室、二极管、Pilatus CBF 的 `Flux`、储存环流强） | 按名称选择的文件头值（EDF 关键字如 `Monitor`、`I0`、`Intensity0`；NeXus 中该帧的 `NXmonitor` `data` / `integral` 或 `control/integral`）或手动输入 |
+| `T` | 样品透射率，`0 < T ≤ 1` | 手动输入 |
+| `d` | 厚度（mm） | 手动输入 |
+| `A` | 绝对强度因子，例如由同一装置下测量的玻璃碳或水得到 | 手动输入 |
+
+- 关闭的项等于 1。该区域列出当前帧文件头中所有可用的值（曝光时间和监视器）；文件头中没有所选值的帧不做分析，并说明原因
+  （不做猜测）。对帧之和（4.3 节），`t` 和 `M` 是参与求和的各帧之和。
+- **改变什么。** 只改变标度：q、每条曲线的形状、切线和峰位都不变。强度单位变为 `counts/(pixel·s·monitor·mm) × A`（按启用的项），
+  它是每条曲线的纵轴标签，也是拟合输入的 `intensity_unit`。
+- **不确定度。** `c` 是精确的（这里各项不带误差），因此每个点 `σ_norm = c · σ`。对光子计数，Poisson 方差经过因子传递，
+  与 (5.9) 相同，只是 `1/F_p` 换成 `c/F_p`：
+
+```text
+Var(I_norm,p) = c² · Var(I′_p) = c · I_norm,p / F_p                             (4.16)
+σ_k = √max( Σ_{p∈k} c · I_norm,p / F_p ,  (c f̄_k)² ) / n_k                      (4.17)
+```
+
+  即 (5.10) 的 `c` 倍；误差模型随之为按比例缩放的 Poisson。σ 来自像素离散度的帧保留该模型；`c · I` 的离散度是 `I` 的 `c` 倍。
+- **记录。** `<stem>_analysis.json` 的 `normalisation` 给出因子 `c`、单位和每一项的值与来源（`typed`、`header (exposure_time_s)`、
+  `header (<名称>)`）；`header_values` 列出文件头提供的值；`corrections.normalisation` 保存设置。每个曲线文件有一行头
+  `intensity: <单位>; normalised I = A*I/(t*M*T*d), factor c (…各项…); sigma scaled by the same factor`。
+- **局限。** 背景和暗场在之前以帧的单位按各自的比例扣除：曝光时间不同的背景需要把 `s` 设为两者之比。`T` 和 `d` 是手动输入的，
+  不是测得的（不从束流挡块二极管读取透射率）；`A` 是用户自己的标定，这里不计算。
+
+实现：`src/gimap/features/analyze/domain/normalisation.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`, `src/gimap/features/analyze/application/export_record.py`
+
 ## 5. GIWAXS 的强度校正
 
 ### 5.1 定义
@@ -828,12 +887,12 @@ I′_p = I_p / F_ff,p      （不保留的像素：从每一帧中排除）     
 强度校正（掩膜步骤，折叠区；仅 GIWAXS）默认关闭。至少开启一项时，每个像素都除以一个因子：
 
 ```text
-I′_p = I_p / F_p,      F_p = F_Ω · F_P · F_A                                     (5.1)
+I′_p = I_p / F_p,      F_p = F_Ω · F_P · F_A · F_L                               (5.1)
 ```
 
 - 每个因子都是可选的；关闭的因子等于 1。
 - q 从不改变。因此峰位不变；在不同 χ 或不同 q 之间比较的强度会变。
-- `F_Ω` 和 `F_P` 在直射束处为 1，`F_A` 在 `α_f = α_i` 处为 1，所以校正后的值仍接近每像素计数。
+- `F_Ω` 和 `F_P` 在直射束处为 1，`F_A` 在 `α_f = α_i` 处为 1，所以校正后的值仍接近每像素计数。Lorentz 因子 `F_L`（5.6 节）不做归一化。
 - F 非有限或非正的像素变为无效。
 - 有平场时（4.10 节），`F_p = F_Ω · F_P · F_A · F_ff`：平场在顺序中较早除（4.9 节），这里的因子最后除，计数的方差 (5.9) 用整个乘积。
 - 它们在其他所有准备步骤之后应用（4.9 节），并且需要几何。X、Y 和 L_p 即 (1.3)、(1.4) 和 (2.2) 中的量，`cos 2θ = L/L_p`（(2.12)）。对倾斜的探测器，像素的矢量 t 是 (3.15)，它的长度 |t| 代替 L_p，cos 2θ 是 t 沿光束的分量除以 |t|。
@@ -903,6 +962,37 @@ Var(I′_p) = Var(I_p) / F_p² = I_p / F_p² = I′_p / F_p                     
 其中求和遍历分箱 k 的 n_k 个像素，`I_k = Σ I′_p / n_k`。使用平场时 `F_p` 包含平场（4.10 节）；只有平场时（GISAXS 也一样）`F_p = F_ff`，GISAXS 的探测器线 l 用 l 代替 k 套用 (5.10)。`f̄_k²` 是按该分箱平均因子计的一个计数的方差：与 (6.5) 一样，全为零计数的分箱得到一个计数的误差，而不是 `σ = 0`；所有 F = 1 时，(5.10) 就是 (6.5)。帧不是光子计数时，校正后的值取 6.4 节的像素离散度 σ。这样校正过的值不再是计数：只要开启任一项 GIWAXS 校正或平场，拟合输入就记录 `counting_model_valid: false`。JSON 记录 `<stem>_analysis.json` 中的 `intensity_corrections` 写有公式和参数。因子按每块 512 行计算，只要形状、几何和选项不变就保留。
 
 实现：`src/gimap/features/analyze/domain/intensity.py`, `src/gimap/features/analyze/domain/binning.py`, `src/gimap/features/analyze/application/export_record.py`
+
+### 5.6 纤维织构的 Lorentz 因子
+
+默认关闭（强度校正 ▸ Lorentz 因子（纤维织构））；仅 GIWAXS。晶粒绕表面法线随机取向（纤维织构，或样品绕法线旋转）时，晶面法线
+与表面法线成极角 χ 的倒易点位于绕 q_z 的一个圆上。把它看作倒易点绕法线的转动，它穿过 Ewald 球的速率由其速度沿出射线的分量决定；
+GIXSGUI（Jiang, 2015，式 5 和图 3）给出 Lorentz 因子
+
+```text
+F_L = L = 1 / (S · |sin 2θ_f|),      S = cos α_i · cos α_f                      (5.11)
+```
+
+其中 `2θ_f` 是像素的面内出射角，`α_f` 是出射角 (2.8)；`cos α_f · sin 2θ_f` 是单位出射矢量垂直于光束的水平分量，对每个像素精确计算
+（倾斜的探测器也一样）。于是 `I / L` 正比于 `N(χ)`（晶面法线落在 χ 与 χ + dχ 之间的晶粒数）乘以结构因子。在光束附近
+
+```text
+1 / L = cos α_i cos α_f |sin 2θ_f| ≈ (q / k) · sin χ                            (5.12)
+```
+
+所以这一校正就是 Hermans 因子 (7.25) 中 sin χ 权重的精确形式。GIDVis（Schrode et al., 2019）在几何校正中也做 Lorentz 校正，
+但没有写出其形式；GIMaP 按 GIXSGUI 实现。
+
+- `L` 不做归一化（`1/L ≤ 1`）。它在镜面反射棒上（`2θ_f = 0`）为无穷大，这些像素被排除（(5.1)：F 非有限）。
+- **不确定度。** 与其他因子相同：(5.9) 和 (5.10)，`F_p` 包含 `F_L`。
+- **Hermans 因子。** 除以 L 之后的 I(χ) 是每度 χ 内的晶粒数：自动分析的取向分析计算 ⟨cos²χ⟩ 时不再乘第二个 sin χ 权重（7.7 节）。
+  它永远不会被重复计入。
+- **局限。** 如 GIXSGUI 所提醒，Lorentz 因子只属于周期性（晶体）散射的强度。GIMaP 为方便起见对整幅图应用它：它也改变漫散射、
+  非晶散射环和镜面反射棒，整环平均的 I(q) 也会变（它加重环的面内部分）。镜面反射棒上（`00l`）的反射强度需要摇摆扫描的因子
+  `1/sin 2θ`（Jiang, 2015 中指出），而不是这里的因子。
+- **记录。** `intensity_corrections.lorentz` 给出公式 (5.11) 以及取向分析如何对待它。
+
+实现：`src/gimap/features/analyze/domain/intensity.py`, `src/gimap/features/assistant/domain/orientation.py`
 
 ## 6. 约化为曲线及其不确定度
 
@@ -1366,6 +1456,11 @@ f = ( 3 ⟨cos²χ⟩ − 1 ) / 2                                               
 ```
 
 求和遍历测量的分箱。f = 1 表示全部沿法线取向，f = 0 表示随机，f = −½ 表示全部在平面内（Hermans & Platzek, 1939；GIWAXS 中的应用见 Baker et al., 2010）。代码和当前的报告写作 "Herman's f"；标准名称是 Hermans 取向函数（Hermans orientation function）。
+
+**经过 Lorentz 校正的 I(χ)。** (7.25) 中的 sin χ 就是光束附近纤维织构的 Lorentz 因子 (5.12)。帧已经除以 Lorentz 因子时（5.6 节），
+折叠后的 `Ī_k` 已经是每度的晶粒数，因子按 `⟨cos²χ⟩ = Σ_k max(Ī_k, 0) cos²χ_k / Σ_k max(Ī_k, 0)` 计算，不再乘第二个 sin χ。
+径向背景 `b` 则按经过因子后的各向同性环分配：在该廓线的各分箱上 `b_k = b · sin χ_k / ⟨sin χ⟩`。各向同性参考 f_iso 和加权覆盖率
+(7.24) 不变：经过因子后各向同性的环 `∝ sin χ`。
 
 **各向同性参照。** 因为未测量的分箱会使 f 产生偏差，报告给出一个各向同性环在同样的测量分箱上会有的值：
 
@@ -3335,6 +3430,7 @@ SHA-256 摘要标识内容重要的文件：
 - Renaud, G., Lazzari, R. & Leroy, F. (2009). *Surf. Sci. Rep.* **64**, 255–380. https://doi.org/10.1016/j.surfrep.2009.07.002
 - Robertson, T., Wright, F. T. & Dykstra, R. L. (1988). *Order Restricted Statistical Inference*. Chichester: Wiley.
 - Ryan, C. G., Clayton, E., Griffin, W. L., Sie, S. H. & Cousens, D. R. (1988). *Nucl. Instrum. Methods Phys. Res. B*, **34**, 396–402. https://doi.org/10.1016/0168-583X(88)90063-8
+- Schrode, B., Pachmajer, S., Dohr, M., Röthel, C., Domke, J., Fritz, T., Resel, R. & Werzer, O. (2019). *J. Appl. Cryst.* **52**, 683–689. https://doi.org/10.1107/S1600576719004485
 - Scherrer, P. (1918). *Nachr. Ges. Wiss. Göttingen Math.-Phys. Kl.* **1918**, 98–100.
 - Schmidt, U., Weigert, M., Broaddus, C. & Myers, G. (2018). *Medical Image Computing and Computer Assisted Intervention – MICCAI 2018*, Lecture Notes in Computer Science, Vol. 11071, pp. 265–273. Cham: Springer. https://doi.org/10.1007/978-3-030-00934-2_30
 - Schwartzkopf, M. et al. (2015). *ACS Appl. Mater. Interfaces*, **7**, 13547. https://doi.org/10.1021/acsami.5b02901

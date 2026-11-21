@@ -157,6 +157,9 @@ class AnalyzeAutomation:
                 "normalisation_mean": analysis.flat_field.mean},
             "valid_range": [corrections.minimum, corrections.maximum],
             "gap_guard_px": corrections.gap_guard_px,
+            "dark": Path(corrections.dark_path).name if corrections.dark_path else None,
+            "lorentz": bool(corrections.lorentz),  # I(χ) divided by the fibre-texture Lorentz factor: no 2nd sin χ
+            "normalisation": None if analysis.normalisation is None else analysis.normalisation.to_record(),
         }
         reduction = analysis.reduction
         if reduction is not None and analysis.kind == "giwaxs":

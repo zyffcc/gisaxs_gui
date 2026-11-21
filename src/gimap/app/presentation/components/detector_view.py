@@ -26,7 +26,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from .detector_display import _colormap, _image_item_class, display_array, display_levels
+from .detector_display import _colormap, _image_item_class, display_array, display_image, display_levels
 from .levels import LevelControl, level_bar
 from .marks import DETECTOR_MARKS, MarkLayers
 from .box_zoom import zoom_button
@@ -297,8 +297,8 @@ class DetectorView(QWidget):
     def _redraw(self, *, keep_view: bool) -> None:
         if self._data is None:
             return
-        shown = display_array(self._data, self._valid, self.log_check.isChecked())
-        levels = self.levels.levels_for(shown, self.log_check.isChecked())
+        shown, self._level_sample = display_image(self._data, self._valid, self.log_check.isChecked())
+        levels = self.levels.levels_for(shown, self.log_check.isChecked(), self._level_sample)
         self.image_item.setImage(shown, autoLevels=False, levels=levels or (0.0, 1.0))
         if self._rect is not None:
             self.image_item.setRect(QRectF(*self._rect))
@@ -312,11 +312,12 @@ class DetectorView(QWidget):
 
     def auto_levels(self) -> None:
         """The rule's limits for the image shown now, kept for the next frames (napari's “once”)."""
-        self.levels.auto_once(self.image_item.image, self.log_check.isChecked())
+        self.levels.auto_once(self.image_item.image, self.log_check.isChecked(), getattr(self, "_level_sample", None))
 
     def _apply_levels(self) -> None:
         image = self.image_item.image
-        levels = None if image is None else self.levels.levels_for(image, self.log_check.isChecked())
+        levels = None if image is None else self.levels.levels_for(
+            image, self.log_check.isChecked(), getattr(self, "_level_sample", None))
         if levels is not None:
             self.image_item.setLevels(levels)
             self.color_bar.set_levels(levels)
@@ -568,4 +569,4 @@ class DetectorView(QWidget):
             self.positionClicked.emit(float(point.x()), float(point.y()))
 
 
-__all__ = ["COLORMAPS", "DetectorView", "display_array", "display_levels"]
+__all__ = ["COLORMAPS", "DetectorView", "display_array", "display_image", "display_levels"]

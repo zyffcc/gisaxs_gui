@@ -47,7 +47,7 @@ VIEW_ITEMS = ("Detector", "q map", "Cake")
 VIEW_DETECTOR, VIEW_Q_MAP, VIEW_CAKE = range(3)
 RIGHT_TABS = (("Curves", "curves"), ("Results", "results"), ("Series", "series"))
 INCIDENCE_FROM_PROFILE = -0.001
-SPLITTER_SIZES = [300, 610, 610]
+SPLITTER_SIZES = [300, 720, 520]  # the image widest (``bindings/workspace.EvenSplit`` keeps it so)
 """Steps | image | curves and results before the page has its width."""
 INCIDENCE_TIP = (
     "Grazing angle αi of this measurement. At the minimum (“from profile”) the "
@@ -389,6 +389,20 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         self.canvas_save_data_action.setToolTip("The q map (q∥–qz) or the cake (χ–q) as a table with its axes")
         self.canvas_save_button.setMenu(canvas_menu)
         self.detector_view.toolbar_layout.addWidget(self.canvas_save_button)
+        self.panels_button = QToolButton(center)
+        self.panels_button.setObjectName("analyzePanelsButton")
+        self.panels_button.setText("Panels")
+        self.panels_button.setToolTip("Hide the steps or the curves and results, so the image has the room; "
+                                      "show them again here")
+        self.panels_button.setPopupMode(QToolButton.InstantPopup)
+        panels_menu = QMenu(self.panels_button)
+        self.show_steps_action = panels_menu.addAction("Steps")
+        self.show_curves_action = panels_menu.addAction("Curves and Results")
+        for action in (self.show_steps_action, self.show_curves_action):
+            action.setCheckable(True)
+            action.setChecked(True)
+        self.panels_button.setMenu(panels_menu)
+        self.detector_view.toolbar_layout.addWidget(self.panels_button)
         layout.addWidget(self.detector_view, 1)
         return center
 

@@ -32,8 +32,10 @@ from ..domain import (
     giwaxs_maps,
     gisaxs_maps,
     gisaxs_q_map,
+    header_values,
     reduce_gisaxs,
     reduce_giwaxs,
+    summed_header_values,
     valid_pixels,
 )
 from .models import AUTO, AnalysisRequest, FrameAnalysis
@@ -85,6 +87,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
             metadata=dict(image.metadata or {}),
             summed_frames=request.summed_frames,
         )
+        headers = [header_values(image.metadata)]  # exposure and monitors: a sum is divided by their sums
         if request.summed_frames:
             total = FrameSum()  # one frame in memory at a time: Sum 40 of a 15 Mpx detector held 3 GB as a list
             total.add(data, valid)
@@ -92,8 +95,10 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 extra = self.frames.load(path, index)
                 extra_data = np.asarray(extra.data, dtype=np.float32)
                 total.add(extra_data, valid_pixels(extra_data, extra.mask, negatives_valid=floating(extra.metadata)))
+                headers.append(header_values(extra.metadata))
                 del extra, extra_data
             data, valid = total.result()
+        common["header_values"] = headers[0] if len(headers) == 1 else summed_header_values(headers)
         return data, valid, common
 
     def _giwaxs_maps(self, shape: tuple[int, int], geometry: DetectorGeometry) -> GiwaxsMaps:
@@ -171,6 +176,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 detector_name=loaded.detector_name,
                 metadata=loaded.metadata,
                 summed_frames=loaded.summed_frames,
+                header_values=loaded.header_values,
             )
         else:
             raw_data, raw_valid, common = self._load_frames(request)
@@ -204,6 +210,8 @@ class AnalyzeFrame(FramePreprocessingMixin):
         self._flat_scale(common, request.corrections, counting)  # counts divided by a flat field: their variance too
         if kind == GIWAXS and geometry is not None and has_intensity_corrections(request.corrections):
             self._correct_intensity(common, raw_data, raw_valid, geometry, request.corrections, counting)
+        if not request.corrections.normalisation.is_identity:  # one constant of the frame, last
+            self._normalise(common, raw_data, raw_valid, request.corrections, counting, Path(request.path).name)
         data, valid = common["data"], common["valid"]
         scale = common.get("intensity_scale")
         messages: list[str] = []
@@ -240,6 +248,9 @@ class AnalyzeFrame(FramePreprocessingMixin):
             )
         messages.extend(reduction.warnings)
         reduction = held_cut(reduction, request.series_cut)
+        if common.get("normalisation") is not None:  # the curves say the unit of the normalised intensity
+            label = f"I ({common['normalisation'].unit})"
+            reduction = replace(reduction, curves=tuple(replace(curve, y_label=label) for curve in reduction.curves))
         return FrameAnalysis(
             **common,
             resolution=resolution,
@@ -421,7 +432,7 @@ class ExportAnalysis:
         sas = sas_curves(curves, metadata, run=stem) if nxcansas else []
         # The record's "files" lists every file of the export: the curves and the files written after it.
         also = (() if fit_curve is None else (path.name,)) + ((nxcansas_name(stem),) if sas else ())
-        written = self.writer.write(curves, Path(destination), stem, metadata, also=also)
+        written = self.writer.write(curves, Path(destination), stem, metadata, also=also, region_names=True)
         if fit_curve is not None:
             written.append(
                 self.writer.write_xy(fit_curve, path, _fit_input_metadata(analysis, metadata, halves))

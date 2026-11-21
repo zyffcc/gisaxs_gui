@@ -182,6 +182,20 @@ def _frame_time(handle: h5py.File, detector: tuple[str, ...], entries: tuple[str
     return None, None
 
 
+_MONITOR_PLACES = ("monitor/data", "monitor/integral", "monitor0/data", "monitor0/integral", "control/integral",
+                   "control/data", "instrument/monitor/data", "instrument/monitor/integral")
+"""Where an NXentry keeps its monitor (NXmonitor ``data`` or ``integral``, the ``control`` group of NXcanSAS-like
+files): the first positive value, of the frame asked when there is one per frame."""
+
+
+def _monitor(handle: h5py.File, entries: tuple[str, ...], frame: Optional[int]) -> tuple[Optional[float], Optional[str]]:
+    for path in _places(entries, _MONITOR_PLACES):
+        value, _units = _number(handle, (path,), frame)
+        if value is not None and value > 0:
+            return value, path
+    return None, None
+
+
 def extract_nexus_metadata(
     handle: h5py.File,
     detector_group: str = DEFAULT_DETECTOR_GROUP,
@@ -219,6 +233,7 @@ def extract_nexus_metadata(
             "timestamp", "collection/date", "detectorSpecific/data_collection_date")))
     if stamp is None and "file_time" in handle.attrs:  # the Lambda server writes the time of the file only here
         stamp = str(_plain(np.asarray(handle.attrs["file_time"]).reshape(-1)[0]))
+    monitor, monitor_source = _monitor(handle, entries, frame)
     return {
         "energy_kev": energy,
         "wavelength_angstrom": wavelength,
@@ -234,6 +249,8 @@ def extract_nexus_metadata(
             "count_time", "frame_time", "exposure_time", "collection/count_time")), _TIME_TO_SECOND, frame),
         "timestamp": stamp,
         "frame_time_s": frame_time,
+        "monitor": monitor,
+        "monitor_source": monitor_source,
     }
 
 

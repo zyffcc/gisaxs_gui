@@ -3,6 +3,7 @@
 from .bad_pixels import BadPixels, find_bad_pixels
 from .intensity import describe_intensity_corrections, film_absorption_on, has_intensity_corrections, intensity_factor
 from .flat_field import FlatField, apply_flat_field, check_flat_shape, normalise_flat_field
+from .normalisation import Normalisation, NormalisationUse, header_values, normalisation_use, summed_header_values
 from .cake import CakeMap, cake_map
 from .preprocess import POLYGON, RECTANGLE, MaskShape, mirror_fill, rasterize
 from .regions import CutRegion, default_region_near, region_key, region_outline
@@ -116,6 +117,11 @@ __all__ = [
     "series_map",
     "stack_curves",
     "BinnedMean",
+    "Normalisation",
+    "NormalisationUse",
+    "header_values",
+    "normalisation_use",
+    "summed_header_values",
     "describe_intensity_corrections",
     "film_absorption_on",
     "has_intensity_corrections",

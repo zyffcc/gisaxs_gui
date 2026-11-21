@@ -415,7 +415,7 @@ def test_the_export_step_says_nothing_untrue_about_where_files_go() -> None:
         tips = {button.text(): button.toolTip() for button in (
             page.export_curves_button, page.export_all_button, page.export_image_button, page.export_map_button,
             page.export_plots_button)}
-        assert tips["Export Curves…"].endswith("next to the data (gimap_analysis/).")
+        assert tips["Export Curves…"].endswith("to a folder you choose (it starts in the last one).")
         assert "to a folder you choose" in tips["Batch Export…"]
         for name in ("Save Image…", "Save q-Map Data…", "Save Plots…"):
             assert tips[name].endswith("to a file you choose."), name

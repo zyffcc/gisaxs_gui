@@ -171,6 +171,8 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
             else None
         ),
         "corrections": {**_plain(analysis.corrections), "flat_field": flat_field_record(analysis)},
+        "normalisation": None if getattr(analysis, "normalisation", None) is None else analysis.normalisation.to_record(),
+        "header_values": _plain(getattr(analysis, "header_values", None) or {}),
         "intensity_corrections": (
             describe_intensity_corrections(analysis.corrections) if analysis.kind == GIWAXS else None
         ),
@@ -231,6 +233,23 @@ def provenance_lines(record: Mapping[str, Any], written_by: str, settings: Optio
             f"{geometry['beam_center_y_px']:.3f}) px, wavelength {geometry['wavelength_angstrom']:.6g} A, "
             f"alpha_i {geometry['incidence_deg']:.4g} deg, detector tilt {tilt:.4g} deg" + (
                 f", q_z refracted, alpha_c {critical:.4g} deg" if critical > 0.0 else ""))
+    return lines + intensity_lines(record)
+
+
+def intensity_lines(record: Mapping[str, Any]) -> list[str]:
+    """What was subtracted from and divided into the intensities, from the record: the dark frame and the
+    normalisation with each of its terms and where it came from (none of them: no line)."""
+    lines = []
+    corrections = record.get("corrections") or {}
+    if corrections.get("dark_path"):
+        lines.append(f"dark frame: {Path(str(corrections['dark_path'])).name} (index {int(corrections.get('dark_frame') or 0)}) "
+                     f"x {float(corrections.get('dark_scale', 1.0)):g}, subtracted before the background")
+    norm = record.get("normalisation")
+    if norm:
+        terms = ", ".join(f"{key} {item['value']:.6g} ({item['source']})" for key, item in norm.items()
+                          if isinstance(item, Mapping))
+        lines.append(f"intensity: {norm['intensity_unit']}; normalised I = A*I/(t*M*T*d), factor {norm['factor']:.6g}"
+                     f" ({terms}); sigma scaled by the same factor")
     return lines
 
 
@@ -329,7 +348,8 @@ def fit_input_observation(analysis: FrameAnalysis, halves: Optional[str] = None)
     record = {
         "source": "native_detector_columns" if analysis.kind == GISAXS else "radial_bins",
         "file_format": analysis.path.suffix.lower().lstrip("."),
-        "intensity_unit": "counts_per_pixel",
+        "intensity_unit": ("counts_per_pixel" if getattr(analysis, "normalisation", None) is None
+                           else analysis.normalisation.unit),
         "counting_model_valid": (
             photon_counts(analysis.metadata, corrections, mirror_filled=getattr(analysis, "filled_pixels", None) is not None)
             and analysis.intensity_scale is None
@@ -355,6 +375,7 @@ def fit_input_metadata(analysis: FrameAnalysis, metadata: Mapping[str, Any], hal
 __all__ = [
     "GEOMETRY_CONVENTION", "MERGE_RULE", "PIXEL_SCATTER", "POISSON", "Q_LABEL", "SCALED_POISSON", "SOFTWARE",
     "analysis_metadata", "binning", "error_model", "export_stem", "fit_input_curve", "fit_input_metadata", "flat_field_record",
-    "fit_input_observation", "frame_cuts", "frame_name", "frame_name_of", "frame_stem", "provenance_lines",
+    "fit_input_observation", "frame_cuts", "frame_name", "frame_name_of", "frame_stem", "intensity_lines",
+    "provenance_lines",
     "source_files",
 ]

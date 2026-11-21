@@ -1,4 +1,4 @@
-"""Frame corrections applied before any reduction: frame sum, background, flat field,
+"""Frame corrections applied before any reduction: frame sum, dark frame, background, flat field,
 gap guard and valid range.
 
 All work on the raw frame, so every curve, the q map and the exports use the
@@ -12,6 +12,8 @@ from typing import Optional, Sequence
 
 import numpy as np
 
+from .normalisation import Normalisation
+
 MAX_GAP_GUARD_PX = 20
 
 
@@ -19,8 +21,13 @@ MAX_GAP_GUARD_PX = 20
 class Corrections:
     """What to correct; the defaults change nothing."""
 
+    dark_path: Optional[str] = None
+    """Dark frame (detector without beam: dark current, offset) subtracted first, before the background."""
+    dark_frame: int = 0
+    dark_scale: float = 1.0
+    """``image − dark_scale × dark`` (for example the ratio of exposure times)."""
     background_path: Optional[str] = None
-    """Frame subtracted from every analysed frame (same detector and shape)."""
+    """Frame subtracted from every analysed frame (same detector and shape), after the dark frame."""
     background_frame: int = 0
     background_scale: float = 1.0
     """``image − scale × background`` (for example the ratio of exposure times)."""
@@ -53,6 +60,12 @@ class Corrections:
 
     The intensity corrections need the geometry; they are applied after the others, in the analysis,
     and are not part of ``is_identity``."""
+    lorentz: bool = False
+    """GIWAXS: divide by the Lorentz factor of a fibre texture about the surface normal (GIXSGUI),
+    L = 1 / (cos αi cos αf |sin 2θf|) (``intensity.py``)."""
+    normalisation: Normalisation = Normalisation()
+    """Exposure time, monitor, transmission, thickness, absolute scale (``normalisation.py``): one constant per
+    frame, applied last; not part of ``is_identity``."""
     critical_angle_deg: Optional[float] = None
     """GISAXS and GIWAXS: the critical angle α_c of the film; q_z is then the one inside it (refraction,
     ``q_mapping.refracted_qz``) and pixels below α_c are left out of the maps and cuts that use q_z. ``None``: the
@@ -62,6 +75,7 @@ class Corrections:
     def is_identity(self) -> bool:
         return (
             not self.mirror_fill
+            and self.dark_path is None
             and self.background_path is None
             and self.flat_field_path is None
             and self.minimum is None
@@ -138,8 +152,9 @@ def subtract_background(
     background: np.ndarray,
     background_valid: np.ndarray,
     scale: float = 1.0,
+    what: str = "background",
 ) -> tuple[np.ndarray, np.ndarray]:
-    """``data − scale × background``; a pixel is valid only where both frames are.
+    """``data − scale × background``; a pixel is valid only where both frames are (``what``: background or dark).
 
     The subtracted frame may be negative (over-subtraction, noise); such
     pixels stay valid because negative values are real results here.
@@ -148,7 +163,7 @@ def subtract_background(
     background = np.asarray(background)
     if background.shape != data.shape:
         raise ValueError(
-            f"The background frame is {background.shape[0]}×{background.shape[1]}, "
+            f"The {what} frame is {background.shape[0]}×{background.shape[1]}, "
             f"the frame is {data.shape[0]}×{data.shape[1]}."
         )
     corrected = np.asarray(data, dtype=np.float32) - np.float32(scale) * np.asarray(

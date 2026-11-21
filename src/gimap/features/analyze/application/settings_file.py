@@ -13,7 +13,8 @@ file that no longer exists is reported when the file is loaded.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from dataclasses import fields as _fields
 from typing import Any, Mapping, Optional
 
 from src.gimap.shared.geometry import InstrumentProfile
@@ -21,6 +22,7 @@ from src.gimap.shared.version import SOFTWARE as RELEASE
 
 from ..domain import (
     Corrections,
+    Normalisation,
     GisaxsCutSettings,
     GiwaxsSettings,
     MaskShape,
@@ -33,6 +35,8 @@ from .cut_regions import region_to_dict, regions_from_dicts
 from .gisaxs_cuts import cut_to_dict, cuts_from_dicts
 from .models import AUTO, MODES
 from .use_cases import SOFTWARE
+
+NORMALISATION_FIELDS = tuple(item.name for item in _fields(Normalisation))
 
 SETTINGS_FORMAT = "gimap-analyze-settings"
 SETTINGS_VERSION = 1
@@ -97,10 +101,15 @@ def settings_record(settings: AnalyzeSettings) -> dict[str, Any]:
             "mirror_fill": bool(corrections.mirror_fill),
             "minimum": corrections.minimum,
             "maximum": corrections.maximum,
+            "dark_path": corrections.dark_path,
+            "dark_frame": int(corrections.dark_frame),
+            "dark_scale": float(corrections.dark_scale),
             "background_path": corrections.background_path,
             "background_frame": int(corrections.background_frame),
             "background_scale": float(corrections.background_scale),
             "flat_field_path": corrections.flat_field_path,
+            "normalisation": asdict(corrections.normalisation),
+            "lorentz": bool(corrections.lorentz),
             "mask_path": corrections.mask_path,
             "mask_shapes": [
                 {"kind": shape.kind, "points": [list(point) for point in shape.points]} for shape in corrections.mask_shapes
@@ -147,7 +156,13 @@ def settings_from_record(record: Any) -> AnalyzeSettings:
         mode = record.get("mode") if record.get("mode") in MODES else AUTO
         profile = InstrumentProfile.from_dict(record["profile"]) if record.get("profile") else None
         values = record.get("corrections") or {}
+        norm = values.get("normalisation") or {}
         corrections = Corrections(
+            dark_path=values.get("dark_path") or None,
+            dark_frame=int(values.get("dark_frame", 0)),
+            dark_scale=float(values.get("dark_scale", 1.0)),
+            normalisation=Normalisation(**{key: norm[key] for key in NORMALISATION_FIELDS if key in norm}),
+            lorentz=bool(values.get("lorentz", False)),
             background_path=values.get("background_path") or None,
             background_frame=int(values.get("background_frame", 0)),
             background_scale=float(values.get("background_scale", 1.0)),

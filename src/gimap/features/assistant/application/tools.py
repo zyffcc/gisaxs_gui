@@ -478,7 +478,9 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
         self.workbench.show(lower_profile="azimuthal")
         _curve, profile = self._profile("azimuthal")
         background = search.background_at(center) or 0.0
-        result = ring_orientation(profile, q_window=(low, high), background=background)
+        corrections = (self.workbench.status() or {}).get("corrections") or {}  # a Lorentz-corrected I(χ): no 2nd sin χ
+        result = ring_orientation(profile, q_window=(low, high), background=background,
+                                  lorentz=bool(corrections.get("lorentz")))
         self.results.rings.append(result)
         payload = clean(result)
         if peak is None:

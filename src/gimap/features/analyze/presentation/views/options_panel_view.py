@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.presentation.components import AdvancedSection, SegmentedControl
 
 from ..frames_model import MAX_SUM
+from .normalisation_view import NormalisationView
 
 X_AXIS_ITEMS = (("q", "q"), ("2θ", "two_theta"))
 
@@ -42,12 +43,13 @@ def _hint(text: str, parent) -> QLabel:
     return label
 
 
-class OptionsPanelView:
-    """Builds the option sections — frames, corrections, GIWAXS cuts — that the process steps show."""
+class OptionsPanelView(NormalisationView):
+    """Builds the option sections — frames, corrections, normalisation, GIWAXS cuts — that the process steps show."""
 
     def build_option_sections(self, parent: QWidget) -> None:
         self._frames_section(parent)
         self._corrections_section(parent)
+        self._normalisation_section(parent)
         self._intensity_section(parent)
         self._giwaxs_section(parent)
 
@@ -81,6 +83,7 @@ class OptionsPanelView:
             expanded=True,
         )
         self.corrections_section = section
+        self._dark_row(section)  # subtracted first, then the background
         background = QHBoxLayout()
         self.background_label = QLabel("No background", section)
         self.background_label.setProperty("gimapRole", "muted")
@@ -233,6 +236,7 @@ class OptionsPanelView:
         film.addRow("Thickness", self.film_thickness_spin)
         film.addRow("Attenuation length", self.attenuation_spin)
         section.add_layout(film)
+        self._lorentz_row(section)
         return section
 
     def _giwaxs_section(self, parent) -> AdvancedSection:
