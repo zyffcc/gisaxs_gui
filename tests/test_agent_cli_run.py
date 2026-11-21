@@ -170,7 +170,7 @@ def test_the_command_expands_its_arguments_and_refuses_what_it_cannot_run(monkey
 class Fitter:
     """Two solutions as Fitting's ``create_curve_fit`` gives them, named by network and seed (no network is run)."""
 
-    def __call__(self, q, intensity, sigma, *, components=(), report=None, cancelled=None):
+    def __call__(self, q, intensity, sigma, *, components=(), report=None, cancelled=None, cut_qz=None):
         from tests.test_guided_gisaxs import _row
 
         rows = [_row(q, intensity, sigma, 1, "sphere", 9.4, 53.4, 1.31, probability=0.9),

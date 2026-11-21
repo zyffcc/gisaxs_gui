@@ -20,6 +20,11 @@ REVIEW_SOLUTIONS_ZH: dict[str, str] = {
     "the posterior":
         "这些数值来自把模型误差加进 σ 的拟合：只用曲线自身 σ 的拟合落在后验之外",
     "population {name} has Scale 0: this solution does not use it": "第 {name} 种颗粒的比例为 0：这个解没有用到它",
+    "{name}: q_z·R is above 1.7 at the cut's q_z, where the form factor at q_z = 0 (the default effective interface) "
+    "biases the radius, usually too small; give both angles of the cut (αi, αf) so that spheres are fitted with the "
+    "exit-reflected path (random cylinders stay at q_z = 0)":
+        "{name}：在切线的 q_z 处 q_z·R 大于 1.7，此时在 q_z = 0 处计算形状因子（默认的有效界面近似）会使半径有偏差，"
+        "通常偏小；请给出切线的两个角度（αi、αf），使球按出射反射路径拟合（随机取向圆柱仍取 q_z = 0）",
     "the refined value lies at the edge of the posterior: the model describes this curve only within the model "
     "error ({names})":
         "精修值位于后验的边缘：模型只在模型误差之内描述这条曲线（{names}）",

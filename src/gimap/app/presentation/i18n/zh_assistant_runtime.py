@@ -238,6 +238,10 @@ ASSISTANT_RUNTIME_ZH = {
         "报告的解（{model}）：{bounds}；这些数值不由曲线确定。",
     "Refine the model you expect in Fitting (Send to Fitting), with the value at the bound fixed or its range changed.":
         "在拟合中精修你预期的模型（发送到拟合），把处于边界的数值固定，或改变它的范围。",
+    "The reported solution ({model}) was fitted with the form factor at q_z = 0 (the effective interface), but at the cut's q_z = {qz} nm⁻¹ q_z·R is {values} for {names}, above {limit}: there that treatment biases the radius, usually too small.":
+        "报告的解（{model}）是用 q_z = 0 处的形状因子（有效界面近似）拟合的，但在切线的 q_z = {qz} nm⁻¹ 处，{names} 的 q_z·R 为 {values}，大于 {limit}：此时这种处理会使半径有偏差，通常偏小。",
+    "Send to Fitting, enter αi, αf and λ of the cut under Model ▸ Spheres in grazing incidence and run Predict parameters again: spheres are then fitted with the exit-reflected path. Random cylinders stay at q_z = 0.":
+        "请发送到拟合，在 模型 ▸ 掠入射下的球 中填入切线的 αi、αf 和 λ，再运行一次预测参数：球随后按出射反射路径拟合。随机取向圆柱仍取 q_z = 0。",
     "Choose the particle shape you expect and refine that model in Fitting; compare the fitted curves.":
         "请选择你预期的粒子形状，在拟合中精修这个模型，并比较拟合曲线。",
     "The symmetry axis is {shift} px from the calibrated centre: check the calibration or the sample alignment.":

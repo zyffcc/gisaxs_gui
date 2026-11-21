@@ -94,15 +94,18 @@ def create_curve_fit():
     Analysis, Batch Export's particle model, Process with AI and the command line).
 
     ``curve_fit(q_inv_angstrom, intensity, sigma, *, components=(), distance_nm=None, report=None, cancelled=None,
-    evaluated=None, halves=None)`` finds the particles of one cut on |q|: the given composition (1 = sphere,
-    2 = random cylinder, 3 = vertical cylinder, each with a paracrystal) or, with none given, the network's choice among
-    one or two populations of spheres and upright cylinders, with or without a paracrystal (random cylinders cost far
-    more time: give them as the composition). It returns the distinct solutions, most probable first, as the rows of
+    evaluated=None, halves=None, cut_qz=None)`` finds the particles of one cut on |q|: the given composition
+    (1 = sphere, 2 = random cylinder, 3 = vertical cylinder, each with a paracrystal) or, with none given, the
+    network's choice among one or two populations of spheres and upright cylinders, with or without a paracrystal
+    (random cylinders cost far more time: give them as the composition). It returns the distinct solutions, most probable first, as the rows of
     the 1D Predict window (``posterior_job.curve_rows``: values, curves, ``probability``, ``at_bounds``, ``warnings``).
     Every row also names what made it: ``network`` (``{"name", "sha256"}``: the proposal network and the SHA-256 of
     its weights file, as the 1D Predict record writes them) and ``seed`` (``CURVE_FIT_SEED``).
     Units of the result: q, σ_Res in nm⁻¹; R, h, D in nm. ``distance_nm`` and ``evaluated`` are accepted for the
     callers of the former quick fit and not used (the network needs no start); ``report`` hears the steps.
+    The cut is fitted at q_z = 0 (the effective interface). ``cut_qz``: the cut's vacuum q_z = k(sin α_i + sin α_f) in
+    nm⁻¹ when its angles are known (None: not known). It changes no value: a solution whose sphere or random cylinder
+    has q_z·R above ``refine.QZR_LIMIT`` gets the flag ``qzR:R_n`` (``refine.interface_flags``) and its sentence.
 
     The curve is prepared first (``shared/signed_cut``), so a cut with both halves and of any length can be given.
     ``halves`` says what to fit of a cut through the beam: ``mean`` / ``positive`` / ``negative`` (``both`` and
@@ -139,7 +142,7 @@ def create_curve_fit():
         return PreparedCut(x, y, s, note, "", 0, int(order.size), group)
 
     def curve_fit(q_inv_angstrom, intensity, sigma, *, components=(), distance_nm=None, report=None, cancelled=None,
-                  evaluated=None, halves=None):
+                  evaluated=None, halves=None, cut_qz=None):
         options = {**default_options(), "q_unit": "A^-1", "side": "positive", "components": list(components)}
         cut = prepared(np.asarray(q_inv_angstrom, dtype=float).reshape(-1), np.asarray(intensity, float).reshape(-1),
                        None if sigma is None else np.asarray(sigma, float).reshape(-1), halves)
@@ -160,6 +163,9 @@ def create_curve_fit():
                                    seed=CURVE_FIT_SEED, **chosen)
         if not solutions:
             raise ValueError("Predict parameters found no solution for this curve")
+        if cut_qz:  # a flag only, added after the fit: no value, interval or probability changes
+            for solution in solutions:
+                solution.flags = tuple(solution.flags) + tuple(refine.interface_flags(solution.model, cut_qz))
         q = np.asarray(item["q"], float)
         rows = curve_rows(item, solutions[:5], np.linspace(q.min(), q.max(), options["render_points"]),
                           chosen_by="user_composition" if components else "network_choice")

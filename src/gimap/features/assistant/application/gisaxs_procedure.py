@@ -8,8 +8,9 @@ available — Predict parameters on the curve: the most probable solution is rep
 probability and intervals, and when another solution is probable too the person chooses the model.
 Each step is a tool call, so the GUI shows it and the AI could do the same. Like the GIWAXS run, the
 report always says what its numbers are (q kinematic, uncertainties statistical only:
-``giwaxs_decisions``), and a reported fit far from its curve (χ²ᵣ above Fitting's poor-fit limit) or
-with a value at a bound of its range is a point to check.
+``giwaxs_decisions``), and a reported fit far from its curve (χ²ᵣ above Fitting's poor-fit limit),
+with a value at a bound of its range, or with a sphere too large for the form factor at q_z = 0 (``qzR``) is a point
+to check.
 """
 
 from __future__ import annotations
@@ -24,9 +25,11 @@ from .gisaxs_choice import (
     LENGTH_SCALE,
     LINEAR_TERMS,
     POOR_CHI2,
+    QZ_R_HINT,
     bounds_text,
     chance,
     chosen,
+    interface_caveat,
     interval,
     poor_fit,
     rivals,
@@ -271,6 +274,9 @@ class GisaxsProcedureMixin:
                 "fit", "The best fit did not converge.", None,
                 "Open the curve in Fitting (Send to Fitting) and refine it with a chosen model.",
             )
+        caveat = interface_caveat(best, fit.get("cut_qz"))
+        if caveat:  # fitted at q_z = 0 while q_z·R of the cut is beyond what that treatment holds for
+            self._attention("fit", caveat, None, QZ_R_HINT)
         if poor_fit(best):  # converged, but far from the curve: Fitting's poor-fit limit
             self._attention("fit", POOR_FIT.format(model=best["model"], chi2=f"{best['chi2']:.3g}", limit=f"{POOR_CHI2:g}"),
                             None, POOR_FIT_HINT)

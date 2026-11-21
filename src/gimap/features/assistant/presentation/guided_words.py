@@ -68,6 +68,9 @@ SENTENCES = (
     "Solutions whose D is within {percent} of 2π/q* of the cut: {solutions} (2π/q* is a length scale, not necessarily "
     "the particle spacing).",
     "The reported solution ({model}) has {bounds}: those values are not determined by the curve.",
+    "The reported solution ({model}) was fitted with the form factor at q_z = 0 (the effective interface), but at the "
+    "cut's q_z = {qz} nm⁻¹ q_z·R is {values} for {names}, above {limit}: there that treatment biases the radius, "
+    "usually too small.",  # gisaxs_choice.QZ_R, character for character
     # A value of a fit solution at a bound of its range (application/gisaxs_choice.py).
     "{name} at its upper bound",
     "{name} at its lower bound",

@@ -169,9 +169,12 @@ class CurveFitter(Protocol):
     """Predict parameters on one curve (|q| > 0, q in Å⁻¹): the distinct solutions, most probable first
     (Fitting's ``create_curve_fit``: rows with ``probability``, values, ``posterior`` intervals, curves)."""
 
-    def __call__(self, q_inv_angstrom, intensity, sigma, *, components=(), report=None, cancelled=None) -> list[dict]:
+    def __call__(self, q_inv_angstrom, intensity, sigma, *, components=(), report=None, cancelled=None,
+                 cut_qz=None) -> list[dict]:
         """``components``: the composition to fit (1 sphere, 2 random cylinder, 3 vertical cylinder; empty: the
-        network chooses)."""
+        network chooses). The cut is fitted at q_z = 0 (the effective interface); ``cut_qz``: its vacuum q_z in nm⁻¹
+        when its angles are known (None: not known), which changes no value and flags (``qzR``) a sphere or random
+        cylinder too large for q_z = 0."""
         ...
 
 

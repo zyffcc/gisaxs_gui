@@ -24,7 +24,9 @@ central interval, which is then extended to it. Flags:
 * ``large:R_n``         q_min·R of population n at least ``LARGE``: its Guinier region lies at or below the curve's
   lowest q, and the curve shows only its decay, which roughness or a rise at low q produce as well;
 * ``small:R_n``         q_max·R of population n below ``SMALL``: smaller than the curve resolves, it acts as a smooth
-  background (as fit1d named such a population).
+  background (as fit1d named such a population);
+* ``qzR:R_n``           (``interface_flags``, added by the caller that knows the cut's angles) a sphere or random
+  cylinder fitted at q_z = 0, the effective interface, whose radius times the cut's q₊ is above ``QZR_LIMIT``.
 """
 
 from __future__ import annotations
@@ -266,6 +268,29 @@ def window_flags(model: fm.FitModel, q) -> list[str]:
         elif q_max * radius < SMALL:
             out.append(f"small:R_{n}")
     return out
+
+
+QZR_LIMIT = 1.7
+"""q₊R of a sphere above which the form factor at q_z = 0 (the effective interface) puts its radius more than about
+5 % off (Physics and Methods 9.10; on the four-term DWBA benchmark of 9.13 the median error is 15–29 % above it)."""
+AT_QZ_ZERO = ("sphere", "cylinder")
+"""The families a model without the cut's angles evaluates at q_z = 0 (an upright cylinder's cut is exact)."""
+
+
+def interface_flags(model: fm.FitModel, qz: Optional[float]) -> list[str]:
+    """``qzR:R_n`` for the spheres and random cylinders (populations numbered in the order of their radii, as
+    ``window_flags``) with ``qz``·R above ``QZR_LIMIT``, when ``model`` was fitted without the cut's angles (q_z = 0,
+    the effective interface). ``qz``: the cut's vacuum q₊ = k(sin α_i + sin α_f) in nm⁻¹; None or 0 when the angles
+    are not known, and then no flag. A model with the angles (the Born term or the two paths) gets none. A flag only:
+    no value of the solution changes."""
+    if qz is None or not math.isfinite(float(qz)) or float(qz) <= 0:
+        return []
+    geometry = fm.grazing(model)
+    if geometry is not None and geometry.qz_born > 0:
+        return []
+    ordered = sorted(model.components, key=lambda c: c.value("R"))
+    return [f"qzR:R_{n}" for n, component in enumerate(ordered, 1)
+            if component.family in AT_QZ_ZERO and float(qz) * component.value("R") > QZR_LIMIT]
 
 
 def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra, lsq=None,
@@ -516,5 +541,6 @@ def _label(path) -> str:
 
 
 __all__ = ["CHI2_RETRY", "DELTA_BIC", "ESS_FAILED", "ESS_MIN", "EXPLORED", "LARGE", "LOCAL_MAX", "LOCAL_SAMPLES",
-           "MODEL_ERROR_FLOOR", "MOVES", "SAMPLES", "SHORTLIST", "SMALL", "UNCONSTRAINED", "Interval",
-           "NUISANCE", "PosteriorSolution", "fit_model", "model_values", "predict", "reflection", "window_flags"]
+           "MODEL_ERROR_FLOOR", "MOVES", "QZR_LIMIT", "SAMPLES", "SHORTLIST", "SMALL", "UNCONSTRAINED", "Interval",
+           "NUISANCE", "PosteriorSolution", "fit_model", "interface_flags", "model_values", "predict", "reflection",
+           "window_flags"]

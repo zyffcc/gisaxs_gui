@@ -12,6 +12,16 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **A sphere too large for the form factor at q_z = 0 is flagged.** Predict parameters fits a cut at q_z = 0 (the
+  effective interface) unless it is given the cut's angles; for spheres that holds within about 5 % of R only up to
+  q_z·R ≈ 1.7 (on the four-term DWBA benchmark the median error of R is 15–29 % above it, with both angles below
+  10 %). A solution fitted at q_z = 0 whose sphere or random cylinder has q_z·R above 1.7 at the cut's
+  q_z = k(sin αi + sin αf) now has the flag *qzR* (*R: q_z·R is above 1.7 at the cut's q_z, … biases the radius,
+  usually too small; give both angles of the cut …*), in English and Chinese. The automatic analysis (Run Automatic
+  Analysis, `tools/gimap_agent.py auto`, Process with AI) takes αi of the geometry and αf of the Yoneda band, lists
+  the flag under **Needs attention** with q_z·R (exit code 2) and keeps the q_z and the angles in `report.json`
+  (`gisaxs.fit.cut_qz`); without αi, or for a cut away from the Yoneda band, nothing is flagged. Upright cylinders
+  are exact at q_z = 0 and get no flag. No value, interval or probability changes (*Physics and Methods* 9.13).
 - **The benchmark files of Predict parameters are the ones the paper names.** `tools/benchmarks/` now holds the
   final runs under the names of the paper's table (`posterior_recovery`, `posterior_extended`, `posterior_dwba_tp`
   / `_born` / `_eia` with `posterior_dwba_pairs.json`, `posterior_own`, `posterior_floor03`, `posterior_floor08`,

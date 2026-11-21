@@ -2221,7 +2221,8 @@ with the right family:
   χ²ᵣ usually shows it, but not always (hemispheres of 2 nm on PS: −4 % at χ²ᵣ = 1.0; of 3 nm: −7 % at 1.5). For
   hemispheres the polymer film sets the limit: on bare Si they stay within 3 % up to q₊R ≈ 2.0.
 - D and σ_nn/D stay within 1 % in every case: the spacing comes from the structure factor, not from the form factor.
-- With α_i and α_f entered, Fitting shows q₊R of every sphere under the result, as information.
+- With α_i and α_f entered, Fitting shows q₊R of every sphere under the result, as information. Predict parameters
+  fitted at q_z = 0 flags a sphere above q₊R 1.7 when it knows the cut's angles (*qzR*, section 9.13).
 
 **Two paths with a free reflection coefficient.** In *Spheres in grazing incidence* (Model step), α_i, α_f and λ
 of the cut switch spheres to the two terms that dominate:
@@ -2494,7 +2495,8 @@ weights raised to the largest power β ≤ 1 that gives 50 effective samples, wh
 proposal); *bic*; *large* and *small* for a population whose size the measured q range does not show (q_min·R ≥ 0.7:
 its Guinier region lies at or below the lowest q, and the decay the curve shows is also what roughness or a rise at low
 q produce — on the *measured* benchmark curves the solution chosen has such an extra population, which takes up the
-roughness, on 10 of 100 and 20 of 300 curves; q_max·R < 1: it acts as a smooth background, as fit1d named such a population). The most
+roughness, on 10 of 100 and 20 of 300 curves; q_max·R < 1: it acts as a smooth background, as fit1d named such a population);
+and *qzR* for a sphere or random cylinder fitted at q_z = 0 whose q₊R at the cut is above 1.7 (below). The most
 probable goes into Model, the others to **Other solutions**. Model's fixed values and
 ranges are not used; **Refine the values in Model** afterwards keeps them. Time per curve on one core: about 6 s
 with the composition given and about 26 s choosing among one or two populations (24 held-out cuts, one worker,
@@ -2506,6 +2508,40 @@ Model's coupling (DA) and size law (log-normal) are used in steps 2–4: the net
 sizes, is then only a proposal, which the weights correct. Fitting has no four-term DWBA: with both angles Predict
 uses the two paths of spheres with a free r (the terms that matter at the Yoneda angle, section 9.10), with q_z alone
 the Born term at it, else the effective interface.
+
+**Three levels of the substrate, and the flag *qzR*.** The horizontal cut is fitted at one of three levels:
+
+1. the effective interface, the form factor at q_z = 0 (the default; no angle needed);
+2. the Born term at the cut's vacuum q₊ = k(sin α_i + sin α_f) (q_z alone: *Cut qz* of the 1D Predict window);
+3. the two paths of spheres, the Born term and the exit-reflected path with a free r (both angles: α_i, α_f and λ
+   under Model ▸ *Spheres in grazing incidence* on the Fit page).
+
+Upright cylinders are the same at every level (section 9.10). Random cylinders are averaged at q_z = 0 at levels 1
+and 3 and in Fitting's model at every level (at level 2 the network's posterior has them at the cut's q₊, the refined
+model at q_z = 0; section 9.4). For spheres, level 1 holds within about 5 % of R up to q₊R ≈ 1.7 (section 9.10). On the
+four-term DWBA curves on Si above (`posterior_dwba_pairs.json`) the median error of R at level 1 is 15 %, 20 % and
+29 % at q₊R 1.7–2.3, 2.3–3.5 and above 3.5; at level 3 it is 4.0 %, 6.7 % and 7.0 %; level 2 gives 4.0 %, 11 % and
+40 %. DWBA programs such as BornAgain and IsGISAXS evaluate the terms with the substrate's refractive index and need
+no such approximation, so GIMaP says when it matters:
+
+- A solution fitted at level 1 whose sphere or random cylinder has q₊R above 1.7 (R its radius, the populations
+  numbered as for *large*) gets the flag *qzR* (`refine.interface_flags`, `refine.QZR_LIMIT`): *R (n): q_z·R is
+  above 1.7 at the cut's q_z, where the form factor at q_z = 0 (the default effective interface) biases the radius,
+  usually too small; give both angles of the cut (αi, αf) so that spheres are fitted with the exit-reflected path
+  (random cylinders stay at q_z = 0)*. A solution fitted at level 2 or 3 gets none.
+- The flag needs the cut's q₊, so only a fit at level 1 that knows the angles sets it. The automatic analysis (Run
+  Automatic Analysis, `tools/gimap_agent.py auto`, Process with AI) fits at level 1 and takes α_i and λ of the
+  geometry and α_f of the Yoneda band the cut is at; its report lists the flag among the *Decisions* (fit caveat)
+  and under **Needs attention** with q₊R of each population named (exit code 2), and `report.json` keeps q₊ and the
+  angles (`gisaxs.fit.cut_qz`, section 14.10). For a cut elsewhere or without α_i, `cut_qz` is `null` and nothing
+  is flagged: no angle is guessed.
+- The Fit page and the 1D Predict window take the level from the angles they are given. A curve file does not carry
+  the angles of its cut (Send to Fitting passes the file), so a fit there at level 1 knows no q₊ and has no flag;
+  they show the flag, in the words above, on a solution that has it.
+- For random cylinders the limit is the spheres', applied to the radius, which is a lower bound of their size; no
+  level evaluates them at the cut's q_z in Fitting's model, so the flag only warns.
+- The flag changes no value, interval or probability of a solution: it is added after the fit
+  (`tests/test_qzr_flag.py` compares a run with and without it).
 
 **The model error.** Without it (steps 4–5 with the counts' σ), the 68 % intervals held the truth in 60–64 % of the
 curves of Fitting's own model (fit1d's 200 development curves drawn in `cut_model`, the composition given:
@@ -3831,7 +3867,7 @@ window's records:
 | Mask | `mask`: `applied` (true or false), `file` (as above), `kind` (a mask image whose non-zero pixels are left out, or a GIMaP masks file with its number of drawn shapes), `masked_pixels`, and `bad_pixels_left_out` (section 14.4): the pixels found automatically are counted apart from the mask. `report.md` says the same under **Mask**, also when no mask was applied |
 | Analyze's record | `analysis_record`: the record of section 14.2 for the frame as it was reduced (geometry, corrections, error model, binning, markers, `input_sha256`), without `files` |
 | Results | the decisions with their reasons (`decisions`), the open questions (`needs_attention`), the steps, the peaks and rings (GIWAXS) or `gisaxs` (cuts, symmetry axis, halves, length scale, fit), `tables` and `folder` (the frame's folder, relative to the summary); in `summary.json` each frame also has `outputs` (the files written) |
-| Model fit | `gisaxs.fit.method`: `name` (`Predict parameters`), `network` (`name`, for example `flow_v1`, and `sha256`: the SHA-256 of the weights file, the value the network's record names and the loader checks) and `seed` (0, section 14.8). `gisaxs.fit.solutions` holds every solution with its model, parameters, probability, χ²ᵣ (`chi2`, with `points`: `fitted`, `given`, `below_window`, `unusable`), `flags`, `warnings` and `more_warnings` (the flags as sentences: of the particles and the solution, and of background, beam tail and resolution) and `intervals` (median, 68 % and 95 % limits; the texts print the refined value with the 68 % limits); `fitted_points` repeats the points of the fit; `curve`, `points` and `q_range_inv_angstrom` say what was fitted, `data` holds the fitted points |
+| Model fit | `gisaxs.fit.method`: `name` (`Predict parameters`), `network` (`name`, for example `flow_v1`, and `sha256`: the SHA-256 of the weights file, the value the network's record names and the loader checks) and `seed` (0, section 14.8). `gisaxs.fit.solutions` holds every solution with its model, parameters, probability, χ²ᵣ (`chi2`, with `points`: `fitted`, `given`, `below_window`, `unusable`), `flags`, `warnings` and `more_warnings` (the flags as sentences: of the particles and the solution, and of background, beam tail and resolution) and `intervals` (median, 68 % and 95 % limits; the texts print the refined value with the 68 % limits); `fitted_points` repeats the points of the fit; `curve`, `points` and `q_range_inv_angstrom` say what was fitted, `data` holds the fitted points; `sphere_model` (`effective interface (q_z = 0)`) says where the particles are evaluated and `cut_qz` holds the cut's vacuum q_z (`q_z_inv_nm`) with `alpha_i_deg`, `alpha_f_deg` and `wavelength_A` it is from (α_i and λ of the geometry, α_f of the Yoneda band; `null` when one is not known), with which a sphere or random cylinder of q₊R above 1.7 is flagged `qzR` (section 9.13) |
 
 - `summary.json` is one object: `software_version`, `created`, `options`, `arguments` (one sentence per pattern or
   folder among the arguments: how many files it stood for) and `frames`, the list of the frame reports without

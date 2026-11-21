@@ -11,7 +11,8 @@ range (``at_bounds`` of a solution, e.g. D at its upper bound) is not determined
 The linear terms — the particle amplitudes, the Background and the beam tail's amplitude Tail A — cannot go below 0 and
 are not in ``at_bounds``: one that ends at 0 is held there by that limit, which the report says for the reported
 solution (``zero_terms``). A converged reported solution with χ²ᵣ above ``POOR_CHI2`` misses the curve by far more
-than its σ (``poor_fit``).
+than its σ (``poor_fit``). A sphere or random cylinder fitted at q_z = 0 whose q_z·R at the cut is above
+``QZ_R_LIMIT`` has a biased radius (``interface_caveat``, from the flag ``qzR``).
 """
 
 from __future__ import annotations
@@ -38,6 +39,19 @@ POOR_CHI2 = 10.0
 """A converged reported solution whose χ²ᵣ is above this is a poor fit: it misses the curve by far more than the σ
 of its points. The limit is Fitting's (``fitting/application/series_fit.POOR_CHI2``, for the same χ²ᵣ); features
 import nothing of each other, so a test keeps the two equal."""
+QZ_R_LIMIT = 1.7
+"""q_z·R of the cut above which the form factor at q_z = 0 biases a sphere's radius: Fitting's ``refine.QZR_LIMIT``,
+the limit of its flag ``qzR`` (features import nothing of each other, so a test keeps the two equal)."""
+QZ_R = (
+    "The reported solution ({model}) was fitted with the form factor at q_z = 0 (the effective interface), but at the "
+    "cut's q_z = {qz} nm⁻¹ q_z·R is {values} for {names}, above {limit}: there that treatment biases the radius, "
+    "usually too small."
+)
+QZ_R_HINT = (
+    "Send to Fitting, enter αi, αf and λ of the cut under Model ▸ Spheres in grazing incidence and run Predict "
+    "parameters again: spheres are then fitted with the exit-reflected path. Random cylinders stay at q_z = 0."
+)
+"""A reported solution with the flag ``qzR`` (``interface_caveat``)."""
 LINEAR_TERMS = (("background", "Background"), ("resolution_amplitude", "Tail A"))
 """The linear terms of a solution's ``globals`` that can end at their non-negativity limit, as the report names them."""
 INTERVAL_KEYS = ("R", "h", "D")
@@ -144,8 +158,30 @@ def chosen(fit: Optional[dict]) -> tuple[int, Optional[dict]]:
     return index, solutions[index]
 
 
+def interface_caveat(solution: Optional[dict], cut: Optional[dict]) -> str:
+    """``QZ_R`` for a solution whose populations carry the flag ``qzR`` (fitted at q_z = 0, q_z·R of the cut above
+    ``QZ_R_LIMIT``), with q_z·R of each; "" without such a flag or without the cut's q_z (``cut``: the fit record's
+    ``cut_qz``). The flag numbers the populations in the order of their radii, as the solution's values."""
+    qz = (cut or {}).get("q_z_inv_nm")
+    if not solution or not qz:
+        return ""
+    ordered = sorted((c for c in solution.get("components") or () if c.get("R") is not None), key=lambda c: float(c["R"]))
+    many = len(solution.get("components") or ()) > 1
+    names, values = [], []
+    for flag in solution.get("flags") or ():
+        kind, flagged = fit_names.flag_names(flag)
+        slot = fit_names.split_name(flagged[0])[1] if kind == "qzR" and flagged else None
+        if slot is not None and 1 <= slot <= len(ordered):
+            names.append(fit_names.display_name(flagged[0], many))
+            values.append(f"{float(qz) * float(ordered[slot - 1]['R']):.2f}")
+    if not names:
+        return ""
+    return QZ_R.format(model=solution.get("model"), qz=f"{float(qz):.3g}", values=", ".join(values),
+                       names=", ".join(names), limit=f"{QZ_R_LIMIT:g}")
+
+
 __all__ = [
     "ASK_PROBABILITY", "AT_LOWER", "AT_UPPER", "BOUND_NAMES", "INTERVAL_KEYS", "LENGTH_SCALE", "LINEAR_TERMS", "POOR_CHI2",
-    "bound_phrases", "bounds_text", "chance", "chosen", "interval", "poor_fit", "probability", "rivals", "sizes",
-    "zero_terms",
+    "QZ_R", "QZ_R_HINT", "QZ_R_LIMIT", "bound_phrases", "bounds_text", "chance", "chosen", "interface_caveat",
+    "interval", "poor_fit", "probability", "rivals", "sizes", "zero_terms",
 ]

@@ -42,8 +42,8 @@ class FakeFitter:
     def __init__(self):
         self.calls = []
 
-    def __call__(self, q, intensity, sigma, *, components=(), report=None, cancelled=None):
-        self.calls.append({"points": len(q), "components": components, "q_min": float(np.min(q))})
+    def __call__(self, q, intensity, sigma, *, components=(), report=None, cancelled=None, cut_qz=None):
+        self.calls.append({"points": len(q), "components": components, "q_min": float(np.min(q)), "cut_qz": cut_qz})
         return [_row(q, intensity, sigma, 1, "random_cylinder", 6.1, 398.0, 1.22, probability=0.62),
                 _row(q, intensity, sigma, 2, "sphere", 9.4, 53.4, 1.31, probability=0.38)]
 
@@ -58,7 +58,7 @@ class BoundFitter(FakeFitter):
     gives): the most probable has D at its upper bound, the second (p 0.25) σh/h at its lower bound, the third (a
     sphere, D = 48.3484 nm) none."""
 
-    def __call__(self, q, intensity, sigma, *, components=(), report=None, cancelled=None):
+    def __call__(self, q, intensity, sigma, *, components=(), report=None, cancelled=None, cut_qz=None):
         self.calls.append({"points": len(q), "components": components, "q_min": float(np.min(q))})
         upper_d = [{"parameter": "D", "bound": "upper", "component": 0},
                    {"parameter": "sigma_h", "bound": "upper", "component": 0}]
@@ -673,7 +673,7 @@ class PoorFitter(FakeFitter):
     """One converged solution far from its curve: χ²ᵣ of hundreds, as a fit of the public AgBh SAXS frame gives
     (the Bragg rings of a calibrant, no particles)."""
 
-    def __call__(self, q, intensity, sigma, *, components=(), report=None, cancelled=None):
+    def __call__(self, q, intensity, sigma, *, components=(), report=None, cancelled=None, cut_qz=None):
         self.calls.append({"points": len(q), "components": components, "q_min": float(np.min(q))})
         return [_row(q, intensity, sigma, 1, "sphere", 7.18, 16.9, 472.0)]
 
