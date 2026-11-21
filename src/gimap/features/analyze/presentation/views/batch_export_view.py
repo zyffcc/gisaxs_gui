@@ -46,6 +46,9 @@ from PyQt5.QtWidgets import (
 DATA_OUTPUTS = (
     ("tables", "All frames in one table per curve", "x in the first column, then one column per frame — ready to plot a series"),
     ("per_frame", "Each frame: its curves, with error bars and pixel counts", "x, I, σ and the pixels behind each point; a JSON record of the settings per frame"),
+    ("nxcansas", "Each frame: its q curves as NXcanSAS (.h5)",
+     "One HDF5 file per frame for SasView and other NeXus programs: every chosen curve against q with σ, the "
+     "wavelength, distance and αi, and the record (I(χ) and 2θ curves are not in it)"),
     ("fit_input", "Each frame: the curve for Fitting", "q, I, σ, pixels — what Fitting ▸ In-situ series reads"),
     ("q_map", "Each frame: the q map as numbers", "Intensity on a regular q∥–qz (or qy–qz) grid, with its axes"),
     ("cake", "Each frame: the unwrapped χ–q map as numbers", "GIWAXS: intensity on a χ × q grid, with its axes"),
@@ -217,7 +220,7 @@ class BatchExportView:
         curves.addWidget(_muted("Curves to save:", self.data_group))
         self.curve_list = QListWidget(self.data_group)
         self.curve_list.setObjectName("batchCurveList")
-        self.curve_list.setToolTip("For the tables of all frames and the per-frame curves")
+        self.curve_list.setToolTip("For the tables of all frames, the per-frame curves and the NXcanSAS files")
         self.curve_list.setSelectionMode(QAbstractItemView.NoSelection)
         self.curve_list.setMaximumHeight(CURVE_LIST_HEIGHT)  # as tall as its rows, up to this (``batch_dialog.py``)
         curves.addWidget(self.curve_list)

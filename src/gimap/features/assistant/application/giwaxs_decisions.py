@@ -9,6 +9,7 @@ These lines do not change a number; they say what a number means, so that a read
 * ``uncertainties`` — the ± are statistical only, from the bins' own errors (Poisson counting statistics or
   the scatter of each bin's pixels, whichever the frame's reduction used); for GISAXS, the σ of the cuts that
   the fit's χ²ᵣ is normalised by;
+* ``flat field`` — when the frame was divided by one: its file and the pixels it left out;
 * ``peak search`` — when more candidates qualified than were fitted (``PeakSearch.truncated``), how many,
   and how to fit more;
 * ``texture rule`` and ``ring orientation`` — what the texture sentences compare, and the rings whose f depends
@@ -25,7 +26,8 @@ from ..domain.orientation import HORIZON_CHI, HORIZON_SHIFT, NORMAL_CHI, PLANE_C
 
 ERROR_MODELS = {
     "poisson": "Poisson counting statistics of each bin (photon counts as measured)",
-    "scaled_poisson": "Poisson counting statistics of each bin, scaled like the intensities (intensity corrections on)",
+    "scaled_poisson": "Poisson counting statistics of each bin, scaled like the intensities (a flat field or intensity "
+                      "corrections on)",
     "pixel_scatter": (
         "the scatter of each bin's pixels (a floating-point, background-subtracted or mirror-filled frame: "
         "a statistical, pixel-scatter uncertainty, not counting noise)"
@@ -85,6 +87,23 @@ def uncertainty_decision(errors: Optional[str], technique: str = "giwaxs") -> di
     model = ERROR_MODELS.get(str(errors or ""), UNKNOWN_ERRORS)
     template = UNCERTAINTIES.get(technique, UNCERTAINTIES["giwaxs"])
     return {"what": "uncertainties", "decision": "statistical only", "why": template.format(model=model)}
+
+
+def flat_field_decision(status: Optional[dict]) -> Optional[dict]:
+    """The flat field the frame was divided by (``get_status``: ``corrections.flat_field``): its file and the pixels
+    it left out; ``None`` without one."""
+    flat = ((status or {}).get("corrections") or {}).get("flat_field")
+    if not flat:
+        return None
+    return {
+        "what": "flat field",
+        "decision": f"divided by {flat.get('file')} ({flat.get('masked_pixels')} pixels left out)",
+        "why": (
+            "the detector response: every pixel is divided by the flat field normalised to mean 1 over the pixels it "
+            "keeps, right after the background; pixels where it is at or below 0.05 or not finite do not respond "
+            "and are left out; the σ of photon counts are scaled with it (scaled Poisson)"
+        ),
+    }
 
 
 def peak_cap_decision(search, asked: int = MAX_PEAKS) -> Optional[dict]:
@@ -157,6 +176,6 @@ def horizon_decision(rings: Iterable) -> Optional[dict]:
 
 
 __all__ = [
-    "ERROR_MODELS", "MORE_PEAKS", "horizon_decision", "peak_cap_decision", "refraction_decision",
+    "ERROR_MODELS", "MORE_PEAKS", "flat_field_decision", "horizon_decision", "peak_cap_decision", "refraction_decision",
     "texture_rule_decision", "uncertainty_decision",
 ]

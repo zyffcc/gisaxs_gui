@@ -21,6 +21,42 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   0.25–0.55° gets a warning in the log. The networks for Si, polymers and Cu are unchanged: their retrained versions
   did not pass those tests. The package's report under **Details** now lists the model values for Si, polymer and Cu
   scans as well (before, only the direct readings). Manual chapter 13; *Physics and Methods* 12.1.
+- **GISAXS cuts of your own, in q: bands, boxes, sectors and lines in any direction.** The Cuts step of a GISAXS
+  frame has a **Cuts** table: the automatic Yoneda cut (the one Fitting takes) and vertical cut first, then as many
+  named cuts as you add — horizontal bands (I(qy)), vertical bands (I(qz)), boxes (along qy or qz), sectors (I(qyz)
+  in a direction from the direct beam) and lines in any direction with a width (I(s) along them). Add them from
+  **Add ▾** or draw them on the detector image or the q map; type their position and width in q (Å⁻¹), exit angles
+  (αf, 2θf) or detector pixels; rename, duplicate, remove, show or hide them. Each cut has one colour in the table,
+  the plots, the detector view and the q map (where the automatic bands are now drawn too, and bands and boxes can be
+  dragged). A cut averages the whole pixels whose centre q lies inside it, with the frame's error model; sectors and
+  lines are binned one pixel wide. Cuts are kept in q (also in settings files, Batch Export and series), and a frame
+  of another detector or geometry asks whether to **Keep Cuts** or **Remove Cuts** instead of using them silently.
+  The CSV and `_analysis.json` of every cut state it in q (and αf or 2θf); those of the automatic cuts add the qz/αf
+  and qy/2θf of their band edges. The automatic cuts and their numbers are unchanged; **Auto Cuts** now keeps the
+  cuts you added (*Physics and Methods* 6.7).
+
+- **A sphere too large for the form factor at q_z = 0 is flagged.** Predict parameters fits a cut at q_z = 0 (the
+  effective interface) unless it is given the cut's angles; for spheres that holds within about 5 % of R only up to
+  q_z·R ≈ 1.7 (on the four-term DWBA benchmark the median error of R is 15–29 % above it, with both angles below
+  10 %). A solution fitted at q_z = 0 whose sphere or random cylinder has q_z·R above 1.7 at the cut's
+  q_z = k(sin αi + sin αf) now has the flag *qzR* (*R: q_z·R is above 1.7 at the cut's q_z, … biases the radius,
+  usually too small; give both angles of the cut …*), in English and Chinese. The automatic analysis (Run Automatic
+  Analysis, `tools/gimap_agent.py auto`, Process with AI) takes αi of the geometry and αf of the Yoneda band, lists
+  the flag under **Needs attention** with q_z·R (exit code 2) and keeps the q_z and the angles in `report.json`
+  (`gisaxs.fit.cut_qz`); without αi, or for a cut away from the Yoneda band, nothing is flagged. Upright cylinders
+  are exact at q_z = 0 and get no flag. No value, interval or probability changes (*Physics and Methods* 9.13).
+- **Curves as NXcanSAS (HDF5), for SasView and other NeXus programs, and back into Fitting.** Analyze's Export
+  step has **Also as NXcanSAS (.h5)** (remembered; it applies to Export Curves…, Save the Curves of the Plot and
+  Export New Frames While Watching): `<stem>_nxcansas.h5` holds the curves against q, one SASentry each (NeXus
+  definition NXcanSAS 1.1), titled with the frame, the curve and which q its Q is — a horizontal cut keeps its
+  signed qy —, with Q in 1/angstrom, I, Idev = σ, the wavelength, distance, pixel size and αi, and the record of
+  `_analysis.json` as a note of SASprocess; I(χ) and 2θ curves stay CSV only. Batch Export has **Each frame: its q
+  curves as NXcanSAS (.h5)** (`nxcansas/<frame>_nxcansas.h5`), the command line `--curve-format csv|nxcansas|both`
+  (default csv; `curves_nxcansas.h5`), and Fitting's **Save Data and Fit…** the type NXcanSAS (the points fitted and
+  the model, Q in 1/nm). Fitting opens NXcanSAS `.h5` files of any program: Q in the unit the file states (1/m is
+  converted), Idev as σ, the points its mask leaves out left out; a file of several curves asks which one, and
+  **Import Curves…** takes all of them. SasView's reader (sasdata 0.11) opens the files GIMaP writes, with their
+  titles, units, σ, wavelength, distance and αi.
 - **The benchmark files of Predict parameters are the ones the paper names.** `tools/benchmarks/` now holds the
   final runs under the names of the paper's table (`posterior_recovery`, `posterior_extended`, `posterior_dwba_tp`
   / `_born` / `_eia` with `posterior_dwba_pairs.json`, `posterior_own`, `posterior_floor03`, `posterior_floor08`,
@@ -536,6 +572,15 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Analyze
 
+- **Flat field (detector response).** Mask & corrections ▸ Corrections has a **Flat field** (**Choose…**, **×**;
+  off by default; GISAXS and GIWAXS): every frame is divided by a detector image of its size (CBF, TIFF, EDF,
+  NeXus/HDF5) or a `.npy` array, normalised to mean 1 over the pixels it keeps; pixels where it is at or below
+  0.05 are left out and counted, and one of another size is refused, never resampled. It comes right after the
+  background, and with the GIWAXS intensity corrections the factor is `F = F_Ω F_P F_A F_ff`. For photon counts
+  the error bars follow it (`scaled_poisson`: Var = I / F²). Batch Export, series and the folder watch use the same
+  flat field; settings files keep it; the JSON record has `corrections.flat_field` (file, SHA-256, normalisation
+  mean, pixels left out). `tools/gimap_agent.py auto --flat-field PATH` does the same (a missing file: exit code
+  1), and every report names the flat field among its Decisions. *Physics and Methods* 4.10.
 - **Opening data**: for a source of several frames, the new window **Import Frames** asks which frames to list
   (all, a range with every n-th, or frame numbers counted from 1); **Choose Frames…** changes it later, and only
   references are listed, so a stack of thousands of frames opens quickly. **Cancel Import** stops a slow import;

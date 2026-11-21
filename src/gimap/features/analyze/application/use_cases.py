@@ -49,6 +49,7 @@ from .export_record import (  # noqa: F401 - the record of an export; these name
 from .flat_detector import detector_rotation_message, flat_detector_error, flat_detector_message
 from .frame_preprocessing import FramePreprocessingMixin, FrameSum, floating, photon_counts
 from .geometry_resolution import ResolveGeometry, center_not_used_message
+from .nxcansas_export import nxcansas_name, sas_curves
 from .ports import CurveWriter, FrameSource, InstrumentProfileStore
 
 
@@ -110,12 +111,16 @@ class AnalyzeFrame(FramePreprocessingMixin):
         source = self._q_map_source
         if source is not None and source[0] is data and source[1] is valid and self._q_map_key == key:
             return self._q_map  # the arrays are held here, so identity cannot be reused by another frame
+        self._q_map = gisaxs_q_map(data, valid, self._gisaxs_maps_for(shape, geometry))
+        self._q_map_key, self._q_map_source = key, (data, valid)
+        return self._q_map
+
+    def _gisaxs_maps_for(self, shape: tuple[int, int], geometry: DetectorGeometry):
+        """qy, qz of every pixel of a GISAXS frame (cached for its shape and geometry): the q map and the cuts."""
         if self._gisaxs_maps is None or self._gisaxs_maps_key != (shape, geometry):
             self._gisaxs_maps = gisaxs_maps(shape, geometry)
             self._gisaxs_maps_key = (shape, geometry)
-        self._q_map = gisaxs_q_map(data, valid, self._gisaxs_maps)
-        self._q_map_key, self._q_map_source = key, (data, valid)
-        return self._q_map
+        return self._gisaxs_maps
 
     def maps_of(self, analysis: FrameAnalysis) -> GiwaxsMaps:
         """The q maps of a GIWAXS frame (cached for its shape and geometry)."""
@@ -135,9 +140,11 @@ class AnalyzeFrame(FramePreprocessingMixin):
         reduction = analysis.reduction
         if reduction is None or analysis.geometry is None:
             return {}
-        maps = None
+        shape = (int(analysis.data.shape[0]), int(analysis.data.shape[1]))
         if reduction.kind != GISAXS:
-            maps = self._giwaxs_maps((int(analysis.data.shape[0]), int(analysis.data.shape[1])), analysis.geometry)
+            maps = self._giwaxs_maps(shape, analysis.geometry)
+        else:  # (the person's cuts are in q; the two automatic bands are rows and columns)
+            maps = self._gisaxs_maps_for(shape, analysis.geometry) if has_person_cuts(reduction) else None
         masks = {}
         for key in keys:
             curve = reduction.curve(key)
@@ -194,6 +201,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
         counting = photon_counts(
             common["metadata"], request.corrections, mirror_filled=common.get("filled_pixels") is not None
         )
+        self._flat_scale(common, request.corrections, counting)  # counts divided by a flat field: their variance too
         if kind == GIWAXS and geometry is not None and has_intensity_corrections(request.corrections):
             self._correct_intensity(common, raw_data, raw_valid, geometry, request.corrections, counting)
         data, valid = common["data"], common["valid"]
@@ -221,8 +229,9 @@ class AnalyzeFrame(FramePreprocessingMixin):
             )
         if kind == GISAXS:
             reduction = reduce_gisaxs(
-                data, valid, geometry, request.gisaxs, counts=counting,
+                data, valid, geometry, request.gisaxs, counts=scale if scale is not None else counting,
                 q_map=self._gisaxs_q_map(data, valid, geometry) if request.with_map else None,
+                maps=self._gisaxs_maps_for(shape, geometry) if request.gisaxs.regions else None,
             )
         else:
             reduction = reduce_giwaxs(
@@ -240,6 +249,11 @@ class AnalyzeFrame(FramePreprocessingMixin):
             detected_kind=detected,
             flat_detector=flat,
         )
+
+
+def has_person_cuts(reduction: Reduction) -> bool:
+    """Whether a GISAXS reduction holds a cut the person defined (whose pixels need the q maps)."""
+    return any("gisaxs_cut" in curve.region for curve in reduction.curves)
 
 
 def header_beam_center(
@@ -329,16 +343,41 @@ class ExportAnalysis:
 
     def curves(
         self, analysis: FrameAnalysis, keys: Sequence[str], destination: Path,
-        extra_metadata: Optional[Mapping[str, Any]] = None, *, text_format: str = "csv",
+        extra_metadata: Optional[Mapping[str, Any]] = None, *, text_format: str = "csv", nxcansas: bool = False,
     ) -> list[Path]:
-        """Only the named curves (for example those of one plot), one CSV each, plus the JSON record."""
+        """Only the named curves (for example those of one plot), one CSV each, plus the JSON record; ``nxcansas``:
+        also those against q in one NXcanSAS file (``nxcansas_export``), listed in the record's ``files``."""
         chosen = [curve for key in keys if (curve := analysis.reduction.curve(key)) is not None and not curve.is_empty]
         if not chosen:
             raise ValueError("None of these curves has data.")
         metadata = analysis_metadata(analysis)
         if extra_metadata:
             metadata.update(_plain(dict(extra_metadata)))
-        return self.writer.write(chosen, Path(destination), export_stem(analysis), metadata, text_format=text_format)
+        stem = export_stem(analysis)
+        sas = sas_curves(chosen, metadata, run=stem) if nxcansas else []
+        written = self.writer.write(chosen, Path(destination), stem, metadata, text_format=text_format,
+                                    also=(nxcansas_name(stem),) if sas else ())
+        if sas:
+            written.append(self.writer.write_nxcansas(Path(destination) / nxcansas_name(stem), sas))
+        return written
+
+    def nxcansas(
+        self, analysis: FrameAnalysis, keys: Sequence[str], destination: Path,
+        extra_metadata: Optional[Mapping[str, Any]] = None,
+    ) -> Optional[Path]:
+        """The named curves (all when ``keys`` is empty) that are against q, as ``<stem>_nxcansas.h5`` with the
+        frame's record in each entry; ``None`` when none of them is against q (I(χ), 2θ: NXcanSAS has no angle)."""
+        reduction = analysis.reduction
+        if reduction is None:
+            return None
+        chosen = [curve for curve in reduction.curves if not keys or curve.key in keys]
+        metadata = analysis_metadata(analysis)
+        if extra_metadata:
+            metadata.update(_plain(dict(extra_metadata)))
+        sas = sas_curves(chosen, metadata, run=export_stem(analysis))
+        if not sas:
+            return None
+        return self.writer.write_nxcansas(Path(destination) / nxcansas_name(export_stem(analysis)), sas)
 
     def cake(self, analysis: FrameAnalysis, cake: CakeMap, path: Path) -> Path:
         """The unwrapped view as a CSV table: q in the first row, χ in the first column."""
@@ -363,9 +402,11 @@ class ExportAnalysis:
         extra_metadata: Optional[Mapping[str, Any]] = None,
         *,
         halves: Optional[str] = None,
+        nxcansas: bool = False,
     ) -> list[Path]:
         """Every curve as CSV plus the JSON record, and the Fitting input when there is one (``halves``: what a
-        fit is to take of a GISAXS cut, written with it — ``fit_input_observation``)."""
+        fit is to take of a GISAXS cut, written with it — ``fit_input_observation``); ``nxcansas``: also the
+        curves against q in one NXcanSAS file (``nxcansas_export``)."""
         if analysis.reduction is None:
             raise ValueError("Nothing to export: this frame has no geometry yet.")
         curves = [curve for curve in analysis.reduction.curves if not curve.is_empty]
@@ -375,14 +416,18 @@ class ExportAnalysis:
         if extra_metadata:
             metadata.update(_plain(dict(extra_metadata)))
         fit_curve = fit_input_curve(analysis)
-        path = Path(destination) / f"{export_stem(analysis)}_fit_input.dat"
-        # The record's "files" lists every file of the export: the curves and the curve for Fitting written after it.
-        written = self.writer.write(curves, Path(destination), export_stem(analysis), metadata,
-                                    also=() if fit_curve is None else (path.name,))
+        stem = export_stem(analysis)
+        path = Path(destination) / f"{stem}_fit_input.dat"
+        sas = sas_curves(curves, metadata, run=stem) if nxcansas else []
+        # The record's "files" lists every file of the export: the curves and the files written after it.
+        also = (() if fit_curve is None else (path.name,)) + ((nxcansas_name(stem),) if sas else ())
+        written = self.writer.write(curves, Path(destination), stem, metadata, also=also)
         if fit_curve is not None:
             written.append(
                 self.writer.write_xy(fit_curve, path, _fit_input_metadata(analysis, metadata, halves))
             )
+        if sas:
+            written.append(self.writer.write_nxcansas(Path(destination) / nxcansas_name(stem), sas))
         return written
 
 

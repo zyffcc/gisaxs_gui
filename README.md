@@ -277,8 +277,11 @@ python tools/gimap_agent.py auto <frame> [<frame> ...] --notes "<your notes>" --
   folder that already holds the summary of an earlier run is refused unless `--overwrite` is given.
 - `--mask FILE` applies a mask as **Load Masks** in Analyze reads it (a GIMaP masks `.json` or a mask image
   whose non-zero pixels are left out). Every report says which mask was applied, or that none was.
+- `--flat-field PATH` divides every frame by a flat field (detector response: a detector image of the frame's
+  size or a `.npy`, normalised to mean 1, pixels at or below 0.05 left out), as the flat field of Analyze's
+  Corrections does; the report names it among its Decisions with the pixels it left out.
 - `report.json` and `summary.json` name the release, the UTC time, the options as given (the notes too) and
-  every input file (frame, calibration, mask) by path, size and SHA-256; a model fit also names its network,
+  every input file (frame, calibration, mask, flat field) by path, size and SHA-256; a model fit also names its network,
   the SHA-256 of the network's weights and the seed. Every CSV starts with `#` lines that name the release,
   the inputs and the geometry. A run repeated on the same input gives the same files except for the time
   and the durations.

@@ -46,6 +46,9 @@ SENTENCES = {
     "large": "{name}: its Guinier region lies at or below the curve's lowest q, so the curve shows only its decay, "
              "which roughness or a rise at low q produce as well",
     "small": "{name}: smaller than the curve resolves, it acts as a smooth background",
+    "qzR": "{name}: q_z·R is above 1.7 at the cut's q_z, where the form factor at q_z = 0 (the default effective "
+           "interface) biases the radius, usually too small; give both angles of the cut (αi, αf) so that spheres are "
+           "fitted with the exit-reflected path (random cylinders stay at q_z = 0)",
     "absent": "population {name} has Scale 0: this solution does not use it",
 }
 """Flag kind → the sentence a person reads (``{name}``: the display names; templates, translated by the interface)."""
@@ -99,7 +102,7 @@ def of_population(flag: str) -> bool:
     """Whether a flag concerns the populations' values or the solution as a whole (shown first); the others are of
     the background, the beam tail and the resolution (shown after them, in one paragraph)."""
     kind, names = flag_names(flag)
-    if kind in GENERAL or kind in ("large", "small", "absent"):
+    if kind in GENERAL or kind in ("large", "small", "qzR", "absent"):
         return True
     return any(split_name(name)[0] in POPULATION for name in names)
 
@@ -169,7 +172,8 @@ def clean_flags(flags: Iterable[str], amplitudes: dict) -> tuple:
     kept = []
     for flag in flags:
         kind, names = flag_names(flag)
-        if names and kind in ("at_bound", "unconstrained", "correlated", "large", "small") and any(map(absent, names)):
+        if names and kind in ("at_bound", "unconstrained", "correlated", "large", "small", "qzR") and any(
+                map(absent, names)):
             continue
         kept.append(flag)
     return tuple(kept) + tuple(f"absent:{slot}" for slot in sorted(gone))

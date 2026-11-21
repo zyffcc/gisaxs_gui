@@ -140,6 +140,7 @@ from .batch_folder import (
 from .batch_report import BatchRun, batch_record, is_gisaxs, readme_text, written_kinds
 from .batch_tables import common_x
 from .export_record import frame_cuts, frame_name, frame_name_of, frame_stem, source_files
+from .flat_field import FlatFieldUse
 from .cut_regions import (
     CUT_SET_FORMAT,
     PlaceRegions,
@@ -160,6 +161,7 @@ from .ports import (
     source_stem,
 )
 from .series import CorrectSeriesFrame
+from . import gisaxs_cuts as gisaxs_cut_tools  # the person's GISAXS cuts: units, outlines, the set-up they were made on
 from .settings_file import SETTINGS_FORMAT, AnalyzeSettings, settings_from_record, settings_record
 from .series_map import SERIES_TITLE, build_series_map, export_series_map, export_series_track, row_label, series_row
 from .series_stages import (
@@ -209,6 +211,7 @@ def q_at_position(geometry: DetectorGeometry, x_px: float, y_px: float) -> dict[
 
 
 __all__ = [
+    "FlatFieldUse",
     "FitCurvePreview", "FrameFitPreview", "failed_preview", "model_preview", "peak_preview",
     "BatchRun",
     "EarlierExport",
@@ -304,6 +307,7 @@ __all__ = [
     "Peak",
     "Pick",
     "PlaceRegions",
+    "gisaxs_cut_tools",
     "RING",
     "SECTOR",
     "SPOT",

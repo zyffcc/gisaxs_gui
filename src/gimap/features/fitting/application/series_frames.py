@@ -10,14 +10,16 @@ from __future__ import annotations
 
 import fnmatch
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable
 
 from src.gimap.shared.detector_io.loading import DETECTOR_SUFFIXES
+from src.gimap.shared.nxcansas import READ_SUFFIXES, is_nxcansas
 
 from ..domain import CurveData
 from .curve_units import FROM_FRAME
-from .models import CurveOperationResult, FileOperationError, InSituSourceFrame
+from .models import CURVE_SUFFIXES, CurveOperationResult, FileOperationError, InSituSourceFrame
 from .use_cases import _structured_file_error
 
 FRAME_PATTERNS = tuple(f"*{suffix}" for suffix in DETECTOR_SUFFIXES)
@@ -29,8 +31,27 @@ def frame_path(token: str) -> Path:
 
 
 def is_frame(token: str) -> bool:
-    """Whether a listed item is a detector frame (to be cut), not a curve file."""
-    return frame_path(token).suffix.lower() in DETECTOR_SUFFIXES
+    """Whether a listed item is a detector frame (to be cut), not a curve file. An HDF5 file of NXcanSAS curves
+    (``shared.nxcansas``) is a curve file: its contents decide, once per version of the file."""
+    path = frame_path(token)
+    suffix = path.suffix.lower()
+    if suffix not in DETECTOR_SUFFIXES:
+        return False
+    return not (suffix in READ_SUFFIXES and _holds_curves(str(path), file_stamp(str(path))))
+
+
+@lru_cache(maxsize=1024)
+def _holds_curves(path: str, _stamp) -> bool:
+    return is_nxcansas(path)
+
+
+def is_curve_file(path) -> bool:
+    """A file Fitting opens as a curve (``CURVE_SUFFIXES``): a .dat or .txt table, or an .h5 file that holds
+    NXcanSAS curves (its contents decide: an HDF5 file of detector frames is none)."""
+    suffix = Path(path).suffix.lower()
+    if suffix not in CURVE_SUFFIXES:
+        return False
+    return suffix not in READ_SUFFIXES or _holds_curves(str(path), file_stamp(str(path)))
 
 
 def is_frame_pattern(pattern: str) -> bool:
@@ -45,10 +66,13 @@ def matching(items, pattern: str) -> list:
 
 
 def frame_name(token: str) -> str:
-    """``film_00012.cbf``, or ``run.nxs · frame 4`` for a frame past the first of its source (1-based)."""
+    """``film_00012.cbf``, or ``run.nxs · frame 4`` for a frame past the first of its source (1-based); a further
+    curve of an NXcanSAS file is ``curves.h5 · curve 2``."""
     frame = InSituSourceFrame.from_token(token)
     if frame.columns is not None:
         return frame.display_name
+    if frame.frame_index and not is_frame(token):
+        return f"{frame.path.name} · curve {frame.frame_index + 1}"
     return frame.path.name if frame.frame_index == 0 else f"{frame.path.name} · frame {frame.frame_index + 1}"
 
 
@@ -105,4 +129,4 @@ class SeriesCurveReader:
 
 
 __all__ = ["FRAME_PATTERNS", "SeriesCurveReader", "file_stamp", "frame_curve", "frame_name", "frame_path",
-           "is_frame", "is_frame_pattern", "matching"]
+           "is_curve_file", "is_frame", "is_frame_pattern", "matching"]

@@ -4,7 +4,8 @@ A settings file is JSON (``{"format": "gimap-analyze-settings", "version": 1, â€
 mode, the instrument profile (its name and its geometry, so the file also works on another
 computer), Î±i, a beam-centre override, frame summing, the corrections (gap guard, hot/dead
 pixels, masks drawn or loaded, mirror filling, valid range, background), the GIWAXS cuts (band
-widths, bins, x axis, ring window, custom sector, q box, cut regions), the GISAXS cut positions,
+widths, bins, x axis, ring window, custom sector, q box, cut regions), the GISAXS cut positions and the person's
+GISAXS cuts (in q),
 whether a series is cut where the frame on screen is (``pin_series_cuts``) and, optionally, the
 batch-export choices. Paths are stored as they are; a mask or background
 file that no longer exists is reported when the file is loaded.
@@ -29,6 +30,7 @@ from ..domain import (
     X_AXIS_TWO_THETA,
 )
 from .cut_regions import region_to_dict, regions_from_dicts
+from .gisaxs_cuts import cut_to_dict, cuts_from_dicts
 from .models import AUTO, MODES
 from .use_cases import SOFTWARE
 
@@ -98,6 +100,7 @@ def settings_record(settings: AnalyzeSettings) -> dict[str, Any]:
             "background_path": corrections.background_path,
             "background_frame": int(corrections.background_frame),
             "background_scale": float(corrections.background_scale),
+            "flat_field_path": corrections.flat_field_path,
             "mask_path": corrections.mask_path,
             "mask_shapes": [
                 {"kind": shape.kind, "points": [list(point) for point in shape.points]} for shape in corrections.mask_shapes
@@ -126,6 +129,7 @@ def settings_record(settings: AnalyzeSettings) -> dict[str, Any]:
             "horizontal_half_height_px": gisaxs.horizontal_half_height_px,
             "vertical_column": gisaxs.vertical_column,
             "vertical_half_width_px": gisaxs.vertical_half_width_px,
+            "cuts": [cut_to_dict(cut) for cut in gisaxs.regions],
         },
     }
     if settings.pin_series_cuts is not None:  # (a set-up that does not know the pin says nothing of it)
@@ -147,6 +151,7 @@ def settings_from_record(record: Any) -> AnalyzeSettings:
             background_path=values.get("background_path") or None,
             background_frame=int(values.get("background_frame", 0)),
             background_scale=float(values.get("background_scale", 1.0)),
+            flat_field_path=values.get("flat_field_path") or None,
             minimum=_optional_float(values.get("minimum")),
             maximum=_optional_float(values.get("maximum")),
             gap_guard_px=int(values.get("gap_guard_px", 0)),
@@ -186,6 +191,7 @@ def settings_from_record(record: Any) -> AnalyzeSettings:
             horizontal_half_height_px=float(values.get("horizontal_half_height_px", 2.5)),
             vertical_column=_optional_float(values.get("vertical_column")),
             vertical_half_width_px=float(values.get("vertical_half_width_px", 5.0)),
+            regions=tuple(cuts_from_dicts(values.get("cuts"))),
         )
         export = record.get("export")
         return AnalyzeSettings(

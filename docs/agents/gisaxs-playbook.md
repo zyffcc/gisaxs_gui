@@ -56,7 +56,10 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
    曲线确定；报告的解有这样的值时 Needs attention 里有一条 “fit”。振幅、背景 BG 和直射束拖尾振幅 A 按非负最小二乘求解，
    不算边界：等于 0 时 Decisions 有一条 `fit caveat`（“Background at 0, the non-negativity limit”；Tail A = 0 时 Tail w、Tail ν
    不影响曲线）。报告的解已收敛但 χ²ᵣ > 10（与 Fitting 序列 “拟合差” 的 χ²ᵣ 限值相同）时 Needs attention 里有一条 “fit”：
-   试过的组成都描述不了这条切线，R、D 不是测量值（粉末或标样的布拉格环会这样）。
+   试过的组成都描述不了这条切线，R、D 不是测量值（粉末或标样的布拉格环会这样）。切线在 Yoneda 带上且知道 αi 时，切线的
+   q_z = k(sin αi + sin αf) 记在 `gisaxs.fit.cut_qz`；q_z·R 大于 1.7 的球或随机取向圆柱带标记 `qzR`，Needs attention 里有一条
+   “fit”：q_z = 0 处的形状因子使半径偏小（四项 DWBA 基准上中位误差 15–29 %）。转述这个 R 时要说出来；用户要可靠的 R 时，在
+   Fitting 的模型里填入 αi、αf、λ 再用 Predict parameters（两路径）。
    网络只凭曲线选组成，所以要用用户知道的形状在 Fitting 里确认（手册第 13 章）。`--no-fit` 只准备切线，不拟合。
 
 输出：`report.md/json`、`horizontal.csv`、`vertical.csv`、`fit_curve.csv`（q、I、σ、I_fit：报告的那个解）、`fit_solutions.csv`

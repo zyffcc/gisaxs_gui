@@ -42,8 +42,9 @@ FIT_INPUT_FOLDER = "fit_input"
 FIT_INPUT_PATTERN = "*_fit_input.dat"
 SEND_SUFFIX = "_fitting"
 """The folder of a Send Series to Fitting is ``<batch>_fitting``."""
-KINDS = ("tables", "per_frame", "fit_input", "q_map", "cake", "detector_image", "q_map_image", "frames", "fit",
-         "fit_plot", "fit_curves", "readme", "record", "other")
+CHOSEN = ("tables", "per_frame", "nxcansas", "fit_input", "q_map", "cake", "detector_image", "q_map_image", "frames")
+"""The kinds of file a choice of ``BatchChoices`` of the same name writes."""
+KINDS = (*CHOSEN, "fit", "fit_plot", "fit_curves", "readme", "record", "other")
 """The kinds of file of a batch folder (the keys of ``output_names``, and ``other``), in the order they are said."""
 _KIND_OF_FOLDER = {folder: kind for kind, folder in FOLDERS.items() if kind not in ("cake", "q_map_image")}
 
@@ -78,7 +79,7 @@ def file_kind(name: str, batch: str) -> str:
 
 def chosen_kinds(choices: BatchChoices) -> set[str]:
     """The kinds of file a batch with ``choices`` writes (``README.txt`` and the record always)."""
-    kinds = {kind for kind in KINDS[:8] if getattr(choices, kind)} | {"readme", "record"}
+    kinds = {kind for kind in CHOSEN if getattr(choices, kind)} | {"readme", "record"}
     if choices.fit != FIT_NONE:
         kinds |= {"fit", "fit_plot"} | ({"fit_curves"} if choices.fit_curves else set())
     return kinds

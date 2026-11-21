@@ -57,6 +57,8 @@ def inspect_imported_sources(sources, inspect, stop):
                 raise table
             if source.columns is not None:
                 validate_columns(table, source.columns)
+            elif table.curve_titles and source.frame_index >= len(table.curve_titles):  # NXcanSAS: fewer curves now
+                raise ValueError("The NXcanSAS file holds fewer curves than when it was imported; import it again.")
         except (OSError, ValueError, RuntimeError) as exc:
             errors[source.token] = str(exc)
     return errors

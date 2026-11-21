@@ -28,8 +28,8 @@ def _table(tmp_path, name: str = "frame_horizontal.csv") -> Path:
 
 
 def test_a_csv_table_is_refused_with_what_fitting_reads_and_where_the_curve_is(tmp_path) -> None:
-    assert UNSUPPORTED_CURVE == ("Fitting reads .dat and .txt curves (q, I, σ). For a cut from Analyze, use Send to "
-                                 "Fitting or open its _fit_input.dat file.")
+    assert UNSUPPORTED_CURVE == ("Fitting reads .dat and .txt curves (q, I, σ) and NXcanSAS .h5 files. For a cut from "
+                                 "Analyze, use Send to Fitting or open its _fit_input.dat file.")
     assert all(suffix in UNSUPPORTED_CURVE for suffix in CURVE_SUFFIXES) and ".csv" not in CURVE_SUFFIXES
     use_case = LoadCurve(LocalCurveRepository())
     for name in ("frame_horizontal.csv", "frame_horizontal.CSV", "curve.xy", "curve"):

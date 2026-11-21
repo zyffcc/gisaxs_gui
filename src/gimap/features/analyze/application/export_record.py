@@ -53,8 +53,8 @@ GEOMETRY_CONVENTION = (
 ``rot3_rad``; refraction only with ``geometry.critical_angle_deg`` above 0)."""
 POISSON, PIXEL_SCATTER, SCALED_POISSON = "poisson", "pixel_scatter", "scaled_poisson"
 """``error_model``: σ of a point from the photon counts of its pixels (√Σ / n), from the scatter of its pixels
-(not counts as measured: ``frame_preprocessing.photon_counts``), or from the counts scaled like the values (GIWAXS
-intensity corrections on counts: a pixel's variance is value / factor)."""
+(not counts as measured: ``frame_preprocessing.photon_counts``), or from the counts scaled like the values (a flat
+field or the GIWAXS intensity corrections on counts: a pixel's variance is value / factor)."""
 MERGE_RULE = (
     "a bin with fewer pixels than max(8, 10 % of the curve's median) is joined with its neighbours until the point "
     "has enough, never across a gap of more than 2.5 bin steps; the point has the pixel-weighted mean of q and of I"
@@ -170,7 +170,7 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
             if profile is not None
             else None
         ),
-        "corrections": _plain(analysis.corrections),
+        "corrections": {**_plain(analysis.corrections), "flat_field": flat_field_record(analysis)},
         "intensity_corrections": (
             describe_intensity_corrections(analysis.corrections) if analysis.kind == GIWAXS else None
         ),
@@ -204,6 +204,13 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
     return record
 
 
+def flat_field_record(analysis: FrameAnalysis) -> Optional[dict[str, Any]]:
+    """The flat field the frame was divided by — file, path, SHA-256, normalisation mean, floor, pixels it leaves
+    out, how it was applied — for the ``corrections`` block of the record; ``None`` without one."""
+    use = getattr(analysis, "flat_field", None)
+    return None if use is None else use.to_record()
+
+
 def provenance_lines(record: Mapping[str, Any], written_by: str, settings: Optional[str] = None, *,
                      frame: bool = True) -> list[str]:
     """The lines above the columns of a curve or map file (without their ``#``), from the frame's record
@@ -229,8 +236,8 @@ def provenance_lines(record: Mapping[str, Any], written_by: str, settings: Optio
 
 def error_model(analysis: FrameAnalysis) -> Optional[str]:
     """How the σ of the frame's points were computed (``POISSON``, ``PIXEL_SCATTER``, ``SCALED_POISSON``): the
-    decision the reduction took (``frame_preprocessing.photon_counts``, then the GIWAXS intensity corrections).
-    ``None`` without a reduction."""
+    decision the reduction took (``frame_preprocessing.photon_counts``, then a flat field or the GIWAXS intensity
+    corrections, which scale the counts). ``None`` without a reduction."""
     if analysis.reduction is None:
         return None
     if not photon_counts(analysis.metadata, analysis.corrections,
@@ -305,10 +312,10 @@ def fit_input_observation(analysis: FrameAnalysis, halves: Optional[str] = None)
     per pixel, Poisson σ); background subtraction, a floating-point
     (dark-subtracted) frame and mirror filling break the counting model — σ then
     comes from the scatter of the pixels (``frame_preprocessing.photon_counts``,
-    the same decision the cuts use) —, and so do the GIWAXS intensity
-    corrections (the values are no longer counts, though their σ still follows
-    from the counts); a valid range acts as a threshold, and summed frames are
-    recorded.
+    the same decision the cuts use) —, and so do a flat field and the GIWAXS
+    intensity corrections (the values are no longer counts, though their σ still
+    follows from the counts); a valid range acts as a threshold, and summed
+    frames are recorded.
 
     ``halves`` — what a fit is to take of the GISAXS cut, chosen when the file was written (``mean`` /
     ``positive`` / ``negative``) — is recorded as ``"halves"``: Fitting starts with it. The file itself always
@@ -326,6 +333,7 @@ def fit_input_observation(analysis: FrameAnalysis, halves: Optional[str] = None)
         "counting_model_valid": (
             photon_counts(analysis.metadata, corrections, mirror_filled=getattr(analysis, "filled_pixels", None) is not None)
             and analysis.intensity_scale is None
+            and not corrections.flat_field_path
             and not (analysis.kind == GIWAXS and has_intensity_corrections(corrections))
         ),
         "threshold_enabled": corrections.minimum is not None or corrections.maximum is not None,
@@ -346,7 +354,7 @@ def fit_input_metadata(analysis: FrameAnalysis, metadata: Mapping[str, Any], hal
 
 __all__ = [
     "GEOMETRY_CONVENTION", "MERGE_RULE", "PIXEL_SCATTER", "POISSON", "Q_LABEL", "SCALED_POISSON", "SOFTWARE",
-    "analysis_metadata", "binning", "error_model", "export_stem", "fit_input_curve", "fit_input_metadata",
+    "analysis_metadata", "binning", "error_model", "export_stem", "fit_input_curve", "fit_input_metadata", "flat_field_record",
     "fit_input_observation", "frame_cuts", "frame_name", "frame_name_of", "frame_stem", "provenance_lines",
     "source_files",
 ]

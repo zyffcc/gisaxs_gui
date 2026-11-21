@@ -12,6 +12,7 @@ from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile
 from src.gimap.shared.geometry.detector_tilt import FlatDetectorError
 
 from ..domain import BadPixels, Corrections, GisaxsCutSettings, GiwaxsSettings, Reduction
+from .flat_field import FlatFieldUse
 
 AUTO = "auto"
 MODES = (AUTO, "gisaxs", "giwaxs")
@@ -114,8 +115,12 @@ class FrameAnalysis:
     filled_pixels: Optional[np.ndarray] = None
     """Pixels filled from the mirror side (``Corrections.mirror_fill``, GIWAXS)."""
     intensity_scale: Optional[np.ndarray] = None
-    """GIWAXS with intensity corrections on photon counts: the factor each pixel's counts were multiplied
-    by (1 / solid angle × polarisation × absorption), so its Poisson variance is that factor × its value."""
+    """Photon counts divided by a flat field or (GIWAXS) by the intensity corrections: the factor each pixel's
+    counts were multiplied by (1 / F, F = solid angle × polarisation × absorption × flat field), so its Poisson
+    variance is that factor × its value."""
+    flat_field: Optional[FlatFieldUse] = None
+    """The flat field the frame was divided by (``Corrections.flat_field_path``): file, SHA-256, mean, pixels
+    it leaves out; ``None`` without one."""
     detected_kind: Optional[str] = None
     """GISAXS or GIWAXS as Auto would classify the frame from its geometry, whatever the mode chosen
     (``kind`` is the reduction used); ``None`` without a geometry."""

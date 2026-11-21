@@ -8,8 +8,9 @@ available — Predict parameters on the curve: the most probable solution is rep
 probability and intervals, and when another solution is probable too the person chooses the model.
 Each step is a tool call, so the GUI shows it and the AI could do the same. Like the GIWAXS run, the
 report always says what its numbers are (q kinematic, uncertainties statistical only:
-``giwaxs_decisions``), and a reported fit far from its curve (χ²ᵣ above Fitting's poor-fit limit) or
-with a value at a bound of its range is a point to check.
+``giwaxs_decisions``), and a reported fit far from its curve (χ²ᵣ above Fitting's poor-fit limit),
+with a value at a bound of its range, or with a sphere too large for the form factor at q_z = 0 (``qzR``) is a point
+to check.
 """
 
 from __future__ import annotations
@@ -24,9 +25,11 @@ from .gisaxs_choice import (
     LENGTH_SCALE,
     LINEAR_TERMS,
     POOR_CHI2,
+    QZ_R_HINT,
     bounds_text,
     chance,
     chosen,
+    interface_caveat,
     interval,
     poor_fit,
     rivals,
@@ -35,7 +38,7 @@ from .gisaxs_choice import (
 )
 from .gisaxs_report import cut_spans
 from .gisaxs_tools import MAX_SYMMETRY_SHIFT_PX
-from .giwaxs_decisions import refraction_decision, uncertainty_decision
+from .giwaxs_decisions import flat_field_decision, refraction_decision, uncertainty_decision
 from .ring_frames import NO_FIT
 
 PREDICTED = (
@@ -143,6 +146,9 @@ class GisaxsProcedureMixin:
         # What the numbers are, in every report (the GIWAXS run says the same in its own words).
         self._decide(**refraction_decision(status.get("geometry"), "gisaxs", given=self._incidence is not None))
         self._decide(**uncertainty_decision(status.get("error_model"), "gisaxs"))
+        flat = flat_field_decision(status)
+        if flat is not None:
+            self._decide(**flat)
         self._horizontal_cut(cuts)
         symmetry = self._call("refine_beam_center_symmetry", {"max_shift_px": MAX_SYMMETRY_SHIFT_PX})
         if symmetry is not None:
@@ -271,6 +277,9 @@ class GisaxsProcedureMixin:
                 "fit", "The best fit did not converge.", None,
                 "Open the curve in Fitting (Send to Fitting) and refine it with a chosen model.",
             )
+        caveat = interface_caveat(best, fit.get("cut_qz"))
+        if caveat:  # fitted at q_z = 0 while q_z·R of the cut is beyond what that treatment holds for
+            self._attention("fit", caveat, None, QZ_R_HINT)
         if poor_fit(best):  # converged, but far from the curve: Fitting's poor-fit limit
             self._attention("fit", POOR_FIT.format(model=best["model"], chi2=f"{best['chi2']:.3g}", limit=f"{POOR_CHI2:g}"),
                             None, POOR_FIT_HINT)

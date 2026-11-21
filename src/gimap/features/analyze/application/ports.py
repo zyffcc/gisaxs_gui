@@ -156,6 +156,11 @@ class CurveWriter(Protocol):
         """A JSON record (settings, frames, files written)."""
         ...
 
+    def write_nxcansas(self, path: Path, curves: Sequence[Any]) -> Path:
+        """One NXcanSAS (HDF5) file of ``shared.nxcansas.SasCurve`` curves, one SASentry each
+        (``nxcansas_export.sas_curves``)."""
+        ...
+
 
 class FitPreviewCache(Protocol):
     """A bounded store of actual fit curves; overflow belongs in a private temporary cache."""

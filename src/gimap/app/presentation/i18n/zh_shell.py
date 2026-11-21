@@ -182,8 +182,10 @@ SHELL_ZH = {
     "What the pages could not restore:": "各页面未能恢复的内容：",
     "No such file or directory": "没有这个文件或文件夹",
     "Permission denied": "没有访问权限",
-    "Fitting reads .dat and .txt curves (q, I, σ). For a cut from Analyze, use Send to Fitting or open its _fit_input.dat file.":
-        "拟合读取 .dat 和 .txt 曲线（q、I、σ）。来自分析的切线，请用“发送到拟合”，或打开它的 _fit_input.dat 文件。",
+    "Fitting reads .dat and .txt curves (q, I, σ) and NXcanSAS .h5 files. For a cut from Analyze, use Send to Fitting "
+    "or open its _fit_input.dat file.":
+        "拟合读取 .dat 和 .txt 曲线（q、I、σ）以及 NXcanSAS .h5 文件。来自分析的切线，请用“发送到拟合”，或打开它的 "
+        "_fit_input.dat 文件。",
 }
 
 __all__ = ["SHELL_ZH"]

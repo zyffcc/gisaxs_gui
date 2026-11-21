@@ -1,10 +1,12 @@
 """What happens to a loaded frame before any cut: validity, masks, corrections, mirror filling.
 
 Order: the detector's own invalid pixels → hot and dead pixels found in the frame → masks drawn
-by the person → background → gap guard → valid intensity range → (GIWAXS, when asked) pixels
-without data filled from the mirror side → (GIWAXS, when asked, once the geometry is known) the
-intensity corrections: solid angle, polarisation, film absorption (``_correct_intensity``). Hot, dead and drawn-mask pixels are part of the frame's
-validity; the rest are corrections, so the raw frame is kept for re-analysis with other settings.
+by the person → background → flat field (its pixels that do not respond left out before the gap guard, the
+division after the range, so the range applies to the values as measured) → gap guard → valid intensity range →
+(GIWAXS, when asked) pixels without data filled from the mirror side (from values already divided by the flat
+field) → (GIWAXS, when asked, once the geometry is known) the intensity corrections: solid angle, polarisation,
+film absorption (``_correct_intensity``). Hot, dead and drawn-mask pixels are part of the frame's validity; the
+rest are corrections, so the raw frame is kept for re-analysis with other settings.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from src.gimap.shared.geometry import DetectorGeometry
 
 from ..domain import (
     Corrections,
+    apply_flat_field,
     intensity_factor,
     apply_valid_range,
     find_bad_pixels,
@@ -28,6 +31,7 @@ from ..domain import (
     subtract_background,
     valid_pixels,
 )
+from .flat_field import FlatFieldMixin
 
 
 def floating(metadata: Optional[Mapping[str, Any]]) -> bool:
@@ -78,10 +82,11 @@ class FrameSum:
         return summed, self._valid
 
 
-class FramePreprocessingMixin:
+class FramePreprocessingMixin(FlatFieldMixin):
     """Needs ``frames`` (a ``FrameSource``); call ``_init_preprocessing()`` in ``__init__``."""
 
     def _init_preprocessing(self) -> None:
+        self._init_flat_field()
         self._background_key: Optional[tuple] = None
         self._background: Optional[tuple[np.ndarray, np.ndarray]] = None
         self._bad_cache: Optional[tuple] = None
@@ -144,14 +149,22 @@ class FramePreprocessingMixin:
     def _corrected(
         self, data: np.ndarray, valid: np.ndarray, corrections: Corrections
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Background, then the gap guard (around invalid pixels), then the range."""
+        """Background, the flat field's pixels that do not respond, the gap guard (around invalid pixels, those
+        too), the range (on the values as measured), then the division by the flat field."""
         if corrections.background_path:
             background, background_valid = self._background_frame(corrections)
             data, valid = subtract_background(
                 data, valid, background, background_valid, corrections.background_scale
             )
+        flat = None
+        if corrections.flat_field_path:
+            flat = self._flat_field(corrections.flat_field_path, (int(data.shape[0]), int(data.shape[1])))[0]
+            valid = valid & flat.kept
         valid = guard_invalid(valid, corrections.gap_guard_px)
-        return data, apply_valid_range(data, valid, corrections.minimum, corrections.maximum)
+        valid = apply_valid_range(data, valid, corrections.minimum, corrections.maximum)
+        if flat is not None:
+            data, valid = apply_flat_field(data, valid, flat)
+        return data, valid
 
     def _preprocess(
         self, raw_data: np.ndarray, raw_valid: np.ndarray, corrections: Corrections,
@@ -180,6 +193,8 @@ class FramePreprocessingMixin:
                 record["raw_valid"] = raw_valid  # re-analysing without them starts from the detector's mask
             return record
         data, valid = self._corrected(raw_data, usable, corrections)
+        if corrections.flat_field_path:
+            record["flat_field"] = self._flat_field(corrections.flat_field_path)[1]
         filled = None
         if corrections.mirror_fill and mirror_center_x is not None:
             data, valid, filled = mirror_fill(data, valid, mirror_center_x)
@@ -199,8 +214,17 @@ class FramePreprocessingMixin:
             self._intensity, self._intensity_key = cached, key
         return cached
 
+    def _flat_scale(self, common: dict, corrections, counting: bool) -> None:
+        """Photon counts divided by a flat field: each pixel's counts were multiplied by ``1 / F_ff``, so its
+        Poisson variance is that factor × its value (``intensity_scale``)."""
+        if counting and common.get("flat_field") is not None:
+            with np.errstate(invalid="ignore", divide="ignore"):
+                common["intensity_scale"] = (1.0 / self._flat_field(corrections.flat_field_path)[0].factor).astype(
+                    np.float32)
+
     def _correct_intensity(self, common: dict, raw_data, raw_valid, geometry, corrections, counting: bool) -> None:
-        """GIWAXS intensity corrections: ``I / factor``; the raw frame is kept for re-analysis."""
+        """GIWAXS intensity corrections: ``I / factor``; the raw frame is kept for re-analysis. The scale of the
+        counts is that of the flat field, when there is one, times ``1 / factor``: ``F = F_Ω F_P F_A F_ff``."""
         data, valid = common["data"], common["valid"]
         factor = self._intensity_factor((int(data.shape[0]), int(data.shape[1])), geometry, corrections)
         with np.errstate(invalid="ignore", divide="ignore"):
@@ -210,7 +234,9 @@ class FramePreprocessingMixin:
         common["data"], common["valid"] = corrected, valid & np.isfinite(factor) & (factor > 0)
         if counting:
             with np.errstate(invalid="ignore", divide="ignore"):
-                common["intensity_scale"] = (1.0 / factor).astype(np.float32)
+                scale = (1.0 / factor).astype(np.float32)
+            previous = common.get("intensity_scale")  # the flat field's
+            common["intensity_scale"] = scale if previous is None else (previous * scale).astype(np.float32)
 
 
 __all__ = ["FramePreprocessingMixin", "FrameSum", "floating", "photon_counts"]

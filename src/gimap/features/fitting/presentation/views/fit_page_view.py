@@ -81,7 +81,7 @@ class FitPageView(FitStepsView):
         self.import_curves_button = QPushButton("Import Curves…", bar)
         self.import_curves_button.setObjectName("fitImportCurvesButton")
         self.import_curves_button.setToolTip(
-            "Batch fit selected TXT/DAT files: preview q I sigma or shared-q columns q I1 I2 …")
+            "Batch fit selected TXT/DAT files or NXcanSAS .h5 files: preview q I sigma or shared-q columns q I1 I2 …")
         self.undo_button = QToolButton(bar)
         self.undo_button.setObjectName("fitUndoButton")
         self.undo_button.setText("Undo")

@@ -113,7 +113,7 @@ ANALYZE_MENU = (
 FITTING_MENU = (
     Entry("fitting_open_curve", "&Open Curve…", "Open a 1D curve (q, I, σ) — Analyze ▸ Send to Fitting opens its cut here"),
     Entry("fitting_import_curves", "&Import Curves…",
-          "Batch fit selected TXT/DAT files: preview q I sigma or shared-q columns q I1 I2 …"),
+          "Batch fit selected TXT/DAT files or NXcanSAS .h5 files: preview q I sigma or shared-q columns q I1 I2 …"),
     Entry("fitting_fit_folder", "Fit a Fol&der of Curves…",
           "In-situ series: every curve of a folder (a series, or many samples), each fitted with the model of this "
           "page — fit one curve here first, or let each curve be predicted"),

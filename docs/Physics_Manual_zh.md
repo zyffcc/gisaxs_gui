@@ -50,6 +50,7 @@
   - [4.7 缝隙保护](#47-缝隙保护)
   - [4.8 镜像补齐（GIWAXS）](#48-镜像补齐giwaxs)
   - [4.9 步骤的顺序](#49-步骤的顺序)
+  - [4.10 平场（探测器响应）](#410-平场探测器响应)
 - [5. GIWAXS 的强度校正](#5-giwaxs-的强度校正)
   - [5.1 定义](#51-定义)
   - [5.2 立体角](#52-立体角)
@@ -423,8 +424,8 @@ row_specular = y_c − L tan 2α_i / p_y         (α_f = α_i)             (2.16
 - **探测器倾斜和旋转。** `.poni` 的倾斜（rot1、rot2、rot3）是几何的一部分，进入 q、χ、立体角和偏振因子（3.7 节）。标定不精修倾斜（3.3 节）。下面的水平地平线行假设探测器不倾斜。
 - **样品方位角和侧滚（roll）。** 假定样品只绕与光束垂直的水平轴倾斜。绕表面法线或绕光束的旋转不作描述。
 - **视差与传感器厚度。** 一个像素就是它的中心；没有相互作用深度，也没有像素拆分。
-- **平场与探测效率。** 不做平场、探测器效率、空气或窗口吸收的校正。
-- **绝对强度。** 强度是每像素的平均计数。不按监视器、透过率、曝光时间或样品体积缩放。只有开启 GIWAXS 强度校正时才除以一个几何因子（第 5 章）；序列可以按参考峰归一化（6.10 节）。
+- **平场与探测效率。** 只有选择了平场（探测器响应）时才用它除各帧（4.10 节；默认关闭）。不做探测器效率、空气或窗口吸收的校正。
+- **绝对强度。** 强度是每像素的平均计数。不按监视器、透过率、曝光时间或样品体积缩放。只有开启 GIWAXS 强度校正时才除以一个几何因子（第 5 章），只有选择了平场时才除以平场（4.10 节）；序列可以按参考峰归一化（6.10 节）。
 - **光束性质。** 不对发散度、能量带宽和光斑足迹（footprint）建模。
 
 直的样品地平线（2.3 节）、镜像补齐（4.8 节）以及立体角和偏振因子（第 5 章）也都假定探测器是平的并且垂直于光束。
@@ -748,7 +749,7 @@ valid′(p) = valid(p) ∧ 以 p 为中心的 (2N + 1) × (2N + 1) 方块中没�
 ```
 
 - `0 ≤ N ≤ 20`。在分析窗口中默认是 3 px（校正（Corrections）；记为 `analyze.gap_guard_px`）。领域对象和没有这个键的设置文件默认为 0。
-- 它围绕此时所有无效的像素扩展：读取器掩蔽的像素和缝隙代码、任一求和帧中无效的像素、坏像素、绘制的掩膜和掩膜文件，以及背景帧中无效的像素。
+- 它围绕此时所有无效的像素扩展：读取器掩蔽的像素和缝隙代码、任一求和帧中无效的像素、坏像素、绘制的掩膜和掩膜文件、背景帧中无效的像素，以及平场排除的像素（4.10 节）。
 - 它不围绕之后被数值范围排除的像素扩展，也不围绕样品地平线扩展。帧的边界不算无效。
 
 实现：`src/gimap/features/analyze/domain/corrections.py`
@@ -776,14 +777,49 @@ I_fill(i, j) = (1 − w) I(i, j_0) + w I(i, j_0 + 1)                            
 2. 在原始帧中找坏像素（4.4 节）。
 3. 绘制的掩膜和掩膜文件（4.5 节）。
 4. 背景扣除（4.6 节）。
-5. 缝隙保护（4.7 节）。
-6. 有效数值范围（4.5 节）。
-7. 镜像补齐，仅 GIWAXS（4.8 节）。
-8. 强度校正，仅 GIWAXS（第 5 章）。
+5. 平场的第一部分：排除平场不保留的像素（4.10 节）。
+6. 缝隙保护（4.7 节）。
+7. 有效数值范围（4.5 节），作用于除以平场之前的值。
+8. 平场的第二部分：除法 `I / F_ff`（4.10 节）。
+9. 镜像补齐，仅 GIWAXS（4.8 节）；它用已经除过平场的值来补齐。
+10. 强度校正，仅 GIWAXS（第 5 章）。
 
-第 4 到 7 步只有在其中至少一步启用时才运行。原始帧被保留：改动任何设置都从原始帧重新计算，所以校正永远不会叠加。曲线、q 图、展开图和每一种导出都使用这个结果。
+第 4 到 9 步只有在其中至少一步启用时才运行。原始帧被保留：改动任何设置都从原始帧重新计算，所以校正永远不会叠加。曲线、q 图、展开图和每一种导出都使用这个结果。
 
 实现：`src/gimap/features/analyze/application/frame_preprocessing.py`, `src/gimap/features/analyze/application/use_cases.py`
+
+### 4.10 平场（探测器响应）
+
+探测器的各个像素响应并不相同：增益、阈值和传感器厚度各有差异，模块边缘的响应更低。平场是一幅均匀照射下的帧（荧光箔、
+非晶散射体，或探测器厂商自己的标定）。选择了平场时（掩膜与校正（Mask & corrections）▸ 校正（Corrections）▸ 平场；默认关闭），
+分析工作区用它除每一帧，与 pyFAI、Nika、GIXSGUI 和 pygix 的做法相同。记平场图像为 `F_raw`：
+
+```text
+F_ff,p = F_raw,p / m,      m = (1/N_kept) Σ_{p kept} F_raw,p                         (4.11)
+kept(p) = finite(F_raw,p) ∧ ¬mask_reader(p) ∧ F_ff,p > 0.05                          (4.12)
+I′_p = I_p / F_ff,p      （不保留的像素：从每一帧中排除）                              (4.13)
+```
+
+- **归一化。** `F_ff` 在它保留的像素上平均为 1，所以校正后的值仍接近每像素计数。`m` 和保留的像素互相依赖：从所有大于 0 的
+  有限像素开始，在大于 `0.05 m` 的像素上重新计算 `m`，直到这些像素不再变化（每一轮只会去掉像素，而最大的像素总会保留，
+  所以几轮之后就结束）。
+- **排除的像素。** `F_ff ≤ 0.05`、不是有限值或被平场的读取器掩蔽的像素没有响应：它们从每一帧中排除，记录统计这些探测器
+  像素的数目（`masked_pixels`）。缝隙保护（4.7 节）也围绕它们扩展。
+- **文件。** 平场可以是分析工作区能读的任何帧（CBF、TIFF、EDF、NeXus/HDF5；含多帧的文件取第一帧，并带上它的读取器掩膜，
+  4.1 节），也可以是 NumPy 的 `.npy` 数组（不用 pickle 读取）。它必须与帧形状相同；形状不同时拒绝并写明原因，从不重采样。
+  每个文件版本只读一次，用于每一帧：显示的帧、批量导出、监视文件夹和序列。
+- **顺序。** 除法在背景扣除之后（pyFAI：`(I − dark) / flat`）、有效数值范围之后，所以数值范围作用于测得的值；镜像补齐和
+  GIWAXS 强度校正在它之后（4.9 节）。对每个测量到的像素，结果都是 `I / (F_Ω F_P F_A F_ff)`（(5.1)）。
+- **不确定度。** 对光子计数，校正后像素的方差是 `I_p / F_ff,p²`（(5.9)，没有开启 GIWAXS 校正时 `F_p = F_ff`）：误差模型变为
+  缩放的泊松模型（6.4 节 (c)），GISAXS 切线和 GIWAXS 分箱都一样，拟合输入写明 `counting_model_valid: false`。不是光子计数的帧
+  仍取校正后数值的像素离散度 σ。
+- **记录。** `<stem>_analysis.json` 的 `corrections.flat_field` 写有文件、它的路径和 SHA-256、归一化用的平均值 `m`（以文件中的
+  单位计）、下限 0.05、排除的像素数和形状；没有平场时为 `null`。自动分析的报告在“决定”（Decisions）中写出所用的平场和它排除的
+  像素数。
+- **局限。** 平场按原样使用：它自身的噪声会加到每一幅校正后的帧上（每像素 10⁴ 计数的平场在每个像素上带来 1 % 的噪声）；
+  能量或阈值与测量时不同的平场给出的是错误的响应。不从平场中扣除暗场。
+
+实现：`src/gimap/features/analyze/domain/flat_field.py`, `src/gimap/features/analyze/application/flat_field.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`
 
 ## 5. GIWAXS 的强度校正
 
@@ -799,6 +835,7 @@ I′_p = I_p / F_p,      F_p = F_Ω · F_P · F_A                               
 - q 从不改变。因此峰位不变；在不同 χ 或不同 q 之间比较的强度会变。
 - `F_Ω` 和 `F_P` 在直射束处为 1，`F_A` 在 `α_f = α_i` 处为 1，所以校正后的值仍接近每像素计数。
 - F 非有限或非正的像素变为无效。
+- 有平场时（4.10 节），`F_p = F_Ω · F_P · F_A · F_ff`：平场在顺序中较早除（4.9 节），这里的因子最后除，计数的方差 (5.9) 用整个乘积。
 - 它们在其他所有准备步骤之后应用（4.9 节），并且需要几何。X、Y 和 L_p 即 (1.3)、(1.4) 和 (2.2) 中的量，`cos 2θ = L/L_p`（(2.12)）。对倾斜的探测器，像素的矢量 t 是 (3.15)，它的长度 |t| 代替 L_p，cos 2θ 是 t 沿光束的分量除以 |t|。
 - 其他掠入射软件包中也有类似的几何校正，例如 GIXSGUI（Jiang, 2015）。
 
@@ -863,7 +900,7 @@ Var(I′_p) = Var(I_p) / F_p² = I_p / F_p² = I′_p / F_p                     
 σ_k = √max( Σ_{p∈k} I′_p / F_p ,  f̄_k² ) / n_k,      f̄_k = (1/n_k) Σ_{p∈k} 1/F_p      (5.10)
 ```
 
-其中求和遍历分箱 k 的 n_k 个像素，`I_k = Σ I′_p / n_k`。`f̄_k²` 是按该分箱平均因子计的一个计数的方差：与 (6.5) 一样，全为零计数的分箱得到一个计数的误差，而不是 `σ = 0`；所有 F = 1 时，(5.10) 就是 (6.5)。帧不是光子计数时，校正后的值取 6.4 节的像素离散度 σ。这样校正过的值不再是计数：只要开启任一项 GIWAXS 校正，拟合输入就记录 `counting_model_valid: false`。JSON 记录 `<stem>_analysis.json` 中的 `intensity_corrections` 写有公式和参数。因子按每块 512 行计算，只要形状、几何和选项不变就保留。
+其中求和遍历分箱 k 的 n_k 个像素，`I_k = Σ I′_p / n_k`。使用平场时 `F_p` 包含平场（4.10 节）；只有平场时（GISAXS 也一样）`F_p = F_ff`，GISAXS 的探测器线 l 用 l 代替 k 套用 (5.10)。`f̄_k²` 是按该分箱平均因子计的一个计数的方差：与 (6.5) 一样，全为零计数的分箱得到一个计数的误差，而不是 `σ = 0`；所有 F = 1 时，(5.10) 就是 (6.5)。帧不是光子计数时，校正后的值取 6.4 节的像素离散度 σ。这样校正过的值不再是计数：只要开启任一项 GIWAXS 校正或平场，拟合输入就记录 `counting_model_valid: false`。JSON 记录 `<stem>_analysis.json` 中的 `intensity_corrections` 写有公式和参数。因子按每块 512 行计算，只要形状、几何和选项不变就保留。
 
 实现：`src/gimap/features/analyze/domain/intensity.py`, `src/gimap/features/analyze/domain/binning.py`, `src/gimap/features/analyze/application/export_record.py`
 
@@ -871,7 +908,7 @@ Var(I′_p) = Var(I_p) / F_p² = I_p / F_p² = I′_p / F_p                     
 
 ### 6.1 原则
 
-- 曲线上的每个点都是分配给它的有效像素的平均值。强度单位是每像素计数（`I (counts/pixel)`），开启 GIWAXS 校正时再除以 F。
+- 曲线上的每个点都是分配给它的有效像素的平均值。强度单位是每像素计数（`I (counts/pixel)`），使用平场或开启 GIWAXS 校正时再除以 F。
 - **不拆分像素。** 每个像素整个归入其中心坐标所在的那一个分箱或那一条探测器线；pyFAI 的像素拆分积分器则把像素分摊开。
 - **与 pyFAI 的比较。** 在四帧公开数据上，GIMaP 全方位角的 I(q) 与 pyFAI 的 `integrate1d`（2026.9，直方图，不拆分像素）用相同的像素、q 范围和分箱，在两者像素相同的每个分箱上相差 10⁻⁷ 以内（95 % 的分箱；最大 0.2 %，出现在分箱边缘的像素落到另一侧时）。加立体角和偏振改正时，pyFAI 用计数之和除以因子之和（`Σ I / Σ F`），GIMaP 取 `I / F` 的平均；F 和 I 在一个分箱内都变化时两者不同：靠近样品的 Xeuss 帧中位数相差 0.26 %（最大 1.3 %），P08 帧 0.04 %（`tools/benchmarks/pyfai_comparison.py`）。
 - 不平滑，也不跨缝隙插值。没有像素的分箱不给出点，画出的曲线在那里断开。
@@ -924,13 +961,13 @@ s_k² = ( Σ_{p∈k} I_p² − S_k² / n_k ) / (n_k − 1)                      
 
 为负的 `s_k²`（舍入误差）设为 0。只有一个像素的分箱或线取至少有两个像素的分箱的 `s²` 中位数（若没有这样的分箱则为 0）。
 
-**(c) 缩放的泊松模型，用于 GIWAXS 强度校正之后：** 方程 (5.10)。
+**(c) 缩放的泊松模型，用于平场或 GIWAXS 强度校正之后：** 方程 (5.10)，固定边界的分箱和 GISAXS 探测器线都一样。
 
 **用哪种模型。** 每帧只选择一次：
 
 | 帧 | σ |
 |---|---|
-| 光子计数：存储类型不是浮点，未扣除背景，没有镜像补齐 | (a)；开启 GIWAXS 强度校正时为 (c) |
+| 光子计数：存储类型不是浮点，未扣除背景，没有镜像补齐 | (a)；使用平场或开启 GIWAXS 强度校正时为 (c) |
 | 浮点帧（在束线上已扣除暗场或背景） | (b) |
 | 在 GIMaP 中扣除了背景 | (b) |
 | 应用了镜像补齐（有几何的 GIWAXS，即使没有像素需要补齐） | (b) |
@@ -1022,11 +1059,48 @@ c 为整数时为 10 列，否则为 11 列，并且只取完全在样品地平�
 
 因此名义上的条带尺寸是“5 px 高”和“10 px 宽”。误差模型见 6.4 节。
 
+**自动条带在 q 中的位置。** 它们曲线的记录（CSV 的 `# region:` 行和 `_analysis.json`）还给出 `qz_edges` 和
+`alpha_f_edges_deg`（水平条带的行边缘 `⌊r_c − h⌋` 和 `⌈r_c + h⌉` 在光束中心列上的 q_z 和 α_f），以及 `qy_edges` 和
+`two_theta_f_edges_deg`（竖直条带的列边缘在样品地平线所在行上的 q_y 和 2θ_f）。条带本身仍是整行和整列，(6.12)–(6.14)。
+
+**用户以 q 定义的切线。** 除两条自动切线外，切线（Cuts）步骤可以有任意多条有名字的切线。每条都在 `q_y`–`q_z`
+平面中定义（Å⁻¹，`q_y` 带符号），因此对这一几何的每一帧意义相同，并且在探测器图（映射回像素）和 q 图上画法一致。
+像素中心的 q 落在切线内时，这个像素属于该切线——整像素，从不拆分——并且只计可用像素（有效且在样品地平线以上，同 6.8）：
+
+```text
+horizontal band   z_0 ≤ q_z,p ≤ z_1                  每列一个点，x = mean q_y   (6.4)
+vertical band     y_0 ≤ q_y,p ≤ y_1                  每行一个点，x = mean q_z   (6.4)
+box               两者，沿 q_y 时每列一个点，沿 q_z 时每行一个点
+sector            c_0 ≤ atan2(q_y,p, q_z,p) ≤ c_1,   r_0 ≤ q_yz,p = √(q_y,p² + q_z,p²) ≤ r_1        (6.14a)
+line              0 ≤ s_p ≤ L,  |t_p| ≤ w,   s_p = (q_p − q_A)·û,  t_p = (q_p − q_A)·n̂                (6.14b)
+```
+
+扇区的 χ 从 `q_z` 轴（0°，表面法线）量起，符号同 `q_y`；原点是直射束。线从 `q_A` 到 `q_B`（`û` 沿线，`n̂` 垂直于线，
+`L = |q_B − q_A|`，半宽 `w`）。扇区和线的曲线是宽度为 `Δq = k p/D` 的固定边界区间（6.2；`p` 取较小的像素尺寸：
+直射束附近一个像素的 q），范围为 `[r_0, r_1]`（没有 q 范围的扇区：其像素的范围）或 `[0, L]`，稀疏区间按 6.5 合并；
+横坐标是 `q_yz` 或沿线的距离 `s`。误差与每条曲线一样，遵循该帧的模型（6.4）。放在 Yoneda 行 q_z 处的水平带并不完全
+重现自动切线：在平板探测器上 q_z 恒定的曲线略有弯曲，所以离开光束列后取到的像素略有不同。
+
+**以角度或像素输入切线。** 每个轴各自换算，精确且可逆：
+
+```text
+q_z = k (sin α_f + sin α_i)       （有折射时：k (√(sin² α_f − sin² α_c) + √(sin² α_i − sin² α_c))）   (6.14c)
+q_y = k sin 2θ_f                  （样品地平线上的 2θ_f，α_f = 0）
+q_z 对应的行 y：光束中心列上 q_z(x_c, y) = q_z；   q_y 对应的列 x：地平线所在行上 q_y(x, y_h) = q_y   (6.14d)
+```
+
+行和列通过把 q 映射回探测器求得（第 2 节的精确模型，包括倾斜的探测器）。线的半宽以像素输入时为 `w/(k p/D)`，
+以度输入时为 `w/k`（小角度）。另外两种单位中显示的数值就是这些换算；切线本身是那块 q 区域。
+
+**另一套设置上的切线。** 切线与做它们时的设置一起保存：探测器名、帧尺寸、像素尺寸、距离（±0.5 mm）、波长（相对
+10⁻⁴）、光束中心（±1 px）和探测器倾斜（±0.01°）。另一个文件的帧只要其中任一项不同，就会询问保留还是移除这些切线；
+在此之前切线照常应用（它们以 q 定义）。不比较 α_i：在 q 中，切线在另一个 α_i 下意义相同。
+
 **使左右对称**（Make Left and Right Symmetric；切线（Cuts）步骤）把 `x_c` 移到水平条带的镜像轴上，其他什么都不改。切线步骤和运行自动分析用的是同一种方法；见 8.2 节。
 
 **GISAXS q 图。** 在可用像素的范围内，`q_y`–`q_z` 上至多 600 × 600 格的网格（6.8 节）。
 
-实现：`src/gimap/features/analyze/domain/gisaxs.py`, `src/gimap/features/analyze/domain/binning.py`, `src/gimap/features/analyze/domain/symmetry.py`, `src/gimap/features/analyze/domain/symmetry_coarse.py`
+实现：`src/gimap/features/analyze/domain/gisaxs.py`, `src/gimap/features/analyze/domain/gisaxs_cuts.py`, `src/gimap/features/analyze/application/gisaxs_cuts.py`, `src/gimap/shared/geometry/q_inverse.py`, `src/gimap/features/analyze/domain/binning.py`, `src/gimap/features/analyze/domain/symmetry.py`, `src/gimap/features/analyze/domain/symmetry_coarse.py`
 
 ### 6.8 q 图与展开图
 
@@ -1859,7 +1933,8 @@ F(q_∥, Q) = πR²H · [2J₁(q_∥R)/(q_∥R)] · sinc(QH/2) e^{−iQH/2}     
 - 超出之后，误差取决于未知的基底，连符号也会变，所以无法事后校正。χ²ᵣ 通常能看出来，但不总是（PS 上 2 nm 的半球：
   −4 %，χ²ᵣ = 1.0；3 nm：−7 %，χ²ᵣ = 1.5）。半球的界限由聚合物膜决定：在裸 Si 上直到 q₊R ≈ 2.0 都在 3 % 以内。
 - D 和 σ_nn/D 在所有情形下都在 1 % 以内：间距来自结构因子，与形状因子无关。
-- 输入 α_i 和 α_f 后，拟合工作区在结果下方给出每个球的 q₊R，仅供参考。
+- 输入 α_i 和 α_f 后，拟合工作区在结果下方给出每个球的 q₊R，仅供参考。在 q_z = 0 处拟合的预测参数知道切线的角度时，
+  会标出 q₊R 大于 1.7 的球（*qzR*，9.13 节）。
 
 **两条路径加自由反射系数。** 在模型步骤的*掠入射下的球*（Spheres in grazing incidence）里输入切线的 α_i、α_f 和 λ，
 球就改用起主导作用的两项：
@@ -2047,12 +2122,40 @@ epoch（2 小时）；权重（13 MB，float32）随 GIMaP 提供，带 SHA-256 
 所以在模型不能在 σ 之内描述的曲线上，或数值贴在边界上时，精修值会落在中心区间旁边，区间就延伸到它。曲线完全看不到的数值（振幅为 0 的颗粒群的形状）没有最小二乘误差。标记有：数值在其范围的边界上；
 *不受约束*（unconstrained），即它的 68 % 区间覆盖先验范围的 0.7 以上；强相关的数值对（超过 ±0.95）；有效样本少（低于 50：这时区间改用取 β 次幂的权重，β ≤ 1 取能给出 50 个有效样本的最大值，使区间向更宽的建议分布靠拢）；*bic*；以及 *large* 和 *small*，即测得的 q 范围显示不出其尺寸的颗粒群（q_min·R ≥ 0.7：它的
 Guinier 区在最低 q 处或更低，曲线显示的衰减也是粗糙度或低 q 处的上升会产生的——在基准的 *measured* 曲线上，100 条中有 10 条、
-300 条中有 20 条所选的解多出这样一群颗粒，吸收了粗糙度；q_max·R < 1：它起平滑背景的作用，fit1d 也这样称呼这种颗粒群）。
+300 条中有 20 条所选的解多出这样一群颗粒，吸收了粗糙度；q_max·R < 1：它起平滑背景的作用，fit1d 也这样称呼这种颗粒群）；
+以及 *qzR*，即在 q_z = 0 处拟合、在切线处 q₊R 大于 1.7 的球或随机取向圆柱（见下文）。
 最可能的解放进模型，其他的进 **其他解**（Other solutions）。不使用模型中的固定值和范围；之后的 **精修模型中的数值** 会保留它们。单核上每条曲线的用时：给定组成时约 6 s，在一到两群中选择时约 26 s（24 条留出切线，一个进程，Intel Core i9-13900HX；`tools/benchmarks/posterior_timing_summary.json`）；在开发用曲线上用更早的版本，在一到三群球和竖直圆柱中选择时约 30–70 s，选择范围含随机取向圆柱时要几分钟，给定两个角度（两路径）时约为 2.4 倍。
 
 模型的耦合（DA）和尺寸分布（对数正态）在第 2–4 步中照样使用：网络是在 LMA 和高斯尺寸上训练的，这时只是一个建议，由
 权重来校正。拟合工作区没有四项 DWBA：两个角度都有时，预测参数用球的两路径、r 自由（Yoneda 角处起作用的那些项，9.10 节）；
 只有 q_z 时用该处的 Born 项；否则用有效界面。
+
+**基底的三个层级与标记 *qzR*。** 水平切线按三个层级之一拟合：
+
+1. 有效界面，在 q_z = 0 处计算形状因子（默认；不需要角度）；
+2. 在切线的真空 q₊ = k(sin α_i + sin α_f) 处的 Born 项（只有 q_z：一维预测窗口的 *Cut qz*）；
+3. 球的两路径，即 Born 项加上 r 自由的出射反射路径（两个角度都有：在拟合页的 模型 ▸ *掠入射下的球*（Spheres in grazing
+   incidence）中填入 α_i、α_f 和 λ）。
+
+竖直圆柱在每个层级都一样（9.10 节）。随机取向圆柱在第 1、3 层级以及拟合工作区的模型中的每个层级都在 q_z = 0 处平均（在第 2
+层级，网络的后验把它们放在切线的 q₊ 处，精修后的模型仍在 q_z = 0；9.4 节）。对球，第 1 层级直到 q₊R ≈ 1.7 都能把 R 保持在约
+5 % 以内（9.10 节）。在上面 Si 上的四项 DWBA 曲线上（`posterior_dwba_pairs.json`），第 1 层级下 R 的中位误差在 q₊R 1.7–2.3、
+2.3–3.5 和大于 3.5 时为 15 %、20 % 和 29 %；第 3 层级为 4.0 %、6.7 % 和 7.0 %；第 2 层级为 4.0 %、11 % 和 40 %。BornAgain 和
+IsGISAXS 这类 DWBA 程序用基底的折射率计算各项，不需要这种近似，所以 GIMaP 在它起作用时会说明：
+
+- 在第 1 层级拟合、其中的球或随机取向圆柱的 q₊R 大于 1.7（R 为其半径，颗粒群的编号与 *large* 相同）的解，带有标记 *qzR*
+  （`refine.interface_flags`、`refine.QZR_LIMIT`）：*R (n)：在切线的 q_z 处 q_z·R 大于 1.7，此时在 q_z = 0 处计算形状因子
+  （默认的有效界面近似）会使半径有偏差，通常偏小；请给出切线的两个角度（αi、αf），使球按出射反射路径拟合（随机取向圆柱仍取
+  q_z = 0）*。在第 2 或第 3 层级拟合的解没有这个标记。
+- 这个标记需要切线的 q₊，所以只有知道角度的第 1 层级拟合才会设置它。自动分析（运行自动分析、`tools/gimap_agent.py auto`、
+  用 AI 处理）在第 1 层级拟合，取几何中的 α_i 和 λ 以及切线所在 Yoneda 带的 α_f；它的报告在*决策*（fit caveat）中和
+  **需要处理** 下列出这个标记，并给出所涉每群颗粒的 q₊R（退出码 2），`report.json` 保存 q₊ 和这些角度（`gisaxs.fit.cut_qz`，
+  14.10 节）。切线不在 Yoneda 带或没有 α_i 时，`cut_qz` 为 `null`，不做标记：不猜测任何角度。
+- 拟合页和一维预测窗口按给它们的角度决定层级。曲线文件不带其切线的角度（发送到拟合只传递文件），所以在那里按第 1 层级的
+  拟合不知道 q₊，也就没有这个标记；解带有这个标记时，它们用上面的话显示它。
+- 对随机取向圆柱，这个界限沿用球的，用于其半径，而半径是其尺寸的下限；拟合工作区的模型在任何层级都不在切线的 q_z 处计算
+  它们，所以这个标记只是提醒。
+- 这个标记不改变解的任何数值、区间或概率：它在拟合之后才加上（`tests/test_qzr_flag.py` 比较有它和没有它的运行）。
 
 **模型误差。** 不加模型误差时（第 4–5 步用计数的 σ），在拟合工作区自己的模型画出的曲线上（fit1d 那一类的 200 条开发用曲线
 在 `cut_model` 中重画，给定组成：`posterior_recovery.py --truth own`），68 % 区间在 60–64 % 的情形中包含真值，两到三群颗粒时为
@@ -2969,15 +3072,23 @@ P_row(i) = Σ_j M_ij,    P_col(j) = Σ_i M_ij                                   
 | 程序与来源 | `software`（记录名 `GIMaP Analyze 1`）、`software_version`（发布版本，例如 `GIMaP v0.2.0`；14.5 节）、`source_file`、`frame_index`、`frame_count`、`frame`（从 1 计数的标签）、`summed_frames`（加入的每一帧的文件和索引） |
 | 探测器 | `detector_name`、`frame_shape`、`measurement`（GISAXS 或 GIWAXS） |
 | 几何 | `geometry`（像素尺寸、距离、光束中心、波长、α_i；`rot1_rad`、`rot2_rad`、`rot3_rad`：3.7 节的探测器转角；0.1 的 `dropped_…` 和 `flat_detector_…` 字段为 `null`）、`geometry_convention`（规范像素角点坐标系，第 0 行在上，以 Å⁻¹ 计、按转角倾斜的平板探测器的运动学（真空）掠入射 q）、`instrument_profile`（名称、来源、更新时间；几何由运行自动分析或 `tools/gimap_agent.py` 选定时，来源以 `automatic analysis:` 开头，由 AI 选定时以 `assistant:` 开头——0.2.0 之前两者都写 `assistant:`） |
-| 统计与分箱 | `error_model`（`poisson`、`pixel_scatter` 或 `scaled_poisson`：6.4 节的三种误差模型，由 `photon_counts` 和 GIWAXS 强度校正决定；没有约化时为 `null`）、`binning`（GIWAXS：每条 I(q) 的固定边界分箱的 `radial_bins`、`q_min`、`q_max`、`bin_width` 和 `unit`，`bins_chosen`，`radial_points`（合并后 I(q) 的点数），`merge`（6.5 节的规则），`chi_bin_deg` 和 `chi_merge`；GISAXS：每个探测器列或行一个点，不合并） |
+| 统计与分箱 | `error_model`（`poisson`、`pixel_scatter` 或 `scaled_poisson`：6.4 节的三种误差模型，由 `photon_counts`、平场和 GIWAXS 强度校正决定；没有约化时为 `null`）、`binning`（GIWAXS：每条 I(q) 的固定边界分箱的 `radial_bins`、`q_min`、`q_max`、`bin_width` 和 `unit`，`bins_chosen`，`radial_points`（合并后 I(q) 的点数），`merge`（6.5 节的规则），`chi_bin_deg` 和 `chi_merge`；GISAXS：每个探测器列或行一个点，不合并） |
 | 时间 | `created`：写出记录的 UTC 时间（ISO 8601，例如 `2026-11-01T05:52:31+00:00`） |
-| 校正 | `corrections`（每一项设置）、`intensity_corrections`（GIWAXS：如何应用、公式、参数）、`bad_pixels_left_out`、`drawn_mask_pixels`、`pixels_filled_from_mirror` |
+| 校正 | `corrections`（每一项设置；`flat_field`：文件、路径、SHA-256、归一化平均值、下限、排除的像素数、形状和应用方式，4.10 节，没有平场时为 `null`）、`intensity_corrections`（GIWAXS：如何应用、公式、参数）、`bad_pixels_left_out`、`drawn_mask_pixels`、`pixels_filled_from_mirror` |
 | 结果 | `markers`（光束中心、样品地平线所在行、切线条带、Yoneda 估计、I(χ) 窗口、峰……）、`curves`（每条曲线的键、标题、x 标签、区域）、`messages` |
 | 文件 | `source_files`（读取帧的每个文件：模块文件、主文件和数据文件）、`input_sha256`（每个输入文件的文件名和 SHA-256：来源、它的模块文件或数据文件，以及与它求和的帧）、NeXus/HDF5 的 `source_layout`（类型、摘要、数据集路径、`transformations`）、`files`（写出的文件） |
 
 这些数字是约化所用的数字；`geometry` 是实际应用的几何。
 
-实现：`src/gimap/features/analyze/application/export_record.py`, `src/gimap/features/analyze/infrastructure/adapters/csv_export.py`。
+NXcanSAS 导出（`<stem>_nxcansas.h5`，NeXus 定义 NXcanSAS 1.1；批量导出为 `nxcansas/`，命令行为 `curves_nxcansas.h5`）带同样的记录，
+另加键 `curve`（该曲线的键、标题、x 标签和区域），作为 JSON 写在每个条目 SASprocess 下 NXnote `gimap_record` 的 `data` 里。每个
+SASentry 是一条以 q 为横轴的曲线：`Q` 以 1/angstrom 计，与约化结果完全相同（水平切线保留带符号的 q_y；条目的 `title` 写明是哪个 q），
+`I` 的单位为 `arbitrary`，`Idev` 是本节误差模型给出的 σ，`mask` 在 Q 或 I 不是有限值处为 1；SASinstrument 写出波长
+（`incident_wavelength`，angstrom）、样品到探测器的距离（`SDD`，m）和像素尺寸，SASsample 的 `pitch`（degree）是 αi，即在 NeXus
+坐标中绕垂直于光束的水平轴的转角。以 χ 或 2θ 为横轴的曲线不写入：NXcanSAS 的 Q 是动量转移。
+
+实现：`src/gimap/features/analyze/application/export_record.py`, `src/gimap/features/analyze/infrastructure/adapters/csv_export.py`；
+NXcanSAS：`src/gimap/shared/nxcansas.py`、`src/gimap/features/analyze/application/nxcansas_export.py`。
 
 ### 14.3 文本表格的头行
 
@@ -3089,12 +3200,12 @@ SHA-256 摘要标识内容重要的文件：
 | 组 | `report.json` 的键 |
 |---|---|
 | 程序与时间 | `software_version`（发布版本，14.5 节）；`created`（UTC，ISO 8601，精确到秒；一批的每份报告和 `summary.json` 用同一个时间） |
-| 选项 | `options`：命令行的每个选项，按它自己的名字、原样写出（`frames`：展开通配符和文件夹之前的参数；`calibration`、`mask`、`incidence_deg`、`technique`、`no_fit`……；`notes` 和 `notes_file`），以及 `notes_text`：分析读到的笔记。经 MCP 或 `call` 写文件时为 `null` |
-| 输入 | `inputs.frame`：读取这一帧的每个文件（模块文件、主文件及其数据文件）和与它求和的每一帧；`inputs.calibration`：几何取自的 `.poni`、标定 `.json` 或标样图像（用已保存的仪器配置时为 `null`）；`inputs.mask` 和 `inputs.background`：用到的掩膜文件和背景文件，没有时为 `null`。每个文件写成 `{"file": 文件名, "path": 给出的路径, "bytes": 大小, "sha256": SHA-256}` |
+| 选项 | `options`：命令行的每个选项，按它自己的名字、原样写出（`frames`：展开通配符和文件夹之前的参数；`calibration`、`mask`、`flat_field`、`incidence_deg`、`technique`、`no_fit`……；`notes` 和 `notes_file`），以及 `notes_text`：分析读到的笔记。经 MCP 或 `call` 写文件时为 `null` |
+| 输入 | `inputs.frame`：读取这一帧的每个文件（模块文件、主文件及其数据文件）和与它求和的每一帧；`inputs.calibration`：几何取自的 `.poni`、标定 `.json` 或标样图像（用已保存的仪器配置时为 `null`）；`inputs.mask`、`inputs.background` 和 `inputs.flat_field`：用到的掩膜文件、背景文件和平场文件，没有时为 `null`（平场还写在“决定”（Decisions）中，带上它排除的像素数，4.10 节）。每个文件写成 `{"file": 文件名, "path": 给出的路径, "bytes": 大小, "sha256": SHA-256}` |
 | 掩膜 | `mask`：`applied`（true 或 false）、`file`（同上）、`kind`（掩膜图像，非零像素被排除；或 GIMaP 掩膜文件及其形状个数）、`masked_pixels`，以及 `bad_pixels_left_out`（14.4 节）：自动找到的像素与掩膜分开计数。`report.md` 在 **Mask** 一节写同样的内容，没有应用掩膜时也写 |
 | 分析工作区的记录 | `analysis_record`：14.2 节的记录，对应实际约化的这一帧（几何、校正、误差模型、分箱、标记、`input_sha256`），没有 `files` |
 | 结果 | 决定及其理由（`decisions`）、待回答的问题（`needs_attention`）、步骤、峰和环（GIWAXS）或 `gisaxs`（切线、对称轴、两半、特征长度、拟合）、`tables` 和 `folder`（这一帧的文件夹，相对于摘要）；在 `summary.json` 里每一帧还有 `outputs`（写出的文件） |
-| 模型拟合 | `gisaxs.fit.method`：`name`（`Predict parameters`）、`network`（`name`，例如 `flow_v1`，和 `sha256`：权重文件的 SHA-256，即网络记录里写明、载入时检查的值）和 `seed`（0，14.8 节）。`gisaxs.fit.solutions` 是每个解及其模型、参数、概率、χ²/N 和 `intervals`（中位数、68 % 和 95 % 限）；`curve`、`points` 和 `q_range_inv_angstrom` 说明拟合的是什么，`data` 是被拟合的点 |
+| 模型拟合 | `gisaxs.fit.method`：`name`（`Predict parameters`）、`network`（`name`，例如 `flow_v1`，和 `sha256`：权重文件的 SHA-256，即网络记录里写明、载入时检查的值）和 `seed`（0，14.8 节）。`gisaxs.fit.solutions` 是每个解及其模型、参数、概率、χ²/N 和 `intervals`（中位数、68 % 和 95 % 限）；`curve`、`points` 和 `q_range_inv_angstrom` 说明拟合的是什么，`data` 是被拟合的点；`sphere_model`（`effective interface (q_z = 0)`）说明颗粒在哪里计算，`cut_qz` 是切线的真空 q_z（`q_z_inv_nm`）及其来源 `alpha_i_deg`、`alpha_f_deg` 和 `wavelength_A`（几何中的 α_i 和 λ、Yoneda 带的 α_f；有一个不知道时为 `null`），q₊R 大于 1.7 的球或随机取向圆柱据此标为 `qzR`（9.13 节） |
 
 - `summary.json` 是一个对象：`software_version`、`created`、`options`、`arguments`（参数中的每个通配符或文件夹一句话：它代表多少个文件）
   和 `frames`，即各帧报告的列表，不含 `tables`、`analysis_record` 和 `options`。0.2.0 之前这个文件只是那个列表；
@@ -3128,7 +3239,7 @@ SHA-256 摘要标识内容重要的文件：
 ### 15.1 散射物理
 
 - **折射与 DWBA。** 除非在分析工作区给出薄膜的临界角（一层薄膜的 q_z，2.6 节），分析、拟合和一维预测中的每个 q 都是运动学的真空值；也不计算畸变波玻恩近似的反射波项（2.5、8.6、9.2 节）；唯一的例外是拟合工作区可选的、带自由有效反射系数的两路径球（9.10 节）。Yoneda 带凭经验定位，不用任何临界角（6.7、8.1 节）。薄膜吸收校正和 XRR 提取工具的 q_z 也忽略折射（5.4、13.1 节）。唯一经过折射校正的量是溅射的岛高度 H(t)，它对条纹极小的位置使用折射后的波矢转移，而不是 DWBA 强度（12.12 节）。GIWAXS 报告在 *Decisions* 中说明 q 是运动学值，并给出在这一帧的 α_i 下、薄膜临界角附近或以下折射可能引起的至多约 k sin α_i 的 q_z 偏移（7.9 节）；GISAXS 报告也这样说明，并指出 Yoneda 带的 q_z 偏移最大（8.6 节）。
-- **绝对强度。** 强度是每像素的平均计数。不做监视器、透过率、曝光时间、样品体积、平场、探测器效率、空气或窗口吸收的校正（2.5 节）。只有可选的 GIWAXS 几何因子会除强度（第 5 章），序列可以按参考峰归一化（6.10 节）。因此拟合模型的比例因子是相对的。每种类型的形状因子都归一化为 P(0) = 1，所以 Int 不是 数密度 × ⟨V²⟩ × Δρ²（9.4 节）。
+- **绝对强度。** 强度是每像素的平均计数。不做监视器、透过率、曝光时间、样品体积、探测器效率、空气或窗口吸收的校正（2.5 节）。只有可选的平场（4.10 节）和可选的 GIWAXS 几何因子（第 5 章）会除强度，序列可以按参考峰归一化（6.10 节）。因此拟合模型的比例因子是相对的。每种类型的形状因子都归一化为 P(0) = 1，所以 Int 不是 数密度 × ⟨V²⟩ × Δρ²（9.4 节）。
 - **洛伦兹和埃瓦尔德球校正。** I(χ) 和环的强度是探测器上的强度。不施加洛伦兹因子，χ = 0 附近的缺失楔形区不重建（2.2、7.7 节）。
 - **织构。** Hermans 因子假定绕表面法线的纤维织构；缺失楔形区只通过覆盖率 C_w 和各向同性参照 f_iso 起作用，环下面的背景是一个与 χ 无关的常数（7.7 节）。I(χ) 不做出射角校正（薄膜吸收、透射函数、阴影），而 sin χ 权重使样品地平线附近的分箱最重要：f 可能以许多个 σ_f 依赖这些分箱，报告会说明但不校正（7.7 节）。面内与面外比较使用两个 20° 的扇区；它不是极图（7.6 节）。
 - **物相。** 不指定物相。层状和六方序列作为提示报告（7.4 节）。
@@ -3146,7 +3257,7 @@ SHA-256 摘要标识内容重要的文件：
 
 ### 15.3 统计与不确定度
 
-- **误差模型的选择。** 泊松误差（开启 GIWAXS 强度校正时经过缩放）只用于以整数存储、没有扣除背景、没有镜像补齐的帧。选择依据存储类型，而不是数值的物理含义（4.1、6.4 节）。
+- **误差模型的选择。** 泊松误差（使用平场或开启 GIWAXS 强度校正时经过缩放）只用于以整数存储、没有扣除背景、没有镜像补齐的帧。选择依据存储类型，而不是数值的物理含义（4.1、6.4 节）。
 - **独立性。** 像素被当作相互独立：不对电荷共享和相关噪声建模，也不计算曲线各点之间的协方差（6.4 节）。
 - **像素离散度。** 分箱内的真实结构会使像素离散度误差变大；镜像补齐之后它会偏小一些（6.4 节）。
 - **图。** q 图、展开图和序列热图都不带 σ（6.8、11.1 节）。

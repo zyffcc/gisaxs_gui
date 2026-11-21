@@ -15,7 +15,7 @@ from typing import Callable, Optional
 import numpy as np
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QKeySequence
-from PyQt5.QtWidgets import QFileDialog, QMenu, QShortcut, QWidget
+from PyQt5.QtWidgets import QFileDialog, QInputDialog, QMenu, QShortcut, QWidget
 
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
@@ -51,7 +51,9 @@ from .run import FitRunMixin
 from .session import FitSession, Solution, model_label
 
 CURVE_FILTER = "Curves ({});;All files (*)".format(" ".join(f"*{suffix}" for suffix in CURVE_SUFFIXES))
-"""The curve files the reader takes (``application.CURVE_SUFFIXES``: .dat, .txt)."""
+"""The curve files the reader takes (``application.CURVE_SUFFIXES``: .dat, .txt, NXcanSAS .h5)."""
+CHOOSE_CURVE = "{name} holds {count} curves. Which one is to be fitted?"
+"""An NXcanSAS file of several curves (Open Curve…, a dropped file): asked once, by the curves' titles."""
 PREFERENCES_KEY = "fitting_single_page"
 STARTING_MODEL = "Starting model, not set up yet"
 """The Model step while its model is the starting guess (nobody set it up, nor was it fitted)."""
@@ -199,7 +201,24 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         start = str(self._remembered("folder") or "")
         path, _ = QFileDialog.getOpenFileName(self, tr("Open Curve"), start, CURVE_FILTER)
         if path:
-            self.open_curve(path)
+            self.open_curve_file(path)
+
+    def open_curve_file(self, path) -> bool:
+        """Open Curve… and a dropped file: an NXcanSAS file of several curves asks which one (by their titles)."""
+        titles = ()
+        if Path(path).suffix.lower() not in (".dat", ".txt"):
+            try:
+                titles = self.view_model.inspect_curve_table(path).curve_titles
+            except (OSError, ValueError, RuntimeError):
+                titles = ()  # open_curve says why the file cannot be read
+        if len(titles) > 1:
+            items = [f"{number}: {title}" for number, title in enumerate(titles, 1)]
+            chosen, ok = QInputDialog.getItem(self, tr("Choose a Curve"), trf(CHOOSE_CURVE, name=Path(path).name,
+                                                                           count=len(titles)), items, 0, False)
+            if not ok:
+                return False
+            path = InSituSourceFrame(Path(path), frame_index=items.index(chosen)).token
+        return self.open_curve(path)
 
     def open_curve(self, path, side: Optional[str] = None, *, unit: Optional[str] = None) -> bool:
         """Load a curve file (Analyze's cuts: q in Å⁻¹, signed); ``side`` as Analyze names it. Its q is read in the
@@ -213,6 +232,9 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
                                                                               reason=tr(outcome.error.message)), "error")
             return False
         loaded = outcome.value
+        made = (getattr(loaded, "observation", None) or {}).get("curve_source") or {}
+        if made.get("format") == "NXcanSAS" and int(made.get("curves_in_file") or 1) > 1:  # which of its curves
+            name = f"{Path(str(made.get('path'))).name} · curve {made.get('curve')}"  # a name, as records keep it
         curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=name, path=str(path),
                                   unit=loaded.q_source_unit, unit_from=getattr(loaded, "q_unit_from", ""),
                                   rows_left_out=getattr(loaded, "rows_left_out", 0))

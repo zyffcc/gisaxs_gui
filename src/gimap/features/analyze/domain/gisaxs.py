@@ -14,9 +14,11 @@ from dataclasses import dataclass
 import numpy as np
 
 from src.gimap.shared.geometry import DetectorGeometry
+from src.gimap.shared.geometry.q_inverse import q_per_pixel
 from src.gimap.shared.geometry.q_mapping import grazing_q_region
 
 from .binning import binned_mean_2d, map_grid_shape, native_profile
+from .gisaxs_cuts import NO_PIXELS, column_band_q, cut_curve, cut_key, row_band_q
 from .models import GISAXS, Curve, GisaxsCutSettings, ReciprocalSpaceMap, Reduction, YonedaEstimate
 
 YONEDA_SEARCH_MAX_DEG = 1.5
@@ -173,16 +175,21 @@ def horizontal_cut(
     *,
     center_row: float,
     half_height_px: float,
-    counts: bool = True,
+    counts: bool | np.ndarray = True,
 ) -> Curve:
-    """I(qy) over a band of rows: one point per detector column (native sampling)."""
+    """I(qy) over a band of rows: one point per detector column (native sampling). ``counts``: as
+    ``reduce_gisaxs``."""
     rows, columns = image.shape
     start, stop = _row_bounds(center_row, half_height_px, rows)
     region = {"rows": (start, stop), "columns": (0, columns), "center_row": float(center_row)}
     if stop <= start:
         return _empty_curve("horizontal", "Horizontal cut I(qy)", "qy (Å⁻¹)", region)
     q = grazing_q_region(geometry, (start, stop), (0, columns))
-    x, mean, sigma, pixels = native_profile(image[start:stop], valid[start:stop], q.qy, axis=0, counts_model=counts)
+    poisson, scale = _counts(counts)
+    x, mean, sigma, pixels = native_profile(
+        image[start:stop], valid[start:stop], q.qy, axis=0, counts_model=poisson,
+        scale=None if scale is None else scale[start:stop],
+    )
     if x.size == 0:
         return _empty_curve("horizontal", "Horizontal cut I(qy)", "qy (Å⁻¹)", region)
     return Curve(
@@ -197,7 +204,7 @@ def vertical_cut(
     *,
     center_column: float,
     half_width_px: float,
-    counts: bool = True,
+    counts: bool | np.ndarray = True,
 ) -> Curve:
     """I(qz) over a band of columns above the sample horizon (with refraction, above the row of α_c): one point
     per detector row."""
@@ -214,8 +221,10 @@ def vertical_cut(
     if stop <= start or last_row <= 0:
         return _empty_curve("vertical", "Vertical cut I(qz)", "qz (Å⁻¹)", region)
     q = grazing_q_region(geometry, (0, last_row), (start, stop))
+    poisson, scale = _counts(counts)
     x, mean, sigma, pixels = native_profile(
-        image[:last_row, start:stop], valid[:last_row, start:stop], q.qz, axis=1, counts_model=counts
+        image[:last_row, start:stop], valid[:last_row, start:stop], q.qz, axis=1, counts_model=poisson,
+        scale=None if scale is None else scale[:last_row, start:stop],
     )
     if x.size == 0:
         return _empty_curve("vertical", "Vertical cut I(qz)", "qz (Å⁻¹)", region)
@@ -224,9 +233,31 @@ def vertical_cut(
     )
 
 
+def _counts(counts) -> tuple[bool, np.ndarray | None]:
+    """``counts`` of a cut as ``(Poisson?, per-pixel scale of the counts or None)``."""
+    if isinstance(counts, np.ndarray):
+        return True, counts
+    return bool(counts), None
+
+
 def _empty_curve(key: str, title: str, x_label: str, region: dict) -> Curve:
     empty = np.array([], dtype=np.float64)
     return Curve(key, title, empty, empty, empty, np.array([], dtype=np.int64), x_label, region=region)
+
+
+def _with_q_edges(curves, geometry: DetectorGeometry) -> tuple[Curve, ...]:
+    """The automatic cuts with where their bands lie in q and in exit angle (``row_band_q``, ``column_band_q``), for
+    the record of an export: the pixels and the numbers stay as they are."""
+    horizontal, vertical = curves
+    rows, columns = horizontal.region["rows"], vertical.region["columns"]
+    extra_h = row_band_q(geometry, *rows) if rows[1] > rows[0] else {}
+    extra_v = column_band_q(geometry, *columns) if columns[1] > columns[0] else {}
+    return (
+        Curve(horizontal.key, horizontal.title, horizontal.x, horizontal.intensity, horizontal.sigma, horizontal.pixels,
+              horizontal.x_label, horizontal.y_label, {**horizontal.region, **extra_h}),
+        Curve(vertical.key, vertical.title, vertical.x, vertical.intensity, vertical.sigma, vertical.pixels,
+              vertical.x_label, vertical.y_label, {**vertical.region, **extra_v}),
+    )
 
 
 def reduce_gisaxs(
@@ -236,9 +267,15 @@ def reduce_gisaxs(
     settings: GisaxsCutSettings | None = None,
     *,
     q_map: ReciprocalSpaceMap | None = None,
-    counts: bool = True,
+    counts: bool | np.ndarray = True,
+    maps: GisaxsMaps | None = None,
 ) -> Reduction:
-    """Yoneda-band horizontal cut and beam-centre vertical cut, no user input needed.
+    """Yoneda-band horizontal cut and beam-centre vertical cut, no user input needed, then the person's cuts
+    (``settings.regions``, ``gisaxs_cuts``; they need the frame's ``maps``), keys ``cut1``, ``cut2`` …
+
+    ``counts``: the frame holds photon counts (Poisson errors); ``False``: not counts (the scatter of the pixels);
+    an array of the frame's shape: photon counts multiplied per pixel by it (a flat field, ``flat_field.py``), so
+    a pixel's variance is that factor × its value.
 
     ``q_map`` (``gisaxs_q_map``) is passed through: it depends on the frame, not on the cuts.
     """
@@ -288,9 +325,20 @@ def reduce_gisaxs(
             counts=counts,
         ),
     )
+    curves = _with_q_edges(curves, geometry)
     for curve in curves:
         if curve.is_empty:
             warnings_out.append(f"{curve.title}: no valid pixels in the cut band.")
+    if settings.regions:
+        if maps is None:
+            maps = gisaxs_maps(image.shape, geometry)
+        usable = np.asarray(valid, dtype=bool) & maps.above_horizon
+        step = q_per_pixel(geometry)
+        for index, cut in enumerate(settings.regions):
+            curve = cut_curve(cut, cut_key(index), maps, image, usable, step=step, counts=counts, geometry=geometry)
+            if curve.is_empty:
+                warnings_out.append(NO_PIXELS.format(name=cut.name))
+            curves = (*curves, curve)
     markers = {
         "beam_center": (geometry.beam_center_x_px, geometry.beam_center_y_px),
         "horizon_row": geometry.horizon_row(),

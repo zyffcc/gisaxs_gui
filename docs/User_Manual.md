@@ -1214,9 +1214,19 @@ remembered), which also leaves out pixels this close to gaps and bad pixels. **R
 makes q_z the one inside a film of that critical angle (q∥ does not change; pixels below αc are left out of the q
 maps and of the cuts in q_z). Off by default; Physics and Methods 2.6.
 
-The order is fixed: invalid detector pixels → hot and dead pixels → masks → background → gap guard
-→ intensity range → mirror fill → intensity corrections. Curves, q map, cake and exports all use
-the corrected frame.
+**Flat field** (detector response; off by default; GISAXS and GIWAXS): **Choose…** next to *No flat field* takes a
+detector image of the frame's size (CBF, TIFF, EDF, NeXus/HDF5: its first frame) or a NumPy `.npy` array, and **×**
+stops it. Every frame is divided by the flat field, normalised to mean 1 over the pixels it keeps; pixels where it
+is at or below 0.05 (dead, shadowed, module gaps) are left out. A flat field of another size is refused with the
+reason, never resampled. The line under it says the mean it was normalised by and how many pixels it leaves out.
+The same flat field serves every frame of a Batch Export, a series and the folder watch, and is saved with the
+settings. With photon counts the error bars follow the division (scaled Poisson); the JSON record
+(`corrections.flat_field`) names the file with its SHA-256, the mean and the pixels left out
+([Physics and Methods 4.10](Physics_Manual.md#410-flat-field-detector-response)).
+
+The order is fixed: invalid detector pixels → hot and dead pixels → masks → background → pixels the flat field
+leaves out → gap guard → intensity range (on the values as measured) → division by the flat field → mirror fill →
+intensity corrections. Curves, q map, cake and exports all use the corrected frame.
 
 **Intensity corrections (GIWAXS)** (folded, off by default). They divide each pixel by a geometric
 factor; q does not change:
@@ -1262,6 +1272,44 @@ the same structure. Choose which the curve for Fitting uses:
 The same choice is in **Send to Fitting ▾** and in **Tools ▸ Settings… ▸ Analyze**. **Make Left and Right
 Symmetric** moves the beam-centre column onto the symmetry axis of the cut (only x changes;
 section 4.6 describes how).
+
+#### GISAXS: cuts of your own
+
+Under the halves is the **List of cuts**. Its first two rows are the automatic cuts — **Yoneda cut**, the one Fitting
+takes, and **Vertical cut** — and you can add as many named cuts as you need:
+
+- **Add ▾** — a horizontal band (I(qy)), a vertical band (I(qz)), a box (I(qy) or I(qz)), a sector (I(qyz) in one
+  direction from the direct beam) or a line in any direction (I(s) along it). A new cut starts where it is easy to
+  see and is selected, so you can type its position at once.
+- **Draw on the image or the q map** — Horizontal, Vertical and Sector take one click, Box two opposite corners, Line
+  its two ends. Esc cancels.
+- The editor under the table sets the position: centre ± half width of a band, from–to of a box (and whether it is
+  cut along qy or qz), χ ± half width and the q range of a sector, the start and end points and the half width of a
+  line. The list beside **Add** chooses the unit: **q (Å⁻¹)**, **Angles (°)** (the exit angles: αf of qz, 2θf of
+  qy on the sample horizon) or **Pixels (px)** (rows on the beam-centre column, columns on the horizon row). The line
+  under the editor gives the position in the other two units.
+- Tick a row to show or hide its curve and outline. Double-click a name to rename it. **Duplicate** copies the
+  selected cut (of an automatic cut: a band of your own at the same q, to move elsewhere). **Remove** deletes it;
+  Ctrl+Z brings it back. Typing the Yoneda cut sets its rows, as dragging the orange band does. **Auto Cuts**
+  returns the automatic cuts to their places and keeps yours.
+
+![GISAXS cuts on the q map](manual_images/en/06b_gisaxs_cuts.png)
+
+*The Yoneda cut, a band at the specular reflection, a vertical band at a Bragg rod, a sector and a line, each in its
+own colour in the table, on the q map and in the plots; the band selected is typed in exit angles.*
+
+A cut has one colour everywhere: its row, its curve, its outline on the detector and on the q map, and its pixels
+under **Sources**. Horizontal bands and boxes along qy are in the upper plot with the Yoneda cut, vertical bands and
+boxes along qz in the lower plot; when there are sectors or lines, the list above the lower plot shows them. On the
+q map you can drag and resize bands and boxes. A pixel belongs to a cut when the q of its centre lies inside (whole
+pixels; only those above the horizon), so on the detector a band of constant qz curves slightly.
+
+Cuts are kept in q: they hold for every frame of the same set-up, also in Batch Export and series maps, and **Save
+Settings…** saves them. When a frame of another detector or geometry comes (detector, frame size, pixel size,
+distance, wavelength, beam centre or tilt), the Cuts step asks: **Keep Cuts** or **Remove Cuts**; until you choose,
+the cuts are applied at the same q. Each exported cut states its definition in q — and in αf or 2θf — in the
+`# region:` line of its CSV and in `_analysis.json`; the automatic cuts add the qz and αf (qy and 2θf) of their band
+edges.
 
 #### GIWAXS: regions, Ring / Sector / Spot
 
@@ -1457,7 +1505,13 @@ counted as values at a bound; one that ends at 0 is named among the report's *De
 at 0, the non-negativity limit*). A reported solution with χ²ᵣ above 10 — the limit of Fitting's poor fits
 (section 6.5) — misses the curve by far more than its noise: a point to check (**Fit**) says that none of the
 compositions tried describes the cut and that its R and D are not measurements (the Bragg rings of a powder or a
-calibrant give such a misfit). When another solution has a probability of 0.2 or more, the curve alone does not
+calibrant give such a misfit). The particles are evaluated at q_z = 0, which puts a sphere's radius more than about
+5 % off once q_z·R is above 1.7 at the cut's q_z = k(sin αi + sin αf) (αi of the geometry, αf of the Yoneda band the
+cut is at): such a sphere or random cylinder is flagged (*R: q_z·R is above 1.7 at the cut's q_z, where the form
+factor at q_z = 0 … biases the radius, usually too small; give both angles of the cut …*), and a point to check
+(**Fit**) gives its q_z·R and says what to do: **Send to Fitting**, enter αi, αf and λ under Model ▸ **Spheres in
+grazing incidence** and run Predict parameters again, which then fits spheres with the exit-reflected path (random
+cylinders stay at q_z = 0). Without αi, or with the cut away from the Yoneda band, nothing is flagged. When another solution has a probability of 0.2 or more, the curve alone does not
 decide the model: a line under the table says so, and the Results tab asks which one you expect and names the
 solutions whose D is within 15 % of 2π/q\*. The report gives the refined R, h and D of the reported
 solution with their 68 % intervals (*fit intervals: R (1) 3.17 [3.04, 3.26] nm …*: the refined value, then its
@@ -1629,7 +1683,7 @@ page opens the folder and then the dialog, once its first frame is analysed.
 
 | Group | Options | Files |
 |---|---|---|
-| **Data (numbers)** — CSV (comma), TXT (tab) or DAT (space) | **All frames in one table per curve** (x first, one column per frame); **Each frame: its curves, with error bars and pixel counts**; **Each frame: the curve for Fitting**; **Each frame: the q map as numbers**; **Each frame: the unwrapped χ–q map as numbers** | `<name>_<curve>_frames.csv`, `curves/<frame>_<curve>.csv` (+ `_analysis.json`), `fit_input/<frame>_fit_input.dat`, `maps/<frame>_qmap.csv`, `maps/<frame>_cake.csv` |
+| **Data (numbers)** — CSV (comma), TXT (tab) or DAT (space) | **All frames in one table per curve** (x first, one column per frame); **Each frame: its curves, with error bars and pixel counts**; **Each frame: its q curves as NXcanSAS (.h5)** (section 5.8; always HDF5, whatever the format); **Each frame: the curve for Fitting**; **Each frame: the q map as numbers**; **Each frame: the unwrapped χ–q map as numbers** | `<name>_<curve>_frames.csv`, `curves/<frame>_<curve>.csv` (+ `_analysis.json`), `nxcansas/<frame>_nxcansas.h5`, `fit_input/<frame>_fit_input.dat`, `maps/<frame>_qmap.csv`, `maps/<frame>_cake.csv` |
 | **Pictures** — PNG, TIFF, SVG or PDF | **Each frame: picture of the detector image**; **Each frame: picture of the q map**; **Colour scale**: each frame its own limits (1–99.7 %), or the limits on screen for every frame (comparable pictures) | `images/<frame>_detector.png`, `images/<frame>_qmap.png` |
 | **Converted detector frames** — TIFF, EDF, NumPy or HDF5 | **Each frame: the detector data in another format** (values as read: modules stitched, frames summed; in the type the file stores, with the gap codes and the pixels without data marked as the Format Converter writes them, section 9.1; pixels left out only by the hot-pixel test or a drawn mask keep their values) | `frames/<frame>.tif` |
 | **Curve for Fitting** (GISAXS) | **Halves of the cut**: **Mean of both halves**, **q > 0 half** or **q < 0 half** — what the model fit takes in every frame | (named in the curves for Fitting) |
@@ -1649,7 +1703,7 @@ Export asks **Replace**, **Keep Both in a New Subfolder** or **Cancel**; the que
 would remove, and `Enter` answers Replace only when this export writes every such kind of file again —
 otherwise Keep Both.
 
-For tables and per-frame curves, tick the curves you want (**All** / **None**). In a table of all
+For tables, per-frame curves and NXcanSAS files, tick the curves you want (**All** / **None**). In a table of all
 frames, frames with the same points are put side by side; frames whose points differ only slightly
 (rounding, a few missing columns) are matched row by row; only grids that really differ are interpolated
 onto the first frame's x, never across a gap and never extrapolated. The table header says which. The
@@ -1737,7 +1791,17 @@ writes, next to the data in `gimap_analysis/`:
 - one CSV per curve (`x, I, sigma, pixels`), named `<stem>_<curve>.csv`;
 - `<stem>_analysis.json`: the source, geometry, where the beam centre came from, corrections, the
   number of bad pixels left out, the cuts;
-- `<stem>_fit_input.dat`, the curve for Fitting.
+- `<stem>_fit_input.dat`, the curve for Fitting;
+- with **Also as NXcanSAS (.h5)** ticked (below **Export Curves…** in the Export step; remembered between sessions),
+  also `<stem>_nxcansas.h5`: the curves against q as **NXcanSAS** (HDF5, NeXus definition NXcanSAS 1.1), which
+  SasView, SASfit and other NeXus programs open, and Fitting too (section 6.1). Each curve is a SASentry of its own,
+  titled with the frame, the curve and which q its Q is: a horizontal cut keeps its signed qy (both halves; a
+  program that fits |Q| sees each |q| twice, so fit one half there), a vertical cut has qz. Each holds Q in
+  1/angstrom as Analyze computed it, I (arbitrary units: mean counts per pixel), Idev = σ, a mask of the points
+  without a finite value, the wavelength, the distance, the pixel size and αi (as the sample's pitch), and the same
+  record as `_analysis.json` (as JSON in a note of SASprocess). I(χ) and curves shown against 2θ are not in it —
+  NXcanSAS has no angle axis — but in their CSVs. The box applies to **Save the Curves of the Plot** and **Export
+  New Frames While Watching** too.
 
 `<stem>` is the file name; a frame of a multi-frame file adds `_frame` and its number, a sum adds
 `_sum` and the number of frames summed.
@@ -1809,7 +1873,7 @@ which writes the curve that Fitting fits.
 
 ### 6.1 Curves Fitting reads
 
-Fitting reads `.dat` and `.txt` text curves:
+Fitting reads `.dat` and `.txt` text curves and NXcanSAS files (`.h5`):
 
 - Analyze's curve files, `<name>_fit_input.dat`, have four columns — q (Å⁻¹), intensity, σ and the number of
   detector pixels averaged — and a header recording where the curve came from.
@@ -1826,6 +1890,13 @@ Fitting reads `.dat` and `.txt` text curves:
   too small or too large). A title line above the line of column names is a header like any other; a row that is
   no numbers, or that holds NaN or inf, is left out, and the card and the status line say how many (*3 rows of the
   file could not be read as numbers and were left out.*).
+- NXcanSAS files (`.h5`, HDF5 written by Analyze, SasView, Mantid and other programs; `.hdf5` and `.nxs` through
+  **All files**): each SASdata group of the file is a curve — Q, I and Idev as σ. q is read in the unit the file
+  states on Q: 1/angstrom and 1/nm as they are, 1/m converted to nm⁻¹; the Curve card says *q read in Å⁻¹: stated in
+  the file*. A Q whose unit Fitting does not know is read like a text file that states none. Points the file's mask
+  leaves out are not fitted. A file of several curves asks which one to open (**Open Curve…**, a dropped file) and
+  is then named *file.h5 · curve 2*; **Import Curves…** takes every curve of it. An HDF5 file of detector frames
+  is no curve: dropped on the window it goes to Analyze.
 
 Fitting does not read `.csv` files, also not the CSV curves that Analyze exports. Use **Send to Fitting** in
 Analyze, or open the `_fit_input.dat` written next to the CSV. A `.csv` dropped on Fitting is refused with
@@ -1838,8 +1909,10 @@ Single-curve inputs keep their existing interpretation: **Open Curve…** and fo
 
 ![Previewing shared-q curves before importing](manual_images/en/11a_fitting_import.png)
 
-1. Click **Import Curves…** and select one or more `.txt` / `.dat` files. The cancellable preview shows
-   the first ten data rows, column roles, q unit and total number of curves. It does not rewrite or split files.
+1. Click **Import Curves…** and select one or more `.txt` / `.dat` files, or NXcanSAS `.h5` files. The cancellable
+   preview shows the first ten data rows, column roles, q unit and total number of curves. It does not rewrite or
+   split files. An NXcanSAS file gives every curve in it (one per SASdata group, in its order; the rows shown are
+   those of the first): the column layout does not apply to it.
 2. For each file, check **Column layout**:
 
    | Layout | Interpretation |
@@ -2049,7 +2122,8 @@ sizes for your sample, or let the Fit step find them.
   **Use This Solution** puts one into Model (Undo brings the previous model back).
 - **Save Data and Fit…** writes a CSV — q (nm⁻¹ and Å⁻¹), I, σ, the model, the residuals and every term — with a
   JSON record next to it: the model, the fit (errors, values at a bound, correlations) and the
-  points used. **Save Plot…** writes PNG or SVG; **Save Model…** writes the model as JSON, to load for another
+  points used. Choose **NXcanSAS (*.h5)** as the type for an HDF5 file with two SASentry groups, the points fitted
+  (Idev = σ) and the model, Q = |q| in 1/nm; the record is next to it and inside it. **Save Plot…** writes PNG or SVG; **Save Model…** writes the model as JSON, to load for another
   curve with **Load Model…**.
 - **Run Log** (folded) at the bottom.
 
@@ -2172,7 +2246,10 @@ solution that comes into Model keeps Model's geometry; **Refine** afterwards kee
   are named as in Model (Tail ν, σ_q, σR/R (1): the population's number in brackets). A population whose size
   the curve does not show is named too: one whose Guinier region lies at or below the lowest q (the curve shows only
   its decay, which roughness or a rise at low q produce as well: check it before you report particles of that size),
-  or one smaller than the curve resolves (a smooth background).
+  or one smaller than the curve resolves (a smooth background). A sphere or random cylinder fitted at q_z = 0 (no
+  angles in Model) whose q_z·R at the cut is above 1.7 is named as well: its radius is then biased, usually too
+  small; give both angles. GIMaP can say this only where it knows the cut's angles, as in the automatic analysis
+  (section 5.5): a curve file does not carry them, so a Predict here without angles in Model does not flag it.
 - **Refine These Values** (or **Refine the values in Model**) then gives the least-squares errors under Model's own
   limits, as for any model.
 
@@ -3345,10 +3422,10 @@ hold one frame each as one series.
 - **Frames.** An argument may be a file, a pattern such as `*.tif` or a folder. A pattern the shell did not
   expand (PowerShell does not) is expanded by GIMaP, in natural order (`f2` before `f10`); a folder stands for
   every detector image in it (`.cbf`, `.tif`, `.tiff`, `.edf`, NeXus/HDF5; subfolders are not searched; the
-  files given as `--calibration` or `--mask` are left out). `summary.md` says how many files each pattern or
+  files given as `--calibration`, `--mask` or `--flat-field` are left out). `summary.md` says how many files each pattern or
   folder gave; one that gives none is an error (exit code 1).
-- **Values that cannot be used.** `--incidence-deg` must be above 0° and below 90°, and a `--calibration` or
-  `--mask` file must exist: otherwise the command ends with the reason and exit code 1, before anything is read
+- **Values that cannot be used.** `--incidence-deg` must be above 0° and below 90°, and a `--calibration`,
+  `--mask` or `--flat-field` file must exist: otherwise the command ends with the reason and exit code 1, before anything is read
   (it never goes on with a calibration it found itself in place of the one you named).
 - **A calibration that is not the frame's.** A calibration nobody named, which the search took from another folder
   than the frame's (or one below it), is an open item of the report with its full path (*calibration found by the
@@ -3367,8 +3444,13 @@ hold one frame each as one series.
   the mask does not fit fails with the reason. `report.md` (section **Mask**) and `report.json` (`mask`) always
   say which mask was applied, or that none was; detector gaps and the bad pixels found automatically are
   named apart from it.
+- **Flat field.** `--flat-field PATH` divides every frame by a flat field (detector response) as the **Flat
+  field** of Analyze's Corrections does: a detector image of the frame's size or a `.npy` array, normalised to
+  mean 1, pixels at or below 0.05 of it left out. A frame it does not fit fails with the reason. `report.md`
+  names it among the **Decisions** (*flat field: divided by flat.npy (120 pixels left out)*) and in **Record**
+  (the file with its SHA-256); `report.json` has it in `inputs` and in `analysis_record.corrections.flat_field`.
 - **Record.** `report.json` names the release, the UTC time, the options as given (the notes too), and every
-  input file (the frame's files, the calibration, a mask) by path, size and SHA-256; for a model fit also the
+  input file (the frame's files, the calibration, a mask, a flat field) by path, size and SHA-256; for a model fit also the
   network, the SHA-256 of its weights and the seed. `summary.json` is one object with the release, the time, the
   options and the frame reports (`frames`). Every CSV starts with `#` lines that name the release, the inputs
   with their SHA-256 and the geometry, and names its columns in plain ASCII with one spelling of the units
@@ -3381,6 +3463,10 @@ hold one frame each as one series.
   *asymmetry* it prints for the symmetry axis and names the disorder of the distance σnn/D, as Fitting's Model
   table does. And every crystallite size names its unit (`size_A`, `size_nm`). A run repeated on the same input gives the same files except for the
   time and the durations ([Physics and Methods, section 14.10](Physics_Manual.md#1410-the-record-of-a-run-without-the-window)).
+- **Curves as NXcanSAS.** `--curve-format nxcansas` writes the curves against q of each frame as one NXcanSAS file,
+  `curves_nxcansas.h5`, instead of their CSVs (as Analyze's **Also as NXcanSAS (.h5)** writes it, section 5.8; the
+  I(χ) of the last ring stays `azimuthal_last_ring.csv`, the fit stays `fit_curve.csv`); `--curve-format both`
+  writes both; `csv`, the default, writes the CSVs only. `call … --out` takes the option too.
 - **Language and time.** The headings of `report.md` and `summary.md` are English; `--language zh` writes the
   section headings (the `##` lines) in Chinese and nothing else: the titles, the tables and their column names,
   the decisions, the questions and every other sentence stay English, as do `report.json` and the CSVs (one
@@ -3498,13 +3584,13 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 
 | Action | Files written | Default location | Record that comes with it |
 |---|---|---|---|
-| Analyze ▸ **Export** (`Ctrl+E`), **Export Curves…** | `<stem>_<curve>.csv` per curve, `<stem>_fit_input.dat`, `<stem>_analysis.json` (`_frameNNNN` added for a frame of a multi-frame file, `_sumN` when frames are summed) | `gimap_analysis/` next to the data, without a dialog; a folder dialog if it cannot be written | `<stem>_analysis.json` (settings, geometry with the tilt of a `.poni`, corrections, pixels left out, error model, binning, UTC time of writing) and `#` header lines |
+| Analyze ▸ **Export** (`Ctrl+E`), **Export Curves…** | `<stem>_<curve>.csv` per curve, `<stem>_fit_input.dat`, `<stem>_analysis.json` (`_frameNNNN` added for a frame of a multi-frame file, `_sumN` when frames are summed); with **Also as NXcanSAS (.h5)** also `<stem>_nxcansas.h5` | `gimap_analysis/` next to the data, without a dialog; a folder dialog if it cannot be written | `<stem>_analysis.json` (settings, geometry with the tilt of a `.poni`, corrections, pixels left out, error model, binning, UTC time of writing) and `#` header lines |
 | Analyze plots ▸ **Save ▸ Curves as Data…** | the CSV files of that plot and `_analysis.json` | folder dialog in `gimap_analysis/` | as Export |
 | Analyze plots and images ▸ figures (**Plot as Figure…**, **View as Figure…**, **Analyze ▸ Figures ▸ Save Image…** …) | PNG, TIFF, SVG or PDF, light colours | dialog in `gimap_analysis/` | none |
 | Analyze ▸ **Save q-Map Data…**, **View Data as CSV…** (also **Analyze ▸ Figures**) | `<stem>_qmap.csv`, `<stem>_cake.csv` | dialog in `gimap_analysis/` | `#` header lines (source, frame, axes) |
 | Analyze ▸ Series ▸ **Export** (**Map as CSV Table…**, **Map as Figure…**, **Stages as Table…**, **Selected Frame's Curve as Figure…** / **as Table…**, **Trace as Figure…** / **Trace as Table…**, **Peak Table of Every Frame…**) | `<series>_<curve>[_<halves>]_map.csv`, `…_map.png`, `…_stages.csv`, `…_trace_<value>.csv` and `….png`, `…_peaks.csv`; the frame picked as `<frame>_<curve>[_<halves>].csv` and `.png` (figures also as TIFF, SVG or PDF) | dialog in `gimap_analysis/` | `#` header lines (curve, halves, frames, cut) and a `.json` of the settings next to each table; none for the figures |
 | Analyze ▸ **Send to Fitting** | `<stem>_fit_input.dat` (q in Å⁻¹) | `gimap_analysis/` next to the data; a folder you choose (kept for the session) when that cannot be written | `#` header lines (source, frame, sum, curve, observation with the halves) |
-| Analyze ▸ **Batch Export…** | per-curve tables `<batch>_<curve>_frames.csv` (or `.txt`, `.dat`); if you chose fitting, a fit table `<batch>_peak_fits.csv` (or `<batch>_model_fits.csv`) with its trend plot `<batch>_peak_fits.png` (`_model_fits.png`) and, if chosen, the fitted curves `fits/<frame>_<peak or model>_fit.csv`; subfolders `curves/`, `fit_input/`, `maps/`, `images/`, `frames/` after your choices; frame names keep the 0-based index (`…_frame0003_sum3_…`) | the last batch folder, else `gimap_analysis/` next to the data; by default in a subfolder named after the frames' folder (one file: its name; several folders: `batch`); **Keep Both** writes into a new subfolder | `README.txt` and `<batch>_batch.json` (every file written, the cut of every frame, failed frames and why); `curves/` also gets an `_analysis.json` per frame |
+| Analyze ▸ **Batch Export…** | per-curve tables `<batch>_<curve>_frames.csv` (or `.txt`, `.dat`); if you chose fitting, a fit table `<batch>_peak_fits.csv` (or `<batch>_model_fits.csv`) with its trend plot `<batch>_peak_fits.png` (`_model_fits.png`) and, if chosen, the fitted curves `fits/<frame>_<peak or model>_fit.csv`; subfolders `curves/`, `nxcansas/`, `fit_input/`, `maps/`, `images/`, `frames/` after your choices; frame names keep the 0-based index (`…_frame0003_sum3_…`) | the last batch folder, else `gimap_analysis/` next to the data; by default in a subfolder named after the frames' folder (one file: its name; several folders: `batch`); **Keep Both** writes into a new subfolder | `README.txt` and `<batch>_batch.json` (every file written, the cut of every frame, failed frames and why); `curves/` also gets an `_analysis.json` per frame |
 | Analyze ▸ **Send Series to Fitting…** | `fit_input/<frame>_fit_input.dat`, `README.txt`, `<batch>_batch.json` | a folder of its own, `<name>_fitting/`, next to any Batch Export of the same data | `README.txt`, batch JSON |
 | Analyze ▸ **Export New Frames While Watching** | as Export, for each new frame | `gimap_analysis/` next to the frame; when it cannot be written, a folder you choose once (kept for the session); with none, the export is switched off and the status line says why | as Export |
 | Analyze ▸ **Save Settings…**; Mask step ▸ **Save…**; Regions ▸ **Add ▸ Save Cuts…** | `analyze_settings.json`; `masks.json`; `cuts.json` | dialog in `gimap_analysis/` | the file is the record |
@@ -3512,7 +3598,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Process with AI ▸ **Save Report…** | `<stem>_ai_report.html` + `<stem>_ai_report.json` | as above | the JSON |
 | Process with AI (automatic) | a record of every run; missing analyses | user data folder: `assistant_runs/`, `assistant_feature_requests.jsonl` | — |
 | Process with AI, when the AI exports | the curves as Export, and `<stem>_assistant.json` | `gimap_analysis/` next to the data | `<stem>_analysis.json`, `<stem>_assistant.json` |
-| Fitting ▸ Single analysis ▸ **Save ▸ Data and Fit…** | `<curve>_fit.csv` + `<curve>_fit.json` (written as a pair) | the folder saved to last, else the folder a curve was last opened from, else the curve's folder | the JSON (model, method, range, left-out points) |
+| Fitting ▸ Single analysis ▸ **Save ▸ Data and Fit…** | `<curve>_fit.csv` (or NXcanSAS `<curve>_fit.h5`) + `<curve>_fit.json` (written as a pair) | the folder saved to last, else the folder a curve was last opened from, else the curve's folder | the JSON (model, method, range, left-out points) |
 | Fitting ▸ **Save ▸ Plot…**, **Save ▸ Model…** | `<curve>_fit.png` / `.svg`; `<curve>_model.json` | as above | none; the model file |
 | Fitting ▸ Batch / In-situ series ▸ **Save ▸ Table of Every Frame…** | `series_fit.csv` + `series_fit.json` | the series folder | the JSON (`gimap_series_fit_v2`: start model, halves and where they came from, every frame's state and reason; for detector frames Analyze's settings) |
 | Fitting ▸ Batch / In-situ series ▸ **Trend Plot…**, **Selected Frame's Plot…** | `series_trend_<value>.png` (the table column of the value, for example `series_trend_chi2_reduced.png`) and `series_frame_<NNNNN>.png` (the frame counted from 1, five digits), or `.svg`; `series_trend.png`, `series_frame.png` while nothing is fitted | the series folder | none (the title in the picture names the value or frame) |
@@ -3602,7 +3688,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 |---|---|
 | **Cancellation does not forcibly interrupt low-level file reading.** A Compare directory scan or single-table read, or the current Fitting read, may still be returning. | Press Cancel or Stop once; the request is registered, and the unfinished import is discarded or the frame fit skipped when reading returns. Completed series and results stay (sections 6.5, 7.2). |
 | **Curve import supports `q I [sigma]` and `q I1 I2 …`, not interleaved `q I1 sigma1 I2 sigma2`.** A headerless three-column table cannot identify its meaning by numbers alone. | Choose the layout explicitly in **Import Curves…** (section 6.1). For separate errors per curve, provide one `q I sigma` file per curve. Fixed imported selections cannot watch for new columns/files. |
-| **Fitting does not read `.csv` curves**, although Analyze exports its curves as CSV. | Use **Send to Fitting**, or open the `<name>_fit_input.dat` that Analyze writes; `.dat` and `.txt` files with columns `q I [σ]` open too. |
+| **Fitting does not read `.csv` curves**, although Analyze exports its curves as CSV. | Use **Send to Fitting**, or open the `<name>_fit_input.dat` that Analyze writes; `.dat` and `.txt` files with columns `q I [σ]` open too, and so does Analyze's NXcanSAS export (`<name>_nxcansas.h5`). |
 | **Geometry Calibration can put a wrong solution first.** A wrong **Estimated distance** misleads, also with the right standard and with **Auto Detect**, and the field can hold a distance you did not type (section 4.3). | Choose the standard yourself when you know it. Leave **Estimated distance** on *Optional* or type the approximate distance of your set-up; set a number you did not type back to 0 unless it is that distance. Before **Apply**, check the distance and that the drawn rings lie on the rings of the image. |
 | **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them (section 10.5). | Calibrate such an image with pyFAI and give GIMaP the `.poni`: name it in the notes, or put it beside the frames (section 4.2). |
 | **An instrument profile is matched by detector name and frame size only**, and **a calibration found by the automatic search may belong to another experiment** (one beside or above the frame's folder is taken when that folder holds none; file times say nothing in a folder copied in one go) — or even to another detector: a `.poni` or `.json` is applied without checking its pixel size or frame size (section 4.2). | Read which file the report names and check the distance in **Geometry**. Name the calibration in the notes, or give it yourself; remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
@@ -3620,7 +3706,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **The Ag and Cu distribution modules of 2D Prediction declare no axes**: their maps and curves are drawn on a placeholder axis (0.05–15 nm), which is not a physical scale, and they are not attached to the SEM comparison (section 11.3). | Read only the shape of these distributions. When you know the axes of the trained model, add them to the module's `module.yaml`. |
 | After the interface language is switched in a session, a few texts keep the old language (e.g. the outcome line of a finished automatic analysis). | Run the analysis again, or restart. |
 | Quitting GIMaP during a Batch Export keeps the files of the frames done, but the batch tables, `README.txt` and the batch's JSON record are not written. | End a batch with **Stop**: it writes them. |
-| **The model fit of the automatic analysis chooses the particles from the curve alone.** Run Automatic Analysis (and Batch Export's particle model) fits the cut with Predict parameters among one or two populations of spheres and upright cylinders, at the effective interface; random cylinders only when you give them as the composition. On the public GALAXI frame of Ag spheres it reports two upright cylinders (section 1.3): broad sizes and a rise at low q can be described by another composition than the true one. 2π/q\* is a length scale, not the particle spacing: on BornAgain simulations of the GALAXI model it was within 10 % of the true distance in 1 of 10 simulations with interference, and a peak or shoulder appeared in all 4 without (sections 1.3 and 5.5; [Physics and Methods, section 8.5](Physics_Manual.md#85-the-model-fit-and-how-the-solution-is-chosen)). | Choose the model from what you know of the sample and confirm it in **Fitting**: Predict parameters with **The particles in Model**, then refine it and judge the residuals. Do not quote 2π/q\* as the particle spacing. |
+| **The model fit of the automatic analysis chooses the particles from the curve alone.** Run Automatic Analysis (and Batch Export's particle model) fits the cut with Predict parameters among one or two populations of spheres and upright cylinders, at the effective interface (a sphere too large for it, q_z·R above 1.7 at the cut, is flagged in the automatic analysis when αi is known; section 5.5); random cylinders only when you give them as the composition. On the public GALAXI frame of Ag spheres it reports two upright cylinders (section 1.3): broad sizes and a rise at low q can be described by another composition than the true one. 2π/q\* is a length scale, not the particle spacing: on BornAgain simulations of the GALAXI model it was within 10 % of the true distance in 1 of 10 simulations with interference, and a peak or shoulder appeared in all 4 without (sections 1.3 and 5.5; [Physics and Methods, section 8.5](Physics_Manual.md#85-the-model-fit-and-how-the-solution-is-chosen)). | Choose the model from what you know of the sample and confirm it in **Fitting**: Predict parameters with **The particles in Model**, then refine it and judge the residuals. Do not quote 2π/q\* as the particle spacing. |
 | **Fitting is slower with sizes by intensity and with random cylinders.** With a sphere or vertical cylinder and sizes by number or log-normal, **Search the ranges** takes a few seconds as before; with *Gaussian, by intensity* (models of earlier versions) tens of seconds, and with a random cylinder (15–800 ms per evaluation) up to minutes. | Set **Sizes** to *Gaussian, by number*, narrow the ranges of R, h and σR/R before a search, or start **Refine** from values close to the curve. |
 | **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA; spheres with two paths and a free reflection coefficient r when Model has both angles, else at the Born term of the cut's q_z or the effective interface). It was checked on simulated curves of an independent model and on BornAgain simulations, not on measured curves of known particles; physics outside the model (roughness, other shapes) can give a composition a high probability that it does not deserve. The waves the surface reflects (the four-term DWBA) matter for spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i = 0.4°, 12 keV): with both angles R is off by about 6 % (median; P90 19–40 %) and the composition right in about 60 % of such curves; with the q_z alone R is off by about 10 % (q₊R 2.3–3.5) to 40 % (above) and a sphere is usually taken for upright cylinders; upright cylinders are not affected. With both angles on a curve whose reflected wave is weak (far above the critical angle), a smaller sphere with a large \|r\| can fit as well, and on BornAgain's model of the GALAXI frame (broad log-normal sizes, αf at the critical angle) the free r let wrong sizes fit within the errors (with one sphere population R 16–500 nm, once at the 500 nm bound, on the three simulated draws; with the composition chosen one 16 nm sphere without a paracrystal on two); and on two-sphere curves without reflection this network misses the true sizes somewhat more often than the previous one ([Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters)). | Judge every solution by its residuals and by what you know of the sample; give both angles for spheres beyond q₊R 1.7; far above the critical angle check the fitted \|r\| (`refl_amp` in Model) against the substrate's and fix it if it is far off, then refine. |
 | **Run records do not hold everything needed to repeat a run.** They identify `software_version`, the network's record and Predict parameters' fixed seed; masks are counted, not stored as pixel lists. | Keep the input, settings and model files with the exported records. |
@@ -3646,8 +3732,8 @@ for another file format, use **Help ▸ Report a Problem…** or write to the au
 
 ### 14.2 A `.csv` curve does not open in Fitting
 
-Fitting reads `.dat` and `.txt` curves. For a curve from Analyze use **Send to Fitting**, or open the
-`_fit_input.dat` written next to the CSV.
+Fitting reads `.dat` and `.txt` curves and NXcanSAS `.h5` files. For a curve from Analyze use **Send to Fitting**,
+or open the `_fit_input.dat` written next to the CSV (or the `_nxcansas.h5`, when **Also as NXcanSAS (.h5)** is ticked).
 
 ### 14.3 1D Predict Does Not Start
 

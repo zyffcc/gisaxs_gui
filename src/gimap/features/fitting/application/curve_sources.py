@@ -72,10 +72,13 @@ class CurveTablePreview:
     has_header: bool = False
     uncertainty_columns: tuple[int, ...] = ()
     intensity_columns: tuple[int, ...] = ()
+    curve_titles: tuple[str, ...] = ()
+    """An NXcanSAS file: the title of each of its curves (one SASdata group each); the rows are of the first."""
 
     @property
     def allow_shared_q(self) -> bool:
-        return self.column_count >= 3 and not self.analyze_export and not self.uncertainty_columns
+        return (self.column_count >= 3 and not self.analyze_export and not self.uncertainty_columns
+                and not self.curve_titles)
 
 
 def sources_from_table(preview: CurveTablePreview, layout: TableLayout):
@@ -83,11 +86,14 @@ def sources_from_table(preview: CurveTablePreview, layout: TableLayout):
 
     An ambiguous table is never interpreted as multiple curves without this explicit layout choice.
     Analyze's pixel-count/error columns are protected even when the user requests a shared-q layout.
+    An NXcanSAS file gives each of its curves (``CurveTablePreview.curve_titles``), whatever the layout.
     """
     from .models import InSituSourceFrame
 
     if layout not in ("single", "shared_q"):
         raise ValueError("Unknown curve table layout.")
+    if preview.curve_titles:  # NXcanSAS: every curve of the file, by its place in it (no columns to choose)
+        return tuple(InSituSourceFrame(preview.path, frame_index=index) for index in range(len(preview.curve_titles)))
     if preview.column_count < 2:
         raise ValueError("A curve table needs at least two columns.")
     if layout == "shared_q" and not preview.allow_shared_q:
@@ -141,12 +147,18 @@ def source_record(token) -> dict:
             "columns": None if source.columns is None else source.columns.to_dict()}
 
 
+def _curve_file(source) -> bool:
+    from .series_frames import is_frame
+
+    return not is_frame(source.token)
+
+
 def source_stem(token) -> str:
     """A portable output basename; display labels and encoded source tokens are never paths."""
     from .models import InSituSourceFrame
 
     source = InSituSourceFrame.from_token(str(token))
-    if source.columns is None:
-        return source.path.stem
+    if source.columns is None:  # a further curve of an NXcanSAS file: _curveN, as its curves are counted
+        return source.path.stem + (f"_curve{source.frame_index + 1}" if source.frame_index and _curve_file(source) else "")
     stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", source.path.stem).rstrip(" .") or "curve"
     return f"{stem}_I{source.columns.intensity + 1}"

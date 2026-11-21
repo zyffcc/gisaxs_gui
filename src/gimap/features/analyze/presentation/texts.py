@@ -17,7 +17,9 @@ from src.gimap.shared.detector_io.nexus_layout import ERROR_TEMPLATES, FRAME_BEY
 
 from ..application import RECTANGLE
 from ..application.flat_detector import DETECTOR_ROTATION_MESSAGE, FLAT_DETECTOR_MESSAGE
+from ..application.flat_field import FLAT_FIELD_TEMPLATES
 from ..application.geometry_resolution import CENTER_NOT_USED, CENTER_NOT_USED_HEADER
+from ..application.gisaxs_cuts import CUT_TEMPLATES
 
 NO_PROFILE = "No instrument profile for {detector} ({shape}). Calibrate once or enter the geometry to get q curves."
 PROFILE_SHAPE = "Profile “{name}” is for {profile_shape} frames; this frame is {shape}."
@@ -28,6 +30,7 @@ PROFILE_ADDED = "Instrument profile “{name}” added from the settings file."
 PROFILE_MISSING = "Instrument profile “{name}” is not here: the geometry is matched automatically."
 MASK_FILE_MISSING = "Mask file not found, left out: {path}"
 BACKGROUND_MISSING = "Background frame not found, left out: {path}"
+FLAT_FIELD_MISSING = "Flat-field file not found, left out: {path}"
 """Notes of a settings file applied (``batch_model.apply_settings``)."""
 REGION_Q_EMPTY = "Region {name}: the q range is empty."
 REGION_CHI_EMPTY = "Region {name}: the χ range is empty."
@@ -88,9 +91,12 @@ TEMPLATES: tuple[tuple[str, dict[str, Callable[[str], str]]], ...] = (
     (PROFILE_MISSING, {}),
     (MASK_FILE_MISSING, {}),
     (BACKGROUND_MISSING, {}),
+    (FLAT_FIELD_MISSING, {}),
+    *((template, {}) for template in FLAT_FIELD_TEMPLATES),  # a flat field that cannot be used, and why
     (REGION_Q_EMPTY, {}),
     (REGION_CHI_EMPTY, {}),
     (MASK_SHAPE, {}),
+    *((template, {}) for template in CUT_TEMPLATES),  # a GISAXS cut that cannot be made or holds nothing
     *((template, {"error": _frame_beyond} if template == FEWER_FRAMES else {}) for template in READ_ERRORS),
 )
 """English templates of the messages made elsewhere, with what to do with each value (default: keep it)."""

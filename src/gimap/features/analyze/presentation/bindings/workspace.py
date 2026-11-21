@@ -124,6 +124,7 @@ class WorkspaceMixin:
         batch.activated.connect(lambda: self.batch_export_dialog())
         self.options_button.toggled.connect(lambda on: on and self.show_step("mask"))
         self.export_curves_button.clicked.connect(self.export_current)
+        self.export_nxcansas_check.toggled.connect(self._nxcansas_toggled)
         self.export_image_button.clicked.connect(self.save_image)
         self.export_map_button.clicked.connect(self.save_map_data)
         self.save_map_action.triggered.connect(self.save_map_data)
@@ -299,6 +300,8 @@ class WorkspaceMixin:
                 parts.append(tr("intensity range"))
             if corrections is not None and corrections.background_path:
                 parts.append(tr("background"))
+            if corrections is not None and corrections.flat_field_path:
+                parts.append(tr("flat field"))
             lines.append(f"· {tr(' and ').join(parts) or tr('corrections')}: {_pixels(extra, total)}")
         show_card(self.mask_summary_label, "\n".join(lines))
         share = 100.0 * (total - int(valid.sum())) / max(total, 1)
@@ -324,6 +327,11 @@ class WorkspaceMixin:
             self.set_step_state(
                 "cuts", "ok", tr("Ring, bands and {n} region(s)").format(n=regions) if regions else tr("Ring and bands")
             )
+
+    def _nxcansas_toggled(self, checked: bool) -> None:
+        """Export Curves…, the curves of a plot and the export while watching also write NXcanSAS (remembered)."""
+        self.view_model.export_nxcansas = bool(checked)
+        self._remember()
 
     # -- halves of the horizontal cut --------------------------------------------------
 

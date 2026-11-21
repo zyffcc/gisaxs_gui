@@ -198,6 +198,8 @@ class HeadlessSession:
     """What the file opened stands for; a pipeline report says so (``describe_source``)."""
     mask: Optional[str] = None
     """The mask file applied with ``apply_mask`` (``None``: none)."""
+    flat_field: Optional[str] = None
+    """The flat field applied with ``apply_flat_field`` (``None``: none)."""
     _calls: int = field(default=0, repr=False)
 
     def call(self, name: str, arguments: Optional[dict] = None) -> ToolOutcome:
@@ -230,6 +232,26 @@ class HeadlessSession:
             raise ValueError(MASK_UNREADABLE.format(name=path.name))
         self.page.tasks.wait(LOAD_TIMEOUT_S)
         self.mask = str(path)
+
+    def apply_flat_field(self, flat_field: str | Path) -> None:
+        """Divide the frame by a flat field as Analyze's Corrections do; ``ValueError`` / ``OSError``: why not."""
+        path = Path(flat_field)
+        if not path.is_file():
+            raise FileNotFoundError(f"No such flat-field file: {path}")
+        self.page.view_model.check_flat_field(path)  # the application's sentence when it does not fit
+        self.page.load_flat_field(path)
+        self.page.tasks.wait(LOAD_TIMEOUT_S)
+        self.flat_field = str(path)
+
+    def apply_files(self, mask=None, flat_field=None) -> Optional[str]:
+        """The mask and the flat field given for every frame, applied (``None``) or why one was not."""
+        try:
+            for path, apply in ((mask, self.apply_mask), (flat_field, self.apply_flat_field)):
+                if path:
+                    apply(path)
+        except (OSError, ValueError) as exc:  # of another detector: this frame fails, the others go on
+            return str(exc)
+        return None
 
     def unreadable(self) -> Optional[str]:
         """Why GIMaP could not read the frame (``None``: it was read): such a frame failed, it asks nothing."""
@@ -330,31 +352,32 @@ def analyse_frames(
     data_dir: Optional[Path] = None,
     series: bool = False,
     mask: Optional[str | Path] = None,
+    flat_field: Optional[str | Path] = None,
     overwrite: bool = False,
     record: Optional[dict] = None,
     found: tuple = (),
     language: str = "en",
+    curve_format: str = "csv",
 ) -> list[dict]:
     """The standard pipeline on each source the files stand for: the module files of one detector are one
     stitched series, analysed once however many of them were given. Later sources of the same detector reuse
     the first calibration; without a technique each gets the procedure Auto detects for it. ``series``: the
-    files are ONE series stored as one frame per file, analysed like the frames of a multi-frame file (one
-    report).
+    files are ONE series stored as one frame per file, analysed like the frames of a multi-frame file.
 
-    Every source has its own folder in ``out`` (``headless_inputs.frame_folders``: frames of one name in
-    different folders do not share one), named in its report (``folder``) and linked from the summary.
-    ``mask``: a mask file applied to every frame (``HeadlessSession.apply_mask``); a frame it does not fit
-    fails. ``out`` with the summary of an earlier run is refused (``FileExistsError``) unless ``overwrite``
-    (``headless_inputs.prepare_output``). ``record``: the options as they were given, kept in every
-    report.json and in summary.json; ``found``: what patterns and folders among the arguments stood for;
-    ``language``: of the reports' headings."""
+    Every source has its own folder in ``out`` (``headless_inputs.frame_folders``), named in its report
+    (``folder``) and linked from the summary. ``mask``: a mask file for every frame (``apply_mask``);
+    ``flat_field``: a flat field every frame is divided by (``apply_flat_field``), a frame it does not fit
+    fails. ``out`` with an earlier summary is refused (``FileExistsError``) unless ``overwrite``. ``record``:
+    the options as given (every report.json, summary.json); ``found``: what the patterns and folders among
+    the arguments stood for; ``language``: of the headings; ``curve_format``: ``CURVE_FORMATS``."""
     prepare_output(out, overwrite)
-    written = {"options": record, "created": utc_now(), "language": language}
+    written = {"options": record, "created": utc_now(), "language": language, "curve_format": curve_format}
     reports: list[dict] = []
     calibration: Optional[dict] = None
     sources = given_sources(frames)
     if series:
-        reports.append(_analyse_series(sources, options, out, progress, saved_profiles, data_dir, mask, written))
+        reports.append(_analyse_series(sources, options, out, progress, saved_profiles, data_dir, (mask, flat_field),
+                                       written))
         sources = []
     for source, folder in zip(sources, frame_folders(sources)):
         frame = source.path
@@ -372,12 +395,10 @@ def analyse_frames(
                 reports[-1]["given"] = list(source.given)
             continue
         try:
-            if mask and not session.unreadable():
-                try:
-                    session.apply_mask(mask)
-                except (OSError, ValueError) as exc:  # a mask of another detector: this frame fails, the others go on
-                    reports.append({"ok": False, "frame": str(frame), "error": str(exc), "needs_attention": []})
-                    continue
+            failure = session.apply_files(mask, flat_field) if not session.unreadable() else None
+            if failure:
+                reports.append({"ok": False, "frame": str(frame), "error": failure, "needs_attention": []})
+                continue
             shape = (session.call("get_status").data or {}).get("shape")
             frame_options = options
             if calibration is not None and options.calibration is None and list(calibration.get("shape") or []) == list(shape or []):
@@ -401,7 +422,7 @@ def _write(session: HeadlessSession, report: dict, folder: str, written: dict) -
 
 
 def _analyse_series(
-    sources, options: PipelineOptions, out: Path, progress, saved_profiles: bool, data_dir, mask=None,
+    sources, options: PipelineOptions, out: Path, progress, saved_profiles: bool, data_dir, files=(None, None),
     written: Optional[dict] = None,
 ) -> dict:
     """One report for files that are one series stored as one frame per file: the block ``--frame`` /
@@ -422,11 +443,9 @@ def _analyse_series(
     except Exception as exc:  # noqa: BLE001 - reported like any file that cannot be opened
         return {"ok": False, "frame": str(block[0].path), "error": str(exc) or type(exc).__name__, "needs_attention": []}
     try:
-        if mask and not session.unreadable():
-            try:
-                session.apply_mask(mask)
-            except (OSError, ValueError) as exc:
-                return {"ok": False, "frame": str(block[0].path), "error": str(exc), "needs_attention": []}
+        failure = session.apply_files(*files) if not session.unreadable() else None  # (mask, flat field)
+        if failure:
+            return {"ok": False, "frame": str(block[0].path), "error": failure, "needs_attention": []}
         summed = 1
         if count > 1:  # Analyze adds the following listed files of the same kind
             summed = int(session.catalog.workbench.set_frame(1, count).get("summed_frames") or 1)

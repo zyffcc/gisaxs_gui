@@ -37,6 +37,29 @@ INTERVAL_NAMES = ("median", "low68", "high68", "low95", "high95")
 """The posterior of a value as a row gives it: best, then these, then the least-squares error."""
 
 
+SPHERE_MODEL = "effective interface (q_z = 0)"
+"""Where Predict parameters evaluates the particles of the cut: the form factor at q_z = 0, as Fitting's record says
+it (``sphere_model``); the cut's own q_z (``cut_qz``) only flags the sizes too large for that."""
+
+
+def cut_qz(status: Optional[dict]) -> Optional[dict]:
+    """The vacuum q_z of the horizontal cut, k(sin αi + sin αf) in nm⁻¹ (``q_z_inv_nm``), with the angles and λ it is
+    from: αi and λ of the geometry, αf of the Yoneda band the cut is at. ``None`` when one of them is not known (a
+    cut elsewhere, no αi): nothing is guessed."""
+    status = status or {}
+    geometry, cuts = status.get("geometry") or {}, status.get("gisaxs") or {}
+    wavelength, alpha_i, alpha_f = (geometry.get("wavelength_A"), geometry.get("incidence_deg"),
+                                    cuts.get("yoneda_alpha_f_deg"))
+    if cuts.get("horizontal_source") != "yoneda" or None in (wavelength, alpha_i, alpha_f):
+        return None
+    wavelength, alpha_i, alpha_f = float(wavelength), float(alpha_i), float(alpha_f)
+    if not (wavelength > 0 and 0 < alpha_i < 90 and 0 < alpha_f < 90):
+        return None
+    k = 2.0 * math.pi / (wavelength / 10.0)  # nm⁻¹
+    return {"q_z_inv_nm": k * (math.sin(math.radians(alpha_i)) + math.sin(math.radians(alpha_f))),
+            "alpha_i_deg": alpha_i, "alpha_f_deg": alpha_f, "wavelength_A": wavelength}
+
+
 def _intervals(row: dict) -> dict:
     """The posterior intervals of a solution's values (``R_1``, ``D_2`` …; nm, nm⁻¹, spreads relative)."""
     found = {}
@@ -256,7 +279,9 @@ class GisaxsToolsMixin:
         if self.fitter is None:
             raise ToolInputError("No curve fitter is available in this session: use Send to Fitting in the GUI.")
         side, x, y, sigma, note = self._fit_input(side)
-        rows = self.fitter(x, y, sigma, components=tuple(components or ()), cancelled=self.cancelled)
+        cut = cut_qz(self.results.status)  # flags a size too large for q_z = 0; no value changes
+        rows = self.fitter(x, y, sigma, components=tuple(components or ()), cancelled=self.cancelled,
+                           cut_qz=None if cut is None else cut["q_z_inv_nm"])
         if not rows:
             raise ToolInputError("Predict parameters found no solution.")
         solutions = [_solution(row) for row in rows]  # most probable first: the first is the one reported
@@ -264,6 +289,8 @@ class GisaxsToolsMixin:
             solutions[0]["alone"] = True
         self.results.gisaxs["fit"] = {
             "side": side, "curve": note, "points": int(x.size), "q_range_inv_angstrom": [float(x.min()), float(x.max())],
+            # the particles at q_z = 0; the cut's q_z (None: its angles not known) flags (qzR) a size too large for it
+            "sphere_model": SPHERE_MODEL, "cut_qz": cut,
             # the points χ²ᵣ is of: fitted, given, below_window (below the network's q window), unusable
             "fitted_points": None if not rows[0].get("points") else dict(rows[0]["points"]),
             # what the fit says of the curve as it took it: an estimated σ, negative and zero intensities
@@ -286,4 +313,4 @@ class GisaxsToolsMixin:
                          "chosen": head}, summary)
 
 
-__all__ = ["GisaxsToolsMixin"]
+__all__ = ["GisaxsToolsMixin", "SPHERE_MODEL", "cut_qz"]

@@ -5,7 +5,8 @@ attach the same keys to a report, from the record Analyze writes beside its curv
 (``<stem>_analysis.json``: ``analysis_record``):
 
 - ``software_version``, ``created`` (UTC), ``options`` (the command line's; ``None`` in the window),
-- ``inputs``: every file the result was made from, each by name, path, size and SHA-256,
+- ``inputs``: every file the result was made from (the frame's, calibration, mask, background, flat field), each by
+  name, path, size and SHA-256,
 - ``mask``: which mask was applied or that none was, and the bad pixels left out apart from it,
 - ``analysis_record``: geometry, instrument profile, corrections, error model, binning.
 
@@ -85,8 +86,8 @@ def mask_record(record: Optional[dict], mask_path: Optional[str] = None) -> dict
 
 def input_files(report: dict, record: Optional[dict]) -> dict:
     """Every file the result was made from, each by name, path, size and SHA-256: the frame's files (the module
-    or data files of a source, the frames summed with it), and the calibration, mask and background file when
-    one was used (``None``: none)."""
+    or data files of a source, the frames summed with it), and the calibration, mask, background and flat-field
+    file when one was used (``None``: none)."""
     record = record or {}
     frames = list(record.get("source_files") or [record.get("source_file") or report.get("frame")])
     frames += [item.get("file") for item in record.get("summed_frames") or ()]
@@ -100,6 +101,7 @@ def input_files(report: dict, record: Optional[dict]) -> dict:
         "calibration": _existing((report.get("calibration") or {}).get("source_image")),
         "mask": _existing(corrections.get("mask_path")),
         "background": _existing(corrections.get("background_path")),
+        "flat_field": _existing(corrections.get("flat_field_path")),
     }
 
 
@@ -153,6 +155,9 @@ def _corrections(record: dict) -> str:
     low, high = corrections.get("minimum"), corrections.get("maximum")
     if low is not None or high is not None:
         parts.append(f"valid intensities {'—' if low is None else f'{low:g}'} to {'—' if high is None else f'{high:g}'}")
+    flat = corrections.get("flat_field")
+    if flat:
+        parts.append(f"divided by the flat field `{flat.get('file')}` ({flat.get('masked_pixels')} pixels left out)")
     if corrections.get("gap_guard_px"):
         parts.append(f"{corrections['gap_guard_px']} px next to detector gaps left out")
     if corrections.get("mirror_fill"):
@@ -195,6 +200,8 @@ def record_lines(report: dict) -> list[str]:
         lines.append("- calibration: none (no geometry)")
     if inputs.get("background"):
         lines.append(_file_line("background file", inputs["background"]))
+    if inputs.get("flat_field"):
+        lines.append(_file_line("flat-field file", inputs["flat_field"]))
     if record:
         lines.append(f"- corrections: {_corrections(record)}")
         if record.get("error_model"):

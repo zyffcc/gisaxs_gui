@@ -16,6 +16,10 @@
   `series_pick.py`、`series_exports.py`、`series_stages.py`、`series_fit_results.py`）。视图模型的帧与源：
   `frames_model.py`、`sources_model.py`、`frame_selection.py`、`frame_sequences.py`、`folder_watch.py`。
 - 共享组件：`app/presentation/components/`（DetectorView、CurvePlot、StepRail、SegmentedControl、EmptyState、Toast）。
+- NXcanSAS 导出：导出步骤的 “Also as NXcanSAS (.h5)”（`export_nxcansas_check`，记在 `preferences.nxcansas`，视图模型
+  `export_nxcansas`）→ `ExportAnalysis(..., nxcansas=True)` / `.curves(..., nxcansas=True)` / `.nxcansas()`（批量导出
+  `BatchChoices.nxcansas` → `nxcansas/<帧>_nxcansas.h5`）；曲线到 SASentry 的对应在 `application/nxcansas_export.py`，
+  文件格式（写和读）在 `shared/nxcansas.py`；测试 `test_nxcansas.py`。
 - 自动化：`presentation/automation.py` 的 `AnalyzeAutomation` 让自动分析和 AI 像用户一样操作本页（每个改动同步到控件、
   重新分析一次再回调）；曲线一律以 q（Å⁻¹）返回。
 - 相关测试：`test_analyze_*.py`（NeXus 源：`test_analyze_nexus_sources.py`）、`test_live_following.py`、`test_guided_start.py`、
@@ -223,8 +227,14 @@ Send to Fitting（命令栏和 Export 步骤的按钮都走 `bindings/fit_handov
 - Masks you draw：Rectangle（在探测器图上点两个对角）、Polygon（逐点单击，双击或 Enter 闭合，Backspace 删最后一点，Esc 取消）；
   列表与 Remove Selected / Clear Masks 只在有掩膜时出现；Save… 存为 JSON（规范像素坐标），Load… 载入 JSON 或同尺寸的掩膜图（EDF / TIFF，非零 = 掩膜，pyFAI 约定）。
   掩膜在图上以红色轮廓显示，立即从所有曲线中排除。
-- Corrections（折叠区）：背景帧（缩放、帧号）、有效原始强度 Min / Max、gap guard（0–20 px，记住）。
-  顺序：探测器无效像素 → 热 / 死像素 → 掩膜 → 背景 → gap guard → 强度范围 → 镜像补齐 → 强度校正；曲线、q 图、展开图与导出都用处理后的帧。
+- Corrections（折叠区）：背景帧（缩放、帧号）、平场（Flat field，探测器响应，默认关；`domain/flat_field.py`、
+  `application/flat_field.py`、`bindings/options.py` 的 `load_flat_field`）、有效原始强度 Min / Max、gap guard（0–20 px，记住）。
+  平场：探测器帧或 `.npy`，按保留的像素归一化到平均值 1，≤ 0.05 或非有限的像素排除并计数，尺寸不同则拒绝；
+  I / F_ff，计数帧的方差按 value / F 传递（`intensity_scale`，GISAXS 的 `native_profile(..., scale)` 与 GIWAXS 的
+  `BinnedMean.add(..., scale)`），与 GIWAXS 强度校正相乘为 F = F_Ω F_P F_A F_ff；记录 `corrections.flat_field`（文件、SHA-256、
+  归一化平均值、排除的像素）；每个文件版本只读一次，批量导出、序列与监视共用。
+  顺序：探测器无效像素 → 热 / 死像素 → 掩膜 → 背景 → 平场排除的像素 → gap guard → 强度范围 → 除以平场 → 镜像补齐 → 强度校正；
+  曲线、q 图、展开图与导出都用处理后的帧。
 - Intensity corrections (GIWAXS)（折叠区，只在 GIWAXS 显示，默认关，`domain/intensity.py`）：立体角 cos³2θ、偏振（pyFAI 公式，因子 f）、
   薄膜吸收（厚度 t、衰减长度 L，相对 αf = αi，不含折射）；I / factor，q 不变。计数帧的方差按 value / factor 传递
   （`BinnedMean.add(..., scale)`），导出记录的 `intensity_corrections` 写明公式与参数，Fitting 的计数模型标记为不成立。
@@ -237,6 +247,24 @@ Send to Fitting（命令栏和 Export 步骤的按钮都走 `bindings/fit_handov
 - 标记（`components/marks.py`、`bindings/marks.py`）：每个图像视图的 Marks ▾ 和每个曲线图的眼睛按钮，按类显示 / 隐藏
   （光束中心、地平线、切线带、掩膜与区域、像素叠加层、热 / 死像素、q 框、色标、窗口带），全部显示 / 隐藏；隐藏选择按视图
   记在设置 `analyze.hidden_marks`；自己画的可从同一菜单删除（掩膜、全部区域、q 框，可撤销）。
+
+## GISAXS：自己的切线（Cuts 步骤）
+
+- 静态布局 `views/gisaxs_cuts_view.py`（`GisaxsCutsView`，经 `RegionsView` 混入；“另一套设置”的提示卡 `cut_notice` 放在
+  Cuts 步骤顶部，GISAXS 和 GIWAXS 都用）；行为 `bindings/gisaxs_cuts.py`（表格、编辑区、添加 / 复制 / 移除 / 改名 / 显示、
+  单位、另一套设置的询问）和 `bindings/gisaxs_cut_display.py`（上下图的曲线、下图列表 Cuts along qz / Sectors / Lines、
+  探测器图和 q 图上的轮廓、在图上画），经 `RegionsMixin` 混入；视图模型 `gisaxs_cuts_model.py`（`AnalyzeState.gisaxs.regions`、
+  `cut_home`）。
+- 切线在 q 中定义（`domain/gisaxs_cuts.py` 的 `GisaxsCut`：horizontal / vertical / box / sector / line），曲线键 `cut1`、`cut2` …；
+  像素中心的 q 落在切线内即属于它（整像素，只计地平线以上）。带和框每列 / 每行一个点（`native_profile`），扇区和线按
+  k·p/D 宽的区间（`BinnedMean` + `merge_sparse_bins`）。自动的 `horizontal` / `vertical` 不变（`gisaxs.py`，整行整列），
+  记录里另加 `qz_edges`、`alpha_f_edges_deg`、`qy_edges`、`two_theta_f_edges_deg`。
+- 单位换算（`application/gisaxs_cuts.py`）：q_z ↔ α_f ↔ 光束中心列上的行；q_y ↔ 地平线上的 2θ_f ↔ 地平线所在行上的列；
+  q → 像素用 `shared/geometry/q_inverse.py`（精确模型的逆，含倾斜和折射）。
+- 设置文件 `gisaxs.cuts`；Auto Cuts 保留自己的切线；Sources 用 `curve_source_mask`（GISAXS 切线需要 `GisaxsMaps`，
+  `AnalyzeFrame._gisaxs_maps_for` 缓存）。另一套设置（探测器、帧尺寸、像素、距离、波长、光束中心、倾斜；不比 αi）的
+  帧来时显示提示卡和 toast：Keep Cuts / Remove Cuts。
+- 测试：`tests/test_gisaxs_cuts.py`（含 Yoneda 切线与 218cbe2 相同的数值）。
 
 ## GIWAXS：区域与切线（Cuts 步骤）
 

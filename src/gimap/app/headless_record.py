@@ -11,6 +11,9 @@ One vocabulary with the window's records (Physics and Methods, chapter 14):
   network's weights and its seed (``gisaxs.fit.method``) beside the solutions with their intervals.
 - every CSV starts with the same ``#`` lines: the release, each input file with its SHA-256, the frame and the
   geometry (``provenance_lines``).
+- ``--curve-format nxcansas`` (or ``both``) writes the curves against q as one NXcanSAS file instead of (or beside)
+  the curve CSVs: ``curves_nxcansas.h5``, one SASentry per curve with the frame's record
+  (``analyze/application/nxcansas_export.py``); I(χ) of the last ring stays a CSV (NXcanSAS has no angle axis).
 - ``summary.json`` is one object: the release, the time, the options, what the arguments stood for and the
   frame reports (``frames``; before 0.2.0 the file was that list).
 
@@ -34,6 +37,9 @@ from ..features.assistant.application.run_record import MASK_IMAGE, MASK_SHAPES,
 from .headless_sources import batch_summary
 
 CURVES = ("radial", "in_plane", "out_of_plane", "azimuthal", "horizontal", "vertical")
+CURVE_FORMATS = ("csv", "nxcansas", "both")
+"""How the command line writes the curves (``--curve-format``): CSV files, one NXcanSAS file, or both."""
+NXCANSAS_FILE = "curves_nxcansas.h5"
 SUMMARY_LEAVES_OUT = ("tables", "analysis_record", "options")
 """Parts of a frame's report that stay in its own report.json (``options`` is the summary's own)."""
 MADE_BY_THE_RUN = "automatic analysis:"
@@ -88,10 +94,12 @@ def csv_text(text: str) -> str:
 
 def write_outputs(
     session, report: dict, folder: Path, *, options: Optional[dict] = None, created: Optional[str] = None,
-    language: str = ENGLISH,
+    language: str = ENGLISH, curve_format: str = "csv",
 ) -> list[Path]:
     """report.json, report.md, the curves as CSV (GISAXS: the cuts and the fit) and the q-map as PNG. ``report``
-    gets the record of the run (``run_record``), so a summary made of it names the same inputs."""
+    gets the record of the run (``run_record``), so a summary made of it names the same inputs. ``curve_format``
+    (``CURVE_FORMATS``): ``nxcansas`` writes the curves against q as ``curves_nxcansas.h5`` instead of their CSVs
+    (an I(χ) stays CSV), ``both`` writes both."""
     import numpy as np
 
     folder.mkdir(parents=True, exist_ok=True)
@@ -100,9 +108,10 @@ def write_outputs(
     written[0].write_text(json.dumps(report, indent=1, ensure_ascii=False, default=str), encoding="utf-8")
     written[1].write_text(pipeline_markdown(report, language=language), encoding="utf-8")
     provenance = provenance_lines(session)
+    in_nxcansas = _write_nxcansas(session, folder, written) if curve_format in ("nxcansas", "both") else set()
     for key in CURVES:
         curve = session.curve(key)
-        if curve is None or len(curve["x"]) == 0:
+        if curve is None or len(curve["x"]) == 0 or (curve_format == "nxcansas" and key in in_nxcansas):
             continue
         name = "azimuthal_last_ring.csv" if key == "azimuthal" else f"{key}.csv"
         with open(folder / name, "w", encoding="utf-8", newline="\n") as stream:
@@ -117,6 +126,28 @@ def write_outputs(
         (folder / "qmap.png").write_bytes(png)
         written.append(folder / "qmap.png")
     return written
+
+
+def _write_nxcansas(session, folder: Path, written: list) -> set[str]:
+    """The curves of ``CURVES`` that are against q as ``curves_nxcansas.h5`` (appended to ``written``); the keys
+    of the curves it holds (none without a frame or such a curve)."""
+    from src.gimap.shared.nxcansas import write_nxcansas
+
+    from ..features.analyze.application.export_record import export_stem
+    from ..features.analyze.application.nxcansas_export import against_q, sas_curves
+    from ..features.analyze.domain import Curve
+
+    analysis, record = session.page.view_model.state.analysis, analysis_record(session)
+    if analysis is None or record is None:
+        return set()
+    curves = [Curve(curve["key"], curve["title"], curve["x"], curve["y"], curve["sigma"], curve["pixels"],
+                    curve["x_label"], region=curve["region"])
+              for key in CURVES if (curve := session.curve(key)) is not None and len(curve["x"])]
+    sas = sas_curves(curves, record, run=export_stem(analysis), written_by="command line")
+    if not sas:
+        return set()
+    written.append(write_nxcansas(folder / NXCANSAS_FILE, sas))
+    return {curve.key for curve in curves if against_q(curve)}
 
 
 def _write_fit(fit: Optional[dict], folder: Path, provenance: str = "") -> list[Path]:
@@ -157,6 +188,6 @@ def write_summary(
 
 
 __all__ = [
-    "CURVES", "analysis_record", "csv_text", "input_files", "mask_record", "provenance_lines", "run_record", "utc_now",
+    "CURVES", "CURVE_FORMATS", "NXCANSAS_FILE", "analysis_record", "csv_text", "input_files", "mask_record", "provenance_lines", "run_record", "utc_now",
     "write_outputs", "write_summary",
 ]
