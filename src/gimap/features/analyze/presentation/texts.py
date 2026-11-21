@@ -18,7 +18,10 @@ from src.gimap.shared.detector_io.nexus_layout import ERROR_TEMPLATES, FRAME_BEY
 from ..application import RECTANGLE
 from ..application.flat_detector import DETECTOR_ROTATION_MESSAGE, FLAT_DETECTOR_MESSAGE
 from ..application.flat_field import FLAT_FIELD_TEMPLATES
-from ..application.geometry_resolution import CENTER_NOT_USED, CENTER_NOT_USED_HEADER
+from ..application.geometry_resolution import CENTER_NOT_USED, CENTER_NOT_USED_HEADER, PROFILE_REFUSED
+from ..application.geometry_files import PIXEL_MISMATCH, SHAPE_MISMATCH
+from ..application.frame_import import OTHER_DETECTOR
+from ..application.technique import BY_RINGS
 
 NO_PROFILE = "No instrument profile for {detector} ({shape}). Calibrate once or enter the geometry to get q curves."
 PROFILE_SHAPE = "Profile “{name}” is for {profile_shape} frames; this frame is {shape}."
@@ -95,6 +98,11 @@ TEMPLATES: tuple[tuple[str, dict[str, Callable[[str], str]]], ...] = (
     (REGION_Q_EMPTY, {}),
     (REGION_CHI_EMPTY, {}),
     (MASK_SHAPE, {}),
+    (PROFILE_REFUSED, {}),
+    (SHAPE_MISMATCH, {}),
+    (PIXEL_MISMATCH, {}),
+    (OTHER_DETECTOR, {"detector": tr}),  # “detector not named” when the file names none
+    (BY_RINGS, {}),
     *((template, {"error": _frame_beyond} if template == FEWER_FRAMES else {}) for template in READ_ERRORS),
 )
 """English templates of the messages made elsewhere, with what to do with each value (default: keep it)."""
@@ -171,6 +179,8 @@ def detector_text(analysis) -> Optional[str]:
         return str(name)
     resolution = getattr(analysis, "resolution", None)
     profile = getattr(resolution, "profile", None) if resolution is not None else None
+    if getattr(resolution, "how", None) == "file":  # a .poni beside the frame: its name is a file, not a detector
+        return str(profile.detector_name) if profile is not None and profile.detector_name else None
     return str(profile.name) if profile is not None and getattr(profile, "name", None) else None
 
 

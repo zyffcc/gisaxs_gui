@@ -127,6 +127,23 @@ Auto Detect 时引擎用所有已知标样去试，再按环的匹配打分。
   `system.geometry_calibration`：按没有做过标定处理，框显示 Optional，在这一版里按一次 Apply 之后恢复。
 - NeXus 的距离没有 `units` 时，共用的读取器按米读。窗口只是不显示超出范围的值；一个错的、但看起来合理的数仍会被填进去。
 
+## 探测器倾斜与能量来源（2026-11-21）
+
+- **倾斜。** `domain/tilt_fit.py`：中心和距离的拟合之后，对显示的候选解把 rot1、rot2 与中心、距离一起最小二乘拟合
+  （环上的点按扇区取加权质心，残差 `L (tan 2θ_点 − tan 2θ_环) / p̄`，用 `shared.geometry.lab_rays`）；默认在匹配到
+  三个或更多环时进行（左栏 **Detector tilt: Refine rot1, rot2**，`tilt_check`；引擎参数 `tilt="auto" | "on" | "off"`）。
+  1σ 由 `optimizer.estimate_uncertainty` 的刀切法（≥ 3 环）或协方差（2 环）给出。结果栏 **Detector tilt** 一行显示
+  rot1、rot2 ± 1σ，提示里是计倾斜和不计倾斜时环上点的 RMS。候选解的 `rot1_deg` … 只在拟合了倾斜时写进 JSON。
+  Apply 后仪器配置的几何带上这些转角（`instrument_profile.calibrated_geometry`）。谱线检查（`line_check.check_lines`）
+  按候选解的转角积分。物理说明见《物理与方法》3.8 节。
+- **能量。** 能量框默认 0，显示 *Required*；文件（或 CBF 配套的 NXS）给出能量时填上并在框下一行说明来源；没有时以警告样式
+  说明，Auto Calibration 不可用（`bindings/energy_source.py`）。下一张没有能量的图像沿用上次输入的值，并请用户核对。
+  记录写 `metadata.energy_source`，仪器配置的 `source` 也写上。
+- **导出 .poni。** Export Calibration… 的文件类型可选 *pyFAI geometry (*.poni)*（`JsonCalibrationStorageAdapter.save`
+  按后缀写 `calibration_poni_text`）。
+- 测试：`tests/test_geometry_tilt_calibration.py`、`tests/test_geometry_ui.py`。
+- 已知：预览上的理论环仍按不倾斜的圆画；对几度的倾斜，叠加与图上的环在外圈会有可见的偏差。
+
 ## 控件映射
 
 | 功能/控件区域 | Python View object / 当前位置 | 行为 |

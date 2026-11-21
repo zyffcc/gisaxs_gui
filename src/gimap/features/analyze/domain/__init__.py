@@ -11,6 +11,7 @@ from .region_pick import PICK_KINDS, RING, SECTOR, SPOT, Peak, Pick, pick_region
 from .binning import BinnedMean, binned_mean, binned_mean_2d, native_profile
 from .classification import (
     WIDE_ANGLE_LIMIT_DEG,
+    calibrant_name,
     classify_measurement,
     max_scattering_angle_deg,
 )
@@ -46,10 +47,13 @@ from .giwaxs import (
     strongest_ring,
     two_theta_deg,
 )
+from .transmission import reduce_transmission, transmission_maps
+from .ring_frame import rings_about_beam
 from .models import (
     GISAXS,
     GIWAXS,
     MEASUREMENT_KINDS,
+    TRANSMISSION,
     Curve,
     GisaxsCutSettings,
     GiwaxsSettings,
@@ -67,6 +71,11 @@ from .symmetry import SymmetryCenter, symmetric_center_x
 from .validity import valid_pixels
 
 __all__ = [
+    "TRANSMISSION",
+    "calibrant_name",
+    "reduce_transmission",
+    "rings_about_beam",
+    "transmission_maps",
     "PROFILES",
     "PeakFit",
     "fit_peak",

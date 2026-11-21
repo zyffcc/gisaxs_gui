@@ -1,8 +1,10 @@
-"""Decide whether a frame is small-angle (GISAXS) or wide-angle (GIWAXS)."""
+"""Decide whether a frame is small-angle (GISAXS) or wide-angle (GIWAXS), or a calibrant in transmission."""
 
 from __future__ import annotations
 
 import math
+import re
+from pathlib import Path
 
 from src.gimap.shared.geometry import DetectorGeometry, lab_rays
 
@@ -35,4 +37,14 @@ def classify_measurement(shape: tuple[int, int], geometry: DetectorGeometry) -> 
     return GIWAXS if max_scattering_angle_deg(shape, geometry) > WIDE_ANGLE_LIMIT_DEG else GISAXS
 
 
-__all__ = ["WIDE_ANGLE_LIMIT_DEG", "classify_measurement", "max_scattering_angle_deg"]
+CALIBRANT_TOKENS = frozenset({"agbh", "agbe", "behenate", "lab6", "ceo2"})
+"""Words in a file name that name a calibration standard measured in transmission."""
+
+
+def calibrant_name(path) -> bool:
+    """Whether the file name names a calibration standard (silver behenate, LaB6, CeO2)."""
+    tokens = re.split(r"[^a-z0-9]+", Path(str(path)).name.lower())
+    return any(token in CALIBRANT_TOKENS for token in tokens)
+
+
+__all__ = ["CALIBRANT_TOKENS", "WIDE_ANGLE_LIMIT_DEG", "calibrant_name", "classify_measurement", "max_scattering_angle_deg"]

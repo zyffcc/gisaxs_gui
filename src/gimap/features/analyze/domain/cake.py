@@ -24,6 +24,7 @@ class CakeMap:
     """``(χ bins, q bins)``; row 0 is χ = −90°."""
     q_range: tuple[float, float]
     chi_range: tuple[float, float] = (-90.0, 90.0)
+    """(−90°, 90°) for GIWAXS; (−180°, 180°) in transmission, whose χ runs round the whole ring."""
 
     def axes(self) -> tuple[np.ndarray, np.ndarray]:
         """Bin centres: q (columns) and χ (rows, from −90° up)."""
@@ -34,8 +35,11 @@ class CakeMap:
         return q, chi
 
 
-def cake_map(image: np.ndarray, usable: np.ndarray, maps, *, shape: tuple[int, int] = CAKE_SHAPE) -> CakeMap:
-    """Mean intensity on a regular (χ, q) grid of the ``usable`` pixels."""
+def cake_map(
+    image: np.ndarray, usable: np.ndarray, maps, *, shape: tuple[int, int] = CAKE_SHAPE,
+    chi_range: tuple[float, float] = (-90.0, 90.0),
+) -> CakeMap:
+    """Mean intensity on a regular (χ, q) grid of the ``usable`` pixels (χ over ``chi_range``)."""
     usable = np.asarray(usable, dtype=bool)
     if not usable.any():
         raise ValueError("No valid pixels above the horizon to unwrap.")
@@ -43,9 +47,9 @@ def cake_map(image: np.ndarray, usable: np.ndarray, maps, *, shape: tuple[int, i
     q_high = float(q.max())
     grid = binned_mean_2d(
         q, maps.chi_deg[usable], np.asarray(image)[usable],
-        x_range=(0.0, q_high + 1e-12), y_range=(-90.0, 90.0 + 1e-9), shape=shape,
+        x_range=(0.0, q_high + 1e-12), y_range=(float(chi_range[0]), float(chi_range[1]) + 1e-9), shape=shape,
     )
-    return CakeMap(grid.astype(np.float32), (0.0, q_high))
+    return CakeMap(grid.astype(np.float32), (0.0, q_high), (float(chi_range[0]), float(chi_range[1])))
 
 
 __all__ = ["CAKE_SHAPE", "CakeMap", "cake_map"]

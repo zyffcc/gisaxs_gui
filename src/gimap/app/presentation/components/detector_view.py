@@ -173,9 +173,12 @@ class DetectorView(QWidget):
         self.readout_label.setToolTip(READOUT_HINT)
         self.readout_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         # The readout changes with every mouse move: it must never change the size of the view
-        # (a longer text would widen the panel, and the image would jump). Too long: cut, whole in the tooltip.
+        # (a longer text would widen the panel, and the image would jump). Two lines of fixed height: a readout
+        # in two parts (the point; its angles and d) is whole at the usual widths; a line that does not fit even
+        # so is cut at its end, whole in the tooltip.
         self.readout_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self.readout_label.setMinimumWidth(0)
+        self.readout_label.setFixedHeight(2 * self.readout_label.fontMetrics().lineSpacing() + 4)
         layout.addWidget(self.readout_label)
 
         self.log_check.toggled.connect(lambda _checked: self._redraw(keep_view=True))
@@ -537,17 +540,21 @@ class DetectorView(QWidget):
         point = self.view_box.mapSceneToView(position)
         x, y = float(point.x()), float(point.y())
         value = self.value_at(x, y)
-        text = f"x = {x:.1f}, y = {y:.1f}   I = {value:.4g}" if value is not None else f"x = {x:.1f}, y = {y:.1f}"
+        if self._rect is not None:  # q map, cake: the axes are not pixels; the formatter names the point
+            text = f"I = {value:.4g}" if value is not None else ""
+        else:
+            text = f"x = {x:.1f}, y = {y:.1f}   I = {value:.4g}" if value is not None else f"x = {x:.1f}, y = {y:.1f}"
         if self._readout is not None:
             extra = self._readout(x, y)
             if extra:
-                text += "   " + extra
-        self._show_readout(text)
+                text = f"{text}   {extra}" if text else extra
+        self._show_readout(text.strip() or READOUT_IDLE)
 
     def _show_readout(self, text: str) -> None:
-        """The cursor readout, cut to the width of the view (whole in the tooltip)."""
+        """The cursor readout on its (at most) two lines; a line wider than the view is cut, whole in the tooltip."""
         room = max(40, self.readout_label.width() - 4)
-        shown = self.readout_label.fontMetrics().elidedText(text, Qt.ElideRight, room)
+        metrics = self.readout_label.fontMetrics()
+        shown = "\n".join(metrics.elidedText(line, Qt.ElideRight, room) for line in text.split("\n")[:2])
         self.readout_label.setText(shown)
         if shown != text:
             self.readout_label.setToolTip(text)

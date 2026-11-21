@@ -10,9 +10,8 @@ profile centre and a message saying so.
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 from typing import Callable, Optional
-
-from src.gimap.shared.geometry import InstrumentProfile
 
 from .models import CENTER_HEADER, CENTER_PROFILE, CENTER_SESSION, GeometryResolution
 from .ports import InstrumentProfileStore
@@ -31,21 +30,53 @@ def shape_text(shape) -> str:
     return f"{rows}×{columns}"
 
 
+def _made_from(profile, beside, path) -> bool:
+    """Whether a saved profile was made from the ``.poni`` beside the frame or for frames of its folder (its source
+    names the file or the folder: a centre or geometry saved in Analyze, the file loaded): then it is the newer word
+    on these frames and wins over the file itself."""
+    source = str(profile.source or "")
+    named = beside.source.split(": ", 1)[-1]
+    return bool(source) and (named in source or str(Path(path).parent) in source)
+
+
 def _same_shape(first, second) -> bool:
     return tuple(int(value) for value in first) == tuple(int(value) for value in second)
 
 
 class ResolveGeometry:
-    """Pick the geometry for a frame: an explicit profile, else the best match.
+    """Pick the geometry for a frame.
 
-    The beam centre is the profile's (the calibrated one) unless the session
-    overrides it, or the user asked to trust file headers and the file has a
-    header centre.  A session override wins over the header — on frames of
+    In this order: the profile picked by hand, when it is for frames of this size (or the person said to use it
+    anyway: ``force_profile``); the ``.poni`` beside the frame (``geometry_files.SiblingPoni``), when it fits the
+    frame; a profile matched by detector name and frame size; else none. A profile picked by hand for frames of
+    another size is not used, and the resolution says so (``refused_profile``): a frame of another detector never
+    takes the geometry in use silently.
+
+    The beam centre is the geometry's (the calibrated one) unless the session overrides it, or the user asked to
+    trust file headers and the file has a header centre. A session override wins over the header — on frames of
     the shape it was set on (``beam_center_shape``; ``None``: any frame).
     """
 
-    def __init__(self, profiles: Optional[InstrumentProfileStore]):
+    def __init__(self, profiles: Optional[InstrumentProfileStore], sibling=None):
         self.profiles = profiles
+        self.sibling = sibling
+
+    def _pick(self, profile_name, detector_name, shape, path, pixel_size_m, force_profile):
+        refused = None
+        if self.profiles is not None and profile_name:
+            profile = self.profiles.find(profile_name)
+            if profile is not None:
+                fits = profile.detector_shape is None or _same_shape(profile.detector_shape, shape)
+                if fits or force_profile:
+                    return profile, "chosen", None
+                refused = profile
+        matched = self.profiles.match(detector_name=detector_name, shape=shape) if self.profiles is not None else None
+        beside = self.sibling(path, shape, pixel_size_m, detector_name) if self.sibling is not None and path else None
+        if beside is not None and not (matched is not None and _made_from(matched, beside, path)):
+            return beside, "file", refused
+        if matched is not None:
+            return matched, "matched", refused
+        return None, "missing", refused
 
     def __call__(
         self,
@@ -59,18 +90,14 @@ class ResolveGeometry:
         header_center: Optional[tuple[float, float]] = None,
         distance_m: Optional[float] = None,
         beam_center_shape: Optional[tuple[int, int]] = None,
+        path=None,
+        pixel_size_m=None,
+        force_profile: bool = False,
     ) -> GeometryResolution:
-        profile: Optional[InstrumentProfile] = None
-        how = "missing"
-        if self.profiles is not None:
-            if profile_name:
-                profile = self.profiles.find(profile_name)
-                how = "chosen" if profile is not None else "missing"
-            else:
-                profile = self.profiles.match(detector_name=detector_name, shape=shape)
-                how = "matched" if profile is not None else "missing"
+        profile, how, refused = self._pick(profile_name, detector_name, shape, path, pixel_size_m, force_profile)
+        refusal = dict(refused_profile=refused.name, refused_shape=tuple(refused.detector_shape)) if refused else {}
         if profile is None:
-            return GeometryResolution(None, None, "missing", header_center=header_center)
+            return GeometryResolution(None, None, "missing", header_center=header_center, **refusal)
         geometry = profile.geometry
         source = CENTER_PROFILE
         fits = beam_center is not None and (beam_center_shape is None or _same_shape(beam_center_shape, shape))
@@ -88,7 +115,19 @@ class ResolveGeometry:
             geometry = geometry.with_incidence(float(incidence_deg))
         if distance_m is not None:
             geometry = replace(geometry, distance_m=float(distance_m))
-        return GeometryResolution(geometry, profile, how, source, header_center, ignored)
+        return GeometryResolution(geometry, profile, how, source, header_center, ignored, **refusal)
+
+
+PROFILE_REFUSED = ("Profile “{name}” is for {profile_shape} frames; this {shape} frame is from another detector, so it "
+                   "is not used.")
+
+
+def refused_profile_message(resolution: GeometryResolution, shape) -> Optional[str]:
+    """Why the profile picked by hand was not used for this frame (``None`` when it was, or none was picked)."""
+    if resolution is None or not resolution.refused_profile or resolution.refused_shape is None:
+        return None
+    return PROFILE_REFUSED.format(name=resolution.refused_profile, profile_shape=shape_text(resolution.refused_shape),
+                                  shape=shape_text(shape))
 
 
 def center_not_used_message(
@@ -105,6 +144,8 @@ def center_not_used_message(
 
 
 __all__ = [
+    "PROFILE_REFUSED",
+    "refused_profile_message",
     "CENTER_NOT_USED",
     "CENTER_NOT_USED_HEADER",
     "ResolveGeometry",

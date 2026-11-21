@@ -262,6 +262,7 @@ class FormSetupMixin:
         self.canvas.mpl_connect("button_release_event", self._preview_release)
 
     def _set_running(self, running: bool) -> None:
+        self._running = running
         self.open_button.setEnabled(not running)
         for widget in (
             self.path_edit,
@@ -275,9 +276,11 @@ class FormSetupMixin:
             self.custom_min_spin,
             self.custom_max_spin,
             self.background_check,
+            self.tilt_check,
         ):
             widget.setEnabled(not running)
-        self.calibrate_button.setEnabled(not running and self.image is not None)
+        # Auto Calibration waits for an energy (``EnergySourceMixin``): none is made up.
+        self.calibrate_button.setEnabled(not running and self.image is not None and self.energy_spin.value() > 0)
         self.cancel_button.setEnabled(running)
         self.apply_button.setEnabled(not running and self.result is not None)
         self.export_button.setEnabled(not running and self.result is not None)

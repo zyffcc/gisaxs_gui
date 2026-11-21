@@ -16,6 +16,7 @@ from src.gimap.features.calibration.domain import (
     standard_options,
     standard_q_values,
     theoretical_ring_overlays,
+    tilted_ring_grid,
 )
 
 from .errors import AmbiguousImageDatasetError, CalibrationCancelledError
@@ -54,6 +55,7 @@ __all__ = [
     "standard_options",
     "standard_q_values",
     "theoretical_ring_overlays",
+    "tilted_ring_grid",
     "ExportCalibration",
     "ImportCalibration",
     "ImportedCalibration",

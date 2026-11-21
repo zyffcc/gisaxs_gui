@@ -10,6 +10,7 @@ from .models import (
 from .requests import CalibrationRequest
 from .line_check import best_by_lines, check_lines
 from .instrument_profile import (
+    calibration_poni_text,
     calibrated_geometry,
     calibrated_shape,
     profile_change_is_significant,
@@ -27,6 +28,7 @@ from .ring_geometry import (
     TheoreticalRingOverlay,
     manual_ring_distance,
     theoretical_ring_overlays,
+    tilted_ring_grid,
 )
 from .scientific_kernel import (
     STANDARDS,
@@ -44,6 +46,7 @@ from .standard_selection import (
 )
 
 __all__ = [
+    "tilted_ring_grid",
     "STANDARDS",
     "CalibrationCandidate",
     "CalibrationResult",
@@ -56,6 +59,7 @@ __all__ = [
     "available_standards",
     "best_by_lines",
     "check_lines",
+    "calibration_poni_text",
     "calibrated_geometry",
     "calibrated_shape",
     "profile_change_is_significant",

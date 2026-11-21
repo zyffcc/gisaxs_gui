@@ -6,11 +6,12 @@ calibration and gets the geometry and its quality as a dict; nothing is saved.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable, Optional
 
 from src.gimap.shared.geometry.conventions import canonical_from_index_center
+from src.gimap.shared.geometry.poni import tilt_from_geometry
 
 import numpy as np
 
@@ -26,6 +27,12 @@ from ..domain import (
     standard_options,
 )
 from .use_cases import ImportCalibration, LoadCalibrationImage, RunCalibration
+
+
+def _tilt(result: CalibrationResult) -> Optional[dict]:
+    """pyFAI's description of the selected candidate's detector (``DetectorTilt.to_dict``) when it is tilted."""
+    geometry = calibrated_geometry(result)
+    return tilt_from_geometry(geometry).to_dict() if geometry.tilted else None
 
 
 def describe_calibration(result: CalibrationResult) -> dict:
@@ -45,6 +52,8 @@ def describe_calibration(result: CalibrationResult) -> dict:
             "matched_rings": int(other.matched_ring_count),
             "rms_residual_px": float(other.rms_residual_px),
             "confidence": other.confidence,
+            "rotations_deg": [float(other.rot1_deg), float(other.rot2_deg), float(other.rot3_deg)],
+            "detector_tilt": _tilt(replace(result, selected_candidate=other)),
         })
     return {
         "standard": candidate.standard_key,
@@ -64,6 +73,12 @@ def describe_calibration(result: CalibrationResult) -> dict:
         "score": float(candidate.score),
         "warnings": list(candidate.warnings),
         "rotation_deg": float(candidate.detector_rotation_deg),
+        "rotations_deg": [float(candidate.rot1_deg), float(candidate.rot2_deg), float(candidate.rot3_deg)],
+        "tilt_refined": bool(candidate.tilt_refined),
+        "tilt_uncertainty_deg": [candidate.rot1_sigma_deg, candidate.rot2_sigma_deg],
+        "energy_source": (result.metadata or {}).get("energy_source"),
+        # pyFAI's description of the tilt (the key a .poni's tilt travels under), so it reaches the profile
+        "detector_tilt": _tilt(result),
         "source_image": result.source_image,
         "calibrated_at": result.calibration_timestamp,
         "alternatives": alternatives[:3],
@@ -132,6 +147,7 @@ def with_line_checks(summary: dict, image) -> dict:
             distance_mm=candidate["distance_mm"],
             pixel_size_x_m=summary["pixel_size_um"][0] * 1e-6, pixel_size_y_m=summary["pixel_size_um"][1] * 1e-6,
             wavelength_angstrom=summary["wavelength_angstrom"], q_lines=standard.q_values_inv_angstrom,
+            rotations_deg=candidate.get("rotations_deg") or (0.0, 0.0, 0.0),
         ))
     for candidate, check in zip(candidates, checks):
         candidate["line_check"] = check
@@ -141,7 +157,8 @@ def with_line_checks(summary: dict, image) -> dict:
         return summary
     winner = candidates[best]
     others = [candidate for index, candidate in enumerate(candidates) if index != best]
-    for key in ("standard", "distance_mm", "beam_center_px", "matched_rings", "rms_residual_px", "confidence", "line_check"):
+    for key in ("standard", "distance_mm", "beam_center_px", "matched_rings", "rms_residual_px", "confidence", "line_check",
+                "rotations_deg", "detector_tilt"):
         summary[key] = winner[key]
     summary["standard_name"] = standard_display_name(winner["standard"])
     summary["alternatives"] = [{key: value for key, value in item.items() if key != "alternatives"} for item in others]

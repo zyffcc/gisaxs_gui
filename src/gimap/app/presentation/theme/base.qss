@@ -450,6 +450,10 @@ QToolButton[segment="last"] {
     border-left: none;
 }
 
+QToolButton[narrowSegment="true"] {
+    padding: 3px 8px;
+}
+
 QToolButton[segment="first"] {
     border-top-left-radius: 5px;
     border-bottom-left-radius: 5px;

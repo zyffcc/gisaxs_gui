@@ -110,7 +110,7 @@ class GeometryModelMixin:
             profile.geometry.with_beam_center(geometry.beam_center_x_px, geometry.beam_center_y_px),
             detector_name=profile.detector_name,
             shape=profile.detector_shape,
-            source="beam centre set in Analyze",
+            source=self._linked_source("beam centre set in Analyze"),
             dropped_tilt=profile.dropped_tilt,  # the detector is as tilted as before
         )
         self.clear_beam_center()
@@ -177,7 +177,7 @@ class GeometryModelMixin:
             geometry,
             detector_name=analysis.detector_name if analysis else None,
             shape=analysis.shape if analysis else None,
-            source=source,
+            source=self._linked_source(source),
             dropped_tilt=dropped_tilt,
         )
         self.state.profile_name = None  # let the new profile match automatically
@@ -185,6 +185,16 @@ class GeometryModelMixin:
         if held is None or analysis is None or tuple(held) == tuple(int(value) for value in analysis.shape):
             self.clear_beam_center()
         return profile
+
+    def _linked_source(self, source: str) -> str:
+        """``source`` of a profile saved now; when the frame shown takes its geometry from the ``.poni`` beside it,
+        that file is named too, so the profile saved here wins over the file next time (``ResolveGeometry``)."""
+        analysis = self.state.analysis
+        resolution = analysis.resolution if analysis is not None else None
+        if resolution is not None and resolution.how == "file" and resolution.profile is not None:
+            named = resolution.profile.source.split(": ", 1)[-1]
+            return source if named in source else f"{source} · from {resolution.profile.source}"
+        return source
 
     def delete_profile(self, name: str) -> bool:
         if self._profiles is None or not self._profiles.delete(name):

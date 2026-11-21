@@ -123,8 +123,7 @@ class ImageLoadingMixin:
         self.manual_group.setChecked(False)
         self.progress.setRange(0, 100)
         self.progress.setValue(100)
-        if image.energy_kev:
-            self.energy_spin.setValue(image.energy_kev)
+        self._image_energy(image)  # its own energy, or a warning that it states none (``EnergySourceMixin``)
         if image.pixel_size_x_m:
             self.pixel_x_spin.setValue(image.pixel_size_x_m * 1e6)
         if image.pixel_size_y_m:
@@ -171,7 +170,9 @@ class ImageLoadingMixin:
         if len(detected_standards) > 1:
             notes += " | " + tr("multiple standard names found; comparing patterns automatically")
         # The file and its size are the line above the preview (``_show_image_caption``).
-        self.stage_label.setText(trf("Image loaded{notes}. Click Auto Calibration.", notes=notes))
+        stage = ("Image loaded{notes}. Click Auto Calibration." if self.energy_spin.value() > 0 else
+                 "Image loaded{notes}. Enter the X-ray energy, then click Auto Calibration.")
+        self.stage_label.setText(trf(stage, notes=notes))
         self.job_status.set_state(
             "succeeded",
             self.stage_label.text(),

@@ -808,6 +808,7 @@ def test_the_public_agbh_calibration_reads_the_same_in_calibration_analyze_and_x
         # The standard and the rough distance are known for this frame (the manual advises to give them).
         calibration.standard_combo.setCurrentIndex(calibration.standard_combo.findData("agbh"))
         calibration.estimated_distance_spin.setValue(1600.0)
+        calibration.energy_spin.setValue(12.0)  # the frame states no energy: it is entered (none is assumed)
         calibration.start_calibration()
         _wait(app, lambda: calibration._cal_thread is None and calibration.result is not None, 240)
         calibration.apply_result()
@@ -816,7 +817,7 @@ def test_the_public_agbh_calibration_reads_the_same_in_calibration_analyze_and_x
         profile = calibration.view_model.last_profile.geometry
         saved = (profile.beam_center_x_px, profile.beam_center_y_px)
         assert saved == (fitted.center_x_px + 0.5, fitted.center_y_px + 0.5)
-        assert saved == pytest.approx((182.97, 264.84), abs=0.05)  # the documented direct beam is (180.0, 263.9)
+        assert saved == pytest.approx((179.78, 264.03), abs=0.05)  # the documented direct beam is (180.0, 263.9)
         stored = (context.settings.get("detector", "beam_center_x"), context.settings.get("detector", "beam_center_y"))
         assert stored == (fitted.center_x_px, fitted.center_y_px)
 

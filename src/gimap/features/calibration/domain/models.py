@@ -26,6 +26,9 @@ INDEX_CENTER_CONVENTION = {
 }
 """The convention of ``CalibrationCandidate.center_x_px`` / ``center_y_px``, in memory and in the file."""
 UNKNOWN_CENTER_CONVENTION = "This calibration file states a beam-centre convention this version does not know."
+TILT_KEYS = ("tilt_refined", "rot1_deg", "rot2_deg", "rot3_deg", "rot1_sigma_deg", "rot2_sigma_deg", "point_rms_px",
+             "untilted_point_rms_px")
+"""Candidate keys written only for a tilted detector (``CalibrationCandidate.to_dict``)."""
 
 
 def _stated_center_convention(metadata: dict[str, Any]) -> str:
@@ -85,9 +88,27 @@ class CalibrationCandidate:
     uncertainty_method: str = ""
     """How the 1σ of the centre and the distance were found (``optimizer.estimate_uncertainty``): ``ring jackknife``
     with three or more matched rings, else ``least squares``; empty when none could be."""
+    tilt_refined: bool = False
+    """Whether rot1 and rot2 were fitted with the centre and the distance (``tilt_fit.refine_tilt``)."""
+    rot1_deg: float = 0.0
+    """pyFAI's rot1, rot2, rot3 of the detector (degrees). ``distance_mm`` stays the distance from the sample to the
+    direct beam and ``center_*`` the direct beam, whatever the tilt (a ``.poni`` is converted when written)."""
+    rot2_deg: float = 0.0
+    rot3_deg: float = 0.0
+    rot1_sigma_deg: Optional[float] = None
+    rot2_sigma_deg: Optional[float] = None
+    point_rms_px: Optional[float] = None
+    """RMS of the ring-point residuals of the tilted geometry, and of the same points without the tilt."""
+    untilted_point_rms_px: Optional[float] = None
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        """The record; the tilt keys only when a tilt was fitted or given, so an untilted calibration reads in a
+        GIMaP from before them, and a tilted one is refused there instead of read without its tilt."""
+        values = asdict(self)
+        if not (self.tilt_refined or self.rot1_deg or self.rot2_deg or self.rot3_deg):
+            for key in TILT_KEYS:
+                values.pop(key, None)
+        return values
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "CalibrationCandidate":

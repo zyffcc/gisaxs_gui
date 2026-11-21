@@ -12,6 +12,7 @@ from ..domain import (
     PROFILES,
     GISAXS,
     GIWAXS,
+    TRANSMISSION,
     PICK_KINDS,
     RING,
     SECTOR,
@@ -186,6 +187,10 @@ from .use_cases import (
     refine_center_by_symmetry,
 )
 from .ring_frame import ring_frame
+from .technique import TECHNIQUE_NAMES
+from .readout import cake_point, detector_point, map_point
+from .batch_geometry import NO_GEOMETRY, batch_geometry_lines
+from .geometry_files import SiblingPoni, poni_problem, poni_profile, read_poni_file, sibling_poni, write_poni_file
 
 
 def q_at_position(geometry: DetectorGeometry, x_px: float, y_px: float) -> dict[str, float]:
@@ -368,6 +373,19 @@ __all__ = [
     "FrameSource",
     "GISAXS",
     "GIWAXS",
+    "TRANSMISSION",
+    "TECHNIQUE_NAMES",
+    "cake_point",
+    "NO_GEOMETRY",
+    "batch_geometry_lines",
+    "SiblingPoni",
+    "poni_problem",
+    "poni_profile",
+    "read_poni_file",
+    "sibling_poni",
+    "write_poni_file",
+    "detector_point",
+    "map_point",
     "GeometryResolution",
     "GisaxsCutSettings",
     "GiwaxsSettings",

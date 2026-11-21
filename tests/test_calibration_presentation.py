@@ -205,5 +205,7 @@ def test_feature_dialog_accepts_loaded_image_offscreen() -> None:
     assert dialog.path_edit.text() == ""
     assert dialog.detector_combo.currentIndex() == 0
     assert "choose a detector model" in dialog.detector_label.text()
+    assert not dialog.calibrate_button.isEnabled()  # the file states no energy: it must be entered first
+    dialog.energy_spin.setValue(12.0)
     assert dialog.calibrate_button.isEnabled()
     dialog.close()
