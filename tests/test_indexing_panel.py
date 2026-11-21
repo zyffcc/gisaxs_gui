@@ -54,9 +54,12 @@ def test_phases_are_drawn_listed_fitted_and_exported(tmp_path: Path, monkeypatch
         assert [phase["name"] for phase in result["phases"]] == ["cubic", "MAPbI3 (tetragonal)"]
         on_detector = page.reflection_count()
         assert on_detector > 0 and page._curve_reflections.shown > 0  # spots on the image, ring lines on I(q)
+        for view in (1, 2):  # the q map, then the cake (made on the task runner)
+            page.set_view(view)
+            _done(page)
+            assert page.reflection_count() > 0, view
         page.set_view(1)
         _done(page)
-        assert page.reflection_count() > 0
         found = automation.assign_peaks([{"q": 1.1, "q_err": 0.001, "fwhm": 0.04}])
         assert found["assignments"][0]["phase"] == "cubic" and found["assignments"][0]["hkl"] == "111"  # at 1.1000 Å⁻¹
         panel = page.open_indexing()
