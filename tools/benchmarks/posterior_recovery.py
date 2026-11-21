@@ -286,6 +286,22 @@ def summary(results):
                 failed=failed)
 
 
+def _code_state() -> dict:
+    """The commit of the run, the git tree of the fitting code (the same tree at two commits is the same code) and
+    whether that code had uncommitted changes."""
+    import subprocess
+
+    def git(*args):
+        try:
+            return subprocess.run(["git", *args], cwd=HERE.parent.parent, capture_output=True, text=True, check=True).stdout.strip()
+        except Exception:
+            return ""
+
+    folder = "src/gimap/features/fitting/domain"
+    return {"commit": git("rev-parse", "--short", "HEAD"), "fitting_tree": git("rev-parse", f"HEAD:{folder}"),
+            "fitting_code_modified": bool(git("status", "--porcelain", "--", folder))}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--network", required=True)
@@ -329,6 +345,7 @@ def main():
     s = summary(results)
     s["network"] = Path(a.network).name
     s["network_sha256"] = Network.load(a.network).meta["sha256"]
+    s["code"] = _code_state()
     s["seed0"] = a.seed0
     s["set"] = a.set
     s["truth"] = a.truth
