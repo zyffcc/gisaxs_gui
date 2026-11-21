@@ -1485,8 +1485,8 @@ notes or an answer that differs from it replaces it there, so the αi reported i
 
 The Results tab shows **Peaks**, **Checks** (shadows, artefacts, unmeasured ranges), **Geometry**
 (where it came from: distance, beam centre, wavelength, αi), **Series** (with **Compare with the
-Start of the Series**) and **Report**. Sizes are Scherrer lower bounds. Phases are not assigned
-automatically.
+Start of the Series**) and **Report**. Sizes are Scherrer lower bounds. Phases are assigned only to
+the phases you give (**Phases**, section 5.9).
 
 What the numbers are is said in the report's *Decisions* (**Show the Full Text**): q is kinematic, without a
 refraction correction, and the line gives how far refraction can shift q_z near or below the film's critical
@@ -1883,6 +1883,58 @@ only the curve for Fitting of each frame: choose **Every** n-th frame, the folde
 every imported frame (or sum of frames) into a folder of its own, `<name>_fitting/` (next to any Batch
 Export of the same data, which it leaves alone), and opens its `fit_input/` in **Fitting ▸ In-situ
 series** (chapter 6).
+
+### 5.9 Phases: indexing and pole figures
+
+**Phases** in the image toolbar opens the **Phases and Indexing** window (GIWAXS frames). It has three tabs.
+
+**Phases.** **Add from CIF…** reads a CIF: the cell, the symmetry operations and the atom sites (intensities |F|²
+from the atoms). **Add Cell** adds a cell you type in, with its lattice **Centring** (P, A, B, C, I, F, R): its
+allowed reflections all get intensity 1. Under **Selected Phase** you change the name, the cell and the
+**Orientation**: **Powder (random orientation)**, **Plane (hkl) parallel to the substrate** or **Axis [uvw] along the
+surface normal**, with the three indices. **Show** hides or shows a phase. Each phase has its colour; the names are
+written in the corner of the image. **Overlay** sets **q max** (3 Å⁻¹), the **hkl labels**, and **Shift the fibre spots
+for refraction in the film**, with **αc of the film** (0: the αc of the refraction correction, section 5.2) and
+**Also the reflected channel (DWBA)**.
+
+What is drawn:
+
+- a fibre phase: a dot at (±q∥, qz) of every reflection on the **q map**, at its pixel on the **Detector** and at
+  (q, χ) on the **Cake**; the dot grows with m·|F|², hollow dots are in the missing wedge (not seen by the detector)
+  or in the reflected channel; hover a dot for its hkl, d, q∥, qz and χ;
+- a powder phase: arcs of its rings on the q map and the detector, lines on the cake;
+- every phase: a dashed line at each ring on **I(q)**, labelled for the strongest.
+
+![Phases on the q map and I(q): tetragonal MAPbI₃ with (110) parallel to the substrate, and PbI₂ (public P08 frame)](manual_images/en/07a_phases_overlay.png)
+
+**Reflections.** The table lists, for every phase shown, the fibre spots or rings: hkl, d, q, q∥, qz, χ, the
+multiplicity m, |F|² and the intensity relative to the strongest (100). Copy it with Ctrl+C. Select a row and press
+**Pole Figure of This Ring**: the I(χ) ring moves onto that reflection and its pole figure is fitted with χ0 of the
+reflection.
+
+**Pole Figure.** The ring is the one of I(χ) (the purple band over I(q)). **Fit Pole Figure** folds its I(χ), takes
+off the background under the ring (**Automatic**: from I(q) at the ring; or type a value), applies the Lorentz factor
+(sin χ, or none when the frame is already Lorentz-corrected) and fits a **Model**: **Gaussian + isotropic** or
+**Maier–Saupe + isotropic**, about a **Direction**: **Along the normal (χ0 = 0°)**, **In the plane (χ0 = 90°)**,
+**Fitted direction** or **Set χ0**. **Fit up to χ** (85°) leaves out the bins next to the sample horizon; lower it when I(χ)
+falls towards the horizon. The plot shows the points fitted, the points left out (grey) and the fitted curve. The
+result gives the **oriented fraction**, the **FWHM** (mosaicity) and χ0 with their ±, the Hermans f of the fitted
+distribution (the missing wedge filled by the model) next to f from the measured bins alone, the 2D order
+2<cos²χ> − 1 and χ²_red. A χ²_red far above 1 means that one Gaussian and an isotropic part do not describe the ring:
+read the numbers with care.
+
+![The pole figure of the MAPbI₃ ring at 0.997 Å⁻¹ (public P08 frame)](manual_images/en/07b_pole_figure.png)
+
+**Export…** writes the pole figure as CSV (`<frame>_pole_figure.csv`, in
+`gimap_analysis/` next to the data by default) and `<frame>_indexing.json` beside it: the phases (with the CIF and its
+SHA-256), the reflection table, the settings and the fit.
+
+**In the automatic analysis.** With phases shown (or `--phase FILE.cif` on the command line, repeated for several),
+**Run Automatic Analysis** assigns each peak to the nearest reflection within max(3σ, FWHM/2): the *Decisions* line
+*phase assignment* gives the phase, hkl and Δq of every peak; the report's **Phase assignment** section adds the other
+reflections within the window. Each analysed ring also gets a pole-figure fit next to its Hermans f (a line under the
+ring in the report). The nearest reflection is an assignment, not a proof: check the alternatives and Δq. The
+formulas are in [Physics and Methods 7.10 and 7.11](Physics_Manual.md#710-reflection-overlay-and-phase-assignment).
 
 ## 6. Fitting
 

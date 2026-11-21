@@ -41,7 +41,7 @@ MODEL_ITEMS = (("gaussian", "Gaussian + isotropic"), ("maier_saupe", "Maier–Sa
 DIRECTION_ITEMS = (
     ("normal", "Along the normal (χ0 = 0°)"),
     ("plane", "In the plane (χ0 = 90°)"),
-    ("fitted", "Fitted"),
+    ("fitted", "Fitted direction"),
     ("set", "Set χ0"),
 )
 

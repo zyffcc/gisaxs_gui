@@ -59,6 +59,7 @@ INDEXING_ZH = {
     "Along the normal (χ0 = 0°)": "沿法线（χ0 = 0°）",
     "In the plane (χ0 = 90°)": "在面内（χ0 = 90°）",
     "Set χ0": "指定 χ0",
+    "Fitted direction": "拟合方向",
     "N(χ) ∝ crystallites per degree": "N(χ) ∝ 每度的晶粒数",
     "not fitted": "未拟合",
     "I(χ) of the ring": "环的 I(χ)",
