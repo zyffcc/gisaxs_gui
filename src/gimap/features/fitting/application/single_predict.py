@@ -49,12 +49,19 @@ class Predicted:
     """How many compositions were given to try (1: the particles in Model); None: the network chose among several."""
 
 
+MANUAL_ONLY = ("Predict parameters knows spheres, random and vertical cylinders with the 1D paracrystal: Model has a "
+               "core–shell sphere or another interference function. Use Refine or Search, or set Particles to a choice.")
+
+
 def compositions(model: fm.FitModel, particles: str) -> dict:
     """``{"compositions": [...]}`` for the particles of Model, or ``{"allowed": [...]}`` for a choice."""
     if particles == "model":
         if not 1 <= len(model.components) <= E.SLOTS:
             raise ValueError(f"Predict needs 1–{E.SLOTS} particles in Model, or Particles set to a choice")
         ordered = sorted(model.components, key=lambda c: c.value("R"))
+        if any(c.family not in fm.NETWORK_FAMILIES or (c.structure and c.interference != fm.DEFAULT_INTERFERENCE)
+               for c in ordered):
+            raise ValueError(MANUAL_ONLY)
         return {"compositions": [E.composition_index([(c.family, bool(c.structure)) for c in ordered])]}
     if particles == "spheres_cylinders":
         return {"allowed": E.select(("sphere", "vertical_cylinder"), 2)}

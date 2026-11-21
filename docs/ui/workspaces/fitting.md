@@ -150,6 +150,19 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
 `scattering_model` 同一公式和采样）、`fit_engine.py`（拟合、误差、相关、边界）；Analyze 结果或
 1D Predict 的解经 `native_solution.py` 换成模型（与该解曲线的最大相对差写在状态里）。
 
+手动拟合（精修、搜索）另有（《物理与方法》9.6、9.14–9.16 节）：
+- `domain/model_library.py`：核壳球、Percus–Yevick 硬球、二维六方次晶（只给精修和搜索；预测参数和 `cut_model` 不变）；
+  `fit_model.FAMILIES` 多了 `core_shell_sphere`，`Component.interference` 选干涉函数（`NETWORK_FAMILIES` 是网络认识的）。
+- `domain/fit_links.py`（名称 `R_1`、安全的表达式求值、链接、不等式）和 `domain/linked_fit.py`（拟合里的链接与不等式；
+  没有链接的模型不进入这里，数值与之前完全相同，预测参数的结果用 `tests/test_ml1d_posterior.py` 核对）。
+- `domain/beam_tail.py`：尾项范围按曲线设定（`single_fit.tail_for_curve`，在打开曲线、开始精修或搜索、序列每帧时调用，
+  `fit_resolving` 本身不改范围）和标记；`series_fit.flagged_fit`。
+- `domain/fit_profile.py`、`application/fit_uncertainty.py`（相关矩阵、强相关对、记录）、`application/fit_report.py`（报告）。
+- 界面：`single/parameter_row.py`（每个参数一行）、`single/model_links.py`（链接与约束卡片）、`single/tail_ranges.py`、
+  `single/uncertainty.py` 与 `views/fit_uncertainty_view.py`（不确定度与报告窗口）。
+- 测试：`tests/test_fit_links.py`、`test_fit_model_library.py`（对照 SasView 公式、Wertheim 解析解和 BornAgain）、
+  `test_fit_uncertainty.py`、`test_fit_model_editor_links.py`。
+
 ## 主单曲线页的 Predict parameters
 
 - **请求**（`application/single_predict.predict_request`）：曲线的点（q 为 nm⁻¹，σ 可缺）、Particles 给出的组成

@@ -38,7 +38,10 @@ from ..domain.fit_engine import (
 )
 from ..domain.fit_model import (
     BASE_GLOBALS,
+    DEFAULT_INTERFERENCE,
     FAMILIES,
+    INTERFERENCES,
+    NETWORK_FAMILIES,
     GLOBALS,
     GRAZING,
     INFO,
@@ -59,8 +62,9 @@ from ..domain.fit_model import (
     qz_plus_r,
     sigma_nn_over_d,
     to_manual,
+    with_interference,
 )
-from ..domain import fit_edges
+from ..domain import beam_tail, fit_edges
 from ..domain.fit_limits import constrain_proposal, explicit_limits
 from ..domain.native_solution import native_solution_mapping
 
@@ -325,6 +329,17 @@ def fit_resolving(model: FitModel, data: FitData, *, method: str = "local", max_
     return fit_edges.resolve(lambda changed: result, result, rounds=0, cancelled=stop or (lambda: False))
 
 
+def tail_for_curve(model: FitModel, data: FitData, *, start: bool = False) -> FitModel:
+    """The beam tail's ranges tied to the curve (``domain.beam_tail``) while they are the generic ones and the tail
+    is in use (A free or above 0); ``start``: also w and ν from the first points (a starting model). Applied where a
+    model meets a curve (the page opens it, a fit starts from generic ranges, a frame of a series), never inside
+    ``fit_resolving``: the fit keeps every range of the model it is given."""
+    tail = model.globals["res_amplitude"]
+    if not data.q.size or not beam_tail.is_generic(model) or not (tail.free or tail.value > 0):
+        return model
+    return beam_tail.tied_to_curve(model, data, with_start=start)
+
+
 def parameter_text(key: str, value: float, error: Optional[float] = None) -> str:
     """``value ± error unit`` with the error's significant digits deciding the value's."""
     unit = INFO[key].unit
@@ -361,6 +376,7 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
                excluded=()) -> dict:
     """What the export writes next to the table: the model, the fit and how it was made."""
     from .curve_sources import source_record
+    from .fit_uncertainty import describe_links, uncertainty_record
 
     made_of = None if curve is None else prepare_points(curve, side, q_range, excluded)
     record = {
@@ -383,6 +399,7 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
         "qz_plus_R": {f"{index}": round(value, 4) for index, value in qz_plus_r(model)},
         # every particle's radius by number (as microscopy and fit1d count) and by intensity (V²), and σ_nn/D
         "derived": [derived_values(component) for component in model.components],
+        "links": describe_links(model),
     }
     if curve is not None and curve.path:
         record["curve"]["source"] = source_record(curve.path)
@@ -393,12 +410,14 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
             "errors": {f"{owner}:{key}": value for (owner, key), value in result.errors.items()},
             "at_bounds": [f"{owner}:{key}" for owner, key in result.at_bounds],
             "correlated": [[f"{a[0]}:{a[1]}", f"{b[0]}:{b[1]}", rho] for a, b, rho in result.correlated],
+            **uncertainty_record(result),  # correlation matrix and covariance (names as in links), flags
         }
     return record
 
 
 __all__ = [
-    "ANALYZE_SIDES", "BASE_GLOBALS", "FAMILIES", "GLOBALS", "GRAZING", "INFO", "RESOLUTION", "grazing", "qz_plus_r", "derived_values",
+    "ANALYZE_SIDES", "BASE_GLOBALS", "DEFAULT_INTERFERENCE", "FAMILIES", "INTERFERENCES", "NETWORK_FAMILIES",
+    "tail_for_curve", "with_interference", "GLOBALS", "GRAZING", "INFO", "RESOLUTION", "grazing", "qz_plus_r", "derived_values",
     "intensity_size", "number_size", "sigma_nn_over_d", "SIZE_LAWS", "LINEAR", "NM_PER_A", "PHASES", "PROGRESS_LINE", "SIDES",
     "BOTH_USES_MEAN", "NO_POSITIVE_POINT", "START_KEPT", "TOO_FEW_FOR_FREE", "ONE_CURVE_METHODS", "CURVE_FIT_MIN_POINTS", "SERIES_SIDES", "TOO_FEW_FOR_CURVE_FIT",
     "Component", "Curve", "FitData", "FitModel", "FitResult", "FitStopped", "MissingHalf", "Parameter", "PreparedCurve",

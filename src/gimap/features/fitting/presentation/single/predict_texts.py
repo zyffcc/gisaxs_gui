@@ -69,9 +69,10 @@ def sizes_cells(model) -> tuple[str, str]:
     if not ordered:
         return "—", "—"
     radii = " / ".join(f"{component.value('R'):.3g}" for component in ordered)
-    if not any(component.structure for component in ordered):
+    spaced = [component.structure and "D" in component.keys() for component in ordered]  # (hard spheres: R_HS)
+    if not any(spaced):
         return radii, "—"
-    return radii, " / ".join(f"{component.value('D'):.3g}" if component.structure else "–" for component in ordered)
+    return radii, " / ".join(f"{component.value('D'):.3g}" if has else "–" for component, has in zip(ordered, spaced))
 
 
 def _shown(solution, many: bool):

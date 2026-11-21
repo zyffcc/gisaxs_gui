@@ -9,7 +9,12 @@
 * Residuals: (I − model)/σ when σ is known, else ln(I/model) (every point the same relative weight).
 * Errors: from the Jacobian of all free parameters at the solution, cov = (JᵀJ)⁻¹·s² with
   s² = Σr²/(N − p) — reported with the correlated pairs (|ρ| ≥ 0.95) and parameters left at a
-  bound of their range, where the error is not meaningful.
+  bound of their range, where the error is not meaningful. The covariance itself is kept
+  (``FitResult.covariance``) for the correlation matrix.
+* Links and inequalities (``fit_links``): a linked parameter is not searched; its value follows the others at every
+  evaluation (a linked scale that reads fitted scales enters their columns, so the scales are still solved exactly),
+  and its error is propagated from the covariance. An inequality maps its parameter between the bound and the far end
+  of its range, like the contact D ≥ 2R. A model without them is fitted exactly as before.
 """
 
 from __future__ import annotations
@@ -23,7 +28,8 @@ import numpy as np
 from scipy.optimize import differential_evolution, least_squares, lsq_linear
 from scipy.stats import qmc
 
-from .fit_model import LINEAR, FitModel, component_form, evaluate, grazing, resolution_shape
+from . import fit_links, linked_fit
+from .fit_model import LINEAR, NETWORK_FAMILIES, FitModel, component_form, evaluate, grazing, resolution_shape
 
 TINY = 1e-300
 CORRELATED = 0.95
@@ -102,6 +108,10 @@ class FitResult:
     start_kept: bool = False
     """No curve the fit tried was better than the starting one (by the reported objective), so the start values are
     returned unchanged: not a converged fit, and ``errors`` are not those of a minimum that was found."""
+    covariance: tuple = ()
+    """The covariance matrix of the free parameters (rows of ``covariance_paths``; NaN in the rows of a direction
+    the curve does not see); empty when it could not be computed."""
+    covariance_paths: tuple = ()
 
 
 def stopped_result(result: FitResult) -> FitResult:
@@ -132,8 +142,11 @@ class _Problem:
     """The free parameters of a model split into non-linear (searched) and linear (solved)."""
 
     def __init__(self, model: FitModel, data: FitData, stop, progress, total: int):
+        self.links = fit_links.Links(model)
+        if self.links.ties:
+            model = self.links.apply(model)
         self.model, self.data, self.stop, self.progress, self.total = model, data, stop, progress, max(1, total)
-        free = [(path, parameter) for path, parameter in model.parameters() if parameter.free]
+        free = [(path, parameter) for path, parameter in model.parameters() if parameter.free and not parameter.tie]
         for path, parameter in free:
             if not (math.isfinite(parameter.lower) and parameter.lower < parameter.upper):
                 raise ValueError(f"Give {path[1]} a valid range (min < max) to fit it")
@@ -144,8 +157,10 @@ class _Problem:
                 raise ValueError(f"Give {path[1]} a finite range (min < max) to fit it")
         self.lower = np.array([p.lower for _path, p in self.nonlinear], dtype=float)
         self.upper = np.array([p.upper for _path, p in self.nonlinear], dtype=float)
-        self.pairs = self._contact(model)
+        self.pairs = self._contact(model) if model.contact else []
         self.logarithmic = (self.lower > 0) & (self.upper >= 10.0 * np.maximum(self.lower, TINY))
+        self.bounded = linked_fit.inequalities(self, model)
+        self.linear_ties = linked_fit.linear_ties(self)
         self.weights = 1.0 / data.sigma if data.sigma is not None else 1.0 / data.intensity
         self.evaluations = 0
         self.cache: dict = {}
@@ -161,8 +176,8 @@ class _Problem:
         where = {path: index for index, (path, _p) in enumerate(self.nonlinear)}
         pairs = []
         for owner, component in enumerate(model.components):
-            if "D" not in component.keys():
-                continue
+            if "D" not in component.keys() or component.family not in NETWORK_FAMILIES:
+                continue  # (the families of ``model_library``: ``_inequalities``)
             d_index, r_index = where.get((owner, "D")), where.get((owner, "R"))
             if d_index is not None and r_index is not None:
                 pairs.append((d_index, r_index))
@@ -201,6 +216,8 @@ class _Problem:
         for d_index, r_index in self.pairs:
             values[d_index] = self._to_value(t[d_index], self._floor(values, d_index, r_index), self.upper[d_index],
                                              bool(self.logarithmic[d_index]))
+        if self.bounded:
+            linked_fit.bound(self, values, t)
         return values
 
     def encode(self, values) -> np.ndarray:
@@ -212,6 +229,10 @@ class _Problem:
         for d_index, r_index in self.pairs:
             t[d_index] = self._to_unit(values[d_index], self._floor(values, d_index, r_index), self.upper[d_index],
                                        bool(self.logarithmic[d_index]))
+        if self.bounded:
+            units = linked_fit.bound(self, np.array(values, dtype=float))
+            for index, _relation, _expression in self.bounded:
+                t[index] = units[index]
         return np.clip(t, 1e-9, 1.0 - 1e-9)
 
     def start(self) -> np.ndarray:
@@ -224,9 +245,17 @@ class _Problem:
             raise FitStopped()
         self.evaluations += 1
         model = self.model.with_values({path: value for (path, _p), value in zip(self.nonlinear, self.decode(t))})
-        if self.linear:
-            model = self._scales(model)
+        valid = True
+        if self.links.ties:
+            try:
+                model = self.links.apply(model)
+            except ValueError:  # a link that cannot be evaluated here (log of a negative value …): a bad point
+                valid = False
+        if self.linear and valid:
+            model = linked_fit.scales_linked(self, model) if self.linear_ties else self._scales(model)
         try:
+            if not valid:
+                raise ValueError("a link cannot be evaluated")
             with np.errstate(all="ignore"):
                 residual = _residual(evaluate(model, self.data.q, cache=self.cache), self.data)
         except (ValueError, FloatingPointError, ZeroDivisionError):
@@ -235,7 +264,7 @@ class _Problem:
             residual = np.where(np.isfinite(residual), residual, 1e6)
         cost = float(residual @ residual)
         self.lowest = min(self.lowest, cost)
-        if cost < self.best[0]:
+        if cost < self.best[0] and valid:
             self.best = (cost, model)
         self._report(cost)
         return model, residual
@@ -297,7 +326,8 @@ def fit(model: FitModel, data: FitData, *, method: str = "local", max_evaluation
     if data.q.size < 3:
         raise ValueError("Too few points to fit (at least 3 in the fitting range)")
     tick = time.perf_counter()
-    count = sum(1 for _path, p in model.parameters() if p.free)
+    model = fit_links.apply_links(model)  # the model itself when it has no link
+    count = sum(1 for _path, p in model.parameters() if p.free and not p.tie)
     budget = int(max_evaluations or (4000 if method == "global" else 150 * (count + 1)))
     problem = _Problem(model, data, stop, progress, budget)
     # The starting curve is a valid contender. Profiling linear scales uses relative
@@ -341,12 +371,14 @@ def fit(model: FitModel, data: FitData, *, method: str = "local", max_evaluation
             and problem.lowest > start_cost * (1.0 + KEPT_MARGIN))
     if kept:
         converged, message = False, START_KEPT
-    errors, correlated = _errors(fitted, data, problem)
+    errors, correlated, covariance, paths = _covariance(fitted, data, problem)
     return FitResult(
         model=fitted, method=method, weighting=data.weighting, points=int(data.q.size), free=count,
         chi2_reduced=_chi2(fitted, data, count), log_rmse=log_rmse(fitted, data), evaluations=problem.evaluations,
         seconds=time.perf_counter() - tick, converged=converged and not stopped, stopped=stopped, message=message,
         errors=errors, correlated=correlated, at_bounds=_at_bounds(fitted, problem), start_kept=kept,
+        covariance=() if covariance is None else tuple(tuple(float(v) for v in row) for row in covariance),
+        covariance_paths=tuple(paths),
     )
 
 
@@ -360,8 +392,9 @@ def fit_scales(model: FitModel, data: FitData) -> FitModel:
     problem = _Problem(held, data, None, None, 1)
     if not problem.linear:
         return model
-    solved = problem._scales(held)
-    return model.with_values({path: solved.get(path).value for path in problem.linear})
+    solved = linked_fit.scales_linked(problem, problem.model) if problem.linear_ties else problem._scales(held)
+    fitted = model.with_values({path: solved.get(path).value for path in problem.linear})
+    return problem.links.apply(fitted) if problem.links.ties else fitted
 
 
 def _search(problem: _Problem, budget: int, seed: int, extra=()) -> list[np.ndarray]:
@@ -400,9 +433,16 @@ UNSEEN = 1e-12
 
 def _errors(model: FitModel, data: FitData, problem: _Problem) -> tuple[dict, tuple]:
     """1σ errors of every free parameter, and the strongly correlated pairs."""
+    return _covariance(model, data, problem)[:2]
+
+
+def _covariance(model: FitModel, data: FitData, problem: _Problem) -> tuple[dict, tuple, Optional[np.ndarray], list]:
+    """1σ errors of every free parameter (and of the linked ones, propagated), the strongly correlated pairs, the
+    covariance matrix (None when it could not be computed) and its parameters."""
     paths = [path for path, _p in problem.nonlinear] + list(problem.linear)
     if not paths or data.q.size <= len(paths):
-        return {path: math.nan for path in paths}, ()
+        return {path: math.nan for path in paths}, (), None, paths
+    links = problem.links
     values = np.array([model.get(path).value for path in paths], dtype=float)
     # The size of every parameter on its own (its range when it is 0): the finite-difference step
     # and the unit of its column. A parameter of 1e30 next to R ≈ 5 nm must not set R's step.
@@ -411,13 +451,13 @@ def _errors(model: FitModel, data: FitData, problem: _Problem) -> tuple[dict, tu
     for column, (path, value) in enumerate(zip(paths, values)):
         step = 1e-4 * scale[column]
         with np.errstate(all="ignore"):
-            upper = residuals(model.with_values({path: value + step}), data)
-            lower = residuals(model.with_values({path: value - step}), data)
+            upper = residuals(links.apply(model.with_values({path: value + step})), data)
+            lower = residuals(links.apply(model.with_values({path: value - step})), data)
         jacobian[:, column] = (upper - lower) / (2.0 * step)
     residual = residuals(model, data)
     variance = float(residual @ residual) / (data.q.size - len(paths))
     if not np.all(np.isfinite(jacobian)):
-        return {path: math.nan for path in paths}, ()
+        return {path: math.nan for path in paths}, (), None, paths
     # Columns in relative units, so that no parameter pushes the others below the cut-off of the inverse.
     scaled = jacobian * scale
     normal = scaled.T @ scaled
@@ -436,7 +476,13 @@ def _errors(model: FitModel, data: FitData, problem: _Problem) -> tuple[dict, tu
                 rho = covariance[i, j] / math.sqrt(diagonal[i] * diagonal[j])
                 if abs(rho) >= CORRELATED:
                     correlated.append((paths[i], paths[j], float(rho)))
-    return errors, tuple(correlated)
+    shown = np.array(covariance)
+    blind = ~(diagonal > 0)
+    shown[blind, :] = math.nan
+    shown[:, blind] = math.nan
+    if links.ties:
+        errors.update(linked_fit.propagated(model, links, paths, values, scale, shown))
+    return errors, tuple(correlated), shown, paths
 
 
 def _width(parameter) -> float:
@@ -463,5 +509,8 @@ def errors(model: FitModel, data: FitData) -> tuple[dict, tuple]:
     return _errors(model, data, _Problem(model, data, None, None, 1))
 
 
-__all__ = ["PHASES", "PROGRESS_LINE", "START_KEPT", "FitData", "FitResult", "FitStopped", "errors", "fit", "fit_scales",
+contact_inequalities = linked_fit.contact_inequalities
+
+__all__ = ["PHASES", "PROGRESS_LINE", "START_KEPT", "FitData", "FitResult", "FitStopped", "contact_inequalities", "errors",
+           "fit", "fit_scales",
            "log_rmse", "residuals", "stopped_result"]

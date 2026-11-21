@@ -23,9 +23,10 @@ from src.gimap.shared.series_stages import SeriesStages, find_stages
 from src.gimap.shared.signed_cut import FIT_HALVES, fit_halves
 from src.gimap.shared.version import SOFTWARE
 
+from ..domain import beam_tail
 from ..domain.fit_engine import FitResult
 from ..domain.fit_model import FAMILIES, INFO, FitModel, model_to_dict
-from .single_fit import Curve, PreparedCurve, fit_resolving, prepare_points
+from .single_fit import Curve, PreparedCurve, fit_resolving, prepare_points, tail_for_curve
 from .models import InSituSourceFrame
 
 STARTS = (("previous", "Each frame starts from the previous frame's result"),
@@ -128,6 +129,26 @@ def poor_fit(frame) -> bool:
     return bool(math.isfinite(result.chi2_reduced) and result.chi2_reduced > POOR_CHI2)
 
 
+def flagged_fit(frame) -> bool:
+    """Whether a frame fitted to the end has a value the curve does not determine (its error not finite or above
+    10× the value) or a beam tail at an edge of its range (``domain.beam_tail``): such a frame is counted as flagged,
+    not as a clean fit."""
+    return bool(frame.fitted and beam_tail.flagged(frame.result))
+
+
+def flag_names(frame) -> list[str]:
+    """What is flagged in a frame (``flagged_fit``): ``res_amplitude (bound)``, ``sigma_nn_1 (undetermined)`` …."""
+    if not frame.fitted:
+        return []
+    from .fit_uncertainty import parameter_name
+
+    result = frame.result
+    named = [f"{parameter_name(path)} ({why})" for path, why in beam_tail.tail_flags(result)]
+    tail = {path for path, _why in beam_tail.tail_flags(result)}
+    loose = [path for path in beam_tail.undetermined(result, finite_only=True) if path not in tail]
+    return named + [f"{parameter_name(path)} (undetermined)" for path in loose]
+
+
 def prepare_frame(curve: Curve, settings: SeriesSettings) -> PreparedCurve:
     """The points a frame is fitted on (the halves, range and left-out points of the series) and what they
     are. ``MissingHalf`` when the frame has no points on the chosen half."""
@@ -158,8 +179,9 @@ def _fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: S
             result, actions, _remaining = fit_resolving(predict(prepared.data, start), prepared.data, method="local",
                                                         stop=stop, resolve=False)
             return FrameFit(index, path, result, **made_of)
-        result, actions, _remaining = fit_resolving(start, prepared.data, method=settings.method, stop=stop,
-                                                    resolve=settings.resolve_edges)
+        # a start whose beam tail still has the generic ranges gets this frame's (``single_fit.tail_for_curve``)
+        result, actions, _remaining = fit_resolving(tail_for_curve(start, prepared.data), prepared.data,
+                                                    method=settings.method, stop=stop, resolve=settings.resolve_edges)
         return FrameFit(index, path, result, resolved=tuple(note.text for note in actions), **made_of)
     except (ValueError, FloatingPointError, np.linalg.LinAlgError, KeyError, RuntimeError) as exc:
         return FrameFit(index, path, error=str(exc) or type(exc).__name__, **made_of)
@@ -368,6 +390,7 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
         "not_converged": [frame.index + 1 for frame in ordered if frame.state == "not converged"],
         "stopped": [frame.index + 1 for frame in ordered if frame.state == "stopped"],
         "poor_fit": {"chi2_reduced_above": POOR_CHI2, "frames": [frame.index + 1 for frame in ordered if poor_fit(frame)]},
+        "flagged": [{"frame": frame.index + 1, "values": flag_names(frame)} for frame in ordered if flagged_fit(frame)],
         "per_frame": [{"frame": frame.index + 1, "file": file_name(frame.path, folder), "state": frame.state,
                        "reason": frame.reason, "points": frame.points, "halves_used": frame.halves_used,
                        "averaged": frame.averaged, "left_out": frame.left_out,
@@ -393,5 +416,6 @@ def curve_source_record(token: str) -> dict:
 
 
 __all__ = ["FrameFit", "FrameStages", "MADE_OF_COLUMNS", "POOR_CHI2", "STARTS", "STATES", "SeriesSettings", "TOO_FEW_POINTS",
-           "UNREADABLE", "file_name", "fit_frame", "next_start", "parameter_columns", "poor_fit", "prepare_frame",
+           "UNREADABLE", "file_name", "fit_frame", "flag_names", "flagged_fit", "next_start", "parameter_columns", "poor_fit",
+           "prepare_frame",
            "series_counts", "series_record", "series_side", "series_table", "stages_of_curves", "unusable_curves"]
