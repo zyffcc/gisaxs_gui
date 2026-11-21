@@ -6,6 +6,11 @@
 - **Related code**:
   [`src/gimap/features/fitting/presentation/`](../../../src/gimap/features/fitting/presentation/)、
   [`src/gimap/app/main_window.py`](../../../src/gimap/app/main_window.py)
+- **NXcanSAS**: `.h5` 曲线由 `infrastructure/adapters/nxcansas_curves.py` 读取（`InSituSourceFrame.frame_index` 是文件中的
+  第几条曲线；Q 的单位来自文件，1/m 换算为 1/nm；Idev 为 σ），`series_frames.is_curve_file` / `is_frame` 按内容区分 NXcanSAS
+  与探测器帧；单条分析的 Open Curve… 对多条曲线的文件用 `QInputDialog` 问选哪一条（`page.open_curve_file`），Import Curves…
+  取全部（`CurveTablePreview.curve_titles`）；Save Data and Fit… 可存为 NXcanSAS（`application/fit_nxcansas.py`）。
+  测试 [`tests/test_nxcansas.py`](../../../tests/test_nxcansas.py)。
 - **Related tests**:
   [`tests/test_fit_page.py`](../../../tests/test_fit_page.py)、
   [`tests/test_fit_page_predict.py`](../../../tests/test_fit_page_predict.py)、

@@ -40,6 +40,7 @@ from .zh_tips_fitting import TIPS_FITTING_ZH
 from .zh_tips_tools import TIPS_TOOLS_ZH
 from .zh_tips_labs import TIPS_LABS_ZH
 from .zh_review import REVIEW_ZH
+from .zh_nxcansas import NXCANSAS_ZH
 
 ZH = {
     # -- menus --------------------------------------------------------------------------
@@ -591,4 +592,5 @@ ZH.update(TIPS_ANALYZE_ZH)
 ZH.update(TIPS_FITTING_ZH)
 ZH.update(TIPS_TOOLS_ZH)
 ZH.update({**TIPS_LABS_ZH, **REVIEW_ZH})
+ZH.update(NXCANSAS_ZH)
 __all__ = ["ZH"]

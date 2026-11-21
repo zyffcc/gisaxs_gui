@@ -71,6 +71,9 @@ EXPORT_TIPS = (
     ("export_series_button", "Every listed frame exported and opened in Fitting ▸ In-situ series."),
 )
 """The Export step: one button per product, what it writes and where in its tooltip."""
+NXCANSAS_TIP = ("Export Curves…, Save the Curves of the Plot and Export New Frames While Watching also write "
+                "<frame>_nxcansas.h5: the curves against q (Q in 1/Å, I, σ, the wavelength, distance and αi, and the "
+                "record) as NXcanSAS (HDF5), for SasView and other NeXus programs. I(χ) and 2θ curves stay CSV only.")
 
 
 def muted(text: str, parent: QWidget) -> QLabel:
@@ -463,14 +466,19 @@ class AnalyzeStepsView:
         self.export_fit_button = QPushButton("Send to Fitting", page)
         self.export_series_button = QPushButton("Send Series to Fitting…", page)
         self.export_all_button.setProperty("gimapRole", "primary")
+        self.export_nxcansas_check = QCheckBox("Also as NXcanSAS (.h5)", page)
+        self.export_nxcansas_check.setObjectName("analyzeExportNxcansas")
+        self.export_nxcansas_check.setToolTip(NXCANSAS_TIP)
         for name, tip in EXPORT_TIPS:  # the button names say what each writes; the tooltips say how and where
             button = getattr(self, name)
             button.setToolTip(tip)
             layout.addWidget(button, 0, Qt.AlignLeft)
+            if name == "export_curves_button":
+                layout.addWidget(self.export_nxcansas_check, 0, Qt.AlignLeft)
         self.export_extra_host = QVBoxLayout()
         layout.addLayout(self.export_extra_host)
         layout.addStretch(1)
 
 
-__all__ = ["AnalyzeStepsView", "CENTER_TIP", "EXPORT_TIPS", "FIT_SIDE_ITEMS", "GISAXS_CUTS_TIP", "MASK_TIP", "PROFILE_TIP",
-           "STEPS"]
+__all__ = ["AnalyzeStepsView", "CENTER_TIP", "EXPORT_TIPS", "FIT_SIDE_ITEMS", "GISAXS_CUTS_TIP", "MASK_TIP", "NXCANSAS_TIP",
+           "PROFILE_TIP", "STEPS"]

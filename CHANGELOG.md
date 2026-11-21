@@ -12,6 +12,18 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Curves as NXcanSAS (HDF5), for SasView and other NeXus programs, and back into Fitting.** Analyze's Export
+  step has **Also as NXcanSAS (.h5)** (remembered; it applies to Export Curves…, Save the Curves of the Plot and
+  Export New Frames While Watching): `<stem>_nxcansas.h5` holds the curves against q, one SASentry each (NeXus
+  definition NXcanSAS 1.1), titled with the frame, the curve and which q its Q is — a horizontal cut keeps its
+  signed qy —, with Q in 1/angstrom, I, Idev = σ, the wavelength, distance, pixel size and αi, and the record of
+  `_analysis.json` as a note of SASprocess; I(χ) and 2θ curves stay CSV only. Batch Export has **Each frame: its q
+  curves as NXcanSAS (.h5)** (`nxcansas/<frame>_nxcansas.h5`), the command line `--curve-format csv|nxcansas|both`
+  (default csv; `curves_nxcansas.h5`), and Fitting's **Save Data and Fit…** the type NXcanSAS (the points fitted and
+  the model, Q in 1/nm). Fitting opens NXcanSAS `.h5` files of any program: Q in the unit the file states (1/m is
+  converted), Idev as σ, the points its mask leaves out left out; a file of several curves asks which one, and
+  **Import Curves…** takes all of them. SasView's reader (sasdata 0.11) opens the files GIMaP writes, with their
+  titles, units, σ, wavelength, distance and αi.
 - **The benchmark files of Predict parameters are the ones the paper names.** `tools/benchmarks/` now holds the
   final runs under the names of the paper's table (`posterior_recovery`, `posterior_extended`, `posterior_dwba_tp`
   / `_born` / `_eia` with `posterior_dwba_pairs.json`, `posterior_own`, `posterior_floor03`, `posterior_floor08`,

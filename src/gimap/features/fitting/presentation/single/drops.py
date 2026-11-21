@@ -16,7 +16,7 @@ from typing import Optional
 
 from PyQt5.QtCore import QTimer
 
-from ...application import CURVE_SUFFIXES
+from ...application import CURVE_SUFFIXES, is_curve_file
 
 SPLITTER_DELAY_MS = 400
 """How long after the last move of the splitter its widths are kept (one write per drag)."""
@@ -30,8 +30,8 @@ def dropped_paths(mime) -> list[Path]:
 
 
 def dropped_curves(mime) -> list[Path]:
-    """The curve files of a drag (.dat, .txt)."""
-    return [path for path in dropped_paths(mime) if path.suffix.lower() in CURVE_SUFFIXES and path.is_file()]
+    """The curve files of a drag (.dat, .txt, and .h5 files of NXcanSAS curves)."""
+    return [path for path in dropped_paths(mime) if path.is_file() and is_curve_file(path)]
 
 
 def dropped_folder(mime) -> Optional[Path]:
@@ -40,7 +40,7 @@ def dropped_folder(mime) -> Optional[Path]:
 
 
 class CurveDropMixin:
-    """Single analysis: a dropped curve file opens. Needs ``open_curve`` and ``_status``; before ``QWidget``
+    """Single analysis: a dropped curve file opens. Needs ``open_curve_file`` and ``_status``; before ``QWidget``
     in the bases (its drag handlers replace the widget's)."""
 
     def dragEnterEvent(self, event) -> None:  # noqa: N802 - Qt API
@@ -58,7 +58,7 @@ class CurveDropMixin:
         if len(curves) > 1:
             self.importCurvesRequested.emit([str(path) for path in curves])
         else:
-            self.open_curve(str(curves[0]))
+            self.open_curve_file(str(curves[0]))  # an NXcanSAS file of several curves asks which
 
 
 class FolderDropMixin:

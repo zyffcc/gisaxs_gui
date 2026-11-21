@@ -44,7 +44,10 @@ listed in summary.json are removed first, nothing else). report.json and summary
 name the release, the time (UTC), the options as given and every input file by path,
 size and SHA-256; every CSV starts with # lines that name the release, the inputs and
 the geometry. --mask FILE applies a mask as Analyze's Load Masks does; every report
-says which mask was applied, or that none was.
+says which mask was applied, or that none was. --curve-format nxcansas writes the
+curves against q as one NXcanSAS file (curves_nxcansas.h5: HDF5 for SasView and other
+NeXus programs, one SASentry per curve with the frame's record) instead of their CSVs;
+both writes both (default csv).
 
 Exit codes (auto):
   0  every frame was analysed and nothing is open (Status OK).
@@ -135,6 +138,7 @@ def command_auto(arguments) -> int:
         frames, options, out, progress=progress, saved_profiles=not arguments.no_saved_profiles,
         series=arguments.series, mask=arguments.mask, overwrite=arguments.overwrite,
         record=options_given(arguments, notes), found=tuple(found), language=arguments.language,
+        curve_format=arguments.curve_format,
     )
     print(batch_summary(reports, notes=found, language=arguments.language))
     for report in reports:
@@ -231,7 +235,7 @@ def command_call(arguments) -> int:
             from src.gimap.features.assistant.application import results_payload
 
             report = {"ok": not failed, "frame": arguments.frame, "steps": steps, "tables": results_payload(session.results)}
-            write_outputs(session, report, Path(arguments.out))
+            write_outputs(session, report, Path(arguments.out), curve_format=arguments.curve_format)
         failed = failed or bool(session.unreadable())
     finally:
         session.close()
@@ -251,6 +255,12 @@ def parser() -> argparse.ArgumentParser:
         "the person's notes, verbatim: αi, energy (keV) and pixel size (µm) when they give exactly one value; "
         "a calibration file named there (.poni, GIMaP .json, standard image) is tried first; the calibrant "
         "(AgBH, LaB6, CeO2, LaB6+CeO2) when exactly one is named; every path named becomes readable"
+    )
+    curve_format = dict(
+        choices=("csv", "nxcansas", "both"), default="csv",
+        help="how the curves are written: csv (one CSV per curve), nxcansas (the curves against q in one NXcanSAS "
+             "HDF5 file, curves_nxcansas.h5, for SasView and other NeXus programs: Q in 1/angstrom, I, Idev = sigma, "
+             "the wavelength, distance and alpha_i, and the frame's record; an I(chi) stays CSV) or both (default csv)",
     )
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--no-saved-profiles", action="store_true", help="ignore instrument profiles saved in GIMaP")
@@ -329,6 +339,7 @@ def parser() -> argparse.ArgumentParser:
              "column names, the decisions, the questions and every other sentence stay English, as do report.json "
              "and the CSVs (default en)",
     )
+    auto.add_argument("--curve-format", **curve_format)
     auto.add_argument("--quiet", action="store_true", help="no progress on stderr")
     auto.set_defaults(run=command_auto)
 
@@ -357,6 +368,7 @@ def parser() -> argparse.ArgumentParser:
         help="also write the curves, q-map and tables here; export_results writes to gimap_analysis/ in it "
              "(default for exports: <GIMaP data folder>/assistant_runs/cli/<time>/<frame>)",
     )
+    call.add_argument("--curve-format", **curve_format)
     call.set_defaults(run=command_call)
 
     mcp = commands.add_parser(

@@ -38,6 +38,7 @@ from .insitu import (
     RunInSituWorkflow,
 )
 from .insitu_records import ManageInSituRecords
+from .series_frames import is_curve_file
 from .insitu_recipe import (
     CreateInSituRecipe,
     InSituRecipeRevision,
@@ -92,6 +93,7 @@ __all__ = [
     "CURVE_SUFFIXES",
     "DEFAULT_CURVE_PATTERN",
     "UNSUPPORTED_CURVE",
+    "is_curve_file",
     "InSituSourceFrame",
     "InSituSourceKind",
     "GenerateCandidates",

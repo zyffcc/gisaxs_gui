@@ -34,6 +34,10 @@ class ExportedFiles(list):
 class ExportModelMixin:
     """Needs ``state``, ``_analyze_frame``, ``_export``, ``figures``, ``fit_side`` and ``request_for``."""
 
+    export_nxcansas = False
+    """Export, the curves of a plot and the export while watching also write the curves against q as NXcanSAS
+    (the Export step's “Also as NXcanSAS (.h5)”)."""
+
     # -- export ------------------------------------------------------------------------
 
     def default_export_dir(self) -> Optional[Path]:
@@ -45,7 +49,8 @@ class ExportModelMixin:
         if analysis is None:
             raise ValueError("Open a frame first.")
         target = Path(destination) if destination is not None else self.default_export_dir()
-        return self._export(analysis, target, halves=self.fit_side)  # its curve for Fitting says the Cuts step's halves
+        # its curve for Fitting says the Cuts step's halves
+        return self._export(analysis, target, halves=self.fit_side, nxcansas=self.export_nxcansas)
 
     def export_q_map(self, path: Path) -> Path:
         analysis = self.state.analysis
@@ -67,11 +72,11 @@ class ExportModelMixin:
         return self._export.cake(analysis, cake, Path(path))
 
     def export_curves(self, keys, destination: Path) -> list[Path]:
-        """The named curves of the frame on screen, one CSV each, with the JSON record."""
+        """The named curves of the frame on screen, one CSV each, with the JSON record (and NXcanSAS when chosen)."""
         analysis = self.state.analysis
         if analysis is None or analysis.reduction is None:
             raise ValueError("Open a frame with a geometry first.")
-        return self._export.curves(analysis, list(keys), Path(destination))
+        return self._export.curves(analysis, list(keys), Path(destination), nxcansas=self.export_nxcansas)
 
     def export_series_track(self, series: SeriesMap, track, path: Path) -> Path:
         return export_series_track(self._export.writer, series, track, Path(path))
@@ -118,7 +123,8 @@ class ExportModelMixin:
                 series_state.setdefault("factor", info["normalization_factor"])
         if analysis.reduction is None:
             raise ValueError(analysis.messages[0] if analysis.messages else "No geometry.")
-        written = self._export(analysis, Path(destination), {"series": info} if info else None, halves=self.fit_side)
+        written = self._export(analysis, Path(destination), {"series": info} if info else None, halves=self.fit_side,
+                               nxcansas=self.export_nxcansas)
         if save_images and self.figures is not None:
             written.extend(self._save_frame_images(analysis, Path(destination)))
         if live_key is not None:

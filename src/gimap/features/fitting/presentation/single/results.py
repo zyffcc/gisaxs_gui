@@ -28,6 +28,7 @@ from ...application.single_fit import (
     model_to_dict,
     parameter_text,
 )
+from ...application.fit_nxcansas import fit_curves, write_curves
 from ..views.step_widgets import fit_to_rows, show_line
 from .method_hint import note_text
 from . import predict_texts
@@ -36,6 +37,8 @@ from ...application.models import InSituSourceFrame
 from ...application.curve_sources import source_stem
 
 QZ_PLUS_R = "q₊R of the spheres (q₊ = kᵢ + k_f): {values}"
+SAVE_DATA_FILTER = "CSV (*.csv);;NXcanSAS (*.h5)"
+"""Save Data and Fit: the table with every term, or NXcanSAS for SasView and other NeXus programs."""
 BY_NUMBER = "Sizes by number | by intensity: {values}"
 
 
@@ -420,7 +423,7 @@ class FitResultsMixin:
         if data is None or not data.q.size:
             self._status(tr("Open a curve first."), "warning")
             return None
-        path = path or self._save_path("Save Data and Fit", f"{self._stem()}_fit.csv", "CSV (*.csv)")
+        path = path or self._save_path("Save Data and Fit", f"{self._stem()}_fit.csv", SAVE_DATA_FILTER)
         if not path:
             return None
         names, table = export_table(self.session.model, data)
@@ -428,9 +431,14 @@ class FitResultsMixin:
                             q_range=self.session.q_range,
                             result=self.session.result if self.session.result_is_current() else None,
                             excluded=self.session.excluded)
+        if Path(path).suffix.lower() == ".h5":  # NXcanSAS: the points fitted and the model, q in 1/nm
+            curves = fit_curves(self.session.model, data, record, self._stem())
+            write = lambda target: write_curves(target, curves)  # noqa: E731
+        else:
+            write = lambda target: np.savetxt(  # noqa: E731
+                target, table, delimiter=",", header=",".join(names), comments="", fmt="%.8g")
         try:
-            record_path = write_pair(path, lambda target: np.savetxt(
-                target, table, delimiter=",", header=",".join(names), comments="", fmt="%.8g"), record)
+            record_path = write_pair(path, write, record)
         except OSError as exc:
             return self._save_failed(exc)
         self._status(lambda: tr("Saved {name} and its record {record}.").format(name=Path(path).name, record=record_path.name),

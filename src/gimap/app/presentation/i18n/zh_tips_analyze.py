@@ -46,7 +46,7 @@ TIPS_ANALYZE_ZH = {
         "需要多帧：列出更多文件、打开文件夹或多帧 NeXus 文件。",
     # -- Batch Export ------------------------------------------------------------------------------------------------
     "Curves to save:": "要保存的曲线：",
-    "For the tables of all frames and the per-frame curves": "用于所有帧的表格和逐帧曲线",
+    "For the tables of all frames, the per-frame curves and the NXcanSAS files": "用于所有帧的表格、逐帧曲线和 NXcanSAS 文件",
     "A fit takes one curve on |qy|: the mean of the two halves of the horizontal cut, or one half — never both "
     "halves together. Fitting ▸ In-situ series starts with this choice. Used when the curve for Fitting is saved "
     "(Data, above) or a particle model is fitted (below).":

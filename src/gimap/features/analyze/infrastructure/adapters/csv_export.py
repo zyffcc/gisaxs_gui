@@ -31,6 +31,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 from src.gimap.shared.export_text import export_text
+from src.gimap.shared.nxcansas import write_nxcansas
 
 from ...application.export_record import provenance_lines
 from ...domain import Curve
@@ -202,6 +203,10 @@ class CsvCurveWriter:
 
     def write_record(self, path: Path, record: Mapping[str, Any]) -> Path:
         return write_record(path, record)
+
+    def write_nxcansas(self, path: Path, curves: Sequence[Any]) -> Path:
+        """The curves as one NXcanSAS file (``shared.nxcansas``; complete or not there at all)."""
+        return write_nxcansas(path, curves)
 
     def write(
         self,

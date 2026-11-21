@@ -162,6 +162,9 @@ class ProfileActionsMixin(GeometryEditorMixin, FitHandoverMixin):
         self._incidence_profile = preferences.incidence_profile
         with QSignalBlocker(self.auto_export_check):
             self.auto_export_check.setChecked(preferences.auto_export)
+        with QSignalBlocker(self.export_nxcansas_check):
+            self.export_nxcansas_check.setChecked(preferences.nxcansas)
+        self.view_model.export_nxcansas = preferences.nxcansas
         self._refresh_profiles()
 
     def _remember(self, *, last_folder: Optional[str] = None) -> None:
@@ -178,6 +181,7 @@ class ProfileActionsMixin(GeometryEditorMixin, FitHandoverMixin):
                     incidence_profile=self._incidence_profile,
                     last_folder=self._last_folder,
                     auto_export=self.auto_export_check.isChecked(),
+                    nxcansas=self.export_nxcansas_check.isChecked(),
                 ),
             )
         except OSError as exc:

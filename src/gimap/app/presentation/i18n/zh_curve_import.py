@@ -7,8 +7,8 @@ CURVE_IMPORT_ZH = {
     "&Batch / In-situ Series": "批量 / 原位序列(&B)",
     "Every listed curve fitted with the model of Single analysis": "使用单条分析的模型拟合列表中的每一条曲线",
     "&Import Curves…": "导入曲线(&I)…",
-    "Batch fit selected TXT/DAT files: preview q I sigma or shared-q columns q I1 I2 …":
-        "批量拟合所选 TXT/DAT 文件：预览 q、I、sigma 或共用 q 的 q、I1、I2、… 列",
+    "Batch fit selected TXT/DAT files or NXcanSAS .h5 files: preview q I sigma or shared-q columns q I1 I2 …":
+        "批量拟合所选 TXT/DAT 文件或 NXcanSAS .h5 文件：预览 q、I、sigma 或共用 q 的 q、I1、I2、… 列",
     "Stop the batch fit before importing curves.": "请先停止批量拟合，再导入曲线。",
     "Import Curves from This File…": "从此文件导入曲线…",
     "Review the columns of this file before batch fitting.": "批量拟合前核对此文件各列的含义。",

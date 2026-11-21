@@ -35,10 +35,11 @@ class OperationResult(Generic[T]):
 InSituSourceKind = Literal["curve"]
 _INSITU_FRAME_MARKER = "::gimap-frame="
 _CURVE_COLUMN_MARKER = "::gimap-curve="
-CURVE_SUFFIXES = (".dat", ".txt")
-"""1D curve files an in-situ series can fit (Analyze writes ``*_fit_input.dat``)."""
-UNSUPPORTED_CURVE = ("Fitting reads .dat and .txt curves (q, I, σ). For a cut from Analyze, use Send to Fitting or "
-                     "open its _fit_input.dat file.")
+CURVE_SUFFIXES = (".dat", ".txt", ".h5")
+"""1D curve files an in-situ series can fit (Analyze writes ``*_fit_input.dat``); ``.h5``: NXcanSAS curves
+(``shared.nxcansas``; an HDF5 file of detector frames is not one: ``series_frames.is_curve_file``)."""
+UNSUPPORTED_CURVE = ("Fitting reads .dat and .txt curves (q, I, σ) and NXcanSAS .h5 files. For a cut from Analyze, "
+                     "use Send to Fitting or open its _fit_input.dat file.")
 """Why a file of another kind (Analyze's .csv tables among them) is not opened as a curve. One fixed sentence —
 the page names the file and says it in the interface language."""
 CURVE_NOT_FOUND = "Curve file was not found: {path}"

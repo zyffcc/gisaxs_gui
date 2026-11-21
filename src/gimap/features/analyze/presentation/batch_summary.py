@@ -52,7 +52,8 @@ REPLACE_TAKES = "Replace removes the {n} files of the earlier export first."
 REPLACE_TAKES_OTHERS = ("Replace removes the {n} files of the earlier export first, among them {m} files of kinds this "
                         "export does not write again: {kinds}.")
 KIND_WORDS = {
-    "tables": "tables of all frames", "per_frame": "curves of single frames", "fit_input": "curves for Fitting",
+    "tables": "tables of all frames", "per_frame": "curves of single frames", "nxcansas": "NXcanSAS files",
+    "fit_input": "curves for Fitting",
     "q_map": "q maps", "cake": "cakes", "detector_image": "pictures", "q_map_image": "pictures",
     "frames": "converted frames", "fit": "fit tables", "fit_plot": "fit tables", "fit_curves": "fitted curves",
     "other": "other files",
@@ -185,7 +186,7 @@ class BatchFolderMixin:
     def _sync_folder(self, choices: BatchChoices, curves: Sequence[str]) -> bool:
         """The target line and what is to be known about the folder; ``True`` when it can be exported to."""
         has_folder = bool(self.destination_edit.text().strip())
-        needs_curves = choices.tables or choices.per_frame
+        needs_curves = choices.tables or choices.per_frame or choices.nxcansas
         self.beside_button.setEnabled(self._beside is not None and self.destination() != self._beside)
         notes, role, ready = [], "muted", False
         if not has_folder:
@@ -234,7 +235,7 @@ class BatchFolderMixin:
 
     def _sync_summary(self, choices: BatchChoices, curves: Sequence[str]) -> None:
         parts = [self._frames_part()]
-        if (choices.tables or choices.per_frame) and curves:
+        if (choices.tables or choices.per_frame or choices.nxcansas) and curves:
             titles = [self._curve_titles.get(key, key) for key in curves]
             more = len(titles) - CURVES_SHOWN
             names = ", ".join(titles[:CURVES_SHOWN]) + (" " + trf("+ {n} more", n=more) if more > 0 else "")

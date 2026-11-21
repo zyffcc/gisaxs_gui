@@ -17,6 +17,10 @@ from ..application.models import InSituSourceFrame
 from .views.curve_import_view import CurveImportView
 
 
+NXCANSAS_NOTE = ("NXcanSAS file: every curve in it (each SASdata group: Q, I and Idev as σ) is imported; the rows "
+                 "shown are those of the first.")
+
+
 @dataclass(frozen=True)
 class CurveImportPlan:
     sources: tuple[InSituSourceFrame, ...]
@@ -175,7 +179,7 @@ class CurveImportDialog(QDialog, CurveImportView):
         self.preview_table.setRowCount(0)
         self.preview_table.setColumnCount(0)
         self.file_path_label.setText(str(self.paths[index]) if 0 <= index < len(self.paths) else "")
-        self.layout_combo.setEnabled(preview is not None and index not in self._errors)
+        self.layout_combo.setEnabled(preview is not None and index not in self._errors and not preview.curve_titles)
         self.apply_all_button.setEnabled(self._same_columns())
         self.apply_all_button.setToolTip(tr(
             "Apply this layout to files with identical column headings."
@@ -194,6 +198,8 @@ class CurveImportDialog(QDialog, CurveImportView):
             note = trf("Could not import this table: {error}", error=tr(self._errors[index]))
         elif index in self._layout_notices:
             note = trf("Layout not changed: {error}", error=tr(self._layout_notices[index]))
+        elif preview.curve_titles:
+            note = NXCANSAS_NOTE
         elif preview.analyze_export:
             note = "Analyze export: q, I, σ and pixel counts describe one curve. Shared-q import is disabled."
         elif preview.uncertainty_columns:

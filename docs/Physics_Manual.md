@@ -3681,7 +3681,17 @@ Every curve export of Analyze writes `<stem>_analysis.json` beside the curve fil
 
 The numbers are those of the reduction; `geometry` is the geometry that was applied.
 
-Implementation: `src/gimap/features/analyze/application/export_record.py`, `src/gimap/features/analyze/infrastructure/adapters/csv_export.py`.
+An NXcanSAS export (`<stem>_nxcansas.h5`, NeXus definition NXcanSAS 1.1; Batch Export `nxcansas/`, the command
+line `curves_nxcansas.h5`) carries the same record, with the key `curve` (key, title, x label and region of that
+curve) added, as the JSON `data` of an NXnote `gimap_record` in each entry's SASprocess. Each SASentry holds one
+curve against q: `Q` in 1/angstrom exactly as reduced (a horizontal cut keeps its signed q_y; the entry's `title`
+says which q), `I` in `arbitrary` units, `Idev` = σ of this section's error model, and `mask` (1 where Q or I is not
+finite); SASinstrument holds the wavelength (`incident_wavelength`, angstrom), the sample–detector distance (`SDD`,
+m) and the pixel size, and SASsample `pitch` (degree) is αi, the rotation about the horizontal axis normal to the
+beam in NeXus axes. Curves against χ or 2θ are not written there: Q of NXcanSAS is a momentum transfer.
+
+Implementation: `src/gimap/features/analyze/application/export_record.py`, `src/gimap/features/analyze/infrastructure/adapters/csv_export.py`;
+NXcanSAS: `src/gimap/shared/nxcansas.py`, `src/gimap/features/analyze/application/nxcansas_export.py`.
 
 ### 14.3 Header lines of the text tables
 

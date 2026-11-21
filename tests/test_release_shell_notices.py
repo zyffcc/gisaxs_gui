@@ -264,7 +264,7 @@ def test_a_right_click_on_a_number_field_opens_a_chinese_menu(monkeypatch) -> No
 def test_only_what_fitting_reads_is_a_curve_for_the_window() -> None:
     from src.gimap.features.fitting.application import CURVE_SUFFIXES
 
-    assert main_module.CURVE_SUFFIXES == tuple(CURVE_SUFFIXES) == (".dat", ".txt")
+    assert main_module.CURVE_SUFFIXES == tuple(CURVE_SUFFIXES) == (".dat", ".txt", ".h5")  # .h5: NXcanSAS curves
     assert main_module.TABLE_SUFFIXES == (".csv",)
     assert ".dat" in main_module.NOT_A_CURVE and "_fit_input.dat" in main_module.NOT_A_CURVE
 

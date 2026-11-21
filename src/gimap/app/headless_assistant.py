@@ -334,6 +334,7 @@ def analyse_frames(
     record: Optional[dict] = None,
     found: tuple = (),
     language: str = "en",
+    curve_format: str = "csv",
 ) -> list[dict]:
     """The standard pipeline on each source the files stand for: the module files of one detector are one
     stitched series, analysed once however many of them were given. Later sources of the same detector reuse
@@ -347,9 +348,9 @@ def analyse_frames(
     fails. ``out`` with the summary of an earlier run is refused (``FileExistsError``) unless ``overwrite``
     (``headless_inputs.prepare_output``). ``record``: the options as they were given, kept in every
     report.json and in summary.json; ``found``: what patterns and folders among the arguments stood for;
-    ``language``: of the reports' headings."""
+    ``language``: of the reports' headings; ``curve_format``: ``headless_record.CURVE_FORMATS``."""
     prepare_output(out, overwrite)
-    written = {"options": record, "created": utc_now(), "language": language}
+    written = {"options": record, "created": utc_now(), "language": language, "curve_format": curve_format}
     reports: list[dict] = []
     calibration: Optional[dict] = None
     sources = given_sources(frames)

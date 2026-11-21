@@ -34,12 +34,12 @@ from src.gimap.features.fitting import application as fitting_files
 
 WINDOW_GEOMETRY_KEY = "window.geometry"
 CURVE_SUFFIXES = tuple(fitting_files.CURVE_SUFFIXES)
-"""Curve files, as Fitting's reader takes them (.dat, .txt): dropped while Fitting is shown, they open there."""
+"""Curve files, as Fitting's reader takes them (.dat, .txt, NXcanSAS .h5 — ``is_curve_file``: an .h5 of detector
+frames goes to Analyze): dropped while Fitting is shown, they open there."""
 TABLE_SUFFIXES = tuple(suffix for suffix in (".csv",) if suffix not in CURVE_SUFFIXES)
 """Analyze exports its cuts as .csv tables too, which Fitting does not read (their columns differ by table):
 dropped while Fitting is shown, they are refused with the reason instead of being sent anywhere."""
-NOT_A_CURVE = getattr(fitting_files, "UNSUPPORTED_CURVE", "Fitting reads .dat and .txt curves (q, I, σ). For a cut "
-                      "from Analyze, use Send to Fitting or open its _fit_input.dat file.")
+NOT_A_CURVE = fitting_files.UNSUPPORTED_CURVE
 """Why: Fitting's own sentence (what Open Curve… says for such a file)."""
 
 
@@ -101,12 +101,12 @@ class MainWindow(QMainWindow, ApplicationWindowView):
             return
         components = self.components
         if components.current_page_key() == "fitting":
-            curves = [path for path in paths if path.lower().endswith(CURVE_SUFFIXES)]
+            curves = [path for path in paths if path.lower().endswith(CURVE_SUFFIXES) and fitting_files.is_curve_file(path)]
             if curves:
                 # As Open Curve: no side given, so the halves chosen in Fitting stay (a side would replace them).
                 workspace = components.fitting_workspace
                 workspace.show_context("single")
-                workspace.fit_page.open_curve(curves[0])
+                workspace.fit_page.open_curve_file(curves[0])  # NXcanSAS of several curves: asks which
                 return
             tables = [path for path in paths if path.lower().endswith(TABLE_SUFFIXES)]
             if tables:
