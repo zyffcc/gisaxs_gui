@@ -202,9 +202,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   view says that it has most likely stopped on an error and will not go on, with the last line of its log, and
   **Stop Analysis**; the line at the top and the job status say *No progress for 1:10: the analysis package's
   processes are all waiting*. Before, such a run showed the same line for ever.
-- **Known limitation, Sputter ▸ Analyze of Cu:** the analysis package's Cu networks and Cu optics are computed for a
-  wavelength of 0.105 nm (11.81 keV). For a Cu scan at another photon energy a process of the package ends at the
-  networks step and the analysis waits without ending; the note above says so after a minute (manual chapter 13).
+- **Sputter ▸ Analyze away from the networks' wavelength runs to the end.** A Cu scan away from 0.105 nm (or any scan
+  away from its networks' wavelength by more than 5 %; Au away from 12 keV) is analysed with optical constants
+  computed at its own energy, the networks giving only the starting solutions and **Auto** picking **Refine**; a photon
+  energy outside 4–30 keV is refused when the scan is imported, with the reason. Before, such a Cu analysis waited
+  without ending (manual chapter 13 says what this means for the result).
 
 - **Checked against pyFAI:** on the four public frames, every pixel's q, 2θ, q∥ and q_z agree with pyFAI to
   10⁻¹³, and the azimuthal I(q) to 10⁻⁷ on the same pixels and bins; pyFAI's Σ I / Σ F differs from GIMaP's mean of
