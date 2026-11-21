@@ -60,8 +60,8 @@ the profile list, the beam-centre button, the Mask step's card and the GISAXS Cu
 EXPORT_TIPS = (
     ("export_all_button", "Every listed frame with the current settings, to a folder you choose: a table per curve with "
                           "every frame a column, and per-frame files. Settings can be saved for the next data set."),
-    ("export_curves_button", "One CSV per curve (q, I, σ, pixels) and a JSON record of the settings, next to the data "
-                             "(gimap_analysis/)."),
+    ("export_curves_button", "One CSV per curve (q, I, σ, pixels), a cut region's under its name, and a JSON record of "
+                             "the settings, to a folder you choose (it starts in the last one)."),
     ("export_image_button", "The detector image or q map as shown, with a colour bar (PNG, TIFF, SVG, PDF), to a file "
                             "you choose."),
     ("export_map_button", "The intensity on a regular q grid (qy–qz or q∥–qz) as a CSV table with its axes, to a file "
@@ -400,6 +400,7 @@ class AnalyzeStepsView:
         layout.addWidget(self.show_mask_button, 0, Qt.AlignLeft)
         self.corrections_section.set_expanded(False)
         layout.addWidget(self.corrections_section)
+        layout.addWidget(self.normalisation_section)
         layout.addWidget(self.intensity_section)
         layout.addStretch(1)
 

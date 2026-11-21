@@ -233,10 +233,19 @@ Send to Fitting（命令栏和 Export 步骤的按钮都走 `bindings/fit_handov
   I / F_ff，计数帧的方差按 value / F 传递（`intensity_scale`，GISAXS 的 `native_profile(..., scale)` 与 GIWAXS 的
   `BinnedMean.add(..., scale)`），与 GIWAXS 强度校正相乘为 F = F_Ω F_P F_A F_ff；记录 `corrections.flat_field`（文件、SHA-256、
   归一化平均值、排除的像素）；每个文件版本只读一次，批量导出、序列与监视共用。
-  顺序：探测器无效像素 → 热 / 死像素 → 掩膜 → 背景 → 平场排除的像素 → gap guard → 强度范围 → 除以平场 → 镜像补齐 → 强度校正；
-  曲线、q 图、展开图与导出都用处理后的帧。
+  暗场（Dark frame，默认关，`views/normalisation_view.py` 的 `_dark_row`、`bindings/normalisation.py` 的 `apply_dark`）：在背景之前
+  扣除 `s_D · D`，误差模型改为像素离散度（`frame_preprocessing.photon_counts`）。
+  顺序：探测器无效像素 → 热 / 死像素 → 掩膜 → 暗场 → 背景 → 平场排除的像素 → gap guard → 强度范围 → 除以平场 → 镜像补齐 →
+  强度校正 → 归一化；曲线、q 图、展开图与导出都用处理后的帧。
+- Normalisation（折叠区，各项默认关；`domain/normalisation.py`、`frame_preprocessing._normalise`、`bindings/normalisation.py`）：
+  c = A / (t · M · T · d)，t 与 M 取文件头（`normalisation.header_values`：读取器的 `exposure_time_s`、EDF / CBF 的监视器名、NeXus 的
+  `monitor`；帧之和取和）或手动输入；第一行总写出文件头可用的值，下方一行写出乘了多少和每项来源。数据乘 c，计数帧的
+  `intensity_scale` 乘 c（σ = c × 原 σ），曲线的 y 标签与拟合输入的 `intensity_unit` 带单位；记录 `normalisation`、`header_values`，
+  每个曲线文件有 `# intensity:` 头行（`export_record.intensity_lines`）。
 - Intensity corrections (GIWAXS)（折叠区，只在 GIWAXS 显示，默认关，`domain/intensity.py`）：立体角 cos³2θ、偏振（pyFAI 公式，因子 f）、
-  薄膜吸收（厚度 t、衰减长度 L，相对 αf = αi，不含折射）；I / factor，q 不变。计数帧的方差按 value / factor 传递
+  薄膜吸收（厚度 t、衰减长度 L，相对 αf = αi，不含折射）、Lorentz 因子（纤维织构，GIXSGUI 的 L = 1/(cos αi cos αf |sin 2θf|)；
+  `Corrections.lorentz`，自动分析的 Hermans 因子此时不再乘 sin χ：`assistant/domain/orientation.ring_orientation(lorentz=True)`，
+  由 `automation.status()["corrections"]["lorentz"]` 传入）；I / factor，q 不变。计数帧的方差按 value / factor 传递
   （`BinnedMean.add(..., scale)`），导出记录的 `intensity_corrections` 写明公式与参数，Fitting 的计数模型标记为不成立。
 - Undo / Redo（命令栏 ↶ ↷ 或 Edit ▸ Undo / Redo，Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y，`setup_history.py`）：设置的每次改动是一步，同类快速改动合并
   （但抵消上一步的改动——比如刚加上又删掉——单独成一步）。

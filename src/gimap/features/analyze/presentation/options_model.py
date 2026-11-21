@@ -17,6 +17,7 @@ from ..application import (
     Corrections,
     CutRegion,
     MaskShape,
+    Normalisation,
     PlaceRegions,
     QBox,
     Sector,
@@ -44,6 +45,21 @@ class OptionsModelMixin:
             background_scale=float(scale),
         )
 
+    def set_dark(self, path: Optional[str | Path], *, frame: int = 0, scale: float = 1.0) -> None:
+        """Subtract ``scale ×`` this dark frame from every analysed frame, before the background (``None`` stops)."""
+        self.state.corrections = replace(
+            self.state.corrections, dark_path=str(path) if path else None, dark_frame=max(0, int(frame)),
+            dark_scale=float(scale),
+        )
+
+    def set_normalisation(self, normalisation: Normalisation) -> None:
+        """Multiply every analysed frame by A / (t · M · T · d) (``Normalisation()``: not at all)."""
+        self.state.corrections = replace(self.state.corrections, normalisation=normalisation)
+
+    def set_lorentz(self, on: bool) -> None:
+        """GIWAXS: divide by the Lorentz factor of a fibre texture."""
+        self.state.corrections = replace(self.state.corrections, lorentz=bool(on))
+
     def set_flat_field(self, path: Optional[str | Path]) -> None:
         """Divide every analysed frame by this flat field (``None`` stops)."""
         self.state.corrections = replace(self.state.corrections, flat_field_path=str(path) if path else None)
@@ -64,12 +80,13 @@ class OptionsModelMixin:
         )
 
     def reset_corrections(self) -> None:
-        """No background or range; the gap guard, bad pixels, masks, flat field and mirror filling stay (the
-        set-up's: they belong to the detector)."""
+        """No background, range or normalisation; the gap guard, bad pixels, masks, dark frame, flat field and mirror
+        filling stay (the set-up's: they belong to the detector)."""
         current = self.state.corrections
         self.state.corrections = Corrections(
             gap_guard_px=current.gap_guard_px, bad_pixels=current.bad_pixels, mask_shapes=current.mask_shapes,
             mask_path=current.mask_path, mirror_fill=current.mirror_fill, flat_field_path=current.flat_field_path,
+            dark_path=current.dark_path, dark_frame=current.dark_frame, dark_scale=current.dark_scale,
         )
 
     # -- masks and mirror filling ---------------------------------------------------------

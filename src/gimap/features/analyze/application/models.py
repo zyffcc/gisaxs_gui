@@ -11,7 +11,7 @@ import numpy as np
 from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile
 from src.gimap.shared.geometry.detector_tilt import FlatDetectorError
 
-from ..domain import BadPixels, Corrections, GisaxsCutSettings, GiwaxsSettings, Reduction
+from ..domain import BadPixels, Corrections, GisaxsCutSettings, GiwaxsSettings, NormalisationUse, Reduction
 from .flat_field import FlatFieldUse
 
 AUTO = "auto"
@@ -127,6 +127,10 @@ class FrameAnalysis:
     flat_detector: Optional[FlatDetectorError] = None
     """A ``.poni`` tilt the flat geometry leaves out, and how far |q| is off for it on this frame's valid pixels
     (``flat_detector.py``); ``None`` when the profile names no tilt."""
+    header_values: dict = field(default_factory=dict)
+    """What the header offers for the normalisation (``normalisation.header_values``; of a sum: the sums)."""
+    normalisation: Optional[NormalisationUse] = None
+    """The constant the frame was multiplied by and its terms (``Corrections.normalisation``); ``None``: none."""
 
     @property
     def shape(self) -> tuple[int, int]:

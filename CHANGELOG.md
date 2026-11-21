@@ -12,6 +12,24 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Normalisation, a dark frame and the Lorentz factor in Analyze.** Mask & corrections ▸ **Normalisation** (every
+  term off by default) multiplies each frame, after every other correction, by A / (t · M · T · d): the exposure time
+  from the file header or typed, a monitor of the header (EDF keywords, the `Flux` of a Pilatus CBF, a NeXus
+  `NXmonitor`, now read per frame) or typed, the transmission, the thickness (mm) and an absolute-scale factor; a sum
+  of frames is divided by the sums of their exposure times and monitors. The section always lists the header values
+  the frame offers and says by what the frame was multiplied. σ is multiplied by the same factor (photon counts stay
+  Poisson, scaled); the unit of the intensity goes into the plots, the CSV column, an `# intensity:` line of every
+  curve file, the fit input and the record (`normalisation`: the factor and each term with its source). A **dark
+  frame** with its own scale is subtracted before the background (σ then from the pixel scatter). **Lorentz factor
+  (fibre texture)** among the GIWAXS intensity corrections divides by GIXSGUI's L = 1/(cos αi cos αf |sin 2θf|);
+  the Hermans factor of a Lorentz-corrected I(χ) is no longer weighted by sin χ a second time. With all of them off,
+  curves and σ are those of before. *Physics and Methods* 4.11, 4.12, 5.6 and 7.7.
+- **The Analyze display.** In log display, pixels at or below 0 (a dark-subtracted frame) take the lowest colour
+  instead of none, and the automatic limits come from the positive values: such frames no longer look black. In
+  linear display the colour bar is drawn around the limits. The image is the widest panel, and **Panels ▾** hides
+  the steps or the curves and results. Find Calibration Automatically no longer switches the right panel to Results,
+  and the Results geometry says the αi in use (and the run's, when it differs). **Export Curves…** asks for the folder
+  (starting in the last one chosen) and names the curves of a cut region by the region's name.
 - **A sphere too large for the form factor at q_z = 0 is flagged.** Predict parameters fits a cut at q_z = 0 (the
   effective interface) unless it is given the cut's angles; for spheres that holds within about 5 % of R only up to
   q_z·R ≈ 1.7 (on the four-term DWBA benchmark the median error of R is 15–29 % above it, with both angles below
@@ -1047,6 +1065,9 @@ hold.
 - **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry
   search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them: calibrate such an image
   with pyFAI and give GIMaP the `.poni`.
+- **Analyze's normalisation divides the frame after the background and dark frame are subtracted** in the frame's
+  own units, with the scales you type: the background's own exposure or monitor is not used. Set its **Scale** to
+  the ratio. Transmission and thickness are typed, not measured.
 - **XRR intensities are raw**: no monitor normalisation, footprint, background or resolution correction, and no
   θ offset. Angle units and signed-integer gap codes are checked before extraction.
 - **Format Converter does not read EDF** (use Batch Export ▸ Converted detector frames), and its uint16 modes

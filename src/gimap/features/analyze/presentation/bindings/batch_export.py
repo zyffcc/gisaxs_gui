@@ -28,7 +28,7 @@ from PyQt5.QtCore import QSignalBlocker, QTimer
 from PyQt5.QtWidgets import QDialog, QFileDialog
 
 from src.gimap.app.presentation.components import show_toast
-from src.gimap.app.presentation.components.detector_view import display_array, display_levels
+from src.gimap.app.presentation.components.detector_view import display_image, display_levels
 from src.gimap.app.presentation.components.levels import to_intensity
 from src.gimap.app.presentation.i18n import tr, trf
 
@@ -286,13 +286,13 @@ class BatchExportMixin:
         if analysis is None:
             return None
         if context == "detector":
-            shown = display_array(analysis.data, analysis.valid, log)
+            sample = display_image(analysis.data, analysis.valid, log)[1]
         else:
             rsm = analysis.reduction.reciprocal_space_map if analysis.reduction is not None else None
             if rsm is None:
                 return None
-            shown = display_array(rsm.image, None, log)
-        levels = display_levels(shown)
+            sample = display_image(rsm.image, None, log)[1]
+        levels = display_levels(sample)  # in log, from the positive values (``display_image``)
         return None if levels is None else to_intensity(levels, log)
 
     def batch_display_text(self) -> str:
@@ -364,8 +364,12 @@ class BatchExportMixin:
         if corrections.mirror_fill:
             parts.append(tr("mirror filling"))
         if state.mode != GISAXS and (corrections.solid_angle or corrections.polarization is not None
-                                     or corrections.film_thickness_nm is not None):
+                                     or corrections.film_thickness_nm is not None or corrections.lorentz):
             parts.append(tr("intensity corrections"))
+        if corrections.dark_path:
+            parts.append(trf("dark {name}", name=Path(corrections.dark_path).name))
+        if not corrections.normalisation.is_identity:
+            parts.append(tr("normalised"))
         if corrections.critical_angle_deg:
             parts.append(tr("refraction αc {value}°").format(value=f"{corrections.critical_angle_deg:g}"))
         if corrections.background_path:
@@ -490,6 +494,7 @@ class BatchExportMixin:
         self.background_label.setText(Path(background).name if background else tr("No background"))
         self.background_label.setToolTip(background or "")
         self._refresh_mask_list()
+        self._sync_normalisation_widgets()  # the dark frame, the normalisation, the Lorentz factor
         # αi now comes from this set-up, not from the last session: no "from your last session" notice, and
         # the field's marker, tooltip and Back to Profile follow the value even when no frame is analysed.
         self._incidence_notice_pending = False

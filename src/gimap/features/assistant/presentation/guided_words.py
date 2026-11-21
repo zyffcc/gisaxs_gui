@@ -32,6 +32,8 @@ SENTENCES = (
     "Without those bins the texture rule (|f − f_iso| against {margin}) would give another verdict.",
     "tilted: maximum at χ ≈ ±{chi}°",
     "The radial background under the ring ({background} counts/pixel) was subtracted.",
+    "The radial background under the ring ({background} counts/pixel) was subtracted, scaled like an isotropic ring "
+    "(∝ sin χ).",
     "|χ| {where} is shadowed: the intensity there is below {fraction} of the diffuse background at this q (a shadow, "
     "absorber or insensitive detector area), so it counts as unmeasured.",
     "|χ| < {angle}° is not measured (missing wedge); f then leaves out the orientations closest to the surface normal "

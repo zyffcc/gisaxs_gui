@@ -72,6 +72,28 @@ class BatchWatchMixin(WatchSeriesMixin):
             return
         self.notify_written(exported_text(written), written[0].parent)
 
+    def export_curves(self, folder: Optional[str | Path] = None) -> Optional[list]:
+        """Export Curves…: the frame's curves, its record and its curve for Fitting into a folder the person
+        chooses (``folder``: without asking). The question starts in the folder chosen last, else next to the
+        data; the folder chosen is remembered for the next time. ``None`` when nothing was written."""
+        if self.view_model.state.analysis is None:
+            self._status(trf("Export failed: {error}", error=tr("Open a frame first.")), "error")
+            return None
+        if folder is None:
+            start = self.view_model.last_export_folder() or self.view_model.default_export_dir() or Path(
+                self._last_folder or ".")
+            folder = QFileDialog.getExistingDirectory(self, tr("Export Curves: choose a folder"), str(start))
+            if not folder:
+                return None
+        try:
+            written = self.view_model.export(Path(folder))
+        except (ValueError, OSError) as exc:
+            self._status(trf("Export failed: {error}", error=message_text(exc)), "error")
+            return None
+        self.view_model.remember_export_folder(Path(folder))
+        self.notify_written(exported_text(written), written[0].parent)
+        return written
+
     def _auto_export_folder(self, destination: Path) -> Optional[Path]:
         """Where Export New Frames While Watching writes now: next to the data, else the session's folder
         (``write_elsewhere``: asked for once). ``None`` when no folder takes the files: the export is switched off

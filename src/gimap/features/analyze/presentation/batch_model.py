@@ -412,7 +412,7 @@ class BatchModelMixin:
                 name = None
         corrections = settings.corrections
         for label, key in (("Mask file", "mask_path"), ("Background frame", "background_path"),
-                           ("Flat-field file", "flat_field_path")):
+                           ("Flat-field file", "flat_field_path"), ("Dark frame", "dark_path")):
             path = getattr(corrections, key)
             if path and not Path(path).exists():
                 notes.append(f"{label} not found, left out: {path}")

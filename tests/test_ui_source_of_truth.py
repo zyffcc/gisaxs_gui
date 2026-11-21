@@ -48,7 +48,7 @@ EXPECTED_VIEWS_BY_OWNER = {
                 "sputter_static_view.py", "sputter_steps_view.py"},
     "analyze": {
         "analyze_page_view.py", "analyze_steps_view.py", "batch_export_view.py", "batch_progress_view.py",
-        "options_panel_view.py",
+        "options_panel_view.py", "normalisation_view.py",
         "regions_view.py", "series_view.py", "series_fit_view.py",
         "geometry_dialog_view.py", "center_dialog_view.py", "frame_import_dialog_view.py",
     },

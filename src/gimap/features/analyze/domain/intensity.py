@@ -1,4 +1,4 @@
-"""Intensity corrections of a GIWAXS frame: solid angle, polarisation, absorption in the film.
+"""Intensity corrections of a GIWAXS frame: solid angle, polarisation, absorption in the film, Lorentz factor.
 
 What a pixel records is the true scattered intensity times a factor that depends on where the pixel
 is; the corrected intensity is ``I / factor``. Solid angle and polarisation are 1 at the direct beam,
@@ -20,6 +20,16 @@ They change only intensities, never q:
   ``s = 1/sin αi + 1/sin αf``, so the film scatters ``∝ (1 − exp(−t·s/L)) / s``; factor relative to
   ``αf = αi``. Refraction is not included (valid well above the critical angle); pixels at or below
   the sample horizon have no factor (they are left out).
+* **Lorentz factor of a fibre texture** (GIXSGUI, Jiang 2015, Eq. 5 with S = cos αi cos αf) — crystallites
+  oriented at random about the surface normal: a reciprocal-lattice point at the polar angle χ from the normal
+  lies on a circle about q_z, and the Ewald sphere cuts that circle at a rate set by the component of its motion
+  along the scattered ray, ``k cos αi cos αf |sin 2θf|`` (``2θf`` the in-plane exit angle, ``αf`` the exit angle).
+  The intensity a pixel records is ``∝ N(χ) · L`` with ``L = 1 / (cos αi cos αf |sin 2θf|)`` and ``N(χ) dχ`` the
+  crystallites whose plane normal lies between χ and χ + dχ; ``I / L`` is therefore ``∝ N(χ)``. Near the beam
+  ``cos αi cos αf |sin 2θf| ≈ (q/k) sin χ``: the correction is the ``sin χ`` weight of the Hermans orientation
+  factor, made exact. ``L`` is not normalised (``1/L ≤ 1``); it is infinite on the specular rod (2θf = 0), whose
+  pixels are left out. As GIXSGUI warns, it belongs to the intensities of crystalline (periodic) scattering only:
+  it also scales the diffuse scattering and the amorphous halo, and it changes the I(q) average over a ring.
 
 For photon counts the variance of a corrected pixel is ``value / factor`` (see ``BinnedMean.add``).
 """
@@ -35,6 +45,9 @@ from src.gimap.shared.geometry import DetectorGeometry
 from src.gimap.shared.geometry.q_mapping import exit_directions, geometry_rays
 
 BLOCK_ROWS = 512
+LORENTZ_FORMULA = ("L = 1/(cos ai * cos af * |sin 2theta_f|), fibre texture about the surface normal (GIXSGUI, "
+                   "Jiang 2015, Eq. 5, S = cos ai cos af); not normalised; infinite on the specular rod "
+                   "(2theta_f = 0), whose pixels are left out")
 
 
 def has_intensity_corrections(corrections) -> bool:
@@ -42,6 +55,7 @@ def has_intensity_corrections(corrections) -> bool:
         getattr(corrections, "solid_angle", False)
         or getattr(corrections, "polarization", None) is not None
         or film_absorption_on(corrections)
+        or getattr(corrections, "lorentz", False)
     )
 
 
@@ -65,13 +79,14 @@ def intensity_factor(
     polarization: Optional[float] = None,
     film_thickness_nm: Optional[float] = None,
     attenuation_length_um: Optional[float] = None,
+    lorentz: bool = False,
 ) -> np.ndarray:
-    """The factor of every pixel (float32; NaN where it is not defined)."""
+    """The factor of every pixel (float32; NaN or infinite where it is not defined)."""
     rows, columns = int(shape[0]), int(shape[1])
     factor = np.ones((rows, columns), dtype=np.float32)
     beam = float(geometry.distance_m)
     film = bool(film_thickness_nm and attenuation_length_um and film_thickness_nm > 0 and attenuation_length_um > 0)
-    sin_in = math.sin(geometry.incidence_rad)
+    sin_in, cos_in = math.sin(geometry.incidence_rad), math.cos(geometry.incidence_rad)
     if film and sin_in <= 0:
         raise ValueError("The film absorption needs a grazing angle αi above 0.")
     ratio = float(film_thickness_nm or 0.0) * 1e-9 / (float(attenuation_length_um or 1.0) * 1e-6)
@@ -90,10 +105,14 @@ def intensity_factor(
                 cos_2phi = np.where(in_plane > 0, (x * x - y * y) / in_plane, 0.0)
             sin2 = 1.0 - cos_2theta**2
             block *= 0.5 * (1.0 + cos_2theta**2 - float(polarization) * cos_2phi * sin2)
+        if film or lorentz:
+            _along, across, sin_exit = exit_directions(x, y, along, geometry.incidence_rad)
         if film:
-            sin_exit = exit_directions(x, y, along, geometry.incidence_rad)[2]
             relative = _film(sin_exit, sin_in, ratio) / reference
             block *= np.where(sin_exit > 0, relative, np.nan)
+        if lorentz:  # L = 1 / (cos αi · cos αf |sin 2θf|); across = cos αf sin 2θf (infinite on the specular rod)
+            with np.errstate(divide="ignore"):
+                block *= 1.0 / (cos_in * np.abs(across))
         factor[start:stop] = block
     return factor
 
@@ -102,7 +121,8 @@ def describe_intensity_corrections(corrections) -> Optional[dict]:
     """What was corrected and how, for the JSON record (``None``: nothing)."""
     if not has_intensity_corrections(corrections):
         return None
-    record: dict = {"applied_as": "I / factor (1 at the direct beam; film absorption 1 at af = ai); q unchanged"}
+    record: dict = {"applied_as": "I / factor (1 at the direct beam; film absorption 1 at af = ai; the Lorentz "
+                                  "factor not normalised); q unchanged"}
     if corrections.solid_angle:
         record["solid_angle"] = "(D/r)^3, D the distance to the direct beam and r to the pixel: cos^3(2theta) for a detector perpendicular to the beam"
     if corrections.polarization is not None:
@@ -117,7 +137,14 @@ def describe_intensity_corrections(corrections) -> Optional[dict]:
             "formula": "(1 - exp(-t/L*(1/sin ai + 1/sin af))) / (1/sin ai + 1/sin af), relative to af = ai; "
                        "no refraction",
         }
+    if getattr(corrections, "lorentz", False):
+        record["lorentz"] = {
+            "formula": LORENTZ_FORMULA,
+            "orientation": "I(chi) after it is proportional to the number of crystallites per unit polar angle "
+                           "N(chi): the Hermans factor of a Lorentz-corrected I(chi) is not weighted by sin(chi) again",
+        }
     return record
 
 
-__all__ = ["describe_intensity_corrections", "film_absorption_on", "has_intensity_corrections", "intensity_factor"]
+__all__ = ["LORENTZ_FORMULA", "describe_intensity_corrections", "film_absorption_on", "has_intensity_corrections",
+           "intensity_factor"]

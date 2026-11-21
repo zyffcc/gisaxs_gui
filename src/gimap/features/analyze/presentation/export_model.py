@@ -20,6 +20,8 @@ from ..application import (
 )
 
 EXPORT_FOLDER = "gimap_analysis"
+EXPORT_FOLDER_KEY = "export_folder"
+"""The folder Export Curves… wrote to last (settings ``analyze``): where its question starts next time."""
 
 
 class ExportedFiles(list):
@@ -43,6 +45,15 @@ class ExportModelMixin:
     def default_export_dir(self) -> Optional[Path]:
         path = self.current_path
         return path.parent / EXPORT_FOLDER if path is not None else None
+
+    def last_export_folder(self) -> Optional[Path]:
+        """The folder Export Curves… wrote to last (any session), while it is there; ``None``: none yet."""
+        stored = self._read_setting("analyze", EXPORT_FOLDER_KEY, None)
+        return Path(str(stored)) if stored and Path(str(stored)).is_dir() else None
+
+    def remember_export_folder(self, folder: Path) -> None:
+        if self.settings is not None:
+            self.settings.set("analyze", EXPORT_FOLDER_KEY, str(folder))
 
     def export(self, destination: Optional[Path] = None) -> list[Path]:
         analysis = self.state.analysis

@@ -168,10 +168,26 @@ def level_bar(image_item):
                     return
                 self._programmatic = True
                 try:
-                    histogram = image.getHistogram(bins=HISTOGRAM_BINS, targetImageSize=400)
+                    levels = image.getLevels()
+                    window = {}
+                    data = image.image
+                    if levels is not None and np.size(levels) == 2 and float(levels[1]) > float(levels[0]) \
+                            and data is not None and data.ndim == 2:
+                        # No wider than the limits and their span on each side: a linear frame whose brightest
+                        # pixels are 1000 times its typical ones keeps a readable bar with handles that can be seen.
+                        low, high = float(levels[0]), float(levels[1])
+                        step = max(1, int(np.ceil(np.sqrt(data.size / 160_000))))
+                        with np.errstate(invalid="ignore"):
+                            seen = data[::step, ::step]
+                            seen = seen[np.isfinite(seen)]
+                        if seen.size:
+                            window = {"range": (max(low - (high - low), float(seen.min())),
+                                                min(high + (high - low), float(seen.max())))}
+                            if not window["range"][1] > window["range"][0]:
+                                window = {}
+                    histogram = image.getHistogram(bins=HISTOGRAM_BINS, targetImageSize=400, **window)
                     if histogram[0] is not None:
                         self.plot.setData(*histogram)
-                    levels = image.getLevels()
                     if levels is not None and np.size(levels) == 2:
                         self.region.setRegion([float(levels[0]), float(levels[1])])
                 finally:
@@ -238,12 +254,13 @@ class LevelControl(QObject):
 
     # -- the limits ----------------------------------------------------------------------
 
-    def levels_for(self, shown, log: bool) -> Optional[tuple[float, float]]:
-        """The displayed limits for ``shown`` (auto by the rule, or the fixed ones), recorded as shown."""
+    def levels_for(self, shown, log: bool, sample=None) -> Optional[tuple[float, float]]:
+        """The displayed limits for ``shown`` (auto by the rule over ``sample``, the values they are taken from:
+        ``shown`` when not given; or the fixed ones), recorded as shown."""
         state = self.state
         levels = None if state.auto or state.fixed is None else to_display(state.fixed, log)
         if levels is None:
-            levels = auto_levels(shown, state.rule)
+            levels = auto_levels(shown if sample is None else sample, state.rule)
         if levels is not None:
             state.shown = to_intensity(levels, log)
         return levels
@@ -265,9 +282,10 @@ class LevelControl(QObject):
         self._refresh_button()
         self.changed.emit()
 
-    def auto_once(self, shown, log: bool) -> None:
-        """The rule's limits for the image shown now, kept for the next frames."""
-        levels = auto_levels(shown, self.state.rule) if shown is not None else None
+    def auto_once(self, shown, log: bool, sample=None) -> None:
+        """The rule's limits for the image shown now (over ``sample`` when given), kept for the next frames."""
+        values = shown if sample is None else sample
+        levels = auto_levels(values, self.state.rule) if values is not None else None
         if levels is None:
             return
         self.state.fixed, self.state.auto = to_intensity(levels, log), False

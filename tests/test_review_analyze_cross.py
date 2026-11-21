@@ -312,15 +312,17 @@ def _laid_out(page, width: int) -> list[int]:
 
 
 def test_the_image_and_the_curves_share_the_room_the_steps_leave() -> None:
-    from src.gimap.features.analyze.presentation.bindings.workspace import IMAGE_KEEPS
+    from src.gimap.features.analyze.presentation.bindings.workspace import IMAGE_KEEPS, IMAGE_SHARE, RIGHT_SHARE
 
     page = _page(_context())
     page.show()
     steps, image, curves = _laid_out(page, 1100)  # the page of a 1280 px window
     assert steps >= page.process_panel.minimumWidth()
-    assert image == IMAGE_KEEPS and curves >= 350  # the image keeps its two toolbar lines, the rest is the curves'
-    _steps, image, curves = _laid_out(page, 1500)  # a wide window: half each
-    assert abs(image - curves) <= 1 and curves > 500
+    # The image is the widest panel; the curves keep their least width and RIGHT_SHARE of the room.
+    assert image >= IMAGE_KEEPS and image > curves >= page.splitter.widget(2).minimumSizeHint().width()
+    assert curves >= int(RIGHT_SHARE * (image + curves)) - 1
+    _steps, image, curves = _laid_out(page, 1500)  # a wide window: the image takes IMAGE_SHARE of the room
+    assert abs(image - int(IMAGE_SHARE * (image + curves))) <= 1 and curves > 450
 
     # Once the person moves a handle, their split stays (not balanced again); the splitter shares more room.
     page.splitter.setSizes([steps, 700, image + curves - 700])

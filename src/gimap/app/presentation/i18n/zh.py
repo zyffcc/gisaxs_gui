@@ -42,6 +42,7 @@ from .zh_tips_tools import TIPS_TOOLS_ZH
 from .zh_tips_labs import TIPS_LABS_ZH
 from .zh_review import REVIEW_ZH
 from .zh_nxcansas import NXCANSAS_ZH
+from .zh_normalisation import NORMALISATION_ZH
 
 ZH = {
     # -- menus --------------------------------------------------------------------------
@@ -220,8 +221,6 @@ ZH = {
         "运行自动分析（无需 AI）或问 AI；找到的结果——峰、取向、尺寸、检查——会连同证据显示在这里。",
     # -- Analyze export step ------------------------------------------------------------
     "Export Curves…": "导出曲线…",
-    "One CSV per curve (q, I, σ, pixels) and a JSON record of the settings, next to the data (gimap_analysis/).":
-        "每条曲线一个 CSV（q、I、σ、像素数）以及一份设置的 JSON 记录，保存在数据旁（gimap_analysis/）。",
     "Save Image…": "保存图像…",
     "The detector image or q map as shown, with a colour bar (PNG, TIFF, SVG, PDF).": "按当前显示保存探测器图像或 q 图，带色标（PNG、TIFF、SVG、PDF）。",
     "Save q-Map Data…": "保存 q 图数据…",
@@ -594,4 +593,5 @@ ZH.update(TIPS_FITTING_ZH)
 ZH.update(TIPS_TOOLS_ZH)
 ZH.update({**TIPS_LABS_ZH, **REVIEW_ZH})
 ZH.update(NXCANSAS_ZH)
+ZH.update(NORMALISATION_ZH)
 __all__ = ["ZH"]

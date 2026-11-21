@@ -103,7 +103,8 @@ class ResultsStateMixin:
         self.stop_pipeline_button.setVisible(self._stop_pipeline is not None)
         self.stop_pipeline_button.setEnabled(True)
         self.stop_pipeline_button.setText(tr("Stop"))
-        self.show_right("results")  # the progress of the run is at the top of the Results tab
+        if not getattr(self, "_geometry_run", False):  # Find Calibration: the tab the person chose stays
+            self.show_right("results")  # the progress of the run is at the top of the Results tab
         self.set_step_state("results", "busy", tr("Running…"))
         self._status(message)
 

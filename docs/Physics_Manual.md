@@ -51,12 +51,15 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [4.8 Mirror filling (GIWAXS)](#48-mirror-filling-giwaxs)
   - [4.9 The order of the steps](#49-the-order-of-the-steps)
   - [4.10 Flat field (detector response)](#410-flat-field-detector-response)
+  - [4.11 Dark frame](#411-dark-frame)
+  - [4.12 Normalisation: exposure, monitor, transmission, thickness, absolute scale](#412-normalisation-exposure-monitor-transmission-thickness-absolute-scale)
 - [5. Intensity corrections for GIWAXS](#5-intensity-corrections-for-giwaxs)
   - [5.1 Definition](#51-definition)
   - [5.2 Solid angle](#52-solid-angle)
   - [5.3 Polarisation](#53-polarisation)
   - [5.4 Absorption in the film](#54-absorption-in-the-film)
   - [5.5 Uncertainty of corrected photon counts](#55-uncertainty-of-corrected-photon-counts)
+  - [5.6 Lorentz factor of a fibre texture](#56-lorentz-factor-of-a-fibre-texture)
 - [6. Reduction to curves and uncertainties](#6-reduction-to-curves-and-uncertainties)
   - [6.1 Principles](#61-principles)
   - [6.2 Fixed-edge bins](#62-fixed-edge-bins)
@@ -748,7 +751,7 @@ Implementation: `src/gimap/features/analyze/domain/preprocess.py`, `src/gimap/fe
 I′ = I − s · B                                                          (4.6)
 ```
 
-`B` is a frame of the same detector and shape (for NeXus a chosen frame of the file) and `s` a scale, for example the ratio of exposure times. A pixel is valid only where both frames are valid; the background's validity follows (4.1) with its own stored type. Negative results stay valid. A subtracted frame is no longer photon counts, so its errors come from the pixel scatter (section 6.4).
+`B` is a frame of the same detector and shape (for NeXus a chosen frame of the file) and `s` a scale, for example the ratio of exposure times. A pixel is valid only where both frames are valid; the background's validity follows (4.1) with its own stored type. Negative results stay valid. A subtracted frame is no longer photon counts, so its errors come from the pixel scatter (section 6.4). A dark frame has its own field and is subtracted before the background (section 4.11).
 
 Implementation: `src/gimap/features/analyze/domain/corrections.py`
 
@@ -788,13 +791,14 @@ Implementation: `src/gimap/features/analyze/domain/preprocess.py`
 1. Load the frame or the sum of frames; validity (4.1).
 2. Bad pixels found in the raw frame (section 4.4).
 3. Drawn masks and mask file (section 4.5).
-4. Background subtraction (section 4.6).
+4. Dark frame (section 4.11), then background subtraction (section 4.6).
 5. Flat field, first part: the pixels it does not keep are left out (section 4.10).
 6. Gap guard (section 4.7).
 7. Valid value range (section 4.5), on the values before the flat-field division.
 8. Flat field, second part: the division `I / F_ff` (section 4.10).
 9. Mirror filling, GIWAXS only (section 4.8); it fills from values already divided by the flat field.
-10. Intensity corrections, GIWAXS only (chapter 5).
+10. Intensity corrections, GIWAXS only (chapter 5), the Lorentz factor among them (section 5.6).
+11. Normalisation (section 4.12): one constant per frame, last.
 
 Steps 4 to 9 run only when at least one of them is active. The raw frame is kept: changing any setting recomputes from the raw frame, so corrections never stack. Curves, q maps, the cake and every export use the result.
 
@@ -842,6 +846,69 @@ I′_p = I_p / F_ff,p      (pixels not kept: left out of every frame)           
 
 Implementation: `src/gimap/features/analyze/domain/flat_field.py`, `src/gimap/features/analyze/application/flat_field.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`
 
+### 4.11 Dark frame
+
+A dark frame `D` (the detector read without beam: dark current and offset of an integrating detector, a CCD or a
+flat panel) is subtracted first, with its own scale `s_D`, and the background `B` (section 4.6) after it:
+
+```text
+I′ = I − s_D · D − s · B                                                        (4.14)
+```
+
+- `D` is a frame of the same detector and shape (Mask & corrections ▸ Corrections ▸ dark frame; for NeXus a chosen
+  frame of the file), off by default. `s_D` is typically the ratio of exposure times. A pixel is valid only where
+  the frame and the dark frame are valid (validity of `D` as in (4.1)); negative results stay valid.
+- **Uncertainty.** Read noise and offset are not counts: with a dark frame the error model is the pixel scatter
+  (section 6.4 (b)), as for a background, and the fit input says `counting_model_valid: false`.
+- **Record.** `corrections.dark_path`, `dark_frame` and `dark_scale` of `<stem>_analysis.json`, and a header line
+  `dark frame: <file> (index i) x s_D, subtracted before the background` in every curve file. A settings file keeps
+  it; a set-up whose dark frame is missing says so and leaves it out.
+
+Implementation: `src/gimap/features/analyze/domain/corrections.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`
+
+### 4.12 Normalisation: exposure, monitor, transmission, thickness, absolute scale
+
+After every other correction (section 4.9) each pixel is multiplied by one constant `c` of the frame (Mask &
+corrections ▸ Normalisation; every term off by default):
+
+```text
+I_norm,p = c · I′_p,      c = A / (t · M · T · d)                              (4.15)
+```
+
+| Term | Meaning | Source |
+| --- | --- | --- |
+| `t` | exposure time (s) | the file header (`exposure_time_s` of the reader: CBF `Exposure_time`, EDF `ExposureTime` / `count_time`, NeXus `count_time` / `frame_time`) or typed |
+| `M` | monitor (ion chamber, diode, `Flux` of a Pilatus CBF, ring current) | a header value chosen by its name (EDF keywords such as `Monitor`, `I0`, `Intensity0`; NeXus `NXmonitor` `data` / `integral` or `control/integral` of the frame) or typed |
+| `T` | transmission of the sample, `0 < T ≤ 1` | typed |
+| `d` | thickness (mm) | typed |
+| `A` | absolute-scale factor, e.g. from glassy carbon or water measured in the same set-up | typed |
+
+- A term that is off is 1. The section lists, for the frame shown, every header value it can take (exposure time
+  and monitors); a frame whose header lacks the value chosen is not analysed and the reason is said (nothing is
+  guessed). For a sum of frames (section 4.3) `t` and `M` are the sums over the frames summed.
+- **What it changes.** Only the scale: q, the shape of every curve, the cuts and the peak positions do not change.
+  The unit of the intensity becomes `counts/(pixel·s·monitor·mm) × A` with the terms in use; it is the y label of
+  every curve and the `intensity_unit` of the fit input.
+- **Uncertainty.** `c` is exact (its terms carry no error here), so for every point `σ_norm = c · σ`. For photon
+  counts the Poisson variance is carried through the factor, as in (5.9) with `1/F_p` replaced by `c/F_p`:
+
+```text
+Var(I_norm,p) = c² · Var(I′_p) = c · I_norm,p / F_p                             (4.16)
+σ_k = √max( Σ_{p∈k} c · I_norm,p / F_p ,  (c f̄_k)² ) / n_k                      (4.17)
+```
+
+  which is `c` times (5.10); the error model is then scaled Poisson. A frame whose σ comes from the pixel scatter
+  keeps that model; the scatter of `c · I` is `c` times that of `I`.
+- **Record.** `normalisation` of `<stem>_analysis.json` gives the factor `c`, the unit and every term with its
+  value and source (`typed`, `header (exposure_time_s)`, `header (<name>)`); `header_values` lists what the header
+  offered; `corrections.normalisation` keeps the settings. Each curve file carries a header line
+  `intensity: <unit>; normalised I = A*I/(t*M*T*d), factor c (…terms…); sigma scaled by the same factor`.
+- **Limits.** The background and dark frame are subtracted before, in the units of the frame, with their own scales:
+  a background measured with another exposure needs `s` set to the ratio. `T` and `d` are typed, not measured
+  (no transmission from a beam-stop diode); `A` is the user's calibration, not computed here.
+
+Implementation: `src/gimap/features/analyze/domain/normalisation.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`, `src/gimap/features/analyze/application/export_record.py`
+
 ## 5. Intensity corrections for GIWAXS
 
 ### 5.1 Definition
@@ -849,12 +916,12 @@ Implementation: `src/gimap/features/analyze/domain/flat_field.py`, `src/gimap/fe
 The intensity corrections (Mask step, folded; GIWAXS only) are off by default. When at least one is on, every pixel is divided by a factor:
 
 ```text
-I′_p = I_p / F_p,      F_p = F_Ω · F_P · F_A                                     (5.1)
+I′_p = I_p / F_p,      F_p = F_Ω · F_P · F_A · F_L                               (5.1)
 ```
 
 - Each factor is optional; a factor that is off equals 1.
 - q never changes. Peak positions therefore do not change; intensities compared across χ or q do.
-- `F_Ω` and `F_P` are 1 at the direct beam and `F_A` is 1 at `α_f = α_i`, so corrected values stay close to counts per pixel.
+- `F_Ω` and `F_P` are 1 at the direct beam and `F_A` is 1 at `α_f = α_i`, so corrected values stay close to counts per pixel. The Lorentz factor `F_L` (section 5.6) is not normalised.
 - Pixels where F is not finite or not positive become invalid.
 - With a flat field (section 4.10), `F_p = F_Ω · F_P · F_A · F_ff`: the flat field is divided earlier in the order (section 4.9), the factors here last, and the counts' variance (5.9) uses the whole product.
 - They are applied after all other preparation steps (section 4.9) and need the geometry. X, Y and L_p are those of (1.3), (1.4) and (2.2), and `cos 2θ = L/L_p` (2.12). On a tilted detector the vector t of a pixel is (3.15), its length |t| takes the place of L_p, and cos 2θ is its component along the beam over |t|.
@@ -926,6 +993,44 @@ Var(I′_p) = Var(I_p) / F_p² = I_p / F_p² = I′_p / F_p                     
 where the sums run over the n_k pixels of bin k and `I_k = Σ I′_p / n_k`. `F_p` includes the flat field when one is used (section 4.10); with a flat field alone, also for GISAXS, `F_p = F_ff`, and a GISAXS line l takes (5.10) with l in place of k. `f̄_k²` is the variance of one count at the bin's mean factor: as in (6.5), a bin of zero counts gets the error of one count, not `σ = 0`; with every F = 1, (5.10) is (6.5). When the frame is not photon counts, the corrected values get the pixel-scatter σ of section 6.4. Values corrected in this way are no longer counts: the fit input records `counting_model_valid: false` whenever a GIWAXS correction or a flat field is on. The JSON record `<stem>_analysis.json` holds `intensity_corrections` with the formulas and their parameters. The factor is computed in blocks of 512 rows and kept while shape, geometry and options stay the same.
 
 Implementation: `src/gimap/features/analyze/domain/intensity.py`, `src/gimap/features/analyze/domain/binning.py`, `src/gimap/features/analyze/application/export_record.py`
+
+### 5.6 Lorentz factor of a fibre texture
+
+Off by default (Intensity corrections ▸ Lorentz factor (fibre texture)); GIWAXS only. For crystallites oriented at
+random about the surface normal (a fibre texture, or a sample rotated about the normal), a reciprocal-lattice point
+whose plane normal makes the polar angle χ with the surface normal lies on a circle about q_z. Seen as a rotation of
+the point about the normal, the Ewald sphere is crossed at a rate set by the component of the point's velocity along
+the scattered ray; GIXSGUI (Jiang, 2015, Eq. 5 and Fig. 3) gives the Lorentz factor
+
+```text
+F_L = L = 1 / (S · |sin 2θ_f|),      S = cos α_i · cos α_f                      (5.11)
+```
+
+with `2θ_f` the in-plane exit angle and `α_f` the exit angle of the pixel (2.8); `cos α_f · sin 2θ_f` is the
+across-beam component of the unit exit vector, computed exactly for every pixel (also on a tilted detector).
+`I / L` is then proportional to `N(χ)`, the number of crystallites whose plane normal lies between χ and χ + dχ,
+times the structure factor. Near the beam
+
+```text
+1 / L = cos α_i cos α_f |sin 2θ_f| ≈ (q / k) · sin χ                            (5.12)
+```
+
+so the correction is, made exact, the sin χ weight of the Hermans factor (7.25). GIDVis (Schrode et al., 2019)
+applies a Lorentz factor among its geometric corrections without stating its form; GIMaP follows GIXSGUI.
+
+- `L` is not normalised (`1/L ≤ 1`). It is infinite on the specular rod (`2θ_f = 0`), whose pixels are left out
+  (5.1: F not finite).
+- **Uncertainty.** As the other factors: (5.9) and (5.10) with `F_p` including `F_L`.
+- **Hermans factor.** An I(χ) divided by L counts crystallites per degree of χ: the orientation analysis of the
+  automatic analysis then computes ⟨cos²χ⟩ without a second sin χ weight (section 7.7). It is never applied twice.
+- **Limits.** As GIXSGUI warns, a Lorentz factor belongs to the intensities of periodic (crystalline) scattering
+  only. GIMaP applies it to the whole frame for convenience: it also scales diffuse scattering, the amorphous halo
+  and the specular rod, and the I(q) averaged over a ring changes (it weights the in-plane part of the ring). The
+  intensity of a reflection on the specular rod (`00l`) needs the factor `1/sin 2θ` of a rocking scan, as Jiang
+  (2015) notes, not this one.
+- **Record.** `intensity_corrections.lorentz` gives the formula (5.11) and how the orientation analysis treats it.
+
+Implementation: `src/gimap/features/analyze/domain/intensity.py`, `src/gimap/features/assistant/domain/orientation.py`
 
 ## 6. Reduction to curves and uncertainties
 
@@ -1414,7 +1519,14 @@ f = ( 3 ⟨cos²χ⟩ − 1 ) / 2                                               
 ```
 
 The sums run over the measured bins. f = 1 means all orientations along the normal, f = 0 random, f = −½ all in the
-plane (Hermans & Platzek, 1939; for GIWAXS see Baker et al., 2010). The code and the current report write this as
+plane (Hermans & Platzek, 1939; for GIWAXS see Baker et al., 2010).
+
+**A Lorentz-corrected I(χ).** The sin χ in (7.25) is the Lorentz factor of a fibre texture near the beam (5.12).
+When the frame was divided by the Lorentz factor (section 5.6), the folded `Ī_k` already count crystallites per
+degree, and the factor is computed as `⟨cos²χ⟩ = Σ_k max(Ī_k, 0) cos²χ_k / Σ_k max(Ī_k, 0)`, without a second
+sin χ. The radial background `b` is then distributed as an isotropic ring after the factor,
+`b_k = b · sin χ_k / ⟨sin χ⟩` over the bins of the profile. The isotropic reference f_iso and the weighted coverage
+(7.24) do not change: an isotropic ring is `∝ sin χ` after the factor. The code and the current report write this as
 "Herman's f"; the standard name is the Hermans orientation function.
 
 **Isotropic reference.** Because unmeasured bins bias f, the report gives the value an isotropic ring would have on
@@ -4066,6 +4178,7 @@ The list follows the style of the IUCr journals: titles are given for books, pro
 - Renaud, G., Lazzari, R. & Leroy, F. (2009). *Surf. Sci. Rep.* **64**, 255–380. https://doi.org/10.1016/j.surfrep.2009.07.002
 - Robertson, T., Wright, F. T. & Dykstra, R. L. (1988). *Order Restricted Statistical Inference*. Chichester: Wiley.
 - Ryan, C. G., Clayton, E., Griffin, W. L., Sie, S. H. & Cousens, D. R. (1988). *Nucl. Instrum. Methods Phys. Res. B*, **34**, 396–402. https://doi.org/10.1016/0168-583X(88)90063-8
+- Schrode, B., Pachmajer, S., Dohr, M., Röthel, C., Domke, J., Fritz, T., Resel, R. & Werzer, O. (2019). *J. Appl. Cryst.* **52**, 683–689. https://doi.org/10.1107/S1600576719004485
 - Scherrer, P. (1918). *Nachr. Ges. Wiss. Göttingen Math.-Phys. Kl.* **1918**, 98–100.
 - Schmidt, U., Weigert, M., Broaddus, C. & Myers, G. (2018). *Medical Image Computing and Computer Assisted Intervention – MICCAI 2018*, Lecture Notes in Computer Science, Vol. 11071, pp. 265–273. Cham: Springer. https://doi.org/10.1007/978-3-030-00934-2_30
 - Schwartzkopf, M. et al. (2015). *ACS Appl. Mater. Interfaces*, **7**, 13547. https://doi.org/10.1021/acsami.5b02901

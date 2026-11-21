@@ -1,12 +1,13 @@
 """What happens to a loaded frame before any cut: validity, masks, corrections, mirror filling.
 
 Order: the detector's own invalid pixels → hot and dead pixels found in the frame → masks drawn
-by the person → background → flat field (its pixels that do not respond left out before the gap guard, the
+by the person → dark frame → background → flat field (its pixels that do not respond left out before the gap guard, the
 division after the range, so the range applies to the values as measured) → gap guard → valid intensity range →
 (GIWAXS, when asked) pixels without data filled from the mirror side (from values already divided by the flat
 field) → (GIWAXS, when asked, once the geometry is known) the intensity corrections: solid angle, polarisation,
-film absorption (``_correct_intensity``). Hot, dead and drawn-mask pixels are part of the frame's validity; the
-rest are corrections, so the raw frame is kept for re-analysis with other settings.
+film absorption, Lorentz factor (``_correct_intensity``) → the normalisation, one constant (``_normalise``). Hot,
+dead and drawn-mask pixels are part of the frame's validity; the rest are corrections, so the raw frame is kept for
+re-analysis with other settings.
 """
 
 from __future__ import annotations
@@ -27,10 +28,12 @@ from ..domain import (
     find_bad_pixels,
     guard_invalid,
     mirror_fill,
+    normalisation_use,
     rasterize,
     subtract_background,
     valid_pixels,
 )
+from ..domain.normalisation import BAD_VALUE, NORMALISATION_TEMPLATES  # noqa: F401 - the page translates them
 from .flat_field import FlatFieldMixin
 
 
@@ -47,9 +50,11 @@ def photon_counts(metadata: Optional[Mapping[str, Any]], corrections: Correction
     floating-point (dark-subtracted) frame, a background-subtracted one, or one with pixels filled from the
     mirror side (``mirror_filled``: mirror filling was applied — GIWAXS with a geometry): a filled pixel
     repeats photons measured on the other side, and a bin that holds both (every I(q) bin does) would count
-    them twice, so Poisson σ would be too small. σ then comes from the scatter of the bin's pixels.
+    them twice, so Poisson σ would be too small. σ then comes from the scatter of the bin's pixels. A dark frame
+    subtracted works as a background: its read noise and offset are not counts.
     """
-    return not floating(metadata) and not corrections.background_path and not mirror_filled
+    return (not floating(metadata) and not corrections.background_path and not corrections.dark_path
+            and not mirror_filled)
 
 
 class FrameSum:
@@ -87,26 +92,29 @@ class FramePreprocessingMixin(FlatFieldMixin):
 
     def _init_preprocessing(self) -> None:
         self._init_flat_field()
-        self._background_key: Optional[tuple] = None
-        self._background: Optional[tuple[np.ndarray, np.ndarray]] = None
+        self._references: dict[str, tuple] = {}
+        """``background`` and ``dark``: (key, (data, valid)) of the frame last read for each."""
         self._bad_cache: Optional[tuple] = None
         self._mask_cache: Optional[tuple] = None
         self._file_mask_cache: Optional[tuple] = None
         self._intensity_key: Optional[tuple] = None
         self._intensity: Optional[np.ndarray] = None
 
-    def _background_frame(self, corrections: Corrections) -> tuple[np.ndarray, np.ndarray]:
-        """The background frame and its valid pixels, loaded once per file version."""
-        path = Path(str(corrections.background_path))
+    def _reference_frame(self, kind: str, path: str, frame: int) -> tuple[np.ndarray, np.ndarray]:
+        """The background or dark frame (``kind``) and its valid pixels, loaded once per file version."""
+        path = Path(str(path))
         stat = path.stat()
-        key = (str(path), int(corrections.background_frame), stat.st_mtime_ns, stat.st_size)
-        cached, cached_key = self._background, self._background_key
-        if cached is None or cached_key != key:
-            image = self.frames.load(path, int(corrections.background_frame))
+        key = (str(path), int(frame), stat.st_mtime_ns, stat.st_size)
+        cached = self._references.get(kind)  # one tuple per kind: analyses run on several threads
+        if cached is None or cached[0] != key:
+            image = self.frames.load(path, int(frame))
             data = np.asarray(image.data, dtype=np.float32)
-            cached = (data, valid_pixels(data, image.mask, negatives_valid=floating(image.metadata)))
-            self._background, self._background_key = cached, key
-        return cached
+            cached = (key, (data, valid_pixels(data, image.mask, negatives_valid=floating(image.metadata))))
+            self._references[kind] = cached
+        return cached[1]
+
+    def _background_frame(self, corrections: Corrections) -> tuple[np.ndarray, np.ndarray]:
+        return self._reference_frame("background", corrections.background_path, corrections.background_frame)
 
     def _bad_pixels(self, data: np.ndarray, valid: np.ndarray, metadata: Mapping[str, Any]):
         """Hot and dead pixels of the raw frame (kept while the same frame is re-analysed)."""
@@ -149,8 +157,11 @@ class FramePreprocessingMixin(FlatFieldMixin):
     def _corrected(
         self, data: np.ndarray, valid: np.ndarray, corrections: Corrections
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Background, the flat field's pixels that do not respond, the gap guard (around invalid pixels, those
-        too), the range (on the values as measured), then the division by the flat field."""
+        """Dark frame, background, the flat field's pixels that do not respond, the gap guard (around invalid
+        pixels, those too), the range (on the values as measured), then the division by the flat field."""
+        if corrections.dark_path:
+            dark, dark_valid = self._reference_frame("dark", corrections.dark_path, corrections.dark_frame)
+            data, valid = subtract_background(data, valid, dark, dark_valid, corrections.dark_scale, what="dark")
         if corrections.background_path:
             background, background_valid = self._background_frame(corrections)
             data, valid = subtract_background(
@@ -202,10 +213,11 @@ class FramePreprocessingMixin(FlatFieldMixin):
         return record
 
     def _intensity_factor(self, shape: tuple[int, int], geometry: DetectorGeometry, corrections) -> np.ndarray:
-        """Solid angle × polarisation × film absorption of every pixel (kept for the same geometry)."""
+        """Solid angle × polarisation × film absorption × Lorentz factor of every pixel (kept for the same geometry)."""
         options = dict(
             solid_angle=bool(corrections.solid_angle), polarization=corrections.polarization,
             film_thickness_nm=corrections.film_thickness_nm, attenuation_length_um=corrections.attenuation_length_um,
+            lorentz=bool(getattr(corrections, "lorentz", False)),
         )
         key = (shape, geometry, tuple(sorted(options.items())))
         cached, cached_key = self._intensity, self._intensity_key
@@ -237,6 +249,21 @@ class FramePreprocessingMixin(FlatFieldMixin):
                 scale = (1.0 / factor).astype(np.float32)
             previous = common.get("intensity_scale")  # the flat field's
             common["intensity_scale"] = scale if previous is None else (previous * scale).astype(np.float32)
+
+    def _normalise(self, common: dict, raw_data, raw_valid, corrections, counting: bool, name: str) -> None:
+        """Exposure time, monitor, transmission, thickness, absolute scale: ``c · I`` with one constant ``c`` of the
+        frame (``normalisation.py``; the header values of a sum of frames are their sums). The raw frame is kept;
+        photon counts get ``c`` into their scale (Poisson variance ``c × value``)."""
+        use = normalisation_use(corrections.normalisation, common.get("header_values") or {}, name)
+        factor = np.float32(use.factor)
+        if common.get("raw_data") is None:
+            common["raw_data"], common["raw_valid"] = raw_data, raw_valid
+        common["data"] = (np.asarray(common["data"], dtype=np.float32) * factor).astype(np.float32, copy=False)
+        if counting:
+            previous = common.get("intensity_scale")
+            common["intensity_scale"] = (np.full(common["data"].shape, factor, dtype=np.float32) if previous is None
+                                         else (previous * factor).astype(np.float32))
+        common["normalisation"] = use
 
 
 __all__ = ["FramePreprocessingMixin", "FrameSum", "floating", "photon_counts"]

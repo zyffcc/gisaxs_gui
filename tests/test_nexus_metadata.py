@@ -210,7 +210,18 @@ def test_the_classic_paths_and_plain_numbers_read_as_before(tmp_path: Path) -> N
         "pixel_size_x_m": 75e-6, "pixel_size_y_m": 75e-6, "distance_m": 2.5,
         "beam_center_x_px": 999.0, "beam_center_y_px": 888.0, "header_beam_center_px": (999.0, 888.0),
         "exposure_time_s": 0.5, "timestamp": "2024-01-02T03:04:05", "frame_time_s": None,
+        "monitor": None, "monitor_source": None,
     }
     empty = _file(tmp_path / "empty.nxs", {})
     with h5py.File(empty, "r") as handle:
         assert all(value is None for value in extract_nxs_metadata(handle).values())
+
+
+def test_a_monitor_of_the_entry_is_read_per_frame_with_its_place(tmp_path: Path) -> None:
+    """The normalisation offers it (Analyze: ``normalisation.header_values``); the first positive value of the
+    NXmonitor ``data`` / ``integral`` or the ``control`` group, of the frame asked."""
+    header = _header(tmp_path, {"/entry/monitor/data": [1.0e6, 2.0e6, 3.0e6]}, frame=1)
+    assert header["monitor"] == 2.0e6 and header["monitor_source"] == "/entry/monitor/data"
+    control = _header(tmp_path, {"/entry/monitor/data": [0.0], "/entry/control/integral": 5.5e5})
+    assert control["monitor"] == 5.5e5 and control["monitor_source"] == "/entry/control/integral"
+    assert _header(tmp_path, {})["monitor"] is None
