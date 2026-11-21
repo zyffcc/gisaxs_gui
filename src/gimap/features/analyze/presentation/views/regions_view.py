@@ -30,6 +30,8 @@ from PyQt5.QtWidgets import (
 
 from src.gimap.app.presentation.components import FlowLayout
 
+from .gisaxs_cuts_view import GisaxsCutsView
+
 EDITOR_PAGES = ("note", "width", "ring", "generic")
 REGION_LIST_TIP = (
     "Every region is cut along q (upper plot) and along χ (lower plot). Tick a region to show its curves and outline; "
@@ -81,8 +83,9 @@ def _plus_minus(first: QWidget, second: QWidget, parent: QWidget, unit: str) -> 
     return row
 
 
-class RegionsView:
-    """Adds ``self.regions_panel`` (call after ``build_option_sections``, which makes the width spins)."""
+class RegionsView(GisaxsCutsView):
+    """Adds ``self.regions_panel`` (call after ``build_option_sections``, which makes the width spins); the GISAXS
+    cuts of the same step come with it (``GisaxsCutsView``)."""
 
     def setup_regions_panel(self, parent: QWidget) -> QWidget:
         panel = QWidget(parent)

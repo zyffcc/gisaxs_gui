@@ -161,6 +161,7 @@ from .ports import (
     source_stem,
 )
 from .series import CorrectSeriesFrame
+from . import gisaxs_cuts as gisaxs_cut_tools  # the person's GISAXS cuts: units, outlines, the set-up they were made on
 from .settings_file import SETTINGS_FORMAT, AnalyzeSettings, settings_from_record, settings_record
 from .series_map import SERIES_TITLE, build_series_map, export_series_map, export_series_track, row_label, series_row
 from .series_stages import (
@@ -306,6 +307,7 @@ __all__ = [
     "Peak",
     "Pick",
     "PlaceRegions",
+    "gisaxs_cut_tools",
     "RING",
     "SECTOR",
     "SPOT",

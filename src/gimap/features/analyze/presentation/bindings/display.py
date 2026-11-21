@@ -211,6 +211,7 @@ class DisplayMixin:
                     points = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
                 points.append(points[0])
                 outlines.append(([x for x, _y in points], [y for _x, y in points], MASK_OUTLINE))
+            outlines += self.gisaxs_cut_shapes(VIEW_DETECTOR)[0]  # the person's GISAXS cuts, where they lie
             self.shape_layer.set_outlines(outlines)
             self.shape_layer.set_rects([])
             return
@@ -230,6 +231,7 @@ class DisplayMixin:
         if reduction.kind == GISAXS:
             view.show_horizontal_band(*markers["horizontal_band"])
             view.show_vertical_band(*markers["vertical_band"])
+            self._hide_unticked_bands()
 
     def _show_curves(self, analysis: FrameAnalysis) -> None:
         top, bottom = self.top_plot, self.bottom_plot
@@ -246,20 +248,8 @@ class DisplayMixin:
             return
         for plot in (top, bottom):  # a plot left without curves says so in its title
             plot.set_empty_text("")
-        if reduction.kind == GISAXS:
-            self._plot_keys = {"top": ["horizontal"], "bottom": ["vertical"]}
-            horizontal, vertical = reduction.curve("horizontal"), reduction.curve("vertical")
-            lines = cut_lines(analysis)
-            # Short titles (the header also holds the halves, Save and Log); the whole sentence in the tooltip.
-            top.set_title(tr("I(qy) · rows {rows} · {where}").format(
-                rows=pixel_range(*horizontal.region["rows"]), where=_horizontal_where(reduction, short=True)))
-            top.title_label.setToolTip(lines[0])
-            top.set_labels(horizontal.x_label, horizontal.y_label)
-            top.set_curves([("I(qy)", horizontal.x, horizontal.intensity)])
-            bottom.set_title(tr("I(qz) · columns {columns}").format(columns=pixel_range(*vertical.region["columns"])))
-            bottom.title_label.setToolTip(lines[-1])
-            bottom.set_labels(vertical.x_label, vertical.y_label)
-            bottom.set_curves([("I(qz)", vertical.x, vertical.intensity)], legend=[False])  # the title names it
+        if reduction.kind == GISAXS:  # the automatic cuts and the person's (``bindings/gisaxs_cut_display.py``)
+            self._show_gisaxs_curves(analysis)
             return
         self._show_giwaxs_curves(analysis)
 
@@ -330,6 +320,8 @@ class DisplayMixin:
         self._show_lower_profile()
 
     def _show_lower_profile(self) -> None:
+        if self._gisaxs_lower():  # a GISAXS frame: the cuts along qz, the sectors or the lines
+            return
         bottom = self.bottom_plot
         analysis = self.view_model.state.analysis
         reduction = analysis.reduction if analysis is not None else None

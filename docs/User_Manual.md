@@ -1273,6 +1273,44 @@ The same choice is in **Send to Fitting ▾** and in **Tools ▸ Settings… ▸
 Symmetric** moves the beam-centre column onto the symmetry axis of the cut (only x changes;
 section 4.6 describes how).
 
+#### GISAXS: cuts of your own
+
+Under the halves is the **List of cuts**. Its first two rows are the automatic cuts — **Yoneda cut**, the one Fitting
+takes, and **Vertical cut** — and you can add as many named cuts as you need:
+
+- **Add ▾** — a horizontal band (I(qy)), a vertical band (I(qz)), a box (I(qy) or I(qz)), a sector (I(qyz) in one
+  direction from the direct beam) or a line in any direction (I(s) along it). A new cut starts where it is easy to
+  see and is selected, so you can type its position at once.
+- **Draw on the image or the q map** — Horizontal, Vertical and Sector take one click, Box two opposite corners, Line
+  its two ends. Esc cancels.
+- The editor under the table sets the position: centre ± half width of a band, from–to of a box (and whether it is
+  cut along qy or qz), χ ± half width and the q range of a sector, the start and end points and the half width of a
+  line. The list beside **Add** chooses the unit: **q (Å⁻¹)**, **Angles (°)** (the exit angles: αf of qz, 2θf of
+  qy on the sample horizon) or **Pixels (px)** (rows on the beam-centre column, columns on the horizon row). The line
+  under the editor gives the position in the other two units.
+- Tick a row to show or hide its curve and outline. Double-click a name to rename it. **Duplicate** copies the
+  selected cut (of an automatic cut: a band of your own at the same q, to move elsewhere). **Remove** deletes it;
+  Ctrl+Z brings it back. Typing the Yoneda cut sets its rows, as dragging the orange band does. **Auto Cuts**
+  returns the automatic cuts to their places and keeps yours.
+
+![GISAXS cuts on the q map](manual_images/en/06b_gisaxs_cuts.png)
+
+*The Yoneda cut, a band at the specular reflection, a vertical band at a Bragg rod, a sector and a line, each in its
+own colour in the table, on the q map and in the plots; the band selected is typed in exit angles.*
+
+A cut has one colour everywhere: its row, its curve, its outline on the detector and on the q map, and its pixels
+under **Sources**. Horizontal bands and boxes along qy are in the upper plot with the Yoneda cut, vertical bands and
+boxes along qz in the lower plot; when there are sectors or lines, the list above the lower plot shows them. On the
+q map you can drag and resize bands and boxes. A pixel belongs to a cut when the q of its centre lies inside (whole
+pixels; only those above the horizon), so on the detector a band of constant qz curves slightly.
+
+Cuts are kept in q: they hold for every frame of the same set-up, also in Batch Export and series maps, and **Save
+Settings…** saves them. When a frame of another detector or geometry comes (detector, frame size, pixel size,
+distance, wavelength, beam centre or tilt), the Cuts step asks: **Keep Cuts** or **Remove Cuts**; until you choose,
+the cuts are applied at the same q. Each exported cut states its definition in q — and in αf or 2θf — in the
+`# region:` line of its CSV and in `_analysis.json`; the automatic cuts add the qz and αf (qy and 2θf) of their band
+edges.
+
 #### GIWAXS: regions, Ring / Sector / Spot
 
 A GIWAXS frame gives I(q) in the upper plot and I(χ) in the lower plot. χ = 0° is the surface

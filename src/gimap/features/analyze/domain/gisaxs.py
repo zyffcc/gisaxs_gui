@@ -14,9 +14,11 @@ from dataclasses import dataclass
 import numpy as np
 
 from src.gimap.shared.geometry import DetectorGeometry
+from src.gimap.shared.geometry.q_inverse import q_per_pixel
 from src.gimap.shared.geometry.q_mapping import grazing_q_region
 
 from .binning import binned_mean_2d, map_grid_shape, native_profile
+from .gisaxs_cuts import NO_PIXELS, column_band_q, cut_curve, cut_key, row_band_q
 from .models import GISAXS, Curve, GisaxsCutSettings, ReciprocalSpaceMap, Reduction, YonedaEstimate
 
 YONEDA_SEARCH_MAX_DEG = 1.5
@@ -243,6 +245,21 @@ def _empty_curve(key: str, title: str, x_label: str, region: dict) -> Curve:
     return Curve(key, title, empty, empty, empty, np.array([], dtype=np.int64), x_label, region=region)
 
 
+def _with_q_edges(curves, geometry: DetectorGeometry) -> tuple[Curve, ...]:
+    """The automatic cuts with where their bands lie in q and in exit angle (``row_band_q``, ``column_band_q``), for
+    the record of an export: the pixels and the numbers stay as they are."""
+    horizontal, vertical = curves
+    rows, columns = horizontal.region["rows"], vertical.region["columns"]
+    extra_h = row_band_q(geometry, *rows) if rows[1] > rows[0] else {}
+    extra_v = column_band_q(geometry, *columns) if columns[1] > columns[0] else {}
+    return (
+        Curve(horizontal.key, horizontal.title, horizontal.x, horizontal.intensity, horizontal.sigma, horizontal.pixels,
+              horizontal.x_label, horizontal.y_label, {**horizontal.region, **extra_h}),
+        Curve(vertical.key, vertical.title, vertical.x, vertical.intensity, vertical.sigma, vertical.pixels,
+              vertical.x_label, vertical.y_label, {**vertical.region, **extra_v}),
+    )
+
+
 def reduce_gisaxs(
     image: np.ndarray,
     valid: np.ndarray,
@@ -251,8 +268,10 @@ def reduce_gisaxs(
     *,
     q_map: ReciprocalSpaceMap | None = None,
     counts: bool | np.ndarray = True,
+    maps: GisaxsMaps | None = None,
 ) -> Reduction:
-    """Yoneda-band horizontal cut and beam-centre vertical cut, no user input needed.
+    """Yoneda-band horizontal cut and beam-centre vertical cut, no user input needed, then the person's cuts
+    (``settings.regions``, ``gisaxs_cuts``; they need the frame's ``maps``), keys ``cut1``, ``cut2`` …
 
     ``counts``: the frame holds photon counts (Poisson errors); ``False``: not counts (the scatter of the pixels);
     an array of the frame's shape: photon counts multiplied per pixel by it (a flat field, ``flat_field.py``), so
@@ -306,9 +325,20 @@ def reduce_gisaxs(
             counts=counts,
         ),
     )
+    curves = _with_q_edges(curves, geometry)
     for curve in curves:
         if curve.is_empty:
             warnings_out.append(f"{curve.title}: no valid pixels in the cut band.")
+    if settings.regions:
+        if maps is None:
+            maps = gisaxs_maps(image.shape, geometry)
+        usable = np.asarray(valid, dtype=bool) & maps.above_horizon
+        step = q_per_pixel(geometry)
+        for index, cut in enumerate(settings.regions):
+            curve = cut_curve(cut, cut_key(index), maps, image, usable, step=step, counts=counts, geometry=geometry)
+            if curve.is_empty:
+                warnings_out.append(NO_PIXELS.format(name=cut.name))
+            curves = (*curves, curve)
     markers = {
         "beam_center": (geometry.beam_center_x_px, geometry.beam_center_y_px),
         "horizon_row": geometry.horizon_row(),

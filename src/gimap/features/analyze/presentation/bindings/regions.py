@@ -21,6 +21,7 @@ from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import GISAXS, CutRegion, default_region_near, region_key, region_outline
 from ..texts import message_text
+from .gisaxs_cuts import GisaxsCutsMixin
 
 STANDARD_COLORS = {
     "full": "#2563eb", "in_plane": "#f97316", "out_of_plane": "#16a34a", "ring": "#9333ea", "sector": "#dc2626",
@@ -108,10 +109,12 @@ def _swatch(color: str) -> QIcon:
     return QIcon(pixmap)
 
 
-class RegionsMixin:
-    """Needs the regions widgets (``views/regions_view.py``), ``shape_layer``, ``view_model``, ``run_analysis``."""
+class RegionsMixin(GisaxsCutsMixin):
+    """Needs the regions widgets (``views/regions_view.py``), ``shape_layer``, ``view_model``, ``run_analysis``; the
+    GISAXS cuts of the same step come with it (``GisaxsCutsMixin``)."""
 
     def _connect_regions(self) -> None:
+        self._connect_gisaxs_cuts()
         self._hidden_regions: set[str] = set()
         self._region_rows: list[RegionRow] = []
         self.region_list.itemChanged.connect(self._region_item_changed)
@@ -146,6 +149,7 @@ class RegionsMixin:
         return not any(curve_key in (row.q_curve, row.chi_curve) for row in self._region_rows if row.key in self._hidden_regions)
 
     def _refresh_regions(self, analysis) -> None:
+        self._check_cut_setup(analysis)  # regions made on another set-up: keep or remove (``GisaxsCutsMixin``)
         reduction = analysis.reduction if analysis is not None else None
         if reduction is None or reduction.kind == GISAXS:
             self._region_rows = []
@@ -191,6 +195,7 @@ class RegionsMixin:
         self._fit_region_list()  # the rows' height follows the font of the language
         if self._region_rows:
             self._region_selected()
+        self._cut_texts()
 
     def _selected_row(self) -> Optional[RegionRow]:
         row = self.region_list.currentRow()
@@ -367,7 +372,10 @@ class RegionsMixin:
         return [row for row in self._region_rows if row.key not in self._hidden_regions]
 
     def region_shapes(self, view: int) -> tuple[list, list]:
-        """``(outlines, rects)`` of the visible regions for the q map (1) or the cake (2)."""
+        """``(outlines, rects)`` of the visible regions for the q map (1) or the cake (2); of a GISAXS frame, its cuts."""
+        analysis = self.view_model.state.analysis
+        if analysis is not None and analysis.kind == GISAXS:
+            return self.gisaxs_cut_shapes(view)
         outlines, rects = [], []
         q_limits = self._q_limits()
         for row in self._visible_rows():

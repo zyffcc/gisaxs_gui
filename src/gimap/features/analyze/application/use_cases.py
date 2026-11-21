@@ -111,12 +111,16 @@ class AnalyzeFrame(FramePreprocessingMixin):
         source = self._q_map_source
         if source is not None and source[0] is data and source[1] is valid and self._q_map_key == key:
             return self._q_map  # the arrays are held here, so identity cannot be reused by another frame
+        self._q_map = gisaxs_q_map(data, valid, self._gisaxs_maps_for(shape, geometry))
+        self._q_map_key, self._q_map_source = key, (data, valid)
+        return self._q_map
+
+    def _gisaxs_maps_for(self, shape: tuple[int, int], geometry: DetectorGeometry):
+        """qy, qz of every pixel of a GISAXS frame (cached for its shape and geometry): the q map and the cuts."""
         if self._gisaxs_maps is None or self._gisaxs_maps_key != (shape, geometry):
             self._gisaxs_maps = gisaxs_maps(shape, geometry)
             self._gisaxs_maps_key = (shape, geometry)
-        self._q_map = gisaxs_q_map(data, valid, self._gisaxs_maps)
-        self._q_map_key, self._q_map_source = key, (data, valid)
-        return self._q_map
+        return self._gisaxs_maps
 
     def maps_of(self, analysis: FrameAnalysis) -> GiwaxsMaps:
         """The q maps of a GIWAXS frame (cached for its shape and geometry)."""
@@ -136,9 +140,11 @@ class AnalyzeFrame(FramePreprocessingMixin):
         reduction = analysis.reduction
         if reduction is None or analysis.geometry is None:
             return {}
-        maps = None
+        shape = (int(analysis.data.shape[0]), int(analysis.data.shape[1]))
         if reduction.kind != GISAXS:
-            maps = self._giwaxs_maps((int(analysis.data.shape[0]), int(analysis.data.shape[1])), analysis.geometry)
+            maps = self._giwaxs_maps(shape, analysis.geometry)
+        else:  # (the person's cuts are in q; the two automatic bands are rows and columns)
+            maps = self._gisaxs_maps_for(shape, analysis.geometry) if has_person_cuts(reduction) else None
         masks = {}
         for key in keys:
             curve = reduction.curve(key)
@@ -225,6 +231,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
             reduction = reduce_gisaxs(
                 data, valid, geometry, request.gisaxs, counts=scale if scale is not None else counting,
                 q_map=self._gisaxs_q_map(data, valid, geometry) if request.with_map else None,
+                maps=self._gisaxs_maps_for(shape, geometry) if request.gisaxs.regions else None,
             )
         else:
             reduction = reduce_giwaxs(
@@ -242,6 +249,11 @@ class AnalyzeFrame(FramePreprocessingMixin):
             detected_kind=detected,
             flat_detector=flat,
         )
+
+
+def has_person_cuts(reduction: Reduction) -> bool:
+    """Whether a GISAXS reduction holds a cut the person defined (whose pixels need the q maps)."""
+    return any("gisaxs_cut" in curve.region for curve in reduction.curves)
 
 
 def header_beam_center(

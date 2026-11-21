@@ -30,6 +30,7 @@ from .sources_model import SourcesModelMixin, source_stamp
 from .geometry_model import FIT_SIDE_KEY, HEADER_CENTER_KEY, SECTION, GeometryModelMixin
 from .batch_model import BatchModelMixin
 from .export_model import EXPORT_FOLDER, ExportModelMixin
+from .gisaxs_cuts_model import GisaxsCutsModelMixin
 from .options_model import GAP_GUARD_KEY, OptionsModelMixin
 from .texts import flat_detector_summary, tilt_summary
 
@@ -64,7 +65,7 @@ class AnalyzeState:
 
 class AnalyzeViewModel(
     GeometryModelMixin, OptionsModelMixin, SourcesModelMixin, FramesModelMixin, SeriesModelMixin, ExportModelMixin,
-    BatchModelMixin,
+    BatchModelMixin, GisaxsCutsModelMixin,
 ):
     def __init__(
         self,
@@ -208,8 +209,9 @@ class AnalyzeViewModel(
         return notes
 
     def reset_cuts(self) -> None:
-        """Back to the automatic cut positions (Yoneda, beam centre, strongest ring)."""
-        self.state.gisaxs = GisaxsCutSettings()
+        """Back to the automatic cut positions (Yoneda, beam centre, strongest ring); the GISAXS cuts the person
+        defined stay (they are not automatic positions)."""
+        self.state.gisaxs = GisaxsCutSettings(regions=self.state.gisaxs.regions)
         self.state.giwaxs = GiwaxsSettings()
         self._opened_cut = None  # (found in the frame again, also for a frame opened from a Series map)
 

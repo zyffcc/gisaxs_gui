@@ -6,6 +6,16 @@ from .flat_field import FlatField, apply_flat_field, check_flat_shape, normalise
 from .cake import CakeMap, cake_map
 from .preprocess import POLYGON, RECTANGLE, MaskShape, mirror_fill, rasterize
 from .regions import CutRegion, default_region_near, region_key, region_outline
+from .gisaxs_cuts import (
+    CUT_KINDS,
+    GisaxsCut,
+    cut_from_record,
+    cut_key,
+    cut_mask,
+    cut_outlines,
+    cut_record,
+    cut_rect,
+)
 from .peak_fit import PROFILES, PeakFit, fit_peak
 from .region_pick import PICK_KINDS, RING, SECTOR, SPOT, Peak, Pick, pick_region, region_kind, snap_region
 from .binning import BinnedMean, binned_mean, binned_mean_2d, native_profile
@@ -67,6 +77,14 @@ from .symmetry import SymmetryCenter, symmetric_center_x
 from .validity import valid_pixels
 
 __all__ = [
+    "CUT_KINDS",
+    "GisaxsCut",
+    "cut_from_record",
+    "cut_key",
+    "cut_mask",
+    "cut_outlines",
+    "cut_record",
+    "cut_rect",
     "PROFILES",
     "PeakFit",
     "fit_peak",

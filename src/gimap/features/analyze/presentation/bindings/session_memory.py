@@ -114,8 +114,9 @@ def _setup_summary(settings) -> str:
         parts.append(tr("profile “{name}”").format(name=settings.profile_name))
     if settings.incidence_deg is not None:  # an αi typed for the beamtime, not the profile's
         parts.append(trf("αi {value}°", value=f"{settings.incidence_deg:g}"))
-    if settings.giwaxs.regions:
-        parts.append(tr("{n} cut regions").format(n=len(settings.giwaxs.regions)))
+    regions = len(settings.giwaxs.regions) + len(settings.gisaxs.regions)  # (GIWAXS regions, GISAXS cuts)
+    if regions:
+        parts.append(tr("{n} cut regions").format(n=regions))
     shapes = len(settings.corrections.mask_shapes) + (1 if settings.corrections.mask_path else 0)
     if shapes:
         parts.append(tr("{n} masks").format(n=shapes))

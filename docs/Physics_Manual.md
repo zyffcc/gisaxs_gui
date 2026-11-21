@@ -1082,11 +1082,55 @@ That gives 10 columns when c is an integer and 11 otherwise, and only rows entir
 
 The nominal band sizes are therefore "5 px high" and "10 px wide". The error model is that of section 6.4.
 
+**Where the automatic bands lie in q.** Their curves' records (the `# region:` line of the CSV and `_analysis.json`)
+also give `qz_edges` and `alpha_f_edges_deg` (the q_z and α_f of the horizontal band's row edges `⌊r_c − h⌋` and
+`⌈r_c + h⌉` on the beam-centre column) and `qy_edges` and `two_theta_f_edges_deg` (the q_y and 2θ_f of the vertical
+band's column edges on the horizon row). The bands themselves stay whole rows and columns, (6.12)–(6.14).
+
+**Cuts of the person, defined in q.** The Cuts step holds any number of named cuts besides the two automatic ones.
+Each is defined in the `q_y`–`q_z` plane (Å⁻¹, `q_y` signed), so it means the same on every frame of the geometry and
+is drawn alike on the detector (mapped back to pixels) and on the q map. A pixel belongs to a cut when the q of its
+centre lies inside it — whole pixels, never split — and only usable pixels count (valid and above the horizon, as in
+6.8):
+
+```text
+horizontal band   z_0 ≤ q_z,p ≤ z_1                  one point per column, x = mean q_y   (6.4)
+vertical band     y_0 ≤ q_y,p ≤ y_1                  one point per row, x = mean q_z      (6.4)
+box               both, one point per column (along q_y) or per row (along q_z)
+sector            c_0 ≤ atan2(q_y,p, q_z,p) ≤ c_1,   r_0 ≤ q_yz,p = √(q_y,p² + q_z,p²) ≤ r_1        (6.14a)
+line              0 ≤ s_p ≤ L,  |t_p| ≤ w,   s_p = (q_p − q_A)·û,  t_p = (q_p − q_A)·n̂                (6.14b)
+```
+
+χ of a sector is measured from the `q_z` axis (0°, the surface normal) with the sign of `q_y`; its origin is the direct
+beam. A line runs from `q_A` to `q_B` (`û` along it, `n̂` across, `L = |q_B − q_A|`, half width `w`). Sector and line
+curves are fixed-edge bins (6.2) of width `Δq = k p/D` (`p` the smaller pixel size: the q of one pixel near the direct
+beam) over `[r_0, r_1]` (a sector without a q range: over the range of its pixels) or `[0, L]`, sparse bins joined as
+in 6.5; their x is `q_yz` or the distance `s` along the line. The errors follow the frame's model (6.4), as for every
+curve. A horizontal band at the q_z of the Yoneda row does not reproduce the automatic cut exactly: a row of constant
+q_z curves a little across a flat detector, so off the beam column it takes slightly different pixels.
+
+**Typing a cut in angles or pixels.** Each axis converts on its own, exactly and invertibly:
+
+```text
+q_z = k (sin α_f + sin α_i)       (with refraction: k (√(sin² α_f − sin² α_c) + √(sin² α_i − sin² α_c)))   (6.14c)
+q_y = k sin 2θ_f                  (2θ_f on the sample horizon, α_f = 0)
+row y of q_z:  q_z(x_c, y) = q_z on the beam-centre column;   column x of q_y:  q_y(x, y_h) = q_y on the horizon row   (6.14d)
+```
+
+The rows and columns are found by mapping q back to the detector (the exact model of section 2, tilted detectors
+included). A line's half width typed in pixels is `w/(k p/D)`, in degrees `w/k` (small angles). The values shown in
+the two other units are these conversions; the cut is the q region.
+
+**Cuts on another set-up.** The cuts are kept with the set-up they were made on: detector name, frame size, pixel
+size, distance (±0.5 mm), wavelength (relative 10⁻⁴), beam centre (±1 px) and detector tilt (±0.01°). A frame of
+another file that differs in any of these asks whether to keep or remove the cuts; until then they are applied (they
+are in q). α_i is not compared: in q the cuts mean the same at another α_i.
+
 **Make Left and Right Symmetric** (Cuts step) moves `x_c` onto the mirror axis of the horizontal band and changes nothing else. The Cuts step and Run Automatic Analysis use the same method; section 8.2 gives it.
 
 **GISAXS q map.** A grid of at most 600 × 600 cells in `q_y`–`q_z` over the range of the usable pixels (section 6.8).
 
-Implementation: `src/gimap/features/analyze/domain/gisaxs.py`, `src/gimap/features/analyze/domain/binning.py`, `src/gimap/features/analyze/domain/symmetry.py`, `src/gimap/features/analyze/domain/symmetry_coarse.py`
+Implementation: `src/gimap/features/analyze/domain/gisaxs.py`, `src/gimap/features/analyze/domain/gisaxs_cuts.py`, `src/gimap/features/analyze/application/gisaxs_cuts.py`, `src/gimap/shared/geometry/q_inverse.py`, `src/gimap/features/analyze/domain/binning.py`, `src/gimap/features/analyze/domain/symmetry.py`, `src/gimap/features/analyze/domain/symmetry_coarse.py`
 
 ### 6.8 The q map and the cake
 

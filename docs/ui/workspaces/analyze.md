@@ -248,6 +248,24 @@ Send to Fitting（命令栏和 Export 步骤的按钮都走 `bindings/fit_handov
   （光束中心、地平线、切线带、掩膜与区域、像素叠加层、热 / 死像素、q 框、色标、窗口带），全部显示 / 隐藏；隐藏选择按视图
   记在设置 `analyze.hidden_marks`；自己画的可从同一菜单删除（掩膜、全部区域、q 框，可撤销）。
 
+## GISAXS：自己的切线（Cuts 步骤）
+
+- 静态布局 `views/gisaxs_cuts_view.py`（`GisaxsCutsView`，经 `RegionsView` 混入；“另一套设置”的提示卡 `cut_notice` 放在
+  Cuts 步骤顶部，GISAXS 和 GIWAXS 都用）；行为 `bindings/gisaxs_cuts.py`（表格、编辑区、添加 / 复制 / 移除 / 改名 / 显示、
+  单位、另一套设置的询问）和 `bindings/gisaxs_cut_display.py`（上下图的曲线、下图列表 Cuts along qz / Sectors / Lines、
+  探测器图和 q 图上的轮廓、在图上画），经 `RegionsMixin` 混入；视图模型 `gisaxs_cuts_model.py`（`AnalyzeState.gisaxs.regions`、
+  `cut_home`）。
+- 切线在 q 中定义（`domain/gisaxs_cuts.py` 的 `GisaxsCut`：horizontal / vertical / box / sector / line），曲线键 `cut1`、`cut2` …；
+  像素中心的 q 落在切线内即属于它（整像素，只计地平线以上）。带和框每列 / 每行一个点（`native_profile`），扇区和线按
+  k·p/D 宽的区间（`BinnedMean` + `merge_sparse_bins`）。自动的 `horizontal` / `vertical` 不变（`gisaxs.py`，整行整列），
+  记录里另加 `qz_edges`、`alpha_f_edges_deg`、`qy_edges`、`two_theta_f_edges_deg`。
+- 单位换算（`application/gisaxs_cuts.py`）：q_z ↔ α_f ↔ 光束中心列上的行；q_y ↔ 地平线上的 2θ_f ↔ 地平线所在行上的列；
+  q → 像素用 `shared/geometry/q_inverse.py`（精确模型的逆，含倾斜和折射）。
+- 设置文件 `gisaxs.cuts`；Auto Cuts 保留自己的切线；Sources 用 `curve_source_mask`（GISAXS 切线需要 `GisaxsMaps`，
+  `AnalyzeFrame._gisaxs_maps_for` 缓存）。另一套设置（探测器、帧尺寸、像素、距离、波长、光束中心、倾斜；不比 αi）的
+  帧来时显示提示卡和 toast：Keep Cuts / Remove Cuts。
+- 测试：`tests/test_gisaxs_cuts.py`（含 Yoneda 切线与 218cbe2 相同的数值）。
+
 ## GIWAXS：区域与切线（Cuts 步骤）
 
 - 三种视图（图像区上方）：Detector、q map（q∥ 即 qr / qxy 对 qz）、Cake（展开图：χ 对 q，环是竖线、区域是矩形）。

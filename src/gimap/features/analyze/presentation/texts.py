@@ -19,6 +19,7 @@ from ..application import RECTANGLE
 from ..application.flat_detector import DETECTOR_ROTATION_MESSAGE, FLAT_DETECTOR_MESSAGE
 from ..application.flat_field import FLAT_FIELD_TEMPLATES
 from ..application.geometry_resolution import CENTER_NOT_USED, CENTER_NOT_USED_HEADER
+from ..application.gisaxs_cuts import CUT_TEMPLATES
 
 NO_PROFILE = "No instrument profile for {detector} ({shape}). Calibrate once or enter the geometry to get q curves."
 PROFILE_SHAPE = "Profile “{name}” is for {profile_shape} frames; this frame is {shape}."
@@ -95,6 +96,7 @@ TEMPLATES: tuple[tuple[str, dict[str, Callable[[str], str]]], ...] = (
     (REGION_Q_EMPTY, {}),
     (REGION_CHI_EMPTY, {}),
     (MASK_SHAPE, {}),
+    *((template, {}) for template in CUT_TEMPLATES),  # a GISAXS cut that cannot be made or holds nothing
     *((template, {"error": _frame_beyond} if template == FEWER_FRAMES else {}) for template in READ_ERRORS),
 )
 """English templates of the messages made elsewhere, with what to do with each value (default: keep it)."""

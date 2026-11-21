@@ -1059,11 +1059,48 @@ c 为整数时为 10 列，否则为 11 列，并且只取完全在样品地平�
 
 因此名义上的条带尺寸是“5 px 高”和“10 px 宽”。误差模型见 6.4 节。
 
+**自动条带在 q 中的位置。** 它们曲线的记录（CSV 的 `# region:` 行和 `_analysis.json`）还给出 `qz_edges` 和
+`alpha_f_edges_deg`（水平条带的行边缘 `⌊r_c − h⌋` 和 `⌈r_c + h⌉` 在光束中心列上的 q_z 和 α_f），以及 `qy_edges` 和
+`two_theta_f_edges_deg`（竖直条带的列边缘在样品地平线所在行上的 q_y 和 2θ_f）。条带本身仍是整行和整列，(6.12)–(6.14)。
+
+**用户以 q 定义的切线。** 除两条自动切线外，切线（Cuts）步骤可以有任意多条有名字的切线。每条都在 `q_y`–`q_z`
+平面中定义（Å⁻¹，`q_y` 带符号），因此对这一几何的每一帧意义相同，并且在探测器图（映射回像素）和 q 图上画法一致。
+像素中心的 q 落在切线内时，这个像素属于该切线——整像素，从不拆分——并且只计可用像素（有效且在样品地平线以上，同 6.8）：
+
+```text
+horizontal band   z_0 ≤ q_z,p ≤ z_1                  每列一个点，x = mean q_y   (6.4)
+vertical band     y_0 ≤ q_y,p ≤ y_1                  每行一个点，x = mean q_z   (6.4)
+box               两者，沿 q_y 时每列一个点，沿 q_z 时每行一个点
+sector            c_0 ≤ atan2(q_y,p, q_z,p) ≤ c_1,   r_0 ≤ q_yz,p = √(q_y,p² + q_z,p²) ≤ r_1        (6.14a)
+line              0 ≤ s_p ≤ L,  |t_p| ≤ w,   s_p = (q_p − q_A)·û,  t_p = (q_p − q_A)·n̂                (6.14b)
+```
+
+扇区的 χ 从 `q_z` 轴（0°，表面法线）量起，符号同 `q_y`；原点是直射束。线从 `q_A` 到 `q_B`（`û` 沿线，`n̂` 垂直于线，
+`L = |q_B − q_A|`，半宽 `w`）。扇区和线的曲线是宽度为 `Δq = k p/D` 的固定边界区间（6.2；`p` 取较小的像素尺寸：
+直射束附近一个像素的 q），范围为 `[r_0, r_1]`（没有 q 范围的扇区：其像素的范围）或 `[0, L]`，稀疏区间按 6.5 合并；
+横坐标是 `q_yz` 或沿线的距离 `s`。误差与每条曲线一样，遵循该帧的模型（6.4）。放在 Yoneda 行 q_z 处的水平带并不完全
+重现自动切线：在平板探测器上 q_z 恒定的曲线略有弯曲，所以离开光束列后取到的像素略有不同。
+
+**以角度或像素输入切线。** 每个轴各自换算，精确且可逆：
+
+```text
+q_z = k (sin α_f + sin α_i)       （有折射时：k (√(sin² α_f − sin² α_c) + √(sin² α_i − sin² α_c))）   (6.14c)
+q_y = k sin 2θ_f                  （样品地平线上的 2θ_f，α_f = 0）
+q_z 对应的行 y：光束中心列上 q_z(x_c, y) = q_z；   q_y 对应的列 x：地平线所在行上 q_y(x, y_h) = q_y   (6.14d)
+```
+
+行和列通过把 q 映射回探测器求得（第 2 节的精确模型，包括倾斜的探测器）。线的半宽以像素输入时为 `w/(k p/D)`，
+以度输入时为 `w/k`（小角度）。另外两种单位中显示的数值就是这些换算；切线本身是那块 q 区域。
+
+**另一套设置上的切线。** 切线与做它们时的设置一起保存：探测器名、帧尺寸、像素尺寸、距离（±0.5 mm）、波长（相对
+10⁻⁴）、光束中心（±1 px）和探测器倾斜（±0.01°）。另一个文件的帧只要其中任一项不同，就会询问保留还是移除这些切线；
+在此之前切线照常应用（它们以 q 定义）。不比较 α_i：在 q 中，切线在另一个 α_i 下意义相同。
+
 **使左右对称**（Make Left and Right Symmetric；切线（Cuts）步骤）把 `x_c` 移到水平条带的镜像轴上，其他什么都不改。切线步骤和运行自动分析用的是同一种方法；见 8.2 节。
 
 **GISAXS q 图。** 在可用像素的范围内，`q_y`–`q_z` 上至多 600 × 600 格的网格（6.8 节）。
 
-实现：`src/gimap/features/analyze/domain/gisaxs.py`, `src/gimap/features/analyze/domain/binning.py`, `src/gimap/features/analyze/domain/symmetry.py`, `src/gimap/features/analyze/domain/symmetry_coarse.py`
+实现：`src/gimap/features/analyze/domain/gisaxs.py`, `src/gimap/features/analyze/domain/gisaxs_cuts.py`, `src/gimap/features/analyze/application/gisaxs_cuts.py`, `src/gimap/shared/geometry/q_inverse.py`, `src/gimap/features/analyze/domain/binning.py`, `src/gimap/features/analyze/domain/symmetry.py`, `src/gimap/features/analyze/domain/symmetry_coarse.py`
 
 ### 6.8 q 图与展开图
 

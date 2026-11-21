@@ -70,6 +70,8 @@ class GisaxsCutSettings:
     horizontal_half_height_px: float = 2.5
     vertical_column: float | None = None
     vertical_half_width_px: float = 5.0
+    regions: tuple = ()
+    """Cuts the person defined (``gisaxs_cuts.GisaxsCut``, in q): each gives one curve, keys ``cut1``, ``cut2`` …"""
 
 
 @dataclass(frozen=True)

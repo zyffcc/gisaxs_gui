@@ -12,6 +12,20 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **GISAXS cuts of your own, in q: bands, boxes, sectors and lines in any direction.** The Cuts step of a GISAXS
+  frame has a **Cuts** table: the automatic Yoneda cut (the one Fitting takes) and vertical cut first, then as many
+  named cuts as you add — horizontal bands (I(qy)), vertical bands (I(qz)), boxes (along qy or qz), sectors (I(qyz)
+  in a direction from the direct beam) and lines in any direction with a width (I(s) along them). Add them from
+  **Add ▾** or draw them on the detector image or the q map; type their position and width in q (Å⁻¹), exit angles
+  (αf, 2θf) or detector pixels; rename, duplicate, remove, show or hide them. Each cut has one colour in the table,
+  the plots, the detector view and the q map (where the automatic bands are now drawn too, and bands and boxes can be
+  dragged). A cut averages the whole pixels whose centre q lies inside it, with the frame's error model; sectors and
+  lines are binned one pixel wide. Cuts are kept in q (also in settings files, Batch Export and series), and a frame
+  of another detector or geometry asks whether to **Keep Cuts** or **Remove Cuts** instead of using them silently.
+  The CSV and `_analysis.json` of every cut state it in q (and αf or 2θf); those of the automatic cuts add the qz/αf
+  and qy/2θf of their band edges. The automatic cuts and their numbers are unchanged; **Auto Cuts** now keeps the
+  cuts you added (*Physics and Methods* 6.7).
+
 - **A sphere too large for the form factor at q_z = 0 is flagged.** Predict parameters fits a cut at q_z = 0 (the
   effective interface) unless it is given the cut's angles; for spheres that holds within about 5 % of R only up to
   q_z·R ≈ 1.7 (on the four-term DWBA benchmark the median error of R is 15–29 % above it, with both angles below

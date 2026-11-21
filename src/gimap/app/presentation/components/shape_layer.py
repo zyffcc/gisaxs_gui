@@ -4,9 +4,9 @@
   region on the q map).
 * ``set_rects([(key, x0, y0, x1, y1, color, editable), …])``: rectangles; an editable one can be
   moved and resized and emits ``rectChanged(key, x0, y0, x1, y1)`` when the drag ends.
-* ``start_drawing("rectangle" | "polygon" | "point", purpose=…)``: a rectangle is two clicks
-  (opposite corners), a polygon one click per vertex and a double click (or Enter) to close, a
-  point one click; Esc cancels, Backspace removes the last vertex. The result is emitted in view
+* ``start_drawing("rectangle" | "line" | "polygon" | "point", purpose=…)``: a rectangle is two clicks
+  (opposite corners), a line two clicks (its ends), a polygon one click per vertex and a double click (or Enter)
+  to close, a point one click; Esc cancels, Backspace removes the last vertex. The result is emitted in view
   coordinates as ``shapeDrawn(kind, [(x, y), …])`` for a mask (the default purpose) and as
   ``shapePicked(purpose, kind, [(x, y), …])`` for any other purpose (e.g. placing a cut region).
   While drawing, the view's own clicks (beam centre, double click) are held back.
@@ -19,6 +19,7 @@ from typing import Optional
 from PyQt5.QtCore import QEvent, QObject, Qt, pyqtSignal
 
 RECTANGLE = "rectangle"
+LINE = "line"
 POLYGON = "polygon"
 POINT = "point"
 MASK_PURPOSE = "mask"
@@ -121,7 +122,7 @@ class ShapeLayer(QObject):
     # -- drawing -------------------------------------------------------------------------
 
     def start_drawing(self, kind: str, *, purpose: str = MASK_PURPOSE) -> None:
-        if kind not in (RECTANGLE, POLYGON, POINT):
+        if kind not in (RECTANGLE, LINE, POLYGON, POINT):
             raise ValueError(f"Unknown shape {kind!r}.")
         self.view.set_pick_mode(False)
         if self.kind:
@@ -168,7 +169,7 @@ class ShapeLayer(QObject):
         if self.kind == POINT:
             self._finish([(x, y)])
             return
-        if self.kind == RECTANGLE:
+        if self.kind in (RECTANGLE, LINE):
             self._points.append((x, y))
             if len(self._points) == 2:
                 self._finish(list(self._points))
@@ -190,6 +191,8 @@ class ShapeLayer(QObject):
         if self.kind == RECTANGLE and cursor is not None and points:
             (x0, y0), (x1, y1) = points[0], cursor
             points = [(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)]
+        elif self.kind == LINE and cursor is not None and points:
+            points = [points[0], cursor]
         elif cursor is not None:
             points = points + [cursor, points[0]]
         self._preview.setData([x for x, _y in points], [y for _x, y in points])
@@ -210,4 +213,4 @@ class ShapeLayer(QObject):
         return False
 
 
-__all__ = ["DRAW_COLOR", "MASK_PURPOSE", "POINT", "POLYGON", "RECTANGLE", "ShapeLayer"]
+__all__ = ["DRAW_COLOR", "LINE", "MASK_PURPOSE", "POINT", "POLYGON", "RECTANGLE", "ShapeLayer"]

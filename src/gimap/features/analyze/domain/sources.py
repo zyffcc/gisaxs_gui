@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from .gisaxs_cuts import cut_from_record, cut_mask
 from .giwaxs import GiwaxsMaps
 from .models import Curve
 from .regions import region_mask
@@ -23,11 +24,16 @@ def _band(shape: tuple[int, int], rows: tuple[int, int], columns: tuple[int, int
 
 
 def curve_source_mask(curve: Curve, valid: np.ndarray, maps: GiwaxsMaps | None = None) -> np.ndarray:
-    """Boolean mask (frame shape) of the pixels averaged into ``curve``."""
+    """Boolean mask (frame shape) of the pixels averaged into ``curve`` (``maps``: the frame's ``GiwaxsMaps``, or
+    its ``GisaxsMaps`` for a cut the person defined on a GISAXS frame)."""
     valid = np.asarray(valid, dtype=bool)
     region = dict(curve.region)
     if curve.key in ("horizontal", "vertical"):
         return valid & _band(valid.shape, region["rows"], region["columns"])
+    if "gisaxs_cut" in region:
+        if maps is None:
+            raise ValueError("GISAXS cuts need the q maps of the frame.")
+        return cut_mask(cut_from_record(region), maps, valid & maps.above_horizon)
     if "cut_region" in region:
         if maps is None:
             raise ValueError("GIWAXS curves need the q maps of the frame.")
