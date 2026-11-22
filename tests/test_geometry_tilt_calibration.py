@@ -170,3 +170,18 @@ def test_the_public_agbh_frame_is_fitted_better_with_the_tilt() -> None:
     assert best.center_y_px + 0.5 == pytest.approx(263.86, abs=0.5)
     assert abs(best.rot1_deg) < 1.0 and abs(best.rot2_deg) < 1.0  # a small tilt (the .poni: 0.37°, 0.43°)
     assert best.rot2_deg == pytest.approx(0.433, abs=3 * best.rot2_sigma_deg)
+
+
+def test_the_window_shows_one_rms_residual_and_says_which_it_is() -> None:
+    """With the tilt refined: the ring points of the tilted geometry (the same points without the tilt in the
+    tooltip); without: the ring radii. The tilt's own tooltip no longer carries a second RMS."""
+    from src.gimap.features.calibration.domain.models import CalibrationCandidate
+    from src.gimap.features.calibration.presentation.residual_text import rms_text, rms_tip, rms_title
+
+    tilted = CalibrationCandidate("agbh", 179.3, 263.5, 1634.0, rms_residual_px=1.056, tilt_refined=True,
+                                  point_rms_px=0.45, untilted_point_rms_px=1.80)
+    assert (rms_title(tilted), rms_text(tilted), rms_text(tilted, 2)) == ("Ring-point RMS:", "0.450 px", "0.45 px")
+    assert "with the detector tilt" in rms_tip(tilted) and "without the tilt: 1.800 px" in rms_tip(tilted)
+    flat = CalibrationCandidate("agbh", 179.3, 263.5, 1634.0, rms_residual_px=1.056)
+    assert (rms_title(flat), rms_text(flat)) == ("Ring-radius RMS:", "1.056 px")
+    assert "azimuthal average" in rms_tip(flat)

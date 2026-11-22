@@ -23,6 +23,7 @@ from ...application import (
 
 
 from ..pixel_coordinates import fitted_center, image_extent, image_limits, shown_center
+from ..residual_text import rms_text, rms_tip, rms_title
 from ..preview_style import (
     CENTER_COLOR,
     DETECTED_RING_COLOR,
@@ -145,7 +146,10 @@ class ResultPreviewMixin:
                 value=f"{value:.2g}", unit=unit, method=tr(candidate.uncertainty_method)))
         self._show_tilt(candidate)
         self.result_labels["Matched rings"].setText(str(candidate.matched_ring_count))
-        self.result_labels["RMS residual"].setText(f"{candidate.rms_residual_px:.3f} px")
+        self.result_labels["RMS residual"].setText(rms_text(candidate))  # one value, of the geometry shown
+        self.result_labels["RMS residual"].setToolTip(rms_tip(candidate))
+        self.resultRmsTitle.setText(rms_title(candidate))  # which residual it is
+        self.resultRmsTitle.setToolTip(rms_tip(candidate))
         # Confidence and warnings are the engine's English (also in the exported record), shown translated.
         self.result_labels["Confidence"].setText(tr(candidate.confidence))
         self._show_warnings(candidate.warnings)
@@ -183,10 +187,7 @@ class ResultPreviewMixin:
         if candidate.rot1_sigma_deg is not None and candidate.rot2_sigma_deg is not None:
             tip += " " + trf("1σ: {rot1}°, {rot2}° ({method}).", rot1=f"{candidate.rot1_sigma_deg:.2g}",
                              rot2=f"{candidate.rot2_sigma_deg:.2g}", method=tr(candidate.uncertainty_method))
-        if candidate.point_rms_px is not None and candidate.untilted_point_rms_px is not None:
-            tip += " " + trf("Ring points: RMS {tilted} px tilted, {flat} px without the tilt.",
-                             tilted=f"{candidate.point_rms_px:.3f}", flat=f"{candidate.untilted_point_rms_px:.3f}")
-        label.setToolTip(tip)
+        label.setToolTip(tip)  # (the residual with and without the tilt: the RMS row and its tooltip)
 
     def _show_warnings(self, warnings) -> None:
         """The Warning row: the engine's warnings (translated) in the warning style, why they matter as its

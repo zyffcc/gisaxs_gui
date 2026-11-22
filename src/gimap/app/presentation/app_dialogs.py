@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from .question_box import ACCEPT, ACTION, DESTRUCTIVE, REJECT, ask_choice
 from .i18n import tr, trf
 
 JSON_FILTER = "JSON Files (*.json);;All Files (*)"
@@ -43,19 +44,9 @@ def warn(parent: Optional[QWidget], title: str, text: str) -> None:
 def _choose(parent: Optional[QWidget], title: str, text: str, buttons, default: int, escape: int,
             informative: str = "") -> int:
     """A question with the buttons ``(text, role)`` given; returns the index of the one chosen (``escape`` for
-    Esc or the window's close button)."""
-    box = QMessageBox(parent)
-    box.setIcon(QMessageBox.Question)
-    box.setWindowTitle(title)
-    box.setText(text)
-    if informative:
-        box.setInformativeText(informative)
-    made = [box.addButton(label, role) for label, role in buttons]
-    box.setDefaultButton(made[default])
-    box.setEscapeButton(made[escape])
-    box.exec_()
-    clicked = box.clickedButton()
-    return made.index(clicked) if clicked in made else escape
+    Esc or the window's close button). A ``QuestionBox``, not a ``QMessageBox`` (which kills the process on the
+    offscreen platform: ``question_box.py``)."""
+    return ask_choice(parent, title, text, buttons, default=default, escape=escape, informative=informative)
 
 
 def ask_quit_with_jobs(parent: Optional[QWidget], jobs: str) -> bool:
@@ -71,8 +62,8 @@ def ask_save_changes(parent: Optional[QWidget], name: str) -> str:
     text = (trf("Save the changes to the project {name}?", name=name) if name
             else tr("Save the current work as a project?"))
     answer = _choose(parent, tr("Unsaved Changes"), text,
-                     ((tr("Save"), QMessageBox.AcceptRole), (tr("Don't Save"), QMessageBox.DestructiveRole),
-                      (tr("Cancel"), QMessageBox.RejectRole)), default=0, escape=2,
+                     ((tr("Save"), ACCEPT), (tr("Don't Save"), DESTRUCTIVE),
+                      (tr("Cancel"), REJECT)), default=0, escape=2,
                      informative=tr("Changes that are not saved are lost."))
     return ("save", "discard", "cancel")[answer]
 
@@ -81,7 +72,7 @@ def ask_restore_session(parent: Optional[QWidget], when: str) -> bool:
     """After GIMaP was not closed properly: restore the work it autosaved at ``when``?"""
     answer = _choose(parent, tr("Restore the Session"),
                      trf("GIMaP was not closed properly. Restore the work autosaved at {time}?", time=when),
-                     ((tr("Restore"), QMessageBox.AcceptRole), (tr("Discard"), QMessageBox.DestructiveRole)),
+                     ((tr("Restore"), ACCEPT), (tr("Discard"), DESTRUCTIVE)),
                      default=0, escape=1)
     return answer == 0
 
@@ -90,9 +81,9 @@ def ask_already_running(parent: Optional[QWidget]) -> str:
     """A second start: ``"switch"`` to the GIMaP that runs, ``"read_only"`` (start anyway, settings not saved)
     or ``"cancel"``."""
     answer = _choose(parent, "GIMaP", tr("GIMaP is already running."),
-                     ((tr("Switch to It"), QMessageBox.AcceptRole),
-                      (tr("Start Anyway (Read-only Settings)"), QMessageBox.ActionRole),
-                      (tr("Cancel"), QMessageBox.RejectRole)), default=0, escape=2,
+                     ((tr("Switch to It"), ACCEPT),
+                      (tr("Start Anyway (Read-only Settings)"), ACTION),
+                      (tr("Cancel"), REJECT)), default=0, escape=2,
                      informative=tr("Two windows on one user folder would overwrite each other's settings and "
                                     "session. A second one started anyway keeps its settings in memory only."))
     return ("switch", "read_only", "cancel")[answer]

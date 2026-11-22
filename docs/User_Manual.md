@@ -955,8 +955,9 @@ Start page (*Calibrate the detector*).
    Click **Auto Calibration**. The calculation runs in the background; **Cancel** stops it after the
    current step.
 7. Review the result: beam centre, distance, **Detector tilt** (rot1 and rot2, *0.372°, 0.433°*, or *not
-   refined*; its tooltip gives the 1σ and the RMS of the ring points with and without the tilt), matched rings, RMS residual,
-   confidence and warning of the **Selected solution** (a warning is marked ⚠; its tooltip says why it matters), and the
+   refined*; its tooltip gives the 1σ), matched rings, one RMS residual of the geometry shown (**Ring-point RMS**
+   with the tilt refined: the points on the matched rings, its tooltip giving the same points without the tilt;
+   else **Ring-radius RMS**: the azimuthally averaged radii), confidence and warning of the **Selected solution** (a warning is marked ⚠; its tooltip says why it matters), and the
    **Candidate solutions** below. The line above the preview names only the image and its size. Selecting a candidate draws its
    rings. **Clean image** temporarily hides all overlays, **Reset view** restores the complete
    detector mosaic after zooming or panning, and **Focus image** hides the result panels to give tall
@@ -1291,7 +1292,11 @@ LZ4 need the Python package `hdf5plugin` (in `requirements.txt`).
 
 ### 5.2 Mask and corrections
 
-The **Mask & corrections** step says how many pixels are left out, and why: detector gaps and
+The **Mask & corrections** step starts with what scales the intensities: the folded sections **Normalisation**,
+**Corrections** (dark frame, background, gap guard, intensity range) and **Intensity corrections** (GIWAXS, with the
+Lorentz factor), so their headers are in view also in a small window. The step's line in the step list says first
+when the intensities are scaled (*intensity × 1.25*, *Lorentz factor*). Below them, the step says how many pixels are
+left out, and why: detector gaps and
 marked pixels, hot and dead pixels found in this frame, your masks, the gap guard, the intensity
 range, the background, and how many pixels were filled from the mirror side.
 
@@ -2082,7 +2087,16 @@ series** (chapter 6).
 **Phases** in the image toolbar opens the **Phases and Indexing** window (GIWAXS frames). It has three tabs.
 
 **Phases.** **Add from CIF…** reads a CIF: the cell, the symmetry operations and the atom sites (intensities |F|²
-from the atoms). **Add Cell** adds a cell you type in, with its lattice **Centring** (P, A, B, C, I, F, R): its
+from the atoms). A CIF copied from a paper often names its space group (`_symmetry_space_group_name_H-M`, the Hall
+symbol or the number) without listing the operations: GIMaP then generates them from the symbol — every space group
+in the setting of *International Tables*, the common alternative settings (`P 21/n`, `Pbnm`, `R-3m` on rhombohedral
+axes, both origin choices) — and the **Symmetry** column says *operations from the space group (none in the CIF)*.
+When it cannot (a symbol it cannot read or does not know, a cell of another shape than the symbol needs, no space
+group named), the phase gives **positions only**: every hkl of the cell, without intensities or extinctions. The
+**Symmetry** column then starts with ⚠ for as long as the phase is listed, its tooltip and **Selected Phase** say why,
+and peaks assigned to this phase are *tentative* (marked **?** in the peak table, said so in the report). The phase
+is named after `_chemical_name_common`, `_chemical_name_mineral` or the data block; the sum formula is the tooltip
+of the name. **Add Cell** adds a cell you type in, with its lattice **Centring** (P, A, B, C, I, F, R): its
 allowed reflections all get intensity 1. Under **Selected Phase** you change the name, the cell and the
 **Orientation**: **Powder (random orientation)**, **Plane (hkl) parallel to the substrate** or **Axis [uvw] along the
 surface normal**, with the three indices. **Show** hides or shows a phase. Each phase has its colour; the names are
@@ -2114,7 +2128,9 @@ falls towards the horizon. The plot shows the points fitted, the points left out
 result gives the **oriented fraction**, the **FWHM** (mosaicity) and χ0 with their ±, the Hermans f of the fitted
 distribution (the missing wedge filled by the model) next to f from the measured bins alone, the 2D order
 2<cos²χ> − 1 and χ²_red. A χ²_red far above 1 means that one Gaussian and an isotropic part do not describe the ring:
-read the numbers with care.
+read the numbers with care. When a parameter of the fit ends at its bound (the isotropic part at 0 or 1, the FWHM at
+150°), the first line says ⚠ *Not determined by this fit* and leads with what is best determined, the Hermans f of
+the measured bins; the value at its bound is marked *(at its bound)* where it is listed.
 
 ![The pole figure of the MAPbI₃ ring at 0.997 Å⁻¹ (public P08 frame)](manual_images/en/07b_pole_figure.png)
 
@@ -2123,9 +2139,10 @@ read the numbers with care.
 SHA-256), the reflection table, the settings and the fit.
 
 **In the automatic analysis.** With phases shown (or `--phase FILE.cif` on the command line, repeated for several),
-**Run Automatic Analysis** assigns each peak to the nearest reflection within max(3σ, FWHM/2): the *Decisions* line
-*phase assignment* gives the phase, hkl and Δq of every peak; the report's **Phase assignment** section adds the other
-reflections within the window. Each analysed ring also gets a pole-figure fit next to its Hermans f (a line under the
+**Run Automatic Analysis** assigns each peak to the nearest reflection within max(3σ, FWHM/2): the **Peaks** table of
+Results gets the columns **phase**, **hkl** and **Δq** (the tooltips give q_hkl, the window and the other reflections
+within it), the *Decisions* line *phase assignment* gives the phase, hkl and Δq of every peak, and the report's **Phase
+assignment** section adds the other reflections within the window and the warnings of the phases. Each analysed ring also gets a pole-figure fit next to its Hermans f (a line under the
 ring in the report). The nearest reflection is an assignment, not a proof: check the alternatives and Δq. The
 formulas are in [Physics and Methods 7.10 and 7.11](Physics_Manual.md#710-reflection-overlay-and-phase-assignment).
 

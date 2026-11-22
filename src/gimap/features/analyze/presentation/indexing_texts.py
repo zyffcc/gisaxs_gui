@@ -7,7 +7,11 @@ from typing import Optional
 
 from src.gimap.app.presentation.i18n import tr, trf
 
+from .texts import message_text
+
 MODEL_NAMES = {"gaussian": "Gaussian + isotropic", "maier_saupe": "Maier–Saupe + isotropic"}
+BOUND_QUANTITIES = {"fraction_iso": "oriented fraction", "width": "FWHM", "chi0_deg": "direction χ0"}
+"""What a fitted parameter at its bound leaves undetermined, in the words of the result."""
 
 
 def _pm(value: Optional[float], error: Optional[float], digits: int) -> str:
@@ -33,15 +37,28 @@ def phase_cell_text(spec) -> str:
 
 
 def symmetry_text(spec) -> str:
+    """The Symmetry column of a phase: where its operations come from and what its intensities are. A phase
+    without operations says so first, with ⚠, for as long as it is listed."""
     atoms = len(spec.atoms)
-    if spec.operations:
-        text = trf("{group}{count} operations from the CIF", group=f"{spec.space_group}, " if spec.space_group else "",
+    group = f"{spec.space_group}, " if spec.space_group else ""
+    if getattr(spec, "positions_only", False):
+        return "⚠ " + trf("{group}positions only: no symmetry operations, every hkl, no intensities",
+                          group=group)
+    if getattr(spec, "symmetry", "") == "symbol":
+        text = trf("{group}{count} operations from the space group (none in the CIF)", group=group,
                    count=len(spec.operations))
+    elif spec.operations:
+        text = trf("{group}{count} operations from the CIF", group=group, count=len(spec.operations))
     else:
         text = trf("lattice centring {centring}", centring=spec.centring)
     if atoms:
         return text + "; " + trf("{atoms} atom sites: |F|² from the atoms", atoms=atoms)
     return text + "; " + tr("no atoms: every allowed reflection has intensity 1")
+
+
+def phase_notes(spec) -> str:
+    """The warnings and the notes of a phase (how its symmetry was found or why it was not), one per line."""
+    return "\n".join(message_text(text) for text in (*spec.warnings, *getattr(spec, "notes", ())))
 
 
 def ring_text(analysis, *, short: bool = False) -> str:
@@ -56,18 +73,33 @@ def ring_text(analysis, *, short: bool = False) -> str:
                low=f"{low:.3f}", high=f"{high:.3f}")
 
 
+def _bounded(text: str, name: str, at_bound) -> str:
+    return text + " " + tr("(at its bound)") if name in at_bound else text
+
+
 def pole_result_text(result) -> str:
+    """The result of a pole-figure fit. When a parameter ended at its bound the fit does not determine what it
+    stands for: the first line says so and gives the Hermans f of the measured bins (it needs no model), and the
+    value at its bound is marked where it is listed."""
     fit = result.fit
     if not fit.ok:
         return trf("No fit: {reason}", reason=tr(fit.message))
     values, errors = fit.values, fit.errors
     profile = fit.profile
-    lines = [
+    at_bound = tuple(getattr(fit, "at_bound", ()) or ())
+    lines = []
+    if at_bound:
+        lines.append("⚠ " + trf("Not determined by this fit: {what} at its bound. Best determined: Hermans f = {f} "
+                                "from the measured bins.",
+                                what=", ".join(tr(BOUND_QUANTITIES.get(name, name)) for name in at_bound),
+                                f=_pm(profile.herman_measured() if profile is not None else None, None, 3)))
+    lines += [
         trf("{model}: oriented fraction {fraction}, FWHM {fwhm}°, direction χ0 = {chi0}°",
             model=tr(MODEL_NAMES.get(fit.model, fit.model)),
-            fraction=_pm(values.get("oriented_fraction"), errors.get("oriented_fraction"), 3),
-            fwhm=_pm(values.get("fwhm_deg"), errors.get("fwhm_deg"), 2),
-            chi0=_pm(values.get("chi0_deg"), errors.get("chi0_deg"), 1)),
+            fraction=_bounded(_pm(values.get("oriented_fraction"), errors.get("oriented_fraction"), 3), "fraction_iso",
+                              at_bound),
+            fwhm=_bounded(_pm(values.get("fwhm_deg"), errors.get("fwhm_deg"), 2), "width", at_bound),
+            chi0=_bounded(_pm(values.get("chi0_deg"), errors.get("chi0_deg"), 1), "chi0_deg", at_bound)),
         trf("Hermans f = {f} (fitted distribution, missing wedge filled; oriented part {f_oriented}); "
             "from the measured bins {f_measured}",
             f=_pm(values.get("herman"), errors.get("herman"), 3),
@@ -87,4 +119,5 @@ def pole_result_text(result) -> str:
     return "\n".join(lines)
 
 
-__all__ = ["MODEL_NAMES", "orientation_text", "phase_cell_text", "pole_result_text", "ring_text", "symmetry_text"]
+__all__ = ["BOUND_QUANTITIES", "MODEL_NAMES", "orientation_text", "phase_cell_text", "phase_notes", "pole_result_text",
+           "ring_text", "symmetry_text"]

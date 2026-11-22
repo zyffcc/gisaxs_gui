@@ -22,10 +22,11 @@ from pathlib import Path
 from typing import Callable, Optional, Sequence
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QFileDialog, QMessageBox
+from PyQt5.QtWidgets import QFileDialog
 
 from src.gimap.app.presentation import theme
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.question_box import ACCEPT, DESTRUCTIVE, REJECT, QuestionBox
 
 from ..application import (
     NO_PERMISSION,
@@ -304,14 +305,10 @@ class BatchFolderMixin:
             said.append(tr("It was written by an earlier version of GIMaP, whose record lists only its tables: the "
                            "files of single frames stay."))
         said.append(trf("Keep Both writes this export into the new subfolder “{name}”.", name=new.name))
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Question)
-        box.setWindowTitle(self.windowTitle())
-        box.setText(text)
-        box.setInformativeText(" ".join(said))
-        replace = box.addButton(tr("Replace"), QMessageBox.DestructiveRole)
-        keep = box.addButton(tr("Keep Both in a New Subfolder"), QMessageBox.AcceptRole)
-        box.addButton(QMessageBox.Cancel)
+        box = QuestionBox(self, self.windowTitle(), text, " ".join(said))  # not a QMessageBox: question_box.py
+        replace = box.addButton(tr("Replace"), DESTRUCTIVE)
+        keep = box.addButton(tr("Keep Both in a New Subfolder"), ACCEPT)
+        box.setEscapeButton(box.addButton(tr("Cancel"), REJECT))
         box.setDefaultButton(replace if earlier.record is not None and not lost else keep)
         return box, replace, keep
 

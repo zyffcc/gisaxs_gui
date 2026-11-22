@@ -90,12 +90,15 @@ class PoleFit:
     curve_chi: np.ndarray = field(default_factory=lambda: np.empty(0))
     curve_value: np.ndarray = field(default_factory=lambda: np.empty(0))
     """The fitted N(χ) on a 0.25° grid over [0°, 90°] (per degree, as the profile)."""
+    at_bound: tuple[str, ...] = ()
+    """Free parameters (not the scale) that ended at a bound: what they stand for is not determined by the fit."""
 
     def record(self) -> dict:
         profile = self.profile
         return {
             "model": self.model, "ok": self.ok, "message": self.message,
             "values": dict(self.values), "errors": dict(self.errors), "fixed": list(self.fixed),
+            "at_bound": list(self.at_bound),
             "reduced_chi2": self.chi2_red, "points": self.points,
             "coverage": None if profile is None else profile.coverage,
             "weighted_coverage": None if profile is None else profile.weighted_coverage,
@@ -270,7 +273,7 @@ def fit_pole_figure(profile: PoleProfile, model: str = GAUSSIAN, *, chi0_deg: Op
     if at_bound:
         message = (message + "; " if message else "") + "at its bound: " + ", ".join(at_bound)
     return PoleFit(True, model, message, profile, {k: float(v) for k, v in values.items()}, errors, fixed,
-                   chi2_red, int(len(data)), grid, curve)
+                   chi2_red, int(len(data)), grid, curve, tuple(at_bound))
 
 
 __all__ = ["BINS", "GAUSSIAN", "MAIER_SAUPE", "PoleFit", "PoleProfile", "fit_pole_figure", "fold_profile"]

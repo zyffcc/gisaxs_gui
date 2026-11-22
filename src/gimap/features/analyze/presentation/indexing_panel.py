@@ -17,11 +17,20 @@ from PyQt5.QtWidgets import QCheckBox, QDialog, QFileDialog, QTableWidgetItem, Q
 
 from src.gimap.app.presentation.components.toast import show_toast
 from src.gimap.app.presentation.i18n import language_changed, tr, trf
+from src.gimap.app.presentation.theme import theme_color, theme_manager
 
 from ..application.export_record import analysis_metadata, export_stem
 from ..application.indexing import POWDER, PhaseSpec, table_rows
 from ..application.pole_figure import pole_figure, pole_figure_csv
-from .indexing_texts import MODEL_NAMES, orientation_text, phase_cell_text, pole_result_text, ring_text, symmetry_text
+from .indexing_texts import (
+    MODEL_NAMES,
+    orientation_text,
+    phase_cell_text,
+    phase_notes,
+    pole_result_text,
+    ring_text,
+    symmetry_text,
+)
 from .views.indexing_view import IndexingView
 
 POLE_POINTS, POLE_LEFT_OUT, POLE_MODEL = "#2563eb", "#9ca3af", "#f97316"
@@ -67,7 +76,11 @@ class IndexingPanel(QDialog, IndexingView):
         self.direction_combo.currentIndexChanged.connect(self._direction_chosen)
         self._direction_chosen()
         language_changed().connect(lambda _language: self.refresh())
+        theme_manager().changed.connect(self._theme_changed)  # the warning colour of a phase
         self._fill_settings()
+
+    def _theme_changed(self, *_args) -> None:
+        self.refresh()
 
     @property
     def model(self):
@@ -85,9 +98,9 @@ class IndexingPanel(QDialog, IndexingView):
             self.status_label.setText(trf("Could not read the CIF: {error}", error=str(error)))
             return
         self._changed(select=index)
-        warnings = self.model.phases[index].warnings
-        self.status_label.setText(" ".join(tr(text) for text in warnings) if warnings else trf(
-            "Read {name} from {file}.", name=self.model.phases[index].name, file=Path(path).name))
+        spec = self.model.phases[index]
+        read = trf("Read {name} from {file}.", name=spec.name, file=Path(path).name)
+        self.status_label.setText(read + (" ⚠ " + tr("See the Symmetry column.") if spec.warnings else ""))
 
     def _add_cell(self) -> None:
         index = self.model.add(PhaseSpec(trf("Phase {n}", n=len(self.model.phases) + 1),
@@ -121,12 +134,13 @@ class IndexingPanel(QDialog, IndexingView):
             for spin, value in zip((*self.cell_spins, *self.angle_spins), spec.cell):
                 spin.setValue(float(value))
             self.centring_combo.setCurrentText(spec.centring)
-            self.centring_combo.setEnabled(not spec.operations)
+            self.centring_combo.setEnabled(not spec.operations and not spec.symmetry)  # a typed cell only
             self.orientation_combo.setCurrentIndex(max(0, self.orientation_combo.findData(spec.orientation)))
             for spin, value in zip(self.index_spins, spec.indices):
                 spin.setValue(int(value))
                 spin.setEnabled(spec.orientation != POWDER)
-            self.symmetry_label.setText(symmetry_text(spec))
+            notes = phase_notes(spec)
+            self.symmetry_label.setText(symmetry_text(spec) + ("\n" + notes if notes else ""))
         finally:
             self._filling = False
 
@@ -200,10 +214,15 @@ class IndexingPanel(QDialog, IndexingView):
                 self.phase_table.setCellWidget(row, 0, check)
                 name = _item(spec.name)
                 name.setForeground(_color(spec.color))
+                if spec.formula:
+                    name.setToolTip(trf("Formula: {formula}", formula=spec.formula))
                 self.phase_table.setItem(row, 1, name)
                 self.phase_table.setItem(row, 2, _item(phase_cell_text(spec)))
                 symmetry = _item(symmetry_text(spec))
-                symmetry.setToolTip(symmetry.text())
+                notes = phase_notes(spec)
+                symmetry.setToolTip(symmetry.text() + ("\n" + notes if notes else ""))
+                if spec.warnings:  # kept while the phase is listed, not a status line the next action replaces
+                    symmetry.setForeground(_color(theme_color("warning")))
                 self.phase_table.setItem(row, 3, symmetry)
                 self.phase_table.setItem(row, 4, _item(orientation_text(spec)))
         if selected is not None and selected < len(self.model.phases):

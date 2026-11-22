@@ -367,6 +367,12 @@ class AnalyzeStepsView:
     # -- 3 mask and corrections ----------------------------------------------------------
 
     def _mask_step(self, page: QWidget, layout: QVBoxLayout) -> None:
+        # What scales the intensities first, as three closed headers that fit above the fold of a small window
+        # (normalisation, dark frame and background, Lorentz factor); the masks below them.
+        self.corrections_section.set_expanded(False)
+        layout.addWidget(self.normalisation_section)
+        layout.addWidget(self.corrections_section)
+        layout.addWidget(self.intensity_section)
         card, self.mask_summary_label = info_card(page)
         self.mask_summary_label.setObjectName("analyzeMaskSummary")
         self.mask_summary_label.setToolTip(MASK_TIP)
@@ -394,10 +400,6 @@ class AnalyzeStepsView:
         self.show_mask_button.setToolTip("Circle every pixel left out (gaps, hot and dead pixels, your masks) on the image")
         self.show_mask_button.setCheckable(True)
         layout.addWidget(self.show_mask_button, 0, Qt.AlignLeft)
-        self.corrections_section.set_expanded(False)
-        layout.addWidget(self.corrections_section)
-        layout.addWidget(self.normalisation_section)
-        layout.addWidget(self.intensity_section)
         layout.addStretch(1)
 
     # -- 4 cuts ------------------------------------------------------------------------

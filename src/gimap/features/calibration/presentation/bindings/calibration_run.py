@@ -22,6 +22,7 @@ from ...application import (
 
 
 from ..pixel_coordinates import shown_center
+from ..residual_text import rms_text, rms_tip, rms_title
 from ..workers import CalibrationWorker
 
 LOGGER = logging.getLogger(__name__)
@@ -133,11 +134,14 @@ class CalibrationRunMixin:
                 f"{candidate.distance_mm:.2f} mm",
                 f"{center_x:.1f}, {center_y:.1f}",
                 str(candidate.matched_ring_count),
-                f"{candidate.rms_residual_px:.2f} px",
+                rms_text(candidate, 2),  # the residual of the geometry shown (ring points with the tilt)
                 tr(candidate.confidence),
             )
             for column, value in enumerate(values):
-                self.candidate_table.setItem(row, column, QTableWidgetItem(value))
+                item = QTableWidgetItem(value)
+                if column == 4:  # the residual of the geometry shown: which one, on hover
+                    item.setToolTip(rms_title(candidate) + " " + rms_tip(candidate))
+                self.candidate_table.setItem(row, column, item)
 
     def _candidate_selected(self) -> None:
         if self.result is None:

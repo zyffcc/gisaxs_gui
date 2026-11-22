@@ -30,6 +30,17 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   about a vertical band on the rod, and automatic horizontal cuts warn when the horizon crosses more than half a row.
 
 - **In-situ series after a user test.** The chained fit no longer breaks where a value reaches a bound of its range (the beam tail, the background or any other), at an undetermined value or at a poor fit — those are flagged; it breaks only at a failed or unconverged fit, a new stage or a jump of χ²ᵣ, and there Predict parameters (unchanged) restarts from its solution closest to the frame before among those at least a tenth as probable as the most probable one. A smooth series no longer gets steps from restarts (a linked two-sphere model jumped by a factor 2 in R₁ where only the beam tail's exponent had reached its bound). The table's new **Started from** column says “continued from frame n” or “restarted from Predict (why)”, with the rule that chose Predict's solution on hover; the saved table and record add `start_frame` and `predict_choice`. **Refine** and **Search** go on from their own result while χ²ᵣ falls by more than 0.1 % (at most 5 more runs, counted in the Run Log, the record and the report). **Fit New Frames in Fitting…** ticks **Watch for new curves** and starts once the model is set up; a map the watch begins includes the frame on screen when watching began; the Series map comes back with a project and after a crash; NXcanSAS files of fits mark their entries as data or model, and opened again offer the measured curves. Manual 3.9, 5.1, 6.1, 6.2, 6.5; *Physics and Methods* 9.8, 11.13, 14.2.
+- **Third user test: Analyze and GIWAXS.** Opening frames while others are listed no longer ends the program on a
+  computer without a display (the Replace / Add to List question, and the other questions of Analyze, Batch
+  Export, Sputter, Format Converter and the session, are now GIMaP's own question window). A CIF that names its
+  space group without listing the operations gets them from the symbol (all 230 groups and the common settings);
+  without that the phase gives positions only, says so in the Symmetry column and the report, and its assignments
+  are tentative — it no longer lists forbidden reflections with wrong intensities. A phase is named after its common
+  or mineral name or its data block, not its sum formula. The Results peak table has the phase, hkl and Δq of each
+  peak. A pole figure whose fit ends at a bound leads with *not determined* and the Hermans f of the measured bins.
+  The Normalisation, Corrections and intensity-correction sections head the Mask & corrections step, and the step
+  says when the intensities are scaled. Geometry Calibration shows one RMS residual and names it (ring points with the
+  tilt, ring radii without). Manual 5.2, 5.9, 4.3; *Physics and Methods* 3.4, 7.10, 7.11.
 - **GIWAXS indexing and pole figures (Analyze ▸ Phases).** Give phases as a CIF (cell, symmetry operations, atom
   sites; |F|² from Cromer–Mann scattering factors) or a cell with its centring, at random or as a fibre texture
   ((hkl) parallel to the substrate or [uvw] along the normal): their reflections are drawn with hkl labels on the

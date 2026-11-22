@@ -107,7 +107,7 @@ def pole_figure(analysis: Optional[FrameAnalysis], *, model: str = GAUSSIAN, chi
                     note = f"the direction fitted at the fold ({edge:g}°) was fixed there"
                     fit = PoleFit(refit.ok, refit.model, "; ".join(m for m in (refit.message, note) if m),
                                   refit.profile, refit.values, refit.errors, refit.fixed, refit.chi2_red, refit.points,
-                                  refit.curve_chi, refit.curve_value)
+                                  refit.curve_chi, refit.curve_value, refit.at_bound)
     return PoleFigure(fit, window, value, source, lorentz, chi0_deg, float(chi_max))
 
 

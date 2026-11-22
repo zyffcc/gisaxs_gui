@@ -18,6 +18,8 @@ POLE_RULE = (
 )
 POOR_FIT = 10.0
 """A pole-figure fit above this χ²_red is flagged: one Gaussian and an isotropic part do not describe the ring."""
+BOUND_QUANTITIES = {"fraction_iso": "oriented fraction", "width": "FWHM", "chi0_deg": "χ0"}
+"""What a pole-figure parameter at its bound leaves undetermined."""
 
 
 def pole_direction(ring) -> Optional[float]:
@@ -39,14 +41,18 @@ def _short(value: Optional[float], digits: int) -> str:
     return "—" if value is None or not math.isfinite(value) else f"{value:.{digits}f}"
 
 
+TENTATIVE = "tentative: this phase gives positions only (no symmetry operations)"
+"""After an assignment to a phase whose symmetry is not known (``application/indexing.py``)."""
+
+
 def assignment_text(item: dict) -> str:
-    """``q = 0.9973 → MAPbI3 110 (Δq = −0.0040 Å⁻¹, −41 σ)`` of one assignment record."""
+    """``q = 0.9973 → MAPbI3 110 (q_hkl = 1.0013, Δq = −0.0040 Å⁻¹ within ±0.0050)`` of one assignment record: the
+    deviation against the window that accepted it (σ(q0) of a strong ring is far smaller than the window)."""
     if not item.get("assigned"):
         return f"q = {item['q']:.4f}: none within ±{item['tolerance']:.4f} Å⁻¹"
-    sigma = item.get("delta_sigma")
-    in_sigma = f", {sigma:+.1f} σ" if sigma is not None and math.isfinite(sigma) else ""
-    return (f"q = {item['q']:.4f} → {item['phase']} {item['hkl']} (q_hkl = {item['q_hkl']:.4f}, "
-            f"Δq = {item['delta_q']:+.4f} Å⁻¹{in_sigma})")
+    text = (f"q = {item['q']:.4f} → {item['phase']} {item['hkl']} (q_hkl = {item['q_hkl']:.4f}, "
+            f"Δq = {item['delta_q']:+.4f} Å⁻¹ within ±{item['tolerance']:.4f})")
+    return text + (f"; {TENTATIVE}" if item.get("tentative") else "")
 
 
 class PhaseStepsMixin:
@@ -121,7 +127,8 @@ class PhaseStepsMixin:
             for row in report.get("peaks") or []:
                 match = min(items, key=lambda item: abs(item["q"] - row.get("q", math.inf)), default=None)
                 if match is not None and abs(match["q"] - row.get("q", math.inf)) < 1e-9 + 1e-6 * match["q"]:
-                    row.update({key: match.get(key) for key in ("phase", "hkl", "q_hkl", "delta_q", "delta_sigma")})
+                    row.update({key: match.get(key) for key in ("phase", "hkl", "q_hkl", "delta_q", "delta_sigma",
+                                                                 "tolerance", "tentative")})
                     row["alternatives"] = match.get("alternatives") or []
         for row in report.get("rings") or []:
             pole = min(getattr(self, "_poles", None) or [], key=lambda entry: abs(entry[0] - row.get("q", math.inf)),
@@ -143,6 +150,7 @@ def pole_summary(record: dict) -> dict:
     for key in ("herman_measured", "reduced_chi2", "points", "weighted_coverage", "fitted_up_to_chi_deg",
                 "lorentz_corrected_input"):
         summary[key] = record.get(key)
+    summary["at_bound"] = list(record.get("at_bound") or ())
     background = record.get("background")
     summary["background"] = background.get("value") if isinstance(background, dict) else background
     return summary
@@ -158,7 +166,10 @@ def pole_line(pole: dict) -> str:
         text = _short(pole.get(key), digits)
         return text + (f" ± {error:.{digits}f}" if error is not None and math.isfinite(error) and error > 0 else "")
 
-    return (f"pole figure (Gaussian + isotropic): oriented fraction {pm('oriented_fraction', 3)}, "
+    bound = [BOUND_QUANTITIES.get(name, name) for name in pole.get("at_bound") or ()]
+    lead = (f"orientation not determined by the fit ({', '.join(bound)} at its bound); best determined: f = "
+            f"{_short(pole.get('herman_measured'), 3)} from the measured bins; the fit gave: " if bound else "")
+    return (f"pole figure (Gaussian + isotropic): {lead}oriented fraction {pm('oriented_fraction', 3)}, "
             f"FWHM {pm('fwhm_deg', 1)}°, χ0 = {pm('chi0_deg', 1)}°, f = {pm('herman', 3)} (missing wedge filled; "
             f"from the measured bins {_short(pole.get('herman_measured'), 3)}), χ²_red = "
             f"{_short(pole.get('reduced_chi2'), 1)}" + (f"; {pole['message']}" if pole.get("message") else "")
@@ -173,6 +184,11 @@ def assignment_lines(report: dict) -> list[str]:
         return []
     names = ", ".join(phase.get("name", "?") for phase in found.get("phases") or ())
     lines = [f"Phases given: {names}. Rule: {found.get('rule')}.", ""]
+    for phase in found.get("phases") or ():
+        if phase.get("warnings"):  # kept in the report: a phase without symmetry, a file read in part
+            lines.append(f"- ⚠ {phase.get('name', '?')}: " + " ".join(phase["warnings"]))
+    if lines[-1] != "":
+        lines.append("")
     for item in found.get("assignments") or []:
         others = "; ".join(f"{other['phase']} {other['hkl']} ({other['delta_q']:+.4f})"
                            for other in item.get("alternatives") or [])
