@@ -117,6 +117,10 @@ def xrr_export_record(
             "beam_center_x_px": geometry.beam_center_x_px,
             "beam_center_y_px": geometry.beam_center_y_px,
             "vertical_direction": geometry.vertical_direction,
+            "rot1_rad": geometry.rot1_rad,
+            "rot2_rad": geometry.rot2_rad,
+            "rot3_rad": geometry.rot3_rad,
+            "orientation": geometry.orientation,
             "pixel_convention": "numpy indices of the loaded frame: x = column, y = row, row 0 at the top",
             "sources": dict(request.geometry_sources),
         }
@@ -136,8 +140,10 @@ def xrr_export_record(
     record["formulas"] = {
         "qz": f"qz = 4·π·sin(θ)/λ, λ = hc/E, hc = {HC_KEV_ANGSTROM} keV·Å",
         "roi_center": (
-            "x = beam_center_x_px; y = beam_center_y_px + vertical_direction · distance_m · "
-            "tan(2θ) / pixel_size_y_m (the detector is fixed, the sample turns by θ)"
+            "Intersection of the fixed detector plane (rot1, rot2, rot3) with the ray "
+            "(cos(2θ), 0, -vertical_direction · sin(2θ)) in laboratory axes (along beam, right, up). "
+            "At zero rotations: x = beam_center_x_px; y = beam_center_y_px + vertical_direction · "
+            "distance_m · tan(2θ) / pixel_size_y_m."
         ),
         "intensity": (
             "sum or mean of the finite, unmasked pixels within roi_radius_px of the ROI centre "

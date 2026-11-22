@@ -222,8 +222,35 @@ def test_both_cuts_of_a_public_frame_reach_the_joint_fit(tmp_path):
         loaded = LocalCurveRepository().load(LoadCurveRequest(vertical, "angstrom"))
         found = hints(loaded.observation)
         assert found["kind"] == "vertical" and found["alpha_i"] == geometry["alpha_i_deg"] == 0.463
-        assert found["wavelength"] == 0.134 and found["q_parallel"] >= 0  # the automatic cut: at the beam centre
+        assert found["wavelength"] == 0.134 and found["q_parallel"] > 0
+        assert found["band_crosses_specular"] is False
         assert np.all(np.asarray(loaded.q) > 0)
     finally:
         page.dispose()
         page.close()
+
+
+def test_joint_fit_warns_for_a_band_that_covers_the_rod_even_with_its_centre_off_rod(tmp_path):
+    from src.gimap.features.fitting.presentation.single.joint_fit_dialog import JointFitDialog
+
+    page = _page()
+    try:
+        path = _vertical_file(tmp_path, _cylinders())
+        path.write_text(path.read_text(encoding="utf-8").replace('"cut": "vertical"',
+                        '"cut": "vertical", "band_crosses_specular": true'), encoding="utf-8")
+        dialog = JointFitDialog(page, page.view_model, page)
+        assert dialog.add_file(path)
+        assert dialog.specs[0].q_parallel == 0.3
+        assert "crosses the specular rod" in dialog.joint_status.text()
+        dialog.remove_selected()
+        assert not dialog.joint_status.text()
+        # A curve without band metadata still warns on the centre, including a manually typed position.
+        arrays = np.ones(5)
+        dialog.add_spec(CurveSpec("No band", arrays, arrays, kind="vertical", q_parallel=0.0))
+        assert "on or near the specular rod" in dialog.joint_status.text()
+        dialog.joint_q_parallel.setValue(0.3)
+        assert not dialog.joint_status.text()
+        dialog.dispose()
+    finally:
+        page.dispose()
+        page.deleteLater()

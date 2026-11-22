@@ -298,9 +298,10 @@ def reduce_giwaxs(
             q_parallel_range=(float(q_par.min()), float(q_par.max())),
             qz_range=(float(qz.min()), float(qz.max())),
         )
+    horizon = geometry.horizon_row()
     markers = {
         "beam_center": (geometry.beam_center_x_px, geometry.beam_center_y_px),
-        "horizon_row": geometry.horizon_row(),
+        "horizon_row": horizon if math.isfinite(horizon) else None,
         "chi_q_window": window,
         # the bins of every I(q) before sparse ones are joined (the records' ``binning``): edges low…high in q, Å⁻¹
         "radial_bins": {"bins": bins, "q_range": (q_low, q_high), "chosen": "set" if settings.bins else "auto"},

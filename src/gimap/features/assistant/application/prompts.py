@@ -98,7 +98,7 @@ such; caveats list the limits that matter for these data.
 
 GISAXS
 - Curves: 'horizontal' is I(qy) of a band of rows at the Yoneda band (both halves, qy < 0 and \
-qy > 0); 'vertical' is I(qz) of a band of columns at the beam centre. q in Å⁻¹, distances in nm.
+qy > 0); 'vertical' is I(qz) of a column band placed beside the specular rod by default. q in Å⁻¹, distances in nm.
 - If the frame is not reduced as GISAXS, switch with set_measurement_mode. The baseline is \
 run_standard_pipeline with technique 'gisaxs': Yoneda cut, symmetry axis, halves, the length scale \
 2π/q* and a fit.

@@ -147,6 +147,7 @@ class AnalyzeAutomation(IndexingAutomationMixin):  # set_phases, assign_peaks, p
             "resolved_by": analysis.resolution.how,  # chosen, matched, or file: the .poni beside the frame (no profile)
             "flat_detector": analysis.flat_detector.to_dict() if analysis.flat_detector is not None else None,
             "tilt_deg": geometry.tilt_deg,
+            "orientation": geometry.orientation,
             "rotations_deg": [math.degrees(geometry.rot1_rad), math.degrees(geometry.rot2_rad),
                               math.degrees(geometry.rot3_rad)],
             "critical_angle_deg": geometry.critical_angle_deg or None,  # None: none given, q is kinematic
@@ -202,6 +203,7 @@ class AnalyzeAutomation(IndexingAutomationMixin):  # set_phases, assign_peaks, p
                 "yoneda_row": None if yoneda is None else float(yoneda.row),
                 "horizon_row": markers.get("horizon_row"),
                 "vertical_columns": [float(left), float(right)],
+                "vertical_source": markers.get("vertical_source"),
                 "vertical_pixel_columns": _pixel_span(reduction.curve("vertical"), "columns"),
                 "halves": view_model.fit_side,
                 "symmetry": self._symmetry,

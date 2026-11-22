@@ -476,11 +476,12 @@ class DetectorView(QWidget):
         finally:
             self._updating_bands = False
 
-    def show_horizon(self, y: Optional[float]) -> None:
+    def show_horizon(self, y: Optional[float], *, x: float = 0.0, angle: float = 0.0) -> None:
         if y is None or not np.isfinite(y):
             self.marks.track("horizon", self.horizon_line, False)
             return
-        self.horizon_line.setValue(float(y))
+        self.horizon_line.setAngle(angle)
+        self.horizon_line.setPos((float(x), float(y)))
         self.marks.track("horizon", self.horizon_line, True)
 
     def show_markers(self, points, *, symbol: str = "+", color: str = "#22d3ee", size: int = 16) -> None:

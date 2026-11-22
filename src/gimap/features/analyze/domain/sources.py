@@ -29,6 +29,10 @@ def curve_source_mask(curve: Curve, valid: np.ndarray, maps: GiwaxsMaps | None =
     valid = np.asarray(valid, dtype=bool)
     region = dict(curve.region)
     if curve.key in ("horizontal", "vertical"):
+        if "per_pixel_exit_angle_min_deg" in region:
+            if maps is None:
+                raise ValueError("GISAXS cuts need the q maps of the frame.")
+            valid = valid & maps.above_horizon
         return valid & _band(valid.shape, region["rows"], region["columns"])
     if "gisaxs_cut" in region:
         if maps is None:

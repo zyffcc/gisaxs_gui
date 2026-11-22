@@ -160,7 +160,8 @@ class AnalyzeFrame(FramePreprocessingMixin):
         if reduction.kind != GISAXS:
             maps = self._giwaxs_maps(shape, analysis.geometry, reduction.kind)
         else:  # (the person's cuts are in q; the two automatic bands are rows and columns)
-            maps = self._gisaxs_maps_for(shape, analysis.geometry) if has_person_cuts(reduction) else None
+            needs_maps = has_person_cuts(reduction) or (analysis.geometry.tilted and "vertical" in keys)
+            maps = self._gisaxs_maps_for(shape, analysis.geometry) if needs_maps else None
         masks = {}
         for key in keys:
             curve = reduction.curve(key)
@@ -218,12 +219,12 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 common["path"], (int(common["frame_index"]), tuple(common["summed_frames"])), raw_data, raw_valid,
                 geometry, request.incidence_deg)
         kind = None if geometry is None else (request.mode if request.mode != AUTO else detected)
-        mirror_x = geometry.beam_center_x_px if geometry is not None and kind == GIWAXS else None
-        common.update(self._preprocess(raw_data, raw_valid, request.corrections, common["metadata"], mirror_x))
+        mirror_geometry = geometry if kind == GIWAXS else None
+        common.update(self._preprocess(raw_data, raw_valid, request.corrections, common["metadata"], mirror_geometry))
         # Errors from counting statistics only for photon counts as measured (not dark- or background-
         # subtracted, nothing filled from the mirror side); otherwise from the scatter of the pixels.
         counting = photon_counts(
-            common["metadata"], request.corrections, mirror_filled=common.get("filled_pixels") is not None
+            common["metadata"], request.corrections, mirror_filled=bool(request.corrections.mirror_fill and mirror_geometry)
         )
         self._flat_scale(common, request.corrections, counting)  # counts divided by a flat field: their variance too
         if kind == GIWAXS and geometry is not None and has_intensity_corrections(request.corrections):
@@ -341,6 +342,8 @@ def held_cut(reduction: Reduction, series_cut: Optional[Mapping[str, Any]]) -> R
                 held[name] = pinned
         if "horizontal_rows" in held and markers.get("horizontal_source") == "manual":
             markers["horizontal_source"] = "series"
+        if "vertical_columns" in held:
+            markers["vertical_source"] = "series"
     elif reduction.kind == GIWAXS and technique == GIWAXS:
         pinned, used = _band(series_cut.get("chi_q_window")), _band(markers.get("chi_q_window"))
         if pinned is not None and used is not None and np.allclose(sorted(pinned), sorted(used)):

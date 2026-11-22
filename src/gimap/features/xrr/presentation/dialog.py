@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import math
 
 from PyQt5.QtCore import QThread, Qt
 from PyQt5.QtWidgets import QDialog, QMessageBox
@@ -124,6 +125,10 @@ class XrrSeriesDialog(XrrFilesMixin, GeometrySourcesMixin, QDialog, XrrSeriesDia
             beam_center_x_px=extraction_coordinate(center_x.value(), center_x.decimals()),
             beam_center_y_px=extraction_coordinate(center_y.value(), center_y.decimals()),
             vertical_direction=-1 if self.direction_combo.currentIndex() == 0 else 1,
+            rot1_rad=math.radians(self.rot1_spin.value()),
+            rot2_rad=math.radians(self.rot2_spin.value()),
+            rot3_rad=math.radians(self.rot3_spin.value()),
+            orientation=int(self.orientation_spin.value()),
         )
 
     def _request(self) -> XrrExtractionRequest:

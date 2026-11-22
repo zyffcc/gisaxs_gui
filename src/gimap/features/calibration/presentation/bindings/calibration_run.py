@@ -45,6 +45,7 @@ class CalibrationRunMixin:
                 "pixel_size_y_m": self.pixel_y_spin.value() * 1e-6,
                 "subtract_background": self.background_check.isChecked(),
                 "tilt": self.run_tilt_mode(),
+                "rot3_deg": self.rot3_spin.value(),
                 "energy_source": self.run_energy_source(),
             }
         except ValueError as exc:

@@ -861,6 +861,10 @@ beam centre moved later (the GISAXS symmetry axis, or by hand) keeps the tilt. T
 Geometry Calibration fits the tilt (rot1, rot2; section 4.3), and the **Geometry** dialog has fields for
 rot1, rot2 and rot3.
 
+**Check rot3 on a GISAXS frame.** Powder rings constrain rot1 and rot2. To check the rotation about the beam, open **Geometry ▸ Check rot3 ▸ Measure Specular Rod**. Click two widely separated points on the ridge. Both qy values should be close to zero within the precision of the picks. To use the angle shown, enter it under **Geometry… ▸ Rotation about the beam rot3** and choose **Save Profile**. Repeat the check. If the direction agrees but both qy values remain offset, check the direct-beam centre. Under **Measure Horizon or Yoneda Band**, pick two points on the same feature. Their exit angles should agree. On the horizon both should be zero.
+
+A `.poni` can specify detector orientation 1–4. GIMaP uses the stored row and column directions in the geometry. Load the frame in the same storage order as the calibration.
+
 The search may pick the calibration of another experiment: one in a folder beside or above the
 frame's when the frame's own folder holds none, or, among several in one folder that was copied in
 one go, the wrong one (the file times then say nothing). Check the file named and the distance shown in
@@ -943,7 +947,8 @@ Start page (*Calibrate the detector*).
    and the fit, a horizontal band above the beam is not taken for a ring, and for AgBH every order between the
    matched ones must be there — so the Yoneda band is no longer taken for the first ring of a solution at
    half the distance. The warnings of the solution say when this applied.
-6. **Detector tilt: Refine rot1, rot2** (on by default) fits the tilt of the detector with the centre and the
+6. Under **Advanced configuration**, enter a measured roll in **Fixed rot3** (degrees, default 0). The ring fit keeps that value.
+   **Detector tilt: Refine rot1, rot2** (on by default) fits the tilt of the detector with the centre and the
    distance when three or more rings are matched ([Physics and Methods, section 3.8](Physics_Manual.md#38-detector-tilt-from-the-rings-of-the-standard)).
    Click **Auto Calibration**. The calculation runs in the background; **Cancel** stops it after the
    current step.
@@ -1316,13 +1321,11 @@ option off to put these pixels back into the curves.
 4. **Save…** writes the drawn masks as `.json` (in the pixel coordinates of section 4.4). **Load…**
    reads such a file, or a mask image of the same size (EDF or TIFF, non-zero = masked, as in pyFAI).
 
-**Fill gaps from the mirror side (GIWAXS)** (off by default). A GIWAXS pattern is symmetric in
-±q∥. A pixel without data (module gap, mask, hot pixel) takes the value at its mirror position
-about the beam-centre column, interpolated between two columns that both have data. Where the
-mirror has no data either, the gap stays. A filled pixel repeats photons measured on the other side,
-so while this is on the error bars of every GIWAXS curve come from the scatter of the pixels, not
-from counting statistics (section 5.4). The record counts the filled pixels, and Fitting is told
-that the counting statistics no longer hold.
+**Fill gaps from the mirror side (GIWAXS)** is off by default. Use it for a sample whose scattering
+is symmetric in ±q∥. Each gap pixel takes its intensity from the opposite in-plane angle at the same
+exit angle. On a tilted detector this can be in another row. All pixels contributing to the
+interpolation must have measured values. The missing wedge stays empty. The export records the
+number of filled pixels and uses pixel scatter for the error bars (section 5.4).
 
 **Corrections** (folded): a **dark frame** (**Choose…** next to *No dark frame*, with **Dark scale** and, for NeXus,
 **Dark frame**; off by default), subtracted from every frame before the background; with it the error bars come
@@ -1345,7 +1348,7 @@ settings. With photon counts the error bars follow the division (scaled Poisson)
 
 The order is fixed: invalid detector pixels → hot and dead pixels → masks → dark frame → background → pixels the
 flat field leaves out → gap guard → intensity range (on the values as measured) → division by the flat field →
-mirror fill → intensity corrections → normalisation. Curves, q map, cake and exports all use the corrected frame.
+mirror fill → intensity corrections → normalisation. On a rotated detector the angle-dependent corrections are applied to the measured mirror partners before interpolation. Curves, q map, cake and exports all use the corrected frame.
 
 **Normalisation** (folded, every term off by default; GISAXS and GIWAXS). Its first line always says which header
 values the frame shown offers (*In the file header: exposure 20 s; Monitor = 5000*). After every other correction
@@ -1398,7 +1401,7 @@ GIMaP finds the Yoneda band (the brightest row between the sample horizon and an
 1.5°, measured beside the specular rod) and takes:
 
 - the **horizontal cut** I(qy) in a band 5 px high at the Yoneda row (orange on the image);
-- the **vertical cut** I(qz) in a band 10 px wide at the beam-centre column.
+- the **vertical cut** I(qz) in a band nominally 10 px wide. Its inner edge clears the projected specular rod by 15 columns when possible. Analyze tries the right side first, then the left. If neither side fits, it uses the side with more room and warns. This is a geometric clearance. A broader rod may need a larger offset.
 
 If no Yoneda band is found, the horizontal cut sits just above the horizon and the step says so —
 check αi. To move a cut, drag the orange band on the image (its edges change its height), or
@@ -1431,7 +1434,7 @@ takes, and **Vertical cut** — and you can add as many named cuts as you need:
 - The editor under the table sets the position: centre ± half width of a band, from–to of a box (and whether it is
   cut along qy or qz), χ ± half width and the q range of a sector, the start and end points and the half width of a
   line. The list beside **Add** chooses the unit: **q (Å⁻¹)**, **Angles (°)** (the exit angles: αf of qz, 2θf of
-  qy on the sample horizon) or **Pixels (px)** (rows on the beam-centre column, columns on the horizon row). The line
+  qy on the sample horizon) or **Pixels (px)** (rows on the beam-centre column, columns along the calculated horizon). The line
   under the editor gives the position in the other two units.
 - Tick a row to show or hide its curve and outline. Double-click a name to rename it. **Duplicate** copies the
   selected cut (of an automatic cut: a band of your own at the same q, to move elsewhere). **Remove** deletes it;
@@ -1770,7 +1773,7 @@ its stage and whether it is odd. How it is computed: [Physics and Methods, secti
 
 **One cut for the series.** While the cut is automatic, every frame of the map — and of a Batch
 Export, a Send Series to Fitting and a watched folder's export — is cut where the frame on screen is:
-for GISAXS the rows of the Yoneda band and the beam-centre column, for GIWAXS the ring of I(χ). A row
+for GISAXS the selected horizontal rows and vertical columns, for GIWAXS the ring of I(χ). A row
 of the map then differs from the next by the sample, not by where it was cut. The line under the
 buttons names the cut (*Cut of the series — horizontal cut: rows 202–206 for every frame*). A cut you
 set yourself is the same for every frame anyway.
@@ -2772,9 +2775,7 @@ the vertical extent of the particles. The model is the one in Model of Single an
   included; a height fixed at the joint value) into Model; **Save Record…** writes every curve with its model, errors,
   the shared values, χ² and the covariance (JSON).
 
-A vertical cut on the specular rod (q∥ near 0, as Analyze's automatic vertical cut at the beam centre) is said: the
-particles' model leaves the specular reflection out, so take the vertical cut beside it in the Cuts step, for example
-at the structure peak. The model of a vertical cut, its limits and its check against BornAgain:
+**Fit Several Curves Together** warns when the exported vertical band crosses qy = 0 or its centre has |qy| below 0.02 nm⁻¹. The particle model excludes the specular reflection. If the band includes it, move the cut beside the ridge and send both curves again. The vertical-cut model and its check against BornAgain are described in
 [Physics and Methods, section 9.18](Physics_Manual.md#918-several-curves-fitted-together-the-vertical-cut).
 
 ## 7. Compare and stages
@@ -3404,14 +3405,14 @@ detector angle series. One point of the curve comes from each detector frame.
    - For CBF, a glob pattern (**CBF pattern**, e.g. `*.cbf`): each naturally sorted file is one point.
 2. **Set θ.** Either a linear sequence (**Theta start (°)** and **Theta step (°)**) or an NXS motor dataset with
    one θ value per frame.
-3. **Set the geometry.** Detector distance, beam energy, pixel sizes and the direct-beam centre. Select
-   in **Reflection direction** whether the specular reflection moves up or down in detector y.
+3. **Set the geometry.** Enter the distance, energy, pixel sizes and direct-beam centre. In **Detector rotations**, check pyFAI rot1, rot2 and rot3 in degrees and **pyFAI orientation** (1–4). Missing rotations default to zero and orientation defaults to 3. **Reflection direction** chooses the upward or downward ray in the laboratory. With detector roll the spot can move across columns.
    - The window starts from the last applied Geometry Calibration, marked *from last calibration*. When
      that calibration was of frames of another size, only its energy is taken.
    - **Load first frame** never overwrites a value you typed. A tag beside each field says whether a value
      comes from the file, the last calibration, the image centre or the built-in defaults; the summary under
      **Load first frame** warns only of the values that are not in the file and need checking
      (*⚠ Not in the file — check: …*).
+   - If a file gives an unsupported orientation or tilt, the inspection names the field and its value. Check the source beside the value used for extraction. Full turns of rot3 are equivalent.
    - **Pick direct-beam center** lets you click the centre on the frame.
 4. **Set the ROI.** An ROI radius and `Sum` or `Mean`. Radius 0 reads one pixel; a larger radius
    integrates a circle around the calculated specular beam.
@@ -4050,8 +4051,9 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Curve import supports `q I [sigma]` and `q I1 I2 …`, not interleaved `q I1 sigma1 I2 sigma2`.** A headerless three-column table cannot identify its meaning by numbers alone. | Choose the layout explicitly in **Import Curves…** (section 6.1). For separate errors per curve, provide one `q I sigma` file per curve. Fixed imported selections cannot watch for new columns/files. |
 | **Geometry Calibration can put a wrong solution first.** A wrong **Estimated distance** misleads, also with the right standard and with **Auto Detect**, and the field can hold a distance you did not type (section 4.3). | Choose the standard yourself when you know it. Leave **Estimated distance** on *Optional* or type the approximate distance of your set-up; set a number you did not type back to 0 unless it is that distance. Before **Apply**, check the distance and that the drawn rings lie on the rings of the image. |
 | **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them (section 10.5). | Calibrate such an image with pyFAI and give GIMaP the `.poni`: name it in the notes, or put it beside the frames (section 4.2). |
-| **An instrument profile is matched by detector name and frame size only**, and **a calibration found by the automatic search may belong to another experiment** (one beside or above the frame's folder is taken when that folder holds none; file times say nothing in a folder copied in one go) — or even to another detector: a `.poni` or `.json` is applied without checking its pixel size or frame size (section 4.2). | Read which file the report names and check the distance in **Geometry**. Name the calibration in the notes, or give it yourself; remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
-| **The `orientation` entry of a `.poni` is not read**, and at SAXS distances the rings fix the detector tilt only loosely (±0.2° on the public silver behenate frame); the straight horizon row, mirror filling and XRR assume an untilted detector (sections 4.2, 4.3). | Check that a `.poni` was made for images stored like yours (orientation 3, pyFAI's default). For a precise tilt at small angles, calibrate with a wide-angle standard (LaB₆, CeO₂) or with pyFAI and use its `.poni`. |
+| **An instrument profile is matched by detector name and frame size only. A calibration found by the automatic search may belong to another experiment.** Even matching detector dimensions cannot establish which run produced a calibration (section 4.2). | Check the file named in the report and the distance in **Geometry**. Supply the calibration or name it in the notes. Remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
+| **Powder rings leave rot3 undetermined.** They also constrain tilt weakly at SAXS distances (±0.2° on the public silver behenate frame). | Use a wide-angle standard for rot1 and rot2. Check rot3 on a GISAXS ridge and the horizon in **Geometry ▸ Check rot3**. GIMaP reads flat-detector `.poni` orientations 1–4 (section 4.2). |
+| **The automatic Yoneda search and horizontal cut average detector rows.** Analyze warns when the horizon varies by more than half a row across the frame. | Add a horizontal band in q for a constant exit angle. Mirror filling needs a measured partner on the other side. It cannot recover the missing wedge. |
 | **Run Automatic Analysis (GIWAXS) fits at most 12 candidate peaks**, the most prominent; the window has no setting for more. The others are left out of the peak table, the sector comparison, the rings and the series hints; *Decisions* says how many candidates there were (section 5.5). | Run `tools/gimap_agent.py auto … --max-peaks N` (section 10.7), or ask the AI to run `find_peaks` with `max_peaks`, when you need the full list. |
 | **The GIWAXS and GISAXS q are kinematic: no refraction correction.** Near or below the film's critical angle, the q_z of a peak can be off by up to about k·sin αi, and in GISAXS that of the Yoneda band most, by an amount of that order (the report's *Decisions* give the number for your frame); the ± and σ of the report contain neither that nor the geometry's uncertainty ([Physics and Methods, sections 7.9 and 8.6](Physics_Manual.md#79-what-the-report-states)). | Measure above the critical angle for positions, or correct q_z yourself for the material; quote the systematic error separately from the statistical ±. |
 | **Hermans f and the texture sentence are not corrected for the exit angle.** f weighs the bins next to the sample horizon most, where absorption in the film or a shadow can lower the intensity; on the public P08 frame leaving out the bins within 5° of the sample plane moves f − f_iso by 17–27 σ_f ([Physics and Methods, section 7.7](Physics_Manual.md#77-ring-orientation-and-the-hermans-orientation-factor)). | Read the ring's notes and the *ring orientation* line of *Decisions*; when they name the ring, check I(χ) near χ = ±90° before reading f as texture. |

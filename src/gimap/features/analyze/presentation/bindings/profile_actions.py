@@ -103,6 +103,7 @@ class ProfileActionsMixin(GeometryEditorMixin, GeometryFilesMixin, FitHandoverMi
                 rot1_deg=math.degrees(current.rot1_rad),
                 rot2_deg=math.degrees(current.rot2_rad),
                 rot3_deg=math.degrees(current.rot3_rad),
+                orientation=current.orientation,
             )
         saved = profile is not None and analysis.resolution.how != "file"  # (a .poni beside the frame is no profile)
         name = profile.name if saved else self.view_model.suggested_profile_name()

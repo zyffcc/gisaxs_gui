@@ -7,6 +7,9 @@ import math
 
 import numpy as np
 
+from src.gimap.shared.geometry import DetectorGeometry
+from src.gimap.shared.geometry.conventions import canonical_from_index_center, index_center_from_canonical
+from src.gimap.shared.geometry.q_inverse import positions_of_rays
 
 HC_KEV_ANGSTROM = 12.398419843320026
 
@@ -22,6 +25,10 @@ class SpecularGeometry:
     beam_center_x_px: float
     beam_center_y_px: float
     vertical_direction: int = -1
+    rot1_rad: float = 0.0
+    rot2_rad: float = 0.0
+    rot3_rad: float = 0.0
+    orientation: int = 3
 
     def __post_init__(self) -> None:
         if self.distance_m <= 0:
@@ -65,6 +72,13 @@ def specular_pixel(theta_deg: float, geometry: SpecularGeometry) -> tuple[float,
     """
 
     scattering_angle = math.radians(2.0 * float(theta_deg))
+    if geometry.rot1_rad or geometry.rot2_rad or geometry.rot3_rad or geometry.orientation != 3:
+        x, y = canonical_from_index_center(geometry.beam_center_x_px, geometry.beam_center_y_px)
+        plane = DetectorGeometry(geometry.pixel_size_x_m, geometry.pixel_size_y_m, geometry.distance_m,
+                                 x, y, geometry.wavelength_angstrom, rot1_rad=geometry.rot1_rad,
+                                 rot2_rad=geometry.rot2_rad, rot3_rad=geometry.rot3_rad, orientation=geometry.orientation)
+        ray = np.array([math.cos(scattering_angle), 0.0, -geometry.vertical_direction * math.sin(scattering_angle)])
+        return index_center_from_canonical(*positions_of_rays(plane, ray))
     offset_y = geometry.distance_m * math.tan(scattering_angle) / geometry.pixel_size_y_m
     return (
         float(geometry.beam_center_x_px),
@@ -93,6 +107,8 @@ def extract_circular_roi(
         raise ValueError("ROI aggregation must be 'sum' or 'mean'.")
 
     height, width = values.shape
+    if not (math.isfinite(center_x_px) and math.isfinite(center_y_px)):
+        return RoiMeasurement(float("nan"), 0, center_x_px, center_y_px, (0, 0, 0, 0))
     if radius == 0:
         x0 = int(math.floor(center_x_px + 0.5))
         y0 = int(math.floor(center_y_px + 0.5))

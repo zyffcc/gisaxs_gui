@@ -12,6 +12,12 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Detector geometry in grazing incidence.** Analyze reads and writes pyFAI detector orientations 1–4,
+  displays the tilted horizon, and projects GIWAXS mirror partners onto the detector. XRR projects the
+  specular spot using the detector rotations. GISAXS users can check rot3 on a measured ridge or band.
+  The automatic vertical cut clears the specular rod by 15 columns where possible. Joint fitting warns
+  about a vertical band on the rod, and automatic horizontal cuts warn when the horizon crosses more than half a row.
+
 - **GIWAXS indexing and pole figures (Analyze ▸ Phases).** Give phases as a CIF (cell, symmetry operations, atom
   sites; |F|² from Cromer–Mann scattering factors) or a cell with its centring, at random or as a fibre texture
   ((hkl) parallel to the substrate or [uvw] along the normal): their reflections are drawn with hkl labels on the
