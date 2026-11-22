@@ -54,6 +54,7 @@ from .equivalent_solutions import EquivalentSolutionsMixin
 from .result_actions import ResultActionsMixin
 from .model_editor import FitModelEditor
 from .plotting import FitPlotMixin
+from .posterior_check import PosteriorCheckMixin
 from .results import FitResultsMixin
 from .run import FitRunMixin
 from .session import FitSession, Solution, model_label
@@ -83,7 +84,7 @@ def _saved_source(token):
 class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunMixin, FitResultsMixin,
               FitExclusionMixin, PredictPageMixin, MethodHintMixin, EquivalentSolutionsMixin, ResultActionsMixin,
               CurveUnitMixin, CurveInfoMixin, FitPlotMixin, FitProjectMixin, SolutionsExportMixin, FigureExportMixin,
-              HistoryMixin, UncertaintyMixin, TailRangesMixin):
+              HistoryMixin, UncertaintyMixin, PosteriorCheckMixin, TailRangesMixin):
     curveOpened = pyqtSignal(str)
     """The file of the curve now on the page (In-situ series takes its set-up from it)."""
     batchRequested = pyqtSignal()
@@ -124,6 +125,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.setup_results()
         self.setup_solutions_export()
         self.setup_uncertainty()  # correlations, χ² profile and the fit report (uncertainty.py)
+        self.setup_posterior_check()  # the MCMC check of a solution or a fit (posterior_check.py)
         self.setup_result_actions()
         self.setup_exclusion()
         self.setup_curve_unit()  # the unit of q of files without one in their header (curve_unit.py)
@@ -489,6 +491,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
 
     def dispose(self) -> None:
         self.stop_fit()
+        self.dispose_checks()  # an MCMC check, the window of a fit of several curves
         self.tasks.shutdown(2000)
         self.plot.dispose()
         self.residual_plot.dispose()

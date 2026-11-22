@@ -111,6 +111,19 @@ class WorkspaceCommands:
     def _send_fitting(self) -> str:
         return "" if self._analyze.fit_button.isEnabled() else self._analysis() or NO_GEOMETRY
 
+    def _send_both(self) -> str:
+        """Both cuts need a GISAXS frame with a horizontal and a vertical cut."""
+        from src.gimap.features.analyze.application.both_cuts import cut_geometry
+
+        analysis = self._analyze.view_model.state.analysis
+        if analysis is None or getattr(analysis, "reduction", None) is None:
+            return self._analysis() or NO_GEOMETRY
+        try:
+            cut_geometry(analysis)
+        except ValueError as exc:
+            return str(exc)
+        return ""
+
     def _send_series(self) -> str:
         page = self._analyze
         if page.view_model.listed_frames() < 2:
@@ -219,6 +232,7 @@ class WorkspaceCommands:
             "analyze_batch": MenuEntry(analyze(lambda: page().batch_export_dialog()), self._batch),
             "analyze_batch_folder": MenuEntry(analyze(lambda: page().batch_from_folder()), self._batch_free),
             "analyze_send_fitting": MenuEntry(analyze(lambda: page().fit_current()), self._send_fitting),
+            "analyze_send_both_cuts": MenuEntry(analyze(lambda: self.menus.window._send_both_cuts()), self._send_both),
             "analyze_send_series": MenuEntry(analyze(lambda: page().send_series_dialog()), self._send_series),
             "analyze_send_compare": MenuEntry(analyze(lambda: page().send_series_to_compare()), self._send_compare),
             "analyze_save_settings": MenuEntry(analyze(lambda: page().save_settings())),
@@ -237,6 +251,7 @@ class WorkspaceCommands:
             "fitting_fit_folder": MenuEntry(fitting(lambda: series().choose_folder(), "insitu"), self._series_folder),
             "fitting_fit": MenuEntry(fitting(lambda: fit().run_fit()), self._fit),
             "fitting_stop": MenuEntry(fitting(lambda: fit().stop_fit()), self._stop_fit),
+            "fitting_joint": MenuEntry(fitting(lambda: self._fitting.open_joint_fit())),
             "fitting_load_model": MenuEntry(fitting(lambda: fit().load_model_dialog())),
             "fitting_save_model": MenuEntry(fitting(lambda: fit().save_model_dialog())),
             "fitting_save_data": MenuEntry(fitting(lambda: fit().export_data_dialog()), self._curve),

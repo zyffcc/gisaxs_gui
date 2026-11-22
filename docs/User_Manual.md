@@ -521,8 +521,8 @@ spreadsheet.
 | File | Open Data… (`Ctrl+O`), Open Folder… (`Ctrl+Shift+O`), Open Recent, Open Project… (`Ctrl+Shift+P`), Save Project (`Ctrl+S`), Save Project As… (`Ctrl+Shift+S`), Labs Parameters ▸ Load… / Save As…, Exit |
 | Edit | Undo (`Ctrl+Z`), Redo (`Ctrl+Y`; `Ctrl+Shift+Z` also works): the set-up in Analyze, the model in Fitting's Single analysis |
 | View | *Workspaces* and *Labs*: the pages (`Ctrl+1`…`Ctrl+6`), Collapse Sidebar (`Ctrl+B`), Full Screen (`F11`), Theme ▸ Light / Dark, Font Size ▸ Larger (`Ctrl++`) / Smaller (`Ctrl+-`) / Reset (`Ctrl+0`), Language ▸ English / 中文 |
-| Analyze | Run Automatic Analysis, Stop Automatic Analysis, Repeat Analysis (`F5`), Export Curves… (`Ctrl+E`), Batch Export… (`Ctrl+Shift+E`), Batch Export a Folder…, Send to Fitting, Send Series to Fitting…, Send Series to Compare, Set-up Files ▸ Save Settings… / Load Settings… / Save Cuts… / Load Cuts… / Save Masks… / Load Masks…, Figures ▸ Save Image… / Save q-Map Data… / Save View Data…, Clear Frame List |
-| Fitting | Open Curve…, Import Curves…, Fit a Folder of Curves…, Fit (`Ctrl+Return`), Stop Fit, Load Model…, Save Model…, Save Data and Fit…, Save Plot…, Batch / In-situ Series ▸ Start / Stop, 1D Predict — Fit Many Curves… |
+| Analyze | Run Automatic Analysis, Stop Automatic Analysis, Repeat Analysis (`F5`), Export Curves… (`Ctrl+E`), Batch Export… (`Ctrl+Shift+E`), Batch Export a Folder…, Send to Fitting, Send Both Cuts to Fitting, Send Series to Fitting…, Send Series to Compare, Set-up Files ▸ Save Settings… / Load Settings… / Save Cuts… / Load Cuts… / Save Masks… / Load Masks…, Figures ▸ Save Image… / Save q-Map Data… / Save View Data…, Clear Frame List |
+| Fitting | Open Curve…, Import Curves…, Fit a Folder of Curves…, Fit (`Ctrl+Return`), Stop Fit, Fit Several Curves Together…, Load Model…, Save Model…, Save Data and Fit…, Save Plot…, Batch / In-situ Series ▸ Start / Stop, 1D Predict — Fit Many Curves… |
 | Tools | Geometry Calibration… (`Ctrl+Shift+G`), Format Converter… (`Ctrl+Shift+C`), Convert Current File…, XRR Series Extractor… (`Ctrl+Shift+R`), SEM Particle Analysis…, 1D Predict — Fit Many Curves…, Process with AI… (`Ctrl+Shift+L`), Settings… (`Ctrl+,`) |
 | Help | User Manual (`F1`), Physics and Methods, Keyboard Shortcuts…, Example Data ▸ GISAXS — Ag Nanoparticles (GALAXI)… / SAXS — AgBh Calibrant (pyFAI)… / GIWAXS — MAPbI₃ Film (DESY P08)… / GIWAXS — PbTe, Tilted Detector (Xeuss)…, Report a Problem…, Open Error Log Folder, Open User Data Folder, GitHub Repository, Check for Updates…, How to Cite GIMaP…, Third-party Notices, About GIMaP |
 
@@ -1836,7 +1836,8 @@ between sessions), else next to the data — and writes the same files there:
   keeps the keys (`region1`), as its tables do;
 - `<stem>_analysis.json`: the source, geometry, where the beam centre came from, corrections, the
   number of bad pixels left out, the cuts;
-- `<stem>_fit_input.dat`, the curve for Fitting;
+- `<stem>_fit_input.dat`, the curve for Fitting (**Analyze ▸ Send Both Cuts to Fitting** also writes the vertical
+  cut beside it as `<stem>_fit_input_qz.dat`, section 6.6);
 - with **Also as NXcanSAS (.h5)** ticked (below **Export Curves…** in the Export step; remembered between sessions),
   also `<stem>_nxcansas.h5`: the curves against q as **NXcanSAS** (HDF5, NeXus definition NXcanSAS 1.1), which
   SasView, SASfit and other NeXus programs open, and Fitting too (section 6.1). Each curve is a SASentry of its own,
@@ -2136,7 +2137,12 @@ Analysis** to inspect its contributions here.
   (the default) spheres are evaluated at q_z = 0, the effective interface approximation, which needs nothing about the
   substrate. Enter αi, αf (the row of the cut) and λ to evaluate spheres as the direct plus the exit-reflected path,
   and free |r| and arg r to fit the reflection; cylinders are not affected. After a fit with the angles entered, the
-  results show q₊R of every sphere. When to use which, with examples on Si and on a polymer film:
+  results show q₊R of every sphere. **Substrate** (under the values): *Unknown* (the default, the levels above), a
+  material of the table (**Si**, **SiO₂**, **Glass (plate)**, **Au**: δ and β at the cut's λ, 4.9–30 keV) or **Typed δ,
+  β**. With a substrate and both angles the spheres are in the four-term DWBA with the substrate's Fresnel coefficients
+  (|r| and arg r are then not used); the line below says which level is in use (*Level: Four-term DWBA, substrate known
+  on Si (δ = …, β = …)*). Predict parameters does not use the substrate; its solutions come back without it
+  ([Physics and Methods, section 9.17](Physics_Manual.md#917-the-four-term-dwba-with-a-known-substrate)). When to use which, with examples on Si and on a polymer film:
   [Physics and Methods, section 9.10](Physics_Manual.md#910-spheres-and-cylinders-in-a-horizontal-cut-the-effective-interface-approximation);
   how to read a fit with three populations: [section 9.11](Physics_Manual.md#911-the-three-population-model).
 - After a fit every value shows its ± error, or *⚠ at a bound* (orange) when it stopped at the edge of its range
@@ -2183,6 +2189,20 @@ sizes for your sample, or let the Fit step find them.
   ± error with its status, χ²ᵣ, the correlated pairs, the settings — as Markdown, HTML or text, to **Copy** or **Save
   Report…** ([Physics and Methods, section 9.16](Physics_Manual.md#916-uncertainty-after-refine-and-search)). A value
   the curve does not determine (its error not finite, or above 10× the value) is marked ⚠ in the table and the report.
+  **Posterior check (MCMC)** runs a short Markov chain Monte Carlo on the posterior of the solution in Model — a
+  solution of Predict parameters (its own posterior, with the model error) or the last Refine or Search (its
+  likelihood) — in the background (**Run Check**, **Stop**; **Steps**, by default 3000, **Walkers**, **Seed**). The
+  table sets the run's median and 68 % / 95 % intervals beside the intervals checked (Predict's, or the fit's ± 1σ),
+  with each value's autocorrelation time τ and R̂; **Trace of** draws one value step by step; the line under the table
+  says whether the run is long enough (*Converged: … ≥ 50 × the longest autocorrelation time …, R̂ ≤ …*) and marks ⚠ a
+  value whose interval does not overlap the one checked; **Save Check…** writes it all as JSON. It is a check only:
+  nothing in Model, Results or Predict's values changes
+  ([Physics and Methods, section 9.19](Physics_Manual.md#919-posterior-check-by-mcmc)).
+
+  ![Posterior check](manual_images/en/27_fitting_mcmc_check.png)
+
+  *The Posterior check tab after a Refine: the run's intervals beside the fit's ± 1σ, τ and R̂, the verdict, and the trace of R (three walkers, the 16–84 % band and the median).*
+
 - When there are several solutions (of Predict parameters, or of Analyze), the drop-down above the parameter table
   switches the entire solution: parameters, errors, total curve, components and residuals together. It does not
   combine individual parameter endpoints from unrelated solutions. The exported record identifies the selected
@@ -2521,6 +2541,39 @@ current frame finish before pausing. Completed results stay available.
 A curve that cannot be read or fitted is marked ✗ in the list, and the series goes on. The folder or exact imported
 selection, its units and choices are kept for the next session and in a project. Mapped sources keep their column
 indices and names in result records; indices in JSON are zero-based, while the preview labels columns from 1.
+
+### 6.6 Several curves fitted together
+
+![Fit Several Curves Together](manual_images/en/26_fitting_joint.png)
+
+*Two cuts of one frame fitted together: the vertical cut (right, its Yoneda peak and the height's minimum) holds the cylinders' height h, shared with the horizontal cut; every curve its own scale and background.*
+
+**Fitting ▸ Fit Several Curves Together…** fits a list of curves with one χ²: typically the horizontal and the vertical
+cut of one GISAXS frame, whose vertical cut sees what the horizontal cut does not — the height of upright cylinders and
+the vertical extent of the particles. The model is the one in Model of Single analysis when the fit starts.
+
+- **Curves**: **Add Files…** (curve files), **Add Curve of the Page** (the curve in Single analysis, with the angles of
+  its Model) and **Remove**; **Analyze ▸ Send Both Cuts to Fitting** writes the frame's horizontal cut
+  (`<stem>_fit_input.dat`) and its vertical cut (`<stem>_fit_input_qz.dat`, next to the data in `gimap_analysis/`, or
+  where you choose when that folder cannot be written) and lists both here with their geometry. Under the list, the
+  selected curve's **Kind** — *Horizontal cut* (αi, αf, λ), *Vertical cut* (αi, λ, **q∥** of its columns and, when
+  Analyze refracted its q_z, **αc of q_z**) or *Other curve (q_z = 0)* — and its values.
+- **Substrate** (all curves): a vertical cut is computed in the four-term DWBA and needs it (Si, SiO₂, Glass (plate),
+  Au or **Typed δ, β**); a horizontal cut with both angles is then in the four-term DWBA as well.
+- **Parameters**: every free value of Model with **Shared** (fitted once; by default every particle value) or not (each
+  curve its own value). The scales — every population's Int, the background, Tail A — are always each curve's own, so
+  every curve has its own scale and background. When a vertical cut is listed, upright cylinders get their height h and
+  σh/h, shared.
+- **Fit Together** with *Refine* (from the values in Model) or *Search the ranges, then refine*; a progress bar and
+  **Stop** (the best values so far are kept). The summary gives χ²ᵣ over all points and each curve's Σr²/N; **Show**
+  picks the curve drawn with its model. **Use in Model** puts the values of the first horizontal cut (shared values
+  included; a height fixed at the joint value) into Model; **Save Record…** writes every curve with its model, errors,
+  the shared values, χ² and the covariance (JSON).
+
+A vertical cut on the specular rod (q∥ near 0, as Analyze's automatic vertical cut at the beam centre) is said: the
+particles' model leaves the specular reflection out, so take the vertical cut beside it in the Cuts step, for example
+at the structure peak. The model of a vertical cut, its limits and its check against BornAgain:
+[Physics and Methods, section 9.18](Physics_Manual.md#918-several-curves-fitted-together-the-vertical-cut).
 
 ## 7. Compare and stages
 
@@ -3809,6 +3862,9 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **The model fit of the automatic analysis chooses the particles from the curve alone.** Run Automatic Analysis (and Batch Export's particle model) fits the cut with Predict parameters among one or two populations of spheres and upright cylinders, at the effective interface (a sphere too large for it, q_z·R above 1.7 at the cut, is flagged in the automatic analysis when αi is known; section 5.5); random cylinders only when you give them as the composition. On the public GALAXI frame of Ag spheres it reports two upright cylinders (section 1.3): broad sizes and a rise at low q can be described by another composition than the true one. 2π/q\* is a length scale, not the particle spacing: on BornAgain simulations of the GALAXI model it was within 10 % of the true distance in 1 of 10 simulations with interference, and a peak or shoulder appeared in all 4 without (sections 1.3 and 5.5; [Physics and Methods, section 8.5](Physics_Manual.md#85-the-model-fit-and-how-the-solution-is-chosen)). | Choose the model from what you know of the sample and confirm it in **Fitting**: Predict parameters with **The particles in Model**, then refine it and judge the residuals. Do not quote 2π/q\* as the particle spacing. |
 | **The models for manual fitting are not proposed by Predict parameters.** Core–shell spheres, the 2D hexagonal paracrystal (infinite domains) and Percus–Yevick hard spheres (a 3D liquid) are fitted by Refine and Search only; core–shell spheres at q_z = 0. | Start them from values you know, or from a Predict solution with spheres, then change the family or the interference in Model and Refine ([Physics and Methods, section 9.14](Physics_Manual.md#914-models-for-manual-fitting)). |
 | **Fitting is slower with sizes by intensity and with random cylinders.** With a sphere or vertical cylinder and sizes by number or log-normal, **Search the ranges** takes a few seconds as before; with *Gaussian, by intensity* (models of earlier versions) tens of seconds, and with a random cylinder (15–800 ms per evaluation) up to minutes. | Set **Sizes** to *Gaussian, by number*, narrow the ranges of R, h and σR/R before a search, or start **Refine** from values close to the curve. |
+| **A vertical cut is modelled for spheres and upright cylinders only**, at one in-plane q (q∥ of its columns), without a q resolution or the specular rod, and only in Fitting ▸ Fit Several Curves Together. Its scales are its own: with several populations their ratio is not tied to the horizontal cut's (section 6.6). | Take the vertical cut beside the specular rod; fit random cylinders and core–shell spheres on horizontal cuts. |
+| **The substrate table holds bare Si, SiO₂, plate glass and Au from 4.9 to 30 keV.** An oxide, a polymer film, roughness and the particle layer's own index are not part of it (section 6.2). | Type δ and β of an effective substrate, or use the two paths with a free r. |
+| **The posterior check (MCMC) is slow for random cylinders and samples one mode.** A random cylinder takes 15–200 ms per evaluation (hours for a check); the run explores the mode it starts at (section 6.2). | Check spheres and upright cylinders; compare other modes through Predict's other solutions. |
 | **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA; spheres with two paths and a free reflection coefficient r when Model has both angles, else at the Born term of the cut's q_z or the effective interface). It was checked on simulated curves of an independent model and on BornAgain simulations, not on measured curves of known particles; physics outside the model (roughness, other shapes) can give a composition a high probability that it does not deserve. The waves the surface reflects (the four-term DWBA) matter for spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i = 0.4°, 12 keV): with both angles R is off by about 6 % (median; P90 19–40 %) and the composition right in about 60 % of such curves; with the q_z alone R is off by about 10 % (q₊R 2.3–3.5) to 40 % (above) and a sphere is usually taken for upright cylinders; upright cylinders are not affected. With both angles on a curve whose reflected wave is weak (far above the critical angle), a smaller sphere with a large \|r\| can fit as well, and on BornAgain's model of the GALAXI frame (broad log-normal sizes, αf at the critical angle) the free r let wrong sizes fit within the errors (with one sphere population R 16–500 nm, once at the 500 nm bound, on the three simulated draws; with the composition chosen one 16 nm sphere without a paracrystal on two); and on two-sphere curves without reflection this network misses the true sizes somewhat more often than the previous one ([Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters)). | Judge every solution by its residuals and by what you know of the sample; give both angles for spheres beyond q₊R 1.7; far above the critical angle check the fitted \|r\| (`refl_amp` in Model) against the substrate's and fix it if it is far off, then refine. |
 | **Run records do not hold everything needed to repeat a run.** They identify `software_version`, the network's record and Predict parameters' fixed seed; masks are counted, not stored as pixel lists. | Keep the input, settings and model files with the exported records. |
 | **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`, `assistant_provider_keys.json`; section 10.1): whoever can read that folder can read them. | On a shared computer, or with `GIMAP_HOME` on a shared drive, set the key as an environment variable instead, or **Remove** it after use. |

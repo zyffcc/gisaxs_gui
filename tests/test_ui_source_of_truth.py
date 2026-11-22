@@ -22,6 +22,8 @@ EXPECTED_VIEWS_BY_OWNER = {
         "fit_series_view.py",
         "fit_steps_view.py",
         "fit_uncertainty_view.py",
+        "joint_fit_view.py",
+        "posterior_check_view.py",
     },
     "format_converter": {
         "conversion_progress_dialog_view.py",

@@ -20,7 +20,9 @@ The intensity is GIMaP's one forward model of a cut, ``cut_model`` (Physics and 
 
 Spheres of a horizontal GISAXS cut: with αi = αf = 0 (the default) the sphere is evaluated at q_z = 0, the
 effective interface approximation. With the angles and λ of the cut it is the sum of the direct and the
-exit-reflected path, A = f(√(q² + q₊²) R) e^{-i q₊ R} + r f(√(q² + q₋²) R) e^{-i q₋ R}, r = |r| e^{i arg r} free.
+exit-reflected path, A = f(√(q² + q₊²) R) e^{-i q₊ R} + r f(√(q² + q₋²) R) e^{-i q₋ R}, r = |r| e^{i arg r} free;
+with a known ``substrate`` (``substrates``) as well, the four-term DWBA with the substrate's Fresnel coefficients.
+A model with a ``cut`` is a vertical cut of a fit of several curves (``vertical_cut``, ``joint_fit``).
 
 q in nm⁻¹, sizes in nm. Model files of earlier versions (``gimap_fit_model_v1``: σD/D = (σnn/D)/√(2π), intensity-weighted
 spheres and random cylinders, a vertical cylinder scaled by 10⁻⁶⟨R⁴⟩/4) are converted when read
@@ -44,6 +46,9 @@ from .cut_model.resolution import table_grid, tabulated
 from .cut_model.shapes import RADIUS_POWER
 from .cut_model.structure import paracrystal
 from . import model_library
+from .substrates import Substrate
+from .vertical_cut import VerticalCut
+from .vertical_cut import component_term as vertical_term
 
 CACHE_SIZE = 96
 
@@ -57,6 +62,8 @@ NETWORK_FAMILIES = ("sphere", "cylinder", "vertical_cylinder")
 """The families of Predict parameters; the others are for Refine and Search (``model_library``)."""
 MANUAL_NAMES = {"sphere": "Sphere", "cylinder": "Cylinder", "vertical_cylinder": "Vertical Cylinder"}
 STRUCTURE = ("D", "sigma_nn")
+HEIGHTS = ("h", "sigma_h")
+"""The height of upright cylinders, a parameter only where a vertical cut sees it (``Component.heights``)."""
 INTERFERENCES = {
     "paracrystal": ("1D paracrystal", STRUCTURE),
     "hex2d": ("2D hexagonal paracrystal", STRUCTURE),
@@ -159,9 +166,12 @@ class Component:
     """The size distribution (``SIZE_LAWS``)."""
     interference: str = DEFAULT_INTERFERENCE
     """The interference function with ``structure`` (``INTERFERENCES``)."""
+    heights: bool = False
+    """Upright cylinders with their height h and σh/h as parameters (a vertical cut sees them, ``vertical_cut``)."""
 
     def keys(self) -> tuple[str, ...]:
-        return ("Int", *FAMILIES[self.family][1], *(INTERFERENCES[self.interference][1] if self.structure else ()))
+        shape = FAMILIES[self.family][1] + (HEIGHTS if self.heights and self.family == "vertical_cylinder" else ())
+        return ("Int", *shape, *(INTERFERENCES[self.interference][1] if self.structure else ()))
 
     def value(self, key: str) -> float:
         return float(self.params[key].value)
@@ -178,6 +188,10 @@ class FitModel:
     spheres, while both are fitted (``fit_engine``)."""
     inequalities: tuple = ()
     """``fit_links.Inequality`` constraints of the fit (``D_1 >= 2*R_1 + 3``)."""
+    substrate: Optional[Substrate] = None
+    """A known substrate: with αi and αf, spheres in the four-term DWBA on it (``grazing``)."""
+    cut: Optional[VerticalCut] = None
+    """A vertical cut (fits of several curves): the curve is I(q_z) at the cut's in-plane q."""
 
     # -- addressing: ("globals", key) or (component index, key) ----------------------
 
@@ -208,19 +222,22 @@ class FitModel:
 
 
 def new_component(family: str, *, radius: Optional[float] = None, distance: Optional[float] = None,
-                  structure: bool = True, law: str = DEFAULT_LAW, interference: str = DEFAULT_INTERFERENCE) -> Component:
+                  structure: bool = True, law: str = DEFAULT_LAW, interference: str = DEFAULT_INTERFERENCE,
+                  heights: bool = False) -> Component:
     if family not in FAMILIES:
         raise ValueError(f"Unknown particle family {family!r}")
     if law not in SIZE_LAWS:
         raise ValueError(f"Unknown size law {law!r}")
     params = {key: Parameter.default(key) for key in ("Int", *FAMILIES[family][1], *STRUCTURE)}
+    if heights and family == "vertical_cylinder":
+        params.update({key: Parameter.default(key) for key in HEIGHTS})
     if radius is not None:
         params["R"] = replace(params["R"], value=float(radius))
     if distance is not None:
         params["D"] = replace(params["D"], value=float(distance))
     elif radius is not None:
         params["D"] = replace(params["D"], value=max(3.0 * float(radius), params["D"].lower))
-    component = Component(family, params, structure, law=law)
+    component = Component(family, params, structure, law=law, heights=heights and family == "vertical_cylinder")
     return with_interference(component, interference) if interference != DEFAULT_INTERFERENCE else component
 
 
@@ -250,9 +267,16 @@ def _cached(cache: Optional[dict], key: tuple, compute):
     return cache[key]
 
 
-def grazing(model: FitModel) -> Optional[Geometry]:
-    """The geometry of the two-path sphere, or None for the effective interface (q_z = 0)."""
+def grazing(model: FitModel):
+    """The geometry of the cut's spheres: None for the effective interface (q_z = 0), the Born term or the two paths
+    (``Geometry``); with a known substrate and both angles, the four-term DWBA on it. A vertical cut: its
+    ``VerticalCut``."""
+    if model.cut is not None:
+        return model.cut
     g = {key: float(model.globals[key].value) for key in GRAZING}
+    if model.substrate is not None and g["alpha_i"] > 0 and g["alpha_f"] > 0:
+        delta, beta = model.substrate.optical(g["wavelength"])
+        return Geometry("dwba", g["wavelength"], g["alpha_i"], g["alpha_f"], delta=delta, beta=beta)
     geometry = from_angles(g["alpha_i"], g["alpha_f"], g["wavelength"], g["refl_amp"], g["refl_phase"])
     return None if geometry.mode == "eia" else geometry
 
@@ -260,7 +284,7 @@ def grazing(model: FitModel) -> Optional[Geometry]:
 def qz_plus_r(model: FitModel) -> list[tuple[int, float]]:
     """q₊·R of every sphere (component index, value), q₊ = k_i + k_f; empty without the angles of the cut."""
     geometry = grazing(model)
-    if geometry is None or geometry.qz_born <= 0:
+    if not isinstance(geometry, Geometry) or geometry.qz_born <= 0:
         return []
     return [(index, geometry.qz_born * c.value("R")) for index, c in enumerate(model.components) if c.family == "sphere"]
 
@@ -297,6 +321,10 @@ def component_form(component: Component, q: np.ndarray, cache: Optional[dict] = 
     """T(q) of one component with scale 1 (q in nm⁻¹). ``cache``: reuse the size average while only the spacing
     changes during one fit, and the reverse. ``geometry``: :func:`grazing` of the model (spheres only)."""
     q = np.asarray(q, dtype=float)
+    if isinstance(geometry, VerticalCut):
+        values = {key: component.value(key) for key in component.keys()}
+        return vertical_term(component.family, component.law, component.interference, component.coupling,
+                             component.structure, values, q, geometry, lambda key, compute: _cached(cache, key, compute))
     if component.family not in NETWORK_FAMILIES or component.interference != DEFAULT_INTERFERENCE:
         values = {key: component.value(key) for key in component.keys()}
         return model_library.component_term(component.family, component.law, component.interference,
@@ -343,7 +371,7 @@ def evaluate(model: FitModel, q: np.ndarray, *, parts: bool = False, cache: Opti
     g = {key: float(parameter.value) for key, parameter in model.globals.items()}
     terms, geometry = {}, grazing(model)
     sigma = g.get("q_resolution", 0.0)
-    forms = (_smeared_forms(model, q, sigma, cache, geometry) if sigma > 0 and q.size
+    forms = (_smeared_forms(model, q, sigma, cache, geometry) if sigma > 0 and q.size and model.cut is None
              else [component_form(component, q, cache, geometry) for component in model.components])
     for index, (component, form) in enumerate(zip(model.components, forms)):
         terms[f"{index + 1}: {FAMILIES[component.family][0]}"] = g["k"] * component.value("Int") * form
@@ -457,6 +485,8 @@ def model_to_dict(model: FitModel) -> dict:
                "params": {key: parameter(c.params[key]) for key in c.keys()}}
         if c.interference != DEFAULT_INTERFERENCE:
             out["interference"] = c.interference
+        if c.heights:
+            out["heights"] = True
         return out
 
     out = {
@@ -468,6 +498,8 @@ def model_to_dict(model: FitModel) -> dict:
         out["contact"] = False
     if model.inequalities:
         out["constraints"] = [inequality.to_dict() for inequality in model.inequalities]
+    if model.substrate is not None:
+        out["substrate"] = model.substrate.to_dict()
     return out
 
 
@@ -508,7 +540,7 @@ def model_from_dict(data: Mapping) -> FitModel:
         legacy = schema == LEGACY_SCHEMA
         law = LEGACY_LAWS.get(family, DEFAULT_LAW) if legacy else str(raw.get("sizes") or DEFAULT_LAW)
         component = new_component(family, structure=bool(raw.get("structure", True)),
-                                  law=law if law in SIZE_LAWS else DEFAULT_LAW)
+                                  law=law if law in SIZE_LAWS else DEFAULT_LAW, heights=bool(raw.get("heights")))
         coupling = str(raw.get("coupling") or "lma")
         component = replace(component, coupling=coupling if coupling in COUPLINGS else "lma")
         interference = str(raw.get("interference") or DEFAULT_INTERFERENCE)
@@ -529,7 +561,8 @@ def model_from_dict(data: Mapping) -> FitModel:
 
     constraints = tuple(fit_links.Inequality(str(item["parameter"]), str(item["relation"]), str(item["expression"]))
                         for item in data.get("constraints") or ())
-    model = FitModel(tuple(components), globals_, contact=bool(data.get("contact", True)), inequalities=constraints)
+    model = FitModel(tuple(components), globals_, contact=bool(data.get("contact", True)), inequalities=constraints,
+                     substrate=Substrate.from_dict(data.get("substrate")))
     return fit_links.apply_links(fit_links.with_inequalities(model, constraints)) if constraints or any(
         p.tie for _path, p in model.parameters()) else model
 
