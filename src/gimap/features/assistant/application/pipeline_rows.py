@@ -93,7 +93,7 @@ def ring_row(ring) -> dict:
         row["orientation_settings"] = clean(ring.orientation_settings, digits=FULL)
     if ring.pole_figure:
         row["pole_figure"] = clean(ring.pole_figure, digits=FULL)
-        row["herman_systematic_range"] = (ring.pole_figure.get("systematics") or {}).get("range")
+        row["herman_systematic_range"] = (row["pole_figure"].get("systematics") or {}).get("range")
     return row
 
 

@@ -177,7 +177,7 @@ def test_the_results_are_composed_in_chinese_and_again_after_a_switch(zh) -> Non
     panel.refresh_language()
     texts = [line.text() for line in panel.findChildren(QLabel)]
     assert "峰" in texts and "几何" in texts and "距离" in texts
-    assert "环 q ≈ 0.9931 Å⁻¹：f = 0.610 —— 沿表面法线取向（面外，χ ≈ 0°）" in texts  # numbers as they are
+    assert "环 q ≈ 0.9931 Å⁻¹：f = 0.610, f_iso = 0.00 —— 沿表面法线取向（面外，χ ≈ 0°）" in texts
     assert "共 40 帧的序列：这些结果来自第 31–40 帧（最终状态）。" in texts
     assert "仪器配置“P08 Lambda”" in texts
     table = panel.peak_table

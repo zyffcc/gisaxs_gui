@@ -9,6 +9,8 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from src.gimap.shared.orientation_notes import coverage_warning, measured_f_text
+
 from .pipeline_assignment import assignment_lines, assignment_text, axis_text
 
 POLE_MODEL = "gaussian"
@@ -94,8 +96,12 @@ class PhaseStepsMixin:
             self._decide("pole figure", "fitted for every analysed ring", POLE_RULE)
             self._reported_pole = True
         reasons = pole.get("quality_reasons") or []
+        q = sum(ring.q_window) / 2
+        warning = coverage_warning(pole.get("systematics") or {})
+        if ring.herman is not None and warning:
+            self._attention("orientation factor", f"q = {q:.4g} Å⁻¹. {warning}", None,
+                            "Check the angular coverage and the range endpoints in Phases ▸ Pole Figure.")
         if reasons:
-            q = sum(ring.q_window) / 2
             self._attention("pole figure", f"At q = {q:.4g} Å⁻¹ the pole fit is not determined ({', '.join(reasons)}).",
                             None, "Inspect the profile and background in Phases ▸ Pole Figure.")
 
@@ -125,6 +131,18 @@ def fit_ring_pole(workbench, ring, background=None) -> dict:
     return pole_summary(record)
 
 
+def ring_step_summary(q, ring):
+    """Orientation result used in the tool response and the report's steps."""
+    pole = ring.pole_figure
+    verdict = "pole fit not determined" if pole.get("quality_reasons") else ring.reason or ring.texture
+    if ring.herman is None:
+        return f"q = {q:.3g}: {verdict}"
+    systematics = pole.get("systematics") or {}
+    warning = coverage_warning(systematics)
+    measured = measured_f_text(ring.herman, ring.herman_err, systematics.get("range"), isotropic=ring.herman_isotropic)
+    return f"q = {q:.3g}: {warning or verdict.rstrip('.') + '.'} Measured f = {measured}"
+
+
 def pole_summary(record: dict) -> dict:
     """The values of a pole-figure record a report keeps (full precision)."""
     values, errors = record.get("values") or {}, record.get("errors") or {}
@@ -134,7 +152,7 @@ def pole_summary(record: dict) -> dict:
         if key in values:
             summary[key] = values[key]
             summary[f"{key}_err"] = errors.get(key)
-    for key in ("herman_measured", "herman_measured_err", "reduced_chi2", "points", "weighted_coverage", "fitted_up_to_chi_deg",
+    for key in ("herman_measured", "herman_measured_err", "herman_isotropic", "reduced_chi2", "points", "weighted_coverage", "fitted_up_to_chi_deg",
                 "lorentz_corrected_input"):
         summary[key] = record.get(key)
     summary["at_bound"] = list(record.get("at_bound") or ())
@@ -147,18 +165,6 @@ def pole_summary(record: dict) -> dict:
     background = record.get("background")
     summary["background"] = background.get("value") if isinstance(background, dict) else background
     return summary
-
-
-def measured_f_text(value, sigma=None, limits=None, *, stat_label="stat") -> str:
-    """Measured f and its uncertainties to three significant digits."""
-    def number(amount):
-        return f"{float(amount):#.3g}".removesuffix(".").replace("-", "−")
-    text = number(value)
-    if sigma is not None:
-        text += f" ± {number(sigma)} ({stat_label})"
-    if limits is not None:
-        text += f" [{number(limits[0])}, {number(limits[1])}]"
-    return text
 
 
 def pole_estimate(pole: dict, key: str) -> str:

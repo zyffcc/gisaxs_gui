@@ -10,13 +10,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from src.gimap.shared.orientation_notes import orientation_notes
+from src.gimap.shared.orientation_notes import coverage_warning, measured_f_text, orientation_notes
 
 from ..domain import AT_EDGE
 from .calibration_report import calibration_quality, calibration_rms
 from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
 from .pipeline_geometry import ROTATION_WHY, SEARCHED
-from .pipeline_phases import assignment_lines, measured_f_text, pole_line
+from .pipeline_phases import assignment_lines, pole_line
 from .report_language import ENGLISH, heading as section
 from .run_record import mask_lines, record_lines
 
@@ -93,7 +93,7 @@ def herman_texts(ring: dict, stat_label="stat") -> Optional[dict]:
         return None
 
     return {"f": measured_f_text(ring["herman"], ring.get("herman_err"), ring.get("herman_systematic_range"),
-                                stat_label=stat_label)}
+                                 stat_label=stat_label, isotropic=ring.get("herman_isotropic"))}
 
 
 def found_by_search(report: dict) -> Optional[dict]:
@@ -188,11 +188,15 @@ def _ring_lines(rings: list[dict]) -> list[str]:
         head = f"- q ≈ {_number(ring.get('q'))} Å⁻¹, |χ| coverage {_fixed(ring.get('coverage'), 2)}: "
         texts = herman_texts(ring)
         pole = ring.get("pole_figure") or {}
-        if pole.get("quality_reasons"):
+        warning = coverage_warning(pole.get("systematics") or {}) if texts else ""
+        if warning:
+            lines.append(head + warning)
+            head = "  - "
+        if pole.get("quality_reasons") and not warning:
             head += "pole fit not determined. "
         if texts is None:
             lines.append(head + (ring.get("reason") or ring.get("texture") or "no result"))
-        elif pole.get("quality_reasons"):
+        elif pole.get("quality_reasons") or warning:
             lines.append(head + f"Measured f = {texts['f']}")
         else:
             lines.append(head + f"f = {texts['f']} — {ring.get('texture')}")

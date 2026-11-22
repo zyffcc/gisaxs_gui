@@ -6,7 +6,7 @@ import math
 from typing import Optional
 
 from src.gimap.app.presentation.i18n import tr, trf
-from src.gimap.shared.orientation_notes import orientation_notes
+from src.gimap.shared.orientation_notes import coverage_warning, orientation_notes
 
 from .texts import message_text
 
@@ -102,6 +102,9 @@ def pole_result_text(result) -> str:
     """Show fit quality and the independently measured moment on the requested angular range."""
     fit = result.fit
     lines = []
+    warning = coverage_warning(result.systematics, trf)
+    if warning:
+        lines.append(warning)
     if not fit.ok:
         lines.append(trf("Pole fit not determined ({reasons}).", reasons=tr(fit.message)))
     elif fit.quality_reasons:
@@ -115,6 +118,7 @@ def pole_result_text(result) -> str:
         limits = result.systematics.get("range")
         if limits:
             text += trf(" [{low}, {high}] (systematic)", low=f"{limits[0]:#.3g}", high=f"{limits[1]:#.3g}")
+        text += "   " + trf("Isotropic reference f_iso = {value}", value=f"{fit.herman_isotropic:#.3g}")
         lines.append(text)
     if fit.ok:
         lines.extend(_fit_lines(result))

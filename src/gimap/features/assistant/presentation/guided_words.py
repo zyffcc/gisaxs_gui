@@ -14,8 +14,10 @@ from functools import lru_cache
 
 from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, current_language, tr, trf
 from src.gimap.shared import fit_names
+from src.gimap.shared.orientation_notes import COVERAGE_WARNING
 
 SENTENCES = (
+    "q = {q} Å⁻¹.", COVERAGE_WARNING,
     "At q = {q} Å⁻¹ the pole fit is not determined ({bounds}).",
     "Exclude pixels with αf < {angle}° ({source}). Polarisation: {factor}.",
     "no clear preferred orientation; the strongest measured bin is at |χ| ≈ {chi}°",

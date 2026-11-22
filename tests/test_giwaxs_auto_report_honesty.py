@@ -8,6 +8,7 @@ for this floating-point frame. For the ring orientation it gives the exit-angle 
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 from pathlib import Path
@@ -78,9 +79,11 @@ def test_an_alpha_i_given_replaces_the_one_in_the_command_bar_and_is_the_one_use
     assert not _alpha_asked(report)
 
 
-def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08) -> None:
+def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08, tmp_path) -> None:
+    from src.gimap.app.headless_record import write_outputs
+
     session, poni = p08
-    report = session.run_pipeline(PipelineOptions(calibration=str(poni), incidence_deg=0.075, follow_detection=True))
+    report = session.run_pipeline(PipelineOptions(calibration=str(poni), incidence_deg=0.075, follow_detection=True, rings=1))
 
     q = _decision(report, "q")
     assert q["decision"] == "kinematic (no refraction correction)"
@@ -113,22 +116,40 @@ def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08) ->
     assert ring["orientation_settings"]["error_model"] == "pixel_scatter"
     pole = ring["pole_figure"]
     low, high = ring["herman_systematic_range"]
-    assert low <= ring["herman"] <= high
+    assert ring["herman"] == pytest.approx(.142, abs=.001)
+    assert ring["herman_err"] == pytest.approx(.00275, abs=.0001)
+    assert ring["herman_isotropic"] == pytest.approx(.0563, abs=.0005)
+    assert [low, high] == pytest.approx([.071, .157], abs=.002)
     assert ring["herman"] == pytest.approx(pole["herman_measured"])
+    assert ring["herman_isotropic"] == pytest.approx(pole["herman_isotropic"])
     assert ring["orientation_settings"]["horizon_excluded_deg"] == [84, 88]
     assert "Excluded |χ| 84–88°" in text
-    assert "uses measured ±χ partners only" in text
+    assert "uses measured ±χ partners only" not in text
     scenarios = pole["systematics"]["scenarios"]
     assert {s["horizon_fraction"] for s in scenarios} == {0., .05, .10}
     assert all(s["model_fill"] is None for s in scenarios)
-    moments = [s["measured"] for s in scenarios if s["measured"] is not None]
+    moments = [f for s in scenarios for f in s["coverage_factors"].values()]
     assert [low, high] == pytest.approx([min(moments), max(moments)])
     assert {s["threshold_multiplier"] for s in pole["systematics"]["scenarios"]} == {0.5, 1.0, 2.0}
     assert pole["systematics"]["background_rule"] == "fitted sigma"
     assert "reduced χ² exceeds 5" in pole["quality_reasons"]
     assert any("0.997" in item["why"] and "not determined" in item["why"] for item in report["needs_attention"])
-    assert any("pole fit not determined. Measured f =" in line for line in text.splitlines() if "q ≈ 0.997" in line)
+    warning = "orientation factor is not determined by the measured χ range (systematic range [0.0711, 0.157])"
+    assert any(warning in line for line in text.splitlines() if "q ≈ 0.997" in line)
+    assert any(warning in item["why"] for item in report["needs_attention"] if item["item"] == "orientation factor")
+    assert "Measured f = 0.142 ± 0.00275 (stat) [0.0711, 0.157], f_iso = 0.0563" in text
+    assert "Lower limit from attenuated bins and horizon gap continued" in text
+    assert "Upper limit from attenuated bins removed, horizon gap empty" in text
     assert "1 − φ is conditional on the background b" in text and "(stat) [" in text
+
+    folder = tmp_path / "exported"
+    write_outputs(session, report, folder)
+    header = next(line for line in (folder / "azimuthal_last_ring.csv").read_text(encoding="utf-8").splitlines()
+                  if line.startswith("# ring orientation: "))
+    exported = json.loads(header.removeprefix("# ring orientation: "))
+    for key in ("herman", "herman_err", "herman_isotropic", "herman_systematic_range"):
+        assert exported[key] == ring[key]
+    assert exported["range_sources"] == pole["systematics"]["range_sources"]
 
 
 def test_more_peaks_are_fitted_when_asked_and_a_clean_one_left_out_by_the_cap_is_listed(p08) -> None:

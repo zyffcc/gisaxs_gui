@@ -42,7 +42,7 @@ UNCERTAINTIES = {
                "the ± of a peak fit whose reduced χ² is above 1 are multiplied by √χ²_r (a fit above χ²_r = 10 is "
                "flagged as a poor fit in the peak table); "
                "the Monte Carlo estimate of σ_f uses the errors of the measured I(χ) bins before mirror filling. "
-               "The systematic range for f varies the background, exit-angle cut, horizon intensity threshold and wedge fill. "
+               "The systematic range for f varies the angular cuts, background and assumed densities at both edges. "
                "Geometry and refraction uncertainties are excluded"),
     "gisaxs": ("the σ of the cuts' points (the σ column of the saved curves), by which the fit's χ²ᵣ is normalised, "
                "come from {model}; the intervals of R, h and D are the posterior of Predict parameters given these σ "
@@ -155,7 +155,7 @@ def horizon_decision(rings: Iterable) -> Optional[dict]:
         "what": "ring orientation",
         "decision": f"Exclude pixels with αf < {threshold:g}° ({source}). Polarisation: {polarization}.",
         "why": "Binned means sample the pole density. Hermans f and the pole fit use (I − b) sin χ. "
-               "The systematic range varies the exit-angle cut, horizon intensity threshold, background and missing-wedge fill.",
+               "The range tests the exit-angle cut, horizon threshold, background, attenuated bins and gaps at both ends of the profile.",
     }
 
 

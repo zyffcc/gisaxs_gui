@@ -78,18 +78,34 @@ def test_phases_are_drawn_listed_fitted_and_exported(tmp_path: Path, monkeypatch
         pole = page.indexing.last_pole
         assert pole is not None and pole.fit.ok and pole.fit.values["oriented_fraction"] < 0.2
         assert "oriented fraction" in panel.result_label.text() and panel.pole_plot.curve_count() >= 2
+        reference = pole.fit.herman_isotropic
+        result_text = panel.result_label.text()
+        measured = next(line for line in result_text.splitlines() if "Measured f =" in line)
+        assert f"Isotropic reference f_iso = {reference:#.3g}" in measured
+        for end in ("min", "max"):
+            assert pole.systematics["range_sources"][end]["scenario"] in result_text
         target = tmp_path / "out" / "film_pole_figure.csv"
         monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(lambda *_args, **_kw: (str(target), "")))
         panel.export_button.click()
         text = target.read_text(encoding="utf-8")
         assert "# columns: chi_deg  N  sigma  measured  model" in text and len(text.splitlines()) > 90
+        summary = next(line for line in text.splitlines() if line.startswith("# pole figure summary:"))
+        assert "measured f =" in summary
+        assert float(summary.split("f_iso = ")[1].replace("−", "-")) == pytest.approx(reference, rel=.005)
         record = json.loads((tmp_path / "out" / "film_indexing.json").read_text(encoding="utf-8"))
         assert record["pole_figure"]["model"] == "gaussian_mosaic"
+        assert record["pole_figure"]["herman_isotropic"] == reference
+        csv_record = next(line.removeprefix("# pole figure: ") for line in text.splitlines()
+                          if line.startswith("# pole figure: "))
+        assert json.loads(csv_record)["herman_isotropic"] == reference
         assert record["pole_figure"]["values"]["oriented_fraction"] == pytest.approx(pole.fit.values["oriented_fraction"])
         assert [phase["name"] for phase in record["indexing"]["phases"]] == ["cubic", "MAPbI3 (tetragonal)"]
         assert record["analysis"]["geometry"]
         apply_language("zh", [panel])
         assert panel.windowTitle() == "物相与指标化" and panel.fit_button.text() == "拟合极图"
+        assert f"各向同性参考值 f_iso = {reference:#.3g}" in panel.result_label.text()
+        for end in ("min", "max"):
+            assert ZH[pole.systematics["range_sources"][end]["scenario"]] in panel.result_label.text()
         panel.refresh()
         assert panel.phase_table.item(0, 4).text() == "(1 1 1) 平行于衬底"
     finally:

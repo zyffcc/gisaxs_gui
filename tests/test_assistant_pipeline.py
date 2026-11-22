@@ -294,7 +294,7 @@ def test_the_command_line_pipeline_analyses_real_images_end_to_end(tmp_path: Pat
     reports = analyse_frames([str(frame)], PipelineOptions(notes=notes, technique="giwaxs"), out, saved_profiles=False)
 
     report = reports[0]
-    assert report["ok"] and {item["item"] for item in report["needs_attention"]} == {"pole figure"}
+    assert report["ok"] and {item["item"] for item in report["needs_attention"]} == {"pole figure", "orientation factor"}
     assert decision(report, "geometry")["decision"] == "calibrated from AgBH_00001.tif"
     assert decision(report, "technique")["why"].startswith("forced")
     assert report["measurement"] == "giwaxs" and report["geometry"]["incidence_deg"] == pytest.approx(0.2)
@@ -327,7 +327,8 @@ def test_the_command_line_pipeline_analyses_real_images_end_to_end(tmp_path: Pat
     assert answers[3]["result"]["isError"] and "open_frame" in answers[3]["result"]["content"][0]["text"]
     assert not answers[4]["result"]["isError"]
     pipeline = json.loads(answers[5]["result"]["content"][0]["text"])
-    assert pipeline["ok"] and "tables" not in pipeline and {item["item"] for item in pipeline["needs_attention"]} == {"pole figure"}
+    assert pipeline["ok"] and "tables" not in pipeline
+    assert {item["item"] for item in pipeline["needs_attention"]} == {"pole figure", "orientation factor"}
     assert (tmp_path / "mcp_out" / "report.md").is_file() and len(pipeline["outputs"]) >= 4
     ring = json.loads(answers[6]["result"]["content"][0]["text"])
     assert not answers[6]["result"]["isError"] and ring["coverage"] > 0.5

@@ -12,6 +12,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **GIWAXS orientation** reports measured Hermans f beside its same-coverage isotropic reference f_iso. The systematic range includes empty and continued edge gaps and tests attenuation near the horizon. Reports name the scenarios at both limits and flag rings whose range is wider than 0.05. The Pole Figure tool, CSV headers and JSON records include the reference and limits.
+
 - **Fit Several Curves Together** starts vertical cuts at twice the substrate critical angle. Set the limit to zero
   to use the full cut. The report flags likely height underestimation in dense or high-Z layers when the vertical
   reduced χ² exceeds 3. The cylinder DA now averages coherent amplitudes over the height distribution. Heights and

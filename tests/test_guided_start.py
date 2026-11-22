@@ -62,7 +62,7 @@ def test_one_click_gives_results_with_their_evidence_without_any_model(analyze) 
     _wait(lambda: guided.report is not None, 120)
     report = guided.report
     assert report["ok"] and report["procedure"] == "giwaxs"
-    assert {item["item"] for item in report["needs_attention"]} == {"pole figure"}
+    assert {item["item"] for item in report["needs_attention"]} == {"pole figure", "orientation factor"}
     assert page.step_rail.state("results") == "ok" and page.current_right() == "results"
     # The status during the run says what is done in words, never "find_peaks: …".
     assert progress and all("_" not in line.split(" — ")[0] for line in progress), progress
@@ -170,13 +170,26 @@ def test_a_ring_says_in_one_line_why_its_orientation_is_not_determined() -> None
     assert detail.startswith(reason) and "shadowed" in detail
     text, detail = ring_summary({"q": 0.36, "herman": 0.52, "herman_isotropic": -0.03,
                                  "texture": "oriented along the surface normal (out-of-plane, χ ≈ 0°)"})
-    assert text == ("Ring q ≈ 0.36 Å⁻¹: f = 0.520 — oriented along the surface "
-                    "normal (out-of-plane, χ ≈ 0°)")  # the Unicode minus; two decimals while σ_f is not known
+    assert text == ("Ring q ≈ 0.36 Å⁻¹: f = 0.520, f_iso = −0.0300 — oriented along the surface "
+                    "normal (out-of-plane, χ ≈ 0°)")
     assert detail.startswith("oriented along the surface normal")  # what the short note means
-    # With σ_f, f and f_iso have the decimals that show it (0.0027: four), and f_iso is given unless it is 0 there.
     text, _detail = ring_summary({"q": 0.9972, "herman": 0.13921, "herman_err": 0.002696, "herman_isotropic": -0.001357,
                                   "texture": "oriented along the surface normal (out-of-plane, χ ≈ 0°)"})
-    assert text.startswith("Ring q ≈ 0.9972 Å⁻¹: f = 0.139 ± 0.00270 (stat) — ")
+    assert text.startswith("Ring q ≈ 0.9972 Å⁻¹: f = 0.139 ± 0.00270 (stat), f_iso = −0.00136 — ")
+
+
+def test_ring_coverage_warning_depends_on_the_range_even_for_a_determined_pole_fit():
+    from src.gimap.features.assistant.presentation.guided_tables import ring_summary
+
+    limits = [.1, .15]
+    ring = {"q": 1.0, "herman": .12, "herman_isotropic": .03, "herman_systematic_range": limits,
+            "texture": "tilted", "pole_figure": {"ok": True, "systematics": {"range": limits}}}
+    assert "not determined" not in ring_summary(ring)[0]
+    limits[1] = .151
+    text, _ = ring_summary(ring)
+    headline = text.splitlines()[0]
+    assert "not determined by the measured χ range" in headline and "[0.100, 0.151]" in headline
+    assert "f_iso = 0.0300" in text and "Pole fit not determined" not in text
 
 
 def test_a_peak_at_the_end_of_the_data_is_not_called_reliable() -> None:

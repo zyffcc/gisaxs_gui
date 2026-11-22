@@ -117,11 +117,15 @@ def test_computed_ring_table_reports_the_measured_range_and_conditional_pole_fit
         ring, orientation_settings={"min_exit_deg": .3, "polarization": .99,
                                     "horizon_excluded_deg": [82, 87], "horizon_fraction": .05},
         pole_figure={"ok": True, "quality_reasons": ["reduced χ² exceeds 5"], "herman": .1,
-                     "oriented_fraction": .2, "systematics": {"range": [.01, .03], "model_fill_allowed": False}}))
+                     "oriented_fraction": .2, "systematics": {"range": [.01, .09], "model_fill_allowed": False,
+                         "range_sources": {"min": {"scenario": "horizon gap continued", "threshold_multiplier": .5,
+                                                   "background": 12., "horizon_fraction": .05}}}}))
     page = report_html(outcome)
     assert "Pole fit not determined (reduced χ² exceeds 5)" in page
-    assert "(stat) [0.0100, 0.0300]" in page and "1 − φ is conditional on the background b." in page
+    assert "(stat) [0.0100, 0.0900], f_iso =" in page and "1 − φ is conditional on the background b." in page
+    assert "orientation factor is not determined by the measured χ range" in page
     assert "Excluded αf &lt; 0.3°. Polarisation 0.99." in page
-    assert "Excluded |χ| 82–87°" in page and "leaves the missing wedge empty" in page
+    assert "Excluded |χ| 82–87°" in page and "Lower limit from horizon gap continued" in page
     chinese = report_html(outcome, language="中文")
-    assert "极图拟合未能确定取向" in chinese and "缺失楔留空" in chinese and "|χ| 82–87°" in chinese
+    assert "极图拟合未能确定取向" in chinese and "下限取自按邻近强度补全地平线缺口" in chinese and "|χ| 82–87°" in chinese
+    assert "实测 χ 范围不足以确定取向因子" in chinese
