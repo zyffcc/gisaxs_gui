@@ -101,7 +101,8 @@ Run Automatic Analysis（Results 步骤可写束线时笔记：αi、能量、�
 - GISAXS：几何 → Yoneda 切线（找不到时提示检查 αi）→ 按左右对称移动中心列 → 选择两半（都可用且一致就平均，
   一半被遮挡 / 有缝隙 / 太短就用另一半，并写出理由）→ 特征长度 2π/q*（侧峰或 shoulder；写明不一定是粒子间距；它是单独的结果，
   不作拟合的起点）→ Fitting 的 Predict parameters（注入的 `create_curve_fit()`：没有给组成时网络在一种或两种球和竖直圆柱、
-  带或不带次晶的组成中选，随机取向圆柱只在给定组成时用；有效界面 q_z = 0）。报告最可能的解（`chosen`），带概率和 R、h、D 的
+  带或不带次晶的组成中选，随机取向圆柱只在给定组成时用）。已知入射角和 Yoneda 带的出射角时，在切线真空 q_z 处计算 Born 项（第二层）；
+  任一角度未知时用有效界面（第一层，q_z = 0）。报告最可能的解（`chosen`），带概率和 R、h、D 的
   68 % 区间（*fit intervals*）；`at_bounds` 标出停在范围边界的非线性数值，报告的解有这种值时是一处需要查看；χ²ᵣ > 10 为拟合差；
   另一个解的概率 ≥ 0.2（`ASK_PROBABILITY`）时结果里会问你选哪个模型，并指出 D 与 2π/q* 相差 15 % 以内的解
   （`application/gisaxs_choice.py`、`gisaxs_procedure.py`）。

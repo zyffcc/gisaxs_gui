@@ -244,6 +244,11 @@ class GisaxsProcedureMixin:
         solutions = fit.get("solutions") or []
         if not solutions:
             return
+        if fit.get("substrate_level") == 2:
+            self._decide("model fit", "at the second level",
+                         f"Born term at the cut's q_z = {fit['cut_qz']['q_z_inv_nm']:.4g} nm⁻¹")
+        elif fit.get("substrate_level") == 1:
+            self._decide("model fit", "at the first level (q_z = 0)", "the angles of the cut are not known")
         _index, best = chosen(fit)
         over = fit_names.points_text(best.get("points") or fit.get("fitted_points"))
         by_errors = fit_names.weight_key(best) == "bic_weight"

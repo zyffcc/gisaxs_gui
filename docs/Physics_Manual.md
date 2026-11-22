@@ -2092,9 +2092,12 @@ posterior probability. The same function fits the cut in Batch Export's *Particl
 Process with AI and the MCP tool `fit_horizontal_cut`, and on the command line (`tools/gimap_agent.py`). It takes about
 25 s per cut on one core.
 
-**Model and compositions.** The cut is taken at the effective interface (q_z = 0, section 9.10), with Fitting's
-defaults: sizes Gaussian by number, the paracrystal of section 9.5 in the LMA, the beam tail A / (1 + (q/w)^ν) and a
-constant background (9.1). Without a given composition (as in Run Automatic Analysis) the network chooses among one
+**Model and compositions.** When the geometry supplies α_i and λ and the cut is on the Yoneda band of exit angle α_f,
+the automatic fit uses the Born term at the cut's vacuum q_z = (2π/λ)(sin α_i + sin α_f), in nm⁻¹ for λ in nm
+(level 2, section 9.13). When either angle is unknown, it uses the effective interface at q_z = 0 (level 1).
+The report states the level under *Decisions*. Other model settings follow Fitting's defaults, with sizes Gaussian
+by number, the paracrystal of section 9.5 in the LMA, the beam tail A / (1 + (q/w)^ν) and a constant background (9.1).
+Without a given composition (as in Run Automatic Analysis) the network chooses among one
 or two populations of spheres and upright cylinders, each with or without a paracrystal (the head's four most
 probable of these, and its most probable of one and of two populations). A given composition (1 sphere, 2 random cylinder, 3 vertical cylinder, each population with a
 paracrystal: Batch Export's **Model**, the `components` of the tool) is fitted whole; random cylinders are fitted only
@@ -2161,7 +2164,7 @@ same in the table and in *Needs attention* (48.3484 nm is 48.3 nm in both). **Sa
 population of each solution: rank, model, χ²ᵣ (`chi2`; a `#` line gives the fitted points), probability, log RMSE, the parameters (nm; the spreads relative), the
 68 % intervals of R, h and D, `at_bounds` (`name:upper` or `name:lower`) and `chosen`.
 
-**GALAXI.** On the public GALAXI frame (α_i = 0.463°, `galaxi_bornagain.poni`) the run reports an upright cylinder
+**GALAXI.** On the public GALAXI frame (α_i = 0.463°, `galaxi_bornagain.poni`) the earlier first-level fit reported an upright cylinder
 with a paracrystal next to a second upright cylinder, R = 3.17 / 6.15 nm, D = 44 / – nm, χ²ᵣ = 1.07 over 596 of 598
 points, probability 0.39; two more solutions have probabilities of 0.32 and 0.30, so *Needs attention* asks for the
 model (**model**). The cut's broad log-normal sizes and its low-q rise are described by two populations; the sample's
@@ -2186,8 +2189,8 @@ Implementation: `create_curve_fit()` in `src/gimap/features/fitting/bootstrap.py
 
 ### 8.6 What the GISAXS analysis does not model
 
-- The cut is treated as a function of `abs(q_y)` only. q_z at the Yoneda row, reflection and refraction (DWBA) terms
-  and the Yoneda enhancement itself are not modelled.
+- The automatic fit uses a single vacuum q_z for a Yoneda band of known angles (section 8.5). It omits reflected
+  paths, refraction and the variation of the Yoneda enhancement across the band.
 - The term `A / (1 + (q/w)^ν)` is an additive empirical tail of the direct and reflected beam; no resolution
   convolution is applied.
 - The Yoneda row is found without αc; the beam-centre row is not refined; the centre has no uncertainty.
@@ -2221,7 +2224,8 @@ Sizes and distances are in nm, w in nm⁻¹, the spreads σ_R/R, σ_h/h, σnn/D 
 section 9.10): with both angles, spheres have the direct and the exit-reflected path, q₊ = k_i + k_f and
 q₋ = k_i − k_f, with a free effective reflection coefficient r (the two paths of section 9.10, section 9.13). The 1D
 Predict window takes its **Cut qz (nm⁻¹)** (chapter 10): spheres at the Born term of that q_z alone. Without either,
-q_z = 0, the effective interface. Analyze's finite-width horizontal band is not automatically replaced by a single inferred q_z.
+q_z = 0, the effective interface. For Run Automatic Analysis, the Yoneda band's exit angle and the incidence angle
+give a single vacuum q_z for the fit (section 8.5).
 
 ### 9.1 Points that are fitted
 
@@ -3107,12 +3111,9 @@ no such approximation, so GIMaP says when it matters:
   above 1.7 at the cut's q_z, where the form factor at q_z = 0 (the default effective interface) biases the radius,
   usually too small; give both angles of the cut (αi, αf) so that spheres are fitted with the exit-reflected path
   (random cylinders stay at q_z = 0)*. This flag applies only at level 1.
-- The flag needs the cut's q₊, so only a fit at level 1 that knows the angles sets it. The automatic analysis (Run
-  Automatic Analysis, `tools/gimap_agent.py auto`, Process with AI) fits at level 1 and takes α_i and λ of the
-  geometry and α_f of the Yoneda band the cut is at; its report lists the flag among the *Decisions* (fit caveat)
-  and under **Needs attention** with q₊R of each population named (exit code 2), and `report.json` keeps q₊ and the
-  angles (`gisaxs.fit.cut_qz`, section 14.10). For a cut elsewhere or without α_i, `cut_qz` is `null` and nothing
-  is flagged: no angle is guessed.
+- Automatic analysis uses level 2 when it knows α_i, λ and the cut's Yoneda exit angle α_f. Predict applies its
+  level-2 flags below to the solution. For a cut away from the Yoneda band or without α_i, the fit uses level 1
+  and has no measured q₊ for these flags. The report records the level and the source of q₊ (section 14.10).
 - The Fit page and the 1D Predict window take the level from the angles they are given. A curve file does not carry
   the angles of its cut. At level 1, users can enter the measured q₊ separately for flags on reflected-beam data. The fit still evaluates the effective interface at q_z = 0.
 - For a sphere or random cylinder on a reflected-beam cut fitted at level 1 or 2, `qzR_cov:R_n` warns above
@@ -3125,8 +3126,7 @@ no such approximation, so GIMaP says when it matters:
   upright-cylinder cut alone does not determine h. It can use a height supplied with the selected population in Model.
 - For random cylinders the limit is the spheres', applied to the radius, which is a lower bound of their size; no
   level evaluates them at the cut's q_z in Fitting's model, so the flag only warns.
-- The flag changes no value, interval or probability of a solution: it is added after the fit
-  (`tests/test_qzr_flag.py` compares a run with and without it).
+- Predict assigns the flags after fitting. The fitted values, intervals and probabilities depend on the substrate level used.
 
 **The model error.** Without it (steps 4–5 with the counts' σ), the 68 % intervals held the truth in 60–64 % of the
 curves of Fitting's own model (fit1d's 200 development curves drawn in `cut_model`, the composition given:
@@ -4891,7 +4891,7 @@ window's records:
 | Mask | `mask`: `applied` (true or false), `file` (as above), `kind` (a mask image whose non-zero pixels are left out, or a GIMaP masks file with its number of drawn shapes), `masked_pixels`, and `bad_pixels_left_out` (section 14.4): the pixels found automatically are counted apart from the mask. `report.md` says the same under **Mask**, also when no mask was applied |
 | Analyze's record | `analysis_record`: the record of section 14.2 for the frame as it was reduced (geometry, corrections, error model, binning, markers, `input_sha256`), without `files` |
 | Results | the decisions with their reasons (`decisions`), the open questions (`needs_attention`), the steps, the peaks and rings (GIWAXS) or `gisaxs` (cuts, symmetry axis, halves, length scale, fit), `tables` and `folder` (the frame's folder, relative to the summary); in `summary.json` each frame also has `outputs` (the files written) |
-| Model fit | `gisaxs.fit.method`: `name` (`Predict parameters`), `network` (`name`, for example `flow_v1`, and `sha256`: the SHA-256 of the weights file, the value the network's record names and the loader checks) and `seed` (0, section 14.8). `gisaxs.fit.solutions` holds every solution with its model, parameters, probability, χ²ᵣ (`chi2`, with `points`: `fitted`, `given`, `below_window`, `unusable`), `flags`, `warnings` and `more_warnings` (the flags as sentences: of the particles and the solution, and of background, beam tail and resolution) and `intervals` (median, 68 % and 95 % limits; the texts print the refined value with the 68 % limits); `fitted_points` repeats the points of the fit; `curve`, `points` and `q_range_inv_angstrom` say what was fitted, `data` holds the fitted points; `sphere_model` (`effective interface (q_z = 0)`) says where the particles are evaluated and `cut_qz` holds the cut's vacuum q_z (`q_z_inv_nm`) with `alpha_i_deg`, `alpha_f_deg` and `wavelength_A` it is from (α_i and λ of the geometry, α_f of the Yoneda band; `null` when one is not known), with which a sphere or random cylinder of q₊R above 1.7 is flagged `qzR` (section 9.13) |
+| Model fit | `gisaxs.fit.method`: `name` (`Predict parameters`), `network` (`name`, for example `flow_v1`, and `sha256`: the SHA-256 of the weights file, the value the network's record names and the loader checks) and `seed` (0, section 14.8). `gisaxs.fit.solutions` holds every solution with its model, parameters, probability, χ²ᵣ (`chi2`, with `points`: `fitted`, `given`, `below_window`, `unusable`), `flags`, `warnings` and `more_warnings` (the flags as sentences: of the particles and the solution, and of background, beam tail and resolution) and `intervals` (median, 68 % and 95 % limits; the texts print the refined value with the 68 % limits); `fitted_points` repeats the points of the fit; `curve`, `points` and `q_range_inv_angstrom` say what was fitted, `data` holds the fitted points; `substrate_level` and `sphere_model` record the approximation used. At level 2 (`Born term at the cut's q_z`), `cut_qz` holds the vacuum `q_z_inv_nm` and its inputs `alpha_i_deg`, `alpha_f_deg` and `wavelength_A`. At level 1 (`effective interface (q_z = 0)`), `cut_qz` is `null`. Section 9.13 explains the q_z·R flags |
 
 - `summary.json` is one object: `software_version`, `created`, `options`, `arguments` (one sentence per pattern or
   folder among the arguments: how many files it stood for) and `frames`, the list of the frame reports without

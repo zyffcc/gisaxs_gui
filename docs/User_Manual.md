@@ -193,11 +193,11 @@ orange (section 4.1).
 | Beam centre | x moved to the symmetry axis, x = 597.26 px | The documented direct beam is x = 597.1 px |
 | Halves | *Halves: Mean of both halves*, the reason in its tooltip | Both halves agree; otherwise the usable one is taken |
 | **Length scale 2π/q\*** | *2π/q\* = 55.6 nm at a shoulder of the cut (\|qy\| = 0.0113 Å⁻¹, no resolved peak): not necessarily the particle spacing.* | It is not the particle spacing: near the documented 53.6 nm by coincidence (a BornAgain simulation of the same particles without interference shows a shoulder too) |
-| **Fit of I(qy)** | A table of solutions, most probable first: model, p (the probability), R, h, D (nm) of every population in the order of the radii (`3.17 / 6.15`; `44 / –`: the second population has no paracrystal) and χ²ᵣ; a value at a bound of its range is marked ⚠ and named under the table in a warning (*⚠ Not determined by the curve (at a search bound) — 2: Tail ν; 3: Tail ν*; which bound: its tooltip) | Whether another solution is about as probable; what is at a bound |
+| **Fit of I(qy)** | A table of solutions, most probable first: model, p (the probability), R, h, D (nm) of every population in the order of the radii (a dash for D means that population has no paracrystal) and χ²ᵣ; a ⚠ marks values at a bound. The warning under the table names them, and the tooltip identifies the bound | Whether another solution is about as probable; what is at a bound |
 
 The fit is **Predict parameters** (section 6.4): GIMaP's network proposes one or two populations of spheres and
 upright cylinders, with or without a paracrystal, each solution is refined by least squares and weighted by its
-probability, and the most probable solution is reported. Here it is an upright cylinder with a paracrystal next
+probability, and the most probable solution is reported. The screenshot shows the earlier first-level fit, which found an upright cylinder with a paracrystal next
 to a second, larger upright cylinder (R = 3.17 / 6.15 nm, D = 44 / – nm, χ²ᵣ 1.07, probability 0.39). Two more
 solutions are about as probable (0.32 and 0.30), so the Results tab shows a point to check, **Model choice**:
 *3 solutions have a probability of at least 0.2 (…): the curve alone does not decide the model.* The probabilities
@@ -1701,9 +1701,10 @@ Otherwise, determined fits also contribute a model fill with its propagated stan
 6. fits I(qy) with **Predict parameters**, Fitting's network method (section 6.4): GIMaP's network
    proposes one or two populations of spheres and upright cylinders, with or without a paracrystal
    distance D, and their values; each solution is refined by least squares and weighted by its posterior
-   probability. The cut is taken at the effective interface (q_z = 0); 2π/q\* stays a result of its own
-   and does not start the fit.
-   Confirm the model in Fitting.
+   probability. With the incidence angle αi and the exit angle αf of the Yoneda band, the fit uses the Born term
+   at the cut's vacuum q_z = (2π/λ)(sin αi + sin αf), the second level. If either angle is unknown, the fit uses
+   the effective interface at q_z = 0, the first level. The report states the level and the reason under *Decisions*.
+   The length scale 2π/q\* is independent of the fit. Confirm the model in Fitting.
 
 The solutions are ranked by probability **p**, or by **BIC weight** if evidence sampling failed. Probabilities are relative to the
 compositions that were tried; the single solution of a composition you gave has none (*only this composition was
@@ -1720,13 +1721,10 @@ counted as values at a bound; one that ends at 0 is named among the report's *De
 at 0, the non-negativity limit*). A reported solution with χ²ᵣ above 10 — the limit of Fitting's poor fits
 (section 6.5) — misses the curve by far more than its noise: a point to check (**Fit**) says that none of the
 compositions tried describes the cut and that its R and D are not measurements (the Bragg rings of a powder or a
-calibrant give such a misfit). The particles are evaluated at q_z = 0, which puts a sphere's radius more than about
-5 % off once q_z·R is above 1.7 at the cut's q_z = k(sin αi + sin αf) (αi of the geometry, αf of the Yoneda band the
-cut is at): such a sphere or random cylinder is flagged (*R: q_z·R is above 1.7 at the cut's q_z, where the form
-factor at q_z = 0 … biases the radius, usually too small; give both angles of the cut …*), and a point to check
-(**Fit**) gives its q_z·R and says what to do: **Send to Fitting**, enter αi, αf and λ under Model ▸ **Spheres in
-grazing incidence** and run Predict parameters again, which then fits spheres with the exit-reflected path (random
-cylinders stay at q_z = 0). Without αi, or with the cut away from the Yoneda band, nothing is flagged. When another solution has a probability of 0.2 or more, the curve alone does not
+calibrant give such a misfit). At the second level, Predict parameters flags a sphere or random cylinder when
+q_z·R > 1.2 because its reported interval can underestimate the uncertainty (`qzR_cov`). Above 2 it also flags
+strong model error (`qzR_fail`). To include the exit-reflected path for spheres, use **Send to Fitting**, enter
+αi, αf and λ under Model ▸ **Spheres in grazing incidence** and run Predict parameters again. When another solution has a probability of 0.2 or more, the curve alone does not
 decide the model: a line under the table says so, and the Results tab asks which one you expect and names the
 solutions whose D is within 15 % of 2π/q\*. The report gives the refined R, h and D of the reported
 solution with their 68 % intervals (*fit intervals: R (1) 3.17 [3.04, 3.26] nm …*: the refined value, then its
@@ -3903,18 +3901,19 @@ experiment (chapter 13).
 ### 10.7 Without the window
 
 **Worked example (GALAXI GISAXS).**
-Run this command from the source folder to reproduce the Yoneda cut and Predict solutions in Fig. 4.
+Run this command from the source folder to reproduce the Yoneda cut in Fig. 4 and fit it at the second level.
+The figure shows the earlier fit at the first level.
 It uses the public GALAXI frame, its calibration and the reported incidence angle of 0.463°.
 
 ```sh
 python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.tif --calibration tests/data/external/gisaxs_galaxi/galaxi_bornagain.poni --incidence-deg 0.463 --out fig4
 ```
 
-The run took 1 min 41 s on the Windows test machine. Open `fig4/galaxi_data/report.md`.
+Open `fig4/galaxi_data/report.md` to see the fit level and the cut's vacuum q_z under *Decisions*.
 `horizontal.csv` contains the signed Yoneda cut and `vertical.csv` the vertical cut. `fit_curve.csv`
-gives the best fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists three solutions with
-probabilities of about 0.39, 0.32 and 0.30. Exit code 2 means that the report asks you to choose a
-model. The same folder contains `qmap.png` and `report.json`. The run summaries are
+gives the most probable fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists
+the candidate solutions and their probabilities. Exit code 2 means that an item needs attention in the report.
+The same folder contains `qmap.png` and `report.json`. The run summaries are
 `fig4/summary.md` and `fig4/summary.json`.
 
 `tools/gimap_agent.py` runs the same standard procedure without the window, for scripts and other
@@ -4232,7 +4231,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **The Ag and Cu distribution modules of 2D Prediction declare no axes**: their maps and curves are drawn on a placeholder axis (0.05–15 nm), which is not a physical scale, and they are not attached to the SEM comparison (section 11.3). | Read only the shape of these distributions. When you know the axes of the trained model, add them to the module's `module.yaml`. |
 | After the interface language is switched in a session, a few texts keep the old language (e.g. the outcome line of a finished automatic analysis). | Run the analysis again, or restart. |
 | Quitting GIMaP during a Batch Export keeps the files of the frames done, but the batch tables, `README.txt` and the batch's JSON record are not written. | End a batch with **Stop**: it writes them. |
-| **The model fit of the automatic analysis chooses the particles from the curve alone.** Run Automatic Analysis (and Batch Export's particle model) fits the cut with Predict parameters among one or two populations of spheres and upright cylinders, at the effective interface (a sphere too large for it, q_z·R above 1.7 at the cut, is flagged in the automatic analysis when αi is known; section 5.5); random cylinders only when you give them as the composition. On the public GALAXI frame of Ag spheres it reports two upright cylinders (section 1.3): broad sizes and a rise at low q can be described by another composition than the true one. 2π/q\* is a length scale, not the particle spacing: on BornAgain simulations of the GALAXI model it was within 10 % of the true distance in 1 of 10 simulations with interference, and a peak or shoulder appeared in all 4 without (sections 1.3 and 5.5; [Physics and Methods, section 8.5](Physics_Manual.md#85-the-model-fit-and-how-the-solution-is-chosen)). | Choose the model from what you know of the sample and confirm it in **Fitting**: Predict parameters with **The particles in Model**, then refine it and judge the residuals. Do not quote 2π/q\* as the particle spacing. |
+| **The model fit of the automatic analysis chooses the particles from the curve alone.** Run Automatic Analysis (and Batch Export's particle model) fits the cut with Predict parameters among one or two populations of spheres and upright cylinders, using the cut geometry available to the fit (section 5.5). Random cylinders require a given composition. The earlier first-level fit of the public GALAXI frame of Ag spheres reported two upright cylinders (section 1.3). Broad sizes and a rise at low q can be described by another composition than the true one. 2π/q\* is a length scale, not the particle spacing: on BornAgain simulations of the GALAXI model it was within 10 % of the true distance in 1 of 10 simulations with interference, and a peak or shoulder appeared in all 4 without (sections 1.3 and 5.5; [Physics and Methods, section 8.5](Physics_Manual.md#85-the-model-fit-and-how-the-solution-is-chosen)). | Choose the model from what you know of the sample and confirm it in **Fitting**: Predict parameters with **The particles in Model**, then refine it and judge the residuals. Do not quote 2π/q\* as the particle spacing. |
 | **The models for manual fitting are not proposed by Predict parameters.** Core–shell spheres, the 2D hexagonal paracrystal (infinite domains) and Percus–Yevick hard spheres (a 3D liquid) are fitted by Refine and Search only; core–shell spheres at q_z = 0. | Start them from values you know, or from a Predict solution with spheres, then change the family or the interference in Model and Refine ([Physics and Methods, section 9.14](Physics_Manual.md#914-models-for-manual-fitting)). |
 | **Fitting is slower with sizes by intensity and with random cylinders.** With a sphere or vertical cylinder and sizes by number or log-normal, **Search the ranges** takes a few seconds as before; with *Gaussian, by intensity* (models of earlier versions) tens of seconds, and with a random cylinder (15–800 ms per evaluation) up to minutes. | Set **Sizes** to *Gaussian, by number*, narrow the ranges of R, h and σR/R before a search, or start **Refine** from values close to the curve. |
 | **A vertical cut is modelled for spheres and upright cylinders only**, at one in-plane q (q∥ of its columns), without a q resolution or the specular rod, and only in Fitting ▸ Fit Several Curves Together. Its scales are its own: with several populations their ratio is not tied to the horizontal cut's (section 6.6). | Take the vertical cut beside the specular rod; fit random cylinders and core–shell spheres on horizontal cuts. |
