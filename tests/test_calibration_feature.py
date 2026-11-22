@@ -277,6 +277,40 @@ def test_headless_line_selection_keeps_each_centres_own_fit_statistics(tmp_path:
     assert report["alternatives"][0]["point_rms_px"] == first.point_rms_px
 
 
+@pytest.mark.parametrize(("guided", "primary_orders", "other_standard", "expected_distance"), [
+    (True, (1, 2, 3), "agbh", 1001.0),   # better geometry for the same indexed reflections
+    (True, (1, 2), "agbh", 500.0),        # two lines do not independently establish indexing
+    (True, (1, 2, 3), "lab6", 500.0),     # a different standard is judged on its own lines
+    (False, (1, 2, 3), "agbh", 500.0),    # unmarked records retain the original comparison
+])
+def test_headless_compares_confirmed_agbh_indexing_on_the_same_lines(
+        tmp_path, monkeypatch, guided, primary_orders, other_standard, expected_distance):
+    from dataclasses import replace
+    from src.gimap.features.calibration.application import headless
+
+    result = _result(tmp_path / "standard.npy")
+    first = replace(result.selected_candidate, distance_mm=1000.0)
+    alias = replace(first, standard_key=other_standard, distance_mm=500.0)
+    accurate = replace(first, distance_mm=1001.0)
+    extra_lines = replace(first, distance_mm=1002.0)
+    result = replace(result, selected_candidate=first, candidates=[first, alias, accurate, extra_lines],
+                     metadata={"guided_ring_ranking": True} if guided else {})
+    # Persisting a calibration must preserve the choice of comparison.
+    summary = headless.describe_calibration(CalibrationResult.from_dict(result.to_dict()))
+    image = DetectorImage(np.ones((4, 4)), None, Path(result.source_image))
+
+    def check(orders, errors):
+        return {"lines_checked": len(orders), "mean_relative": np.mean(errors),
+                "lines": [{"q": q, "dq": q * error} for q, error in zip(orders, errors)]}
+
+    checks = iter([check(primary_orders, [0.003] * len(primary_orders)),
+                   check((2, 4, 6), [0.0001] * 3),
+                   check((1, 2, 3), [0.002] * 3),
+                   check((1, 2, 3, 4, 5), [0.0025] * 3 + [0.0] * 2)])
+    monkeypatch.setattr(headless, "check_lines", lambda *a, **kw: next(checks))
+    assert headless.with_line_checks(summary, image)["distance_mm"] == expected_distance
+
+
 def test_calibration_applies_with_in_memory_context_and_no_qapplication(tmp_path: Path) -> None:
     settings = InMemorySettingsRepository(
         {"detector": {"distance": 2000.0, "beam_center_x": 100.0, "beam_center_y": 200.0}}

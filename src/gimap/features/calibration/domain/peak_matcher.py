@@ -19,12 +19,6 @@ STRONG_PEAK_SHARE = 0.3
 """A radial peak with at least this share of the strongest peak's prominence is a ring the solution must explain."""
 
 
-def _fit_distance(matches: list[MatchedRing], energy_kev: float, pixel_size_m: float) -> float:
-    unit = q_to_ring_radius_px([item.q_inv_angstrom for item in matches], energy_kev, 1.0, pixel_size_m)
-    observed = np.asarray([item.observed_radius_px for item in matches], dtype=float)
-    return float(np.dot(unit, observed) / max(np.dot(unit, unit), 1e-12))
-
-
 def _completeness(matches: list[MatchedRing], predicted: np.ndarray, window_px, peaks: list[DetectedPeak]) -> float | None:
     """Share of the orders (at most MAX_EXPECTED_ORDER) expected to be seen that were found. Expected: the predicted
     radius lies where the detector records a radial profile and not beyond the outermost strong peak (prominence at
@@ -62,7 +56,11 @@ def _match_at_distance(
     pairs: list[tuple[float, int, int]] = []
     for theory_idx, radius in enumerate(predicted):
         for peak_idx, peak in enumerate(peaks):
-            tolerance = max(3.0, 0.018 * float(radius), 0.6 * peak.width_px)
+            if standard.key == "agbh":
+                # A broad background hump does not locate a harmonic order anywhere within its width.
+                tolerance = max(HARMONIC_TOLERANCE_PX, HARMONIC_TOLERANCE_REL * float(radius))
+            else:
+                tolerance = max(3.0, 0.018 * float(radius), 0.6 * peak.width_px)
             difference = abs(peak.radius_px - float(radius))
             if difference <= tolerance:
                 pairs.append((difference, theory_idx, peak_idx))
@@ -88,27 +86,23 @@ def _match_at_distance(
         return None
     # With correspondences fixed, solve the one-parameter distance model
     # analytically before joint center refinement.
-    unit_radii = q_to_ring_radius_px(
-        [item.q_inv_angstrom for item in matches], energy_kev, 1.0, pixel_size_m
-    )
-    observed_radii = np.asarray([item.observed_radius_px for item in matches], dtype=float)
-    fitted_distance = float(np.dot(unit_radii, observed_radii) / max(np.dot(unit_radii, unit_radii), 1e-12))
-    if fitted_distance > 0:
-        distance_mm = fitted_distance
+    while True:
+        unit_radii = q_to_ring_radius_px(
+            [item.q_inv_angstrom for item in matches], energy_kev, 1.0, pixel_size_m
+        )
+        observed_radii = np.asarray([item.observed_radius_px for item in matches], dtype=float)
+        distance_mm = float(np.dot(unit_radii, observed_radii) / np.dot(unit_radii, unit_radii))
         for item, unit_radius in zip(matches, unit_radii):
             item.predicted_radius_px = float(unit_radius * distance_mm)
             item.residual_px = item.observed_radius_px - item.predicted_radius_px
-    if standard.key == "agbh" and len(matches) > 1:
-        for _ in range(2):                                # harmonic: an order far off the common distance is not it
-            limit = [max(HARMONIC_TOLERANCE_PX, HARMONIC_TOLERANCE_REL * item.predicted_radius_px) for item in matches]
-            kept = [item for item, tol in zip(matches, limit) if abs(item.residual_px) <= tol]
-            if not kept or len(kept) == len(matches):
-                break
-            matches = kept
-            distance_mm = _fit_distance(matches, energy_kev, pixel_size_m)
-            for item in matches:
-                item.predicted_radius_px = float(q_to_ring_radius_px([item.q_inv_angstrom], energy_kev, distance_mm, pixel_size_m)[0])
-                item.residual_px = item.observed_radius_px - item.predicted_radius_px
+        if standard.key != "agbh" or len(matches) == 1:
+            break
+        relative_misses = [abs(item.residual_px) / max(HARMONIC_TOLERANCE_PX,
+                           HARMONIC_TOLERANCE_REL * item.predicted_radius_px) for item in matches]
+        worst = int(np.argmax(relative_misses))
+        if relative_misses[worst] <= 1:
+            break
+        matches.pop(worst)
     inferred = [
         distance_from_ring_radius(item.observed_radius_px, item.q_inv_angstrom, 12.398419843320026 / energy_kev, pixel_size_m)
         for item in matches
@@ -132,6 +126,11 @@ def _match_at_distance(
     # Not a field of the record (a file stays readable by earlier versions): used for ranking only.
     all_predicted = q_to_ring_radius_px(standard.q_values_inv_angstrom, energy_kev, distance_mm, pixel_size_m)
     candidate.order_completeness = _completeness(matches, np.asarray(all_predicted, dtype=float), window_px, peaks)
+    # The independent radial scan can see a strong line even if this assignment never predicted it.
+    strongest = max(peak.prominence for peak in peaks)
+    candidate.strong_peak_radii = tuple(peak.radius_px for peak in peaks
+                                        if peak.prominence >= STRONG_PEAK_SHARE * strongest)
+    candidate.radial_profile_center = (center_x_px, center_y_px)
     return candidate
 
 

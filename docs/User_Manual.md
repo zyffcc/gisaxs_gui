@@ -931,10 +931,16 @@ Start page (*Calibrate the detector*).
    half the distance. The warnings of the solution say when this applied.
 6. Under **Advanced configuration**, enter a measured roll in **Fixed rot3** (degrees, default 0). The ring fit keeps that value.
    **Detector tilt: Refine rot1, rot2** (on by default) fits the tilt of the detector with the centre and the
-   distance when three or more rings are matched ([Physics and Methods, section 3.8](Physics_Manual.md#38-detector-tilt-from-the-rings-of-the-standard)).
+   distance when three or more rings contribute usable measurements ([Physics and Methods, section 3.8](Physics_Manual.md#38-detector-tilt-from-the-rings-of-the-standard)).
    With the option cleared, the centre and distance are still refined on the ring points when at least two rings are matched.
-   Click **Auto Calibration**. The calculation runs in the background. **Cancel** stops it after the
-   current step.
+   Click **Auto Calibration**. After an initial fit, the engine predicts where the standard's other
+   rings should cross the detector. It checks these arcs in several azimuthal sectors and refits
+   with the rings supported by the image. This can recover a weak outer ring needed to fit tilt.
+   Closely spaced lines can also contribute when the radial scan resolves them individually.
+   Candidate solutions rank lower when they miss strong measured rings, predict unsupported rings
+   within view or fit the measured ring positions poorly.
+   The final fit locates each peak from measured detector intensities where both sides of the ring
+   are visible. The calculation runs in the background. **Cancel** stops it after the current step.
 7. Check the matched-ring count, confidence and first warning in **Run**. Toggle **Clean image** to
    compare the rings with the frame. Review the result: beam centre, distance, **Detector tilt** (rot1 and rot2, *0.372°, 0.433°*, or *not
    refined*; its tooltip gives the 1σ), matched rings, **Ring-point RMS** and its tooltip. The tooltip gives the RMS before refinement on the same points. For a fitted tilt, it also gives the RMS with centre and distance refitted at zero tilt. **Ring-radius RMS** appears when there is no point fit. Review the confidence and warning of the **Selected solution** (a warning is marked ⚠; its tooltip says why it matters), and the
@@ -944,8 +950,8 @@ Start page (*Calibrate the detector*).
    **Clean image** temporarily hides all overlays, **Reset view** restores the complete
    detector mosaic after zooming or panning, and **Focus image** hides the result panels to give tall
    WAXS mosaics more room. The horizontal divider can be dragged.
-   When exactly three rings contribute to the tilt fit, the tilt 1σ in the tooltip comes from the
-   covariance of that fit. Each two-ring refit keeps the tilts fixed to estimate the scatter in centre and distance.
+   With three rings the engine checks how the fit changes when each ring is left out. If any pair of rings
+   gives an unstable joint fit, the tilt 1σ in the tooltip comes from the covariance of the full fit.
 8. To adjust the result by hand, press **Manual refine**: drag the centre marker, edit the
    centre/distance values, or pair a detected ring with a theoretical peak (**Fit selected ring**).
    **Reset to fitted** goes back to the fitted solution and **Finish manual** closes the panel. The
@@ -969,8 +975,9 @@ exported `.json` can also be dropped on the window. **Open…** and **Import
 Calibration…** start in the folder of the image shown, else in the folder used last.
 
 **The overlays.** Solid yellow lines are matched theoretical rings, dashed orange lines are unused
-theoretical rings, dotted cyan lines are detected experimental radii, and pink lines cross at the
-beam centre; the legend above the image names each style. Partial WAXS arcs and centres outside the active detector area are
+theoretical rings, dotted cyan lines mark peaks in the independent radial scan, and pink lines cross at the
+beam centre. A weak ring found in the guided search can therefore have a solid yellow overlay even when the
+radial scan missed it. The legend above the image names each style. Partial WAXS arcs and centres outside the active detector area are
 supported. A low-confidence result or a one-ring result should be treated as ambiguous and reviewed
 by hand. How the rings are fitted, and what the RMS residual and the confidence measure, is in
 [Physics and Methods, chapter 3](Physics_Manual.md#3-calibration).
@@ -4313,6 +4320,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **The rows of a Series map carry no σ.** The timeline's χ² takes the noise of each x column from the series itself, and a Series map recorded in the results database holds x and I only (section 5.6). | Read the timeline as a distance in units of the frame-to-frame noise, not as a goodness of fit; for σ of every point, use Batch Export ▸ Each frame: its curves, with error bars. |
 | **Cancellation does not forcibly interrupt low-level file reading.** A Compare directory scan or single-table read, or the current Fitting read, may still be returning. | Press Cancel or Stop once; the request is registered, and the unfinished import is discarded or the frame fit skipped when reading returns. Completed series and results stay (sections 6.5, 7.2). |
 | **Curve import supports `q I [sigma]` and `q I1 I2 …`, not interleaved `q I1 sigma1 I2 sigma2`.** A headerless three-column table cannot identify its meaning by numbers alone. | Choose the layout explicitly in **Import Curves…** (section 6.1). For separate errors per curve, provide one `q I sigma` file per curve. Fixed imported selections cannot watch for new columns/files. |
+| **Geometry Calibration 1σ depends on the number of contributing rings.** For example, in simulated AgBh frames with four to six matched rings, distance and rot2 lay within their reported 1σ in 56.5 % of frames. The estimate excludes systematic errors shared by every ring. | Check the ring overlays and the measured coverage by parameter and ring count in Physics and Methods 3.3. |
 | **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them (section 10.5). | Calibrate such an image with pyFAI and give GIMaP the `.poni`: name it in the notes, or put it beside the frames (section 4.2). |
 | **An instrument profile is matched by detector name and frame size only. A calibration found by the automatic search may belong to another experiment.** Even matching detector dimensions cannot establish which run produced a calibration (section 4.2). | Check the file named in the report and the distance in **Geometry**. Supply the calibration or name it in the notes. Remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
 | **Powder rings leave rot3 undetermined.** They constrain tilt weakly at SAXS distances (±0.2° on the public silver behenate frame). With seven or more matched rings in simulated frames, the 1σ estimates for beam x and rot1 covered the true values less often than expected. | See Physics and Methods 3.3 for measured coverage. Use a wide-angle standard for rot1 and rot2. Check rot3 on a GISAXS ridge and the horizon in **Geometry ▸ Check rot3**. GIMaP reads flat-detector `.poni` orientations 1–4 (section 4.2). |

@@ -317,12 +317,16 @@ def _engine_sentences() -> dict[str, set[str]]:
 
 
 def test_every_stage_warning_and_reason_of_the_engine_has_chinese() -> None:
+    from src.gimap.app.presentation.i18n.zh import ZH as shipped_zh
+    from src.gimap.features.calibration.domain.tilt_fit import NOT_REFINED_CONTRIBUTING_RINGS
+
     sentences = _engine_sentences()
     # 8 stages: the tilt and the fixed-tilt refinement share "Optimizing geometry" (both refine on the ring points)
     assert len(sentences["stage"]) == 8 and len(sentences["warning"]) >= 7 and len(sentences["reason"]) >= 6
-    missing = sorted(text for group in sentences.values() for text in group if text not in ZH)
+    sentences["warning"].add(NOT_REFINED_CONTRIBUTING_RINGS)
+    missing = sorted(text for group in sentences.values() for text in group if text not in shipped_zh)
     assert missing == []
-    assert {"High", "Medium", "Low"} <= set(ZH)
+    assert {"High", "Medium", "Low"} <= set(shipped_zh)
 
 
 # -- an image that cannot be read (R48) -------------------------------------------------------------

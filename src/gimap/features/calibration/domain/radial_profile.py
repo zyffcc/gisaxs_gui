@@ -16,6 +16,21 @@ class RadialProfile:
     counts: np.ndarray
 
 
+def _angular_percentile(values: np.ndarray, valid: np.ndarray, counts: np.ndarray, percentile: float) -> np.ndarray:
+    """Linearly interpolated percentile of the valid rays at each radius."""
+    if not 0 <= percentile <= 100:
+        raise ValueError("Percentiles must be in the range [0, 100]")
+    ordered = np.sort(np.where(valid, values, np.inf).T, axis=1)
+    populated = np.flatnonzero(counts)
+    position = (counts[populated].astype(float) - 1.0) * (percentile / 100)
+    lower = position.astype(int)
+    left = ordered[populated, lower]
+    right = ordered[populated, np.ceil(position).astype(int)]
+    result = np.zeros(counts.shape, dtype=np.float32)
+    result[populated] = left + (position - lower) * (right - left)
+    return result
+
+
 def calculate_radial_profile(
     signal: np.ndarray,
     valid: np.ndarray,
@@ -81,13 +96,7 @@ def calculate_azimuthal_profile(
     ).astype(bool)
     counts = polar_valid.sum(axis=0).astype(np.float32)
     coverage_valid = counts / float(angle_bins)
-    masked = np.where(polar_valid, polar, np.nan)
-    populated = counts > 0
-    intensity = np.zeros(radii.shape, dtype=np.float32)
-    if np.any(populated):
-        intensity[populated] = np.nanpercentile(
-            masked[:, populated], float(percentile), axis=0
-        ).astype(np.float32)
+    intensity = _angular_percentile(polar, polar_valid, counts, percentile)
 
     # Estimate how much azimuth actually supports a local radial maximum. This
     # is distinct from merely having valid detector pixels at that radius.
@@ -95,15 +104,14 @@ def calculate_azimuthal_profile(
     weights = gaussian_filter1d(polar_valid.astype(np.float32), 8.0, axis=1, mode="nearest")
     radial_background = gaussian_filter1d(filled, 8.0, axis=1, mode="nearest")
     radial_background /= np.maximum(weights, 1e-3)
-    excess = np.where(polar_valid, polar - radial_background, np.nan)
-    median = np.zeros(radii.shape, dtype=np.float32)
-    mad = np.zeros(radii.shape, dtype=np.float32)
-    if np.any(populated):
-        median[populated] = np.nanmedian(excess[:, populated], axis=0)
-        mad[populated] = np.nanmedian(
-            np.abs(excess[:, populated] - median[None, populated]), axis=0
-        )
-    threshold = median + np.maximum(1.5 * mad, 0.005)
+    excess = polar - radial_background
+    median = _angular_percentile(excess, polar_valid, counts, 50)
+    mad = _angular_percentile(np.abs(excess - median), polar_valid, counts, 50)
+    # The radial background has already been subtracted along each ray. A
+    # uniform powder ring has positive excess on *all* illuminated rays.
+    # Testing against the median on the ring itself would reject exactly
+    # those rays, especially on a short outer arc.
+    threshold = np.maximum(1.5 * mad, 0.005)
     supported = polar_valid & (excess > threshold[None, :])
     signal_coverage = supported.sum(axis=0).astype(np.float32) / float(angle_bins)
     coverage = np.minimum(coverage_valid, signal_coverage)

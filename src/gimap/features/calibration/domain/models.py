@@ -90,7 +90,7 @@ class CalibrationCandidate:
     distance_sigma_mm: Optional[float] = None
     uncertainty_method: str = ""
     """Source of the standard errors in this record (see ``optimizer.estimate_uncertainty``).
-    The three-ring estimate for a fitted tilt combines the ring jackknife and least squares."""
+    A three-ring fit can combine the ring jackknife and least squares when a two-ring subset cannot constrain tilt."""
     tilt_refined: bool = False
     """Whether rot1 and rot2 were fitted with the centre and the distance (``tilt_fit.refine_ring_geometry``)."""
     rot1_deg: float = 0.0

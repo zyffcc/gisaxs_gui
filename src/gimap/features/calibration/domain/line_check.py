@@ -96,13 +96,25 @@ def check_lines(
     }
 
 
-def best_by_lines(checks: Sequence[Optional[dict]], minimum_lines: int = 3) -> Optional[int]:
-    """Index of the check with the smallest mean relative q error among those with enough lines."""
-    usable = [
-        (check["mean_relative"], index)
-        for index, check in enumerate(checks)
-        if check and check.get("lines_checked", 0) >= minimum_lines
-    ]
+def best_by_lines(checks: Sequence[Optional[dict]], minimum_lines: int = 3, *,
+                  compare_reference_lines: Optional[Sequence[bool]] = None) -> Optional[int]:
+    """Choose the smallest relative error, comparing the same indexed lines for a confirmed guided fit."""
+    reference = set()
+    if compare_reference_lines is not None and checks and checks[0]:
+        reference = {line["q"] for line in checks[0]["lines"]}
+    usable = []
+    for index, check in enumerate(checks):
+        if not check or check.get("lines_checked", 0) < minimum_lines:
+            continue
+        error = check["mean_relative"]
+        if reference and len(reference) >= minimum_lines and compare_reference_lines[index]:
+            # A harmonic alias can have a small q error on a different set of orders.
+            # Compare all reflections that independently confirm the first indexing.
+            errors = {line["q"]: abs(line["dq"]) / line["q"] for line in check["lines"]}
+            if not reference <= errors.keys():
+                continue
+            error = sum(errors[q] for q in sorted(reference)) / len(reference)
+        usable.append((error, index))
     return min(usable)[1] if usable else None
 
 
