@@ -12,6 +12,8 @@ import re
 from pathlib import Path
 from typing import Optional
 
+from src.gimap.shared.geometry.orientation import KNOWN_DETECTORS, detector_shape
+
 from ..domain.calibration_files import folder_place
 from .calibration_tools import file_key
 
@@ -37,22 +39,7 @@ SEARCHED_WHY = (
     "another experiment or detector, and nothing in it is checked against a standard image of this measurement."
 )
 SEARCHED_HINT = "Name the calibration file of this measurement (this path when it is the right one)."
-KNOWN_DETECTORS = {
-    "pilatus100k": (195, 487), "pilatus200k": (407, 487), "pilatus300k": (619, 487), "pilatus300kw": (195, 1475),
-    "pilatus1m": (1043, 981), "pilatus2m": (1679, 1475), "pilatus6m": (2527, 2463),
-    "eiger500k": (512, 1030), "eiger1m": (1065, 1030), "eiger4m": (2167, 2070), "eiger9m": (3269, 3110),
-    "eiger16m": (4371, 4150), "eiger2500k": (512, 1028), "eiger21m": (1062, 1028), "eiger24m": (2162, 2068),
-    "eiger29m": (3262, 3108), "eiger216m": (4362, 4148),
-}
-"""(rows, columns) of the detectors a ``.poni`` names in its ``Detector:`` line (pyFAI's names, lower case, letters
-and digits only, without the sensor material): a ``.poni`` that names one of them states its shape by that."""
 _MAX_SHAPE = re.compile(r'"max_shape"\s*:\s*(\[[^\]]*\])')
-
-
-def detector_shape(name) -> Optional[tuple[int, int]]:
-    """The shape of a detector named as pyFAI names it ("Pilatus300k", "Eiger2 CdTe 1M"); ``None`` when unknown."""
-    key = re.sub(r"[^a-z0-9]", "", str(name or "").lower()).replace("cdte", "")
-    return KNOWN_DETECTORS.get(key)
 
 
 def calibration_shape(info: dict, text: Optional[str] = None) -> Optional[tuple[int, int]]:
@@ -66,7 +53,12 @@ def shape_mismatch(path: str, info: dict, frame: dict, text: Optional[str] = Non
     """Why a calibration file — given, noted or found — is not this frame's: it states (or names a detector of)
     another shape than the frame's; ``None`` when it states none or the shapes agree (either orientation)."""
     shape, frame_shape = calibration_shape(info, text), frame.get("shape")
-    if not shape or not frame_shape or sorted(shape) == sorted(int(v) for v in frame_shape):
+    if not shape or not frame_shape:
+        return None
+    frame_shape = tuple(int(v) for v in frame_shape)
+    # On a flipped axis the extent sets the beam coordinate. A transposed shape has different extents.
+    oriented = (info.get("detector_tilt") or {}).get("orientation", 3) != 3
+    if shape == frame_shape or (not oriented and sorted(shape) == sorted(frame_shape)):
         return None
     named = f" ({info['detector']})" if info.get("detector") and not (info.get("shape") or poni_shape(text or "")) else ""
     return NOT_THIS_FRAME.format(name=Path(path).name, shape=list(shape), detector=named, frame_shape=list(frame_shape))

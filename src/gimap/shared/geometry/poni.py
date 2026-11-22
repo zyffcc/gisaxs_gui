@@ -12,8 +12,8 @@ and back::
 
     L = D cos rot1 cos rot2,   poni2 = x pixel2 + L tan rot1,   poni1 = y pixel1 − L tan rot2 / cos rot1.
 
-``x, y`` are GIMaP's pixel-corner coordinates (the centre of the first pixel is 0.5), which are pyFAI's. Reading and
-writing are each other's inverse to rounding (``repr`` of the floats is written).
+``x, y`` are pixel-corner coordinates in pyFAI's native orientation 3. For a reversed axis of length N,
+the displayed coordinate is N minus the native coordinate. Reading and writing are inverse to rounding.
 
 Pure Python: no Qt, no feature imports.
 """
@@ -28,6 +28,7 @@ from typing import Optional
 
 from .detector_geometry import DetectorGeometry
 from .detector_tilt import DetectorTilt
+from .orientation import MISSING_SHAPE, detector_shape, orientation_number, oriented_position
 
 DETECTOR_PIXELS_M = (
     ("pilatus", 172e-6), ("eiger", 75e-6), ("perkin", 200e-6), ("lambda", 55e-6), ("mar3450", 100e-6),
@@ -70,7 +71,7 @@ class PoniFile:
         tilt = self.tilt
         x, y = tilt.direct_beam_px()
         return DetectorGeometry(tilt.pixel2_m, tilt.pixel1_m, tilt.beam_distance_m, x, y, float(wavelength),
-                                incidence_deg, tilt.rot1_rad, tilt.rot2_rad, tilt.rot3_rad)
+                                incidence_deg, tilt.rot1_rad, tilt.rot2_rad, tilt.rot3_rad, orientation=tilt.orientation)
 
 
 def poni_values(text: str) -> dict[str, str]:
@@ -91,6 +92,8 @@ def _config(values: dict[str, str]) -> dict:
     try:
         config = json.loads(text)
     except ValueError:
+        if re.search(r"\borientation\b", text, re.IGNORECASE):
+            raise ValueError("The .poni Detector_config with orientation must be valid JSON.") from None
         config = {}
         for name in ("pixel1", "pixel2"):
             found = re.search(rf'"{name}"\s*:\s*([0-9.eE+-]+)', text)
@@ -99,7 +102,7 @@ def _config(values: dict[str, str]) -> dict:
     return config if isinstance(config, dict) else {}
 
 
-def read_poni(text: str) -> PoniFile:
+def read_poni(text: str, *, frame_shape: tuple[int, int] | None = None) -> PoniFile:
     """A ``.poni`` file's geometry (``ValueError`` when Distance, Poni1, Poni2 or the pixel size is missing)."""
     values = poni_values(text)
     config = _config(values)
@@ -114,7 +117,9 @@ def read_poni(text: str) -> PoniFile:
     if distance is None or poni1 is None or poni2 is None or not pixel1 or not pixel2:
         raise ValueError(MISSING_VALUES)
     rotations = [_float(values.get(name)) or 0.0 for name in ("rot1", "rot2", "rot3")]
-    tilt = DetectorTilt(distance, poni1, poni2, *rotations, pixel1, pixel2)
+    orientation = orientation_number(config.get("orientation", values.get("orientation", 3)))
+    if "orientation" in values and orientation_number(values["orientation"]) != orientation:
+        raise ValueError("The .poni file gives conflicting detector orientations.")
     wavelength = _float(values.get("wavelength"))
     shape = None
     try:
@@ -122,17 +127,25 @@ def read_poni(text: str) -> PoniFile:
         shape = (rows, columns) if rows > 0 and columns > 0 else None
     except (TypeError, ValueError):
         shape = None
-    return PoniFile(tilt, wavelength * 1e10 if wavelength else None, values.get("detector", ""), shape)
+    detector = values.get("detector", "")
+    if orientation != 3:
+        shape = shape or detector_shape(detector) or frame_shape
+        if shape is None:
+            raise ValueError(MISSING_SHAPE)
+    tilt = DetectorTilt(distance, poni1, poni2, *rotations, pixel1, pixel2, orientation, shape if orientation != 3 else None)
+    return PoniFile(tilt, wavelength * 1e10 if wavelength else None, detector, shape)
 
 
-def tilt_from_geometry(geometry: DetectorGeometry) -> DetectorTilt:
+def tilt_from_geometry(geometry: DetectorGeometry, *, shape=None) -> DetectorTilt:
     """pyFAI's description of ``geometry`` (the inverse of :meth:`PoniFile.geometry`)."""
     c1, c2 = math.cos(geometry.rot1_rad), math.cos(geometry.rot2_rad)
     distance = geometry.distance_m * c1 * c2
-    poni2 = geometry.beam_center_x_px * geometry.pixel_size_x_m + distance * math.tan(geometry.rot1_rad)
-    poni1 = geometry.beam_center_y_px * geometry.pixel_size_y_m - distance * math.tan(geometry.rot2_rad) / c1
+    x, y = oriented_position(geometry.beam_center_x_px, geometry.beam_center_y_px, geometry.orientation, shape)
+    poni2 = x * geometry.pixel_size_x_m + distance * math.tan(geometry.rot1_rad)
+    poni1 = y * geometry.pixel_size_y_m - distance * math.tan(geometry.rot2_rad) / c1
     return DetectorTilt(distance, poni1, poni2, geometry.rot1_rad, geometry.rot2_rad, geometry.rot3_rad,
-                        geometry.pixel_size_y_m, geometry.pixel_size_x_m)
+                        geometry.pixel_size_y_m, geometry.pixel_size_x_m, geometry.orientation,
+                        shape if geometry.orientation != 3 else None)
 
 
 def format_poni(
@@ -141,11 +154,11 @@ def format_poni(
 ) -> str:
     """The text of a ``.poni`` (version 2.1, pyFAI's generic ``Detector`` with its pixel sizes and, when known, the
     frame shape) for ``geometry``. The incidence angle and a critical angle are no part of a ``.poni``."""
-    tilt = tilt_from_geometry(geometry)
+    tilt = tilt_from_geometry(geometry, shape=shape)
     config: dict = {"pixel1": tilt.pixel1_m, "pixel2": tilt.pixel2_m}
     if shape is not None:
         config["max_shape"] = [int(shape[0]), int(shape[1])]
-    config["orientation"] = 3
+    config["orientation"] = geometry.orientation
     lines = [f"# {comment}" for comment in comments]
     lines += [
         "# Nota: C-Order, 1 refers to the Y axis, 2 to the X axis",

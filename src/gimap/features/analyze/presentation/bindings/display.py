@@ -7,6 +7,7 @@ from PyQt5.QtCore import QSignalBlocker
 
 from src.gimap.app.presentation.components.image_extent import filled_extent
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.geometry.q_inverse import horizon_qz
 
 from ...application import (
     GISAXS,
@@ -74,8 +75,7 @@ def _horizontal_where(reduction, *, short: bool) -> str:
 
 def cut_lines(analysis: FrameAnalysis) -> list[str]:
     """Where the two GISAXS cuts are, in detector pixels taken from the curves themselves (both ends included). A
-    vertical cut away from the beam centre is the person's, or the series' when the frame was cut at the cut of a
-    series (``markers["series_cut"]``)."""
+    vertical band can be automatic, set by hand or held for a series."""
     reduction = analysis.reduction
     if reduction is None or reduction.kind != GISAXS:
         return []
@@ -90,8 +90,9 @@ def cut_lines(analysis: FrameAnalysis) -> list[str]:
         on_beam = geometry is not None and centre is not None and abs(float(centre) - geometry.beam_center_x_px) < 0.01
         held = (reduction.markers.get("series_cut") or {}).get("vertical_columns") is not None
         template = (
-            "Vertical cut I(qz) over columns {columns} (the beam centre)." if on_beam
-            else "Vertical cut I(qz) over columns {columns} (the cut of the series)." if held
+            "Vertical cut I(qz) over columns {columns} (the cut of the series)." if held
+            else "Vertical cut I(qz) over columns {columns} (automatic)." if reduction.markers.get("vertical_source") == "automatic"
+            else "Vertical cut I(qz) over columns {columns} (the beam centre)." if on_beam
             else "Vertical cut I(qz) over columns {columns} (set by hand)."
         )
         lines.append(tr(template).format(columns=pixel_range(*vertical.region["columns"])))
@@ -178,8 +179,7 @@ class DisplayMixin:
         if analysis.kind == TRANSMISSION:  # no sample surface: no horizon
             view.show_horizon(None)
         else:
-            horizon = q_at_position(geometry, geometry.beam_center_x_px, geometry.horizon_row())
-            view.show_horizon(horizon["qz"])
+            view.show_horizon(horizon_qz(geometry))
         if not keep_view:
             view.fit_view()
 
@@ -245,7 +245,11 @@ class DisplayMixin:
             return
         markers = reduction.markers
         view.show_beam_center(*markers["beam_center"])
-        view.show_horizon(markers.get("horizon_row"))
+        if "horizon_row" in markers and analysis.geometry is not None:
+            line = analysis.geometry.horizon_line()
+            if line is not None:
+                (x, y), angle = line
+                view.show_horizon(y, x=x, angle=angle)
         if reduction.kind == GISAXS:
             view.show_horizontal_band(*markers["horizontal_band"])
             view.show_vertical_band(*markers["vertical_band"])

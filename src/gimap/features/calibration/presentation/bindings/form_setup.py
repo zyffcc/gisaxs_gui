@@ -277,6 +277,7 @@ class FormSetupMixin:
             self.custom_max_spin,
             self.background_check,
             self.tilt_check,
+            self.rot3_spin,
         ):
             widget.setEnabled(not running)
         # Auto Calibration waits for an energy (``EnergySourceMixin``): none is made up.

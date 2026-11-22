@@ -160,7 +160,8 @@ class AnalyzeFrame(FramePreprocessingMixin):
         if reduction.kind != GISAXS:
             maps = self._giwaxs_maps(shape, analysis.geometry, reduction.kind)
         else:  # (the person's cuts are in q; the two automatic bands are rows and columns)
-            maps = self._gisaxs_maps_for(shape, analysis.geometry) if has_person_cuts(reduction) else None
+            needs_maps = has_person_cuts(reduction) or (analysis.geometry.tilted and "vertical" in keys)
+            maps = self._gisaxs_maps_for(shape, analysis.geometry) if needs_maps else None
         masks = {}
         for key in keys:
             curve = reduction.curve(key)
@@ -337,6 +338,8 @@ def held_cut(reduction: Reduction, series_cut: Optional[Mapping[str, Any]]) -> R
                 held[name] = pinned
         if "horizontal_rows" in held and markers.get("horizontal_source") == "manual":
             markers["horizontal_source"] = "series"
+        if "vertical_columns" in held:
+            markers["vertical_source"] = "series"
     elif reduction.kind == GIWAXS and technique == GIWAXS:
         pinned, used = _band(series_cut.get("chi_q_window")), _band(markers.get("chi_q_window"))
         if pinned is not None and used is not None and np.allclose(sorted(pinned), sorted(used)):

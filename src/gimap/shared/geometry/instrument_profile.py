@@ -58,9 +58,10 @@ class InstrumentProfile:
                 raise ValueError(f"Invalid detector shape {self.detector_shape!r}.")
             object.__setattr__(self, "detector_shape", (rows, columns))
         tilt = self.dropped_tilt
-        if tilt is not None and not self.geometry.tilted:
+        if tilt is not None and not self.geometry.requires_projection:
             object.__setattr__(
-                self, "geometry", self.geometry.with_rotations(tilt.rot1_rad, tilt.rot2_rad, tilt.rot3_rad)
+                self, "geometry", replace(self.geometry, rot1_rad=tilt.rot1_rad, rot2_rad=tilt.rot2_rad,
+                                          rot3_rad=tilt.rot3_rad, orientation=tilt.orientation)
             )
 
     def match_score(self, *, detector_name: Optional[str], shape: Optional[tuple[int, int]]) -> int:

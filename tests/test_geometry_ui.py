@@ -56,6 +56,42 @@ def _galaxi_profile() -> InstrumentProfile:
     return InstrumentProfile("GALAXI", geometry, None, (1043, 981), source="test")
 
 
+def test_calibration_passes_fixed_roll_from_advanced_configuration_and_restores_it_on_import(monkeypatch):
+    from tests.test_calibration_feature import _result
+    from tests.test_release2_calibration_window import _dispose, _wait
+
+    dialog = GeometryCalibrationDialog(app_context=_calibration_context())
+    try:
+        image = DetectorImage(np.ones((32, 40), np.float32), np.zeros((32, 40), bool), Path("powder.cbf"),
+                              energy_kev=12.)
+        dialog._image_loaded(image)
+        requests = []
+
+        def run(request, _progress, _cancelled):
+            requests.append(request)
+            result = _result(image.source_path)
+            result.selected_candidate.rot3_deg = request.rot3_deg
+            return result
+
+        monkeypatch.setattr(dialog.view_model, "_run_calibration", run)
+        assert dialog.rot3_spin.value() == 0.0
+        dialog.rot3_spin.setValue(-4.375)
+        dialog.tilt_check.setChecked(False)
+        dialog.start_calibration()
+        _wait(_app(), lambda: dialog._cal_thread is None, 20)
+        assert requests[0].rot3_deg == -4.375 and requests[0].tilt == "off"
+        dialog.manual_group.setChecked(True)
+        dialog.manual_distance.setValue(1580)
+        dialog._commit_manual_values()
+        assert dialog.result.selected_candidate.rot3_deg == -4.375
+        dialog.rot3_spin.setValue(0)
+        monkeypatch.setattr(dialog.view_model, "import_result", lambda _path: dialog.result)
+        dialog.import_result_from("powder_calibration.json")
+        assert dialog.rot3_spin.value() == -4.375
+    finally:
+        _dispose(dialog)
+
+
 @requires_public
 def test_the_geometry_dialog_has_the_tilt_and_says_where_the_wavelength_comes_from(tmp_path: Path) -> None:
     frame = tmp_path / GALAXI.name

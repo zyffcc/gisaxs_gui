@@ -171,7 +171,7 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
             "set_gisaxs_cuts",
             "GISAXS: move the horizontal cut (centre row and half height in rows) and/or the vertical cut "
             "(centre column and half width); omitted values stay. automatic=true returns to the Yoneda "
-            "band and the beam-centre column.",
+            "band and a column band beside the specular rod.",
             _object({
                 "automatic": {"type": "boolean"}, "horizontal_row": NUMBER, "horizontal_half_height": NUMBER,
                 "vertical_column": NUMBER, "vertical_half_width": NUMBER,

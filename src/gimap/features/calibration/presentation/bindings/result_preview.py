@@ -97,6 +97,8 @@ class ResultPreviewMixin:
         """
         try:
             self._show_overlay_legend()
+            if self.result is not None:
+                self._show_tilt(self.result.selected_candidate)
             if getattr(self, "_shown_warnings", None):
                 self._show_warnings(self._shown_warnings)
         except RuntimeError:  # the dialog is being destroyed
@@ -169,13 +171,14 @@ class ResultPreviewMixin:
         """The Detector tilt row: rot1, rot2 (± 1σ) when they were fitted, else why not."""
         label = self.result_labels["Detector rotation"]
         if not candidate.tilt_refined:
-            label.setText(tr("not refined"))
+            label.setText(trf("rot3 fixed at {rot3}°", rot3=f"{candidate.rot3_deg:g}")
+                          if candidate.rot3_deg else tr("not refined"))
             label.setToolTip(tr("Tick Refine rot1, rot2 and calibrate again; the tilt needs three or more matched rings."))
             return
         rot1, rot2 = candidate.rot1_deg, candidate.rot2_deg
         angles = f"{rot1:.3f}°, {rot2:.3f}°"  # rot1, rot2: numbers and symbols only; what they are and 1σ: the tooltip
         label.setText(angles)
-        tip = trf("pyFAI's rot1 and rot2 (rot3 = {rot3}°), fitted with the centre and the distance.",
+        tip = trf("The fit refined rot1 and rot2 with the centre and distance. It held rot3 fixed at {rot3}°.",
                   rot3=f"{candidate.rot3_deg:g}")
         if candidate.rot1_sigma_deg is not None and candidate.rot2_sigma_deg is not None:
             tip += " " + trf("1σ: {rot1}°, {rot2}° ({method}).", rot1=f"{candidate.rot1_sigma_deg:.2g}",

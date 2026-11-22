@@ -208,7 +208,7 @@ class PoniGeometry:
     ``None`` when the file has no rotation. Analyze estimates from it how far |q| is off (``detector_tilt``)."""
 
 
-def parse_poni(text: str) -> PoniGeometry:
+def parse_poni(text: str, *, frame_shape=None) -> PoniGeometry:
     """A pyFAI ``.poni`` file as a direct-beam geometry (pyFAI's ``Geometry.getFit2D`` conversion).
 
     The PONI is where the detector normal through the sample meets the detector, not the direct
@@ -216,7 +216,7 @@ def parse_poni(text: str) -> PoniGeometry:
     axis) the beam lands at ``poni2 − L·tan(rot1)`` and ``poni1 + L·tan(rot2)/cos(rot1)``. The file is read by
     ``shared/geometry/poni.read_poni`` (the reader of Analyze's Load .poni… too).
     """
-    stated = read_poni(text)
+    stated = read_poni(text, frame_shape=frame_shape)
     poni = stated.tilt
     # The conversion is the tilt's own (``DetectorTilt.direct_beam_px``), so Analyze's estimate of what the tilt
     # costs compares the .poni with exactly this flat geometry.
@@ -235,7 +235,7 @@ def parse_poni(text: str) -> PoniGeometry:
         tilt_deg=tilt,
         detector=stated.detector,
         notes=tuple(notes),
-        tilt=poni if stated.tilted else None,
+        tilt=poni if stated.tilted or poni.orientation != 3 else None,
     )
 
 

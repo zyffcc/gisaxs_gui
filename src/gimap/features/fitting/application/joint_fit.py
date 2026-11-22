@@ -40,6 +40,8 @@ NO_EXIT_ANGLE = "{name}: no point of the vertical cut lies above the sample hori
 FEW_POINTS = "{name}: fewer than 3 points to fit"
 ON_SPECULAR = ("{name}: a vertical cut at q∥ = {q} nm⁻¹ lies on or near the specular rod, which the particles' model "
                "leaves out: take the vertical cut beside it in Analyze (Cuts step), e.g. at the structure peak.")
+CROSSES_ROD = ("The vertical band of {name} crosses the specular rod (qy = 0). The particle model excludes this "
+               "scattering. Move the band beside the rod in Analyze and extract the cut again.")
 SPECULAR_Q = 0.02
 """A vertical cut whose q∥ is below this (nm⁻¹) is warned of (``warnings``)."""
 
@@ -59,6 +61,7 @@ class CurveSpec:
     critical_angle: float = 0.0
     path: str = ""
     dq: Optional[np.ndarray] = None
+    band_crosses_specular: Optional[bool] = None
 
     def with_geometry(self, **changes) -> "CurveSpec":
         return replace(self, **changes)
@@ -70,6 +73,8 @@ def hints(observation: Optional[Mapping]) -> dict:
     if observation.get("cut") != "vertical":
         return {"kind": "horizontal"} if observation.get("source") == "native_detector_columns" else {}
     out = {"kind": "vertical"}
+    if isinstance(observation.get("band_crosses_specular"), bool):
+        out["band_crosses_specular"] = observation["band_crosses_specular"]
     for key, name in (("alpha_i_deg", "alpha_i"), ("wavelength_nm", "wavelength"), ("q_parallel_nm", "q_parallel"),
                       ("critical_angle_deg", "critical_angle"), ("horizontal_alpha_f_deg", "horizontal_alpha_f")):
         value = observation.get(key)
@@ -80,8 +85,15 @@ def hints(observation: Optional[Mapping]) -> dict:
 
 def warnings(specs: Sequence["CurveSpec"]) -> list[tuple[str, dict]]:
     """(template, values) of what a person should know of the curves before fitting them together."""
-    return [(ON_SPECULAR, {"name": s.name, "q": f"{s.q_parallel:.3g}"}) for s in specs
-            if s.kind == "vertical" and s.q_parallel < SPECULAR_Q]
+    messages = []
+    for spec in specs:
+        if spec.kind != "vertical":
+            continue
+        if spec.band_crosses_specular:
+            messages.append((CROSSES_ROD, {"name": spec.name}))
+        elif abs(spec.q_parallel) < SPECULAR_Q:
+            messages.append((ON_SPECULAR, {"name": spec.name, "q": f"{spec.q_parallel:.3g}"}))
+    return messages
 
 
 def substrate_of(material: str, delta: float = 0.0, beta: float = 0.0) -> Optional[Substrate]:
@@ -227,6 +239,7 @@ def joint_record(result: JointResult, specs: Sequence[CurveSpec], substrate: Opt
             "weighting": result.weightings[index], "chi2_per_point": number(result.curve_chi2[index]),
             "geometry": {"alpha_i_deg": spec.alpha_i, "alpha_f_deg": spec.alpha_f, "wavelength_nm": spec.wavelength,
                          "q_parallel_nm": spec.q_parallel if spec.kind == "vertical" else None,
+                         "band_crosses_specular": spec.band_crosses_specular if spec.kind == "vertical" else None,
                          "critical_angle_deg": spec.critical_angle if spec.kind == "vertical" else None},
             "model": model_to_dict(model),
             "errors": {fit_links.parameter_name(path): number(error)

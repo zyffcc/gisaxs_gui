@@ -171,6 +171,10 @@ class XrrCalibrationGeometry:
     image_shape: tuple[int, int] | None = None
     """(rows, columns) of the calibrated frame; ``None`` for calibrations that did not record it."""
     detector: str = ""
+    rot1_deg: float | None = None
+    rot2_deg: float | None = None
+    rot3_deg: float | None = None
+    orientation: int = 3  # ring calibration operates on the displayed pixels
 
 
 @dataclass(frozen=True)

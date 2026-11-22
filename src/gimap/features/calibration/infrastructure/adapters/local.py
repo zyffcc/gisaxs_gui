@@ -231,6 +231,9 @@ class SettingsGeometryAdapter:
                 "standard": candidate.standard_key,
                 "confidence": candidate.confidence,
                 "residual_px": candidate.rms_residual_px,
+                "rot1_deg": candidate.rot1_deg,
+                "rot2_deg": candidate.rot2_deg,
+                "rot3_deg": candidate.rot3_deg,
                 # Which frames the geometry belongs to (rows, columns), for tools that reuse it.
                 "image_shape": _image_shape(result),
                 "detector": result.detector_name or "",
