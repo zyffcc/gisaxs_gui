@@ -26,7 +26,7 @@ if str(ROOT) not in sys.path:
 from src.gimap.features.calibration.application.headless import describe_calibration, with_line_checks  # noqa: E402
 from src.gimap.features.calibration.domain import engine as engine_module  # noqa: E402
 from src.gimap.features.calibration.domain.engine import CalibrationEngine  # noqa: E402
-from src.gimap.features.calibration.domain.models import DetectorImage  # noqa: E402
+from src.gimap.features.calibration.domain.models import THREE_RING_UNCERTAINTY_METHOD, DetectorImage  # noqa: E402
 from src.gimap.features.calibration.domain.standards import AGBH_Q1  # noqa: E402
 from src.gimap.features.calibration.domain.tilt_fit import tilt_residual  # noqa: E402
 from src.gimap.shared.geometry import DetectorGeometry  # noqa: E402
@@ -78,7 +78,9 @@ def gimap_spread(points, candidate, wavelength):
     xs, ys, qs = points
     scale = np.array([1.0, 1.0, max(1.0, 1e-3 * centre[2]), 1e-3, 1e-3])
     rings = np.unique(qs)
-    fixed = centre[3:] if rings.size == 3 else None
+    # The shipped record distinguishes the conditional fallback from a full joint jackknife.
+    # Repeat the indicated fit independently on the recorded points.
+    fixed = centre[3:] if rings.size == 3 and candidate.uncertainty_method == THREE_RING_UNCERTAINTY_METHOD else None
     start = centre[:3] if fixed is not None else centre
     replicates = []
     for ring in rings:
@@ -190,10 +192,20 @@ def calibrated(image, truth, wavelength, estimate) -> dict:
     candidate = result.selected_candidate
     fit = np.array([candidate.center_x_px + 0.5, candidate.center_y_px + 0.5, candidate.distance_mm,
                     candidate.rot1_deg, candidate.rot2_deg])
+    headless_beam = summary["beam_center_px"]
+    headless_distance = summary["distance_mm"]
+    headless_identified = bool(
+        summary["tilt_refined"] and summary["uncertainty"]["distance_mm"] is not None
+        and all(value is not None for value in summary["tilt_uncertainty_deg"])
+        and abs(headless_distance / truth[2] - 1) < 0.05
+        and np.hypot(*(np.asarray(headless_beam) - truth[:2])) < 5
+    )
     record = dict(seconds=round(time.perf_counter() - start, 2), matched_rings=candidate.matched_ring_count,
                   orders=[ring.theoretical_index + 1 for ring in candidate.matched_rings],
                   method=candidate.uncertainty_method, tilt_refined=candidate.tilt_refined,
                   chosen_by=summary["chosen_by"], fit=named(GIMAP_KEYS, fit),
+                  headless_beam_center_px=headless_beam, headless_distance_mm=headless_distance,
+                  headless_identified=headless_identified,
                   identified=bool(abs(fit[2] / truth[2] - 1) < 0.05 and np.hypot(*(fit[:2] - truth[:2])) < 5))
     if not candidate.tilt_refined or candidate.distance_sigma_mm is None:
         return {**record, "failed": "tilt not refined (fewer than 3 matched rings) or no uncertainty",
@@ -203,8 +215,15 @@ def calibrated(image, truth, wavelength, estimate) -> dict:
     sigma = np.array([candidate.center_x_sigma_px, candidate.center_y_sigma_px, candidate.distance_sigma_mm,
                       candidate.rot1_sigma_deg, candidate.rot2_sigma_deg], float)
     replicates, covariance = gimap_spread(fit_points[id(candidate)], candidate, wavelength)
-    record.update(sigma=named(GIMAP_KEYS, sigma), sigma_ls=named(GIMAP_KEYS, ls_sigma_gimap(covariance)),
-                  jackknife_fits=int(len(replicates)))
+    values = np.array([engine_to_gimap(params) for params in replicates])
+    n = len(values)
+    sigma_from_points = np.sqrt((n - 1) / n * np.sum((values - values.mean(axis=0)) ** 2, axis=0))
+    sigma_ls = ls_sigma_gimap(covariance)
+    if candidate.uncertainty_method == THREE_RING_UNCERTAINTY_METHOD:
+        sigma_from_points = np.r_[np.maximum(sigma_from_points[:3], sigma_ls[:3]), sigma_ls[3:]]
+    record.update(sigma=named(GIMAP_KEYS, sigma), sigma_ls=named(GIMAP_KEYS, sigma_ls),
+                  jackknife_fits=n, sigma_check_max_relative_difference=float(np.max(
+                      np.abs(sigma_from_points - sigma) / np.maximum(sigma, 1e-12))))
     if candidate.matched_ring_count == 3:
         record["jackknife_two_ring_fits"] = [named(GIMAP_KEYS, engine_to_gimap(item), 4) for item in replicates]
     return record
@@ -243,7 +262,7 @@ def coverage_table(records, name: str, sigma_key: str) -> dict:
             row[key] = {"within_1sigma": round(float(np.mean(ratio <= 1)), 3),
                         "within_2sigma": round(float(np.mean(ratio <= 2)), 3),
                         "median_error_over_sigma": round(float(np.median(ratio)), 3)}
-        if sigma_key == "sigma" and low >= 4:  # reference for ring scatter; three-ring fits also use covariance
+        if sigma_key == "sigma" and all(r[name]["method"] == "ring jackknife" for r in chosen):
             dof = np.array([r[name]["jackknife_fits"] - 1 for r in chosen])
             row["student_t_expected"] = {"within_1sigma": round(float(np.mean(2 * student_t.cdf(1, dof) - 1)), 3),
                                          "within_2sigma": round(float(np.mean(2 * student_t.cdf(2, dof) - 1)), 3),
@@ -256,6 +275,12 @@ def identified_share(records, name: str) -> str:
     return f"{sum(r[name]['identified'] for r in records)}/{len(records)}"
 
 
+def headless_recovery(records, name: str) -> dict:
+    if not any("headless_identified" in r[name] for r in records):
+        return {}
+    return {"headless_identified": f"{sum(r[name].get('headless_identified', False) for r in records)}/{len(records)}"}
+
+
 def not_identified(records, name: str) -> dict:
     """How many frames were not identified, by reason."""
     reasons: dict[str, int] = {}
@@ -266,6 +291,15 @@ def not_identified(records, name: str) -> dict:
     return reasons
 
 
+def calibration_times(records, name: str) -> dict:
+    """Elapsed time per frame inside a worker, including the headless line check, excluding simulation."""
+    seconds = [r[name]["seconds"] for r in records if "seconds" in r[name]]
+    if not seconds:
+        return {}
+    return {"timed": len(seconds), "mean": round(float(np.mean(seconds)), 3),
+            "median": round(float(np.median(seconds)), 3)}
+
+
 def engine_summary(records, name: str) -> dict:
     good = [r for r in records if r[name]["identified"]]
     three = [r for r in good if r[name]["matched_rings"] == 3]
@@ -274,6 +308,8 @@ def engine_summary(records, name: str) -> dict:
     tilts = (("<1", 0, 1), ("1-2", 1, 2), ("2-3", 2, 3), (">=3", 3, 99))
     return {
         "identified": identified_share(records, name),
+        **headless_recovery(records, name),
+        "calibration_and_line_check_seconds_per_frame": calibration_times(records, name),
         "identified_by_target_rings": {label: identified_share([r for r in records if low <= r["target_rings"] <= high],
                                                                name) for label, low, high in targets},
         "identified_by_tilt_deg": {label: identified_share([r for r in records if low <= r["tilt_deg"] < high], name)
@@ -294,7 +330,13 @@ def engine_summary(records, name: str) -> dict:
 
 def run_cases(jobs, workers: int) -> list[dict]:
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        return list(pool.map(run_case, jobs))
+        records = []
+        for record in pool.map(run_case, jobs):
+            records.append(record)
+            if len(records) % 25 == 0 or len(records) == len(jobs):
+                print(f"{len(records)}/{len(jobs)} frames, {identified_share(records, 'as_shipped')} identified",
+                      flush=True)
+        return records
 
 
 def three_ring_set(cases: int, workers: int, seed0: int) -> tuple[dict, list[dict]]:
@@ -311,6 +353,8 @@ def three_ring_summary(meta: dict, records: list[dict]) -> dict:
     example = good[0] if good else None
     summary[name] = {
         "identified": identified_share(records, name), "identified_with_3_rings": len(good),
+        **headless_recovery(records, name),
+        "calibration_and_line_check_seconds_per_frame": calibration_times(records, name),
         "not_identified": not_identified(records, name),
         "coverage_reported_sigma": coverage_table(good, name, "sigma").get("3"),
         "coverage_least_squares_sigma": coverage_table(good, name, "sigma_ls").get("3"),
@@ -333,9 +377,11 @@ def coverage_summary(meta: dict, records: list[dict]) -> dict:
     return {
         **meta, "set_up": SIMULATION,
         "identified_means": "tilt refined with a 1 sigma, |L - L_true| < 5 % and the beam within 5 px of the truth",
-        "engines": {"as_shipped": "CalibrationEngine as in this checkout, with pixel-polished centre proposals"},
-        "three_rings_jackknife": "Each of the three fits uses two rings with the tilts fixed at the full fit. "
-                                 "For beam x, y and L take the larger of the ring jackknife and full-fit covariance "
-                                 "standard errors. For rot1 and rot2 use the full-fit covariance.",
+        "engines": {"as_shipped": "CalibrationEngine as in this checkout, with guided ring extraction and fitted "
+                                  "candidate ranking by the supported and missing rings and the point residual"},
+        "three_rings_jackknife": "Leave one of three rings out and refit all five parameters. If any replicate is "
+                                 "unconverged, physically inadmissible, or has a rank-deficient normalized Jacobian, "
+                                 "hold tilt fixed in all three replicates. In that fallback, use full-fit covariance "
+                                 "for the tilts and its standard errors as floors on x, y and L.",
         "as_shipped": engine_summary(records, "as_shipped"),
     }

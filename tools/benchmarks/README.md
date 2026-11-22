@@ -138,7 +138,7 @@ python tools/benchmarks/search_baseline.py --n 200 --workers 10
 python tools/benchmarks/galaxi_posterior.py   # in an environment with BornAgain 24
 python tools/benchmarks/analyze_speed.py --repeat 5 --json tools/benchmarks/analyze_speed.json
 python tools/benchmarks/pyfai_comparison.py --json tools/benchmarks/pyfai_comparison.json  # in an environment with pyFAI
-python tools/benchmarks/calibration_check.py --part all --cases 300 --three-ring-cases 150 --workers 4  # part 1 with pyFAI; --part coverage needs none
+python tools/benchmarks/calibration_check.py --part all --cases 300 --workers 3  # part 1 with pyFAI; --part coverage needs none
 python tools/benchmarks/pygid_comparison.py --json tools/benchmarks/pygid_comparison.json --published FOLDER  # with pygid
 python tools/benchmarks/galaxi_fit.py
 python tools/benchmarks/galaxi_bornagain_model.py
@@ -235,22 +235,34 @@ The JSON gives each frame's timings, settings and the network checksum. Running 
 `--synthetic-mpx` times the watched folder on crops of the public GALAXI frame.
 ## Geometry Calibration against pyFAI, and the coverage of its 1σ
 
-Run `calibration_check.py --part all --cases 300 --workers 4` with pyFAI installed.
+Run `calibration_check.py --part all --cases 300 --workers 3` with pyFAI installed.
 The simulation alone (`--part coverage`) uses the GIMaP environment. `--part summarize` rebuilds the coverage
 tables from `per_cut/calibration_check_frames.json.gz`. The JSON records the seed, settings and command.
 
 **Geometry and uncertainty.** GIMaP fits the beam centre, sample-to-direct-beam distance L and two detector
-rotations to the ring points. Each point is an intensity-weighted centroid from a sector about 2 px of arc wide.
+rotations to the ring points. Each point is a centroid from a sector about 2 px of arc wide,
+weighted by recorded intensity above the sector's lower quartile. The sector must contain valid
+pixels on both flanks of the predicted ring. A detector edge or gap can otherwise truncate a peak,
+pulling the centroid toward the visible side and biasing the tilt fit.
 The residual in pixels is r_i = L (tan 2θ_i − tan 2θ_ring) / p̄, where p̄ is the mean pixel size and 2θ_ring
 comes from the order of AgBh (d₀₀₁ = 58.38 Å). The fit minimises Σ f²(√(1 + r_i²/f²) − 1) with f = 2 px.
+After the initial fit, the engine searches narrow radial bands along the predicted ellipses.
+It tests each sector against the background on both sides of its peak. Once two orders are confirmed,
+the refit uses the confirmed orders, including any missing from the initial assignment. Independently
+resolved close reflections can also enter when their spacing leaves too little room to test the flanks.
+Automatic tilt refinement needs usable centroids from at least three orders.
+The final ranking counts confirmed rings, penalises missing observable
+orders and unexplained strong radial peaks, and uses the ring-point RMS of the fitted geometry.
 The benchmark records the points used in the final fit to check the uncertainties independently.
 
 For n contributing rings, the leave-one-ring-out variance is v_J = (n − 1)/n Σ_k (θ_k − θ̄)².
 The full-fit covariance is C = [Σ_i r_i²/(N − p)] (JᵀJ)⁻¹ for N points and p free parameters.
-With four or more rings, GIMaP reports √v_J for each free parameter. With exactly three rings and fitted
-tilts, each two-ring refit holds both tilts at their full-fit values. GIMaP reports √max(v_J, C_jj) for x, y
-and L, and √C_jj for the tilts. A calibration with fixed tilts uses the ring jackknife for x, y and L
-with three or more rings. With two rings, the standard errors come from C.
+With at least three rings, GIMaP reports √v_J for each free parameter. With exactly three and fitted
+tilts, all three two-ring refits must converge, constrain all five parameters and stay within 25% of
+the full distance and ±30° tilt. Identifiability requires the smallest singular value of the unit-column
+Jacobian to exceed √ε times the largest (ε is machine precision). If any subset fails these checks,
+all three refits hold tilt at its full-fit values. The conditional fallback reports √max(v_J, C_jj)
+for x, y and L, and √C_jj for the tilts. With two rings, the standard errors come from C.
 
 **Public silver behenate frame.** GIMaP matched orders 1–5 on `saxs_agbh_pyfai/Pilatus1M.edf` at λ = 1.0 Å
 and 172 µm pixels. pyFAI 2026.9 located points on six rings using `Recalibration.extract_cpt` (massif, one
@@ -260,42 +272,101 @@ the difference by the two standard errors added in quadrature.
 
 | Parameter | GIMaP ± ring jackknife | pyFAI ± curve_fit [ring jackknife] | Difference / combined σ |
 |---|---:|---:|---:|
-| beam x (px) | 179.796 ± 0.186 | 179.923 ± 0.017 [0.073] | −0.68 |
-| beam y (px) | 264.005 ± 0.174 | 263.968 ± 0.018 [0.094] | +0.22 |
-| L (mm) | 1633.84 ± 0.66 | 1634.05 ± 0.07 [0.17] | −0.32 |
-| rot1 (°) | −0.126 ± 0.154 | −0.297 ± 0.035 [0.089] | +1.08 |
-| rot2 (°) | 0.717 ± 0.185 | 0.687 ± 0.035 [0.091] | +0.16 |
+| beam x (px) | 179.736 ± 0.076 | 179.923 ± 0.017 [0.073] | −2.41 |
+| beam y (px) | 264.012 ± 0.154 | 263.968 ± 0.018 [0.094] | +0.29 |
+| L (mm) | 1633.47 ± 0.35 | 1634.05 ± 0.07 [0.17] | −1.65 |
+| rot1 (°) | −0.305 ± 0.148 | −0.297 ± 0.035 [0.089] | −0.05 |
+| rot2 (°) | 0.670 ± 0.178 | 0.687 ± 0.035 [0.091] | −0.10 |
 
-On GIMaP's ring points the RMS residuals of the GIMaP and pyFAI geometries were 0.584 and 0.623 px.
-On pyFAI's points they were 0.300 and 0.222 px. The shipped `Pilatus1M.poni`, a starting geometry for
-pyFAI, gave 14.6 and 15.3 px on these two sets. `calibration_check.json` also gives both geometries in PONI
+The two fits differed by 0.193 px in beam position and 0.580 mm in distance. The headless line
+check returned the same five-order geometry to the precision shown. A half-distance candidate
+places the same five image rings at orders 2, 4, 6, 8 and 10. Its smaller mean relative q error
+on those five orders previously overrode the window's solution. The headless AgBh comparison
+now measures competing candidates on the independently confirmed orders of the leading geometry.
+On GIMaP's ring points the RMS residuals of the GIMaP and pyFAI geometries were 0.142 and 0.297 px.
+On pyFAI's points they were 0.349 and 0.222 px. The shipped `Pilatus1M.poni`, a starting geometry for
+pyFAI, gave 14.4 and 15.3 px on these two sets. `calibration_check.json` also gives both geometries in PONI
 coordinates and the results of a second pyFAI fit started 3% farther away with zero tilt.
 
 **Recovery and coverage.** The 300 simulated Pilatus 1M frames have 3–9 target rings, L between
 1.5 and 3 m, and rotations up to ±3° about either axis. Each fit receives an estimate within ±15% of the
 true distance. Recovery requires a fitted tilt with an uncertainty, a beam centre within 5 px of the
 truth and a distance error below 5%. Counts and coverage use the calibration window's first-ranked
-candidate. The archive records the headless line check separately.
+candidate. The archive records the headless line check separately. The ring-count classes below
+are the simulation targets. Additional orders can reach a corner of the detector.
 
-The shipped engine recovered **213/300** geometries. On the same seeds, the engine before
-transmission polishing recovered 111/300 (archived in commit `7cd8999`). Coarse arc votes can place the
-centre several pixels off, spreading a narrow ring over several radii in the profile. The engine now
-tests refined copies of these votes alongside the original proposals. In the separate 150 frames with
-only orders 1–3 drawn, it recovered 114/150 geometries. Of these, 112 matched exactly three rings.
+**Diagnosis on the original frames.** At the true centre of case 0, orders 3–5 peaked at
+563, 751 and 939 px. Only 1.1%, 0.6% and 0% of the rays passed the old angular support test,
+below the 1.5% cutoff, despite clear arcs in the image. A bright sector had to exceed the
+median excess of the other sectors at the same radius. The revised test compares each
+sector to its own radial background. In case 3, the polished centre was 0.4 px from truth.
+Three strong peaks at 175, 350 and 525 px agreed on a distance of 1964 mm. A broad background
+peak at 811 px was assigned to order 5 and pulled the initial least-squares fit to 1871 mm.
+AgBh matching now requires agreement with the harmonic spacing before fitting the distance.
+In case 208 the selected solution put the detector at half its true distance. It predicted
+intermediate orders in regions where the image shows background. All three cases had a
+centre proposal within 1 px of truth and pass with the existing centre search.
 
-Among recovered frames, each cell gives the fraction within 1σ, fraction within 2σ and median |error|/σ.
-The three-ring row uses the separate set. The other rows use the 300-frame set.
+In the first guided run the rot1 errors still depended on where the rings reached the detector.
+After comparing centroid methods on 40 frames with at least seven matched rings, we checked 32
+other frames in the same class. Using recorded counts and requiring both flanks reduced RMS
+error from 0.044 to 0.004 px for x, 0.032 to 0.003 px for y, 0.156 to 0.016 mm for L,
+0.141° to 0.012° for rot1 and 0.098° to 0.017° for rot2. Both fits used the same assignments.
+
+Replaying all 87 failures with the previous engine found a centre within 5 px in 73 frames
+before polishing and in all 87 after polishing. The table identifies the earliest missing
+step at centres within 5 px. This audit counts a true order when the simulated ring crosses
+at least four 5° sectors on active pixels. A strong coarse peak has prominence ≥0.1 and lies
+within max(2.5 px, 0.012 r) of the nominal radius. An accurate assignment meets the same
+5 px and 5% tolerances as the benchmark and matches at least three true orders.
+
+| Earliest missing step in the previous engine | Previous geometry found | Current geometry found |
+|---|---:|---:|
+| Fewer than three strong true orders detected at any accurate centre | 0/12 | 12/12 |
+| Three detected, no accurate three-order assignment generated | 0/7 | 7/7 |
+| Accurate assignment generated, lost during refinement or ranking | 0/68 | 68/68 |
+
+The shipped engine found **300/300 geometries** on the same seeds for which commit `7fc06ff` found
+213/300. It retained all 213 successful fits, recovered all 53 frames previously missing a tilt fit
+and all 34 previously assigned a wrong geometry. Among those 34, the old fit missed both tolerances
+on 25 frames, only the distance tolerance on six, and only the centre tolerance on three.
+
+| Simulation group | Previous | Current |
+|---|---:|---:|
+| 3 target rings | 41/100 | 100/100 |
+| 4–6 target rings | 74/100 | 100/100 |
+| 7–9 target rings | 98/100 | 100/100 |
+| Tilt <1° | 24/30 | 30/30 |
+| Tilt 1–<2° | 63/87 | 87/87 |
+| Tilt 2–<3° | 79/117 | 117/117 |
+| Tilt ≥3° | 47/66 | 66/66 |
+
+Tilt in this table is the combined angle arccos(cos rot1 · cos rot2). The separate set with only
+orders 1–3 drawn improved from 114/150 geometries recovered to 150/150, and from 112 to 150
+recoveries with exactly three matched orders. The headless workflow also recovered all 450 geometries.
+
+Mean worker time for calibration and the headless line check rose from 13.371 to 15.502 s per frame
+on the main set (median 13.090 to 15.115 s), and from 9.143 to 11.514 s on the separate set.
+These times exclude simulation and the benchmark's independent uncertainty refits. The archived
+baseline used four workers and this run used three.
+
+Among recovered frames, each cell gives the measured fraction within 1σ, fraction within 2σ and median |error|/σ.
+The first row uses the independent 150-frame set with only orders 1–3 drawn. The remaining rows use the
+300-frame set, grouped by the number of matched rings.
 
 | Matched rings | Frames | beam x | beam y | L | rot1 | rot2 |
 |---|---:|---|---|---|---|---|
-| 3 | 112 | 0.74 / 0.92 / 0.54 | 0.55 / 0.82 / 0.86 | 0.75 / 0.96 / 0.58 | 0.53 / 0.83 / 0.95 | 0.52 / 0.78 / 0.95 |
-| 4–6 | 81 | 0.78 / 0.97 / 0.54 | 0.74 / 0.90 / 0.59 | 0.79 / 0.97 / 0.47 | 0.72 / 0.99 / 0.75 | 0.81 / 0.95 / 0.55 |
-| ≥7 | 125 | 0.52 / 0.94 / 0.97 | 0.67 / 0.95 / 0.72 | 0.79 / 0.99 / 0.51 | 0.57 / 0.91 / 0.84 | 0.70 / 0.98 / 0.71 |
+| 3 (orders 1–3 only) | 150 | 0.613 / 0.820 / 0.666 | 0.687 / 0.853 / 0.533 | 0.593 / 0.820 / 0.754 | 0.640 / 0.873 / 0.745 | 0.673 / 0.833 / 0.596 |
+| 3 | 6 | 0.667 / 0.833 / 0.737 | 0.667 / 1.000 / 0.396 | 0.833 / 0.833 / 0.440 | 0.333 / 0.833 / 1.397 | 0.500 / 0.667 / 1.437 |
+| 4–6 | 138 | 0.594 / 0.855 / 0.684 | 0.616 / 0.862 / 0.699 | 0.565 / 0.819 / 0.747 | 0.623 / 0.862 / 0.745 | 0.565 / 0.841 / 0.874 |
+| ≥7 | 156 | 0.660 / 0.955 / 0.684 | 0.679 / 0.904 / 0.598 | 0.622 / 0.891 / 0.792 | 0.641 / 0.923 / 0.710 | 0.609 / 0.891 / 0.832 |
 
-The main set also yielded 7 three-ring recoveries, reported separately in the JSON. With seven or more
-rings, a Student t reference for ring scatter gives 65.1% within 1σ. The measured rates were 52.0% for beam x
-and 56.8% for rot1. Taking the larger of the jackknife and covariance standard errors on the same
-points gave 56.8% and 57.6%, respectively. The engine retains the ring jackknife for these fits.
+With few rings, estimated standard errors themselves vary. A Student t reference with n − 1 degrees
+of freedom gives 57.7%, 61.9% and 65.4% within 1σ for the separate three-ring set, the 4–6 group and
+the ≥7 group respectively. Coverage for L and rot2 was 56.5% in the 4–6 group. With ≥7 rings, taking
+the larger of the covariance and ring-jackknife errors would give 76.9–84.6% across the five parameters.
+The reported values use the ring jackknife. Repeating it on the final points agreed with the stored
+standard errors to within 1.38 × 10⁻⁵ relative across all 450 frames.
 
 ## The third set
 

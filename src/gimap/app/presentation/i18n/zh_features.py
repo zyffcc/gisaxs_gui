@@ -6,6 +6,7 @@ from .zh_absolute_scale import ABSOLUTE_SCALE_ZH
 from .zh_app_session import APP_SESSION_ZH
 from .zh_assistant_service import ASSISTANT_SERVICE_ZH
 from .zh_calibration_residuals import CALIBRATION_RESIDUALS_ZH
+from .zh_calibration_rings import CALIBRATION_RINGS_ZH
 from .zh_calibration_uncertainty import CALIBRATION_UNCERTAINTY_ZH
 from .zh_coverage_report import COVERAGE_REPORT_ZH
 from .zh_fit_data import FIT_DATA_ZH
@@ -47,6 +48,7 @@ FEATURES_ZH = {
     **GISAXS_FIT_LEVEL_ZH,
     **ASSISTANT_SERVICE_ZH,
     **CALIBRATION_RESIDUALS_ZH,
+    **CALIBRATION_RINGS_ZH,
     **CALIBRATION_UNCERTAINTY_ZH,
     **PREDICT_REPORT_ZH, **POSTERIOR_MCMC_ZH, **GISAXS_POSTERIOR_ZH, **FLAT_FIELD_ZH, **NXCANSAS_ZH,
     **GISAXS_CUTS_ZH, **FIT_DATA_ZH, **NORMALISATION_ZH, **GEOMETRY_ZH, **APP_SESSION_ZH, **INDEXING_ZH,

@@ -102,10 +102,10 @@ def test_the_agbh_standard_calibrates_to_its_rings() -> None:
     result = create_headless_calibration().calibrate(
         str(DATA / MANIFEST["saxs_agbh_pyfai"]["frame"]), standard="agbh", energy_kev=12.398419843, pixel_size_m=172e-6,
     )
-    expected = MANIFEST["saxs_agbh_pyfai"]
-    assert result["distance_mm"] == pytest.approx(expected["ring_distance_mm_at_stated_wavelength"], rel=0.01)
-    assert np.hypot(*(np.array(result["beam_center_px"]) - expected["beam_center_px"])) < 5.0
-    # Known limit (2026-09-29): on these partial arcs the fit centre sits ~3 px off, 0.45 % in distance.
+    benchmark = Path(__file__).resolve().parents[1] / "tools/benchmarks/calibration_check.json"
+    pyfai = json.loads(benchmark.read_text(encoding="utf-8"))["real_frame"]["pyfai"]["values_gimap_convention"]
+    assert result["distance_mm"] == pytest.approx(pyfai["distance_mm"], abs=1.0)
+    assert np.hypot(*(np.array(result["beam_center_px"]) - [pyfai["beam_x_px"], pyfai["beam_y_px"]])) < 0.5
 
 
 def test_galaxi_gisaxs_yoneda_band_and_symmetry_axis() -> None:

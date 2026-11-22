@@ -31,6 +31,8 @@ PEAK_SHARE = 0.3
 _BLOCK_PIXELS = 1 << 20
 NOT_REFINED_FEW_RINGS = "The detector tilt was not refined: it needs at least three matched rings."
 NOT_REFINED_POINTS = "The detector tilt was not refined: too few ring points."
+NOT_REFINED_CONTRIBUTING_RINGS = "Automatic tilt refinement needs usable points from at least three rings."
+_TOO_FEW_GEOMETRY_POINTS = "Too few experimental ring points were available for joint refinement."
 
 
 def _geometry(params, wavelength: float, px: float, py: float, rot3: float) -> DetectorGeometry:
@@ -71,8 +73,9 @@ def tilted_ring_points(
     The valid pixels within a band about the ring (± max(3, min(10, 1.2 % of the radius)) px, times ``widen``) are
     split into sectors about 2 px of arc long (36 to 720 a ring). In a sector, every pixel weighs by how far it
     stands above the sector's lower quartile; the point is the weighted mean position (sub-pixel), kept when the
-    sector's brightest pixel stands above that quartile by at least ``PEAK_SHARE`` of the ring's median such height
-    (a sector the ring does not reach, behind the beam stop or a gap, gives no point). Done in blocks of rows."""
+    sector's brightest pixel stands above that quartile by at least ``PEAK_SHARE`` of the ring's median such height.
+    Both radial flanks of the band must have data. Averaging a peak cut by a gap or detector edge displaces the
+    centroid towards the illuminated side. Done in blocks of rows."""
     geometry = _geometry(params, wavelength, px, py, rot3)
     cx, cy = float(params[0]), float(params[1])
     distance_m, mean_pixel = float(params[2]) * 1e-3, 0.5 * (px + py)
@@ -85,7 +88,7 @@ def tilted_ring_points(
         radius = distance_m * tangent / mean_pixel
         rings.append((match.q_inv_angstrom, tangent, radius, widen * max(3.0, min(10.0, 0.012 * radius))))
     rows, columns = analysis.signal.shape
-    found: list[list[tuple[np.ndarray, np.ndarray, np.ndarray]]] = [[] for _ in rings]
+    found: list[list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]] = [[] for _ in rings]
     step = max(1, _BLOCK_PIXELS // max(1, columns))
     column_index = np.arange(columns, dtype=float)
     for start in range(0, rows, step):
@@ -95,11 +98,12 @@ def tilted_ring_points(
         valid = analysis.valid[start:stop]
         signal = analysis.signal[start:stop]
         for index, (_q, ring_tangent, _radius, half_width) in enumerate(rings):
-            band = valid & (np.abs(distance_m * (tangent - ring_tangent) / mean_pixel) <= half_width)
+            offset = distance_m * (tangent - ring_tangent) / mean_pixel
+            band = valid & (np.abs(offset) <= half_width)
             if band.any():
-                found[index].append((xs[band], ys[band], signal[band].astype(float)))
+                found[index].append((xs[band], ys[band], signal[band].astype(float), offset[band]))
     points_x, points_y, point_q = [], [], []
-    for (q, _tangent, radius, _width), parts in zip(rings, found):
+    for (q, _tangent, radius, half_width), parts in zip(rings, found):
         if not parts:
             continue
         xs = np.concatenate([part[0] for part in parts])
@@ -120,8 +124,14 @@ def tilted_ring_points(
         total = np.bincount(sector, weights=weight, minlength=sectors)
         peak = np.zeros(sectors)
         np.maximum.at(peak, sector, weight)
-        typical = float(np.median(peak[filled])) if filled.any() else 0.0
-        use = filled & (total > 0) & (peak > 0) & (peak >= PEAK_SHARE * typical)
+        offsets = np.concatenate([part[3] for part in parts])
+        inner = np.full(sectors, np.inf)
+        outer = np.full(sectors, -np.inf)
+        np.minimum.at(inner, sector, offsets)
+        np.maximum.at(outer, sector, offsets)
+        complete = filled & (inner <= -half_width + 1) & (outer >= half_width - 1)
+        typical = float(np.median(peak[complete])) if complete.any() else 0.0
+        use = complete & (total > 0) & (peak > 0) & (peak >= PEAK_SHARE * typical)
         if not use.any():
             continue
         mean_x = np.bincount(sector, weights=weight * xs, minlength=sectors)[use] / total[use]
@@ -170,30 +180,42 @@ def refine_ring_geometry(
     tilt: str, distance_range_mm: Optional[tuple[float, float]] = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
     """Refine the candidate in place and return the ring points that determined it."""
-    free_tilt = tilt != "off" and candidate.matched_ring_count >= (2 if tilt == "on" else TILT_MIN_RINGS)
-    if tilt != "off" and not free_tilt:
+    minimum = 2 if tilt == "on" else TILT_MIN_RINGS
+    can_refine = tilt != "off" and candidate.matched_ring_count >= minimum
+    rotations = np.radians([candidate.rot1_deg, candidate.rot2_deg])
+    fixed_rotations = rotations if tilt == "off" else np.zeros(2)
+    # A guided refit can lose a ring at a detector edge. Its earlier tilt and
+    # uncertainties no longer describe the points available to this call.
+    candidate.clear_fit_statistics()
+    candidate.tilt_refined = False
+    candidate.rot1_deg, candidate.rot2_deg = np.degrees(fixed_rotations)
+    point_warnings = (NOT_REFINED_FEW_RINGS, NOT_REFINED_POINTS, NOT_REFINED_CONTRIBUTING_RINGS,
+                      _TOO_FEW_GEOMETRY_POINTS)
+    candidate.warnings[:] = [message for message in candidate.warnings if message not in point_warnings]
+    if tilt != "off" and not can_refine:
         candidate.warnings.append(NOT_REFINED_FEW_RINGS)
     if candidate.matched_ring_count < 2:
         return None
 
     rot3 = math.radians(candidate.rot3_deg)
-    rotations = np.radians([candidate.rot1_deg, candidate.rot2_deg])
-    initial = np.r_[candidate.center_x_px, candidate.center_y_px, candidate.distance_mm, rotations]
+    initial = np.r_[candidate.center_x_px, candidate.center_y_px, candidate.distance_mm,
+                    rotations if can_refine else fixed_rotations]
     params = initial.copy()
-    fixed_tilt = None if free_tilt else rotations
     window = max(12.0, min(60.0, 0.04 * max(analysis.signal.shape)))
     options = dict(rot3=rot3, distance_range_mm=distance_range_mm, center_window_px=window)
     for passed in range(POINT_PASSES):
         points = tilted_ring_points(analysis, candidate, params, wavelength, px, py, rot3,
                                     widen=2.0 if passed == 0 else 1.0)
         xs, ys, qs = points
-        if xs.size < 30 or np.unique(qs).size < 2:
-            candidate.warnings.append(NOT_REFINED_POINTS if free_tilt else
-                                      "Too few experimental ring points were available for joint refinement.")
+        contributing = np.unique(qs).size
+        if xs.size < 30 or contributing < 2:
+            candidate.warnings.append(NOT_REFINED_POINTS if can_refine else _TOO_FEW_GEOMETRY_POINTS)
             return None
+        free_tilt = can_refine and contributing >= minimum
         free = params if free_tilt else params[:3]
-        fit = fit_tilted_geometry(*points, wavelength, px, py, free, fixed_tilt=fixed_tilt, **options)
-        updated = fit if free_tilt else np.r_[fit, rotations]
+        fit = fit_tilted_geometry(*points, wavelength, px, py, free,
+                                  fixed_tilt=None if free_tilt else fixed_rotations, **options)
+        updated = fit if free_tilt else np.r_[fit, fixed_rotations]
         moved = np.abs(updated - params)
         params = updated
         if moved[0] < 0.01 and moved[1] < 0.01 and moved[3] < 1e-6 and moved[4] < 1e-6:
@@ -201,6 +223,8 @@ def refine_ring_geometry(
     candidate.center_x_px, candidate.center_y_px, candidate.distance_mm = map(float, params[:3])
     candidate.rot1_deg, candidate.rot2_deg = np.degrees(params[3:])
     candidate.tilt_refined = free_tilt
+    if can_refine and not free_tilt:
+        candidate.warnings.append(NOT_REFINED_CONTRIBUTING_RINGS)
     candidate.initial_point_rms_px = point_rms_px(*points, initial, wavelength, px, py, rot3)
     candidate.point_rms_px = point_rms_px(*points, params, wavelength, px, py, rot3)
     if free_tilt:

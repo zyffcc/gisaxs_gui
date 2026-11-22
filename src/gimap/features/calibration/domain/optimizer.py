@@ -10,7 +10,7 @@ from scipy.optimize import least_squares
 from .geometry_model import q_to_ring_radius_m
 from .models import THREE_RING_UNCERTAINTY_METHOD, CalibrationCandidate
 from .preprocessing import AnalysisImage
-from .tilt_fit import tilt_residual
+from .tilt_fit import TILT_LIMIT_DEG, tilt_residual
 
 
 def _ring_points(
@@ -62,6 +62,47 @@ def _ring_residual(xs, ys, qs, wavelength_angstrom, pixel_size_x_m, pixel_size_y
     return residual
 
 
+def _identifiable_two_ring_fit(fit, full_distance: float) -> bool:
+    """A two-ring subset must constrain all five parameters inside the joint fit's physical range."""
+    if not fit.success or not np.all(np.isfinite(fit.x)):
+        return False
+    if not 0.75 * full_distance < fit.x[2] < 1.25 * full_distance:
+        return False
+    if np.any(np.abs(fit.x[3:]) >= math.radians(TILT_LIMIT_DEG)):
+        return False
+    # Unit-length columns remove the dependence on the chosen units of distance and tilt.
+    jac = fit.jac
+    norms = np.linalg.norm(jac, axis=0)
+    if jac.shape[0] < jac.shape[1] or not np.all(np.isfinite(norms) & (norms > 0)):
+        return False
+    singular = np.linalg.svd(jac / norms, compute_uv=False)
+    return singular[-1] > np.sqrt(np.finfo(float).eps) * singular[0]
+
+
+def _ring_jackknife(points, rings, make, free, fixed_tilt):
+    """Standard errors on the final points. A two-ring joint fit may have too little angular support."""
+    xs, ys, qs = points
+    scale = np.array([1.0, 1.0, max(1.0, 1e-3 * free[2]), 1e-3, 1e-3])[:free.size]
+    check_subset = rings.size == 3 and free.size == 5
+    estimates = []
+    for ring in rings:
+        keep = qs != ring
+        residual = make(xs[keep], ys[keep], qs[keep], fixed_tilt)
+        try:
+            fit = least_squares(residual, free, loss="soft_l1", f_scale=2.0,
+                                max_nfev=40 if free.size == 3 else 80, x_scale=scale)
+            if check_subset and not _identifiable_two_ring_fit(fit, free[2]):
+                return None
+        except (ValueError, np.linalg.LinAlgError):
+            if check_subset:
+                return None
+            raise
+        estimates.append(fit.x)
+    values = np.asarray(estimates)
+    n = rings.size
+    return np.sqrt((n - 1) / n * np.sum((values - values.mean(axis=0)) ** 2, axis=0))
+
+
 def estimate_uncertainty(
     points: tuple[np.ndarray, np.ndarray, np.ndarray] | None,
     candidate: CalibrationCandidate,
@@ -72,9 +113,9 @@ def estimate_uncertainty(
     """1σ of the beam centre and the distance of a refined candidate (and of rot1, rot2 when the tilt was fitted).
 
     The jackknife leaves out each of n rings in turn, keeping the points of the final fit.
-    With three rings and a fitted tilt, the two-ring refits hold the tilt fixed. The full-fit
-    least-squares covariance supplies the tilt errors and a floor for the conditional centre
-    and distance errors. With only two rings the errors are from the covariance alone."""
+    Three rings permit a joint jackknife when all two-ring subsets constrain tilt. Otherwise
+    repeat with fixed tilts, using the full-fit covariance for the tilt errors and a floor on
+    the centre and distance errors. Two rings use the full-fit covariance alone."""
     if points is None:
         return candidate
     xs, ys, qs = points
@@ -92,21 +133,10 @@ def estimate_uncertainty(
         return candidate
     rings = np.unique(qs)
     if rings.size >= 3:
-        free = centre[:3] if rings.size == 3 else centre
-        fixed_tilt = rotations if free.size == 3 else None
-        scale = np.array([1.0, 1.0, max(1.0, 1e-3 * centre[2]), 1e-3, 1e-3])[:free.size]
-        estimates = []
-        for ring in rings:
-            keep = qs != ring
-            residual = make(xs[keep], ys[keep], qs[keep], fixed_tilt)
-            fit = least_squares(residual, free, loss="soft_l1", f_scale=2.0,
-                                max_nfev=40 if free.size == 3 else 80, x_scale=scale)
-            estimates.append(fit.x)
-        values = np.asarray(estimates)
-        n = rings.size
-        sigma = np.sqrt((n - 1) / n * np.sum((values - values.mean(axis=0)) ** 2, axis=0))
+        sigma = _ring_jackknife(points, rings, make, centre, None if candidate.tilt_refined else rotations)
         method = "ring jackknife"
-        if free.size < centre.size:
+        if sigma is None:
+            sigma = _ring_jackknife(points, rings, make, centre[:3], rotations)
             full_sigma = _least_squares_sigma(make(xs, ys, qs, None), centre)
             if full_sigma is not None:
                 # Fixed tilts in the jackknife omit the centre/distance dependence on tilt.

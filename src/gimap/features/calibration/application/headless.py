@@ -67,6 +67,7 @@ def describe_calibration(result: CalibrationResult) -> dict:
         "detector": result.detector_name,
         "shape": list(shape) if shape else None,
         "energy_source": (result.metadata or {}).get("energy_source"),
+        "guided_ring_ranking": (result.metadata or {}).get("guided_ring_ranking", False),
         "source_image": result.source_image,
         "calibrated_at": result.calibration_timestamp,
         "alternatives": alternatives[:3],
@@ -114,12 +115,7 @@ class HeadlessCalibration:
 
 
 def with_line_checks(summary: dict, image) -> dict:
-    """Check the fit and its alternatives against the standard's lines; keep the most accurate one.
-
-    The engine ranks by ring matching in pixels; the geometry that puts the
-    standard's lines closest to their q is the better calibration, so it becomes
-    the result when it differs (``chosen_by`` says so).
-    """
+    """Compare independent line positions, preserving the guided indexing when confirmed."""
     data = np.asarray(image.data, dtype=np.float64)
     valid = np.isfinite(data) & (data >= 0)
     if image.mask is not None:
@@ -141,7 +137,11 @@ def with_line_checks(summary: dict, image) -> dict:
         ))
     for candidate, check in zip(candidates, checks):
         candidate["line_check"] = check
-    best = best_by_lines(checks)
+    if summary.get("guided_ring_ranking") and summary["standard"] == "agbh":
+        harmonic = [candidate["standard"] == "agbh" for candidate in candidates]
+        best = best_by_lines(checks, compare_reference_lines=harmonic)
+    else:
+        best = best_by_lines(checks)
     if best is None or best == 0:
         summary["chosen_by"] = "ring fit" if best is None else "ring fit, confirmed by the line positions"
         return summary
