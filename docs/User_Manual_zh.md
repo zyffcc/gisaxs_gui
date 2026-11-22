@@ -1034,7 +1034,7 @@ GIMaP 读取 CBF、TIFF 和 EDF 帧，以及 NeXus/HDF5 文件（`.nxs`、`.nx`�
 
 ![掩膜与校正步骤](manual_images/zh/05_mask_step.png)
 
-*顶部的摘要按类统计被排除的像素；图上琥珀色圆圈标出本帧找到的热像素，红色矩形是手绘掩膜。*
+*在这幅合成帧上，红环预览手绘圆环向外膨胀 4 个像素后的结果。“应用掩膜编辑”旁的计数表示编辑后用户掩膜覆盖的像素数。*
 
 **在图上显示被掩膜的像素**（Show Masked Pixels on the Image）在探测器图上标出它们：红色 = 排除，
 琥珀色圆圈 = 热 / 死像素，青色 = 由镜像补齐（参与曲线计算）。
@@ -1046,14 +1046,36 @@ GIMaP 读取 CBF、TIFF 和 EDF 帧，以及 NeXus/HDF5 文件（`.nxs`、`.nx`�
 [《物理与方法》4.4 节](Physics_Manual_zh.md#44-在帧中找到的坏像素)。凡是宽于一个像素的东西——布拉格斑点、条纹、beam stop 边缘、
 Yoneda 带——都保留，也不会整行整列去掉。排除的数量写进导出记录（`bad_pixels_left_out`）。关掉这个选项，这些像素就回到曲线里。
 
-**手绘掩膜**（Masks you draw）：
+**用户掩膜**（User mask）
 
-1. 按 **矩形**（Rectangle），在探测器图上点两个对角；或按 **多边形**（Polygon），逐个点击角点
-   （双击或 `Enter` 闭合，`Backspace` 删除最后一点，`Esc` 取消）。
-2. 掩膜以红色轮廓显示，并立即从所有曲线中排除。
-3. **删除所选**（Remove Selected，或在列表中按 `Delete`）和 **清除掩膜**（Clear Masks）删除掩膜；探测器缝隙始终保持掩膜。
-4. **保存…**（Save…）把手绘掩膜存为 `.json`（使用 4.4 节的像素坐标）。**载入…**（Load…）读取这种文件，
-   或同尺寸的掩膜图像（EDF 或 TIFF，非零 = 掩膜，与 pyFAI 相同）。
+在**用户掩膜**下选择工具。**排除像素**（Exclude pixels）把选区加入掩膜。**恢复像素**（Include pixels）
+从用户掩膜中移除选区，其中通过探测器有效性检查和其他校正的像素可重新参与计算。
+
+| 选区 | 操作 |
+|---|---|
+| 矩形（Rectangle）或椭圆（Ellipse） | 按**绘制**（Draw），点击外接矩形的两个对角。 |
+| 多边形（Polygon） | 按**绘制**，依次点击顶点。双击或按 `Enter` 闭合，`Backspace` 删除最后一点，`Esc` 取消。 |
+| 圆（Circle）或圆环（Annulus） | 按**绘制**，先点击圆心。圆再点击圆周上一点。圆环则依次点击内圆周和外圆周。 |
+| 手绘笔画 | 选**画笔**（Brush）或**橡皮擦**（Eraser），设置**半径**（Radius，单位为像素），按**绘制**后拖动。橡皮擦可以恢复先前排除的像素。 |
+| 围绕直射束的环 | 选**以束心为中心的 q 环**（Beam-centred q annulus），输入**内边界 q**（Inner q）和**外边界 q**（Outer q），单位为 Å⁻¹。该工具使用当前探测器几何。 |
+
+画好后可预览用户掩膜的像素总数。按**应用掩膜编辑**（Apply mask edit）使掩膜作用于所有曲线。排除矩形或多边形的操作在绘制结束时立即生效。
+
+对 q 环或数值规则，按**预览掩膜**（Preview mask），核对总数后按**应用掩膜编辑**。
+**高于阈值**（Above threshold）和**低于阈值**（Below threshold）比较原始像素值。需要相对阈值时，勾选
+**中位数的倍数**（Multiple of the median）并输入倍数。中位数取自剩余的有效像素。
+**饱和像素**（Saturated pixels）选中达到或超过所输入饱和值的像素。**负值像素**（Negative pixels）选中小于零的值。启用帧求和时，这些规则比较求和值。
+
+**膨胀掩膜**（Grow mask）和**腐蚀掩膜**（Shrink mask）按给定像素半径的圆盘扩大或缩小用户掩膜。
+**反转掩膜**（Invert mask）交换用户掩膜内外的像素。按列表顺序执行各项编辑。**删除所选**（Remove Selected）
+或 `Delete` 移除一项编辑。**清除掩膜**（Clear Masks）后，用户掩膜覆盖 0 个像素。编辑菜单中的**撤销**（Undo）和
+**重做**（Redo）适用于绘制、应用规则、载入、删除和清除。
+
+**保存…**（Save…）可以把操作顺序写进 GIMaP `.json` 文件，在每一帧上重新执行。请保留该文件所引用的掩膜图像。
+如果只需保存本帧的用户掩膜，可选 EDF、TIFF、NumPy（`.npy`）或 Fit2D（`.msk`）。图像中 0 表示未掩蔽，1 表示掩蔽。
+探测器缝隙和自动排除的坏像素另行记录。图像旁的记录文件（如 `masks.edf.json`）写明帧、几何、设置和掩膜来源。
+**载入…**（Load…）接受上述操作记录、旧版矩形及多边形 JSON 文件，以及与当前帧形状一致的掩膜图像。
+与 pyFAI 的约定相同，图像中所有非零像素都被掩蔽。见《物理与方法》4.5 节。
 
 **用镜像一侧补齐缝隙（GIWAXS）**（Fill gaps from the mirror side (GIWAXS)，默认关）。GIWAXS 图样对 ±q∥ 对称。
 没有数据的像素（模块缝隙、掩膜、热像素）取它关于光束中心列的镜像位置的值，在两列之间插值，两列都须有数据。
@@ -2949,7 +2971,7 @@ AI 对分析的每个修改（扇区宽度、自定义扇区、q 框、帧、模
 - **文件夹。** 每一帧在 `--out` 下有自己的文件夹，以帧命名，`summary.md` 的每一行都链接到它的 `report.md`。不同文件夹里同名的帧，
   加上能区分它们的最近一级文件夹名（`<名称>_<文件夹>`），否则加编号。已有先前运行摘要的 `--out` 文件夹会被拒绝（退出码 1）；
   `--overwrite` 替换那次运行：先删除它的 `summary.json` 列出的帧文件夹，别的不动。
-- **掩膜。** `--mask FILE` 对每一帧应用同一个掩膜，读法与分析工作区的**载入掩膜**（Load Masks）相同：GIMaP 掩膜 `.json`（画的形状），
+- **掩膜。** `--mask FILE` 对每一帧应用同一个掩膜，读法与分析工作区的**载入掩膜**（Load Masks）相同：GIMaP 掩膜 `.json`（有顺序的形状、规则及图像来源），
   或与帧同样大小的掩膜图像，非零像素被排除。掩膜不合适的帧失败并写出原因。`report.md`（**Mask** 一节）和 `report.json`（`mask`）
   总是写明应用了哪个掩膜，或者没有应用；探测器缝隙和自动找到的坏像素与它分开写。
 - **平场。** `--flat-field PATH` 用平场（探测器响应）除每一帧，做法与分析工作区校正中的**平场**（Flat field）相同：与帧同样大小
@@ -3071,7 +3093,7 @@ GIMaP 从不改动你的数据文件。分析的导出默认写到**数据旁边
 | 分析 ▸ **批量导出…**（Batch Export…） | 按曲线的表 `<batch>_<curve>_frames.csv`（或 `.txt`、`.dat`）；选了拟合时，拟合表 `<batch>_peak_fits.csv`（或 `<batch>_model_fits.csv`）及其趋势图 `<batch>_peak_fits.png`（`_model_fits.png`），选了拟合曲线时还有 `fits/<帧>_<峰或模型>_fit.csv`；按你的选择生成的子文件夹 `curves/`、`nxcansas/`、`fit_input/`、`maps/`、`images/`、`frames/`；帧名保留从 0 数的帧号（`…_frame0003_sum3_…`） | 上次的批量文件夹，否则数据旁边的 `gimap_analysis/`；默认再建一个以帧所在文件夹命名的子文件夹（单个文件：以文件命名；来自多个文件夹：`batch`）；**两者都保留**时写到新的子文件夹 | `README.txt` 和 `<batch>_batch.json`（写出的每个文件、每帧的切线、失败的帧及原因）；`curves/` 里每帧还有 `_analysis.json` |
 | 分析 ▸ **把序列发送到拟合…**（Send Series to Fitting…） | `fit_input/<帧>_fit_input.dat`、`README.txt`、`<batch>_batch.json` | 它自己的文件夹 `<名称>_fitting/`，在同一数据的批量导出旁边 | `README.txt`、批量 JSON |
 | 分析 ▸ **监视时导出新帧**（Export New Frames While Watching） | 每个新帧同导出 | 帧旁边的 `gimap_analysis/`；那里写不了时为你选一次的文件夹（本次会话记住）；不选时关闭这项导出，状态行说明原因 | 同导出 |
-| 分析 ▸ **保存设置…**（Save Settings…）；掩膜步骤 ▸ **保存…**（Save…）；区域 ▸ **添加 ▸ 保存切线…**（Add ▸ Save Cuts…） | `analyze_settings.json`；`masks.json`；`cuts.json` | 对话框，从 `gimap_analysis/` 开始 | 文件本身就是记录 |
+| 分析 ▸ **保存设置…**（Save Settings…）；掩膜步骤 ▸ **保存…**（Save…）；区域 ▸ **添加 ▸ 保存切线…**（Add ▸ Save Cuts…） | `analyze_settings.json`；`masks.json` 或掩膜图像（5.2 节）；`cuts.json` | 对话框，从 `gimap_analysis/` 开始 | JSON 文件记录了操作。掩膜图像旁另有 `<文件名>.json`。 |
 | 运行自动分析 ▸ **保存报告…**（Save Report…） | `<stem>_report.html`（带图）或 `.md` | 本次会话中同一文件夹的帧上次保存到的文件夹，否则已有 `gimap_analysis/` 时在那里，否则在帧旁边 | 报告本身（没有 JSON） |
 | 用 AI 处理 ▸ **保存报告…** | `<stem>_ai_report.html` + `<stem>_ai_report.json` | 同上 | JSON |
 | 用 AI 处理（自动） | 每次运行的记录；缺少的分析 | 用户数据文件夹：`assistant_runs/`、`assistant_feature_requests.jsonl` | — |

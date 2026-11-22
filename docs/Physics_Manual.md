@@ -815,11 +815,15 @@ Implementation: `src/gimap/features/analyze/domain/bad_pixels.py`
 
 ### 4.5 Masks and value limits
 
-- **Mask file.** An image of the same shape; every non-zero pixel is masked (the pyFAI and Xeuss convention). A file of another shape is refused.
-- **Drawn masks.** Rectangles (two corners, edges included) and polygons (three or more vertices) in canonical coordinates. A pixel is masked when its centre `(j + 0.5, i + 0.5)` lies inside a shape; polygons use Matplotlib's point-in-path test. The record counts the masked pixels of drawn shapes and mask file together (`drawn_mask_pixels`).
+- **Mask order.** The editable user mask starts empty or with a loaded mask image. Edits are replayed in order for each frame. An image adds every non-zero pixel (the pyFAI convention). The shape must match the detector array, with row 0 at the top. An exclude operation adds a region and an include operation removes it. Detector validity and the automatic bad-pixel exclusions apply independently. [pyFAI mask convention](https://pyfai.readthedocs.io/en/stable/conventions.html)
+- **Pixel shapes.** Test the centre of each pixel, `(j + 0.5, i + 0.5)`. Rectangle edges are included. Polygons use Matplotlib's point-in-path test. For a centre `(cx, cy)`, write `u = x − cx`, `v = y − cy`. A disk has `u² + v² ≤ R²` and an annulus has `r² ≤ u² + v² ≤ R²`. An axis-aligned ellipse with semiaxes `a, b` has `(u/a)² + (v/b)² ≤ 1`. A brush or eraser selects centres within the chosen radius of any segment of the stroke, including the endpoints. A single click gives a disk.
+- **Beam-centred q annulus.** Select `q_min ≤ |q| ≤ q_max`, in Å⁻¹, where `|q| = (4π/λ) sin(2θ/2)`. The laboratory scattering angle 2θ is measured from the direct beam to the ray through the pixel centre. It includes detector tilt and both pixel pitches (section 2). The limits refer to vacuum scattering angles for any film refraction setting.
+- **Value rules.** Write `I` for the finite raw value in Analyze’s single-precision frame (section 4.1), before subtracting dark or background frames. During frame summing, `I` is the sum (section 4.3). Above and below select `I > T` and `I < T`. An absolute threshold is in the frame's units. A relative threshold is `T = k × median(I)`, computed over detector-valid pixels remaining after automatic bad-pixel removal and preceding user edits. The saturation rule uses `I ≥ S` with an explicitly supplied saturation level. The negative rule uses `I < 0`.
+- **Morphology.** For an integer radius n in pixels, use the disk of integer offsets satisfying `dx² + dy² ≤ n²`. Dilation masks a centre if any pixel in that disk was masked. Erosion keeps it masked if all pixels in the disk were masked. Pixels outside the frame count as unmasked. Inversion complements the user mask within the detector array. Clearing returns it to zero everywhere.
+- **Record.** `drawn_mask_pixels` counts the final user mask. `corrections.mask_path` names an initial image if present, `corrections.mask_shapes` records each subsequent edit and its parameters, and `corrections.mask_sources` lists the source paths. Their file digests are in `input_sha256`. Exporting a mask image writes 0 or 1 for this frame's user mask.
 - **Valid value range.** Optional limits `[I_min, I_max]`, both inclusive, applied to the pixel value at that step of the order (section 4.9), that is after background subtraction.
 
-Implementation: `src/gimap/features/analyze/domain/preprocess.py`, `src/gimap/features/analyze/domain/corrections.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`
+Implementation: `src/gimap/features/analyze/domain/mask_raster.py`, `src/gimap/features/analyze/domain/corrections.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`
 
 ### 4.6 Background subtraction
 
@@ -866,7 +870,7 @@ Implementation: `src/gimap/features/analyze/domain/preprocess.py`
 
 1. Load the frame or the sum of frames; validity (4.1).
 2. Bad pixels found in the raw frame (section 4.4).
-3. Drawn masks and mask file (section 4.5).
+3. User mask from ordered image, shape and rule edits (section 4.5).
 4. Dark frame (section 4.11), then background subtraction (section 4.6).
 5. Flat field, first part: the pixels it does not keep are left out (section 4.10).
 6. Gap guard (section 4.7).
@@ -4686,8 +4690,9 @@ Implementation: `src/gimap/features/analyze/infrastructure/adapters/csv_export.p
 
 `bad_pixels_left_out` gives, per frame, the numbers of hot pixels, dead pixels (counting detectors only) and pixels
 on defective detector lines that were excluded automatically (the rules are in section 4.4). `drawn_mask_pixels` is the number of pixels of the user's mask, and `pixels_filled_from_mirror` the
-number of pixels filled from the mirror image. A value `null` means that the step was off. The records give counts,
-not the pixel positions; the positions follow again from the same frame and settings.
+number of pixels filled from the mirror image. A value `null` means that the step was off. The mask recipe and its
+source files reproduce the user mask on that frame. A mask image export preserves its pixel positions directly
+(section 4.5).
 
 ### 14.5 Version of the software
 
@@ -4774,7 +4779,8 @@ These gaps are known at the time of writing. A reader who needs the information 
   its `pixel_mask`, they read back as valid values (section 13.3).
 - Seeds are not written into the records (section 14.8), except the seed of Predict parameters in the command
   line's `report.json` (section 14.10).
-- Bad pixels, drawn masks and mirror-filled pixels are recorded as counts, not as positions (section 14.4).
+- The per-frame analysis JSON records counts of automatic bad pixels and mirror-filled pixels. Their positions
+  can be recovered from the frame and settings. For the user mask it records the recipe and the count (section 14.4).
 - `<stem>_analysis.json` gives its time of creation in UTC (`created`), as the XRR and SEM records do; the 2D
   Prediction record gives local time without a time zone.
 

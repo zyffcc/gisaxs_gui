@@ -219,7 +219,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 geometry, request.incidence_deg)
         kind = None if geometry is None else (request.mode if request.mode != AUTO else detected)
         mirror_x = geometry.beam_center_x_px if geometry is not None and kind == GIWAXS else None
-        common.update(self._preprocess(raw_data, raw_valid, request.corrections, common["metadata"], mirror_x))
+        common.update(self._preprocess(raw_data, raw_valid, request.corrections, common["metadata"], mirror_x, geometry))
         # Errors from counting statistics only for photon counts as measured (not dark- or background-
         # subtracted, nothing filled from the mirror side); otherwise from the scatter of the pixels.
         counting = photon_counts(

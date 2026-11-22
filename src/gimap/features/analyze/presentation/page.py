@@ -355,6 +355,7 @@ class AnalyzePage(
     def run_analysis(self) -> None:
         if self._import_applying:
             return
+        self._mask_inputs_changed()
         self._invalidate_geometry_editors()
         self._cancel_center_refinement()
         self._observe_setup()
@@ -565,10 +566,8 @@ class AnalyzePage(
         self.save_last_setup()
         self._watch_timer.stop()
         self.view_model.stop_watch()
-        self.tasks.cancel("analyze")
-        self.tasks.cancel("batch")
-        self.tasks.cancel("series")
-        self.tasks.cancel("cake")
+        for task in ("analyze", "batch", "series", "cake", "mask_preview"):
+            self.tasks.cancel(task)
         self.shape_layer.cancel_drawing()
         self.shutdown_batch()
         self._reset_series_fit()

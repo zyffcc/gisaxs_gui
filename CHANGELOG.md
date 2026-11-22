@@ -12,6 +12,12 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Analyze ▸ Mask & corrections.** Draw circles, annuli, ellipses and freehand strokes, erase pixels, or select a
+  ring about the direct beam in Å⁻¹. Preview intensity thresholds, saturation, negative pixels, mask growth,
+  shrinkage and inversion. Each mask edit supports Undo and Redo. Save an ordered JSON recipe or the current
+  frame's user mask as EDF, TIFF, NumPy or Fit2D with its source record. See User Manual 5.2 and Physics and
+  Methods 4.5.
+
 - **GIWAXS indexing and pole figures (Analyze ▸ Phases).** Give phases as a CIF (cell, symmetry operations, atom
   sites; |F|² from Cromer–Mann scattering factors) or a cell with its centring, at random or as a fibre texture
   ((hkl) parallel to the substrate or [uvw] along the normal): their reflections are drawn with hkl labels on the

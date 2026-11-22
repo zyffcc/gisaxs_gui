@@ -106,6 +106,7 @@ class DisplayMixin:
         change does not draw them again), no axis names of the frame before, no ring band, no banner. Both
         plots say ``sentence`` (English, a key of the table; a blank: nothing) instead of an empty grid with
         ticks that mean nothing."""
+        self._mask_inputs_changed()
         self.detector_view.clear()
         self.shape_layer.clear()
         self._clear_reflections()
@@ -214,9 +215,14 @@ class DisplayMixin:
     def _refresh_shapes(self) -> None:
         """Masks drawn on the detector; region outlines on the q map; region rectangles on the cake."""
         index = self.view_combo.currentIndex()
+        edits = self.view_model.state.corrections.mask_shapes
+        simple = all(edit.kind in ("rectangle", "polygon") and edit.mode == "exclude" for edit in edits)
+        analysis = self.view_model.state.analysis
+        self.shape_layer.set_mask_image(
+            analysis.drawn_mask if index == VIEW_DETECTOR and analysis is not None and not simple else None)
         if index == VIEW_DETECTOR:
             outlines = []
-            for shape in self.view_model.state.corrections.mask_shapes:
+            for shape in (edits if simple else ()):
                 points = list(shape.points)
                 if shape.kind == "rectangle":
                     (x0, y0), (x1, y1) = points

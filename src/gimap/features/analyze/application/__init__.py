@@ -7,6 +7,7 @@ import math
 from .batch_preview import FitCurvePreview, FrameFitPreview, failed_preview, model_preview, peak_preview
 
 from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile, lab_rays, scattering_vectors
+from ..domain.mask_edits import MaskEdit, MaskImage, MaskRule, mask_edit_from_record, mask_edit_record
 
 from ..domain import (
     PROFILES,
@@ -334,7 +335,11 @@ __all__ = [
     "source_labels",
     "CakeMap",
     "CutRegion",
-    "MaskShape",
+    "MaskShape", "MaskEdit",
+    "MaskImage",
+    "MaskRule",
+    "mask_edit_from_record",
+    "mask_edit_record",
     "POLYGON",
     "PeakTrack",
     "RECTANGLE",

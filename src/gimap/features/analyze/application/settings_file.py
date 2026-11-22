@@ -25,12 +25,12 @@ from ..domain import (
     Normalisation,
     GisaxsCutSettings,
     GiwaxsSettings,
-    MaskShape,
     QBox,
     Sector,
     X_AXIS_Q,
     X_AXIS_TWO_THETA,
 )
+from ..domain.mask_edits import mask_edit_from_record, mask_edit_record
 from .cut_regions import region_to_dict, regions_from_dicts
 from .gisaxs_cuts import cut_to_dict, cuts_from_dicts
 from .models import AUTO, MODES
@@ -111,9 +111,7 @@ def settings_record(settings: AnalyzeSettings) -> dict[str, Any]:
             "normalisation": asdict(corrections.normalisation),
             "lorentz": bool(corrections.lorentz),
             "mask_path": corrections.mask_path,
-            "mask_shapes": [
-                {"kind": shape.kind, "points": [list(point) for point in shape.points]} for shape in corrections.mask_shapes
-            ],
+            "mask_shapes": [mask_edit_record(edit) for edit in corrections.mask_shapes],
             "solid_angle": bool(corrections.solid_angle),
             "polarization": corrections.polarization,
             "film_thickness_nm": corrections.film_thickness_nm,
@@ -171,10 +169,7 @@ def settings_from_record(record: Any) -> AnalyzeSettings:
             maximum=_optional_float(values.get("maximum")),
             gap_guard_px=int(values.get("gap_guard_px", 0)),
             mask_path=values.get("mask_path") or None,
-            mask_shapes=tuple(
-                MaskShape(str(item["kind"]), tuple(tuple(point) for point in item["points"]))
-                for item in values.get("mask_shapes") or ()
-            ),
+            mask_shapes=tuple(mask_edit_from_record(item) for item in values.get("mask_shapes") or ()),
             mirror_fill=bool(values.get("mirror_fill", False)),
             bad_pixels=bool(values.get("bad_pixels", True)),
             solid_angle=bool(values.get("solid_angle", False)),

@@ -31,7 +31,9 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.gimap.app.presentation.components import EmptyState, FlowLayout, StepRail
+from src.gimap.app.presentation.components import EmptyState, StepRail
+
+from .mask_tools_view import add_mask_editor
 
 STEPS = (
     ("data", "Data"),
@@ -372,41 +374,7 @@ class AnalyzeStepsView:
             "are counted and recorded in the export."
         )
         layout.addWidget(self.mirror_fill_check)
-        masks_title = QLabel("Masks you draw", page)
-        masks_title.setProperty("gimapSectionTitle", True)
-        layout.addWidget(masks_title)
-        draw_row = FlowLayout()  # wraps in a narrow panel
-        self.draw_rect_button = QPushButton("Rectangle", page)
-        self.draw_rect_button.setObjectName("analyzeDrawRectangle")
-        self.draw_rect_button.setCheckable(True)
-        self.draw_rect_button.setToolTip("Click two opposite corners on the detector image (Esc cancels)")
-        self.draw_polygon_button = QPushButton("Polygon", page)
-        self.draw_polygon_button.setObjectName("analyzeDrawPolygon")
-        self.draw_polygon_button.setCheckable(True)
-        self.draw_polygon_button.setToolTip(
-            "Click the corners on the detector image; double-click or Enter closes it, Backspace removes "
-            "the last corner, Esc cancels"
-        )
-        self.mask_load_button = QPushButton("Load…", page)
-        self.mask_load_button.setToolTip("Masks saved by GIMaP (.json) or a mask image of the same size (EDF, TIFF: non-zero = masked)")
-        self.mask_save_button = QPushButton("Save…", page)
-        self.mask_save_button.setToolTip("The drawn masks as a .json file, to reuse with other data of this set-up")
-        for button in (self.draw_rect_button, self.draw_polygon_button, self.mask_load_button, self.mask_save_button):
-            draw_row.addWidget(button)
-        layout.addLayout(draw_row)
-        self.mask_list = QListWidget(page)
-        self.mask_list.setObjectName("analyzeMaskList")
-        self.mask_list.setMaximumHeight(96)
-        layout.addWidget(self.mask_list)
-        mask_actions = QHBoxLayout()
-        self.mask_remove_button = QPushButton("Remove Selected", page)
-        self.mask_remove_button.setToolTip("Remove the mask selected in the list above (or press Delete in the list)")
-        self.mask_clear_button = QPushButton("Clear Masks", page)
-        self.mask_clear_button.setToolTip("Remove every drawn or loaded mask (the detector gaps stay masked)")
-        mask_actions.addWidget(self.mask_remove_button)
-        mask_actions.addWidget(self.mask_clear_button)
-        mask_actions.addStretch(1)
-        layout.addLayout(mask_actions)
+        add_mask_editor(self, page, layout)
         self.show_mask_button = QPushButton("Show Masked Pixels on the Image", page)
         self.show_mask_button.setObjectName("analyzeShowMaskButton")
         self.show_mask_button.setToolTip("Circle every pixel left out (gaps, hot and dead pixels, your masks) on the image")

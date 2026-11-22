@@ -4,9 +4,9 @@
   region on the q map).
 * ``set_rects([(key, x0, y0, x1, y1, color, editable), …])``: rectangles; an editable one can be
   moved and resized and emits ``rectChanged(key, x0, y0, x1, y1)`` when the drag ends.
-* ``start_drawing("rectangle" | "line" | "polygon" | "point", purpose=…)``: a rectangle is two clicks
-  (opposite corners), a line two clicks (its ends), a polygon one click per vertex and a double click (or Enter)
-  to close, a point one click; Esc cancels, Backspace removes the last vertex. The result is emitted in view
+* Rectangles and ellipses take two bounding corners, circles a centre and rim, annuli a centre and two rims.
+  The brush and eraser take a dragged stroke. A line takes its two ends, a point one click, a polygon one click
+  per vertex and a double click or Enter to close. Esc cancels, Backspace removes the last vertex. Results use view
   coordinates as ``shapeDrawn(kind, [(x, y), …])`` for a mask (the default purpose) and as
   ``shapePicked(purpose, kind, [(x, y), …])`` for any other purpose (e.g. placing a cut region).
   While drawing, the view's own clicks (beam centre, double click) are held back.
@@ -14,8 +14,10 @@
 
 from __future__ import annotations
 
+from math import cos, hypot, pi, sin
 from typing import Optional
 
+import numpy as np
 from PyQt5.QtCore import QEvent, QObject, Qt, pyqtSignal
 
 RECTANGLE = "rectangle"
@@ -45,6 +47,11 @@ class ShapeLayer(QObject):
         self.kind = ""
         self.purpose = ""
         self._points: list[tuple[float, float]] = []
+        self._radius = 1.0
+        self._mask_image = pg.ImageItem(axisOrder="row-major")
+        self._mask_image.setLookupTable(np.array([[0, 0, 0, 0], [244, 63, 94, 92]], dtype=np.uint8))
+        self._mask_image.setZValue(6)
+        view.plot.addItem(self._mask_image, ignoreBounds=True)
         self._preview = pg.PlotCurveItem(pen=pg.mkPen(DRAW_COLOR, width=2, style=Qt.DashLine))
         self._preview.setZValue(30)
         view.plot.addItem(self._preview, ignoreBounds=True)
@@ -52,6 +59,7 @@ class ShapeLayer(QObject):
         view.graphics.scene().sigMouseClicked.connect(self._clicked)
         view.graphics.scene().sigMouseMoved.connect(self._moved)
         view.graphics.installEventFilter(self)
+        view.graphics.viewport().installEventFilter(self)
 
     # -- outlines and rectangles ---------------------------------------------------------
 
@@ -116,18 +124,30 @@ class ShapeLayer(QObject):
         self.rectChanged.emit(key, float(x), float(y), float(x + width), float(y + height))
 
     def clear(self) -> None:
+        self.set_mask_image(None)
         self.set_outlines([])
         self.set_rects([])
 
+    def set_mask_image(self, mask) -> None:
+        """The resulting user mask, including holes where an edit restored pixels."""
+        self.view.marks.forget("shapes", self._mask_image)
+        if mask is None:
+            self._mask_image.clear()
+            self._mask_image.hide()
+        else:
+            self._mask_image.setImage(np.asarray(mask).astype(np.uint8, copy=False), levels=(0, 1))
+            self.view.marks.track("shapes", self._mask_image)
+
     # -- drawing -------------------------------------------------------------------------
 
-    def start_drawing(self, kind: str, *, purpose: str = MASK_PURPOSE) -> None:
-        if kind not in (RECTANGLE, LINE, POLYGON, POINT):
+    def start_drawing(self, kind: str, *, purpose: str = MASK_PURPOSE, radius: float = 1.0) -> None:
+        if kind not in (RECTANGLE, LINE, POLYGON, POINT, "circle", "annulus", "ellipse", "brush", "eraser"):
             raise ValueError(f"Unknown shape {kind!r}.")
         self.view.set_pick_mode(False)
         if self.kind:
             self._finish(None)
         self.kind = kind
+        self._radius = radius
         self.purpose = purpose
         self._points = []
         self._preview.setData([], [])
@@ -164,14 +184,16 @@ class ShapeLayer(QObject):
     def _clicked(self, event) -> None:
         if not self.kind or event.button() != Qt.LeftButton:
             return
+        if not self.view.view_box.sceneBoundingRect().contains(event.scenePos()):
+            return
         event.accept()
         x, y = self._position(event.scenePos())
         if self.kind == POINT:
             self._finish([(x, y)])
             return
-        if self.kind in (RECTANGLE, LINE):
+        if self.kind in (RECTANGLE, LINE, "circle", "ellipse", "annulus"):
             self._points.append((x, y))
-            if len(self._points) == 2:
+            if len(self._points) == (3 if self.kind == "annulus" else 2):
                 self._finish(list(self._points))
             return
         if event.double():
@@ -182,13 +204,26 @@ class ShapeLayer(QObject):
         self._draw_preview(None)
 
     def _moved(self, scene_position) -> None:
-        if not self.kind or not self._points:
+        if not self.kind or (not self._points and self.kind not in ("brush", "eraser")):
             return
         self._draw_preview(self._position(scene_position))
 
     def _draw_preview(self, cursor: Optional[tuple[float, float]]) -> None:
         points = list(self._points)
-        if self.kind == RECTANGLE and cursor is not None and points:
+        if self.kind in ("brush", "eraser"):
+            if cursor is not None:
+                points = points + [(np.nan, np.nan)] + _oval(cursor, self._radius, self._radius)
+        elif self.kind in ("circle", "annulus", "ellipse") and cursor is not None and points:
+            x, y = points[0]
+            dx, dy = cursor[0] - x, cursor[1] - y
+            if self.kind == "ellipse":
+                points = _oval((x + dx / 2, y + dy / 2), abs(dx / 2), abs(dy / 2))
+            else:
+                radii = [hypot(px - x, py - y) for px, py in points[1:] + [cursor]]
+                points = _oval((x, y), radii[0], radii[0])
+                if len(radii) == 2:
+                    points += [(np.nan, np.nan)] + _oval((x, y), radii[1], radii[1])
+        elif self.kind == RECTANGLE and cursor is not None and points:
             (x0, y0), (x1, y1) = points[0], cursor
             points = [(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)]
         elif self.kind == LINE and cursor is not None and points:
@@ -198,6 +233,28 @@ class ShapeLayer(QObject):
         self._preview.setData([x for x, _y in points], [y for _x, y in points])
 
     def eventFilter(self, watched, event):  # noqa: N802 - Qt API
+        if self.kind and event.type() == QEvent.ShortcutOverride and event.key() == Qt.Key_Escape:
+            event.accept()
+            return True
+        if self.kind in ("brush", "eraser") and watched is self.view.graphics.viewport():
+            kind = event.type()
+            if kind in (QEvent.MouseButtonPress, QEvent.MouseMove, QEvent.MouseButtonRelease):
+                point = self.view.graphics.mapToScene(event.pos())
+                if kind == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+                    if not self.view.view_box.sceneBoundingRect().contains(point):
+                        return False
+                    self._points = [self._position(point)]
+                elif kind == QEvent.MouseMove and self._points:
+                    position = self._position(point)
+                    if position != self._points[-1]:
+                        self._points.append(position)
+                elif kind == QEvent.MouseButtonRelease and self._points and event.button() == Qt.LeftButton:
+                    self._finish(self._points + [self._position(point)])
+                    return True
+                else:
+                    return False
+                self._draw_preview(self._points[-1])
+                return True
         if self.kind and event.type() == QEvent.KeyPress:
             key = event.key()
             if key == Qt.Key_Escape:
@@ -211,6 +268,10 @@ class ShapeLayer(QObject):
                 self._draw_preview(None)
                 return True
         return False
+
+
+def _oval(centre, rx, ry):
+    return [(centre[0] + rx * cos(i * pi / 48), centre[1] + ry * sin(i * pi / 48)) for i in range(97)]
 
 
 __all__ = ["DRAW_COLOR", "LINE", "MASK_PURPOSE", "POINT", "POLYGON", "RECTANGLE", "ShapeLayer"]

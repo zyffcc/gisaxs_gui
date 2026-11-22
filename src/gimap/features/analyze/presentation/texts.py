@@ -9,7 +9,9 @@ they are. Text that matches nothing is shown as it came.
 
 from __future__ import annotations
 
+import math
 import re
+from pathlib import Path
 from typing import Callable, Optional
 
 from src.gimap.app.presentation.i18n import tr, trf
@@ -25,6 +27,7 @@ from ..application.geometry_resolution import CENTER_NOT_USED, CENTER_NOT_USED_H
 from ..application.geometry_files import PIXEL_MISMATCH, SHAPE_MISMATCH
 from ..application.frame_import import OTHER_DETECTOR
 from ..application.technique import BY_RINGS
+from .views.mask_tools_view import RULES, SHAPES
 
 NO_PROFILE = "No instrument profile for {detector} ({shape}). Calibrate once or enter the geometry to get q curves."
 PROFILE_SHAPE = "Profile “{name}” is for {profile_shape} frames; this frame is {shape}."
@@ -169,7 +172,33 @@ def left_unfinished(message: str) -> bool:
 
 
 def mask_text(shape) -> str:
-    """A drawn mask as the Mask step lists it (``MaskShape.describe`` in the interface language)."""
+    """One ordered edit as the Mask step lists it."""
+    if shape.kind == "image":
+        return trf("Mask file: {name}", name=Path(shape.path).name)
+    if shape.kind in RULES or shape.kind == "clear":
+        name = tr(RULES.get(shape.kind, "Clear Masks"))
+        if shape.value is None:
+            return name
+        unit = "px" if shape.kind in ("grow", "shrink") else tr("counts")
+        if shape.relative:
+            unit = tr("× median")
+        return f"{name} ({shape.value:g} {unit})"
+    description = _shape_text(shape)
+    return trf("Include: {shape}", shape=description) if shape.mode == "include" else description
+
+
+def _shape_text(shape) -> str:
+    if shape.kind == "q_annulus":
+        low, high = shape.points[0]
+        return f"{tr(SHAPES[shape.kind])} ({low:g}–{high:g} Å⁻¹)"
+    if shape.kind in ("brush", "eraser"):
+        return trf("{tool}, radius {radius} px", tool=tr(SHAPES[shape.kind]), radius=f"{shape.radius:g}")
+    if shape.kind in ("circle", "annulus"):
+        radii = "–".join(f"{math.dist(shape.points[0], p):.2f}" for p in shape.points[1:])
+        return trf("{tool}, radius {radius} px", tool=tr(SHAPES[shape.kind]), radius=radii)
+    if shape.kind == "ellipse":
+        (x0, y0), (x1, y1) = shape.points
+        return f"{tr('Ellipse')} ({abs(x1 - x0):.2f} × {abs(y1 - y0):.2f} px)"
     xs = [x for x, _y in shape.points]
     ys = [y for _x, y in shape.points]
     x, y = f"{min(xs):.0f}–{max(xs):.0f}", f"{min(ys):.0f}–{max(ys):.0f}"

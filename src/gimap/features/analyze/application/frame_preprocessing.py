@@ -17,6 +17,7 @@ from typing import Any, Mapping, Optional
 
 import numpy as np
 
+from src.gimap.shared.detector_io.mask_files import read_mask_image
 from src.gimap.shared.detector_io.output_values import floating as _floating_dtype
 from src.gimap.shared.geometry import DetectorGeometry
 
@@ -34,6 +35,8 @@ from ..domain import (
     valid_pixels,
 )
 from ..domain.normalisation import BAD_VALUE, NORMALISATION_TEMPLATES  # noqa: F401 - the page translates them
+from ..domain.mask_edits import MaskShape
+from ..domain.mask_raster import evaluate_mask
 from .flat_field import FlatFieldMixin
 
 
@@ -124,13 +127,34 @@ class FramePreprocessingMixin(FlatFieldMixin):
             self._bad_cache = cache
         return cache[2]
 
-    def _drawn_mask(self, shapes: tuple, frame_shape: tuple[int, int]) -> np.ndarray:
+    def _drawn_mask(self, shapes: tuple, frame_shape: tuple[int, int], geometry=None) -> np.ndarray:
         cache = self._mask_cache
-        key = (tuple(shapes), tuple(frame_shape))
+        key = (tuple(shapes), tuple(frame_shape), geometry)
         if cache is None or cache[0] != key:
-            cache = (key, rasterize(shapes, frame_shape))
+            cache = (key, rasterize(shapes, frame_shape, geometry))
             self._mask_cache = cache
         return cache[1]
+
+    def _user_mask(self, raw_data, detector_valid, corrections, geometry):
+        edits = corrections.mask_shapes
+        shape = raw_data.shape
+        base = self._file_mask(corrections.mask_path, shape) if corrections.mask_path else None
+        if not edits:
+            return base
+        if base is None and all(isinstance(edit, MaskShape) for edit in edits):
+            used_geometry = geometry if any(edit.kind == "q_annulus" for edit in edits) else None
+            return self._drawn_mask(edits, shape, used_geometry)
+        return evaluate_mask(edits, raw_data, detector_valid, geometry=geometry, initial=base,
+                             read_image=self._file_mask)
+
+    def preview_mask(self, analysis, corrections: Corrections) -> np.ndarray:
+        """User mask for the displayed raw frame and candidate edits, using the reduction's evaluator."""
+        raw = analysis.raw_data if analysis.raw_data is not None else analysis.data
+        valid = analysis.raw_valid if analysis.raw_valid is not None else analysis.valid
+        if corrections.bad_pixels:
+            valid = valid & ~self._bad_pixels(raw, valid, analysis.metadata).mask
+        drawn = self._user_mask(raw, valid, corrections, analysis.geometry)
+        return np.zeros(raw.shape, dtype=bool) if drawn is None else drawn
 
     def _file_mask(self, path: str, frame_shape: tuple[int, int]) -> np.ndarray:
         """Non-zero pixels of a mask image, read once per file version."""
@@ -138,8 +162,7 @@ class FramePreprocessingMixin(FlatFieldMixin):
         key = (str(path), stat.st_mtime_ns, stat.st_size)
         cache = self._file_mask_cache
         if cache is None or cache[0] != key:
-            image = self.frames.load(Path(path), 0)
-            cache = (key, np.asarray(image.data) != 0)
+            cache = (key, read_mask_image(Path(path), self.frames))
             self._file_mask_cache = cache
         mask = cache[1]
         if mask.shape != tuple(frame_shape):
@@ -179,22 +202,18 @@ class FramePreprocessingMixin(FlatFieldMixin):
 
     def _preprocess(
         self, raw_data: np.ndarray, raw_valid: np.ndarray, corrections: Corrections,
-        metadata: Mapping[str, Any], mirror_center_x: Optional[float],
+        metadata: Mapping[str, Any], mirror_center_x: Optional[float], geometry=None,
     ) -> dict:
         """The frame to reduce and what was done to it (fields of ``FrameAnalysis``).
 
         ``mirror_center_x``: the beam-centre column when the frame is GIWAXS with a geometry
         (mirror filling needs it); ``None`` never fills.
         """
-        shape = (int(raw_data.shape[0]), int(raw_data.shape[1]))
         bad = self._bad_pixels(raw_data, raw_valid, metadata) if corrections.bad_pixels else None
-        drawn = self._drawn_mask(corrections.mask_shapes, shape) if corrections.mask_shapes else None
-        if corrections.mask_path:
-            file_mask = self._file_mask(corrections.mask_path, shape)
-            drawn = file_mask if drawn is None else drawn | file_mask
         usable = raw_valid
         if bad is not None and bad.mask.any():
             usable = usable & ~bad.mask
+        drawn = self._user_mask(raw_data, usable, corrections, geometry)
         if drawn is not None and drawn.any():
             usable = usable & ~drawn
         record: dict = {"corrections": corrections, "bad_pixels": bad, "drawn_mask": drawn}

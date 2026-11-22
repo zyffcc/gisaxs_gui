@@ -35,6 +35,7 @@ from ..domain import (
     has_intensity_corrections,
     q_from_two_theta,
 )
+from ..domain.mask_edits import MaskImage, mask_edit_record
 from .flat_detector import flat_detector_record
 from .frame_preprocessing import photon_counts
 from .models import FrameAnalysis
@@ -193,11 +194,19 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
         "created": datetime.now(timezone.utc).isoformat(timespec="seconds"),  # UTC, when the record was written
     }
     files = source_files(analysis.path, loaded)
+    corrections = analysis.corrections
+    mask_sources = [corrections.mask_path] if corrections.mask_path else []
+    for edit in corrections.mask_shapes:
+        mask_sources.extend(edit.sources)
+        if isinstance(edit, MaskImage):
+            mask_sources.append(edit.path)
+    record["corrections"]["mask_shapes"] = [mask_edit_record(edit) for edit in corrections.mask_shapes]
+    record["corrections"]["mask_sources"] = list(dict.fromkeys(mask_sources))
     if files:  # a set of module files, a master with its data files: every file the frame was read from
         record["source_files"] = files
     # Every input by file name and SHA-256: the paths above are where the files were on this computer.
     record["input_sha256"] = input_digests(
-        [*(files or [analysis.path]), *(path for path, _ in analysis.summed_frames or ())])
+        [*(files or [analysis.path]), *(path for path, _ in analysis.summed_frames or ()), *mask_sources])
     if loaded.get("layout"):  # NeXus / HDF5: what the source is, which dataset, how the image was turned
         record["source_layout"] = {
             "kind": loaded.get("layout"), "summary": loaded.get("layout_summary"),

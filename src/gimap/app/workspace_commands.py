@@ -137,7 +137,8 @@ class WorkspaceCommands:
         return "" if self._analyze.view_model.state.giwaxs.regions else NO_REGIONS
 
     def _masks(self) -> str:
-        return "" if self._analyze.view_model.state.corrections.mask_shapes else NO_MASKS
+        corrections = self._analyze.view_model.state.corrections
+        return "" if corrections.mask_shapes or corrections.mask_path else NO_MASKS
 
     def _clear(self) -> str:
         page = self._analyze

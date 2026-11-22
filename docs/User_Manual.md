@@ -1288,7 +1288,7 @@ range, the background, and how many pixels were filled from the mirror side.
 
 ![The Mask & corrections step](manual_images/en/05_mask_step.png)
 
-*The summary at the top counts each kind of pixel left out; on the image, amber circles mark the hot pixels found in this frame and the red rectangle is a drawn mask.*
+*On this synthetic frame, the red ring previews a four-pixel expansion of the drawn annulus. The pixel count beside Apply mask edit gives the size of the proposed user mask.*
 
 **Show Masked Pixels on the Image** marks them on the detector image: red = left out, amber
 circles = hot or dead pixels, cyan = filled from the mirror side (used in the curves).
@@ -1305,16 +1305,40 @@ than one pixel — a Bragg spot, a streak, the beam-stop edge, a Yoneda band —
 or columns are never removed. The numbers go into the export record (`bad_pixels_left_out`). Turn the
 option off to put these pixels back into the curves.
 
-**Masks you draw:**
+**User mask**
 
-1. Press **Rectangle** and click two opposite corners on the detector image, or press **Polygon**
-   and click the corners (double-click or `Enter` closes it, `Backspace` removes the last corner,
-   `Esc` cancels).
-2. The mask is outlined in red and left out of every curve at once.
-3. **Remove Selected** (or `Delete` in the list) and **Clear Masks** remove masks; the detector
-   gaps stay masked.
-4. **Save…** writes the drawn masks as `.json` (in the pixel coordinates of section 4.4). **Load…**
-   reads such a file, or a mask image of the same size (EDF or TIFF, non-zero = masked, as in pyFAI).
+Choose a tool under **User mask**. **Exclude pixels** adds the selected area to the mask.
+**Include pixels** restores that area wherever the detector and other corrections allow it.
+
+| To select | What to do |
+|---|---|
+| Rectangle or ellipse | Press **Draw** and click opposite corners of its bounding box. |
+| Polygon | Press **Draw** and click the vertices. Double-click or press `Enter` to close, `Backspace` to remove a vertex, or `Esc` to cancel. |
+| Circle or annulus | Press **Draw** and click the centre. For a circle, click the rim. For an annulus, click the inner rim, then the outer rim. |
+| Freehand stroke | Choose **Brush** or **Eraser**, set **Radius** in pixels, press **Draw** and drag. The eraser restores pixels from earlier edits. |
+| Ring about the direct beam | Choose **Beam-centred q annulus** and enter **Inner q** and **Outer q** in Å⁻¹. This uses the current detector geometry. |
+
+Drawing previews the total number of pixels in the user mask. Press **Apply mask edit** to use it
+in all curves. Excluding a rectangle or polygon applies it as soon as you finish drawing.
+
+For a q annulus or a value rule, press **Preview mask**, check the total and press **Apply mask edit**.
+**Above threshold** and **Below threshold** act on raw values. For a relative threshold, tick
+**Multiple of the median** and enter the multiplier. The median uses the remaining valid pixels.
+**Saturated pixels** includes the threshold itself: enter the saturation level for the exposure.
+**Negative pixels** selects values below zero. With frame summing on, these rules compare the sum.
+
+**Grow mask** and **Shrink mask** expand and erode the current user mask by a circular radius in pixels.
+**Invert mask** swaps masked and unmasked pixels. Edits run in list order. **Remove Selected** or
+`Delete` removes one edit. **Clear Masks** leaves zero pixels in the user mask. Edit ▸ **Undo** and
+**Redo** work for drawing, rules, loading, removal and clearing.
+
+**Save…** can write a GIMaP `.json` recipe that repeats the edits on each frame. Keep any mask images
+the recipe references. To save the resulting user mask for this frame, choose EDF, TIFF, NumPy
+(`.npy`) or Fit2D (`.msk`). The image stores 0 for unmasked and 1 for masked. Detector gaps and
+automatic bad-pixel exclusions are tracked separately. A record beside it (for example
+`masks.edf.json`) gives the frame, geometry, settings and mask sources. **Load…** accepts these
+recipes, older rectangle/polygon JSON files and mask images of the same shape as the frame.
+As in pyFAI, any non-zero image pixel is masked. See Physics and Methods, section 4.5.
 
 **Fill gaps from the mirror side (GIWAXS)** (off by default). A GIWAXS pattern is symmetric in
 ±q∥. A pixel without data (module gap, mask, hot pixel) takes the value at its mirror position
@@ -3795,7 +3819,7 @@ hold one frame each as one series.
   run is refused (exit code 1); `--overwrite` replaces that run: the frame folders its `summary.json` lists
   are removed first, nothing else.
 - **Mask.** `--mask FILE` applies one mask to every frame, read as **Load Masks** in Analyze reads it: a GIMaP
-  masks `.json` (drawn shapes) or a mask image of the frame's size whose non-zero pixels are left out. A frame
+  masks `.json` recipe (ordered shapes, rules and image sources) or a mask image of the frame's size whose non-zero pixels are left out. A frame
   the mask does not fit fails with the reason. `report.md` (section **Mask**) and `report.json` (`mask`) always
   say which mask was applied, or that none was; detector gaps and the bad pixels found automatically are
   named apart from it.
@@ -3951,7 +3975,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Analyze ▸ **Batch Export…** | per-curve tables `<batch>_<curve>_frames.csv` (or `.txt`, `.dat`); if you chose fitting, a fit table `<batch>_peak_fits.csv` (or `<batch>_model_fits.csv`) with its trend plot `<batch>_peak_fits.png` (`_model_fits.png`) and, if chosen, the fitted curves `fits/<frame>_<peak or model>_fit.csv`; subfolders `curves/`, `nxcansas/`, `fit_input/`, `maps/`, `images/`, `frames/` after your choices; frame names keep the 0-based index (`…_frame0003_sum3_…`) | the last batch folder, else `gimap_analysis/` next to the data; by default in a subfolder named after the frames' folder (one file: its name; several folders: `batch`); **Keep Both** writes into a new subfolder | `README.txt` and `<batch>_batch.json` (every file written, the cut of every frame, failed frames and why); `curves/` also gets an `_analysis.json` per frame |
 | Analyze ▸ **Send Series to Fitting…** | `fit_input/<frame>_fit_input.dat`, `README.txt`, `<batch>_batch.json` | a folder of its own, `<name>_fitting/`, next to any Batch Export of the same data | `README.txt`, batch JSON |
 | Analyze ▸ **Export New Frames While Watching** | as Export, for each new frame | `gimap_analysis/` next to the frame; when it cannot be written, a folder you choose once (kept for the session); with none, the export is switched off and the status line says why | as Export |
-| Analyze ▸ **Save Settings…**; Mask step ▸ **Save…**; Regions ▸ **Add ▸ Save Cuts…** | `analyze_settings.json`; `masks.json`; `cuts.json` | dialog in `gimap_analysis/` | the file is the record |
+| Analyze ▸ **Save Settings…**; Mask step ▸ **Save…**; Regions ▸ **Add ▸ Save Cuts…** | `analyze_settings.json`; `masks.json` or a mask image (section 5.2); `cuts.json` | dialog in `gimap_analysis/` | JSON recipes are self-describing. Mask images have a companion `<filename>.json`. |
 | Run Automatic Analysis ▸ **Save Report…** | `<stem>_report.html` (with pictures) or `.md` | the folder you chose last in this session for frames of the same folder, else `gimap_analysis/` if it exists, else next to the frame | the report itself (no JSON) |
 | Process with AI ▸ **Save Report…** | `<stem>_ai_report.html` + `<stem>_ai_report.json` | as above | the JSON |
 | Process with AI (automatic) | a record of every run; missing analyses | user data folder: `assistant_runs/`, `assistant_feature_requests.jsonl` | — |
