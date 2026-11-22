@@ -2149,20 +2149,28 @@ SHA-256), the reflection table, the settings and the fit. The CSV header and JSO
 **Crystal orientation (from phase).** Show the phases to be tested in **Phases**. In **Pole Figure**, select
 **Crystal orientation (from phase)** under **Model**, then choose **Fit Crystal Orientation**. GIMaP searches I(q)
 for peaks and jointly fits the usable rings assigned to each phase. Each ring has its own local background and
-intensity scale. The fit shares the crystal orientation, mosaic width and isotropic fraction across those rings.
+intensity scale. The rings constrain one distribution for the phase. It can contain randomly oriented crystallites
+and up to two oriented populations. Each population has its own plane parallel to the substrate and its own mosaic
+FWHM. A sharp and a broad population can align with the same plane. With only one independent reflection pole
+direction, the fit can test a single fibre axis at one or two widths.
 To set the window for one ring, move the purple band over its peak before fitting. If the band spans several
 detected peaks, each keeps its own window. Automatic analysis calculates its ring windows from the radial peaks.
-The minimum exit angle and **Fit up to χ** restrict the measured bins. A window containing reflections from
-different phases is excluded. Reflections of the same phase in one window contribute to the same curve.
+When the CIF composition and scattering factors give the film's optical constants at the measurement wavelength,
+the model includes exit transmission |T|² and uses measured bins down to the horizon. A minimum exit angle set by
+the user and **Fit up to χ** still apply. When the optical constants are unavailable, the usual exit-angle limit
+applies. A window containing reflections from different phases is excluded. Reflections of the same phase in one
+window contribute to the same curve.
 
 Select a phase and q value under **Show ring**. Points are the measured N(χ), the solid line is the joint fit
 and the dashed lines show the individual reflection families, including their shares of the isotropic population.
 The legend gives each family's share of the ring intensity.
-The results give the leading and runner-up fibre axes, their ΔBIC, mosaic FWHM, oriented and isotropic fractions,
-and reduced χ² for the joint fit and the displayed ring. For a two-axis fit, the shares give each axis's
-percentage of the oriented population, with its standard error. Read **Orientation determined** or
-**Orientation not determined** before interpreting the best axis. The crystal Hermans factor describes the fitted
-distribution of fibre axes. The measured ring f describes that ring over its measured angles.
+Read **Orientation determined** or **Orientation not determined** first. For each oriented population the panel
+gives the fitted substrate-parallel plane (h k l), mosaic FWHM in degrees, and percentage of all crystallites of
+that phase. The ± values are statistical standard errors. The component percentages sum to **Total oriented**.
+Check the runner-up axes, ΔBIC, and reduced χ² for the joint fit and the displayed ring.
+When the orientation is undetermined, the listed planes, widths and fractions describe the trial fit.
+The crystal Hermans factor describes the fitted distribution of fibre axes. The measured ring f describes that
+ring over its measured angles. With exit transmission enabled, the panel also gives the film's δ and β.
 **Export…** writes the selected ring and its component curves to `<frame>_crystal_orientation.csv`
 and the phase results, settings and sources to `<frame>_crystal_orientation.json`. Automatic analysis with phases also
 includes a **Crystal orientation** section and a `crystal_orientation` record in the report JSON.
@@ -4259,6 +4267,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 
 | Limitation | What to do |
 |---|---|
+| **A film transmission model cannot reproduce a shadow that differs on the two sides of a ring.** The public P08 MAPbI₃ example shows this near the horizon (§5.9). | Inspect the signed sectors and the q window on the frame. Read the reported χ and size of the largest residual for a poorly fitted ring. Report a quantitative oriented fraction only when the model describes the measured profiles. |
 | **The rows of a Series map carry no σ.** The timeline's χ² takes the noise of each x column from the series itself, and a Series map recorded in the results database holds x and I only (section 5.6). | Read the timeline as a distance in units of the frame-to-frame noise, not as a goodness of fit; for σ of every point, use Batch Export ▸ Each frame: its curves, with error bars. |
 | **Cancellation does not forcibly interrupt low-level file reading.** A Compare directory scan or single-table read, or the current Fitting read, may still be returning. | Press Cancel or Stop once; the request is registered, and the unfinished import is discarded or the frame fit skipped when reading returns. Completed series and results stay (sections 6.5, 7.2). |
 | **Curve import supports `q I [sigma]` and `q I1 I2 …`, not interleaved `q I1 sigma1 I2 sigma2`.** A headerless three-column table cannot identify its meaning by numbers alone. | Choose the layout explicitly in **Import Curves…** (section 6.1). For separate errors per curve, provide one `q I sigma` file per curve. Fixed imported selections cannot watch for new columns/files. |

@@ -9,6 +9,7 @@ import numpy as np
 from src.gimap.shared.profiles import Profile
 from src.gimap.shared.radial_peaks import find_peaks, orientation_peak_rows
 
+from ..domain.crystal.film_optics import film_optics, ring_transmission
 from ..domain.crystal.pole_figure import MIN_BINS, fold_profile
 from ..domain.crystal.texture import TextureRing, fit_crystal_orientation
 from ..domain.giwaxs import giwaxs_maps
@@ -54,13 +55,27 @@ def _assign(analysis, specs):
     return assign_peaks(sorted(rows, key=lambda row: row["q"]), specs, geometry=analysis.geometry)
 
 
-def _profile(maps, pixels, analysis, window):
-    profiles, _ = ring_profiles(maps, *pixels, analysis.geometry, window, maps.q_step, analysis.corrections)
+def _profile(maps, pixels, analysis, window, q, optics):
+    corrections = analysis.corrections
+    auto_exit = optics["available"] and corrections.orientation_min_exit_deg is None
+    if auto_exit:
+        corrections = replace(corrections, orientation_min_exit_deg=0.)
+    profiles, indices = ring_profiles(maps, *pixels, analysis.geometry, window, maps.q_step, corrections)
     curve = profiles[1.0]
     region = curve.region
+    if optics["available"]:
+        # Weak net bins next to the horizon carry information on transmission. Background, shadow
+        # detection, explicit exit-angle limit and the active q-map geometry still apply.
+        if auto_exit:
+            region["exit_angle_source"] = "film exit transmission"
+        region.update(horizon_fraction=0., horizon_excluded_deg=None)
+        profile = fold_profile(curve.x, curve.intensity, curve.sigma, region["background"])
+        factor = ring_transmission(optics, analysis.geometry, q, maps.chi_deg.flat[indices],
+                                   maps.qz.flat[indices], curve)
+        return profile, region, factor
     profile = fold_profile(curve.x, curve.intensity, curve.sigma, region["background"],
                            horizon_chi_deg=region.get("horizon_chi_deg"))
-    return profile, region
+    return profile, region, None
 
 
 def _skip(item):
@@ -89,6 +104,7 @@ def frame_crystal_orientation(analysis, specs, *, chi_max=90.0, frame_source=Non
     maps = pixels = None
     result = []
     for spec in specs:
+        phase = optics = None
         rings, metadata, excluded = [], {}, []
         for index, item in enumerate(assignment["assignments"]):
             if item["phase"] != spec.name:
@@ -98,10 +114,13 @@ def frame_crystal_orientation(analysis, specs, *, chi_max=90.0, frame_source=Non
             window = item["q_window"]
             reason = _skip(item)
             if reason is None:
+                if phase is None:
+                    phase = spec.phase()
+                    optics = film_optics(phase, analysis.geometry.wavelength_angstrom)
                 if maps is None:
                     maps = giwaxs_maps(analysis.shape, analysis.geometry)
                     pixels = _pixels(analysis, frame_source)
-                profile, settings = _profile(maps, pixels, analysis, window)
+                profile, settings, factor = _profile(maps, pixels, analysis, window, item["q"], optics)
                 use = profile.measured & (profile.chi <= chi_max)
                 use &= np.isfinite(profile.value) & np.isfinite(profile.sigma) & (profile.sigma > 0)
                 if use.sum() < MIN_BINS:
@@ -112,19 +131,23 @@ def frame_crystal_orientation(analysis, specs, *, chi_max=90.0, frame_source=Non
                 excluded.append({"q": item["q"], "q_window": window, "reason": reason,
                                  "overlapping_phases": item.get("overlapping_phases", [])})
                 continue
-            rings.append(TextureRing(index, item["q"], *window, replace(profile, measured=use)))
+            rings.append(TextureRing(index, item["q"], *window, replace(profile, measured=use), transmission=factor))
             metadata[index] = {"q_window": window, "profile_settings": settings,
+                               "exit_transmission": None if factor is None else factor.tolist(),
                                "measured": profile.measured.tolist(), "fit_mask": use.tolist(),
                                "observed": [float(v) if m else None for v, m in zip(profile.value, profile.measured)],
                                "sigma": [float(s) if m else None for s, m in zip(profile.sigma, profile.measured)]}
         if rings:
-            record = fit_crystal_orientation(spec.phase(), rings, check_cancel=check_cancel)
+            record = fit_crystal_orientation(phase, rings, check_cancel=check_cancel)
             for ring in record.get("rings", []):
                 ring.update(metadata[ring["ring_id"]])
         else:
             record = {"phase": spec.name, "ok": False, "determined": False, "rings": [],
                       "reasons": ["No usable ring assigned to this phase."]}
         record.setdefault("excluded_rings", []).extend(excluded)
-        record.update(phase_spec=spec.record(), fitted_up_to_chi_deg=chi_max, q_axis=assignment.get("q_axis"))
+        record.update(phase_spec=spec.record(), fitted_up_to_chi_deg=chi_max,
+                      q_axis=assignment.get("q_axis"))
+        if optics is not None:
+            record["film_optics"] = optics
         result.append(record)
     return result

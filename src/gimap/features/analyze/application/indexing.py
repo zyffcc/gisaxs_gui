@@ -86,6 +86,9 @@ class PhaseSpec:
     """How the operations were derived (``symbol``)."""
     formula: str = ""
     """The sum formula of the CIF (the name is its common or mineral name or its data block)."""
+    formula_sum: str = ""
+    """Only _chemical_formula_sum, for deriving bulk composition independently of the atom sites."""
+    formula_units_z: Optional[float] = None
 
     @property
     def positions_only(self) -> bool:
@@ -95,7 +98,7 @@ class PhaseSpec:
         if self.positions_only:  # no symmetry known: every hkl, no intensities from the atoms as listed
             return Phase(self.name, UnitCell(*self.cell), (parse_operation("x,y,z"),), ())
         operations = parse_operations(self.operations) if self.operations else centring_operations(self.centring)
-        return Phase(self.name, UnitCell(*self.cell), operations, tuple(self.atoms))
+        return Phase(self.name, UnitCell(*self.cell), operations, tuple(self.atoms), self.formula_sum, self.formula_units_z)
 
     def symmetry_record(self) -> str:
         if self.positions_only:
@@ -197,7 +200,7 @@ def phase_from_cif(path, *, color: str = PHASE_COLORS[0], orientation: str = POW
     return PhaseSpec(
         structure.name or path.stem, structure.cell.as_tuple(), "P", structure.operations, structure.atoms,
         structure.space_group, orientation, tuple(indices), color, True, str(path), _sha256(path), structure.warnings,
-        structure.symmetry, structure.notes, structure.formula,
+        structure.symmetry, structure.notes, structure.formula, structure.formula_sum, structure.formula_units_z,
     )
 
 

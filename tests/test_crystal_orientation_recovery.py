@@ -99,9 +99,42 @@ def test_reweighted_doublet_and_two_real_fibre_populations_are_selected_by_bic()
     fit = fit_crystal_orientation(phase, rings)
     assert {tuple(axis) for axis in fit["axes"]} == {(1, 1, 0), (0, 0, 1)}
     assert fit["family_weights"] == "free"
+    assert fit["parameters"] == 4 + sum(len(r["components"]) for r in fit["rings"])
+    assert sum(p["fraction"] for p in fit["populations"]) + fit["fraction_iso"] == pytest.approx(1.)
+    assert all(p["fraction_err"] > 0 and p["fwhm_err_deg"] > 0 for p in fit["populations"])
     weights = {row["hkl"]: row for row in fit["rings"][0]["components"]}
     assert weights["002"]["weight"] < 0.5 * weights["002"]["kinematic_weight"]
     assert fit["reduced_chi2"] < 2
+
+
+def test_single_basal_pole_resolves_two_widths_of_the_same_plane():
+    from src.gimap.features.analyze.domain.crystal import fold_profile
+    from src.gimap.features.analyze.domain.crystal.texture import TextureRing
+
+    phase, expected = expected_rings("PbI2")
+    q, low, high, _, mask, background = expected[0]
+    chi = np.arange(90) + 0.5
+    sin_chi = np.sin(np.radians(chi))
+    width, fraction = (8., 42.), (0.15, 0.50)
+    density = sum(a * _binned_density(0., w) for a, w in zip(fraction, width))
+    mean = 1500 * (density / sin_chi + 1. - sum(fraction)) + background
+    rng = np.random.default_rng(104)
+    observations = rng.poisson(mean, (2, len(chi))).astype(float)
+    observations[:, ~mask] = np.nan
+    values = observations.ravel()
+    profile = fold_profile(np.r_[-chi, chi], values, np.sqrt(values), background)
+    fit = fit_crystal_orientation(phase, [TextureRing(0, q, low, high, profile)])
+    assert not fit["search_settings"]["noncollinear_poles_available"]
+    assert fit["axes"] == [[0, 0, 1], [0, 0, 1]] and fit["determined"]
+    assert fit["fwhm_deg"] is None
+    assert fit["parameters"] == 5
+    sharp, broad = sorted(fit["populations"], key=lambda p: p["fwhm_deg"])
+    for actual, w, a in zip((sharp, broad), width, fraction):
+        assert abs(actual["fwhm_deg"] - w) < 4 * actual["fwhm_err_deg"]
+        assert abs(actual["fraction"] - a) < 4 * actual["fraction_err"]
+    order = sum(p["fraction"] * pole_models.hermans(pole_models.GAUSSIAN_MOSAIC, 0., p["fwhm_deg"], 0.)
+                for p in fit["populations"])
+    assert fit["herman_crystal"] == pytest.approx(order)
 
 
 @pytest.mark.skipif(not (EXTERNAL / "giwaxs_p08_mapi" / "S121_MAI_A2_00841.tif").exists(),
@@ -110,29 +143,45 @@ def test_public_p08_automatic_crystal_orientation():
     report = public_frame()
     mapi, lead = report["crystal_orientation"]
     assert mapi["phase"] == "MAPbI3 (tetragonal)" and lead["phase"] == "PbI2"
-    assert mapi["axes"] == [[0, 0, 1], [1, 1, 2]] and not mapi["determined"]
-    assert mapi["runner_up_axes"] == [[2, 1, 2], [0, 0, 1]]
-    assert mapi["family_weights"] == "free"
-    assert mapi["delta_bic"] == pytest.approx(247.71, abs=2.)
-    assert mapi["fwhm_deg"] == pytest.approx(29.38, abs=0.25)
-    assert mapi["fraction_iso"] == pytest.approx(0.814, abs=0.006)
-    assert mapi["herman_crystal"] == pytest.approx(0.161, abs=0.005)
+    assert not mapi["determined"] and "joint or ring reduced χ² exceeds 5" in mapi["reasons"]
+    assert len(mapi["populations"]) == 2 and mapi["fwhm_deg"] is None
+    assert mapi["film_optics"]["electron_density_e_per_a3"] == pytest.approx(1.04228, abs=1e-5)
+    assert mapi["film_optics"]["beta"] == pytest.approx(1.26942e-7, rel=1e-4)
+    assert mapi["reduced_chi2"] == pytest.approx(33.07, abs=.15)
     assert [r["reduced_chi2"] for r in mapi["rings"]] == pytest.approx(
-        [25.39, 4.07, 9.14, 19.21, 14.05, 3.64, 9.59, 8.98, 4.74, 2.75], abs=0.15)
+        [40.15, 13.26, 14.53, 59.36, 123.25, 8.94, 20.88, 8.44, 5.69, 2.95], abs=.25)
     strong = mapi["rings"][0]
     assert {r["hkl"] for r in strong["components"]} == {"110", "002"}
-    assert strong["herman_measured"] == pytest.approx(report["rings"][0]["herman"])
+    assert strong["profile_settings"]["min_exit_deg"] == 0.
+    assert strong["measured"][84] and strong["fit_mask"][84]
+    assert strong["exit_transmission"][84] > 1.
+    assert strong["observed"][84] < strong["fitted"][84] - 3*strong["sigma"][84]
+    assert strong["largest_residual"]["chi_deg"] == pytest.approx(3.5)
+    assert strong["largest_residual"]["observed_minus_fit_sigma"] > 20.
     for ring in mapi["rings"] + lead["rings"]:
         np.testing.assert_allclose(ring["fitted"], np.sum([r["values"] for r in ring["components"]], axis=0))
         assert len(ring["observed"]) == len(ring["measured"]) == len(ring["chi_deg"])
-    assert lead["axes"] == [[0, 0, 1], [1, 0, 2]] and lead["determined"]
-    assert lead["runner_up_axes"] == [[0, 0, 1], [1, 1, 2]]
-    assert [[0, 0, 1], [2, -1, 2]] in lead["runner_up_tied_axes"]
-    assert lead["delta_bic"] == pytest.approx(44.71, abs=0.8)
-    assert lead["fwhm_deg"] == pytest.approx(31.26, abs=0.20)
-    assert lead["fraction_iso"] == pytest.approx(0.221, abs=0.01)
-    assert lead["herman_crystal"] == pytest.approx(0.664, abs=0.01)
-    assert len(lead["rings"]) == 1 and lead["rings"][0]["reduced_chi2"] == pytest.approx(2.015, abs=0.06)
+    assert lead["axes"] == [[0, 0, 1], [0, 0, 1]]
+    assert not lead["search_settings"]["noncollinear_poles_available"]
+    assert len(lead["rings"]) == 1
+    assert lead["rings"][0]["reduced_chi2"] == pytest.approx(2.76, abs=.08)
+    widths = sorted(p["fwhm_deg"] for p in lead["populations"])
+    assert widths == pytest.approx([16.64, 65.37], abs=.3)
+
+
+def test_transmitted_sharp_and_broad_populations_recover_their_own_widths_and_fractions():
+    from tools.benchmarks.crystal_orientation import MIXTURE, MIXED_WIDTHS, SHARP_SHARE
+
+    phase, rings = synthetic(MIXTURE, SEED)
+    fit = fit_crystal_orientation(phase, rings)
+    axis, _, iso, _ = TEXTURES["MAPbI3_tetragonal"]
+    assert fit["axes"] == [list(axis)] * 2
+    populations = sorted(fit["populations"], key=lambda p: p["fwhm_deg"])
+    for pop, width, share in zip(populations, MIXED_WIDTHS, (SHARP_SHARE, 1.-SHARP_SHARE)):
+        assert abs(pop["fwhm_deg"] - width) < 3 * pop["fwhm_err_deg"]
+        assert abs(pop["fraction"] - (1.-iso)*share) < 3 * pop["fraction_err"]
+    assert all(.6 < row["reduced_chi2"] < 1.5 for row in fit["rings"])
+    assert any(np.max(r.transmission[r.profile.measured]) > 1.4 for r in rings)
 
 
 @pytest.mark.skipif(not (EXTERNAL / "giwaxs_p08_mapi" / "S121_MAI_A2_00841.tif").exists(),

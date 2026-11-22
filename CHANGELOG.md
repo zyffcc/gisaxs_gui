@@ -744,6 +744,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Analyze
 
+- **Crystal orientation** reports the mosaic width and fraction of each of up to two fibre components, including two widths about the same plane normal. It models exit transmission from the CIF composition and reports per-ring residuals. The public MAPbI₃ frame has an asymmetric horizon loss that prevents a quantitative texture assignment.
+
 - With phases loaded, Analyze and Run Automatic Analysis fit a shared crystal fibre texture to each phase's assigned GIWAXS rings. The Pole Figure tab shows how each reflection family contributes, with mosaic width, oriented fraction, competing axes and per-ring residuals.
 
 - **Flat field (detector response).** Mask & corrections ▸ Corrections has a **Flat field** (**Choose…**, **×**;

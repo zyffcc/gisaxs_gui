@@ -48,10 +48,13 @@ def test_phase_model_shows_joint_fit_and_reflection_curves(tmp_path, monkeypatch
                 "measured": [True, True, False, True], "reduced_chi2": .99, "herman_measured": .31,
                 "components": [{"hkl": "110", "weight": .4, "values": [1., 2., 3., 4.]},
                                {"hkl": "002", "weight": .6, "values": [3., 3., 3., 3.]}]}
-        phase = {"phase": "Test crystal", "axes": [[1, 1, 0], [0, 0, 1]], "determined": True,
-                 "axis_fractions": [.8, .2], "axis_fractions_err": [.05, .05],
+        phase = {"phase": "Test crystal", "axes": [[1, 1, 0], [1, 1, 0]], "determined": True,
+                 "populations": [
+                     {"axis": [1, 1, 0], "fwhm_deg": 25., "fwhm_err_deg": .4, "fraction": .56, "fraction_err": .03},
+                     {"axis": [1, 1, 0], "fwhm_deg": 6., "fwhm_err_deg": .2, "fraction": .14, "fraction_err": .02}],
                  "runner_up_axes": [[0, 0, 1]], "delta_bic": 15., "reduced_chi2": 1., "reasons": [],
-                 "fwhm_deg": 12., "fwhm_err_deg": .2, "fraction_iso": .3, "fraction_iso_err": .04,
+                 "ok": True, "family_weights": "kinematic", "fraction_iso": .3, "fraction_iso_err": .04,
+                 "film_optics": {"available": True, "delta": 3.1e-6, "beta": 4.3e-7},
                  "oriented_fraction": .7, "oriented_fraction_err": .04, "herman_crystal": .65,
                  "rings": [ring, dict(ring, q=2., q_window=[1.98, 2.02], fit_mask=[True, True, False, False])]}
         monkeypatch.setattr(crystal_orientation, "frame_crystal_orientation", lambda *_a, **_kw: [phase])
@@ -63,7 +66,16 @@ def test_phase_model_shows_joint_fit_and_reflection_curves(tmp_path, monkeypatch
         assert [curve[0] for curve in curves] == ["Measured N(χ)", "Joint fit", "110 (40.0%)", "002 (60.0%)"]
         assert list(curves[0][1]) == [20., 21., 23.]
         assert "Orientation determined" in panel.result_label.text()
-        assert "80.0 ± 5.0% / 20.0 ± 5.0%" in panel.result_label.text()
+        text = panel.result_label.text()
+        for width, fraction in (("25.00 ± 0.40", "56.0 ± 3.0"), ("6.00 ± 0.20", "14.0 ± 2.0")):
+            assert f"(1 1 0) ∥ substrate · mosaic FWHM {width}° · {fraction}% of phase" in text
+        assert "Total oriented 70.0 ± 4.0%" in text
+        assert "Film exit transmission |T|² from CIF composition · δ 3.1e-06 · β 4.3e-07" in text
+        from src.gimap.features.assistant.application.pipeline_crystal import crystal_lines
+
+        report = "\n".join(crystal_lines([phase]))
+        assert "FWHM 25.00 ± 0.40°, fraction of this phase 0.560 ± 0.030" in report
+        assert "FWHM 6.00 ± 0.20°, fraction of this phase 0.140 ± 0.020" in report
         panel.crystal_ring_combo.setCurrentIndex(1)
         assert "1.980" in panel.pole_plot.figure_state()["title"]
         fitted, excluded = panel.pole_plot.figure_state()["curves"][:2]
@@ -80,6 +92,7 @@ def test_phase_model_shows_joint_fit_and_reflection_curves(tmp_path, monkeypatch
         assert record["crystal_orientation"] == [phase] and record["analysis"]["geometry"]
         apply_language("zh", [panel])
         assert "已确定取向" in panel.result_label.text() and "晶体取向（依据物相）" == combo.currentText()
+        assert "镶嵌展宽（半高宽）6.00 ± 0.20° · 占该物相 14.0 ± 2.0%" in panel.result_label.text()
         panel.chi_max_spin.setValue(75.)
         assert not panel.export_button.isEnabled() and not panel.crystal_ring_combo.count()
         cat.set_phases([])

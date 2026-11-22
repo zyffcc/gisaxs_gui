@@ -119,9 +119,15 @@ def ring_families(phase, found, low, high):
 class PoleLibrary:
     """Bin-averaged probabilities, indexed by axis and family, as a function of log FWHM."""
 
-    def __init__(self, phase, axes, families, centres):
+    def __init__(self, phase, axes, families, centres, *, transmission=None):
         normals = np.array([phase.cell.plane_normal(hkl) for hkl in axes])
         bins = _bin_moments(tuple(centres))
+        if transmission is not None:
+            transmission = np.asarray(transmission, dtype=float)
+            if (transmission.shape != (len(centres),) or np.any(~np.isfinite(transmission))
+                    or np.any(transmission < 0.)):
+                raise ValueError("Each polar bin requires one finite, nonnegative exit transmission.")
+            bins = bins * transmission
         self.isotropic = bins[0]
         spectra = []
         for family in families:

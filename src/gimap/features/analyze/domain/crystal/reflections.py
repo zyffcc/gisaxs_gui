@@ -42,6 +42,8 @@ class Phase:
     cell: UnitCell
     operations: tuple[Operation, ...]
     atoms: tuple[AtomSite, ...] = ()
+    formula_sum: str = ""
+    formula_units_z: float | None = None
 
 
 @dataclass(frozen=True)

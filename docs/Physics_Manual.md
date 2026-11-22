@@ -1618,7 +1618,7 @@ Implementation: `src/gimap/features/assistant/domain/orientation.py`
 
 ### 7.7 Ring orientation and the Hermans orientation factor
 
-With a phase assignment the same ring profiles also constrain the joint crystal orientation in §7.11.
+With a phase assignment, §7.11 uses the same radial windows, detector errors and folding for the joint crystal orientation fit. When the CIF supplies film optical constants, that fit models the exit transmission and admits measured pixels down to the horizon of the active q map. An explicit exit-angle or polar-angle limit still applies. The single-ring Hermans and pole-figure procedures below use their original cuts.
 
 **Ring window.** The ring is centred on the fitted q_0 of the nearest radial peak (when one lies within
 `max(2 FWHM, 3 Δq)` of the requested q), with the half width
@@ -1992,23 +1992,38 @@ Implementation: `src/gimap/features/analyze/domain/crystal/pole_figure.py`, `pol
 
 #### Crystal orientation from assigned rings
 
-For a given phase, all usable assigned rings in the radial peak search constrain the same crystal texture. The three-ring default in §7.5 applies to the individual ring summaries. The joint fit uses each peak's I(χ) extraction window (§7.7), local background, exit-angle selection, measured-bin mask and uncertainties. A window containing allowed reflections of another visible phase is listed among the exclusions. A positions-only CIF with unknown symmetry cannot supply an orientation assignment. A cell with no atom sites uses unit intensity for each allowed reflection.
+All usable rings assigned to a phase constrain its fibre texture. A ring keeps its radial peak window and the local background from §7.7. The fit excludes windows shared by visible phases and assignments with unknown symmetry. In a unit cell without atom sites, each allowed reflection has unit intensity.
 
-Let **n** be a reciprocal-lattice plane normal. For a unit reflection vector **ĝ** in ring r, ψ = arccos|**ĝ**·**n**|. With mosaic FWHM w, set s = w / √(8 ln 2) in radians. The antipodal spherical Gaussian K describes the distribution of **n** about the sample normal. Its normalisation C gives a mean density of one on the hemisphere. Uniform rotation around **n** gives the pole density G of **ĝ**:
+An oriented population a has a reciprocal-lattice plane normal **n**ₐ preferentially along the substrate normal, so planes (hkl) lie preferentially parallel to the substrate. Its mosaic FWHM is wₐ and sₐ = wₐ / √(8 ln 2) in radians. For reflection direction **ĝ**, cos ψ₍g,a₎ = |**ĝ**·**n**ₐ|. Averaging over rotation of the crystal about **n**ₐ gives the pole density Gₐ. With absolute population fractions pₐ and isotropic fraction φ,
 
 ```text
-K(γ) = C {exp[−γ²/(2s²)] + exp[−(π−γ)²/(2s²)]},    ∫₀^{π/2} K(γ) sin γ dγ = 1
-G(χ,ψ) = (1/2π) ∫₀^{2π} K(arccos[cos χ cos ψ + sin χ sin ψ cos α]) dα
-N_r(χ) = A_r sin χ {φ + (1−φ) Σ_a t_a Σ_g W_rg G(χ,ψ_ga)},    Σ_a t_a = Σ_g W_rg = 1
+Kₐ(γ) = Cₐ {exp[−γ²/(2sₐ²)] + exp[−(π−γ)²/(2sₐ²)]},   ∫₀^{π/2} Kₐ(γ) sin γ dγ = 1
+Gₐ(χ,ψ) = (1/2π) ∫₀^{2π} Kₐ(arccos[cos χ cos ψ + sin χ sin ψ cos α]) dα
+Nᵣₖ = Aᵣ ⟨|T_f|²⟩ᵣₖ ∫bin k sin χ [φ + Σₐ pₐ Σg Wᵣg Gₐ(χ,ψ₍g,a₎)] dχ
+φ + Σₐ pₐ = 1,    Σg Wᵣg = 1
 ```
 
-The sum includes every allowed equivalent reflection in the extraction window. Each individual pole contributes |F|² (§7.10), so a family of multiplicity m has total weight m|F|² before normalisation. The alternative fit estimates nonnegative family weights independently for each ring and keeps the calculated proportions within a family. The family curves include their shares of the isotropic signal and add up to the plotted fit. Even Legendre moments evaluate the spherical average. The prediction is averaged over each 1° bin. Each ring has its own scale A_r. The width w and isotropic fraction φ are shared across rings and, in a mixture, across both oriented populations.
+Each ring has its own scale Aᵣ. Every equivalent reflection in its window contributes |F|² (§7.10). An alternative fit estimates nonnegative family weights per ring while preserving calculated ratios within each family. The family curves include their shares of the isotropic signal and sum to the plotted prediction. Even Legendre moments evaluate the spherical average over the 1° bin.
 
-The search compares isotropic material with one or two distinct fibre axes. Candidates are primitive (hkl) with |h|, |k|, |l| ≤ 2, grouped by the phase symmetry and inversion. The width range is 2°–120°, from twice the bin size to a broad distribution. For N measured bins and k fitted parameters, BIC = Σ[(N_obs − N_fit)/σ]² + k ln N. The count includes each scale, w, φ, one mixing fraction for two axes and one parameter per extra family weight when freed. Each axis set keeps its better weighting model. A pair must improve on both its constituent single axes to enter the ranking.
+**Film transmission.** Let nⱼ be the occupied number of atoms of element j in the unit cell of volume V. The CIF formula sum multiplied by the number of formula units Z supplies these populations when available. Otherwise the fit expands the occupied sites by symmetry. The record gives the composition used. At the frame wavelength λ, the neutral electron density, film index and reciprocal exit-wave field are
 
-An orientation is **determined** when the joint and every ring's reduced χ² are ≤ 5, the next distinct orientation or isotropic model is at least 6 BIC units worse, and the fitted parameters are identifiable with the width away from its limits and φ below the isotropic limit. The χ² ceiling follows the single-ring residual check. The BIC gap corresponds approximately to a 20:1 evidence ratio under the independent-bin likelihood. Per-ring degrees of freedom subtract that ring's share of the weighted Jacobian leverage. Conditional 1σ errors use the full parameter covariance scaled by max(1, χ²_red). Background, phase assignment, model selection and systematic error in |F|² are outside these errors.
+```text
+ρₑ = Σⱼ nⱼ Zⱼ / V,    n = 1 − δ + iβ
+(δ, β) = [rₑ λ² / (2πV)] Σⱼ nⱼ (f₁ⱼ, f₂ⱼ)
+β = μλ/(4π)                                                (μ is the linear absorption coefficient)
+u = sin αf = q cos χ / (2π/λ) − sin αi                    (external q)
+|T_f|² = |2u / [u + √(u² − 2δ + 2iβ)]|²,    u > 0
+```
 
-The fitted crystal Hermans factor is (1−φ) ∫ K(γ) P₂(cos γ) sin γ dγ over the hemisphere, with P₂(x) = (3x²−1)/2. In a mixture γ refers to each population's own fibre axis. Each ring also retains its model-free f over the measured bins (§7.7). An undetermined fit still reports the candidate parameters and ring residuals for inspection.
+Zⱼ is the atomic number. The forward factors for H, C, N, O, Na, Si, Ca, I, Au and Pb are interpolated over 4.895–30 keV. When factors are unavailable, δ is estimated from rₑλ²ρₑ/(2π), β is unknown and the fit retains the §7.7 exit cut. With film optics, each signed bin averages the Fresnel field intensity over its measured pixels at their external exit angles, then combines ±χ with the intensity profile's weights. If the q map already includes refraction, the fit inverts that mapping to obtain the external exit angle. The fixed q window follows the active geometry. The incident field is constant for a frame and enters Aᵣ. A single interface can enhance scattering near the critical angle. It cannot account for a beamstop, an asymmetric sample shadow, diffuse background varying with χ, or a peak leaving the extraction window. [Henke scattering factors](https://henke.lbl.gov/optical_constants/asf.html) · [Gasser et al., 2025, §3.6](https://doi.org/10.1107/S1600576724010628)
+
+The search compares isotropic material with one or two oriented populations. Each has its own width (2°–120°) and axis, including two widths about the same axis. Primitive (hkl) with |h|, |k|, |l| ≤ 2 are grouped by symmetry and inversion. For N measured bins, BIC = χ² + k ln N. With m oriented populations, k includes 2m shared continuous parameters and one scale per ring, or one amplitude per family per ring when its weights are free. A pair must improve on each constituent's single-component BIC. Two distinct axes require noncollinear reflection poles. Against each constituent alone and its supported two-width fit, the two-axis prediction must change at least one measured ring by √(Σₖ(ΔNₖ/σₖ)²) > 1 after refitting scales and weights.
+
+An orientation is **determined** when the joint and every ring’s reduced χ² are ≤ 5, the next candidate is at least 6 BIC units worse, the parameters are identifiable, widths lie away from their bounds and φ is below the isotropic limit. The per-ring degrees of freedom subtract that ring’s share of the weighted Jacobian leverage. The full covariance, scaled by max(1, χ²_red), gives conditional 1σ errors for each width and each absolute fraction including their correlations. These local errors exclude uncertainty in the background, optical constants, phase assignment and model choice. A parameter on a bound can have an asymmetric interval.
+
+The fitted crystal Hermans factor is Σₐ pₐ ∫ Kₐ(γ) P₂(cos γ) sin γ dγ over the hemisphere, with P₂(x) = (3x²−1)/2. Each population’s own axis defines γ. Each ring also reports its model-free f over the measured bins (§7.7). When the fit fails the quality criteria, its axes, widths and fractions are diagnostic estimates.
+
+For the public P08 frame (λ = 0.688801 Å), the MAPbI₃ formula with four units per cell gives ρₑ = 1.0423 e Å⁻³, δ = 2.183 × 10⁻⁶, β = 1.269 × 10⁻⁷ and αc = 0.1197°. Only Pb and I have refined positions in the benchmark CIF. At q ≈ 1 Å⁻¹ the two measured sides of the ring fade at different angles well above αc. The joint fit fails the residual check. [Public-frame benchmark](../tools/benchmarks/README.md#crystal-orientation)
 
 ## 8. GISAXS automatic analysis
 

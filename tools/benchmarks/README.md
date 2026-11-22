@@ -307,60 +307,53 @@ points gave 56.8% and 57.6%, respectively. The engine retains the ring jackknife
 
 ## Crystal orientation
 
-Run `python tools/benchmarks/crystal_orientation.py --part all --trials 32 --json results.json` in the GIMaP environment.
-The JSON contains the public automatic-analysis report and the estimates and 1σ errors for each synthetic draw.
+Run `python tools/benchmarks/crystal_orientation.py --part all --trials 32 --json results.json`. The JSON contains each simulated fit and its 1σ errors, the public-frame report, an independent-width refit on the original angular cut, and signed-sector measurements around the strongest peak.
 
-**Synthetic rings.** The generator integrates an antipodal Gaussian directly using 96-point azimuthal and
-16-point within-bin Gauss quadrature. Each of the three rings has its own intensity scale and a known constant
-background. Each generated reflection contributes its kinematic |F|². Two independent Poisson draws for ±χ
-are folded with the measured count errors. The low-angle wedge (|χ| < 5°), a detector gap (42–45°) and
-bins below αf = 0.30° are removed for a simulated wavelength of 1 Å and αi = 0.15°.
-Width and isotropic fraction are shared across all three rings. Each run searches the full set of candidate
-axes and compares fixed and free family weights. Since the oriented fraction is 1 − φ, it has the same interval
-coverage as φ.
+### Synthetic recovery
 
-With 32 draws per phase (seeds 41027–41058), all 64 selected models included the true axis. Of the 59 fits
-classified as determined, every one selected the true single axis. The other five selected an additional
-axis with insufficient ΔBIC. Coverage counts below include every draw, including these five.
+Three rings with independent scales sample each simulated fibre distribution. Direct integration of the antipodal Gaussian uses 96 azimuthal and 16 within-bin Gauss nodes. Individual poles contribute their calculated |F|². Two independent Poisson draws at ±χ are folded with their counting errors after subtraction of the known background. The missing wedge below 5° and a detector gap at 42–45° are present in every draw. The two single-component sets use αf ≥ 0.30°. The mixed set includes the exit field for δ = 4.2 × 10⁻⁶, β = 3.1 × 10⁻⁷ at λ = 1 Å and αi = 0.15°, with all bin centres above the horizon accepted. Its true (110) populations have widths 8° and 36° and absolute fractions 0.186 and 0.434.
 
-| Phase | True axis | True FWHM | True φ | Correct single axis | FWHM within 1σ | φ within 1σ |
-|---|---|---:|---:|---:|---:|---:|
-| MAPbI₃ | (110) | 16° | 0.380 | 29/32 | 21/32 (66%) | 19/32 (59%) |
-| PbI₂ | (001) | 22° | 0.290 | 30/32 | 21/32 (66%) | 17/32 (53%) |
+Seeds 41027–41058 give the following results. Width and population-fraction coverage counts are conditional on selecting the generating model. Isotropic coverage includes all 32 draws.
 
-At 32 draws the binomial standard error near 68% coverage is 8 percentage points. Mean fitted widths were
-16.009° and 21.991° and mean isotropic fractions were 0.3777 and 0.2885, respectively. Isotropic fraction
-errors undercovered in this test. The profiles use inverse variances estimated from the observed counts.
+| Phase and true texture | Correct model | Correct and determined | Width within 1σ | Population fraction within 1σ | Isotropic fraction within 1σ | Mean joint χ²red |
+|---|---:|---:|---:|---:|---:|---:|
+| MAPbI₃ (110), 16°, φ = 0.38 | 29/32 | 29/32 | 19/29 | 18/29 | 18/32 | 1.00 |
+| PbI₂ (001), 22°, φ = 0.29 | 30/32 | 30/32 | 20/30 | 17/30 | 17/32 | 1.01 |
+| MAPbI₃ (110), 8° + 36°, φ = 0.38 | 32/32 | 32/32 | 16/32, 17/32 | 20/32, 21/32 | 22/32 | 1.00 |
 
-**Public P08 frame.** The benchmark opens the dark-subtracted floating-point frame in offscreen Analyze, applies
-its manifest incidence angle (0.075°), and runs automatic analysis with the supplied PONI and the two
-CIFs in `tests/data/crystal/`. The PONI gives λ = 0.688801 Å and rotations (0.300556°, 0.063019°, 0°).
-The usual 12-peak search assigns 11 peaks. The orientation profiles use the pixel-scatter errors, local ring
-backgrounds, αf ≥ 0.15° and polarization 0.99. The old strongest-ring Gaussian fit gives χ²red = 31.16.
+Every selected model included the true axis. One single-component PbI₂ draw passed the determination checks with a spurious second (001) population of about 0.9%. The other four single-component draws with an extra population failed the determination checks. Interval coverage reflects counting noise, the estimated bin weights and the model selection step.
 
-| Phase | Best axes | Runner-up axes | ΔBIC | FWHM (°) | Oriented (%) | Isotropic (%) | Crystal f | Joint χ²red |
-|---|---|---|---:|---:|---:|---:|---:|---:|
-| MAPbI₃ | (001) + (112) | (212) + (001) | 247.71 | 29.38 ± 0.98 | 18.58 ± 3.05 | 81.42 ± 3.05 | 0.161 | 10.94 |
-| PbI₂ | (001) + (102) | (001) + (112) or (001) + (2 −1 2) | 44.71 | 31.26 ± 0.99 | 77.88 ± 10.96 | 22.12 ± 10.96 | 0.664 | 2.02 |
+### Public P08 film
 
-The MAPbI₃ joint fit fails the goodness-of-fit threshold. Even with free family weights, the strongest ring has
-χ²red = 25.39. The fit gives its entire doublet weight to 002, compared with a kinematic fraction of 0.351.
-Its selected axes and fractions are diagnostic estimates. The PbI₂ result satisfies the selection criteria
-among the tested axes, but only its 001 ring was assigned. The two runner-up solutions have the same
-interplanar angle to this reflection. A second PbI₂ ring would independently test the
-inferred orientation. The local pygid example materials describe the preparation and radial peaks and give
-no independent fibre axis or mosaic width for this frame.
+The benchmark uses the dark-subtracted frame, its PONI (λ = 0.688801 Å) and αi = 0.075° from the public example. The peak search assigns ten rings to tetragonal MAPbI₃ and one to PbI₂. The profiles use pixel-scatter errors, a locally fitted radial background constant in χ, polarization 0.99 and the original q windows. The MAPbI₃ CIF supplies four CH₆NPbI₃ units per cell for the index, and refined Pb and I sites for diffraction. These give ρₑ = 1.0423 e Å⁻³, δ = 2.18265 × 10⁻⁶, β = 1.26942 × 10⁻⁷ and αc = 0.1197°. The PbI₂ fixture now uses the symmetry of its declared space group P −3 m 1, which gives one Pb and two I atoms per cell. [Public dataset and notebook](https://zenodo.org/records/17466183)
 
-| Phase | Ring q (Å⁻¹) | Families in extraction window | Ring χ²red | Measured ring f |
-|---|---:|---|---:|---:|
-| MAPbI₃ | 0.9972 | 002, 110 | 25.39 | 0.142 |
-| | 1.4091 | 112, 200 | 4.07 | 0.161 |
-| | 1.7247 | 202 | 9.14 | 0.159 |
-| | 1.9902 | 004, 220 | 19.21 | 0.094 |
-| | 2.2255 | 114, 222, 310 | 14.05 | 0.075 |
-| | 2.4382 | 204, 312 | 3.64 | 0.130 |
-| | 2.8148 | 224, 400 | 9.59 | 0.069 |
-| | 2.9854 | 006, 314, 402, 330 | 8.98 | 0.074 |
-| | 3.4480 | 404 | 4.74 | 0.293 |
-| | 4.1040 | 118, 523, 406, 514, 442 | 2.75 | 0.376 |
-| PbI₂ | 0.8989 | 001 | 2.02 | 0.494 |
+| Phase and q (Å⁻¹) | Families | Shared width, original cut | Independent widths, original cut | Independent widths, exit transmission |
+|---|---|---:|---:|---:|
+| **MAPbI₃ joint** | **10 rings** | **10.94** | **8.20** | **33.07** |
+| 0.9972 | 002, 110 | 25.39 | 16.86 | 40.15 |
+| 1.4091 | 112, 200 | 4.07 | 2.88 | 13.26 |
+| 1.7247 | 202 | 9.14 | 8.31 | 14.53 |
+| 1.9902 | 004, 220 | 19.21 | 11.24 | 59.36 |
+| 2.2255 | 114, 222, 310 | 14.05 | 11.11 | 123.25 |
+| 2.4382 | 204, 312 | 3.64 | 2.62 | 8.94 |
+| 2.8148 | 224, 400 | 9.59 | 8.93 | 20.88 |
+| 2.9854 | 006, 314, 402, 330 | 8.98 | 7.56 | 8.44 |
+| 3.4480 | 404 | 4.74 | 4.85 | 5.69 |
+| 4.1040 | 118, 523, 406, 514, 442 | 2.75 | 2.82 | 2.95 |
+| **PbI₂ 0.8989** | **001** | **2.02** | **1.43** | **2.76** |
+
+Each entry is χ² divided by that fit’s effective degrees of freedom. The first column reproduces commit `bb45957`. The first two use 717 measured MAPbI₃ bins at αf ≥ 0.15° with the original shadow and weak-horizon exclusions. The last includes 738 measured bins and applies the pixel-averaged exit transmission. These fits use different observations, so the last column also measures disagreement with newly admitted bins.
+
+**Which planes are parallel?** On the original cut, two (001) components give 11.63 ± 0.54° and 104.9 ± 18.1°, with 3.9 ± 0.6% and 89 ± 66% of the phase, respectively. On the full profile the best candidate changes to (212) at 30.00 ± 3.34° (56.8 ± 29.4%) and (001) at 58.46 ± 3.97° (43.2 ± 18.3%). The runner-up is (112) + (001), ΔBIC = 256. Nine individual rings exceed χ²red = 5. The large residuals and the change of preferred planes preclude a quantitative assignment of MAPbI₃ fibre planes, widths or oriented fraction.
+
+For **PbI₂**, the only observed reflection is 001. Both selected populations have their basal planes parallel to the substrate. The narrow component is 16.64 ± 2.03° and 8.9 ± 2.5% of this phase. The broad component is 65.37 ± 7.07° and 91.1 ± 16.4%. The original cut gave 14.92° and 53.67°, with an isotropic fraction of 35.6%. The full-profile estimate of φ reaches zero with a local standard error of 17.6 percentage points. A single basal reflection supports this conditional shape comparison and supplies no independent check of the broad population.
+
+**Why the strongest MAPbI₃ ring fails.** At χ = 3.5°, the folded signal is 52.97 ± 1.25 and the joint fit predicts 23.61. At 80.5° and 84.5° the Fresnel multipliers are 1.008 and 1.027, respectively, while the measured signal drops from 142.7 ± 8.7 to 0.6 ± 2.7. At 88.5° the measured net signal is negative after subtraction of the radial background. The optical maximum occurs much closer to the horizon than the onset of the loss.
+
+The two detector sectors expose the asymmetry before polarization correction and background subtraction. At |χ| = 70–75°, mean intensities in the strongest ring window are 195 and 191 for the negative and positive sides. At 84–86° they are 82 and 10. Their respective radial maxima, 0.9948 and 0.9968 Å⁻¹, still lie inside the 0.9888–1.0057 Å⁻¹ window. Extending each edge by 0.015 Å⁻¹ and integrating above the measured flank background gives areas of 1.43 and 0.10 in intensity × Å⁻¹, compared with 3.44 and 3.31 at 70–75°. The asymmetry persists after the wider integration. The flank intensities themselves fall from about 18 near the missing wedge to 5 on the positive side at 84–86°, while the fitted constant background is 16.88. These observations identify a loss of measured scattering and a changing diffuse background. The frame alone does not identify the attenuating object.
+
+At q = 2.2255 Å⁻¹, 60% of the residual χ² lies above 80°. At 3.4480 Å⁻¹ the detector ends before the horizon. Its worst bin is at 68.5°, where only 76% of the radial window is spanned. At 69.5° that falls to 22%.
+
+The calibrated direct-beam height is 1826.95 px. In detector columns 543–547 (zero-based indices), the strongest on-axis excess between rows 1680 and 1839 occurs at row 1755, after subtracting the mean of the flanking strips at columns 510–527 and 560–577. If that feature were specular, its 71.45 px separation would imply αi ≈ ½ arctan(71.45 × 0.200 / 811.77) = 0.50°. The public notebook uses 0.075°. The related P08 chamber study reports 0.5° for its experiment. As a sensitivity test, `--part public --public-incidence-deg 0.5` gives joint χ²red = 27.35 and strongest-ring χ²red = 37.82. This fit also fails. An independent measurement of the sample horizon would be needed to establish the angle for this exposure. [P08 chamber study, §III](https://doi.org/10.1063/5.0149613)
+
+The public example’s authors describe the perovskite as visually close to random and attribute additional low-q arcs to an intermediate phase. Those arcs are outside the ten fitted windows. [Public frame, Fig. 6](https://journals.iucr.org/j/issues/2026/01/00/yr5162/index.html)

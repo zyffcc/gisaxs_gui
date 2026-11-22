@@ -1,9 +1,9 @@
 """Weighted simultaneous least squares for one or two candidate fibre axes.
 
-At a fixed mosaic width, isotropic fraction and axis mixing fraction the ring
+At fixed mosaic widths, isotropic fraction and mixing fraction the ring
 amplitudes are linear. For free family weights they are the nonnegative family
 amplitudes; their sum is the scale of that ring. Profiling them analytically
-leaves only two or three shared parameters for nonlinear optimisation.
+leaves only two or four shared parameters for nonlinear optimisation.
 """
 from __future__ import annotations
 
@@ -64,61 +64,104 @@ def _coefficients(shapes, y):
 
 
 def _seed(rings, indices):
-    """Resolve competing width minima on a grid with independent ring fractions for this start."""
-    costs = np.zeros(len(_START_INDEX))
-    params = np.zeros((len(_START_INDEX), 2))
+    """Grid both widths independently. Ring-specific amplitudes only initialise the joint fit."""
+    widths = np.arange(len(_START_INDEX))
+    if len(indices) == 2:
+        first, second = np.meshgrid(widths, widths, indexing="ij")
+        select = first < second if indices[0] == indices[1] else np.ones(first.shape, dtype=bool)
+        grid = [first[select], second[select]]
+    else:
+        grid = [widths]
+    costs = np.zeros(len(grid[0]))
+    fractions = np.zeros((len(costs), 2))
     for ring in rings:
-        columns = np.stack([np.broadcast_to(ring.iso, ring.starts[:, 0].shape),
-                            *(ring.starts[:, i] for i in indices)], axis=2)
-        # A cheap unconstrained solve provides seeds, only. Clipped estimates
-        # are used to score the start, then the shared constrained fit follows.
-        amplitudes = np.maximum((np.linalg.pinv(columns) @ ring.y), 0.)
-        residuals = (columns @ amplitudes[..., None]).squeeze(-1) - ring.y
-        costs += np.sum(residuals**2, axis=1)
-        params[:, 0] += ring.norm2 * amplitudes[:, 0] / np.maximum(amplitudes.sum(axis=1), 1e-100)
-        params[:, 1] += ring.norm2 * amplitudes[:, 1] / np.maximum(amplitudes[:, 1:].sum(axis=1), 1e-100)
+        columns = np.stack([np.broadcast_to(ring.iso, (len(costs), len(ring.y))),
+                            *(ring.starts[g, i] for g, i in zip(grid, indices))], axis=1)
+        gram = columns @ columns.transpose(0, 2, 1)
+        rhs = columns @ ring.y
+        # Scale the small Gram matrices before the pseudoinverse. Narrow poles
+        # can lie almost entirely in a gap. Collinear columns are allowed here.
+        norms = np.maximum(np.sqrt(gram.diagonal(axis1=1, axis2=2)), 1e-100)
+        normal = gram / (norms[:, :, None] * norms[:, None, :])
+        amplitudes = (np.linalg.pinv(normal, rcond=1e-10) @ (rhs / norms)[..., None])[..., 0] / norms
+        amplitudes = np.maximum(amplitudes, 0.)
+        residual = (amplitudes[:, None, :] @ columns)[:, 0] - ring.y
+        costs += np.sum(residual**2, axis=1)
+        fractions[:, 0] += ring.norm2 * amplitudes[:, 0] / np.maximum(amplitudes.sum(axis=1), 1e-100)
+        fractions[:, 1] += ring.norm2 * amplitudes[:, 1] / np.maximum(amplitudes[:, 1:].sum(axis=1), 1e-100)
     i = np.argmin(costs)
-    fractions = np.clip(params[i] / max(sum(r.norm2 for r in rings), 1e-100), 0.04, 0.96)
-    return [LOG_WIDTHS[_START_INDEX[i]], *fractions[:len(indices)]]
+    phi, share = np.clip(fractions[i] / max(sum(r.norm2 for r in rings), 1e-100), 0.04, 0.96)
+    log_widths = [LOG_WIDTHS[_START_INDEX[g[i]]] for g in grid]
+    return [log_widths[0], phi] if len(indices) == 1 else [log_widths[0], phi, log_widths[1], share]
+
+
+def _spline(curve, log_width):
+    knot = min(max(int((log_width - LOG_WIDTHS[0]) / _LOG_STEP), 0), len(LOG_WIDTHS) - 2)
+    d = log_width - LOG_WIDTHS[knot]
+    a, b, c, e = curve[:, knot]
+    return ((a*d + b)*d + c)*d + e, (3*a*d + 2*b)*d + c
 
 
 class Hypothesis:
     def __init__(self, rings, indices, free):
         self.rings, self.indices, self.free = rings, indices, free
         self.curves = [tuple((r.by_family if free else r.fixed)[:, :, i] for i in indices) for r in rings]
-        shared = len(indices) + 1 if indices else 0
-        self.parameters = shared + sum(len(r.families) if free else 1 for r in rings)
+        self.parameters = 2*len(indices) + sum(len(r.families) if free else 1 for r in rings)
         self.points = sum(len(r.y) for r in rings)
 
-    def shapes(self, x, index):
-        w = x[0]
-        knot = min(max(int((w - LOG_WIDTHS[0]) / _LOG_STEP), 0), len(LOG_WIDTHS) - 2)
-        d = w - LOG_WIDTHS[knot]
-
-        def evaluate(curve):
-            a, b, c, e = curve[:, knot]
-            return ((a*d + b)*d + c)*d + e
-
+    def _model(self, x, index):
         curves = self.curves[index]
-        oriented = evaluate(curves[0])
-        if len(curves) == 2:
-            oriented = x[2] * oriented + (1. - x[2]) * evaluate(curves[1])
-        return (1. - x[1])*oriented + x[1]*self.rings[index].iso
+        first, d_first = _spline(curves[0], x[0])
+        iso, phi = self.rings[index].iso, x[1]
+        if len(curves) == 1:
+            return (1. - phi)*first + phi*iso, [(1. - phi)*d_first, iso - first]
+        second, d_second = _spline(curves[1], x[2])
+        share = x[3]
+        oriented = share*first + (1. - share)*second
+        return ((1. - phi)*oriented + phi*iso,
+                [(1. - phi)*share*d_first, iso - oriented, (1. - phi)*(1. - share)*d_second,
+                 (1. - phi)*(first - second)])
 
-    def residual(self, x):
-        blocks = []
-        for i, ring in enumerate(self.rings):
-            shapes = self.shapes(x, i)
-            coeff = _coefficients(shapes, ring.y)
-            blocks.append(coeff @ shapes - ring.y)
-        return np.concatenate(blocks)
+    def shapes(self, x, index):
+        return self._model(x, index)[0]
 
     def fit(self, starts):
-        lower = [LOG_WIDTHS[0]] + [0.] * len(self.indices)
-        upper = [LOG_WIDTHS[-1]] + [1.] * len(self.indices)
+        """Optimise with the variable-projection Jacobian on the active NNLS face."""
+        last_x = None
+        jacobian = None
+
+        def evaluate(x):
+            nonlocal last_x, jacobian
+            blocks, jac = [], []
+            for i, ring in enumerate(self.rings):
+                shapes, gradients = self._model(x, i)
+                coeff = _coefficients(shapes, ring.y)
+                residual = coeff @ shapes - ring.y
+                derivatives = np.asarray(gradients)
+                change = (coeff @ derivatives).T
+                # Differentiate A.T @ (A c - y) = 0 over the locally nonzero coefficients.
+                active = coeff > 0.
+                if active.any():
+                    rows = shapes[active]
+                    inverse = (rows / max(np.dot(rows[0], rows[0]), 1e-300) if len(rows) == 1
+                               else np.linalg.pinv(rows.T))
+                    change -= rows.T @ (inverse @ change) + inverse.T @ (derivatives[:, active] @ residual).T
+                jac.append(change)
+                blocks.append(residual)
+            last_x = x.copy()
+            jacobian = np.concatenate(jac)
+            return np.concatenate(blocks)
+
+        def derivative(x):
+            if not np.array_equal(last_x, x):
+                evaluate(x)
+            return jacobian
+
+        lower = [LOG_WIDTHS[0], 0.] * len(self.indices)
+        upper = [LOG_WIDTHS[-1], 1.] * len(self.indices)
         best = None
         for start in starts:
-            solution = least_squares(self.residual, start, bounds=(lower, upper), ftol=2e-7, max_nfev=120)
+            solution = least_squares(evaluate, start, jac=derivative, bounds=(lower, upper), ftol=2e-7, max_nfev=120)
             if solution.success and (best is None or solution.cost < best.cost):
                 best = solution
         if best is None:
@@ -136,6 +179,36 @@ class Trial:
     bic: float
 
 
+def _prediction(rings, trial):
+    problem = Hypothesis(rings, trial.indices, trial.free)
+    prediction = []
+    for i, ring in enumerate(rings):
+        shapes = problem.shapes(trial.x, i)
+        prediction.append(_coefficients(shapes, ring.y) @ shapes)
+    return prediction
+
+
+def _observable(rings, mixed, alternatives):
+    """Resolve each simpler prediction in at least one measured ring.
+
+    For independent bin errors, the standardised separation of two entire profiles
+    along their difference is ||(N1 - N2)/sigma||_2. Coherent small differences
+    across several bins can resolve an axis even if each is below one bin error.
+    """
+    predictions = _prediction(rings, mixed)
+    for trial in alternatives:
+        rival = _prediction(rings, trial)
+        if all(np.linalg.norm(p - r) <= 1. for p, r in zip(predictions, rival)):
+            return False
+    return True
+
+
+def multiple_poles(rings):
+    """A pole and its antipode measure just one crystal direction, at any diffraction order."""
+    directions = np.concatenate([family.directions for ring in rings for family in ring.families])
+    return np.any(abs(directions @ directions[0]) < 1. - 1e-9)
+
+
 def search(rings, n_axes, check_cancel):
     points = sum(len(r.y) for r in rings)
     null_chi2 = 0.
@@ -145,29 +218,35 @@ def search(rings, n_axes, check_cancel):
     null = Trial((), False, np.array([]), null_chi2, null_chi2 + len(rings)*math.log(points))
     trials = {(): null}
     free_count = sum(len(r.families)-1 for r in rings)
-    for size in (1, 2):
-        for indices in itertools.combinations(range(n_axes), size):
-            if check_cancel is not None:
-                check_cancel()
-            seed = _seed(rings, indices)
-            fixed = Hypothesis(rings, indices, False).fit([seed])
-            if fixed is None:
+    axes = range(n_axes)
+    pairs = itertools.combinations(axes, 2) if multiple_poles(rings) else ()
+    for indices in itertools.chain(((a,) for a in axes), ((a, a) for a in axes), pairs):
+        if check_cancel is not None:
+            check_cancel()
+        seed = _seed(rings, indices)
+        size = len(indices)
+        fixed = Hypothesis(rings, indices, False).fit([seed])
+        if fixed is None:
+            continue
+        chosen = fixed
+        if free_count and points > len(rings) + free_count + 2*size:
+            starts = [fixed.x]
+            alternate = [math.log(15.), 0.4] if size == 1 else [math.log(8.), 0.4, math.log(36.), 0.5]
+            if max(abs(fixed.x[::2] - alternate[::2])) > 0.7:
+                starts.append(alternate)
+            free = Hypothesis(rings, indices, True).fit(starts)
+            if free is not None and free.bic < fixed.bic:
+                chosen = free
+        if size == 2:
+            rivals = [trials.get((i,), null) for i in set(indices)]
+            if any(rival.bic <= chosen.bic for rival in rivals):
                 continue
-            chosen = fixed
-            if free_count and points > len(rings) + free_count + size + 1:
-                problem = Hypothesis(rings, indices, True)
-                starts = [fixed.x]
-                if abs(fixed.x[0] - math.log(15.)) > 0.7:
-                    starts.append([math.log(15.), 0.4, *([0.5] if size == 2 else [])])
-                free = problem.fit(starts)
-                if free is not None and free.bic < fixed.bic:
-                    chosen = free
-            # A pair that loses to a constituent cannot support a second axis.
-            if size == 2 and any(trials.get((i,), null).bic <= chosen.bic for i in indices):
-                continue
-            trials[indices] = chosen
-    # Distinct directions can give exactly the same polar angles on the
-    # observed rings. Suppress optimiser roundoff when naming such competitors.
+            if indices[0] != indices[1]:
+                rivals.extend(trials[i, i] for i in indices if (i, i) in trials)
+                if not _observable(rings, chosen, [t for t in rivals if t.indices]):
+                    continue
+        trials[indices] = chosen
+    # Resolve roundoff ties deterministically while reporting the actual BIC difference.
     ranked = sorted(trials.values(), key=lambda trial: trial.bic)
     result = []
     while ranked:

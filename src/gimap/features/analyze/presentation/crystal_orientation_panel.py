@@ -35,28 +35,36 @@ def _number(value, error=None, *, decimals=2, scale=1):
 def _summary(phase, ring):
     status = tr("Orientation determined") if phase["determined"] else tr("Orientation not determined")
     reasons = [tr(reason) for reason in phase.get("reasons", [])]
-    details = []
-    if len(phase["axes"]) == 2:
-        shares = " / ".join(_number(fraction, error, decimals=1, scale=100) + "%" for fraction, error in
-                            zip(phase["axis_fractions"], phase["axis_fractions_err"]))
-        details.append(trf("Shares of the oriented population {shares}", shares=shares))
-    if phase.get("family_weights"):
-        details.append(tr("Free reflection weights") if phase["family_weights"] == "free"
-                       else tr("Kinematic reflection weights"))
-    return "\n".join((
-        f"{status} · {phase['phase']} {_axes(phase['axes'])}",
-        trf("Mosaic FWHM {width}° · oriented {oriented}% · isotropic {isotropic}%",
-            width=_number(phase["fwhm_deg"], phase["fwhm_err_deg"]),
+    populations = [
+        trf("{plane} ∥ substrate · mosaic FWHM {width}° · {fraction}% of phase",
+            plane=_axes([p["axis"]]), width=_number(p["fwhm_deg"], p["fwhm_err_deg"]),
+            fraction=_number(p["fraction"], p["fraction_err"], decimals=1, scale=100))
+        for p in phase["populations"]
+    ]
+    weights = tr("Free reflection weights") if phase.get("family_weights") == "free" else tr("Kinematic reflection weights")
+    optics = phase.get("film_optics", {})
+    transmission = (
+        trf("Film exit transmission |T|² from CIF composition · δ {delta} · β {beta}",
+            delta=f"{optics['delta']:.3g}", beta=f"{optics['beta']:.3g}")
+        if optics.get("available") else tr("Film exit transmission unavailable")
+    )
+    lines = [
+        " · ".join((f"{phase['phase']} · {status}", *reasons)),
+        *populations,
+        trf("Total oriented {oriented}% · isotropic {isotropic}%",
             oriented=_number(phase["oriented_fraction"], phase["oriented_fraction_err"], decimals=1, scale=100),
             isotropic=_number(phase["fraction_iso"], phase["fraction_iso_err"], decimals=1, scale=100)),
         trf("Runner-up {axes} · ΔBIC {delta} · joint χ²red {joint} · ring χ²red {ring}",
             axes=_axes(phase.get("runner_up_axes")), delta=_number(phase.get("delta_bic"), decimals=1),
             joint=_number(phase["reduced_chi2"]), ring=_number(ring["reduced_chi2"])),
         trf("Crystal Hermans f {crystal} · measured ring f {ring}",
-            crystal=_number(phase["herman_crystal"], decimals=3), ring=_number(ring["herman_measured"], decimals=3)),
-        *([" · ".join(details)] if details else []),
-        *reasons,
-    ))
+            crystal=_number(phase["herman_crystal"], decimals=3), ring=_number(ring["herman_measured"], decimals=3))
+        + f" · {weights}",
+        transmission,
+    ]
+    if phase.get("search_settings", {}).get("noncollinear_poles_available") is False:
+        lines.append(tr("Only one pole direction constrains this phase. Two distinct fibre axes cannot be established."))
+    return "\n".join(lines)
 
 
 def _plot(plot, phase, ring):
@@ -81,7 +89,7 @@ def _plot(plot, phase, ring):
         curves.append((label, chi, np.asarray(family["values"], dtype=float)))
         colors.append(FAMILY_COLORS[i % len(FAMILY_COLORS)])
         styles.append(LineStyle(width=1.5, style=Qt.DashLine, z=2.5))
-    plot.set_labels("χ (°)", tr("N(χ) ∝ crystallites per degree"))
+    plot.set_labels("χ (°)", tr("N(χ) = net intensity × sin χ"))
     low, high = ring["q_window"]
     plot.set_title(f"{phase['phase']} · q = {low:.3f}–{high:.3f} Å⁻¹")
     plot.legend.setColumnCount(1 if len(curves) <= 6 else 2)
@@ -153,6 +161,7 @@ class CrystalOrientationMixin:
                 self._show_pole(self._displayed_pole)
             else:
                 self._clear_crystal_plot()
+                self.pole_plot.set_labels("χ (°)", tr("N(χ) ∝ crystallites per degree"))
 
     def _clear_crystal_plot(self):
         self.pole_plot.set_title("")

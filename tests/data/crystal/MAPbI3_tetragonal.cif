@@ -1,6 +1,9 @@
-# tetragonal MAPbI3, the inorganic framework only (Pb, I); cell and I2 x as commonly reported
+# Tetragonal MAPbI3. The sites describe only the Pb/I framework for diffraction.
+# Bulk formula and Z: Dalton Trans., DOI 10.1039/C5DT04420K, supporting information.
 data_mapbi3
 _chemical_name_common 'MAPbI3 (tetragonal)'
+_chemical_formula_sum 'C H6 I3 N Pb'
+_cell_formula_units_Z 4
 _cell_length_a 8.874(2)
 _cell_length_b 8.874(2)
 _cell_length_c 12.671(3)
