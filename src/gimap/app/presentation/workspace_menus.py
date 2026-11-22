@@ -83,6 +83,9 @@ ANALYZE_MENU = (
           "A folder of raw frames straight to curves: Batch Export opens once its first frame is analysed"),
     SEPARATOR,
     Entry("analyze_send_fitting", "Send to &Fitting", "The horizontal cut (GISAXS) or I(q) (GIWAXS) opened in Fitting."),
+    Entry("analyze_send_both_cuts", "Send Bot&h Cuts to Fitting",
+          "The horizontal and the vertical cut of this GISAXS frame, fitted together in Fitting (one χ²): the "
+          "vertical cut sees the particles' height"),
     Entry("analyze_send_series", "Send Series to Fitti&ng…",
           "Export every listed frame (or sum of frames) and open the series in Fitting ▸ In-situ series"),
     Entry("analyze_send_compare", "Send Series to &Compare",
@@ -120,6 +123,9 @@ FITTING_MENU = (
     SEPARATOR,
     Entry("fitting_fit", "&Fit", "Run the method chosen in the Fit step (Ctrl+Return)", ("Ctrl+Return",)),
     Entry("fitting_stop", "S&top Fit", "Stop the fit; the best values so far are kept"),
+    Entry("fitting_joint", "Fit Several Curves To&gether…",
+          "One χ² over several curves — a horizontal and a vertical cut of one frame (Analyze ▸ Send Both Cuts to "
+          "Fitting) or curve files — with values shared or each curve's own"),
     SEPARATOR,
     Entry("fitting_load_model", "&Load Model…", "A model saved from Fitting (JSON), for this curve"),
     Entry("fitting_save_model", "Save &Model…", "The model (values, fit/fixed, ranges) as JSON, to load for another curve"),

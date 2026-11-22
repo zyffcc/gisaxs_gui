@@ -42,8 +42,10 @@ from ...application.single_fit import (
     new_component,
     with_interference,
 )
+from ...application.substrate_level import with_substrate
 from .model_links import add_constraint, links_card, remove_constraint
 from .parameter_row import ParameterRow, header, label_text
+from .substrate_row import SubstrateControls
 
 MANUAL_ONLY = "For Refine and Search: Predict parameters does not propose this family"
 DROPPED = "Links or constraints that no longer hold were removed: {items}"
@@ -80,6 +82,7 @@ class FitModelEditor(QWidget):
         self._shape: tuple = ()
         self._links_card: Optional[QFrame] = None
         self._links_shape: tuple = ()
+        self._substrate: Optional[SubstrateControls] = None
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(8)
@@ -138,6 +141,15 @@ class FitModelEditor(QWidget):
     def set_contact(self, on: bool) -> None:
         self._emit(replace(self.model, contact=bool(on)))
 
+    def set_substrate(self, material: str, delta: float = 0.0, beta: float = 0.0) -> None:
+        """The substrate under the particles: a material of the table, ``custom`` δ and β, or none (``""``)."""
+        try:
+            model = with_substrate(self.model, material, delta, beta)
+        except ValueError as exc:
+            self.message.emit(str(exc), "warning")
+            return
+        self._emit(model, rebuild=False)
+
     def add_constraint(self, text: str) -> None:
         try:
             model = add_constraint(self.model, text)
@@ -187,6 +199,8 @@ class FitModelEditor(QWidget):
     def _refresh_rows(self) -> None:
         for row in self._rows.values():
             row.refresh(self._errors, self._at_bounds)
+        if self._substrate is not None:
+            self._substrate.refresh()
         if self._links_signature(self.model) != self._links_shape:
             self._replace_links_card()
 
@@ -194,7 +208,7 @@ class FitModelEditor(QWidget):
 
     @staticmethod
     def _structure(model: FitModel) -> tuple:
-        return tuple((c.family, c.structure, c.interference) for c in model.components)
+        return tuple((c.family, c.structure, c.interference, c.heights) for c in model.components)
 
     @staticmethod
     def _links_signature(model: FitModel) -> tuple:
@@ -338,9 +352,11 @@ class FitModelEditor(QWidget):
         title.setToolTip(tr("αi = αf = 0: spheres at q_z = 0 (effective interface approximation, no substrate needed). "
                             "With αi, αf and λ of the cut: direct and exit-reflected path, with a free effective "
                             "reflection coefficient r = |r|·e^(i·arg r); free |r| and arg r to fit it. "
-                            "Cylinders are not affected."))
+                            "With a known substrate as well: the four-term DWBA. Upright cylinders are not affected."))
         layout.addWidget(title)
         layout.addLayout(self._grid(card, GRAZING, "globals"))
+        self._substrate = SubstrateControls(self, card)
+        layout.addLayout(self._substrate.layout)
         return card
 
     def row(self, path: tuple) -> Optional[ParameterRow]:

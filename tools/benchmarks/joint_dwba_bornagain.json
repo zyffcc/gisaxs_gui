@@ -1,0 +1,87 @@
+{
+ "wavelength_nm": 0.1045,
+ "alpha_i_deg": 0.4,
+ "substrate": "Si (GIMaP's table)",
+ "delta": 3.4628850486392357e-06,
+ "beta": 3.736670125155363e-08,
+ "horizontal_alpha_f_deg": 0.15078448877144895,
+ "vertical_q_y": 0.3,
+ "vertical_alpha_f_deg": [
+  0.02,
+  1.2
+ ],
+ "cylinder_height_nm": 6.0,
+ "average_materials": false,
+ "checks": [
+  {
+   "name": "horizontal: sphere one size",
+   "max_rel": 0.02641799382855603,
+   "median_rel": 0.0010224195498462763,
+   "x_at_max": 1.9011103387343373,
+   "points": 471
+  },
+  {
+   "name": "horizontal: sphere sizes σ_R/R 0.2 (24 radii)",
+   "max_rel": 0.0003946068926607982,
+   "median_rel": 0.00014460670691196498,
+   "x_at_max": 2.499175937805593,
+   "points": 471
+  },
+  {
+   "name": "horizontal: sphere one size, radial paracrystal",
+   "max_rel": 0.026433038686021204,
+   "median_rel": 0.0010518400141812378,
+   "x_at_max": 1.9011103387343373,
+   "points": 471
+  },
+  {
+   "name": "horizontal: upright cylinder one size",
+   "max_rel": 1.122259401254948,
+   "median_rel": 0.0011886363971547187,
+   "x_at_max": 1.755486691054843,
+   "points": 471
+  },
+  {
+   "name": "vertical: sphere one size",
+   "max_rel": 0.0009773241948384248,
+   "median_rel": 0.00019223704061904767,
+   "x_at_max": 1.1980333333333333,
+   "points": 300
+  },
+  {
+   "name": "vertical: sphere one size, one q_∥ = q_y (as fitted)",
+   "max_rel": 0.0009039595277084977,
+   "median_rel": 0.00020155894940510066,
+   "x_at_max": 0.6355666666666666,
+   "points": 300
+  },
+  {
+   "name": "vertical: sphere sizes σ_R/R 0.2 (24 radii)",
+   "max_rel": 0.0001950933302432567,
+   "median_rel": 4.648672024348821e-05,
+   "x_at_max": 0.7221,
+   "points": 300
+  },
+  {
+   "name": "vertical: sphere one size, radial paracrystal",
+   "max_rel": 0.0009753227059621228,
+   "median_rel": 0.0001916469692069267,
+   "x_at_max": 1.1980333333333333,
+   "points": 300
+  },
+  {
+   "name": "vertical: upright cylinder one size",
+   "max_rel": 0.0010952343231208639,
+   "median_rel": 0.00025774722606319855,
+   "x_at_max": 0.5372333333333333,
+   "points": 300
+  },
+  {
+   "name": "vertical: upright cylinder, radii and heights σ 0.15 (64 particles)",
+   "max_rel": 0.00020953150250757613,
+   "median_rel": 0.0001709836024469391,
+   "x_at_max": 0.15176666666666666,
+   "points": 300
+  }
+ ]
+}

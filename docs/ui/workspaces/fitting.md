@@ -163,6 +163,25 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
 - 测试：`tests/test_fit_links.py`、`test_fit_model_library.py`（对照 SasView 公式、Wertheim 解析解和 BornAgain）、
   `test_fit_uncertainty.py`、`test_fit_model_editor_links.py`。
 
+## 已知基底的四项 DWBA、多条曲线联合拟合与 MCMC 检验（2026-11-22）
+
+- 基底层次：`domain/substrates.py`（Si、SiO₂、平板玻璃、Au 的 δ、β，Henke f₁/f₂ 4.9–30 keV；或输入 δ、β），
+  `FitModel.substrate`；`fit_model.grazing` 在有基底且 αi、αf 都给出时返回 `Geometry("dwba", …)`。界面：模型卡片
+  *掠入射下的球* 里的 `single/substrate_row.py`（`fitSubstrate`、`fitLevel` 行，`application/substrate_level.py`）。
+  预测参数的请求与有无基底无关（`tests/test_joint_fit_gui.py` 比较两者）。
+- 联合拟合：`domain/vertical_cut.py`（垂直切线：逐点 α_f 的四项 DWBA，球和竖直圆柱；`FitModel.cut`），
+  `domain/joint_fit.py`（共享 / 各曲线自有的非线性值，每条曲线各自的标度用 `fit_engine._Problem` 求解；联合协方差），
+  `application/joint_fit.py`（曲线类型与几何、每条曲线的模型、记录、`model_for_page`），窗口 `single/joint_fit_dialog.py`
+  与 `views/joint_fit_view.py`，工作区入口 `workspace_joint.py`（拟合 ▸ 多条曲线联合拟合…，`fitting_joint`）。
+  竖直圆柱的高度只在有垂直切线时是参数（`Component.heights`）。分析 ▸ 把两条切线都发送到拟合：
+  `features/analyze/application/both_cuts.py`（`<stem>_fit_input_qz.dat`，几何写在 `# observation:`），由
+  `app/handover.py::_send_both_cuts` 组合。
+- MCMC 检验：`domain/mcmc.py`（仿射不变系综：DE 移动 0.8、伸缩移动 0.2；τ、分段 R̂），`domain/posterior_check.py`
+  （`PredictTarget`：预测参数自己的后验；`FitTarget`：精修或搜索的似然），`application/posterior_check.py`，
+  不确定度与报告窗口的第四个标签页 `single/posterior_check.py` 与 `views/posterior_check_view.py`。只是检验，不改任何值。
+- 验证：`tools/benchmarks/joint_dwba_bornagain.py`（BornAgain 24.1）、`tools/benchmarks/mcmc_check.py`；
+  测试 `tests/test_joint_dwba.py`、`tests/test_mcmc_check.py`、`tests/test_joint_fit_gui.py`。
+
 ## 主单曲线页的 Predict parameters
 
 - **请求**（`application/single_predict.predict_request`）：曲线的点（q 为 nm⁻¹，σ 可缺）、Particles 给出的组成

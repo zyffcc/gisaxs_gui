@@ -50,7 +50,8 @@ class ResolveGeometry:
     anyway: ``force_profile``); the ``.poni`` beside the frame (``geometry_files.SiblingPoni``), when it fits the
     frame; a profile matched by detector name and frame size; else none. A profile picked by hand for frames of
     another size is not used, and the resolution says so (``refused_profile``): a frame of another detector never
-    takes the geometry in use silently.
+    takes the geometry in use silently. A ``.poni`` carries no incident angle: when it is used, the profile matched
+    for the detector, if it has one, still gives α_i (a GISAXS frame is not reduced at α_i = 0 because of it).
 
     The beam centre is the geometry's (the calibrated one) unless the session overrides it, or the user asked to
     trust file headers and the file has a header centre. A session override wins over the header — on frames of
@@ -73,6 +74,10 @@ class ResolveGeometry:
         matched = self.profiles.match(detector_name=detector_name, shape=shape) if self.profiles is not None else None
         beside = self.sibling(path, shape, pixel_size_m, detector_name) if self.sibling is not None and path else None
         if beside is not None and not (matched is not None and _made_from(matched, beside, path)):
+            incidence = matched.geometry.incidence_deg if matched is not None else 0.0
+            if incidence and not beside.geometry.incidence_deg:
+                # A .poni carries no incident angle: the profile of this detector keeps giving it.
+                beside = replace(beside, geometry=beside.geometry.with_incidence(float(incidence)))
             return beside, "file", refused
         if matched is not None:
             return matched, "matched", refused
