@@ -244,7 +244,7 @@ def test_report_names_the_radial_axis_and_every_unassigned_peak():
         assert assignment["q_axis"]["k_sin_alpha_i_inv_A"] == pytest.approx(expected)
         report = "\n".join(assignment_lines({"phase_assignment": assignment}))
         assert basis in report and "transmitted and reflected channels" in report
-        assert "Δd/d = " in report and "Δq = " in report and "1.3200 Å⁻¹ unassigned" in report
+        assert "Δd/d = " in report and "Δq = " in report and "1.32000 Å⁻¹ unassigned" in report
 
 
 def test_xeuss_example_cif_predicts_the_bulk_rock_salt_reference_rings() -> None:

@@ -4,6 +4,8 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- A CBF frame still opens when a neighbouring scan folder disappears during the search for beam energy.
+
 - Reports and result labels round estimates to the decimal place of their two-significant-digit uncertainty. Unit-cell and population tables use compact notation such as `8.9335(22) Å`.
 
 - **GIWAXS unit cells.** Analyze refines lattice parameters and strain from indexed peaks on one frame or across a series, with uncertainties, peak residuals and exports. A resolved fibre axis also permits a directional strain fit. The crystal-orientation report pools unresolved near-random populations with the isotropic fraction.

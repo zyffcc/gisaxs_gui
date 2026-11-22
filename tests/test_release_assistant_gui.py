@@ -230,9 +230,8 @@ def test_the_results_name_a_searched_calibration_with_its_path_and_where_it_lies
     panel.deleteLater()
 
 
-def test_an_analysis_says_under_its_outcome_that_the_geometry_was_searched(zh) -> None:
-    """The Geometry section is the last of a long Results tab (below the peaks, the checks, the fit): one line
-    under the outcome names the file and points there. Information only: no badge, no point to check."""
+def test_giwaxs_results_point_to_the_searched_calibration_after_the_summary(zh) -> None:
+    """The note after the GIWAXS report controls points to the full calibration path under Geometry."""
     _app()
     apply_language(DEFAULT_LANGUAGE)
     analysed = {**_geometry_report(_searched_decision()), "procedure": "giwaxs", "peaks": [], "rings": []}
@@ -242,9 +241,10 @@ def test_an_analysis_says_under_its_outcome_that_the_geometry_was_searched(zh) -
     assert above is not None and above.property("gimapRole") == "muted"
     assert above.text() == ("The geometry is from a calibration the automatic search found "
                             "(Pilatus1M_long_name_00001.poni): see Geometry below.")
-    labels = panel.findChildren(QLabel)
-    assert labels.index(above) == 1  # right under the outcome
-    assert panel.findChild(QLabel, "guidedSearchedCalibration") is not None  # the path and the place: under Geometry
+    detail = panel.findChild(QLabel, "guidedSearchedCalibration")
+    assert detail is not None
+    layout = panel.layout()
+    assert 0 <= layout.indexOf(panel.report_view) < layout.indexOf(above) < layout.indexOf(detail)
     apply_language("zh")
     panel.refresh_language()
     above = panel.findChild(QLabel, "guidedSearchedAbove")

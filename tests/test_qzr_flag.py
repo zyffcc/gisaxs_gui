@@ -151,7 +151,8 @@ def test_bic_gisaxs_report_preserves_weights_and_flags_and_names_their_kind():
     table = fit_solutions_csv(fit)
     assert "rank,model,chi2,bic_weight," in table and "R_posterior_median" in table and "ess," in table
     text = "\n".join(gisaxs_sections(report))
-    assert "| BIC weight |" in text and "Effective sample size 24" in text and "| R_1 | 6 | 5.8 |" in text
+    assert "| BIC weight |" in text and "Effective sample size 24" in text
+    assert "| R_1 | 6 | 5.80 | 5.50–5.90 |" in text
 
     procedure = GisaxsProcedureMixin()
     attention = []
@@ -176,7 +177,7 @@ def test_the_caveat_names_each_flagged_population_with_its_q_z_r() -> None:
 
 
 @pytest.mark.parametrize("known_angles", [False, True])
-def test_automatic_report_records_the_level_and_the_flags_of_the_fit(known_angles) -> None:
+def test_automatic_report_records_the_level_and_the_flags_of_the_fit(known_angles, tmp_path) -> None:
     import tools.gimap_agent as agent
     from src.gimap.app.headless_assistant import open_headless_session
     from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_language
@@ -193,8 +194,17 @@ def test_automatic_report_records_the_level_and_the_flags_of_the_fit(known_angle
 
     session = open_headless_session(DATA / GALAXI["frame"], saved_profiles=False)
     try:
+        geometry = _geometry()
+        if not known_angles:
+            # The unmasked specular spot supplies αi even without an entered angle.
+            beam_column = int(geometry["beam_center_px"][0])
+            mask = np.zeros(geometry["shape"], dtype=bool)
+            mask[:, beam_column - 12:beam_column + 13] = True
+            mask_file = tmp_path / "specular_mask.npy"
+            np.save(mask_file, mask)
+            session.apply_mask(mask_file)
         session.catalog.fitter = fitter = LargeSphere()
-        report = session.run_pipeline(PipelineOptions(technique="gisaxs", geometry=_geometry(),
+        report = session.run_pipeline(PipelineOptions(technique="gisaxs", geometry=geometry,
                                                       incidence_deg=GALAXI["incidence_deg"] if known_angles else None))
     finally:
         session.close()
@@ -214,6 +224,7 @@ def test_automatic_report_records_the_level_and_the_flags_of_the_fit(known_angle
         attention = [item["why"] for item in report["needs_attention"] if item["item"] == "fit"]
         assert all(note in attention for note in notes)
     else:
+        assert report["incidence_measurement"]["decision"] == "unresolved"
         assert cut is None and fitter.calls[-1]["cut_qz"] is None
         assert fit["substrate_level"] == 1 and fit["sphere_model"] == "effective interface (q_z = 0)"
         assert decision["decision"] == "at the first level (q_z = 0)" and decision["why"] == "the angles of the cut are not known"

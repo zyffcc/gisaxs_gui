@@ -2128,7 +2128,7 @@ Let A contain the direct lattice vectors as columns, M = (AᵀA)⁻¹ and hⱼ b
 
 ```text
 q̂ⱼ = 2π √(hⱼᵀ M hⱼ) + Δq₀
-χ² = Σⱼ [(qⱼ − q̂ⱼ)/σⱼ]² .
+χ² = Σⱼ [(qⱼ − q̂ⱼ)/σⱼ]²
 ```
 
 The cubic cell has one independent length, tetragonal and hexagonal/trigonal cells have a and c, and orthorhombic cells have a, b and c. A monoclinic cell also has the unique-axis angle (normally β), and a triclinic cell has all three angles. For rhombohedral CIF indices, the reported conventional hexagonal lengths are |bᵣ−aᵣ| and |aᵣ+bᵣ+cᵣ| and the reported volume is 3Vᵣ. The CIF symmetry defines the constraints; for a typed cell with centring alone the reference metric sets them.

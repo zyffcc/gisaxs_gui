@@ -227,7 +227,9 @@ class CalibrationTests(unittest.TestCase):
         except ImportError:
             self.skipTest("fabio CBF writer is unavailable")
         with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "frame.cbf"
+            detector_folder = Path(folder) / "detector"
+            detector_folder.mkdir()
+            path = detector_folder / "frame.cbf"
             source = np.arange(80, dtype=np.int32).reshape(8, 10)
             CbfImage(data=source).write(str(path))
             detector = load_detector_image(path)
@@ -239,19 +241,31 @@ class CalibrationTests(unittest.TestCase):
         except ImportError:
             self.skipTest("fabio CBF writer is unavailable")
         with tempfile.TemporaryDirectory() as folder:
-            scan_root = Path(folder) / "scan_agbh_00001"
+            scan_root = Path(folder).resolve() / "scan_agbh_00001"
             cbf_folder = scan_root / "embl_2m"
             nxs_folder = scan_root / "lmbd01"
+            vanishing = scan_root / "other_detector"
             cbf_folder.mkdir(parents=True)
             nxs_folder.mkdir()
+            vanishing.mkdir()
             cbf_path = cbf_folder / "scan_agbh_00001_00001.cbf"
             nxs_path = nxs_folder / "scan_agbh_00001_00001.nxs"
             CbfImage(data=np.ones((40, 48), dtype=np.int32)).write(str(cbf_path))
             with h5py.File(nxs_path, "w") as handle:
                 handle.create_dataset("/entry/instrument/detector/collection/beam_energy", data=[12000.0])
-            detector = load_detector_image(cbf_path)
+            # The scan lists the sibling, but it is gone by the time its entries are read.
+            scandir = os.scandir
+
+            def scan(directory):
+                if directory in (vanishing, str(vanishing)):
+                    vanishing.rmdir()
+                return scandir(directory)
+
+            with patch("os.scandir", side_effect=scan):
+                detector = load_detector_image(cbf_path)
+            self.assertFalse(vanishing.exists())
             self.assertAlmostEqual(detector.energy_kev, 12.0)
-            self.assertIn("companion NXS", detector.metadata["energy_source"])
+            self.assertEqual(detector.metadata["energy_source"], f"companion NXS: {nxs_path}")
 
     def test_center_recovery_with_complete_rings(self):
         center = (247.0, 271.0)

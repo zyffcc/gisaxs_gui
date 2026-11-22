@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -56,18 +57,29 @@ def nxs_series_paths(path: str | Path) -> list[Path]:
     return [path.parent / member.name for member in layout.members]  # in the folder as the caller named it
 
 
+def _companion_nxs_paths(scan_root: Path) -> list[Path]:
+    """One detector folder below the scan, skipping folders that disappear or cannot be read."""
+    candidates = []
+    for directory, subdirs, names in os.walk(scan_root, followlinks=True):
+        folder = Path(directory)
+        if folder != scan_root:
+            subdirs.clear()
+            candidates.extend(folder / name for name in names if Path(name).match("*.nxs"))
+    return sorted(candidates)
+
+
 def _read_cbf(path: Path) -> DetectorImage:
     try:
         import fabio
     except ImportError as exc:
         raise ImportError("fabio is required to read CBF calibration images.") from exc
-    cbf = fabio.open(str(path))
-    if cbf.data is None:
-        raise ValueError(f"Empty CBF detector image: {path}")
-    data = np.asarray(cbf.data, dtype=np.float32)
+    with fabio.open(str(path)) as cbf:
+        if cbf.data is None:
+            raise ValueError(f"Empty CBF detector image: {path}")
+        data = np.asarray(cbf.data, dtype=np.float32)
+        metadata = extract_cbf_metadata(cbf.header, data.shape)
+        metadata["stored_dtype"] = str(np.asarray(cbf.data).dtype)  # Pilatus: int32 counts, −1/−2 gap codes
     invalid = ~np.isfinite(data) | (data < 0)
-    metadata = extract_cbf_metadata(cbf.header, data.shape)
-    metadata["stored_dtype"] = str(np.asarray(cbf.data).dtype)  # Pilatus: int32 counts, −1/−2 gap codes
     # Beam_xy is (column, row) in pixels of the stored image, which is also
     # the canonical frame here (row 0 at the top, origin at the pixel corner,
     # as pyFAI reads it).  Headers are often stale; Analyze uses this centre
@@ -78,13 +90,10 @@ def _read_cbf(path: Path) -> DetectorImage:
     # energy.  A simultaneous detector normally writes an NXS file under a
     # sibling directory of the same scan; read only its lightweight metadata.
     if metadata.get("energy_kev") is None:
-        scan_root = path.parent.parent
-        companion_paths = sorted(
-            candidate for candidate in scan_root.glob("*/*.nxs")
-            if candidate.is_file()
-        )
-        for companion in companion_paths:
+        for companion in _companion_nxs_paths(path.parent.parent):
             try:
+                if not companion.is_file():
+                    continue
                 with open_nexus(companion) as handle:
                     companion_metadata = extract_nxs_metadata(handle)
                 if companion_metadata.get("energy_kev"):
