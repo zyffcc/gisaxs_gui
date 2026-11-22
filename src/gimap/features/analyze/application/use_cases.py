@@ -10,6 +10,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 import numpy as np
 
 from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile
+from src.gimap.shared.geometry.instrument_profile import OTHER_SCALE_SETUP
 from src.gimap.shared.geometry.detector_tilt import DetectorTilt
 from src.gimap.shared.geometry.conventions import (
     canonical_from_fitting_center,
@@ -27,7 +28,6 @@ from ..domain import (
     SymmetryCenter,
     cake_map,
     curve_source_mask,
-    has_intensity_corrections,
     symmetric_center_x,
     giwaxs_maps,
     gisaxs_maps,
@@ -52,7 +52,7 @@ from .export_record import (  # noqa: F401 - the record of an export; these name
     fit_input_observation,
 )
 from .flat_detector import detector_rotation_message, flat_detector_error, flat_detector_message
-from .frame_preprocessing import FramePreprocessingMixin, FrameSum, floating, photon_counts
+from .frame_preprocessing import FramePreprocessingMixin, FrameSum, floating
 from .geometry_files import SiblingPoni
 from .geometry_resolution import ResolveGeometry, center_not_used_message, refused_profile_message
 from .nxcansas_export import nxcansas_name, sas_curves
@@ -207,6 +207,11 @@ class AnalyzeFrame(FramePreprocessingMixin):
             force_profile=shape in {tuple(int(v) for v in item) for item in request.forced_shapes},
         )
         geometry = resolution.geometry
+        calibration = request.corrections.normalisation.standard_calibration
+        if calibration is not None:
+            if resolution.profile is None:
+                raise ValueError(OTHER_SCALE_SETUP)
+            resolution.profile.check_scale_setup(calibration, geometry, shape)
         refraction = getattr(request.corrections, "critical_angle_deg", None)
         if geometry is not None and refraction:
             geometry = geometry.with_critical_angle(float(refraction))
@@ -218,16 +223,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 common["path"], (int(common["frame_index"]), tuple(common["summed_frames"])), raw_data, raw_valid,
                 geometry, request.incidence_deg)
         kind = None if geometry is None else (request.mode if request.mode != AUTO else detected)
-        mirror_x = geometry.beam_center_x_px if geometry is not None and kind == GIWAXS else None
-        common.update(self._preprocess(raw_data, raw_valid, request.corrections, common["metadata"], mirror_x))
-        # Errors from counting statistics only for photon counts as measured (not dark- or background-
-        # subtracted, nothing filled from the mirror side); otherwise from the scatter of the pixels.
-        counting = photon_counts(
-            common["metadata"], request.corrections, mirror_filled=common.get("filled_pixels") is not None
-        )
-        self._flat_scale(common, request.corrections, counting)  # counts divided by a flat field: their variance too
-        if kind == GIWAXS and geometry is not None and has_intensity_corrections(request.corrections):
-            self._correct_intensity(common, raw_data, raw_valid, geometry, request.corrections, counting)
+        counting = self.correct_pixels(common, raw_data, raw_valid, request.corrections, geometry, kind)
         if not request.corrections.normalisation.is_identity:  # one constant of the frame, last
             self._normalise(common, raw_data, raw_valid, request.corrections, counting, Path(request.path).name)
         data, valid = common["data"], common["valid"]
@@ -421,7 +417,9 @@ class ExportAnalysis:
     def cake(self, analysis: FrameAnalysis, cake: CakeMap, path: Path) -> Path:
         """The unwrapped view as a CSV table: q in the first row, χ in the first column."""
         q_axis, chi_axis = cake.axes()
-        metadata = {**analysis_metadata(analysis), "title": "GIMaP Analyze cake: mean intensity on a chi-q grid, blank = no pixel"}
+        # The cake is calculated from detector pixels, before a series scales its curves and q map to a peak.
+        metadata = {**analysis_metadata(replace(analysis, reference_peak_scale=None)),
+                    "title": "GIMaP Analyze cake: mean intensity on a chi-q grid, blank = no pixel"}
         return self.writer.write_map(cake.image, q_axis, chi_axis, Path(path), ("q (Å⁻¹)", "χ (°)"), metadata)
 
     def fit_input(self, analysis: FrameAnalysis, destination: Path, halves: Optional[str] = None) -> Path:

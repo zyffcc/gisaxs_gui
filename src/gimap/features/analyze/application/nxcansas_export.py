@@ -4,8 +4,8 @@ One file per frame, ``<stem>_nxcansas.h5``, with one SASentry per curve. Only cu
 NXcanSAS is a momentum transfer (1/angstrom, 1/nm or 1/m), so I(χ) and a curve shown against 2θ are left out —
 the CSV files keep them. Each entry holds:
 
-* Q in 1/angstrom as Analyze computed it (no conversion), I in ``arbitrary`` units (mean detector counts per
-  pixel of the bin), Idev = the σ of the point (the standard error of that mean, ``error_model`` of the record);
+* Q in 1/angstrom as Analyze computed it, I in 1/cm for absolute intensities, in arbitrary units otherwise.
+  Idev is the statistical standard error of the point (``error_model`` of the record).
 * the title says the frame, the curve and which q its Q is: a horizontal cut keeps its signed q_y (both halves
   of the cut), a vertical cut has q_z, a box I(q∥) q_par, the others |q|;
 * the wavelength, the sample–detector distance, the pixel size and, for grazing incidence, αi (as the sample's
@@ -73,6 +73,13 @@ def sas_curves(curves: Sequence[Curve], metadata: Mapping[str, Any], *, run: str
     """The curves against q of ``curves`` as NXcanSAS curves of the frame ``run`` (its export stem), each with the
     frame's record ``metadata`` (``analysis_metadata``); ``written_by``: Analyze or the command line."""
     known = instrument(metadata)
+    calibrated = bool((metadata.get("normalisation") or {}).get("standard_calibration"))
+    relative = metadata.get("output_intensity_unit") == "relative"
+    unit = "1/cm" if calibrated and not relative else ARBITRARY
+    intensity_description = ("absolute differential scattering cross section (1/cm)" if calibrated
+                             else "the mean detector counts per pixel of the point (arbitrary units)")
+    if relative:
+        intensity_description = "relative intensity after reference-peak scaling"
     error = ERRORS.get(str(metadata.get("error_model") or ""), "as the record's error_model says")
     out = []
     for curve in curves:
@@ -83,12 +90,12 @@ def sas_curves(curves: Sequence[Curve], metadata: Mapping[str, Any], *, run: str
                                              "region": curve.region}}
         out.append(SasCurve(
             title=export_text(f"{run}: {curve.title}; Q is {axis}"),
-            q=curve.x, intensity=curve.intensity, sigma=curve.sigma, q_unit=PER_ANGSTROM, intensity_unit=ARBITRARY,
+            q=curve.x, intensity=curve.intensity, sigma=curve.sigma, q_unit=PER_ANGSTROM, intensity_unit=unit,
             run=run, sample=run, instrument=known,
             process="GIMaP Analyze" if written_by == "Analyze" else f"GIMaP Analyze ({written_by})",
             description=export_text(
-                f"Reduced by {RELEASE}: {curve.title}. Q: {axis}, in 1/angstrom. I: the mean detector counts per "
-                f"pixel of the point (arbitrary units). Idev: the standard error of that mean ({error}). The record "
+                f"Reduced by {RELEASE}: {curve.title}. Q: {axis}, in 1/angstrom. I: {intensity_description}. "
+                f"Idev: the standard error of that mean ({error}). The record "
                 "of the frame (settings, geometry, corrections, inputs with SHA-256) is the NXnote gimap_record."),
             record=json.dumps(record, ensure_ascii=True, sort_keys=True, default=str),
             date=str(metadata.get("created") or ""),

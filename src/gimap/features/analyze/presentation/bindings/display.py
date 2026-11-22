@@ -303,7 +303,7 @@ class DisplayMixin:
         top.set_title(TOP_TITLE_GIWAXS)
         top.title_label.setToolTip(tr(TOP_TIP_GIWAXS))
         x_label = family[0][1].x_label if family else "q (Å⁻¹)"
-        top.set_labels(x_label, "I (counts/pixel)")
+        top.set_labels(x_label, family[0][1].y_label if family else "")
         top.set_curves(
             [("q box" if curve.key == "box_q" else name, curve.x, curve.intensity) for name, curve, _color in family],
             [color or BOX_COLOR for _name, _curve, color in family],
@@ -349,7 +349,7 @@ class DisplayMixin:
                 return
             bottom.set_title("I(χ) of the regions")
             labels = {curve.x_label for _name, curve, _color in shown}
-            bottom.set_labels(labels.pop() if len(labels) == 1 else "χ or |χ| (°)", "I (counts/pixel)")
+            bottom.set_labels(labels.pop() if len(labels) == 1 else "χ or |χ| (°)", shown[0][1].y_label)
             bottom.set_curves([(name, curve.x, curve.intensity) for name, curve, _color in shown],
                               [color for _name, _curve, color in shown])
             self._plot_keys["bottom"] = [curve.key for _name, curve, _color in shown]

@@ -209,7 +209,7 @@ The table lists the symbols that occur in more than one chapter. Every other sym
 - **Fitting works in nm⁻¹ internally.** A curve read in Å⁻¹ is multiplied by 10 (1 Å⁻¹ = 10 nm⁻¹; 1 nm = 10 Å). Sizes and distances of the models are in nm. The model fit of the GISAXS automatic analysis (Predict parameters) converts in the same way (section 8.5).
 - **Angles** are in degrees in the windows and the records. Formulas use radians wherever an angle enters a trigonometric function or is a width in radians (for example β in (7.30)).
 - **Detector lengths.** Pixel coordinates are in px. L, X, Y and the pixel sizes are in metres in the formulas; the windows take L in mm and pixel sizes in µm.
-- **Intensities** are mean counts per pixel (`I (counts/pixel)`), not absolute intensities (section 2.5).
+- **Intensities** default to mean counts per pixel. Calibration against a secondary standard gives a differential scattering cross section per unit volume in cm⁻¹ (section 4.12).
 
 ### 0.3 Conventions of this reference
 
@@ -443,7 +443,7 @@ The following effects are not in the q map, nor anywhere else in Analyze:
 - **Sample azimuth and roll.** The sample is assumed to be tilted only about the horizontal axis perpendicular to the beam. A rotation about the surface normal or about the beam is not described.
 - **Parallax and sensor thickness.** A pixel is its centre; there is no depth of interaction and no pixel splitting.
 - **Flat field and efficiency.** A flat field (detector response) divides the frames only when one is chosen (section 4.10; off by default). No detector-efficiency, air or window absorption correction is applied.
-- **Absolute intensity.** Intensities are mean counts per pixel. They are not scaled by a monitor, the transmission, the exposure time or the sample volume. They are divided by a geometric factor only when the GIWAXS intensity corrections are on (chapter 5), and by a flat field only when one is chosen (section 4.10); a series can be normalised to a reference peak (section 6.10).
+- **Absolute intensity.** Section 4.12 describes optional normalisation by exposure time, monitor, transmission and thickness, and calibration in cm⁻¹ for a given set-up. Flat-field and geometric corrections act before this step (section 4.10 and chapter 5). Normalising a series to a reference peak gives a relative intensity (section 6.10).
 - **Beam properties.** Divergence, energy bandwidth and footprint are not modelled.
 
 The flat, perpendicular detector is also assumed by the straight horizon (section 2.3), by mirror filling (section 4.8) and by the solid-angle and polarisation factors (chapter 5).
@@ -956,16 +956,15 @@ I_norm,p = c · I′_p,      c = A / (t · M · T · d)                         
 | `t` | exposure time (s) | the file header (`exposure_time_s` of the reader: CBF `Exposure_time`, EDF `ExposureTime` / `count_time`, NeXus `count_time` / `frame_time`) or typed |
 | `M` | monitor (ion chamber, diode, `Flux` of a Pilatus CBF, ring current) | a header value chosen by its name (EDF keywords such as `Monitor`, `I0`, `Intensity0`; NeXus `NXmonitor` `data` / `integral` or `control/integral` of the frame) or typed |
 | `T` | transmission of the sample, `0 < T ≤ 1` | typed |
-| `d` | thickness (mm) | typed |
-| `A` | absolute-scale factor, e.g. from glassy carbon or water measured in the same set-up | typed |
+| `d` | thickness entered in mm, converted to cm for a standard-derived scale | typed |
+| `A` | absolute-scale factor | typed or fitted to a standard measured in the same set-up |
 
 - A term that is off is 1. The section lists, for the frame shown, every header value it can take (exposure time
   and monitors); a frame whose header lacks the value chosen is not analysed and the reason is said (nothing is
   guessed). For a sum of frames (section 4.3) `t` and `M` are the sums over the frames summed.
 - **What it changes.** Only the scale: q, the shape of every curve, the cuts and the peak positions do not change.
-  The unit of the intensity becomes `counts/(pixel·s·monitor·mm) × A` with the terms in use; it is the y label of
-  every curve and the `intensity_unit` of the fit input.
-- **Uncertainty.** `c` is exact (its terms carry no error here), so for every point `σ_norm = c · σ`. For photon
+  The standard-derived scale gives cm⁻¹. Manual normalisation gives `counts/(pixel·s·monitor·mm) × A` with the terms in use.
+- **Uncertainty.** Each point carries the statistical uncertainty `σ_norm = c · σ` conditional on the scale. For photon
   counts the Poisson variance is carried through the factor, as in (5.9) with `1/F_p` replaced by `c/F_p`:
 
 ```text
@@ -979,11 +978,33 @@ Var(I_norm,p) = c² · Var(I′_p) = c · I_norm,p / F_p                        
   value and source (`typed`, `header (exposure_time_s)`, `header (<name>)`); `header_values` lists what the header
   offered; `corrections.normalisation` keeps the settings. Each curve file carries a header line
   `intensity: <unit>; normalised I = A*I/(t*M*T*d), factor c (…terms…); sigma scaled by the same factor`.
-- **Limits.** The background and dark frame are subtracted before, in the units of the frame, with their own scales:
-  a background measured with another exposure needs `s` set to the ratio. `T` and `d` are typed, not measured
-  (no transmission from a beam-stop diode); `A` is the user's calibration, not computed here.
+- **Background.** GIMaP subtracts the background and dark frame in detector units before normalisation. Scale a background measured at a different exposure or transmission accordingly. Supply the measured transmission and thickness for each sample.
 
-Implementation: `src/gimap/features/analyze/domain/normalisation.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`, `src/gimap/features/analyze/application/export_record.py`
+#### Absolute scale from a secondary standard
+
+Measure the standard in transmission with the same beam, detector geometry and corrections used for the sample. Use a background-subtracted radial mean. For water, subtract the empty cell and select the flat small-angle region. The forward cross section of liquid water at 20 °C is 0.01632 cm⁻¹. It varies with temperature as the product of squared scattering length density, absolute temperature and isothermal compressibility. GIMaP linearly interpolates the Graz water table at 1 °C intervals from 0 to 100 °C at ambient pressure. The table gives a nominal value without an uncertainty. [Orthaber, Bergmann & Glatter (2000)](https://doi.org/10.1107/S0021889899015216). [Graz temperature table reproduced in BioXTAS RAW](https://sources.debian.org/src/bioxtasraw/2.3.0-2.1/bioxtasraw/RAWSettings.py/).
+
+For glassy carbon, supply the reference for the material measured. Write independent, one-standard-deviation point uncertainties in its third column. Enter any common fractional scale uncertainty separately. For example, the published SRM 3600 calibration gives a 2.58% standard uncertainty (6.25% expanded uncertainty, coverage factor 2.423). When treating this as a common scale uncertainty, enter 2.58% once. Put any additional independent point uncertainties in the third column, or use zero if none are supplied. [Allen et al. (2017), §3.1.1](https://journals.iucr.org/j/issues/2017/02/00/vg5064/index.html).
+
+Let `x_i = I_i/(t M T d_cm)` be the corrected standard intensity and `u_i` its statistical uncertainty after the same division. Within the chosen overlap in q (Å⁻¹), the reference `R_i` is the water level or the linear interpolant of file values `r_j`. With interpolation coefficients `L_ij` and independent file uncertainties `s_j`,
+
+```text
+R_i = Σ_j L_ij r_j,        v_i² = Σ_j L_ij² s_j²
+w_i = 1/(u_i² + b² v_i²),  χ²(b) = Σ_i w_i (x_i − b R_i)²,     A = 1/b       (4.18)
+```
+
+The iterative least-squares fit estimates one positive slope through the origin. The weights in (4.18) use the diagonal elements of the covariance matrix. The plotted residual is `A x_i − R_i` in cm⁻¹. Water has `v_i = 0`. Bins with zero combined variance are omitted when other bins have positive variance. If no point uncertainties are available, all weights are one. At least two distinct measured q values are required.
+
+For the first-order uncertainty, define `z_i = R_i + b v_i² w_i (x_i − b R_i)`, `D = Σ_i w_i z_i²`, and `h_i = w_i z_i/D`. For `n` fitted bins and common fractional standard uncertainty `f`, the calculation is
+
+```text
+V_b = Σ_i (h_i u_i)² + b² Σ_j (s_j Σ_i h_i L_ij)² + max(0, χ²/(n−1) − 1)/D
+σ_A² = V_b/b⁴ + (A f)²                                                       (4.19)
+```
+
+Accumulating the interpolated contributions at each original reference point accounts for shared reference values. Excess residual scatter increases the uncertainty. In the equal-weight case with no point uncertainties, `V_b = Σ_i (x_i − b R_i)²/[(n−1)D]`. Uncertainties in the entered normalisation terms are outside the fit. The JSON record identifies the standard and measurement, fit range, date and `A ± σ_A`. This calibration uncertainty is shared by all points and frames using that scale. Its contribution to a sample intensity is `|I_norm| σ_A/A`.
+
+Implementation: `src/gimap/features/analyze/domain/absolute_scale.py`, `src/gimap/features/analyze/domain/normalisation.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`, `src/gimap/features/analyze/application/export_record.py`.
 
 ## 5. Intensity corrections for GIWAXS
 
@@ -4636,7 +4657,7 @@ An NXcanSAS export (`<stem>_nxcansas.h5`, NeXus definition NXcanSAS 1.1; Batch E
 line `curves_nxcansas.h5`) carries the same record, with the key `curve` (key, title, x label and region of that
 curve) added, as the JSON `data` of an NXnote `gimap_record` in each entry's SASprocess. Each SASentry holds one
 curve against q: `Q` in 1/angstrom exactly as reduced (a horizontal cut keeps its signed q_y; the entry's `title`
-says which q), `I` in `arbitrary` units, `Idev` = σ of this section's error model, and `mask` (1 where Q or I is not
+says which q), `I` in `1/cm` for absolute intensity and `arbitrary` otherwise, `Idev` = statistical σ in the same units, and `mask` (1 where Q or I is not
 finite); SASinstrument holds the wavelength (`incident_wavelength`, angstrom), the sample–detector distance (`SDD`,
 m) and the pixel size, and SASsample `pitch` (degree) is αi, the rotation about the horizontal axis normal to the
 beam in NeXus axes. Curves against χ or 2θ are not written there: Q of NXcanSAS is a momentum transfer.
@@ -4657,7 +4678,7 @@ UTF-8 without a byte-order mark; GIMaP's own symbols are written in ASCII (`1/A`
 - Fit input `<stem>_fit_input.dat` (q in Å⁻¹, the curve Fitting reads): the title
   `# GIMaP Analyze fit input (q in 1/A)`, the source, frame and curve lines, `# observation:` (JSON) and
   `# columns:`. The observation says how the points were measured: `source` (`native_detector_columns` for
-  GISAXS, `radial_bins` for GIWAXS), `file_format`, `intensity_unit` (`counts_per_pixel`), `counting_model_valid`
+  GISAXS, `radial_bins` for GIWAXS), `file_format`, `intensity_unit` (`counts_per_pixel` by default, cm⁻¹ for absolute intensity), `counting_model_valid`
   (true only for photon counts in the sense of section 6.4, without GIWAXS intensity corrections and without a
   reference-peak normalisation; whether σ may be taken from Poisson statistics), `threshold_enabled` (a value range
   was set), `gap_guard_px`, `summed_frames`, for GISAXS the halves a fit should take when they were chosen, and for a
@@ -4837,7 +4858,7 @@ This chapter collects the limits stated in chapters 1 to 14, so that they can be
 
 - **Refraction and the DWBA.** Every q of Analyze, Fitting and 1D Predict is the kinematic vacuum value unless Analyze is given the film's critical angle (q_z of one film, section 2.6), and no reflected-wave terms of the distorted-wave Born approximation are computed (sections 2.5, 8.6, 9.2), except
 Fitting's optional two-path sphere with a free effective reflection coefficient (section 9.10), the four-term DWBA on a known bare substrate (section 9.17) and the vertical cut of a fit of several curves (section 9.18); a layered substrate, an oxide or a film on the wafer and roughness are not modelled. The Yoneda band is located empirically, without any critical angle (sections 6.7, 8.1). The film absorption correction and the q_z of the XRR extractor also ignore refraction (sections 5.4, 13.1). The only refraction-corrected quantity is the Sputter island height H(t), which uses the refracted wavevector transfer for the positions of fringe minima, not a DWBA intensity (section 12.12). The GIWAXS report says that q is kinematic in its *Decisions*, with the q_z shift of up to about k sin α_i that refraction can cause near or below the film's critical angle at the frame's α_i (section 7.9); the GISAXS report says so too, with the Yoneda band's q_z shifted most (section 8.6).
-- **Absolute intensity.** Intensities are mean counts per pixel. No monitor, transmission, exposure-time, sample-volume, detector-efficiency, air- or window-absorption correction is applied (section 2.5). Only an optional flat field (section 4.10) and the optional GIWAXS geometric factors (chapter 5) divide the intensities, and a series can be normalised to a reference peak (section 6.10). The scales of the Fitting models are therefore relative. Every family's form factor is normalised to P(0) = 1, so Int is not number density × ⟨V²⟩ × Δρ² (section 9.4).
+- **Absolute intensity.** A secondary standard sets the absolute scale for its measurement conditions (section 4.12). In grazing incidence, footprint, illuminated volume and interface effects require a sample-specific treatment. The scale parameter Int in Fitting is an empirical amplitude because the form factors use P(0) = 1 (section 9.4).
 - **Lorentz and Ewald-sphere corrections.** I(χ) and the ring intensities are intensities on the detector. No Lorentz factor is applied, and the missing wedge near χ = 0 is not reconstructed from data; only the pole-figure fit fills it, with its model (sections 2.2, 7.7, 7.11).
 - **Texture.** The Hermans factor assumes a fibre texture about the surface normal; the missing wedge enters only through the coverage C_w and the isotropic reference f_iso, and the background under a ring is one χ-independent constant (section 7.7). No exit-angle correction (film absorption, transmission function, shadowing) is applied to I(χ), and the sin χ weight makes the bins next to the sample horizon count most: f can depend on them by many σ_f, which the report states but does not correct (section 7.7). The in-plane and out-of-plane comparison uses two sectors of 20°; it is not a pole figure (section 7.6).
 - **Phases.** No phase is assigned. Lamellar and hexagonal series are reported as hints (section 7.4).
@@ -4854,6 +4875,8 @@ Fitting's optional two-path sphere with a free effective reflection coefficient 
 - **Instrumental broadening.** Run Automatic Analysis subtracts no instrumental width, so every automatic Scherrer size is a lower bound. Footprint, divergence, distance, pixel size, binning, strain and paracrystalline disorder all broaden a peak and none is subtracted (section 7.8).
 
 ### 15.3 Statistics and uncertainties
+
+The calibration record carries the standard-derived scale uncertainty. Curve files give the statistical error of each point conditional on that scale. Comparisons of data on the same scale share the calibration error σ_A of equation (4.19) (section 4.12).
 
 - **Choice of the error model.** Poisson errors (scaled when a flat field or the GIWAXS intensity corrections are on) are used only for frames stored as integers, with no background subtracted and no mirror filling. The choice follows the stored type, not the physical meaning of the values (sections 4.1, 6.4).
 - **Independence.** Pixels are taken as independent: charge sharing and correlated noise are not modelled, and no covariance between the points of a curve is computed (section 6.4).

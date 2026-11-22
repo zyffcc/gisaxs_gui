@@ -11,7 +11,10 @@ its own centre.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any, Optional
+
+from src.gimap.shared.geometry.instrument_profile import OTHER_SCALE_SETUP
 
 from ..application import (
     DetectorGeometry,
@@ -20,6 +23,7 @@ from ..application import (
     geometry_from_fitting_settings,
     refine_center_by_symmetry,
 )
+from ..application.absolute_scale import CalibrateStandard
 
 SECTION = "analyze"
 HEADER_CENTER_KEY = "use_header_beam_center"
@@ -34,6 +38,21 @@ FRAME_SHOWN = object()
 
 class GeometryModelMixin:
     """Needs ``state``, ``settings``, ``_read_setting``, ``_save_profile`` and ``_profiles``."""
+
+    def standard_calibrator(self) -> CalibrateStandard:
+        """Freeze the detector set-up before the standard is read in a worker."""
+        profile = self.absolute_scale_profile()
+        state = self.state
+        analysis = state.analysis
+        if analysis is not None and analysis.geometry is not None:
+            geometry, shape, mode = analysis.geometry, analysis.shape, analysis.kind
+        else:
+            geometry, shape, mode = profile.geometry, profile.detector_shape, state.mode
+            if state.incidence_deg is not None:
+                geometry = geometry.with_incidence(state.incidence_deg)
+            if state.beam_center is not None and (state.beam_center_shape is None or state.beam_center_shape == shape):
+                geometry = geometry.with_beam_center(*state.beam_center)
+        return CalibrateStandard(self._frames, profile, geometry, shape, state.corrections, mode, state.giwaxs.bins)
 
     # -- beam centre -------------------------------------------------------------------
 
@@ -145,6 +164,62 @@ class GeometryModelMixin:
         self._frame_halves = None
 
     # -- profiles ----------------------------------------------------------------------
+
+    def set_profile(self, name: Optional[str]) -> None:
+        if (name or None) != self.state.profile_name:
+            self.state.forced_shapes = ()  # “Use Anyway” applied to the previous profile
+            norm = self.state.corrections.normalisation
+            if name and norm.standard_calibration and name != norm.standard_calibration["instrument_profile"]:
+                self.set_normalisation(replace(norm, absolute_factor=None, standard_calibration=None))
+        self.state.profile_name = name or None
+
+    def absolute_scale_profile(self) -> InstrumentProfile:
+        """The selected or resolved set-up, including a geometry read beside the frame."""
+        analysis = self.state.analysis
+        resolved = analysis.resolution.profile if analysis is not None else None
+        missing = "Choose an instrument profile or open a frame with geometry first."
+        if self._profiles is None:
+            raise ValueError(missing)
+        if self.state.profile_name:
+            chosen = self._profiles.find(self.state.profile_name)
+            if chosen is None or (analysis and (not resolved or resolved.name != chosen.name
+                                                or resolved.geometry != chosen.geometry)):
+                raise ValueError(missing)
+            return chosen
+        if resolved is None:
+            raise ValueError(missing)
+        stored = self._profiles.find(resolved.name)
+        if stored is None:
+            return resolved
+        if stored.geometry == resolved.geometry and stored.source == resolved.source:
+            return stored
+        if analysis.resolution.how != "file":
+            raise ValueError(missing)
+        # Distinct sibling .poni files may have the same basename. Save the new geometry under a free name.
+        base = f"{resolved.name} ({analysis.path.parent})"
+        name = base
+        number = 2
+        while self._profiles.find(name) is not None:
+            name = f"{base} {number}"
+            number += 1
+        return replace(resolved, name=name)
+
+    def apply_standard_calibration(self, profile, record, thickness_mm, *, save):
+        """Save the fitted record before changing the session. Sample exposure, monitor and T stay sample-specific."""
+        current = self.absolute_scale_profile()
+        if current != profile:
+            raise ValueError(OTHER_SCALE_SETUP)
+        analysis = self.state.analysis
+        geometry = analysis.geometry if analysis is not None else profile.geometry
+        shape = analysis.shape if analysis is not None else profile.detector_shape
+        profile.check_scale_setup(record, geometry, shape)
+        norm = replace(self.state.corrections.normalisation, thickness_mm=thickness_mm,
+                       absolute_factor=record["factor"], standard_calibration=record)
+        if save:
+            self._profiles.save(replace(profile, standard_calibration=record))
+            if analysis is not None and analysis.resolution.how == "file":
+                self.set_profile(profile.name)  # the sibling geometry is now a named, saved instrument
+        self.set_normalisation(norm)
 
     def profile_names(self) -> list[str]:
         if self._profiles is None:

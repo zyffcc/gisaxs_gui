@@ -20,7 +20,7 @@ from ..views.analyze_page_view import FILE_FILTER
 HEADER_ITEM = "header:"
 """Data of a monitor-combo item that takes the header value after the colon."""
 SYMBOLS = {"exposure_time_s": ("t", " s"), "monitor": ("M", ""), "transmission": ("T", ""),
-           "thickness_mm": ("d", " mm"), "absolute_factor": ("A", "")}
+           "thickness_mm": ("d", " mm"), "thickness_cm": ("d", " cm"), "absolute_factor": ("A", "")}
 
 
 def _number(text: str) -> Optional[float]:
@@ -33,6 +33,34 @@ def _number(text: str) -> Optional[float]:
 
 class NormalisationMixin:
     """Needs the widgets of ``NormalisationView``, ``view_model``, ``_options_changed``, ``_status``."""
+
+    def absolute_scale_dialog(self) -> None:
+        from ..absolute_scale_dialog import AbsoluteScaleDialog
+
+        vm = self.view_model
+        try:
+            profile = vm.absolute_scale_profile()
+            preview = vm.standard_calibrator()
+        except ValueError as exc:
+            self._status(message_text(exc), "warning")
+            return
+
+        def apply(record, thickness_mm, *, save):
+            vm.apply_standard_calibration(profile, record, thickness_mm, save=save)
+            self._refresh_profiles()
+            self._sync_normalisation_widgets()
+            self._options_changed()
+            self._status(trf("Applied the absolute scale from profile “{name}”.", name=profile.name), "ok")
+
+        saved = profile.standard_calibration
+        dialog = AbsoluteScaleDialog(
+            preview, lambda result, thickness: apply(result.record, thickness, save=True), self,
+            initial_path=str(vm.current_path or ""), initial_frame=vm.state.frame_index, profile_name=profile.name,
+            sample_thickness_mm=vm.state.corrections.normalisation.thickness_mm, saved_record=saved,
+            use_saved=lambda thickness: apply(saved, thickness, save=False),
+        )
+        dialog.exec_()
+        dialog.deleteLater()
 
     def _connect_normalisation(self) -> None:
         self.dark_button.clicked.connect(self._choose_dark)
@@ -97,12 +125,15 @@ class NormalisationMixin:
             absolute = _number(self.absolute_edit.text())
             if absolute is None:
                 raise ValueError("{what} must be a positive number.".format(what="The absolute-scale factor"))
+        calibration = self._displayed_calibration
+        if calibration is not None and absolute != calibration["factor"]:
+            calibration = None
         return Normalisation(
             exposure=exposure, exposure_s=self.exposure_spin.value() if exposure == "value" else None,
             monitor=monitor, monitor_key=key, monitor_value=value,
             transmission=self.transmission_spin.value() if self.transmission_check.isChecked() else None,
             thickness_mm=self.thickness_spin.value() if self.thickness_check.isChecked() else None,
-            absolute_factor=absolute,
+            absolute_factor=absolute, standard_calibration=calibration,
         )
 
     def _normalisation_changed(self, *_args) -> None:
@@ -110,10 +141,14 @@ class NormalisationMixin:
         try:
             normalisation = self._read_normalisation()
         except ValueError as exc:
+            if self.view_model.state.corrections.normalisation.standard_calibration and not self.thickness_check.isChecked():
+                self._sync_normalisation_widgets()
             self._status(trf("Normalisation not changed: {error}", error=message_text(exc)), "error")
             return
         if normalisation == self.view_model.state.corrections.normalisation:
             return
+        if self.absolute_check.isChecked():
+            self._displayed_calibration = normalisation.standard_calibration
         self.view_model.set_normalisation(normalisation)
         self._options_changed()
 
@@ -165,7 +200,7 @@ class NormalisationMixin:
         terms = []
         for name, value, source in use.terms:
             symbol, unit = SYMBOLS.get(name, (name, ""))
-            where = tr("file header") if source.startswith("header") else tr("typed")
+            where = tr("file header") if source.startswith("header") else tr(source)
             terms.append(f"{symbol} = {value:.6g}{unit} ({where})")
         self.normalisation_status.setText(trf("Multiplied by {factor}: {terms}; intensity in {unit}",
                                               factor=f"{use.factor:.6g}", terms=", ".join(terms), unit=use.unit))
@@ -175,6 +210,9 @@ class NormalisationMixin:
         """The dark frame, the normalisation and the Lorentz check as the state says (a settings file, Undo)."""
         corrections = self.view_model.state.corrections
         norm = corrections.normalisation
+        if getattr(self, "_displayed_calibration", None) is not None and norm.absolute_factor is None:
+            self.absolute_edit.setText("1")
+        self._displayed_calibration = norm.standard_calibration
         for spin, value in ((self.dark_scale_spin, corrections.dark_scale), (self.dark_frame_spin, corrections.dark_frame),
                             (self.exposure_spin, norm.exposure_s), (self.transmission_spin, norm.transmission),
                             (self.thickness_spin, norm.thickness_mm)):

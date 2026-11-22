@@ -74,6 +74,8 @@ ANALYZE_MENU = (
     Entry("analyze_stop_automatic", "S&top Automatic Analysis",
           "End the automatic analysis before its next step; what it found so far is kept"),
     Entry("analyze_repeat", "&Repeat Analysis", "Analyse the frame shown again with the set-up as it is", ("F5",)),
+    Entry("analyze_absolute_scale", "Absol&ute Scale from a Standard…",
+          "Calibrate intensity against water or a reference curve measured in this set-up"),
     SEPARATOR,
     Entry("analyze_export", "&Export Curves…",
           "Write CSV curves and a JSON record next to the data (gimap_analysis/) — Ctrl+E", ("Ctrl+E",)),

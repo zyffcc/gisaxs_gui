@@ -21,8 +21,10 @@ from src.gimap.shared.detector_io.output_values import floating as _floating_dty
 from src.gimap.shared.geometry import DetectorGeometry
 
 from ..domain import (
+    GIWAXS,
     Corrections,
     apply_flat_field,
+    has_intensity_corrections,
     intensity_factor,
     apply_valid_range,
     find_bad_pixels,
@@ -225,6 +227,16 @@ class FramePreprocessingMixin(FlatFieldMixin):
             cached = intensity_factor(shape, geometry, **options)
             self._intensity, self._intensity_key = cached, key
         return cached
+
+    def correct_pixels(self, common: dict, raw_data, raw_valid, corrections, geometry, kind) -> bool:
+        """Apply the pixel-dependent corrections shared by sample and standard. Return the counting model."""
+        mirror_x = geometry.beam_center_x_px if geometry is not None and kind == GIWAXS else None
+        common.update(self._preprocess(raw_data, raw_valid, corrections, common["metadata"], mirror_x))
+        counting = photon_counts(common["metadata"], corrections, mirror_filled=common.get("filled_pixels") is not None)
+        self._flat_scale(common, corrections, counting)
+        if kind == GIWAXS and geometry is not None and has_intensity_corrections(corrections):
+            self._correct_intensity(common, raw_data, raw_valid, geometry, corrections, counting)
+        return counting
 
     def _flat_scale(self, common: dict, corrections, counting: bool) -> None:
         """Photon counts divided by a flat field: each pixel's counts were multiplied by ``1 / F_ff``, so its

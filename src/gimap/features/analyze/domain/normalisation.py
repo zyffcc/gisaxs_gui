@@ -5,9 +5,9 @@ After every other correction each pixel is multiplied by one constant of the fra
     I_norm = A · I / (t · M · T · d),
 
 ``t`` the exposure time (s), ``M`` a monitor value (counts of an ion chamber or diode, a flux or the ring current),
-``T`` the transmission of the sample (0 < T ≤ 1), ``d`` its thickness (mm) and ``A`` an absolute-scale factor (for
-example from a glassy-carbon or water measurement in the same set-up). Each term is optional (1 when it is off);
-none is on by default. ``t`` and ``M`` are taken from the file header or typed; ``T``, ``d`` and ``A`` are typed. A
+``T`` the transmission of the sample (0 < T ≤ 1), ``d`` its thickness and ``A`` the scale factor. Thickness is entered
+in mm and converted to cm for a secondary-standard calibration. Each term is optional (1 when it is off);
+none is on by default. ``t`` and ``M`` are taken from the file header or typed; ``T`` and ``d`` are typed. A
 sum of frames is divided by the sum of their exposure times and of their monitor values.
 
 The normalisation only scales: q, the shape of every curve and the error model do not change. For photon counts
@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 
 OFF, HEADER, VALUE = "off", "header", "value"
@@ -33,6 +33,8 @@ NO_EXPOSURE = "The header of {name} gives no exposure time: type it or turn the 
 NO_MONITOR = "The header of {name} has no monitor value “{key}”: choose another or type it."
 BAD_VALUE = "{what} must be a positive number."
 BAD_TRANSMISSION = "The transmission must be above 0 and at most 1."
+NEED_THICKNESS = "Enter the sample thickness to use a standard calibration."
+ABSOLUTE_UNIT = "cm⁻¹"
 """Why a frame cannot be normalised (templates: ``presentation/texts.py`` translates them)."""
 
 _MONITOR_NAME = re.compile(
@@ -41,6 +43,10 @@ _MONITOR_NAME = re.compile(
 """Header names that can hold a monitor value (ESRF SAXS keywords, Pilatus ``Flux``, ion chambers, ring current)."""
 _NUMBER = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
 _CBF_LINE = re.compile(rf"^[ \t]*#[ \t]*([A-Za-z][\w.\-]*)[ \t:=]+({_NUMBER})", re.MULTILINE)
+
+
+def mm_to_cm(thickness_mm: float) -> float:
+    return float(thickness_mm) / 10.0
 
 
 @dataclass(frozen=True)
@@ -57,6 +63,7 @@ class Normalisation:
     transmission: Optional[float] = None
     thickness_mm: Optional[float] = None
     absolute_factor: Optional[float] = None
+    standard_calibration: Optional[dict] = field(default=None, hash=False)
 
     def __post_init__(self) -> None:
         for name in ("exposure", "monitor"):
@@ -74,6 +81,16 @@ class Normalisation:
             raise ValueError(BAD_VALUE.format(what="The monitor value"))
         if self.monitor == HEADER and not self.monitor_key:
             raise ValueError("A monitor from the header needs the name of its header value.")
+        if self.standard_calibration is not None:
+            record = self.standard_calibration
+            if self.thickness_mm is None:
+                raise ValueError(NEED_THICKNESS)
+            if (not isinstance(record, dict) or self.absolute_factor is None
+                    or record.get("factor") != self.absolute_factor
+                    or not isinstance(record.get("sigma_factor"), (int, float))
+                    or not math.isfinite(record["sigma_factor"]) or record["sigma_factor"] < 0
+                    or not all(record.get(key) for key in ("standard", "source_path", "q_range_A_inv", "date_utc"))):
+                raise ValueError("Invalid standard calibration.")
 
     @property
     def is_identity(self) -> bool:
@@ -128,9 +145,10 @@ class NormalisationUse:
 
     factor: float
     terms: tuple[tuple[str, float, str], ...]
-    """``(name, value, source)``: exposure_time_s, monitor, transmission, thickness_mm, absolute_factor."""
+    """Each applied (name, value, source). The thickness term is in cm for a fitted standard, mm otherwise."""
     unit: str
     """The unit of the normalised intensity (``intensity_unit``)."""
+    standard_calibration: Optional[dict] = field(default=None, hash=False)
 
     def term(self, name: str) -> Optional[tuple[float, str]]:
         return next(((value, source) for key, value, source in self.terms if key == name), None)
@@ -139,11 +157,15 @@ class NormalisationUse:
         record: dict[str, Any] = {"applied_as": APPLIED_AS, "factor": float(self.factor), "intensity_unit": self.unit}
         for name, value, source in self.terms:
             record[name] = {"value": float(value), "source": source}
+        if self.standard_calibration is not None:
+            record["standard_calibration"] = self.standard_calibration
         return record
 
 
 def intensity_unit(norm: Normalisation) -> str:
-    """``counts/pixel`` divided by what the normalisation divides by (s, monitor, mm), times the absolute factor."""
+    """Absolute cross section for a measured calibration, or the units of the selected manual terms."""
+    if norm.standard_calibration is not None:
+        return ABSOLUTE_UNIT
     per = ["pixel"]
     if norm.exposure != OFF:
         per.append("s")
@@ -173,19 +195,25 @@ def normalisation_use(norm: Normalisation, header: Mapping[str, Any], name: str 
         terms.append(("monitor", float(value), f"header ({norm.monitor_key})"))
     elif norm.monitor == VALUE:
         terms.append(("monitor", float(norm.monitor_value), "typed"))
-    for key in ("transmission", "thickness_mm", "absolute_factor"):
-        value = getattr(norm, key)
-        if value is not None:
-            terms.append((key, float(value), "typed"))
+    if norm.transmission is not None:
+        terms.append(("transmission", float(norm.transmission), "typed"))
+    if norm.thickness_mm is not None:
+        if norm.standard_calibration is None:
+            terms.append(("thickness_mm", float(norm.thickness_mm), "typed"))
+        else:
+            terms.append(("thickness_cm", mm_to_cm(norm.thickness_mm), "typed"))
+    if norm.absolute_factor is not None:
+        source = "typed" if norm.standard_calibration is None else "secondary standard"
+        terms.append(("absolute_factor", float(norm.absolute_factor), source))
     divisor = math.prod(value for key, value, _source in terms if key != "absolute_factor")
     factor = float(norm.absolute_factor or 1.0) / divisor
-    return NormalisationUse(factor, tuple(terms), intensity_unit(norm))
+    return NormalisationUse(factor, tuple(terms), intensity_unit(norm), norm.standard_calibration)
 
 
 NORMALISATION_TEMPLATES = (NO_EXPOSURE, NO_MONITOR, BAD_VALUE, BAD_TRANSMISSION)
 
 __all__ = [
-    "APPLIED_AS", "BAD_TRANSMISSION", "BAD_VALUE", "EXPOSURE_KEY", "HEADER", "NORMALISATION_TEMPLATES", "NO_EXPOSURE",
+    "ABSOLUTE_UNIT", "APPLIED_AS", "BAD_TRANSMISSION", "BAD_VALUE", "EXPOSURE_KEY", "HEADER", "NORMALISATION_TEMPLATES", "NO_EXPOSURE",
     "NO_MONITOR", "Normalisation", "NormalisationUse", "OFF", "SOURCES", "VALUE", "header_values", "intensity_unit",
-    "normalisation_use", "summed_header_values",
+    "mm_to_cm", "normalisation_use", "summed_header_values",
 ]

@@ -220,6 +220,7 @@ class BatchModelMixin:
         if run.first_metadata is None:
             run.first_metadata = outcome.metadata
             run.first_frame = outcome.stem
+        run.record_frame_normalisation(label, outcome.metadata)
         return written
 
     def _fit_outcome(self, outcome: FrameOutcome, run: "BatchRun") -> list[Path]:

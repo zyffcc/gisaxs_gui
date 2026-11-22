@@ -169,11 +169,6 @@ class AnalyzeViewModel(
     def set_mode(self, mode: str) -> None:
         self.state.mode = mode
 
-    def set_profile(self, name: Optional[str]) -> None:
-        if (name or None) != self.state.profile_name:
-            self.state.forced_shapes = ()  # “Use Anyway” was said for the profile picked before
-        self.state.profile_name = name or None
-
     def set_incidence(self, incidence_deg: Optional[float]) -> None:
         self.state.incidence_deg = None if incidence_deg is None else float(incidence_deg)
 
