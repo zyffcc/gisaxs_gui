@@ -100,6 +100,7 @@ solution (probability at least 0.05) has them.
 | `galaxi_bornagain_model.py` | BornAgain's model of the GALAXI frame on the same cut: how well it describes the measured cut, and what Fitting recovers from it (Physics and Methods 9.10). Needs BornAgain | `galaxi_bornagain_model.json` |
 | `cut_model_checks.py` | `cut_model`, GIMaP's one 1D forward model, against Fitting's formulas before 0.3, 1D Predict V5's forward, the fit1d kit's tables (when a copy of the kit is in `utils/gisaxs1d_gui_kit`) and the independent `yoneda_truth.py` (Born at the cut's q_z and four-term DWBA, LMA and DA); time of 1000 curves on one core (Physics and Methods 9.2) | `cut_model_checks.json` |
 | `cut_model_bornagain.py` | `cut_model` against BornAgain: spheres and upright cylinders on Si in the four-term DWBA, one size, a size distribution and a radial paracrystal (Physics and Methods 9.2). Needs BornAgain | `cut_model_bornagain.json` |
+| `vertical_height_bias.py` | the height of upright cylinders from a joint fit of a horizontal and a vertical cut (`application.joint_fit`, the vertical cut in the four-term DWBA on Si) when BornAgain's cuts hold what that model leaves out: the average layer at coverage 10–40 % with Si and Au particles, a rough substrate (σ 0.5 and 1 nm), the detector resolution and beam divergence, heights correlated with radii, all at once; each noise-free and with 10 Poisson draws, the whole vertical cut and from 2α_c (referee round 5, M8; section below). Needs BornAgain | `vertical_height_bias.json` |
 | `yoneda_truth.py` | the forward model of a horizontal GISAXS cut used by the fit1d benchmark: sphere or upright cylinder on a substrate, four-term DWBA, paracrystal, resolution, beam tail, roughness, counts. It shares no code with GIMaP or fit1d | – |
 
 The other scripts (the commands of the paper's Predict runs are above):
@@ -117,10 +118,50 @@ python tools/benchmarks/galaxi_fit.py
 python tools/benchmarks/galaxi_bornagain_model.py
 python tools/benchmarks/cut_model_checks.py            # on a clean checkout: add --out <file> (or --force)
 python tools/benchmarks/cut_model_bornagain.py   # in an environment with BornAgain 24
+python tools/benchmarks/vertical_height_bias.py  # with BornAgain 24; about 3 minutes with two workers
 python tools/benchmarks/evidence_integration_check.py   # about 25 minutes on one core
 ```
 
 Times depend on the computer; `analyze_speed.json` names the one it was measured on.
+
+## The height from a vertical cut, against BornAgain with what the model leaves out
+
+`vertical_height_bias.py` (referee round 5, M8). BornAgain 24 simulates the Yoneda row (α_f = α_c(Si)) and the
+vertical cut at q_y ≈ 0.3 nm⁻¹ (α_f 0.02–1.2°) of upright cylinders on Si (R = 4 nm, H = 6 nm, σ_R/R = σ_H/H = 0.15,
+independent; radial paracrystal, σnn/D = 0.2; λ 0.1045 nm, α_i 0.40°), scaled to 10⁴ counts at the maximum on 2
+counts of background. Fitting fits both cuts together as a user would (*Fit Several Curves Together*, Refine, the
+substrate Si known, R, σR/R, h, σh/h, D, σnn/D shared, the DA as BornAgain's Mixture), from R 4.3 nm, h 6.6 nm, D
++7 %. The coverage is BornAgain's density of a radial paracrystal, 2/(√3 D²), times π⟨R²⟩; the average layer is cut
+into 24 slices. BornAgain's average layer was checked first against the four-term DWBA in a uniform layer of the
+average index (one size, one slice): the shapes agree within 1.5·10⁻³. Biases below are of the noise-free fit; the
+mean of 10 Poisson draws lies within 0.1 % of it, and their scatter (0.03–0.3 % of h) matches the 1σ the fit reports
+where the model holds. χ²_r is the mean over the draws.
+
+| Case | Coverage | h bias, whole cut | R bias | D bias | χ²_r | h bias, from 2α_c | χ²_r |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| average layer off, smooth (D 14 nm) | 30 % | +0.0 % | +0.1 % | -0.2 % | 1.1 | -0.0 % | 1.1 |
+| average layer off, smooth (D 24.4 nm) | 10 % | -0.0 % | -0.6 % | -0.1 % | 1.1 | +0.0 % | 1.1 |
+| average layer off, smooth (D 12.2 nm) | 40 % | +0.1 % | +0.4 % | -0.2 % | 1.2 | -0.0 % | 1.2 |
+| average layer, 10 % Si | 10 % | -2.7 % | -0.6 % | -0.1 % | 2.8 | -1.1 % | 1.1 |
+| average layer, 10 % Au | 10 % | -13.0 % | -0.8 % | -0.1 % | 26.6 | -5.8 % | 1.5 |
+| average layer, 30 % Au (D 14 nm) | 30 % | -51.4 % | +0.1 % | -0.4 % | 126.3 | -16.7 % | 4.9 |
+| average layer, 40 % Si | 40 % | -16.6 % | +0.5 % | -0.3 % | 14.9 | -5.2 % | 1.4 |
+| average layer, 40 % Au | 40 % | -60.5 % | +1.0 % | -0.5 % | 220.1 | -19.7 % | 8.8 |
+| roughness 0.5 nm (r and diffuse) | 30 % | -0.1 % | -0.1 % | -0.2 % | 1.4 | -0.1 % | 1.4 |
+| roughness 1.0 nm (r and diffuse) | 30 % | -0.8 % | -0.3 % | -0.2 % | 3.1 | -0.8 % | 3.3 |
+| roughness 0.5 nm (r only) | 30 % | -0.1 % | +0.1 % | -0.2 % | 1.1 | -0.1 % | 1.1 |
+| roughness 1.0 nm (r only) | 30 % | -0.6 % | +0.1 % | -0.2 % | 1.1 | -0.8 % | 1.1 |
+| resolution σ 0.01° | 30 % | -0.7 % | +0.1 % | -0.2 % | 2.8 | -0.1 % | 1.2 |
+| resolution σ 0.02°, divergence σ 0.01° | 30 % | -2.5 % | +0.0 % | -0.2 % | 9.7 | -0.2 % | 1.2 |
+| H = 1.5 R (correlated) | 30 % | +14.4 % | +0.6 % | -0.2 % | 1.2 | +14.2 % | 1.2 |
+| 40 % Au, average layer, roughness 1.0 nm, resolution 0.02° + divergence 0.01° | 40 % | -59.6 % | +1.0 % | -0.6 % | 242.4 | -19.5 % | 10.3 |
+
+The roughness is BornAgain's (K-correlation, Hurst 0.7, lateral correlation 25 nm): *r only* subtracts the bare rough
+substrate's cut, which leaves the reduced reflection coefficients; *r and diffuse* keeps the substrate's own diffuse
+scattering, which raises χ²_r through the horizontal cut. The resolution is a Gaussian detector resolution in α_f and
+φ_f, with a Gaussian beam divergence in α_i in the second case. In every case σR/R comes out 0.16–0.19 instead of
+0.15: BornAgain's DA lowers the coherent term of the Yoneda row by the spread of heights, which Fitting's horizontal
+model of upright cylinders leaves out (with one height in BornAgain the fit gives 0.150).
 
 ## Online GISAXS series
 
