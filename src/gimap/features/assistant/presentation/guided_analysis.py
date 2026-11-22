@@ -39,6 +39,7 @@ from ..application import (
 )
 from src.gimap.app.presentation.i18n import tr, trf
 
+from ..application.peak_export import peak_table_csv
 from .gui_bridge import GuiBridge
 from .gui_workbench import GuiWorkbench
 from .guided_frames import GuidedFramesMixin, frame_key
@@ -145,6 +146,7 @@ class GuidedAnalysis(GuidedFramesMixin, QObject):
         self.results = GuidedResultsPanel(automation, parent)
         self.results.compareRequested.connect(self.compare_start)
         self.results.saveRequested.connect(self.save_report)
+        self.results.savePeaksRequested.connect(self.save_peak_table)
         self.results.refineRequested.connect(lambda: self._for_this_frame() and self.refineRequested.emit())
         self.results.solutionRequested.connect(lambda row: self._for_this_frame() and self.solutionRequested.emit(row))
 
@@ -462,6 +464,19 @@ class GuidedAnalysis(GuidedFramesMixin, QObject):
     def report_page(self) -> str:
         """The report as one web page with its pictures: the q map and I(q) with its peaks (GIWAXS) or the fit (GISAXS)."""
         return report_page(self.report or {}, self.start_report, self._automation)
+
+    def save_peak_table(self) -> None:
+        if not self._save_text or not self.report or not self.report.get("peaks") or not self._for_this_frame():
+            return
+        path, _ = ask_save_path(self.controls, "Save Peak Table", self.report.get("frame"), "peaks.csv", tr("CSV (*.csv)"))
+        if not path:
+            return
+        try:
+            self._save_text(path, peak_table_csv(self.report))
+        except OSError as exc:
+            save_failed_toast(self.controls, path, exc.strerror or str(exc))
+            return
+        saved_toast(self.controls, path)
 
     def save_report(self) -> Optional[str]:
         """The report as a web page (pictures drawn from the frame in Analyze) or Markdown, next to the data."""

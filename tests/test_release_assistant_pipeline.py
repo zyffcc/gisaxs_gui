@@ -363,7 +363,7 @@ def test_the_command_line_distinguishes_the_calibration_notice_from_poor_pole_fi
     record = json.loads((out / "P3HT_00012" / "report.json").read_text(encoding="utf-8"))
     assert {item["item"] for item in record["needs_attention"]} == {"pole figure", "orientation factor"}
     assert code == gimap_agent.EXIT_QUESTIONS
-    assert printed.startswith("# GIWAXS — batch") and "P3HT_00012.tif | needs input" in printed
+    assert printed.startswith("# GIWAXS — batch") and "P3HT_00012.tif | completed with checks" in printed
     note = next(line for line in printed.splitlines() if line.startswith("Calibration found by the automatic search"))
     assert str(image) in note and "sibling folder calib, seen from the frame's folder" in note and "1 frame(s)" in note
     assert "Open questions" in printed
@@ -371,6 +371,7 @@ def test_the_command_line_distinguishes_the_calibration_notice_from_poor_pole_fi
     found = next(line for line in report.splitlines() if line.startswith("- found by the automatic search"))
     assert f"`{image}`" in found and "(sibling folder calib, seen from the frame's folder)" in found
     assert report.index("- source: AgBH_00001.tif") < report.index(found) < report.index("- quality: good")
-    assert "Status: **NEEDS INPUT**" in report and f"- **{SEARCHED}**: {image} — sibling folder calib" in report
+    assert "Status: **COMPLETED WITH CHECKS**" in report and "## Orientation checks" in report
+    assert f"- **{SEARCHED}**: {image} — sibling folder calib" in report
     assert note in (out / "summary.md").read_text(encoding="utf-8")
     assert not (root / "P3HT_film" / "gimap_analysis").exists() and not (root / "calib" / "gimap_analysis").exists()

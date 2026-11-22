@@ -85,7 +85,7 @@ def test_one_click_gives_results_with_their_evidence_without_any_model(analyze) 
     assert "q, FWHM in Å⁻¹ · d in Å · L in nm (Scherrer, a lower bound)" in labels  # the units, one line
     assert not any(text.startswith(("Sizes are Scherrer", "The analysed rings")) for text in labels)
     peaks_title = next(item for item in results.findChildren(QLabel) if item.text() == "Peaks")
-    assert peaks_title.toolTip().startswith("Phases are not assigned automatically")
+    assert peaks_title.toolTip().startswith("To index the measured peaks, add candidate phases in Phases")
     assert "GIWAXS" in results.report_view.toPlainText()
     # Each peak can be seen on the map, and every column says how it was obtained.
     assert "2π / q" in peaks.horizontalHeaderItem(1).toolTip() and "Scherrer" in peaks.horizontalHeaderItem(4).toolTip()

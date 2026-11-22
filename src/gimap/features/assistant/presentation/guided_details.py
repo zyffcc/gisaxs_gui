@@ -27,6 +27,7 @@ from src.gimap.app.presentation.theme import theme_manager
 from src.gimap.shared import fit_names
 
 from ..application import bound_phrases, interval, probability
+from ..application.pipeline_report import FLAG_WORDS
 from .guided_text import ScaledPixmapLabel, label
 from .guided_words import words
 
@@ -196,7 +197,9 @@ class PeakDetails(QWidget):
         ]
         self.values.set_values(pairs)
         caveat = str(peak.get("caveat") or "")
-        self.warnings.setText("⚠ " + tr(caveat) if caveat else tr("No warnings for this peak."))
+        warnings = [tr(caveat)] if caveat else []
+        warnings.extend(tr(FLAG_WORDS[flag]) for flag in peak.get("flags") or () if flag in FLAG_WORDS)
+        self.warnings.setText("\n".join("⚠ " + note for note in warnings) or tr("No warnings for this peak."))
         ring = min(report.get("rings") or (), key=lambda item: abs(item["q"] - peak["q"]), default=None)
         shadowed = ring.get("shadowed") if ring and abs(ring["q"] - peak["q"]) <= peak.get("fwhm", 0.0) else ()
         self._picture(self.where, [{"q": peak["q"], "shadowed": shadowed or (), "label": f"q = {peak['q']:.4g} Å⁻¹"}],

@@ -177,6 +177,10 @@ def test_the_automatic_analysis_assigns_the_rings_and_fits_their_pole_figures(tm
         assert report["phase_assignment"]["q_axis"]["kind"] == "kinematic"
         assert report["phase_assignment"]["phases"][1]["name"] == "PbI2"
         assert any(item["what"] == "pole figure" for item in report["decisions"])
+        reliable = [peak for peak in report["peaks"] if not peak["caveat"] and "at_edge" not in peak["flags"]]
+        largest = max(reliable, key=lambda peak: peak["fit"]["area"])
+        marked = [ring["q"] for ring in report["rings"] if ring.get("strongest_by_area")]
+        assert marked == pytest.approx([largest["q"]])
         for ring in report["rings"]:  # next to the Hermans factor of every analysed ring
             pole = ring["pole_figure"]
             assert ring.get("herman") is not None and pole["ok"]

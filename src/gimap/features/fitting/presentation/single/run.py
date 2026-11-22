@@ -99,13 +99,18 @@ class FitRunMixin:
     def _method_chosen(self, *, remember=True) -> None:
         method = self.method()
         self.predict_row.setVisible(method == "predict")
-        self.fit_step_button.setText(tr(METHOD_NAMES[method]))
+        self._show_method_buttons()
         self.fit_step_button.setToolTip(tr(self.method_combo.itemData(self.method_combo.currentIndex(), Qt.ToolTipRole)
                                            or ""))
         self._fill_curve_card()
         self._refresh_method_hint()
         if remember:
             self._remember(method=method)
+
+    def _show_method_buttons(self) -> None:
+        name = tr(METHOD_NAMES[self.method()])
+        self.fit_button.setText(name)
+        self.fit_step_button.setText(name)
 
     def fit_running(self) -> bool:
         return self._running is not None

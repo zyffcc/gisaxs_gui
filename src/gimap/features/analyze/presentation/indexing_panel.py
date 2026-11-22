@@ -47,6 +47,13 @@ def _number(value, digits: int) -> str:
     return "" if value is None or not np.isfinite(value) else f"{value:.{digits}f}"
 
 
+class _VisibilityCheck(QCheckBox):
+    """The Show column contains one control. Its whole cell toggles the phase."""
+
+    def hitButton(self, position):  # noqa: N802 - Qt API
+        return self.rect().contains(position)
+
+
 class IndexingPanel(QDialog, IndexingView):
     def __init__(self, page: QWidget):
         super().__init__(page)
@@ -95,18 +102,25 @@ class IndexingPanel(QDialog, IndexingView):
     # -- phases ---------------------------------------------------------------------------
 
     def _add_cif(self) -> None:
-        path, _filter = QFileDialog.getOpenFileName(self, tr("Add Phase from CIF"), "", tr("CIF files (*.cif);;All files (*)"))
-        if not path:
-            return
-        try:
-            index = self.model.add_cif(path)
-        except (OSError, ValueError) as error:
-            self.status_label.setText(trf("Could not read the CIF: {error}", error=str(error)))
-            return
-        self._changed(select=index)
-        spec = self.model.phases[index]
-        read = trf("Read {name} from {file}.", name=spec.name, file=Path(path).name)
-        self.status_label.setText(read + (" ⚠ " + tr("See the Symmetry column.") if spec.warnings else ""))
+        frame = self._page.view_model.current_path
+        paths, _filter = QFileDialog.getOpenFileNames(
+            self, tr("Add Phase from CIF"), str(Path(frame).parent) if frame else "",
+            tr("CIF files (*.cif);;All files (*)"))
+        messages = []
+        selected = None
+        for path in paths:
+            try:
+                selected = self.model.add_cif(path)
+            except (OSError, ValueError) as error:
+                messages.append(f"{Path(path).name} — " + trf("Could not read the CIF: {error}", error=str(error)))
+                continue
+            spec = self.model.phases[selected]
+            read = trf("Read {name} from {file}.", name=spec.name, file=Path(path).name)
+            messages.append(read + (" ⚠ " + tr("See the Symmetry column.") if spec.warnings else ""))
+        if selected is not None:
+            self._changed(select=selected)
+        if messages:
+            self.status_label.setText("\n".join(messages))
 
     def _add_cell(self) -> None:
         index = self.model.add(PhaseSpec(trf("Phase {n}", n=len(self.model.phases) + 1),
@@ -132,6 +146,7 @@ class IndexingPanel(QDialog, IndexingView):
             widget.setEnabled(enabled)
         if index is None:
             self.symmetry_label.setText("")
+            self.symmetry_label.setToolTip("")
             return
         spec = self.model.phases[index]
         self._filling = True
@@ -146,7 +161,10 @@ class IndexingPanel(QDialog, IndexingView):
                 spin.setValue(int(value))
                 spin.setEnabled(spec.orientation != POWDER)
             notes = phase_notes(spec)
-            self.symmetry_label.setText(symmetry_text(spec) + ("\n" + notes if notes else ""))
+            summary = symmetry_text(spec)
+            detail = summary + ("\n" + notes if notes else "")
+            self.symmetry_label.setText(detail if spec.warnings else summary)
+            self.symmetry_label.setToolTip(detail)
         finally:
             self._filling = False
 
@@ -214,7 +232,7 @@ class IndexingPanel(QDialog, IndexingView):
         with QSignalBlocker(self.phase_table):
             self.phase_table.setRowCount(len(self.model.phases))
             for row, spec in enumerate(self.model.phases):
-                check = QCheckBox(self.phase_table)
+                check = _VisibilityCheck(self.phase_table)
                 check.setChecked(spec.visible)
                 check.toggled.connect(lambda on, index=row: self._visibility(index, on))
                 self.phase_table.setCellWidget(row, 0, check)

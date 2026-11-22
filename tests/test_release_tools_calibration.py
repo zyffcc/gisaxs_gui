@@ -174,13 +174,13 @@ def test_the_line_of_a_loaded_image_follows_the_language(language, chinese) -> N
         assert dialog.stage_label.text() == {"en": "Reading image...", "zh": "正在读取图像…"}[language]
         _wait(app, lambda: dialog._load_thread is None and dialog.image is not None)
         assert dialog.stage_label.text() == {
-            "en": "Image loaded. Enter the X-ray energy, then click Auto Calibration.",  # the file states none
-            "zh": "已载入图像。请输入 X 射线能量，然后点击“自动标定”。",
+            "en": "Image loaded. Enter the energy or wavelength to calibrate.",
+            "zh": "已载入图像。请输入能量或波长再标定。",
         }[language]
         assert dialog.preview_info_label.text() == "Pilatus1M.edf  ·  981 × 1043 px"  # the file and its size
         assert dialog.pixel_label.text() == {
-            "en": "172.000 × 172.000 µm (metadata)",
-            "zh": "172.000 × 172.000 µm（来自元数据）",
+            "en": "172.000 × 172.000 µm (from frame size; check)",
+            "zh": "172.000 × 172.000 µm（根据图像尺寸推定，请核对）",
         }[language]
     finally:
         _dispose(dialog)
@@ -255,7 +255,7 @@ def test_the_job_line_is_chinese_for_every_state_of_a_run(chinese, boxes) -> Non
         assert boxes[-1] == ("warning", "几何标定", "unexpected: 3 != 4")
 
         dialog._calibration_finished(_result(Path("scan_agbh.cbf")))
-        assert dialog.stage_label.text() == "标定完成。请检查选中的候选解，然后点击“应用”。"
+        assert dialog.stage_label.text() == "匹配环数：3。置信度：中。 点击“应用”前请核对图中的匹配环。"
     finally:
         _dispose(dialog)
 
