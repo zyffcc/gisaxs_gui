@@ -34,7 +34,8 @@ from .client_texts import (JOINT_FAILED, CHOICE_NOT_SAVED, EMPTY_ACTION, EMPTY_M
                            window_tip)
 from .components_view import ComponentsPicture
 from .evolution_view import RELATIVE_RADIUS, EvolutionPlot, axis_label
-from .pattern_view import PatternPair
+from .pattern_line import PatternLine
+from .pattern_view import COLOUR_LABEL, MEASURED_TITLE, MODEL_TITLE, X_LABEL, Y_LABEL, PatternPair
 from .real_space_view import RealSpacePicture
 from .texts import message_text, text
 from .views.sputter_main_view import CONNECTED_HIDDEN, CONNECTED_TILES, ENTRY_HINT, TILES
@@ -87,7 +88,9 @@ class ClientPanelMixin:
         self._entry_labels: tuple = ()
         self._pattern_cache: dict = {}
         self._empty_kind = ""
-        self.patterns = PatternPair(self.pattern_layout)
+        self.patterns = PatternPair(self.pattern_image_layout)
+        self.pattern_line = PatternLine(self.patterns, self._line_shown)  # a line drawn on the images, its curves
+        self.line_clear.clicked.connect(self.pattern_line.clear)
         self.real_space = RealSpacePicture(self.space_layout)
         self.components = ComponentsPicture(self.components_layout)
         self.image_switch.currentIndexChanged.connect(self._show_image_kind)
@@ -311,6 +314,27 @@ class ClientPanelMixin:
             self.patterns.show_message(message_text(exc))
             return
         self.patterns.show(patterns, entry.label, entry_name(entry.label))
+
+    def _line_shown(self, profile) -> None:
+        """The measured and the model count rate along the line drawn on the images (``pattern_line``), or no plot
+        without a line: against q_y for a line along q_y, against the exit angle for one along it."""
+        plot = self.line_plot
+        self.line_clear.setVisible(profile is not None)
+        self.line_hint.setVisible(profile is None)
+        if profile is None:
+            plot.clear_curves()
+            plot.setVisible(False)
+            return
+        along_q = profile["axis"] == "q"
+        if plot.log_x_check.isChecked() != along_q:
+            plot.log_x_check.setChecked(along_q)
+        plot.set_labels(X_LABEL if along_q else tr(Y_LABEL), tr(COLOUR_LABEL))
+        curves, markers = [(tr(MEASURED_TITLE), profile["x"], profile["measured"])], [True]
+        if profile["model"] is not None:
+            curves.append((text(MODEL_TITLE, name=profile.get("name", "")), profile["x"], profile["model"]))
+            markers.append(False)
+        plot.set_curves(curves, markers=markers)
+        plot.setVisible(True)
 
     def _show_image_kind(self, _index: int = 0) -> None:
         """The patterns, the solution in real space or the model's terms, as the switch says."""

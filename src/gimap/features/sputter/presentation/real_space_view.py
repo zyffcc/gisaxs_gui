@@ -36,7 +36,8 @@ from PyQt5.QtWidgets import QLabel, QSizePolicy
 from src.gimap.app.presentation.i18n import tr
 
 from ..application import (FILM_SUBSTRATES, arrangement, clusters, cut, grown, height_map, layer_particles,
-                           pore_density, porous_space, profile, real_space, side_grains, spanning, top_grains, visible)
+                           pore_density, porous_space, profile, real_space, series_ceiling, side_grains, spanning,
+                           top_grains, visible)
 from .texts import text
 
 METAL_COLOURS = {"Ag": ("#b8c0c8", "#5f6b76"), "Au": ("#e3b23c", "#8a6512"), "Cu": ("#d08a5c", "#7a4220")}
@@ -165,8 +166,10 @@ class RealSpacePicture:
             if porous is not None:
                 self._porous(porous, metal, name)
             elif grains is not None:
-                growing = grown([real_space(item) if item else None for item in series], index) if series else None
-                self._grains(grains, metal, substrate, name, growing)
+                spaces = [real_space(item) if item else None for item in series] if series else None
+                growing = grown(spaces, index) if series else None
+                ceiling = series_ceiling(spaces) if growing is not None else 0.0  # one height for the whole scan
+                self._grains(grains, metal, substrate, name, growing, ceiling)
             else:
                 figure.text(.5, .5, tr(NO_GRAINS), ha="center", va="center", fontsize=10, wrap=True)
         restyle_figure(figure)
@@ -186,7 +189,7 @@ class RealSpacePicture:
         axes.tick_params(labelsize=7)
 
     # -- grains on a flat substrate or a polymer film -------------------------------------------------------------
-    def _grains(self, space, metal: str, substrate: str, name: str, growing=None) -> None:
+    def _grains(self, space, metal: str, substrate: str, name: str, growing=None, ceiling: float = 0.0) -> None:
         from matplotlib.patches import Circle, Polygon, Rectangle
 
         fill, edge = METAL_COLOURS.get(metal, METAL_COLOURS["Ag"])
@@ -208,12 +211,14 @@ class RealSpacePicture:
         self.arrangement = arrangement(space, grains)
 
         if space.continuous or self.arrangement == "network":   # a connected film: the film itself, not grain outlines
-            self._film(space, grains, side, top, fill, edge, polymer, substrate, name, growing)
+            self._film(space, grains, side, top, fill, edge, polymer, substrate, name, growing, ceiling)
             return
 
         # side view: substrate (or polymer film), base layer, grains (touching caps as one piece)
         row = cut(grains, space.field / 2.0) if growing is not None else side_grains(space)
-        tallest = max([space.base + grain.height for grain in row] + [space.height, space.radius])
+        # 2026-11-22: the height of the side view is that of the whole growing film (``ceiling``), so the view keeps its
+        # size from window to window (an equal-aspect box narrowed as the film grew)
+        tallest = max([space.base + grain.height for grain in row] + [space.height, space.radius, ceiling])
         below = max(0.3 * tallest, 0.15 * space.side / 4.0)
         side.add_patch(Rectangle((0, -below), space.side, below, facecolor=POLYMER if polymer else SUBSTRATE,
                                  edgecolor=POLYMER_EDGE if polymer else "none", lw=.6, zorder=1))
@@ -253,7 +258,8 @@ class RealSpacePicture:
         note = GROWN_NOTE if growing is not None else DRAWN_NOTE
         figure.text(0.07, 0.03, text(note, name=name), ha="left", va="bottom", fontsize=7.5)
 
-    def _film(self, space, grains, side, top, fill, edge, polymer, substrate, name, growing=None) -> None:
+    def _film(self, space, grains, side, top, fill, edge, polymer, substrate, name, growing=None,
+              ceiling: float = 0.0) -> None:
         """A connected film: the top view is the height of the metal (darker = higher), the holes of a network in the
         colour of what is under it; the side view is the cut through the film along the middle of the top view."""
         from matplotlib.colors import LinearSegmentedColormap
@@ -276,7 +282,7 @@ class RealSpacePicture:
         self._frame(top, TOP_TITLE, X_LABEL, Y_LABEL)
 
         x, h = profile(space, grains, space.field / 2.0)
-        tallest = max(float(h.max()) if h.size else 0.0, space.height, space.radius)
+        tallest = max(float(h.max()) if h.size else 0.0, space.height, space.radius, ceiling)  # the whole film's
         below = max(0.3 * tallest, 0.15 * space.side / 4.0)
         side.add_patch(Rectangle((0, -below), space.side, below, facecolor=under,
                                  edgecolor=POLYMER_EDGE if polymer else "none", lw=.6, zorder=1))

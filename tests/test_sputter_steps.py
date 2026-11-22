@@ -242,18 +242,20 @@ def test_the_joint_step_follows_its_iterations_and_the_preliminary_result_keeps_
     write_joint(trace, 2)
     page._client_event(_joint(2, 200.0))  # the open joint fit is read again
     assert picture.words.text().startswith("2 of at most 6 iterations · median fit deviation 11 → 10")
-    # the preliminary result: Steps beside its note opens the live view, and back
+    # the preliminary result: the live view and its steps stay in front; Show the Preliminary Result opens it, and
+    # Steps beside its note comes back (2026-11-22: the steps had gone out of sight once the joint fit began)
     out = write_result(tmp_path / "prelim")
     page._client_event(_event("chosen", family="zz_v4", deviations={"zz_v4": 12.5}))
     page._client_event(_event("preliminary", family="zz_v4", folder=str(out)))
     page._live_draw()
-    assert page._preliminary_shown() and page.steps_button.isVisibleTo(page)
-    page.steps_button.click()
     from src.gimap.features.sputter.presentation.live_panel import LIVE_PAGE
 
-    assert page.result_stack.currentIndex() == LIVE_PAGE and page.live_preliminary_button.isVisibleTo(page)
+    assert page.result_stack.currentIndex() == LIVE_PAGE and page.live_tree_area.isVisibleTo(page)
+    assert page.live_preliminary_button.isVisibleTo(page) and not page._preliminary_shown()
     page.live_preliminary_button.click()
-    assert page.result_stack.currentIndex() == 1 and page._preliminary_shown()
+    assert page.result_stack.currentIndex() == 1 and page._preliminary_shown() and page.steps_button.isVisibleTo(page)
+    page.steps_button.click()
+    assert page.result_stack.currentIndex() == LIVE_PAGE and page.live_preliminary_button.isVisibleTo(page)
     _close(page)
 
 

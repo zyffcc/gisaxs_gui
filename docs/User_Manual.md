@@ -3328,11 +3328,11 @@ measured after their deposition, see *Samples measured after their deposition* b
      again. When the analysis ends, its result replaces the live view (after a failure or **Cancel**, what was shown
      before comes back). What the live view shows is not the result: the result is what the package writes at the
      end, with every candidate of every window.
-   - **Preliminary result.** In mode Refine the network's result (its candidates and their time path) is shown on the
-     main screen within minutes, its name followed by a note that the joint fit of the whole scan is running; the
-     analysis goes on. A line under the window selector says what it does now (the same line as above); **Steps**
-     beside it shows the live view with its steps again, and **Show the Preliminary Result** there comes back. After every
-     iteration of the joint fit, its current solution is drawn dashed over the evolution — radius, height, distance,
+   - **Preliminary result.** In mode Refine the network's result (its candidates and their time path) is ready
+     within minutes while the joint fit of the whole scan goes on. The live view stays in front with its steps;
+     **Show the Preliminary Result** in it opens the result on the main screen, its name followed by a note that the
+     joint fit is running. A line under the window selector says what the analysis does now (the same line as above),
+     and **Steps** beside it shows the live view with its steps again. After every iteration of the joint fit, its current solution is drawn dashed over the evolution — radius, height, distance,
      gap and coverage in their colours, named *Joint fit, iteration k of n* in the legend — and the next iteration
      replaces it. The tiles keep the values of the solution shown. When the analysis ends, the final result (which
      holds the joint fit) replaces the preliminary one and the dashed lines go.
@@ -3357,7 +3357,11 @@ Analysing the same request again shows the result it has. **Details ▸ Analyze 
   are its time in the scan and the nominal deposit at that time.
 - **Measured image** and **Model image**: the count rate over q_y and the exit angle, on the same axes and with
   one logarithmic colour scale. The scale is set by the measured image, so it does not change with the solution;
-  cells without data are empty in both.
+  cells without data are empty in both. Drag on either image to draw a line: it is drawn on both, and below them
+  **Along the line** plots the measured (dots) and the model count rate (line) of the cells it crosses, in order —
+  against q_y for a line that runs more along q_y, against the exit angle otherwise; the values are those of the
+  images, not interpolated. The line stays when you choose another window or solution, and its curves follow;
+  **Clear Line** removes it.
 - **Solution shown**: the solutions of this window — **Candidate 1** to **3** of the network and, when the
   analysis refined, **Refined** and **Joint fit (whole scan)** (every window refined together over the scan, smooth in
   time) — each with its *fit deviation*: how far its model image is from the measured one (lower is better; it
@@ -3379,8 +3383,9 @@ Analysing the same request again shows the result it has. **Details ▸ Analyze 
   the two images, in nm. Left a cut through a row of grains: the substrate (a polymer film is drawn, its
   thickness not to scale), the continuous layer under the grains when there is one, and the grains with their
   radius and height. Right the view from above: grains with the radius and size distribution of the solution. The
-  whole scan is drawn as one growing film: the view has the same size in nm in every window, and the grains of a
-  window are those of the window before. While the film is open, new nuclei appear in free places where the
+  whole scan is drawn as one growing film: the view has the same size in nm in every window — its height is that of
+  the highest metal of the scan, so the cut keeps its size as the film grows —, and the grains of a window are
+  those of the window before. While the film is open, new nuclei appear in free places where the
   distance D shrinks (nucleation) and neighbouring islands merge into one round island where it grows
   (coalescence). From about half coverage on, nothing disappears or moves any more: the islands grow together into
   worm-like clusters and then a connected film, and what stays open are channels down to the substrate. The metal

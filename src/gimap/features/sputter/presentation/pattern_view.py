@@ -108,6 +108,8 @@ class PatternPair:
         """The titles of the two images as drawn (measured, model)."""
         self.limits: Optional[tuple] = None
         """The limits of the colour scale as drawn."""
+        self.on_drawn = None
+        """Called after every drawing (a line drawn over the images: ``pattern_line.PatternLine``)."""
         try:
             from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
             from matplotlib.figure import Figure
@@ -159,6 +161,8 @@ class PatternPair:
             self._images(*self._last[1:])
         restyle_figure(figure)
         cjk_fallback(figure, self._texts())
+        if self.on_drawn is not None:
+            self.on_drawn()
         self.canvas.draw_idle()
 
     def _texts(self) -> list:
@@ -253,6 +257,8 @@ class PatternPair:
         from src.gimap.shared.figures import cjk_fallback
 
         cjk_fallback(self.figure, [self._axes[1].title])
+        if self.on_drawn is not None:
+            self.on_drawn()
         self.canvas.draw_idle()
         return True
 

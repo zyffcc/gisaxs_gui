@@ -320,4 +320,9 @@ SPUTTER_CLIENT_ZH = {
     "{read} frames read": "已读入 {read} 帧",
     # -- the solutions (client_texts.py) ------------------------------------------------------------------------------
     "Joint fit (whole scan)": "联合精修解",
+    # -- a line drawn on the images (pattern_line.py, 2026-11-22) ---------------------------------------------------
+    "Drag on either image to draw a line: the measured and the model count rate along it appear below.":
+        "在任一张图上拖动画一条线：下方显示实测与模型沿这条线的计数率。",
+    "Along the line": "沿线剖面",
+    "Clear Line": "清除线",
 }

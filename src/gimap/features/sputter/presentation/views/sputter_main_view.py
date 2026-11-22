@@ -31,7 +31,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (QCheckBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
                              QPushButton, QSizePolicy, QSlider, QStackedWidget, QToolButton, QVBoxLayout, QWidget)
 
-from src.gimap.app.presentation.components import (EmptyState, FilePicker, JobStatus, ParameterSection,
+from src.gimap.app.presentation.components import (CurvePlot, EmptyState, FilePicker, JobStatus, ParameterSection,
                                                    SafeWheelComboBox, SegmentedControl)
 from src.gimap.app.presentation.i18n import DATA_VALUES
 
@@ -109,6 +109,9 @@ DEVIATION_CAPTION = "Fit deviation (lower is better)"
 DEVIATION_TIP = ("How far the model image is from the measured image, per cell and with an allowance for the model: "
                  "it compares the solutions of one measured image.")
 ENTRY_HINT = "The number beside each solution is its fit deviation: lower is better."
+LINE_HINT = "Drag on either image to draw a line: the measured and the model count rate along it appear below."
+LINE_TITLE = "Along the line"
+CLEAR_LINE = "Clear Line"
 FILM_TIP = "Thickness of the polymer film on the wafer. Empty: the analysis uses its own value for this polymer."
 ONSET_TIP = "Time of the scan (s) at which the deposition started. Empty: found in the data."
 DURATION_TIP = ("How long the deposition lasted after its start (s): the metal amount stays constant afterwards. "
@@ -402,6 +405,23 @@ class SputterMainView:
         components_page = QWidget(self.pattern_host)
         self.pattern_layout = QVBoxLayout(patterns_page)
         self.pattern_layout.setContentsMargins(0, 0, 0, 0)
+        self.pattern_image_layout = QVBoxLayout()  # the two images (pattern_view.PatternPair)
+        self.pattern_image_layout.setContentsMargins(0, 0, 0, 0)
+        self.pattern_layout.addLayout(self.pattern_image_layout, 3)
+        line_row = QHBoxLayout()  # a line drawn on the images: its two curves below them (pattern_line.py)
+        line_row.setContentsMargins(4, 0, 4, 0)
+        self.line_hint = QLabel(LINE_HINT, patterns_page)
+        self.line_hint.setProperty("gimapRole", "caption")
+        self.line_hint.setWordWrap(True)
+        self.line_clear = QPushButton(CLEAR_LINE, patterns_page)
+        self.line_clear.setVisible(False)
+        line_row.addWidget(self.line_hint, 1)
+        line_row.addWidget(self.line_clear)
+        self.pattern_layout.addLayout(line_row)
+        self.line_plot = CurvePlot(LINE_TITLE, patterns_page, log_y=True, log_x=True, sides=False)
+        self.line_plot.setMinimumHeight(170)
+        self.line_plot.setVisible(False)
+        self.pattern_layout.addWidget(self.line_plot, 2)
         self.space_layout = QVBoxLayout(space_page)
         self.space_layout.setContentsMargins(0, 0, 0, 0)
         self.components_layout = QVBoxLayout(components_page)

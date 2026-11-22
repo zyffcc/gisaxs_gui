@@ -4,7 +4,8 @@ from ..domain import (NO_SOLUTION, ClientEntry, ClientQuantity, ClientResult, Cl
 from ..domain import COMPONENT_NAMES, COMPONENTS, DESCRIPTORS, STAGE_NAMES, ProcessAnalysis
 from ..domain import (FIELD_DISTANCES, SIDE_DISTANCES, Grain, PorousSpace, RealSpace, arrangement, clusters,
                       layer_particles, pore_density, porous_space, real_space, side_grains, spanning, top_grains,
-                      visible, height_map, profile, cap_height, cut, grown, series_field)
+                      visible, height_map, profile, cap_height, cut, grown, series_field,
+                      series_ceiling)
 from .client import (CLIENT_FAILED, CLIENT_FALLBACK, CLIENT_INCOMPLETE, CLIENT_MISSING, CLIENT_NO_MAIN, CLIENT_PROBLEMS,
                      EXPORT_FAILED, EXPORT_FOLDER, EXPORT_NOTHING, EXPORT_OLD, CLIENT_STOPPED, CLIENT_TEMPLATES, ENGINE_FOLDER, FILM_SUBSTRATES, LABEL_PREFIX, MASK_UNREADABLE,
                      MODES, QCM_FACTOR, SUBSTRATES, ClientFailed, ClientMissing, ClientPackage, ClientReader,
@@ -48,7 +49,7 @@ __all__ = [
     "COMPONENT_NAMES", "COMPONENTS", "DESCRIPTORS", "STAGE_NAMES", "ProcessAnalysis",
     "NO_SOLUTION", "STEP_OF", "STEP_REUSED", "STEP_TEXT", "STEP_WEIGHTS", "SUBSTRATES", "WindowPatterns",
     "FIELD_DISTANCES", "Grain", "PorousSpace", "RealSpace", "SIDE_DISTANCES", "arrangement", "clusters",
-    "layer_particles", "pore_density", "porous_space", "real_space", "side_grains", "spanning", "top_grains", "height_map", "profile", "cap_height", "cut", "grown", "series_field",
+    "layer_particles", "pore_density", "porous_space", "real_space", "side_grains", "spanning", "top_grains", "height_map", "profile", "cap_height", "cut", "grown", "series_field", "series_ceiling",
     "visible",
     "REFERENCE_SUFFIX", "SAMPLE_EXISTS", "SERIES_ELSEWHERE", "SERIES_NOT_EMPTY", "SERIES_OTHER_MASK", "STATIC_FAILED",
     "STATIC_MODES", "STATIC_PROBLEMS", "STATIC_STEP_TEXT", "STATIC_STEP_WEIGHTS", "STATIC_STOPPED",

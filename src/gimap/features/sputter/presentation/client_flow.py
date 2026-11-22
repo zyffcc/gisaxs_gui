@@ -37,6 +37,7 @@ from .client_texts import (DONE, FAILED_TOAST, GEOMETRY_ALPHA, GEOMETRY_CENTRE, 
                            NO_REPORT, PACKAGE_LINE, PACKAGE_NONE, PRELIMINARY, READY_TOAST, SHOWN_AGAIN, STARTING,
                            STOPPING_ANALYSIS, WAITING_TO_ANALYZE, wrappable)
 from .geometry import warning_style
+from .live_steps_panel import LIVE_PAGE
 from .rate_flow import stored_unit
 from .texts import message_text, text
 
@@ -458,10 +459,11 @@ class SputterClientMixin:
         self._live_job_status(tracker)  # what happens now (live_status.py), else the step
 
     def _client_preliminary(self, folder: Path) -> None:
-        """The package's preliminary result (mode refine: the network's solutions and their time path) replaces the
-        live view on the main screen while the whole-scan joint fit runs (its note line says what the run does, the
-        evolution shows the joint fit at work: ``live_status.py``); the final result replaces it when the run ends. A
-        preliminary result that cannot be read leaves the live view."""
+        """The package's preliminary result (mode refine: the network's solutions and their time path) is loaded while
+        the whole-scan joint fit runs. The live view stays in front with its steps (2026-11-22: the steps went out of
+        sight once the joint fit began); **Show the Preliminary Result** there opens it (its note line says what the
+        run does, the evolution shows the joint fit at work: ``live_status.py``) and **Steps** comes back. The final
+        result replaces it when the run ends. A preliminary result that cannot be read leaves the live view."""
         client = self.service.client
         if client is None:
             return
@@ -473,6 +475,8 @@ class SputterClientMixin:
         if self.client_result is not None:
             self.result_name.setText(f"{self.result_name.text()}  ·  {tr(PRELIMINARY)}")
             self._live_preliminary = self.client_result
+            if self._live is not None:
+                self.result_stack.setCurrentIndex(LIVE_PAGE)
             self._live_show_status()
 
     def _client_finished(self, outcome) -> None:

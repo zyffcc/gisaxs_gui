@@ -183,6 +183,11 @@ def test_the_joint_fit_at_work_is_drawn_over_the_preliminary_result_until_the_fi
     out = _preliminary(tmp_path)
     page._client_event(_event("chosen", family="zz_v4", deviations={"zz_v4": 12.5}))
     page._client_event(_event("preliminary", family="zz_v4", folder=str(out)))
+    from src.gimap.features.sputter.presentation.live_panel import LIVE_PAGE
+
+    page._live_draw()
+    assert page.result_stack.currentIndex() == LIVE_PAGE and page.live_preliminary_button.isVisibleTo(page)
+    page.live_preliminary_button.click()  # the steps stay in front; the preliminary result is one click away
     assert page.result_stack.currentIndex() == 1 and page._preliminary_shown()
     page._client_event(_event("refine", family="zz_v4", refine=8, iterations=6))
     page._live_draw()

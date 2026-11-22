@@ -24,6 +24,12 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Sputter ▸ Analyze, main screen.** Drag on the measured or the model image to draw a line: below the images
+  **Along the line** plots the measured and the model count rate of the cells it crosses, against q_y or the exit
+  angle; the line stays from window to window and **Clear Line** removes it. The side view of **Real Space** keeps
+  its size while the film grows (its height is now that of the highest metal of the whole scan; before, the view
+  narrowed window by window). Once the joint fit of mode Refine starts, the live view and its steps stay in front;
+  **Show the Preliminary Result** opens the preliminary result (before, it replaced the steps).
 - **Predict parameters** fits four-term DWBA when the substrate, both cut angles and the wavelength are known.
   In Fitting or 1D Predict, select the material or enter δ and β. An optional film adds its thickness and optical
   constants to the reflection calculation. Automatic GISAXS analysis takes the substrate from the session or the

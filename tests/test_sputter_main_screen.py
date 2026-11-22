@@ -231,6 +231,58 @@ def test_another_window_puts_its_values_into_the_same_pictures(tmp_path):
     _close(page)
 
 
+def test_a_line_reads_the_cells_it_crosses_in_order_with_their_own_values():
+    """2026-11-22: the measured and the model image along a line drawn on either of them, one point per cell."""
+    import math
+
+    from src.gimap.features.sputter.presentation.pattern_line import line_profile
+
+    q, af = np.array([0.1, 0.2, 0.4, 0.8]), np.array([0.1, 0.2, 0.3])
+    measured = np.arange(12.0).reshape(3, 4)
+    model = measured * 2.0
+    measured[1, 2] = np.nan  # a cell without data stays without a value
+    across = line_profile(q, af, measured, model, (math.log10(0.08), 0.2), (math.log10(1.0), 0.2), log_q=True)
+    assert across["axis"] == "q" and across["x"].tolist() == q.tolist()  # along q_y: the cells of row 1, in order
+    assert across["measured"][[0, 1, 3]].tolist() == [4.0, 5.0, 7.0] and np.isnan(across["measured"][2])
+    assert across["model"].tolist() == [8.0, 10.0, 12.0, 14.0]
+    down = line_profile(q, af, measured, None, (math.log10(0.2), 0.32), (math.log10(0.2), 0.05), log_q=True)
+    assert down["axis"] == "af" and down["x"].tolist() == [0.3, 0.2, 0.1]  # from the start of the line
+    assert down["measured"].tolist() == [9.0, 5.0, 1.0] and down["model"] is None
+    assert line_profile(q, af, measured, model, (2.0, 5.0), (3.0, 6.0), log_q=True) is None  # outside the images
+
+
+def test_a_line_drawn_on_the_images_shows_their_curves_and_follows_the_window(tmp_path):
+    from types import SimpleNamespace
+
+    page = _page(tmp_path)
+    page.show()
+    page.open_client_result(write_result(tmp_path / "out"))
+    assert page.line_hint.isVisibleTo(page) and not page.line_plot.isVisibleTo(page)
+    left, right = page.patterns._axes[:2]
+    (x0, x1), (y0, y1) = left.get_xlim(), left.get_ylim()
+    y = y0 + 0.5 * (y1 - y0)
+    drag = page.pattern_line
+    drag._pressed(SimpleNamespace(button=1, inaxes=right, xdata=x0 + 0.05 * (x1 - x0), ydata=y, x=10.0, y=50.0))
+    drag._released(SimpleNamespace(button=1, inaxes=right, xdata=x0 + 0.95 * (x1 - x0), ydata=y, x=300.0, y=50.0))
+    assert page.line_plot.isVisibleTo(page) and page.line_clear.isVisibleTo(page)
+    assert page.line_plot.curve_count() == 2 and drag.profile["axis"] == "q"
+    assert len(left.lines) == 1 and len(right.lines) == 1  # the line on both images
+    images = page._patterns(page.client_window())
+    row, column = drag.profile["cells"][0]
+    assert drag.profile["measured"][0] == pytest.approx(images.measured[row, column], nan_ok=True)
+    before = drag.profile["measured"].copy()
+    page.window_next.click()  # another window: the same line, its values
+    images = page._patterns(page.client_window())
+    assert drag.line is not None and len(page.patterns._axes[0].lines) == 1
+    row, column = drag.profile["cells"][0]
+    assert drag.profile["measured"][0] == pytest.approx(images.measured[row, column], nan_ok=True)
+    assert not np.allclose(np.nan_to_num(before), np.nan_to_num(drag.profile["measured"]))
+    page.line_clear.click()
+    assert drag.line is None and not page.line_plot.isVisibleTo(page) and page.line_hint.isVisibleTo(page)
+    assert len(page.patterns._axes[0].lines) == 0
+    _close(page)
+
+
 def test_the_main_screen_judges_nothing(tmp_path):
     """Ambiguity is the candidates themselves: no grade, status or reliability wording on the main screen."""
     page = _page(tmp_path)
@@ -705,9 +757,12 @@ def test_the_solution_shown_can_be_seen_in_real_space(tmp_path):
     page.entry_control.button(1).click()  # another solution: no base layer, another radius
     assert (page.real_space.drawn.radius, page.real_space.drawn.base) == (3.0, 0.0)
     field = page.real_space.drawn.field
+    height = page.real_space.figure.axes[0].get_ylim()
     page.select_window(1)
     assert page.real_space.drawn.radius == 4.0
     assert page.real_space.drawn.field == field  # one growing film: the same field in every window
+    # ... and the same height in every window: the side view keeps its size while the film grows (2026-11-22)
+    assert page.real_space.figure.axes[0].get_ylim() == pytest.approx(height)
     assert any("One growing film" in words for words in _picture_texts(page))
     page.image_switch.button(0).click()
     assert page.pattern_host.currentIndex() == 0 and page.patterns.titles[1] == "Model image: Candidate 1"
