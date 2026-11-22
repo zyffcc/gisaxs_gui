@@ -105,6 +105,11 @@ class FrameFit:
     """Why the chain broke at this frame (``series_chain.chain_break``, English); empty: it held."""
     fit_pass: str = ""
     """``forward`` or ``backward``: the pass whose fit was kept."""
+    start_frame: int = 0
+    """The frame (counted from 1) whose result the kept fit started from (``start_from`` previous or next); 0: none."""
+    predict_choice: str = ""
+    """How Predict's solution was chosen where the chain broke (``series_chain.restart_solution``, English); empty:
+    the kept fit did not start from Predict, or the rule is not known."""
 
     @property
     def ok(self) -> bool:
@@ -189,7 +194,7 @@ def _fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: S
     try:
         if settings.method == "predict":  # the network's solution, then least squares for its errors and χ²
             result, actions, _remaining = fit_resolving(predict(prepared.data, start), prepared.data, method="local",
-                                                        stop=stop, resolve=False)
+                                                        stop=stop, resolve=False, restarts=0)
             return FrameFit(index, path, result, **made_of)
         # a start whose beam tail still has the generic ranges gets this frame's (``single_fit.tail_for_curve``)
         result, actions, _remaining = fit_resolving(tail_for_curve(start, prepared.data), prepared.data,
@@ -308,7 +313,7 @@ def parameter_columns(model: FitModel) -> list[tuple[tuple, str]]:
 
 
 MADE_OF_COLUMNS = ("points", "halves_used")
-FLAG_COLUMNS = ("flags", "start_from", "chain_break", "fit_pass")
+FLAG_COLUMNS = ("flags", "start_from", "start_frame", "chain_break", "predict_choice", "fit_pass")
 
 
 def file_name(path, folder=None) -> str:
@@ -346,8 +351,9 @@ def series_table(frames: list[FrameFit], model: FitModel, *, details: bool = Fal
     ``details``: with what each frame was fitted on after ``converged`` — ``points`` and ``halves_used``
     (``MADE_OF_COLUMNS``) — for the table that is saved. A frame without a fit has NaN values.
     ``folder``: the folder of the series, for the ``file`` column (``file_name``). ``flags``: then, after the values,
-    ``FLAG_COLUMNS`` — what to know before trusting a frame (``series_chain.flags_text``), where its kept fit started,
-    why the chain broke there and the pass that gave it."""
+    ``FLAG_COLUMNS`` — what to know before trusting a frame (``series_chain.flags_text``), where its kept fit started
+    (and from which frame's result), why the chain broke there, how Predict's solution was chosen and the pass that
+    gave it."""
     columns = parameter_columns(model)
     with_sources = details and any(InSituSourceFrame.from_token(frame.path).columns is not None for frame in frames)
     header = ["frame", "file", "chi2_reduced", "log_rmse", "converged"] + (list(MADE_OF_COLUMNS) if details else [])
@@ -359,7 +365,8 @@ def series_table(frames: list[FrameFit], model: FitModel, *, details: bool = Fal
         from .series_chain import flags_text
     rows = []
     for frame in sorted(frames, key=lambda item: item.index):
-        tail = [flags_text(frame), frame.start_from, frame.chain, frame.fit_pass] if flags else []
+        tail = [flags_text(frame), frame.start_from, frame.start_frame or "", frame.chain, frame.predict_choice,
+                frame.fit_pass] if flags else []
         row = [frame.index + 1, file_name(frame.path, folder)]
         made_of = [frame.points, frame.halves_used] if details else []
         if with_sources:
@@ -413,7 +420,9 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
                        "reason": frame.reason, "points": frame.points, "halves_used": frame.halves_used,
                        "averaged": frame.averaged, "left_out": frame.left_out,
                        "q_unit": frame.q_unit, "q_unit_from": frame.q_unit_from,
-                       **{key: value for key, value in (("start_from", frame.start_from), ("chain_break", frame.chain),
+                       **{key: value for key, value in (("start_from", frame.start_from),
+                                                        ("start_frame", frame.start_frame), ("chain_break", frame.chain),
+                                                        ("predict_choice", frame.predict_choice),
                                                         ("fit_pass", frame.fit_pass)) if value},
                        "weighting": frame.result.weighting if frame.result is not None else "",
                        **({"weight_mode": frame.result.model.weighting,

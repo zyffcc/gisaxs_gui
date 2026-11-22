@@ -19,11 +19,13 @@ from .zh_mask_tools import MASK_TOOLS_ZH
 from .zh_normalisation import NORMALISATION_ZH
 from .zh_nxcansas import NXCANSAS_ZH
 from .zh_roll_check import ROLL_CHECK_ZH
+from .zh_series_chain import SERIES_CHAIN_ZH
 
 FEATURES_ZH = {
     **FLAT_FIELD_ZH, **NXCANSAS_ZH, **GISAXS_CUTS_ZH, **FIT_DATA_ZH, **NORMALISATION_ZH, **GEOMETRY_ZH,
     **APP_SESSION_ZH, **INDEXING_ZH, **INSITU_ZH, **JOINT_FIT_ZH, **ABSOLUTE_SCALE_ZH, **MASK_TOOLS_ZH,
     **MANUAL_FIT_ZH, **ROLL_CHECK_ZH, **ZH_GEOMETRY_CUTS, **GEOMETRY_ORIENTATION_ZH, **ZH_GEOMETRY_TILT,
+    **SERIES_CHAIN_ZH,
 }
 
 __all__ = ["FEATURES_ZH"]

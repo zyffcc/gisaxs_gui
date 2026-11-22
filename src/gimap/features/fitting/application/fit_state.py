@@ -55,6 +55,7 @@ def result_to_dict(result: Optional[FitResult]) -> Optional[dict]:
         "errors": {path_key(path): number(value) for path, value in result.errors.items()},
         "correlated": [[path_key(a), path_key(b), number(rho)] for a, b, rho in result.correlated],
         "at_bounds": [path_key(path) for path in result.at_bounds], "start_kept": bool(result.start_kept),
+        **({"restarts": int(result.restarts)} if result.restarts else {}),
     }
 
 
@@ -69,7 +70,7 @@ def result_from_dict(data: Optional[dict]) -> Optional[FitResult]:
         errors={path_of(key): read_number(value) for key, value in (data.get("errors") or {}).items()},
         correlated=tuple((path_of(a), path_of(b), read_number(rho)) for a, b, rho in data.get("correlated") or ()),
         at_bounds=tuple(path_of(key) for key in data.get("at_bounds") or ()),
-        start_kept=bool(data.get("start_kept")))
+        start_kept=bool(data.get("start_kept")), restarts=int(data.get("restarts") or 0))
 
 
 def selection_to_dict(selection) -> Optional[dict]:

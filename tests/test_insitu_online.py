@@ -1,7 +1,8 @@
 """The online mode of a watched folder and the timeline of the Series map, on a small in-situ series made of the public
 GALAXI frame (``tests/insitu_frames.py``): frames written into a folder over time are reduced and appended to the map
-without Build Map or an export, recorded in the results database, a file that cannot be read is logged, Pause stops
-the looks, a settle time holds a new file back, and the timeline finds the jump and opens the frame clicked."""
+without Build Map or an export (after the frame on screen when watching began), recorded in the results database, the
+map comes back with the project (and the autosave), a file that cannot be read is logged, Pause stops the looks, a
+settle time holds a new file back, and the timeline finds the jump and opens the frame clicked."""
 
 from __future__ import annotations
 
@@ -64,24 +65,56 @@ def test_new_frames_grow_the_map_without_build_or_export_and_go_into_the_databas
             write_frame(folder, index, jump_at=6)
         _look(page)
         series = page._series_map
-        assert series is not None and series.rows == 9  # the frames written while watching, none twice
+        # The frame on screen when watching began, then the frames written while watching, none twice.
+        assert series is not None and series.rows == 10
         assert not list((folder / "gimap_analysis").glob("*.csv"))  # nothing exported
         with SeriesStore(store_path(folder / "gimap_analysis"), read_only=True) as store:
             (name,) = store.series_names()
             curves = store.curves(name, "horizontal")
-        assert len(curves) == 9 and curves[0].file.endswith("galaxi_00001.tif")
+        assert len(curves) == 10 and curves[0].file.endswith("galaxi_00000.tif")
         np.testing.assert_allclose(curves[-1].intensity, page._series_rows[-1][1])
-        # The timeline of the map: noise ≈ 1, the jump where the side peak moves at once (frame 7, row 5).
+        # The timeline of the map: noise ≈ 1, the jump where the side peak moves at once (frame 7, row 6).
         page.series_trace_combo.setCurrentIndex(page.series_trace_combo.findData("neighbour"))
         timeline = page._series_timeline()
-        assert timeline.jumps == (5,) and float(np.nanmedian(timeline.neighbour)) < 2.0
+        assert timeline.jumps == (6,) and float(np.nanmedian(timeline.neighbour)) < 2.0
         assert page.series_trace_plot.title_label.text() == "χ² to the frame before"
         page.series_trace_combo.setCurrentIndex(page.series_trace_combo.findData("reference"))
         page.series_reference_spin.setValue(9)
-        assert page._series_timeline().reference_row == 7  # frame 9 of the list is row 7 of the map (frames 2–10)
+        assert page._series_timeline().reference_row == 8  # frame 9 of the list is row 8 of the map (frames 1–10)
     finally:
         page.stop_watch()
         _close(page)
+
+
+def test_the_map_comes_back_with_the_project(tmp_path):
+    import json
+
+    page, folder = _watching(tmp_path)
+    other = None
+    try:
+        for index in range(1, 4):
+            write_frame(folder, index, jump_at=6)
+        _look(page)
+        rows = list(page._series_rows)
+        assert page._series_map is not None and len(rows) == 4
+        state = json.loads(json.dumps(page.project_state()))  # (a project file is JSON)
+        assert page.project_state()["series_map"]["rows"][0] is page.project_state()["series_map"]["rows"][0]  # kept
+        page.stop_watch()
+        other = _page(_context(InMemoryInstrumentProfileRepository([crop_profile()])))
+        assert other.apply_project_state(state) == []
+        _done(other)
+        assert other._series_map is not None and other._series_map.rows == 4
+        for mine, theirs in zip(rows, other._series_rows):
+            np.testing.assert_array_equal(mine[0], theirs[0])
+            np.testing.assert_array_equal(mine[1], theirs[1])  # exactly the values of before
+            assert str(mine[3]) == str(theirs[3]) and Path(mine[4][0]) == theirs[4][0] and mine[4][1] == theirs[4][1]
+        big = dict(state, series_map={"kept": False, "frames": 9000})
+        assert any("too large" in note for note in other.apply_project_state(big))
+    finally:
+        page.stop_watch()
+        _close(page)
+        if other is not None:
+            _close(other)
 
 
 def test_a_click_on_the_timeline_shows_the_frame_and_the_table_names_the_jump(tmp_path):

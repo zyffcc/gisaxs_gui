@@ -682,7 +682,9 @@ or dropping a `.gimap` file on the window opens it.
   while a job runs. When GIMaP was not closed properly (a crash, a power cut, a window ended in the Task
   Manager), the next start asks **GIMaP was not closed properly. Restore the work autosaved at …?**:
   **Restore** opens that work (with a `*`: save it to keep it; **Save Project** writes to the project it came
-  from), **Discard** deletes it. A normal close deletes the autosave.
+  from), **Discard** deletes it. A normal close deletes the autosave. The Series map comes back with the autosave and
+  with a project (also one built online while watching), up to 4 million values (x and intensity of every row); a
+  larger map is not kept, and a note says to build it again.
 - **Sputter**: the values of each scan folder's last Analyze (geometry, metal, mask, the substrate, the rate with
   its unit and whether it is a QCM reading, the mode, the start and duration of the deposition and the film
   thickness), the values used last (another folder does not take over the mask, the sample roll or a rate), the
@@ -1228,7 +1230,7 @@ written. Press **Watch** again to stop.
   half-written.
 - **Add New Frames to the Series Map** (on by default): every complete new frame is reduced with the set-up on
   screen and its curve appended to the Series map (section 5.6), its traces and its timeline — also when no map was
-  built and nothing is exported. Only the curves are kept, never the frames: 1000 frames of 200 points take about
+  built and nothing is exported. A map that the watch begins starts with the frame on screen when watching began. Only the curves are kept, never the frames: 1000 frames of 200 points take about
   3 MB of curves.
 - **Record Every Frame in the Results Database**: the curve of every frame appended to the map also goes into
   `gimap_analysis/gimap_series.sqlite` next to the data (about once a second), with its frame, file, time and the
@@ -1237,8 +1239,10 @@ written. Press **Watch** again to stop.
 - **Skipped Files…** opens the log of the files the watch could not take, with the time and the reason: held by
   the program writing it, a failed reduction, a frame without the curve of the map.
 - **Fit New Frames in Fitting…** exports the frame on screen, switches **Export New Frames While Watching** on
-  and opens `gimap_analysis/` in **Fitting ▸ In-situ series**: tick **Watch for new curves** there and press
-  **Start**, and every new frame is fitted from the result of the one before (section 6.5).
+  and opens `gimap_analysis/` in **Fitting ▸ In-situ series** with **Watch for new curves** ticked, and starts
+  there once the curves are listed: every curve written so far and every new one is fitted from the result of the
+  one before (section 6.5). While the model in Single analysis is still the starting guess, it does not start: the
+  status line says to set the model up on a frame and press **Start**.
 
 These choices are remembered between sessions. On a desktop computer, a watched run of 1000 frames of 20,000
 pixels took about 60 ms per frame on average to be listed, reduced, appended and recorded
@@ -2181,7 +2185,10 @@ Fitting reads `.dat`, `.txt` and `.csv` text curves and NXcanSAS files (`.h5`):
   states on Q: 1/angstrom and 1/nm as they are, 1/m converted to nm⁻¹; the Curve card says *q read in Å⁻¹: stated in
   the file*. A Q whose unit Fitting does not know is read like a text file that states none. Points the file's mask
   leaves out are not fitted. A file of several curves asks which one to open (**Open Curve…**, a dropped file) and
-  is then named *file.h5 · curve 2*; **Import Curves…** takes every curve of it. An HDF5 file of detector frames
+  is then named *file.h5 · curve 2*; **Import Curves…** takes every curve of it. A file of fits (Save ▸ Data and
+  Fit, an In-situ series' **Fits as NXcanSAS…**) holds the points fitted and the model of each: only its measured
+  curves are offered (the first chosen; one alone opens at once), and **Import Curves…** takes those, so the fits of
+  a series open again as a series. An HDF5 file of detector frames
   is no curve: dropped on the window it goes to Analyze.
 
 A `.csv` file is read by the names of its header, not by the place of its columns: q is the column named q (`q`,
@@ -2413,7 +2420,9 @@ sizes for your sample, or let the Fit step find them.
   says so and names its file (section 14.3).
 - Under the method, only what it needs: **Particles** for Predict parameters (section 6.4).
 - Press **Fit** in the command bar (`Ctrl+Return`) or the button below, which carries the method's name (for
-  example **Refine**). A progress bar and **Stop** appear while it runs.
+  example **Refine**). A progress bar and **Stop** appear while it runs. **Refine** and **Search** go on from their
+  own result while χ²ᵣ falls by more than 0.1 % (at most 5 more runs; the Run Log and the report say how often), so a
+  fit no longer stops above a minimum that a second Refine would reach.
 - **Options** (folded): **Evaluations at most (Refine, Search)** (automatic by default) and **1D Predict Batch
   Window…** (section 6.4).
 
@@ -2760,11 +2769,13 @@ current frame finish before pausing. Completed results stay available.
   - **The previous result; the Single model at each new stage** — follows the sample within a stage and starts
     afresh where the curves change course.
   - **The previous result; Predict parameters where the chain breaks** — each frame from the result of the frame
-    before; where that chain breaks (the fit failed or did not converge, a new stage begins, the fit is flagged or
-    poor, or χ²ᵣ is more than 3 times the frame before's and above 2), Predict parameters (section 6.4, its method
-    unchanged) fits the frame again with the particles of Single's model. If the manual size law, weights or
-    resolution differ, Refine uses the network values as a starting point and applies the manual settings before
-    comparing the two fits. A model with
+    before; where that chain breaks (the fit failed or did not converge, a new stage begins, or χ²ᵣ is more than 3
+    times the frame before's and above 2), Predict parameters (section 6.4, its method unchanged) fits the frame
+    again with the particles of Single's model, from its solution closest to the frame before among those at least
+    a tenth as probable as the most probable one, and the better fit is kept. If the manual size law, weights or resolution differ, Refine uses the network values as a
+    starting point and applies the manual settings before comparing the two fits. A value at a bound (the beam tail, the
+    background or any other), a value the curve does not determine and a poor fit are flagged but do not break the
+    chain, so a series whose curves change smoothly stays smooth. A model with
     no particle or more than three is refined only (the Run Log says so).
 - **Then a backward pass**: once every frame is done, from the last but one to the first, each frame is refined from
   the result of the frame after it, and the better of its two fits is kept — a sample whose first frames are hard to
@@ -2786,11 +2797,13 @@ current frame finish before pausing. Completed results stay available.
 - How many frames were fitted, failed or did not converge, with the halves and points per frame. A frame whose beam
   tail stopped at an edge of its range, or with a value without a finite error, is **flagged** (marked in the list,
   counted at the end of the run and listed under `flagged` in the record).
-- A table with a row per frame: χ²ᵣ, each free value ± 1σ, the **Flags**, the **Points** fitted and the
-  **Halves**. Click a row to see that frame's curve and model; a failed frame shows its reason. **Flags** says what
-  to know before trusting the row: failed, not converged, a poor fit, values at a bound of their range, the beam
-  tail at an edge, a value the curve does not determine, *chain broke* (with why, and whether Predict parameters
-  fitted the frame again), *backward* (the fit kept came from the backward pass).
+- A table with a row per frame: χ²ᵣ, each free value ± 1σ, **Started from**, the **Flags**, the **Points** fitted
+  and the **Halves**. Click a row to see that frame's curve and model; a failed frame shows its reason. **Started
+  from** says where the frame's kept fit started: *continued from frame n* (the frame before; *backward pass*: the
+  frame after), *restarted from Predict (why the chain broke)* — the rule that chose Predict's solution is on hover —,
+  *… (the chain broke: why)* when the continued fit was still the better one, or *from the model in Single
+  analysis*. **Flags** says what to know before trusting the row: failed, not converged, a poor fit, values at a
+  bound of their range, the beam tail at an edge, a value the curve does not determine.
 - Below the frame plot: one value against the frame (or χ²ᵣ), with ±1σ error bars, in the colours of the stages.
   The plot is titled with the name of the series. When the curves say when their frames were measured (curves for
   Fitting that Analyze wrote of frames with a time stamp), the box beside the value draws it against **Time (s)**
@@ -2800,10 +2813,10 @@ current frame finish before pausing. Completed results stay available.
   value and its error) with a JSON record next to it: the start model, the halves and where they came from, range,
   left-out points, method, every frame's state, reason and the unit its q was read in (`q_unit`, `q_unit_from`;
   `q_unit_of_files` is the setting for files without one), the poor fits (χ²ᵣ above 10) and which curves or frames
-  were listed. The table ends with `flags`, `start_from` (previous, next, single or predict), `chain_break` and
-  `fit_pass`, and the record says the start and the backward pass. **Fits as NXcanSAS…** writes, for every fitted
+  were listed. The table ends with `flags`, `start_from` (previous, next, single or predict), `start_frame`,
+  `chain_break`, `predict_choice` and `fit_pass`, and the record says the start and the backward pass. **Fits as NXcanSAS…** writes, for every fitted
   frame, the points fitted and the model at their q (one `.h5`, two entries per frame, each with the frame's
-  record; Q in 1/nm). **Results Database…** writes every frame's fit — state, χ²ᵣ, values and errors, flags, where
+  record and its role, data or model; Q in 1/nm). **Results Database…** writes every frame's fit — state, χ²ᵣ, values and errors, flags, where
   it started — into `gimap_series.sqlite`; one in the folder of the curves or up to two folders above it (Analyze's,
   next to its curves) is offered first. **Trend Plot…** and **Selected Frame's Plot…** save the figures.
 - Before results that are not saved are dropped — a second Start, other curves, a project opened — GIMaP asks:

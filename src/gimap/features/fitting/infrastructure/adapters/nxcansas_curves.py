@@ -7,6 +7,9 @@ read as they are, 1/m is converted to 1/nm (× 1e-9). A Q without a unit Fitting
 for files without one applies, as for a text file. Idev (the dataset I's ``uncertainties`` names) is the σ.
 Points the file's mask leaves out are not in the curve (the source record counts them); points without a finite
 Q or I are left out as unreadable rows of a text file are (``rows_left_out``).
+
+What each curve is (``curve_roles``): the role the file states (``SasCurve.role``); a file of fits GIMaP wrote before
+it stated roles is known by its titles (``FIT_TITLES``: “…: the points fitted”, “…: the model”).
 """
 
 from __future__ import annotations
@@ -28,6 +31,15 @@ UNIT_READ = {"angstrom": "angstrom", "nm": "nm", "m": "nm"}
 SCALE = {"m": 1e-9}
 """Q in 1/m times this is Q in 1/nm."""
 PREVIEW_ROWS = 10
+FIT_TITLES = {": the points fitted": "data", ": the model": "model"}
+"""The ends of the titles of Fitting's Save Data and Fit (and of a series' fits) before the files said the role."""
+
+
+def curve_role(curve) -> str:
+    """``data`` / ``model`` as the file says (``SasCurve.role``), else by the end of a title GIMaP wrote; empty."""
+    if curve.role:
+        return curve.role
+    return next((role for end, role in FIT_TITLES.items() if str(curve.title).endswith(end)), "")
 
 
 def is_nxcansas_file(path) -> bool:
@@ -100,7 +112,9 @@ def preview(path) -> CurveTablePreview:
         uncertainty_columns=(2,) if first.sigma is not None else (), intensity_columns=(1,),
         curve_titles=tuple(curve.title or f"curve {number}" for number, curve in enumerate(curves, 1)),
         resolution_columns=(len(names) - 1,) if first.dq is not None else (), q_columns=(0,),
+        curve_roles=tuple(curve_role(curve) for curve in curves),
     )
 
 
-__all__ = ["SCALE", "UNIT_READ", "is_nxcansas_file", "load_curve", "preview", "stated_unit"]
+__all__ = ["FIT_TITLES", "SCALE", "UNIT_READ", "curve_role", "is_nxcansas_file", "load_curve", "preview",
+           "stated_unit"]

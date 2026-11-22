@@ -63,9 +63,6 @@ INSITU_ZH = {
     "Saved {n} frames to {name}": "已把 {n} 帧保存到 {name}",
     "Watch a folder first: Fit New Frames in Fitting fits the frames written into it.":
         "请先监视一个文件夹：“在拟合中拟合新帧”拟合写入该文件夹的帧。",
-    "Fitting ▸ In-situ series lists the curves written so far: tick Watch for new curves and press Start — every new "
-    "frame is then fitted from the result of the one before.":
-        "“拟合 ▸ 原位序列”列出了目前写好的曲线：勾选“监视新曲线”并按“开始”——之后每个新帧都从上一帧的结果开始拟合。",
     "Save Results Database": "保存结果数据库",
     "Results database": "结果数据库",
     # -- the chained fit of an In-situ series (fitting/presentation/views/fit_series_view.py, single/series_chain.py) --
@@ -76,11 +73,6 @@ INSITU_ZH = {
     "Every frame's fit into the series' results database (gimap_series.sqlite), beside the curves Analyze recorded":
         "把每一帧的拟合写入序列的结果数据库（gimap_series.sqlite），与分析页记录的曲线放在一起",
     "The previous result; Predict parameters where the chain breaks": "上一帧的结果；链断开处用“预测参数”",
-    "Each frame from the result of the frame before; where that chain breaks — a failed or unconverged fit, a new stage, "
-    "a flagged or poor fit, χ²ᵣ more than 3× the frame before's — Predict parameters fits the frame again and the better "
-    "fit is kept":
-        "每一帧从上一帧的结果开始；在链断开处——拟合失败或未收敛、进入新阶段、拟合被标记或拟合差、χ²ᵣ 超过上一帧的 3 倍——"
-        "用“预测参数”重新拟合这一帧，并保留较好的结果",
     "Then a backward pass: each frame from the result of the frame after it": "然后反向再拟合一遍：每一帧从下一帧的结果开始",
     "Once every frame is done, from the last but one to the first, each frame is refined from the result of the frame "
     "after it; the better of its two fits is kept (its row says “backward”)":
@@ -90,11 +82,6 @@ INSITU_ZH = {
         "按帧或按距第一个已拟合帧的时间绘制趋势（曲线文件写明测量时间时）",
     "from the previous frame, Predict where the chain breaks": "从上一帧开始，链断开处预测",
     "Flags": "标记",
-    "What to know before trusting the row: failed, not converged, a poor fit, values at a bound of their range, the beam "
-    "tail at an edge, a value the curve does not determine, where the chain broke (Predict parameters fitted the frame "
-    "again), a fit kept from the backward pass":
-        "采信这一行之前需要知道的：失败、未收敛、拟合差、参数停在范围边界、光束拖尾在范围边缘、曲线确定不了的参数、"
-        "链在此断开（用“预测参数”重新拟合了这一帧）、保留的是反向拟合的结果",
     "at a bound": "在边界上",
     "beam tail": "光束拖尾",
     "undetermined": "未确定",

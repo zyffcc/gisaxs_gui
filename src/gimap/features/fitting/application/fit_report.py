@@ -105,7 +105,8 @@ def blocks(model, data, curve, *, side: str, q_range, result, excluded=()) -> li
             f"Method: {METHODS.get(result.method, result.method)}; {state} ({result.message})",
             f"{chi} = {_number(result.chi2_reduced)} over {result.points} points with {result.free} free values; "
             f"log RMSE {_number(result.log_rmse)}",
-            f"{result.evaluations} evaluations, {result.seconds:.1f} s",
+            f"{result.evaluations} evaluations, {result.seconds:.1f} s"
+            + (f"; the least squares went on from its own result {result.restarts} times" if result.restarts else ""),
             "Errors: 1σ from the covariance (JᵀJ)⁻¹·s², s² = Σr²/(N − p); linked values by propagation"])]
     else:
         out += [("h2", "Fit"), ("p", "No fit of these values yet: the values are those in Model, without errors.")]

@@ -74,14 +74,12 @@ class FitSeriesPredictMixin:
         self._status(tr(NOT_PREDICT), "warning")
         return False
 
-    def predictor(self, settings, previous, new_stage: bool):
-        """``predict(data, start)`` for ``fit_frame``: Predict parameters on one frame (the particles of ``start``),
-        the solution ``closest`` to the previous frame's model when asked to follow it."""
-        follows = settings.follow and settings.start != "same" and not new_stage
-        previous_model = previous.result.model if follows and previous is not None and previous.ok else None
+    def predict_solutions(self):
+        """``solutions(data, start)``: every solution of Predict parameters for one frame's points, most probable first
+        (the particles of ``start``; thread-safe, Stop cancels the job)."""
         jobs, stop = self.view_model.context.jobs, self._stop
 
-        def predict(data, start):
+        def solutions(data, start):
             request = predict_request(data, start, "model")
             self._series_job = request.job_id
             try:
@@ -90,9 +88,17 @@ class FitSeriesPredictMixin:
                 self._series_job = None
             if not result.succeeded:
                 raise RuntimeError(result.error.message if result.error else "Predict parameters failed")
-            return closest(predicted(result.value), previous_model).model
+            return predicted(result.value)
 
-        return predict
+        return solutions
+
+    def predictor(self, settings, previous, new_stage: bool):
+        """``predict(data, start)`` for ``fit_frame``: Predict parameters on one frame (the particles of ``start``),
+        the solution ``closest`` to the previous frame's model when asked to follow it."""
+        follows = settings.follow and settings.start != "same" and not new_stage
+        previous_model = previous.result.model if follows and previous is not None and previous.ok else None
+        solutions = self.predict_solutions()
+        return lambda data, start: closest(solutions(data, start), previous_model).model
 
     def cancel_series_job(self) -> None:
         if self._series_job:

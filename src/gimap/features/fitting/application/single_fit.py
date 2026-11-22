@@ -358,10 +358,39 @@ def solution_deviation(model: FitModel, row: Mapping) -> float:
     return float(np.max(np.abs(evaluate(model, np.abs(q[keep])) / target[keep] - 1))) if keep.any() else float("nan")
 
 
+REFINE_RESTARTS = 5
+"""A manual fit (Refine, Search, a frame of a series refined) runs the local least squares again from its own result at
+most this many times (``fit_resolving``)."""
+RESTART_TOLERANCE = 1e-3
+"""…while each run lowers χ²ᵣ by more than this share: a least squares that stopped in a long, narrow valley of χ² (a
+trust region that shrank there, values correlated near ±1) goes on from where it stopped."""
+
+
+def converged_again(result, data: FitData, *, restarts: int = REFINE_RESTARTS, max_evaluations=None, progress=None,
+                    stop=None):
+    """``result`` refined again by local least squares from its own values while χ²ᵣ falls by more than
+    ``RESTART_TOLERANCE`` of itself, at most ``restarts`` times; the result kept says how often it improved
+    (``FitResult.restarts``, its evaluations and time summed). A stopped fit, one that kept its start values and one
+    without a finite χ²ᵣ are returned as they are."""
+    done, first = 0, result
+    while done < restarts and not result.stopped and not result.start_kept and math.isfinite(result.chi2_reduced):
+        if stop is not None and stop():
+            break
+        again = fit(result.model, data, method="local", max_evaluations=max_evaluations, progress=progress, stop=stop)
+        if again.stopped or not again.chi2_reduced < result.chi2_reduced * (1.0 - RESTART_TOLERANCE):
+            break
+        done += 1
+        result = replace(again, method=first.method, evaluations=result.evaluations + again.evaluations,
+                         seconds=result.seconds + again.seconds)
+    return replace(result, restarts=done) if done else first
+
+
 def fit_resolving(model: FitModel, data: FitData, *, method: str = "local", max_evaluations=None, progress=None,
-                  stop=None, resolve: bool = True) -> tuple:
+                  stop=None, resolve: bool = True, restarts: int = REFINE_RESTARTS) -> tuple:
     """Fit under hard Model limits; return the result, no automatic changes, and boundary diagnostics.
 
+    ``restarts``: the least squares goes on from its own result while it improves (``converged_again``); 0 for the
+    least squares that only gives a solution of Predict parameters its errors and χ² (it stays as it was).
     Refused (``ValueError``): fewer points than free values plus one, and a curve without a positive intensity.
     A fit that kept its start values (``FitResult.start_kept``) claims no errors."""
     free = sum(1 for _path, parameter in model.parameters() if parameter.free)
@@ -370,6 +399,8 @@ def fit_resolving(model: FitModel, data: FitData, *, method: str = "local", max_
     if data.q.size <= free:
         raise ValueError(TOO_FEW_FOR_FREE.format(points=int(data.q.size), free=free, minimum=free + 1))
     result = fit(model, data, method=method, max_evaluations=max_evaluations, progress=progress, stop=stop)
+    result = converged_again(result, data, restarts=restarts, max_evaluations=max_evaluations, progress=progress,
+                             stop=stop)
     if result.start_kept:
         result = replace(result, errors={path: math.nan for path in result.errors}, correlated=())
     if stop is not None and stop():
@@ -465,6 +496,7 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
         record["fit"] = {
             "method": result.method, "chi2_reduced": result.chi2_reduced, "converged": result.converged,
             "evaluations": result.evaluations, "seconds": round(result.seconds, 3), "message": result.message,
+            "restarts": int(getattr(result, "restarts", 0)),
             "errors": {f"{owner}:{key}": value for (owner, key), value in result.errors.items()},
             "at_bounds": [f"{owner}:{key}" for owner, key in result.at_bounds],
             "correlated": [[f"{a[0]}:{a[1]}", f"{b[0]}:{b[1]}", rho] for a, b, rho in result.correlated],
@@ -479,7 +511,8 @@ __all__ = [
     "intensity_size", "number_size", "sigma_nn_over_d", "SIZE_LAWS", "LINEAR", "NM_PER_A", "PHASES", "PROGRESS_LINE", "SIDES",
     "BOTH_USES_MEAN", "NO_POSITIVE_POINT", "START_KEPT", "TOO_FEW_FOR_FREE", "ONE_CURVE_METHODS", "CURVE_FIT_MIN_POINTS", "SERIES_SIDES", "TOO_FEW_FOR_CURVE_FIT",
     "Component", "Curve", "FitData", "FitModel", "FitResult", "FitStopped", "MissingHalf", "Parameter", "PreparedCurve",
-    "evaluate", "export_table", "fit", "fit_record", "fit_resolving", "fit_scales", "from_manual", "left_out_points", "log_rmse",
+    "REFINE_RESTARTS", "RESTART_TOLERANCE", "converged_again", "evaluate", "export_table", "fit", "fit_record", "fit_resolving",
+    "fit_scales", "from_manual", "left_out_points", "log_rmse",
     "model_from_dict", "model_from_solution", "model_to_dict", "new_component", "parameter_text", "point_key",
     "prepare_curve", "prepare_points", "residuals", "to_manual", "explicit_limits", "solution_deviation",
 ]

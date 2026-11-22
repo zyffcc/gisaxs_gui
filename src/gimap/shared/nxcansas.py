@@ -10,6 +10,7 @@ makes one data set of each SASentry and names it by the entry's title, so every 
     /                       @NX_class=NXroot @default=sasentry01 @file_name @file_time @creator
                             @HDF5_Version @h5py_version
       sasentry01            @NX_class=NXentry @canSAS_class=SASentry @version="1.1" @default=sasdata01
+                            @gimap_role="data" | "model" (when the curve says which: Fitting's fits)
         definition          "NXcanSAS"
         title               what the curve is, and which q its Q is (a horizontal cut: q_y, signed)
         run                 the frame the curve is of
@@ -34,6 +35,10 @@ Text is written as fixed-length ASCII strings where it is ASCII (every reader ta
 The reader takes what other programs write too: entries by ``canSAS_class`` (or an ``NXentry`` whose
 ``definition`` is NXcanSAS), the signal, Q and uncertainty datasets by the attributes that name them, 1D data
 only; units as written (``q_unit`` names the usual spellings).
+
+``gimap_role`` (an attribute NeXus allows beside those of the definition; other programs ignore it) tells a measured
+curve (``data``) from a model curve (``model``) in a file that holds both: Fitting offers the measured curves when
+such a file is opened again (``SasCurve.role``; ``ROLES``).
 """
 
 from __future__ import annotations
@@ -56,6 +61,8 @@ PER_ANGSTROM, PER_NM, PER_M = "1/angstrom", "1/nm", "1/m"
 """The units of Q the definition allows."""
 ARBITRARY = "arbitrary"
 VERSION = "1.1"
+ROLES = ("data", "model")
+"""What a curve is (``SasCurve.role``): measured points, or a model at their Q."""
 NOT_NXCANSAS = "{name} holds no NXcanSAS curve (no SASentry with a 1D SASdata group)."
 NO_SUCH_CURVE = "{name} holds {count} NXcanSAS curves; there is no curve {number}."
 
@@ -102,6 +109,8 @@ class SasCurve:
     """One-dimensional Q resolution (one standard deviation)."""
     dq_unit: str = ""
     """Unit of the resolution dataset. When absent, use the unit of Q."""
+    role: str = ""
+    """``data`` or ``model`` (``ROLES``; the SASentry's ``gimap_role``); empty: not said."""
 
 
 def q_unit(units: Any) -> Optional[str]:
@@ -146,6 +155,10 @@ def write_nxcansas(path: str | Path, curves: Sequence[SasCurve], *, creator: str
 
 def _write_entry(entry, curve: SasCurve) -> None:
     _attributes(entry, NX_class="NXentry", canSAS_class="SASentry", version=VERSION, default="sasdata01")
+    if curve.role:
+        if curve.role not in ROLES:
+            raise ValueError(f"{curve.title}: a curve is data or model, not {curve.role!r}.")
+        _attributes(entry, gimap_role=curve.role)
     _field(entry, "definition", "NXcanSAS")
     _field(entry, "title", curve.title)
     _field(entry, "run", curve.run or curve.title)
@@ -351,6 +364,7 @@ def _read_data(entry, data) -> Optional[SasCurve]:
         process=_field_text(process, "name"), description=_field_text(process, "description"),
         record=_field_text(note, "data"), date=_field_text(process, "date"), mask=mask, group=data.name,
         dq=dq, dq_unit=dq_unit,
+        role=_text(entry.attrs.get("gimap_role")) if _text(entry.attrs.get("gimap_role")) in ROLES else "",
     )
 
 

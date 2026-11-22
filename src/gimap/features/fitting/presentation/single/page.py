@@ -69,6 +69,8 @@ TOAST_LEVELS = ("warning", "error")
 well is said in the status line only — one place, not two that overlap."""
 CHOOSE_CURVE = "{name} holds {count} curves. Which one is to be fitted?"
 """An NXcanSAS file of several curves (Open Curve…, a dropped file): asked once, by the curves' titles."""
+CHOOSE_MEASURED = "{name} holds {count} measured curves (and the models fitted to them). Which one is to be fitted?"
+"""A file of fits (the points fitted and the model of each): only its measured curves are offered, the first chosen."""
 PREFERENCES_KEY = "fitting_single_page"
 STARTING_MODEL = "Starting model, not set up yet"
 """The Model step while its model is the starting guess (nobody set it up, nor was it fitted)."""
@@ -227,19 +229,23 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
 
     def open_curve_file(self, path) -> bool:
         """Open Curve… and a dropped file: an NXcanSAS file of several curves asks which one (by their titles)."""
-        titles = ()
+        titles, measured = (), ()
         if Path(path).suffix.lower() not in (".dat", ".txt"):
             try:
-                titles = self.view_model.inspect_curve_table(path).curve_titles
+                preview = self.view_model.inspect_curve_table(path)
+                titles, measured = preview.curve_titles, preview.measured_curves
             except (OSError, ValueError, RuntimeError):
                 titles = ()  # open_curve says why the file cannot be read
-        if len(titles) > 1:
-            items = [f"{number}: {title}" for number, title in enumerate(titles, 1)]
-            chosen, ok = QInputDialog.getItem(self, tr("Choose a Curve"), trf(CHOOSE_CURVE, name=Path(path).name,
-                                                                           count=len(titles)), items, 0, False)
+        fits = len(measured) < len(titles)  # a file of fits: its measured curves, not the models beside them
+        if len(titles) > 1 and len(measured) == 1:
+            path = InSituSourceFrame(Path(path), frame_index=measured[0]).token
+        elif len(titles) > 1 and measured:
+            items = [f"{index + 1}: {titles[index]}" for index in measured]
+            chosen, ok = QInputDialog.getItem(self, tr("Choose a Curve"), trf(
+                CHOOSE_MEASURED if fits else CHOOSE_CURVE, name=Path(path).name, count=len(measured)), items, 0, False)
             if not ok:
                 return False
-            path = InSituSourceFrame(Path(path), frame_index=items.index(chosen)).token
+            path = InSituSourceFrame(Path(path), frame_index=measured[items.index(chosen)]).token
         if self.open_curve(path):
             return True
         if self.view_model.state.error_message != COLUMNS_TO_CHOOSE:
