@@ -52,6 +52,10 @@ class PredictPageMixin(PredictProgressMixin):
         if particles == "model" and not model.components:
             particles = "spheres_cylinders"  # nothing in Model yet: the network chooses
         request = predict_request(data, model, particles)
+        if self.reflected_beam.isChecked():
+            request.payload["reflected_beam"] = True
+            if not request.payload["qz"] and self.measured_qz.value():
+                request.payload["measured_qz"] = self.measured_qz.value()
         self._predict_job_id = request.job_id
         self._predict_selection = selection
         given = request.payload.get("compositions")

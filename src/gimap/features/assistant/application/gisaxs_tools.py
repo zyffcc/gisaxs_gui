@@ -69,7 +69,8 @@ def _intervals(row: dict) -> dict:
         except (TypeError, ValueError):
             continue
         if len(numbers) == len(INTERVAL_NAMES):
-            found[str(name)] = dict(zip(INTERVAL_NAMES, numbers))
+            keys = ("least_squares_value", *INTERVAL_NAMES[1:]) if fit_names.weight_key(row) == "bic_weight" else INTERVAL_NAMES
+            found[str(name)] = dict(zip(keys, numbers))
     return found
 
 
@@ -119,7 +120,7 @@ def _solution(row: dict) -> dict:
         "rank": row.get("rank"),
         "model": row.get("composition") or row.get("combination"),
         "combination": row.get("combination"),
-        "probability": None if math.isnan(probability(row)) else round(probability(row), 4),
+        fit_names.weight_key(row): None if math.isnan(probability(row)) else round(probability(row), 4),
         "components": [
             {"type": component["type"], "weight": round(float(component.get("weight", 0.0)), 3),
              "amplitude": float(component.get("amplitude", math.nan)),
@@ -132,6 +133,10 @@ def _solution(row: dict) -> dict:
         "chi2": round(_chi2(row), 3),
         "points": None if not row.get("points") else dict(row["points"]),
         "compared_by": row.get("compared_by"),
+        "diagnostics": row.get("diagnostics") or {},
+        "ess": row.get("ess"),
+        "posterior_summary": row.get("posterior_summary") or {},
+        "least_squares_values": row.get("least_squares_values") or {},
         "log_rmse": round(float(row.get("best_log_rmse", math.nan)), 4),
         "converged": bool(row.get("converged", True)),
         "warnings": notes,
@@ -305,10 +310,13 @@ class GisaxsToolsMixin:
             "data": {"q_inv_angstrom": x.tolist(), "intensity": y.tolist(), "sigma": sigma.tolist()},
         }
         head = solutions[0]
-        summary = f"most probable: {_brief(head)}" + (f" ({bounds_text(head)})" if bounds_text(head) else "")
+        by_bic = fit_names.weight_key(head) == "bic_weight"
+        lead = "highest BIC weight" if by_bic else "most probable"
+        summary = f"{lead}: {_brief(head)}" + (f" ({bounds_text(head)})" if bounds_text(head) else "")
         others = rivals(solutions)
         if others:
-            summary += "; also probable: " + "; ".join(f"rank {item['rank']}, {_brief(item)}" for item in others)
+            summary += ("; alternatives: " if by_bic else "; also probable: ") + "; ".join(
+                f"rank {item['rank']}, {_brief(item)}" for item in others)
         return self._ok({"side": side, "curve": note, "points": int(x.size), "solutions": solutions[:TOP_SOLUTIONS],
                          "chosen": head}, summary)
 

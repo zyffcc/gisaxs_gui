@@ -112,7 +112,7 @@ def build_results_step(owner, page: QWidget, layout) -> None:
     owner.solution_selector_table.hide()
     layout.addWidget(owner.solution_selector_table)
 
-    owner.parameters_table = _stretching(read_only_table(("", "value", "±"), page, "fitParametersTable",
+    owner.parameters_table = _stretching(read_only_table(("", "value", "±", "posterior median"), page, "fitParametersTable",
                                                          QAbstractItemView.ExtendedSelection), 0)
     owner.parameters_table.setToolTip(VALUES_TIP)
     layout.addWidget(owner.parameters_table)
@@ -144,8 +144,7 @@ def build_results_step(owner, page: QWidget, layout) -> None:
     owner.export_solutions_button = QPushButton("Export Solutions…", owner.alternatives)
     owner.export_solutions_button.setObjectName("fitExportSolutions")
     owner.export_solutions_button.setToolTip(
-        "Every solution: probability, χ²ᵣ, flags and every value with its median and 68 % / 95 % intervals (CSV and "
-        "JSON), and the curves of every solution with their terms")
+        "Export each solution's probability or BIC weight, χ²ᵣ, flags, least-squares values, posterior quantiles and fitted curves.")
     solution_buttons = QHBoxLayout()
     solution_buttons.addWidget(owner.use_solution_button)
     solution_buttons.addWidget(owner.export_solutions_button)

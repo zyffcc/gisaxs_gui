@@ -10,7 +10,7 @@ curves.
 from __future__ import annotations
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QComboBox, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSpinBox, QWidget
+from PyQt5.QtWidgets import QCheckBox, QComboBox, QDoubleSpinBox, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSpinBox, QVBoxLayout, QWidget
 
 from src.gimap.app.presentation.components import AdvancedSection
 
@@ -18,17 +18,15 @@ from .step_widgets import muted
 
 METHODS = (
     ("predict", "Predict parameters",
-     "GIMaP's network proposes the particles and their sizes from the curve; the proposals are weighted against the "
-     "model (a posterior with 68 % intervals and the probability of each solution), and each solution is refined by "
-     "least squares. Values fixed in Model are not kept: Refine afterwards keeps them."),
+     "The network proposes particles and sizes. Least squares refines the values. Evidence compares the solutions, "
+     "with BIC weights if sampling fails. Refine afterwards to use the limits in Model."),
     ("local", "Refine the values in Model",
      "Least squares from the values in Model, with Fitting's own model: fast; finds the nearest good fit."),
     ("global", "Search the ranges, then refine",
      "Tries values across the min–max range of every free parameter first; slower, for a poor start."),
 )
-PREDICT_PARTICLES_TIP = ("The particles in Model: their families, with or without a paracrystal, in the order of their "
-                         "radii. A choice: the network proposes the compositions it finds most probable among these, "
-                         "and their posterior probabilities decide.")
+PREDICT_PARTICLES_TIP = ("The particles in Model uses the families in radius order, with their paracrystals. "
+                         "For a choice of particles, the network proposes compositions. Evidence or BIC weights rank the fits.")
 
 
 def build_fit_step(owner, page: QWidget, layout) -> None:
@@ -50,7 +48,10 @@ def build_fit_step(owner, page: QWidget, layout) -> None:
     layout.addWidget(owner.method_hint)
 
     owner.predict_row = QWidget(page)
-    predict = QHBoxLayout(owner.predict_row)
+    group = QVBoxLayout(owner.predict_row)
+    group.setContentsMargins(0, 0, 0, 0)
+    predict = QHBoxLayout()
+    group.addLayout(predict)
     predict.setContentsMargins(0, 0, 0, 0)
     predict.addWidget(QLabel("Particles", owner.predict_row))
     owner.predict_particles = QComboBox(owner.predict_row)
@@ -59,6 +60,21 @@ def build_fit_step(owner, page: QWidget, layout) -> None:
     owner.predict_particles.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
     owner.predict_particles.setMinimumContentsLength(12)
     predict.addWidget(owner.predict_particles, 1)
+    owner.reflected_beam = QCheckBox("Reflected beam present in the data", owner.predict_row)
+    group.addWidget(owner.reflected_beam)
+    owner.measured_qz = QDoubleSpinBox(owner.predict_row)
+    owner.measured_qz.setDecimals(5)
+    owner.measured_qz.setRange(0, 10)
+    owner.measured_qz.setSingleStep(0.01)
+    owner.measured_qz.setSpecialValueText("Unknown")
+    qz_row = QWidget(owner.predict_row)
+    qz_layout = QHBoxLayout(qz_row)
+    qz_layout.setContentsMargins(0, 0, 0, 0)
+    qz_layout.addWidget(QLabel("Measured q_z for level-1 flags (nm⁻¹)", qz_row))
+    qz_layout.addWidget(owner.measured_qz)
+    qz_row.hide()
+    owner.reflected_beam.toggled.connect(qz_row.setVisible)
+    group.addWidget(qz_row)
     layout.addWidget(owner.predict_row)
 
     owner.fit_step_button = QPushButton("Fit", page)

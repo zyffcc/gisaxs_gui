@@ -52,11 +52,15 @@ def test_predict_on_the_page(tmp_path, monkeypatch):
         page.set_model(FitModel((new_component("sphere", radius=3.0),)))
         page.set_method("predict")
         assert not page.predict_row.isHidden()
+        page.reflected_beam.setChecked(True)
+        page.measured_qz.setValue(.4)
         page.predict_particles.setCurrentIndex(page.predict_particles.findData("model"))
         page.run_fit()
         _wait(page)
         solutions = page.session.solutions
         assert solutions, page.status_label.text()
+        assert "qzR_cov:R_1" in solutions[0].flags and "qzR:R_1" not in solutions[0].flags
+        assert solutions[0].diagnostics["cut_qz"] == 0 and solutions[0].diagnostics["measured_qz"] == .4
         assert all(s.probability is not None and s.source.startswith("Predict parameters") for s in solutions)
         assert sum(s.probability for s in solutions) <= 1.0 + 1e-9
         best = page.session.model.components[0]
@@ -102,7 +106,7 @@ def test_the_batch_window_runs_predict(tmp_path, monkeypatch):
     monkeypatch.setenv("GIMAP_ML1D_NETWORK", str(NETWORK))
     path = _sphere_file(tmp_path)
     options = validate_options({**default_options(), "method": "posterior", "components": [1], "side": "positive",
-                                "q_unit": "A^-1", "max_solutions": 3})
+                                "q_unit": "A^-1", "max_solutions": 3, "reflected_beam": True, "measured_qz": .4})
     value = run_workflow_job({"options": options, "output_dir": str(tmp_path / "out"), "files": [str(path)]},
                              lambda *args: None, lambda: False)
     rows = value["candidates"]
@@ -110,6 +114,7 @@ def test_the_batch_window_runs_predict(tmp_path, monkeypatch):
     assert value["summary"]["profile"].startswith("Predict parameters")
     best = rows[0]
     assert best["components"][0]["params"]["R"] == pytest.approx(4.0, rel=0.05) and 0 <= best["probability"] <= 1
+    assert "qzR_cov:R_1" in best["flags"] and best["diagnostics"]["cut_qz"] == 0
     model, deviation = model_from_solution(best)
     assert model.components[0].family == "sphere" and deviation < 1e-6
     side = next((tmp_path / "out").glob("0001_*")) / "positive"

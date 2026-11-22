@@ -59,9 +59,10 @@ INTERVAL_KEYS = ("R", "h", "D")
 
 
 def probability(solution: Optional[dict]) -> float:
-    """The posterior probability of a solution (NaN when the fit did not give one)."""
+    """The numeric comparison weight. Older BIC records stored it under 'probability'."""
+    row = solution or {}
     try:
-        value = float((solution or {}).get("probability"))
+        value = float(row.get(fit_names.weight_key(row), row.get("probability")))
     except (TypeError, ValueError):
         return math.nan
     return value if math.isfinite(value) else math.nan
@@ -123,6 +124,8 @@ def chance(solution: Optional[dict], name: str = "probability ") -> str:
     if (solution or {}).get("alone"):
         return fit_names.ONLY_ONE
     value = probability(solution)
+    if fit_names.weight_key(solution or {}) == "bic_weight":
+        name = fit_names.BIC_WEIGHT + " "
     return "" if math.isnan(value) else f"{name}{value:.2f}"
 
 

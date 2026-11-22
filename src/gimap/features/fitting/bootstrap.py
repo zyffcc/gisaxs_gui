@@ -127,7 +127,7 @@ def create_curve_fit():
 
     from .application.single_fit import CURVE_FIT_MIN_POINTS, TOO_FEW_FOR_CURVE_FIT
     from .application.workflow_v5 import default_options
-    from .domain.posterior import encoding, network, refine
+    from .domain.posterior import encoding, network, refine, reporting
     from .infrastructure.adapters.posterior_job import batch_compositions, curve_rows
     from .infrastructure.adapters.workflow_v5 import prepare_sides, side_notes
 
@@ -166,6 +166,9 @@ def create_curve_fit():
         if cut_qz:  # a flag only, added after the fit: no value, interval or probability changes
             for solution in solutions:
                 solution.flags = tuple(solution.flags) + tuple(refine.interface_flags(solution.model, cut_qz))
+                solution.flags += tuple(reporting.grazing_flags(solution.model, cut_qz, 1, reflected_beam=True))
+                if "diagnostics" in solution.extras:
+                    solution.extras["diagnostics"].update(measured_qz=cut_qz, reflected_beam=True)
         q = np.asarray(item["q"], float)
         rows = curve_rows(item, solutions[:5], np.linspace(q.min(), q.max(), options["render_points"]),
                           chosen_by="user_composition" if components else "network_choice")

@@ -42,7 +42,7 @@ class Solution:
     deviation: float = 0.0
     """How much the model's curve differs from the solution's own."""
     probability: Optional[float] = None
-    """Predict parameters: the posterior probability of this solution (its composition and mode)."""
+    """Normalized mode weight, from the evidence or from BIC when the comparison fell back."""
     intervals: tuple = ()
     """Predict parameters: (name, (best, median, low68, high68, low95, high95, error)) of every value."""
     flags: tuple = ()
@@ -57,6 +57,10 @@ class Solution:
     incomplete: bool = False
     """Predict parameters was stopped before every solution's posterior was sampled: this one was finished, and its
     probability is over the solutions finished."""
+
+    diagnostics: dict = field(default_factory=dict)
+    posterior_summary: dict = field(default_factory=dict)
+    importance_starts: tuple = field(default=(), compare=False, repr=False)
 
     @property
     def label(self) -> str:

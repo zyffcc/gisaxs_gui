@@ -116,7 +116,8 @@ def fit_rows(fit: dict) -> list[str]:
     if not solutions:
         return ["No fit solution."]
     index, _solution = chosen(fit)
-    lines = ["| rank | model | probability | parameters | χ²ᵣ | note |", "|---|---|---|---|---|---|"]
+    kind = fit_names.BIC_WEIGHT if fit_names.weight_key(_solution or {}) == "bic_weight" else "probability"
+    lines = [f"| rank | model | {kind} | parameters | χ²ᵣ | note |", "|---|---|---|---|---|---|"]
     for number, row in enumerate(solutions):
         more = len(row.get("more_warnings") or ())  # of background, beam tail and resolution: under the table
         notes = ([bounds_text(row)] + list(row.get("warnings") or ())
@@ -170,6 +171,13 @@ def gisaxs_sections(report: dict, language: str = ENGLISH) -> list[str]:
     if not fit:
         lines.append("Not fitted here: Send to Fitting in GIMaP fits the prepared curve with a chosen model.")
     else:
+        _, selected = chosen(fit)
+        by_bic = fit_names.weight_key(selected or {}) == "bic_weight"
+        comparison = ("Evidence sampling failed. BIC weights compare the solutions by exp(−BIC/2), "
+                      "normalised over the solutions compared." if by_bic else
+                      f"Posterior probabilities compare the solutions by their evidences. {fit_names.RELATIVE}.")
+        diagnostics = fit_names.diagnostic_lines((selected or {}).get("diagnostics") or {}, (selected or {}).get("ess"))
+        medians = (selected or {}).get("posterior_summary") or {}
         lines += [
             f"Curve: {fit.get('curve')} ({fit.get('points')} points, |qy| {_number((fit.get('q_range_inv_angstrom') or [None])[0], 3)}–"
             f"{_number((fit.get('q_range_inv_angstrom') or [None, None])[1], 3)} Å⁻¹).",
@@ -179,13 +187,17 @@ def gisaxs_sections(report: dict, language: str = ENGLISH) -> list[str]:
             "",
             *fit_rows(fit),
             *_more_lines(fit),
+            *(["", "| parameter | least-squares value | posterior median | posterior 68 % |",
+                "|---|---|---|---|", *[f"| {name} | {_number(selected.get('least_squares_values', {}).get(name))} | "
+                f"{_number(row['median'])} | {_number(row['low68'])}–{_number(row['high68'])} |"
+                for name, row in medians.items()]] if medians else []),
+            *[f"- {template.format(**values)}" for template, values in diagnostics],
             "",
             "Predict parameters: GIMaP's network proposes compositions — one or two populations of spheres and "
             "upright cylinders with size dispersity, \"(S)\" with a paracrystal distance D — and their values; each "
-            "solution is refined by least squares, and its probability is the posterior probability of that "
-            f"composition and mode; {fit_names.RELATIVE}. The run reports the most probable solution (chosen), with "
-            "its refined sizes and their 68 % intervals in the Decisions; when another solution has a probability of "
-            f"at least {ASK_PROBABILITY:g}, the curve alone does not decide the model and it is a point to check. "
+            f"solution is refined by least squares. {comparison} The run reports the highest-weight solution (chosen), "
+            f"with its refined sizes and their 68 % intervals in the Decisions. Another solution with weight "
+            f"at least {ASK_PROBABILITY:g} is a point to check. "
             f"{fit_names.CHI2_DEFINITION}; it is the number Fitting shows for the same solution. A "
             "non-linear value at a bound of its range (the note column) is not determined by the curve. The "
             "particle amplitudes (Scale), the Background and the beam tail's amplitude Tail A cannot go below 0; one "

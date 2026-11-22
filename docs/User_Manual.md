@@ -229,8 +229,7 @@ distribution of radii; Fitting's default and the automatic analysis use a Gaussi
 number* under **Sizes** to compare like with like): compare radii with care.
 
 ![Fitting with the curve sent from Analyze](manual_images/en/11_fitting_single.png)
-*Fitting ▸ Single analysis after a refining fit: the curve, the model over it, the fitting range
-(orange) and the residuals.*
+*After Predict parameters, Results shows the least-squares values and posterior medians. The model and residuals appear on the right.*
 
 ### 1.4 Where to go next
 
@@ -1641,7 +1640,7 @@ off.
    and does not start the fit.
    Confirm the model in Fitting.
 
-The solutions are listed most probable first, with their probability **p**. Probabilities are relative to the
+The solutions are ranked by probability **p**, or by **BIC weight** if evidence sampling failed. Probabilities are relative to the
 compositions that were tried; the single solution of a composition you gave has none (*only this composition was
 tried*). R, h and D show every population, in the order of the radii (`3.06 / 6.02`, `49.4 / –`: – for a population
 without a paracrystal). The table's χ²ᵣ is Σ((I − model)²/σ²)/(N − number of free values) over the fitted points,
@@ -2214,10 +2213,7 @@ Other ways to get a single curve in:
 
 ![Fitting, Single analysis](manual_images/en/11_fitting_single.png)
 
-*The step rail on the left, here with the Results step open: the quality, the next steps (Fit Again, Fit Every
-Curve in This Folder…), what was done automatically at the edges of the ranges and the warnings (when there are any,
-none for this fit), and every value ± its error; on the right the curve with the model, the orange fitting range and
-the residuals below.*
+*After Predict parameters, Results shows the least-squares values and posterior medians. The model and residuals appear on the right.*
 
 The page is laid out like Analyze: the steps on the left, each saying where it stands, and the plots on the right.
 
@@ -2373,19 +2369,20 @@ sizes for your sample, or let the Fit step find them.
   ± error with its status, χ²ᵣ, the correlated pairs, the settings — as Markdown, HTML or text, to **Copy** or **Save
   Report…** ([Physics and Methods, section 9.16](Physics_Manual.md#916-uncertainty-after-refine-and-search)). A value
   the curve does not determine (its error not finite, or above 10× the value) is marked ⚠ in the table and the report.
-  **Posterior check (MCMC)** runs a short Markov chain Monte Carlo on the posterior of the solution in Model — a
-  solution of Predict parameters (its own posterior, with the model error) or the last Refine or Search (its
-  likelihood) — in the background (**Run Check**, **Stop**; **Steps**, by default 3000, **Walkers**, **Seed**). The
-  table sets the run's median and 68 % / 95 % intervals beside the intervals checked (Predict's, or the fit's ± 1σ),
-  with each value's autocorrelation time τ and R̂; **Trace of** draws one value step by step; the line under the table
-  says whether the run is long enough (*Converged: … ≥ 50 × the longest autocorrelation time …, R̂ ≤ …*) and marks ⚠ a
-  value whose interval does not overlap the one checked; **Save Check…** writes it all as JSON. It is a check only:
-  nothing in Model, Results or Predict's values changes
-  ([Physics and Methods, section 9.19](Physics_Manual.md#919-posterior-check-by-mcmc)).
+  For a Predict parameters solution, **Posterior check (MCMC)** uses a second sampler of the same posterior (same
+  likelihood, model error and prior); checks the Monte Carlo accuracy of this mode. For a Refine or Search result it
+  samples the fit's likelihood. **Run Check** starts two independent ensembles at dispersed importance samples or,
+  when starts are missing, draws from the prior box. **Steps** (default 3000) and **Walkers** apply to each ensemble.
+  **Seed** reproduces the run. **Stop** keeps completed steps. The table compares the MCMC median and 68 % / 95 %
+  intervals with Predict's sampled intervals when available, or with the least-squares reference. Read the
+  autocorrelation time τ and split R̂ across ensembles together. The verdict requires at least 50 τ kept steps per
+  ensemble and R̂ below 1.05 for every value. A ⚠ marks non-overlapping 68 % intervals. **Trace of** plots one value
+  over time. **Save Check…** writes the run and its diagnostics as JSON. The Fit Report includes the check for the
+  current model and data. [Physics and Methods, section 9.19](Physics_Manual.md#919-posterior-check-by-mcmc).
 
   ![Posterior check](manual_images/en/27_fitting_mcmc_check.png)
 
-  *The Posterior check tab after a Refine: the run's intervals beside the fit's ± 1σ, τ and R̂, the verdict, and the trace of R (three walkers, the 16–84 % band and the median).*
+  *A short run after Predict compares the sampled intervals and reports τ and split R̂. Here the ensembles have yet to converge.*
 
 - When there are several solutions (of Predict parameters, or of Analyze), the drop-down above the parameter table
   switches the entire solution: parameters, errors, total curve, components and residuals together. It does not
@@ -2404,7 +2401,7 @@ sizes for your sample, or let the Fit step find them.
   **Fix**, **Let It Fit** or **Range…** (or right-click): the next **Fit Again** uses them. **Range…** shows the
   value's min – max in Model. A free value the fit gives no error for shows **–**; its tooltip says why (at a bound
   of its range, the Scale of its population or Tail A at 0, or not constrained by the curve).
-- **Other solutions** (folded): the solutions of *Predict parameters*, each with its χ²ᵣ and its probability **p**
+- **Other solutions** (folded): the solutions of *Predict parameters*, each with its χ²ᵣ and either its probability **p** or its **BIC weight**
   (the column names' tooltips define both; the row's tooltip says how many points χ²ᵣ is of). R and D show every
   population, in the order of the radii (`3.06 / 6.02`, `49.4 / –`); two solutions of the same composition say in
   their tooltip in which values they differ (σnn/D, σ_q …). A solution from **Show in Fitting** shows the χ²ᵣ of
@@ -2520,8 +2517,8 @@ solution that comes into Model keeps Model's geometry; **Refine** afterwards kee
 
 **Reading the result**
 
-- The solutions go to **Results ▸ Other solutions**, most probable first, with χ²ᵣ and their probability **p**; the
-  most probable is in Model, and **Method** turns to **Refine the values in Model**. The probabilities compare the
+- The solutions go to **Results ▸ Other solutions**, with the highest weight first. Each shows χ²ᵣ and its probability **p** or **BIC weight**. The
+  highest-ranked solution is in Model, and **Method** turns to **Refine the values in Model**. The probabilities compare the
   compositions tried and the distinct solutions of each: a solution with p 0.6 next to one with 0.4 means that the
   curve does not decide between them. With two or three populations this is common: another R of one population at
   the same D, or the paracrystals of two populations exchanged, can describe the curve as well; Predict tries these
@@ -2534,7 +2531,21 @@ solution that comes into Model keeps Model's geometry; **Refine** afterwards kee
   how many (*χ²ᵣ 1.04 over 596 of 598 points; 2 below the network's q window*). The same number is shown wherever
   the solution appears. A **Refine** afterwards fits every point of the fitting range and says so when its χ²ᵣ is
   not of the same points.
-- **Fit details…** lists the values in Model with their 68 % intervals: the refined value first, then its
+- **Results** shows the **least-squares value** used in Model beside the **posterior median** and its central 68 %
+  interval (hover over the median, or open **Fit details…**). The JSON record, solutions CSV and fit report distinguish these estimates. **BIC weight** identifies a
+  comparison that fell back to BIC. For evidence comparisons, Fit details gives the effective sample size, bootstrap
+  error of the log evidence (200 resamples) and the resulting 68 % Monte Carlo range of the composition probability.
+  Below 50 effective samples the sampled quantiles use tempered weights. A dash means no sampled estimate is available.
+- The 5 % model-error floor was calibrated using 397 points over 0.02–2.0 nm⁻¹ (198.5 points per decade).
+  A density difference greater than a factor of 1.5 triggers a notice. At the same q range, independent points of
+  comparable precision give widths proportional to the inverse square root of their density.
+- Select **Reflected beam present in the data** for a measured cut with a reflected beam. For a level-1 fit, enter the measured q₊ under **Measured q_z for level-1 flags (nm⁻¹)** if known. This value affects warnings only. On such cuts, level 1
+  (effective interface) and level 2 (Born at q_z) flag sphere and random-cylinder radii above q_z·R = 1.2
+  (`qzR_cov`). In the simulated DWBA sphere benchmark, nominal 68 % coverage was only 18–33 % at 1.2–1.7.
+  Level 2 adds `qzR_fail` above 2. Use both angles for level 3 or fit the four-term DWBA with a known substrate.
+  The original level-1 `qzR` flag starts above 1.7. A cylinder with known height, 0.8 ≤ h/(2R) ≤ 1.25 and
+  q_z·R > 1.2 may stand for a sphere (`cyl_sphere`). See Physics and Methods §9.13 for the coverage table.
+- **Fit details…** also shows the reported 68 % intervals, extended to include the least-squares value. It gives the refined value first, then its
   interval, e.g. `R 4.12 [4.08, 4.16] nm`, and the probability. When a refined value lies at an end of its interval,
   a line says so (*the refined value lies at the edge of the posterior: the model describes this curve only within
   the model error*). Below it, what to keep in mind, one line per kind of remark: a value the curve says little
@@ -2550,7 +2561,7 @@ solution that comes into Model keeps Model's geometry; **Refine** afterwards kee
   or one smaller than the curve resolves (a smooth background). A sphere or random cylinder fitted at q_z = 0 (no
   angles in Model) whose q_z·R at the cut is above 1.7 is named as well: its radius is then biased, usually too
   small; give both angles. GIMaP can say this only where it knows the cut's angles, as in the automatic analysis
-  (section 5.5): a curve file does not carry them, so a Predict here without angles in Model does not flag it.
+  (section 5.5), or when you supply the measured q₊ yourself.
 - **Refine These Values** (or **Refine the values in Model**) then gives the least-squares errors under Model's own
   limits, as for any model.
 
@@ -2561,9 +2572,7 @@ populations, and radii from 0.5/q_max to 5/q_min.
 
 ![The 1D Predict window](manual_images/en/13_1d_predict.png)
 
-*The candidates of every curve on the left (with their Stage); the selected candidate's fit and parameters on the right.
-The second line under the buttons, “q in Å⁻¹, as their header states”, says how the three Analyze curve files
-(`_fit_input.dat`) are read, with no unit set by hand; **Curve / side** repeats it after each name (“· Å⁻¹”).*
+*The selected curve and its candidate appear on the left. The right-hand panels show the fit and its parameters. Indicate a reflected beam in the settings when the measurement contains one.*
 
 The window runs Predict parameters on every curve listed; it has no other method.
 
@@ -4071,7 +4080,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Fitting is slower with sizes by intensity and with random cylinders.** With a sphere or vertical cylinder and sizes by number or log-normal, **Search the ranges** takes a few seconds as before; with *Gaussian, by intensity* (models of earlier versions) tens of seconds, and with a random cylinder (15–800 ms per evaluation) up to minutes. | Set **Sizes** to *Gaussian, by number*, narrow the ranges of R, h and σR/R before a search, or start **Refine** from values close to the curve. |
 | **A vertical cut is modelled for spheres and upright cylinders only**, at one in-plane q (q∥ of its columns), without a q resolution or the specular rod, and only in Fitting ▸ Fit Several Curves Together. Its scales are its own: with several populations their ratio is not tied to the horizontal cut's (section 6.6). | Take the vertical cut beside the specular rod; fit random cylinders and core–shell spheres on horizontal cuts. |
 | **The substrate table holds bare Si, SiO₂, plate glass and Au from 4.9 to 30 keV.** An oxide, a polymer film, roughness and the particle layer's own index are not part of it (section 6.2). | Type δ and β of an effective substrate, or use the two paths with a free r. |
-| **The posterior check (MCMC) is slow for random cylinders and samples one mode.** A random cylinder takes 15–200 ms per evaluation (hours for a check); the run explores the mode it starts at (section 6.2). | Check spheres and upright cylinders; compare other modes through Predict's other solutions. |
+| **The posterior check (MCMC) is slow for random cylinders.** A random cylinder takes 15–200 ms per evaluation. A check takes hours. Independent ensembles can both miss a distant mode (section 6.2). | Compare other modes through Predict's other solutions. |
 | **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA; spheres with two paths and a free reflection coefficient r when Model has both angles, else at the Born term of the cut's q_z or the effective interface). It was checked on simulated curves of an independent model and on BornAgain simulations, not on measured curves of known particles; physics outside the model (roughness, other shapes) can give a composition a high probability that it does not deserve. The waves the surface reflects (the four-term DWBA) matter for spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i = 0.4°, 12 keV): with both angles R is off by about 6 % (median; P90 19–40 %) and the composition right in about 60 % of such curves; with the q_z alone R is off by about 10 % (q₊R 2.3–3.5) to 40 % (above) and a sphere is usually taken for upright cylinders; upright cylinders are not affected. With both angles on a curve whose reflected wave is weak (far above the critical angle), a smaller sphere with a large \|r\| can fit as well, and on BornAgain's model of the GALAXI frame (broad log-normal sizes, αf at the critical angle) the free r let wrong sizes fit within the errors (with one sphere population R 16–500 nm, once at the 500 nm bound, on the three simulated draws; with the composition chosen one 16 nm sphere without a paracrystal on two); and on two-sphere curves without reflection this network misses the true sizes somewhat more often than the previous one ([Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters)). | Judge every solution by its residuals and by what you know of the sample; give both angles for spheres beyond q₊R 1.7; far above the critical angle check the fitted \|r\| (`refl_amp` in Model) against the substrate's and fix it if it is far off, then refine. |
 | **Run records do not hold everything needed to repeat a run.** They identify `software_version`, the network's record and Predict parameters' fixed seed; masks are counted, not stored as pixel lists. | Keep the input, settings and model files with the exported records. |
 | **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`, `assistant_provider_keys.json`; section 10.1): whoever can read that folder can read them. | On a shared computer, or with `GIMAP_HOME` on a shared drive, set the key as an environment variable instead, or **Remove** it after use. |

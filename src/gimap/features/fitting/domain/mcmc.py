@@ -16,8 +16,7 @@ Diagnostics of a run (the first ``BURN`` of the steps are discarded):
 * the integrated autocorrelation time τ of each coordinate, in steps: the walkers' normalised autocorrelation functions
   averaged, summed up to Sokal's automatic window M ≥ 5 τ(M) (as emcee); the run holds about W·n/τ independent
   samples; emcee advises n ≥ 50 τ;
-* the split R̂ of each coordinate (Gelman & Rubin 1992; Vehtari et al. 2021): every walker's kept half split in two,
-  the variance between these 2W chains against the variance within them; near 1 when they agree;
+* split R̂ of each coordinate on the independent ensembles' mean traces, splitting each trace in time;
 * the acceptance fraction (0.2–0.5 is usual for the stretch move).
 
 ``converged`` asks for both: n ≥ ``TAU_FACTOR`` τ for every coordinate and R̂ < ``RHAT_LIMIT``.
@@ -42,11 +41,11 @@ WINDOW_C = 5.0
 @dataclass
 class Chain:
     positions: np.ndarray
-    """(steps, W, d) of the steps done."""
+    """(steps, ensembles, W, d), or (steps, W, d) for a single ensemble."""
     log_prob: np.ndarray
-    """(steps, W)."""
+    """One log probability per saved walker position."""
     accepted: np.ndarray
-    """(W,) moves accepted per walker."""
+    """Moves accepted per walker."""
     stopped: bool = False
 
     @property
@@ -54,7 +53,7 @@ class Chain:
         return int(self.positions.shape[0])
 
     def kept(self, burn: float = BURN) -> np.ndarray:
-        """(n, W, d): the steps after the first ``burn`` of them."""
+        """Positions after discarding the first ``burn`` fraction of steps."""
         return self.positions[int(math.floor(burn * self.steps)):]
 
     @property
@@ -72,25 +71,44 @@ def walkers_for(dimensions: int, at_least: int = 16) -> int:
 def sample(log_prob: Callable[[np.ndarray], np.ndarray], start: np.ndarray, steps: int, rng: np.random.Generator, *,
            progress: Optional[Callable[[int, int], None]] = None, stop: Optional[Callable[[], bool]] = None,
            stretch: float = STRETCH) -> Chain:
-    """Run ``steps`` steps of the ensemble from ``start`` (W, d), W even; ``log_prob`` takes (B, d) and returns (B,)
-    (−inf outside the support). ``progress(done, steps)`` after each step; ``stop()`` is asked before each step, and a
-    run stopped keeps the steps done."""
+    """Sample from one or more independent ensembles, started at (W, d) or (ensembles, W, d).
+
+    All ensembles complete each step before progress is reported, so a stopped run has equally long traces.
+    """
     x = np.array(start, float)
-    walkers, dims = x.shape
-    if walkers % 2 or walkers <= dims:
-        raise ValueError("The ensemble needs an even number of walkers, more than the dimensions")
-    lp = np.asarray(log_prob(x), float)
-    if not np.all(np.isfinite(lp)):
-        raise ValueError("Every walker must start where the posterior is above zero")
-    positions = np.empty((steps, walkers, dims))
-    log_probs = np.empty((steps, walkers))
-    accepted = np.zeros(walkers)
-    halves = (np.arange(0, walkers // 2), np.arange(walkers // 2, walkers))
+    ensembles = x if x.ndim == 3 else x[None, ...]
+    streams = ([np.random.default_rng(int(seed)) for seed in rng.integers(2**63 - 1, size=len(ensembles))]
+               if x.ndim == 3 else [rng])
+    runs = [_ensemble(log_prob, group, stream, stretch) for group, stream in zip(ensembles, streams)]
+    positions = np.empty((steps, *x.shape))
+    log_probs = np.empty((steps, *x.shape[:-1]))
+    accepted = np.zeros(ensembles.shape[:-1])
     done, stopped = 0, False
     for step in range(steps):
         if stop is not None and stop():
             stopped = True
             break
+        for index, run in enumerate(runs):
+            points, lp, accepted[index] = next(run)
+            dest = (step, index) if x.ndim == 3 else step
+            positions[dest], log_probs[dest] = points, lp
+        done = step + 1
+        if progress is not None:
+            progress(done, steps)
+    return Chain(positions[:done], log_probs[:done], accepted if x.ndim == 3 else accepted[0], stopped)
+
+
+def _ensemble(log_prob, x, rng, stretch):
+    """One independent trajectory. Partners for every proposal belong to this ensemble."""
+    walkers, dims = x.shape
+    if walkers % 2 or walkers <= dims or walkers < 4:
+        raise ValueError("The ensemble needs an even number of walkers, more than the dimensions")
+    lp = np.asarray(log_prob(x), float)
+    if not np.all(np.isfinite(lp)):
+        raise ValueError("Every walker must start where the posterior is above zero")
+    accepted = np.zeros(walkers)
+    halves = (np.arange(0, walkers // 2), np.arange(walkers // 2, walkers))
+    while True:
         evolve = rng.uniform() < DE_SHARE
         for moving, other in (halves, halves[::-1]):
             if evolve:
@@ -109,11 +127,7 @@ def sample(log_prob: Callable[[np.ndarray], np.ndarray], start: np.ndarray, step
             x[moving[take]] = proposal[take]
             lp[moving[take]] = new[take]
             accepted[moving[take]] += 1
-        positions[step], log_probs[step] = x, lp
-        done = step + 1
-        if progress is not None:
-            progress(done, steps)
-    return Chain(positions[:done], log_probs[:done], accepted, stopped)
+        yield x, lp, accepted
 
 
 def _autocorrelation(series: np.ndarray) -> np.ndarray:
@@ -143,16 +157,16 @@ def autocorrelation_time(series: np.ndarray, c: float = WINDOW_C) -> float:
 
 
 def split_rhat(series: np.ndarray) -> float:
-    """Split R̂ of one coordinate, ``series`` (n, W): each walker's chain split in two halves."""
+    """Split R̂ of (steps, independent ensemble traces), splitting each column in time."""
     series = np.asarray(series, float)
     half = series.shape[0] // 2
     if half < 2:
         return math.nan
-    chains = np.concatenate([series[:half], series[half:2 * half]], axis=1)  # (half, 2W)
+    chains = np.concatenate([series[:half], series[-half:]], axis=1)
     within = float(np.mean(np.var(chains, axis=0, ddof=1)))
     between = half * float(np.var(np.mean(chains, axis=0), ddof=1))
     if within <= 0:
-        return math.nan
+        return math.inf if between > 0 else math.nan
     pooled = (half - 1) / half * within + between / half
     return float(math.sqrt(pooled / within))
 
@@ -165,26 +179,30 @@ class Diagnostics:
     kept_steps: int
     walkers: int
     acceptance: float
+    ensembles: int = 1
 
     @property
     def effective_samples(self) -> float:
         finite = [t for t in self.tau if math.isfinite(t)]
-        return self.walkers * self.kept_steps / max(finite) if finite else math.nan
+        return self.ensembles * self.walkers * self.kept_steps / max(finite) if finite else math.nan
 
     @property
     def converged(self) -> bool:
         if not self.tau or any(not math.isfinite(t) for t in self.tau) or any(not math.isfinite(r) for r in self.rhat):
             return False
-        return self.kept_steps >= TAU_FACTOR * max(self.tau) and max(self.rhat) < RHAT_LIMIT
+        return self.ensembles >= 2 and self.kept_steps >= TAU_FACTOR * max(self.tau) and max(self.rhat) < RHAT_LIMIT
 
 
 def diagnose(chain: Chain, burn: float = BURN, coordinates: Optional[np.ndarray] = None) -> Diagnostics:
-    """τ and R̂ of every coordinate of the kept steps (``coordinates``: the same chain in other coordinates, (steps, W,
-    k), e.g. the physical values)."""
+    """τ from individual walkers' autocorrelations and R̂ from each ensemble's mean over its walkers at each step."""
     kept = (chain.positions if coordinates is None else np.asarray(coordinates, float))[int(math.floor(burn * chain.steps)):]
-    taus = tuple(autocorrelation_time(kept[:, :, k]) for k in range(kept.shape[2]))
-    rhats = tuple(split_rhat(kept[:, :, k]) for k in range(kept.shape[2]))
-    return Diagnostics(taus, rhats, int(kept.shape[0]), int(kept.shape[1]), chain.acceptance)
+    if kept.ndim == 3:
+        kept = kept[:, None, :, :]
+    steps, ensembles, walkers, dims = kept.shape
+    traces = kept.mean(axis=2)
+    taus = tuple(autocorrelation_time(kept[..., k].reshape(steps, ensembles * walkers)) for k in range(dims))
+    rhats = tuple(split_rhat(traces[..., k]) for k in range(dims))
+    return Diagnostics(taus, rhats, steps, walkers, chain.acceptance, ensembles)
 
 
 def quantiles(samples: np.ndarray, levels=(0.5, 0.16, 0.84, 0.025, 0.975)) -> np.ndarray:
