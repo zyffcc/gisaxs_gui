@@ -44,7 +44,7 @@ class Corrections:
     mask_path: Optional[str] = None
     """An image of the same size whose non-zero pixels are masked (pyFAI / Xeuss mask files)."""
     mask_shapes: tuple = ()
-    """Rectangles and polygons drawn on the image (``MaskShape``): their pixels are left out."""
+    """Ordered user-mask edits (shapes, threshold/morphology rules and images), after ``mask_path``."""
     mirror_fill: bool = False
     """GIWAXS: fill pixels without data from the mirror side (``preprocess.mirror_fill``)."""
     bad_pixels: bool = True

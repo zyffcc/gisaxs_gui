@@ -132,7 +132,8 @@ class SetupHistory:
             return False
         what = describe(self._current, setup)
         continuing = (
-            self._undo and not self._redo and what == self._last_what and now - self._last_time < MERGE_SECONDS
+            what != "mask" and self._undo and not self._redo and what == self._last_what
+            and now - self._last_time < MERGE_SECONDS
             and setup != self._undo[-1][0]  # an edit that cancels the last one (add, then remove) is a step of its own
         )
         if not continuing:

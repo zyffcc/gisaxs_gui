@@ -15,6 +15,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 - **Analyze ▸ Absolute Scale from a Standard…** fits a detector frame or reduced radial curve against water at the
   measured temperature or a user-supplied reference such as glassy carbon. Calibrated exports carry intensity in
   cm⁻¹ and record the standard, fitted range, scale and uncertainty. The instrument profile keeps the calibration.
+- **Analyze ▸ Mask & corrections.** Draw circles, annuli, ellipses and freehand strokes, erase pixels, or select a
+  ring about the direct beam in Å⁻¹. Preview intensity thresholds, saturation, negative pixels, mask growth,
+  shrinkage and inversion. Each mask edit supports Undo and Redo. Save an ordered JSON recipe or the current
+  frame's user mask as EDF, TIFF, NumPy or Fit2D with its source record. See User Manual 5.2 and Physics and
+  Methods 4.5.
 
 - **GIWAXS indexing and pole figures (Analyze ▸ Phases).** Give phases as a CIF (cell, symmetry operations, atom
   sites; |F|² from Cromer–Mann scattering factors) or a cell with its centring, at random or as a fibre texture

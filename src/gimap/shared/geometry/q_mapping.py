@@ -262,6 +262,12 @@ def grazing_q_region(
     )
 
 
+def transmission_q(along, x, y, wavevector) -> tuple[np.ndarray, np.ndarray]:
+    """Vacuum |q| and 2θ (radians) from laboratory rays relative to the direct beam."""
+    two_theta = np.arctan2(np.hypot(x, y), along)
+    return 2.0 * wavevector * np.sin(two_theta / 2.0), two_theta
+
+
 def transmission_map(shape: tuple[int, int], geometry: DetectorGeometry) -> TransmissionMap:
     """|q|, 2θ and χ for transmission SAXS/WAXS, in Å⁻¹ and degrees.
 
@@ -269,6 +275,5 @@ def transmission_map(shape: tuple[int, int], geometry: DetectorGeometry) -> Tran
     (``analyze/domain/giwaxs.py``: 0° along the surface normal).
     """
     along, x, y = lab_rays(geometry, *pixel_center_displacements(shape, geometry))
-    two_theta = np.arctan2(np.hypot(x, y), along)
-    q = 2.0 * geometry.wavevector_inv_angstrom * np.sin(two_theta / 2.0)
+    q, two_theta = transmission_q(along, x, y, geometry.wavevector_inv_angstrom)
     return TransmissionMap(q, np.degrees(two_theta), np.degrees(np.arctan2(y, x)))

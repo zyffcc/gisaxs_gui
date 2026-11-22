@@ -34,6 +34,7 @@ from ..application import (
     FrameJob,
     FrameOutcome,
     FrameTools,
+    MaskImage,
     batch_record,
     fit_curve_rows,
     fit_halves,
@@ -418,6 +419,13 @@ class BatchModelMixin:
             if path and not Path(path).exists():
                 notes.append(f"{label} not found, left out: {path}")
                 corrections = replace(corrections, **{key: None})
+        kept = []
+        for edit in corrections.mask_shapes:
+            if isinstance(edit, MaskImage) and not Path(edit.path).is_file():
+                notes.append(f"Mask file not found, left out: {edit.path}")
+            else:
+                kept.append(edit)
+        corrections = replace(corrections, mask_shapes=tuple(kept))
         self.state.mode = settings.mode
         self.state.profile_name = name
         self.state.incidence_deg = settings.incidence_deg

@@ -119,7 +119,7 @@ class FrameAnalysis:
     bad_pixels: Optional[BadPixels] = None
     """Hot and dead pixels left out automatically (``Corrections.bad_pixels``)."""
     drawn_mask: Optional[np.ndarray] = None
-    """Pixels inside the masks drawn on the image (``Corrections.mask_shapes``)."""
+    """User mask after all image, shape and rule edits, before combining with detector validity."""
     filled_pixels: Optional[np.ndarray] = None
     """Pixels filled from the mirror side (``Corrections.mirror_fill``, GIWAXS)."""
     intensity_scale: Optional[np.ndarray] = None

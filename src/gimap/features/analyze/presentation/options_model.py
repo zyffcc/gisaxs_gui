@@ -16,7 +16,7 @@ from ..application import (
     X_AXIS_TWO_THETA,
     Corrections,
     CutRegion,
-    MaskShape,
+    MaskEdit,
     Normalisation,
     PlaceRegions,
     QBox,
@@ -94,8 +94,11 @@ class OptionsModelMixin:
     def set_mask_shapes(self, shapes) -> None:
         self.state.corrections = replace(self.state.corrections, mask_shapes=tuple(shapes))
 
-    def add_mask_shape(self, shape: MaskShape) -> None:
+    def add_mask_shape(self, shape: MaskEdit) -> None:
         self.set_mask_shapes((*self.state.corrections.mask_shapes, shape))
+
+    def preview_user_mask(self, analysis, corrections):
+        return self._analyze_frame.preview_mask(analysis, corrections)
 
     def set_mask_path(self, path: Optional[str | Path]) -> None:
         self.state.corrections = replace(self.state.corrections, mask_path=str(path) if path else None)
