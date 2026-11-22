@@ -906,6 +906,8 @@ Start page (*Calibrate the detector*).
    whichever your experiment records. For the public AgBh example, enter `1.0` Å. The other field
    updates using Physics and Methods, equation (1.1). The source line identifies a file header,
    a companion scan NXS, or a value entered by you. **Auto Calibration** requires a value.
+   If a scan folder disappears during the search for a companion NXS, the CBF still opens.
+   Enter the energy or wavelength if the other scan folders supply neither.
    If an entry is carried over to the next image, check it against that experiment.
 3. Check the pixel size. A CBF or EDF can say *from frame size; check* when the dimensions match a
    known detector format. If the pitch is right, leave **Detector model** on **Auto detected**.

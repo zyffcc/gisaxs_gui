@@ -50,7 +50,8 @@ def test_wavelength_to_checked_calibration_and_direct_poni(qt_application, tmp_p
         _wait(qt_application, lambda: dialog.export_poni_button.isEnabled(), 90)
         candidate = dialog.result.selected_candidate
         assert candidate.matched_ring_count == 5
-        assert candidate.warnings[0] in dialog.stage_label.text()
+        assert not candidate.warnings
+        assert "Check the ring overlay before Apply." in dialog.stage_label.text()
         assert candidate.confidence in dialog.stage_label.text()
         _wait(qt_application, lambda: dialog.stage_label.height() >= dialog.stage_label.heightForWidth(
             dialog.stage_label.width()), 3)
