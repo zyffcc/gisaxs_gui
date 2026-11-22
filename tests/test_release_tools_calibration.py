@@ -318,7 +318,8 @@ def _engine_sentences() -> dict[str, set[str]]:
 
 def test_every_stage_warning_and_reason_of_the_engine_has_chinese() -> None:
     sentences = _engine_sentences()
-    assert len(sentences["stage"]) == 9 and len(sentences["warning"]) >= 7 and len(sentences["reason"]) >= 6
+    # 8 stages: the tilt and the fixed-tilt refinement share "Optimizing geometry" (both refine on the ring points)
+    assert len(sentences["stage"]) == 8 and len(sentences["warning"]) >= 7 and len(sentences["reason"]) >= 6
     missing = sorted(text for group in sentences.values() for text in group if text not in ZH)
     assert missing == []
     assert {"High", "Medium", "Low"} <= set(ZH)

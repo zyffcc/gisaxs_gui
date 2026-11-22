@@ -177,10 +177,11 @@ class PyFAIRun:
 
     def __init__(self):
         logging.disable(logging.WARNING)
-        from pyFAI.calibrant import get_calibrant
-        from pyFAI.geometryRefinement import GeometryRefinement
-        from pyFAI.gui.cli_calibration import Recalibration
-        from pyFAI.integrator.azimuthal import AzimuthalIntegrator
+        import importlib  # pyFAI is not a dependency of GIMaP: imported by name (as pyfai_comparison.py)
+        get_calibrant = importlib.import_module("pyFAI.calibrant").get_calibrant
+        GeometryRefinement = importlib.import_module("pyFAI.geometryRefinement").GeometryRefinement
+        Recalibration = importlib.import_module("pyFAI.gui.cli_calibration").Recalibration
+        AzimuthalIntegrator = importlib.import_module("pyFAI.integrator.azimuthal").AzimuthalIntegrator
         self.GeometryRefinement, self.AzimuthalIntegrator = GeometryRefinement, AzimuthalIntegrator
         self.calibrant = get_calibrant("AgBh")
         self.calibrant.wavelength = WAVELENGTH_A * 1e-10
@@ -259,7 +260,8 @@ def propagate(function, values, covariance) -> np.ndarray:
 
 
 def real_frame() -> dict:
-    import pyFAI
+    import importlib
+    pyFAI = importlib.import_module("pyFAI")
     gimap = gimap_real()
     polished = gimap_real(polish=True)
     run = PyFAIRun()
