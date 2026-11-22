@@ -48,7 +48,7 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
    转述时**不要**把它叫作间距。记录里的键仍是 `spacing`、`distance_nm`。
 6. **拟合**（`fit_horizontal_cut`，用 Fitting 的 Predict parameters，即 `create_curve_fit()`，约 15 秒）：GIMaP 的网络给出组成
    和数值，每个解用最小二乘精修并按后验概率加权。没有给组成（`components`）时，网络在一种或两种球和竖直圆柱、带或不带次晶
-   的组成中选；随机取向圆柱只在给定组成时才用。切线按有效界面（q_z = 0）计算；第 5 步的 2π/q* 不作起点。最多给出 5 个
+   的组成中选；随机取向圆柱只在给定组成时才用。已知入射角和 Yoneda 带出射角时，用切线真空 q_z 处的 Born 项（第二层）；任一角未知时用有效界面（第一层，q_z = 0）。第 5 步的 2π/q* 不作起点。最多给出 5 个
    互不相同的解，最可能的在前：report.md 和 fit_solutions.csv 全部列出，而在 MCP 或 call 里直接调用 `fit_horizontal_cut`
    只返回前 3 个，外加 `chosen`。报告的解（`chosen`）就是最可能的那个，带它的概率和 R、h、D 的 68 % 后验区间（决策
    `fit intervals`；区间不含几何和模型选择）。另一个解的概率 ≥ 0.2（`ASK_PROBABILITY`）时，Needs attention 里有一条 “model”：
@@ -57,9 +57,9 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
    不算边界：等于 0 时 Decisions 有一条 `fit caveat`（“Background at 0, the non-negativity limit”；Tail A = 0 时 Tail w、Tail ν
    不影响曲线）。报告的解已收敛但 χ²ᵣ > 10（与 Fitting 序列 “拟合差” 的 χ²ᵣ 限值相同）时 Needs attention 里有一条 “fit”：
    试过的组成都描述不了这条切线，R、D 不是测量值（粉末或标样的布拉格环会这样）。切线在 Yoneda 带上且知道 αi 时，切线的
-   q_z = k(sin αi + sin αf) 记在 `gisaxs.fit.cut_qz`；q_z·R 大于 1.7 的球或随机取向圆柱带标记 `qzR`，Needs attention 里有一条
-   “fit”：q_z = 0 处的形状因子使半径偏小（四项 DWBA 基准上中位误差 15–29 %）。转述这个 R 时要说出来；用户要可靠的 R 时，在
-   Fitting 的模型里填入 αi、αf、λ 再用 Predict parameters（两路径）。
+   q_z = k(sin αi + sin αf) 及角度、波长记在 `gisaxs.fit.cut_qz`；未知时该项为 `null`。`gisaxs.fit.substrate_level` 和 Decisions 均写明拟合层级。
+   在第二层，球或随机取向圆柱的 q_z·R > 1.2 时，`qzR_cov` 提示区间可能低估不确定度；q_z·R > 2 时，`qzR_fail` 提示模型误差较大。
+   转述 R 时要说明这些标记。若要对球计入出射反射路径，在 Fitting 的模型里填入 αi、αf、λ 后运行 Predict parameters。
    网络只凭曲线选组成，所以要用用户知道的形状在 Fitting 里确认（手册第 13 章）。`--no-fit` 只准备切线，不拟合。
 
 输出：`report.md/json`、`horizontal.csv`、`vertical.csv`、`fit_curve.csv`（q、I、σ、I_fit：报告的那个解）、`fit_solutions.csv`
@@ -71,7 +71,7 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
 
 | 看什么 | 为什么 | 怎么做 |
 |---|---|---|
-| 模型的选择 | 解按后验概率排序，表里的 χ²ᵣ 是 σ 归一化残差 r² 的平均，没有自由度修正（不同于 Fitting 的 χ²ᵣ）。另一个解的概率 ≥ 0.2 时曲线本身定不了模型，所以 Needs attention 里的 “model” 是**正常结果**，不是失败。网络只凭曲线选：公开的 GALAXI 银球帧上它报告两种竖直圆柱（见下） | 用户给了材料或形状就按它选：在 Fitting 里用 Predict parameters 的 *The particles in Model* 拟合那个模型，再精修并比较拟合曲线和残差。D 与 2π/q* 接近不是证据 |
+| 模型的选择 | 解按后验概率排序，表里的 χ²ᵣ 与 Fitting 一样，用拟合点上 σ 归一化残差的平方和除以自由度。另一个解的概率 ≥ 0.2 时曲线本身定不了模型，所以 Needs attention 里的 “model” 是**正常结果**，不是失败。网络只凭曲线选：公开的 GALAXI 银球帧在较早的第一层拟合中给出两群竖直圆柱（见下） | 用户给了材料或形状就按它选：在 Fitting 里用 Predict parameters 的 *The particles in Model* 拟合那个模型，再精修并比较拟合曲线和残差。D 与 2π/q* 接近不是证据 |
 | 停在范围边界上的数值 | `at_bounds` 里的数值由边界而不是数据决定 | 转述报告的 `chosen` 解；它处于边界时要说出来，不要引用边界上的值 |
 | 报告的解没有粒子间关联 | D ≥ 250 nm 说明该解在 q 范围内没有粒子间关联（Decisions 的 `fit caveat`） | 不要把这样的 D 当成测得的距离 |
 | 切线位置 | Yoneda 带之外的切线会混进别的散射 | `get_curve vertical` 看 Yoneda 带和镜面峰的位置是否与 αi、λ 一致；`set_gisaxs_cuts` 换位置 |
@@ -91,7 +91,7 @@ python tools/gimap_agent.py auto tests/data/external/gisaxs_galaxi/galaxi_data.t
     --calibration tests/data/external/gisaxs_galaxi/galaxi_bornagain.poni --incidence-deg 0.463 --out <文件夹>
 ```
 
-基线结果（切线部分 2026-10-14，macOS；拟合部分为 0.2.0 的 Predict parameters）：
+基线结果（切线部分 2026-10-14，macOS；拟合部分为较早采用第一层时的 Predict parameters）：
 
 - Yoneda 带在第 605–609 行；对称轴在 597.26 px；两半取平均（到 |qy| = 0.179 Å⁻¹，之后 qy < 0 一半单独到 0.278 Å⁻¹；
   有 15 个点落在另一半的缺口里，只来自一半）；

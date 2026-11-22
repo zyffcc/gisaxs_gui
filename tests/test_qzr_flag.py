@@ -1,10 +1,7 @@
-"""The flag ``qzR``: a sphere or random cylinder fitted at q_z = 0 (the effective interface, Predict's default) whose
-radius times the cut's q_z = k(sin α_i + sin α_f) is above 1.7, where that treatment biases the radius (Physics and
-Methods 9.10, 9.13). A flag and its sentence only: no value, interval or probability of a solution changes."""
+"""Predict's q_z·R flags and the substrate level used and reported for an automatic GISAXS fit."""
 
 from __future__ import annotations
 
-import json
 import math
 
 import numpy as np
@@ -88,40 +85,28 @@ def test_the_fit_page_says_the_flag_with_the_other_notes() -> None:
     assert "⚠ " + fit_names.SENTENCES["qzR"].format(name="R") in lines
 
 
-def test_predict_gives_the_same_values_with_and_without_the_flag() -> None:
-    """The real network on a synthetic sphere cut (R = 5 nm, the composition given, the fixed seed): the cut's q_z
-    adds the flag and its sentence and changes nothing else of any solution."""
+@pytest.mark.parametrize("cut_qz, level", [(None, 1), (QZ, 2)])
+def test_automatic_fitter_uses_the_cut_qz_in_predict_and_its_reproduction_record(cut_qz, level) -> None:
     from src.gimap.features.fitting.bootstrap import create_curve_fit
     from src.gimap.features.fitting.domain.cut_model import model as cut
 
     q = np.linspace(0.1, 2.5, 240)
     population = cut.Population("sphere", 5.0, 0.15, distance=18.0, distance_spread=0.2)
-    truth = 1e4 * cut.unit_terms([population], cut.Settings(), q)[0] + 2.0
+    angle = math.degrees(math.asin(QZ * 0.1 / (4 * math.pi)))
+    geometry = cut.Geometry(mode="born", alpha_i_deg=angle, alpha_f_deg=angle, wavelength_nm=0.1)
+    truth = 1e4 * cut.unit_terms([population], cut.Settings(geometry=geometry), q)[0] + 2.0
     counts = np.random.default_rng(4).poisson(truth).astype(float)
     sigma = np.sqrt(np.maximum(counts, 1.0))
-    fit = create_curve_fit()
-    plain = fit(q / 10.0, counts, sigma, components=(1,))  # q in Å⁻¹
-    flagged = fit(q / 10.0, counts, sigma, components=(1,), cut_qz=QZ)
-
-    def rest(row: dict) -> str:
-        diagnostic = {k: v for k, v in row.get("diagnostics", {}).items() if k not in ("measured_qz", "reflected_beam")}
-        return json.dumps({k: v for k, v in row.items() if k not in ("flags", "warnings", "seconds", "diagnostics", "reproduction")}
-                          | {"diagnostics": diagnostic}, sort_keys=True)
-
-    assert [rest(row) for row in plain] == [rest(row) for row in flagged]
-    plans = [rows[0]["reproduction"] for rows in (plain, flagged)]
-    assert [plan["options"]["measured_qz"] for plan in plans] == [None, QZ]
-    assert [plan["options"]["reflected_beam"] for plan in plans] == [None, True]
-    def numerical_tables(plan):
-        return {name: {key: column for key, column in columns.items() if key not in ("measured_qz", "reflected_beam")}
-                for name, columns in plan["reference"].items()}
-    assert numerical_tables(plans[0]) == numerical_tables(plans[1])
-    assert not any(flag.startswith("qzR") for row in plain for flag in row["flags"])
-    best = flagged[0]
-    assert best["components"][0]["params"]["R"] == pytest.approx(5.0, rel=0.1) and "qzR:R_1" in best["flags"]
-    assert "qzR_cov:R_1" in best["flags"]
-    assert [flag for flag in best["flags"] if flag not in ("qzR:R_1", "qzR_cov:R_1")] == plain[0]["flags"]
-    assert fit_names.SENTENCES["qzR"].format(name="R") in best["warnings"]
+    best = create_curve_fit()(q / 10.0, counts, sigma, components=(1,), cut_qz=cut_qz)[0]
+    options = best["reproduction"]["options"]
+    assert options["qz"] == best["diagnostics"]["cut_qz"] == (cut_qz or 0.0)
+    assert options["qz_minus"] is None and best["diagnostics"]["substrate_level"] == level
+    flags = {flag for flag in best["flags"] if flag.startswith("qzR")}
+    if level == 2:
+        assert best["components"][0]["params"]["R"] == pytest.approx(5.0, rel=0.1)
+        assert flags == {"qzR_cov:R_1", "qzR_fail:R_1"}
+    else:
+        assert flags == set()
 
 
 # -- the automatic analysis ------------------------------------------------------------------------------------
@@ -190,7 +175,8 @@ def test_the_caveat_names_each_flagged_population_with_its_q_z_r() -> None:
     assert gisaxs_choice.interface_caveat({**solution, "flags": ["low_ess"]}, {"q_z_inv_nm": QZ}) == ""
 
 
-def test_a_sphere_too_large_for_q_z_0_needs_attention_in_the_report() -> None:
+@pytest.mark.parametrize("known_angles", [False, True])
+def test_automatic_report_records_the_level_and_the_flags_of_the_fit(known_angles) -> None:
     import tools.gimap_agent as agent
     from src.gimap.app.headless_assistant import open_headless_session
     from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_language
@@ -202,33 +188,40 @@ def test_a_sphere_too_large_for_q_z_0_needs_attention_in_the_report() -> None:
     class LargeSphere(FakeFitter):
         def __call__(self, q, intensity, sigma, *, components=(), report=None, cancelled=None, cut_qz=None):
             self.calls.append({"cut_qz": cut_qz})
-            return [_row(q, intensity, sigma, 1, "sphere", 9.4, 53.4, 1.1, flags=["qzR:R_1"])]
+            flags = ["qzR_cov:R_1", "qzR_fail:R_1"] if cut_qz is not None else []
+            return [_row(q, intensity, sigma, 1, "sphere", 9.4, 53.4, 1.1, flags=flags)]
 
     session = open_headless_session(DATA / GALAXI["frame"], saved_profiles=False)
     try:
         session.catalog.fitter = fitter = LargeSphere()
         report = session.run_pipeline(PipelineOptions(technique="gisaxs", geometry=_geometry(),
-                                                      incidence_deg=GALAXI["incidence_deg"]))
+                                                      incidence_deg=GALAXI["incidence_deg"] if known_angles else None))
     finally:
         session.close()
     fit = report["gisaxs"]["fit"]
     cut = fit["cut_qz"]
-    assert fit["sphere_model"] == "effective interface (q_z = 0)"
-    assert report["gisaxs"]["cuts"]["horizontal_source"] == "yoneda"
-    assert cut["alpha_i_deg"] == pytest.approx(GALAXI["incidence_deg"]) and cut["wavelength_A"] == pytest.approx(1.34)
-    assert cut["alpha_f_deg"] == pytest.approx(report["gisaxs"]["cuts"]["yoneda_alpha_f_deg"])
-    assert fitter.calls[-1]["cut_qz"] == pytest.approx(cut["q_z_inv_nm"]) and 0.3 < cut["q_z_inv_nm"] < 1.0
-    point = next(item for item in report["needs_attention"] if item["item"] == "fit")
-    assert point["why"].startswith("The reported solution (sphere) was fitted with the form factor at q_z = 0")
-    assert f"q_z·R is {9.4 * cut['q_z_inv_nm']:.2f} for R, above 1.7" in point["why"]
-    assert point["hint"] == gisaxs_choice.QZ_R_HINT and agent.exit_code([report]) == 2
-    caveats = [item["decision"] for item in report["decisions"] if item["what"] == "fit caveat"]
-    assert fit_names.SENTENCES["qzR"].format(name="R") in caveats
-    assert point["why"] in pipeline_markdown(report).split("## Geometry")[0]  # under Needs attention
+    decision = next(item for item in report["decisions"] if item["what"] == "model fit")
+    flags = fit["solutions"][0]["flags"]
+    if known_angles:
+        assert fit["substrate_level"] == 2 and fit["sphere_model"] == "Born term at the cut's q_z"
+        assert cut["alpha_i_deg"] == pytest.approx(GALAXI["incidence_deg"]) and cut["wavelength_A"] == pytest.approx(1.34)
+        assert cut["alpha_f_deg"] == pytest.approx(report["gisaxs"]["cuts"]["yoneda_alpha_f_deg"])
+        assert fitter.calls[-1]["cut_qz"] == pytest.approx(cut["q_z_inv_nm"]) and 0.3 < cut["q_z_inv_nm"] < 1.0
+        assert decision["decision"] == "at the second level"
+        assert decision["why"] == f"Born term at the cut's q_z = {cut['q_z_inv_nm']:.4g} nm⁻¹"
+        notes = fit_names.sentences(flags, many=False)
+        assert len(notes) == 2 and agent.exit_code([report]) == 2
+        attention = [item["why"] for item in report["needs_attention"] if item["item"] == "fit"]
+        assert all(note in attention for note in notes)
+    else:
+        assert cut is None and fitter.calls[-1]["cut_qz"] is None
+        assert fit["substrate_level"] == 1 and fit["sphere_model"] == "effective interface (q_z = 0)"
+        assert decision["decision"] == "at the first level (q_z = 0)" and decision["why"] == "the angles of the cut are not known"
+        assert not flags
+    assert decision["why"] in pipeline_markdown(report).split("## Decisions")[1].split("## Steps")[0]
     apply_language("zh")
     try:
-        said = words(point["why"])
-        assert said.startswith("报告的解（sphere）是用 q_z = 0 处的形状因子") and "大于 1.7" in said
-        assert words(point["hint"]).startswith("请发送到拟合")
+        assert words(decision["decision"]).startswith("第二层" if known_angles else "第一层")
+        assert words(decision["why"]).startswith("取切线 q_z" if known_angles else "切线的入射角或出射角未知")
     finally:
         apply_language(DEFAULT_LANGUAGE)

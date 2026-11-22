@@ -13,6 +13,7 @@ from .zh_geometry_cuts import ZH_GEOMETRY_CUTS
 from .zh_geometry_orientation import GEOMETRY_ORIENTATION_ZH
 from .zh_geometry_tilt import ZH_GEOMETRY_TILT
 from .zh_gisaxs_cuts import GISAXS_CUTS_ZH
+from .zh_gisaxs_fit_level import GISAXS_FIT_LEVEL_ZH
 from .zh_gisaxs_posterior import GISAXS_POSTERIOR_ZH
 from .zh_horizon_selection import HORIZON_SELECTION_ZH
 from .zh_indexing import INDEXING_ZH
@@ -35,6 +36,7 @@ from .zh_series_chain import SERIES_CHAIN_ZH
 from .zh_series_selection import SERIES_SELECTION_ZH
 
 FEATURES_ZH = {
+    **GISAXS_FIT_LEVEL_ZH,
     **ASSISTANT_SERVICE_ZH,
     **CALIBRATION_RESIDUALS_ZH,
     **PREDICT_REPORT_ZH, **POSTERIOR_MCMC_ZH, **GISAXS_POSTERIOR_ZH, **FLAT_FIELD_ZH, **NXCANSAS_ZH,

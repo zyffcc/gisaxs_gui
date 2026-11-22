@@ -306,18 +306,19 @@ before relying on the numbers: they say which default decisions may not fit your
 
 ### Worked example · GALAXI GISAXS
 
-Run this command from the source folder to reproduce the Yoneda cut and Predict solutions in Fig. 4.
+Run this command from the source folder to reproduce the Yoneda cut in Fig. 4 and fit it at the second level.
+The figure shows the earlier fit at the first level.
 It uses the public GALAXI frame, its calibration and the reported incidence angle of 0.463°.
 
 ```sh
 python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.tif --calibration tests/data/external/gisaxs_galaxi/galaxi_bornagain.poni --incidence-deg 0.463 --out fig4
 ```
 
-The run took 1 min 41 s on the Windows test machine. Open `fig4/galaxi_data/report.md`.
+Open `fig4/galaxi_data/report.md` to see the fit level and the cut's vacuum q_z under *Decisions*.
 `horizontal.csv` contains the signed Yoneda cut and `vertical.csv` the vertical cut. `fit_curve.csv`
-gives the best fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists three solutions with
-probabilities of about 0.39, 0.32 and 0.30. Exit code 2 means that the report asks you to choose a
-model. The same folder contains `qmap.png` and `report.json`. The run summaries are
+gives the most probable fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists
+the candidate solutions and their probabilities. Exit code 2 means that an item needs attention in the report.
+The same folder contains `qmap.png` and `report.json`. The run summaries are
 `fig4/summary.md` and `fig4/summary.json`.
 
 ## How to cite

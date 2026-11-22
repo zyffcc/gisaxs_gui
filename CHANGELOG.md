@@ -12,6 +12,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Automatic GISAXS analysis** fits the Born term at the Yoneda cut's vacuum q_z when the incidence and exit
+  angles are known (level 2), and uses the effective interface at q_z = 0 otherwise (level 1). The report and
+  JSON record identify the level used. At level 2, Predict flags sphere and random-cylinder radii for uncertain
+  interval coverage above q_z·R = 1.2 and strong model error above 2.
+
 - **Reproduce from Record…** in Analyze ▸ Tools and `gimap reproduce RECORD.json` rerun recorded reductions and fits.
   Records preserve mask bitmaps, input digests, geometry, fit settings and full-precision comparison values.
   The comparison reports bitwise agreement and the maximum relative difference per column (User Manual §12).
@@ -24,8 +29,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   noise and treat the measured flat mean as fixed. GIWAXS exports identify the error model for the measured
   orientation curve when it differs from the model for the radial curve.
 
-- The README and User Manual give the command that reproduces the paper's GALAXI Yoneda cut and Predict
-  solutions. Desktop CI checks Python 3.10 and 3.11 and reads NXcanSAS exports with SasView's loader.
+- The README and User Manual give the command that reproduces the paper's GALAXI Yoneda cut.
+  Desktop CI checks Python 3.10 and 3.11 and reads NXcanSAS exports with SasView's loader.
   Two Predict fits are checked against the archived numerical results. The AI assistant asks before
   sending data to a service, records the provider and model, and uses the OS credential store when available.
 - **GIWAXS ring orientation** uses polarisation-corrected pixel means and an exit-angle cut. Reports give measured Hermans f with a statistical error and systematic range, fitted f and the background-dependent oriented fraction. Poor pole fits are flagged. Tilted-axis models average over azimuth. Lorentz weighting is available for peak areas, with an exclusion band around the plane of incidence. Phase assignments identify the q convention, Δq, Δd/d, ambiguous matches and unassigned peaks.
@@ -197,11 +202,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   q_z·R ≈ 1.7 (on the four-term DWBA benchmark the median error of R is 15–29 % above it, with both angles below
   10 %). A solution fitted at q_z = 0 whose sphere or random cylinder has q_z·R above 1.7 at the cut's
   q_z = k(sin αi + sin αf) now has the flag *qzR* (*R: q_z·R is above 1.7 at the cut's q_z, … biases the radius,
-  usually too small; give both angles of the cut …*), in English and Chinese. The automatic analysis (Run Automatic
-  Analysis, `tools/gimap_agent.py auto`, Process with AI) takes αi of the geometry and αf of the Yoneda band, lists
-  the flag under **Needs attention** with q_z·R (exit code 2) and keeps the q_z and the angles in `report.json`
-  (`gisaxs.fit.cut_qz`); without αi, or for a cut away from the Yoneda band, nothing is flagged. Upright cylinders
-  are exact at q_z = 0 and get no flag. No value, interval or probability changes (*Physics and Methods* 9.13).
+  usually too small; give both angles of the cut …*), in English and Chinese. This flag applies to first-level fits
+  with a measured q_z supplied for flags (*Physics and Methods* 9.13).
 - **Curves as NXcanSAS (HDF5), for SasView and other NeXus programs, and back into Fitting.** Analyze's Export
   step has **Also as NXcanSAS (.h5)** (remembered; it applies to Export Curves…, Save the Curves of the Plot and
   Export New Frames While Watching): `<stem>_nxcansas.h5` holds the curves against q, one SASentry each (NeXus
@@ -316,15 +318,15 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   of the horizontal cut*, Process with AI, `tools/gimap_agent.py` and the MCP tool `fit_horizontal_cut` fit the
   horizontal cut with Predict parameters: without a composition the network chooses among one or two populations
   of spheres and upright cylinders, with or without a paracrystal (random cylinders only when given as the
-  composition), at the effective interface as before. The run reports the most probable solution with its
+  composition). The run reports the most probable solution with its
   probability and the 68 % intervals of R, h and D (*fit intervals*); the fit table has a probability column, and
   **Save Fit Table…** writes the probability and the intervals. When another solution has a probability of 0.2 or
   more, the run asks which model you expect (**model**); a reported value at a bound of its range is a point to
   check, and χ²/N above 10 a poor fit, as before. 2π/q\* no longer starts the fit (it stays a result of its own),
   and the solutions are no longer ranked by the Huber misfit with the rule of 10 % of χ²/N. Batch Export takes
-  from some seconds to a few minutes per frame and needs no start values for the particle model. On the public GALAXI example the run now
-  reports an upright cylinder with a paracrystal next to a second upright cylinder (R = 3.17 / 6.15 nm, D = 44 / –
-  nm, χ²ᵣ 1.07, probability 0.39) and asks for the model, two more solutions being about as probable: for these
+  from some seconds to a few minutes per frame and needs no start values for the particle model. On the public GALAXI example the earlier first-level fit
+  reported an upright cylinder with a paracrystal next to a second upright cylinder (R = 3.17 / 6.15 nm, D = 44 / –
+  nm, χ²ᵣ 1.07, probability 0.39) and asked for the model, two more solutions being about as probable: for these
   spheres, fit a sphere in Fitting (manual, section 1.3).
 - **Fitting ▸ Predict parameters (new):** GIMaP's own network finds the particles of a 1D GISAXS cut and their
   values from the curve. It proposes compositions (one to three spheres, upright or random cylinders, with or
@@ -1245,7 +1247,7 @@ hold.
   BornAgain simulations, not on measured curves of known particles; physics outside the model can give a
   composition a probability it does not deserve. Judge every solution by its residuals.
 - **The model fit of the automatic analysis chooses the particles from the curve alone** (Predict parameters among
-  one or two populations of spheres and upright cylinders): on the public GALAXI frame of Ag spheres it reports two
+  one or two populations of spheres and upright cylinders). On the public GALAXI frame of Ag spheres the earlier first-level fit reported two
   upright cylinders. 2π/q* is a length scale, not the particle spacing: on BornAgain simulations it was within 10 % of
   the true distance in 1 of 10 cuts with interference. Choose the model from what you know of the sample and confirm
   it in Fitting.

@@ -103,9 +103,9 @@ def create_curve_fit():
     its weights file, as the 1D Predict record writes them) and ``seed`` (``CURVE_FIT_SEED``).
     Units of the result: q, σ_Res in nm⁻¹; R, h, D in nm. ``distance_nm`` and ``evaluated`` are accepted for the
     callers of the former quick fit and not used (the network needs no start); ``report`` hears the steps.
-    The cut is fitted at q_z = 0 (the effective interface). ``cut_qz``: the cut's vacuum q_z = k(sin α_i + sin α_f) in
-    nm⁻¹ when its angles are known (None: not known). It changes no value: a solution whose sphere or random cylinder
-    has q_z·R above ``refine.QZR_LIMIT`` gets the flag ``qzR:R_n`` (``refine.interface_flags``) and its sentence.
+    When the angles of the Yoneda cut are known, ``cut_qz`` is its vacuum q_z = k(sin α_i + sin α_f) in nm⁻¹.
+    Predict fits the Born term there (level 2) and reports its reflected-beam cut flags. With no cut q_z it
+    fits the effective interface at q_z = 0 (level 1).
 
     The curve is prepared first (``shared/signed_cut``), so a cut with both halves and of any length can be given.
     ``halves`` says what to fit of a cut through the beam: ``mean`` / ``positive`` / ``negative`` (``both`` and
@@ -161,7 +161,7 @@ def create_curve_fit():
         chosen = (batch_compositions(list(components)) if components else
                   {"allowed": encoding.select(("sphere", "vertical_cylinder"), 2)})
         proposals = network.load()
-        settings = predict_options(dict(seed=CURVE_FIT_SEED, measured_qz=cut_qz or None,
+        settings = predict_options(dict(seed=CURVE_FIT_SEED, qz=cut_qz,
                                         reflected_beam=True if cut_qz else None, **chosen))
         solutions = refine.predict(proposals, item["q"], item["observed"], item["sigma"],
                                    cancelled=cancelled, **settings)

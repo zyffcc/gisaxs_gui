@@ -38,8 +38,7 @@ INTERVAL_NAMES = ("median", "low68", "high68", "low95", "high95")
 
 
 SPHERE_MODEL = "effective interface (q_z = 0)"
-"""Where Predict parameters evaluates the particles of the cut: the form factor at q_z = 0, as Fitting's record says
-it (``sphere_model``); the cut's own q_z (``cut_qz``) only flags the sizes too large for that."""
+"""The sphere model recorded when the angles of the cut are unavailable."""
 
 
 def cut_qz(status: Optional[dict]) -> Optional[dict]:
@@ -284,7 +283,7 @@ class GisaxsToolsMixin:
         if self.fitter is None:
             raise ToolInputError("No curve fitter is available in this session: use Send to Fitting in the GUI.")
         side, x, y, sigma, note = self._fit_input(side)
-        cut = cut_qz(self.results.status)  # flags a size too large for q_z = 0; no value changes
+        cut = cut_qz(self.results.status)
         rows = self.fitter(x, y, sigma, components=tuple(components or ()), cancelled=self.cancelled,
                            cut_qz=None if cut is None else cut["q_z_inv_nm"])
         if not rows:
@@ -294,8 +293,9 @@ class GisaxsToolsMixin:
             solutions[0]["alone"] = True
         self.results.gisaxs["fit"] = {
             "side": side, "curve": note, "points": int(x.size), "q_range_inv_angstrom": [float(x.min()), float(x.max())],
-            # the particles at q_z = 0; the cut's q_z (None: its angles not known) flags (qzR) a size too large for it
-            "sphere_model": SPHERE_MODEL, "cut_qz": cut,
+            "substrate_level": 2 if cut is not None else 1,
+            "sphere_model": "Born term at the cut's q_z" if cut is not None else SPHERE_MODEL,
+            "cut_qz": cut,
             # the points χ²ᵣ is of: fitted, given, below_window (below the network's q window), unusable
             "fitted_points": None if not rows[0].get("points") else dict(rows[0]["points"]),
             # what the fit says of the curve as it took it: an estimated σ, negative and zero intensities
