@@ -12,6 +12,15 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Sputter ▸ Analyze: Si, polymers and Cu at any energy from 8 to 15 keV, too.** Each of these systems now also has
+  an any-energy network (trained at 8–15 keV and αi 0.25–0.55°, the polymer one fine-tuned on measured scans). At the
+  wavelength of the earlier network it runs beside that network and the better fit is shown; elsewhere in 8–15 keV it
+  analyses the scan at its own energy, where before only the tabulated optical constants with the earlier network's
+  starting solutions were used and **Auto** switched to **Refine**. Checked on simulated scans at other energies
+  (closer to the true values than before) and on reference scans that were kept apart until now (no scan fitted worse
+  than with the previous package); not yet on measured scans from another energy or beamline. Outside 8–15 keV nothing
+  changes. Fixed on the way: a Si scan away from 12 keV stopped during the import (*shadow table extraction failed*);
+  it is now imported with its own wavelength. Manual chapter 13; *Physics and Methods* 12.1.
 - **Sputter ▸ Analyze: Au and Ag on TiO₂ at any energy from 8 to 15 keV.** The TiO₂ network was retrained on images
   simulated at 8–15 keV and αi 0.25–0.55°, with optical constants that follow the energy (the earlier ones exactly at
   12 keV) and with parts of the detector cut away, so a TiO₂ scan in that range is analysed as usual at its own energy,
