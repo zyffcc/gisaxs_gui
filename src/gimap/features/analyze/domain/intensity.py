@@ -15,9 +15,9 @@ They change only intensities, never q:
   ``φ`` those of the pixel's ray (of the tilted detector when it is tilted), ``φ`` the
   azimuth from the horizontal, ``f`` the polarisation factor: about 0.95–0.99 for a
   synchrotron (horizontal), 0 for an unpolarised laboratory source.
-* **Absorption in the film** — a film of thickness ``t`` and attenuation length ``L`` (1/µ), beam in
+* **Absorption in the film** — a film of thickness ``d`` and attenuation length ``L`` (1/µ), beam in
   at ``αi``, out at ``αf``: the scattering from depth ``z`` is attenuated by ``exp(−z·s/L)`` with
-  ``s = 1/sin αi + 1/sin αf``, so the film scatters ``∝ (1 − exp(−t·s/L)) / s``; factor relative to
+  ``s = 1/sin αi + 1/sin αf``, so the film scatters ``∝ (1 − exp(−d·s/L)) / s``; factor relative to
   ``αf = αi``. Refraction is not included (valid well above the critical angle); pixels at or below
   the sample horizon have no factor (they are left out).
 * **Lorentz factor of a fibre texture** (GIXSGUI, Jiang 2015, Eq. 5 with S = cos αi cos αf) — crystallites
@@ -135,7 +135,7 @@ def describe_intensity_corrections(corrections) -> Optional[dict]:
         record["film_absorption"] = {
             "thickness_nm": float(corrections.film_thickness_nm),
             "attenuation_length_um": float(corrections.attenuation_length_um),
-            "formula": "(1 - exp(-t/L*(1/sin ai + 1/sin af))) / (1/sin ai + 1/sin af), relative to af = ai; "
+            "formula": "(1 - exp(-d/L*(1/sin ai + 1/sin af))) / (1/sin ai + 1/sin af), relative to af = ai; "
                        "no refraction",
         }
     if getattr(corrections, "lorentz", False):

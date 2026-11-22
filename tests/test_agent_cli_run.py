@@ -281,15 +281,16 @@ def test_every_csv_starts_with_the_same_lines_that_name_the_inputs(two_of_one_na
     digest = _sha256(Path(two_of_one_name["frames"][0]))
     tables = sorted(folder.glob("*.csv"))
     assert {path.name for path in tables} == {"horizontal.csv", "vertical.csv", "fit_curve.csv", "fit_solutions.csv"}
-    heads = {path.name: path.read_text(encoding="utf-8").splitlines()[:4] for path in tables}
+    heads = {path.name: path.read_text(encoding="utf-8").splitlines()[:5] for path in tables}
     assert len({tuple(head) for head in heads.values()}) == 1, heads
     head = heads["fit_solutions.csv"]
     assert head[0] == f"# {SOFTWARE} (command line); settings and decisions in report.json"
     assert head[1] == f"# input: galaxi_data.tif sha256 {digest}" and head[2].startswith("# frame: ")
     assert head[3].startswith("# geometry: distance 1730.0000 mm, direct beam (") and "alpha_i 0.2 deg" in head[3]
+    assert head[4] == "# error model: poisson, observed sample shot variance"
     solutions = (folder / "fit_solutions.csv").read_text(encoding="utf-8").splitlines()
-    assert solutions[4].startswith("# GISAXS fit solutions [") and solutions[5].startswith("# units: ")
-    assert solutions[6].startswith("rank,model,chi2,probability") and b"\r" not in (folder / "fit_solutions.csv").read_bytes()
+    assert solutions[5].startswith("# GISAXS fit solutions [") and solutions[6].startswith("# units: ")
+    assert solutions[7].startswith("rank,model,chi2,probability") and b"\r" not in (folder / "fit_solutions.csv").read_bytes()
     for path in tables:  # a reader that skips the comment lines still gets numbers
         if path.name != "fit_solutions.csv":
             assert np.loadtxt(path, delimiter=",", encoding="utf-8").shape[1] >= 3

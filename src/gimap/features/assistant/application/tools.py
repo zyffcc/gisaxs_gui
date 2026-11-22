@@ -479,7 +479,8 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
         self.workbench.show(lower_profile="azimuthal")
         curve, profile = self._profile("azimuthal")
         settings = {key: curve.region[key] for key in (
-            "min_exit_deg", "exit_angle_source", "polarization", "background", "background_sigma", "background_source"
+            "min_exit_deg", "exit_angle_source", "polarization", "background", "background_sigma",
+            "background_source", "error_model",
         ) if key in curve.region}
         background = settings.get("background")
         if background is None:

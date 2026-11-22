@@ -1293,7 +1293,8 @@ LZ4 need the Python package `hdf5plugin` (in `requirements.txt`).
 
 The **Mask & corrections** step starts with what scales the intensities: the folded sections **Normalisation**,
 **Corrections** (dark frame, background, gap guard, intensity range) and **Intensity corrections** (GIWAXS, with the
-Lorentz factor), so their headers are in view also in a small window. The step's line in the step list says first
+Lorentz factor), so their headers are in view also in a small window. **Detector and curve errors** follows these
+sections. The step's line in the step list says first
 when the intensities are scaled (*intensity × 1.25*, *Lorentz factor*). Below them, the step says how many pixels are
 left out, and why: detector gaps and
 marked pixels, hot and dead pixels found in this frame, your masks, the gap guard, the intensity
@@ -1357,26 +1358,21 @@ As in pyFAI, any non-zero image pixel is masked. See Physics and Methods, sectio
 is symmetric in ±q∥. Each gap pixel takes its intensity from the opposite in-plane angle at the same
 exit angle. On a tilted detector this can be in another row. All pixels contributing to the
 interpolation must have measured values. The missing wedge stays empty. The export records the
-number of filled pixels and uses pixel scatter for the error bars (section 5.4).
+number of filled pixels. Curves using mirror filling use pixel scatter for their error bars. The orientation
+curve uses measured pixels and their own uncertainties (sections 5.4–5.5).
 
-**Corrections** (folded): a **dark frame** (**Choose…** next to *No dark frame*, with **Dark scale** and, for NeXus,
-**Dark frame**; off by default), subtracted from every frame before the background; with it the error bars come
-from the scatter of the pixels ([Physics and Methods 4.11](Physics_Manual.md#411-dark-frame)). Then a background
-frame (**Choose…**, with **Scale** and, for NeXus, **Frame**),
-a valid raw intensity range (**Min** / **Max**), and the **Gap guard** (default 3 px; 0–20 px,
+Under **Corrections**, choose a beam-off **Dark frame** `K` and a background frame `B` from the same detector. Set **Dark scale** for the sample and **Scale** for the background. For a raw background, **Dark scale for background** uses the background-to-dark exposure ratio, or the sample dark scale if either header lacks an exposure. Clear **Auto** to enter a different ratio. Select **Background is already dark-subtracted** for a processed background. For NeXus, choose the frame number. You can also set a valid raw intensity range (**Min** / **Max**), and the **Gap guard** (default 3 px; 0–20 px,
 remembered), which also leaves out pixels this close to gaps and bad pixels. **Refraction in the film, αc**
 makes q_z the one inside a film of that critical angle (q∥ does not change; pixels below αc are left out of the q
 maps and of the cuts in q_z). Off by default; Physics and Methods 2.6.
 
-**Flat field** (detector response; off by default; GISAXS and GIWAXS): **Choose…** next to *No flat field* takes a
-detector image of the frame's size (CBF, TIFF, EDF, NeXus/HDF5: its first frame) or a NumPy `.npy` array, and **×**
-stops it. Every frame is divided by the flat field, normalised to mean 1 over the pixels it keeps; pixels where it
-is at or below 0.05 (dead, shadowed, module gaps) are left out. A flat field of another size is refused with the
-reason, never resampled. The line under it says the mean it was normalised by and how many pixels it leaves out.
-The same flat field serves every frame of a Batch Export, a series and the folder watch, and is saved with the
-settings. With photon counts the error bars follow the division (scaled Poisson); the JSON record
-(`corrections.flat_field`) names the file with its SHA-256, the mean and the pixels left out
-([Physics and Methods 4.10](Physics_Manual.md#410-flat-field-detector-response)).
+For a **Flat field**, choose a uniform exposure `D_ff` of the sample detector's shape (the first image of a detector file, or a NumPy `.npy` array). The flat field is off by default. With a dark loaded, the flat uses the flat-to-dark exposure ratio, or the sample dark scale if an exposure is missing. Select **Flat is already dark-subtracted** for a processed flat. The response `F_ff` has mean one over kept pixels. **Flat-field threshold** excludes pixels at or below the chosen response (default 0.05). The status gives the mean and number excluded. For propagated uncertainties supply a flat on its acquisition count or ADU scale. Batch Export, series and the folder watch use these settings. The JSON record includes dark scales, threshold, file digests and the error model used. A combined batch record identifies the model for each frame in `frame_error_models`. [Physics and Methods 4.10](Physics_Manual.md#410-flat-field-detector-response)
+
+Open **Detector and curve errors**. Clear **Use instrument profile settings** to edit **Counts per ADU (gain)**, **Offset (ADU)** and **Error model**. Raw intensity becomes `gain × (ADU − offset)`. **Automatic** chooses from the storage type and corrections. Integer CCD data and internally corrected counts may need an explicit model. Choose **Poisson**, **Scatter of the pixels**, or **Given σ frame**. A σ frame gives each sample pixel's standard deviation in its input units. Use **Save detector settings to profile** to reuse these choices with that instrument. If a neighbouring `.poni` file supplies the geometry, select the saved instrument profile to use its detector settings.
+
+By default, scatter errors for bins with fewer than ten pixels use a variance fitted across the curve. This reduces the influence of noisy variance estimates on fit weights. For low-count Poisson data, switch **Poisson variance** from **Observed intensity** to **Smoothed intensity** to estimate counting noise from neighbouring points. Curve intensities retain their measured values. Exports carry the chosen σ, and Fitting has its own weighting options. [Physics and Methods 6.4](Physics_Manual.md#64-curve-error-models)
+
+![Detector and curve errors](manual_images/en/detector_errors.png)
 
 The order is fixed: invalid detector pixels → hot and dead pixels → masks → dark frame → background → pixels the
 flat field leaves out → gap guard → intensity range (on the values as measured) → division by the flat field →
@@ -1384,15 +1380,15 @@ mirror fill → intensity corrections → normalisation. On a rotated detector t
 
 **Normalisation** (folded, every term off by default; GISAXS and GIWAXS). Its first line always says which header
 values the frame shown offers (*In the file header: exposure 20 s; Monitor = 5000*). After every other correction
-each frame is multiplied by **A / (t · M · T · d)**:
+each frame is multiplied by **A_abs / (t_exp · M · T · d)**:
 
 | Term | Enter |
 |---|---|
-| **Exposure t** | *From the file header* (the exposure time the file states; of a sum of frames, their sum) or *Typed* (s) |
+| **Exposure t_exp** | *From the file header* (the exposure time the file states; of a sum of frames, their sum) or *Typed* (s) |
 | **Monitor M** | a monitor of the header (*Header: I0 = …*: EDF keywords, the `Flux` of a Pilatus CBF, a NeXus `NXmonitor`; of a sum of frames, their sum) or *Typed* |
 | **Transmission T** | 0 < T ≤ 1 |
 | **Thickness d** | mm |
-| **Absolute scale A** | a factor from a glassy-carbon or water measurement in the same set-up |
+| **Absolute scale A_abs** | a factor from a glassy-carbon or water measurement in the same set-up |
 
 The line under the fields says by what the frame was multiplied, each term with its source, and the unit of the
 intensity, which the plots, the CSV column and the fit input then carry (*counts/(pixel·s·monitor)*). The error
@@ -1417,13 +1413,13 @@ value chosen is not analysed, and the status line says why. The JSON record (`no
    Click **Fit Scale**. Inspect the overlay and the residual (scaled measurement minus reference). A trend in the
    residual can indicate a background mismatch or an unsuitable q range.
 5. Enter the **sample** thickness in mm and click **Apply Scale**. GIMaP converts both thicknesses to cm and saves
-   A, its standard uncertainty, source and UTC date in the instrument profile. Set the sample's own exposure,
+   A_abs, its standard uncertainty, source and UTC date in the instrument profile. Set the sample's own exposure,
    monitor and transmission under **Mask & Corrections ▸ Normalisation**, using the same monitor convention as for
    the standard. For a later sample, **Use Saved Scale** reuses the profile calibration with its new thickness.
    A change in detector distance, pixel size, tilt or wavelength requires a calibration for the new set-up.
 
 The curve CSV labels intensity in `cm^-1`. In the frame JSON, `normalisation.standard_calibration` identifies the
-standard measurement, the reference, the fitted q range and A ± σ_A. σ_A is common to the whole curve. The
+standard measurement, the reference, the fitted q range and A_abs ± σ_A_abs. σ_A_abs is common to the whole curve. The
 pointwise σ column gives the statistical uncertainty of each reduced point. For a combined batch table,
 each entry in `frame_normalisations` links its sample terms to the standard in the batch JSON.
 A subsequent series normalisation to a target peak height gives relative intensities.
@@ -1586,15 +1582,16 @@ and I(q∥). The lower plot's drop-down chooses **I(χ) of the regions**, **q bo
 ### 5.4 Curves and results
 
 **Where the points come from.** Each point normally gives the mean intensity of the valid pixels in one bin.
-With **Lorentz factor for peak areas** selected, radial I(q) gives the weighted sum per q bin.
-For radial means, bins with very few pixels near the beam or a region edge are merged with their neighbours
-along q. Gaps separate the bins. I(χ) and Lorentz-weighted radial sums retain their bins. Bins with no pixel — gaps,
-masked χ ranges, the missing wedge — have no point, and the curve is broken there. The error bar σ is
-the counting error for raw photon counts (a bin of zero counts gets the error of one count, so σ is never
-0), and the scatter of the pixels for floating-point frames,
-after background subtraction or with mirror fill ([Physics and Methods, sections 6.4 and
-6.5](Physics_Manual.md#64-the-three-error-models) define both and the merging). GIMaP never smooths a
-curve: for smoother curves widen the region's χ range or lower **Radial bins**.
+The default radial bin width follows the change in q across a detector pixel. With **Lorentz factor for peak areas**
+selected, radial I(q) gives the weighted sum per q bin. For radial means, bins with very few pixels near the beam
+or a region edge are merged with their neighbours along q. I(χ) and Lorentz-weighted radial sums retain their bins.
+Detector gaps, masked χ ranges and the missing wedge can leave bins empty. The curve breaks across missing ranges.
+
+The error bar σ follows **Detector and curve errors**. Automatic mode uses counting errors for raw integer counts
+and pixel scatter for floating-point, dark-subtracted, background-subtracted or mirror-filled frames. You can also
+supply a σ frame. With observed Poisson errors a bin of zero counts receives the error of one count.
+**Smoothed intensity** changes the Poisson error estimate only. To average more measured pixels per radial point,
+widen the region's χ range or lower **Radial bins**. [Physics and Methods, sections 6.4 and 6.5](Physics_Manual.md#64-curve-error-models)
 
 **Sources.** Press **Sources** to see on the detector image which pixels each curve comes from, in
 the colours of the plots. Click a curve to see only its region.
@@ -1670,10 +1667,11 @@ The Results tab shows **Peaks**, **Checks** (shadows, artefacts, unmeasured rang
 Start of the Series**) and **Report**. Sizes are Scherrer lower bounds. Phases are assigned only to
 the phases you give (**Phases**, section 5.9).
 
-The report's *Decisions* (**Show the Full Text**) identifies the q axis. Without film refraction correction it
-gives the scale of the shift in q_z near the horizon (about k·sin αi). Peak uncertainties are statistical, from Poisson counting statistics
-or, for a floating-point, background-subtracted or mirror-filled frame, from the pixel scatter, without the
-geometry. At most 12 candidate peaks, the most prominent, are fitted: when more qualify, *Decisions* and the line
+The *Decisions* section of the report (**Show the Full Text**) states which q axis was used. For kinematic q
+it gives the scale of the refraction shift in q_z near the horizon, about k·sin αi near or below the film's
+critical angle. The statistical peak uncertainties
+come from the recorded reduction model (Poisson, pixel scatter or a supplied σ frame). They exclude geometry
+uncertainty. GIMaP fits up to 12 of the most prominent candidate peaks. When more qualify, *Decisions* and the line
 under the peak table say how many candidates there were and how many of the 12 gave a peak (a fit can merge two
 candidates or reject one), and the peak table, the rings and the series hints are those of the 12 (the command
 line's `--max-peaks` fits more). The saved report gives q, d and the FWHM of each peak with their ±. The ± of a fit
@@ -1684,7 +1682,9 @@ fourth order is not listed. A peak within 1.5 widths of the end of the data
 (*at the end of the data: check*) is not used for the rings, the sizes or the series hints: its shape may be cut
 off.
 
-For each analysed ring the report gives the exit-angle exclusion and polarisation. The measured Hermans f appears
+For each analysed ring the report gives the exit-angle exclusion and polarisation. Ring I(χ) and its uncertainties
+use only measured pixels. A radial curve with mirror filling can therefore use a different error model.
+The measured Hermans f appears
 with its statistical error and a systematic range. To obtain the range, GIMaP repeats the measurement at half,
 one and twice the nominal exit-angle threshold. At each threshold it varies the background by its fitted standard
 error, or by 20 % when no standard error is available. It compares the measured bins with a model extrapolation into
@@ -1751,8 +1751,7 @@ in Fitting** opens the prepared curve (the halves chosen) in Fitting.
 As for GIWAXS, the report's *Decisions* (**Show the Full Text**) say what the numbers are: q is kinematic,
 and near the critical angle refraction mostly shifts q_z — that of the Yoneda band most — by an amount of
 the order of k·sin αi, which the line gives for your frame (q_y and 2π/q\* barely change); the σ of the
-cuts, by which χ²ᵣ is normalised, are statistical only, from Poisson counting statistics or the pixel
-scatter, without the geometry; the intervals of R, h and D come from the posterior given those σ, so they do not
+cuts, by which χ²ᵣ is normalised, come from the recorded Poisson, pixel-scatter or supplied σ model and exclude geometry uncertainty; the intervals of R, h and D come from the posterior given those σ, so they do not
 include the geometry or the choice of model.
 
 ![Results of the automatic analysis of a GISAXS frame](manual_images/en/08_gisaxs_results.png)
@@ -4195,6 +4194,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Kinematic q omits film refraction.** Near the critical angle the shift in q_z can be of order k·sin αi. A transmitted-channel correction can leave a second ring from the reflected beam. | Check the q axis in the report. Apply the film critical angle when known and quote geometry uncertainty separately from peak-fit errors. |
 | **Missing-wedge intensities require extrapolation.** An exit-angle cut also removes some in-plane orientations. | Check angular coverage, the systematic range of measured f and the pole fit's quality (section 5.9). |
 | **NeXus/HDF5 files not written by the Lambda server are now read as stored** (earlier versions transposed and flipped them). A geometry or mask made on such a file with an earlier version no longer fits it (section 5.1). | Check the beam centre and masks of such data; calibrate again if needed. |
+| **Flat-field errors treat the measured flat mean as fixed.** A unit-mean response map lacks the acquisition count scale needed to estimate Poisson noise. | Supply the uniform exposure in counts or ADU. Curves using the same reference share uncertainty (section 5.2). |
 | **The normalisation divides the frame after the background and dark frame are subtracted** in the frame's own units. Transmission and thickness are entered by the user (section 5.2). | Set the background's **Scale** (and the **Dark scale**) to the ratio of exposure times or monitors of the frame and the background. |
 | **XRR intensities are raw**: no monitor normalisation, footprint, background, resolution correction or θ offset. Analyze masks and bad-pixel search are not applied (section 9.2). | Apply the required corrections to the exported curve and check the ROI and valid-pixel counts. |
 | **Format Converter does not read EDF.** | Use **Analyze ▸ Batch Export ▸ Converted detector frames**. |

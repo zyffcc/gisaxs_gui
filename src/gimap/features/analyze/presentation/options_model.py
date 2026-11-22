@@ -53,7 +53,7 @@ class OptionsModelMixin:
         )
 
     def set_normalisation(self, normalisation: Normalisation) -> None:
-        """Multiply every analysed frame by A / (t · M · T · d) (``Normalisation()``: not at all)."""
+        """Multiply every analysed frame by A_abs / (t_exp · M · T · d)."""
         self.state.corrections = replace(self.state.corrections, normalisation=normalisation)
 
     def set_lorentz(self, on: bool) -> None:
@@ -72,7 +72,29 @@ class OptionsModelMixin:
         """What the flat field of ``path`` is (``FlatFieldUse``: mean, pixels it leaves out); ``ValueError`` (the
         application's sentence) or ``OSError`` when it cannot be read or is not of the size of the frame shown."""
         analysis = self.state.analysis
-        return self._analyze_frame.check_flat_field_file(path, analysis.shape if analysis is not None else None)
+        settings = self.state.corrections
+        response = self.detector_response()
+        settings = replace(settings, counts_per_adu=response.counts_per_adu, offset_adu=response.offset_adu)
+        return self._analyze_frame.check_flat_field_file(
+            path, analysis.shape if analysis is not None else None, corrections=settings)
+
+    def set_reference_options(self, *, background_dark_scale, background_already_dark_subtracted,
+                              flat_already_dark_subtracted, flat_field_floor):
+        self.state.corrections = replace(
+            self.state.corrections, background_dark_scale=background_dark_scale,
+            background_already_dark_subtracted=background_already_dark_subtracted,
+            flat_already_dark_subtracted=flat_already_dark_subtracted, flat_field_floor=flat_field_floor,
+        )
+
+    def set_detector_response(self, *, use_profile, gain=1.0, offset=0.0, model="auto", sigma_path=None):
+        self.state.corrections = replace(
+            self.state.corrections, use_profile_response=use_profile, counts_per_adu=gain,
+            offset_adu=offset, error_model=model, sigma_path=sigma_path if model == "sigma" else None,
+        )
+
+    def set_curve_errors(self, pooled_scatter, poisson_variance):
+        self.state.corrections = replace(
+            self.state.corrections, pooled_scatter=pooled_scatter, poisson_variance=poisson_variance)
 
     def set_valid_range(self, minimum: Optional[float], maximum: Optional[float]) -> None:
         if minimum is not None and maximum is not None and minimum > maximum:
@@ -91,6 +113,10 @@ class OptionsModelMixin:
             gap_guard_px=current.gap_guard_px, bad_pixels=current.bad_pixels, mask_shapes=current.mask_shapes,
             mask_path=current.mask_path, mirror_fill=current.mirror_fill, flat_field_path=current.flat_field_path,
             dark_path=current.dark_path, dark_frame=current.dark_frame, dark_scale=current.dark_scale,
+            flat_field_floor=current.flat_field_floor, flat_already_dark_subtracted=current.flat_already_dark_subtracted,
+            counts_per_adu=current.counts_per_adu, offset_adu=current.offset_adu, error_model=current.error_model,
+            sigma_path=current.sigma_path, use_profile_response=current.use_profile_response,
+            pooled_scatter=current.pooled_scatter, poisson_variance=current.poisson_variance,
         )
 
     # -- masks and mirror filling ---------------------------------------------------------

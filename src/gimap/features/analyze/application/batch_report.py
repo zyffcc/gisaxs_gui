@@ -54,6 +54,7 @@ class BatchRun:
     """``name (reason)`` of every frame that failed (``failed``: the two apart)."""
     first_metadata: Optional[dict] = None
     frame_normalisations: list[dict] = field(default_factory=list)
+    frame_error_models: list[dict] = field(default_factory=list)
     first_frame: str = ""
     curve_titles: dict = field(default_factory=dict)
     started: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M"))
@@ -110,7 +111,12 @@ class BatchRun:
         self.failed.append({"frame": str(frame), "why": str(why), **({"file": str(file)} if file else {})})
         self.failures.append(f"{frame} ({why})")
 
-    def record_frame_normalisation(self, frame: str, metadata: dict) -> None:
+    def record_frame_statistics(self, frame: str, metadata: dict) -> None:
+        corrections = metadata.get("corrections") or {}
+        if metadata.get("error_model"):
+            response = {key: corrections.get(key) for key in (
+                "counts_per_adu", "offset_adu", "sigma_path", "pooled_scatter", "poisson_variance", "reference_dark")}
+            self.frame_error_models.append({"frame": frame, "error_model": metadata["error_model"], **response})
         norm = metadata.get("normalisation") or {}
         if not norm.get("standard_calibration"):
             return
@@ -358,6 +364,8 @@ def batch_record(run: BatchRun, files: Sequence[Path]) -> dict[str, Any]:
         record["write_error"] = run.write_error
     if run.frame_normalisations:
         record["frame_normalisations"] = run.frame_normalisations
+    if run.frame_error_models:
+        record["frame_error_models"] = run.frame_error_models
     if run.sums and max(run.sums) > 1:
         record["sums"] = [{"frame": frame, "frames_summed": int(size)} for frame, size in zip(run.frames, run.sums)]
     if run.sources:

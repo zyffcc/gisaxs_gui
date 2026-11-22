@@ -367,12 +367,12 @@ class AnalyzeStepsView:
     # -- 3 mask and corrections ----------------------------------------------------------
 
     def _mask_step(self, page: QWidget, layout: QVBoxLayout) -> None:
-        # What scales the intensities first, as three closed headers that fit above the fold of a small window
-        # (normalisation, dark frame and background, Lorentz factor); the masks below them.
+        # Keep intensity corrections together above the detector errors and mask controls.
         self.corrections_section.set_expanded(False)
         layout.addWidget(self.normalisation_section)
         layout.addWidget(self.corrections_section)
         layout.addWidget(self.intensity_section)
+        layout.addWidget(self.detector_errors_section)
         card, self.mask_summary_label = info_card(page)
         self.mask_summary_label.setObjectName("analyzeMaskSummary")
         self.mask_summary_label.setToolTip(MASK_TIP)

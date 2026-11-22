@@ -36,12 +36,13 @@ from ..domain import (
     normalisation_use,
     rasterize,
     subtract_background,
-    valid_pixels,
 )
 from ..domain.normalisation import BAD_VALUE, NORMALISATION_TEMPLATES  # noqa: F401 - the page translates them
 from ..domain.mask_edits import MaskShape
 from ..domain.mask_raster import evaluate_mask
+from ..domain.reference_variance import reference_variance
 from .flat_field import FlatFieldMixin
+from .reference_frames import dark_scale, detector_counts
 
 
 def floating(metadata: Optional[Mapping[str, Any]]) -> bool:
@@ -51,17 +52,19 @@ def floating(metadata: Optional[Mapping[str, Any]]) -> bool:
 
 
 def photon_counts(metadata: Optional[Mapping[str, Any]], corrections: Corrections, *, mirror_filled: bool) -> bool:
-    """Whether the frame's values are photon counts as measured, so a bin's σ is Poisson (√Σ / n).
+    """Whether to propagate counting variance, including all selected corrections."""
+    return effective_error_model(metadata, corrections, mirror_filled=mirror_filled) == "poisson"
 
-    The one place this is decided (the cuts, the peak fits of a batch, the fit-input record). Not for a
-    floating-point (dark-subtracted) frame, a background-subtracted one, or one with pixels filled from the
-    mirror side (``mirror_filled``: mirror filling was applied — GIWAXS with a geometry): a filled pixel
-    repeats photons measured on the other side, and a bin that holds both (every I(q) bin does) would count
-    them twice, so Poisson σ would be too small. σ then comes from the scatter of the bin's pixels. A dark frame
-    subtracted works as a background: its read noise and offset are not counts.
-    """
-    return (not floating(metadata) and not corrections.background_path and not corrections.dark_path
-            and not mirror_filled)
+
+def effective_error_model(metadata, corrections, *, mirror_filled: bool) -> str:
+    """Mirrored pixels repeat measured photons. Otherwise the user can override the storage heuristic."""
+    if mirror_filled:
+        return "scatter"
+    if corrections.error_model != "auto":
+        return corrections.error_model
+    if floating(metadata) or corrections.background_path or corrections.dark_path:
+        return "scatter"
+    return "poisson"
 
 
 class FrameSum:
@@ -99,29 +102,11 @@ class FramePreprocessingMixin(FlatFieldMixin):
 
     def _init_preprocessing(self) -> None:
         self._init_flat_field()
-        self._references: dict[str, tuple] = {}
-        """``background`` and ``dark``: (key, (data, valid)) of the frame last read for each."""
         self._bad_cache: Optional[tuple] = None
         self._mask_cache: Optional[tuple] = None
         self._file_mask_cache: Optional[tuple] = None
         self._intensity_key: Optional[tuple] = None
         self._intensity: Optional[np.ndarray] = None
-
-    def _reference_frame(self, kind: str, path: str, frame: int) -> tuple[np.ndarray, np.ndarray]:
-        """The background or dark frame (``kind``) and its valid pixels, loaded once per file version."""
-        path = Path(str(path))
-        stat = path.stat()
-        key = (str(path), int(frame), stat.st_mtime_ns, stat.st_size)
-        cached = self._references.get(kind)  # one tuple per kind: analyses run on several threads
-        if cached is None or cached[0] != key:
-            image = self.frames.load(path, int(frame))
-            data = np.asarray(image.data, dtype=np.float32)
-            cached = (key, (data, valid_pixels(data, image.mask, negatives_valid=floating(image.metadata))))
-            self._references[kind] = cached
-        return cached[1]
-
-    def _background_frame(self, corrections: Corrections) -> tuple[np.ndarray, np.ndarray]:
-        return self._reference_frame("background", corrections.background_path, corrections.background_frame)
 
     def _bad_pixels(self, data: np.ndarray, valid: np.ndarray, metadata: Mapping[str, Any]):
         """Hot and dead pixels of the raw frame (kept while the same frame is re-analysed)."""
@@ -181,32 +166,67 @@ class FramePreprocessingMixin(FlatFieldMixin):
         the mask is kept, so a mask of another detector is refused instead of failing every later analysis."""
         self._file_mask(str(path), (int(frame_shape[0]), int(frame_shape[1])))
 
-    def _corrected(
-        self, data: np.ndarray, valid: np.ndarray, corrections: Corrections
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Dark frame, background, the flat field's pixels that do not respond, the gap guard (around invalid
-        pixels, those too), the range (on the values as measured), then the division by the flat field."""
+    def _corrected(self, raw, valid, corrections, record, exposures):
+        """Convert ADU, subtract references, apply validity limits and divide by the flat response."""
+        data = detector_counts(raw, corrections, exposures=exposures)
+        model = record["error_model_used"]
+        if model == "poisson" and (corrections.dark_path or corrections.background_path or corrections.offset_adu
+                                   or corrections.error_model == "poisson"):
+            record["pixel_variance"] = np.maximum(data, 0)  # measured before subtracting other frames
+        if model == "sigma":
+            if not corrections.sigma_path:
+                raise ValueError("Choose a sigma frame for the supplied error model.")
+            sigma = self._reference("sigma", corrections.sigma_path)
+            if sigma.data.shape != raw.shape:
+                raise ValueError("The sigma frame must have the same shape as the sample.")
+            valid = valid & sigma.valid & (sigma.data >= 0)
+            record["pixel_variance"] = (corrections.counts_per_adu * sigma.data)**2
+
+        dark = dark_counts = background_counts = None
+        dark_coefficient = 0.0
         if corrections.dark_path:
-            dark, dark_valid = self._reference_frame("dark", corrections.dark_path, corrections.dark_frame)
-            data, valid = subtract_background(data, valid, dark, dark_valid, corrections.dark_scale, what="dark")
+            dark = self._reference("dark", corrections.dark_path, corrections.dark_frame)
+            dark_counts = detector_counts(dark.data, corrections)
+            data, valid = subtract_background(data, valid, dark_counts, dark.valid, corrections.dark_scale, what="dark")
+            dark_coefficient = -corrections.dark_scale
         if corrections.background_path:
-            background, background_valid = self._background_frame(corrections)
-            data, valid = subtract_background(
-                data, valid, background, background_valid, corrections.background_scale
-            )
+            background = self._reference("background", corrections.background_path, corrections.background_frame)
+            prepared = corrections.background_already_dark_subtracted
+            background_counts = detector_counts(background.data, corrections, exposures=int(not prepared))
+            scale, source = dark_scale(background, dark, corrections.dark_scale, prepared, corrections.background_dark_scale)
+            net, usable = background_counts, background.valid
+            if scale:
+                net, usable = subtract_background(net, usable, dark_counts, dark.valid, scale, what="dark")
+            data, valid = subtract_background(data, valid, net, usable, corrections.background_scale)
+            dark_coefficient += corrections.background_scale * scale
+            record["reference_dark"] = dict(background_dark_scale=scale, source=source,
+                                            background_already_dark_subtracted=prepared,
+                                            background_exposure_time_s=background.exposure_s,
+                                            dark_exposure_time_s=dark.exposure_s if dark is not None else None)
         flat = None
+        flat_dark_scale = 0.0
         if corrections.flat_field_path:
-            flat = self._flat_field(corrections.flat_field_path, (int(data.shape[0]), int(data.shape[1])))[0]
+            flat, use = self._flat_field(corrections.flat_field_path, data.shape, corrections=corrections, dark=dark)
+            record["flat_field"] = use
+            flat_dark_scale = use.dark_scale
             valid = valid & flat.kept
         valid = guard_invalid(valid, corrections.gap_guard_px)
         valid = apply_valid_range(data, valid, corrections.minimum, corrections.maximum)
+        if model != "scatter":
+            record["extra_variance"] = reference_variance(
+                data, background=background_counts, background_scale=corrections.background_scale,
+                dark=dark_counts, dark_coefficient=dark_coefficient, flat=flat, flat_dark_scale=flat_dark_scale)
         if flat is not None:
             data, valid = apply_flat_field(data, valid, flat)
+            if model == "poisson":
+                record["intensity_scale"] = 1.0 / flat.factor
+            if "pixel_variance" in record:
+                record["pixel_variance"] = record["pixel_variance"] / flat.factor**2
         return data, valid
 
     def _preprocess(
         self, raw_data: np.ndarray, raw_valid: np.ndarray, corrections: Corrections,
-        metadata: Mapping[str, Any], mirror_geometry: Optional[DetectorGeometry], geometry=None,
+        metadata: Mapping[str, Any], mirror_geometry: Optional[DetectorGeometry], geometry=None, exposures=1,
     ) -> dict:
         """The frame to reduce and what was done to it (fields of ``FrameAnalysis``).
 
@@ -221,14 +241,16 @@ class FramePreprocessingMixin(FlatFieldMixin):
         if drawn is not None and drawn.any():
             usable = usable & ~drawn
         record: dict = {"corrections": corrections, "bad_pixels": bad, "drawn_mask": drawn}
+        record["error_model_used"] = effective_error_model(
+            metadata, corrections, mirror_filled=corrections.mirror_fill and mirror_geometry is not None)
         if corrections.is_identity:
             record.update(data=raw_data, valid=usable)
+            if corrections.error_model == "poisson" and floating(metadata):
+                record["pixel_variance"] = np.maximum(raw_data, 0)
             if usable is not raw_valid:
                 record["raw_valid"] = raw_valid  # re-analysing without them starts from the detector's mask
             return record
-        data, valid = self._corrected(raw_data, usable, corrections)
-        if corrections.flat_field_path:
-            record["flat_field"] = self._flat_field(corrections.flat_field_path)[1]
+        data, valid = self._corrected(raw_data, usable, corrections, record, exposures)
         filled = None
         if corrections.mirror_fill and mirror_geometry is not None:
             if not (mirror_geometry.tilted and has_intensity_corrections(corrections)):
@@ -254,21 +276,12 @@ class FramePreprocessingMixin(FlatFieldMixin):
     def correct_pixels(self, common: dict, raw_data, raw_valid, corrections, geometry, kind) -> bool:
         """Apply the pixel-dependent corrections shared by sample and standard. Return the counting model."""
         mirror_geometry = geometry if kind == GIWAXS else None
-        common.update(self._preprocess(raw_data, raw_valid, corrections, common["metadata"], mirror_geometry, geometry))
-        counting = photon_counts(common["metadata"], corrections,
-                                 mirror_filled=bool(corrections.mirror_fill and mirror_geometry))
-        self._flat_scale(common, corrections, counting)
+        common.update(self._preprocess(raw_data, raw_valid, corrections, common["metadata"], mirror_geometry, geometry,
+                                       exposures=1 + len(common.get("summed_frames", ()))))
+        counting = common["error_model_used"] == "poisson"
         if kind == GIWAXS and geometry is not None and has_intensity_corrections(corrections):
             self._correct_intensity(common, raw_data, raw_valid, geometry, corrections, counting)
         return counting
-
-    def _flat_scale(self, common: dict, corrections, counting: bool) -> None:
-        """Photon counts divided by a flat field: each pixel's counts were multiplied by ``1 / F_ff``, so its
-        Poisson variance is that factor × its value (``intensity_scale``)."""
-        if counting and common.get("flat_field") is not None:
-            with np.errstate(invalid="ignore", divide="ignore"):
-                common["intensity_scale"] = (1.0 / self._flat_field(corrections.flat_field_path)[0].factor).astype(
-                    np.float32)
 
     def _correct_intensity(self, common: dict, raw_data, raw_valid, geometry, corrections, counting: bool) -> None:
         """GIWAXS intensity corrections: ``I / factor``; the raw frame is kept for re-analysis. The scale of the
@@ -286,6 +299,10 @@ class FramePreprocessingMixin(FlatFieldMixin):
             common["filled_pixels"] = filled & defined
             valid &= defined
         common["data"], common["valid"] = corrected, valid
+        for field in ("pixel_variance", "extra_variance"):
+            if common.get(field) is not None:
+                with np.errstate(invalid="ignore", divide="ignore"):
+                    common[field] = common[field] / factor**2
         if counting:
             with np.errstate(invalid="ignore", divide="ignore"):
                 scale = (1.0 / factor).astype(np.float32)
@@ -301,6 +318,9 @@ class FramePreprocessingMixin(FlatFieldMixin):
         if common.get("raw_data") is None:
             common["raw_data"], common["raw_valid"] = raw_data, raw_valid
         common["data"] = (np.asarray(common["data"], dtype=np.float32) * factor).astype(np.float32, copy=False)
+        for field in ("pixel_variance", "extra_variance"):
+            if common.get(field) is not None:
+                common[field] = common[field] * factor**2
         if counting:
             previous = common.get("intensity_scale")
             common["intensity_scale"] = (np.full(common["data"].shape, factor, dtype=np.float32) if previous is None
@@ -308,4 +328,4 @@ class FramePreprocessingMixin(FlatFieldMixin):
         common["normalisation"] = use
 
 
-__all__ = ["FramePreprocessingMixin", "FrameSum", "floating", "photon_counts"]
+__all__ = ["FramePreprocessingMixin", "FrameSum", "effective_error_model", "floating", "photon_counts"]

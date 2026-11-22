@@ -32,6 +32,7 @@ from .guided_words import words
 
 FIT_PLOT_HEIGHT = 190
 ERROR_WORDS = {"poisson": "Poisson (counting) error", "scaled_poisson": "Poisson (counting) error",
+               "sigma_frame": "Given σ frame",
                "pixel_scatter": "pixel-scatter error (statistical, not counting noise)"}
 """The errors the peaks were fitted with, by the frame's error model (the report's ``error_model``)."""
 NAME_WIDTH = 64

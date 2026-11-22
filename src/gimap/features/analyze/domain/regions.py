@@ -18,7 +18,8 @@ from typing import Optional
 
 import numpy as np
 
-from .binning import BinnedMean, counts_and_scale, merge_sparse_bins
+from .binning import BinnedMean
+from .curve_errors import PixelErrors, pixel_errors
 from .models import Curve
 
 CHI_STEP_DEG = 1.0
@@ -66,19 +67,19 @@ def region_mask(q_range, chi_range, both_sides: bool, maps, usable: np.ndarray) 
 
 
 def _profile(
-    key, title, x_label, x_values, values, mask, *, low, high, bins, region, merge: bool = True, counts: bool = True,
+    key, title, x_label, x_values, values, mask, *, low, high, bins, region, merge: bool = True,
+    counts: bool | np.ndarray | PixelErrors = True,
 ) -> Curve:
     accumulator = BinnedMean.linear(low, high, bins)
-    poisson, scale = counts_and_scale(counts, mask)
-    accumulator.add(x_values[mask], values[mask], scale)
-    result = accumulator.result(counts=poisson)
-    x, mean, sigma, pixels = merge_sparse_bins(*result) if merge else result
+    errors = pixel_errors(counts).subset(mask)
+    accumulator.add(x_values[mask], values[mask], errors=errors)
+    x, mean, sigma, pixels = accumulator.result(counts=errors, merge=merge)
     return Curve(key, title, x, mean, sigma, pixels, x_label, region=region)
 
 
 def region_curves(
     region: CutRegion, key: str, maps, values: np.ndarray, usable: np.ndarray, *,
-    q_low: float, q_high: float, bins: int, counts: bool = True,
+    q_low: float, q_high: float, bins: int, counts: bool | np.ndarray | PixelErrors = True,
 ) -> tuple[Curve, Curve]:
     """I(q) and I(χ) of one region (see the module docstring)."""
     low, high = region.q_range or (q_low, q_high)
@@ -110,16 +111,17 @@ def region_curves(
     return along_q, along_chi
 
 
-def window_profile(maps, values, usable, q_range, chi_range, both_sides: bool, *, counts: bool = True):
+def window_profile(maps, values, usable, q_range, chi_range, both_sides: bool, *,
+                   counts: bool | np.ndarray | PixelErrors = True):
     """``(q, I, σ)`` of a region's χ range over ``q_range`` at the detector's own q step (to fit a peak:
     the window can be wider than the region, so the background on both sides of the peak is in it)."""
     low, high = float(q_range[0]), float(q_range[1])
     step = float(getattr(maps, "q_step", 0.0)) or (high - low) / 100.0
     inside = region_mask((low, high), chi_range, both_sides, maps, usable)
     accumulator = BinnedMean.linear(low, high, max(10, int(round((high - low) / step))))
-    poisson, scale = counts_and_scale(counts, inside)
-    accumulator.add(maps.q[inside], values[inside], scale)
-    x, mean, sigma, _pixels = accumulator.result(counts=poisson)
+    errors = pixel_errors(counts).subset(inside)
+    accumulator.add(maps.q[inside], values[inside], errors=errors)
+    x, mean, sigma, _pixels = accumulator.result(counts=errors)
     return x, mean, sigma
 
 

@@ -157,7 +157,9 @@ def test_posterior_check_of_a_refine_fit(tmp_path):
         assert "Refine or Search" in page.check_what.text()
         page.check_steps.setValue(400)
         page.run_check()
-        _settle(page)
+        # The independent ensembles can still be sampling after the usual GUI wait.
+        _settle(page, limit=600)
+        assert not page.tasks.is_busy(), page.check_verdict.text()
         assert page.check_table.rowCount() == 2
         assert {page.check_table.item(i, 0).text() for i in range(2)} == {"R_1", "sigma_R_1"}
         assert "R̂" in page.check_verdict.text() and "check only" in page.check_verdict.text()

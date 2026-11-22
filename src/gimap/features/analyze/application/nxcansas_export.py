@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 from typing import Any, Mapping, Optional, Sequence
 
+from src.gimap.shared.curve_error_description import curve_error_description
 from src.gimap.shared.export_text import export_text
 from src.gimap.shared.nxcansas import ARBITRARY, PER_ANGSTROM, Instrument, SasCurve
 from src.gimap.shared.version import SOFTWARE as RELEASE
@@ -33,11 +34,6 @@ Q_AXES = {
 }
 """What the Q of a curve is, by the axis Analyze gives it (the curves against an angle are not among them)."""
 SUFFIX = "_nxcansas.h5"
-ERRORS = {
-    "poisson": "Poisson: the square root of the counts summed in the bin over the number of pixels",
-    "pixel_scatter": "the scatter of the bin's pixels about their mean over the square root of their number",
-    "scaled_poisson": "Poisson carried through the intensity corrections",
-}
 
 
 def nxcansas_name(stem: str) -> str:
@@ -80,7 +76,7 @@ def sas_curves(curves: Sequence[Curve], metadata: Mapping[str, Any], *, run: str
                              else "the mean detector counts per pixel of the point (arbitrary units)")
     if relative:
         intensity_description = "relative intensity after reference-peak scaling"
-    error = ERRORS.get(str(metadata.get("error_model") or ""), "as the record's error_model says")
+    error = curve_error_description(metadata.get("error_model"), metadata.get("corrections") or {})
     out = []
     for curve in curves:
         if not against_q(curve):

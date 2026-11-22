@@ -21,21 +21,11 @@ from __future__ import annotations
 import math
 from typing import Iterable, Optional
 
+from src.gimap.shared.curve_error_description import ERROR_MODELS, curve_error_description
+
 from ..domain import MAX_PEAKS
 from ..domain.orientation import NORMAL_CHI, PLANE_CHI, TEXTURE_SIGMAS, WEAK_HERMAN
 
-ERROR_MODELS = {
-    "poisson": "Poisson counting statistics of each bin (photon counts as measured)",
-    "scaled_poisson": "Poisson counting statistics of each bin, scaled like the intensities (a flat field or intensity "
-                      "corrections on)",
-    "pixel_scatter": (
-        "the scatter of each bin's pixels (a floating-point, background-subtracted or mirror-filled frame: "
-        "a statistical, pixel-scatter uncertainty, not counting noise)"
-    ),
-}
-"""The error model of the frame's curves (``get_status``: ``error_model``, as ``<stem>_analysis.json`` records it)
-in the words of the report."""
-UNKNOWN_ERRORS = "the bins' own errors (the error model was not reported)"
 MORE_PEAKS = "--max-peaks N on the command line; max_peaks of find_peaks or run_standard_pipeline"
 """How to fit more candidates than the default (the GUI's Run Automatic Analysis has no setting for it)."""
 
@@ -48,10 +38,11 @@ REFRACTION = {
 }
 """What refraction does to the kinematic q of each technique: (the shift, what barely changes)."""
 UNCERTAINTIES = {
-    "giwaxs": ("the ± of q, d, FWHM and sizes (the peak fits) and σ_f of the Hermans f (Monte Carlo) come from {model}; "
+    "giwaxs": ("the ± of q, d, FWHM and sizes (the peak fits) come from {model}; "
                "the ± of a peak fit whose reduced χ² is above 1 are multiplied by √χ²_r (a fit above χ²_r = 10 is "
                "flagged as a poor fit in the peak table); "
-               "the separate systematic range for f varies the background, exit-angle threshold and wedge fill. "
+               "the Monte Carlo estimate of σ_f uses the errors of the measured I(χ) bins before mirror filling. "
+               "The separate systematic range for f varies the background, exit-angle threshold and wedge fill. "
                "Geometry and refraction uncertainties are excluded"),
     "gisaxs": ("the σ of the cuts' points (the σ column of the saved curves), by which the fit's χ²ᵣ is normalised, "
                "come from {model}; the intervals of R, h and D are the posterior of Predict parameters given these σ "
@@ -83,9 +74,9 @@ def refraction_decision(geometry: Optional[dict], technique: str = "giwaxs", *, 
     return {"what": "q", "decision": "kinematic (no refraction correction)", "why": why}
 
 
-def uncertainty_decision(errors: Optional[str], technique: str = "giwaxs") -> dict:
-    """The ± of the report are statistical only: from the bins' own errors, in the error model the frame has."""
-    model = ERROR_MODELS.get(str(errors or ""), UNKNOWN_ERRORS)
+def uncertainty_decision(errors: Optional[str], technique: str = "giwaxs", *, corrections=None) -> dict:
+    """State the statistical source for each observable and the separate systematic range for GIWAXS f."""
+    model = curve_error_description(errors, corrections or {})
     template = UNCERTAINTIES.get(technique, UNCERTAINTIES["giwaxs"])
     return {"what": "uncertainties", "decision": "statistical ± and systematic range for f" if technique == "giwaxs" else "statistical only", "why": template.format(model=model)}
 
@@ -100,9 +91,8 @@ def flat_field_decision(status: Optional[dict]) -> Optional[dict]:
         "what": "flat field",
         "decision": f"divided by {flat.get('file')} ({flat.get('masked_pixels')} pixels left out)",
         "why": (
-            "the detector response: every pixel is divided by the flat field normalised to mean 1 over the pixels it "
-            "keeps, right after the background; pixels where it is at or below 0.05 or not finite do not respond "
-            "and are left out; the σ of photon counts are scaled with it (scaled Poisson)"
+            "the reduction divides each corrected pixel by its flat-field response F_ff, normalised to mean 1. "
+            f"It excludes nonfinite responses and values at or below {flat.get('floor', 0.05):g}."
         ),
     }
 

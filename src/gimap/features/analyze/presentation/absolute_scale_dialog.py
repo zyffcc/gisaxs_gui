@@ -203,7 +203,7 @@ class AbsoluteScaleDialog(QDialog, AbsoluteScaleView):
         self.water_level.setText(f"dΣ/dΩ = {water_intensity(self.temperature.value()):.6g} cm⁻¹")
         if self.calibration is not None:
             fit = self.calibration.fit
-            summary = trf("A = {factor:.6g} ± {sigma:.2g} (1σ)\n{points} points from {low:.6g} to {high:.6g} Å⁻¹",
+            summary = trf("A_abs = {factor:.6g} ± {sigma:.2g} (1σ)\n{points} points from {low:.6g} to {high:.6g} Å⁻¹",
                           factor=fit.factor, sigma=fit.sigma_factor, points=len(fit.q),
                           low=fit.q[0], high=fit.q[-1])
         self.fit_summary.setText(summary)
@@ -213,7 +213,7 @@ class AbsoluteScaleDialog(QDialog, AbsoluteScaleView):
         if self.saved_record and self.use_saved:
             record = self.saved_record
             try:
-                summary = trf("Saved A = {factor:.6g} ± {sigma:.2g} · {standard} · {date}",
+                summary = trf("Saved A_abs = {factor:.6g} ± {sigma:.2g} · {standard} · {date}",
                               factor=record["factor"], sigma=record["sigma_factor"], date=record["date_utc"],
                               standard=tr("Water") if record["standard"] == "Water" else record["standard"])
             except (KeyError, TypeError, ValueError):

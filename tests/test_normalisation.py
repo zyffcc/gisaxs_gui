@@ -41,6 +41,7 @@ from src.gimap.features.assistant.domain.orientation import ring_orientation
 from src.gimap.features.assistant.domain.profiles import Profile
 from src.gimap.integrations.state import InMemoryInstrumentProfileRepository
 from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile
+from src.gimap.shared.geometry.detector_response import DetectorResponse
 from src.gimap.shared.geometry.q_mapping import exit_directions, geometry_rays
 from tests.test_assistant_calibration import SHAPE
 from tests.test_giwaxs_workspace import GEOMETRY
@@ -86,6 +87,30 @@ def _gisaxs(tmp_path: Path):
     return _analyze(InstrumentProfile("synthetic", GISAXS_GEOMETRY, None, GISAXS_SHAPE))
 
 
+def test_matched_gain_and_sigma_frame_reach_the_exported_cut(tmp_path):
+    raw = _save_int(tmp_path / "readout.tif", np.full(GISAXS_SHAPE, 51))
+    path = tmp_path / "standard_deviation.npy"
+    np.save(path, np.full(GISAXS_SHAPE, 3.0))
+    profile = InstrumentProfile("integrating", GISAXS_GEOMETRY, detector_shape=GISAXS_SHAPE,
+                                detector_response=DetectorResponse(2.0, 40.0, "sigma", str(path)))
+    analyze = _analyze(profile)
+    request = AnalysisRequest(path=raw, mode="gisaxs", corrections=Corrections(bad_pixels=False))
+    frame = analyze(request)
+    cut = frame.reduction.curve("horizontal")
+    np.testing.assert_array_equal(cut.intensity, np.full_like(cut.intensity, 22))
+    np.testing.assert_allclose(cut.sigma, 6 / np.sqrt(cut.pixels))
+    record = analysis_metadata(frame)
+    assert record["error_model"] == "sigma_frame"
+    assert record["corrections"]["sigma_path"] == str(path)
+    assert any(item["file"] == path.name and item["sha256"] for item in record["input_sha256"])
+    assert not fit_input_observation(frame)["counting_model_valid"]
+    assert "error model: sigma_frame" in provenance_lines(record, "Analyze")
+    manual = replace(request, corrections=Corrections(bad_pixels=False, use_profile_response=False))
+    restored = analyze(manual, loaded=frame)
+    np.testing.assert_array_equal(restored.data, np.full(GISAXS_SHAPE, 51))
+    assert analysis_metadata(restored)["error_model"] == "poisson"
+
+
 # -- the defaults ----------------------------------------------------------------------------------------------------
 
 
@@ -102,7 +127,7 @@ def test_with_every_new_option_off_the_curves_and_errors_are_those_of_the_releas
     for name, (frame, mode, geometry, shape) in cases.items():
         analysis = _analyze(InstrumentProfile(name, geometry, None, shape))(AnalysisRequest(
             path=DATA / frame, mode=mode, profile_name=name,
-            corrections=Corrections(orientation_min_exit_deg=0.0, orientation_polarization=False)))
+            corrections=Corrections(pooled_scatter=False, orientation_min_exit_deg=0.0, orientation_polarization=False)))
         assert analysis.normalisation is None and analysis.intensity_scale is None
         record = analysis_metadata(analysis)
         assert record["normalisation"] is None and not any("normalised" in line or "dark frame" in line
@@ -147,7 +172,7 @@ def test_the_constant_scales_intensities_and_sigma_and_says_each_term_and_its_so
     assert observation["intensity_unit"] == "counts/(pixel·s·mm) × 3" and not observation["counting_model_valid"]
     written = ExportAnalysis(CsvCurveWriter())(scaled, tmp_path / "out")
     text = next(path for path in written if path.name.endswith("_horizontal.csv")).read_text(encoding="utf-8")
-    assert "# intensity: counts/(pixel*s*mm) x 3; normalised I = A*I/(t*M*T*d), factor 6" in text  # (export_text)
+    assert "# intensity: counts/(pixel*s*mm) x 3; normalised I = A_abs*I/(t_exp*M*T*d), factor 6" in text
     assert "exposure_time_s 4 (typed)" in text and "sigma scaled by the same factor" in text
     assert "I (counts/(pixel*s*mm) x 3),sigma,pixels" in text
 
@@ -217,15 +242,32 @@ def test_monitor_names_of_cbf_and_edf_headers_are_offered() -> None:
     assert header_values(nexus) == {"exposure_time_s": 0.1, "monitors": {"/entry/monitor/data": 9.5e6}}
 
 
+@pytest.mark.parametrize("options,reason", [
+    ({"lorentz_band_px": -0.5}, "Lorentz"),
+    ({"orientation_min_exit_deg": 95}, "orientation"),
+    ({"counts_per_adu": 0}, "Counts per ADU"),
+])
+def test_corrections_validate_orientation_and_detector_response(options, reason):
+    with pytest.raises(ValueError, match=reason):
+        Corrections(**options)
+
+
 def test_settings_files_keep_the_dark_frame_the_normalisation_and_the_lorentz_factor(tmp_path: Path) -> None:
     corrections = Corrections(dark_path=str(tmp_path / "dark.tif"), dark_frame=2, dark_scale=0.5, lorentz=True,
+                              background_dark_scale=0.25, background_already_dark_subtracted=True,
+                              flat_already_dark_subtracted=True, flat_field_floor=0.1,
+                              use_profile_response=False, counts_per_adu=1.5, offset_adu=25, error_model="sigma",
+                              sigma_path=str(tmp_path / "uncertainty.npy"), poisson_variance="smoothed", pooled_scatter=False,
                               lorentz_band_px=2.5, orientation_min_exit_deg=0.35, orientation_polarization=False,
                               normalisation=Normalisation(exposure="header", monitor="header", monitor_key="I0",
                                                           transmission=0.8, absolute_factor=1.5e-3))
     record = json.loads(json.dumps(settings_record(AnalyzeSettings(corrections=corrections))))
     assert settings_from_record(record).corrections == corrections
     old = settings_record(AnalyzeSettings())
-    for key in ("dark_path", "dark_frame", "dark_scale", "normalisation", "lorentz", "lorentz_band_px",
+    for key in ("dark_path", "dark_frame", "dark_scale", "normalisation", "lorentz", "background_dark_scale",
+                "background_already_dark_subtracted", "flat_already_dark_subtracted", "flat_field_floor",
+                "counts_per_adu", "offset_adu", "error_model", "sigma_path", "use_profile_response",
+                "pooled_scatter", "poisson_variance", "lorentz_band_px",
                 "orientation_min_exit_deg", "orientation_polarization"):
         old["corrections"].pop(key)
     assert settings_from_record(old).corrections == Corrections()  # a file of the release before: all off
@@ -244,7 +286,7 @@ def test_the_dark_frame_is_subtracted_before_the_background_and_sigma_is_the_pix
                               background_scale=0.5)
     analysis = analyze(AnalysisRequest(path=frame, mode="gisaxs", profile_name="synthetic", corrections=corrections))
     raw = analysis.raw_data
-    np.testing.assert_allclose(analysis.data, raw - 2.0 * 50 - 0.5 * 30, rtol=1e-6)
+    np.testing.assert_allclose(analysis.data, raw - 2.0 * 50 - 0.5 * (30 - 2.0 * 50), rtol=1e-6)
     assert error_model(analysis) == "pixel_scatter" and analysis.intensity_scale is None
     assert not fit_input_observation(analysis)["counting_model_valid"]
     lines = provenance_lines(analysis_metadata(analysis), "Analyze")
@@ -361,6 +403,36 @@ def test_exit_angle_is_cut_on_detector_pixels_before_azimuthal_binning(critical,
                 & (sin_exit >= math.sin(math.radians(nominal * multiplier))))
         assert np.sum(curve.pixels) == kept.sum()
         np.testing.assert_allclose(curve.intensity, 100, rtol=1e-6)
+
+
+def test_orientation_of_summed_frames_keeps_profile_gain_and_propagated_variance(tmp_path):
+    from src.gimap.features.analyze.domain import GiwaxsSettings
+
+    path = _save_int(tmp_path / "film.tif", np.full(SHAPE, 52))
+    background = _save_int(tmp_path / "prepared.tif", np.full(SHAPE, 3))
+    sigma_path = tmp_path / "sigma.npy"
+    np.save(sigma_path, np.full(SHAPE, 3.0))
+    profile = InstrumentProfile("integrating", GEOMETRY, detector_shape=SHAPE,
+                                detector_response=DetectorResponse(2.0, 40.0, "sigma", str(sigma_path)))
+    corrections = Corrections(bad_pixels=False, lorentz=True, mirror_fill=True, background_path=str(background),
+                              background_already_dark_subtracted=True)
+    analyze = _analyze(profile)
+    frame = analyze(AnalysisRequest(path, mode="giwaxs", summed_frames=((path, 0),), corrections=corrections,
+                                    giwaxs=GiwaxsSettings(chi_q_window=(0.2, 0.8)), with_map=False))
+    curve = frame.reduction.curve("azimuthal")
+    assert curve.pixels.sum() > 0 and curve.region["error_model"] == "sigma_frame"
+    used = analyze.source_masks(frame, ["azimuthal"])["azimuthal"]
+    polar = intensity_factor(SHAPE, GEOMETRY, polarization=0.99)[used]
+    # Two exposures, gain 2, offset 40 per exposure, prepared background of six counts.
+    signal = 2 * (2 * 52 - 2 * 40) - 6
+    variance = (2 * 3)**2 + 6  # supplied sample variance plus independent background counts
+    np.testing.assert_allclose(curve.intensity @ curve.pixels, np.sum(signal / polar, dtype=float), rtol=1e-6)
+    np.testing.assert_allclose(np.sum((curve.sigma * curve.pixels)**2),
+                               np.sum(variance / polar**2, dtype=float), rtol=1e-6)
+    record = analysis_metadata(frame)
+    assert record["error_model"] == "pixel_scatter"  # mirror-filled radial channel
+    assert any(source["file"] == sigma_path.name and source["sha256"] for source in record["input_sha256"])
+    assert "ring orientation error model: sigma_frame" in provenance_lines(record, "Analyze")
 
 
 # -- exports ---------------------------------------------------------------------------------------------------------

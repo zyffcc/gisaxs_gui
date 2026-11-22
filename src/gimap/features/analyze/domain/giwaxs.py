@@ -16,7 +16,8 @@ import numpy as np
 from src.gimap.shared.geometry import DetectorGeometry
 from src.gimap.shared.geometry.q_mapping import grazing_q_region
 
-from .binning import BinnedMean, binned_mean_2d, counts_and_scale, map_grid_shape, merge_sparse_bins, pixel_step
+from .binning import BinnedMean, binned_mean_2d, map_grid_shape, pixel_step
+from .curve_errors import PixelErrors, pixel_errors
 from .regions import region_curves, region_key
 from .corrections import Corrections
 from .orientation_reduction import ring_profiles
@@ -105,7 +106,7 @@ def _in_two_theta(curve: Curve, wavelength_angstrom: float) -> Curve:
     )
 
 
-def _sector_curves(sector: Sector, maps, values, usable, *, low, high, bins, counts: bool = True) -> list[Curve]:
+def _sector_curves(sector: Sector, maps, values, usable, *, low, high, bins, counts: bool | np.ndarray | PixelErrors = True) -> list[Curve]:
     chi_low, chi_high = sorted((float(sector.chi_min_deg), float(sector.chi_max_deg)))
     in_chi = usable & (maps.chi_deg >= chi_low) & (maps.chi_deg <= chi_high)
     q_low = low if sector.q_min is None else max(low, float(sector.q_min))
@@ -131,7 +132,7 @@ def _sector_curves(sector: Sector, maps, values, usable, *, low, high, bins, cou
     return curves
 
 
-def _box_curves(box: QBox, maps, values, usable, *, counts: bool = True) -> list[Curve]:
+def _box_curves(box: QBox, maps, values, usable, *, counts: bool | np.ndarray | PixelErrors = True) -> list[Curve]:
     par_low, par_high = sorted(float(value) for value in box.q_parallel)
     z_low, z_high = sorted(float(value) for value in box.qz)
     inside = (
@@ -162,15 +163,15 @@ def _box_curves(box: QBox, maps, values, usable, *, counts: bool = True) -> list
 
 
 def _profile(
-    key, title, x_label, x_values, image, mask, *, low, high, bins, region, merge: bool = True, counts: bool = True,
+    key, title, x_label, x_values, image, mask, *, low, high, bins, region, merge: bool = True,
+    counts: bool | np.ndarray | PixelErrors = True,
 ) -> Curve:
     """Mean per bin; sparse bins joined (``merge_sparse_bins``) except for I(χ), whose 1° bins the
     orientation analysis relies on (an empty or thin χ bin is how the missing wedge shows)."""
     accumulator = BinnedMean.linear(low, high, bins)
-    poisson, scale = counts_and_scale(counts, mask)
-    accumulator.add(x_values[mask], image[mask], scale)
-    result = accumulator.result(counts=poisson)
-    x, mean, sigma, pixels = merge_sparse_bins(*result) if merge else result
+    errors = pixel_errors(counts).subset(mask)
+    accumulator.add(x_values[mask], image[mask], errors=errors)
+    x, mean, sigma, pixels = accumulator.result(counts=errors, merge=merge)
     return Curve(key, title, x, mean, sigma, pixels, x_label, region=region)
 
 
@@ -214,16 +215,15 @@ def reduce_giwaxs(
     *,
     maps: GiwaxsMaps | None = None,
     with_map: bool = True,
-    counts: bool = True,
+    counts: bool | np.ndarray | PixelErrors = True,
     corrections: Corrections = Corrections(),
     orientation_pixels: tuple | None = None,
 ) -> Reduction:
     """The GIWAXS curves; the q∥–qz map too unless ``with_map`` is ``False``.
 
-    ``counts``: the frame holds photon counts (Poisson errors); ``False`` for dark- or
-    background-subtracted frames, whose errors come from the scatter of the pixels in each bin; an
-    array: photon counts multiplied per pixel by it (intensity corrections, ``intensity.py``), so a
-    pixel's Poisson variance is that factor times its value.
+    ``counts`` takes the frame's PixelErrors, a counting flag or a per-pixel
+    scale for Poisson counts. For ring orientation, ``orientation_pixels`` can
+    supply measured intensities, their validity mask and their own uncertainties.
     """
     settings = settings or GiwaxsSettings()
     maps = maps or giwaxs_maps(image.shape, geometry)

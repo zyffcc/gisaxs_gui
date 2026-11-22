@@ -2,9 +2,8 @@
 
 The run is the one Run Automatic Analysis and ``tools/gimap_agent.py auto`` start: an offscreen Analyze page with
 the standard pipeline on it. An αi typed in Analyze's command bar is the αi Analyze uses, so the run takes it and
-does not ask for αi; a list of peaks cut at the cap says so; q is said to be kinematic, the uncertainties to be
-statistical (from the pixel scatter of this floating-point frame); the rings whose f depends on the bins next to
-the sample horizon are named.
+does not ask for αi. The report states the peak cap, the q convention and the statistical error model used
+for this floating-point frame. For the ring orientation it gives the exit-angle cut and a systematic range for f.
 """
 
 from __future__ import annotations
@@ -88,7 +87,10 @@ def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08) ->
     assert "k·sin αi = 0.0119 Å⁻¹ here (αi = 0.075°, λ = 0.6888 Å)" in q["why"]  # 2π/λ · sin αi
     assert report["error_model"] == "pixel_scatter"  # a floating-point frame
     errors = _decision(report, "uncertainties")
-    assert errors["decision"] == "statistical ± and systematic range for f" and "pixel-scatter uncertainty, not counting noise" in errors["why"]
+    assert errors["decision"] == "statistical ± and systematic range for f"
+    assert "scatter of the corrected pixels" in errors["why"]
+    assert "pixel-scatter uncertainty, not counting noise" in errors["why"]
+    assert "pooled variance for points containing fewer than ten pixels" in errors["why"]
 
     search = report["peak_search"]
     assert search["max_peaks"] == 12 and search["truncated"] and search["candidates"] > 12
@@ -108,6 +110,7 @@ def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08) ->
     horizon = _decision(report, "ring orientation")
     assert "αf < 0.15° (2 × αi)" in horizon["decision"] and "factor 0.99" in horizon["decision"]
     ring = min(report["rings"], key=lambda r: abs(r["q"] - 0.997))
+    assert ring["orientation_settings"]["error_model"] == "pixel_scatter"
     pole = ring["pole_figure"]
     low, high = ring["herman_systematic_range"]
     assert low <= ring["herman"] <= high

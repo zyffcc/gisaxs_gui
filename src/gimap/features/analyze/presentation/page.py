@@ -463,6 +463,7 @@ class AnalyzePage(
         Nothing is reduced again; a run or a batch goes on as it was."""
         analysis = self.view_model.state.analysis
         self.command_bar.retranslate()  # the short or full button texts of the state the bar is in
+        self._sync_reduction_errors()
         self._update_center_control()
         self._show_incidence_state()  # the αi field's tooltip names a value set by hand
         self.incidence_spin.updateGeometry()  # “αi from profile” is as wide as the new language writes it

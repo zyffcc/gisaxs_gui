@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import numpy as np
 
@@ -10,6 +11,7 @@ from src.gimap.shared.geometry.conventions import index_center_from_canonical
 from src.gimap.shared.geometry.q_mapping import exit_directions, lab_rays, refracted_qz
 
 from .binning import BinnedMean
+from .curve_errors import pixel_errors
 from .intensity import polarization_factor
 from .models import Curve
 from .peak_fit import GAUSSIAN, fit_peak
@@ -27,13 +29,13 @@ def minimum_exit(geometry, override):
     return 2 * geometry.incidence_deg, "2 × αi"
 
 
-def _background(q, intensity, scale, counting, low, high, step):
+def _background(q, intensity, errors, low, high, step):
     half = 0.5 * (high - low)
     left, right = low - 2*half, high + 2*half
     bins = min(3000, max(1, round((right-left) / max(step, 1e-10))))
     radial = BinnedMean.linear(left, right, bins)
-    radial.add(q, intensity, scale)
-    x, y, sigma, _ = radial.result(counts=counting)
+    radial.add(q, intensity, errors=errors)
+    x, y, sigma, _ = radial.result(counts=errors)
     fit = fit_peak(x, y, sigma, (left, right), profile=GAUSSIAN)
     if fit.ok and low <= fit.center <= high and np.isfinite(fit.background_center):
         error = fit.background_center_err
@@ -56,32 +58,37 @@ def ring_profiles(maps, image, valid, counts, geometry, window, step, correction
                            (cy - row) * geometry.pixel_size_y_m)
     _, _, sin_exit = exit_directions(x, y, along, geometry.incidence_rad)
     signal = image[near]
-    counting = isinstance(counts, np.ndarray) or bool(counts)
-    scale = counts[near] if isinstance(counts, np.ndarray) else None
+    errors = pixel_errors(counts).subset(near)
     polar = corrections.polarization
     if polar is None and corrections.orientation_polarization:
         polar = DEFAULT_POLARIZATION
         factor = polarization_factor(along, x, y, polar)
         signal = signal / factor
-        if counting:
-            scale = (1.0 if scale is None else scale) / factor
+        if errors.model != "scatter":
+            scale = errors.scale
+            if errors.model == "poisson":
+                scale = (1.0 if scale is None else scale) / factor
+            errors = replace(errors, scale=scale,
+                             variance=None if errors.variance is None else errors.variance / factor**2,
+                             extra_variance=None if errors.extra_variance is None else errors.extra_variance / factor**2)
     threshold, source = minimum_exit(geometry, corrections.orientation_min_exit_deg)
     nominal = sin_exit >= math.sin(math.radians(min(90.0, threshold)))
-    background, method, error = _background(q[nominal], signal[nominal], None if scale is None else scale[nominal],
-                                             counting, low, high, step)
+    background, method, error = _background(q[nominal], signal[nominal], errors.subset(nominal), low, high, step)
     profiles = {}
     ring = (q >= low) & (q <= high) & (np.abs(chi) <= 90)
-    error_model = "pixel_scatter" if not counting else "scaled_poisson" if scale is not None else "poisson"
+    propagated = errors.scale is not None or errors.extra_variance is not None
+    error_model = {"sigma": "sigma_frame", "scatter": "pixel_scatter",
+                   "poisson": "scaled_poisson" if propagated else "poisson"}[errors.model]
     for multiplier in (0.5, 1.0, 2.0):
         limit = multiplier * threshold
         selected = ring & (sin_exit >= math.sin(math.radians(min(90.0, limit)))) & (limit <= 90.0)
         acc = BinnedMean.linear(-90.0, 90.0, 180)
-        acc.add(chi[selected], signal[selected], None if scale is None else scale[selected])
+        acc.add(chi[selected], signal[selected], errors=errors.subset(selected))
         region = {"q_window": (low, high), "min_exit_deg": limit, "exit_angle_source": source,
                   "min_qz": float(refracted_qz(math.sin(math.radians(min(90.0, limit))), math.sin(geometry.incidence_rad),
                                                geometry.critical_rad, geometry.wavevector_inv_angstrom)),
                   "polarization": polar, "lorentz": False, "mirror_fill": False, "background": background,
                   "background_source": method, "background_sigma": error, "error_model": error_model}
         profiles[multiplier] = Curve("azimuthal", f"I(χ), q = {low:.3f}–{high:.3f} Å⁻¹",
-                                     *acc.result(counts=counting), "χ (°)", region=region)
+                                     *acc.result(counts=errors), "χ (°)", region=region)
     return profiles, np.ravel_multi_index((row[ring & nominal], column[ring & nominal]), image.shape)

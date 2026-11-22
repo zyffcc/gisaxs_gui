@@ -18,6 +18,7 @@ from src.gimap.shared.geometry.q_inverse import q_per_pixel
 from src.gimap.shared.geometry.q_mapping import grazing_q_region
 
 from .binning import binned_mean_2d, map_grid_shape, native_profile
+from .curve_errors import PixelErrors, pixel_errors
 from .gisaxs_cuts import NO_PIXELS, column_band_q, cut_curve, cut_key, row_band_q
 from .models import GISAXS, Curve, GisaxsCutSettings, ReciprocalSpaceMap, Reduction, YonedaEstimate
 from .vertical_band import LIMITED_CLEARANCE, SPECULAR_EXCLUSION_PX, default_vertical_column
@@ -175,7 +176,7 @@ def horizontal_cut(
     *,
     center_row: float,
     half_height_px: float,
-    counts: bool | np.ndarray = True,
+    counts: bool | np.ndarray | PixelErrors = True,
 ) -> Curve:
     """I(qy) over a band of rows: one point per detector column (native sampling). ``counts``: as
     ``reduce_gisaxs``."""
@@ -185,10 +186,9 @@ def horizontal_cut(
     if stop <= start:
         return _empty_curve("horizontal", "Horizontal cut I(qy)", "qy (Å⁻¹)", region)
     q = grazing_q_region(geometry, (start, stop), (0, columns))
-    poisson, scale = _counts(counts)
     x, mean, sigma, pixels = native_profile(
-        image[start:stop], valid[start:stop], q.qy, axis=0, counts_model=poisson,
-        scale=None if scale is None else scale[start:stop],
+        image[start:stop], valid[start:stop], q.qy, axis=0,
+        errors=pixel_errors(counts).subset(slice(start, stop)),
     )
     if x.size == 0:
         return _empty_curve("horizontal", "Horizontal cut I(qy)", "qy (Å⁻¹)", region)
@@ -204,7 +204,7 @@ def vertical_cut(
     *,
     center_column: float,
     half_width_px: float,
-    counts: bool | np.ndarray = True,
+    counts: bool | np.ndarray | PixelErrors = True,
 ) -> Curve:
     """I(qz) over a band of columns above the sample horizon (with refraction, above the row of α_c): one point
     per detector row."""
@@ -234,23 +234,14 @@ def vertical_cut(
         occupied = np.flatnonzero(above.any(axis=1))
         region["rows"] = (int(occupied[0]), int(occupied[-1] + 1)) if occupied.size else (0, 0)
         region["per_pixel_exit_angle_min_deg"] = geometry.critical_angle_deg
-    poisson, scale = _counts(counts)
     x, mean, sigma, pixels = native_profile(
-        image[band], use, q.qz, axis=1, counts_model=poisson,
-        scale=None if scale is None else scale[band],
+        image[band], use, q.qz, axis=1, errors=pixel_errors(counts).subset(band),
     )
     if x.size == 0:
         return _empty_curve("vertical", "Vertical cut I(qz)", "qz (Å⁻¹)", region)
     return Curve(
         "vertical", "Vertical cut I(qz)", x, mean, sigma, pixels, "qz (Å⁻¹)", region=region
     )
-
-
-def _counts(counts) -> tuple[bool, np.ndarray | None]:
-    """``counts`` of a cut as ``(Poisson?, per-pixel scale of the counts or None)``."""
-    if isinstance(counts, np.ndarray):
-        return True, counts
-    return bool(counts), None
 
 
 def _empty_curve(key: str, title: str, x_label: str, region: dict) -> Curve:
@@ -280,15 +271,14 @@ def reduce_gisaxs(
     settings: GisaxsCutSettings | None = None,
     *,
     q_map: ReciprocalSpaceMap | None = None,
-    counts: bool | np.ndarray = True,
+    counts: bool | np.ndarray | PixelErrors = True,
     maps: GisaxsMaps | None = None,
 ) -> Reduction:
     """Yoneda-band horizontal cut and off-rod vertical cut, then the person's cuts
     (``settings.regions``, ``gisaxs_cuts``; they need the frame's ``maps``), keys ``cut1``, ``cut2`` …
 
-    ``counts``: the frame holds photon counts (Poisson errors); ``False``: not counts (the scatter of the pixels);
-    an array of the frame's shape: photon counts multiplied per pixel by it (a flat field, ``flat_field.py``), so
-    a pixel's variance is that factor × its value.
+    ``counts`` takes the frame's PixelErrors, a counting flag or a per-pixel
+    scale for Poisson counts. The same error model applies to every cut.
 
     ``q_map`` (``gisaxs_q_map``) is passed through: it depends on the frame, not on the cuts.
     """

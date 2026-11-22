@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from src.gimap.features.analyze.application.gisaxs_cuts import UNIT_PIXEL, axis_from_unit, axis_to_unit
+from src.gimap.features.analyze.domain.curve_errors import PixelErrors
 from src.gimap.features.analyze.domain.gisaxs import ROW_BAND_WARNING, gisaxs_maps, reduce_gisaxs, vertical_cut
 from src.gimap.features.analyze.domain.models import GisaxsCutSettings
 from src.gimap.features.analyze.domain.preprocess import mirror_fill
@@ -71,6 +72,13 @@ def test_tilted_vertical_band_and_source_mask_follow_the_exit_angle_at_each_pixe
     assert np.array_equal(curve_source_mask(cut, valid, gisaxs_maps(SHAPE, geometry)), mask)
     assert cut.pixels.sum() == mask.sum()
     assert 0 < mask.sum(axis=1).max() and ((mask.sum(axis=1) > 0) & (mask.sum(axis=1) < 12)).any()
+
+    variance = (1 + rows + 2 * cols).astype(float)
+    cut_with_errors = vertical_cut(image, valid, geometry, center_column=34.0, half_width_px=6,
+                                   counts=PixelErrors(model="sigma", variance=variance))
+    np.testing.assert_array_equal(cut_with_errors.x, cut.x)
+    np.testing.assert_array_equal(cut_with_errors.pixels, cut.pixels)
+    np.testing.assert_allclose(np.sum((cut_with_errors.pixels * cut_with_errors.sigma)**2), variance[mask].sum())
 
 
 def test_horizontal_cut_warns_when_horizon_changes_by_half_a_pixel_across_frame():

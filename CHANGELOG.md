@@ -12,6 +12,12 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Analyze ▸ Mask & corrections.** Raw background and flat-field frames can use an exposure-scaled dark.
+  Set the flat-field threshold, save detector gain, offset and error model in an instrument profile, and choose
+  pooled scatter errors or smoothed counting errors for sparse curves. Propagated errors include flat-field
+  noise and treat the measured flat mean as fixed. GIWAXS exports identify the error model for the measured
+  orientation curve when it differs from the model for the radial curve.
+
 - **GIWAXS ring orientation** uses polarisation-corrected pixel means and an exit-angle cut. Reports give measured Hermans f with a statistical error and systematic range, fitted f and the background-dependent oriented fraction. Poor pole fits are flagged. Tilted-axis models average over azimuth. Lorentz weighting is available for peak areas, with an exclusion band around the plane of incidence. Phase assignments identify the q convention, Δq, Δd/d, ambiguous matches and unassigned peaks.
 
 - **Fitting ▸ In-situ series.** Inspect each Predict choice, its rank and its probability in the results table,

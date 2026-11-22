@@ -1,0 +1,58 @@
+"""Detector response, reference exposures and curve uncertainties in Analyze."""
+
+REDUCTION_ERRORS_ZH = {
+    "Detector and curve errors": "探测器与曲线误差",
+    "Use instrument profile settings": "使用仪器配置中的设置",
+    "Counts per ADU (gain)": "每 ADU 的计数（增益）",
+    "Offset (ADU)": "偏置（ADU）",
+    "Error model": "误差模型",
+    "Last reduction used {model}.": "上次约化采用{model}。",
+    "Automatic": "自动",
+    "Poisson": "泊松",
+    "Scatter of the pixels": "像素离散度",
+    "Given σ frame": "指定 σ 帧",
+    "No σ frame": "未选择 σ 帧",
+    "Choose a σ frame": "选择 σ 帧",
+    "σ frames ({patterns});;All files (*)": "σ 帧 ({patterns});;所有文件 (*)",
+    "Choose the per-pixel standard deviations of the sample frame.": "选择含有样品帧各像素标准差的文件。",
+    "Save detector settings to profile": "将探测器设置保存到仪器配置",
+    "Detector settings saved to the instrument profile.": "探测器设置已保存到仪器配置。",
+    "Save the instrument profile before saving detector settings.": "请先保存仪器配置，再保存探测器设置。",
+    "Pool scatter below 10 pixels": "像素少于 10 个的分箱使用合并方差",
+    "Poisson variance": "泊松方差",
+    "Observed intensity": "实测强度",
+    "Smoothed intensity": "平滑强度",
+    "Scale applied to the background after its dark subtraction.": "对已扣除暗场的背景乘以此比例。",
+    "Background is already\ndark-subtracted": "背景已扣除暗场",
+    "Dark scale for background": "背景的暗场比例",
+    "Auto uses the background-to-dark exposure ratio, or the sample dark scale if either time is missing.":
+        "自动取背景与暗场的曝光时间之比。任一曝光时间缺失时，使用样品的暗场比例。",
+    "Choose a uniformly exposed frame D_ff. Each sample is divided by its normalised response F_ff.":
+        "选择均匀曝光的平场帧 D_ff。每个样品帧都除以其归一化响应 F_ff。",
+    "Flat is already dark-subtracted": "平场已扣除暗场",
+    "Flat-field threshold": "平场阈值",
+    "Leave out pixels whose normalised response F_ff is at or below this value.":
+        "排除归一化响应 F_ff 小于或等于此值的像素。",
+    "Multiply intensity and σ by A_abs / (t_exp · M · T · d) using the selected terms.":
+        "强度和 σ 均乘以 A_abs / (t_exp · M · T · d)，只计入选中的项。",
+    "Choose the dark frame K recorded with the beam off.": "选择关闭光束时记录的暗场帧 K。",
+    "Multiply K by this scale before subtracting it from the sample.": "从样品帧中扣除乘以此比例的暗场 K。",
+    "Frame of K": "暗场 K 的帧号",
+    "Absolute scale A_abs": "绝对强度因子 A_abs",
+    "Exposure t_exp": "曝光时间 t_exp",
+    "Exposure t_exp (s)": "曝光时间 t_exp（s）",
+    "A_abs = {factor:.6g} ± {sigma:.2g} (1σ)\n{points} points from {low:.6g} to {high:.6g} Å⁻¹":
+        "A_abs = {factor:.6g} ± {sigma:.2g}（1σ）\n{points} 个点，范围 {low:.6g} 至 {high:.6g} Å⁻¹",
+    "Saved A_abs = {factor:.6g} ± {sigma:.2g} · {standard} · {date}":
+        "已保存 A_abs = {factor:.6g} ± {sigma:.2g} · {standard} · {date}",
+    "Counts per ADU must be positive and finite.": "每 ADU 的计数必须为有限的正数。",
+    "The detector offset must be finite.": "探测器偏置必须为有限值。",
+    "The flat-field floor must be at least zero and below one.": "平场阈值必须大于等于 0 且小于 1。",
+    "The background dark scale must be nonnegative and finite.": "背景的暗场比例必须为有限的非负数。",
+    "Unknown detector error model.": "未知的探测器误差模型。",
+    "Unknown Poisson variance model.": "未知的泊松方差模型。",
+    "Choose a sigma frame for the supplied error model.": "请为指定的误差模型选择 σ 帧。",
+    "The sigma frame must have the same shape as the sample.": "σ 帧与样品帧的尺寸必须相同。",
+    "The reference frame must be a single 2D image.": "参考帧必须是单张二维图像。",
+    "The reference frame must contain numeric values.": "参考帧必须包含数值。",
+}

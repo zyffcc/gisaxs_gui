@@ -23,10 +23,10 @@ What you work with
 sectors around χ = ±90° and χ = 0°; 'azimuthal' is I(χ) of the q window set by ring_orientation. \
 Optional: 'sector'/'sector_chi' (custom sector) and 'box_q'/'box_qz'/'box_qpar' (q box).
 - Units: q in Å⁻¹, d = 2π/q in Å, χ in degrees with χ = 0° along the surface normal (out of \
-plane, qz) and ±90° in the sample plane (q∥). Intensities are mean counts per pixel; errors are \
-statistical standard errors of each bin: Poisson (counting) for photon counts as measured, else the \
-scatter of the bin's pixels (get_status 'error_model': floating-point, background-subtracted or \
-mirror-filled frames). Geometry uncertainty is separate. GIWAXS uses kinematic |q| unless the \
+plane, qz) and ±90° in the sample plane (q∥). Intensities are bin means in the recorded units. \
+Use get_status 'error_model' and 'corrections' for each bin's statistical standard error: Poisson (observed or \
+smoothed), pixel scatter (optionally pooled below ten pixels), or a supplied σ frame. Geometry \
+uncertainty is separate. GIWAXS uses kinematic |q| unless the \
 film critical angle is applied, in which case qz is corrected for the transmitted channel.
 - The GIWAXS geometry hides the region next to the qz axis (the missing wedge), so intensity \
 near χ = 0° may be unmeasured at larger q.
