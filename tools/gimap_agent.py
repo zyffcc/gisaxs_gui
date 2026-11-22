@@ -131,6 +131,7 @@ def command_auto(arguments) -> int:
     options = PipelineOptions(
         calibration=arguments.calibration, standard=arguments.standard, energy_kev=arguments.energy_kev,
         incidence_deg=arguments.incidence_deg, critical_angle_deg=arguments.critical_angle_deg,
+        orientation_min_exit_deg=arguments.orientation_min_exit_deg,
         pixel_size_um=arguments.pixel_size_um, frame=arguments.frame,
         sum_frames=arguments.sum,
         rings=arguments.rings, max_peaks=arguments.max_peaks, recalibrate=arguments.recalibrate, notes=notes,
@@ -176,6 +177,9 @@ def check_arguments(arguments) -> None:
         raise ArgumentProblem(
             f"--incidence-deg {incidence:g}: the incidence angle must be above 0° and below 90° "
             "(grazing incidence is typically 0.1–0.5°). Leave the option out when αi is not known.")
+    minimum_exit = arguments.orientation_min_exit_deg
+    if minimum_exit is not None and not 0 <= minimum_exit <= 90:
+        raise ArgumentProblem("--orientation-min-exit-deg must be between 0° and 90°.")
     critical = arguments.critical_angle_deg
     if critical is not None and not 0.0 <= critical < 90.0:
         raise ArgumentProblem(f"--critical-angle-deg {critical:g}: the critical angle must be within [0°, 90°).")
@@ -313,6 +317,8 @@ def parser() -> argparse.ArgumentParser:
     )
     auto.add_argument("--energy-kev", type=float, help="X-ray energy in keV (beats the header and the notes)")
     auto.add_argument("--incidence-deg", type=float, help="incidence angle αi in degrees, above 0 and below 90 (beats the notes and the profile)")
+    auto.add_argument("--orientation-min-exit-deg", type=float,
+                      help="Minimum pixel exit angle for GIWAXS ring orientation (default: twice αc or twice αi).")
     auto.add_argument("--critical-angle-deg", type=float,
                       help="critical angle αc of the film in degrees: q_z is corrected for refraction (default: kinematic)")
     auto.add_argument(

@@ -1,22 +1,23 @@
 """Use case: the pole figure of the ring in Analyze's I(χ) window and the fit of its orientation distribution.
 
 The ring is the I(χ) window of the frame (the purple band over I(q); ``set_chi_window``). The background under it is
-the one given (the automatic analysis passes its SNIP baseline at the ring), else the local linear background of a
-Gaussian fitted to I(q) over three times the window (``peak_fit.fit_peak``), else the mean of I(q) just outside the
-window. The profile, the models and the errors are those of ``domain/crystal/pole_figure.py``.
+the one given or the local linear background fitted to radial pixel means with the orientation corrections
+and exit-angle threshold. The flank mean is the fallback. Profiles and fit errors are defined in
+``domain/crystal/pole_figure.py``; the sensitivity to the threshold, baseline and wedge is in ``pole_systematics.py``.
 """
 
 from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 import numpy as np
 
 from ..domain.crystal import GAUSSIAN, MAIER_SAUPE, MODELS, PoleFit, fit_pole_figure, fold_profile
 from ..domain.crystal.pole_figure import CHI_MAX
+from ..domain.crystal.pole_systematics import orientation_systematics
 from ..domain.giwaxs import q_from_two_theta
 from ..domain.peak_fit import GAUSSIAN as GAUSSIAN_PEAK
 from ..domain.peak_fit import fit_peak
@@ -38,6 +39,11 @@ class PoleFigure:
     lorentz: bool
     chi0_request: Optional[float]
     chi_max: float = CHI_MAX
+    min_exit_deg: Optional[float] = None
+    exit_angle_source: str = ""
+    polarization: Optional[float] = None
+    background_sigma: Optional[float] = None
+    systematics: dict = field(default_factory=dict)
 
     @property
     def q_center(self) -> float:
@@ -47,7 +53,9 @@ class PoleFigure:
         return {
             **self.fit.record(),
             "ring": {"q_window": list(self.window), "q": self.q_center},
-            "background": {"value": self.background, "source": self.background_source},
+            "background": {"value": self.background, "source": self.background_source, "sigma": self.background_sigma},
+            "min_exit_deg": self.min_exit_deg, "exit_angle_source": self.exit_angle_source,
+            "polarization": self.polarization, "systematics": self.systematics,
             "lorentz_corrected_input": self.lorentz,
             "direction_requested_deg": self.chi0_request, "fitted_up_to_chi_deg": self.chi_max,
         }
@@ -65,6 +73,12 @@ def _radial_in_q(analysis: FrameAnalysis):
 
 def ring_background(analysis: FrameAnalysis, window: tuple[float, float]) -> tuple[float, str]:
     """The background under the ring of ``window`` from I(q) (see the module docstring)."""
+    curve = analysis.reduction.curve("azimuthal") if analysis.reduction is not None else None
+    region = curve.region if curve is not None else {}
+    if "background" in region and tuple(sorted(window)) == tuple(region["q_window"]):
+        return region["background"], region["background_source"]
+    if getattr(analysis.corrections, "lorentz", False):
+        raise ValueError("Select the ring again to measure its background before the Lorentz correction.")
     radial = _radial_in_q(analysis)
     if radial is None:
         return 0.0, BACKGROUND_NONE
@@ -72,8 +86,8 @@ def ring_background(analysis: FrameAnalysis, window: tuple[float, float]) -> tup
     low, high = sorted(float(value) for value in window)
     centre, half = 0.5 * (low + high), 0.5 * (high - low)
     fit = fit_peak(x, y, sigma, (centre - 3.0 * half, centre + 3.0 * half), profile=GAUSSIAN_PEAK)
-    if fit.ok and np.isfinite(fit.background[0]) and low <= fit.center <= high:
-        return float(fit.background[0]), BACKGROUND_PEAK  # b0: the straight background at the peak's start centre
+    if fit.ok and np.isfinite(fit.background_center) and low <= fit.center <= high:
+        return float(fit.background_center), BACKGROUND_PEAK
     beside = np.isfinite(y) & (((x >= low - half) & (x < low)) | ((x > high) & (x <= high + half)))
     if beside.any():
         return float(np.nanmean(y[beside])), BACKGROUND_FLANKS
@@ -91,12 +105,17 @@ def pole_figure(analysis: Optional[FrameAnalysis], *, model: str = GAUSSIAN, chi
     if curve is None or curve.is_empty or window is None:
         raise ValueError("No ring is selected for I(χ): drag the purple band over I(q) onto a ring.")
     window = tuple(sorted(float(value) for value in window))
+    settings = curve.region
+    background_sigma = None
     if background is None:
-        value, source = ring_background(analysis, window)
+        if "background" in settings:
+            value, source = settings["background"], settings["background_source"]
+            background_sigma = settings["background_sigma"]
+        else:
+            value, source = ring_background(analysis, window)
     else:
         value, source = float(background), BACKGROUND_GIVEN
-    lorentz = bool(getattr(analysis.corrections, "lorentz", False))
-    profile = fold_profile(curve.x, curve.intensity, curve.sigma, value, lorentz=lorentz)
+    profile = fold_profile(curve.x, curve.intensity, curve.sigma, value)
     fit = fit_pole_figure(profile, model, chi0_deg=chi0_deg, fraction_iso=fraction_iso, chi_max=chi_max)
     if fit.ok and chi0_deg is None:
         direction = fit.values.get("chi0_deg", 45.0)
@@ -105,16 +124,20 @@ def pole_figure(analysis: Optional[FrameAnalysis], *, model: str = GAUSSIAN, chi
                 refit = fit_pole_figure(profile, model, chi0_deg=edge, fraction_iso=fraction_iso, chi_max=chi_max)
                 if refit.ok:
                     note = f"the direction fitted at the fold ({edge:g}°) was fixed there"
-                    fit = PoleFit(refit.ok, refit.model, "; ".join(m for m in (refit.message, note) if m),
-                                  refit.profile, refit.values, refit.errors, refit.fixed, refit.chi2_red, refit.points,
-                                  refit.curve_chi, refit.curve_value, refit.at_bound)
-    return PoleFigure(fit, window, value, source, lorentz, chi0_deg, float(chi_max))
+                    fit = replace(refit, message="; ".join(m for m in (refit.message, note) if m))
+    variants = getattr(analysis.reduction, "orientation_profiles", {}) or {1.0: curve}
+    profiles = {multiplier: (item.x, item.intensity, item.sigma) for multiplier, item in variants.items()}
+    systematic = orientation_systematics(profiles, value, background_sigma=background_sigma, nominal_fit=fit,
+                                         chi_max=chi_max, chi0_deg=chi0_deg, fraction_iso=fraction_iso)
+    return PoleFigure(fit, window, value, source, False, chi0_deg, float(chi_max),
+                      settings.get("min_exit_deg"), settings.get("exit_angle_source", ""),
+                      settings.get("polarization"), background_sigma, systematic)
 
 
 def pole_figure_csv(result: PoleFigure, header: Optional[dict] = None) -> str:
     """The folded profile and the fitted curve as a table; the source, settings and fit in ``#`` lines."""
     fit, profile = result.fit, result.fit.profile
-    lines = ["# GIMaP pole figure (Lorentz-corrected crystallites per degree of chi, background subtracted)"]
+    lines = ["# GIMaP pole figure (N proportional to background-subtracted pixel mean times sin(chi))"]
     for key, value in (header or {}).items():
         lines.append(f"# {key}: {value}")
     lines.append("# pole figure: " + json.dumps(_plain(result.record()), ensure_ascii=False, sort_keys=True))

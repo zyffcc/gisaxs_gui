@@ -20,6 +20,7 @@ from src.gimap.app.presentation.i18n import current_language, tr, trf
 from src.gimap.app.presentation.theme import theme_manager
 
 from ..application import herman_texts
+from ..application.pipeline_phases import pole_estimate
 from .guided_words import words
 
 PEAK_COLUMNS = (
@@ -165,19 +166,25 @@ def assigned(peaks: list[dict]) -> bool:
 def assignment_cells(peak: dict) -> list:
     """The phase, hkl and Δq of one peak (``—`` when no reflection lies within the window)."""
     if not peak.get("phase"):
-        return ["—", "—", "—"]
+        return [tr("Unassigned"), "—", "—"]
     others = "\n".join(f"{other.get('phase')} {other.get('hkl')} ({other.get('delta_q', 0.0):+.4f})"
                        for other in peak.get("alternatives") or [])
     window = peak.get("tolerance")
     delta = peak.get("delta_q")
     tentative = bool(peak.get("tentative"))
     phase_tip = tr("Tentative: this phase gives positions only (no symmetry operations).") if tentative else ""
+    ambiguous = bool(peak.get("ambiguous") or others)
+    hkl = str(peak.get("hkl") or "")
+    hkl_tip = trf("Also within the window:\n{others}", others=others) if others else ""
+    relative = peak.get("relative_d")
+    delta_tip = (trf("q_hkl = {q_hkl} Å⁻¹; window ±{window} Å⁻¹", q_hkl=f"{peak.get('q_hkl', 0.0):.4f}",
+                     window=f"{window:.4f}") if window is not None else "")
+    if relative is not None:
+        delta_tip = _joined(delta_tip, f"Δd/d = {relative:+.3%}")
     return [
         (f"{peak['phase']}?" if tentative else str(peak["phase"]), phase_tip, "warning" if tentative else ""),
-        (str(peak.get("hkl") or ""), trf("Also within the window:\n{others}", others=others) if others else ""),
-        ("—" if delta is None else f"{delta:+.4f}",
-         trf("q_hkl = {q_hkl} Å⁻¹; window ±{window} Å⁻¹", q_hkl=f"{peak.get('q_hkl', 0.0):.4f}",
-             window=f"{window:.4f}") if window is not None else ""),
+        (trf("{hkl} (ambiguous)", hkl=hkl) if ambiguous else hkl, hkl_tip, "warning" if ambiguous else ""),
+        ("—" if delta is None else f"{delta:+.4f}", delta_tip),
     ]
 
 
@@ -213,7 +220,7 @@ def coverage_notes(rings) -> list[tuple[str, str]]:
     if wedge:
         where = _ranges(wedge, lambda ring: f"< {ring['missing'][0][1]:.0f}°")
         notes.append((
-            trf("Missing wedge (red dashed next to qz): |χ| {where} Å⁻¹ not measured — Hermans f is biased low.",
+            trf("The measured f excludes the missing wedge (red dashed near qz), |χ| {where} Å⁻¹.",
                 where=where),
             "\n".join(words(note) for ring in wedge for note in ring.get("notes") or () if "missing wedge" in note),
         ))
@@ -222,17 +229,28 @@ def coverage_notes(rings) -> list[tuple[str, str]]:
 
 def ring_summary(ring: dict) -> tuple[str, str]:
     """(one plain line, the full sentences) for an analysed ring's orientation."""
-    q = f"{ring.get('q'):.4g}"
+    pole = ring.get("pole_figure") or {}
+    reasons = ", ".join(tr(reason) for reason in pole.get("quality_reasons") or ())
+    headline = _measured_summary(ring, reasons)
     detail = "\n".join(words(text) for text in (ring.get("reason"), ring.get("texture"), *(ring.get("notes") or ())) if text)
+    if pole:
+        if reasons and ring.get("herman") is None:
+            headline += "\n" + trf("Pole fit not determined ({reasons}).", reasons=reasons)
+        if pole.get("ok"):
+            headline += "\n" + trf("Pole f = {f}, oriented fraction = {fraction}. 1 − φ is conditional on the background b.",
+                                    f=pole_estimate(pole, "herman"), fraction=pole_estimate(pole, "oriented_fraction"))
+    return headline, detail
+
+
+def _measured_summary(ring: dict, reasons: str) -> str:
+    q = f"{ring.get('q'):.4g}"
     texture = words(ring.get("texture"))
-    texts = herman_texts(ring)  # f ± σ_f with the decimals of σ_f and the Unicode minus, as the report gives them
+    texts = herman_texts(ring, stat_label=tr("stat"))
     if texts is not None:
-        random, f = ring.get("herman_isotropic"), texts["f"]
-        if random is not None and round(float(random), texts["decimals"]) != 0:  # f_iso unless 0 at those decimals
-            why = trf("A random ring would give f = {random} here.", random=texts["iso"])
-            return trf("Ring q ≈ {q} Å⁻¹: f = {f} (random ring: {random}) — {texture}",
-                       q=q, f=f, random=texts["iso"], texture=texture), "\n".join(part for part in (why, detail) if part)
-        return trf("Ring q ≈ {q} Å⁻¹: f = {f} — {texture}", q=q, f=f, texture=texture), detail
+        if reasons:
+            return trf("Ring q ≈ {q} Å⁻¹: pole fit not determined ({reasons}). Measured f = {f}",
+                       q=q, reasons=reasons, f=texts["f"])
+        return trf("Ring q ≈ {q} Å⁻¹: f = {f} — {texture}", q=q, f=texts["f"], texture=texture)
     covered = ring.get("weighted_coverage")
     if covered is not None and "is measured at this q" in str(ring.get("reason") or ""):
         gaps = []
@@ -244,10 +262,10 @@ def ring_summary(ring: dict) -> tuple[str, str]:
         values = {"q": q, "covered": f"{covered:.0%}"}
         if gaps:
             return trf("Ring q ≈ {q} Å⁻¹: orientation not determined — only {covered} of the range Hermans f needs "
-                       "is measured ({gaps}). Hover for details.", gaps=listed(gaps, "; "), **values), detail
+                       "is measured ({gaps}). Hover for details.", gaps=listed(gaps, "; "), **values)
         return trf("Ring q ≈ {q} Å⁻¹: orientation not determined — only {covered} of the range Hermans f needs "
-                   "is measured. Hover for details.", **values), detail
-    return trf("Ring q ≈ {q} Å⁻¹: {reason}", q=q, reason=words(ring.get("reason")) or texture), detail
+                   "is measured. Hover for details.", **values)
+    return trf("Ring q ≈ {q} Å⁻¹: {reason}", q=q, reason=words(ring.get("reason")) or texture)
 
 
 # -- the table widget -----------------------------------------------------------------------------------------

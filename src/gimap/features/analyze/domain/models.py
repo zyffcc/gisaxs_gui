@@ -21,7 +21,8 @@ class Curve:
     ``x`` is in the unit named by ``x_label``; ``intensity`` is the mean pixel
     value per bin (detector counts unless the frame was normalised upstream or
     divided by the GIWAXS intensity-correction factor); ``pixels`` is the number
-    of pixels averaged in each bin.
+    of pixels averaged in each bin. The GIWAXS full radial curve with the Lorentz option instead sums the
+    corrected values in each bin; its region records the aggregation and its σ is the error of that sum.
 
     ``sigma`` is the standard error of that mean, by one of three models chosen
     once per frame (the application's ``photon_counts``): Poisson for photon
@@ -149,6 +150,10 @@ class Reduction:
     markers: dict[str, Any] = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
     reciprocal_space_map: ReciprocalSpaceMap | None = None
+    orientation_profiles: dict[float, Curve] = field(default_factory=dict)
+    """Measured angular profiles at each multiplier of the minimum exit angle."""
+    orientation_indices: np.ndarray | None = None
+    """Flat indices of the pixels contributing to the nominal azimuthal curve."""
 
     def curve(self, key: str) -> Curve | None:
         return next((curve for curve in self.curves if curve.key == key), None)

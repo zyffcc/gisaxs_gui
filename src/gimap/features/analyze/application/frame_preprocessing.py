@@ -27,7 +27,6 @@ from ..domain import (
     GIWAXS,
     Corrections,
     apply_flat_field,
-    has_intensity_corrections,
     intensity_factor,
     apply_valid_range,
     find_bad_pixels,
@@ -243,6 +242,7 @@ class FramePreprocessingMixin(FlatFieldMixin):
             solid_angle=bool(corrections.solid_angle), polarization=corrections.polarization,
             film_thickness_nm=corrections.film_thickness_nm, attenuation_length_um=corrections.attenuation_length_um,
             lorentz=bool(getattr(corrections, "lorentz", False)),
+            lorentz_band_px=corrections.lorentz_band_px,
         )
         key = (shape, geometry, tuple(sorted(options.items())))
         cached, cached_key = self._intensity, self._intensity_key

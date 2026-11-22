@@ -161,7 +161,10 @@ class AnalyzeAutomation(IndexingAutomationMixin):  # set_phases, assign_peaks, p
             "valid_range": [corrections.minimum, corrections.maximum],
             "gap_guard_px": corrections.gap_guard_px,
             "dark": Path(corrections.dark_path).name if corrections.dark_path else None,
-            "lorentz": bool(corrections.lorentz),  # I(χ) divided by the fibre-texture Lorentz factor: no 2nd sin χ
+            "lorentz": bool(corrections.lorentz),
+            "lorentz_band_px": corrections.lorentz_band_px,
+            "orientation_min_exit_deg": corrections.orientation_min_exit_deg,
+            "orientation_polarization": corrections.orientation_polarization,
             "normalisation": None if analysis.normalisation is None else analysis.normalisation.to_record(),
         }
         reduction = analysis.reduction

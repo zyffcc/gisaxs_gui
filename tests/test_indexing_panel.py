@@ -72,6 +72,7 @@ def test_phases_are_drawn_listed_fitted_and_exported(tmp_path: Path, monkeypatch
         page.view_model.set_chi_window(1.07, 1.13)
         page.run_analysis()
         _done(page)
+        panel.model_combo.setCurrentIndex(panel.model_combo.findData("gaussian_mosaic"))
         panel.fit_pole()
         _done(page)
         pole = page.indexing.last_pole
@@ -83,6 +84,7 @@ def test_phases_are_drawn_listed_fitted_and_exported(tmp_path: Path, monkeypatch
         text = target.read_text(encoding="utf-8")
         assert "# columns: chi_deg  N  sigma  measured  model" in text and len(text.splitlines()) > 90
         record = json.loads((tmp_path / "out" / "film_indexing.json").read_text(encoding="utf-8"))
+        assert record["pole_figure"]["model"] == "gaussian_mosaic"
         assert record["pole_figure"]["values"]["oriented_fraction"] == pytest.approx(pole.fit.values["oriented_fraction"])
         assert [phase["name"] for phase in record["indexing"]["phases"]] == ["cubic", "MAPbI3 (tetragonal)"]
         assert record["analysis"]["geometry"]
@@ -103,6 +105,33 @@ def test_every_text_of_the_phases_window_has_its_chinese() -> None:
     for english, chinese in INDEXING_ZH.items():
         assert ZH[english] == chinese, english
         assert english.split("{")[0][:28] in text, english
+
+
+def test_assignment_and_pole_fit_warnings_are_visible_in_both_languages():
+    from src.gimap.features.analyze.application.pole_figure import PoleFigure
+    from src.gimap.features.analyze.domain.crystal.pole_figure import PoleFit
+    from src.gimap.features.analyze.presentation.indexing_texts import pole_result_text
+    from src.gimap.features.assistant.presentation.guided_tables import assignment_cells
+
+    fit = PoleFit(True, "gaussian", values={"fwhm_deg": 120.}, chi2_red=6.2, at_bound=("fraction_iso",),
+                  converged=True)
+    result = PoleFigure(fit, (0.98, 1.02), 1.2, "given", False, 0.0)
+    peak = {"phase": "A", "hkl": "002", "ambiguous": True, "delta_q": -0.006, "relative_d": 0.006}
+    try:
+        for language, label, unmatched, headline, reasons in (
+            ("en", "002 (ambiguous)", "Unassigned", "⚠ Pole fit not determined",
+             ("reduced χ² exceeds 5", "FWHM exceeds 100°", "isotropic fraction at a bound")),
+            ("zh", "002（多种可能）", "未指认", "⚠ 极图拟合未能确定取向",
+             ("约化 χ² 大于 5", "半高宽大于 100°", "各向同性分数达到边界")),
+        ):
+            apply_language(language)
+            cells = assignment_cells(peak)
+            assert cells[1][0] == label and "Δd/d = +0.600%" in cells[2][1]
+            assert assignment_cells({"phase": None})[0] == unmatched
+            first = pole_result_text(result).splitlines()[0]
+            assert first.startswith(headline) and all(reason in first for reason in reasons)
+    finally:
+        apply_language("en")
 
 
 @pytest.mark.skipif(not (P08 / FRAME).is_file(), reason="the public P08 frame is not in this checkout")
@@ -127,6 +156,9 @@ def test_the_automatic_analysis_assigns_the_rings_and_fits_their_pole_figures(tm
         assert "max(3 σ(q0), FWHM/2)" in decision["why"]
         rows = {round(row["q"], 2): row for row in report["peaks"]}
         assert rows[1.0]["hkl"] == "110" and abs(rows[1.0]["delta_q"]) < 0.006
+        assert rows[1.0]["ambiguous"] and any(alt["hkl"] == "002" for alt in rows[1.0]["alternatives"])
+        assert rows[1.0]["relative_d"] == pytest.approx(rows[1.0]["q_hkl"] / rows[1.0]["q"] - 1)
+        assert report["phase_assignment"]["q_axis"]["kind"] == "kinematic"
         assert report["phase_assignment"]["phases"][1]["name"] == "PbI2"
         assert any(item["what"] == "pole figure" for item in report["decisions"])
         for ring in report["rings"]:  # next to the Hermans factor of every analysed ring
@@ -136,6 +168,7 @@ def test_the_automatic_analysis_assigns_the_rings_and_fits_their_pole_figures(tm
         markdown = pipeline_markdown(report)
         assert "## Phase assignment" in markdown and "pole figure (Gaussian + isotropic)" in markdown
         assert "Phases: the nearest reflection of the phases given" in markdown
+        assert "ambiguous" in markdown and "Δd/d =" in markdown and "Å⁻¹ unassigned" in markdown
         assert session.page.reflection_count() > 0  # the phases given are drawn in Analyze too
     finally:
         session.close()

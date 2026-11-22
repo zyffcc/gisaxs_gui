@@ -11,7 +11,7 @@ import base64
 import json
 import math
 import time
-from dataclasses import fields, is_dataclass
+from dataclasses import fields, is_dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -26,10 +26,8 @@ from ..domain import (
     compare_sectors,
     downsample,
     find_peaks,
-    herman_decimals,
     ring_orientation,
     scherrer_size,
-    signed,
     significant,
 )
 from .gisaxs_tools import GisaxsToolsMixin
@@ -48,6 +46,7 @@ from .models import (
 from .calibration_tools import CalibrationToolsMixin
 from .operation_tools import OperationToolsMixin
 from .operations import OPERATION_TOOLS
+from .pipeline_phases import fit_ring_pole, measured_f_text
 from .pipeline_progress import FrameChanged
 from .ports import AnalysisWorkbench, Chooser, Confirmer, CurveFitter, FileExplorer, GeometryCalibrator, ResultStore
 from .tool_specs import FINAL, WRITE, tool_specs
@@ -434,13 +433,15 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
             raise ToolInputError("No peaks to compare: find_peaks on 'radial' found none; pass q_values.")
         _ip, in_plane = self._profile("in_plane")
         _oop, out_of_plane = self._profile("out_of_plane")
+        status = self.results.status or self.workbench.status()
+        summed_radial = bool((status.get("corrections") or {}).get("lorentz"))
         rows = compare_sectors(
             pairs, in_plane, out_of_plane,
             background_window=search.background_window, window_fwhm=max(0.25, float(window_fwhm)),
-            reference_background=search.background_at,
+            reference_background=None if summed_radial else search.background_at,
         )
         self.results.sector_rows = rows
-        giwaxs = (self.results.status or self.workbench.status()).get("giwaxs") or {}
+        giwaxs = status.get("giwaxs") or {}
         payload = {
             "sector_half_widths_deg": {
                 "in_plane": giwaxs.get("in_plane_half_width_deg"),
@@ -476,11 +477,16 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
         low, high = center - half, center + half
         self.workbench.set_chi_window(low, high)
         self.workbench.show(lower_profile="azimuthal")
-        _curve, profile = self._profile("azimuthal")
-        background = search.background_at(center) or 0.0
-        corrections = (self.workbench.status() or {}).get("corrections") or {}  # a Lorentz-corrected I(χ): no 2nd sin χ
-        result = ring_orientation(profile, q_window=(low, high), background=background,
-                                  lorentz=bool(corrections.get("lorentz")))
+        curve, profile = self._profile("azimuthal")
+        settings = {key: curve.region[key] for key in (
+            "min_exit_deg", "exit_angle_source", "polarization", "background", "background_sigma", "background_source"
+        ) if key in curve.region}
+        background = settings.get("background")
+        if background is None:
+            background = search.background_at(center) or 0.0
+        result = ring_orientation(profile, q_window=(low, high), background=background)
+        pole = fit_ring_pole(self.workbench, result, background=None if "background" in settings else background)
+        result = replace(result, orientation_settings=settings, pole_figure=pole)
         self.results.rings.append(result)
         payload = clean(result)
         if peak is None:
@@ -492,12 +498,11 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
                 payload["analysed"] = (
                     f"no peak at q = {q_center:g} Å⁻¹ in this frame: the nearest feature, at {peak.q:.4g} Å⁻¹, was analysed"
                 )
-        decimals = herman_decimals(result.herman_err)  # f with the decimals of its σ_f, as the report gives it
-        summary = (
-            f"q = {center:.3g}: {result.texture}, f = {signed(result.herman, decimals)}"
-            + (f" ± {result.herman_err:.{decimals}f}" if result.herman_err else "")
-            if result.herman is not None else f"q = {center:.3g}: {result.reason or result.texture}"
-        )
+        verdict = "pole fit not determined" if pole.get("quality_reasons") else result.reason or result.texture
+        summary = f"q = {center:.3g}: {verdict}"
+        if result.herman is not None:
+            limits = (pole.get("systematics") or {}).get("range")
+            summary += f", f = {measured_f_text(result.herman, result.herman_err, limits)}"
         if peak is not None and caveat(peak):
             summary += f" ({caveat(peak).split(':')[0]})"
         return self._ok(payload, summary)

@@ -37,7 +37,8 @@ ORIENTATION_ITEMS = (
     ("axis", "Axis [uvw] along the surface normal"),
 )
 CENTRING_ITEMS = ("P", "A", "B", "C", "I", "F", "R")
-MODEL_ITEMS = (("gaussian", "Gaussian + isotropic"), ("maier_saupe", "Maier–Saupe + isotropic"))
+MODEL_ITEMS = (("gaussian", "Gaussian + isotropic"), ("gaussian_mosaic", "Gaussian mosaic + isotropic"),
+               ("maier_saupe", "Maier–Saupe + isotropic"))
 DIRECTION_ITEMS = (
     ("normal", "Along the normal (χ0 = 0°)"),
     ("plane", "In the plane (χ0 = 90°)"),
@@ -239,9 +240,8 @@ class IndexingView:
         for key, text in DIRECTION_ITEMS:
             self.direction_combo.addItem(text, key)
         self.direction_spin = _spin(tab, 0.0, 90.0, 0.0, 1, " °")
-        self.chi_max_spin = _spin(tab, 20.0, 90.0, 85.0, 1, " °")
-        self.chi_max_spin.setToolTip("Bins above this χ are left out of the fit: next to the sample horizon "
-                                     "absorption or a shadow lowers the intensity")
+        self.chi_max_spin = _spin(tab, 20.0, 90.0, 90.0, 1, " °")
+        self.chi_max_spin.setToolTip("Optional upper χ limit after the minimum exit angle in Mask & Corrections.")
         self.background_check = QCheckBox("Automatic", tab)
         self.background_check.setChecked(True)
         self.background_check.setToolTip("The local linear background of a Gaussian fitted to I(q) at the ring")

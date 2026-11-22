@@ -166,7 +166,12 @@ class AnalyzeFrame(FramePreprocessingMixin):
         for key in keys:
             curve = reduction.curve(key)
             if curve is not None and not curve.is_empty:
-                masks[key] = curve_source_mask(curve, analysis.valid, maps)
+                if key == "azimuthal" and reduction.orientation_indices is not None:
+                    mask = np.zeros(shape, dtype=bool)
+                    mask.flat[reduction.orientation_indices] = True
+                    masks[key] = mask
+                else:
+                    masks[key] = curve_source_mask(curve, analysis.valid, maps)
         return masks
 
     def __call__(
@@ -267,15 +272,31 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 maps=self._gisaxs_maps_for(shape, geometry) if request.gisaxs.regions else None,
             )
         else:
+            orientation = None
+            corrections = request.corrections
+            if corrections.lorentz or corrections.mirror_fill:
+                # Start before both operations: neither masked centre-plane pixels nor measured donors can
+                # be reconstructed from an already corrected and mirror-filled map.
+                settings = replace(corrections, lorentz=False, mirror_fill=False)
+                measured = {"metadata": common["metadata"], "header_values": common.get("header_values")}
+                poisson = self.correct_pixels(measured, raw_data, raw_valid, settings, geometry, GIWAXS)
+                if not settings.normalisation.is_identity:
+                    self._normalise(measured, raw_data, raw_valid, settings, poisson, Path(request.path).name)
+                orientation = (measured["data"], measured["valid"], measured.get("intensity_scale", poisson))
             reduction = reduce_giwaxs(
                 data, valid, geometry, request.giwaxs, maps=self._giwaxs_maps(shape, geometry),
                 with_map=request.with_map, counts=scale if scale is not None else counting,
+                corrections=corrections, orientation_pixels=orientation,
             )
         messages.extend(reduction.warnings)
         reduction = held_cut(reduction, request.series_cut)
         if common.get("normalisation") is not None:  # the curves say the unit of the normalised intensity
-            label = f"I ({common['normalisation'].unit})"
-            reduction = replace(reduction, curves=tuple(replace(curve, y_label=label) for curve in reduction.curves))
+            unit = common["normalisation"].unit
+            # A normalised pixel value has the stated unit. A detector sum adds one such value per pixel.
+            summed = unit.replace("/pixel", "").replace("pixel·", "")
+            curves = tuple(replace(curve, y_label=f"I (summed {summed})" if curve.region.get("aggregation")
+                                   else f"I ({unit})") for curve in reduction.curves)
+            reduction = replace(reduction, curves=curves)
         return FrameAnalysis(
             **common,
             resolution=resolution,

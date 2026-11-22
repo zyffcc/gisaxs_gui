@@ -24,12 +24,8 @@ They change only intensities, never q:
   oriented at random about the surface normal: a reciprocal-lattice point at the polar angle χ from the normal
   lies on a circle about q_z, and the Ewald sphere cuts that circle at a rate set by the component of its motion
   along the scattered ray, ``k cos αi cos αf |sin 2θf|`` (``2θf`` the in-plane exit angle, ``αf`` the exit angle).
-  The intensity a pixel records is ``∝ N(χ) · L`` with ``L = 1 / (cos αi cos αf |sin 2θf|)`` and ``N(χ) dχ`` the
-  crystallites whose plane normal lies between χ and χ + dχ; ``I / L`` is therefore ``∝ N(χ)``. Near the beam
-  ``cos αi cos αf |sin 2θf| ≈ (q/k) sin χ``: the correction is the ``sin χ`` weight of the Hermans orientation
-  factor, made exact. ``L`` is not normalised (``1/L ≤ 1``); it is infinite on the specular rod (2θf = 0), whose
-  pixels are left out. As GIXSGUI warns, it belongs to the intensities of crystalline (periodic) scattering only:
-  it also scales the diffuse scattering and the amorphous halo, and it changes the I(q) average over a ring.
+  This Jacobian weights detector sums for crystalline peak areas. It vanishes in inverse form throughout
+  the plane of incidence (qy = 0). Ring orientation uses pixel means before this correction.
 
 For photon counts the variance of a corrected pixel is ``value / factor`` (see ``BinnedMean.add``).
 """
@@ -46,8 +42,7 @@ from src.gimap.shared.geometry.q_mapping import exit_directions, geometry_rays
 
 BLOCK_ROWS = 512
 LORENTZ_FORMULA = ("L = 1/(cos ai * cos af * |sin 2theta_f|), fibre texture about the surface normal (GIXSGUI, "
-                   "Jiang 2015, Eq. 5, S = cos ai cos af); not normalised; infinite on the specular rod "
-                   "(2theta_f = 0), whose pixels are left out")
+                   "Jiang 2015, Eq. 5, S = cos ai cos af); 1/L = cos(ai) |qy| / k")
 
 
 def has_intensity_corrections(corrections) -> bool:
@@ -71,6 +66,12 @@ def _film(sin_exit: np.ndarray, sin_in: float, thickness_over_length: float) -> 
         return -np.expm1(-thickness_over_length * path) / path
 
 
+def polarization_factor(along, x, y, polarization: float) -> np.ndarray:
+    """pyFAI convention; x is the horizontal lab coordinate of the scattered ray."""
+    # Equivalent to ½[1+cos²(2θ)−f cos(2φ) sin²(2θ)], also defined on the direct beam.
+    return 1.0 - 0.5 * ((1 + polarization) * x*x + (1 - polarization) * y*y) / (along*along + x*x + y*y)
+
+
 def intensity_factor(
     shape: tuple[int, int],
     geometry: DetectorGeometry,
@@ -80,6 +81,7 @@ def intensity_factor(
     film_thickness_nm: Optional[float] = None,
     attenuation_length_um: Optional[float] = None,
     lorentz: bool = False,
+    lorentz_band_px: float = 2.0,
 ) -> np.ndarray:
     """The factor of every pixel (float32; NaN or infinite where it is not defined)."""
     rows, columns = int(shape[0]), int(shape[1])
@@ -101,18 +103,17 @@ def intensity_factor(
         if solid_angle:  # (distance to the direct beam / distance to the pixel)³, also on a tilted detector
             block *= (beam / radius) ** 3
         if polarization is not None:
-            with np.errstate(invalid="ignore", divide="ignore"):
-                cos_2phi = np.where(in_plane > 0, (x * x - y * y) / in_plane, 0.0)
-            sin2 = 1.0 - cos_2theta**2
-            block *= 0.5 * (1.0 + cos_2theta**2 - float(polarization) * cos_2phi * sin2)
+            block *= polarization_factor(along, x, y, float(polarization))
         if film or lorentz:
             _along, across, sin_exit = exit_directions(x, y, along, geometry.incidence_rad)
         if film:
             relative = _film(sin_exit, sin_in, ratio) / reference
             block *= np.where(sin_exit > 0, relative, np.nan)
-        if lorentz:  # L = 1 / (cos αi · cos αf |sin 2θf|); across = cos αf sin 2θf (infinite on the specular rod)
+        if lorentz:
+            # across = q_y/k. One horizontal pixel at the direct beam subtends p_x/D radians.
+            minimum = float(lorentz_band_px) * geometry.pixel_size_x_m / beam
             with np.errstate(divide="ignore"):
-                block *= 1.0 / (cos_in * np.abs(across))
+                block *= np.where(np.abs(across) >= minimum, 1.0 / (cos_in * np.abs(across)), np.inf)
         factor[start:stop] = block
     return factor
 
@@ -140,8 +141,10 @@ def describe_intensity_corrections(corrections) -> Optional[dict]:
     if getattr(corrections, "lorentz", False):
         record["lorentz"] = {
             "formula": LORENTZ_FORMULA,
-            "orientation": "I(chi) after it is proportional to the number of crystallites per unit polar angle "
-                           "N(chi): the Hermans factor of a Lorentz-corrected I(chi) is not weighted by sin(chi) again",
+            "excluded_qy_half_width_px": float(corrections.lorentz_band_px),
+            "exclusion": "|qy|/k < half_width_px * pixel_size_x_m / distance_m; qy=0 always excluded",
+            "radial": "sum of corrected pixel intensities per q bin",
+            "orientation": "pixel means before the Lorentz correction; N(chi) proportional to I(chi) sin(chi)",
         }
     return record
 

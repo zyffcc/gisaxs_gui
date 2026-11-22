@@ -16,6 +16,10 @@ from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, current_language, 
 from src.gimap.shared import fit_names
 
 SENTENCES = (
+    "At q = {q} Å⁻¹ the pole fit is not determined ({bounds}).",
+    "Exclude pixels with αf < {angle}° ({source}). Polarisation: {factor}.",
+    "no clear preferred orientation; the strongest measured bin is at |χ| ≈ {chi}°",
+    "no single preferred orientation: the maximum at |χ| ≈ {chi}° and the measured moment disagree",
     # A ring's orientation (domain/orientation.py): the texture, the notes and why there is no f.
     "{texture} — but the strongest measured |χ| ({chi}°) borders an unmeasured range, so the true maximum may lie "
     "inside it",
@@ -36,8 +40,7 @@ SENTENCES = (
     "(∝ sin χ).",
     "|χ| {where} is shadowed: the intensity there is below {fraction} of the diffuse background at this q (a shadow, "
     "absorber or insensitive detector area), so it counts as unmeasured.",
-    "|χ| < {angle}° is not measured (missing wedge); f then leaves out the orientations closest to the surface normal "
-    "and is biased low.",
+    "The missing wedge covers |χ| < {angle}°. The measured f excludes these orientations.",
     "A random (isotropic) ring measured over the same |χ| would give f = {f}: compare f with that, not with 0.",
     "Only {n} measured χ bins in this ring.",
     "The ring is not above the radial background: at most {snr}σ in any 1° χ bin.",

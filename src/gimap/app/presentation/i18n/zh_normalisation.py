@@ -59,18 +59,7 @@ NORMALISATION_ZH = {
     "The thickness": "厚度",
     "The absolute-scale factor": "绝对强度因子",
     "The transmission must be above 0 and at most 1.": "透射率必须大于 0 且不大于 1。",
-    # -- the Lorentz factor
-    "Lorentz factor (fibre texture)": "Lorentz 因子（纤维织构）",
-    "Crystallites oriented at random about the surface normal: divide by L = 1/(cos αi cos αf |sin 2θf|) (GIXSGUI). "
-    "I(χ) then counts the crystallites per degree of χ; the Hermans factor of the automatic analysis is then not "
-    "weighted by sin χ again. Only for crystalline peaks: it also scales diffuse scattering and the I(q) of a ring":
-        "晶粒绕表面法线随机取向：除以 L = 1/(cos αi cos αf |sin 2θf|)（GIXSGUI）。此后 I(χ) 是每度 χ 内的晶粒数；"
-        "自动分析的 Hermans 取向因子不再乘 sin χ 权重。只适用于晶体衍射峰：它也会改变漫散射和整环的 I(q)",
     # -- Export Curves…, the panels, the αi of the Results
-    "The I(χ) is divided by the Lorentz factor of a fibre texture: Hermans f is not weighted by sin χ again.":
-        "I(χ) 已除以纤维织构的 Lorentz 因子：Hermans 取向因子 f 不再乘 sin χ 权重。",
-    "The radial background under the ring ({background} counts/pixel) was subtracted, scaled like an isotropic ring "
-    "(∝ sin χ).": "已扣除环下方的径向背景（{background} counts/pixel），并按各向同性环的形状（∝ sin χ）分配。",
     "Export Curves: choose a folder": "导出曲线：选择文件夹",
     "One CSV per curve (q, I, σ, pixels), a cut region's under its name, and a JSON record of the settings, to a "
     "folder you choose (it starts in the last one).":

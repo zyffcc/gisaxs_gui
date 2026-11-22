@@ -82,12 +82,18 @@ def ring_row(ring) -> dict:
         "q": 0.5 * (low + high), "q_window": ring.q_window, "coverage": ring.coverage,
         "weighted_coverage": ring.weighted_coverage, "herman": ring.herman, "herman_err": ring.herman_err,
         "herman_isotropic": ring.herman_isotropic, "herman_excess": ring.herman_excess,
-        "texture_margin": ring.texture_margin, "herman_excess_without_horizon": ring.horizon_excess,
+        "texture_margin": ring.texture_margin,
         "texture": ring.texture, "reason": ring.reason,
         "maxima": ring.maxima, "notes": ring.notes, "missing": ring.missing, "shadowed": ring.shadowed,
     })
-    row.update(clean({"herman": ring.herman, "herman_err": ring.herman_err, "herman_isotropic": ring.herman_isotropic,
+    row.update(clean({"q_window": ring.q_window, "q": (low + high) / 2,
+                      "herman": ring.herman, "herman_err": ring.herman_err, "herman_isotropic": ring.herman_isotropic,
                       "herman_excess": ring.herman_excess}, digits=FULL))
+    if ring.orientation_settings:
+        row["orientation_settings"] = clean(ring.orientation_settings, digits=FULL)
+    if ring.pole_figure:
+        row["pole_figure"] = clean(ring.pole_figure, digits=FULL)
+        row["herman_systematic_range"] = (ring.pole_figure.get("systematics") or {}).get("range")
     return row
 
 

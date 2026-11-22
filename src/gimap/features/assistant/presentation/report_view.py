@@ -11,6 +11,9 @@ import math
 from pathlib import Path
 from typing import Optional
 
+from src.gimap.app.presentation.i18n import translate
+
+from ..application.pipeline_phases import measured_f_text, pole_estimate
 from ..application import BILLING_SUBSCRIPTION, GOALS, RunOutcome
 
 STATUS_COLORS = {"done": "#2e7d32", "partial": "#ef6c00", "not_available": "#c62828"}
@@ -124,21 +127,42 @@ def _sector_table(results) -> str:
     )
 
 
-def _ring_tables(results) -> str:
+def _ring_tables(results, language) -> str:
+    def label(template):
+        return (translate(template, "zh") or template) if language == "中文" else template
+
     parts = []
     for ring in results.rings:
         low, high = ring.q_window
         title = f"<h4>Ring q = {_n(low)}–{_n(high)} Å⁻¹</h4>"
+        parts.append(title)
+        pole = ring.pole_figure
+        reasons = ", ".join(label(reason) for reason in pole.get("quality_reasons") or ())
+        if reasons:
+            parts.append("<p>" + _e(label("Pole fit not determined ({reasons}).").format(reasons=reasons)) + "</p>")
+        if pole.get("ok"):
+            estimate = label("Pole f = {f}, oriented fraction = {fraction}. 1 − φ is conditional on the background b.")
+            parts.append("<p>" + _e(estimate.format(f=pole_estimate(pole, "herman"),
+                                                    fraction=pole_estimate(pole, "oriented_fraction"))) + "</p>")
+        settings = ring.orientation_settings
+        if settings.get("min_exit_deg") is not None:
+            factor = settings.get("polarization")
+            selection = label("Excluded αf < {angle}°. Polarisation {factor}.").format(
+                angle=f"{settings['min_exit_deg']:g}", factor=label("off") if factor is None else f"{factor:g}")
+            parts.append("<p>" + _e(selection) + "</p>")
         if ring.reason:
-            parts.append(title + f"<p>{_e(ring.reason)}</p>")
+            parts.append(f"<p>{_e(ring.reason)}</p>")
             continue
+        limits = (pole.get("systematics") or {}).get("range")
+        moment = (measured_f_text(ring.herman, ring.herman_err, limits, stat_label=label("stat"))
+                  if ring.herman is not None else "–")
         maxima = "; ".join(
             f"|χ| = {_n(item['chi'], 3)}° (FWHM {_n(item['fwhm'], 3)}°)" for item in ring.maxima
         ) or "none above the noise"
         missing = ", ".join(f"{_n(a, 3)}–{_n(b, 3)}°" for a, b in ring.missing) or "none"
-        parts.append(title + _table(
+        parts.append(_table(
             ["texture", "Hermans f", "⟨cos²χ⟩", "maxima", "χ coverage", "unmeasured |χ|"],
-            [[_e(ring.texture), _pm(ring.herman, ring.herman_err, 3), _n(ring.cos2, 3), _e(maxima),
+            [[_e(ring.texture), _e(moment), _n(ring.cos2, 3), _e(maxima),
               f"{ring.coverage:.0%}", _e(missing)]],
         ))
     return "".join(parts)
@@ -215,7 +239,7 @@ def report_html(
         parts.append(f"<h3>{t('No report')}</h3><p>{_e(outcome.message)}</p>")
     tables = (
         _geometry_section(results) + _peak_tables(results) + _sector_table(results)
-        + _ring_tables(results) + _size_table(results)
+        + _ring_tables(results, language) + _size_table(results)
     )
     if tables:
         parts.append(f"<h3>{t('Computed results')}</h3>" + tables)
