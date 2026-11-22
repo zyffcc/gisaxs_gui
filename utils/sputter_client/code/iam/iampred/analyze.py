@@ -27,7 +27,14 @@ FAMILIES = {("Au", "Si"): ("si_p3h", None), ("Ag", "Si"): ("si_p3h", None),
             **{("Ag", s): ("polyag_p3", "ref04" if s == "PNO" else "ref05") for s in FILMS}}
 
 
-ALTERNATIVES = {"polyag_p3": ["polyag_v5"], "si_p3h": ["si_v6"], "cu_p5": ["cu_v4"], "tio2_u1": ["tio2_v2"]}
+ALTERNATIVES = {"polyag_p3": ["polyag_v5", "polyag_u1"], "si_p3h": ["si_v6", "si_u1"], "cu_p5": ["cu_v4", "cu_u1"],
+                "tio2_u1": ["tio2_v2"]}
+
+
+UNIVERSAL = {"si_p3h": "si_u1", "polyag_p3": "polyag_u1", "cu_p5": "cu_u1"}
+
+
+ROUTE_OFF_NATIVE = {"si_p3h", "polyag_p3", "cu_p5"}
 
 
 PRIOR_DEFAULT_ON = {("Ag", "PS")}
@@ -45,12 +52,32 @@ FILES = dict(report_md="REPORT.md", report_png="report.png", report_csv="report.
              main_json="main/main.json", process_png="main/process.png")
 
 
-def same_optics(fam, alts, metal, lam):
-    'The alternatives that render with the optics of ``fam`` at wavelength ``lam`` (nm; None: the scan carries none,'
+def optics_key(fam, metal, lam):
+    "Which optics ``fam`` renders a scan at wavelength ``lam`` (nm) with: 'own' (the scan names no wavelength),"
     cfg = REG.load(fam)
-    if not cfg.get("energy_range_kev") or lam is None:
-        return list(alts)
-    return [f for f in alts if abs(float(lam) / REG.model_lam(REG.load(f)) - 1) <= 1e-4]
+    if lam is None:
+        return "own"
+    if REG.lam_outside(metal, float(lam), cfg):
+        return "table"
+    if abs(float(lam) / REG.model_lam(cfg) - 1) <= 1e-4:
+        return "hand"
+    return ("anchored" if cfg.get("energy_range_kev") else "const", round(float(lam), 9))
+
+
+def same_optics(fam, alts, metal, lam):
+    'The alternatives that render with the optics of ``fam`` at wavelength ``lam`` (optics_key): only then does the'
+    key = optics_key(fam, metal, lam)
+    return [f for f in alts if optics_key(f, metal, lam) == key]
+
+
+def routed(fam, metal, lam):
+    'The family that analyses a scan at wavelength ``lam``: the any-energy network of ``fam`` (UNIVERSAL) when ``fam``'
+    uni = UNIVERSAL.get(fam)
+    if uni is None or fam not in ROUTE_OFF_NATIVE or lam is None:
+        return fam
+    if REG.lam_outside(metal, float(lam), REG.load(fam)) and not REG.lam_outside(metal, float(lam), REG.load(uni)):
+        return uni
+    return fam
 
 
 def scan_lam(data, label, extra):
@@ -153,6 +180,8 @@ def main(argv=None):
                          "on = for every system with a law in the package's reference, off = never")
     a = ap.parse_args(argv)
     fam, like = choose(a.metal, a.substrate) if not a.family else (a.family, None)
+    if not a.family:
+        fam = routed(fam, a.metal, _lam_of(extra))
     like = a.like or like
     a.prior_used = growth_prior_used(a.growth_prior, a.metal, a.substrate)
     if a.mode == "auto":

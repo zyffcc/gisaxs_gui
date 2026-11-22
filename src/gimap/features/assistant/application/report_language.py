@@ -11,6 +11,7 @@ ENGLISH, CHINESE = "en", "zh"
 LANGUAGES = (ENGLISH, CHINESE)
 
 HEADINGS_ZH = {
+    "Result summary": "结果摘要",
     "Needs attention (answer, then run again)": "需要处理（回答后重新运行）",
     "Open questions": "需要处理",
     "Geometry": "几何",
@@ -19,7 +20,10 @@ HEADINGS_ZH = {
     "Frames": "帧",
     "Peaks (radial I(q))": "峰（径向 I(q)）",
     "Ring orientation": "取向",
+    "Orientation checks": "取向核查",
     "Phase assignment": "物相指认",
+    "Refined unit cells": "精修晶胞",
+    "Crystal orientation": "晶体取向",
     "Decisions": "决策",
     "Steps": "步骤",
     "Cuts": "切线",

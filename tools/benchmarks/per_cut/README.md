@@ -45,6 +45,8 @@ of the joint integral and the parts of the difference), written at 958aa9b with 
 `calibration_check_frames.json.gz` holds every simulated frame of `../calibration_check.py` (`calibration_coverage.py`).
 `main` and `three_ring_set` each contain `meta` (command, frame count, first seed and seconds) and `frames`.
 Each frame records the simulated geometry and the result from the shipped engine, including whether it found the
-geometry. Successful fits include the reported 1σ and the covariance standard errors on the final fit's points.
-Three-ring records also give the three two-ring refits with both tilts fixed. Run `--part summarize` to rebuild the
+geometry. The headless beam centre, distance and recovery flag record the independent line check's choice
+under the same criterion. Successful fits include the reported 1σ, the covariance standard errors on the final points and the
+largest relative difference when repeating the reported uncertainty estimate. Three-ring records include all
+three two-ring refits. The recorded method indicates whether the tilts varied in those refits. Run `--part summarize` to rebuild the
 coverage summaries in `../calibration_check.json`.

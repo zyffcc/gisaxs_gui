@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import cmath
 import math
 from dataclasses import dataclass
 
 import numpy as np
+
+from src.gimap.shared.material_optics import normal_wavevector_ratio
 
 
 @dataclass(frozen=True)
@@ -33,7 +34,7 @@ def parratt(k: float, angle_deg: float, delta: float, beta: float, layers: tuple
     sine = math.sin(math.radians(angle_deg))
 
     def kz(d, b):
-        return k * cmath.sqrt(complex(sine * sine - 2 * d, 2 * b))
+        return k * normal_wavevector_ratio(sine, d, b)
 
     field, slope = 1., kz(delta, beta)
     for layer in reversed(layers):

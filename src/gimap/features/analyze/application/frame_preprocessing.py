@@ -14,6 +14,7 @@ enabled, interpolate the corrected donor intensities and keep targets with an un
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
@@ -22,6 +23,7 @@ import numpy as np
 from src.gimap.shared.detector_io.mask_files import read_mask_image
 from src.gimap.shared.detector_io.output_values import floating as _floating_dtype
 from src.gimap.shared.geometry import DetectorGeometry
+from src.gimap.shared.reproduction import file_reference
 
 from ..domain import (
     GIWAXS,
@@ -37,12 +39,14 @@ from ..domain import (
     rasterize,
     subtract_background,
 )
+from ..domain.crystal.film_optics import film_optics
 from ..domain.normalisation import BAD_VALUE, NORMALISATION_TEMPLATES  # noqa: F401 - the page translates them
 from ..domain.mask_edits import MaskShape
 from ..domain.mask_bitmap import read_bitmap
 from ..domain.mask_raster import evaluate_mask
 from ..domain.reference_variance import reference_variance
 from .flat_field import FlatFieldMixin
+from .indexing import phase_from_cif
 from .reduction_inputs import image_stamp
 from .reference_frames import dark_scale, detector_counts
 
@@ -256,7 +260,7 @@ class FramePreprocessingMixin(FlatFieldMixin):
         data, valid = self._corrected(raw_data, usable, corrections, record, exposures)
         filled = None
         if corrections.mirror_fill and mirror_geometry is not None:
-            if not (mirror_geometry.tilted and has_intensity_corrections(corrections)):
+            if not ((mirror_geometry.tilted or mirror_geometry.sample_roll_deg) and has_intensity_corrections(corrections)):
                 data, valid, filled = mirror_fill(data, valid, mirror_geometry.beam_center_x_px, geometry=mirror_geometry)
         record.update(data=data, valid=valid, raw_data=raw_data, raw_valid=raw_valid, filled_pixels=filled)
         return record
@@ -266,6 +270,7 @@ class FramePreprocessingMixin(FlatFieldMixin):
         options = dict(
             solid_angle=bool(corrections.solid_angle), polarization=corrections.polarization,
             film_thickness_nm=corrections.film_thickness_nm, attenuation_length_um=corrections.attenuation_length_um,
+            film_delta=corrections.film_delta, film_beta=corrections.film_beta,
             lorentz=bool(getattr(corrections, "lorentz", False)),
             lorentz_band_px=corrections.lorentz_band_px,
         )
@@ -279,6 +284,14 @@ class FramePreprocessingMixin(FlatFieldMixin):
     def correct_pixels(self, common: dict, raw_data, raw_valid, corrections, geometry, kind, *, mask_bitmap=None) -> bool:
         """Apply the pixel-dependent corrections shared by sample and standard. Return the counting model."""
         mirror_geometry = geometry if kind == GIWAXS else None
+        if mirror_geometry is not None and corrections.film_cif_path:
+            spec = phase_from_cif(corrections.film_cif_path)
+            optics = film_optics(spec.phase(), geometry.wavelength_angstrom)
+            if not optics["available"]:
+                raise ValueError("The film CIF does not provide optical constants at this wavelength.")
+            corrections = replace(corrections, film_delta=optics["delta"], film_beta=optics["beta"])
+            if "correction_files" in common:
+                common["correction_files"][corrections.film_cif_path] = file_reference(corrections.film_cif_path)
         common.update(self._preprocess(raw_data, raw_valid, corrections, common["metadata"], mirror_geometry, geometry,
                                        exposures=1 + len(common.get("summed_frames", ())), mask_bitmap=mask_bitmap))
         counting = common["error_model_used"] == "poisson"
@@ -297,7 +310,7 @@ class FramePreprocessingMixin(FlatFieldMixin):
             common["raw_data"], common["raw_valid"] = raw_data, raw_valid
         defined = np.isfinite(factor) & (factor > 0)
         valid = valid & defined
-        if corrections.mirror_fill and geometry.tilted:
+        if corrections.mirror_fill and (geometry.tilted or geometry.sample_roll_deg):
             corrected, valid, filled = mirror_fill(corrected, valid, geometry.beam_center_x_px, geometry=geometry)
             common["filled_pixels"] = filled & defined
             valid &= defined

@@ -48,10 +48,10 @@ class OptionsMixin(NormalisationMixin, ReductionErrorsMixin):
             spin.valueChanged.connect(self._limits_changed)
         self.refraction_check.toggled.connect(self._refraction_changed)
         self.critical_angle_spin.valueChanged.connect(self._refraction_changed)
-        for widget in (self.solid_angle_check, self.polarization_check, self.film_check):
+        for widget in (self.solid_angle_check, self.polarization_check):
             widget.toggled.connect(self._intensity_changed)
-        for spin in (self.polarization_spin, self.film_thickness_spin, self.attenuation_spin):
-            spin.valueChanged.connect(self._intensity_changed)
+        self.polarization_spin.valueChanged.connect(self._intensity_changed)
+        self.film_controls.changed.connect(self._intensity_changed)
         for spin in (self.in_plane_spin, self.out_of_plane_spin):
             spin.valueChanged.connect(self._sector_widths_changed)
         self.bins_spin.valueChanged.connect(self._bins_changed)
@@ -65,7 +65,7 @@ class OptionsMixin(NormalisationMixin, ReductionErrorsMixin):
         self.detector_view.boxChanged.connect(self._box_dragged)
         self.sector_grid.setEnabled(False)
         self.box_grid.setEnabled(False)
-        for spin in (self.polarization_spin, self.film_thickness_spin, self.attenuation_spin, self.critical_angle_spin):
+        for spin in (self.polarization_spin, self.critical_angle_spin):
             spin.setEnabled(False)
         self._connect_reduction_errors()
         self._connect_normalisation()
@@ -169,15 +169,11 @@ class OptionsMixin(NormalisationMixin, ReductionErrorsMixin):
         self._options_changed()
 
     def _intensity_changed(self, *_args) -> None:
-        film = self.film_check.isChecked()
         self.polarization_spin.setEnabled(self.polarization_check.isChecked())
-        self.film_thickness_spin.setEnabled(film)
-        self.attenuation_spin.setEnabled(film)
         self.view_model.set_intensity_corrections(
             solid_angle=self.solid_angle_check.isChecked(),
             polarization=self.polarization_spin.value() if self.polarization_check.isChecked() else None,
-            film_thickness_nm=self.film_thickness_spin.value() if film else None,
-            attenuation_length_um=self.attenuation_spin.value() if film else None,
+            **self.film_controls.values(),
         )
         self._options_changed()
 

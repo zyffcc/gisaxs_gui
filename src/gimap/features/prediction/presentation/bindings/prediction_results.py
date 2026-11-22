@@ -13,6 +13,7 @@ from PyQt5.QtGui import QImage, QPixmap
 
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import theme_manager
+from src.gimap.shared.numbers import format_number
 
 # Exported figures keep their light publication look in either theme (white figure, light grey
 # axes, black text and spines, matplotlib's grey grid), as before the display was themed.
@@ -61,7 +62,7 @@ class PredictionResultsMixin:
         # 1) If only scalar outputs, print to status and return
         scal = outputs.get("scalars") if isinstance(outputs, dict) else None
         if isinstance(scal, np.ndarray):
-            vals = ", ".join(f"{float(x):.4g}" for x in scal.reshape(-1))
+            vals = ", ".join(format_number(x) for x in scal.reshape(-1))
             self._append_status_message(trf("Predicted scalars: [{values}]", values=vals), level="INFO")
             return
         panels: List[Dict[str, object]] = []
@@ -74,7 +75,7 @@ class PredictionResultsMixin:
                 else [f"p{i + 1}" for i in range(params.size)]
             )
             text = ", ".join(
-                f"{name}={float(value):.6g}"
+                f"{name}={format_number(value)}"
                 for name, value in zip(names, np.asarray(params).reshape(-1))
             )
             self._append_status_message(trf("Predicted parameters: {values}", values=text), level="INFO")

@@ -40,6 +40,7 @@ from src.gimap.features.calibration.domain.models import (
 from src.gimap.features.calibration.domain.peak_detector import DetectedPeak
 from src.gimap.features.calibration.domain.peak_matcher import generate_distance_candidates
 from src.gimap.features.calibration.domain.preprocessing import preprocess_detector_image
+from src.gimap.features.calibration.domain.radial_profile import calculate_azimuthal_profile
 from src.gimap.features.calibration.infrastructure.adapters import JsonCalibrationStorageAdapter
 from src.gimap.features.calibration.domain.standards import STANDARDS
 from src.gimap.app.bootstrap import create_app_context
@@ -87,6 +88,18 @@ def synthetic_grazing_agbh(
 class CalibrationTests(unittest.TestCase):
     def test_energy_to_wavelength(self):
         self.assertAlmostEqual(energy_to_wavelength(12.398419843320026), 1.0, places=12)
+
+    def test_uniform_partial_ring_counts_the_illuminated_rays(self):
+        yy, xx = np.indices((200, 280))
+        radius = np.hypot(xx - 32.0, yy - 40.0)
+        signal = np.exp(-0.5 * ((radius - 210) / 2.0) ** 2).astype(np.float32)
+        profile = calculate_azimuthal_profile(signal, np.ones(signal.shape, bool), 32.0, 40.0)
+        index = np.argmin(np.abs(profile.radius_px - 210))
+        # The bright arc occupies only the accessible part of the circle.
+        angle = np.linspace(0, 2 * np.pi, 360, endpoint=False)
+        x, y = 32 + 210 * np.cos(angle), 40 + 210 * np.sin(angle)
+        accessible = np.mean((0 <= x) & (x < 280) & (0 <= y) & (y < 200))
+        self.assertAlmostEqual(profile.coverage[index], accessible, delta=0.02)
 
     def test_q_to_ring_radius(self):
         radius = q_to_ring_radius_px(0.1, 12.398419843320026, 1000.0, 100e-6)
@@ -214,7 +227,9 @@ class CalibrationTests(unittest.TestCase):
         except ImportError:
             self.skipTest("fabio CBF writer is unavailable")
         with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "frame.cbf"
+            detector_folder = Path(folder) / "detector"
+            detector_folder.mkdir()
+            path = detector_folder / "frame.cbf"
             source = np.arange(80, dtype=np.int32).reshape(8, 10)
             CbfImage(data=source).write(str(path))
             detector = load_detector_image(path)
@@ -226,19 +241,31 @@ class CalibrationTests(unittest.TestCase):
         except ImportError:
             self.skipTest("fabio CBF writer is unavailable")
         with tempfile.TemporaryDirectory() as folder:
-            scan_root = Path(folder) / "scan_agbh_00001"
+            scan_root = Path(folder).resolve() / "scan_agbh_00001"
             cbf_folder = scan_root / "embl_2m"
             nxs_folder = scan_root / "lmbd01"
+            vanishing = scan_root / "other_detector"
             cbf_folder.mkdir(parents=True)
             nxs_folder.mkdir()
+            vanishing.mkdir()
             cbf_path = cbf_folder / "scan_agbh_00001_00001.cbf"
             nxs_path = nxs_folder / "scan_agbh_00001_00001.nxs"
             CbfImage(data=np.ones((40, 48), dtype=np.int32)).write(str(cbf_path))
             with h5py.File(nxs_path, "w") as handle:
                 handle.create_dataset("/entry/instrument/detector/collection/beam_energy", data=[12000.0])
-            detector = load_detector_image(cbf_path)
+            # The scan lists the sibling, but it is gone by the time its entries are read.
+            scandir = os.scandir
+
+            def scan(directory):
+                if directory in (vanishing, str(vanishing)):
+                    vanishing.rmdir()
+                return scandir(directory)
+
+            with patch("os.scandir", side_effect=scan):
+                detector = load_detector_image(cbf_path)
+            self.assertFalse(vanishing.exists())
             self.assertAlmostEqual(detector.energy_kev, 12.0)
-            self.assertIn("companion NXS", detector.metadata["energy_source"])
+            self.assertEqual(detector.metadata["energy_source"], f"companion NXS: {nxs_path}")
 
     def test_center_recovery_with_complete_rings(self):
         center = (247.0, 271.0)

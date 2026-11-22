@@ -143,6 +143,42 @@ def test_spelled_out_units_of_every_quantity(tmp_path: Path, path: str, value, u
     assert header[key] is None if expected is None else header[key] == pytest.approx(expected, rel=1e-6)
 
 
+def test_sample_incidence_is_read_for_the_selected_frame_and_sum(tmp_path: Path):
+    from src.gimap.features.analyze.application import AnalysisRequest, AnalyzeFrame, analysis_metadata
+    from src.gimap.features.analyze.infrastructure.adapters import DetectorIoFrameSource
+
+    field = "/entry/specimen/incidence_angle"
+    path = _file(tmp_path / "angle_scan.nxs", {field: ([.003, .006, .006], "radians")})
+    with h5py.File(path, "r+") as handle:
+        handle["/entry/specimen"].attrs["NX_class"] = "NXsample"
+    frame = load_detector_image(path, frame_idx=1)
+    assert frame.metadata["incidence_deg"] == pytest.approx(np.degrees(.006))
+    assert frame.metadata["incidence_source"] == field
+    analyze = AnalyzeFrame(DetectorIoFrameSource(), profiles=None)
+    for first, expected in ((0, None), (1, np.degrees(.006))):
+        analysis = analyze(AnalysisRequest(path, frame_index=first, summed_frames=((path, 2),),
+                                           with_map=False, with_record=False))
+        assert analysis.metadata.get("incidence_deg") == (pytest.approx(expected) if expected is not None else None)
+        if expected is not None:
+            assert analysis.metadata["incidence_source"] == "all summed frame headers"
+            geometry = analysis_metadata(analysis, with_reproduction=False)["geometry_resolution"]
+            assert geometry["nominal_incidence_source"] == "all summed frame headers"
+            assert geometry["nominal_incidence_deg"] == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("field, units, data, expected", [
+    ("incident_angle", "degrees", .25, .25),
+    ("incidence_angle", "mrad", 5., np.degrees(.005)),
+    ("incident_angle", None, .23, None),
+    ("incident_angle", "deg", -1., None),
+    ("omega", "deg", .25, None),
+    ("incident_angle", "deg", [.2, .3], None),
+])
+def test_header_incidence_requires_a_sample_angle_for_this_frame(tmp_path, field, units, data, expected):
+    header = _header(tmp_path, {"/entry/sample/" + field: (data, units)}, frame=2)
+    assert header.get("incidence_deg") == (pytest.approx(expected) if expected is not None else None)
+
+
 def test_exposure_and_time_stamps_of_the_frame_asked(tmp_path: Path) -> None:
     values = {
         f"{DET}/count_time": (np.array([100.0, 500.0, 1000.0]), "ms"),

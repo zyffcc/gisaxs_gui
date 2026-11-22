@@ -234,7 +234,7 @@ Every q value in Analyze comes from one geometry object and one pixel convention
 
 ### 1.1 The detector model
 
-GIMaP describes a measurement with seven numbers, and three more for a tilted detector. The detector is flat; without rotations it is perpendicular to the direct beam (a `.poni` tilt, section 3.7). The sample surface is tilted by the grazing angle α_i.
+GIMaP describes the beam, flat detector and sample by the quantities below. Three additional rotations set the detector orientation relative to the beam (section 3.7).
 
 | Symbol | Stored field | Unit | Meaning |
 |---|---|---|---|
@@ -243,6 +243,7 @@ GIMaP describes a measurement with seven numbers, and three more for a tilted de
 | `x_c`, `y_c` | `beam_center_x_px`, `beam_center_y_px` | px | position of the direct (transmitted) beam, in the canonical coordinates of section 1.2 |
 | `λ` | `wavelength_angstrom` | Å | X-ray wavelength |
 | `α_i` | `incidence_deg` | ° | grazing angle between the beam and the sample surface; 0 means transmission |
+| `ψ` | `sample_roll_deg` | ° | sample roll about the beam, positive toward lab right from lab up, default 0 |
 
 The pixel sizes, `L` and `λ` must be positive and finite. The beam centre must be finite; it may lie outside the frame. The grazing angle must satisfy `−90° < α_i < 90°`. When a wavelength is derived from a photon energy, GIMaP uses
 
@@ -344,11 +345,18 @@ Implementation: `src/gimap/shared/geometry/legacy_conventions.py`
 The q map of Analyze rests on these assumptions:
 
 1. The detector is flat. `L` is the distance from the sample to the direct beam on the detector, measured along the beam. The detector may be tilted: the rotations rot_1, rot_2, rot_3 of a `.poni` are part of the geometry (section 3.7). The formulas of this section are written for the untilted detector, perpendicular to the direct beam (all three rotations 0); for a tilted one the ray `(L, X, Y)` of a pixel is replaced by the vector (3.15), and everything after it is unchanged.
-2. The sample is tilted by α_i about the horizontal axis perpendicular to the beam (the detector's X axis). The plane of incidence is vertical. It contains the beam and the detector column through the direct beam.
+2. The incident beam makes a grazing angle α_i with the surface. The sample roll ψ sets the direction of the surface normal about the beam. Both angles are specified independently of the detector rotations.
 3. The scattering is elastic and comes from a point at the origin. There is no refraction (the vacuum, kinematic q).
 4. Each pixel is represented by its centre.
 
-Two frames are used. In the laboratory frame, `x_L` points along the beam, `y_L` along the detector X axis and `z_L` along the detector Y axis. In the sample frame, `x_s` is the projection of the beam onto the surface, `y_s` lies in the surface perpendicular to `x_s`, and `z_s` is the surface normal. The sample frame is the laboratory frame rotated by α_i about `y_L`:
+In the laboratory frame, the axes point along the incident beam, to the right and up. Apply the PONI detector rotations and orientation first to obtain the pixel ray `t = (L, X, Y)` in those axes. A positive ψ tips the sample normal toward lab right, the convention of Sputter’s `sample_roll_deg`. Express the transverse ray in axes aligned with the rolled sample:
+
+```text
+X′ = X cos ψ − Y sin ψ,        Y′ = X sin ψ + Y cos ψ
+n  = (−sin α_i, cos α_i sin ψ, cos α_i cos ψ)
+```
+
+Use `X′, Y′` in place of `X, Y` in (2.1)–(2.9). The incident ray lies on the roll axis. The norm of the ray and the vacuum |q| are invariant. χ, signed q∥, q_z and the exit angle use the rolled components. The inverse projection uses the opposite rotation to place reflections on the detector. The beam polarization stays in the laboratory frame. At ψ = 0 the laboratory-to-sample conversion is
 
 ```text
 x_s = x_L cos α_i + z_L sin α_i,    y_s = y_L,    z_s = z_L cos α_i − x_L sin α_i     (2.1)
@@ -379,7 +387,7 @@ tan 2θ_f = X / (L cos α_i + Y sin α_i)                                (2.9)
 
 The code computes the three components of (2.3) directly; it never forms 2θ_f.
 
-Signs: `q_y > 0` to the right of the direct beam on the image, `q_z > 0` above the horizon. At the direct beam `q = 0` and `α_f = −α_i`. The tests pin three points: the direct beam gives `q = (0, 0, 0)`; the horizon (`X = 0`, `Y = L tan α_i`) gives `q = k (1 − cos α_i, 0, sin α_i)`; the specular beam (`X = 0`, `Y = L tan 2α_i`) gives `q = (0, 0, 2k sin α_i)`. For every pixel `|k_f| = k` to 10⁻¹³ Å⁻¹. With `α_i = 0` the map reduces to transmission rings.
+Signs at ψ = 0 for a perpendicular detector in orientation 3: `q_y > 0` to the right of the direct beam on the image, `q_z > 0` above the horizon. At the direct beam `q = 0` and `α_f = −α_i`. The tests pin three points: the direct beam gives `q = (0, 0, 0)`; the horizon (`X = 0`, `Y = L tan α_i`) gives `q = k (1 − cos α_i, 0, sin α_i)`; the specular beam (`X = 0`, `Y = L tan 2α_i`) gives `q = (0, 0, 2k sin α_i)`. For every pixel `|k_f| = k` to 10⁻¹³ Å⁻¹. With `α_i = 0` the map reduces to transmission rings.
 
 This exact flat-detector model is the only q mapping that Analyze uses. Its derivation is standard (Renaud et al., 2009; Hexemer & Müller-Buschbaum, 2015).
 
@@ -395,16 +403,16 @@ q_∥ = sign(q_y) · √(q_x² + q_y²)                                       (2
 ```
 
 - **q_∥** (labelled q∥ or qr) is the full in-plane magnitude, including `q_x`, with the sign of `q_y`. The sign is applied with `copysign`, so a pixel with `q_y = +0.0` gets a positive q_∥.
-- **|q| and 2θ do not depend on α_i.** A rotation keeps the angle between `k_i` and `k_f`, so 2θ from (2.12) is the true scattering angle. In the laboratory frame `cos 2θ = k̂_i · k̂_f = L/L_p`. The optional 2θ axis of the GIWAXS I(q) curves converts the q of each point with (2.12); the bins stay uniform in q.
+- **|q| and 2θ are independent of α_i and ψ.** A rotation keeps the angle between `k_i` and `k_f`, so 2θ from (2.12) is the true scattering angle. In the laboratory frame `cos 2θ = k̂_i · k̂_f = L/L_p`. The optional 2θ axis of the GIWAXS I(q) curves converts the q of each point with (2.12); the bins stay uniform in q.
 - **χ** (GIWAXS polar angle): 0° along the surface normal (out of plane), ±90° in the sample plane, with the sign of `q_y`. Above the horizon `q_z > 0`, so χ lies between −90° and +90°. Because `q_∥² + q_z² = |q|²`, a point at (|q|, χ) has `q_∥ = |q| sin χ` and `q_z = |q| cos χ` exactly.
-- **Missing wedge.** On the detector column through the beam (`X = 0`) `q_y = 0` but `q_x ≠ 0`, so χ is not zero there. With the public P08 geometry (section 2.4), the beam column reaches χ ≈ 2.2° at |q| = 0.73 Å⁻¹, 5.7° at 1.83 Å⁻¹ and 9.0° at 2.87 Å⁻¹. Smaller χ at these |q| is not measured by a flat detector (Baker et al., 2010).
+- **Missing wedge.** In the plane of incidence (`X′ = 0`, the beam column for an unrotated detector and ψ = 0) `q_y = 0` but `q_x ≠ 0`, so χ is not zero there. With the public P08 geometry (section 2.4), the beam column reaches χ ≈ 2.2° at |q| = 0.73 Å⁻¹, 5.7° at 1.83 Å⁻¹ and 9.0° at 2.87 Å⁻¹. Smaller χ at these |q| is not measured by a flat detector (Baker et al., 2010).
 - A second azimuth exists in the code for transmission data, `atan2(Y, X)` (0° to the right, 90° up). No part of the program uses it; every χ shown or exported by Analyze is the χ of (2.13).
 
 Implementation: `src/gimap/shared/geometry/q_mapping.py`, `src/gimap/features/analyze/domain/giwaxs.py`
 
 ### 2.3 Horizon, specular and Yoneda rows
 
-On a perpendicular detector in orientation 3, equation (2.8) in the plane of incidence gives the following continuous row coordinates on the beam column.
+At ψ = 0 on a perpendicular detector in orientation 3, equation (2.8) in the plane of incidence gives the following continuous row coordinates on the beam column.
 
 ```text
 row(α_f) = y_c − L tan(α_f + α_i) / p_y                               (2.14)
@@ -414,12 +422,24 @@ row_specular = y_c − L tan 2α_i / p_y         (α_f = α_i)             (2.16
 
 and the exit angle at a row on the beam column is `α_f = atan2((y_c − row) p_y, L) − α_i`, which is (2.8) at `X = 0`.
 
-- **Tilted horizon.** For the full laboratory ray `t = (along, right, up)` of section 3.7, the horizon satisfies `up cos α_i − along sin α_i = 0`. This is a line on any flat detector. It can cross rows or even run along a column. At α_i = 0 it passes through the direct beam.
-- **Above the horizon.** The vacuum exit angle satisfies `sin α_f = (up cos α_i − along sin α_i)/|t|`. Tilted GISAXS vertical cuts select pixels individually at α_f ≥ 0 (α_f ≥ α_c for refracted q_z). For a perpendicular detector in orientation 3 the original whole-row selection in (6.14) is retained. The automatic horizontal cut uses all valid pixels in its chosen rows.
+- **Tilted horizon.** For the full laboratory ray of section 3.7, the horizon satisfies `t · n = 0`. This is a line on any flat detector. At α_i = 0 it passes through the direct beam. For a perpendicular detector in orientation 3 its slope in image coordinates is `d(row)/d(column) = (p_x/p_y) tan ψ`.
+- **Above the horizon.** The vacuum exit angle satisfies `sin α_f = t · n / |t|`. Tilted GISAXS vertical cuts select pixels individually at α_f ≥ 0 (α_f ≥ α_c for refracted q_z). At ψ = 0 on a perpendicular detector in orientation 3, the whole-row selection in (6.14) applies.
 
 Example (GALAXI geometry of section 1.4): `row_horizon` = 638.3 and `row_specular` = 557.0. The Yoneda band of this frame lies at row 607.5, which (2.14) turns into `α_f` = 0.18°.
 
+**Measuring ψ on one frame.** Both measurements use calibrated rays and valid measured pixels. The angle search runs from −8° to +8° in 0.1° increments. Film absorption, fibre Lorentz weighting and mirror filling are omitted when measuring ψ. On the detector, the projected horizon is a straight line. The first estimator scores the intensity drop across that line in strips of columns near the horizon. A free offset lets the observed edge lie above or below the geometric horizon (for example, at a Yoneda band). Deleting contiguous groups of strips measures how much the slope depends on the chosen part of the edge.
+
+At fixed vacuum |q|, rays on opposite sides of the incidence plane have equal |χ|. Write their laboratory azimuths from vertical as β = atan2(X,Y). For each strong ring, the second estimator minimises the mean of `[I(ψ+β) − I(ψ−β)]²` using the same measured pairs of angular bins at every trial ψ. Flat profiles, ambiguous minima and insufficient bilateral coverage do not determine a symmetry axis. The uncertainty includes angular sampling, correlated sector residuals and differences between rings. In GISAXS the second estimator fits the direction of a narrow central specular rod in laboratory coordinates.
+
+If only one estimator resolves an angle, its uncertainty is retained. For two estimates with standard errors s₁ and s₂, agreement requires `|ψ₁ − ψ₂| ≤ 2√(s₁²+s₂²)`. Their mean uses inverse-variance weights. Because both estimates use the same frame, its uncertainty is the larger of the smaller individual error and half their difference. Disagreement is recorded with both estimates. Automatic analysis uses a roll supplied for the run or set in Analyze, including zero. It also keeps a nonzero roll in the resolved geometry. Otherwise it applies the frame estimate when `|ψ| ≥ 3s`. These are frame-based uncertainties conditional on the detector calibration.
+
 Implementation: `src/gimap/shared/geometry/detector_geometry.py`, `src/gimap/features/analyze/domain/gisaxs.py`, `src/gimap/features/analyze/domain/giwaxs.py`
+
+**Measuring the external incidence angle.** The direct beam, pixel pitches and detector rotations define a ray for each pixel. Write its components as (b, x, z) along the beam, across it and up in the plane of the rolled sample normal. On the horizon the exit angle is zero, giving αᵢ = atan2(z,b). For an on-axis specular reflection the ray has turned through 2αᵢ, giving αᵢ = ½ atan2(z,b). A GISAXS band at a known material critical angle α_c satisfies (z cos αᵢ − b sin αᵢ)/|r| = sin α_c. On the incidence plane this gives αᵢ = atan2(z,b) − α_c. A band from a multilayer requires a choice of interface. For an explicitly selected Si, SiO₂, plate glass or Au layer, the program evaluates α_c ≃ √(2δ) in radians using the density and wavelength-dependent forward scattering factors in §9.17. Outside the optical table’s 4.895–30 keV range, the other estimators remain available and the report explains why the band was omitted. An independently known α_c can be supplied directly.
+
+The shadow fit determines its intercept with the input αᵢ set to zero. Its uncertainty includes sampling, omission of contiguous detector strips and the shift on using only strips closer to the beam. The specular search tests 0–3° incidence. It requires a localized peak on the calculated ray above both flanks. A second check follows the cone of constant |q| to detect Bragg arcs: after subtracting a local radial background, either side retaining at least half the axial signal at 1.5–3 radial widths excludes the peak. A compact diffraction spot exactly on that ray can still mimic specular reflection. Its angular error is half the greater of one sampling interval and the peak FWHM divided by 2.355, in scattering angle. The GISAXS band uses the existing off-axis Yoneda estimate. Its width and row sampling give an angular error. Its illuminated flank cannot also count as a shadow.
+
+For a unique largest set of estimates with every pair within three combined standard errors, the program reports their inverse-variance weighted mean. Its error is at least the smallest component uncertainty and increases with excess between-method scatter. A selected angle must exceed zero by more than three standard errors. The record keeps the individual estimates even when the frame gives no selection. The errors are conditional on the calibration, feature identification and any supplied critical angle. On P08 the spot gives 0.501 ± 0.012°, while the shadow gives 0.65 ± 0.57°. The spot determines most of the precision.
 
 ### 2.4 GISAXS or GIWAXS
 
@@ -447,7 +467,7 @@ The following effects are not in the q map, nor anywhere else in Analyze:
 
 - **Refraction and the distorted-wave Born approximation (DWBA).** `q_z` is the kinematic vacuum value unless the film's critical angle is given (section 2.6). No reflected-wave terms of the DWBA are computed.
 - **Detector tilt and rotation.** All three detector rotations enter the pixel rays, q, χ, the solid angle and the polarisation factor (section 3.7). Geometry Calibration fits rot1 and rot2 (section 3.8).
-- **Sample azimuth and roll.** The sample is assumed to be tilted only about the horizontal axis perpendicular to the beam. A rotation about the surface normal or about the beam is not described.
+- **Sample azimuth.** The sample axes are fixed by the surface normal and incident beam. A separate crystallographic azimuth about the surface normal requires independent information.
 - **Parallax and sensor thickness.** A pixel is its centre; there is no depth of interaction and no pixel splitting.
 - **Flat field and efficiency.** A flat field (detector response) divides the frames only when one is chosen (section 4.10; off by default). No detector-efficiency, air or window absorption correction is applied.
 - **Absolute intensity.** Section 4.12 describes optional normalisation by exposure time, monitor, transmission and thickness, and calibration in cm⁻¹ for a given set-up. Flat-field and geometric corrections act before this step (section 4.10 and chapter 5). Normalising a series to a reference peak gives a relative intensity (section 6.10).
@@ -489,6 +509,10 @@ Geometry Calibration (Tools menu) finds the beam centre, the distance and the de
 
 ### 3.1 Calibrants
 
+Geometry Calibration accepts the measured beam energy in keV or wavelength in Å.
+For a wavelength entry it uses equation (1.1) to fill the energy field. The ring fit uses
+the displayed energy in keV (five decimal places). For example, 1.0 Å gives 12.39842 keV.
+
 | Key | Standard | Values in the code | Lines used |
 |---|---|---|---|
 | `agbh` | silver behenate | lamellar `d_001` = 58.38 Å | orders n = 1 … 20 |
@@ -504,7 +528,7 @@ d_hkl = a / √(h² + k² + l²)                                            (3.3
 
 - For LaB6, N = 7 and 15 are absent because they are not sums of three squares. The first spacings are 4.1569 Å (100), 2.9394 Å (110), 2.4000 Å (111) and 2.0785 Å (200); q runs from 1.5115 to 7.0896 Å⁻¹.
 - For CeO2 the first spacings are 3.1244 Å (111), 2.7058 Å (200), 1.9133 Å (220) and 1.6317 Å (311); q runs from 2.0110 to 8.0440 Å⁻¹.
-- For AgBH, q runs from 0.10763 Å⁻¹ (n = 1) to 2.1525 Å⁻¹ (n = 20). The code stores relative intensities 1/n, but the engine does not use them.
+- For AgBH, q runs from 0.10763 Å⁻¹ (n = 1) to 2.1525 Å⁻¹ (n = 20). The relative intensities 1/n provide a weak ordering prior in the final comparison of candidate geometries (section 3.3).
 - With the standard set to Auto, all four line sets are tried.
 - The values are fixed; temperature is not taken into account. The code cites no source. The AgBH spacing equals the 58.380(3) Å of Huang et al. (1993). The LaB6 value differs from the certified lattice parameter of NIST SRM 660c (4.156826 Å at 22.5 °C; Black et al., 2020) by 1.8 × 10⁻⁵ relative. The CeO₂ value differs from the certified lattice parameter of NIST SRM 674b (5.41153 Å at 22.5 °C; NIST, 2017) by 2.2 × 10⁻⁵ relative; the code does not state its source.
 
@@ -520,7 +544,7 @@ r = L tan 2θ                    [m]                                     (3.5)
 r_px = L tan 2θ / p̄,      p̄ = (p_x + p_y) / 2                           (3.6)
 ```
 
-The search for candidates (ring detection and matching) uses radii in pixels with the mean pixel size `p̄`, i.e. square pixels. The joint refinement (section 3.3, step 6) uses `p_x` and `p_y` separately. The overlay in the window draws each ring as an ellipse of width `2r/p_x` and height `2r/p_y`. A line with `qλ/4π > 1` cannot be reached and is refused.
+The initial radial scan uses the mean pixel size `p̄`. The guided ring search and joint refinement (section 3.3) use `p_x` and `p_y` separately. For a perpendicular detector, the overlay has width `2r/p_x` and height `2r/p_y`. For a tilted detector it follows contours of constant 2θ. A line with `qλ/4π > 1` cannot be reached and is refused.
 
 Implementation: `src/gimap/features/calibration/domain/geometry_model.py`, `src/gimap/features/calibration/domain/ring_geometry.py`
 
@@ -532,11 +556,17 @@ Inputs: the image, the energy (λ from (1.1)), the pixel size (from the header o
 2. **Beam-centre proposals.** Up to 14 initial proposals, at least 3 px apart, each with a support between 0 and 1. They come from the direct beam and beam stop along the bright beam column, from voting of intensity-gradient lines of partial arcs (which can place a centre outside the detector), from the image centre, from the header centre (support 0.70), from 180° symmetry by phase correlation (support 0.20), and from a coarse-to-fine search for the sharpest radial profile.
    For transmission and grazing-incidence images alike, the engine also tests refined copies of up to four arc-voting proposals. It centres a radial profile on each trial position and maximises the sharpness of the rings using the brightest quarter of valid pixels. The grid step decreases from 4 to 2, 1 and 0.5 px. A refined centre is added if it lies at least 1 px from every existing proposal.
 3. **Ring detection for each proposal.** The image is resampled onto 360 azimuths × 1 px radii. The radial profile is the 60th percentile over azimuth, which is robust against streaks and gaps (the plain radial mean when OpenCV is missing). The profile is smoothed with a Gaussian of σ = 1.2 px. Peaks need a prominence of at least `max(2.3 MAD, 0.08 (P_85 − median), 10⁻⁵)`, an azimuthal coverage of at least 1.5 % and a radius of at least 40 px. Peak radii stay on the 1 px grid; they are not interpolated.
-4. **Distance hypotheses and matching.** Each of the first 35 peaks paired with each line of the standard gives a distance by inverting (3.6); distances inside the range are clustered within 0.8 %. At each distance, predicted and observed radii are paired greedily within a tolerance of `max(3 px, 0.018 r, 0.6 w)` (w: peak width). With the pairs fixed, L is solved by one-parameter linear least squares, equation (3.7).
-5. **Ranking.** A weighted score rewards matched rings (each counted in proportion to its prominence up to 0.1 in the log-scaled profile, about 10 % contrast, and whole above it: chance coincidences with noise-level peaks do not outweigh fewer clear rings), azimuthal coverage, valid area, centre support, an unbroken run of orders and prominence, and a Gaussian prior of 20 % width around an estimated distance. It penalises the residual, inconsistent per-ring distances, unexplained inner peaks and (for AgBH) a missing first order.
+   For the polar profile, let e(r,φ) be the signal above the local background along the ray at φ.
+   That background is a radial Gaussian average (σ = 8 px) over valid samples. At radius r, coverage is the
+   fraction of all 360 rays that are valid and satisfy e(r,φ) > max(1.5 MAD_φ(e), 0.005) in the preprocessed
+   signal. An arc with similar intensity at every illuminated azimuth can therefore support a peak.
+4. **Distance hypotheses and matching.** Each of the first 35 peaks paired with each standard line gives a distance by inverting (3.6). Distances inside the range are clustered within 0.8 %. At each distance, predicted and observed radii are paired in order of increasing absolute difference. For AgBH the tolerance is h = max(2.5 px, 0.012 r). For other standards it is max(3 px, 0.018 r, 0.6 w), where w is the peak width. The paired radii give L by (3.7). If any AgBH pair exceeds its tolerance after this fit, the engine removes the largest |Δr|/h and refits until the remaining pairs agree.
+5. **Preliminary ranking.** A weighted score rewards matched rings (each counted in proportion to its prominence up to 0.1 in the log-scaled profile, about 10 % contrast, and whole above it: chance coincidences with noise-level peaks do not outweigh fewer clear rings), azimuthal coverage, valid area, centre support, an unbroken run of orders and prominence, and a Gaussian prior of 20 % width around an estimated distance. It penalises the residual, inconsistent per-ring distances, unexplained inner peaks and (for AgBH) a missing first order.
 6. **Joint refinement.** For up to 6 groups of proposals with up to 3 distinct distances each, the beam centre and L are refined together. Ring points are the valid pixels within `h = clip(0.012 r, 3, 10)` px of each predicted ring whose preprocessed signal reaches the 70th percentile of the annulus, at most 800 per ring. The residual (3.8) is minimised with `scipy.optimize.least_squares` (soft-L1 loss, f_scale 2 px, at most 80 evaluations). The centre may move by 5 px (direct-beam proposal), by 40 to 140 px (arc voting) or by 12 to 60 px (other proposals); L may move by ±15 %. Only `x_c`, `y_c` and `L` are free.
-7. **Re-matching.** At the refined centre the rings are detected again and matched at the refined L, and L is solved again with (3.7). The ring-radius RMS from this step is used to rank the candidates.
-8. **Result.** The best three candidates are kept, plus the best candidate of each other standard tried, up to five. The record holds the SHA-256, size and modification time of the image, the energy, λ, the pixel sizes, every candidate and the image shape. With fewer than two matched rings a warning says that the distance is ambiguous.
+   Within 25 % of a supplied distance estimate, hypotheses differing by at least 1.5 % in distance may
+   enter the same group's refinement. Farther from the estimate, or without one, the separation is 25 %.
+7. **Re-matching.** At the refined centre the rings are detected again and matched at the refined L, and L is solved again with (3.7). The ring-radius RMS from this step enters the preliminary ranking.
+8. **Candidate selection.** The guided search below checks up to 20 distinct geometries. When it confirms at least two lines, these lines enter the point fit. An independently resolved radial peak can also enter if the neighbouring line spacing leaves less than 2 px of guided search half-width after reserving its flanks and the measured radial angular support is at least 4/72 of a full circle. This match takes the untested half-weight in S below. A short arc lacking enough supporting sectors by itself cannot add another order. With fewer than two confirmed lines the radial assignments remain available. Up to five geometries proceed to the point fit, including candidates from the guided and radial rankings and, in Auto mode, competing standards. The search is repeated on the fitted ellipses. A change of assigned lines triggers another point fit. The record holds the SHA-256, size and modification time of the image, the energy, λ, pixel sizes, candidates and image shape. A single matched ring carries a distance-ambiguity warning.
 
 ```text
 L = Σ_m u_m r_m / Σ_m u_m²,     u_m = tan 2θ_m / p̄     (r_m: observed radii in px)     (3.7)
@@ -545,7 +575,44 @@ L = Σ_m u_m r_m / Σ_m u_m²,     u_m = tan 2θ_m / p̄     (r_m: observed radi
 
 In (3.8), `(x_p, y_p)` are the integer index coordinates of ring pixel p, `q_p` the line it was assigned to, and ρ_p is in pixels.
 
-9. **Final geometry.** With at least two matched rings and enough points, the centre and distance of each retained candidate are refined on the sector centroids in section 3.8. Enabling tilt refinement also frees rot1 and rot2 when at least three rings are matched.
+**Guided ring search.** At a trial geometry, let (a,b,c) be the displacement in metres for one pixel step along
+a detector ray, expressed along the incident beam, to its right and upwards. For a standard line q and
+t = tan[2 arcsin(qλ/4π)], the predicted intersection lies at r = L t / (√(b² + c²) − a t) pixels from the beam
+when the denominator is positive. This follows the ellipse on a tilted detector with either pixel aspect ratio.
+The engine samples 72 sectors of 12 rays each, averaging the valid preprocessed signals at integer offsets
+from each predicted r. A radial bin needs at least four valid rays. On a recognised grazing-incidence frame,
+the search excludes the specular rod and the half-plane shadowed by the sample when measuring both presence and absence.
+
+The search half-width w is ⌈0.012 L t / p̄⌉, clipped to 4–12 px and narrowed where lines are close. The search
+and its two background flanks together extend at most 45 % of the nearest predicted line spacing on either side.
+Lines below 40 px in equivalent radius, or with less than 2 px available for w, are skipped. Each flank begins
+at w + 3 px and ends at most w + 10 px from the prediction. A sector needs four populated bins on each flank
+and w + 1 in the search window. Let B₋, B₊ and v₋, v₊ be the sample means and variances on the two flanks.
+The peak P is the maximum of the search profile after smoothing with weights (1,2,1)/4. A sector supports
+the ring when the peak lies inside both endpoints, P − max(B₋,B₊) > max(4√[(v₋ + v₊)/2], 10⁻⁵), and its
+offset lies within 3 px of the median offset of the significant sectors. Acceptance needs at least four
+supporting sectors and at least 20 % of the observable sectors.
+
+**Final geometry and ranking.** With at least two matches and enough points, the engine refines the centre
+and distance on the sector centroids in section 3.8. Automatic tilt refinement frees rot1 and rot2 with
+at least three orders contributing centroids. The comparison of ring assignments uses the following dimensionless score.
+
+```text
+S = ½ Σ_confirmed (1 + s/o) + ½ Σ_untested min(1, p/0.1) − ½ Σ_absent o/72
+    − U − ln(1 + R²) + 0.2 exp[−½ ((L − L_est)/(0.2 L_est))²] + 0.1 K
+```
+
+Here s and o are the supporting and observable sector counts, and p is the prominence of an independently
+matched radial peak whose predicted ring has fewer than four observable sectors. An absent line has at least
+four observable sectors and fails the acceptance test. For each supporting sector, use the interval between
+the smallest and largest detector-pixel radius r(φ) + δₛ on its valid rays at the measured peak offset δₛ.
+A match from an untestable arc contributes its observed radial-scan radius. U counts independent radial
+peaks of at least 30 % of the strongest prominence whose radius r lies farther from every such interval
+or observed radius than max(3 px, 0.018 r) plus the beam-centre displacement since that scan. R is the final ring-point RMS
+in pixels (2 when unavailable). The distance term is zero without an estimate. K is the mean sign of
+(Iᵢ − Iⱼ)(pᵢ − pⱼ) over pairs of confirmed lines with tabulated intensities I and measured guided peak heights
+p. K is zero when a comparison is unavailable. The engine evaluates S again on the final geometry, after any
+tilt refinement and refit with newly confirmed orders. The largest S ranks first.
 
 Wavelength, pixel size and rot3 are fixed. Powder rings measure angles to the incident beam, so they cannot determine a rotation about it. The engine keeps the supplied rot3 even when refinement is skipped (default 0°). The physical rotations of a candidate are `rot1_deg`, `rot2_deg` and `rot3_deg`.
 
@@ -555,39 +622,48 @@ variance is σ²_J = (n − 1)/n · Σ (θ_i − θ̄)², where θ_i is its esti
 of the n estimates.
 
 - With four or more rings, each refit varies the same parameters as the full fit. With three rings and tilt refinement disabled, each refit varies x_c, y_c and L.
-- With three rings and fitted tilts, two rings remain in each refit. Both tilts are held at their three-ring values because two rings constrain tilt poorly. The full five-parameter fit gives C = s² (JᵀJ)⁻¹, where J is the Jacobian of the pixel residuals (3.17) and s² = Σ ρ_p²/(N − 5) for N centroids. Each tilt has σ = √C_ii. For x_c, y_c and L, the reported σ is the larger of σ_J and √C_ii, so it also accounts for coupling to the fitted tilts. If JᵀJ is singular, only the jackknife uncertainties for x_c, y_c and L are available.
+- With three rings and fitted tilts, each pair of rings is first fitted with all five parameters free. All three refits must converge to finite values, have |rot1| and |rot2| below 30° and give 0.75 L_full < L < 1.25 L_full. For each refit, the solver's final Jacobian with columns normalised to unit length must satisfy s_min/s_max > √ε, where s_min and s_max are its extreme singular values and ε is double-precision machine epsilon. When these checks pass, all five parameters receive the joint ring-jackknife σ. This includes the coupling between beam centre, distance and tilt.
+- If any two-ring refit fails those checks, all three pairs are refitted with both tilts fixed at their three-ring values. The full five-parameter fit gives C = s² (JᵀJ)⁻¹, where J is the Jacobian of the pixel residuals (3.17) and s² = Σ ρ_p²/(N − 5) for N centroids. Each tilt has σ = √C_ii. For x_c, y_c and L, the reported σ is max(σ_J, √C_ii). If JᵀJ is singular, only the conditional jackknife uncertainties for x_c, y_c and L are available.
 - With two rings, uncertainties come from the covariance alone, with denominator N − p for p free parameters. The default fit keeps the tilts fixed, so p = 3. Treat this as a lower bound because the point residuals within a ring can be correlated.
 
 The estimates assume the ring assignments are correct and omit systematic errors shared by all rings. The calibration
 record gives `center_x_sigma_px`, `center_y_sigma_px`, `distance_sigma_mm` and `uncertainty_method`. The result tooltips
 show these uncertainties and the instrument profile carries them into each `<stem>_analysis.json`.
 
-**Measured 1σ coverage.** In 300 simulated Pilatus 1M AgBh frames, the input distance estimate was within 15 %
-of the true distance, and rot1 and rot2 each ranged from −3° to +3°. GIMaP identified 213 geometries (71 %).
-Identification required a fitted tilt with an uncertainty, a direct beam within 5 px and a distance within 5 %
-of the input geometry. In a separate set of 150 frames with only orders 1–3 drawn, it identified 114 geometries,
-112 with exactly three matched rings. Each entry below is the percentage of identified fits in the row for which
-the interval from θ − σ to θ + σ contained the input value.
+**Measured 1σ coverage.** The 300 simulated Pilatus 1M AgBh frames had distance estimates within 15 % of the truth and rotations about each axis between −3° and +3°.
+GIMaP identified 300 geometries (100 %). Identification required fitted tilt with an uncertainty, a direct beam within 5 px and a distance error below 5 %.
+In the separate 150 frames with only orders 1–3 drawn, it identified 150, of which 150 matched exactly three rings. Each entry below gives the percentage of identified fits whose ±1σ interval contained the input parameter.
 
 | Simulated set | Matched rings | Fits | x_c | y_c | L | rot1 | rot2 |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Main | 3 | 7 | 85.7 % | 71.4 % | 42.9 % | 57.1 % | 42.9 % |
-| Only orders 1–3 drawn | 3 | 112 | 74.1 % | 54.5 % | 75.0 % | 52.7 % | 51.8 % |
-| Main | ≥7 | 125 | 52.0 % | 67.2 % | 79.2 % | 56.8 % | 69.6 % |
+| Main | 3 | 6 | 66.7 % | 66.7 % | 83.3 % | 33.3 % | 50.0 % |
+| Main | 4–6 | 138 | 59.4 % | 61.6 % | 56.5 % | 62.3 % | 56.5 % |
+| Main | ≥7 | 156 | 66.0 % | 67.9 % | 62.2 % | 64.1 % | 60.9 % |
+| Only orders 1–3 drawn | 3 | 150 | 61.3 % | 68.7 % | 59.3 % | 64.0 % | 67.3 % |
 
-With at least seven rings, a Student t reference for scatter estimated from n independent rings
-(n − 1 degrees of freedom) gives 65.1 % within ±1σ, averaged over the ring counts in that row.
-Taking the larger of the jackknife and covariance errors raised coverage to 56.8 % for x_c and 57.6 %
-for rot1. Both remained below the reference, so these fits retain the ring jackknife.
+All 150 frames with exactly three orders drawn matched orders 1–3. In the main set some outer arcs occupy
+less detector area than the nominal ring-count class requires, yet still contribute enough sectors to fit.
+The interval from θ − σ to θ + σ has finite-ring sampling variability. With n independent rings a Student
+t reference with n − 1 degrees of freedom gives 57.7 %, 61.9 % and 65.4 % coverage, averaged over the ring
+counts in the 3, 4–6 and ≥7 classes. In the main set the six fits with exactly three matches give little
+precision on coverage. The reported errors also omit systematic shifts shared by all rings.
 The input conditions, fitted values and coverage are recorded in [the calibration benchmark](../tools/benchmarks/README.md#geometry-calibration-against-pyfai-and-the-coverage-of-its-1σ).
 
-Implementation: `src/gimap/features/calibration/domain/engine.py`, `src/gimap/features/calibration/domain/preprocessing.py`, `src/gimap/features/calibration/domain/center_estimator.py`, `src/gimap/features/calibration/domain/radial_profile.py`, `src/gimap/features/calibration/domain/peak_detector.py`, `src/gimap/features/calibration/domain/peak_matcher.py`, `src/gimap/features/calibration/domain/candidate_ranker.py`, `src/gimap/features/calibration/domain/optimizer.py`
+Implementation: `src/gimap/features/calibration/domain/engine.py`, `src/gimap/features/calibration/domain/preprocessing.py`, `src/gimap/features/calibration/domain/center_estimator.py`, `src/gimap/features/calibration/domain/radial_profile.py`, `src/gimap/features/calibration/domain/peak_detector.py`, `src/gimap/features/calibration/domain/peak_matcher.py`, `src/gimap/features/calibration/domain/guided_rings.py`, `src/gimap/features/calibration/domain/candidate_ranker.py`, `src/gimap/features/calibration/domain/optimizer.py`
 
 ### 3.4 Quality measures
 
 GIMaP uses two measures of a calibration.
 
-**Ring residual (the Geometry Calibration window).** *Ring-point RMS* gives the RMS of (3.17) for the final geometry with fixed or fitted tilt. Its tooltip gives the starting geometry on the same points. After fitting tilt, it also gives the RMS for centre and distance refitted at zero tilt on those points. *Ring-radius RMS* is shown when no point fit is recorded. The ring-radius value `rms_residual_px` comes from re-matching (step 7) and determines confidence. `distance_consistency` is the standard deviation divided by the mean of the per-ring distances. `azimuthal_coverage` is the mean coverage of the matched rings. The window shows a confidence:
+For a guided match, the recorded observed radius is r₀ + medianₛ(δₛ r₀/rₛ). Here r₀ = L tan(2θ)/p̄
+is the equivalent radius on a perpendicular detector, rₛ is the mean predicted radius of the rays in
+supporting sector s, and δₛ is the measured radial peak offset sampled in integer pixel steps.
+Thus the record gives one radius per matched order in units of the mean pixel size. The ring-point RMS uses
+individual subpixel centroids on the detector.
+
+**Ring residual (the Geometry Calibration window).** *Ring-point RMS* gives the RMS of (3.17) for the final geometry with fixed or fitted tilt. Its tooltip gives the starting geometry on the same points. After fitting tilt, it also gives the RMS for centre and distance refitted at zero tilt on those points. *Ring-radius RMS* is shown when no point fit is recorded. The ring-radius value `rms_residual_px` is the RMS of observed minus predicted equivalent radii for the final assigned orders. It enters the confidence rating. `distance_consistency` is the standard deviation divided by the mean of the per-ring distances. `azimuthal_coverage` is the mean coverage of the matched rings. The window shows a confidence:
+
+For the confidence thresholds below, RMS is the larger of the ring-radius RMS and the available ring-point RMS.
 
 | Confidence | Condition |
 |---|---|
@@ -613,7 +689,12 @@ GIMaP uses two measures of a calibration.
 | good (no line check possible) | at least 3 rings, RMS ≤ 1.5 px and confidence High or Medium |
 | unreliable (no line check possible) | fewer than 2 rings |
 
-Among the candidates with at least 3 accepted lines, the one with the smallest ε is chosen, even when the engine ranked another first; the record says which rule chose (`chosen_by`).
+When comparing AgBh assignments of a calibration ranked by guided ring evidence, the independently accepted
+q values of the first-ranked AgBh solution form a reference set if at least three are measured. An alternative
+AgBh assignment must measure every line in that set. The engine compares ε on exactly those q values so that
+another harmonic assignment cannot win by fitting a different subset. For other standards, fewer than three
+reference lines or older records, it compares each candidate's ε on its own set of at least three accepted lines.
+The record names the selection rule in `chosen_by`.
 
 "Good" measures agreement with the calibration image. Check the acquisition records to establish that the calibration belongs to the sample data. Section 3.8 compares the GIMaP and pyFAI calibrations of the public AgBh frame.
 
@@ -652,7 +733,7 @@ tilt = arccos(cos rot_1 cos rot_2)                                      (3.13)
 L_poni = L cos rot_1 cos rot_2,   poni_2 = x_c p_2 + L_poni tan rot_1,   poni_1 = y_c p_1 − L_poni tan rot_2 / cos rot_1      (3.16)
 ```
 
-  Reading a written file gives the geometry back to rounding (the q of every pixel to 10⁻¹²). α_i is no part of a `.poni`.
+  Reading a written file gives the geometry back to rounding (the q of every pixel to 10⁻¹²). GIMaP stores ψ and available measurement details in `# GIMaP sample_roll_deg` and `# GIMaP sample_roll_measurement` comments. pyFAI’s detector angles keep their usual values. α_i is no part of a `.poni`.
 
 Examples from the public data: the P08 file gives (545.46, 1826.95) px, `L` = 811.77 mm, tilt 0.31°; the pyFAI AgBh file gives (179.98, 263.86) px, `L` = 1583.31 mm, tilt 0.57° (note); the Xeuss file gives (7.05, 589.49) px, `L` = 147.58 mm, tilt 6.06° (note).
 
@@ -707,7 +788,7 @@ that of its rows upward. Without rotations in orientation 3, (3.15) is `(L, X, Y
 - Profiles saved by GIMaP 0.1 kept the tilt beside a flat geometry (`dropped_tilt`). They are read with the tilt
   in the geometry. Geometry Calibration fits rot1 and rot2 (section 3.8), and the Detector geometry dialog of
   Analyze has fields for rot1, rot2 and rot3 (degrees).
-- **Checking rot3 with a GISAXS frame.** In **Geometry ▸ Check rot3**, pick two distant points on the observed rod. On the plane of incidence the exact condition is `q_y = k right/|t| = 0`. The signed magnitude q∥ includes q_x and can be nonzero along that plane. For the two rays, the tool solves `Δright = 0` as rot3 varies, taking the solution nearest the current angle modulo 180°. Both endpoint q_y values test the beam centre as well. Enter the angle in the geometry dialog. A second pair on the horizon or the same Yoneda band tests Δα_f = 0 using (2.8).
+- **Checking rot3 with a GISAXS frame.** In **Geometry ▸ Check rot3**, pick two distant points on the observed rod. On the plane of incidence the exact condition is `q_y = k X′/|t| = 0`. The signed magnitude q∥ includes q_x and can be nonzero along that plane. For the two rays, the tool holds ψ fixed and solves `ΔX′ = 0` as rot3 varies, taking the solution nearest the current angle modulo 180°. Both endpoint q_y values test the beam centre as well. Enter the angle in the geometry dialog. A second pair on the horizon or the same Yoneda band tests Δα_f = 0 using (2.8).
 - The initial ring search before tilt refinement still assumes a perpendicular detector. A horizontal cut defined by detector rows can also mix exit angles (section 6.7).
 
 Implementation: `src/gimap/shared/geometry/detector_geometry.py` (`in_plane_axes`),
@@ -722,10 +803,12 @@ Analyze uses, so a calibrated geometry and the q of Analyze agree by constructio
 
 **Ring points.** For each matched ring of q_m, the valid pixels within `h = 2 clip(0.012 r, 3, 10)` px (first pass)
 or `clip(0.012 r, 3, 10)` px (later passes) of the ring of the current geometry are split into azimuthal sectors
-about 2 px of arc long (36 to 720 per ring). In a sector every pixel weighs `w = max(0, S − S_25)` (S the
-preprocessed signal, S_25 the sector's lower quartile); the ring point is the weighted mean position (sub-pixel).
-A sector gives a point when its largest w is at least 0.3 times the median of that value over the ring's sectors,
-so sectors the ring does not reach (beam stop, gaps, the shadow of a grazing sample) give none.
+about 2 px of arc long (36 to 720 per ring). Each pixel has weight w = max(0, I − I₂₅), where I is the measured
+detector intensity and I₂₅ is the sector's lower quartile. A sector needs at least three valid pixels,
+including one at an offset ≤ −h + 1 px and one at ≥ h − 1 px in the residual coordinate (3.17). These
+conditions exclude profiles cut short by detector edges and gaps. Among sectors that span both flanks,
+the peak weight must be positive and at least 0.3 of the median peak weight for the ring. Each qualifying
+sector gives one subpixel centroid (Σ w x / Σ w, Σ w y / Σ w).
 
 **Residual and fit.** With `t = (along, right, up)` the laboratory vector of a point (3.15) and
 `tan 2θ_p = √(right² + up²) / along`,
@@ -740,7 +823,10 @@ L by ±25 % within the distance range, rot_1 and rot_2 within ±30°. The points
 the new geometry and the fit repeated, four passes at most (fewer when the centre moves less than 0.01 px and the
 rotations less than 10⁻⁶ rad). On the final set of points the record gives the RMS of the starting geometry (`initial_point_rms_px`) and the fitted geometry (`point_rms_px`). A tilted fit also reports `untilted_point_rms_px` after fitting centre and distance on these points with rot_1 = rot_2 = 0.
 
-**When.** The point fit needs at least 30 points on at least two matched rings. By default **Refine rot1, rot2** frees the tilt with three or more matched rings. With two rings, or with this option cleared, the centre and distance are fitted with fixed tilt.
+**When.** The point fit needs at least 30 accepted centroids on at least two distinct orders. With the
+window's **Refine rot1, rot2** option enabled, tilt is fitted when three or more orders contribute centroids
+after the sector checks. With two contributing orders, or with the option cleared, the centre and distance
+are fitted at fixed tilt. An explicit engine request for `tilt="on"` allows two contributing orders.
 
 In a calibration JSON, `metadata.ring_point_fits` stores the before and after values for each geometry and its matched lines. Headless summaries give both values directly on each solution.
 
@@ -752,8 +838,8 @@ Applying or exporting a manually changed geometry clears the point-fit RMS value
 from an untilted start 3 % off in distance, give rot_1 and rot_2 within 0.012° of the file's. A synthetic LaB₆
 frame (1200 × 1200 px, 172 µm, 12 keV, L = 200 mm, rot_1 = 2.0°, rot_2 = −1.5°) through the whole engine gives
 rot_1 and rot_2 within 0.05° of their input values. On the public AgBh frame at λ = 1.0 Å, GIMaP matches orders 1–5
-and obtains a ring-point RMS of 0.584 px. Its direct beam is (179.796, 264.005) px in the window coordinates,
-0.133 px from the independent pyFAI calibration. The distances to the direct beam are 1633.840 and 1634.053 mm,
+and obtains a ring-point RMS of 0.142 px. Its direct beam is (179.736, 264.012) px in the window coordinates,
+0.193 px from the independent pyFAI calibration. The distances to the direct beam are 1633.473 and 1634.053 mm,
 respectively. For an untilted geometry the tilt fields change no pixel's q (equal to 10⁻¹²).
 
 Implementation: `src/gimap/features/calibration/domain/tilt_fit.py`, `src/gimap/features/calibration/domain/optimizer.py`
@@ -877,7 +963,7 @@ Implementation: `src/gimap/features/analyze/domain/corrections.py`
 
 ### 4.8 Mirror filling (GIWAXS)
 
-Fill gaps from the mirror side (Mask step) is off by default and acts only on GIWAXS frames with a geometry. On a flat detector perpendicular to the beam, the reflection `X → −X` maps `q_y → −q_y` and leaves `q_x`, `q_z`, |q|, α_f and 2θ unchanged; it changes the signs of q_∥ and χ. A pixel without data is given the value at its mirror position about the beam-centre column, in the same row:
+Fill gaps from the mirror side (Mask step) is off by default and acts only on GIWAXS frames with a geometry. At zero roll on a flat detector perpendicular to the beam, the reflection `X → −X` maps `q_y → −q_y` and leaves `q_x`, `q_z`, |q|, α_f and 2θ unchanged; it changes the signs of q_∥ and χ. A pixel without data is given the value at its mirror position about the beam-centre column, in the same row:
 
 ```text
 m_j = 2 x_c − (j + 0.5) − 0.5 = 2 x_c − j − 1        (fractional column index)       (4.8)
@@ -886,7 +972,7 @@ I_fill(i, j) = (1 − w) I(i, j_0) + w I(i, j_0 + 1)                            
 ```
 
 - Only pixels that are invalid at this point are filled: gaps, masks, bad pixels, gap-guard and value-range pixels.
-- For a tilted plane, reflect the laboratory ray `(along, right, up) → (along, −right, up)` and intersect it with that plane. This gives the opposite 2θ_f at the same α_f. Bilinear interpolation uses only originally valid pixels with nonzero weight. For a perpendicular detector in orientation 3 the calculation reduces to (4.8)–(4.10).
+- For a rolled sample or tilted detector, reflect the outgoing ray in the sample plane of incidence. In the transverse coordinates of section 2.1 this changes the sign of X′ and preserves Y′. Intersect the reflected ray with the detector plane to find the opposite 2θ_f at the same α_f. Bilinear interpolation uses only originally valid pixels with nonzero weight. At ψ = 0 on a perpendicular detector in orientation 3 the calculation reduces to (4.8)–(4.10).
 - A partner outside the measured image, or one with a missing interpolation neighbour, leaves the gap empty. The reciprocal-space missing wedge has no measured partner. The record counts filled detector pixels in `pixels_filled_from_mirror`.
 - Mirror filling assumes symmetry in ±q_∥. It reuses measured intensities, so the error model switches to pixel scatter (section 6.4) and the fit input records `counting_model_valid: false`.
 
@@ -1065,21 +1151,29 @@ Implementation: `src/gimap/features/analyze/domain/intensity.py`
 
 ### 5.4 Absorption in the film
 
-A uniform film of thickness d and attenuation length Λ_att = 1/µ is entered with d in nm and Λ_att in µm (from tables such as CXRO or NIST at the beam energy). Scattering from depth z travels `z/sin α_i` in and `z/sin α_f` out:
+For a homogeneous film with optical constants δ and β at wavelength λ, let s = sin α in vacuum and k = 2π/λ. At the vacuum–film interface the transmitted wave has
 
 ```text
-s(α_f) = 1 / sin α_i + 1 / sin α_f                                               (5.6)
-A(α_f) = ∫ from 0 to d of exp(−z s / Λ_att) dz = (Λ_att / s) (1 − exp(−d s / Λ_att))     (5.7)
-F_A = A(α_f) / A(α_i)                                                            (5.8)
+v(α) = √(s² − 2δ + 2iβ),      Im v ≥ 0
+k_z(α) = k v(α),              t(α) = 2s / (s + v)
+g = 2 Im[k_z(α_i) + k_z(α_f)]
+A(α_f,d) = |t_i|² |t_f|² ∫₀ᵈ exp(−gz) dz = |t_i|² |t_f|² [1 − exp(−gd)] / g
+F_film = A(α_f,d) / A(α_i,d)
 ```
 
-- The code evaluates `(1 − exp(−d s/Λ_att))/s`; the constant Λ_att cancels in the ratio.
-- `sin α_f` is the exact value (2.8) for each pixel.
-- Pixels with `sin α_f ≤ 0` (at or below the horizon) have no factor and are left out. The correction needs `α_i > 0`.
-- Limits: for `d ≪ Λ_att`, `F_A → 1`; for `d ≫ Λ_att`, `F_A → s(α_i)/s(α_f)`.
-- Not included: refraction (so the correction is valid only well above the critical angle), the reflected-wave paths of the DWBA, the substrate, and a varying composition with depth.
+The reciprocal exit wave enters with the same decaying root as the incident wave. Below α_c ≈ √(2δ), its imaginary normal wavevector limits the depth contributing to diffraction even for very weak absorption. The model includes transmission at the top surface and omits reflection at the substrate. The depth integral tends to d for gd ≪ 1 and to 1/g for gd ≫ 1. Normalisation to specular exit cancels the incident transmission. The correction divides each pixel by F_film before binning, using its external exit angle (2.8). It requires α_i > 0 and excludes pixels at or below the horizon. Wavelength, depth and wavevectors in these formulas must use consistent length units.
 
-Implementation: `src/gimap/features/analyze/domain/intensity.py`
+**Large-angle limit (Table 2).** When both sin²α ≫ 2δ, 2β, the fields approach unit amplitude and Im k_z ≈ kβ/sin α. With μ = 4πβ/λ and attenuation length Λ_att = 1/μ this gives
+
+```text
+S(α_f) = 1 / sin α_i + 1 / sin α_f                                               (5.6)
+A(α_f,d) ≈ (1 − exp(−μ d S)) / (μ S)                                             (5.7)
+F_A = A(α_f,d) / A(α_i,d)                                                        (5.8)
+```
+
+When only Λ_att is supplied, GIMaP uses (5.6–5.8) directly. F_A tends to 1 in the thin limit and to S(α_i)/S(α_f) in the thick limit. Film thickness is entered in nm and the tabulated attenuation length in µm. [Gasser et al., §§2.5–2.6 and Table 2](https://journals.iucr.org/j/issues/2025/01/00/xx5064/)
+
+Implementation: `src/gimap/features/analyze/domain/refracted_film.py`, `src/gimap/features/analyze/domain/intensity.py`
 
 ### 5.5 Uncertainty of corrected photon counts
 
@@ -1242,7 +1336,7 @@ Implementation: `src/gimap/features/analyze/domain/giwaxs.py`, `src/gimap/featur
 
 **Yoneda band.** The search window runs from the row of `α_f = 1.5°` down to the row of `α_f = −0.2°` (equation (2.14)). The 0.2° below the computed horizon absorbs small errors of α_i or of the beam centre. The columns are two bands of 100 px on both sides of a 31-column strip around the beam column `c_0 = ⌊x_c⌋`, namely `[c_0 − 115, c_0 − 15)` and `[c_0 + 16, c_0 + 116)`. This keeps the direct beam, the specular rod and a rod-shaped beam stop out. The profile is the median of the valid pixels in each row, smoothed with a 3-row moving average that ignores missing rows. The brightest row gives `r_Y = row + 0.5`, and `α_f` follows from (2.14). The window needs at least 3 rows. For the cited phenomenon see Yoneda (1963).
 
-The automatic search and horizontal cut still use pixel rows. A change of more than half a row in the calculated horizon height across the detector triggers a warning because rounding then matters at the scale of a selected row. A horizontal band defined in q selects a constant exit-angle range.
+With nonzero sample roll the Yoneda search follows constant exit angle across the side bands. The horizontal and vertical cut widths define q_z limits on the beam column and q_y limits at the horizon, respectively. The mean and error use the original measured pixels inside these limits. The detector displays the projected bands. The row and column rules below describe ψ = 0, where a horizon-height change of more than half a row across the detector triggers a warning.
 
 **Horizontal cut I(q_y).** The centre `r_c` is the Yoneda row or the row set by hand. If the search finds no band, move 10 rows from the horizon on the beam column towards positive exit angles and clamp to the frame. If that column has no unique horizon crossing, use the middle row and warn.
 
@@ -1618,6 +1712,8 @@ Implementation: `src/gimap/features/assistant/domain/orientation.py`
 
 ### 7.7 Ring orientation and the Hermans orientation factor
 
+With a phase assignment, §7.11 uses the same radial windows, detector errors and folding for the joint crystal orientation fit. When the CIF supplies film optical constants, that fit models refraction and attenuation of both film waves and admits measured pixels down to the horizon of the active q map. An explicit exit-angle or polar-angle limit still applies. The single-ring Hermans and pole-figure procedures below use their original cuts.
+
 **Ring window.** The ring is centred on the fitted q_0 of the nearest radial peak (when one lies within
 `max(2 FWHM, 3 Δq)` of the requested q), with the half width
 
@@ -1752,8 +1848,8 @@ paracrystalline disorder; none of these is subtracted. A size is also marked a l
 No size is given when FWHM is above 0.15 q_0 (a halo: the report gives 2π/FWHM as a correlation length, not a crystal
 size), or when FWHM ≤ FWHM_instr.
 
-Example (invented values): q_0 = 1.50 Å⁻¹, FWHM = 0.030 ± 0.0006 Å⁻¹ give d = 4.189 Å and
-τ ≥ 188.5 ± 3.8 Å, reported as τ ≥ 18.85 nm.
+For example, q_0 = 1.50 Å⁻¹ and FWHM = 0.03000 ± 0.00060 Å⁻¹ give d = 4.19 Å and
+τ ≥ 188.5 ± 3.8 Å. In nm the report gives τ ≥ 18.85 ± 0.38 nm.
 
 Implementation: `src/gimap/features/assistant/domain/size.py`
 
@@ -1761,7 +1857,7 @@ Implementation: `src/gimap/features/assistant/domain/size.py`
 
 For each peak: q_0 ± σ, d ± σ_d, FWHM ± σ, height, local background, area, SNR, χ²_red, flags and caveat, the sector
 preference and ρ_oi, and the size with its lower-bound mark and note. For each ring: the q window, coverage (unweighted
-share of measured 1° bins), C_w, measured f ± σ_f [systematic range], isotropic reference, peak directions, missing and shadowed ranges, fitted f and oriented fraction. The record keeps the background, polarisation, exit threshold, scenario results and fit-quality reasons. Reported f, its statistical error and the systematic limits have three significant digits. The peak table gives q to 4 decimals, d to 3, FWHM to 4, SNR and size to 1, and detector positions to 0.01 px. Search limits, settings and open questions accompany the results.
+share of measured 1° bins), C_w, measured f ± σ_f [systematic range], isotropic reference, peak directions, missing and shadowed ranges, fitted f and oriented fraction. The record keeps the background, polarisation, exit threshold, scenario results and fit-quality reasons. Reports round each positive statistical uncertainty to two significant digits and the estimate to the same decimal place. Decimal ties round to even. The systematic range is shown separately. In compact tables, parentheses give the uncertainty in units of the last displayed digit. Search limits, settings and open questions accompany the results.
 
 - *q*: kinematic, no refraction correction. Near or below the film's critical angle, refraction shifts q_z by up to
   about k sin α_i, and the line gives that number for the frame (`2π/λ · sin α_i`; 0.0119 Å⁻¹ for the public P08
@@ -1772,10 +1868,7 @@ share of measured 1° bins), C_w, measured f ± σ_f [systematic range], isotrop
 
 - *phase assignment* when phases were given, and *pole figure* when rings were analysed (sections 7.10, 7.11).
 
-*Incidence angle* names where α_i came from, in this order: the options, the notes, the value set in Analyze's
-command bar (by hand or by the tool `set_incidence_angle`; Analyze uses it instead of the instrument profile's),
-the instrument profile. A value from the options or the notes that differs from the one set in the command bar
-replaces it there, so the α_i reported is the α_i used. Only when none of them gives α_i is 0° used and asked for. Numbers in the JSON report are rounded to four significant digits; the beam centre keeps full precision.
+*Incidence angle* records the nominal value from the run options, notes, Analyze command bar, a unit-labelled sample incidence in the selected frame header, or instrument profile, in that order. A frame sum uses a header value only when its members agree. The frame measurement in §2.3 supplies a missing nominal angle and replaces a nominal angle that differs by more than three measured standard errors. **Keep entered αi** or `--keep-incidence` retains the nominal angle and still reports the comparison. When both sources are missing, the run uses 0° and asks for αi. The JSON record keeps geometry and peak-fit values to 15 significant digits. The tool-response snapshots use the precision specified in section 14.10.
 
 Implementation: `src/gimap/features/assistant/application/pipeline_rows.py`
 
@@ -1988,6 +2081,68 @@ fraction, a background constant in χ and the sin χ measure on the hemisphere. 
 Implementation: `src/gimap/features/analyze/domain/crystal/pole_figure.py`, `pole_models.py`,
 `src/gimap/features/analyze/application/pole_figure.py`
 
+#### Crystal orientation from assigned rings
+
+All usable rings assigned to a phase constrain its fibre texture. A ring keeps its radial peak window and the local background from §7.7. The fit excludes windows shared by visible phases and assignments with unknown symmetry. In a unit cell without atom sites, each allowed reflection has unit intensity.
+
+An oriented population a has a reciprocal-lattice plane normal **n**ₐ preferentially along the substrate normal, so planes (hkl) lie preferentially parallel to the substrate. Its mosaic FWHM is wₐ and sₐ = wₐ / √(8 ln 2) in radians. For reflection direction **ĝ**, cos ψ₍g,a₎ = |**ĝ**·**n**ₐ|. Averaging over rotation of the crystal about **n**ₐ gives the pole density Gₐ. With absolute population fractions pₐ and isotropic fraction φ,
+
+```text
+Kₐ(γ) = Cₐ {exp[−γ²/(2sₐ²)] + exp[−(π−γ)²/(2sₐ²)]},   ∫₀^{π/2} Kₐ(γ) sin γ dγ = 1
+Gₐ(χ,ψ) = (1/2π) ∫₀^{2π} Kₐ(arccos[cos χ cos ψ + sin χ sin ψ cos α]) dα
+Nᵣₖ = Aᵣ ⟨F_film⟩ᵣₖ ∫bin k sin χ [φ + Σₐ pₐ Σg Wᵣg Gₐ(χ,ψ₍g,a₎)] dχ
+φ + Σₐ pₐ = 1,    Σg Wᵣg = 1
+```
+
+Each ring has its own scale Aᵣ. Every equivalent reflection in its window contributes |F|² (§7.10). An alternative fit estimates nonnegative family weights per ring while preserving calculated ratios within each family. The family curves include their shares of the isotropic signal and sum to the plotted prediction. Even Legendre moments evaluate the spherical average over the 1° bin.
+
+**Film transmission.** Let nⱼ be the occupied number of atoms of element j in the unit cell of volume V. The CIF formula sum multiplied by the number of formula units Z supplies these populations when available. Otherwise the fit expands the occupied sites by symmetry. The record gives the composition used. At the frame wavelength λ, the neutral electron density, film index and reciprocal exit-wave field are
+
+```text
+ρₑ = Σⱼ nⱼ Zⱼ / V,    n = 1 − δ + iβ
+(δ, β) = [rₑ λ² / (2πV)] Σⱼ nⱼ (f₁ⱼ, f₂ⱼ)
+β = μλ/(4π)                                                (μ is the linear absorption coefficient)
+u = sin αf = q cos χ / (2π/λ) − sin αi                    (external q)
+|T_f|² = |2u / [u + √(u² − 2δ + 2iβ)]|²,    u > 0
+```
+
+Zⱼ is the atomic number. The forward factors for H, C, N, O, Na, Si, Ca, I, Au and Pb are interpolated over 4.895–30 keV. When factors are unavailable, δ is estimated from rₑλ²ρₑ/(2π), β is unknown and the fit retains the §7.7 exit cut. With film optics, each signed bin averages the full depth-integrated factor F_film (§5.4) over its measured pixels at their external exit angles, then combines ±χ with the intensity profile's weights. The fit takes the external exit angle from each measured detector ray, including when the q map uses refraction. For display bins without pixels it uses the ray at the centre of the ring window when that ray exists. The fixed q window follows the active geometry. A single interface can enhance scattering near the critical angle. It cannot account for a beamstop, an asymmetric sample shadow, diffuse background varying with χ, or a peak leaving the extraction window. [Henke scattering factors](https://henke.lbl.gov/optical_constants/asf.html) · [Gasser et al., 2025, §2.6](https://doi.org/10.1107/S1600576724010628)
+
+The default orientation model uses the thick-film limit when the thickness is unknown. For a frame corrected with the geometrical absorption factor, the model uses the supplied thickness and divides F_film by the factor already applied to each pixel. A frame corrected with the refracted-wave model needs no further film multiplier. The P08 benchmark also fits one thickness shared by all rings of each phase, including that parameter in BIC and the degrees of freedom. It reports the optical depth τ = μd for a finite thickness. At the thick limit only the angular dependence can be inferred.
+
+The search compares isotropic material with one or two oriented populations. Each has its own width (2°–120°) and axis, including two widths about the same axis. Primitive (hkl) with |h|, |k|, |l| ≤ 2 are grouped by symmetry and inversion. For N measured bins, BIC = χ² + k ln N. With m oriented populations, k includes 2m shared continuous parameters and one scale per ring, or one amplitude per family per ring when its weights are free. A pair must improve on each constituent's single-component BIC. Two distinct axes require noncollinear reflection poles. Against each constituent alone and its supported two-width fit, the two-axis prediction must change at least one measured ring by √(Σₖ(ΔNₖ/σₖ)²) > 1 after refitting scales and weights.
+
+An orientation is **determined** when the joint and every ring’s reduced χ² are ≤ 5, the next candidate is at least 6 BIC units worse, the parameters are identifiable, widths lie away from their bounds and φ is below the isotropic limit. The per-ring degrees of freedom subtract that ring’s share of the weighted Jacobian leverage. The full covariance, scaled by max(1, χ²_red), gives conditional 1σ errors for each width and each absolute fraction including their correlations. These local errors exclude uncertainty in the background, optical constants, phase assignment and model choice. A parameter on a bound can have an asymmetric interval.
+
+The fit checks each population against an isotropic replacement on the measured bins. It refits the remaining populations and ring amplitudes. A BIC increase below 6 gives weak evidence for the extra population. If either of two components can be removed, the comparison retains the better single-component fit (the closer width for a tie). A separate check uses the joint covariance. If pₐ < 3σ(pₐ) and corr(pₐ, φ) < −1/√2, more than half the local variance of pₐ is associated with exchange with random material. For this covariance check to mark a component **near-random**, its replacement must also increase χ² by at most one per measured bin on average. A component with weak BIC support is also pooled. Even when a broad modulation improves the profile fit, its split from random material can be uncertain. The report pools this fraction with φ and omits its axis. The pooled error follows from the covariance of 1 − Σ pₐ over the retained components. The saved record gives the replacement ΔBIC, fraction correlation and original fitted width.
+
+The reported crystal Hermans factor is Σₐ pₐ ∫ Kₐ(γ) P₂(cos γ) sin γ dγ over the hemisphere, with P₂(x) = (3x²−1)/2. The sum includes the resolved populations, and each population’s own axis defines γ. Each ring also reports its model-free f over the measured bins (§7.7). When the fit fails the quality criteria, its axes, widths and fractions are diagnostic estimates.
+
+For the public P08 frame (λ = 0.688801 Å), the MAPbI₃ formula with four units per cell gives ρₑ = 1.0423 e Å⁻³, δ = 2.183 × 10⁻⁶, β = 1.269 × 10⁻⁷ and αc = 0.1197°. Only Pb and I have refined positions in the benchmark CIF. The measured geometry places the sharp attenuation of the 0.9973 Å⁻¹ ring near the film critical angle. At |χ| = 84.5° the prediction changes from 84.4 with geometrical absorption to 24.1 with refracted waves, against 28.2 ± 3.3 measured. The 1.7248 Å⁻¹ ring still exceeds the reduced χ² limit of 5, so this exposure leaves the MAPbI₃ orientation undetermined. [Public-frame benchmark](../tools/benchmarks/README.md#p08-crystal-orientation-at-the-measured-incidence-and-roll)
+
+### 7.12 Unit-cell refinement from indexed peaks
+
+For each visible phase, the observations are fitted radial centres qⱼ in Å⁻¹ with finite positive standard errors σⱼ from §7.4. Each measured peak contributes once. The assignment window is ±max(3σⱼ, FWHM/2). Exclude tentative assignments and windows shared by phases. For two or more families of one phase, retain the family whose summed CIF intensity Σ|F|² (multiplicity × mean |F|²) is at least three times the sum of all competitors. Without atom sites, omit ambiguous peaks. Coincident indices that separate when the free metric changes also remain unused. These weights decide the indices only. Texture can change the relative intensities.
+
+Let A contain the direct lattice vectors as columns, M = (AᵀA)⁻¹ and hⱼ be the column of CIF indices. Fit the independent entries of the reciprocal metric by minimizing
+
+```text
+q̂ⱼ = 2π √(hⱼᵀ M hⱼ) + Δq₀
+χ² = Σⱼ [(qⱼ − q̂ⱼ)/σⱼ]²
+```
+
+The cubic cell has one independent length, tetragonal and hexagonal/trigonal cells have a and c, and orthorhombic cells have a, b and c. A monoclinic cell also has the unique-axis angle (normally β), and a triclinic cell has all three angles. For rhombohedral CIF indices, the reported conventional hexagonal lengths are |bᵣ−aᵣ| and |aᵣ+bᵣ+cᵣ| and the reported volume is 3Vᵣ. The CIF symmetry defines the constraints; for a typed cell with centring alone the reference metric sets them.
+
+An additive q zero shift Δq₀ represents an empirical offset over the measured range. For p independent metric parameters, it is fitted only with at least p+2 usable peaks and an independent shift column in the weighted Jacobian. Otherwise it is fixed at zero. A distance or wavelength scale error can still mimic strain. Insufficient rank in the cell model (for example, only tetragonal 00l peaks) precludes a cell estimate.
+
+**Refraction.** With a supplied film critical angle, use transmitted-channel q for both the incoming and outgoing beam as in §7.10. For a propagating exit ray, q∥ is conserved and qz = k[√(sin²αf − sin²αc) + Re√(sin²αi − sin²αc)]. When the overlay selects a different αc, the frame is binned again on this map and peak positions and errors are fitted again. A full ring has no single exit angle. A curve already reduced with that αc supplies its fitted centres directly. For a supplied 2D spot, the measured direction gives its exit angle. Propagate its radial error at fixed direction as σT = |∂qT/∂qmap| σmap. The model assumes the transmitted branch for these positions. [Jiang, J. Appl. Cryst. 48, 917–926 (2015)](https://journals.iucr.org/j/issues/2015/03/00/rg5085/).
+
+**Errors.** For the weighted Jacobian J and ν = N − number of fitted parameters, C = (JᵀJ)⁻¹ max(1, χ²/ν). At ν = 0 the supplied absolute peak errors determine C and χ²red is undefined. The full covariance propagates to the direct cell and V = |det A|. For a length u, εᵤ = (u − uref)/uref and σ(εᵤ) = σ(u)/uref; the volume change is reported in the same way. Reference values, indices, calibrated geometry and critical angle are held fixed. Residuals are observed minus fitted q in Å⁻¹.
+
+**Directional strain.** For one resolved fibre pole, project each reference reciprocal vector into P perpendicular to the director and Z along it. The directional model fits q̂ = √[(P/(1+ε∥))² + (Z/(1+εz))²] + Δq₀ against independent measured radii with the same weighting and rank rules. A measured spot direction selects its symmetry-equivalent pole. For sector I(q) the angular limits must select a single distinct reference pole angle. The panel uses the non-overlapping in-plane and out-of-plane sectors. This fit conditions on the CIF metric and the fitted fibre axis; allowing both a general cell and two additional strains would count some deformations twice.
+
+**Series.** The selected range and stride refer to individual physical frames. Starting near the indexed frame, track each accepted ring in both directions. The Series centroid initializes a Gaussian on a linear background fitted to native radial intensities with their σ. The search half-width is the larger of 2.5 indexed FWHM and five radial sampling steps, limited by midpoints between neighbouring peaks in the indexed frame. Each frame uses its own fitted qⱼ, σⱼ and covariance. An unresolved or missing peak is left out; an undetermined frame leaves a gap in the plot.
+
 ## 8. GISAXS automatic analysis
 
 For a GISAXS frame the automatic analysis places the horizontal cut at the Yoneda band, moves the beam-centre column
@@ -2169,8 +2324,7 @@ Further rules of the report (`gisaxs_choice.py`):
   than the σ of its points, so none of the compositions tried describes the cut and its R and D are not measurements.
   The limit is that of Fitting's poor fits of a series (χ²_red > 10; User Manual, section 6.5).
 
-Every number of these texts is formatted once from the fit record (R, h, D to 4 decimals of nm), so a value reads the
-same in the table and in *Needs attention* (48.3484 nm is 48.3 nm in both). **Save Fit Table…** writes one line per
+The table and *Needs attention* use the same fit record. Where a 68 % interval is available, its half-width sets the decimal place for R, h and D. **Save Fit Table…** writes one line per
 population of each solution: rank, model, χ²ᵣ (`chi2`; a `#` line gives the fitted points), probability, log RMSE, the parameters (nm; the spreads relative), the
 68 % intervals of R, h and D, `at_bounds` (`name:upper` or `name:lower`) and `chosen`.
 
@@ -4207,6 +4361,12 @@ The sum runs over the `n` columns where both rows have a value (the x range show
 
 ### 11.13 Chained fit of an In-situ series
 
+For the fitted-parameter trend, elapsed time is the detector time of the frame minus the earliest
+detector time among the fitted frames with times. The plot and the exported `elapsed_time_s` column
+use the same origin. A missing acquisition time stays blank. Numeric frame times and calendar
+timestamps are kept separately in the JSON. Refine error bars show the recorded local standard
+errors (§9.8). For Predict, the trend shows the median and central 68% interval when available (§9.13).
+
 When the network and the manual fit use different size laws, weights or resolution, the network supplies a
 starting point for a local fit under the manual settings. The two candidate fits are ranked on the same objective.
 
@@ -4258,7 +4418,7 @@ The Sputter workspace follows an in-situ sputter deposition series. Its **Analyz
 
 **Inputs handed to the package.** The folder of CBF frames; the metal and the substrate; the deposition rate in nm/s, either as the rate at the sample or as the reading of the quartz balance (section 12.2); α_i; the sample–detector distance; the energy or the wavelength; the direct-beam position, entered in GIMaP's pixel coordinates and handed over minus 0.5 px as 0-based pixel centres (section 1.3), or, when it is empty, the request to estimate it from the frames; the sample roll (0° when empty); optionally a detector mask (without one the package uses the pixel mask it was built with), the time of the scan at which the deposition started, its duration, and the thickness of a polymer film. GIMaP changes none of these values. The package keeps an imported scan under a label; GIMaP derives the label from all these inputs, so a changed input is imported anew and never read from an earlier import.
 
-**Network and photon energy.** The package picks its network by metal and substrate. The network for Au and Ag on porous TiO₂ was trained on images simulated at 8–15 keV and α_i 0.25°, 0.40° and 0.55°, with parts of the detector area cut away at random (as by another distance, detector size or beamstop). Its optical constants are the package's values at 12 keV, changed with the energy by the ratio of the tabulated values, δ(E) = δ(12 keV) · δ_tab(E)/δ_tab(12 keV) and the same for β, so at 12 keV they are the earlier ones exactly; the network reads the image on a grid of k_z = k₀ sin α_f with k₀ = 2π/λ and gets k₀ and k₀ sin α_i as inputs. In that range a scan is analysed at its own energy as at 12 keV. The other networks were trained at one wavelength (12 keV; Cu 0.105 nm) and α_i 0.40°; within 5 % of it (Au: 12 keV only) the package uses its own optical constants at the scan's wavelength. Farther away, and on TiO₂ outside 8–15 keV, it computes the optical constants at the scan's energy from its table (4–30 keV) and uses the network's candidates only as starting solutions. Where the package keeps an earlier network of the same kind, it runs both and keeps the one with the lower median fit deviation, but only where both render with the same optical constants (for TiO₂: at 12 keV). GIMaP hands over the energy unchanged and shows which network was used.
+**Network and photon energy.** The package picks its networks by metal and substrate. Each system has a network trained at one wavelength (12 keV; Cu 0.105 nm) and α_i 0.40°, and an any-energy network trained on images simulated at 8–15 keV and α_i 0.25°, 0.40° and 0.55°, with parts of the detector area cut away at random (as by another distance, detector size or beamstop); the any-energy network of the polymers was then fine-tuned on measured scans by rendering its candidates with the differentiable forward model and comparing them with the counts. The any-energy networks use the package's optical constants at E₀ = 12 keV (Cu: 0.105 nm), changed with the energy by the ratio of the tabulated values, δ(E) = δ(E₀) · δ_tab(E)/δ_tab(E₀) and the same for β, so at E₀ they are the earlier ones exactly; they read the image on a grid of k_z = k₀ sin α_f with k₀ = 2π/λ and get k₀ and k₀ sin α_i as inputs. Within 5 % of a one-wavelength network's wavelength (Au: 12 keV only) the package runs that network with its own optical constants, the earlier networks of the same kind and the any-energy network where it renders with the same optical constants (at that wavelength), and keeps the one with the lowest median fit deviation. Elsewhere within 8–15 keV it runs the any-energy network alone at the scan's energy: on simulated scans at 10 and 14 keV its first candidates were closer to the true values than those of the one-wavelength network in each quantity compared (size, spacing, coverage). For Au and Ag on TiO₂ the any-energy network is the primary network everywhere in 8–15 keV, and the earlier 12 keV network runs beside it at 12 keV. Outside 8–15 keV the package computes the optical constants at the scan's energy from its table (4–30 keV) and uses the network's candidates only as starting solutions. GIMaP hands over the energy unchanged and shows which network was used.
 
 **Quantities.** For every time window the package gives several *entries*: up to three candidates of its network, ranked, and, when it refined, the refined solution and the joint fit of the whole scan (every window refined together over the scan, smooth in time; the package then marks it as lying on its smooth evolution). An entry holds the grain radius R, the grain height H, the centre-to-centre distance D, the gap D − 2R, the width σ of the log-normal distribution of the radius, the coverage (0 to 1) and the metal amount (nm), each as the package defines it for the model family of the sample; a quantity a family does not have is absent and is not shown. Every entry of a grain family also holds the thickness t_b of the continuous metal layer under the grains (0 for separate islands; the grains stand on it, their caps H − t_b high, section 12.3); it is shown as a value only when the result lists it among its quantities (a newer package), otherwise it is used for the real-space picture alone. Lengths are in nm, the time t in s from the first frame; the nominal deposit of a window is the package's value. GIMaP shows the values with three significant digits (two for σ and the coverage) and computes none of them.
 
@@ -4921,6 +5081,11 @@ Implementation: `src/gimap/features/xrr/application/export_record.py`, `src/gima
 
 ### 14.7 Checksums
 
+Refitting from an exported single-curve record adds `parent_fit_record` to the new fit JSON.
+It names the original record and the SHA-256 of its bytes at opening. If replay uses a copy of a
+missing input beside the record, `comparison.json` lists its actual path and verified digest in
+`relocated_inputs`.
+
 SHA-256 digests identify files whose content matters:
 
 - SEM: the source image, a label image and a CSV source; every StarDist model file, before and after the run
@@ -5004,7 +5169,7 @@ window's records:
   `not_applied` when the axis was too far to be used). `geometry.critical_angle_deg` is `null` when no critical
   angle was given (q is kinematic). `tables` keeps the tools' answers as the
   AI saw them (four significant digits), except `geometry_used`. Every crystallite size names its unit:
-  `tables.crystallite_sizes[].size_A`, `size_err_A`, `size_nm`, `size_err_nm`, beside `peaks[].size_nm`.
+  `tables.crystallite_sizes[].size_A`, `size_err_A`, `size_nm`, `size_err_nm`, beside `peaks[].size_nm` and `peaks[].size_err_nm`.
 - `report.md` has a section **Record**: the release, each input file with its SHA-256, the calibration file with
   its path and SHA-256, the instrument profile with its source (a profile a tool made from a file names the file's
   full path in brackets), the corrections and the error model. The window's **Save Report…** attaches the same keys
@@ -5028,7 +5193,7 @@ This chapter collects the limits stated in chapters 1 to 14, so that they can be
 ### 15.1 Scattering physics
 
 - **Refraction and the DWBA.** Every q of Analyze, Fitting and 1D Predict is the kinematic vacuum value unless Analyze is given the film's critical angle (q_z of one film, section 2.6), and no reflected-wave terms of the distorted-wave Born approximation are computed (sections 2.5, 8.6, 9.2), except
-Fitting's optional two-path sphere with a free effective reflection coefficient (section 9.10), the four-term DWBA on a known bare or layered substrate for a horizontal cut (section 9.17) and the vertical cut of a fit of several curves (section 9.18); these models assume smooth interfaces. The Yoneda band is located empirically, without any critical angle (sections 6.7, 8.1). The film absorption correction and the q_z of the XRR extractor also ignore refraction (sections 5.4, 13.1). The only refraction-corrected quantity is the Sputter island height H(t), which uses the refracted wavevector transfer for the positions of fringe minima, not a DWBA intensity (section 12.12). The GIWAXS report says that q is kinematic in its *Decisions*, with the q_z shift of up to about k sin α_i that refraction can cause near or below the film's critical angle at the frame's α_i (section 7.9); the GISAXS report says so too, with the Yoneda band's q_z shifted most (section 8.6).
+Fitting's optional two-path sphere with a free effective reflection coefficient (section 9.10), the four-term DWBA on a known bare or layered substrate for a horizontal cut (section 9.17) and the vertical cut of a fit of several curves (section 9.18); these models assume smooth interfaces. The Yoneda band is located empirically, without any critical angle (sections 6.7, 8.1). GIWAXS intensity corrections and orientation fits can use refracted waves in a uniform film (sections 5.4, 7.11). The XRR extractor uses vacuum q_z (section 13.1). The Sputter island height H(t) uses the refracted wavevector transfer for fringe minima (section 12.12). The GIWAXS report says that q is kinematic in its *Decisions*, with the q_z shift of up to about k sin α_i that refraction can cause near or below the film's critical angle at the frame's α_i (section 7.9); the GISAXS report says so too, with the Yoneda band's q_z shifted most (section 8.6).
 - **Absolute intensity.** A secondary standard sets the absolute scale for its measurement conditions (section 4.12). In grazing incidence, footprint, illuminated volume and interface effects require a sample-specific treatment. The scale parameter Int in Fitting is an empirical amplitude because the form factors use P(0) = 1 (section 9.4).
 - **Lorentz weighting.** The optional detector Jacobian applies to integrated crystalline intensities (§5.6).
 - **Texture.** The analysis assumes fibre symmetry. The systematic range tests the angular cuts, background, attenuation and edge fills (§§7.7, 7.11). A population concentrated beyond the measured angles can give f outside these scenarios.
@@ -5039,8 +5204,8 @@ Fitting's optional two-path sphere with a free effective reflection coefficient 
 
 ### 15.2 Instrument and geometry
 
-- **Detector tilt and rotation.** Rings weakly constrain tilt at SAXS distances (1σ of 0.15° for rot1 and 0.19° for rot2 on the public AgBh frame) and leave rot3 undetermined. Check rot3 against the observed GISAXS rod and horizon (section 3.7). The initial ring search uses circles. Automatic row bands warn when the horizon changes by more than half a row across the image. Mirror filling and XRR project rays onto the detector plane (sections 4.8, 13.1).
-- **Sample orientation.** The sample is tilted by α_i about the horizontal axis perpendicular to the beam and by nothing else; a rotation about the surface normal or about the beam is not described in Analyze (section 2.5). Sputter alone hands a sample roll to its analysis package (section 12.1).
+- **Detector tilt and rotation.** Rings weakly constrain tilt at SAXS distances (1σ of 0.15° for rot1 and 0.18° for rot2 on the public AgBh frame) and leave rot3 undetermined. Check rot3 against the observed GISAXS rod and horizon (section 3.7). The initial ring search uses circles. Automatic row bands warn when the horizon changes by more than half a row across the image. Mirror filling and XRR project rays onto the detector plane (sections 4.8, 13.1).
+- **Sample orientation.** A single image measures the sample roll relative to the calibrated detector axes. An error in detector rot3 can mimic sample roll. Fibre symmetry requires measurable texture on both sides of a ring (section 2.3).
 - **Pixels.** A pixel is represented by its centre: there is no parallax, no sensor thickness and no pixel splitting (sections 2.5, 6.1).
 - **Beam.** Divergence, energy bandwidth and footprint are not modelled (section 2.5). The XRR extractor applies no footprint correction (section 13.1).
 - **Calibration.** Wavelength and pixel sizes are inputs. Calibrant constants are fixed without a temperature correction, and ring radii use a 1 px grid. Agreement with the calibration image alone cannot identify the correct calibration for the sample. `.poni` orientations 1–4 are supported (section 3.6).

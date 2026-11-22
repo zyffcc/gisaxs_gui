@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import pytest
 from scipy.optimize import least_squares
 
 from src.gimap.features.calibration.domain.engine import CalibrationEngine
@@ -45,7 +46,8 @@ def test_five_rings_give_a_jackknife_error_that_covers_the_true_centre() -> None
     assert record["uncertainty_method"] == "ring jackknife" and record["distance_sigma_mm"] > 0
 
 
-def test_three_ring_errors_hold_tilt_fixed_in_refits_and_use_the_joint_covariance() -> None:
+@pytest.mark.parametrize("partial", [False, True], ids=["complete-rings", "singular-two-ring-subset"])
+def test_three_ring_errors_follow_identifiability_of_two_ring_subsets(partial: bool) -> None:
     angles = np.linspace(0, 2 * np.pi, 100, endpoint=False)
     qs = np.repeat([0.14, 0.28, 0.42], angles.size)
     radius = np.tan(2 * np.arcsin(qs / (4 * np.pi))) / PIXEL
@@ -53,6 +55,12 @@ def test_three_ring_errors_hold_tilt_fixed_in_refits_and_use_the_joint_covarianc
     radius += np.repeat([-0.4, 0.7, 0.3], angles.size) + np.random.default_rng(17).normal(0, 0.3, qs.size)
     xs = CENTRE[0] + radius * np.tile(np.cos(angles), 3)
     ys = CENTRE[1] + radius * np.tile(np.sin(angles), 3)
+    if partial:
+        # Removing the outer ring leaves only four distinct measured positions for five unknowns.
+        for start in (0, angles.size):
+            which = [start, start + angles.size // 4]
+            xs[start:start + angles.size] = np.tile(xs[which], angles.size // 2)
+            ys[start:start + angles.size] = np.tile(ys[which], angles.size // 2)
     residual = tilt_residual(xs, ys, qs, 1.0, PIXEL, PIXEL)
     params = least_squares(residual, [*CENTRE, DISTANCE, 0.01, -0.02], loss="soft_l1", f_scale=2).x
     candidate = CalibrationCandidate("agbh", *params[:3], matched_ring_count=3, tilt_refined=True,
@@ -62,15 +70,22 @@ def test_three_ring_errors_hold_tilt_fixed_in_refits_and_use_the_joint_covarianc
     replicates = []
     for ring in np.unique(qs):
         keep = qs != ring
-        fixed = tilt_residual(xs[keep], ys[keep], qs[keep], 1.0, PIXEL, PIXEL, fixed_tilt=params[3:])
-        replicates.append(least_squares(fixed, params[:3], loss="soft_l1", f_scale=2).x)
+        fixed = params[3:] if partial else None
+        residual_subset = tilt_residual(xs[keep], ys[keep], qs[keep], 1.0, PIXEL, PIXEL, fixed_tilt=fixed)
+        replicates.append(least_squares(residual_subset, params[:3] if partial else params, loss="soft_l1",
+                                        f_scale=2, x_scale=[1, 1, 1] if partial else [1, 1, 1, .001, .001]).x)
     jackknife = np.sqrt(2 / 3 * np.sum((replicates - np.mean(replicates, axis=0)) ** 2, axis=0))
+    if not partial:
+        assert candidate.uncertainty_method == "ring jackknife"
+        np.testing.assert_allclose([candidate.center_x_sigma_px, candidate.center_y_sigma_px,
+                                    candidate.distance_sigma_mm, candidate.rot1_sigma_deg, candidate.rot2_sigma_deg],
+                                   np.r_[jackknife[:3], np.degrees(jackknife[3:])], rtol=1e-4)
+        return
     steps = np.diag([1e-4, 1e-4, 1e-4, 1e-6, 1e-6])
     jac = np.column_stack([(residual(params + step) - residual(params - step)) / (2 * step.sum())
                            for step in steps])
     variance = np.sum(residual(params) ** 2) / (qs.size - 5)
     ls = np.sqrt(variance * np.diag(np.linalg.inv(jac.T @ jac)))
-    assert np.any(jackknife < ls[:3]) and np.any(jackknife > ls[:3])
     assert candidate.uncertainty_method == "ring jackknife and least squares"
     np.testing.assert_allclose([candidate.center_x_sigma_px, candidate.center_y_sigma_px, candidate.distance_sigma_mm],
                                np.maximum(jackknife, ls[:3]), rtol=1e-4)

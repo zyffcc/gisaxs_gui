@@ -21,6 +21,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from src.gimap.shared.numbers import format_number
+
 from ..domain import AT_EDGE, MAX_PEAKS, caveat, energy_from_notes, incidence_from_notes, pixel_size_from_notes
 from ..domain import reliable as is_reliable
 from ..domain.notes import calibrants_in_notes
@@ -38,6 +40,7 @@ from .pipeline_geometry import GeometryStepsMixin
 from .pipeline_phases import PhaseStepsMixin
 from .pipeline_progress import FrameChanged, PipelineStopped, frame_changed, same_file
 from .pipeline_report import calibration_quality, compact_report
+from .pipeline_roll import choose_frame_angles
 from .pipeline_rows import peak_rows as _peak_rows
 from .pipeline_rows import peak_search as _peak_search
 from .pipeline_rows import ring_row as _ring_row
@@ -160,6 +163,14 @@ class PipelineOptions:
     replace those of Analyze's Phases window, whose phases are used otherwise."""
     orientation_min_exit_deg: Optional[float] = None
     """Override the minimum pixel exit angle for GIWAXS orientation. None keeps the Analyze setting."""
+    sample_roll_deg: Optional[float] = None
+    """An explicit rotation about the incident beam. None allows measurement on this frame."""
+    keep_incidence: bool = False
+    """Keep the nominal αi even when the frame measurement differs by more than 3σ."""
+    yoneda_critical_deg: Optional[float] = None
+    """Known film or substrate critical angle for identifying a GISAXS band, independent of q refraction."""
+    yoneda_material: Optional[str] = None
+    """Material assigned to the GISAXS band when no explicit numeric αc is given."""
     substrate: Optional[dict | str] = None
     """Substrate of this GISAXS sample, as a material key or an optical-constants record at the cut's wavelength."""
 
@@ -172,6 +183,7 @@ class _Run:
     attention: list = field(default_factory=list)
     calibration: Optional[dict] = None
     geometry_source: str = ""
+    strongest_ring_index: Optional[int] = None
     stopped: Optional[str] = None
     """The step that was not started because a stop was requested (``None``: ran to the end)."""
     failed: Optional[str] = None
@@ -198,6 +210,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         self._run = _Run()
         self._energy: Optional[float] = None
         self._incidence: Optional[float] = None
+        self._incidence_source = None
         self._incidence_kept = False  # αi is Analyze's command-bar value: never written into a profile
         self._incidence_suggestion: Optional[float] = None  # the last session's αi, set with another profile
         self._pixel: Optional[float] = None
@@ -348,12 +361,15 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
             self._decide("measurement", f"switched from {kind or 'no reduction'} to {technique.upper()}",
                          SWITCHED if why == DEFAULT else why)
         self._procedure = technique
-        rings = transmission_rings(self.catalog.workbench, status, self._incidence is not None) if (
+        known_incidence = self._incidence is not None or (status.get("header") or {}).get("incidence_deg") is not None
+        rings = transmission_rings(self.catalog.workbench, status, known_incidence) if (
             technique == "gisaxs" and why == DETECTED) else None
         if rings:  # a calibrant in transmission: the cuts are written, no particle model is fitted
             self._transmission_frame = rings
             self._decide(TRANSMISSION_ITEM, TRANSMISSION_DECISION.format(rings=rings), TRANSMISSION_WHY.format(rings=rings))
             self._attention(TRANSMISSION_ITEM, TRANSMISSION_ATTENTION.format(rings=rings), "technique", TRANSMISSION_HINT)
+        elif technique == "giwaxs":
+            choose_frame_angles(self)
         self._analyse_gisaxs() if technique == "gisaxs" else self._analyse()
         self._run.ok = True
         return self._report()
@@ -400,6 +416,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         ):
             if value is not None:
                 self._incidence, self._incidence_kept = float(value), source is None
+                self._incidence_source = source or "Analyze command bar"
                 why = FROM_COMMAND_BAR if source is None else f"from {source}"
                 if source is not None and override is not None and abs(float(override) - self._incidence) > 1e-9:
                     why = REPLACES_COMMAND_BAR[source].format(value=f"{float(override):g}")
@@ -440,7 +457,8 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
 
     def _analyse(self) -> None:
         status = self.catalog.results.status or {}
-        self._run.decisions.append(refraction_decision(status.get("geometry"), given=self._incidence is not None))
+        self._run.decisions.append(refraction_decision(status.get("geometry"), given=self._incidence is not None,
+                                                      incidence_measurement=status.get("incidence_measurement")))
         self._phases_given()
         if self.options.orientation_min_exit_deg is not None:
             self.catalog.results.status = self.catalog.workbench.set_orientation_min_exit(self.options.orientation_min_exit_deg)
@@ -456,16 +474,21 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         if search is None or not search.peaks:
             reason = search.reason if search is not None else "the radial curve could not be searched"
             self._decide("peaks", "none", reason)
+            if search is not None:
+                self._assign(search)
+                self._fit_crystal_orientation()
+                self._refine_cells()
             return
         self._run.decisions.append(uncertainty_decision(status.get("error_model"), corrections=status.get("corrections")))
-        self._assign(search.peaks)
+        self._assign(search)
         self._call("compare_sectors")
         reliable = [peak for peak in search.peaks if is_reliable(peak)]  # no caveat, not cut off at the end of the data
         chosen = sorted(reliable, key=lambda peak: -peak.area)[: max(0, int(self.options.rings))]
-        skipped = [f"{peak.q:.4g} ({(caveat(peak) or AT_EDGE).split(':')[0]})" for peak in search.peaks
-                   if not is_reliable(peak)]
+        skipped = [f"{format_number(p.q, p.q_err, value_only=True)} ({(caveat(p) or AT_EDGE).split(':')[0]})"
+                   for p in search.peaks if not is_reliable(p)]
+        centres_shown = [format_number(p.q, p.q_err, value_only=True) for p in sorted(chosen, key=lambda p: p.q)]
         self._decide(
-            "rings analysed", ", ".join(f"{peak.q:.4g}" for peak in sorted(chosen, key=lambda item: item.q)) or "none",
+            "rings analysed", ", ".join(centres_shown) or "none",
             "the strongest reliable peaks by area" + (f"; not analysed: {', '.join(skipped)}" if skipped else ""),
         )
         centres = [float(peak.q) for peak in chosen]
@@ -475,6 +498,8 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
             self._decide("requested ring", f"q ≈ {asked:g} Å⁻¹", "the person asked for it")
         for q in sorted(centres):
             if self._call("ring_orientation", {"q_center": q}) is not None:
+                if chosen and q == chosen[0].q:
+                    self._run.strongest_ring_index = len(self.catalog.results.rings) - 1
                 self._pole()
             if any(abs(peak.q - q) <= 0.5 * peak.fwhm for peak in reliable):
                 self._call("crystallite_size", {"q_center": q})
@@ -482,6 +507,8 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         for decision in (texture_rule_decision(rings), horizon_decision(rings)):
             if decision is not None:
                 self._run.decisions.append(decision)
+        self._fit_crystal_orientation()
+        self._refine_cells()
 
     # -- report ----------------------------------------------------------------------
 
@@ -492,6 +519,9 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         # The record keeps the geometry as applied (the CSV headers do too): four significant digits can erase a
         # resolved subpixel shift, and 147.6 mm is not the distance q was computed with. report.md rounds for reading.
         geometry = clean(status.get("geometry") or {}, digits=FULL_PRECISION)
+        rings = [_ring_row(ring) for ring in results.rings]
+        if run.strongest_ring_index is not None:
+            rings[run.strongest_ring_index]["strongest_by_area"] = True
         return self._phase_rows({
             "ok": run.ok,
             "stopped": run.stopped,
@@ -502,10 +532,12 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
             "measurement": status.get("measurement"),
             "frames": {"total": status.get("frames"), "first": status.get("frame"), "summed": status.get("summed_frames")},
             "geometry": {"source": run.geometry_source, **geometry},
+            "sample_roll_measurement": status.get("sample_roll_measurement"),
+            "incidence_measurement": status.get("incidence_measurement"),
             "calibration_quality": calibration_quality(run.calibration),
             "peaks": _peak_rows(results),
             "peak_search": _peak_search(results),
-            "rings": [_ring_row(ring) for ring in results.rings],
+            "rings": rings,
             "series_hints": list(getattr(results.peak_searches.get("radial"), "series", ()) or ()),
             "error_model": status.get("error_model"),
             "decisions": run.decisions,

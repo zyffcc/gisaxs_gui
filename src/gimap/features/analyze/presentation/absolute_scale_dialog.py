@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import QApplication, QDialog, QFileDialog
 from src.gimap.app.presentation.i18n import apply_to, current_language, language_changed, tr, trf
 from src.gimap.app.presentation.task_runner import TaskRunner
 from src.gimap.app.presentation.theme import set_role
+from src.gimap.shared.numbers import format_number
 
 from ..application.absolute_scale import StandardRequest, water_intensity
 from .texts import message_text
@@ -203,9 +204,9 @@ class AbsoluteScaleDialog(QDialog, AbsoluteScaleView):
         self.water_level.setText(f"dΣ/dΩ = {water_intensity(self.temperature.value()):.6g} cm⁻¹")
         if self.calibration is not None:
             fit = self.calibration.fit
-            summary = trf("A_abs = {factor:.6g} ± {sigma:.2g} (1σ)\n{points} points from {low:.6g} to {high:.6g} Å⁻¹",
-                          factor=fit.factor, sigma=fit.sigma_factor, points=len(fit.q),
-                          low=fit.q[0], high=fit.q[-1])
+            summary = trf("A_abs = {estimate} (1σ)\n{points} points from {low} to {high} Å⁻¹",
+                          estimate=format_number(fit.factor, fit.sigma_factor), points=len(fit.q),
+                          low=format_number(fit.q[0]), high=format_number(fit.q[-1]))
         self.fit_summary.setText(summary)
 
     def refresh_language(self):
@@ -213,8 +214,10 @@ class AbsoluteScaleDialog(QDialog, AbsoluteScaleView):
         if self.saved_record and self.use_saved:
             record = self.saved_record
             try:
-                summary = trf("Saved A_abs = {factor:.6g} ± {sigma:.2g} · {standard} · {date}",
-                              factor=record["factor"], sigma=record["sigma_factor"], date=record["date_utc"],
+                if not (math.isfinite(record["factor"]) and math.isfinite(record["sigma_factor"])):
+                    raise ValueError("Invalid standard calibration.")
+                summary = trf("Saved A_abs = {estimate} · {standard} · {date}",
+                              estimate=format_number(record["factor"], record["sigma_factor"]), date=record["date_utc"],
                               standard=tr("Water") if record["standard"] == "Water" else record["standard"])
             except (KeyError, TypeError, ValueError):
                 summary = tr("Invalid standard calibration.")

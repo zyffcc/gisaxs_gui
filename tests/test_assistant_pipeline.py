@@ -304,7 +304,7 @@ def test_the_command_line_pipeline_analyses_real_images_end_to_end(tmp_path: Pat
     folder = out / "P3HT_00012"
     for name in ("report.md", "report.json", "radial.csv", "qmap.png"):
         assert (folder / name).is_file(), name
-    assert (out / "summary.md").is_file() and "P3HT_00012.tif | needs input" in (out / "summary.md").read_text(encoding="utf-8")
+    assert "P3HT_00012.tif | completed with checks" in (out / "summary.md").read_text(encoding="utf-8")
 
     # The same tools over MCP stdio, as Codex or Claude Code would call them.
     requests = [

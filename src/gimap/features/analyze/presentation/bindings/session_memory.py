@@ -18,6 +18,7 @@ from typing import Optional
 
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.numbers import applied_angle
 
 from ...application import settings_from_record, settings_record
 
@@ -129,9 +130,12 @@ class SessionMemoryMixin:
             last = replace(last, pin_series_cuts=current.pin_series_cuts)
         if settings_record(last) == settings_record(current):
             return  # nothing would change
-        summary = _setup_summary(last)
+
+        def notice():
+            return trf("Use the set-up of your last session? {summary}", summary=_setup_summary(last))
+
         self._setup_offer = show_toast(
-            self.window(), tr("Use the set-up of your last session? {summary}").format(summary=summary), level="info",
+            self.window(), notice(), refresh=notice, level="info",
             action=(tr("Use It"), lambda: self._read_settings(path)), timeout_ms=15000,
         )
 
@@ -142,6 +146,8 @@ def _setup_summary(settings) -> str:
         parts.append(tr("profile “{name}”").format(name=settings.profile_name))
     if settings.incidence_deg is not None:  # an αi typed for the beamtime, not the profile's
         parts.append(trf("αi {value}°", value=f"{settings.incidence_deg:g}"))
+    if settings.sample_roll_deg is not None:
+        parts.append(f"ψ {applied_angle(settings.sample_roll_deg, settings.sample_roll_measurement)}°")
     regions = len(settings.giwaxs.regions) + len(settings.gisaxs.regions)  # (GIWAXS regions, GISAXS cuts)
     if regions:
         parts.append(tr("{n} cut regions").format(n=regions))

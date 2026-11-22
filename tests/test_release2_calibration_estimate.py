@@ -407,4 +407,6 @@ def test_the_reported_frame_is_solved_on_a_new_installation(window, tmp_path: Pa
     assert abs(best.distance_mm - expected_mm) <= 0.03 * expected_mm
     # The table's first row, in the pixels the window shows (0.5 more than the fit's pixel-centre indices).
     assert abs(best.center_x_px + 0.5 - expected_x) < 5.0 and abs(best.center_y_px + 0.5 - expected_y) < 5.0
-    assert window.candidate_table.item(0, 1).text() == f"{best.distance_mm:.2f} mm"
+    from src.gimap.shared.numbers import format_number
+    distance = format_number(best.distance_mm, best.distance_sigma_mm, value_only=True, digits=6)
+    assert window.candidate_table.item(0, 1).text() == f"{distance} mm"

@@ -77,7 +77,7 @@ interface in them is under the MIT License. The frames, and the images and curve
 licence and attribution of their source above:
 
 - `08_gisaxs_results.png`, `11_fitting_single.png`: the GALAXI frame and its cut (GPL-3.0);
-- `02_analyze_overview.png`, `04_geometry_dialog.png`, `06_cuts_cake.png`,
+- `02_analyze_overview.png`, `04_geometry_dialog.png`, `04a_sample_roll.png`, `06_cuts_cake.png`,
   `07_giwaxs_results.png`, `23_analyze_menu.png`: `S121_MAI_A2_00841.tif` of the pygid usage examples
   (CC BY 4.0; cite as given above; adapted: rendered, masked and integrated by GIMaP);
 - `03_calibration.png`: the pyFAI silver behenate image (licence to be confirmed);

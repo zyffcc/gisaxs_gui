@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.gimap.app.presentation.i18n import tr
+from src.gimap.shared.numbers import format_number
 
 from ..application import (
     FIT_MODEL,
@@ -241,7 +242,8 @@ class BatchModelMixin:
             self._remember_batch_preview(run, peak_preview(outcome, fits, values))
             run.fit_keys = run.fit_keys or [target.key for target, _fit in fits]
             run.last_fit = "; ".join(
-                f"{target.name}: q {fit.center:.4f} Å⁻¹, FWHM {fit.fwhm:.4f}" if fit.ok else f"{target.name}: {fit.message}"
+                f"{target.name}: q {format_number(fit.center, fit.center_err)} Å⁻¹, FWHM {format_number(fit.fwhm, fit.fwhm_err)}"
+                if fit.ok else f"{target.name}: {fit.message}"
                 for target, fit in fits[:3]
             )
             if choices.fit_curves:
@@ -401,6 +403,10 @@ class BatchModelMixin:
             profile_name=name,
             profile=profile,
             incidence_deg=state.incidence_deg,
+            incidence_measurement=state.incidence_measurement, incidence_locked=state.incidence_locked,
+            yoneda_critical_deg=state.yoneda_critical_deg,
+            yoneda_material=state.yoneda_material,
+            sample_roll_deg=state.sample_roll_deg, sample_roll_measurement=state.sample_roll_measurement,
             beam_center=state.beam_center,
             beam_center_shape=self.session_center_shape() if hasattr(self, "session_center_shape") else None,
             sum_count=self.sum_count,
@@ -438,6 +444,11 @@ class BatchModelMixin:
         self.state.mode = settings.mode
         self.state.profile_name = name
         self.state.incidence_deg = settings.incidence_deg
+        self.set_incidence_measurement(settings.incidence_measurement)
+        self.state.incidence_locked = settings.incidence_locked
+        self.state.yoneda_critical_deg = settings.yoneda_critical_deg
+        self.state.yoneda_material = settings.yoneda_material
+        self.set_sample_roll(settings.sample_roll_deg, settings.sample_roll_measurement)
         if settings.beam_center is None:
             self.clear_beam_center()
         else:

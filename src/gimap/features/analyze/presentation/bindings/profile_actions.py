@@ -100,7 +100,8 @@ class ProfileActionsMixin(GeometryEditorMixin, GeometryFilesMixin, FitHandoverMi
                 wavelength_source_name=profile.name if profile is not None else "",
                 center_x=current.beam_center_x_px,
                 center_y=current.beam_center_y_px,
-                incidence_deg=current.incidence_deg,
+                incidence_deg=profile.geometry.incidence_deg if profile else 0.0,
+                sample_roll_deg=current.sample_roll_deg, sample_roll_measurement=analysis.sample_roll_measurement,
                 rot1_deg=math.degrees(current.rot1_rad),
                 rot2_deg=math.degrees(current.rot2_rad),
                 rot3_deg=math.degrees(current.rot3_rad),
@@ -125,7 +126,9 @@ class ProfileActionsMixin(GeometryEditorMixin, GeometryFilesMixin, FitHandoverMi
             dialog.close()
             return
         try:
-            self.view_model.save_profile(dialog.profile_name(), dialog.geometry(), source=dialog.source_text())
+            self.view_model.save_profile(dialog.profile_name(), dialog.geometry(), source=dialog.source_text(),
+                                         sample_roll_measurement=dialog.roll_measurement)
+            self.view_model.set_sample_roll(None)
         except (ValueError, OSError) as exc:
             self._set_geometry_editor_status(dialog, "Could not save the geometry: {error}", "error", error=str(exc))
             return

@@ -6,7 +6,8 @@ import math
 
 import numpy as np
 
-from .models import CalibrationCandidate
+from .guided_rings import N_SECTORS, RingEvidence
+from .models import CalibrationCandidate, CalibrationStandard
 
 RING_PROMINENCE_FULL = 0.1
 """Prominence of a matched ring (in the log1p-scaled radial profile: about its relative contrast, 0.1 = 10 %) from
@@ -92,17 +93,19 @@ def score_candidate(candidate: CalibrationCandidate, estimated_distance_mm: floa
         # near a large beamstop; missing several observable inner orders is not.
         - (min(lowest_order, 5) * 32.0 if harmonic_standard else 0.0)
     )
-    if rings >= 4 and candidate.rms_residual_px <= 2.0 and candidate.azimuthal_coverage >= 0.18:
+    # Median offsets of opposing arcs can cancel even when individual points miss the fitted cone.
+    rms = max(candidate.rms_residual_px, candidate.point_rms_px or 0.0)
+    if rings >= 4 and rms <= 2.0 and candidate.azimuthal_coverage >= 0.18:
         candidate.confidence = "High"
     elif (
-        rings >= 2 and candidate.rms_residual_px <= 6.0
+        rings >= 2 and rms <= 6.0
         or rings >= 4
         and candidate.center_support >= 0.8
-        and candidate.rms_residual_px <= 8.0
+        and rms <= 8.0
         and candidate.azimuthal_coverage >= 0.05
         or rings >= 5
         and candidate.center_support >= 0.8
-        and candidate.rms_residual_px <= 10.0
+        and rms <= 10.0
         and candidate.azimuthal_coverage >= 0.015
     ):
         candidate.confidence = "Medium"
@@ -141,3 +144,55 @@ def rank_candidates(candidates: list[CalibrationCandidate], estimated_distance_m
         if len(unique) >= limit:
             break
     return unique
+
+
+def score_ring_evidence(candidate: CalibrationCandidate, evidence: list[RingEvidence], standard: CalibrationStandard,
+                        estimated_distance_mm: float | None = None) -> float:
+    """Rank the fitted geometry in units of a confirmed ring.
+
+    A confirmed order contributes 1/2 plus half its supporting fraction of observable sectors.
+    Missing reflections cost half their observable fraction. An unexplained strong peak in the
+    independent radial scan costs one ring. The point-fit penalty is log(1 + RMS²) in pixel units.
+    Distance and tabulated intensity order break close ties.
+    """
+    observable = [item for item in evidence if item.observable_sectors >= 4]
+    confirmed = [item for item in observable if item.match is not None]
+    supported = sum(0.5 + 0.5 * item.supporting_sectors / item.observable_sectors for item in confirmed)
+    missing = sum(item.observable_sectors / N_SECTORS for item in observable if item.match is None)
+    tested_orders = {item.theoretical_index for item in observable}
+    # Radial matches with no guided test, including separately resolved close reflections.
+    untested = [ring for ring in candidate.matched_rings if ring.theoretical_index not in tested_orders]
+    supported += 0.5 * sum(ring_weight(ring.prominence) for ring in untested)
+
+    # The independent profile is circular and may precede the final centre refinement.
+    # Its peak can move by at most the centre displacement in addition to the radial match tolerance.
+    old_center = getattr(candidate, "radial_profile_center", (candidate.center_x_px, candidate.center_y_px))
+    center_shift = math.hypot(old_center[0] - candidate.center_x_px, old_center[1] - candidate.center_y_px)
+    intervals = [span for item in confirmed for span in item.detector_radius_ranges_px]
+    intervals.extend((ring.observed_radius_px, ring.observed_radius_px) for ring in untested)
+    unexplained = 0
+    for radius in getattr(candidate, "strong_peak_radii", ()):
+        tolerance = center_shift + max(3.0, 0.018 * radius)
+        if all(radius < low - tolerance or radius > high + tolerance for low, high in intervals):
+            unexplained += 1
+
+    # Pairwise concordance, bounded in [-1,1]. Sample texture and absorption can reverse the intensity order.
+    ordering = []
+    if standard.relative_intensities:
+        for i, outer in enumerate(confirmed):
+            for inner in confirmed[:i]:
+                expected = (standard.relative_intensities[inner.theoretical_index]
+                            - standard.relative_intensities[outer.theoretical_index])
+                observed = inner.match.prominence - outer.match.prominence
+                ordering.append(float(np.sign(expected * observed)))
+    intensity_prior = float(np.mean(ordering)) if ordering else 0.0
+    distance_prior = 0.0
+    if estimated_distance_mm and estimated_distance_mm > 0:
+        relative = (candidate.distance_mm - estimated_distance_mm) / estimated_distance_mm
+        distance_prior = math.exp(-0.5 * (relative / 0.20) ** 2)
+
+    # A one-ring geometry has no independent point fit and a zero radial assignment residual by construction.
+    rms = candidate.point_rms_px if candidate.point_rms_px is not None else 2.0
+    candidate.score = (supported - 0.5 * missing - unexplained - math.log1p(rms**2)
+                       + 0.2 * distance_prior + 0.1 * intensity_prior)
+    return candidate.score

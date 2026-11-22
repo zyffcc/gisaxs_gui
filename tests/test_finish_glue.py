@@ -122,9 +122,11 @@ def test_series_handover_reports_the_receivers_outcome(tmp_path, monkeypatch, ac
 
 
 def test_cancelling_series_handover_keeps_unsaved_results_and_says_where_the_exports_are(tmp_path, monkeypatch):
-    from tests.test_handover import _fit_input, _settle, _window
-    from tests.test_fit_series import _loaded
     from src.gimap.app.presentation.components import visible_toasts
+    from src.gimap.features.fitting.application.series_fit import FrameFit
+    from tests.test_fit_series import _loaded
+    from tests.test_handover import _fit_input, _settle, _window
+    from tests.test_workflow_fit_cancellation import _completed_result
 
     window = _window()
     try:
@@ -136,7 +138,7 @@ def test_cancelling_series_handover_keeps_unsaved_results_and_says_where_the_exp
                 _fit_input(folder / f"cut_{frame:04d}_fit_input.dat")
         assert page.open_series(old)
         _loaded(page)
-        retained = {0: SimpleNamespace(fitted=True, ok=True)}
+        retained = {0: FrameFit(0, page.paths[0], _completed_result())}
         page.fits, page._unsaved = retained, True
         monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *_args: QMessageBox.Cancel))
         components.show_page("analyze")

@@ -29,6 +29,8 @@ def test_nexus_substrate_of_current_entry_reaches_fitter(tmp_path, optical, film
     path = tmp_path / "public_model.nxs"
     with h5py.File(path, "w") as file:
         file["entry/sample/substrate/material"] = "Au"
+        file["scan/sample/incident_angle"] = [.22, .36]
+        file["scan/sample/incident_angle"].attrs["units"] = "degrees"
         if optical:
             file["scan/sample/substrate/delta"] = 3.5e-6
             file["scan/sample/substrate/beta"] = 1e-8
@@ -42,6 +44,7 @@ def test_nexus_substrate_of_current_entry_reaches_fitter(tmp_path, optical, film
             file["scan/sample/substrate/top_layer/delta"] = 1.2e-6
             file["scan/sample/substrate/top_layer/beta"] = [1.e-9, 1.1e-9]
         header = header_values(extract_nexus_metadata(file, entry="/scan", frame=1))
+    assert header["incidence_deg"] == .36
 
     def fitter(x, y, sigma, **kwargs):
         assert kwargs["grazing"] == pytest.approx(dict(wavelength=.118, alpha_i=.3, alpha_f=.15))
@@ -155,6 +158,7 @@ def test_session_override_reaches_standard_pipeline_and_report():
         session.close()
     fit = report["gisaxs"]["fit"]
     assert fit["substrate_level"] == 4 and fit["substrate"] == substrate
+    assert fit["grazing"]["alpha_i"] == pytest.approx(report["geometry"]["incidence_deg"], rel=5e-15)
     assert any(item["why"] == "four-term DWBA on film on Si" for item in report["decisions"])
 
 

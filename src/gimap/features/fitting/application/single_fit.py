@@ -21,6 +21,7 @@ from typing import Mapping, Optional
 import numpy as np
 
 from .models import InSituSourceFrame
+from src.gimap.shared.numbers import format_number
 from src.gimap.shared.signed_cut import MISSING_HALF, MissingHalf, local_steps, mean_of_halves
 from src.gimap.shared.version import SOFTWARE
 
@@ -146,7 +147,8 @@ class Curve:
 
     @classmethod
     def from_arrays(cls, q, intensity, sigma=None, *, name: str, path: str = "", unit: str = "angstrom",
-                    unit_from: str = "", rows_left_out: int = 0, columns: Optional[dict] = None, dq=None) -> "Curve":
+                    unit_from: str = "", rows_left_out: int = 0, columns: Optional[dict] = None, dq=None,
+                    verified_sha256=None) -> "Curve":
         factor = NM_PER_A if unit == "angstrom" else 1.0
         q = np.asarray(q, dtype=float).reshape(-1) * factor
         intensity = np.asarray(intensity, dtype=float).reshape(-1)
@@ -163,7 +165,7 @@ class Curve:
 
         return cls(q[keep], intensity[keep], None if sigma is None else sigma[keep], name, path, unit, unit_from,
                    int(rows_left_out) + int(q.size - np.count_nonzero(keep)), columns, dq,
-                   source=source_record(path) if path else None)
+                   source=source_record(path, verified_sha256=verified_sha256) if path else None)
 
 
 def _half(curve: Curve, positive: bool):
@@ -435,11 +437,7 @@ def tail_for_curve(model: FitModel, data: FitData, *, start: bool = False) -> Fi
 def parameter_text(key: str, value: float, error: Optional[float] = None) -> str:
     """``value ± error unit`` with the error's significant digits deciding the value's."""
     unit = INFO[key].unit
-    if error is None or not math.isfinite(error) or error <= 0:
-        text = f"{value:.4g}"
-    else:
-        digits = max(0, 1 - int(math.floor(math.log10(error)))) if error < 10 else 0
-        text = f"{value:.{digits}f} ± {error:.{digits}f}" if digits < 8 else f"{value:.3g} ± {error:.2g}"
+    text = format_number(value, error)
     return f"{text} {unit}".strip()
 
 

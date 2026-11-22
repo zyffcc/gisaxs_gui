@@ -76,6 +76,30 @@ def test_the_residual_of_an_untilted_detector_is_the_circle_fit() -> None:
     assert np.allclose(flat, tilted, rtol=0, atol=1e-9)
 
 
+def test_one_sided_masked_peaks_do_not_supply_tilt_centroids():
+    from src.gimap.features.calibration.domain.models import MatchedRing
+    from src.gimap.features.calibration.domain.preprocessing import AnalysisImage
+    from src.gimap.features.calibration.domain.tilt_fit import tilted_ring_points
+
+    cx, cy, distance_mm, pixel_m, radius = 120.0, 116.0, 150.0, 172e-6, 70.0
+    rows, columns = np.indices((250, 250))
+    offset = np.hypot(columns - cx, rows - cy) - radius
+    angle = np.arctan2(cy - rows, columns - cx)
+    counts = 12.0 + 200.0 * np.exp(-0.5 * offset**2)
+    valid = ~((np.abs(angle) < 0.3) & (offset > 0.3))
+    analysis = AnalysisImage(counts, valid, valid.mean())
+    two_theta = np.arctan(radius * pixel_m / (distance_mm * 1e-3))
+    q = 4 * np.pi * np.sin(two_theta / 2)  # wavelength 1 Å
+    candidate = CalibrationCandidate("agbh", cx, cy, distance_mm,
+                                     matched_rings=[MatchedRing(0, q, radius, radius, 0.0)])
+
+    xs, ys, _ = tilted_ring_points(analysis, candidate, (cx, cy, distance_mm), 1.0, pixel_m, pixel_m)
+    measured_angles = np.abs(np.arctan2(cy - ys, xs - cx))
+    assert xs.size > 100
+    assert np.all(measured_angles > 0.25)
+    assert np.any(measured_angles < 0.4)
+
+
 def _tilted_lab6(rot1_deg: float, rot2_deg: float):
     energy, distance_mm, pixel, shape, centre = 12.0, 200.0, 172e-6, (1200, 1200), (590.3, 610.7)
     geometry = DetectorGeometry(pixel, pixel, distance_mm * 1e-3, centre[0], centre[1], energy_to_wavelength(energy),
@@ -185,6 +209,40 @@ def test_rms_before_and_after_use_the_points_of_the_last_pass(monkeypatch):
     assert candidate.point_rms_px < 1e-7 and candidate.untilted_point_rms_px < 1e-7
 
 
+@pytest.mark.parametrize("mode,refined", [("auto", False), ("on", True)])
+def test_only_rings_with_points_in_the_final_pass_constrain_tilt(monkeypatch, mode, refined):
+    from types import SimpleNamespace
+    from src.gimap.features.calibration.domain import tilt_fit
+    from src.gimap.features.calibration.domain.optimizer import estimate_uncertainty
+
+    angles = np.tile(np.linspace(0, 2 * np.pi, 90, endpoint=False), 3)
+    qs = np.repeat([0.11, 0.22, 0.33], 90)
+    radii = np.tan(2 * np.arcsin(qs / (4 * np.pi))) / 172e-6
+    xs, ys = 150 + radii * np.cos(angles), 110 + radii * np.sin(angles)
+    # The third band has usable points in the broad initial extraction only.
+    def sample(*args, widen):
+        keep = (qs < 0.33) | (widen > 1.0)
+        return xs[keep], ys[keep], qs[keep]
+
+    monkeypatch.setattr(tilt_fit, "tilted_ring_points", sample)
+    candidate = CalibrationCandidate("agbh", 155, 110, 1000, matched_ring_count=3, tilt_refined=True,
+                                     rot1_deg=0.5, rot2_deg=1.0, rot1_sigma_deg=3.0, rot2_sigma_deg=4.0,
+                                     untilted_point_rms_px=7, warnings=[tilt_fit.NOT_REFINED_FEW_RINGS])
+    points = tilt_fit.refine_ring_geometry(SimpleNamespace(signal=np.empty((1, 1))), candidate,
+                                           1, 172e-6, 172e-6, tilt=mode)
+    assert np.unique(points[2]).size == 2
+    assert candidate.tilt_refined is refined
+    assert candidate.rot1_sigma_deg is None and candidate.rot2_sigma_deg is None
+    assert (candidate.untilted_point_rms_px is not None) is refined
+    assert (tilt_fit.NOT_REFINED_CONTRIBUTING_RINGS in candidate.warnings) is (not refined)
+    assert tilt_fit.NOT_REFINED_FEW_RINGS not in candidate.warnings
+    estimate_uncertainty(points, candidate, 1, 172e-6, 172e-6)
+    assert candidate.distance_sigma_mm is not None and candidate.uncertainty_method == "least squares"
+    assert (candidate.rot1_sigma_deg is not None and candidate.rot2_sigma_deg is not None) is refined
+    if not refined:
+        assert (candidate.rot1_deg, candidate.rot2_deg) == (0, 0)
+
+
 @pytest.mark.skipif(not AGBH_FRAME.exists(), reason="public test data")
 def test_the_public_agbh_frame_is_fitted_better_with_the_tilt() -> None:
     from src.gimap.features.calibration.application import LoadCalibrationImage
@@ -234,12 +292,12 @@ def test_the_window_shows_one_rms_residual_and_says_which_it_is() -> None:
 
     tilted = CalibrationCandidate("agbh", 179.3, 263.5, 1634.0, rms_residual_px=1.056, tilt_refined=True,
                                   point_rms_px=0.45, untilted_point_rms_px=0.46, initial_point_rms_px=1.80)
-    assert (rms_title(tilted), rms_text(tilted), rms_text(tilted, 2)) == ("Ring-point RMS:", "0.450 px", "0.45 px")
-    assert "Before refinement" in rms_tip(tilted) and "1.800 px" in rms_tip(tilted)
-    assert "same points with zero tilt gives 0.460 px" in rms_tip(tilted)
+    assert (rms_title(tilted), rms_text(tilted)) == ("Ring-point RMS:", "0.45 px")
+    assert "Before refinement" in rms_tip(tilted) and "1.8 px" in rms_tip(tilted)
+    assert "same points with zero tilt gives 0.46 px" in rms_tip(tilted)
     current = CalibrationCandidate("agbh", 179.4, 263.6, 1634.5, point_rms_px=0.47, initial_point_rms_px=1.84)
-    assert (rms_title(current), rms_text(current)) == ("Ring-point RMS:", "0.470 px")
-    assert "1.840 px" in rms_tip(current) and "zero tilt" not in rms_tip(current)
+    assert (rms_title(current), rms_text(current)) == ("Ring-point RMS:", "0.47 px")
+    assert "1.84 px" in rms_tip(current) and "zero tilt" not in rms_tip(current)
     flat = CalibrationCandidate("agbh", 179.3, 263.5, 1634.0, rms_residual_px=1.056)
-    assert (rms_title(flat), rms_text(flat)) == ("Ring-radius RMS:", "1.056 px")
+    assert (rms_title(flat), rms_text(flat)) == ("Ring-radius RMS:", "1.06 px")
     assert "azimuthal average" in rms_tip(flat)

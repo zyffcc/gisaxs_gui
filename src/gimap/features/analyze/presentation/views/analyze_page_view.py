@@ -260,6 +260,10 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         row.addWidget(self.file_meta, 1)
         row.addWidget(self.mode_combo)
         row.addWidget(self.incidence_spin)
+        self.roll_step_button = QToolButton(bar)
+        self.roll_step_button.setText("ψ 0°")
+        self.roll_step_button.setToolTip("Sample roll ψ")
+        row.addWidget(self.roll_step_button)
         actions_separator = _separator(bar)
         actions = (self.run_pipeline_button, self.stop_pipeline_button, self.assistant_button, self.export_button,
                    self.batch_export_button, self.fit_button)
@@ -267,7 +271,8 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
             row.addWidget(widget)
         bar.set_rows(row, second, actions=actions, separator=actions_separator, filler=self.file_chip)
         bar.set_compact_parts(
-            hidden=(self.previous_file_button, self.next_file_button, self.file_position_label, self.file_meta),
+            hidden=(self.previous_file_button, self.next_file_button, self.file_position_label, self.file_meta,
+                    self.roll_step_button),
             texts=((self.run_pipeline_button, "Run Automatic Analysis", "Run Analysis"),
                    (self.batch_export_button, "Batch Export…", "Batch…"),
                    (self.fit_button, "Send to Fitting", "Fitting")),

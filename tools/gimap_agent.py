@@ -131,6 +131,9 @@ def command_auto(arguments) -> int:
     options = PipelineOptions(
         calibration=arguments.calibration, standard=arguments.standard, energy_kev=arguments.energy_kev,
         incidence_deg=arguments.incidence_deg, critical_angle_deg=arguments.critical_angle_deg,
+        sample_roll_deg=arguments.sample_roll_deg, keep_incidence=arguments.keep_incidence,
+        yoneda_critical_deg=arguments.yoneda_critical_deg,
+        yoneda_material=arguments.yoneda_material,
         orientation_min_exit_deg=arguments.orientation_min_exit_deg,
         pixel_size_um=arguments.pixel_size_um, frame=arguments.frame,
         sum_frames=arguments.sum,
@@ -178,6 +181,12 @@ def check_arguments(arguments) -> None:
             f"--incidence-deg {incidence:g}: the incidence angle must be above 0° and below 90° "
             "(grazing incidence is typically 0.1–0.5°). Leave the option out when αi is not known.")
     minimum_exit = arguments.orientation_min_exit_deg
+    band_critical = arguments.yoneda_critical_deg
+    if band_critical is not None and not 0 < band_critical < 90:
+        raise ArgumentProblem("--yoneda-critical-deg must be above 0° and below 90°.")
+    roll = getattr(arguments, "sample_roll_deg", None)
+    if roll is not None and not -180 <= roll <= 180:
+        raise ArgumentProblem("--sample-roll-deg must be between −180° and 180°.")
     if minimum_exit is not None and not 0 <= minimum_exit <= 90:
         raise ArgumentProblem("--orientation-min-exit-deg must be between 0° and 90°.")
     critical = arguments.critical_angle_deg
@@ -319,6 +328,14 @@ def parser() -> argparse.ArgumentParser:
     auto.add_argument("--incidence-deg", type=float, help="incidence angle αi in degrees, above 0 and below 90 (beats the notes and the profile)")
     auto.add_argument("--substrate", choices=("Si", "SiO2", "glass", "Au"),
                       help="known GISAXS substrate for the four-term DWBA fit at the Yoneda band")
+    auto.add_argument("--keep-incidence", action="store_true",
+                      help="keep the nominal αi even if the frame measurement differs by more than 3σ")
+    yoneda = auto.add_mutually_exclusive_group()
+    yoneda.add_argument("--yoneda-critical-deg", type=float,
+                      help="known critical angle of the material giving the GISAXS Yoneda band (degrees)")
+    yoneda.add_argument("--yoneda-material", choices=("Si", "SiO2", "glass", "Au"),
+                        help="material assigned to the GISAXS Yoneda band; calculate αc at the calibrated wavelength")
+    auto.add_argument("--sample-roll-deg", type=float, help="sample normal roll ψ about the beam in degrees (overrides frame measurement)")
     auto.add_argument("--orientation-min-exit-deg", type=float,
                       help="Minimum pixel exit angle for GIWAXS ring orientation (default: twice αc or twice αi).")
     auto.add_argument("--critical-angle-deg", type=float,

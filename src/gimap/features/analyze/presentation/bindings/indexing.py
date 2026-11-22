@@ -12,7 +12,7 @@ import numpy as np
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application import GISAXS, X_AXIS_TWO_THETA, two_theta_deg
+from ...application import GISAXS, TRANSMISSION, X_AXIS_TWO_THETA, two_theta_deg
 from ..indexing_model import IndexingModel
 from ..reflection_layer import ReflectionLayer, Spots, marker_size
 from ..views.indexing_view import make_phases_button
@@ -106,6 +106,8 @@ class IndexingMixin:
         analysis = self.view_model.state.analysis
         if analysis is None or analysis.reduction is None or analysis.reduction.kind == GISAXS:
             return None
+        if analysis.reduction.kind == TRANSMISSION and analysis.geometry is not None:
+            return analysis.geometry.with_sample_roll(0.0)
         return analysis.geometry
 
     def indexing_overlays(self):

@@ -125,6 +125,8 @@ class FrameFit:
     predict_attempts: tuple[PredictAttempt, ...] = ()
     """Every Predict restart of this frame, including the ones superseded by another fit."""
     reproduction: Optional[dict] = None
+    acquisition: Optional[dict] = None
+    """Detector time fields from the curve used for this fit."""
 
     @property
     def ok(self) -> bool:
@@ -381,8 +383,12 @@ def series_table(frames: list[FrameFit], model: FitModel, *, details: bool = Fal
     (and from which frame's result), why the chain broke there, how Predict's solution was chosen and the pass that
     gave it."""
     columns = parameter_columns(model)
+    from .series_chain import elapsed_times
+    elapsed = elapsed_times(frames) if details else {}
     with_sources = details and any(InSituSourceFrame.from_token(frame.path).columns is not None for frame in frames)
     header = ["frame", "file", "chi2_reduced", "log_rmse", "converged"] + (list(MADE_OF_COLUMNS) if details else [])
+    if elapsed:
+        header.append("elapsed_time_s")
     if with_sources:
         header += ["source_file", "q_column_1based", "intensity_column_1based", "sigma_column_1based", "sigma_source"]
     for _path, name in columns:
@@ -402,6 +408,8 @@ def series_table(frames: list[FrameFit], model: FitModel, *, details: bool = Fal
             tail = decision_cells(frame) + tail
         row = [frame.index + 1, file_name(frame.path, folder)]
         made_of = [frame.points, frame.halves_used] if details else []
+        if elapsed:
+            made_of.append(elapsed.get(frame.index, ""))
         if with_sources:
             source = InSituSourceFrame.from_token(frame.path)
             mapping = source.columns
@@ -433,8 +441,10 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
     ``listing``: which curves of the folder were fitted (first, last, every n-th, the frames left out …),
     written as it is given. Files are named as in the table (``file_name``)."""
     from .series_policy import frame_decisions, series_policy
+    from .series_chain import elapsed_times
 
     ordered = sorted(frames, key=lambda item: item.index)
+    elapsed = elapsed_times(ordered)
     failed = [{"frame": frame.index + 1, "file": file_name(frame.path, folder), "why": frame.error}
               for frame in ordered if not frame.ok]
     record = {
@@ -456,6 +466,8 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
                        "reason": frame.reason, "points": frame.points, "halves_used": frame.halves_used,
                        "averaged": frame.averaged, "left_out": frame.left_out,
                        "q_unit": frame.q_unit, "q_unit_from": frame.q_unit_from,
+                       **({"acquisition": frame.acquisition} if frame.acquisition else {}),
+                       **({"elapsed_time_s": elapsed[frame.index]} if frame.index in elapsed else {}),
                        **frame_decisions(frame),
                        **{key: value for key, value in (("start_from", frame.start_from),
                                                         ("start_frame", frame.start_frame), ("chain_break", frame.chain),

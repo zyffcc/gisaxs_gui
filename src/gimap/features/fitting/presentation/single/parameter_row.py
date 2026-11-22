@@ -25,9 +25,10 @@ from PyQt5.QtWidgets import (
 
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import set_role
+from src.gimap.shared.numbers import format_number
 
 from ...application.fit_uncertainty import parameter_name
-from ...application.single_fit import INFO, LINEAR, parameter_info, parameter_text
+from ...application.single_fit import LINEAR, parameter_info, parameter_text
 from ..layout_primitives import ScientificDoubleSpinBox
 
 VALUE_LIMIT = 1e15
@@ -220,10 +221,8 @@ class ParameterRow:
             self.error.setToolTip(tr("The fit stopped at a bound of the range: widen the range or fix this value"))
         elif error is not None:
             shown = parameter_text(self.path[1], parameter.value, error)
-            unit = INFO[self.path[1]].unit
-            plus = shown.split("± ", 1)[-1]
-            plus = plus[: -len(unit)].strip() if unit and plus.endswith(unit) else plus
-            self.error.setText("± —" if not math.isfinite(error) else "± " + plus)
+            plus = format_number(error, error, value_only=True) if error >= 0 else "—"
+            self.error.setText("± " + plus)
             self.error.setToolTip(tr("1σ error of the last fit") + f": {shown}")
         else:
             self.error.setText("")

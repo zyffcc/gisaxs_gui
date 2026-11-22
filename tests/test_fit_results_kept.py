@@ -57,7 +57,8 @@ def test_predict_solutions_have_their_interval_as_plus_minus_and_distinct_names(
     page = _predicted(tmp_path)
     try:
         value, plus, tip = _cells(page, "R")
-        assert plus == "± 0.25" and "half the width of the 68 % posterior interval [5.8, 6.3]" in tip
+        assert value == "6.00 nm" and plus == "± 0.25"
+        assert "half the width of the 68 % posterior interval [5.80, 6.30]" in tip
         assert _cells(page, "Scale")[1] == "–" and "solves the scales" in _cells(page, "Scale")[2]
         texts = [page.solution_selector.itemText(index) for index in range(page.solution_selector.count())]
         assert texts[0].startswith("1: Sphere #1 · χ²ᵣ") and "p 0.60" in texts[0] and "at bound: Tail ν" in texts[0]

@@ -112,8 +112,9 @@ def test_the_window_attaches_the_record_and_the_page_names_the_release(tmp_path:
 def test_the_peak_table_gives_the_errors_and_says_how_many_peaks_passed(tmp_path: Path) -> None:
     text = pipeline_markdown(_report(*_files(tmp_path)))
     row = next(line for line in text.splitlines() if line.startswith("| 0.2212"))
-    assert row.startswith("| 0.2212 ± 0.0008 | 28.410 ± 0.098 | 0.0210 ± 2e-05 | 11.3 |")
-    assert "poor fit (χ²_r above 10)" in row
+    assert row.startswith("| 0.22120(77) | 28.410(98) | 0.021000(20) | 11.3 |")
+    assert len(row) < 100 and row.endswith("| [1] |")
+    assert "- [1] poor fit (χ²_r above 10)" in text
     assert "The 12 most prominent of 21 candidate peaks were fitted; 9 of them gave a peak and are in the table" in text
     assert "Only the 12" not in text
 
@@ -175,7 +176,7 @@ def test_the_windows_csv_starts_with_the_command_lines_lines(tmp_path: Path) -> 
     assert lines[0] == f"{SOFTWARE} (command line); settings and decisions in report.json"
     assert lines[1] == f"input: {frame.name} sha256 {sha256_of(frame)}" and lines[2] == "frame: frame 1 of 1"
     assert lines[3].startswith("geometry: distance 147.5823 mm, direct beam (7.048, 589.490) px, wavelength 1.54 A, "
-                               "alpha_i 0.235 deg, detector tilt 6.05")
+                               "alpha_i 0.235 deg, sample roll 0 deg, detector tilt 6.05")
     path = CsvCurveWriter().write_map(
         np.ones((2, 2)), [0.0, 1.0], [0.0, 1.0], tmp_path / "map.csv", ("q_par (Å⁻¹)", "qz (Å⁻¹)"), record)
     header = [line for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("#")]
@@ -198,7 +199,7 @@ def test_the_record_keeps_the_geometry_as_applied(tmp_path: Path) -> None:
     report = StandardPipeline(catalog, PipelineOptions(energy_kev=12.4, incidence_deg=0.2)).run()
     assert report["geometry"]["distance_mm"] == 147.582320121856  # 15 significant digits, not 147.6
     assert report["geometry"]["tilt_deg"] == pytest.approx(6.05813304651471, abs=1e-12)
-    assert "distance 147.6 mm" in pipeline_markdown(report)  # the text rounds for reading
+    assert "distance 148 mm" in pipeline_markdown(report)  # the text rounds for reading
 
     rounded = {"from_file": True, "distance_mm": 147.6, "beam_center_px": [7.048, 589.5], "wavelength_angstrom": 1.54,
                "detector_tilt": {"rot1_rad": -0.08902}}
@@ -209,3 +210,37 @@ def test_the_record_keeps_the_geometry_as_applied(tmp_path: Path) -> None:
     assert exact["distance_mm"] == used["distance_mm"] and exact["beam_center_px"][1] == used["beam_center_y_px"]
     assert exact["detector_tilt"]["rot1_rad"] == used["detector_tilt"]["rot1_rad"]
     assert exact_calibration({**rounded, "distance_mm": 370.0}, used)["distance_mm"] == 370.0  # another geometry
+
+
+def test_report_reuses_applied_angle_precision_and_preserves_peak_csv(tmp_path):
+    from src.gimap.features.assistant.application.peak_export import peak_table_csv
+
+    report = _report(*_files(tmp_path))
+    report["geometry"].update(incidence_deg=0.42738, sample_roll_deg=-1.2849)
+    report["incidence_measurement"] = dict(reference_deg=0.12, reference_source="header", deg=0.4274,
+                                          error_deg=0.0136, decision="disagreement", method="specular")
+    report["sample_roll_measurement"] = dict(deg=-1.2849, error_deg=0.179, significant=True,
+                                            origin="automatic", method="horizon")
+    report["peaks"][0]["q"] = 0.2212013549
+    text = pipeline_markdown(report)
+    assert "measured αi 0.427 ± 0.014° differ by more than 3σ. Used 0.427°." in text
+    assert "sample roll ψ applied: -1.28°" in text
+    assert "selected estimate (horizon): -1.28 ± 0.18°" in text
+    assert "0.22120(77)" in text and "0.2212013549,0.00077" in peak_table_csv(report)
+    assert report["geometry"]["incidence_deg"] == 0.42738
+    report["geometry"]["incidence_deg"] = 0.12
+    report["incidence_measurement"]["decision"] = "user_override"
+    assert "Used 0.12°." in pipeline_markdown(report)
+
+
+def test_compact_cell_and_strain_table_keeps_the_q_shift_and_residual_precision():
+    from src.gimap.features.assistant.application.pipeline_cell import cell_lines
+
+    phase = {"ok": True, "phase": "Synthetic cell", "system": "cubic", "values": {"a": 5.432789},
+             "errors": {"a": 0.001071}, "strain": {"a": 0.0043997}, "strain_errors": {"a": 0.0001945},
+             "reference": {"a": 5.409}, "zero_shift": None, "zero_shift_error": None, "chi2_red": 1.8034, "dof": 3,
+             "residuals": [{"q": 1.15775, "sigma": 0.0116, "residual": -0.00388, "hkl": [1, 0, 0]}]}
+    lines = cell_lines([phase])
+    assert "| a (Å) | 5.4328(11) | 5.409 | 0.440(19) |" in lines
+    assert "| 1 0 0 | 1.158(12) | -0.004 |" in lines
+    assert all(len(line) < 100 for line in lines if line.startswith("|"))

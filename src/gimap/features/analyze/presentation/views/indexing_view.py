@@ -27,7 +27,7 @@ from PyQt5.QtWidgets import (
 
 from src.gimap.app.presentation.components.curve_plot import CurvePlot
 from src.gimap.app.presentation.components.table_copy import enable_table_copy
-from src.gimap.app.presentation.i18n import DATA_HEADERS
+from src.gimap.app.presentation.i18n import DATA_HEADERS, DATA_VALUES
 
 PHASE_COLUMNS = ("Show", "Name", "Cell (Å, °)", "Symmetry", "Orientation")
 REFLECTION_COLUMNS = ("Phase", "hkl", "d (Å)", "q (Å⁻¹)", "q∥ (Å⁻¹)", "qz (Å⁻¹)", "χ (°)", "m", "|F|²", "I (%)")
@@ -89,6 +89,8 @@ class IndexingView:
         self.tabs.addTab(self._phases_tab(dialog), "Phases")
         self.tabs.addTab(self._reflections_tab(dialog), "Reflections")
         self.tabs.addTab(self._pole_tab(dialog), "Pole Figure")
+        self.cell_tab = self._cell_tab(dialog)
+        self.tabs.addTab(self.cell_tab, "Unit Cell")
         layout.addWidget(self.tabs, 1)
         self.status_label = QLabel(dialog)
         self.status_label.setWordWrap(True)
@@ -97,6 +99,43 @@ class IndexingView:
         self.buttons = QDialogButtonBox(QDialogButtonBox.Close, dialog)
         self.buttons.button(QDialogButtonBox.Close).setAutoDefault(False)
         layout.addWidget(self.buttons)
+
+    def _cell_tab(self, dialog) -> QWidget:
+        tab = QWidget(dialog)
+        layout = QVBoxLayout(tab)
+        choose = QHBoxLayout()
+        choose.addWidget(QLabel("Phase", tab))
+        self.cell_phase_combo = QComboBox(tab)
+        self.cell_phase_combo.setProperty(DATA_VALUES, True)
+        choose.addWidget(self.cell_phase_combo, 1)
+        self.cell_series_button = QPushButton("Refine Series…", tab)
+        self.cell_export_button = QPushButton("Export Cell…", tab)
+        self.cell_cancel_button = QPushButton("Cancel", tab)
+        for button in (self.cell_series_button, self.cell_export_button, self.cell_cancel_button):
+            choose.addWidget(button)
+        layout.addLayout(choose)
+        self.cell_summary = QLabel(tab)
+        self.cell_summary.setWordWrap(True)
+        self.cell_summary.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.cell_summary)
+        for name, columns, stretch in (
+            ("cell_values", ("Parameter", "Refined ± 1σ", "Reference", "Change ± 1σ (%)"), 2),
+            ("cell_peaks", ("h k l", "Measured q ± σ (Å⁻¹)", "Residual (Å⁻¹)", "Used in fit"), 3),
+        ):
+            table = QTableWidget(0, len(columns), tab)
+            table.setHorizontalHeaderLabels(columns)
+            table.verticalHeader().hide()
+            table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+            table.horizontalHeader().setStretchLastSection(True)
+            enable_table_copy(table)
+            setattr(self, name, table)
+            layout.addWidget(table, stretch)
+        self.cell_fibre_label = QLabel(tab)
+        self.cell_fibre_label.setWordWrap(True)
+        self.cell_fibre_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.cell_fibre_label)
+        return tab
 
     # -- phases -------------------------------------------------------------------------
 
@@ -249,21 +288,33 @@ class IndexingView:
         self.background_spin.setEnabled(False)
         form.addWidget(QLabel("Model", tab), 0, 0)
         form.addWidget(self.model_combo, 0, 1)
-        form.addWidget(QLabel("Direction", tab), 0, 2)
+        self.direction_label = QLabel("Direction", tab)
+        form.addWidget(self.direction_label, 0, 2)
         form.addWidget(self.direction_combo, 0, 3)
         form.addWidget(self.direction_spin, 0, 4)
         form.addWidget(QLabel("Fit up to χ", tab), 1, 0)
         form.addWidget(self.chi_max_spin, 1, 1)
-        form.addWidget(QLabel("Background", tab), 1, 2)
+        self.background_label = QLabel("Background", tab)
+        form.addWidget(self.background_label, 1, 2)
         form.addWidget(self.background_check, 1, 3)
         form.addWidget(self.background_spin, 1, 4)
+        self.crystal_ring_label = QLabel("Show ring", tab)
+        self.crystal_ring_combo = QComboBox(tab)
+        self.crystal_ring_combo.setProperty(DATA_VALUES, True)
+        form.addWidget(self.crystal_ring_label, 0, 2)
+        form.addWidget(self.crystal_ring_combo, 0, 3, 1, 2)
+        self.crystal_ring_label.hide()
+        self.crystal_ring_combo.hide()
         layout.addLayout(form)
         buttons = QHBoxLayout()
         self.fit_button = QPushButton("Fit Pole Figure", tab)
         self.fit_button.setProperty("gimapRole", "primary")
+        self.cancel_crystal_button = QPushButton("Cancel", tab)
+        self.cancel_crystal_button.hide()
         self.export_button = QPushButton("Export…", tab)
         self.export_button.setToolTip("The pole figure as CSV and the indexing record (.json) beside it")
         buttons.addWidget(self.fit_button)
+        buttons.addWidget(self.cancel_crystal_button)
         buttons.addWidget(self.export_button)
         buttons.addStretch(1)
         layout.addLayout(buttons)

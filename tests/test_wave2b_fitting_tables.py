@@ -69,7 +69,9 @@ def test_a_model_of_one_particle_names_its_values_short_and_the_full_name_is_on_
     page.open_curve(_curve_file(tmp_path))
     table = page.parameters_table
     names = {table.item(line, 0).text(): table.item(line, 0).toolTip() for line in range(table.rowCount())}
-    assert names["R"] == "1·Sphere R" and "1·Sphere R" not in names
+    assert names["R"].splitlines() == ["1·Sphere R", "Mean radius (of the size distribution chosen in Sizes)"]
+    assert names["D"].splitlines() == ["1·Sphere D", "Mean distance between neighbours (paracrystal)"]
+    assert "1·Sphere R" not in names
     page.set_model(two)
     names = [table.item(line, 0).text() for line in range(table.rowCount())]
     assert "1·Sphere R" in names and "2·Random cylinder R" in names

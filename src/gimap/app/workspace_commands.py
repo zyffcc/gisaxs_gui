@@ -242,7 +242,7 @@ class WorkspaceCommands:
             "analyze_batch": MenuEntry(analyze(lambda: page().batch_export_dialog()), self._batch),
             "analyze_batch_folder": MenuEntry(analyze(lambda: page().batch_from_folder()), self._batch_free),
             "analyze_send_fitting": MenuEntry(analyze(lambda: page().fit_current()), self._send_fitting),
-            "analyze_send_both_cuts": MenuEntry(analyze(lambda: self.menus.window._send_both_cuts()), self._send_both),
+            "analyze_send_both_cuts": MenuEntry(analyze(lambda: self._components._send_both_cuts()), self._send_both),
             "analyze_send_series": MenuEntry(analyze(lambda: page().send_series_dialog()), self._send_series),
             "analyze_send_compare": MenuEntry(analyze(lambda: page().send_series_to_compare()), self._send_compare),
             "analyze_save_settings": MenuEntry(analyze(lambda: page().save_settings())),

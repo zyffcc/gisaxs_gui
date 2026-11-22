@@ -8,6 +8,7 @@ from typing import Any, Optional
 import h5py
 import numpy as np
 
+from .header_incidence import cbf_incidence
 from .nexus_metadata import extract_nexus_metadata, nxs_header_beam_center_px  # noqa: F401  (re-exported)
 from .radiation import energy_to_wavelength
 
@@ -78,9 +79,12 @@ def extract_cbf_metadata(header: dict[str, Any], shape: tuple[int, int]) -> dict
         energy = float(energy_match.group(1)) / (1000.0 if energy_match.group(2).lower() == "ev" else 1.0)
     px = float(pixel_match.group(1)) if pixel_match else None
     py = float(pixel_match.group(2)) if pixel_match else None
-    if px is None and shape in {(1679, 1475), (1043, 981), (2527, 2463)}:
+    inferred_pixels = px is None and shape in {(1679, 1475), (1043, 981), (2527, 2463)}
+    if inferred_pixels:
         px = py = 172e-6
     return {
+        **({"pixel_size_source": "frame shape"} if inferred_pixels else {}),
+        **cbf_incidence(contents),
         "detector_name": detector_match.group(1).strip() if detector_match else None,
         "pixel_size_x_m": px,
         "pixel_size_y_m": py,
@@ -123,13 +127,15 @@ def extract_edf_metadata(header: dict[str, Any], shape: tuple[int, int]) -> dict
     and centre are reported under ``header_*`` keys only; the pixel size is used.
     """
     px, py = _edf_float(header, "PSize_1"), _edf_float(header, "PSize_2")
-    if px is None and tuple(shape) in {(1679, 1475), (1043, 981), (2527, 2463), (619, 487)}:
+    inferred_pixels = px is None and tuple(shape) in {(1679, 1475), (1043, 981), (2527, 2463), (619, 487)}
+    if inferred_pixels:
         px = py = 172e-6
     wavelength_m = _edf_float(header, "WaveLength", "Wavelength", "wavelength")
     wavelength = wavelength_m * 1e10 if wavelength_m and wavelength_m < 1e-6 else wavelength_m
     center_x, center_y = _edf_float(header, "Center_1"), _edf_float(header, "Center_2")
     name = str(header.get("DetectorName") or header.get("detector") or "").strip() or None
     return {
+        **({"pixel_size_source": "frame shape"} if inferred_pixels else {}),
         "detector_name": name,
         "pixel_size_x_m": px,
         "pixel_size_y_m": py if py is not None else px,

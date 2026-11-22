@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
 
-from .candidate_ranker import rank_candidates
+from .candidate_ranker import rank_candidates, score_candidate, score_ring_evidence
 from .center_estimator import estimate_center_candidates
-from .geometry_model import energy_to_wavelength
 from .center_polish import polished_centers
+from .geometry_model import energy_to_wavelength, q_to_ring_radius_m
 from .gisaxs_features import LitHalf, follows_horizontal_line, specular_rod_columns, without_columns
+from .guided_rings import search_rings
 from .models import CalibrationCandidate, CalibrationResult, DetectorImage
 from .optimizer import estimate_uncertainty, refine_candidate
 from .peak_detector import detect_radial_peaks
@@ -21,7 +23,7 @@ from .peak_matcher import generate_distance_candidates, rematch_candidate
 from .preprocessing import preprocess_detector_image
 from .radial_profile import calculate_azimuthal_profile
 from .standards import STANDARDS
-from .tilt_fit import refine_ring_geometry
+from .tilt_fit import NOT_REFINED_FEW_RINGS, point_rms_px, refine_ring_geometry
 
 
 class CalibrationError(RuntimeError):
@@ -120,7 +122,11 @@ def _refinement_seeds(
     for items in ordered_groups:
         distances: list[float] = []
         for candidate in sorted(items, key=lambda item: item.score, reverse=True):
-            if any(abs(candidate.distance_mm - old) / max(candidate.distance_mm, old, 1.0) < 0.25 for old in distances):
+            # Neighbouring high-order assignments can differ by much less than 25%.
+            # Give each distinct scale near the stated estimate a chance on the image.
+            near_estimate = estimated_distance_mm and abs(candidate.distance_mm / estimated_distance_mm - 1) <= 0.25
+            separation = 0.015 if near_estimate else 0.25
+            if any(abs(candidate.distance_mm - old) / max(candidate.distance_mm, old, 1.0) < separation for old in distances):
                 continue
             selected.append(candidate)
             distances.append(candidate.distance_mm)
@@ -135,6 +141,44 @@ def _refinement_seeds(
         if near:
             selected.append(max(near, key=lambda item: item.score + 40.0 * item.center_support))
     return selected
+
+
+def _guided_matches(candidate, evidence):
+    """Once two guided rings verify the scale, retain measured lines with independent arc support."""
+    confirmed = {item.theoretical_index: item.match for item in evidence if item.match is not None}
+    if len(confirmed) < 2:
+        return False
+    # Closely spaced, separately resolved radial peaks can lack room for a guided background.
+    confirmed.update({item.theoretical_index: item.resolved_radial_match for item in evidence
+                      if item.resolved_radial_match is not None})
+    # A radial maximum from just a detector corner has too little independent arc
+    # support. Including it as another ring would also change the uncertainty.
+    previous = [ring.theoretical_index for ring in candidate.matched_rings]
+    indices = sorted(confirmed)
+    candidate.matched_rings = [confirmed[i] for i in indices]
+    candidate.matched_ring_count = len(indices)
+    candidate.warnings[:] = [w for w in candidate.warnings if w !=
+                             "Only one ring is matched; center and distance remain ambiguous."]
+    if len(indices) >= 3 and NOT_REFINED_FEW_RINGS in candidate.warnings:
+        candidate.warnings.remove(NOT_REFINED_FEW_RINGS)
+    return indices != previous
+
+
+def _final_ring_measurements(candidate, evidence, wavelength, px, py):
+    """Record the measured offsets at the final geometry for exactly the orders used in the fit."""
+    measured = {item.theoretical_index: item.match for item in evidence if item.match is not None}
+    scales = []
+    for index, ring in enumerate(candidate.matched_rings):
+        if ring.theoretical_index in measured:
+            ring = candidate.matched_rings[index] = measured[ring.theoretical_index]
+        else:
+            ring.predicted_radius_px = float(q_to_ring_radius_m(ring.q_inv_angstrom, wavelength, candidate.distance_mm)
+                                             / (0.5 * (px + py)))
+            ring.residual_px = ring.observed_radius_px - ring.predicted_radius_px
+        scales.append(ring.observed_radius_px / ring.predicted_radius_px)
+    candidate.rms_residual_px = float(np.sqrt(np.mean([m.residual_px**2 for m in candidate.matched_rings])))
+    candidate.azimuthal_coverage = float(np.mean([m.coverage for m in candidate.matched_rings]))
+    candidate.distance_consistency = float(np.std(scales) / np.mean(scales)) if len(scales) > 1 else 1.0
 
 
 def _file_sha256(path: Path) -> str:
@@ -188,6 +232,9 @@ class CalibrationEngine:
         # Grazing incidence: the specular rod crosses every ring and pulls a ring fit; it is left out of both.
         rod = specular_rod_columns(analysis)
         ring_image = without_columns(analysis, rod)
+        # Log contrast locates weak rings. Their subpixel centroids measure the
+        # recorded intensity, with the same valid pixels and rod exclusion.
+        fit_image = replace(ring_image, signal=np.asarray(image.data))
         lit = LitHalf(ring_image) if rod is not None else None
         bands = 0
 
@@ -238,9 +285,27 @@ class CalibrationEngine:
         if not refined:
             raise CalibrationError(OUT_OF_RANGE)
 
+        def check_orders(candidate):
+            # The shadow of a grazing-incidence sample hides arcs below the horizon.
+            # The independent scan and guided absence test need the same illuminated half.
+            searchable = ring_image if lit is None else replace(ring_image, valid=lit.valid(candidate.center_y_px))
+            return search_rings(searchable, candidate, STANDARDS[candidate.standard_key], wavelength, px, py)
+
         self._stage(90, "Ranking candidates")
         ranked_candidates = rank_candidates(refined, estimated_distance_mm, limit=20, grazing=rod is not None)
-        candidates = ranked_candidates[:3]
+        # Keep the leading radial solution even when a tilted detector displaces the
+        # outer arcs beyond the first (untilted) sector search.
+        radial_best = ranked_candidates[0]
+        for candidate in ranked_candidates:
+            candidate.rot3_deg = rot3_deg
+            standard = STANDARDS[candidate.standard_key]
+            evidence = check_orders(candidate)
+            _guided_matches(candidate, evidence)
+            score_ring_evidence(candidate, evidence, standard, estimated_distance_mm)
+        ranked_candidates.sort(key=lambda item: item.score, reverse=True)
+        candidates = ranked_candidates[:2]
+        if radial_best not in candidates:
+            candidates.append(radial_best)
         for key in standard_keys:
             if any(item.standard_key == key for item in candidates):
                 continue
@@ -259,12 +324,25 @@ class CalibrationEngine:
         candidates = candidates[:5]
         if not candidates:
             raise CalibrationError("Calibration candidates were rejected as physically implausible.")
-        self._stage(92, "Optimizing geometry")
-        for candidate in candidates:
-            candidate.rot3_deg = rot3_deg
-            points = refine_ring_geometry(ring_image, candidate, wavelength, px, py, tilt=tilt,
+        for index, candidate in enumerate(candidates):
+            self._stage(92 + index, "Optimizing geometry")
+            initial = (candidate.center_x_px, candidate.center_y_px, candidate.distance_mm)
+            points = refine_ring_geometry(fit_image, candidate, wavelength, px, py, tilt=tilt,
                                           distance_range_mm=distance_range_mm)
+            standard = STANDARDS[candidate.standard_key]
+            evidence = check_orders(candidate)
+            if _guided_matches(candidate, evidence):
+                points = refine_ring_geometry(fit_image, candidate, wavelength, px, py, tilt=tilt,
+                                              distance_range_mm=distance_range_mm)
+                if points is not None:
+                    candidate.initial_point_rms_px = point_rms_px(*points, initial, wavelength, px, py,
+                                                                 np.radians(rot3_deg))
+                evidence = check_orders(candidate)
+            _final_ring_measurements(candidate, evidence, wavelength, px, py)
+            score_candidate(candidate, estimated_distance_mm, grazing=rod is not None)
+            score_ring_evidence(candidate, evidence, standard, estimated_distance_mm)
             estimate_uncertainty(points, candidate, wavelength, px, py)
+        candidates.sort(key=lambda item: item.score, reverse=True)
         best = candidates[0]
         for candidate in candidates:
             if rod is not None and GRAZING_NOTE not in candidate.warnings:
@@ -298,6 +376,7 @@ class CalibrationEngine:
                 "estimated_distance_mm": estimated_distance_mm,
                 "distance_range_mm": list(distance_range_mm),
                 "tilt_mode": tilt,
+                "guided_ring_ranking": True,
                 **({"energy_source": energy_source} if energy_source else {}),
             },
         )

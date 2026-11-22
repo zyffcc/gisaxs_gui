@@ -17,8 +17,10 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
    文件夹（或其子文件夹）里时，同一项也列在 Needs attention 里（退出码 2）；`.poni` 点名的探测器尺寸与帧不同时不采用
    （“the calibration does not match this frame”）；对称轴离标定中心超过 100 px 时不应用并提问。`--incidence-deg` 必须在
    (0°, 90°) 内，`--calibration` 的文件必须存在，否则以退出码 1 结束。CSV 的列名是 ASCII：`qy (A^-1), I, sigma`。
-   αi 的来源顺序同 GIWAXS（选项、笔记、分析命令栏里设定的 αi、仪器配置）；之前已用 `set_incidence_angle` 或在命令栏设定的
-   αi 会被采用，不再提问。都没有 αi 时先用 0°，并在 Needs attention 里提问（退出码 2）。运行中没有人可问，由调用它的 agent 补
+   αi 的名义值依次取自选项、笔记、Analyze 命令栏、图像头和所用的仪器配置。报告列出地平线、镜面峰、Yoneda 带各自的帧测值及误差。
+   用 Yoneda 带定角需要知道带属于哪种材料；可用 `--yoneda-material Si` 等选项按当前波长计算 αc，或用 `--yoneda-critical-deg` 给出已知的 αc；多层样品须说明选用的膜层或衬底。
+   帧测值与名义值相差超过帧测值的 3σ 时，默认用帧测值重新归约，否则沿用名义值。可用 `--keep-incidence` 保留已核实的名义值。
+   没有名义值时采用可靠的帧测值，两者都缺时才用 0°，并在 Needs attention 里提问（退出码 2）。有了实验记录再补
    `--incidence-deg` 后重跑。`.poni` 的探测器倾斜（`Rot1`、`Rot2`、`Rot3`）是几何的一部分：每个像素放在 pyFAI
    放的位置，q 是倾斜探测器的值。Decisions 里有一行 “detector tilt”，Geometry 一节写出倾斜角，数值在 `report.json`
    的 `geometry.tilt_deg` 和 `geometry.rotations_deg`；第 3 步对称轴移动光束中心时倾斜保留。几何标定不拟合倾斜，

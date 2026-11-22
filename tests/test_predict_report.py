@@ -146,7 +146,7 @@ def test_bic_record_csv_project_and_report_preserve_separate_estimates(tmp_path)
         page.render_results()
         assert page.parameters_table.horizontalHeaderItem(3).text() == "posterior median"
         row = page._row_paths.index((0, "R"))
-        assert page.parameters_table.item(row, 3).text() == "5"
+        assert page.parameters_table.item(row, 3).text() == "5.00"
         assert "5.00 [4.50, 6.00]" in page.parameters_table.item(row, 3).toolTip()
         for flag in ("qzR_cov:R_1", "qzR_fail:R_1", "cyl_sphere:R_1"):
             page.session.solutions = [replace(solution, flags=("bic", flag))]
@@ -175,3 +175,37 @@ def test_bic_record_csv_project_and_report_preserve_separate_estimates(tmp_path)
             assert "20 fitted points" in report and "0.005 nm⁻¹" in report and "9.47 times" in report
     finally:
         page.dispose()
+
+
+def test_automatic_report_uses_each_estimates_own_interval():
+    from src.gimap.features.assistant.application.gisaxs_report import _posterior_rows
+
+    solution = {
+        "least_squares_values": {"R_1": 4.0},
+        "intervals": {"R_1": {"low68": 3, "high68": 5}},
+        "posterior_summary": {"R_1": {"median": 5, "low68": 4.5, "high68": 6}},
+    }
+    assert _posterior_rows(solution)[-1] == "| R_1 | 4.0 | 5.00 | 4.50–6.00 |"
+
+
+def test_guided_solution_maps_global_and_derived_intervals_to_the_displayed_parameter():
+    from src.gimap.features.assistant.application.gisaxs_choice import component_number
+    from src.gimap.features.assistant.presentation.guided_details import _parameter_text
+
+    scale = np.sqrt(2 * np.pi)
+    solution = {
+        "components": [{"sigma_D": 0.1235}],
+        "globals": {"sigma_Res": 0.056789112, "nu_Res": 2.125379, "q_resolution": 0.00126789},
+        "least_squares_values": {"sigma_nn_1": 0.123456789 * scale},
+        "intervals": {
+            "sigma_nn_1": {"low68": 0.123445 * scale, "high68": 0.123465 * scale},
+            "tail_width": {"low68": 0.05666, "high68": 0.05698},
+            "tail_exponent": {"low68": 2.1231, "high68": 2.1291},
+            "q_resolution": {"low68": 0.00120, "high68": 0.00136},
+        },
+    }
+    assert component_number(solution, "sigma_D", 0) == "0.123457"
+    assert _parameter_text(solution, "sigma_D", "", 0) == "0.123457 (68 %: 0.123445–0.123465)"
+    assert _parameter_text(solution, "sigma_Res", "nm⁻¹") == "0.05679 nm⁻¹ (68 %: 0.05666–0.05698)"
+    assert _parameter_text(solution, "nu_Res", "") == "2.1254 (68 %: 2.1231–2.1291)"
+    assert _parameter_text(solution, "q_resolution", "nm⁻¹") == "0.001268 nm⁻¹ (68 %: 0.001200–0.001360)"

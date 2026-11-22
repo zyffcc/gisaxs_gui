@@ -83,9 +83,11 @@ class CalibrateStandard(FramePreprocessingMixin):
         if curve is None or curve.is_empty:
             raise ValueError("The standard frame has no usable radial intensity after corrections.")
         _check_cancelled(cancelled)
-        corrections = self.corrections
+        corrections = common["corrections"]
         paths = [p for p in (corrections.mask_path, corrections.dark_path, corrections.background_path,
                              corrections.flat_field_path) if p]
+        if self.mode == GIWAXS and corrections.film_cif_path:
+            paths.append(corrections.film_cif_path)
         if common["error_model_used"] == "sigma":
             paths.append(corrections.sigma_path)
         corrections_record = _plain(corrections)

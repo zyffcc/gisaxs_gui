@@ -9,9 +9,15 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from src.gimap.shared.numbers import format_number
 from src.gimap.shared.orientation_notes import coverage_warning, measured_f_text
+from src.gimap.shared.radial_peaks import orientation_peak_rows
 
 from .pipeline_assignment import assignment_lines, assignment_text, axis_text
+from .pipeline_cell import cell_lines
+from .pipeline_crystal import crystal_lines
+from .pipeline_progress import PipelineStopped
+from .report_language import heading
 
 POLE_MODEL = "gaussian"
 POLE_RULE = (
@@ -19,6 +25,26 @@ POLE_RULE = (
     "The strongest maximum sets χ0 to 0° below 20° or 90° above 70°. Otherwise χ0 is fitted. "
     "The fitted f includes the model in the missing wedge. 1 − φ is conditional on the background b."
 )
+
+
+def orientation_checks_only(report: dict) -> bool:
+    if not report.get("ok") or report.get("stopped") or report.get("failed"):
+        return False
+    points = report.get("needs_attention") or ()
+    return bool(points and all(
+        item.get("item") in {"orientation factor", "pole figure"} and not item.get("option") for item in points))
+
+
+def phase_sections(report, language, word=str):
+    lines = []
+    assignment = assignment_lines(report)
+    if assignment:
+        lines.extend([heading("Phase assignment", language), "", *assignment, ""])
+    if report.get("cell_refinement"):
+        lines.extend([heading("Refined unit cells", language), "", *cell_lines(report["cell_refinement"])])
+    if report.get("crystal_orientation"):
+        lines.extend([heading("Crystal orientation", language), "", *crystal_lines(report["crystal_orientation"], word)])
+    return lines
 
 
 def pole_direction(ring) -> Optional[float]:
@@ -36,14 +62,12 @@ ASSIGN_RULE = (
 )
 
 
-def _short(value: Optional[float], digits: int) -> str:
-    return "—" if value is None or not math.isfinite(value) else f"{value:.{digits}f}"
-
-
 class PhaseStepsMixin:
     """Needs ``catalog``, ``options``, ``_run``, ``_decide`` and ``_attention`` (``StandardPipeline``)."""
 
     _assignment: Optional[dict] = None
+    _crystal_orientation: Optional[list] = None
+    _refined_cells: Optional[list] = None
     _reported_pole: bool = False
 
     def _workbench_with(self, name: str):
@@ -54,6 +78,8 @@ class PhaseStepsMixin:
         """The phases of the options replace those of the Phases window (``--phase``)."""
         self._reported_pole = False
         self._assignment = None
+        self._crystal_orientation = None
+        self._refined_cells = None
         phases = tuple(getattr(self.options, "phases", ()) or ())
         workbench = self._workbench_with("set_phases")
         if not phases or workbench is None:
@@ -67,25 +93,24 @@ class PhaseStepsMixin:
         names = ", ".join(phase.get("name", "?") for phase in (result or {}).get("phases") or ())
         self._decide("phases", names or "none", "given (--phase, phases=)")
 
-    def _assign(self, peaks) -> None:
+    def _assign(self, search) -> None:
         workbench = self._workbench_with("assign_peaks")
-        if workbench is None or not peaks:
+        if workbench is None:
             return
-        found = workbench.assign_peaks([
-            {"q": peak.q, "q_err": peak.q_err if math.isfinite(peak.q_err) else None, "fwhm": peak.fwhm}
-            for peak in peaks
-        ]) or {}
+        found = workbench.assign_peaks(orientation_peak_rows(search)) or {}
         if not found.get("phases"):
             return
         self._assignment = found
         items = found.get("assignments") or []
         assigned = [item for item in items if item.get("assigned")]
-        missing = [f"{item['q']:.4f}" for item in items if not item.get("assigned")]
+        missing = [format_number(item["q"], item.get("q_err"), value_only=True) for item in items if not item.get("assigned")]
         decision = f"{len(assigned)} of {len(items)} peaks: " + "; ".join(assignment_text(item) for item in assigned)
         if missing:
             decision += f"; not assigned: {', '.join(missing)}"
         names = ", ".join(phase.get("name", "?") for phase in found["phases"])
-        self._decide("phase assignment", decision, ASSIGN_RULE.format(phases=names) + " " + axis_text(found.get("q_axis") or {}))
+        incidence = (self.catalog.results.status or {}).get("incidence_measurement")
+        axis = axis_text(found.get("q_axis") or {}, incidence)
+        self._decide("phase assignment", decision, ASSIGN_RULE.format(phases=names) + " " + axis)
 
     def _pole(self) -> None:
         ring = self.catalog.results.rings[-1]
@@ -105,10 +130,52 @@ class PhaseStepsMixin:
             self._attention("pole figure", f"At q = {q:.4g} Å⁻¹ the pole fit is not determined ({', '.join(reasons)}).",
                             None, "Inspect the profile and background in Phases ▸ Pole Figure.")
 
+    def _fit_crystal_orientation(self) -> None:
+        workbench = self._workbench_with("crystal_orientation")
+        if workbench is None or not self._assignment:
+            return
+
+        def check_cancel():
+            if self.stop is not None and self.stop.is_set():
+                raise PipelineStopped("crystal orientation")
+
+        check_cancel()
+        self.progress("Fitting crystal orientation")
+        try:
+            self._crystal_orientation = workbench.crystal_orientation(self._assignment, check_cancel)
+        except ValueError as error:
+            self._attention("crystal orientation", str(error), None, "Inspect the phases and ring assignments.")
+            return
+        for phase in self._crystal_orientation:
+            if not phase["determined"]:
+                self._attention("crystal orientation", f"{phase['phase']}: " + ", ".join(phase["reasons"]),
+                                None, "Inspect the assigned rings in Phases ▸ Pole Figure.")
+
+    def _refine_cells(self) -> None:
+        workbench = self._workbench_with("refine_cells")
+        if workbench is None or not self._assignment:
+            return
+
+        def check_cancel():
+            if self.stop is not None and self.stop.is_set():
+                raise PipelineStopped("cell refinement")
+
+        check_cancel()
+        self.progress("Refining unit cells")
+        try:
+            self._refined_cells = workbench.refine_cells(
+                self._assignment, self._crystal_orientation or [], self.options.max_peaks, check_cancel)
+        except ValueError as error:
+            self._attention("cell refinement", str(error), None, "Inspect the phases and ring assignments.")
+
     def _phase_rows(self, report: dict) -> dict:
         """The assignment in the peak rows and the pole figures in the ring rows of ``report``."""
         if self._assignment:
             report["phase_assignment"] = dict(self._assignment)
+            if self._refined_cells is not None:
+                report["cell_refinement"] = self._refined_cells
+            if self._crystal_orientation is not None:
+                report["crystal_orientation"] = self._crystal_orientation
             items = self._assignment.get("assignments") or []
             for row in report.get("peaks") or []:
                 match = min(items, key=lambda item: abs(item["q"] - row.get("q", math.inf)), default=None)
@@ -168,13 +235,7 @@ def pole_summary(record: dict) -> dict:
 
 
 def pole_estimate(pole: dict, key: str) -> str:
-    value, error = pole.get(key), pole.get(f"{key}_err")
-    if value is None or not math.isfinite(value):
-        return "—"
-    estimate = f"{value:#.3g}".removesuffix(".")
-    if error is not None and math.isfinite(error) and error > 0:
-        estimate += " ± " + f"{error:#.3g}".removesuffix(".")
-    return estimate
+    return format_number(pole.get(key), pole.get(f"{key}_err"))
 
 
 def pole_line(pole: dict) -> str:
@@ -186,8 +247,8 @@ def pole_line(pole: dict) -> str:
 
     return (f"pole figure (Gaussian + isotropic): {lead}f = {pole_estimate(pole, 'herman')}, "
             f"oriented fraction 1 − φ = {pole_estimate(pole, 'oriented_fraction')}, FWHM {pole_estimate(pole, 'fwhm_deg')}°, "
-            f"χ0 = {_short(pole.get('chi0_deg'), 1)}°, χ²_red = {_short(pole.get('reduced_chi2'), 1)}. "
+            f"χ0 = {pole_estimate(pole, 'chi0_deg')}°, χ²_red = {format_number(pole.get('reduced_chi2'))}. "
             "1 − φ is conditional on the background b.")
 
 
-__all__ = ["PhaseStepsMixin", "assignment_lines", "assignment_text", "pole_direction", "pole_line", "pole_summary"]
+__all__ = ["PhaseStepsMixin", "assignment_lines", "assignment_text", "orientation_checks_only", "pole_direction", "pole_line", "pole_summary"]

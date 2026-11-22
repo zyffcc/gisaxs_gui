@@ -122,7 +122,7 @@ Auto Detect 时引擎用所有已知标样去试，再按环的匹配打分。
 - **倾斜。** `domain/tilt_fit.py`：中心和距离的拟合之后，对显示的候选解把 rot1、rot2 与中心、距离一起最小二乘拟合
   （环上的点按扇区取加权质心，残差 `L (tan 2θ_点 − tan 2θ_环) / p̄`，用 `shared.geometry.lab_rays`）；默认在匹配到
   三个或更多环时进行（左栏 **Detector tilt: Refine rot1, rot2**，`tilt_check`；引擎参数 `tilt="auto" | "on" | "off"`）。
-  `optimizer.estimate_uncertainty` 在至少三个环时逐环做刀切法。恰有三个环且拟合了倾角时，每次删环后固定两个倾角，完整拟合的协方差给出倾角误差及中心、距离误差的下限。两个环时只用协方差。结果栏 **Detector tilt** 一行显示
+  `optimizer.estimate_uncertainty` 在至少三个环时逐环做刀切法。恰有三个环且拟合了倾角时，若每对环均能约束全部五个参数，则删环后也拟合倾角。若任一重拟合不稳定，则三对环均固定倾角，完整拟合的协方差给出倾角误差及中心、距离误差的下限。两个环时只用协方差。结果栏 **Detector tilt** 一行显示
   rot1、rot2 ± 1σ，提示里是计倾斜和不计倾斜时环上点的 RMS。候选解的 `rot1_deg` … 只在拟合了倾斜时写进 JSON。
   Apply 后仪器配置的几何带上这些转角（`instrument_profile.calibrated_geometry`）。谱线检查（`line_check.check_lines`）
   按候选解的转角积分。物理说明见《物理与方法》3.8 节。

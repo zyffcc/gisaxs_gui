@@ -11,6 +11,7 @@ from typing import Optional
 
 from src.gimap.app.presentation.i18n import tr
 
+from ...application.saved_fit import SavedFit
 from ...application.single_fit import (
     FAMILIES, INFO, Curve, FitData, FitModel, FitResult, new_component, parameter_info, prepare_curve,
 )
@@ -95,6 +96,7 @@ def starting_model() -> FitModel:
 @dataclass
 class FitSession:
     curve: Optional[Curve] = None
+    saved_fit: Optional[SavedFit] = None
     side: str = "mean"
     q_range: Optional[tuple] = None
     """|q| from–to in nm⁻¹; ``None``: every point."""
@@ -153,6 +155,7 @@ class FitSession:
 
     def set_curve(self, curve: Optional[Curve]) -> None:
         self.curve = curve
+        self.saved_fit = None
         self.q_range = None
         self.result = None
         self.result_selection = None

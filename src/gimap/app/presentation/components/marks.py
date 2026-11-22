@@ -89,6 +89,9 @@ class MarkLayers(QObject):
     def hidden(self) -> list[str]:
         return [key for key, visible in self._visible.items() if not visible]
 
+    def hidden_titles(self) -> list[str]:
+        return [self._titles[key] for key in self.hidden() if key in self._titles]
+
     def set_hidden(self, keys) -> None:
         """Restore remembered choices (unknown keys are kept for kinds added later)."""
         for key in keys or ():

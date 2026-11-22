@@ -164,7 +164,9 @@ def test_the_automatic_analysis_assigns_the_rings_and_fits_their_pole_figures(tm
     session = open_headless_session(data / FRAME, saved_profiles=False, out_dir=tmp_path / "out")
     try:
         report = session.run_pipeline(PipelineOptions(
-            calibration=str(data / PONI), incidence_deg=0.075, follow_detection=True,
+            # Reproduce the notebook-angle pole-figure reference. The measured-angle
+            # reduction has a different exit-angle cut and different Hermans coverage.
+            calibration=str(data / PONI), incidence_deg=0.075, keep_incidence=True, follow_detection=True,
             phases=(str(tmp_path / "mapi.cif"), str(tmp_path / "pbi2.cif")),
         ))
         decision = next(item for item in report["decisions"] if item["what"] == "phase assignment")
@@ -177,12 +179,30 @@ def test_the_automatic_analysis_assigns_the_rings_and_fits_their_pole_figures(tm
         assert report["phase_assignment"]["q_axis"]["kind"] == "kinematic"
         assert report["phase_assignment"]["phases"][1]["name"] == "PbI2"
         assert any(item["what"] == "pole figure" for item in report["decisions"])
+        reliable = [peak for peak in report["peaks"] if not peak["caveat"] and "at_edge" not in peak["flags"]]
+        largest = max(reliable, key=lambda peak: peak["fit"]["area"])
+        marked = [ring["q"] for ring in report["rings"] if ring.get("strongest_by_area")]
+        assert marked == pytest.approx([largest["q"]])
         for ring in report["rings"]:  # next to the Hermans factor of every analysed ring
             pole = ring["pole_figure"]
             assert ring.get("herman") is not None and pole["ok"]
             assert 0.0 <= pole["oriented_fraction"] <= 1.0 and pole["oriented_fraction_err"] >= 0.0
         markdown = pipeline_markdown(report)
         assert "## Phase assignment" in markdown and "pole figure (Gaussian + isotropic)" in markdown
+        assert "## Refined unit cells" in markdown and "Observed − fitted" in markdown
+        cell = report["cell_refinement"][0]
+        assert cell["ok"] and cell["system"] == "tetragonal"
+        assert cell["values"]["a"] == pytest.approx(8.9, abs=.15)
+        assert cell["values"]["c"] == pytest.approx(12.65, abs=.2)
+        assert all(cell["errors"][name] > 0 for name in ("a", "c", "V"))
+        assert cell["strain"]["a"] == pytest.approx(cell["values"]["a"]/cell["reference"]["a"] - 1.)
+        assert cell["residuals"] and cell["excluded"] and cell["chi2_red"] > 0
+        assert "## Crystal orientation" in markdown and "measured ring f" in markdown
+        from src.gimap.features.assistant.application.pipeline_report import compact_report
+
+        ring = compact_report(report)["crystal_orientation"][0]["rings"][0]
+        assert "fitted" not in ring and "values" not in ring["components"][0]
+        assert ring["components"][0]["hkl"] and ring["effective_dof"] > 0
         assert "Phases: the nearest reflection of the phases given" in markdown
         assert "ambiguous" in markdown and "Δd/d =" in markdown and "Å⁻¹ unassigned" in markdown
         assert session.page.reflection_count() > 0  # the phases given are drawn in Analyze too

@@ -166,22 +166,22 @@ def test_the_fit_reports_the_most_probable_and_asks_for_the_model_when_another_i
     assert fit["solutions"][1]["intervals"]["R_1"]["low68"] == pytest.approx(0.97 * 9.4)
     assert len(fit["curves"]) == 2 and len(fit["data"]["q_inv_angstrom"]) == call["points"]
     decision = _decision(report, "fit")
-    assert decision["decision"] == "random_cylinder: R = 6.1 nm, D = 398 nm, χ²ᵣ = 1.22, probability 0.62"
+    assert decision["decision"] == "random_cylinder: R = 6.10 nm, D = 398 nm, χ²ᵣ = 1.22, probability 0.62"
     assert decision["why"].startswith("the most probable solution of Predict parameters on ")
     assert _decision(report, "fit intervals")["decision"] == (
         "R 6.10 [5.92, 6.28] nm, D 398 [358, 438] nm (refined value [68 % posterior interval])")
     assert any(item["what"] == "fit caveat" and "no interparticle correlation" in item["decision"] for item in report["decisions"])
     model = next(item for item in report["needs_attention"] if item["item"] == "model")
     assert model["why"] == (
-        "2 solutions have a probability of at least 0.2 (rank 1, random_cylinder: R = 6.1 nm, D = 398 nm, χ²ᵣ = 1.22, "
-        "probability 0.62; rank 2, sphere: R = 9.4 nm, D = 53.4 nm, χ²ᵣ = 1.31, probability 0.38): the curve alone "
+        "2 solutions have a probability of at least 0.2 (rank 1, random_cylinder: R = 6.10 nm, D = 398 nm, χ²ᵣ = 1.22, "
+        "probability 0.62; rank 2, sphere: R = 9.40 nm, D = 53.4 nm, χ²ᵣ = 1.31, probability 0.38): the curve alone "
         "does not decide the model.")
     assert "sphere" in model["hint"] and "53.4" in model["hint"]  # the solution that agrees with the spacing
     compact = compact_report(report)
     assert "data" not in compact["gisaxs"]["fit"] and "curves" not in compact["gisaxs"]["fit"]
     text = pipeline_markdown(report)
     assert text.startswith("# GISAXS") and "## Fit of I(qy)" in text and "Peaks (radial" not in text
-    assert "| 1 (chosen) | random_cylinder | 0.62 | R 6.10 nm, σR/R 0.300, D 398.0 nm, σD/D 0.400 | 1.22 |  |" in text
+    assert "| 1 (chosen) | random_cylinder | 0.62 | R 6.10 nm, σR/R 0.3, D 398 nm, σD/D 0.4 | 1.22 |  |" in text
     assert "Predict parameters: GIMaP's network proposes compositions" in text and "Huber" not in text
 
 
@@ -243,7 +243,7 @@ def test_the_results_panel_shows_the_fit_and_saves_it(galaxi_run, tmp_path: Path
     section.fit_details.set_expanded(True)
     details = section.solution_details
     texts = [item.text() for item in details.values.findChildren(QLabel)]
-    for expected in ("sphere: R", "9.4 nm (68 %: 9.12–9.68)", "σR/R", "Background", "Tail w", "0.01 nm⁻¹",
+    for expected in ("sphere: R", "9.40 nm (68 %: 9.12–9.68)", "σR/R", "Background", "Tail w", "0.01 nm⁻¹",
                      "probability", "0.38", "13.2 s"):
         assert expected in texts, (expected, texts)
     assert "evaluations" not in texts and "D started" not in details.settings.text()
@@ -263,7 +263,7 @@ def test_the_results_panel_shows_the_fit_and_saves_it(galaxi_run, tmp_path: Path
     state, line = automatic_outcome(report)
     assert state == "ok" and line.startswith("GISAXS — halves: mean of both halves, 2π/q* = ")
     assert line.endswith("; 1 point(s) to check.") and "question" not in line and "both_abs" not in line
-    assert "most probable fit random cylinder R 6.1 nm (p 0.62, χ²ᵣ 1.22)" in line
+    assert "most probable fit random cylinder R 6.10 nm (p 0.62, χ²ᵣ 1.22)" in line
     texts = [item.text() for item in panel.findChildren(QLabel)]
     assert texts[0].startswith("GISAXS — halves: mean of both halves") and not any("question" in text for text in texts)
     assert "1 point(s) to check — see below" in texts and any(text.startswith("Model choice: ") for text in texts)
@@ -550,7 +550,7 @@ def test_the_most_probable_solution_is_reported_and_its_values_at_a_bound_are_a_
     # the fit's own warning for D at its bound is said once, by at_bounds (which bound); the others pass on
     assert fit["solutions"][0]["warnings"] == [UNCONSTRAINED]
     decision = _decision(report, "fit")
-    assert decision["decision"] == "random_cylinder: R = 8.6 nm, D = 500 nm, χ²ᵣ = 1.26, probability 0.55"
+    assert decision["decision"] == "random_cylinder: R = 8.60 nm, D = 500 nm, χ²ᵣ = 1.26, probability 0.55"
     assert any(item["what"] == "fit caveat" and item["decision"] == "D at its upper bound, σh/h at its upper bound"
                for item in report["decisions"])
     assert any(item["what"] == "fit caveat" and item["decision"] == UNCONSTRAINED for item in report["decisions"])
@@ -558,16 +558,17 @@ def test_the_most_probable_solution_is_reported_and_its_values_at_a_bound_are_a_
     assert point["why"] == ("The reported solution (random_cylinder) has D at its upper bound, σh/h at its upper "
                             "bound: those values are not determined by the curve.")
     model = next(item for item in report["needs_attention"] if item["item"] == "model")
-    assert model["why"].startswith("2 solutions have a probability of at least 0.2 (rank 1, random_cylinder: R = 8.6 nm")
+    assert model["why"].startswith("2 solutions have a probability of at least 0.2 (rank 1, random_cylinder: R = 8.60 nm")
     assert "rank 2, random_cylinder: R = 6.01 nm, D = 30.9 nm, χ²ᵣ = 1.28, probability 0.25" in model["why"]
     assert "rank 3" not in model["why"]  # p 0.15: below the limit
     text = pipeline_markdown(report)
-    assert f"| D at its upper bound, σh/h at its upper bound; {UNCONSTRAINED} |" in text
-    # One number of decimals per quantity in every row: R 8.60 next to R 9.44, σR/R 0.300 (not 0.3).
-    assert "| 3 | sphere | 0.15 | R 9.44 nm, σR/R 0.300, D 48.3 nm, σD/D 0.400 | 1.36 |  |" in text
-    assert "| 1 (chosen) | random_cylinder | 0.55 | R 8.60 nm, " in text and "D 500.0 nm" in text
+    assert f"- [1] D at its upper bound, σh/h at its upper bound; {UNCONSTRAINED}" in text
+    assert all(len(line) < 100 for line in text.splitlines() if line.startswith("|"))
+    # The interval sets the displayed precision for R and D. Relative dispersities here have no interval.
+    assert "| 3 | sphere | 0.15 | R 9.44 nm, σR/R 0.3, D 48.3 nm, σD/D 0.4 | 1.36 |  |" in text
+    assert "| 1 (chosen) | random_cylinder | 0.55 | R 8.60 nm, " in text and "D 500 nm" in text
     assert gisaxs_batch_row(report)[2] == (
-        "random_cylinder R 8.60 nm, D 500.0 nm, χ²ᵣ 1.26, p 0.55 ⚠ D at its upper bound, σh/h at its upper bound")
+        "random_cylinder R 8.60 nm, D 500 nm, χ²ᵣ 1.26, p 0.55 ⚠ D at its upper bound, σh/h at its upper bound")
     table = fit_solutions_csv(fit).splitlines()
     assert table[2].startswith("rank,model,chi2,probability,") and table[2].endswith(",at_bounds,chosen")
     assert "R_low68,R_high68,h_low68,h_high68,D_low68,D_high68" in table[2]
@@ -603,7 +604,7 @@ def test_the_results_tab_selects_the_reported_solution_and_names_the_bounds(boun
     heading = next(label for label in panel.findChildren(QLabel) if label.text() == "Fit of I(qy)")
     assert heading.toolTip().startswith("Predict parameters: GIMaP's network proposes the particles")
     assert "⚠ D at its upper bound" in section.solution_details.warnings.text()
-    assert ("most probable fit random cylinder R 8.6 nm (p 0.55, χ²ᵣ 1.26) ⚠ D at its upper bound, σh/h at its upper "
+    assert ("most probable fit random cylinder R 8.60 nm (p 0.55, χ²ᵣ 1.26) ⚠ D at its upper bound, σh/h at its upper "
             "bound") in automatic_outcome(report)[1]
     panel.gisaxs.dispose()
     panel.deleteLater()
@@ -612,7 +613,7 @@ def test_the_results_tab_selects_the_reported_solution_and_names_the_bounds(boun
     apply_language("zh")
     try:  # by its form; the values at a bound as a list, the warnings of Predict parameters too
         assert words(point["why"]) == "报告的解（random_cylinder）：D 处于搜索上界、σh/h 处于搜索上界；这些数值不由曲线确定。"
-        assert words(model["why"]).startswith("2 个解的概率都不低于 0.2（rank 1, random_cylinder: R = 8.6 nm")
+        assert words(model["why"]).startswith("2 个解的概率都不低于 0.2（rank 1, random_cylinder: R = 8.60 nm")
         assert words(model["hint"]) == "请选择你预期的粒子形状，在拟合中精修这个模型，并比较拟合曲线。"
         assert words(UNCONSTRAINED) == "曲线对 σh/h 约束很少（其 68 % 区间覆盖了允许范围的大部分）"
     finally:

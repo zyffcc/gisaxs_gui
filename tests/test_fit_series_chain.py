@@ -152,6 +152,38 @@ def test_the_trend_is_drawn_against_time_when_the_curves_say_when_they_were_meas
         (_name, x, _y), *_rest = series.trend_plot._source
         assert list(x) == [0.0, 10.0, 25.0]
         assert series.trend_plot.plot.getAxis("bottom").labelText == "time (s)"
+        pair = next(i for i in range(series.trend_combo.count()) if series.trend_combo.itemData(i) == (0, "R+D"))
+        series.trend_combo.setCurrentIndex(pair)
+        radius, distance = series.trend_plot._source
+        assert radius[0].startswith("R · ") and distance[0].startswith("D · ")
+        bars = series.trend_plot._items[-2:]
+        for key, curve, bar in zip(("R", "D"), (radius, distance), bars):
+            assert list(curve[1]) == [0.0, 10.0, 25.0]
+            assert list(curve[2]) == [frame.result.model.get((0, key)).value for frame in series.fits.values()]
+            _x, bounds = bar.getOriginalDataset()
+            errors = [frame.result.errors[(0, key)] for frame in series.fits.values()]
+            np.testing.assert_allclose(bounds[0::2], curve[2] - errors)
+            np.testing.assert_allclose(bounds[1::2], curve[2] + errors)
+        assert len(series.trend_plot._items) == 4  # two estimates and their two sets of vertical bars
+        assert series.quick_table_button.isVisible() and series.quick_trend_button.isEnabled()
+        csv_path = tmp_path / "trend.csv"
+        series.save_table(str(csv_path))
+        with csv_path.open(encoding="utf-8") as stream:
+            assert [float(row["elapsed_time_s"]) for row in csv.DictReader(stream)] == [0.0, 10.0, 25.0]
+        rows = json.loads(csv_path.with_suffix(".json").read_text(encoding="utf-8"))["per_frame"]
+        assert [row["elapsed_time_s"] for row in rows] == [0.0, 10.0, 25.0]
+        assert rows[0]["acquisition"]["timestamp"].endswith("+0100")
+        older = series.series_results_state()
+        for row in older["frames"]:
+            row.pop("acquisition")
+        series.restore_series_results(older)
+        assert series.fits[0].acquisition == rows[0]["acquisition"]
+        series.trend_combo.setCurrentIndex(pair)
+        figure = tmp_path / "trend.svg"
+        series._save_plot(series.trend_plot, "trend", str(figure))
+        picture = figure.read_text(encoding="utf-8")
+        assert "R, D (nm)" in picture and "time (s)" in picture
+        assert "R · Refined fit" in picture and "D · Refined fit" in picture
         series.trend_axis_combo.setCurrentIndex(series.trend_axis_combo.findData("frame"))
         assert list(series.trend_plot._source[0][1]) == [1.0, 2.0, 3.0]
     finally:

@@ -22,6 +22,7 @@ import math
 from typing import Iterable, Optional
 
 from src.gimap.shared.curve_error_description import ERROR_MODELS, curve_error_description
+from src.gimap.shared.numbers import applied_angle
 
 from ..domain import MAX_PEAKS
 from ..domain.orientation import NORMAL_CHI, PLANE_CHI, TEXTURE_SIGMAS, WEAK_HERMAN
@@ -51,7 +52,7 @@ UNCERTAINTIES = {
 """Which ± a report gives and what they leave out, by technique (``{model}``: the frame's error model)."""
 
 
-def refraction_decision(geometry: Optional[dict], technique: str = "giwaxs", *, given: bool = False) -> dict:
+def refraction_decision(geometry: Optional[dict], technique: str = "giwaxs", *, given: bool = False, incidence_measurement=None) -> dict:
     """q is kinematic: the q_z shift refraction can cause near or below the film's critical angle, k·sin αi, for
     the αi and wavelength the run used, in the words of ``technique`` (``giwaxs`` or ``gisaxs``). ``given``: the run
     was given its αi (an αi of 0° is then the person's, not the stand-in for a missing one)."""
@@ -66,7 +67,8 @@ def refraction_decision(geometry: Optional[dict], technique: str = "giwaxs", *, 
     why = shifted
     if wavelength and incidence:
         shift = 2.0 * math.pi / float(wavelength) * math.sin(math.radians(float(incidence)))
-        why += f" = {shift:.3g} Å⁻¹ here (αi = {float(incidence):g}°, λ = {float(wavelength):.4g} Å){barely}"
+        angle = applied_angle(incidence, incidence_measurement)
+        why += f" = {shift:.3g} Å⁻¹ here (αi = {angle}°, λ = {float(wavelength):.4g} Å){barely}"
     elif given:
         why += "; αi is 0° as given, so k·sin αi gives no size for that shift"
     else:

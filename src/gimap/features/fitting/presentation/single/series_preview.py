@@ -28,7 +28,8 @@ from ...application.single_fit import SERIES_SIDES, Curve, evaluate, left_out_po
 from ..views.fit_series_view import FRAME_EMPTY
 from .series_loading import LOADING
 from .series_stages import CHI2
-from .series_text import ONE_HALF
+from .series_trend import PAIR, paired_label
+from .series_text import ONE_HALF, STATE_COLOR
 from .session import path_name
 
 DATA_COLOR, MODEL_COLOR, OUTSIDE_COLOR, LEFT_OUT_COLOR = "#2563eb", "#f97316", "#94a3b8", "#dc2626"
@@ -141,7 +142,9 @@ class FitSeriesPreviewMixin:
             self.frame_plot.hide_window()
         else:
             self.frame_plot.show_window(*settings.q_range)  # the fitting range, as Single analysis shows it
-        self._show_frame_note(self._fitted_on(curve, settings, prepared))
+        note = self._fitted_on(curve, settings, prepared)
+        flags = self.flags_cell(frame) if frame is not None and self._frame_state(index)[0] in STATE_COLOR else ""
+        self._show_frame_note(note + (" · " + flags if flags else ""), "warning" if flags else "muted")
 
     def _fitted_on(self, curve: Curve, settings, prepared) -> str:
         """“Mean of both halves · 771 points · |q| 0.1–1.2 nm⁻¹ · 3 left out”: what a frame is fitted on."""
@@ -218,7 +221,12 @@ class FitSeriesPreviewMixin:
         self.trend_combo.clear()
         self.trend_combo.addItem("χ²ᵣ", CHI2)
         labels = []
-        for path, _name in parameter_columns(model):
+        columns = parameter_columns(model)
+        keys = dict(columns)
+        for owner in range(len(model.components)):
+            if (owner, "R") in keys and (owner, "D") in keys:
+                self.trend_combo.addItem(paired_label(model, owner), (owner, PAIR))
+        for path, _name in columns:
             labels.append(path_name(model, path, unit=True))
             self.trend_combo.addItem(labels[-1], path)
             self.trend_combo.setItemData(self.trend_combo.count() - 1, path_name(model, path, unit=True, full=True),

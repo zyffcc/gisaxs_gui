@@ -162,6 +162,7 @@ class FormSetupMixin:
         )
         self.progress = self.job_status.progress_bar
         self.stage_label = self.job_status.message_label
+        self.job_status.installEventFilter(self)
 
         self.figure = Figure(figsize=(7, 5), constrained_layout=False)
         self.figure.subplots_adjust(left=0.08, right=0.98, bottom=0.10, top=0.96)
@@ -192,7 +193,10 @@ class FormSetupMixin:
             "Warning": self.result_warning,
         }
         self.candidate_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.candidate_table.horizontalHeader().setStretchLastSection(True)
+        self.candidate_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.candidate_table.horizontalHeader().setMinimumSectionSize(24)
+        self.candidate_table.verticalHeader().hide()
+        self.candidate_table.viewport().installEventFilter(self)
         self.results_splitter.setStretchFactor(0, 1)
         self.results_splitter.setStretchFactor(1, 2)
         self._result_two_columns = True  # as the View places the rows
@@ -238,6 +242,7 @@ class FormSetupMixin:
         self.close_button.clicked.connect(self.close)
         self.apply_button.clicked.connect(self.apply_result)
         self.export_button.clicked.connect(self.export_result)
+        self.export_poni_button.clicked.connect(lambda: self.export_result(poni=True))
         self.import_button.clicked.connect(self.import_result)
         self.candidate_table.itemSelectionChanged.connect(self._candidate_selected)
         self.log_check.toggled.connect(self.redraw_preview)
@@ -267,6 +272,7 @@ class FormSetupMixin:
         for widget in (
             self.path_edit,
             self.energy_spin,
+            self.wavelength_spin,
             self.standard_combo,
             self.estimated_distance_spin,
             self.range_combo,
@@ -285,6 +291,7 @@ class FormSetupMixin:
         self.cancel_button.setEnabled(running)
         self.apply_button.setEnabled(not running and self.result is not None)
         self.export_button.setEnabled(not running and self.result is not None)
+        self.export_poni_button.setEnabled(self.export_button.isEnabled())
         self.clean_preview_button.setEnabled(not running and self.result is not None)
         self.manual_refine_button.setEnabled(not running and self.result is not None)
         self.manual_group.setEnabled(not running and self.result is not None)
@@ -318,7 +325,16 @@ class FormSetupMixin:
         self._results_user_sized = True
 
     def eventFilter(self, watched, event) -> bool:
-        if watched is getattr(self, "calibrationPreviewContent", None) and event.type() in (
+        if event.type() == QEvent.Resize and hasattr(self, "candidate_table") and watched is self.candidate_table.viewport():
+            self._fit_candidate_columns()
+        elif watched is getattr(self, "job_status", None) and event.type() in (QEvent.Resize, QEvent.LayoutRequest):
+            # The pinned status shares its row with a state chip. Reserve the height of all
+            # wrapped lines at the label's actual width as soon as a fit warning arrives.
+            label = self.stage_label
+            height = max(0, label.heightForWidth(label.width()))
+            if height != label.minimumHeight():
+                label.setMinimumHeight(height)
+        elif watched is getattr(self, "calibrationPreviewContent", None) and event.type() in (
             QEvent.Resize,
             QEvent.LayoutRequest,  # a button text changed (language, Clean image/Show overlays)
         ):

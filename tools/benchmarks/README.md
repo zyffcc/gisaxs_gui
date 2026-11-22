@@ -340,6 +340,7 @@ To reproduce the published tables, use the four bundled archives as its level-4 
 | `pyfai_comparison.py` | GIMaP against pyFAI on the public frames: |q|, 2θ, q∥, q_z, solid angle and polarisation of every pixel, and the azimuthal I(q) on the same pixels and bins (Physics and Methods 3.7, 6.1). Needs pyFAI, which GIMaP does not install | `pyfai_comparison.json` |
 | `calibration_check.py` | Geometry Calibration checked (section below): GIMaP's calibration of the public pyFAI silver behenate frame against pyFAI's own calibration of the same frame, what GIMaP minimises and which 1σ it reports, and how often that 1σ covers the truth on simulated frames of known geometry (`calibration_coverage.py`). Part 1 needs pyFAI | `calibration_check.json`; every simulated frame in `per_cut/calibration_check_frames.json.gz` |
 | `pygid_comparison.py` | GIMaP against pygid on its two example frames: q∥ and q_z of every pixel, and the rings of pygid's polar map; with `--published DIR`, also the maps published with the examples (Zenodo 10.5281/zenodo.17466183) (Physics and Methods 3.7). Needs pygid | `pygid_comparison.json` |
+| `crystal_orientation.py` | Joint fits to Poisson draws of known MAPbI₃ and PbI₂ fibre textures and to the public P08 MAPbI₃ frame, using the supplied CIFs | [Results below](#crystal-orientation) |
 | `make_external_reference.py` | writes `tests/data/external/reference_values.json`: pyFAI's and pygid's q at fixed pixels of the public frames, which `tests/test_external_reference.py` checks GIMaP against without either installed. Needs pyFAI and pygid | `tests/data/external/reference_values.json` |
 | `galaxi_fit.py` | Fitting on the measured GALAXI cut, sphere and paracrystal (EIA or two paths, LMA or DA, with BornAgain's D held or free) (Physics and Methods 9.10) | `galaxi_fit.json` |
 | `galaxi_fit1d.py` | fit1d (removed in 0.2.0; a copy of the kit in `utils/gisaxs1d_gui_kit`) on the measured GALAXI cut and on BornAgain's model of it: one sphere in Born or DWBA, and the composition chosen by fit1d (Physics and Methods 9.12). Needs BornAgain | `galaxi_fit1d.json` |
@@ -358,7 +359,7 @@ python tools/benchmarks/search_baseline.py --n 200 --workers 10
 python tools/benchmarks/galaxi_posterior.py   # in an environment with BornAgain 24
 python tools/benchmarks/analyze_speed.py --repeat 5 --json tools/benchmarks/analyze_speed.json
 python tools/benchmarks/pyfai_comparison.py --json tools/benchmarks/pyfai_comparison.json  # in an environment with pyFAI
-python tools/benchmarks/calibration_check.py --part all --cases 300 --three-ring-cases 150 --workers 4  # part 1 with pyFAI; --part coverage needs none
+python tools/benchmarks/calibration_check.py --part all --cases 300 --workers 3  # part 1 with pyFAI; --part coverage needs none
 python tools/benchmarks/pygid_comparison.py --json tools/benchmarks/pygid_comparison.json --published FOLDER  # with pygid
 python tools/benchmarks/galaxi_fit.py
 python tools/benchmarks/galaxi_bornagain_model.py
@@ -455,22 +456,34 @@ The JSON gives each frame's timings, settings and the network checksum. Running 
 `--synthetic-mpx` times the watched folder on crops of the public GALAXI frame.
 ## Geometry Calibration against pyFAI, and the coverage of its 1σ
 
-Run `calibration_check.py --part all --cases 300 --workers 4` with pyFAI installed.
+Run `calibration_check.py --part all --cases 300 --workers 3` with pyFAI installed.
 The simulation alone (`--part coverage`) uses the GIMaP environment. `--part summarize` rebuilds the coverage
 tables from `per_cut/calibration_check_frames.json.gz`. The JSON records the seed, settings and command.
 
 **Geometry and uncertainty.** GIMaP fits the beam centre, sample-to-direct-beam distance L and two detector
-rotations to the ring points. Each point is an intensity-weighted centroid from a sector about 2 px of arc wide.
+rotations to the ring points. Each point is a centroid from a sector about 2 px of arc wide,
+weighted by recorded intensity above the sector's lower quartile. The sector must contain valid
+pixels on both flanks of the predicted ring. A detector edge or gap can otherwise truncate a peak,
+pulling the centroid toward the visible side and biasing the tilt fit.
 The residual in pixels is r_i = L (tan 2θ_i − tan 2θ_ring) / p̄, where p̄ is the mean pixel size and 2θ_ring
 comes from the order of AgBh (d₀₀₁ = 58.38 Å). The fit minimises Σ f²(√(1 + r_i²/f²) − 1) with f = 2 px.
+After the initial fit, the engine searches narrow radial bands along the predicted ellipses.
+It tests each sector against the background on both sides of its peak. Once two orders are confirmed,
+the refit uses the confirmed orders, including any missing from the initial assignment. Independently
+resolved close reflections can also enter when their spacing leaves too little room to test the flanks.
+Automatic tilt refinement needs usable centroids from at least three orders.
+The final ranking counts confirmed rings, penalises missing observable
+orders and unexplained strong radial peaks, and uses the ring-point RMS of the fitted geometry.
 The benchmark records the points used in the final fit to check the uncertainties independently.
 
 For n contributing rings, the leave-one-ring-out variance is v_J = (n − 1)/n Σ_k (θ_k − θ̄)².
 The full-fit covariance is C = [Σ_i r_i²/(N − p)] (JᵀJ)⁻¹ for N points and p free parameters.
-With four or more rings, GIMaP reports √v_J for each free parameter. With exactly three rings and fitted
-tilts, each two-ring refit holds both tilts at their full-fit values. GIMaP reports √max(v_J, C_jj) for x, y
-and L, and √C_jj for the tilts. A calibration with fixed tilts uses the ring jackknife for x, y and L
-with three or more rings. With two rings, the standard errors come from C.
+With at least three rings, GIMaP reports √v_J for each free parameter. With exactly three and fitted
+tilts, all three two-ring refits must converge, constrain all five parameters and stay within 25% of
+the full distance and ±30° tilt. Identifiability requires the smallest singular value of the unit-column
+Jacobian to exceed √ε times the largest (ε is machine precision). If any subset fails these checks,
+all three refits hold tilt at its full-fit values. The conditional fallback reports √max(v_J, C_jj)
+for x, y and L, and √C_jj for the tilts. With two rings, the standard errors come from C.
 
 **Public silver behenate frame.** GIMaP matched orders 1–5 on `saxs_agbh_pyfai/Pilatus1M.edf` at λ = 1.0 Å
 and 172 µm pixels. pyFAI 2026.9 located points on six rings using `Recalibration.extract_cpt` (massif, one
@@ -480,42 +493,101 @@ the difference by the two standard errors added in quadrature.
 
 | Parameter | GIMaP ± ring jackknife | pyFAI ± curve_fit [ring jackknife] | Difference / combined σ |
 |---|---:|---:|---:|
-| beam x (px) | 179.796 ± 0.186 | 179.923 ± 0.017 [0.073] | −0.68 |
-| beam y (px) | 264.005 ± 0.174 | 263.968 ± 0.018 [0.094] | +0.22 |
-| L (mm) | 1633.84 ± 0.66 | 1634.05 ± 0.07 [0.17] | −0.32 |
-| rot1 (°) | −0.126 ± 0.154 | −0.297 ± 0.035 [0.089] | +1.08 |
-| rot2 (°) | 0.717 ± 0.185 | 0.687 ± 0.035 [0.091] | +0.16 |
+| beam x (px) | 179.736 ± 0.076 | 179.923 ± 0.017 [0.073] | −2.41 |
+| beam y (px) | 264.012 ± 0.154 | 263.968 ± 0.018 [0.094] | +0.29 |
+| L (mm) | 1633.47 ± 0.35 | 1634.05 ± 0.07 [0.17] | −1.65 |
+| rot1 (°) | −0.305 ± 0.148 | −0.297 ± 0.035 [0.089] | −0.05 |
+| rot2 (°) | 0.670 ± 0.178 | 0.687 ± 0.035 [0.091] | −0.10 |
 
-On GIMaP's ring points the RMS residuals of the GIMaP and pyFAI geometries were 0.584 and 0.623 px.
-On pyFAI's points they were 0.300 and 0.222 px. The shipped `Pilatus1M.poni`, a starting geometry for
-pyFAI, gave 14.6 and 15.3 px on these two sets. `calibration_check.json` also gives both geometries in PONI
+The two fits differed by 0.193 px in beam position and 0.580 mm in distance. The headless line
+check returned the same five-order geometry to the precision shown. A half-distance candidate
+places the same five image rings at orders 2, 4, 6, 8 and 10. Its smaller mean relative q error
+on those five orders previously overrode the window's solution. The headless AgBh comparison
+now measures competing candidates on the independently confirmed orders of the leading geometry.
+On GIMaP's ring points the RMS residuals of the GIMaP and pyFAI geometries were 0.142 and 0.297 px.
+On pyFAI's points they were 0.349 and 0.222 px. The shipped `Pilatus1M.poni`, a starting geometry for
+pyFAI, gave 14.4 and 15.3 px on these two sets. `calibration_check.json` also gives both geometries in PONI
 coordinates and the results of a second pyFAI fit started 3% farther away with zero tilt.
 
 **Recovery and coverage.** The 300 simulated Pilatus 1M frames have 3–9 target rings, L between
 1.5 and 3 m, and rotations up to ±3° about either axis. Each fit receives an estimate within ±15% of the
 true distance. Recovery requires a fitted tilt with an uncertainty, a beam centre within 5 px of the
 truth and a distance error below 5%. Counts and coverage use the calibration window's first-ranked
-candidate. The archive records the headless line check separately.
+candidate. The archive records the headless line check separately. The ring-count classes below
+are the simulation targets. Additional orders can reach a corner of the detector.
 
-The shipped engine recovered **213/300** geometries. On the same seeds, the engine before
-transmission polishing recovered 111/300 (archived in commit `7cd8999`). Coarse arc votes can place the
-centre several pixels off, spreading a narrow ring over several radii in the profile. The engine now
-tests refined copies of these votes alongside the original proposals. In the separate 150 frames with
-only orders 1–3 drawn, it recovered 114/150 geometries. Of these, 112 matched exactly three rings.
+**Diagnosis on the original frames.** At the true centre of case 0, orders 3–5 peaked at
+563, 751 and 939 px. Only 1.1%, 0.6% and 0% of the rays passed the old angular support test,
+below the 1.5% cutoff, despite clear arcs in the image. A bright sector had to exceed the
+median excess of the other sectors at the same radius. The revised test compares each
+sector to its own radial background. In case 3, the polished centre was 0.4 px from truth.
+Three strong peaks at 175, 350 and 525 px agreed on a distance of 1964 mm. A broad background
+peak at 811 px was assigned to order 5 and pulled the initial least-squares fit to 1871 mm.
+AgBh matching now requires agreement with the harmonic spacing before fitting the distance.
+In case 208 the selected solution put the detector at half its true distance. It predicted
+intermediate orders in regions where the image shows background. All three cases had a
+centre proposal within 1 px of truth and pass with the existing centre search.
 
-Among recovered frames, each cell gives the fraction within 1σ, fraction within 2σ and median |error|/σ.
-The three-ring row uses the separate set. The other rows use the 300-frame set.
+In the first guided run the rot1 errors still depended on where the rings reached the detector.
+After comparing centroid methods on 40 frames with at least seven matched rings, we checked 32
+other frames in the same class. Using recorded counts and requiring both flanks reduced RMS
+error from 0.044 to 0.004 px for x, 0.032 to 0.003 px for y, 0.156 to 0.016 mm for L,
+0.141° to 0.012° for rot1 and 0.098° to 0.017° for rot2. Both fits used the same assignments.
+
+Replaying all 87 failures with the previous engine found a centre within 5 px in 73 frames
+before polishing and in all 87 after polishing. The table identifies the earliest missing
+step at centres within 5 px. This audit counts a true order when the simulated ring crosses
+at least four 5° sectors on active pixels. A strong coarse peak has prominence ≥0.1 and lies
+within max(2.5 px, 0.012 r) of the nominal radius. An accurate assignment meets the same
+5 px and 5% tolerances as the benchmark and matches at least three true orders.
+
+| Earliest missing step in the previous engine | Previous geometry found | Current geometry found |
+|---|---:|---:|
+| Fewer than three strong true orders detected at any accurate centre | 0/12 | 12/12 |
+| Three detected, no accurate three-order assignment generated | 0/7 | 7/7 |
+| Accurate assignment generated, lost during refinement or ranking | 0/68 | 68/68 |
+
+The shipped engine found **300/300 geometries** on the same seeds for which commit `7fc06ff` found
+213/300. It retained all 213 successful fits, recovered all 53 frames previously missing a tilt fit
+and all 34 previously assigned a wrong geometry. Among those 34, the old fit missed both tolerances
+on 25 frames, only the distance tolerance on six, and only the centre tolerance on three.
+
+| Simulation group | Previous | Current |
+|---|---:|---:|
+| 3 target rings | 41/100 | 100/100 |
+| 4–6 target rings | 74/100 | 100/100 |
+| 7–9 target rings | 98/100 | 100/100 |
+| Tilt <1° | 24/30 | 30/30 |
+| Tilt 1–<2° | 63/87 | 87/87 |
+| Tilt 2–<3° | 79/117 | 117/117 |
+| Tilt ≥3° | 47/66 | 66/66 |
+
+Tilt in this table is the combined angle arccos(cos rot1 · cos rot2). The separate set with only
+orders 1–3 drawn improved from 114/150 geometries recovered to 150/150, and from 112 to 150
+recoveries with exactly three matched orders. The headless workflow also recovered all 450 geometries.
+
+Mean worker time for calibration and the headless line check rose from 13.371 to 15.502 s per frame
+on the main set (median 13.090 to 15.115 s), and from 9.143 to 11.514 s on the separate set.
+These times exclude simulation and the benchmark's independent uncertainty refits. The archived
+baseline used four workers and this run used three.
+
+Among recovered frames, each cell gives the measured fraction within 1σ, fraction within 2σ and median |error|/σ.
+The first row uses the independent 150-frame set with only orders 1–3 drawn. The remaining rows use the
+300-frame set, grouped by the number of matched rings.
 
 | Matched rings | Frames | beam x | beam y | L | rot1 | rot2 |
 |---|---:|---|---|---|---|---|
-| 3 | 112 | 0.74 / 0.92 / 0.54 | 0.55 / 0.82 / 0.86 | 0.75 / 0.96 / 0.58 | 0.53 / 0.83 / 0.95 | 0.52 / 0.78 / 0.95 |
-| 4–6 | 81 | 0.78 / 0.97 / 0.54 | 0.74 / 0.90 / 0.59 | 0.79 / 0.97 / 0.47 | 0.72 / 0.99 / 0.75 | 0.81 / 0.95 / 0.55 |
-| ≥7 | 125 | 0.52 / 0.94 / 0.97 | 0.67 / 0.95 / 0.72 | 0.79 / 0.99 / 0.51 | 0.57 / 0.91 / 0.84 | 0.70 / 0.98 / 0.71 |
+| 3 (orders 1–3 only) | 150 | 0.613 / 0.820 / 0.666 | 0.687 / 0.853 / 0.533 | 0.593 / 0.820 / 0.754 | 0.640 / 0.873 / 0.745 | 0.673 / 0.833 / 0.596 |
+| 3 | 6 | 0.667 / 0.833 / 0.737 | 0.667 / 1.000 / 0.396 | 0.833 / 0.833 / 0.440 | 0.333 / 0.833 / 1.397 | 0.500 / 0.667 / 1.437 |
+| 4–6 | 138 | 0.594 / 0.855 / 0.684 | 0.616 / 0.862 / 0.699 | 0.565 / 0.819 / 0.747 | 0.623 / 0.862 / 0.745 | 0.565 / 0.841 / 0.874 |
+| ≥7 | 156 | 0.660 / 0.955 / 0.684 | 0.679 / 0.904 / 0.598 | 0.622 / 0.891 / 0.792 | 0.641 / 0.923 / 0.710 | 0.609 / 0.891 / 0.832 |
 
-The main set also yielded 7 three-ring recoveries, reported separately in the JSON. With seven or more
-rings, a Student t reference for ring scatter gives 65.1% within 1σ. The measured rates were 52.0% for beam x
-and 56.8% for rot1. Taking the larger of the jackknife and covariance standard errors on the same
-points gave 56.8% and 57.6%, respectively. The engine retains the ring jackknife for these fits.
+With few rings, estimated standard errors themselves vary. A Student t reference with n − 1 degrees
+of freedom gives 57.7%, 61.9% and 65.4% within 1σ for the separate three-ring set, the 4–6 group and
+the ≥7 group respectively. Coverage for L and rot2 was 56.5% in the 4–6 group. With ≥7 rings, taking
+the larger of the covariance and ring-jackknife errors would give 76.9–84.6% across the five parameters.
+The reported values use the ring jackknife. Repeating it on the final points agreed with the stored
+standard errors to within 1.38 × 10⁻⁵ relative across all 450 frames.
 
 ## The third set
 
@@ -523,3 +595,159 @@ points gave 56.8% and 57.6%, respectively. The engine retains the ring jackknife
 `posterior_newseed_auto2` repeats the stage `auto` on the same 300 cuts after the automatic analysis was changed to fit at the second level when it knows both angles (commit f73d9c8): the true composition is the most probable in 75 % of the cuts (27 % at the first level) and the median error of R is 0.8 % (13 %).
 
 `posterior_dwba_auto2` (commit 9c90e6a): with DWBA truth the automatic analysis's call chooses the true composition in 31 % of the cuts; by the largest q_zR of a cut: 80 % (median |ΔR/R| 1 %) at 1.2–1.7, 29 % (10 %) at 1.7–2.3 and 23 % (9 %) above 2.3; cuts of spheres alone 9 %, of cylinders alone 78 %. The q_zR flags of Predict mark the solutions above these limits.
+
+## GIWAXS unit-cell refinement
+
+Run `python tools/benchmarks/cell_refinement.py --part all --trials 100 --json cell_results.json`. The three parts can also be run separately with `--part synthetic`, `--part public` or `--part series`. The JSON includes the synthetic truth, measured coverage, public peak assignments and per-peak residuals, and the time-dependent cells and uncertainties. The public runs use the supplied PONIs, the Xeuss mask and a temporary settings directory. The numerical method and its assumptions are in [Physics and Methods §7.12](../../docs/Physics_Manual.md#712-unit-cell-refinement-from-indexed-peaks).
+
+**Noisy peak lists.** Each trial draws independent Gaussian peak-centre errors between 0.0002 and 0.0008 Å⁻¹ about a known strained cell with an additive shift of 0.0015 Å⁻¹. The 100-draw runs cover all seven crystal systems, including trigonal CIFs in hexagonal and rhombohedral settings. Across the 38 reported parameters, volumes and offsets, the empirical 1σ coverage averaged 72.8%, with individual values from 62% to 81%. Covariance scaling above unit reduced χ² makes the intervals slightly conservative. The JSON lists the truth, mean recovered value, coverage and mean reported error for each parameter.
+
+**Public frames.** Numbers below use kinematic q. For P08, automatic analysis applied the measured incidence of 0.50124° and roll of −1.30459°. For Xeuss, the incidence was 0.235° and roll was zero.
+
+| Sample and indexing | Cell estimate ± 1σ | Relative to CIF | q offset (Å⁻¹) | χ²red |
+|---|---|---|---|---:|
+| P08 MAPbI₃, 6 of 10 assigned rings | a = 8.9335 ± 0.0022 Å, c = 12.6464 ± 0.0038 Å, V = 1009.28 ± 0.64 Å³ | εa = +0.671 ± 0.025%, εc = −0.194 ± 0.030% | +0.00295 ± 0.00045 | 1.40 |
+| Xeuss PbTe, conditional 111/200/220 indexing | a = 6.832 ± 0.021 Å | +5.72 ± 0.33% against 6.462 Å | −0.0203 ± 0.0080 | 0.60 |
+
+Four P08 windows have competing MAPbI₃ families without a dominant CIF intensity. The single PbI₂ 001 ring cannot determine its cell. With the Xeuss geometry, the three measured centres (1.56733, 1.81998 and 2.58111 Å⁻¹) fall outside the bulk-CIF assignment tolerances. The benchmark records that refusal. It then tests the rock-salt sequence documented with the data, using the narrowest fractional-width order to initialize a trial cell and retaining bulk PbTe as the strain reference. The apparent expansion depends on that indexing and on the q calibration. [Public frames and geometry](../../tests/data/external/README.md)
+
+**In situ series.** Eight synthetic Poisson detector frames contain six tetragonal rings with known trajectories a(t) = 10 + 0.009t and c(t) = 16 − 0.004t Å over 0–14 s. Native-frame tracking and refinement give RMS errors of 0.00358 Å for a, 0.00441 Å for c and 1.60 Å³ for V. A GUI regression also indexes the stack, inserts a missing frame and checks the gap in the exported table.
+
+## Crystal orientation
+
+Run `python tools/benchmarks/crystal_orientation.py --part all --trials 32 --json results.json`. The JSON contains each simulated fit and its 1σ errors, the public-frame report, the film-absorption refit, an independent-width refit on the original angular cut, and signed-sector measurements around the strongest peak.
+
+### Synthetic recovery
+
+Three rings with independent scales sample each simulated fibre distribution. Direct integration of the antipodal Gaussian uses 96 azimuthal and 16 within-bin Gauss nodes. Individual poles contribute their calculated |F|². Two independent Poisson draws at ±χ are folded with their counting errors after subtraction of the known background. The missing wedge below 5° and a detector gap at 42–45° are present in every draw. The two single-component sets use αf ≥ 0.30°. The mixed set includes the exit field for δ = 4.2 × 10⁻⁶, β = 3.1 × 10⁻⁷ at λ = 1 Å and αi = 0.15°, with all bin centres above the horizon accepted. Its true (110) populations have widths 8° and 36° and absolute fractions 0.186 and 0.434.
+
+Seeds 41027–41058 give the following results. Width and population-fraction coverage counts are conditional on selecting the generating model. Isotropic coverage includes all 32 draws.
+
+| Phase and true texture | Correct model | Correct and determined | Width within 1σ | Population fraction within 1σ | Isotropic fraction within 1σ | Mean joint χ²red |
+|---|---:|---:|---:|---:|---:|---:|
+| MAPbI₃ (110), 16°, φ = 0.38 | 29/32 | 29/32 | 19/29 | 18/29 | 18/32 | 1.00 |
+| PbI₂ (001), 22°, φ = 0.29 | 30/32 | 30/32 | 20/30 | 17/30 | 17/32 | 1.01 |
+| MAPbI₃ (110), 8° + 36°, φ = 0.38 | 32/32 | 32/32 | 16/32, 17/32 | 20/32, 21/32 | 22/32 | 1.00 |
+
+Every selected model included the true axis. One single-component PbI₂ draw passed the determination checks with a spurious second (001) population of about 0.9%. The other four single-component draws with an extra population failed the determination checks. Interval coverage reflects counting noise, the estimated bin weights and the model selection step.
+
+### Public grazing-incidence frames and sample roll
+
+Run `python tools/benchmarks/sample_roll.py` for the frame estimates and the P08 signed-ring check. Each frame uses its published αi, the adjacent PONI and Analyze’s default bad-pixel rejection. Xeuss also uses its published mask. Positive ψ tips the surface normal toward laboratory right. The columns give degrees and estimated standard errors.
+
+| Frame | Horizon or Yoneda band | Ring symmetry or GISAXS rod | Selected ψ | Automatically applied ψ |
+|---|---:|---:|---:|---:|
+| P08 MAPbI₃ | −1.50 ± 1.63 | −1.30 ± 0.25 | −1.30 ± 0.25, combined | −1.30459 |
+| Xeuss PbTe | −0.90 ± 0.78 | Unresolved | −0.90 ± 0.78, horizon | 0 |
+| GALAXI GISAXS | 0.00 ± 0.23 | Unresolved | 0.00 ± 0.23, band | 0 |
+
+The P08 normal leans left. The horizon uncertainty reflects variation across detector strips. The ring carries most of the weight in the combined estimate. The Xeuss beam is only 7 px from the left edge, and the GALAXI frame gives no independently resolved specular-rod slope. Only P08 passes the three-standard-error rule.
+
+The same command measures incidence independently of the supplied αi. The table gives degrees and 1σ errors at the calibrated direct beam. “Used” applies the automatic three-standard-error comparison with the published value.
+
+Synthetic frames with a shadow edge and a specular spot at true αi = 0.310°, 0.520° and 0.450° gave 0.311 ± 0.021°, 0.519 ± 0.021° and 0.455 ± 0.021°, respectively, with 1.89° entered. These tests use tilted, non-square pixels and ψ = 2.2°. Both constituent estimates recover the generated angle within one reported standard error.
+
+| Frame | Published αi | Shadow intercept | Specular spot | Yoneda band | Combined αi | Used |
+|---|---:|---:|---:|---:|---:|---:|
+| P08 MAPbI₃ | 0.075 | 0.65 ± 0.57 | 0.5012 ± 0.0119 | — | 0.5012 ± 0.0119 | 0.5012 |
+| Xeuss PbTe | 0.235 | −0.067 ± 0.200 | — | — | Unresolved | 0.235 |
+| GALAXI GISAXS | 0.463 | — | 0.4615 ± 0.0042 | 0.444 ± 0.026 | 0.4611 ± 0.0042 | 0.463 |
+
+The P08 specular-like maximum lies at (543.84, 1755.95) px. The full shadow trace crosses about 46 px above the direct beam, but using only the nearer half of the strips gives 0.085°. This strip dependence limits what the edge alone establishes. The selected angle is set chiefly by the spot.
+
+On Xeuss the beam position prevents an independent bilateral spot measurement, and the shadow intercept is consistent with zero. On GALAXI the band centre is at row 607.5 px. Its incidence estimate assumes the Si substrate critical angle 0.19483° from δ = 5.7816 × 10⁻⁶ in the BornAgain GALAXI model. The multilayer also contains PTFE and HMDSO. The specular spot by itself agrees with 0.463°. [Public geometries and source files](../../tests/data/external/README.md)
+
+### P08 crystal orientation at the measured incidence and roll
+
+On the 0.9973 Å⁻¹ ring, the vacuum horizon obeys `cos χ = (2π/λ) sin αi / q`. With λ = 0.688801 Å, its predicted |χ| is 85.41° at the measured incidence and 89.31° at the notebook angle. The observed loss around 84–86° agrees with the former. This check does not enter the incidence estimate.
+
+`python tools/benchmarks/crystal_orientation.py --part public --json measured.json` runs the automatic analysis with the published αi as its reference. It measures αi = 0.50124° and ψ = −1.30459°. In the JSON, `crystal_orientation` uses the thick-film limit and `benchmark_film_absorption` fits one optical depth μd per phase. The public sample record gives the coating and annealing conditions but no measured thickness. [P08 sample and notebook](https://zenodo.org/records/17466183)
+
+For the reference columns, run the same command at commit `27f8b22d` with `--json reference.json`. The refit there used the exit-field intensity T_f = |t_f|² multiplied by the geometrical film absorption F_A of Physics Manual §5.4. At the present revision add `--reference-json reference.json` to compare both refits. The benchmark compares the CIF hashes, geometry, q windows, χ bins, fit masks, signals and errors. Its `film_comparison` block records the per-ring χ²red and the measured and predicted intensities for fitted bins above 80°. Each model retains the per-ring intensity scales and evaluates its optical factor on each measured ray before folding. The fitted optical depth counts toward BIC and the effective degrees of freedom.
+
+| Phase and q (Å⁻¹) | χ²red, T_f only | χ²red, T_f × geometrical F_A | χ²red, refracted waves |
+|---|---:|---:|---:|
+| **MAPbI₃ joint (746 bins)** | **18.32** | **4.24** | **3.37** |
+| 0.9973 | 34.94 | 5.96 | 1.64 |
+| 1.4091 | 7.75 | 2.71 | 2.46 |
+| 1.7248 | 12.14 | 5.92 | 6.04 |
+| 1.9903 | 26.37 | 3.97 | 2.89 |
+| 2.2256 | 30.19 | 2.94 | 2.10 |
+| 2.4382 | 6.61 | 3.88 | 3.72 |
+| 2.8148 | 22.03 | 5.25 | 4.62 |
+| 2.9854 | 21.47 | 3.78 | 3.13 |
+| 3.4480 | 4.39 | 3.76 | 3.79 |
+| 4.1040 | 3.71 | 3.66 | 3.64 |
+| **PbI₂ 0.8989 (83 bins)** | **1.90** | **1.86** | **1.81** |
+
+Both depth fits reach the thick limit for both phases. Fixing that limit in the wave model gives joint χ²red = 3.366 for MAPbI₃ and 1.786 for PbI₂. Fitting the depth adds one parameter per phase and gives 3.371 and 1.809. The frame provides no finite thickness estimate.
+
+On the 0.9973 Å⁻¹ ring, the central ray at |χ| = 84.5° has αf ≈ 0.10° from sin αf = q cos χ / k − sin αi. Below the MAPbI₃ critical angle of 0.120° the exit wave samples less film. The 85.5° bin straddles the vacuum horizon and its measured rays lie above it. Residuals in the last two columns are (observed − fitted) / σ.
+
+| Ring q (Å⁻¹) | &#124;χ&#124; (°) | Observed ± σ | Geometrical fit | Refracted fit | Geometrical residual | Refracted residual |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0.9973 | 83.5 | 85.36 ± 5.96 | 89.70 | 85.18 | −0.73 | +0.03 |
+| 0.9973 | 84.5 | 28.17 ± 3.27 | 84.37 | 24.13 | −17.19 | +1.24 |
+| 0.9973 | 85.5 | −0.36 ± 3.56 | 3.56 | 0.45 | −1.10 | −0.23 |
+
+Only the 1.7248 Å⁻¹ ring exceeds the determination limit of χ²red = 5. Its largest residual is at 85.5°, where the folded background-subtracted signal is −10.05 ± 2.05 and the wave model gives 8.70 (−9.16σ). At fixed thick-film depth, the MAPbI₃ fit contains a narrow (110) component, FWHM 11.08 ± 0.33°, with a phase fraction of 0.0483 ± 0.0022. A broad modulation at 78.68 ± 5.52° improves the profile BIC by 524.4 over a single (110) population plus isotropic material. Its fraction of 0.952 ± 0.428 trades strongly with the isotropic fraction. The report groups it as near-random and gives a pooled fraction of 0.9517 ± 0.0022. The failed ring prevents a quantitative determination of the overall crystal orientation.
+
+The single PbI₂ ring passes the determination checks for two (001) populations, with FWHM values of 51.24 ± 5.27° and 13.47 ± 1.75° and phase fractions of 0.570 ± 0.336 and 0.049 ± 0.029. The isotropic fraction is 0.381 ± 0.362. This basal reflection supplies no independent check on the broad fraction.
+
+### P08 crystal orientation before and after roll
+
+To reproduce the historical exit-transmission comparison at the published angle, use commit `27f8b22d`. Run `python tools/benchmarks/crystal_orientation.py --part public --public-incidence-deg 0.075 --public-roll-deg 0 --json zero.json`, then omit `--public-roll-deg 0` to measure the roll. Both runs use the same two CIFs. Each ring has its own intensity scale. The central columns give χ²red for the original exit-angle cut and the CIF-based exit-transmission fit. The last column compares the two raw arms, using RMS of the difference between mean pixel intensities in matching 2° |χ| bins. Each bin must have at least 12 pixels on each arm in both runs.
+
+| Phase and q (Å⁻¹) | Original cut, ψ = 0 → measured | Exit transmission, ψ = 0 → measured | Paired bins | ±χ RMS, ψ = 0 → measured |
+|---|---:|---:|---:|---:|
+| **MAPbI₃ joint** | **8.20 → 9.71** | **33.07 → 22.45** | | |
+| 0.9972 | 16.86 → 19.61 | 40.15 → 37.73 | 44 | 47.43 → 15.96 |
+| 1.4091 | 2.88 → 3.06 | 13.26 → 14.51 | 28 | 3.09 → 4.57 |
+| 1.7247 | 8.31 → 7.84 | 14.53 → 13.49 | 20 | 2.17 → 2.69 |
+| 1.9902 | 11.24 → 8.27 | 59.36 → 63.39 | 16 | 14.83 → 13.25 |
+| 2.2255 | 11.11 → 20.87 | 123.25 → 26.69 | 13 | 4.12 → 3.58 |
+| 2.4382 | 2.62 → 2.54 | 8.94 → 8.15 | 12 | 1.06 → 1.59 |
+| 2.8148 | 8.93 → 10.73 | 20.88 → 22.11 | 9 | 2.34 → 3.43 |
+| 2.9854 | 7.56 → 10.60 | 8.44 → 10.73 | 8 | 1.62 → 2.40 |
+| 3.4480 | 4.85 → 4.00 | 5.69 → 4.86 | 6 | 0.91 → 0.65 |
+| 4.1040 | 2.82 → 3.21 | 2.95 → 3.51 | 0 | — |
+| **PbI₂ 0.8989** | **1.43 → 1.32** | **2.76 → 2.08** | 44 | 3.38 → 2.50 |
+
+At |χ| = 84–86° on the strongest MAPbI₃ ring, the negative and positive arm means change from 82.4 and 10.5 to 26.7 and 33.8 counts/pixel. Over 87 common 1° bins their RMS difference falls from 45.6 to 20.2. This improvement is largest on the ring with both ends visible. Some outer rings have higher bilateral residuals after correction, and the outermost has no bin with enough pixels on both sides.
+
+With exit transmission the best MAPbI₃ candidate remains (212) + (001). Their FWHM values change from 30.0° and 58.5° to 33.3 ± 3.4° and 53.6 ± 2.9°, with fitted fractions 0.64 ± 0.42 and 0.36 ± 0.21. The fit admits 742 bins after roll, up from 738. Its residuals still exceed the determination threshold, so the data do not establish these populations. On the original cut both runs prefer two (001) components. PbI₂ retains two basal (001) components on its single ring. With exit transmission their widths change from 16.6° and 65.4° to 16.4 ± 1.7° and 66.9 ± 6.9°, with fitted fractions of 8.9% and 91.1%.
+
+### P08 film at fixed ψ = 0 (reference)
+
+The historical fits below use the dark-subtracted frame, its PONI (λ = 0.688801 Å) and αi = 0.075° from the public example. At these fixed angles the current default thick-film wave model gives joint χ²red = 31.75 for MAPbI₃ and 2.76 for PbI₂. The peak search assigns ten rings to tetragonal MAPbI₃ and one to PbI₂. The profiles use pixel-scatter errors, a locally fitted radial background constant in χ, polarization 0.99 and the original q windows. The MAPbI₃ CIF supplies four CH₆NPbI₃ units per cell for the index, and refined Pb and I sites for diffraction. These give ρₑ = 1.0423 e Å⁻³, δ = 2.18265 × 10⁻⁶, β = 1.26942 × 10⁻⁷ and αc = 0.1197°. The PbI₂ fixture uses the symmetry of its declared space group P −3 m 1, which gives one Pb and two I atoms per cell. [Public dataset and notebook](https://zenodo.org/records/17466183)
+
+| Phase and q (Å⁻¹) | Families | Shared width, original cut | Independent widths, original cut | Independent widths, exit transmission |
+|---|---|---:|---:|---:|
+| **MAPbI₃ joint** | **10 rings** | **10.94** | **8.20** | **33.07** |
+| 0.9972 | 002, 110 | 25.39 | 16.86 | 40.15 |
+| 1.4091 | 112, 200 | 4.07 | 2.88 | 13.26 |
+| 1.7247 | 202 | 9.14 | 8.31 | 14.53 |
+| 1.9902 | 004, 220 | 19.21 | 11.24 | 59.36 |
+| 2.2255 | 114, 222, 310 | 14.05 | 11.11 | 123.25 |
+| 2.4382 | 204, 312 | 3.64 | 2.62 | 8.94 |
+| 2.8148 | 224, 400 | 9.59 | 8.93 | 20.88 |
+| 2.9854 | 006, 314, 402, 330 | 8.98 | 7.56 | 8.44 |
+| 3.4480 | 404 | 4.74 | 4.85 | 5.69 |
+| 4.1040 | 118, 523, 406, 514, 442 | 2.75 | 2.82 | 2.95 |
+| **PbI₂ 0.8989** | **001** | **2.02** | **1.43** | **2.76** |
+
+Each entry is χ² divided by that fit’s effective degrees of freedom. The first column reproduces commit `bb45957`. The first two use 717 measured MAPbI₃ bins at αf ≥ 0.15° with the original shadow and weak-horizon exclusions. The last includes 738 measured bins and applies the pixel-averaged exit transmission. These fits use different observations, so the last column also measures disagreement with newly admitted bins.
+
+**Which planes are parallel?** On the original cut, two (001) components give 11.63 ± 0.54° and 104.9 ± 18.1°, with 3.9 ± 0.6% and 89 ± 66% of the phase, respectively. On the full profile the best candidate changes to (212) at 30.00 ± 3.34° (56.8 ± 29.4%) and (001) at 58.46 ± 3.97° (43.2 ± 18.3%). The runner-up is (112) + (001), ΔBIC = 256. Nine individual rings exceed χ²red = 5. The large residuals and the change of preferred planes preclude a quantitative assignment of MAPbI₃ fibre planes, widths or oriented fraction.
+
+For **PbI₂**, the only observed reflection is 001. Both selected populations have their basal planes parallel to the substrate. The narrow component is 16.64 ± 2.03° and 8.9 ± 2.5% of this phase. The broad component is 65.37 ± 7.07° and 91.1 ± 16.4%. The original cut gave 14.92° and 53.67°, with an isotropic fraction of 35.6%. The full-profile estimate of φ reaches zero with a local standard error of 17.6 percentage points. A single basal reflection supports this conditional shape comparison and supplies no independent check of the broad population.
+
+**Why the strongest MAPbI₃ ring fails.** At χ = 3.5°, the folded signal is 52.97 ± 1.25 and the joint fit predicts 23.61. At 80.5° and 84.5° the Fresnel multipliers are 1.008 and 1.027, respectively, while the measured signal drops from 142.7 ± 8.7 to 0.6 ± 2.7. At 88.5° the measured net signal is negative after subtraction of the radial background. The optical maximum occurs much closer to the horizon than the onset of the loss.
+
+The two detector sectors expose the asymmetry before polarization correction and background subtraction. At |χ| = 70–75°, mean intensities in the strongest ring window are 195 and 191 for the negative and positive sides. At 84–86° they are 82 and 10. Their respective radial maxima, 0.9948 and 0.9968 Å⁻¹, still lie inside the 0.9888–1.0057 Å⁻¹ window. Extending each edge by 0.015 Å⁻¹ and integrating above the measured flank background gives areas of 1.43 and 0.10 in intensity × Å⁻¹, compared with 3.44 and 3.31 at 70–75°. The asymmetry persists after the wider integration. The flank intensities themselves fall from about 18 near the missing wedge to 5 on the positive side at 84–86°, while the fitted constant background is 16.88. These observations identify a loss of measured scattering and a changing diffuse background. The frame alone does not identify the attenuating object.
+
+At q = 2.2255 Å⁻¹, 60% of the residual χ² lies above 80°. At 3.4480 Å⁻¹ the detector ends before the horizon. Its worst bin is at 68.5°, where only 76% of the radial window is spanned. At 69.5° that falls to 22%.
+
+The calibrated direct-beam height is 1826.95 px. In detector columns 543–547 (zero-based indices), the strongest on-axis excess between rows 1680 and 1839 occurs at row 1755, after subtracting the mean of the flanking strips at columns 510–527 and 560–577. If that feature were specular, its 71.45 px separation would imply αi ≈ ½ arctan(71.45 × 0.200 / 811.77) = 0.50°. The public notebook uses 0.075°. The related P08 chamber study reports 0.5° for its experiment. As a sensitivity test, `--part public --public-incidence-deg 0.5 --public-roll-deg 0` gives joint χ²red = 27.35 and strongest-ring χ²red = 37.82. This fit also fails. The measured-incidence section above compares this feature with an independent, less precise shadow-edge intercept. [P08 chamber study, §III](https://doi.org/10.1063/5.0149613)
+
+The public example’s authors describe the perovskite as visually close to random and attribute additional low-q arcs to an intermediate phase. Those arcs are outside the ten fitted windows. [Public frame, Fig. 6](https://journals.iucr.org/j/issues/2026/01/00/yr5162/index.html)

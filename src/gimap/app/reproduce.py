@@ -170,10 +170,12 @@ def reproduce_record(record_path, out=None, *, should_cancel=None) -> dict:
     with tempfile.TemporaryDirectory(prefix=".gimap-reproduce-", dir=destination) as temporary:
         staged = Path(temporary)
         try:
-            with verify_run(should_cancel):
+            with verify_run(should_cancel) as relocated:
                 comparison = _replay(record, path, staged, should_cancel)
         except (KeyError, TypeError, IndexError, AttributeError, OverflowError, zlib.error) as exc:
             raise ValueError(f"Invalid reproduction record {path.name}: {exc}") from exc
+        if relocated:
+            comparison["relocated_inputs"] = relocated
         comparison.update(source_record=str(path), source_record_sha256=record_digest,
                           output_dir=str(destination), software_version=SOFTWARE,
                           commit=source_commit(), runtime=numerical_environment())

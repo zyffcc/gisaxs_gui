@@ -134,6 +134,12 @@ _PATTERNS = tuple((template, _pattern(template), values) for template, values in
 def message_text(message: str) -> str:
     """``message`` (made in English by the application or the domain) in the interface language."""
     message = str(message)
+    # The reduction record describes the geometry. On screen the angle can be entered directly.
+    if message == "Set αi in the geometry for correct qz.":
+        return tr("For qz, enter the measured incidence angle in the αi field above the image.")
+    if message == "Incidence angle is 0°: the sample horizon equals the beam centre row. Set αi in the geometry for correct qz.":
+        return tr("At αi = 0° the horizon is at the beam centre row. For qz, enter the measured incidence angle "
+                  "in the αi field above the image.")
     exact = tr(message)
     if exact != message:
         return exact

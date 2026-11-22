@@ -111,6 +111,7 @@ class ResolveGeometry:
         shape: tuple[int, int],
         profile_name: Optional[str] = None,
         incidence_deg: Optional[float] = None,
+        sample_roll_deg: Optional[float] = None,
         beam_center: Optional[tuple[float, float]] = None,
         use_header_center: bool = False,
         header_center: Optional[tuple[float, float]] = None,
@@ -139,6 +140,8 @@ class ResolveGeometry:
             source = CENTER_HEADER
         if incidence_deg is not None:
             geometry = geometry.with_incidence(float(incidence_deg))
+        if sample_roll_deg is not None:
+            geometry = geometry.with_sample_roll(sample_roll_deg)
         if distance_m is not None:
             geometry = replace(geometry, distance_m=float(distance_m))
         return GeometryResolution(geometry, profile, how, source, header_center, ignored, **refusal)

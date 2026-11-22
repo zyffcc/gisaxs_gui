@@ -19,9 +19,10 @@ from dataclasses import replace
 import numpy as np
 from PyQt5.QtWidgets import QApplication, QComboBox, QLabel
 
-from src.gimap.features.fitting.application.joint_fit import CurveSpec, hints
+from src.gimap.features.fitting.application.joint_fit import CurveSpec, curve_errors, hints
 from src.gimap.features.fitting.application.single_fit import Curve, FitModel, evaluate, new_component
 from src.gimap.features.fitting.application.single_predict import predict_request
+from src.gimap.shared.numbers import format_number
 from tests.test_fit_page import _page, _wait
 
 LAMBDA, ALPHA_I = 0.1045, 0.4
@@ -113,7 +114,12 @@ def test_joint_window_fits_a_horizontal_and_a_vertical_cut(tmp_path):
         assert dialog.add_file(_vertical_file(tmp_path, truth))
         assert [s.kind for s in dialog.specs] == ["horizontal", "vertical"]
         assert dialog.specs[1].q_parallel == 0.3 and dialog.specs[1].alpha_i == ALPHA_I
+        assert not dialog.joint_run.isEnabled() and "Choose substrate" in dialog.joint_substrate.currentText()
+        dialog.joint_shown.setCurrentIndex(1)
+        assert dialog.joint_plot.has_curves()
+        np.testing.assert_equal(dialog.joint_plot.figure_state()["curves"][0][1], dialog.specs[1].q)
         dialog.set_substrate("Si")
+        assert dialog.joint_run.isEnabled()
         assert dialog.joint_min_exit.value() == 2
         dialog._render()
         names = [dialog.joint_parameters.item(i, 0).text() for i in range(dialog.joint_parameters.rowCount())]
@@ -124,6 +130,8 @@ def test_joint_window_fits_a_horizontal_and_a_vertical_cut(tmp_path):
         assert dialog.result is not None, dialog.joint_status.text()
         assert abs(dialog.result.models[0].get((0, "h")).value - 6.0) < 0.5
         assert "χ²ᵣ" in dialog.joint_summary.text()
+        height = dialog.result.models[0].get((0, "h")).value
+        assert f"h = {format_number(height, curve_errors(dialog.result, 0).get((0, 'h')))} nm" in dialog.joint_dimensions.text()
         dialog.joint_min_exit.setValue(0)  # the completed fit retains its own range
         assert "2 αc" in dialog.joint_summary.text()
         assert dialog.joint_shown.count() == 2
@@ -154,6 +162,32 @@ def test_joint_window_fits_a_horizontal_and_a_vertical_cut(tmp_path):
         assert dialog.result.start_curves[1].model.get((0, "h")).value == page.session.model.get((0, "h")).value
         dialog.dispose()
     finally:
+        page.dispose()
+        page.deleteLater()
+
+
+def test_one_particle_shape_can_be_chosen_in_the_joint_window(tmp_path):
+    from src.gimap.app.presentation.i18n import apply_language
+    from src.gimap.features.fitting.presentation.single.joint_fit_dialog import JointFitDialog
+
+    page = _page()
+    dialog = JointFitDialog(page, page.view_model, page)
+    try:
+        assert dialog.add_file(_vertical_file(tmp_path, _cylinders()))
+        index = dialog.joint_family.findData("vertical_cylinder")
+        dialog.joint_family.activated.emit(index)
+        assert page.session.model.components[0].family == "vertical_cylinder"
+        names = [dialog.joint_parameters.item(i, 0).text() for i in range(dialog.joint_parameters.rowCount())]
+        assert any(" h (nm)" in name for name in names)
+        assert not dialog.joint_run.isEnabled()
+        dialog.remove_selected()
+        assert not dialog.joint_plot.has_curves()
+        dialog._save_text(tmp_path / "notes.md", "Test")
+        apply_language("zh", [dialog.joint_dialog])
+        assert dialog.joint_status.text() == "已保存 notes.md。"
+    finally:
+        apply_language("en", [dialog.joint_dialog])
+        dialog.dispose()
         page.dispose()
         page.deleteLater()
 

@@ -83,19 +83,23 @@ RESIDUAL_DEFINITION = {
                       "distance of the point from its ring. (tilt_fit.tilt_residual)",
     "gimap_points": "one point per azimuthal sector (about 2 px of arc, 36-720 a ring) of each matched ring: the "
                     "intensity-weighted mean position of the valid pixels within +-max(3, min(10, 1.2 % of the radius)) "
-                    "px of the ring (weights: signal above the sector's lower quartile, signal = log(1 + counts) minus a "
-                    "smooth background); a sector is kept when its brightest pixel stands above that quartile by at "
-                    "least 0.3 of the ring's median such height; points taken again about the tilted rings, 4 passes "
+                    "px of the ring (first pass: twice this half-width h). Weights are measured detector intensity "
+                    "above the sector's lower quartile. Each sector must have valid pixels at radial offsets <= -h+1 "
+                    "and >= h-1 px. Its brightest pixel must stand above the quartile by at least 0.3 of the median "
+                    "such height among sectors that cover both flanks; points taken again about the tilted rings, 4 passes "
                     "at most (tilt_fit.tilted_ring_points, refine_tilt)",
     "gimap_bounds": "beam centre within 4 % of the larger image side (12-60 px) of the start, L within +-25 % (and "
                     "the user's range), |rot1|, |rot2| <= 30 deg",
     "gimap_sigma_reported": "4 or more contributing rings: jackknife over rings, sigma^2 = (n-1)/n sum_k (theta_(k) - "
                             "mean)^2, theta_(k) the same robust fit with ring k left out (unbounded, from the full fit, "
                             "same points); 2 rings: s^2 (J^T J)^-1, s^2 = sum r_i^2 / (N - p), forward-difference J "
-                            "(optimizer.estimate_uncertainty). With 3 rings the two-ring refits hold both tilts at "
-                            "the full fit. When the full fit refined the tilts, their variance comes from its "
-                            "five-parameter covariance, and x, y and L take the larger of the jackknife and covariance "
-                            "standard errors. With fixed tilt use the jackknife for x, y and L.",
+                            "(optimizer.estimate_uncertainty). With 3 rings and fitted tilts the jackknife refits all "
+                            "five parameters if every fit converges, with |rot1| and |rot2| < 30 deg, L in "
+                            "(0.75 L_full, 1.25 L_full) and s_min/s_max > sqrt(machine epsilon) for the Jacobian with "
+                            "unit-length columns. Otherwise all two-ring refits hold both tilts at their full-fit "
+                            "values. In this fallback the tilt errors come from the full five-parameter covariance, "
+                            "and x, y and L take the larger of the conditional jackknife and covariance errors. "
+                            "With tilt fixed by the user use the jackknife for x, y and L.",
     "pyfai_minimises": "sum_i (2theta_i - 2theta_ring(i))^2 in radians, plain least squares "
                        "(GeometryRefinement.residu2; curve_fit = Levenberg-Marquardt); its sigma is curve_fit's "
                        "s^2 (J^T J)^-1",
@@ -165,6 +169,7 @@ def gimap_real() -> dict:
                     uncertainty_method=candidate.uncertainty_method, tilt_refined=candidate.tilt_refined,
                     point_rms_px=candidate.point_rms_px, untilted_point_rms_px=candidate.untilted_point_rms_px,
                     ring_points=int(points[0].size), chosen_by=summary.get("chosen_by"), seconds=seconds,
+                    headless_beam_center_px=summary["beam_center_px"], headless_distance_mm=summary["distance_mm"],
                     jackknife_repeated_here_max_relative_difference=float(np.max(np.abs(repeated / reported - 1.0)))),
     )
 

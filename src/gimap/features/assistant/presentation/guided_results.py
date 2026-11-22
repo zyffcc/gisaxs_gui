@@ -17,6 +17,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import (
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QTextBrowser,
@@ -27,7 +28,12 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.presentation.components import AdvancedSection
 from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_to, current_language, tr, trf
 
+from src.gimap.shared.numbers import applied_angle, format_number
+
+from ..application.calibration_report import geometry_estimates
+from ..application.report_numbers import peak_value
 from ..application import found_by_search, reliable_row, ring_overlays, series_changes
+from ..application.giwaxs_summary import result_lines
 from .guided_details import PeakDetails, SolutionDetails, method_text
 from .guided_gisaxs import GisaxsResults, outcome_summary
 from .guided_report import report_markdown
@@ -57,7 +63,7 @@ GEOMETRY_DECISIONS = {
     "pixel size": "Pixel size", "detector tilt": "Detector tilt",
 }
 """The decisions about the geometry shown under it: the report's key and its title (in the interface language)."""
-FRAME_ACTIONS = ("guidedRefineFit", "guidedSaveReport", "guidedCompareButton")
+FRAME_ACTIONS = ("guidedSavePeaks", "guidedRefineFit", "guidedSaveReport", "guidedCompareButton")
 """Buttons that act on the frame shown in Analyze: off while the results are another frame's (with Show in Fitting)."""
 SERIES_HEADERS = (("q (Å⁻¹)", ""), ("at the start", "Frames 1–10 summed."), ("at the end", "The frames in the results above."),
                   ("change", "Reliable peaks only. Peaks closer than half their width are the same line; it shifted if it "
@@ -74,8 +80,8 @@ SEARCHED_NOTE = "Found by the automatic search, not named by you: {path} — {wh
 """Under the geometry, when nobody named the calibration the run used: its full path and where it lies."""
 SEARCHED_ABOVE = "The geometry is from a calibration the automatic search found ({name}): see Geometry below."
 """Under the outcome of an analysis: the Geometry section, with the path, is the last one of a long tab."""
-PEAKS_TIP = ("Phases are not assigned automatically: ask the AI or compare q with the lines of your material. Hover a "
-             "cell for the whole sentence; the saved report has the full table.")
+PEAKS_TIP = ("To index the measured peaks, add candidate phases in Phases, then run the automatic analysis. "
+             "Hover over an hkl to see other reflections within the assignment window.")
 Q_MAP_TIP = ("The analysed rings on the q map: solid white = measured, orange = in a shadow, red dashed = not measured "
              "(detector gaps, the missing wedge next to qz).")
 DETAILS_TIP = ("How the selected row was fitted: the fit on its points, every parameter with its error, the settings "
@@ -208,6 +214,7 @@ def searched_note(report: dict) -> str:
 class GuidedResultsPanel(QWidget):
     compareRequested = pyqtSignal()
     saveRequested = pyqtSignal()
+    savePeaksRequested = pyqtSignal()
     refineRequested = pyqtSignal()
     """GISAXS: open the prepared curve in Fitting."""
     details_open = False
@@ -256,7 +263,8 @@ class GuidedResultsPanel(QWidget):
         frames = report.get("frames") or {}
         if report.get("ok") and int(frames.get("total") or 1) > 1:
             self._series(report)
-        self._report(report)
+        if not self._has_giwaxs_summary(report):
+            self._report(report)
         self.layout_.addStretch(1)
         if current_language() != DEFAULT_LANGUAGE:  # built after the window was translated
             apply_to(self, current_language())
@@ -305,14 +313,22 @@ class GuidedResultsPanel(QWidget):
                 gap = "" if current_language() == "zh" else " "  # Chinese sentences follow each other without a space
                 text += gap + tr("{n} question(s) in the Results step.").format(n=len(questions))
             self.layout_.addWidget(badge(text, GOOD, self))
+            if self._has_giwaxs_summary(report):
+                self.layout_.addWidget(_heading("Result summary", self))
+                self.layout_.addWidget(label("\n".join(result_lines(report, words)), self))
+                self._report(report)
             found = found_by_search(report)
             if found and report.get("procedure") != "geometry":  # Find Geometry says it in its outcome line
                 above = label(trf(SEARCHED_ABOVE, name=Path(str(found["decision"]).replace("\\", "/")).name), self, role="muted")
                 above.setObjectName("guidedSearchedAbove")
                 self.layout_.addWidget(above)
-            if points:
+            strongest = next((ring for ring in rings if ring.get("strongest_by_area")), None)
+            if strongest:
+                self.layout_.addWidget(_heading("Strongest reliable ring by fitted area", self))
+                self._ring(strongest)
+            if points and not self._has_giwaxs_summary(report):
                 self.layout_.addWidget(label(tr("{n} point(s) to check — see below").format(n=len(points)), self, role="muted"))
-            for item in points:
+            for item in ([] if self._has_giwaxs_summary(report) else points):
                 point = badge(_point(item), NOTE, self)
                 self.layout_.addWidget(point)
                 if item.get("hint") and item.get("item") in HINT_IN_TIP:  # its details are in the sections below
@@ -331,7 +347,15 @@ class GuidedResultsPanel(QWidget):
         peaks = report.get("peaks") or []
         heading = _heading("Peaks", self)
         heading.setToolTip(tr(PEAKS_TIP))
-        self.layout_.addWidget(heading)
+        header = QHBoxLayout()
+        header.addWidget(heading)
+        header.addStretch(1)
+        save = QPushButton(tr("Save Peak Table…"), self)
+        save.setObjectName("guidedSavePeaks")
+        save.setToolTip(tr("Save every fitted peak, its uncertainty and phase assignment as CSV."))
+        save.clicked.connect(self.savePeaksRequested)
+        header.addWidget(save)
+        self.layout_.addLayout(header)
         self.peak_table = peak_table(peaks, self)  # compact: fits the narrow Results tab; tooltips say the rest
         self.peak_table.setMinimumHeight(min(360, 60 + 30 * len(peaks)))
         self.layout_.addWidget(self.peak_table)
@@ -347,10 +371,14 @@ class GuidedResultsPanel(QWidget):
         self._details_tip(peaks[first] if peaks else {}, report)  # how the peaks were found and fitted
         self.peak_table.selectRow(first)
         for ring in report.get("rings") or ():
-            text, detail = ring_summary(ring)
-            line = label(text, self)
-            line.setToolTip(detail)
-            self.layout_.addWidget(line)
+            if not ring.get("strongest_by_area") or not report.get("ok"):
+                self._ring(ring)
+
+    def _ring(self, ring: dict) -> None:
+        text, detail = ring_summary(ring)
+        line = label(text, self)
+        line.setToolTip(detail)
+        self.layout_.addWidget(line)
 
     def _details_section(self, name: str) -> AdvancedSection:
         """Fit details of the selected row: closed until opened, then open for the next reports too."""
@@ -389,10 +417,15 @@ class GuidedResultsPanel(QWidget):
     def _checks(self, report: dict) -> None:
         self.layout_.addWidget(_heading("Checks", self))
         found = 0
+        for item in to_check(report.get("needs_attention") or []):
+            self.layout_.addWidget(badge(_point(item), NOTE, self))
+            if item.get("hint"):
+                self.layout_.addWidget(label(words(item["hint"]), self, role="muted"))
+            found += 1
         for peak in report.get("peaks") or ():
             if peak.get("caveat"):
-                self.layout_.addWidget(badge(trf("q = {q} Å⁻¹: {caveat}", q=f"{peak['q']:.4g}", caveat=tr(peak["caveat"])),
-                                             WARN, self))
+                text = trf("q = {q} Å⁻¹: {caveat}", q=peak_value(peak, "q", value_only=True), caveat=tr(peak["caveat"]))
+                self.layout_.addWidget(badge(text, WARN, self))
                 found += 1
         for text, detail in coverage_notes(report.get("rings") or ()):
             note = badge(text, NOTE, self)
@@ -426,14 +459,13 @@ class GuidedResultsPanel(QWidget):
             assessment = str(quality.get("assessment") or "")
             color = GOOD if assessment.startswith(("good", "a saved")) or not assessment else NOTE if assessment.startswith("usable") else WARN
             self.layout_.addWidget(badge(words(assessment) or tr("Instrument profile of this detector"), color, self))
-            # To 0.01 px, as the report and the cuts give it (the record keeps the coordinates applied).
-            centre = ["—" if value is None else f"{float(value):.2f}" for value in (geometry.get("beam_center_px") or [None, None])]
+            distance, centre = geometry_estimates(geometry, report.get("calibration"))
             form = QFormLayout()
             for name, value in (
                 ("From", source_text(geometry.get("source"))),
-                ("Distance", f"{float(geometry.get('distance_mm')):.6g} mm"),  # the record keeps every digit
+                ("Distance", f"{distance} mm"),
                 ("Beam centre", f"({centre[0]}, {centre[1]}) px"),
-                ("Wavelength", f"{float(geometry.get('wavelength_A') or 0):.6g} Å"),
+                ("Wavelength", f"{format_number(geometry.get('wavelength_A'))} Å"),
             ):
                 form.addRow(tr(name), label(str(value), self))
             self._incidence_label = label(self._incidence_text(report), self)
@@ -468,9 +500,10 @@ class GuidedResultsPanel(QWidget):
         shown, ran = status.get("path"), report.get("frame")
         if shown and (not ran or Path(str(shown)).resolve() == Path(str(ran)).resolve()):
             now = (status.get("geometry") or {}).get("incidence_deg")
+        recorded = applied_angle(used, report.get("incidence_measurement"))
         if now is None or abs(float(now) - used) < 1e-9:
-            return f"{used:.6g}°"
-        return trf("{now}° (the run used {used}°)", now=f"{float(now):.6g}", used=f"{used:.6g}")
+            return f"{recorded}°"
+        return trf("{now}° (the run used {used}°)", now=applied_angle(now, status.get("incidence_measurement")), used=recorded)
 
     def refresh_incidence(self) -> None:
         """Analyze shows its frame again (αi may have changed): the geometry block says the αi in use."""
@@ -495,8 +528,9 @@ class GuidedResultsPanel(QWidget):
         self.layout_.addWidget(compare, 0, Qt.AlignLeft)
         if self.start_report is None or not self.start_report.get("ok"):
             return
-        changes = sorted(series_changes(self.start_report, report), key=lambda item: item["change"] == "present at both")
-        rows = [[f"{item['q']:.4g}", tr(item["start"]), tr(item["end"]), change_text(item["change"])]
+        changes = series_changes(self.start_report, report, display=True)
+        changes.sort(key=lambda item: item["change"] == "present at both")
+        rows = [[item["q_text"], tr(item["start"]), tr(item["end"]), change_text(item["change"])]
                 for item in changes]
         series_table = table(SERIES_HEADERS, rows, self, "guidedSeriesTable", numbers=(0,), single=False)
         series_table.setMinimumHeight(min(300, 60 + 30 * len(rows)))
@@ -521,6 +555,10 @@ class GuidedResultsPanel(QWidget):
         toggle.toggled.connect(lambda on: toggle.setText(tr("Hide the Full Text") if on else tr("Show the Full Text")))
         self.layout_.addWidget(toggle, 0, Qt.AlignLeft)
         self.layout_.addWidget(self.report_view)
+
+    @staticmethod
+    def _has_giwaxs_summary(report):
+        return report.get("ok") and not report.get("stopped") and report.get("procedure") not in ("gisaxs", "geometry")
 
     # -- the interface language -----------------------------------------------------------
 

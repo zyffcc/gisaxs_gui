@@ -6,6 +6,7 @@ The module calibrates the pyFAI AgBh Pilatus1M.edf frame once (about 5 s) and ex
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from pathlib import Path
@@ -160,7 +161,7 @@ def _clipped_labels(dialog) -> list[str]:
 
 
 @pytest.mark.parametrize("language", ["en", "zh"])
-def test_every_solution_row_shows_at_the_default_size(calibration_json, monkeypatch, language):
+def test_every_solution_row_shows_at_the_default_size(calibration_json, tmp_path, monkeypatch, language):
     from src.gimap.app.presentation import i18n
 
     app = _app()
@@ -174,10 +175,18 @@ def test_every_solution_row_shows_at_the_default_size(calibration_json, monkeypa
         assert dialog.preview_empty_label.isVisible()
         assert not dialog.preview_info_label.isVisible()
 
-        _import(dialog, calibration_json, monkeypatch)
+        # Exercise the wrapped row even when all rings on the public frame are well supported.
+        warning = "Matched rings are partial GISAXS arcs; verify the overlay before applying."
+        record = json.loads(calibration_json.read_text(encoding="utf-8"))
+        record["selected_candidate"]["warnings"] = [warning]
+        for candidate in record["candidates"]:
+            candidate["warnings"] = [warning]
+        layout_example = tmp_path / "layout.gimap-calibration.json"
+        layout_example.write_text(json.dumps(record), encoding="utf-8")
+        _import(dialog, layout_example, monkeypatch)
         _settle(app, 0.4)
         assert dialog.preview_info_label.isVisible()
-        assert dialog.result_warning.text() not in ("", "—", "None")  # a wrapped warning
+        assert i18n.tr(warning) in dialog.result_warning.text()
         assert dialog._result_two_columns
         assert dialog.result_scroll.verticalScrollBar().maximum() == 0
         assert _rows_outside_viewport(dialog) == []
@@ -196,9 +205,12 @@ def test_every_solution_row_shows_at_the_default_size(calibration_json, monkeypa
         _settle(app, 0.3)
 
         # A narrow window: one pair per row, so neither the labels nor the table are squeezed.
-        dialog.resize(900, 600)
+        dialog.resize(900, 560)
         _settle(app, 0.4)
         assert not dialog._result_two_columns
+        assert dialog.candidate_table.horizontalScrollBar().maximum() == 0
+        assert not dialog.candidate_table.isColumnHidden(0)
+        assert not dialog.candidate_table.isColumnHidden(1)
         assert _clipped_labels(dialog) == []
         dialog.resize(1180, 760)
         _settle(app, 0.4)

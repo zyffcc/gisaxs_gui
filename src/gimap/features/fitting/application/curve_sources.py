@@ -171,14 +171,15 @@ def validate_columns(preview: CurveTablePreview, columns: ColumnMapping) -> None
             raise ValueError("An intensity column cannot be used as sigma. Choose Shared q or correct the column names.")
 
 
-def source_record(token) -> dict:
+def source_record(token, *, verified_sha256=None) -> dict:
     """The physical file and explicit column selection, suitable for a JSON provenance record."""
     from .models import InSituSourceFrame
 
     from src.gimap.shared.file_digest import sha256_of
 
     source = InSituSourceFrame.from_token(str(token))
-    return {"path": str(source.path.absolute()), "file": source.path.name, "sha256": sha256_of(source.path),
+    digest = verified_sha256 if verified_sha256 is not None else sha256_of(source.path)
+    return {"path": str(source.path.absolute()), "file": source.path.name, "sha256": digest,
             "frame_index": source.frame_index, "source_kind": source.source_kind,
             "columns": None if source.columns is None else source.columns.to_dict()}
 

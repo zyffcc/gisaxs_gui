@@ -336,7 +336,7 @@ class _Problem:
         self._reported = now
         points = max(1, self.data.q.size - len(self.nonlinear) - len(self.linear))
         self.progress(min(0.99, self.evaluations / self.total), PROGRESS_LINE.format(
-            phase=self.phase, evaluations=self.evaluations, chi2=f"{self.best[0] / points:.4g}"))
+            phase=self.phase, evaluations=self.evaluations, chi2=f"{self.best[0] / points:.3g}"))
 
 
 def fit(model: FitModel, data: FitData, *, method: str = "local", max_evaluations: Optional[int] = None,

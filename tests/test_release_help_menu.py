@@ -506,7 +506,8 @@ def test_an_example_is_copied_to_the_folder_chosen_and_opened_in_analyze(command
     assert asked[0][1].endswith(str(Path("GIMaP examples") / "giwaxs_xeuss_pbte"))
     assert frame == target / "PbTe_3010_r1_PT_1_10_0_00028.edf"
     assert sorted(path.name for path in target.iterdir()) == sorted(
-        ["PbTe_3010_r1_PT_1_10_0_00028.edf", "mask_PbTe_3010.edf", "AgBe_250403_XENOCS.poni", "SOURCE_AND_LICENCE.md"])
+        ["PbTe_3010_r1_PT_1_10_0_00028.edf", "mask_PbTe_3010.edf", "AgBe_250403_XENOCS.poni",
+         "PbTe_bulk_reference.cif", "SOURCE_AND_LICENCE.md"])
     source = help_commands.EXAMPLES_FOLDER / "giwaxs_xeuss_pbte" / "AgBe_250403_XENOCS.poni"
     assert (target / source.name).read_bytes() == source.read_bytes()
     assert commands.window.components.analyze_page.imported == [[str(frame)]]

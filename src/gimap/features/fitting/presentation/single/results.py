@@ -3,7 +3,7 @@ methods, and saving (the points with the model and its terms plus a JSON record,
 the solutions: ``solutions_export.py``; the figure: ``figure_export.py``).
 
 ± of a value is its least-squares error after a fit; with a solution of Predict parameters in Model (no fit since),
-half the width of the solution's 68 % posterior interval (``solution_texts.predict_plus``, said in its tooltip).
+half the width of the solution's 68 % posterior interval (``solution_texts.predict_uncertainty``, said in its tooltip).
 """
 
 from __future__ import annotations
@@ -22,7 +22,8 @@ from PyQt5.QtWidgets import QFileDialog, QHeaderView, QTableWidgetItem
 from src.gimap.app.presentation.i18n import tr, trf
 
 from src.gimap.shared import fit_names
-from ...application.solution_export import posterior_by_path
+from src.gimap.shared.numbers import format_number
+from ...application.solution_export import intervals_by_path, posterior_by_path
 from ...application.single_fit import (
     GRAZING,
     INFO,
@@ -32,14 +33,14 @@ from ...application.single_fit import (
     derived_values,
     fit_record,
     model_to_dict,
-    parameter_text,
+    parameter_info,
 )
 from ...application.fit_nxcansas import fit_curves, write_curves
 from ..views.step_widgets import fit_to_rows, show_line
 from .method_hint import note_text
 from . import predict_texts
 from .session import path_name
-from .solution_texts import PLUS_HEADER_TIP, numbered_labels, predict_plus, refined_text
+from .solution_texts import PLUS_HEADER_TIP, numbered_labels, predict_uncertainty, refined_text
 from ...application.models import InSituSourceFrame
 from ...application.curve_sources import source_stem
 
@@ -164,11 +165,10 @@ def write_pair(path, write_table, record: dict) -> Path:
 def value_cells(key: str, value: float, error, free: bool) -> tuple[str, str]:
     """The value with its unit, and “± error” (no unit) or “fixed”: the unit stays in the value column."""
     unit = INFO[key].unit
-    text = parameter_text(key, value, error)
-    if unit and text.endswith(unit):
-        text = text[: -len(unit)].strip()
-    number, _sep, err = text.partition(" ± ")
-    return f"{number} {unit}".strip(), f"± {err}" if err else ("" if free else tr("fixed"))
+    number = format_number(value, error, value_only=True)
+    if error is None or not math.isfinite(error) or error < 0:
+        return f"{number} {unit}".strip(), "" if free else tr("fixed")
+    return f"{number} {unit}".strip(), "± " + format_number(error, error, value_only=True)
 
 
 CORRELATED_SHOWN = 2
@@ -232,9 +232,12 @@ class FitResultsMixin:
         return tr("{points} points fitted").format(points=count)
 
     def render_results(self) -> None:
+        self.compare_saved_fit_button.setVisible(self.session.saved_fit is not None)
         self._render_model_results()
         self.render_result_actions()  # next steps, what the fit did by itself, the folds (result_actions.py)
-        self.fit_notes_button.setVisible(bool(self.warnings_label.text() or not self.actions_label.isHidden()))
+        notes = self.warnings_label.text()
+        self.fit_notes_button.setVisible(bool(notes or not self.actions_label.isHidden()))
+        self.fit_notes_button.setText(tr("Review fit warnings…") if "⚠" in notes else tr("Fit details…"))
         self.refresh_equivalent_selector()
         self.refresh_uncertainty()  # the Uncertainty and Report window (uncertainty.py)
 
@@ -250,8 +253,7 @@ class FitResultsMixin:
         search_note = ["⚠ " + tr("The halves, the fitting range or the left-out points changed after the search: "
                                  "the χ² of the solutions is of the points before.")] if old_search else []
         if result is None and session.solutions:
-            self.quality_label.setText(trf("{solutions} below; the best is in Model. Fit (Refine) gives its quality "
-                                           "and the error of every value.",
+            self.quality_label.setText(trf("{solutions} below. Refine reports fit quality and uncertainties where estimable.",
                                            solutions=predict_texts.count_solutions(len(session.solutions)))
                                        + self._incomplete_note())
             current = next((s for s in session.solutions if s.model == session.model), None)
@@ -263,7 +265,15 @@ class FitResultsMixin:
             show_line(self.step_intro["results"], stale + trf(
                 "{solutions} to compare.", solutions=predict_texts.count_solutions(len(session.solutions))))
         elif result is None:
-            self.quality_label.setText(tr("No fit yet."))
+            saved = session.saved_fit
+            if saved is None:
+                self.quality_label.setText(tr("No fit yet."))
+            else:
+                text = trf("Saved model from {name} · {count} points", name=saved.path.name, count=saved.count)
+                if saved.quality is not None:
+                    metric = "χ²ᵣ" if saved.weighting == "sigma" else "var ln I"
+                    text += f" · {metric} {saved.quality:.3g}"
+                self.quality_label.setText(text)
             self.warnings_label.setText("")
             self.warnings_label.setToolTip("")
             show_line(self.step_intro["results"], "")  # the box below and the rail's “After a fit” say it
@@ -358,6 +368,7 @@ class FitResultsMixin:
         predicted = None if result is not None else next(  # a solution of Predict in Model: ± from its interval
             (s for s in self.session.solutions if s.model == self.session.model and s.intervals), None)
         posterior = posterior_by_path(predicted) if predicted else {}
+        reported = intervals_by_path(predicted) if predicted else {}
         self.parameters_table.setColumnHidden(3, predicted is None)
         self.parameters_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.parameters_table.horizontalHeaderItem(1).setText(tr("least-squares\nvalue") if predicted else tr("value"))
@@ -366,11 +377,15 @@ class FitResultsMixin:
             if self._unused(path, parameter):
                 continue  # an unused term (no resolution peak, no background, spheres at q_z = 0)
             error = None if result is None else result.errors.get(path)
-            full = path_name(self.session.model, path, full=True)  # “1·Sphere R”, also when shown as “R”
-            value, plus = value_cells(path[1], parameter.value, error, parameter.free)
+            full = path_name(self.session.model, path, full=True)
+            component = None if path[0] == "globals" else self.session.model.components[path[0]]
+            full += "\n" + tr(parameter_info(component, path[1]).tip)
             why = ""
             if predicted is not None and parameter.free:
-                plus, why = predict_plus(predicted, path)
+                error, why = predict_uncertainty(predicted, reported.get(path), posterior.get(path, {}))
+            value, plus = value_cells(path[1], parameter.value, error, parameter.free)
+            if why and not plus:
+                plus = "–"
             if result is not None and parameter.free and not plus:  # a free value the fit gives no error for
                 plus, why = "–", predict_texts.no_error_reason(path, parameter, result, self.session.model)
             plus, why = self.flag_cell(path, result, plus, why)
@@ -382,7 +397,8 @@ class FitResultsMixin:
             self.parameters_table.setItem(line, 0, _item(name, full))
             self.parameters_table.setItem(line, 1, _item(value))
             self.parameters_table.setItem(line, 2, _item(plus, why))
-            median = f"{sampled['median']:.5g}" if sampled else "—"
+            median = (fit_names.interval_values(sampled["median"], sampled.get("low68"), sampled.get("high68"))[0]
+                      if sampled else "—")
             interval = (fit_names.interval_text(sampled["median"], sampled["low68"], sampled["high68"])
                         if sampled and "low68" in sampled else "")
             self.parameters_table.setItem(line, 3, _item(median, interval))
@@ -410,7 +426,7 @@ class FitResultsMixin:
         self.solutions_table.setRowCount(len(solutions))
         labels = numbered_labels(solutions)
         for line, solution in enumerate(solutions):
-            radii, distances = predict_texts.sizes_cells(solution.model)  # every population, by radius
+            radii, distances = predict_texts.sizes_cells(solution.model, solution)  # every population, by radius
             tip = tr("From {source}.").format(source=tr(solution.source))
             for extra in (predict_texts.points_text(solution.points), predict_texts.differing_tip(solution, solutions)):
                 if extra:
@@ -472,7 +488,7 @@ class FitResultsMixin:
         if data is None or not data.q.size:
             self._status(tr("Open a curve first."), "warning")
             return None
-        path = path or self._save_path("Save Data and Fit", f"{self._stem()}_fit.csv", SAVE_DATA_FILTER)
+        path = path or self._save_path("Save Curve and Parameters…", f"{self._stem()}_fit.csv", SAVE_DATA_FILTER)
         if not path:
             return None
         names, table = export_table(self.session.model, data)
@@ -481,6 +497,9 @@ class FitResultsMixin:
                             result=self.session.result if self.session.result_is_current() else None,
                             excluded=self.session.excluded, curve_table=(names, table))
         record.update(self.solutions_record(record))
+        saved = self.session.saved_fit
+        if saved is not None:
+            record["parent_fit_record"] = {"path": str(saved.path), "sha256": saved.sha256}
         if Path(path).suffix.lower() == ".h5":  # NXcanSAS: the points fitted and the model, q in 1/nm
             curves = fit_curves(self.session.model, data, record, self._stem())
             write = lambda target: write_curves(target, curves)  # noqa: E731

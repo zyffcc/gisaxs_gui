@@ -460,10 +460,21 @@ def _intake(a, root, mask, msha, energy, lam, out):
             t_last=LV.rounded(rows[-1]["time_s"], 3), onset=LV.rounded(scan.get("t_dep"), 3))
 
 
+def shadow_env(root, label, base=None):
+    'Environment of the shadow-table extraction. A scan away from 12 keV needs its own wavelength (IAM_LAM_NM) and'
+    env = dict(os.environ if base is None else base, IAM_DATA=str(root))
+    env.pop("IAM_SHADOW_BG", None)
+    sj = Path(root) / label / "scan.json"
+    lam = json.loads(sj.read_text(encoding="utf-8")).get("lam") if sj.exists() else None
+    if lam is not None and abs(float(lam) / LAM_12KEV - 1) > 1e-9:
+        env["IAM_LAM_NM"] = repr(float(lam))
+        env["IAM_OPTICS"] = "table"
+    return env
+
+
 def shadow(a, root):
     'Near-horizon shadow table of every window (Si families with the pre0 background term).'
-    env = dict(os.environ, IAM_DATA=str(root))
-    env.pop("IAM_SHADOW_BG", None)
+    env = shadow_env(root, a.label)
     code = ("import sys; sys.path.insert(0, '.'); from iampred import adapter as A; A.register(sys.argv[1]); "
             "import shadow_rows as S; S.extract(sys.argv[1], 'all', sys.argv[2])")
     r = subprocess.run([sys.executable, "-c", code, a.label, str(root)], cwd=str(IAM), env=env)

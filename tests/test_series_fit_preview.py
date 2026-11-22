@@ -28,15 +28,32 @@ def test_preview_copies_only_best_solution_and_converts_q_without_changing_fit_v
     outcome = SimpleNamespace(label="stack.h5 frame 4 of 8", number=4,
                               metadata={"source_file": "/synthetic/stack.h5", "frame_index": 3})
     best = _solution()
+    best["posterior"] = {"R_1": [4.0, 4.01, 3.926, 4.081, 3.817, 4.215, .01]}
     preview = model_preview(outcome, [best, _solution(12.0)], {"frame": outcome.label})
     assert preview.ref == (Path("/synthetic/stack.h5"), 3) and preview.number == 4 and preview.ok
     assert len(preview.curves) == 1
+    assert preview.intervals == {"c1 sphere R": (3.926, 4.081)}
     curve = preview.curves[0]
     np.testing.assert_array_equal(curve.x, np.asarray(best["native_q"]) * 0.1)
     np.testing.assert_array_equal(curve.observed, best["observed"])
     np.testing.assert_array_equal(curve.fitted, best["native_fit"])
     best["observed"][0] = 99
     assert curve.observed[0] == 10.2
+
+
+def test_peak_summary_and_series_table_share_the_fitted_precision():
+    from src.gimap.features.analyze.presentation.bindings.batch_export import fit_summary
+    from src.gimap.features.analyze.presentation.bindings.series_fit_results import _cell_text
+
+    fit = SimpleNamespace(ok=True, center=2.3456789, center_err=.0143, fwhm=.287122, fwhm_err=.00639,
+                          area=157.98, area_err=.7245, chi2_red=1.2345)
+    text, level = fit_summary([(SimpleNamespace(name="Ring A"), fit)], BatchChoices(fit="peaks"))
+    assert level == "ok"
+    assert "q = 2.346 ± 0.014 Å⁻¹ (d = 2.679 ± 0.016 Å)" in text
+    assert "FWHM 0.2871 ± 0.0064 Å⁻¹, area 157.98 ± 0.72, χ²ᵣ 1.23" in text
+    row = {"Ring A q (1/A)": fit.center, "Ring A q err": fit.center_err, "Ring A d (A)": 2 * np.pi / fit.center}
+    cells = [_cell_text(column, value, row) for column, value in row.items()]
+    assert cells == ["2.346", "0.014", "2.679"]
 
 
 def test_gui_browses_batch_fits_without_files_and_clears_failed_frame(tmp_path):

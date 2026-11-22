@@ -42,6 +42,8 @@ class Phase:
     cell: UnitCell
     operations: tuple[Operation, ...]
     atoms: tuple[AtomSite, ...] = ()
+    formula_sum: str = ""
+    formula_units_z: float | None = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,13 @@ class Reflections:
 
 
 @dataclass(frozen=True)
+class ReflectionFamily:
+    representative: tuple[int, int, int]
+    intensity: float
+    members: tuple[tuple[int, int, int], ...]
+
+
+@dataclass(frozen=True)
 class Group:
     """A powder ring or a fibre spot: reflections at the same position."""
 
@@ -75,6 +84,7 @@ class Group:
     intensity: float
     """Σ |F|² over the reflections at the position."""
     extra: dict = field(default_factory=dict)
+    families: tuple[ReflectionFamily, ...] = ()
 
     @property
     def d(self) -> float:
@@ -154,8 +164,8 @@ def _canonical_key(hkl) -> tuple:
     return (sum(value < 0 for value in values), tuple(-value for value in values))
 
 
-def _families(members: np.ndarray, f2: np.ndarray, operations) -> list[tuple[tuple[int, int, int], float, int]]:
-    """``(representative, Σ|F|², count)`` of each family among ``members``: reflections with the same |F|² related by
+def _families(members: np.ndarray, f2: np.ndarray, operations) -> list[ReflectionFamily]:
+    """The representative, Σ|F|² and equivalent indices of each family: reflections with the same |F|² related by
     a rotation of the symmetry or by −1 (Friedel). Without rotations (a cell entered with only its centring) the
     point group is not known: reflections whose indices are the same up to order and sign count as one family."""
     rotations = [operation.rotation for operation in operations] or [np.eye(3, dtype=int)]
@@ -175,9 +185,9 @@ def _families(members: np.ndarray, f2: np.ndarray, operations) -> list[tuple[tup
             if same_f2 and related:
                 chosen.append(other)
                 remaining.remove(other)
-        representative = min((tuple(int(v) for v in members[index]) for index in chosen), key=_canonical_key)
-        families.append((representative, float(f2[chosen].sum()), len(chosen)))
-    families.sort(key=lambda family: (-family[1] / family[2], _canonical_key(family[0])))
+        indices = tuple(tuple(int(v) for v in members[index]) for index in chosen)
+        families.append(ReflectionFamily(min(indices, key=_canonical_key), float(f2[chosen].sum()), indices))
+    families.sort(key=lambda family: (-family.intensity / len(family.members), _canonical_key(family.representative)))
     return families
 
 
@@ -201,7 +211,8 @@ def powder_rings(found: Reflections, operations=()) -> list[Group]:
         families = _families(hkl, found.f2[members], operations)
         rings.append(Group(
             float(found.q[members].mean()), 0.0, 0.0, tuple(tuple(int(v) for v in row) for row in hkl),
-            tuple(hkl_text(family[0]) for family in families), len(members), float(found.f2[members].sum()),
+            tuple(hkl_text(family.representative) for family in families), len(members), float(found.f2[members].sum()),
+            families=tuple(families),
         ))
     rings.sort(key=lambda ring: ring.q)
     return rings
@@ -223,8 +234,8 @@ def fibre_spots(found: Reflections, normal, operations=()) -> list[Group]:
         families = _families(hkl, found.f2[members], operations)
         spots.append(Group(
             float(found.q[members].mean()), float(q_parallel[members].mean()), float(np.abs(qz[members]).mean()),
-            tuple(tuple(int(v) for v in row) for row in hkl), tuple(hkl_text(family[0]) for family in families),
-            len(members), float(found.f2[members].sum()),
+            tuple(tuple(int(v) for v in row) for row in hkl), tuple(hkl_text(family.representative) for family in families),
+            len(members), float(found.f2[members].sum()), families=tuple(families),
         ))
     spots.sort(key=lambda spot: (spot.q, spot.qz))
     return spots

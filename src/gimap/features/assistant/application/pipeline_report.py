@@ -10,13 +10,19 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+from src.gimap.shared.numbers import applied_angle, format_number
 from src.gimap.shared.orientation_notes import coverage_warning, measured_f_text, orientation_notes
 
 from ..domain import AT_EDGE
-from .calibration_report import calibration_quality, calibration_rms
+from .calibration_report import calibration_quality, calibration_rms, geometry_estimates
 from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
+from .giwaxs_summary import result_lines
 from .pipeline_geometry import ROTATION_WHY, SEARCHED
-from .pipeline_phases import assignment_lines, pole_line
+from .pipeline_roll import incidence_lines
+from .pipeline_crystal import compact_crystal
+from .report_numbers import peak_shift, peak_value
+from .pipeline_phases import orientation_checks_only, phase_sections, pole_line
+from .report_table import batch_table, report_link, table_row
 from .report_language import ENGLISH, heading as section
 from .run_record import mask_lines, record_lines
 
@@ -44,35 +50,11 @@ def compact_report(report: dict) -> dict:
             {**peak, "fit": {key: value for key, value in peak["fit"].items() if key not in ("x", "y", "sigma")}}
             if peak.get("fit") else peak for peak in compact["peaks"]
         ]
+    if report.get("crystal_orientation"):
+        compact["crystal_orientation"] = [compact_crystal(phase) for phase in report["crystal_orientation"]]
     return compact
 
 
-def _number(value, digits: int = 4) -> str:
-    if value is None:
-        return "—"
-    if isinstance(value, float):
-        return f"{value:.{digits}g}"
-    return str(value)
-
-
-def _fixed(value, decimals: int) -> str:
-    """A number with a fixed number of decimals ("—" when there is none): one precision per table column."""
-    return "—" if value is None else f"{float(value):.{decimals}f}"
-
-
-def _pm(value, error, decimals: int) -> str:
-    """``value ± error`` with the column's decimals; an error smaller than they show keeps one significant digit."""
-    text = _fixed(value, decimals)
-    if value is None or not isinstance(error, (int, float)) or not error > 0:
-        return text
-    shown = f"{float(error):.{decimals}f}"
-    return f"{text} ± {shown if float(shown) > 0 else f'{float(error):.1g}'}"
-
-
-PIXEL_DECIMALS = 2
-"""A detector position (the beam centre) to 0.01 px, as the cuts and decisions give it."""
-PEAK_DECIMALS = {"q": 4, "d_A": 3, "fwhm": 4, "snr": 1, "size_nm": 1}
-"""The decimals of each column of the peak table, the same in every row (1.9000 next to 0.2236, not 1.9)."""
 FLAG_WORDS = {
     "at_edge": AT_EDGE,
     "resolution_limited": "narrower than 3 bins (its width is set by the binning)",
@@ -88,7 +70,7 @@ def reliable_row(peak: dict) -> bool:
 
 
 def herman_texts(ring: dict, stat_label="stat") -> Optional[dict]:
-    """Measured f, statistical error and systematic limits, each at three significant digits."""
+    """Measured f with its statistical error, systematic limits and same-coverage reference."""
     if ring.get("herman") is None:
         return None
 
@@ -106,37 +88,54 @@ HC_KEV_ANGSTROM = 12.398419843
 """E (keV) · λ (Å)."""
 
 
+def _fixed(value, decimals):
+    return "—" if value is None else f"{value:.{decimals}f}"
+
+
 def _geometry_lines(report: dict) -> list[str]:
     geometry = report.get("geometry") or {}
     if not geometry.get("distance_mm"):
         return ["No geometry: nothing below is in q."]
-    centre = geometry.get("beam_center_px") or [None, None]
+    distance, centre = geometry_estimates(geometry, report.get("calibration"))
     lines = [
         f"- source: {geometry.get('source') or 'instrument profile'}",
-        f"- distance {_number(geometry.get('distance_mm'))} mm, beam centre ({_fixed(centre[0], PIXEL_DECIMALS)}, "
-        f"{_fixed(centre[1], PIXEL_DECIMALS)}) px, λ {_number(geometry.get('wavelength_A'))} Å, "
-        f"αi {_number(geometry.get('incidence_deg'))}°",
+        f"- distance {distance} mm, beam centre ({centre[0]}, {centre[1]}) px, λ {format_number(geometry.get('wavelength_A'))} Å, "
+        f"αi {applied_angle(geometry.get('incidence_deg'), report.get('incidence_measurement'))}°",
     ]
     pixel, wavelength = geometry.get("pixel_size_um") or (), geometry.get("wavelength_A")
+    lines.extend(incidence_lines(report))
+    roll = report.get("sample_roll_measurement")
+    if "sample_roll_deg" in geometry:
+        lines.append(f"- sample roll ψ applied: {applied_angle(geometry['sample_roll_deg'], roll)}°")
+    if roll:
+        second = roll.get("symmetry_feature") or ("specular rod" if report.get("procedure") == "gisaxs" else "ring symmetry")
+        for label, estimate in (("horizon", roll.get("horizon")), (second, roll.get("symmetry"))):
+            value = (format_number(estimate["deg"], estimate["error_deg"]) + "°"
+                     if estimate and estimate.get("deg") is not None else "unresolved")
+            lines.append(f"  - {label}: {value}")
+        if roll.get("deg") is not None:
+            lines.append(f"  - selected estimate ({roll['method']}): {format_number(roll['deg'], roll['error_deg'])}°")
+        else:
+            lines.append(f"  - estimate: {roll['method']}")
     if len(pixel) == 2 and pixel[0] and wavelength:
-        size = _number(pixel[0]) if pixel[0] == pixel[1] else f"{_number(pixel[0])} × {_number(pixel[1])}"
-        lines.append(f"- pixel size {size} µm, energy {_number(HC_KEV_ANGSTROM / float(wavelength))} keV "
+        size = format_number(pixel[0]) if pixel[0] == pixel[1] else f"{format_number(pixel[0])} × {format_number(pixel[1])}"
+        lines.append(f"- pixel size {size} µm, energy {format_number(HC_KEV_ANGSTROM / float(wavelength))} keV "
                      "(from λ; the beam centre is the one q was computed with, after any refinement below)")
     flat = geometry.get("flat_detector")
     rotations = geometry.get("rotations_deg") or ()
     if any(rotations) and not flat:
-        lines.append(f"- detector tilt {_number(geometry.get('tilt_deg'), 3)}° (rot1, rot2, rot3 = "
-                     + ", ".join(_number(value) for value in rotations) + "°), part of the geometry")
+        lines.append(f"- detector tilt {format_number(geometry.get('tilt_deg'))}° (rot1, rot2, rot3 = "
+                     + ", ".join(format_number(value) for value in rotations) + "°), part of the geometry")
     if flat:  # a .poni tilt the flat geometry leaves out (Needs attention or Decisions says whether it matters)
         error = flat.get("q_error_max")
         lines.append(
-            f"- detector tilt left out: {_number(flat.get('dropped_tilt_deg'), 3)}° (GIMaP's detector is flat and "
-            f"perpendicular to the beam); |q| off by up to {'—' if error is None else _number(100 * error, 2)} % "
+            f"- detector tilt left out: {format_number(flat.get('dropped_tilt_deg'))}° (GIMaP's detector is flat and "
+            f"perpendicular to the beam); |q| off by up to {'—' if error is None else format_number(100 * error, digits=2)} % "
             "over the valid detector area"
         )
         rotation = flat.get("dropped_beam_axis_rotation_deg")
         if rotation:
-            lines.append("- " + ROTATION_WHY.format(rotation=_number(rotation)))
+            lines.append("- " + ROTATION_WHY.format(rotation=format_number(rotation)))
     searched = found_by_search(report)
     if searched:  # nobody named it: the quality below says it fits its own standard, not whose measurement it is
         lines.insert(1, f"- found by the automatic search, named by nobody: `{searched['decision']}` ({searched['why']})")
@@ -160,22 +159,20 @@ def _peak_table(peaks: list[dict]) -> list[str]:
         "| q (Å⁻¹) | d (Å) | FWHM (Å⁻¹) | SNR | in-/out-of-plane | size (nm) | caveat |",
         "|---|---|---|---|---|---|---|",
     ]
-    decimals = PEAK_DECIMALS
+    notes = []
     for peak in peaks:
         size = peak.get("size_nm")
-        size_text = "—" if size is None else ("≥ " if peak.get("size_is_lower_bound") else "") + _fixed(size, decimals["size_nm"])
+        size_text = "—" if size is None else ("≥ " if peak.get("size_is_lower_bound") else "") + format_number(
+            size, peak.get("size_err_nm"), compact=True)
         if size is None and peak.get("size_note"):
             size_text = "n/a"
         flags = "; ".join(FLAG_WORDS.get(flag, flag) for flag in peak.get("flags") or () if flag in FLAG_WORDS)
-        fit = peak.get("fit") or {}  # the ± of the fit (statistical; Decisions: uncertainties)
-        cells = [_pm(peak.get(key), fit.get(error), decimals[key])
-                 for key, error in (("q", "q_err"), ("d_A", "d_err_A"), ("fwhm", "fwhm_err"))]
-        lines.append(
-            "| " + " | ".join([*cells, _fixed(peak.get("snr"), decimals["snr"])]) + " | "
-            f"{peak.get('orientation') or '—'} | {size_text} | {'; '.join(filter(None, (peak.get('caveat'), flags)))} |"
-        )
-    notes = [
-        f"- q = {_fixed(peak.get('q'), decimals['q'])}: {peak['size_note']}" for peak in peaks if peak.get("size_note")
+        cells = [peak_value(peak, key, compact=True) for key in ("q", "d_A", "fwhm")]
+        caveat = "; ".join(filter(None, (peak.get("caveat"), flags)))
+        cells += [format_number(peak.get("snr")), peak.get("orientation") or "—", size_text, caveat]
+        lines.append(table_row(cells, notes, move_columns=(6, 4)))
+    notes += [
+        f"- q = {peak_value(peak, 'q', value_only=True)}: {peak['size_note']}" for peak in peaks if peak.get("size_note")
     ]
     return lines + ([""] + notes if notes else [])
 
@@ -185,7 +182,7 @@ def _ring_lines(rings: list[dict]) -> list[str]:
         return ["No ring analysed."]
     lines = []
     for ring in rings:
-        head = f"- q ≈ {_number(ring.get('q'))} Å⁻¹, |χ| coverage {_fixed(ring.get('coverage'), 2)}: "
+        head = f"- q ≈ {format_number(ring.get('q'))} Å⁻¹, |χ| coverage {_fixed(ring.get('coverage'), 2)}: "
         texts = herman_texts(ring)
         pole = ring.get("pole_figure") or {}
         warning = coverage_warning(pole.get("systematics") or {}) if texts else ""
@@ -206,7 +203,7 @@ def _ring_lines(rings: list[dict]) -> list[str]:
             if systematics:
                 source = systematics["background_rule"]
                 lines.append(f"  - Systematic range at 0.5, 1 and 2 times the exit-angle threshold, "
-                             f"with b = {pole['background']:.3g} ± {systematics['background_step']:.3g} ({source}).")
+                             f"with b = {format_number(pole['background'], systematics['background_step'])} ({source}).")
                 if "horizon_fraction" in systematics:
                     fractions = sorted({s["horizon_fraction"] for s in systematics["scenarios"]})
                     lines.append("  - Horizon intensity thresholds tested: "
@@ -236,19 +233,24 @@ def _hints_title(report: dict) -> str:
     return "Series hints (reliable peaks only)"
 
 
-def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: str = ENGLISH) -> str:
+def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: str = ENGLISH, summary_word=str) -> str:
     frame = report.get("frame") or ""
     name = title or Path(frame).name or "frame"
     attention = report.get("needs_attention") or []
     state = "OK" if report.get("ok") and not attention else ("NEEDS INPUT" if attention else "FAILED")
+    if orientation_checks_only(report):
+        state = "COMPLETED WITH CHECKS"
     if report.get("failed"):  # ended early (the frame changed, the file could not be read): its point says why
         state = "FAILED"
     gisaxs = report.get("procedure") == "gisaxs"
     undecided = _no_technique(report)
     heading = "GISAXS" if gisaxs else ("GIMaP" if undecided else "GIWAXS")
     lines = [f"# {heading} — {name}", "", f"Status: **{state}**  ", f"File: `{frame}`", ""]
+    if report.get("ok") and not gisaxs and report.get("procedure") != "geometry":
+        lines += [section("Result summary", language), "", *("- " + line for line in result_lines(report, summary_word)), ""]
     if attention:
-        lines += [section("Needs attention (answer, then run again)", language), ""]
+        heading = "Orientation checks" if orientation_checks_only(report) else "Needs attention (answer, then run again)"
+        lines += [section(heading, language), ""]
         for number, item in enumerate(attention, 1):
             option = OPTION_FLAGS.get(item.get("option") or "", "")
             fix = f" → `{option}`" if option else ""
@@ -279,8 +281,7 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: st
         hints = report.get("series_hints") or []
         if hints:
             lines += [_hints_title(report) + ": " + "; ".join(hints), ""]
-        if assignment_lines(report):
-            lines += [section("Phase assignment", language), "", *assignment_lines(report), ""]
+        lines += phase_sections(report, language, summary_word)
         lines += [section("Ring orientation", language), "", *_ring_lines(report.get("rings") or []), ""]
     lines += [section("Decisions", language), ""]
     lines += [f"- **{item['what']}**: {item['decision']} — {item['why']}" for item in report.get("decisions") or []]
@@ -351,6 +352,8 @@ def _state(report: dict) -> str:
         return f"error: {report['error']}"
     if report.get("failed"):
         return f"failed: {report['failed']}"
+    if orientation_checks_only(report):
+        return "completed with checks"
     return "OK" if report.get("ok") and not attention else ("needs input" if attention else "failed")
 
 
@@ -368,37 +371,19 @@ def frame_labels(reports: list[dict]) -> dict[int, str]:
     }
 
 
-def report_link(report: dict) -> str:
-    """The Markdown link from summary.md to a frame's own report ('—' when it has no folder of its own)."""
-    folder = report.get("folder")
-    return f"[report.md]({folder}/report.md)" if folder else "—"
-
-
-def _linked(lines: list[str], reports: list[dict]) -> list[str]:
-    """A summary table with a last column that links every row to its frame's report (frames with a folder)."""
-    if not any(report.get("folder") for report in reports):
-        return lines
-    cells = [" report |", "---|", *(f" {report_link(report)} |" for report in reports)]
-    return [line + cell for line, cell in zip(lines, cells)] + lines[len(cells):]
-
-
-def _giwaxs_batch_table(reports: list[dict], labels: dict[int, str]) -> list[str]:
-    lines = [
-        "| frame | status | frames | geometry | peaks q (Å⁻¹) | ring f | open questions |",
-        "|---|---|---|---|---|---|---|",
-    ]
+def _giwaxs_batch_table(reports: list[dict], labels: dict[int, str], link_ids) -> list[str]:
+    headers = ["frame", "status", "frames", "geometry", "peaks q (Å⁻¹)", "ring f", "open questions"]
+    rows = []
     for report in reports:
         peaks = ", ".join(
-            f"{peak['q']:.3f}" + ("" if reliable_row(peak) else "*") for peak in report.get("peaks") or [] if peak.get("q")
+            peak_value(peak, "q", value_only=True) + ("" if reliable_row(peak) else "*") for peak in report.get("peaks") or [] if peak.get("q")
         ) or "—"
         rings = "; ".join(
             f"{ring['q']:.3g}: {herman_texts(ring)['f']}" for ring in report.get("rings") or [] if ring.get("herman") is not None
         ) or "—"
-        lines.append(
-            f"| {labels[id(report)]} | {_state(report)} | {_frames_text(report)} | "
-            f"{(report.get('geometry') or {}).get('source') or '—'} | {peaks} | {rings} | {_asked(report)} |"
-        )
-    lines = _linked(lines, reports)
+        rows.append([labels[id(report)], _state(report), _frames_text(report),
+                     (report.get("geometry") or {}).get("source") or "—", peaks, rings, _asked(report)])
+    lines = batch_table(headers, reports, rows, move_columns=(3, 4, 5, 6), link_ids=link_ids)
     lines += ["", "Peaks marked * have a caveat (spike, halo, failed fit or weak) or lie at the end of the data: see that "
               "frame's report.md.", ""]
     cut = [report for report in reports if (report.get("peak_search") or {}).get("truncated")]
@@ -411,7 +396,7 @@ def _giwaxs_batch_table(reports: list[dict], labels: dict[int, str]) -> list[str
         ]
     shared = common_peaks(reports)
     if shared:
-        listed = ", ".join(f"{peak['q']:.4g}" + (f" ({peak['caveat'].split(':')[0]})" if peak.get("caveat") else "") for peak in shared)
+        listed = ", ".join(peak_value(peak, "q", value_only=True) + (f" ({peak['caveat'].split(':')[0]})" if peak.get("caveat") else "") for peak in shared)
         lines += [
             f"Lines at the same q (±{SAME_Q:.1%}) in every frame: {listed}. A line every sample shares is "
             "either a common phase or instrumental (a window, the substrate, hot pixels): compare with the "
@@ -421,14 +406,12 @@ def _giwaxs_batch_table(reports: list[dict], labels: dict[int, str]) -> list[str
     return lines
 
 
-def _unanalysed_table(reports: list[dict], labels: dict[int, str]) -> list[str]:
+def _unanalysed_table(reports: list[dict], labels: dict[int, str], link_ids) -> list[str]:
     """Frames no procedure ran on: why (the status) and what is asked."""
-    lines = ["| frame | status | geometry | open questions |", "|---|---|---|---|"]
-    lines += [
-        f"| {labels[id(report)]} | {_state(report)} | "
-        f"{(report.get('geometry') or {}).get('source') or '—'} | {_asked(report)} |" for report in reports
-    ]
-    return _linked(lines, reports) + [""]
+    rows = ([labels[id(report)], _state(report), (report.get("geometry") or {}).get("source") or "—", _asked(report)]
+            for report in reports)
+    return batch_table(["frame", "status", "geometry", "open questions"], reports, rows,
+                       move_columns=(1, 2, 3), link_ids=link_ids) + [""]
 
 
 def _searched_notes(reports: list[dict]) -> list[str]:
@@ -450,6 +433,7 @@ def batch_markdown(reports: list[dict], *, language: str = ENGLISH) -> str:
     same words share one line that names them all). Titled by what ran: GIWAXS, GISAXS, or GIMaP when both did or
     neither. A frame with a folder of its own (``report["folder"]``, relative to the summary) is linked."""
     labels = frame_labels(reports)
+    link_ids = {id(report): number for number, report in enumerate(reports, 1)}
     groups: dict[Optional[str], list[dict]] = {"giwaxs": [], "gisaxs": [], None: []}
     for report in reports:
         groups[technique_run(report)].append(report)
@@ -460,12 +444,12 @@ def batch_markdown(reports: list[dict], *, language: str = ENGLISH) -> str:
     heading = ran[0].upper() if len(ran) == 1 else "GIMaP"
     lines = [f"# {heading} — batch", "", f"{len(reports)} frame(s); each has its own report.md.", ""]
     if groups["giwaxs"]:
-        lines += (["## GIWAXS", ""] if mixed else []) + _giwaxs_batch_table(groups["giwaxs"], labels)
+        lines += (["## GIWAXS", ""] if mixed else []) + _giwaxs_batch_table(groups["giwaxs"], labels, link_ids)
     if groups["gisaxs"]:
-        table = gisaxs_batch_table(groups["gisaxs"], _state, labels)
-        lines += (["## GISAXS", ""] if mixed else []) + _linked(table, groups["gisaxs"]) + [""]
+        table = gisaxs_batch_table(groups["gisaxs"], _state, labels, link_ids=link_ids)
+        lines += (["## GISAXS", ""] if mixed else []) + table + [""]
     if groups[None]:
-        lines += ([section("Not analysed", language), ""] if mixed else []) + _unanalysed_table(groups[None], labels)
+        lines += ([section("Not analysed", language), ""] if mixed else []) + _unanalysed_table(groups[None], labels, link_ids)
     lines += _searched_notes(reports)
     questions: dict[tuple, tuple[dict, list[str]]] = {}  # the same question in the same words: one line, its frames
     for report in reports:
@@ -488,7 +472,7 @@ NEARBY_Q = 0.01
 """A line gone and one new within this relative q are shown together: perhaps one line that moved."""
 
 
-def series_changes(start: dict, end: dict, tolerance: float = SAME_Q) -> list[dict]:
+def series_changes(start: dict, end: dict, tolerance: float = SAME_Q, *, display=False) -> list[dict]:
     """How the lines change from the start to the end of a series, sorted by q.
 
     Only reliable peaks (``reliable_row``) count as present.  Two peaks are the same line when they are closer than
@@ -496,6 +480,7 @@ def series_changes(start: dict, end: dict, tolerance: float = SAME_Q) -> list[di
     ``tolerance`` is "shifted".  A weak (tentative) peak on the other side makes a line "grew" or
     "faded" rather than "appeared" or "disappeared"; a line gone next to a new one (within
     ``NEARBY_Q``) becomes one "moved?" row.  ``start`` / ``end``: "yes", "weak" or "—".
+    With ``display=True``, q_text gives the q measurement in compact notation.
     """
     def pick(report: dict, weak: bool) -> list[dict]:
         return [
@@ -517,33 +502,41 @@ def series_changes(start: dict, end: dict, tolerance: float = SAME_Q) -> list[di
         if other is not None:
             matched.append(other)
             shift = peak["q"] - other["q"]
-            change = "present at both" if abs(shift) <= tolerance * peak["q"] else (
-                f"shifted {shift:+.3f} Å⁻¹ ({shift / other['q']:+.1%}) from {other['q']:.4g}"
-            )
-            rows.append({"q": peak["q"], "start": "yes", "end": "yes", "change": change})
+            change = "present at both"
+            if abs(shift) > tolerance * peak["q"]:
+                delta, percent = peak_shift(other, peak)
+                change = f"shifted {delta} Å⁻¹ ({percent}) from {peak_value(other, 'q', compact=True)}"
+            rows.append({"peak": peak, "start": "yes", "end": "yes", "change": change})
         elif nearest(peak, pick(start, True)) is not None:
-            rows.append({"q": peak["q"], "start": "weak", "end": "yes", "change": "grew (weak at the start)"})
+            rows.append({"peak": peak, "start": "weak", "end": "yes", "change": "grew (weak at the start)"})
         else:
-            rows.append({"q": peak["q"], "start": "—", "end": "yes", "change": "appeared"})
+            rows.append({"peak": peak, "start": "—", "end": "yes", "change": "appeared"})
     for peak in first:
         if any(peak is used for used in matched):
             continue
         if nearest(peak, pick(end, True)) is not None:
-            rows.append({"q": peak["q"], "start": "yes", "end": "weak", "change": "faded (weak at the end)"})
+            rows.append({"peak": peak, "start": "yes", "end": "weak", "change": "faded (weak at the end)"})
         else:
-            rows.append({"q": peak["q"], "start": "yes", "end": "—", "change": "disappeared"})
+            rows.append({"peak": peak, "start": "yes", "end": "—", "change": "disappeared"})
     # A line that disappeared next to one that appeared: possibly one line that moved further than its width.
     gone = [row for row in rows if row["change"] == "disappeared"]
     for row in [row for row in rows if row["change"] == "appeared"]:
-        near = min(gone, key=lambda other: abs(other["q"] - row["q"]), default=None)
-        if near is not None and abs(near["q"] - row["q"]) <= NEARBY_Q * row["q"]:
+        peak = row["peak"]
+        near = min(gone, key=lambda other: abs(other["peak"]["q"] - peak["q"]), default=None)
+        if near is not None and abs(near["peak"]["q"] - peak["q"]) <= NEARBY_Q * peak["q"]:
             gone.remove(near)
             rows.remove(near)
-            shift = (row["q"] - near["q"]) / near["q"]
+            old = near["peak"]
+            _, percent = peak_shift(old, peak)
             row.update(start="yes", change=(
-                f"moved? {near['q']:.4g} → {row['q']:.4g} ({shift:+.1%}): one line shifting further than its "
-                "width, or one line replacing another"
+                f"moved? {peak_value(old, 'q', compact=True)} → {peak_value(peak, 'q', compact=True)} ({percent}): "
+                "one line shifting further than its width, or one line replacing another"
             ))
+    for row in rows:
+        peak = row.pop("peak")
+        row["q"] = peak["q"]
+        if display:
+            row["q_text"] = peak_value(peak, "q", compact=True)
     return sorted(rows, key=lambda row: row["q"])
 
 
@@ -562,15 +555,18 @@ def series_markdown(start: dict, end: dict, *, language: str = ENGLISH) -> str:
         "half their width are the same line.", "",
         "| q (Å⁻¹) | at the start | at the end | change |", "|---|---|---|---|",
     ]
-    for row in series_changes(start, end):
-        lines.append(f"| {row['q']:.4g} | {row['start']} | {row['end']} | {row['change']} |")
+    notes = []
+    for row in series_changes(start, end, display=True):
+        lines.append(table_row([row["q_text"], row["start"], row["end"], row["change"]], notes, move_columns=(3,)))
+    if notes:
+        lines.extend(["", *notes])
     return "\n".join(lines) + "\n"
 
 
 def peak_markers(report: dict) -> list[dict]:
     """The report's peaks as I(q) markers (``curve_png(markers=…)``): reliable ones and flagged ones."""
     return [
-        {"q": peak["q"], "label": f"{peak['q']:.3g}", "reliable": reliable_row(peak)}
+        {"q": peak["q"], "label": peak_value(peak, "q", value_only=True), "reliable": reliable_row(peak)}
         for peak in report.get("peaks") or () if peak.get("q")
     ]
 
@@ -584,7 +580,7 @@ def ring_overlays(report: dict) -> list[dict]:
 
 
 __all__ = [
-    "FLAG_WORDS", "OPTION_FLAGS", "PEAK_DECIMALS", "SAME_Q", "batch_markdown", "calibration_quality", "common_peaks",
+    "FLAG_WORDS", "OPTION_FLAGS", "SAME_Q", "batch_markdown", "calibration_quality", "common_peaks",
     "compact_report", "found_by_search", "frame_labels", "herman_texts", "mask_lines", "peak_markers", "pipeline_markdown",
     "reliable_row", "report_link", "ring_overlays",
     "series_changes", "series_markdown", "technique_run",

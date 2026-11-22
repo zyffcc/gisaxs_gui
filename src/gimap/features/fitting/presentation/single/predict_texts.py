@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.shared import fit_names
+from src.gimap.shared.numbers import format_number
+
+from ...application.solution_export import intervals_by_path
 
 SHOWN = ("R", "sigma_R", "h", "sigma_h", "D", "sigma_nn")
 """The populations' values listed in Fit details."""
@@ -62,17 +65,21 @@ def points_tuple(points) -> tuple:
             int(points.get("unusable") or 0))
 
 
-def sizes_cells(model) -> tuple[str, str]:
+def sizes_cells(model, solution=None) -> tuple[str, str]:
     """The R and D cells of the solutions table: every population, in the order of the radii (“3.06 / 6.02”,
     “49.4 / –”)."""
-    ordered = sorted(model.components, key=lambda component: component.value("R"))
+    reported = intervals_by_path(solution) if solution else {}
+    def size(index, component, key):
+        bounds = reported.get((index, key))
+        error = fit_names.interval_half_width(*bounds[2:4]) if bounds else None
+        return format_number(component.value(key), error, value_only=True)
+
+    ordered = sorted(enumerate(model.components), key=lambda item: item[1].value("R"))
     if not ordered:
         return "—", "—"
-    radii = " / ".join(f"{component.value('R'):.3g}" for component in ordered)
-    spaced = [component.structure and "D" in component.keys() for component in ordered]  # (hard spheres: R_HS)
-    if not any(spaced):
-        return radii, "—"
-    return radii, " / ".join(f"{component.value('D'):.3g}" if has else "–" for component, has in zip(ordered, spaced))
+    radii = " / ".join(size(i, c, "R") for i, c in ordered)
+    distances = [size(i, c, "D") if c.structure and "D" in c.keys() else "–" for i, c in ordered]
+    return radii, " / ".join(distances) if any(value != "–" for value in distances) else "—"
 
 
 def _shown(solution, many: bool):
@@ -152,8 +159,10 @@ def differing_tip(solution, solutions) -> str:
         if abs(mine - theirs) > 0.01 * max(abs(mine), abs(theirs), 1e-300):
             unit = fit_names.unit_of(name)
             unit = f" {unit}" if unit else ""
-            parts.append(trf(THERE, name=fit_names.display_name(name, many, tr), value=f"{mine:.3g}{unit}",
-                             other=f"{theirs:.3g}{unit}"))
+            this_value = fit_names.interval_values(mine, *values[2:4])[0]
+            other_value = fit_names.interval_values(theirs, *there[name][2:4])[0]
+            parts.append(trf(THERE, name=fit_names.display_name(name, many, tr), value=this_value + unit,
+                             other=other_value + unit))
     if not parts:
         return ""
     return trf(DIFFERS, other=list(solutions).index(other) + 1, values="; ".join(parts))

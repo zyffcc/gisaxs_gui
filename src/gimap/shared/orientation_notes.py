@@ -1,5 +1,7 @@
 """Per-ring selection notes for the pole window and the text and HTML reports."""
 
+from .numbers import format_number
+
 
 def _number(value):
     return f"{float(value):#.3g}".removesuffix(".").replace("-", "−")
@@ -11,9 +13,9 @@ def _limits_text(limits):
 
 def measured_f_text(value, sigma=None, limits=None, *, stat_label="stat", isotropic=None):
     """Measured moment, statistical error, systematic limits and same-coverage reference."""
-    text = _number(value)
-    if sigma is not None:
-        text += f" ± {_number(sigma)} ({stat_label})"
+    text = format_number(value, sigma).replace("-", "−")
+    if " ± " in text:
+        text += f" ({stat_label})"
     if limits is not None:
         text += " " + _limits_text(limits)
     if isotropic is not None:

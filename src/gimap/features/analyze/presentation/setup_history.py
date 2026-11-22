@@ -30,6 +30,12 @@ class Setup:
     giwaxs: Any
     gisaxs: Any
     sum_count: int
+    sample_roll_deg: Optional[float] = None
+    sample_roll_measurement: Optional[dict] = None
+    incidence_measurement: Optional[dict] = None
+    incidence_locked: bool = False
+    yoneda_critical_deg: Optional[float] = None
+    yoneda_material: Optional[str] = None
 
 
 def snapshot(view_model) -> Setup:
@@ -38,6 +44,10 @@ def snapshot(view_model) -> Setup:
         mode=state.mode, profile_name=state.profile_name, incidence_deg=state.incidence_deg,
         beam_center=state.beam_center, corrections=state.corrections, giwaxs=state.giwaxs, gisaxs=state.gisaxs,
         sum_count=int(view_model.sum_count),
+        sample_roll_deg=state.sample_roll_deg, sample_roll_measurement=state.sample_roll_measurement,
+        incidence_measurement=state.incidence_measurement, incidence_locked=state.incidence_locked,
+        yoneda_critical_deg=state.yoneda_critical_deg,
+        yoneda_material=state.yoneda_material,
     )
 
 
@@ -46,6 +56,11 @@ def restore(view_model, setup: Setup) -> None:
     state.mode = setup.mode
     state.profile_name = setup.profile_name
     state.incidence_deg = setup.incidence_deg
+    state.incidence_locked = setup.incidence_locked
+    state.yoneda_critical_deg = setup.yoneda_critical_deg
+    state.yoneda_material = setup.yoneda_material
+    view_model.set_incidence_measurement(setup.incidence_measurement)
+    view_model.set_sample_roll(setup.sample_roll_deg, setup.sample_roll_measurement)
     state.beam_center = setup.beam_center
     state.corrections = setup.corrections
     state.giwaxs = setup.giwaxs
@@ -61,7 +76,7 @@ _CORRECTIONS = (
     (("normalisation",), "normalisation"),
     (("mirror_fill",), "mirror filling"),
     (("minimum", "maximum", "gap_guard_px", "bad_pixels"), "pixel limits"),
-    (("solid_angle", "polarization", "film_thickness_nm", "attenuation_length_um", "lorentz", "lorentz_band_px",
+    (("solid_angle", "polarization", "film_thickness_nm", "attenuation_length_um", "film_delta", "film_beta", "film_cif_path", "lorentz", "lorentz_band_px",
       "orientation_min_exit_deg", "orientation_polarization"), "intensity corrections"),
     (("critical_angle_deg",), "refraction"),
 )
@@ -95,8 +110,13 @@ def describe(before: Setup, after: Setup) -> str:
         names.append("mode")
     if before.profile_name != after.profile_name:
         names.append("instrument profile")
-    if before.incidence_deg != after.incidence_deg:
+    if (before.yoneda_critical_deg, before.yoneda_material) != (after.yoneda_critical_deg, after.yoneda_material):
+        names.append("Yoneda critical angle")
+    if (before.incidence_deg, before.incidence_locked, before.incidence_measurement) != (
+            after.incidence_deg, after.incidence_locked, after.incidence_measurement):
         names.append("αi")
+    if before.sample_roll_deg != after.sample_roll_deg or before.sample_roll_measurement != after.sample_roll_measurement:
+        names.append("Sample roll ψ")
     if before.beam_center != after.beam_center:
         names.append("beam centre")
     if before.sum_count != after.sum_count:

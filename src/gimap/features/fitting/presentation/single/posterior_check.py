@@ -11,7 +11,6 @@ time and R̂). A check only: it never changes the model, the Results or Predict'
 from __future__ import annotations
 
 import json
-import math
 import threading
 from pathlib import Path
 
@@ -20,6 +19,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QTableWidgetItem
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.fit_names import interval_values
 
 from ...application.posterior_check import (
     BIC_REFERENCE, CHANGED, CHECK_ONLY, ENSEMBLES, NOTHING, PREDICT_CHECK, record, report_blocks, rows, run, target_for,
@@ -43,10 +43,9 @@ class _CheckProgress(QObject):
     changed = pyqtSignal(int, int)
 
 
-def _interval(low: float, high: float) -> str:
-    if low is None or high is None or not (math.isfinite(low) and math.isfinite(high)):
-        return "—"
-    return f"{low:.5g} – {high:.5g}"
+def _interval(value, low, high) -> tuple[str, str]:
+    centre, low, high = interval_values(value, low, high)
+    return centre, "—" if "—" in (low, high) else f"{low} – {high}"
 
 
 class PosteriorCheckMixin:
@@ -155,9 +154,9 @@ class PosteriorCheckMixin:
         table.setRowCount(len(table_rows))
         for line, row in enumerate(table_rows):
             ref = row["reference"]
-            cells = (row["name"], f"{row['checked']:.5g}", "—" if ref is None else _interval(ref[1], ref[2]),
-                     f"{row['median']:.5g}", _interval(row["low68"], row["high68"]),
-                     _interval(row["low95"], row["high95"]), f"{row['tau']:.0f}", f"{row['rhat']:.3f}")
+            cells = (row["name"], *_interval(row["checked"], *(ref[1:3] if ref else (None, None))),
+                     *_interval(row["median"], row["low68"], row["high68"]),
+                     _interval(None, row["low95"], row["high95"])[1], f"{row['tau']:.0f}", f"{row['rhat']:.3f}")
             for column, text in enumerate(cells):
                 item = QTableWidgetItem(text)
                 if column == 4 and row["overlap"] is False:

@@ -57,40 +57,9 @@ from src.gimap.shared.geometry.q_inverse import q_of_positions
 DATA = Path(__file__).parent / "data" / "external"
 MANIFEST = json.loads((DATA / "manifest.json").read_text(encoding="utf-8")) if (DATA / "manifest.json").exists() else {}
 
-I4MCM = ["x,y,z", "-x,-y,z", "-y,x,z", "y,-x,z", "-x,y,-z+1/2", "x,-y,-z+1/2", "y,x,-z+1/2", "-y,-x,-z+1/2",
-         "-x,-y,-z", "x,y,-z", "y,-x,-z", "-y,x,-z", "x,-y,z+1/2", "-x,y,z+1/2", "-y,-x,z+1/2", "y,x,z+1/2"]
-
-
-def _centred(operations: list[str]) -> list[str]:
-    return operations + [",".join(f"{part}+1/2" for part in operation.split(",")) for operation in operations]
-
-
-MAPI_CIF = "\n".join([
-    "# tetragonal MAPbI3, the inorganic framework only (Pb, I); cell and I2 x as commonly reported",
-    "data_mapbi3",
-    "_chemical_name_common 'MAPbI3 (tetragonal)'",
-    "_cell_length_a 8.874(2)", "_cell_length_b 8.874(2)", "_cell_length_c 12.671(3)",
-    "_cell_angle_alpha 90", "_cell_angle_beta 90", "_cell_angle_gamma 90",
-    "_symmetry_space_group_name_H-M 'I 4/m c m'",
-    "loop_", "_symmetry_equiv_pos_site_id", "_symmetry_equiv_pos_as_xyz",
-    *[f"{index + 1} '{operation}'" for index, operation in enumerate(_centred(I4MCM))],
-    "loop_", "_atom_site_label", "_atom_site_type_symbol", "_atom_site_fract_x", "_atom_site_fract_y",
-    "_atom_site_fract_z", "_atom_site_occupancy", "_atom_site_U_iso_or_equiv",
-    "Pb1 Pb2+ 0 0 0 1 0.02",
-    "I1 I1- 0 0 0.25 1 0.04",
-    "I2 I1- 0.2142 0.7142 0 1 0.04",
-    "",
-])
-PBI2_CIF = "\n".join([
-    "data_PbI2", "_cell_length_a 4.557", "_cell_length_b 4.557", "_cell_length_c 6.979",
-    "_cell_angle_alpha 90", "_cell_angle_beta 90", "_cell_angle_gamma 120",
-    "_space_group_name_H-M_alt 'P -3 m 1'",
-    "loop_", "_space_group_symop_operation_xyz",
-    "x,y,z", "-y,x-y,z", "-x+y,-x,z", "-y,-x,-z", "-x+y,y,-z", "x,x-y,-z",
-    "-x,-y,-z", "y,-x+y,-z", "x-y,x,-z", "y,x,z", "x-y,-y,z", "-x,-x+y,z",
-    "loop_", "_atom_site_label", "_atom_site_fract_x", "_atom_site_fract_y", "_atom_site_fract_z",
-    "Pb1 0 0 0", "I1 0.33333 0.66667 0.265", "",
-])
+CRYSTAL_DATA = DATA / "giwaxs_p08_mapi"
+MAPI_CIF = (CRYSTAL_DATA / "MAPbI3_reference.cif").read_text(encoding="utf-8")
+PBI2_CIF = (CRYSTAL_DATA / "PbI2_reference.cif").read_text(encoding="utf-8")
 LAB6_CIF = "\n".join([
     "data_LaB6", "_cell_length_a 4.1569", "_cell_length_b 4.1569", "_cell_length_c 4.1569",
     "_symmetry_space_group_name_H-M 'P 1'",
@@ -119,6 +88,23 @@ def test_every_scattering_factor_row_sums_to_its_atomic_number() -> None:
         assert np.all(np.diff(values) < 0), element  # falls with q
     assert f0("C", 0.5 * 4 * math.pi) == pytest.approx(1.69, abs=0.01)  # sin θ/λ = 0.5 Å⁻¹ (ITC Table 6.1.1.1)
     assert f0("Po", 0.0) == pytest.approx(84.0, abs=0.1)  # not tabulated: Bi scaled by Z
+
+
+def test_another_phase_in_the_extracted_band_excludes_an_otherwise_unambiguous_assignment():
+    from src.gimap.features.analyze.application.crystal_orientation import frame_crystal_orientation
+
+    phases = [PhaseSpec("A", (6., 6., 6., 90., 90., 90.)),
+              PhaseSpec("B", (5.2, 5.2, 5.2, 90., 90., 90.))]
+    q = 2 * math.pi / 6.
+    peak = {"q": q, "fwhm": .01, "q_err": .0001, "q_window": [q - .02, 1.24]}
+    found = assign_peaks([peak], phases)
+    assigned, = found["assignments"]
+    assert assigned["phase"] == "A" and assigned["overlapping_phases"] == ["B"]
+    assert not assigned["alternatives"]  # the other phase is outside the radial tolerance
+    frame = SimpleNamespace(kind="giwaxs", geometry=object(), reduction=object())
+    a, b = frame_crystal_orientation(frame, phases, assignment=found)
+    assert not a["ok"] and a["excluded_rings"][0]["overlapping_phases"] == ["B"]
+    assert not b["ok"] and not b["rings"]
 
 
 def test_symmetry_operations_are_read_in_the_usual_notations() -> None:
@@ -258,11 +244,18 @@ def test_report_names_the_radial_axis_and_every_unassigned_peak():
         assert assignment["q_axis"]["k_sin_alpha_i_inv_A"] == pytest.approx(expected)
         report = "\n".join(assignment_lines({"phase_assignment": assignment}))
         assert basis in report and "transmitted and reflected channels" in report
-        assert "Δd/d = " in report and "Δq = " in report and "1.3200 Å⁻¹ unassigned" in report
+        assert "Δd/d = " in report and "Δq = " in report and "1.32000 Å⁻¹ unassigned" in report
+
+
+def test_xeuss_example_cif_predicts_the_bulk_rock_salt_reference_rings() -> None:
+    spec = phase_from_cif(DATA / "giwaxs_xeuss_pbte/PbTe_bulk_reference.cif")
+    rings = phase_overlay(spec, IndexingSettings(q_max=3.0), None).rings
+    assert [ring.label for ring in rings[:3]] == ["111", "200", "220"]
+    assert [ring.q for ring in rings[:3]] == pytest.approx([1.68, 1.95, 2.75], abs=0.01)
 
 
 @pytest.mark.skipif(not MANIFEST, reason="public test data not downloaded (tests/data/external)")
-def test_the_rings_of_the_public_p08_frame_are_mapbi3_and_pbi2(tmp_path: Path) -> None:
+def test_the_rings_of_the_public_p08_frame_are_mapbi3_and_pbi2() -> None:
     from src.gimap.features.analyze.domain import GiwaxsSettings
     from src.gimap.features.analyze.domain.giwaxs import reduce_giwaxs
     from src.gimap.features.assistant.domain import Profile, find_peaks, parse_poni, reliable
@@ -278,9 +271,8 @@ def test_the_rings_of_the_public_p08_frame_are_mapbi3_and_pbi2(tmp_path: Path) -
                               GiwaxsSettings(chi_q_window=(0.982, 1.012)))
     radial = reduction.curve("radial")
     search = find_peaks(Profile.of(radial.x, radial.intensity, radial.sigma, radial.pixels))
-    (tmp_path / "mapi.cif").write_text(MAPI_CIF, encoding="utf-8")
-    (tmp_path / "pbi2.cif").write_text(PBI2_CIF, encoding="utf-8")
-    phases = [phase_from_cif(tmp_path / "mapi.cif"), phase_from_cif(tmp_path / "pbi2.cif")]
+    example = (DATA / info["frame"]).parent
+    phases = [phase_from_cif(example / name) for name in ("MAPbI3_reference.cif", "PbI2_reference.cif")]
     peaks = [{"q": peak.q, "q_err": peak.q_err, "fwhm": peak.fwhm} for peak in search.peaks]
     found = {round(item["q"], 3): item for item in assign_peaks(peaks, phases)["assignments"]}
     strongest = sorted((peak for peak in search.peaks if reliable(peak)), key=lambda peak: -peak.area)[:3]

@@ -7,7 +7,7 @@ pixel ``(i, j)`` covers ``[j, j + 1] x [i, i + 1]``, row 0 at the top):
   ``sin² α_f = (q_z/k − Re√(sin² α_i − sin² α_c))² + sin² α_c``, above α_c only);
 * q_y = k cos α_f sin 2θ_f, so the scattered direction in the sample frame is ``(along, q_y/k, sin α_f)`` with
   ``along = +√(1 − (q_y/k)² − sin² α_f)`` (forward);
-* turned back by α_i into the laboratory and met with the detector plane (tilted or not, ``lab_rays``).
+* undo the incidence rotation and then the sample roll into the laboratory, and intersect the detector plane.
 
 Positions the scattered ray cannot reach (|q| too large, below α_c, behind the detector) are NaN. The 1D
 conversions used to type a cut in angles (``alpha_f_of_qz``, ``two_theta_f_of_qy`` …) are exact: α_f depends on
@@ -20,7 +20,7 @@ import math
 
 import numpy as np
 
-from .detector_geometry import DetectorGeometry
+from .detector_geometry import DetectorGeometry, roll_transverse
 from .q_mapping import lab_rays, scattering_vectors
 
 
@@ -30,7 +30,7 @@ def q_of_positions(geometry: DetectorGeometry, x_px, y_px) -> tuple[np.ndarray, 
     y = (geometry.beam_center_y_px - np.asarray(y_px, dtype=np.float64)) * geometry.pixel_size_y_m
     along, right, up = lab_rays(geometry, *np.broadcast_arrays(x, y))
     q = scattering_vectors(right, up, along, geometry.incidence_rad, geometry.wavevector_inv_angstrom,
-                           critical_rad=geometry.critical_rad)
+                           critical_rad=geometry.critical_rad, sample_roll_rad=geometry.sample_roll_rad)
     return np.asarray(q.qy, dtype=np.float64), np.asarray(q.qz, dtype=np.float64)
 
 
@@ -102,7 +102,8 @@ def positions_of_q(geometry: DetectorGeometry, qy, qz) -> tuple[np.ndarray, np.n
     with np.errstate(invalid="ignore"):
         along = np.sqrt(1.0 - across * across - normal * normal)  # NaN where no ray has these q
     cos_i, sin_i = math.cos(geometry.incidence_rad), math.sin(geometry.incidence_rad)
-    ray = np.stack([along * cos_i - normal * sin_i, across, along * sin_i + normal * cos_i])  # (along beam, right, up)
+    right, up = roll_transverse(across, along * sin_i + normal * cos_i, -geometry.sample_roll_rad)
+    ray = np.stack([along * cos_i - normal * sin_i, right, up])
     return positions_of_rays(geometry, ray)
 
 

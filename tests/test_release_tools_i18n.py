@@ -35,7 +35,7 @@ CALIBRATION_ZH = {
     "Reading image...": "正在读取图像…",
     "Starting calibration...": "正在开始标定…",
     "Cancelling after the current numerical step...": "当前这一步数值计算结束后取消…",
-    "Calibration complete. Review the selected candidate, then Apply.": "标定完成。请检查选中的候选解，然后点击“应用”。",
+    "Check the ring overlay before Apply.": "点击“应用”前请核对图中的匹配环。",
     "Calibration cancelled.": "标定已取消。",
     "Calibration failed. Adjust the inputs and try again.": "标定失败。请调整输入后重试。",
     "Failed to load image.": "图像读取失败。",
@@ -228,7 +228,7 @@ def test_every_entry_is_a_text_of_the_code() -> None:
 
 def test_a_sentence_that_names_a_button_names_its_chinese_label(chinese) -> None:
     for english, label in (
-        ("Calibration complete. Review the selected candidate, then Apply.", "Apply"),
+        ("Check the ring overlay before Apply.", "Apply"),
         ("Image loaded{notes}. Click Auto Calibration.", "Auto Calibration"),
         ("Pixel size could not be determined. Select the detector model or enter the pixel size under "
          "Advanced configuration.", "Advanced configuration"),

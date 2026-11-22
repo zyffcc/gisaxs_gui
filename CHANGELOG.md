@@ -4,6 +4,18 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- A CBF frame still opens when a neighbouring scan folder disappears during the search for beam energy.
+
+- Reports and result labels round estimates to the decimal place of their two-significant-digit uncertainty. Unit-cell and population tables use compact notation such as `8.9335(22) Å`.
+
+- **GIWAXS unit cells.** Analyze refines lattice parameters and strain from indexed peaks on one frame or across a series, with uncertainties, peak residuals and exports. A resolved fibre axis also permits a directional strain fit. The crystal-orientation report pools unresolved near-random populations with the isotropic fraction.
+
+- **GIWAXS film absorption and crystal orientation** use refracted incident and exit waves near the sample horizon, including evanescent attenuation below the critical angle. For a frame correction, enter the optical constants at the measurement wavelength or select a film CIF. The attenuation-length option retains the large-angle geometrical correction.
+
+- **Measure from frame** now measures incidence αi alongside roll ψ. Analyze records the shadow, specular and available GISAXS Yoneda estimates with their uncertainties. Automatic analysis uses a resolved measurement when the nominal angle is missing or differs by more than 3σ. **Keep entered αi** retains the nominal value.
+
+- Analyze can measure sample roll ψ from the shadow or Yoneda band and the two sides of a GIWAXS ring or a GISAXS specular rod. The applied angle sets the sample axes for cuts, pole figures and reflection overlays. Automatic analysis reports the estimates and applies a resolved roll at three standard errors.
+
 What changed since 0.1.0 (2026-10-13). New are the **Sputter** workspace, **SEM Particle Analysis**, the
 **Edit**, **Analyze** and **Fitting** menus with a fuller **Help** menu, NeXus/HDF5 files read by what they
 hold, a source folder that starts with one double-click, and a reference of the methods, *Physics and
@@ -16,6 +28,25 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   In Fitting or 1D Predict, select the material or enter δ and β. An optional film adds its thickness and optical
   constants to the reflection calculation. Automatic GISAXS analysis takes the substrate from the session or the
   sample metadata. Each level-4 solution retains the substrate and geometry.
+- **Sputter ▸ Analyze: Si, polymers and Cu at any energy from 8 to 15 keV, too.** Each of these systems now also has
+  an any-energy network (trained at 8–15 keV and αi 0.25–0.55°, the polymer one fine-tuned on measured scans). At the
+  wavelength of the earlier network it runs beside that network and the better fit is shown; elsewhere in 8–15 keV it
+  analyses the scan at its own energy, where before only the tabulated optical constants with the earlier network's
+  starting solutions were used and **Auto** switched to **Refine**. Checked on simulated scans at other energies
+  (closer to the true values than before) and on reference scans that were kept apart until now (no scan fitted worse
+  than with the previous package); not yet on measured scans from another energy or beamline. Outside 8–15 keV nothing
+  changes. Fixed on the way: a Si scan away from 12 keV stopped during the import (*shadow table extraction failed*);
+  it is now imported with its own wavelength. Manual chapter 13; *Physics and Methods* 12.1.
+- Analyze saves indexed q maps with their visible phase and region overlays, legend and publication settings.
+  The GIWAXS report opens with phase matches, ring orientations and warnings. Replacing a sample offers to
+  reset its αi and visibility settings. In situ fits can export radius and spacing together against elapsed
+  time and point to the first fit needing review. Both GISAXS cuts open together for a joint fit. A saved
+  fit can be reopened, compared after a change and reproduced using a relocated copy of its verified input.
+- **First-use workflows.** Geometry Calibration accepts wavelength, identifies pixel pitch inferred from frame size,
+  shows ring-fit warnings beside the job status and saves a PONI directly. Fitting explains which halves Predict
+  uses, marks bound-limited values and saves the curve and parameters together from Results. The GIWAXS examples
+  include candidate CIFs. Analyze can load several at once, identifies the strongest reliable ring by fitted area
+  and exports the measured peak table with its indexing and geometry.
 - The manuals document the precision of an applied beam centre in Analyze, Geometry Calibration and XRR,
   and the differences observed when reproducing archived Predict parameters fits on another platform.
 - **Predict parameters** flags upright cylinders that could represent spheres above fitted q₊R = 2 at levels 2–4,
@@ -39,7 +70,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   The comparison reports bitwise agreement and the maximum relative difference per column (User Manual §12).
   Maps built while watching a folder can also be replayed after reopening a project that kept their row records.
 
-- **Geometry Calibration** refines arc-derived beam centres before ring detection on transmission frames as well as grazing-incidence frames. It matches five rings on the public silver behenate frame, including with a 2000 mm distance estimate. With three rings, the two-ring uncertainty refits hold the tilts fixed. The full fit supplies their uncertainties and a lower bound for the centre and distance errors. Simulations with seven or more matched rings still show low 1σ coverage for beam x and rot1 (Physics and Methods 3.3).
+- **Geometry Calibration** searches along predicted rings for weak reflections and ranks geometries by the rings present, strong peaks left unexplained and the fitted point residual. It measures each ring position from detector counts on both sides of the peak. The engine found all 300 simulated AgBh geometries (previously 213) and matched exactly three orders on all 150 three-order frames. Three-ring uncertainty accounts for centre–tilt coupling when all three pairs constrain the fit. For four to six matched rings, distance and rot2 each fell within 1σ in 56.5 % of frames. See *Physics and Methods* 3.3 for coverage of all five parameters.
+- **Geometry Calibration** refines arc-derived beam centres before ring detection on transmission frames as well as grazing-incidence frames.
 - **Geometry Calibration and GIWAXS orientation.** Calibration now refines the beam centre and distance with tilt fixed and reports ring-point RMS before and after refinement. Orientation reports identify weak bins excluded next to the exit-angle cut, vary that threshold in the Hermans f range, and omit model fills from undetermined pole fits. Sparse bins with measured scatter retain an uncertainty when the pooled variance fit crosses zero.
 - **Analyze ▸ Mask & corrections.** Raw background and flat-field frames can use an exposure-scaled dark.
   Set the flat-field threshold, save detector gain, offset and error model in an instrument profile, and choose
@@ -747,6 +779,10 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   their chapter.
 
 ### Analyze
+
+- **Crystal orientation** reports the mosaic width and fraction of each of up to two fibre components, including two widths about the same plane normal. It models exit transmission from the CIF composition and reports per-ring residuals. The public MAPbI₃ frame has an asymmetric horizon loss that prevents a quantitative texture assignment.
+
+- With phases loaded, Analyze and Run Automatic Analysis fit a shared crystal fibre texture to each phase's assigned GIWAXS rings. The Pole Figure tab shows how each reflection family contributes, with mosaic width, oriented fraction, competing axes and per-ring residuals.
 
 - **Flat field (detector response).** Mask & corrections ▸ Corrections has a **Flat field** (**Choose…**, **×**;
   off by default; GISAXS and GIWAXS): every frame is divided by a detector image of its size (CBF, TIFF, EDF,

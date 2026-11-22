@@ -52,6 +52,7 @@ def geometry_defaults(metadata: dict, shape: tuple[int, int]) -> dict:
         "center_x": columns / 2.0,
         "center_y": rows / 2.0,
         "incidence_deg": 0.0,
+        "sample_roll_deg": 0.0,
         "rot1_deg": 0.0,
         "rot2_deg": 0.0,
         "rot3_deg": 0.0,
@@ -83,6 +84,9 @@ class GeometryDialog(QDialog, GeometryDialogView):
         self.setup_geometry_ui(
             name, defaults, allow_delete=allow_delete, center_step_px=center_step_px,
         )
+        self._exact_roll = defaults.get("sample_roll_deg", 0.0)
+        self.roll_measurement = defaults.get("sample_roll_measurement")
+        self.sample_roll_spin.valueChanged.connect(self._roll_typed)
         self._wavelength_source = (defaults.get("wavelength_source") or SOURCE_NONE,
                                    defaults.get("wavelength_source_name") or "")
         self.apply_button.clicked.connect(self.applyCenterRequested)
@@ -97,6 +101,10 @@ class GeometryDialog(QDialog, GeometryDialogView):
         self._show_wavelength_source()
 
     # -- wavelength and energy --------------------------------------------------------------
+
+    def _roll_typed(self, value):
+        self._exact_roll = value
+        self.roll_measurement = None
 
     def wavelength_known(self) -> bool:
         return self.wavelength_spin.value() > 0
@@ -181,16 +189,18 @@ class GeometryDialog(QDialog, GeometryDialogView):
                             (self.pixel_y_spin, geometry.pixel_size_y_m * 1e6),
                             (self.center_x_spin, geometry.beam_center_x_px),
                             (self.center_y_spin, geometry.beam_center_y_px),
+                            (self.sample_roll_spin, geometry.sample_roll_deg),
                             (self.rot1_spin, math.degrees(geometry.rot1_rad)),
                             (self.rot2_spin, math.degrees(geometry.rot2_rad)),
                             (self.rot3_spin, math.degrees(geometry.rot3_rad))):
             spin.setValue(value)
+        self._exact_roll = geometry.sample_roll_deg
         self.set_wavelength(geometry.wavelength_angstrom, source, name)
 
     def geometry(self) -> DetectorGeometry:
         """The geometry of the fields (``ValueError`` while the wavelength is not known)."""
         for spin in (self.pixel_x_spin, self.pixel_y_spin, self.distance_spin, self.center_x_spin,
-                     self.center_y_spin, self.wavelength_spin, self.incidence_spin, *self.rotation_spins):
+                     self.center_y_spin, self.wavelength_spin, self.incidence_spin, self.sample_roll_spin, *self.rotation_spins):
             spin.interpretText()
         if not self.wavelength_known():
             raise ValueError(WAVELENGTH_REQUIRED)
@@ -202,6 +212,7 @@ class GeometryDialog(QDialog, GeometryDialogView):
             beam_center_y_px=self.center_y_spin.value(),
             wavelength_angstrom=self.wavelength_spin.value(),
             incidence_deg=self.incidence_spin.value(),
+            sample_roll_deg=self._exact_roll,
             rot1_rad=math.radians(self.rot1_spin.value()),
             rot2_rad=math.radians(self.rot2_spin.value()),
             rot3_rad=math.radians(self.rot3_spin.value()),
