@@ -159,3 +159,6 @@ separately (`149 passed in 17.29s`). Ruff reported `All checks passed!` on the c
 files. The English and Chinese user manuals were checked against the walkthroughs. Section 3.1
 of both physics manuals now identifies the existing energy–wavelength conversion used by the
 calibration dialog.
+
+The [second usability round](2026-11_second_round.md) follows up the publication and sample
+replacement findings and adds three walkthroughs of series fitting, joint fitting and record reuse.

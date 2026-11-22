@@ -11,6 +11,7 @@ ENGLISH, CHINESE = "en", "zh"
 LANGUAGES = (ENGLISH, CHINESE)
 
 HEADINGS_ZH = {
+    "Result summary": "结果摘要",
     "Needs attention (answer, then run again)": "需要处理（回答后重新运行）",
     "Open questions": "需要处理",
     "Geometry": "几何",

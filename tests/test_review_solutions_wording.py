@@ -248,6 +248,10 @@ def test_the_solutions_table_shows_every_population_the_points_and_what_differs(
         assert "Differs from solution 1 in: σnn/D (1) 0.201" in table.item(1, 1).toolTip()
         assert page.quality_label.text().startswith("2 solutions below")
         assert page.quality_label.toolTip() == fit_names.CHI2_DEFINITION
+        page.session.solutions = [first]
+        page.render_results()
+        assert page.quality_label.text().startswith("1 solution below.")
+        assert "uncertainties where estimable" in page.quality_label.text()
     finally:
         page.dispose()
 

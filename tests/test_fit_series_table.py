@@ -175,7 +175,9 @@ def test_a_failed_row_says_why_and_the_counts_are_of_what_was_fitted(tmp_path) -
     assert series.step_rail.state("results") == "warn" and series.step_rail.detail("results") == "4 fitted · 1 failed"
     assert series.status_label.text() == "Series done: 4 frames fitted, 1 failed."
     # The failed frame, selected: why, where the plot would be (not “the selected frame appears here”).
-    table.setCurrentCell(2, 0)
+    assert series.review_frame_button.text() == "Review frame 3"
+    series.review_frame_button.click()
+    assert table.currentRow() == 2
     assert series.frame_plot.curve_count() == 0
     assert series.frame_plot.empty_overlay.label.text().startswith("Frame 3 cannot be fitted: No data rows found")
     assert series.frame_note.text().startswith("Frame 3 cannot be fitted") and series.frame_note.property("gimapRole") == "warning"

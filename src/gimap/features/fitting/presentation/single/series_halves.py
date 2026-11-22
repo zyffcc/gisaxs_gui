@@ -41,6 +41,7 @@ class FitSeriesHalvesMixin:
     ``halves_note``, ``_listed()``, ``_preview_curve()``, ``refresh()``."""
 
     def _connect_halves(self) -> None:
+        self.forget_times()
         self._halves_chosen: Optional[str] = None
         """The person's own choice for the listed series (or a project's); ``None``: not chosen here."""
         self._halves_origin = ""

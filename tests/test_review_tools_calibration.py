@@ -196,9 +196,12 @@ def test_every_solution_row_shows_at_the_default_size(calibration_json, monkeypa
         _settle(app, 0.3)
 
         # A narrow window: one pair per row, so neither the labels nor the table are squeezed.
-        dialog.resize(900, 600)
+        dialog.resize(900, 560)
         _settle(app, 0.4)
         assert not dialog._result_two_columns
+        assert dialog.candidate_table.horizontalScrollBar().maximum() == 0
+        assert not dialog.candidate_table.isColumnHidden(0)
+        assert not dialog.candidate_table.isColumnHidden(1)
         assert _clipped_labels(dialog) == []
         dialog.resize(1180, 760)
         _settle(app, 0.4)

@@ -24,6 +24,7 @@ from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.task_runner import TaskRunner
 
 from ...application import LoadCurveRequest
+from ...application.series_chain import acquisition_fields
 from ...application.series_fit import (
     POOR_CHI2,
     FrameFit,
@@ -351,7 +352,7 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
                                       unit=value.q_source_unit, unit_from=value.q_unit_from, dq=value.dq)
             frame = chained(index, path, curve, start) if chained is not None else replace(
                 fit_frame(index, path, curve, start, settings, stop, predict), **marks)
-            return frame, curve, stamp, value
+            return replace(frame, acquisition=acquisition_fields(value.observation) or {}), curve, stamp, value
 
         def done(value):
             if not self._loading_current(epoch) or not self.running:
@@ -462,7 +463,7 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
         text = text() if callable(text) else text
         self.status_label.setText(text)
         if level in ("ok", "warning", "error") and self.isVisible():
-            show_toast(self.window(), text, level=level, action=action)
+            show_toast(self.window(), text, level=level, action=action, refresh=self._status_text)
 
     def _log(self, text: str) -> None:
         from datetime import datetime

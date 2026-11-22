@@ -334,7 +334,7 @@ class BatchExportMixin:
             self._batch_announced = True
             show_toast(
                 self.window(),
-                tr("{count} frames listed: set up one of them (geometry, mask, cuts), then Batch Export does them all.").format(count=frames),
+                trf("{count} frames listed: set up one of them (geometry, mask, cuts), then Batch Export does them all.", count=frames),
                 level="info", action=(tr("Batch Export…"), lambda: self.batch_export_dialog()),
             )
 

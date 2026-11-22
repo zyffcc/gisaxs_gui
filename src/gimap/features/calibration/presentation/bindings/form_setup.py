@@ -193,7 +193,10 @@ class FormSetupMixin:
             "Warning": self.result_warning,
         }
         self.candidate_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.candidate_table.horizontalHeader().setStretchLastSection(True)
+        self.candidate_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.candidate_table.horizontalHeader().setMinimumSectionSize(24)
+        self.candidate_table.verticalHeader().hide()
+        self.candidate_table.viewport().installEventFilter(self)
         self.results_splitter.setStretchFactor(0, 1)
         self.results_splitter.setStretchFactor(1, 2)
         self._result_two_columns = True  # as the View places the rows
@@ -322,7 +325,9 @@ class FormSetupMixin:
         self._results_user_sized = True
 
     def eventFilter(self, watched, event) -> bool:
-        if watched is getattr(self, "job_status", None) and event.type() in (QEvent.Resize, QEvent.LayoutRequest):
+        if event.type() == QEvent.Resize and hasattr(self, "candidate_table") and watched is self.candidate_table.viewport():
+            self._fit_candidate_columns()
+        elif watched is getattr(self, "job_status", None) and event.type() in (QEvent.Resize, QEvent.LayoutRequest):
             # The pinned status shares its row with a state chip. Reserve the height of all
             # wrapped lines at the label's actual width as soon as a fit warning arrives.
             label = self.stage_label

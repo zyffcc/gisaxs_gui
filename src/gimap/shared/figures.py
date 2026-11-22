@@ -11,7 +11,8 @@ from pathlib import Path
 
 import numpy as np
 
-CM = 1.0 / 2.54
+CM_PER_INCH = 2.54
+CM = 1.0 / CM_PER_INCH
 COLUMN_WIDTH_CM = 8.5
 RASTER_DPI = 600
 RASTER_SUFFIXES = frozenset({".png", ".tif", ".tiff", ".jpg", ".jpeg"})
@@ -34,7 +35,8 @@ def publication_figure(width_cm: float = COLUMN_WIDTH_CM, height_cm: float = COL
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
 
-    figure = Figure(figsize=(width_cm * CM, height_cm * CM), layout="compressed" if fixed_aspect else "constrained")
+    figure = Figure(figsize=(width_cm / CM_PER_INCH, height_cm / CM_PER_INCH),
+                    layout="compressed" if fixed_aspect else "constrained")
     FigureCanvasAgg(figure)
     return figure
 
@@ -107,13 +109,13 @@ def cjk_fallback(figure, texts=None) -> int:
     fallback = next((name for name in CJK_FONTS if name in names), None)
     if fallback is None:
         return 0
-    family = ["DejaVu Sans", fallback] if "DejaVu Sans" in names else [fallback]
     for text in texts:
-        text.set_fontfamily(family)
+        family = text.get_fontfamily()
+        text.set_fontfamily(list(dict.fromkeys([*family, fallback])))
     return len(texts)
 
 
-def save_figure(figure, path: str | Path) -> Path:
+def save_figure(figure, path: str | Path, *, dpi=None) -> Path:
     """Write ``figure``; raster formats at :data:`RASTER_DPI`, vector formats as vectors.
 
     Titles and labels in Chinese (the interface language) are written with a Chinese font."""
@@ -121,7 +123,9 @@ def save_figure(figure, path: str | Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     raster = path.suffix.lower() in RASTER_SUFFIXES
     cjk_fallback(figure)
-    figure.savefig(path, dpi=RASTER_DPI if raster else None)
+    if dpi is None and raster:
+        dpi = RASTER_DPI
+    figure.savefig(path, dpi=dpi)
     return path
 
 

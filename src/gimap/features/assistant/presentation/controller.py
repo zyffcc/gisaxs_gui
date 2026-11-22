@@ -24,7 +24,7 @@ from PyQt5.QtCore import QObject, QSize, Qt, pyqtSignal
 from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QDockWidget, QFrame, QMessageBox, QScrollArea, QVBoxLayout
 
 from src.gimap.app.presentation.components import show_toast
-from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_to, current_language, tr
+from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_to, current_language, tr, trf
 from src.gimap.app.presentation.layout_metrics import fit_to_screen
 from src.gimap.app.presentation.task_runner import TaskRunner
 
@@ -413,7 +413,7 @@ class AssistantController(QObject):
         except OSError:
             pass
         if self.window is not None:
-            show_toast(self.window, tr("AI: {message}").format(message=outcome.message), level="info")
+            show_toast(self.window, trf("AI: {message}", message=outcome.message), level="info")
 
     # -- the changes (operation cards) ----------------------------------------------------
 
@@ -452,7 +452,7 @@ class AssistantController(QObject):
         if self.panel is not None and self.outcome is not None:
             self.panel.show_operations(self.outcome.results.operations)
         if self.window is not None:
-            show_toast(self.window, tr("AI change: {message}").format(message=message), level="info")
+            show_toast(self.window, trf("AI change: {message}", message=message), level="info")
 
     def _language(self) -> str:
         return self._goals.language if self._goals is not None else "English"

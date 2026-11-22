@@ -59,8 +59,14 @@ class ReflectionLayer:
         self._plot = plot
         self._items: list = []
         self._corner = None
+        self.arcs = ()
+        self.spots = ()
+        self.labels = []
+        self.legend = ()
 
     def clear(self) -> None:
+        self.arcs = self.spots = self.legend = ()
+        self.labels = []
         if self._corner is not None:
             scene = self._corner.scene()
             if scene is not None:
@@ -86,6 +92,7 @@ class ReflectionLayer:
         from PyQt5.QtCore import Qt
 
         self.clear()
+        self.arcs, self.spots, self.legend = arcs, spots, legend
         for color, xs, ys in arcs:
             self._add(pg.PlotDataItem(xs, ys, pen=pg.mkPen(color, width=1.2, style=Qt.DashLine), connect="finite"))
         for color, x, text in lines:
@@ -108,6 +115,7 @@ class ReflectionLayer:
             if not labels:
                 continue
             for x, y, text in _spread_labels(group.labels, spots):
+                self.labels.append((x, y, text, group.color))
                 label = pg.TextItem(text, color=group.color, anchor=(-0.15, 1.1))
                 label.setPos(x, y)
                 self._add(label)

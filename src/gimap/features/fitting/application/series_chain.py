@@ -234,6 +234,31 @@ def observation_time(observation) -> Optional[float]:
         return None
 
 
+def acquisition_fields(observation) -> dict | None:
+    """Retain the detector's time source, including its original timestamp and time zone."""
+    if not isinstance(observation, dict):
+        return None
+    fields = {}
+    for key in ("frame_time_s", "timestamp"):
+        value = observation.get(key)
+        if value is not None and observation_time({key: value}) is not None:
+            fields[key] = float(value) if key == "frame_time_s" else str(value)
+    return fields or None
+
+
+def elapsed_times(frames) -> dict:
+    """Seconds from the earliest timed, fitted frame. Never subtract a relative clock from a date."""
+    timed = [frame for frame in frames if frame.acquisition]
+    for key in ("frame_time_s", "timestamp"):
+        if timed and all(key in frame.acquisition for frame in timed):
+            moments = {frame.index: observation_time({key: frame.acquisition[key]}) for frame in timed}
+            fitted = [moments[frame.index] for frame in timed if frame.fitted and moments[frame.index] is not None]
+            if fitted:
+                origin = min(fitted)
+                return {i: value - origin for i, value in moments.items() if value is not None}
+    return {}
+
+
 def backward_order(indices: Sequence[int]) -> list[int]:
     """The frames of the backward pass: from the last but one to the first (the last starts it as it is)."""
     ordered = sorted(indices)
@@ -261,5 +286,6 @@ def series_nxcansas(frames: Sequence[FrameFit], curves: dict, settings: SeriesSe
 
 __all__ = ["BACKWARD", "BREAKS", "CHAIN", "CHI2_JUMP", "CHI2_JUMP_LEAST", "CHOICES", "CHOSEN_CLOSEST", "CHOSEN_TOP",
            "FLAG_KINDS", "FORWARD", "PREDICT_FACTOR", "STARTS_FROM", "backward_order", "better", "chain_break",
-           "chained_fit", "flags_text", "frame_flags", "observation_time", "restart_solution", "series_nxcansas",
+           "acquisition_fields", "chained_fit", "elapsed_times", "flags_text", "frame_flags", "observation_time",
+           "restart_solution", "series_nxcansas",
            "solution_distance"]

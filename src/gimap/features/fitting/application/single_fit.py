@@ -146,7 +146,8 @@ class Curve:
 
     @classmethod
     def from_arrays(cls, q, intensity, sigma=None, *, name: str, path: str = "", unit: str = "angstrom",
-                    unit_from: str = "", rows_left_out: int = 0, columns: Optional[dict] = None, dq=None) -> "Curve":
+                    unit_from: str = "", rows_left_out: int = 0, columns: Optional[dict] = None, dq=None,
+                    verified_sha256=None) -> "Curve":
         factor = NM_PER_A if unit == "angstrom" else 1.0
         q = np.asarray(q, dtype=float).reshape(-1) * factor
         intensity = np.asarray(intensity, dtype=float).reshape(-1)
@@ -163,7 +164,7 @@ class Curve:
 
         return cls(q[keep], intensity[keep], None if sigma is None else sigma[keep], name, path, unit, unit_from,
                    int(rows_left_out) + int(q.size - np.count_nonzero(keep)), columns, dq,
-                   source=source_record(path) if path else None)
+                   source=source_record(path, verified_sha256=verified_sha256) if path else None)
 
 
 def _half(curve: Curve, positive: bool):

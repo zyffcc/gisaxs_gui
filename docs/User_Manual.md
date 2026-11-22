@@ -120,8 +120,7 @@ The warnings row lists this and any overlap, edge or bin-width flags recorded fo
 image to **q map** or **Cake** to see the rings in q; **Sources** shows which pixels each curve uses.
 
 ![GIWAXS results](manual_images/en/07_giwaxs_results.png)
-*The Results tab of a GIWAXS frame: the summary line, the peak table, Fit details and the ring
-orientation; the checks follow further down.*
+*The Results tab opens with the indexed peak count, orientation evidence for each candidate phase and warnings. The peak table and checks follow.*
 
 **5. Send to Fitting.** Press **Send to Fitting**. GIMaP writes
 `gimap_analysis/S121_MAI_A2_00841_fit_input.dat` next to the frame (columns q, I, σ, pixels; q in
@@ -931,7 +930,9 @@ Start page (*Calibrate the detector*).
    compare the rings with the frame. Review the result: beam centre, distance, **Detector tilt** (rot1 and rot2, *0.372°, 0.433°*, or *not
    refined*; its tooltip gives the 1σ), matched rings, **Ring-point RMS** and its tooltip. The tooltip gives the RMS before refinement on the same points. For a fitted tilt, it also gives the RMS with centre and distance refitted at zero tilt. **Ring-radius RMS** appears when there is no point fit. Review the confidence and warning of the **Selected solution** (a warning is marked ⚠; its tooltip says why it matters), and the
    **Candidate solutions** below. The line above the preview names only the image and its size. Selecting a candidate draws its
-   rings. **Clean image** temporarily hides all overlays, **Reset view** restores the complete
+   rings. In a narrow window the table keeps the standard and distance visible. Select a row to read
+   its centre, ring count, residual and confidence in **Selected solution**.
+   **Clean image** temporarily hides all overlays, **Reset view** restores the complete
    detector mosaic after zooming or panning, and **Focus image** hides the result panels to give tall
    WAXS mosaics more room. The horizontal divider can be dragged.
    When exactly three rings contribute to the tilt fit, the tilt 1σ in the tooltip comes from the
@@ -1137,6 +1138,10 @@ whether to **Replace** them or **Add to List**. Frames added must come from the 
 first new frame has another size than the frame shown, nothing is added and the status line says why
 (*These frames are 1043×981 …; the frames listed are 2048×2048 …*). A list never mixes two detectors, so
 Batch Export never mixes two geometries.
+
+When replacing a sample, review the listed phase visibility, hidden cuts and manual αi.
+**Replace and reset** uses the new frame's incidence setting, hides the previous sample's phases
+and shows all cuts and marks. The phase definitions remain available in **Phases**.
 
 **The frame list** (Data step) has one row per imported frame, whether it comes from a file of its own
 or from a NeXus stack:
@@ -1508,8 +1513,11 @@ Three views above the image:
 - **Cake** — unwrapped onto χ against q: a ring is a vertical line, a region a rectangle.
 
 **Save ▾** above the image: **View as Figure…** (the view with its colour bar) or **View Data as
-CSV…** (the q map or the cake as a table with its axes). Phase arcs and their legend appear only
-in the interactive view. Use **Phases ▸ Reflections** to look up the expected q values.
+CSV…** (the q map or the cake as a table with its axes). To publish an indexed q map, set the
+zoom, tick the phases and regions to include, then choose **View as Figure…** or **Save Image…**.
+After choosing the file, set width and height in cm, font, point size and image resolution in dpi.
+PDF and SVG keep the arcs, spot markers, labels and region boundaries as vectors over the intensity
+image. PNG uses the chosen resolution. The legend identifies the visible phases and regions.
 
 **Regions.** A region is a q range × a χ range, optionally on both sides (±χ, folded onto |χ|).
 Each region gives two curves in its own colour: I(q) (upper plot) and I(χ) (lower plot). The list
@@ -1664,7 +1672,7 @@ the factors and limits for the analysed ring matching that curve.
 
 ![Results of the automatic analysis of a GIWAXS frame](manual_images/en/07_giwaxs_results.png)
 
-*The peak table (q, d, FWHM, trust, Scherrer size L, OOP/IP); **Fit details** below it opens the fit of the selected peak.*
+*The summary distinguishes ambiguous matches from indexed peaks with orientation evidence. Open the full report here, or inspect a peak in the table below.*
 
 **GISAXS.** The run:
 
@@ -1748,6 +1756,10 @@ time, and ticks off the phases. **Stop** (in the panel and the command bar) ends
 its next step. A step already running finishes first, and the panel says what it waits for (a
 geometry fit or model fit can take a minute). What was found is kept: **Save Report…** or
 **Discard**.
+
+The GIWAXS **Result summary** gives the number of indexed and ambiguous peaks and the measured
+ring orientations by candidate phase. Read the flags before assigning a phase or quoting an orientation.
+**Show the Full Text** and **Save Report…** are beside the summary. The detailed checks follow the peaks.
 
 **Save Peak Table…** beside **Peaks** writes one CSV row per fitted peak, with uncertainties,
 indexing alternatives and flags. An empty phase and hkl identify an unassigned peak. The comment lines record the source,
@@ -2294,6 +2306,16 @@ Other ways to get a single curve in:
 
 ### 6.2 Single analysis: one curve in four steps
 
+To continue a saved fit, open the arrow beside **Open Curve…** and choose **Open Saved Fit…**.
+Select the JSON from **Save Curve and Parameters…**. GIMaP verifies the source curve's SHA-256
+and restores its column or frame selection, q unit, halves, range, excluded points and saved model.
+The progress window lets you cancel the check and keep the curve already open.
+Change a setting and run the fit. **Results ▸ Compare with Saved Fit…** shows the saved and current
+parameter values, available errors, bounds and point counts side by side. The new fit JSON identifies
+the original record by path and SHA-256. Choose a new filename to keep both records.
+
+![Recorded and current model values after narrowing the GALAXI fitting range](manual_images/en/11c_saved_fit.png)
+
 ![Fitting, Single analysis](manual_images/en/11_fitting_single.png)
 
 *After Predict parameters, Results shows the least-squares values and posterior medians. The model and residuals appear on the right.*
@@ -2453,7 +2475,7 @@ sizes for your sample, or let the Fit step find them.
   Search). Refine and Search refuse a curve with fewer points than free values plus one (*Only 5 points in the
   fitting range for 9 free values: a fit needs at least 10 …*) and a curve without an intensity above zero.
   After Predict parameters it says how many solutions there are and that the most probable is in Model: **Refine**
-  gives its quality and the error of every value.
+  reports fit quality and the uncertainties the data allow it to estimate.
 - What to do next: **Refine These Values** (after a prediction), **Fit Again** (the same
   method, with the values, fixed values and ranges now in Model) and **Fit Every Curve in This Folder…** (the
   In-situ series on this curve's folder, each curve starting from this model).
@@ -2740,7 +2762,7 @@ the fit1d kit (*Predict parameters (fit1d)*) and the quick physical fit (*Find t
 
 ![Fitting, In-situ series](manual_images/en/12_fitting_insitu.png)
 
-*Eight synthetic sphere curves fitted with the hidden Markov model. Predict returned one solution per frame, so each has raw and smoothed probability 1. Frame 5 is selected. The trend shows the posterior median and 68% interval for R, with each solution’s least-squares value overlaid.*
+*Four synthetic detector frames fitted with a sphere model. At 7 s the model misses part of the measured curve. The table flags frame 4 and the trend shows R and D with their least-squares standard errors.*
 
 The **Batch / In-situ series** tab fits curves with the model of Single analysis. The command bar has
 **Import Curves…**, **Choose Folder…** and **Start**; **Pause** and **Stop** appear while fitting runs,
@@ -2853,6 +2875,12 @@ current frame finish before pausing. Completed results stay available.
   The plot is titled with the name of the series. When the curves say when their frames were measured (curves for
   Fitting that Analyze wrote of frames with a time stamp), the box beside the value draws it against **Time (s)**
   since the first fitted frame.
+- Select **Radius and spacing (nm)** to plot R and D for the same particle on one axis. The legend identifies
+  the estimates and the error bars. **Save Trend…** writes the displayed trend. **Save Table…** writes all
+  fitted parameters and their errors. When detector times are available on a common clock, the CSV includes
+  `elapsed_time_s` relative to the earliest timed fitted frame. The JSON retains the recorded detector times.
+- **Review frame n** selects the first result marked for review in the Results table.
+  The note above its measured curve gives the reason. A flagged frame can still have a converged fit.
 - **Open Frame in Single Analysis** takes a frame and its fitted model back to Single analysis to look closer.
 - **Save ▸ Table of Every Frame…** writes a CSV (frame, file, χ²ᵣ, log RMSE, converged, points, halves used, every
   value and its error) with a JSON record next to it: the start model, the halves and where they came from, range,
@@ -2881,11 +2909,18 @@ indices and names in result records; indices in JSON are zero-based, while the p
 
 ![Fit Several Curves Together](manual_images/en/26_fitting_joint.png)
 
-*The minimum in the vertical cut (right) constrains the cylinder height h. Both curves share h and have their own intensity scales and backgrounds.*
+*A cylinder model fitted to the two GALAXI cuts. The data rise above the model at the high-q end of the vertical
+cut. Read the vertical reduced χ² and the warning below the plot when interpreting the reported height.*
 
 **Fitting ▸ Fit Several Curves Together…** fits a list of curves with one χ²: typically the horizontal and the vertical
 cut of one GISAXS frame. The vertical cut constrains the height of upright cylinders and the vertical extent of the
 particles. The fit starts from the model in Single analysis.
+
+For one particle population, **Particle shape** also changes the model in Single analysis. To fit an independent
+height and radius for upright cylinders, choose **Vertical cylinder**. Check the measured cuts with **Show**, select
+the sample's **Substrate**, then choose **Fit Together**. The plot now shows the points used for that curve and
+its fitted model. The line above the plot gives the last fit's radius and, for a model with height, its height in nm.
+An available 1σ fit error follows each value. Read the vertical reduced χ² and the range check before quoting a height.
 
 - **Curves**: **Add Files…** (curve files), **Add Curve of the Page** (the curve in Single analysis, with the angles of
   its Model) and **Remove**; **Analyze ▸ Send Both Cuts to Fitting** writes the frame's horizontal cut
@@ -4130,7 +4165,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | Fitting ▸ **Save ▸ Plot…**, **Save ▸ Model…** | `<curve>_fit.png` / `.svg`; `<curve>_model.json` | as above | none; the model file |
 | Fitting ▸ Batch / In-situ series ▸ **Save ▸ Table of Every Frame…** | `series_fit.csv` + `series_fit.json` | the series folder | the JSON (`gimap_series_fit_v2`: start model, halves and where they came from, every frame's state and reason; for detector frames Analyze's settings) |
 | Fitting ▸ Batch / In-situ series ▸ **Save ▸ Series report…** | `series_fit.md` | series folder | frame decisions, probabilities and run settings |
-| Fitting ▸ Batch / In-situ series ▸ **Trend Plot…**, **Selected Frame's Plot…** | `series_trend_<value>.png` (the table column of the value, for example `series_trend_chi2_reduced.png`) and `series_frame_<NNNNN>.png` (the frame counted from 1, five digits), or `.svg`; `series_trend.png`, `series_frame.png` while nothing is fitted | the series folder | none (the title in the picture names the value or frame) |
+| Fitting ▸ Batch / In-situ series ▸ **Trend Plot…**, **Selected Frame's Plot…** | `series_trend_<value>.png` (the table column of the value, for example `series_trend_chi2_reduced.png`, or `series_trend_1_R_D_nm.png` for the paired trend of particle 1) and `series_frame_<NNNNN>.png` (the frame counted from 1, five digits), or `.svg`; `series_trend.png`, `series_frame.png` while nothing is fitted | the series folder | none (the title in the picture names the value or frame) |
 | **Tools ▸ 1D Predict — Fit Many Curves…** | a run folder: `request.json`, `batch_summary.json` …, a subfolder per curve with `solutions.json`, `fitting_curves.csv` … | `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the GIMaP user data folder; never removed automatically | `request.json` |
 | Compare ▸ **Save ▸ Table of Every Series… / Table of Every Frame…** | `compare_series.csv` / `compare_frames.csv` + `.json` | the folder of the first series added from files, else the folder a series was last added from (while it is there), else your home folder | `#` header lines and the JSON |
 | Compare ▸ **Change Plot… / Paths Plot… / End States Plot…** | `compare_*.png` or `.svg` | as above | none |
@@ -4168,7 +4203,11 @@ gimap reproduce example_analysis.json --out check
 
 Without `--out`, the command creates `<record stem>_reproduced/` beside the JSON. Use a fresh destination for each comparison. The folder contains the newly calculated CSV columns and `comparison.json`. Batch results have numbered subfolders. **identical** means every recorded numerical column matches bit for bit, including uncertainties and pixel counts where present. **different** gives the largest relative difference in each column. The command exits with 0 for identical values, 2 for a difference and 1 for an error.
 
-Keep the referenced files with the record. Replay checks their SHA-256 digests and names any missing or changed file. If you move a file, work on a copy of the JSON and update the file reference’s `path`, keeping its digest. Relative paths are read from the folder containing the record.
+Keep the referenced files with the record. Relative paths start in the record's folder. If the original
+path is missing, place an identical copy beside the JSON with its original filename. Replay checks its
+SHA-256 and writes the locations and digests of the copies it used in `comparison.json` under
+`relocated_inputs`. For inputs that share a filename, preserve their separate folders and update their
+file references in a copy of the JSON, keeping the original digests.
 
 The reduction record preserves frame indices and sums, the applied geometry and instrument profile, ordered mask edits and their source files, final mask bitmaps, dark, background and flat-field settings, intensity corrections, normalisation, cuts, bins and error model. A manual fit records the fitted points, starting model and solver settings. Predict parameters records its network, sampling settings and seed. The record names the GIMaP version and source commit when available. Use the same software and numerical environment when checking bitwise agreement.
 
@@ -4229,7 +4268,6 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 
 | Limitation | What to do |
 |---|---|
-| **Saved q-map figures omit phase arcs and their legend.** | Keep the candidate CIFs and the indexed peak CSV with the figure. The **Reflections** tab in **Phases** lists the expected q values. |
 | **The rows of a Series map carry no σ.** The timeline's χ² takes the noise of each x column from the series itself, and a Series map recorded in the results database holds x and I only (section 5.6). | Read the timeline as a distance in units of the frame-to-frame noise, not as a goodness of fit; for σ of every point, use Batch Export ▸ Each frame: its curves, with error bars. |
 | **Cancellation does not forcibly interrupt low-level file reading.** A Compare directory scan or single-table read, or the current Fitting read, may still be returning. | Press Cancel or Stop once; the request is registered, and the unfinished import is discarded or the frame fit skipped when reading returns. Completed series and results stay (sections 6.5, 7.2). |
 | **Curve import supports `q I [sigma]` and `q I1 I2 …`, not interleaved `q I1 sigma1 I2 sigma2`.** A headerless three-column table cannot identify its meaning by numbers alone. | Choose the layout explicitly in **Import Curves…** (section 6.1). For separate errors per curve, provide one `q I sigma` file per curve. Fixed imported selections cannot watch for new columns/files. |

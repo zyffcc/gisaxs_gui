@@ -143,9 +143,11 @@ class CalibrationRunMixin:
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
+                item.setToolTip(value)
                 if column == 4:  # the residual of the geometry shown: which one, on hover
                     item.setToolTip(rms_title(candidate) + " " + rms_tip(candidate))
                 self.candidate_table.setItem(row, column, item)
+        self._fit_candidate_columns()
 
     def _candidate_selected(self) -> None:
         if self.result is None:

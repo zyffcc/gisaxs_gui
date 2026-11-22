@@ -396,6 +396,15 @@ class FitSeriesView:
         self.results_card.setObjectName("fitSeriesResultsCard")
         self.results_card.hide()  # shown once a series was started (the rail says “After Start” until then)
         layout.addWidget(self.results_card)
+        self.result_actions = QWidget(page)
+        actions = FlowLayout(self.result_actions, spacing=6)
+        self.quick_table_button = QPushButton("Save Table…", self.result_actions)
+        self.quick_trend_button = QPushButton("Save Trend…", self.result_actions)
+        self.review_frame_button = QPushButton(self.result_actions)
+        for button in (self.quick_table_button, self.quick_trend_button, self.review_frame_button):
+            actions.addWidget(button)
+        self.result_actions.hide()
+        layout.addWidget(self.result_actions)
         self.results_table = read_only_table(("#", "χ²ᵣ", "parameter"), page, "fitSeriesTable",
                                              QAbstractItemView.ExtendedSelection)  # rows to copy; the current one is shown
         self.results_table.setProperty("gimapDataHeaders", True)  # parameter names with units
