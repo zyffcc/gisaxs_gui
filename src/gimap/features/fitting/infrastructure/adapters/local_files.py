@@ -8,12 +8,13 @@ from pathlib import Path
 
 import numpy as np
 
-from .curve_columns import column_q_unit, csv_columns
+from .curve_columns import column_q_unit, curve_columns, resolution_unit
 from .curve_units import file_q_unit
-from .scattering_curve_files import load_xy_any
+from .scattering_curve_files import LoadOptions, load_xy_any
 from .curve_tables import inspect_curve_table, load_table_curve
 from . import nxcansas_curves
 from ...application.curve_sources import CurveTablePreview
+from ...application.curve_units import IN_NM
 
 from ...application.models import (
     CURVE_NOT_FOUND,
@@ -97,15 +98,17 @@ class LocalCurveRepository:
                 InSituSourceFrame(source, selection.frame_index), request.q_source_unit)
         if source.suffix.lower() not in CURVE_SUFFIXES:
             raise ValueError(UNSUPPORTED_CURVE)
-        columns, chosen_by = selection.columns, "selection"
-        if columns is None and source.suffix.lower() == ".csv":
-            # A CSV's columns differ by table (Fitting's own “data and fit” has two q columns): by the header's
-            # names, never by place alone (``curve_columns``).
-            columns, chosen_by = csv_columns(source), "header"
-        loaded = load_xy_any(str(source)) if columns is None else load_table_curve(source, columns)
+        columns = curve_columns(source, selection.columns)
+        chosen_by = "selection" if selection.columns is not None else "header"
+        loaded = (load_xy_any(str(source), LoadOptions(keep_missing_sigma=request.keep_missing_sigma)) if columns is None
+                  else load_table_curve(source, columns, keep_missing_sigma=request.keep_missing_sigma))
         pixels, observation = read_fit_input_extras(source)
         if pixels is not None and pixels.size != np.asarray(loaded.q).size:
             pixels = None  # rows were dropped as non-finite: counts no longer align
+        dq = loaded.dq
+        if dq is not None and loaded.meta["dq_column_name"]:
+            width_unit = resolution_unit(loaded.meta["dq_column_name"]) or request.q_source_unit
+            dq = dq * (IN_NM[width_unit] / IN_NM[request.q_source_unit])
         if columns is not None:
             observation = dict(observation, curve_source={
                 "path": str(source), "columns": columns.to_dict(), "chosen_by": chosen_by,
@@ -120,6 +123,7 @@ class LocalCurveRepository:
             pixels=pixels,
             observation=observation,
             rows_left_out=int(getattr(loaded, "meta", {}).get("rows_left_out", 0)),
+            dq=dq,
         )
 
     def stated_q_unit(self, path) -> str | None:
@@ -131,9 +135,7 @@ class LocalCurveRepository:
             raise FileNotFoundError(CURVE_NOT_FOUND.format(path=source.resolve()))  # as ``load`` says it
         if nxcansas_curves.is_nxcansas_file(source):
             return nxcansas_curves.stated_unit(source, selection.frame_index)
-        columns = selection.columns
-        if columns is None and source.suffix.lower() == ".csv":
-            columns = csv_columns(source)
+        columns = curve_columns(source, selection.columns)
         return file_q_unit(source) if columns is None else column_q_unit(source, columns)
 
     def inspect_table(self, path) -> CurveTablePreview:

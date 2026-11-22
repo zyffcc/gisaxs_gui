@@ -20,6 +20,7 @@ from typing import Mapping, Optional
 
 import numpy as np
 
+from .models import InSituSourceFrame
 from src.gimap.shared.signed_cut import MISSING_HALF, MissingHalf, local_steps, mean_of_halves
 from src.gimap.shared.version import SOFTWARE
 
@@ -59,12 +60,14 @@ from ..domain.fit_model import (
     new_component,
     intensity_size,
     number_size,
+    parameter_info,
     qz_plus_r,
     sigma_nn_over_d,
     to_manual,
     with_interference,
 )
 from ..domain import beam_tail, fit_edges
+from ..domain.fit_resolution import MISSING_DQ
 from ..domain.fit_limits import constrain_proposal, explicit_limits
 from ..domain.native_solution import native_solution_mapping
 
@@ -119,6 +122,22 @@ class Curve:
     columns: Optional[dict] = None
     """The columns of a table read as q, I and σ (``ColumnMapping.to_dict``; a CSV: chosen by its header's names, or
     by the person); ``None``: a file read by place or an NXcanSAS curve."""
+    dq: Optional[np.ndarray] = None
+    """Measured Gaussian resolution widths, in nm⁻¹ and aligned with the signed q."""
+
+    def without_missing_text_sigma(self) -> "Curve":
+        """For file weighting, form the halves from the same observations the text reader historically supplied.
+
+        A blank or nonfinite σ cell used to remove its whole row during import. Keep it available in the loaded
+        curve for other weights. NXcanSAS and in-memory arrays already handled their σ after folding.
+        """
+        if self.sigma is None or not self.path:
+            return self
+        finite = np.isfinite(self.sigma)
+        if finite.all() or InSituSourceFrame.from_token(self.path).path.suffix.lower() not in (".dat", ".csv", ".txt"):
+            return self
+        return replace(self, q=self.q[finite], intensity=self.intensity[finite], sigma=self.sigma[finite],
+                       dq=None if self.dq is None else self.dq[finite])
 
     @property
     def signed(self) -> bool:
@@ -126,7 +145,7 @@ class Curve:
 
     @classmethod
     def from_arrays(cls, q, intensity, sigma=None, *, name: str, path: str = "", unit: str = "angstrom",
-                    unit_from: str = "", rows_left_out: int = 0, columns: Optional[dict] = None) -> "Curve":
+                    unit_from: str = "", rows_left_out: int = 0, columns: Optional[dict] = None, dq=None) -> "Curve":
         factor = NM_PER_A if unit == "angstrom" else 1.0
         q = np.asarray(q, dtype=float).reshape(-1) * factor
         intensity = np.asarray(intensity, dtype=float).reshape(-1)
@@ -134,8 +153,13 @@ class Curve:
         if sigma is not None and (sigma.shape != q.shape or not np.any(np.isfinite(sigma) & (sigma > 0))):
             sigma = None
         keep = np.isfinite(q) & np.isfinite(intensity)
+        if dq is not None:
+            dq = np.asarray(dq, dtype=float).reshape(-1)
+            if dq.shape != q.shape:
+                raise ValueError("dQ and q must have the same length")
+            dq = dq[keep] * factor
         return cls(q[keep], intensity[keep], None if sigma is None else sigma[keep], name, path, unit, unit_from,
-                   int(rows_left_out) + int(q.size - np.count_nonzero(keep)), columns)
+                   int(rows_left_out) + int(q.size - np.count_nonzero(keep)), columns, dq)
 
 
 def _half(curve: Curve, positive: bool):
@@ -143,7 +167,8 @@ def _half(curve: Curve, positive: bool):
     q = np.abs(curve.q[keep])
     order = np.argsort(q)
     sigma = None if curve.sigma is None else curve.sigma[keep][order]
-    return q[order], curve.intensity[keep][order], sigma
+    dq = None if curve.dq is None else curve.dq[keep][order]
+    return q[order], curve.intensity[keep][order], sigma, dq
 
 
 def point_key(q: float) -> float:
@@ -196,7 +221,7 @@ class PreparedCurve:
 
 
 def prepare_points(curve: Curve, side: str = "mean", q_range: Optional[tuple] = None, excluded=(), *,
-                   strict: bool = False) -> PreparedCurve:
+                   strict: bool = False, weighting: str = "file", resolution: str = "constant") -> PreparedCurve:
     """The points fitted (|q| in nm⁻¹) — in ``q_range`` (nm⁻¹) when given, without the ``excluded`` ones
     (``left_out_points``) — and what they are made of.
 
@@ -204,11 +229,18 @@ def prepare_points(curve: Curve, side: str = "mean", q_range: Optional[tuple] = 
     or ``negative``. A chosen half without points is ``MissingHalf`` when ``strict`` (a frame of a series,
     where the other half must never stand in for it); else the half there is is used — Single analysis,
     where a curve with points on one side only offers no choice of halves."""
+    if resolution not in ("constant", "file"):
+        raise ValueError(f"Unknown resolution source {resolution!r}")
+    if resolution == "file" and curve.dq is None:
+        raise ValueError(MISSING_DQ)
+    input_curve = curve
+    if weighting == "file":
+        curve = curve.without_missing_text_sigma()
     positive, negative = _half(curve, True), _half(curve, False)
     there = [name for name, half in (("positive", positive), ("negative", negative)) if half[0].size]
     halves = None
     if side == "both":
-        q, intensity, sigma = np.abs(curve.q), curve.intensity, curve.sigma
+        q, intensity, sigma, dq = np.abs(curve.q), curve.intensity, curve.sigma, curve.dq
         used = "both" if len(there) == 2 else (there[0] if there else "both")
     elif side in ("positive", "negative"):
         used = side
@@ -216,21 +248,29 @@ def prepare_points(curve: Curve, side: str = "mean", q_range: Optional[tuple] = 
             if strict:
                 raise MissingHalf(MISSING_HALF[side])
             used = there[0] if there else side
-        q, intensity, sigma = positive if used == "positive" else negative
+        q, intensity, sigma, dq = positive if used == "positive" else negative
     elif len(there) == 2:
         # the q > 0 half gives the |q| of the mean, as in Analyze's curve and the series map: one cut, one mean curve
-        mean, used = mean_of_halves(positive, negative, grid="positive"), "mean"
+        mean, used = mean_of_halves(positive[:3], negative[:3], grid="positive"), "mean"
         q, intensity, sigma, halves = mean.q, mean.intensity, mean.sigma, mean.halves
+        dq = None
+        if resolution == "file":
+            # The second moment of a centered mixture is the mean of the variances.
+            # Use the same interpolation, gaps and branch selection as the intensities.
+            variances = [(x, np.where(width >= 0, width, np.nan)**2, None)
+                         for x, _, _, width in (positive, negative)]
+            dq = np.sqrt(mean_of_halves(*variances, grid="positive").intensity)
     else:
         used = there[0] if there else "mean"
-        q, intensity, sigma = positive if used == "positive" else negative
+        q, intensity, sigma, dq = positive if used == "positive" else negative
     keep = np.ones(q.shape, dtype=bool)
     if q_range is not None:
         low, high = sorted(float(value) for value in q_range)
         keep = (q >= low) & (q <= high)
     left_out = left_out_points(q, excluded) & keep if len(excluded) else np.zeros(q.shape, dtype=bool)
     keep &= ~left_out
-    data = FitData.prepare(q[keep], intensity[keep], None if sigma is None else sigma[keep])
+    data = FitData.prepare(q[keep], intensity[keep], None if sigma is None else sigma[keep],
+                           weighting=weighting, dq=dq[keep] if resolution == "file" else None)
     averaged = 0
     if halves is not None:
         halves = halves[keep][np.isin(q[keep], data.q)]  # of the points that are fitted
@@ -240,15 +280,25 @@ def prepare_points(curve: Curve, side: str = "mean", q_range: Optional[tuple] = 
     measured = intensity[keep][np.isfinite(q[keep]) & (q[keep] > 0)]
     measured = measured[np.isfinite(measured)]
     candidates = int(np.count_nonzero(np.isfinite(q[keep]) & (q[keep] > 0) & np.isfinite(intensity[keep])))
-    invalid = candidates - int(data.q.size) if data.sigma is not None else 0
+    invalid = candidates - int(data.q.size) if weighting == "file" and data.sigma is not None else 0
+    if input_curve is not curve:
+        q_abs = np.abs(input_curve.q)
+        missing = ~np.isfinite(input_curve.sigma) & (q_abs > 0)
+        if used in ("positive", "negative") and side in ("positive", "negative"):
+            missing &= input_curve.q > 0 if used == "positive" else input_curve.q < 0
+        if q_range is not None:
+            missing &= (q_abs >= low) & (q_abs <= high)
+        if len(excluded):
+            missing &= ~left_out_points(q_abs, excluded)
+        invalid += int(missing.sum())
     return PreparedCurve(data, used, averaged, int(left_out.sum()), int(np.count_nonzero(measured < 0)),
                          int(np.count_nonzero(measured == 0)), max(0, invalid))
 
 
 def prepare_curve(curve: Curve, side: str = "mean", q_range: Optional[tuple] = None, excluded=(), *,
-                  strict: bool = False) -> FitData:
+                  strict: bool = False, weighting: str = "file", resolution: str = "constant") -> FitData:
     """The points fitted (|q| in nm⁻¹): ``prepare_points`` without the account of what they are."""
-    return prepare_points(curve, side, q_range, excluded, strict=strict).data
+    return prepare_points(curve, side, q_range, excluded, strict=strict, weighting=weighting, resolution=resolution).data
 
 
 CUT_MODEL_FAMILIES = {"sphere": "sphere", "random_cylinder": "cylinder", "cylinder": "cylinder",
@@ -353,10 +403,13 @@ def parameter_text(key: str, value: float, error: Optional[float] = None) -> str
 
 def export_table(model: FitModel, data: FitData) -> tuple[list[str], np.ndarray]:
     """Columns: q (nm⁻¹), q (Å⁻¹), I, σ, model, residual, then each term of the model."""
-    total, parts = evaluate(model, data.q, parts=True)
+    total, parts = evaluate(model, data.q, parts=True, dq=data.dq)
     names = ["q_nm^-1", "q_A^-1", "I", "sigma", "model", "residual"]
     columns = [data.q, data.q / NM_PER_A, data.intensity,
                data.sigma if data.sigma is not None else np.full_like(data.q, np.nan), total, residuals(model, data)]
+    if data.dq is not None:
+        names.append("dQ_nm^-1")
+        columns.append(data.dq)
     for name, curve in parts.items():
         names.append(name.replace(" ", "_").replace(":", ""))
         columns.append(curve)
@@ -369,7 +422,7 @@ def derived_values(component: Component) -> dict:
     return {"R_number_mean_nm": None if size is None else round(size[0], 6),
             "sigma_R_number_rel": None if size is None else round(size[1], 6),
             "R_intensity_mean_nm": round(by_intensity[0], 6), "sigma_R_intensity_rel": round(by_intensity[1], 6),
-            "sigma_nn_over_D": None if not component.structure else round(sigma_nn_over_d(component), 6)}
+            "sigma_nn_over_D": None if sigma_nn_over_d(component) is None else round(sigma_nn_over_d(component), 6)}
 
 
 def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: str, q_range, result: Optional[FitResult],
@@ -378,21 +431,26 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
     from .curve_sources import source_record
     from .fit_uncertainty import describe_links, uncertainty_record
 
-    made_of = None if curve is None else prepare_points(curve, side, q_range, excluded)
+    made_of = None if curve is None else prepare_points(curve, side, q_range, excluded, weighting=data.weight_mode,
+                                                        resolution=model.resolution_mode)
     record = {
         "software_version": SOFTWARE,
         "model": model_to_dict(model),
-        "equation": "I(q) = BG + k * [sum_i Int_i * P_i(q) * S_i(q; D_i, sigma_nn_i/D_i) + A / (1 + (|q|/w)^nu)]; "
-                    "P_i(0) = 1; S_i the Hosemann paracrystal; a component with coupling 'da' has "
-                    "P_i + |<F_i>|^2 (S_i - 1) in place of P_i * S_i; sizes per component ('sizes')",
+        "equation": "I(q) = BG + k * [sum_i Int_i * T_i(q) + A / (1 + (|q|/w)^nu)]. "
+                    "T_i is the particle term after q-resolution smearing. Before smearing it is P_i * S_i "
+                    "for LMA or P_i + |<F_i>|^2 (S_i - 1) for DA. S_i is the selected interference "
+                    "function (1 for independent particles), and P_i(0) = 1.",
         "curve": None if curve is None else {"name": curve.name, "path": curve.path, "q_unit_of_file": curve.source_unit,
                                              "q_unit_from": curve.unit_from, "columns_read": curve.columns},
         "points": {"side": side, "q_range_nm^-1": None if q_range is None else [float(v) for v in q_range],
-                   "count": int(data.q.size), "weighting": data.weighting,
+                   "count": int(data.q.size), "weighting": data.weighting, "weighting_choice": data.weight_mode,
+                   "residual": "standardized_intensity" if data.sigma is not None else "log_intensity",
                    # what the points are (a curve with one half only is that half, whatever ``side`` says)
                    "halves_used": None if made_of is None else made_of.halves_used,
                    "averaged": None if made_of is None else made_of.averaged,
                    "left_out_q_nm^-1": sorted(float(value) for value in excluded)},
+        "resolution": ({"mode": "file", "dq_nm^-1": data.dq.tolist()} if model.resolution_mode == "file" else
+                       {"mode": "constant", "sigma_q_nm^-1": model.globals["q_resolution"].value}),
         "log_rmse": log_rmse(model, data),
         # spheres of a horizontal cut: q_z = 0 (effective interface) or the two-path model with the cut's angles
         "sphere_model": "effective interface (q_z = 0)" if grazing(model) is None else "two paths (direct + exit-reflected)",

@@ -18,7 +18,7 @@ import numpy as np
 
 from ..domain import beam_tail, fit_links
 from ..domain.fit_engine import FitData
-from ..domain.fit_model import FAMILIES, INFO, FitModel, INTERFERENCES
+from ..domain.fit_model import FAMILIES, FitModel, INTERFERENCES, parameter_info
 from ..domain.fit_profile import POINTS, Profile, grid, profile
 
 SHOWN_CORRELATION = 0.9
@@ -41,7 +41,7 @@ flagged = beam_tail.flagged
 def parameter_label(model: FitModel, path: tuple) -> str:
     """“1·Sphere R (nm)”, “Background”: a parameter as the report names it."""
     owner, key = path
-    info = INFO[key]
+    info = parameter_info(None if owner == "globals" else model.components[owner], key)
     unit = f" ({info.unit})" if info.unit else ""
     if owner == "globals":
         return info.label + unit

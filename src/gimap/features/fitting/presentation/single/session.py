@@ -11,7 +11,9 @@ from typing import Optional
 
 from src.gimap.app.presentation.i18n import tr
 
-from ...application.single_fit import FAMILIES, INFO, Curve, FitData, FitModel, FitResult, new_component, prepare_curve
+from ...application.single_fit import (
+    FAMILIES, INFO, Curve, FitData, FitModel, FitResult, new_component, parameter_info, prepare_curve,
+)
 
 HISTORY = 50
 COALESCE_SECONDS = 1.0
@@ -75,7 +77,8 @@ def path_name(model: FitModel, path: tuple, *, unit: bool = False, translate: bo
     the axes of a figure. Shown only: the saved tables and records name every value in full."""
     owner, key = path
     say = tr if translate else str
-    label = say(INFO[key].label) + (f" ({INFO[key].unit})" if unit and INFO[key].unit else "")
+    info = INFO[key] if owner == "globals" or owner >= len(model.components) else parameter_info(model.components[owner], key)
+    label = say(info.label) + (f" ({info.unit})" if unit and info.unit else "")
     if owner == "globals" or owner >= len(model.components) or (len(model.components) == 1 and not full):
         return label
     return f"{owner + 1}·{say(FAMILIES[model.components[owner].family][0])} {label}"
@@ -121,17 +124,19 @@ class FitSession:
 
     # -- the points ---------------------------------------------------------------------
 
-    def data(self) -> Optional[FitData]:
+    def data(self, *, predict: bool = False) -> Optional[FitData]:
         """The points fitted (the halves chosen, inside the range)."""
         if self.curve is None:
             return None
-        return prepare_curve(self.curve, self.side, self.q_range, self.excluded)
+        return prepare_curve(self.curve, self.side, self.q_range, self.excluded,
+                             weighting="file" if predict else self.model.weighting,
+                             resolution="constant" if predict else self.model.resolution_mode)
 
     def all_points(self) -> Optional[FitData]:
         """Every point of the halves chosen (also those outside the range or left out)."""
         if self.curve is None:
             return None
-        return prepare_curve(self.curve, self.side, None)
+        return prepare_curve(self.curve, self.side, None, weighting=self.model.weighting)
 
     def selection(self) -> tuple:
         """Which points are fitted: the halves, the range and the left-out points."""

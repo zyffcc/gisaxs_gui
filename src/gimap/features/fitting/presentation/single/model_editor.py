@@ -49,9 +49,11 @@ from .substrate_row import SubstrateControls
 
 MANUAL_ONLY = "For Refine and Search: Predict parameters does not propose this family"
 DROPPED = "Links or constraints that no longer hold were removed: {items}"
-SIZES_TIP = ("How R and σR/R are meant: the mean and relative spread of a Gaussian or a log-normal of the particle "
-             "count, or of a Gaussian of the intensity each size scatters (earlier Fitting). The results give the sizes "
-             "both by number and by intensity.")
+SIZES_TIP = ("Choose the size distribution for this population. The parameter labels give its location and width. "
+             "Results also show the mean radius and relative spread by number and by intensity.")
+RESOLUTION_CHOICES = {"constant": "Constant σ_q", "file": "Resolution from the file"}
+WEIGHT_CHOICES = {"file": "σ from the file", "relative": "Relative (σ = I)", "poisson": "Poisson (σ = √I)",
+                  "none": "None (fit ln I)"}
 INTERFERENCE_TIP = ("1D paracrystal: neighbours along a line (Hosemann). 2D hexagonal paracrystal: a disordered "
                     "hexagonal lattice in the plane, averaged over its orientation. Hard spheres: the Percus–Yevick "
                     "liquid of radius R_HS and volume fraction φ. The last two are for Refine and Search only.")
@@ -120,7 +122,8 @@ class FitModelEditor(QWidget):
         owner, key = path
         if owner == "globals":
             return label_text(key)
-        return f"{owner + 1}·{tr(FAMILIES[self.model.components[owner].family][0])} {label_text(key)}"
+        component = self.model.components[owner]
+        return f"{owner + 1}·{tr(FAMILIES[component.family][0])} {label_text(key, component)}"
 
     # -- edits --------------------------------------------------------------------------
 
@@ -208,7 +211,8 @@ class FitModelEditor(QWidget):
 
     @staticmethod
     def _structure(model: FitModel) -> tuple:
-        return tuple((c.family, c.structure, c.interference, c.heights) for c in model.components)
+        return (tuple((c.family, c.structure, c.interference, c.heights, c.law, c.coupling) for c in model.components),
+                model.resolution_mode, model.weighting)
 
     @staticmethod
     def _links_signature(model: FitModel) -> tuple:
@@ -304,7 +308,9 @@ class FitModelEditor(QWidget):
         top.addWidget(remove)
         layout.addLayout(top)
         layout.addLayout(self._grid(card, component.keys(), index))
-        layout.addLayout(self._choice(card, "Sizes", f"fitSizes_{index}", SIZE_LAWS, component.law, index, "law",
+        laws = {key: label for key, label in SIZE_LAWS.items()
+                if key not in ("lognormal", "number_gauss") or key == component.law}
+        layout.addLayout(self._choice(card, "Sizes", f"fitSizes_{index}", laws, component.law, index, "law",
                                       SIZES_TIP))
         if component.structure:
             kinds = {key: name for key, (name, _keys) in INTERFERENCES.items()}
@@ -315,9 +321,9 @@ class FitModelEditor(QWidget):
                                           index, "coupling", COUPLING_TIP))
         return card
 
-    def _choice(self, card, label: str, name: str, items: dict, current: str, index: int, field: str,
+    def _choice(self, card, label: str, name: str, items: dict, current: str, index: Optional[int], field: str,
                 tip: str) -> QHBoxLayout:
-        """A labelled combo of one of a component's choices (``field``: ``law``, ``interference``, ``coupling``)."""
+        """One labelled choice for a population or the whole manual model."""
         row = QHBoxLayout()
         box = QComboBox(card)
         box.setObjectName(name)
@@ -326,7 +332,9 @@ class FitModelEditor(QWidget):
             box.addItem(tr(text), key)
         box.setToolTip(tr(tip))
         box.setCurrentIndex(max(0, box.findData(current)))
-        if field == "interference":
+        if index is None:
+            box.currentIndexChanged.connect(lambda: self._emit(replace(self.model, **{field: box.currentData()})))
+        elif field == "interference":
             box.currentIndexChanged.connect(lambda _i, at=index, combo=box: self._interference(at, str(combo.currentData())))
         else:
             box.currentIndexChanged.connect(lambda _i, at=index, combo=box, key=field: self._replace_component(
@@ -342,7 +350,14 @@ class FitModelEditor(QWidget):
         title.setToolTip(tr("I(q) = BG + k·[Σ particles + A/(1 + (|q|/w)^ν)]: the peak is the direct and "
                             "reflected beam's tail and the resolution near q = 0"))
         layout.addWidget(title)
-        layout.addLayout(self._grid(card, BASE_GLOBALS + RESOLUTION, "globals"))
+        keys = BASE_GLOBALS + (RESOLUTION if self.model.resolution_mode == "constant" else ())
+        layout.addLayout(self._grid(card, keys, "globals"))
+        layout.addLayout(self._choice(card, "Resolution", "fitResolutionMode", RESOLUTION_CHOICES,
+                                      self.model.resolution_mode, None, "resolution_mode",
+                                      "Refine and Search smear the particle terms using constant σ_q or each point’s dQ."))
+        layout.addLayout(self._choice(card, "Weights", "fitWeighting", WEIGHT_CHOICES, self.model.weighting, None,
+                                      "weighting", "Refine and Search use these weights. Without a file σ, the default "
+                                      "fits ln I with equal weights."))
         return card
 
     def _grazing_card(self) -> QFrame:

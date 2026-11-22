@@ -30,9 +30,10 @@ def fit_curves(model: FitModel, data: FitData, record: dict, name: str, date: Op
     described = f"Saved by {RELEASE} (Fitting, Save Data and Fit). Q: |q| in 1/nm, as fitted."
     return [
         SasCurve(title=export_text(f"{name}: the points fitted"), q=q, intensity=np.asarray(data.intensity, dtype=float),
-                 sigma=None if data.sigma is None else np.asarray(data.sigma, dtype=float),
-                 description=described + " I: the points fitted; Idev: their sigma.", **common),
-        SasCurve(title=export_text(f"{name}: the model"), q=q, intensity=np.asarray(evaluate(model, q), dtype=float),
+                 sigma=None if data.sigma is None else np.asarray(data.sigma, dtype=float), dq=data.dq,
+                 description=described + " I: the fitted points. Idev is the sigma used for the selected weights. "
+                             "Qdev, when present, is the Gaussian resolution used in the fit.", **common),
+        SasCurve(title=export_text(f"{name}: the model"), q=q, intensity=evaluate(model, q, dq=data.dq),
                  description=described + " I: the model fitted (the record names it and its parameters).", **common),
     ]
 

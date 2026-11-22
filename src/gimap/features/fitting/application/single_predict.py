@@ -91,7 +91,9 @@ def cut_qz_minus(model: fm.FitModel) -> Optional[float]:
 
 def predict_request(data, model: fm.FitModel, particles: str, *, seed: int = 0) -> JobRequest:
     qz, grazing = cut_geometry(model)
-    law = model.components[0].law if model.components else fm.DEFAULT_LAW
+    law = model.components[0].law if model.components else "number_gauss"
+    if law not in ("number_gauss", "lognormal", "intensity_gauss"):
+        law = "number_gauss"
     coupling = model.components[0].coupling if model.components else "lma"
     return JobRequest(handler=HANDLER, payload=dict(
         q=data.q.tolist(), intensity=data.intensity.tolist(), sigma=None if data.sigma is None else data.sigma.tolist(),

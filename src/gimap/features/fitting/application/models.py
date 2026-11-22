@@ -115,6 +115,8 @@ class InSituSourceFrame:
 class LoadCurveRequest:
     path: Path
     q_source_unit: str = "angstrom"
+    keep_missing_sigma: bool = False
+    """Keep measured intensities available for the manual fit's alternative weighting choices."""
 
 
 @dataclass(frozen=True)

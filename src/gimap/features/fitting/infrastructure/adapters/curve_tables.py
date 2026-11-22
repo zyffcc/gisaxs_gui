@@ -10,7 +10,7 @@ import numpy as np
 
 from ...application.curve_sources import ColumnMapping, CurveTablePreview, validate_columns
 from .curve_units import COMMENTS, file_q_unit
-from .scattering_curve_files import NO_DATA_ROWS, TOO_FEW_POINTS, XYData, _split, _to_float
+from .scattering_curve_files import NO_DATA_ROWS, TOO_FEW_POINTS, XYData, _optional_float, _split, _to_float
 
 
 @dataclass(frozen=True)
@@ -59,6 +59,8 @@ def _header_cells(text: str, delimiter: str) -> tuple[str, ...]:
 
 def _column_kind(name: str) -> str:
     text = re.sub(r"\([^)]*\)|\[[^]]*\]", "", name).strip().lower()
+    if re.fullmatch(r"(?:dq|sigma[_ ]?q|σ[_ ]?q)(?:[_ ]?(?:nm|a|å|m).*)?", text):
+        return "dq"
     if re.fullmatch(r"\|?q\|?(?:[xyz]|xy|zxy|_?par|_?perp)?(?:[_ ]?(?:nm|a|å).*)?", text):
         return "q"
     if re.fullmatch(r"(?:(?:i|intensity)[ _-])?(?:sigma|σ|err(?:or)?|di|d_i|std(?:dev)?|uncertainty)"
@@ -85,7 +87,8 @@ def _table_from_lines(path: Path, lines, *, preview_only: bool) -> _Table:
             if comment.lower().startswith("columns:"):
                 columns = comment.split(":", 1)[1].strip()
             candidate_names = _header_cells(comment, _delimiter(comment))
-            if len(candidate_names) >= 2 and _column_kind(candidate_names[0]) == "q":
+            candidate_kinds = tuple(map(_column_kind, candidate_names))
+            if len(candidate_names) >= 2 and (candidate_kinds[0] == "q" or {"q", "dq", "intensity"} <= set(candidate_kinds)):
                 column_comment = comment
             continue
         candidate = _delimiter(text)
@@ -116,7 +119,7 @@ def _table_from_lines(path: Path, lines, *, preview_only: bool) -> _Table:
         names = _header_cells(columns, delimiter)
     if not names:
         candidate = _header_cells(column_comment, delimiter)
-        if candidate and _column_kind(candidate[0]) == "q":
+        if candidate:
             names = candidate
     has_header = bool(names)
     # A named header defines the schema. Short data rows are kept for per-curve validation.
@@ -126,7 +129,8 @@ def _table_from_lines(path: Path, lines, *, preview_only: bool) -> _Table:
         names = tuple(f"Column {index + 1}" for index in range(count))
     kinds = tuple(map(_column_kind, names)) if has_header else ()
     analyze |= len(kinds) >= 4 and kinds[:4] == ("q", "intensity", "sigma", "pixels")
-    if analyze or count == 2 or (len(kinds) >= 3 and kinds[:3] == ("q", "intensity", "sigma")):
+    if (analyze or count == 2 or (len(kinds) >= 3 and kinds[:3] == ("q", "intensity", "sigma"))
+            or ("dq" in kinds and kinds.count("intensity") == 1)):
         suggested = "single"
     elif count >= 3 and kinds and kinds[0] == "q" and all(kind == "intensity" for kind in kinds[1:]):
         suggested = "shared_q"
@@ -134,8 +138,10 @@ def _table_from_lines(path: Path, lines, *, preview_only: bool) -> _Table:
         suggested = "ambiguous"
     uncertainty = tuple(index for index, kind in enumerate(kinds) if kind == "sigma")
     intensity = tuple(index for index, kind in enumerate(kinds) if kind == "intensity")
+    resolution = tuple(index for index, kind in enumerate(kinds) if kind == "dq")
     preview = CurveTablePreview(path, names, rows[:10], count, suggested, analyze, file_q_unit(path), has_header,
-                                uncertainty, intensity)
+                                uncertainty, intensity, resolution_columns=resolution,
+                                q_columns=tuple(index for index, kind in enumerate(kinds) if kind == "q"))
     return _Table(preview, rows, delimiter, first + 1)
 
 
@@ -156,11 +162,11 @@ def inspect_curve_table(path: Path) -> CurveTablePreview:
     return _read_table(path, preview_only=True).preview
 
 
-def load_table_curve(path: Path, columns: ColumnMapping) -> XYData:
+def load_table_curve(path: Path, columns: ColumnMapping, *, keep_missing_sigma: bool = False) -> XYData:
     table = _read_table(path)
     preview = table.preview
     validate_columns(preview, columns)
-    selected = (columns.q, columns.intensity) + (() if columns.sigma is None else (columns.sigma,))
+    decimal_comma = table.delimiter != ","
     valid, bad_lines = [], 0
     for row in table.rows:
         if table.delimiter == "whitespace" and len(row) < preview.column_count:
@@ -168,11 +174,17 @@ def load_table_curve(path: Path, columns: ColumnMapping) -> XYData:
             bad_lines += 1
             continue
         try:
-            values = tuple(_to_float(row[index], table.delimiter != ",") for index in selected)
+            values = (_to_float(row[columns.q], decimal_comma), _to_float(row[columns.intensity], decimal_comma))
         except (IndexError, ValueError):
             bad_lines += 1
             continue
         if not all(np.isfinite(value) for value in values):
+            bad_lines += 1
+            continue
+        for index in (columns.sigma, columns.dq):
+            if index is not None:
+                values += (_optional_float(row, index, decimal_comma),)
+        if columns.sigma is not None and not keep_missing_sigma and not np.isfinite(values[2]):
             bad_lines += 1
             continue
         valid.append(values)
@@ -182,6 +194,7 @@ def load_table_curve(path: Path, columns: ColumnMapping) -> XYData:
     error = array[:, 2] if columns.sigma is not None else None
     return XYData(array[:, 0], array[:, 1], error, {
         "path": str(path), "data_start_line": table.first_data_line, "bad_lines": bad_lines,
-        "has_error": error is not None,
+        "has_error": error is not None, "rows_left_out": bad_lines,
+        "dq_column_name": preview.column_names[columns.dq] if columns.dq is not None and preview.has_header else "",
         "delimiter": {"\t": "tab", ",": "comma", ";": "semicolon"}.get(table.delimiter, "whitespace"),
-    })
+    }, dq=None if columns.dq is None else array[:, -1])

@@ -94,7 +94,8 @@ class FitSeriesPreviewMixin:
         self._refresh_open_frame()
         started = frame is not None or self._started()
         settings = self._settings if started else self._stage_settings()  # before Start: as it would be fitted
-        self._drawn_with = (index, settings, self._preview_unit())
+        model = frame.result.model if frame is not None and frame.ok else self._start_model or self.single.session.model
+        self._drawn_with = (index, settings, self._preview_unit(), model.weighting, model.resolution_mode)
         path = self.paths[index]
         self.frame_plot.set_title(f"{index + 1} · {file_name(path)}")
         if curve is None and (path, self._preview_unit()) in self._preview_pending:
@@ -108,7 +109,7 @@ class FitSeriesPreviewMixin:
                                   or (self._read_errors or {}).get(path) or UNREADABLE)
             return
         try:
-            prepared = prepare_frame(curve, settings)
+            prepared = prepare_frame(curve, settings, model)
         except ValueError as exc:  # no points on the chosen half: the other half is not shown in its place
             self._frame_not_drawn(index, str(exc))
             return
@@ -118,12 +119,12 @@ class FitSeriesPreviewMixin:
             return
         curves, colors, markers = [(tr("measured"), data.q, data.intensity)], [DATA_COLOR], [True]
         if frame is not None and frame.ok:
-            q = np.geomspace(max(data.q.min(), 1e-6), data.q.max(), 400)
-            curves.append((tr("model"), q, evaluate(frame.result.model, q)))
+            q = data.q if model.resolution_mode == "file" else np.geomspace(max(data.q.min(), 1e-6), data.q.max(), 400)
+            curves.append((tr("model"), q, evaluate(model, q, dq=data.dq)))
             colors.append(MODEL_COLOR)
             markers.append(False)
         # The other points of the same curve (the same halves): not fitted, but there to be seen.
-        every = prepare_points(curve, settings.side, None, (), strict=True).data
+        every = prepare_points(curve, settings.side, None, (), strict=True, weighting=data.weight_mode).data
         left_out = left_out_points(every.q, settings.excluded) if settings.excluded else np.zeros(every.q.size, bool)
         if settings.q_range is not None:
             left_out &= (every.q >= min(settings.q_range)) & (every.q <= max(settings.q_range))
@@ -203,7 +204,9 @@ class FitSeriesPreviewMixin:
         range or left-out points) or reads q in another unit than when it was drawn."""
         if self._started() or self._selected is None:
             return
-        if (self._selected, self._stage_settings(), self._preview_unit()) != self._drawn_with:
+        model = self.single.session.model
+        signature = (self._selected, self._stage_settings(), self._preview_unit(), model.weighting, model.resolution_mode)
+        if signature != self._drawn_with:
             self._select(self._selected)
 
     # -- the trend's choices ----------------------------------------------------------------

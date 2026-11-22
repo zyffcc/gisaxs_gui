@@ -19,6 +19,7 @@ import numpy as np
 from src.gimap.shared.nxcansas import READ_SUFFIXES, q_unit, read_curve, read_nxcansas
 
 from ...application.curve_sources import CurveTablePreview
+from ...application.curve_units import IN_NM
 from ...application.models import InSituSourceFrame
 from ...domain import CurveData
 
@@ -47,6 +48,7 @@ def load_curve(source: InSituSourceFrame, setting: str) -> CurveData:
         read_curve(source.path, source.frame_index)  # says why: no NXcanSAS curve, or not that many
     curve = curves[source.frame_index]
     unit = q_unit(curve.q_unit)
+    read_unit = UNIT_READ.get(unit or "", setting)
     q = np.asarray(curve.q, dtype=float) * SCALE.get(unit or "", 1.0)
     intensity = np.asarray(curve.intensity, dtype=float)
     sigma = None if curve.sigma is None else np.asarray(curve.sigma, dtype=float)
@@ -62,10 +64,17 @@ def load_curve(source: InSituSourceFrame, setting: str) -> CurveData:
     }
     if unit == "m":
         record["q_converted"] = "Q in 1/m read as 1/nm (x 1e-9)"
+    dq = None
+    if curve.dq is not None:
+        width_unit = q_unit(curve.dq_unit) if curve.dq_unit else unit or read_unit
+        if width_unit is None:
+            raise ValueError("The unit of dQ must be an inverse length.")
+        dq = curve.dq[keep] * (IN_NM[width_unit] / IN_NM[read_unit])
+        record["resolution_units"] = curve.dq_unit or curve.q_unit
     return CurveData(
         q=q[keep], intensity=intensity[keep], error=None if sigma is None else sigma[keep],
-        q_source_unit=UNIT_READ.get(unit or "", setting), source_path=source.token,
-        observation={"curve_source": record}, rows_left_out=left_out,
+        q_source_unit=read_unit, source_path=source.token,
+        observation={"curve_source": record}, rows_left_out=left_out, dq=dq,
     )
 
 
@@ -81,12 +90,16 @@ def preview(path) -> CurveTablePreview:
     if first.sigma is not None:
         names += ("Idev",)
         columns.append(first.sigma)
+    if first.dq is not None:
+        names += (f"Qdev ({first.dq_unit or first.q_unit})",)
+        columns.append(first.dq)
     rows = tuple(tuple(f"{value:.6g}" for value in row) for row in zip(*(column[:PREVIEW_ROWS] for column in columns)))
     return CurveTablePreview(
         path=path, column_names=names, sample_rows=rows, column_count=len(names), suggested_layout="single",
         unit=UNIT_READ.get(q_unit(first.q_unit) or ""), has_header=True,
         uncertainty_columns=(2,) if first.sigma is not None else (), intensity_columns=(1,),
         curve_titles=tuple(curve.title or f"curve {number}" for number, curve in enumerate(curves, 1)),
+        resolution_columns=(len(names) - 1,) if first.dq is not None else (), q_columns=(0,),
     )
 
 

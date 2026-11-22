@@ -69,16 +69,28 @@ def blocks(model, data, curve, *, side: str, q_range, result, excluded=()) -> li
                  + (" (fitting range set)" if points["q_range_nm^-1"] else " (the whole curve)"))
     items.append(f"Made of: {SIDES.get(points.get('halves_used') or side, side)}; points left out by hand: "
                  f"{len(points['left_out_q_nm^-1'])}")
-    items.append("Weighting: " + ("(I − model)/σ with the σ of the file" if points["weighting"] == "sigma"
-                                  else "ln I − ln model, every point the same relative weight (no σ)"))
+    weights = {"file": ("(I − model)/σ with the σ of the file" if data.sigma is not None else
+                        "σ from the file selected, no usable σ. Residual = ln I − ln model"),
+               "relative": "relative, (I − model)/I", "poisson": "Poisson, (I − model)/√I",
+               "none": "none, ln I − ln model"}
+    items.append("Weighting: " + weights[points["weighting_choice"]])
     out += [("h2", "Data"), ("ul", items)]
 
     items = [record["equation"]]
+    resolution = record["resolution"]
+    if resolution["mode"] == "file":
+        items.append("Gaussian q resolution: dQ from the file at each fitted point (nm⁻¹)")
+    else:
+        items.append(f"Gaussian q resolution: constant σ_q = {_number(resolution['sigma_q_nm^-1'])} nm⁻¹")
     for index, component in enumerate(model.components, start=1):
         structure = interference_label(component)
         coupling = f", {component.coupling.upper()}" if component.structure else ""
         items.append(f"{index}: {FAMILIES[component.family][0]}; sizes: {SIZE_LAWS[component.law]}; "
                      f"interference: {structure}{coupling}")
+        size = record["derived"][index - 1]
+        if size["R_number_mean_nm"] is not None:
+            items.append(f"Number mean radius {_number(size['R_number_mean_nm'])} nm, "
+                         f"relative standard deviation {_number(size['sigma_R_number_rel'])}")
     items.append(f"Spheres: {record['sphere_model']}")
     items.append("Contact: " + ("particles do not overlap (D ≥ 2R, R_HS ≥ R)" if model.contact else "off"))
     links = describe_links(model)

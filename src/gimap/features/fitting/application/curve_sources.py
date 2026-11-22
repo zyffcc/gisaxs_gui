@@ -20,6 +20,7 @@ class ColumnMapping:
     sigma: int | None = None
     column_names: tuple[str, ...] = ()
     column_count: int | None = None
+    dq: int | None = None
 
     def __post_init__(self) -> None:
         indexes = (self.q, self.intensity) + (() if self.sigma is None else (self.sigma,))
@@ -27,6 +28,12 @@ class ColumnMapping:
             raise ValueError("Curve column indexes must be non-negative integers.")
         if len(set(indexes)) != len(indexes):
             raise ValueError("q, intensity and sigma must use different columns.")
+        if self.dq is not None:
+            if type(self.dq) is not int or self.dq < 0:
+                raise ValueError("Curve column indexes must be non-negative integers.")
+            if self.dq in indexes:
+                raise ValueError("A resolution column cannot be used as q, intensity or sigma.")
+            indexes += (self.dq,)
         if self.column_count is not None:
             if type(self.column_count) is not int or self.column_count <= max(indexes):
                 raise ValueError("A selected curve column is missing from the table.")
@@ -39,17 +46,19 @@ class ColumnMapping:
 
     def to_dict(self) -> dict:
         return {"q": self.q, "intensity": self.intensity, "sigma": self.sigma,
-                "column_names": list(self.column_names), "column_count": self.column_count}
+                "column_names": list(self.column_names), "column_count": self.column_count,
+                **({"dq": self.dq} if self.dq is not None else {})}
 
     @classmethod
     def from_dict(cls, value: dict) -> "ColumnMapping":
-        if not isinstance(value, dict) or set(value) - {"q", "intensity", "sigma", "column_names", "column_count"}:
+        if not isinstance(value, dict) or set(value) - {"q", "intensity", "sigma", "column_names", "column_count", "dq"}:
             raise ValueError("Invalid curve column mapping.")
         names = value.get("column_names", ())
         if not isinstance(names, (list, tuple)):
             raise ValueError("Invalid curve column names.")
         try:
-            return cls(value["q"], value["intensity"], value.get("sigma"), tuple(names), value.get("column_count"))
+            return cls(value["q"], value["intensity"], value.get("sigma"), tuple(names), value.get("column_count"),
+                       value.get("dq"))
         except KeyError as exc:
             raise ValueError("Invalid curve column mapping.") from exc
 
@@ -74,11 +83,13 @@ class CurveTablePreview:
     intensity_columns: tuple[int, ...] = ()
     curve_titles: tuple[str, ...] = ()
     """An NXcanSAS file: the title of each of its curves (one SASdata group each); the rows are of the first."""
+    resolution_columns: tuple[int, ...] = ()
+    q_columns: tuple[int, ...] = ()
 
     @property
     def allow_shared_q(self) -> bool:
         return (self.column_count >= 3 and not self.analyze_export and not self.uncertainty_columns
-                and not self.curve_titles)
+                and not self.curve_titles and not self.resolution_columns)
 
 
 def sources_from_table(preview: CurveTablePreview, layout: TableLayout):
@@ -105,8 +116,18 @@ def sources_from_table(preview: CurveTablePreview, layout: TableLayout):
     names = preview.column_names if preview.has_header else ()
     columns = range(1, preview.column_count) if layout == "shared_q" else (1,)
     sigma = 2 if layout == "single" and preview.column_count >= 3 else None
+    q, dq = 0, None
+    if preview.resolution_columns:
+        if len(preview.resolution_columns) != 1:
+            raise ValueError("Each curve must have one resolution column.")
+        dq = preview.resolution_columns[0]
+        if preview.q_columns:
+            q = preview.q_columns[0]
+        sigma = preview.uncertainty_columns[0] if preview.uncertainty_columns else None
+        if len(preview.intensity_columns) == 1:
+            columns = preview.intensity_columns
     sources = tuple(InSituSourceFrame(preview.path, columns=ColumnMapping(
-        0, index, sigma, names, preview.column_count)) for index in columns)
+        q, index, sigma, names, preview.column_count, dq)) for index in columns)
     for source in sources:
         validate_columns(preview, source.columns)
     return sources
@@ -123,6 +144,10 @@ def validate_columns(preview: CurveTablePreview, columns: ColumnMapping) -> None
     selected = (columns.q, columns.intensity) + (() if columns.sigma is None else (columns.sigma,))
     if max(selected) >= preview.column_count:
         raise ValueError("A selected curve column is missing from the table.")
+    if columns.dq is not None and columns.dq >= preview.column_count:
+        raise ValueError("A selected curve column is missing from the table.")
+    if set(selected).intersection(preview.resolution_columns):
+        raise ValueError("A resolution column cannot be used as q, intensity or sigma.")
     if preview.analyze_export and selected != (0, 1, 2):
         raise ValueError("GIMaP Analyze exports contain one curve; sigma and pixels are not intensity columns.")
     if columns.intensity in preview.uncertainty_columns:

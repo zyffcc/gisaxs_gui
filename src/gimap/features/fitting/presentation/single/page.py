@@ -257,7 +257,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         path = Path(path)
         source = _saved_source(path)
         name = source.display_name if source is not None else path.name.split("::gimap", 1)[0]
-        outcome = self.view_model.load_curve(LoadCurveRequest(path, unit or self.unit_setting()))
+        outcome = self.view_model.load_curve(LoadCurveRequest(path, unit or self.unit_setting(), keep_missing_sigma=True))
         if outcome.error is not None:  # (columns to choose: Open Curve… asks next, open_curve_file)
             self._status(lambda: tr("Could not open {name}: {reason}").format(name=name, reason=tr(outcome.error.message)),
                          "info" if outcome.error.message == COLUMNS_TO_CHOOSE else "error")
@@ -267,7 +267,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         if made.get("format") == "NXcanSAS" and int(made.get("curves_in_file") or 1) > 1:  # which of its curves
             name = f"{Path(str(made.get('path'))).name} · curve {made.get('curve')}"  # a name, as records keep it
         curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=name, path=str(path),
-                                  unit=loaded.q_source_unit, unit_from=getattr(loaded, "q_unit_from", ""),
+                                  unit=loaded.q_source_unit, dq=loaded.dq, unit_from=getattr(loaded, "q_unit_from", ""),
                                   rows_left_out=getattr(loaded, "rows_left_out", 0), columns=made.get("columns"))
         self._halt_fit()  # a fit of the curve before stops; what it brings back is not kept (run.py)
         self.session.set_curve(curve)
@@ -331,8 +331,14 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
     # -- the model ------------------------------------------------------------------------
 
     def _model_edited(self, model) -> None:
+        old = self.session.model
         if self.session.set_model(model, label=("an edit in Model", {})):
             self._model_changed()
+            if (model.resolution_mode, model.weighting) != (old.resolution_mode, old.weighting):
+                try:
+                    self.session.data()
+                except ValueError as exc:
+                    self._status(tr(str(exc)), "warning")
 
     def _model_changed(self, *, editor: bool = False) -> None:
         if editor:
@@ -340,6 +346,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             self.model_editor.set_model(self.session.model, result.errors if result else {},
                                         result.at_bounds if result else ())
         self._remember(model=model_to_dict(self.session.model))
+        self._fill_curve_card()
         self._redraw()
         self._refresh_steps()
         self.render_results()

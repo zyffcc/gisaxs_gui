@@ -2121,7 +2121,7 @@ Fitting reads `.dat`, `.txt` and `.csv` text curves and NXcanSAS files (`.h5`):
   no numbers, or that holds NaN or inf, is left out, and the card and the status line say how many (*3 rows of the
   file could not be read as numbers and were left out.*).
 - NXcanSAS files (`.h5`, HDF5 written by Analyze, SasView, Mantid and other programs; `.hdf5` and `.nxs` through
-  **All files**): each SASdata group of the file is a curve — Q, I and Idev as σ. q is read in the unit the file
+  **All files**): each SASdata group of the file is a curve — Q, I, Idev as σ, and Gaussian Qdev when present. q is read in the unit the file
   states on Q: 1/angstrom and 1/nm as they are, 1/m converted to nm⁻¹; the Curve card says *q read in Å⁻¹: stated in
   the file*. A Q whose unit Fitting does not know is read like a text file that states none. Points the file's mask
   leaves out are not fitted. A file of several curves asks which one to open (**Open Curve…**, a dropped file) and
@@ -2129,7 +2129,7 @@ Fitting reads `.dat`, `.txt` and `.csv` text curves and NXcanSAS files (`.h5`):
   is no curve: dropped on the window it goes to Analyze.
 
 A `.csv` file is read by the names of its header, not by the place of its columns: q is the column named q (`q`,
-`qy (A^-1)`, `q_nm^-1` …), I the one named I or intensity, σ the one named sigma, σ, err or dI (none: no σ); other
+`qy (A^-1)`, `q_nm^-1` …), I the one named I or intensity, σ the one named sigma, σ, err or dI, and the Gaussian q width the one named dQ or sigma_q. Other
 columns (a model, residuals, terms, pixel counts) are not read. So the cuts of the command line (`horizontal.csv`,
 the names in its last `#` line), Analyze's curve tables and Fitting's own **Save ▸ Data and Fit…** table — which has
 q twice, in nm⁻¹ and then in Å⁻¹: the first is taken, in nm⁻¹ — open as they are. q is read in the unit the name of
@@ -2139,8 +2139,9 @@ header and the first ten rows, as **Import Curves…** does, and asks which colu
 unit of q when the q column's name states none. The record of a fit names the columns that were read
 (`curve.columns_read`).
 
-Single-curve `.dat` and `.txt` inputs keep their existing interpretation: **Open Curve…** and folder discovery read
-`q I [σ]`, including the third column as σ. To split `q I1 I2 …`, use **Import Curves…** explicitly.
+Single-curve text files without column names use `q I [σ]`. To supply Gaussian resolution, name the columns,
+for example `# q_nm^-1 I sigma dQ`. dQ is one standard deviation and defaults to the q column's unit.
+The pixel count in Analyze's fourth column is a count. To split `q I1 I2 …`, use **Import Curves…** explicitly.
 
 **Import selected files or several curves from one file**
 
@@ -2226,7 +2227,7 @@ The page is laid out like Analyze: the steps on the left, each saying where it s
   contributions: particles, the constant background and any beam-tail/low-q term. The total model is a stronger
   solid line; contributions use thinner dashed or dotted lines. Use the arrow beside **Components** to choose
   individual contributions.
-- **The residual plot** below: (I − model)/σ, or ln(I/model) when the file has no σ.
+- **The residual plot** below uses (I − model)/σ for the selected intensity weights or ln(I/model) for a log fit.
 - **The command bar**: **Open Curve…** (its menu: **Load Model…**), **Undo / Redo** (`Ctrl+Z` /
   `Ctrl+Shift+Z`: every change of the model, the fitting range or the left-out points is one step, and so is every
   fit, solution used and model loaded), **Fit** (`Ctrl+Return`), **Stop** and **Save** (**Data and Fit…**,
@@ -2291,12 +2292,22 @@ Analysis** to inspect its contributions here.
   form factor is 1 there.
 - Each value is one line: its name (the tooltip gives its name in links, such as `R_1`), the value, ± its error after a
   fit, **min** and **max** (with **Ranges**), **fit** and **=** (link). Two populations fit on one screen.
-- **Sizes** under the values says what R and σR/R are: *Gaussian, by number* (the default: the mean and relative
-  spread of the particle count, as a microscope counts), *Log-normal, by number* (for broad distributions)
-  or *Gaussian, by intensity* (each size scatters the same at q = 0; Fitting's earlier sizes). After a fit the
-  results give every particle's sizes both by number and by intensity
-  ([Physics and Methods, section 9.3](Physics_Manual.md#93-size-distributions)). A model saved by an earlier version
-  opens with the sizes it had, its σD/D converted to σnn/D (× √(2π)) and the scale of a vertical cylinder converted.
+- For **Refine** and **Search**, choose **Sizes** on each population. **Gaussian, by number** uses centre R and
+  width σ = R·(σR/R), restricted to positive radii within four σ. **Log-normal, by number (median)** uses median
+  M and s = SD(ln R). Its number mean is M exp(s²/2) and its relative standard deviation is √(exp(s²) − 1).
+  **Schulz (Gamma), by number** uses number mean R and relative standard deviation w, with shape 1/w² and scale Rw².
+  The results give the number mean and relative standard deviation after normalization. Saved models retain their
+  original laws. Models using the new laws, weights or file resolution use the `gimap_fit_model_v3` JSON format.
+- Under **Resolution**, choose **Constant σ_q** (0 gives an unsmeared curve) or **Resolution from the file**.
+  The latter averages each particle term at |qᵢ + dQᵢ Z| with Z a standard normal variable. dQ must be finite and
+  nonnegative at each fitted point. A width of zero evaluates that point directly.
+- Under **Weights**, **σ from the file** uses residual (I − model)/σ, **Relative (σ = I)** uses (I − model)/I
+  and **Poisson (σ = √I)** uses (I − model)/√I. **None (fit ln I)** uses ln I − ln model, as does the default
+  when no usable file σ is available. Relative, Poisson and log fits use positive intensities. **Save Data and Fit**
+  records these choices and the fit report lists them. [Physics and Methods, chapter 9](Physics_Manual.md#93-size-distributions)
+
+![Size law, resolution and weights for a manual fit](manual_images/en/11b_manual_fit.png)
+
 - **fit** ticked: the fit may change the value. Unticked: the value stays fixed.
 - **=** links the value to another (**Same as**: e.g. one σR/R for two populations) or to an expression of others
   (**Expression…**: `2*R_1`, `R_1 + t_shell_1`; numbers, + − * / **, sqrt, exp, log, min, max …). A linked value is
@@ -2415,12 +2426,14 @@ sizes for your sample, or let the Fit step find them.
   68 % and 95 % intervals and least-squares error), `<curve>_solutions.json` (the record of Save Data and Fit with
   every solution under `predict`) and `<curve>_solutions_curves.csv` (the points and every solution's model,
   residual and terms).
-- **Save Data and Fit…** writes a CSV — q (nm⁻¹ and Å⁻¹), I, σ, the model, the residuals and every term — with a
+- **Save Data and Fit…** writes a CSV with q (nm⁻¹ and Å⁻¹), I, the σ used in the objective, the model,
+  the residuals, dQ in nm⁻¹ when file resolution was used, and each model term. It writes a
   JSON record next to it: the model, the fit (errors, values at a bound, correlations) and the
   points used; after Predict parameters also every solution (`predict`: composition, probability, χ²ᵣ, flags and
   every value with its median and intervals). Choose **NXcanSAS (*.h5)** as the type for an HDF5 file with two SASentry groups, the points fitted
-  (Idev = σ) and the model, Q = |q| in 1/nm; the record is next to it and inside it. **Save Plot…** writes the plot with its residuals under it as one figure — PNG, SVG or PDF, on white, with
-  error bars from σ, the terms shown and the fitting range shaded; **Save Model…** writes the model as JSON, to load for another
+  (Idev = the σ used for fitting, Qdev = dQ when used) and the model, Q = |q| in 1/nm. The record is next to the
+  file and inside it. **Save Plot…** writes the plot and residuals as a PNG, SVG or PDF on white, including
+  measured error bars with file-σ weighting, the visible terms and the shaded fitting range. **Save Model…** writes the model as JSON, to load for another
   curve with **Load Model…**.
 - **Run Log** (folded) at the bottom.
 
@@ -2496,8 +2509,8 @@ benchmarks.
    curves at the Yoneda angle). On a cut well above the critical angle the reflected wave is weak, and a solution
    with a large |r| and a sphere about half the size can describe the curve as well: there fix |r| (`refl_amp`) to
    the substrate's value, or to 0, and refine. With both angles Predict takes about 2.4 times as long.
-   Model's **Sizes** and coupling are used too (*Gaussian, by number* and the LMA are the network's own; with the
-   others the model reweights its proposals).
+   Predict uses its Gaussian size model for the three manual number distributions, its own q resolution and the
+   curve's measured σ. Earlier models retain their existing Predict size-law and coupling conventions.
 3. Without σ in the file, Predict takes a relative σ from the scatter of ln I about its trend (at least 1 %); the
    Curve card names its value, and the 1D Predict window uses the same estimate.
 4. Press **Fit**. It runs in a separate process. The line under the bar says the step — *Step 1 of 3 · Network
@@ -2693,7 +2706,9 @@ current frame finish before pausing. Completed results stay available.
   - **The previous result; Predict parameters where the chain breaks** — each frame from the result of the frame
     before; where that chain breaks (the fit failed or did not converge, a new stage begins, the fit is flagged or
     poor, or χ²ᵣ is more than 3 times the frame before's and above 2), Predict parameters (section 6.4, its method
-    unchanged) fits the frame again with the particles of Single's model, and the better fit is kept. A model with
+    unchanged) fits the frame again with the particles of Single's model. If the manual size law, weights or
+    resolution differ, Refine uses the network values as a starting point and applies the manual settings before
+    comparing the two fits. A model with
     no particle or more than three is refined only (the Run Log says so).
 - **Then a backward pass**: once every frame is done, from the last but one to the first, each frame is refined from
   the result of the frame after it, and the better of its two fits is kept — a sample whose first frames are hard to

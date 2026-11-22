@@ -149,7 +149,7 @@ class FitSeriesLoadingMixin:
                     if stop.is_set():
                         break
                     read.append((index, load(LoadCurveRequest(Path(paths[index]),
-                                "angstrom" if frame_mode else unit))))
+                                "angstrom" if frame_mode else unit, keep_missing_sigma=True))))
             units = {} if frame_mode else read_units(paths, stated, stop)
             return result, read, units, load.loaded, errors
 
@@ -192,7 +192,7 @@ class FitSeriesLoadingMixin:
         self._note_curve(index, value.q, value.observation)
         self._preview_curves[(path, unit)] = Curve.from_arrays(
             value.q, value.intensity, value.error, name=file_name(path), path=path,
-            unit=value.q_source_unit, unit_from=value.q_unit_from)
+            unit=value.q_source_unit, unit_from=value.q_unit_from, dq=value.dq)
 
     def _request_preview(self, index, key):
         if key in self._preview_pending or self._listing_busy or self._disposed:
@@ -200,7 +200,7 @@ class FitSeriesLoadingMixin:
         self._preview_pending.add(key)
         epoch, load = self._loading_epoch, self.series_curve_loader()
         version = self._path_versions.get(key[0], 0)
-        request = LoadCurveRequest(Path(key[0]), key[1])
+        request = LoadCurveRequest(Path(key[0]), key[1], keep_missing_sigma=True)
 
         def current():
             return self._loading_current(epoch) and self._path_versions.get(key[0], 0) == version
