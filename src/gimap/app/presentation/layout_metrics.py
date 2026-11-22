@@ -8,7 +8,7 @@ per-resolution profiles.  The metrics are compact: the main window fits a
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from PyQt5.QtCore import QPoint, QRect, QSize
 from PyQt5.QtGui import QCursor, QScreen
@@ -18,8 +18,9 @@ from PyQt5.QtWidgets import QApplication, QWidget
 @dataclass(frozen=True)
 class LayoutMetrics:
     key: str = "standard"
-    min_window: QSize = QSize(1024, 640)
-    default_window: QSize = QSize(1440, 900)
+    # default_factory: Python 3.11 refuses an unhashable default (QSize) in a dataclass
+    min_window: QSize = field(default_factory=lambda: QSize(1024, 640))
+    default_window: QSize = field(default_factory=lambda: QSize(1440, 900))
     content_min: int = 760
     workspace_min: int = 560
     preview_min: int = 360
