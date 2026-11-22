@@ -46,7 +46,7 @@ def flat_detector_error(
     from its own ``.poni``, so a centre moved since is not counted as the tilt's error."""
     global _map, _last
     tilt = getattr(profile, "dropped_tilt", None) if profile is not None else None
-    if tilt is None or geometry is None or getattr(geometry, "tilted", False):  # the tilt is in the geometry
+    if tilt is None or geometry is None or getattr(geometry, "requires_projection", False):
         return None
     shape = tuple(int(value) for value in shape)
     usable = np.asarray(valid, dtype=bool)

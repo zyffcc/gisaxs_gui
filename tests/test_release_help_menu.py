@@ -268,7 +268,7 @@ def menu_bar():
 
 
 HELP_ENTRIES = ["&User Manual", "&Physics and Methods", "&Keyboard Shortcuts…", "E&xample Data", "",
-                "&Report a Problem…", "Open Error &Log Folder", "Open User &Data Folder", "",
+                "&Report a Problem…", "Open &Log Folder", "Open User &Data Folder", "",
                 "&GitHub Repository", "Check for Upda&tes…", "How to &Cite GIMaP…", "Third-party &Notices", "",
                 "&About GIMaP"]
 
@@ -446,17 +446,20 @@ def commands(monkeypatch, tmp_path):
     window.deleteLater()
 
 
-def test_open_error_log_folder_says_when_nothing_was_logged(commands, opened) -> None:
+def test_open_log_folder_says_when_nothing_was_logged(commands, opened) -> None:
     from src.gimap.app.error_guard import LOG_NAME
+    from src.gimap.app.logging_setup import CRASH_FILE, LOG_FILE
 
     logs = commands.window.app_context.data_dir / "logs"
     assert commands.open_error_log() is False
-    assert commands.said == [("inform", "Error Log", "No error has been logged.")] and opened == []
+    assert commands.said == [("inform", "Logs", "Nothing has been logged yet.")] and opened == []
     assert not logs.exists()  # nothing is created to show an empty folder
     logs.mkdir(parents=True)
-    (logs / LOG_NAME).write_text("Traceback …\n", encoding="utf-8")
-    assert commands.open_error_log() is True
-    assert len(opened) == 1 and Path(opened[0].toLocalFile()) == logs.resolve()
+    for name in (LOG_FILE, CRASH_FILE, LOG_NAME):  # the session log, native crashes, unexpected errors
+        (logs / name).write_text("…\n", encoding="utf-8")
+        assert commands.open_error_log() is True
+        (logs / name).unlink()
+    assert len(opened) == 3 and Path(opened[0].toLocalFile()) == logs.resolve()
 
 
 def test_report_a_problem_copies_versions_only_then_opens_a_new_issue(commands, opened, monkeypatch) -> None:
@@ -503,7 +506,8 @@ def test_an_example_is_copied_to_the_folder_chosen_and_opened_in_analyze(command
     assert asked[0][1].endswith(str(Path("GIMaP examples") / "giwaxs_xeuss_pbte"))
     assert frame == target / "PbTe_3010_r1_PT_1_10_0_00028.edf"
     assert sorted(path.name for path in target.iterdir()) == sorted(
-        ["PbTe_3010_r1_PT_1_10_0_00028.edf", "mask_PbTe_3010.edf", "AgBe_250403_XENOCS.poni", "SOURCE_AND_LICENCE.md"])
+        ["PbTe_3010_r1_PT_1_10_0_00028.edf", "mask_PbTe_3010.edf", "AgBe_250403_XENOCS.poni",
+         "PbTe_bulk_reference.cif", "SOURCE_AND_LICENCE.md"])
     source = help_commands.EXAMPLES_FOLDER / "giwaxs_xeuss_pbte" / "AgBe_250403_XENOCS.poni"
     assert (target / source.name).read_bytes() == source.read_bytes()
     assert commands.window.components.analyze_page.imported == [[str(frame)]]

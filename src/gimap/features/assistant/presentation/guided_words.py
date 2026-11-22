@@ -14,28 +14,23 @@ from functools import lru_cache
 
 from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, current_language, tr, trf
 from src.gimap.shared import fit_names
+from src.gimap.shared.orientation_notes import COVERAGE_WARNING
 
 SENTENCES = (
+    "q = {q} Å⁻¹.", COVERAGE_WARNING,
+    "At q = {q} Å⁻¹ the pole fit is not determined ({bounds}).",
+    "Exclude pixels with αf < {angle}° ({source}). Polarisation: {factor}.",
+    "no clear preferred orientation; the strongest measured bin is at |χ| ≈ {chi}°",
+    "no single preferred orientation: the maximum at |χ| ≈ {chi}° and the measured moment disagree",
     # A ring's orientation (domain/orientation.py): the texture, the notes and why there is no f.
     "{texture} — but the strongest measured |χ| ({chi}°) borders an unmeasured range, so the true maximum may lie "
     "inside it",
     "no single preferred orientation: maxima of similar height at |χ| ≈ {a}° and {b}°",
-    "no clear preferred orientation (f − f_iso = {f}, within ±{margin}): the ring is strongest at |χ| ≈ {chi}° but "
-    "nearly as intense elsewhere",
-    "no single preferred orientation: strongest at |χ| ≈ {chi}°, but f − f_iso = {f} puts most of the intensity "
-    "nearer the sample plane",
-    "no single preferred orientation: strongest at |χ| ≈ {chi}°, but f − f_iso = {f} puts most of the intensity "
-    "nearer the surface normal",
-    "Leaving out |χ| ≥ {chi}°, next to the sample horizon, changes f − f_iso from {a} to {b} ({n}σ_f): f depends on "
-    "those bins. There the exit angle αf is smallest, and absorption in the film, the transmission function or a "
-    "shadow can lower the intensity; GIMaP corrects none of them.",
-    "Without those bins the texture rule (|f − f_iso| against {margin}) would give another verdict.",
     "tilted: maximum at χ ≈ ±{chi}°",
     "The radial background under the ring ({background} counts/pixel) was subtracted.",
     "|χ| {where} is shadowed: the intensity there is below {fraction} of the diffuse background at this q (a shadow, "
     "absorber or insensitive detector area), so it counts as unmeasured.",
-    "|χ| < {angle}° is not measured (missing wedge); f then leaves out the orientations closest to the surface normal "
-    "and is biased low.",
+    "The missing wedge covers |χ| < {angle}°. The measured f excludes these orientations.",
     "A random (isotropic) ring measured over the same |χ| would give f = {f}: compare f with that, not with 0.",
     "Only {n} measured χ bins in this ring.",
     "The ring is not above the radial background: at most {snr}σ in any 1° χ bin.",
@@ -61,7 +56,11 @@ SENTENCES = (
     "half has no points)",  # gisaxs_cut.HOLES_SENTENCE, character for character
     # The points a GISAXS run asks a person to look at (application/gisaxs_procedure.py).
     "cut of the series (rows {rows})",
+    "Born term at the cut's q_z = {qz} nm⁻¹",
     "{n} solutions have a probability of at least {limit} ({solutions}): the curve alone does not decide the model.",
+    "{n} solutions have a BIC weight of at least {limit} ({solutions}).",
+    "Predict parameters on {curve} compared the solutions by BIC weight after evidence sampling failed.",
+    fit_names.MC_ERROR, fit_names.ESS_TEXT, fit_names.DENSITY_NOTICE, fit_names.PEAK_SPACING, fit_names.COMPOSITION_RANGE,
     "The reported solution ({model}) has χ²ᵣ = {chi2}, above {limit}: it misses the curve by far more than the σ of "
     "its points, so none of the compositions Predict parameters tried describes this cut, and its R and D are not "
     "measurements.",  # gisaxs_procedure.POOR_FIT, character for character
@@ -92,10 +91,10 @@ SENTENCES = (
     "clear: {standard} — {lines} lines within {error} of their q",
     "ambiguous: {standard} ({error}) and {second} ({second_error}) place their lines about equally well; check a log "
     "or ask the user",
-    "none fits well (best {standard}: {rings} rings, rms {rms} px): the image may show another standard, the energy "
-    "or pixel size may be wrong, or the rings are too weak",
-    "clear: {standard} ({rings} rings, rms {rms} px) beats {second} ({second_rings} rings, rms {second_rms} px)",
-    "clear: {standard} ({rings} rings, rms {rms} px)",
+    "none fits well (best {standard}: {rings} rings, ring-radius RMS {rms} px): the image may show another standard, "
+    "the energy or pixel size may be wrong, or the rings are too weak",
+    "clear: {standard} ({rings} rings, ring-radius RMS {rms} px) beats {second} ({second_rings} rings, ring-radius RMS {second_rms} px)",
+    "clear: {standard} ({rings} rings, ring-radius RMS {rms} px)",
     "clear: {standard}, and its distance agrees with the expected {distance} mm",
     "probably {second}: its distance agrees with the expected {distance} mm, although {standard} matches as many rings",
     "ambiguous: {standard} and {second} fit about equally well; check the distance in the header or a log, or ask "
@@ -171,10 +170,30 @@ _FIELD = re.compile(r"\{(\w+)\}")
 _SENTENCE_BREAK = re.compile(r"(?<=[.。])\s+(?=[A-Z])")
 """Between two sentences of a text that has no form of its own (a hint made of several sentences)."""
 
+_SAVED_SENTENCES = (
+    "no clear preferred orientation (f − f_iso = {f}, within ±{margin}): the ring is strongest at |χ| ≈ {chi}° but "
+    "nearly as intense elsewhere",
+    "no single preferred orientation: strongest at |χ| ≈ {chi}°, but f − f_iso = {f} puts most of the intensity "
+    "nearer the sample plane",
+    "no single preferred orientation: strongest at |χ| ≈ {chi}°, but f − f_iso = {f} puts most of the intensity "
+    "nearer the surface normal",
+    "Leaving out |χ| ≥ {chi}°, next to the sample horizon, changes f − f_iso from {a} to {b} ({n}σ_f): f depends on "
+    "those bins. There the exit angle αf is smallest, and absorption in the film, the transmission function or a "
+    "shadow can lower the intensity; GIMaP corrects none of them.",
+    "Without those bins the texture rule (|f − f_iso| against {margin}) would give another verdict.",
+    "The radial background under the ring ({background} counts/pixel) was subtracted, scaled like an isotropic ring "
+    "(∝ sin χ).",
+    "none fits well (best {standard}: {rings} rings, rms {rms} px): the image may show another standard, the energy "
+    "or pixel size may be wrong, or the rings are too weak",
+    "clear: {standard} ({rings} rings, rms {rms} px) beats {second} ({second_rings} rings, rms {second_rms} px)",
+    "clear: {standard} ({rings} rings, rms {rms} px)",
+)
+"""Wording from earlier analyses, still translated when a saved report is reopened."""
+
 
 @lru_cache(maxsize=1)
 def _ordered() -> tuple[str, ...]:
-    return tuple(sorted(SENTENCES, key=lambda template: -len(_FIELD.sub("", template))))
+    return tuple(sorted((*SENTENCES, *_SAVED_SENTENCES), key=lambda template: -len(_FIELD.sub("", template))))
 
 
 @lru_cache(maxsize=None)

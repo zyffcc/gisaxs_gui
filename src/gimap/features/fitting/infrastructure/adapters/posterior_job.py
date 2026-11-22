@@ -9,6 +9,13 @@ model (``model_to_dict``), χ²ᵣ (over the fitted points, with the curve's σ:
 shows), probability, values with their posterior intervals, flags (``shared/fit_names.clean_flags``: none for a term
 that is absent), ``points`` (``fitted_points``: how many were fitted, how many lay below the network's q window);
 ``tried`` (the compositions given; None: the network chose) and the network's name and SHA-256.
+
+While it runs, the job reports its stages (``StageReport``): the details of a report say the stage (``loading``,
+``proposals``, ``refinement``, ``starts``, ``search``, ``sampling``), how many of its items are done of how many, the
+seconds since the start and an estimate of the seconds left in the stage; after each solution's posterior is sampled
+(but the last) they also carry ``partial``: the solutions sampled so far, encoded as the result's, their probabilities
+over those alone — what the page keeps when Predict is stopped. The numbers computed are those of a run without
+reports (``refine.predict``).
 """
 
 from __future__ import annotations
@@ -23,6 +30,8 @@ from src.gimap.shared import fit_names
 from ...domain import fit_model as fm
 from ...domain.posterior import network as posterior_network
 from ...domain.posterior import refine
+from ...application.fit_reproduction import prediction_record
+from ..reproduce_fit import predict_options, prediction_plan
 
 
 def _number(value):
@@ -55,39 +64,99 @@ def fitted_points(q, intensity, sigma=None, qz: float = 0.0, qz_minus=None) -> d
 
 
 def encode(solution, points=None) -> dict:
+    extra = solution.extras or {}
+    diagnostics = dict(extra.get("diagnostics", {}))
+    diagnostics["reported_interval_kinds"] = {
+        name: fit_names.reported_interval_kind(solution.flags, v.error, diagnostics.get("posterior_kind"))
+        for name, v in solution.values.items()}
+    key = fit_names.weight_key({"compared_by": extra.get("compared_by"), "flags": solution.flags})
     return {
+        "diagnostics": diagnostics, "posterior_summary": extra.get("posterior_summary", {}),
+        "importance_starts": extra.get("importance_starts", []),
+        "least_squares_values": {**{name: _number(v.best) for name, v in solution.values.items()},
+                                 **{key: _number(solution.model.globals[key].value) for key in refine.REFLECTION_KEYS
+                                    if key in extra.get("posterior_summary", {})}},
         "points": None if points is None else dict(points),
         "compared_by": (solution.extras or {}).get("compared_by"),
-        "composition": int(solution.composition), "name": solution.name, "probability": _number(solution.probability),
+        "composition": int(solution.composition), "name": solution.name, key: _number(solution.probability),
         "model": fm.model_to_dict(solution.model), "chi2": _number(solution.chi2_reduced),
         "log_rmse": _number(solution.log_rmse), "method": solution.method, "flags": list(solution_flags(solution)),
-        "log_evidence": _number(solution.log_evidence), "ess": _number(solution.ess), "samples": solution.samples,
+        "log_evidence": _number(diagnostics.get("log_evidence", solution.log_evidence)), "ess": _number(solution.ess), "samples": solution.samples,
         "values": {name: [_number(v.best), _number(v.median), _number(v.low68), _number(v.high68), _number(v.low95),
                           _number(v.high95), _number(v.error)] for name, v in solution.values.items()},
     }
 
 
+STAGES = {"loading": (0.0, 0.02), "proposals": (0.02, 0.15), "refinement": (0.15, 0.5), "starts": (0.5, 0.55),
+          "search": (0.5, 0.55), "sampling": (0.55, 1.0)}
+"""Each stage's share of the bar (from, to): a guide only, the stages take other times on other curves."""
+STAGE_LINES = {"loading": "Loading the proposal network", "proposals": "Network proposals: composition {number} of {total}",
+               "refinement": "Refining the modes: composition {number} of {total}",
+               "starts": "Refining from other starts: composition {number} of {total}",
+               "search": "Searching the ranges for a composition the proposals miss",
+               "sampling": "Sampling the posterior: solution {number} of {total}"}
+"""The English line of each stage (the log; the page builds its own from the details)."""
+
+
+class StageReport:
+    """The job's reports of ``refine.predict``'s stages and of the solutions finished so far (module docstring)."""
+
+    def __init__(self, report, points: dict, tick: float):
+        self.report, self.points, self.tick = report, points, tick
+        self.stage, self.started, self.last = "", tick, (0, 0)
+        self.plan = None
+
+    def progress(self, stage: str, done: int, total: int, **extra) -> None:
+        """``done`` of ``total`` items of ``stage`` finished (the item after them is under way)."""
+        now = time.perf_counter()
+        if stage != self.stage:
+            self.stage, self.started = stage, now
+        self.last = (int(done), int(total))
+        low, high = STAGES.get(stage, (0.0, 1.0))
+        share = min(1.0, done / total) if total > 0 else 0.0
+        left = (now - self.started) / done * (total - done) if 0 < done < total else None
+        details = {"stage": stage, "done": int(done), "total": int(total), "elapsed": round(now - self.tick, 2),
+                   "left": None if left is None else round(left, 1), **extra}
+        line = STAGE_LINES.get(stage, stage).format(number=min(int(done) + 1, max(int(total), 1)), total=total)
+        try:  # a report never stops the run
+            self.report(low + (high - low) * share, 1, line, details)
+        except Exception:  # noqa: BLE001 - e.g. a value JSON cannot take: the run goes on without this report
+            pass
+
+    def partial(self, solutions) -> None:
+        """The solutions of those sampled so far (``refine.predict``'s ``partial``, right after a sampling)."""
+        try:
+            encoded = [encode(s, self.points) for s in solutions]
+        except Exception:  # noqa: BLE001 - nothing to keep from this report; the run goes on
+            return
+        done, total = self.last
+        self.progress("sampling", done + 1, total, partial=encoded,
+                      **({"prediction_plan": self.plan} if self.plan and encoded else {}))
+
+
 def run_predict(payload: dict, report, cancelled) -> dict:
     tick = time.perf_counter()
-    report(0, 1, "Loading the proposal network")
+    points = fitted_points(payload["q"], payload["intensity"], payload.get("sigma"), payload.get("qz") or 0.0,
+                           None if payload.get("qz_minus") is None else float(payload["qz_minus"]))
+    stages = StageReport(report, points, tick)
+    stages.progress("loading", 0, 1)
     network = posterior_network.load()
+    options = predict_options(payload)
+    if network.meta.get("sha256"):
+        stages.plan = prediction_plan({key: payload.get(key) for key in ("q", "intensity", "sigma")},
+                                      options, posterior_network.path(), network.meta)
     if cancelled():
         raise RuntimeError("Fitting cancelled")
-    report(0, 1, "Weighting the network's samples and refining each solution")
     solutions = refine.predict(
-        network, payload["q"], payload["intensity"], payload.get("sigma"), qz=float(payload.get("qz") or 0.0),
-        qz_minus=None if payload.get("qz_minus") is None else float(payload["qz_minus"]),
-        compositions=payload.get("compositions"), allowed=payload.get("allowed"),
-        seed=int(payload.get("seed", 0)),
-        law=payload.get("law", "number_gauss"), coupling=payload.get("coupling", "lma"),
-        grazing=payload.get("grazing"))
+        network, payload["q"], payload["intensity"], payload.get("sigma"), **options,
+        progress=stages.progress, partial=stages.partial)
     if cancelled():
         raise RuntimeError("Fitting cancelled")
     report(1, 1, "Done")
-    points = fitted_points(payload["q"], payload["intensity"], payload.get("sigma"), payload.get("qz") or 0.0,
-                           None if payload.get("qz_minus") is None else float(payload["qz_minus"]))
     tried = payload.get("compositions")
-    return {"solutions": [encode(s, points) for s in solutions], "points": points,
+    encoded = [encode(s, points) for s in solutions]
+    return {"solutions": encoded, "points": points,
+            **({"reproduction": prediction_record(stages.plan, encoded)} if stages.plan and encoded else {}),
             "tried": None if tried is None else len(tried),
             "network": {"name": posterior_network.path().stem, "sha256": network.meta.get("sha256")},
             "seconds": time.perf_counter() - tick}
@@ -196,6 +265,8 @@ def solution_row(solution, item, render_q, points=None) -> dict:
     for c in components:
         c["weight"] = c["amplitude"] / total if total > 0 else 0.0
     g = model.globals
+    record = encode(solution)
+    key = fit_names.weight_key(record)
     return dict(
         workflow="native_v5", physics_backend="cut_model", law=model.components[0].law if components else None,
         best_source="posterior", side=item["side"], combination=" + ".join(c["type"] for c in components),
@@ -204,12 +275,13 @@ def solution_row(solution, item, render_q, points=None) -> dict:
                            sigma_Res=float(g["res_width"].value), nu_Res=float(g["res_exponent"].value),
                            q_resolution=float(g["q_resolution"].value),
                            **{key: float(g[key].value) for key in ("alpha_i", "alpha_f", "wavelength")}),
-        probability=_number(solution.probability), posterior={k: v for k, v in encode(solution)["values"].items()},
+        **{key: record[key]}, posterior=record["values"], posterior_summary=record["posterior_summary"],
+        least_squares_values=record["least_squares_values"], diagnostics=record["diagnostics"],
         best_log_rmse=float(np.sqrt(np.mean(np.log(fitted[positive] / y[positive]) ** 2))) if positive.any() else None,
         best_chi2_weighted=float(solution.chi2_reduced), chi2_reduced=float(solution.chi2_reduced),
         points={key: value for key, value in points.items() if key != "q_min"}, signed_weighted_rms=float(np.sqrt(np.mean(residual**2))),
         signed_huber_delta2=float(np.mean(np.where(abs(residual) <= 2, 0.5 * residual**2, 2 * (abs(residual) - 1)))),
-        probability_status="Posterior probability of the composition and mode (importance sampling)",
+        comparison_label=("BIC weight" if key == "bic_weight" else "Posterior probability of the composition and mode"),
         flags=list(flags), warnings=flag_sentences(first, many), more_warnings=flag_sentences(second, many),
         compared_by=(solution.extras or {}).get("compared_by"), ess=_number(solution.ess),
         native_q=(q * item["sign"]).tolist(), observed=y.tolist(), sigma=sigma.tolist(), native_fit=fitted.tolist(),
@@ -222,8 +294,9 @@ def fit_and_write(output, item, options, report, cancelled) -> list:
 
     network = posterior_network.load()
     report(0, 1, f"{item['side']}: weighting the network's samples", {})
-    solutions = refine.predict(network, item["q"], item["observed"], item["sigma"],
-                               qz=float(options.get("cut_qz") or 0.0), **batch_compositions(options["components"]))
+    settings = predict_options(dict(qz=options.get("cut_qz"), reflected_beam=options.get("reflected_beam"),
+                                    measured_qz=options.get("measured_qz"), **batch_compositions(options["components"])))
+    solutions = refine.predict(network, item["q"], item["observed"], item["sigma"], **settings)
     if cancelled():
         raise RuntimeError("Prediction cancelled")
     q = np.asarray(item["q"], float)
@@ -234,7 +307,11 @@ def fit_and_write(output, item, options, report, cancelled) -> list:
     for rank, row in enumerate(rows, start=1):
         row["rank"] = rank
     output.mkdir(parents=True, exist_ok=True)
-    (output / "solutions.json").write_text(json.dumps(dict(method="posterior", options=options, network={
+    plan = prediction_plan({"q": q.tolist(), "intensity": item["observed"].tolist(), "sigma": item["sigma"].tolist()},
+                           settings, posterior_network.path(), network.meta, display_q=render_q, sign=item["sign"],
+                           limit=options["max_solutions"], source=item.get("source_reference"))
+    reproduction = prediction_record(plan, [encode(s) for s in solutions[:options["max_solutions"]]])
+    (output / "solutions.json").write_text(json.dumps(dict(method="posterior", options=options, reproduction=reproduction, network={
         "name": posterior_network.path().stem, "sha256": network.meta.get("sha256")}, solutions=rows),
         indent=2, allow_nan=False), encoding="utf-8")
     np.savez_compressed(output / "display.npz", reference_q=item["q"], observed=item["observed"], sigma=item["sigma"],
@@ -244,5 +321,5 @@ def fit_and_write(output, item, options, report, cancelled) -> list:
     return rows
 
 
-__all__ = ["amplitudes", "batch_compositions", "encode", "fit_and_write", "fitted_points", "flag_sentences",
-           "run_predict", "solution_flags", "solution_row"]
+__all__ = ["STAGES", "STAGE_LINES", "StageReport", "amplitudes", "batch_compositions", "encode", "fit_and_write",
+           "fitted_points", "flag_sentences", "run_predict", "solution_flags", "solution_row"]

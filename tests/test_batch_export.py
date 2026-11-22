@@ -138,7 +138,7 @@ def test_batch_export_writes_tables_and_per_frame_files_to_the_chosen_folder(bat
 
     monkeypatch.setattr(BatchExportDialog, "exec_", accept)
     page.batch_export_dialog()
-    _settle(page, lambda: not page._batch and (out / "run_07" / "run_07_batch.json").exists())
+    _settle(page, lambda: "Exported 3/3" in page.status_text())
     assert "3 frames" in seen["frames"] and {"radial", "region1", "region1_chi"} <= set(seen["curves"])
     assert str(out / "run_07") in seen["target"]
     assert seen["files"]["tables"] == "→ run_07_region1_frames.csv"  # every option says the file it writes
@@ -153,7 +153,9 @@ def test_batch_export_writes_tables_and_per_frame_files_to_the_chosen_folder(bat
     assert "run_07_<curve>_frames.csv" in readme and "curves/<frame>_<curve>.csv" in readme
     record = json.loads((target / "run_07_batch.json").read_text(encoding="utf-8"))
     assert len(record["frames"]) == 3 and record["choices"]["curves"] == ["region1", "region1_chi"]
-    assert "Exported 3/3" in page.status_text()
+    assert [item["frame"] for item in record["frame_error_models"]] == record["frames"]
+    assert all(item["error_model"] == record["settings_of_first_frame"]["error_model"]
+               for item in record["frame_error_models"])
     choices, destination, subfolder = page.view_model.batch_preferences()  # remembered for next time
     assert choices.per_frame and destination == str(out) and subfolder
 

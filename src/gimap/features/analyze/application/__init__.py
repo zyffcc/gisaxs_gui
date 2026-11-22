@@ -7,11 +7,13 @@ import math
 from .batch_preview import FitCurvePreview, FrameFitPreview, failed_preview, model_preview, peak_preview
 
 from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile, lab_rays, scattering_vectors
+from ..domain.mask_edits import MaskEdit, MaskImage, MaskRule, mask_edit_from_record, mask_edit_record
 
 from ..domain import (
     PROFILES,
     GISAXS,
     GIWAXS,
+    TRANSMISSION,
     PICK_KINDS,
     RING,
     SECTOR,
@@ -31,6 +33,7 @@ from ..domain import (
     X_AXIS_TWO_THETA,
     MAX_GAP_GUARD_PX,
     Corrections,
+    Normalisation,
     Curve,
     GisaxsCutSettings,
     GiwaxsSettings,
@@ -163,7 +166,16 @@ from .ports import (
 from .series import CorrectSeriesFrame
 from . import gisaxs_cuts as gisaxs_cut_tools  # the person's GISAXS cuts: units, outlines, the set-up they were made on
 from .settings_file import SETTINGS_FORMAT, AnalyzeSettings, settings_from_record, settings_record
-from .series_map import SERIES_TITLE, build_series_map, export_series_map, export_series_track, row_label, series_row
+from .series_map import SERIES_TITLE, RowLabel, build_series_map, export_series_map, export_series_track, row_label, series_row
+from .series_results import (
+    TIMELINE_METHOD,
+    export_series_timeline,
+    rows_from_store,
+    series_info,
+    store_fit_previews,
+    store_rows,
+    timeline_of,
+)
 from .series_stages import (
     change_curve,
     export_series_stages,
@@ -187,6 +199,10 @@ from .use_cases import (
     refine_center_by_symmetry,
 )
 from .ring_frame import ring_frame
+from .technique import TECHNIQUE_NAMES
+from .readout import cake_point, detector_point, map_point
+from .batch_geometry import NO_GEOMETRY, batch_geometry_lines
+from .geometry_files import SiblingPoni, poni_problem, poni_profile, read_poni_file, sibling_poni, write_poni_file
 
 
 def q_at_position(geometry: DetectorGeometry, x_px: float, y_px: float) -> dict[str, float]:
@@ -198,7 +214,7 @@ def q_at_position(geometry: DetectorGeometry, x_px: float, y_px: float) -> dict[
     y = np.array([(geometry.beam_center_y_px - float(y_px)) * geometry.pixel_size_y_m])
     along, x, y = lab_rays(geometry, x, y)
     q = scattering_vectors(x, y, along, geometry.incidence_rad, geometry.wavevector_inv_angstrom,
-                           critical_rad=geometry.critical_rad)
+                           critical_rad=geometry.critical_rad, sample_roll_rad=geometry.sample_roll_rad)
     sin_alpha_f = float(q.sin_exit[0])
     return {
         "qx": float(q.qx[0]),
@@ -319,7 +335,11 @@ __all__ = [
     "source_labels",
     "CakeMap",
     "CutRegion",
-    "MaskShape",
+    "MaskShape", "MaskEdit",
+    "MaskImage",
+    "MaskRule",
+    "mask_edit_from_record",
+    "mask_edit_record",
     "POLYGON",
     "PeakTrack",
     "RECTANGLE",
@@ -338,14 +358,22 @@ __all__ = [
     "stages_record",
     "export_series_map",
     "export_series_track",
-    "row_label",
+    "RowLabel", "row_label",
     "series_row",
+    "TIMELINE_METHOD",
+    "export_series_timeline",
+    "rows_from_store",
+    "series_info",
+    "store_fit_previews",
+    "store_rows",
+    "timeline_of",
     "AUTO",
     "CENTER_HEADER",
     "CENTER_PROFILE",
     "CENTER_SESSION",
     "CorrectSeriesFrame",
     "Corrections",
+    "Normalisation",
     "FrameRef",
     "MAX_GAP_GUARD_PX",
     "SymmetryCenter",
@@ -370,6 +398,19 @@ __all__ = [
     "FrameSource",
     "GISAXS",
     "GIWAXS",
+    "TRANSMISSION",
+    "TECHNIQUE_NAMES",
+    "cake_point",
+    "NO_GEOMETRY",
+    "batch_geometry_lines",
+    "SiblingPoni",
+    "poni_problem",
+    "poni_profile",
+    "read_poni_file",
+    "sibling_poni",
+    "write_poni_file",
+    "detector_point",
+    "map_point",
     "GeometryResolution",
     "GisaxsCutSettings",
     "GiwaxsSettings",

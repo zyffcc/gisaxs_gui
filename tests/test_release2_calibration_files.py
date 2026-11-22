@@ -72,8 +72,10 @@ def _result(tmp_path: Path) -> CalibrationResult:
 
 
 def _former_payload(result: CalibrationResult) -> dict:
-    """The record exactly as ``CalibrationResult.to_dict`` wrote it before the convention was named."""
+    """Earlier candidate fields, before the ring-point refinement diagnostics."""
     payload = asdict(result)
+    for candidate in (payload["selected_candidate"], *payload["candidates"]):
+        candidate.pop("initial_point_rms_px")
     payload["format"] = "gimap-geometry-calibration"
     payload["format_version"] = 1
     return payload
@@ -116,7 +118,14 @@ def test_an_export_keeps_its_numbers_and_keys_and_names_the_convention(tmp_path:
     assert "center_x_px" in convention["description"] and "0.5 px higher" in convention["description"]
     # It names the windows that show the other numbers: not every tool window of GIMaP counts pixels that way.
     assert "Geometry Calibration and Analyze windows" in convention["description"]
-    # Apart from that one field, the record is the former one, value for value.
+    # A flat candidate omits the tilt-only fields so a pre-tilt reader accepts it.
+    # Check their historical defaults, then every remaining value and key.
+    for candidate in (former["selected_candidate"], *former["candidates"]):
+        assert candidate.pop("tilt_refined") is False
+        for key in ("rot1_deg", "rot2_deg", "rot3_deg"):
+            assert candidate.pop(key) == 0.0
+        for key in ("point_rms_px", "untilted_point_rms_px", "rot1_sigma_deg", "rot2_sigma_deg"):
+            assert candidate.pop(key) is None
     assert written == former
     assert written["format_version"] == 1
     assert written["selected_candidate"]["center_x_px"] == 182.47412173380593

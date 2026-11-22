@@ -72,6 +72,28 @@ class GuiWorkbench:
     def set_incidence(self, degrees: Optional[float]) -> dict:
         return self._apply(lambda done: self._automation.set_incidence(degrees, done))
 
+    def apply_sample_roll(self, degrees: Optional[float]) -> dict:
+        """An explicit value wins. Otherwise measure the displayed frame on the pipeline worker."""
+        frame, record = None, None
+        if degrees is None:
+            frame, measure = self._call(self._automation.prepare_sample_roll)
+            result = measure()
+            record = result.as_dict()
+            degrees = result.deg if result.significant else None
+        return self._apply(lambda done: self._automation.set_sample_roll(degrees, record, frame, done))
+
+    def set_orientation_min_exit(self, degrees: float) -> dict:
+        return self._apply(lambda done: self._automation.set_orientation_min_exit(degrees, done))
+
+    def apply_frame_angles(self, roll_policy, roll_deg, reference_deg, reference_source, keep_incidence,
+                           yoneda_critical_deg=None, yoneda_material=None) -> dict:
+        frame, measure, critical_source = self._call(self._automation.prepare_frame_angles, roll_policy, roll_deg,
+                                                     yoneda_critical_deg, yoneda_material)
+        roll, incidence = measure()
+        return self._apply(lambda done: self._automation.set_frame_angles(
+            frame, roll_policy, roll_deg, roll, incidence, reference_deg, reference_source, critical_source,
+            keep_incidence, done))
+
     def set_critical_angle(self, degrees: Optional[float]) -> dict:
         return self._apply(lambda done: self._automation.set_critical_angle(degrees, done))
 
@@ -106,8 +128,8 @@ class GuiWorkbench:
     def show(self, view: Optional[str] = None, lower_profile: Optional[str] = None) -> None:
         self._call(self._automation.show, view, lower_profile)
 
-    def export_curves(self) -> list[str]:
-        return list(self._call(self._automation.export_current))
+    def export_curves(self, extra_metadata: Optional[dict] = None) -> list[str]:
+        return list(self._call(self._automation.export_current, extra_metadata))
 
     def preview_png(self, max_size: int = 900) -> Optional[bytes]:
         return self._call(self._automation.preview_png, max_size)
@@ -120,6 +142,28 @@ class GuiWorkbench:
 
     def ring_frame(self) -> dict:
         return self._call(self._automation.ring_frame)
+
+    def set_phases(self, phases) -> dict:
+        return self._call(self._automation.set_phases, list(phases))
+
+    def assign_peaks(self, peaks) -> dict:
+        return self._call(self._automation.assign_peaks, list(peaks))
+
+    def pole_figure(self, background=None, model: str = "gaussian", chi0_deg=None) -> dict:
+        fit = self._call(self._automation.prepare_pole, background, model, chi0_deg)
+        return self._call(self._automation.store_pole, fit())
+
+    def crystal_orientation(self, assignment, check_cancel) -> list[dict]:
+        fit = self._call(self._automation.prepare_crystal_orientation, assignment, check_cancel)
+        result = fit()
+        self._call(lambda: None)  # a pinned run still belongs to the frame shown
+        return result
+
+    def refine_cells(self, assignment, orientations, max_peaks, check_cancel):
+        fit = self._call(self._automation.prepare_cell_refinement, assignment, orientations, max_peaks, check_cancel)
+        result = fit()
+        self._call(lambda: None)
+        return result
 
     def set_beam_center(self, x_px: float, y_px: float) -> dict:
         return self._apply(lambda done: self._automation.set_beam_center(x_px, y_px, done))

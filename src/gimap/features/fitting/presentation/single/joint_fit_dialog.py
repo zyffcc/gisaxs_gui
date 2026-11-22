@@ -1,0 +1,572 @@
+"""Fit Several Curves Together (Fitting ▸ Fit Several Curves Together…; Analyze ▸ Send Both Cuts to Fitting): the
+behaviour of ``views/joint_fit_view.py`` (application: ``application/joint_fit.py``; Physics and Methods 9.18).
+
+The model is the one in Model of Single analysis when the fit starts: its particles, their values, freedom and ranges.
+The curves are added from files, from the page, or by Analyze (both cuts of a frame with their geometry). Each
+curve's kind and geometry are edited under the list; the substrate is the sample's, the same for all. A free value is
+shared (fitted once) or each curve's own; the scales are always each curve's own. The fit runs in the background with
+its progress and Stop (the best values so far are kept); Use in Model puts the values of the first horizontal cut into
+Model, Save Record… writes the whole fit as JSON.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import threading
+from pathlib import Path
+
+import numpy as np
+from PyQt5.QtCore import QObject, QSignalBlocker, Qt, pyqtSignal
+from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem
+
+from src.gimap.app.presentation.components import show_toast
+from src.gimap.app.presentation.i18n import FormattedText, language_changed, tr, trf
+from src.gimap.app.presentation.task_runner import TaskRunner
+from src.gimap.shared.numbers import format_number
+
+from ...application import CURVE_SUFFIXES, LoadCurveRequest
+from ...application.joint_fit import (
+    DEFAULT_MIN_EXIT_ANGLE_AC,
+    FEW_ABOVE_CUTOFF,
+    HEIGHT_ASSUMPTION,
+    HEIGHT_RANGE_LINE,
+    KINDS,
+    CurveSpec,
+    curve_errors,
+    default_shared,
+    height_range_rows,
+    hints,
+    joint_record,
+    model_for_page,
+    needs_attention,
+    plot_points,
+    run_joint_fit,
+    shareable,
+    substrate_of,
+    values_of,
+    warnings,
+    with_heights,
+)
+from ...application.single_fit import FAMILIES, Curve
+from ...application.substrate_level import CUSTOM, SUBSTRATE_CHOICES
+from ..views.joint_fit_view import build_joint_dialog
+from .results import folder_action
+from .run import progress_line
+from .session import path_name
+
+CURVE_FILTER = "Curves ({});;All files (*)".format(" ".join(f"*{suffix}" for suffix in CURVE_SUFFIXES))
+METHODS = (("local", "Refine: from the values in Model"), ("global", "Search the ranges, then refine"))
+SUMMARY = ("χ²ᵣ {chi2} over {points} points of {curves} curves and {free} free values · {outcome} · "
+           "{evaluations} evaluations, {seconds:.1f} s")
+CURVE_LINE = "{name}: Σr²/N = {value} ({points} points, {weighting})"
+BOUNDS = "At a bound of its range: {names}"
+MIXED = "The curves are weighted differently (some by σ, some by ln I): their χ² are not comparable."
+NOT_ADDED = "{name} was not added: {reason}"
+GEOMETRY = {"horizontal": "αi {ai}°, αf {af}°, λ {wl} nm", "vertical": "αi {ai}°, q∥ {qp} nm⁻¹, λ {wl} nm",
+            "other": "q_z = 0"}
+CHOOSE_SUBSTRATE = "Choose substrate for vertical cut"
+
+
+class _Progress(QObject):
+    changed = pyqtSignal(float, str)
+
+
+class JointFitDialog:
+    """The window and what it does; ``page``: Single analysis (its model, curve and ``set_model``)."""
+
+    def __init__(self, page, view_model, parent):
+        self.page, self.view_model = page, view_model
+        self.specs: list[CurveSpec] = []
+        self.result = None
+        self.result_specs: list[CurveSpec] = []
+        self.result_substrate = None
+        self._formatted_status = None
+        self.tasks = TaskRunner(parent)
+        self._stop = threading.Event()
+        self._signal = _Progress(parent)
+        self._signal.changed.connect(self._progress)
+        build_joint_dialog(self, parent)
+        self.joint_min_exit.setValue(DEFAULT_MIN_EXIT_ANGLE_AC)
+        for key, text in KINDS:
+            self.joint_kind.addItem(tr(text), key)
+        for key, text in SUBSTRATE_CHOICES:
+            self.joint_substrate.addItem(tr(text), key)
+        for key, text in METHODS:
+            self.joint_method.addItem(tr(text), key)
+        for key, (name, _parameters) in FAMILIES.items():
+            self.joint_family.addItem(tr(name), key)
+        self._sync_substrate()
+        self._connect()
+        language_changed().connect(self.refresh_language)
+        self._render()
+
+    def _connect(self) -> None:
+        self.joint_add_files.clicked.connect(self.add_files_dialog)
+        self.joint_add_current.clicked.connect(self.add_page_curve)
+        self.joint_remove.clicked.connect(self.remove_selected)
+        self.joint_curves.itemSelectionChanged.connect(self._selected)
+        self.joint_kind.currentIndexChanged.connect(lambda _i: self._edited())
+        for box in (self.joint_alpha_i, self.joint_alpha_f, self.joint_wavelength, self.joint_q_parallel,
+                    self.joint_critical):
+            box.valueChanged.connect(lambda _v: self._edited())
+        self.joint_substrate.currentIndexChanged.connect(lambda _i: self._sync_substrate())
+        self.joint_family.activated.connect(self._choose_family)
+        self.joint_run.clicked.connect(self.run)
+        self.joint_stop.clicked.connect(self._stop.set)
+        self.joint_shown.currentIndexChanged.connect(lambda _i: self._plot())
+        self.joint_use.clicked.connect(self.use_in_model)
+        self.joint_save.clicked.connect(lambda: self.save_record_dialog())
+        self.joint_report.clicked.connect(lambda: self.save_report_dialog())
+
+    def show(self) -> None:
+        self._render()
+        self._summary()
+        self.joint_dialog.show()
+        self.joint_dialog.raise_()
+
+    # -- curves -------------------------------------------------------------------------------------------------
+
+    def _page_globals(self) -> dict:
+        g = self.page.session.model.globals
+        return {key: float(g[name].value) for key, name in (("alpha_i", "alpha_i"), ("alpha_f", "alpha_f"),
+                                                             ("wavelength", "wavelength"))}
+
+    def add_spec(self, spec: CurveSpec) -> None:
+        self.specs.append(spec)
+        self._render()
+        self.joint_curves.selectRow(len(self.specs) - 1)
+        self._warn()
+
+    def add_page_curve(self) -> bool:
+        curve = self.page.session.curve
+        if curve is None:
+            self._say(tr("Single analysis has no curve open."), "warning")
+            return False
+        self.add_spec(CurveSpec(curve.name, curve.q, curve.intensity, curve.sigma, "horizontal", path=curve.path,
+                                dq=curve.dq, source=curve.source, **self._page_globals()))
+        return True
+
+    def add_file(self, path, geometry=None) -> bool:
+        """A curve file: its kind and geometry from the file (Analyze's vertical cut) or ``geometry``, else those of
+        the page's Model."""
+        path = Path(path)
+        outcome = self.view_model.load_curve(LoadCurveRequest(path, self.page.unit_setting(), keep_missing_sigma=True))
+        if outcome.error is not None:
+            self._say(trf(NOT_ADDED, name=path.name, reason=tr(outcome.error.message)), "error")
+            return False
+        loaded = outcome.value
+        curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=path.name, path=str(path),
+                                  unit=loaded.q_source_unit, dq=loaded.dq)
+        found = {**self._page_globals(), **hints(getattr(loaded, "observation", None)), **dict(geometry or {})}
+        kind = found.pop("kind", "horizontal")
+        alpha_f = found.pop("horizontal_alpha_f", None)
+        if kind == "horizontal" and alpha_f is not None:
+            found["alpha_f"] = alpha_f
+        allowed = {"alpha_i", "alpha_f", "wavelength", "q_parallel", "critical_angle", "band_crosses_specular"}
+        self.add_spec(CurveSpec(path.name, curve.q, curve.intensity, curve.sigma, kind, path=str(path),
+                                dq=curve.dq, source=curve.source, **{k: v for k, v in found.items() if k in allowed}))
+        return True
+
+    def add_files_dialog(self) -> None:
+        paths, _ = QFileDialog.getOpenFileNames(self.joint_dialog, tr("Add Curves"), "", CURVE_FILTER)
+        for path in paths:
+            self.add_file(path)
+
+    def remove_selected(self) -> None:
+        row = self.joint_curves.currentRow()
+        if 0 <= row < len(self.specs):
+            del self.specs[row]
+            self._render()
+            self._warn()
+
+    def _selected(self) -> None:
+        row = self.joint_curves.currentRow()
+        spec = self.specs[row] if 0 <= row < len(self.specs) else None
+        widgets = (self.joint_kind, self.joint_alpha_i, self.joint_alpha_f, self.joint_wavelength,
+                   self.joint_q_parallel, self.joint_critical)
+        blockers = [QSignalBlocker(w) for w in widgets]
+        for widget in widgets:
+            widget.setEnabled(spec is not None)
+        if spec is not None:
+            self.joint_kind.setCurrentIndex(max(0, self.joint_kind.findData(spec.kind)))
+            for box, value in ((self.joint_alpha_i, spec.alpha_i), (self.joint_alpha_f, spec.alpha_f),
+                               (self.joint_wavelength, spec.wavelength), (self.joint_q_parallel, spec.q_parallel),
+                               (self.joint_critical, spec.critical_angle)):
+                box.setValue(value)
+            self._kind_fields(spec.kind)
+        del blockers
+
+    def _kind_fields(self, kind: str) -> None:
+        self.joint_alpha_f.setEnabled(kind == "horizontal")
+        self.joint_q_parallel.setEnabled(kind == "vertical")
+        self.joint_critical.setEnabled(kind == "vertical")
+        self.joint_alpha_i.setEnabled(kind != "other")
+
+    def _edited(self) -> None:
+        row = self.joint_curves.currentRow()
+        if not 0 <= row < len(self.specs):
+            return
+        kind = str(self.joint_kind.currentData())
+        self.specs[row] = self.specs[row].with_geometry(
+            kind=kind, alpha_i=self.joint_alpha_i.value(), alpha_f=self.joint_alpha_f.value(),
+            wavelength=self.joint_wavelength.value(), q_parallel=self.joint_q_parallel.value(),
+            critical_angle=self.joint_critical.value())
+        self._kind_fields(kind)
+        self._fill_curves()
+        self._fill_parameters()
+        self._ready()
+        self._plot()
+        self._warn()
+
+    def _warn(self) -> None:
+        found = warnings(self.specs)
+        if found:
+            self._say(" ".join("⚠ " + trf(template, **values) for template, values in found), "warning")
+        elif self.joint_status.text().startswith("⚠ "):
+            self._say("", "info")
+
+    def _sync_substrate(self) -> None:
+        custom = self.joint_substrate.currentData() == CUSTOM
+        for widget in (self.joint_delta_label, self.joint_delta, self.joint_beta_label, self.joint_beta):
+            widget.setVisible(custom)
+        self._ready()
+
+    def _ready(self) -> None:
+        vertical = any(spec.kind == "vertical" for spec in self.specs)
+        self.joint_substrate.setItemText(0, tr(CHOOSE_SUBSTRATE if vertical else SUBSTRATE_CHOICES[0][1]))
+        self.joint_run.setEnabled(bool(self.specs) and not self.tasks.is_busy()
+                                  and (not vertical or bool(self.joint_substrate.currentData())))
+
+    def substrate(self):
+        def number(field):
+            try:
+                return float(field.text().replace(",", "."))
+            except ValueError:
+                return 0.0
+
+        return substrate_of(str(self.joint_substrate.currentData() or ""), number(self.joint_delta),
+                            number(self.joint_beta))
+
+    def set_substrate(self, material: str, delta: float = 0.0, beta: float = 0.0) -> None:
+        self.joint_substrate.setCurrentIndex(max(0, self.joint_substrate.findData(material)))
+        if material == CUSTOM:
+            self.joint_delta.setText(f"{delta:.6g}")
+            self.joint_beta.setText(f"{beta:.6g}")
+
+    # -- the parameters -----------------------------------------------------------------------------------------
+
+    def _model(self):
+        model = self.page.session.model
+        return with_heights(model) if any(s.kind == "vertical" for s in self.specs) else model
+
+    def _choose_family(self, index: int) -> None:
+        if len(self.page.session.model.components) == 1:
+            self.page.model_editor.set_family(0, self.joint_family.itemData(index))
+            self._render()
+
+    def _same_families(self) -> bool:
+        return self.result is not None and [c.family for c in self.result.models[0].components] == [
+            c.family for c in self.page.session.model.components]
+
+    def shared(self) -> set:
+        out = set()
+        for line in range(self.joint_parameters.rowCount()):
+            box, item = self.joint_parameters.item(line, 1), self.joint_parameters.item(line, 0)
+            if box is not None and item is not None and box.checkState() == Qt.Checked:
+                out.add(tuple(item.data(Qt.UserRole)))
+        return out
+
+    def _fill_parameters(self) -> None:
+        model = self._model()
+        before = {tuple(self.joint_parameters.item(i, 0).data(Qt.UserRole)):
+                  self.joint_parameters.item(i, 1).checkState() == Qt.Checked
+                  for i in range(self.joint_parameters.rowCount())
+                  if self.joint_parameters.item(i, 0) is not None and self.joint_parameters.item(i, 1) is not None}
+        paths = shareable(model)
+        default = default_shared(model)
+        table = self.joint_parameters
+        table.setRowCount(len(paths))
+        result = self.result if self._same_families() else None
+        fitted_paths = {path for path, _p in result.models[0].parameters()} if result is not None else set()
+        for line, path in enumerate(paths):
+            item = QTableWidgetItem(path_name(model, path, unit=True, full=True))
+            item.setData(Qt.UserRole, list(path))
+            table.setItem(line, 0, item)
+            box = QTableWidgetItem("")
+            height = path[1] in ("h", "sigma_h") and model.components[path[0]].heights
+            box.setFlags(Qt.ItemIsUserCheckable | (Qt.NoItemFlags if height else Qt.ItemIsEnabled))
+            box.setCheckState(Qt.Checked if (height or before.get(path, path in default)) else Qt.Unchecked)
+            table.setItem(line, 1, box)
+            value, error = format_number(model.get(path).value), "—"
+            if path in fitted_paths:
+                found = values_of(result, path)
+                cells = [(format_number(v, e, value_only=True), format_number(e, e, value_only=True))
+                         for v, e in found]
+                if all(cell == cells[0] for cell in cells):
+                    cells = cells[:1]
+                value = " | ".join(v for v, _ in cells)
+                error = " | ".join(e for _, e in cells)
+            table.setItem(line, 2, QTableWidgetItem(value))
+            table.setItem(line, 3, QTableWidgetItem(error))
+
+    # -- rendering ----------------------------------------------------------------------------------------------
+
+    def _fill_curves(self) -> None:
+        table = self.joint_curves
+        kinds = dict(KINDS)
+        table.setRowCount(len(self.specs))
+        for line, spec in enumerate(self.specs):
+            geometry = trf(GEOMETRY[spec.kind], ai=f"{spec.alpha_i:g}", af=f"{spec.alpha_f:g}",
+                           wl=f"{spec.wavelength:g}", qp=f"{spec.q_parallel:g}")
+            for column, text in enumerate((spec.name, tr(kinds[spec.kind]), str(len(spec.q)), geometry)):
+                item = QTableWidgetItem(text)
+                item.setToolTip(text)
+                table.setItem(line, column, item)
+
+    def _render(self) -> None:
+        row = self.joint_curves.currentRow()
+        self._fill_curves()
+        if 0 <= row < len(self.specs):
+            self.joint_curves.selectRow(row)
+        self._selected()
+        components = self.page.session.model.components
+        self.joint_family_label.setVisible(len(components) == 1)
+        self.joint_family.setVisible(len(components) == 1)
+        if len(components) == 1:
+            self.joint_family.setCurrentIndex(self.joint_family.findData(components[0].family))
+        self._fill_parameters()
+        busy = self.tasks.is_busy()
+        self._ready()
+        self.joint_family.setEnabled(not busy)
+        self.joint_add_current.setEnabled(self.page.session.curve is not None)
+        self.joint_use.setEnabled(self._same_families() and not busy)
+        self.joint_save.setEnabled(self.result is not None)
+        self.joint_report.setEnabled(self.result is not None)
+        blocker = QSignalBlocker(self.joint_shown)
+        previous = self.joint_shown.currentText()
+        self.joint_shown.clear()
+        for spec in (self.result_specs if self.result is not None else self.specs):
+            self.joint_shown.addItem(spec.name)
+        self.joint_shown.setCurrentIndex(max(0, self.joint_shown.findText(previous)))
+        del blocker
+        self._plot()
+
+    def _plot(self) -> None:
+        index = self.joint_shown.currentIndex()
+        specs = self.specs if self.result is None else self.result_specs
+        self.joint_dimensions.setVisible(self.result is not None)
+        if not 0 <= index < len(specs):
+            self.joint_plot.set_curves([])
+            self.joint_plot.set_empty_text(tr("Add the curves, then Fit Together: each curve is shown here with its "
+                                              "model."))
+            return
+        spec = specs[index]
+        self.joint_plot.set_labels("q_z (nm⁻¹)" if spec.kind == "vertical" else "|q| (nm⁻¹)", "I")
+        if self.result is None:
+            x = spec.q if spec.kind == "vertical" else np.abs(spec.q)
+            self.joint_plot.set_curves([(spec.name, x, spec.intensity)], markers=[True])
+            return
+        model = self.result.models[index]
+        errors = curve_errors(self.result, index)
+        dimensions = []
+        for owner, component in enumerate(model.components):
+            values = []
+            for key in ("R", "h"):
+                if key in component.keys():
+                    value = component.value(key)
+                    error = errors.get((owner, key), math.nan)
+                    estimate = format_number(value, error)
+                    values.append(f"{key} = {estimate} nm")
+            dimensions.append(" · ".join([tr(FAMILIES[component.family][0]), *values]))
+        self.joint_dimensions.setText(trf("Last fit: {dimensions}", dimensions="\n".join(dimensions)))
+        try:
+            x, y, fitted = plot_points(spec, model)
+        except ValueError as exc:
+            self.joint_plot.set_curves([])
+            self.joint_plot.set_empty_text(str(exc))
+            return
+        self.joint_plot.set_curves([(spec.name, x, y), (tr("Model"), x, fitted)], markers=[True, None])
+
+    # -- the fit ------------------------------------------------------------------------------------------------
+
+    def run(self) -> None:
+        if not self.specs or self.tasks.is_busy():
+            return
+        try:
+            substrate = self.substrate()
+        except ValueError as exc:
+            self._say(str(exc), "error")
+            return
+        specs, model, shared = list(self.specs), self.page.session.model, self.shared()
+        method = str(self.joint_method.currentData())
+        min_exit_angle_ac = self.joint_min_exit.value()
+        self._stop.clear()
+        self.joint_run.setEnabled(False)
+        self.joint_family.setEnabled(False)
+        self.joint_stop.show()
+        self.joint_progress.setRange(0, 100)
+        self.joint_progress.setValue(0)
+        self.joint_progress.show()
+        self._say(tr("Fitting the curves together …"), "info")
+        job = lambda: run_joint_fit(specs, model, substrate, shared, method=method,  # noqa: E731
+                                    min_exit_angle_ac=min_exit_angle_ac, progress=self._signal.changed.emit,
+                                    stop=self._stop.is_set)
+        self.tasks.submit("joint", job, on_done=lambda result: self._done(result, specs, substrate),
+                          on_error=lambda message, _details="": self._failed(message))
+
+    def _progress(self, fraction: float, line: str) -> None:
+        self.joint_progress.setValue(int(100 * fraction))
+        self._set_status_text(progress_line(line))
+
+    def _finish(self) -> None:
+        self.joint_stop.hide()
+        self.joint_progress.hide()
+
+    def _failed(self, message: str) -> None:
+        self._finish()
+        ending = FEW_ABOVE_CUTOFF.removeprefix("{name}")
+        reason = trf(FEW_ABOVE_CUTOFF, name=message[:-len(ending)]) if message.endswith(ending) else tr(message)
+        self._say(trf("The fit failed: {reason}", reason=reason), "error")
+        self._render()
+
+    def _done(self, result, specs, substrate) -> None:
+        self._finish()
+        self.result, self.result_specs, self.result_substrate = result, specs, substrate
+        self._render()
+        self._summary()
+        self._say(tr("Stopped: the best values so far are kept.") if result.stopped else tr("The curves were fitted "
+                                                                                             "together."), "ok")
+
+    def _report_blocks(self) -> list:
+        result = self.result
+        outcome = tr("stopped") if result.stopped else tr("converged") if result.converged else tr("not converged")
+        lines = [trf(SUMMARY, chi2=f"{result.chi2_reduced:.3g}", points=sum(result.points), curves=len(result.points),
+                     free=result.free, outcome=outcome, evaluations=result.evaluations, seconds=result.seconds)]
+        for i, spec in enumerate(self.result_specs):
+            value, points, weighting = result.curve_chi2[i], result.points[i], result.weightings[i]
+            lines.append(trf(CURVE_LINE, name=spec.name, value=f"{value:.4g}", points=points,
+                             weighting=tr("σ") if weighting == "sigma" else tr("ln I")))
+            cut = result.models[i].cut
+            if cut is not None:
+                lines.append(trf("Lowest exit angle of the vertical cut ({name}) = {multiple} αc ({degrees}°).",
+                                 name=spec.name, multiple=f"{cut.min_exit_angle_ac:g}",
+                                 degrees=f"{cut.min_exit_angle_deg:.5g}"))
+                chi2 = result.reduced_chi2_for(i)
+                if math.isfinite(chi2):
+                    lines.append(trf("Vertical reduced χ² = {value}", value=f"{chi2:.3g}"))
+        for row in height_range_rows(result):
+            lines.append(trf(HEIGHT_RANGE_LINE, height=row["height"],
+                             selected=format_number(row["selected_nm"], row["selected_sigma_nm"]),
+                             alternate=format_number(row["alternate_nm"], row["alternate_sigma_nm"]),
+                             multiple=f"{result.height_range_check.min_exit_angle_ac:g}"))
+        lines.append(tr(HEIGHT_ASSUMPTION))
+        attention = [trf(template, **values) for template, values in needs_attention(result, self.result_specs)]
+        if len(set(result.weightings)) > 1:
+            attention.append(tr(MIXED))
+        if result.at_bounds:
+            from ...application.joint_fit import key_name
+
+            attention.append(trf(BOUNDS, names=", ".join(key_name(key) for key in result.at_bounds)))
+        blocks = [("p", line) for line in lines]
+        if attention:
+            blocks += [("h2", tr("Needs attention")), ("ul", attention)]
+        return blocks
+
+    def _summary(self) -> None:
+        blocks = self._report_blocks() if self.result is not None else []
+        lines = []
+        for kind, body in blocks:
+            if kind == "ul":
+                lines.extend("⚠ " + item for item in body)
+            else:
+                lines.append(body)
+        self.joint_summary.setText("\n".join(lines))
+
+    def use_in_model(self) -> None:
+        if self.result is None:
+            return
+        number = next((i for i, s in enumerate(self.result_specs) if s.kind == "horizontal"), 0)
+        model = model_for_page(self.page.session.model, self.result, number)
+        self.page.set_model(model, message=lambda: tr("The values of the joint fit are in Model."),
+                            label=("a joint fit", {}))
+
+    def save_record_dialog(self, path=None):
+        if self.result is None:
+            return None
+        path = path or QFileDialog.getSaveFileName(self.joint_dialog, tr("Save Record"), "joint_fit.json",
+                                                   "JSON (*.json)")[0]
+        if not path:
+            return None
+        text = json.dumps(joint_record(self.result, self.result_specs, self.result_substrate), indent=1,
+                          ensure_ascii=False, allow_nan=False)
+        return self._save_text(path, text)
+
+    def save_report_dialog(self, path=None):
+        if self.result is None:
+            return None
+        path = path or QFileDialog.getSaveFileName(self.joint_dialog, tr("Save Report…"), "joint_fit.md",
+                                                   tr("Markdown (*.md)"))[0]
+        if not path:
+            return None
+        from ...application.fit_report import render
+
+        parts = [("h1", tr("Fit Several Curves Together")), *self._report_blocks()]
+        rows = []
+        for index, spec in enumerate(self.result_specs):
+            model = self.result.models[index]
+            errors = curve_errors(self.result, index)
+            for path_key, parameter in model.parameters():
+                if path_key[0] == "globals" and not parameter.free:
+                    continue
+                error = errors.get(path_key, math.nan)
+                rows.append([spec.name, path_name(model, path_key, unit=True, full=True),
+                             format_number(parameter.value, error, value_only=True), format_number(error, error, value_only=True)])
+        if rows:
+            parts += [("h2", tr("Parameters")), ("table", [tr("Curve"), tr("Parameter"), tr("Value"), "± 1σ"], rows)]
+        return self._save_text(path, render(parts, "markdown"))
+
+    def _save_text(self, path, text):
+        try:
+            Path(path).write_text(text, encoding="utf-8")
+        except OSError as exc:
+            self._say(trf("Could not save {name}: {reason}", name=Path(path).name, reason=str(exc)), "error")
+            return None
+        saved = trf("Saved {name}.", name=Path(path).name)
+        self._say(saved, "ok")
+        show_toast(self.joint_dialog, saved, level="ok", action=folder_action(path))
+        return path
+
+    def _say(self, text: str, level: str) -> None:
+        self._set_status_text(text)
+        self.joint_status.setProperty("gimapRole", {"error": "danger", "warning": "warning"}.get(level, "muted"))
+        self.joint_status.style().unpolish(self.joint_status)
+        self.joint_status.style().polish(self.joint_status)
+
+    def _set_status_text(self, text: str) -> None:
+        self._formatted_status = text if isinstance(text, FormattedText) else None
+        self.joint_status.setText(text)
+
+    def refresh_language(self) -> None:
+        for combo, items in ((self.joint_kind, KINDS), (self.joint_substrate, SUBSTRATE_CHOICES),
+                             (self.joint_method, METHODS)):
+            for index, (_key, text) in enumerate(items):
+                combo.setItemText(index, tr(text))
+        for index, (name, _parameters) in enumerate(FAMILIES.values()):
+            self.joint_family.setItemText(index, tr(name))
+        self._render()
+        self._summary()
+        if self._formatted_status is not None:
+            self.joint_status.setText(self._formatted_status.current())
+        self._warn()
+
+    def dispose(self) -> None:
+        self._stop.set()
+        self.tasks.shutdown(2000)
+        try:
+            language_changed().disconnect(self.refresh_language)
+        except TypeError:  # not connected
+            pass
+
+
+__all__ = ["JointFitDialog", "METHODS"]

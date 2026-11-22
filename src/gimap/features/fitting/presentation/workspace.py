@@ -27,6 +27,7 @@ from .single.page import FitPage
 from .single.series_page import FitSeriesPage
 from .workspace_context import FittingContextContainer
 from .workspace_imports import CurveImportMixin
+from .workspace_joint import JointFitMixin
 from ..application.models import InSituSourceFrame
 
 GIWAXS_SOURCE = "radial_bins"
@@ -68,7 +69,7 @@ class _RunEnds(QObject):
         return False
 
 
-class FittingWorkspace(CurveImportMixin):
+class FittingWorkspace(CurveImportMixin, JointFitMixin):
     """Single analysis (one curve) and In-situ series (many curves) of Fitting."""
 
     def __init__(

@@ -32,7 +32,7 @@ from .batch_model import BatchModelMixin
 from .export_model import EXPORT_FOLDER, ExportModelMixin
 from .gisaxs_cuts_model import GisaxsCutsModelMixin
 from .options_model import GAP_GUARD_KEY, OptionsModelMixin
-from .texts import flat_detector_summary, tilt_summary
+from .geometry_summary import geometry_summary
 
 
 @dataclass
@@ -43,6 +43,12 @@ class AnalyzeState:
     mode: str = AUTO
     profile_name: Optional[str] = None
     incidence_deg: Optional[float] = None
+    sample_roll_deg: Optional[float] = None
+    sample_roll_measurement: Optional[dict] = None
+    incidence_measurement: Optional[dict] = None
+    incidence_locked: bool = False
+    yoneda_critical_deg: Optional[float] = None
+    yoneda_material: Optional[str] = None
     gisaxs: GisaxsCutSettings = field(default_factory=GisaxsCutSettings)
     giwaxs: GiwaxsSettings = field(default_factory=GiwaxsSettings)
     analysis: Optional[FrameAnalysis] = None
@@ -54,6 +60,8 @@ class AnalyzeState:
     corrections: Corrections = field(default_factory=Corrections)
     sum_count: int = 1
     """Consecutive frames summed into one analysis (1: none)."""
+    forced_shapes: tuple = ()
+    """Frame sizes the chosen profile is used on although it is for another size (``AnalysisRequest``)."""
 
     @property
     def beam_center_shape(self) -> Optional[tuple[int, int]]:
@@ -98,6 +106,10 @@ class AnalyzeViewModel(
 
     # -- files (listing and the folder watch: ``sources_model.py``) -------------------------
 
+    @property
+    def frames(self) -> FrameSource:
+        return self._frames
+
     def request_for(
         self, path: Path, frame_index: int = 0, *, summed: Optional[tuple] = None
     ) -> AnalysisRequest:
@@ -111,12 +123,17 @@ class AnalyzeViewModel(
             mode=self.state.mode,
             profile_name=self.state.profile_name,
             incidence_deg=self.state.incidence_deg,
+            incidence_measurement=self.state.incidence_measurement, incidence_locked=self.state.incidence_locked,
+            yoneda_critical_deg=None if self.state.yoneda_material else self.state.yoneda_critical_deg,
+            yoneda_material=self.state.yoneda_material,
+            sample_roll_deg=self.state.sample_roll_deg, sample_roll_measurement=self.state.sample_roll_measurement,
             gisaxs=self.state.gisaxs,
             giwaxs=self.state.giwaxs,
             beam_center=self.state.beam_center,
             beam_center_shape=self.state.beam_center_shape,
             use_header_center=self.use_header_center,
             corrections=self.state.corrections,
+            forced_shapes=self.state.forced_shapes,
         )
 
     def clear_files(self) -> None:
@@ -165,11 +182,12 @@ class AnalyzeViewModel(
     def set_mode(self, mode: str) -> None:
         self.state.mode = mode
 
-    def set_profile(self, name: Optional[str]) -> None:
-        self.state.profile_name = name or None
-
     def set_incidence(self, incidence_deg: Optional[float]) -> None:
         self.state.incidence_deg = None if incidence_deg is None else float(incidence_deg)
+        self.state.incidence_measurement = None
+
+    def set_incidence_measurement(self, record: Optional[dict]) -> None:
+        self.state.incidence_measurement = dict(record) if record else None
 
     def set_horizontal_band(self, low: float, high: float) -> None:
         low, high = sorted((float(low), float(high)))
@@ -221,7 +239,7 @@ class AnalyzeViewModel(
         path = self.current_path
         if path is None:
             return None
-        return self._shown_request(self.request_for(path, self.state.frame_index))
+        return self._shown_request(self.request_for(path, self.state.frame_index)).with_scoped_roll()
 
     def analyze(self, request: AnalysisRequest) -> FrameAnalysis:
         """Thread-safe: reuses the frame already in memory when it is the requested one and its files are as
@@ -250,29 +268,7 @@ class AnalyzeViewModel(
         self.state.analysis = None
 
     def geometry_summary(self, translate: Callable[[str], str] = str) -> str:
-        """The frame and its geometry in one line. ``translate`` turns each English template into the interface
-        language before it is filled (the page passes ``tr``); names, numbers and units are kept. A frame whose
-        file names no detector is described by its size alone."""
-        analysis = self.state.analysis
-        if analysis is None:
-            return translate("No frame loaded")
-        rows, columns = analysis.shape
-        head = " ".join(part for part in (analysis.detector_name, f"{rows}×{columns}") if part)
-        geometry = analysis.geometry
-        if geometry is None:
-            return translate("{frame} · no geometry").format(frame=head)
-        profile = analysis.resolution.profile
-        origin = {
-            "matched": translate("profile “{name}” (matched)").format(name=profile.name) if profile else "",
-            "chosen": translate("profile “{name}”").format(name=profile.name) if profile else "",
-        }.get(analysis.resolution.how, "")
-        parts = [
-            head, f"D = {geometry.distance_m * 1e3:.1f} mm", f"λ = {geometry.wavelength_angstrom:.4f} Å",
-            f"αi = {geometry.incidence_deg:.3f}°", (analysis.kind or "").upper(), origin,
-        ]
-        flat = getattr(analysis, "flat_detector", None)  # a .poni tilt the flat geometry leaves out
-        parts.extend((*tilt_summary(geometry, translate), *flat_detector_summary(flat, translate)))
-        return " · ".join(part for part in parts if part)
+        return geometry_summary(self.state.analysis, translate)
 
     @staticmethod
     def is_gisaxs(analysis: Optional[FrameAnalysis]) -> bool:

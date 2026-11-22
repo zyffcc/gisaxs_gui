@@ -12,6 +12,8 @@ from src.gimap.shared.detector_io import DETECTOR_SUFFIXES
 
 from ..texts import message_text
 from ..views.analyze_page_view import FILE_FILTER
+from .normalisation import NormalisationMixin
+from .reduction_errors import ReductionErrorsMixin
 
 APPLY_DELAY_MS = 250
 FLAT_FIELD_FILTER = (
@@ -20,7 +22,7 @@ FLAT_FIELD_FILTER = (
 """A flat field is any frame the reader takes, or a NumPy array (``application/flat_field.py``)."""
 
 
-class OptionsMixin:
+class OptionsMixin(NormalisationMixin, ReductionErrorsMixin):
     """Own the Options panel; every change re-runs the analysis once it settles."""
 
     def _connect_options(self) -> None:
@@ -46,10 +48,10 @@ class OptionsMixin:
             spin.valueChanged.connect(self._limits_changed)
         self.refraction_check.toggled.connect(self._refraction_changed)
         self.critical_angle_spin.valueChanged.connect(self._refraction_changed)
-        for widget in (self.solid_angle_check, self.polarization_check, self.film_check):
+        for widget in (self.solid_angle_check, self.polarization_check):
             widget.toggled.connect(self._intensity_changed)
-        for spin in (self.polarization_spin, self.film_thickness_spin, self.attenuation_spin):
-            spin.valueChanged.connect(self._intensity_changed)
+        self.polarization_spin.valueChanged.connect(self._intensity_changed)
+        self.film_controls.changed.connect(self._intensity_changed)
         for spin in (self.in_plane_spin, self.out_of_plane_spin):
             spin.valueChanged.connect(self._sector_widths_changed)
         self.bins_spin.valueChanged.connect(self._bins_changed)
@@ -63,8 +65,10 @@ class OptionsMixin:
         self.detector_view.boxChanged.connect(self._box_dragged)
         self.sector_grid.setEnabled(False)
         self.box_grid.setEnabled(False)
-        for spin in (self.polarization_spin, self.film_thickness_spin, self.attenuation_spin, self.critical_angle_spin):
+        for spin in (self.polarization_spin, self.critical_angle_spin):
             spin.setEnabled(False)
+        self._connect_reduction_errors()
+        self._connect_normalisation()
 
     def _options_changed(self) -> None:
         self._options_timer.start()
@@ -165,15 +169,11 @@ class OptionsMixin:
         self._options_changed()
 
     def _intensity_changed(self, *_args) -> None:
-        film = self.film_check.isChecked()
         self.polarization_spin.setEnabled(self.polarization_check.isChecked())
-        self.film_thickness_spin.setEnabled(film)
-        self.attenuation_spin.setEnabled(film)
         self.view_model.set_intensity_corrections(
             solid_angle=self.solid_angle_check.isChecked(),
             polarization=self.polarization_spin.value() if self.polarization_check.isChecked() else None,
-            film_thickness_nm=self.film_thickness_spin.value() if film else None,
-            attenuation_length_um=self.attenuation_spin.value() if film else None,
+            **self.film_controls.values(),
         )
         self._options_changed()
 
@@ -229,14 +229,18 @@ class OptionsMixin:
         self._box_changed()
 
     def _sync_options(self, kind) -> None:
-        """GIWAXS cuts only make sense for a GIWAXS reduction; the GISAXS ones for GISAXS."""
+        """GIWAXS cuts only make sense for a GIWAXS reduction; the GISAXS ones for GISAXS. In transmission the cut
+        regions (rings, sectors) apply, the in-/out-of-plane sectors and the GIWAXS corrections do not."""
+        grazing_wide = kind not in ("gisaxs", "transmission")
         self.giwaxs_section.setEnabled(kind == "giwaxs")
-        self.giwaxs_section.setVisible(kind != "gisaxs")
-        self.regions_panel.setVisible(kind == "giwaxs")
+        self.giwaxs_section.setVisible(grazing_wide)
+        self.regions_panel.setVisible(kind in ("giwaxs", "transmission"))
         self.gisaxs_cuts.setVisible(kind == "gisaxs")
-        self.mirror_fill_check.setVisible(kind != "gisaxs")  # a GIWAXS correction: not offered for GISAXS
-        self.intensity_section.setVisible(kind != "gisaxs")  # GIWAXS corrections: not offered for GISAXS
+        self.mirror_fill_check.setVisible(grazing_wide)  # a GIWAXS correction: not offered for GISAXS
+        self.intensity_section.setVisible(grazing_wide)  # GIWAXS corrections: not offered for GISAXS
         self._show_flat_field()  # (GISAXS and GIWAXS) what it did to the frame now shown
+        self._sync_reduction_errors()
+        self._show_normalisation()  # what the header offers, and by what the frame was multiplied
 
 
 __all__ = ["OptionsMixin"]

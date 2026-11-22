@@ -14,12 +14,16 @@ EXPECTED_VIEWS_BY_OWNER = {
     "calibration": {"geometry_calibration_dialog_view.py"},
     "compare": {"compare_page_view.py"},
     "fitting": {
+        "curve_columns_view.py",
         "curve_import_view.py",
         "fit_page_view.py",
         "fit_results_view.py",
         "fit_step_view.py",
         "fit_series_view.py",
         "fit_steps_view.py",
+        "fit_uncertainty_view.py",
+        "joint_fit_view.py",
+        "posterior_check_view.py",
     },
     "format_converter": {
         "conversion_progress_dialog_view.py",
@@ -48,9 +52,10 @@ EXPECTED_VIEWS_BY_OWNER = {
                 "sputter_static_view.py", "sputter_steps_view.py"},
     "analyze": {
         "analyze_page_view.py", "analyze_steps_view.py", "batch_export_view.py", "batch_progress_view.py",
-        "options_panel_view.py",
-        "regions_view.py", "gisaxs_cuts_view.py", "series_view.py", "series_fit_view.py",
-        "geometry_dialog_view.py", "center_dialog_view.py", "frame_import_dialog_view.py",
+        "options_panel_view.py", "normalisation_view.py", "absolute_scale_view.py", "mask_tools_view.py",
+        "regions_view.py", "gisaxs_cuts_view.py", "series_view.py", "series_fit_view.py", "reduction_errors_view.py",
+        "geometry_dialog_view.py", "center_dialog_view.py", "frame_import_dialog_view.py", "indexing_view.py",
+        "cell_series_view.py",
     },
 }
 

@@ -30,7 +30,7 @@ ZH = {
     # Mask & Corrections and GIWAXS options: tooltips and a label (R36)
     "Frame subtracted from every analysed frame": "从每一帧中扣除的帧",
     "Stop subtracting the background": "不再扣除背景",
-    "frame − scale × background (e.g. the exposure-time ratio)": "帧 − 系数 × 背景（例如曝光时间之比）",
+    "Scale applied to the background after its dark subtraction.": "对已扣除暗场的背景乘以此比例。",
     "Frame of a NeXus background file": "NeXus 背景文件中的第几帧",
     "Also ignore pixels this close to detector gaps and bad pixels, which often read wrong and show up as spikes "
     "in cuts. Remembered between sessions.":
@@ -384,7 +384,7 @@ def test_the_options_tooltips_and_the_axis_label_have_chinese(chinese) -> None:
         tips = {
             page.background_button: "Frame subtracted from every analysed frame",
             page.background_clear_button: "Stop subtracting the background",
-            page.background_scale_spin: "frame − scale × background (e.g. the exposure-time ratio)",
+            page.background_scale_spin: "Scale applied to the background after its dark subtraction.",
             page.background_frame_spin: "Frame of a NeXus background file",
             page.gap_guard_spin: "Also ignore pixels this close to detector gaps and bad pixels, which often read wrong "
                                  "and show up as spikes in cuts. Remembered between sessions.",

@@ -164,7 +164,7 @@ class SeriesExportsMixin:
         if series is None or found is None:
             self._status(tr("The trace has no values yet."), "warning")
             return None
-        if found[0] != "change" and self._series_window()[1] == "none":  # nothing measured in the window
+        if found[0] not in ("change", "neighbour", "reference") and self._series_window()[1] == "none":  # nothing measured in the window
             self._status(tr(TRACE_NO_POINT), "warning")
             return None
         kind, values, words = found

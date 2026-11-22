@@ -26,7 +26,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from .detector_display import _colormap, _image_item_class, display_array, display_levels
+from .detector_display import _colormap, _image_item_class, display_array, display_image, display_levels
 from .levels import LevelControl, level_bar
 from .marks import DETECTOR_MARKS, MarkLayers
 from .box_zoom import zoom_button
@@ -173,9 +173,12 @@ class DetectorView(QWidget):
         self.readout_label.setToolTip(READOUT_HINT)
         self.readout_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         # The readout changes with every mouse move: it must never change the size of the view
-        # (a longer text would widen the panel, and the image would jump). Too long: cut, whole in the tooltip.
+        # (a longer text would widen the panel, and the image would jump). Two lines of fixed height: a readout
+        # in two parts (the point; its angles and d) is whole at the usual widths; a line that does not fit even
+        # so is cut at its end, whole in the tooltip.
         self.readout_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self.readout_label.setMinimumWidth(0)
+        self.readout_label.setFixedHeight(2 * self.readout_label.fontMetrics().lineSpacing() + 4)
         layout.addWidget(self.readout_label)
 
         self.log_check.toggled.connect(lambda _checked: self._redraw(keep_view=True))
@@ -297,8 +300,8 @@ class DetectorView(QWidget):
     def _redraw(self, *, keep_view: bool) -> None:
         if self._data is None:
             return
-        shown = display_array(self._data, self._valid, self.log_check.isChecked())
-        levels = self.levels.levels_for(shown, self.log_check.isChecked())
+        shown, self._level_sample = display_image(self._data, self._valid, self.log_check.isChecked())
+        levels = self.levels.levels_for(shown, self.log_check.isChecked(), self._level_sample)
         self.image_item.setImage(shown, autoLevels=False, levels=levels or (0.0, 1.0))
         if self._rect is not None:
             self.image_item.setRect(QRectF(*self._rect))
@@ -312,11 +315,12 @@ class DetectorView(QWidget):
 
     def auto_levels(self) -> None:
         """The rule's limits for the image shown now, kept for the next frames (napari's “once”)."""
-        self.levels.auto_once(self.image_item.image, self.log_check.isChecked())
+        self.levels.auto_once(self.image_item.image, self.log_check.isChecked(), getattr(self, "_level_sample", None))
 
     def _apply_levels(self) -> None:
         image = self.image_item.image
-        levels = None if image is None else self.levels.levels_for(image, self.log_check.isChecked())
+        levels = None if image is None else self.levels.levels_for(
+            image, self.log_check.isChecked(), getattr(self, "_level_sample", None))
         if levels is not None:
             self.image_item.setLevels(levels)
             self.color_bar.set_levels(levels)
@@ -472,11 +476,12 @@ class DetectorView(QWidget):
         finally:
             self._updating_bands = False
 
-    def show_horizon(self, y: Optional[float]) -> None:
+    def show_horizon(self, y: Optional[float], *, x: float = 0.0, angle: float = 0.0) -> None:
         if y is None or not np.isfinite(y):
             self.marks.track("horizon", self.horizon_line, False)
             return
-        self.horizon_line.setValue(float(y))
+        self.horizon_line.setAngle(angle)
+        self.horizon_line.setPos((float(x), float(y)))
         self.marks.track("horizon", self.horizon_line, True)
 
     def show_markers(self, points, *, symbol: str = "+", color: str = "#22d3ee", size: int = 16) -> None:
@@ -537,17 +542,21 @@ class DetectorView(QWidget):
         point = self.view_box.mapSceneToView(position)
         x, y = float(point.x()), float(point.y())
         value = self.value_at(x, y)
-        text = f"x = {x:.1f}, y = {y:.1f}   I = {value:.4g}" if value is not None else f"x = {x:.1f}, y = {y:.1f}"
+        if self._rect is not None:  # q map, cake: the axes are not pixels; the formatter names the point
+            text = f"I = {value:.4g}" if value is not None else ""
+        else:
+            text = f"x = {x:.1f}, y = {y:.1f}   I = {value:.4g}" if value is not None else f"x = {x:.1f}, y = {y:.1f}"
         if self._readout is not None:
             extra = self._readout(x, y)
             if extra:
-                text += "   " + extra
-        self._show_readout(text)
+                text = f"{text}   {extra}" if text else extra
+        self._show_readout(text.strip() or READOUT_IDLE)
 
     def _show_readout(self, text: str) -> None:
-        """The cursor readout, cut to the width of the view (whole in the tooltip)."""
+        """The cursor readout on its (at most) two lines; a line wider than the view is cut, whole in the tooltip."""
         room = max(40, self.readout_label.width() - 4)
-        shown = self.readout_label.fontMetrics().elidedText(text, Qt.ElideRight, room)
+        metrics = self.readout_label.fontMetrics()
+        shown = "\n".join(metrics.elidedText(line, Qt.ElideRight, room) for line in text.split("\n")[:2])
         self.readout_label.setText(shown)
         if shown != text:
             self.readout_label.setToolTip(text)
@@ -568,4 +577,4 @@ class DetectorView(QWidget):
             self.positionClicked.emit(float(point.x()), float(point.y()))
 
 
-__all__ = ["COLORMAPS", "DetectorView", "display_array", "display_levels"]
+__all__ = ["COLORMAPS", "DetectorView", "display_array", "display_image", "display_levels"]

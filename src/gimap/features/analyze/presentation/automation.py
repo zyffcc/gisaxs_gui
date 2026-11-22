@@ -23,6 +23,9 @@ from src.gimap.shared.geometry.detector_tilt import DetectorTilt
 from ..application import q_from_two_theta, refine_center_by_symmetry, regions_from_dicts, ring_frame
 from ..application.export_record import analysis_metadata, binning, error_model
 from .bindings.batch_watch import exported_text
+from .automation_indexing import IndexingAutomationMixin
+from .automation_gisaxs import gisaxs_cut_status
+from .automation_sample_roll import SampleRollAutomationMixin
 from .automation_rings import RING_STATES, _draw_rings  # noqa: F401 - imported from here too
 from .geometry_dialog import geometry_defaults
 from .views.analyze_page_view import INCIDENCE_FROM_PROFILE
@@ -33,16 +36,6 @@ Done = Callable[[bool, str], None]
 def _number(metadata: dict, key: str, scale: float = 1.0) -> Optional[float]:
     value = metadata.get(key)
     return float(value) * scale if isinstance(value, (int, float)) and np.isfinite(value) else None
-
-
-def _pixel_span(curve, axis: str) -> Optional[list[int]]:
-    """``[first, last]`` detector rows or columns a GISAXS cut reduces, both included (as the Cuts step says
-    them: ``display.pixel_range``); ``horizontal_rows`` / ``vertical_columns`` are the band's continuous edges."""
-    span = (curve.region or {}).get(axis) if curve is not None else None
-    if not span:
-        return None
-    start, stop = int(span[0]), int(span[1])
-    return [start, max(start, stop - 1)]
 
 
 def header_values(metadata: dict) -> dict:
@@ -58,6 +51,7 @@ def header_values(metadata: dict) -> dict:
         "detector": metadata.get("detector_name"),
         "pixel_size_um": [_number(metadata, "pixel_size_x_m", 1e6), _number(metadata, "pixel_size_y_m", 1e6)],
         "energy_kev": _number(metadata, "energy_kev"),
+        "incidence_deg": _number(metadata, "incidence_deg"),
         "wavelength_angstrom": _number(metadata, "wavelength_angstrom") or _number(metadata, "header_wavelength_angstrom"),
         "distance_mm": _number(metadata, "distance_m", 1e3) or _number(metadata, "header_distance_m", 1e3),
         "beam_center_px_as_written": center,
@@ -67,7 +61,7 @@ def header_values(metadata: dict) -> dict:
     return {key: value for key, value in values.items() if value not in (None, [None, None])}
 
 
-class AnalyzeAutomation:
+class AnalyzeAutomation(IndexingAutomationMixin, SampleRollAutomationMixin):
     def __init__(self, page):
         self._page = page
         self._waiting: list[Done] = []
@@ -136,15 +130,19 @@ class AnalyzeAutomation:
                            if key in ("radial_bins", "radial_points", "bin_width")} or None
         geometry = analysis.geometry
         profile = analysis.resolution.profile
+        info.update(self.sample_roll_status(analysis))
         info["geometry"] = None if geometry is None else {
             "distance_mm": geometry.distance_m * 1e3,
             "wavelength_A": geometry.wavelength_angstrom,
             "incidence_deg": geometry.incidence_deg,
+            "sample_roll_deg": geometry.sample_roll_deg,
             "beam_center_px": [geometry.beam_center_x_px, geometry.beam_center_y_px],
             "pixel_size_um": [geometry.pixel_size_x_m * 1e6, geometry.pixel_size_y_m * 1e6],
             "instrument_profile": profile.name if profile else None,
+            "resolved_by": analysis.resolution.how,  # chosen, matched, or file: the .poni beside the frame (no profile)
             "flat_detector": analysis.flat_detector.to_dict() if analysis.flat_detector is not None else None,
             "tilt_deg": geometry.tilt_deg,
+            "orientation": geometry.orientation,
             "rotations_deg": [math.degrees(geometry.rot1_rad), math.degrees(geometry.rot2_rad),
                               math.degrees(geometry.rot3_rad)],
             "critical_angle_deg": geometry.critical_angle_deg or None,  # None: none given, q is kinematic
@@ -154,9 +152,17 @@ class AnalyzeAutomation:
             "background": Path(corrections.background_path).name if corrections.background_path else None,
             "flat_field": None if analysis.flat_field is None else {  # what the frame was divided by
                 "file": analysis.flat_field.name, "masked_pixels": analysis.flat_field.masked_pixels,
-                "normalisation_mean": analysis.flat_field.mean},
+                "normalisation_mean": analysis.flat_field.mean, "floor": analysis.flat_field.floor},
+            "pooled_scatter": analysis.corrections.pooled_scatter,
+            "poisson_variance": analysis.corrections.poisson_variance,
             "valid_range": [corrections.minimum, corrections.maximum],
             "gap_guard_px": corrections.gap_guard_px,
+            "dark": Path(corrections.dark_path).name if corrections.dark_path else None,
+            "lorentz": bool(corrections.lorentz),
+            "lorentz_band_px": corrections.lorentz_band_px,
+            "orientation_min_exit_deg": corrections.orientation_min_exit_deg,
+            "orientation_polarization": corrections.orientation_polarization,
+            "normalisation": None if analysis.normalisation is None else analysis.normalisation.to_record(),
         }
         reduction = analysis.reduction
         if reduction is not None and analysis.kind == "giwaxs":
@@ -185,22 +191,7 @@ class AnalyzeAutomation:
                 ],
             }
         if reduction is not None and analysis.kind == "gisaxs":
-            markers = reduction.markers
-            yoneda = markers.get("yoneda")
-            low, high = markers["horizontal_band"]
-            left, right = markers["vertical_band"]
-            info["gisaxs"] = {
-                "horizontal_rows": [float(low), float(high)],
-                "horizontal_pixel_rows": _pixel_span(reduction.curve("horizontal"), "rows"),
-                "horizontal_source": markers.get("horizontal_source"),
-                "yoneda_alpha_f_deg": None if yoneda is None else float(yoneda.alpha_f_deg),
-                "yoneda_row": None if yoneda is None else float(yoneda.row),
-                "horizon_row": markers.get("horizon_row"),
-                "vertical_columns": [float(left), float(right)],
-                "vertical_pixel_columns": _pixel_span(reduction.curve("vertical"), "columns"),
-                "halves": view_model.fit_side,
-                "symmetry": self._symmetry,
-            }
+            info["gisaxs"] = gisaxs_cut_status(reduction, view_model.fit_side, self._symmetry)
         curves = []
         for curve in (reduction.curves if reduction is not None else ()):
             measured = np.asarray(curve.pixels) > 0
@@ -468,13 +459,15 @@ class AnalyzeAutomation:
                 beam_center_y_px=float(values["beam_center_y_px"]),
                 wavelength_angstrom=float(values["wavelength_angstrom"]),
                 incidence_deg=float(values.get("incidence_deg") or 0.0),
+                sample_roll_deg=float(values.get("sample_roll_deg") or 0.0),
             )
         except (KeyError, TypeError, ValueError) as exc:
             done(False, f"The geometry is not valid: {exc}")
             return
         profile_name = (name or "").strip() or page.view_model.suggested_profile_name()
         tilt = DetectorTilt.from_dict(values.get("detector_tilt"))  # a .poni's tilt the flat geometry leaves out
-        page.view_model.save_profile(profile_name, geometry, source=source, dropped_tilt=tilt)
+        page.view_model.save_profile(profile_name, geometry, source=source, dropped_tilt=tilt,
+                                     sample_roll_measurement=values.get("sample_roll_measurement"))
         self._waiting.append(done)
         page._profile_saved(profile_name)
 
@@ -501,8 +494,8 @@ class AnalyzeAutomation:
         analysis = self._page.view_model.state.analysis
         return None if analysis is None else analysis_metadata(analysis)
 
-    def export_current(self) -> list[str]:
-        written = self._page.view_model.export()
+    def export_current(self, extra_metadata: Optional[dict] = None) -> list[str]:
+        written = self._page.view_model.export(extra_metadata=extra_metadata)
         self._page._status(exported_text(written), "ok")
         return [str(path) for path in written]
 

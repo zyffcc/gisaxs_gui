@@ -91,6 +91,10 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
                     "standard": {"type": ["string", "null"], "enum": ["agbh", "lab6", "ceo2", "lab6_ceo2", None]},
                     "energy_kev": NUMBER_OR_NULL,
                     "incidence_deg": NUMBER_OR_NULL,
+                    "sample_roll_deg": NUMBER_OR_NULL,
+                    "keep_incidence": {"type": "boolean"},
+                    "yoneda_critical_deg": NUMBER_OR_NULL,
+                    "yoneda_material": {"type": ["string", "null"], "enum": ["Si", "SiO2", "glass", "Au", None]},
                     "pixel_size_um": NUMBER_OR_NULL,
                     "frame": {"type": ["integer", "null"]},
                     "sum_frames": {"type": ["integer", "null"]},
@@ -171,7 +175,7 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
             "set_gisaxs_cuts",
             "GISAXS: move the horizontal cut (centre row and half height in rows) and/or the vertical cut "
             "(centre column and half width); omitted values stay. automatic=true returns to the Yoneda "
-            "band and the beam-centre column.",
+            "band and a column band beside the specular rod.",
             _object({
                 "automatic": {"type": "boolean"}, "horizontal_row": NUMBER, "horizontal_half_height": NUMBER,
                 "vertical_column": NUMBER, "vertical_half_width": NUMBER,
@@ -209,11 +213,12 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
             "dispersity, with or without a paracrystal distance D ('(S)' in the model's name) — or takes the one "
             "given (1 = sphere, 2 = random cylinder, 3 = vertical cylinder, each with a paracrystal; random "
             "cylinders take far longer); each solution is refined by least squares. Returns the distinct solutions, "
-            "most probable first, with probability (posterior probability of the solution), R, h, D (nm), "
-            "intervals (median and 68 %/95 % posterior intervals per value: R_1, D_2 …), χ²ᵣ (chi2: the reduced χ² over "
+            "largest comparison weight first, with probability or bic_weight (BIC fallback), R, h, D (nm), "
+            "least_squares_values, posterior_summary (sampled medians and intervals when available), diagnostics "
+            "(weight kind, density and bootstrap uncertainty), intervals, χ²ᵣ (chi2: the reduced χ² over "
             "the fitted points, 'points'), warnings and at_bounds (non-linear values that ended on a bound of their range, "
-            "not determined by the curve), and 'chosen': the most probable, the one the standard procedure reports. "
-            "Another solution with a probability of 0.2 or more means the curve does not decide the model. "
+            "not determined by the curve), and 'chosen', the solution the standard procedure reports. "
+            "Another solution with a comparison weight of 0.2 or more means the curve does not decide the model. "
             "Confirm the model in Fitting. Takes some seconds to a few minutes (more points and more compositions "
             "take longer).",
             _object({

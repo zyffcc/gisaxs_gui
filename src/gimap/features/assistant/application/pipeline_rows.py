@@ -30,13 +30,13 @@ def peak_rows(results) -> list[dict]:
             "caveat": caveat(peak),
             "orientation": None if sector is None else sector.preference,
             "ratio_out_in": None if sector is None else sector.ratio,
+            "ratio_out_in_err": None if sector is None else sector.ratio_err,
             "size_nm": None if size is None or size.size is None else size.size / 10.0,
+            "size_err_nm": None if size is None or size.size_err is None else size.size_err / 10.0,
             "size_is_lower_bound": None if size is None else size.lower_bound,
             "size_note": None if size is None else size.reason,
         }
-        row = clean(row)
-        row.update(clean({"q": peak.q, "d_A": peak.d, "fwhm": peak.fwhm, "snr": peak.snr,
-                          "size_nm": None if size is None or size.size is None else size.size / 10.0}, digits=FULL))
+        row = clean(row, digits=FULL)
         fit = peak_fit(search, peak)
         if fit is not None:
             row["fit"] = fit
@@ -54,7 +54,7 @@ def peak_fit(search, peak) -> Optional[dict]:
         "model": "Gaussian on a local linear background", "window": [low, high], "points": int(inside.sum()),
         "height": peak.height, "background": peak.background, "slope": peak.slope, "area": peak.area,
         "q_err": peak.q_err, "d_err_A": peak.d_err, "fwhm_err": peak.fwhm_err, "reduced_chi2": peak.reduced_chi2,
-    })
+    }, digits=FULL)
     record.update(x=search.baseline_x[inside].tolist(), y=search.data_y[inside].tolist(),
                   sigma=search.data_sigma[inside].tolist())
     return record
@@ -82,12 +82,18 @@ def ring_row(ring) -> dict:
         "q": 0.5 * (low + high), "q_window": ring.q_window, "coverage": ring.coverage,
         "weighted_coverage": ring.weighted_coverage, "herman": ring.herman, "herman_err": ring.herman_err,
         "herman_isotropic": ring.herman_isotropic, "herman_excess": ring.herman_excess,
-        "texture_margin": ring.texture_margin, "herman_excess_without_horizon": ring.horizon_excess,
+        "texture_margin": ring.texture_margin,
         "texture": ring.texture, "reason": ring.reason,
         "maxima": ring.maxima, "notes": ring.notes, "missing": ring.missing, "shadowed": ring.shadowed,
     })
-    row.update(clean({"herman": ring.herman, "herman_err": ring.herman_err, "herman_isotropic": ring.herman_isotropic,
+    row.update(clean({"q_window": ring.q_window, "q": (low + high) / 2,
+                      "herman": ring.herman, "herman_err": ring.herman_err, "herman_isotropic": ring.herman_isotropic,
                       "herman_excess": ring.herman_excess}, digits=FULL))
+    if ring.orientation_settings:
+        row["orientation_settings"] = clean(ring.orientation_settings, digits=FULL)
+    if ring.pole_figure:
+        row["pole_figure"] = clean(ring.pole_figure, digits=FULL)
+        row["herman_systematic_range"] = (row["pole_figure"].get("systematics") or {}).get("range")
     return row
 
 

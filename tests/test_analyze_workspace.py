@@ -932,8 +932,11 @@ def test_the_cuts_card_and_the_plots_name_the_same_pixels() -> None:
 
 
 @requires_public
-def test_an_incidence_set_by_hand_is_marked_and_undone_in_one_step(monkeypatch) -> None:
+def test_an_incidence_set_by_hand_is_marked_and_undone_in_one_step(monkeypatch, tmp_path) -> None:
     from src.gimap.features.analyze.presentation.bindings import incidence
+
+    frame = tmp_path / GALAXI.name  # the frame alone: a .poni beside it (no αi) would come before the profile
+    shutil.copy2(GALAXI, frame)
 
     notices = []
     monkeypatch.setattr(incidence, "show_toast", lambda parent, text, **options: notices.append((text, options)))
@@ -941,7 +944,7 @@ def test_an_incidence_set_by_hand_is_marked_and_undone_in_one_step(monkeypatch) 
     page = _public_page(context)
     assert page.incidence_spin.text() == "αi from profile"  # Qt draws no prefix at the minimum: the name is in the text
     assert page.incidence_menu.actions() == [page.incidence_reset_action]  # one context menu, reused
-    page.add_paths([str(GALAXI)])
+    page.add_paths([str(frame)])
     _done(page)
     spin = page.incidence_spin
     assert spin.value() == pytest.approx(0.463) and spin.property("override") is False
@@ -965,7 +968,7 @@ def test_an_incidence_set_by_hand_is_marked_and_undone_in_one_step(monkeypatch) 
     page.close()
     second = _page(context)
     assert second.incidence_spin.property("override") is True
-    second.add_paths([str(GALAXI)])
+    second.add_paths([str(frame)])
     _done(second)
     second.run_analysis()
     _done(second)

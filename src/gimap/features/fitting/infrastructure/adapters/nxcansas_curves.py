@@ -7,6 +7,9 @@ read as they are, 1/m is converted to 1/nm (× 1e-9). A Q without a unit Fitting
 for files without one applies, as for a text file. Idev (the dataset I's ``uncertainties`` names) is the σ.
 Points the file's mask leaves out are not in the curve (the source record counts them); points without a finite
 Q or I are left out as unreadable rows of a text file are (``rows_left_out``).
+
+What each curve is (``curve_roles``): the role the file states (``SasCurve.role``); a file of fits GIMaP wrote before
+it stated roles is known by its titles (``FIT_TITLES``: “…: the points fitted”, “…: the model”).
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ import numpy as np
 from src.gimap.shared.nxcansas import READ_SUFFIXES, q_unit, read_curve, read_nxcansas
 
 from ...application.curve_sources import CurveTablePreview
+from ...application.curve_units import IN_NM
 from ...application.models import InSituSourceFrame
 from ...domain import CurveData
 
@@ -27,6 +31,15 @@ UNIT_READ = {"angstrom": "angstrom", "nm": "nm", "m": "nm"}
 SCALE = {"m": 1e-9}
 """Q in 1/m times this is Q in 1/nm."""
 PREVIEW_ROWS = 10
+FIT_TITLES = {": the points fitted": "data", ": the model": "model"}
+"""The ends of the titles of Fitting's Save Data and Fit (and of a series' fits) before the files said the role."""
+
+
+def curve_role(curve) -> str:
+    """``data`` / ``model`` as the file says (``SasCurve.role``), else by the end of a title GIMaP wrote; empty."""
+    if curve.role:
+        return curve.role
+    return next((role for end, role in FIT_TITLES.items() if str(curve.title).endswith(end)), "")
 
 
 def is_nxcansas_file(path) -> bool:
@@ -47,6 +60,7 @@ def load_curve(source: InSituSourceFrame, setting: str) -> CurveData:
         read_curve(source.path, source.frame_index)  # says why: no NXcanSAS curve, or not that many
     curve = curves[source.frame_index]
     unit = q_unit(curve.q_unit)
+    read_unit = UNIT_READ.get(unit or "", setting)
     q = np.asarray(curve.q, dtype=float) * SCALE.get(unit or "", 1.0)
     intensity = np.asarray(curve.intensity, dtype=float)
     sigma = None if curve.sigma is None else np.asarray(curve.sigma, dtype=float)
@@ -62,10 +76,17 @@ def load_curve(source: InSituSourceFrame, setting: str) -> CurveData:
     }
     if unit == "m":
         record["q_converted"] = "Q in 1/m read as 1/nm (x 1e-9)"
+    dq = None
+    if curve.dq is not None:
+        width_unit = q_unit(curve.dq_unit) if curve.dq_unit else unit or read_unit
+        if width_unit is None:
+            raise ValueError("The unit of dQ must be an inverse length.")
+        dq = curve.dq[keep] * (IN_NM[width_unit] / IN_NM[read_unit])
+        record["resolution_units"] = curve.dq_unit or curve.q_unit
     return CurveData(
         q=q[keep], intensity=intensity[keep], error=None if sigma is None else sigma[keep],
-        q_source_unit=UNIT_READ.get(unit or "", setting), source_path=source.token,
-        observation={"curve_source": record}, rows_left_out=left_out,
+        q_source_unit=read_unit, source_path=source.token,
+        observation={"curve_source": record}, rows_left_out=left_out, dq=dq,
     )
 
 
@@ -81,13 +102,19 @@ def preview(path) -> CurveTablePreview:
     if first.sigma is not None:
         names += ("Idev",)
         columns.append(first.sigma)
+    if first.dq is not None:
+        names += (f"Qdev ({first.dq_unit or first.q_unit})",)
+        columns.append(first.dq)
     rows = tuple(tuple(f"{value:.6g}" for value in row) for row in zip(*(column[:PREVIEW_ROWS] for column in columns)))
     return CurveTablePreview(
         path=path, column_names=names, sample_rows=rows, column_count=len(names), suggested_layout="single",
         unit=UNIT_READ.get(q_unit(first.q_unit) or ""), has_header=True,
         uncertainty_columns=(2,) if first.sigma is not None else (), intensity_columns=(1,),
         curve_titles=tuple(curve.title or f"curve {number}" for number, curve in enumerate(curves, 1)),
+        resolution_columns=(len(names) - 1,) if first.dq is not None else (), q_columns=(0,),
+        curve_roles=tuple(curve_role(curve) for curve in curves),
     )
 
 
-__all__ = ["SCALE", "UNIT_READ", "is_nxcansas_file", "load_curve", "preview", "stated_unit"]
+__all__ = ["FIT_TITLES", "SCALE", "UNIT_READ", "curve_role", "is_nxcansas_file", "load_curve", "preview",
+           "stated_unit"]

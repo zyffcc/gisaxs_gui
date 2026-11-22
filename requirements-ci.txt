@@ -1,0 +1,5 @@
+pytest>=8,<10
+ruff>=0.12,<1
+httpx>=0.27
+# SasView's independent reader for the NXcanSAS export test (Python 3.10 and 3.11).
+sasdata==0.11.0

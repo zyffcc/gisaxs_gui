@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
 
@@ -11,11 +11,12 @@ import numpy as np
 from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile
 from src.gimap.shared.geometry.detector_tilt import FlatDetectorError
 
-from ..domain import BadPixels, Corrections, GisaxsCutSettings, GiwaxsSettings, Reduction
+from ..domain import BadPixels, Corrections, GisaxsCutSettings, GiwaxsSettings, NormalisationUse, Reduction
 from .flat_field import FlatFieldUse
+from .incidence_record import same_measurement_frame, selected_incidence_record
 
 AUTO = "auto"
-MODES = (AUTO, "gisaxs", "giwaxs")
+MODES = (AUTO, "gisaxs", "giwaxs", "transmission")
 
 CENTER_PROFILE = "profile"
 CENTER_HEADER = "header"
@@ -30,9 +31,12 @@ class AnalysisRequest:
     path: Path
     frame_index: int = 0
     mode: str = AUTO
-    """``auto`` classifies from the geometry; ``gisaxs``/``giwaxs`` force a reduction."""
+    """``auto`` classifies from the geometry; ``gisaxs``/``giwaxs``/``transmission`` force a reduction."""
     profile_name: Optional[str] = None
-    """Use this profile instead of the automatic match."""
+    """Use this profile instead of the automatic match (for frames of its size, or with ``force_profile``)."""
+    forced_shapes: tuple = ()
+    """Frame sizes ``(rows, columns)`` on which ``profile_name`` is used although it is for another size (the person
+    said so: Use Anyway)."""
     incidence_deg: Optional[float] = None
     """Grazing angle for this measurement; ``None`` keeps the profile's value."""
     gisaxs: GisaxsCutSettings = field(default_factory=GisaxsCutSettings)
@@ -55,6 +59,32 @@ class AnalysisRequest:
     series_cut: Optional[dict] = field(default=None, hash=False)
     """The cut of a series this frame is cut at (the view model's ``series_cut()``: the automatic cut of one frame,
     held for every frame of a series run); the reduction's record then says so (``held_cut``). ``None``: its own."""
+    with_record: bool = True
+    """A display-only Series map discards each reduced frame, so it needs no export record or file digests."""
+
+    sample_roll_deg: Optional[float] = None
+    """Sample roll override. None takes the value in the resolved geometry."""
+    sample_roll_measurement: Optional[dict] = field(default=None, hash=False)
+    incidence_measurement: Optional[dict] = field(default=None, hash=False)
+    incidence_locked: bool = False
+    yoneda_critical_deg: Optional[float] = None
+    """Critical angle of the material producing the Yoneda band, independent of film refraction."""
+    yoneda_material: Optional[str] = None
+
+    def with_scoped_roll(self) -> AnalysisRequest:
+        """Match frame-specific measurements before applying a request to another frame or sum."""
+        result = self
+        if self.incidence_measurement and not same_measurement_frame(self.incidence_measurement, self):
+            result = replace(self, incidence_measurement=None)
+        measured = self.sample_roll_measurement or {}
+        if measured.get("origin") == "automatic" and not same_measurement_frame(measured, self):
+            result = replace(result, sample_roll_deg=None, sample_roll_measurement=None)
+        return result
+
+    @property
+    def needs_input_identities(self) -> bool:
+        """A display-only series checks the source when reusing this frame's measured incidence."""
+        return self.with_record or bool(self.incidence_measurement)
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -78,13 +108,18 @@ class GeometryResolution:
     geometry: Optional[DetectorGeometry]
     profile: Optional[InstrumentProfile]
     how: str
-    """``matched``, ``chosen`` or ``missing``."""
+    """``chosen`` (the profile picked by hand), ``file`` (the ``.poni`` beside the frame), ``matched`` (a profile
+    matched by detector name and frame size) or ``missing``."""
     center_source: str = CENTER_PROFILE
     """Where the beam centre of ``geometry`` came from: profile, header or session."""
     header_center: Optional[tuple[float, float]] = None
     """Canonical beam centre written in the file header, if the file has one."""
     ignored_center_shape: Optional[tuple[int, int]] = None
     """The frame shape a session beam centre was set for, when it was not used for this frame (another shape)."""
+    refused_profile: Optional[str] = None
+    """The profile picked by hand when it was not used because it is for frames of another size (another
+    detector): a frame never takes the geometry of another detector without being told to."""
+    refused_shape: Optional[tuple[int, int]] = None
 
 
 @dataclass(frozen=True)
@@ -111,13 +146,11 @@ class FrameAnalysis:
     bad_pixels: Optional[BadPixels] = None
     """Hot and dead pixels left out automatically (``Corrections.bad_pixels``)."""
     drawn_mask: Optional[np.ndarray] = None
-    """Pixels inside the masks drawn on the image (``Corrections.mask_shapes``)."""
+    """User mask after all image, shape and rule edits, before combining with detector validity."""
     filled_pixels: Optional[np.ndarray] = None
     """Pixels filled from the mirror side (``Corrections.mirror_fill``, GIWAXS)."""
     intensity_scale: Optional[np.ndarray] = None
-    """Photon counts divided by a flat field or (GIWAXS) by the intensity corrections: the factor each pixel's
-    counts were multiplied by (1 / F, F = solid angle × polarisation × absorption × flat field), so its Poisson
-    variance is that factor × its value."""
+    """Corrected intensity corresponding to one sample count, including flat, geometric and frame scaling."""
     flat_field: Optional[FlatFieldUse] = None
     """The flat field the frame was divided by (``Corrections.flat_field_path``): file, SHA-256, mean, pixels
     it leaves out; ``None`` without one."""
@@ -127,6 +160,43 @@ class FrameAnalysis:
     flat_detector: Optional[FlatDetectorError] = None
     """A ``.poni`` tilt the flat geometry leaves out, and how far |q| is off for it on this frame's valid pixels
     (``flat_detector.py``); ``None`` when the profile names no tilt."""
+    header_values: dict = field(default_factory=dict)
+    """What the header offers for the normalisation (``normalisation.header_values``; of a sum: the sums)."""
+    normalisation: Optional[NormalisationUse] = None
+    """The constant the frame was multiplied by and its terms (``Corrections.normalisation``); ``None``: none."""
+    reference_peak_scale: Optional[float] = None
+    """Factor subsequently applied to the reduced curves and q map of a series, after frame normalisation."""
+    error_model_used: Optional[str] = None
+    pixel_variance: Optional[np.ndarray] = None
+    """Sample shot variance or supplied variance, in squared corrected pixel units."""
+    extra_variance: Optional[np.ndarray] = None
+    """Variance from the measured reference frames, in the same units."""
+    reference_dark: Optional[dict] = None
+    """Dark scales used for the reference frames, with their sources."""
+    request: Optional[AnalysisRequest] = None
+    """Cut settings actually used, including any per-frame overrides in a series."""
+    frame_files: dict = field(default_factory=dict)
+    """Paths and digests of the detector files at read time, including all members of every summed frame."""
+    correction_files: dict = field(default_factory=dict)
+    """Paths and digests of the inputs to the pixel corrections."""
+    geometry_files: dict = field(default_factory=dict)
+    """Calibration file read for this frame, when its geometry came from a sibling .poni."""
+
+    @property
+    def incidence_measurement(self) -> Optional[dict]:
+        return selected_incidence_record(self.request, self.resolution, self.metadata, self.frame_files, self.correction_files)
+
+    @property
+    def sample_roll_measurement(self) -> Optional[dict]:
+        if self.request and (self.request.sample_roll_deg is not None or self.request.sample_roll_measurement):
+            return self.request.sample_roll_measurement
+        return self.resolution.profile.sample_roll_measurement if self.resolution.profile else None
+
+    @property
+    def calibrated_curve_unit(self) -> Optional[str]:
+        if self.normalisation is None or self.normalisation.standard_calibration is None:
+            return None
+        return self.normalisation.unit if self.reference_peak_scale is None else "relative"
 
     @property
     def shape(self) -> tuple[int, int]:

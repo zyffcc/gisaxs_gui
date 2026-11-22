@@ -5,6 +5,8 @@
   folder cannot be written, where the person chose.
 * Results ▸ Refine in Fitting and Fit details ▸ Show in Fitting — the same hand-over, the second with a
   solution of the automatic analysis as the model.
+* Analyze ▸ Send Both Cuts to Fitting — the horizontal and the vertical cut of the frame, written beside each other
+  and listed in Fitting ▸ Fit Several Curves Together with their geometry.
 * Analyze ▸ Send Series to Fitting — the folder of curves a batch wrote, listed in Fitting ▸ In-situ series.
 * Analyze ▸ Series ▸ Send to Compare — the map joins the comparison, and Compare is shown.
 * The Start page's series entry — the frames open in Analyze with its Series tab in view.
@@ -31,6 +33,8 @@ SERIES_CARD = "series"
 SENT_TO_FITTING = "Sent to Fitting — the curve file is in {folder}"
 """The notice on the Fitting page (its status line names the file; a long name would make the notice tall)."""
 SERIES_NOT_OPENED = "Series not opened in Fitting — the exported curves are in {folder}."
+BOTH_SENT = "Both cuts are in Fitting ▸ Fit Several Curves Together — the curve files are in {folder}"
+BOTH_FAILED = "Could not send both cuts: {error}"
 
 
 def short_folder(folder) -> str:
@@ -73,17 +77,51 @@ class HandoverMixin:
         page = self.analyze_page
         getattr(page, "send_to_fitting", page.fit_current)()
 
+    def _send_both_cuts(self) -> None:
+        """Analyze ▸ Send Both Cuts to Fitting: the frame's two cuts written (next to the data, else where the person
+        chooses, as Send to Fitting) and listed in Fitting's fit of several curves with their geometry."""
+        from src.gimap.features.analyze.application.both_cuts import write_both_cuts
+
+        page = self.analyze_page
+        model = page.view_model
+        analysis = model.state.analysis
+
+        def write(folder):
+            return write_both_cuts(model.frame_tools().export, analysis, folder, halves=model.fit_side)
+
+        try:
+            folder = model.default_export_dir()
+            if folder is None:
+                raise ValueError("The frame has no folder to write next to.")
+            try:
+                horizontal, vertical, geometry = write(folder)
+            except OSError as exc:
+                (horizontal, vertical, geometry), _folder = page.write_elsewhere(write, exc)
+        except (ValueError, OSError, RuntimeError) as exc:
+            show_toast(self.ui, trf(BOTH_FAILED, error=tr(str(exc))), level="error")
+            return
+        self._fitting_runtime().navigate("fitting")
+        first = {"kind": "horizontal", "alpha_i": geometry["alpha_i_deg"], "wavelength": geometry["wavelength_nm"],
+                 "alpha_f": geometry["horizontal_alpha_f_deg"]}
+        self.fitting_workspace.open_joint_fit([horizontal, vertical], [first, None])
+        folder = Path(vertical).parent
+        show_toast(self.ui, trf(BOTH_SENT, folder=short_folder(folder)), level="ok",
+                   action=(tr("Open Folder"), lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))))
+
     def _show_fit_solution(self, row: dict) -> None:
         """Results ▸ Fit details ▸ Show in Fitting: the prepared curve in Fitting with that solution as its model."""
         self._send_to_fitting()
         if self.current_page_key() == "fitting":
             self.fitting_workspace.show_solution(row)
 
-    def _send_series_to_fitting(self, folder) -> bool:
+    def _send_series_to_fitting(self, folder, watch: bool = False) -> bool:
         """Open Fitting ▸ In-situ series on the folder Analyze wrote; a refused hand-over leaves the
-        exported files available, also when the person chose to keep unsaved results."""
+        exported files available, also when the person chose to keep unsaved results. ``watch`` (Fit New Frames in
+        Fitting…): Watch for new curves on, and Start once the curves are listed."""
         self._fitting_runtime().navigate("fitting")
         if self.fitting_workspace.open_series(folder, "*_fit_input.dat"):
+            if watch:
+                self.fitting_workspace.series_page.watch_and_start()
             return True
         folder = Path(folder)
         show_toast(self.ui, trf(SERIES_NOT_OPENED, folder=short_folder(folder)), level="warning",
@@ -113,4 +151,4 @@ class HandoverMixin:
             page.show_right("series")
 
 
-__all__ = ["HandoverMixin", "SENT_TO_FITTING", "SERIES_CARD", "SERIES_NOT_OPENED", "SERIES_TASKS", "short_folder"]
+__all__ = ["BOTH_FAILED", "BOTH_SENT", "HandoverMixin", "SENT_TO_FITTING", "SERIES_CARD", "SERIES_NOT_OPENED", "SERIES_TASKS", "short_folder"]

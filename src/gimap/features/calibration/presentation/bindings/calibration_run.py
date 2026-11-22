@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
 )
 
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.task_runner import WORKER_STACK_BYTES
 
 from ...application import (
@@ -21,7 +21,8 @@ from ...application import (
 )
 
 
-from ..pixel_coordinates import shown_center
+from ..result_numbers import geometry_text
+from ..residual_text import rms_text, rms_tip, rms_title
 from ..workers import CalibrationWorker
 
 LOGGER = logging.getLogger(__name__)
@@ -33,6 +34,8 @@ class CalibrationRunMixin:
     def start_calibration(self) -> None:
         if self.image is None or (self._cal_thread is not None and self._cal_thread.isRunning()):
             return
+        if not self.energy_ready():  # never a made-up energy: the line under the field says what is missing
+            return
         try:
             options = {
                 "energy_kev": self.energy_spin.value(),
@@ -42,6 +45,9 @@ class CalibrationRunMixin:
                 "pixel_size_x_m": self.pixel_x_spin.value() * 1e-6,
                 "pixel_size_y_m": self.pixel_y_spin.value() * 1e-6,
                 "subtract_background": self.background_check.isChecked(),
+                "tilt": self.run_tilt_mode(),
+                "rot3_deg": self.rot3_spin.value(),
+                "energy_source": self.run_energy_source(),
             }
         except ValueError as exc:
             QMessageBox.warning(self, tr("Calibration Input"), tr(str(exc)))
@@ -82,11 +88,7 @@ class CalibrationRunMixin:
     def _calibration_finished(self, result: CalibrationResult) -> None:
         self.result = result
         self._remember_fitted_geometry()
-        self.job_status.set_state(
-            "succeeded",
-            "Calibration complete. Review the selected candidate, then Apply.",
-            progress=1.0,
-        )
+        self._show_fit_status()
         candidate_blocker = QSignalBlocker(self.candidate_table)
         self._populate_candidates()
         self.candidate_table.selectRow(0)
@@ -95,6 +97,14 @@ class CalibrationRunMixin:
         self.manual_group.setChecked(False)
         self._show_candidate(result.selected_candidate)
         self._set_running(False)
+
+    def _show_fit_status(self) -> None:
+        candidate = self.result.selected_candidate
+        summary = trf("Matched rings: {n}. Confidence: {level}.", n=candidate.matched_ring_count,
+                      level=tr(candidate.confidence))
+        note = "⚠ " + tr(candidate.warnings[0]) if candidate.warnings else tr("Check the ring overlay before Apply.")
+        self._fit_status = f"{summary} {note}"
+        self.job_status.set_state("succeeded", self._fit_status, progress=1.0)
 
     def _calibration_failed(self, exc: Exception) -> None:
         if isinstance(exc, CalibrationCancelledError):
@@ -122,17 +132,22 @@ class CalibrationRunMixin:
             return
         self.candidate_table.setRowCount(len(self.result.candidates))
         for row, candidate in enumerate(self.result.candidates):
-            center_x, center_y = shown_center(candidate)  # the pixels of Analyze, as everywhere in the window
+            center_x, center_y, distance = geometry_text(candidate)
             values = (
                 tr(self.view_model.standard_display_name(candidate.standard_key)),
-                f"{candidate.distance_mm:.2f} mm",
-                f"{center_x:.1f}, {center_y:.1f}",
+                f"{distance} mm",
+                f"{center_x}, {center_y}",
                 str(candidate.matched_ring_count),
-                f"{candidate.rms_residual_px:.2f} px",
+                rms_text(candidate),  # the residual of the geometry shown (ring points with the tilt)
                 tr(candidate.confidence),
             )
             for column, value in enumerate(values):
-                self.candidate_table.setItem(row, column, QTableWidgetItem(value))
+                item = QTableWidgetItem(value)
+                item.setToolTip(value)
+                if column == 4:  # the residual of the geometry shown: which one, on hover
+                    item.setToolTip(rms_title(candidate) + " " + rms_tip(candidate))
+                self.candidate_table.setItem(row, column, item)
+        self._fit_candidate_columns()
 
     def _candidate_selected(self) -> None:
         if self.result is None:
@@ -142,5 +157,6 @@ class CalibrationRunMixin:
             return
         # Manual values committed for the previous candidate do not stay on it.
         self._restore_fitted_geometry()
-        candidate = self.view_model.select_candidate(rows[0].row())
-        self._show_candidate(candidate)
+        self.view_model.select_candidate(rows[0].row())
+        self._refresh_manual_result()
+        self._show_fit_status()

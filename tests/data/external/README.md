@@ -8,10 +8,16 @@ They are not GIMaP's data: keep the licences and the attribution below when you 
 |---|---|---|---|---|
 | `gisaxs_galaxi/` | `galaxi_data.tif` (decompressed from `galaxi_data.tif.gz`) | BornAgain r23 test data, `https://jugit.fz-juelich.de/mlz/bornagain/-/raw/r23/testdata/scatter2d/galaxi_data.tif.gz` | GPL-3.0 (BornAgain) | GISAXS, GALAXI (Jülich), Pilatus 1M, 981 × 1043 px |
 | `saxs_agbh_pyfai/` | `Pilatus1M.edf`, `Pilatus1M.poni` | pyFAI test images, `http://www.silx.org/pub/pyFAI/testimages/` | MIT (pyFAI); the licence of the test-image server's files is not stated there: to be confirmed | Silver behenate calibration image (ESRF BM26, Pilatus 1M) |
-| `giwaxs_p08_mapi/` | `S121_MAI_A2_00841.tif`, `LaB6_2021_12_DESY_P08.poni`, `S121_MAI_A2_metadata.yaml` | pygid usage examples, Zenodo 10.5281/zenodo.17466183 (attribution below) | CC BY 4.0 | GIWAXS of a MAPbI₃ film, DESY P08, PerkinElmer 2048², αi = 0.075° |
+| `giwaxs_p08_mapi/` | `S121_MAI_A2_00841.tif`, `LaB6_2021_12_DESY_P08.poni`, `S121_MAI_A2_metadata.yaml` | pygid usage examples, Zenodo 10.5281/zenodo.17466183 (attribution below) | CC BY 4.0 | GIWAXS of a MAPbI₃ film, DESY P08, PerkinElmer 2048², notebook αi = 0.075° |
 | `giwaxs_xeuss_pbte/` | `PbTe_3010_r1_PT_1_10_0_00028.edf`, `mask_PbTe_3010.edf`, `AgBe_250403_XENOCS.poni` | same Zenodo record | CC BY 4.0 | GIWAXS of PbTe nanoplatelets, Xeuss 2.0 lab source, Pilatus 300K, αi = 0.235° |
 
 `galaxi_bornagain.poni`, `manifest.json` and `reference_values.json` are GIMaP's own files (see below).
+`MAPbI3_reference.cif` and `PbI2_reference.cif` are GIMaP's comparison models from the indexing validation
+in *Physics and Methods*, chapter 7. The tetragonal MAPbI₃ model includes only the Pb and I sites.
+`PbTe_bulk_reference.cif` describes ideal rock salt with the bulk lattice parameter quoted below.
+These three example files are distributed under GIMaP's licence. The original measurements come from the
+sources in the table. A candidate CIF supplies expected reflections for comparison with the measured peaks.
+
 `reference_values.json` holds what pyFAI 2026.9.0 and pygid 0.2.20 give at fixed pixels of these frames
 (`tools/benchmarks/make_external_reference.py`); `tests/test_external_reference.py` checks GIMaP against it.
 
@@ -36,15 +42,21 @@ They are not GIMaP's data: keep the licences and the attribution below when you 
   `tools/gimap_agent.py auto … --technique gisaxs --calibration …`. BornAgain's sample model: Ag spheres
   (R 5.75 nm; a log-normal σ 0.4 is defined but commented out in r23) with a radial paracrystal of peak distance
   53.6 nm (Physics and Methods 9.10).
-- **AgBh** (pyFAI): the `.poni` states λ = 1.0 Å and L = 1583.2 mm with 0.57° tilt. Measured ring radii of
-  orders 1–5 around the `.poni` direct beam (180.0, 263.9) px give L = 1635 mm at 1.0 Å, so the stated
-  wavelength is not the one of the calibration (≈ 1.033 Å would give 1583 mm). Use the image for the beam
-  centre and for ring self-consistency, not for an absolute distance.
+- **AgBh** (pyFAI): the `.poni` states λ = 1.0 Å and L = 1583.2 mm with 0.57° tilt. The `.poni` is a
+  pixel-to-q test geometry, not a calibration of this image. The ring radii of orders 1–5, measured on the
+  azimuthal average about the direct beam (179.8, 264.0) px, are 162.6, 325.8, 489.0, 652.6 and 816.8 px; the
+  `.poni` puts them at 157.7, 315.5, 473.5, 631.8 and 790.5 px, 3.3 % closer. They give L = 1635 mm at 1.0 Å
+  (≈ 1.033 Å would give 1583 mm), which is what Geometry Calibration finds for this image at 12.398 keV
+  (`tests/test_public_data.py`). Use the image for the beam centre and for ring self-consistency, and the
+  `.poni` to compare pixel-to-q conversions with pyFAI, not as the distance of this image.
 - **P08 MAPbI₃**: `.poni` → direct beam (545.5, 1826.9) px, L = 811.8 mm, λ = 0.6888 Å, tilt 0.31°.
   Radial peaks at q ≈ 0.899 (PbI₂ 001), 0.999 (MAPbI₃ 110), 1.41, 1.99, 2.23 Å⁻¹. The raw frame is
   dark-subtracted floating-point data: negative values are real (noise), not detector gaps.
-- **Xeuss PbTe**: `.poni` → direct beam (7.0, 589.5) px, L = 147.6 mm, λ = 1.54 Å, **6° detector tilt**:
-  GIMaP's flat-detector geometry is only approximate for it (kept on purpose as a tilt case).
+- **Xeuss PbTe**: `.poni` → direct beam (7.0, 589.5) px, L = 147.6 mm, λ = 1.54 Å, **6° detector tilt** (kept on
+  purpose as a tilt case; Analyze applies pyFAI's rot1 and rot2, and its q equals pyFAI's at the reference pixels).
   The EDF header says `Center_1/2` = (8.3, 590.39), `SampleDistance` = 0.37 m, `Dummy` = −1.5 ± 0.6.
+  With this `.poni` the strongest peaks of radial I(q) lie at q ≈ 1.57, 1.82 and 2.58 Å⁻¹, in the ratios of rock-salt
+  111, 200 and 220 but 6–7 % below bulk PbTe (a = 6.462 Å, rings at 1.68, 1.95 and 2.75 Å⁻¹): an assignment against
+  bulk PbTe finds none of them. pyFAI gives the same q, so the geometry and the sample, not the reduction, set this.
 
 `manifest.json` holds the same values for the tests.

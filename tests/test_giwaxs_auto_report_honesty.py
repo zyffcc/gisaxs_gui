@@ -1,14 +1,14 @@
 """What the GIWAXS automatic analysis says about its own numbers, on the public P08 frame (tests/data/external).
 
 The run is the one Run Automatic Analysis and ``tools/gimap_agent.py auto`` start: an offscreen Analyze page with
-the standard pipeline on it. An αi typed in Analyze's command bar is the αi Analyze uses, so the run takes it and
-does not ask for αi; a list of peaks cut at the cap says so; q is said to be kinematic, the uncertainties to be
-statistical (from the pixel scatter of this floating-point frame); the rings whose f depends on the bins next to
-the sample horizon are named.
+the standard pipeline on it. A nominal angle from Analyze is checked against the frame before reduction.
+The report states the peak cap, the q convention and the statistical error model used
+for this floating-point frame. For the ring orientation it gives the exit-angle cut and a systematic range for f.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 from pathlib import Path
@@ -48,7 +48,7 @@ def _alpha_asked(report: dict) -> bool:
 
 
 @pytest.mark.parametrize("how", ["command bar", "set_incidence_angle"])
-def test_an_alpha_i_set_in_analyze_is_used_and_not_asked_for(p08, how: str) -> None:
+def test_the_frame_angle_is_checked_against_the_command_bar(p08, how: str) -> None:
     session, poni = p08
     if how == "command bar":  # typed into the αi field of Analyze's command bar before Run Automatic Analysis
         session.page.incidence_spin.setValue(0.075)
@@ -60,11 +60,18 @@ def test_an_alpha_i_set_in_analyze_is_used_and_not_asked_for(p08, how: str) -> N
     report = session.run_pipeline(PipelineOptions(calibration=str(poni), follow_detection=True))
 
     assert report["ok"] and report["procedure"] == "giwaxs"
-    assert report["geometry"]["incidence_deg"] == pytest.approx(0.075)  # what the analysis used …
-    assert not _alpha_asked(report)  # … so αi is not asked for, nor "0° is used" said
+    measured = report["incidence_measurement"]
+    assert measured["reference_deg"] == 0.075 and measured["decision"] == "disagreement"
+    assert measured["deg"] == pytest.approx(.50, abs=.02) and measured["error_deg"] > 0.
+    assert report["geometry"]["incidence_deg"] == pytest.approx(measured["applied_deg"], abs=1e-10)
+    assert measured["horizon"] and measured["specular"]
+    assert session.page.automation().analysis_record()["incidence_measurement"] == measured
+    assert not _alpha_asked(report)
     alpha = _decision(report, "incidence angle")
     assert alpha["decision"] == "αi = 0.075°" and alpha["why"] == FROM_COMMAND_BAR
-    assert "0° is used" not in pipeline_markdown(report)
+    markdown = pipeline_markdown(report)
+    assert "differ by more than 3σ" in markdown and "0.075°" in markdown
+    assert "0° is used" not in markdown
 
 
 def test_an_alpha_i_given_replaces_the_one_in_the_command_bar_and_is_the_one_used(p08) -> None:
@@ -72,23 +79,32 @@ def test_an_alpha_i_given_replaces_the_one_in_the_command_bar_and_is_the_one_use
     session.page.incidence_spin.setValue(0.075)
     session.page.tasks.wait(60)
 
-    report = session.run_pipeline(PipelineOptions(calibration=str(poni), incidence_deg=0.1, follow_detection=True))
+    report = session.run_pipeline(PipelineOptions(calibration=str(poni), incidence_deg=0.1, keep_incidence=True,
+                                                  follow_detection=True))
 
     assert report["geometry"]["incidence_deg"] == pytest.approx(0.1)  # before, Analyze kept using 0.075°
     assert _decision(report, "incidence angle")["why"] == "from given; it replaces the 0.075° set in Analyze's command bar"
     assert not _alpha_asked(report)
+    assert report["incidence_measurement"]["decision"] == "user_override"
+    assert "differ by more than 3σ" in pipeline_markdown(report)
 
 
-def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08) -> None:
+def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08, tmp_path) -> None:
+    from src.gimap.app.headless_record import write_outputs
+
     session, poni = p08
-    report = session.run_pipeline(PipelineOptions(calibration=str(poni), incidence_deg=0.075, follow_detection=True))
+    report = session.run_pipeline(PipelineOptions(calibration=str(poni), incidence_deg=0.075, keep_incidence=True,
+                                                  follow_detection=True, rings=1))
 
     q = _decision(report, "q")
     assert q["decision"] == "kinematic (no refraction correction)"
     assert "k·sin αi = 0.0119 Å⁻¹ here (αi = 0.075°, λ = 0.6888 Å)" in q["why"]  # 2π/λ · sin αi
     assert report["error_model"] == "pixel_scatter"  # a floating-point frame
     errors = _decision(report, "uncertainties")
-    assert errors["decision"] == "statistical only" and "pixel-scatter uncertainty, not counting noise" in errors["why"]
+    assert errors["decision"] == "statistical ± and systematic range for f"
+    assert "scatter of the corrected pixels" in errors["why"]
+    assert "pixel-scatter uncertainty, not counting noise" in errors["why"]
+    assert "pooled variance for points containing fewer than ten pixels" in errors["why"]
 
     search = report["peak_search"]
     assert search["max_peaks"] == 12 and search["truncated"] and search["candidates"] > 12
@@ -105,17 +121,56 @@ def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08) ->
 
     rule = _decision(report, "texture rule")  # the margin names "along the normal" or "in the plane", not "tilted"
     assert rule["decision"].endswith("|f − f_iso| ≥ max(0.1, 3σ_f)") and "without this margin" in rule["why"]
-    assert any(ring["texture"].startswith("tilted") for ring in report["rings"])  # 2.224 Å⁻¹, f − f_iso below 0.1
-    horizon = _decision(report, "ring orientation")  # on this frame I(χ) falls to the background next to the horizon
-    assert "|χ| ≥ 85°" in horizon["decision"] and "0.9972 (+0.141 → +0.095" in horizon["why"]  # with the .poni tilt (0.31°)
-    assert all(ring.get("herman_excess") is not None for ring in report["rings"])
+    horizon = _decision(report, "ring orientation")
+    assert "αf < 0.15° (2 × αi)" in horizon["decision"] and "factor 0.99" in horizon["decision"]
+    ring = min(report["rings"], key=lambda r: abs(r["q"] - 0.997))
+    assert report["sample_roll_measurement"]["significant"]
+    assert report["geometry"]["sample_roll_deg"] == pytest.approx(-1.30, abs=.02)
+    assert ring["orientation_settings"]["error_model"] == "pixel_scatter"
+    pole = ring["pole_figure"]
+    low, high = ring["herman_systematic_range"]
+    assert ring["herman"] == pytest.approx(.133, abs=.001)
+    assert ring["herman_err"] == pytest.approx(.00267, abs=.0001)
+    assert ring["herman_isotropic"] == pytest.approx(.0460, abs=.0005)
+    assert [low, high] == pytest.approx([.073, .148], abs=.002)
+    assert ring["herman"] == pytest.approx(pole["herman_measured"])
+    assert ring["herman_isotropic"] == pytest.approx(pole["herman_isotropic"])
+    assert ring["orientation_settings"]["horizon_excluded_deg"] == [85, 88]
+    assert "Excluded |χ| 85–88°" in text
+    assert "uses measured ±χ partners only" not in text
+    scenarios = pole["systematics"]["scenarios"]
+    assert {s["horizon_fraction"] for s in scenarios} == {0., .05, .10}
+    assert all(s["model_fill"] is None for s in scenarios)
+    moments = [f for s in scenarios for f in s["coverage_factors"].values()]
+    assert [low, high] == pytest.approx([min(moments), max(moments)])
+    assert {s["threshold_multiplier"] for s in pole["systematics"]["scenarios"]} == {0.5, 1.0, 2.0}
+    assert pole["systematics"]["background_rule"] == "fitted sigma"
+    assert "reduced χ² exceeds 5" in pole["quality_reasons"]
+    assert any("0.997" in item["why"] and "not determined" in item["why"] for item in report["needs_attention"])
+    warning = "orientation factor is not determined by the measured χ range (systematic range [0.0731, 0.148])"
+    assert any(warning in line for line in text.splitlines() if "q ≈ 0.997" in line)
+    assert any(warning in item["why"] for item in report["needs_attention"] if item["item"] == "orientation factor")
+    assert f"Measured f = {ring['herman']:.4f} ± 0.0027 (stat) [0.0731, 0.148], f_iso = 0.046" in text
+    assert "Lower limit from attenuated bins and horizon gap continued" in text
+    assert "Upper limit from attenuated bins removed, horizon gap empty" in text
+    assert "1 − φ is conditional on the background b" in text and "(stat) [" in text
+
+    folder = tmp_path / "exported"
+    write_outputs(session, report, folder)
+    header = next(line for line in (folder / "azimuthal_last_ring.csv").read_text(encoding="utf-8").splitlines()
+                  if line.startswith("# ring orientation: "))
+    exported = json.loads(header.removeprefix("# ring orientation: "))
+    for key in ("herman", "herman_err", "herman_isotropic", "herman_systematic_range"):
+        assert exported[key] == ring[key]
+    assert exported["range_sources"] == pole["systematics"]["range_sources"]
 
 
 def test_more_peaks_are_fitted_when_asked_and_a_clean_one_left_out_by_the_cap_is_listed(p08) -> None:
     session, poni = p08
     report = session.run_pipeline(
-        PipelineOptions(calibration=str(poni), incidence_deg=0.075, follow_detection=True, max_peaks=40),
+        PipelineOptions(calibration=str(poni), incidence_deg=0.075, follow_detection=True, max_peaks=40, orientation_min_exit_deg=0.35),
     )
+    assert report["rings"][0]["orientation_settings"]["min_exit_deg"] == 0.35
     found = [peak["q"] for peak in report["peaks"]]
     assert len(found) > 12 and any(abs(q - 3.585) < 0.01 for q in found)  # SNR 33, dropped by the default cap
     assert report["peak_search"]["max_peaks"] == 40

@@ -3,6 +3,10 @@
 Auto-exports return their native row from the same reduction. Without exporting, an existing map uses
 its ordinary series-row use case on a worker. The map's cut, settings and subset remain fixed; no raw
 frame is kept, and batch/watch completions share one deduplicated native-row store.
+
+A map that the watch begins (none was built) starts with the frame that was on screen when watching began:
+its row is taken from that frame's reduction at once (``_watch_series_origin``), so the map holds it and every
+frame written after it.
 """
 from __future__ import annotations
 
@@ -13,12 +17,13 @@ from src.gimap.app.presentation.i18n import trf
 from ..frames_model import with_cut
 from ..texts import message_text
 from ..series_texts import SUM_SWITCHED_OFF
+from .watch_online import WHAT_FAILED, WHAT_NO_CURVE, WatchOnlineMixin
 
 CORRECTED_MAP = ("This map uses batch series corrections. Watching cannot append uncorrected frames: "
                  "Build Map again or rerun Batch Export with the same corrections.")
 
 
-class WatchSeriesMixin:
+class WatchSeriesMixin(WatchOnlineMixin):
     def _stop_watch_series(self) -> None:
         self._watch_series_epoch = object()
         self._watch_series_waiting = []
@@ -28,6 +33,8 @@ class WatchSeriesMixin:
         self._watch_series_jobs = set()
         self._watch_series_rereading = False
         self._watch_series_correction_warned = None
+        self._watch_series_origin = None
+        self._watch_online_stopped()
         self.series_watch_follow_check.hide()
         timer = getattr(self, "_watch_series_timer", None)
         if timer is not None:
@@ -36,6 +43,8 @@ class WatchSeriesMixin:
 
     def _watch_series_start(self) -> None:
         self._stop_watch_series()
+        if self._series_map is None:
+            self._watch_series_origin = self._watch_series_shown()
         if not hasattr(self, "_watch_series_timer"):
             self._watch_series_timer = QTimer(self)
             self._watch_series_timer.setSingleShot(True)
@@ -49,6 +58,19 @@ class WatchSeriesMixin:
         with QSignalBlocker(self.series_watch_follow_check):
             self.series_watch_follow_check.setChecked(self.batch_panel.follow_check.isChecked())
         self.series_watch_follow_check.show()
+
+    def _watch_series_shown(self):
+        """``(key, row)`` of the frame on screen as the map's curve would stack it (a frame of one, with its
+        reduction), or ``None``: the first row of a map the watch begins."""
+        analysis = self.view_model.state.analysis
+        if analysis is None or analysis.reduction is None or len(analysis.summed_frames) > 0:
+            return None
+        key = self.series_curve_combo.currentData() or ("horizontal" if analysis.kind == "gisaxs" else "radial")
+        try:
+            self.view_model.begin_series_spool(replace_existing=False)
+            return key, self.view_model.series_row_of(analysis, key)
+        except (ValueError, AttributeError):
+            return None
 
     def _watch_series_ready(self, _analysis) -> None:
         if self.view_model.watch.active and self._watch_series_waiting:
@@ -114,7 +136,7 @@ class WatchSeriesMixin:
         has_map = (self._series_map is not None or self.batch_running()
                    or (self._watch_series_built is not None and self._watch_series_built is self._series_built))
         stored_key = getattr(self, "_series_key", None)
-        live = analysis.reduction is not None and (has_map or exporting)
+        live = analysis.reduction is not None and (has_map or exporting or self._watch_map_wanted())
         if has_map and self._watch_series_corrected():
             live = False
             self._series_say(CORRECTED_MAP)
@@ -127,24 +149,38 @@ class WatchSeriesMixin:
         key = stored_key if has_map else self.series_curve_combo.currentData()
         if live and not has_map:
             key = key or ("horizontal" if analysis.kind == "gisaxs" else "radial")
+            self.view_model.begin_series_spool(replace_existing=False)  # includes the row captured at watch start
             self._series_keep_curve(key)
             self._series_run = None
             self._series_built["every"] = max(1, self.series_step_spin.value())
-            if requests:
-                earliest = min(model.frame_numbers().get((str(request.path).casefold(), int(request.frame_index)), 1)
-                               for request in requests)
+            numbers = model.frame_numbers()
+            origin, self._watch_series_origin = self._watch_series_origin, None
+            shown = origin[1] if origin is not None and origin[0] == key and int(self._series_built.get("group") or 1) <= 1 \
+                else None
+            at = None if shown is None else numbers.get((str(shown[4][0]).casefold(), int(shown[4][1])))
+            if requests or at is not None:
+                earliest = min([numbers.get((str(request.path).casefold(), int(request.frame_index)), 1)
+                                for request in requests] + ([at] if at is not None else []))
                 self._series_built["first"] = max(self._series_built["first"], earliest)
+            if at is not None and not any((str(row[4][0]).casefold(), int(row[4][1])) == (str(shown[4][0]).casefold(),
+                                                                                           int(shown[4][1]))
+                                          for row in self._series_rows):
+                self._series_rows.append(shown)  # the frame on screen when watching began: the map's first row
+                self._watch_series_timer.start()
             self._watch_series_followed = self._series_row
         built = self._series_built if live else None
         self._watch_series_built = built
         token = self._watch_series_epoch
         prepared = []
+        groups = None
+        if built is not None and requests:  # the groups of the run once per look (not per frame: thousands of files)
+            with model.only_frames(built.get("first", 1), built.get("last") or None):
+                groups = model._lazy_groups()
         for request in requests:
             row_key = key if live else None
             if built is not None:
                 request = with_cut(request, built.get("cut"))
-                with model.only_frames(built.get("first", 1), built.get("last") or None):
-                    group = model.batch_group_index(request.path, request.frame_index)
+                group = groups.index_for(request.path, request.frame_index)
                 if group is None or group % max(1, built.get("every", 1)):
                     row_key = None
             prepared.append((request, row_key, token, built))
@@ -162,6 +198,7 @@ class WatchSeriesMixin:
         if getattr(value, "live_error", ""):
             self._status(trf("Could not append a frame to the Series map: {error}",
                              error=message_text(value.live_error)), "warning")
+            self._log_skipped(job.split(":", 1)[-1].rsplit(":", 1)[0] or job, WHAT_NO_CURVE, message_text(value.live_error))
         if row is None or len(row) != 5:
             return
         numbers = model.frame_numbers()
@@ -178,7 +215,7 @@ class WatchSeriesMixin:
             self._series_rows[existing] = row
         else:
             self._series_rows.append(row)
-        self._watch_series_normalize()
+        # (put in order at the redraw, once a second: per frame it would read every listed source each time)
         if not self._watch_series_timer.isActive():
             self._watch_series_timer.start()
 
@@ -189,6 +226,7 @@ class WatchSeriesMixin:
         template = ("Auto-export of {name} failed: {error}" if exporting
                     else "Could not append {name} to the Series map: {error}")
         self._status(trf(template, name=name, error=message_text(message)), "error")
+        self._log_skipped(name, WHAT_FAILED, message_text(message))
 
     def _watch_series_normalize(self) -> None:
         if not self.view_model.watch.active:
@@ -231,3 +269,4 @@ class WatchSeriesMixin:
         self._clear_stages()
         self._show_series_map(keep_view=had_map and not follow, keep_q=had_map)
         self._find_stages()
+        self._record_rows()  # (Record Every Frame in the Results Database: the rows not written yet)

@@ -1,27 +1,141 @@
-"""The Analyze part of a GIMaP project: the frames listed, the one on screen and the whole set-up
-(``settings_record``: mode, geometry, αi, masks, corrections, cuts), to reopen a sample as it was left."""
+"""The Analyze part of a GIMaP project: the frames listed, the one on screen, the whole set-up
+(``settings_record``: mode, geometry, αi, masks, corrections, cuts) and the Series map, to reopen a sample as it
+was left — also after a crash, from the autosave.
+
+**The Series map** (``series_map_state``): every row as the map stacks it (x and intensity, its x label, the row's
+name with the facts of its frame, the frame it is of) and what it was built from (the curve, the frame range, every
+n-th). A map built online while watching, by Build Map or by a Batch Export comes back as it was, without reducing a
+frame again; the settings it was built with are those of the project. The arrays are written as base64 of their
+float64 bytes (little-endian), compressed with zlib: the values come back exactly. Each row is encoded once and kept
+(the work is digested every second or two for unsaved changes); a map of more than ``MOST_KEPT`` values is not kept
+(the note says to build it again).
+"""
 
 from __future__ import annotations
 
+import base64
+import binascii
+import zlib
 from pathlib import Path
+
+import numpy as np
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application import settings_from_record, settings_record
+from ...application import RowLabel, settings_from_record, settings_record
+from ...application.series_reproduction import spool_recipe
+
+MOST_KEPT = 4_000_000
+"""Values (the x and intensity of every row) a project keeps of a Series map; a larger one is built again."""
+MAP_NOT_KEPT = "The Series map ({rows} frames) was too large to keep in the project: Build Map again."
+MAP_UNREADABLE = "The Series map of the project could not be read: Build Map again."
+RECIPES_NOT_KEPT = ("The Series map was restored. Its reduction records exceeded the project size limit. "
+                    "Build Map again to reproduce it.")
+_FACTS = ("name", "source", "frame_index", "frame_count", "summed", "timestamp", "exposure_s", "frame_time_s")
+
+
+def _encoded(values) -> dict:
+    array = np.ascontiguousarray(np.asarray(values, dtype="<f8"))
+    return {"shape": list(array.shape), "f8": base64.b64encode(zlib.compress(array.tobytes(), 1)).decode("ascii")}
+
+
+def _decoded(data: dict) -> np.ndarray:
+    raw = zlib.decompress(base64.b64decode(str(data["f8"]).encode("ascii")))
+    return np.frombuffer(raw, dtype="<f8").reshape([int(size) for size in data["shape"]]).astype(float)
+
+
+def _row_record(row, keep_recipes: bool) -> dict:
+    x, intensity, x_label, label, ref = row
+    facts = {key: getattr(label, key) for key in _FACTS if isinstance(label, RowLabel)}
+    record = {"x": _encoded(x), "y": _encoded(intensity), "x_label": str(x_label), "label": str(label), "facts": facts,
+              "ref": [str(ref[0]), int(ref[1])]}
+    if keep_recipes and getattr(label, "recipe_path", None):
+        record["reduction_record"] = Path(label.recipe_path).read_text(encoding="utf-8")
+    return record
+
+
+def _row_from(record: dict) -> tuple:
+    label = RowLabel(str(record.get("label") or ""), **{key: value for key, value in (record.get("facts") or {}).items()
+                                                        if key in _FACTS})
+    path, index = record["ref"]
+    return _decoded(record["x"]), _decoded(record["y"]), str(record.get("x_label") or ""), label, (Path(path), int(index))
 
 
 class ProjectMixin:
-    """Needs ``view_model``, ``file_list``, ``add_paths``, ``clear_files``, ``run_analysis``."""
+    """Needs ``view_model``, ``file_list``, ``add_paths``, ``clear_files``, ``run_analysis`` and the Series map's
+    state (``_series_map``, ``_series_rows``, ``_series_key``, ``_series_built``, ``_show_series_map``)."""
 
     def project_state(self) -> dict:
         state = self.view_model.state
-        return {
+        out = {
             "files": [str(path) for path in state.files],
             "current": int(self.file_list.currentRow()),
             "frame": int(getattr(state, "frame_index", 0) or 0),
             "import_selections": self.view_model.export_import_selections(),
             "settings": settings_record(self.view_model.current_settings()),
         }
+        series = self.series_map_state()
+        if series is not None:
+            out["series_map"] = series
+        return out
+
+    def series_map_state(self):
+        """The Series map shown (module docstring), or ``None`` when there is none."""
+        rows = list(getattr(self, "_series_rows", ()) or ()) if getattr(self, "_series_map", None) is not None else []
+        if len(rows) < 2:
+            return None
+        values = sum(np.size(row[0]) + np.size(row[1]) for row in rows)
+        if values > MOST_KEPT:
+            return {"kept": False, "frames": len(rows)}
+        # Prioritise the plotted values within the existing float64 storage budget.
+        recipe_bytes = sum(getattr(row[3], "recipe_size", 0) for row in rows)
+        keep_recipes = recipe_bytes <= 8 * (MOST_KEPT - values)
+        cache, kept = getattr(self, "_series_memory", {}), {}
+        records = []
+        for row in rows:
+            entry = cache.get(id(row))
+            if entry is None or entry[0] is not row or entry[2] != keep_recipes:
+                entry = (row, _row_record(row, keep_recipes), keep_recipes)
+            kept[id(row)] = entry
+            records.append(entry[1])
+        self._series_memory = kept  # (each row encoded once: the work is digested every second or two)
+        built = getattr(self, "_series_built", {}) or {}
+        return {"key": str(self._series_key), "title": str(getattr(self, "_series_curve_title", "") or ""),
+                "view": str(getattr(self, "_series_view", "both")), "row": int(getattr(self, "_series_row", 0)),
+                "first": int(built.get("first") or 1), "last": int(built.get("last") or 0),
+                "every": int(built.get("every") or 1), "kind": built.get("kind"), "rows": records,
+                "reduction_records_too_large": not keep_recipes or bool(built.get("reduction_records_too_large"))}
+
+    def restore_series_map(self, data) -> list[str]:
+        """The Series map of a project (``series_map_state``) shown again; returns notes (too large, unreadable)."""
+        if not isinstance(data, dict):
+            return []
+        if data.get("kept") is False:
+            return [trf(MAP_NOT_KEPT, rows=int(data.get("frames") or 0))]
+        try:
+            rows = [_row_from(record) for record in data["rows"]]
+            key = str(data["key"])
+        except (KeyError, ValueError, TypeError, zlib.error, binascii.Error):
+            return [tr(MAP_UNREADABLE)]
+        if len(rows) < 2:
+            return []
+        for row, record in zip(rows, data["rows"]):
+            if isinstance(recipe := record.get("reduction_record"), str):
+                self.view_model.begin_series_spool(replace_existing=False)
+                spool_recipe(self.view_model.series_spool, recipe.encode("utf-8"), row[3])
+        self._series_rows, self._series_key = rows, key
+        self._series_curve_title = str(data.get("title") or "")
+        self._series_run = None
+        self._series_view = str(data.get("view") or "both")
+        self._series_built = dict(self.view_model.series_built_with(), kind=data.get("kind"),
+                                  every=int(data.get("every") or 1), first=int(data.get("first") or 1),
+                                  last=int(data.get("last") or 0), watch_tail=(),
+                                  reduction_records_too_large=bool(data.get("reduction_records_too_large")))
+        self._series_row = min(max(0, int(data.get("row") or 0)), len(rows) - 1)
+        self._clear_stages()
+        self._show_series_map(keep_view=False)
+        self._find_stages()
+        return [tr(RECIPES_NOT_KEPT)] if data.get("reduction_records_too_large") else []
 
     def apply_project_state(self, data: dict) -> list[str]:
         """The frames and set-up of a project; returns notes (files or masks no longer there)."""
@@ -60,7 +174,8 @@ class ProjectMixin:
                 if len(indices):
                     self.show_frame(sources.index(source), frame if frame in indices else indices[0])
             self.refresh_frame_list()
+            notes += self.restore_series_map(data.get("series_map"))
         return notes
 
 
-__all__ = ["ProjectMixin"]
+__all__ = ["MAP_NOT_KEPT", "MAP_UNREADABLE", "MOST_KEPT", "ProjectMixin"]

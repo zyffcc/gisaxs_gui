@@ -68,9 +68,9 @@ def test_an_absent_term_is_not_flagged() -> None:
 
 
 def test_an_interval_is_printed_with_digits_that_tell_it_from_its_value() -> None:
-    assert fit_names.interval_text(6.0, 5.99, 6.01, "nm") == "6.00 [5.99, 6.01] nm"
-    assert fit_names.interval_text(4.556, 4.556, 7.52, "nm") == "4.56 [4.56, 7.52] nm"
-    assert fit_names.interval_text(0.2, 0.1996, 0.2004) == "0.2000 [0.1996, 0.2004]"
+    assert fit_names.interval_text(6.0, 5.99, 6.01, "nm") == "6.000 [5.990, 6.010] nm"
+    assert fit_names.interval_text(4.556, 4.556, 7.52, "nm") == "4.6 [4.6, 7.5] nm"
+    assert fit_names.interval_text(0.2, 0.1996, 0.2004) == "0.20000 [0.19960, 0.20040]"
     assert fit_names.at_edge(4.556, 4.556, 7.52) and not fit_names.at_edge(6.0, 5.99, 6.01)
 
 
@@ -101,12 +101,12 @@ def _row(**changes) -> dict:
 
 def test_the_headline_and_the_table_show_every_population_in_the_order_of_the_radii() -> None:
     solution = gisaxs_tools._solution(_row())
-    assert sizes(solution) == "R = 3.06 / 6.02 nm, D = 49.4 / – nm"
+    assert sizes(solution) == "R = 3.06 / 6.02 nm, D = 49 / – nm"
     assert _solution_text(solution) == ("upright cylinder (S) + upright cylinder: R = 3.06 / 6.02 nm, "
-                                        "D = 49.4 / – nm, χ²ᵣ = 1.05, probability 0.42")
+                                        "D = 49 / – nm, χ²ᵣ = 1.05, probability 0.42")
     assert gisaxs_tools._brief(solution).startswith("upright cylinder (S) + upright cylinder, R = 3.06 / 6.02 nm, D = ")
     report = {"gisaxs": {"fit": {"solutions": [solution], "chosen": 0}}}
-    assert "R 3.06 / 6.02 nm, D 49.4 / – nm, χ²ᵣ 1.05, p 0.42" in gisaxs_batch_row(report)[2]
+    assert "R 3.06 / 6.02 nm, D 49 / – nm, χ²ᵣ 1.05, p 0.42" in gisaxs_batch_row(report)[2]
     one = gisaxs_tools._solution(_row(components=_row()["components"][1:]))
     assert sizes(one) == "R = 3.06 nm, D = 49.4 nm"  # one population: as before
 
@@ -114,7 +114,7 @@ def test_the_headline_and_the_table_show_every_population_in_the_order_of_the_ra
 def test_the_interval_line_gives_the_refined_value_under_the_same_names() -> None:
     solution = gisaxs_tools._solution(_row())
     text = _interval_text(solution)
-    assert text == "R (1) 6.02 [5.57, 6.31] nm, R (2) 3.06 [3.02, 3.23] nm, D (2) 49.4 [37.8, 65.0] nm"
+    assert text == "R (1) 6.02 [5.57, 6.31] nm, R (2) 3.06 [3.02, 3.23] nm, D (2) 49 [38, 65] nm"
     assert "R 1 " not in text
     assert bound_phrases(solution) == ["Tail ν at its lower bound"]
     # the flags' names are the same; a value listed in at_bounds is not repeated as a sentence
@@ -204,7 +204,7 @@ def test_fit_details_give_the_value_in_model_with_its_interval_and_few_warning_l
     solution = _solution(model)
     lines = predict_texts.solution_lines(solution, [solution], many=False)
     text = "\n".join(lines)
-    assert "R 4.56 [4.56, 7.52] nm" in lines[0] and "6.8" not in text and "median" not in text
+    assert "R 4.6 [4.6, 7.5] nm" in lines[0] and "6.8" not in text and "median" not in text
     assert "Only this composition was tried: no probability." in lines and "probability 1.00" not in text
     assert "χ²ᵣ is over 596 of 598 points; 2 below the network's q window." in lines
     assert ("⚠ the refined value lies at the edge of the posterior: the model describes this curve only within the "
@@ -216,7 +216,7 @@ def test_fit_details_give_the_value_in_model_with_its_interval_and_few_warning_l
     lines = predict_texts.solution_lines(by_errors, [by_errors], many=False)
     assert lines[0].startswith("Values in Model with 68 % intervals from the least-squares errors")
     assert "median" not in "\n".join(lines) and "posterior intervals" not in lines[0]
-    assert "Probability 0.60, relative to the compositions that were tried." in lines
+    assert "BIC weight 0.6 among the solutions compared." in lines
     assert not any("edge of the posterior" in line for line in lines)  # an interval from errors has no such edge
 
 
@@ -232,7 +232,7 @@ def test_the_solutions_table_shows_every_population_the_points_and_what_differs(
         ("q_resolution", (0.031, 0.03, 0.001, 0.1, 0.0001, 0.1, 0.03))))
     assert predict_texts.sizes_cells(two) == ("3.06 / 6.02", "49.4 / –")
     tip = predict_texts.differing_tip(second, [first, second])
-    assert tip == ("Differs from solution 1 in: σnn/D (1) 0.201 (there 0.435); σ_q 0.031 nm⁻¹ (there 0.0103 nm⁻¹).")
+    assert tip == ("Differs from solution 1 in: σnn/D (1) 0.20 (there 0.44); σ_q 0.031 nm⁻¹ (there 0.010 nm⁻¹).")
     page = _page()
     try:
         page.session.solutions = [first, second]
@@ -245,9 +245,13 @@ def test_the_solutions_table_shows_every_population_the_points_and_what_differs(
         assert table.horizontalHeaderItem(4).toolTip() == fit_names.CHI2_DEFINITION
         assert "relative to the compositions that were tried" in table.horizontalHeaderItem(5).toolTip()
         assert "χ²ᵣ is over 596 of 598 points; 2 below the network's q window." in table.item(0, 4).toolTip()
-        assert "Differs from solution 1 in: σnn/D (1) 0.201" in table.item(1, 1).toolTip()
+        assert "Differs from solution 1 in: σnn/D (1) 0.20 " in table.item(1, 1).toolTip()
         assert page.quality_label.text().startswith("2 solutions below")
         assert page.quality_label.toolTip() == fit_names.CHI2_DEFINITION
+        page.session.solutions = [first]
+        page.render_results()
+        assert page.quality_label.text().startswith("1 solution below.")
+        assert "uncertainties where estimable" in page.quality_label.text()
     finally:
         page.dispose()
 
@@ -274,10 +278,11 @@ def test_predict_then_refine_on_the_page_says_the_points_of_each_chi2(tmp_path, 
         assert f"(χ²ᵣ {chi2} over 200 of 203 points; 3 below the network's q window)" in status
         assert page.solutions_table.item(0, 4).text() == chi2  # the same number in the table
         details = page.warnings_label.text()
-        assert "Values in Model with" in details and "median" not in details
+        assert "Values in Model with" in details and "Posterior median [central 68 % interval]" in details
         assert "χ²ᵣ is over 200 of 203 points; 3 below the network's q window." in details
         radius = page.session.model.components[0].value("R")
-        assert radius == pytest.approx(4.0, rel=0.05) and f"R {radius:.2f} [" in details  # the value that is in Model
+        _, _, low, high, *_ = dict(solutions[0].intervals)["R_1"]
+        assert radius == pytest.approx(4.0, rel=0.05) and "R " + fit_names.interval_text(radius, low, high, "nm") in details
         page.run_fit("local")
         _wait(page)
         result = page.session.result

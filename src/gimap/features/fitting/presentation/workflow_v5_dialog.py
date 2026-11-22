@@ -41,6 +41,7 @@ from src.gimap.app.presentation.i18n import language_changed, tr, trf
 from src.gimap.app.presentation.task_runner import WORKER_STACK_BYTES
 from src.gimap.app.presentation.theme import set_role, theme_manager
 from src.gimap.app.jobs import JobRequest
+from src.gimap.shared import fit_names
 from src.gimap.integrations.jobs import LocalProcessJobRunner
 from ..application.workflow_v5 import validate_options
 from .curve_rendering import follow_plot_theme, text_font_family, theme_figure
@@ -63,7 +64,7 @@ RMSE_TIP = ("Natural-log RMSE over the measured curve, including measurement noi
             "Review peak positions, overall shape and residuals; no mandatory cutoff is applied.")
 EXPERIMENTAL = "Check every candidate's fit; refine it in Fitting before reporting it."
 """The line under the title (the window's one caveat; the details are its tooltip, ``EXPERIMENTAL_TIP``)."""
-EXPERIMENTAL_TIP = ("Predict parameters gives each candidate's probability and the posterior intervals of its values. "
+EXPERIMENTAL_TIP = ("Each candidate has an evidence-based probability or a BIC weight. "
                     "logRMSE and RMS/σ include the measurement noise.")
 CURRENT_CUT = "Input: the current cut of Fitting (q in nm⁻¹); each side fitted separately"
 """The input line for Use current cut (Fitting converts its q to nm⁻¹; the halves are fitted one by one)."""
@@ -199,7 +200,7 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Interactive)
         self.table.setColumnWidth(0, 130)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.table.horizontalHeader().setStretchLastSection(True)
         split.addWidget(self.table)
         tabs = QTabWidget()
         # Every tab label bold, not only the selected one, set as the font so that the tab widths fit it.
@@ -218,7 +219,7 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
         tabs.addTab(self.parameters, "Parameters and units")
         tabs.addTab(self.log, "Batch log")
         split.addWidget(tabs)
-        split.setSizes([520, 640])
+        split.setSizes([555, 605])
         root.addWidget(split, 1)
         self.status = QLabel()
         self.status.setWordWrap(True)
@@ -509,7 +510,17 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
             if k not in ("native_q", "native_fit", "observed", "sigma", "measurement_sigma",
                          "display_q", "display_fit", "display_components")
         }
-        self.parameters.setPlainText("\n".join([*self._row_notes(r), tr(UNITS_NOTE)]) + "\n\n"
+        notes = [trf(template, **values) for template, values in
+                 fit_names.diagnostic_lines(r.get("diagnostics") or {}, r.get("ess"))]
+        intervals = []
+        many = len(r.get("components") or ()) > 1
+        for name, values in (r.get("posterior") or {}).items():
+            if len(values) >= 4 and values[0] is not None and all(v is not None for v in values[2:4]):
+                shown = fit_names.interval_text(values[0], *values[2:4], fit_names.unit_of(name))
+                intervals.append(f"{fit_names.display_name(name, many, tr)} {shown}")
+        if intervals:
+            notes.append(trf("Least-squares value [reported 68 % interval] — {values}.", values="; ".join(intervals)))
+        self.parameters.setPlainText("\n".join([*self._row_notes(r), tr(UNITS_NOTE), *notes]) + "\n\n"
                                      + json.dumps(detail, indent=2, ensure_ascii=False))
 
     def _cancel(self):

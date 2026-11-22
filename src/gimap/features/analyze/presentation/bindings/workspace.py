@@ -20,6 +20,7 @@ from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import GISAXS, FrameAnalysis, export_stem, source_labels
 from ...application.frame_preprocessing import floating
+from ..geometry_summary import incidence_angle_text
 from ..texts import flat_detector_summary, message_text, tilt_summary
 from .display import PLOT_SIDES, VIEW_DETECTOR, cut_lines
 
@@ -48,15 +49,17 @@ def _pixels(count: int, total: int) -> str:
 
 IMAGE_KEEPS = 400
 """Width (px) of the image panel below which its toolbar takes a third line: kept while the curves have room."""
-RIGHT_SHARE = 0.45
+RIGHT_SHARE = 0.4
 """The least share of the curves and results while the image keeps ``IMAGE_KEEPS``."""
+IMAGE_SHARE = 0.58
+"""The image's share of the room the steps leave, when the curves keep ``RIGHT_SHARE``: the largest panel."""
 
 
 class EvenSplit(QObject):
-    """Steps | image | curves and results: the image and the right panel share what the steps leave, equally
-    (a wide window: the Results tables keep their columns), the image keeping ``keep`` px as long as the right
-    panel keeps ``RIGHT_SHARE`` of the room (a 1280 px window: 400 | 356). Until the person moves a handle:
-    their split stays, and further room is shared by the splitter's stretch factors."""
+    """Steps | image | curves and results: of what the steps leave the image takes ``IMAGE_SHARE`` (it is the
+    largest panel), at least ``keep`` px, as long as the right panel keeps ``RIGHT_SHARE`` of the room and its least
+    width (a 1600 px window: 300 | 730 | 530). Until the person moves a handle: their split stays, and further room
+    is shared by the splitter's stretch factors. A side panel hidden (Panels ▾) leaves the image the room."""
 
     def __init__(self, splitter, keep: int = IMAGE_KEEPS):
         super().__init__(splitter)
@@ -78,11 +81,12 @@ class EvenSplit(QObject):
             sizes = splitter.sizes()
         except RuntimeError:  # the page is gone
             return
-        if self.by_hand or len(sizes) != 3 or sizes[1] + sizes[2] <= 0:
+        if self.by_hand or len(sizes) != 3 or sizes[1] + sizes[2] <= 0 or splitter.widget(2).isHidden():
             return
         shared = sizes[1] + sizes[2]
         right_least = max(splitter.widget(2).minimumSizeHint().width(), int(RIGHT_SHARE * shared))
-        image = max(shared // 2, min(self._keep, shared - right_least))
+        image = max(min(self._keep, shared - right_least), min(int(IMAGE_SHARE * shared), shared - right_least),
+                    shared // 2)
         if image != sizes[1]:
             splitter.setSizes([sizes[0], image, shared - image])
 
@@ -123,7 +127,7 @@ class WorkspaceMixin:
         batch.setContext(Qt.WidgetWithChildrenShortcut)
         batch.activated.connect(lambda: self.batch_export_dialog())
         self.options_button.toggled.connect(lambda on: on and self.show_step("mask"))
-        self.export_curves_button.clicked.connect(self.export_current)
+        self.export_curves_button.clicked.connect(lambda: self.export_curves())  # asks for the folder
         self.export_nxcansas_check.toggled.connect(self._nxcansas_toggled)
         self.export_image_button.clicked.connect(self.save_image)
         self.export_map_button.clicked.connect(self.save_map_data)
@@ -142,6 +146,10 @@ class WorkspaceMixin:
         self.top_plot.curveClicked.connect(lambda index: self._curve_clicked("top", index))
         self.bottom_plot.curveClicked.connect(lambda index: self._curve_clicked("bottom", index))
         self.tasks.busy_changed.connect(self._busy_changed)
+        self.load_poni_button.clicked.connect(lambda _checked=False: self.load_poni())
+        self.export_poni_button.clicked.connect(lambda _checked=False: self.export_poni())
+        self.banner_poni_button.clicked.connect(lambda _checked=False: self.load_poni())
+        self.banner_anyway_button.clicked.connect(lambda _checked=False: self.use_profile_anyway())
         self.find_geometry_button.clicked.connect(self._find_geometry_clicked)
         self.banner_find_button.clicked.connect(self._find_geometry_clicked)
         self.run_pipeline_button.clicked.connect(self._run_pipeline_clicked)
@@ -153,6 +161,9 @@ class WorkspaceMixin:
         self.region_editor.currentChanged.connect(lambda _index: fit_stack_to_page(self.region_editor))
         fit_stack_to_page(self.region_editor)
         self.even_split = EvenSplit(self.splitter)
+        self.show_steps_action.toggled.connect(lambda shown: self._show_panel(self.process_panel, shown))
+        self.show_curves_action.toggled.connect(lambda shown: self._show_panel(self.splitter.widget(2), shown))
+        self._geometry_run = False
         self.show_step("data")
         self.show_right("curves")
         self._sync_halves()
@@ -173,6 +184,12 @@ class WorkspaceMixin:
             self.show_right("results")
         elif key in ("geometry", "mask", "cuts"):
             self.show_right("curves")
+
+    def _show_panel(self, panel, shown: bool) -> None:
+        """Panels ▾: hide a side panel (the image takes its room) or show it again where it was."""
+        panel.setVisible(bool(shown))
+        if shown:
+            QTimer.singleShot(0, self.even_split.balance)
 
     def show_right(self, key: str) -> None:
         page = self.right_pages.get(key)
@@ -260,7 +277,7 @@ class WorkspaceMixin:
         if geometry is None:
             self.set_step_state("geometry", "warn", tr("No geometry yet"))
             return
-        detail = f"{geometry.distance_m * 1e3:.1f} mm · λ {geometry.wavelength_angstrom:.4g} Å · αi {geometry.incidence_deg:g}°"
+        detail = f"{geometry.distance_m * 1e3:.1f} mm · λ {geometry.wavelength_angstrom:.4g} Å · αi {incidence_angle_text(analysis)}°"
         flat = getattr(analysis, "flat_detector", None)  # a .poni tilt the flat geometry leaves out, when it matters
         detail = " · ".join((detail, *tilt_summary(geometry, tr), *flat_detector_summary(flat, tr)))
         self.set_step_state("geometry", "warn" if flat is not None and flat.needs_attention else "ok", detail)
@@ -298,6 +315,8 @@ class WorkspaceMixin:
                 parts.append(tr("gap guard {px} px").format(px=corrections.gap_guard_px))
             if corrections is not None and (corrections.minimum is not None or corrections.maximum is not None):
                 parts.append(tr("intensity range"))
+            if corrections is not None and corrections.dark_path:
+                parts.append(tr("dark frame"))
             if corrections is not None and corrections.background_path:
                 parts.append(tr("background"))
             if corrections is not None and corrections.flat_field_path:
@@ -305,7 +324,14 @@ class WorkspaceMixin:
             lines.append(f"· {tr(' and ').join(parts) or tr('corrections')}: {_pixels(extra, total)}")
         show_card(self.mask_summary_label, "\n".join(lines))
         share = 100.0 * (total - int(valid.sum())) / max(total, 1)
-        self.set_step_state("mask", "ok", tr("{share} % of the pixels left out").format(share=f"{share:.2g}"))
+        said = []  # the step says first whether the intensities are scaled, not only its closed sections
+        use = getattr(analysis, "normalisation", None)
+        if use is not None:
+            said.append(trf("intensity × {factor}", factor=f"{use.factor:.3g}"))
+        if corrections is not None and getattr(corrections, "lorentz", False):
+            said.append(tr("Lorentz factor"))
+        said.append(tr("{share} % of the pixels left out").format(share=f"{share:.2g}"))
+        self.set_step_state("mask", "ok", " · ".join(said))
         self._intro("mask")
 
     def _show_cut_state(self, analysis: FrameAnalysis) -> None:
@@ -496,10 +522,12 @@ class WorkspaceMixin:
     def _find_geometry_clicked(self) -> None:
         if self._find_geometry is not None and not self._needs_frame():
             self.show_step("geometry")
+            self._geometry_run = True  # its progress is the status line's: the tab the person chose stays
             self._find_geometry()
 
     def _run_pipeline_clicked(self) -> None:
         if self._run_pipeline is not None and not self._needs_frame():
+            self._geometry_run = False
             self._run_pipeline()
 
     def run_automatic(self) -> bool:
@@ -507,6 +535,7 @@ class WorkspaceMixin:
         is set, one runs, or no frame is open — the status line then says so)."""
         if self._run_pipeline is None or not self.run_pipeline_button.isEnabled() or self._needs_frame():
             return False
+        self._geometry_run = False
         self._run_pipeline()
         return True
 

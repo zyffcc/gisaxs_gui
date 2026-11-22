@@ -23,6 +23,8 @@ from .bindings.file_list import FileListMixin
 from .bindings.frame_import import FrameImportMixin
 from .bindings.frame_checks import FrameChecksMixin
 from .bindings.incidence import IncidenceMixin
+from .bindings.sample_roll import SampleRollMixin
+from .bindings.indexing import IndexingMixin
 from .bindings.options import OptionsMixin
 from .bindings.marks import MarksMixin
 from .bindings.masks import MaskToolsMixin
@@ -52,6 +54,7 @@ class AnalyzePage(
     ProjectMixin,
     FrameChecksMixin,
     IncidenceMixin,
+    SampleRollMixin,
     ResultsStateMixin,
     WorkspaceMixin,
     DataStepMixin,
@@ -71,6 +74,7 @@ class AnalyzePage(
     MarksMixin,
     BeamCenterMixin,
     OptionsMixin,
+    IndexingMixin,
     DisplayMixin,
     QWidget,
     AnalyzePageView,
@@ -123,6 +127,7 @@ class AnalyzePage(
         self._watch_timer.setInterval(WATCH_INTERVAL_MS)
         self._watch_timer.timeout.connect(self._watch_tick)  # looks on its own thread (``bindings/batch_watch.py``)
         self.setup_ui(self)
+        self._setup_indexing()  # the Phases window and the reflection overlay (``bindings/indexing.py``)
         self.setAcceptDrops(True)
         self.calibrate_button.setEnabled(calibrate is not None)
         self.banner_calibrate_button.setEnabled(calibrate is not None)
@@ -150,6 +155,7 @@ class AnalyzePage(
         self._connect_region_pick()
         self._connect_masks()
         self._connect_incidence()
+        self._connect_sample_roll()
         self._connect_file_list()
         self._connect_frame_import()
 
@@ -300,6 +306,8 @@ class AnalyzePage(
         self._refresh_workspace(None)
         self._update_frame_controls(None)
         self._update_center_control()  # no frame: "Beam centre", disabled
+        self._cancel_roll_measurement()
+        self._sync_sample_roll_widgets()
         self._forget_incidence()  # nor the αi of the frame before
         self.fit_button.setEnabled(False)  # nothing to send to Fitting
         self._sync_fit_side()  # (nor a GIWAXS I(q) to say anything about)
@@ -352,6 +360,8 @@ class AnalyzePage(
     def run_analysis(self) -> None:
         if self._import_applying:
             return
+        self._cancel_roll_measurement()
+        self._mask_inputs_changed()
         self._invalidate_geometry_editors()
         self._cancel_center_refinement()
         self._observe_setup()
@@ -381,6 +391,7 @@ class AnalyzePage(
         show_card(self.summary_label, self.view_model.geometry_summary(tr))
         self._update_frame_controls(analysis)
         self._update_incidence(analysis)
+        self._sync_sample_roll_widgets()
         same_frame_shape = previous is not None and previous.shape == analysis.shape
         self.banner.setVisible(analysis.reduction is None)
         messages = self._frame_messages(analysis)
@@ -459,7 +470,9 @@ class AnalyzePage(
         Nothing is reduced again; a run or a batch goes on as it was."""
         analysis = self.view_model.state.analysis
         self.command_bar.retranslate()  # the short or full button texts of the state the bar is in
+        self._sync_reduction_errors()
         self._update_center_control()
+        self._sync_sample_roll_widgets()
         self._show_incidence_state()  # the αi field's tooltip names a value set by hand
         self.incidence_spin.updateGeometry()  # “αi from profile” is as wide as the new language writes it
         self._sync_fit_side()  # Send to Fitting's tooltip names the half chosen
@@ -507,32 +520,6 @@ class AnalyzePage(
         if self._assistant is not None:
             self._assistant()
 
-    def _view_chosen(self, _index: int) -> None:
-        self.detector_view.set_pick_mode(False)
-        self._show_image(keep_view=False)
-        self._update_center_control()
-        self._refresh_overlay()
-
-    def _horizontal_band_moved(self, low: float, high: float) -> None:
-        self.view_model.set_horizontal_band(low, high)
-        self.run_analysis()
-
-    def _vertical_band_moved(self, low: float, high: float) -> None:
-        self.view_model.set_vertical_band(low, high)
-        self.run_analysis()
-
-    def _position_clicked(self, x: float, _y: float) -> None:
-        analysis = self.view_model.state.analysis
-        if analysis is None or analysis.kind != GISAXS or self.view_combo.currentIndex() != 0:
-            return
-        half = self.view_model.state.gisaxs.vertical_half_width_px
-        self.view_model.set_vertical_band(x - half, x + half)
-        self.run_analysis()
-
-    def _auto_cuts(self) -> None:
-        self.view_model.reset_cuts()
-        self.run_analysis()
-
     def _sync_fit_side(self) -> None:
         """The halves menu of Send to Fitting, and its tooltip: what is sent — on a GIWAXS frame, also what Fitting
         fits it with and where its peaks are fitted instead."""
@@ -562,15 +549,14 @@ class AnalyzePage(
         self.save_last_setup()
         self._watch_timer.stop()
         self.view_model.stop_watch()
-        self.tasks.cancel("analyze")
-        self.tasks.cancel("batch")
-        self.tasks.cancel("series")
-        self.tasks.cancel("cake")
+        for task in ("analyze", "batch", "series", "cake", "mask_preview", "sample-roll"):
+            self.tasks.cancel(task)
         self.shape_layer.cancel_drawing()
         self.shutdown_batch()
         self._reset_series_fit()
         self._dispose_undo()
         self._dispose_file_list()
+        self._dispose_indexing()
         for view in (self.detector_view, self.top_plot, self.bottom_plot, self.series_map_view,
                      self.series_profile_plot, self.series_trace_plot, self.series_fit_plot, self.series_fit_trend_plot):
             view.dispose()

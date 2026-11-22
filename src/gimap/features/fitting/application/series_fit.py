@@ -21,16 +21,21 @@ import numpy as np
 
 from src.gimap.shared.series_stages import SeriesStages, find_stages
 from src.gimap.shared.signed_cut import FIT_HALVES, fit_halves
+from src.gimap.shared.reproduction import replay_header
 from src.gimap.shared.version import SOFTWARE
 
+from ..domain import beam_tail
 from ..domain.fit_engine import FitResult
 from ..domain.fit_model import FAMILIES, INFO, FitModel, model_to_dict
-from .single_fit import Curve, PreparedCurve, fit_resolving, prepare_points
+from .single_fit import Curve, PreparedCurve, fit_resolving, prepare_points, tail_for_curve
 from .models import InSituSourceFrame
+from .fit_reproduction import fit_recipe, with_prediction
+from .series_selection import DEFAULT_SCALE, PredictedStart, PredictAttempt, SolutionChoice
 
 STARTS = (("previous", "Each frame starts from the previous frame's result"),
           ("same", "Every frame starts from the model in Single analysis"),
-          ("stages", "From the previous frame's result, and from the model in Single analysis at every new stage"))
+          ("stages", "From the previous frame's result, and from the model in Single analysis at every new stage"),
+          ("chain", "From the previous frame's result; Predict parameters where the chain breaks (series_chain.py)"))
 TOO_FEW_POINTS = "too few points in the fitting range"
 UNREADABLE = "the curve could not be read"
 STATES = ("ok", "not converged", "stopped", "failed")
@@ -53,9 +58,19 @@ class SeriesSettings:
     """Answer the parameters that stop at an edge of their range (``single_fit.fit_resolving``)."""
     follow: bool = True
     """``predict``: of the solutions about as probable, keep the one closest to the previous frame."""
+    backward: bool = False
+    """After the frames in order, a backward pass: each frame from the result of the frame after it, the better fit
+    kept (``series_chain.py``)."""
+    smooth: bool = False
+    """Select a joint HMM path through the Predict solutions of the series."""
+    smooth_scale: float = DEFAULT_SCALE
+    selection_recorded: bool = True
+    """False for saved fits from before series selection provenance was recorded."""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "side", fit_halves(self.side))
+        if not self.smooth_scale > 0:
+            raise ValueError("The continuity scale must be positive")
 
 
 def series_side(chosen=None, observed=None, single=None, *, signed: bool = True) -> str:
@@ -94,6 +109,24 @@ class FrameFit:
     """The unit the q of the frame's file was read in (``angstrom`` / ``nm``), and where it came from
     (``curve_units``: stated in the file, the setting for files without one, a cut frame); empty: not read."""
     q_unit_from: str = ""
+    start_from: str = ""
+    """Where the kept fit started (``series_chain.STARTS_FROM``); empty: not said (a run before the chained fit)."""
+    chain: str = ""
+    """Why the chain broke at this frame (``series_chain.chain_break``, English); empty: it held."""
+    fit_pass: str = ""
+    """``forward`` or ``backward``: the pass whose fit was kept."""
+    start_frame: int = 0
+    """The frame (counted from 1) whose result the kept fit started from (``start_from`` previous or next); 0: none."""
+    predict_choice: str = ""
+    """How Predict's solution was chosen where the chain broke (``series_chain.restart_solution``, English); empty:
+    the kept fit did not start from Predict, or the rule is not known."""
+    selection: Optional[SolutionChoice] = None
+    """Mode selected by Predict, with its probabilities and conditional intervals."""
+    predict_attempts: tuple[PredictAttempt, ...] = ()
+    """Every Predict restart of this frame, including the ones superseded by another fit."""
+    reproduction: Optional[dict] = None
+    acquisition: Optional[dict] = None
+    """Detector time fields from the curve used for this fit."""
 
     @property
     def ok(self) -> bool:
@@ -128,10 +161,32 @@ def poor_fit(frame) -> bool:
     return bool(math.isfinite(result.chi2_reduced) and result.chi2_reduced > POOR_CHI2)
 
 
-def prepare_frame(curve: Curve, settings: SeriesSettings) -> PreparedCurve:
+def flagged_fit(frame) -> bool:
+    """Whether a frame fitted to the end has a value the curve does not determine (its error not finite or above
+    10× the value) or a beam tail at an edge of its range (``domain.beam_tail``): such a frame is counted as flagged,
+    not as a clean fit."""
+    return bool(frame.fitted and beam_tail.flagged(frame.result))
+
+
+def flag_names(frame) -> list[str]:
+    """What is flagged in a frame (``flagged_fit``): ``res_amplitude (bound)``, ``sigma_nn_1 (undetermined)`` …."""
+    if not frame.fitted:
+        return []
+    from .fit_uncertainty import parameter_name
+
+    result = frame.result
+    named = [f"{parameter_name(path)} ({why})" for path, why in beam_tail.tail_flags(result)]
+    tail = {path for path, _why in beam_tail.tail_flags(result)}
+    loose = [path for path in beam_tail.undetermined(result, finite_only=True) if path not in tail]
+    return named + [f"{parameter_name(path)} (undetermined)" for path in loose]
+
+
+def prepare_frame(curve: Curve, settings: SeriesSettings, model: Optional[FitModel] = None) -> PreparedCurve:
     """The points a frame is fitted on (the halves, range and left-out points of the series) and what they
     are. ``MissingHalf`` when the frame has no points on the chosen half."""
-    return prepare_points(curve, settings.side, settings.q_range, settings.excluded, strict=True)
+    options = (dict(weighting=model.weighting, resolution=model.resolution_mode)
+               if model is not None and settings.method != "predict" else {})
+    return prepare_points(curve, settings.side, settings.q_range, settings.excluded, strict=True, **options)
 
 
 def fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: SeriesSettings,
@@ -146,7 +201,7 @@ def fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: Se
 def _fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: SeriesSettings,
                stop: Optional[Callable[[], bool]], predict: Optional[Callable]) -> FrameFit:
     try:
-        prepared = prepare_frame(curve, settings)
+        prepared = prepare_frame(curve, settings, start)
     except ValueError as exc:  # no points on the chosen half
         return FrameFit(index, path, error=str(exc) or type(exc).__name__)
     made_of = dict(points=prepared.points, halves_used=prepared.halves_used, averaged=prepared.averaged,
@@ -154,13 +209,25 @@ def _fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: S
     if prepared.points < 3:
         return FrameFit(index, path, error=TOO_FEW_POINTS, **made_of)
     try:
+        prediction = None
         if settings.method == "predict":  # the network's solution, then least squares for its errors and χ²
-            result, actions, _remaining = fit_resolving(predict(prepared.data, start), prepared.data, method="local",
-                                                        stop=stop, resolve=False)
-            return FrameFit(index, path, result, **made_of)
-        result, actions, _remaining = fit_resolving(start, prepared.data, method=settings.method, stop=stop,
-                                                    resolve=settings.resolve_edges)
-        return FrameFit(index, path, result, resolved=tuple(note.text for note in actions), **made_of)
+            proposed = predict(prepared.data, start)
+            if isinstance(proposed, PredictedStart):
+                prediction, proposed = proposed, proposed.model
+            choice = getattr(predict, "choice", None)
+            if choice is not None:
+                rule = f"closest to frame {choice.reference_frame}" if choice.reference_frame else choice.rule
+                made_of.update(selection=choice, predict_choice=rule)
+            result, actions, _remaining = fit_resolving(proposed, prepared.data, method="local",
+                                                        stop=stop, resolve=False, restarts=0)
+        else:
+            result, actions, _remaining = fit_resolving(tail_for_curve(start, prepared.data), prepared.data,
+                                                        method=settings.method, stop=stop, resolve=settings.resolve_edges)
+        recipe = fit_recipe(result.model, prepared.data, result, curve.source)
+        if recipe is not None and prediction is not None and prediction.reproduction:
+            with_prediction({"reproduction": recipe}, {"reproduction": prediction.reproduction}, None)
+            recipe["start_solution_index"] = prediction.index
+        return FrameFit(index, path, result, resolved=tuple(note.text for note in actions), reproduction=recipe, **made_of)
     except (ValueError, FloatingPointError, np.linalg.LinAlgError, KeyError, RuntimeError) as exc:
         return FrameFit(index, path, error=str(exc) or type(exc).__name__, **made_of)
 
@@ -178,7 +245,7 @@ def next_start(previous: Optional[FrameFit], single: FitModel, settings: SeriesS
     also at the first frame of a new stage when ``start`` is ``"stages"``."""
     if settings.method == "predict":  # its particles are the model's; it follows by itself
         return single
-    follows = settings.start == "previous" or (settings.start == "stages" and not new_stage)
+    follows = settings.start in ("previous", "chain") or (settings.start == "stages" and not new_stage)
     if follows and previous is not None and previous.ok and previous.result.converged:
         return previous.result.model
     return single
@@ -274,6 +341,7 @@ def parameter_columns(model: FitModel) -> list[tuple[tuple, str]]:
 
 
 MADE_OF_COLUMNS = ("points", "halves_used")
+FLAG_COLUMNS = ("flags", "start_from", "start_frame", "chain_break", "predict_choice", "fit_pass")
 
 
 def file_name(path, folder=None) -> str:
@@ -305,23 +373,43 @@ def _resolved(folder: str) -> Path:
 
 
 def series_table(frames: list[FrameFit], model: FitModel, *, details: bool = False,
-                 folder=None) -> tuple[list[str], list[list]]:
+                 folder=None, flags: bool = False, predict_columns: bool = False) -> tuple[list[str], list[list]]:
     """Header and rows: frame, file, χ²ᵣ, log RMSE, converged, then value and error of every free parameter.
 
     ``details``: with what each frame was fitted on after ``converged`` — ``points`` and ``halves_used``
     (``MADE_OF_COLUMNS``) — for the table that is saved. A frame without a fit has NaN values.
-    ``folder``: the folder of the series, for the ``file`` column (``file_name``)."""
+    ``folder``: the folder of the series, for the ``file`` column (``file_name``). ``flags``: then, after the values,
+    ``FLAG_COLUMNS`` — what to know before trusting a frame (``series_chain.flags_text``), where its kept fit started
+    (and from which frame's result), why the chain broke there, how Predict's solution was chosen and the pass that
+    gave it."""
     columns = parameter_columns(model)
+    from .series_chain import elapsed_times
+    elapsed = elapsed_times(frames) if details else {}
     with_sources = details and any(InSituSourceFrame.from_token(frame.path).columns is not None for frame in frames)
     header = ["frame", "file", "chi2_reduced", "log_rmse", "converged"] + (list(MADE_OF_COLUMNS) if details else [])
+    if elapsed:
+        header.append("elapsed_time_s")
     if with_sources:
         header += ["source_file", "q_column_1based", "intensity_column_1based", "sigma_column_1based", "sigma_source"]
     for _path, name in columns:
         header += [name, f"{name}_error"]
+    if flags:
+        from .series_chain import flags_text
+    from .series_policy import PREDICT_COLUMNS, decision_cells
+
+    with_choices = details and (predict_columns or any(frame.selection or frame.predict_attempts for frame in frames))
+    if with_choices:
+        header.extend(PREDICT_COLUMNS)
     rows = []
     for frame in sorted(frames, key=lambda item: item.index):
+        tail = [flags_text(frame), frame.start_from, frame.start_frame or "", frame.chain, frame.predict_choice,
+                frame.fit_pass] if flags else []
+        if with_choices:
+            tail = decision_cells(frame) + tail
         row = [frame.index + 1, file_name(frame.path, folder)]
         made_of = [frame.points, frame.halves_used] if details else []
+        if elapsed:
+            made_of.append(elapsed.get(frame.index, ""))
         if with_sources:
             source = InSituSourceFrame.from_token(frame.path)
             mapping = source.columns
@@ -330,14 +418,14 @@ def series_table(frames: list[FrameFit], model: FitModel, *, details: bool = Fal
                          "none" if mapping.sigma is None else "column"] if mapping is not None else
                         [str(source.path), "", "", "", "legacy file layout"])
         if not frame.ok:
-            rows.append(row + [math.nan, math.nan, False] + made_of + [math.nan] * (2 * len(columns)))
+            rows.append(row + [math.nan, math.nan, False] + made_of + [math.nan] * (2 * len(columns)) + tail)
             continue
         result = frame.result
         row += [result.chi2_reduced, result.log_rmse, bool(result.converged)] + made_of
         for path, _name in columns:
             row += [result.model.get(path).value, result.errors.get(path, math.nan)]
-        rows.append(row)
-    return header, rows
+        rows.append(row + tail)
+    return header + (list(FLAG_COLUMNS) if flags else []), rows
 
 
 def series_record(model: FitModel, settings: SeriesSettings, folder: str, pattern: str, frames: list[FrameFit], *,
@@ -352,7 +440,11 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
     the halves of the series came from (the person's own choice, the fit inputs, Single analysis …);
     ``listing``: which curves of the folder were fitted (first, last, every n-th, the frames left out …),
     written as it is given. Files are named as in the table (``file_name``)."""
+    from .series_policy import frame_decisions, series_policy
+    from .series_chain import elapsed_times
+
     ordered = sorted(frames, key=lambda item: item.index)
+    elapsed = elapsed_times(ordered)
     failed = [{"frame": frame.index + 1, "file": file_name(frame.path, folder), "why": frame.error}
               for frame in ordered if not frame.ok]
     record = {
@@ -360,19 +452,32 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
         "saved": saved or datetime.now().astimezone().isoformat(timespec="seconds"),
         "folder": folder, "pattern": pattern, "q_unit_of_files": q_unit,
         "start_model": model_to_dict(model),
+        "series_policy": series_policy(settings),
         "settings": {"side": settings.side, "q_range_nm^-1": None if settings.q_range is None else list(settings.q_range),
                      "left_out_q_nm^-1": sorted(settings.excluded), "method": settings.method, "start": settings.start,
-                     "resolve_edges": settings.resolve_edges,
+                     "resolve_edges": settings.resolve_edges, "backward_pass": settings.backward,
                      **({"follow": settings.follow} if settings.method == "predict" else {})},
         "frames": len(frames), "counts": series_counts(frames), "failed": failed,
         "not_converged": [frame.index + 1 for frame in ordered if frame.state == "not converged"],
         "stopped": [frame.index + 1 for frame in ordered if frame.state == "stopped"],
         "poor_fit": {"chi2_reduced_above": POOR_CHI2, "frames": [frame.index + 1 for frame in ordered if poor_fit(frame)]},
+        "flagged": [{"frame": frame.index + 1, "values": flag_names(frame)} for frame in ordered if flagged_fit(frame)],
         "per_frame": [{"frame": frame.index + 1, "file": file_name(frame.path, folder), "state": frame.state,
                        "reason": frame.reason, "points": frame.points, "halves_used": frame.halves_used,
                        "averaged": frame.averaged, "left_out": frame.left_out,
                        "q_unit": frame.q_unit, "q_unit_from": frame.q_unit_from,
+                       **({"acquisition": frame.acquisition} if frame.acquisition else {}),
+                       **({"elapsed_time_s": elapsed[frame.index]} if frame.index in elapsed else {}),
+                       **frame_decisions(frame),
+                       **{key: value for key, value in (("start_from", frame.start_from),
+                                                        ("start_frame", frame.start_frame), ("chain_break", frame.chain),
+                                                        ("predict_choice", frame.predict_choice),
+                                                        ("fit_pass", frame.fit_pass)) if value},
                        "weighting": frame.result.weighting if frame.result is not None else "",
+                       **({"weight_mode": frame.result.model.weighting,
+                           "resolution_mode": frame.result.model.resolution_mode,
+                           "size_laws": [component.law for component in frame.result.model.components]}
+                          if frame.result is not None else {}),
                        **curve_source_record(frame.path),
                        **({"resolved": list(frame.resolved)} if frame.resolved else {})} for frame in ordered],
     }
@@ -380,6 +485,10 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
         record["settings"]["side_from"] = side_from
     if listing is not None:
         record["listing"] = dict(listing)
+    successful = [frame for frame in ordered if frame.ok]
+    if successful and all(frame.reproduction is not None for frame in successful):
+        record["reproduction"] = {**replay_header("batch", {}), "records": [
+            {"frame": frame.index + 1, "reproduction": frame.reproduction} for frame in successful]}
     return record
 
 
@@ -392,6 +501,7 @@ def curve_source_record(token: str) -> dict:
                              "sigma_source": "none" if source.columns.sigma is None else "column"}}
 
 
-__all__ = ["FrameFit", "FrameStages", "MADE_OF_COLUMNS", "POOR_CHI2", "STARTS", "STATES", "SeriesSettings", "TOO_FEW_POINTS",
-           "UNREADABLE", "file_name", "fit_frame", "next_start", "parameter_columns", "poor_fit", "prepare_frame",
+__all__ = ["FLAG_COLUMNS", "FrameFit", "FrameStages", "MADE_OF_COLUMNS", "POOR_CHI2", "STARTS", "STATES", "SeriesSettings", "TOO_FEW_POINTS",
+           "UNREADABLE", "file_name", "fit_frame", "flag_names", "flagged_fit", "next_start", "parameter_columns", "poor_fit",
+           "prepare_frame",
            "series_counts", "series_record", "series_side", "series_table", "stages_of_curves", "unusable_curves"]

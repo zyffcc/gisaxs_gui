@@ -24,13 +24,19 @@ from PyQt5.QtWidgets import QGridLayout, QLabel, QPushButton, QSizePolicy, QVBox
 from src.gimap.app.presentation.components import CurvePlot
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import theme_manager
+from src.gimap.shared import fit_names
+from src.gimap.shared.numbers import format_number
 
-from ..application import bound_phrases, interval, probability
+from ..application import bound_phrases, probability
+from ..application.gisaxs_choice import displayed_estimate
+from ..application.pipeline_report import FLAG_WORDS
+from ..application.report_numbers import peak_value
 from .guided_text import ScaledPixmapLabel, label
 from .guided_words import words
 
 FIT_PLOT_HEIGHT = 190
 ERROR_WORDS = {"poisson": "Poisson (counting) error", "scaled_poisson": "Poisson (counting) error",
+               "sigma_frame": "Given σ frame",
                "pixel_scatter": "pixel-scatter error (statistical, not counting noise)"}
 """The errors the peaks were fitted with, by the frame's error model (the report's ``error_model``)."""
 NAME_WIDTH = 64
@@ -44,12 +50,12 @@ GLOBAL_VALUES = (("background", "Background", ""), ("resolution_amplitude", "Tai
 MORE_NOTES = "Background, beam tail and resolution: {notes}"
 
 
-def _number(value, digits: int = 4) -> str:
-    try:
-        value = float(value)
-    except (TypeError, ValueError):
-        return "—"
-    return "—" if not math.isfinite(value) else f"{value:.{digits}g}"
+def _parameter_text(solution, key, unit, index=None):
+    value, bounds = displayed_estimate(solution, key, index)
+    if bounds is None:
+        return f"{format_number(value)} {unit}".strip()
+    best, low, high = fit_names.interval_values(value, *bounds)
+    return f"{best} {unit}".strip() + f" (68 %: {low}–{high})"
 
 
 def method_text(peak: dict, report: dict) -> str:
@@ -61,15 +67,8 @@ def method_text(peak: dict, report: dict) -> str:
         "{height} % above it. Size: Scherrer, L = 2π·0.9 / FWHM (instrument broadening not removed)."
     ).format(model=tr(fit.get("model") or "Gaussian on a local linear background"),
              errors=tr(ERROR_WORDS.get(str(report.get("error_model") or ""), "statistical error")),
-             window=_number(search.get("background_window"), 3), snr=_number(search.get("min_snr"), 3),
-             height=_number(100 * float(search.get("min_relative_height") or 0.02), 3))
-
-
-def _plus_minus(value, error, unit: str = "", digits: int = 5) -> str:
-    text = _number(value, digits)
-    if error is not None and _number(error) != "—":
-        text += f" ± {_number(error, 2)}"
-    return f"{text} {unit}".strip()
+             window=format_number(search.get("background_window")), snr=format_number(search.get("min_snr")),
+             height=format_number(100 * float(search.get("min_relative_height") or 0.02)))
 
 
 class _Values(QWidget):
@@ -176,29 +175,35 @@ class PeakDetails(QWidget):
                 ["#2563eb", "#f97316", theme_manager().color("plot_fg")],
             )
         size = peak.get("size_nm")
+        size_text = "—"
+        if size is not None:
+            lower = "≥ " if peak.get("size_is_lower_bound") else ""
+            size_text = lower + format_number(size, peak.get("size_err_nm")) + " nm"
         pairs = [
-            ("q", _plus_minus(peak.get("q"), fit.get("q_err"), "Å⁻¹")),
-            ("d = 2π/q", _plus_minus(peak.get("d_A"), fit.get("d_err_A"), "Å")),
-            ("FWHM", _plus_minus(peak.get("fwhm"), fit.get("fwhm_err"), "Å⁻¹", 4)),
-            ("height above background", _number(fit.get("height"))),
-            ("area", _number(fit.get("area"))),
-            ("background at the peak", _number(fit.get("background"))),
-            ("background slope", _number(fit.get("slope"))),
-            ("signal / noise", f"{_number(peak.get('snr'), 3)} σ"),
-            ("χ²ᵣ of the fit", _number(fit.get("reduced_chi2"), 3)),
+            ("q", peak_value(peak, "q") + " Å⁻¹"),
+            ("d = 2π/q", peak_value(peak, "d_A") + " Å"),
+            ("FWHM", peak_value(peak, "fwhm") + " Å⁻¹"),
+            ("height above background", format_number(fit.get("height"))),
+            ("area", format_number(fit.get("area"))),
+            ("background at the peak", format_number(fit.get("background"))),
+            ("background slope", format_number(fit.get("slope"))),
+            ("signal / noise", f"{format_number(peak.get('snr'))} σ"),
+            ("χ²ᵣ of the fit", format_number(fit.get("reduced_chi2"))),
             ("points fitted", str(fit.get("points", "—"))),
             ("fit window", "—" if not fit.get("window") else
-             f"{_number(fit['window'][0])}–{_number(fit['window'][1])} Å⁻¹"),
-            ("crystallite size", "—" if size is None else ("≥ " if peak.get("size_is_lower_bound") else "") + f"{size:.3g} nm"),
-            ("out-of-plane / in-plane", _number(peak.get("ratio_out_in"), 3)),
+             f"{format_number(fit['window'][0])}–{format_number(fit['window'][1])} Å⁻¹"),
+            ("crystallite size", size_text),
+            ("out-of-plane / in-plane", format_number(peak.get("ratio_out_in"), peak.get("ratio_out_in_err"))),
         ]
         self.values.set_values(pairs)
         caveat = str(peak.get("caveat") or "")
-        self.warnings.setText("⚠ " + tr(caveat) if caveat else tr("No warnings for this peak."))
+        warnings = [tr(caveat)] if caveat else []
+        warnings.extend(tr(FLAG_WORDS[flag]) for flag in peak.get("flags") or () if flag in FLAG_WORDS)
+        self.warnings.setText("\n".join("⚠ " + note for note in warnings) or tr("No warnings for this peak."))
         ring = min(report.get("rings") or (), key=lambda item: abs(item["q"] - peak["q"]), default=None)
         shadowed = ring.get("shadowed") if ring and abs(ring["q"] - peak["q"]) <= peak.get("fwhm", 0.0) else ()
-        self._picture(self.where, [{"q": peak["q"], "shadowed": shadowed or (), "label": f"q = {peak['q']:.4g} Å⁻¹"}],
-                      map_width)
+        overlay = {"q": peak["q"], "shadowed": shadowed or (), "label": f"q = {peak_value(peak, 'q', value_only=True)} Å⁻¹"}
+        self._picture(self.where, [overlay], map_width)
 
     def dispose(self) -> None:
         self.plot.dispose()
@@ -271,38 +276,45 @@ class SolutionDetails(QWidget):
             prefix = str(component.get("type", "")).replace("_", " ") + (f" {number}" if len(solution["components"]) > 1 else "")
             for key, name, unit in COMPONENT_VALUES:
                 if component.get(key) is not None:
-                    found = interval(solution, key, number - 1)  # the 68 % posterior interval, where the fit gives one
-                    shown = f"{_number(component[key])} {unit}".strip() + (
-                        "" if found is None else f" (68 %: {_number(found[0], 3)}–{_number(found[1], 3)})")
+                    shown = _parameter_text(solution, key, unit, number - 1)
                     pairs.append((f"{prefix}: {name}" if key == "R" else name, shown))
         for key, name, unit in GLOBAL_VALUES:
-            value = (solution.get("globals") or {}).get(key)
-            if value is not None:
-                pairs.append((name, f"{_number(value)} {unit}".strip()))
+            if (solution.get("globals") or {}).get(key) is not None:
+                pairs.append((name, _parameter_text(solution, key, unit)))
         chance = probability(solution)
         fitted = solution.get("points") or fit.get("fitted_points") or {}
         over = "" if fitted.get("fitted") is None else " (" + trf(
             "{fitted} of {given} points", fitted=fitted["fitted"], given=fitted.get("given", fitted["fitted"])) + ")"
-        pairs += [("probability", tr("only this composition was tried") if solution.get("alone")
-                   else "—" if math.isnan(chance) else _number(chance, 3)),
-                  ("χ²ᵣ", _number(solution.get("chi2")) + over), ("log RMSE", _number(solution.get("log_rmse"))),
+        by_bic = fit_names.weight_key(solution) == "bic_weight"
+        pairs += [(fit_names.BIC_WEIGHT if by_bic else "probability", tr("only this composition was tried") if solution.get("alone")
+                   else "—" if math.isnan(chance) else format_number(chance)),
+                  ("χ²ᵣ", format_number(solution.get("chi2")) + over), ("log RMSE", format_number(solution.get("log_rmse"))),
                   ("converged", tr("yes") if solution.get("converged", True) else tr("no")),
                   ("time", "—" if solution.get("seconds") is None else f"{solution['seconds']:.1f} s")]
+        for name, stat in (solution.get("posterior_summary") or {}).items():
+            median, low, high = fit_names.interval_values(stat["median"], stat["low68"], stat["high68"])
+            pairs.append((name, trf("Posterior median {value} (68 % {low}–{high})", value=median, low=low, high=high)))
         self.values.set_values(pairs)
         low, high = (fit.get("q_range_inv_angstrom") or [math.nan, math.nan])[:2]
         screen = tr("the composition you gave") if solution.get("screen") == "user_composition" else tr(
             "the composition the network chose")
-        self.settings.setText(tr(
+        setting = (
             "{points} points, |qy| {low}–{high} Å⁻¹ ({low_nm}–{high_nm} nm⁻¹); {screen}. {algorithm}. Sizes in nm; "
             "σ/value are relative size spreads; the weight is the share of the fitted amplitude, not a volume "
             "fraction; the intervals hold 68 % of the posterior."
-        ).format(points=fit.get("points", "—"), low=_number(low), high=_number(high),
-                 low_nm=_number(NM_PER_A * low), high_nm=_number(NM_PER_A * high),
+        ) if not by_bic else (
+            "{points} points, |qy| {low}–{high} Å⁻¹ ({low_nm}–{high_nm} nm⁻¹). {screen}. {algorithm}. "
+            "BIC fallback intervals use least-squares errors."
+        )
+        self.settings.setText(tr(setting).format(points=fit.get("points", "—"), low=format_number(low), high=format_number(high),
+                 low_nm=format_number(NM_PER_A * low), high_nm=format_number(NM_PER_A * high),
                  screen=screen, algorithm=words(solution.get("algorithm")) or tr("Bounded least squares")))
         notes = [words(note) for note in list(solution.get("warnings") or ())
                  + ([] if solution.get("converged", True) else ["not converged"])]
         notes += [words(phrase) for phrase in bound_phrases(solution)]  # which values ended on a bound of their range
         lines = ["⚠ " + note for note in notes]
+        lines += [trf(template, **values) for template, values in fit_names.diagnostic_lines(
+            solution.get("diagnostics") or {}, solution.get("ess"))]
         more = [words(note) for note in solution.get("more_warnings") or ()]
         if more:  # not the particles' values: one paragraph after the others
             lines.append(trf(MORE_NOTES, notes="; ".join(more)))

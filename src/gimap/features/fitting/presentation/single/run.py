@@ -6,10 +6,12 @@ Stop (the work runs in the background).
   probable into Model.
 
 A fit replaces the model (Undo brings the previous one back). A stopped fit of the engine keeps the best
-values so far; a stopped Predict brings none.
+values so far; a stopped Predict keeps the solutions it finished, marked incomplete (``predict_progress.py``).
+A fit that starts from a solution (Refine These Values) says so: ``FitSession.refined_from``.
 
 While a fit runs, the bars show how far it is — busy (no number) until there is something to count — and
-the line under them what it is doing, in the interface language (``progress_line``).
+the line under them what it is doing, in the interface language (``progress_line``; Predict's stages:
+``predict_progress.stage_line``).
 """
 
 from __future__ import annotations
@@ -22,11 +24,22 @@ from PyQt5.QtCore import QObject, Qt, pyqtSignal
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application.single_fit import BOTH_USES_MEAN, ONE_CURVE_METHODS, PROGRESS_LINE, fit_resolving, stopped_result
+from ...application.single_fit import (
+    BOTH_USES_MEAN,
+    ONE_CURVE_METHODS,
+    PROGRESS_LINE,
+    RESTART_TOLERANCE,
+    fit_resolving,
+    stopped_result,
+)
 from .method_hint import fit_error_text
+from .predict_progress import stage_line
 from .predict_texts import count_solutions, points_text
+from .solution_texts import numbered_labels
 
 METHOD_NAMES = {"local": "Refine", "global": "Search the ranges", "predict": "Predict parameters"}
+RESTARTED = "The least squares went on from its own result {count} times (each time χ²ᵣ fell by more than {share} %)."
+"""The Run Log after a manual fit that ran again (``single_fit.converged_again``)."""
 _ENGINE_LINE = re.compile("".join(
     re.escape(part) if index % 2 == 0 else f"(?P<{part}>.+?)"
     for index, part in enumerate(re.split(r"\{(\w+)\}", PROGRESS_LINE))), re.DOTALL)
@@ -36,6 +49,8 @@ def progress_line(what) -> str:
     """What a running fit is doing, in the interface language. ``what``: the engine's English line
     (``PROGRESS_LINE``: its phase is translated, its numbers stay) or any other line — shown as it comes unless the
     table knows it."""
+    if isinstance(what, dict):  # a stage of Predict parameters (``predict_progress``)
+        return stage_line(what)
     found = _ENGINE_LINE.fullmatch(str(what))
     if found is None:
         return tr(str(what))
@@ -84,13 +99,18 @@ class FitRunMixin:
     def _method_chosen(self, *, remember=True) -> None:
         method = self.method()
         self.predict_row.setVisible(method == "predict")
-        self.fit_step_button.setText(tr(METHOD_NAMES[method]))
+        self._show_method_buttons()
         self.fit_step_button.setToolTip(tr(self.method_combo.itemData(self.method_combo.currentIndex(), Qt.ToolTipRole)
                                            or ""))
         self._fill_curve_card()
         self._refresh_method_hint()
         if remember:
             self._remember(method=method)
+
+    def _show_method_buttons(self) -> None:
+        name = tr(METHOD_NAMES[self.method()])
+        self.fit_button.setText(name)
+        self.fit_step_button.setText(name)
 
     def fit_running(self) -> bool:
         return self._running is not None
@@ -101,7 +121,6 @@ class FitRunMixin:
         """``method``: one of ``METHOD_NAMES``; the one chosen in the Fit step if None."""
         if self.fit_running():
             return
-        data = self._data()
         if self.session.curve is None:
             self._status(tr("Open a curve first."), "warning")
             return
@@ -120,11 +139,20 @@ class FitRunMixin:
             # These methods take one measurement per |q|. The page goes over to the mean of the halves and says
             # so: what it shows, the points a result is of and the record of an export are the fitted points.
             self.set_side("mean")
-            data = self._data()
             self._status(lambda: tr(BOTH_USES_MEAN), "warning")
+        try:
+            data = self.session.data(predict=method == "predict")
+        except ValueError as exc:
+            self._status(fit_error_text(str(exc)), "warning")
+            return
         if data is None or data.q.size < 3:
             self._status(tr("Too few points in the fitting range: widen it in the Curve step."), "warning")
             return
+        # Where the fit starts is taken before the tail's ranges are tied: ranges set from the curve do not make a
+        # solution "edited".
+        self._refining_from = self._start_of_fit(self.session.model, method) if method in ("local", "global") else None
+        if method in ("local", "global"):
+            self.tie_tail_before_fit(data)  # generic beam-tail ranges: set from this curve, in Model (tail_ranges.py)
         self._stop_event.clear()
         self._running = self._last_method = method
         self._busy(True)
@@ -148,12 +176,26 @@ class FitRunMixin:
             except (ValueError, TypeError, RuntimeError) as exc:
                 failed(str(exc))
 
+    def _start_of_fit(self, model, method: str):
+        """Where a Refine / Search starts (``FitSession.refined_from``): a solution as it is, a fit of one, or one
+        edited in Model; ``None`` otherwise."""
+        session = self.session
+        number = next((index for index, solution in enumerate(session.solutions) if solution.model == model), None)
+        if number is not None:
+            return {"solution": number + 1, "method": method, "edited": False}
+        if session.refined_from and session.result is not None and session.result.model == model:
+            return {**session.refined_from, "method": method}  # a fit of a fit of the solution
+        if session.model_from is not None and session.model_from < len(session.solutions):
+            return {"solution": session.model_from + 1, "method": method, "edited": True}
+        return None
+
     def stop_fit(self) -> None:
         if not self.fit_running():
             return
-        keeps = self._running in ("local", "global")  # Predict keeps nothing of a run cut short
+        keeps = self._running in ("local", "global")  # Predict keeps the solutions it finished (predict_progress)
         self._halt_fit()
-        self.fit_progress_text.setText(tr("Stopping … the best values so far are kept.") if keeps else tr("Stopping…"))
+        self.fit_progress_text.setText(tr("Stopping … the best values so far are kept.") if keeps
+                                       else self.stopping_line())
 
     def _halt_fit(self) -> None:
         """Ask the running fit to stop (also when another curve is opened: its result is then not kept)."""
@@ -218,10 +260,10 @@ class FitRunMixin:
             return
         # Stop during a search for solutions ends as an error of its fitter (“Fitting cancelled”): not a failure.
         stopped = self._stop_event.is_set() and self._running == "predict"
-        self._finish()
         if stopped:
-            self._status(lambda: tr("Stopped before the search finished: no new solutions."), "warning")
+            self._predict_stopped(curve, self._predict_selection)  # what it finished, marked incomplete, or nothing
         else:
+            self._finish()
             self._status(lambda: tr("The fit failed: {reason}").format(reason=fit_error_text(message)), "error")
 
     def _fitted(self, result, actions=(), remaining=(), *, selection=None, curve=None) -> None:
@@ -233,8 +275,12 @@ class FitRunMixin:
         self._fit_notes = dict(result=result, actions=list(actions), remaining=list(remaining))
         self.session.result = result
         self.session.result_selection = self.session.selection() if selection is None else selection
-        self.session.set_model(result.model)
+        self.session.refined_from = getattr(self, "_refining_from", None)
+        self.session.set_model(result.model, label=("the fit ({method})", {"method": METHOD_NAMES[result.method]
+                                                                             if result.method in METHOD_NAMES else "Refine"}))
         self._model_changed(editor=True)
+        if getattr(result, "restarts", 0):
+            self._log(trf(RESTARTED, count=result.restarts, share=f"{100 * RESTART_TOLERANCE:g}"))
         if result.stopped:
             self._status(lambda: tr("Stopped: the best values so far are kept ({quality}).").format(
                 quality=self._quality_text(result)), "warning")
@@ -243,7 +289,8 @@ class FitRunMixin:
                          "ok" if result.converged else "warning")
         self.show_step("results")
 
-    def _solutions_found(self, solutions, curve=None, selection=None) -> None:
+    def _solutions_found(self, solutions, curve=None, selection=None, message=None) -> None:
+        """``message``: the status line (a function), when not the one of a search that finished."""
         if self._of_another_curve(curve):
             return
         method = self._running
@@ -256,15 +303,20 @@ class FitRunMixin:
         self.session.solutions_selection = self.session.selection() if selection is None else selection
         best = solutions[0]
         self.session.result = None
-        self.set_model(best.model)
+        self.session.refined_from = None
+        self.set_model(best.model, label=("Predict parameters: solution 1 in Model", {}))
+        self.session.model_from = 0
+        self._refresh_steps()  # also when the best is the model already (a run after one that was stopped)
+        self.render_results()
         self.set_method("local")  # next: refine the chosen solution here
         def found() -> str:  # the same χ²ᵣ as the table and Fit details, with the points it is of
             over = points_text(best.points)
             chi2 = trf("{value} over {points}", value=f"{best.chi2:.3g}", points=over) if over else f"{best.chi2:.3g}"
             return trf("{solutions}; the best, {model} (χ²ᵣ {chi2}), is in Model. Fit again to refine it, or choose "
-                       "another in Results.", solutions=count_solutions(len(solutions)), model=best.label, chi2=chi2)
+                       "another in Results.", solutions=count_solutions(len(solutions)),
+                       model=numbered_labels(solutions)[0], chi2=chi2)
 
-        self._status(found, "ok")
+        self._status(message or found, "warning" if message else "ok")
         self._log(trf("{method}: {solutions}", method=tr(METHOD_NAMES.get(method, "")),
                       solutions=count_solutions(len(solutions))))
         self.show_step("results")

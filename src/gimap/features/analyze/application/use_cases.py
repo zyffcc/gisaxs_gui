@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
@@ -10,6 +9,8 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 import numpy as np
 
 from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile
+from src.gimap.shared.geometry.detector_response import DetectorResponse
+from src.gimap.shared.geometry.instrument_profile import OTHER_SCALE_SETUP
 from src.gimap.shared.geometry.detector_tilt import DetectorTilt
 from src.gimap.shared.geometry.conventions import (
     canonical_from_fitting_center,
@@ -19,23 +20,25 @@ from src.gimap.shared.geometry.conventions import (
 from ..domain import (
     GISAXS,
     GIWAXS,
+    TRANSMISSION,
     CakeMap,
     Corrections,
     GiwaxsMaps,
     Reduction,
-    SymmetryCenter,
     cake_map,
-    classify_measurement,
     curve_source_mask,
-    has_intensity_corrections,
-    symmetric_center_x,
     giwaxs_maps,
     gisaxs_maps,
     gisaxs_q_map,
+    header_values,
     reduce_gisaxs,
     reduce_giwaxs,
+    summed_header_values,
+    reduce_transmission,
+    transmission_maps,
     valid_pixels,
 )
+from ..domain.transmission import CAKE_SHAPE as TRANSMISSION_CAKE, CHI_RANGE as TRANSMISSION_CHI
 from .models import AUTO, AnalysisRequest, FrameAnalysis
 from .export_record import (  # noqa: F401 - the record of an export; these names are imported from here
     SOFTWARE,
@@ -47,10 +50,17 @@ from .export_record import (  # noqa: F401 - the record of an export; these name
     fit_input_observation,
 )
 from .flat_detector import detector_rotation_message, flat_detector_error, flat_detector_message
-from .frame_preprocessing import FramePreprocessingMixin, FrameSum, floating, photon_counts
-from .geometry_resolution import ResolveGeometry, center_not_used_message
+from .frame_preprocessing import FramePreprocessingMixin, FrameSum, floating
+from .geometry_files import SiblingPoni, geometry_references
+from .incidence_record import selected_incidence_record
+from .detector_response import with_profile_response
+from .reduction_errors import reduction_errors
+from .geometry_resolution import ResolveGeometry, center_not_used_message, header_beam_center, refused_profile_message
 from .nxcansas_export import nxcansas_name, sas_curves
+from .technique import TechniqueGuess
+from .symmetry_center import refine_center_by_symmetry
 from .ports import CurveWriter, FrameSource, InstrumentProfileStore
+from .reduction_inputs import correction_references, frame_references
 
 
 class AnalyzeFrame(FramePreprocessingMixin):
@@ -62,7 +72,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
 
     def __init__(self, frames: FrameSource, profiles: Optional[InstrumentProfileStore]):
         self.frames = frames
-        self.resolve = ResolveGeometry(profiles)
+        self.resolve = ResolveGeometry(profiles, SiblingPoni())
         self._maps_key: Optional[tuple] = None
         self._maps: Optional[GiwaxsMaps] = None
         self._gisaxs_maps_key: Optional[tuple] = None
@@ -70,6 +80,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
         self._q_map_key: Optional[tuple] = None
         self._q_map_source: Optional[tuple] = None
         self._q_map = None
+        self._technique = TechniqueGuess()
         self._init_preprocessing()
 
     def _load_frames(self, request: AnalysisRequest) -> tuple[np.ndarray, np.ndarray, dict]:
@@ -84,7 +95,9 @@ class AnalyzeFrame(FramePreprocessingMixin):
             detector_name=image.detector_name,
             metadata=dict(image.metadata or {}),
             summed_frames=request.summed_frames,
+            frame_files=frame_references(Path(request.path), image.metadata) if request.needs_input_identities else {},
         )
+        headers = [header_values(image.metadata)]  # exposure and monitors: a sum is divided by their sums
         if request.summed_frames:
             total = FrameSum()  # one frame in memory at a time: Sum 40 of a 15 Mpx detector held 3 GB as a list
             total.add(data, valid)
@@ -92,15 +105,30 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 extra = self.frames.load(path, index)
                 extra_data = np.asarray(extra.data, dtype=np.float32)
                 total.add(extra_data, valid_pixels(extra_data, extra.mask, negatives_valid=floating(extra.metadata)))
+                headers.append(header_values(extra.metadata))
+                # A scan can vary incidence from frame to frame. Only a common header angle
+                # belongs to the summed pixels. Keep the primary image's metadata untouched.
+                metadata = common["metadata"]
+                first = metadata.get("incidence_deg")
+                angle = (extra.metadata or {}).get("incidence_deg")
+                if first is not None and (angle is None or not np.isclose(first, angle, rtol=1e-9, atol=1e-9)):
+                    metadata.pop("incidence_deg", None)
+                    metadata.pop("incidence_source", None)
+                if request.needs_input_identities:
+                    common["frame_files"].update(frame_references(path, extra.metadata, common["frame_files"]))
                 del extra, extra_data
             data, valid = total.result()
+            if common["metadata"].get("incidence_deg") is not None:
+                common["metadata"]["incidence_source"] = "all summed frame headers"
+        common["header_values"] = headers[0] if len(headers) == 1 else summed_header_values(headers)
         return data, valid, common
 
-    def _giwaxs_maps(self, shape: tuple[int, int], geometry: DetectorGeometry) -> GiwaxsMaps:
-        key = (shape, geometry)
+    def _giwaxs_maps(self, shape: tuple[int, int], geometry: DetectorGeometry, kind: str = GIWAXS) -> GiwaxsMaps:
+        """The q maps of a GIWAXS frame, or of a frame in transmission (``kind``: their χ and horizon differ)."""
+        key = (shape, geometry, kind)
         maps, cached_key = self._maps, self._maps_key
         if maps is None or cached_key != key:
-            maps = giwaxs_maps(shape, geometry)
+            maps = transmission_maps(shape, geometry) if kind == TRANSMISSION else giwaxs_maps(shape, geometry)
             self._maps, self._maps_key = maps, key
         return maps
 
@@ -126,14 +154,29 @@ class AnalyzeFrame(FramePreprocessingMixin):
         """The q maps of a GIWAXS frame (cached for its shape and geometry)."""
         if analysis.geometry is None or analysis.kind == GISAXS:
             raise ValueError("This needs a GIWAXS frame with a geometry.")
-        return self._giwaxs_maps((int(analysis.data.shape[0]), int(analysis.data.shape[1])), analysis.geometry)
+        shape = (int(analysis.data.shape[0]), int(analysis.data.shape[1]))
+        return self._giwaxs_maps(shape, analysis.geometry, analysis.kind)
+
+    def measured_orientation_pixels(self, common, corrections, geometry, raw_data, raw_valid, name, mask_bitmap=None):
+        """Repeat pixel preparation before the Lorentz factor, its mask and mirror filling."""
+        # The measured frame already carries the CIF constants evaluated at its wavelength.
+        settings = replace(corrections, lorentz=False, mirror_fill=False,
+                           film_cif_path=corrections.film_cif_path if corrections.film_delta is None else None)
+        measured = {key: common[key] for key in ("metadata", "header_values", "summed_frames")}
+        poisson = self.correct_pixels(measured, raw_data, raw_valid, settings, geometry, GIWAXS, mask_bitmap=mask_bitmap)
+        if not settings.normalisation.is_identity:
+            self._normalise(measured, raw_data, raw_valid, settings, poisson, name)
+        return measured["data"], measured["valid"], reduction_errors(settings, measured)
 
     def cake(self, analysis: FrameAnalysis) -> CakeMap:
         """The GIWAXS frame unwrapped onto χ–q (``cake_map``), from the q maps already computed."""
         if analysis.geometry is None or analysis.kind == GISAXS:
             raise ValueError("The unwrapped view needs a GIWAXS frame with a geometry.")
         maps = self.maps_of(analysis)
-        return cake_map(analysis.data, np.asarray(analysis.valid, dtype=bool) & maps.above_horizon, maps)
+        usable = np.asarray(analysis.valid, dtype=bool) & maps.above_horizon
+        if analysis.kind == TRANSMISSION:  # χ round the whole ring
+            return cake_map(analysis.data, usable, maps, shape=TRANSMISSION_CAKE, chi_range=TRANSMISSION_CHI)
+        return cake_map(analysis.data, usable, maps)
 
     def source_masks(self, analysis: FrameAnalysis, keys: Sequence[str]) -> dict[str, np.ndarray]:
         """The pixels each named curve of ``analysis`` averages (curves it does not have are skipped)."""
@@ -142,25 +185,34 @@ class AnalyzeFrame(FramePreprocessingMixin):
             return {}
         shape = (int(analysis.data.shape[0]), int(analysis.data.shape[1]))
         if reduction.kind != GISAXS:
-            maps = self._giwaxs_maps(shape, analysis.geometry)
-        else:  # (the person's cuts are in q; the two automatic bands are rows and columns)
-            maps = self._gisaxs_maps_for(shape, analysis.geometry) if has_person_cuts(reduction) else None
+            maps = self._giwaxs_maps(shape, analysis.geometry, reduction.kind)
+        else:  # Rolled automatic bands and user-defined cuts both record their q regions.
+            cuts_in_q = any("gisaxs_cut" in curve.region for curve in reduction.curves)
+            needs_maps = cuts_in_q or (analysis.geometry.tilted and "vertical" in keys)
+            maps = self._gisaxs_maps_for(shape, analysis.geometry) if needs_maps else None
         masks = {}
         for key in keys:
             curve = reduction.curve(key)
             if curve is not None and not curve.is_empty:
-                masks[key] = curve_source_mask(curve, analysis.valid, maps)
+                if key == "azimuthal" and reduction.orientation_indices is not None:
+                    mask = np.zeros(shape, dtype=bool)
+                    mask.flat[reduction.orientation_indices] = True
+                    masks[key] = mask
+                else:
+                    masks[key] = curve_source_mask(curve, analysis.valid, maps)
         return masks
 
     def __call__(
-        self, request: AnalysisRequest, *, loaded: Optional[FrameAnalysis] = None
+        self, request: AnalysisRequest, *, loaded: Optional[FrameAnalysis] = None, resolution=None, mask_bitmap=None,
     ) -> FrameAnalysis:
         """Reduce the requested frame(s); ``loaded`` is reused when it holds the same frames."""
+        request = request.with_scoped_roll()
         if (
             loaded is not None
             and Path(loaded.path) == Path(request.path)
             and loaded.frame_index == int(request.frame_index)
             and tuple(loaded.summed_frames) == request.summed_frames
+            and (not request.needs_input_identities or loaded.frame_files)
         ):
             raw_data = loaded.raw_data if loaded.raw_data is not None else loaded.data
             raw_valid = loaded.raw_valid if loaded.raw_valid is not None else loaded.valid
@@ -171,42 +223,68 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 detector_name=loaded.detector_name,
                 metadata=loaded.metadata,
                 summed_frames=loaded.summed_frames,
+                header_values=loaded.header_values,
+                frame_files=loaded.frame_files,
             )
         else:
             raw_data, raw_valid, common = self._load_frames(request)
         shape = (int(raw_data.shape[0]), int(raw_data.shape[1]))
-        resolution = self.resolve(
+        incidence = request.incidence_deg
+        if incidence is None:
+            incidence = common["metadata"].get("incidence_deg")
+        resolution = resolution or self.resolve(
             detector_name=common["detector_name"],
             shape=shape,
             profile_name=request.profile_name,
-            incidence_deg=request.incidence_deg,
+            incidence_deg=incidence, sample_roll_deg=request.sample_roll_deg,
             beam_center=request.beam_center,
             use_header_center=request.use_header_center,
             header_center=header_beam_center(common["metadata"], shape),
             distance_m=request.distance_m,
             beam_center_shape=request.beam_center_shape,
+            path=common["path"],
+            pixel_size_m=(common["metadata"].get("pixel_size_x_m"), common["metadata"].get("pixel_size_y_m")),
+            force_profile=shape in {tuple(int(v) for v in item) for item in request.forced_shapes},
         )
         geometry = resolution.geometry
+        corrections = with_profile_response(request.corrections, resolution.profile)
+        if request.needs_input_identities:
+            common["correction_files"] = correction_references(corrections, self.frames)
+        measured = selected_incidence_record(request, resolution, common["metadata"], common["frame_files"],
+                                             common.get("correction_files"))
+        if measured and not request.incidence_locked and measured.get("applied_deg") is not None:
+            incidence = measured["applied_deg"]
+            geometry = geometry.with_incidence(incidence)
+            resolution = replace(resolution, geometry=geometry)
+        calibration = request.corrections.normalisation.standard_calibration
+        if calibration is not None:
+            if resolution.profile is None:
+                raise ValueError(OTHER_SCALE_SETUP)
+            resolution.profile.check_scale_setup(calibration, geometry, shape)
         refraction = getattr(request.corrections, "critical_angle_deg", None)
         if geometry is not None and refraction:
             geometry = geometry.with_critical_angle(float(refraction))
             resolution = replace(resolution, geometry=geometry)
         # What Auto would choose, in every mode: a pinned mode that disagrees is pointed out.
-        detected = None if geometry is None else classify_measurement(shape, geometry)
+        detected, technique_note = None, None
+        if geometry is not None:
+            detected, technique_note = self._technique.detect(
+                common["path"], (int(common["frame_index"]), tuple(common["summed_frames"])), raw_data, raw_valid,
+                geometry, incidence)
         kind = None if geometry is None else (request.mode if request.mode != AUTO else detected)
-        mirror_x = geometry.beam_center_x_px if geometry is not None and kind == GIWAXS else None
-        common.update(self._preprocess(raw_data, raw_valid, request.corrections, common["metadata"], mirror_x))
-        # Errors from counting statistics only for photon counts as measured (not dark- or background-
-        # subtracted, nothing filled from the mirror side); otherwise from the scatter of the pixels.
-        counting = photon_counts(
-            common["metadata"], request.corrections, mirror_filled=common.get("filled_pixels") is not None
-        )
-        self._flat_scale(common, request.corrections, counting)  # counts divided by a flat field: their variance too
-        if kind == GIWAXS and geometry is not None and has_intensity_corrections(request.corrections):
-            self._correct_intensity(common, raw_data, raw_valid, geometry, request.corrections, counting)
+        counting = self.correct_pixels(common, raw_data, raw_valid, corrections, geometry, kind,
+                                       mask_bitmap=mask_bitmap)
+        if request.with_record:
+            common["request"] = request
+            common["geometry_files"] = geometry_references(resolution)
+        if not corrections.normalisation.is_identity:  # one constant of the frame, last
+            self._normalise(common, raw_data, raw_valid, corrections, counting, Path(request.path).name)
         data, valid = common["data"], common["valid"]
-        scale = common.get("intensity_scale")
+        errors = reduction_errors(corrections, common)
         messages: list[str] = []
+        refused = refused_profile_message(resolution, shape)
+        if refused:
+            messages.append(refused)
         if geometry is None:
             detector = common["detector_name"] or "this detector"
             messages.append(
@@ -227,19 +305,40 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 f"Profile “{resolution.profile.name}” is for {profile_shape[0]}×{profile_shape[1]} "
                 f"frames; this frame is {shape[0]}×{shape[1]}."
             )
-        if kind == GISAXS:
+        if technique_note and kind == TRANSMISSION and request.mode == AUTO:
+            messages.append(technique_note)
+        if kind == TRANSMISSION:
+            reduction = reduce_transmission(
+                data, valid, geometry, request.giwaxs, maps=self._giwaxs_maps(shape, geometry, TRANSMISSION),
+                with_map=request.with_map, counts=errors,
+            )
+        elif kind == GISAXS:
             reduction = reduce_gisaxs(
-                data, valid, geometry, request.gisaxs, counts=scale if scale is not None else counting,
+                data, valid, geometry, request.gisaxs, counts=errors,
                 q_map=self._gisaxs_q_map(data, valid, geometry) if request.with_map else None,
-                maps=self._gisaxs_maps_for(shape, geometry) if request.gisaxs.regions else None,
+                maps=self._gisaxs_maps_for(shape, geometry) if request.gisaxs.regions or geometry.sample_roll_deg else None,
             )
         else:
+            orientation = None
+            if corrections.lorentz or corrections.mirror_fill:
+                # Start before both operations: neither masked centre-plane pixels nor measured donors can
+                # be reconstructed from an already corrected and mirror-filled map.
+                orientation = self.measured_orientation_pixels(common, common["corrections"], geometry, raw_data, raw_valid,
+                                                               Path(request.path).name, mask_bitmap)
             reduction = reduce_giwaxs(
                 data, valid, geometry, request.giwaxs, maps=self._giwaxs_maps(shape, geometry),
-                with_map=request.with_map, counts=scale if scale is not None else counting,
+                with_map=request.with_map, counts=errors,
+                corrections=corrections, orientation_pixels=orientation,
             )
         messages.extend(reduction.warnings)
         reduction = held_cut(reduction, request.series_cut)
+        if common.get("normalisation") is not None:  # the curves say the unit of the normalised intensity
+            unit = common["normalisation"].unit
+            # A normalised pixel value has the stated unit. A detector sum adds one such value per pixel.
+            summed = unit.replace("/pixel", "").replace("pixel·", "")
+            curves = tuple(replace(curve, y_label=f"I (summed {summed})" if curve.region.get("aggregation")
+                                   else f"I ({unit})") for curve in reduction.curves)
+            reduction = replace(reduction, curves=curves)
         return FrameAnalysis(
             **common,
             resolution=resolution,
@@ -249,31 +348,6 @@ class AnalyzeFrame(FramePreprocessingMixin):
             detected_kind=detected,
             flat_detector=flat,
         )
-
-
-def has_person_cuts(reduction: Reduction) -> bool:
-    """Whether a GISAXS reduction holds a cut the person defined (whose pixels need the q maps)."""
-    return any("gisaxs_cut" in curve.region for curve in reduction.curves)
-
-
-def header_beam_center(
-    metadata: Mapping[str, Any], shape: tuple[int, int]
-) -> Optional[tuple[float, float]]:
-    """Canonical beam centre from the file header, if the loader found a usable one."""
-    center = metadata.get("header_beam_center") if metadata else None
-    if center is None:
-        return None
-    try:
-        x, y = (float(value) for value in center)
-    except (TypeError, ValueError):
-        return None
-    rows, columns = shape
-    # A header centre far outside the frame is a placeholder, not a position.
-    if not (math.isfinite(x) and math.isfinite(y)):
-        return None
-    if not (-columns <= x <= 2 * columns and -rows <= y <= 2 * rows):
-        return None
-    return x, y
 
 
 def _band(values) -> Optional[tuple[float, float]]:
@@ -302,6 +376,8 @@ def held_cut(reduction: Reduction, series_cut: Optional[Mapping[str, Any]]) -> R
                 held[name] = pinned
         if "horizontal_rows" in held and markers.get("horizontal_source") == "manual":
             markers["horizontal_source"] = "series"
+        if "vertical_columns" in held:
+            markers["vertical_source"] = "series"
     elif reduction.kind == GIWAXS and technique == GIWAXS:
         pinned, used = _band(series_cut.get("chi_q_window")), _band(markers.get("chi_q_window"))
         if pinned is not None and used is not None and np.allclose(sorted(pinned), sorted(used)):
@@ -311,20 +387,6 @@ def held_cut(reduction: Reduction, series_cut: Optional[Mapping[str, Any]]) -> R
     frame = series_cut.get("frame")
     markers["series_cut"] = {"frame": (str(frame[0]), int(frame[1])) if frame else None, **held}
     return replace(reduction, markers=markers)
-
-
-def refine_center_by_symmetry(analysis: FrameAnalysis, *, cancelled=None) -> SymmetryCenter:
-    """Beam-centre x of a GISAXS frame from the left–right symmetry of its horizontal cut band."""
-    reduction = analysis.reduction
-    if analysis.kind != GISAXS or reduction is None or analysis.geometry is None:
-        raise ValueError("Symmetry refinement needs a GISAXS frame with a geometry.")
-    curve = reduction.curve("horizontal")
-    if curve is None:
-        raise ValueError("This frame has no horizontal cut.")
-    rows = tuple(int(value) for value in curve.region.get("rows", (0, 0)))
-    return symmetric_center_x(
-        analysis.data, analysis.valid, rows, analysis.geometry.beam_center_x_px, cancelled=cancelled
-    )
 
 
 class ExportAnalysis:
@@ -338,7 +400,8 @@ class ExportAnalysis:
             raise ValueError("This frame has no q map yet (it needs a geometry).")
         x_axis, z_axis = rsm.axes()
         return self.writer.write_map(
-            rsm.image, x_axis, z_axis, Path(path), (rsm.x_label, "qz (Å⁻¹)"), analysis_metadata(analysis)
+            rsm.image, x_axis, z_axis, Path(path), (rsm.x_label, "qz (Å⁻¹)"),
+            analysis_metadata(analysis, with_reproduction=False)
         )
 
     def curves(
@@ -350,7 +413,7 @@ class ExportAnalysis:
         chosen = [curve for key in keys if (curve := analysis.reduction.curve(key)) is not None and not curve.is_empty]
         if not chosen:
             raise ValueError("None of these curves has data.")
-        metadata = analysis_metadata(analysis)
+        metadata = analysis_metadata(analysis, curve_keys=[curve.key for curve in chosen])
         if extra_metadata:
             metadata.update(_plain(dict(extra_metadata)))
         stem = export_stem(analysis)
@@ -371,7 +434,7 @@ class ExportAnalysis:
         if reduction is None:
             return None
         chosen = [curve for curve in reduction.curves if not keys or curve.key in keys]
-        metadata = analysis_metadata(analysis)
+        metadata = analysis_metadata(analysis, curve_keys=[curve.key for curve in chosen if not curve.is_empty])
         if extra_metadata:
             metadata.update(_plain(dict(extra_metadata)))
         sas = sas_curves(chosen, metadata, run=export_stem(analysis))
@@ -382,7 +445,9 @@ class ExportAnalysis:
     def cake(self, analysis: FrameAnalysis, cake: CakeMap, path: Path) -> Path:
         """The unwrapped view as a CSV table: q in the first row, χ in the first column."""
         q_axis, chi_axis = cake.axes()
-        metadata = {**analysis_metadata(analysis), "title": "GIMaP Analyze cake: mean intensity on a chi-q grid, blank = no pixel"}
+        # The cake is calculated from detector pixels, before a series scales its curves and q map to a peak.
+        metadata = {**analysis_metadata(replace(analysis, reference_peak_scale=None), with_reproduction=False),
+                    "title": "GIMaP Analyze cake: mean intensity on a chi-q grid, blank = no pixel"}
         return self.writer.write_map(cake.image, q_axis, chi_axis, Path(path), ("q (Å⁻¹)", "χ (°)"), metadata)
 
     def fit_input(self, analysis: FrameAnalysis, destination: Path, halves: Optional[str] = None) -> Path:
@@ -391,9 +456,9 @@ class ExportAnalysis:
         if curve is None:
             raise ValueError("Nothing to fit: this frame has no usable curve.")
         path = Path(destination) / f"{export_stem(analysis)}_fit_input.dat"
-        return self.writer.write_xy(
-            curve, path, _fit_input_metadata(analysis, analysis_metadata(analysis), halves)
-        )
+        metadata = _fit_input_metadata(analysis, analysis_metadata(analysis, curve_keys=["fit_input"]), halves)
+        self.writer.write_record(path.with_suffix(".json"), {**metadata, "files": [path.name]})
+        return self.writer.write_xy(curve, path, metadata)
 
     def __call__(
         self,
@@ -412,16 +477,17 @@ class ExportAnalysis:
         curves = [curve for curve in analysis.reduction.curves if not curve.is_empty]
         if not curves:
             raise ValueError("Nothing to export: every curve of this frame is empty.")
-        metadata = analysis_metadata(analysis)
+        fit_curve = fit_input_curve(analysis)
+        keys = [curve.key for curve in curves] + ([] if fit_curve is None else ["fit_input"])
+        metadata = analysis_metadata(analysis, curve_keys=keys)
         if extra_metadata:
             metadata.update(_plain(dict(extra_metadata)))
-        fit_curve = fit_input_curve(analysis)
         stem = export_stem(analysis)
         path = Path(destination) / f"{stem}_fit_input.dat"
         sas = sas_curves(curves, metadata, run=stem) if nxcansas else []
         # The record's "files" lists every file of the export: the curves and the files written after it.
         also = (() if fit_curve is None else (path.name,)) + ((nxcansas_name(stem),) if sas else ())
-        written = self.writer.write(curves, Path(destination), stem, metadata, also=also)
+        written = self.writer.write(curves, Path(destination), stem, metadata, also=also, region_names=True)
         if fit_curve is not None:
             written.append(
                 self.writer.write_xy(fit_curve, path, _fit_input_metadata(analysis, metadata, halves))
@@ -444,6 +510,8 @@ class SaveInstrumentProfile:
         shape: Optional[tuple[int, int]],
         source: str,
         dropped_tilt: Optional[DetectorTilt] = None,
+        detector_response: Optional[DetectorResponse] = None,
+        sample_roll_measurement: Optional[dict] = None,
     ) -> InstrumentProfile:
         """``dropped_tilt``: the tilt of the ``.poni`` the geometry comes from, which the flat geometry leaves out."""
         if self.profiles is None:
@@ -460,6 +528,10 @@ class SaveInstrumentProfile:
                 source=source,
                 dropped_tilt=dropped_tilt,
             )
+        if sample_roll_measurement is not None:
+            profile = replace(profile, sample_roll_measurement=sample_roll_measurement)
+        if detector_response is not None:
+            profile = replace(profile, detector_response=detector_response)
         self.profiles.save(profile)
         return profile
 

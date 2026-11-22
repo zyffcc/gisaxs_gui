@@ -131,10 +131,15 @@ def command_auto(arguments) -> int:
     options = PipelineOptions(
         calibration=arguments.calibration, standard=arguments.standard, energy_kev=arguments.energy_kev,
         incidence_deg=arguments.incidence_deg, critical_angle_deg=arguments.critical_angle_deg,
+        sample_roll_deg=arguments.sample_roll_deg, keep_incidence=arguments.keep_incidence,
+        yoneda_critical_deg=arguments.yoneda_critical_deg,
+        yoneda_material=arguments.yoneda_material,
+        orientation_min_exit_deg=arguments.orientation_min_exit_deg,
         pixel_size_um=arguments.pixel_size_um, frame=arguments.frame,
         sum_frames=arguments.sum,
         rings=arguments.rings, max_peaks=arguments.max_peaks, recalibrate=arguments.recalibrate, notes=notes,
         technique=arguments.technique, follow_detection=arguments.technique is None, fit=not arguments.no_fit,
+        phases=tuple(arguments.phase or ()),
     )
     out = Path(arguments.out) if arguments.out else default_output_folder()
     progress = (lambda _text: None) if arguments.quiet else (lambda text: print(text, file=sys.stderr, flush=True))
@@ -167,11 +172,23 @@ def check_arguments(arguments) -> None:
         raise FileNotFoundError(f"No such flat-field file: {arguments.flat_field}")
     if arguments.calibration and not Path(arguments.calibration).is_file():
         raise FileNotFoundError(f"No such calibration file: {arguments.calibration}")
+    for phase in getattr(arguments, "phase", None) or ():
+        if not Path(phase).is_file():
+            raise FileNotFoundError(f"No such phase file (CIF): {phase}")
     incidence = arguments.incidence_deg
     if incidence is not None and not 0.0 < incidence < 90.0:  # nan fails the comparison too
         raise ArgumentProblem(
             f"--incidence-deg {incidence:g}: the incidence angle must be above 0° and below 90° "
             "(grazing incidence is typically 0.1–0.5°). Leave the option out when αi is not known.")
+    minimum_exit = arguments.orientation_min_exit_deg
+    band_critical = arguments.yoneda_critical_deg
+    if band_critical is not None and not 0 < band_critical < 90:
+        raise ArgumentProblem("--yoneda-critical-deg must be above 0° and below 90°.")
+    roll = getattr(arguments, "sample_roll_deg", None)
+    if roll is not None and not -180 <= roll <= 180:
+        raise ArgumentProblem("--sample-roll-deg must be between −180° and 180°.")
+    if minimum_exit is not None and not 0 <= minimum_exit <= 90:
+        raise ArgumentProblem("--orientation-min-exit-deg must be between 0° and 90°.")
     critical = arguments.critical_angle_deg
     if critical is not None and not 0.0 <= critical < 90.0:
         raise ArgumentProblem(f"--critical-angle-deg {critical:g}: the critical angle must be within [0°, 90°).")
@@ -309,8 +326,23 @@ def parser() -> argparse.ArgumentParser:
     )
     auto.add_argument("--energy-kev", type=float, help="X-ray energy in keV (beats the header and the notes)")
     auto.add_argument("--incidence-deg", type=float, help="incidence angle αi in degrees, above 0 and below 90 (beats the notes and the profile)")
+    auto.add_argument("--keep-incidence", action="store_true",
+                      help="keep the nominal αi even if the frame measurement differs by more than 3σ")
+    yoneda = auto.add_mutually_exclusive_group()
+    yoneda.add_argument("--yoneda-critical-deg", type=float,
+                      help="known critical angle of the material giving the GISAXS Yoneda band (degrees)")
+    yoneda.add_argument("--yoneda-material", choices=("Si", "SiO2", "glass", "Au"),
+                        help="material assigned to the GISAXS Yoneda band; calculate αc at the calibrated wavelength")
+    auto.add_argument("--sample-roll-deg", type=float, help="sample normal roll ψ about the beam in degrees (overrides frame measurement)")
+    auto.add_argument("--orientation-min-exit-deg", type=float,
+                      help="Minimum pixel exit angle for GIWAXS ring orientation (default: twice αc or twice αi).")
     auto.add_argument("--critical-angle-deg", type=float,
                       help="critical angle αc of the film in degrees: q_z is corrected for refraction (default: kinematic)")
+    auto.add_argument(
+        "--phase", action="append", metavar="CIF",
+        help="a CIF of a phase the GIWAXS rings are assigned to (nearest reflection within max(3 σ, FWHM/2)); "
+             "repeat for several phases",
+    )
     auto.add_argument(
         "--pixel-size-um", type=float,
         help="detector pixel size in µm: used even when the image header gives another (Decisions names both)",

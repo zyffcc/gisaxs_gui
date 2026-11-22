@@ -454,6 +454,7 @@ def test_comparing_standards_on_a_real_agbh_image_picks_agbh(tmp_path: Path) -> 
     assert outcome["verdict"].startswith("clear: agbh"), outcome
     best = outcome["comparison"][0]
     assert best["standard"] == "agbh" and best["distance_mm"] == pytest.approx(100.0, rel=0.01)
+    assert best["initial_point_rms_px"] is not None and best["point_rms_px"] is not None
 
 
 def test_a_declined_geometry_is_not_saved(tmp_path: Path) -> None:
@@ -510,7 +511,8 @@ def giwaxs_frame(seed: int = 5) -> np.ndarray:
     return np.random.default_rng(seed).poisson(image).astype(np.float32)
 
 
-def test_a_frame_without_geometry_is_calibrated_from_files_nearby(tmp_path: Path) -> None:
+def test_a_frame_without_geometry_is_calibrated_from_files_nearby(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
     from PyQt5.QtWidgets import QMainWindow
 
     from src.gimap.app import AppContext
@@ -535,7 +537,7 @@ def test_a_frame_without_geometry_is_calibrated_from_files_nearby(tmp_path: Path
     log = touch(root / "logs" / "beamtime.log", "Energy: 12.3984 keV\nSDD approx 100 mm\nalpha_i = 0.2 deg\n")
     profiles = InMemoryInstrumentProfileRepository([])
     context = AppContext(
-        settings=InMemorySettingsRepository({}), session=InMemorySessionRepository(),
+        settings=InMemorySettingsRepository({"assistant": {"approved_services": ["Anthropic"]}}), session=InMemorySessionRepository(),
         preferences=InMemoryUserPreferencesRepository(), instrument_profiles=profiles,
     )
     page = AnalyzePage(create_analyze_view_model(context))
@@ -572,6 +574,7 @@ def test_a_frame_without_geometry_is_calibrated_from_files_nearby(tmp_path: Path
     assert geometry.distance_m == pytest.approx(0.100, rel=0.01)
     assert (geometry.beam_center_x_px, geometry.beam_center_y_px) == pytest.approx(CENTER, abs=1.0)
     assert geometry.incidence_deg == pytest.approx(0.2) and "AgBH_00001.tif" in saved[0].source
+    assert "Anthropic · fake-claude" in saved[0].source
     analysis = page.view_model.state.analysis
     assert analysis.geometry is not None and analysis.kind == "giwaxs"
     found = [peak.q for peak in outcome.results.peak_searches["radial"].peaks]
@@ -601,6 +604,7 @@ def test_the_choice_dialog_returns_the_option_or_the_typed_text() -> None:
 
 
 def test_a_calibration_named_in_the_notes_is_used_even_far_away(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
     """The user's case: 'the calibration is <path>' — no search range, no standard in the name."""
     from PyQt5.QtWidgets import QMainWindow, QMessageBox
 
@@ -632,7 +636,7 @@ def test_a_calibration_named_in_the_notes_is_used_even_far_away(tmp_path: Path, 
     far = save_tiff(tmp_path.parent / f"{tmp_path.name}_other_disk" / "2026" / "img_0005.tif", agbh_image())
     profiles = InMemoryInstrumentProfileRepository([])
     context = AppContext(
-        settings=InMemorySettingsRepository({}), session=InMemorySessionRepository(),
+        settings=InMemorySettingsRepository({"assistant": {"approved_services": ["Anthropic"]}}), session=InMemorySessionRepository(),
         preferences=InMemoryUserPreferencesRepository(), instrument_profiles=profiles,
     )
     page = AnalyzePage(create_analyze_view_model(context))

@@ -13,16 +13,26 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Optional
 
 from .detector_geometry import DetectorGeometry
+from .detector_response import DetectorResponse
+from .sample_roll_record import measurement_record
 from .detector_tilt import DetectorTilt
 
 SCHEMA_VERSION = 1
 TILT_KEY, OLD_TILT_KEY = "tilt", "dropped_tilt"
 """The key a profile's ``.poni`` tilt is saved under. Up to 0.2.0 it was ``dropped_tilt`` (when the geometry left
 the tilt out); the tilt is applied now, so it is written as ``tilt`` and the old key is still read."""
+OTHER_SCALE_SETUP = "This standard calibration belongs to another instrument set-up."
 
 
 def _normalized_name(value: Optional[str]) -> str:
     return " ".join(str(value or "").split()).casefold()
+
+
+def scale_geometry(geometry: DetectorGeometry) -> dict[str, float]:
+    """Detector dimensions, orientation and wavelength used to identify the calibrated set-up."""
+    return {key: getattr(geometry, key) for key in (
+        "distance_m", "wavelength_angstrom", "pixel_size_x_m", "pixel_size_y_m",
+        "rot1_rad", "rot2_rad", "rot3_rad")}
 
 
 @dataclass(frozen=True)
@@ -38,6 +48,10 @@ class InstrumentProfile:
     0.2 the geometry left this tilt out. Now a geometry without rotations takes the tilt's rotations
     (``__post_init__``), so a profile saved by an older GIMaP is read with its detector tilted as the ``.poni`` says.
     """
+    standard_calibration: Optional[dict] = field(default=None, hash=False)
+    """Absolute intensity scale and its measurement record, saved separately from the geometry source."""
+    detector_response: DetectorResponse = field(default_factory=DetectorResponse)
+    sample_roll_measurement: Optional[dict] = field(default=None, hash=False)
 
     def __post_init__(self) -> None:
         if not str(self.name).strip():
@@ -48,9 +62,10 @@ class InstrumentProfile:
                 raise ValueError(f"Invalid detector shape {self.detector_shape!r}.")
             object.__setattr__(self, "detector_shape", (rows, columns))
         tilt = self.dropped_tilt
-        if tilt is not None and not self.geometry.tilted:
+        if tilt is not None and not self.geometry.requires_projection:
             object.__setattr__(
-                self, "geometry", self.geometry.with_rotations(tilt.rot1_rad, tilt.rot2_rad, tilt.rot3_rad)
+                self, "geometry", replace(self.geometry, rot1_rad=tilt.rot1_rad, rot2_rad=tilt.rot2_rad,
+                                          rot3_rad=tilt.rot3_rad, orientation=tilt.orientation)
             )
 
     def match_score(self, *, detector_name: Optional[str], shape: Optional[tuple[int, int]]) -> int:
@@ -70,6 +85,13 @@ class InstrumentProfile:
             score += 2
         return score
 
+    def check_scale_setup(self, record, geometry, shape) -> None:
+        required_shape = record.get("detector_shape")
+        if (self.name != record.get("instrument_profile") or geometry is None
+                or scale_geometry(geometry) != record.get("instrument_geometry")
+                or (required_shape and shape and list(shape) != required_shape)):
+            raise ValueError(OTHER_SCALE_SETUP)
+
     def updated(
         self, geometry: DetectorGeometry, *, source: str, dropped_tilt: Optional[DetectorTilt] = None
     ) -> "InstrumentProfile":
@@ -81,6 +103,9 @@ class InstrumentProfile:
             source=source,
             updated_at=datetime.now(timezone.utc).isoformat(),
             dropped_tilt=dropped_tilt,
+            sample_roll_measurement=(self.sample_roll_measurement if self.geometry.sample_roll_deg == geometry.sample_roll_deg else None),
+            standard_calibration=(self.standard_calibration if scale_geometry(self.geometry) == scale_geometry(geometry)
+                                  else None),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -94,6 +119,12 @@ class InstrumentProfile:
         }
         if self.dropped_tilt is not None:  # written only when there is one: older files stay as they were
             values[TILT_KEY] = self.dropped_tilt.to_dict()
+        if self.sample_roll_measurement is not None:
+            values["sample_roll_measurement"] = self.sample_roll_measurement
+        if self.standard_calibration is not None:
+            values["standard_calibration"] = self.standard_calibration
+        if self.detector_response != DetectorResponse():
+            values["detector_response"] = asdict(self.detector_response)
         return values
 
     @classmethod
@@ -107,6 +138,9 @@ class InstrumentProfile:
             source=str(values.get("source", "")),
             updated_at=str(values.get("updated_at", "")),
             dropped_tilt=DetectorTilt.from_dict(values.get(TILT_KEY) or values.get(OLD_TILT_KEY)),
+            standard_calibration=values.get("standard_calibration"),
+            detector_response=DetectorResponse(**(values.get("detector_response") or {})),
+            sample_roll_measurement=measurement_record(values.get("sample_roll_measurement")),
         )
 
 

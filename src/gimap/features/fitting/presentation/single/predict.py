@@ -15,15 +15,17 @@ from PyQt5.QtCore import QSignalBlocker
 from src.gimap.app.presentation.i18n import tr
 
 from ...application.single_predict import PARTICLES, network_available, predict_request, predicted
-from .predict_texts import points_tuple, solution_lines
-from .session import Solution
+from .predict_progress import PredictProgressMixin, as_solutions
+from .predict_texts import solution_lines
 
 MISSING = "Predict parameters needs GIMaP's proposal network, which is missing in this installation ({name})."
 
 
-class PredictPageMixin:
+class PredictPageMixin(PredictProgressMixin):
     def setup_predict(self) -> None:
         self._predict_job_id = None
+        self._predict_selection = None
+        self.setup_predict_progress()  # the stages, the time, and what Stop keeps (predict_progress.py)
         for text, value in PARTICLES:
             self.predict_particles.addItem(tr(text), value)
         stored = self._remembered("predict_settings")
@@ -50,7 +52,14 @@ class PredictPageMixin:
         if particles == "model" and not model.components:
             particles = "spheres_cylinders"  # nothing in Model yet: the network chooses
         request = predict_request(data, model, particles)
+        if self.reflected_beam.isChecked():
+            request.payload["reflected_beam"] = True
+            if not request.payload["qz"] and self.measured_qz.value():
+                request.payload["measured_qz"] = self.measured_qz.value()
         self._predict_job_id = request.job_id
+        self._predict_selection = selection
+        given = request.payload.get("compositions")
+        self._predict_started(None if given is None else len(given))
         self.tasks.submit("fit", lambda: self._run_predict_job(request),
                           on_done=lambda value: self._predict_finished(value, curve, selection),
                           on_error=lambda message, details="": self._failed(message, details, curve))
@@ -67,7 +76,7 @@ class PredictPageMixin:
         if self._stop_event.is_set():
             self._cancel_predict()
         else:
-            self._progress.changed.emit(float(progress.fraction), str(progress.message))
+            self._predict_report(progress)
 
     def _cancel_predict(self) -> None:
         if self._predict_job_id:
@@ -75,9 +84,12 @@ class PredictPageMixin:
 
     def _predict_finished(self, value, curve, selection) -> None:
         self._predict_job_id = None
-        solutions = [Solution(p.model, p.chi2, f"Predict parameters · {p.name}", 0.0, probability=p.probability,
-                              intervals=tuple(p.intervals.items()), flags=p.flags, points=points_tuple(p.points),
-                              tried=p.tried) for p in predicted(value)]
+        self._predict_clock.stop()
+        self._predict_partial = None
+        solutions = as_solutions(predicted(value))
+        if curve is None or curve is self.session.curve:
+            self.session.predict_run = {"stopped": False, "network": value.get("network"),
+                                        "seconds": value.get("seconds"), "reproduction": value.get("reproduction")}
         self._solutions_found(solutions, curve, selection)
 
     def posterior_lines(self) -> list[str]:

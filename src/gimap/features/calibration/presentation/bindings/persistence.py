@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 
 from PyQt5.QtCore import QSignalBlocker, Qt
@@ -15,7 +16,8 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ..pixel_coordinates import shown_center
+from ..result_numbers import geometry_text
+from .energy_source import FROM_IMPORT
 
 LOGGER = logging.getLogger(__name__)
 
@@ -46,19 +48,16 @@ class PersistenceMixin:
         self._sync_main_window_geometry()
         self.calibrationApplied.emit(self.result)
         # One confirmation: a toast that never blocks (no message box after the overwrite question).
-        show_toast(self._toast_host(), self._applied_text(), level="ok")
+        candidate, profile = self.result.selected_candidate, self.view_model.last_profile
+        show_toast(self._toast_host(), lambda: self._applied_text(candidate, profile), level="ok")
 
-    def _applied_text(self) -> str:
-        candidate = self.result.selected_candidate
+    def _applied_text(self, candidate, profile) -> str:
         # The centre as the saved instrument profile holds it and as Analyze shows it.
-        center_x, center_y = shown_center(candidate)
+        center_x, center_y, distance = geometry_text(candidate)
         text = trf(
             "Geometry calibration applied: centre ({x}, {y}) px, distance {distance} mm.",
-            x=f"{center_x:.2f}",
-            y=f"{center_y:.2f}",
-            distance=f"{candidate.distance_mm:.2f}",
+            x=center_x, y=center_y, distance=distance,
         )
-        profile = self.view_model.last_profile
         if profile is not None:
             text += " " + trf(
                 "Saved as instrument profile \u201c{name}\u201d; Analyze uses it automatically "
@@ -67,14 +66,20 @@ class PersistenceMixin:
             )
         return text
 
-    def export_result(self) -> None:
+    def export_result(self, *, poni: bool = False) -> None:
         if self.result is None:
             return
         self._commit_manual_values()
         default = self.view_model.default_export_path(self.result.source_image)
-        path, _ = QFileDialog.getSaveFileName(
-            self, tr("Export Calibration"), default, tr("JSON Files (*.json)")
+        poni_filter = tr("pyFAI geometry (*.poni)")
+        filters = poni_filter if poni else f"{tr('JSON Files (*.json)')};;{poni_filter}"
+        if poni:
+            default = str(Path(default).with_suffix(".poni"))
+        path, chosen = QFileDialog.getSaveFileName(
+            self, tr("Export .poni") if poni else tr("Export Calibration"), default, filters
         )
+        if path and (poni or chosen == poni_filter) and not path.lower().endswith(".poni"):
+            path = str(Path(path).with_suffix(".poni"))
         if path:
             try:
                 self.view_model.export_result(path)
@@ -104,9 +109,11 @@ class PersistenceMixin:
             if self.image is not previous_image:
                 self._preview_cache.clear()
                 self._show_imported_frames()
-            self.energy_spin.setValue(self.result.energy_kev)
+            self._set_energy(self.result.energy_kev, FROM_IMPORT)
             self.pixel_x_spin.setValue(self.result.pixel_size_x_m * 1e6)
             self.pixel_y_spin.setValue(self.result.pixel_size_y_m * 1e6)
+            roll = self.result.selected_candidate.rot3_deg
+            self.rot3_spin.setValue(roll if -180 <= roll <= 180 else (roll + 180) % 360 - 180)
             # A new run fits the standard this calibration was made with: left on "Auto Detect" it could
             # settle on another one than the calibration that was imported.
             standard_index = self.standard_combo.findData(self.result.selected_candidate.standard_key)

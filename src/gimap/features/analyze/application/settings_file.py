@@ -13,26 +13,33 @@ file that no longer exists is reported when the file is loaded.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from dataclasses import fields as _fields
 from typing import Any, Mapping, Optional
 
 from src.gimap.shared.geometry import InstrumentProfile
+from src.gimap.shared.material_optics import MATERIALS
+from src.gimap.shared.geometry.sample_roll_record import measurement_record
 from src.gimap.shared.version import SOFTWARE as RELEASE
 
 from ..domain import (
     Corrections,
+    Normalisation,
     GisaxsCutSettings,
     GiwaxsSettings,
-    MaskShape,
     QBox,
     Sector,
     X_AXIS_Q,
     X_AXIS_TWO_THETA,
 )
+from ..domain.mask_edits import mask_edit_from_record, mask_edit_record
 from .cut_regions import region_to_dict, regions_from_dicts
 from .gisaxs_cuts import cut_to_dict, cuts_from_dicts
 from .models import AUTO, MODES
+from .incidence_record import checked_incidence_record
 from .use_cases import SOFTWARE
+
+NORMALISATION_FIELDS = tuple(item.name for item in _fields(Normalisation))
 
 SETTINGS_FORMAT = "gimap-analyze-settings"
 SETTINGS_VERSION = 1
@@ -56,6 +63,13 @@ class AnalyzeSettings:
     pin_series_cuts: Optional[bool] = None
     """One cut for every frame of a series (``False``: the cut is found again in every frame); ``None``: not said
     (a file written before the pin existed) — loading it leaves the pin in force as it is."""
+
+    sample_roll_deg: Optional[float] = None
+    sample_roll_measurement: Optional[dict] = field(default=None, hash=False)
+    incidence_measurement: Optional[dict] = field(default=None, hash=False)
+    incidence_locked: bool = False
+    yoneda_critical_deg: Optional[float] = None
+    yoneda_material: Optional[str] = None
 
 
 def _pair(value) -> Optional[tuple[float, float]]:
@@ -88,6 +102,12 @@ def settings_record(settings: AnalyzeSettings) -> dict[str, Any]:
         "profile_name": settings.profile_name,
         "profile": settings.profile.to_dict() if settings.profile is not None else None,
         "incidence_deg": settings.incidence_deg,
+        "incidence_measurement": settings.incidence_measurement,
+        "incidence_locked": settings.incidence_locked,
+        "yoneda_critical_deg": settings.yoneda_critical_deg,
+        "yoneda_material": settings.yoneda_material,
+        "sample_roll_deg": settings.sample_roll_deg,
+        "sample_roll_measurement": settings.sample_roll_measurement,
         "beam_center_px": list(settings.beam_center) if settings.beam_center is not None else None,
         "beam_center_shape_px": list(settings.beam_center_shape) if settings.beam_center_shape else None,
         "sum_frames": int(settings.sum_count),
@@ -97,17 +117,37 @@ def settings_record(settings: AnalyzeSettings) -> dict[str, Any]:
             "mirror_fill": bool(corrections.mirror_fill),
             "minimum": corrections.minimum,
             "maximum": corrections.maximum,
+            "dark_path": corrections.dark_path,
+            "dark_frame": int(corrections.dark_frame),
+            "dark_scale": float(corrections.dark_scale),
             "background_path": corrections.background_path,
             "background_frame": int(corrections.background_frame),
             "background_scale": float(corrections.background_scale),
             "flat_field_path": corrections.flat_field_path,
+            "background_dark_scale": corrections.background_dark_scale,
+            "background_already_dark_subtracted": corrections.background_already_dark_subtracted,
+            "flat_already_dark_subtracted": corrections.flat_already_dark_subtracted,
+            "flat_field_floor": corrections.flat_field_floor,
+            "counts_per_adu": corrections.counts_per_adu,
+            "offset_adu": corrections.offset_adu,
+            "error_model": corrections.error_model,
+            "sigma_path": corrections.sigma_path,
+            "use_profile_response": corrections.use_profile_response,
+            "pooled_scatter": corrections.pooled_scatter,
+            "poisson_variance": corrections.poisson_variance,
+            "normalisation": asdict(corrections.normalisation),
+            "lorentz": bool(corrections.lorentz),
+            "lorentz_band_px": corrections.lorentz_band_px,
+            "orientation_min_exit_deg": corrections.orientation_min_exit_deg,
+            "orientation_polarization": corrections.orientation_polarization,
             "mask_path": corrections.mask_path,
-            "mask_shapes": [
-                {"kind": shape.kind, "points": [list(point) for point in shape.points]} for shape in corrections.mask_shapes
-            ],
+            "mask_shapes": [mask_edit_record(edit) for edit in corrections.mask_shapes],
             "solid_angle": bool(corrections.solid_angle),
             "polarization": corrections.polarization,
             "film_thickness_nm": corrections.film_thickness_nm,
+            "film_delta": corrections.film_delta,
+            "film_beta": corrections.film_beta,
+            "film_cif_path": corrections.film_cif_path,
             "attenuation_length_um": corrections.attenuation_length_um,
             "critical_angle_deg": corrections.critical_angle_deg,
         },
@@ -147,24 +187,44 @@ def settings_from_record(record: Any) -> AnalyzeSettings:
         mode = record.get("mode") if record.get("mode") in MODES else AUTO
         profile = InstrumentProfile.from_dict(record["profile"]) if record.get("profile") else None
         values = record.get("corrections") or {}
+        norm = values.get("normalisation") or {}
         corrections = Corrections(
+            dark_path=values.get("dark_path") or None,
+            dark_frame=int(values.get("dark_frame", 0)),
+            dark_scale=float(values.get("dark_scale", 1.0)),
+            normalisation=Normalisation(**{key: norm[key] for key in NORMALISATION_FIELDS if key in norm}),
+            lorentz=bool(values.get("lorentz", False)),
+            lorentz_band_px=float(values.get("lorentz_band_px", 2.0)),
+            orientation_min_exit_deg=_optional_float(values.get("orientation_min_exit_deg")),
+            orientation_polarization=bool(values.get("orientation_polarization", True)),
             background_path=values.get("background_path") or None,
             background_frame=int(values.get("background_frame", 0)),
             background_scale=float(values.get("background_scale", 1.0)),
             flat_field_path=values.get("flat_field_path") or None,
+            background_dark_scale=_optional_float(values.get("background_dark_scale")),
+            background_already_dark_subtracted=bool(values.get("background_already_dark_subtracted", False)),
+            flat_already_dark_subtracted=bool(values.get("flat_already_dark_subtracted", False)),
+            flat_field_floor=float(values.get("flat_field_floor", 0.05)),
+            counts_per_adu=float(values.get("counts_per_adu", 1.0)),
+            offset_adu=float(values.get("offset_adu", 0.0)),
+            error_model=values.get("error_model", "auto"),
+            sigma_path=values.get("sigma_path") or None,
+            use_profile_response=bool(values.get("use_profile_response", True)),
+            pooled_scatter=bool(values.get("pooled_scatter", True)),
+            poisson_variance=values.get("poisson_variance", "observed"),
             minimum=_optional_float(values.get("minimum")),
             maximum=_optional_float(values.get("maximum")),
             gap_guard_px=int(values.get("gap_guard_px", 0)),
             mask_path=values.get("mask_path") or None,
-            mask_shapes=tuple(
-                MaskShape(str(item["kind"]), tuple(tuple(point) for point in item["points"]))
-                for item in values.get("mask_shapes") or ()
-            ),
+            mask_shapes=tuple(mask_edit_from_record(item) for item in values.get("mask_shapes") or ()),
             mirror_fill=bool(values.get("mirror_fill", False)),
             bad_pixels=bool(values.get("bad_pixels", True)),
             solid_angle=bool(values.get("solid_angle", False)),
             polarization=_optional_float(values.get("polarization")),
             film_thickness_nm=_optional_float(values.get("film_thickness_nm")),
+            film_delta=_optional_float(values.get("film_delta")),
+            film_beta=_optional_float(values.get("film_beta")),
+            film_cif_path=values.get("film_cif_path") or None,
             attenuation_length_um=_optional_float(values.get("attenuation_length_um")),
             critical_angle_deg=_optional_float(values.get("critical_angle_deg")),
         )
@@ -194,11 +254,23 @@ def settings_from_record(record: Any) -> AnalyzeSettings:
             regions=tuple(cuts_from_dicts(values.get("cuts"))),
         )
         export = record.get("export")
+        yoneda_critical = _optional_float(record.get("yoneda_critical_deg"))
+        if yoneda_critical is not None and not 0 < yoneda_critical < 90:
+            raise ValueError("The Yoneda critical angle must be between 0 and 90 degrees.")
+        material = record.get("yoneda_material")
+        if material is not None and material not in MATERIALS:
+            raise ValueError("Unknown Yoneda material.")
         return AnalyzeSettings(
             mode=mode,
             profile_name=record.get("profile_name") or (profile.name if profile is not None else None),
             profile=profile,
             incidence_deg=_optional_float(record.get("incidence_deg")),
+            incidence_measurement=checked_incidence_record(record.get("incidence_measurement")),
+            incidence_locked=bool(record.get("incidence_locked", False)),
+            yoneda_critical_deg=yoneda_critical,
+            yoneda_material=material,
+            sample_roll_deg=_optional_float(record.get("sample_roll_deg")),
+            sample_roll_measurement=measurement_record(record.get("sample_roll_measurement")),
             beam_center=_pair(record.get("beam_center_px")),
             beam_center_shape=_shape(record.get("beam_center_shape_px")),
             sum_count=max(1, int(record.get("sum_frames", 1))),

@@ -24,6 +24,7 @@ from ..series_texts import (
 )
 from ..views.series_view import CHANGE_EMPTY, CHANGE_FEW
 from .series_display import nice_step
+from .series_timeline import TIMELINE_KINDS
 
 FOLLOW_MS = 300
 """A picked row is shown in Analyze this long after the last pick (dragging the band reads no frame)."""
@@ -114,7 +115,9 @@ class SeriesPickMixin:
             return None
         low, high = self._series_q
         kind = self.series_trace_combo.currentData() or "intensity"
-        words = TRACE_WORDS[kind].format(low=f"{low:.6g}", high=f"{high:.6g}", unit=unit_of(series.x_label))
+        words = TRACE_WORDS.get(kind, "").format(low=f"{low:.6g}", high=f"{high:.6g}", unit=unit_of(series.x_label))
+        if kind in TIMELINE_KINDS:
+            return self._series_timeline_values(kind)
         if kind == "change":
             stages = self._series_stages
             return None if stages is None else (kind, np.asarray(stages.scores[:, 0], dtype=float), words)
@@ -136,6 +139,9 @@ class SeriesPickMixin:
         low, high = self._series_q
         centre, half = 0.5 * (low + high), 0.5 * (high - low)
         kind = self.series_trace_combo.currentData() or "intensity"
+        self.series_trace_plot.title_label.setToolTip("")  # (the change and the timeline say what they are)
+        if kind in TIMELINE_KINDS and self._draw_timeline_trace(kind):
+            return
         few = series.rows < STAGES_LEAST_FRAMES  # no stages are looked for in so short a map
         columns, how = self._series_window()
         empty = TRACE_NO_POINT if kind != "change" and how == "none" else ""  # nothing measured there: no value

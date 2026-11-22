@@ -149,9 +149,9 @@ def test_a_fitted_centre_anywhere_is_shown_and_saved_as_the_same_point(window, t
     shown = (fitted[0] + 0.5, fitted[1] + 0.5)
     _show(dialog, _result(tmp_path / "frame.cbf", *fitted))
 
-    assert dialog.result_center_x.text() == f"{shown[0]:.3f} px"
-    assert dialog.result_center_y.text() == f"{shown[1]:.3f} px"
-    assert dialog.candidate_table.item(0, 2).text() == f"{shown[0]:.1f}, {shown[1]:.1f}"
+    assert dialog.result_center_x.text() == f"{shown[0]:.7g} px"
+    assert dialog.result_center_y.text() == f"{shown[1]:.7g} px"
+    assert dialog.candidate_table.item(0, 2).text() == f"{shown[0]:.7g}, {shown[1]:.7g}"
     vertical, horizontal = dialog.axes.lines
     assert (vertical.get_xdata()[0], horizontal.get_ydata()[0]) == shown
     assert tuple(dialog.axes.images[0].get_extent()) == (0.0, float(COLUMNS), float(ROWS), 0.0)
@@ -165,7 +165,7 @@ def test_a_fitted_centre_anywhere_is_shown_and_saved_as_the_same_point(window, t
     assert (selected.center_x_px, selected.center_y_px) == fitted and selected.warnings == []
     assert (profile.geometry.beam_center_x_px, profile.geometry.beam_center_y_px) == shown
     (toast,) = visible_toasts(dialog.right)
-    assert f"centre ({shown[0]:.2f}, {shown[1]:.2f}) px" in toast.text()
+    assert f"centre ({shown[0]:.7g}, {shown[1]:.7g}) px" in toast.text()
     # The settings another tool reads keep the fit's own numbers, as in every earlier version.
     settings = dialog.app_context.settings
     assert (settings.get("detector", "beam_center_x"), settings.get("detector", "beam_center_y")) == fitted
@@ -203,7 +203,7 @@ def test_a_centre_typed_on_an_edge_is_saved_exported_and_read_back_as_typed(wind
     try:
         other.import_result_from(str(target))
         assert (other.result_center_x.text(), other.result_center_y.text()) == (
-            f"{typed[0]:.3f} px", f"{typed[1]:.3f} px"
+            f"{typed[0]:.7g} px", f"{typed[1]:.7g} px"
         )
         assert (other.manual_x.value(), other.manual_y.value()) == pytest.approx(typed, abs=5e-4)
     finally:
@@ -240,7 +240,7 @@ def test_the_next_start_reads_the_centre_the_window_showed(tmp_path, monkeypatch
     assert asked == []  # a new profile: nothing to overwrite
     (written,) = json.loads(store.read_text(encoding="utf-8"))["profiles"]
     assert (written["geometry"]["beam_center_x_px"], written["geometry"]["beam_center_y_px"]) == shown
-    assert window_text == (f"{shown[0]:.3f} px", f"{shown[1]:.3f} px")
+    assert window_text == (f"{shown[0]:.7g} px", f"{shown[1]:.7g} px")
 
     # The next start: a repository of its own on the same file.
     again = JsonInstrumentProfileRepository(store)
@@ -275,7 +275,7 @@ def test_language_and_theme_change_no_number(window, tmp_path) -> None:
         )
 
     before = numbers()
-    assert before[:3] == ("400.500 px", "500.500 px", "400.5, 500.5")
+    assert before[:3] == ("400.5 px", "500.5 px", "400.5, 500.5")
     try:
         for language, theme in (("zh", "dark"), ("en", "dark"), ("zh", "light"), ("en", "light")):
             i18n.apply_language(language, [dialog])
@@ -284,7 +284,7 @@ def test_language_and_theme_change_no_number(window, tmp_path) -> None:
             assert numbers() == before, (language, theme)
             _apply(dialog)
             (toast,) = visible_toasts(dialog.right)
-            assert "(400.50, 500.50) px" in toast.text(), (language, theme)
+            assert "(400.5, 500.5) px" in toast.text(), (language, theme)
     finally:
         i18n.apply_language("en")
         apply_theme("light", 9)

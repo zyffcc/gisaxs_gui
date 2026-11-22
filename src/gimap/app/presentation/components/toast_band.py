@@ -33,6 +33,8 @@ class BandContent:
     """x where the progress bar / buttons at the right end of the band begin; ``None``: none there."""
     controls_top: Optional[int] = None
     """y of the top of those controls."""
+    level: str = ""
+    """The ``level`` property of the status label (``"error"``, ``"warning"`` …; ``""`` for a status bar)."""
 
 
 def _drawn_rect(widget: QWidget, parent: QWidget) -> QRect:
@@ -59,7 +61,7 @@ def band_content(roots: Iterable[Optional[QWidget]], parent: QWidget, top: int, 
     """What the widgets of ``roots`` (the page shown, a status bar) show in the rows ``top`` … ``bottom`` of
     ``parent``; ``obstacles``: other rectangles there (in ``parent``'s coordinates) the row keeps off as it
     keeps off the controls. A notice's own label and buttons are no content of the band."""
-    texts: list[tuple[int, int, str]] = []
+    texts: list[tuple[int, int, str, str]] = []
     controls: list[QRect] = [rect for rect in obstacles if not rect.isEmpty() and rect.bottom() >= top and rect.top() <= bottom]
     for root in roots:
         if root is None or not root.isVisible() or not parent.isAncestorOf(root):
@@ -68,7 +70,7 @@ def band_content(roots: Iterable[Optional[QWidget]], parent: QWidget, top: int, 
             rect = _drawn_rect(root, parent)
             if rect.bottom() >= top and rect.top() <= bottom:
                 end = rect.left() + 8 + root.fontMetrics().horizontalAdvance(root.currentMessage())
-                texts.append((rect.left(), min(rect.right(), end), root.currentMessage()))
+                texts.append((rect.left(), min(rect.right(), end), root.currentMessage(), ""))
         for widget in root.findChildren((QLabel, QProgressBar, QAbstractButton)):
             holder = widget.parentWidget()
             if not widget.isVisible() or (holder is not None and holder.property("gimapToast")):
@@ -78,10 +80,10 @@ def band_content(roots: Iterable[Optional[QWidget]], parent: QWidget, top: int, 
                 continue
             if isinstance(widget, QLabel):
                 if widget.text():
-                    texts.append((rect.left(), _text_end(widget, rect), widget.text()))
+                    texts.append((rect.left(), _text_end(widget, rect), widget.text(), str(widget.property("level") or "")))
             else:
                 controls.append(rect)
-    status = min(texts) if texts else (0, None, "")
+    status = min(texts) if texts else (0, None, "", "")
     left = top_of = None
     boundary = parent.width()
     for rect in sorted(controls, key=lambda found: found.right(), reverse=True):
@@ -89,7 +91,7 @@ def band_content(roots: Iterable[Optional[QWidget]], parent: QWidget, top: int, 
             break
         boundary = min(boundary, rect.left())
         left, top_of = boundary, rect.top() if top_of is None else min(top_of, rect.top())
-    return BandContent(status[1], status[2], left, top_of)
+    return BandContent(status[1], status[2], left, top_of, status[3])
 
 
 __all__ = ["BandContent", "GAP", "band_content"]

@@ -51,17 +51,17 @@ def compare_verdict(fits: list[dict], distance_hint: Optional[float] = None) -> 
     name = best.get("standard")
     if rings < GOOD_RINGS or rms > GOOD_RMS_PX:
         return (
-            f"none fits well (best {name}: {rings} rings, rms {rms:.2g} px): the image may show another "
+            f"none fits well (best {name}: {rings} rings, ring-radius RMS {rms:.2g} px): the image may show another "
             "standard, the energy or pixel size may be wrong, or the rings are too weak"
         )
     if len(fits) == 1:
-        return f"clear: {name} ({rings} rings, rms {rms:.2g} px)"
+        return f"clear: {name} ({rings} rings, ring-radius RMS {rms:.2g} px)"
     second = fits[1]
     second_rings, second_rms = int(second.get("matched_rings") or 0), rms_px(second)
     if rings >= second_rings + 2 or rms <= 0.6 * second_rms:
         return (
-            f"clear: {name} ({rings} rings, rms {rms:.2g} px) beats {second.get('standard')} "
-            f"({second_rings} rings, rms {second_rms:.2g} px)"
+            f"clear: {name} ({rings} rings, ring-radius RMS {rms:.2g} px) beats {second.get('standard')} "
+            f"({second_rings} rings, ring-radius RMS {second_rms:.2g} px)"
         )
     if distance_hint:
         best_off = abs(best["distance_mm"] - distance_hint) / distance_hint

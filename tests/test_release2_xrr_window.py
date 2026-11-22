@@ -785,6 +785,7 @@ def test_the_public_agbh_calibration_reads_the_same_in_calibration_analyze_and_x
     from src.gimap.features.analyze.bootstrap import create_analyze_view_model
     from src.gimap.features.analyze.presentation.page import AnalyzePage
     from src.gimap.features.calibration.presentation.dialog import GeometryCalibrationDialog
+    from src.gimap.shared.numbers import format_number
 
     monkeypatch.setattr(QMessageBox, "question", lambda *_args, **_kwargs: QMessageBox.Yes)
     monkeypatch.setattr(QMessageBox, "warning", lambda *_args, **_kwargs: pytest.fail("no warning expected"))
@@ -808,6 +809,7 @@ def test_the_public_agbh_calibration_reads_the_same_in_calibration_analyze_and_x
         # The standard and the rough distance are known for this frame (the manual advises to give them).
         calibration.standard_combo.setCurrentIndex(calibration.standard_combo.findData("agbh"))
         calibration.estimated_distance_spin.setValue(1600.0)
+        calibration.energy_spin.setValue(12.0)  # the frame states no energy: it is entered (none is assumed)
         calibration.start_calibration()
         _wait(app, lambda: calibration._cal_thread is None and calibration.result is not None, 240)
         calibration.apply_result()
@@ -816,7 +818,7 @@ def test_the_public_agbh_calibration_reads_the_same_in_calibration_analyze_and_x
         profile = calibration.view_model.last_profile.geometry
         saved = (profile.beam_center_x_px, profile.beam_center_y_px)
         assert saved == (fitted.center_x_px + 0.5, fitted.center_y_px + 0.5)
-        assert saved == pytest.approx((182.97, 264.84), abs=0.05)  # the documented direct beam is (180.0, 263.9)
+        assert saved == pytest.approx((179.78, 264.03), abs=0.05)  # the documented direct beam is (180.0, 263.9)
         stored = (context.settings.get("detector", "beam_center_x"), context.settings.get("detector", "beam_center_y"))
         assert stored == (fitted.center_x_px, fitted.center_y_px)
 
@@ -826,13 +828,11 @@ def test_the_public_agbh_calibration_reads_the_same_in_calibration_analyze_and_x
         _settle(app, 0.1)
         shown = (xrr.center_x_spin.text(), xrr.center_y_spin.text())
         assert shown == (f"{saved[0]:.2f}", f"{saved[1]:.2f}")
-        # Geometry Calibration shows three decimals of the same numbers.
+        # Each display starts from the full-precision centre. Calibration also uses its fitted error.
         assert (calibration.result_center_x.text(), calibration.result_center_y.text()) == (
-            f"{saved[0]:.3f} px", f"{saved[1]:.3f} px"
+            format_number(saved[0], fitted.center_x_sigma_px, value_only=True, digits=7) + " px",
+            format_number(saved[1], fitted.center_y_sigma_px, value_only=True, digits=7) + " px",
         )
-        assert tuple(f"{float(text.split()[0]):.2f}" for text in (
-            calibration.result_center_x.text(), calibration.result_center_y.text()
-        )) == shown
         assert xrr.center_x_spin.toolTip() == calibration.manual_x.toolTip() == PIXEL_NOTE
         geometry = xrr._geometry()
         assert (geometry.beam_center_x_px, geometry.beam_center_y_px) == (round(stored[0], 2), round(stored[1], 2))

@@ -16,7 +16,8 @@ from ..application import (
     X_AXIS_TWO_THETA,
     Corrections,
     CutRegion,
-    MaskShape,
+    MaskEdit,
+    Normalisation,
     PlaceRegions,
     QBox,
     Sector,
@@ -44,6 +45,25 @@ class OptionsModelMixin:
             background_scale=float(scale),
         )
 
+    def set_dark(self, path: Optional[str | Path], *, frame: int = 0, scale: float = 1.0) -> None:
+        """Subtract ``scale ×`` this dark frame from every analysed frame, before the background (``None`` stops)."""
+        self.state.corrections = replace(
+            self.state.corrections, dark_path=str(path) if path else None, dark_frame=max(0, int(frame)),
+            dark_scale=float(scale),
+        )
+
+    def set_normalisation(self, normalisation: Normalisation) -> None:
+        """Multiply every analysed frame by A_abs / (t_exp · M · T · d)."""
+        self.state.corrections = replace(self.state.corrections, normalisation=normalisation)
+
+    def set_lorentz(self, on: bool) -> None:
+        """GIWAXS: divide by the Lorentz factor of a fibre texture."""
+        self.state.corrections = replace(self.state.corrections, lorentz=bool(on))
+
+    def set_orientation_options(self, band_px: float, minimum_exit: Optional[float], polarize: bool) -> None:
+        self.state.corrections = replace(self.state.corrections, lorentz_band_px=float(band_px),
+                                         orientation_min_exit_deg=minimum_exit, orientation_polarization=polarize)
+
     def set_flat_field(self, path: Optional[str | Path]) -> None:
         """Divide every analysed frame by this flat field (``None`` stops)."""
         self.state.corrections = replace(self.state.corrections, flat_field_path=str(path) if path else None)
@@ -52,7 +72,29 @@ class OptionsModelMixin:
         """What the flat field of ``path`` is (``FlatFieldUse``: mean, pixels it leaves out); ``ValueError`` (the
         application's sentence) or ``OSError`` when it cannot be read or is not of the size of the frame shown."""
         analysis = self.state.analysis
-        return self._analyze_frame.check_flat_field_file(path, analysis.shape if analysis is not None else None)
+        settings = self.state.corrections
+        response = self.detector_response()
+        settings = replace(settings, counts_per_adu=response.counts_per_adu, offset_adu=response.offset_adu)
+        return self._analyze_frame.check_flat_field_file(
+            path, analysis.shape if analysis is not None else None, corrections=settings)
+
+    def set_reference_options(self, *, background_dark_scale, background_already_dark_subtracted,
+                              flat_already_dark_subtracted, flat_field_floor):
+        self.state.corrections = replace(
+            self.state.corrections, background_dark_scale=background_dark_scale,
+            background_already_dark_subtracted=background_already_dark_subtracted,
+            flat_already_dark_subtracted=flat_already_dark_subtracted, flat_field_floor=flat_field_floor,
+        )
+
+    def set_detector_response(self, *, use_profile, gain=1.0, offset=0.0, model="auto", sigma_path=None):
+        self.state.corrections = replace(
+            self.state.corrections, use_profile_response=use_profile, counts_per_adu=gain,
+            offset_adu=offset, error_model=model, sigma_path=sigma_path if model == "sigma" else None,
+        )
+
+    def set_curve_errors(self, pooled_scatter, poisson_variance):
+        self.state.corrections = replace(
+            self.state.corrections, pooled_scatter=pooled_scatter, poisson_variance=poisson_variance)
 
     def set_valid_range(self, minimum: Optional[float], maximum: Optional[float]) -> None:
         if minimum is not None and maximum is not None and minimum > maximum:
@@ -64,12 +106,17 @@ class OptionsModelMixin:
         )
 
     def reset_corrections(self) -> None:
-        """No background or range; the gap guard, bad pixels, masks, flat field and mirror filling stay (the
-        set-up's: they belong to the detector)."""
+        """No background, range or normalisation; the gap guard, bad pixels, masks, dark frame, flat field and mirror
+        filling stay (the set-up's: they belong to the detector)."""
         current = self.state.corrections
         self.state.corrections = Corrections(
             gap_guard_px=current.gap_guard_px, bad_pixels=current.bad_pixels, mask_shapes=current.mask_shapes,
             mask_path=current.mask_path, mirror_fill=current.mirror_fill, flat_field_path=current.flat_field_path,
+            dark_path=current.dark_path, dark_frame=current.dark_frame, dark_scale=current.dark_scale,
+            flat_field_floor=current.flat_field_floor, flat_already_dark_subtracted=current.flat_already_dark_subtracted,
+            counts_per_adu=current.counts_per_adu, offset_adu=current.offset_adu, error_model=current.error_model,
+            sigma_path=current.sigma_path, use_profile_response=current.use_profile_response,
+            pooled_scatter=current.pooled_scatter, poisson_variance=current.poisson_variance,
         )
 
     # -- masks and mirror filling ---------------------------------------------------------
@@ -77,8 +124,11 @@ class OptionsModelMixin:
     def set_mask_shapes(self, shapes) -> None:
         self.state.corrections = replace(self.state.corrections, mask_shapes=tuple(shapes))
 
-    def add_mask_shape(self, shape: MaskShape) -> None:
+    def add_mask_shape(self, shape: MaskEdit) -> None:
         self.set_mask_shapes((*self.state.corrections.mask_shapes, shape))
+
+    def preview_user_mask(self, analysis, corrections):
+        return self._analyze_frame.preview_mask(analysis, corrections)
 
     def set_mask_path(self, path: Optional[str | Path]) -> None:
         self.state.corrections = replace(self.state.corrections, mask_path=str(path) if path else None)
@@ -138,7 +188,7 @@ class OptionsModelMixin:
 
     def set_intensity_corrections(
         self, *, solid_angle: bool, polarization: Optional[float], film_thickness_nm: Optional[float],
-        attenuation_length_um: Optional[float],
+        attenuation_length_um: Optional[float], film_delta=None, film_beta=None, film_cif_path=None,
     ) -> None:
         """GIWAXS intensity corrections (``None``: that one off)."""
         self.state.corrections = replace(
@@ -146,6 +196,7 @@ class OptionsModelMixin:
             polarization=None if polarization is None else float(polarization),
             film_thickness_nm=None if film_thickness_nm is None else float(film_thickness_nm),
             attenuation_length_um=None if attenuation_length_um is None else float(attenuation_length_um),
+            film_delta=film_delta, film_beta=film_beta, film_cif_path=film_cif_path,
         )
 
     def set_bad_pixels(self, enabled: bool) -> None:

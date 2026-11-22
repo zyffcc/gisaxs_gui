@@ -2,12 +2,16 @@
 
 The same held-out curves as fit1d_recovery.py (its draw() and curve(), unchanged: the independent truth model
 yoneda_truth.py, seed0 20261116, two levels of physics, four compositions), and with --seed0 another set from the same
-draw. For every curve, GIMaP's posterior path (src/gimap/features/fitting/domain/posterior) runs three times:
+draw. By default each curve goes through the network, fit and choose stages. --stages selects any of these or auto:
   network   the network's samples of the true composition, their median (no likelihood): what fit1d calls 'network'
   fit       the true composition: importance-sampled posterior, its modes refined by least squares; the most
             probable solution is scored
   choose    compositions among spheres and upright cylinders with a paracrystal, one or two of them (fit1d's
             'auto:sphere,vc:2'): is the most probable one the true composition?
+  auto      the automatic analysis's choice among one or two populations of spheres and upright cylinders, with
+            or without a paracrystal. The angles are known, so Predict evaluates the Born term at the cut's vacuum
+            q_z. --auto-level 1 reproduces the former fit at q_z = 0, with the cut's q_z supplied for flags.
+For choose and auto the head's candidates are stored, and whether the true composition (its families) is among them.
 Reported as in fit1d_recovery.py (median and 90th percentile of the error, bias, |z| ≤ 1 with the least-squares
 error), and in addition the coverage of the posterior's 68 % and 95 % intervals, how often the most probable solution
 of the true composition is in the truth's mode and how often that mode is listed at all (``truth_mode``), the
@@ -28,6 +32,7 @@ usage: python tools/benchmarks/posterior_recovery.py --network PATH/NAME [--n 20
            [--samples N] [--local-samples N] [--shortlist N] [--refined 3] [--set fit1d|extended]
            [--truth independent|own] [--model-error-floor F] [--explored N] [--moves N] [--widths 1,2]
            [--scattering born_qz|dwba] [--substrate si|ps100] [--cut born|two_path|eia] [--out NAME]
+           [--stages network,fit,choose,auto] [--auto] [--auto-level 1|2]
   (defaults: Predict parameters' own, refine.SAMPLES, LOCAL_SAMPLES, SHORTLIST, MODEL_ERROR_FLOOR, EXPLORED, MOVES,
   infer.PROPOSAL_WIDTHS)
 Writes the summary to tools/benchmarks/NAME_summary.json (default posterior_recovery) and every curve to results/.
@@ -61,6 +66,7 @@ from src.gimap.features.fitting.domain.posterior import infer, refine  # noqa: E
 from src.gimap.features.fitting.domain.posterior.flow import Network  # noqa: E402
 
 KEYS = ("R", "sR", "D", "s_nn")
+STAGES = ("network", "fit", "choose", "auto")
 MODE_TOLERANCE = 0.2
 OURS = {"R": "R", "sR": "sigma_R", "D": "D", "s_nn": "sigma_nn"}
 FAMILY = {"sphere": "sphere", "vc": "vertical_cylinder"}
@@ -100,9 +106,12 @@ def _populations(values: dict, k: int, field: str, error_field: str | None = Non
 
 
 def _init(network_path: str, options: dict):
-    global NETWORK
+    global NETWORK, OPTIONS
     NETWORK = Network.load(network_path)
-    OPTIONS.update(options)
+    OPTIONS = dict(options)
+    # Older benchmark records have only the --auto switch and used level 1.
+    OPTIONS.setdefault("stages", STAGES if options.get("auto") else STAGES[:-1])
+    OPTIONS.setdefault("auto_level", 1 if options.get("auto") and "stages" not in options else 2)
     fr.set_truth(options.get("scattering", "born_qz"), options.get("substrate", "si"))
     refine.MOVES = options.get("moves", refine.MOVES)
     refine.MOVED_SOLUTIONS = options.get("moved_solutions", refine.MOVED_SOLUTIONS)
@@ -152,7 +161,8 @@ def _cut() -> tuple[float, float | None]:
     return float(fr.GEOM.qz_vacuum), (fr.qz_minus() if kind == "two_path" else None)
 
 
-def run(index: int) -> dict:
+def run(index: int, *, fit_only: bool = False) -> dict:
+    """Evaluate one cut. The release regression needs only the fit with the given composition."""
     extended = OPTIONS.get("set") == "extended"
     case = (hc.draw if extended else fr.draw)(index, OPTIONS["seed0"])
     I, s = own_curve(case) if OPTIONS.get("truth") == "own" else (hc.curve if extended else fr.curve)(case)
@@ -161,24 +171,49 @@ def run(index: int) -> dict:
     qz, qz_minus = _cut()
     truth = _composition(case)
     k = len(case["populations"])
-    # network: samples of the true composition, their median
-    tick = time.perf_counter()
-    data = infer.Cut.prepare(fr.Q, I, s, qz, qz_minus)
-    binned = E.bin_curve(data.q, data.intensity, data.sigma, data.q_max, data.ratio)
-    h = NETWORK.summary(E.features(*(a[None] for a in binned)), infer.conditions(data))
-    z, _ = NETWORK.sample(NETWORK.context(h, truth), truth, OPTIONS["samples"], np.random.default_rng(index))
-    values = infer.physical(E.from_z(z, np.full(z.shape[0], data.ratio), truth), data.q_max)
-    median = np.median(values, axis=0)
-    pops = []
-    for slot in range(k):
-        j = slot * E.PER_SLOT
-        pops.append(dict(R=median[j], sR=median[j + 1], D=median[j + 4], s_nn=median[j + 5]))
-    out["network"] = dict(ok=True, populations=pops, seconds=time.perf_counter() - tick)
-    for name, kwargs in (("fit", dict(compositions=[truth])),
-                         ("choose", dict(allowed=_allowed(3 if extended else 2), shortlist=OPTIONS["shortlist"]))):
+    selected = ("fit",) if fit_only else OPTIONS["stages"]
+    if "network" in selected:
+        # network: samples of the true composition, their median
         tick = time.perf_counter()
+        data = infer.Cut.prepare(fr.Q, I, s, qz, qz_minus)
+        binned = E.bin_curve(data.q, data.intensity, data.sigma, data.q_max, data.ratio)
+        h = NETWORK.summary(E.features(*(a[None] for a in binned)), infer.conditions(data))
+        z, _ = NETWORK.sample(NETWORK.context(h, truth), truth, OPTIONS["samples"], np.random.default_rng(index))
+        values = infer.physical(E.from_z(z, np.full(z.shape[0], data.ratio), truth), data.q_max)
+        median = np.median(values, axis=0)
+        pops = []
+        for slot in range(k):
+            j = slot * E.PER_SLOT
+            pops.append(dict(R=median[j], sR=median[j + 1], D=median[j + 4], s_nn=median[j + 5]))
+        out["network"] = dict(ok=True, populations=pops, seconds=time.perf_counter() - tick)
+    stages = []
+    if "fit" in selected:
+        stages.append(("fit", dict(compositions=[truth]), qz, qz_minus))
+    if "choose" in selected:
+        stages.append(("choose", dict(allowed=_allowed(3 if extended else 2), shortlist=OPTIONS["shortlist"]),
+                       qz, qz_minus))
+    if "auto" in selected:
+        cut_qz = float(fr.GEOM.qz_vacuum)
+        auto_options = dict(allowed=E.select(("sphere", "vertical_cylinder"), 2), reflected_beam=True)
+        auto_qz = cut_qz
+        if OPTIONS["auto_level"] == 1:
+            auto_qz = 0.0
+            auto_options["measured_qz"] = cut_qz
+        stages.append(("auto", auto_options, auto_qz, None))
+    truth_families = sorted(FAMILY[p["shape"]] for p in case["populations"])
+    for name, kwargs, qz_stage, qz_minus_stage in stages:
+        tick = time.perf_counter()
+        candidates = None
+        if "allowed" in kwargs:  # the head's candidates, as infer.infer chooses them
+            data_stage = infer.Cut.prepare(fr.Q, I, s, qz_stage, qz_minus_stage)
+            binned_stage = E.bin_curve(data_stage.q, data_stage.intensity, data_stage.sigma, data_stage.q_max,
+                                       data_stage.ratio)
+            h_stage = NETWORK.summary(E.features(*(a[None] for a in binned_stage)), infer.conditions(data_stage))
+            candidates = [int(c) for c, _p in infer.candidates(NETWORK, h_stage, kwargs["allowed"],
+                                                               kwargs.get("shortlist", refine.SHORTLIST))]
         try:
-            solutions = refine.predict(NETWORK, fr.Q, I, s, qz=qz, qz_minus=qz_minus, samples=OPTIONS["samples"],
+            solutions = refine.predict(NETWORK, fr.Q, I, s, qz=qz_stage, qz_minus=qz_minus_stage,
+                                       samples=OPTIONS["samples"],
                                        seed=index,
                                        coupling=coupling, local_samples=OPTIONS["local_samples"],
                                        refine_modes=OPTIONS["refined"],
@@ -201,7 +236,10 @@ def run(index: int) -> dict:
         except Exception as exc:  # noqa: BLE001 - one failing curve must not stop the study
             out[name] = dict(ok=False, error=f"{type(exc).__name__}: {exc}")
         out[name]["seconds"] = time.perf_counter() - tick
-    out["truth_families"] = sorted(FAMILY[p["shape"]] for p in case["populations"])
+        if candidates is not None:
+            out[name]["candidates"] = candidates
+            out[name]["truth_in_candidates"] = any(_families(c) == truth_families for c in candidates)
+    out["truth_families"] = truth_families
     return out
 
 
@@ -262,25 +300,35 @@ def _listed(results, level):
 
 
 def summary(results):
+    stages = [stage for stage in STAGES if any(stage in r for r in results)]
+    levels = ("model", "measured", "all")
     table = {}
-    for stage in ("network", "fit"):
-        for level in ("model", "measured", "all"):
-            table[f"{stage}/{level}"] = _errors(results, stage, level)
-    for level in ("model", "measured", "all"):
-        table[f"posterior_median/{level}"] = _errors(results, "fit", level, field="posterior")
-    choose = {}
-    for level in ("model", "measured", "all"):
-        rows = [r for r in results if (level == "all" or r["case"]["level"] == level) and r.get("choose", {}).get("ok")]
-        exact = [r["choose"]["families"] == r["truth_families"] for r in rows]
-        in_set = [r["truth_families"] in r["choose"]["in_set"] for r in rows]
-        choose[level] = dict(n=len(rows), exact=float(np.mean(exact)) if rows else None,
-                             true_in_equivalent_set=float(np.mean(in_set)) if rows else None)
+    for stage in ("network", "fit", "auto"):
+        if stage in stages:
+            for level in levels:
+                table[f"{stage}/{level}"] = _errors(results, stage, level)
+    if "fit" in stages:
+        for level in levels:
+            table[f"posterior_median/{level}"] = _errors(results, "fit", level, field="posterior")
+    choose, auto = {}, {}
+    for stage, target in (("choose", choose), ("auto", auto)):
+        for level in levels:
+            rows = [r for r in results if (level == "all" or r["case"]["level"] == level) and r.get(stage, {}).get("ok")]
+            if not rows:
+                continue
+            exact = [r[stage]["families"] == r["truth_families"] for r in rows]
+            in_set = [r["truth_families"] in r[stage]["in_set"] for r in rows]
+            in_candidates = [r[stage]["truth_in_candidates"] for r in rows if "truth_in_candidates" in r[stage]]
+            target[level] = dict(n=len(rows), exact=float(np.mean(exact)),
+                                 true_in_equivalent_set=float(np.mean(in_set)),
+                                 true_in_candidates=float(np.mean(in_candidates)) if in_candidates else None)
     seconds = {stage: float(np.median([r[stage]["seconds"] for r in results if stage in r]))
-               for stage in ("network", "fit", "choose")}
+               for stage in stages}
     ess = [r["fit"]["ess"] for r in results if r.get("fit", {}).get("ok")]
-    failed = {stage: int(sum(not r.get(stage, {}).get("ok") for r in results)) for stage in ("fit", "choose")}
-    mode = {level: _listed(results, level) for level in ("model", "measured", "all")}
-    return dict(parameters=table, composition=choose, truth_mode=mode, median_seconds=seconds, n=len(results),
+    failed = {stage: sum(not r[stage]["ok"] for r in results if stage in r)
+              for stage in stages if stage != "network"}
+    mode = {level: _listed(results, level) for level in levels} if "fit" in stages else {}
+    return dict(parameters=table, composition=choose, composition_auto=auto or None, truth_mode=mode, median_seconds=seconds, n=len(results),
                 fit_ess=dict(median=float(np.median(ess)) if ess else None,
                              below_50=float(np.mean(np.asarray(ess) < 50)) if ess else None),
                 failed=failed)
@@ -300,6 +348,13 @@ def _code_state() -> dict:
     folder = "src/gimap/features/fitting/domain"
     return {"commit": git("rev-parse", "--short", "HEAD"), "fitting_tree": git("rev-parse", f"HEAD:{folder}"),
             "fitting_code_modified": bool(git("status", "--porcelain", "--", folder))}
+
+
+def _stages(value):
+    names = [name.strip() for name in value.split(",")]
+    if any(name not in STAGES for name in names):
+        raise argparse.ArgumentTypeError("choose comma-separated stages from " + ", ".join(STAGES))
+    return [stage for stage in STAGES if stage in names]
 
 
 def main():
@@ -324,24 +379,33 @@ def main():
     ap.add_argument("--widths", default=",".join(str(w) for w in infer.PROPOSAL_WIDTHS))
     ap.add_argument("--scattering", default="born_qz", choices=("born_qz", "dwba"))
     ap.add_argument("--substrate", default="si", choices=tuple(fr.SUBSTRATES))
+    ap.add_argument("--stages", type=_stages, default="network,fit,choose",
+                    help="comma-separated list of network,fit,choose,auto (default: network,fit,choose)")
+    ap.add_argument("--auto", action="store_true", help="add auto to the selected stages")
+    ap.add_argument("--auto-level", type=int, choices=(1, 2), default=2,
+                    help="auto fit level: 1 for q_z = 0, 2 for the cut's vacuum q_z (default)")
     ap.add_argument("--cut", default="born", choices=("born", "two_path", "eia"),
                     help="what Predict is given of the cut: q_z, both angles, or nothing")
     a = ap.parse_args()
+    if a.auto and "auto" not in a.stages:
+        a.stages.append("auto")
     t0 = time.perf_counter()
     results = []
     options = dict(seed0=a.seed0, samples=a.samples, set=a.set, local_samples=a.local_samples, shortlist=a.shortlist,
                    refined=a.refined, truth=a.truth, floor=a.model_error_floor,
                    explored=a.explored, moves=a.moves, widths=[float(w) for w in a.widths.split(",")],
                    moved_solutions=a.moved_solutions, per_count=a.per_count, constants=a.constant,
-                   scattering=a.scattering, substrate=a.substrate, cut=a.cut)
+                   scattering=a.scattering, substrate=a.substrate, cut=a.cut, stages=a.stages,
+                   auto="auto" in a.stages, auto_level=a.auto_level)
     with Pool(min(a.workers, a.n), initializer=_init, initargs=(a.network, options)) as pool:
         for i, r in enumerate(pool.imap_unordered(run, range(a.n)), 1):
             results.append(r)
             c = r["case"]
             print(f"[{i}/{a.n}] {c['composition']:13s} {c['level']:8s} "
                   + " ".join(f"{k}:{'ok' if r[k].get('ok') else 'ERR'} {r[k]['seconds']:.1f}s"
-                             for k in ("network", "fit", "choose"))
-                  + f" chose {r['choose'].get('composition')}", flush=True)
+                             for k in a.stages)
+                  + "".join(f" {k} chose {r[k]['composition']}" for k in ("choose", "auto")
+                            if "composition" in r.get(k, {})), flush=True)
     s = summary(results)
     s["network"] = Path(a.network).name
     s["network_sha256"] = Network.load(a.network).meta["sha256"]

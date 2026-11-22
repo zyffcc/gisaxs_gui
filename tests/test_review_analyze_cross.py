@@ -240,12 +240,16 @@ def test_the_status_names_the_pixels_of_each_cut_both_ends_included() -> None:
 
 
 @requires_public
-def test_refresh_language_composes_the_texts_of_the_frame_shown(monkeypatch, english) -> None:
+def test_refresh_language_composes_the_texts_of_the_frame_shown(monkeypatch, english, tmp_path) -> None:
+    import shutil
+
     from src.gimap.features.analyze.presentation.bindings.display import _horizontal_where, pixel_range
 
     profiles = InMemoryInstrumentProfileRepository([_galaxi_profile(), _p08_profile()])
     page = _page(_context(profiles))
-    page.add_paths([str(GALAXI)])
+    frame = tmp_path / GALAXI.name  # the frame alone: the .poni beside it (no αi) would come before the profile
+    shutil.copy2(GALAXI, frame)
+    page.add_paths([str(frame)])
     _done(page)
     english_title = page.top_plot.title_label.text()
     english_status = page.status_text()
@@ -312,15 +316,17 @@ def _laid_out(page, width: int) -> list[int]:
 
 
 def test_the_image_and_the_curves_share_the_room_the_steps_leave() -> None:
-    from src.gimap.features.analyze.presentation.bindings.workspace import IMAGE_KEEPS
+    from src.gimap.features.analyze.presentation.bindings.workspace import IMAGE_KEEPS, IMAGE_SHARE, RIGHT_SHARE
 
     page = _page(_context())
     page.show()
     steps, image, curves = _laid_out(page, 1100)  # the page of a 1280 px window
     assert steps >= page.process_panel.minimumWidth()
-    assert image == IMAGE_KEEPS and curves >= 350  # the image keeps its two toolbar lines, the rest is the curves'
-    _steps, image, curves = _laid_out(page, 1500)  # a wide window: half each
-    assert abs(image - curves) <= 1 and curves > 500
+    # The image is the widest panel; the curves keep their least width and RIGHT_SHARE of the room.
+    assert image >= IMAGE_KEEPS and image > curves >= page.splitter.widget(2).minimumSizeHint().width()
+    assert curves >= int(RIGHT_SHARE * (image + curves)) - 1
+    _steps, image, curves = _laid_out(page, 1500)  # a wide window: the image takes IMAGE_SHARE of the room
+    assert abs(image - int(IMAGE_SHARE * (image + curves))) <= 1 and curves > 450
 
     # Once the person moves a handle, their split stays (not balanced again); the splitter shares more room.
     page.splitter.setSizes([steps, 700, image + curves - 700])

@@ -37,6 +37,9 @@ class GuidedFramesMixin:
         key = frame_key(path)
         if key is None:
             return
+        refresh = getattr(self.results, "refresh_incidence", None)
+        if refresh is not None:  # the Results geometry says the αi in use (the command bar's), also after a change
+            refresh()
         before = getattr(self, "_before_notice", None)
         if before is not None:  # “Open a frame first.” was said (``GuidedAnalysis._no_frame``): here is one
             self._say(before)

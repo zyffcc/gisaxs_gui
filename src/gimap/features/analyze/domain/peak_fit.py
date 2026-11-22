@@ -53,6 +53,9 @@ class PeakFit:
     """The data fitted (the points of the window)."""
     fitted: np.ndarray = field(default_factory=lambda: np.empty(0))
     """The fitted curve on ``x``."""
+    background_center: float = math.nan
+    background_center_err: float = math.nan
+    """Fitted linear background at the centre of the requested window and its covariance-propagated σ."""
 
     def as_start(self) -> dict:
         return {"center": self.center, "fwhm": self.fwhm, "area": self.area, "eta": self.eta}
@@ -161,6 +164,8 @@ def fit_peak(
     errors = np.sqrt(variances) * math.sqrt(max(1.0, chi2_red))
     center, fwhm, area, eta, b0, b1 = (float(value) for value in popt)
     height = float(area * shape(np.array([center]), center, fwhm, eta, profile)[0])
+    offset = (0.5 * sum(window) if window is not None else center) - reference
+    variance = pcov[-2, -2] + 2.0 * offset * pcov[-2, -1] + offset**2 * pcov[-1, -1]
     message = ""
     if area <= 0:
         message = "no peak above the background"
@@ -172,6 +177,8 @@ def fit_peak(
         ok=not message, message=message, profile=profile, center=center, center_err=float(errors[0]),
         fwhm=fwhm, fwhm_err=float(errors[1]), area=area, area_err=float(errors[2]), eta=eta, height=height,
         background=(b0, b1), chi2_red=chi2_red, points=int(x.size), x=x, y=y, fitted=fitted,
+        background_center=b0 + b1 * offset,
+        background_center_err=math.sqrt(max(0.0, variance) * max(1.0, chi2_red)) if np.isfinite(variance) else math.nan,
     )
 
 

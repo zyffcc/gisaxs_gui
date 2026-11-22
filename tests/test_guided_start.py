@@ -61,12 +61,14 @@ def test_one_click_gives_results_with_their_evidence_without_any_model(analyze) 
     assert page.step_rail.state("results") == "busy"
     _wait(lambda: guided.report is not None, 120)
     report = guided.report
-    assert report["ok"] and report["needs_attention"] == [] and report["procedure"] == "giwaxs"
+    assert report["ok"] and report["procedure"] == "giwaxs"
+    assert {item["item"] for item in report["needs_attention"]} == {"pole figure", "orientation factor"}
     assert page.step_rail.state("results") == "ok" and page.current_right() == "results"
     # The status during the run says what is done in words, never "find_peaks: …".
     assert progress and all("_" not in line.split(" — ")[0] for line in progress), progress
     assert any(line.startswith("Finding the peaks of I(q) — ") for line in progress), progress
-    assert guided.status_label.text() == "Done — see the Results tab."
+    points = len(report["needs_attention"])
+    assert guided.status_label.text() == f"Done — see the Results tab. {points} point(s) to check there."
     results = guided.results
     badge = results.findChildren(QLabel)[0]
     assert badge.text().startswith("GIWAXS — ") and badge.property("gimapRole") == "success" and not badge.styleSheet()
@@ -74,7 +76,10 @@ def test_one_click_gives_results_with_their_evidence_without_any_model(analyze) 
     assert results.minimumSizeHint().width() <= 360, results.minimumSizeHint()
     peaks = results.peak_table
     assert peaks.rowCount() == len(report["peaks"]) > 0
-    found = [float(peaks.item(row, 0).text()) for row in range(peaks.rowCount())]
+    from src.gimap.features.assistant.application.report_numbers import peak_value
+    assert [peaks.item(i, 0).text() for i in range(peaks.rowCount())] == [
+        peak_value(row, "q", compact=True) for row in report["peaks"]]
+    found = [row["q"] for row in report["peaks"]]
     for expected in (0.40, 0.80):  # the synthetic film's lamellar orders
         assert min(abs(q - expected) for q in found) < 0.02, found
     assert results.q_map is not None and not results.q_map.pixmap().isNull()  # see what was and was not measured
@@ -83,7 +88,7 @@ def test_one_click_gives_results_with_their_evidence_without_any_model(analyze) 
     assert "q, FWHM in Å⁻¹ · d in Å · L in nm (Scherrer, a lower bound)" in labels  # the units, one line
     assert not any(text.startswith(("Sizes are Scherrer", "The analysed rings")) for text in labels)
     peaks_title = next(item for item in results.findChildren(QLabel) if item.text() == "Peaks")
-    assert peaks_title.toolTip().startswith("Phases are not assigned automatically")
+    assert peaks_title.toolTip().startswith("To index the measured peaks, add candidate phases in Phases")
     assert "GIWAXS" in results.report_view.toPlainText()
     # Each peak can be seen on the map, and every column says how it was obtained.
     assert "2π / q" in peaks.horizontalHeaderItem(1).toolTip() and "Scherrer" in peaks.horizontalHeaderItem(4).toolTip()
@@ -149,7 +154,7 @@ def test_the_check_step_says_once_where_the_rings_are_shadowed_or_unmeasured() -
     (shadow, shadow_detail), (wedge, _detail) = coverage_notes(rings)
     assert shadow.startswith("Shadow (orange on the map): |χ| 72–90° at q 1.4, 64–90° at q 2.11 Å⁻¹.")
     assert shadow_detail == "|χ| 72–90° is shadowed: …"
-    assert wedge.startswith("Missing wedge (red dashed next to qz): |χ| < 8° at q 1.4, < 10° at q 2.11 Å⁻¹")
+    assert wedge.startswith("The measured f excludes the missing wedge (red dashed near qz), |χ| < 8° at q 1.4, < 10° at q 2.11 Å⁻¹")
     assert coverage_notes([{"q": 1.0, "missing": [], "shadowed": []}]) == []
 
 
@@ -168,13 +173,26 @@ def test_a_ring_says_in_one_line_why_its_orientation_is_not_determined() -> None
     assert detail.startswith(reason) and "shadowed" in detail
     text, detail = ring_summary({"q": 0.36, "herman": 0.52, "herman_isotropic": -0.03,
                                  "texture": "oriented along the surface normal (out-of-plane, χ ≈ 0°)"})
-    assert text == ("Ring q ≈ 0.36 Å⁻¹: f = 0.52 (random ring: −0.03) — oriented along the surface "
-                    "normal (out-of-plane, χ ≈ 0°)")  # the Unicode minus; two decimals while σ_f is not known
-    assert detail.startswith("A random ring would give f = −0.03 here.")  # what the short note means
-    # With σ_f, f and f_iso have the decimals that show it (0.0027: four), and f_iso is given unless it is 0 there.
+    assert text == ("Ring q ≈ 0.36 Å⁻¹: f = 0.52, f_iso = −0.0300 — oriented along the surface "
+                    "normal (out-of-plane, χ ≈ 0°)")
+    assert detail.startswith("oriented along the surface normal")  # what the short note means
     text, _detail = ring_summary({"q": 0.9972, "herman": 0.13921, "herman_err": 0.002696, "herman_isotropic": -0.001357,
                                   "texture": "oriented along the surface normal (out-of-plane, χ ≈ 0°)"})
-    assert text.startswith("Ring q ≈ 0.9972 Å⁻¹: f = 0.1392 ± 0.0027 (random ring: −0.0014) — ")
+    assert text.startswith("Ring q ≈ 0.9972 Å⁻¹: f = 0.1392 ± 0.0027 (stat), f_iso = −0.00136 — ")
+
+
+def test_ring_coverage_warning_depends_on_the_range_even_for_a_determined_pole_fit():
+    from src.gimap.features.assistant.presentation.guided_tables import ring_summary
+
+    limits = [.1, .15]
+    ring = {"q": 1.0, "herman": .12, "herman_isotropic": .03, "herman_systematic_range": limits,
+            "texture": "tilted", "pole_figure": {"ok": True, "systematics": {"range": limits}}}
+    assert "not determined" not in ring_summary(ring)[0]
+    limits[1] = .151
+    text, _ = ring_summary(ring)
+    headline = text.splitlines()[0]
+    assert "not determined by the measured χ range" in headline and "[0.100, 0.151]" in headline
+    assert "f_iso = 0.0300" in text and "Pole fit not determined" not in text
 
 
 def test_a_peak_at_the_end_of_the_data_is_not_called_reliable() -> None:
@@ -211,7 +229,8 @@ def test_only_questions_with_a_field_are_called_questions() -> None:
     assert guided.status_label.text() == "Done — see the Results tab. 1 question(s) below."
     texts = [item.text() for item in guided.results.findChildren(QLabel)]
     assert texts[0].startswith("GIWAXS — 0 peaks (0 reliable), 0 rings analysed. 1 question(s) in the Results step.")
-    assert "1 point(s) to check — see below" in texts and "Beam centre: The axis is 25 px off." in texts
+    assert "Result summary" in texts and "Checks" in texts
+    assert "Beam centre: The axis is 25 px off." in texts
     # Advice alone (no field to fill in) is a point to check, not a question.
     advice = dict(report, needs_attention=report["needs_attention"][1:])
     assert automatic_outcome(advice) == ("ok", "GIWAXS — 0 peaks (0 reliable), 0 rings analysed; 1 point(s) to check.")
@@ -481,8 +500,8 @@ def test_the_start_and_the_end_of_a_series_are_compared() -> None:
     assert rows == {
         0.958: ("weak", "yes", "grew (weak at the start)"),
         1.21: ("yes", "yes", "present at both"),
-        1.728: ("yes", "yes", "shifted -0.017 Å⁻¹ (-1.0%) from 1.745"),  # inside half its width: the same line
-        2.619: ("yes", "yes", "moved? 2.631 → 2.619 (-0.5%): one line shifting further than its width, or one "
+        1.728: ("yes", "yes", "shifted -0.017 Å⁻¹ (-1.0%) from 1.74"),  # inside half its width: the same line
+        2.619: ("yes", "yes", "moved? 2.63 → 2.62 (-0.5%): one line shifting further than its width, or one "
                               "line replacing another"),
         3.05: ("yes", "weak", "faded (weak at the end)"),
     }
@@ -492,3 +511,27 @@ def test_the_start_and_the_end_of_a_series_are_compared() -> None:
                            {**end, "ok": True, "frames": {"first": 248, "summed": 10}})
     assert "Frames 1–10 compared with frames 248–257" in text and "| 0.958 | weak | yes | grew (weak at the start) |" in text
     assert series_markdown({"ok": False}, end) == ""
+
+
+def test_series_peak_positions_keep_their_own_errors_and_long_changes_stay_beside_the_table() -> None:
+    from src.gimap.features.assistant.application import series_changes, series_markdown
+
+    first = {"q": 0.812345, "fit": {"q_err": 0.00081234}, "fwhm": 0.001}
+    last = {"q": 0.8187654, "fit": {"q_err": 0.001234}, "fwhm": 0.001}
+    isolated = {"q": 1.142857, "fit": {"q_err": 0.00956}}
+    start = {"ok": True, "peaks": [first, isolated]}
+    end = {"ok": True, "peaks": [last]}
+
+    moved, disappeared = series_changes(start, end)
+    assert moved["q"] == last["q"] and disappeared["q"] == isolated["q"]
+    assert set(moved) == {"q", "start", "end", "change"}
+    text = series_markdown(start, end)
+    assert "| 0.8188(12) | yes | yes | [1] |" in text
+    assert "| 1.1429(96) | yes | — | disappeared |" in text
+    assert "- [1] moved? 0.81234(81) → 0.8188(12) (+0.79%):" in text
+    assert all(len(line) < 100 for line in text.splitlines() if line.startswith("|"))
+
+    first["fwhm"] = 0.04
+    assert "shifted +0.0064 Å⁻¹ (+0.79%) from 0.81234(81)" in series_markdown(start, end)
+    del first["fit"]
+    assert "shifted +0.0064 Å⁻¹ (+0.8%) from 0.812" in series_markdown(start, end)

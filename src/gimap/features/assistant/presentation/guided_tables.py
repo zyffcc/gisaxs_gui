@@ -18,8 +18,12 @@ from PyQt5.QtWidgets import QHeaderView, QSizePolicy, QTableWidget, QTableWidget
 from src.gimap.app.presentation.components.table_copy import enable_table_copy
 from src.gimap.app.presentation.i18n import current_language, tr, trf
 from src.gimap.app.presentation.theme import theme_manager
+from src.gimap.shared.numbers import format_number
+from src.gimap.shared.orientation_notes import coverage_warning, orientation_notes
 
 from ..application import herman_texts
+from ..application.pipeline_phases import pole_estimate
+from ..application.report_numbers import peak_value
 from .guided_words import words
 
 PEAK_COLUMNS = (
@@ -43,6 +47,15 @@ PEAK_HEADERS = ("q", "d", "FWHM", "trust", "L", "OOP/IP")
 ``PEAK_LEGEND`` the units under the table (with units in the headers the table is wider than the Results tab)."""
 PEAK_NUMBERS = (0, 1, 2, 4)
 """Columns of the peak table that hold numbers (right-aligned)."""
+ASSIGNMENT_COLUMNS = (
+    ("phase", "The phase of the nearest reflection within max(3 σ(q0), FWHM/2), from the phases given (Analyze ▸ "
+              "Phases). ? marks an assignment to a phase without symmetry operations (positions only): tentative."),
+    ("hkl", "The reflection (one per family) at q_hkl; the tooltip lists the others within the window."),
+    ("Δq (Å⁻¹)", "q0 − q_hkl: how far the peak lies from the reflection (the window that accepted it in the "
+                 "tooltip)."),
+)
+"""Columns added after FWHM when phases were given: the assignment of each peak (also in the report)."""
+ASSIGNMENT_HEADERS = ("phase", "hkl", "Δq")
 PEAK_LEGEND = "q, FWHM in Å⁻¹ · d in Å · L in nm (Scherrer, a lower bound)"
 """The units under the peak table, needed at every reading (OOP / IP / * are explained in their column's tooltip;
 that a cell's tooltip has its whole sentence and the saved report the full table: the Peaks title's tooltip)."""
@@ -118,10 +131,11 @@ def peak_rows(peaks: list[dict]) -> list[list]:
         size = peak.get("size_nm")
         orientation = str(peak.get("orientation") or "")
         caveat = str(peak.get("caveat") or "")
-        size_text = "—" if size is None else ("≥ " if peak.get("size_is_lower_bound") else "") + f"{size:.3g}"
+        size_text = "—" if size is None else ("≥ " if peak.get("size_is_lower_bound") else "") + format_number(
+            size, peak.get("size_err_nm"), compact=True)
         at_edge = not caveat and "at_edge" in (peak.get("flags") or ())
         rows.append([
-            f"{peak.get('q'):.4g}", f"{peak.get('d_A'):.4g}", f"{peak.get('fwhm'):.3g}",
+            *(peak_value(peak, key, compact=True) for key in ("q", "d_A", "fwhm")),
             (tr(EDGE_VERDICT), tr(EDGE_NOTE)) if at_edge else (trust(caveat), tr(caveat) if caveat else ""),
             (size_text, tr(str(peak.get("size_note") or ""))),
             (short_orientation(orientation), tr(orientation)),
@@ -146,6 +160,36 @@ def peak_cells(peaks: list[dict]) -> list[list]:
             (compact_orientation(str(peak.get("orientation") or "")), _joined(words, sentence)),
         ])
     return cells
+
+
+def assigned(peaks: list[dict]) -> bool:
+    """Whether the peaks carry an assignment to the phases given (``pipeline_phases._phase_rows``)."""
+    return any("phase" in peak for peak in peaks)
+
+
+def assignment_cells(peak: dict) -> list:
+    """The phase, hkl and Δq of one peak (``—`` when no reflection lies within the window)."""
+    if not peak.get("phase"):
+        return [tr("Unassigned"), "—", "—"]
+    others = "\n".join(f"{other.get('phase')} {other.get('hkl')} ({other.get('delta_q', 0.0):+.4f})"
+                       for other in peak.get("alternatives") or [])
+    window = peak.get("tolerance")
+    delta = peak.get("delta_q")
+    tentative = bool(peak.get("tentative"))
+    phase_tip = tr("Tentative: this phase gives positions only (no symmetry operations).") if tentative else ""
+    ambiguous = bool(peak.get("ambiguous") or others)
+    hkl = str(peak.get("hkl") or "")
+    hkl_tip = trf("Also within the window:\n{others}", others=others) if others else ""
+    relative = peak.get("relative_d")
+    delta_tip = (trf("q_hkl = {q_hkl} Å⁻¹; window ±{window} Å⁻¹", q_hkl=f"{peak.get('q_hkl', 0.0):.4f}",
+                     window=f"{window:.4f}") if window is not None else "")
+    if relative is not None:
+        delta_tip = _joined(delta_tip, f"Δd/d = {relative:+.3%}")
+    return [
+        (f"{peak['phase']}?" if tentative else str(peak["phase"]), phase_tip, "warning" if tentative else ""),
+        (trf("{hkl} (ambiguous)", hkl=hkl) if ambiguous else hkl, hkl_tip, "warning" if ambiguous else ""),
+        ("—" if delta is None else f"{delta:+.4f}", delta_tip),
+    ]
 
 
 def _joined(words: str, sentence: str) -> str:
@@ -180,7 +224,7 @@ def coverage_notes(rings) -> list[tuple[str, str]]:
     if wedge:
         where = _ranges(wedge, lambda ring: f"< {ring['missing'][0][1]:.0f}°")
         notes.append((
-            trf("Missing wedge (red dashed next to qz): |χ| {where} Å⁻¹ not measured — Hermans f is biased low.",
+            trf("The measured f excludes the missing wedge (red dashed near qz), |χ| {where} Å⁻¹.",
                 where=where),
             "\n".join(words(note) for ring in wedge for note in ring.get("notes") or () if "missing wedge" in note),
         ))
@@ -189,17 +233,32 @@ def coverage_notes(rings) -> list[tuple[str, str]]:
 
 def ring_summary(ring: dict) -> tuple[str, str]:
     """(one plain line, the full sentences) for an analysed ring's orientation."""
+    pole = ring.get("pole_figure") or {}
+    reasons = ", ".join(tr(reason) for reason in pole.get("quality_reasons") or ())
+    headline = _measured_summary(ring, reasons)
+    details = [words(text) for text in (ring.get("reason"), ring.get("texture"), *(ring.get("notes") or ())) if text]
+    details.extend(orientation_notes(ring.get("orientation_settings") or {}, pole.get("systematics") or {}, trf))
+    if pole:
+        if reasons and (ring.get("herman") is None or coverage_warning(pole.get("systematics") or {})):
+            headline += "\n" + trf("Pole fit not determined ({reasons}).", reasons=reasons)
+        if pole.get("ok"):
+            headline += "\n" + trf("Pole f = {f}, oriented fraction = {fraction}. 1 − φ is conditional on the background b.",
+                                    f=pole_estimate(pole, "herman"), fraction=pole_estimate(pole, "oriented_fraction"))
+    return headline, "\n".join(details)
+
+
+def _measured_summary(ring: dict, reasons: str) -> str:
     q = f"{ring.get('q'):.4g}"
-    detail = "\n".join(words(text) for text in (ring.get("reason"), ring.get("texture"), *(ring.get("notes") or ())) if text)
     texture = words(ring.get("texture"))
-    texts = herman_texts(ring)  # f ± σ_f with the decimals of σ_f and the Unicode minus, as the report gives them
+    texts = herman_texts(ring, stat_label=tr("stat"))
     if texts is not None:
-        random, f = ring.get("herman_isotropic"), texts["f"]
-        if random is not None and round(float(random), texts["decimals"]) != 0:  # f_iso unless 0 at those decimals
-            why = trf("A random ring would give f = {random} here.", random=texts["iso"])
-            return trf("Ring q ≈ {q} Å⁻¹: f = {f} (random ring: {random}) — {texture}",
-                       q=q, f=f, random=texts["iso"], texture=texture), "\n".join(part for part in (why, detail) if part)
-        return trf("Ring q ≈ {q} Å⁻¹: f = {f} — {texture}", q=q, f=f, texture=texture), detail
+        warning = coverage_warning((ring.get("pole_figure") or {}).get("systematics") or {}, trf)
+        if warning:
+            return trf("Ring q ≈ {q} Å⁻¹: {reason}", q=q, reason=warning) + "\n" + trf("Measured f = {value}", value=texts["f"])
+        if reasons:
+            return trf("Ring q ≈ {q} Å⁻¹: pole fit not determined ({reasons}). Measured f = {f}",
+                       q=q, reasons=reasons, f=texts["f"])
+        return trf("Ring q ≈ {q} Å⁻¹: f = {f} — {texture}", q=q, f=texts["f"], texture=texture)
     covered = ring.get("weighted_coverage")
     if covered is not None and "is measured at this q" in str(ring.get("reason") or ""):
         gaps = []
@@ -211,10 +270,10 @@ def ring_summary(ring: dict) -> tuple[str, str]:
         values = {"q": q, "covered": f"{covered:.0%}"}
         if gaps:
             return trf("Ring q ≈ {q} Å⁻¹: orientation not determined — only {covered} of the range Hermans f needs "
-                       "is measured ({gaps}). Hover for details.", gaps=listed(gaps, "; "), **values), detail
+                       "is measured ({gaps}). Hover for details.", gaps=listed(gaps, "; "), **values)
         return trf("Ring q ≈ {q} Å⁻¹: orientation not determined — only {covered} of the range Hermans f needs "
-                   "is measured. Hover for details.", **values), detail
-    return trf("Ring q ≈ {q} Å⁻¹: {reason}", q=q, reason=words(ring.get("reason")) or texture), detail
+                   "is measured. Hover for details.", **values)
+    return trf("Ring q ≈ {q} Å⁻¹: {reason}", q=q, reason=words(ring.get("reason")) or texture)
 
 
 # -- the table widget -----------------------------------------------------------------------------------------
@@ -324,9 +383,17 @@ def table(headers, rows, parent: QWidget, name: str, *, numbers=(), row_numbers:
 
 
 def peak_table(peaks: list[dict], parent: QWidget, name: str = "guidedPeakTable") -> QTableWidget:
-    """The compact peak table (``peak_cells``): one row at a time, since Fit details follow the selected peak."""
-    widget = table(peak_headers(), peak_cells(peaks), parent, name, numbers=PEAK_NUMBERS, row_numbers=False,
-                   copy_headers=[full for full, _tip in PEAK_COLUMNS])
+    """The compact peak table (``peak_cells``): one row at a time, since Fit details follow the selected peak. With
+    phases given, the phase, hkl and Δq of each peak follow FWHM (``ASSIGNMENT_COLUMNS``)."""
+    headers, cells = peak_headers(), peak_cells(peaks)
+    copy_headers, numbers = [full for full, _tip in PEAK_COLUMNS], PEAK_NUMBERS
+    if assigned(peaks):
+        extra = [(short, f"{tr(full)}\n{tr(tip)}") for short, (full, tip) in zip(ASSIGNMENT_HEADERS, ASSIGNMENT_COLUMNS)]
+        headers = headers[:3] + extra + headers[3:]
+        cells = [row[:3] + assignment_cells(peak) + row[3:] for peak, row in zip(peaks, cells)]
+        copy_headers = copy_headers[:3] + [full for full, _tip in ASSIGNMENT_COLUMNS] + copy_headers[3:]
+        numbers = tuple(column if column < 3 else column + 3 for column in PEAK_NUMBERS) + (5,)
+    widget = table(headers, cells, parent, name, numbers=numbers, row_numbers=False, copy_headers=copy_headers)
     widget.setProperty("gimapCompactTable", True)
     return widget
 
@@ -340,7 +407,7 @@ def selected_row(view: Optional[QTableWidget]) -> int:
 
 
 __all__ = [
-    "EDGE_NOTE", "EDGE_VERDICT", "LastColumnFill", "ORIENTATION_WORDS", "PEAK_COLUMNS", "PEAK_HEADERS", "PEAK_LEGEND",
+    "ASSIGNMENT_COLUMNS", "ASSIGNMENT_HEADERS", "assigned", "assignment_cells", "EDGE_NOTE", "EDGE_VERDICT", "LastColumnFill", "ORIENTATION_WORDS", "PEAK_COLUMNS", "PEAK_HEADERS", "PEAK_LEGEND",
     "PEAK_NUMBERS", "ROLE", "TRUST_WORDS", "compact_orientation", "compact_trust", "coverage_notes", "listed",
     "peak_cells", "peak_headers", "peak_rows", "peak_table", "ring_summary", "selected_row", "short_orientation",
     "table", "trust",

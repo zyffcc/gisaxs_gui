@@ -20,7 +20,7 @@ from typing import Callable, Optional, Sequence
 
 import numpy as np
 
-from . import envelope, resolution, shapes, sizes, tables
+from . import envelope, manual_cylinder, manual_sizes, resolution, shapes, sizes, tables
 from .geometry import Geometry
 from .structure import paracrystal
 
@@ -89,6 +89,8 @@ def size_averages(family: str, q, *, radius, radius_spread, law: str = "number_g
     height, h_spread = _column(height, rows), _column(height_spread, rows)
     terms = geometry.sphere_terms()
     qz = {"sphere": max(abs(z) for _c, z in terms), "cylinder": geometry.random_cylinder_qz()}.get(family, 0.0)
+    if family == "cylinder" and law in manual_sizes.LAWS:
+        return manual_cylinder.average(q, law, radius, spread, height, h_spread, qz, coherent, panels)
     form = np.empty((rows, q.size))
     coh = np.empty_like(form) if coherent else None
     fast = _tabulated_rows(family, law, spread, h_spread, terms, coherent) if panels is None else np.zeros(rows, bool)

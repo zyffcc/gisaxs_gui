@@ -72,6 +72,28 @@ class BatchWatchMixin(WatchSeriesMixin):
             return
         self.notify_written(exported_text(written), written[0].parent)
 
+    def export_curves(self, folder: Optional[str | Path] = None) -> Optional[list]:
+        """Export Curves…: the frame's curves, its record and its curve for Fitting into a folder the person
+        chooses (``folder``: without asking). The question starts in the folder chosen last, else next to the
+        data; the folder chosen is remembered for the next time. ``None`` when nothing was written."""
+        if self.view_model.state.analysis is None:
+            self._status(trf("Export failed: {error}", error=tr("Open a frame first.")), "error")
+            return None
+        if folder is None:
+            start = self.view_model.last_export_folder() or self.view_model.default_export_dir() or Path(
+                self._last_folder or ".")
+            folder = QFileDialog.getExistingDirectory(self, tr("Export Curves: choose a folder"), str(start))
+            if not folder:
+                return None
+        try:
+            written = self.view_model.export(Path(folder))
+        except (ValueError, OSError) as exc:
+            self._status(trf("Export failed: {error}", error=message_text(exc)), "error")
+            return None
+        self.view_model.remember_export_folder(Path(folder))
+        self.notify_written(exported_text(written), written[0].parent)
+        return written
+
     def _auto_export_folder(self, destination: Path) -> Optional[Path]:
         """Where Export New Frames While Watching writes now: next to the data, else the session's folder
         (``write_elsewhere``: asked for once). ``None`` when no folder takes the files: the export is switched off
@@ -120,9 +142,20 @@ class BatchWatchMixin(WatchSeriesMixin):
         if state is None:
             self._status(tr("Open a frame first."), "warning")
             return
-        path = self._figure_path("Save Image", ("detector", "qmap", "cake")[self.view_combo.currentIndex()])
+        view = self.view_combo.currentIndex()
+        if view == 1:
+            from ..qmap_figure import displayed_layers, figure_options
+
+            state["layers"] = displayed_layers(self)
+        path = self._figure_path("Save Image", ("detector", "qmap", "cake")[view])
         if path is None:
             return
+        if view == 1:
+            options = figure_options(self, getattr(self, "_qmap_figure_options", {}))
+            if options is None:
+                return
+            self._qmap_figure_options = options
+            state.update(options)
         image = state.pop("image")
         try:
             written = self.view_model.save_image_figure(path, image, **state)
@@ -239,7 +272,7 @@ class BatchWatchMixin(WatchSeriesMixin):
 
     def _watch_tick(self) -> None:
         """The timer: look at the folder on the watch's own thread (one look at a time), then act on it here."""
-        if getattr(self, "_watch_looking", False) or not self.view_model.watch.active:
+        if getattr(self, "_watch_looking", False) or not self.view_model.watch.active or self.watch_paused():
             return
         runner = getattr(self, "_watch_runner", None)
         if runner is None:  # its own runner: a look every two seconds is no "busy" for the progress bar
@@ -279,7 +312,8 @@ class BatchWatchMixin(WatchSeriesMixin):
         exporting = self.auto_export_check.isChecked() and destination is not None
         self._watch_series_sum(exporting=exporting)
         # With frame summing only complete groups of N new frames are exported.
-        requests = model.watch_requests(added, wanted=exporting or self._series_map is not None)
+        requests = model.watch_requests(added, wanted=exporting or self._series_map is not None or self._watch_map_wanted())
+        self._watch_note_waiting()
         if self._watch_dispatch_requests(requests):
             self._say_watch(grown, exporting)
 

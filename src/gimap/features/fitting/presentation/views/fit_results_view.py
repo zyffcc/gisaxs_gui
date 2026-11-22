@@ -72,7 +72,30 @@ def build_results_step(owner, page: QWidget, layout) -> None:
         next_row.addWidget(button)
     layout.addLayout(next_row)
     owner.fit_notes_button = QPushButton("Fit details…", page)
-    layout.addWidget(owner.fit_notes_button)
+    owner.uncertainty_button = QPushButton("Uncertainty and Report…", page)
+    owner.uncertainty_button.setObjectName("fitUncertainty")
+    owner.uncertainty_button.setToolTip("The errors and correlation matrix of the last Refine or Search, the χ² "
+                                        "profile of one value, and a fit report to save")
+    owner.uncertainty_button.hide()
+    details_row = FlowLayout()
+    details_row.addWidget(owner.fit_notes_button)
+    details_row.addWidget(owner.uncertainty_button)
+    owner.compare_saved_fit_button = QPushButton("Compare with Saved Fit…", page)
+    owner.compare_saved_fit_button.hide()
+    details_row.addWidget(owner.compare_saved_fit_button)
+    layout.addLayout(details_row)
+    exports = FlowLayout()
+    owner.export_data_step_button = QPushButton("Save Curve and Parameters…", page)
+    owner.export_data_step_button.setObjectName("fitExportData")
+    owner.export_data_step_button.setToolTip(
+        "CSV: q, I, σ, the model, the residuals and each term; a JSON record of the model and the fit next to it")
+    owner.export_plot_step_button = QPushButton("Save Plot…", page)
+    owner.export_plot_step_button.setObjectName("fitExportPlot")
+    owner.export_plot_step_button.setToolTip(
+        "The plot as shown with the residuals under it: PNG (image), SVG or PDF (vector), with error bars")
+    exports.addWidget(owner.export_data_step_button)
+    exports.addWidget(owner.export_plot_step_button)
+    layout.addLayout(exports)
     owner.fit_notes_dialog = QDialog(page)
     owner.fit_notes_dialog.setWindowTitle("Fit details")
     owner.fit_notes_dialog.resize(600, 430)
@@ -104,7 +127,7 @@ def build_results_step(owner, page: QWidget, layout) -> None:
     owner.solution_selector_table.hide()
     layout.addWidget(owner.solution_selector_table)
 
-    owner.parameters_table = _stretching(read_only_table(("", "value", "±"), page, "fitParametersTable",
+    owner.parameters_table = _stretching(read_only_table(("", "value", "±", "posterior median"), page, "fitParametersTable",
                                                          QAbstractItemView.ExtendedSelection), 0)
     owner.parameters_table.setToolTip(VALUES_TIP)
     layout.addWidget(owner.parameters_table)
@@ -133,25 +156,24 @@ def build_results_step(owner, page: QWidget, layout) -> None:
     owner.use_solution_button = QPushButton("Use This Solution", owner.alternatives)
     owner.use_solution_button.setObjectName("fitUseSolution")
     owner.use_solution_button.setToolTip("Put the selected solution into Model (Undo brings the previous model back)")
-    for widget in (owner.solutions_title, owner.solutions_table, owner.use_solution_button):
+    owner.export_solutions_button = QPushButton("Export Solutions…", owner.alternatives)
+    owner.export_solutions_button.setObjectName("fitExportSolutions")
+    owner.export_solutions_button.setToolTip(
+        "Export each solution's probability or BIC weight, χ²ᵣ, flags, least-squares values, posterior quantiles and fitted curves.")
+    solution_buttons = QHBoxLayout()
+    solution_buttons.addWidget(owner.use_solution_button)
+    solution_buttons.addWidget(owner.export_solutions_button)
+    solution_buttons.addStretch(1)
+    for widget in (owner.solutions_title, owner.solutions_table):
         owner.alternatives.add_widget(widget)
+    owner.alternatives.add_layout(solution_buttons)
     owner.alternatives.hide()
     layout.addWidget(owner.alternatives)
 
-    exports = FlowLayout()
-    owner.export_data_step_button = QPushButton("Save Data and Fit…", page)
-    owner.export_data_step_button.setObjectName("fitExportData")
-    owner.export_data_step_button.setToolTip(
-        "CSV: q, I, σ, the model, the residuals and each term; a JSON record of the model and the fit next to it")
-    owner.export_plot_step_button = QPushButton("Save Plot…", page)
-    owner.export_plot_step_button.setObjectName("fitExportPlot")
-    owner.export_plot_step_button.setToolTip("The plot as shown: PNG (image) or SVG (vector)")
     owner.save_model_button = QPushButton("Save Model…", page)
     owner.save_model_button.setObjectName("fitSaveModel")
     owner.save_model_button.setToolTip("The model (values, fit/fixed, ranges) as JSON, to load for another curve")
-    for button in (owner.export_data_step_button, owner.export_plot_step_button, owner.save_model_button):
-        exports.addWidget(button)
-    layout.addLayout(exports)
+    layout.addWidget(owner.save_model_button, 0, Qt.AlignLeft)
 
     log = AdvancedSection("Run Log", "", page)
     log.setObjectName("fitLogSection")

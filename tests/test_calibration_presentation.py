@@ -135,6 +135,40 @@ def test_calibration_layout_is_owned_by_feature_python_view() -> None:
     assert "FigureCanvas(self.figure)" in dialog_source
 
 
+def test_three_ring_uncertainty_tooltips_follow_the_display_language() -> None:
+    from src.gimap.app.presentation.i18n import apply_language, current_language
+
+    _app()
+    dialog = GeometryCalibrationDialog(app_context=_context())
+    original_language = current_language()
+    try:
+        dialog.result = _result(Path("standard.edf"))
+        candidate = dialog.result.selected_candidate
+        candidate.tilt_refined = True
+        candidate.center_x_sigma_px, candidate.center_y_sigma_px, candidate.distance_sigma_mm = 0.03, 0.04, 0.2
+        candidate.rot1_sigma_deg, candidate.rot2_sigma_deg = 0.12, 0.08
+        candidate.uncertainty_method = "ring jackknife and least squares"
+        dialog._show_candidate(candidate)
+        assert dialog.result_center_x.text() == "124.000 px"
+        assert dialog.result_distance.text() == "1456.70 mm"
+        assert "0.030 px" in dialog.result_center_x.toolTip()
+        assert "0.20 mm" in dialog.result_distance.toolTip()
+        for language, centre_method, tilt_method in (("zh", "环的刀切法与最小二乘法", "最小二乘"),
+                                                     ("en", "ring jackknife and least squares", "least squares")):
+            apply_language(language, [dialog])
+            for key in ("Beam center X", "Beam center Y", "Distance"):
+                assert centre_method in dialog.result_labels[key].toolTip()
+            tilt_tip = dialog.result_labels["Detector rotation"].toolTip()
+            assert tilt_method in tilt_tip and centre_method not in tilt_tip
+        # Read the method saved with older three-ring fits.
+        candidate.uncertainty_method = "ring jackknife"
+        dialog._show_candidate(candidate)
+        assert "ring jackknife" in dialog.result_labels["Detector rotation"].toolTip()
+    finally:
+        apply_language(original_language, [dialog])
+        dialog.close()
+
+
 def test_view_model_owns_calibration_presentation_commands_without_qapplication(
     tmp_path: Path,
 ) -> None:
@@ -205,5 +239,7 @@ def test_feature_dialog_accepts_loaded_image_offscreen() -> None:
     assert dialog.path_edit.text() == ""
     assert dialog.detector_combo.currentIndex() == 0
     assert "choose a detector model" in dialog.detector_label.text()
+    assert not dialog.calibrate_button.isEnabled()  # the file states no energy: it must be entered first
+    dialog.energy_spin.setValue(12.0)
     assert dialog.calibrate_button.isEnabled()
     dialog.close()

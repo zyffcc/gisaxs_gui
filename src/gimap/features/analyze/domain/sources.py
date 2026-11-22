@@ -28,7 +28,11 @@ def curve_source_mask(curve: Curve, valid: np.ndarray, maps: GiwaxsMaps | None =
     its ``GisaxsMaps`` for a cut the person defined on a GISAXS frame)."""
     valid = np.asarray(valid, dtype=bool)
     region = dict(curve.region)
-    if curve.key in ("horizontal", "vertical"):
+    if curve.key in ("horizontal", "vertical") and "gisaxs_cut" not in region:
+        if "per_pixel_exit_angle_min_deg" in region:
+            if maps is None:
+                raise ValueError("GISAXS cuts need the q maps of the frame.")
+            valid = valid & maps.above_horizon
         return valid & _band(valid.shape, region["rows"], region["columns"])
     if "gisaxs_cut" in region:
         if maps is None:
@@ -52,6 +56,8 @@ def curve_source_mask(curve: Curve, valid: np.ndarray, maps: GiwaxsMaps | None =
         return usable & (np.abs(chi) <= region["chi_deg"][1])
     if curve.key == "azimuthal":
         low, high = region["q_window"]
+        if "min_qz" in region:
+            usable &= maps.qz >= region["min_qz"]
         return usable & (q >= low) & (q <= high) & (chi >= -90.0) & (chi <= 90.0)
     if curve.key in ("sector", "sector_chi"):
         chi_low, chi_high = region["chi_deg"]

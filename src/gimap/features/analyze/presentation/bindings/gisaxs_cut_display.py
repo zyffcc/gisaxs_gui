@@ -76,7 +76,10 @@ class GisaxsCutDisplayMixin:
         lines = cut_lines(analysis)
         names, curves, colors, keys = self._cut_curves(reduction, "qy")
         horizontal = reduction.curve("horizontal")
-        if "horizontal" in keys:  # short title (the header also holds the halves, Save and Log); the sentence in the tooltip
+        if "horizontal" in keys and "gisaxs_cut" in horizontal.region:
+            top.set_title(lines[0])
+            top.title_label.setToolTip(lines[0])
+        elif "horizontal" in keys:  # short title (the header also holds the halves, Save and Log); the sentence in the tooltip
             top.set_title(tr("I(qy) · rows {rows} · {where}").format(
                 rows=pixel_range(*horizontal.region["rows"]), where=_horizontal_where(reduction, short=True)))
             top.title_label.setToolTip(lines[0])
@@ -120,7 +123,11 @@ class GisaxsCutDisplayMixin:
         choice = choice if choice in LOWER_AXES else "g_qz"
         names, curves, colors, keys = self._cut_curves(reduction, LOWER_AXES[choice])
         vertical = reduction.curve("vertical")
-        if choice == "g_qz" and "vertical" in keys:
+        if choice == "g_qz" and "vertical" in keys and "gisaxs_cut" in vertical.region:
+            line = cut_lines(analysis)[-1]
+            bottom.set_title(line)
+            bottom.title_label.setToolTip(line)
+        elif choice == "g_qz" and "vertical" in keys:
             bottom.set_title(tr("I(qz) · columns {columns}").format(columns=pixel_range(*vertical.region["columns"])))
             bottom.title_label.setToolTip(cut_lines(analysis)[-1])
         else:
@@ -142,7 +149,13 @@ class GisaxsCutDisplayMixin:
         for row in self._visible_cut_rows():
             if row.auto:
                 curve = analysis.reduction.curve(row.key)
-                if view == VIEW_Q_MAP and curve is not None and "rows" in curve.region:
+                if curve is not None and "gisaxs_cut" in curve.region and extent is not None:
+                    cut = tools.cut_from_record(curve.region)
+                    if view == VIEW_DETECTOR:
+                        outlines.extend((x, y, row.color) for x, y in tools.detector_outlines(cut, geometry, extent))
+                    else:
+                        rects.append((f"g:{row.key}", *tools.cut_rect(cut, extent), row.color, True))
+                elif view == VIEW_Q_MAP and curve is not None and "rows" in curve.region:
                     qy, qz = tools.band_outline_q(geometry, curve.region["rows"], curve.region["columns"])
                     outlines.append((qy, qz, row.color))
                 continue
@@ -169,7 +182,16 @@ class GisaxsCutDisplayMixin:
         if not key.startswith("g:"):
             return
         row = next((item for item in self._cut_rows if item.key == key[2:]), None)
-        if row is None or row.auto:
+        if row is None:
+            return
+        if row.auto:
+            geometry = self._cut_geometry()
+            if row.kind == tools.HORIZONTAL:
+                self.view_model.set_horizontal_band(*tools.range_to_unit(geometry, tools.UNIT_PIXEL, "qz", (y0, y1)))
+            else:
+                self.view_model.set_vertical_band(*tools.range_to_unit(geometry, tools.UNIT_PIXEL, "qy", (x0, x1)))
+            self._pending_cut_key = row.key
+            self.run_analysis()
             return
         cut = row.cut
         try:

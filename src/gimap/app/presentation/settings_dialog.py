@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
-from PyQt5.QtCore import QSize, QUrl
+from PyQt5.QtCore import QSize, QTimer, QUrl
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import QDialog, QMessageBox, QScrollArea, QWidget
 
@@ -42,6 +42,9 @@ DATA_FOLDER_NOTE = (
 """What the user data folder holds: the tooltip of its field, under the folder's whole path."""
 FIRST_SIZE = QSize(920, 700)
 """The size the dialog opens at (wider when a page needs it), clamped to the screen."""
+FONT_DELAY_MS = 400
+"""The font size is applied this long after the last arrow click or key in its field (at once on Enter or when
+the field is left): a restyle per click would make each click wait for the one before."""
 
 
 class SettingsDialog(QDialog, SettingsDialogView):
@@ -125,7 +128,12 @@ class SettingsDialog(QDialog, SettingsDialogView):
     def _connect(self) -> None:
         self.light_radio.toggled.connect(lambda on: on and self.appearance.set_theme("light"))
         self.dark_radio.toggled.connect(lambda on: on and self.appearance.set_theme("dark"))
-        self.font_size_spin.valueChanged.connect(self.appearance.set_font_pt)
+        self._font_timer = QTimer(self)
+        self._font_timer.setSingleShot(True)
+        self._font_timer.setInterval(FONT_DELAY_MS)
+        self._font_timer.timeout.connect(self._apply_font)
+        self.font_size_spin.valueChanged.connect(lambda _value: self._font_timer.start())
+        self.font_size_spin.editingFinished.connect(self._apply_font)
         self.font_reset_button.clicked.connect(self._reset_font)
         self.language_combo.currentIndexChanged.connect(self._language_chosen)
         self.header_center_check.toggled.connect(
@@ -150,7 +158,18 @@ class SettingsDialog(QDialog, SettingsDialogView):
         self.appearance.set_language(self.language_combo.currentData(), QApplication.topLevelWidgets())
         self._compose_texts()  # the menus cannot be reached while Settings is open: only here does it switch
 
+    def _apply_font(self) -> None:
+        """The size in the field, once (``FONT_DELAY_MS``); nothing when it is applied already."""
+        self._font_timer.stop()
+        self.appearance.set_font_pt(self.font_size_spin.value())
+
+    def done(self, result: int) -> None:  # noqa: D401 - Qt API
+        if self._font_timer.isActive():  # a size typed just before Close is applied, not lost
+            self._apply_font()
+        super().done(result)
+
     def _reset_font(self) -> None:
+        self._font_timer.stop()
         self.appearance.reset_font()
         self.font_size_spin.blockSignals(True)
         self.font_size_spin.setValue(self.appearance.font_pt)

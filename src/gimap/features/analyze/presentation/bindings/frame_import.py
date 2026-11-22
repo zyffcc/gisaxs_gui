@@ -4,11 +4,15 @@
 the frames listed and are shown as one sum, Sum = their number."""
 from pathlib import Path
 from threading import Event
+from typing import Optional
 from PyQt5.QtCore import QObject, QSignalBlocker, Qt, pyqtSignal
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import QDialog, QShortcut
+from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
-from ...application.frame_import import ImportSource, prepare_frame_import
+from src.gimap.app.presentation.question_box import ACCEPT, ACTION, REJECT, ask_choice
+from src.gimap.shared.numbers import applied_angle
+from ...application.frame_import import ImportSource, other_detector, prepare_frame_import
 from ...application.ports import source_name
 from ..frame_import_dialog import FrameImportDialog
 from ..frame_listing import FrameListingModel
@@ -38,7 +42,7 @@ class _ImportSignals(QObject):
 
 
 class FrameImportMixin:
-    _import_applying = _importing = False
+    _import_applying = _importing = _asking_import = False
     def _connect_frame_import(self):
         self._frame_import_disposed = False
         self._importing = self._import_applying = False
@@ -161,14 +165,109 @@ class FrameImportMixin:
         self._status(trf("Frame {n} is not imported. Use Choose Frames to add it.", n=frame + 1), "warning")
         return False
 
+    def _new_paths(self, paths) -> bool:
+        """Whether ``paths`` name anything that is not listed yet (a folder always may)."""
+        listed = {str(Path(path)) for path in self.view_model.state.files}
+        return any(str(Path(path)) not in listed for path in paths)
+
+    def ask_replace_or_add(self, paths) -> Optional[str]:
+        """Frames are listed and others are opened: ``replace`` them, ``add`` to them, or ``None`` (cancelled).
+        A ``QuestionBox`` (``app/presentation/question_box.py``): a ``QMessageBox`` killed the process here on the
+        offscreen platform."""
+        carried = self._sample_choices()
+        buttons = [(tr("Replace"), ACCEPT), (tr("Add to List"), ACTION), (tr("Cancel"), REJECT)]
+        if carried:
+            buttons.append((tr("Replace and reset"), ACTION))
+        answer = ask_choice(self, tr("Open Frames"),
+                            trf("{count} frames are listed. Replace them with the frames opened now, or add these to "
+                                "the list?", count=len(self.view_model.state.files)),
+                            buttons, default=0, escape=2, informative=carried)
+        return ("replace", "add", None, "reset")[answer]
+
+    def _sample_choices(self):
+        kept = []
+        angle = self.view_model.state.incidence_deg
+        if angle is not None:
+            kept.append(trf("Incidence override: {value}°", value=f"{angle:g}"))
+        if self.view_model.state.incidence_locked:
+            kept.append(tr("Keep entered αi"))
+        if self.view_model.state.yoneda_material:
+            kept.append(f"{tr('Yoneda critical angle')}  {self.view_model.state.yoneda_material}")
+        elif self.view_model.state.yoneda_critical_deg is not None:
+            kept.append(f"{tr('Yoneda critical angle')}  {self.view_model.state.yoneda_critical_deg:g}°")
+        if self.view_model.state.sample_roll_deg is not None:
+            state = self.view_model.state
+            kept.append(f"ψ {applied_angle(state.sample_roll_deg, state.sample_roll_measurement)}°")
+        phases = self.indexing.phases
+        if phases:
+            kept.append(trf("Phases shown: {names}", names=", ".join(p.name for p in phases if p.visible) or "—"))
+            if any(not p.visible for p in phases):
+                kept.append(trf("Phases hidden: {names}", names=", ".join(p.name for p in phases if not p.visible)))
+        hidden = self._hidden_regions | self._hidden_cuts
+        if hidden:
+            names = {r.key: tr(r.name) for r in [*self._region_rows, *self._cut_rows]}
+            kept.append(trf("Hidden cuts and regions: {names}", names=", ".join(names.get(k, k) for k in sorted(hidden))))
+        hidden_marks = dict.fromkeys(tr(title) for view in self._mark_views().values()
+                                     for title in view.marks.hidden_titles())
+        if hidden_marks:
+            kept.append(trf("Hidden image or plot marks: {names}", names=", ".join(hidden_marks)))
+        if not kept:
+            return ""
+        return "\n".join([tr("Replace keeps these settings:"), *kept,
+                          tr("Reset uses the frame’s incidence, hides the previous phases and shows all cuts and marks.")])
+
+    def _reset_sample_choices(self):
+        for index in range(len(self.indexing.phases)):
+            self.indexing.replace(index, visible=False)
+        self._region_rows = []
+        self._hidden_regions.clear()
+        self._cut_table_state = None
+        self._hidden_cuts.clear()
+        for view in self._mark_views().values():
+            for key in view.marks.hidden():
+                view.marks.set_visible(key, True)
+        self._remember_marks()
+        self._adopt_incidence(None)
+        self.view_model.state.incidence_locked = False
+        self.view_model.state.yoneda_critical_deg = None
+        self.view_model.state.yoneda_material = None
+        self.view_model.set_sample_roll(None)
+        self._forget_incidence()
+        self._remember()
+
     def import_paths(self, paths, *, interactive=True, selections=None, on_imported=None):
-        """Inspect headers in the background, then import references; no stack is decoded here."""
+        """Inspect headers in the background, then import references; no stack is decoded here. Opened by the
+        person (``interactive``) while other frames are listed: asks whether to replace them or add to them; frames
+        added are refused when they are of another detector (``application/frame_import.other_detector``)."""
         paths = list(paths)
         if not paths:
             return False
         if self._list_kept():
             self._status(tr("Wait for the current task before changing imported frames."), "warning")
             return False
+        appending = False
+        replacement = None
+        if interactive and self.view_model.state.files and self._new_paths(paths):
+            if self._asking_import:  # a second drop while the question is open
+                self._status(tr("Answer the open question about the frames listed first."), "warning")
+                return False
+            self._asking_import = True
+            try:
+                answer = self.ask_replace_or_add(paths)
+            finally:
+                self._asking_import = False
+            if self._frame_import_disposed:
+                return False
+            if answer is None:
+                self._status(tr("Frame import cancelled."), "info")
+                return False
+            if self._list_kept():  # a batch or the automatic analysis started while the question was open
+                self._status(tr("Wait for the current task before changing imported frames."), "warning")
+                return False
+            if answer in ("replace", "reset"):
+                replacement = answer
+            else:
+                appending = True
         self.cancel_frame_import(silent=True)
         self._import_cancelled = cancelled = Event()
         self._importing = True
@@ -179,11 +278,14 @@ class FrameImportMixin:
         self.import_cancel_button.show()
         self.show_step("data")
         self.frameImportStarted.emit()
+        listed = self.view_model.state.analysis
+        listed = (listed.shape, listed.detector_name) if appending and listed is not None else None
         self.tasks.submit("import-frames", lambda: prepare_frame_import(
             self.view_model._frames, paths,
             progress=lambda n, total, name: self._import_signals.progress.emit(cancelled, n, total, name),
-            cancelled=cancelled.is_set),
-            on_done=lambda sources: self._frame_import_ready(sources, paths, interactive, selections, cancelled, on_imported),
+            cancelled=cancelled.is_set, probe=listed is not None),
+            on_done=lambda sources: self._frame_import_ready(sources, paths, interactive, selections, cancelled, on_imported,
+                                                             listed=listed, replacement=replacement),
             on_error=lambda message, _details: self._frame_import_failed(message, cancelled))
         return True
 
@@ -269,8 +371,18 @@ class FrameImportMixin:
         self.cancel_frame_import(silent=True)
         self._status(trf("Frame import failed: {error}", error=message_text(message)), "error")
 
-    def _frame_import_ready(self, sources, paths, interactive, selections, cancelled, on_imported=None):
+    def _frame_import_ready(self, sources, paths, interactive, selections, cancelled, on_imported=None,
+                            listed=None, replacement=None):
         if cancelled is not self._import_cancelled or cancelled.is_set() or sources is None:
+            return
+        refused = other_detector(sources, *listed) if listed is not None else None
+        if refused:  # never a list of two detectors (wrong q for one of them, mixed in Batch Export)
+            self._importing = False
+            self.import_cancel_button.hide()
+            self.import_status_label.hide()
+            self.choose_frames_button.setEnabled(bool(self.view_model.state.files))
+            self._status(message_text(refused), "error")
+            show_toast(self.window(), message_text(refused), level="warning")
             return
         self._importing = False
         self.import_cancel_button.hide()
@@ -295,6 +407,10 @@ class FrameImportMixin:
         if self._list_kept():
             self._status(tr("Frame import cancelled. Wait for the current task before changing imported frames."), "warning")
             return
+        if replacement:
+            self.clear_files()
+            if replacement == "reset":
+                self._reset_sample_choices()
         if self._apply_frame_import(sources, choices, on_imported=on_imported):
             self.remember_recent(paths)
 

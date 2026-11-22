@@ -6,7 +6,8 @@
   examples' ``.poni`` in the folders beside the frame.
 * **Report a Problem**: the versions only (no path, no data) go to the clipboard; the browser opens a new
   issue. The program sends nothing.
-* **Open Error Log Folder**: ``<user data>/logs``, where ``ErrorGuard`` writes ``errors.log``.
+* **Open Log Folder**: ``<user data>/logs``: ``gimap.log`` (``logging_setup.py``), ``crash.log`` and the
+  ``errors.log`` of ``ErrorGuard``.
 * **How to Cite**: the reference read from ``CITATION.cff`` with the version that runs; a DOI only when the
   file gives one.
 """
@@ -26,6 +27,10 @@ from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import QApplication
 
 from .error_guard import LOG_NAME
+from .logging_setup import CRASH_FILE, LOG_FILE, SECOND_LOG_FILE
+
+LOG_NAMES = (LOG_FILE, SECOND_LOG_FILE, CRASH_FILE, LOG_NAME)
+"""What Help ▸ Open Log Folder looks for: the session logs, native crashes and unexpected errors."""
 from .presentation.app_dialogs import inform, warn
 from .presentation.components import show_toast
 from .presentation.help_dialogs import ask_example_folder, plain_text, system_summary
@@ -267,13 +272,13 @@ class HelpCommands:
         return frame
 
     def log_folder(self) -> Path:
-        """Where ``ErrorGuard`` writes ``errors.log`` (``main.py``: ``<user data>/logs``)."""
+        """Where the logs are (``<user data>/logs``: ``gimap.log``, ``crash.log``, ``errors.log``)."""
         return (Path(self.window.app_context.data_dir or ".") / "logs").resolve()
 
     def open_error_log(self) -> bool:
         folder = self.log_folder()
-        if not (folder / LOG_NAME).is_file():
-            inform(self.window, tr("Error Log"), tr("No error has been logged."))
+        if not any((folder / name).is_file() for name in LOG_NAMES):
+            inform(self.window, tr("Logs"), tr("Nothing has been logged yet."))
             return False
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
         return True

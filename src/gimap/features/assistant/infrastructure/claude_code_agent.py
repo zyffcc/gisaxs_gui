@@ -145,10 +145,11 @@ def _limit_text(info: dict) -> str:
 class _Session:
     """One Claude Code process: feeds it user messages and turns its output into events."""
 
-    def __init__(self, process: subprocess.Popen, events, follow_up, cancelled):
+    def __init__(self, process: subprocess.Popen, events, follow_up, cancelled, model_resolved):
         self.process = process
         self.events = events
         self.follow_up = follow_up
+        self.model_resolved = model_resolved
         self.cancelled = cancelled
         self.stderr: deque[str] = deque(maxlen=40)
         self.transcript: list = []
@@ -234,6 +235,10 @@ class _Session:
         if kind == "system":
             self._system(message)
         elif kind == "assistant":
+            model = (message.get("message") or {}).get("model")
+            if model:
+                self.model = str(model)
+                self.model_resolved(self.model)
             for block in (message.get("message") or {}).get("content") or ():
                 if isinstance(block, dict) and block.get("type") == "text" and str(block.get("text", "")).strip():
                     self.events.model_text(str(block["text"]).strip())
@@ -250,6 +255,7 @@ class _Session:
         subtype = message.get("subtype")
         if subtype == "init":
             self.model = str(message.get("model") or "")
+            self.model_resolved(self.model)
             source = message.get("apiKeySource")
             # "none" is a Claude plan login; "/login managed key", ANTHROPIC_API_KEY and
             # apiKeyHelper are billed per token.
@@ -332,6 +338,7 @@ class ClaudeCodeAgent:
                 raise LlmError(INSTALL_HINT if not cli else f"Claude Code was not found at {cli}.")
             command = [path]
         self.command = list(command)
+        self.resolved_model = ""
         self.model = (model or "").strip()
         self.effort = effort if effort in EFFORTS else ""
 
@@ -400,7 +407,10 @@ class ClaudeCodeAgent:
                 )
             except OSError as exc:
                 return AgentResult(False, f"Claude Code could not be started: {exc}")
-            return _Session(process, events, follow_up, cancelled).run(prompt)
+            def model_resolved(name):
+                self.resolved_model = name
+
+            return _Session(process, events, follow_up, cancelled, model_resolved).run(prompt)
 
     # -- account -----------------------------------------------------------------------
 

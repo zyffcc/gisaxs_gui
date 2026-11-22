@@ -42,12 +42,12 @@ from .series_view import SeriesScroll, SeriesView
 AUTO_PROFILE_TEXT = "Automatic (match detector)"
 FILE_FILTER = f"Detector frames ({' '.join('*' + suffix for suffix in DETECTOR_SUFFIXES)});;All files (*)"
 """A dialog that takes one detector frame (the background frame): every suffix the reader accepts."""
-MODE_ITEMS = (("Auto", "auto"), ("GISAXS", "gisaxs"), ("GIWAXS", "giwaxs"))
+MODE_ITEMS = (("Auto", "auto"), ("GISAXS", "gisaxs"), ("GIWAXS", "giwaxs"), ("SAXS", "transmission"))
 VIEW_ITEMS = ("Detector", "q map", "Cake")
 VIEW_DETECTOR, VIEW_Q_MAP, VIEW_CAKE = range(3)
 RIGHT_TABS = (("Curves", "curves"), ("Results", "results"), ("Series", "series"))
 INCIDENCE_FROM_PROFILE = -0.001
-SPLITTER_SIZES = [300, 610, 610]
+SPLITTER_SIZES = [300, 720, 520]  # the image widest (``bindings/workspace.EvenSplit`` keeps it so)
 """Steps | image | curves and results before the page has its width."""
 INCIDENCE_TIP = (
     "Grazing angle αi of this measurement. At the minimum (“from profile”) the "
@@ -193,9 +193,15 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         self.mode_combo.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         for text, value in MODE_ITEMS:
             self.mode_combo.addItem(text, value)
-        self.mode_combo.setItemToolTip(0, "Decide from the largest scattering angle on the detector")
+        for index in range(self.mode_combo.count()):  # four techniques in the room of three: narrower padding
+            self.mode_combo.button(index).setProperty("narrowSegment", True)
         self.mode_combo.setItemToolTip(1, "Small angles: Yoneda cut, vertical cut, the symmetric halves")
         self.mode_combo.setItemToolTip(2, "Wide angles: rings, sectors, the q map and the cake")
+        self.mode_combo.setItemToolTip(
+            3, "SAXS/WAXS in transmission: full rings about the beam, I(q) and I(χ) over 360°, no horizon or Yoneda "
+               "band (a calibrant, or a sample in transmission)")
+        self.mode_combo.setItemToolTip(0, "Decide from the largest scattering angle on the detector; without an "
+                                          "incidence angle, a calibrant or complete rings mean transmission")
         self.incidence_spin = QDoubleSpinBox(bar)
         self.incidence_spin.setObjectName("analyzeIncidenceSpin")
         self.incidence_spin.setDecimals(3)
@@ -254,6 +260,10 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         row.addWidget(self.file_meta, 1)
         row.addWidget(self.mode_combo)
         row.addWidget(self.incidence_spin)
+        self.roll_step_button = QToolButton(bar)
+        self.roll_step_button.setText("ψ 0°")
+        self.roll_step_button.setToolTip("Sample roll ψ")
+        row.addWidget(self.roll_step_button)
         actions_separator = _separator(bar)
         actions = (self.run_pipeline_button, self.stop_pipeline_button, self.assistant_button, self.export_button,
                    self.batch_export_button, self.fit_button)
@@ -261,7 +271,8 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
             row.addWidget(widget)
         bar.set_rows(row, second, actions=actions, separator=actions_separator, filler=self.file_chip)
         bar.set_compact_parts(
-            hidden=(self.previous_file_button, self.next_file_button, self.file_position_label, self.file_meta),
+            hidden=(self.previous_file_button, self.next_file_button, self.file_position_label, self.file_meta,
+                    self.roll_step_button),
             texts=((self.run_pipeline_button, "Run Automatic Analysis", "Run Analysis"),
                    (self.batch_export_button, "Batch Export…", "Batch…"),
                    (self.fit_button, "Send to Fitting", "Fitting")),
@@ -342,9 +353,15 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         self.banner_find_button.hide()
         self.enter_geometry_button = QPushButton("Enter Geometry…", self.banner)
         self.banner_calibrate_button = QPushButton("Calibrate…", self.banner)
+        self.banner_anyway_button = QPushButton("Use Profile Anyway", self.banner)
+        self.banner_anyway_button.setToolTip("Use the profile picked for frames of another size on these frames too")
+        self.banner_anyway_button.hide()
+        self.banner_poni_button = QPushButton("Load .poni…", self.banner)
         banner_layout.addWidget(self.banner_label, 1)
         banner_layout.addWidget(self.use_fitting_button)
+        banner_layout.addWidget(self.banner_anyway_button)
         banner_layout.addWidget(self.banner_find_button)
+        banner_layout.addWidget(self.banner_poni_button)
         banner_layout.addWidget(self.enter_geometry_button)
         banner_layout.addWidget(self.banner_calibrate_button)
         self.banner.hide()
@@ -389,6 +406,20 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         self.canvas_save_data_action.setToolTip("The q map (q∥–qz) or the cake (χ–q) as a table with its axes")
         self.canvas_save_button.setMenu(canvas_menu)
         self.detector_view.toolbar_layout.addWidget(self.canvas_save_button)
+        self.panels_button = QToolButton(center)
+        self.panels_button.setObjectName("analyzePanelsButton")
+        self.panels_button.setText("Panels")
+        self.panels_button.setToolTip("Hide the steps or the curves and results, so the image has the room; "
+                                      "show them again here")
+        self.panels_button.setPopupMode(QToolButton.InstantPopup)
+        panels_menu = QMenu(self.panels_button)
+        self.show_steps_action = panels_menu.addAction("Steps")
+        self.show_curves_action = panels_menu.addAction("Curves and Results")
+        for action in (self.show_steps_action, self.show_curves_action):
+            action.setCheckable(True)
+            action.setChecked(True)
+        self.panels_button.setMenu(panels_menu)
+        self.detector_view.toolbar_layout.addWidget(self.panels_button)
         layout.addWidget(self.detector_view, 1)
         return center
 
@@ -438,7 +469,8 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         results.setObjectName("analyzeResultsPage")
         results.setWidgetResizable(True)
         results.setFrameShape(QFrame.NoFrame)
-        results.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # everything wraps or scrolls on its own
+        # Most of it wraps or scrolls on its own; what cannot (a wide table on a 1024-pixel screen) scrolls here.
+        results.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         results_content = QWidget(results)
         self.results_panel_host = QVBoxLayout(results_content)
         self.results_panel_host.setContentsMargins(2, 2, 6, 2)

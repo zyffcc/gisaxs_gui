@@ -48,6 +48,32 @@ def _slug(text: str) -> str:
     return "".join(character if character.isalnum() else "_" for character in text).strip("_")
 
 
+def curve_file_names(curves: Sequence[Curve]) -> list[str]:
+    """The part of each curve's file name after the frame's stem: a cut region is named by its name (its I(χ)
+    with ``_chi``: ``ring_q1_0``, ``ring_q1_0_chi``), every other curve by its key. A region name two regions share,
+    that another curve's key already is, or that is empty once cleaned, gets the region's key after it
+    (``ring_q1_0_region3``), so no file overwrites another."""
+    keys = {_slug(curve.key) for curve in curves}
+    owners: dict[str, set[str]] = {}
+    parts = []
+    for curve in curves:
+        region = (curve.region or {}).get("cut_region") if isinstance(curve.region, Mapping) else None
+        own = curve.key[:-4] if curve.key.endswith("_chi") else curve.key  # region1_chi → region1
+        base = _slug(str(region)) if region else None
+        parts.append((curve, base, own))
+        if base is not None:
+            owners.setdefault(base, set()).add(own)
+    names = []
+    for curve, base, own in parts:
+        if base is None:
+            names.append(_slug(curve.key))
+            continue
+        if not base or len(owners[base]) > 1 or base in keys:
+            base = f"{base}_{_slug(own)}" if base else _slug(own)
+        names.append(base + ("_chi" if curve.key.endswith("_chi") else ""))
+    return names if len(set(names)) == len(names) else [_slug(curve.key) for curve in curves]
+
+
 FIT_INPUT_MARKER = "# GIMaP Analyze fit input"
 SEPARATORS = {".csv": ",", ".txt": "\t", ".dat": " "}
 """The column separator of a text table, by its suffix (comma, tab, space)."""
@@ -148,7 +174,7 @@ class CsvCurveWriter:
                     stream.write(f"# observation: {json.dumps(_jsonable(observation), sort_keys=True)}\n")
                 stream.write(f"# columns: {export_text(curve.x_label)}  I  sigma  pixels\n")
                 for x, intensity, sigma, pixels in zip(curve.x, curve.intensity, curve.sigma, curve.pixels):
-                    stream.write(f"{x:.8g} {intensity:.8g} {sigma:.8g} {int(pixels)}\n")
+                    stream.write(f"{x:.17g} {intensity:.17g} {sigma:.17g} {int(pixels)}\n")
             os.replace(unfinished, path)  # complete, or not there at all
         finally:
             if unfinished.exists():
@@ -171,7 +197,7 @@ class CsvCurveWriter:
                     if isinstance(value, float) and value != value:
                         cells.append(blank)
                     elif isinstance(value, float):
-                        cells.append(f"{value:.8g}")  # as the files of one frame: a table loses no digit of them
+                        cells.append(f"{value:.8g}")  # the precision of combined batch tables
                     else:
                         cells.append(_cell(export_text(str(value)), separator) or blank)
                 writer.writerow(cells)
@@ -216,6 +242,7 @@ class CsvCurveWriter:
         metadata: Mapping[str, Any],
         text_format: str = "csv",
         also: Sequence[str] = (),
+        region_names: bool = False,
     ) -> list[Path]:
         """``also``: the names of the other files the same export writes next to these (the curve for Fitting),
         listed with the curves in the record's ``files``."""
@@ -224,8 +251,9 @@ class CsvCurveWriter:
         written: list[Path] = []
         suffix = f".{text_format}" if f".{text_format}" in SEPARATORS else ".csv"
         separator = SEPARATORS[suffix]
-        for curve in curves:
-            path = destination / f"{stem}_{_slug(curve.key)}{suffix}"
+        names = curve_file_names(curves) if region_names else [_slug(curve.key) for curve in curves]
+        for curve, name in zip(curves, names):  # (a batch keeps the keys: its tables and README name them)
+            path = destination / f"{stem}_{name}{suffix}"
             with _text_file(path) as stream:
                 stream.write("# GIMaP Analyze export (q in 1/A, angles in deg)\n")
                 stream.write(_source_line(metadata))
@@ -238,7 +266,7 @@ class CsvCurveWriter:
                     [_cell(export_text(curve.x_label), separator), _cell(export_text(curve.y_label), separator), "sigma", "pixels"]
                 )
                 for row in zip(curve.x, curve.intensity, curve.sigma, curve.pixels):
-                    writer.writerow([f"{row[0]:.8g}", f"{row[1]:.8g}", f"{row[2]:.8g}", int(row[3])])
+                    writer.writerow([f"{row[0]:.17g}", f"{row[1]:.17g}", f"{row[2]:.17g}", int(row[3])])
             written.append(path)
         sidecar = destination / f"{stem}_analysis.json"
         payload = dict(metadata)
@@ -270,4 +298,4 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
-__all__ = ["CsvCurveWriter", "FIT_INPUT_MARKER", "export_text"]
+__all__ = ["CsvCurveWriter", "FIT_INPUT_MARKER", "curve_file_names", "export_text"]

@@ -7,7 +7,7 @@ pixel ``(i, j)`` covers ``[j, j + 1] x [i, i + 1]``, row 0 at the top):
   ``sin² α_f = (q_z/k − Re√(sin² α_i − sin² α_c))² + sin² α_c``, above α_c only);
 * q_y = k cos α_f sin 2θ_f, so the scattered direction in the sample frame is ``(along, q_y/k, sin α_f)`` with
   ``along = +√(1 − (q_y/k)² − sin² α_f)`` (forward);
-* turned back by α_i into the laboratory and met with the detector plane (tilted or not, ``lab_rays``).
+* undo the incidence rotation and then the sample roll into the laboratory, and intersect the detector plane.
 
 Positions the scattered ray cannot reach (|q| too large, below α_c, behind the detector) are NaN. The 1D
 conversions used to type a cut in angles (``alpha_f_of_qz``, ``two_theta_f_of_qy`` …) are exact: α_f depends on
@@ -20,7 +20,7 @@ import math
 
 import numpy as np
 
-from .detector_geometry import DetectorGeometry
+from .detector_geometry import DetectorGeometry, roll_transverse
 from .q_mapping import lab_rays, scattering_vectors
 
 
@@ -30,8 +30,14 @@ def q_of_positions(geometry: DetectorGeometry, x_px, y_px) -> tuple[np.ndarray, 
     y = (geometry.beam_center_y_px - np.asarray(y_px, dtype=np.float64)) * geometry.pixel_size_y_m
     along, right, up = lab_rays(geometry, *np.broadcast_arrays(x, y))
     q = scattering_vectors(right, up, along, geometry.incidence_rad, geometry.wavevector_inv_angstrom,
-                           critical_rad=geometry.critical_rad)
+                           critical_rad=geometry.critical_rad, sample_roll_rad=geometry.sample_roll_rad)
     return np.asarray(q.qy, dtype=np.float64), np.asarray(q.qz, dtype=np.float64)
+
+
+def qy_on_horizon(geometry: DetectorGeometry, columns) -> np.ndarray:
+    """q_y where each detector column meets α_f = 0 (NaN when it has no unique crossing)."""
+    columns = np.asarray(columns, dtype=np.float64)
+    return q_of_positions(geometry, columns, geometry.horizon_row(columns))[0]
 
 
 def exit_sine_of_qz(geometry: DetectorGeometry, qz) -> np.ndarray:
@@ -96,16 +102,20 @@ def positions_of_q(geometry: DetectorGeometry, qy, qz) -> tuple[np.ndarray, np.n
     with np.errstate(invalid="ignore"):
         along = np.sqrt(1.0 - across * across - normal * normal)  # NaN where no ray has these q
     cos_i, sin_i = math.cos(geometry.incidence_rad), math.sin(geometry.incidence_rad)
-    ray = np.stack([along * cos_i - normal * sin_i, across, along * sin_i + normal * cos_i])  # (along beam, right, up)
-    if geometry.tilted:
-        columns, rows_up = (np.asarray(axis, dtype=np.float64) for axis in geometry.in_plane_axes())
-    else:
-        columns, rows_up = np.array([0.0, 1.0, 0.0]), np.array([0.0, 0.0, 1.0])
+    right, up = roll_transverse(across, along * sin_i + normal * cos_i, -geometry.sample_roll_rad)
+    ray = np.stack([along * cos_i - normal * sin_i, right, up])
+    return positions_of_rays(geometry, ray)
+
+
+def positions_of_rays(geometry: DetectorGeometry, ray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Intersect laboratory rays (along beam, right, up) with the detector. NaN if the ray misses its plane."""
+    columns, rows_up = (np.asarray(axis, dtype=np.float64) for axis in geometry.in_plane_axes())
     normal_vector = np.cross(columns, rows_up)
     origin = np.array([geometry.distance_m, 0.0, 0.0])
     facing = np.tensordot(normal_vector, ray, axes=1)
     with np.errstate(invalid="ignore", divide="ignore"):
-        distance = np.where(facing > 0, float(origin @ normal_vector) / facing, np.nan)
+        distance = float(origin @ normal_vector) / facing
+        distance = np.where(np.isfinite(distance) & (distance > 0), distance, np.nan)
     point = ray * distance - origin.reshape((3,) + (1,) * (ray.ndim - 1))
     x = np.tensordot(columns, point, axes=1)
     y = np.tensordot(rows_up, point, axes=1)
@@ -119,6 +129,6 @@ def q_per_pixel(geometry: DetectorGeometry) -> float:
 
 
 __all__ = [
-    "alpha_f_of_qz", "exit_sine_of_qz", "horizon_qz", "positions_of_q", "q_of_positions", "q_per_pixel",
+    "alpha_f_of_qz", "exit_sine_of_qz", "horizon_qz", "positions_of_q", "positions_of_rays", "q_of_positions", "q_per_pixel", "qy_on_horizon",
     "qy_of_two_theta_f", "qz_of_alpha_f", "qz_of_exit_sine", "two_theta_f_of_qy",
 ]

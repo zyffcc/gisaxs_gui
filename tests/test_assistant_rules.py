@@ -195,7 +195,7 @@ def test_rival_maxima_or_f_near_zero_are_not_called_an_orientation() -> None:
 
     weak = ring_orientation(_ring(weak_bump), q_window=(1.6, 1.8), background=10.0)
     assert abs(weak.herman_excess) < weak.texture_margin == pytest.approx(0.1)
-    assert weak.texture.startswith("no clear preferred orientation (f − f_iso = +0.00"), weak.texture
+    assert weak.texture.startswith("no clear preferred orientation") and "f_iso" not in weak.texture
 
     def normal(chi):
         return np.exp(-0.5 * (chi / 12.0) ** 2)
@@ -225,22 +225,12 @@ def test_the_texture_sentence_compares_f_with_a_random_ring_over_the_same_bins()
     assert oriented.herman_excess > oriented.texture_margin and oriented.texture.startswith("oriented along the surface normal")
 
 
-def test_f_says_when_it_depends_on_the_bins_next_to_the_sample_horizon() -> None:
-    # An isotropic ring whose intensity falls to the background within 5° of the sample plane (absorption at small αf,
-    # a shadow): the sin χ weight of those bins makes f look like orientation towards the normal (≈ +0.05).
-    drop = ring_orientation(_ring(lambda chi: np.where(chi >= 85.0, 0.0, 1.0), pixels=3000.0), q_window=(1.6, 1.8),
-                            background=10.0)
-    assert drop.herman_excess == pytest.approx(0.047, abs=0.005) and abs(drop.horizon_excess) < 0.005
-    (note,) = [note for note in drop.notes if "next to the sample horizon" in note]
-    assert note.startswith("Leaving out |χ| ≥ 85°, next to the sample horizon, changes f − f_iso from +0.047 to +0.000")
-    assert not any("another verdict" in note for note in drop.notes)  # both below the margin: the same sentence
-    from src.gimap.features.assistant.application.giwaxs_decisions import horizon_decision
-
-    decision = horizon_decision([drop])
-    assert decision["decision"] == "f includes the bins next to the sample horizon (|χ| ≥ 85°)"
-    assert "q = 1.7 (+0.047 → +0.000" in decision["why"] and "no exit-angle correction" in decision["why"]
-    flat = ring_orientation(_ring(lambda chi: np.ones_like(chi), pixels=3000.0), q_window=(1.6, 1.8), background=10.0)
-    assert not any("sample horizon" in note for note in flat.notes) and horizon_decision([flat]) is None
+def test_ring_orientation_uses_the_supplied_exit_filtered_profile_without_a_second_chi_cut() -> None:
+    ring = _ring(lambda chi: np.where(chi >= 85., 0., 1.), pixels=3000.)
+    drop = ring_orientation(ring, q_window=(1.6, 1.8), background=10.)
+    assert drop.herman == pytest.approx(0.047, abs=0.005)
+    assert drop.coverage == 1.
+    assert all("85°" not in note for note in drop.notes)
 
 
 def test_a_peak_list_cut_at_the_cap_says_how_many_candidates_there_were() -> None:
@@ -282,15 +272,15 @@ def test_a_peak_at_the_end_of_the_data_builds_no_ring_size_or_series() -> None:
               "steps": [], "geometry": {"distance_mm": 811.8, "beam_center_px": [545.458310126973, 1826.94747674757],
                                         "wavelength_A": 0.6888, "incidence_deg": 0.075}}
     text = pipeline_markdown(report)
-    # One precision per column, each number rounded once from its full value (29.348: 29.3, not 29.35 → 29.4).
-    assert "| 0.8601 | 7.305 | 0.0300 | 25.0 | — | ≥ 29.3 |  |" in text
-    assert "| 1.9000 | 3.307 | 0.0240 | 18.0 | — | — | overlaps a neighbouring peak |" in text
-    assert f"| 2.5799 | 2.435 | 0.0517 | 7.0 | — | — | {AT_EDGE} |" in text and "at_edge" not in text
+    # Without a reported error, use three significant digits, rounded once from the stored value.
+    assert "| 0.86 | 7.31 | 0.03 | 25 | — | ≥ 29.3 |  |" in text
+    assert "| 1.9 | 3.31 | 0.024 | 18 | — | — | overlaps a neighbouring peak |" in text
+    assert f"| 2.58 | 2.44 | 0.0517 | 7.03 | — | — | {AT_EDGE} |" in text and "at_edge" not in text
     assert "beam centre (545.46, 1826.95) px" in text  # to 0.01 px, as the cuts and decisions give it
     assert [marker["reliable"] for marker in peak_markers(report)] == [True, True, False]
 
 
-def test_a_ring_line_gives_f_its_uncertainty_and_f_iso_with_the_same_decimals() -> None:
+def test_a_ring_line_gives_f_its_uncertainty_and_the_same_coverage_reference() -> None:
     from src.gimap.features.assistant.application.pipeline_report import pipeline_markdown
     from src.gimap.features.assistant.domain import herman_decimals, signed
 
@@ -302,15 +292,15 @@ def test_a_ring_line_gives_f_its_uncertainty_and_f_iso_with_the_same_decimals() 
     full = {**ring, "q": 1.989, "coverage": 1.0, "herman_isotropic": 0.0, "herman_excess": 0.13921}
     text = pipeline_markdown({"ok": True, "procedure": "giwaxs", "peaks": [], "rings": [ring, full], "decisions": [],
                               "steps": [], "geometry": {"distance_mm": 811.8}})
-    assert ("- q ≈ 0.9972 Å⁻¹, |χ| coverage 0.97: f = 0.1392 ± 0.0027 (a random ring over the same |χ|: "
-            "f_iso = −0.0014), f − f_iso = +0.1406 — oriented") in text  # it was f = 0.139 ± 0.0027, no f_iso
-    assert "coverage 1.00: f = 0.1392 ± 0.0027 (a random ring over the same |χ|: f_iso = 0.0000)" in text  # every ring
-    # The note of a ring with a missing wedge: f_iso with those decimals and the Unicode minus (it read f = -0.00).
+    assert "coverage 0.97: f = 0.1392 ± 0.0027 (stat), f_iso = −0.00136 — oriented" in text
+    assert "coverage 1.00: f = 0.1392 ± 0.0027 (stat), f_iso = 0.00" in text
+    assert "f − f_iso =" not in text
+    # The same-coverage reference has no uncertainty of its own.
     ring = _ring(lambda chi: np.ones_like(chi))
     cut = ring_orientation(Profile.of(ring.x, ring.y, ring.sigma, np.where(np.abs(ring.x) < 6.0, 0.0, 300.0)),
                            q_window=(1.6, 1.8), background=10.0)
     (note,) = [note for note in cut.notes if note.startswith("A random (isotropic) ring")]
-    value = signed(cut.herman_isotropic, herman_decimals(cut.herman_err))
+    value = f"{cut.herman_isotropic:.3g}".replace("-", "−")
     assert value.startswith("−0.0") and f"would give f = {value}: compare" in note and "-" not in value
 
 

@@ -3,6 +3,7 @@
 from .bad_pixels import BadPixels, find_bad_pixels
 from .intensity import describe_intensity_corrections, film_absorption_on, has_intensity_corrections, intensity_factor
 from .flat_field import FlatField, apply_flat_field, check_flat_shape, normalise_flat_field
+from .normalisation import Normalisation, NormalisationUse, header_values, normalisation_use, summed_header_values
 from .cake import CakeMap, cake_map
 from .preprocess import POLYGON, RECTANGLE, MaskShape, mirror_fill, rasterize
 from .regions import CutRegion, default_region_near, region_key, region_outline
@@ -21,6 +22,7 @@ from .region_pick import PICK_KINDS, RING, SECTOR, SPOT, Peak, Pick, pick_region
 from .binning import BinnedMean, binned_mean, binned_mean_2d, native_profile
 from .classification import (
     WIDE_ANGLE_LIMIT_DEG,
+    calibrant_name,
     classify_measurement,
     max_scattering_angle_deg,
 )
@@ -56,10 +58,13 @@ from .giwaxs import (
     strongest_ring,
     two_theta_deg,
 )
+from .transmission import reduce_transmission, transmission_maps
+from .ring_frame import rings_about_beam
 from .models import (
     GISAXS,
     GIWAXS,
     MEASUREMENT_KINDS,
+    TRANSMISSION,
     Curve,
     GisaxsCutSettings,
     GiwaxsSettings,
@@ -85,6 +90,11 @@ __all__ = [
     "cut_outlines",
     "cut_record",
     "cut_rect",
+    "TRANSMISSION",
+    "calibrant_name",
+    "reduce_transmission",
+    "rings_about_beam",
+    "transmission_maps",
     "PROFILES",
     "PeakFit",
     "fit_peak",
@@ -116,6 +126,11 @@ __all__ = [
     "series_map",
     "stack_curves",
     "BinnedMean",
+    "Normalisation",
+    "NormalisationUse",
+    "header_values",
+    "normalisation_use",
+    "summed_header_values",
     "describe_intensity_corrections",
     "film_absorption_on",
     "has_intensity_corrections",

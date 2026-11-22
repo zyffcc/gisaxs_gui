@@ -26,6 +26,7 @@ from typing import Any, Collection, Mapping, Optional, Sequence
 
 from src.gimap.shared.export_text import export_text
 from src.gimap.shared.signed_cut import fit_halves
+from src.gimap.shared.reproduction import replay_header
 from src.gimap.shared.version import SOFTWARE as RELEASE
 
 from ..domain import GISAXS
@@ -53,6 +54,8 @@ class BatchRun:
     failures: list = field(default_factory=list)
     """``name (reason)`` of every frame that failed (``failed``: the two apart)."""
     first_metadata: Optional[dict] = None
+    frame_normalisations: list[dict] = field(default_factory=list)
+    frame_error_models: list[dict] = field(default_factory=list)
     first_frame: str = ""
     curve_titles: dict = field(default_factory=dict)
     started: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M"))
@@ -103,11 +106,32 @@ class BatchRun:
     write_error: str = ""
     """Why the folder stopped taking files (the batch was ended for it)."""
     seconds: float = 0.0
+    replay_records: list[dict] = field(default_factory=list)
+    table_frames: dict[str, list[int]] = field(default_factory=dict)
 
     def fail(self, frame: str, why: str, file: str = "") -> None:
         """A frame that gave nothing: its name, the reason in English, and the file it was to be read from."""
         self.failed.append({"frame": str(frame), "why": str(why), **({"file": str(file)} if file else {})})
         self.failures.append(f"{frame} ({why})")
+
+    def record_frame_statistics(self, frame: str, metadata: dict) -> None:
+        corrections = metadata.get("corrections") or {}
+        if metadata.get("error_model"):
+            response = {key: corrections.get(key) for key in (
+                "counts_per_adu", "offset_adu", "sigma_path", "pooled_scatter", "poisson_variance", "reference_dark")}
+            self.frame_error_models.append({"frame": frame, "error_model": metadata["error_model"], **response})
+        norm = metadata.get("normalisation") or {}
+        if not norm.get("standard_calibration"):
+            return
+        # One complete standard record for this set-up; t and M can differ even in a batch with fixed settings.
+        first = (self.first_metadata or {}).get("normalisation") or {}
+        if first.get("standard_calibration") == norm["standard_calibration"]:
+            norm = {**norm, "standard_calibration": {"$ref": "#/settings_of_first_frame/normalisation/standard_calibration"}}
+        entry = {"frame": frame, "source_file": metadata["source_file"], "frame_index": metadata["frame_index"],
+                 "normalisation": norm, "output_intensity_unit": metadata["output_intensity_unit"]}
+        if "reference_peak_scale" in metadata:
+            entry["reference_peak_scale"] = metadata["reference_peak_scale"]
+        self.frame_normalisations.append(entry)
 
 
 _KINDS = ("tables", "per_frame", "nxcansas", "fit_input", "q_map", "cake", "detector_image", "q_map_image", "frames")
@@ -119,7 +143,8 @@ _MEANING = {
     "nxcansas": "per frame: its curves against q (not I(chi), not 2theta) as NXcanSAS (HDF5, for SasView and other "
                 "NeXus programs), one SASentry per curve: Q in 1/angstrom, I, Idev = sigma, the wavelength, distance "
                 "and alpha_i, and the frame's record as a note of SASprocess",
-    "fit_input": "per frame: q (1/A), I, sigma, pixels — the curve Fitting reads (Fitting > In-situ series)",
+    "fit_input": "per frame: q (1/A), I, sigma, pixels for Fitting (Fitting > In-situ series), with a JSON "
+                 "reduction record beside the curve",
     "q_map": "per frame: the intensity on a regular q_par-qz grid (qy-qz for GISAXS); first row = x axis, "
              "first column = qz",
     "cake": "per frame: the intensity unwrapped onto chi (rows) and q (columns)",
@@ -183,16 +208,21 @@ def cut_lines(run: BatchRun, record_name: str) -> list[str]:
     and, where the frames were not all cut at the same place, between which rows or q — every frame's own cut
     is in the record."""
     lines = [f"Cuts: {export_text(run.series_cut_text)}."] if run.series_cut_text else []
-    rows = [cut["horizontal_rows"] for cut in run.cuts if cut.get("horizontal_rows")]
+    rows = [cut["horizontal_rows"] for cut in run.cuts if cut.get("horizontal_rows") and not cut.get("horizontal_qz_edges_A_inv")]
+    qz = [cut["horizontal_qz_edges_A_inv"] for cut in run.cuts if cut.get("horizontal_qz_edges_A_inv")]
+    qy = [cut["vertical_qy_edges_A_inv"] for cut in run.cuts if cut.get("vertical_qy_edges_A_inv")]
     windows = [cut["chi_q_window"] for cut in run.cuts if cut.get("chi_q_window")]
     where = f'every frame\'s is under "cuts" in {record_name}'
-    for found, name, digits, unit in ((rows, "Horizontal cut: detector rows", None, ""), (windows, "I(chi) ring: q", 3, " 1/A")):
+    for found, name, digits, unit in ((rows, "Horizontal cut: detector rows", None, ""),
+                                      (qz, "Horizontal cut: qz", 5, " 1/A"), (qy, "Vertical cut: qy", 5, " 1/A"),
+                                      (windows, "I(chi) ring: q", 3, " 1/A")):
         if not found:
             continue
         if len({tuple(pair) for pair in found}) > 1:
             lines.append(f"{name} {_span(found, digits)}{unit}, not the same in every frame ({where}).")
         elif not run.series_cut_text:
-            lines.append(f"{name} {_span(found, digits)}{unit} in every frame.")
+            scope = "every frame" if len(found) == len(run.cuts) else f"{len(found)} frames"
+            lines.append(f"{name} {_span(found, digits)}{unit} in {scope}.")
     return lines
 
 
@@ -281,7 +311,13 @@ def readme_text(choices: BatchChoices, *, batch: str, frame: str, frames: int, c
     if curves and (choices.tables or choices.per_frame or choices.nxcansas):
         # Compare reads these named curves back; keep their titles exactly.
         lines += ["", "Curves:"] + [f"  {key}: {title}" for key, title in curves]
-    lines += ["", "Units: q in 1/A (Angstrom^-1), angles in degrees, intensity = mean counts per pixel.", NAMES]
+    unit = (run.first_metadata or {}).get("output_intensity_unit") if run is not None else None
+    quantity = "intensity = mean counts per pixel"
+    if unit == "relative":
+        quantity = "curve and q-map intensities are relative after reference-peak scaling; cake intensity is in cm^-1"
+    elif unit:
+        quantity = f"absolute intensity in {export_text(unit)}"
+    lines += ["", f"Units: q in 1/A (Angstrom^-1), angles in degrees, {quantity}.", NAMES]
     if run is not None:
         lines += cut_lines(run, names["record"]) + sum_lines(run)
         for source in run.sources:
@@ -335,6 +371,10 @@ def batch_record(run: BatchRun, files: Sequence[Path]) -> dict[str, Any]:
     }
     if run.write_error:
         record["write_error"] = run.write_error
+    if run.frame_normalisations:
+        record["frame_normalisations"] = run.frame_normalisations
+    if run.frame_error_models:
+        record["frame_error_models"] = run.frame_error_models
     if run.sums and max(run.sums) > 1:
         record["sums"] = [{"frame": frame, "frames_summed": int(size)} for frame, size in zip(run.frames, run.sums)]
     if run.sources:
@@ -344,6 +384,10 @@ def batch_record(run: BatchRun, files: Sequence[Path]) -> dict[str, Any]:
     if run.fit_frames:  # what every frame's model fit was made of, and the frames it failed on with the reason
         record["model_fit"] = model_fit_record(choices.fit_halves, run.fit_frames)
         record["fit_failed"] = [{"frame": frame["frame"], "why": frame["reason"]} for frame in unfitted]
+    if run.replay_records:
+        tables = {key: run.tables.reference_columns(key) for key in run.table_frames}
+        record["reproduction"] = {**replay_header("batch", tables), "records": run.replay_records,
+                                  "table_frames": run.table_frames}
     if run.series is not None and not run.series.is_identity:
         record["series_correction"] = asdict(run.series)
     if run.display is not None and (choices.detector_image or choices.q_map_image):

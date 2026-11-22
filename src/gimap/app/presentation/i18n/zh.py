@@ -9,6 +9,7 @@ from .zh_analyze import ANALYZE_ZH
 from .zh_analyze_runtime import ANALYZE_RUNTIME_ZH
 from .zh_fitting import FITTING_ZH
 from .zh_fit_controls import FIT_CONTROLS_ZH
+from .zh_fit_model import FIT_MODEL_ZH
 from .zh_curve_import import CURVE_IMPORT_ZH
 from .zh_compare import COMPARE_ZH
 from .zh_night import NIGHT_ZH
@@ -35,14 +36,12 @@ from .zh_sputter_process import SPUTTER_PROCESS_ZH
 from .zh_menus import MENUS_ZH
 from .zh_giwaxs_auto import GIWAXS_AUTO_ZH
 from .zh_flat_detector import FLAT_DETECTOR_ZH
-from .zh_flat_field import FLAT_FIELD_ZH
+from .zh_features import FEATURES_ZH
 from .zh_tips_analyze import TIPS_ANALYZE_ZH
 from .zh_tips_fitting import TIPS_FITTING_ZH
 from .zh_tips_tools import TIPS_TOOLS_ZH
 from .zh_tips_labs import TIPS_LABS_ZH
 from .zh_review import REVIEW_ZH
-from .zh_nxcansas import NXCANSAS_ZH
-from .zh_gisaxs_cuts import GISAXS_CUTS_ZH
 
 ZH = {
     # -- menus --------------------------------------------------------------------------
@@ -221,8 +220,6 @@ ZH = {
         "运行自动分析（无需 AI）或问 AI；找到的结果——峰、取向、尺寸、检查——会连同证据显示在这里。",
     # -- Analyze export step ------------------------------------------------------------
     "Export Curves…": "导出曲线…",
-    "One CSV per curve (q, I, σ, pixels) and a JSON record of the settings, next to the data (gimap_analysis/).":
-        "每条曲线一个 CSV（q、I、σ、像素数）以及一份设置的 JSON 记录，保存在数据旁（gimap_analysis/）。",
     "Save Image…": "保存图像…",
     "The detector image or q map as shown, with a colour bar (PNG, TIFF, SVG, PDF).": "按当前显示保存探测器图像或 q 图，带色标（PNG、TIFF、SVG、PDF）。",
     "Save q-Map Data…": "保存 q 图数据…",
@@ -566,7 +563,7 @@ ZH = {
 }
 
 ZH.update(ANALYZE_ZH)
-ZH.update({**FITTING_ZH, **FIT_CONTROLS_ZH})
+ZH.update({**FITTING_ZH, **FIT_CONTROLS_ZH, **FIT_MODEL_ZH})
 ZH.update(CURVE_IMPORT_ZH)
 ZH.update(NIGHT_ZH)
 ZH.update(COMPARE_ZH)
@@ -589,11 +586,10 @@ ZH.update(SPUTTER_ZH)
 ZH.update({**SPUTTER_CLIENT_ZH, **SPUTTER_LIVE_ZH, **SPUTTER_STEPS_ZH, **SPUTTER_SAMPLES_ZH, **SPUTTER_PROCESS_ZH})
 ZH.update(MENUS_ZH)
 ZH.update(GIWAXS_AUTO_ZH)
-ZH.update({**FLAT_DETECTOR_ZH, **FLAT_FIELD_ZH})
+ZH.update(FLAT_DETECTOR_ZH)
 ZH.update(TIPS_ANALYZE_ZH)
 ZH.update(TIPS_FITTING_ZH)
 ZH.update(TIPS_TOOLS_ZH)
 ZH.update({**TIPS_LABS_ZH, **REVIEW_ZH})
-ZH.update(NXCANSAS_ZH)
-ZH.update(GISAXS_CUTS_ZH)
+ZH.update(FEATURES_ZH)
 __all__ = ["ZH"]

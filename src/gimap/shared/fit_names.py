@@ -13,6 +13,8 @@ import math
 import re
 from typing import Iterable, Optional
 
+from .numbers import format_number
+
 NAMES = {
     "R": "R", "sigma_R": "σR/R", "h": "h", "sigma_h": "σh/h", "D": "D", "sigma_nn": "σnn/D", "sigma_D": "σD/D",
     "Int": "Scale", "amplitude": "Scale",
@@ -23,13 +25,14 @@ NAMES = {
     "q_resolution": "σ_q", "k": "Factor k", "refl_amp": "|r|", "refl_phase": "arg r",
 }
 """Every key a fit, a row or a record uses for a quantity → its name in the Model table."""
-UNITS = {"R": "nm", "h": "nm", "D": "nm", "Tail w": "nm⁻¹", "σ_q": "nm⁻¹"}
+UNITS = {"R": "nm", "h": "nm", "D": "nm", "arg r": "rad", "Tail w": "nm⁻¹", "σ_q": "nm⁻¹"}
 """The unit of a quantity, by its display name."""
 POPULATION = ("R", "sigma_R", "h", "sigma_h", "D", "sigma_nn", "sigma_D", "Int", "amplitude")
 """The keys of a population's own values; every other key is of the whole curve (background, beam tail, resolution)."""
 TAIL = ("res_width", "tail_width", "sigma_Res", "res_exponent", "tail_exponent", "nu_Res")
 """The beam tail's width and exponent: they change nothing when Tail A is 0."""
 TAIL_AMPLITUDE = ("res_amplitude", "resolution_amplitude")
+GRAZING_FLAGS = ("qzR", "qzR_cov", "qzR_fail", "cyl_sphere")
 GENERAL = ("low_ess", "bic", "model_error")
 """Flags of the whole solution (no value named)."""
 
@@ -40,7 +43,7 @@ SENTENCES = {
     "low_ess": "few effective samples of the posterior: the intervals are rough, and wider than a converged sampling "
                "would give",
     "bic": "the posterior's sampling did not converge: the solutions are compared by χ² and their number of values "
-           "(BIC), and the intervals are the least-squares errors",
+           "(BIC), and the intervals use least-squares errors where available",
     "model_error": "the values are those of a fit with the model error added to σ: the fit with the curve's σ alone "
                    "lay outside the posterior",
     "large": "{name}: its Guinier region lies at or below the curve's lowest q, so the curve shows only its decay, "
@@ -49,9 +52,78 @@ SENTENCES = {
     "qzR": "{name}: q_z·R is above 1.7 at the cut's q_z, where the form factor at q_z = 0 (the default effective "
            "interface) biases the radius, usually too small; give both angles of the cut (αi, αf) so that spheres are "
            "fitted with the exit-reflected path (random cylinders stay at q_z = 0)",
+    "qzR_cov": "{name}: intervals not calibrated at this q_z·R (DWBA data)",
+    "qzR_fail": "{name}: the second level does not describe this q_z·R; use the third level or the four-term DWBA",
+    "cyl_sphere": "{name}: may stand for a sphere of this radius at high q_z·R",
     "absent": "population {name} has Scale 0: this solution does not use it",
 }
 """Flag kind → the sentence a person reads (``{name}``: the display names; templates, translated by the interface)."""
+MIN_SAMPLING_POINTS, MAX_SAMPLING_POINTS = 80, 400
+DENSITY_NOTICE = ("This cut has {count} fitted points. The validation grid has 397 equally spaced points "
+                  "from 0.02 to 2 nm⁻¹ (Δq = 0.005 nm⁻¹).")
+PEAK_SPACING = ("At the intensity maximum (|q| = {peak} nm⁻¹), Δq is {spacing} nm⁻¹ "
+                "({ratio} times the validation spacing).")
+SPARSE_SAMPLING = "Fewer than 80 fitted points. Check whether the measured features are resolved."
+DENSE_SAMPLING = ("With more than 400 fitted points, sampling may fail and the fits may be compared by BIC. "
+                  "Try rebinning to 150–250 log-spaced points.")
+BIC_WEIGHT = "BIC weight"
+MC_ERROR = "Mode log evidence {estimate} (bootstrap Monte Carlo error)."
+COMPOSITION_RANGE = "Composition probability {p} (68 % Monte Carlo range {low}–{high})."
+ESS_TEXT = "Effective sample size {ess}."
+TEMPERED = "Posterior quantiles use tempered importance weights."
+
+
+def diagnostic_lines(diagnostics, ess=None):
+    """English templates and substitutions for the report and translated Fit details."""
+    d = diagnostics
+    lines = []
+    if ess is not None:
+        source = "Network-proposal effective sample size {ess}." if d.get("ess_source") == "network proposals" else ESS_TEXT
+        lines.append((source, {"ess": f"{ess:.3g}"}))
+    if d.get("posterior_kind") == "tempered":
+        lines.append((TEMPERED, {}))
+    if d.get("log_evidence_mc_error") is not None:
+        template = ("Network-proposal log evidence {estimate} (bootstrap Monte Carlo error)."
+                    if d.get("log_evidence_source") == "network" else MC_ERROR)
+        lines.append((template, {"estimate": format_number(d["log_evidence"], d["log_evidence_mc_error"])}))
+    if d.get("composition_bic_weight") is not None:
+        lines.append(("Composition BIC weight {weight}.", {"weight": f"{d['composition_bic_weight']:.4g}"}))
+    if d.get("composition_modes", 1) > 1 and d.get("composition_log_evidence_mc_error") is not None:
+        lines.append(("Composition log evidence {estimate} (bootstrap Monte Carlo error).", {
+            "estimate": format_number(d["composition_log_evidence"], d["composition_log_evidence_mc_error"])}))
+    if d.get("composition_probability_mc68") and d.get("composition_count") != 1:
+        low, high = d["composition_probability_mc68"]
+        probability, low, high = interval_values(d["composition_probability"], low, high)
+        lines.append((COMPOSITION_RANGE, {"p": probability, "low": low, "high": high}))
+    count = d.get("point_count")
+    if count is not None:
+        lines.append((DENSITY_NOTICE, {"count": count}))
+        if d.get("peak_spacing_nm_inv") is not None:
+            spacing = d["peak_spacing_nm_inv"]
+            lines.append((PEAK_SPACING, {"peak": f"{d['peak_q_nm_inv']:.4g}", "spacing": f"{spacing:.4g}",
+                                         "ratio": f"{spacing / d['validation_spacing_nm_inv']:.3g}"}))
+        if count < MIN_SAMPLING_POINTS:
+            lines.append((SPARSE_SAMPLING, {}))
+        if count > MAX_SAMPLING_POINTS:
+            lines.append((DENSE_SAMPLING, {}))
+    return lines
+
+
+def reported_interval_kind(flags, error, posterior_kind=None):
+    """Source of one reported interval; on fallback least-squares errors replace only finite entries."""
+    if "bic" in flags:
+        if error is not None and math.isfinite(error):
+            return "bic"
+        return posterior_kind or "network_proposal"
+    return posterior_kind or ("tempered" if "low_ess" in flags else "evidence")
+
+
+def weight_key(record):
+    by_bic = ("bic_weight" in record or record.get("compared_by") == "bic" or
+              (record.get("diagnostics") or {}).get("compared_by") == "bic" or "bic" in (record.get("flags") or ()))
+    return "bic_weight" if by_bic else "probability"
+
+
 EDGE = ("the refined value lies at the edge of the posterior: the model describes this curve only within the model "
         "error ({names})")
 """A refined value at an end of its own interval that is not at a bound of its range."""
@@ -102,7 +174,7 @@ def of_population(flag: str) -> bool:
     """Whether a flag concerns the populations' values or the solution as a whole (shown first); the others are of
     the background, the beam tail and the resolution (shown after them, in one paragraph)."""
     kind, names = flag_names(flag)
-    if kind in GENERAL or kind in ("large", "small", "qzR", "absent"):
+    if kind in GENERAL or kind in ("large", "small", *GRAZING_FLAGS, "absent"):
         return True
     return any(split_name(name)[0] in POPULATION for name in names)
 
@@ -172,31 +244,30 @@ def clean_flags(flags: Iterable[str], amplitudes: dict) -> tuple:
     kept = []
     for flag in flags:
         kind, names = flag_names(flag)
-        if names and kind in ("at_bound", "unconstrained", "correlated", "large", "small", "qzR") and any(
+        if names and kind in ("at_bound", "unconstrained", "correlated", "large", "small", *GRAZING_FLAGS) and any(
                 map(absent, names)):
             continue
         kept.append(flag)
     return tuple(kept) + tuple(f"absent:{slot}" for slot in sorted(gone))
 
 
-def interval_digits(best: float, low: float, high: float, significant: int = 3, most: int = 8) -> int:
-    """Decimals with which ``best [low, high]`` is printed: ``significant`` digits of the value, and more until the
-    three numbers differ where they differ (``6.00 [5.99, 6.01]``, not ``6 [5.99, 6.01]``)."""
-    scale = abs(best) if best else max(abs(low), abs(high), 1e-300)
-    decimals = max(0, significant - 1 - int(math.floor(math.log10(scale)))) if scale > 0 else significant
-    decimals = min(decimals, most)
-    while decimals < most:
-        texts = [f"{value:.{decimals}f}" for value in (low, best, high)]
-        if (low == best or texts[0] != texts[1]) and (high == best or texts[2] != texts[1]):
-            break
-        decimals += 1
-    return decimals
+def interval_half_width(low, high):
+    """The half-width used to display a reported interval and its estimate."""
+    if low is None or high is None or not (math.isfinite(low) and math.isfinite(high)):
+        return None
+    return (float(high) - float(low)) * 0.5
+
+
+def interval_values(best, low, high) -> tuple[str, str, str]:
+    """An estimate and both ends rounded to the precision of the interval's half-width."""
+    width = interval_half_width(low, high)
+    return tuple(format_number(value, width, value_only=True) for value in (best, low, high))
 
 
 def interval_text(best: float, low: float, high: float, unit: str = "") -> str:
-    """``6.00 [5.99, 6.01] nm``: a value with its interval, all three with the same decimals."""
-    decimals = interval_digits(float(best), float(low), float(high))
-    return (f"{best:.{decimals}f} [{low:.{decimals}f}, {high:.{decimals}f}]" + (f" {unit}" if unit else ""))
+    """A value followed by the reported interval and unit."""
+    best, low, high = interval_values(best, low, high)
+    return f"{best} [{low}, {high}]" + (f" {unit}" if unit else "")
 
 
 def at_edge(best: float, low: float, high: float, tolerance: float = 1e-6) -> bool:
@@ -252,6 +323,6 @@ def legend(populations: int = 1) -> str:
 
 __all__ = [
     "BELOW_WINDOW", "CHI2_DEFINITION", "EDGE", "MORE", "NAMES", "ONLY_ONE", "POINTS", "RELATIVE", "SENTENCES", "UNUSABLE",
-    "at_edge", "clean_flags", "display_name", "flag_names", "grouped", "interval_digits", "interval_text", "legend", "of_population",
+    "at_edge", "clean_flags", "display_name", "flag_names", "grouped", "interval_half_width", "interval_values", "interval_text", "legend", "of_population",
     "points_text", "sentence", "sentences", "sizes_text", "split_flags", "split_name", "unit_of",
 ]

@@ -2,8 +2,8 @@
 
 The table gets one row when a frame is done (filling the whole table again at every frame, with columns
 that measured themselves at every cell, froze the window for minutes) and keeps its columns as wide as
-their text: the frame, χ²ᵣ, every fitted value ± 1σ, then the points the frame was fitted on and what they
-are. A frame without a fit says why across its row; a frame not to be trusted as it is (not converged, a
+their text: the frame, χ²ᵣ, every fitted value ± 1σ, where the frame's fit started (``start_texts.py``), its
+flags, then the points the frame was fitted on and what they are. A frame without a fit says why across its row; a frame not to be trusted as it is (not converged, a
 poor fit, stopped) is in the warning colour, with the reason on hover. The card above says how many frames
 are in each state and what they were fitted on. Saving writes the table with a JSON record of the run, or a
 plot with a title that says what it shows; results that were not saved are asked about before they go.
@@ -23,11 +23,14 @@ from PyQt5.QtWidgets import QFileDialog, QMessageBox, QTableWidgetItem
 
 from src.gimap.app.presentation.i18n import current_language, tr, trf
 from src.gimap.app.presentation.theme import theme_manager
+from src.gimap.shared.numbers import format_number
 
 from ...application.single_fit import FAMILIES
 from ...application.series_fit import (
     POOR_CHI2,
     file_name,
+    flag_names,
+    flagged_fit,
     parameter_columns,
     poor_fit,
     series_counts,
@@ -35,14 +38,21 @@ from ...application.series_fit import (
     series_table,
 )
 from ..views.fit_series_view import RESULTS_WIDTH
-from .results import folder_action, start_folder, write_pair, write_plot
+from .results import folder_action, start_folder, write_pair, write_plot, write_text_whole
 from .series_stages import CHI2
+from .series_trend import paired_choice, paired_label
+from .series_selection import CHOICE_TIPS, INTERVAL_NOTE, choice_cells, choice_headers, selection_summary
 from .series_text import HALF_TEXT, STATE_COLOR, STATE_MARK
 from .session import path_name
+from .start_texts import START, START_TIP, start_text, start_tip
 
+FLAGGED_LINE = "Flagged (a value not determined, or the beam tail at an edge of its range): frames {frames}"
+FLAGGED_FRAME = "Flagged: {values}"
 STALE = "Changed after the fit: Start again"
 """The halves, the fitting range or the left-out points are no longer those of the run."""
 UNTOUCHED = "The model was the starting guess of Single analysis: it was never set up or fitted there."
+FLAGS_TIP = ("What to know before trusting the row: failed, not converged, a poor fit, values at a bound of their range, "
+             "the beam tail at an edge, a value the curve does not determine (none of them breaks the chain)")
 PLOTS_MIN_WIDTH = 460
 """The plots keep at least this width when the steps panel widens for the table."""
 NAMED_FRAMES = 8
@@ -82,7 +92,11 @@ class FitSeriesResultsMixin:
         self.results_table.currentCellChanged.connect(lambda row, *_: self._select_table_row(row))
         self.trend_combo.currentIndexChanged.connect(lambda _index: self._show_trend_column())
         self.to_single_button.clicked.connect(self._open_in_single)
+        self.quick_table_button.clicked.connect(self.save_table_action.trigger)
+        self.quick_trend_button.clicked.connect(self.save_trend_action.trigger)
+        self.review_frame_button.clicked.connect(self._review_first_warning)
         self.save_table_action.triggered.connect(lambda: self.save_table())
+        self.save_report_action.triggered.connect(lambda: self.save_report())
         self.save_trend_action.triggered.connect(lambda: self._save_plot(self.trend_plot, "trend"))
         self.save_frame_action.triggered.connect(lambda: self._save_plot(self.frame_plot, "frame"))
         self.splitter.splitterMoved.connect(self._splitter_moved)
@@ -106,13 +120,20 @@ class FitSeriesResultsMixin:
             self._table_frames = []
             if model is not None:
                 columns = parameter_columns(model)
-                table.setColumnCount(len(columns) + 4)
-                table.setHorizontalHeaderLabels(["#", "χ²ᵣ"] + [path_name(model, path, unit=True) for path, _name in columns]
-                                                + [tr("Points"), tr("Halves")])
-                for column, (path, _name) in enumerate(columns, start=2):  # the whole name (“1·Sphere R (nm)”) on hover
+                choices = choice_headers(self._settings)
+                first_parameter = 2 + len(choices)
+                table.setColumnCount(len(columns) + len(choices) + 6)
+                table.setHorizontalHeaderLabels(["#", "χ²ᵣ"] + [tr(key) for key in choices]
+                                                + [path_name(model, path, unit=True) for path, _name in columns]
+                                                + [tr(START), tr("Flags"), tr("Points"), tr("Halves")])
+                for column, key in enumerate(choices, start=2):
+                    table.horizontalHeaderItem(column).setToolTip(tr(CHOICE_TIPS[key]))
+                for column, (path, _name) in enumerate(columns, start=first_parameter):
                     table.horizontalHeaderItem(column).setToolTip(path_name(model, path, unit=True, full=True))
-                table.horizontalHeaderItem(len(columns) + 2).setToolTip(tr("The points the frame was fitted on"))
-                table.horizontalHeaderItem(len(columns) + 3).setToolTip(
+                table.horizontalHeaderItem(table.columnCount() - 4).setToolTip(tr(START_TIP))
+                table.horizontalHeaderItem(table.columnCount() - 3).setToolTip(tr(FLAGS_TIP))
+                table.horizontalHeaderItem(table.columnCount() - 2).setToolTip(tr("The points the frame was fitted on"))
+                table.horizontalHeaderItem(table.columnCount() - 1).setToolTip(
                     tr("What those points are: the mean of both halves of the cut, or one half"))
                 header = table.horizontalHeader()
                 for column in range(table.columnCount()):
@@ -146,31 +167,42 @@ class FitSeriesResultsMixin:
     def _fill_row(self, row: int, frame, columns) -> None:
         table = self.results_table
         last = table.columnCount() - 1
-        if table.columnSpan(row, 1) > 1:
-            table.setSpan(row, 1, 1, 1)
+        choices = choice_cells(frame, choice_headers(self._settings))
+        has_attempt = bool(frame.predict_attempts or frame.selection)
+        first_parameter = 2 + len(choices)
+        for col in (1, first_parameter):
+            if table.columnSpan(row, col) > 1:
+                table.setSpan(row, col, 1, 1)
+        span = None
         if not frame.ok:  # no values: why, across the row
-            cells = [str(frame.index + 1), f"{STATE_MARK['failed']} {self._reason_text(frame.error)}"]
+            reason = f"{STATE_MARK['failed']} {self._reason_text(frame.error)}"
+            cells = [str(frame.index + 1), "", *choices, reason] if has_attempt else [str(frame.index + 1), reason]
+            span = first_parameter if has_attempt else 1
         else:
             result = frame.result
-            cells = [str(frame.index + 1), f"{result.chi2_reduced:.3g}" if np.isfinite(result.chi2_reduced) else "—"]
+            cells = [str(frame.index + 1), f"{result.chi2_reduced:.3g}" if np.isfinite(result.chi2_reduced) else "—",
+                     *choices]
             for path, _name in columns:
                 value, error = result.model.get(path).value, result.errors.get(path, np.nan)
-                cells.append("—" if not np.isfinite(value) else
-                             f"{value:.4g}" + ("" if not np.isfinite(error) else f" ± {error:.2g}"))
-            cells += [str(frame.points), tr(HALF_TEXT.get(frame.halves_used, frame.halves_used))]
+                cells.append(format_number(value, error))
+            cells += [start_text(frame), self.flags_cell(frame), str(frame.points),
+                      tr(HALF_TEXT.get(frame.halves_used, frame.halves_used))]
         token = STATE_COLOR.get(self._frame_state(frame.index)[0])
         brush = None if token is None else QBrush(theme_manager().color(token))
         tip = self._frame_tip(frame)
+        started = first_parameter + len(columns)
         for column in range(last + 1):
             item = QTableWidgetItem(cells[column] if column < len(cells) else "")
-            item.setToolTip(tip)
+            item.setToolTip(tip + "\n" + start_tip(frame) if column == started and frame.ok else tip)
             if brush is not None:
                 item.setForeground(brush)
             table.setItem(row, column, item)
-        if not frame.ok:
-            table.setSpan(row, 1, 1, last)
+        if span is not None:
+            table.setSpan(row, span, 1, last - span + 1)
+        if len(frame.predict_attempts) > 1:
+            table.resizeRowToContents(row)
         model = table.model()
-        for column in range(last + 1) if frame.ok else (0,):  # a reason spans the row: it widens no column
+        for column in range(last + 1) if span is None else range(span):
             width = table.sizeHintForIndex(model.index(row, column)).width() + 2
             if width > table.columnWidth(column):
                 table.setColumnWidth(column, width)
@@ -190,6 +222,8 @@ class FitSeriesResultsMixin:
             lines.append(detail)
         if frame.ok and frame.state != "ok" and frame.reason:
             lines.append(tr(frame.reason))
+        if flagged_fit(frame):
+            lines.append(trf(FLAGGED_FRAME, values=", ".join(flag_names(frame))))
         return "\n".join(lines)
 
     def _select_table_row(self, row: int) -> None:
@@ -212,8 +246,9 @@ class FitSeriesResultsMixin:
         key, model, table = self.trend_combo.currentData(), self._start_model, self.results_table
         if model is None or not table.rowCount():
             return
+        start = 2 + len(choice_headers(self._settings))
         column = 1 if key == CHI2 else next(
-            (position for position, (path, _name) in enumerate(parameter_columns(model), start=2) if path == key), None)
+            (position for position, (path, _name) in enumerate(parameter_columns(model), start=start) if path == key), None)
         if column is None:
             return
         # By the column's place, not by a cell: the cell of a row without a fit spans the table.
@@ -267,6 +302,14 @@ class FitSeriesResultsMixin:
     def _poor_frames(self) -> list[int]:
         return [index for index, frame in self.fits.items() if poor_fit(frame)]
 
+    def _review_first_warning(self):
+        if self._first_warning is not None:
+            self._select(self._first_warning, follow=True)
+
+    def _flagged_frames(self) -> list[int]:
+        """Frames fitted with a value the curve does not determine or a beam tail at an edge (``flagged_fit``)."""
+        return sorted(index for index, frame in self.fits.items() if flagged_fit(frame))
+
     def _counts_text(self) -> str:
         """“17 fitted · 1 failed”: the frames by what became of them (only the states that occur)."""
         counts = series_counts(list(self.fits.values()))
@@ -278,6 +321,9 @@ class FitSeriesResultsMixin:
         poor = self._poor_frames()
         if poor:
             parts.append(trf("{count} poor fits", count=len(poor)))
+        flagged = self._flagged_frames()
+        if flagged:
+            parts.append(trf("{count} flagged", count=len(flagged)))
         return " · ".join(parts)
 
     def _points_text(self, settings, source: str) -> str:
@@ -300,7 +346,19 @@ class FitSeriesResultsMixin:
             self._rebuild_results()
         frames = list(self.fits.values())
         started = self._start_model is not None
+        summary = selection_summary(self._settings) if started else ""
+        self.selection_summary.setVisible(bool(summary))
+        has_intervals = summary and any(f.selection and f.selection.intervals for f in frames)
+        self.selection_summary.setText(summary + ("\n" + tr(INTERVAL_NOTE) if has_intervals else ""))
         self.save_button.setVisible(bool(self.fits))
+        self.result_actions.setVisible(bool(self.fits))
+        self.result_actions.setEnabled(not self._listing_busy)
+        self.quick_trend_button.setEnabled(self.trend_plot.has_curves())
+        self._first_warning = next((i for i in sorted(self.fits) if self._frame_state(i)[0] in STATE_COLOR), None)
+        self.review_frame_button.setVisible(self._first_warning is not None)
+        if self._first_warning is not None:
+            self.review_frame_button.setText(trf("Review frame {frame}", frame=self._first_warning + 1))
+            self.review_frame_button.setToolTip(self.flags_cell(self.fits[self._first_warning]))
         self._refresh_open_frame()
         self.save_button.setEnabled(not self._listing_busy)
         self.results_card.setVisible(started)  # before the first Start the rail's “After Start” says it
@@ -313,6 +371,9 @@ class FitSeriesResultsMixin:
         lines = [self._counts_text(), self._fitted_on_text()]
         if poor:
             lines.append(trf("Poor fit (χ²ᵣ above {limit}): frames {frames}", limit=f"{POOR_CHI2:g}", frames=frame_numbers(poor)))
+        flagged = self._flagged_frames()
+        if flagged:
+            lines.append(trf(FLAGGED_LINE, frames=frame_numbers(flagged)))
         if self._untouched_start:
             lines.append(tr(UNTOUCHED))
         if stale:
@@ -326,7 +387,8 @@ class FitSeriesResultsMixin:
         elif not frames:
             self.step_rail.set_state("results", "pending", tr("After Start"))
         else:
-            trouble = counts["failed"] or counts["not_converged"] or counts["stopped"] or poor or self._untouched_start
+            trouble = (counts["failed"] or counts["not_converged"] or counts["stopped"] or poor or flagged
+                       or self._untouched_start)
             self.step_rail.set_state("results", "warn" if trouble or stale else "ok", tr(STALE) if stale else lines[0])
 
     def _can_open_selected(self):
@@ -381,7 +443,8 @@ class FitSeriesResultsMixin:
         if not path:
             return None
         frames = list(self.fits.values())
-        header, rows = series_table(frames, self._start_model, details=True, folder=self.folder)
+        header, rows = series_table(frames, self._start_model, details=True, folder=self.folder, flags=True,
+                                    predict_columns=self._settings.method == "predict" or self._settings.start == "chain")
 
         def write(target) -> None:
             with open(target, "w", newline="", encoding="utf-8") as stream:
@@ -389,19 +452,39 @@ class FitSeriesResultsMixin:
                 writer.writerow(header)
                 writer.writerows(rows)
 
-        listing = dict(self._run_listing or {})
-        if self._untouched_start:
-            listing["model"] = UNTOUCHED
-        record = series_record(self._start_model, self._settings, self.folder, self.pattern_edit.text(), frames,
-                               q_unit=self._unit, side_from=self._side_from, listing=listing)
         try:
-            write_pair(path, write, record)  # both, or neither
+            write_pair(path, write, self._series_record())  # both, or neither
         except OSError as exc:
             self._status(lambda error=str(exc): tr("Could not save: {error}").format(error=error), "error")
             return None
         self._unsaved = False
         self._status(lambda name=Path(path).name: tr("Saved {name} and its record.").format(name=name), "ok",
                      action=folder_action(path))
+        return path
+
+    def _series_record(self):
+        listing = dict(self._run_listing or {})
+        if self._untouched_start:
+            listing["model"] = UNTOUCHED
+        return series_record(self._start_model, self._settings, self.folder, self.pattern_edit.text(),
+                             list(self.fits.values()), q_unit=self._unit, side_from=self._side_from, listing=listing)
+
+    def save_report(self, path=None):
+        from ...application.series_report import series_report
+
+        if self._listing_busy or not self.fits or self._start_model is None:
+            return None
+        path = path or QFileDialog.getSaveFileName(self, tr("Save Series Report"),
+                                                   str(start_folder(self.folder) / "series_fit.md"),
+                                                   tr("Markdown (*.md)"))[0]
+        if not path:
+            return None
+        try:
+            write_text_whole(path, series_report(self._series_record()))
+        except OSError as exc:
+            self._status(lambda error=str(exc): tr("Could not save: {error}").format(error=error), "error")
+            return None
+        self._status(lambda: tr("Saved {name}.").format(name=Path(path).name), "ok", action=folder_action(path))
         return path
 
     def _plot_words(self, name: str) -> tuple[str, str]:
@@ -412,6 +495,9 @@ class FitSeriesResultsMixin:
             key, model = self.trend_combo.currentData(), self._start_model
             if model is None or not any(frame.ok for frame in self.fits.values()) or key is None:
                 return "series_trend", ""
+            if paired_choice(key):
+                title = paired_label(model, key[0], translate=False)
+                return f"series_trend_{key[0] + 1}_R_D_nm", f"{title} · {folder} · {model_label_plain(model)}"
             column = "chi2_reduced" if key == CHI2 else dict(parameter_columns(model)).get(key, "value")
             value = "χ²ᵣ" if key == CHI2 else path_name(model, key, unit=True, translate=False, full=True)
             return f"series_trend_{column}", f"{value} · {folder} · {model_label_plain(model)}"

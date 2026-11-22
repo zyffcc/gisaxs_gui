@@ -56,6 +56,7 @@ TRACKED = {
     "Start_GIMaP.bat": "@echo off\n",
     "src/gimap/app.py": "APP = 'GIMaP'\n",
     "src/gimap/shared/version.py": '__version__ = "9.8.7"\n',
+    "src/gimap/shared/revision.json": '{"commit":"$Format:%H$"}\n',
     "config/detectors.json": "{}\n",
     "docs/User_Manual.md": "# Manual\n",
     "docs/User_Manual_zh.md": "# Manual (zh)\n",
@@ -194,6 +195,9 @@ def test_the_package_holds_the_list_and_nothing_else(developer_folder, tmp_path,
     monkeypatch.setenv("TEMP", str(temporary))
 
     # Only the stand-in conda knows this environment: a real one would stop the script here.
+    _git(developer_folder, "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+         "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "Synthetic package input")
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=developer_folder, text=True).strip()
     build = _builder(developer_folder, "-EnvironmentName", "gimap-stand-in")
     assert build.returncode == 0, build.stdout + build.stderr
     package = "GIMaP-9.8.7-windows-x64-portable"
@@ -201,6 +205,7 @@ def test_the_package_holds_the_list_and_nothing_else(developer_folder, tmp_path,
     with zipfile.ZipFile(zip_path) as archive:
         names = {name[len(package) + 1:] for name in archive.namelist()}
         network = archive.read(f"{package}/{NETWORK}.npz")
+        assert json.loads(archive.read(f"{package}/src/gimap/shared/revision.json"))["commit"] == commit
         pyqt_gpl = archive.read(f"{package}/licenses/python/PyQt5-5.15.11/GPL-3.0.txt")
         notices = archive.read(f"{package}/licenses/THIRD_PARTY_NOTICES.md")
     licences = {f"licenses/{name}" for name in collect(environment, tmp_path / "expected")["written"]}

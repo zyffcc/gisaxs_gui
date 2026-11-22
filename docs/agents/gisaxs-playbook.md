@@ -17,8 +17,10 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
    文件夹（或其子文件夹）里时，同一项也列在 Needs attention 里（退出码 2）；`.poni` 点名的探测器尺寸与帧不同时不采用
    （“the calibration does not match this frame”）；对称轴离标定中心超过 100 px 时不应用并提问。`--incidence-deg` 必须在
    (0°, 90°) 内，`--calibration` 的文件必须存在，否则以退出码 1 结束。CSV 的列名是 ASCII：`qy (A^-1), I, sigma`。
-   αi 的来源顺序同 GIWAXS（选项、笔记、分析命令栏里设定的 αi、仪器配置）；之前已用 `set_incidence_angle` 或在命令栏设定的
-   αi 会被采用，不再提问。都没有 αi 时先用 0°，并在 Needs attention 里提问（退出码 2）。运行中没有人可问，由调用它的 agent 补
+   αi 的名义值依次取自选项、笔记、Analyze 命令栏、图像头和所用的仪器配置。报告列出地平线、镜面峰、Yoneda 带各自的帧测值及误差。
+   用 Yoneda 带定角需要知道带属于哪种材料；可用 `--yoneda-material Si` 等选项按当前波长计算 αc，或用 `--yoneda-critical-deg` 给出已知的 αc；多层样品须说明选用的膜层或衬底。
+   帧测值与名义值相差超过帧测值的 3σ 时，默认用帧测值重新归约，否则沿用名义值。可用 `--keep-incidence` 保留已核实的名义值。
+   没有名义值时采用可靠的帧测值，两者都缺时才用 0°，并在 Needs attention 里提问（退出码 2）。有了实验记录再补
    `--incidence-deg` 后重跑。`.poni` 的探测器倾斜（`Rot1`、`Rot2`、`Rot3`）是几何的一部分：每个像素放在 pyFAI
    放的位置，q 是倾斜探测器的值。Decisions 里有一行 “detector tilt”，Geometry 一节写出倾斜角，数值在 `report.json`
    的 `geometry.tilt_deg` 和 `geometry.rotations_deg`；第 3 步对称轴移动光束中心时倾斜保留。几何标定不拟合倾斜，
@@ -48,7 +50,7 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
    转述时**不要**把它叫作间距。记录里的键仍是 `spacing`、`distance_nm`。
 6. **拟合**（`fit_horizontal_cut`，用 Fitting 的 Predict parameters，即 `create_curve_fit()`，约 15 秒）：GIMaP 的网络给出组成
    和数值，每个解用最小二乘精修并按后验概率加权。没有给组成（`components`）时，网络在一种或两种球和竖直圆柱、带或不带次晶
-   的组成中选；随机取向圆柱只在给定组成时才用。切线按有效界面（q_z = 0）计算；第 5 步的 2π/q* 不作起点。最多给出 5 个
+   的组成中选；随机取向圆柱只在给定组成时才用。已知入射角和 Yoneda 带出射角时，用切线真空 q_z 处的 Born 项（第二层）；任一角未知时用有效界面（第一层，q_z = 0）。第 5 步的 2π/q* 不作起点。最多给出 5 个
    互不相同的解，最可能的在前：report.md 和 fit_solutions.csv 全部列出，而在 MCP 或 call 里直接调用 `fit_horizontal_cut`
    只返回前 3 个，外加 `chosen`。报告的解（`chosen`）就是最可能的那个，带它的概率和 R、h、D 的 68 % 后验区间（决策
    `fit intervals`；区间不含几何和模型选择）。另一个解的概率 ≥ 0.2（`ASK_PROBABILITY`）时，Needs attention 里有一条 “model”：
@@ -57,9 +59,10 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
    不算边界：等于 0 时 Decisions 有一条 `fit caveat`（“Background at 0, the non-negativity limit”；Tail A = 0 时 Tail w、Tail ν
    不影响曲线）。报告的解已收敛但 χ²ᵣ > 10（与 Fitting 序列 “拟合差” 的 χ²ᵣ 限值相同）时 Needs attention 里有一条 “fit”：
    试过的组成都描述不了这条切线，R、D 不是测量值（粉末或标样的布拉格环会这样）。切线在 Yoneda 带上且知道 αi 时，切线的
-   q_z = k(sin αi + sin αf) 记在 `gisaxs.fit.cut_qz`；q_z·R 大于 1.7 的球或随机取向圆柱带标记 `qzR`，Needs attention 里有一条
-   “fit”：q_z = 0 处的形状因子使半径偏小（四项 DWBA 基准上中位误差 15–29 %）。转述这个 R 时要说出来；用户要可靠的 R 时，在
-   Fitting 的模型里填入 αi、αf、λ 再用 Predict parameters（两路径）。
+   q_z = k(sin αi + sin αf) 及角度、波长记在 `gisaxs.fit.cut_qz`；未知时该项为 `null`。`gisaxs.fit.substrate_level` 和 Decisions 均写明拟合层级。
+   在第二层，球或随机取向圆柱的 q_z·R > 1.2 时，`qzR_cov` 提示区间可能低估不确定度；q_z·R > 2 时，`qzR_fail` 提示模型误差较大。
+   第二层的竖直圆柱在 q_z·R > 2 时还会标记 `cyl_sphere`，即使没有高度，也要考虑半径相近的球。转述 R 时要说明这些标记。
+   若要对球计入出射反射路径，在 Fitting 的模型里填入 αi、αf、λ 后运行 Predict parameters。第三层在 q_z·R > 1.7 时也会给出覆盖率提示。
    网络只凭曲线选组成，所以要用用户知道的形状在 Fitting 里确认（手册第 13 章）。`--no-fit` 只准备切线，不拟合。
 
 输出：`report.md/json`、`horizontal.csv`、`vertical.csv`、`fit_curve.csv`（q、I、σ、I_fit：报告的那个解）、`fit_solutions.csv`
@@ -71,7 +74,7 @@ GUI 的 Run Automatic Analysis 做同样的事。基线按以下顺序进行。�
 
 | 看什么 | 为什么 | 怎么做 |
 |---|---|---|
-| 模型的选择 | 解按后验概率排序，表里的 χ²ᵣ 是 σ 归一化残差 r² 的平均，没有自由度修正（不同于 Fitting 的 χ²ᵣ）。另一个解的概率 ≥ 0.2 时曲线本身定不了模型，所以 Needs attention 里的 “model” 是**正常结果**，不是失败。网络只凭曲线选：公开的 GALAXI 银球帧上它报告两种竖直圆柱（见下） | 用户给了材料或形状就按它选：在 Fitting 里用 Predict parameters 的 *The particles in Model* 拟合那个模型，再精修并比较拟合曲线和残差。D 与 2π/q* 接近不是证据 |
+| 模型的选择 | 解按后验概率排序，表里的 χ²ᵣ 与 Fitting 一样，用拟合点上 σ 归一化残差的平方和除以自由度。另一个解的概率 ≥ 0.2 时曲线本身定不了模型，所以 Needs attention 里的 “model” 是**正常结果**，不是失败。即使一个模型占了几乎全部概率，也要留意形状混淆：公开的 GALAXI 银球帧在第二层拟合中给出一群球和一群竖直圆柱（见下） | 用户给了材料或形状就按它选：在 Fitting 里用 Predict parameters 的 *The particles in Model* 拟合那个模型，再精修并比较拟合曲线和残差。D 与 2π/q* 接近不是证据 |
 | 停在范围边界上的数值 | `at_bounds` 里的数值由边界而不是数据决定 | 转述报告的 `chosen` 解；它处于边界时要说出来，不要引用边界上的值 |
 | 报告的解没有粒子间关联 | D ≥ 250 nm 说明该解在 q 范围内没有粒子间关联（Decisions 的 `fit caveat`） | 不要把这样的 D 当成测得的距离 |
 | 切线位置 | Yoneda 带之外的切线会混进别的散射 | `get_curve vertical` 看 Yoneda 带和镜面峰的位置是否与 αi、λ 一致；`set_gisaxs_cuts` 换位置 |
@@ -91,13 +94,12 @@ python tools/gimap_agent.py auto tests/data/external/gisaxs_galaxi/galaxi_data.t
     --calibration tests/data/external/gisaxs_galaxi/galaxi_bornagain.poni --incidence-deg 0.463 --out <文件夹>
 ```
 
-基线结果（切线部分 2026-10-14，macOS；拟合部分为 0.2.0 的 Predict parameters）：
+用上述命令得到的第二层结果：
 
 - Yoneda 带在第 605–609 行；对称轴在 597.26 px；两半取平均（到 |qy| = 0.179 Å⁻¹，之后 qy < 0 一半单独到 0.278 Å⁻¹；
   有 15 个点落在另一半的缺口里，只来自一半）；
 - shoulder 在 |qy| = 0.0113 Å⁻¹，2π/q* = 55.6 nm（特征长度；接近模型的 53.6 nm 只是巧合，去掉干涉的模拟也有 shoulder）；
-- 报告的解（`chosen`）是一群带次晶的竖直圆柱加第二群竖直圆柱：R = 3.17 / 6.15 nm、D = 44 / – nm、χ²ᵣ 1.07（598 个点中的
-  596 个）、概率 0.39；另两个解的概率为 0.32 和 0.30，Needs attention 里有一条 “model”。很宽的对数正态尺寸分布（σ 0.4）和
-  低 q 的上升在这里被两种颗粒群描述。
+- 报告的解（`chosen`）为带次晶的球和竖直圆柱，R 分别为 3.28 和 5.99 nm，球的 D = 48.9 nm。χ²ᵣ = 1.05，598 个点中 596 个参与拟合。
+  在 q_z = 0.5226 nm⁻¹，报告标记球半径的区间覆盖率（`qzR_cov:R_1`），并提示竖直圆柱可能代表半径相近的球（`cyl_sphere:R_2`，q_z·R = 3.13）。
 
 这个例子正好说明：选模型要看用户知道的形状（这里是球），并在 Fitting 里确认；不能只看概率或 χ²ᵣ，也不能把 2π/q* 当间距。

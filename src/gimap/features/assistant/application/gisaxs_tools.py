@@ -38,8 +38,7 @@ INTERVAL_NAMES = ("median", "low68", "high68", "low95", "high95")
 
 
 SPHERE_MODEL = "effective interface (q_z = 0)"
-"""Where Predict parameters evaluates the particles of the cut: the form factor at q_z = 0, as Fitting's record says
-it (``sphere_model``); the cut's own q_z (``cut_qz``) only flags the sizes too large for that."""
+"""The sphere model recorded when the angles of the cut are unavailable."""
 
 
 def cut_qz(status: Optional[dict]) -> Optional[dict]:
@@ -69,7 +68,8 @@ def _intervals(row: dict) -> dict:
         except (TypeError, ValueError):
             continue
         if len(numbers) == len(INTERVAL_NAMES):
-            found[str(name)] = dict(zip(INTERVAL_NAMES, numbers))
+            keys = ("least_squares_value", *INTERVAL_NAMES[1:]) if fit_names.weight_key(row) == "bic_weight" else INTERVAL_NAMES
+            found[str(name)] = dict(zip(keys, numbers))
     return found
 
 
@@ -119,7 +119,7 @@ def _solution(row: dict) -> dict:
         "rank": row.get("rank"),
         "model": row.get("composition") or row.get("combination"),
         "combination": row.get("combination"),
-        "probability": None if math.isnan(probability(row)) else round(probability(row), 4),
+        fit_names.weight_key(row): None if math.isnan(probability(row)) else round(probability(row), 4),
         "components": [
             {"type": component["type"], "weight": round(float(component.get("weight", 0.0)), 3),
              "amplitude": float(component.get("amplitude", math.nan)),
@@ -132,6 +132,10 @@ def _solution(row: dict) -> dict:
         "chi2": round(_chi2(row), 3),
         "points": None if not row.get("points") else dict(row["points"]),
         "compared_by": row.get("compared_by"),
+        "diagnostics": row.get("diagnostics") or {},
+        "ess": row.get("ess"),
+        "posterior_summary": row.get("posterior_summary") or {},
+        "least_squares_values": row.get("least_squares_values") or {},
         "log_rmse": round(float(row.get("best_log_rmse", math.nan)), 4),
         "converged": bool(row.get("converged", True)),
         "warnings": notes,
@@ -279,7 +283,7 @@ class GisaxsToolsMixin:
         if self.fitter is None:
             raise ToolInputError("No curve fitter is available in this session: use Send to Fitting in the GUI.")
         side, x, y, sigma, note = self._fit_input(side)
-        cut = cut_qz(self.results.status)  # flags a size too large for q_z = 0; no value changes
+        cut = cut_qz(self.results.status)
         rows = self.fitter(x, y, sigma, components=tuple(components or ()), cancelled=self.cancelled,
                            cut_qz=None if cut is None else cut["q_z_inv_nm"])
         if not rows:
@@ -289,8 +293,9 @@ class GisaxsToolsMixin:
             solutions[0]["alone"] = True
         self.results.gisaxs["fit"] = {
             "side": side, "curve": note, "points": int(x.size), "q_range_inv_angstrom": [float(x.min()), float(x.max())],
-            # the particles at q_z = 0; the cut's q_z (None: its angles not known) flags (qzR) a size too large for it
-            "sphere_model": SPHERE_MODEL, "cut_qz": cut,
+            "substrate_level": 2 if cut is not None else 1,
+            "sphere_model": "Born term at the cut's q_z" if cut is not None else SPHERE_MODEL,
+            "cut_qz": cut,
             # the points χ²ᵣ is of: fitted, given, below_window (below the network's q window), unusable
             "fitted_points": None if not rows[0].get("points") else dict(rows[0]["points"]),
             # what the fit says of the curve as it took it: an estimated σ, negative and zero intensities
@@ -305,10 +310,13 @@ class GisaxsToolsMixin:
             "data": {"q_inv_angstrom": x.tolist(), "intensity": y.tolist(), "sigma": sigma.tolist()},
         }
         head = solutions[0]
-        summary = f"most probable: {_brief(head)}" + (f" ({bounds_text(head)})" if bounds_text(head) else "")
+        by_bic = fit_names.weight_key(head) == "bic_weight"
+        lead = "highest BIC weight" if by_bic else "most probable"
+        summary = f"{lead}: {_brief(head)}" + (f" ({bounds_text(head)})" if bounds_text(head) else "")
         others = rivals(solutions)
         if others:
-            summary += "; also probable: " + "; ".join(f"rank {item['rank']}, {_brief(item)}" for item in others)
+            summary += ("; alternatives: " if by_bic else "; also probable: ") + "; ".join(
+                f"rank {item['rank']}, {_brief(item)}" for item in others)
         return self._ok({"side": side, "curve": note, "points": int(x.size), "solutions": solutions[:TOP_SOLUTIONS],
                          "chosen": head}, summary)
 

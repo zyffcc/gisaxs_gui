@@ -14,7 +14,7 @@ from PyQt5.QtGui import QDesktopServices, QFont, QPixmap
 from PyQt5.QtWidgets import QFileDialog, QLabel, QLayout, QSizePolicy, QWidget
 
 from src.gimap.app.presentation.components import show_toast
-from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, current_language, tr
+from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, current_language, tr, trf
 
 from ..application import energy_from_notes, incidence_from_notes, pixel_size_from_notes
 from ..application.operations import HALVES_NAMES, halves_label
@@ -44,7 +44,7 @@ OPTION_FIELDS = {
 HALVES_DONE = "halves: "
 """How ``set_halves`` reports a success (``AnalyzeAutomation.set_halves``): ``halves: <side>``."""
 ATTENTION_TITLES = {"model": "Model choice", "fit": "Fit", "beam centre": "Beam centre",
-                    "detector distance": "Detector distance", "technique": "Technique"}
+                    "detector distance": "Detector distance", "technique": "Technique", "pole figure": "Pole Figure"}
 """Readable titles of the points a run asks a person to check (the report's item keys)."""
 RUN_TEXT, RUN_ANYWAY_TEXT = "Run Automatic Analysis", "Run as GIWAXS Anyway"
 GISAXS_NOTE = (
@@ -355,7 +355,7 @@ def saved_toast(widget: QWidget, path) -> None:
     """“Saved <name>” with Open Folder (the folder of ``path``)."""
     folder = Path(str(path)).parent
     show_toast(
-        _toast_parent(widget), tr("Saved {name}").format(name=Path(str(path)).name), level="ok",
+        _toast_parent(widget), trf("Saved {name}", name=Path(str(path)).name), level="ok",
         action=(tr("Open Folder"), lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))),
     )
 
@@ -363,7 +363,7 @@ def saved_toast(widget: QWidget, path) -> None:
 def save_failed_toast(widget: QWidget, path, error) -> None:
     """A save that did not work, with the reason (never an error dialog)."""
     show_toast(
-        _toast_parent(widget), tr("{name} could not be saved: {error}").format(name=Path(str(path)).name, error=error),
+        _toast_parent(widget), trf("{name} could not be saved: {error}", name=Path(str(path)).name, error=error),
         level="error", timeout_ms=9000,
     )
 

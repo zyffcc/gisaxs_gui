@@ -90,6 +90,13 @@ class WorkspaceCommands:
     def _shown(self) -> str:
         return self._held()
 
+    def _standard_profile(self) -> str:
+        try:
+            self._analyze.view_model.absolute_scale_profile()
+        except ValueError as exc:
+            return str(exc)
+        return ""
+
     def _batch_free(self) -> str:
         return BATCH_RUNNING if self._analyze.batch_running() else ""
 
@@ -111,6 +118,19 @@ class WorkspaceCommands:
     def _send_fitting(self) -> str:
         return "" if self._analyze.fit_button.isEnabled() else self._analysis() or NO_GEOMETRY
 
+    def _send_both(self) -> str:
+        """Both cuts need a GISAXS frame with a horizontal and a vertical cut."""
+        from src.gimap.features.analyze.application.both_cuts import cut_geometry
+
+        analysis = self._analyze.view_model.state.analysis
+        if analysis is None or getattr(analysis, "reduction", None) is None:
+            return self._analysis() or NO_GEOMETRY
+        try:
+            cut_geometry(analysis)
+        except ValueError as exc:
+            return str(exc)
+        return ""
+
     def _send_series(self) -> str:
         page = self._analyze
         if page.view_model.listed_frames() < 2:
@@ -124,7 +144,8 @@ class WorkspaceCommands:
         return "" if self._analyze.view_model.state.giwaxs.regions else NO_REGIONS
 
     def _masks(self) -> str:
-        return "" if self._analyze.view_model.state.corrections.mask_shapes else NO_MASKS
+        corrections = self._analyze.view_model.state.corrections
+        return "" if corrections.mask_shapes or corrections.mask_path else NO_MASKS
 
     def _clear(self) -> str:
         page = self._analyze
@@ -192,9 +213,11 @@ class WorkspaceCommands:
 
     def _history_detail(self, step: str):
         def detail() -> str:
-            if self._undo_page() != "analyze":
-                return ""  # Fitting's Undo does not say what it undoes
-            undo, redo = self._analyze.undo_names()
+            page = self._undo_page()
+            if not page:
+                return ""
+            owner = self._analyze if page == "analyze" else self._fitting.fit_page
+            undo, redo = owner.undo_names()
             return undo if step == "undo" else redo
         return detail
 
@@ -213,10 +236,13 @@ class WorkspaceCommands:
             "analyze_run_automatic": MenuEntry(analyze(lambda: page().run_automatic()), self._run_automatic),
             "analyze_stop_automatic": MenuEntry(analyze(lambda: page().stop_automatic()), self._stop_automatic),
             "analyze_repeat": MenuEntry(analyze(lambda: page().run_analysis()), self._frame),
+            "analyze_absolute_scale": MenuEntry(analyze(lambda: page().absolute_scale_dialog()), self._standard_profile),
             "analyze_export": MenuEntry(analyze(lambda: page().export_current()), self._analysis),
+            "analyze_reproduce": MenuEntry(analyze(lambda: self.menus.reproduce_from_record())),
             "analyze_batch": MenuEntry(analyze(lambda: page().batch_export_dialog()), self._batch),
             "analyze_batch_folder": MenuEntry(analyze(lambda: page().batch_from_folder()), self._batch_free),
             "analyze_send_fitting": MenuEntry(analyze(lambda: page().fit_current()), self._send_fitting),
+            "analyze_send_both_cuts": MenuEntry(analyze(lambda: self._components._send_both_cuts()), self._send_both),
             "analyze_send_series": MenuEntry(analyze(lambda: page().send_series_dialog()), self._send_series),
             "analyze_send_compare": MenuEntry(analyze(lambda: page().send_series_to_compare()), self._send_compare),
             "analyze_save_settings": MenuEntry(analyze(lambda: page().save_settings())),
@@ -235,6 +261,7 @@ class WorkspaceCommands:
             "fitting_fit_folder": MenuEntry(fitting(lambda: series().choose_folder(), "insitu"), self._series_folder),
             "fitting_fit": MenuEntry(fitting(lambda: fit().run_fit()), self._fit),
             "fitting_stop": MenuEntry(fitting(lambda: fit().stop_fit()), self._stop_fit),
+            "fitting_joint": MenuEntry(fitting(lambda: self._fitting.open_joint_fit())),
             "fitting_load_model": MenuEntry(fitting(lambda: fit().load_model_dialog())),
             "fitting_save_model": MenuEntry(fitting(lambda: fit().save_model_dialog())),
             "fitting_save_data": MenuEntry(fitting(lambda: fit().export_data_dialog()), self._curve),

@@ -136,4 +136,20 @@ def common_x(frames: Sequence[tuple[np.ndarray, np.ndarray]]) -> tuple[np.ndarra
     return x, values, INTERPOLATED.format(gap=GAP_STEPS)
 
 
+def batch_table_columns(frames):
+    """Numerical columns as saved by the batch table writer (8 significant digits; blanks are NaN)."""
+    x, values, _ = common_x(frames)
+    columns = {"x": x, **{f"frame_{i:04d}": col for i, col in enumerate(values, 1)}}
+    return {name: np.array([float(format(value, ".8g")) for value in array]) for name, array in columns.items()}
+
+
+def reproduced_batch_tables(record, results):
+    """Align each exported curve's fresh per-frame data in the order used for its original table."""
+    tables = {}
+    for key, indices in record["reproduction"]["table_frames"].items():
+        frames = [(results[index][key]["x"], results[index][key]["intensity"]) for index in indices]
+        tables[key] = batch_table_columns(frames)
+    return tables
+
+
 __all__ = ["EXACT", "GAP_STEPS", "INTERPOLATED", "MATCHED", "OTHER_GRID", "SAME_POINT", "common_x"]

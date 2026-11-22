@@ -173,7 +173,7 @@ def test_a_batch_summary_is_titled_by_the_procedure_that_ran() -> None:
     one = batch_markdown([NO_GEOMETRY, _giwaxs(), UNREADABLE])
     assert one.startswith("# GIWAXS — batch\n") and "##" not in one.split("## Open questions")[0]
     assert "| lonely.tif | needs input | 1 | — | — | — | calibration |" in one
-    assert "| film.tif | OK | 1 | agbh.poni | 0.899, 1.409* | 0.899: 0.61 | — |" in one
+    assert "| film.tif | OK | 1 | agbh.poni | 0.899, 1.41* | 0.899: 0.61 | — |" in one
     assert batch_markdown([_gisaxs(), UNREADABLE]).startswith("# GISAXS — batch\n")
 
 
@@ -183,15 +183,28 @@ def test_a_mixed_batch_keeps_the_results_of_its_gisaxs_frames() -> None:
     assert text.startswith("# GIMaP — batch\n\n3 frame(s); each has its own report.md.\n")
     giwaxs, gisaxs, rest = text.index("## GIWAXS"), text.index("## GISAXS"), text.index("## Not analysed")
     assert giwaxs < gisaxs < rest < text.index("Open questions")
-    assert "| film.tif | needs input | 1 | agbh.poni | 0.899, 1.409* | 0.899: 0.61 | incidence angle αi |" in text[giwaxs:gisaxs]
+    assert "| film.tif | needs input | 1 | agbh.poni | 0.899, 1.41* | 0.899: 0.61 | incidence angle αi |" in text[giwaxs:gisaxs]
     # Halves, spacing and best fit of the GISAXS frame: they were dropped from a table of GIWAXS columns.
-    row = "| dots.tif | needs input | mean | 53.5 (shoulder) | sphere R 9.40 nm, D 53.4 nm, χ²ᵣ 1.31 | incidence angle αi |"
-    assert row in text[gisaxs:rest]
+    assert "| dots.tif | needs input | mean | 53.5 (shoulder) | [1] | incidence angle αi |" in text[gisaxs:rest]
+    assert "- [1] sphere R 9.4 nm, D 53.4 nm, χ²ᵣ 1.31" in text[gisaxs:rest]
     assert "| missing.tif | error: No such file: missing.tif | — | — |" in text[rest:]
     # αi is asked once for each procedure, in its words, with the flag that answers it.
     asked = [line for line in text.splitlines() if line.startswith("- **incidence angle αi**")]
     assert len(asked) == 2 and "missing wedge" in asked[0] and "exit angle αf" in asked[1]
     assert all(line.endswith("→ `--incidence-deg A`") for line in asked)
+
+
+def test_many_observations_in_a_batch_row_keep_their_values_and_report_link() -> None:
+    peaks = [{"q": (index + 11) / 100} for index in range(16)]
+    rings = [{"q": peak["q"], "herman": 0.48} for peak in peaks]
+    report = _giwaxs("film-series.tif", folder="many observations from one synthetic long exposure",
+                     peaks=peaks, rings=rings)
+    text = batch_markdown([report])
+    row = next(line for line in text.splitlines() if line.startswith("| film-series.tif |"))
+    assert len(row) < 100 and "[report.md][r1]" in row
+    assert "[r1]: many%20observations%20from%20one%20synthetic%20long%20exposure/report.md" in text
+    assert "[1]" in row and "- [1] " + "; ".join(f"{peak['q']}: 0.48" for peak in peaks) in text
+    assert "[2]" in row and "- [2] " + ", ".join(str(peak["q"]) for peak in peaks) in text
 
 
 def test_a_technique_asked_for_but_never_started_is_not_what_ran(tmp_path: Path) -> None:
@@ -294,20 +307,18 @@ def galaxi():
     session.close()
 
 
-def test_a_gisaxs_run_asks_for_alpha_i_with_what_it_changes_for_the_cut(galaxi) -> None:
+def test_a_gisaxs_run_with_no_nominal_angle_uses_the_resolved_frame_measurement(galaxi) -> None:
     from tests.test_guided_gisaxs import _geometry
 
     report = galaxi.run_pipeline(PipelineOptions(technique="gisaxs", geometry=_geometry(), fit=False))
     assert report["ok"] and report["procedure"] == "gisaxs"
-    asked = [item for item in report["needs_attention"] if item["option"] == "incidence_deg"]
-    alpha = next(item for item in asked if item["item"] == "incidence angle αi")
-    assert alpha["why"] == INCIDENCE_MISSING["gisaxs"]
-    for word in ("Ring positions", "missing wedge"):  # GIWAXS words mean nothing here
-        assert word not in alpha["why"]
-    assert "0° is used" in alpha["why"] and "exit angle αf" in alpha["why"] and "too large by αi" in alpha["why"]
+    assert all(item["item"] != "incidence angle αi" for item in report["needs_attention"])
+    estimate = report["incidence_measurement"]
+    assert estimate["reference_deg"] is None and estimate["decision"] == "measured"
+    assert abs(estimate["deg"] - .463) < 3 * estimate["error_deg"]
+    assert report["geometry"]["incidence_deg"] == pytest.approx(estimate["deg"])
     text = pipeline_markdown(report)
-    assert text.startswith("# GISAXS") and "too large by αi" in text.split("## Geometry")[0]
-    assert "→ `--incidence-deg A`" in text and "missing wedge" not in text
+    assert text.startswith("# GISAXS") and "measured angle supplies the missing incidence" in text
 
 
 def test_find_geometry_words_the_question_for_what_auto_reads_the_frame_as(galaxi) -> None:
@@ -346,7 +357,7 @@ def test_the_fit_solutions_table_starts_with_what_it_is_and_the_units() -> None:
 # -- the command line, on real images ---------------------------------------------------------------------
 
 
-def test_the_command_line_prints_where_the_calibration_was_found_and_still_exits_0(tmp_path: Path, capsys) -> None:
+def test_the_command_line_distinguishes_the_calibration_notice_from_poor_pole_fits(tmp_path: Path, capsys) -> None:
     from tests.test_assistant_calibration import ENERGY_KEV, agbh_image, giwaxs_frame, save_tiff
     from tools import gimap_agent
 
@@ -359,15 +370,19 @@ def test_the_command_line_prints_where_the_calibration_was_found_and_still_exits
                              "--no-saved-profiles", "--quiet"])
     printed = capsys.readouterr().out
 
-    assert code == gimap_agent.EXIT_DONE  # said, not asked: the exit code is the one of a run with nothing open
-    assert printed.startswith("# GIWAXS — batch") and "P3HT_00012.tif | OK" in printed
+    import json
+    record = json.loads((out / "P3HT_00012" / "report.json").read_text(encoding="utf-8"))
+    assert {item["item"] for item in record["needs_attention"]} == {"pole figure", "orientation factor"}
+    assert code == gimap_agent.EXIT_QUESTIONS
+    assert printed.startswith("# GIWAXS — batch") and "P3HT_00012.tif | completed with checks" in printed
     note = next(line for line in printed.splitlines() if line.startswith("Calibration found by the automatic search"))
     assert str(image) in note and "sibling folder calib, seen from the frame's folder" in note and "1 frame(s)" in note
-    assert "Open questions" not in printed
+    assert "Open questions" in printed
     report = (out / "P3HT_00012" / "report.md").read_text(encoding="utf-8")
     found = next(line for line in report.splitlines() if line.startswith("- found by the automatic search"))
     assert f"`{image}`" in found and "(sibling folder calib, seen from the frame's folder)" in found
     assert report.index("- source: AgBH_00001.tif") < report.index(found) < report.index("- quality: good")
-    assert "Status: **OK**" in report and f"- **{SEARCHED}**: {image} — sibling folder calib" in report
+    assert "Status: **COMPLETED WITH CHECKS**" in report and "## Orientation checks" in report
+    assert f"- **{SEARCHED}**: {image} — sibling folder calib" in report
     assert note in (out / "summary.md").read_text(encoding="utf-8")
     assert not (root / "P3HT_film" / "gimap_analysis").exists() and not (root / "calib" / "gimap_analysis").exists()

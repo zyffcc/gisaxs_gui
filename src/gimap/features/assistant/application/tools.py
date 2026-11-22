@@ -11,11 +11,14 @@ import base64
 import json
 import math
 import time
-from dataclasses import fields, is_dataclass
+from dataclasses import fields, is_dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 import numpy as np
+
+from src.gimap.shared.numbers import format_number
+from src.gimap.shared.radial_peaks import orientation_half_width
 
 from ..domain import (
     DEFAULT_BACKGROUND_WINDOW,
@@ -26,10 +29,8 @@ from ..domain import (
     compare_sectors,
     downsample,
     find_peaks,
-    herman_decimals,
     ring_orientation,
     scherrer_size,
-    signed,
     significant,
 )
 from .gisaxs_tools import GisaxsToolsMixin
@@ -48,12 +49,10 @@ from .models import (
 from .calibration_tools import CalibrationToolsMixin
 from .operation_tools import OperationToolsMixin
 from .operations import OPERATION_TOOLS
+from .pipeline_phases import fit_ring_pole, ring_step_summary
 from .pipeline_progress import FrameChanged
 from .ports import AnalysisWorkbench, Chooser, Confirmer, CurveFitter, FileExplorer, GeometryCalibrator, ResultStore
 from .tool_specs import FINAL, WRITE, tool_specs
-
-HALO_HALF_WINDOW = 0.04
-"""Largest half width of a ring window around a broad halo, as a fraction of its q."""
 
 _TYPES = {
     "number": (int, float),
@@ -146,6 +145,7 @@ def results_payload(results: RunResults) -> dict:
         for curve, search in results.peak_searches.items()
     }
     return {
+        **results.model_record(),
         "status": clean(results.status),
         "peaks": searches,
         "sectors": clean(results.sector_rows),
@@ -416,7 +416,7 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
             )
         cut = f" (the {search.max_peaks} most prominent of {search.candidates} candidates)" if search.truncated else ""
         summary = (
-            f"{len(search.peaks)} peak(s) on {curve}{cut}: " + ", ".join(f"{peak.q:.3g}" for peak in search.peaks[:6])
+            f"{len(search.peaks)} peak(s) on {curve}{cut}: " + ", ".join(format_number(p.q, p.q_err, value_only=True) for p in search.peaks[:6])
             if search.peaks else f"no peaks on {curve}"
         )
         return self._ok(payload, summary)
@@ -434,13 +434,15 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
             raise ToolInputError("No peaks to compare: find_peaks on 'radial' found none; pass q_values.")
         _ip, in_plane = self._profile("in_plane")
         _oop, out_of_plane = self._profile("out_of_plane")
+        status = self.results.status or self.workbench.status()
+        summed_radial = bool((status.get("corrections") or {}).get("lorentz"))
         rows = compare_sectors(
             pairs, in_plane, out_of_plane,
             background_window=search.background_window, window_fwhm=max(0.25, float(window_fwhm)),
-            reference_background=search.background_at,
+            reference_background=None if summed_radial else search.background_at,
         )
         self.results.sector_rows = rows
-        giwaxs = (self.results.status or self.workbench.status()).get("giwaxs") or {}
+        giwaxs = status.get("giwaxs") or {}
         payload = {
             "sector_half_widths_deg": {
                 "in_plane": giwaxs.get("in_plane_half_width_deg"),
@@ -467,18 +469,24 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
         if q_half_width is not None and q_half_width > 0:
             half = float(q_half_width)
         elif peak is not None:
-            half = max(0.75 * peak.fwhm, 2.0 * search.step)
-            if "broad" in peak.flags:
-                # A wide window reaches the detector edges at some χ and mixes q there.
-                half = min(half, HALO_HALF_WINDOW * peak.q)
+            half = orientation_half_width(peak, search.step)
         else:
             half = 0.015 * center
         low, high = center - half, center + half
         self.workbench.set_chi_window(low, high)
         self.workbench.show(lower_profile="azimuthal")
-        _curve, profile = self._profile("azimuthal")
-        background = search.background_at(center) or 0.0
-        result = ring_orientation(profile, q_window=(low, high), background=background)
+        curve, profile = self._profile("azimuthal")
+        settings = {key: curve.region[key] for key in (
+            "min_exit_deg", "exit_angle_source", "polarization", "background", "background_sigma",
+            "background_source", "error_model", "horizon_chi_deg", "horizon_fraction", "horizon_excluded_deg",
+        ) if key in curve.region}
+        background = settings.get("background")
+        if background is None:
+            background = search.background_at(center) or 0.0
+        result = ring_orientation(profile, q_window=(low, high), background=background,
+                                  horizon_chi_deg=settings.get("horizon_chi_deg"))
+        pole = fit_ring_pole(self.workbench, result, background=None if "background" in settings else background)
+        result = replace(result, orientation_settings=settings, pole_figure=pole)
         self.results.rings.append(result)
         payload = clean(result)
         if peak is None:
@@ -490,12 +498,7 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
                 payload["analysed"] = (
                     f"no peak at q = {q_center:g} Å⁻¹ in this frame: the nearest feature, at {peak.q:.4g} Å⁻¹, was analysed"
                 )
-        decimals = herman_decimals(result.herman_err)  # f with the decimals of its σ_f, as the report gives it
-        summary = (
-            f"q = {center:.3g}: {result.texture}, f = {signed(result.herman, decimals)}"
-            + (f" ± {result.herman_err:.{decimals}f}" if result.herman_err else "")
-            if result.herman is not None else f"q = {center:.3g}: {result.reason or result.texture}"
-        )
+        summary = ring_step_summary(center, result)
         if peak is not None and caveat(peak):
             summary += f" ({caveat(peak).split(':')[0]})"
         return self._ok(payload, summary)
@@ -509,7 +512,7 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
             raise ToolInputError(f"Run find_peaks on '{curve}' first.")
         peak = self._nearest_peak(search, float(q_center))
         if peak is None:
-            listed = ", ".join(f"{item.q:.4g}" for item in search.peaks) or "none"
+            listed = ", ".join(format_number(p.q, p.q_err, value_only=True) for p in search.peaks) or "none"
             raise ToolInputError(f"No fitted peak near q = {q_center:g} Å⁻¹ on '{curve}' (peaks: {listed}).")
         size = scherrer_size(
             peak.q, peak.fwhm, peak.fwhm_err if math.isfinite(peak.fwhm_err) else None,
@@ -518,10 +521,12 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
         )
         self.results.sizes.append(size)
         payload = clean(size.record())  # size_A and size_nm: every length names its unit
-        summary = (
-            f"q = {peak.q:.3g}: L {'≥ ' if size.lower_bound else ''}{size.size / 10.0:.3g} nm"
-            if size.size is not None else f"q = {peak.q:.3g}: {size.reason}"
-        )
+        centre = format_number(peak.q, peak.q_err, value_only=True)
+        if size.size is None:
+            summary = f"q = {centre}: {size.reason}"
+        else:
+            length = format_number(size.size / 10, None if size.size_err is None else size.size_err / 10)
+            summary = f"q = {centre}: L {'≥ ' if size.lower_bound else ''}{length} nm"
         return ToolOutcome(json.dumps(payload, ensure_ascii=False), summary, data=payload)
 
     def _tool_show_view(self, view=None, lower_plot=None) -> ToolOutcome:
@@ -540,6 +545,7 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
 
     def _tool_note_missing_capability(self, capability: str, reason: str) -> ToolOutcome:
         entry = {
+            **self.results.model_record(),
             "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "file": (self.results.status or {}).get("path"),
             "capability": capability,
@@ -555,7 +561,8 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
         return self._ok(status, f"valid range {minimum} … {maximum}")
 
     def _tool_export_results(self, include_tables: bool) -> ToolOutcome:
-        paths = list(self.workbench.export_curves())
+        model = self.results.model_record()
+        paths = list(self.workbench.export_curves({"assistant": model}) if model else self.workbench.export_curves())
         if include_tables and self.store is not None:
             status = self.results.status or self.workbench.status()
             source = Path(status.get("path") or "frame")

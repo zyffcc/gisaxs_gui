@@ -89,7 +89,7 @@ class ManualRefinementMixin:
         return math.hypot(event.x - marker_x, event.y - marker_y) <= MARKER_GRAB_PX * scale
 
     def _remember_fitted_geometry(self) -> None:
-        """Keep the fitted centre, distance and warnings of every candidate of a new result.
+        """Keep the fitted geometry and its statistics for every candidate of a new result.
 
         Committing manual values writes them into the selected candidate in place, so this
         copy is what 'Reset to fitted', manual mode off and the next commit go back to. An
@@ -106,10 +106,8 @@ class ManualRefinementMixin:
         }
         self._fitted_geometry = (
             self.result,
-            [
-                (c, (c.center_x_px, c.center_y_px, c.distance_mm, list(c.warnings)))
-                for c in unique.values()
-            ],
+            # Manual adjustment replaces scalar fit statistics and the warning list.
+            [(c, vars(c).copy()) for c in unique.values()],
         )
 
     def _restore_fitted_geometry(self) -> None:
@@ -117,11 +115,8 @@ class ManualRefinementMixin:
         saved = getattr(self, "_fitted_geometry", None)
         if self.result is None or saved is None or saved[0] is not self.result:
             return
-        for candidate, (x, y, distance, warnings) in saved[1]:
-            candidate.center_x_px = x
-            candidate.center_y_px = y
-            candidate.distance_mm = distance
-            candidate.warnings = list(warnings)
+        for candidate, fitted in saved[1]:
+            vars(candidate).update(fitted)
 
     def _load_fitted_into_manual_fields(self) -> None:
         """Put the selected fitted centre and distance into the manual fields (no redraw)."""
@@ -144,8 +139,17 @@ class ManualRefinementMixin:
         if self.result is None:
             return
         self._restore_fitted_geometry()
-        self._show_candidate(self.result.selected_candidate)
+        self._refresh_manual_result()
         self.stage_label.setText(tr("Manual values reset to the fitted solution."))
+
+    def _refresh_manual_result(self) -> None:
+        """Keep geometry, RMS and uncertainties together in the result panel and table."""
+        if self.result is None:
+            return
+        blocker = QSignalBlocker(self.candidate_table)
+        self._populate_candidates()
+        del blocker
+        self._show_candidate(self.result.selected_candidate)
 
     def _manual_values_changed(self) -> bool:
         """Whether the manual fields differ from the fitted solution as the fields show it."""
@@ -175,6 +179,7 @@ class ManualRefinementMixin:
             center_y_px=center_y,
             distance_mm=self.manual_distance.value(),
         )
+        self._refresh_manual_result()
 
     def _sync_main_window_geometry(self) -> None:
         """Let Analyze see the applied calibration (the confirmation is Apply's toast)."""

@@ -10,6 +10,7 @@ analysed) gets a “Geometry report” with the q map only.
 
 from __future__ import annotations
 
+
 import base64
 import html
 import io
@@ -21,6 +22,7 @@ import numpy as np
 from PyQt5.QtGui import QTextDocument
 
 from src.gimap.app.presentation.i18n import current_language
+from src.gimap.shared import fit_names
 from src.gimap.shared.version import SOFTWARE
 
 from ..application import (
@@ -33,7 +35,10 @@ from ..application import (
     ring_overlays,
     series_markdown,
 )
+from ..application.gisaxs_choice import population_values
 from ..application.run_record import run_record
+from ..application.report_language import CHINESE, ENGLISH, heading
+from .guided_words import words
 
 STYLE = """
 body { font-family: system-ui, "Segoe UI", sans-serif; max-width: 980px; margin: 24px auto; padding: 0 16px;
@@ -64,6 +69,7 @@ TITLES = {"gisaxs": "GISAXS report", "giwaxs": "GIWAXS report", "geometry": "Geo
 _GIWAXS_HEADING = "# GIWAXS — "
 _GIWAXS_CLOSING = "Sizes are Scherrer lower bounds"
 GISAXS_CUT_CAPTION = "The horizontal cut I(qy) at the Yoneda band (not fitted here)."
+BIC_CAPTION = "Horizontal cut I(|qy|) on log–log axes, with the fit of highest BIC weight drawn over the data."
 NO_RINGS_CAPTION = "The q map of the analysed frames."
 FIT_COLOURS = ("#1f4e79", "#c62828")
 
@@ -116,15 +122,28 @@ def report_html(
     title: Optional[str] = None,
     captions: Optional[tuple[str, str]] = None,
 ) -> str:
-    """One self-contained page: header, the two pictures, then the report text.
+    """A self-contained report. The GIWAXS summary precedes the figures and detailed checks.
 
     ``procedure`` (``gisaxs`` | ``giwaxs`` | ``geometry``, default from the report) chooses the title and the captions.
     """
     procedure = procedure or procedure_of(report)
     title = title or TITLES.get(procedure, f"{procedure.upper()} report")
     q_caption, curve_caption = captions or CAPTIONS.get(procedure, CAPTIONS["giwaxs"])
+    if procedure == "gisaxs" and curve_caption == CAPTIONS["gisaxs"][1]:
+        _, solution = chosen_solution((report.get("gisaxs") or {}).get("fit"))
+        if fit_names.weight_key(solution or {}) == "bic_weight":
+            curve_caption = BIC_CAPTION
     frame = str(report.get("frame") or "")
     made = time.strftime("%Y-%m-%d %H:%M")
+    introduction = ""
+    if procedure == "giwaxs":
+        lines = markdown.splitlines(keepends=True)
+        headings = {heading("Result summary", language) for language in (ENGLISH, CHINESE)}
+        start = next((i for i, line in enumerate(lines) if line.strip() in headings), None)
+        if start is not None:
+            end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+            introduction = _markdown_html("".join(lines[:end]))
+            markdown = "".join(lines[end:])
     return "\n".join((
         "<!DOCTYPE html>",
         '<html lang="en"><head><meta charset="utf-8">',
@@ -132,7 +151,7 @@ def report_html(
         f"<h1>{html.escape(title)}</h1>",
         f'<p class="muted">{html.escape(frame)} · {SUBTITLE} · {html.escape(report.get("software_version") or SOFTWARE)}, '
         f"{made}</p>",
-        _figure(q_map, q_caption),
+        introduction, _figure(q_map, q_caption),
         _figure(curve, curve_caption),
         _markdown_html(markdown),
         "</body></html>",
@@ -142,7 +161,7 @@ def report_html(
 def report_markdown(report: dict, start_report: Optional[dict] = None) -> str:
     """The report text, with the start-versus-end comparison when the start of the series was analysed."""
     language = current_language()  # one language per report: the headings follow the program's
-    text = pipeline_markdown(report, language=language)
+    text = pipeline_markdown(report, language=language, summary_word=words)
     if report.get("procedure") == "geometry":
         text = _geometry_markdown(text)
     if start_report is not None:
@@ -191,15 +210,17 @@ def fit_png(report: dict, width: int = 1000) -> Optional[bytes]:
     axes.loglog(q[shown], intensity[shown], ".", color=FIT_COLOURS[0], markersize=2.5, label="data")
     fitted = shown & np.isfinite(model) & (model > 0)
     if fitted.any():
-        radii = sorted(float(c["R"]) for c in top.get("components") or () if c.get("R") is not None)
+        radii = population_values(top, "R")
         name = str(top.get("model") or "").replace("_", " ")
-        detail = f" R {' / '.join(f'{radius:.3g}' for radius in radii)} nm" if radii else ""  # every population
+        detail = f" R {radii} nm" if radii != "—" else ""
         chance = probability(top)
-        which = "best fit" if math.isnan(chance) else "most probable fit"  # (a report before Predict: no probability)
+        by_bic = fit_names.weight_key(top) == "bic_weight"
+        which = "best fit" if math.isnan(chance) or by_bic else "most probable fit"
+        kind = fit_names.BIC_WEIGHT if by_bic else "p"
         bounds = ", ".join(bound_phrases(top))
         axes.loglog(q[fitted], model[fitted], "-", color=FIT_COLOURS[1], linewidth=1.4,
                     label=f"{which}: {name}{detail} ("
-                    + ("" if math.isnan(chance) else f"p {chance:.2f}, ")
+                    + ("" if math.isnan(chance) else f"{kind} {chance:.2f}, ")
                     + f"χ²ᵣ {float(top.get('chi2') or 0):.3g})" + (f" ⚠ {bounds}" if bounds else ""))
     axes.set_xlabel("|qy| (Å⁻¹)")
     axes.set_ylabel("Intensity")

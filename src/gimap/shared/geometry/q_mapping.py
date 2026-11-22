@@ -33,7 +33,7 @@ from typing import Optional
 
 import numpy as np
 
-from .detector_geometry import DetectorGeometry
+from .detector_geometry import DetectorGeometry, roll_transverse
 
 
 class ExitAngleModel(str, Enum):
@@ -124,7 +124,7 @@ def lab_rays(geometry: DetectorGeometry, x: np.ndarray, y: np.ndarray) -> tuple[
     directions of its columns and of its rows upward (``DetectorGeometry.in_plane_axes``). This is pyFAI's pixel
     position written relative to the direct beam."""
     x, y = np.asarray(x, dtype=np.float64), np.asarray(y, dtype=np.float64)
-    if not geometry.tilted:
+    if not geometry.requires_projection:
         return np.full(np.broadcast(x, y).shape, float(geometry.distance_m)), x, y
     (ax, rx, ux), (ay, ry, uy) = geometry.in_plane_axes()
     return geometry.distance_m + x * ax + y * ay, x * rx + y * ry, x * ux + y * uy
@@ -147,6 +147,8 @@ def exit_directions(
     distance: float,
     incidence_rad: float,
     model: ExitAngleModel = ExitAngleModel.EXACT,
+    *,
+    sample_roll_rad: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Unit vector of the scattered ray in the sample frame.
 
@@ -155,8 +157,10 @@ def exit_directions(
     along-beam component of every ray of a tilted detector (:func:`lab_rays`).
     """
     model = ExitAngleModel(model)
+    lab_x, lab_y = x, y
+    x, y = roll_transverse(lab_x, lab_y, sample_roll_rad)
     if model is ExitAngleModel.EXACT:
-        radius = np.sqrt(distance**2 + x**2 + y**2)
+        radius = np.sqrt(distance**2 + lab_x**2 + lab_y**2)
         cos_i, sin_i = np.cos(incidence_rad), np.sin(incidence_rad)
         along_beam = (distance * cos_i + y * sin_i) / radius
         across_beam = x / radius
@@ -209,10 +213,11 @@ def scattering_vectors(
     *,
     zero_at_axis: bool = False,
     critical_rad: float = 0.0,
+    sample_roll_rad: float = 0.0,
 ) -> GrazingQMap:
     """q = k_f − k_i in the sample frame, in units of ``wavevector``; with ``critical_rad`` above 0, q_z is the one
     inside the film (:func:`refracted_qz`)."""
-    along_beam, across_beam, normal = exit_directions(x, y, distance, incidence_rad, model)
+    along_beam, across_beam, normal = exit_directions(x, y, distance, incidence_rad, model, sample_roll_rad=sample_roll_rad)
     qx = wavevector * (along_beam - np.cos(incidence_rad))
     qy = wavevector * across_beam
     if critical_rad > 0:
@@ -240,6 +245,7 @@ def grazing_q_map(
         geometry.wavevector_inv_angstrom,
         model,
         critical_rad=geometry.critical_rad,
+        sample_roll_rad=geometry.sample_roll_rad,
     )
 
 
@@ -259,7 +265,14 @@ def grazing_q_region(
         geometry.wavevector_inv_angstrom,
         model,
         critical_rad=geometry.critical_rad,
+        sample_roll_rad=geometry.sample_roll_rad,
     )
+
+
+def transmission_q(along, x, y, wavevector) -> tuple[np.ndarray, np.ndarray]:
+    """Vacuum |q| and 2θ (radians) from laboratory rays relative to the direct beam."""
+    two_theta = np.arctan2(np.hypot(x, y), along)
+    return 2.0 * wavevector * np.sin(two_theta / 2.0), two_theta
 
 
 def transmission_map(shape: tuple[int, int], geometry: DetectorGeometry) -> TransmissionMap:
@@ -269,6 +282,5 @@ def transmission_map(shape: tuple[int, int], geometry: DetectorGeometry) -> Tran
     (``analyze/domain/giwaxs.py``: 0° along the surface normal).
     """
     along, x, y = lab_rays(geometry, *pixel_center_displacements(shape, geometry))
-    two_theta = np.arctan2(np.hypot(x, y), along)
-    q = 2.0 * geometry.wavevector_inv_angstrom * np.sin(two_theta / 2.0)
+    q, two_theta = transmission_q(along, x, y, geometry.wavevector_inv_angstrom)
     return TransmissionMap(q, np.degrees(two_theta), np.degrees(np.arctan2(y, x)))

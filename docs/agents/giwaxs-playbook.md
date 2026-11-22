@@ -53,8 +53,10 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
 | frames | 序列取最后五分之一的帧求和，至多 10 帧（终态）；不到 10 帧只取最后一帧 | 问题关心的是过程，或者开头 | `--frame N --sum K`（负数从末尾数；只给 `--frame` 时从该帧起求和同样的默认帧数，单帧用 `--sum 1`；求和块不会越过最后一帧，所以和覆盖整个序列时 Decisions 会写明它是整个序列而不是一个状态） |
 | peak search | 最多拟合 12 个最显著的候选峰（为了快）；候选更多时 Decisions 的 peak search 一行写 “N candidate peaks found; the 12 most prominent were fitted”，峰表、扇区比较、环和序列提示都只来自这 12 个（序列提示的标题也这样写）。候选峰是拟合前的极大，全部拟合得到的峰比候选少（公开 P08 帧：115 个候选，全部拟合是 32 个峰） | 用户要完整的峰表、某个弱一些的峰，或序列提示 | `--max-peaks N`；`find_peaks` / `run_standard_pipeline` 的 `max_peaks` |
 | rings | 面积最大的 3 个没有警告的峰算取向和尺寸 | 用户问的是别的环 | `--rings N`；指定某个 q 要用 `call` 或 MCP 的 `ring_orientation`、`crystallite_size` |
-| 能量 / αi / 像素 | 能量：选项 > 头文件 > 笔记（只认 “12.4 keV” 这种写法；波长要自己换算后传 `--energy-kev`）> 标定文件的波长（这时 Decisions 里没有 energy 一行，能量来源就是几何来源）。αi：选项 > 笔记 > 分析命令栏里设定的 αi（手动或之前的 `set_incidence_angle`；分析用它代替仪器配置的值，Decisions 写 “from Analyze's command bar”）> 仪器配置（只在几何也取自仪器配置时），都没有时先用 0° 并提问；选项或笔记的值与命令栏不同时会替换命令栏里的值，报告的 αi 就是实际用的。像素：选项 > 头文件 > 笔记。笔记里的值只有唯一时才取 | 笔记里有两个不同的值，或者有效值只在幻灯片、日志里 | `--energy-kev`、`--incidence-deg`、`--pixel-size-um` |
+| 能量 / αi / 像素 | 能量：选项 > 头文件 > 笔记（只认 “12.4 keV” 这种写法；波长要自己换算后传 `--energy-kev`）> 标定文件的波长（这时 Decisions 里没有 energy 一行，能量来源就是几何来源）。αi 的名义值依次取自选项、笔记、Analyze 命令栏、图像头、所用的仪器配置，再与帧的测量比较。像素：选项 > 头文件 > 笔记。笔记里的值只有唯一时才取 | 笔记里有两个不同的值，或者有效值只在幻灯片、日志里 | `--energy-kev`、`--incidence-deg`、`--keep-incidence`、`--pixel-size-um` |
 | 标样 | `--standard` > 笔记里唯一点名的标样 > 文件名 > 所有标样拟合比较（笔记和文件名不一致时也比较） | 混合标样的写法：`LaB6+CeO2` 是混合，`LaB6, CeO2` 是两种 | `--standard` |
+
+地平线阴影的截距和镜面峰各给出一个 αi 及误差。先看报告中的各项测量及来源。帧测值与名义值相差超过帧测值的 3σ 时，默认用帧测值重新归约；在 3σ 内保留名义值。要保留已核实的名义值，可用 `--keep-incidence`。没有名义值时用可靠的帧测值，两者都缺时才用 0° 并提问。地平线随探测器区域变化很大时，应说明结果主要由哪一个特征决定。
 
 标定验收看的是标样的线落在的 q：平均误差 ≤ 0.2 % 为好，≤ 0.5 % 可用（需要至少 3 条线）。测到 3 条以上线时不看
 像素残差：宽角和探测器倾斜时 rms 会很大（几个像素），线的位置仍然可以很准；少于 3 条线时才退回看环数和像素残差（≤ 1.5 px）。
@@ -73,7 +75,8 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
   αi 主要移动 qz，几乎不改 |q|。用户给了材料时，把测到的 q 和已知线逐条比较。
 - **峰的比值是晶系的线索。** 基线只检查层状和六方序列（2 % 以内），从不判定物相。
   只用可靠峰，并写出算式：写出测到的 q₂ / q₁，再和已知的比值相比（例如 bcc (200)/(110) 的 √2 ≈ 1.414）。
-- **q 是运动学值，± 只是统计误差。** Decisions 的 q 一行写出这一帧的 k·sin αi：在薄膜临界角附近或以下，折射使 q_z 偏移至多
+- **说明归属所用的 q。** 默认使用运动学 |q|，给出薄膜临界角并启用折射后使用透射通道的 q。转述每个候选的 Δq 和 Δd/d。
+  同一窗口有多个反射时列出歧义，未匹配的峰单列。αi > αc 时反射和透射通道可能给出两条环。Decisions 的 q 一行写出这一帧的 k·sin αi：在薄膜临界角附近或以下，折射使 q_z 偏移可达
   这么多（P08 公开帧 αi = 0.075° 时 0.0119 Å⁻¹，远大于峰位的统计 ±）；uncertainties 一行写出误差模型（泊松计数，或浮点、扣背景、
   镜像填补的帧用像素离散）。转述峰位或 d 时把这些系统误差和统计 ± 分开写，不要把像素离散的 σ 叫计数误差。
 - **Scherrer 尺寸是下限**：基线没有扣除仪器展宽。有标样的峰宽时，用 `crystallite_size(q_center, instrumental_fwhm=…)`
@@ -81,6 +84,10 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
 - **缺失楔边上的极大值**：真正的极大可能落在测不到的 χ 里。
   先 `ring_orientation(q_center=…)`（它设定这个环的 q 窗口），再 `get_curve azimuthal` 看 I(χ)；
   用 `set_custom_sector` 只取测到的区域。
+- **环取向。** I(χ) 是像素均值，N(χ) ∝ [I(χ) − b] sin χ。环取向默认做偏振校正，Lorentz 开关只影响探测器强度积分。
+  抄录报告里的出射角下限、实测 f（统计误差）[系统范围] 和极图拟合的 f、1 − φ。1 − φ 取决于背景 b。系统范围比较
+  出射角下限的 0.5、1 和 2 倍，背景 b 的 ±1 个拟合标准差（无拟合误差时 ±20%），以及保留或用模型填补低 |χ| 缺失楔。
+  填补量的一倍标准差由拟合参数协方差传递。f_iso 是相同覆盖下的各向同性参照，不能从 f 扣掉它作为偏差校正。
 - **笔记、日志、幻灯片**：αi、材料和实验设计常常只写在那里。GIMaP 的工具只读图像、`.poni` 和文本或日志文件；
   `.pptx` / `.odp` 要自己读（文字分别在 `ppt/slides/*.xml` 和 `content.xml` 里），截图需要多模态或问人。
 
@@ -97,12 +104,13 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
 | a broad halo | FWHM > q 的 15 % | 非晶有序；不给晶粒尺寸 |
 | shadowed | 强度低于同一 q 漫散射背景的 20 % | 这些 χ 算作没测到；扇区落在阴影里就不比较 |
 | Only …% of the orientation range | sin χ 加权覆盖 < 80 % | 不给 Hermans f，只给测到的范围 |
-| not measured (missing wedge) | 靠近 qz 的 \|χ\| 没有像素 | f 偏低，照实写 |
+| missing wedge | 靠近 qz 的 \|χ\| 没有像素 | 实测 f 只用已测角度；比较模型填补前后的 f |
 | no single preferred orientation | 两个极大高度差在 15 % 以内、相距 ≥ 30° | 不说取向 |
 | no clear preferred orientation | \|f − f_iso\| < max(0.1, 3σ_f)，最强处在 0° 或 90° 的 20° 以内（f_iso：同样测到的 \|χ\| 上随机环的 f） | 不说取向 |
-| no single preferred orientation: strongest at …, but f − f_iso … | 最强处在法线附近而 f − f_iso < 0，或在平面附近而 f − f_iso > 0 | 不说取向 |
-| tilted: maximum at χ ≈ ±… | 最强处在 20°–70° 之间（且没有高度相近的第二个极大） | 只凭极大命名，不比较 \|f − f_iso\| 和裕量：f − f_iso 小时要写出它，别当成强织构 |
-| Leaving out \|χ\| ≥ 85°, next to the sample horizon … | 去掉这些分箱后 f − f_iso 的变化同时超过 0.01 和 3σ_f；“Without those bins … another verdict” 表示结论会变 | 不排除；Decisions 的 ring orientation 一行点名这些环。出射角最小处的吸收、透射函数或阴影没有校正：先看 ±90° 附近的 I(χ)，再把 f 当织构 |
+| no single preferred orientation: the maximum at … and the measured moment disagree | 最强处在法线附近而 f − f_iso < 0，或在平面附近而 f − f_iso > 0 | 不说取向 |
+| tilted: maximum at χ ≈ ±… | 最强处在 20°–70° 之间（且没有高度相近的第二个极大） | 只凭极大命名，不比较 \|f − f_iso\| 和裕量：f − f_iso 只作覆盖诊断，同时报告实测 f、统计误差和系统变化范围 |
+| 出射角下限 | 默认 αf < 2αc（已知薄膜临界角）或 αf < 2αi，用户可更改 | 在逐像素分箱前排除样品地平线附近的散射；吸收、透射和遮挡可影响该区 |
+| pole fit … not determined | χ²_red > 5、自由 φ 达边界、FWHM > 100° 或未收敛等 | 写明原因和实测 f；拟合给出的数值只作诊断 |
 | mainly in-plane / out-of-plane | 两个扇区之比 ≥ 2 | — |
 | its shape could not be fitted | 高斯拟合失败，但信号 ≥ 2 × min_snr（默认 6σ） | 不算可靠峰；看图像上这个 q（模块缝隙、探测器边缘、重叠） |
 | `at_edge`（报告和 GUI 显示 “at the end of the data: check”） | 峰在 q 范围末端 1.5 个峰宽以内 | 不算可靠峰：不选去算环和尺寸，也不进序列提示（Decisions 的 rings analysed 写 “not analysed: … (at the end of the data)”）；仍在峰表里，形状、位置和宽度可能被截断，要用它就自己核对 |
@@ -163,7 +171,7 @@ python tools/gimap_agent.py call <图像> steps.json   # 按顺序执行 [{"tool
   - 先用 `open_frame(path, notes, out_dir)` 打开帧，然后可以连续调用所有工具。
   - `run_standard_pipeline` 的参数：
     - 和命令行同名的：`calibration`、`standard`、`energy_kev`、`incidence_deg`、`pixel_size_um`、`frame`、`rings`、
-      `recalibrate`、`technique`；
+      `recalibrate`、`technique`、`keep_incidence`、`yoneda_critical_deg`；
     - 和命令行不同的：`sum_frames`（对应 `--sum`）、`fit`（对应 `--no-fit`）、`out_dir`；
     - 没有 notes 参数，笔记来自 `open_frame`。
   - 同一会话里用 `technique=X` 跑过一次后，之后不指定 technique 的运行也沿用 X。

@@ -33,7 +33,6 @@ from src.gimap.features.fitting.application import ManageFittingModelParameters
 from dataclasses import replace
 
 from src.gimap.features.fitting.application.single_fit import (
-    FAMILIES,
     FitModel,
     evaluate,
     from_manual,
@@ -134,9 +133,9 @@ def _same_model(read: FitModel, model: FitModel) -> None:
         assert (got.free, got.lower, got.upper) == (expected.free, expected.lower, expected.upper), path
 
 
-@pytest.mark.parametrize("family", sorted(FAMILIES))
+@pytest.mark.parametrize("family", sorted(LEGACY_LAWS))
 def test_every_component_holds_the_defaults_of_a_new_component_of_each_family(family: str) -> None:
-    """Choosing another type on a component shows the domain's defaults of that family, valid as they are."""
+    """Each family representable in the legacy store has the same defaults as a new component."""
     fitting = _template()["fitting"]
     fresh = FitModel((new_component(family),))
     expected = to_manual(fresh).components[0]
@@ -151,7 +150,7 @@ def test_every_component_holds_the_defaults_of_a_new_component_of_each_family(fa
     assert ConstraintSet.defaults().validate_components([{"type": family, "params": block}]) == []
 
 
-@pytest.mark.parametrize("family", sorted(FAMILIES))
+@pytest.mark.parametrize("family", sorted(LEGACY_LAWS))
 def test_the_store_and_the_domain_draw_the_same_finite_curve(family: str) -> None:
     """The store's manual model on fine rules of its own formulas is the domain's model with the store's sizes.
     (On its default rules it is not: 25 radii and 24 orientations alias at large q, Physics and Methods 9.3.)"""

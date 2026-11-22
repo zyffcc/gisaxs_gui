@@ -4,15 +4,14 @@ halves of a curve as the fits take them) and ``read_curve``."""
 
 from __future__ import annotations
 
-from src.gimap.shared.version import SOFTWARE
-
 import json
 import time
 from pathlib import Path
 
 import numpy as np
 
-
+from src.gimap.shared.reproduction import file_reference, replay_header
+from src.gimap.shared.version import SOFTWARE
 from ...application.workflow_v5 import FROM_REQUEST, q_unit_of_file, validate_options
 from ...application import curve_intake
 from .curve_units import file_q_unit
@@ -132,7 +131,7 @@ def run_workflow_job(payload, report, is_cancelled):
     )
     from .posterior_job import fit_and_write
 
-    records, all_rows = [], []
+    records, all_rows, fit_records = [], [], []
     for index, source in enumerate(sources):
         if is_cancelled():
             raise RuntimeError("Prediction cancelled")
@@ -149,9 +148,11 @@ def run_workflow_job(payload, report, is_cancelled):
                 if source
                 else (payload["q"], payload["intensity"], payload.get("sigma"), 0)
             )
+            source_ref = file_reference(source) if source else None
             sides = prepare_sides(q, y, sigma, file_options)
             for item in sides:
                 item["curve_notes"] = side_notes(item, unit, unreadable)
+                item["source_reference"] = source_ref
             metadata = payload.get("observation_metadata", {}) if source is None else {}
             counts = None
             if metadata.get("source") == "native_cbf_columns" and "valid_pixel_counts" in metadata:
@@ -167,7 +168,12 @@ def run_workflow_job(payload, report, is_cancelled):
                     item["sigma_estimated"] = True
             rows = []
             for item in sides:
-                side_rows = fit_and_write(directory / item["side"], item, file_options, report, is_cancelled)
+                side_folder = directory / item["side"]
+                side_rows = fit_and_write(side_folder, item, file_options, report, is_cancelled)
+                side_record = side_folder / "solutions.json"
+                if side_record.is_file():
+                    fit_records.append({"record_file": {**file_reference(side_record),
+                                                        "path": side_record.relative_to(output).as_posix()}})
                 for row in side_rows:
                     row.update(curve_notes=item["curve_notes"], sigma_source=SIGMA_SOURCES[item.get("sigma_level") is not None],
                                sigma_relative=item.get("sigma_level"))
@@ -223,6 +229,8 @@ def run_workflow_job(payload, report, is_cancelled):
         exit_code=0 if all_rows else 1,
         q_units=units,
     )
+    if fit_records:
+        summary["reproduction"] = {**replay_header("batch", {}), "records": fit_records}
     (output / "fitting_run_summary.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8"
     )

@@ -18,6 +18,9 @@ When the row is full the newest notice keeps its whole text; of the older ones, 
 the tooltip), or goes when not even that fits — a row above would lie over the plot's axis again. Only an
 error never goes: it is shortened over the end of the status line, and one that does not fit even so starts
 a row above. A status line that says what the newest notice says is no loss: the older ones may lie over it.
+A notice shown before the status line said what it says now is older than that line: when the line is an error
+or a warning, the notice is shortened or goes, like any older notice, rather than cover it (a new red error line
+is never hidden by an old notice).
 Without ``band`` the row looks at the parent's own status line (a page that shows notices itself); the
 notices of a window and of a page in it keep off each other, whoever came first keeping the corner.
 
@@ -32,11 +35,13 @@ notices with a button (Undo, Open Folder, Details) stay.
 
 from __future__ import annotations
 
+import time
 from typing import Callable, Iterable, Optional
 
 from PyQt5.QtCore import QEvent, QObject, QPoint, QRect, Qt, QTimer
 from PyQt5.QtWidgets import QHBoxLayout, QLabel, QPushButton, QToolButton, QWidget
 
+from ..i18n import FormattedText, language_changed, tr, translate
 from .toast_band import BandContent, band_content
 
 LEVELS = ("info", "ok", "warning", "error")
@@ -67,29 +72,41 @@ def default_timeout(level: str) -> int:
     return 0 if level == "error" else WARNING_TIMEOUT_MS if level == "warning" else DEFAULT_TIMEOUT_MS
 
 
+def _in_current_language(text):
+    if callable(text):
+        return text
+    if isinstance(text, FormattedText):
+        return text.current
+    original = translate(text, "en") or text
+    return lambda: tr(original)
+
+
 class Toast(QWidget):
     def __init__(
         self,
         parent: QWidget,
-        text: str,
+        text: str | Callable[[], str],
         *,
         level: str = "info",
         action: Optional[tuple[str, Callable[[], None]]] = None,
         timeout_ms: Optional[int] = None,
+        refresh: Optional[Callable[[], str]] = None,
     ):
         """``timeout_ms``: ``None`` for the level's default (``default_timeout``), 0 to stay until closed."""
-        from ..i18n import tr
-
         super().__init__(parent)
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.setProperty("gimapToast", True)
         self.setProperty("level", level if level in LEVELS else "info")
         self.setFocusPolicy(Qt.NoFocus)
+        self.shown_at = time.monotonic()
+        """When the notice appeared: one older than the status line's text keeps off it (``_Stack.layout``)."""
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 4, 6, 4)
         layout.setSpacing(8)
-        self._text = tr(text)
+        self._message = refresh or _in_current_language(text)
+        self._action_title = _in_current_language(action[0]) if action else None
+        self._text = self._message()
         self.label = QLabel(self._text, self)
         self.label.setWordWrap(True)
         self.label.setProperty("gimapToastText", True)
@@ -119,6 +136,7 @@ class Toast(QWidget):
         close.clicked.connect(self.close)
         layout.addWidget(close)
         self.close_button = close
+        language_changed().connect(self._refresh_language)
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self.close)
@@ -130,6 +148,17 @@ class Toast(QWidget):
     def text(self) -> str:
         """The whole text (also while the notice shows it shortened)."""
         return self._text
+
+    def _refresh_language(self, _language):
+        self._text = self._message()
+        metrics = self.label.fontMetrics()
+        self.preferred_text_width = max(metrics.horizontalAdvance(line) for line in self._text.split("\n")) + 4
+        self.close_button.setToolTip(tr("Close"))
+        if self.action_button is not None:
+            self.action_button.setText(self._action_title())
+        stack = _stacks.get(id(self.parentWidget()))
+        if stack is not None:
+            stack.layout()
 
     def _beside(self) -> int:
         """The width of what stands beside the text: the margins and the buttons."""
@@ -209,6 +238,9 @@ class _Stack(QObject):
         parent's own (a page that shows notices itself keeps them off its own progress bar and Cancel)."""
         self._laid: Optional[tuple] = None
         """The bounds of the row the toasts were laid out in (``_bounds``)."""
+        self._said: Optional[str] = None
+        self._said_at = self._laid_said = float("-inf")
+        """The status line's text and when it last changed (a notice from before keeps off it)."""
         self._look = QTimer(self)
         self._look.setInterval(LOOK_MS)
         self._look.timeout.connect(self._look_again)
@@ -260,6 +292,9 @@ class _Stack(QObject):
             else:  # (above the band the status text is not under the row)
                 return left, left, edge, found.controls_top - SPACING
         said = " ".join(found.text.split())
+        if said != self._said:  # (the first look only notes the text: it is not newer than the notices)
+            changed = self._said is not None and bool(said) and found.level in ("error", "warning")
+            self._said, self._said_at = said, time.monotonic() if changed else float("-inf")
         if found.text_end is not None and not (self.toasts and said == " ".join(self.toasts[-1].text().split())):
             # (a status line that says what the newest notice says is no loss under the notices)
             text_end = max(left, -(-found.text_end // TEXT_STEP) * TEXT_STEP + SPACING)
@@ -281,7 +316,7 @@ class _Stack(QObject):
         text grew, the sidebar was collapsed)."""
         if not self.toasts:
             self._look.stop()
-        elif self.parent_widget.isVisible() and self._bounds() != self._laid:
+        elif self.parent_widget.isVisible() and (self._bounds() != self._laid or self._said_at != self._laid_said):
             self.layout()
 
     def layout(self) -> None:
@@ -292,6 +327,7 @@ class _Stack(QObject):
         shortened to its shortest over the end of the status text, else it starts a row above. A notice is
         shortened only as far as the errors older than it still find room at their shortest."""
         left, keep_off, edge, bottom = self._laid = self._bounds()
+        self._laid_said = self._said_at
         available = max(MIN_ROW, edge - left)
         right, row_height = edge, 0
         crowded_out = []
@@ -303,7 +339,8 @@ class _Stack(QObject):
                            if older.property("level") == "error")
             room = right - keep_off - reserved
             error = toast.property("level") == "error"
-            if number and width > room:
+            stale = not error and toast.shown_at < self._said_at  # (older than the status line's text)
+            if (number or stale) and width > room:
                 if _plain(toast):
                     crowded_out.append(toast)
                     continue
@@ -346,15 +383,16 @@ def _stack(parent: QWidget) -> _Stack:
 
 def show_toast(
     parent: QWidget,
-    text: str,
+    text: str | Callable[[], str],
     *,
     level: str = "info",
     action: Optional[tuple[str, Callable[[], None]]] = None,
     timeout_ms: Optional[int] = None,
+    refresh: Optional[Callable[[], str]] = None,
 ) -> Toast:
     """``timeout_ms``: ``None`` — until closed for an error, 10 s for a warning, 5 s otherwise; 0 — until closed."""
     stack = _stack(parent)
-    toast = Toast(parent, text, level=level, action=action, timeout_ms=timeout_ms)
+    toast = Toast(parent, text, level=level, action=action, timeout_ms=timeout_ms, refresh=refresh)
     toast.show()
     stack.add(toast)
     return toast

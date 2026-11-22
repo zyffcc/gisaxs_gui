@@ -28,12 +28,16 @@ from PyQt5.QtCore import QSignalBlocker, QTimer
 from PyQt5.QtWidgets import QDialog, QFileDialog
 
 from src.gimap.app.presentation.components import show_toast
-from src.gimap.app.presentation.components.detector_view import display_array, display_levels
+from src.gimap.app.presentation.components.detector_view import display_image, display_levels
 from src.gimap.app.presentation.components.levels import to_intensity
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.numbers import applied_angle, format_number
 
 from ...application import (
     AUTO,
+    NO_GEOMETRY,
+    TECHNIQUE_NAMES,
+    batch_geometry_lines,
     FIT_PEAKS,
     GISAXS,
     SCALE_SCREEN,
@@ -53,7 +57,7 @@ from ...application import (
     source_name,
 )
 from ..batch_dialog import BatchExportDialog
-from ..batch_texts import made_of_text, try_failed_text
+from ..batch_texts import made_of_text, model_parameters_text, spacing_text, try_failed_text
 from ..source_texts import warning_texts
 from ..texts import curve_title, message_text
 
@@ -90,6 +94,7 @@ class BatchExportMixin:
         choices, destination, subfolder, beside, carried = self._batch_folder(stem)
         subfolder = subfolder or for_fitting  # a send: always its own folder ``<name>_fitting``, beside any export
         frames_text, sum_size, source_notes = self._batch_frames(requests)
+        geometry_notes, no_geometry = self._batch_geometry(files)
         analysis, first = model.state.analysis, requests[0]
         targets = peak_targets(analysis) if analysis is not None else []
         said, set_pin = getattr(model, "series_cut_text", None), getattr(model, "set_pin_series_cuts", None)
@@ -106,7 +111,8 @@ class BatchExportMixin:
             model_available=model.model_fitter is not None, try_fit=self.try_batch_fit,
             speeds=self.batch_speed_options(len(requests)), screen_scale=self.batch_display_text(),
             halves=model.fit_side,  # the halves of the Cuts step (both halves on |qy|: those of the last batch)
-            frames_text=frames_text, sum_size=sum_size, notes=[*notes, *source_notes],
+            frames_text=frames_text, sum_size=sum_size, notes=[*notes, *source_notes, *geometry_notes],
+            no_geometry=no_geometry,
             cut_text=self._batch_cut_text if said is not None and self._batch_cut_text() else None,
             pin_cuts=None if pinned is None else bool(pinned), set_pin_cuts=set_pin,
             cost=self._batch_cost, beside=beside, carried=carried,
@@ -286,13 +292,13 @@ class BatchExportMixin:
         if analysis is None:
             return None
         if context == "detector":
-            shown = display_array(analysis.data, analysis.valid, log)
+            sample = display_image(analysis.data, analysis.valid, log)[1]
         else:
             rsm = analysis.reduction.reciprocal_space_map if analysis.reduction is not None else None
             if rsm is None:
                 return None
-            shown = display_array(rsm.image, None, log)
-        levels = display_levels(shown)
+            sample = display_image(rsm.image, None, log)[1]
+        levels = display_levels(sample)  # in log, from the positive values (``display_image``)
         return None if levels is None else to_intensity(levels, log)
 
     def batch_display_text(self) -> str:
@@ -329,7 +335,7 @@ class BatchExportMixin:
             self._batch_announced = True
             show_toast(
                 self.window(),
-                tr("{count} frames listed: set up one of them (geometry, mask, cuts), then Batch Export does them all.").format(count=frames),
+                trf("{count} frames listed: set up one of them (geometry, mask, cuts), then Batch Export does them all.", count=frames),
                 level="info", action=(tr("Batch Export…"), lambda: self.batch_export_dialog()),
             )
 
@@ -345,13 +351,36 @@ class BatchExportMixin:
             return []
         return [(curve.key, curve_title(curve.title)) for curve in analysis.reduction.curves if not curve.is_empty]
 
+    def _batch_geometry(self, files) -> tuple[list[str], bool]:
+        """What the dialog says about the geometry of each folder of frames, and whether none can have one."""
+        analysis = self.view_model.state.analysis
+        source = self._geometry_source_text(analysis) if analysis is not None and analysis.geometry is not None else None
+        lines, possible = batch_geometry_lines(files, self.view_model.current_path, source,
+                                               have_profiles=bool(self.view_model.profile_names()))
+        notes = [trf(template, **values) for template, values in lines]
+        if not possible:
+            notes.append(tr(NO_GEOMETRY))
+        return notes, not possible
+
+    def _geometry_source_text(self, analysis) -> str:
+        resolution = analysis.resolution
+        name = resolution.profile.name if resolution.profile is not None else ""
+        return {"chosen": trf("profile “{name}”", name=name), "matched": trf("profile “{name}” (matched)", name=name),
+                "file": trf("{name} beside the frame", name=name)}.get(resolution.how, tr("geometry in use"))
+
     def settings_summary(self) -> str:
-        """The set-up in one line: mode, profile, αi, cuts, masks, corrections."""
+        """The set-up in one line: mode, the geometry of the frame on screen, αi, cuts, masks, corrections."""
         state = self.view_model.state
-        settings = self.view_model.current_settings()
-        mode = {AUTO: tr("GISAXS or GIWAXS by angle")}.get(state.mode, state.mode.upper())
+        mode = {AUTO: tr("technique by angle (transmission for a calibrant)")}.get(
+            state.mode, TECHNIQUE_NAMES.get(state.mode, state.mode.upper()))
         parts = [mode]
-        parts.append(tr("profile “{name}”").format(name=settings.profile_name) if settings.profile_name else tr("geometry matched automatically"))
+        analysis = state.analysis
+        if analysis is not None and analysis.geometry is not None:
+            parts.append(self._geometry_source_text(analysis))
+        else:
+            parts.append(tr("no geometry"))
+        if state.sample_roll_deg is not None:
+            parts.append(f"ψ {applied_angle(state.sample_roll_deg, state.sample_roll_measurement)}°")
         if state.incidence_deg is not None:
             parts.append(f"αi {state.incidence_deg:g}°")
         regions = len(state.giwaxs.regions)
@@ -364,8 +393,13 @@ class BatchExportMixin:
         if corrections.mirror_fill:
             parts.append(tr("mirror filling"))
         if state.mode != GISAXS and (corrections.solid_angle or corrections.polarization is not None
-                                     or corrections.film_thickness_nm is not None):
+                                     or corrections.film_thickness_nm is not None or corrections.film_delta is not None
+                                     or corrections.film_cif_path or corrections.lorentz):
             parts.append(tr("intensity corrections"))
+        if corrections.dark_path:
+            parts.append(trf("dark {name}", name=Path(corrections.dark_path).name))
+        if not corrections.normalisation.is_identity:
+            parts.append(tr("normalised"))
         if corrections.critical_angle_deg:
             parts.append(tr("refraction αc {value}°").format(value=f"{corrections.critical_angle_deg:g}"))
         if corrections.background_path:
@@ -434,6 +468,7 @@ class BatchExportMixin:
     def _sync_settings_widgets(self) -> None:
         """Every control shows the state again (after a settings file, a project or Undo/Redo was applied)."""
         state = self.view_model.state
+        self._sync_sample_roll_widgets()
         corrections, giwaxs = state.corrections, state.giwaxs
         self._refresh_profiles()
         values = [
@@ -450,7 +485,6 @@ class BatchExportMixin:
             (self.bad_pixels_check, corrections.bad_pixels), (self.mirror_fill_check, corrections.mirror_fill),
             (self.minimum_check, corrections.minimum is not None), (self.maximum_check, corrections.maximum is not None),
             (self.solid_angle_check, corrections.solid_angle), (self.polarization_check, corrections.polarization is not None),
-            (self.film_check, corrections.film_thickness_nm is not None and corrections.attenuation_length_um is not None),
             (self.refraction_check, bool(corrections.critical_angle_deg)),
             (self.sector_check, giwaxs.sector is not None), (self.box_check, giwaxs.box is not None),
         ]
@@ -459,8 +493,6 @@ class BatchExportMixin:
                 check.setChecked(bool(value))
         for spin, value in ((self.minimum_spin, corrections.minimum), (self.maximum_spin, corrections.maximum),
                             (self.polarization_spin, corrections.polarization),
-                            (self.film_thickness_spin, corrections.film_thickness_nm),
-                            (self.attenuation_spin, corrections.attenuation_length_um),
                             (self.critical_angle_spin, corrections.critical_angle_deg)):
             if value is not None:
                 with QSignalBlocker(spin):
@@ -477,9 +509,7 @@ class BatchExportMixin:
                 with QSignalBlocker(spin):
                     spin.setValue(value)
         self.polarization_spin.setEnabled(corrections.polarization is not None)
-        film = corrections.film_thickness_nm is not None and corrections.attenuation_length_um is not None
-        self.film_thickness_spin.setEnabled(film)
-        self.attenuation_spin.setEnabled(film)
+        self.film_controls.restore(corrections)
         self.critical_angle_spin.setEnabled(bool(corrections.critical_angle_deg))
         self.sector_grid.setEnabled(giwaxs.sector is not None)
         self.box_grid.setEnabled(giwaxs.box is not None)
@@ -490,6 +520,7 @@ class BatchExportMixin:
         self.background_label.setText(Path(background).name if background else tr("No background"))
         self.background_label.setToolTip(background or "")
         self._refresh_mask_list()
+        self._sync_normalisation_widgets()  # the dark frame, the normalisation, the Lorentz factor
         # αi now comes from this set-up, not from the last session: no "from your last session" notice, and
         # the field's marker, tooltip and Back to Profile follow the value even when no frame is analysed.
         self._incidence_notice_pending = False
@@ -536,23 +567,23 @@ def fit_summary(result, choices: BatchChoices) -> tuple[str, str]:
                 ok = False
                 lines.append(tr("{name}: not fitted — {why}").format(name=target.name, why=tr(fit.message)))
                 continue
-            lines.append(tr("{name}: q = {q} ± {dq} Å⁻¹ (d = {d} Å), FWHM {w} Å⁻¹, area {a}, χ²ᵣ {chi}").format(
-                name=target.name, q=f"{fit.center:.4f}", dq=f"{fit.center_err:.1g}",
-                d=f"{2 * math.pi / fit.center:.3f}", w=f"{fit.fwhm:.4f}", a=f"{fit.area:.3g}", chi=f"{fit.chi2_red:.2f}",
+            lines.append(trf(
+                "{name}: q = {q} Å⁻¹ (d = {d} Å), FWHM {w} Å⁻¹, area {a}, χ²ᵣ {chi}",
+                name=target.name, q=format_number(fit.center, fit.center_err),
+                d=spacing_text(2 * math.pi / fit.center, fit.center, fit.center_err),
+                w=format_number(fit.fwhm, fit.fwhm_err), a=format_number(fit.area, fit.area_err),
+                chi=format_number(fit.chi2_red),
             ))
         return "\n".join(lines), "ok" if ok else "warning"
     if not result:
         return tr("No solution."), "warning"
     best = result[0]
-    parts = []
-    for component in best.get("components") or ():
-        params = component.get("params") or {}
-        parts.append(", ".join(f"{key} = {float(value):.3g}" for key, value in params.items()
-                               if isinstance(value, (int, float)) and key in ("R", "h", "D", "sigma_R", "pdi")))
-    chance = best.get("probability")
-    text = tr("Most probable: {model} (p = {p}), {params} nm, χ²ᵣ = {chi}").format(  # χ²ᵣ of Predict parameters, over its fitted points
+    chance = best.get("bic_weight", best.get("probability"))
+    template = ("{model} (BIC weight {p}), {params}, χ²ᵣ = {chi}" if "bic_weight" in best else
+                "Most probable: {model} (p = {p}), {params}, χ²ᵣ = {chi}")
+    text = tr(template).format(  # χ²ᵣ of Predict parameters, over its fitted points
         model=model_name(best), p="—" if chance is None else f"{float(chance):.2f}",
-        params="; ".join(part for part in parts if part), chi=f"{float(best.get('best_chi2_weighted', math.nan)):.3g}",
+        params=model_parameters_text(best), chi=format_number(best.get("best_chi2_weighted")),
     )
     made_of = made_of_text(best)  # the halves and the points it was fitted on
     return (f"{text}\n{made_of}" if made_of else text), "ok"

@@ -69,6 +69,8 @@ def build(prefix: Path, output: Path) -> Path:
             target = application / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / name, target)
+        commit = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
+        (application / 'src/gimap/shared/revision.json').write_text(json.dumps({'commit': commit}) + '\n')
         # Test the files that will actually ship, where omitted optional workspaces are absent.
         check_home = Path(temporary) / 'check-home'
         check_home.mkdir()
@@ -92,7 +94,7 @@ def build(prefix: Path, output: Path) -> Path:
             subprocess.run([str(prefix / 'bin/python'), '-m', 'pip', 'freeze'], stdout=stream, check=True)
         (package / 'BUILD.json').write_text(json.dumps({
             'software_version': __version__, 'architecture': arch, 'macos_build': platform.mac_ver()[0],
-            'commit': subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD']).decode().strip(),
+            'commit': commit,
             'runtime_sha256': digest, 'files': len(names),
         }, indent=2) + '\n')
         # ditto preserves the executable bit of the double-click launcher and Unicode file names.

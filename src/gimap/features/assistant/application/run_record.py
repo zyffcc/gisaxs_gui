@@ -43,6 +43,25 @@ def profile_source(actor: str, origin: str, path: Optional[str] = None) -> str:
     return f"{text} [{path}]" if path and str(path) not in text else text
 
 
+def file_geometry(path: str, info: dict, pixel_um: Optional[float]) -> dict:
+    """The inspected file in the calibration record format used throughout a batch."""
+    if info.get("kind") == "GIMaP calibration":
+        return {key: value for key, value in info.items() if key != "kind"}
+    return {
+        "distance_mm": info["distance_mm"],
+        "beam_center_px": [info["beam_center_x_px"], info["beam_center_y_px"]],
+        "wavelength_angstrom": info.get("wavelength_angstrom"),
+        "energy_kev": info.get("energy_kev"),
+        "pixel_size_um": [pixel_um, pixel_um] if pixel_um else None,
+        "source_image": path,
+        "shape": None,
+        "from_file": True,
+        "detector_tilt": info.get("detector_tilt"),
+        "sample_roll_deg": info.get("sample_roll_deg", 0.0),
+        "sample_roll_measurement": info.get("sample_roll_measurement"),
+    }
+
+
 def exact_calibration(calibration: Optional[dict], used: Optional[dict]) -> Optional[dict]:
     """``calibration`` (a saved file as ``inspect_file`` answered: four significant digits) with the distance, centre,
     wavelength and tilt as they were applied (``used``: ``RunResults.geometry_used``), when both are the same
@@ -60,6 +79,9 @@ def exact_calibration(calibration: Optional[dict], used: Optional[dict]) -> Opti
         exact["beam_center_px"] = centre
     if calibration.get("detector_tilt") and used.get("detector_tilt"):
         exact["detector_tilt"] = dict(used["detector_tilt"])
+    if "sample_roll_deg" in used:
+        exact["sample_roll_deg"] = used["sample_roll_deg"]
+        exact["sample_roll_measurement"] = used.get("sample_roll_measurement")
     return exact
 
 
@@ -73,12 +95,18 @@ def mask_record(record: Optional[dict], mask_path: Optional[str] = None) -> dict
     record = record or {}
     corrections = record.get("corrections") or {}
     shapes = corrections.get("mask_shapes") or []
-    path = mask_path or corrections.get("mask_path")
+    sources = corrections.get("mask_sources") or []
+    path = mask_path or corrections.get("mask_path") or next(iter(sources), None)
     image = bool(corrections.get("mask_path"))
+    if shapes and (image or any(edit.get("kind") not in ("rectangle", "polygon")
+                                or edit.get("mode") == "include" for edit in shapes)):
+        kind = f"user mask with {len(shapes) + int(image)} ordered edit(s)"
+    else:
+        kind = MASK_IMAGE if image else (MASK_SHAPES.format(count=len(shapes)) if shapes else None)
     return {
         "applied": bool(image or shapes),
         "file": _existing(path) if (image or shapes) else None,
-        "kind": MASK_IMAGE if image else (MASK_SHAPES.format(count=len(shapes)) if shapes else None),
+        "kind": kind,
         "masked_pixels": record.get("drawn_mask_pixels"),
         "bad_pixels_left_out": record.get("bad_pixels_left_out"),
     }
@@ -100,6 +128,7 @@ def input_files(report: dict, record: Optional[dict]) -> dict:
         "frame": [file_record(path) for path in seen],
         "calibration": _existing((report.get("calibration") or {}).get("source_image")),
         "mask": _existing(corrections.get("mask_path")),
+        "mask_sources": [file_record(source) for source in corrections.get("mask_sources") or ()],
         "background": _existing(corrections.get("background_path")),
         "flat_field": _existing(corrections.get("flat_field_path")),
     }
@@ -130,7 +159,9 @@ def mask_lines(mask: dict) -> list[str]:
     if mask.get("applied"):
         pixels = "" if mask.get("masked_pixels") is None else f"; {mask['masked_pixels']} pixels masked"
         digest = f"; SHA-256 {file['sha256']}" if file.get("sha256") else ""
-        lines = [f"- mask applied: `{file.get('path') or file.get('file')}` ({mask.get('kind')}{pixels}{digest})"]
+        path = file.get("path") or file.get("file")
+        label = f"`{path}`" if path else "Analyze user mask"
+        lines = [f"- mask applied: {label} ({mask.get('kind')}{pixels}{digest})"]
     else:
         lines = ["- mask applied: none (no mask file was given)"]
     bad = mask.get("bad_pixels_left_out")

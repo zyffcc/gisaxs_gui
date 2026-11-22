@@ -13,9 +13,10 @@ from matplotlib.patches import Ellipse
 
 from PyQt5.QtCore import QSignalBlocker, QTimer
 
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import set_role
 from src.gimap.app.presentation.theme.figures import restyle_figure
+from src.gimap.shared.numbers import format_number
 
 from ...application import (
     CalibrationCandidate,
@@ -23,6 +24,8 @@ from ...application import (
 
 
 from ..pixel_coordinates import fitted_center, image_extent, image_limits, shown_center
+from ..residual_text import rms_text, rms_tip, rms_title
+from ..result_numbers import geometry_text
 from ..preview_style import (
     CENTER_COLOR,
     DETECTED_RING_COLOR,
@@ -54,7 +57,7 @@ class ResultPreviewMixin:
             max(titles[0::2])
             + metrics.horizontalAdvance("10000.000 mm")  # distance, the widest left value
             + max(titles[1::2])
-            + metrics.horizontalAdvance("10000.000 px")
+            + max(metrics.horizontalAdvance("10000.000 px"), self.result_rotation.sizeHint().width())
             + 3 * self.resultForm.horizontalSpacing()
             + form.left() + form.right() + group.left() + group.right()
             + 12  # the group box frame
@@ -83,7 +86,7 @@ class ResultPreviewMixin:
         if two_columns and (initial or changed or current < needed):
             solution = needed
         elif not two_columns and (initial or changed):
-            solution = min(max(int(total * 0.36), 260), 360)
+            solution = min(max(int(total * 0.40), 190), 360)
         else:
             return
         self.results_splitter.setSizes([solution, max(1, total - solution)])
@@ -97,11 +100,25 @@ class ResultPreviewMixin:
         """
         try:
             self._show_overlay_legend()
+            if self.image and self.image.pixel_size_x_m and self.image.pixel_size_y_m and not self.detector_combo.currentData():
+                self._show_file_pixel_size(self.image)
+            if self.result is not None:
+                candidate = self.result.selected_candidate
+                if self.stage_label.text() == getattr(self, "_fit_status", None):
+                    self._show_fit_status()
+                self._show_uncertainty(candidate)
+                self._show_tilt(candidate)
+                self._show_rms(candidate)
+                for row, other in enumerate(self.result.candidates):
+                    item = self.candidate_table.item(row, 4)
+                    if item is not None:
+                        item.setToolTip(rms_title(other) + " " + rms_tip(other))
             if getattr(self, "_shown_warnings", None):
                 self._show_warnings(self._shown_warnings)
         except RuntimeError:  # the dialog is being destroyed
             return
         QTimer.singleShot(0, self._refit_results)
+        QTimer.singleShot(0, self._fit_candidate_columns)
 
     def _refit_results(self) -> None:
         self._arrange_result_form()
@@ -132,18 +149,14 @@ class ResultPreviewMixin:
     def _show_candidate(self, candidate: CalibrationCandidate) -> None:
         # The centre in the pixels of Analyze and of the saved profile (see ``pixel_coordinates``).
         center_x, center_y = shown_center(candidate)
-        self.result_labels["Beam center X"].setText(f"{center_x:.3f} px")
-        self.result_labels["Beam center Y"].setText(f"{center_y:.3f} px")
-        self.result_labels["Distance"].setText(f"{candidate.distance_mm:.3f} mm")
-        # 1σ of the fit (the scatter between the rings), when known
-        for key, value, unit in (("Beam center X", candidate.center_x_sigma_px, "px"),
-                                 ("Beam center Y", candidate.center_y_sigma_px, "px"),
-                                 ("Distance", candidate.distance_sigma_mm, "mm")):
-            self.result_labels[key].setToolTip("" if value is None else tr("1σ: {value} {unit} ({method})").format(
-                value=f"{value:.2g}", unit=unit, method=tr(candidate.uncertainty_method)))
-        self.result_labels["Detector rotation"].setText(f"{candidate.detector_rotation_deg:.3f}°")
+        x_text, y_text, distance = geometry_text(candidate)
+        self.result_labels["Beam center X"].setText(f"{x_text} px")
+        self.result_labels["Beam center Y"].setText(f"{y_text} px")
+        self.result_labels["Distance"].setText(f"{distance} mm")
+        self._show_uncertainty(candidate)
+        self._show_tilt(candidate)
         self.result_labels["Matched rings"].setText(str(candidate.matched_ring_count))
-        self.result_labels["RMS residual"].setText(f"{candidate.rms_residual_px:.3f} px")
+        self._show_rms(candidate)
         # Confidence and warnings are the engine's English (also in the exported record), shown translated.
         self.result_labels["Confidence"].setText(tr(candidate.confidence))
         self._show_warnings(candidate.warnings)
@@ -163,7 +176,43 @@ class ResultPreviewMixin:
         self._show_image_caption()
         self._populate_manual_rings(candidate)
         self.redraw_preview()
-        self._fit_results_height()
+        self._refit_results()
+
+    def _show_uncertainty(self, candidate: CalibrationCandidate) -> None:
+        for key, value, unit in (("Beam center X", candidate.center_x_sigma_px, "px"),
+                                 ("Beam center Y", candidate.center_y_sigma_px, "px"),
+                                 ("Distance", candidate.distance_sigma_mm, "mm")):
+            self.result_labels[key].setToolTip("" if value is None else trf("1σ: {value} {unit} ({method})",
+                value=format_number(value, value, value_only=True), unit=unit, method=tr(candidate.uncertainty_method)))
+
+    def _show_rms(self, candidate: CalibrationCandidate) -> None:
+        label = self.result_labels["RMS residual"]
+        tip = rms_tip(candidate)
+        label.setText(rms_text(candidate))
+        label.setToolTip(tip)
+        self.resultRmsTitle.setText(rms_title(candidate))
+        self.resultRmsTitle.setToolTip(tip)
+
+    def _show_tilt(self, candidate: CalibrationCandidate) -> None:
+        """The Detector tilt row: rot1, rot2 (± 1σ) when they were fitted, else why not."""
+        label = self.result_labels["Detector rotation"]
+        if not candidate.tilt_refined:
+            label.setText(trf("rot3 fixed at {rot3}°", rot3=f"{candidate.rot3_deg:g}")
+                          if candidate.rot3_deg else tr("not refined"))
+            label.setToolTip(tr("Tick Refine rot1, rot2 and calibrate again; the tilt needs three or more matched rings."))
+            return
+        rot1 = format_number(candidate.rot1_deg, candidate.rot1_sigma_deg, value_only=True)
+        rot2 = format_number(candidate.rot2_deg, candidate.rot2_sigma_deg, value_only=True)
+        angles = f"{rot1}°, {rot2}°"
+        label.setText(angles)
+        tip = trf("The fit refined rot1 and rot2 with the centre and distance. It held rot3 fixed at {rot3}°.",
+                  rot3=f"{candidate.rot3_deg:g}")
+        if candidate.rot1_sigma_deg is not None and candidate.rot2_sigma_deg is not None:
+            tip += " " + trf("1σ: {rot1}°, {rot2}° ({method}).",
+                             rot1=format_number(candidate.rot1_sigma_deg, candidate.rot1_sigma_deg, value_only=True),
+                             rot2=format_number(candidate.rot2_sigma_deg, candidate.rot2_sigma_deg, value_only=True),
+                             method=tr(candidate.tilt_uncertainty_method))
+        label.setToolTip(tip)  # (the residual with and without the tilt: the RMS row and its tooltip)
 
     def _show_warnings(self, warnings) -> None:
         """The Warning row: the engine's warnings (translated) in the warning style, why they matter as its
@@ -324,7 +373,15 @@ class ResultPreviewMixin:
                             alpha=0.62,
                         )
                     )
-                for ring in self.view_model.theoretical_ring_overlays(candidate):
+                tilted = self.view_model.tilted_ring_grid(candidate, self.image.data.shape)
+                if tilted is not None and tilted.levels:  # conic sections: drawn as contours of tan 2θ
+                    self.axes.contour(
+                        tilted.xs, tilted.ys, tilted.values, levels=list(tilted.levels),
+                        colors=[MATCHED_RING_COLOR if flag else UNMATCHED_RING_COLOR for flag in tilted.matched],
+                        linestyles=["-" if flag else "--" for flag in tilted.matched],
+                        linewidths=[1.5 if flag else 0.8 for flag in tilted.matched],
+                    )
+                for ring in (() if tilted is not None else self.view_model.theoretical_ring_overlays(candidate)):
                     ellipse_width = ring.width_px
                     ellipse_height = ring.height_px
                     if not self._ellipse_intersects_image(
@@ -379,3 +436,20 @@ class ResultPreviewMixin:
         )
         for index, q in enumerate(self.view_model.standard_q_values(key)):
             self.theory_ring_combo.addItem(f"{index + 1}: q={q:.5f} Å⁻¹", q)
+
+    def _fit_candidate_columns(self):
+        """At narrow widths the selected solution alongside the table supplies its detailed values."""
+        table = self.candidate_table
+        metrics = table.fontMetrics()
+        available = table.viewport().width()
+        widths = []
+        for col in range(table.columnCount()):
+            texts = [table.horizontalHeaderItem(col).text()]
+            texts.extend(table.item(r, col).text() for r in range(table.rowCount()) if table.item(r, col))
+            widths.append(max(metrics.horizontalAdvance(t) for t in texts) + 16)
+        needed = sum(widths)
+        for column in (2, 4, 3, 5):
+            compact = needed > available
+            table.setColumnHidden(column, compact)
+            if compact:
+                needed -= widths[column]

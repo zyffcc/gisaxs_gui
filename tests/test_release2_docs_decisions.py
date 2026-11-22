@@ -3,10 +3,8 @@
 - A source checkout is updated with ``tools/update_source.ps1``; the history of ``main`` was rewritten.
 - Geometry Calibration, the XRR Series Extractor and Analyze show the same beam centre; the files the two
   tools export keep pixel-centre indices and say so.
-- Auto Detect of the calibration standard put the wrong standard first (corrected 2026-11-15: a regression test
-  now), and a wrong estimated distance misleads the search: a known limitation, documented now and corrected
-  later. The test that reproduces it fails when it is corrected, so the texts follow. The window no longer fills the estimate with a built-in
-  distance: the rule it follows is checked here on the window itself.
+- Auto Detect identifies the public silver behenate frame even with a high distance estimate. The window's
+  distance prefill follows the image or the last applied calibration.
 - A case built on private data is not in the repository, and no document names one.
 - Fitting starts a new user with a neutral model and stores one block of values per shape.
 - The documents say whether the version running is a pre-release, as ``PRE_RELEASE`` in ``shared/version.py``
@@ -551,38 +549,18 @@ def test_xrr_and_analyze_use_the_same_nexus_header_coordinates(tmp_path: Path) -
         QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
 
-# -- Auto Detect of the standard: a known limitation --------------------------------------------------
+# -- Auto Detect of the standard and the distance estimate -------------------------------------------
 
 
-def test_the_auto_detect_limitation_is_in_the_documents() -> None:
-    limitations = " ".join(_part(_text(CHANGELOG), "### Known limitations", "### ").split())
-    section = " ".join(_part(_text(MANUAL), "## 4. Geometry and calibration").split())
-    for text in (limitations, section):
-        assert "Auto Detect" in text
-        assert "Choose the standard yourself when you know it" in text
-        assert "check that the distance is the one of your set-up" in text
-        # 0.1.0's limitation (CHANGELOG, as it was then); the manual says it was corrected.
-        assert "silver behenate" in text and "LaB₆ solution at a much shorter distance" in text
-        assert "corrected in a later version" in text
-        # The second way to a wrong solution: a wrong estimate, which somebody typed or the window took over.
-        assert "**Estimated distance**" in text and "2000 mm typed in" in text and "about 1630 mm" in text
-        assert "approximate distance of your set-up" in text and "*Optional*" in text
-        assert "the distance the image file states" in text and "the distance of the calibration applied last" in text
-        # No longer true: the window does not put the built-in 2000 mm into the field.
-        for stale in ("or 2000 mm on a new installation", "2000 mm left in the field", "with 2000 mm in it"):
-            assert stale not in text, stale
-    assert "a solution near 1830 mm came first" in limitations  # 0.1.0
-    assert "a solution near 1790 mm came first" in section and "a LaB₆ solution at 120 mm came first" in section
-    assert "Before this version, **Auto Detect** without an estimated distance put a LaB₆ solution" in section
-    assert "set a number you did not type back to 0" in limitations
-    assert "set the field to 0 (it then shows *Optional*)" in section
-    assert "with 1500 to 1800 mm typed in, the silver behenate solution came first" in section
+def test_manuals_describe_the_public_frame_and_optional_distance() -> None:
+    en = _part(_text(MANUAL), "### 4.3", "### ")
+    zh = _part(_text(MANUAL.with_name("User_Manual_zh.md")), "### 4.3", "### ")
+    for section, rings, optional in ((en, "five rings", "Optional"), (zh, "五个环", "可选")):
+        for value in (rings, "1634 mm", "2000 mm", optional):
+            assert value in section
     page = _text(CALIBRATION_PAGE)
-    assert "已知限制：Auto Detect" in page and "STANDARD_SOURCE_ALIASES" in page
-    for stale in ("Estimated distance 不是空的", "新安装时是内置默认值", "这一版同样只写进了文档"):
-        assert stale not in page, stale
-    for said in ("估计距离错了会带偏结果", "`_prefill_estimated_distance`", "`system.geometry_calibration`",
-                 "default_settings.py", "tests/test_release2_calibration_estimate.py", "内置的 2000 mm 不再出现在框里"):
+    for said in ("STANDARD_SOURCE_ALIASES", "`_prefill_estimated_distance`", "`system.geometry_calibration`",
+                 "default_settings.py", "tests/test_release2_calibration_estimate.py"):
         assert said in page, said
     # The names the documents use are the ones on the window.
     presentation = ROOT / "src" / "gimap" / "features" / "calibration" / "presentation"
@@ -610,15 +588,7 @@ def test_the_names_the_manual_gives_select_a_standard() -> None:
 
 
 def test_the_estimated_distance_is_filled_in_as_the_documents_say(tmp_path: Path) -> None:
-    """Section 9 of the manual, on the window of a new installation, with made-up frames and a made-up result.
-
-    "It is never filled with a built-in value: on a new installation it stays on *Optional*. But each time an
-    image is opened it takes the distance the image file states, or else the distance of the calibration
-    applied last, also when you had typed another value or cleared the field; with neither, a value you typed
-    stays." When this fails the rule changed: change section 4.3 of docs/User_Manual.md, the limitation and the
-    fix in CHANGELOG.md and docs/ui/workspaces/calibration.md (the rule itself is tested, case by case, in
-    tests/test_release2_calibration_estimate.py).
-    """
+    """User Manual 4.3. A file or a saved calibration supplies the distance on a new image."""
     from datetime import datetime, timezone
 
     import numpy as np
@@ -638,8 +608,8 @@ def test_the_estimated_distance_is_filled_in_as_the_documents_say(tmp_path: Path
     )
 
     section = " ".join(_part(_text(MANUAL), "## 4. Geometry and calibration").split())
-    for said in ("It is never filled with a built-in value: on a new installation it stays on *Optional*",
-                 "also when you had typed another value or cleared the field", "with neither, a value you typed stays",
+    for said in ("On a new installation the field starts at *Optional*", "replaces any typed value, including 0",
+                 "If neither source supplies a distance, a value you typed stays",
                  "a NeXus file can; the distance in a CBF or EDF header is not used"):
         assert said in section, said
     fixed = " ".join(_part(_text(CHANGELOG), "### Fixed before the release", "### ").split())
@@ -706,17 +676,8 @@ def test_the_estimated_distance_is_filled_in_as_the_documents_say(tmp_path: Path
         QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
 
-def test_auto_detect_and_a_wrong_estimate_on_the_public_image(tmp_path: Path) -> None:
-    """A public silver behenate image under a name that names no standard.
-
-    Auto Detect without an estimated distance (what a new installation has) ranks silver behenate first at the
-    right distance (until 2026-11-15 a LaB₆ solution at a much shorter distance came first: now the regression
-    test); with the standard chosen and no estimated distance the distance is right. A wrong estimate typed in
-    (2000 mm) still misleads: with the standard chosen a solution near 1790 mm comes first, with Auto Detect a
-    LaB₆ solution at about 120 mm. When that is corrected this test fails: change the limitation in
-    docs/User_Manual.md (sections 4.3 and 13) and docs/ui/workspaces/calibration.md, and turn that part of this test
-    into the regression test. What helps is checked too: an approximate distance puts the right standard first.
-    """
+def test_auto_detect_and_distance_estimates_on_the_public_image(tmp_path: Path) -> None:
+    """A neutral filename leaves the standard identification to the engine."""
     if not PUBLIC_AGBH.is_file():
         pytest.skip("the public silver behenate image is not in this checkout")
     from src.gimap.features.calibration.application import CalibrationRequest, LoadCalibrationImage, RunCalibration
@@ -728,46 +689,20 @@ def test_auto_detect_and_a_wrong_estimate_on_the_public_image(tmp_path: Path) ->
 
     manifest = json.loads(_text(PUBLIC_AGBH.parents[1] / "manifest.json"))["saxs_agbh_pyfai"]
     energy_kev = 12.398419843 / float(manifest["wavelength_angstrom"])
-    expected_mm = float(manifest["ring_distance_mm_at_stated_wavelength"])
     image_path = tmp_path / "standard_image.edf"
     shutil.copyfile(PUBLIC_AGBH, image_path)
     assert detect_standard_keys(image_path) == ()
     image = LoadCalibrationImage(LocalCalibrationImageAdapter())(image_path, None)
     run = RunCalibration(LegacyCalibrationRunnerAdapter())
 
-    chosen = run(CalibrationRequest(image=image, energy_kev=energy_kev, standard_key="agbh"), None, None)
-    best = chosen.selected_candidate
-    assert best.standard_key == "agbh" and abs(best.distance_mm - expected_mm) <= 0.03 * expected_mm
-
-    automatic = run(CalibrationRequest(image=image, energy_kev=energy_kev, standard_key="auto"), None, None)
-    first = automatic.selected_candidate
-    # Regression (corrected 2026-11-15): silver behenate first, at the distance found with the standard chosen.
-    assert first.standard_key == "agbh" and abs(first.distance_mm - best.distance_mm) < 0.5
-
-    # "With silver behenate chosen and 2000 mm typed in, a solution near 1790 mm came first."
-    misled = run(CalibrationRequest(image=image, energy_kev=energy_kev, standard_key="agbh",
-                                    estimated_distance_mm=2000.0), None, None).selected_candidate
-    assert not abs(misled.distance_mm - expected_mm) <= 0.03 * expected_mm, (
-        "an estimate of 2000 mm no longer misleads the search on this image: change the second "
-        "case of the limitation in CHANGELOG.md, docs/User_Manual.md (sections 4.3 and 13) and "
-        "docs/ui/workspaces/calibration.md"
-    )
-    assert misled.standard_key == "agbh" and round(misled.distance_mm, -1) == 1790.0
-    assert round(best.distance_mm, -1) == 1630.0  # "the real distance is about 1630 mm"
-    # "with Auto Detect and 2000 mm, a LaB₆ solution at 120 mm came first"
-    misled_auto = run(CalibrationRequest(image=image, energy_kev=energy_kev, standard_key="auto",
-                                         estimated_distance_mm=2000.0), None, None).selected_candidate
-    assert misled_auto.standard_key == "lab6" and round(misled_auto.distance_mm, -1) == 120.0, (
-        "Auto Detect with 2000 mm no longer puts LaB₆ first: change the limitation in docs/User_Manual.md "
-        "(sections 4.3 and 13) and docs/ui/workspaces/calibration.md"
-    )
-
-    # "An approximate distance helps Auto Detect too: with 1500 to 1800 mm typed in, the silver behenate
-    # solution came first on this image." The solution is the one found with the standard chosen.
-    for estimate_mm in (1500.0, 1800.0):
-        helped = run(CalibrationRequest(image=image, energy_kev=energy_kev, standard_key="auto",
-                                        estimated_distance_mm=estimate_mm), None, None).selected_candidate
-        assert helped.standard_key == "agbh" and abs(helped.distance_mm - best.distance_mm) < 0.5, estimate_mm
+    for standard, estimates in (("agbh", (None, 2000.0)), ("auto", (None, 1500.0, 1800.0, 2000.0))):
+        for estimate in estimates:
+            request = CalibrationRequest(image=image, energy_kev=energy_kev, standard_key=standard,
+                                         estimated_distance_mm=estimate)
+            best = run(request, None, None).selected_candidate
+            assert best.standard_key == "agbh", (standard, estimate)
+            assert best.matched_ring_count == 5, (standard, estimate)
+            assert best.distance_mm == pytest.approx(1634, abs=1), (standard, estimate)
 
 
 # -- what 1D Predict does with a changed model file ----------------------------------------------------

@@ -97,17 +97,62 @@ def test_the_yoneda_cut_fitting_takes_is_the_same_with_and_without_cuts_of_the_p
     assert horizontal.x[-1] == pytest.approx(0.17859417810246023, rel=1e-12)
     assert float(horizontal.intensity.sum()) == pytest.approx(121654.0, rel=1e-12)
     assert float(horizontal.sigma.sum()) == pytest.approx(3153.876296729858, rel=1e-12)
-    assert vertical.region["columns"] == (592, 603) and len(vertical.x) == 638 and int(vertical.pixels.sum()) == 7018
-    assert float(vertical.intensity.sum()) == pytest.approx(278261.0, rel=1e-12)
+    assert vertical.region["columns"][0] - geometry.beam_center_x_px >= 15
+    manual = reduce_gisaxs(data, valid, geometry, GisaxsCutSettings(vertical_column=geometry.beam_center_x_px)).curve("vertical")
+    assert manual.region["columns"] == (592, 603) and len(manual.x) == 638 and int(manual.pixels.sum()) == 7018
+    assert float(manual.intensity.sum()) == pytest.approx(278261.0, rel=1e-12)
     # … and as the band functions alone give it (the same rows, the same sampling).
     again = horizontal_cut(data, valid, geometry, center_row=607.5, half_height_px=2.5)
     assert np.array_equal(again.intensity, horizontal.intensity) and np.array_equal(again.sigma, horizontal.sigma)
     beam = vertical_cut(data, valid, geometry, center_column=geometry.beam_center_x_px, half_width_px=5.0)
-    assert np.array_equal(beam.intensity, vertical.intensity)
+    assert np.array_equal(beam.intensity, manual.intensity)
     # Where the bands lie in q, for the record of an export: the q_z and α_f of the row edges on the beam column.
     qz = horizontal.region["qz_edges"]
     assert qz[0] < qz[1] and horizontal.region["alpha_f_edges_deg"][0] == pytest.approx(alpha_f_of_qz(geometry, qz[0]))
-    assert vertical.region["qy_edges"][0] < 0 < vertical.region["qy_edges"][1]
+    assert vertical.region["qy_edges"][0] > 0 and manual.region["qy_edges"][0] < 0 < manual.region["qy_edges"][1]
+
+
+@pytest.mark.parametrize("geometry", [GEOMETRY, replace(GEOMETRY, rot3_rad=0.22),
+                                       replace(GEOMETRY, orientation=4, rot3_rad=-0.12),
+                                       GEOMETRY.with_beam_center(SHAPE[1] - 8, GEOMETRY.beam_center_y_px)])
+def test_automatic_vertical_band_clears_entire_projected_rod_and_keeps_explicit_column(geometry):
+    from src.gimap.features.analyze.application.both_cuts import cut_geometry
+
+    maps = gisaxs_maps(SHAPE, geometry)
+    step = geometry.wavevector_inv_angstrom * geometry.pixel_size_x_m / geometry.distance_m
+    # A synthetic specular ridge with a one-pixel half-width and a uniform diffuse background.
+    image = np.where(np.abs(maps.qy) < step, 10000., 2.)
+    valid = np.ones_like(image, dtype=bool)
+    auto = reduce_gisaxs(image, valid, geometry)
+    assert auto.markers["vertical_source"] == "automatic"
+    curve = auto.curve("vertical")
+    assert len(curve.x) > 3 and np.all(curve.intensity == 2)
+    left, right = curve.region["columns"]
+    assert np.min(np.abs(maps.qy[:, left:right][maps.above_horizon[:, left:right]])) > 13 * step
+    record = cut_geometry(SimpleNamespace(reduction=auto, geometry=geometry, kind="gisaxs"))
+    assert not record["band_crosses_specular"]
+    # Place the band at the ridge of an illuminated row. On a rolled detector this is away from the beam column.
+    row = 20
+    x = float(np.argmin(np.abs(maps.qy[row]))) + 0.5
+    manual = reduce_gisaxs(image, valid, geometry, GisaxsCutSettings(vertical_column=x))
+    assert manual.curve("vertical").region["center_column"] == x
+    assert manual.curve("vertical").intensity.max() > 2
+    assert cut_geometry(SimpleNamespace(reduction=manual, geometry=geometry, kind="gisaxs"))["band_crosses_specular"]
+
+
+def test_a_narrow_frame_reports_limited_clearance_and_add_handles_one_sided_q_ranges():
+    from src.gimap.features.analyze.domain.vertical_band import LIMITED_CLEARANCE
+
+    image = np.ones((SHAPE[0], 26))
+    reduction = reduce_gisaxs(image, image.astype(bool), GEOMETRY.with_beam_center(10, 190))
+    assert LIMITED_CLEARANCE in reduction.warnings
+    assert reduction.curve("vertical").region["columns"] == (16, 26)
+    for q_range in ((-0.035, -0.03), (-0.001, 0.0005), (-0.04, 0.0001), (0.05, 0.06)):
+        cut = tools.new_cut("vertical", GEOMETRY, (q_range, (0.03, 0.05)), name="Band")
+        assert q_range[0] <= cut.qy[0] < cut.qy[1] <= q_range[1]
+        assert cut.qy[0] * cut.qy[1] > 0
+    point = tools.new_cut("vertical", GEOMETRY, ((-0.01, -0.01), (0.03, 0.05)), name="One column")
+    assert point.qy[0] < -0.01 < point.qy[1] < 0
 
 
 # -- the geometry back from q ------------------------------------------------------------------------
@@ -375,7 +420,8 @@ def test_cuts_are_drawn_on_the_detector_and_the_q_map_and_drawn_by_clicks(page) 
     page.shape_layer._finish([(100.0, 60.0), (220.0, 20.0)])
     _settle(page)
     line = page.view_model.gisaxs_cuts[1]
-    assert line.start == pytest.approx(q_of_positions(GEOMETRY, 100.0, 60.0)) and line.kind == "line"
+    qy, qz = q_of_positions(GEOMETRY, 100.0, 60.0)
+    assert line.kind == "line" and line.start == pytest.approx((float(qy), float(qz)))
     colors = {item.opts["pen"].color().name() for item in page.shape_layer._outlines}
     assert {row.color for row in page._cut_rows[2:]} <= colors
 

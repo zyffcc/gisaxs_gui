@@ -29,7 +29,7 @@ from ...application.errors import (
     CalibrationCancelledError,
 )
 from ...application.ports import CancellationCheck, FrameProgress, ProgressCallback
-from ...domain import CalibrationRequest, CalibrationResult, DetectorImage
+from ...domain import CalibrationRequest, CalibrationResult, DetectorImage, calibration_poni_text
 
 
 class LocalCalibrationImageAdapter:
@@ -125,6 +125,9 @@ class JsonCalibrationStorageAdapter:
     """
 
     def save(self, result: CalibrationResult, path: str | Path) -> None:
+        if Path(path).suffix.lower() == ".poni":  # pyFAI's geometry file (Export Calibration… offers both)
+            Path(path).write_text(calibration_poni_text(result), encoding="utf-8")
+            return
         Path(path).write_text(
             json.dumps(result.to_dict(), indent=2, ensure_ascii=False),
             encoding="utf-8",
@@ -228,6 +231,9 @@ class SettingsGeometryAdapter:
                 "standard": candidate.standard_key,
                 "confidence": candidate.confidence,
                 "residual_px": candidate.rms_residual_px,
+                "rot1_deg": candidate.rot1_deg,
+                "rot2_deg": candidate.rot2_deg,
+                "rot3_deg": candidate.rot3_deg,
                 # Which frames the geometry belongs to (rows, columns), for tools that reuse it.
                 "image_shape": _image_shape(result),
                 "detector": result.detector_name or "",

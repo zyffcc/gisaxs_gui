@@ -151,12 +151,16 @@ def test_fitting_views_are_python_view_owned():
     assert "QtWidgets.QPushButton" not in factory_source
     assert len(factory_source.splitlines()) <= 40
     assert {path.name for path in views.glob("*_view.py")} == {
+        "curve_columns_view.py",
         "curve_import_view.py",
         "fit_results_view.py",
         "fit_step_view.py",
         "fit_page_view.py",
         "fit_series_view.py",
         "fit_steps_view.py",
+        "fit_uncertainty_view.py",
+        "joint_fit_view.py",
+        "posterior_check_view.py",
     }
 
 

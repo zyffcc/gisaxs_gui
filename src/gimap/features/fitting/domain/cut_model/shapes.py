@@ -9,8 +9,8 @@ so a population's scale is its forward intensity, whatever its family. Families:
 
 * ``sphere``: A = Σ_k c_k f(√(q²+Q_k²) R) e^{−iQ_k R}, f(x) = 3 (sin x − x cos x)/x³, the paths (c_k, Q_k) of the
   geometry (``geometry.Geometry.sphere_terms``); V ∝ R³.
-* ``vertical_cylinder``: cylinders standing on the substrate, A = 2 J₁(qR)/(qR) in the plane; V ∝ R² at any fixed
-  height (the height factor is common to every radius and every path, so it drops out of P̂ and C).
+* ``vertical_cylinder``: cylinders standing on the substrate, A = 2 J₁(qR)/(qR) in the plane and V ∝ R² at fixed
+  height. A manual fit with distributed heights multiplies the radial C by ``upright_height_coherence``.
 * ``cylinder``: randomly oriented cylinders of radius R and height h with independent distributions,
   A = [2 J₁(|q| R sin α)/(|q| R sin α)] · sin(|q| h cos α / 2)/(|q| h cos α / 2), V ∝ R² h, averaged over
   α on [0, π/2] with weights sin α (isotropic orientation) by composite Gauss–Legendre.
@@ -60,6 +60,27 @@ def disc_amplitude(x):
 def sinc_half(x):
     """sin(x/2)/(x/2) (1 at 0)."""
     return np.sinc(np.asarray(x, float) / (2.0 * np.pi))
+
+
+def upright_axial_amplitude(heights, coefficients, wave):
+    """Sum of the axial paths for each height and detector point, before multiplying by the cylinder volume."""
+    amplitude = 0j
+    for c, q_z in zip(coefficients, wave):
+        x = heights[:, None] * q_z
+        amplitude = amplitude + c * sinc_half(x) * np.exp(-0.5j * x)
+    return amplitude
+
+
+def upright_height_coherence(law, height, spread, geometry):
+    """|⟨G⟩|²/⟨|G|²⟩ by number, with G the axial amplitude including H. A horizontal row's scale absorbs ⟨|G|²⟩."""
+    coefficients, wave = zip(*geometry.sphere_terms())
+    q_top = max(abs(q_z) for q_z in wave)
+    panels = sizes.panel_count(q_top, sizes.extent(law, height, spread, power=2))
+    nodes, weights = sizes.nodes(law, height, spread, power=2, panels=panels)
+    heights, weights = nodes[0], weights[0]
+    axial = heights * upright_axial_amplitude(heights, coefficients, wave)[:, 0]
+    intensity = weights @ (np.abs(axial) ** 2)
+    return float(abs(weights @ axial) ** 2 / intensity) if intensity > 0 else 0.0
 
 
 def _blocks(rows: int, columns: int, per_element: int):

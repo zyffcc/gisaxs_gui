@@ -49,8 +49,9 @@ from src.gimap.shared.detector_io import frame_suffix, output_frame, write_frame
 from src.gimap.shared.signed_cut import FIT_HALVES, fit_halves
 
 from ..domain import GISAXS, PROFILES, Curve
+from ..domain.normalisation import ABSOLUTE_UNIT
 from .batch_fit import FIT_MODEL, FIT_NONE, FIT_PEAKS, MODEL_COMPONENTS, STARTS
-from .batch_tables import common_x
+from .batch_tables import batch_table_columns, common_x
 from .export_record import source_files
 from .nxcansas_export import nxcansas_name
 from .models import FrameAnalysis
@@ -227,7 +228,8 @@ def export_frame(
             ))
     if choices.fit_input:
         try:
-            written.append(export.fit_input(analysis, destination / FOLDERS["fit_input"], halves=choices.fit_halves))
+            path = export.fit_input(analysis, destination / FOLDERS["fit_input"], halves=choices.fit_halves)
+            written.extend((path, path.with_suffix(".json")))
         except ValueError:
             pass  # a frame without a usable curve: nothing to fit
     if choices.nxcansas:
@@ -285,14 +287,14 @@ class CurveTables:
 
     def __init__(self) -> None:
         self._columns: dict[str, list[tuple[str, np.ndarray, np.ndarray]]] = {}
-        self._titles: dict[str, tuple[str, str]] = {}
+        self._titles: dict[str, tuple[str, str, str]] = {}
 
     def add(self, label: str, curves: Sequence[Curve]) -> None:
         for curve in curves:
             self._columns.setdefault(curve.key, []).append(
                 (str(label), np.asarray(curve.x, dtype=float), np.asarray(curve.intensity, dtype=float))
             )
-            self._titles.setdefault(curve.key, (curve.title, curve.x_label))
+            self._titles.setdefault(curve.key, (curve.title, curve.x_label, curve.y_label))
 
     @property
     def keys(self) -> list[str]:
@@ -301,6 +303,9 @@ class CurveTables:
     def frames(self, key: str) -> int:
         return len(self._columns.get(key, ()))
 
+    def reference_columns(self, key):
+        return batch_table_columns([(x, y) for _, x, y in self._columns[key]])
+
     def write(self, writer: CurveWriter, destination: Path, stem: str, text_format: str = "csv",
               notes: Sequence[str] = ()) -> list[Path]:
         """One table per curve; ``notes``: further ``#`` lines of every table (frames that are missing, sums of
@@ -308,11 +313,14 @@ class CurveTables:
         written = []
         for key in self.keys:
             columns = self._columns[key]
-            title, x_label = self._titles[key]
+            title, x_label, y_label = self._titles[key]
             x, values, grid = common_x([(c_x, c_y) for _label, c_x, c_y in columns])
+            quantity = {f"I ({ABSOLUTE_UNIT})": f"absolute intensity ({ABSOLUTE_UNIT})",
+                        "I (relative)": "relative intensity after reference-peak scaling"}.get(
+                            y_label, "mean intensity per pixel")
             comments = [
                 f"{BATCH_TITLE} ({SOFTWARE}): {title}",
-                f"one column per frame ({len(columns)} frames, in list order); mean intensity per pixel; blank = no data",
+                f"one column per frame ({len(columns)} frames, in list order); {quantity}; blank = no data",
                 grid, *notes,
             ]
             header = [x_label, *(label for label, _x, _y in columns)]

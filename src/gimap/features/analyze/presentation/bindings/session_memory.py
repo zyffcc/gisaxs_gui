@@ -18,6 +18,7 @@ from typing import Optional
 
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.numbers import applied_angle
 
 from ...application import settings_from_record, settings_record
 
@@ -60,6 +61,22 @@ class SessionMemoryMixin:
         except Exception:
             pass
 
+    def forget_recent(self, path) -> bool:
+        """Take ``path`` off Recent (it could not be opened); ``True`` when it was there."""
+        settings = self.view_model.settings
+        if settings is None:
+            return False
+        try:
+            known = [str(value) for value in (settings.get(SECTION, RECENT_KEY, []) or []) if isinstance(value, str)]
+            kept = [item for item in known if item.casefold() != str(Path(path)).casefold()]
+            if len(kept) == len(known):
+                return False
+            settings.set(SECTION, RECENT_KEY, kept)
+            settings.save()
+        except Exception:
+            return False
+        return True
+
     def clear_recent(self) -> None:
         settings = self.view_model.settings
         if settings is not None:
@@ -84,6 +101,18 @@ class SessionMemoryMixin:
             return None
         return Path(path)
 
+    def decline_last_setup(self) -> None:
+        """A project was opened: its own set-up wins, so the last session's is not offered (and an offer shown
+        already goes)."""
+        self._setup_offered = True
+        offer = getattr(self, "_setup_offer", None)
+        self._setup_offer = None
+        if offer is not None:
+            try:
+                offer.close()
+            except RuntimeError:  # closed already
+                pass
+
     def _offer_last_setup(self) -> None:
         """Once per session, with the first frame: “use the set-up of your last session?”."""
         if self._setup_offered:
@@ -101,9 +130,12 @@ class SessionMemoryMixin:
             last = replace(last, pin_series_cuts=current.pin_series_cuts)
         if settings_record(last) == settings_record(current):
             return  # nothing would change
-        summary = _setup_summary(last)
-        show_toast(
-            self.window(), tr("Use the set-up of your last session? {summary}").format(summary=summary), level="info",
+
+        def notice():
+            return trf("Use the set-up of your last session? {summary}", summary=_setup_summary(last))
+
+        self._setup_offer = show_toast(
+            self.window(), notice(), refresh=notice, level="info",
             action=(tr("Use It"), lambda: self._read_settings(path)), timeout_ms=15000,
         )
 
@@ -114,6 +146,8 @@ def _setup_summary(settings) -> str:
         parts.append(tr("profile “{name}”").format(name=settings.profile_name))
     if settings.incidence_deg is not None:  # an αi typed for the beamtime, not the profile's
         parts.append(trf("αi {value}°", value=f"{settings.incidence_deg:g}"))
+    if settings.sample_roll_deg is not None:
+        parts.append(f"ψ {applied_angle(settings.sample_roll_deg, settings.sample_roll_measurement)}°")
     regions = len(settings.giwaxs.regions) + len(settings.gisaxs.regions)  # (GIWAXS regions, GISAXS cuts)
     if regions:
         parts.append(tr("{n} cut regions").format(n=regions))

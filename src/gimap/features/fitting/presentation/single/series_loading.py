@@ -9,6 +9,8 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
+from PyQt5.QtCore import QTimer
+
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.task_runner import TaskRunner
 
@@ -149,7 +151,7 @@ class FitSeriesLoadingMixin:
                     if stop.is_set():
                         break
                     read.append((index, load(LoadCurveRequest(Path(paths[index]),
-                                "angstrom" if frame_mode else unit))))
+                                "angstrom" if frame_mode else unit, keep_missing_sigma=True))))
             units = {} if frame_mode else read_units(paths, stated, stop)
             return result, read, units, load.loaded, errors
 
@@ -169,6 +171,7 @@ class FitSeriesLoadingMixin:
         if self._restore_listing is not None:
             data, self._restore_listing = self._restore_listing, None
             self._restore_series_choices(data)
+        QTimer.singleShot(0, self.start_watched)  # (Fit New Frames in Fitting…: Start once listed)
         if self.imported_mode() and self._read_errors:
             path, reason = next(iter(self._read_errors.items()))
             self._status(lambda: trf("{count} imported curves cannot be read: {name} — {reason}",
@@ -178,6 +181,7 @@ class FitSeriesLoadingMixin:
     def _listing_failed(self, epoch, message):
         if not self._loading_current(epoch):
             return
+        self._start_when_listed = False
         self.close_series()
         self._status(lambda: tr("Could not list the curves: {reason}").format(reason=message), "error")
         self.refresh()
@@ -192,7 +196,7 @@ class FitSeriesLoadingMixin:
         self._note_curve(index, value.q, value.observation)
         self._preview_curves[(path, unit)] = Curve.from_arrays(
             value.q, value.intensity, value.error, name=file_name(path), path=path,
-            unit=value.q_source_unit, unit_from=value.q_unit_from)
+            unit=value.q_source_unit, unit_from=value.q_unit_from, dq=value.dq)
 
     def _request_preview(self, index, key):
         if key in self._preview_pending or self._listing_busy or self._disposed:
@@ -200,7 +204,7 @@ class FitSeriesLoadingMixin:
         self._preview_pending.add(key)
         epoch, load = self._loading_epoch, self.series_curve_loader()
         version = self._path_versions.get(key[0], 0)
-        request = LoadCurveRequest(Path(key[0]), key[1])
+        request = LoadCurveRequest(Path(key[0]), key[1], keep_missing_sigma=True)
 
         def current():
             return self._loading_current(epoch) and self._path_versions.get(key[0], 0) == version

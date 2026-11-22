@@ -43,12 +43,13 @@ def q_curve(key: str, column: int, *, pixels: float = 400.0, seed: int = 1) -> C
 
 def chi_curve(q_center: float, *, seed: int = 4) -> CurveData:
     chi = np.arange(-89.5, 90.0, 1.0)
+    background = 40.0 + 400.0 * np.exp(-q_center / 0.25)  # same radial background as q_curve
     if abs(q_center - 0.40) < 0.05:  # out of plane: around the surface normal
-        clean = 60.0 + 900.0 * _gauss(chi, 0.0, 25.0)
+        clean = background + 900.0 * _gauss(chi, 0.0, 25.0)
     elif abs(q_center - 1.65) < 0.1:  # in plane
-        clean = 60.0 + 300.0 * (_gauss(chi, -90.0, 30.0) + _gauss(chi, 90.0, 30.0))
+        clean = background + 300.0 * (_gauss(chi, -90.0, 30.0) + _gauss(chi, 90.0, 30.0))
     else:
-        clean = np.full_like(chi, 160.0)
+        clean = np.full_like(chi, background + 100.0)
     return _curve("azimuthal", chi, clean, pixels=80.0, label="χ (°)", seed=seed)
 
 
@@ -123,7 +124,7 @@ class FakeWorkbench:
     def show(self, view=None, lower_profile=None):
         self.calls.append(("show", view, lower_profile))
 
-    def export_curves(self):
+    def export_curves(self, extra_metadata=None):
         self.exports = ["C:/data/gimap_analysis/synthetic_radial.csv"]
         self.calls.append(("export_curves",))
         return list(self.exports)
@@ -170,6 +171,7 @@ class ScriptedLlm:
     """Plays back prepared turns and keeps every request it received."""
 
     model = "fake-claude"
+    provider = "Test service"
 
     def __init__(self, turns: list[Step]):
         self.turns = list(turns)

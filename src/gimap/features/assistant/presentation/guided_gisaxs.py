@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import QPushButton, QToolButton, QVBoxLayout, QWidget
 from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, FlowLayout
 from src.gimap.app.presentation.i18n import current_language, tr, trf
 from src.gimap.shared import fit_names
+from src.gimap.shared.numbers import format_number
 from src.gimap.shared.export_text import export_text
 
 from ..application import (
@@ -33,6 +34,7 @@ from ..application import (
     probability,
     rivals,
 )
+from ..application.gisaxs_choice import component_number, population_values
 from ..application.operations import halves_label
 from .guided_details import SolutionDetails
 from .guided_text import GOOD, NOTE, WARN, ask_save_path, badge, label, listed, save_failed_toast, saved_toast, table
@@ -70,6 +72,9 @@ FIT_TIP = ("Predict parameters: GIMaP's network proposes the particles (one or t
 """The tooltip of “Fit of I(qy)”: what the fits are and are not."""
 PROBABLE_NOTE = ("{n} solutions have p ≥ {limit}: the curve alone does not decide the model. Compare their fits (select "
                  "a row) and choose from what you know of the sample.")
+BIC_TIP = "Evidence sampling failed. The solutions are ranked by normalised BIC weights."
+BIC_NOTE = "{n} solutions have BIC weights ≥ {limit}. Select a row to compare their fits."
+BIC_OUTCOME = "{model} R {radius} nm (BIC weight {p}, χ²ᵣ {chi2})"
 """Under the table when another solution is probable too (``gisaxs_choice.rivals``)."""
 
 
@@ -77,24 +82,16 @@ def model_name(model: str) -> str:
     return str(model or "").replace("_", " ")
 
 
-def population_values(row: dict, key: str) -> str:
-    """``key`` (R, h, D) of every population of a solution, in the order of the radii: “3.06 / 6.02”, “49.4 / –”;
-    “—” when no population has it."""
-    components = sorted((c for c in row.get("components") or () if c.get("R") is not None), key=lambda c: float(c["R"]))
-    if not any(component.get(key) is not None for component in components):
-        return "—"
-    return " / ".join("–" if component.get(key) is None else _number(component[key]) for component in components)
-
-
 def _details(row: dict) -> str:
     """Every parameter and warning of a solution (the row's tooltip), its words in the interface language."""
     components = row.get("components") or [{}]
     values = "; ".join(
         (f"{number}: " if len(components) > 1 else "")
-        + ", ".join(f"{tr(name)} {_number(component[key])}{unit}" for key, name, unit in DETAILS if component.get(key) is not None)
+        + ", ".join(f"{tr(name)} {component_number(row, key, number - 1)}{unit}" for key, name, unit in DETAILS if component.get(key) is not None)
         for number, component in enumerate(components, start=1))
     notes = list(row.get("warnings") or ()) + ([] if row.get("converged", True) else ["not converged"])
-    chance = "" if _probability(row) == "—" else f"; p {_probability(row)}"
+    label = tr(fit_names.BIC_WEIGHT) if fit_names.weight_key(row) == "bic_weight" else "p"
+    chance = "" if _probability(row) == "—" else f"; {label} {_probability(row)}"
     more = [words(note) for note in row.get("more_warnings") or ()]
     return (f"{model_name(row['model'])}: {values}; χ²ᵣ {_number(row['chi2'])}{chance}"
             + "".join(f"\n⚠ {words(note)}" for note in notes) + "".join(f"\n⚠ {phrase}" for phrase in bound_words(row))
@@ -123,7 +120,7 @@ def _joined(items) -> str:
 
 
 def _number(value, digits: int = 3) -> str:
-    return "—" if value is None else f"{float(value):.{digits}g}"
+    return format_number(value, digits=digits)
 
 
 def cut_rows(report: dict) -> str:
@@ -155,6 +152,7 @@ def outcome_summary(report: dict) -> str:
                   "chi2": _number(best["chi2"])}
         chance = _probability(best)  # a report written before Predict parameters gives none
         parts.append(trf("best fit {model} R {radius} nm (χ²ᵣ {chi2})", **values) if chance == "—" else
+                     trf(BIC_OUTCOME, p=chance, **values) if fit_names.weight_key(best) == "bic_weight" else
                      trf("most probable fit {model} R {radius} nm (p {p}, χ²ᵣ {chi2})", p=chance, **values))
         if bound_words(best):  # values the curve does not determine
             parts[-1] += " ⚠ " + _joined(bound_words(best))
@@ -248,12 +246,13 @@ class GisaxsResults(QWidget):
                 "particle spacing.", **values), NOTE, self))
 
     def _fit(self, layout: QVBoxLayout) -> None:
-        self._heading("Fit of I(qy)", layout).setToolTip(tr(FIT_TIP))
+        solutions = self.fit.get("solutions") or []
+        by_bic = bool(solutions) and fit_names.weight_key(solutions[0]) == "bic_weight"
+        self._heading("Fit of I(qy)", layout).setToolTip(tr(BIC_TIP if by_bic else FIT_TIP))
         refine = QPushButton(tr("Refine in Fitting"), self)
         refine.setObjectName("guidedRefineFit")
         refine.setToolTip(tr("Open the prepared curve (the halves chosen) in Fitting and fit it with a model you choose."))
         refine.clicked.connect(self.refineRequested)
-        solutions = self.fit.get("solutions") or []
         if not solutions:
             layout.addWidget(label(tr("Not fitted here. Open the prepared curve in Fitting to fit it with a model."), self))
             layout.addWidget(refine)
@@ -282,8 +281,10 @@ class GisaxsResults(QWidget):
             if bounds:
                 bounded.append(trf("{rank}: {bounds}", rank=row.get("rank"), bounds=_joined(bounds)))
                 named.append(trf("{rank}: {bounds}", rank=row.get("rank"), bounds=_joined(bound_names(row))))
-        self.fit_table = table(FIT_HEADERS, rows, self, "guidedFitTable", numbers=FIT_NUMBERS,  # Fit details follow the row
-                               copy_headers=FIT_COPY_HEADERS)
+        headers, copy_headers = list(FIT_HEADERS), list(FIT_COPY_HEADERS)
+        if by_bic:
+            headers[1], copy_headers[1] = (fit_names.BIC_WEIGHT, BIC_TIP), fit_names.BIC_WEIGHT
+        self.fit_table = table(headers, rows, self, "guidedFitTable", numbers=FIT_NUMBERS, copy_headers=copy_headers)
         self.fit_table.setMinimumHeight(min(260, 60 + 30 * len(rows)))
         self.fit_table.itemSelectionChanged.connect(self._show_solution)
         layout.addWidget(self.fit_table)
@@ -296,7 +297,8 @@ class GisaxsResults(QWidget):
         index, _best = chosen_solution(self.fit)
         others = rivals(solutions)
         if others:  # another solution about as probable: the person chooses the model
-            layout.addWidget(badge(trf(PROBABLE_NOTE, n=len(others) + 1, limit=f"{ASK_PROBABILITY:g}"), WARN, self))
+            layout.addWidget(badge(trf(BIC_NOTE if by_bic else PROBABLE_NOTE, n=len(others) + 1,
+                                       limit=f"{ASK_PROBABILITY:g}"), WARN, self))
         layout.addWidget(label(trf(
             "Fitted: {curve} ({points} points) · R, h and D in nm.",
             curve=parts(self.fit.get("curve")), points=self.fit.get("points")), self, role="muted",
@@ -308,7 +310,8 @@ class GisaxsResults(QWidget):
         save_curve.clicked.connect(self.save_curve)
         save_table = QPushButton(tr("Save Fit Table…"), self)
         save_table.setObjectName("guidedSaveFitTable")
-        save_table.setToolTip(tr("CSV: every solution with its probability, parameters (nm), intervals and χ²ᵣ."))
+        save_table.setToolTip(tr("CSV: every solution with its BIC weight, parameters (nm), intervals and χ²ᵣ."
+                                 if by_bic else "CSV: every solution with its probability, parameters (nm), intervals and χ²ᵣ."))
         save_table.clicked.connect(self.save_table)
         for button in (save_curve, save_table, refine):
             buttons.addWidget(button)

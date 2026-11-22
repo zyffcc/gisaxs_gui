@@ -16,7 +16,7 @@ import secrets
 from typing import Any, Callable, Iterable, Optional, Sequence
 
 from ..application import LlmError, LlmTurn, LlmUsage, ToolCall
-from ..application.providers import AZURE_API_VERSION, KIND_AZURE, ProviderPreset
+from ..application.providers import AZURE_API_VERSION, KIND_AZURE, ProviderPreset, service_name
 
 TIMEOUT_S = 300.0
 JSON_RETRIES = 2
@@ -256,6 +256,7 @@ class OpenAICompatibleLlm:
         client: Any = None,
     ):
         self.preset = preset
+        self.provider = service_name(preset.name, base_url or "", preset.base_url)
         self.model = (model or "").strip()
         self.max_tokens = max_tokens
         self._stream_usage = True

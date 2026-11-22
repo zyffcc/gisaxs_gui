@@ -1,6 +1,6 @@
 """Release 0.1.0, Fitting: a file that is not a curve is refused with a sentence that says what Fitting reads
-(R7: Analyze's .csv tables are not read in this version), and a save dialog never starts in the working folder
-of the program (R13)."""
+(R7 then refused Analyze's .csv tables; since 0.2.0 a CSV opens with its columns chosen by the header's names,
+``test_fit_data_files.py``), and a save dialog never starts in the working folder of the program (R13)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,8 @@ from src.gimap.features.fitting.application import CURVE_SUFFIXES, UNSUPPORTED_C
 from src.gimap.features.fitting.infrastructure.adapters import LocalCurveRepository
 from tests.test_fit_page import _curve_file, _page
 
-REFUSAL_ZH = "拟合读取 .dat 和 .txt 曲线（q、I、σ）。来自分析的切线，请用“发送到拟合”，或打开它的 _fit_input.dat 文件。"
+REFUSAL_ZH = ("拟合读取 .dat、.txt 和 .csv 曲线（q、I、σ）以及 NXcanSAS .h5 文件。来自分析的切线，请用“发送到拟合”，或打开它的 "
+              "_fit_input.dat 文件。")
 """The entry this release adds to the Chinese table (put in here until it is in it)."""
 
 
@@ -27,15 +28,19 @@ def _table(tmp_path, name: str = "frame_horizontal.csv") -> Path:
     return path
 
 
-def test_a_csv_table_is_refused_with_what_fitting_reads_and_where_the_curve_is(tmp_path) -> None:
-    assert UNSUPPORTED_CURVE == ("Fitting reads .dat and .txt curves (q, I, σ) and NXcanSAS .h5 files. For a cut from "
-                                 "Analyze, use Send to Fitting or open its _fit_input.dat file.")
-    assert all(suffix in UNSUPPORTED_CURVE for suffix in CURVE_SUFFIXES) and ".csv" not in CURVE_SUFFIXES
+def test_a_file_of_another_kind_is_refused_with_what_fitting_reads_and_where_the_curve_is(tmp_path) -> None:
+    assert UNSUPPORTED_CURVE == ("Fitting reads .dat, .txt and .csv curves (q, I, σ) and NXcanSAS .h5 files. For a cut "
+                                 "from Analyze, use Send to Fitting or open its _fit_input.dat file.")
+    assert all(suffix in UNSUPPORTED_CURVE for suffix in CURVE_SUFFIXES) and ".csv" in CURVE_SUFFIXES
     use_case = LoadCurve(LocalCurveRepository())
-    for name in ("frame_horizontal.csv", "frame_horizontal.CSV", "curve.xy", "curve"):
+    for name in ("curve.xy", "curve"):
         outcome = use_case.execute(LoadCurveRequest(_table(tmp_path, name)))
         assert outcome.error is not None and outcome.error.code == "unsupported_format"
         assert outcome.error.message == UNSUPPORTED_CURVE  # one fixed sentence: the page can translate it
+    for name in ("frame_horizontal.csv", "frame_horizontal.CSV"):  # Analyze's table: q, I, σ by the header's names
+        outcome = use_case.execute(LoadCurveRequest(_table(tmp_path, name)))
+        assert outcome.succeeded and outcome.value.q_source_unit == "angstrom"
+        assert outcome.value.observation["curve_source"]["columns"]["intensity"] == 1
     for name in ("curve.dat", "curve.TXT"):  # what it does read is read as before
         path = tmp_path / name
         np.savetxt(path, np.column_stack([np.linspace(0.01, 0.2, 30), np.linspace(50, 5, 30)]))
@@ -52,7 +57,7 @@ def test_the_page_says_the_refusal_in_the_interface_language_and_keeps_its_curve
     try:
         assert page.open_curve(_curve_file(tmp_path))
         curve = page.session.curve
-        table = _table(tmp_path)
+        table = _table(tmp_path, "frame_horizontal.xy")
         assert page.open_curve(table) is False
         assert page.status_label.text() == f"Could not open {table.name}: {UNSUPPORTED_CURVE}"
         assert "Unsupported curve format" not in page.status_label.text()

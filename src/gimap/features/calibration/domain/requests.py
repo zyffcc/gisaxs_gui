@@ -17,6 +17,11 @@ class CalibrationRequest:
     pixel_size_x_m: float | None = None
     pixel_size_y_m: float | None = None
     subtract_background: bool = True
+    tilt: str = "auto"
+    """Refine the detector tilt (rot1, rot2): ``auto`` with three or more matched rings, ``on``, ``off``."""
+    rot3_deg: float = 0.0
+    energy_source: str = ""
+    """Where the energy came from (``file header``, ``entered by user`` …), written into the result's metadata."""
 
     def algorithm_options(self) -> dict:
         return {
@@ -27,4 +32,7 @@ class CalibrationRequest:
             "pixel_size_x_m": self.pixel_size_x_m,
             "pixel_size_y_m": self.pixel_size_y_m,
             "subtract_background": self.subtract_background,
+            "tilt": self.tilt,
+            "rot3_deg": self.rot3_deg,
+            "energy_source": self.energy_source,
         }

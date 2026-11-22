@@ -12,6 +12,7 @@ run came to and saving are in ``series_results.py``.
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
@@ -23,12 +24,14 @@ from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.task_runner import TaskRunner
 
 from ...application import LoadCurveRequest
+from ...application.series_chain import acquisition_fields
 from ...application.series_fit import (
     POOR_CHI2,
     FrameFit,
     SeriesSettings,
     fit_frame,
     file_name,
+    flagged_fit,
     next_start,
     poor_fit,
     series_counts,
@@ -36,6 +39,7 @@ from ...application.series_fit import (
 from ...application.single_fit import Curve
 from ..views.fit_series_view import FitSeriesView
 from .drops import FolderDropMixin, SplitterMemoryMixin
+from .series_chain import FitSeriesChainMixin
 from .series_predict import FitSeriesPredictMixin
 from .series_frames import FitSeriesFramesMixin
 from .series_halves import FitSeriesHalvesMixin
@@ -43,6 +47,7 @@ from .series_imports import FitSeriesImportsMixin
 from .series_listing import FitSeriesListingMixin
 from .series_loading import FitSeriesLoadingMixin
 from .series_preview import FitSeriesPreviewMixin
+from .series_project import FitSeriesProjectMixin
 from .series_results import UNTOUCHED, FitSeriesResultsMixin
 from .series_stages import NO_STAGES_AT_START, FitSeriesStagesMixin
 from .series_text import FIGURE_SPACE, ONE_HALF, STATE_MARK
@@ -62,10 +67,12 @@ END_SENTENCES = {
 }
 """The end of a run, ``(stopped, with poor fits)``: a run whose fits converged far from the curves (``poor_fit``) is
 not said like a success (said at the level of a warning)."""
+FLAGGED_END = ("{flagged} of the fitted frames are flagged: a value the curve does not determine, or the beam tail at "
+               "an edge of its range.")
 
 
-class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin, FitSeriesStagesMixin, FitSeriesPredictMixin,
-                    FitSeriesFramesMixin, FitSeriesUnitsMixin,
+class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin, FitSeriesStagesMixin, FitSeriesPredictMixin,
+                    FitSeriesFramesMixin, FitSeriesUnitsMixin, FitSeriesChainMixin,
                     FitSeriesPreviewMixin, FitSeriesHalvesMixin, FitSeriesResultsMixin, FitSeriesWatchMixin, QWidget,
                     FitSeriesView):
     editModelRequested = pyqtSignal()
@@ -133,10 +140,15 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
         self.frame_list.currentRowChanged.connect(lambda row: self._select(self._listed()[row] if 0 <= row < len(self._listed()) else None))
         self.trend_combo.currentIndexChanged.connect(lambda _index: self._draw_trend())
         self.trend_plot.log_check.toggled.connect(lambda _checked: self._draw_trend())  # the bars again
+        self.least_squares_check.toggled.connect(lambda _: self._draw_trend())
         self.edit_model_button.clicked.connect(self._edit_or_set_up)
         self.start_group.buttonToggled.connect(lambda *_: self._remember_choices())
         self.method_group.buttonToggled.connect(lambda *_: self._remember_choices())
         self.follow_check.toggled.connect(lambda _on: self._remember_choices())
+        self.backward_check.toggled.connect(lambda _on: self._remember_choices())
+        self.trend_axis_combo.currentIndexChanged.connect(lambda _index: self._draw_trend())
+        self.save_nxcansas_action.triggered.connect(lambda: self.save_fits_nxcansas())
+        self.save_store_action.triggered.connect(lambda: self.save_results_database())
         self.setup_series_predict()
 
     # -- steps --------------------------------------------------------------------------------
@@ -173,7 +185,10 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
             model=model_label(model), free=free, side=self.halves_text(), range=self._range_text(self._stage_settings()),
             left_out=""))
         start = {"previous": tr("from the previous frame"), "same": tr("from the same model"),
-                 "stages": tr("from the previous frame, afresh at each stage")}[self._start_choice()]
+                 "stages": tr("from the previous frame, afresh at each stage"),
+                 "chain": tr("from the previous frame, Predict where the chain breaks")}[self._start_choice()]
+        if self._smooth_active():
+            start = tr("HMM")
         untouched = bool(model.components) and not session.edited  # the starting guess: nobody set it up
         self.step_rail.set_state("start", "ok" if model.components and not untouched else "warn",
                                  tr("No model: set one in Single analysis") if not model.components else
@@ -238,6 +253,8 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
             return "warn", detail + " · " + tr("not converged")
         if poor_fit(frame):
             return "warn", detail + " · " + tr("poor fit")
+        if flagged_fit(frame):  # a value the curve does not determine, or the beam tail at an edge (series_fit)
+            return "warn", detail + " · " + tr("flagged")
         half = ONE_HALF.get(getattr(frame, "halves_used", "")) if self._settings.side == "mean" else None
         return "done", detail + (" · " + tr(half) if half and self.curves_signed() else "")
 
@@ -259,7 +276,8 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
         self._settings = SeriesSettings(
             side=self.series_side(), q_range=session.q_range, excluded=frozenset(session.excluded),
             method=self.series_method(), start=self._start_choice(),
-            resolve_edges=True, follow=self.follow_check.isChecked())
+            resolve_edges=True, follow=self.follow_check.isChecked(), smooth=self._smooth_active(),
+            smooth_scale=self.smooth_scale.value(), backward=self.backward_check.isChecked() and self.backward_check.isEnabled())
         self._side_from, self._untouched_start = self.halves_source(), not session.edited
         self._unit = "angstrom" if self.frames_mode() else self.source_unit_setting()  # for files without a unit
         self._start_model = model
@@ -270,6 +288,8 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
         self._stop = threading.Event()
         self._watch_scan += 1
         self._watch_busy = False
+        self._chain_reset()
+        self.reset_smoothing()
         self.pause_button.setChecked(False)  # (before the run is on: un-pausing a run starts its next frame)
         self.running = True
         self._fill_trend_choices()
@@ -299,7 +319,9 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
     def _next(self) -> None:
         if not self.running or self.tasks.is_busy():
             return  # a fit is under way and goes on from its end: never two at once (Watch and a finished fit)
-        if self._stop.is_set() or (not self.queue and not self._watch.isActive()):
+        if not self.queue and not self._stop.is_set() and self.begin_smoothing():
+            return
+        if self._stop.is_set() or (not self.queue and not self._watch.isActive() and not self._begin_backward()):
             self._finish()
             return
         if self.pause_button.isChecked():
@@ -314,19 +336,23 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
         start = next_start(self._previous, self._start_model, self._settings, new_stage=new_stage)
         settings, stop = self._settings, self._stop.is_set
         predict = self.predictor(settings, self._previous, new_stage) if settings.method == "predict" else None
+        chained = self.chain_fitter(settings, self._previous, new_stage)  # (Predict where the chain breaks)
+        marks = self.fit_marks(settings, self._previous, start)
         load, unit, epoch = self.series_curve_loader(), self._unit, self._loading_epoch
 
         def work():
             stamp = file_stamp(path)  # stat can also wait on a network drive
-            outcome = load(LoadCurveRequest(Path(path), unit))
+            outcome = load(LoadCurveRequest(Path(path), unit, keep_missing_sigma=True))
             if stop():  # Stop during I/O: no fit is started and no spurious failed result is recorded
                 return None, None, stamp, None
             if outcome.error is not None:
                 return FrameFit(index, path, error=outcome.error.message), None, stamp, None
             value = outcome.value
             curve = Curve.from_arrays(value.q, value.intensity, value.error, name=file_name(path), path=path,
-                                      unit=value.q_source_unit, unit_from=value.q_unit_from)
-            return fit_frame(index, path, curve, start, settings, stop, predict), curve, stamp, value
+                                      unit=value.q_source_unit, unit_from=value.q_unit_from, dq=value.dq)
+            frame = chained(index, path, curve, start) if chained is not None else replace(
+                fit_frame(index, path, curve, start, settings, stop, predict), **marks)
+            return replace(frame, acquisition=acquisition_fields(value.observation) or {}), curve, stamp, value
 
         def done(value):
             if not self._loading_current(epoch) or not self.running:
@@ -339,6 +365,7 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
             if frame is None:
                 self._finish()
             else:
+                self.remember_modes(frame, predict)
                 self._frame_done(frame, curve)
 
         def failed(message, _details):
@@ -346,12 +373,15 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
                 if stop():
                     self._finish()
                 else:
-                    self._frame_done(FrameFit(index, path, error=message))
+                    frame = FrameFit(index, path, error=message)
+                    self.remember_modes(frame, predict)
+                    self._frame_done(frame)
 
         self.tasks.submit(f"series-{index}", work, on_done=done, on_error=failed)
         self._set_item(index)
 
     def _frame_done(self, frame: FrameFit, curve: Optional[Curve] = None) -> None:
+        frame = self._chain_kept(frame)  # (the backward pass keeps the better of a frame's two fits)
         self.fits[frame.index] = frame
         self._frames_done += 1
         if frame.ok:
@@ -393,19 +423,28 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
 
     def _finish(self) -> None:
         stopped = self._stop.is_set()
+        if stopped and self._smooth_dirty:
+            self._publish_modes(self._independent_fits)
+        smoothing_error = self._smoothing_error
         self.running = False
         self._watch.stop()
+        self.reset_smoothing()
         self.status_progress.hide()
         counts = series_counts(list(self.fits.values()))
         fitted, failed, poor = counts["ok"] + counts["not_converged"], counts["failed"], len(self._poor_frames())
-        trouble = failed or counts["not_converged"] or counts["stopped"] or poor or self._untouched_start
+        flagged = len(self._flagged_frames())
+        trouble = failed or counts["not_converged"] or counts["stopped"] or poor or flagged or self._untouched_start
 
         def done() -> str:  # (poor fits — χ²ᵣ far above 1, e.g. a sphere on a diffraction peak — are counted)
             template = END_SENTENCES[(bool(stopped), bool(poor))]
-            return trf(template, count=fitted, failed=failed, poor=poor, limit=f"{POOR_CHI2:g}")
+            text = trf(template, count=fitted, failed=failed, poor=poor, limit=f"{POOR_CHI2:g}")
+            if smoothing_error:
+                text += " " + trf("Series smoothing failed: {error}", error=tr(smoothing_error))
+            return text + (" " + trf(FLAGGED_END, flagged=flagged) if flagged else "")
 
+        self._chain_finished()
         self._log(done())
-        self._status(done, "warning" if trouble else "ok")
+        self._status(done, "warning" if trouble or smoothing_error else "ok")
         self._frames_changed()
 
     def _set_item(self, index: int) -> None:
@@ -424,7 +463,7 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
         text = text() if callable(text) else text
         self.status_label.setText(text)
         if level in ("ok", "warning", "error") and self.isVisible():
-            show_toast(self.window(), text, level=level, action=action)
+            show_toast(self.window(), text, level=level, action=action, refresh=self._status_text)
 
     def _log(self, text: str) -> None:
         from datetime import datetime
@@ -445,7 +484,9 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
 
     def _remember_choices(self) -> None:
         if not self.imported_mode():
-            self._remember(start=self._start_choice(), method=self.series_method(), follow=self.follow_check.isChecked())
+            self._remember(start=self._start_choice(), method=self.series_method(), follow=self.follow_check.isChecked(),
+                           backward=self.backward_check.isChecked(), smooth=self.smooth_check.isChecked(),
+                           smooth_scale=self.smooth_scale.value())
         self.refresh()
 
     def _restore(self) -> None:
@@ -453,10 +494,11 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
         pattern = self._remembered("pattern")
         if pattern:
             self.pattern_edit.setText(str(pattern))
-        self._set_start(self._remembered("start"))
-        self.set_series_method(self._remembered("method"))
-        if self._remembered("follow") is not None:
-            self.follow_check.setChecked(bool(self._remembered("follow")))
+        choices = {key: self._remembered(key) for key in ("start", "method", "follow", "backward", "smooth", "smooth_scale")}
+        self._set_start(choices["start"])
+        self.set_series_method(choices["method"])
+        self._restore_continuity({key: value for key, value in choices.items() if value is not None})
+        self.backward_check.setChecked(bool(choices["backward"]))
 
     # -- a project -------------------------------------------------------------------------
 
@@ -464,7 +506,10 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
         state = {"folder": self.folder, "pattern": self.pattern_edit.text(), "subfolders": self.subfolders_check.isChecked(),
                  "first": self.first_spin.value(), "last": self.last_spin.value(), "every": self.every_spin.value(),
                  "start": self._start_choice(), "method": self.series_method(),
-                 "follow": self.follow_check.isChecked(), **self.halves_state(), **self.imported_state()}
+                 "follow": self.follow_check.isChecked(), "smooth": self.smooth_check.isChecked(),
+                 "smooth_scale": self.smooth_scale.value(), "backward": self.backward_check.isChecked(),
+                 **self.halves_state(), **self.imported_state(),
+                 "results": self.series_results_state()}  # the fitted frames (series_project.py)
         if self._listing_busy:
             # Range/halves wait for discovery and cannot be edited yet. Safe choices above stay live.
             pending = self._restore_listing or {}
@@ -483,7 +528,8 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
         self._clear_imported_sources()
         self._set_start(data.get("start"))
         self.set_series_method(data.get("method"))
-        self.follow_check.setChecked(bool(data.get("follow", True)))
+        self._restore_continuity(data)
+        self.backward_check.setChecked(bool(data.get("backward", False)))
         self.subfolders_check.blockSignals(True)
         self.subfolders_check.setChecked(bool(data.get("subfolders")))
         self.subfolders_check.blockSignals(False)
@@ -502,6 +548,7 @@ class FitSeriesPage(FitSeriesImportsMixin, FitSeriesLoadingMixin, FolderDropMixi
                 spin.setValue(int(data[key]))
         self.apply_halves_state(data)
         self.refresh()
+        self.restore_series_results(data.get("results"))
 
     def refresh_language(self) -> None:
         """After a switch of the interface language (``i18n.language_changed``): what this page composed with

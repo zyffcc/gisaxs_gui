@@ -150,7 +150,7 @@ def test_the_english_result_texts_are_unchanged(tmp_path) -> None:
         assert dialog.preview_info_label.text() == "scan_agbh.cbf"
         # The centre of the fit (index 123.5, 234.5) in the pixels of Analyze: + 0.5.
         assert [dialog.candidate_table.item(0, column).text() for column in range(6)] == [
-            "Silver behenate (AgBH)", "1456.70 mm", "124.0, 235.0", "3", "1.25 px", "Medium",
+            "Silver behenate (AgBH)", "1456.7 mm", "124, 235", "3", "1.25 px", "Medium",
         ]
         assert _legend(dialog) == "━━ Center ┄┄┄ Detected ━━ Matched ╌╌╌ Other theoretical"
         _show(dialog, _result(tmp_path / "scan_agbh.cbf", warnings=[ONE_RING_WARNING, COVERAGE_WARNING]))
@@ -174,13 +174,13 @@ def test_the_line_of_a_loaded_image_follows_the_language(language, chinese) -> N
         assert dialog.stage_label.text() == {"en": "Reading image...", "zh": "正在读取图像…"}[language]
         _wait(app, lambda: dialog._load_thread is None and dialog.image is not None)
         assert dialog.stage_label.text() == {
-            "en": "Image loaded. Click Auto Calibration.",
-            "zh": "已载入图像。请点击“自动标定”。",
+            "en": "Image loaded. Enter the energy or wavelength to calibrate.",
+            "zh": "已载入图像。请输入能量或波长再标定。",
         }[language]
         assert dialog.preview_info_label.text() == "Pilatus1M.edf  ·  981 × 1043 px"  # the file and its size
         assert dialog.pixel_label.text() == {
-            "en": "172.000 × 172.000 µm (metadata)",
-            "zh": "172.000 × 172.000 µm（来自元数据）",
+            "en": "172.000 × 172.000 µm (from frame size; check)",
+            "zh": "172.000 × 172.000 µm（根据图像尺寸推定，请核对）",
         }[language]
     finally:
         _dispose(dialog)
@@ -202,7 +202,7 @@ def test_a_result_is_shown_in_chinese_and_kept_in_english(tmp_path, chinese) -> 
         assert dialog.preview_info_label.text() == "scan_agbh.cbf"
         assert dialog.candidate_table.item(0, 0).text() == "山嵛酸银（AgBH）"
         assert dialog.candidate_table.item(0, 5).text() == "中"
-        assert dialog.candidate_table.item(0, 1).text() == "1456.70 mm"  # values and units stay
+        assert dialog.candidate_table.item(0, 1).text() == "1456.7 mm"  # values and units stay
         assert _legend(dialog) == "━━ 中心 ┄┄┄ 检测到的环 ━━ 匹配的环 ╌╌╌ 其他理论环"
         # What is exported and what the assistant reads stays the engine's English.
         assert result.selected_candidate.confidence == "Medium"
@@ -255,7 +255,7 @@ def test_the_job_line_is_chinese_for_every_state_of_a_run(chinese, boxes) -> Non
         assert boxes[-1] == ("warning", "几何标定", "unexpected: 3 != 4")
 
         dialog._calibration_finished(_result(Path("scan_agbh.cbf")))
-        assert dialog.stage_label.text() == "标定完成。请检查选中的候选解，然后点击“应用”。"
+        assert dialog.stage_label.text() == "匹配环数：3。置信度：中。 点击“应用”前请核对图中的匹配环。"
     finally:
         _dispose(dialog)
 
@@ -268,6 +268,7 @@ def test_a_wrong_custom_range_and_the_file_dialogs_are_chinese(tmp_path, chinese
         dialog.range_combo.setCurrentIndex(3)  # Custom
         dialog.custom_min_spin.setValue(900.0)
         dialog.custom_max_spin.setValue(300.0)
+        dialog.energy_spin.setValue(12.0)  # the frame states no energy: it is entered (none is assumed)
         dialog.start_calibration()
         assert boxes == [("warning", "标定输入", "自定义距离的下限必须小于上限。")]
         assert dialog._cal_thread is None
@@ -281,7 +282,7 @@ def test_a_wrong_custom_range_and_the_file_dialogs_are_chinese(tmp_path, chinese
         dialog.result = _result(tmp_path / "scan_agbh.cbf")
         dialog.export_result()
         dialog.import_result()
-        assert asked == [("导出标定", "JSON 文件 (*.json)"), ("导入标定", "JSON 文件 (*.json)")]
+        assert asked == [("导出标定", "JSON 文件 (*.json);;pyFAI 几何文件 (*.poni)"), ("导入标定", "JSON 文件 (*.json)")]
 
         not_a_calibration = tmp_path / "other.json"
         not_a_calibration.write_text('{"format": "something else"}', encoding="utf-8")
@@ -316,11 +317,16 @@ def _engine_sentences() -> dict[str, set[str]]:
 
 
 def test_every_stage_warning_and_reason_of_the_engine_has_chinese() -> None:
+    from src.gimap.app.presentation.i18n.zh import ZH as shipped_zh
+    from src.gimap.features.calibration.domain.tilt_fit import NOT_REFINED_CONTRIBUTING_RINGS
+
     sentences = _engine_sentences()
+    # 8 stages: the tilt and the fixed-tilt refinement share "Optimizing geometry" (both refine on the ring points)
     assert len(sentences["stage"]) == 8 and len(sentences["warning"]) >= 7 and len(sentences["reason"]) >= 6
-    missing = sorted(text for group in sentences.values() for text in group if text not in ZH)
+    sentences["warning"].add(NOT_REFINED_CONTRIBUTING_RINGS)
+    missing = sorted(text for group in sentences.values() for text in group if text not in shipped_zh)
     assert missing == []
-    assert {"High", "Medium", "Low"} <= set(ZH)
+    assert {"High", "Medium", "Low"} <= set(shipped_zh)
 
 
 # -- an image that cannot be read (R48) -------------------------------------------------------------

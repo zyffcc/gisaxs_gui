@@ -29,6 +29,8 @@ from .gisaxs_choice import (
     bounds_text,
     chance,
     chosen,
+    component_estimate,
+    component_number,
     interface_caveat,
     interval,
     poor_fit,
@@ -36,9 +38,10 @@ from .gisaxs_choice import (
     sizes,
     zero_terms,
 )
-from .gisaxs_report import cut_spans
+from .gisaxs_report import cut_locations
 from .gisaxs_tools import MAX_SYMMETRY_SHIFT_PX
 from .giwaxs_decisions import flat_field_decision, refraction_decision, uncertainty_decision
+from .pipeline_roll import choose_frame_angles
 from .ring_frames import NO_FIT
 
 PREDICTED = (
@@ -82,6 +85,8 @@ POOR_FIT_HINT = (
 )
 """A converged reported solution with χ²ᵣ above ``POOR_CHI2`` (the limit of Fitting's poor fit)."""
 PROBABLE = "{n} solutions have a probability of at least {limit} ({solutions}): the curve alone does not decide the model."
+BIC_DECISION = "Predict parameters on {curve} compared the solutions by BIC weight after evidence sampling failed."
+BIC_RIVALS = "{n} solutions have a BIC weight of at least {limit} ({solutions})."
 PROBABLE_HINT = "Choose the particle shape you expect and refine that model in Fitting; compare the fitted curves."
 """Another solution is probable too (``gisaxs_choice.rivals``): the person chooses the model."""
 SPACING = "length scale"
@@ -114,7 +119,7 @@ def _interval_text(solution: dict) -> str:
         for key in INTERVAL_KEYS:
             found = interval(solution, key, number) if component.get(key) is not None else None
             if found is not None:
-                best = float(component[key])  # an interval always holds its refined value (rounding apart)
+                best = component_estimate(solution, key, number)  # an interval always holds its refined value (rounding apart)
                 parts.append(f"{fit_names.display_name(f'{key}_{number + 1}', many)} "
                              + fit_names.interval_text(best, min(found[0], best), max(found[1], best), "nm"))
     return ", ".join(parts)
@@ -141,15 +146,6 @@ class GisaxsProcedureMixin:
 
     def _analyse_gisaxs(self) -> None:
         results = self.catalog.results
-        status = results.status or {}
-        cuts = status.get("gisaxs") or {}
-        # What the numbers are, in every report (the GIWAXS run says the same in its own words).
-        self._decide(**refraction_decision(status.get("geometry"), "gisaxs", given=self._incidence is not None))
-        self._decide(**uncertainty_decision(status.get("error_model"), "gisaxs"))
-        flat = flat_field_decision(status)
-        if flat is not None:
-            self._decide(**flat)
-        self._horizontal_cut(cuts)
         symmetry = self._call("refine_beam_center_symmetry", {"max_shift_px": MAX_SYMMETRY_SHIFT_PX})
         if symmetry is not None:
             # The tool's answer is rounded to 4 significant digits (597.263 → 597.3): the decision states the
@@ -176,6 +172,17 @@ class GisaxsProcedureMixin:
         else:  # never plain OK on a centre nobody could check
             self._attention("beam centre", SYMMETRY_FAILED.format(reason=self._run.steps[-1]["summary"]), None,
                             SYMMETRY_FAILED_HINT)
+        # The angle record belongs to the final calibrated beam centre, including any x refinement.
+        if not getattr(self, "_transmission_frame", None):
+            choose_frame_angles(self)
+        status = results.status or {}
+        self._decide(**refraction_decision(status.get("geometry"), "gisaxs", given=self._incidence is not None,
+                                          incidence_measurement=status.get("incidence_measurement")))
+        self._decide(**uncertainty_decision(status.get("error_model"), "gisaxs", corrections=status.get("corrections")))
+        flat = flat_field_decision(status)
+        if flat is not None:
+            self._decide(**flat)
+        self._horizontal_cut(status.get("gisaxs") or {})
         halves = self._call("choose_halves")
         if halves is not None:
             self._call("set_halves", {"side": halves["recommended"]})
@@ -191,7 +198,7 @@ class GisaxsProcedureMixin:
     def _horizontal_cut(self, cuts: dict) -> None:
         source = cuts.get("horizontal_source")
         # The rows the cut uses, both ends included (as Analyze's Cuts card says them).
-        where = f"rows {cut_spans(cuts, self.catalog.results.status)[0]}"
+        where = cut_locations(cuts, self.catalog.results.status)[0]
         if source == "yoneda":
             self._decide(
                 "horizontal cut", f"at the Yoneda band, αf = {cuts.get('yoneda_alpha_f_deg'):.3f}° ({where})",
@@ -242,15 +249,22 @@ class GisaxsProcedureMixin:
         solutions = fit.get("solutions") or []
         if not solutions:
             return
+        if fit.get("substrate_level") == 2:
+            self._decide("model fit", "at the second level",
+                         f"Born term at the cut's q_z = {fit['cut_qz']['q_z_inv_nm']:.4g} nm⁻¹")
+        elif fit.get("substrate_level") == 1:
+            self._decide("model fit", "at the first level (q_z = 0)", "the angles of the cut are not known")
         _index, best = chosen(fit)
         over = fit_names.points_text(best.get("points") or fit.get("fitted_points"))
-        self._decide("fit", _solution_text(best), PREDICTED.format(curve=fit.get("curve"),
-                                                                   points=f" ({over})" if over else ""))
+        by_errors = fit_names.weight_key(best) == "bic_weight"
+        reason = BIC_DECISION if by_errors else PREDICTED
+        self._decide("fit", _solution_text(best), reason.format(curve=fit.get("curve"), points=f" ({over})" if over else ""))
         ranges = _interval_text(best)
         if ranges:  # the refined values with their intervals; from the errors when the sampling did not converge
-            by_errors = best.get("compared_by") == "bic" or "bic" in (best.get("flags") or ())
             self._decide("fit intervals", (INTERVALS_BIC if by_errors else INTERVALS).format(values=ranges),
-                         INTERVALS_WHY)
+                         "reported by the fit" if by_errors else INTERVALS_WHY)
+        for template, values in fit_names.diagnostic_lines(best.get("diagnostics") or {}, best.get("ess")):
+            self._decide("fit", template.format(**values), "reported by the fit")
         for warning in best.get("warnings") or ():
             self._decide("fit caveat", warning, "reported by the fit")
         if best.get("more_warnings"):  # one line for the values that are not the particles'
@@ -264,7 +278,7 @@ class GisaxsProcedureMixin:
         distance = _distance(best)
         if distance is not None and distance >= UNCORRELATED_D_NM:
             self._decide(
-                "fit caveat", f"D = {distance:.3g} nm: this solution has no interparticle correlation in the q range",
+                "fit caveat", f"D = {component_number(best, 'D', 0)} nm: this solution has no interparticle correlation in the q range",
                 "a structure factor that is flat here; D itself is not determined by the curve",
             )
         others = rivals(solutions)
@@ -280,6 +294,10 @@ class GisaxsProcedureMixin:
         caveat = interface_caveat(best, fit.get("cut_qz"))
         if caveat:  # fitted at q_z = 0 while q_z·R of the cut is beyond what that treatment holds for
             self._attention("fit", caveat, None, QZ_R_HINT)
+        grazing = [flag for flag in best.get("flags") or () if flag.split(":", 1)[0] in fit_names.GRAZING_FLAGS
+                   and not flag.startswith("qzR:")]
+        for note in fit_names.sentences(grazing, len(best.get("components") or ()) > 1):
+            self._attention("fit", note, None, "")
         if poor_fit(best):  # converged, but far from the curve: Fitting's poor-fit limit
             self._attention("fit", POOR_FIT.format(model=best["model"], chi2=f"{best['chi2']:.3g}", limit=f"{POOR_CHI2:g}"),
                             None, POOR_FIT_HINT)
@@ -298,7 +316,8 @@ class GisaxsProcedureMixin:
                      + "; ".join(_solution_text(item) for item in agree)
                      + " (2π/q* is a length scale, not necessarily the particle spacing). ")
         listed = "; ".join(f"rank {item['rank']}, {_solution_text(item)}" for item in probable)
-        self._attention("model", PROBABLE.format(n=len(probable), limit=f"{ASK_PROBABILITY:g}", solutions=listed),
+        template = BIC_RIVALS if fit_names.weight_key(probable[0]) == "bic_weight" else PROBABLE
+        self._attention("model", template.format(n=len(probable), limit=f"{ASK_PROBABILITY:g}", solutions=listed),
                         None, hint + PROBABLE_HINT)
 
     def _gisaxs_report(self) -> Optional[dict]:

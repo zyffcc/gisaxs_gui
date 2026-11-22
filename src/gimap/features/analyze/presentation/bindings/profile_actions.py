@@ -12,14 +12,17 @@ from PyQt5.QtWidgets import QMessageBox
 
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ..geometry_dialog import GeometryDialog, geometry_defaults
+import math
+
+from ..geometry_dialog import HC_KEV_ANGSTROM, SOURCE_PONI, SOURCE_PROFILE, GeometryDialog, geometry_defaults
 from ..preferences import AnalyzePreferences, load_preferences, save_preferences
 from ..views.analyze_page_view import AUTO_PROFILE_TEXT
 from .fit_handover import FitHandoverMixin
 from .geometry_editor import GeometryEditorMixin
+from .geometry_files import GeometryFilesMixin
 
 
-class ProfileActionsMixin(GeometryEditorMixin, FitHandoverMixin):
+class ProfileActionsMixin(GeometryEditorMixin, GeometryFilesMixin, FitHandoverMixin):
     """Own the Instrument combo, the no-geometry banner actions and preferences."""
 
     def _refresh_profiles(self) -> None:
@@ -34,6 +37,7 @@ class ProfileActionsMixin(GeometryEditorMixin, FitHandoverMixin):
 
     def _profile_chosen(self, _index: int) -> None:
         self.view_model.set_profile(self.profile_combo.currentData())
+        self._sync_normalisation_widgets()
         self._remember()
         self.run_analysis()
 
@@ -43,7 +47,13 @@ class ProfileActionsMixin(GeometryEditorMixin, FitHandoverMixin):
         self.run_analysis()
 
     def _offer_previous_geometry(self) -> None:
-        """Show “Use Previous Geometry” only when the former Fitting page stored one."""
+        """Show “Use Previous Geometry” only when the former Fitting page stored one; “Use Profile Anyway” only when
+        the profile picked is for frames of another size (``ResolveGeometry``)."""
+        analysis = self.view_model.state.analysis
+        refused = analysis.resolution.refused_profile if analysis is not None else None
+        self.banner_anyway_button.setVisible(bool(refused))
+        if refused:
+            self.banner_anyway_button.setText(trf("Use “{name}” Anyway", name=refused))
         geometry = self.view_model.fitting_geometry()
         self.use_fitting_button.setVisible(geometry is not None)
         if geometry is not None:
@@ -85,19 +95,30 @@ class ProfileActionsMixin(GeometryEditorMixin, FitHandoverMixin):
                 pixel_x_um=current.pixel_size_x_m * 1e6,
                 pixel_y_um=current.pixel_size_y_m * 1e6,
                 wavelength_angstrom=current.wavelength_angstrom,
+                energy_kev=HC_KEV_ANGSTROM / current.wavelength_angstrom,
+                wavelength_source=SOURCE_PONI if analysis.resolution.how == "file" else SOURCE_PROFILE,
+                wavelength_source_name=profile.name if profile is not None else "",
                 center_x=current.beam_center_x_px,
                 center_y=current.beam_center_y_px,
-                incidence_deg=current.incidence_deg,
+                incidence_deg=profile.geometry.incidence_deg if profile else 0.0,
+                sample_roll_deg=current.sample_roll_deg, sample_roll_measurement=analysis.sample_roll_measurement,
+                rot1_deg=math.degrees(current.rot1_rad),
+                rot2_deg=math.degrees(current.rot2_rad),
+                rot3_deg=math.degrees(current.rot3_rad),
+                orientation=current.orientation,
             )
-        name = profile.name if profile is not None else self.view_model.suggested_profile_name()
+        saved = profile is not None and analysis.resolution.how != "file"  # (a .poni beside the frame is no profile)
+        name = profile.name if saved else self.view_model.suggested_profile_name()
         dialog = GeometryDialog(
-            name, defaults, self, allow_delete=profile is not None, center_step_px=self._center_step_px(),
+            name, defaults, self, allow_delete=saved, center_step_px=self._center_step_px(),
         )
-        dialog._edited_profile_name = profile.name if profile is not None else None
+        dialog._edited_profile_name = profile.name if saved else None
         dialog.applyCenterRequested.connect(lambda: self._apply_geometry_editor_center(dialog))
         dialog.saveRequested.connect(lambda: self._save_geometry_editor_profile(dialog))
         dialog.deleteRequested.connect(lambda: self._delete_geometry_editor_profile(dialog))
         dialog.validationFailed.connect(lambda text: self._set_geometry_editor_status(dialog, text, "warning"))
+        dialog.loadPoniRequested.connect(lambda: self.load_poni(dialog=dialog))
+        dialog.exportPoniRequested.connect(lambda: self.export_poni(dialog=dialog))
         self._show_geometry_editor("_geometry_dialog", dialog, target)
 
     def _save_geometry_editor_profile(self, dialog) -> None:
@@ -105,7 +126,9 @@ class ProfileActionsMixin(GeometryEditorMixin, FitHandoverMixin):
             dialog.close()
             return
         try:
-            self.view_model.save_profile(dialog.profile_name(), dialog.geometry(), source="entered by hand")
+            self.view_model.save_profile(dialog.profile_name(), dialog.geometry(), source=dialog.source_text(),
+                                         sample_roll_measurement=dialog.roll_measurement)
+            self.view_model.set_sample_roll(None)
         except (ValueError, OSError) as exc:
             self._set_geometry_editor_status(dialog, "Could not save the geometry: {error}", "error", error=str(exc))
             return

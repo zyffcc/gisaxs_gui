@@ -126,7 +126,10 @@ def test_the_table_shows_every_value_the_points_and_the_halves_and_copies(tmp_pa
     table = series.results_table
     values = parameter_columns(series._start_model)
     header = _header(table)
-    assert len(values) >= 6 and table.columnCount() == len(values) + 4  # every free value has its column
+    # every free value has its column, then where the fit started and the flags
+    assert len(values) >= 6 and table.columnCount() == len(values) + 6
+    assert header[len(values) + 2: len(values) + 4] == ["Started from", "Flags"]
+    assert _row(table, 1)[len(values) + 2] == "continued from frame 1"  # (each frame from the one before)
     assert header[:4] == ["#", "χ²ᵣ", "Scale", "R (nm)"] and header[-2:] == ["Points", "Halves"]
     assert table.horizontalScrollBarPolicy() != Qt.ScrollBarAlwaysOff  # the columns that do not fit are scrolled to
     first = _row(table, 0)
@@ -172,7 +175,9 @@ def test_a_failed_row_says_why_and_the_counts_are_of_what_was_fitted(tmp_path) -
     assert series.step_rail.state("results") == "warn" and series.step_rail.detail("results") == "4 fitted · 1 failed"
     assert series.status_label.text() == "Series done: 4 frames fitted, 1 failed."
     # The failed frame, selected: why, where the plot would be (not “the selected frame appears here”).
-    table.setCurrentCell(2, 0)
+    assert series.review_frame_button.text() == "Review frame 3"
+    series.review_frame_button.click()
+    assert table.currentRow() == 2
     assert series.frame_plot.curve_count() == 0
     assert series.frame_plot.empty_overlay.label.text().startswith("Frame 3 cannot be fitted: No data rows found")
     assert series.frame_note.text().startswith("Frame 3 cannot be fitted") and series.frame_note.property("gimapRole") == "warning"

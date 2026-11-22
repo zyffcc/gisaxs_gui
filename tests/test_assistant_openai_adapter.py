@@ -158,7 +158,9 @@ def test_models_are_listed_and_the_connection_test_uses_a_tool() -> None:
     assert llm.check() == "deepseek-chat" and server.requests[0]["body"]["tools"][0]["function"]["name"] == "ping"
 
 
-def test_keys_are_kept_per_provider_and_environment_variables_work(tmp_path: Path) -> None:
+def test_keys_are_kept_per_provider_and_environment_variables_work(tmp_path: Path, monkeypatch) -> None:
+    from src.gimap.features.assistant.infrastructure import storage
+    monkeypatch.setattr(storage, "system_credentials", lambda folder: None)
     store = ProviderKeyStore(tmp_path, environ={"DASHSCOPE_API_KEY": "sk-env"})
     assert store.source("qwen", "DASHSCOPE_API_KEY") == "environment variable DASHSCOPE_API_KEY"
     assert store.load("qwen", "DASHSCOPE_API_KEY") == "sk-env" and store.load("deepseek", "DEEPSEEK_API_KEY") is None

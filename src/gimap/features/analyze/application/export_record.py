@@ -16,7 +16,6 @@ for GISAXS, the I(q) for GIWAXS — also when the I(q) is shown against 2θ.
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Optional
@@ -24,6 +23,7 @@ from typing import Any, Mapping, Optional
 import numpy as np
 
 from src.gimap.shared.file_digest import input_digests
+from src.gimap.shared.geometry.q_inverse import q_of_positions
 from src.gimap.shared.signed_cut import FIT_HALVES
 from src.gimap.shared.version import SOFTWARE as RELEASE
 
@@ -35,10 +35,14 @@ from ..domain import (
     has_intensity_corrections,
     q_from_two_theta,
 )
+from ..domain.mask_edits import MaskImage, mask_edit_record
 from .flat_detector import flat_detector_record
 from .frame_preprocessing import photon_counts
+from .incidence_record import nominal_incidence
 from .models import FrameAnalysis
 from .ports import frame_label, source_name, source_stem
+from .record_values import plain as _plain
+from .reduction_inputs import source_files
 
 SOFTWARE = "GIMaP Analyze 1"
 """``software`` of Analyze's records: the name of the record format, not the release (``software_version``)."""
@@ -47,45 +51,18 @@ GEOMETRY_CONVENTION = (
     "canonical pixel-corner frame, row 0 at top, beam centre = direct beam; "
     "kinematic (vacuum) grazing-incidence q of a flat detector, tilted by pyFAI's rotations rot1-rot3 of the "
     "geometry (all 0: perpendicular to the beam); q_z inside the film when geometry.critical_angle_deg is above 0 "
-    "(refraction, pixels below it left out), Å⁻¹"
+    "(refraction, pixels below it left out), Å⁻¹. Positive sample_roll_deg tilts the surface normal toward "
+    "laboratory right about the incident beam before the incidence rotation"
 )
 """``geometry_convention`` of the record: what the q values are (the detector tilt is ``geometry.rot1_rad`` …
 ``rot3_rad``; refraction only with ``geometry.critical_angle_deg`` above 0)."""
 POISSON, PIXEL_SCATTER, SCALED_POISSON = "poisson", "pixel_scatter", "scaled_poisson"
-"""``error_model``: σ of a point from the photon counts of its pixels (√Σ / n), from the scatter of its pixels
-(not counts as measured: ``frame_preprocessing.photon_counts``), or from the counts scaled like the values (a flat
-field or the GIWAXS intensity corrections on counts: a pixel's variance is value / factor)."""
+"""Established record names for the Poisson and pixel scatter estimators."""
 MERGE_RULE = (
     "a bin with fewer pixels than max(8, 10 % of the curve's median) is joined with its neighbours until the point "
     "has enough, never across a gap of more than 2.5 bin steps; the point has the pixel-weighted mean of q and of I"
 )
 """How the sparse bins of an I(q) are joined (``domain/binning.merge_sparse_bins``), for the record's ``binning``."""
-
-
-def _plain(value: Any) -> Any:
-    """JSON-friendly copy of markers (dataclasses, tuples, numpy scalars)."""
-    if is_dataclass(value):
-        return _plain(asdict(value))
-    if isinstance(value, Mapping):
-        return {str(key): _plain(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_plain(item) for item in value]
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, float) and not math.isfinite(value):
-        return None
-    return value
-
-
-def source_files(path: str | Path, metadata: Optional[Mapping[str, Any]]) -> list[str]:
-    """Every file a frame was read from when it is not ``path`` alone: the module files of a set, or a master
-    and its data files (as the reader lists them in the frame's metadata). Empty for a frame of one file."""
-    metadata = metadata or {}
-    modules = [str(item) for item in metadata.get("module_files") or ()]
-    if modules:
-        return modules
-    data = [str(item) for item in metadata.get("data_files") or ()]
-    return [str(path), *data] if data else []
 
 
 def frame_stem(path: str | Path, source: Any = None, *, frame_index: int = 0, frame_count: int = 1,
@@ -134,7 +111,12 @@ def frame_cuts(metadata: Optional[Mapping[str, Any]]) -> dict[str, Any]:
         cuts["horizontal_rows"] = list(rows) if rows else None
         cuts["horizontal_source"] = markers.get("horizontal_source")
         cuts["vertical_columns"] = list(columns) if columns else None
-    elif metadata.get("measurement") == GIWAXS:
+        cuts["vertical_source"] = markers.get("vertical_source")
+        if "gisaxs_cut" in regions.get("horizontal", {}):
+            cuts["horizontal_qz_edges_A_inv"] = regions["horizontal"]["qz_edges"]
+        if "gisaxs_cut" in regions.get("vertical", {}):
+            cuts["vertical_qy_edges_A_inv"] = regions["vertical"]["qy_edges"]
+    elif metadata.get("measurement") in (GIWAXS, "transmission"):
         window = markers.get("chi_q_window")
         cuts["chi_q_window"] = [float(value) for value in window] if window else None
     if markers.get("series_cut"):
@@ -142,11 +124,24 @@ def frame_cuts(metadata: Optional[Mapping[str, Any]]) -> dict[str, Any]:
     return cuts
 
 
-def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
+def recorded_region(analysis, curve):
+    region = dict(curve.region or {})
+    if (analysis.kind == GISAXS and curve.key in ("horizontal", "vertical") and "gisaxs_cut" not in region
+            and "rows" in region and "columns" in region):
+        top, bottom = region["rows"]
+        left, right = region["columns"]
+        corners = ("top_left", "top_right", "bottom_right", "bottom_left")
+        qy, qz = q_of_positions(analysis.geometry, [left, right, right, left], [top, top, bottom, bottom])
+        region["detector_corners_qy_qz_A_inv"] = dict(zip(corners, np.column_stack((qy, qz)).tolist()))
+    return _plain(region)
+
+
+def analysis_metadata(analysis: FrameAnalysis, *, curve_keys=None, with_reproduction=True) -> dict[str, Any]:
     """Provenance written next to exported curves."""
     reduction = analysis.reduction
     profile = analysis.resolution.profile
     loaded = analysis.metadata or {}
+    reference, reference_source = nominal_incidence(analysis)
     record = {
         "software": SOFTWARE,
         "software_version": RELEASE,  # the release that wrote the record (``shared.version.SOFTWARE``)
@@ -165,12 +160,22 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
             if analysis.geometry is not None else None
         ),
         "geometry_convention": GEOMETRY_CONVENTION,
+        "sample_roll_measurement": getattr(analysis, "sample_roll_measurement", None),
+        "incidence_measurement": getattr(analysis, "incidence_measurement", None),
+        "geometry_resolution": {
+            "method": analysis.resolution.how, "beam_center_source": analysis.resolution.center_source,
+            "header_beam_center_px": _plain(analysis.resolution.header_center),
+            "nominal_incidence_deg": reference, "nominal_incidence_source": reference_source,
+        },
         "instrument_profile": (
-            {"name": profile.name, "source": profile.source, "updated_at": profile.updated_at}
+            profile.to_dict()
             if profile is not None
             else None
         ),
-        "corrections": {**_plain(analysis.corrections), "flat_field": flat_field_record(analysis)},
+        "corrections": {**_plain(analysis.corrections), "flat_field": flat_field_record(analysis),
+                        "reference_dark": getattr(analysis, "reference_dark", None)},
+        "normalisation": None if getattr(analysis, "normalisation", None) is None else analysis.normalisation.to_record(),
+        "header_values": _plain(getattr(analysis, "header_values", None) or {}),
         "intensity_corrections": (
             describe_intensity_corrections(analysis.corrections) if analysis.kind == GIWAXS else None
         ),
@@ -182,7 +187,8 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
         "pixels_filled_from_mirror": None if analysis.filled_pixels is None else int(analysis.filled_pixels.sum()),
         "markers": _plain(reduction.markers) if reduction is not None else {},
         "curves": [
-            {"key": curve.key, "title": curve.title, "x_label": curve.x_label, "region": _plain(curve.region)}
+            {"key": curve.key, "title": curve.title, "x_label": curve.x_label, "y_label": curve.y_label,
+             "region": recorded_region(analysis, curve)}
             for curve in (reduction.curves if reduction is not None else ())
         ],
         "messages": list(analysis.messages),
@@ -190,17 +196,43 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
         "binning": binning(analysis),
         "created": datetime.now(timezone.utc).isoformat(timespec="seconds"),  # UTC, when the record was written
     }
+    if getattr(analysis, "calibrated_curve_unit", None) is not None:
+        record["output_intensity_unit"] = analysis.calibrated_curve_unit
+    if getattr(analysis, "reference_peak_scale", None) is not None:
+        record["reference_peak_scale"] = analysis.reference_peak_scale
     files = source_files(analysis.path, loaded)
+    corrections = analysis.corrections
+    mask_sources = [corrections.mask_path] if corrections.mask_path else []
+    for edit in corrections.mask_shapes:
+        mask_sources.extend(edit.sources)
+        if isinstance(edit, MaskImage):
+            mask_sources.append(edit.path)
+    record["corrections"]["mask_shapes"] = [mask_edit_record(edit) for edit in corrections.mask_shapes]
+    record["corrections"]["mask_sources"] = list(dict.fromkeys(mask_sources))
     if files:  # a set of module files, a master with its data files: every file the frame was read from
         record["source_files"] = files
-    # Every input by file name and SHA-256: the paths above are where the files were on this computer.
-    record["input_sha256"] = input_digests(
-        [*(files or [analysis.path]), *(path for path, _ in analysis.summed_frames or ())])
     if loaded.get("layout"):  # NeXus / HDF5: what the source is, which dataset, how the image was turned
         record["source_layout"] = {
             "kind": loaded.get("layout"), "summary": loaded.get("layout_summary"),
             "dataset": loaded.get("dataset_path"), "transformations": _plain(loaded.get("transformations") or []),
         }
+    if getattr(analysis, "request", None) is not None and reduction is not None:
+        inputs = {**analysis.frame_files, **analysis.correction_files, **analysis.geometry_files}
+        if with_reproduction:
+            from .reduction_record import reduction_record
+            record["reproduction"] = reduction_record(analysis, inputs, curve_keys)
+        record["input_sha256"] = [{"file": Path(ref["path"]).name, "sha256": ref["sha256"]} for ref in inputs.values()]
+    else:
+        references = [corrections.dark_path, corrections.background_path, corrections.flat_field_path]
+        if analysis.kind == GIWAXS and corrections.film_cif_path:
+            references.append(corrections.film_cif_path)
+        if getattr(analysis, "error_model_used", None) == "sigma" or any(
+            curve["region"].get("error_model") == "sigma_frame" for curve in record["curves"]
+        ):
+            references.append(corrections.sigma_path)
+        record["input_sha256"] = input_digests(
+            [*(files or [analysis.path]), *(path for path, _ in analysis.summed_frames or ()), *mask_sources,
+             *(path for path in references if path)])
     return record
 
 
@@ -226,24 +258,68 @@ def provenance_lines(record: Mapping[str, Any], written_by: str, settings: Optio
         tilt = math.degrees(math.acos(max(-1.0, min(1.0, math.cos(geometry.get("rot1_rad") or 0.0)
                                                     * math.cos(geometry.get("rot2_rad") or 0.0)))))
         critical = float(geometry.get("critical_angle_deg") or 0.0)
+        roll = float(geometry.get("sample_roll_deg") or 0.0)
         lines.append(
             f"geometry: distance {geometry['distance_m'] * 1e3:.4f} mm, direct beam ({geometry['beam_center_x_px']:.3f}, "
             f"{geometry['beam_center_y_px']:.3f}) px, wavelength {geometry['wavelength_angstrom']:.6g} A, "
-            f"alpha_i {geometry['incidence_deg']:.4g} deg, detector tilt {tilt:.4g} deg" + (
+            f"alpha_i {geometry['incidence_deg']:.4g} deg, sample roll {roll:.4g} deg, detector tilt {tilt:.4g} deg" + (
                 f", q_z refracted, alpha_c {critical:.4g} deg" if critical > 0.0 else ""))
+    return lines + intensity_lines(record)
+
+
+def intensity_lines(record: Mapping[str, Any]) -> list[str]:
+    """What was subtracted from and divided into the intensities, from the record: the dark frame and the
+    normalisation with each of its terms and where it came from (none of them: no line)."""
+    lines = []
+    corrections = record.get("corrections") or {}
+    if corrections.get("dark_path"):
+        lines.append(f"dark frame: {Path(str(corrections['dark_path'])).name} (index {int(corrections.get('dark_frame') or 0)}) "
+                     f"x {float(corrections.get('dark_scale', 1.0)):g}, subtracted before the background")
+    reference = corrections.get("reference_dark")
+    if reference:
+        lines.append(f"background dark scale: {reference['background_dark_scale']:g} ({reference['source']})")
+    model = record.get("error_model")
+    if model:
+        def estimator(name):
+            if name in (POISSON, SCALED_POISSON):
+                return f"{name}, {corrections.get('poisson_variance', 'observed')} sample shot variance"
+            if name == PIXEL_SCATTER and corrections.get("pooled_scatter"):
+                return f"{name}, pooled below 10 pixels"
+            return name
+
+        ring = next(((c.get("region") or {}).get("error_model") for c in record.get("curves") or ()
+                     if c.get("key") == "azimuthal"), None)
+        if ring and ring != model:
+            lines.append(f"radial and sector error model: {estimator(model)}")
+            lines.append(f"ring orientation error model: {estimator(ring)}")
+        else:
+            lines.append(f"error model: {estimator(model)}")
+    norm = record.get("normalisation")
+    if norm:
+        terms = ", ".join(f"{key} {item['value']:.6g} ({item['source']})" for key, item in norm.items()
+                          if isinstance(item, Mapping) and "value" in item and "source" in item)
+        unit = norm["intensity_unit"]
+        if record.get("reference_peak_scale") is not None:
+            unit = (f"relative after reference-peak scaling by {record['reference_peak_scale']:.8g}; "
+                    f"before reference-peak scaling: {unit}")
+        lines.append(f"intensity: {unit}; normalised I = A_abs*I/(t_exp*M*T*d), factor {norm['factor']:.6g}"
+                     f" ({terms}); sigma scaled by the same factor")
     return lines
 
 
 def error_model(analysis: FrameAnalysis) -> Optional[str]:
-    """How the σ of the frame's points were computed (``POISSON``, ``PIXEL_SCATTER``, ``SCALED_POISSON``): the
-    decision the reduction took (``frame_preprocessing.photon_counts``, then a flat field or the GIWAXS intensity
-    corrections, which scale the counts). ``None`` without a reduction."""
+    """Describe the estimator used for the reduced curves, including supplied σ and propagated references."""
     if analysis.reduction is None:
         return None
-    if not photon_counts(analysis.metadata, analysis.corrections,
-                         mirror_filled=getattr(analysis, "filled_pixels", None) is not None):
+    model = getattr(analysis, "error_model_used", None)
+    if model == "sigma":
+        return "sigma_frame"
+    if model == "scatter" or (model is None and not photon_counts(
+        analysis.metadata, analysis.corrections, mirror_filled=getattr(analysis, "filled_pixels", None) is not None
+    )):
         return PIXEL_SCATTER
-    return SCALED_POISSON if getattr(analysis, "intensity_scale", None) is not None else POISSON
+    propagated = analysis.intensity_scale is not None or getattr(analysis, "extra_variance", None) is not None
+    return SCALED_POISSON if propagated else POISSON
 
 
 def binning(analysis: FrameAnalysis) -> Optional[dict[str, Any]]:
@@ -267,7 +343,7 @@ def binning(analysis: FrameAnalysis) -> Optional[dict[str, Any]]:
         "bins_chosen": None if not radial else (
             "auto: the q range over the q step of one pixel (99th percentile), 100 to 3000 bins" if radial.get("chosen") == "auto" else "set in Options"),
         "radial_points": None if curve is None else int(np.asarray(curve.x).size),
-        "merge": MERGE_RULE,
+        "merge": "none (sum per original q bin)" if curve is not None and curve.region.get("aggregation") else MERGE_RULE,
         "chi_bin_deg": 1.0, "chi_merge": "none (the I(χ) bins are kept as they are)",
     }
 
@@ -323,28 +399,47 @@ def fit_input_observation(analysis: FrameAnalysis, halves: Optional[str] = None)
     which has no halves, leave the key out: Fitting decides.
 
     A frame of a source that holds several also says which: ``"frame_index"`` (0-based, as in the file name)
-    and ``"frame_count"`` — what a series in Fitting needs to plot against the frame of the measurement.
+    and ``"frame_count"`` — what a series in Fitting needs to plot against the frame of the measurement. When the
+    file says when the frame was measured, ``"timestamp"`` (as the file writes it) and ``"frame_time_s"`` (a time of
+    each frame of a series) are recorded too: Fitting's trend can then be drawn against time.
     """
     corrections = analysis.corrections
     record = {
         "source": "native_detector_columns" if analysis.kind == GISAXS else "radial_bins",
         "file_format": analysis.path.suffix.lower().lstrip("."),
-        "intensity_unit": "counts_per_pixel",
+        "intensity_unit": ("counts_per_pixel" if getattr(analysis, "normalisation", None) is None
+                           else getattr(analysis, "calibrated_curve_unit", None) or analysis.normalisation.unit),
         "counting_model_valid": (
             photon_counts(analysis.metadata, corrections, mirror_filled=getattr(analysis, "filled_pixels", None) is not None)
             and analysis.intensity_scale is None
-            and not corrections.flat_field_path
+            and not (corrections.flat_field_path or corrections.dark_path or corrections.background_path)
+            and corrections.error_model not in ("scatter", "sigma")
+            and corrections.counts_per_adu == 1 and corrections.offset_adu == 0
             and not (analysis.kind == GIWAXS and has_intensity_corrections(corrections))
         ),
         "threshold_enabled": corrections.minimum is not None or corrections.maximum is not None,
         "gap_guard_px": int(corrections.gap_guard_px),
         "summed_frames": analysis.frame_total,
     }
+    if analysis.kind == GIWAXS and corrections.lorentz:
+        radial = analysis.reduction.curve("radial") if analysis.reduction is not None else None
+        if radial is not None:
+            record["intensity_unit"] = radial.y_label.removeprefix("I (").removesuffix(")")
+            record["aggregation"] = radial.region.get("aggregation")
     if analysis.kind == GISAXS and halves in FIT_HALVES:
         record["halves"] = halves
     count = int(getattr(analysis, "frame_count", 1) or 1)
     if count > 1:
         record["frame_index"], record["frame_count"] = int(getattr(analysis, "frame_index", 0)), count
+    metadata = getattr(analysis, "metadata", None) or {}
+    if metadata.get("timestamp"):
+        record["timestamp"] = str(metadata["timestamp"])
+    try:
+        frame_time = float(metadata.get("frame_time_s"))
+    except (TypeError, ValueError):
+        frame_time = None
+    if frame_time is not None and np.isfinite(frame_time):
+        record["frame_time_s"] = frame_time
     return record
 
 
@@ -355,6 +450,7 @@ def fit_input_metadata(analysis: FrameAnalysis, metadata: Mapping[str, Any], hal
 __all__ = [
     "GEOMETRY_CONVENTION", "MERGE_RULE", "PIXEL_SCATTER", "POISSON", "Q_LABEL", "SCALED_POISSON", "SOFTWARE",
     "analysis_metadata", "binning", "error_model", "export_stem", "fit_input_curve", "fit_input_metadata", "flat_field_record",
-    "fit_input_observation", "frame_cuts", "frame_name", "frame_name_of", "frame_stem", "provenance_lines",
+    "fit_input_observation", "frame_cuts", "frame_name", "frame_name_of", "frame_stem", "intensity_lines",
+    "provenance_lines",
     "source_files",
 ]

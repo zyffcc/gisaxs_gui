@@ -5,14 +5,13 @@ field is a frame of a uniform exposure (a fluorescence foil, an amorphous scatte
 calibration); divided by its mean it is each pixel's response relative to the average pixel, and the corrected
 value is ``I'_p = I_p / F_ff,p``. It changes only intensities, never q, and needs no geometry:
 
-* **Normalisation** — ``F_ff = F_raw / m``, ``m`` the mean of ``F_raw`` over the pixels the flat field keeps, so
-  ``F_ff`` is 1 on average over them. A pixel is kept where ``F_raw`` is finite, not masked by its reader and
-  ``F_ff > FLOOR`` (0.05); the rest do not respond and are left out of every frame (masked) and counted.
+* **Normalisation** — ``F_ff = U / m``, where ``U = D_ff − rK`` and ``m`` is the mean of ``U`` over retained pixels.
+  A pixel is retained where ``U`` is finite, valid, and ``F_ff > floor`` (default 0.05).
   ``m`` and the kept pixels depend on each other: starting from every pixel above 0, ``m`` is recomputed over the
-  pixels above ``FLOOR × m`` until they no longer change (a few rounds; each only removes pixels).
+  pixels above ``floor × m`` until they no longer change.
 * **Composition** — with the intensity corrections, ``F_p = F_Ω F_P F_A F_ff`` (``intensity.py``): the flat field is
-  divided right after the background (pyFAI: ``(I − dark) / flat``), the geometric factors at the end. The variance
-  of a photon count divided by it is ``I_p / F_p²`` (``BinnedMean.add``, ``native_profile``).
+  divided after subtracting the background. The geometric factors are applied last. ``reference_variance.py``
+  propagates the uncertainty of B, D_ff and K, conditional on the measured normalisation mean.
 * A flat field of another shape than the frame is refused (``FLAT_SHAPE``): never resampled.
 """
 
@@ -25,7 +24,6 @@ import numpy as np
 
 FLOOR = 0.05
 """Pixels whose normalised flat field is at or below this (dead, shadowed, a gap) are left out."""
-MAX_ROUNDS = 50
 FLAT_SHAPE = "The flat field {name} is {flat_shape}; the frame is {shape}."
 NOT_2D = "The flat field {name} is not one 2D image (it has {dimensions} dimensions)."
 NO_RESPONSE = "The flat field {name} has no pixel above 0."
@@ -35,12 +33,14 @@ NO_RESPONSE = "The flat field {name} has no pixel above 0."
 @dataclass(frozen=True)
 class FlatField:
     """A normalised flat field: ``factor`` (float32, ``F_ff``; NaN where not kept), the pixels it keeps, and the
-    mean ``m`` of the raw flat field over them (in the units of its file)."""
+    mean ``m`` of the dark-corrected flat exposure over them (counts after ADU conversion)."""
 
     factor: np.ndarray
     kept: np.ndarray
     mean: float
     floor: float = FLOOR
+    independent_variance: Optional[np.ndarray] = None
+    """Poisson variance of D_ff / mean, excluding the shared dark reference."""
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -54,12 +54,15 @@ class FlatField:
 
 def normalise_flat_field(
     raw: np.ndarray, valid: Optional[np.ndarray] = None, *, floor: float = FLOOR, name: str = "",
+    flat_counts: Optional[np.ndarray] = None,
 ) -> FlatField:
     """``raw`` divided by its mean over the pixels it keeps (module docstring); ``valid``: the pixels its reader
     did not mask. ``ValueError`` (``NOT_2D``, ``NO_RESPONSE``) when it cannot be a flat field."""
     raw = np.asarray(raw, dtype=np.float64)
     if raw.ndim != 2:
         raise ValueError(NOT_2D.format(name=name, dimensions=raw.ndim))
+    if not 0 <= floor < 1:
+        raise ValueError("The flat-field floor must be at least zero and below one.")
     with np.errstate(invalid="ignore"):
         usable = np.isfinite(raw) & (raw > 0)
     if valid is not None:
@@ -68,14 +71,15 @@ def normalise_flat_field(
         raise ValueError(NO_RESPONSE.format(name=name))
     kept = usable
     mean = float(raw[kept].mean())
-    for _ in range(MAX_ROUNDS):  # each round removes pixels or stops: the largest pixel always stays
+    while True:  # Each round removes pixels or stops. With floor < 1 the largest pixel stays.
         fewer = usable & (raw > float(floor) * mean)
         if np.array_equal(fewer, kept):
             break
         kept, mean = fewer, float(raw[fewer].mean())
     factor = np.full(raw.shape, np.nan, dtype=np.float32)
     factor[kept] = (raw[kept] / mean).astype(np.float32)
-    return FlatField(factor, kept, mean, float(floor))
+    variance = np.maximum(raw if flat_counts is None else flat_counts, 0.0) / mean**2
+    return FlatField(factor, kept, mean, float(floor), variance.astype(np.float32))
 
 
 def check_flat_shape(flat: FlatField, shape: tuple[int, int], name: str = "") -> None:

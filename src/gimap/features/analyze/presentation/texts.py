@@ -9,7 +9,9 @@ they are. Text that matches nothing is shown as it came.
 
 from __future__ import annotations
 
+import math
 import re
+from pathlib import Path
 from typing import Callable, Optional
 
 from src.gimap.app.presentation.i18n import tr, trf
@@ -18,8 +20,15 @@ from src.gimap.shared.detector_io.nexus_layout import ERROR_TEMPLATES, FRAME_BEY
 from ..application import RECTANGLE
 from ..application.flat_detector import DETECTOR_ROTATION_MESSAGE, FLAT_DETECTOR_MESSAGE
 from ..application.flat_field import FLAT_FIELD_TEMPLATES
+from ..application.frame_preprocessing import BAD_VALUE, NORMALISATION_TEMPLATES
 from ..application.geometry_resolution import CENTER_NOT_USED, CENTER_NOT_USED_HEADER
 from ..application.gisaxs_cuts import CUT_TEMPLATES
+from ..application.geometry_resolution import CENTER_NOT_USED, CENTER_NOT_USED_HEADER, PROFILE_REFUSED
+from ..application.geometry_files import PIXEL_MISMATCH, SHAPE_MISMATCH
+from ..application.frame_import import OTHER_DETECTOR
+from ..application.technique import BY_RINGS
+from .views.mask_tools_view import RULES, SHAPES
+from ..application.indexing import SYMMETRY_TEMPLATES
 
 NO_PROFILE = "No instrument profile for {detector} ({shape}). Calibrate once or enter the geometry to get q curves."
 PROFILE_SHAPE = "Profile “{name}” is for {profile_shape} frames; this frame is {shape}."
@@ -31,6 +40,7 @@ PROFILE_MISSING = "Instrument profile “{name}” is not here: the geometry is 
 MASK_FILE_MISSING = "Mask file not found, left out: {path}"
 BACKGROUND_MISSING = "Background frame not found, left out: {path}"
 FLAT_FIELD_MISSING = "Flat-field file not found, left out: {path}"
+DARK_MISSING = "Dark frame not found, left out: {path}"
 """Notes of a settings file applied (``batch_model.apply_settings``)."""
 REGION_Q_EMPTY = "Region {name}: the q range is empty."
 REGION_CHI_EMPTY = "Region {name}: the χ range is empty."
@@ -92,11 +102,19 @@ TEMPLATES: tuple[tuple[str, dict[str, Callable[[str], str]]], ...] = (
     (MASK_FILE_MISSING, {}),
     (BACKGROUND_MISSING, {}),
     (FLAT_FIELD_MISSING, {}),
+    (DARK_MISSING, {}),
+    *((template, {"what": tr} if template == BAD_VALUE else {}) for template in NORMALISATION_TEMPLATES),
     *((template, {}) for template in FLAT_FIELD_TEMPLATES),  # a flat field that cannot be used, and why
     (REGION_Q_EMPTY, {}),
     (REGION_CHI_EMPTY, {}),
     (MASK_SHAPE, {}),
     *((template, {}) for template in CUT_TEMPLATES),  # a GISAXS cut that cannot be made or holds nothing
+    (PROFILE_REFUSED, {}),
+    (SHAPE_MISMATCH, {}),
+    (PIXEL_MISMATCH, {}),
+    (OTHER_DETECTOR, {"detector": tr}),  # “detector not named” when the file names none
+    (BY_RINGS, {}),
+    *((template, {}) for template in SYMMETRY_TEMPLATES),  # how a CIF phase got its symmetry, or why not
     *((template, {"error": _frame_beyond} if template == FEWER_FRAMES else {}) for template in READ_ERRORS),
 )
 """English templates of the messages made elsewhere, with what to do with each value (default: keep it)."""
@@ -116,6 +134,12 @@ _PATTERNS = tuple((template, _pattern(template), values) for template, values in
 def message_text(message: str) -> str:
     """``message`` (made in English by the application or the domain) in the interface language."""
     message = str(message)
+    # The reduction record describes the geometry. On screen the angle can be entered directly.
+    if message == "Set αi in the geometry for correct qz.":
+        return tr("For qz, enter the measured incidence angle in the αi field above the image.")
+    if message == "Incidence angle is 0°: the sample horizon equals the beam centre row. Set αi in the geometry for correct qz.":
+        return tr("At αi = 0° the horizon is at the beam centre row. For qz, enter the measured incidence angle "
+                  "in the αi field above the image.")
     exact = tr(message)
     if exact != message:
         return exact
@@ -156,7 +180,33 @@ def left_unfinished(message: str) -> bool:
 
 
 def mask_text(shape) -> str:
-    """A drawn mask as the Mask step lists it (``MaskShape.describe`` in the interface language)."""
+    """One ordered edit as the Mask step lists it."""
+    if shape.kind == "image":
+        return trf("Mask file: {name}", name=Path(shape.path).name)
+    if shape.kind in RULES or shape.kind == "clear":
+        name = tr(RULES.get(shape.kind, "Clear Masks"))
+        if shape.value is None:
+            return name
+        unit = "px" if shape.kind in ("grow", "shrink") else tr("counts")
+        if shape.relative:
+            unit = tr("× median")
+        return f"{name} ({shape.value:g} {unit})"
+    description = _shape_text(shape)
+    return trf("Include: {shape}", shape=description) if shape.mode == "include" else description
+
+
+def _shape_text(shape) -> str:
+    if shape.kind == "q_annulus":
+        low, high = shape.points[0]
+        return f"{tr(SHAPES[shape.kind])} ({low:g}–{high:g} Å⁻¹)"
+    if shape.kind in ("brush", "eraser"):
+        return trf("{tool}, radius {radius} px", tool=tr(SHAPES[shape.kind]), radius=f"{shape.radius:g}")
+    if shape.kind in ("circle", "annulus"):
+        radii = "–".join(f"{math.dist(shape.points[0], p):.2f}" for p in shape.points[1:])
+        return trf("{tool}, radius {radius} px", tool=tr(SHAPES[shape.kind]), radius=radii)
+    if shape.kind == "ellipse":
+        (x0, y0), (x1, y1) = shape.points
+        return f"{tr('Ellipse')} ({abs(x1 - x0):.2f} × {abs(y1 - y0):.2f} px)"
     xs = [x for x, _y in shape.points]
     ys = [y for _x, y in shape.points]
     x, y = f"{min(xs):.0f}–{max(xs):.0f}", f"{min(ys):.0f}–{max(ys):.0f}"
@@ -173,6 +223,8 @@ def detector_text(analysis) -> Optional[str]:
         return str(name)
     resolution = getattr(analysis, "resolution", None)
     profile = getattr(resolution, "profile", None) if resolution is not None else None
+    if getattr(resolution, "how", None) == "file":  # a .poni beside the frame: its name is a file, not a detector
+        return str(profile.detector_name) if profile is not None and profile.detector_name else None
     return str(profile.name) if profile is not None and getattr(profile, "name", None) else None
 
 

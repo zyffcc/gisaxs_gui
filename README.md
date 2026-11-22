@@ -25,6 +25,8 @@ right.*
   curves in q (Å⁻¹, kinematic; a flat detector, tilted when the `.poni` gives rotations): GISAXS cuts, I(q), sectors, q boxes and I(χ). Geometry from a calibrant or a
   `.poni` file, kept as the instrument profile of the detector; masks, hot and dead pixels left out per
   frame, background subtraction and optional GIWAXS intensity corrections with propagated errors.
+  Near the sample horizon, film absorption and crystal orientation can use the incident and exit waves
+  refracted in the film. [Measured P08 ring profiles and fit residuals](tools/benchmarks/README.md#p08-crystal-orientation-at-the-measured-incidence-and-roll)
 - **Run Automatic Analysis** (no AI): for GIWAXS a peak table with fitted positions, widths and
   uncertainties, ring orientation (Hermans f) and Scherrer sizes (lower bounds); for GISAXS the Yoneda cut,
   the length scale 2π/q\* (not necessarily the particle spacing) and screening fits of sphere and cylinder models. A value it cannot know, such as the
@@ -46,7 +48,9 @@ right.*
   Predict for many curves.
 - **AI assistant** (optional): **Tools ▸ Process with AI…** lets an AI (Claude, DeepSeek, Qwen, OpenAI or a
   local model) run the Analyze tools on the frame shown while you watch; each change comes back as a card
-  you can preview, apply or undo. Nothing else in GIMaP needs AI or an account.
+  you can preview, apply or undo. Before the first request to a service, GIMaP names it and asks
+  permission to send frame information and results. The saved report identifies the provider and model.
+  Automatic analysis runs locally without an AI account.
 - **Command line and MCP**: `tools/gimap_agent.py` runs the automatic analysis without the window and
   serves the analysis tools to agents over MCP (see [Command Line and MCP](#command-line-and-mcp)).
 - **Labs** (experimental): 2D Prediction runs trained TensorFlow modules on GISAXS frames (no trained model
@@ -101,7 +105,7 @@ To update a clone, double-click `Update_GIMaP.bat` (see
 
 ### From source with pip
 
-Python 3.10 or 3.11:
+GIMaP requires Python >=3.10 and is tested on 3.10 and 3.11. From the source folder, run
 
 ```powershell
 cd gisaxs_gui
@@ -125,6 +129,11 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python main.py
 ```
+
+`python main.py` also opens what it is given (`python main.py frame_0001.cbf scan_folder sample.gimap`) and
+`python main.py --version` prints the version. `python -m pip install -e .` installs the same with a `gimap` command
+(`gimap --version`, `gimap FILE_OR_FOLDER …`); keep it editable (`-e`): the manuals, icons and example data stay in
+the checkout.
 
 To check an installation quickly, run `python tools/offscreen_smoke.py`: it starts the whole program without a
 window in a temporary user data folder, checks that its six pages are there and prints
@@ -224,9 +233,8 @@ nanoparticles, GALAXI), about ten minutes each.
 3. **Results** gives χ²ᵣ, every value ± 1σ and warnings (a value at a bound, strongly correlated values).
    The **Fitting** menu saves the data and fit (CSV with a JSON record), the plot and the model.
 
-Fitting shows q in nm⁻¹ (Analyze uses Å⁻¹; the Curve step shows both). Fitting opens `.dat` and `.txt`
-curves; the `.csv` curves that Analyze exports are not read by Fitting — use **Send to Fitting**, or the
-`<name>_fit_input.dat` file written next to them.
+Fitting shows q in nm⁻¹ (Analyze uses Å⁻¹; the Curve step shows both). Fitting opens `.dat`, `.txt` and `.csv`
+curves (a CSV by the names of its header: q, I, σ) and NXcanSAS `.h5` files.
 
 ## Predict parameters and 1D Predict
 
@@ -298,6 +306,26 @@ Read the playbooks ([GIWAXS](docs/agents/giwaxs-playbook.md), [GISAXS](docs/agen
 before relying on the numbers: they say which default decisions may not fit your question.
 `python tools/gimap_agent.py auto --help` lists every option.
 
+### Worked example · GALAXI GISAXS
+
+Run this command from the source folder to reproduce the Yoneda cut and level-2 fit in Fig. 4.
+It uses the public GALAXI frame, its calibration and the reported incidence angle of 0.463°.
+
+```sh
+python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.tif --calibration tests/data/external/gisaxs_galaxi/galaxi_bornagain.poni --incidence-deg 0.463 --out fig4
+```
+
+Open `fig4/galaxi_data/report.md` to see the fit level and the cut's vacuum q_z under *Decisions*.
+At q_z = 0.5226 nm⁻¹ the 5.99 nm upright cylinder has q_z·R = 3.13. The report flags it as a possible
+sphere (`cyl_sphere:R_2`). BornAgain's reference model uses spheres of radius 5.75 nm.
+The fit uses 596 points. At the measured intensity maximum their spacing is 0.00466 nm⁻¹,
+or 0.93 times the validation spacing. This run compared the solutions by evidence.
+`horizontal.csv` contains the signed Yoneda cut and `vertical.csv` the vertical cut. `fit_curve.csv`
+gives the most probable fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists
+the candidate solutions and their probabilities. Exit code 2 means that an item needs attention in the report.
+The same folder contains `qmap.png` and `report.json`. The run summaries are
+`fig4/summary.md` and `fig4/summary.json`.
+
 ## How to cite
 
 If you publish results obtained with GIMaP, please cite it and name the version you used. The metadata
@@ -318,7 +346,7 @@ Where you rely on a method or a data set that GIMaP builds on, cite it as well: 
   packages include Python. Each release must pass the platform checks and clean-machine package
   acceptance in [the release guide](docs/releasing.md); see the release notes for completed acceptance.
   BornAgain is optional on macOS. **Linux**: from source; the test suite runs on Ubuntu 24.04 in CI.
-- **Python** 3.10 or 3.11 to run from source.
+- **Python** >=3.10 to run from source, tested on 3.10 and 3.11.
 - **Screen**: 1280 × 720 or larger (the smallest window is 1024 × 640). GIMaP follows the display scaling of
   the operating system; **View ▸ Font Size** changes the text size.
 - **Disk**: about 2 GB for the Python environment.

@@ -232,7 +232,9 @@ def test_a_damaged_distance_of_the_applied_geometry_is_no_estimate_and_does_not_
         dialog._set_running(True)  # as ``load_image`` leaves the window while the file is read
         dialog._image_loaded(_frame())
         assert _shown(dialog) == (0.0, "Optional")
-        assert dialog.open_button.isEnabled() and dialog.calibrate_button.isEnabled()
+        assert dialog.open_button.isEnabled() and not dialog.calibrate_button.isEnabled()  # no energy in the frame
+        dialog.energy_spin.setValue(12.0)
+        assert dialog.calibrate_button.isEnabled()
     finally:
         _dispose(dialog)
 
@@ -376,9 +378,9 @@ def test_applying_in_the_window_makes_its_distance_the_estimate_of_the_next_imag
 def test_the_reported_frame_is_solved_on_a_new_installation(window, tmp_path: Path) -> None:
     """The public pyFAI silver behenate frame, in the window: the standard chosen by hand, the field never touched.
 
-    With the 2000 mm the window used to fill in, a solution near 1830 mm came first (that part of the search
-    is pinned in ``tests/test_release2_docs_decisions.py``). The name of this test names no standard on
-    purpose: the folder pytest makes for it is part of the image's path, where the window looks for one.
+    The search with a user-supplied 2000 mm estimate is covered in ``tests/test_release2_docs_decisions.py``.
+    The name of this test names no standard on purpose: the folder pytest makes for it is part of the image's
+    path, where the window looks for one.
     """
     if not AGBH.is_file():
         pytest.skip("the public silver behenate image is not in this checkout")
@@ -405,4 +407,6 @@ def test_the_reported_frame_is_solved_on_a_new_installation(window, tmp_path: Pa
     assert abs(best.distance_mm - expected_mm) <= 0.03 * expected_mm
     # The table's first row, in the pixels the window shows (0.5 more than the fit's pixel-centre indices).
     assert abs(best.center_x_px + 0.5 - expected_x) < 5.0 and abs(best.center_y_px + 0.5 - expected_y) < 5.0
-    assert window.candidate_table.item(0, 1).text() == f"{best.distance_mm:.2f} mm"
+    from src.gimap.shared.numbers import format_number
+    distance = format_number(best.distance_mm, best.distance_sigma_mm, value_only=True, digits=6)
+    assert window.candidate_table.item(0, 1).text() == f"{distance} mm"

@@ -1,0 +1,677 @@
+{
+ "residual_definition": {
+  "gimap_minimises": "scipy.optimize.least_squares(loss='soft_l1', f_scale=2.0) over the ring points i: cost = sum_i f^2 (sqrt(1 + r_i^2 / f^2) - 1), f = 2 px (r_i^2/2 for |r_i| << 2 px, f |r_i| for |r_i| >> 2 px); free: beam x, y, L, rot1, rot2 (tilt_fit.fit_tilted_geometry). Before it, the centre and L alone are fitted to ring pixels with the untilted residual (Physics and Methods 3.3, eq. 3.8) and the same loss.",
+  "gimap_residual": "r_i = L (tan 2theta_i - tan 2theta_ring(i)) / pbar, in pixels: L the distance from the sample to the direct beam (m), 2theta_i the scattering angle of point i for the trial geometry (beam centre, L, rot1, rot2; GIMaP's lab_rays, pyFAI's rotation convention, rot3 fixed), 2theta_ring from q = 2 pi n / 58.38 A and lambda, pbar = (pixel_x + pixel_y)/2. Untilted, r_i is the radial pixel distance of the point from its ring. (tilt_fit.tilt_residual)",
+  "gimap_points": "one point per azimuthal sector (about 2 px of arc, 36-720 a ring) of each matched ring: the intensity-weighted mean position of the valid pixels within +-max(3, min(10, 1.2 % of the radius)) px of the ring (first pass: twice this half-width h). Weights are measured detector intensity above the sector's lower quartile. Each sector must have valid pixels at radial offsets <= -h+1 and >= h-1 px. Its brightest pixel must stand above the quartile by at least 0.3 of the median such height among sectors that cover both flanks; points taken again about the tilted rings, 4 passes at most (tilt_fit.tilted_ring_points, refine_tilt)",
+  "gimap_bounds": "beam centre within 4 % of the larger image side (12-60 px) of the start, L within +-25 % (and the user's range), |rot1|, |rot2| <= 30 deg",
+  "gimap_sigma_reported": "4 or more contributing rings: jackknife over rings, sigma^2 = (n-1)/n sum_k (theta_(k) - mean)^2, theta_(k) the same robust fit with ring k left out (unbounded, from the full fit, same points); 2 rings: s^2 (J^T J)^-1, s^2 = sum r_i^2 / (N - p), forward-difference J (optimizer.estimate_uncertainty). With 3 rings and fitted tilts the jackknife refits all five parameters if every fit converges, with |rot1| and |rot2| < 30 deg, L in (0.75 L_full, 1.25 L_full) and s_min/s_max > sqrt(machine epsilon) for the Jacobian with unit-length columns. Otherwise all two-ring refits hold both tilts at their full-fit values. In this fallback the tilt errors come from the full five-parameter covariance, and x, y and L take the larger of the conditional jackknife and covariance errors. With tilt fixed by the user use the jackknife for x, y and L.",
+  "pyfai_minimises": "sum_i (2theta_i - 2theta_ring(i))^2 in radians, plain least squares (GeometryRefinement.residu2; curve_fit = Levenberg-Marquardt); its sigma is curve_fit's s^2 (J^T J)^-1"
+ },
+ "real_frame": {
+  "command": "python tools/benchmarks/calibration_check.py --part all --cases 300 --workers 3",
+  "pyfai_version": "2026.9.0",
+  "frame": "tests/data/external/saxs_agbh_pyfai/Pilatus1M.edf",
+  "wavelength_angstrom": 1.0,
+  "pixel_um": 172.0,
+  "calibrant": "AgBh, d001 = 58.38 A (GIMaP agbh and pyFAI AgBh.D)",
+  "gimap": {
+   "matched_rings": 5,
+   "orders": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "uncertainty_method": "ring jackknife",
+   "tilt_refined": true,
+   "point_rms_px": 0.14215267937906048,
+   "untilted_point_rms_px": 0.2026007714603243,
+   "ring_points": 1354,
+   "chosen_by": "line positions (the engine's first choice put the standard's lines further from their q)",
+   "seconds": 12.830420799999956,
+   "headless_beam_center_px": [
+    179.7355794454783,
+    264.01228301515664
+   ],
+   "headless_distance_mm": 1633.4725635951613,
+   "jackknife_repeated_here_max_relative_difference": 2.220446049250313e-16,
+   "sigma_method_reported": "ring jackknife",
+   "values": {
+    "beam_x_px": 179.735579,
+    "beam_y_px": 264.012283,
+    "distance_mm": 1633.472564,
+    "rot1_deg": -0.304794,
+    "rot2_deg": 0.669735
+   },
+   "sigma": {
+    "beam_x_px": 0.075778,
+    "beam_y_px": 0.153751,
+    "distance_mm": 0.34515,
+    "rot1_deg": 0.148242,
+    "rot2_deg": 0.178001
+   },
+   "values_poni": {
+    "dist_mm": 1633.33786,
+    "poni1_mm": 26.316756,
+    "poni2_mm": 22.225647,
+    "rot1_deg": -0.304794,
+    "rot2_deg": 0.669735
+   },
+   "sigma_poni_jackknife": {
+    "dist_mm": 0.394221,
+    "poni1_mm": 5.095213,
+    "poni2_mm": 4.226915,
+    "rot1_deg": 0.148242,
+    "rot2_deg": 0.178001
+   },
+   "sigma_least_squares_same_points": {
+    "beam_x_px": 0.008246,
+    "beam_y_px": 0.008465,
+    "distance_mm": 0.034757,
+    "rot1_deg": 0.018187,
+    "rot2_deg": 0.018231
+   }
+  },
+  "pyfai": {
+   "route": "Recalibration.extract_cpt('massif', 1.0) from the shipped .poni (rot3 = 0), then GeometryRefinement.curve_fit(with_rot=True), repeated until the geometry stops moving",
+   "cycles": 16,
+   "control_points": 747,
+   "points_per_order": {
+    "1": 228,
+    "2": 165,
+    "3": 141,
+    "4": 127,
+    "5": 70,
+    "6": 16
+   },
+   "values_poni": {
+    "dist_mm": 1633.913088,
+    "poni1_mm": 25.807826,
+    "poni2_mm": 22.477007,
+    "rot1_deg": -0.297004,
+    "rot2_deg": 0.687074
+   },
+   "sigma_poni_curve_fit": {
+    "dist_mm": 0.080127,
+    "poni1_mm": 0.996392,
+    "poni2_mm": 0.993682,
+    "rot1_deg": 0.034815,
+    "rot2_deg": 0.034897
+   },
+   "sigma_poni_covariance_here": {
+    "dist_mm": 0.080127,
+    "poni1_mm": 0.996397,
+    "poni2_mm": 0.993702,
+    "rot1_deg": 0.034816,
+    "rot2_deg": 0.034897
+   },
+   "sigma_poni_jackknife": {
+    "dist_mm": 0.195074,
+    "poni1_mm": 2.621663,
+    "poni2_mm": 2.55744,
+    "rot1_deg": 0.089436,
+    "rot2_deg": 0.091445
+   },
+   "values_gimap_convention": {
+    "beam_x_px": 179.923281,
+    "beam_y_px": 263.967575,
+    "distance_mm": 1634.052528,
+    "rot1_deg": -0.297004,
+    "rot2_deg": 0.687074
+   },
+   "sigma_gimap_convention_curve_fit": {
+    "beam_x_px": 0.017319,
+    "beam_y_px": 0.017638,
+    "distance_mm": 0.071075,
+    "rot1_deg": 0.034816,
+    "rot2_deg": 0.034897
+   },
+   "sigma_gimap_convention_jackknife": {
+    "beam_x_px": 0.072931,
+    "beam_y_px": 0.093533,
+    "distance_mm": 0.171097,
+    "rot1_deg": 0.089436,
+    "rot2_deg": 0.091445
+   },
+   "fit2d_direct_beam_px": [
+    179.92328136279062,
+    263.9675749649525
+   ],
+   "fit2d_direct_distance_mm": 1634.0525281975677,
+   "last_8_cycles_spread_gimap_convention": {
+    "beam_x_px": 0.004086,
+    "beam_y_px": 0.005078,
+    "distance_mm": 0.032651,
+    "rot1_deg": 0.017369,
+    "rot2_deg": 0.028021
+   },
+   "second_start": {
+    "start": "shipped .poni, distance x 1.03, rot1 = rot2 = 0",
+    "cycles": 16,
+    "values_gimap_convention": {
+     "beam_x_px": 179.930284,
+     "beam_y_px": 263.969131,
+     "distance_mm": 1634.070098,
+     "rot1_deg": -0.288291,
+     "rot2_deg": 0.678701
+    },
+    "difference_from_first_over_sigma_curve_fit": {
+     "dist_mm": 0.271,
+     "poni1_mm": 0.24,
+     "poni2_mm": 0.251,
+     "rot1_deg": 0.25,
+     "rot2_deg": -0.24
+    }
+   }
+  },
+  "shipped_poni": {
+   "values_poni": {
+    "dist_mm": 1583.231118,
+    "poni1_mm": 33.417017,
+    "poni2_mm": 41.22778,
+    "rot1_deg": 0.371698,
+    "rot2_deg": 0.433047
+   },
+   "values_gimap_convention": {
+    "beam_x_px": 179.98053,
+    "beam_y_px": 263.85883,
+    "distance_mm": 1583.309658,
+    "rot1_deg": 0.371698,
+    "rot2_deg": 0.433047
+   },
+   "note": "a pixel-to-q test geometry, not a calibration of this image: its ring radii are about 3 % smaller than measured (see the RMS residuals)",
+   "difference_from_pyfai_over_sigma_curve_fit": {
+    "dist_mm": -632.52,
+    "poni1_mm": 7.64,
+    "poni2_mm": 18.87,
+    "rot1_deg": 19.21,
+    "rot2_deg": -7.28
+   }
+  },
+  "compare_gimap_convention": {
+   "beam_x_px": {
+    "gimap": 179.735579,
+    "gimap_sigma": 0.075778,
+    "pyfai": 179.923281,
+    "pyfai_sigma_curve_fit": 0.017319,
+    "pyfai_sigma_jackknife": 0.072931,
+    "difference": -0.187702,
+    "difference_over_combined_sigma_curve_fit": -2.414723,
+    "difference_over_combined_sigma_jackknife": -1.7847
+   },
+   "beam_y_px": {
+    "gimap": 264.012283,
+    "gimap_sigma": 0.153751,
+    "pyfai": 263.967575,
+    "pyfai_sigma_curve_fit": 0.017638,
+    "pyfai_sigma_jackknife": 0.093533,
+    "difference": 0.044708,
+    "difference_over_combined_sigma_curve_fit": 0.288888,
+    "difference_over_combined_sigma_jackknife": 0.248425
+   },
+   "distance_mm": {
+    "gimap": 1633.472564,
+    "gimap_sigma": 0.34515,
+    "pyfai": 1634.052528,
+    "pyfai_sigma_curve_fit": 0.071075,
+    "pyfai_sigma_jackknife": 0.171097,
+    "difference": -0.579965,
+    "difference_over_combined_sigma_curve_fit": -1.645793,
+    "difference_over_combined_sigma_jackknife": -1.505499
+   },
+   "rot1_deg": {
+    "gimap": -0.304794,
+    "gimap_sigma": 0.148242,
+    "pyfai": -0.297004,
+    "pyfai_sigma_curve_fit": 0.034816,
+    "pyfai_sigma_jackknife": 0.089436,
+    "difference": -0.007789,
+    "difference_over_combined_sigma_curve_fit": -0.051153,
+    "difference_over_combined_sigma_jackknife": -0.044991
+   },
+   "rot2_deg": {
+    "gimap": 0.669735,
+    "gimap_sigma": 0.178001,
+    "pyfai": 0.687074,
+    "pyfai_sigma_curve_fit": 0.034897,
+    "pyfai_sigma_jackknife": 0.091445,
+    "difference": -0.017339,
+    "difference_over_combined_sigma_curve_fit": -0.095589,
+    "difference_over_combined_sigma_jackknife": -0.086643
+   }
+  },
+  "compare_poni": {
+   "dist_mm": {
+    "gimap": 1633.33786,
+    "gimap_sigma": 0.394221,
+    "pyfai": 1633.913088,
+    "pyfai_sigma_curve_fit": 0.080127,
+    "pyfai_sigma_jackknife": 0.195074,
+    "difference": -0.575228,
+    "difference_over_combined_sigma_curve_fit": -1.429916,
+    "difference_over_combined_sigma_jackknife": -1.307798
+   },
+   "poni1_mm": {
+    "gimap": 26.316756,
+    "gimap_sigma": 5.095213,
+    "pyfai": 25.807826,
+    "pyfai_sigma_curve_fit": 0.996397,
+    "pyfai_sigma_jackknife": 2.621663,
+    "difference": 0.50893,
+    "difference_over_combined_sigma_curve_fit": 0.098027,
+    "difference_over_combined_sigma_jackknife": 0.088817
+   },
+   "poni2_mm": {
+    "gimap": 22.225647,
+    "gimap_sigma": 4.226915,
+    "pyfai": 22.477007,
+    "pyfai_sigma_curve_fit": 0.993702,
+    "pyfai_sigma_jackknife": 2.55744,
+    "difference": -0.25136,
+    "difference_over_combined_sigma_curve_fit": -0.057888,
+    "difference_over_combined_sigma_jackknife": -0.050879
+   },
+   "rot1_deg": {
+    "gimap": -0.304794,
+    "gimap_sigma": 0.148242,
+    "pyfai": -0.297004,
+    "pyfai_sigma_curve_fit": 0.034816,
+    "pyfai_sigma_jackknife": 0.089436,
+    "difference": -0.007789,
+    "difference_over_combined_sigma_curve_fit": -0.051153,
+    "difference_over_combined_sigma_jackknife": -0.044991
+   },
+   "rot2_deg": {
+    "gimap": 0.669735,
+    "gimap_sigma": 0.178001,
+    "pyfai": 0.687074,
+    "pyfai_sigma_curve_fit": 0.034897,
+    "pyfai_sigma_jackknife": 0.091445,
+    "difference": -0.017339,
+    "difference_over_combined_sigma_curve_fit": -0.095589,
+    "difference_over_combined_sigma_jackknife": -0.086643
+   }
+  },
+  "rms_residual_px": {
+   "gimap_on_gimap_points": 0.1422,
+   "gimap_on_pyfai_points": 0.3489,
+   "pyfai_on_gimap_points": 0.297,
+   "pyfai_on_pyfai_points": 0.2216,
+   "shipped_poni_on_gimap_points": 14.4102,
+   "shipped_poni_on_pyfai_points": 15.3098
+  },
+  "rms_residual_two_theta": {
+   "gimap_on_gimap_points_urad": 14.931,
+   "gimap_on_pyfai_points_urad": 36.574,
+   "pyfai_on_gimap_points_urad": 31.149,
+   "pyfai_on_pyfai_points_urad": 23.214,
+   "shipped_poni_on_gimap_points_urad": 1558.295,
+   "shipped_poni_on_pyfai_points_urad": 1654.462
+  },
+  "gimap_orders": [
+   1,
+   2,
+   3,
+   4,
+   5
+  ]
+ },
+ "coverage": {
+  "frames_file": "per_cut/calibration_check_frames.json.gz",
+  "command": "python tools/benchmarks/calibration_check.py --part all --cases 300 --workers 3",
+  "cases": 300,
+  "seed0": 20261122,
+  "workers": 3,
+  "seconds": 1695.5,
+  "set_up": "Pilatus 1M (981 x 1043 px of 172 um, the gaps of the public frame); direct beam uniform in the central 80 % of the detector; L uniform in 1.5-3 m; rot1, rot2 uniform in +-3 deg, rot3 = 0; lambda (0.5-2 A) chosen so that about 3, 4-6 or 7-9 rings lie on the detector (a third of the frames each); every order on the detector drawn as a Gaussian ring of 1.5-3 px sigma (2x2 sub-pixels; the public frame's rings are 5.5-6 px FWHM), first ring 2000-30000 counts, order^-(1.5-2.5), azimuthal modulation up to 30 %; background falling as 1/(1 + (r/r0)^2), r0 0.4-1 ring spacing, 1/10-1/60 of the first ring at its radius, plus 1-10 counts; Poisson counts; a beam stop of 8-20 px radius and its arm (1 % of the counts). Engine: standard agbh, energy and pixel size given, a distance estimate within +-15 %, tilt auto. 2theta of every sub-pixel from pyFAI's formula (detector_tilt.tilted_rays), not from lab_rays, which GIMaP fits with.",
+  "identified_means": "tilt refined with a 1 sigma, |L - L_true| < 5 % and the beam within 5 px of the truth",
+  "engines": {
+   "as_shipped": "CalibrationEngine as in this checkout, with guided ring extraction and fitted candidate ranking by the supported and missing rings and the point residual"
+  },
+  "three_rings_jackknife": "Leave one of three rings out and refit all five parameters. If any replicate is unconverged, physically inadmissible, or has a rank-deficient normalized Jacobian, hold tilt fixed in all three replicates. In that fallback, use full-fit covariance for the tilts and its standard errors as floors on x, y and L.",
+  "as_shipped": {
+   "identified": "300/300",
+   "headless_identified": "300/300",
+   "calibration_and_line_check_seconds_per_frame": {
+    "timed": 300,
+    "mean": 15.502,
+    "median": 15.115
+   },
+   "identified_by_target_rings": {
+    "3": "100/100",
+    "4-6": "100/100",
+    "7-9": "100/100"
+   },
+   "identified_by_tilt_deg": {
+    "<1": "30/30",
+    "1-2": "87/87",
+    "2-3": "117/117",
+    ">=3": "66/66"
+   },
+   "not_identified": {},
+   "line_check_switched_candidate": 102,
+   "coverage_reported_sigma": {
+    "3": {
+     "cases": 6,
+     "beam_x_px": {
+      "within_1sigma": 0.667,
+      "within_2sigma": 0.833,
+      "median_error_over_sigma": 0.737
+     },
+     "beam_y_px": {
+      "within_1sigma": 0.667,
+      "within_2sigma": 1.0,
+      "median_error_over_sigma": 0.396
+     },
+     "distance_mm": {
+      "within_1sigma": 0.833,
+      "within_2sigma": 0.833,
+      "median_error_over_sigma": 0.44
+     },
+     "rot1_deg": {
+      "within_1sigma": 0.333,
+      "within_2sigma": 0.833,
+      "median_error_over_sigma": 1.397
+     },
+     "rot2_deg": {
+      "within_1sigma": 0.5,
+      "within_2sigma": 0.667,
+      "median_error_over_sigma": 1.437
+     },
+     "student_t_expected": {
+      "within_1sigma": 0.577,
+      "within_2sigma": 0.816,
+      "median_error_over_sigma": 0.816
+     }
+    },
+    "4-6": {
+     "cases": 138,
+     "beam_x_px": {
+      "within_1sigma": 0.594,
+      "within_2sigma": 0.855,
+      "median_error_over_sigma": 0.684
+     },
+     "beam_y_px": {
+      "within_1sigma": 0.616,
+      "within_2sigma": 0.862,
+      "median_error_over_sigma": 0.699
+     },
+     "distance_mm": {
+      "within_1sigma": 0.565,
+      "within_2sigma": 0.819,
+      "median_error_over_sigma": 0.747
+     },
+     "rot1_deg": {
+      "within_1sigma": 0.623,
+      "within_2sigma": 0.862,
+      "median_error_over_sigma": 0.745
+     },
+     "rot2_deg": {
+      "within_1sigma": 0.565,
+      "within_2sigma": 0.841,
+      "median_error_over_sigma": 0.874
+     },
+     "student_t_expected": {
+      "within_1sigma": 0.619,
+      "within_2sigma": 0.874,
+      "median_error_over_sigma": 0.751
+     }
+    },
+    ">=7": {
+     "cases": 156,
+     "beam_x_px": {
+      "within_1sigma": 0.66,
+      "within_2sigma": 0.955,
+      "median_error_over_sigma": 0.684
+     },
+     "beam_y_px": {
+      "within_1sigma": 0.679,
+      "within_2sigma": 0.904,
+      "median_error_over_sigma": 0.598
+     },
+     "distance_mm": {
+      "within_1sigma": 0.622,
+      "within_2sigma": 0.891,
+      "median_error_over_sigma": 0.792
+     },
+     "rot1_deg": {
+      "within_1sigma": 0.641,
+      "within_2sigma": 0.923,
+      "median_error_over_sigma": 0.71
+     },
+     "rot2_deg": {
+      "within_1sigma": 0.609,
+      "within_2sigma": 0.891,
+      "median_error_over_sigma": 0.832
+     },
+     "student_t_expected": {
+      "within_1sigma": 0.654,
+      "within_2sigma": 0.92,
+      "median_error_over_sigma": 0.706
+     }
+    }
+   },
+   "coverage_least_squares_sigma": {
+    "3": {
+     "cases": 6,
+     "beam_x_px": {
+      "within_1sigma": 0.833,
+      "within_2sigma": 1.0,
+      "median_error_over_sigma": 0.399
+     },
+     "beam_y_px": {
+      "within_1sigma": 1.0,
+      "within_2sigma": 1.0,
+      "median_error_over_sigma": 0.23
+     },
+     "distance_mm": {
+      "within_1sigma": 1.0,
+      "within_2sigma": 1.0,
+      "median_error_over_sigma": 0.33
+     },
+     "rot1_deg": {
+      "within_1sigma": 0.667,
+      "within_2sigma": 1.0,
+      "median_error_over_sigma": 0.496
+     },
+     "rot2_deg": {
+      "within_1sigma": 1.0,
+      "within_2sigma": 1.0,
+      "median_error_over_sigma": 0.424
+     }
+    },
+    "4-6": {
+     "cases": 138,
+     "beam_x_px": {
+      "within_1sigma": 0.862,
+      "within_2sigma": 0.993,
+      "median_error_over_sigma": 0.444
+     },
+     "beam_y_px": {
+      "within_1sigma": 0.862,
+      "within_2sigma": 0.986,
+      "median_error_over_sigma": 0.49
+     },
+     "distance_mm": {
+      "within_1sigma": 0.739,
+      "within_2sigma": 0.949,
+      "median_error_over_sigma": 0.653
+     },
+     "rot1_deg": {
+      "within_1sigma": 0.833,
+      "within_2sigma": 0.971,
+      "median_error_over_sigma": 0.536
+     },
+     "rot2_deg": {
+      "within_1sigma": 0.71,
+      "within_2sigma": 0.978,
+      "median_error_over_sigma": 0.579
+     }
+    },
+    ">=7": {
+     "cases": 156,
+     "beam_x_px": {
+      "within_1sigma": 0.833,
+      "within_2sigma": 0.987,
+      "median_error_over_sigma": 0.486
+     },
+     "beam_y_px": {
+      "within_1sigma": 0.821,
+      "within_2sigma": 0.987,
+      "median_error_over_sigma": 0.384
+     },
+     "distance_mm": {
+      "within_1sigma": 0.776,
+      "within_2sigma": 0.955,
+      "median_error_over_sigma": 0.55
+     },
+     "rot1_deg": {
+      "within_1sigma": 0.782,
+      "within_2sigma": 0.955,
+      "median_error_over_sigma": 0.531
+     },
+     "rot2_deg": {
+      "within_1sigma": 0.731,
+      "within_2sigma": 0.955,
+      "median_error_over_sigma": 0.62
+     }
+    }
+   },
+   "within_1sigma_with_covariance_floor_7plus": {
+    "beam_x_px": 0.846,
+    "beam_y_px": 0.84,
+    "distance_mm": 0.795,
+    "rot1_deg": 0.801,
+    "rot2_deg": 0.769
+   },
+   "three_rings_cases": 6
+  },
+  "three_ring_set": {
+   "command": "python tools/benchmarks/calibration_check.py --part all --cases 300 --workers 3",
+   "cases": 150,
+   "seed0": 21261122,
+   "workers": 3,
+   "seconds": 632.7,
+   "set_up": "as the main set with about 3 rings on the detector, but orders above 3 not drawn",
+   "as_shipped": {
+    "identified": "150/150",
+    "identified_with_3_rings": 150,
+    "headless_identified": "150/150",
+    "calibration_and_line_check_seconds_per_frame": {
+     "timed": 150,
+     "mean": 11.514,
+     "median": 11.995
+    },
+    "not_identified": {},
+    "coverage_reported_sigma": {
+     "cases": 150,
+     "beam_x_px": {
+      "within_1sigma": 0.613,
+      "within_2sigma": 0.82,
+      "median_error_over_sigma": 0.666
+     },
+     "beam_y_px": {
+      "within_1sigma": 0.687,
+      "within_2sigma": 0.853,
+      "median_error_over_sigma": 0.533
+     },
+     "distance_mm": {
+      "within_1sigma": 0.593,
+      "within_2sigma": 0.82,
+      "median_error_over_sigma": 0.754
+     },
+     "rot1_deg": {
+      "within_1sigma": 0.64,
+      "within_2sigma": 0.873,
+      "median_error_over_sigma": 0.745
+     },
+     "rot2_deg": {
+      "within_1sigma": 0.673,
+      "within_2sigma": 0.833,
+      "median_error_over_sigma": 0.596
+     },
+     "student_t_expected": {
+      "within_1sigma": 0.577,
+      "within_2sigma": 0.816,
+      "median_error_over_sigma": 0.816
+     }
+    },
+    "coverage_least_squares_sigma": {
+     "cases": 150,
+     "beam_x_px": {
+      "within_1sigma": 0.873,
+      "within_2sigma": 1.0,
+      "median_error_over_sigma": 0.439
+     },
+     "beam_y_px": {
+      "within_1sigma": 0.92,
+      "within_2sigma": 1.0,
+      "median_error_over_sigma": 0.354
+     },
+     "distance_mm": {
+      "within_1sigma": 0.747,
+      "within_2sigma": 0.987,
+      "median_error_over_sigma": 0.603
+     },
+     "rot1_deg": {
+      "within_1sigma": 0.893,
+      "within_2sigma": 1.0,
+      "median_error_over_sigma": 0.43
+     },
+     "rot2_deg": {
+      "within_1sigma": 0.88,
+      "within_2sigma": 0.993,
+      "median_error_over_sigma": 0.401
+     }
+    },
+    "example": {
+     "truth": {
+      "beam_x_px": 200.36638,
+      "beam_y_px": 609.027193,
+      "distance_mm": 2422.214656,
+      "rot1_deg": -1.572923,
+      "rot2_deg": 0.084117
+     },
+     "fit": {
+      "beam_x_px": 200.359788,
+      "beam_y_px": 609.022495,
+      "distance_mm": 2422.243615,
+      "rot1_deg": -1.576447,
+      "rot2_deg": 0.122211
+     },
+     "sigma": {
+      "beam_x_px": 0.004791,
+      "beam_y_px": 0.005096,
+      "distance_mm": 0.01283,
+      "rot1_deg": 0.012959,
+      "rot2_deg": 0.028451
+     },
+     "jackknife_two_ring_fits": [
+      {
+       "beam_x_px": 200.3534,
+       "beam_y_px": 609.0173,
+       "distance_mm": 2422.2457,
+       "rot1_deg": -1.5874,
+       "rot2_deg": 0.1361
+      },
+      {
+       "beam_x_px": 200.3599,
+       "beam_y_px": 609.0241,
+       "distance_mm": 2422.2343,
+       "rot1_deg": -1.5819,
+       "rot2_deg": 0.1243
+      },
+      {
+       "beam_x_px": 200.3611,
+       "beam_y_px": 609.0256,
+       "distance_mm": 2422.2565,
+       "rot1_deg": -1.5658,
+       "rot2_deg": 0.0888
+      }
+     ]
+    }
+   }
+  }
+ }
+}

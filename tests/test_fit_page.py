@@ -188,12 +188,14 @@ def test_refine_finds_the_values_with_errors_and_undo_brings_the_start_back(tmp_
     assert fitted.get((0, "R")).value == pytest.approx(6.0, rel=0.05)
     assert result.chi2_reduced == pytest.approx(1.0, abs=0.3)
     row = page.model_editor.row((0, "R"))
-    assert row.error.text().startswith("± ") and "nm" in row.error.text()
+    # one line per parameter: the ± without its unit (the name has it), the tooltip whole
+    assert row.error.text().startswith("± ") and "nm" not in row.error.text() and row.error.toolTip().endswith("nm")
     assert page.parameters_table.rowCount() >= 5 and page.step_rail.state("fit") == "ok"
     assert page.step_stack.currentWidget() is page.step_pages["results"]
     page.undo()  # the fit is one step of the history
     assert page.session.model == start and page.session.result is not None and not page.session.result_is_current()
     assert "changed after this fit" in page.warnings_label.text()
+    assert page.fit_notes_button.text() == "Review fit warnings…"
     page.redo()
     assert page.session.model == fitted
     page.dispose()
@@ -202,6 +204,7 @@ def test_refine_finds_the_values_with_errors_and_undo_brings_the_start_back(tmp_
 def test_each_thing_is_said_once_and_a_missing_sigma_or_a_bound_is_a_warning(tmp_path) -> None:
     """The small-text review: the rail has the points and the quality, the Results box all of it, the status line
     only confirms; a file without σ and a value at a bound are warnings where they are seen, never folded away."""
+    from dataclasses import replace
     from src.gimap.app.presentation.i18n import apply_language
 
     page = _page()
@@ -247,6 +250,11 @@ def test_each_thing_is_said_once_and_a_missing_sigma_or_a_bound_is_a_warning(tmp
         row.refresh({}, ((0, "R"),))  # as after a fit that stopped R at a bound of its range
         assert row.error.text() == "⚠ at a bound" and row.error.property("gimapRole") == "warning"
         assert row.error.toolTip().startswith("The fit stopped at a bound")
+        page.session.result = replace(result, at_bounds=((0, "R"),), errors={})
+        page.render_results()
+        radius_error = page.parameters_table.item(page._row_paths.index((0, "R")), 2)
+        assert radius_error.text() == "⚠ at a bound"
+        assert "bound" in radius_error.toolTip()
         row.refresh({(0, "R"): 0.1}, ())
         assert row.error.text().startswith("± ") and row.error.property("gimapRole") == "muted"
     finally:
@@ -463,7 +471,7 @@ def test_saves_report_errors_and_leave_no_table_without_its_record(tmp_path, mon
         assert page.save_model_dialog(str(tmp_path / "model.json")) is None
     assert not (tmp_path / "b.csv").exists() and not (tmp_path / "b.json").exists()  # the table went with its record
     assert page.status_label.text().startswith("Could not save:")
-    assert page.export_plot_dialog(str(tmp_path / "missing" / "plot.png")) is None  # QImage.save says False
+    assert page.export_plot_dialog(str(tmp_path / "missing" / "plot.png")) is None  # no folder is made
     assert page.status_label.text().startswith("Could not save:") and "Saved" not in page.status_label.text()
     assert page.export_data_dialog(str(tmp_path / "ok.csv")) == str(tmp_path / "ok.csv")
     assert (tmp_path / "ok.csv").exists() and (tmp_path / "ok.json").exists()
@@ -543,7 +551,7 @@ def test_predict_parameters_shows_on_the_rail_and_its_row_is_selected(tmp_path) 
     solutions = page.session.solutions
     assert len(solutions) == 5 and page.session.result is None
     assert page.step_rail.state("fit") == "ok" and page.step_rail.state("results") == "ok"
-    assert page.step_rail.detail("fit").startswith("5 solutions · best Sphere χ²ᵣ")
+    assert page.step_rail.detail("fit").startswith("5 solutions · best Sphere #1 χ²ᵣ")  # five of one composition
     assert page.step_rail.detail("results") == "5 solutions to compare"
     assert page.solutions_table.horizontalHeaderItem(4).text() == "χ²ᵣ"
     best = next(line for line, item in enumerate(solutions) if item.model == page.session.model)

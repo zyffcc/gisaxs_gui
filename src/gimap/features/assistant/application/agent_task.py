@@ -46,8 +46,10 @@ class RunAgentTask:
         chooser: Optional[Chooser] = None,
         fitter: Optional[CurveFitter] = None,
         max_turns: int = DEFAULT_MAX_TURNS,
+        provider: str = "Anthropic",
     ):
         self.agent = agent
+        self.provider = provider
         self.workbench = workbench
         self.confirmer = confirmer
         self.store = store
@@ -59,7 +61,7 @@ class RunAgentTask:
         self.max_turns = max(1, int(max_turns))
 
     def __call__(self, goals: AnalysisGoals, *, cancelled: Callable[[], bool] = lambda: False) -> RunOutcome:
-        results = RunResults()
+        results = RunResults(provider=self.provider, model=self.agent.model or "Claude Code default")
         catalog = ToolCatalog(
             self.workbench, goals, results, confirmer=self.confirmer, store=self.store,
             explorer=self.explorer, calibrator=self.calibrator, chooser=self.chooser, fitter=self.fitter,
@@ -75,6 +77,7 @@ class RunAgentTask:
                 if cancelled():
                     return STOPPED
                 call = ToolCall(f"agent_{len(steps) + 1}", name, arguments if isinstance(arguments, dict) else {})
+                results.model = self.agent.resolved_model or results.model
                 return run_step(catalog, call, steps, self.events)
 
         def follow_up() -> Optional[str]:
@@ -104,13 +107,14 @@ class RunAgentTask:
             state, message = RUN_FAILED, result.message
         else:
             state, message = RUN_INCOMPLETE, result.message or "Claude stopped without submitting its report."
+        results.model = result.model or results.model
         return RunOutcome(
             state,
             message,
             steps,
             results,
             result.usage,
-            model=result.model or getattr(self.agent, "model", ""),
+            model=results.model,
             transcript=result.transcript,
             cost_usd=result.cost_usd,
             billing=result.billing,

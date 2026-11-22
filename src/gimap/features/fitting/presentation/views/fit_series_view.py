@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import (
     QButtonGroup,
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -142,6 +143,13 @@ class FitSeriesView:
         menu = QMenu(self.save_button)
         self.save_table_action = menu.addAction("Table of Every Frame…")
         self.save_table_action.setToolTip("CSV: every frame's parameters with their errors and fit quality, and a JSON record")
+        self.save_report_action = menu.addAction("Series report…")
+        self.save_nxcansas_action = menu.addAction("Fits as NXcanSAS…")
+        self.save_nxcansas_action.setToolTip("For every fitted frame the points fitted and the model, one HDF5 file "
+                                             "(SasView and other NXcanSAS programs open it)")
+        self.save_store_action = menu.addAction("Results Database…")
+        self.save_store_action.setToolTip("Every frame's fit into the series' results database (gimap_series.sqlite), "
+                                          "beside the curves Analyze recorded")
         self.save_trend_action = menu.addAction("Trend Plot…")
         self.save_frame_action = menu.addAction("Selected Frame's Plot…")
         self.save_button.setMenu(menu)
@@ -326,10 +334,21 @@ class FitSeriesView:
         self.start_stages.setObjectName("fitSeriesStartStages")
         self.start_stages.setToolTip(
             "Follows the sample within a stage, and starts afresh where the curves change course (Curves step)")
-        for index, button in enumerate((self.start_previous, self.start_same, self.start_stages)):
+        self.start_chain = QRadioButton("Previous result, Predict at chain breaks", page)
+        self.start_chain.setObjectName("fitSeriesStartChain")
+        self.start_chain.setToolTip(
+            "Retry with Predict after a failure, non-convergence, a new stage, or χ²ᵣ above both 2 and 3× the "
+            "previous value. Keep the better fit.")
+        for index, button in enumerate((self.start_previous, self.start_same, self.start_stages, self.start_chain)):
             self.start_group.addButton(button, index)
             layout.addWidget(button)
         self.start_previous.setChecked(True)
+        self.backward_check = QCheckBox("Refine again in a backward pass", page)
+        self.backward_check.setObjectName("fitSeriesBackward")
+        self.backward_check.setToolTip(
+            "Once every frame is done, from the last but one to the first, each frame is refined from the result of the "
+            "frame after it; the better of its two fits is kept (its row says “backward”)")
+        layout.addWidget(self.backward_check)
         method_title = QLabel("Method", page)
         method_title.setProperty("gimapRole", "strong")
         layout.addWidget(method_title)
@@ -342,21 +361,34 @@ class FitSeriesView:
         self.method_global.setToolTip("For frames that change a lot from one to the next")
         self.method_predict = QRadioButton("Predict each frame", page)
         self.method_predict.setObjectName("fitSeriesPredictPosterior")
-        self.method_predict.setToolTip(
-            "Predict parameters on every frame with the particles of Single analysis' model; with the box below, "
-            "of solutions about as probable the one closest to the previous frame; each frame then refined")
+        self.method_predict.setToolTip("Predict solutions for each frame using the particles in Single analysis.")
         for index, button in enumerate((self.method_local, self.method_global, self.method_predict)):
             self.method_group.addButton(button, index)
             layout.addWidget(button)
         self.method_local.setChecked(True)
         self.follow_check = QCheckBox("Prefer the solution that continues the previous frame", page)
         self.follow_check.setObjectName("fitSeriesFollow")
-        self.follow_check.setToolTip(
-            "When a frame has solutions that fit equally well, keep the one closest to the previous frame (the "
-            "smoothest series); a clearly better other solution is still taken, and said")
+        self.follow_check.setToolTip("Keep the nearest solution with at least 20% of the largest probability.")
         self.follow_check.setChecked(True)
         self.follow_check.setContentsMargins(22, 0, 0, 0)
         layout.addWidget(self.follow_check)
+        self.smooth_check = QCheckBox("Smooth across frames (hidden Markov model)", page)
+        self.smooth_check.setContentsMargins(22, 0, 0, 0)
+        self.smooth_check.setToolTip("Use all frames to choose the most probable sequence of Predict solutions.")
+        layout.addWidget(self.smooth_check)
+        self.scale_row = QWidget(page)
+        scale = QHBoxLayout(self.scale_row)
+        scale.setContentsMargins(22, 0, 0, 0)
+        scale.addWidget(QLabel("Log step per frame (s)", self.scale_row))
+        self.smooth_scale = QDoubleSpinBox(self.scale_row)
+        self.smooth_scale.setDecimals(3)
+        self.smooth_scale.setRange(0.001, 1000.0)
+        self.smooth_scale.setSingleStep(0.01)
+        self.smooth_scale.setValue(0.1)
+        self.smooth_scale.setToolTip("A log step of 0.1 allows about 10% change per frame in one coordinate.")
+        scale.addWidget(self.smooth_scale)
+        scale.addStretch(1)
+        layout.addWidget(self.scale_row)
         layout.addStretch(1)
 
     def _series_results_step(self, page: QWidget, layout: QVBoxLayout) -> None:
@@ -364,6 +396,15 @@ class FitSeriesView:
         self.results_card.setObjectName("fitSeriesResultsCard")
         self.results_card.hide()  # shown once a series was started (the rail says “After Start” until then)
         layout.addWidget(self.results_card)
+        self.result_actions = QWidget(page)
+        actions = FlowLayout(self.result_actions, spacing=6)
+        self.quick_table_button = QPushButton("Save Table…", self.result_actions)
+        self.quick_trend_button = QPushButton("Save Trend…", self.result_actions)
+        self.review_frame_button = QPushButton(self.result_actions)
+        for button in (self.quick_table_button, self.quick_trend_button, self.review_frame_button):
+            actions.addWidget(button)
+        self.result_actions.hide()
+        layout.addWidget(self.result_actions)
         self.results_table = read_only_table(("#", "χ²ᵣ", "parameter"), page, "fitSeriesTable",
                                              QAbstractItemView.ExtendedSelection)  # rows to copy; the current one is shown
         self.results_table.setProperty("gimapDataHeaders", True)  # parameter names with units
@@ -377,6 +418,10 @@ class FitSeriesView:
         self.results_table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.results_table.setWordWrap(False)
         layout.addWidget(self.results_table, 1)
+        self.selection_summary = muted("", page)
+        self.selection_summary.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.selection_summary.hide()
+        layout.addWidget(self.selection_summary)
         log = AdvancedSection("Run Log", "", page)
         self.log_view = QPlainTextEdit(log)
         self.log_view.setObjectName("fitSeriesLog")
@@ -421,6 +466,18 @@ class FitSeriesView:
         self.trend_combo.setToolTip("Which parameter to follow through the series")
         self.trend_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.trend_plot.header_layout.insertWidget(0, self.trend_combo)
+        self.trend_axis_combo = QComboBox(self.trend_plot)
+        self.trend_axis_combo.setObjectName("fitSeriesTrendAxis")
+        self.trend_axis_combo.addItem("Frame", "frame")
+        self.trend_axis_combo.addItem("Time (s)", "time")
+        self.trend_axis_combo.setToolTip("Draw the trend against the frame, or against the time since the first fitted "
+                                         "frame (when the curves say when their frames were measured)")
+        self.trend_axis_combo.hide()  # shown once the curves carry a time
+        self.trend_plot.header_layout.insertWidget(1, self.trend_axis_combo)
+        self.least_squares_check = QCheckBox("Least squares", self.trend_plot)
+        self.least_squares_check.setToolTip("Overlay the chosen Predict solution’s least-squares values as small open symbols.")
+        self.least_squares_check.hide()
+        self.trend_plot.header_layout.insertWidget(2, self.least_squares_check)
         # A splitter, not a box: a plot whose title has gone onto its own row (a narrow panel) asks a box for
         # the height it happens to have and then never gives it back — the trend ends as a strip under it.
         self.plot_splitter = QSplitter(Qt.Vertical, panel)

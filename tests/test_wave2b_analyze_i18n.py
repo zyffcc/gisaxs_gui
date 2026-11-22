@@ -131,9 +131,13 @@ def test_the_geometry_summary_says_nothing_of_a_detector_the_file_does_not_name(
 
 
 @requires_public
-def test_the_data_step_and_the_command_bar_follow_the_language(english, monkeypatch) -> None:
+def test_the_data_step_and_the_command_bar_follow_the_language(english, monkeypatch, tmp_path) -> None:
+    import shutil
+
     page = _public_page()
-    page.add_paths([str(GALAXI)])
+    frame = tmp_path / GALAXI.name  # the frame alone: a .poni beside it would come before the profile matched
+    shutil.copy2(GALAXI, frame)
+    page.add_paths([str(frame)])
     _done(page)
     card = page.data_info_label.text()
     detail = page.step_rail.detail("data")
@@ -307,6 +311,18 @@ def _english(node) -> bool:
     return isinstance(node, ast.Constant) and isinstance(node.value, str) and any(c.isalpha() for c in node.value)
 
 
+def _has_formatted_words(node) -> bool:
+    if not isinstance(node, ast.JoinedStr):
+        return False
+    # Mathematical labels have the same symbols and units in both languages.
+    parts = [part.value if isinstance(part, ast.Constant) else None for part in node.values]
+    return parts not in (
+        ["dΣ/dΩ = ", None, " cm⁻¹"],
+        ["ψ ", None, "°"],
+        [None, " · q = ", None, "–", None, " Å⁻¹"],
+    )
+
+
 def test_no_text_on_screen_is_formatted_before_its_translation() -> None:
     problems = []
     for path in sorted(PRESENTATION.rglob("*.py")):
@@ -324,7 +340,7 @@ def test_no_text_on_screen_is_formatted_before_its_translation() -> None:
             text = node.args[index]
             branches = [text.body, text.orelse] if isinstance(text, ast.IfExp) else [text]
             for branch in branches:
-                if isinstance(branch, ast.JoinedStr) or isinstance(branch, ast.BinOp) and any(
+                if _has_formatted_words(branch) or isinstance(branch, ast.BinOp) and any(
                         isinstance(side, ast.JoinedStr) or _english(side) for side in (branch.left, branch.right)):
                     problems.append(f"{path.name}:{node.lineno} {name}: formatted before the translation")
                 elif _english(branch) and name not in TRANSLATED_BY_CALLEE:

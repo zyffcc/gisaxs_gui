@@ -12,8 +12,10 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QAction,
+    QActionGroup,
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -30,7 +32,9 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.gimap.app.presentation.components import EmptyState, FlowLayout, StepRail
+from src.gimap.app.presentation.components import EmptyState, StepRail
+
+from .mask_tools_view import add_mask_editor
 
 STEPS = (
     ("data", "Data"),
@@ -60,8 +64,8 @@ the profile list, the beam-centre button, the Mask step's card and the GISAXS Cu
 EXPORT_TIPS = (
     ("export_all_button", "Every listed frame with the current settings, to a folder you choose: a table per curve with "
                           "every frame a column, and per-frame files. Settings can be saved for the next data set."),
-    ("export_curves_button", "One CSV per curve (q, I, σ, pixels) and a JSON record of the settings, next to the data "
-                             "(gimap_analysis/)."),
+    ("export_curves_button", "One CSV per curve (q, I, σ, pixels), a cut region's under its name, and a JSON record of "
+                             "the settings, to a folder you choose (it starts in the last one)."),
     ("export_image_button", "The detector image or q map as shown, with a colour bar (PNG, TIFF, SVG, PDF), to a file "
                             "you choose."),
     ("export_map_button", "The intensity on a regular q grid (qy–qz or q∥–qz) as a CSV table with its axes, to a file "
@@ -204,6 +208,7 @@ class AnalyzeStepsView:
         self.watch_button.setToolTip(
             "Watch a folder: new frames are added and shown as soon as they are completely written"
         )
+        self._setup_watch_menu(page)
         self.clear_button = QToolButton(page)
         self.clear_button.setText("Clear")
         self.clear_button.setAutoRaise(True)
@@ -274,6 +279,58 @@ class AnalyzeStepsView:
         self.profile_combo.setToolTip(PROFILE_TIP)
         layout.addWidget(muted("Instrument profile", page))
         layout.addWidget(self.profile_combo)
+        layout.addWidget(muted("Sample roll ψ and incidence αi", page))
+        roll = QHBoxLayout()
+        self.sample_roll_spin = QDoubleSpinBox(page)
+        self.sample_roll_spin.setRange(-180, 180)
+        self.sample_roll_spin.setDecimals(4)
+        self.sample_roll_spin.setSuffix(" °")
+        self.sample_roll_spin.setSingleStep(0.05)
+        self.sample_roll_spin.setKeyboardTracking(False)
+        self.sample_roll_spin.setToolTip("Positive ψ tilts the surface normal toward lab right.")
+        self.sample_roll_spin.setContextMenuPolicy(Qt.ActionsContextMenu)
+        self.roll_reset_action = QAction("Use profile roll", self.sample_roll_spin)
+        self.sample_roll_spin.addAction(self.roll_reset_action)
+        self.measure_roll_button = QPushButton("Measure from frame", page)
+        self.measure_roll_button.setToolTip("Measure sample roll and incidence angle from this frame.")
+        roll.addWidget(self.sample_roll_spin)
+        roll.addWidget(self.measure_roll_button)
+        roll.addStretch(1)
+        layout.addLayout(roll)
+        self.incidence_lock_check = QCheckBox("Keep entered αi", page)
+        self.incidence_lock_check.setToolTip("Keep the entered, header or profile angle even when the frame measurement disagrees.")
+        layout.addWidget(self.incidence_lock_check)
+        self.yoneda_angle_row = QWidget(page)
+        yoneda = QVBoxLayout(self.yoneda_angle_row)
+        yoneda.setContentsMargins(0, 0, 0, 0)
+        yoneda.addWidget(muted("Yoneda critical angle", self.yoneda_angle_row))
+        material = QHBoxLayout()
+        self.yoneda_material_combo = QComboBox(self.yoneda_angle_row)
+        self.yoneda_material_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.yoneda_material_combo.addItem("Enter angle", None)
+        self.yoneda_material_combo.setToolTip("Choose the material that produces the Yoneda band.")
+        material.addWidget(self.yoneda_material_combo)
+        self.yoneda_angle_spin = QDoubleSpinBox(self.yoneda_angle_row)
+        self.yoneda_angle_spin.setRange(0.0, 89.9999)
+        self.yoneda_angle_spin.setDecimals(4)
+        self.yoneda_angle_spin.setSingleStep(0.01)
+        self.yoneda_angle_spin.setSuffix(" °")
+        self.yoneda_angle_spin.setKeyboardTracking(False)
+        self.yoneda_angle_spin.setSpecialValueText("From film")
+        self.yoneda_angle_spin.setToolTip("Critical angle of the film or substrate producing the band. "
+                                         "From film uses the refraction setting when available.")
+        material.addWidget(self.yoneda_angle_spin, 1)
+        self.yoneda_material_value = QLabel(self.yoneda_angle_row)
+        self.yoneda_material_value.setWordWrap(True)
+        material.addWidget(self.yoneda_material_value, 1)
+        yoneda.addLayout(material)
+        layout.addWidget(self.yoneda_angle_row)
+        self.roll_estimate_label = QLabel(page)
+        self.roll_estimate_label.setWordWrap(True)
+        layout.addWidget(self.roll_estimate_label)
+        self.incidence_estimate_label = QLabel(page)
+        self.incidence_estimate_label.setWordWrap(True)
+        layout.addWidget(self.incidence_estimate_label)
         card, self.summary_label = info_card(page)
         self.summary_label.setObjectName("analyzeGeometrySummary")
         card.hide()  # shown with a frame
@@ -299,6 +356,18 @@ class AnalyzeStepsView:
         buttons.addWidget(self.calibrate_button)
         buttons.addStretch(1)
         layout.addLayout(buttons)
+        files = QHBoxLayout()
+        self.load_poni_button = QPushButton("Load .poni…", page)
+        self.load_poni_button.setObjectName("analyzeLoadPoniButton")
+        self.load_poni_button.setToolTip("Use the geometry of a pyFAI .poni file (distance, beam, tilt, pixel size, "
+                                         "wavelength) for this detector")
+        self.export_poni_button = QPushButton("Export .poni…", page)
+        self.export_poni_button.setObjectName("analyzeExportPoniButton")
+        self.export_poni_button.setToolTip("Write the geometry in use as a pyFAI .poni file")
+        files.addWidget(self.load_poni_button)
+        files.addWidget(self.export_poni_button)
+        files.addStretch(1)
+        layout.addLayout(files)
         self.center_button = QToolButton(page)
         self.center_button.setObjectName("analyzeCenterButton")
         self.center_button.setPopupMode(QToolButton.InstantPopup)
@@ -332,11 +401,31 @@ class AnalyzeStepsView:
         self.center_menu.addAction(self.save_center_action)
         self.center_button.setMenu(self.center_menu)
         layout.addWidget(self.center_button, 0, Qt.AlignLeft)
+        self.roll_button = QToolButton(page)
+        self.roll_button.setText("Check rot3")
+        self.roll_button.setPopupMode(QToolButton.InstantPopup)
+        roll_menu = QMenu(self.roll_button)
+        self.check_rod_action = roll_menu.addAction("Measure Specular Rod")
+        self.check_band_action = roll_menu.addAction("Measure Horizon or Yoneda Band")
+        self.roll_button.setMenu(roll_menu)
+        layout.addWidget(self.roll_button, 0, Qt.AlignLeft)
+        self.roll_result = QLabel(page)
+        self.roll_result.setWordWrap(True)
+        self.roll_result.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.roll_result)
+        self.roll_button.hide()
+        self.roll_result.hide()
         layout.addStretch(1)
 
     # -- 3 mask and corrections ----------------------------------------------------------
 
     def _mask_step(self, page: QWidget, layout: QVBoxLayout) -> None:
+        # Keep intensity corrections together above the detector errors and mask controls.
+        self.corrections_section.set_expanded(False)
+        layout.addWidget(self.normalisation_section)
+        layout.addWidget(self.corrections_section)
+        layout.addWidget(self.intensity_section)
+        layout.addWidget(self.detector_errors_section)
         card, self.mask_summary_label = info_card(page)
         self.mask_summary_label.setObjectName("analyzeMaskSummary")
         self.mask_summary_label.setToolTip(MASK_TIP)
@@ -353,54 +442,17 @@ class AnalyzeStepsView:
         self.mirror_fill_check = QCheckBox("Fill gaps from the mirror side (GIWAXS)", page)
         self.mirror_fill_check.setObjectName("analyzeMirrorFillCheck")
         self.mirror_fill_check.setToolTip(
-            "GIWAXS is symmetric in ±q∥: a pixel without data (module gap, mask, hot pixel) takes the value "
-            "at its mirror position about the beam-centre column when that one was measured. Filled pixels "
-            "are counted and recorded in the export."
+            "Assumes left–right symmetry of the sample. An unmeasured pixel takes the interpolated intensity "
+            "at the opposite in-plane angle and the same exit angle. Every contributing pixel must be measured. "
+            "The export records how many pixels were filled."
         )
         layout.addWidget(self.mirror_fill_check)
-        masks_title = QLabel("Masks you draw", page)
-        masks_title.setProperty("gimapSectionTitle", True)
-        layout.addWidget(masks_title)
-        draw_row = FlowLayout()  # wraps in a narrow panel
-        self.draw_rect_button = QPushButton("Rectangle", page)
-        self.draw_rect_button.setObjectName("analyzeDrawRectangle")
-        self.draw_rect_button.setCheckable(True)
-        self.draw_rect_button.setToolTip("Click two opposite corners on the detector image (Esc cancels)")
-        self.draw_polygon_button = QPushButton("Polygon", page)
-        self.draw_polygon_button.setObjectName("analyzeDrawPolygon")
-        self.draw_polygon_button.setCheckable(True)
-        self.draw_polygon_button.setToolTip(
-            "Click the corners on the detector image; double-click or Enter closes it, Backspace removes "
-            "the last corner, Esc cancels"
-        )
-        self.mask_load_button = QPushButton("Load…", page)
-        self.mask_load_button.setToolTip("Masks saved by GIMaP (.json) or a mask image of the same size (EDF, TIFF: non-zero = masked)")
-        self.mask_save_button = QPushButton("Save…", page)
-        self.mask_save_button.setToolTip("The drawn masks as a .json file, to reuse with other data of this set-up")
-        for button in (self.draw_rect_button, self.draw_polygon_button, self.mask_load_button, self.mask_save_button):
-            draw_row.addWidget(button)
-        layout.addLayout(draw_row)
-        self.mask_list = QListWidget(page)
-        self.mask_list.setObjectName("analyzeMaskList")
-        self.mask_list.setMaximumHeight(96)
-        layout.addWidget(self.mask_list)
-        mask_actions = QHBoxLayout()
-        self.mask_remove_button = QPushButton("Remove Selected", page)
-        self.mask_remove_button.setToolTip("Remove the mask selected in the list above (or press Delete in the list)")
-        self.mask_clear_button = QPushButton("Clear Masks", page)
-        self.mask_clear_button.setToolTip("Remove every drawn or loaded mask (the detector gaps stay masked)")
-        mask_actions.addWidget(self.mask_remove_button)
-        mask_actions.addWidget(self.mask_clear_button)
-        mask_actions.addStretch(1)
-        layout.addLayout(mask_actions)
+        add_mask_editor(self, page, layout)
         self.show_mask_button = QPushButton("Show Masked Pixels on the Image", page)
         self.show_mask_button.setObjectName("analyzeShowMaskButton")
         self.show_mask_button.setToolTip("Circle every pixel left out (gaps, hot and dead pixels, your masks) on the image")
         self.show_mask_button.setCheckable(True)
         layout.addWidget(self.show_mask_button, 0, Qt.AlignLeft)
-        self.corrections_section.set_expanded(False)
-        layout.addWidget(self.corrections_section)
-        layout.addWidget(self.intensity_section)
         layout.addStretch(1)
 
     # -- 4 cuts ------------------------------------------------------------------------
@@ -481,6 +533,41 @@ class AnalyzeStepsView:
         layout.addLayout(self.export_extra_host)
         layout.addStretch(1)
 
+
+    def _setup_watch_menu(self, page: QWidget) -> None:
+        """The Watch button's arrow: the online mode of a watched folder (``bindings/watch_online.py``)."""
+        self.watch_button.setPopupMode(QToolButton.MenuButtonPopup)
+        menu = QMenu(self.watch_button)
+        self.watch_pause_action = menu.addAction("Pause Watching")
+        self.watch_pause_action.setCheckable(True)
+        self.watch_pause_action.setToolTip("No looks at the folder until you resume; what is written meanwhile is "
+                                           "listed then")
+        self.watch_map_action = menu.addAction("Add New Frames to the Series Map")
+        self.watch_map_action.setCheckable(True)
+        self.watch_map_action.setChecked(True)
+        self.watch_map_action.setToolTip("Reduce every complete new frame with this set-up and append its curve to the "
+                                         "Series map, its traces and timeline (only curves are kept, not frames)")
+        settle = menu.addMenu("Settle Time")
+        self.watch_settle_group = QActionGroup(page)
+        for seconds, text in ((0.0, "Two Looks (2 s)"), (5.0, "5 s"), (10.0, "10 s"), (30.0, "30 s")):
+            action = settle.addAction(text)
+            action.setCheckable(True)
+            action.setData(seconds)
+            action.setChecked(seconds == 0.0)
+            self.watch_settle_group.addAction(action)
+        settle.setToolTip("How long a new file must stay unchanged before it is read: a frame still being written is "
+                          "never read half-written")
+        self.watch_record_action = menu.addAction("Record Every Frame in the Results Database")
+        self.watch_record_action.setCheckable(True)
+        self.watch_record_action.setToolTip("Write the curve of every frame of the map into gimap_analysis/"
+                                            "gimap_series.sqlite next to the data (Compare reads it)")
+        menu.addSeparator()
+        self.watch_log_action = menu.addAction("Skipped Files…")
+        self.watch_log_action.setToolTip("Every file the watch could not take, when and why")
+        self.watch_fitting_action = menu.addAction("Fit New Frames in Fitting…")
+        self.watch_fitting_action.setToolTip("Export every new frame and open the exports in Fitting ▸ In-situ series, "
+                                             "which fits each new frame from the result of the one before")
+        self.watch_button.setMenu(menu)
 
 __all__ = ["AnalyzeStepsView", "CENTER_TIP", "EXPORT_TIPS", "FIT_SIDE_ITEMS", "GISAXS_CUTS_TIP", "MASK_TIP", "NXCANSAS_TIP",
            "PROFILE_TIP", "STEPS"]

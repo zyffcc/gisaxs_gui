@@ -7,12 +7,18 @@ from PyQt5.QtCore import QSignalBlocker
 
 from src.gimap.app.presentation.components.image_extent import filled_extent
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.geometry.q_inverse import horizon_qz
 
 from ...application import (
     GISAXS,
     X_AXIS_TWO_THETA,
     FrameAnalysis,
+    gisaxs_cut_tools,
     q_at_position,
+    cake_point,
+    detector_point,
+    map_point,
+    TRANSMISSION,
     q_from_two_theta,
     two_theta_deg,
 )
@@ -70,24 +76,30 @@ def _horizontal_where(reduction, *, short: bool) -> str:
 
 def cut_lines(analysis: FrameAnalysis) -> list[str]:
     """Where the two GISAXS cuts are, in detector pixels taken from the curves themselves (both ends included). A
-    vertical cut away from the beam centre is the person's, or the series' when the frame was cut at the cut of a
-    series (``markers["series_cut"]``)."""
+    vertical band can be automatic, set by hand or held for a series."""
     reduction = analysis.reduction
     if reduction is None or reduction.kind != GISAXS:
         return []
     lines = []
     horizontal, vertical = reduction.curve("horizontal"), reduction.curve("vertical")
-    if horizontal is not None:
+    if horizontal is not None and "gisaxs_cut" in horizontal.region:
+        low, high = horizontal.region["qz_edges"]
+        lines.append(f"I(qy) · qz {low:.5g}–{high:.5g} Å⁻¹ · {_horizontal_where(reduction, short=True)}")
+    elif horizontal is not None:
         lines.append(tr("Horizontal cut I(qy) over rows {rows}, {where}.").format(
             rows=pixel_range(*horizontal.region["rows"]), where=_horizontal_where(reduction, short=False)))
-    if vertical is not None:
+    if vertical is not None and "gisaxs_cut" in vertical.region:
+        low, high = vertical.region["qy_edges"]
+        lines.append(f"I(qz) · qy {low:.5g}–{high:.5g} Å⁻¹")
+    elif vertical is not None:
         geometry = analysis.geometry
         centre = vertical.region.get("center_column")
         on_beam = geometry is not None and centre is not None and abs(float(centre) - geometry.beam_center_x_px) < 0.01
         held = (reduction.markers.get("series_cut") or {}).get("vertical_columns") is not None
         template = (
-            "Vertical cut I(qz) over columns {columns} (the beam centre)." if on_beam
-            else "Vertical cut I(qz) over columns {columns} (the cut of the series)." if held
+            "Vertical cut I(qz) over columns {columns} (the cut of the series)." if held
+            else "Vertical cut I(qz) over columns {columns} (automatic)." if reduction.markers.get("vertical_source") == "automatic"
+            else "Vertical cut I(qz) over columns {columns} (the beam centre)." if on_beam
             else "Vertical cut I(qz) over columns {columns} (set by hand)."
         )
         lines.append(tr(template).format(columns=pixel_range(*vertical.region["columns"])))
@@ -97,13 +109,47 @@ def cut_lines(analysis: FrameAnalysis) -> list[str]:
 class DisplayMixin:
     """Own the image view, its overlays and both curve plots."""
 
+    def _view_chosen(self, _index: int) -> None:
+        self.detector_view.set_pick_mode(False)
+        self._show_image(keep_view=False)
+        self._update_center_control()
+        self._refresh_overlay()
+
+    def _horizontal_band_moved(self, low: float, high: float) -> None:
+        self.view_model.set_horizontal_band(low, high)
+        self.run_analysis()
+
+    def _vertical_band_moved(self, low: float, high: float) -> None:
+        self.view_model.set_vertical_band(low, high)
+        self.run_analysis()
+
+    def _position_clicked(self, x: float, y: float) -> None:
+        analysis = self.view_model.state.analysis
+        if analysis is None or analysis.kind != GISAXS or self.view_combo.currentIndex() != 0:
+            return
+        geometry = analysis.geometry
+        if geometry is not None and geometry.sample_roll_deg:
+            qy, _ = gisaxs_cut_tools.q_at(geometry, x, y)
+            x = gisaxs_cut_tools.axis_to_unit(geometry, gisaxs_cut_tools.UNIT_PIXEL, "qy", qy)[0]
+            if not np.isfinite(x):
+                return
+        half = self.view_model.state.gisaxs.vertical_half_width_px
+        self.view_model.set_vertical_band(x - half, x + half)
+        self.run_analysis()
+
+    def _auto_cuts(self) -> None:
+        self.view_model.reset_cuts()
+        self.run_analysis()
+
     def _empty_views(self, sentence: str) -> None:
         """No frame is shown: no image, no mask or region outlines, no curves (forgotten too: a theme or Log
         change does not draw them again), no axis names of the frame before, no ring band, no banner. Both
         plots say ``sentence`` (English, a key of the table; a blank: nothing) instead of an empty grid with
         ticks that mean nothing."""
+        self._mask_inputs_changed()
         self.detector_view.clear()
         self.shape_layer.clear()
+        self._clear_reflections()
         for plot in (self.top_plot, self.bottom_plot):
             plot.set_curves([])
             plot.set_title("")
@@ -128,6 +174,7 @@ class DisplayMixin:
         if analysis is None:
             view.clear()
             self.shape_layer.clear()
+            self._sync_reflections()
             return
         reduction = analysis.reduction
         rsm = reduction.reciprocal_space_map if reduction is not None else None
@@ -149,6 +196,7 @@ class DisplayMixin:
             if box is not None:
                 view.show_box(box.q_parallel[0], box.qz[0], box.q_parallel[1], box.qz[1])
             self._refresh_shapes()
+            self._sync_reflections()  # the phases' reflections in this view (``bindings/indexing.py``)
             return
         view.set_image(
             analysis.data, valid=analysis.valid, title=analysis.path.name,
@@ -156,6 +204,7 @@ class DisplayMixin:
         )
         self._show_overlays(analysis)
         self._refresh_shapes()
+        self._sync_reflections()
 
     def _show_q_map_marks(self, analysis: FrameAnalysis, rsm, *, keep_view: bool) -> None:
         """The beam centre (the direct beam: q∥ = qz = 0) and the sample horizon (qz = k sin αi) on the q map."""
@@ -166,8 +215,10 @@ class DisplayMixin:
         axis = "qy" if str(rsm.x_label).startswith("qy") else "q_parallel"
         beam = q_at_position(geometry, geometry.beam_center_x_px, geometry.beam_center_y_px)
         view.show_beam_center(beam[axis], beam["qz"], movable=False, keep_in_view=True)
-        horizon = q_at_position(geometry, geometry.beam_center_x_px, geometry.horizon_row())
-        view.show_horizon(horizon["qz"])
+        if analysis.kind == TRANSMISSION:  # no sample surface: no horizon
+            view.show_horizon(None)
+        else:
+            view.show_horizon(horizon_qz(geometry))
         if not keep_view:
             view.fit_view()
 
@@ -185,6 +236,7 @@ class DisplayMixin:
             )
             self.detector_view.clear_overlays()
             self._refresh_shapes()
+            self._sync_reflections()
             return
         self.detector_view.title_label.setText(tr("Unwrapping onto χ–q …"))
         self.tasks.submit(
@@ -202,9 +254,14 @@ class DisplayMixin:
     def _refresh_shapes(self) -> None:
         """Masks drawn on the detector; region outlines on the q map; region rectangles on the cake."""
         index = self.view_combo.currentIndex()
+        edits = self.view_model.state.corrections.mask_shapes
+        simple = all(edit.kind in ("rectangle", "polygon") and edit.mode == "exclude" for edit in edits)
+        analysis = self.view_model.state.analysis
+        self.shape_layer.set_mask_image(
+            analysis.drawn_mask if index == VIEW_DETECTOR and analysis is not None and not simple else None)
         if index == VIEW_DETECTOR:
             outlines = []
-            for shape in self.view_model.state.corrections.mask_shapes:
+            for shape in (edits if simple else ()):
                 points = list(shape.points)
                 if shape.kind == "rectangle":
                     (x0, y0), (x1, y1) = points
@@ -226,9 +283,18 @@ class DisplayMixin:
         if reduction is None:
             return
         markers = reduction.markers
-        view.show_beam_center(*markers["beam_center"])
-        view.show_horizon(markers.get("horizon_row"))
-        if reduction.kind == GISAXS:
+        geometry = analysis.geometry
+        centre = markers.get("beam_center")
+        if centre is None and geometry is not None:
+            centre = geometry.beam_center_x_px, geometry.beam_center_y_px
+        if centre is not None:
+            view.show_beam_center(*centre)
+        if reduction.kind != TRANSMISSION and geometry is not None:
+            line = geometry.horizon_line()
+            if line is not None:
+                (x, y), angle = line
+                view.show_horizon(y, x=x, angle=angle)
+        if reduction.kind == GISAXS and geometry is not None and not geometry.sample_roll_deg:
             view.show_horizontal_band(*markers["horizontal_band"])
             view.show_vertical_band(*markers["vertical_band"])
             self._hide_unticked_bands()
@@ -291,9 +357,16 @@ class DisplayMixin:
         top.set_title(TOP_TITLE_GIWAXS)
         top.title_label.setToolTip(tr(TOP_TIP_GIWAXS))
         x_label = family[0][1].x_label if family else "q (Å⁻¹)"
-        top.set_labels(x_label, "I (counts/pixel)")
+        mixed = len({curve.y_label for _name, curve, _color in family}) > 1
+        label = tr("Intensity (see legend)") if mixed else family[0][1].y_label if family else ""
+        top.set_labels(x_label, label)
+        def legend(name, curve):
+            name = "q box" if curve.key == "box_q" else name
+            if mixed:
+                return trf("{name} (sum)", name=name) if curve.region.get("aggregation") else trf("{name} (mean)", name=name)
+            return name
         top.set_curves(
-            [("q box" if curve.key == "box_q" else name, curve.x, curve.intensity) for name, curve, _color in family],
+            [(legend(name, curve), curve.x, curve.intensity) for name, curve, _color in family],
             [color or BOX_COLOR for _name, _curve, color in family],
         )
         self._plot_keys["top"] = [curve.key for _name, curve, _color in family]
@@ -302,6 +375,7 @@ class DisplayMixin:
             top.show_window(*self._window_for_display(window, analysis), color=STANDARD_COLORS["ring"])
         self._fill_lower_choice(reduction)
         self._show_lower_profile()
+        self._sync_reflections()
 
     def _fill_lower_choice(self, reduction) -> None:
         wanted = self.lower_choice.currentData() or self._lower_profile
@@ -336,7 +410,7 @@ class DisplayMixin:
                 return
             bottom.set_title("I(χ) of the regions")
             labels = {curve.x_label for _name, curve, _color in shown}
-            bottom.set_labels(labels.pop() if len(labels) == 1 else "χ or |χ| (°)", "I (counts/pixel)")
+            bottom.set_labels(labels.pop() if len(labels) == 1 else "χ or |χ| (°)", shown[0][1].y_label)
             bottom.set_curves([(name, curve.x, curve.intensity) for name, curve, _color in shown],
                               [color for _name, _curve, color in shown])
             self._plot_keys["bottom"] = [curve.key for _name, curve, _color in shown]
@@ -373,18 +447,30 @@ class DisplayMixin:
     # -- cursor readout ------------------------------------------------------------------
 
     def _readout(self, x: float, y: float) -> str:
+        """Every coordinate of the point under the cursor (``application/readout.py``): q and its components,
+        2θ, χ, αf (grazing incidence) and d; the detector view adds the pixel and its value in front."""
         analysis = self.view_model.state.analysis
         if analysis is None or analysis.geometry is None:
             return ""
-        if self.view_combo.currentIndex() == VIEW_Q_MAP:
-            return f"q∥ = {x:.4f}, qz = {y:.4f}, q = {np.hypot(x, y):.4f} Å⁻¹"
-        if self.view_combo.currentIndex() == VIEW_CAKE:
-            return f"q = {x:.4f} Å⁻¹, χ = {y:.1f}°"
-        q = q_at_position(analysis.geometry, x, y)
-        return (
-            f"qy = {q['qy']:.4f}, qz = {q['qz']:.4f}, q = {q['q']:.4f} Å⁻¹, "
-            f"αf = {q['alpha_f_deg']:.3f}°"
-        )
+        geometry, kind, view = analysis.geometry, analysis.kind, self.view_combo.currentIndex()
+        if view == VIEW_Q_MAP:
+            reduction = analysis.reduction
+            rsm = reduction.reciprocal_space_map if reduction is not None else None
+            name = "qy" if rsm is not None and str(rsm.x_label).startswith("qy") else "q∥"
+            point = map_point(geometry, x, y, kind)
+            parts = [f"q = {point['q']:.4f} Å⁻¹ ({name} = {x:.4f}, qz = {y:.4f})"]
+        elif view == VIEW_CAKE:
+            point = cake_point(geometry, x, y)
+            parts = [f"q = {point['q']:.4f} Å⁻¹"]
+        else:
+            point = detector_point(geometry, x, y, kind)
+            inner = f"q∥ = {point['q_parallel']:.4f}" if kind not in (GISAXS, TRANSMISSION) else f"qy = {point['qy']:.4f}"
+            parts = [f"q = {point['q']:.4f} Å⁻¹ ({inner}, qz = {point['qz']:.4f})"]
+        angles = [f"2θ = {point['two_theta_deg']:.3f}°" if point.get("two_theta_deg") is not None else "",
+                  f"χ = {point['chi_deg']:.1f}°",
+                  f"αf = {point['alpha_f_deg']:.3f}°" if point.get("alpha_f_deg") is not None else "",
+                  f"d = {point['d_angstrom']:.4g} Å" if point.get("d_angstrom") is not None else ""]
+        return "   ".join(parts) + "\n" + "   ".join(part for part in angles if part)
 
 
 __all__ = [

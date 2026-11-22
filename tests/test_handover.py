@@ -712,6 +712,8 @@ def test_the_start_pages_series_entry_takes_a_folder_or_files_and_ends_on_the_se
     try:
         components = window.components
         page, home = components.analyze_page, components.home_page
+        # Frames opened while others are listed: the person adds them to the list (the question is a modal dialog)
+        monkeypatch.setattr(page, "ask_replace_or_add", lambda _paths: "add")
         folder, stack = _frames(tmp_path / "run_7"), _stack(tmp_path / "scans" / "insitu_0042.nxs")
         asked = []
         monkeypatch.setattr(QFileDialog, "getExistingDirectory", staticmethod(

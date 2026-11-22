@@ -243,6 +243,9 @@ class ComparePageView:
         self.add_folder_action.setToolTip(FOLDER_TIP)
         self.add_files_action = menu.addAction("Curve Files…")
         self.add_files_action.setToolTip("Chosen curve files (q, I columns), in counting order: one series")
+        self.add_store_action = menu.addAction("Results Database…")
+        self.add_store_action.setToolTip("A series Analyze recorded in a results database (gimap_series.sqlite): every "
+                                         "frame's curve, without its frames")
         self.add_button.setMenu(menu)
         self.chip = QLabel("", bar)  # what is loaded; empty without a series (the empty state says what to do)
         self.chip.setObjectName("compareChip")

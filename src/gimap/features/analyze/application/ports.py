@@ -136,9 +136,11 @@ class CurveWriter(Protocol):
         metadata: Mapping[str, Any],
         text_format: str = "csv",
         also: Sequence[str] = (),
+        region_names: bool = False,
     ) -> list[Path]:
         """One ``<stem>_<curve>.<text_format>`` per curve (csv: comma, txt: tab, dat: space) and the JSON record,
-        whose ``files`` lists the curves and ``also`` (other files of the same export: the curve for Fitting)."""
+        whose ``files`` lists the curves and ``also`` (other files of the same export: the curve for Fitting).
+        ``region_names``: a cut region's curves are named by the region's name, not its key (Export Curves…)."""
         ...
 
     def write_table(self, path: Path, comments: Sequence[str], header: Sequence[str], rows: Sequence[Sequence[Any]]) -> Path:

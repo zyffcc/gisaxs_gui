@@ -16,9 +16,12 @@ from collections import Counter
 from pathlib import Path
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.fit_names import interval_text
+from src.gimap.shared.numbers import format_number
 from src.gimap.shared.signed_cut import MISSING_HALF
 
 from ..application import NO_INTENSITY
+from ..application.batch_preview import component_intervals
 from .texts import message_text
 
 HALVES_TEXTS = {"mean": "Mean of both halves", "positive": "q > 0 half", "negative": "q < 0 half"}
@@ -83,6 +86,33 @@ _PATTERNS = tuple((template, _pattern(template)) for template in CURVE_FIT_REASO
 def halves_text(halves: str) -> str:
     """``mean`` / ``positive`` / ``negative`` as the combo says it (anything else: as it came)."""
     return tr(HALVES_TEXTS[halves]) if halves in HALVES_TEXTS else str(halves)
+
+
+def spacing_text(d, q, sigma_q, *, value_only=False):
+    """Display d = 2π/q at the precision of its peak centre (Physics Manual, Eq. 7.15)."""
+    sigma_d = d * sigma_q / q if q and sigma_q is not None else None
+    return format_number(d, sigma_d, value_only=value_only)
+
+
+def model_value_text(value, interval=None, unit=""):
+    if interval:
+        return trf("{estimate} (68% interval)", estimate=interval_text(value, *interval, unit))
+    return f"{format_number(value)} {unit}".rstrip()
+
+
+def model_parameters_text(solution):
+    intervals = component_intervals(solution)
+    parts = []
+    for index, component in enumerate(solution.get("components") or (), 1):
+        params = []
+        for key, value in (component.get("params") or {}).items():
+            if key in ("R", "h", "D", "sigma_R", "pdi") and isinstance(value, (int, float)):
+                interval = intervals.get(f"c{index} {component.get('type', '')} {key}")
+                shown = model_value_text(value, interval, "nm" if key in ("R", "h", "D") else "")
+                params.append(f"{key} = {shown}")
+        if params:
+            parts.append(", ".join(params))
+    return "; ".join(parts)
 
 
 def fit_reason_text(reason) -> str:
@@ -333,5 +363,5 @@ __all__ = [
     "CURVE_FIT_REASONS", "FAILED_SHOWN", "SENT_GIWAXS", "SENT_TO_FITTING", "TRY_OTHER_HALVES", "batch_end_text", "end_title",
     "end_toast_text", "failed_line", "failed_lines", "failure_reason", "fit_end_text", "fit_reason_text",
     "fit_toast_text", "fits_failed", "halves_text", "latest_fit_text", "made_of_text", "short_folder", "try_failed_text",
-    "with_fits", "written_text",
+    "model_parameters_text", "model_value_text", "spacing_text", "with_fits", "written_text",
 ]

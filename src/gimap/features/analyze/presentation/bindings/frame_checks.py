@@ -21,13 +21,13 @@ from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.shared.detector_io.nexus_modules import MODULES_FEWER
 
-from ...application import AUTO, GISAXS, GIWAXS, MODES
+from ...application import AUTO, GISAXS, GIWAXS, MODES, TRANSMISSION
 from ..texts import message_text
 from .data_step import SENTENCE
 from .display import NOT_ANALYSED_TEXT
 from .workspace import show_card
 
-MODE_NAMES = {AUTO: "Auto", GISAXS: "GISAXS", GIWAXS: "GIWAXS"}
+MODE_NAMES = {AUTO: "Auto", GISAXS: "GISAXS", GIWAXS: "GIWAXS", TRANSMISSION: "SAXS/WAXS (transmission)"}
 MODE_MISMATCH = "This frame looks like {detected} but {mode} is selected"
 
 
@@ -46,8 +46,8 @@ class FrameChecksMixin:
     # -- the mode --------------------------------------------------------------------------
 
     def choose_mode(self, mode: str) -> None:
-        """Analyse this and the following frames as ``auto``, ``gisaxs`` or ``giwaxs`` (remembered for the next
-        session); a frame on screen is reduced again at once."""
+        """Analyse this and the following frames as ``auto``, ``gisaxs``, ``giwaxs`` or ``transmission``
+        (remembered for the next session); a frame on screen is reduced again at once."""
         if mode not in MODES:
             raise ValueError(f"Unknown analysis mode {mode!r}; expected one of {MODES}.")
         with QSignalBlocker(self.mode_combo):
@@ -163,6 +163,7 @@ class FrameChecksMixin:
             self._show_results_elsewhere()  # results kept are another file's, and named so
         self.fit_button.setEnabled(False)
         self._update_center_control()
+        self._sync_sample_roll_widgets()
         self._forget_incidence()  # the field showed the αi of the frame before
         return True
 

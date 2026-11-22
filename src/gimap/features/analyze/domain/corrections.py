@@ -1,4 +1,4 @@
-"""Frame corrections applied before any reduction: frame sum, background, flat field,
+"""Frame corrections applied before any reduction: frame sum, dark frame, background, flat field,
 gap guard and valid range.
 
 All work on the raw frame, so every curve, the q map and the exports use the
@@ -8,9 +8,15 @@ corrected values.  Nothing here changes the geometry or the array layout.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Optional, Sequence
 
 import numpy as np
+
+from src.gimap.shared.geometry.detector_response import DetectorResponse
+
+from .flat_field import FLOOR
+from .normalisation import Normalisation
 
 MAX_GAP_GUARD_PX = 20
 
@@ -19,14 +25,19 @@ MAX_GAP_GUARD_PX = 20
 class Corrections:
     """What to correct; the defaults change nothing."""
 
+    dark_path: Optional[str] = None
+    """Dark frame (detector without beam: dark current, offset) subtracted first, before the background."""
+    dark_frame: int = 0
+    dark_scale: float = 1.0
+    """``image − dark_scale × dark`` (for example the ratio of exposure times)."""
     background_path: Optional[str] = None
-    """Frame subtracted from every analysed frame (same detector and shape)."""
+    """Frame subtracted from every analysed frame (same detector and shape), after the dark frame."""
     background_frame: int = 0
     background_scale: float = 1.0
     """``image − scale × background`` (for example the ratio of exposure times)."""
     flat_field_path: Optional[str] = None
     """A flat field (detector response) of the frame's shape: every frame is divided by it, normalised to mean 1
-    over the pixels it keeps; pixels where it is at or below 0.05 or not finite are left out (``flat_field.py``).
+    over the pixels it keeps; pixels at or below the response floor or not finite are left out (``flat_field.py``).
     A ``.npy`` file or any frame the reader takes (its first frame)."""
     minimum: Optional[float] = None
     """Pixels below this raw value are treated as invalid (``None``: no limit)."""
@@ -37,7 +48,7 @@ class Corrections:
     mask_path: Optional[str] = None
     """An image of the same size whose non-zero pixels are masked (pyFAI / Xeuss mask files)."""
     mask_shapes: tuple = ()
-    """Rectangles and polygons drawn on the image (``MaskShape``): their pixels are left out."""
+    """Ordered user-mask edits (shapes, threshold/morphology rules and images), after ``mask_path``."""
     mirror_fill: bool = False
     """GIWAXS: fill pixels without data from the mirror side (``preprocess.mirror_fill``)."""
     bad_pixels: bool = True
@@ -49,24 +60,82 @@ class Corrections:
     """GIWAXS: divide by the polarisation factor with this ``f`` (0.95–0.99 synchrotron, 0 laboratory)."""
     film_thickness_nm: Optional[float] = None
     attenuation_length_um: Optional[float] = None
-    """GIWAXS: divide by the absorption in a film of this thickness and attenuation length (both needed).
+    """GIWAXS geometrical-path correction when thickness and attenuation length are supplied.
+    Film optical constants select the refracted-wave correction instead.
 
     The intensity corrections need the geometry; they are applied after the others, in the analysis,
     and are not part of ``is_identity``."""
+    lorentz: bool = False
+    """GIWAXS: divide by the Lorentz factor of a fibre texture about the surface normal (GIXSGUI),
+    L = 1 / (cos αi cos αf |sin 2θf|) (``intensity.py``)."""
+    normalisation: Normalisation = Normalisation()
+    """Exposure time, monitor, transmission, thickness, absolute scale (``normalisation.py``): one constant per
+    frame, applied last; not part of ``is_identity``."""
     critical_angle_deg: Optional[float] = None
     """GISAXS and GIWAXS: the critical angle α_c of the film; q_z is then the one inside it (refraction,
     ``q_mapping.refracted_qz``) and pixels below α_c are left out of the maps and cuts that use q_z. ``None``: the
     kinematic q_z in vacuum. Part of the geometry of the analysis, not of ``is_identity``."""
+    lorentz_band_px: float = 2.0
+    """Half-width of the excluded incidence-plane band in direct-beam horizontal pixel widths."""
+    orientation_min_exit_deg: Optional[float] = None
+    """Minimum exit angle for ring orientation; automatic uses twice αc, or twice αi without αc."""
+    orientation_polarization: bool = True
+    """Use horizontal polarisation f=0.99 for ring orientation when no frame factor was specified."""
+
+    background_dark_scale: Optional[float] = None
+    background_already_dark_subtracted: bool = False
+    flat_already_dark_subtracted: bool = False
+    flat_field_floor: float = FLOOR
+    counts_per_adu: float = 1.0
+    offset_adu: float = 0.0
+    use_profile_response: bool = True
+    error_model: str = "auto"
+    sigma_path: Optional[str] = None
+    pooled_scatter: bool = True
+    poisson_variance: str = "observed"
+    film_delta: Optional[float] = None
+    film_beta: Optional[float] = None
+    film_cif_path: Optional[str] = None
+    """GIWAXS film intensity correction. Supply δ and β or a CIF resolved at the frame wavelength.
+    With optical constants, a missing thickness selects the semi-infinite film."""
+
+    def __post_init__(self) -> None:
+        if (self.film_delta is None) != (self.film_beta is None):
+            raise ValueError("Enter both film optical constants, δ and β.")
+        if self.film_delta is not None and not (
+            math.isfinite(self.film_delta) and math.isfinite(self.film_beta) and self.film_beta >= 0
+        ):
+            raise ValueError("Film δ must be finite and film β must be finite and nonnegative.")
+        if (self.film_delta is not None or self.film_cif_path) and self.film_thickness_nm is not None and not (
+            math.isfinite(self.film_thickness_nm) and self.film_thickness_nm > 0
+        ):
+            raise ValueError("Enter a positive film thickness or select the thick film limit.")
+        DetectorResponse(self.counts_per_adu, self.offset_adu, self.error_model, self.sigma_path)
+        if not (math.isfinite(self.lorentz_band_px) and self.lorentz_band_px >= 0):
+            raise ValueError("The Lorentz exclusion half-width must be finite and nonnegative.")
+        if self.orientation_min_exit_deg is not None and not 0 <= self.orientation_min_exit_deg <= 90:
+            raise ValueError("The orientation minimum exit angle must be between 0° and 90°.")
+        if not 0 <= self.flat_field_floor < 1:
+            raise ValueError("The flat-field floor must be at least zero and below one.")
+        if self.background_dark_scale is not None and not (
+            np.isfinite(self.background_dark_scale) and self.background_dark_scale >= 0
+        ):
+            raise ValueError("The background dark scale must be nonnegative and finite.")
+        if self.poisson_variance not in ("observed", "smoothed"):
+            raise ValueError("Unknown Poisson variance model.")
 
     @property
     def is_identity(self) -> bool:
         return (
             not self.mirror_fill
+            and self.dark_path is None
             and self.background_path is None
             and self.flat_field_path is None
             and self.minimum is None
             and self.maximum is None
             and self.gap_guard_px <= 0
+            and self.counts_per_adu == 1 and self.offset_adu == 0
+            and self.error_model != "sigma"
         )
 
 
@@ -138,8 +207,9 @@ def subtract_background(
     background: np.ndarray,
     background_valid: np.ndarray,
     scale: float = 1.0,
+    what: str = "background",
 ) -> tuple[np.ndarray, np.ndarray]:
-    """``data − scale × background``; a pixel is valid only where both frames are.
+    """``data − scale × background``; a pixel is valid only where both frames are (``what``: background or dark).
 
     The subtracted frame may be negative (over-subtraction, noise); such
     pixels stay valid because negative values are real results here.
@@ -148,7 +218,7 @@ def subtract_background(
     background = np.asarray(background)
     if background.shape != data.shape:
         raise ValueError(
-            f"The background frame is {background.shape[0]}×{background.shape[1]}, "
+            f"The {what} frame is {background.shape[0]}×{background.shape[1]}, "
             f"the frame is {data.shape[0]}×{data.shape[1]}."
         )
     corrected = np.asarray(data, dtype=np.float32) - np.float32(scale) * np.asarray(

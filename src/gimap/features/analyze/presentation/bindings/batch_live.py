@@ -33,6 +33,8 @@ class BatchLiveMixin:
         if not self._batch_live:
             return
         self._series_rows, self._series_failures = [], []
+        # A late frame can still be writing a recipe. Reuse the folder until those workers finish.
+        self.view_model.begin_series_spool(replace_existing=not self.tasks.is_busy() and not self._batch_inflight)
         self._series_keep_curve(key)  # the key and the name the map goes by (``bindings/series.py``)
         self._series_map = None
         self._clear_stages()

@@ -102,7 +102,7 @@ class FitSeriesImportsMixin:
             return False
         if not self.imported_mode():
             self._folder_choices = (self._start_choice(), self.series_method(), self.follow_check.isChecked(),
-                                    self.skip_odd_check.isChecked())
+                                    self.smooth_check.isChecked(), self.smooth_scale.value(), self.skip_odd_check.isChecked())
         self._restore_listing = None
         self._imported_sources = sources
         self._imported_independent = bool(independent)
@@ -112,6 +112,7 @@ class FitSeriesImportsMixin:
         self._watch.stop()
         self._forget_halves()
         self._set_start("same" if independent else "previous")
+        self.smooth_check.setChecked(False)
         self.follow_check.setChecked(not independent)
         self.skip_odd_check.setChecked(not independent)
         self.every_spin.setValue(1)
@@ -123,13 +124,16 @@ class FitSeriesImportsMixin:
         self._imported_independent = False
         self._imported_q_unit = None
         if self._folder_choices is not None:
-            start, method, follow, skip_odd = self._folder_choices
+            start, method, follow, smooth, scale, skip_odd = self._folder_choices
             self._folder_choices = None
             blockers = [QSignalBlocker(control) for control in
-                        (self.start_group, self.method_group, self.follow_check, self.skip_odd_check)]
+                        (self.start_group, self.method_group, self.follow_check, self.smooth_check, self.smooth_scale,
+                         self.skip_odd_check)]
             self._set_start(start)
             self.set_series_method(method)
             self.follow_check.setChecked(follow)
+            self.smooth_check.setChecked(smooth)
+            self.smooth_scale.setValue(scale)
             self.skip_odd_check.setChecked(skip_odd)
             del blockers
 
@@ -142,7 +146,7 @@ class FitSeriesImportsMixin:
         self.watch_check.setToolTip(tr(FIXED_SELECTION) if imported else tr(self._folder_watch_tip))
         self.start_previous.setEnabled(not independent)
         self.start_stages.setEnabled(not independent)
-        self.follow_check.setEnabled(self.predicts_frames() and not independent)
+        self._update_continuity_controls()
         self.skip_odd_check.setEnabled(not independent)
         self.import_button.setEnabled(not self.running)
         if imported:
@@ -172,7 +176,8 @@ class FitSeriesImportsMixin:
             self.set_series_method(data.get("method"))
             if not self.independent_samples():
                 self._set_start(data.get("start"))
-                self.follow_check.setChecked(bool(data.get("follow", True)))
+                self._restore_continuity(data)
+                self.backward_check.setChecked(bool(data.get("backward", False)))
                 self.skip_odd_check.setChecked(bool(data.get("skip_odd", True)))
             return []
         self.close_series()

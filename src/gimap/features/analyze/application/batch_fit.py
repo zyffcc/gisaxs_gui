@@ -45,7 +45,7 @@ from src.gimap.shared.signed_cut import fit_halves
 
 from ..domain import GISAXS, PeakFit, fit_peak, q_from_two_theta
 from ..domain.regions import window_profile
-from .frame_preprocessing import photon_counts
+from .reduction_errors import reduction_errors
 from .models import FrameAnalysis
 from .ports import CurveWriter
 from .use_cases import SOFTWARE, fit_input_curve
@@ -156,9 +156,7 @@ def peak_inputs(analysis: FrameAnalysis, *, maps=None) -> list[PeakInput]:
     without them, the region's own I(q) curve.
     """
     inputs = []
-    counts = photon_counts(analysis.metadata, analysis.corrections, mirror_filled=analysis.filled_pixels is not None)
-    if counts and analysis.intensity_scale is not None:
-        counts = analysis.intensity_scale  # corrected counts: their variance is scaled too
+    counts = reduction_errors(analysis.corrections, vars(analysis))
     for target in peak_targets(analysis):
         if maps is not None:
             usable = np.asarray(analysis.valid, dtype=bool) & maps.above_horizon
@@ -239,8 +237,9 @@ def model_row(label: str, rows: Sequence[dict], *, error: str = "", halves: str 
     row["model"] = model_name(best)
     row["chi2"] = float(best.get("best_chi2_weighted", math.nan))
     row["log rmse"] = float(best.get("best_log_rmse", math.nan))
-    if best.get("probability") is not None:
-        row["probability"] = float(best["probability"])
+    for key in ("probability", "bic_weight"):
+        if best.get(key) is not None:
+            row[key] = float(best[key])
     for index, component in enumerate(best.get("components") or (), start=1):
         prefix = f"c{index} {component.get('type', '')}"
         row[f"{prefix} weight"] = float(component.get("weight", math.nan))

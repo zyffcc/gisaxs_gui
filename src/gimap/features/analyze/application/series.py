@@ -34,14 +34,17 @@ def _radial_q(analysis: FrameAnalysis) -> tuple[np.ndarray, np.ndarray]:
 def scaled(analysis: FrameAnalysis, factor: float) -> FrameAnalysis:
     """Every intensity of the reduction multiplied by ``factor`` (q axes unchanged)."""
     reduction = analysis.reduction
+    calibrated = analysis.calibrated_curve_unit is not None
     curves = tuple(
-        replace(curve, intensity=curve.intensity * factor, sigma=curve.sigma * factor)
+        replace(curve, intensity=curve.intensity * factor, sigma=curve.sigma * factor,
+                y_label="I (relative)" if calibrated else curve.y_label)
         for curve in reduction.curves
     )
     rsm = reduction.reciprocal_space_map
     if rsm is not None:
         rsm = replace(rsm, image=rsm.image * np.float32(factor))
-    return replace(analysis, reduction=replace(reduction, curves=curves, reciprocal_space_map=rsm))
+    return replace(analysis, reference_peak_scale=float(factor),
+                   reduction=replace(reduction, curves=curves, reciprocal_space_map=rsm))
 
 
 class CorrectSeriesFrame:

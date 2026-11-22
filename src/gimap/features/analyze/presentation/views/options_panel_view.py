@@ -19,6 +19,10 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.presentation.components import AdvancedSection, SegmentedControl
 
 from ..frames_model import MAX_SUM
+from .command_bar import ElidedLabel
+from .film_controls import FilmControls
+from .normalisation_view import NormalisationView
+from .reduction_errors_view import ReductionErrorsView
 
 X_AXIS_ITEMS = (("q", "q"), ("2θ", "two_theta"))
 
@@ -42,12 +46,14 @@ def _hint(text: str, parent) -> QLabel:
     return label
 
 
-class OptionsPanelView:
-    """Builds the option sections — frames, corrections, GIWAXS cuts — that the process steps show."""
+class OptionsPanelView(NormalisationView, ReductionErrorsView):
+    """Builds the option sections — frames, corrections, normalisation, GIWAXS cuts — that the process steps show."""
 
     def build_option_sections(self, parent: QWidget) -> None:
         self._frames_section(parent)
         self._corrections_section(parent)
+        self._detector_errors_section(parent)
+        self._normalisation_section(parent)
         self._intensity_section(parent)
         self._giwaxs_section(parent)
 
@@ -81,8 +87,9 @@ class OptionsPanelView:
             expanded=True,
         )
         self.corrections_section = section
+        self._dark_row(section)  # subtracted first, then the background
         background = QHBoxLayout()
-        self.background_label = QLabel("No background", section)
+        self.background_label = ElidedLabel("No background", section, padding=0)
         self.background_label.setProperty("gimapRole", "muted")
         self.background_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.background_button = QToolButton(section)
@@ -99,13 +106,26 @@ class OptionsPanelView:
         form = QFormLayout()
         form.setHorizontalSpacing(8)
         self.background_scale_spin = _spin(section, -1e6, 1e6, 1.0, decimals=4, step=0.05)
-        self.background_scale_spin.setToolTip("frame − scale × background (e.g. the exposure-time ratio)")
+        self.background_scale_spin.setToolTip("Scale applied to the background after its dark subtraction.")
         self.background_frame_spin = QSpinBox(section)
         self.background_frame_spin.setRange(0, 100000)
         self.background_frame_spin.setToolTip("Frame of a NeXus background file")
         form.addRow("Scale", self.background_scale_spin)
         form.addRow("Frame", self.background_frame_spin)
         section.add_layout(form)
+        self.background_dark_check = QCheckBox("Background is already\ndark-subtracted", section)
+        section.add_widget(self.background_dark_check)
+        dark = QFormLayout()
+        dark.setRowWrapPolicy(QFormLayout.WrapLongRows)
+        scale = QHBoxLayout()
+        self.background_dark_auto = QCheckBox("Auto", section)
+        self.background_dark_auto.setToolTip(
+            "Auto uses the background-to-dark exposure ratio, or the sample dark scale if either time is missing.")
+        self.background_dark_spin = _spin(section, 0, 1e6, 1.0, decimals=6, step=0.05)
+        scale.addWidget(self.background_dark_auto)
+        scale.addWidget(self.background_dark_spin, 1)
+        dark.addRow("Dark scale for background", scale)
+        section.add_layout(dark)
         self._flat_field_row(section)
 
         limits = QGridLayout()
@@ -136,7 +156,8 @@ class OptionsPanelView:
         )
         guard.addRow("Gap guard", self.gap_guard_spin)
         section.add_layout(guard)
-        refraction = QHBoxLayout()
+        refraction = QFormLayout()
+        refraction.setRowWrapPolicy(QFormLayout.WrapLongRows)
         self.refraction_check = QCheckBox("Refraction in the film, αc", section)
         self.refraction_check.setObjectName("analyzeRefractionCheck")
         self.refraction_check.setToolTip(
@@ -150,16 +171,14 @@ class OptionsPanelView:
             "Yoneda band"
         )
         self.critical_angle_spin.setMaximumWidth(130)
-        refraction.addWidget(self.refraction_check)
-        refraction.addWidget(self.critical_angle_spin)
-        refraction.addStretch(1)
+        refraction.addRow(self.refraction_check, self.critical_angle_spin)
         section.add_layout(refraction)
         return section
 
     def _flat_field_row(self, section) -> None:
         """The flat field (detector response): its file, Choose… and ×, and what it did to the frame shown."""
         flat = QHBoxLayout()
-        self.flat_field_label = QLabel("No flat field", section)
+        self.flat_field_label = ElidedLabel("No flat field", section, padding=0)
         self.flat_field_label.setObjectName("analyzeFlatFieldLabel")
         self.flat_field_label.setProperty("gimapRole", "muted")
         self.flat_field_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -167,8 +186,7 @@ class OptionsPanelView:
         self.flat_field_button.setObjectName("analyzeFlatFieldButton")
         self.flat_field_button.setText("Choose…")
         self.flat_field_button.setToolTip(
-            "Flat field (detector response): every frame is divided by it, normalised to mean 1; pixels where it "
-            "is at or below 0.05 are left out. A detector frame of the same size or a .npy file"
+            "Choose a uniformly exposed frame D_ff. Each sample is divided by its normalised response F_ff."
         )
         self.flat_field_clear_button = QToolButton(section)
         self.flat_field_clear_button.setText("×")
@@ -178,6 +196,14 @@ class OptionsPanelView:
         flat.addWidget(self.flat_field_button)
         flat.addWidget(self.flat_field_clear_button)
         section.add_layout(flat)
+        self.flat_dark_check = QCheckBox("Flat is already dark-subtracted", section)
+        section.add_widget(self.flat_dark_check)
+        form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.WrapLongRows)
+        self.flat_floor_spin = _spin(section, 0, 0.999999, 0.05, decimals=6, step=0.01)
+        self.flat_floor_spin.setToolTip("Leave out pixels whose normalised response F_ff is at or below this value.")
+        form.addRow("Flat-field threshold", self.flat_floor_spin)
+        section.add_layout(form)
         self.flat_field_status = _hint("", section)
         self.flat_field_status.setObjectName("analyzeFlatFieldStatus")
         self.flat_field_status.hide()
@@ -186,8 +212,7 @@ class OptionsPanelView:
     def _intensity_section(self, parent) -> AdvancedSection:
         section = AdvancedSection(
             "Intensity corrections (GIWAXS)",
-            "Off by default. Peak positions do not change; intensities compared across χ or q do "
-            "(orientation, pole figures, crystallinity ratios).",
+            "Ring orientation uses polarisation by default. Map and radial intensity corrections are optional.",
             parent,
             expanded=False,
         )
@@ -211,28 +236,10 @@ class OptionsPanelView:
         polarization.addWidget(self.polarization_spin)
         polarization.addStretch(1)
         section.add_layout(polarization)
-        self.film_check = QCheckBox("Absorption in the film", section)
-        self.film_check.setObjectName("analyzeFilmCheck")
-        self.film_check.setToolTip(
-            "The path of the beam in the film changes with the exit angle αf; relative to αf = αi. "
-            "Refraction is not included: valid well above the critical angle."
-        )
-        section.add_widget(self.film_check)
-        film = QFormLayout()
-        film.setHorizontalSpacing(8)
-        self.film_thickness_spin = _spin(section, 0.1, 1e6, 100.0, decimals=1, step=10.0, suffix=" nm")
-        self.film_thickness_spin.setObjectName("analyzeFilmThickness")
-        self.attenuation_spin = _spin(section, 0.001, 1e6, 100.0, decimals=3, step=1.0, suffix=" µm")
-        self.attenuation_spin.setObjectName("analyzeAttenuationLength")
-        self.attenuation_spin.setToolTip(
-            "Attenuation length 1/µ of the film at this energy (tables such as CXRO or NIST)"
-        )
-        film.setRowWrapPolicy(QFormLayout.WrapLongRows)  # the panel is narrow: never wider than it
-        for spin in (self.polarization_spin, self.film_thickness_spin, self.attenuation_spin):
-            spin.setMaximumWidth(130)
-        film.addRow("Thickness", self.film_thickness_spin)
-        film.addRow("Attenuation length", self.attenuation_spin)
-        section.add_layout(film)
+        self.polarization_spin.setMaximumWidth(130)
+        self.film_controls = FilmControls(section)
+        section.add_widget(self.film_controls)
+        self._lorentz_row(section)
         return section
 
     def _giwaxs_section(self, parent) -> AdvancedSection:

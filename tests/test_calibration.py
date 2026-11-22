@@ -40,6 +40,7 @@ from src.gimap.features.calibration.domain.models import (
 from src.gimap.features.calibration.domain.peak_detector import DetectedPeak
 from src.gimap.features.calibration.domain.peak_matcher import generate_distance_candidates
 from src.gimap.features.calibration.domain.preprocessing import preprocess_detector_image
+from src.gimap.features.calibration.domain.radial_profile import calculate_azimuthal_profile
 from src.gimap.features.calibration.infrastructure.adapters import JsonCalibrationStorageAdapter
 from src.gimap.features.calibration.domain.standards import STANDARDS
 from src.gimap.app.bootstrap import create_app_context
@@ -87,6 +88,18 @@ def synthetic_grazing_agbh(
 class CalibrationTests(unittest.TestCase):
     def test_energy_to_wavelength(self):
         self.assertAlmostEqual(energy_to_wavelength(12.398419843320026), 1.0, places=12)
+
+    def test_uniform_partial_ring_counts_the_illuminated_rays(self):
+        yy, xx = np.indices((200, 280))
+        radius = np.hypot(xx - 32.0, yy - 40.0)
+        signal = np.exp(-0.5 * ((radius - 210) / 2.0) ** 2).astype(np.float32)
+        profile = calculate_azimuthal_profile(signal, np.ones(signal.shape, bool), 32.0, 40.0)
+        index = np.argmin(np.abs(profile.radius_px - 210))
+        # The bright arc occupies only the accessible part of the circle.
+        angle = np.linspace(0, 2 * np.pi, 360, endpoint=False)
+        x, y = 32 + 210 * np.cos(angle), 40 + 210 * np.sin(angle)
+        accessible = np.mean((0 <= x) & (x < 280) & (0 <= y) & (y < 200))
+        self.assertAlmostEqual(profile.coverage[index], accessible, delta=0.02)
 
     def test_q_to_ring_radius(self):
         radius = q_to_ring_radius_px(0.1, 12.398419843320026, 1000.0, 100e-6)

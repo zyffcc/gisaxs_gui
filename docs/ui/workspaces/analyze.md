@@ -101,7 +101,8 @@ Run Automatic Analysis（Results 步骤可写束线时笔记：αi、能量、�
 - GISAXS：几何 → Yoneda 切线（找不到时提示检查 αi）→ 按左右对称移动中心列 → 选择两半（都可用且一致就平均，
   一半被遮挡 / 有缝隙 / 太短就用另一半，并写出理由）→ 特征长度 2π/q*（侧峰或 shoulder；写明不一定是粒子间距；它是单独的结果，
   不作拟合的起点）→ Fitting 的 Predict parameters（注入的 `create_curve_fit()`：没有给组成时网络在一种或两种球和竖直圆柱、
-  带或不带次晶的组成中选，随机取向圆柱只在给定组成时用；有效界面 q_z = 0）。报告最可能的解（`chosen`），带概率和 R、h、D 的
+  带或不带次晶的组成中选，随机取向圆柱只在给定组成时用）。已知入射角和 Yoneda 带的出射角时，在切线真空 q_z 处计算 Born 项（第二层）；
+  任一角度未知时用有效界面（第一层，q_z = 0）。报告最可能的解（`chosen`），带概率和 R、h、D 的
   68 % 区间（*fit intervals*）；`at_bounds` 标出停在范围边界的非线性数值，报告的解有这种值时是一处需要查看；χ²ᵣ > 10 为拟合差；
   另一个解的概率 ≥ 0.2（`ASK_PROBABILITY`）时结果里会问你选哪个模型，并指出 D 与 2π/q* 相差 15 % 以内的解
   （`application/gisaxs_choice.py`、`gisaxs_procedure.py`）。
@@ -200,6 +201,28 @@ Ask AI… 用同样的工具（GIWAXS 或 GISAXS 的结果选项随当前模式�
   连续移动合并刷新；当前计算完成后只计算最新的中心，保留曲线的手动缩放。关闭预览或窗口会取消尚未提交的刷新。
   切换文件或帧、清空和关闭页面时关闭调整窗口，避免将旧帧的输入应用到另一个探测器。
 
+## 几何从哪里来、.poni、透射模式与光标读数（2026-11-21）
+
+- **顺序**（`application/geometry_resolution.py`）：手选且帧尺寸相符的配置 → 帧旁边的 `.poni`
+  （`application/geometry_files.SiblingPoni`：同一文件夹中名字与帧相同开头的，否则唯一的一个；帧尺寸、像素尺寸相符且有波长）
+  → 按探测器名和尺寸匹配的配置 → 无。手选配置用于另一尺寸的帧时不用（`refused_profile`，提示条 **Use “…” Anyway** 把该尺寸加入
+  `state.forced_shapes`）。`source` 写有这个 `.poni` 或帧所在文件夹的配置优先于文件（在用文件时保存的中心或几何会写上它，
+  `geometry_model._linked_source`）。
+- **Load .poni… / Export .poni…**：几何步骤、提示条和几何对话框（`bindings/geometry_files.py`；读写在
+  `shared/geometry/poni.py`）。不符的文件先询问；有波长的文件保存为配置并被选中，没有波长的打开对话框。
+- **几何对话框**：波长与能量联动，下面一行写来源（文件头、`.poni`、配置、用户）；没有时显示 *Required* 并以警告样式说明，
+  保存和导出要等输入；rot1、rot2、rot3（度）。
+- **打开帧时已有帧**（`bindings/frame_import.py`）：询问 Replace / Add to List（`app/presentation/question_box.ask_choice`，
+  不是 `QMessageBox`；问题开着时再拖入的帧被拒绝，回答后若批处理或自动分析已开始也拒绝）；追加时读入第一帧的尺寸，另一台
+  探测器的帧拒绝（`application/frame_import.other_detector`）。测试：`tests/test_open_frames_question.py`（offscreen 下连开两帧）。
+- **批量导出**：每个文件夹的几何来源一行（`application/batch_geometry.py`）；没有任何帧能有几何时 Export 不可用。
+- **透射模式** `transmission`（命令栏 **SAXS**；`domain/transmission.py`，自动判断在 `application/technique.py`）：
+  整环 I(q)、−180°…180° 的 I(χ)、区域、q_y–q_z 图和 −180°…180° 的展开图；没有地平线和 Yoneda 切线。自动分析把它
+  当作 GISAXS 流程的标样帧处理（`assistant/application/pipeline.py`）。
+- **光标读数**（`application/readout.py`，`bindings/display._readout`）：两行，q 及其分量、2θ、χ、αf、d 和像素值；DetectorView
+  的读数框固定两行高，一行放不下时才截断（完整内容在提示里）。
+- 测试：`tests/test_poni_and_geometry_sources.py`、`tests/test_geometry_ui.py`。
+
 ## αi 与模式
 
 - 命令栏的 αi：没有输入时显示 “αi from profile”；为本次会话输入的值以橙色标出，右键 ▸ Back to Profile 回到配置的值。
@@ -233,10 +256,19 @@ Send to Fitting（命令栏和 Export 步骤的按钮都走 `bindings/fit_handov
   I / F_ff，计数帧的方差按 value / F 传递（`intensity_scale`，GISAXS 的 `native_profile(..., scale)` 与 GIWAXS 的
   `BinnedMean.add(..., scale)`），与 GIWAXS 强度校正相乘为 F = F_Ω F_P F_A F_ff；记录 `corrections.flat_field`（文件、SHA-256、
   归一化平均值、排除的像素）；每个文件版本只读一次，批量导出、序列与监视共用。
-  顺序：探测器无效像素 → 热 / 死像素 → 掩膜 → 背景 → 平场排除的像素 → gap guard → 强度范围 → 除以平场 → 镜像补齐 → 强度校正；
-  曲线、q 图、展开图与导出都用处理后的帧。
+  暗场（Dark frame，默认关，`views/normalisation_view.py` 的 `_dark_row`、`bindings/normalisation.py` 的 `apply_dark`）：在背景之前
+  扣除 `s_D · D`，误差模型改为像素离散度（`frame_preprocessing.photon_counts`）。
+  顺序：探测器无效像素 → 热 / 死像素 → 掩膜 → 暗场 → 背景 → 平场排除的像素 → gap guard → 强度范围 → 除以平场 → 镜像补齐 →
+  强度校正 → 归一化；曲线、q 图、展开图与导出都用处理后的帧。
+- Normalisation（折叠区，各项默认关；`domain/normalisation.py`、`frame_preprocessing._normalise`、`bindings/normalisation.py`）：
+  c = A / (t · M · T · d)，t 与 M 取文件头（`normalisation.header_values`：读取器的 `exposure_time_s`、EDF / CBF 的监视器名、NeXus 的
+  `monitor`；帧之和取和）或手动输入；第一行总写出文件头可用的值，下方一行写出乘了多少和每项来源。数据乘 c，计数帧的
+  `intensity_scale` 乘 c（σ = c × 原 σ），曲线的 y 标签与拟合输入的 `intensity_unit` 带单位；记录 `normalisation`、`header_values`，
+  每个曲线文件有 `# intensity:` 头行（`export_record.intensity_lines`）。
 - Intensity corrections (GIWAXS)（折叠区，只在 GIWAXS 显示，默认关，`domain/intensity.py`）：立体角 cos³2θ、偏振（pyFAI 公式，因子 f）、
-  薄膜吸收（厚度 t、衰减长度 L，相对 αf = αi，不含折射）；I / factor，q 不变。计数帧的方差按 value / factor 传递
+  薄膜吸收（厚度 t、衰减长度 L，相对 αf = αi，不含折射）、Lorentz 因子（纤维织构，GIXSGUI 的 L = 1/(cos αi cos αf |sin 2θf|)；
+  `Corrections.lorentz`，自动分析的 Hermans 因子此时不再乘 sin χ：`assistant/domain/orientation.ring_orientation(lorentz=True)`，
+  由 `automation.status()["corrections"]["lorentz"]` 传入）；I / factor，q 不变。计数帧的方差按 value / factor 传递
   （`BinnedMean.add(..., scale)`），导出记录的 `intensity_corrections` 写明公式与参数，Fitting 的计数模型标记为不成立。
 - Undo / Redo（命令栏 ↶ ↷ 或 Edit ▸ Undo / Redo，Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y，`setup_history.py`）：设置的每次改动是一步，同类快速改动合并
   （但抵消上一步的改动——比如刚加上又删掉——单独成一步）。
@@ -297,6 +329,26 @@ Send to Fitting（命令栏和 Export 步骤的按钮都走 `bindings/fit_handov
 - 放大：每个图像和曲线图都有 Zoom（放大镜）——按下后拖出矩形放大；在任何视图中按住 Shift 拖动也可以；Reset / Fit view
   恢复全部。Fitting 的曲线图（以及原位序列的图）直接拖出矩形放大，双击恢复；重新拟合、重画数据时保持放大，载入新曲线时恢复。
 - AI 工具 `set_cut_regions` 设置同一个区域列表（可预览、应用、撤销）。
+
+## GIWAXS：物相、指标化与极图（Phases 窗口）
+
+- 入口：图像工具栏的 **Phases** 按钮（`views/indexing_view.make_phases_button`），打开非模态窗口 `indexing_panel.IndexingPanel`
+  （布局 `views/indexing_view.py`，文字 `indexing_texts.py`，中文 `i18n/zh_indexing.py`）。
+- 物相保存在页面的 `indexing_model.IndexingModel`（不在窗口里）：自动分析和命令行 `--phase` 不打开窗口也能给出物相。
+- 叠加：`bindings/indexing.IndexingMixin._sync_reflections` 在 `display.py` 画图像、展开图和 GIWAXS 曲线后调用，按当前视图
+  （探测器像素、q∥–qz、q–χ）画点、弧线和直线（`reflection_layer.ReflectionLayer`，自己的 pyqtgraph 项，不碰页面的其他项）；
+  I(q) 上画每个环的虚线。
+- 科学部分：`domain/crystal/`（晶胞、CIF、对称操作与消光、Cromer–Mann f0、衍射与分组、纤维织构与折射两通道、环的指认、极图模型与拟合；
+  CIF 不列对称操作时由空间群生成：`space_group_table.py` 的 Hall 符号表、`hall.py` 的生成、`space_groups.py` 的符号读法与设置选择，
+  生成不了时物相仅给出位置、指认为暂定），
+  用例 `application/indexing.py`（物相、叠加、表、指认、记录）和 `application/pole_figure.py`（I(χ) 窗口所在环的极图、背景、CSV）。
+- 给其他组件：`automation_indexing.IndexingAutomationMixin`（`set_phases`、`assign_peaks`、`pole_figure`），经 assistant 的
+  `GuiWorkbench` 到 `pipeline_phases.PhaseStepsMixin`：决策 *phase assignment*、峰行的 `phase`/`hkl`/`delta_q`、环行的 `pole_figure`、
+  `report.md` 的 *Phase assignment* 一节。
+- 测试：`tests/test_crystal_indexing.py`（LaB₆、MAPbI₃ 消光、纤维点、折射、指认、P08 公开帧、极图拟合恢复）、
+  `tests/test_space_groups.py`（Hall 表每一项的一般位置数和符号的滑移面、螺旋轴，薄膜材料的消光，符号读法，只写空间群的 CIF）、
+  `tests/test_indexing_panel.py`（窗口、叠加、导出、中文、自动分析的指认与极图）。
+- 公式：*Physics and Methods* 7.10、7.11；手册 5.9。
 
 ## 曲线上的点从哪里来
 

@@ -162,8 +162,9 @@ def _headless_workbench(page, output: OutputFolder):
     class HeadlessWorkbench(GuiWorkbench):
         """Analyze's automation; its curves are exported under the output folder, not next to the data."""
 
-        def export_curves(self) -> list[str]:
-            return [str(path) for path in self._call(page.view_model.export, output.exports())]
+        def export_curves(self, extra_metadata: Optional[dict] = None) -> list[str]:
+            written = self._call(lambda: page.view_model.export(output.exports(), extra_metadata=extra_metadata))
+            return [str(path) for path in written]
 
     return HeadlessWorkbench(page.automation(), GuiBridge())
 

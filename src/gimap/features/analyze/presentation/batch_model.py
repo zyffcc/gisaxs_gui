@@ -18,6 +18,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
+from src.gimap.app.presentation.i18n import tr
+from src.gimap.shared.numbers import format_number
+
 from ..application import (
     FIT_MODEL,
     FIT_NONE,
@@ -34,12 +37,12 @@ from ..application import (
     FrameJob,
     FrameOutcome,
     FrameTools,
+    MaskImage,
     batch_record,
     fit_curve_rows,
     fit_halves,
     fit_model,
     fit_model_curve,
-    fit_peak_inputs,
     fit_peaks,
     is_gisaxs,
     model_fit_curve,
@@ -56,6 +59,7 @@ from ..application import (
     run_frame_job,
     written_kinds,
 )
+from ..application.peak_reproduction import fit_recorded_peaks
 
 BATCH_SECTION = "analyze_batch"
 MISSING_NAMED = 6
@@ -77,8 +81,9 @@ def _trend_panels(table: FitTable, kind: str) -> list:
 def _latest_model(rows) -> str:
     """The most probable solution of a frame in a few words (the panel's latest fit)."""
     best = rows[0]
-    chance = best.get("probability")
-    return (f"{model_name(best)}" + ("" if chance is None else f", p {float(chance):.2f}")
+    label = tr("BIC weight") if "bic_weight" in best else "p"
+    chance = best.get("bic_weight", best.get("probability"))
+    return (f"{model_name(best)}" + ("" if chance is None else f", {label} {float(chance):.2f}")
             + f", χ²ᵣ {float(best.get('best_chi2_weighted', float('nan'))):.3g}")
 
 
@@ -162,7 +167,7 @@ class BatchModelMixin:
         return FrameJob(
             index=int(index), request=request, choices=run.choices, destination=run.destination,
             series=run.series, series_factor=run.series_state.get("factor"), live_key=run.live_key,
-            display=run.display, number=number,
+            display=run.display, number=number, series_spool=self.series_spool if run.live_key else None,
         )
 
     def needs_first_frame_alone(self, run: "BatchRun") -> bool:
@@ -210,6 +215,10 @@ class BatchModelMixin:
             run.tables.add(label, outcome.curves)
             for curve in outcome.curves:
                 run.curve_titles.setdefault(curve.key, curve.title)
+                if outcome.metadata.get("reproduction"):
+                    run.table_frames.setdefault(curve.key, []).append(len(run.replay_records))
+        if outcome.metadata.get("reproduction"):
+            run.replay_records.append(outcome.metadata)
         if run.fit_table is not None:
             written.extend(self._fit_outcome(outcome, run))
         run.frames.append(label)
@@ -220,19 +229,21 @@ class BatchModelMixin:
         if run.first_metadata is None:
             run.first_metadata = outcome.metadata
             run.first_frame = outcome.stem
+        run.record_frame_statistics(label, outcome.metadata)
         return written
 
     def _fit_outcome(self, outcome: FrameOutcome, run: "BatchRun") -> list[Path]:
         choices, written, label = run.choices, [], outcome.label
         stem, text = outcome.stem, choices.text_format
         if choices.fit == FIT_PEAKS:
-            fits = fit_peak_inputs(outcome.peak_inputs, choices.fit_profile, run.starts)
+            fits = fit_recorded_peaks(outcome, choices.fit_profile, run.starts)
             values = peak_row(label, fits)
             run.fit_table.add(values, outcome.number)
             self._remember_batch_preview(run, peak_preview(outcome, fits, values))
             run.fit_keys = run.fit_keys or [target.key for target, _fit in fits]
             run.last_fit = "; ".join(
-                f"{target.name}: q {fit.center:.4f} Å⁻¹, FWHM {fit.fwhm:.4f}" if fit.ok else f"{target.name}: {fit.message}"
+                f"{target.name}: q {format_number(fit.center, fit.center_err)} Å⁻¹, FWHM {format_number(fit.fwhm, fit.fwhm_err)}"
+                if fit.ok else f"{target.name}: {fit.message}"
                 for target, fit in fits[:3]
             )
             if choices.fit_curves:
@@ -255,6 +266,8 @@ class BatchModelMixin:
         run.fit_table.add(values, outcome.number)
         self._remember_batch_preview(run, model_preview(outcome, rows, values, error=error))
         run.fit_frames.append(model_fit_frame(label, rows, error=error, halves=halves))  # a failed fit is counted
+        if rows and rows[0].get("reproduction"):
+            run.replay_records.append({"frame": label, "reproduction": rows[0]["reproduction"]})
         run.last_fit = _latest_model(rows) if rows else error
         if rows and choices.fit_curves:  # the points that were fitted (the mean or the one half) and the model
             path = run.destination / FOLDERS["fit_curves"] / f"{stem}_model_fit.{text}"
@@ -390,6 +403,10 @@ class BatchModelMixin:
             profile_name=name,
             profile=profile,
             incidence_deg=state.incidence_deg,
+            incidence_measurement=state.incidence_measurement, incidence_locked=state.incidence_locked,
+            yoneda_critical_deg=state.yoneda_critical_deg,
+            yoneda_material=state.yoneda_material,
+            sample_roll_deg=state.sample_roll_deg, sample_roll_measurement=state.sample_roll_measurement,
             beam_center=state.beam_center,
             beam_center_shape=self.session_center_shape() if hasattr(self, "session_center_shape") else None,
             sum_count=self.sum_count,
@@ -412,14 +429,26 @@ class BatchModelMixin:
                 name = None
         corrections = settings.corrections
         for label, key in (("Mask file", "mask_path"), ("Background frame", "background_path"),
-                           ("Flat-field file", "flat_field_path")):
+                           ("Flat-field file", "flat_field_path"), ("Dark frame", "dark_path")):
             path = getattr(corrections, key)
             if path and not Path(path).exists():
                 notes.append(f"{label} not found, left out: {path}")
                 corrections = replace(corrections, **{key: None})
+        kept = []
+        for edit in corrections.mask_shapes:
+            if isinstance(edit, MaskImage) and not Path(edit.path).is_file():
+                notes.append(f"Mask file not found, left out: {edit.path}")
+            else:
+                kept.append(edit)
+        corrections = replace(corrections, mask_shapes=tuple(kept))
         self.state.mode = settings.mode
         self.state.profile_name = name
         self.state.incidence_deg = settings.incidence_deg
+        self.set_incidence_measurement(settings.incidence_measurement)
+        self.state.incidence_locked = settings.incidence_locked
+        self.state.yoneda_critical_deg = settings.yoneda_critical_deg
+        self.state.yoneda_material = settings.yoneda_material
+        self.set_sample_roll(settings.sample_roll_deg, settings.sample_roll_measurement)
         if settings.beam_center is None:
             self.clear_beam_center()
         else:

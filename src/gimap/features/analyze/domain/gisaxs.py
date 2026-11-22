@@ -9,28 +9,31 @@ grazing-incidence model, in Å⁻¹.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
 from src.gimap.shared.geometry import DetectorGeometry
-from src.gimap.shared.geometry.q_inverse import q_per_pixel
+from src.gimap.shared.geometry.q_inverse import positions_of_q, q_of_positions, q_per_pixel, qy_on_horizon
 from src.gimap.shared.geometry.q_mapping import grazing_q_region
 
 from .binning import binned_mean_2d, map_grid_shape, native_profile
-from .gisaxs_cuts import NO_PIXELS, column_band_q, cut_curve, cut_key, row_band_q
+from .curve_errors import PixelErrors, pixel_errors
+from .gisaxs_cuts import NO_PIXELS, GisaxsCut, column_band_q, cut_curve, cut_key, row_band_q
 from .models import GISAXS, Curve, GisaxsCutSettings, ReciprocalSpaceMap, Reduction, YonedaEstimate
+from .vertical_band import LIMITED_CLEARANCE, SPECULAR_EXCLUSION_PX, default_vertical_column
 
 YONEDA_SEARCH_MAX_DEG = 1.5
 """Highest exit angle searched for the Yoneda band (above any common αc)."""
 HORIZON_TOLERANCE_DEG = 0.2
 """The search also extends this far below the computed horizon, because a
 slightly wrong αi or beam centre moves the real horizon by tens of pixels."""
-SPECULAR_EXCLUSION_PX = 15
-"""Half width around the beam-centre column skipped (specular rod, beam stop)."""
 SIDE_BAND_WIDTH_PX = 100
 MAP_SHAPE = (600, 600)
 MAP_BLOCK_ROWS = 256
+ROW_BAND_WARNING = ("The detector horizon changes by more than half a row across this frame. "
+                    "The Yoneda search and automatic horizontal cut use detector rows. "
+                    "Add a horizontal band in q to select a constant exit angle.")
 
 
 @dataclass(frozen=True)
@@ -47,7 +50,7 @@ def gisaxs_maps(shape: tuple[int, int], geometry: DetectorGeometry) -> GisaxsMap
     rows, columns = int(shape[0]), int(shape[1])
     qy = np.empty((rows, columns), dtype=np.float32)
     qz = np.empty_like(qy)
-    above = np.empty((rows, columns), dtype=bool) if geometry.refraction else None
+    above = np.empty((rows, columns), dtype=bool) if geometry.refraction or geometry.grazing_requires_projection else None
     for start in range(0, rows, MAP_BLOCK_ROWS):
         stop = min(rows, start + MAP_BLOCK_ROWS)
         block = grazing_q_region(geometry, (start, stop), (0, columns))
@@ -86,7 +89,7 @@ def _row_bounds(center: float, half: float, rows: int) -> tuple[int, int]:
 
 def exit_angle_deg_at_row(geometry: DetectorGeometry, row: float) -> float:
     """Exit angle on the beam-centre column at a continuous row coordinate."""
-    if geometry.tilted:
+    if geometry.grazing_requires_projection:
         return math.degrees(geometry.exit_angle_at(geometry.beam_center_x_px, float(row)))
     height_m = (geometry.beam_center_y_px - float(row)) * geometry.pixel_size_y_m
     return math.degrees(math.atan2(height_m, geometry.distance_m)) - geometry.incidence_deg
@@ -112,6 +115,7 @@ def locate_yoneda(
     exclusion_px: int = SPECULAR_EXCLUSION_PX,
     side_width_px: int = SIDE_BAND_WIDTH_PX,
     smooth_rows: int = 3,
+    require_peak: bool = False,
 ) -> YonedaEstimate | None:
     """Brightest row between the sample horizon and ``search_max_deg`` exit angle.
 
@@ -124,14 +128,10 @@ def locate_yoneda(
     """
     rows, columns = image.shape
     center_column = int(math.floor(geometry.beam_center_x_px))
-    left = (
-        max(0, center_column - exclusion_px - side_width_px),
-        max(0, center_column - exclusion_px),
-    )
-    right = (
-        min(columns, center_column + 1 + exclusion_px),
-        min(columns, center_column + 1 + exclusion_px + side_width_px),
-    )
+    left = (min(columns, max(0, center_column - exclusion_px - side_width_px)),
+            min(columns, max(0, center_column - exclusion_px)))
+    right = (min(columns, max(0, center_column + 1 + exclusion_px)),
+             min(columns, max(0, center_column + 1 + exclusion_px + side_width_px)))
     band_columns = np.r_[left[0] : left[1], right[0] : right[1]]
     if band_columns.size == 0:
         return None
@@ -143,12 +143,26 @@ def locate_yoneda(
         bottom = geometry.row_for_exit_angle(-HORIZON_TOLERANCE_DEG)
     except ValueError:
         bottom = geometry.horizon_row()
+    if not math.isfinite(bottom):
+        return None
     start = max(0, int(math.floor(min(top, bottom))))
     stop = min(rows, int(math.ceil(max(top, bottom))))
     if stop - start < 3:
         return None
-    window = image[start:stop][:, band_columns].astype(np.float64)
-    window_valid = valid[start:stop][:, band_columns]
+    if geometry.sample_roll_deg:
+        # At each search height, follow a constant exit angle across both side bands.
+        # Only the locator samples a grid; the resulting cut averages original measured pixels.
+        vacuum = geometry.with_critical_angle(0.0)
+        _, qz = q_of_positions(vacuum, geometry.beam_center_x_px, np.arange(start, stop) + 0.5)
+        qy = qy_on_horizon(vacuum, band_columns + 0.5)
+        x, y = positions_of_q(vacuum, qy[None, :], qz[:, None])
+        inside = (x >= 0) & (x < columns) & (y >= 0) & (y < rows)
+        i = np.where(inside, y, 0.0).astype(int)
+        j = np.where(inside, x, 0.0).astype(int)
+        window, window_valid = image[i, j], inside & valid[i, j]
+    else:
+        window = image[start:stop][:, band_columns].astype(np.float64)
+        window_valid = valid[start:stop][:, band_columns]
     window = np.where(window_valid, window, np.nan)
     # Median only over rows with data: no all-NaN warnings, which matters because
     # reductions run on worker threads where catch_warnings() is not thread safe.
@@ -159,12 +173,48 @@ def locate_yoneda(
     smoothed = _nan_smooth(profile, smooth_rows)
     if not np.any(np.isfinite(smoothed)):
         return None
-    row = start + int(np.nanargmax(smoothed)) + 0.5
+    peak = int(np.nanargmax(smoothed))
+    error_rows = None
+    if require_peak:
+        from scipy.signal import peak_prominences, peak_widths
+        # A brightest row is sufficient to place a cut. To measure an angle the
+        # band must rise and fall on observed rows, clear of the search boundaries.
+        if not has_data[peak]:
+            return None
+        missing = np.flatnonzero(~has_data)
+        lo = int(max(missing[missing < peak], default=-1)) + 1
+        hi = int(min(missing[missing > peak], default=len(profile)))
+        if min(peak-lo, hi-peak-1) < 3:
+            return None
+        values = smoothed[lo:hi]
+        prominence = peak_prominences(values, [peak-lo])[0][0]
+        differences = np.diff(profile[lo:hi])
+        noise = 1.4826 * np.median(np.abs(differences-np.median(differences))) / math.sqrt(2)
+        if prominence <= max(6*noise, 1e-12):
+            return None
+        width = peak_widths(values, [peak-lo])[0][0]
+        error_rows = max(1., float(width)/2.355)
+        # Each half of the measured columns must independently locate the same
+        # band. In sparse counts the MAD can vanish on an otherwise random profile.
+        observed = np.flatnonzero(window_valid[lo:hi].any(axis=0))
+        if len(observed) < 8:
+            return None
+        for subset in np.array_split(observed, 2):
+            covered = window_valid[:, subset].sum(axis=1) >= len(subset)/2
+            if not covered[peak]:
+                return None
+            half = np.full_like(profile, np.nan)
+            half[covered] = np.nanmedian(window[covered][:, subset], axis=1)
+            half = _nan_smooth(half, smooth_rows)
+            if abs(int(np.nanargmax(half))-peak) > max(2., 2*error_rows):
+                return None
+    row = start + peak + 0.5
     return YonedaEstimate(
         row=row,
         alpha_f_deg=exit_angle_deg_at_row(geometry, row),
         search_rows=(start, stop),
         side_columns=(left, right),
+        error_rows=error_rows,
     )
 
 
@@ -175,7 +225,8 @@ def horizontal_cut(
     *,
     center_row: float,
     half_height_px: float,
-    counts: bool | np.ndarray = True,
+    counts: bool | np.ndarray | PixelErrors = True,
+    maps: GisaxsMaps | None = None,
 ) -> Curve:
     """I(qy) over a band of rows: one point per detector column (native sampling). ``counts``: as
     ``reduce_gisaxs``."""
@@ -184,11 +235,13 @@ def horizontal_cut(
     region = {"rows": (start, stop), "columns": (0, columns), "center_row": float(center_row)}
     if stop <= start:
         return _empty_curve("horizontal", "Horizontal cut I(qy)", "qy (Å⁻¹)", region)
+    if geometry.sample_roll_deg:
+        edges = row_band_q(geometry, max(0.0, center_row - half_height_px), min(float(rows), center_row + half_height_px))
+        return _rolled_band("horizontal", image, valid, geometry, maps, counts, region, edges)
     q = grazing_q_region(geometry, (start, stop), (0, columns))
-    poisson, scale = _counts(counts)
     x, mean, sigma, pixels = native_profile(
-        image[start:stop], valid[start:stop], q.qy, axis=0, counts_model=poisson,
-        scale=None if scale is None else scale[start:stop],
+        image[start:stop], valid[start:stop], q.qy, axis=0,
+        errors=pixel_errors(counts).subset(slice(start, stop)),
     )
     if x.size == 0:
         return _empty_curve("horizontal", "Horizontal cut I(qy)", "qy (Å⁻¹)", region)
@@ -204,27 +257,43 @@ def vertical_cut(
     *,
     center_column: float,
     half_width_px: float,
-    counts: bool | np.ndarray = True,
+    counts: bool | np.ndarray | PixelErrors = True,
+    maps: GisaxsMaps | None = None,
 ) -> Curve:
     """I(qz) over a band of columns above the sample horizon (with refraction, above the row of α_c): one point
     per detector row."""
     rows, columns = image.shape
     start = max(0, int(math.floor(center_column - half_width_px)))
     stop = min(columns, int(math.ceil(center_column + half_width_px)))
-    horizon = geometry.row_for_exit_angle(geometry.critical_angle_deg) if geometry.refraction else geometry.horizon_row()
-    last_row = int(min(rows, max(0, math.floor(horizon))))
+    first_row, last_row = 0, rows
+    if not geometry.tilted and not geometry.sample_roll_deg:  # native whole-row boundary
+        horizon = geometry.row_for_exit_angle(geometry.critical_angle_deg)
+        if geometry.orientation in (1, 2):
+            first_row = min(rows, max(0, math.ceil(horizon)))
+        else:
+            last_row = min(rows, max(0, math.floor(horizon)))
     region = {
-        "rows": (0, last_row),
+        "rows": (first_row, last_row),
         "columns": (start, max(start, stop)),
         "center_column": float(center_column),
     }
-    if stop <= start or last_row <= 0:
+    if stop <= start or last_row <= first_row:
         return _empty_curve("vertical", "Vertical cut I(qz)", "qz (Å⁻¹)", region)
-    q = grazing_q_region(geometry, (0, last_row), (start, stop))
-    poisson, scale = _counts(counts)
+    if geometry.sample_roll_deg:
+        edges = column_band_q(geometry, max(0.0, center_column - half_width_px),
+                              min(float(columns), center_column + half_width_px))
+        return _rolled_band("vertical", image, valid, geometry, maps, counts, region, edges)
+    band = np.s_[first_row:last_row, start:stop]
+    q = grazing_q_region(geometry, (first_row, last_row), (start, stop))
+    use = valid[band]
+    if geometry.tilted:
+        above = q.sin_exit >= math.sin(geometry.critical_rad)
+        use = use & above
+        occupied = np.flatnonzero(above.any(axis=1))
+        region["rows"] = (int(occupied[0]), int(occupied[-1] + 1)) if occupied.size else (0, 0)
+        region["per_pixel_exit_angle_min_deg"] = geometry.critical_angle_deg
     x, mean, sigma, pixels = native_profile(
-        image[:last_row, start:stop], valid[:last_row, start:stop], q.qz, axis=1, counts_model=poisson,
-        scale=None if scale is None else scale[:last_row, start:stop],
+        image[band], use, q.qz, axis=1, errors=pixel_errors(counts).subset(band),
     )
     if x.size == 0:
         return _empty_curve("vertical", "Vertical cut I(qz)", "qz (Å⁻¹)", region)
@@ -233,22 +302,31 @@ def vertical_cut(
     )
 
 
-def _counts(counts) -> tuple[bool, np.ndarray | None]:
-    """``counts`` of a cut as ``(Poisson?, per-pixel scale of the counts or None)``."""
-    if isinstance(counts, np.ndarray):
-        return True, counts
-    return bool(counts), None
-
-
 def _empty_curve(key: str, title: str, x_label: str, region: dict) -> Curve:
     empty = np.array([], dtype=np.float64)
     return Curve(key, title, empty, empty, empty, np.array([], dtype=np.int64), x_label, region=region)
+
+
+def _rolled_band(key, image, valid, geometry, maps, counts, region, edges):
+    """Use the pixel anchors to define a constant q_z or q_y band in the sample frame."""
+    axis, coordinate = ("qz", "qy") if key == "horizontal" else ("qy", "qz")
+    limits = edges[axis + "_edges"]
+    title, label = f"{key.capitalize()} cut I({coordinate})", f"{coordinate} (Å⁻¹)"
+    if not np.isfinite(limits).all() or limits[0] >= limits[1]:
+        return _empty_curve(key, title, label, region)
+    maps = maps if maps is not None else gisaxs_maps(image.shape, geometry)
+    cut = GisaxsCut(key, key, **{axis: tuple(limits)})
+    curve = cut_curve(cut, key, maps, image, valid & maps.above_horizon, step=q_per_pixel(geometry),
+                      counts=counts, geometry=geometry)
+    return replace(curve, title=title, region={**region, **curve.region, **edges})
 
 
 def _with_q_edges(curves, geometry: DetectorGeometry) -> tuple[Curve, ...]:
     """The automatic cuts with where their bands lie in q and in exit angle (``row_band_q``, ``column_band_q``), for
     the record of an export: the pixels and the numbers stay as they are."""
     horizontal, vertical = curves
+    if geometry.sample_roll_deg:
+        return curves  # the cut already records its actual sample-frame edges
     rows, columns = horizontal.region["rows"], vertical.region["columns"]
     extra_h = row_band_q(geometry, *rows) if rows[1] > rows[0] else {}
     extra_v = column_band_q(geometry, *columns) if columns[1] > columns[0] else {}
@@ -267,15 +345,14 @@ def reduce_gisaxs(
     settings: GisaxsCutSettings | None = None,
     *,
     q_map: ReciprocalSpaceMap | None = None,
-    counts: bool | np.ndarray = True,
+    counts: bool | np.ndarray | PixelErrors = True,
     maps: GisaxsMaps | None = None,
 ) -> Reduction:
-    """Yoneda-band horizontal cut and beam-centre vertical cut, no user input needed, then the person's cuts
+    """Yoneda-band horizontal cut and off-rod vertical cut, then the person's cuts
     (``settings.regions``, ``gisaxs_cuts``; they need the frame's ``maps``), keys ``cut1``, ``cut2`` …
 
-    ``counts``: the frame holds photon counts (Poisson errors); ``False``: not counts (the scatter of the pixels);
-    an array of the frame's shape: photon counts multiplied per pixel by it (a flat field, ``flat_field.py``), so
-    a pixel's variance is that factor × its value.
+    ``counts`` takes the frame's PixelErrors, a counting flag or a per-pixel
+    scale for Poisson counts. The same error model applies to every cut.
 
     ``q_map`` (``gisaxs_q_map``) is passed through: it depends on the frame, not on the cuts.
     """
@@ -283,13 +360,18 @@ def reduce_gisaxs(
     warnings_out: list[str] = []
     rows, columns = image.shape
     if geometry.incidence_deg <= 0.0:
-        warnings_out.append(
+        warnings_out.append("Set αi in the geometry for correct qz." if geometry.grazing_requires_projection else
             "Incidence angle is 0°: the sample horizon equals the beam centre row. "
             "Set αi in the geometry for correct qz."
         )
     if not (0.0 <= geometry.beam_center_x_px <= columns):
         warnings_out.append("The beam centre column lies outside the frame.")
 
+    horizon = geometry.horizon_row()
+    if geometry.requires_projection and not geometry.sample_roll_deg:
+        a, b, _ = geometry.horizon_plane()
+        if abs(a) * columns > abs(b) * 0.5:
+            warnings_out.append(ROW_BAND_WARNING)
     yoneda = locate_yoneda(image, valid, geometry)
     if settings.horizontal_row is not None:
         horizontal_row = float(settings.horizontal_row)
@@ -298,15 +380,23 @@ def reduce_gisaxs(
         horizontal_row = yoneda.row
         horizontal_source = "yoneda"
     else:
-        horizontal_row = min(max(geometry.horizon_row() - 10.0, 0.5), rows - 0.5)
+        if math.isfinite(horizon):
+            above_sign = 1 if geometry.horizon_plane()[1] > 0 else -1
+            horizontal_row = min(max(horizon + above_sign * 10.0, 0.5), rows - 0.5)
+        else:
+            horizontal_row = rows / 2
         horizontal_source = "horizon"
-        warnings_out.append("No Yoneda band found; the horizontal cut sits just above the horizon.")
+        warnings_out.append("No Yoneda band found; the horizontal cut sits just above the horizon." if math.isfinite(horizon)
+                            else "The horizon has no unique row at the beam column. The horizontal cut uses the middle row.")
 
-    vertical_column = (
-        float(settings.vertical_column)
-        if settings.vertical_column is not None
-        else float(geometry.beam_center_x_px)
-    )
+    if settings.vertical_column is None:
+        vertical_column, clearance = default_vertical_column(geometry, image.shape, settings.vertical_half_width_px)
+        if not clearance:
+            warnings_out.append(LIMITED_CLEARANCE)
+    else:
+        vertical_column = float(settings.vertical_column)
+    if geometry.sample_roll_deg and maps is None:
+        maps = gisaxs_maps(image.shape, geometry)
     curves = (
         horizontal_cut(
             image,
@@ -315,6 +405,7 @@ def reduce_gisaxs(
             center_row=horizontal_row,
             half_height_px=settings.horizontal_half_height_px,
             counts=counts,
+            maps=maps,
         ),
         vertical_cut(
             image,
@@ -323,6 +414,7 @@ def reduce_gisaxs(
             center_column=vertical_column,
             half_width_px=settings.vertical_half_width_px,
             counts=counts,
+            maps=maps,
         ),
     )
     curves = _with_q_edges(curves, geometry)
@@ -341,12 +433,13 @@ def reduce_gisaxs(
             curves = (*curves, curve)
     markers = {
         "beam_center": (geometry.beam_center_x_px, geometry.beam_center_y_px),
-        "horizon_row": geometry.horizon_row(),
+        "horizon_row": horizon if math.isfinite(horizon) else None,
         "horizontal_band": (
             horizontal_row - settings.horizontal_half_height_px,
             horizontal_row + settings.horizontal_half_height_px,
         ),
         "horizontal_source": horizontal_source,
+        "vertical_source": "automatic" if settings.vertical_column is None else "manual",
         "vertical_band": (
             vertical_column - settings.vertical_half_width_px,
             vertical_column + settings.vertical_half_width_px,

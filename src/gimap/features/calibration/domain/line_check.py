@@ -16,6 +16,8 @@ from typing import Optional, Sequence
 import numpy as np
 from scipy.optimize import OptimizeWarning, curve_fit
 
+from src.gimap.shared.geometry import DetectorGeometry, transmission_map
+
 BIN_WIDTH = 0.0015
 WINDOW = 0.025
 MIN_PIXELS_PER_BIN = 20
@@ -39,13 +41,21 @@ def check_lines(
     q_lines: Sequence[float],
     bin_width: float = BIN_WIDTH,
     window: float = WINDOW,
+    rotations_deg: Sequence[float] = (0.0, 0.0, 0.0),
 ) -> dict:
-    """Measured minus expected q of every line visible on the image (canonical centre, flat detector)."""
+    """Measured minus expected q of every line visible on the image (canonical centre, flat detector; tilted by
+    pyFAI's ``rotations_deg`` when they are not 0, through GIMaP's pixel→q mapping)."""
     rows, columns = data.shape[:2]
-    x = ((np.arange(columns, dtype=np.float32) + 0.5 - np.float32(center_x_px)) * np.float32(pixel_size_x_m)) ** 2
-    y = ((np.arange(rows, dtype=np.float32) + 0.5 - np.float32(center_y_px)) * np.float32(pixel_size_y_m)) ** 2
-    radius = np.sqrt(y[:, None] + x[None, :])
-    q = (4.0 * math.pi / wavelength_angstrom) * np.sin(0.5 * np.arctan2(radius, np.float32(distance_mm * 1e-3)))
+    if any(float(angle) for angle in rotations_deg):
+        geometry = DetectorGeometry(pixel_size_x_m, pixel_size_y_m, distance_mm * 1e-3, center_x_px, center_y_px,
+                                    wavelength_angstrom, rot1_rad=math.radians(rotations_deg[0]),
+                                    rot2_rad=math.radians(rotations_deg[1]), rot3_rad=math.radians(rotations_deg[2]))
+        q = transmission_map((rows, columns), geometry).q
+    else:
+        x = ((np.arange(columns, dtype=np.float32) + 0.5 - np.float32(center_x_px)) * np.float32(pixel_size_x_m)) ** 2
+        y = ((np.arange(rows, dtype=np.float32) + 0.5 - np.float32(center_y_px)) * np.float32(pixel_size_y_m)) ** 2
+        radius = np.sqrt(y[:, None] + x[None, :])
+        q = (4.0 * math.pi / wavelength_angstrom) * np.sin(0.5 * np.arctan2(radius, np.float32(distance_mm * 1e-3)))
     keep = valid & np.isfinite(data)
     q_values, intensity = q[keep], np.asarray(data, dtype=np.float64)[keep]
     if q_values.size == 0:
@@ -86,13 +96,25 @@ def check_lines(
     }
 
 
-def best_by_lines(checks: Sequence[Optional[dict]], minimum_lines: int = 3) -> Optional[int]:
-    """Index of the check with the smallest mean relative q error among those with enough lines."""
-    usable = [
-        (check["mean_relative"], index)
-        for index, check in enumerate(checks)
-        if check and check.get("lines_checked", 0) >= minimum_lines
-    ]
+def best_by_lines(checks: Sequence[Optional[dict]], minimum_lines: int = 3, *,
+                  compare_reference_lines: Optional[Sequence[bool]] = None) -> Optional[int]:
+    """Choose the smallest relative error, comparing the same indexed lines for a confirmed guided fit."""
+    reference = set()
+    if compare_reference_lines is not None and checks and checks[0]:
+        reference = {line["q"] for line in checks[0]["lines"]}
+    usable = []
+    for index, check in enumerate(checks):
+        if not check or check.get("lines_checked", 0) < minimum_lines:
+            continue
+        error = check["mean_relative"]
+        if reference and len(reference) >= minimum_lines and compare_reference_lines[index]:
+            # A harmonic alias can have a small q error on a different set of orders.
+            # Compare all reflections that independently confirm the first indexing.
+            errors = {line["q"]: abs(line["dq"]) / line["q"] for line in check["lines"]}
+            if not reference <= errors.keys():
+                continue
+            error = sum(errors[q] for q in sorted(reference)) / len(reference)
+        usable.append((error, index))
     return min(usable)[1] if usable else None
 
 

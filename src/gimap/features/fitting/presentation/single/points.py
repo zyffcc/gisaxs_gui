@@ -19,7 +19,8 @@ def measured_series(session, data) -> list[tuple]:
     curve = session.curve
     if session.side == "both" and curve is not None and curve.signed:
         try:
-            halves = [(name, prepare_curve(curve, side, session.q_range, session.excluded), color)
+            halves = [(name, prepare_curve(curve, side, session.q_range, session.excluded,
+                                           weighting=session.model.weighting, resolution=session.model.resolution_mode), color)
                       for name, side, color in BOTH_HALVES]
         except ValueError:
             halves = []

@@ -12,6 +12,7 @@ from src.gimap.app.presentation.help_documents import render_markdown
 
 ROOT = Path(__file__).resolve().parents[1]
 _BLOCK = re.compile(r'<pre class="help-code"[^>]*><code>(.*?)</code></pre>', re.S)
+_MANUAL_FENCE = re.compile(r"^([ \t]*)(`{3,}|~{3,})[^\n]*\n(.*?)^\1\2[ \t]*$", re.M | re.S)
 
 
 def _code_blocks(page: str) -> list[str]:
@@ -23,12 +24,26 @@ def test_every_manual_equation_and_command_block_keeps_its_literal_text(name):
     source = ROOT / "docs" / name
     markdown = source.read_text(encoding="utf-8")
     expected = []
-    for indent, body in re.findall(r"^([ \t]*)```[^\n]*\n(.*?)^\1```[ \t]*$", markdown, re.M | re.S):
+    for indent, _fence, body in _MANUAL_FENCE.findall(markdown):
         # CommonMark removes up to the opening fence's indentation from each content line.
         lines = [line[min(len(indent), len(line) - len(line.lstrip(' '))):] for line in body.splitlines(keepends=True)]
         expected.append("".join(lines).rstrip("\n") + "\n")
     assert expected
     assert _code_blocks(render_markdown(markdown, source.stem, source.parent)) == expected
+
+
+def test_physics_editions_have_the_same_equation_blocks():
+    def blocks(name):
+        markdown = (ROOT / "docs" / name).read_text(encoding="utf-8")
+        return [body for _indent, _fence, body in _MANUAL_FENCE.findall(markdown)]
+
+    english, chinese = blocks("Physics_Manual.md"), blocks("Physics_Manual_zh.md")
+    equation_numbers = re.compile(r"\((\d+\.\d+[a-z]?)\)[ \t]*$", re.M)
+    for original, translation in zip(english, chinese, strict=True):
+        assert equation_numbers.findall(original) == equation_numbers.findall(translation)
+        # Blocks without translated annotations keep their literal formula or command text.
+        if not re.search(r"[\u3400-\u9fff]", translation):
+            assert original == translation
 
 
 def test_formula_alignment_and_literal_html_survive_without_turning_into_markup(tmp_path):

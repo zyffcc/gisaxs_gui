@@ -11,6 +11,15 @@
   与探测器帧；单条分析的 Open Curve… 对多条曲线的文件用 `QInputDialog` 问选哪一条（`page.open_curve_file`），Import Curves…
   取全部（`CurveTablePreview.curve_titles`）；Save Data and Fit… 可存为 NXcanSAS（`application/fit_nxcansas.py`）。
   测试 [`tests/test_nxcansas.py`](../../../tests/test_nxcansas.py)。
+- **数据与保存**（2026-11-21）：`.csv` 按表头列名选 q、I、σ（`infrastructure/adapters/curve_columns.py`；说不清时
+  `COLUMNS_TO_CHOOSE`，页面用 `presentation/curve_columns_dialog.py` 问）；保存 ▸ 解… 与数据与拟合记录里的 `predict`
+  （`application/solution_export.py`、`single/solutions_export.py`）；项目保存拟合结果与解（`application/fit_state.py`、
+  `single/project.py`、`single/series_project.py`）；预测的阶段与停止后保留已完成的解（`posterior_job.StageReport`、
+  `refine.predict` 的 `progress` / `partial`，只报告、不改计算；`single/predict_progress.py`）；精修来源与解的编号、标记
+  （`single/solution_texts.py`、`single/equivalent_solutions.py`）；保存图带残差（`single/figure_export.py`、
+  `adapters/curve_figures.py`）；撤销 / 重做说明是哪一步（`single/history.py`）。测试
+  [`tests/test_fit_data_files.py`](../../../tests/test_fit_data_files.py)、
+  [`tests/test_fit_results_kept.py`](../../../tests/test_fit_results_kept.py)。
 - **Related tests**:
   [`tests/test_fit_page.py`](../../../tests/test_fit_page.py)、
   [`tests/test_fit_page_predict.py`](../../../tests/test_fit_page_predict.py)、
@@ -141,6 +150,38 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
 `scattering_model` 同一公式和采样）、`fit_engine.py`（拟合、误差、相关、边界）；Analyze 结果或
 1D Predict 的解经 `native_solution.py` 换成模型（与该解曲线的最大相对差写在状态里）。
 
+手动拟合（精修、搜索）另有（《物理与方法》9.6、9.14–9.16 节）：
+- `domain/model_library.py`：核壳球、Percus–Yevick 硬球、二维六方次晶（只给精修和搜索；预测参数和 `cut_model` 不变）；
+  `fit_model.FAMILIES` 多了 `core_shell_sphere`，`Component.interference` 选干涉函数（`NETWORK_FAMILIES` 是网络认识的）。
+- `domain/fit_links.py`（名称 `R_1`、安全的表达式求值、链接、不等式）和 `domain/linked_fit.py`（拟合里的链接与不等式；
+  没有链接的模型不进入这里，数值与之前完全相同，预测参数的结果用 `tests/test_ml1d_posterior.py` 核对）。
+- `domain/beam_tail.py`：尾项范围按曲线设定（`single_fit.tail_for_curve`，在打开曲线、开始精修或搜索、序列每帧时调用，
+  `fit_resolving` 本身不改范围）和标记；`series_fit.flagged_fit`。
+- `domain/fit_profile.py`、`application/fit_uncertainty.py`（相关矩阵、强相关对、记录）、`application/fit_report.py`（报告）。
+- 界面：`single/parameter_row.py`（每个参数一行）、`single/model_links.py`（链接与约束卡片）、`single/tail_ranges.py`、
+  `single/uncertainty.py` 与 `views/fit_uncertainty_view.py`（不确定度与报告窗口）。
+- 测试：`tests/test_fit_links.py`、`test_fit_model_library.py`（对照 SasView 公式、Wertheim 解析解和 BornAgain）、
+  `test_fit_uncertainty.py`、`test_fit_model_editor_links.py`。
+
+## 已知基底的四项 DWBA、多条曲线联合拟合与 MCMC 检验（2026-11-22）
+
+- 基底层次：`domain/substrates.py`（Si、SiO₂、平板玻璃、Au 的 δ、β，Henke f₁/f₂ 4.9–30 keV；或输入 δ、β），
+  `FitModel.substrate`；`fit_model.grazing` 在有基底且 αi、αf 都给出时返回 `Geometry("dwba", …)`。界面：模型卡片
+  *掠入射下的球* 里的 `single/substrate_row.py`（`fitSubstrate`、`fitLevel` 行，`application/substrate_level.py`）。
+  预测参数的请求与有无基底无关（`tests/test_joint_fit_gui.py` 比较两者）。
+- 联合拟合：`domain/vertical_cut.py`（垂直切线：逐点 α_f 的四项 DWBA，球和竖直圆柱；`FitModel.cut`），
+  `domain/joint_fit.py`（共享 / 各曲线自有的非线性值，每条曲线各自的标度用 `fit_engine._Problem` 求解；联合协方差），
+  `application/joint_fit.py`（曲线类型与几何、每条曲线的模型、记录、`model_for_page`），窗口 `single/joint_fit_dialog.py`
+  与 `views/joint_fit_view.py`，工作区入口 `workspace_joint.py`（拟合 ▸ 多条曲线联合拟合…，`fitting_joint`）。
+  竖直圆柱的高度只在有垂直切线时是参数（`Component.heights`）。分析 ▸ 把两条切线都发送到拟合：
+  `features/analyze/application/both_cuts.py`（`<stem>_fit_input_qz.dat`，几何写在 `# observation:`），由
+  `app/handover.py::_send_both_cuts` 组合。
+- MCMC 检验：`domain/mcmc.py`（仿射不变系综：DE 移动 0.8、伸缩移动 0.2；τ、分段 R̂），`domain/posterior_check.py`
+  （`PredictTarget`：预测参数自己的后验；`FitTarget`：精修或搜索的似然），`application/posterior_check.py`，
+  不确定度与报告窗口的第四个标签页 `single/posterior_check.py` 与 `views/posterior_check_view.py`。只是检验，不改任何值。
+- 验证：`tools/benchmarks/joint_dwba_bornagain.py`（BornAgain 24.1）、`tools/benchmarks/mcmc_check.py`；
+  测试 `tests/test_joint_dwba.py`、`tests/test_mcmc_check.py`、`tests/test_joint_fit_gui.py`。
+
 ## 主单曲线页的 Predict parameters
 
 - **请求**（`application/single_predict.predict_request`）：曲线的点（q 为 nm⁻¹，σ 可缺）、Particles 给出的组成
@@ -243,6 +284,15 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
   previous frame**（默认勾选；起点为 Single 的模型、或新阶段的第一帧时不跟随）：在概率至少为最可能解的 `CLOSE_ENOUGH` = 0.2 倍的解里，
   取尺寸和间距（ln R、ln D 之差，按半径对应各群）与上一帧最接近的一个（`closest`）；明显更可能的解仍被采用。记录
   `settings.method` = `predict`、`settings.follow`。
+- **链式拟合**（`application/series_chain.py`，页面 `single/series_chain.py`）：链只在拟合失败或未收敛、新阶段、χ²ᵣ 跳变处断开
+  （`chain_break`）；参数在边界（光束拖尾、背景或其他）、未确定的值和拟合差只标记。断开处 `chained_fit(solutions=…)` 取页面的
+  `predict_solutions()`（Predict 的全部解，方法不变），`restart_solution` 在概率不低于最可能解 1/`PREDICT_FACTOR`（10）的解中取
+  `solution_distance`（共有自由值在上一帧范围中位置之差的 RMS）最小的一个，规则写进 `FrameFit.predict_choice`；`start_frame` 是接续的帧。
+  表格的 **Started from** 列（`single/start_texts.py`）写 “continued from frame n” / “restarted from Predict (why)”，悬停给出规则；
+  Flags 列不再重复 chain broke 和 backward（保存的 `flags` 里仍有）。
+- **Fit New Frames in Fitting…**（Analyze）经 `HandoverMixin._send_series_to_fitting(folder, watch=True)` 调用
+  `series_page.watch_and_start()`：勾选 Watch for new curves，列出完毕后（`start_watched`）Start；模型还是没人设置过的初始猜测时
+  不开始，状态栏说 `WATCHING_NOT_SET_UP`。
 - **运行**：曲线在界面线程读入，拟合在后台一帧一帧做；Pause / Stop；选中最后一帧时图跟着运行走，
   选了别的帧就停在那里。Start 之前点列表中的帧就能看到它的曲线和 Single 的模型（预览）；开始后各帧都按这次运行的设置画。
   运行期间不能打开项目（先 Stop）。
@@ -288,11 +338,12 @@ Save Model…、Save Data and Fit…、Save Plot…、In-situ Series ▸ Start /
 
 - [ ] Analyze 打开 CBF 后 Send to Fitting：切到 Fitting，Curve 步骤显示 `_fit_input.dat`、点数与
       q 范围；Send to Fitting ▾ 的四种半边选择对应 Curve 步骤的 Halves of the cut；
-- [ ] Open Curve… 打开两列 / 三列 / 四列 `.dat` / `.txt` 曲线；坏文件或其他格式（包括 `.csv`）给出明确错误；
+- [ ] Open Curve… 打开两列 / 三列 / 四列 `.dat` / `.txt` 曲线和按表头读的 `.csv`（命令行的 horizontal.csv、保存的
+      fit.csv）；表头说不清时弹出 Choose Columns；坏文件或其他格式给出明确错误；
 - [ ] 步骤栏 Curve、Model、Fit、Results 四步都能点开，每步写出状态；窄窗口下命令栏的 Fit 与 Save 不被截断；
 - [ ] 三种方法（Predict parameters / Refine the values in Model / Search the ranges, then refine）在 Method 下拉里，
       都由同一个 Fit 按钮（Ctrl+Return）启动；Predict 下面只有 Particles，Options 里只有最多计算次数与 1D Predict 批量窗口；
-      未拟合的 GISAXS 线切自动选 Predict 并写 Recommended；精修的 Stop 保留最优值，Predict 的 Stop 不产生新结果；
+      未拟合的 GISAXS 线切自动选 Predict 并写 Recommended；精修的 Stop 保留最优值，Predict 的 Stop 保留已完成采样的解（标为不完整）；
 - [ ] 范围太窄的 R（例如 1–2 nm，真值 3 nm）：Predict 和 Refine 都保留用户范围，
       边界说明在拟合详情中；固定值不变；
 - [ ] Results 选中一个值 → Fix → Fit Again：该值固定参与下一次拟合；Fit Every Curve in This Folder… 打开 In-situ series

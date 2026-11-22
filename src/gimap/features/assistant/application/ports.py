@@ -16,6 +16,7 @@ class AssistantLlm(Protocol):
     """
 
     model: str
+    provider: str
 
     def respond(
         self,
@@ -40,6 +41,17 @@ class AnalysisWorkbench(Protocol):
     def set_mode(self, mode: str) -> dict: ...
 
     def set_incidence(self, degrees: Optional[float]) -> dict: ...
+
+    def apply_sample_roll(self, degrees: Optional[float]) -> dict:
+        """Set ψ explicitly, or measure the selected frame and apply a significant estimate."""
+        ...
+
+    def apply_frame_angles(self, roll_policy, roll_deg, reference_deg, reference_source, keep_incidence,
+                           yoneda_critical_deg=None, yoneda_material=None) -> dict:
+        """Measure both angles on the same selected frame or sum, then reduce it with the chosen geometry."""
+        ...
+
+    def set_orientation_min_exit(self, degrees: float) -> dict: ...
 
     def set_critical_angle(self, degrees: Optional[float]) -> dict:
         """The film's critical angle for the refraction of q_z (``None``: kinematic q_z); returns the status."""
@@ -73,7 +85,7 @@ class AnalysisWorkbench(Protocol):
 
     def show(self, view: Optional[str] = None, lower_profile: Optional[str] = None) -> None: ...
 
-    def export_curves(self) -> list[str]: ...
+    def export_curves(self, extra_metadata: Optional[dict] = None) -> list[str]: ...
 
     def preview_png(self, max_size: int = 900) -> Optional[bytes]: ...
 
@@ -86,7 +98,29 @@ class AnalysisWorkbench(Protocol):
         detector covers (a calibrant in transmission); nothing changes. Optional: without it the run does not look."""
         ...
 
+    def set_phases(self, phases: list) -> dict:
+        """Optional: the phases of Analyze's Phases window (CIF paths or ``{"cell", "orientation", "indices"}``)."""
+        ...
+
+    def assign_peaks(self, peaks: list[dict]) -> dict:
+        """Optional: ``{"phases", "rule", "assignments"}``, each peak ``{"q", "q_err", "fwhm"}`` with its nearest
+        reflection of the phases given (empty lists without phases); nothing changes."""
+        ...
+
+    def pole_figure(self, background: Optional[float] = None, model: str = "gaussian",
+                    chi0_deg: Optional[float] = None) -> dict:
+        """Optional: the pole figure of the ring in the I(χ) window and the fit of its orientation distribution."""
+        ...
+
     def set_beam_center(self, x_px: float, y_px: float) -> dict: ...
+
+    def crystal_orientation(self, assignment: dict, check_cancel) -> list[dict]:
+        """Joint fit to the phase-resolved rings of the displayed frame."""
+        ...
+
+    def refine_cells(self, assignment: dict, orientations: list, max_peaks: int, check_cancel) -> list[dict]:
+        """Fit the indexed cell of each phase and the strain along a resolved fibre axis."""
+        ...
 
     def set_halves(self, side: str) -> dict: ...
 
@@ -166,15 +200,14 @@ class GeometryCalibrator(Protocol):
 
 
 class CurveFitter(Protocol):
-    """Predict parameters on one curve (|q| > 0, q in Å⁻¹): the distinct solutions, most probable first
-    (Fitting's ``create_curve_fit``: rows with ``probability``, values, ``posterior`` intervals, curves)."""
+    """Predict parameters on one curve (|q| > 0, q in Å⁻¹), yielding solutions in descending comparison weight.
+    Fitting's ``create_curve_fit`` supplies probability or BIC weight, parameter summaries, diagnostics and curves."""
 
     def __call__(self, q_inv_angstrom, intensity, sigma, *, components=(), report=None, cancelled=None,
                  cut_qz=None) -> list[dict]:
         """``components``: the composition to fit (1 sphere, 2 random cylinder, 3 vertical cylinder; empty: the
-        network chooses). The cut is fitted at q_z = 0 (the effective interface); ``cut_qz``: its vacuum q_z in nm⁻¹
-        when its angles are known (None: not known), which changes no value and flags (``qzR``) a sphere or random
-        cylinder too large for q_z = 0."""
+        network chooses). With ``cut_qz`` (the vacuum q_z in nm⁻¹), fit the Born term at that q_z. With
+        ``None``, fit the effective interface at q_z = 0."""
         ...
 
 
@@ -225,6 +258,7 @@ class AgentRuntime(Protocol):
     """
 
     model: str
+    resolved_model: str
 
     def run(
         self,

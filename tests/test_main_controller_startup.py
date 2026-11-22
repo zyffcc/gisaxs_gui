@@ -61,7 +61,10 @@ def test_application_runtime_uses_app_context_without_global_registry() -> None:
 
 
 def test_main_entry_imports_feature_owned_shell_modules() -> None:
-    production_main = (PROJECT_ROOT / "main.py").read_text(encoding="utf-8")
+    # main.py stays light (the splash comes before the heavy imports): the launcher starts the session and
+    # src/gimap/app/window.py composes the window.
+    production_main = "\n".join((PROJECT_ROOT / name).read_text(encoding="utf-8") for name in (
+        "main.py", "src/gimap/app/launcher.py", "src/gimap/app/window.py"))
 
     assert "src.gimap.app.window_view" in production_main
     assert "src.gimap.app.main_window" in production_main
