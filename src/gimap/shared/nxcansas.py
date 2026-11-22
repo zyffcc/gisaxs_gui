@@ -98,6 +98,10 @@ class SasCurve:
     """Read: True where the file's mask leaves a point out (``None``: the file has no mask)."""
     group: str = ""
     """Read: the path of the SASdata group in the file."""
+    dq: Optional[np.ndarray] = None
+    """One-dimensional Q resolution (one standard deviation)."""
+    dq_unit: str = ""
+    """Unit of the resolution dataset. When absent, use the unit of Q."""
 
 
 def q_unit(units: Any) -> Optional[str]:
@@ -152,7 +156,14 @@ def _write_entry(entry, curve: SasCurve) -> None:
     intensity = np.asarray(curve.intensity, dtype=np.float64).ravel()
     if q.size != intensity.size:
         raise ValueError(f"{curve.title}: Q and I differ in length ({q.size}, {intensity.size}).")
-    _attributes(data.create_dataset("Q", data=q), units=curve.q_unit)
+    axis = data.create_dataset("Q", data=q)
+    _attributes(axis, units=curve.q_unit)
+    if curve.dq is not None:
+        dq = np.asarray(curve.dq, dtype=np.float64).ravel()
+        if dq.shape != q.shape:
+            raise ValueError("dQ and q must have the same length")
+        _attributes(axis, resolutions="Qdev")
+        _attributes(data.create_dataset("Qdev", data=dq), units=curve.dq_unit or curve.q_unit)
     signal = data.create_dataset("I", data=intensity)
     _attributes(signal, units=curve.intensity_unit)
     if curve.sigma is not None:
@@ -320,6 +331,11 @@ def _read_data(entry, data) -> Optional[SasCurve]:
                    or (["Idev"] if "Idev" in data else []))
     sigma = data.get(uncertainty[0]) if uncertainty else None
     sigma = np.asarray(sigma[()], dtype=float) if isinstance(sigma, h5py.Dataset) and sigma.shape == q.shape else None
+    names = _names(q.attrs.get("resolutions")) or ["Qdev"]
+    resolution = data.get(names[0]) if len(names) == 1 else None  # two names describe slit smearing
+    dq, dq_unit = None, ""
+    if isinstance(resolution, h5py.Dataset) and resolution.shape == q.shape:
+        dq, dq_unit = np.asarray(resolution[()], dtype=float), _units(resolution)
     mask_name = _text(data.attrs.get("mask"))
     mask = data.get(mask_name) if mask_name else None
     mask = np.asarray(mask[()]).astype(bool) if isinstance(mask, h5py.Dataset) and mask.shape == q.shape else None
@@ -334,6 +350,7 @@ def _read_data(entry, data) -> Optional[SasCurve]:
         sample=_field_text(_first(entry, "SASsample"), "name"), instrument=_read_instrument(entry),
         process=_field_text(process, "name"), description=_field_text(process, "description"),
         record=_field_text(note, "data"), date=_field_text(process, "date"), mask=mask, group=data.name,
+        dq=dq, dq_unit=dq_unit,
     )
 
 

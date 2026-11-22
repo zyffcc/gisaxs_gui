@@ -16,8 +16,8 @@ import numpy as np
 from src.gimap.app.presentation.i18n import tr
 
 from ...application.models import ExportCurveFigureRequest, FigureSeries
-from ...application.single_fit import evaluate, left_out_points, prepare_curve, residuals
-from .plotting import LEFT_OUT_COLOR, MODEL_COLOR, MODEL_POINTS, OUTSIDE_COLOR, component_style
+from ...application.single_fit import left_out_points, prepare_curve, residuals
+from .plotting import LEFT_OUT_COLOR, MODEL_COLOR, OUTSIDE_COLOR, component_style, plotted_model
 from .points import BOTH_HALVES, DATA_COLOR, measured_series
 
 FIGURE_SUFFIXES = (".png", ".svg", ".pdf")
@@ -49,12 +49,13 @@ class FigureExportMixin:
                                        marker="x"))
         halves = {name: side for name, side, _color in BOTH_HALVES}
         for name, q, intensity, color in measured_series(session, data):
-            sigma = data.sigma if data is not None else None
-            if name in halves:  # both halves on |q|: each with its own σ
-                sigma = prepare_curve(session.curve, halves[name], session.q_range, session.excluded).sigma
+            sigma = None
+            if session.model.weighting == "file" and data is not None:
+                # Only an uncertainty read from the file is an experimental error bar.
+                sigma = (prepare_curve(session.curve, halves[name], session.q_range, session.excluded).sigma
+                         if name in halves else data.sigma)
             series.append(FigureSeries(name, q, intensity, color, error=sigma))
-        q_model = np.geomspace(max(full.q.min(), 1e-6), full.q.max(), MODEL_POINTS)
-        total, parts = evaluate(session.model, q_model, parts=True)
+        q_model, total, parts = plotted_model(session.model, full, data)
         series.append(FigureSeries("model", q_model, total, MODEL_COLOR, style="line"))
         if self.terms_check.isChecked():
             for index, (name, values) in enumerate(parts.items()):
@@ -85,7 +86,12 @@ class FigureExportMixin:
             self._status(lambda: tr("Could not save: {error}").format(error=tr(NO_FOLDER).format(folder=path.parent)),
                          "error")
             return None
-        outcome = self.view_model.export_curve_figure(self.figure_request(path))
+        try:
+            request = self.figure_request(path)
+        except ValueError as exc:
+            self._status(tr(str(exc)), "error")
+            return None
+        outcome = self.view_model.export_curve_figure(request)
         if outcome.error is not None:
             self._status(lambda: tr("Could not save: {error}").format(error=outcome.error.message), "error")
             return None

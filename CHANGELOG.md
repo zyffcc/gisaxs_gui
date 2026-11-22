@@ -20,6 +20,9 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   shrinkage and inversion. Each mask edit supports Undo and Redo. Save an ordered JSON recipe or the current
   frame's user mask as EDF, TIFF, NumPy or Fit2D with its source record. See User Manual 5.2 and Physics and
   Methods 4.5.
+- **Fitting, Refine and Search.** Choose a number-weighted Gaussian, log-normal or Schulz distribution for each
+  population, use per-point Gaussian resolution from text curves or NXcanSAS, and select file, relative, Poisson
+  or logarithmic residuals. The fit record and report identify the settings used.
 
 - **GIWAXS indexing and pole figures (Analyze ▸ Phases).** Give phases as a CIF (cell, symmetry operations, atom
   sites; |F|² from Cromer–Mann scattering factors) or a cell with its centring, at random or as a fibre texture

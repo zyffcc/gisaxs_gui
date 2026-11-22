@@ -17,8 +17,8 @@ from ..application.models import InSituSourceFrame
 from .views.curve_import_view import CurveImportView
 
 
-NXCANSAS_NOTE = ("NXcanSAS file: every curve in it (each SASdata group: Q, I and Idev as σ) is imported; the rows "
-                 "shown are those of the first.")
+NXCANSAS_NOTE = ("Each NXcanSAS SASdata group supplies one curve. Idev gives the intensity uncertainty and Qdev gives "
+                 "the q resolution when present. The preview shows the first curve.")
 
 
 @dataclass(frozen=True)
@@ -132,7 +132,9 @@ class CurveImportDialog(QDialog, CurveImportView):
 
     def _sources(self, index):
         preview = self._previews[index]
-        return sources_from_table(preview, self._layouts[index]) if preview is not None else ()
+        if preview is None or index in self._errors:
+            return ()
+        return sources_from_table(preview, self._layouts[index])
 
     def _same_columns(self):
         if not self._complete or self._errors or len(self.paths) < 2:
@@ -202,6 +204,8 @@ class CurveImportDialog(QDialog, CurveImportView):
             note = NXCANSAS_NOTE
         elif preview.analyze_export:
             note = "Analyze export: q, I, σ and pixel counts describe one curve. Shared-q import is disabled."
+        elif preview.resolution_columns:
+            note = "The dQ column supplies the Gaussian width at each point when you choose Resolution from the file."
         elif preview.uncertainty_columns:
             note = ("Named uncertainty columns cannot be imported as intensities. Only q, I and σ are used; "
                     "put curves with separate uncertainties in separate q, I, σ files.")
@@ -219,6 +223,19 @@ class CurveImportDialog(QDialog, CurveImportView):
         self.preview_table.setRowCount(len(rows))
         roles = ["q"] + (["Intensity"] * (preview.column_count - 1) if layout == "shared_q"
                           else ["Intensity", "Uncertainty (σ)"] + ["Ignored"] * max(0, preview.column_count - 3))
+        if preview.resolution_columns and preview.curve_titles:
+            roles = ["q" if i == 0 else "Intensity" for i in range(preview.column_count)]
+            for column in preview.uncertainty_columns:
+                roles[column] = "Uncertainty (σ)"
+        elif preview.resolution_columns:
+            roles = ["Ignored"] * preview.column_count
+            for source in self._sources(index):
+                cols = source.columns
+                roles[cols.q], roles[cols.intensity] = "q", "Intensity"
+                if cols.sigma is not None:
+                    roles[cols.sigma] = "Uncertainty (σ)"
+        for column in preview.resolution_columns:
+            roles[column] = "Resolution (dQ)"
         headers = [trf("{name}\nRole: {role}", name=name if preview.has_header else trf("Column {n}", n=i + 1),
                        role=tr(roles[i])) for i, name in enumerate(preview.column_names)]
         self.preview_table.setHorizontalHeaderLabels(headers)

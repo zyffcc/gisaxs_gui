@@ -2299,8 +2299,8 @@ or missing selected column is reported and requires importing the table again; i
 
 A curve with signed q (a horizontal GISAXS cut) is fitted on one of: the mean of both halves (6.16)–(6.17), both halves on
 `abs(q)`, or one half. Then the fitting range and points left out apply. Of these points only `abs(q) > 0` with finite
-values are kept. σ is used only when every kept point has a finite `σ > 0`; otherwise σ is dropped for the whole
-curve, and `I > 0` is required.
+values are kept. With file weighting, usable intensity uncertainties must be finite and positive.
+If the selection has no usable σ, its positive intensities are fitted in ln I (9.7).
 
 Implementation: `src/gimap/features/fitting/application/curve_sources.py`, `src/gimap/features/fitting/infrastructure/adapters/curve_tables.py`, `src/gimap/features/fitting/infrastructure/adapters/scattering_curve_files.py`, `src/gimap/features/fitting/application/single_fit.py`, `src/gimap/features/fitting/domain/fit_engine.py`
 
@@ -2323,6 +2323,16 @@ max(0, q_min − 5σ_q) to q_max + 5σ_q, at most σ_q/5 apart, folded at q = 0 
 convolved with the Gaussian cut at ±5σ_q and interpolated back to the points. A test compares the result with a
 direct convolution of the symmetric cut (within 10⁻³). Smearing matters for well-ordered films: when σ_q is above
 about 0.3 of the width of the structure peak, the fitted σnn/D otherwise takes up the resolution as disorder.
+
+**Resolution from the file (Refine and Search).** For a measured Gaussian standard deviation dQᵢ,
+replace each particle term T(qᵢ) in (9.1) by E[T(|qᵢ + dQᵢ Z|)], Z ∼ N(0,1). A zero width gives T(|qᵢ|).
+The integral uses the normalized Gaussian over −7 ≤ Z ≤ 7, with adaptive Gauss–Legendre quadrature and explicit
+subdivision at sharp 1D paracrystal peaks. Each scale column uses the same convolution. BG and the beam tail
+retain their values at the measured qᵢ. A named dQ or sigma_q text column, or a Gaussian NXcanSAS Qdev,
+supplies one finite, nonnegative standard deviation in inverse length per fitted point. With both halves
+on |q| each measurement retains its width. For their mean, the two Gaussian responses are approximated by
+one Gaussian with the mean of their variances, interpolating variances as needed. Where only one side contributes
+its width is used. Fitting works in nm⁻¹ throughout.
 
 The plot's **Components** are these additive intensities: `k·Int_i·T_i`, the scaled beam-tail term and
 `BG`; their sum is the total model. They are not normalised population fractions. Component visibility and axis limits do not change the
@@ -2368,11 +2378,13 @@ Implementation: `src/gimap/features/fitting/domain/cut_model/`, `src/gimap/featu
 
 ### 9.3 Size distributions
 
-Each component's **Sizes** say what R and σR/R are (number weights n, intensity weights g; σ = R · σR/R):
+Each component's **Sizes** defines the fitted location and spread. New manual populations use a normalized
+number distribution n(x) for radius x. The same law applies independently to a fitted cylinder height.
 
 ```text
 Gaussian, by number (default)    n(x) ∝ exp( −½ ((x − R)/σ)² ),   max(0, R − 4σ) ≤ x ≤ R + 4σ                 (9.2)
-Log-normal, by number             n(x) ∝ exp( −½ ((ln x − μ)/s)² ) / x,   s² = ln(1 + (σR/R)²),  μ = ln R − s²/2  (9.3)
+Log-normal, by number (median)    n(x) = exp(−½[ln(x/M)/s]²)/(x s √(2π)),   x > 0                              (9.3)
+Schulz (Gamma), by number         n(x) = x^(k−1) exp(−x/θ)/(Γ(k) θ^k),   k = 1/w², θ = R w², x > 0
 Gaussian, by intensity            g(x) ∝ exp( −½ ((x − R)/σ)² ),   n(x) = g(x)/V(x)²,   same range as (9.2)
 P(q) = Σ_j n_j V_j² |A_j(q)|² / Σ_j n_j V_j²,     C(q) = | Σ_j n_j V_j A_j(q) |² / Σ_j n_j V_j²                  (9.4)
 ```
@@ -2380,17 +2392,31 @@ P(q) = Σ_j n_j V_j² |A_j(q)|² / Σ_j n_j V_j²,     C(q) = | Σ_j n_j V_j A_j
 A_j is the amplitude of a particle of size x_j normalised to A(0) = 1 (section 9.4) and V_j its volume, so P(0) = 1
 whatever the law. The Gaussian by number is the size distribution of `tools/benchmarks/yoneda_truth.py` (and of fit1d),
 cut at ±4σ; the cut is part of the definition: weighted by R⁶ the upper cut removes about 1.5 % of a sphere's
-intensity at σR/R = 0.35, more above. In the log-normal R and σR/R are again the number mean and relative standard
+intensity at σR/R = 0.35, more above. In the **older mean-parameterized log-normal** R and σR/R are the number mean and relative standard
 deviation; it is integrated from 4s below its median to 4s above the median of its V²-weighted form (a log-normal of
 the same s with the median times exp(p s²), V² ∝ R^p), so its largest particles, which dominate the intensity of a
 broad distribution, are not cut off. The Gaussian by intensity is Fitting's earlier distribution for spheres and
 random cylinders: every size scatters the same at q = 0.
 
+For (9.2), R and σ = R·w are the Gaussian centre and standard deviation before truncation. The reported
+number mean and relative width are ⟨x⟩ and √(⟨x²⟩ − ⟨x⟩²)/⟨x⟩ of the retained population.
+For (9.3), M is the median and s = SD(ln x). The number mean is M exp(s²/2) and the relative width is
+√(exp(s²) − 1). For Schulz they are R and w. Zero spread gives a single size. The contact condition in
+section 9.6 uses the fitted radius parameter (M for the median log-normal).
+The median and log-width convention follows [SasView's distribution definitions](https://www.sasview.org/docs/user/qtgui/Perspectives/Fitting/pd/polydispersity.html#lognormal-distribution).
+
+Manual integration resolves the size oscillations for these three distributions. For a log-normal, the
+integration in ln x extends from ln M − 6.5s to ln M + p s² + 6.5s. For Schulz the bounds are the 10⁻¹⁰
+quantile at shape k and the upper-tail 10⁻¹⁰ quantile at shape k+p, both at scale θ. Here p accounts for
+the forward intensity (6 for sphere radius, 4 for cylinder radius, 2 for cylinder height). The quadrature
+weights are normalized before computing (9.4). Independent integrations of the sphere intensity check all
+three laws through relative width 0.5 to relative tolerance 10⁻⁴.
+
 **Quadrature.** Composite Gauss–Legendre with 8 nodes per panel. A form factor squared oscillates in x with
 period π/q, so the panels are the number of such periods across the distribution at the largest q of the curve,
 rounded up to a power of 2, at least 2 (at most 4096).
 
-**Large q·σ: the envelope.** Averaged over sizes that vary on a scale σ (σ = R·σR/R; for the log-normal the lower
+**Large q·σ in Predict and earlier models.** Averaged over sizes that vary on a scale σ (σ = R·σR/R; for the log-normal the lower
 end of its intensity-weighted part), the oscillating part of |F|² is damped by about e^{−2(qσ)²}. From
 q_cut = 6/σ on it is negligible, and the average is that of the envelope of |F|², its average over one oscillation:
 9(1 + x²)/(2x⁶) for a sphere (for two DWBA paths (9/(2ab)) Re[h₁(a)h₁(b)*] with the spherical Hankel function h₁),
@@ -2401,7 +2427,7 @@ e^{−(qσ)²/2}). What the envelope leaves out is the ringing of the hard cut a
 artefact of the cut: compared with the fully resolved average the curve differs by at most 3 · 10⁻⁵ for σR/R ≤ 0.2,
 10⁻³ at 0.35 and 10⁻² at 0.5 (tests). A Gaussian by intensity keeps much weight at small R; it is always fully resolved.
 
-**Tables (the default path).** For sizes by number (a Gaussian or a log-normal with 0.02 ≤ σR/R ≤ 1) and one scattering
+**Tables for Predict and earlier models.** For sizes by number (a Gaussian or a log-normal with 0.02 ≤ σR/R ≤ 1) and one scattering
 path (the effective interface, or Born at the cut's q_z), the averages come from small tables (`cut_model/tables.py`,
 3.4 MB, built by `tools/ml1d/build_tables.py` and checked against a fresh build). Each form factor splits exactly into
 a smooth part and a smooth amplitude times an oscillation, f(x)² = env(x) + Re[G(x) e^{iωx}] (ω = 2 for the sphere and
@@ -2465,10 +2491,14 @@ F_c(q, R, h, α) = [ 2 J_1(q R sin α) / (q R sin α) ] · sinc( q h cos α / 2 
 P_cyl(q) = ∫₀¹ du  ⟨R⁴ (2 J_1(q R √(1−u²)) / (q R √(1−u²)))²⟩ / ⟨R⁴⟩  ·  ⟨h² sinc²(q h u / 2)⟩ / ⟨h²⟩,   u = cos α   (9.9)
 ```
 
+For the manual size laws the two independent size averages are tabulated on a grid linear near q = 0 and
+logarithmic at large q. For broad Gamma and log-normal cylinders the oscillatory factors can be integrated
+on a rotated size contour where they decay. The axial Gamma factor also has an analytic characteristic function.
+
 ⟨ ⟩ are averages by number (9.4). The orientation average is taken in α on [0, π/2] with weights sin α (u = cos α
 is uniform for an isotropic orientation; q sin α and q cos α are smooth in α, whereas in u the radius argument
 q√(1 − u²) oscillates ever faster towards u = 1), by composite Gauss–Legendre with one panel per period
-π/(q · max(R, h/2)). The radius average depends on q sin α only and the height average on q cos α only: each is made once
+π/(q · max(R, h/2)). The radius average depends on q sin α only and the height average on q cos α only. For legacy size laws each is made once
 on a uniform 1D grid with 64 points per period of the largest size and taken at every (α, q) by four-point
 interpolation; with the envelope of section 9.3 the grids and the orientation rule end at 2·q_cut, and beyond it the
 envelope averages are taken directly. For one size the result agrees with adaptive quadrature to 10⁻⁵. With sizes by number the radius and height averages on the grids come from the tables of
@@ -2573,8 +2603,8 @@ Implementation: `src/gimap/features/fitting/domain/cut_model/structure.py`, `src
 
 Each component has Int, R, σR/R (h and σh/h for random cylinders; t and ρc/ρs for core–shell spheres) and, with its
 structure factor (**S(q)**), the values of its **Interference** function — D and σnn/D of the 1D paracrystal (the
-default) or the 2D hexagonal paracrystal, R_HS and φ of hard spheres (9.14); its **Sizes** (Gaussian by number, the
-default; log-normal by number; Gaussian by intensity) and, with S(q), its **Coupling**.
+default) or the 2D hexagonal paracrystal, R_HS and φ of hard spheres (9.14), its **Sizes** (9.3) and,
+with S(q), its **Coupling**.
 
 **D is at least 2R.** A fit keeps the distance of a component's paracrystal at or above twice its mean radius, so
 particles of the mean radius do not overlap. With R and D both free, D is searched between max(D_min, 2R) and
@@ -2617,6 +2647,13 @@ r_i = ln I_i − ln max( m_i, 10⁻³⁰⁰ )               without σ (each poi
 ```
 
 m_i is the model (9.1). The fit minimises Σ r_i².
+
+For **Refine** and **Search**, **σ from the file** uses the measured intensity uncertainty in (9.15).
+If no usable σ is available, it uses (9.16). **Relative** sets σᵢ = Iᵢ and **Poisson** sets σᵢ = √Iᵢ in (9.15).
+**None** uses (9.16) with equal log weights. The last three choices use only Iᵢ > 0. With positive measured
+σᵢ, negative and zero intensities can contribute to (9.15). A reduced sum of squares from relative weights
+or log residuals measures lack of fit in that metric. A statistical reduced χ² requires a suitable noise model.
+The fit record stores both the selected weight and the residual that was used.
 
 **Scales by bounded least squares (variable projection).** The intensity is linear in Int_i, BG and A. Those of
 them that are free are eliminated at every evaluation of the model (Golub & Pereyra, 1973). With the non-linear values
@@ -3065,7 +3102,8 @@ Intel Core i9-13900HX; `tools/benchmarks/posterior_timing_summary.json`); on dev
 versions, 30–70 s among one to three of spheres and upright cylinders, a few minutes when random cylinders are
 among the choice, and with both angles (two paths) about 2.4 times as long.
 
-Model's coupling (DA) and size law (log-normal) are used in steps 2–4: the network, trained on the LMA and Gaussian
+Model's coupling (DA) and legacy size law (mean-parameterized log-normal) are used in steps 2–4. For the new
+manual number distributions, Predict uses its original Gaussian. The network, trained on the LMA and Gaussian
 sizes, is then only a proposal, which the weights correct. Fitting has no four-term DWBA: with both angles Predict
 uses the two paths of spheres with a free r (the terms that matter at the Yoneda angle, section 9.10), with q_z alone
 the Born term at it, else the effective interface.
@@ -4083,6 +4121,9 @@ The sum runs over the `n` columns where both rows have a value (the x range show
 
 ### 11.13 Chained fit of an In-situ series
 
+When the network and the manual fit use different size laws, weights or resolution, the network supplies a
+starting point for a local fit under the manual settings. The two candidate fits are ranked on the same objective.
+
 Fitting ▸ In-situ series ▸ *The previous result; Predict parameters where the chain breaks* refines every frame from the converged result of the frame before (as *The previous frame's result*). The chain **breaks** at a frame whose fit failed or did not converge, at the first frame of a new stage, at a flagged fit (beam tail at an edge, a value without a finite error; section 9.16), at a poor fit (`χ²ᵣ > 10`), or where χ²ᵣ jumps:
 
 ```text
@@ -4868,7 +4909,7 @@ Fitting's optional two-path sphere with a free effective reflection coefficient 
 - **Lorentz and Ewald-sphere corrections.** I(χ) and the ring intensities are intensities on the detector. No Lorentz factor is applied, and the missing wedge near χ = 0 is not reconstructed from data; only the pole-figure fit fills it, with its model (sections 2.2, 7.7, 7.11).
 - **Texture.** The Hermans factor assumes a fibre texture about the surface normal; the missing wedge enters only through the coverage C_w and the isotropic reference f_iso, and the background under a ring is one χ-independent constant (section 7.7). No exit-angle correction (film absorption, transmission function, shadowing) is applied to I(χ), and the sin χ weight makes the bins next to the sample horizon count most: f can depend on them by many σ_f, which the report states but does not correct (section 7.7). The in-plane and out-of-plane comparison uses two sectors of 20°; it is not a pole figure (section 7.6).
 - **Phases.** No phase is assigned. Lamellar and hexagonal series are reported as hints (section 7.4).
-- **GISAXS models.** The 1D models of a horizontal cut depend on the magnitude of q_y only; q_z at the Yoneda row and the Yoneda enhancement are not modelled (sections 8.6, 9.2), except in the four-term DWBA with a known substrate (section 9.17). A vertical cut is modelled only in a fit of several curves, for spheres and upright cylinders, at one in-plane q and without a q resolution or the specular rod (section 9.18). The beam-tail term is an additive empirical term; no resolution convolution or instrumental smearing is applied (sections 8.6, 9.2). Fitting and Predict parameters use sizes by number unless a component's Sizes says otherwise (sections 8.5, 9.3). Without a given composition the automatic analysis lets the network choose among one or two populations of spheres and upright cylinders; random cylinders and three populations only when given (section 8.6).
+- **GISAXS models.** The 1D models of a horizontal cut depend on the magnitude of q_y only; q_z at the Yoneda row and the Yoneda enhancement are not modelled (sections 8.6, 9.2), except in the four-term DWBA with a known substrate (section 9.17). A vertical cut is modelled only in a fit of several curves, for spheres and upright cylinders, at one in-plane q and without a q resolution or the specular rod (section 9.18). The model adds the empirical beam tail after smearing the horizontal particle terms (sections 8.6, 9.2 and 9.13). Fitting and Predict parameters use sizes by number unless a component's Sizes says otherwise (sections 8.5, 9.3). Without a given composition the automatic analysis lets the network choose among one or two populations of spheres and upright cylinders; random cylinders and three populations only when given (section 8.6).
 - **Paracrystal spread.** Until 0.2.0 the quick fit and 1D Predict reported σ_D/D, √(2π) ≈ 2.51 times smaller than the relative standard deviation of the neighbour distance σnn/D that Fitting and Predict parameters now use (sections 9.5, 13.5); the 1D Predict window gives both.
 
 ### 15.2 Instrument and geometry

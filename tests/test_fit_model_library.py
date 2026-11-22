@@ -193,7 +193,7 @@ def test_hexagonal_paracrystal_equals_a_bornagain_simulation():
 
 def test_the_new_models_are_in_the_model_and_its_file_and_the_old_ones_are_unchanged():
     q = np.geomspace(0.05, 2.0, 80)
-    plain = fm.new_component("sphere", radius=4.0, distance=15.0)
+    plain = fm.new_component("sphere", radius=4.0, distance=15.0, law="number_gauss")
     assert plain.interference == "paracrystal" and set(plain.params) == {"Int", "R", "sigma_R", "D", "sigma_nn"}
     assert fm.component_form(plain, q) == pytest.approx(population_terms(
         "sphere", q, radius=4.0, radius_spread=0.2, distance=15.0, distance_spread=0.25)[0], rel=1e-12)

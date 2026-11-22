@@ -505,6 +505,7 @@ def test_a_frame_without_the_chosen_half_fails_and_is_not_fitted_on_the_other() 
                                       "q_unit": "angstrom", "q_unit_from": ""}  # (a curve made here: nobody said)
     assert record["per_frame"][0] == {"frame": 1, "file": "run_00001.dat", "state": "ok", "reason": "", "points": 200,
                                       "halves_used": "positive", "averaged": 0, "left_out": 0, "weighting": "sigma",
+                                      "weight_mode": "file", "resolution_mode": "constant", "size_laws": ["gaussian"],
                                       "q_unit": "angstrom", "q_unit_from": ""}
     assert json.loads(json.dumps(record)) == record
     from datetime import datetime

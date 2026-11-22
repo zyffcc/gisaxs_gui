@@ -118,7 +118,8 @@ class FitSeriesStagesMixin:
         """The points a frame would be fitted on now: the halves of the series (``series_halves.py``), the
         range and left-out points of Single analysis."""
         session = self.single.session
-        return SeriesSettings(side=self.series_side(), q_range=session.q_range, excluded=frozenset(session.excluded))
+        return SeriesSettings(side=self.series_side(), q_range=session.q_range, excluded=frozenset(session.excluded),
+                              method=self.series_method())
 
     def _schedule_stages(self) -> None:
         """Find the stages again when the listed curves or the way they are fitted changed."""
@@ -175,14 +176,14 @@ class FitSeriesStagesMixin:
             for row, path in enumerate(paths):
                 if stop.is_set():
                     return None, "", (), {}, ()
-                outcome = load(LoadCurveRequest(Path(path), unit))
+                outcome = load(LoadCurveRequest(Path(path), unit, keep_missing_sigma=True))
                 if outcome.error is not None:  # this file is left out; the search goes on
                     curves.append(None)
                     unreadable[row] = outcome.error.message
                     continue
                 value = outcome.value
                 curves.append(Curve.from_arrays(value.q, value.intensity, value.error, name=file_name(path), path=path,
-                                                unit=value.q_source_unit, unit_from=value.q_unit_from))
+                                                unit=value.q_source_unit, unit_from=value.q_unit_from, dq=value.dq))
                 read.append((listed[row], value.q, value.observation))
             try:
                 return stages_of_curves(curves, settings, unreadable), "", curves, unreadable, read

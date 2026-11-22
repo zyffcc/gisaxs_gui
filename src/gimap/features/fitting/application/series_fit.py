@@ -159,10 +159,12 @@ def flag_names(frame) -> list[str]:
     return named + [f"{parameter_name(path)} (undetermined)" for path in loose]
 
 
-def prepare_frame(curve: Curve, settings: SeriesSettings) -> PreparedCurve:
+def prepare_frame(curve: Curve, settings: SeriesSettings, model: Optional[FitModel] = None) -> PreparedCurve:
     """The points a frame is fitted on (the halves, range and left-out points of the series) and what they
     are. ``MissingHalf`` when the frame has no points on the chosen half."""
-    return prepare_points(curve, settings.side, settings.q_range, settings.excluded, strict=True)
+    options = (dict(weighting=model.weighting, resolution=model.resolution_mode)
+               if model is not None and settings.method != "predict" else {})
+    return prepare_points(curve, settings.side, settings.q_range, settings.excluded, strict=True, **options)
 
 
 def fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: SeriesSettings,
@@ -177,7 +179,7 @@ def fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: Se
 def _fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: SeriesSettings,
                stop: Optional[Callable[[], bool]], predict: Optional[Callable]) -> FrameFit:
     try:
-        prepared = prepare_frame(curve, settings)
+        prepared = prepare_frame(curve, settings, start)
     except ValueError as exc:  # no points on the chosen half
         return FrameFit(index, path, error=str(exc) or type(exc).__name__)
     made_of = dict(points=prepared.points, halves_used=prepared.halves_used, averaged=prepared.averaged,
@@ -414,6 +416,10 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
                        **{key: value for key, value in (("start_from", frame.start_from), ("chain_break", frame.chain),
                                                         ("fit_pass", frame.fit_pass)) if value},
                        "weighting": frame.result.weighting if frame.result is not None else "",
+                       **({"weight_mode": frame.result.model.weighting,
+                           "resolution_mode": frame.result.model.resolution_mode,
+                           "size_laws": [component.law for component in frame.result.model.components]}
+                          if frame.result is not None else {}),
                        **curve_source_record(frame.path),
                        **({"resolved": list(frame.resolved)} if frame.resolved else {})} for frame in ordered],
     }

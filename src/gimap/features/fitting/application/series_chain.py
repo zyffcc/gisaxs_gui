@@ -27,6 +27,7 @@ from typing import Callable, Optional, Sequence
 
 from ..domain import beam_tail
 from ..domain.fit_links import parameter_name
+from ..domain.fit_limits import manual_chain_start
 from ..domain.fit_model import FitModel
 from .series_fit import POOR_CHI2, FrameFit, SeriesSettings, fit_frame, flagged_fit, poor_fit, prepare_frame
 
@@ -104,6 +105,15 @@ def chained_fit(index: int, path: str, curve, start: FitModel, single: FitModel,
     if not why or predict is None or (stop is not None and stop()) or not frame.points:
         return replace(frame, chain=why)
     again = fit_frame(index, path, curve, single, replace(settings, method="predict"), stop, predict)
+    if stop and stop():
+        return replace(frame, chain=why)
+    if again.fitted:
+        proposal = again.result.model
+        if (proposal.weighting != single.weighting or proposal.resolution_mode != single.resolution_mode
+                or [c.law for c in proposal.components] != [c.law for c in single.components]):
+            # Compare χ² on the same points, with the chosen weights and smearing. Predict remains a separate fit.
+            again = fit_frame(index, path, curve, manual_chain_start(proposal, single),
+                              replace(settings, method="local"), stop)
     kept = better(frame, replace(again, start_from="predict", fit_pass=fit_pass))
     return replace(kept, chain=why)
 
@@ -188,7 +198,7 @@ def series_nxcansas(frames: Sequence[FrameFit], curves: dict, settings: SeriesSe
         if not frame.fitted or curve is None:
             continue
         try:
-            data = prepare_frame(curve, settings).data
+            data = prepare_frame(curve, settings, frame.result.model).data
         except ValueError:
             continue
         out.extend(fit_curves(frame.result.model, data, record_of(frame), name_of(frame)))

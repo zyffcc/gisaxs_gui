@@ -107,7 +107,6 @@ class FitRunMixin:
         """``method``: one of ``METHOD_NAMES``; the one chosen in the Fit step if None."""
         if self.fit_running():
             return
-        data = self._data()
         if self.session.curve is None:
             self._status(tr("Open a curve first."), "warning")
             return
@@ -126,8 +125,12 @@ class FitRunMixin:
             # These methods take one measurement per |q|. The page goes over to the mean of the halves and says
             # so: what it shows, the points a result is of and the record of an export are the fitted points.
             self.set_side("mean")
-            data = self._data()
             self._status(lambda: tr(BOTH_USES_MEAN), "warning")
+        try:
+            data = self.session.data(predict=method == "predict")
+        except ValueError as exc:
+            self._status(fit_error_text(str(exc)), "warning")
+            return
         if data is None or data.q.size < 3:
             self._status(tr("Too few points in the fitting range: widen it in the Curve step."), "warning")
             return

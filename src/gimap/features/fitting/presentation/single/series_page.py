@@ -334,14 +334,14 @@ class FitSeriesPage(FitSeriesProjectMixin, FitSeriesImportsMixin, FitSeriesLoadi
 
         def work():
             stamp = file_stamp(path)  # stat can also wait on a network drive
-            outcome = load(LoadCurveRequest(Path(path), unit))
+            outcome = load(LoadCurveRequest(Path(path), unit, keep_missing_sigma=True))
             if stop():  # Stop during I/O: no fit is started and no spurious failed result is recorded
                 return None, None, stamp, None
             if outcome.error is not None:
                 return FrameFit(index, path, error=outcome.error.message), None, stamp, None
             value = outcome.value
             curve = Curve.from_arrays(value.q, value.intensity, value.error, name=file_name(path), path=path,
-                                      unit=value.q_source_unit, unit_from=value.q_unit_from)
+                                      unit=value.q_source_unit, unit_from=value.q_unit_from, dq=value.dq)
             frame = chained(index, path, curve, start) if chained is not None else replace(
                 fit_frame(index, path, curve, start, settings, stop, predict), **marks)
             return frame, curve, stamp, value

@@ -27,6 +27,7 @@ from src.gimap.shared.version import SOFTWARE
 
 from ..domain import fit_links
 from ..domain.fit_engine import FitData
+from ..domain.fit_resolution import MISSING_DQ
 from ..domain.fit_model import FitModel, evaluate, model_to_dict
 from ..domain.joint_fit import SHARED, JointCurve, JointResult, curve_errors, default_shared, fit_curves
 from ..domain.substrates import CUSTOM, MATERIALS, Substrate
@@ -57,6 +58,7 @@ class CurveSpec:
     q_parallel: float = 0.0
     critical_angle: float = 0.0
     path: str = ""
+    dq: Optional[np.ndarray] = None
 
     def with_geometry(self, **changes) -> "CurveSpec":
         return replace(self, **changes)
@@ -136,7 +138,7 @@ def curve_model(spec: CurveSpec, model: FitModel, substrate: Optional[Substrate]
         delta, beta = substrate.optical(spec.wavelength)
         cut = VerticalCut(float(spec.q_parallel), float(spec.wavelength), float(spec.alpha_i), delta, beta,
                           float(spec.critical_angle))
-        model = _without_tail(replace(model, cut=cut, substrate=substrate))
+        model = _without_tail(replace(model, cut=cut, substrate=substrate, resolution_mode="constant"))
     else:
         angles = (spec.alpha_i, spec.alpha_f) if spec.kind == "horizontal" else (0.0, 0.0)
         model = model.with_values({("globals", "alpha_i"): angles[0], ("globals", "alpha_f"): angles[1],
@@ -157,7 +159,10 @@ def curve_data(spec: CurveSpec, model: FitModel) -> FitData:
             raise ValueError(NO_EXIT_ANGLE.format(name=spec.name))
         q, intensity = q[keep], intensity[keep]
         sigma = None if sigma is None else sigma[keep]
-    data = FitData.prepare(q, intensity, sigma)
+    if model.resolution_mode == "file" and spec.dq is None:
+        raise ValueError(MISSING_DQ)
+    data = FitData.prepare(q, intensity, sigma, dq=spec.dq if model.resolution_mode == "file" else None,
+                           weighting=model.weighting)
     if data.q.size < 3:
         raise ValueError(FEW_POINTS.format(name=spec.name))
     return data
@@ -192,7 +197,7 @@ def run_joint_fit(specs: Sequence[CurveSpec], model: FitModel, substrate: Option
 def plot_points(spec: CurveSpec, model: FitModel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """(x, I, model) of a curve's fitted points (|q_y| or q_z in nm⁻¹)."""
     data = curve_data(spec, model)
-    return data.q, data.intensity, evaluate(model, data.q)
+    return data.q, data.intensity, evaluate(model, data.q, dq=data.dq)
 
 
 def values_of(result: JointResult, path) -> list[tuple[float, float]]:
