@@ -46,8 +46,11 @@ They are not GIMaP's data: keep the licences and the attribution below when you 
 - **P08 MAPbI₃**: `.poni` → direct beam (545.5, 1826.9) px, L = 811.8 mm, λ = 0.6888 Å, tilt 0.31°.
   Radial peaks at q ≈ 0.899 (PbI₂ 001), 0.999 (MAPbI₃ 110), 1.41, 1.99, 2.23 Å⁻¹. The raw frame is
   dark-subtracted floating-point data: negative values are real (noise), not detector gaps.
-- **Xeuss PbTe**: `.poni` → direct beam (7.0, 589.5) px, L = 147.6 mm, λ = 1.54 Å, **6° detector tilt**:
-  GIMaP's flat-detector geometry is only approximate for it (kept on purpose as a tilt case).
+- **Xeuss PbTe**: `.poni` → direct beam (7.0, 589.5) px, L = 147.6 mm, λ = 1.54 Å, **6° detector tilt** (kept on
+  purpose as a tilt case; Analyze applies pyFAI's rot1 and rot2, and its q equals pyFAI's at the reference pixels).
   The EDF header says `Center_1/2` = (8.3, 590.39), `SampleDistance` = 0.37 m, `Dummy` = −1.5 ± 0.6.
+  With this `.poni` the strongest peaks of radial I(q) lie at q ≈ 1.57, 1.82 and 2.58 Å⁻¹, in the ratios of rock-salt
+  111, 200 and 220 but 6–7 % below bulk PbTe (a = 6.46 Å, rings at 1.68, 1.95 and 2.75 Å⁻¹): an assignment against
+  bulk PbTe finds none of them. pyFAI gives the same q, so the geometry and the sample, not the reduction, set this.
 
 `manifest.json` holds the same values for the tests.
