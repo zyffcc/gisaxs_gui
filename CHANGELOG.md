@@ -61,6 +61,10 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   Carlo errors. It flags high-q_z·R limits and departures from the validation point density. The MCMC check
   compares independently initialized ensembles and reports autocorrelation time and split R̂.
 
+- **Calibration in the automatic analysis:** when the line positions choose another solution than the ring fit, the
+  record gives the 1σ of that solution (before, the 1σ of the ring fit's first choice stood beside the chosen
+  geometry), and the first choice keeps its own geometry and 1σ among the alternatives (before, its entry held the
+  chosen geometry).
 - **GIWAXS indexing and pole figures (Analyze ▸ Phases).** Give phases as a CIF (cell, symmetry operations, atom
   sites; |F|² from Cromer–Mann scattering factors) or a cell with its centring, at random or as a fibre texture
   ((hkl) parallel to the substrate or [uvw] along the normal): their reflections are drawn with hkl labels on the
