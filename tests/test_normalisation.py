@@ -52,8 +52,10 @@ GISAXS_GEOMETRY = DetectorGeometry(172e-6, 172e-6, 2.5, 120.0, 140.0, 1.0, 0.3)
 LEVEL = 400.0
 
 MAIN_CURVES = {  # (points, Σx, ΣI, Σσ, Σpixels) of each curve with Corrections(), as the release before computed them
+    # GALAXI's automatic vertical band now leaves 15 columns beside the specular rod (the particle model excludes the
+    # rod): 10 columns off the rod instead of 11 on it, hence its new sums.
     "galaxi": {"horizontal": (974, -48.3395814206, 121654.0, 3153.87629673, 4870),
-               "vertical": (638, 119.013875328, 278261.0, 1236.95412207, 7018)},
+               "vertical": (638, 119.013672038, 22873.5, 821.673773407, 6380)},
     "p08": {"radial": (2050, 4901.63819899, 41555.2331458, 1343.12795251, 3731451),
             "in_plane": (1396, 2363.36253493, 13451.4440037, 2930.53001397, 216834),
             "out_of_plane": (1384, 2265.20326733, 40319.2098257, 2859.11223685, 254936),
