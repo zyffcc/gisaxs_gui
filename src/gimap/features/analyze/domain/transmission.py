@@ -43,7 +43,7 @@ QY_LABEL = "qy (Å⁻¹)"
 
 def transmission_maps(shape: tuple[int, int], geometry: DetectorGeometry) -> GiwaxsMaps:
     """q, qy (in ``q_parallel``), qz and χ of every pixel in float32 (row blocks); every pixel is usable."""
-    flat = replace(geometry, incidence_deg=0.0, critical_angle_deg=0.0)
+    flat = replace(geometry, incidence_deg=0.0, critical_angle_deg=0.0, sample_roll_deg=0.0)
     rows, columns = int(shape[0]), int(shape[1])
     q = np.empty((rows, columns), dtype=np.float32)
     qy = np.empty_like(q)

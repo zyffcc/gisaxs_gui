@@ -87,6 +87,7 @@ class GeometryDialogView:
             self, self.center_x_spin, self.center_y_spin, center_step_px,
         )
         self.incidence_spin = _spin(self, 0.0, 10.0, 3, defaults["incidence_deg"], " °", 0.01)
+        self.sample_roll_spin = _spin(self, -180.0, 180.0, 4, defaults.get("sample_roll_deg", 0.0), " °", 0.05)
         form.addRow("Profile name", self.name_edit)
         form.addRow("Sample–detector distance", self.distance_spin)
         form.addRow("Pixel size x", self.pixel_x_spin)
@@ -101,6 +102,7 @@ class GeometryDialogView:
         form.addRow("Beam centre y", self.center_y_spin)
         form.addRow("Centre step", self.center_step_spin)
         form.addRow("Incidence angle αi", self.incidence_spin)
+        form.addRow("Sample roll ψ", self.sample_roll_spin)
         layout.addLayout(form)
         self.live_preview_check = QCheckBox("Live Preview", self)
         self.live_preview_check.setObjectName("analyzeGeometryLivePreview")

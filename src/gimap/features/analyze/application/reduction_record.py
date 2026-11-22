@@ -27,6 +27,7 @@ def reduction_tables(analysis, keys):
 def reduction_record(analysis, inputs, keys=None):
     request = analysis.request
     settings = settings_record(AnalyzeSettings(
+        sample_roll_deg=request.sample_roll_deg, sample_roll_measurement=analysis.sample_roll_measurement,
         mode=analysis.kind, gisaxs=request.gisaxs, giwaxs=request.giwaxs, corrections=analysis.corrections,
     ))
     if keys is None:

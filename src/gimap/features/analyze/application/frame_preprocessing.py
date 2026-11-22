@@ -256,7 +256,7 @@ class FramePreprocessingMixin(FlatFieldMixin):
         data, valid = self._corrected(raw_data, usable, corrections, record, exposures)
         filled = None
         if corrections.mirror_fill and mirror_geometry is not None:
-            if not (mirror_geometry.tilted and has_intensity_corrections(corrections)):
+            if not ((mirror_geometry.tilted or mirror_geometry.sample_roll_deg) and has_intensity_corrections(corrections)):
                 data, valid, filled = mirror_fill(data, valid, mirror_geometry.beam_center_x_px, geometry=mirror_geometry)
         record.update(data=data, valid=valid, raw_data=raw_data, raw_valid=raw_valid, filled_pixels=filled)
         return record
@@ -297,7 +297,7 @@ class FramePreprocessingMixin(FlatFieldMixin):
             common["raw_data"], common["raw_valid"] = raw_data, raw_valid
         defined = np.isfinite(factor) & (factor > 0)
         valid = valid & defined
-        if corrections.mirror_fill and geometry.tilted:
+        if corrections.mirror_fill and (geometry.tilted or geometry.sample_roll_deg):
             corrected, valid, filled = mirror_fill(corrected, valid, geometry.beam_center_x_px, geometry=geometry)
             common["filled_pixels"] = filled & defined
             valid &= defined

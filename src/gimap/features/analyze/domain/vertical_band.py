@@ -22,12 +22,12 @@ def rod_columns(geometry: DetectorGeometry, rows, columns):
     top, bottom = rows
     left, right = columns
     cx, cy = geometry.beam_center_x_px, geometry.beam_center_y_px
-    if not geometry.requires_projection:
+    if not geometry.grazing_requires_projection:
         if left <= cx <= right and top <= geometry.row_for_exit_angle(geometry.critical_angle_deg):
             return cx, cx
         return None
-    along_x, along_up = geometry.in_plane_axes()
-    # Lab right = a (x − cx) + b (y − cy), which vanishes on the rod.
+    along_x, along_up = geometry.rolled_detector_axes()
+    # The rolled transverse component vanishes on the rod.
     a = along_x[1] * geometry.pixel_size_x_m
     b = -along_up[1] * geometry.pixel_size_y_m
     ends = []

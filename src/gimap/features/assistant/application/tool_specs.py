@@ -91,6 +91,7 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
                     "standard": {"type": ["string", "null"], "enum": ["agbh", "lab6", "ceo2", "lab6_ceo2", None]},
                     "energy_kev": NUMBER_OR_NULL,
                     "incidence_deg": NUMBER_OR_NULL,
+                    "sample_roll_deg": NUMBER_OR_NULL,
                     "pixel_size_um": NUMBER_OR_NULL,
                     "frame": {"type": ["integer", "null"]},
                     "sum_frames": {"type": ["integer", "null"]},

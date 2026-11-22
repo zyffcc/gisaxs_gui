@@ -72,6 +72,16 @@ class GuiWorkbench:
     def set_incidence(self, degrees: Optional[float]) -> dict:
         return self._apply(lambda done: self._automation.set_incidence(degrees, done))
 
+    def apply_sample_roll(self, degrees: Optional[float]) -> dict:
+        """An explicit value wins. Otherwise measure the displayed frame on the pipeline worker."""
+        frame, record = None, None
+        if degrees is None:
+            frame, measure = self._call(self._automation.prepare_sample_roll)
+            result = measure()
+            record = result.as_dict()
+            degrees = result.deg if result.significant else None
+        return self._apply(lambda done: self._automation.set_sample_roll(degrees, record, frame, done))
+
     def set_orientation_min_exit(self, degrees: float) -> dict:
         return self._apply(lambda done: self._automation.set_orientation_min_exit(degrees, done))
 

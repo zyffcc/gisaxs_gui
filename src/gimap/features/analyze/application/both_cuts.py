@@ -54,7 +54,11 @@ def cut_geometry(analysis) -> dict:
         "critical_angle_deg": float(getattr(geometry, "critical_angle_deg", 0.0) or 0.0),
         "horizontal_alpha_f_deg": float(exit_angle_deg_at_row(geometry, float(row))),
     }
-    if "rows" in vertical.region:
+    if "gisaxs_cut" in vertical.region:
+        values["sample_roll_deg"] = geometry.sample_roll_deg
+        low, high = vertical.region["qy_edges"]
+        values["band_crosses_specular"] = low <= 0 <= high
+    elif "rows" in vertical.region:
         values["band_crosses_specular"] = rod_columns(geometry, vertical.region["rows"], columns) is not None
     return values
 

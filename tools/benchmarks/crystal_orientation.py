@@ -204,10 +204,26 @@ def public_diagnostics(report, page, cifs):
         report["benchmark_signed_sectors"] = sector_diagnostics(analysis, fits[0]["rings"][0], maps)
     old_cut = []
     residuals = []
+    paired = []
     polar = np.abs(maps.chi_deg)
     for cif, fit in zip(cifs, fits):
         rings = []
         for row in fit["rings"]:
+            low, high = row["q_window"]
+            band = analysis.valid & maps.above_horizon & (maps.q >= low) & (maps.q <= high)
+            signed = maps.chi_deg[band]
+            observed = analysis.data[band]
+            edges = np.arange(0., 91., 2.)
+            means = []
+            counts = []
+            for sign in (-1, 1):
+                count = np.histogram(sign * signed, edges)[0]
+                total = np.histogram(sign * signed, edges, weights=observed.astype(float))[0]
+                means.append(total / count.clip(min=1))
+                counts.append(count)
+            use_both = np.minimum(*counts) >= 12
+            paired.append({"phase": fit["phase"], "q": row["q"], "chi_centres_deg": (edges[:-1]+1)[use_both].tolist(),
+                           "negative": means[0][use_both].tolist(), "positive": means[1][use_both].tolist()})
             profile, _, _ = _profile(maps, pixels, analysis, row["q_window"], row["q"], {"available": False})
             rings.append(TextureRing(row["ring_id"], row["q"], *row["q_window"], profile))
             chi = np.asarray(row["chi_deg"])
@@ -231,16 +247,18 @@ def public_diagnostics(report, page, cifs):
                         "rings": [{k: r[k] for k in ("q", "points", "reduced_chi2")} for r in stage["rings"]]})
     report["benchmark_independent_widths_original_cut"] = old_cut
     report["benchmark_ring_residuals"] = residuals
+    report["benchmark_signed_profiles"] = paired
 
 
-def public_frame(*, with_phases=True, diagnostics=False, incidence_deg=None):
+def public_frame(*, with_phases=True, diagnostics=False, incidence_deg=None, sample_roll_deg=None):
     from src.gimap.app.headless_assistant import open_headless_session
     from src.gimap.features.assistant.application.pipeline import PipelineOptions
 
     info = json.loads((EXTERNAL / "manifest.json").read_text(encoding="utf-8"))["giwaxs_p08_mapi"]
     cifs = tuple(str(CIF / (name + ".cif")) for name in TEXTURES) if with_phases else ()
     options = PipelineOptions(technique="giwaxs", calibration=str(EXTERNAL / info["poni"]),
-                              incidence_deg=info["incidence_deg"] if incidence_deg is None else incidence_deg, phases=cifs)
+                              incidence_deg=info["incidence_deg"] if incidence_deg is None else incidence_deg,
+                              sample_roll_deg=sample_roll_deg, phases=cifs)
     with tempfile.TemporaryDirectory() as tmp:
         session = open_headless_session(EXTERNAL / info["frame"], saved_profiles=False, out_dir=tmp)
         try:
@@ -262,6 +280,7 @@ def main():
     parser.add_argument("--trials", default=24, type=int, help="independent Poisson draws per phase")
     parser.add_argument("--json", type=Path)
     parser.add_argument("--public-incidence-deg", type=float, help="test a specified incidence angle on the public frame")
+    parser.add_argument("--public-roll-deg", type=float, help="fix sample roll ψ (default: measure on the frame)")
     arguments = parser.parse_args()
     if arguments.trials < 1:
         parser.error("--trials must be positive")
@@ -272,7 +291,8 @@ def main():
             os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
             if os.name == "nt":
                 os.environ.setdefault("QT_QPA_FONTDIR", "C:/Windows/Fonts")
-            results["public"] = public_frame(diagnostics=True, incidence_deg=arguments.public_incidence_deg)
+            results["public"] = public_frame(diagnostics=True, incidence_deg=arguments.public_incidence_deg,
+                                            sample_roll_deg=arguments.public_roll_deg)
     if arguments.part in ("synthetic", "all"):
         results["synthetic"] = [coverage(name, arguments.trials) for name in (*TEXTURES, MIXTURE)]
         for item in results["synthetic"]:

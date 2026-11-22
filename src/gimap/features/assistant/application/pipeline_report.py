@@ -100,6 +100,19 @@ def _geometry_lines(report: dict) -> list[str]:
         f"αi {_number(geometry.get('incidence_deg'))}°",
     ]
     pixel, wavelength = geometry.get("pixel_size_um") or (), geometry.get("wavelength_A")
+    if "sample_roll_deg" in geometry:
+        lines.append(f"- sample roll ψ applied: {_number(geometry['sample_roll_deg'])}°")
+    roll = report.get("sample_roll_measurement")
+    if roll:
+        second = roll.get("symmetry_feature") or ("specular rod" if report.get("procedure") == "gisaxs" else "ring symmetry")
+        for label, estimate in (("horizon", roll.get("horizon")), (second, roll.get("symmetry"))):
+            value = (_pm(estimate["deg"], estimate["error_deg"], 2) + "°"
+                     if estimate and estimate.get("deg") is not None else "unresolved")
+            lines.append(f"  - {label}: {value}")
+        if roll.get("deg") is not None:
+            lines.append(f"  - selected estimate ({roll['method']}): {_pm(roll['deg'], roll['error_deg'], 2)}°")
+        else:
+            lines.append(f"  - estimate: {roll['method']}")
     if len(pixel) == 2 and pixel[0] and wavelength:
         size = _number(pixel[0]) if pixel[0] == pixel[1] else f"{_number(pixel[0])} × {_number(pixel[1])}"
         lines.append(f"- pixel size {size} µm, energy {_number(HC_KEV_ANGSTROM / float(wavelength))} keV "

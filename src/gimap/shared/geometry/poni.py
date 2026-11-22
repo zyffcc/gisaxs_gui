@@ -23,10 +23,11 @@ from __future__ import annotations
 import json
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from .detector_geometry import DetectorGeometry
+from .sample_roll_record import measurement_record
 from .detector_tilt import DetectorTilt
 from .orientation import MISSING_SHAPE, detector_shape, orientation_number, oriented_position
 
@@ -58,6 +59,9 @@ class PoniFile:
     detector: str = ""
     shape: Optional[tuple[int, int]] = None
 
+    sample_roll_deg: Optional[float] = None
+    sample_roll_measurement: Optional[dict] = field(default=None, hash=False)
+
     @property
     def tilted(self) -> bool:
         return bool(self.tilt.rot1_rad or self.tilt.rot2_rad or self.tilt.rot3_rad)
@@ -71,7 +75,8 @@ class PoniFile:
         tilt = self.tilt
         x, y = tilt.direct_beam_px()
         return DetectorGeometry(tilt.pixel2_m, tilt.pixel1_m, tilt.beam_distance_m, x, y, float(wavelength),
-                                incidence_deg, tilt.rot1_rad, tilt.rot2_rad, tilt.rot3_rad, orientation=tilt.orientation)
+                                incidence_deg, tilt.rot1_rad, tilt.rot2_rad, tilt.rot3_rad, orientation=tilt.orientation,
+                                sample_roll_deg=self.sample_roll_deg or 0.0)
 
 
 def poni_values(text: str) -> dict[str, str]:
@@ -133,7 +138,15 @@ def read_poni(text: str, *, frame_shape: tuple[int, int] | None = None) -> PoniF
         if shape is None:
             raise ValueError(MISSING_SHAPE)
     tilt = DetectorTilt(distance, poni1, poni2, *rotations, pixel1, pixel2, orientation, shape if orientation != 3 else None)
-    return PoniFile(tilt, wavelength * 1e10 if wavelength else None, detector, shape)
+    # Standard PONI has no sample roll. These two optional GIMaP comments leave its
+    # detector fields (especially rot3) usable by any PONI reader.
+    metadata = poni_values("\n".join(line.removeprefix("# GIMaP ") for line in text.splitlines()
+                                     if line.startswith("# GIMaP ")))
+    roll = float(metadata["sample_roll_deg"]) if "sample_roll_deg" in metadata else None
+    if roll is not None and not math.isfinite(roll):
+        raise ValueError("The sample roll must be finite.")
+    measured = json.loads(metadata["sample_roll_measurement"]) if "sample_roll_measurement" in metadata else None
+    return PoniFile(tilt, wavelength * 1e10 if wavelength else None, detector, shape, roll, measurement_record(measured))
 
 
 def tilt_from_geometry(geometry: DetectorGeometry, *, shape=None) -> DetectorTilt:
@@ -150,7 +163,7 @@ def tilt_from_geometry(geometry: DetectorGeometry, *, shape=None) -> DetectorTil
 
 def format_poni(
     geometry: DetectorGeometry, *, shape: Optional[tuple[int, int]] = None, detector: str = "Detector",
-    comments: tuple[str, ...] = (),
+    comments: tuple[str, ...] = (), sample_roll_measurement: Optional[dict] = None,
 ) -> str:
     """The text of a ``.poni`` (version 2.1, pyFAI's generic ``Detector`` with its pixel sizes and, when known, the
     frame shape) for ``geometry``. The incidence angle and a critical angle are no part of a ``.poni``."""
@@ -160,6 +173,9 @@ def format_poni(
         config["max_shape"] = [int(shape[0]), int(shape[1])]
     config["orientation"] = geometry.orientation
     lines = [f"# {comment}" for comment in comments]
+    lines.append(f"# GIMaP sample_roll_deg: {geometry.sample_roll_deg!r}")
+    if sample_roll_measurement:
+        lines.append(f"# GIMaP sample_roll_measurement: {json.dumps(sample_roll_measurement, allow_nan=False)}")
     lines += [
         "# Nota: C-Order, 1 refers to the Y axis, 2 to the X axis",
         f"poni_version: {PONI_VERSION}",

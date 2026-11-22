@@ -50,7 +50,8 @@ GEOMETRY_CONVENTION = (
     "canonical pixel-corner frame, row 0 at top, beam centre = direct beam; "
     "kinematic (vacuum) grazing-incidence q of a flat detector, tilted by pyFAI's rotations rot1-rot3 of the "
     "geometry (all 0: perpendicular to the beam); q_z inside the film when geometry.critical_angle_deg is above 0 "
-    "(refraction, pixels below it left out), Å⁻¹"
+    "(refraction, pixels below it left out), Å⁻¹. Positive sample_roll_deg tilts the surface normal toward "
+    "laboratory right about the incident beam before the incidence rotation"
 )
 """``geometry_convention`` of the record: what the q values are (the detector tilt is ``geometry.rot1_rad`` …
 ``rot3_rad``; refraction only with ``geometry.critical_angle_deg`` above 0)."""
@@ -127,6 +128,10 @@ def frame_cuts(metadata: Optional[Mapping[str, Any]]) -> dict[str, Any]:
         cuts["horizontal_source"] = markers.get("horizontal_source")
         cuts["vertical_columns"] = list(columns) if columns else None
         cuts["vertical_source"] = markers.get("vertical_source")
+        if "gisaxs_cut" in regions.get("horizontal", {}):
+            cuts["horizontal_qz_edges_A_inv"] = regions["horizontal"]["qz_edges"]
+        if "gisaxs_cut" in regions.get("vertical", {}):
+            cuts["vertical_qy_edges_A_inv"] = regions["vertical"]["qy_edges"]
     elif metadata.get("measurement") in (GIWAXS, "transmission"):
         window = markers.get("chi_q_window")
         cuts["chi_q_window"] = [float(value) for value in window] if window else None
@@ -137,7 +142,8 @@ def frame_cuts(metadata: Optional[Mapping[str, Any]]) -> dict[str, Any]:
 
 def recorded_region(analysis, curve):
     region = dict(curve.region or {})
-    if analysis.kind == GISAXS and curve.key in ("horizontal", "vertical") and "rows" in region and "columns" in region:
+    if (analysis.kind == GISAXS and curve.key in ("horizontal", "vertical") and "gisaxs_cut" not in region
+            and "rows" in region and "columns" in region):
         top, bottom = region["rows"]
         left, right = region["columns"]
         corners = ("top_left", "top_right", "bottom_right", "bottom_left")
@@ -169,6 +175,7 @@ def analysis_metadata(analysis: FrameAnalysis, *, curve_keys=None, with_reproduc
             if analysis.geometry is not None else None
         ),
         "geometry_convention": GEOMETRY_CONVENTION,
+        "sample_roll_measurement": getattr(analysis, "sample_roll_measurement", None),
         "geometry_resolution": {
             "method": analysis.resolution.how, "beam_center_source": analysis.resolution.center_source,
             "header_beam_center_px": _plain(analysis.resolution.header_center),
@@ -262,10 +269,11 @@ def provenance_lines(record: Mapping[str, Any], written_by: str, settings: Optio
         tilt = math.degrees(math.acos(max(-1.0, min(1.0, math.cos(geometry.get("rot1_rad") or 0.0)
                                                     * math.cos(geometry.get("rot2_rad") or 0.0)))))
         critical = float(geometry.get("critical_angle_deg") or 0.0)
+        roll = float(geometry.get("sample_roll_deg") or 0.0)
         lines.append(
             f"geometry: distance {geometry['distance_m'] * 1e3:.4f} mm, direct beam ({geometry['beam_center_x_px']:.3f}, "
             f"{geometry['beam_center_y_px']:.3f}) px, wavelength {geometry['wavelength_angstrom']:.6g} A, "
-            f"alpha_i {geometry['incidence_deg']:.4g} deg, detector tilt {tilt:.4g} deg" + (
+            f"alpha_i {geometry['incidence_deg']:.4g} deg, sample roll {roll:.4g} deg, detector tilt {tilt:.4g} deg" + (
                 f", q_z refracted, alpha_c {critical:.4g} deg" if critical > 0.0 else ""))
     return lines + intensity_lines(record)
 

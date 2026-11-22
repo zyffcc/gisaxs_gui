@@ -214,7 +214,7 @@ def q_at_position(geometry: DetectorGeometry, x_px: float, y_px: float) -> dict[
     y = np.array([(geometry.beam_center_y_px - float(y_px)) * geometry.pixel_size_y_m])
     along, x, y = lab_rays(geometry, x, y)
     q = scattering_vectors(x, y, along, geometry.incidence_rad, geometry.wavevector_inv_angstrom,
-                           critical_rad=geometry.critical_rad)
+                           critical_rad=geometry.critical_rad, sample_roll_rad=geometry.sample_roll_rad)
     sin_alpha_f = float(q.sin_exit[0])
     return {
         "qx": float(q.qx[0]),

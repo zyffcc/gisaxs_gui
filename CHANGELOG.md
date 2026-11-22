@@ -4,6 +4,8 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## 0.2.0 — unreleased (pre-release)
 
+- Analyze can measure sample roll ψ from the shadow or Yoneda band and the two sides of a GIWAXS ring or a GISAXS specular rod. The applied angle sets the sample axes for cuts, pole figures and reflection overlays. Automatic analysis reports the estimates and applies a resolved roll at three standard errors.
+
 What changed since 0.1.0 (2026-10-13). New are the **Sputter** workspace, **SEM Particle Analysis**, the
 **Edit**, **Analyze** and **Fitting** menus with a fuller **Help** menu, NeXus/HDF5 files read by what they
 hold, a source folder that starts with one double-click, and a reference of the methods, *Physics and

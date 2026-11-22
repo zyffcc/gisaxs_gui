@@ -57,7 +57,7 @@ def ring_profiles(maps, image, valid, counts, geometry, window, step, correction
     cx, cy = index_center_from_canonical(geometry.beam_center_x_px, geometry.beam_center_y_px)
     along, x, y = lab_rays(geometry, (column - cx) * geometry.pixel_size_x_m,
                            (cy - row) * geometry.pixel_size_y_m)
-    _, _, sin_exit = exit_directions(x, y, along, geometry.incidence_rad)
+    _, _, sin_exit = exit_directions(x, y, along, geometry.incidence_rad, sample_roll_rad=geometry.sample_roll_rad)
     signal = image[near]
     errors = pixel_errors(counts).subset(near)
     polar = corrections.polarization

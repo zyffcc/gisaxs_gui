@@ -36,7 +36,7 @@ from .gisaxs_choice import (
     sizes,
     zero_terms,
 )
-from .gisaxs_report import cut_spans
+from .gisaxs_report import cut_locations
 from .gisaxs_tools import MAX_SYMMETRY_SHIFT_PX
 from .giwaxs_decisions import flat_field_decision, refraction_decision, uncertainty_decision
 from .ring_frames import NO_FIT
@@ -193,7 +193,7 @@ class GisaxsProcedureMixin:
     def _horizontal_cut(self, cuts: dict) -> None:
         source = cuts.get("horizontal_source")
         # The rows the cut uses, both ends included (as Analyze's Cuts card says them).
-        where = f"rows {cut_spans(cuts, self.catalog.results.status)[0]}"
+        where = cut_locations(cuts, self.catalog.results.status)[0]
         if source == "yoneda":
             self._decide(
                 "horizontal cut", f"at the Yoneda band, αf = {cuts.get('yoneda_alpha_f_deg'):.3f}° ({where})",

@@ -83,17 +83,18 @@ def poni_profile(
         raise ValueError(NO_WAVELENGTH)
     geometry = poni.geometry(wavelength_angstrom=wavelength_angstrom, incidence_deg=incidence_deg)
     return InstrumentProfile(
-        name=name, geometry=geometry, detector_name=detector_name,
+        name=name, geometry=geometry, detector_name=detector_name, sample_roll_measurement=poni.sample_roll_measurement,
         detector_shape=tuple(int(v) for v in shape[:2]) if shape is not None else poni.shape,
         source=source_template.format(path=str(path)), dropped_tilt=poni.tilt if poni.tilted else None,
     )
 
 
-def write_poni_file(geometry: DetectorGeometry, path, *, shape=None, source: str = "") -> Path:
+def write_poni_file(geometry: DetectorGeometry, path, *, shape=None, source: str = "", sample_roll_measurement=None) -> Path:
     """Write ``geometry`` as a ``.poni`` (version 2.1) at ``path``; returns the path."""
     comments = ("Written by GIMaP (Analyze ▸ Geometry ▸ Export .poni…)",) + ((f"Geometry: {source}",) if source else ())
     target = Path(path)
-    target.write_text(format_poni(geometry, shape=shape, comments=comments), encoding="utf-8")
+    target.write_text(format_poni(geometry, shape=shape, comments=comments,
+                                  sample_roll_measurement=sample_roll_measurement), encoding="utf-8")
     return target
 
 

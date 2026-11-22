@@ -43,6 +43,25 @@ def profile_source(actor: str, origin: str, path: Optional[str] = None) -> str:
     return f"{text} [{path}]" if path and str(path) not in text else text
 
 
+def file_geometry(path: str, info: dict, pixel_um: Optional[float]) -> dict:
+    """The inspected file in the calibration record format used throughout a batch."""
+    if info.get("kind") == "GIMaP calibration":
+        return {key: value for key, value in info.items() if key != "kind"}
+    return {
+        "distance_mm": info["distance_mm"],
+        "beam_center_px": [info["beam_center_x_px"], info["beam_center_y_px"]],
+        "wavelength_angstrom": info.get("wavelength_angstrom"),
+        "energy_kev": info.get("energy_kev"),
+        "pixel_size_um": [pixel_um, pixel_um] if pixel_um else None,
+        "source_image": path,
+        "shape": None,
+        "from_file": True,
+        "detector_tilt": info.get("detector_tilt"),
+        "sample_roll_deg": info.get("sample_roll_deg", 0.0),
+        "sample_roll_measurement": info.get("sample_roll_measurement"),
+    }
+
+
 def exact_calibration(calibration: Optional[dict], used: Optional[dict]) -> Optional[dict]:
     """``calibration`` (a saved file as ``inspect_file`` answered: four significant digits) with the distance, centre,
     wavelength and tilt as they were applied (``used``: ``RunResults.geometry_used``), when both are the same
@@ -60,6 +79,9 @@ def exact_calibration(calibration: Optional[dict], used: Optional[dict]) -> Opti
         exact["beam_center_px"] = centre
     if calibration.get("detector_tilt") and used.get("detector_tilt"):
         exact["detector_tilt"] = dict(used["detector_tilt"])
+    if "sample_roll_deg" in used:
+        exact["sample_roll_deg"] = used["sample_roll_deg"]
+        exact["sample_roll_measurement"] = used.get("sample_roll_measurement")
     return exact
 
 

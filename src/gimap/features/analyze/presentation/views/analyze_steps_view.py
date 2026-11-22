@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
     QActionGroup,
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -278,6 +279,26 @@ class AnalyzeStepsView:
         self.profile_combo.setToolTip(PROFILE_TIP)
         layout.addWidget(muted("Instrument profile", page))
         layout.addWidget(self.profile_combo)
+        layout.addWidget(muted("Sample roll ψ", page))
+        roll = QHBoxLayout()
+        self.sample_roll_spin = QDoubleSpinBox(page)
+        self.sample_roll_spin.setRange(-180, 180)
+        self.sample_roll_spin.setDecimals(4)
+        self.sample_roll_spin.setSuffix(" °")
+        self.sample_roll_spin.setSingleStep(0.05)
+        self.sample_roll_spin.setKeyboardTracking(False)
+        self.sample_roll_spin.setToolTip("Positive ψ tilts the surface normal toward lab right.")
+        self.sample_roll_spin.setContextMenuPolicy(Qt.ActionsContextMenu)
+        self.roll_reset_action = QAction("Use profile roll", self.sample_roll_spin)
+        self.sample_roll_spin.addAction(self.roll_reset_action)
+        self.measure_roll_button = QPushButton("Measure from frame", page)
+        roll.addWidget(self.sample_roll_spin)
+        roll.addWidget(self.measure_roll_button)
+        roll.addStretch(1)
+        layout.addLayout(roll)
+        self.roll_estimate_label = QLabel(page)
+        self.roll_estimate_label.setWordWrap(True)
+        layout.addWidget(self.roll_estimate_label)
         card, self.summary_label = info_card(page)
         self.summary_label.setObjectName("analyzeGeometrySummary")
         card.hide()  # shown with a frame

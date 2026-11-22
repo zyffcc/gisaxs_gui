@@ -38,6 +38,7 @@ from .pipeline_geometry import GeometryStepsMixin
 from .pipeline_phases import PhaseStepsMixin
 from .pipeline_progress import FrameChanged, PipelineStopped, frame_changed, same_file
 from .pipeline_report import calibration_quality, compact_report
+from .pipeline_roll import choose_sample_roll
 from .pipeline_rows import peak_rows as _peak_rows
 from .pipeline_rows import peak_search as _peak_search
 from .pipeline_rows import ring_row as _ring_row
@@ -160,6 +161,8 @@ class PipelineOptions:
     replace those of Analyze's Phases window, whose phases are used otherwise."""
     orientation_min_exit_deg: Optional[float] = None
     """Override the minimum pixel exit angle for GIWAXS orientation. None keeps the Analyze setting."""
+    sample_roll_deg: Optional[float] = None
+    """An explicit rotation about the incident beam. None allows measurement on this frame."""
 
 
 @dataclass
@@ -352,6 +355,8 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
             self._transmission_frame = rings
             self._decide(TRANSMISSION_ITEM, TRANSMISSION_DECISION.format(rings=rings), TRANSMISSION_WHY.format(rings=rings))
             self._attention(TRANSMISSION_ITEM, TRANSMISSION_ATTENTION.format(rings=rings), "technique", TRANSMISSION_HINT)
+        else:
+            choose_sample_roll(self)
         self._analyse_gisaxs() if technique == "gisaxs" else self._analyse()
         self._run.ok = True
         return self._report()
@@ -504,6 +509,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
             "measurement": status.get("measurement"),
             "frames": {"total": status.get("frames"), "first": status.get("frame"), "summed": status.get("summed_frames")},
             "geometry": {"source": run.geometry_source, **geometry},
+            "sample_roll_measurement": status.get("sample_roll_measurement"),
             "calibration_quality": calibration_quality(run.calibration),
             "peaks": _peak_rows(results),
             "peak_search": _peak_search(results),

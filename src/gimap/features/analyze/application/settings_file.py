@@ -18,6 +18,7 @@ from dataclasses import fields as _fields
 from typing import Any, Mapping, Optional
 
 from src.gimap.shared.geometry import InstrumentProfile
+from src.gimap.shared.geometry.sample_roll_record import measurement_record
 from src.gimap.shared.version import SOFTWARE as RELEASE
 
 from ..domain import (
@@ -61,6 +62,9 @@ class AnalyzeSettings:
     """One cut for every frame of a series (``False``: the cut is found again in every frame); ``None``: not said
     (a file written before the pin existed) — loading it leaves the pin in force as it is."""
 
+    sample_roll_deg: Optional[float] = None
+    sample_roll_measurement: Optional[dict] = field(default=None, hash=False)
+
 
 def _pair(value) -> Optional[tuple[float, float]]:
     if value is None:
@@ -92,6 +96,8 @@ def settings_record(settings: AnalyzeSettings) -> dict[str, Any]:
         "profile_name": settings.profile_name,
         "profile": settings.profile.to_dict() if settings.profile is not None else None,
         "incidence_deg": settings.incidence_deg,
+        "sample_roll_deg": settings.sample_roll_deg,
+        "sample_roll_measurement": settings.sample_roll_measurement,
         "beam_center_px": list(settings.beam_center) if settings.beam_center is not None else None,
         "beam_center_shape_px": list(settings.beam_center_shape) if settings.beam_center_shape else None,
         "sum_frames": int(settings.sum_count),
@@ -237,6 +243,8 @@ def settings_from_record(record: Any) -> AnalyzeSettings:
             profile_name=record.get("profile_name") or (profile.name if profile is not None else None),
             profile=profile,
             incidence_deg=_optional_float(record.get("incidence_deg")),
+            sample_roll_deg=_optional_float(record.get("sample_roll_deg")),
+            sample_roll_measurement=measurement_record(record.get("sample_roll_measurement")),
             beam_center=_pair(record.get("beam_center_px")),
             beam_center_shape=_shape(record.get("beam_center_shape_px")),
             sum_count=max(1, int(record.get("sum_frames", 1))),

@@ -105,7 +105,7 @@ def intensity_factor(
         if polarization is not None:
             block *= polarization_factor(along, x, y, float(polarization))
         if film or lorentz:
-            _along, across, sin_exit = exit_directions(x, y, along, geometry.incidence_rad)
+            _along, across, sin_exit = exit_directions(x, y, along, geometry.incidence_rad, sample_roll_rad=geometry.sample_roll_rad)
         if film:
             relative = _film(sin_exit, sin_in, ratio) / reference
             block *= np.where(sin_exit > 0, relative, np.nan)

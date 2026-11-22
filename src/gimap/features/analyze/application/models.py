@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
 
@@ -60,6 +60,20 @@ class AnalysisRequest:
     held for every frame of a series run); the reduction's record then says so (``held_cut``). ``None``: its own."""
     with_record: bool = True
     """A display-only Series map discards each reduced frame, so it needs no export record or file digests."""
+
+    sample_roll_deg: Optional[float] = None
+    """Sample roll override. None takes the value in the resolved geometry."""
+    sample_roll_measurement: Optional[dict] = field(default=None, hash=False)
+
+    def with_scoped_roll(self) -> AnalysisRequest:
+        """An automatic result belongs only to the frame (or sum) on which it was measured."""
+        measured = self.sample_roll_measurement or {}
+        if measured.get("origin") == "automatic":
+            members = [[str(path), index] for path, index in self.summed_frames]
+            if (measured.get("path"), measured.get("frame_index"), measured.get("summed_frames", [])) != (
+                    str(self.path), self.frame_index, members):
+                return replace(self, sample_roll_deg=None, sample_roll_measurement=None)
+        return self
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -156,6 +170,12 @@ class FrameAnalysis:
     """Paths and digests of the inputs to the pixel corrections."""
     geometry_files: dict = field(default_factory=dict)
     """Calibration file read for this frame, when its geometry came from a sibling .poni."""
+
+    @property
+    def sample_roll_measurement(self) -> Optional[dict]:
+        if self.request and (self.request.sample_roll_deg is not None or self.request.sample_roll_measurement):
+            return self.request.sample_roll_measurement
+        return self.resolution.profile.sample_roll_measurement if self.resolution.profile else None
 
     @property
     def calibrated_curve_unit(self) -> Optional[str]:

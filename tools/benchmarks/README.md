@@ -323,7 +323,42 @@ Seeds 41027–41058 give the following results. Width and population-fraction co
 
 Every selected model included the true axis. One single-component PbI₂ draw passed the determination checks with a spurious second (001) population of about 0.9%. The other four single-component draws with an extra population failed the determination checks. Interval coverage reflects counting noise, the estimated bin weights and the model selection step.
 
-### Public P08 film
+### Public grazing-incidence frames and sample roll
+
+Run `python tools/benchmarks/sample_roll.py` for the frame estimates and the P08 signed-ring check. Each frame uses its published αi, the adjacent PONI and Analyze’s default bad-pixel rejection. Xeuss also uses its published mask. Positive ψ tips the surface normal toward laboratory right. The columns give degrees and estimated standard errors.
+
+| Frame | Horizon or Yoneda band | Ring symmetry or GISAXS rod | Selected ψ | Automatically applied ψ |
+|---|---:|---:|---:|---:|
+| P08 MAPbI₃ | −1.50 ± 1.63 | −1.30 ± 0.25 | −1.30 ± 0.25, combined | −1.30459 |
+| Xeuss PbTe | −0.90 ± 0.78 | Unresolved | −0.90 ± 0.78, horizon | 0 |
+| GALAXI GISAXS | 0.00 ± 0.23 | Unresolved | 0.00 ± 0.23, band | 0 |
+
+The P08 normal leans left. The horizon uncertainty reflects variation across detector strips. The ring carries most of the weight in the combined estimate. The Xeuss beam is only 7 px from the left edge, and the GALAXI frame gives no independently resolved specular-rod slope. Only P08 passes the three-standard-error rule.
+
+### P08 crystal orientation before and after roll
+
+Run `python tools/benchmarks/crystal_orientation.py --part public --public-roll-deg 0 --json zero.json`, then omit `--public-roll-deg 0` for the frame measurement. Both runs use αi = 0.075° and the same two CIFs. Each ring has its own intensity scale. The central columns give χ²red for the original exit-angle cut and the CIF-based exit-transmission fit. The last column compares the two raw arms, using RMS of the difference between mean pixel intensities in matching 2° |χ| bins. Each bin must have at least 12 pixels on each arm in both runs.
+
+| Phase and q (Å⁻¹) | Original cut, ψ = 0 → measured | Exit transmission, ψ = 0 → measured | Paired bins | ±χ RMS, ψ = 0 → measured |
+|---|---:|---:|---:|---:|
+| **MAPbI₃ joint** | **8.20 → 9.71** | **33.07 → 22.45** | | |
+| 0.9972 | 16.86 → 19.61 | 40.15 → 37.73 | 44 | 47.43 → 15.96 |
+| 1.4091 | 2.88 → 3.06 | 13.26 → 14.51 | 28 | 3.09 → 4.57 |
+| 1.7247 | 8.31 → 7.84 | 14.53 → 13.49 | 20 | 2.17 → 2.69 |
+| 1.9902 | 11.24 → 8.27 | 59.36 → 63.39 | 16 | 14.83 → 13.25 |
+| 2.2255 | 11.11 → 20.87 | 123.25 → 26.69 | 13 | 4.12 → 3.58 |
+| 2.4382 | 2.62 → 2.54 | 8.94 → 8.15 | 12 | 1.06 → 1.59 |
+| 2.8148 | 8.93 → 10.73 | 20.88 → 22.11 | 9 | 2.34 → 3.43 |
+| 2.9854 | 7.56 → 10.60 | 8.44 → 10.73 | 8 | 1.62 → 2.40 |
+| 3.4480 | 4.85 → 4.00 | 5.69 → 4.86 | 6 | 0.91 → 0.65 |
+| 4.1040 | 2.82 → 3.21 | 2.95 → 3.51 | 0 | — |
+| **PbI₂ 0.8989** | **1.43 → 1.32** | **2.76 → 2.08** | 44 | 3.38 → 2.50 |
+
+At |χ| = 84–86° on the strongest MAPbI₃ ring, the negative and positive arm means change from 82.4 and 10.5 to 26.7 and 33.8 counts/pixel. Over 87 common 1° bins their RMS difference falls from 45.6 to 20.2. This improvement is largest on the ring with both ends visible. Some outer rings have higher bilateral residuals after correction, and the outermost has no bin with enough pixels on both sides.
+
+With exit transmission the best MAPbI₃ candidate remains (212) + (001). Their FWHM values change from 30.0° and 58.5° to 33.3 ± 3.4° and 53.6 ± 2.9°, with fitted fractions 0.64 ± 0.42 and 0.36 ± 0.21. The fit admits 742 bins after roll, up from 738. Its residuals still exceed the determination threshold, so the data do not establish these populations. On the original cut both runs prefer two (001) components. PbI₂ retains two basal (001) components on its single ring. With exit transmission their widths change from 16.6° and 65.4° to 16.4 ± 1.7° and 66.9 ± 6.9°, with fitted fractions of 8.9% and 91.1%.
+
+### P08 film at fixed ψ = 0 (reference)
 
 The benchmark uses the dark-subtracted frame, its PONI (λ = 0.688801 Å) and αi = 0.075° from the public example. The peak search assigns ten rings to tetragonal MAPbI₃ and one to PbI₂. The profiles use pixel-scatter errors, a locally fitted radial background constant in χ, polarization 0.99 and the original q windows. The MAPbI₃ CIF supplies four CH₆NPbI₃ units per cell for the index, and refined Pb and I sites for diffraction. These give ρₑ = 1.0423 e Å⁻³, δ = 2.18265 × 10⁻⁶, β = 1.26942 × 10⁻⁷ and αc = 0.1197°. The PbI₂ fixture now uses the symmetry of its declared space group P −3 m 1, which gives one Pb and two I atoms per cell. [Public dataset and notebook](https://zenodo.org/records/17466183)
 

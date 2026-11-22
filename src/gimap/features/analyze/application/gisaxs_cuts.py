@@ -85,7 +85,7 @@ def axis_to_unit(geometry: DetectorGeometry, unit: str, axis: str, values) -> np
         if unit == UNIT_ANGLE:
             return alpha_f_of_qz(geometry, values)
         rows = positions_of_q(geometry, np.zeros_like(values), values)[1]
-        return _solve(lambda y: _column_qz(geometry, y), rows, values, geometry.requires_projection)
+        return _solve(lambda y: _column_qz(geometry, y), rows, values, geometry.grazing_requires_projection)
     flat = _vacuum(geometry)
     if unit == UNIT_ANGLE:
         return two_theta_f_of_qy(flat, values)
@@ -178,7 +178,7 @@ def q_extent(analysis) -> Optional[tuple[tuple[float, float], tuple[float, float
         return tuple(rsm.q_parallel_range), tuple(rsm.qz_range)
     rows, columns = analysis.shape
     x_values = np.linspace(0.0, columns, 41)
-    if geometry.requires_projection:
+    if geometry.grazing_requires_projection:
         x, y = np.meshgrid(x_values, np.linspace(0.0, rows, 41))
         # Include the horizon itself in addition to the coarse interior grid.
         horizon = np.broadcast_to(geometry.horizon_row(x_values), x_values.shape)

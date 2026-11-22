@@ -139,8 +139,8 @@ def test_single_basal_pole_resolves_two_widths_of_the_same_plane():
 
 @pytest.mark.skipif(not (EXTERNAL / "giwaxs_p08_mapi" / "S121_MAI_A2_00841.tif").exists(),
                     reason="The public P08 frame is unavailable.")
-def test_public_p08_automatic_crystal_orientation():
-    report = public_frame()
+def test_public_p08_automatic_crystal_orientation_zero_roll():
+    report = public_frame(sample_roll_deg=0.0)
     mapi, lead = report["crystal_orientation"]
     assert mapi["phase"] == "MAPbI3 (tetragonal)" and lead["phase"] == "PbI2"
     assert not mapi["determined"] and "joint or ring reduced χ² exceeds 5" in mapi["reasons"]
@@ -187,7 +187,7 @@ def test_transmitted_sharp_and_broad_populations_recover_their_own_widths_and_fr
 @pytest.mark.skipif(not (EXTERNAL / "giwaxs_p08_mapi" / "S121_MAI_A2_00841.tif").exists(),
                     reason="The public P08 frame is unavailable.")
 def test_public_p08_without_phases_keeps_the_existing_single_ring_results():
-    report = public_frame(with_phases=False)
+    report = public_frame(with_phases=False, sample_roll_deg=0.0)
     assert "crystal_orientation" not in report
     strong = report["rings"][0]
     assert strong["herman"] == pytest.approx(0.14187, abs=2e-4)
@@ -195,3 +195,18 @@ def test_public_p08_without_phases_keeps_the_existing_single_ring_results():
     assert pole["model"] == "gaussian"
     assert pole["reduced_chi2"] == pytest.approx(31.1577, abs=0.06)
     assert "reduced χ² exceeds 5" in pole["quality_reasons"]
+
+
+@pytest.mark.skipif(not (EXTERNAL / "giwaxs_p08_mapi" / "S121_MAI_A2_00841.tif").exists(),
+                    reason="The public P08 frame is unavailable.")
+def test_measured_roll_reaches_public_crystal_orientation():
+    report = public_frame()
+    measurement = report["sample_roll_measurement"]
+    assert measurement["method"] == "combined" and measurement["significant"]
+    assert measurement["origin"] == "automatic"
+    assert report["geometry"]["sample_roll_deg"] == pytest.approx(measurement["deg"])
+    assert measurement["deg"] == pytest.approx(-1.30, abs=.07)
+    mapi, lead = report["crystal_orientation"]
+    assert mapi["reduced_chi2"] == pytest.approx(22.45, abs=.25)
+    assert not mapi["determined"] and lead["axes"] == [[0, 0, 1], [0, 0, 1]]
+    assert lead["reduced_chi2"] == pytest.approx(2.08, abs=.12)

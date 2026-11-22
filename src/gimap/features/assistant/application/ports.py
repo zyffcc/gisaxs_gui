@@ -42,6 +42,10 @@ class AnalysisWorkbench(Protocol):
 
     def set_incidence(self, degrees: Optional[float]) -> dict: ...
 
+    def apply_sample_roll(self, degrees: Optional[float]) -> dict:
+        """Set ψ explicitly, or measure the selected frame and apply a significant estimate."""
+        ...
+
     def set_orientation_min_exit(self, degrees: float) -> dict: ...
 
     def set_critical_angle(self, degrees: Optional[float]) -> dict:

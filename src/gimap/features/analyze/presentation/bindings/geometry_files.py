@@ -76,6 +76,7 @@ class GeometryFilesMixin:
             dialog.set_geometry(geometry, source=SOURCE_PONI, name=name)
             if not poni.wavelength_angstrom:
                 dialog.set_wavelength(None, SOURCE_PONI, name)
+            dialog.roll_measurement = poni.sample_roll_measurement
             dialog._poni_tilt = poni.tilt if poni.tilted else None
             self._set_geometry_editor_status(dialog, "Read {name}: check the values, then Save Profile.", "info",
                                              name=name)
@@ -85,10 +86,12 @@ class GeometryFilesMixin:
                                incidence_deg=analysis.geometry.incidence_deg if analysis.geometry else 0.0)
         try:
             self.view_model.save_profile(profile.name, profile.geometry, source=profile.source,
-                                         dropped_tilt=profile.dropped_tilt)
+                                         dropped_tilt=profile.dropped_tilt, sample_roll_measurement=poni.sample_roll_measurement)
         except (ValueError, OSError) as exc:
             self._status(trf("Could not save the geometry: {error}", error=message_text(str(exc))), "error")
             return False
+        if poni.sample_roll_deg is not None:
+            self.view_model.set_sample_roll(None)  # use the loaded angle, including an explicit zero
         self.view_model.set_profile(profile.name)  # the file chosen wins over a .poni lying beside the frames
         self._refresh_profiles()
         self._remember()
@@ -121,7 +124,9 @@ class GeometryFilesMixin:
         profile = analysis.resolution.profile if analysis is not None else None
         try:
             written = write_poni_file(geometry, path, shape=analysis.shape if analysis else None,
-                                      source=profile.source if profile is not None and dialog is None else "")
+                                      source=profile.source if profile is not None and dialog is None else "",
+                                      sample_roll_measurement=(dialog.roll_measurement if dialog is not None
+                                                               else analysis.sample_roll_measurement))
         except OSError as exc:
             self._status(trf("Could not write the .poni file: {error}", error=str(exc)), "error")
             return None

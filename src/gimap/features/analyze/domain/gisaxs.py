@@ -9,17 +9,17 @@ grazing-incidence model, in Å⁻¹.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
 from src.gimap.shared.geometry import DetectorGeometry
-from src.gimap.shared.geometry.q_inverse import q_per_pixel
+from src.gimap.shared.geometry.q_inverse import positions_of_q, q_of_positions, q_per_pixel, qy_on_horizon
 from src.gimap.shared.geometry.q_mapping import grazing_q_region
 
 from .binning import binned_mean_2d, map_grid_shape, native_profile
 from .curve_errors import PixelErrors, pixel_errors
-from .gisaxs_cuts import NO_PIXELS, column_band_q, cut_curve, cut_key, row_band_q
+from .gisaxs_cuts import NO_PIXELS, GisaxsCut, column_band_q, cut_curve, cut_key, row_band_q
 from .models import GISAXS, Curve, GisaxsCutSettings, ReciprocalSpaceMap, Reduction, YonedaEstimate
 from .vertical_band import LIMITED_CLEARANCE, SPECULAR_EXCLUSION_PX, default_vertical_column
 
@@ -50,7 +50,7 @@ def gisaxs_maps(shape: tuple[int, int], geometry: DetectorGeometry) -> GisaxsMap
     rows, columns = int(shape[0]), int(shape[1])
     qy = np.empty((rows, columns), dtype=np.float32)
     qz = np.empty_like(qy)
-    above = np.empty((rows, columns), dtype=bool) if geometry.refraction or geometry.requires_projection else None
+    above = np.empty((rows, columns), dtype=bool) if geometry.refraction or geometry.grazing_requires_projection else None
     for start in range(0, rows, MAP_BLOCK_ROWS):
         stop = min(rows, start + MAP_BLOCK_ROWS)
         block = grazing_q_region(geometry, (start, stop), (0, columns))
@@ -89,7 +89,7 @@ def _row_bounds(center: float, half: float, rows: int) -> tuple[int, int]:
 
 def exit_angle_deg_at_row(geometry: DetectorGeometry, row: float) -> float:
     """Exit angle on the beam-centre column at a continuous row coordinate."""
-    if geometry.requires_projection:
+    if geometry.grazing_requires_projection:
         return math.degrees(geometry.exit_angle_at(geometry.beam_center_x_px, float(row)))
     height_m = (geometry.beam_center_y_px - float(row)) * geometry.pixel_size_y_m
     return math.degrees(math.atan2(height_m, geometry.distance_m)) - geometry.incidence_deg
@@ -148,8 +148,20 @@ def locate_yoneda(
     stop = min(rows, int(math.ceil(max(top, bottom))))
     if stop - start < 3:
         return None
-    window = image[start:stop][:, band_columns].astype(np.float64)
-    window_valid = valid[start:stop][:, band_columns]
+    if geometry.sample_roll_deg:
+        # At each search height, follow a constant exit angle across both side bands.
+        # Only the locator samples a grid; the resulting cut averages original measured pixels.
+        vacuum = geometry.with_critical_angle(0.0)
+        _, qz = q_of_positions(vacuum, geometry.beam_center_x_px, np.arange(start, stop) + 0.5)
+        qy = qy_on_horizon(vacuum, band_columns + 0.5)
+        x, y = positions_of_q(vacuum, qy[None, :], qz[:, None])
+        inside = (x >= 0) & (x < columns) & (y >= 0) & (y < rows)
+        i = np.where(inside, y, 0.0).astype(int)
+        j = np.where(inside, x, 0.0).astype(int)
+        window, window_valid = image[i, j], inside & valid[i, j]
+    else:
+        window = image[start:stop][:, band_columns].astype(np.float64)
+        window_valid = valid[start:stop][:, band_columns]
     window = np.where(window_valid, window, np.nan)
     # Median only over rows with data: no all-NaN warnings, which matters because
     # reductions run on worker threads where catch_warnings() is not thread safe.
@@ -177,6 +189,7 @@ def horizontal_cut(
     center_row: float,
     half_height_px: float,
     counts: bool | np.ndarray | PixelErrors = True,
+    maps: GisaxsMaps | None = None,
 ) -> Curve:
     """I(qy) over a band of rows: one point per detector column (native sampling). ``counts``: as
     ``reduce_gisaxs``."""
@@ -185,6 +198,9 @@ def horizontal_cut(
     region = {"rows": (start, stop), "columns": (0, columns), "center_row": float(center_row)}
     if stop <= start:
         return _empty_curve("horizontal", "Horizontal cut I(qy)", "qy (Å⁻¹)", region)
+    if geometry.sample_roll_deg:
+        edges = row_band_q(geometry, max(0.0, center_row - half_height_px), min(float(rows), center_row + half_height_px))
+        return _rolled_band("horizontal", image, valid, geometry, maps, counts, region, edges)
     q = grazing_q_region(geometry, (start, stop), (0, columns))
     x, mean, sigma, pixels = native_profile(
         image[start:stop], valid[start:stop], q.qy, axis=0,
@@ -205,6 +221,7 @@ def vertical_cut(
     center_column: float,
     half_width_px: float,
     counts: bool | np.ndarray | PixelErrors = True,
+    maps: GisaxsMaps | None = None,
 ) -> Curve:
     """I(qz) over a band of columns above the sample horizon (with refraction, above the row of α_c): one point
     per detector row."""
@@ -212,7 +229,7 @@ def vertical_cut(
     start = max(0, int(math.floor(center_column - half_width_px)))
     stop = min(columns, int(math.ceil(center_column + half_width_px)))
     first_row, last_row = 0, rows
-    if not geometry.tilted:  # retain the native whole-row boundary after flipping the pixel axes
+    if not geometry.tilted and not geometry.sample_roll_deg:  # native whole-row boundary
         horizon = geometry.row_for_exit_angle(geometry.critical_angle_deg)
         if geometry.orientation in (1, 2):
             first_row = min(rows, max(0, math.ceil(horizon)))
@@ -225,6 +242,10 @@ def vertical_cut(
     }
     if stop <= start or last_row <= first_row:
         return _empty_curve("vertical", "Vertical cut I(qz)", "qz (Å⁻¹)", region)
+    if geometry.sample_roll_deg:
+        edges = column_band_q(geometry, max(0.0, center_column - half_width_px),
+                              min(float(columns), center_column + half_width_px))
+        return _rolled_band("vertical", image, valid, geometry, maps, counts, region, edges)
     band = np.s_[first_row:last_row, start:stop]
     q = grazing_q_region(geometry, (first_row, last_row), (start, stop))
     use = valid[band]
@@ -249,10 +270,26 @@ def _empty_curve(key: str, title: str, x_label: str, region: dict) -> Curve:
     return Curve(key, title, empty, empty, empty, np.array([], dtype=np.int64), x_label, region=region)
 
 
+def _rolled_band(key, image, valid, geometry, maps, counts, region, edges):
+    """Use the pixel anchors to define a constant q_z or q_y band in the sample frame."""
+    axis, coordinate = ("qz", "qy") if key == "horizontal" else ("qy", "qz")
+    limits = edges[axis + "_edges"]
+    title, label = f"{key.capitalize()} cut I({coordinate})", f"{coordinate} (Å⁻¹)"
+    if not np.isfinite(limits).all() or limits[0] >= limits[1]:
+        return _empty_curve(key, title, label, region)
+    maps = maps if maps is not None else gisaxs_maps(image.shape, geometry)
+    cut = GisaxsCut(key, key, **{axis: tuple(limits)})
+    curve = cut_curve(cut, key, maps, image, valid & maps.above_horizon, step=q_per_pixel(geometry),
+                      counts=counts, geometry=geometry)
+    return replace(curve, title=title, region={**region, **curve.region, **edges})
+
+
 def _with_q_edges(curves, geometry: DetectorGeometry) -> tuple[Curve, ...]:
     """The automatic cuts with where their bands lie in q and in exit angle (``row_band_q``, ``column_band_q``), for
     the record of an export: the pixels and the numbers stay as they are."""
     horizontal, vertical = curves
+    if geometry.sample_roll_deg:
+        return curves  # the cut already records its actual sample-frame edges
     rows, columns = horizontal.region["rows"], vertical.region["columns"]
     extra_h = row_band_q(geometry, *rows) if rows[1] > rows[0] else {}
     extra_v = column_band_q(geometry, *columns) if columns[1] > columns[0] else {}
@@ -286,7 +323,7 @@ def reduce_gisaxs(
     warnings_out: list[str] = []
     rows, columns = image.shape
     if geometry.incidence_deg <= 0.0:
-        warnings_out.append("Set αi in the geometry for correct qz." if geometry.requires_projection else
+        warnings_out.append("Set αi in the geometry for correct qz." if geometry.grazing_requires_projection else
             "Incidence angle is 0°: the sample horizon equals the beam centre row. "
             "Set αi in the geometry for correct qz."
         )
@@ -294,7 +331,7 @@ def reduce_gisaxs(
         warnings_out.append("The beam centre column lies outside the frame.")
 
     horizon = geometry.horizon_row()
-    if geometry.requires_projection:
+    if geometry.requires_projection and not geometry.sample_roll_deg:
         a, b, _ = geometry.horizon_plane()
         if abs(a) * columns > abs(b) * 0.5:
             warnings_out.append(ROW_BAND_WARNING)
@@ -321,6 +358,8 @@ def reduce_gisaxs(
             warnings_out.append(LIMITED_CLEARANCE)
     else:
         vertical_column = float(settings.vertical_column)
+    if geometry.sample_roll_deg and maps is None:
+        maps = gisaxs_maps(image.shape, geometry)
     curves = (
         horizontal_cut(
             image,
@@ -329,6 +368,7 @@ def reduce_gisaxs(
             center_row=horizontal_row,
             half_height_px=settings.horizontal_half_height_px,
             counts=counts,
+            maps=maps,
         ),
         vertical_cut(
             image,
@@ -337,6 +377,7 @@ def reduce_gisaxs(
             center_column=vertical_column,
             half_width_px=settings.vertical_half_width_px,
             counts=counts,
+            maps=maps,
         ),
     )
     curves = _with_q_edges(curves, geometry)

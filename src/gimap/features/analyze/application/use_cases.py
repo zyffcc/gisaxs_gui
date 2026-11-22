@@ -25,10 +25,8 @@ from ..domain import (
     Corrections,
     GiwaxsMaps,
     Reduction,
-    SymmetryCenter,
     cake_map,
     curve_source_mask,
-    symmetric_center_x,
     giwaxs_maps,
     gisaxs_maps,
     gisaxs_q_map,
@@ -59,6 +57,7 @@ from .reduction_errors import reduction_errors
 from .geometry_resolution import ResolveGeometry, center_not_used_message, header_beam_center, refused_profile_message
 from .nxcansas_export import nxcansas_name, sas_curves
 from .technique import TechniqueGuess
+from .symmetry_center import refine_center_by_symmetry
 from .ports import CurveWriter, FrameSource, InstrumentProfileStore
 from .reduction_inputs import correction_references, frame_references
 
@@ -174,8 +173,9 @@ class AnalyzeFrame(FramePreprocessingMixin):
         shape = (int(analysis.data.shape[0]), int(analysis.data.shape[1]))
         if reduction.kind != GISAXS:
             maps = self._giwaxs_maps(shape, analysis.geometry, reduction.kind)
-        else:  # (the person's cuts are in q; the two automatic bands are rows and columns)
-            needs_maps = has_person_cuts(reduction) or (analysis.geometry.tilted and "vertical" in keys)
+        else:  # Rolled automatic bands and user-defined cuts both record their q regions.
+            cuts_in_q = any("gisaxs_cut" in curve.region for curve in reduction.curves)
+            needs_maps = cuts_in_q or (analysis.geometry.tilted and "vertical" in keys)
             maps = self._gisaxs_maps_for(shape, analysis.geometry) if needs_maps else None
         masks = {}
         for key in keys:
@@ -193,6 +193,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
         self, request: AnalysisRequest, *, loaded: Optional[FrameAnalysis] = None, resolution=None, mask_bitmap=None,
     ) -> FrameAnalysis:
         """Reduce the requested frame(s); ``loaded`` is reused when it holds the same frames."""
+        request = request.with_scoped_roll()
         if (
             loaded is not None
             and Path(loaded.path) == Path(request.path)
@@ -219,7 +220,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
             detector_name=common["detector_name"],
             shape=shape,
             profile_name=request.profile_name,
-            incidence_deg=request.incidence_deg,
+            incidence_deg=request.incidence_deg, sample_roll_deg=request.sample_roll_deg,
             beam_center=request.beam_center,
             use_header_center=request.use_header_center,
             header_center=header_beam_center(common["metadata"], shape),
@@ -292,7 +293,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
             reduction = reduce_gisaxs(
                 data, valid, geometry, request.gisaxs, counts=errors,
                 q_map=self._gisaxs_q_map(data, valid, geometry) if request.with_map else None,
-                maps=self._gisaxs_maps_for(shape, geometry) if request.gisaxs.regions else None,
+                maps=self._gisaxs_maps_for(shape, geometry) if request.gisaxs.regions or geometry.sample_roll_deg else None,
             )
         else:
             orientation = None
@@ -324,11 +325,6 @@ class AnalyzeFrame(FramePreprocessingMixin):
             detected_kind=detected,
             flat_detector=flat,
         )
-
-
-def has_person_cuts(reduction: Reduction) -> bool:
-    """Whether a GISAXS reduction holds a cut the person defined (whose pixels need the q maps)."""
-    return any("gisaxs_cut" in curve.region for curve in reduction.curves)
 
 
 def _band(values) -> Optional[tuple[float, float]]:
@@ -368,20 +364,6 @@ def held_cut(reduction: Reduction, series_cut: Optional[Mapping[str, Any]]) -> R
     frame = series_cut.get("frame")
     markers["series_cut"] = {"frame": (str(frame[0]), int(frame[1])) if frame else None, **held}
     return replace(reduction, markers=markers)
-
-
-def refine_center_by_symmetry(analysis: FrameAnalysis, *, cancelled=None) -> SymmetryCenter:
-    """Beam-centre x of a GISAXS frame from the left–right symmetry of its horizontal cut band."""
-    reduction = analysis.reduction
-    if analysis.kind != GISAXS or reduction is None or analysis.geometry is None:
-        raise ValueError("Symmetry refinement needs a GISAXS frame with a geometry.")
-    curve = reduction.curve("horizontal")
-    if curve is None:
-        raise ValueError("This frame has no horizontal cut.")
-    rows = tuple(int(value) for value in curve.region.get("rows", (0, 0)))
-    return symmetric_center_x(
-        analysis.data, analysis.valid, rows, analysis.geometry.beam_center_x_px, cancelled=cancelled
-    )
 
 
 class ExportAnalysis:
@@ -506,6 +488,7 @@ class SaveInstrumentProfile:
         source: str,
         dropped_tilt: Optional[DetectorTilt] = None,
         detector_response: Optional[DetectorResponse] = None,
+        sample_roll_measurement: Optional[dict] = None,
     ) -> InstrumentProfile:
         """``dropped_tilt``: the tilt of the ``.poni`` the geometry comes from, which the flat geometry leaves out."""
         if self.profiles is None:
@@ -522,6 +505,8 @@ class SaveInstrumentProfile:
                 source=source,
                 dropped_tilt=dropped_tilt,
             )
+        if sample_roll_measurement is not None:
+            profile = replace(profile, sample_roll_measurement=sample_roll_measurement)
         if detector_response is not None:
             profile = replace(profile, detector_response=detector_response)
         self.profiles.save(profile)

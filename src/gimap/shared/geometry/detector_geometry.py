@@ -22,6 +22,18 @@ def _finite(name: str, value: float) -> float:
     return number
 
 
+def roll_transverse(right, up, roll_rad: float):
+    """Lab (right, up) in the rolled sample's transverse axes. Invert by passing −ψ.
+
+    Positive ψ leans the surface normal toward lab right, as in the Sputter client.
+    The zero branch preserves the original floating-point operations.
+    """
+    if roll_rad == 0.0:
+        return right, up
+    cosine, sine = math.cos(roll_rad), math.sin(roll_rad)
+    return cosine * right - sine * up, sine * right + cosine * up
+
+
 @dataclass(frozen=True)
 class DetectorGeometry:
     """A flat detector, perpendicular to the direct beam or tilted, plus the grazing angle.
@@ -49,6 +61,8 @@ class DetectorGeometry:
     * Lengths are metres, the wavelength is in Å, so q comes out in Å⁻¹.
     * ``orientation`` is pyFAI's detector orientation. Relative to native orientation 3,
       1 reverses rows and columns, 2 reverses rows and 4 reverses columns before rotation.
+    * ``sample_roll_deg`` tilts the surface normal about the incident beam toward lab right
+      for positive angles. In lab (beam, right, up), n = (−sin αi, cos αi sin ψ, cos αi cos ψ).
     """
 
     pixel_size_x_m: float
@@ -63,6 +77,7 @@ class DetectorGeometry:
     rot3_rad: float = 0.0
     critical_angle_deg: float = 0.0
     orientation: int = 3
+    sample_roll_deg: float = 0.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "orientation", orientation_number(self.orientation))
@@ -78,6 +93,7 @@ class DetectorGeometry:
         if not -90.0 < incidence < 90.0:
             raise ValueError(f"incidence_deg must be within (-90, 90), got {incidence!r}.")
         object.__setattr__(self, "incidence_deg", incidence)
+        object.__setattr__(self, "sample_roll_deg", _finite("sample_roll_deg", self.sample_roll_deg))
         for name in ("rot1_rad", "rot2_rad", "rot3_rad"):
             angle = _finite(name, getattr(self, name))
             if name != "rot3_rad" and not abs(angle) < math.pi / 2:
@@ -97,6 +113,11 @@ class DetectorGeometry:
     def requires_projection(self) -> bool:
         """Whether the native, unrotated image-to-laboratory axes need transforming."""
         return self.tilted or self.orientation != 3
+
+    @property
+    def grazing_requires_projection(self) -> bool:
+        """Whether the detector coordinates differ from an upright native grazing geometry."""
+        return self.requires_projection or self.sample_roll_deg != 0.0
 
     @property
     def tilt_deg(self) -> float:
@@ -128,6 +149,18 @@ class DetectorGeometry:
     @property
     def incidence_rad(self) -> float:
         return math.radians(self.incidence_deg)
+
+    @property
+    def sample_roll_rad(self) -> float:
+        return math.radians(self.sample_roll_deg)
+
+    def with_sample_roll(self, sample_roll_deg: float) -> "DetectorGeometry":
+        return replace(self, sample_roll_deg=sample_roll_deg)
+
+    def rolled_detector_axes(self):
+        """Detector column and upward row axes in (beam, sample transverse, rolled up)."""
+        return tuple((along, *roll_transverse(right, up, self.sample_roll_rad))
+                     for along, right, up in self.in_plane_axes())
 
     def with_beam_center(self, x_px: float, y_px: float) -> "DetectorGeometry":
         return replace(self, beam_center_x_px=float(x_px), beam_center_y_px=float(y_px))
@@ -171,7 +204,7 @@ class DetectorGeometry:
         if not -math.pi / 2 < angle < math.pi / 2:
             raise ValueError("The requested exit angle does not reach the detector.")
         height_m = self.distance_m * math.tan(angle)
-        if not self.tilted:
+        if not self.tilted and not self.sample_roll_deg:
             sign = 1 if self.orientation in (1, 2) else -1
             return self.beam_center_y_px + sign * (height_m / self.pixel_size_y_m)
         # At the beam column the ray is D*(e_beam + t*row_up). Solve n·r = |r| sin α_f;
@@ -181,7 +214,7 @@ class DetectorGeometry:
             row = self.horizon_row()
             if math.isfinite(row):
                 return row
-        _col, (ax, _, up) = self.in_plane_axes()
+        _col, (ax, _, up) = self.rolled_detector_axes()
         si, ci = math.sin(self.incidence_rad), math.cos(self.incidence_rad)
         b = up * ci - ax * si
         s2 = math.sin(target) ** 2
@@ -208,19 +241,20 @@ class DetectorGeometry:
         along, up = self.distance_m + x * ax + y * ay, x * ux + y * uy
         right = x * rx + y * ry
         radius = math.sqrt(along * along + right * right + up * up)
+        _, up = roll_transverse(right, up, self.sample_roll_rad)
         normal = (up * math.cos(self.incidence_rad) - along * math.sin(self.incidence_rad)) / radius
         return math.asin(max(-1.0, min(1.0, normal)))
 
     def horizon_plane(self) -> tuple[float, float, float]:
         """The horizon in pixels relative to the direct beam: A·dx + B·dy = C (the sample normal dotted with the ray)."""
-        (ax, _, ux), (ay, _, uy) = self.in_plane_axes()
+        (ax, _, ux), (ay, _, uy) = self.rolled_detector_axes()
         si, ci = math.sin(self.incidence_rad), math.cos(self.incidence_rad)
         return ((ux * ci - ax * si) * self.pixel_size_x_m,
                 (ay * si - uy * ci) * self.pixel_size_y_m, self.distance_m * si)
 
     def horizon_line(self) -> tuple[tuple[float, float], float] | None:
         """A point on α_f = 0 and the angle of its detector trace in (column, row) coordinates."""
-        if not self.requires_projection:
+        if not self.grazing_requires_projection:
             return (self.beam_center_x_px, self.horizon_row()), 0.0
         a, b, c = self.horizon_plane()
         norm2 = a * a + b * b
@@ -231,7 +265,7 @@ class DetectorGeometry:
 
     def horizon_row(self, x_px: float | None = None) -> float:
         """Row of α_f = 0 at this column (default: direct beam); NaN for a vertical horizon."""
-        if not self.tilted:
+        if not self.tilted and not self.sample_roll_deg:
             return self.row_for_exit_angle(0.0)
         a, b, c = self.horizon_plane()
         if abs(b) <= 1e-14 * self.pixel_size_y_m:
@@ -241,10 +275,11 @@ class DetectorGeometry:
 
     def specular_row(self) -> float:
         """Row of the specularly reflected beam (alpha_f = alpha_i)."""
-        if not self.requires_projection:
+        if not self.grazing_requires_projection:
             return self.row_for_exit_angle(self.incidence_deg)
         from .q_inverse import positions_of_rays
         import numpy as np
 
-        ray = np.array([math.cos(2 * self.incidence_rad), 0, math.sin(2 * self.incidence_rad)])
+        across, up = roll_transverse(0.0, math.sin(2 * self.incidence_rad), -self.sample_roll_rad)
+        ray = np.array([math.cos(2 * self.incidence_rad), across, up])
         return float(positions_of_rays(self, ray)[1])

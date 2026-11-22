@@ -401,6 +401,7 @@ class BatchModelMixin:
             profile_name=name,
             profile=profile,
             incidence_deg=state.incidence_deg,
+            sample_roll_deg=state.sample_roll_deg, sample_roll_measurement=state.sample_roll_measurement,
             beam_center=state.beam_center,
             beam_center_shape=self.session_center_shape() if hasattr(self, "session_center_shape") else None,
             sum_count=self.sum_count,
@@ -438,6 +439,7 @@ class BatchModelMixin:
         self.state.mode = settings.mode
         self.state.profile_name = name
         self.state.incidence_deg = settings.incidence_deg
+        self.set_sample_roll(settings.sample_roll_deg, settings.sample_roll_measurement)
         if settings.beam_center is None:
             self.clear_beam_center()
         else:

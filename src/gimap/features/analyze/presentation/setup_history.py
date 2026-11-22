@@ -30,6 +30,8 @@ class Setup:
     giwaxs: Any
     gisaxs: Any
     sum_count: int
+    sample_roll_deg: Optional[float] = None
+    sample_roll_measurement: Optional[dict] = None
 
 
 def snapshot(view_model) -> Setup:
@@ -38,6 +40,7 @@ def snapshot(view_model) -> Setup:
         mode=state.mode, profile_name=state.profile_name, incidence_deg=state.incidence_deg,
         beam_center=state.beam_center, corrections=state.corrections, giwaxs=state.giwaxs, gisaxs=state.gisaxs,
         sum_count=int(view_model.sum_count),
+        sample_roll_deg=state.sample_roll_deg, sample_roll_measurement=state.sample_roll_measurement,
     )
 
 
@@ -46,6 +49,7 @@ def restore(view_model, setup: Setup) -> None:
     state.mode = setup.mode
     state.profile_name = setup.profile_name
     state.incidence_deg = setup.incidence_deg
+    view_model.set_sample_roll(setup.sample_roll_deg, setup.sample_roll_measurement)
     state.beam_center = setup.beam_center
     state.corrections = setup.corrections
     state.giwaxs = setup.giwaxs
@@ -97,6 +101,8 @@ def describe(before: Setup, after: Setup) -> str:
         names.append("instrument profile")
     if before.incidence_deg != after.incidence_deg:
         names.append("αi")
+    if before.sample_roll_deg != after.sample_roll_deg or before.sample_roll_measurement != after.sample_roll_measurement:
+        names.append("Sample roll ψ")
     if before.beam_center != after.beam_center:
         names.append("beam centre")
     if before.sum_count != after.sum_count:

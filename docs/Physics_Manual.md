@@ -234,7 +234,7 @@ Every q value in Analyze comes from one geometry object and one pixel convention
 
 ### 1.1 The detector model
 
-GIMaP describes a measurement with seven numbers, and three more for a tilted detector. The detector is flat; without rotations it is perpendicular to the direct beam (a `.poni` tilt, section 3.7). The sample surface is tilted by the grazing angle α_i.
+GIMaP describes the beam, flat detector and sample by the quantities below. Three additional rotations set the detector orientation relative to the beam (section 3.7).
 
 | Symbol | Stored field | Unit | Meaning |
 |---|---|---|---|
@@ -243,6 +243,7 @@ GIMaP describes a measurement with seven numbers, and three more for a tilted de
 | `x_c`, `y_c` | `beam_center_x_px`, `beam_center_y_px` | px | position of the direct (transmitted) beam, in the canonical coordinates of section 1.2 |
 | `λ` | `wavelength_angstrom` | Å | X-ray wavelength |
 | `α_i` | `incidence_deg` | ° | grazing angle between the beam and the sample surface; 0 means transmission |
+| `ψ` | `sample_roll_deg` | ° | sample roll about the beam, positive toward lab right from lab up, default 0 |
 
 The pixel sizes, `L` and `λ` must be positive and finite. The beam centre must be finite; it may lie outside the frame. The grazing angle must satisfy `−90° < α_i < 90°`. When a wavelength is derived from a photon energy, GIMaP uses
 
@@ -344,11 +345,18 @@ Implementation: `src/gimap/shared/geometry/legacy_conventions.py`
 The q map of Analyze rests on these assumptions:
 
 1. The detector is flat. `L` is the distance from the sample to the direct beam on the detector, measured along the beam. The detector may be tilted: the rotations rot_1, rot_2, rot_3 of a `.poni` are part of the geometry (section 3.7). The formulas of this section are written for the untilted detector, perpendicular to the direct beam (all three rotations 0); for a tilted one the ray `(L, X, Y)` of a pixel is replaced by the vector (3.15), and everything after it is unchanged.
-2. The sample is tilted by α_i about the horizontal axis perpendicular to the beam (the detector's X axis). The plane of incidence is vertical. It contains the beam and the detector column through the direct beam.
+2. The incident beam makes a grazing angle α_i with the surface. The sample roll ψ sets the direction of the surface normal about the beam. Both angles are specified independently of the detector rotations.
 3. The scattering is elastic and comes from a point at the origin. There is no refraction (the vacuum, kinematic q).
 4. Each pixel is represented by its centre.
 
-Two frames are used. In the laboratory frame, `x_L` points along the beam, `y_L` along the detector X axis and `z_L` along the detector Y axis. In the sample frame, `x_s` is the projection of the beam onto the surface, `y_s` lies in the surface perpendicular to `x_s`, and `z_s` is the surface normal. The sample frame is the laboratory frame rotated by α_i about `y_L`:
+In the laboratory frame, the axes point along the incident beam, to the right and up. Apply the PONI detector rotations and orientation first to obtain the pixel ray `t = (L, X, Y)` in those axes. A positive ψ tips the sample normal toward lab right, the convention of Sputter’s `sample_roll_deg`. Express the transverse ray in axes aligned with the rolled sample:
+
+```text
+X′ = X cos ψ − Y sin ψ,        Y′ = X sin ψ + Y cos ψ
+n  = (−sin α_i, cos α_i sin ψ, cos α_i cos ψ)
+```
+
+Use `X′, Y′` in place of `X, Y` in (2.1)–(2.9). The incident ray lies on the roll axis. The norm of the ray and the vacuum |q| are invariant. χ, signed q∥, q_z and the exit angle use the rolled components. The inverse projection uses the opposite rotation to place reflections on the detector. The beam polarization stays in the laboratory frame. At ψ = 0 the laboratory-to-sample conversion is
 
 ```text
 x_s = x_L cos α_i + z_L sin α_i,    y_s = y_L,    z_s = z_L cos α_i − x_L sin α_i     (2.1)
@@ -379,7 +387,7 @@ tan 2θ_f = X / (L cos α_i + Y sin α_i)                                (2.9)
 
 The code computes the three components of (2.3) directly; it never forms 2θ_f.
 
-Signs: `q_y > 0` to the right of the direct beam on the image, `q_z > 0` above the horizon. At the direct beam `q = 0` and `α_f = −α_i`. The tests pin three points: the direct beam gives `q = (0, 0, 0)`; the horizon (`X = 0`, `Y = L tan α_i`) gives `q = k (1 − cos α_i, 0, sin α_i)`; the specular beam (`X = 0`, `Y = L tan 2α_i`) gives `q = (0, 0, 2k sin α_i)`. For every pixel `|k_f| = k` to 10⁻¹³ Å⁻¹. With `α_i = 0` the map reduces to transmission rings.
+Signs at ψ = 0 for a perpendicular detector in orientation 3: `q_y > 0` to the right of the direct beam on the image, `q_z > 0` above the horizon. At the direct beam `q = 0` and `α_f = −α_i`. The tests pin three points: the direct beam gives `q = (0, 0, 0)`; the horizon (`X = 0`, `Y = L tan α_i`) gives `q = k (1 − cos α_i, 0, sin α_i)`; the specular beam (`X = 0`, `Y = L tan 2α_i`) gives `q = (0, 0, 2k sin α_i)`. For every pixel `|k_f| = k` to 10⁻¹³ Å⁻¹. With `α_i = 0` the map reduces to transmission rings.
 
 This exact flat-detector model is the only q mapping that Analyze uses. Its derivation is standard (Renaud et al., 2009; Hexemer & Müller-Buschbaum, 2015).
 
@@ -395,16 +403,16 @@ q_∥ = sign(q_y) · √(q_x² + q_y²)                                       (2
 ```
 
 - **q_∥** (labelled q∥ or qr) is the full in-plane magnitude, including `q_x`, with the sign of `q_y`. The sign is applied with `copysign`, so a pixel with `q_y = +0.0` gets a positive q_∥.
-- **|q| and 2θ do not depend on α_i.** A rotation keeps the angle between `k_i` and `k_f`, so 2θ from (2.12) is the true scattering angle. In the laboratory frame `cos 2θ = k̂_i · k̂_f = L/L_p`. The optional 2θ axis of the GIWAXS I(q) curves converts the q of each point with (2.12); the bins stay uniform in q.
+- **|q| and 2θ are independent of α_i and ψ.** A rotation keeps the angle between `k_i` and `k_f`, so 2θ from (2.12) is the true scattering angle. In the laboratory frame `cos 2θ = k̂_i · k̂_f = L/L_p`. The optional 2θ axis of the GIWAXS I(q) curves converts the q of each point with (2.12); the bins stay uniform in q.
 - **χ** (GIWAXS polar angle): 0° along the surface normal (out of plane), ±90° in the sample plane, with the sign of `q_y`. Above the horizon `q_z > 0`, so χ lies between −90° and +90°. Because `q_∥² + q_z² = |q|²`, a point at (|q|, χ) has `q_∥ = |q| sin χ` and `q_z = |q| cos χ` exactly.
-- **Missing wedge.** On the detector column through the beam (`X = 0`) `q_y = 0` but `q_x ≠ 0`, so χ is not zero there. With the public P08 geometry (section 2.4), the beam column reaches χ ≈ 2.2° at |q| = 0.73 Å⁻¹, 5.7° at 1.83 Å⁻¹ and 9.0° at 2.87 Å⁻¹. Smaller χ at these |q| is not measured by a flat detector (Baker et al., 2010).
+- **Missing wedge.** In the plane of incidence (`X′ = 0`, the beam column for an unrotated detector and ψ = 0) `q_y = 0` but `q_x ≠ 0`, so χ is not zero there. With the public P08 geometry (section 2.4), the beam column reaches χ ≈ 2.2° at |q| = 0.73 Å⁻¹, 5.7° at 1.83 Å⁻¹ and 9.0° at 2.87 Å⁻¹. Smaller χ at these |q| is not measured by a flat detector (Baker et al., 2010).
 - A second azimuth exists in the code for transmission data, `atan2(Y, X)` (0° to the right, 90° up). No part of the program uses it; every χ shown or exported by Analyze is the χ of (2.13).
 
 Implementation: `src/gimap/shared/geometry/q_mapping.py`, `src/gimap/features/analyze/domain/giwaxs.py`
 
 ### 2.3 Horizon, specular and Yoneda rows
 
-On a perpendicular detector in orientation 3, equation (2.8) in the plane of incidence gives the following continuous row coordinates on the beam column.
+At ψ = 0 on a perpendicular detector in orientation 3, equation (2.8) in the plane of incidence gives the following continuous row coordinates on the beam column.
 
 ```text
 row(α_f) = y_c − L tan(α_f + α_i) / p_y                               (2.14)
@@ -414,10 +422,16 @@ row_specular = y_c − L tan 2α_i / p_y         (α_f = α_i)             (2.16
 
 and the exit angle at a row on the beam column is `α_f = atan2((y_c − row) p_y, L) − α_i`, which is (2.8) at `X = 0`.
 
-- **Tilted horizon.** For the full laboratory ray `t = (along, right, up)` of section 3.7, the horizon satisfies `up cos α_i − along sin α_i = 0`. This is a line on any flat detector. It can cross rows or even run along a column. At α_i = 0 it passes through the direct beam.
-- **Above the horizon.** The vacuum exit angle satisfies `sin α_f = (up cos α_i − along sin α_i)/|t|`. Tilted GISAXS vertical cuts select pixels individually at α_f ≥ 0 (α_f ≥ α_c for refracted q_z). For a perpendicular detector in orientation 3 the original whole-row selection in (6.14) is retained. The automatic horizontal cut uses all valid pixels in its chosen rows.
+- **Tilted horizon.** For the full laboratory ray of section 3.7, the horizon satisfies `t · n = 0`. This is a line on any flat detector. At α_i = 0 it passes through the direct beam. For a perpendicular detector in orientation 3 its slope in image coordinates is `d(row)/d(column) = (p_x/p_y) tan ψ`.
+- **Above the horizon.** The vacuum exit angle satisfies `sin α_f = t · n / |t|`. Tilted GISAXS vertical cuts select pixels individually at α_f ≥ 0 (α_f ≥ α_c for refracted q_z). At ψ = 0 on a perpendicular detector in orientation 3, the whole-row selection in (6.14) applies.
 
 Example (GALAXI geometry of section 1.4): `row_horizon` = 638.3 and `row_specular` = 557.0. The Yoneda band of this frame lies at row 607.5, which (2.14) turns into `α_f` = 0.18°.
+
+**Measuring ψ on one frame.** Both measurements use calibrated rays and valid measured pixels. The angle search runs from −8° to +8° in 0.1° increments. Film absorption, fibre Lorentz weighting and mirror filling are omitted when measuring ψ. On the detector, the projected horizon is a straight line. The first estimator scores the intensity drop across that line in strips of columns near the horizon. A free offset lets the observed edge lie above or below the geometric horizon (for example, at a Yoneda band). Deleting contiguous groups of strips measures how much the slope depends on the chosen part of the edge.
+
+At fixed vacuum |q|, rays on opposite sides of the incidence plane have equal |χ|. Write their laboratory azimuths from vertical as β = atan2(X,Y). For each strong ring, the second estimator minimises the mean of `[I(ψ+β) − I(ψ−β)]²` using the same measured pairs of angular bins at every trial ψ. Flat profiles, ambiguous minima and insufficient bilateral coverage do not determine a symmetry axis. The uncertainty includes angular sampling, correlated sector residuals and differences between rings. In GISAXS the second estimator fits the direction of a narrow central specular rod in laboratory coordinates.
+
+If only one estimator resolves an angle, its uncertainty is retained. For two estimates with standard errors s₁ and s₂, agreement requires `|ψ₁ − ψ₂| ≤ 2√(s₁²+s₂²)`. Their mean uses inverse-variance weights. Because both estimates use the same frame, its uncertainty is the larger of the smaller individual error and half their difference. Disagreement is recorded with both estimates. Automatic analysis uses a roll supplied for the run or set in Analyze, including zero. It also keeps a nonzero roll in the resolved geometry. Otherwise it applies the frame estimate when `|ψ| ≥ 3s`. These are frame-based uncertainties conditional on the detector calibration.
 
 Implementation: `src/gimap/shared/geometry/detector_geometry.py`, `src/gimap/features/analyze/domain/gisaxs.py`, `src/gimap/features/analyze/domain/giwaxs.py`
 
@@ -447,7 +461,7 @@ The following effects are not in the q map, nor anywhere else in Analyze:
 
 - **Refraction and the distorted-wave Born approximation (DWBA).** `q_z` is the kinematic vacuum value unless the film's critical angle is given (section 2.6). No reflected-wave terms of the DWBA are computed.
 - **Detector tilt and rotation.** All three detector rotations enter the pixel rays, q, χ, the solid angle and the polarisation factor (section 3.7). Geometry Calibration fits rot1 and rot2 (section 3.8).
-- **Sample azimuth and roll.** The sample is assumed to be tilted only about the horizontal axis perpendicular to the beam. A rotation about the surface normal or about the beam is not described.
+- **Sample azimuth.** The sample axes are fixed by the surface normal and incident beam. A separate crystallographic azimuth about the surface normal requires independent information.
 - **Parallax and sensor thickness.** A pixel is its centre; there is no depth of interaction and no pixel splitting.
 - **Flat field and efficiency.** A flat field (detector response) divides the frames only when one is chosen (section 4.10; off by default). No detector-efficiency, air or window absorption correction is applied.
 - **Absolute intensity.** Section 4.12 describes optional normalisation by exposure time, monitor, transmission and thickness, and calibration in cm⁻¹ for a given set-up. Flat-field and geometric corrections act before this step (section 4.10 and chapter 5). Normalising a series to a reference peak gives a relative intensity (section 6.10).
@@ -652,7 +666,7 @@ tilt = arccos(cos rot_1 cos rot_2)                                      (3.13)
 L_poni = L cos rot_1 cos rot_2,   poni_2 = x_c p_2 + L_poni tan rot_1,   poni_1 = y_c p_1 − L_poni tan rot_2 / cos rot_1      (3.16)
 ```
 
-  Reading a written file gives the geometry back to rounding (the q of every pixel to 10⁻¹²). α_i is no part of a `.poni`.
+  Reading a written file gives the geometry back to rounding (the q of every pixel to 10⁻¹²). GIMaP stores ψ and available measurement details in `# GIMaP sample_roll_deg` and `# GIMaP sample_roll_measurement` comments. pyFAI’s detector angles keep their usual values. α_i is no part of a `.poni`.
 
 Examples from the public data: the P08 file gives (545.46, 1826.95) px, `L` = 811.77 mm, tilt 0.31°; the pyFAI AgBh file gives (179.98, 263.86) px, `L` = 1583.31 mm, tilt 0.57° (note); the Xeuss file gives (7.05, 589.49) px, `L` = 147.58 mm, tilt 6.06° (note).
 
@@ -707,7 +721,7 @@ that of its rows upward. Without rotations in orientation 3, (3.15) is `(L, X, Y
 - Profiles saved by GIMaP 0.1 kept the tilt beside a flat geometry (`dropped_tilt`). They are read with the tilt
   in the geometry. Geometry Calibration fits rot1 and rot2 (section 3.8), and the Detector geometry dialog of
   Analyze has fields for rot1, rot2 and rot3 (degrees).
-- **Checking rot3 with a GISAXS frame.** In **Geometry ▸ Check rot3**, pick two distant points on the observed rod. On the plane of incidence the exact condition is `q_y = k right/|t| = 0`. The signed magnitude q∥ includes q_x and can be nonzero along that plane. For the two rays, the tool solves `Δright = 0` as rot3 varies, taking the solution nearest the current angle modulo 180°. Both endpoint q_y values test the beam centre as well. Enter the angle in the geometry dialog. A second pair on the horizon or the same Yoneda band tests Δα_f = 0 using (2.8).
+- **Checking rot3 with a GISAXS frame.** In **Geometry ▸ Check rot3**, pick two distant points on the observed rod. On the plane of incidence the exact condition is `q_y = k X′/|t| = 0`. The signed magnitude q∥ includes q_x and can be nonzero along that plane. For the two rays, the tool holds ψ fixed and solves `ΔX′ = 0` as rot3 varies, taking the solution nearest the current angle modulo 180°. Both endpoint q_y values test the beam centre as well. Enter the angle in the geometry dialog. A second pair on the horizon or the same Yoneda band tests Δα_f = 0 using (2.8).
 - The initial ring search before tilt refinement still assumes a perpendicular detector. A horizontal cut defined by detector rows can also mix exit angles (section 6.7).
 
 Implementation: `src/gimap/shared/geometry/detector_geometry.py` (`in_plane_axes`),
@@ -877,7 +891,7 @@ Implementation: `src/gimap/features/analyze/domain/corrections.py`
 
 ### 4.8 Mirror filling (GIWAXS)
 
-Fill gaps from the mirror side (Mask step) is off by default and acts only on GIWAXS frames with a geometry. On a flat detector perpendicular to the beam, the reflection `X → −X` maps `q_y → −q_y` and leaves `q_x`, `q_z`, |q|, α_f and 2θ unchanged; it changes the signs of q_∥ and χ. A pixel without data is given the value at its mirror position about the beam-centre column, in the same row:
+Fill gaps from the mirror side (Mask step) is off by default and acts only on GIWAXS frames with a geometry. At zero roll on a flat detector perpendicular to the beam, the reflection `X → −X` maps `q_y → −q_y` and leaves `q_x`, `q_z`, |q|, α_f and 2θ unchanged; it changes the signs of q_∥ and χ. A pixel without data is given the value at its mirror position about the beam-centre column, in the same row:
 
 ```text
 m_j = 2 x_c − (j + 0.5) − 0.5 = 2 x_c − j − 1        (fractional column index)       (4.8)
@@ -886,7 +900,7 @@ I_fill(i, j) = (1 − w) I(i, j_0) + w I(i, j_0 + 1)                            
 ```
 
 - Only pixels that are invalid at this point are filled: gaps, masks, bad pixels, gap-guard and value-range pixels.
-- For a tilted plane, reflect the laboratory ray `(along, right, up) → (along, −right, up)` and intersect it with that plane. This gives the opposite 2θ_f at the same α_f. Bilinear interpolation uses only originally valid pixels with nonzero weight. For a perpendicular detector in orientation 3 the calculation reduces to (4.8)–(4.10).
+- For a rolled sample or tilted detector, reflect the outgoing ray in the sample plane of incidence. In the transverse coordinates of section 2.1 this changes the sign of X′ and preserves Y′. Intersect the reflected ray with the detector plane to find the opposite 2θ_f at the same α_f. Bilinear interpolation uses only originally valid pixels with nonzero weight. At ψ = 0 on a perpendicular detector in orientation 3 the calculation reduces to (4.8)–(4.10).
 - A partner outside the measured image, or one with a missing interpolation neighbour, leaves the gap empty. The reciprocal-space missing wedge has no measured partner. The record counts filled detector pixels in `pixels_filled_from_mirror`.
 - Mirror filling assumes symmetry in ±q_∥. It reuses measured intensities, so the error model switches to pixel scatter (section 6.4) and the fit input records `counting_model_valid: false`.
 
@@ -1242,7 +1256,7 @@ Implementation: `src/gimap/features/analyze/domain/giwaxs.py`, `src/gimap/featur
 
 **Yoneda band.** The search window runs from the row of `α_f = 1.5°` down to the row of `α_f = −0.2°` (equation (2.14)). The 0.2° below the computed horizon absorbs small errors of α_i or of the beam centre. The columns are two bands of 100 px on both sides of a 31-column strip around the beam column `c_0 = ⌊x_c⌋`, namely `[c_0 − 115, c_0 − 15)` and `[c_0 + 16, c_0 + 116)`. This keeps the direct beam, the specular rod and a rod-shaped beam stop out. The profile is the median of the valid pixels in each row, smoothed with a 3-row moving average that ignores missing rows. The brightest row gives `r_Y = row + 0.5`, and `α_f` follows from (2.14). The window needs at least 3 rows. For the cited phenomenon see Yoneda (1963).
 
-The automatic search and horizontal cut still use pixel rows. A change of more than half a row in the calculated horizon height across the detector triggers a warning because rounding then matters at the scale of a selected row. A horizontal band defined in q selects a constant exit-angle range.
+With nonzero sample roll the Yoneda search follows constant exit angle across the side bands. The horizontal and vertical cut widths define q_z limits on the beam column and q_y limits at the horizon, respectively. The mean and error use the original measured pixels inside these limits. The detector displays the projected bands. The row and column rules below describe ψ = 0, where a horizon-height change of more than half a row across the detector triggers a warning.
 
 **Horizontal cut I(q_y).** The centre `r_c` is the Yoneda row or the row set by hand. If the search finds no band, move 10 rows from the horizon on the beam column towards positive exit angles and clamp to the frame. If that column has no unique horizon crossing, use the middle row and warn.
 
@@ -5036,8 +5050,8 @@ Fitting's optional two-path sphere with a free effective reflection coefficient 
 
 ### 15.2 Instrument and geometry
 
-- **Detector tilt and rotation.** Rings weakly constrain tilt at SAXS distances (1σ of 0.15° for rot1 and 0.19° for rot2 on the public AgBh frame) and leave rot3 undetermined. Check rot3 against the observed GISAXS rod and horizon (section 3.7). The initial ring search uses circles. Automatic row bands warn when the horizon changes by more than half a row across the image. Mirror filling and XRR project rays onto the detector plane (sections 4.8, 13.1).
-- **Sample orientation.** The sample is tilted by α_i about the horizontal axis perpendicular to the beam and by nothing else; a rotation about the surface normal or about the beam is not described in Analyze (section 2.5). Sputter alone hands a sample roll to its analysis package (section 12.1).
+- **Detector tilt and rotation.** Rings weakly constrain tilt at SAXS distances (1σ of 0.15° for rot1 and 0.19° for rot2 on the public AgBh frame) and leave rot3 undetermined. Check rot3 against the observed GISAXS rod and horizon (section 3.7). The initial ring search uses circles. At zero sample roll, automatic row bands warn when the horizon changes by more than half a row across the image. Mirror filling and XRR project rays onto the detector plane (sections 4.8, 13.1).
+- **Sample orientation.** A single image measures the sample roll relative to the calibrated detector axes. An error in detector rot3 can mimic sample roll. Fibre symmetry requires measurable texture on both sides of a ring (section 2.3).
 - **Pixels.** A pixel is represented by its centre: there is no parallax, no sensor thickness and no pixel splitting (sections 2.5, 6.1).
 - **Beam.** Divergence, energy bandwidth and footprint are not modelled (section 2.5). The XRR extractor applies no footprint correction (section 13.1).
 - **Calibration.** Wavelength and pixel sizes are inputs. Calibrant constants are fixed without a temperature correction, and ring radii use a 1 px grid. Agreement with the calibration image alone cannot identify the correct calibration for the sample. `.poni` orientations 1–4 are supported (section 3.6).

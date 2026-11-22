@@ -344,6 +344,7 @@ def _assignment_axis(geometry: Optional[DetectorGeometry], transmission: bool) -
     return {
         "kind": "refracted_transmitted" if geometry.refraction else "kinematic",
         "incidence_deg": geometry.incidence_deg,
+        "sample_roll_deg": geometry.sample_roll_deg,
         "critical_angle_deg": geometry.critical_angle_deg if geometry.refraction else None,
         "k_sin_alpha_i_inv_A": geometry.wavevector_inv_angstrom * math.sin(geometry.incidence_rad),
     }

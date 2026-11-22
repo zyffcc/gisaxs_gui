@@ -38,12 +38,14 @@ from .zh_reproduction import REPRODUCTION_ZH
 from .zh_review_phases import REVIEW_PHASES_ZH
 from .zh_ring_assignment import RING_ASSIGNMENT_ZH
 from .zh_roll_check import ROLL_CHECK_ZH
+from .zh_sample_roll import SAMPLE_ROLL_ZH
 from .zh_series_chain import SERIES_CHAIN_ZH
 from .zh_series_selection import SERIES_SELECTION_ZH
 from .zh_texture_populations import TEXTURE_POPULATIONS_ZH
 from .zh_vertical_consistency import VERTICAL_CONSISTENCY_ZH
 
 FEATURES_ZH = {
+    **SAMPLE_ROLL_ZH,
     **PREDICT_SAMPLING_ZH,
     **VERTICAL_CONSISTENCY_ZH,
     **GISAXS_FIT_LEVEL_ZH,

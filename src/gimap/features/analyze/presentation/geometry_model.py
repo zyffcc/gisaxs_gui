@@ -41,6 +41,10 @@ FRAME_SHOWN = object()
 class GeometryModelMixin:
     """Needs ``state``, ``settings``, ``_read_setting``, ``_save_profile`` and ``_profiles``."""
 
+    def set_sample_roll(self, value: Optional[float], measurement: Optional[dict] = None) -> None:
+        self.state.sample_roll_deg = None if value is None else float(value)
+        self.state.sample_roll_measurement = dict(measurement) if measurement else None
+
     def standard_calibrator(self) -> CalibrateStandard:
         """Freeze the detector set-up before the standard is read in a worker."""
         profile = self.absolute_scale_profile()
@@ -264,7 +268,8 @@ class GeometryModelMixin:
             return None
         return geometry_from_fitting_settings(self._read_setting, analysis.shape[0])
 
-    def save_profile(self, name: str, geometry: DetectorGeometry, *, source: str, dropped_tilt=None) -> InstrumentProfile:
+    def save_profile(self, name: str, geometry: DetectorGeometry, *, source: str, dropped_tilt=None,
+                     sample_roll_measurement=None) -> InstrumentProfile:
         """Save ``geometry`` as the profile of the frame shown. The geometry just saved is then the one used:
         a beam centre set earlier in this session for frames of this shape (dragged, typed, or refined by an
         automatic analysis) is forgotten, or it would silently replace the centre saved here. A session
@@ -281,6 +286,7 @@ class GeometryModelMixin:
             source=self._linked_source(source),
             dropped_tilt=dropped_tilt,
             detector_response=None if preserve_response else self.detector_response(),
+            sample_roll_measurement=sample_roll_measurement,
         )
         self.state.profile_name = None  # let the new profile match automatically
         held = self.state.beam_center_shape

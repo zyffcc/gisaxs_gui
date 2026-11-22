@@ -113,17 +113,19 @@ def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08, tm
     horizon = _decision(report, "ring orientation")
     assert "αf < 0.15° (2 × αi)" in horizon["decision"] and "factor 0.99" in horizon["decision"]
     ring = min(report["rings"], key=lambda r: abs(r["q"] - 0.997))
+    assert report["sample_roll_measurement"]["significant"]
+    assert report["geometry"]["sample_roll_deg"] == pytest.approx(-1.30, abs=.02)
     assert ring["orientation_settings"]["error_model"] == "pixel_scatter"
     pole = ring["pole_figure"]
     low, high = ring["herman_systematic_range"]
-    assert ring["herman"] == pytest.approx(.142, abs=.001)
-    assert ring["herman_err"] == pytest.approx(.00275, abs=.0001)
-    assert ring["herman_isotropic"] == pytest.approx(.0563, abs=.0005)
-    assert [low, high] == pytest.approx([.071, .157], abs=.002)
+    assert ring["herman"] == pytest.approx(.133, abs=.001)
+    assert ring["herman_err"] == pytest.approx(.00267, abs=.0001)
+    assert ring["herman_isotropic"] == pytest.approx(.0460, abs=.0005)
+    assert [low, high] == pytest.approx([.073, .148], abs=.002)
     assert ring["herman"] == pytest.approx(pole["herman_measured"])
     assert ring["herman_isotropic"] == pytest.approx(pole["herman_isotropic"])
-    assert ring["orientation_settings"]["horizon_excluded_deg"] == [84, 88]
-    assert "Excluded |χ| 84–88°" in text
+    assert ring["orientation_settings"]["horizon_excluded_deg"] == [85, 88]
+    assert "Excluded |χ| 85–88°" in text
     assert "uses measured ±χ partners only" not in text
     scenarios = pole["systematics"]["scenarios"]
     assert {s["horizon_fraction"] for s in scenarios} == {0., .05, .10}
@@ -134,10 +136,10 @@ def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08, tm
     assert pole["systematics"]["background_rule"] == "fitted sigma"
     assert "reduced χ² exceeds 5" in pole["quality_reasons"]
     assert any("0.997" in item["why"] and "not determined" in item["why"] for item in report["needs_attention"])
-    warning = "orientation factor is not determined by the measured χ range (systematic range [0.0711, 0.157])"
+    warning = "orientation factor is not determined by the measured χ range (systematic range [0.0731, 0.148])"
     assert any(warning in line for line in text.splitlines() if "q ≈ 0.997" in line)
     assert any(warning in item["why"] for item in report["needs_attention"] if item["item"] == "orientation factor")
-    assert "Measured f = 0.142 ± 0.00275 (stat) [0.0711, 0.157], f_iso = 0.0563" in text
+    assert "Measured f = 0.133 ± 0.00267 (stat) [0.0731, 0.148], f_iso = 0.046" in text
     assert "Lower limit from attenuated bins and horizon gap continued" in text
     assert "Upper limit from attenuated bins removed, horizon gap empty" in text
     assert "1 − φ is conditional on the background b" in text and "(stat) [" in text
