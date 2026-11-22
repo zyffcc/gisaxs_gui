@@ -336,13 +336,13 @@ COUPLINGS = ("lma", "da")
 def component_form(component: Component, q: np.ndarray, cache: Optional[dict] = None,
                    geometry: Optional[Geometry] = None) -> np.ndarray:
     """T(q) of one component with scale 1 (q in nm⁻¹). ``cache``: reuse the size average while only the spacing
-    changes during one fit, and the reverse. ``geometry``: :func:`grazing` of the model (spheres only)."""
+    changes during one fit, and the reverse. ``geometry``: :func:`grazing` of the model."""
     q = np.asarray(q, dtype=float)
     if isinstance(geometry, VerticalCut):
         values = {key: component.value(key) for key in component.keys()}
         return vertical_term(component.family, component.law, component.interference, component.coupling,
                              component.structure, values, q, geometry, lambda key, compute: _cached(cache, key, compute))
-    if component.family not in NETWORK_FAMILIES or component.interference != DEFAULT_INTERFERENCE:
+    if component.heights or component.family not in NETWORK_FAMILIES or component.interference != DEFAULT_INTERFERENCE:
         values = {key: component.value(key) for key in component.keys()}
         return model_library.component_term(component.family, component.law, component.interference,
                                              component.coupling, component.structure, values, q,

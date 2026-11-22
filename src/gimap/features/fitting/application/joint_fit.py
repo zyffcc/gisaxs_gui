@@ -11,8 +11,7 @@ Every curve's model is the page's model with that curve's geometry: a horizontal
 substrate is in the four-term DWBA on it, without the angles at q_z = 0, otherwise at the page model's level; a
 vertical cut needs the substrate (``vertical_cut``). Its beam tail is off (Tail A fixed at 0) and has no q resolution;
 a tail held at 0 has its width and exponent fixed in every curve. Upright cylinders get their height h and σh/h as
-parameters in every curve when a vertical cut is among them (the horizontal cut does not see it; the height is
-shared).
+shared parameters in every curve when a vertical cut is among them.
 """
 
 from __future__ import annotations
@@ -26,7 +25,7 @@ import numpy as np
 from src.gimap.shared.version import SOFTWARE
 
 from ..domain import fit_links
-from ..domain.fit_engine import FitData
+from ..domain.fit_engine import FitData, fit_scales, residuals
 from ..domain.fit_resolution import MISSING_DQ
 from ..domain.fit_model import FitModel, evaluate, model_to_dict
 from ..domain.joint_fit import SHARED, JointCurve, JointResult, curve_errors, default_shared, fit_curves
@@ -38,6 +37,13 @@ NEEDS_SUBSTRATE = "{name}: a vertical cut needs the substrate (choose a material
 NEEDS_ANGLES = "{name}: a vertical cut needs αi and λ"
 NO_EXIT_ANGLE = "{name}: no point of the vertical cut lies above the sample horizon"
 FEW_POINTS = "{name}: fewer than 3 points to fit"
+FEW_ABOVE_CUTOFF = "{name} has fewer than 3 usable points above the exit-angle limit. Lower the limit or widen the cut."
+DEFAULT_MIN_EXIT_ANGLE_AC = 2.0
+HEIGHT_ASSUMPTION = "The model omits correlations between height and radius."
+LAYER_WARNING = ("{name} has a vertical reduced χ² of {chi2} (> 3). The model omits the effective refractive index "
+                 "of the particle layer. For dense or high-Z layers the fitted height is likely underestimated. "
+                 "In the BornAgain benchmark, heights for Au-like layers at 10–40% coverage were 13–60% low on "
+                 "the full cut and 6–20% low from 2αc (Physics and Methods §9.18).")
 ON_SPECULAR = ("{name}: a vertical cut at q∥ = {q} nm⁻¹ lies on or near the specular rod, which the particles' model "
                "leaves out: take the vertical cut beside it in Analyze (Cuts step), e.g. at the structure peak.")
 CROSSES_ROD = ("The vertical band of {name} crosses the specular rod (qy = 0). The particle model excludes this "
@@ -138,7 +144,8 @@ def with_heights(model: FitModel) -> FitModel:
     return replace(model, components=tuple(components))
 
 
-def curve_model(spec: CurveSpec, model: FitModel, substrate: Optional[Substrate], heights: bool) -> FitModel:
+def curve_model(spec: CurveSpec, model: FitModel, substrate: Optional[Substrate], heights: bool, *,
+                min_exit_angle_ac: float = DEFAULT_MIN_EXIT_ANGLE_AC) -> FitModel:
     """The page's model with this curve's geometry (module docstring)."""
     model = replace(model, cut=None)
     if heights:
@@ -150,7 +157,7 @@ def curve_model(spec: CurveSpec, model: FitModel, substrate: Optional[Substrate]
             raise ValueError(NEEDS_ANGLES.format(name=spec.name))
         delta, beta = substrate.optical(spec.wavelength)
         cut = VerticalCut(float(spec.q_parallel), float(spec.wavelength), float(spec.alpha_i), delta, beta,
-                          float(spec.critical_angle))
+                          float(spec.critical_angle), min_exit_angle_ac)
         model = _without_tail(replace(model, cut=cut, substrate=substrate, resolution_mode="constant"))
     else:
         angles = (spec.alpha_i, spec.alpha_f) if spec.kind == "horizontal" else (0.0, 0.0)
@@ -162,12 +169,13 @@ def curve_model(spec: CurveSpec, model: FitModel, substrate: Optional[Substrate]
 
 
 def curve_data(spec: CurveSpec, model: FitModel) -> FitData:
-    """The points of a curve: |q| > 0; for a vertical cut only those with an exit angle above the horizon."""
-    q = np.abs(np.asarray(spec.q, float))
+    """Horizontal curves fold onto |q| in FitData. Vertical q_z is signed until its exit angle is checked."""
+    q = np.asarray(spec.q, float)
     intensity = np.asarray(spec.intensity, float)
     sigma = None if spec.sigma is None else np.asarray(spec.sigma, float)
     if model.cut is not None:
-        keep = np.isfinite(model.cut.exit_angles_deg(q))
+        angles = model.cut.exit_angles_deg(q)
+        keep = np.isfinite(angles)
         if not keep.any():
             raise ValueError(NO_EXIT_ANGLE.format(name=spec.name))
         q, intensity = q[keep], intensity[keep]
@@ -176,18 +184,27 @@ def curve_data(spec: CurveSpec, model: FitModel) -> FitData:
         raise ValueError(MISSING_DQ)
     data = FitData.prepare(q, intensity, sigma, dq=spec.dq if model.resolution_mode == "file" else None,
                            weighting=model.weighting)
+    if model.cut is not None and model.cut.min_exit_angle_ac > 0:
+        # Apply the range after weighting so removing the last usable σ cannot bring invalid rows back as log data.
+        # The tolerance keeps a point exactly on the limit after the inverse q_z transform.
+        keep = model.cut.exit_angles_deg(data.q) >= model.cut.min_exit_angle_deg - 1e-12
+        data = replace(data, q=data.q[keep], intensity=data.intensity[keep],
+                       sigma=None if data.sigma is None else data.sigma[keep])
     if data.q.size < 3:
+        if model.cut is not None and model.cut.min_exit_angle_ac > 0:
+            raise ValueError(FEW_ABOVE_CUTOFF.format(name=spec.name))
         raise ValueError(FEW_POINTS.format(name=spec.name))
     return data
 
 
-def joint_curves(specs: Sequence[CurveSpec], model: FitModel, substrate: Optional[Substrate]) -> list[JointCurve]:
+def joint_curves(specs: Sequence[CurveSpec], model: FitModel, substrate: Optional[Substrate], *,
+                 min_exit_angle_ac: float = DEFAULT_MIN_EXIT_ANGLE_AC) -> list[JointCurve]:
     if not specs:
         raise ValueError("Add at least one curve")
     heights = any(spec.kind == "vertical" for spec in specs)
     curves = []
     for spec in specs:
-        made = curve_model(spec, model, substrate, heights)
+        made = curve_model(spec, model, substrate, heights, min_exit_angle_ac=min_exit_angle_ac)
         curves.append(JointCurve(spec.name, curve_data(spec, made), made))
     return curves
 
@@ -200,11 +217,36 @@ def shareable(model: FitModel) -> list[tuple]:
 
 
 def run_joint_fit(specs: Sequence[CurveSpec], model: FitModel, substrate: Optional[Substrate], shared, *,
-                  method: str = "local", progress=None, stop=None) -> JointResult:
-    curves = joint_curves(specs, model, substrate)
+                  min_exit_angle_ac: float = DEFAULT_MIN_EXIT_ANGLE_AC, method: str = "local", progress=None,
+                  stop=None) -> JointResult:
+    curves = joint_curves(specs, model, substrate, min_exit_angle_ac=min_exit_angle_ac)
     heights = {(owner, key) for owner, c in enumerate(curves[0].model.components) if c.heights
                for key in ("h", "sigma_h")}
+    if method == "local" and min_exit_angle_ac > 0:
+        for owner, component in enumerate(model.components):
+            if (owner, "h") in heights and "h" not in component.params:
+                curves = _start_height(curves, (owner, "h"), stop)
     return fit_curves(curves, frozenset(shared) | heights, method=method, progress=progress, stop=stop)
+
+
+def _start_height(curves, path, stop) -> list[JointCurve]:
+    """Choose a start for a newly introduced height on the retained points. The fringes have local minima."""
+    parameter = curves[0].model.get(path)
+    best, best_cost = curves, math.inf
+    for factor in (1.0, 0.5, 2.0):
+        if stop is not None and stop():
+            break
+        height = parameter.value * factor
+        if not parameter.lower <= height <= parameter.upper:
+            continue
+        trial = [replace(c, model=c.model.with_values({path: height})) for c in curves]
+        cost = 0.0
+        for curve in trial:
+            r = residuals(fit_scales(curve.model, curve.data), curve.data)
+            cost += float(r @ r)
+        if cost < best_cost:
+            best, best_cost = trial, cost
+    return best
 
 
 def plot_points(spec: CurveSpec, model: FitModel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -228,6 +270,16 @@ def key_name(key) -> str:
     return name if owner == SHARED else f"{name} [{owner + 1}]"
 
 
+def needs_attention(result: JointResult, specs: Sequence[CurveSpec]) -> list[tuple[str, dict]]:
+    messages = warnings(specs)
+    for index, spec in enumerate(specs):
+        if spec.kind == "vertical":
+            chi2 = result.reduced_chi2_for(index)
+            if chi2 > 3.0:
+                messages.append((LAYER_WARNING, {"name": spec.name, "chi2": f"{chi2:.4g}"}))
+    return messages
+
+
 def joint_record(result: JointResult, specs: Sequence[CurveSpec], substrate: Optional[Substrate]) -> dict:
     """The record of a joint fit (Save Record…): curves, models, shared values, χ², errors, covariance."""
     def number(value):
@@ -238,6 +290,7 @@ def joint_record(result: JointResult, specs: Sequence[CurveSpec], substrate: Opt
         curves.append({
             "name": spec.name, "path": spec.path, "kind": spec.kind, "points": result.points[index],
             "weighting": result.weightings[index], "chi2_per_point": number(result.curve_chi2[index]),
+            "residual_dof": number(result.curve_dof[index]), "chi2_reduced": number(result.reduced_chi2_for(index)),
             "geometry": {"alpha_i_deg": spec.alpha_i, "alpha_f_deg": spec.alpha_f, "wavelength_nm": spec.wavelength,
                          "q_parallel_nm": spec.q_parallel if spec.kind == "vertical" else None,
                          "band_crosses_specular": spec.band_crosses_specular if spec.kind == "vertical" else None,
@@ -246,6 +299,9 @@ def joint_record(result: JointResult, specs: Sequence[CurveSpec], substrate: Opt
             "errors": {fit_links.parameter_name(path): number(error)
                        for path, error in curve_errors(result, index).items()},
         })
+        if model.cut is not None:
+            curves[-1]["vertical_range"] = {"min_exit_angle_ac": model.cut.min_exit_angle_ac,
+                                            "min_exit_angle_deg": model.cut.min_exit_angle_deg}
     from .fit_reproduction import joint_recipe
 
     return {
@@ -257,6 +313,8 @@ def joint_record(result: JointResult, specs: Sequence[CurveSpec], substrate: Opt
         "seconds": result.seconds, "substrate": None if substrate is None else substrate.to_dict(),
         "shared": sorted(fit_links.parameter_name(path) for path in result.shared),
         "at_bounds": [key_name(key) for key in result.at_bounds],
+        "model_assumptions": [HEIGHT_ASSUMPTION],
+        "needs_attention": [template.format(**values) for template, values in needs_attention(result, specs)],
         "covariance_keys": [key_name(key) for key in result.covariance_keys],
         "covariance": [[number(v) for v in row] for row in result.covariance],
         "curves": curves,
@@ -265,8 +323,7 @@ def joint_record(result: JointResult, specs: Sequence[CurveSpec], substrate: Opt
 
 def model_for_page(page_model: FitModel, result: JointResult, number: int = 0) -> FitModel:
     """The page's model with the fitted values of curve ``number`` (shared ones included), its scales and, for a
-    horizontal cut, its angles and substrate; a height the horizontal cut does not see is kept fixed at the joint
-    value."""
+    horizontal cut, its angles and substrate. Cylinder heights and height spreads are fixed at their joint values."""
     fitted = result.models[number]
     model = page_model
     if fitted.cut is None:
@@ -285,6 +342,7 @@ def model_for_page(page_model: FitModel, result: JointResult, number: int = 0) -
     return model
 
 
-__all__ = ["KINDS", "CurveSpec", "SHARED", "curve_data", "curve_model", "default_shared", "hints", "joint_curves",
-           "joint_record", "key_name", "model_for_page", "plot_points", "run_joint_fit", "shareable", "substrate_of",
+__all__ = ["DEFAULT_MIN_EXIT_ANGLE_AC", "FEW_ABOVE_CUTOFF", "HEIGHT_ASSUMPTION", "KINDS", "CurveSpec", "SHARED",
+           "curve_data", "curve_errors", "curve_model", "default_shared", "hints", "joint_curves", "joint_record",
+           "key_name", "model_for_page", "needs_attention", "plot_points", "run_joint_fit", "shareable", "substrate_of",
            "values_of", "warnings", "with_heights"]

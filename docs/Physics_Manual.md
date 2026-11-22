@@ -2468,8 +2468,8 @@ by up to 18 % (R = 3 nm, h = 10 nm) and 55 % (R = 5 nm, h = 30 nm) at q ≤ 3 nm
 P_vc(q) = ⟨R⁴ (2 J_1(q R)/(q R))²⟩ / ⟨R⁴⟩,   P_vc(0) = 1                                                (9.10)
 ```
 
-The height drops out: the q_z-dependent factor of a cylinder is the same for every radius and every DWBA path
-(section 9.10). Earlier, Fitting's vertical cylinder was not normalised, `P_vc = 10⁻⁶ ⟨R⁴ (2 J_1(qR)/(qR))²⟩/4`
+For independent radii and heights, the horizontal scale absorbs the axial factor in P_vc. The DA also needs the
+coherent height average (section 9.5). Earlier, Fitting's vertical cylinder was not normalised, `P_vc = 10⁻⁶ ⟨R⁴ (2 J_1(qR)/(qR))²⟩/4`
 (R in nm; 1.56 · 10⁻⁴ at R = 5 nm, 1.94 · 10⁻⁴ with σR/R = 0.2), so its Int was in other units than a sphere's; a model
 saved then is converted (section 9.2).
 
@@ -2515,6 +2515,10 @@ DA:   I = P(q) + C(q) (S(q) − 1)                                              
   and positions as independent.
 - C = |⟨VA⟩|²/⟨V²⟩ is the coherent term of (9.4), the amplitude averaged by number (random cylinders also over
   orientation). A test checks the sphere against a direct average by number (10⁻⁶).
+- For upright cylinders with an explicit height distribution, let G(H) = H Σₚ cₚ sinc(QₚH/2) exp(−iQₚH/2)
+  on the paths of the horizontal row. Its scale absorbs ⟨|G|²⟩. The coherent radial term is therefore multiplied
+  by |⟨G⟩|²/⟨|G|²⟩, averaging the complex amplitudes by number. At q_z = 0 this factor is ⟨H⟩²/⟨H²⟩.
+  A single height gives a factor of one wherever the row scatters. Predict parameters uses the radial model for upright cylinders.
 - With one size, DA and LMA are the same curve for spheres and vertical cylinders; randomly oriented cylinders differ,
   their orientation being a disorder of its own. With a size spread, DA keeps the part `P − C` free of the spacing:
   more intensity below the structure peak, a weaker peak. At σR/R = 0.2 and σnn/D = 0.75, the low-q intensity of
@@ -2743,15 +2747,16 @@ polystyrene (λ = 0.1045 nm).
 (EIA) of the Müller-Buschbaum group: the transmission factors are constant along a horizontal cut, so they go into
 the scale, and the form factor is taken at q_z = 0. No substrate information is needed.
 
-**Why upright cylinders are exact.** For a cylinder standing on the surface the amplitude separates:
+**Upright cylinders at a fixed exit angle.** For a cylinder standing on the surface the amplitude separates:
 
 ```text
 F(q_∥, Q) = πR²H · [2J₁(q_∥R)/(q_∥R)] · sinc(QH/2) e^{−iQH/2}                                    (9.28)
 ```
 
-All four terms of (9.27) share the in-plane factor 2J₁(q_∥R)/(q_∥R). The Q-dependent factor is the same at every
-point of the cut, so the cut has exactly the shape of the q_z = 0 form factor, on any substrate. This holds when
-the heights do not vary with the radius; a height that grows with R would weight the radii differently.
+All four terms of (9.27) share the in-plane factor 2J₁(q_∥R)/(q_∥R). For a fixed H their axial sum is constant along
+the row and changes only the scale. Independent height and radius distributions preserve the radial shape of P.
+In the DA, a spread of heights changes the strength of the interference through the coherent average in section 9.5.
+Heights correlated with radii would also change the radial weighting (section 9.18).
 
 **Why spheres are an approximation.** A sphere has no such separation: its form factor depends on
 |q| = √(q_y² + Q²), and the four terms have different Q. The two that matter at the Yoneda angle (|r_f| ≈ 0.8,
@@ -2804,7 +2809,7 @@ reflection. Its limits:
   reflectivity of the substrate (a dense film needed |r| > 1; the default range stops at 1).
 - With the angles entered and |r| fixed at 0 the sphere is the Born term at the vacuum q_z. That is not better than
   q_z = 0: on Si it is worse from R = 4 nm, because the exit-reflected path pulls the effective q_z below q₊.
-- Upright cylinders do not change (9.28); random cylinders stay at |q|.
+- Upright cylinders of one height retain the radial shape (9.28). Random cylinders stay at |q|.
 
 When the substrate is known (a material of the table or δ and β), Model's **Substrate** takes the four terms of (9.27) with its Fresnel coefficients instead of the free r: section 9.17.
 
@@ -3098,7 +3103,7 @@ the Born term at it, else the effective interface.
 3. the two paths of spheres, the Born term and the exit-reflected path with a free r (both angles: α_i, α_f and λ
    under Model ▸ *Spheres in grazing incidence* on the Fit page).
 
-Upright cylinders are the same at every level (section 9.10). Random cylinders are averaged at q_z = 0 at levels 1
+Predict uses the same radial model of upright cylinders at every level (section 9.10). Random cylinders are averaged at q_z = 0 at levels 1
 and 3 and in Fitting's model at every level (at level 2 the network's posterior has them at the cut's q₊, the refined
 model at q_z = 0; section 9.4). For spheres, level 1 holds within about 5 % of R up to q₊R ≈ 1.7 (section 9.10). On the
 four-term DWBA curves on Si above (`posterior_dwba_pairs.json`) the median error of R at level 1 is 15 %, 20 % and
@@ -3312,7 +3317,7 @@ The curves on which a sphere's R is off by more than 10 %, and whether χ²/N ma
   its errors.
 - **Given neither** (the effective interface), R of the spheres at q₊R 1.7–3.5 is low by 13–15 % (median error
   15 % and 20 %), and the true composition is most probable in 44 % and 30 % of all curves.
-- An upright cylinder's cut has the in-plane shape exactly in the four-term DWBA (section 9.10), so these runs test
+- An upright cylinder of fixed height has the in-plane shape exactly in the four-term DWBA (section 9.10), so these runs test
   the spheres.
 - **Two paths where the curve has none.** Given both angles on a curve without a reflected wave, a sphere of about
   half the radius with a strong r can describe the curve as well. At the Yoneda angle of the substrate |r_f| is near
@@ -3534,7 +3539,8 @@ r(α) = (k_z − k_z,s) / (k_z + k_z,s),   k_z = k sin α,   k_z,s = k √(sin²
 
 the same terms as (9.27), with the Fresnel coefficients of the bare substrate at αi and αf instead of an effective r;
 |r| and arg r are then not used. Random cylinders are averaged at |q| = √(q² + (k_i + k_f)²) (the Born term of the
-cut's q_z, as fit1d did), upright cylinders are the same at every level (9.28), core–shell spheres stay at q_z = 0.
+cut's q_z, as fit1d did). Upright cylinders with a height distribution use these four paths for the horizontal DA
+(sections 9.5, 9.10). Core–shell spheres stay at q_z = 0.
 The sizes are averaged by the direct quadrature of section 9.3 (the tables hold one or two paths, not four). The line
 under the substrate says which level is in use (*Level: Four-term DWBA, substrate known on Si (δ = …, β = … at λ =
 … nm)*); with a substrate but without both angles the spheres stay at q_z = 0 and the line says that the substrate is
@@ -3601,7 +3607,9 @@ and with several populations their ratio is not tied between the curves.
 Refine and Search are those of section 9.8 on the joint vector of the free non-linear values; the errors come from
 the Jacobian of all residuals with respect to every free value (shared, per curve and the scales), (9.24)–(9.26). The
 summary gives χ²_red and every curve's Σr²/N; curves weighted differently (some by σ, some by ln I) are said to be
-not comparable.
+not comparable. For a vertical cut with file or Poisson standard deviations, the report also gives its reduced
+χ² = Σᵢr_c,i² / [N_c − tr(H_cc)]. Here H = JJ⁺ projects onto the columns of the weighted joint Jacobian J. The
+diagonal block H_cc assigns the cut its share of the fitted parameters, including shared ones.
 
 **Kinds of curve.** A *horizontal cut* (I(|q_y|) at one exit angle; both halves of a signed cut on |q|) has αi, αf and
 λ: with both angles and a substrate chosen in the window it is in the four-term DWBA (section 9.17), without angles at
@@ -3613,8 +3621,18 @@ sin α_f = q_z/k − sin α_i                                         (vacuum q_
 sin² α_f = (q_z/k − Re √(sin²α_i − sin²α_c))² + sin²α_c            (q_z refracted in a film of critical angle α_c)
 ```
 
-with its own k_f = k sin α_f and r_f = r(α_f) in the four terms (9.40); points without an exit angle above the horizon
-are left out. For particles standing on the substrate (base at z = 0):
+with its own k_f = k sin α_f and r_f = r(α_f) in the four terms (9.40). **Lowest exit angle of the vertical cut**
+retains valid points with α_f ≥ m α_c,substrate, where α_c,substrate = √(2δ) radians at the cut's wavelength.
+The default m = 2 excludes the region around the substrate's critical angle. Set m = 0 to keep all valid points
+above the horizon. For a refracted q_z the film critical angle enters (9.44), then the substrate threshold is applied
+to the recovered α_f. The record and report give the selected multiple and its angle in degrees.
+
+If Model has no height for an upright-cylinder population and m > 0, Refine compares starting heights of 10, 5
+and 20 nm on the retained points. For each trial it solves the free intensity scales and uses the joint residual
+sum of squares to choose the start. Populations are checked in model order. A supplied height starts at its
+value in Model. The record includes the starting model of each curve.
+
+For particles standing on the substrate (base at z = 0):
 
 ```text
 sphere            F(q_∥, Q) = V f(√(q_∥² + Q²) R) e^{−iQR}                                                       (9.45)
@@ -3626,7 +3644,8 @@ averaged over the sizes by number with R and H independent (composite Gauss–Le
 √(q_∥² + Q²) of the cut). The structure factor is that of the cut's in-plane q, the same at every point: in the LMA it
 goes into the scale, and a vertical cut holds D and σnn/D only through the horizontal cut they are shared with. When
 a vertical cut is among the curves, upright cylinders get their height h and σh/h as parameters in every curve
-(shared: the horizontal cut does not see them, 9.28), and Use in Model keeps h fixed at the joint value. A vertical cut
+(shared). The vertical cut samples the height oscillations. In the horizontal DA, height enters through the single
+coherence factor of section 9.5. Use in Model keeps h fixed at the joint value. A vertical cut
 has no beam tail (Tail A fixed at 0) and no q resolution; a tail held at 0 has its width and exponent fixed. Random
 cylinders and core–shell spheres are not available in a vertical cut.
 
@@ -3653,6 +3672,15 @@ scale):
 The tests compare the four paths with an independent sum, the cylinder averages with a direct double sum over radii and
 heights (2 · 10⁻⁵), and fit a simulated horizontal and vertical cut of upright cylinders (R = 4 nm, h = 6 nm, Poisson
 noise): the joint fit finds h within its error, which the horizontal cut alone does not determine.
+
+With BornAgain's average layer off, the noise-free baseline recovered σ_R/R = 0.150005 and h = 5.9997 nm
+for inputs 0.15 and 6 nm at the default cutoff. The original sweep with BornAgain's average layer on gave heights
+about 3% low for 10% Si-like coverage and 13–60% low for Au-like coverages of 10–40% over the full cut.
+At α_f ≥ 2α_c the Au-like biases were 6–20% low. When the vertical reduced χ² exceeds 3, **Needs attention** in
+the joint report explains that the model omits the effective refractive index of the particle layer and height is
+likely underestimated for dense or high-Z layers. The report always states the assumption of independent radii and
+heights. For H = 1.5R the benchmark overestimated h by 14% with joint reduced χ² near 1.2.
+The simulations and per-fit results are in `tools/benchmarks/vertical_height_bias.py` and its JSON record.
 
 Implementation: `src/gimap/features/fitting/domain/joint_fit.py`, `domain/vertical_cut.py`,
 `application/joint_fit.py`, `presentation/single/joint_fit_dialog.py`, `features/analyze/application/both_cuts.py`
@@ -4941,6 +4969,7 @@ Fitting's optional two-path sphere with a free effective reflection coefficient 
 - **Texture.** The analysis assumes fibre symmetry. The systematic range tests both horizon thresholds, the background and, for determined fits, extrapolation into the low-χ wedge (§§7.7, 7.11). Residual horizon attenuation can still affect f.
 - **Phases.** No phase is assigned. Lamellar and hexagonal series are reported as hints (section 7.4).
 - **GISAXS models.** The 1D models of a horizontal cut depend on the magnitude of q_y only; q_z at the Yoneda row and the Yoneda enhancement are not modelled (sections 8.6, 9.2), except in the four-term DWBA with a known substrate (section 9.17). A vertical cut is modelled only in a fit of several curves, for spheres and upright cylinders, at one in-plane q and without a q resolution or the specular rod (section 9.18). The model adds the empirical beam tail after smearing the horizontal particle terms (sections 8.6, 9.2 and 9.13). Fitting and Predict parameters use sizes by number unless a component's Sizes says otherwise (sections 8.5, 9.3). Without a given composition the automatic analysis lets the network choose among one or two populations of spheres and upright cylinders; random cylinders and three populations only when given (section 8.6).
+- **Cylinder height from a joint fit.** The bare-substrate DWBA omits the particle layer's effective refractive index and assumes independent radii and heights. Dense or high-Z layers can give heights that are too low. Radius–height correlation can bias the height even with a good fit (section 9.18).
 - **Paracrystal spread.** Until 0.2.0 the quick fit and 1D Predict reported σ_D/D, √(2π) ≈ 2.51 times smaller than the relative standard deviation of the neighbour distance σnn/D that Fitting and Predict parameters now use (sections 9.5, 13.5); the 1D Predict window gives both.
 
 ### 15.2 Instrument and geometry

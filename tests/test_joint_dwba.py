@@ -117,6 +117,44 @@ def test_upright_cylinder_heights_are_parameters_only_when_asked():
     assert np.array_equal(fm.evaluate(fm.FitModel((plain,)), q), fm.evaluate(fm.FitModel((tall,)), q))
 
 
+@pytest.mark.parametrize("grazing", [False, True])
+@pytest.mark.parametrize("interference", ["paracrystal", "hard_sphere"])
+def test_horizontal_da_against_independent_radius_height_quadrature(grazing, interference):
+    from scipy.special import j1
+    from src.gimap.features.fitting.domain import model_library
+    from src.gimap.features.fitting.domain.cut_model.structure import paracrystal
+
+    q = np.array([0.08, 0.27, 0.5, 0.8])
+    cylinder = fm.new_component("vertical_cylinder", radius=4, distance=14, heights=True, interference=interference)
+    model = fm.FitModel((replace(cylinder, coupling="da"),), substrate=Substrate("Si")).with_values({
+        (0, "sigma_R"): 0.15, (0, "h"): 6.0, (0, "sigma_h"): 0.2})
+    if grazing:
+        model = _horizontal(model)
+    terms = (fm.grazing(model) or Geometry()).sphere_terms()
+    if interference == "paracrystal":
+        structure = paracrystal(q, 14.0, cylinder.value("sigma_nn"))[0]
+    else:
+        structure = model_library.hard_sphere(q, cylinder.value("R_hs"), cylinder.value("phi"))[0]
+
+    # Independent Gaussian counts over ±4σ, integrating the complex amplitude of each (R,H) pair.
+    x, weights = np.polynomial.legendre.leggauss(64)
+    weights *= np.exp(-0.5 * (4*x)**2)
+    weights /= weights.sum()
+    number = np.outer(weights, weights)
+    radii, heights = 4*(1 + 4*0.15*x), 6*(1 + 4*0.2*x)
+    axial = sum(c * heights * np.sinc(w * heights / (2*np.pi)) * np.exp(-0.5j*w*heights) for c, w in terms)
+    norm = np.sum(number * np.abs(np.outer(radii**2, axial))**2)
+    direct = []
+    for qi, si in zip(q, structure):
+        amp = np.outer(radii**2 * 2*j1(qi*radii) / (qi*radii), axial)
+        direct.append((np.sum(number * np.abs(amp)**2) + abs(np.sum(number * amp))**2 * (si - 1)) / norm)
+    assert np.allclose(fm.evaluate(model, q), direct, rtol=2e-5)
+
+    single_height = model.with_values({(0, "sigma_h"): 0.0})
+    radial_only = replace(model, components=(replace(model.components[0], heights=False),))
+    assert np.array_equal(fm.evaluate(single_height, q), fm.evaluate(radial_only, q))
+
+
 # -- the vertical cut ----------------------------------------------------------------------------------------------
 
 

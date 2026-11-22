@@ -12,6 +12,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Fit Several Curves Together** starts vertical cuts at twice the substrate critical angle. Set the limit to zero
+  to use the full cut. The report flags likely height underestimation in dense or high-Z layers when the vertical
+  reduced χ² exceeds 3. The cylinder DA now averages coherent amplitudes over the height distribution. Heights and
+  radii are assumed independent.
+
 - **Automatic GISAXS analysis** fits the Born term at the Yoneda cut's vacuum q_z when the incidence and exit
   angles are known (level 2), and uses the effective interface at q_z = 0 otherwise (level 1). The report and
   JSON record identify the level used. At level 2, Predict flags sphere and random-cylinder radii for uncertain

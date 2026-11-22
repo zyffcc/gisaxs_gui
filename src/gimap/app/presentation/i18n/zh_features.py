@@ -20,6 +20,7 @@ from .zh_horizon_selection import HORIZON_SELECTION_ZH
 from .zh_indexing import INDEXING_ZH
 from .zh_insitu import INSITU_ZH
 from .zh_joint_fit import JOINT_FIT_ZH
+from .zh_joint_height import JOINT_HEIGHT_ZH
 from .zh_manual_fit import MANUAL_FIT_ZH
 from .zh_mask_tools import MASK_TOOLS_ZH
 from .zh_normalisation import NORMALISATION_ZH
@@ -46,7 +47,7 @@ FEATURES_ZH = {
     **INSITU_ZH, **JOINT_FIT_ZH, **ABSOLUTE_SCALE_ZH, **MASK_TOOLS_ZH, **MANUAL_FIT_ZH, **ROLL_CHECK_ZH,
     **ZH_GEOMETRY_CUTS, **GEOMETRY_ORIENTATION_ZH, **ZH_GEOMETRY_TILT, **SERIES_CHAIN_ZH, **REVIEW_PHASES_ZH,
     **RING_ASSIGNMENT_ZH, **ORIENTATION_REDUCTION_ZH, **ORIENTATION_REPORT_ZH, **SERIES_SELECTION_ZH,
-    **REDUCTION_ERRORS_ZH, **HORIZON_SELECTION_ZH, **REPRODUCTION_ZH,
+    **REDUCTION_ERRORS_ZH, **HORIZON_SELECTION_ZH, **REPRODUCTION_ZH, **JOINT_HEIGHT_ZH,
 }
 
 __all__ = ["FEATURES_ZH"]

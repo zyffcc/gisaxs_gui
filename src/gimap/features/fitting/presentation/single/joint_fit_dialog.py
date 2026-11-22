@@ -19,17 +19,23 @@ from pathlib import Path
 from PyQt5.QtCore import QObject, QSignalBlocker, Qt, pyqtSignal
 from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem
 
+from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import language_changed, tr, trf
 from src.gimap.app.presentation.task_runner import TaskRunner
 
 from ...application import CURVE_SUFFIXES, LoadCurveRequest
 from ...application.joint_fit import (
+    DEFAULT_MIN_EXIT_ANGLE_AC,
+    FEW_ABOVE_CUTOFF,
+    HEIGHT_ASSUMPTION,
     KINDS,
     CurveSpec,
+    curve_errors,
     default_shared,
     hints,
     joint_record,
     model_for_page,
+    needs_attention,
     plot_points,
     run_joint_fit,
     shareable,
@@ -41,6 +47,7 @@ from ...application.joint_fit import (
 from ...application.single_fit import Curve
 from ...application.substrate_level import CUSTOM, SUBSTRATE_CHOICES
 from ..views.joint_fit_view import build_joint_dialog
+from .results import folder_action
 from .run import progress_line
 from .session import path_name
 
@@ -74,6 +81,7 @@ class JointFitDialog:
         self._signal = _Progress(parent)
         self._signal.changed.connect(self._progress)
         build_joint_dialog(self, parent)
+        self.joint_min_exit.setValue(DEFAULT_MIN_EXIT_ANGLE_AC)
         for key, text in KINDS:
             self.joint_kind.addItem(tr(text), key)
         for key, text in SUBSTRATE_CHOICES:
@@ -100,6 +108,7 @@ class JointFitDialog:
         self.joint_shown.currentIndexChanged.connect(lambda _i: self._plot())
         self.joint_use.clicked.connect(self.use_in_model)
         self.joint_save.clicked.connect(lambda: self.save_record_dialog())
+        self.joint_report.clicked.connect(lambda: self.save_report_dialog())
 
     def show(self) -> None:
         self._render()
@@ -293,6 +302,7 @@ class JointFitDialog:
         self.joint_add_current.setEnabled(self.page.session.curve is not None)
         self.joint_use.setEnabled(self.result is not None and not busy)
         self.joint_save.setEnabled(self.result is not None)
+        self.joint_report.setEnabled(self.result is not None)
         blocker = QSignalBlocker(self.joint_shown)
         self.joint_shown.clear()
         for spec in (self.result_specs if self.result is not None else self.specs):
@@ -328,6 +338,7 @@ class JointFitDialog:
             return
         specs, model, shared = list(self.specs), self.page.session.model, self.shared()
         method = str(self.joint_method.currentData())
+        min_exit_angle_ac = self.joint_min_exit.value()
         self._stop.clear()
         self.joint_run.setEnabled(False)
         self.joint_stop.show()
@@ -336,7 +347,8 @@ class JointFitDialog:
         self.joint_progress.show()
         self._say(tr("Fitting the curves together …"), "info")
         job = lambda: run_joint_fit(specs, model, substrate, shared, method=method,  # noqa: E731
-                                    progress=self._signal.changed.emit, stop=self._stop.is_set)
+                                    min_exit_angle_ac=min_exit_angle_ac, progress=self._signal.changed.emit,
+                                    stop=self._stop.is_set)
         self.tasks.submit("joint", job, on_done=lambda result: self._done(result, specs, substrate),
                           on_error=lambda message, _details="": self._failed(message))
 
@@ -350,7 +362,9 @@ class JointFitDialog:
 
     def _failed(self, message: str) -> None:
         self._finish()
-        self._say(trf("The fit failed: {reason}", reason=tr(message)), "error")
+        ending = FEW_ABOVE_CUTOFF.removeprefix("{name}")
+        reason = trf(FEW_ABOVE_CUTOFF, name=message[:-len(ending)]) if message.endswith(ending) else tr(message)
+        self._say(trf("The fit failed: {reason}", reason=reason), "error")
         self._render()
 
     def _done(self, result, specs, substrate) -> None:
@@ -361,24 +375,44 @@ class JointFitDialog:
         self._say(tr("Stopped: the best values so far are kept.") if result.stopped else tr("The curves were fitted "
                                                                                              "together."), "ok")
 
-    def _summary(self) -> None:
+    def _report_blocks(self) -> list:
         result = self.result
-        if result is None:
-            self.joint_summary.setText("")
-            return
         outcome = tr("stopped") if result.stopped else tr("converged") if result.converged else tr("not converged")
         lines = [trf(SUMMARY, chi2=f"{result.chi2_reduced:.4g}", points=sum(result.points), curves=len(result.points),
                      free=result.free, outcome=outcome, evaluations=result.evaluations, seconds=result.seconds)]
-        for spec, value, points, weighting in zip(self.result_specs, result.curve_chi2, result.points, result.weightings):
+        for i, spec in enumerate(self.result_specs):
+            value, points, weighting = result.curve_chi2[i], result.points[i], result.weightings[i]
             lines.append(trf(CURVE_LINE, name=spec.name, value=f"{value:.4g}", points=points,
                              weighting=tr("σ") if weighting == "sigma" else tr("ln I")))
+            cut = result.models[i].cut
+            if cut is not None:
+                lines.append(trf("Lowest exit angle of the vertical cut ({name}) = {multiple} αc ({degrees}°).",
+                                 name=spec.name, multiple=f"{cut.min_exit_angle_ac:g}",
+                                 degrees=f"{cut.min_exit_angle_deg:.5g}"))
+                chi2 = result.reduced_chi2_for(i)
+                if math.isfinite(chi2):
+                    lines.append(trf("Vertical reduced χ² = {value}", value=f"{chi2:.4g}"))
+        lines.append(tr(HEIGHT_ASSUMPTION))
+        attention = [trf(template, **values) for template, values in needs_attention(result, self.result_specs)]
         if len(set(result.weightings)) > 1:
-            lines.append("⚠ " + tr(MIXED))
-        lines.extend("⚠ " + trf(template, **values) for template, values in warnings(self.result_specs))
+            attention.append(tr(MIXED))
         if result.at_bounds:
             from ...application.joint_fit import key_name
 
-            lines.append("⚠ " + trf(BOUNDS, names=", ".join(key_name(key) for key in result.at_bounds)))
+            attention.append(trf(BOUNDS, names=", ".join(key_name(key) for key in result.at_bounds)))
+        blocks = [("p", line) for line in lines]
+        if attention:
+            blocks += [("h2", tr("Needs attention")), ("ul", attention)]
+        return blocks
+
+    def _summary(self) -> None:
+        blocks = self._report_blocks() if self.result is not None else []
+        lines = []
+        for kind, body in blocks:
+            if kind == "ul":
+                lines.extend("⚠ " + item for item in body)
+            else:
+                lines.append(body)
         self.joint_summary.setText("\n".join(lines))
 
     def use_in_model(self) -> None:
@@ -398,12 +432,41 @@ class JointFitDialog:
             return None
         text = json.dumps(joint_record(self.result, self.result_specs, self.result_substrate), indent=1,
                           ensure_ascii=False, allow_nan=False)
+        return self._save_text(path, text)
+
+    def save_report_dialog(self, path=None):
+        if self.result is None:
+            return None
+        path = path or QFileDialog.getSaveFileName(self.joint_dialog, tr("Save Report…"), "joint_fit.md",
+                                                   tr("Markdown (*.md)"))[0]
+        if not path:
+            return None
+        from ...application.fit_report import render
+
+        parts = [("h1", tr("Fit Several Curves Together")), *self._report_blocks()]
+        rows = []
+        for index, spec in enumerate(self.result_specs):
+            model = self.result.models[index]
+            errors = curve_errors(self.result, index)
+            for path_key, parameter in model.parameters():
+                if path_key[0] == "globals" and not parameter.free:
+                    continue
+                error = errors.get(path_key, math.nan)
+                rows.append([spec.name, path_name(model, path_key, unit=True, full=True), f"{parameter.value:.6g}",
+                             f"{error:.4g}" if math.isfinite(error) else "—"])
+        if rows:
+            parts += [("h2", tr("Parameters")), ("table", [tr("Curve"), tr("Parameter"), tr("Value"), "± 1σ"], rows)]
+        return self._save_text(path, render(parts, "markdown"))
+
+    def _save_text(self, path, text):
         try:
             Path(path).write_text(text, encoding="utf-8")
         except OSError as exc:
             self._say(trf("Could not save {name}: {reason}", name=Path(path).name, reason=str(exc)), "error")
             return None
-        self._say(trf("Saved {name}.", name=Path(path).name), "ok")
+        saved = trf("Saved {name}.", name=Path(path).name)
+        self._say(saved, "ok")
+        show_toast(self.joint_dialog, saved, level="ok", action=folder_action(path))
         return path
 
     def _say(self, text: str, level: str) -> None:

@@ -364,10 +364,9 @@ class FitModelEditor(QWidget):
         card, layout = self._card("fitGrazing")
         title = QLabel(tr("Spheres in grazing incidence"), card)
         title.setProperty("gimapRole", "strong")
-        title.setToolTip(tr("αi = αf = 0: spheres at q_z = 0 (effective interface approximation, no substrate needed). "
-                            "With αi, αf and λ of the cut: direct and exit-reflected path, with a free effective "
-                            "reflection coefficient r = |r|·e^(i·arg r); free |r| and arg r to fit it. "
-                            "With a known substrate as well: the four-term DWBA. Upright cylinders are not affected."))
+        title.setToolTip(tr("The angles and wavelength set the scattering paths for spheres and for upright cylinders "
+                            "with a height distribution in DA. Choose a substrate for the four-term DWBA. With an "
+                            "unknown substrate, |r| and arg r set the effective reflection coefficient."))
         layout.addWidget(title)
         layout.addLayout(self._grid(card, GRAZING, "globals"))
         self._substrate = SubstrateControls(self, card)
