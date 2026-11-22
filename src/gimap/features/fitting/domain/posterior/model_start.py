@@ -11,6 +11,7 @@ from .. import fit_engine
 from .. import fit_model as fm
 from . import encoding as E
 from .infer import TAIL_WIDTH_MAX, Cut
+from .substrate_level import ordered_model
 
 KEYS = ("R", "sigma_R", "h", "sigma_h", "D", "sigma_nn")
 GLOBAL_KEYS = {"tail_width": "res_width", "tail_exponent": "res_exponent", "q_resolution": "q_resolution"}
@@ -64,18 +65,22 @@ def fit_model(values, composition: int, data: Cut, law: str = "number_gauss", co
     for slot, (family, structure) in enumerate(E.composition_types(composition)):
         j = slot * E.PER_SLOT
         height = data.upright_height(slot) if family == "vertical_cylinder" else None
+        size_law, method = height.settings(law, coupling) if height else (law, coupling)
         component = fm.new_component(family, radius=values[j], distance=values[j + 4] if structure else None,
-                                     structure=structure, law=law, heights=height is not None)
+                                     structure=structure, law=size_law, heights=height is not None)
         params = dict(component.params)
         for offset, key in enumerate(KEYS):
             if key in params and np.isfinite(values[j + offset]):
                 params[key] = _clip(params[key], values[j + offset])
         params = _box(params, family, data)
         if height is not None:
-            for key, value in zip(("h", "sigma_h"), height):
-                params[key] = fm.Parameter(value, False, value, value)
-        components.append(fm.Component(family, params, structure, coupling, law, heights=height is not None))
+            for key, value in (("h", height.height), ("sigma_h", height.spread)):
+                p = params[key]
+                params[key] = fm.Parameter(value, False, min(p.lower, value), max(p.upper, value))
+        components.append(fm.Component(family, params, structure, method, size_law, heights=height is not None))
     model = fm.FitModel(tuple(components), substrate=data.substrate)
+    if data.upright_heights:
+        model = ordered_model(model)
     g = E.GLOBAL.start
     model = model.with_parameter(("globals", "res_amplitude"), value=1.0, free=True)
     for offset, (name, key) in enumerate(GLOBAL_KEYS.items()):

@@ -1705,8 +1705,14 @@ the factors and limits for the analysed ring matching that curve.
    distance D, and their values; each solution is refined by least squares and weighted by its posterior
    probability. With a known substrate, wavelength and both cut angles, the fit uses four-term DWBA (level 4).
    Enter `substrate = Si` on a separate line in the session notes, or use `--substrate Si` on the command line.
-   Material keys are `Si`, `SiO2`, `glass` and `Au`. NeXus sample metadata can also supply the substrate material
-   or its δ and β. With an unknown substrate and both angles, the fit uses the Born term at the cut's vacuum
+   The command-line material keys are `Si`, `SiO2`, `glass` and `Au`. File headers and notes also accept
+   `SiO₂`, silicon, silicon dioxide, fused silica, plate glass and gold, in any letter case.
+   In the current NeXus entry, `sample/substrate` may hold the material name directly, or be a group with
+   `material` or the dimensionless datasets `delta` and `beta`. A film on this substrate goes in its
+   `top_layer` subgroup with `delta`, `beta`, and either `thickness_nm` or `thickness` with length units.
+   All optical constants are at the measured wavelength. If the file gives incomplete or unsupported optics,
+   the report records why the fit skipped them. Correct an invalid explicit substrate in the session before fitting.
+   With an unknown substrate and both angles, the fit uses the Born term at the cut's vacuum
    q_z = (2π/λ)(sin αi + sin αf), the second level. If either angle is unknown, the fit uses
    the effective interface at q_z = 0, the first level. The report states the level and the reason under *Decisions*.
    The length scale 2π/q\* is independent of the fit. Confirm the model in Fitting.
@@ -2604,7 +2610,9 @@ benchmarks.
    and enter the film thickness in nm and its δ and β. The Fit panel and Fit details name the substrate. Refinement
    and posterior weighting use four-term DWBA with Fresnel reflection for a bare substrate or Parratt reflection for
    the film. Spheres sum the four paths. For upright cylinders of fixed height the common axial factor goes into the
-   scale. If Model supplies a height distribution, the decoupling approximation averages over it. Randomly oriented
+   scale. With **The particles in Model**, each upright cylinder keeps its supplied height, width, size law and coupling.
+   The decoupling approximation averages over its heights. With several populations, identify them by increasing
+   radius when entering the heights or reading the results. Randomly oriented
    cylinders use the orientation-averaged Born term at the cut's q_z. Model and the saved solutions retain the geometry.
    With **Unknown**, both angles give the two-path model
    with a fitted effective reflection coefficient. A single angle gives the Born term, and two zero angles give

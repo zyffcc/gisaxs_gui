@@ -1,6 +1,17 @@
 """Known substrate and cut geometry in Predict parameters."""
 
 PREDICT_SUBSTRATE_ZH = {
+    "substrate": "基底",
+    "file optics unused": "未采用文件中的基底光学参数",
+    "Unsupported substrate material {material}.": "不支持基底材料 {material}。",
+    "The substrate needs a known material or finite optical constants δ > 0 and β ≥ 0.":
+        "请提供支持的基底材料，或有限的光学常数 δ > 0 和 β ≥ 0。",
+    "Each specified film needs its thickness in nm and finite optical constants δ and β.":
+        "每层薄膜均须给出膜厚（nm）及有限的光学常数 δ 和 β。",
+    "The substrate description contains unrecognized layer or optical fields.": "基底描述含有无法识别的膜层或光学参数。",
+    "The material table does not cover the cut energy.": "该切线的能量超出材料表范围。",
+    "The notes give conflicting substrate materials.": "笔记中给出的基底材料互相矛盾。",
+    "Give one material or a complete optical description.": "请指定一种材料或给出完整的光学参数。",
     "With both cut angles and a known substrate, Predict and Refine use four-term DWBA. "
     "The material table covers 4.9–30 keV. To enter a film, open Cut geometry and substrate in Fit.":
         "两个切线角度和基底已知时，预测和精修采用四项 DWBA。材料表覆盖 4.9–30 keV。若有薄膜，在拟合步骤打开“切线几何与基底”。",

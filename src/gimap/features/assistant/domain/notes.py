@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+from .substrate_optics import material_name
+
 _NUMBER = r"(\d+(?:\.\d+)?)"
 _INCIDENCE = re.compile(
     r"(?:α\s*_?\s*i|alpha[\s_-]?i|\bai\b|incidence(?:\s+angle)?|incident\s+angle|掠?入射角)"
@@ -61,9 +63,11 @@ def energy_from_notes(text: str) -> Optional[float]:
 
 def substrate_from_notes(text: str) -> Optional[str]:
     """An explicit 'substrate = Si' field on its own line. Sample names and descriptions are ambiguous."""
-    fields = re.findall(r"^\s*(?:substrate|基底|衬底)\s*[:=：]\s*(.*?)\s*$", text or "", re.I | re.M)
-    named = {field.casefold().replace("₂", "2") for field in fields}
-    return {"si": "Si", "sio2": "SiO2", "au": "Au", "glass": "glass"}.get(named.pop()) if len(named) == 1 else None
+    fields = re.findall(r"^[ \t]*(?:substrate|基底|衬底)[ \t]*[:=：][ \t]*(.*?)[ \t]*$", text or "", re.I | re.M)
+    named = {material_name(field) for field in fields}
+    if len(named) > 1:
+        raise ValueError("The notes give conflicting substrate materials.")
+    return named.pop() if named else None
 
 
 def pixel_size_from_notes(text: str) -> Optional[float]:

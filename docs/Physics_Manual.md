@@ -3128,6 +3128,10 @@ to one. Local posterior sampling omits both coordinates and their prior factors.
 
 For upright cylinders the horizontal scale absorbs the common axial intensity. At level 4 a given independent height
 distribution multiplies the DA coherent term by |⟨G(H)⟩|²/⟨|G(H)|²⟩ (section 9.5). The ratio is one for fixed height.
+For **The particles in Model**, the prediction record keeps each upright cylinder's supplied height and width together
+with its size law and LMA or DA setting. For example, a lognormal specified by its median keeps the standard deviation
+of ln(height) as its width. Refinement keeps these inputs fixed and preserves the order of populations by radius.
+The posterior check reads the same inputs from the saved solution.
 Random cylinders use q_z = 0 at levels 1 and 3. At level 2 the posterior uses q₊ and the refined
 model uses q_z = 0. At level 4 both use the orientational average at √(q² + q₊²) (section 9.4).
 For spheres, level 1 holds within about 5 % of R up to q₊R ≈ 1.7 (section 9.10). On the
@@ -3620,7 +3624,9 @@ smooth and the particle layer has the optical constants of air. A horizontal cut
 estimate of the layer thickness or optical constants in this fit.
 
 **Predict parameters.** The fourth level uses these same coefficients in the likelihood and bounded refinement
-(section 9.13). The fitted model records the substrate and any layers for subsequent evaluation.
+(section 9.13). The fitted model records the substrate and any layers for subsequent evaluation. The recovery
+benchmark compares the same simulated cuts on Si and on a 100 nm polystyrene film over Si, keeping the cut
+at the Si Yoneda angle on both surfaces. The per-cut comparisons are grouped by q₊R. [Benchmark results](../tools/benchmarks/README.md)
 
 **Checked against BornAgain 24.1** (`tools/benchmarks/joint_dwba_bornagain.py`, average layer materials off as in
 section 9.2; Si of the table at λ = 0.1045 nm, δ = 3.46 · 10⁻⁶, β = 3.74 · 10⁻⁸; αi = 0.40°, the horizontal cut at the
@@ -4974,7 +4980,7 @@ window's records:
 | Mask | `mask`: `applied` (true or false), `file` (as above), `kind` (a mask image whose non-zero pixels are left out, or a GIMaP masks file with its number of drawn shapes), `masked_pixels`, and `bad_pixels_left_out` (section 14.4): the pixels found automatically are counted apart from the mask. `report.md` says the same under **Mask**, also when no mask was applied |
 | Analyze's record | `analysis_record`: the record of section 14.2 for the frame as it was reduced (geometry, corrections, error model, binning, markers, `input_sha256`), without `files` |
 | Results | the decisions with their reasons (`decisions`), the open questions (`needs_attention`), the steps, the peaks and rings (GIWAXS) or `gisaxs` (cuts, symmetry axis, halves, length scale, fit), `tables` and `folder` (the frame's folder, relative to the summary); in `summary.json` each frame also has `outputs` (the files written) |
-| Model fit | `gisaxs.fit.method`: `name` (`Predict parameters`), `network` (`name`, for example `flow_v1`, and `sha256`: the SHA-256 of the weights file, the value the network's record names and the loader checks) and `seed` (0, section 14.8). `gisaxs.fit.solutions` holds every solution with its model, parameters, probability, χ²ᵣ (`chi2`, with `points`: `fitted`, `given`, `below_window`, `unusable`), `flags`, `warnings` and `more_warnings` (the flags as sentences: of the particles and the solution, and of background, beam tail and resolution) and `intervals` (median, 68 % and 95 % limits; the texts print the refined value with the 68 % limits); `fitted_points` repeats the points of the fit; `curve`, `points` and `q_range_inv_angstrom` say what was fitted, `data` holds the fitted points; `substrate_level` and `sphere_model` record the approximation used. At level 2 (`Born term at the cut's q_z`), `cut_qz` holds the vacuum `q_z_inv_nm` and its inputs `alpha_i_deg`, `alpha_f_deg` and `wavelength_A`. Level 4 also records `substrate` (material or optical constants and any layers) and `grazing` (angles and wavelength in nm). At level 1 (`effective interface (q_z = 0)`), `cut_qz` is `null`. Section 9.13 explains the q_z·R flags |
+| Model fit | `gisaxs.fit.method`: `name` (`Predict parameters`), `network` (`name`, for example `flow_v1`, and `sha256`: the SHA-256 of the weights file, the value the network's record names and the loader checks) and `seed` (0, section 14.8). `gisaxs.fit.solutions` holds every solution with its model, parameters, probability, χ²ᵣ (`chi2`, with `points`: `fitted`, `given`, `below_window`, `unusable`), `flags`, `warnings` and `more_warnings` (the flags as sentences: of the particles and the solution, and of background, beam tail and resolution) and `intervals` (median, 68 % and 95 % limits; the texts print the refined value with the 68 % limits); `fitted_points` repeats the points of the fit; `curve`, `points` and `q_range_inv_angstrom` say what was fitted, `data` holds the fitted points; `substrate_level` and `sphere_model` record the approximation used. At level 2 (`Born term at the cut's q_z`), `cut_qz` holds the vacuum `q_z_inv_nm` and its inputs `alpha_i_deg`, `alpha_f_deg` and `wavelength_A`. Level 4 also records `substrate` (material or optical constants and any layers) and `grazing` (angles and wavelength in nm). When the file optics cannot be used, `substrate_metadata_warning` and the Decisions entry explain why. At level 1 (`effective interface (q_z = 0)`), `cut_qz` is `null`. Section 9.13 explains the q_z·R flags |
 
 - `summary.json` is one object: `software_version`, `created`, `options`, `arguments` (one sentence per pattern or
   folder among the arguments: how many files it stood for) and `frames`, the list of the frame reports without

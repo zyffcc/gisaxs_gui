@@ -89,7 +89,7 @@ class Cut:
                     alpha_f_deg=geometry.alpha_f_deg, delta=geometry.delta, beta=geometry.beta)
 
     def upright_height(self, slot: int):
-        return next(((h, s) for n, h, s in self.upright_heights if n == slot + 1), None)
+        return next((height for n, height in self.upright_heights if n == slot + 1), None)
 
     @property
     def reflected(self) -> bool:
@@ -209,12 +209,14 @@ class Likelihood:
         groups = [(np.flatnonzero(sharp), self.data.q), (np.flatnonzero(~sharp), None)]
         for slot, (family, structure) in enumerate(self.types):
             j = slot * E.PER_SLOT
+            height = self.data.upright_height(slot) if family == "vertical_cylinder" else None
+            law, coupling = height.settings(self.law, self.coupling) if height else (self.law, self.coupling)
             for rows_, grid in groups:
                 if not rows_.size:
                     continue
                 if grid is None:
                     grid = resolution.table_grid(self.data.q, float(np.max(sigma[rows_])), TABLE_POINTS)
-                kwargs = dict(law=self.law, coupling=self.coupling)
+                kwargs = dict(law=law, coupling=coupling)
                 if family == "sphere" and self.data.reflected:  # every sample its own r
                     terms = np.stack([cut.population_terms(
                         family, grid, radius=v[b, j], radius_spread=v[b, j + 1],
@@ -222,7 +224,7 @@ class Likelihood:
                         geometry=self.data.geometry(complex(v[b, g + 4], v[b, g + 5])), **kwargs)[0] for b in rows_])
                 elif slot in self.height_fractions:
                     terms = substrate_level.upright_da_terms(
-                        grid, v[rows_, j], v[rows_, j + 1], v[rows_, j + 4], v[rows_, j + 5], self.law,
+                        grid, v[rows_, j], v[rows_, j + 1], v[rows_, j + 4], v[rows_, j + 5], law,
                         geometry, self.height_fractions[slot])
                 else:
                     terms = cut.population_terms(

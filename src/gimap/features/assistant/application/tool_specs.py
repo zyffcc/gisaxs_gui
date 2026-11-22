@@ -61,7 +61,7 @@ REPORT_ITEM = _object(
 
 def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
     substrate = _object({
-        "material": {"type": "string", "enum": ["Si", "SiO2", "glass", "Au", "custom"]},
+        "material": {"type": "string", "description": "Si, SiO2, plate glass, Au, or custom δ and β."},
         "delta": NUMBER, "beta": NUMBER,
         "layers": {"type": "array", "items": _object({"thickness_nm": NUMBER, "delta": NUMBER, "beta": NUMBER},
                                                      ("thickness_nm", "delta", "beta"))},

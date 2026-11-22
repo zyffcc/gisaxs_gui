@@ -255,5 +255,3 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
             partial(finish(entries, final=False))
     tell("sampling", len(kept), len(kept))
     return finish(entries)
-
-

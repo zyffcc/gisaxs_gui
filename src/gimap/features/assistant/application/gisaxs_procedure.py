@@ -20,6 +20,7 @@ from typing import Optional
 from src.gimap.shared import fit_names
 
 from ..domain.notes import substrate_from_notes
+from ..domain.substrate_optics import substrate_record
 from .gisaxs_choice import (
     ASK_PROBABILITY,
     INTERVAL_KEYS,
@@ -239,10 +240,16 @@ class GisaxsProcedureMixin:
         # The time grows with the points and the compositions tried (``pipeline_progress.FIT_TAKES``): no one figure.
         self.progress("fit_horizontal_cut: predicting the particles of I(qy) (some seconds to a few minutes)…")
         options = getattr(self, "options", None)
-        substrate = getattr(options, "substrate", None) or substrate_from_notes(getattr(options, "notes", ""))
-        if isinstance(substrate, str):
-            substrate = {"material": substrate}
-        outcome = (self._call("fit_horizontal_cut", {"substrate": substrate}) if substrate else
+        substrate = getattr(options, "substrate", None)
+        try:
+            if substrate is None:
+                substrate = substrate_from_notes(getattr(options, "notes", ""))
+            if substrate is not None:
+                substrate = substrate_record(substrate)
+        except ValueError as exc:
+            self._attention("substrate", str(exc), "--substrate", "Give one material or a complete optical description.")
+            return
+        outcome = (self._call("fit_horizontal_cut", {"substrate": substrate}) if substrate is not None else
                    self._call("fit_horizontal_cut"))
         if outcome is None:
             return
@@ -251,6 +258,8 @@ class GisaxsProcedureMixin:
         solutions = fit.get("solutions") or []
         if not solutions:
             return
+        if fit.get("substrate_metadata_warning"):
+            self._decide("substrate", "file optics unused", fit["substrate_metadata_warning"])
         if fit.get("substrate_level") == 4:
             self._decide("model fit", "at the fourth level", fit["sphere_model"])
         elif fit.get("substrate_level") == 2:

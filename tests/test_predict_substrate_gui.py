@@ -48,7 +48,9 @@ def test_typed_film_in_predict_and_batch_uses_the_same_geometry():
     settings = batch_geometry(saved)
     assert settings["substrate"] == options["substrate"]
     assert settings["qz"] == options["qz"] and settings["qz_minus"] == options["qz_minus"]
-    assert options["upright_heights"]["1"] == [model.components[0].value(k) for k in ("h", "sigma_h")]
+    upright = model.components[0]
+    assert options["upright_heights"]["1"] == dict(h=upright.value("h"), sigma_h=upright.value("sigma_h"),
+                                                   law=upright.law, coupling=upright.coupling)
     record = fit_record(model, data, None, side="mean", q_range=None, result=None, include_recipe=False)
     assert record["sphere_model"].startswith("four-term DWBA on 90 nm")
     assert record["model"]["substrate"] == cut["substrate"]

@@ -58,6 +58,7 @@ SENTENCES = (
     "cut of the series (rows {rows})",
     "Born term at the cut's q_z = {qz} nm⁻¹",
     "four-term DWBA on {substrate}",
+    "Unsupported substrate material {material}.",
     "{n} solutions have a probability of at least {limit} ({solutions}): the curve alone does not decide the model.",
     "{n} solutions have a BIC weight of at least {limit} ({solutions}).",
     "Predict parameters on {curve} compared the solutions by BIC weight after evidence sampling failed.",

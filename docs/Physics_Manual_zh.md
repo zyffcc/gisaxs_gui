@@ -2590,7 +2590,9 @@ q₊R > 2 时第二层另加 `qzR_fail:R_n`，提示改用第三层或四项 DWB
 似然与这两个坐标无关，其归一化先验的积分为 1。局部后验抽样略去这两个坐标和相应的先验因子。
 
 竖直圆柱的轴向强度因子由水平切线的标度吸收。在第四层，给定独立的高度分布时 DA 相干项还要乘上 |⟨G(H)⟩|²/⟨|G(H)|²⟩
-（9.5 节），高度固定时这一因子为 1。随机取向圆柱在第一、三层用 q_z = 0。第二层的后验用 q₊，精修模型用 q_z = 0。
+（9.5 节），高度固定时这一因子为 1。选择“模型中的粒子”时，预测记录保存各竖直圆柱的给定高度和宽度、尺寸分布以及 LMA 或 DA 设置。
+例如，按中位数给出的对数正态分布以 ln(高度) 的标准差为宽度。精修时这些输入保持固定，且各组颗粒按半径从小到大排列。
+后验检查从保存的解中读取同一组输入。随机取向圆柱在第一、三层用 q_z = 0。第二层的后验用 q₊，精修模型用 q_z = 0。
 第四层二者均在 √(q² + q₊²) 处作取向平均（9.4 节）。对球，第 1 层级直到 q₊R ≈ 1.7 都能把 R 保持在约
 5 % 以内（9.10 节）。在上面 Si 上的四项 DWBA 曲线上（`posterior_dwba_pairs.json`），第 1 层级下 R 的中位误差在 q₊R 1.7–2.3、
 2.3–3.5 和大于 3.5 时为 15 %、20 % 和 29 %；第 3 层级为 4.0 %、6.7 % 和 7.0 %；第 2 层级为 4.0 %、11 % 和 40 %。BornAgain 和
@@ -2901,7 +2903,9 @@ r(α) = (k_z − k_z,s) / (k_z + k_z,s),   k_z = k sin α,   k_z,s = k √(sin²
 
 (9.40) 的四项用 αi 和 αf 处的反射振幅。裸界面采用 (9.41)，分层基底采用下文的 (9.41a)，两个系数都由给定的光学参数确定。随机取向圆柱在
 |q| = √(q² + (k_i + k_f)²) 处平均（切线 q_z 的 Born 项，与 fit1d 相同）。对于有高度分布的竖直圆柱，水平切线的 DA 使用这四条路径（9.5、9.10 节）。核壳球仍在
-q_z = 0。尺寸平均采用 9.3 节的求积。批量计算未进入包络区的球强度时，在共用半径网格上计算四路径强度，采用六点插值。基底下面一行说明正在用哪个层次（*层次：四项 DWBA
+q_z = 0。尺寸平均采用 9.3 节的求积。批量计算未进入包络区的球强度时，通过半径上的六点插值共用四路径强度表。
+对单个尺寸分布，若切线的 q 点很密，可在 q 上取网格后用八点插值。半径为 R 的球内最大面内间距为 2R，因此 q 步长取为
+0.32/(2R_max)，其中 R_max 是求积节点的最大半径。两种插值都在乘以 S(q) 和分辨率展宽之前进行。基底下面一行说明正在用哪个层次（*层次：四项 DWBA
 （已知基底），基底 Si（λ = … nm 时 δ = …，β = …）*）。两个角度未给全时，这一行说明第四层需要 αi 和 αf。
 
 **材料表。** 密度 ρ、各元素质量分数 w_j、原子量 A_j、原子散射因子 f₁ + i f₂ 的材料：
@@ -2939,6 +2943,7 @@ R_j = (f_j + u_j)/(1 + f_j u_j),    j = m−1, …, 0                           
 颗粒所在层的平均光学常数与空气相同。该拟合将膜厚和光学常数视为输入，水平切线本身不给出它们的独立估计。
 
 **预测参数。** 第四层的似然与有界精修使用上述同一组反射系数（9.13 节）。拟合得到的模型记录基底和各层，后续计算继续使用它们。
+恢复基准在 Si 以及覆盖 100 nm 聚苯乙烯膜的 Si 上模拟同一组切线，两组都取 Si 的 Yoneda 角，逐条比较并按 q₊R 分组。[基准结果](../tools/benchmarks/README.md)
 
 **与 BornAgain 24.1 的比较**（`tools/benchmarks/joint_dwba_bornagain.py`，与 9.2 节一样关闭层平均材料；λ = 0.1045 nm 时
 表中的 Si，δ = 3.46 · 10⁻⁶，β = 3.74 · 10⁻⁸；αi = 0.40°，水平切线在 Yoneda 行 αf = 0.151°；拟合工作区已知基底的模型；
@@ -4055,7 +4060,7 @@ SHA-256 摘要标识内容重要的文件：
 | 掩膜 | `mask`：`applied`（true 或 false）、`file`（同上）、`kind`（掩膜图像，非零像素被排除；或 GIMaP 掩膜文件及其形状个数）、`masked_pixels`，以及 `bad_pixels_left_out`（14.4 节）：自动找到的像素与掩膜分开计数。`report.md` 在 **Mask** 一节写同样的内容，没有应用掩膜时也写 |
 | 分析工作区的记录 | `analysis_record`：14.2 节的记录，对应实际约化的这一帧（几何、校正、误差模型、分箱、标记、`input_sha256`），没有 `files` |
 | 结果 | 决定及其理由（`decisions`）、待回答的问题（`needs_attention`）、步骤、峰和环（GIWAXS）或 `gisaxs`（切线、对称轴、两半、特征长度、拟合）、`tables` 和 `folder`（这一帧的文件夹，相对于摘要）；在 `summary.json` 里每一帧还有 `outputs`（写出的文件） |
-| 模型拟合 | `gisaxs.fit.method`：`name`（`Predict parameters`）、`network`（`name`，例如 `flow_v1`，和 `sha256`：权重文件的 SHA-256，即网络记录里写明、载入时检查的值）和 `seed`（0，14.8 节）。`gisaxs.fit.solutions` 是每个解及其模型、参数、概率、χ²/N 和 `intervals`（中位数、68 % 和 95 % 限）；`curve`、`points` 和 `q_range_inv_angstrom` 说明拟合的是什么，`data` 是被拟合的点；`substrate_level` 和 `sphere_model` 记录拟合所用的近似。第二层（`Born term at the cut's q_z`）的 `cut_qz` 保存真空 `q_z_inv_nm` 及输入 `alpha_i_deg`、`alpha_f_deg` 和 `wavelength_A`。第四层另记录 `substrate`（材料或光学常数以及各层）和 `grazing`（角度、以 nm 计的波长）。第一层（`effective interface (q_z = 0)`）的 `cut_qz` 为 `null`。q_z·R 标记见 9.13 节 |
+| 模型拟合 | `gisaxs.fit.method`：`name`（`Predict parameters`）、`network`（`name`，例如 `flow_v1`，和 `sha256`：权重文件的 SHA-256，即网络记录里写明、载入时检查的值）和 `seed`（0，14.8 节）。`gisaxs.fit.solutions` 是每个解及其模型、参数、概率、χ²/N 和 `intervals`（中位数、68 % 和 95 % 限）；`curve`、`points` 和 `q_range_inv_angstrom` 说明拟合的是什么，`data` 是被拟合的点；`substrate_level` 和 `sphere_model` 记录拟合所用的近似。第二层（`Born term at the cut's q_z`）的 `cut_qz` 保存真空 `q_z_inv_nm` 及输入 `alpha_i_deg`、`alpha_f_deg` 和 `wavelength_A`。第四层另记录 `substrate`（材料或光学常数以及各层）和 `grazing`（角度、以 nm 计的波长）。文件中的基底光学参数不可用时，`substrate_metadata_warning` 和 Decisions 中说明原因。第一层（`effective interface (q_z = 0)`）的 `cut_qz` 为 `null`。q_z·R 标记见 9.13 节 |
 
 - `summary.json` 是一个对象：`software_version`、`created`、`options`、`arguments`（参数中的每个通配符或文件夹一句话：它代表多少个文件）
   和 `frames`，即各帧报告的列表，不含 `tables`、`analysis_record` 和 `options`。0.2.0 之前这个文件只是那个列表；
