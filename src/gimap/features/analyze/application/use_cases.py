@@ -10,6 +10,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 import numpy as np
 
 from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile
+from src.gimap.shared.geometry.detector_response import DetectorResponse
 from src.gimap.shared.geometry.instrument_profile import OTHER_SCALE_SETUP
 from src.gimap.shared.geometry.detector_tilt import DetectorTilt
 from src.gimap.shared.geometry.conventions import (
@@ -54,6 +55,8 @@ from .export_record import (  # noqa: F401 - the record of an export; these name
 from .flat_detector import detector_rotation_message, flat_detector_error, flat_detector_message
 from .frame_preprocessing import FramePreprocessingMixin, FrameSum, floating
 from .geometry_files import SiblingPoni
+from .detector_response import with_profile_response
+from .reduction_errors import reduction_errors
 from .geometry_resolution import ResolveGeometry, center_not_used_message, refused_profile_message
 from .nxcansas_export import nxcansas_name, sas_curves
 from .technique import TechniqueGuess
@@ -223,11 +226,12 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 common["path"], (int(common["frame_index"]), tuple(common["summed_frames"])), raw_data, raw_valid,
                 geometry, request.incidence_deg)
         kind = None if geometry is None else (request.mode if request.mode != AUTO else detected)
-        counting = self.correct_pixels(common, raw_data, raw_valid, request.corrections, geometry, kind)
-        if not request.corrections.normalisation.is_identity:  # one constant of the frame, last
-            self._normalise(common, raw_data, raw_valid, request.corrections, counting, Path(request.path).name)
+        corrections = with_profile_response(request.corrections, resolution.profile)
+        counting = self.correct_pixels(common, raw_data, raw_valid, corrections, geometry, kind)
+        if not corrections.normalisation.is_identity:  # one constant of the frame, last
+            self._normalise(common, raw_data, raw_valid, corrections, counting, Path(request.path).name)
         data, valid = common["data"], common["valid"]
-        scale = common.get("intensity_scale")
+        errors = reduction_errors(corrections, common)
         messages: list[str] = []
         refused = refused_profile_message(resolution, shape)
         if refused:
@@ -257,18 +261,18 @@ class AnalyzeFrame(FramePreprocessingMixin):
         if kind == TRANSMISSION:
             reduction = reduce_transmission(
                 data, valid, geometry, request.giwaxs, maps=self._giwaxs_maps(shape, geometry, TRANSMISSION),
-                with_map=request.with_map, counts=scale if scale is not None else counting,
+                with_map=request.with_map, counts=errors,
             )
         elif kind == GISAXS:
             reduction = reduce_gisaxs(
-                data, valid, geometry, request.gisaxs, counts=scale if scale is not None else counting,
+                data, valid, geometry, request.gisaxs, counts=errors,
                 q_map=self._gisaxs_q_map(data, valid, geometry) if request.with_map else None,
                 maps=self._gisaxs_maps_for(shape, geometry) if request.gisaxs.regions else None,
             )
         else:
             reduction = reduce_giwaxs(
                 data, valid, geometry, request.giwaxs, maps=self._giwaxs_maps(shape, geometry),
-                with_map=request.with_map, counts=scale if scale is not None else counting,
+                with_map=request.with_map, counts=errors,
             )
         messages.extend(reduction.warnings)
         reduction = held_cut(reduction, request.series_cut)
@@ -481,6 +485,7 @@ class SaveInstrumentProfile:
         shape: Optional[tuple[int, int]],
         source: str,
         dropped_tilt: Optional[DetectorTilt] = None,
+        detector_response: Optional[DetectorResponse] = None,
     ) -> InstrumentProfile:
         """``dropped_tilt``: the tilt of the ``.poni`` the geometry comes from, which the flat geometry leaves out."""
         if self.profiles is None:
@@ -497,6 +502,8 @@ class SaveInstrumentProfile:
                 source=source,
                 dropped_tilt=dropped_tilt,
             )
+        if detector_response is not None:
+            profile = replace(profile, detector_response=detector_response)
         self.profiles.save(profile)
         return profile
 

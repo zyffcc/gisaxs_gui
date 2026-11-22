@@ -12,6 +12,10 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Analyze ▸ Mask & corrections.** Raw background and flat-field frames can use an exposure-scaled dark.
+  Set the flat-field threshold, save detector gain, offset and error model in an instrument profile, and choose
+  pooled scatter errors or smoothed counting errors for sparse curves. Propagated errors include flat-field noise and treat the measured flat mean as fixed.
+
 - **Analyze ▸ Absolute Scale from a Standard…** fits a detector frame or reduced radial curve against water at the
   measured temperature or a user-supplied reference such as glassy carbon. Calibrated exports carry intensity in
   cm⁻¹ and record the standard, fitted range, scale and uncertainty. The instrument profile keeps the calibration.

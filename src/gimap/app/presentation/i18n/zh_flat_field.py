@@ -5,10 +5,6 @@ note of a settings file whose flat field is missing, and the set-up summaries (B
 
 FLAT_FIELD_ZH = {
     "No flat field": "无平场",
-    "Flat field (detector response): every frame is divided by it, normalised to mean 1; pixels where it is at or "
-    "below 0.05 are left out. A detector frame of the same size or a .npy file":
-        "平场（探测器响应）：每一帧都除以它，它先归一化到平均值为 1；平场值不大于 0.05 的像素被排除。"
-        "可以是同样大小的探测器帧，或 .npy 文件",
     "Stop dividing by the flat field": "不再除以平场",
     "Flat field": "平场",  # (Sputter's label too: one Chinese, one English)
     "flat field": "平场校正",

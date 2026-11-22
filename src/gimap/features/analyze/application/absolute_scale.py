@@ -15,6 +15,8 @@ from ..domain import GIWAXS, GiwaxsSettings, Normalisation, describe_intensity_c
 from ..domain.absolute_scale import ScaleFit, fit_standard, water_intensity
 from ..domain.normalisation import mm_to_cm
 from .export_record import _plain, source_files
+from .detector_response import with_profile_response
+from .reduction_errors import reduction_errors
 from .frame_preprocessing import FramePreprocessingMixin, floating
 from .standard_curves import read_standard_curve
 
@@ -55,7 +57,7 @@ class CalibrateStandard(FramePreprocessingMixin):
         self.profile_name = profile.name
         self.geometry = geometry
         self.shape = tuple(shape) if shape is not None else None
-        self.corrections = replace(corrections, normalisation=Normalisation())
+        self.corrections = replace(with_profile_response(corrections, profile), normalisation=Normalisation())
         self.mode = mode
         self.bins = bins
         self._init_preprocessing()
@@ -71,11 +73,11 @@ class CalibrateStandard(FramePreprocessingMixin):
         _check_cancelled(cancelled)
         valid = valid_pixels(data, image.mask, negatives_valid=floating(image.metadata))
         common = {"metadata": image.metadata}
-        counting = self.correct_pixels(common, data, valid, self.corrections, self.geometry, self.mode)
+        self.correct_pixels(common, data, valid, self.corrections, self.geometry, self.mode)
         _check_cancelled(cancelled)
         reduced = reduce_transmission(
             common["data"], common["valid"], self.geometry, GiwaxsSettings(bins=self.bins),
-            with_map=False, counts=common.get("intensity_scale", counting),
+            with_map=False, counts=reduction_errors(self.corrections, common),
         )
         curve = reduced.curve("radial")
         if curve is None or curve.is_empty:
@@ -84,7 +86,13 @@ class CalibrateStandard(FramePreprocessingMixin):
         corrections = self.corrections
         paths = [p for p in (corrections.mask_path, corrections.dark_path, corrections.background_path,
                              corrections.flat_field_path) if p]
+        if common["error_model_used"] == "sigma":
+            paths.append(corrections.sigma_path)
         corrections_record = _plain(corrections)
+        corrections_record["reference_dark"] = common.get("reference_dark")
+        corrections_record["error_model_used"] = common["error_model_used"]
+        if common.get("flat_field"):
+            corrections_record["flat_field"] = common["flat_field"].to_record()
         corrections_record.pop("normalisation")  # the entered terms are recorded separately
         sources = source_files(path, image.metadata) or [str(path)]
         record = {

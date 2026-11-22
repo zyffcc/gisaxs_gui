@@ -88,7 +88,8 @@ def test_the_report_says_what_its_numbers_are_and_where_the_list_was_cut(p08) ->
     assert "k·sin αi = 0.0119 Å⁻¹ here (αi = 0.075°, λ = 0.6888 Å)" in q["why"]  # 2π/λ · sin αi
     assert report["error_model"] == "pixel_scatter"  # a floating-point frame
     errors = _decision(report, "uncertainties")
-    assert errors["decision"] == "statistical only" and "pixel-scatter uncertainty, not counting noise" in errors["why"]
+    assert errors["decision"] == "statistical only" and "scatter of the corrected pixels" in errors["why"]
+    assert "pooled variance for points containing fewer than ten pixels" in errors["why"]
 
     search = report["peak_search"]
     assert search["max_peaks"] == 12 and search["truncated"] and search["candidates"] > 12

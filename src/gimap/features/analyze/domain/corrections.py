@@ -12,6 +12,9 @@ from typing import Optional, Sequence
 
 import numpy as np
 
+from src.gimap.shared.geometry.detector_response import DetectorResponse
+
+from .flat_field import FLOOR
 from .normalisation import Normalisation
 
 MAX_GAP_GUARD_PX = 20
@@ -33,7 +36,7 @@ class Corrections:
     """``image − scale × background`` (for example the ratio of exposure times)."""
     flat_field_path: Optional[str] = None
     """A flat field (detector response) of the frame's shape: every frame is divided by it, normalised to mean 1
-    over the pixels it keeps; pixels where it is at or below 0.05 or not finite are left out (``flat_field.py``).
+    over the pixels it keeps; pixels at or below the response floor or not finite are left out (``flat_field.py``).
     A ``.npy`` file or any frame the reader takes (its first frame)."""
     minimum: Optional[float] = None
     """Pixels below this raw value are treated as invalid (``None``: no limit)."""
@@ -71,6 +74,29 @@ class Corrections:
     ``q_mapping.refracted_qz``) and pixels below α_c are left out of the maps and cuts that use q_z. ``None``: the
     kinematic q_z in vacuum. Part of the geometry of the analysis, not of ``is_identity``."""
 
+    background_dark_scale: Optional[float] = None
+    background_already_dark_subtracted: bool = False
+    flat_already_dark_subtracted: bool = False
+    flat_field_floor: float = FLOOR
+    counts_per_adu: float = 1.0
+    offset_adu: float = 0.0
+    use_profile_response: bool = True
+    error_model: str = "auto"
+    sigma_path: Optional[str] = None
+    pooled_scatter: bool = True
+    poisson_variance: str = "observed"
+
+    def __post_init__(self) -> None:
+        DetectorResponse(self.counts_per_adu, self.offset_adu, self.error_model, self.sigma_path)
+        if not 0 <= self.flat_field_floor < 1:
+            raise ValueError("The flat-field floor must be at least zero and below one.")
+        if self.background_dark_scale is not None and not (
+            np.isfinite(self.background_dark_scale) and self.background_dark_scale >= 0
+        ):
+            raise ValueError("The background dark scale must be nonnegative and finite.")
+        if self.poisson_variance not in ("observed", "smoothed"):
+            raise ValueError("Unknown Poisson variance model.")
+
     @property
     def is_identity(self) -> bool:
         return (
@@ -81,6 +107,8 @@ class Corrections:
             and self.minimum is None
             and self.maximum is None
             and self.gap_guard_px <= 0
+            and self.counts_per_adu == 1 and self.offset_adu == 0
+            and self.error_model != "sigma"
         )
 
 

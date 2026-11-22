@@ -65,7 +65,7 @@ To cite GIMaP, use the metadata in [`CITATION.cff`](../CITATION.cff) at the root
   - [6.1 Principles](#61-principles)
   - [6.2 Fixed-edge bins](#62-fixed-edge-bins)
   - [6.3 Native detector lines (GISAXS)](#63-native-detector-lines-gisaxs)
-  - [6.4 The three error models](#64-the-three-error-models)
+  - [6.4 Curve error models](#64-curve-error-models)
   - [6.5 Merging sparse bins along q](#65-merging-sparse-bins-along-q)
   - [6.6 GIWAXS curves](#66-giwaxs-curves)
   - [6.7 GISAXS cuts](#67-gisaxs-cuts)
@@ -185,6 +185,11 @@ The table lists the symbols that occur in more than one chapter. Every other sym
 | x_c, y_c | px | position of the direct beam in canonical coordinates | section 1.1 |
 | p_x, p_y | m (entered in µm) | pixel size along the columns (x) and the rows (y) | section 1.1 |
 | I | counts per pixel | intensity: the mean of the valid pixel values of a bin or a detector line | section 6.1 |
+| K, B, D_ff | counts (after ADU conversion) | dark, background and uniform flat exposures, respectively | sections 4.6, 4.10 |
+| F_ff | – | flat-field response relative to the mean over retained pixels | (4.11) |
+| t_exp | s | exposure time | sections 4.11, 4.12 |
+| d | as specified | sample thickness for normalisation (entered in mm) or film thickness for absorption (entered in nm) | sections 4.12, 5.4 |
+| A_abs | depends on intensity units | absolute-scale factor | (4.15) |
 | n | – | number of valid pixels in a bin or a detector line | section 6.1 |
 | N | – | number of points or bins of a curve | where used |
 | σ | unit of the quantity | standard error (one standard deviation) of a point or a parameter | section 6.4 |
@@ -827,13 +832,13 @@ Implementation: `src/gimap/features/analyze/domain/mask_raster.py`, `src/gimap/f
 
 ### 4.6 Background subtraction
 
+Let `I` be the sample frame, `B` the background, `K` the dark and `s_B` the background scale. Subtract the dark from each exposure before scaling the background:
+
 ```text
-I′ = I − s · B                                                          (4.6)
+J = (I − s_D K) − s_B (B − s′_D K)                                         (4.6)
 ```
 
-`B` is a frame of the same detector and shape (for NeXus a chosen frame of the file) and `s` a scale, for example the ratio of exposure times. A pixel is valid only where both frames are valid; the background's validity follows (4.1) with its own stored type. Negative results stay valid. A subtracted frame is no longer photon counts, so its errors come from the pixel scatter (section 6.4). A dark frame has its own field and is subtracted before the background (section 4.11).
-
-Implementation: `src/gimap/features/analyze/domain/corrections.py`
+The background must have the sample's detector shape and orientation. Each input has its own validity mask. Negative differences remain valid. With no dark, `J = I − s_B B`. Section 4.11 gives the source of the background dark scale.
 
 ### 4.7 Gap guard
 
@@ -886,65 +891,40 @@ Implementation: `src/gimap/features/analyze/application/frame_preprocessing.py`,
 
 ### 4.10 Flat field (detector response)
 
-The pixels of a detector do not respond alike: gain, threshold and sensor thickness vary, and module edges respond
-less. A flat field is a frame of a uniform exposure (a fluorescence foil, an amorphous scatterer, or the detector
-maker's own calibration). Analyze divides every frame by it when one is chosen (Mask & corrections ▸ Corrections
-▸ flat field; off by default), as pyFAI, Nika, GIXSGUI and pygix do. With `F_raw` the flat-field image:
+Choose a uniform exposure `D_ff` from the same detector, either a detector image (first frame) or a NumPy `.npy` array. The flat field is off by default. For a raw flat, `r = t_exp,ff / t_exp,K` when both exposures are available, otherwise `r = s_D`. Selecting **Flat is already dark-subtracted**, or omitting the dark, sets `r = 0`.
 
 ```text
-F_ff,p = F_raw,p / m,      m = (1/N_kept) Σ_{p kept} F_raw,p                         (4.11)
-kept(p) = finite(F_raw,p) ∧ ¬mask_reader(p) ∧ F_ff,p > 0.05                          (4.12)
-I′_p = I_p / F_ff,p      (pixels not kept: left out of every frame)                  (4.13)
+U_p = D_ff,p − r K_p,     m = mean(U_p over kept pixels)
+F_ff,p = U_p / m                                                               (4.11)
+kept(p) = valid(p) ∧ F_ff,p > h                                                (4.12)
+I′_p = J_p / F_ff,p                                                            (4.13)
 ```
 
-- **Normalisation.** `F_ff` is 1 on average over the pixels it keeps, so the corrected values stay close to counts
-  per pixel. `m` and the kept pixels depend on each other: starting from every finite pixel above 0, `m` is
-  recomputed over the pixels above `0.05 m` until they no longer change (each round can only remove pixels, and the
-  largest pixel always stays, so this ends after a few rounds).
-- **Pixels left out.** A pixel where `F_ff ≤ 0.05`, not finite or masked by the flat field's reader does not
-  respond; it is left out of every frame, and the record counts these detector pixels (`masked_pixels`). The gap
-  guard (section 4.7) grows around them.
-- **Files.** The flat field is read as any frame Analyze reads (CBF, TIFF, EDF, NeXus/HDF5; the first frame of a
-  file that holds several, with its reader's mask, section 4.1) or as a NumPy `.npy` array (read without pickle).
-  It must have the shape of the frame; one of another shape is refused with the reason, never resampled. It is
-  read once per file version and used for every frame: the frame shown, Batch Export, the folder watch and a
-  series.
-- **Order.** The division follows the background subtraction (pyFAI: `(I − dark) / flat`) and the valid value
-  range, which therefore applies to the values as measured; mirror filling and the GIWAXS intensity corrections
-  come after it (section 4.9). For every measured pixel the result is `I / (F_Ω F_P F_A F_ff)` (5.1).
-- **Uncertainty.** For photon counts the variance of a corrected pixel is `I_p / F_ff,p²` (5.9), with
-  `F_p = F_ff` when no GIWAXS correction is on: the error model becomes scaled Poisson (section 6.4 (c)) in GISAXS
-  cuts and GIWAXS bins alike, and the fit input says `counting_model_valid: false`. A frame that is not photon
-  counts keeps the pixel-scatter σ of the corrected values.
-- **Record.** `corrections.flat_field` of `<stem>_analysis.json` gives the file, its path and SHA-256, the
-  normalisation mean `m` (in the units of the file), the floor 0.05, the pixels left out and the shape; `null`
-  without a flat field. The report of an automatic analysis names the flat field among its Decisions, with the
-  pixels it left out.
-- **Limits.** The flat field is taken as it is: its own noise adds to every corrected frame (a flat field of
-  10⁴ counts per pixel adds 1 % in each pixel), and an energy or threshold other than that of the measurement
-  makes it the wrong response. No dark frame is subtracted from it.
+Start with valid positive responses. Remove pixels with `U_p ≤ h m` and recompute the mean until the kept set is stable. The flat-field threshold `h` defaults to 0.05 and accepts `0 ≤ h < 1`. The gap guard grows around excluded pixels. The value range applies before division. Mirror filling and GIWAXS intensity corrections follow it. The flat must match the detector shape. `corrections.flat_field` records its file, SHA-256, mean, threshold, dark scale and source, masked count and shape.
 
-Implementation: `src/gimap/features/analyze/domain/flat_field.py`, `src/gimap/features/analyze/application/flat_field.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`
+For Poisson or supplied σ errors, let `V_X` be the pixel variance of frame `X` in count units. First-order propagation treats the flat normalisation mean `m` as fixed:
+
+```text
+Var(F) = (V_Dff + r² V_K) / m²                         (F = F_ff,p)
+Var(J/F) = Var(J)/F² + J² Var(F)/F⁴                    (independent J and F)
+c_K = s_B s′_D − s_D
+Var(J/F) = (V_I + s_B² V_B)/F² + J² V_Dff/(m² F⁴)
+           + (c_K/F + J r/(m F²))² V_K                 (shared K)
+```
+
+The last term counts the shared dark measurement once. Raw reference variances use nonnegative counts as Poisson estimates. A reference supplied after dark subtraction provides only net counts, from which the original dark and read noise cannot be recovered. A supplied σ frame provides `V_I`. The scatter model estimates noise empirically from the corrected pixels. Propagation treats the measured mean response as a fixed calibration constant. It omits the resulting interpixel covariance and correlations across frames that reuse a flat.
+
+The flat exposure must retain its count or ADU scale. A unit-mean response map alone cannot supply its counting variance.
 
 ### 4.11 Dark frame
 
-A dark frame `D` (the detector read without beam: dark current and offset of an integrating detector, a CCD or a
-flat panel) is subtracted first, with its own scale `s_D`, and the background `B` (section 4.6) after it:
+The dark `K` is a beam-off exposure of the same detector. Enter the sample dark scale `s_D`, usually the sample-to-dark exposure ratio. For a raw background, `s′_D` defaults to the background-to-dark exposure ratio when both headers provide it and to `s_D` otherwise. Entering a background dark scale overrides the ratio. **Background is already dark-subtracted** sets it to zero. Reduction requires valid pixels in the sample and the reference frames. Collecting the dark terms shows when they cancel:
 
 ```text
-I′ = I − s_D · D − s · B                                                        (4.14)
+J = I − s_B B + (s_B s′_D − s_D) K                                           (4.14)
 ```
 
-- `D` is a frame of the same detector and shape (Mask & corrections ▸ Corrections ▸ dark frame; for NeXus a chosen
-  frame of the file), off by default. `s_D` is typically the ratio of exposure times. A pixel is valid only where
-  the frame and the dark frame are valid (validity of `D` as in (4.1)); negative results stay valid.
-- **Uncertainty.** Read noise and offset are not counts: with a dark frame the error model is the pixel scatter
-  (section 6.4 (b)), as for a background, and the fit input says `counting_model_valid: false`.
-- **Record.** `corrections.dark_path`, `dark_frame` and `dark_scale` of `<stem>_analysis.json`, and a header line
-  `dark frame: <file> (index i) x s_D, subtracted before the background` in every curve file. A settings file keeps
-  it; a set-up whose dark frame is missing says so and leaves it out.
-
-Implementation: `src/gimap/features/analyze/domain/corrections.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`
+`corrections.reference_dark` records the background dark scale, its source and the already-subtracted flag. `dark_path`, `dark_frame` and `dark_scale` identify the sample's dark exposure. Automatic mode uses pixel scatter for a dark- or background-subtracted sample (section 6.4).
 
 ### 4.12 Normalisation: exposure, monitor, transmission, thickness, absolute scale
 
@@ -952,36 +932,34 @@ After every other correction (section 4.9) each pixel is multiplied by one const
 corrections ▸ Normalisation; every term off by default):
 
 ```text
-I_norm,p = c · I′_p,      c = A / (t · M · T · d)                              (4.15)
+I_norm,p = c · I′_p,      c = A_abs / (t_exp · M · T · d)                              (4.15)
 ```
 
 | Term | Meaning | Source |
 | --- | --- | --- |
-| `t` | exposure time (s) | the file header (`exposure_time_s` of the reader: CBF `Exposure_time`, EDF `ExposureTime` / `count_time`, NeXus `count_time` / `frame_time`) or typed |
+| `t_exp` | exposure time (s) | the file header (`exposure_time_s` of the reader: CBF `Exposure_time`, EDF `ExposureTime` / `count_time`, NeXus `count_time` / `frame_time`) or typed |
 | `M` | monitor (ion chamber, diode, `Flux` of a Pilatus CBF, ring current) | a header value chosen by its name (EDF keywords such as `Monitor`, `I0`, `Intensity0`; NeXus `NXmonitor` `data` / `integral` or `control/integral` of the frame) or typed |
 | `T` | transmission of the sample, `0 < T ≤ 1` | typed |
 | `d` | thickness entered in mm, converted to cm for a standard-derived scale | typed |
-| `A` | absolute-scale factor | typed or fitted to a standard measured in the same set-up |
+| `A_abs` | absolute-scale factor | typed or fitted to a standard measured in the same set-up |
 
 - A term that is off is 1. The section lists, for the frame shown, every header value it can take (exposure time
   and monitors); a frame whose header lacks the value chosen is not analysed and the reason is said (nothing is
-  guessed). For a sum of frames (section 4.3) `t` and `M` are the sums over the frames summed.
+  guessed). For a sum of frames (section 4.3) `t_exp` and `M` are the sums over the frames summed.
 - **What it changes.** Only the scale: q, the shape of every curve, the cuts and the peak positions do not change.
-  The standard-derived scale gives cm⁻¹. Manual normalisation gives `counts/(pixel·s·monitor·mm) × A` with the terms in use.
-- **Uncertainty.** Each point carries the statistical uncertainty `σ_norm = c · σ` conditional on the scale. For photon
-  counts the Poisson variance is carried through the factor, as in (5.9) with `1/F_p` replaced by `c/F_p`:
+  The standard-derived scale gives cm⁻¹. Manual normalisation gives `counts/(pixel·s·monitor·mm) × A_abs` with the terms in use.
+- **Uncertainty.** Normalisation scales the sample and reference variances together. Conditional on the scale,
 
 ```text
-Var(I_norm,p) = c² · Var(I′_p) = c · I_norm,p / F_p                             (4.16)
-σ_k = √max( Σ_{p∈k} c · I_norm,p / F_p ,  (c f̄_k)² ) / n_k                      (4.17)
+Var(I_norm,p) = c² · Var(I′_p)                                                (4.16)
+σ_norm,k = c · σ_k                                                            (4.17)
 ```
 
-  which is `c` times (5.10); the error model is then scaled Poisson. A frame whose σ comes from the pixel scatter
-  keeps that model; the scatter of `c · I` is `c` times that of `I`.
+  The same factor `c` scales point errors estimated from pixel scatter or a supplied σ frame.
 - **Record.** `normalisation` of `<stem>_analysis.json` gives the factor `c`, the unit and every term with its
   value and source (`typed`, `header (exposure_time_s)`, `header (<name>)`); `header_values` lists what the header
   offered; `corrections.normalisation` keeps the settings. Each curve file carries a header line
-  `intensity: <unit>; normalised I = A*I/(t*M*T*d), factor c (…terms…); sigma scaled by the same factor`.
+  `intensity: <unit>; normalised I = A_abs*I/(t_exp*M*T*d), factor c (…terms…); sigma scaled by the same factor`.
 - **Background.** GIMaP subtracts the background and dark frame in detector units before normalisation. Scale a background measured at a different exposure or transmission accordingly. Supply the measured transmission and thickness for each sample.
 
 #### Absolute scale from a secondary standard
@@ -990,23 +968,23 @@ Measure the standard in transmission with the same beam, detector geometry and c
 
 For glassy carbon, supply the reference for the material measured. Write independent, one-standard-deviation point uncertainties in its third column. Enter any common fractional scale uncertainty separately. For example, the published SRM 3600 calibration gives a 2.58% standard uncertainty (6.25% expanded uncertainty, coverage factor 2.423). When treating this as a common scale uncertainty, enter 2.58% once. Put any additional independent point uncertainties in the third column, or use zero if none are supplied. [Allen et al. (2017), §3.1.1](https://journals.iucr.org/j/issues/2017/02/00/vg5064/index.html).
 
-Let `x_i = I_i/(t M T d_cm)` be the corrected standard intensity and `u_i` its statistical uncertainty after the same division. Within the chosen overlap in q (Å⁻¹), the reference `R_i` is the water level or the linear interpolant of file values `r_j`. With interpolation coefficients `L_ij` and independent file uncertainties `s_j`,
+Let `x_i = I_i/(t_exp M T d_cm)` be the corrected standard intensity and `u_i` its statistical uncertainty after the same division. Within the chosen overlap in q (Å⁻¹), the reference `R_i` is the water level or the linear interpolant of file values `r_j`. With interpolation coefficients `L_ij` and independent file uncertainties `s_j`,
 
 ```text
 R_i = Σ_j L_ij r_j,        v_i² = Σ_j L_ij² s_j²
-w_i = 1/(u_i² + b² v_i²),  χ²(b) = Σ_i w_i (x_i − b R_i)²,     A = 1/b       (4.18)
+w_i = 1/(u_i² + b² v_i²),  χ²(b) = Σ_i w_i (x_i − b R_i)²,     A_abs = 1/b       (4.18)
 ```
 
-The iterative least-squares fit estimates one positive slope through the origin. The weights in (4.18) use the diagonal elements of the covariance matrix. The plotted residual is `A x_i − R_i` in cm⁻¹. Water has `v_i = 0`. Bins with zero combined variance are omitted when other bins have positive variance. If no point uncertainties are available, all weights are one. At least two distinct measured q values are required.
+The iterative least-squares fit estimates one positive slope through the origin. The weights in (4.18) use the diagonal elements of the covariance matrix. The plotted residual is `A_abs x_i − R_i` in cm⁻¹. Water has `v_i = 0`. Bins with zero combined variance are omitted when other bins have positive variance. If no point uncertainties are available, all weights are one. At least two distinct measured q values are required.
 
 For the first-order uncertainty, define `z_i = R_i + b v_i² w_i (x_i − b R_i)`, `D = Σ_i w_i z_i²`, and `h_i = w_i z_i/D`. For `n` fitted bins and common fractional standard uncertainty `f`, the calculation is
 
 ```text
 V_b = Σ_i (h_i u_i)² + b² Σ_j (s_j Σ_i h_i L_ij)² + max(0, χ²/(n−1) − 1)/D
-σ_A² = V_b/b⁴ + (A f)²                                                       (4.19)
+σ_A_abs² = V_b/b⁴ + (A_abs f)²                                                       (4.19)
 ```
 
-Accumulating the interpolated contributions at each original reference point accounts for shared reference values. Excess residual scatter increases the uncertainty. In the equal-weight case with no point uncertainties, `V_b = Σ_i (x_i − b R_i)²/[(n−1)D]`. Uncertainties in the entered normalisation terms are outside the fit. The JSON record identifies the standard and measurement, fit range, date and `A ± σ_A`. This calibration uncertainty is shared by all points and frames using that scale. Its contribution to a sample intensity is `|I_norm| σ_A/A`.
+Accumulating the interpolated contributions at each original reference point accounts for shared reference values. Excess residual scatter increases the uncertainty. In the equal-weight case with no point uncertainties, `V_b = Σ_i (x_i − b R_i)²/[(n−1)D]`. Uncertainties in the entered normalisation terms are outside the fit. The JSON record identifies the standard and measurement, fit range, date and `A_abs ± σ_A_abs`. This calibration uncertainty is shared by all points and frames using that scale. Its contribution to a sample intensity is `|I_norm| σ_A_abs/A_abs`.
 
 Implementation: `src/gimap/features/analyze/domain/absolute_scale.py`, `src/gimap/features/analyze/domain/normalisation.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`, `src/gimap/features/analyze/application/export_record.py`.
 
@@ -1024,7 +1002,7 @@ I′_p = I_p / F_p,      F_p = F_Ω · F_P · F_A · F_L                        
 - q never changes. Peak positions therefore do not change; intensities compared across χ or q do.
 - `F_Ω` and `F_P` are 1 at the direct beam and `F_A` is 1 at `α_f = α_i`, so corrected values stay close to counts per pixel. The Lorentz factor `F_L` (section 5.6) is not normalised.
 - Pixels where F is not finite or not positive become invalid.
-- With a flat field (section 4.10), `F_p = F_Ω · F_P · F_A · F_ff`: the flat field is divided earlier in the order (section 4.9), the factors here last, and the counts' variance (5.9) uses the whole product.
+- With a flat field (section 4.10), `F_p = F_Ω · F_P · F_A · F_L · F_ff`: the flat field is divided earlier in the order (section 4.9), the factors here last, and the counts' variance (5.9) uses the whole product.
 - They are applied after all other preparation steps (section 4.9) and need the geometry. X, Y and L_p are those of (1.3), (1.4) and (2.2), and `cos 2θ = L/L_p` (2.12). On a tilted detector the vector t of a pixel is (3.15), its length |t| takes the place of L_p, and cos 2θ is its component along the beam over |t|.
 - Comparable geometric corrections are part of other grazing-incidence packages, for example GIXSGUI (Jiang, 2015).
 
@@ -1066,18 +1044,18 @@ Implementation: `src/gimap/features/analyze/domain/intensity.py`
 
 ### 5.4 Absorption in the film
 
-A uniform film of thickness t_f and attenuation length Λ_att = 1/µ is entered with t_f in nm and Λ_att in µm (from tables such as CXRO or NIST at the beam energy). Scattering from depth z travels `z/sin α_i` in and `z/sin α_f` out:
+A uniform film of thickness d and attenuation length Λ_att = 1/µ is entered with d in nm and Λ_att in µm (from tables such as CXRO or NIST at the beam energy). Scattering from depth z travels `z/sin α_i` in and `z/sin α_f` out:
 
 ```text
 s(α_f) = 1 / sin α_i + 1 / sin α_f                                               (5.6)
-A(α_f) = ∫ from 0 to t_f of exp(−z s / Λ_att) dz = (Λ_att / s) (1 − exp(−t_f s / Λ_att))     (5.7)
+A(α_f) = ∫ from 0 to d of exp(−z s / Λ_att) dz = (Λ_att / s) (1 − exp(−d s / Λ_att))     (5.7)
 F_A = A(α_f) / A(α_i)                                                            (5.8)
 ```
 
-- The code evaluates `(1 − exp(−t_f s/Λ_att))/s`; the constant Λ_att cancels in the ratio.
+- The code evaluates `(1 − exp(−d s/Λ_att))/s`; the constant Λ_att cancels in the ratio.
 - `sin α_f` is the exact value (2.8) for each pixel.
 - Pixels with `sin α_f ≤ 0` (at or below the horizon) have no factor and are left out. The correction needs `α_i > 0`.
-- Limits: for `t_f ≪ Λ_att`, `F_A → 1`; for `t_f ≫ Λ_att`, `F_A → s(α_i)/s(α_f)`.
+- Limits: for `d ≪ Λ_att`, `F_A → 1`; for `d ≫ Λ_att`, `F_A → s(α_i)/s(α_f)`.
 - Not included: refraction (so the correction is valid only well above the critical angle), the reflected-wave paths of the DWBA, the substrate, and a varying composition with depth.
 
 Implementation: `src/gimap/features/analyze/domain/intensity.py`
@@ -1090,6 +1068,8 @@ When the frame holds photon counts (section 6.4), each corrected pixel keeps its
 Var(I′_p) = Var(I_p) / F_p² = I_p / F_p² = I′_p / F_p                           (5.9)
 σ_k = √max( Σ_{p∈k} I′_p / F_p ,  f̄_k² ) / n_k,      f̄_k = (1/n_k) Σ_{p∈k} 1/F_p      (5.10)
 ```
+
+Equations (5.9) and (5.10) give the sample shot-noise contribution. With a measured flat, add the reference variance from section 4.10, divided by the square of the remaining GIWAXS factors.
 
 where the sums run over the n_k pixels of bin k and `I_k = Σ I′_p / n_k`. `F_p` includes the flat field when one is used (section 4.10); with a flat field alone, also for GISAXS, `F_p = F_ff`, and a GISAXS line l takes (5.10) with l in place of k. `f̄_k²` is the variance of one count at the bin's mean factor: as in (6.5), a bin of zero counts gets the error of one count, not `σ = 0`; with every F = 1, (5.10) is (6.5). When the frame is not photon counts, the corrected values get the pixel-scatter σ of section 6.4. Values corrected in this way are no longer counts: the fit input records `counting_model_valid: false` whenever a GIWAXS correction or a flat field is on. The JSON record `<stem>_analysis.json` holds `intensity_corrections` with the formulas and their parameters. The factor is computed in blocks of 512 rows and kept while shape, geometry and options stay the same.
 
@@ -1170,63 +1150,47 @@ x is the mean of the exact `q_y` (or `q_z`) of the line's valid pixels, not the 
 
 Implementation: `src/gimap/features/analyze/domain/binning.py`
 
-### 6.4 The three error models
+### 6.4 Curve error models
 
-**(a) Poisson, for photon counts.**
+Automatic mode chooses Poisson errors for integer storage and scatter for floating-point, dark-subtracted or background-subtracted data. Integer storage alone gives no detector noise calibration. A CCD or flat panel can store offset ADU, and an Eiger can store counts after detector corrections. Choose the detector model under **Detector and curve errors**. The instrument profile stores gain `g` (counts per ADU), offset `o` (ADU), model and optional σ frame. The JSON record gives both the request and the model used. Mirror filling uses scatter because it duplicates measurements.
 
-```text
-σ_k = √max(S_k, 1) / n_k          (fixed-edge bins, GIWAXS)                         (6.5)
-σ_l = √max(S_l, 1) / n_l          (detector lines, GISAXS)                          (6.6)
-```
-
-Both clamp the sum to at least one count, so a bin or line of zeros gets `σ = 1/n`, never `σ = 0`, which a weighted fit could not use (a division by zero, or a point of infinite weight). For integer counts the clamp changes only such bins and lines: any other sum is at least 1.
-
-**(b) Pixel scatter, for values that are not photon counts.**
+**(a) Poisson.** For raw sample and reference frames use `C = g (raw − o)`, with `g = 1` and `o = 0` by default. For a sum, subtract one offset per exposure. Already dark-subtracted references use `g raw`. Negative corrected intensities remain valid. The shot variance estimate in counts is `max(C, 0)`. For an unscaled bin of `n` pixels with total counts `S` the default error of its mean is
 
 ```text
-s_k² = ( Σ_{p∈k} I_p² − S_k² / n_k ) / (n_k − 1)                                     (6.7)
-σ_k = √( s_k² / n_k )                                                               (6.8)
+σ² = max(S, 1) / n²       (radial or azimuthal bins)                             (6.5)
+σ² = max(S, 1) / n²       (detector rows or columns)                             (6.6)
 ```
 
-Negative `s_k²` (rounding) is set to 0. A bin or line with a single pixel takes the median `s²` of the bins with at least two pixels (0 if there are none).
+At about 1–10 counts per point an observed downward fluctuation also shrinks its own error, giving it greater weight in a fit. **Smoothed intensity** estimates the shot variance from up to two occupied bins on each side, excluding the target and stopping at gaps. It uses the observed estimate for an isolated bin. With corrections, write `S_k` for the sum of sample shot variances and `W_k` for the sum of one-count scale factors. The smoothed prediction is `W_k Σ_neighbors S / Σ_neighbors W`. Floor the shot variance at `(W_k/n_k)²`, add the summed reference variance (4.10), then divide by `n_k²`. This changes the exported σ only. Near a sharp feature its neighbours may have a different mean. Fitting retains its own weighting choices.
 
-**(c) Scaled Poisson, after a flat field or the GIWAXS intensity corrections:** equation (5.10), for fixed-edge bins and GISAXS detector lines alike.
+**(b) Scatter of the pixels.** For corrected pixel values `X` in bin `k`,
 
-**Which model.** The choice is made once per frame:
+```text
+s_k² = [Σ X² − (Σ X)² / n_k] / (n_k − 1)                                      (6.7)
+σ_k² = s_k² / n_k                                                              (6.8)
+```
 
-| Frame | σ |
-|---|---|
-| photon counts: stored type not floating point, no background subtracted, no mirror filling | (a); (c) when a flat field or GIWAXS intensity corrections are on |
-| floating-point frame (dark- or background-subtracted at the beamline) | (b) |
-| background subtracted in GIMaP | (b) |
-| mirror filling applied (GIWAXS with a geometry, even if no pixel needed filling) | (b) |
+For `n_k < 10`, the default uses a pooled pixel variance `a + b I_k`, divided by `n_k`. The fit uses the unbiased variances of bins with at least two pixels on this curve, weighted by `n−1` and downweighted for large residuals using Huber weights. With sparsely populated bins, groups of nearby intensity are first averaged by degrees of freedom (target up to 24 per group). Evaluation is restricted to the fitted intensity range. Negative variance estimates are clipped at zero. For one distinct intensity the fit gives a constant. With pooling off, a singleton takes the median measured variance. If every bin is a singleton the scatter is unmeasurable and the reported σ is zero. Texture and gradients within a bin contribute to scatter.
 
-**Assumptions and limits.**
-
-- Poisson σ assumes that the stored values are raw photon counts. The choice follows the stored type: a raw-count frame stored as floating point gets (b), and a processed frame stored as integers gets (a).
-- Pixel scatter assumes that the pixels of a bin are independent samples of one mean. Real structure inside a bin inflates σ: texture across χ in a full-ring q bin, the Yoneda profile across the rows of a GISAXS band, or the q gradient across a bin.
-- Under mirror filling, the filled pixels are counted in n_k like measured ones. Where a bin holds both a pixel and its mirror copy, (6.8) therefore still underestimates σ somewhat (this is an inference from the code, not a measured number).
-- Pixels are taken as independent; charge sharing and other correlated noise are not modelled. Only the standard error of each point is given; no covariance between points is computed.
-
-Implementation: `src/gimap/features/analyze/domain/binning.py`, `src/gimap/features/analyze/application/frame_preprocessing.py`, `src/gimap/features/analyze/application/use_cases.py`
+**(c) Propagated errors.** Scaled Poisson uses sections 4.10 and 5.5. **Given σ frame** takes an independent standard deviation in sample input units for each pixel (for a sum, supply σ of the sum). Convert it by `g`, propagate through all corrections, add reference variance and use `σ_k² = Σ Var(X_p) / n_k²` without a one-count floor. Charge sharing, correlations between bins and covariance between frames using the same references are outside these point uncertainties.
 
 ### 6.5 Merging sparse bins along q
 
-Near the beam, at the edge of a sector, next to a gap or in the missing wedge, a bin catches few pixels. The I(q)-type curves of GIWAXS join such bins with their neighbours along x. This applies to I(q), the in-plane and out-of-plane sectors, a sector's I(q), the q-box curves I(q), I(q_z) and I(q_∥), and a region's I(q). It never applies to I(χ), to the GISAXS cuts or to the peak-fit windows.
+Near the beam, at the edge of a sector, next to a gap or in the missing wedge, a bin can contain few pixels. Analyze joins sparse bins along x in GIWAXS radial, sector, q-box and region profiles, transmission radial profiles, and user-defined GISAXS sector and line cuts. I(χ), native GISAXS detector-line profiles and peak-fit windows retain their original sampling.
 
 - Threshold: `n_min = max(8, round(0.1 · median n))`. A curve whose bins all reach `n_min` is returned unchanged.
 - The filled bins are walked in order of x and added to a group. A group closes when its pixel count reaches `n_min`.
 - A step to the next filled bin of more than 2.5 median bin steps also closes the group, even when it is still sparse: a gap stays a gap.
 - A sparse group at the end joins the previous point if it lies within 2.5 steps of it.
 
-A merged point is
+A merged point uses the pixel counts as weights for its coordinate and intensity. For independent constituent means with standard errors `σ_k`, propagation gives
 
 ```text
 x = Σ n_k x_k / Σ n_k,      I = Σ n_k I_k / Σ n_k,      n = Σ n_k                   (6.9)
-σ = √( Σ n_k² σ_k² ) / Σ n_k                                                       (6.10)
+σ = √(Σ n_k² σ_k²) / n                                                              (6.10)
 ```
 
-For Poisson bins (6.10) equals `√(Σ max(S_k, 1))/Σ n_k`: the Poisson error of all the pixels together, `√(Σ S_k)/Σ n_k`, when no bin of the group is all zeros. For scatter bins it is `√(Σ n_k s_k²)/Σ n_k`. The x of a merged point is the pixel-weighted mean of the bin centres.
+Observed Poisson errors use (6.10), including the one-count floor in each constituent bin. For scatter errors, (6.10) carries the within-bin uncertainty to the merged point. With pooling enabled, final points with fewer than ten pixels instead receive the fitted pixel variance from §6.4(b), divided by their pixel count. This fit uses the pixel moments of the final points. For smoothed Poisson errors, each group accumulates sample and reference variances and one-count scales. The neighbouring final points supply the smoothed estimate in §6.4(a).
 
 Implementation: `src/gimap/features/analyze/domain/binning.py`
 
@@ -4649,7 +4613,7 @@ Every curve export of Analyze writes `<stem>_analysis.json` beside the curve fil
 | Program and source | `software` (the record name `GIMaP Analyze 1`), `software_version` (the release, for example `GIMaP v0.2.0`; section 14.5), `source_file`, `frame_index`, `frame_count`, `frame` (1-based label), `summed_frames` (file and index of each frame added) |
 | Detector | `detector_name`, `frame_shape`, `measurement` (GISAXS or GIWAXS) |
 | Geometry | `geometry` (pixel sizes, distance, beam centre, wavelength, α_i; `rot1_rad`, `rot2_rad`, `rot3_rad`: the detector's rotations of section 3.7; the `dropped_…` and `flat_detector_…` fields of 0.1 are `null`), `geometry_convention` (canonical pixel-corner frame, row 0 at the top, kinematic (vacuum) grazing-incidence q of a flat detector, tilted by the rotations, in Å⁻¹), `instrument_profile` (name, source, time of update; the source begins with `automatic analysis:` when Run Automatic Analysis or `tools/gimap_agent.py` chose the geometry and with `assistant:` when the AI did, as it did for both before 0.2.0) |
-| Statistics and binning | `error_model` (`poisson`, `pixel_scatter` or `scaled_poisson`: the three error models of section 6.4, as `photon_counts`, a flat field and the GIWAXS intensity corrections decided; `null` without a reduction), `binning` (GIWAXS: `radial_bins`, `q_min`, `q_max`, `bin_width` and `unit` of the fixed-edge bins of every I(q), `bins_chosen`, `radial_points` (the points of I(q) after merging), `merge` (the rule of section 6.5), `chi_bin_deg` and `chi_merge`; GISAXS: one point per detector column or row, no merging) |
+| Statistics and binning | `error_model` (`poisson`, `scaled_poisson`, `pixel_scatter` or `sigma_frame`, the model used for the frame as described in section 6.4; `null` without a reduction), `binning` (GIWAXS: `radial_bins`, `q_min`, `q_max`, `bin_width` and `unit` of the fixed-edge bins of every I(q), `bins_chosen`, `radial_points` (the points of I(q) after merging), `merge` (the rule of section 6.5), `chi_bin_deg` and `chi_merge`; GISAXS: one point per detector column or row, no merging) |
 | Time | `created`: the UTC time the record was written (ISO 8601, for example `2026-11-01T05:52:31+00:00`) |
 | Corrections | `corrections` (every setting; `flat_field`: file, path, SHA-256, normalisation mean, floor, pixels left out, shape and how it was applied, section 4.10, `null` without one), `intensity_corrections` (GIWAXS: how applied, formulas, parameters), `bad_pixels_left_out`, `drawn_mask_pixels`, `pixels_filled_from_mirror` |
 | Results | `markers` (beam centre, horizon row, cut bands, Yoneda estimate, I(χ) window, peaks …), `curves` (key, title, x label, region of each curve), `messages` |
@@ -4882,7 +4846,7 @@ Fitting's optional two-path sphere with a free effective reflection coefficient 
 
 ### 15.3 Statistics and uncertainties
 
-The calibration record carries the standard-derived scale uncertainty. Curve files give the statistical error of each point conditional on that scale. Comparisons of data on the same scale share the calibration error σ_A of equation (4.19) (section 4.12).
+The calibration record carries the standard-derived scale uncertainty. Curve files give the statistical error of each point conditional on that scale. Comparisons of data on the same scale share the calibration error σ_A_abs of equation (4.19) (section 4.12).
 
 - **Choice of the error model.** Poisson errors (scaled when a flat field or the GIWAXS intensity corrections are on) are used only for frames stored as integers, with no background subtracted and no mirror filling. The choice follows the stored type, not the physical meaning of the values (sections 4.1, 6.4).
 - **Independence.** Pixels are taken as independent: charge sharing and correlated noise are not modelled, and no covariance between the points of a curve is computed (section 6.4).

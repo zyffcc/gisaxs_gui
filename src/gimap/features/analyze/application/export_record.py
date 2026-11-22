@@ -53,9 +53,7 @@ GEOMETRY_CONVENTION = (
 """``geometry_convention`` of the record: what the q values are (the detector tilt is ``geometry.rot1_rad`` …
 ``rot3_rad``; refraction only with ``geometry.critical_angle_deg`` above 0)."""
 POISSON, PIXEL_SCATTER, SCALED_POISSON = "poisson", "pixel_scatter", "scaled_poisson"
-"""``error_model``: σ of a point from the photon counts of its pixels (√Σ / n), from the scatter of its pixels
-(not counts as measured: ``frame_preprocessing.photon_counts``), or from the counts scaled like the values (a flat
-field or the GIWAXS intensity corrections on counts: a pixel's variance is value / factor)."""
+"""Established record names for the Poisson and pixel scatter estimators."""
 MERGE_RULE = (
     "a bin with fewer pixels than max(8, 10 % of the curve's median) is joined with its neighbours until the point "
     "has enough, never across a gap of more than 2.5 bin steps; the point has the pixel-weighted mean of q and of I"
@@ -171,7 +169,8 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
             if profile is not None
             else None
         ),
-        "corrections": {**_plain(analysis.corrections), "flat_field": flat_field_record(analysis)},
+        "corrections": {**_plain(analysis.corrections), "flat_field": flat_field_record(analysis),
+                        "reference_dark": getattr(analysis, "reference_dark", None)},
         "normalisation": None if getattr(analysis, "normalisation", None) is None else analysis.normalisation.to_record(),
         "header_values": _plain(getattr(analysis, "header_values", None) or {}),
         "intensity_corrections": (
@@ -209,8 +208,12 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
     if files:  # a set of module files, a master with its data files: every file the frame was read from
         record["source_files"] = files
     # Every input by file name and SHA-256: the paths above are where the files were on this computer.
+    references = [corrections.dark_path, corrections.background_path, corrections.flat_field_path]
+    if getattr(analysis, "error_model_used", None) == "sigma":
+        references.append(corrections.sigma_path)
     record["input_sha256"] = input_digests(
-        [*(files or [analysis.path]), *(path for path, _ in analysis.summed_frames or ()), *mask_sources])
+        [*(files or [analysis.path]), *(path for path, _ in analysis.summed_frames or ()), *mask_sources,
+         *(path for path in references if path)])
     if loaded.get("layout"):  # NeXus / HDF5: what the source is, which dataset, how the image was turned
         record["source_layout"] = {
             "kind": loaded.get("layout"), "summary": loaded.get("layout_summary"),
@@ -257,6 +260,17 @@ def intensity_lines(record: Mapping[str, Any]) -> list[str]:
     if corrections.get("dark_path"):
         lines.append(f"dark frame: {Path(str(corrections['dark_path'])).name} (index {int(corrections.get('dark_frame') or 0)}) "
                      f"x {float(corrections.get('dark_scale', 1.0)):g}, subtracted before the background")
+    reference = corrections.get("reference_dark")
+    if reference:
+        lines.append(f"background dark scale: {reference['background_dark_scale']:g} ({reference['source']})")
+    model = record.get("error_model")
+    if model:
+        details = ""
+        if model in (POISSON, SCALED_POISSON):
+            details = f", {corrections.get('poisson_variance', 'observed')} sample shot variance"
+        elif model == PIXEL_SCATTER and corrections.get("pooled_scatter"):
+            details = ", pooled below 10 pixels"
+        lines.append(f"error model: {model}{details}")
     norm = record.get("normalisation")
     if norm:
         terms = ", ".join(f"{key} {item['value']:.6g} ({item['source']})" for key, item in norm.items()
@@ -265,21 +279,24 @@ def intensity_lines(record: Mapping[str, Any]) -> list[str]:
         if record.get("reference_peak_scale") is not None:
             unit = (f"relative after reference-peak scaling by {record['reference_peak_scale']:.8g}; "
                     f"before reference-peak scaling: {unit}")
-        lines.append(f"intensity: {unit}; normalised I = A*I/(t*M*T*d), factor {norm['factor']:.6g}"
+        lines.append(f"intensity: {unit}; normalised I = A_abs*I/(t_exp*M*T*d), factor {norm['factor']:.6g}"
                      f" ({terms}); sigma scaled by the same factor")
     return lines
 
 
 def error_model(analysis: FrameAnalysis) -> Optional[str]:
-    """How the σ of the frame's points were computed (``POISSON``, ``PIXEL_SCATTER``, ``SCALED_POISSON``): the
-    decision the reduction took (``frame_preprocessing.photon_counts``, then a flat field or the GIWAXS intensity
-    corrections, which scale the counts). ``None`` without a reduction."""
+    """Describe the estimator used for the reduced curves, including supplied σ and propagated references."""
     if analysis.reduction is None:
         return None
-    if not photon_counts(analysis.metadata, analysis.corrections,
-                         mirror_filled=getattr(analysis, "filled_pixels", None) is not None):
+    model = getattr(analysis, "error_model_used", None)
+    if model == "sigma":
+        return "sigma_frame"
+    if model == "scatter" or (model is None and not photon_counts(
+        analysis.metadata, analysis.corrections, mirror_filled=getattr(analysis, "filled_pixels", None) is not None
+    )):
         return PIXEL_SCATTER
-    return SCALED_POISSON if getattr(analysis, "intensity_scale", None) is not None else POISSON
+    propagated = analysis.intensity_scale is not None or getattr(analysis, "extra_variance", None) is not None
+    return SCALED_POISSON if propagated else POISSON
 
 
 def binning(analysis: FrameAnalysis) -> Optional[dict[str, Any]]:
@@ -372,7 +389,9 @@ def fit_input_observation(analysis: FrameAnalysis, halves: Optional[str] = None)
         "counting_model_valid": (
             photon_counts(analysis.metadata, corrections, mirror_filled=getattr(analysis, "filled_pixels", None) is not None)
             and analysis.intensity_scale is None
-            and not corrections.flat_field_path
+            and not (corrections.flat_field_path or corrections.dark_path or corrections.background_path)
+            and corrections.error_model not in ("scatter", "sigma")
+            and corrections.counts_per_adu == 1 and corrections.offset_adu == 0
             and not (analysis.kind == GIWAXS and has_intensity_corrections(corrections))
         ),
         "threshold_enabled": corrections.minimum is not None or corrections.maximum is not None,

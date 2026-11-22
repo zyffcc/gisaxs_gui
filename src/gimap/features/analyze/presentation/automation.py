@@ -156,7 +156,9 @@ class AnalyzeAutomation(IndexingAutomationMixin):  # set_phases, assign_peaks, p
             "background": Path(corrections.background_path).name if corrections.background_path else None,
             "flat_field": None if analysis.flat_field is None else {  # what the frame was divided by
                 "file": analysis.flat_field.name, "masked_pixels": analysis.flat_field.masked_pixels,
-                "normalisation_mean": analysis.flat_field.mean},
+                "normalisation_mean": analysis.flat_field.mean, "floor": analysis.flat_field.floor},
+            "pooled_scatter": analysis.corrections.pooled_scatter,
+            "poisson_variance": analysis.corrections.poisson_variance,
             "valid_range": [corrections.minimum, corrections.maximum],
             "gap_guard_px": corrections.gap_guard_px,
             "dark": Path(corrections.dark_path).name if corrections.dark_path else None,

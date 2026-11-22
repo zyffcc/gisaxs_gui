@@ -19,8 +19,8 @@ from ..views.analyze_page_view import FILE_FILTER
 
 HEADER_ITEM = "header:"
 """Data of a monitor-combo item that takes the header value after the colon."""
-SYMBOLS = {"exposure_time_s": ("t", " s"), "monitor": ("M", ""), "transmission": ("T", ""),
-           "thickness_mm": ("d", " mm"), "thickness_cm": ("d", " cm"), "absolute_factor": ("A", "")}
+SYMBOLS = {"exposure_time_s": ("t_exp", " s"), "monitor": ("M", ""), "transmission": ("T", ""),
+           "thickness_mm": ("d", " mm"), "thickness_cm": ("d", " cm"), "absolute_factor": ("A_abs", "")}
 
 
 def _number(text: str) -> Optional[float]:
@@ -232,6 +232,7 @@ class NormalisationMixin:
             self.exposure_combo.setCurrentIndex(max(0, self.exposure_combo.findData(norm.exposure)))
         self._show_dark()
         self._show_normalisation()
+        self._sync_reduction_errors()
         self._enable_normalisation_fields()
 
 

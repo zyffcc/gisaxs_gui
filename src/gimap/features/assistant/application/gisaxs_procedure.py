@@ -145,7 +145,7 @@ class GisaxsProcedureMixin:
         cuts = status.get("gisaxs") or {}
         # What the numbers are, in every report (the GIWAXS run says the same in its own words).
         self._decide(**refraction_decision(status.get("geometry"), "gisaxs", given=self._incidence is not None))
-        self._decide(**uncertainty_decision(status.get("error_model"), "gisaxs"))
+        self._decide(**uncertainty_decision(status.get("error_model"), "gisaxs", corrections=status.get("corrections")))
         flat = flat_field_decision(status)
         if flat is not None:
             self._decide(**flat)

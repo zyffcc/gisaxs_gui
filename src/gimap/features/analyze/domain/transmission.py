@@ -29,6 +29,7 @@ from src.gimap.shared.geometry import DetectorGeometry
 from src.gimap.shared.geometry.q_mapping import grazing_q_region
 
 from .binning import binned_mean_2d, map_grid_shape
+from .curve_errors import PixelErrors
 from .giwaxs import BLOCK_ROWS, CHI_BIN_DEG, MAP_SHAPE, GiwaxsMaps, _profile, _radial_bins, _pixel_q_step, strongest_ring
 from .giwaxs import _in_two_theta
 from .models import TRANSMISSION, X_AXIS_TWO_THETA, GiwaxsSettings, ReciprocalSpaceMap, Reduction
@@ -66,7 +67,7 @@ def reduce_transmission(
     *,
     maps: GiwaxsMaps | None = None,
     with_map: bool = True,
-    counts: bool = True,
+    counts: bool | np.ndarray | PixelErrors = True,
 ) -> Reduction:
     """The transmission curves (see the module docstring); ``counts`` as in ``reduce_giwaxs``."""
     settings = settings or GiwaxsSettings()

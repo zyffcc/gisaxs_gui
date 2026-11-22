@@ -8,6 +8,7 @@ import pytest
 
 from src.gimap.integrations.state import JsonInstrumentProfileRepository
 from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile, best_profile
+from src.gimap.shared.geometry.detector_response import DetectorResponse
 
 
 def _geometry(**overrides) -> DetectorGeometry:
@@ -40,6 +41,18 @@ def _profile(name: str, **overrides) -> InstrumentProfile:
 def test_profile_round_trips_through_dict() -> None:
     profile = _profile("P03 GISAXS")
     assert InstrumentProfile.from_dict(profile.to_dict()) == profile
+
+
+def test_detector_response_survives_geometry_update_and_repository_reload(tmp_path):
+    path = tmp_path / "profiles.json"
+    response = DetectorResponse(1.5, 25.0, "sigma", str(tmp_path / "uncertainty.npy"))
+    profile = _profile("integrating detector", detector_response=response)
+    repository = JsonInstrumentProfileRepository(path)
+    repository.save(profile.updated(_geometry(distance_m=4), source="calibrated"))
+    assert JsonInstrumentProfileRepository(path).find(profile.name).detector_response == response
+    old_record = profile.to_dict()
+    del old_record["detector_response"]
+    assert InstrumentProfile.from_dict(old_record).detector_response == DetectorResponse()
 
 
 def test_matching_prefers_name_and_shape_and_rejects_other_shapes() -> None:

@@ -28,8 +28,9 @@ class ElidedLabel(QLabel):
     the caller set (the file's path) stays; the label's own follows the text — it is the text whole while the
     text is shortened, none while it fits (it never keeps an earlier text such as “reading…”)."""
 
-    def __init__(self, text: str = "", parent: Optional[QWidget] = None):
+    def __init__(self, text: str = "", parent: Optional[QWidget] = None, *, padding: int = 16):
         super().__init__(parent)
+        self._padding = padding
         self._full = ""
         self._own_tip = ""  # the tooltip this label set itself ("" : none, or the caller's)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
@@ -62,7 +63,7 @@ class ElidedLabel(QLabel):
         self._refresh()
 
     def _refresh(self) -> None:
-        room = max(20, self.width() - 16)
+        room = max(20, self.width() - self._padding)
         shown = self.fontMetrics().elidedText(self._full, Qt.ElideMiddle, room)
         super().setText(shown)
         if self.toolTip() and self.toolTip() != self._own_tip:

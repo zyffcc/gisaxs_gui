@@ -382,6 +382,7 @@ class AnalyzeStepsView:
         layout.addWidget(self.show_mask_button, 0, Qt.AlignLeft)
         self.corrections_section.set_expanded(False)
         layout.addWidget(self.corrections_section)
+        layout.addWidget(self.detector_errors_section)
         layout.addWidget(self.normalisation_section)
         layout.addWidget(self.intensity_section)
         layout.addStretch(1)

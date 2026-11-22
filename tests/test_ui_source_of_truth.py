@@ -53,7 +53,7 @@ EXPECTED_VIEWS_BY_OWNER = {
     "analyze": {
         "analyze_page_view.py", "analyze_steps_view.py", "batch_export_view.py", "batch_progress_view.py",
         "options_panel_view.py", "normalisation_view.py", "absolute_scale_view.py", "mask_tools_view.py",
-        "regions_view.py", "gisaxs_cuts_view.py", "series_view.py", "series_fit_view.py",
+        "regions_view.py", "gisaxs_cuts_view.py", "series_view.py", "series_fit_view.py", "reduction_errors_view.py",
         "geometry_dialog_view.py", "center_dialog_view.py", "frame_import_dialog_view.py", "indexing_view.py",
     },
 }

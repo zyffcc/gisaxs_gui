@@ -13,6 +13,7 @@ from src.gimap.shared.detector_io import DETECTOR_SUFFIXES
 from ..texts import message_text
 from ..views.analyze_page_view import FILE_FILTER
 from .normalisation import NormalisationMixin
+from .reduction_errors import ReductionErrorsMixin
 
 APPLY_DELAY_MS = 250
 FLAT_FIELD_FILTER = (
@@ -21,7 +22,7 @@ FLAT_FIELD_FILTER = (
 """A flat field is any frame the reader takes, or a NumPy array (``application/flat_field.py``)."""
 
 
-class OptionsMixin(NormalisationMixin):
+class OptionsMixin(NormalisationMixin, ReductionErrorsMixin):
     """Own the Options panel; every change re-runs the analysis once it settles."""
 
     def _connect_options(self) -> None:
@@ -66,6 +67,7 @@ class OptionsMixin(NormalisationMixin):
         self.box_grid.setEnabled(False)
         for spin in (self.polarization_spin, self.film_thickness_spin, self.attenuation_spin, self.critical_angle_spin):
             spin.setEnabled(False)
+        self._connect_reduction_errors()
         self._connect_normalisation()
 
     def _options_changed(self) -> None:
@@ -241,6 +243,7 @@ class OptionsMixin(NormalisationMixin):
         self.mirror_fill_check.setVisible(grazing_wide)  # a GIWAXS correction: not offered for GISAXS
         self.intensity_section.setVisible(grazing_wide)  # GIWAXS corrections: not offered for GISAXS
         self._show_flat_field()  # (GISAXS and GIWAXS) what it did to the frame now shown
+        self._sync_reduction_errors()
         self._show_normalisation()  # what the header offers, and by what the frame was multiplied
 
 

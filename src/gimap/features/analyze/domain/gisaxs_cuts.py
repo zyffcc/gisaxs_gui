@@ -32,7 +32,8 @@ import numpy as np
 from src.gimap.shared.geometry import DetectorGeometry
 from src.gimap.shared.geometry.q_inverse import alpha_f_of_qz, q_of_positions, two_theta_f_of_qy
 
-from .binning import BinnedMean, merge_sparse_bins, native_profile
+from .binning import BinnedMean, native_profile
+from .curve_errors import PixelErrors, pixel_errors
 from .models import Curve
 
 HORIZONTAL, VERTICAL, BOX, SECTOR, LINE = "horizontal", "vertical", "box", "sector", "line"
@@ -177,12 +178,6 @@ def cut_mask(cut: GisaxsCut, maps, usable: np.ndarray) -> np.ndarray:
     return inside & (along >= 0) & (along <= length) & (np.abs(across) <= cut.half_width)
 
 
-def _counts(counts) -> tuple[bool, Optional[np.ndarray]]:
-    if isinstance(counts, np.ndarray):
-        return True, counts
-    return bool(counts), None
-
-
 def cut_record(cut: GisaxsCut) -> dict[str, Any]:
     """The definition of a cut in q, as written into its curve's region (the CSV header, the JSON record)."""
     record: dict[str, Any] = {"gisaxs_cut": cut.name, "kind": cut.kind, "q_unit": "1/A"}
@@ -243,7 +238,7 @@ def _title(cut: GisaxsCut) -> str:
 
 def cut_curve(
     cut: GisaxsCut, key: str, maps, values: np.ndarray, usable: np.ndarray, *, step: float,
-    counts: bool | np.ndarray = True, geometry: Optional[DetectorGeometry] = None,
+    counts: bool | np.ndarray | PixelErrors = True, geometry: Optional[DetectorGeometry] = None,
 ) -> Curve:
     """The curve of one cut (module docstring). ``counts``: as ``gisaxs.reduce_gisaxs``; ``step``: the bin width of
     sector and line curves (Å⁻¹)."""
@@ -257,12 +252,12 @@ def cut_curve(
     window = (slice(int(rows[0]), int(rows[-1]) + 1), slice(int(columns[0]), int(columns[-1]) + 1))
     record["pixel_rows"] = [int(rows[0]), int(rows[-1]) + 1]
     record["pixel_columns"] = [int(columns[0]), int(columns[-1]) + 1]
-    poisson, scale = _counts(counts)
+    errors = pixel_errors(counts).subset(window)
     if cut.axis in (ALONG_QY, ALONG_QZ):
         x_map = maps.qy if cut.axis == ALONG_QY else maps.qz
         x, mean, sigma, pixels = native_profile(
             values[window], inside[window], x_map[window], axis=0 if cut.axis == ALONG_QY else 1,
-            counts_model=poisson, scale=None if scale is None else scale[window],
+            errors=errors,
         )
         return Curve(key, title, x, mean, sigma, pixels, label, region=record)
     qy = maps.qy[window][inside[window]].astype(np.float64)
@@ -276,8 +271,8 @@ def cut_curve(
         low, high = 0.0, length
     bins = max(1, int(math.ceil((high - low) / max(float(step), 1e-12))))
     accumulator = BinnedMean.linear(low, high, bins)
-    accumulator.add(coordinate, values[window][inside[window]], None if scale is None else scale[window][inside[window]])
-    x, mean, sigma, pixels = merge_sparse_bins(*accumulator.result(counts=poisson))
+    accumulator.add(coordinate, values[window][inside[window]], errors=errors.subset(inside[window]))
+    x, mean, sigma, pixels = accumulator.result(counts=errors, merge=True)
     return Curve(key, title, x, mean, sigma, pixels, label, region=record)
 
 

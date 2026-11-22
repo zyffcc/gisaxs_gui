@@ -451,7 +451,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
             reason = search.reason if search is not None else "the radial curve could not be searched"
             self._decide("peaks", "none", reason)
             return
-        self._run.decisions.append(uncertainty_decision(status.get("error_model")))
+        self._run.decisions.append(uncertainty_decision(status.get("error_model"), corrections=status.get("corrections")))
         self._assign(search.peaks)
         self._call("compare_sectors")
         reliable = [peak for peak in search.peaks if is_reliable(peak)]  # no caveat, not cut off at the end of the data
