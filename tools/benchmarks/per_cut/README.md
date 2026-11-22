@@ -34,3 +34,8 @@ The fitting code is the git tree `7e68831a52cf841a56fe05f8cc4e36ee62b41cb7` of `
 (`git rev-parse 2eb0243:src/gimap/features/fitting/domain` and the same at 7179b85 give it): one version of the code
 for every run. The two runs written at 2eb0243 predate the `code` field of the summaries, so their commit and tree
 are stated here and not added to the result files. The network is `flow_v1` (its SHA-256 is in every summary).
+
+`evidence_integration_check.json.gz` is not a Predict run: it is everything `../evidence_integration_check.py` computed
+(every parameter point of the 24 solutions, with the scales at the least-squares and at the joint optimum, both runs
+of the joint integral and the parts of the difference), written at 958aa9b with the fitting code of tree `d139e6f5`;
+`../evidence_integration_check.json` holds the same results with the posterior draws as rows.
