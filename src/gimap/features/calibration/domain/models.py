@@ -28,6 +28,7 @@ INDEX_CENTER_CONVENTION = {
 """The convention of ``CalibrationCandidate.center_x_px`` / ``center_y_px``, in memory and in the file."""
 UNKNOWN_CENTER_CONVENTION = "This calibration file states a beam-centre convention this version does not know."
 MANUAL_REFINEMENT_WARNING = "Geometry was manually adjusted after automatic calibration."
+THREE_RING_UNCERTAINTY_METHOD = "ring jackknife and least squares"
 TILT_KEYS = ("tilt_refined", "rot1_deg", "rot2_deg", "rot3_deg", "rot1_sigma_deg", "rot2_sigma_deg",
              "point_rms_px", "untilted_point_rms_px")
 """Candidate keys written only for a tilted detector (``CalibrationCandidate.to_dict``)."""
@@ -88,8 +89,8 @@ class CalibrationCandidate:
     center_y_sigma_px: Optional[float] = None
     distance_sigma_mm: Optional[float] = None
     uncertainty_method: str = ""
-    """How the 1σ of the centre and the distance were found (``optimizer.estimate_uncertainty``): ``ring jackknife``
-    with three or more matched rings, else ``least squares``; empty when none could be."""
+    """Source of the standard errors in this record (see ``optimizer.estimate_uncertainty``).
+    The three-ring estimate for a fitted tilt combines the ring jackknife and least squares."""
     tilt_refined: bool = False
     """Whether rot1 and rot2 were fitted with the centre and the distance (``tilt_fit.refine_ring_geometry``)."""
     rot1_deg: float = 0.0
@@ -105,6 +106,13 @@ class CalibrationCandidate:
     """A zero-tilt refit on the final points, or the original circle-fit RMS in a legacy tilted record."""
     initial_point_rms_px: Optional[float] = None
     """Starting geometry on the same final points. Absent in older calibrations."""
+
+    @property
+    def tilt_uncertainty_method(self) -> str:
+        """The specific source of the tilt errors in this record, including older calibrations."""
+        if self.uncertainty_method == THREE_RING_UNCERTAINTY_METHOD:
+            return "least squares"
+        return self.uncertainty_method
 
     def clear_fit_statistics(self) -> None:
         """A manually adjusted centre or distance no longer describes the fitted geometry."""

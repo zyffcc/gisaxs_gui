@@ -36,7 +36,8 @@ for every run. The two runs written at 2eb0243 predate the `code` field of the s
 are stated here and not added to the result files. The network is `flow_v1` (its SHA-256 is in every summary).
 
 `calibration_check_frames.json.gz` holds every simulated frame of `../calibration_check.py` (`calibration_coverage.py`):
-`main` and `three_ring_set`, each with `meta` (command, frames, first seed, seconds) and `frames` (the truth, the
-set-up, and for the engine as shipped and with polished beam-centre proposals the fit, the reported 1σ, s²(JᵀJ)⁻¹ on
-the same ring points and whether the geometry was found). `--part summarize` makes the summaries of
-`../calibration_check.json` from it.
+`main` and `three_ring_set` each contain `meta` (command, frame count, first seed and seconds) and `frames`.
+Each frame records the simulated geometry and the result from the shipped engine, including whether it found the
+geometry. Successful fits include the reported 1σ and the covariance standard errors on the final fit's points.
+Three-ring records also give the three two-ring refits with both tilts fixed. Run `--part summarize` to rebuild the
+coverage summaries in `../calibration_check.json`.

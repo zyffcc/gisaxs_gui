@@ -529,7 +529,8 @@ Implementation: `src/gimap/features/calibration/domain/geometry_model.py`, `src/
 Inputs: the image, the energy (λ from (1.1)), the pixel size (from the header or entered), the standard or Auto, an optional estimated distance, and a distance range of 30 to 10 000 mm. Internally all positions are index coordinates (section 1.3), and so are the candidates of the result and of the exported `.json`; the window, Apply (section 3.5) and the summary of the automatic analysis shift them by +0.5 px with (1.5).
 
 1. **Preprocessing.** Valid pixels are finite, not masked by the reader and above 0, so zero-filled gaps and apertures are left out. Percentiles and the maximum are taken on a sample of about 2.5 × 10⁵ valid pixels. When the maximum exceeds `max(20 P_99.95, 10⁶)`, the pixels at that value are dropped. Values are clipped to `[0, P_99.9]` and transformed with `ln(1 + I)`. By default a smooth background is subtracted: a Gaussian of σ = `max(6, min(H, W)/90)` px, normalised by the smoothed valid mask so that gaps do not bleed in; negative results are set to 0.
-2. **Beam-centre proposals.** Up to 14 proposals, at least 3 px apart, each with a support between 0 and 1. They come from the direct beam and beam stop along the bright beam column, from voting of intensity-gradient lines of partial arcs (which can place a centre outside the detector), from the image centre, from the header centre (support 0.70), from 180° symmetry by phase correlation (support 0.20), and from a coarse-to-fine search for the sharpest radial profile.
+2. **Beam-centre proposals.** Up to 14 initial proposals, at least 3 px apart, each with a support between 0 and 1. They come from the direct beam and beam stop along the bright beam column, from voting of intensity-gradient lines of partial arcs (which can place a centre outside the detector), from the image centre, from the header centre (support 0.70), from 180° symmetry by phase correlation (support 0.20), and from a coarse-to-fine search for the sharpest radial profile.
+   For transmission and grazing-incidence images alike, the engine also tests refined copies of up to four arc-voting proposals. It centres a radial profile on each trial position and maximises the sharpness of the rings using the brightest quarter of valid pixels. The grid step decreases from 4 to 2, 1 and 0.5 px. A refined centre is added if it lies at least 1 px from every existing proposal.
 3. **Ring detection for each proposal.** The image is resampled onto 360 azimuths × 1 px radii. The radial profile is the 60th percentile over azimuth, which is robust against streaks and gaps (the plain radial mean when OpenCV is missing). The profile is smoothed with a Gaussian of σ = 1.2 px. Peaks need a prominence of at least `max(2.3 MAD, 0.08 (P_85 − median), 10⁻⁵)`, an azimuthal coverage of at least 1.5 % and a radius of at least 40 px. Peak radii stay on the 1 px grid; they are not interpolated.
 4. **Distance hypotheses and matching.** Each of the first 35 peaks paired with each line of the standard gives a distance by inverting (3.6); distances inside the range are clustered within 0.8 %. At each distance, predicted and observed radii are paired greedily within a tolerance of `max(3 px, 0.018 r, 0.6 w)` (w: peak width). With the pairs fixed, L is solved by one-parameter linear least squares, equation (3.7).
 5. **Ranking.** A weighted score rewards matched rings (each counted in proportion to its prominence up to 0.1 in the log-scaled profile, about 10 % contrast, and whole above it: chance coincidences with noise-level peaks do not outweigh fewer clear rings), azimuthal coverage, valid area, centre support, an unbroken run of orders and prominence, and a Gaussian prior of 20 % width around an estimated distance. It penalises the residual, inconsistent per-ring distances, unexplained inner peaks and (for AgBH) a missing first order.
@@ -548,12 +549,37 @@ In (3.8), `(x_p, y_p)` are the integer index coordinates of ring pixel p, `q_p` 
 
 Wavelength, pixel size and rot3 are fixed. Powder rings measure angles to the incident beam, so they cannot determine a rotation about it. The engine keeps the supplied rot3 even when refinement is skipped (default 0°). The physical rotations of a candidate are `rot1_deg`, `rot2_deg` and `rot3_deg`.
 
-**Uncertainty.** The points along one ring are not independent: when a ring is slightly off, all of them move
-together. The 1σ of x_c, y_c and L is therefore the scatter between the rings: with three or more matched rings the
-fit is repeated with each ring left out, and σ² = (n − 1)/n · Σ (θ_i − θ̄)² (jackknife). With two rings only the
-least-squares covariance s² (JᵀJ)⁻¹ is left, a lower bound. A ring matched wrongly, or a bias common to all rings, is not in σ. The values are
-in the calibration record (`center_x_sigma_px`, `center_y_sigma_px`, `distance_sigma_mm`, `uncertainty_method`), in
-the tooltips of the result, and in the `source` of the instrument profile, so they reach every `<stem>_analysis.json`.
+**Uncertainty.** The sector centroids from one ring can shift together. With n ≥ 3 rings contributing points,
+the engine omits each whole ring in turn and refits the remaining centroids. For a parameter θ, the jackknife
+variance is σ²_J = (n − 1)/n · Σ (θ_i − θ̄)², where θ_i is its estimate after omitting ring i and θ̄ is the mean
+of the n estimates.
+
+- With four or more rings, each refit varies the same parameters as the full fit. With three rings and tilt refinement disabled, each refit varies x_c, y_c and L.
+- With three rings and fitted tilts, two rings remain in each refit. Both tilts are held at their three-ring values because two rings constrain tilt poorly. The full five-parameter fit gives C = s² (JᵀJ)⁻¹, where J is the Jacobian of the pixel residuals (3.17) and s² = Σ ρ_p²/(N − 5) for N centroids. Each tilt has σ = √C_ii. For x_c, y_c and L, the reported σ is the larger of σ_J and √C_ii, so it also accounts for coupling to the fitted tilts. If JᵀJ is singular, only the jackknife uncertainties for x_c, y_c and L are available.
+- With two rings, uncertainties come from the covariance alone, with denominator N − p for p free parameters. The default fit keeps the tilts fixed, so p = 3. Treat this as a lower bound because the point residuals within a ring can be correlated.
+
+The estimates assume the ring assignments are correct and omit systematic errors shared by all rings. The calibration
+record gives `center_x_sigma_px`, `center_y_sigma_px`, `distance_sigma_mm` and `uncertainty_method`. The result tooltips
+show these uncertainties and the instrument profile carries them into each `<stem>_analysis.json`.
+
+**Measured 1σ coverage.** In 300 simulated Pilatus 1M AgBh frames, the input distance estimate was within 15 %
+of the true distance, and rot1 and rot2 each ranged from −3° to +3°. GIMaP identified 213 geometries (71 %).
+Identification required a fitted tilt with an uncertainty, a direct beam within 5 px and a distance within 5 %
+of the input geometry. In a separate set of 150 frames with only orders 1–3 drawn, it identified 114 geometries,
+112 with exactly three matched rings. Each entry below is the percentage of identified fits in the row for which
+the interval from θ − σ to θ + σ contained the input value.
+
+| Simulated set | Matched rings | Fits | x_c | y_c | L | rot1 | rot2 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Main | 3 | 7 | 85.7 % | 71.4 % | 42.9 % | 57.1 % | 42.9 % |
+| Only orders 1–3 drawn | 3 | 112 | 74.1 % | 54.5 % | 75.0 % | 52.7 % | 51.8 % |
+| Main | ≥7 | 125 | 52.0 % | 67.2 % | 79.2 % | 56.8 % | 69.6 % |
+
+With at least seven rings, a Student t reference for scatter estimated from n independent rings
+(n − 1 degrees of freedom) gives 65.1 % within ±1σ, averaged over the ring counts in that row.
+Taking the larger of the jackknife and covariance errors raised coverage to 56.8 % for x_c and 57.6 %
+for rot1. Both remained below the reference, so these fits retain the ring jackknife.
+The input conditions, fitted values and coverage are recorded in [the calibration benchmark](../tools/benchmarks/README.md#geometry-calibration-against-pyfai-and-the-coverage-of-its-1σ).
 
 Implementation: `src/gimap/features/calibration/domain/engine.py`, `src/gimap/features/calibration/domain/preprocessing.py`, `src/gimap/features/calibration/domain/center_estimator.py`, `src/gimap/features/calibration/domain/radial_profile.py`, `src/gimap/features/calibration/domain/peak_detector.py`, `src/gimap/features/calibration/domain/peak_matcher.py`, `src/gimap/features/calibration/domain/candidate_ranker.py`, `src/gimap/features/calibration/domain/optimizer.py`
 
@@ -589,7 +615,7 @@ GIMaP uses two measures of a calibration.
 
 Among the candidates with at least 3 accepted lines, the one with the smallest ε is chosen, even when the engine ranked another first; the record says which rule chose (`chosen_by`).
 
-"Good" measures agreement with the calibration image. Check the acquisition records to establish that the calibration belongs to the sample data. Section 3.8 gives the fixed- and free-tilt results on the public pyFAI AgBh frame.
+"Good" measures agreement with the calibration image. Check the acquisition records to establish that the calibration belongs to the sample data. Section 3.8 compares the GIMaP and pyFAI calibrations of the public AgBh frame.
 
 Implementation: `src/gimap/features/calibration/domain/candidate_ranker.py`, `src/gimap/features/calibration/domain/line_check.py`, `src/gimap/features/calibration/application/headless.py`, `src/gimap/features/assistant/domain/calibration_quality.py`
 
@@ -718,15 +744,17 @@ rotations less than 10⁻⁶ rad). On the final set of points the record gives t
 
 In a calibration JSON, `metadata.ring_point_fits` stores the before and after values for each geometry and its matched lines. Headless summaries give both values directly on each solution.
 
-**Uncertainty.** The estimates in section 3.3 use the final points and the same three or five free parameters as the fit. For a fitted tilt, the record includes `rot1_sigma_deg` and `rot2_sigma_deg`.
+**Uncertainty.** Section 3.3 gives the uncertainty for each parameter from the final set of centroids. For a fitted tilt, the record includes `rot1_sigma_deg` and `rot2_sigma_deg`.
 
 Applying or exporting a manually changed geometry clears the point-fit RMS values and uncertainties. The retained ring-radius RMS describes the original automatic ring matches.
 
 **Validation.** Ring points of the public Xeuss `.poni` geometry (tilt 6.06°, rot_1 = −5.100°, rot_2 = −3.274°),
 from an untilted start 3 % off in distance, give rot_1 and rot_2 within 0.012° of the file's. A synthetic LaB₆
 frame (1200 × 1200 px, 172 µm, 12 keV, L = 200 mm, rot_1 = 2.0°, rot_2 = −1.5°) through the whole engine gives
-rot_1 and rot_2 within 0.05° of their input values. On the public pyFAI AgBh frame at λ = 1.0 Å, the fixed-tilt fit reduces the ring-point RMS from 1.835 to 0.473 px. Its direct beam (179.744, 264.139) px is 0.119 px from the free-tilt fit (179.771, 264.024) px. On the free-tilt fit's final points, the RMS is 0.450 px with tilt and 0.459 px with centre and distance refitted at zero tilt. For an
-untilted geometry the tilt fields change no pixel's q (equal to 10⁻¹²).
+rot_1 and rot_2 within 0.05° of their input values. On the public AgBh frame at λ = 1.0 Å, GIMaP matches orders 1–5
+and obtains a ring-point RMS of 0.584 px. Its direct beam is (179.796, 264.005) px in the window coordinates,
+0.133 px from the independent pyFAI calibration. The distances to the direct beam are 1633.840 and 1634.053 mm,
+respectively. For an untilted geometry the tilt fields change no pixel's q (equal to 10⁻¹²).
 
 Implementation: `src/gimap/features/calibration/domain/tilt_fit.py`, `src/gimap/features/calibration/domain/optimizer.py`
 (`estimate_uncertainty`), `src/gimap/features/calibration/domain/engine.py`
@@ -4912,7 +4940,7 @@ Fitting's optional two-path sphere with a free effective reflection coefficient 
 
 ### 15.2 Instrument and geometry
 
-- **Detector tilt and rotation.** Rings weakly constrain tilt at SAXS distances (±0.17° on the public AgBh frame) and leave rot3 undetermined. Check rot3 against the observed GISAXS rod and horizon (section 3.7). The initial ring search uses circles. Automatic row bands warn when the horizon changes by more than half a row across the image. Mirror filling and XRR project rays onto the detector plane (sections 4.8, 13.1).
+- **Detector tilt and rotation.** Rings weakly constrain tilt at SAXS distances (1σ of 0.15° for rot1 and 0.19° for rot2 on the public AgBh frame) and leave rot3 undetermined. Check rot3 against the observed GISAXS rod and horizon (section 3.7). The initial ring search uses circles. Automatic row bands warn when the horizon changes by more than half a row across the image. Mirror filling and XRR project rays onto the detector plane (sections 4.8, 13.1).
 - **Sample orientation.** The sample is tilted by α_i about the horizontal axis perpendicular to the beam and by nothing else; a rotation about the surface normal or about the beam is not described in Analyze (section 2.5). Sputter alone hands a sample roll to its analysis package (section 12.1).
 - **Pixels.** A pixel is represented by its centre: there is no parallax, no sensor thickness and no pixel splitting (sections 2.5, 6.1).
 - **Beam.** Divergence, energy bandwidth and footprint are not modelled (section 2.5). The XRR extractor applies no footprint correction (section 13.1).

@@ -198,9 +198,8 @@ class CalibrationEngine:
         centers = estimate_center_candidates(analysis, metadata_center, source_data=image.data)
         if not centers:
             raise CalibrationError("A stable beam-center proposal could not be found.")
-        if rod is not None:
-            # Half arcs from coarse voting cells: a centre a few pixels off loses thin rings from the profile.
-            centers = centers + polished_centers(ring_image, centers)
+        # A coarse voting cell can spread a narrow ring over several radii, even in transmission.
+        centers += polished_centers(ring_image, centers)
 
         standard_keys = list(STANDARDS) if standard_key == "auto" else [standard_key]
         raw_candidates: list[CalibrationCandidate] = []

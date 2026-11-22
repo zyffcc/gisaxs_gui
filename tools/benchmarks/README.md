@@ -140,64 +140,64 @@ The JSON gives each frame's timings, settings and the network checksum. Running 
 `--synthetic-mpx` times the watched folder on crops of the public GALAXI frame.
 ## Geometry Calibration against pyFAI, and the coverage of its 1σ
 
-`calibration_check.py` with `calibration_coverage.py`: about 45 min with 4 processes. The stored three-ring set was run
-on its own (`--part three --three-ring-cases 150 --workers 4`); `--part all` repeats it with the same seeds, and
-`--part summarize` remakes the summaries from `per_cut/calibration_check_frames.json.gz`.
+Run `calibration_check.py --part all --cases 300 --workers 4` with pyFAI installed.
+The simulation alone (`--part coverage`) uses the GIMaP environment. `--part summarize` rebuilds the coverage
+tables from `per_cut/calibration_check_frames.json.gz`. The JSON records the seed, settings and command.
 
-**What GIMaP minimises** (`calibration/domain/tilt_fit.py`). Per ring point i the residual is
-r_i = L (tan 2θ_i − tan 2θ_ring) / p̄ in pixels: L the distance from the sample to the direct beam, 2θ_i the angle of the
-point for the trial beam centre, L, rot1 and rot2 (pyFAI's rotations, rot3 fixed), 2θ_ring that of its order of
-d = 58.38 Å, p̄ the mean pixel size; untilted, r_i is the radial pixel distance from the ring.
-`least_squares(loss="soft_l1", f_scale=2)` minimises Σ f²(√(1 + r_i²/f²) − 1) with f = 2 px. A ring point is the
-intensity-weighted mean position, in a sector of about 2 px of arc, of the pixels within ±max(3, min(10, 1.2 % r)) px
-of the ring. The 1σ reported is the jackknife over rings (each ring left out, the same robust fit on the other rings:
-σ² = (n − 1)/n Σ(θ_k − θ̄)²) with three or more matched rings, s²(JᵀJ)⁻¹ with two. With three rings each of the three
-jackknife fits frees all five parameters on two rings. pyFAI minimises Σ(2θ_i − 2θ_ring)² without a robust loss; its
-`curve_fit` 1σ is s²(JᵀJ)⁻¹. The JSON's `residual_definition` writes this out in full.
+**Geometry and uncertainty.** GIMaP fits the beam centre, sample-to-direct-beam distance L and two detector
+rotations to the ring points. Each point is an intensity-weighted centroid from a sector about 2 px of arc wide.
+The residual in pixels is r_i = L (tan 2θ_i − tan 2θ_ring) / p̄, where p̄ is the mean pixel size and 2θ_ring
+comes from the order of AgBh (d₀₀₁ = 58.38 Å). The fit minimises Σ f²(√(1 + r_i²/f²) − 1) with f = 2 px.
+The benchmark records the points used in the final fit to check the uncertainties independently.
 
-**The public frame** (`tests/data/external/saxs_agbh_pyfai`, λ = 1.0 Å, 172 µm). pyFAI 2026.9 calibrated it without
-a person: `Recalibration.extract_cpt` (massif, one point per degree, seed fixed) from the shipped `.poni`, then
-`GeometryRefinement.curve_fit` with rot3 = 0, repeated 16 times from the newest geometry (the last 8 scatter by 0.005 px
-in the beam and 0.03 mm in L; a second start, 3 % farther and untilted, ends within 0.3σ). GIMaP's convention below
-(direct beam, pixel corners on integers; L to the direct beam); the JSON has the PONI form as well. GIMaP's 1σ: jackknife
-over its 4 rings; pyFAI's: `curve_fit`, [jackknife over its 6 rings].
+For n contributing rings, the leave-one-ring-out variance is v_J = (n − 1)/n Σ_k (θ_k − θ̄)².
+The full-fit covariance is C = [Σ_i r_i²/(N − p)] (JᵀJ)⁻¹ for N points and p free parameters.
+With four or more rings, GIMaP reports √v_J for each free parameter. With exactly three rings and fitted
+tilts, each two-ring refit holds both tilts at their full-fit values. GIMaP reports √max(v_J, C_jj) for x, y
+and L, and √C_jj for the tilts. A calibration with fixed tilts uses the ring jackknife for x, y and L
+with three or more rings. With two rings, the standard errors come from C.
 
-| | GIMaP | pyFAI | (GIMaP − pyFAI)/σ_combined |
-|---|---|---|---|
-| beam x (px) | 179.771 ± 0.131 | 179.923 ± 0.017 [0.073] | −1.15 |
-| beam y (px) | 264.024 ± 0.185 | 263.968 ± 0.018 [0.094] | +0.30 |
-| L (mm) | 1634.01 ± 0.48 | 1634.05 ± 0.07 [0.17] | −0.08 |
-| rot1 (°) | −0.151 ± 0.173 | −0.297 ± 0.035 [0.089] | +0.83 |
-| rot2 (°) | 0.561 ± 0.163 | 0.687 ± 0.035 [0.091] | −0.76 |
+**Public silver behenate frame.** GIMaP matched orders 1–5 on `saxs_agbh_pyfai/Pilatus1M.edf` at λ = 1.0 Å
+and 172 µm pixels. pyFAI 2026.9 located points on six rings using `Recalibration.extract_cpt` (massif, one
+point per degree, fixed seed) and repeatedly refined its geometry with `GeometryRefinement.curve_fit` and
+rot3 = 0. The table uses pixel-corner coordinates and sample-to-direct-beam distance. The last column divides
+the difference by the two standard errors added in quadrature.
 
-In PONI terms the distance agrees to 0.02 mm (1633.93 and 1633.91 mm) and poni1, poni2 differ by 3.6 and 4.1 mm, 0.8σ:
-at a 0.6° tilt the PONI moves with the rotations, the direct beam does not. RMS of r_i: GIMaP's geometry 0.45 px on
-its 1331 points and 0.30 px on pyFAI's 747; pyFAI's 0.22 px on its own and 0.48 px on GIMaP's (the two pickers place
-points differently; on the other's points each geometry is 0.03–0.08 px worse than the other's own fit). The shipped
-`Pilatus1M.poni` is not a calibration of this image: its L is 1583.3 mm, its rings 3 % too small, r_i 12.8 and 15.3 px
-RMS on the two point sets.
+| Parameter | GIMaP ± ring jackknife | pyFAI ± curve_fit [ring jackknife] | Difference / combined σ |
+|---|---:|---:|---:|
+| beam x (px) | 179.796 ± 0.186 | 179.923 ± 0.017 [0.073] | −0.68 |
+| beam y (px) | 264.005 ± 0.174 | 263.968 ± 0.018 [0.094] | +0.22 |
+| L (mm) | 1633.84 ± 0.66 | 1634.05 ± 0.07 [0.17] | −0.32 |
+| rot1 (°) | −0.126 ± 0.154 | −0.297 ± 0.035 [0.089] | +1.08 |
+| rot2 (°) | 0.717 ± 0.185 | 0.687 ± 0.035 [0.091] | +0.16 |
 
-**Coverage** (`calibration_coverage.py`; set-up in the JSON's `set_up`): 300 simulated AgBh frames on the Pilatus 1M with
-the direct beam anywhere in the central 80 %, L 1.5–3 m, rot1 and rot2 in ±3°, 3–9 rings, and 150 frames with only
-orders 1–3 drawn. Fraction within 1σ / within 2σ / median |error|/σ of GIMaP's reported 1σ, frames whose geometry
-the engine found, by matched rings; the last column is what a Student t with n − 1 degrees of freedom would give:
+On GIMaP's ring points the RMS residuals of the GIMaP and pyFAI geometries were 0.584 and 0.623 px.
+On pyFAI's points they were 0.300 and 0.222 px. The shipped `Pilatus1M.poni`, a starting geometry for
+pyFAI, gave 14.6 and 15.3 px on these two sets. `calibration_check.json` also gives both geometries in PONI
+coordinates and the results of a second pyFAI fit started 3% farther away with zero tilt.
 
-| Rings | Frames | beam x | beam y | L | rot1 | rot2 | t(n−1) |
-|---|---|---|---|---|---|---|---|
-| 3 | 57 | 0.77 / 0.93 / 0.57 | 0.77 / 0.96 / 0.56 | 0.74 / 0.88 / 0.46 | 0.67 / 0.93 / 0.63 | 0.88 / 0.96 / 0.46 | 0.58 / 0.82 |
-| 4–6 | 42 | 0.74 / 0.93 / 0.48 | 0.59 / 0.86 / 0.81 | 0.83 / 0.98 / 0.44 | 0.81 / 1.00 / 0.67 | 0.81 / 0.95 / 0.49 | 0.62 / 0.88 |
-| ≥ 7 | 60 | 0.52 / 0.92 / 0.98 | 0.67 / 0.97 / 0.72 | 0.77 / 0.97 / 0.47 | 0.52 / 0.87 / 0.95 | 0.68 / 0.93 / 0.80 | 0.65 / 0.92 |
+**Recovery and coverage.** The 300 simulated Pilatus 1M frames have 3–9 target rings, L between
+1.5 and 3 m, and rotations up to ±3° about either axis. Each fit receives an estimate within ±15% of the
+true distance. Recovery requires a fitted tilt with an uncertainty, a beam centre within 5 px of the
+truth and a distance error below 5%. Counts and coverage use the calibration window's first-ranked
+candidate. The archive records the headless line check separately.
 
-(3 rings: the three-ring set; the main set gave 9 such frames.) s²(JᵀJ)⁻¹ on the same points covers less: 0.35–0.72
-within 1σ, 0.55–0.93 within 2σ. With the beam-centre proposals polished (below) the numbers are alike on twice the
-frames (112, 81 and 125). Both are in the JSON per parameter. With three rings the 1σ is mostly generous but the tails
-are heavy (0.88–0.96 within 2σ), as for a t with 2 degrees of freedom. With 7 or more rings the 1σ of beam x and rot1
-is too small (about half of the errors within 1σ, median |error|/σ 0.84–0.98 with either engine).
+The shipped engine recovered **213/300** geometries. On the same seeds, the engine before
+transmission polishing recovered 111/300 (archived in commit `7cd8999`). Coarse arc votes can place the
+centre several pixels off, spreading a narrow ring over several radii in the profile. The engine now
+tests refined copies of these votes alongside the original proposals. In the separate 150 frames with
+only orders 1–3 drawn, it recovered 114/150 geometries. Of these, 112 matched exactly three rings.
 
-**The engine as shipped finds the geometry of 111 of the 300 frames** (20, 40 and 51 of the frames with about 3, 4–6 and
-7–9 rings), and of 58 of the 150 three-ring frames. The arc voting of `center_estimator` gives the beam centre in cells
-of about 12 px; about such a centre the rings, 1.5–3 px σ wide, vanish from the azimuthal profile, and the engine
-matches one ring or wrong orders. `center_polish.polished_centers` cures this, but the engine calls it for
-grazing-incidence images only. Applied to every image (`polished_proposals`, patched in the benchmark only), the
-geometry is found for 213 of 300 and 114 of 150. On the public frame the polish gives 5 matched rings instead of 4 and
-moves the result within its 1σ (JSON: `gimap_polished_for_reference`).
+Among recovered frames, each cell gives the fraction within 1σ, fraction within 2σ and median |error|/σ.
+The three-ring row uses the separate set. The other rows use the 300-frame set.
+
+| Matched rings | Frames | beam x | beam y | L | rot1 | rot2 |
+|---|---:|---|---|---|---|---|
+| 3 | 112 | 0.74 / 0.92 / 0.54 | 0.55 / 0.82 / 0.86 | 0.75 / 0.96 / 0.58 | 0.53 / 0.83 / 0.95 | 0.52 / 0.78 / 0.95 |
+| 4–6 | 81 | 0.78 / 0.97 / 0.54 | 0.74 / 0.90 / 0.59 | 0.79 / 0.97 / 0.47 | 0.72 / 0.99 / 0.75 | 0.81 / 0.95 / 0.55 |
+| ≥7 | 125 | 0.52 / 0.94 / 0.97 | 0.67 / 0.95 / 0.72 | 0.79 / 0.99 / 0.51 | 0.57 / 0.91 / 0.84 | 0.70 / 0.98 / 0.71 |
+
+The main set also yielded 7 three-ring recoveries, reported separately in the JSON. With seven or more
+rings, a Student t reference for ring scatter gives 65.1% within 1σ. The measured rates were 52.0% for beam x
+and 56.8% for rot1. Taking the larger of the jackknife and covariance standard errors on the same
+points gave 56.8% and 57.6%, respectively. The engine retains the ring jackknife for these fits.

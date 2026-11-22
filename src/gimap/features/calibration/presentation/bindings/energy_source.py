@@ -34,7 +34,7 @@ class EnergySourceMixin:
 
     def _bind_energy_source(self) -> None:
         self.energy_spin.valueChanged.connect(self._energy_edited)
-        language_changed().connect(lambda _language=None: self._show_energy_source())
+        language_changed().connect(self._show_energy_source)
         self._show_energy_source()
 
     def _energy_edited(self, _value: float) -> None:

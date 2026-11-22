@@ -8,7 +8,7 @@ import numpy as np
 from scipy.optimize import least_squares
 
 from .geometry_model import q_to_ring_radius_m
-from .models import CalibrationCandidate
+from .models import THREE_RING_UNCERTAINTY_METHOD, CalibrationCandidate
 from .preprocessing import AnalysisImage
 from .tilt_fit import tilt_residual
 
@@ -71,48 +71,58 @@ def estimate_uncertainty(
 ) -> CalibrationCandidate:
     """1σ of the beam centre and the distance of a refined candidate (and of rot1, rot2 when the tilt was fitted).
 
-    The points along one ring are not independent (a ring that is slightly off moves all of them together), so the
-    least-squares covariance of the points says too little. With three or more matched rings the error is the
-    jackknife over rings: the fit is repeated with each ring left out, and
-    σ² = (n − 1)/n · Σ (θ_i − θ̄)². With two rings it is the least-squares covariance s² (JᵀJ)⁻¹, s² the mean square
-    residual per degree of freedom, which is a lower bound. Each estimate uses the points of the final fit
-    and frees the same parameters."""
+    The jackknife leaves out each of n rings in turn, keeping the points of the final fit.
+    With three rings and a fitted tilt, the two-ring refits hold the tilt fixed. The full-fit
+    least-squares covariance supplies the tilt errors and a floor for the conditional centre
+    and distance errors. With only two rings the errors are from the covariance alone."""
     if points is None:
         return candidate
     xs, ys, qs = points
     rot3 = math.radians(candidate.rot3_deg)
     rotations = np.radians([candidate.rot1_deg, candidate.rot2_deg])
     centre = np.array([candidate.center_x_px, candidate.center_y_px, candidate.distance_mm])
-    fixed_tilt = rotations
     if candidate.tilt_refined:
         centre = np.r_[centre, rotations]
-        fixed_tilt = None
 
-    def make(xs, ys, qs):
+    def make(xs, ys, qs, fixed_tilt):
         return tilt_residual(xs, ys, qs, wavelength_angstrom, pixel_size_x_m, pixel_size_y_m, rot3,
                              fixed_tilt=fixed_tilt)
 
-    steps = np.array([1e-3, 1e-3, max(1e-6, 1e-6 * centre[2]), 1e-7, 1e-7])[:centre.size]
-    scale = np.array([1.0, 1.0, max(1.0, 1e-3 * centre[2]), 1e-3, 1e-3])[:centre.size]
     if xs.size < 30:
         return candidate
     rings = np.unique(qs)
     if rings.size >= 3:
+        free = centre[:3] if rings.size == 3 else centre
+        fixed_tilt = rotations if free.size == 3 else None
+        scale = np.array([1.0, 1.0, max(1.0, 1e-3 * centre[2]), 1e-3, 1e-3])[:free.size]
         estimates = []
         for ring in rings:
             keep = qs != ring
-            if np.unique(qs[keep]).size < 2:
-                continue
-            fit = least_squares(make(xs[keep], ys[keep], qs[keep]), centre, loss="soft_l1", f_scale=2.0,
-                                max_nfev=40 if centre.size == 3 else 80, x_scale=scale)
+            residual = make(xs[keep], ys[keep], qs[keep], fixed_tilt)
+            fit = least_squares(residual, free, loss="soft_l1", f_scale=2.0,
+                                max_nfev=40 if free.size == 3 else 80, x_scale=scale)
             estimates.append(fit.x)
-        if len(estimates) >= 3:
-            values = np.asarray(estimates)
-            n = values.shape[0]
-            sigma = np.sqrt((n - 1) / n * np.sum((values - values.mean(axis=0)) ** 2, axis=0))
-            _set_sigma(candidate, sigma, "ring jackknife")
-            return candidate
-    residual = make(xs, ys, qs)
+        values = np.asarray(estimates)
+        n = rings.size
+        sigma = np.sqrt((n - 1) / n * np.sum((values - values.mean(axis=0)) ** 2, axis=0))
+        method = "ring jackknife"
+        if free.size < centre.size:
+            full_sigma = _least_squares_sigma(make(xs, ys, qs, None), centre)
+            if full_sigma is not None:
+                # Fixed tilts in the jackknife omit the centre/distance dependence on tilt.
+                sigma = np.r_[np.maximum(sigma, full_sigma[:3]), full_sigma[3:]]
+                method = THREE_RING_UNCERTAINTY_METHOD
+        _set_sigma(candidate, sigma, method)
+    else:
+        sigma = _least_squares_sigma(make(xs, ys, qs, None if candidate.tilt_refined else rotations), centre)
+        if sigma is not None:
+            _set_sigma(candidate, sigma, "least squares")
+    return candidate
+
+
+def _least_squares_sigma(residual, centre: np.ndarray) -> np.ndarray | None:
+    """Standard errors from the raw residuals at the full fit, s² (JᵀJ)⁻¹."""
+    steps = np.array([1e-3, 1e-3, max(1e-6, 1e-6 * centre[2]), 1e-7, 1e-7])[:centre.size]
     values = residual(centre)
     jacobian = np.column_stack([(residual(centre + steps * axis) - values) / steps[i]
                                 for i, axis in enumerate(np.eye(centre.size))])
@@ -120,15 +130,16 @@ def estimate_uncertainty(
     try:
         covariance = np.linalg.inv(jacobian.T @ jacobian) * float(values @ values) / dof
     except np.linalg.LinAlgError:
-        return candidate
-    _set_sigma(candidate, np.sqrt(np.clip(np.diag(covariance), 0.0, None)), "least squares")
-    return candidate
+        return None
+    return np.sqrt(np.clip(np.diag(covariance), 0.0, None))
 
 
 def _set_sigma(candidate: CalibrationCandidate, sigma: np.ndarray, method: str) -> None:
     candidate.center_x_sigma_px, candidate.center_y_sigma_px, candidate.distance_sigma_mm = map(float, sigma[:3])
     if sigma.size == 5:
         candidate.rot1_sigma_deg, candidate.rot2_sigma_deg = (math.degrees(float(value)) for value in sigma[3:])
+    else:
+        candidate.rot1_sigma_deg = candidate.rot2_sigma_deg = None
     candidate.uncertainty_method = method
 
 
