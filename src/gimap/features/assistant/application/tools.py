@@ -145,6 +145,7 @@ def results_payload(results: RunResults) -> dict:
         for curve, search in results.peak_searches.items()
     }
     return {
+        **results.model_record(),
         "status": clean(results.status),
         "peaks": searches,
         "sectors": clean(results.sector_rows),
@@ -548,6 +549,7 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
 
     def _tool_note_missing_capability(self, capability: str, reason: str) -> ToolOutcome:
         entry = {
+            **self.results.model_record(),
             "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "file": (self.results.status or {}).get("path"),
             "capability": capability,
@@ -563,7 +565,8 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
         return self._ok(status, f"valid range {minimum} … {maximum}")
 
     def _tool_export_results(self, include_tables: bool) -> ToolOutcome:
-        paths = list(self.workbench.export_curves())
+        model = self.results.model_record()
+        paths = list(self.workbench.export_curves({"assistant": model}) if model else self.workbench.export_curves())
         if include_tables and self.store is not None:
             status = self.results.status or self.workbench.status()
             source = Path(status.get("path") or "frame")

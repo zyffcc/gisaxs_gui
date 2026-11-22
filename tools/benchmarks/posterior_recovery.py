@@ -156,7 +156,8 @@ def _cut() -> tuple[float, float | None]:
     return float(fr.GEOM.qz_vacuum), (fr.qz_minus() if kind == "two_path" else None)
 
 
-def run(index: int) -> dict:
+def run(index: int, *, fit_only: bool = False) -> dict:
+    """Evaluate one cut. The release regression needs only the fit with the given composition."""
     extended = OPTIONS.get("set") == "extended"
     case = (hc.draw if extended else fr.draw)(index, OPTIONS["seed0"])
     I, s = own_curve(case) if OPTIONS.get("truth") == "own" else (hc.curve if extended else fr.curve)(case)
@@ -165,23 +166,25 @@ def run(index: int) -> dict:
     qz, qz_minus = _cut()
     truth = _composition(case)
     k = len(case["populations"])
-    # network: samples of the true composition, their median
-    tick = time.perf_counter()
-    data = infer.Cut.prepare(fr.Q, I, s, qz, qz_minus)
-    binned = E.bin_curve(data.q, data.intensity, data.sigma, data.q_max, data.ratio)
-    h = NETWORK.summary(E.features(*(a[None] for a in binned)), infer.conditions(data))
-    z, _ = NETWORK.sample(NETWORK.context(h, truth), truth, OPTIONS["samples"], np.random.default_rng(index))
-    values = infer.physical(E.from_z(z, np.full(z.shape[0], data.ratio), truth), data.q_max)
-    median = np.median(values, axis=0)
-    pops = []
-    for slot in range(k):
-        j = slot * E.PER_SLOT
-        pops.append(dict(R=median[j], sR=median[j + 1], D=median[j + 4], s_nn=median[j + 5]))
-    out["network"] = dict(ok=True, populations=pops, seconds=time.perf_counter() - tick)
-    stages = [("fit", dict(compositions=[truth]), qz, qz_minus),
-              ("choose", dict(allowed=_allowed(3 if extended else 2), shortlist=OPTIONS["shortlist"]), qz, qz_minus)]
-    if OPTIONS.get("auto"):
-        stages.append(("auto", dict(allowed=E.select(("sphere", "vertical_cylinder"), 2)), 0.0, None))
+    stages = [("fit", dict(compositions=[truth]), qz, qz_minus)]
+    if not fit_only:
+        # network: samples of the true composition, their median
+        tick = time.perf_counter()
+        data = infer.Cut.prepare(fr.Q, I, s, qz, qz_minus)
+        binned = E.bin_curve(data.q, data.intensity, data.sigma, data.q_max, data.ratio)
+        h = NETWORK.summary(E.features(*(a[None] for a in binned)), infer.conditions(data))
+        z, _ = NETWORK.sample(NETWORK.context(h, truth), truth, OPTIONS["samples"], np.random.default_rng(index))
+        values = infer.physical(E.from_z(z, np.full(z.shape[0], data.ratio), truth), data.q_max)
+        median = np.median(values, axis=0)
+        pops = []
+        for slot in range(k):
+            j = slot * E.PER_SLOT
+            pops.append(dict(R=median[j], sR=median[j + 1], D=median[j + 4], s_nn=median[j + 5]))
+        out["network"] = dict(ok=True, populations=pops, seconds=time.perf_counter() - tick)
+        stages.append(("choose", dict(allowed=_allowed(3 if extended else 2), shortlist=OPTIONS["shortlist"]),
+                       qz, qz_minus))
+        if OPTIONS.get("auto"):
+            stages.append(("auto", dict(allowed=E.select(("sphere", "vertical_cylinder"), 2)), 0.0, None))
     truth_families = sorted(FAMILY[p["shape"]] for p in case["populations"])
     for name, kwargs, qz_stage, qz_minus_stage in stages:
         tick = time.perf_counter()

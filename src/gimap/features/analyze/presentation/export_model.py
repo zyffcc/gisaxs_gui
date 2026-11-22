@@ -55,13 +55,13 @@ class ExportModelMixin:
         if self.settings is not None:
             self.settings.set("analyze", EXPORT_FOLDER_KEY, str(folder))
 
-    def export(self, destination: Optional[Path] = None) -> list[Path]:
+    def export(self, destination: Optional[Path] = None, *, extra_metadata: Optional[dict] = None) -> list[Path]:
         analysis = self.state.analysis
         if analysis is None:
             raise ValueError("Open a frame first.")
         target = Path(destination) if destination is not None else self.default_export_dir()
         # its curve for Fitting says the Cuts step's halves
-        return self._export(analysis, target, halves=self.fit_side, nxcansas=self.export_nxcansas)
+        return self._export(analysis, target, extra_metadata, halves=self.fit_side, nxcansas=self.export_nxcansas)
 
     def export_q_map(self, path: Path) -> Path:
         analysis = self.state.analysis

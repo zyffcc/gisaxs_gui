@@ -8,6 +8,7 @@ synthetic film, and what the panel, the start dialog and the settings show.
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
 import sys
 import threading
@@ -52,6 +53,7 @@ from src.gimap.integrations.state import (
 )
 from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile
 from tests.assistant_fakes import ScriptedLlm, call, report, tool_results, turn
+from src.gimap.features.assistant.presentation.service_notice import ServiceNotice
 
 SHAPE = (400, 400)
 # 100 µm pixels 60 mm from the sample, beam near the bottom edge: q up to ≈ 2 Å⁻¹ in plane.
@@ -89,7 +91,7 @@ def _write_frame(path: Path) -> Path:
 def _context(tmp_path: Path) -> AppContext:
     profile = InstrumentProfile("Synthetic GIWAXS", GEOMETRY, None, SHAPE)
     return AppContext(
-        settings=InMemorySettingsRepository({}),
+        settings=InMemorySettingsRepository({"assistant": {"approved_services": ["Anthropic"]}}),
         session=InMemorySessionRepository(),
         preferences=InMemoryUserPreferencesRepository(),
         instrument_profiles=InMemoryInstrumentProfileRepository([profile]),
@@ -141,7 +143,8 @@ def _wait(condition, timeout: float = 60.0) -> None:
 
 
 @pytest.fixture()
-def analyze(tmp_path: Path):
+def analyze(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
     _app()
     frame = _write_frame(tmp_path / "film_giwaxs.tif")
     context = _context(tmp_path)
@@ -198,6 +201,11 @@ def test_claude_operates_analyze_and_reports_every_requested_result(analyze, tmp
     assert page._lower_profile == "azimuthal"
     written = {path.name for path in (tmp_path / "gimap_analysis").iterdir()}
     assert "film_giwaxs_assistant.json" in written and any(name.endswith(".csv") for name in written)
+    folder = tmp_path / "gimap_analysis"
+    identity = {"provider": "Anthropic", "model": "fake-claude"}
+    tables = json.loads((folder / "film_giwaxs_assistant.json").read_text("utf-8"))
+    assert {key: tables[key] for key in identity} == identity
+    assert json.loads((folder / "film_giwaxs_analysis.json").read_text("utf-8"))["assistant"] == identity
 
     panel = controller.panel
     assert panel.state_label.text() == "Finished"
@@ -326,7 +334,7 @@ def test_start_dialog_turns_choices_into_goals_and_needs_a_ready_brain(tmp_path:
     assert again.backend() == BACKEND_API
 
 
-def test_settings_page_saves_the_key_and_tests_the_connection(tmp_path: Path) -> None:
+def test_settings_page_saves_the_key_and_tests_the_connection(tmp_path: Path, monkeypatch) -> None:
     _app()
     from src.gimap.app.presentation.task_runner import TaskRunner
 
@@ -342,6 +350,7 @@ def test_settings_page_saves_the_key_and_tests_the_connection(tmp_path: Path) ->
     page.model_combo.setEditText("claude-sonnet-5")
     page.effort_combo.setCurrentIndex(page.effort_combo.findText("medium"))
     page.effort_combo.activated.emit(page.effort_combo.currentIndex())
+    monkeypatch.setattr(ServiceNotice, "exec_", lambda self: self.Accepted)
     page.test_button.click()
     assert tasks.wait(10)
     assert page.test_label.text() == "Connected: claude-sonnet-5 (medium) is available."

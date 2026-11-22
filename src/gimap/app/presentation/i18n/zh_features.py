@@ -4,6 +4,7 @@ A new feature adds its table here, not in ``zh.py`` (which is near the size limi
 
 from .zh_absolute_scale import ABSOLUTE_SCALE_ZH
 from .zh_app_session import APP_SESSION_ZH
+from .zh_assistant_service import ASSISTANT_SERVICE_ZH
 from .zh_fit_data import FIT_DATA_ZH
 from .zh_flat_field import FLAT_FIELD_ZH
 from .zh_geometry import GEOMETRY_ZH
@@ -31,6 +32,7 @@ from .zh_series_chain import SERIES_CHAIN_ZH
 from .zh_series_selection import SERIES_SELECTION_ZH
 
 FEATURES_ZH = {
+    **ASSISTANT_SERVICE_ZH,
     **PREDICT_REPORT_ZH, **POSTERIOR_MCMC_ZH, **GISAXS_POSTERIOR_ZH, **FLAT_FIELD_ZH, **NXCANSAS_ZH,
     **GISAXS_CUTS_ZH, **FIT_DATA_ZH, **NORMALISATION_ZH, **GEOMETRY_ZH, **APP_SESSION_ZH, **INDEXING_ZH,
     **INSITU_ZH, **JOINT_FIT_ZH, **ABSOLUTE_SCALE_ZH, **MASK_TOOLS_ZH, **MANUAL_FIT_ZH, **ROLL_CHECK_ZH,

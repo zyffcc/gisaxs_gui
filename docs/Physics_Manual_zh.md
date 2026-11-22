@@ -3840,6 +3840,7 @@ P_row(i) = Σ_j M_ij,    P_col(j) = Σ_i M_ij                                   
 |---|---|
 | 程序与来源 | `software`（记录名 `GIMaP Analyze 1`）、`software_version`（发布版本，例如 `GIMaP v0.2.0`；14.5 节）、`source_file`、`frame_index`、`frame_count`、`frame`（从 1 计数的标签）、`summed_frames`（加入的每一帧的文件和索引） |
 | 探测器 | `detector_name`、`frame_shape`、`measurement`（GISAXS 或 GIWAXS） |
+| AI 助手 | 由助手导出曲线时，`assistant.provider` 记录服务商，`assistant.model` 记录该次运行使用的模型。 |
 | 几何 | `geometry`（像素尺寸、距离、光束中心、波长、α_i；`rot1_rad`、`rot2_rad`、`rot3_rad`：3.7 节的探测器转角；0.1 的 `dropped_…` 和 `flat_detector_…` 字段为 `null`）、`geometry_convention`（规范像素角点坐标系，第 0 行在上，以 Å⁻¹ 计、按转角倾斜的平板探测器的运动学（真空）掠入射 q）、`instrument_profile`（名称、来源、更新时间；几何由运行自动分析或 `tools/gimap_agent.py` 选定时，来源以 `automatic analysis:` 开头，由 AI 选定时以 `assistant:` 开头——0.2.0 之前两者都写 `assistant:`） |
 | 统计与分箱 | `error_model`（`poisson`、`scaled_poisson`、`pixel_scatter` 或 `sigma_frame`，是本帧实际采用的模型；没有归约时为 `null`）、`binning`（GIWAXS：每条 I(q) 的固定边界分箱的 `radial_bins`、`q_min`、`q_max`、`bin_width` 和 `unit`，`bins_chosen`，`radial_points`（合并后 I(q) 的点数），`merge`（6.5 节的规则），`chi_bin_deg` 和 `chi_merge`；GISAXS：每个探测器列或行一个点，不合并） |
 | 时间 | `created`：写出记录的 UTC 时间（ISO 8601，例如 `2026-11-01T05:52:31+00:00`） |

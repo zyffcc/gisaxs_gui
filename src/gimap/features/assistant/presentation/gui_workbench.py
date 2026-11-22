@@ -109,8 +109,8 @@ class GuiWorkbench:
     def show(self, view: Optional[str] = None, lower_profile: Optional[str] = None) -> None:
         self._call(self._automation.show, view, lower_profile)
 
-    def export_curves(self) -> list[str]:
-        return list(self._call(self._automation.export_current))
+    def export_curves(self, extra_metadata: Optional[dict] = None) -> list[str]:
+        return list(self._call(self._automation.export_current, extra_metadata))
 
     def preview_png(self, max_size: int = 900) -> Optional[bytes]:
         return self._call(self._automation.preview_png, max_size)

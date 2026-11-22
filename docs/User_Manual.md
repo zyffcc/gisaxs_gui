@@ -310,7 +310,7 @@ you move or rename the folder, delete its `.gimap` folder and double-click `Star
 environment is set up again for the new place. To build it again in place (for example when it was
 damaged), run `powershell -NoProfile -ExecutionPolicy Bypass -File tools\setup_source_env.ps1 -Reinstall`.
 
-**By hand.** Install Python 3.10 or 3.11, then in the folder of the checkout:
+**By hand.** GIMaP requires Python >=3.10 and is tested on 3.10 and 3.11. In the source folder, run
 
 ```powershell
 python -m venv .venv
@@ -424,7 +424,7 @@ trust; do not disable system protection. Target systems are macOS 15 or later an
 page lists the exact systems and architectures verified for each package. A source checkout running on a
 developer's computer does not replace package acceptance testing.
 
-For source installations on a Mac, use Python 3.10 and `python -m pip install -r requirements-release.txt`. It selects the compatible official SciPy build; version numbers alone do not identify the binary build.
+For source installations on a Mac with Python 3.10 or 3.11, run `python -m pip install -r requirements-release.txt` to select the official SciPy wheel for that interpreter and architecture.
 
 ## 3. The window
 
@@ -3768,12 +3768,13 @@ Gemini, OpenRouter, SiliconFlow, Azure OpenAI and a model on your own computer o
 Studio, vLLM …). The model must support tool calling: **Test Connection** sends one tiny request with a
 tool.
 
-**Where the keys are kept.** A key saved with **Save** is written **in plain text**, not encrypted, into the
-user data folder: `claude_api_key.txt` for the Claude API, `assistant_provider_keys.json` for the other
-providers (one entry each). The files are meant for your user account only, but anyone who can read that folder
-— an administrator, a backup, a `GIMAP_HOME` on a shared drive — can read the keys. A saved key takes precedence
-over the environment variable; **Remove** deletes it. On a shared computer, set the environment variable
-instead, or remove the key when you are done.
+**Where the keys are kept.** **Save** uses the operating system's credential store when GIMaP can access it
+through an installed adapter. This includes Windows Credential Manager. If no supported adapter is available,
+GIMaP saves keys in plain text in the user data folder (section 3.11). The Claude API key goes in
+`claude_api_key.txt` and other providers' keys go in `assistant_provider_keys.json`. Anyone with read
+access to these files can read the keys. If you have a key in one of these files, saving it again with
+an OS store available moves that key into the store. **Remove** deletes the saved key. A saved key
+takes precedence over the provider's environment variable.
 
 Claude Code gets only the GIMaP tools — no shell, files or web — and no API key is passed to it.
 
@@ -3873,13 +3874,19 @@ experiment (chapter 13).
 
 ### 10.6 What is sent, and what is kept
 
-- **Sent to the AI**: the frame's status (file name, geometry, settings) and the reduced curves as
-  numbers. The detector file itself is never sent; the small q-map image only when you allowed it. With
-  a local model (Ollama, LM Studio …) nothing leaves your computer or lab network.
+- Before the first request to a service, including **Get List** or **Test Connection** in Settings,
+  GIMaP names the destination and asks for permission. Declining cancels the request. GIMaP remembers
+  approval for that service in `settings.json`.
+- **Data sent during analysis.** The service receives your instructions, frame information (including its
+  name, geometry and settings), and tool results such as reduced curves and fitted parameters.
+  Enabling image previews also sends a small q-map image. A locally hosted model receives these data
+  on the computer or lab server you selected.
 - **Shown**: the tokens of each run; with Claude Code also the plan's usage-limit warnings and the cost
   at API prices (for comparison only — a plan is not billed per token); with an API the estimated cost.
-- **Kept on your computer**: every run in `assistant_runs/` of the user data folder; analyses the AI
-  found missing in `assistant_feature_requests.jsonl` there; a key you saved, in plain text (section 10.1).
+- **Records on your computer.** Each run in `assistant_runs/` identifies the provider and the model
+  reported by the service, or the requested model if the service omits its name. You can also find these
+  fields in the exported AI tables, the curve's analysis JSON and the saved AI report. Suggestions for missing
+  analyses go in `assistant_feature_requests.jsonl`. Section 10.1 describes API key storage.
 
 **How to read the numbers.** The rules behind them are in Physics and Methods:
 [section 7.7](Physics_Manual.md#77-ring-orientation-and-the-hermans-orientation-factor) (Hermans),
@@ -3901,6 +3908,21 @@ experiment (chapter 13).
   the assignment clear.
 
 ### 10.7 Without the window
+
+**Worked example (GALAXI GISAXS).**
+Run this command from the source folder to reproduce the Yoneda cut and Predict solutions in Fig. 4.
+It uses the public GALAXI frame, its calibration and the reported incidence angle of 0.463°.
+
+```sh
+python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.tif --calibration tests/data/external/gisaxs_galaxi/galaxi_bornagain.poni --incidence-deg 0.463 --out fig4
+```
+
+The run took 1 min 41 s on the Windows test machine. Open `fig4/galaxi_data/report.md`.
+`horizontal.csv` contains the signed Yoneda cut and `vertical.csv` the vertical cut. `fit_curve.csv`
+gives the best fit versus |qᵧ|, averaging the two sides where they overlap. `fit_solutions.csv` lists three solutions with
+probabilities of about 0.39, 0.32 and 0.30. Exit code 2 means that the report asks you to choose a
+model. The same folder contains `qmap.png` and `report.json`. The run summaries are
+`fig4/summary.md` and `fig4/summary.json`.
 
 `tools/gimap_agent.py` runs the same standard procedure without the window, for scripts and other
 agents: `python tools/gimap_agent.py auto <frames> --notes "…" --out <folder>` writes a `report.md` per
@@ -4110,7 +4132,7 @@ file GIMaP writes; the paragraphs below it, what the user data folder and the Wi
 | 2D Prediction ▸ **Export result...** with several files | your choice of `prediction_results_<time>.jsonl`; `prediction_curves_<time>.txt` (or `prediction_parameters_<time>.txt`); images in `prediction_images_<time>/` | a folder you choose (starts at the export folder used last) | `#` header lines in the `.txt` |
 | Geometry Calibration ▸ **Export Calibration…** | `<image>.gimap-calibration.json` | next to the calibrant image | the file (beam centre counted from pixel centres at 0, 0.5 px lower than the windows show; `metadata.center_convention`) |
 | Geometry Calibration ▸ **Apply** | the instrument profile | user data folder: `instrument_profiles.json` | — |
-| **Tools ▸ Settings… ▸ Assistant** ▸ **API key** ▸ **Save** | `claude_api_key.txt` (Claude API), `assistant_provider_keys.json` (other providers), in plain text; **Remove** deletes the key | user data folder | — |
+| **Tools ▸ Settings… ▸ Assistant** ▸ **API key** ▸ **Save** | API credential for the selected provider. **Remove** deletes it. | OS credential store when available, otherwise `claude_api_key.txt` or `assistant_provider_keys.json` in plain text in the user data folder | section 10.1 |
 | **File ▸ Save Project** | `<name>.gimap`; `<name>.<generation>.compare.npz` when Compare holds embedded arrays | next to the first frame | the project (data referenced by path); move the current `compare.arrays_file` with it (section 3.8). Sputter results stay in their result folder |
 | **File ▸ Labs Parameters ▸ Save As…** | `gimap_parameters.json` | dialog in the GIMaP user data folder | — |
 | Errors (automatic) | `logs/errors.log` (moved to `errors.old.log` above 2 MB) | user data folder | — |
@@ -4136,8 +4158,9 @@ bins were joined and the rule for joining them; for GISAXS, one point per detect
 perpendicular to the beam; section 4.2). The fields `dropped_tilt_deg`, `flat_detector_q_error_max` and the other
 `flat_detector_…` and `dropped_…` fields described what a flat detector left out up to 0.1; they are `null` now
 that the tilt is part of the geometry. The instrument profile's `source` says who chose the geometry:
-`automatic analysis: <file>` for Run Automatic Analysis and `tools/gimap_agent.py`, `assistant: <file>` for
-Process with AI; profiles saved before 0.2.0 say `assistant:` for both ([Physics and Methods, section 14.2](Physics_Manual.md#142-the-record-stem_analysisjson)).
+`automatic analysis: <file>` for Run Automatic Analysis and `tools/gimap_agent.py`. For Process with AI the
+source starts with `assistant: <file>` and ends with the provider and model. Profiles saved before 0.2.0 say
+`assistant:` for both workflows. [Physics and Methods, section 14.2](Physics_Manual.md#142-the-record-stem_analysisjson)
 
 A save dialog for one file asks before it replaces that file; the record written beside it (for
 example a `.json`) is replaced without a question. Exports without a file dialog — Export, **Curves as
@@ -4159,8 +4182,8 @@ affected.
 **In the user data folder.** Besides the files of the table, GIMaP keeps there `settings.json` (the settings
 and what the pages remember, section 3.9), `instrument_profiles.json`, `session.json`, `model_parameters.json`
 (Fitting's model), `last_analyze_setup.json` and `logs/`; the AI assistant's `assistant_runs/`,
-`assistant_feature_requests.jsonl` and saved keys (`claude_api_key.txt`, `assistant_provider_keys.json`, plain
-text); and Sputter's result folders in `sputter/`, which are never removed. Delete old
+`assistant_feature_requests.jsonl` and any file-based API keys (section 10.1); and Sputter's result folders in
+`sputter/`, which are never removed. Delete old
 result folders yourself, or choose **More options ▸ Save results in** on a data disk for long scans. The frames Sputter ▸
 Analyze imports are in the local folder `%LOCALAPPDATA%\GIMaP\sputter_client` (macOS
 `~/Library/Caches/GIMaP/sputter_client`, Linux `~/.cache/gimap/sputter_client`), kept under a limit (**Details ▸
@@ -4213,7 +4236,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **The posterior check (MCMC) is slow for random cylinders.** A random cylinder takes 15–200 ms per evaluation. A check takes hours. Independent ensembles can both miss a distant mode (section 6.2). | Compare other modes through Predict's other solutions. |
 | **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA; spheres with two paths and a free reflection coefficient r when Model has both angles, else at the Born term of the cut's q_z or the effective interface). It was checked on simulated curves of an independent model and on BornAgain simulations, not on measured curves of known particles; physics outside the model (roughness, other shapes) can give a composition a high probability that it does not deserve. The waves the surface reflects (the four-term DWBA) matter for spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i = 0.4°, 12 keV): with both angles R is off by about 6 % (median; P90 19–40 %) and the composition right in about 60 % of such curves; with the q_z alone R is off by about 10 % (q₊R 2.3–3.5) to 40 % (above) and a sphere is usually taken for upright cylinders; upright cylinders are not affected. With both angles on a curve whose reflected wave is weak (far above the critical angle), a smaller sphere with a large \|r\| can fit as well, and on BornAgain's model of the GALAXI frame (broad log-normal sizes, αf at the critical angle) the free r let wrong sizes fit within the errors (with one sphere population R 16–500 nm, once at the 500 nm bound, on the three simulated draws; with the composition chosen one 16 nm sphere without a paracrystal on two); and on two-sphere curves without reflection this network misses the true sizes somewhat more often than the previous one ([Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters)). | Judge every solution by its residuals and by what you know of the sample; give both angles for spheres beyond q₊R 1.7; far above the critical angle check the fitted \|r\| (`refl_amp` in Model) against the substrate's and fix it if it is far off, then refine. |
 | **Run records do not hold everything needed to repeat a run.** They identify `software_version`, the network's record and Predict parameters' fixed seed; masks are counted, not stored as pixel lists. | Keep the input, settings and model files with the exported records. |
-| **API keys saved in GIMaP are kept in plain text** in the user data folder (`claude_api_key.txt`, `assistant_provider_keys.json`; section 10.1): whoever can read that folder can read them. | On a shared computer, or with `GIMAP_HOME` on a shared drive, set the key as an environment variable instead, or **Remove** it after use. |
+| Without a supported credential-store adapter, saved API keys are kept in plain text in the user data folder (section 10.1). Anyone with read access to those files can read the keys. | On a shared computer, use the provider's environment variable or **Remove** the saved key after use. |
 | **Sputter ▸ Analyze reads Cu with networks trained for Cu on two polymer films (a homopolymer and a block copolymer)**. | For Cu on another substrate, choose **Polymer** for a polymer film and compare the model image with the measured one before using the values. |
 | **Sputter ▸ Analyze away from the networks' energies rests on the joint fit.** The network for Au and Ag on TiO₂ was trained at 8–15 keV and αi 0.25–0.55°: in that range a TiO₂ scan is analysed as usual at its own energy. The other networks were trained at one wavelength (0.105 nm for Cu, 12 keV for the others) and αi 0.40°; within 5 % of that wavelength (for Au: at 12 keV only) a scan is analysed as usual. Farther away, and on TiO₂ outside 8–15 keV, the package computes the optical constants at the scan's own energy from its table (4–30 keV), the networks give only the starting solutions, and **Auto** picks **Refine**; the result is the joint fit's. A photon energy outside 4–30 keV is refused when the scan is imported, with the reason. A TiO₂ scan at an αi outside 0.25–0.55° is analysed, with a warning in the log of the network step under **Details**. | Away from the networks' energies use **Refine** or **Full** and judge the result by its fit deviation. Keep the photon energy that was measured: changing it to match a network scales every q. |
 | **Sputter ▸ Analyze runs the analysis package that comes with GIMaP**, which analyses only the pairs of metal and substrate the package has a network for; its values are model values that were not compared with an independent measurement of your sample (section 8.1). The frames it reads are kept, one copy per request that changes the import (rate, geometry, mask, substrate …), in GIMaP's local folder, at most 5 GB together by default: the ones not used for the longest time are removed first. | Judge a solution by its model image beside the measured one, and compare with SEM, AFM or XRR where you can. **Details ▸ Storage** lists the imports, removes them and sets the limit. |

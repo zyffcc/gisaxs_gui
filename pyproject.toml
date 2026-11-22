@@ -11,6 +11,10 @@ name = "gimap"
 description = "GIMaP: GISAXS and GIWAXS analysis, a PyQt5 desktop program"
 readme = "README.md"
 requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
 license = {text = "MIT"}
 authors = [{name = "Yufeng Zhai"}]
 dynamic = ["version", "dependencies"]

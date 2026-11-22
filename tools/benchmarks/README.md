@@ -13,6 +13,15 @@ overwrite the stored file, which would lose those rows: give `--out PATH`, or `-
 summary names what was skipped (`skipped`).
 The held-out curves themselves (`recovery_cases.py`, `heldout_cases.py`) need neither the kit nor GIMaP.
 
+## Tests
+
+On the Windows release-check machine, `python -m pytest --collect-only -q` collected **4322 tests**.
+Five tests skipped for missing optional Python packages. One reads an NXcanSAS export with SasView
+(`sasdata`), and four compare detector orientations with `pyFAI`. A separate test skipped because
+the `h5clear` executable was missing. The default suite includes the exact Predict regression for known-composition
+cuts 184 and 167 of the first benchmark. Run `python -m pytest -q tests/test_predict_regression.py`
+to repeat both fits (24 s here).
+
 ## The runs the paper quotes
 
 The recovery numbers of *Predict parameters* in the GIMaP paper, in Physics and Methods 9.13 and in the network's

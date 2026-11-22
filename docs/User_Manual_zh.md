@@ -263,7 +263,7 @@ Python 3.10 和 `requirements-full.txt` 里的包（核心和全部可选部分�
 再双击 `Start_GIMaP.bat`：环境会为新的位置重新建立。要在原地重建（例如环境损坏时），运行
 `powershell -NoProfile -ExecutionPolicy Bypass -File tools\setup_source_env.ps1 -Reinstall`。
 
-**手动方式。** 安装 Python 3.10 或 3.11，然后在源码文件夹里运行：
+**手动方式。** GIMaP 要求 Python >=3.10，测试覆盖 3.10 和 3.11。在源码文件夹里运行以下命令。
 
 ```powershell
 python -m venv .venv
@@ -359,7 +359,7 @@ powershell -ExecutionPolicy Bypass -File tools\update_source.ps1
 使用 macOS 的“打开”操作，不必关闭系统保护。目标系统为 macOS 15 或更新版本及 Windows x64；
 每个发布包实际验收的系统与架构以发布页为准。开发机源码启动成功不等于安装包验收通过。
 
-Mac 从源码安装时，请使用 Python 3.10 并运行 `python -m pip install -r requirements-release.txt`。它会选择兼容的官方 SciPy 构建；仅版本号相同并不代表二进制构建相同。
+在 Mac 上用 Python 3.10 或 3.11 从源码安装时，运行 `python -m pip install -r requirements-release.txt`，即可选用与解释器版本和处理器架构对应的 SciPy 官方构建。
 
 ## 3. 主窗口
 
@@ -2955,9 +2955,10 @@ AI 是可选的：**运行自动分析**（Run Automatic Analysis）不需要 AI
 其他服务商包括 DeepSeek、Qwen（阿里云百炼）、OpenAI、Kimi、智谱 GLM、Google Gemini、OpenRouter、SiliconFlow、Azure OpenAI，
 以及你自己电脑或实验室服务器上的模型（Ollama、LM Studio、vLLM …）。模型必须支持工具调用：**测试连接** 会发送一个带工具的小请求。
 
-**密钥存在哪里。** 用 **保存** 存下的密钥以**明文**（不加密）写进用户数据文件夹：Claude API 的在 `claude_api_key.txt`，其他服务商的在
-`assistant_provider_keys.json`（每个服务商一项）。这些文件只供你的用户账户读取，但凡是能读这个文件夹的人——管理员、备份、放在共享盘上的
-`GIMAP_HOME`——都能读到密钥。存下的密钥优先于环境变量；**移除**（Remove）删除它。在共用的电脑上，请改用环境变量，或用完后移除密钥。
+**密钥存在哪里。** 已安装的适配器能访问操作系统凭据库时，**保存**（Save）会把密钥存入凭据库，例如 Windows 凭据管理器。
+没有可用的受支持适配器时，GIMaP 把密钥以明文保存在用户数据文件夹（3.11 节）。Claude API 密钥保存在 `claude_api_key.txt`，
+其他服务商的密钥保存在 `assistant_provider_keys.json`。有权读取这些文件的人可以看到密钥。系统凭据库可用时，将原来存于文件中的密钥重新保存一次，
+即可把该密钥移入凭据库。**移除**（Remove）删除已保存的密钥。GIMaP 优先使用已保存的密钥，其次读取服务商的环境变量。
 
 Claude Code 只拿到 GIMaP 的工具，没有命令行、文件或网络权限，也不会收到 API 密钥。
 
@@ -3029,10 +3030,14 @@ AI 对分析的每个修改（扇区宽度、自定义扇区、q 框、帧、模
 
 ### 10.6 发送什么，保存什么
 
-- **发送给 AI 的**：帧的状态（文件名、几何、设置）和以数字形式表示的约化曲线。探测器文件本身从不发送；小的 q 图只在你允许时发送。
-  使用本地模型（Ollama、LM Studio …）时，数据不离开你的电脑或实验室网络。
+- 首次向某个服务发送请求前，包括在设置中**获取列表**（Get List）或**测试连接**（Test Connection），GIMaP 会显示接收方并询问是否允许。
+  拒绝会取消该请求。同意后，GIMaP 会将对该服务的授权保存在 `settings.json` 中。
+- **分析时发送的数据。** 服务会收到你的指令、帧信息（包括文件名、几何和设置）以及约化曲线、拟合参数等工具结果。
+  允许发送预览图时还会发送一张小的 q 图。使用本地部署的模型时，接收方是你选定的电脑或实验室服务器。
 - **显示的**：每次运行的 token 数；Claude Code 还显示订阅的用量警告和按 API 价格折算的费用（仅供比较，订阅不按 token 计费）；API 显示估计费用。
-- **保存在你电脑上的**：每次运行的记录在用户数据文件夹的 `assistant_runs/` 里；AI 认为缺少的分析记在同一文件夹的 `assistant_feature_requests.jsonl` 里；你存下的密钥也在那里，是明文（10.1 节）。
+- **本机记录。** 每次运行的记录在用户数据文件夹的 `assistant_runs/` 里，写明服务商及其返回的模型名。服务未返回模型名时记录请求的模型。
+  助手导出的结果表、曲线分析 JSON 和保存的 AI 报告都包含这两项信息。
+  AI 提出的缺失功能记在 `assistant_feature_requests.jsonl` 中。密钥的存放位置见 10.1 节。
 
 **如何理解这些数值。** 背后的规则见《物理与方法》：[7.7 节](Physics_Manual_zh.md#77-环的取向与-hermans-取向因子)（Hermans）、
 [7.8 节](Physics_Manual_zh.md#78-微晶尺寸scherrer)（Scherrer）和[第 8 章](Physics_Manual_zh.md#8-gisaxs-自动分析)（GISAXS）。
@@ -3047,6 +3052,18 @@ AI 对分析的每个修改（扇区宽度、自定义扇区、q 框、帧、模
 - 只有样品笔记或数据能明确指认时，才使用 (100)、edge-on 之类的晶体学标记。
 
 ### 10.7 不用窗口
+
+**示例（GALAXI GISAXS）。** 在源码文件夹中运行以下命令，可复现论文图 4 的 Yoneda 切线和预测参数（Predict parameters）给出的候选解。
+输入为公开的 GALAXI 帧、配套的标定文件和文献给出的入射角 0.463°。
+
+```sh
+python -m tools.gimap_agent auto tests/data/external/gisaxs_galaxi/galaxi_data.tif --calibration tests/data/external/gisaxs_galaxi/galaxi_bornagain.poni --incidence-deg 0.463 --out fig4
+```
+
+在本次测试的 Windows 电脑上耗时 1 分 41 秒。打开 `fig4/galaxi_data/report.md` 查看报告。
+`horizontal.csv` 保存带正负号的 Yoneda 水平切线，`vertical.csv` 保存垂直切线。`fit_curve.csv` 给出以 |qᵧ| 为横坐标的最佳拟合曲线，两侧重叠处取平均。
+`fit_solutions.csv` 列出三个候选解，概率分别约为 0.39、0.32 和 0.30。退出码 2 表示报告里还有一个问题需要判断，即选用哪一个模型。
+同一文件夹中还有 `qmap.png` 和 `report.json`。整次运行的摘要保存在 `fig4/summary.md` 和 `fig4/summary.json`。
 
 `tools/gimap_agent.py` 不开窗口就运行同样的标准流程，供脚本和其他智能体使用：
 `python tools/gimap_agent.py auto <帧> --notes "…" --out <文件夹>` 为每一帧写一份 `report.md`，列出每个决定和需要你回答的问题。
@@ -3213,7 +3230,7 @@ GIMaP 从不改动你的数据文件。分析的导出默认写到**数据旁边
 | 二维预测 ▸ 多个文件时的 **导出结果...** | 按你的选择：`prediction_results_<时间>.jsonl`；`prediction_curves_<时间>.txt`（或 `prediction_parameters_<时间>.txt`）；`prediction_images_<时间>/` 里的图像 | 你选的文件夹（从上次的导出文件夹开始） | `.txt` 里的 `#` 头行 |
 | 几何标定 ▸ **导出标定…**（Export Calibration…） | `<image>.gimap-calibration.json` | 标样图像旁边 | 文件本身（光束中心从 0 数像素中心，比窗口显示的小 0.5 px；`metadata.center_convention`） |
 | 几何标定 ▸ **应用**（Apply） | 仪器配置 | 用户数据文件夹：`instrument_profiles.json` | — |
-| **工具 ▸ 设置… ▸ AI 助手** ▸ **API 密钥** ▸ **保存**（Tools ▸ Settings… ▸ Assistant ▸ API key ▸ Save） | `claude_api_key.txt`（Claude API）、`assistant_provider_keys.json`（其他服务商），明文；**移除**（Remove）删除密钥 | 用户数据文件夹 | — |
+| **工具 ▸ 设置… ▸ AI 助手** ▸ **API 密钥** ▸ **保存**（Tools ▸ Settings… ▸ Assistant ▸ API key ▸ Save） | 所选服务商的 API 密钥。**移除**（Remove）删除密钥。 | 优先使用系统凭据库，否则以明文写入用户数据文件夹中的 `claude_api_key.txt` 或 `assistant_provider_keys.json` | 10.1 节 |
 | **文件 ▸ 保存项目**（File ▸ Save Project） | `<name>.gimap`；比较里有内嵌数组时还有 `<name>.<generation>.compare.npz` | 第一帧旁边 | 项目本身（数据按路径引用）；搬移时带上当前 `compare.arrays_file`（3.8 节）。溅射参数和结果文件夹引用保存在项目里，实际结果文件仍留在该文件夹中 |
 | **文件 ▸ 实验室参数 ▸ 另存为…** | `gimap_parameters.json` | 对话框，从启动 GIMaP 时所在的文件夹开始 | — |
 | 错误（自动） | `logs/errors.log`（超过 2 MB 时改名为 `errors.old.log`） | 用户数据文件夹 | — |
@@ -3234,8 +3251,8 @@ I(q) 留下多少点，以及合并的规则；对 GISAXS，每个探测器列�
 `rot3_rad` 是探测器的转角（pyFAI 的定义，探测器垂直于光束时全为 0；4.2 节）。`dropped_tilt_deg`、
 `flat_detector_q_error_max` 以及其他 `flat_detector_…`、`dropped_…` 字段在 0.1 中描述平板探测器略去的内容；现在倾斜
 进入几何，它们为 `null`。仪器配置的 `source` 写明几何是谁选的：运行自动分析和
-`tools/gimap_agent.py` 写 `automatic analysis: <文件>`，用 AI 处理写 `assistant: <文件>`；0.2.0 之前保存的配置两者都写
-`assistant:`（[《物理与方法》14.2 节](Physics_Manual_zh.md#142-记录-stem_analysisjson)）。
+`tools/gimap_agent.py` 写 `automatic analysis: <文件>`。用 AI 处理时，来源以 `assistant: <文件>` 开头，末尾注明服务商和模型。
+0.2.0 之前保存的配置两者都写 `assistant:`。[《物理与方法》14.2 节](Physics_Manual_zh.md#142-记录-stem_analysisjson)
 
 保存单个文件的对话框在替换这个文件之前会询问；写在它旁边的记录（例如 `.json`）会直接替换，不再询问。
 不弹文件对话框的导出——导出、**曲线存为数据…**（用的是文件夹对话框）、发送到拟合、监视、批量导出、把序列发送到拟合、AI 的导出、
@@ -3251,7 +3268,7 @@ ASCII——`1/A`、`deg`、`2theta`、`alpha_i`、`chi`、`sigma`、`+/-`——�
 
 **用户数据文件夹里的文件。** 除了上表中的文件，GIMaP 还在那里保存 `settings.json`（设置以及各页面记住的内容，3.9 节）、
 `instrument_profiles.json`、`session.json`、`model_parameters.json`（拟合的模型）、`last_analyze_setup.json` 和 `logs/`；AI 助手的
-`assistant_runs/`、`assistant_feature_requests.jsonl` 和存下的密钥（`claude_api_key.txt`、`assistant_provider_keys.json`，明文）；
+`assistant_runs/`、`assistant_feature_requests.jsonl` 和以文件形式保存的密钥（10.1 节）；
 以及溅射在 `sputter/` 里的结果文件夹，它们从不会被删除。旧的结果文件夹请自己删除，长扫描请在
 **更多选项 ▸ 结果保存在** 里选数据盘上的文件夹。溅射 ▸ 分析读入的帧放在本机文件夹 `%LOCALAPPDATA%\GIMaP\sputter_client`
 （macOS `~/Library/Caches/GIMaP/sputter_client`，Linux `~/.cache/gimap/sputter_client`），有大小上限（**详情 ▸ 存储**，默认
@@ -3301,7 +3318,7 @@ ASCII——`1/A`、`deg`、`2theta`、`alpha_i`、`chi`、`sigma`、`+/-`——�
 | **后验检验（MCMC）对随机取向圆柱很慢。** 随机取向圆柱每次计算 15–200 ms，一次检验要几个小时。两个独立系综仍可能同时漏掉较远的模态（6.2 节）。 | 通过预测参数的其他解来比较其他模态。 |
 | **预测参数只认识拟合页的模型**（按数目的高斯尺寸、LMA；模型有两个角度时球取两路径、反射系数 r 自由，否则按切线 q_z 处的 Born 项或有效界面计算）。它在一个独立模型的模拟曲线上和 BornAgain 模拟上检验过，没有在已知颗粒的实测曲线上检验；模型以外的物理（粗糙度、其他形状）可能让某个组成得到它不应有的高概率。表面反射的波（四项 DWBA）对 q₊R 超过约 1.7 的球有影响（α_i = 0.4°、12 keV 时 R ≈ 3 nm）：给两个角度时 R 偏离约 6 %（中位数；第 90 百分位 19–40 %），这类曲线约 60 % 选对组成；只给 q_z 时 R 偏离约 10 %（q₊R 2.3–3.5）到 40 %（更大时），球通常被当成竖直圆柱；竖直圆柱不受影响。在反射波弱的曲线上（远高于临界角）给两个角度时，更小的球加大的 \|r\| 可能拟合得一样好；在 BornAgain 对 GALAXI 帧的模型上（宽的对数正态尺寸，αf 在临界角处），自由的 r 让错误的尺寸在误差之内拟合上了（一群球时，三次模拟抽样的 R 为 16–500 nm，其中一次停在 500 nm 边界上；选择组成时，有两次为一群不带次晶的 16 nm 球）；在没有反射的两群球曲线上，这个网络比上一版略常漏掉真实尺寸（[《物理与方法》9.13 节](Physics_Manual_zh.md#913-预测参数)）。 | 按残差和你对样品的了解判断每个解；q₊R 超过 1.7 的球请给两个角度；远高于临界角时把拟合出的 \|r\|（模型里的 `refl_amp`）与衬底的值比较，差得远就固定它，再精修。 |
 | **运行记录不包含重复一次运行所需的全部内容。** 记录包含 `software_version`、网络的记录和预测参数的固定种子；被排除的像素仅计数，不保存位置列表。 | 随导出记录保存输入、设置和模型文件。 |
-| **在 GIMaP 里存下的 API 密钥是明文**，放在用户数据文件夹里（`claude_api_key.txt`、`assistant_provider_keys.json`；10.1 节）：能读这个文件夹的人就能读到它们。 | 在共用的电脑上，或 `GIMAP_HOME` 在共享盘上时，改用环境变量，或用完后 **移除**（Remove）。 |
+| 缺少受支持的系统凭据库适配器时，API 密钥以明文保存在用户数据文件夹（10.1 节）。有权读取这些文件的人可以看到密钥。 | 在共用的电脑上，可通过服务商的环境变量提供密钥，或在用完后按**移除**（Remove）。 |
 | **溅射 ▸ 分析用为两种聚合物膜（一种均聚物、一种嵌段共聚物）上的 Cu 训练的网络读取 Cu**。 | 其他基底上的 Cu：聚合物膜选 **Polymer**，先对照模型图和实测图再用这些值。 |
 | **溅射 ▸ 远离网络能量时的分析只靠联合精修。** TiO₂ 上的 Au 和 Ag 用的网络在 8–15 keV、αi 0.25–0.55° 上训练：这个范围内的 TiO₂ 扫描按它自己的能量照常分析。其他网络是在一个波长（Cu 为 0.105 nm，其他为 12 keV）和 αi 0.40° 下训练的；离这个波长 5 % 以内（Au 只在 12 keV）照常分析。更远时，以及 TiO₂ 在 8–15 keV 以外时，分析包按扫描自己的能量从光学常数表（4–30 keV）计算光学常数，网络只给起点，**自动**（Auto）模式改用**精修**（Refine），结果就是联合精修的解。4–30 keV 以外的光子能量在导入时就被拒绝，并说明原因。αi 不在 0.25–0.55° 内的 TiO₂ 扫描照样分析，**详情**（Details）里网络这一步的日志给出警告。 | 远离网络能量时用**精修**或**完整**（Full），用拟合偏差判断结果。保留实际测量的光子能量：为了凑网络的波长而改能量，所有 q 都会跟着缩放。 |
 | **溅射 ▸ 分析运行随 GIMaP 提供的分析包**，它只分析分析包有网络的金属与基底组合；它给出的是模型值，没有与你的样品的独立测量比较过（8.1 节）。它读入的帧每个改变了导入的请求（速率、几何、掩膜、基底……）各保存一份，放在 GIMaP 的本机文件夹里，默认合计至多 5 GB：最久没用过的先删除。 | 看模型图与实测图并排对得怎样来判断一个解，能做的话再与 SEM、AFM 或 XRR 对照。**详情 ▸ 存储**列出、删除读入数据并设上限。 |
