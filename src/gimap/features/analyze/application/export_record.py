@@ -186,7 +186,8 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
         "pixels_filled_from_mirror": None if analysis.filled_pixels is None else int(analysis.filled_pixels.sum()),
         "markers": _plain(reduction.markers) if reduction is not None else {},
         "curves": [
-            {"key": curve.key, "title": curve.title, "x_label": curve.x_label, "region": _plain(curve.region)}
+            {"key": curve.key, "title": curve.title, "x_label": curve.x_label, "y_label": curve.y_label,
+             "region": _plain(curve.region)}
             for curve in (reduction.curves if reduction is not None else ())
         ],
         "messages": list(analysis.messages),
@@ -304,7 +305,7 @@ def binning(analysis: FrameAnalysis) -> Optional[dict[str, Any]]:
         "bins_chosen": None if not radial else (
             "auto: the q range over the q step of one pixel (99th percentile), 100 to 3000 bins" if radial.get("chosen") == "auto" else "set in Options"),
         "radial_points": None if curve is None else int(np.asarray(curve.x).size),
-        "merge": MERGE_RULE,
+        "merge": "none (sum per original q bin)" if curve is not None and curve.region.get("aggregation") else MERGE_RULE,
         "chi_bin_deg": 1.0, "chi_merge": "none (the I(χ) bins are kept as they are)",
     }
 
@@ -380,6 +381,11 @@ def fit_input_observation(analysis: FrameAnalysis, halves: Optional[str] = None)
         "gap_guard_px": int(corrections.gap_guard_px),
         "summed_frames": analysis.frame_total,
     }
+    if analysis.kind == GIWAXS and corrections.lorentz:
+        radial = analysis.reduction.curve("radial") if analysis.reduction is not None else None
+        if radial is not None:
+            record["intensity_unit"] = radial.y_label.removeprefix("I (").removesuffix(")")
+            record["aggregation"] = radial.region.get("aggregation")
     if analysis.kind == GISAXS and halves in FIT_HALVES:
         record["halves"] = halves
     count = int(getattr(analysis, "frame_count", 1) or 1)

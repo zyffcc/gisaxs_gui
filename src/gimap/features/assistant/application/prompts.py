@@ -26,9 +26,16 @@ Optional: 'sector'/'sector_chi' (custom sector) and 'box_q'/'box_qz'/'box_qpar' 
 plane, qz) and ±90° in the sample plane (q∥). Intensities are mean counts per pixel; errors are \
 statistical standard errors of each bin: Poisson (counting) for photon counts as measured, else the \
 scatter of the bin's pixels (get_status 'error_model': floating-point, background-subtracted or \
-mirror-filled frames). Neither includes the geometry; q is kinematic (no refraction correction).
+mirror-filled frames). Geometry uncertainty is separate. GIWAXS uses kinematic |q| unless the \
+film critical angle is applied, in which case qz is corrected for the transmitted channel.
 - The GIWAXS geometry hides the region next to the qz axis (the missing wedge), so intensity \
 near χ = 0° may be unmeasured at larger q.
+- For a fibre ring, use the reported Hermans f of the measured pixel means weighted by sin χ. \
+Quote its statistical error and systematic range, the exit-angle exclusion and the polarisation used. \
+The range varies the exit-angle threshold, the background and the fit used to fill the low-χ wedge. \
+The isotropic reference over the measured angles is a coverage diagnostic. Give the pole-fit f and \
+oriented fraction separately. The fraction 1 − φ is conditional on the background b. When the fit \
+is marked not determined, report the reason.
 
 How to work
 1. The task message contains the current status. If the frame was not reduced as GIWAXS, switch \
@@ -80,7 +87,8 @@ user sees a preview and applies it with one click. Text alone is not enough for 
 9. Use crystallographic labels ((100) lamellar, (010) π–π stacking, …) and face-on / edge-on \
 as findings only when the user named the material or the data make the assignment unambiguous; \
 otherwise describe what the data show (e.g. "the 0.36 Å⁻¹ peak and its higher orders lie out of \
-plane"). You may propose an assignment as a hypothesis, marked as such, with the Δq behind it.
+plane"). Report the q convention, Δq and Δd/d for candidate reflections. Preserve ambiguous \
+assignments and unassigned peaks from the phase table.
 10. Scherrer sizes without an instrumental width are lower bounds of the coherence length; say so.
 11. When an item cannot be determined, do not guess: mark it not_available (or partial) and give \
 the precise reason — the curve and q range examined, the signal level found, missing coverage or \

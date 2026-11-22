@@ -88,3 +88,23 @@ def test_a_run_without_report_explains_why() -> None:
     outcome = RunOutcome(RUN_FAILED, "The Claude API rejected the credentials.", [], RunResults(), LlmUsage())
     page = report_html(outcome)
     assert "<h3>No report</h3>" in page and "rejected the credentials" in page
+
+
+def test_computed_ring_table_reports_the_measured_range_and_conditional_pole_fit():
+    from dataclasses import replace
+    import numpy as np
+    from src.gimap.features.assistant.domain import Profile, ring_orientation
+
+    chi = np.arange(-89.5, 90, 1.)
+    profile = Profile.of(chi, 20. + 5. * np.cos(np.deg2rad(chi))**2, np.ones_like(chi))
+    ring = ring_orientation(profile, q_window=(0.99, 1.01))
+    outcome = _outcome()
+    outcome.results.rings.append(replace(
+        ring, orientation_settings={"min_exit_deg": .3, "polarization": .99},
+        pole_figure={"ok": True, "quality_reasons": ["reduced χ² exceeds 5"], "herman": .1,
+                     "oriented_fraction": .2, "systematics": {"range": [.01, .03]}}))
+    page = report_html(outcome)
+    assert "Pole fit not determined (reduced χ² exceeds 5)" in page
+    assert "(stat) [0.0100, 0.0300]" in page and "1 − φ is conditional on the background b." in page
+    assert "Excluded αf &lt; 0.3°. Polarisation 0.99." in page
+    assert "极图拟合未能确定取向" in report_html(outcome, language="中文")

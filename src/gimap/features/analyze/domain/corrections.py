@@ -8,6 +8,7 @@ corrected values.  Nothing here changes the geometry or the array layout.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Optional, Sequence
 
 import numpy as np
@@ -70,6 +71,18 @@ class Corrections:
     """GISAXS and GIWAXS: the critical angle α_c of the film; q_z is then the one inside it (refraction,
     ``q_mapping.refracted_qz``) and pixels below α_c are left out of the maps and cuts that use q_z. ``None``: the
     kinematic q_z in vacuum. Part of the geometry of the analysis, not of ``is_identity``."""
+    lorentz_band_px: float = 2.0
+    """Half-width of the excluded incidence-plane band in direct-beam horizontal pixel widths."""
+    orientation_min_exit_deg: Optional[float] = None
+    """Minimum exit angle for ring orientation; automatic uses twice αc, or twice αi without αc."""
+    orientation_polarization: bool = True
+    """Use horizontal polarisation f=0.99 for ring orientation when no frame factor was specified."""
+
+    def __post_init__(self):
+        if not (math.isfinite(self.lorentz_band_px) and self.lorentz_band_px >= 0):
+            raise ValueError("The Lorentz exclusion half-width must be finite and nonnegative.")
+        if self.orientation_min_exit_deg is not None and not 0 <= self.orientation_min_exit_deg <= 90:
+            raise ValueError("The orientation minimum exit angle must be between 0° and 90°.")
 
     @property
     def is_identity(self) -> bool:

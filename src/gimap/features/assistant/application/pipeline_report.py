@@ -10,10 +10,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from ..domain import AT_EDGE, assessment, herman_decimals, signed
+from ..domain import AT_EDGE, assessment
 from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
 from .pipeline_geometry import ROTATION_WHY, SEARCHED
-from .pipeline_phases import assignment_lines, pole_line
+from .pipeline_phases import assignment_lines, measured_f_text, pole_line
 from .report_language import ENGLISH, heading as section
 from .run_record import mask_lines, record_lines
 
@@ -101,21 +101,13 @@ def reliable_row(peak: dict) -> bool:
     return not peak.get("caveat") and "at_edge" not in (peak.get("flags") or ())
 
 
-def herman_texts(ring: dict) -> Optional[dict]:
-    """f ± σ_f, f_iso and f − f_iso of a ring row as text, each with the decimals that show σ_f to two significant
-    digits and the Unicode minus: ``{"f": "0.1392 ± 0.0027", "iso": "−0.0014", "excess": "+0.1405", "decimals": 4}``
-    (``None`` without an f)."""
+def herman_texts(ring: dict, stat_label="stat") -> Optional[dict]:
+    """Measured f, statistical error and systematic limits, each at three significant digits."""
     if ring.get("herman") is None:
         return None
-    sigma = ring.get("herman_err")
-    decimals = herman_decimals(sigma)
-    texts = {"f": signed(ring["herman"], decimals) + (f" ± {float(sigma):.{decimals}f}" if sigma else ""),
-             "decimals": decimals}
-    if ring.get("herman_isotropic") is not None:
-        texts["iso"] = signed(ring["herman_isotropic"], decimals)
-    if ring.get("herman_excess") is not None:
-        texts["excess"] = signed(ring["herman_excess"], decimals, plus=True)
-    return texts
+
+    return {"f": measured_f_text(ring["herman"], ring.get("herman_err"), ring.get("herman_systematic_range"),
+                                stat_label=stat_label)}
 
 
 def found_by_search(report: dict) -> Optional[dict]:
@@ -206,19 +198,28 @@ def _ring_lines(rings: list[dict]) -> list[str]:
     for ring in rings:
         head = f"- q ≈ {_number(ring.get('q'))} Å⁻¹, |χ| coverage {_fixed(ring.get('coverage'), 2)}: "
         texts = herman_texts(ring)
+        pole = ring.get("pole_figure") or {}
+        if pole.get("quality_reasons"):
+            head += "pole fit not determined. "
         if texts is None:
             lines.append(head + (ring.get("reason") or ring.get("texture") or "no result"))
-            lines += [f"  - {note}" for note in ring.get("notes") or () if "shadowed" in note]
-            continue
-        # f ± σ_f, f_iso and f − f_iso on every ring (Physics and Methods 7.7), with the decimals of σ_f.
-        compare = f" (a random ring over the same |χ|: f_iso = {texts['iso']})" if "iso" in texts else ""
-        excess = f", f − f_iso = {texts['excess']}" if "excess" in texts else ""
-        lines.append(head + f"f = {texts['f']}{compare}{excess} — {ring.get('texture')}")
+        elif pole.get("quality_reasons"):
+            lines.append(head + f"Measured f = {texts['f']}")
+        else:
+            lines.append(head + f"f = {texts['f']} — {ring.get('texture')}")
+        if pole:
+            lines.append(f"  - {pole_line(pole)}")
+            systematics = pole.get("systematics") or {}
+            if systematics:
+                source = systematics["background_rule"]
+                lines.append(f"  - Systematic range: exit threshold × 0.5, 1, 2; "
+                             f"b = {pole['background']:.3g} ± {systematics['background_step']:.3g} ({source}); "
+                             "wedge omitted or model-filled with one propagated fit σ.")
+            if systematics.get("incomplete"):
+                lines.append("  - Partial systematic range. Some cut, background or wedge-fill estimates are unavailable.")
         for note in ring.get("notes") or ():
             if any(word in note for word in RING_NOTES_SHOWN):
                 lines.append(f"  - {note}")
-        if ring.get("pole_figure"):  # the fit of the orientation distribution (Analyze ▸ Phases, 7.11)
-            lines.append(f"  - {pole_line(ring['pole_figure'])}")
     return lines
 
 
@@ -391,7 +392,7 @@ def _giwaxs_batch_table(reports: list[dict], labels: dict[int, str]) -> list[str
             f"{peak['q']:.3f}" + ("" if reliable_row(peak) else "*") for peak in report.get("peaks") or [] if peak.get("q")
         ) or "—"
         rings = "; ".join(
-            f"{ring['q']:.3g}: {ring['herman']:.2f}" for ring in report.get("rings") or [] if ring.get("herman") is not None
+            f"{ring['q']:.3g}: {herman_texts(ring)['f']}" for ring in report.get("rings") or [] if ring.get("herman") is not None
         ) or "—"
         lines.append(
             f"| {labels[id(report)]} | {_state(report)} | {_frames_text(report)} | "

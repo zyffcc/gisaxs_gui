@@ -41,10 +41,6 @@ REVIEW_PHASES_ZH = {
     "q_hkl = {q_hkl} Å⁻¹; window ±{window} Å⁻¹": "q_hkl = {q_hkl} Å⁻¹；窗口 ±{window} Å⁻¹",
     # the pole figure (indexing_texts.py)
     "(at its bound)": "（在边界上）",
-    "Not determined by this fit: {what} at its bound. Best determined: Hermans f = {f} from the measured bins.":
-        "此拟合未能确定：{what}停在边界上。最可靠的是只用测到的分档得到的 Hermans f = {f}。",
-    "oriented fraction": "取向分数",
-    "direction χ0": "方向 χ0",
     # Mask & corrections (bindings/workspace.py)
     "intensity × {factor}": "强度 × {factor}",
     "Lorentz factor": "Lorentz 因子",

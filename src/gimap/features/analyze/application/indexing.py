@@ -328,11 +328,26 @@ def candidates(overlays_: Sequence[PhaseOverlay]) -> list[Candidate]:
         if not overlay.spec.visible:
             continue
         for ring in overlay.rings:
-            found.append(Candidate(overlay.spec.name, ring.label, ring.q, ring.intensity, ring.multiplicity))
+            found.append(Candidate(overlay.spec.name, ring.label, ring.q, ring.intensity, ring.multiplicity, ring.labels))
     return found
 
 
-def assign_peaks(peaks: Sequence[dict], specs: Sequence[PhaseSpec], q_max: Optional[float] = None) -> dict:
+def _assignment_axis(geometry: Optional[DetectorGeometry], transmission: bool) -> dict:
+    """Trace the measured peak centres to the map that supplied I(q), independently of overlay settings."""
+    if geometry is None:
+        return {"kind": "unspecified"}
+    if transmission:
+        return {"kind": "transmission"}
+    return {
+        "kind": "refracted_transmitted" if geometry.refraction else "kinematic",
+        "incidence_deg": geometry.incidence_deg,
+        "critical_angle_deg": geometry.critical_angle_deg if geometry.refraction else None,
+        "k_sin_alpha_i_inv_A": geometry.wavevector_inv_angstrom * math.sin(geometry.incidence_rad),
+    }
+
+
+def assign_peaks(peaks: Sequence[dict], specs: Sequence[PhaseSpec], q_max: Optional[float] = None, *,
+                 geometry: Optional[DetectorGeometry] = None, transmission: bool = False) -> dict:
     """``{"phases", "rule", "assignments"}``: each peak ``{"q", "q_err", "fwhm"}`` with its nearest reflection."""
     visible = [spec for spec in specs if spec.visible]
     if not visible:
@@ -351,7 +366,9 @@ def assign_peaks(peaks: Sequence[dict], specs: Sequence[PhaseSpec], q_max: Optio
     return {
         "phases": [spec.record() for spec in visible],
         "rule": "nearest reflection within max(3 σ(q0), FWHM/2)",
+        "q_axis": _assignment_axis(geometry, transmission),
         "assignments": assignments,
+        "unassigned_q": [item["q"] for item in assignments if not item["assigned"]],
     }
 
 

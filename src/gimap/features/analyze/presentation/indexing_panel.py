@@ -1,7 +1,7 @@
 """Behaviour of the Phases window: edit the phases, show their reflections, fit the pole figure of a ring.
 
 The phases are the page's ``IndexingModel``; every change draws the overlay again (``page.indexing_changed``).
-The pole figure is fitted on the task runner and drawn here: the folded, Lorentz-corrected I(χ) of the ring in
+The pole figure is fitted on the task runner and drawn here: the folded (I(χ) − b) sin χ of the ring in
 Analyze's I(χ) window (points, unmeasured bins left out) and the fitted distribution (line)."""
 
 from __future__ import annotations
@@ -75,9 +75,15 @@ class IndexingPanel(QDialog, IndexingView):
         self.background_check.toggled.connect(lambda on: self.background_spin.setEnabled(not on))
         self.direction_combo.currentIndexChanged.connect(self._direction_chosen)
         self._direction_chosen()
-        language_changed().connect(lambda _language: self.refresh())
+        self._displayed_pole = None
+        language_changed().connect(self._refresh_language)
         theme_manager().changed.connect(self._theme_changed)  # the warning colour of a phase
         self._fill_settings()
+
+    def _refresh_language(self, *_args) -> None:
+        self.refresh()
+        if self._displayed_pole is not None:
+            self._show_pole(self._displayed_pole)
 
     def _theme_changed(self, *_args) -> None:
         self.refresh()
@@ -293,24 +299,30 @@ class IndexingPanel(QDialog, IndexingView):
 
     def _pole_ready(self, result) -> None:
         self.model.last_pole = result
+        self._displayed_pole = result
+        self._show_pole(result)
+
+    def _show_pole(self, result) -> None:
+        self.pole_plot.set_labels("χ (°)", tr("N(χ) ∝ crystallites per degree"))
         fit, profile = result.fit, result.fit.profile
         curves, colors, markers = [], [], []
         if profile is not None:
             shown = profile.measured & np.isfinite(profile.value)
             fitted = shown & (profile.chi <= result.chi_max)
-            curves.append(("I(χ) of the ring", profile.chi[fitted], profile.value[fitted]))
+            curves.append((tr("Measured N(χ)"), profile.chi[fitted], profile.value[fitted]))
             colors.append(POLE_POINTS)
             markers.append(True)
             if (shown & ~fitted).any():
-                curves.append(("not fitted", profile.chi[shown & ~fitted], profile.value[shown & ~fitted]))
+                curves.append((tr("not fitted"), profile.chi[shown & ~fitted], profile.value[shown & ~fitted]))
                 colors.append(POLE_LEFT_OUT)
                 markers.append(True)
         if fit.ok and fit.curve_chi.size:
-            curves.append((MODEL_NAMES.get(fit.model, fit.model), fit.curve_chi, fit.curve_value))
+            curves.append((tr(MODEL_NAMES.get(fit.model, fit.model)), fit.curve_chi, fit.curve_value))
             colors.append(POLE_MODEL)
             markers.append(False)
         self.pole_plot.set_curves(curves, colors, markers=markers)
-        self.pole_plot.set_title(ring_text(self._page.view_model.state.analysis, short=True))
+        low, high = result.window
+        self.pole_plot.set_title(trf("Pole figure, q = {low}–{high} Å⁻¹", low=f"{low:.3f}", high=f"{high:.3f}"))
         self.result_label.setText(pole_result_text(result))
         if not result.fit.ok:
             return

@@ -9,7 +9,7 @@ horizon (αf < 0, the substrate shadow) are excluded from every profile.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -18,6 +18,8 @@ from src.gimap.shared.geometry.q_mapping import grazing_q_region
 
 from .binning import BinnedMean, binned_mean_2d, counts_and_scale, map_grid_shape, merge_sparse_bins, pixel_step
 from .regions import region_curves, region_key
+from .corrections import Corrections
+from .orientation_reduction import ring_profiles
 from .models import (
     GIWAXS,
     X_AXIS_TWO_THETA,
@@ -213,6 +215,8 @@ def reduce_giwaxs(
     maps: GiwaxsMaps | None = None,
     with_map: bool = True,
     counts: bool = True,
+    corrections: Corrections = Corrections(),
+    orientation_pixels: tuple | None = None,
 ) -> Reduction:
     """The GIWAXS curves; the q∥–qz map too unless ``with_map`` is ``False``.
 
@@ -226,6 +230,14 @@ def reduce_giwaxs(
     usable = valid & maps.above_horizon
     warnings_out: list[str] = []
     if not usable.any():
+        if orientation_pixels is not None and settings.chi_q_window is not None:
+            # A user-selected Lorentz band may span all of a small detector/crop. The measured
+            # orientation channel can still have pixels in the explicitly selected ring.
+            profiles, indices = ring_profiles(maps, *orientation_pixels, geometry, settings.chi_q_window,
+                                             maps.q_step, corrections)
+            return Reduction(GIWAXS, (profiles[1.0],), {"chi_q_window": settings.chi_q_window},
+                             ("No valid pixels for the corrected map or radial curve.",),
+                             orientation_profiles=profiles, orientation_indices=indices)
         return Reduction(GIWAXS, (), {}, ("No valid pixels above the sample horizon.",))
     values = image
     q_low = float(maps.q[usable].min())
@@ -233,8 +245,12 @@ def reduce_giwaxs(
     bins = int(settings.bins) if settings.bins else _radial_bins(maps, usable, q_low, q_high)
     radial = _profile(
         "radial", "I(q)", "q (Å⁻¹)", maps.q, values, usable,
-        low=q_low, high=q_high, bins=bins, region={"sector": "full"}, counts=counts,
+        low=q_low, high=q_high, bins=bins, region={"sector": "full"}, counts=counts, merge=not corrections.lorentz,
     )
+    if corrections.lorentz:
+        radial = replace(radial, intensity=radial.intensity * radial.pixels, sigma=radial.sigma * radial.pixels,
+                         y_label="I (summed counts)",
+                         region={**radial.region, "aggregation": "sum of Lorentz-weighted pixels"})
     absolute_chi = np.abs(maps.chi_deg)
     in_plane_limit = 90.0 - float(settings.in_plane_half_width_deg)
     out_limit = float(settings.out_of_plane_half_width_deg)
@@ -250,18 +266,16 @@ def reduce_giwaxs(
     )
     window = settings.chi_q_window or strongest_ring(radial)
     curves = [radial, in_plane, out_of_plane]
+    profiles, indices = {}, None
     if window is None:
         warnings_out.append("No diffraction ring found for I(χ); drag a q window to choose one.")
     else:
-        low, high = sorted(float(value) for value in window)
-        ring = usable & (maps.q >= low) & (maps.q <= high)
-        curves.append(
-            _profile(
-                "azimuthal", f"I(χ), q = {low:.3f}–{high:.3f} Å⁻¹", "χ (°)", maps.chi_deg, values,
-                ring, low=-90.0, high=90.0, bins=int(round(180.0 / CHI_BIN_DEG)),
-                region={"q_window": (low, high)}, merge=False, counts=counts,
-            )
-        )
+        if corrections.lorentz and orientation_pixels is None:
+            raise ValueError("The ring orientation needs pixels before the Lorentz correction.")
+        orientation = orientation_pixels or (image, valid, counts)
+        profiles, indices = ring_profiles(maps, *orientation, geometry, window,
+                                         maps.q_step or (q_high - q_low) / bins, corrections)
+        curves.append(profiles[1.0])
     if settings.sector is not None:
         curves.extend(_sector_curves(settings.sector, maps, values, usable, low=q_low, high=q_high, bins=bins, counts=counts))
     if settings.box is not None:
@@ -306,7 +320,7 @@ def reduce_giwaxs(
         # the bins of every I(q) before sparse ones are joined (the records' ``binning``): edges low…high in q, Å⁻¹
         "radial_bins": {"bins": bins, "q_range": (q_low, q_high), "chosen": "set" if settings.bins else "auto"},
     }
-    return Reduction(GIWAXS, tuple(curves), markers, tuple(warnings_out), rsm)
+    return Reduction(GIWAXS, tuple(curves), markers, tuple(warnings_out), rsm, profiles, indices)
 
 
 __all__ = [

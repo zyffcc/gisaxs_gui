@@ -56,6 +56,8 @@ def curve_source_mask(curve: Curve, valid: np.ndarray, maps: GiwaxsMaps | None =
         return usable & (np.abs(chi) <= region["chi_deg"][1])
     if curve.key == "azimuthal":
         low, high = region["q_window"]
+        if "min_qz" in region:
+            usable &= maps.qz >= region["min_qz"]
         return usable & (q >= low) & (q <= high) & (chi >= -90.0) & (chi <= 90.0)
     if curve.key in ("sector", "sector_chi"):
         chi_low, chi_high = region["chi_deg"]

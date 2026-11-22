@@ -73,7 +73,8 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
   αi 主要移动 qz，几乎不改 |q|。用户给了材料时，把测到的 q 和已知线逐条比较。
 - **峰的比值是晶系的线索。** 基线只检查层状和六方序列（2 % 以内），从不判定物相。
   只用可靠峰，并写出算式：写出测到的 q₂ / q₁，再和已知的比值相比（例如 bcc (200)/(110) 的 √2 ≈ 1.414）。
-- **q 是运动学值，± 只是统计误差。** Decisions 的 q 一行写出这一帧的 k·sin αi：在薄膜临界角附近或以下，折射使 q_z 偏移至多
+- **说明归属所用的 q。** 默认使用运动学 |q|，给出薄膜临界角并启用折射后使用透射通道的 q。转述每个候选的 Δq 和 Δd/d。
+  同一窗口有多个反射时列出歧义，未匹配的峰单列。αi > αc 时反射和透射通道可能给出两条环。Decisions 的 q 一行写出这一帧的 k·sin αi：在薄膜临界角附近或以下，折射使 q_z 偏移可达
   这么多（P08 公开帧 αi = 0.075° 时 0.0119 Å⁻¹，远大于峰位的统计 ±）；uncertainties 一行写出误差模型（泊松计数，或浮点、扣背景、
   镜像填补的帧用像素离散）。转述峰位或 d 时把这些系统误差和统计 ± 分开写，不要把像素离散的 σ 叫计数误差。
 - **Scherrer 尺寸是下限**：基线没有扣除仪器展宽。有标样的峰宽时，用 `crystallite_size(q_center, instrumental_fwhm=…)`
@@ -81,6 +82,10 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
 - **缺失楔边上的极大值**：真正的极大可能落在测不到的 χ 里。
   先 `ring_orientation(q_center=…)`（它设定这个环的 q 窗口），再 `get_curve azimuthal` 看 I(χ)；
   用 `set_custom_sector` 只取测到的区域。
+- **环取向。** I(χ) 是像素均值，N(χ) ∝ [I(χ) − b] sin χ。环取向默认做偏振校正，Lorentz 开关只影响探测器强度积分。
+  抄录报告里的出射角下限、实测 f（统计误差）[系统范围] 和极图拟合的 f、1 − φ。1 − φ 取决于背景 b。系统范围比较
+  出射角下限的 0.5、1 和 2 倍，背景 b 的 ±1 个拟合标准差（无拟合误差时 ±20%），以及保留或用模型填补低 |χ| 缺失楔。
+  填补量的一倍标准差由拟合参数协方差传递。f_iso 是相同覆盖下的各向同性参照，不能从 f 扣掉它作为偏差校正。
 - **笔记、日志、幻灯片**：αi、材料和实验设计常常只写在那里。GIMaP 的工具只读图像、`.poni` 和文本或日志文件；
   `.pptx` / `.odp` 要自己读（文字分别在 `ppt/slides/*.xml` 和 `content.xml` 里），截图需要多模态或问人。
 
@@ -97,12 +102,13 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
 | a broad halo | FWHM > q 的 15 % | 非晶有序；不给晶粒尺寸 |
 | shadowed | 强度低于同一 q 漫散射背景的 20 % | 这些 χ 算作没测到；扇区落在阴影里就不比较 |
 | Only …% of the orientation range | sin χ 加权覆盖 < 80 % | 不给 Hermans f，只给测到的范围 |
-| not measured (missing wedge) | 靠近 qz 的 \|χ\| 没有像素 | f 偏低，照实写 |
+| missing wedge | 靠近 qz 的 \|χ\| 没有像素 | 实测 f 只用已测角度；比较模型填补前后的 f |
 | no single preferred orientation | 两个极大高度差在 15 % 以内、相距 ≥ 30° | 不说取向 |
 | no clear preferred orientation | \|f − f_iso\| < max(0.1, 3σ_f)，最强处在 0° 或 90° 的 20° 以内（f_iso：同样测到的 \|χ\| 上随机环的 f） | 不说取向 |
-| no single preferred orientation: strongest at …, but f − f_iso … | 最强处在法线附近而 f − f_iso < 0，或在平面附近而 f − f_iso > 0 | 不说取向 |
-| tilted: maximum at χ ≈ ±… | 最强处在 20°–70° 之间（且没有高度相近的第二个极大） | 只凭极大命名，不比较 \|f − f_iso\| 和裕量：f − f_iso 小时要写出它，别当成强织构 |
-| Leaving out \|χ\| ≥ 85°, next to the sample horizon … | 去掉这些分箱后 f − f_iso 的变化同时超过 0.01 和 3σ_f；“Without those bins … another verdict” 表示结论会变 | 不排除；Decisions 的 ring orientation 一行点名这些环。出射角最小处的吸收、透射函数或阴影没有校正：先看 ±90° 附近的 I(χ)，再把 f 当织构 |
+| no single preferred orientation: the maximum at … and the measured moment disagree | 最强处在法线附近而 f − f_iso < 0，或在平面附近而 f − f_iso > 0 | 不说取向 |
+| tilted: maximum at χ ≈ ±… | 最强处在 20°–70° 之间（且没有高度相近的第二个极大） | 只凭极大命名，不比较 \|f − f_iso\| 和裕量：f − f_iso 只作覆盖诊断，同时报告实测 f、统计误差和系统变化范围 |
+| 出射角下限 | 默认 αf < 2αc（已知薄膜临界角）或 αf < 2αi，用户可更改 | 在逐像素分箱前排除样品地平线附近的散射；吸收、透射和遮挡可影响该区 |
+| pole fit … not determined | χ²_red > 5、自由 φ 达边界、FWHM > 100° 或未收敛等 | 写明原因和实测 f；拟合给出的数值只作诊断 |
 | mainly in-plane / out-of-plane | 两个扇区之比 ≥ 2 | — |
 | its shape could not be fitted | 高斯拟合失败，但信号 ≥ 2 × min_snr（默认 6σ） | 不算可靠峰；看图像上这个 q（模块缝隙、探测器边缘、重叠） |
 | `at_edge`（报告和 GUI 显示 “at the end of the data: check”） | 峰在 q 范围末端 1.5 个峰宽以内 | 不算可靠峰：不选去算环和尺寸，也不进序列提示（Decisions 的 rings analysed 写 “not analysed: … (at the end of the data)”）；仍在峰表里，形状、位置和宽度可能被截断，要用它就自己核对 |

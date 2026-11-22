@@ -313,9 +313,16 @@ class DisplayMixin:
         top.set_title(TOP_TITLE_GIWAXS)
         top.title_label.setToolTip(tr(TOP_TIP_GIWAXS))
         x_label = family[0][1].x_label if family else "q (Å⁻¹)"
-        top.set_labels(x_label, family[0][1].y_label if family else "")
+        mixed = len({curve.y_label for _name, curve, _color in family}) > 1
+        label = tr("Intensity (see legend)") if mixed else family[0][1].y_label if family else ""
+        top.set_labels(x_label, label)
+        def legend(name, curve):
+            name = "q box" if curve.key == "box_q" else name
+            if mixed:
+                return trf("{name} (sum)", name=name) if curve.region.get("aggregation") else trf("{name} (mean)", name=name)
+            return name
         top.set_curves(
-            [("q box" if curve.key == "box_q" else name, curve.x, curve.intensity) for name, curve, _color in family],
+            [(legend(name, curve), curve.x, curve.intensity) for name, curve, _color in family],
             [color or BOX_COLOR for _name, _curve, color in family],
         )
         self._plot_keys["top"] = [curve.key for _name, curve, _color in family]

@@ -189,8 +189,7 @@ class OptionsPanelView(NormalisationView):
     def _intensity_section(self, parent) -> AdvancedSection:
         section = AdvancedSection(
             "Intensity corrections (GIWAXS)",
-            "Off by default. Peak positions do not change; intensities compared across χ or q do "
-            "(orientation, pole figures, crystallinity ratios).",
+            "Ring orientation uses polarisation by default. Map and radial intensity corrections are optional.",
             parent,
             expanded=False,
         )

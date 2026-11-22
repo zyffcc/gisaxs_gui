@@ -131,16 +131,17 @@ def test_the_command_expands_its_arguments_and_refuses_what_it_cannot_run(monkey
     seen: dict = {}
 
     def analyse_frames(frames, options, out, **kwargs):
-        seen.update(kwargs, frames=list(frames), out=out)
+        seen.update(kwargs, frames=list(frames), out=out, options=options)
         return [{"ok": True, "frame": frame, "procedure": "giwaxs", "needs_attention": [], "decisions": [], "steps": []}
                 for frame in frames]
 
     monkeypatch.setattr(headless_assistant, "analyse_frames", analyse_frames)
     out = tmp_path / "out"
     code = gimap_agent.main(["auto", str(folder / "*.tif"), "--quiet", "--out", str(out), "--notes", "alpha_i 0.2 deg",
-                             "--overwrite", "--language", "zh"])
+                             "--overwrite", "--language", "zh", "--orientation-min-exit-deg", "0.35"])
     printed = capsys.readouterr().out
     assert code == 0 and [Path(frame).name for frame in seen["frames"]] == ["film_2.tif", "film_10.tif"]
+    assert seen["options"].orientation_min_exit_deg == 0.35
     assert seen["overwrite"] is True and seen["mask"] is None and seen["language"] == "zh"
     assert f"Pattern {folder / '*.tif'}: 2 file(s) matched." in printed and seen["found"] == (f"Pattern {folder / '*.tif'}: 2 file(s) matched.",)
     # The options as they were given, for the record: the pattern itself, the notes, and no function.

@@ -12,6 +12,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **GIWAXS ring orientation** uses polarisation-corrected pixel means and an exit-angle cut. Reports give measured Hermans f with a statistical error and systematic range, fitted f and the background-dependent oriented fraction. Poor pole fits are flagged. Tilted-axis models average over azimuth. Lorentz weighting is available for peak areas, with an exclusion band around the plane of incidence. Phase assignments identify the q convention, Δq, Δd/d, ambiguous matches and unassigned peaks.
+
 - **Analyze ▸ Absolute Scale from a Standard…** fits a detector frame or reduced radial curve against water at the
   measured temperature or a user-supplied reference such as glassy carbon. Calibrated exports carry intensity in
   cm⁻¹ and record the standard, fitted range, scale and uncertainty. The instrument profile keeps the calibration.
@@ -52,7 +54,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   film with the transmitted and reflected DWBA channels; a table lists hkl, d, q∥, qz, χ, m and |F|². Run Automatic
   Analysis assigns each ring to the nearest reflection within max(3σ, FWHM/2) (a *phase assignment* decision, the
   peak rows, a report section; `--phase FILE.cif` on the command line) and fits the pole figure of each analysed
-  ring — Gaussian or Maier–Saupe about a direction plus an isotropic fraction, Lorentz-corrected, the missing wedge
+  ring — Gaussian or Maier–Saupe about a direction plus an isotropic fraction, the missing wedge
   filled by the model — giving the oriented fraction, the FWHM and Hermans f with their errors next to the Hermans
   factor of the measured bins. The window exports the pole figure as CSV with a JSON record. Manual 5.9;
   *Physics and Methods* 7.10, 7.11.
@@ -112,9 +114,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   Poisson, scaled); the unit of the intensity goes into the plots, the CSV column, an `# intensity:` line of every
   curve file, the fit input and the record (`normalisation`: the factor and each term with its source). A **dark
   frame** with its own scale is subtracted before the background (σ then from the pixel scatter). **Lorentz factor
-  (fibre texture)** among the GIWAXS intensity corrections divides by GIXSGUI's L = 1/(cos αi cos αf |sin 2θf|);
-  the Hermans factor of a Lorentz-corrected I(χ) is no longer weighted by sin χ a second time. With all of them off,
-  curves and σ are those of before. *Physics and Methods* 4.11, 4.12, 5.6 and 7.7.
+  for peak areas** among the GIWAXS intensity corrections divides by GIXSGUI's L = 1/(cos αi cos αf |sin 2θf|);
+  the radial curve then sums the weighted pixels. Ring orientation uses the mean intensities before this weighting. *Physics and Methods* 4.11, 4.12, 5.6 and 7.7.
 - **The Analyze display.** In log display, pixels at or below 0 (a dark-subtracted frame) take the lowest colour
   instead of none, and the automatic limits come from the positive values: such frames no longer look black. In
   linear display the colour bar is drawn around the limits. The image is the widest panel, and **Panels ▾** hides

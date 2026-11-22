@@ -121,10 +121,10 @@ open, until you go back to the profile's αi (section 4.1).
 - **Peaks**: q and FWHM in Å⁻¹, d in Å, L (Scherrer size, a lower bound) in nm, and whether the peak
   is out-of-plane (OOP) or in-plane (IP). Here you find peaks near q = 0.90, 1.00, 1.41, 1.99 and
   2.22 Å⁻¹. The data's README names 0.899 Å⁻¹ as PbI₂ (001) and 0.999 Å⁻¹ as MAPbI₃ (110).
-  GIMaP does not assign phases: compare q with the lines of your material.
-- The three rings with the largest peak area (and no warning), with their orientation (Hermans f)
-  and where their maximum lies.
-- **Checks**: shadowed and unmeasured χ ranges (the missing wedge next to qz) that bias f.
+  To compare candidate reflections, give the phases in **Phases** (section 5.9).
+- For the three rings with the largest peak area and no warning, read the measured Hermans f with its statistical
+  error and systematic range alongside the pole fit and the position of the intensity maximum.
+- **Checks** identifies shadows and angular gaps, including the missing wedge next to qz.
 - **Geometry**: the profile, distance, beam centre, wavelength and αi used.
 
 Select a peak and open **Fit details** to see the points it was fitted to, the Gaussian and its
@@ -1430,15 +1430,15 @@ A subsequent series normalisation to a target peak height gives relative intensi
 
 ![Fit and residuals for a synthetic standard](manual_images/en/absolute_scale.png)
 
-**Intensity corrections (GIWAXS)** (folded, off by default). They divide each pixel by a geometric
-factor; q does not change:
+**Intensity corrections (GIWAXS)**. The frame corrections are off by default. Their factors change intensities
+at fixed q. Ring orientation has its own polarisation and exit-angle settings.
 
 | Correction | Enter |
 |---|---|
 | **Solid angle of each pixel (cos³2θ)** | — |
 | **Polarisation, factor** | f (default 0.99): 0.95–0.99 at a synchrotron (horizontal), 0 for an unpolarised laboratory source, −1 vertical |
 | **Absorption in the film** | **Thickness** (nm), **Attenuation length** 1/µ (µm, from tables such as CXRO or NIST) |
-| **Lorentz factor (fibre texture)** | — (L = 1/(cos αi cos αf \|sin 2θf\|), as in GIXSGUI) |
+| **Lorentz factor for peak areas** | **Incidence-plane half-width** in horizontal detector pixels (default 2) |
 
 Peak positions do not change; intensities compared across χ or q do — orientation, pole figures,
 crystallinity ratios. The film absorption leaves out refraction, so it holds well above the critical
@@ -1446,11 +1446,18 @@ angle; with it on, pixels at or below the sample horizon are left out. The facto
 bars follow them, are in [Physics and Methods, chapter 5](Physics_Manual.md#5-intensity-corrections-for-giwaxs);
 the JSON record (`intensity_corrections`) gives the formulas and parameters.
 
-The **Lorentz factor** is for orientation and pole analysis of crystallites oriented at random about the surface
-normal: after it, I(χ) counts the crystallites per degree of χ, and the Hermans factor of Run Automatic Analysis is
-then not weighted by sin χ a second time. It is meant for crystalline peaks only: it also changes diffuse
-scattering, the amorphous halo and the I(q) of a whole ring, and pixels on the specular rod are left out
-([Physics and Methods 5.6](Physics_Manual.md#56-lorentz-factor-of-a-fibre-texture)).
+Select **Lorentz factor for peak areas** to compare integrated crystalline intensities of a fibre texture. The map
+uses the GIXSGUI weight cos αi |q_y|/k. The radial curve sums these weighted pixels in each q bin, and the peak
+table uses that curve. To compare fitted areas from different uniform q grids as total weighted counts, divide each area by its q-bin width. The exclusion band follows the whole plane of incidence. A half-width of two excludes
+pixels with |q_y|/k below twice the horizontal pixel size divided by the detector distance. [Physics and Methods 5.6](Physics_Manual.md#56-lorentz-factor-of-a-fibre-texture)
+
+The ring profile I(χ) always uses pixel means before Lorentz weighting. **Polarise ring profiles by default**
+applies the horizontal polarisation parameter 0.99 when the frame polarisation is off. Set the frame parameter
+to match your source, or clear the ring option to leave polarisation off when it is off for the frame.
+**Orientation minimum αf** excludes pixels by their exit angle. **Automatic** uses twice the film critical
+angle when supplied, otherwise twice the incidence angle. Enter a threshold in degrees to override it.
+
+The command-line equivalent is `--orientation-min-exit-deg` in degrees.
 
 ### 5.3 Cuts
 
@@ -1578,9 +1585,10 @@ and I(q∥). The lower plot's drop-down chooses **I(χ) of the regions**, **q bo
 
 ### 5.4 Curves and results
 
-**Where the points come from.** Each point is the mean intensity of the valid pixels in one bin,
-never finer than one pixel. Bins with very few pixels (near the beam, at region edges) are merged
-with their neighbours along q, never across a gap; I(χ) is not merged. Bins with no pixel — gaps,
+**Where the points come from.** Each point normally gives the mean intensity of the valid pixels in one bin.
+With **Lorentz factor for peak areas** selected, radial I(q) gives the weighted sum per q bin.
+For radial means, bins with very few pixels near the beam or a region edge are merged with their neighbours
+along q. Gaps separate the bins. I(χ) and Lorentz-weighted radial sums retain their bins. Bins with no pixel — gaps,
 masked χ ranges, the missing wedge — have no point, and the curve is broken there. The error bar σ is
 the counting error for raw photon counts (a bin of zero counts gets the error of one count, so σ is never
 0), and the scatter of the pixels for floating-point frames,
@@ -1662,9 +1670,8 @@ The Results tab shows **Peaks**, **Checks** (shadows, artefacts, unmeasured rang
 Start of the Series**) and **Report**. Sizes are Scherrer lower bounds. Phases are assigned only to
 the phases you give (**Phases**, section 5.9).
 
-What the numbers are is said in the report's *Decisions* (**Show the Full Text**): q is kinematic, without a
-refraction correction, and the line gives how far refraction can shift q_z near or below the film's critical
-angle at your αi (up to about k·sin αi); the uncertainties are statistical only, from Poisson counting statistics
+The report's *Decisions* (**Show the Full Text**) identifies the q axis. Without film refraction correction it
+gives the scale of the shift in q_z near the horizon (about k·sin αi). Peak uncertainties are statistical, from Poisson counting statistics
 or, for a floating-point, background-subtracted or mirror-filled frame, from the pixel scatter, without the
 geometry. At most 12 candidate peaks, the most prominent, are fitted: when more qualify, *Decisions* and the line
 under the peak table say how many candidates there were and how many of the 12 gave a peak (a fit can merge two
@@ -1673,15 +1680,16 @@ line's `--max-peaks` fits more). The saved report gives q, d and the FWHM of eac
 whose reduced χ² is above 1 are multiplied by √χ²_r; a peak whose fit has χ²_r above 10 is marked *poor fit* in the
 caveat column: its shape is not one Gaussian on a line, so read its width and size with care. A *lamellar
 (1:2:3:4)* hint needs its orders one after the other: a peak near five times the first q without the third and
-fourth order is not listed. The orientation sentence compares f with f_iso, the value of a random ring over the same measured |χ|: it
-says *along the surface normal* or *in the sample plane* only when the I(χ) maximum lies below 20° or above 70°
-and |f − f_iso| reaches max(0.1, 3σ_f); a ring whose maximum lies between 20° and 70° is called *tilted* at that
-|χ| from its maximum alone, without that margin. Every ring line gives f ± σ_f, f_iso and f − f_iso with the
-decimals of σ_f. When f changes by more than that statistical uncertainty once the bins next to the sample horizon
-(|χ| ≥ 85°) are left out, the ring's notes and *Decisions* say so: there the exit angle is smallest, and absorption
-or a shadow can lower the intensity, which GIMaP does not correct. A peak within 1.5 widths of the end of the data
+fourth order is not listed. A peak within 1.5 widths of the end of the data
 (*at the end of the data: check*) is not used for the rings, the sizes or the series hints: its shape may be cut
 off.
+
+For each analysed ring the report gives the exit-angle exclusion and polarisation. The measured Hermans f appears
+with its statistical error and a systematic range. To obtain the range, GIMaP repeats the measurement at half,
+one and twice the nominal exit-angle threshold. At each threshold it varies the background by its fitted standard
+error, or by 20 % when no standard error is available. It compares the measured bins with a model extrapolation into
+the low-|χ| missing wedge and includes the propagated standard error of the extrapolation. The accompanying pole
+fit gives the model's f and oriented fraction. **Needs attention** gives the reason for an undetermined fit.
 
 ![Results of the automatic analysis of a GIWAXS frame](manual_images/en/07_giwaxs_results.png)
 
@@ -2118,18 +2126,23 @@ multiplicity m, |F|² and the intensity relative to the strongest (100). Copy it
 **Pole Figure of This Ring**: the I(χ) ring moves onto that reflection and its pole figure is fitted with χ0 of the
 reflection.
 
-**Pole Figure.** The ring is the one of I(χ) (the purple band over I(q)). **Fit Pole Figure** folds its I(χ), takes
-off the background under the ring (**Automatic**: from I(q) at the ring; or type a value), applies the Lorentz factor
-(sin χ, or none when the frame is already Lorentz-corrected) and fits a **Model**: **Gaussian + isotropic** or
-**Maier–Saupe + isotropic**, about a **Direction**: **Along the normal (χ0 = 0°)**, **In the plane (χ0 = 90°)**,
-**Fitted direction** or **Set χ0**. **Fit up to χ** (85°) leaves out the bins next to the sample horizon; lower it when I(χ)
-falls towards the horizon. The plot shows the points fitted, the points left out (grey) and the fitted curve. The
-result gives the **oriented fraction**, the **FWHM** (mosaicity) and χ0 with their ±, the Hermans f of the fitted
-distribution (the missing wedge filled by the model) next to f from the measured bins alone, the 2D order
-2<cos²χ> − 1 and χ²_red. A χ²_red far above 1 means that one Gaussian and an isotropic part do not describe the ring:
-read the numbers with care. When a parameter of the fit ends at its bound (the isotropic part at 0 or 1, the FWHM at
-150°), the first line says ⚠ *Not determined by this fit* and leads with what is best determined, the Hermans f of
-the measured bins; the value at its bound is marked *(at its bound)* where it is listed.
+**Pole Figure.** Move the purple band over I(q) onto the ring, then choose **Fit Pole Figure**. The fit folds
+the background-subtracted pixel means to |χ| and uses N(χ) ∝ [I(χ) − b] sin χ. **Automatic** obtains b from a
+Gaussian peak on a local linear background in the radial pixel means, falling back to the adjacent bins.
+You can also type b. The minimum exit angle from **Mask & Corrections** applies to the fit.
+**Fit up to χ** optionally restricts it further (default 90°).
+
+Choose a **Model** for the oriented population. **Gaussian + isotropic** is a Gaussian in polar angle about a
+cone at χ0. **Gaussian mosaic + isotropic** describes Gaussian angular spread about a preferred axis.
+**Maier–Saupe + isotropic** describes axial order with density proportional to exp(m cos²γ), where γ is the
+angle to the preferred axis. The last two average over all azimuths of the tilted axis. Under **Direction**,
+fix χ0 along the normal or in the sample plane, enter its value, or fit it.
+
+Compare f from the measured bins with f from the full fitted distribution, including the missing wedge.
+The plot shows the measured points and the fit. The results give the oriented fraction 1 − φ, FWHM, χ0, 2D
+order and reduced χ². The oriented fraction is conditional on the background b. A fit is marked
+*not determined* if it fails to converge, reduced χ² exceeds 5, a fitted parameter reaches a bound, or
+FWHM exceeds 100°. The reason appears with the result.
 
 ![The pole figure of the MAPbI₃ ring at 0.997 Å⁻¹ (public P08 frame)](manual_images/en/07b_pole_figure.png)
 
@@ -2139,10 +2152,12 @@ SHA-256), the reflection table, the settings and the fit.
 
 **In the automatic analysis.** With phases shown (or `--phase FILE.cif` on the command line, repeated for several),
 **Run Automatic Analysis** assigns each peak to the nearest reflection within max(3σ, FWHM/2): the **Peaks** table of
-Results gets the columns **phase**, **hkl** and **Δq** (the tooltips give q_hkl, the window and the other reflections
-within it), the *Decisions* line *phase assignment* gives the phase, hkl and Δq of every peak, and the report's **Phase
-assignment** section adds the other reflections within the window and the warnings of the phases. Each analysed ring also gets a pole-figure fit next to its Hermans f (a line under the
-ring in the report). The nearest reflection is an assignment, not a proof: check the alternatives and Δq. The
+Results gets the columns **phase**, **hkl** and **Δq**. An hkl marked **ambiguous** has two or more candidate
+reflections within the window. Hover over hkl for alternatives and over Δq for the window and the fractional
+spacing difference Δd/d. **Unassigned** means no reflection matched. The **Phase assignment** report lists these
+results and identifies the q axis used, including the film critical angle if refraction was applied.
+Transmitted and reflected channels can split a ring above the film critical angle.
+Each analysed ring also gets a pole-figure fit next to its Hermans f. The
 formulas are in [Physics and Methods 7.10 and 7.11](Physics_Manual.md#710-reflection-overlay-and-phase-assignment).
 
 ## 6. Fitting
@@ -3859,11 +3874,9 @@ experiment (chapter 13).
 - Scherrer sizes are lower bounds of the coherence length unless the instrumental width is known; broad
   halos (FWHM above 15 % of q) get none.
 - The Hermans factor assumes a film that is isotropic in its plane and weighs each |χ| by sin χ. It is
-  given only when at least 80 % of that weight is measured. The report also gives f_iso, the f of a random
-  ring over the same |χ|, and f − f_iso: *along the surface normal* or *in the sample plane* is named only when
-  |f − f_iso| reaches max(0.1, 3σ_f), while a ring whose I(χ) maximum lies between 20° and 70° is called *tilted*
-  from that maximum alone. f weighs the bins next to the sample horizon most; when it depends on them beyond its
-  statistical uncertainty, the ring's notes say so.
+  given only when at least 80 % of that weight is measured. Read its statistical error alongside the range from
+  varying the exit angle, background and missing-wedge fill. A pole fit extrapolates into unmeasured angles.
+  Check its reported quality before interpreting the oriented fraction (section 5.9).
 - Regions far below the diffuse background at the same q (under 20 %: a shadow, an absorber, an
   insensitive detector area) count as unmeasured, and a sector lying in one is not compared. Intensity
   next to the qz axis may be unmeasured (missing wedge).
@@ -4162,8 +4175,8 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **Powder rings leave rot3 undetermined.** They also constrain tilt weakly at SAXS distances (±0.2° on the public silver behenate frame). | Use a wide-angle standard for rot1 and rot2. Check rot3 on a GISAXS ridge and the horizon in **Geometry ▸ Check rot3**. GIMaP reads flat-detector `.poni` orientations 1–4 (section 4.2). |
 | **The automatic Yoneda search and horizontal cut average detector rows.** Analyze warns when the horizon varies by more than half a row across the frame. | Add a horizontal band in q for a constant exit angle. Mirror filling needs a measured partner on the other side. It cannot recover the missing wedge. |
 | **Run Automatic Analysis (GIWAXS) fits at most 12 candidate peaks**, the most prominent; the window has no setting for more. The others are left out of the peak table, the sector comparison, the rings and the series hints; *Decisions* says how many candidates there were (section 5.5). | Run `tools/gimap_agent.py auto … --max-peaks N` (section 10.7), or ask the AI to run `find_peaks` with `max_peaks`, when you need the full list. |
-| **The GIWAXS and GISAXS q are kinematic: no refraction correction.** Near or below the film's critical angle, the q_z of a peak can be off by up to about k·sin αi, and in GISAXS that of the Yoneda band most, by an amount of that order (the report's *Decisions* give the number for your frame); the ± and σ of the report contain neither that nor the geometry's uncertainty ([Physics and Methods, sections 7.9 and 8.6](Physics_Manual.md#79-what-the-report-states)). | Measure above the critical angle for positions, or correct q_z yourself for the material; quote the systematic error separately from the statistical ±. |
-| **Hermans f and the texture sentence are not corrected for the exit angle.** f weighs the bins next to the sample horizon most, where absorption in the film or a shadow can lower the intensity; on the public P08 frame leaving out the bins within 5° of the sample plane moves f − f_iso by 17–27 σ_f ([Physics and Methods, section 7.7](Physics_Manual.md#77-ring-orientation-and-the-hermans-orientation-factor)). | Read the ring's notes and the *ring orientation* line of *Decisions*; when they name the ring, check I(χ) near χ = ±90° before reading f as texture. |
+| **Kinematic q omits film refraction.** Near the critical angle the shift in q_z can be of order k·sin αi. A transmitted-channel correction can leave a second ring from the reflected beam. | Check the q axis in the report. Apply the film critical angle when known and quote geometry uncertainty separately from peak-fit errors. |
+| **Missing-wedge intensities require extrapolation.** An exit-angle cut also removes some in-plane orientations. | Check angular coverage, the systematic range of measured f and the pole fit's quality (section 5.9). |
 | **NeXus/HDF5 files not written by the Lambda server are now read as stored** (earlier versions transposed and flipped them). A geometry or mask made on such a file with an earlier version no longer fits it (section 5.1). | Check the beam centre and masks of such data; calibrate again if needed. |
 | **The normalisation divides the frame after the background and dark frame are subtracted** in the frame's own units. Transmission and thickness are entered by the user (section 5.2). | Set the background's **Scale** (and the **Dark scale**) to the ratio of exposure times or monitors of the frame and the background. |
 | **XRR intensities are raw**: no monitor normalisation, footprint, background, resolution correction or θ offset. Analyze masks and bad-pixel search are not applied (section 9.2). | Apply the required corrections to the exported curve and check the ROI and valid-pixel counts. |
