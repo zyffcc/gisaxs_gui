@@ -2101,7 +2101,7 @@ series** (chapter 6).
 
 ### 5.9 Phases: indexing and pole figures
 
-**Phases** in the image toolbar opens the **Phases and Indexing** window (GIWAXS frames). It has three tabs.
+**Phases** in the image toolbar opens the **Phases and Indexing** window (GIWAXS frames). It has four tabs.
 
 For the public P08 example, use **Add from CIF…** to load `MAPbI3_reference.cif` and
 `PbI2_reference.cif` from the frame's folder. These are the comparison structures used in the
@@ -2192,7 +2192,8 @@ The legend gives each family's share of the ring intensity.
 Read **Orientation determined** or **Orientation not determined** first. For each oriented population the panel
 gives the fitted substrate-parallel plane (h k l), mosaic FWHM in degrees, and percentage of all crystallites of
 that phase. The ± values are statistical standard errors. The component percentages sum to **Total oriented**.
-Check the runner-up axes, ΔBIC, and reduced χ² for the joint fit and the displayed ring.
+**Near-random** marks a component whose inclusion has weak support or whose weak angular modulation leaves its fraction poorly separated from random material. The panel pools these crystallites under **isotropic including near-random**. Only resolved components have a plane label. The exported JSON records the fitted width, fraction uncertainty and change in BIC when the component is replaced with random material.
+Check ΔBIC and the reduced χ² for the joint fit and the displayed ring.
 When the orientation is undetermined, the listed planes, widths and fractions describe the trial fit.
 The crystal Hermans factor describes the fitted distribution of fibre axes. The measured ring f describes that
 ring over its measured angles. The panel gives δ and β when film optics are available.
@@ -2211,6 +2212,16 @@ results and identifies the q axis used, including the film critical angle if ref
 Transmitted and reflected channels can split a ring above the film critical angle.
 Each analysed ring also gets a pole-figure fit next to its Hermans f. The
 formulas are in [Physics and Methods 7.10 and 7.11](Physics_Manual.md#710-reflection-overlay-and-phase-assignment).
+
+**Unit Cell.** After loading the reference phases, open **Unit Cell**. Select a phase to see its free lattice parameters in Å or degrees, volume in Å³, one-standard-error uncertainties, and relative changes against the CIF. The reference retains the original CIF values if you edit the trial cell for indexing. For a hand-entered phase, the typed cell supplies the reference. The table lists measured q, the residual for each accepted reflection, and reasons for exclusions. A rank-deficient phase shows the reason the cell could not be determined. With film αc set in the reduction or enabled in the overlay, the refinement uses transmitted-channel q.
+
+For a fibre-textured sample, fit **Crystal orientation (from phase)** in **Pole Figure**, then return to **Unit Cell**. If one fibre axis is determined and the measured sectors constrain both projections, the tab also shows in-plane and out-of-plane strain. **Export Cell…** writes the results for all visible phases, full covariance, residuals, settings, frame source and CIF references to `<frame>_cells.json`. Automatic analysis with phases includes the same estimates under **Refined unit cells** and `cell_refinement` in the report JSON.
+
+![Refined MAPbI₃ cell and measured P08 peak residuals](manual_images/en/07d_cell_refinement.png)
+
+**Refine Series…** starts tracking the indexed peaks over the range and stride selected in Analyze’s series controls. Each point uses one detector frame. Choose the phase and **Cell parameter** to plot a, c or another free parameter together with volume and 1σ bars. The horizontal axis uses elapsed seconds from timestamps or an estimate from the recorded exposure or frame interval. Without timing it uses frame number. Missing or insufficient peaks leave gaps. **Export Table…** writes one CSV row per frame and phase plus a JSON record of sources, settings, tracks and residuals. See [Physics and Methods §7.12](Physics_Manual.md#712-unit-cell-refinement-from-indexed-peaks).
+
+![Lattice parameter and volume across a synthetic detector series](manual_images/en/07e_cell_series.png)
 
 ## 6. Fitting
 
@@ -4321,6 +4332,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 
 | Limitation | What to do |
 |---|---|
+| A shared q-scale error shifts the refined cell and can mimic strain. The cell errors condition on the calibration, CIF and chosen indices. | Check the calibrant and sample distance before interpreting a strain. Inspect the peak residuals and compare the measured ring sequence with the proposed indices (§5.9). |
 | A frame can lack a clear shadow edge, specular spot or identifiable Yoneda band. On P08 the shadow alone is consistent with both the published and the spot-derived angles. | Check the direct-beam calibration and the individual angle estimates. Use a known reference and **Keep entered αi** when a feature has another plausible assignment. |
 | **A film transmission model cannot reproduce a shadow that differs on the two sides of a ring.** The public P08 MAPbI₃ example shows this near the horizon (§5.9). | Measure incidence and roll before comparing signed sectors and checking the q window on the frame. Read the reported χ and size of the largest residual for a poorly fitted ring. Report a quantitative oriented fraction only when the model describes the measured profiles. |
 | **The rows of a Series map carry no σ.** The timeline's χ² takes the noise of each x column from the series itself, and a Series map recorded in the results database holds x and I only (section 5.6). | Read the timeline as a distance in units of the frame-to-frame noise, not as a goodness of fit; for σ of every point, use Batch Export ▸ Each frame: its curves, with error bars. |

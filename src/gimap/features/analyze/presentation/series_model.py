@@ -65,6 +65,11 @@ class SeriesModelMixin:
         """The curve of one row of the map as a table."""
         return export_series_curve(self._export.writer, series, int(row), Path(path))
 
+    def write_cell_series(self, path: Path, record: dict) -> Path:
+        from ..application.cell_series import write_cell_series
+
+        return write_cell_series(self._export.writer, path, record)
+
     def export_series_timeline(self, series: SeriesMap, timeline, path: Path, *, stages=None) -> Path:
         """The timeline of the map (χ² to the frame before and to the reference frame) as a table."""
         return export_series_timeline(self._export.writer, series, timeline, Path(path), stages=stages)

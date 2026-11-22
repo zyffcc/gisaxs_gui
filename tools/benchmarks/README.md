@@ -376,6 +376,23 @@ standard errors to within 1.38 × 10⁻⁵ relative across all 450 frames.
 
 `posterior_dwba_auto2` (commit 9c90e6a): with DWBA truth the automatic analysis's call chooses the true composition in 31 % of the cuts; by the largest q_zR of a cut: 80 % (median |ΔR/R| 1 %) at 1.2–1.7, 29 % (10 %) at 1.7–2.3 and 23 % (9 %) above 2.3; cuts of spheres alone 9 %, of cylinders alone 78 %. The q_zR flags of Predict mark the solutions above these limits.
 
+## GIWAXS unit-cell refinement
+
+Run `python tools/benchmarks/cell_refinement.py --part all --trials 100 --json cell_results.json`. The three parts can also be run separately with `--part synthetic`, `--part public` or `--part series`. The JSON includes the synthetic truth, measured coverage, public peak assignments and per-peak residuals, and the time-dependent cells and uncertainties. The public runs use the supplied PONIs, the Xeuss mask and a temporary settings directory. The numerical method and its assumptions are in [Physics and Methods §7.12](../../docs/Physics_Manual.md#712-unit-cell-refinement-from-indexed-peaks).
+
+**Noisy peak lists.** Each trial draws independent Gaussian peak-centre errors between 0.0002 and 0.0008 Å⁻¹ about a known strained cell with an additive shift of 0.0015 Å⁻¹. The 100-draw runs cover all seven crystal systems, including trigonal CIFs in hexagonal and rhombohedral settings. Across the 38 reported parameters, volumes and offsets, the empirical 1σ coverage averaged 72.8%, with individual values from 62% to 81%. Covariance scaling above unit reduced χ² makes the intervals slightly conservative. The JSON lists the truth, mean recovered value, coverage and mean reported error for each parameter.
+
+**Public frames.** Numbers below use kinematic q. For P08, automatic analysis applied the measured incidence of 0.50124° and roll of −1.30459°. For Xeuss, the incidence was 0.235° and roll was zero.
+
+| Sample and indexing | Cell estimate ± 1σ | Relative to CIF | q offset (Å⁻¹) | χ²red |
+|---|---|---|---|---:|
+| P08 MAPbI₃, 6 of 10 assigned rings | a = 8.9335 ± 0.0022 Å, c = 12.6464 ± 0.0038 Å, V = 1009.28 ± 0.64 Å³ | εa = +0.671 ± 0.025%, εc = −0.194 ± 0.030% | +0.00295 ± 0.00045 | 1.40 |
+| Xeuss PbTe, conditional 111/200/220 indexing | a = 6.832 ± 0.021 Å | +5.72 ± 0.33% against 6.462 Å | −0.0203 ± 0.0080 | 0.60 |
+
+Four P08 windows have competing MAPbI₃ families without a dominant CIF intensity. The single PbI₂ 001 ring cannot determine its cell. With the Xeuss geometry, the three measured centres (1.56733, 1.81998 and 2.58111 Å⁻¹) fall outside the bulk-CIF assignment tolerances. The benchmark records that refusal. It then tests the rock-salt sequence documented with the data, using the narrowest fractional-width order to initialize a trial cell and retaining bulk PbTe as the strain reference. The apparent expansion depends on that indexing and on the q calibration. [Public frames and geometry](../../tests/data/external/README.md)
+
+**In situ series.** Eight synthetic Poisson detector frames contain six tetragonal rings with known trajectories a(t) = 10 + 0.009t and c(t) = 16 − 0.004t Å over 0–14 s. Native-frame tracking and refinement give RMS errors of 0.00358 Å for a, 0.00441 Å for c and 1.60 Å³ for V. A GUI regression also indexes the stack, inserts a missing frame and checks the gap in the exported table.
+
 ## Crystal orientation
 
 Run `python tools/benchmarks/crystal_orientation.py --part all --trials 32 --json results.json`. The JSON contains each simulated fit and its 1σ errors, the public-frame report, the film-absorption refit, an independent-width refit on the original angular cut, and signed-sector measurements around the strongest peak.
@@ -453,7 +470,7 @@ On the 0.9973 Å⁻¹ ring, the central ray at |χ| = 84.5° has αf ≈ 0.10° 
 | 0.9973 | 84.5 | 28.17 ± 3.27 | 84.37 | 24.13 | −17.19 | +1.24 |
 | 0.9973 | 85.5 | −0.36 ± 3.56 | 3.56 | 0.45 | −1.10 | −0.23 |
 
-Only the 1.7248 Å⁻¹ ring now exceeds the determination limit of χ²red = 5. Its largest residual is at 85.5°, where the folded background-subtracted signal is −10.05 ± 2.05 and the wave model gives 8.70 (−9.16σ). The best pair for MAPbI₃ remains (221) + (110), with ΔBIC = 9.61 over (211) + (110). Their conditional FWHM values are 78.68 ± 5.75° and 11.08 ± 0.33°, with fractions of the phase of 0.952 ± 0.465 and 0.0483 ± 0.0024. The isotropic fraction is at zero to the quoted precision, with a local error of 0.466. The failed ring prevents a quantitative determination of the crystal distribution.
+Only the 1.7248 Å⁻¹ ring exceeds the determination limit of χ²red = 5. Its largest residual is at 85.5°, where the folded background-subtracted signal is −10.05 ± 2.05 and the wave model gives 8.70 (−9.16σ). At fixed thick-film depth, the MAPbI₃ fit contains a narrow (110) component, FWHM 11.08 ± 0.33°, with a phase fraction of 0.0483 ± 0.0022. A broad modulation at 78.68 ± 5.52° improves the profile BIC by 524.4 over a single (110) population plus isotropic material. Its fraction of 0.952 ± 0.428 trades strongly with the isotropic fraction. The report groups it as near-random and gives a pooled fraction of 0.9517 ± 0.0022. The failed ring prevents a quantitative determination of the overall crystal orientation.
 
 The single PbI₂ ring passes the determination checks for two (001) populations, with FWHM values of 51.24 ± 5.27° and 13.47 ± 1.75° and phase fractions of 0.570 ± 0.336 and 0.049 ± 0.029. The isotropic fraction is 0.381 ± 0.362. This basal reflection supplies no independent check on the broad fraction.
 

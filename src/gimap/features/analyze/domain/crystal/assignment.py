@@ -18,6 +18,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
+from .reflections import ReflectionFamily
+
 ERROR_FACTOR = 3.0
 """Statistical errors of q_0 within which a reflection is accepted."""
 WIDTH_FRACTION = 0.5
@@ -32,6 +34,11 @@ class Candidate:
     intensity: float = 1.0
     multiplicity: int = 1
     families: tuple[str, ...] = ()
+    components: tuple[ReflectionFamily, ...] = ()
+
+    def family_records(self):
+        return [{"hkl": list(part.representative), "intensity": part.intensity,
+                 "members": [list(hkl) for hkl in part.members]} for part in self.components]
 
 
 @dataclass(frozen=True)
@@ -67,12 +74,15 @@ class Assignment:
             "ambiguous": bool(self.alternatives or (nearest and len(nearest.families) > 1)),
             "phase": None if nearest is None else nearest.phase,
             "hkl": None if nearest is None else nearest.label,
+            "families": nearest.family_records() if nearest is not None else [],
+            "intensity": nearest.intensity if nearest is not None else None,
             "q_hkl": None if nearest is None else nearest.q,
             "d_hkl_A": None if nearest is None else 2.0 * math.pi / nearest.q,
             "delta_q": self.delta_q, "delta_sigma": self.delta_sigma, "relative_d": self.relative_d,
             "alternatives": [
                 {"phase": item.phase, "hkl": item.label, "q_hkl": item.q, "delta_q": self.q - item.q,
-                 "relative_d": (item.q - self.q) / self.q if self.q > 0 else None}
+                 "relative_d": (item.q - self.q) / self.q if self.q > 0 else None,
+                 "families": item.family_records(), "intensity": item.intensity}
                 for item in self.alternatives
             ],
         }

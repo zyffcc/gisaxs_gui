@@ -20,6 +20,7 @@ from src.gimap.app.presentation.theme import theme_color, theme_manager
 from ..application.export_record import export_stem
 from ..application.indexing import POWDER, PhaseSpec, table_rows
 from ..application.pole_figure import pole_figure
+from .cell_refinement_panel import CellRefinementMixin
 from .crystal_orientation_panel import CrystalOrientationMixin
 from .indexing_export import write_crystal_export, write_pole_export
 from .indexing_texts import (
@@ -54,7 +55,7 @@ class _VisibilityCheck(QCheckBox):
         return self.rect().contains(position)
 
 
-class IndexingPanel(QDialog, IndexingView, CrystalOrientationMixin):
+class IndexingPanel(QDialog, IndexingView, CrystalOrientationMixin, CellRefinementMixin):
     def __init__(self, page: QWidget):
         super().__init__(page)
         self.setWindowFlag(Qt.Tool, True)
@@ -85,6 +86,7 @@ class IndexingPanel(QDialog, IndexingView, CrystalOrientationMixin):
         self._direction_chosen()
         self._displayed_pole = None
         self._setup_crystal_orientation()
+        self._setup_cell()
         language_changed().connect(self._refresh_language)
         theme_manager().changed.connect(self._theme_changed)  # the warning colour of a phase
         self._fill_settings()
@@ -275,6 +277,7 @@ class IndexingPanel(QDialog, IndexingView, CrystalOrientationMixin):
         self._fill_reflections()
         self.ring_label.setText(ring_text(self._page.view_model.state.analysis))
         self._refresh_crystal_options()
+        self._refresh_cell()
         self.reflected_check.setEnabled(self.refraction_check.isChecked())
         self.critical_spin.setEnabled(self.refraction_check.isChecked())
 

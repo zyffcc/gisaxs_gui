@@ -159,6 +159,12 @@ class GuiWorkbench:
         self._call(lambda: None)  # a pinned run still belongs to the frame shown
         return result
 
+    def refine_cells(self, assignment, orientations, max_peaks, check_cancel):
+        fit = self._call(self._automation.prepare_cell_refinement, assignment, orientations, max_peaks, check_cancel)
+        result = fit()
+        self._call(lambda: None)
+        return result
+
     def set_beam_center(self, x_px: float, y_px: float) -> dict:
         return self._apply(lambda done: self._automation.set_beam_center(x_px, y_px, done))
 

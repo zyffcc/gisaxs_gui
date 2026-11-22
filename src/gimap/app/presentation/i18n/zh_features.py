@@ -8,6 +8,9 @@ from .zh_assistant_service import ASSISTANT_SERVICE_ZH
 from .zh_calibration_residuals import CALIBRATION_RESIDUALS_ZH
 from .zh_calibration_rings import CALIBRATION_RINGS_ZH
 from .zh_calibration_uncertainty import CALIBRATION_UNCERTAINTY_ZH
+from .zh_cell_refinement import CELL_REFINEMENT_ZH
+from .zh_cell_series import CELL_SERIES_ZH
+from .zh_cell_orientation import CELL_ORIENTATION_ZH
 from .zh_coverage_report import COVERAGE_REPORT_ZH
 from .zh_crystal_orientation import CRYSTAL_ORIENTATION_ZH
 from .zh_crystal_film import STRINGS as CRYSTAL_FILM_ZH
@@ -57,6 +60,7 @@ from .zh_usability_giwaxs import USABILITY_GIWAXS_ZH
 from .zh_vertical_consistency import VERTICAL_CONSISTENCY_ZH
 
 FEATURES_ZH = {
+    **CELL_REFINEMENT_ZH, **CELL_ORIENTATION_ZH, **CELL_SERIES_ZH,
     **SAMPLE_ROLL_ZH,
     **FRAME_INCIDENCE_ZH,
     **ROUND2_ANALYZE_ZH,

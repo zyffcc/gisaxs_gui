@@ -89,6 +89,8 @@ class IndexingView:
         self.tabs.addTab(self._phases_tab(dialog), "Phases")
         self.tabs.addTab(self._reflections_tab(dialog), "Reflections")
         self.tabs.addTab(self._pole_tab(dialog), "Pole Figure")
+        self.cell_tab = self._cell_tab(dialog)
+        self.tabs.addTab(self.cell_tab, "Unit Cell")
         layout.addWidget(self.tabs, 1)
         self.status_label = QLabel(dialog)
         self.status_label.setWordWrap(True)
@@ -97,6 +99,43 @@ class IndexingView:
         self.buttons = QDialogButtonBox(QDialogButtonBox.Close, dialog)
         self.buttons.button(QDialogButtonBox.Close).setAutoDefault(False)
         layout.addWidget(self.buttons)
+
+    def _cell_tab(self, dialog) -> QWidget:
+        tab = QWidget(dialog)
+        layout = QVBoxLayout(tab)
+        choose = QHBoxLayout()
+        choose.addWidget(QLabel("Phase", tab))
+        self.cell_phase_combo = QComboBox(tab)
+        self.cell_phase_combo.setProperty(DATA_VALUES, True)
+        choose.addWidget(self.cell_phase_combo, 1)
+        self.cell_series_button = QPushButton("Refine Series…", tab)
+        self.cell_export_button = QPushButton("Export Cell…", tab)
+        self.cell_cancel_button = QPushButton("Cancel", tab)
+        for button in (self.cell_series_button, self.cell_export_button, self.cell_cancel_button):
+            choose.addWidget(button)
+        layout.addLayout(choose)
+        self.cell_summary = QLabel(tab)
+        self.cell_summary.setWordWrap(True)
+        self.cell_summary.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.cell_summary)
+        for name, columns, stretch in (
+            ("cell_values", ("Parameter", "Refined ± 1σ", "Reference", "Change ± 1σ (%)"), 2),
+            ("cell_peaks", ("h k l", "Measured q ± σ (Å⁻¹)", "Residual (Å⁻¹)", "Used in fit"), 3),
+        ):
+            table = QTableWidget(0, len(columns), tab)
+            table.setHorizontalHeaderLabels(columns)
+            table.verticalHeader().hide()
+            table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+            table.horizontalHeader().setStretchLastSection(True)
+            enable_table_copy(table)
+            setattr(self, name, table)
+            layout.addWidget(table, stretch)
+        self.cell_fibre_label = QLabel(tab)
+        self.cell_fibre_label.setWordWrap(True)
+        self.cell_fibre_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.cell_fibre_label)
+        return tab
 
     # -- phases -------------------------------------------------------------------------
 

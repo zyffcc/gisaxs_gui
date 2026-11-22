@@ -154,7 +154,7 @@ def coverage(name, trials):
                                                   (fractions[i], "fraction", "fraction_err", "fraction_within_1sigma")):
                     sigma = pop[err]
                     counts[counter][i] += sigma is not None and abs(pop[key] - target) <= sigma
-        fits.append({key: fit.get(key) for key in ("axes", "populations", "fraction_iso", "reduced_chi2",
+        fits.append({key: fit.get(key) for key in ("axes", "populations", "near_random", "fraction_iso", "reduced_chi2",
                                                    "fraction_iso_err", "delta_bic", "determined")})
     return {"phase": name, "truth": {"axis": axis, "fwhm_deg": widths, "fractions": fractions,
                                      "fraction_iso": phi, "exit_transmission": mixed,
@@ -246,7 +246,8 @@ def public_diagnostics(report, page, cifs):
                               "sampled_q_span_in_peak_residual_bin": covered,
                               "chi2_fraction_above_80_deg": float(np.sum(z[chi[use] > 80]**2)/chi2) if chi2 else None})
         stage = fit_crystal_orientation(phase_from_cif(cif).phase(), rings)
-        old_cut.append({"phase": fit["phase"], "populations": stage["populations"], "points": stage.get("points", 0),
+        old_cut.append({"phase": fit["phase"], "populations": stage["populations"], "near_random": stage.get("near_random", []),
+                        "points": stage.get("points", 0),
                         "reduced_chi2": stage.get("reduced_chi2"), "fraction_iso": stage.get("fraction_iso"),
                         "rings": [{k: r[k] for k in ("q", "points", "reduced_chi2")} for r in stage["rings"]]})
     report["benchmark_independent_widths_original_cut"] = old_cut
@@ -348,6 +349,8 @@ def main():
             print("Film absorption", fit.get("film_absorption"), "joint reduced chi2", fit.get("reduced_chi2"))
             print(fit["phase"], fit.get("populations"), "phi", fit.get("fraction_iso"),
                   "delta BIC", fit.get("delta_bic"), "Hermans", fit.get("herman_crystal"))
+            for population in fit.get("near_random", []):
+                print("Near-random (included in phi)", population)
             for ring in fit.get("rings", []):
                 print(ring["q"], ring["reduced_chi2"], ring["herman_measured"])
         for phase in results.get("film_comparison", []):

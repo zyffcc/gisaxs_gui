@@ -13,7 +13,10 @@ from src.gimap.shared.orientation_notes import coverage_warning, measured_f_text
 from src.gimap.shared.radial_peaks import orientation_peak_rows
 
 from .pipeline_assignment import assignment_lines, assignment_text, axis_text
+from .pipeline_cell import cell_lines
+from .pipeline_crystal import crystal_lines
 from .pipeline_progress import PipelineStopped
+from .report_language import heading
 
 POLE_MODEL = "gaussian"
 POLE_RULE = (
@@ -29,6 +32,18 @@ def orientation_checks_only(report: dict) -> bool:
     points = report.get("needs_attention") or ()
     return bool(points and all(
         item.get("item") in {"orientation factor", "pole figure"} and not item.get("option") for item in points))
+
+
+def phase_sections(report, language):
+    lines = []
+    assignment = assignment_lines(report)
+    if assignment:
+        lines.extend([heading("Phase assignment", language), "", *assignment, ""])
+    if report.get("cell_refinement"):
+        lines.extend([heading("Refined unit cells", language), "", *cell_lines(report["cell_refinement"])])
+    if report.get("crystal_orientation"):
+        lines.extend([heading("Crystal orientation", language), "", *crystal_lines(report["crystal_orientation"])])
+    return lines
 
 
 def pole_direction(ring) -> Optional[float]:
@@ -55,6 +70,7 @@ class PhaseStepsMixin:
 
     _assignment: Optional[dict] = None
     _crystal_orientation: Optional[list] = None
+    _refined_cells: Optional[list] = None
     _reported_pole: bool = False
 
     def _workbench_with(self, name: str):
@@ -66,6 +82,7 @@ class PhaseStepsMixin:
         self._reported_pole = False
         self._assignment = None
         self._crystal_orientation = None
+        self._refined_cells = None
         phases = tuple(getattr(self.options, "phases", ()) or ())
         workbench = self._workbench_with("set_phases")
         if not phases or workbench is None:
@@ -135,10 +152,29 @@ class PhaseStepsMixin:
                 self._attention("crystal orientation", f"{phase['phase']}: " + ", ".join(phase["reasons"]),
                                 None, "Inspect the assigned rings in Phases ▸ Pole Figure.")
 
+    def _refine_cells(self) -> None:
+        workbench = self._workbench_with("refine_cells")
+        if workbench is None or not self._assignment:
+            return
+
+        def check_cancel():
+            if self.stop is not None and self.stop.is_set():
+                raise PipelineStopped("cell refinement")
+
+        check_cancel()
+        self.progress("Refining unit cells")
+        try:
+            self._refined_cells = workbench.refine_cells(
+                self._assignment, self._crystal_orientation or [], self.options.max_peaks, check_cancel)
+        except ValueError as error:
+            self._attention("cell refinement", str(error), None, "Inspect the phases and ring assignments.")
+
     def _phase_rows(self, report: dict) -> dict:
         """The assignment in the peak rows and the pole figures in the ring rows of ``report``."""
         if self._assignment:
             report["phase_assignment"] = dict(self._assignment)
+            if self._refined_cells is not None:
+                report["cell_refinement"] = self._refined_cells
             if self._crystal_orientation is not None:
                 report["crystal_orientation"] = self._crystal_orientation
             items = self._assignment.get("assignments") or []
