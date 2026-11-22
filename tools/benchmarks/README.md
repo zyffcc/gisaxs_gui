@@ -38,6 +38,7 @@ timing run alone used one worker. Each summary written at 7179b85 names the comm
 | extended set, 600 curves | `posterior_extended_summary.json` | `per_cut/posterior_extended.json.gz` | `--set extended --n 600 --seed0 20261201 --workers 10` |
 | third set, 300 curves, drawn with a new seed after the procedure was frozen, with the automatic analysis's own call (stage `auto`, first level as at commit 6bb1a18) | `posterior_newseed_summary.json` | `per_cut/posterior_newseed.json.gz` | `--n 300 --seed0 20261122 --auto --workers 8` |
 | third set, the automatic analysis's call at the second level (since f73d9c8) | `posterior_newseed_auto2_summary.json` | `per_cut/posterior_newseed_auto2.json.gz` | `--n 300 --seed0 20261122 --stages auto --auto-level 2 --workers 8` |
+| the automatic analysis's call (second level) on the 200 cuts simulated with the four-term DWBA on Si | `posterior_dwba_auto2_summary.json` | `per_cut/posterior_dwba_auto2.json.gz` | `--n 200 --scattering dwba --substrate si --cut born --stages auto --auto-level 2 --workers 8` |
 | DWBA on Si, both angles given | `posterior_dwba_tp_summary.json` | `per_cut/posterior_dwba_tp.json.gz` | `--n 200 --workers 10 --scattering dwba --substrate si --cut two_path` |
 | DWBA on Si, q_z given | `posterior_dwba_born_summary.json` | `per_cut/posterior_dwba_born.json.gz` | `--n 200 --workers 10 --scattering dwba --substrate si --cut born` |
 | DWBA on Si, neither given | `posterior_dwba_eia_summary.json` | `per_cut/posterior_dwba_eia.json.gz` | `--n 200 --workers 10 --scattering dwba --substrate si --cut eia` |
@@ -297,3 +298,5 @@ and 56.8% for rot1. Taking the larger of the jackknife and covariance standard e
 points gave 56.8% and 57.6%, respectively. The engine retains the ring jackknife for these fits.
 
 `posterior_newseed_auto2` repeats the stage `auto` on the same 300 cuts after the automatic analysis was changed to fit at the second level when it knows both angles (commit f73d9c8): the true composition is the most probable in 75 % of the cuts (27 % at the first level) and the median error of R is 0.8 % (13 %).
+
+`posterior_dwba_auto2` (commit 9c90e6a): with DWBA truth the automatic analysis's call chooses the true composition in 31 % of the cuts; by the largest q_zR of a cut: 80 % (median |ΔR/R| 1 %) at 1.2–1.7, 29 % (10 %) at 1.7–2.3 and 23 % (9 %) above 2.3; cuts of spheres alone 9 %, of cylinders alone 78 %. The q_zR flags of Predict mark the solutions above these limits.
