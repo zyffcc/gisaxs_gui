@@ -311,6 +311,14 @@ def _english(node) -> bool:
     return isinstance(node, ast.Constant) and isinstance(node.value, str) and any(c.isalpha() for c in node.value)
 
 
+def _has_formatted_words(node) -> bool:
+    if not isinstance(node, ast.JoinedStr):
+        return False
+    # In both languages the water reference reads dΣ/dΩ = <value> cm⁻¹.
+    parts = [part.value if isinstance(part, ast.Constant) else None for part in node.values]
+    return parts != ["dΣ/dΩ = ", None, " cm⁻¹"]
+
+
 def test_no_text_on_screen_is_formatted_before_its_translation() -> None:
     problems = []
     for path in sorted(PRESENTATION.rglob("*.py")):
@@ -328,7 +336,7 @@ def test_no_text_on_screen_is_formatted_before_its_translation() -> None:
             text = node.args[index]
             branches = [text.body, text.orelse] if isinstance(text, ast.IfExp) else [text]
             for branch in branches:
-                if isinstance(branch, ast.JoinedStr) or isinstance(branch, ast.BinOp) and any(
+                if _has_formatted_words(branch) or isinstance(branch, ast.BinOp) and any(
                         isinstance(side, ast.JoinedStr) or _english(side) for side in (branch.left, branch.right)):
                     problems.append(f"{path.name}:{node.lineno} {name}: formatted before the translation")
                 elif _english(branch) and name not in TRANSLATED_BY_CALLEE:

@@ -827,13 +827,11 @@ def test_the_public_agbh_calibration_reads_the_same_in_calibration_analyze_and_x
         _settle(app, 0.1)
         shown = (xrr.center_x_spin.text(), xrr.center_y_spin.text())
         assert shown == (f"{saved[0]:.2f}", f"{saved[1]:.2f}")
-        # Geometry Calibration shows three decimals of the same numbers.
+        # Compare each display to the full-precision centre. Rounding a three-decimal
+        # label a second time can give a different hundredth than the XRR field.
         assert (calibration.result_center_x.text(), calibration.result_center_y.text()) == (
             f"{saved[0]:.3f} px", f"{saved[1]:.3f} px"
         )
-        assert tuple(f"{float(text.split()[0]):.2f}" for text in (
-            calibration.result_center_x.text(), calibration.result_center_y.text()
-        )) == shown
         assert xrr.center_x_spin.toolTip() == calibration.manual_x.toolTip() == PIXEL_NOTE
         geometry = xrr._geometry()
         assert (geometry.beam_center_x_px, geometry.beam_center_y_px) == (round(stored[0], 2), round(stored[1], 2))

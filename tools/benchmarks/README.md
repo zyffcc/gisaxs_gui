@@ -19,9 +19,25 @@ On the Windows release-check machine, `python -m pytest --collect-only -q` colle
 Five tests skipped for missing optional Python packages. One reads an NXcanSAS export with SasView
 (`sasdata`), and four compare detector orientations with `pyFAI`. A separate test skipped because
 the `h5clear` executable was missing. Run `python -m pytest -q tests/test_predict_regression.py` for the
-five-cut exact Predict regression (72 s on the Windows test machine). In `per_cut/posterior_recovery.json.gz`
+five-cut Predict regression (72 s on the Windows test machine). In `per_cut/posterior_recovery.json.gz`
 it checks known-composition fits 184 and 167 and composition choice 176. It also checks automatic level-2
 fit 89 in `per_cut/posterior_newseed_auto2.json.gz` and known-composition fit 208 in `per_cut/posterior_newseed.json.gz`.
+
+The archive was produced on Windows with Python 3.10.18 and one BLAS thread per fit. On that platform
+and Python version the test requires exact agreement for every archived numerical field except run time.
+Elsewhere it checks the compositions, allows an absolute difference of 0.01 in each solution probability,
+and checks every fitted population value and posterior median at a relative tolerance of 0.001, every 68% and
+95% interval endpoint at 0.005 and every least-squares standard error at 0.1. This includes the populations in
+the reported alternative solutions.
+The diagnostic comparison across platforms covers `bic`, `low_ess`, `model_error`, `qzR_*` and `cyl_sphere`,
+including the population identified by each flag. The first archive predates the sphere warning at
+q_z R > 2, which now applies to fits 184 and 167. Refinement near a bound can change which bound,
+correlation and unconstrained-parameter flags appear.
+
+The tolerances follow these differences. With the release wheels on Ubuntu and Python 3.11,
+the upper 95% endpoint for the second population's radius spread in cut 167 was 0.30541181.
+The archived endpoint is 0.30579296, a relative difference of 0.001246. In cut 184, the
+standard error of the spacing spread differed by 5.69% between the two runs.
 
 ## The runs the paper quotes
 

@@ -188,7 +188,7 @@ def test_compare_layout_is_steps_and_plots_with_every_command_explained():
     page = ComparePage(create_compare_service())
     assert page.step_rail.keys() == ["series", "compare", "results"] and page.step_rail.current() == "series"
     actions = [action.text() for action in page.add_button.menu().actions()]
-    assert actions == ["The Series Map of Analyze", "Folder of Curves…", "Curve Files…"]
+    assert actions == ["The Series Map of Analyze", "Folder of Curves…", "Curve Files…", "Results Database…"]
     assert all(action.toolTip() for action in page.add_button.menu().actions())
     assert page.save_button.isHidden() and page.remove_button.isHidden()  # nothing to save or remove yet
     assert page.add_button.toolTip().startswith("Add a series: Analyze's Series map")  # how to add: the tooltip

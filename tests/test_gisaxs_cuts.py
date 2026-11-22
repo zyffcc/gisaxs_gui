@@ -420,7 +420,8 @@ def test_cuts_are_drawn_on_the_detector_and_the_q_map_and_drawn_by_clicks(page) 
     page.shape_layer._finish([(100.0, 60.0), (220.0, 20.0)])
     _settle(page)
     line = page.view_model.gisaxs_cuts[1]
-    assert line.start == pytest.approx(q_of_positions(GEOMETRY, 100.0, 60.0)) and line.kind == "line"
+    qy, qz = q_of_positions(GEOMETRY, 100.0, 60.0)
+    assert line.kind == "line" and line.start == pytest.approx((float(qy), float(qz)))
     colors = {item.opts["pen"].color().name() for item in page.shape_layer._outlines}
     assert {row.color for row in page._cut_rows[2:]} <= colors
 

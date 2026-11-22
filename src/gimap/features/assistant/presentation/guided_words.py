@@ -91,10 +91,6 @@ SENTENCES = (
     "clear: {standard} — {lines} lines within {error} of their q",
     "ambiguous: {standard} ({error}) and {second} ({second_error}) place their lines about equally well; check a log "
     "or ask the user",
-    "none fits well (best {standard}: {rings} rings, rms {rms} px): the image may show another standard, the energy "
-    "or pixel size may be wrong, or the rings are too weak",
-    "clear: {standard} ({rings} rings, rms {rms} px) beats {second} ({second_rings} rings, rms {second_rms} px)",
-    "clear: {standard} ({rings} rings, rms {rms} px)",
     "none fits well (best {standard}: {rings} rings, ring-radius RMS {rms} px): the image may show another standard, "
     "the energy or pixel size may be wrong, or the rings are too weak",
     "clear: {standard} ({rings} rings, ring-radius RMS {rms} px) beats {second} ({second_rings} rings, ring-radius RMS {second_rms} px)",

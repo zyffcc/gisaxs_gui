@@ -119,9 +119,9 @@ python -m pytest tests -q
 python -m pytest tests/test_architecture_dependencies.py tests/test_ui_source_of_truth.py tests/test_ui_design_system.py
 ```
 
-`tests/conftest.py` already sets `QT_QPA_PLATFORM=offscreen` (unless set), gives every
-run its own `GIMAP_HOME`, loads Arial, Segoe UI and Microsoft YaHei (offscreen Qt on
-Windows has no font database), and applies the light theme at 9 pt.
+`tests/conftest.py` sets `QT_QPA_PLATFORM=offscreen` unless already set, gives every run its
+own `GIMAP_HOME`, and applies the light theme at 9 pt. On Windows it registers any missing
+Arial, Segoe UI and Microsoft YaHei fonts from the system font folder and selects Segoe UI.
 
 ### macOS
 
@@ -132,8 +132,6 @@ Windows has no font database), and applies the light theme at 9 pt.
   before it starts; `tests/test_task_runner_stack.py` and `tests/test_tool_threads_stack.py` check this.
 - Do not set `OPENBLAS_NUM_THREADS` or `OMP_NUM_THREADS` to make a run pass: single-threaded BLAS hides
   that crash. Under heavy parallel load the timing tests can fail; run fewer test processes at once.
-- `tests/test_levels.py::test_a_compact_bar_is_slim_and_its_handles_still_set_the_limits` fails with the
-  macOS system font (the compact bar is wider than its 60 px bound); it is a font metric, not a regression.
 
 ### Screenshots
 
