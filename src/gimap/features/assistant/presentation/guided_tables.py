@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import QHeaderView, QSizePolicy, QTableWidget, QTableWidget
 from src.gimap.app.presentation.components.table_copy import enable_table_copy
 from src.gimap.app.presentation.i18n import current_language, tr, trf
 from src.gimap.app.presentation.theme import theme_manager
+from src.gimap.shared.orientation_notes import orientation_notes
 
 from ..application import herman_texts
 from ..application.pipeline_phases import pole_estimate
@@ -232,14 +233,15 @@ def ring_summary(ring: dict) -> tuple[str, str]:
     pole = ring.get("pole_figure") or {}
     reasons = ", ".join(tr(reason) for reason in pole.get("quality_reasons") or ())
     headline = _measured_summary(ring, reasons)
-    detail = "\n".join(words(text) for text in (ring.get("reason"), ring.get("texture"), *(ring.get("notes") or ())) if text)
+    details = [words(text) for text in (ring.get("reason"), ring.get("texture"), *(ring.get("notes") or ())) if text]
+    details.extend(orientation_notes(ring.get("orientation_settings") or {}, pole.get("systematics") or {}, trf))
     if pole:
         if reasons and ring.get("herman") is None:
             headline += "\n" + trf("Pole fit not determined ({reasons}).", reasons=reasons)
         if pole.get("ok"):
             headline += "\n" + trf("Pole f = {f}, oriented fraction = {fraction}. 1 − φ is conditional on the background b.",
                                     f=pole_estimate(pole, "herman"), fraction=pole_estimate(pole, "oriented_fraction"))
-    return headline, detail
+    return headline, "\n".join(details)
 
 
 def _measured_summary(ring: dict, reasons: str) -> str:

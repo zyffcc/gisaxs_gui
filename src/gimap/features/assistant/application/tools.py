@@ -481,12 +481,13 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
         curve, profile = self._profile("azimuthal")
         settings = {key: curve.region[key] for key in (
             "min_exit_deg", "exit_angle_source", "polarization", "background", "background_sigma",
-            "background_source", "error_model",
+            "background_source", "error_model", "horizon_chi_deg", "horizon_fraction", "horizon_excluded_deg",
         ) if key in curve.region}
         background = settings.get("background")
         if background is None:
             background = search.background_at(center) or 0.0
-        result = ring_orientation(profile, q_window=(low, high), background=background)
+        result = ring_orientation(profile, q_window=(low, high), background=background,
+                                  horizon_chi_deg=settings.get("horizon_chi_deg"))
         pole = fit_ring_pole(self.workbench, result, background=None if "background" in settings else background)
         result = replace(result, orientation_settings=settings, pole_figure=pole)
         self.results.rings.append(result)

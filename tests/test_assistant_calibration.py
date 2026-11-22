@@ -454,6 +454,7 @@ def test_comparing_standards_on_a_real_agbh_image_picks_agbh(tmp_path: Path) -> 
     assert outcome["verdict"].startswith("clear: agbh"), outcome
     best = outcome["comparison"][0]
     assert best["standard"] == "agbh" and best["distance_mm"] == pytest.approx(100.0, rel=0.01)
+    assert best["initial_point_rms_px"] is not None and best["point_rms_px"] is not None
 
 
 def test_a_declined_geometry_is_not_saved(tmp_path: Path) -> None:

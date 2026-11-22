@@ -9,6 +9,7 @@ import numpy as np
 
 from src.gimap.shared.geometry.conventions import index_center_from_canonical
 from src.gimap.shared.geometry.q_mapping import exit_directions, lab_rays, refracted_qz
+from src.gimap.shared.ring_profile import HORIZON_FRACTION, fold_ring
 
 from .binning import BinnedMean
 from .curve_errors import pixel_errors
@@ -84,11 +85,17 @@ def ring_profiles(maps, image, valid, counts, geometry, window, step, correction
         selected = ring & (sin_exit >= math.sin(math.radians(min(90.0, limit)))) & (limit <= 90.0)
         acc = BinnedMean.linear(-90.0, 90.0, 180)
         acc.add(chi[selected], signal[selected], errors=errors.subset(selected))
+        azimuth, means, sigma, pixels = acc.result(counts=errors)
+        min_qz = float(refracted_qz(math.sin(math.radians(min(90.0, limit))), math.sin(geometry.incidence_rad),
+                                    geometry.critical_rad, geometry.wavevector_inv_angstrom))
+        # At the outer edge of the q window, cos χ = qz / q gives the largest accessible |χ|.
+        horizon_chi = math.degrees(math.acos(np.clip(min_qz / high, 0., 1.))) if high > 0 else None
+        *_, horizon = fold_ring(azimuth, means, sigma, background, horizon_chi_deg=horizon_chi)
         region = {"q_window": (low, high), "min_exit_deg": limit, "exit_angle_source": source,
-                  "min_qz": float(refracted_qz(math.sin(math.radians(min(90.0, limit))), math.sin(geometry.incidence_rad),
-                                               geometry.critical_rad, geometry.wavevector_inv_angstrom)),
+                  "min_qz": min_qz, "horizon_chi_deg": horizon_chi, "horizon_excluded_deg": horizon,
+                  "horizon_fraction": HORIZON_FRACTION,
                   "polarization": polar, "lorentz": False, "mirror_fill": False, "background": background,
                   "background_source": method, "background_sigma": error, "error_model": error_model}
         profiles[multiplier] = Curve("azimuthal", f"I(χ), q = {low:.3f}–{high:.3f} Å⁻¹",
-                                     *acc.result(counts=errors), "χ (°)", region=region)
+                                     azimuth, means, sigma, pixels, "χ (°)", region=region)
     return profiles, np.ravel_multi_index((row[ring & nominal], column[ring & nominal]), image.shape)

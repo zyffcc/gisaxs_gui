@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
@@ -22,7 +21,7 @@ from .peak_matcher import generate_distance_candidates, rematch_candidate
 from .preprocessing import preprocess_detector_image
 from .radial_profile import calculate_azimuthal_profile
 from .standards import STANDARDS
-from .tilt_fit import refine_tilt
+from .tilt_fit import refine_ring_geometry
 
 
 class CalibrationError(RuntimeError):
@@ -261,15 +260,12 @@ class CalibrationEngine:
         candidates = candidates[:5]
         if not candidates:
             raise CalibrationError("Calibration candidates were rejected as physically implausible.")
+        self._stage(92, "Optimizing geometry")
         for candidate in candidates:
-            candidate.rot3_deg = rot3_deg  # Fixed by the user, including when tilt refinement is skipped.
-        if tilt != "off":
-            self._stage(92, "Refining detector tilt")
-            for candidate in candidates:
-                refine_tilt(ring_image, candidate, wavelength, px, py, rot3_rad=math.radians(rot3_deg),
-                            distance_range_mm=distance_range_mm, force=tilt == "on")
-        for candidate in candidates:  # 1σ of the centre and distance (and tilt) of the candidates shown
-            estimate_uncertainty(ring_image if candidate.tilt_refined else analysis, candidate, wavelength, px, py)
+            candidate.rot3_deg = rot3_deg
+            points = refine_ring_geometry(ring_image, candidate, wavelength, px, py, tilt=tilt,
+                                          distance_range_mm=distance_range_mm)
+            estimate_uncertainty(points, candidate, wavelength, px, py)
         best = candidates[0]
         for candidate in candidates:
             if rod is not None and GRAZING_NOTE not in candidate.warnings:

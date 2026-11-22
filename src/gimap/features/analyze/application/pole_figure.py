@@ -115,7 +115,8 @@ def pole_figure(analysis: Optional[FrameAnalysis], *, model: str = GAUSSIAN, chi
             value, source = ring_background(analysis, window)
     else:
         value, source = float(background), BACKGROUND_GIVEN
-    profile = fold_profile(curve.x, curve.intensity, curve.sigma, value)
+    profile = fold_profile(curve.x, curve.intensity, curve.sigma, value,
+                           horizon_chi_deg=settings.get("horizon_chi_deg"))
     fit = fit_pole_figure(profile, model, chi0_deg=chi0_deg, fraction_iso=fraction_iso, chi_max=chi_max)
     if fit.ok and chi0_deg is None:
         direction = fit.values.get("chi0_deg", 45.0)
@@ -127,8 +128,9 @@ def pole_figure(analysis: Optional[FrameAnalysis], *, model: str = GAUSSIAN, chi
                     fit = replace(refit, message="; ".join(m for m in (refit.message, note) if m))
     variants = getattr(analysis.reduction, "orientation_profiles", {}) or {1.0: curve}
     profiles = {multiplier: (item.x, item.intensity, item.sigma) for multiplier, item in variants.items()}
+    horizons = {multiplier: item.region.get("horizon_chi_deg") for multiplier, item in variants.items()}
     systematic = orientation_systematics(profiles, value, background_sigma=background_sigma, nominal_fit=fit,
-                                         chi_max=chi_max, chi0_deg=chi0_deg, fraction_iso=fraction_iso)
+                                         chi_max=chi_max, horizon_angles=horizons)
     return PoleFigure(fit, window, value, source, False, chi0_deg, float(chi_max),
                       settings.get("min_exit_deg"), settings.get("exit_angle_source", ""),
                       settings.get("polarization"), background_sigma, systematic)

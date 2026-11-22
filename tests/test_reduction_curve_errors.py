@@ -79,6 +79,22 @@ def test_pooling_two_pixel_bins_recovers_noise_despite_skew_in_sample_variances(
     assert np.median(recovered[-400:]) == pytest.approx(1, abs=0.14)
 
 
+def test_sparse_bins_keep_measured_scatter_where_the_variance_line_crosses_zero():
+    # Within-bin texture makes the variance grow faster than linearly. The
+    # faint end has measurable noise even though the fitted line is negative.
+    means = np.arange(101.)
+    variance = 9 + means**2
+    offsets = np.arange(6) - 2.5
+    frame = means + offsets[:, None] / offsets.std(ddof=1) * np.sqrt(variance)
+    _, _, sigma, n = native_profile(frame, np.isfinite(frame), means, axis=0,
+                                    errors=PixelErrors(model="scatter"))
+    pooled = sigma**2 * n
+    assert pooled[0] > 0
+    on_floor = np.isclose(pooled, pooled[0])
+    assert 1 < on_floor.sum() < len(means)
+    assert np.all(np.diff(pooled) >= -1e-10)
+
+
 @pytest.mark.parametrize("native", [False, True])
 def test_smoothed_poisson_respects_gaps_occupancy_and_reference_noise(native):
     frame = np.array([[2., 8., 0., np.nan, 40., 48., np.nan, 3.],

@@ -119,7 +119,7 @@ def test_filling_extrapolates_only_the_wedge_and_propagates_the_fit_covariance()
     no_fit = orientation_systematics({1.: profiles[1.]}, background, nominal_fit=PoleFit(False, "gaussian"))
     assert no_fit["background_step"] == pytest.approx(.2 * background) and no_fit["incomplete"]
     assert all(s["measured"] is not None for s in no_fit["scenarios"])
-    assert [s["model_fill"] is None for s in no_fit["scenarios"]] == [False, True, False]
+    assert all(s["model_fill"] is None for s in no_fit["scenarios"])
 
 
 def test_fit_quality_records_each_reason_and_respects_a_fixed_fraction():
@@ -154,20 +154,72 @@ def test_measured_error_and_range_use_same_cap_even_when_pole_fit_fails():
     assert "not determined" in text and "Measured f" in text and "(stat)" in text
 
 
-def test_threshold_variants_retry_with_requested_direction_and_fraction_after_failed_nominal(monkeypatch):
+@pytest.mark.parametrize("nominal", [
+    PoleFit(False, models.GAUSSIAN),
+    PoleFit(True, models.GAUSSIAN, converged=True, chi2_red=5.1),
+    PoleFit(True, models.GAUSSIAN, converged=True, at_bound=("fraction_iso",)),
+    PoleFit(True, models.GAUSSIAN, converged=True, values={"fwhm_deg": 101.}),
+])
+def test_no_scenario_uses_a_model_fill_when_the_nominal_pole_is_not_determined(nominal, monkeypatch):
     from src.gimap.features.analyze.domain.crystal import pole_systematics
 
     chi = np.arange(4.5, 87., 1.)
     curve = chi, np.full(chi.size, 3.), np.ones(chi.size)
-    calls = []
-    failed = PoleFit(False, models.MAIER_SAUPE, message="too few bins")
+    monkeypatch.setattr(pole_systematics, "fit_pole_figure", lambda *a, **kw: pytest.fail("unexpected model fill"))
+    result = orientation_systematics({k: curve for k in (.5, 1., 2.)}, 1., nominal_fit=nominal)
+    assert not result["model_fill_allowed"]
+    assert all(s["model_fill"] is None and s["wedge_sigma"] is None for s in result["scenarios"])
+    measured = [s["measured"] for s in result["scenarios"]]
+    assert result["range"] == [min(measured), max(measured)]
 
-    def record_fit(profile, model, **kwargs):
-        calls.append((model, kwargs["chi0_deg"], kwargs["fraction_iso"]))
-        return failed
 
-    monkeypatch.setattr(pole_systematics, "fit_pole_figure", record_fit)
-    result = orientation_systematics({k: curve for k in (.5, 1., 2.)}, 1., nominal_fit=failed,
-                                     chi0_deg=37., fraction_iso=.25)
-    assert result["incomplete"]
-    assert calls == [(models.MAIER_SAUPE, 37., .25)] * 8
+def test_a_poor_scenario_fit_keeps_only_its_measured_moment(monkeypatch):
+    from src.gimap.features.analyze.domain.crystal import pole_systematics
+
+    chi = np.arange(4.5, 87., 1.)
+    curve = chi, np.full(chi.size, 10.), np.ones(chi.size)
+    profile = fold_profile(*curve, 2.)
+    nominal = PoleFit(True, models.GAUSSIAN, profile=profile, converged=True,
+                      values={"herman_wedge_fill": .2}, errors={"herman_wedge_fill": .01})
+    poor = replace(nominal, chi2_red=18., values={"herman_wedge_fill": .8})
+    monkeypatch.setattr(pole_systematics, "fit_pole_figure", lambda *args, **kwargs: poor)
+    result = orientation_systematics({k: curve for k in (.5, 1., 2.)}, 2., background_sigma=0., nominal_fit=nominal)
+    assert result["model_fill_allowed"] and result["range"][1] == pytest.approx(.21)
+    assert [s["model_fill"] for s in result["scenarios"]] == [None, .2, None]
+    assert result["scenarios"][0]["quality_reasons"] == ["reduced χ² exceeds 5"]
+
+
+def test_an_attenuated_horizon_is_excluded_from_both_moments_and_pole_fits():
+    # The exit-angle cut already removed |χ| ≥ 88°. Two thresholds disagree on the 83–84° bin.
+    chi = np.arange(-87.5, 88., 1.)
+    angle = abs(chi)
+    net = np.where(angle >= 84., 4., np.where(angle >= 83., 8., 100.))
+    net[(angle == 45.5) | (angle == 81.5)] = 2.  # isolated weak bins still count
+    background = 20.
+    curve = chi, background + net, np.ones(chi.size)
+    horizon = 87.9
+    profile = fold_profile(*curve, background, horizon_chi_deg=horizon)
+    fit = fit_pole_figure(profile)
+    assert profile.horizon_excluded_deg == (84, 88) and fit.points == 84
+    np.testing.assert_array_equal(profile.measured, profile.chi < 84.)
+    ring = ring_orientation(Profile.of(*curve), q_window=(.9, 1.1), background=background, horizon_chi_deg=horizon)
+    weights = net[angle < 84.] * np.sin(np.radians(angle[angle < 84.]))
+    expected = np.average((3. * np.cos(np.radians(angle[angle < 84.]))**2 - 1.) / 2., weights=weights)
+    assert ring.herman == pytest.approx(expected)
+    assert fit.measured_moment[0] == pytest.approx(expected)
+
+    result = orientation_systematics({1.: curve}, background, background_sigma=0., nominal_fit=fit,
+                                     horizon_angles={1.: horizon})
+    assert result["horizon_excluded_deg"] == (84, 88)
+    scenarios = {s["horizon_fraction"]: s for s in result["scenarios"]}
+    assert scenarios[0.]["horizon_excluded_deg"] is None
+    assert scenarios[.05]["measured"] == pytest.approx(expected)
+    assert scenarios[.10]["horizon_excluded_deg"] == (83, 88)
+    assert result["range"][0] == pytest.approx(scenarios[0.]["measured"])
+    assert result["range"][1] == pytest.approx(scenarios[.10]["measured"])
+
+    # The measured sector ends well short of the exit cut. Weak bins at a detector edge stay measured.
+    keep = angle < 80.
+    y = np.where(angle[keep] > 77., background + 1., background + 100.)
+    cropped = fold_profile(chi[keep], y, np.ones_like(y), background, horizon_chi_deg=horizon)
+    assert cropped.horizon_excluded_deg is None and cropped.measured.sum() == 80

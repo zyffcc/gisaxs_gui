@@ -3,6 +3,7 @@
 import numpy as np
 
 SHADOW_FRACTION = 0.2
+HORIZON_FRACTION = 0.05
 MONTE_CARLO_SAMPLES = 200
 
 
@@ -27,8 +28,29 @@ def measured_hermans(chi_deg, counts, sigma=None, seed=0):
     return 1.5 * cos2 - 0.5, stat, cos2
 
 
-def fold_ring(chi_deg, intensity, sigma, background):
-    """Return centres, net density, error, measured and shadow masks for 90 one-degree bins."""
+def _weak_horizon_range(mean, measured, shadow, horizon_chi_deg, fraction):
+    """Edges of the contiguous weak run touching the geometrical exit cut, in folded 1° bins."""
+    usable = measured & ~shadow
+    if horizon_chi_deg is None or fraction <= 0 or not usable.any():
+        return None
+    median = np.median(mean[usable])
+    if median <= 0:
+        return None
+    # The last partly accessible bin can be empty on a pixel grid. A detector
+    # edge farther from the cut and gaps inside the ring cannot seed the rule.
+    last = int(np.flatnonzero(measured)[-1])
+    if last + 1 < np.floor(horizon_chi_deg):
+        return None
+    first = last + 1
+    while first and measured[first - 1] and mean[first - 1] <= fraction * median:
+        first -= 1
+    if first > last or not usable[first:last + 1].any():
+        return None
+    return first, last + 1
+
+
+def fold_ring(chi_deg, intensity, sigma, background, *, horizon_chi_deg=None, horizon_fraction=HORIZON_FRACTION):
+    """Fold the net density, retaining its uncertainty, measured and shadow masks, and weak horizon range."""
     chi = np.asarray(chi_deg, dtype=float)
     value = np.asarray(intensity, dtype=float)
     error = np.asarray(sigma, dtype=float)
@@ -42,4 +64,8 @@ def fold_ring(chi_deg, intensity, sigma, background):
     spread = np.divide(1., np.sqrt(total), out=np.full(90, np.nan), where=measured)
     core = (background > 0) & measured & (mean + background < SHADOW_FRACTION * background)
     shadow = measured & (np.convolve(core.astype(int), [1, 1, 1], mode="same") > 0)
-    return np.arange(90) + 0.5, mean, spread, measured & ~shadow, shadow
+    horizon = _weak_horizon_range(mean, measured, shadow, horizon_chi_deg, horizon_fraction)
+    measured &= ~shadow
+    if horizon is not None:
+        measured[slice(*horizon)] = False
+    return np.arange(90) + 0.5, mean, spread, measured, shadow, horizon

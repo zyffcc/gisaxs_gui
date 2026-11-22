@@ -951,12 +951,11 @@ Start page (*Calibrate the detector*).
 6. Under **Advanced configuration**, enter a measured roll in **Fixed rot3** (degrees, default 0). The ring fit keeps that value.
    **Detector tilt: Refine rot1, rot2** (on by default) fits the tilt of the detector with the centre and the
    distance when three or more rings are matched ([Physics and Methods, section 3.8](Physics_Manual.md#38-detector-tilt-from-the-rings-of-the-standard)).
-   Click **Auto Calibration**. The calculation runs in the background; **Cancel** stops it after the
+   With the option cleared, the centre and distance are still refined on the ring points when at least two rings are matched.
+   Click **Auto Calibration**. The calculation runs in the background. **Cancel** stops it after the
    current step.
 7. Review the result: beam centre, distance, **Detector tilt** (rot1 and rot2, *0.372°, 0.433°*, or *not
-   refined*; its tooltip gives the 1σ), matched rings, one RMS residual of the geometry shown (**Ring-point RMS**
-   with the tilt refined: the points on the matched rings, its tooltip giving the same points without the tilt;
-   else **Ring-radius RMS**: the azimuthally averaged radii), confidence and warning of the **Selected solution** (a warning is marked ⚠; its tooltip says why it matters), and the
+   refined*; its tooltip gives the 1σ), matched rings, **Ring-point RMS** and its tooltip. The tooltip gives the RMS before refinement on the same points. For a fitted tilt, it also gives the RMS with centre and distance refitted at zero tilt. **Ring-radius RMS** appears when there is no point fit. Review the confidence and warning of the **Selected solution** (a warning is marked ⚠; its tooltip says why it matters), and the
    **Candidate solutions** below. The line above the preview names only the image and its size. Selecting a candidate draws its
    rings. **Clean image** temporarily hides all overlays, **Reset view** restores the complete
    detector mosaic after zooming or panning, and **Focus image** hides the result panels to give tall
@@ -964,7 +963,7 @@ Start page (*Calibrate the detector*).
 8. To adjust the result by hand, press **Manual refine**: drag the centre marker, edit the
    centre/distance values, or pair a detected ring with a theoretical peak (**Fit selected ring**).
    **Reset to fitted** goes back to the fitted solution and **Finish manual** closes the panel. The
-   fitted values stay as they are until you press **Manual refine**.
+   fitted values stay as they are until you press **Manual refine**. Applying or exporting an edited centre or distance clears its ring-point RMS and fit uncertainties. The ring-radius RMS refers to the automatic ring matches.
 9. Click **Apply** to save the geometry as the instrument profile of the detector. One note says what
    was applied and which profile Analyze will use. When the result moves the beam centre of a saved
    profile by more than 10 px or its distance by more than 5 %, the window asks before it overwrites
@@ -1370,7 +1369,7 @@ For a **Flat field**, choose a uniform exposure `D_ff` of the sample detector's 
 
 Open **Detector and curve errors**. Clear **Use instrument profile settings** to edit **Counts per ADU (gain)**, **Offset (ADU)** and **Error model**. Raw intensity becomes `gain × (ADU − offset)`. **Automatic** chooses from the storage type and corrections. Integer CCD data and internally corrected counts may need an explicit model. Choose **Poisson**, **Scatter of the pixels**, or **Given σ frame**. A σ frame gives each sample pixel's standard deviation in its input units. Use **Save detector settings to profile** to reuse these choices with that instrument. If a neighbouring `.poni` file supplies the geometry, select the saved instrument profile to use its detector settings.
 
-By default, scatter errors for bins with fewer than ten pixels use a variance fitted across the curve. This reduces the influence of noisy variance estimates on fit weights. For low-count Poisson data, switch **Poisson variance** from **Observed intensity** to **Smoothed intensity** to estimate counting noise from neighbouring points. Curve intensities retain their measured values. Exports carry the chosen σ, and Fitting has its own weighting options. [Physics and Methods 6.4](Physics_Manual.md#64-curve-error-models)
+By default, scatter errors for bins with fewer than ten pixels use a variance fitted across the curve. If the fit predicts zero or negative variance over part of the intensity range, the measured pixel scatter there sets a lower limit. This keeps those bins available for orientation analysis when they have measurable scatter. For low-count Poisson data, switch **Poisson variance** from **Observed intensity** to **Smoothed intensity** to estimate counting noise from neighbouring points. Curve intensities retain their measured values. Exports carry the chosen σ, and Fitting has its own weighting options. [Physics and Methods 6.4](Physics_Manual.md#64-curve-error-models)
 
 ![Detector and curve errors](manual_images/en/detector_errors.png)
 
@@ -1685,11 +1684,13 @@ off.
 For each analysed ring the report gives the exit-angle exclusion and polarisation. Ring I(χ) and its uncertainties
 use only measured pixels. A radial curve with mirror filling can therefore use a different error model.
 The measured Hermans f appears
-with its statistical error and a systematic range. To obtain the range, GIMaP repeats the measurement at half,
-one and twice the nominal exit-angle threshold. At each threshold it varies the background by its fitted standard
-error, or by 20 % when no standard error is available. It compares the measured bins with a model extrapolation into
-the low-|χ| missing wedge and includes the propagated standard error of the extrapolation. The accompanying pole
-fit gives the model's f and oriented fraction. **Needs attention** gives the reason for an undetermined fit.
+with its statistical error and a systematic range. After the exit-angle cut, GIMaP leaves out contiguous horizon
+bins at or below 5% of the ring's median net intensity and reports their |χ| interval. The range tests this
+intensity cut at off, 5% and 10%, and the exit-angle threshold at half, one and twice its nominal value.
+It varies the background by one fitted standard error, or by 20% when that error is unavailable. If the
+nominal pole fit is undetermined, only measured ±χ partners contribute and the low-|χ| wedge stays empty.
+Otherwise, determined fits also contribute a model fill with its propagated standard error.
+**Needs attention** gives the reason for an undetermined fit.
 
 ![Results of the automatic analysis of a GIWAXS frame](manual_images/en/07_giwaxs_results.png)
 
@@ -2143,7 +2144,8 @@ Compare f from the measured bins with f from the full fitted distribution, inclu
 The plot shows the measured points and the fit. The results give the oriented fraction 1 − φ, FWHM, χ0, 2D
 order and reduced χ². The oriented fraction is conditional on the background b. A fit is marked
 *not determined* if it fails to converge, reduced χ² exceeds 5, a fitted parameter reaches a bound, or
-FWHM exceeds 100°. The reason appears with the result.
+FWHM exceeds 100°. The result gives the reason and excludes that fit's wedge fill from the measured f range.
+The report also shows any weak |χ| interval excluded next to the exit-angle cut.
 
 ![The pole figure of the MAPbI₃ ring at 0.997 Å⁻¹ (public P08 frame)](manual_images/en/07b_pole_figure.png)
 
@@ -3897,7 +3899,7 @@ experiment (chapter 13).
   halos (FWHM above 15 % of q) get none.
 - The Hermans factor assumes a film that is isotropic in its plane and weighs each |χ| by sin χ. It is
   given only when at least 80 % of that weight is measured. Read its statistical error alongside the range from
-  varying the exit angle, background and missing-wedge fill. A pole fit extrapolates into unmeasured angles.
+  varying the exit angle, horizon intensity threshold, background and missing-wedge fill. A pole fit extrapolates into unmeasured angles.
   Check its reported quality before interpreting the oriented fraction (section 5.9).
 - Regions far below the diffuse background at the same q (under 20 %: a shadow, an absorber, an
   insensitive detector area) count as unmeasured, and a sector lying in one is not compared. Intensity

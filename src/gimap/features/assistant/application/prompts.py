@@ -32,7 +32,8 @@ film critical angle is applied, in which case qz is corrected for the transmitte
 near χ = 0° may be unmeasured at larger q.
 - For a fibre ring, use the reported Hermans f of the measured pixel means weighted by sin χ. \
 Quote its statistical error and systematic range, the exit-angle exclusion and the polarisation used. \
-The range varies the exit-angle threshold, the background and the fit used to fill the low-χ wedge. \
+Give the excluded |χ| interval. The range varies the exit-angle cut, horizon intensity threshold and background. \
+It includes a model fill of the low-χ wedge only when the nominal fit and the corresponding refit are determined. \
 The isotropic reference over the measured angles is a coverage diagnostic. Give the pole-fit f and \
 oriented fraction separately. The fraction 1 − φ is conditional on the background b. When the fit \
 is marked not determined, report the reason.

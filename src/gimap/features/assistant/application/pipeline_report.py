@@ -10,7 +10,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from ..domain import AT_EDGE, assessment
+from src.gimap.shared.orientation_notes import orientation_notes
+
+from ..domain import AT_EDGE
+from .calibration_report import calibration_quality, calibration_rms
 from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
 from .pipeline_geometry import ROTATION_WHY, SEARCHED
 from .pipeline_phases import assignment_lines, measured_f_text, pole_line
@@ -42,23 +45,6 @@ def compact_report(report: dict) -> dict:
             if peak.get("fit") else peak for peak in compact["peaks"]
         ]
     return compact
-
-
-def calibration_quality(result: Optional[dict]) -> Optional[dict]:
-    """How good the calibration a run used is: its assessment, the standard and the line check."""
-    if not result:
-        return None
-    if result.get("from_file"):
-        return {"assessment": "a saved calibration file (not re-checked against a standard image)", "warnings": []}
-    check = result.get("line_check") or {}
-    return {
-        "assessment": assessment(result),
-        "standard": result.get("standard"),
-        "lines_checked": check.get("lines_checked"),
-        "mean_line_q_error_percent": None if check.get("mean_relative") is None else round(100 * check["mean_relative"], 3),
-        "matched_rings": result.get("matched_rings"),
-        "warnings": list(result.get("warnings") or ()),
-    }
 
 
 def _number(value, digits: int = 4) -> str:
@@ -157,6 +143,9 @@ def _geometry_lines(report: dict) -> list[str]:
     quality = report.get("calibration_quality")
     if quality:
         lines.append(f"- quality: {quality.get('assessment')}")
+        residual = calibration_rms(quality)
+        if residual:
+            lines.append(f"- {residual}")
         confirmed = str(quality.get("assessment", "")).startswith("good") and quality.get("lines_checked")
         for warning in quality.get("warnings") or ():
             # The fit engine's warnings predate the line check; when the lines confirm the q scale, say so.
@@ -212,11 +201,18 @@ def _ring_lines(rings: list[dict]) -> list[str]:
             systematics = pole.get("systematics") or {}
             if systematics:
                 source = systematics["background_rule"]
-                lines.append(f"  - Systematic range: exit threshold × 0.5, 1, 2; "
-                             f"b = {pole['background']:.3g} ± {systematics['background_step']:.3g} ({source}); "
-                             "wedge omitted or model-filled with one propagated fit σ.")
+                lines.append(f"  - Systematic range at 0.5, 1 and 2 times the exit-angle threshold, "
+                             f"with b = {pole['background']:.3g} ± {systematics['background_step']:.3g} ({source}).")
+                if "horizon_fraction" in systematics:
+                    fractions = sorted({s["horizon_fraction"] for s in systematics["scenarios"]})
+                    lines.append("  - Horizon intensity thresholds tested: "
+                                 + ", ".join(f"{fraction:.0%}" for fraction in fractions) + " of the median.")
+                if systematics.get("model_fill_allowed", True):
+                    lines.append("  - The range includes model fills with one propagated fit σ where available.")
             if systematics.get("incomplete"):
                 lines.append("  - Partial systematic range. Some cut, background or wedge-fill estimates are unavailable.")
+        lines.extend("  - " + note for note in orientation_notes(ring.get("orientation_settings") or {},
+                                                                 pole.get("systematics") or {}))
         for note in ring.get("notes") or ():
             if any(word in note for word in RING_NOTES_SHOWN):
                 lines.append(f"  - {note}")

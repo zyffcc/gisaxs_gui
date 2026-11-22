@@ -25,7 +25,7 @@ from typing import Optional
 
 import numpy as np
 
-from .....shared.ring_profile import fold_ring, measured_hermans
+from .....shared.ring_profile import HORIZON_FRACTION, fold_ring, measured_hermans
 from .pole_models import GAUSSIAN, MAIER_SAUPE, MODELS, binned, crystallites_per_radian, fwhm_deg, hermans, order_2d
 
 BINS = 90
@@ -51,6 +51,7 @@ class PoleProfile:
     background: float
     lorentz_input: bool
     """Legacy record field, always false for a binned orientation profile."""
+    horizon_excluded_deg: tuple[int, int] | None = None
 
     @property
     def weighted_coverage(self) -> float:
@@ -144,14 +145,16 @@ class PoleFit:
         }
 
 
-def fold_profile(chi_deg, intensity, sigma, background: float = 0.0) -> PoleProfile:
+def fold_profile(chi_deg, intensity, sigma, background: float = 0.0, *, horizon_chi_deg=None,
+                 horizon_fraction=HORIZON_FRACTION) -> PoleProfile:
     """Crystallites per bin from mean pixel intensity before the detector Lorentz correction."""
     b = float(background)
-    centres, mean, spread, measured, _shadow = fold_ring(chi_deg, intensity, sigma, b)
+    centres, mean, spread, measured, _shadow, horizon = fold_ring(
+        chi_deg, intensity, sigma, b, horizon_chi_deg=horizon_chi_deg, horizon_fraction=horizon_fraction)
     factor = np.sin(np.radians(centres))
     value = np.where(measured, mean * factor, np.nan)
     error = np.where(measured, spread * factor, np.nan)
-    return PoleProfile(centres, value, error, measured, b, False)
+    return PoleProfile(centres, value, error, measured, b, False, horizon)
 
 
 def _parameters(model: str, values: dict) -> tuple[float, float, float, float]:

@@ -12,7 +12,9 @@ from pathlib import Path
 from typing import Optional
 
 from src.gimap.app.presentation.i18n import translate
+from src.gimap.shared.orientation_notes import orientation_notes
 
+from ..application.calibration_report import calibration_rms
 from ..application.pipeline_phases import measured_f_text, pole_estimate
 from ..application import BILLING_SUBSCRIPTION, GOALS, RunOutcome
 
@@ -150,6 +152,9 @@ def _ring_tables(results, language) -> str:
             selection = label("Excluded αf < {angle}°. Polarisation {factor}.").format(
                 angle=f"{settings['min_exit_deg']:g}", factor=label("off") if factor is None else f"{factor:g}")
             parts.append("<p>" + _e(selection) + "</p>")
+        notes = orientation_notes(settings, pole.get("systematics") or {},
+                                  lambda template, **values: label(template).format(**values))
+        parts.extend("<p>" + _e(note) + "</p>" for note in notes)
         if ring.reason:
             parts.append(f"<p>{_e(ring.reason)}</p>")
             continue
@@ -181,7 +186,11 @@ def _size_table(results) -> str:
     return "<h4>Crystallite size (Scherrer, K = 0.9)</h4>" + _table(["q (Å⁻¹)", "FWHM (Å⁻¹)", "L (nm)", "note"], rows)
 
 
-def _geometry_section(results) -> str:
+def _geometry_section(results, language) -> str:
+    def label(template, **values):
+        text = (translate(template, "zh") or template) if language == "中文" else template
+        return text.format(**values)
+
     parts = []
     used = results.geometry_used
     if used:
@@ -197,13 +206,13 @@ def _geometry_section(results) -> str:
         rows = [
             [
                 str(index), _e(item.get("standard", "")), _e(Path(str(item.get("source_image", ""))).name),
-                str(item.get("matched_rings", "–")), _n(item.get("rms_residual_px"), 3), _e(item.get("confidence", "")),
+                str(item.get("matched_rings", "–")), _e(calibration_rms(item, label)) or "–", _e(item.get("confidence", "")),
                 _n(item.get("distance_mm")),
             ]
             for index, item in enumerate(results.calibrations)
         ]
         parts.append("<h4>Calibration fits</h4>" + _table(
-            ["#", "standard", "image", "rings", "rms (px)", "confidence", "distance (mm)"], rows,
+            ["#", "standard", "image", "rings", label("Automatic fit residual"), "confidence", "distance (mm)"], rows,
         ))
     return "".join(parts)
 
@@ -238,7 +247,7 @@ def report_html(
     else:
         parts.append(f"<h3>{t('No report')}</h3><p>{_e(outcome.message)}</p>")
     tables = (
-        _geometry_section(results) + _peak_tables(results) + _sector_table(results)
+        _geometry_section(results, language) + _peak_tables(results) + _sector_table(results)
         + _ring_tables(results, language) + _size_table(results)
     )
     if tables:
