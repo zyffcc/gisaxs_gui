@@ -55,7 +55,7 @@ class ResultPreviewMixin:
             max(titles[0::2])
             + metrics.horizontalAdvance("10000.000 mm")  # distance, the widest left value
             + max(titles[1::2])
-            + metrics.horizontalAdvance("10000.000 px")
+            + max(metrics.horizontalAdvance("10000.000 px"), self.result_rotation.sizeHint().width())
             + 3 * self.resultForm.horizontalSpacing()
             + form.left() + form.right() + group.left() + group.right()
             + 12  # the group box frame
@@ -100,6 +100,7 @@ class ResultPreviewMixin:
             self._show_overlay_legend()
             if self.result is not None:
                 candidate = self.result.selected_candidate
+                self._show_uncertainty(candidate)
                 self._show_tilt(candidate)
                 self._show_rms(candidate)
                 for row, other in enumerate(self.result.candidates):
@@ -144,12 +145,7 @@ class ResultPreviewMixin:
         self.result_labels["Beam center X"].setText(f"{center_x:.3f} px")
         self.result_labels["Beam center Y"].setText(f"{center_y:.3f} px")
         self.result_labels["Distance"].setText(f"{candidate.distance_mm:.3f} mm")
-        # 1σ of the fit (the scatter between the rings), when known
-        for key, value, unit in (("Beam center X", candidate.center_x_sigma_px, "px"),
-                                 ("Beam center Y", candidate.center_y_sigma_px, "px"),
-                                 ("Distance", candidate.distance_sigma_mm, "mm")):
-            self.result_labels[key].setToolTip("" if value is None else tr("1σ: {value} {unit} ({method})").format(
-                value=f"{value:.2g}", unit=unit, method=tr(candidate.uncertainty_method)))
+        self._show_uncertainty(candidate)
         self._show_tilt(candidate)
         self.result_labels["Matched rings"].setText(str(candidate.matched_ring_count))
         self._show_rms(candidate)
@@ -172,7 +168,14 @@ class ResultPreviewMixin:
         self._show_image_caption()
         self._populate_manual_rings(candidate)
         self.redraw_preview()
-        self._fit_results_height()
+        self._refit_results()
+
+    def _show_uncertainty(self, candidate: CalibrationCandidate) -> None:
+        for key, value, unit in (("Beam center X", candidate.center_x_sigma_px, "px"),
+                                 ("Beam center Y", candidate.center_y_sigma_px, "px"),
+                                 ("Distance", candidate.distance_sigma_mm, "mm")):
+            self.result_labels[key].setToolTip("" if value is None else trf("1σ: {value} {unit} ({method})",
+                value=f"{value:.2g}", unit=unit, method=tr(candidate.uncertainty_method)))
 
     def _show_rms(self, candidate: CalibrationCandidate) -> None:
         label = self.result_labels["RMS residual"]
@@ -197,7 +200,7 @@ class ResultPreviewMixin:
                   rot3=f"{candidate.rot3_deg:g}")
         if candidate.rot1_sigma_deg is not None and candidate.rot2_sigma_deg is not None:
             tip += " " + trf("1σ: {rot1}°, {rot2}° ({method}).", rot1=f"{candidate.rot1_sigma_deg:.2g}",
-                             rot2=f"{candidate.rot2_sigma_deg:.2g}", method=tr(candidate.uncertainty_method))
+                             rot2=f"{candidate.rot2_sigma_deg:.2g}", method=tr(candidate.tilt_uncertainty_method))
         label.setToolTip(tip)  # (the residual with and without the tilt: the RMS row and its tooltip)
 
     def _show_warnings(self, warnings) -> None:

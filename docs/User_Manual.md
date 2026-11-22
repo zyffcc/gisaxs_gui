@@ -962,6 +962,8 @@ Start page (*Calibrate the detector*).
    rings. **Clean image** temporarily hides all overlays, **Reset view** restores the complete
    detector mosaic after zooming or panning, and **Focus image** hides the result panels to give tall
    WAXS mosaics more room. The horizontal divider can be dragged.
+   When exactly three rings contribute to the tilt fit, the tilt 1σ in the tooltip comes from the
+   covariance of that fit. Each two-ring refit keeps the tilts fixed to estimate the scatter in centre and distance.
 8. To adjust the result by hand, press **Manual refine**: drag the centre marker, edit the
    centre/distance values, or pair a detected ring with a theoretical peak (**Fit selected ring**).
    **Reset to fitted** goes back to the fitted solution and **Finish manual** closes the panel. The
@@ -996,30 +998,17 @@ exported calibration file keeps its numbers as in earlier versions: there the be
 pixel centres from 0, half a pixel lower than the window shows, and the file says so
 (`metadata.center_convention`). Importing the file shows the same centre again.
 
-**Known limitation: a wrong estimated distance can put a wrong solution first.** Seen on a silver
-behenate image whose path does not name the standard.
+**Checking a transmission standard.** Auto Calibration refines the candidate centres obtained from arcs
+before looking for rings in transmission and grazing-incidence images. On the public silver behenate
+frame, **Auto Detect** matches five rings at a distance of about 1634 mm, both with *Optional* and
+with an estimate of 2000 mm. Choosing silver behenate gives the same result.
 
-- A wrong estimated distance can mislead, also with the right standard: the search prefers solutions
-  near the value in **Estimated distance**. With silver behenate chosen and 2000 mm typed in, a
-  solution near 1790 mm came first, although the real distance is about 1630 mm; with **Auto Detect**
-  and 2000 mm, a LaB₆ solution at 120 mm came first. With the field left on *Optional*, the right
-  solution came first, with the standard chosen and with **Auto Detect** alike. Choose the standard
-  yourself when you know it. An approximate distance helps: with 1500 to 1800 mm typed in, the silver
-  behenate solution came first on this image.
-- Before this version, **Auto Detect** without an estimated distance put a LaB₆ solution at a much
-  shorter distance first on this image, and the silver behenate solution last in the list of
-  candidates. A harmonic standard is now ranked by how complete its orders are, and silver behenate
-  comes first.
-
-**Estimated distance** can hold a number you did not type. It is never filled with a built-in value:
-on a new installation it stays on *Optional*. But each time an image is opened it takes the distance
-the image file states, or else the distance of the calibration applied last, also when you had typed
-another value or cleared the field; with neither, a value you typed stays. The calibration applied
-last may be the one of another set-up or detector. Enter the approximate distance of your set-up, or
-set the field to 0 (it then shows *Optional*) when you do not know it.
-
-Before you press **Apply**, check that the distance is the one of your set-up and that the drawn rings
-lie on the rings of the image. This will be corrected in a later version.
+An estimate influences how candidates are ranked. On a new installation the field starts at *Optional*.
+When you open another image, a distance from its file or from the calibration applied last replaces
+any typed value, including 0. Check that it belongs to this set-up. If neither source supplies a distance,
+a value you typed stays. If the distance is unknown, set the field
+to 0 to show *Optional*. Before pressing **Apply**, check the proposed distance against your set-up
+and the ring overlay against the image.
 
 ### 4.4 Pixel coordinates
 
@@ -4224,10 +4213,9 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **The rows of a Series map carry no σ.** The timeline's χ² takes the noise of each x column from the series itself, and a Series map recorded in the results database holds x and I only (section 5.6). | Read the timeline as a distance in units of the frame-to-frame noise, not as a goodness of fit; for σ of every point, use Batch Export ▸ Each frame: its curves, with error bars. |
 | **Cancellation does not forcibly interrupt low-level file reading.** A Compare directory scan or single-table read, or the current Fitting read, may still be returning. | Press Cancel or Stop once; the request is registered, and the unfinished import is discarded or the frame fit skipped when reading returns. Completed series and results stay (sections 6.5, 7.2). |
 | **Curve import supports `q I [sigma]` and `q I1 I2 …`, not interleaved `q I1 sigma1 I2 sigma2`.** A headerless three-column table cannot identify its meaning by numbers alone. | Choose the layout explicitly in **Import Curves…** (section 6.1). For separate errors per curve, provide one `q I sigma` file per curve. Fixed imported selections cannot watch for new columns/files. |
-| **Geometry Calibration can put a wrong solution first.** A wrong **Estimated distance** misleads, also with the right standard and with **Auto Detect**, and the field can hold a distance you did not type (section 4.3). | Choose the standard yourself when you know it. Leave **Estimated distance** on *Optional* or type the approximate distance of your set-up; set a number you did not type back to 0 unless it is that distance. Before **Apply**, check the distance and that the drawn rings lie on the rings of the image. |
 | **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them (section 10.5). | Calibrate such an image with pyFAI and give GIMaP the `.poni`: name it in the notes, or put it beside the frames (section 4.2). |
 | **An instrument profile is matched by detector name and frame size only. A calibration found by the automatic search may belong to another experiment.** Even matching detector dimensions cannot establish which run produced a calibration (section 4.2). | Check the file named in the report and the distance in **Geometry**. Supply the calibration or name it in the notes. Remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
-| **Powder rings leave rot3 undetermined.** They also constrain tilt weakly at SAXS distances (±0.2° on the public silver behenate frame). | Use a wide-angle standard for rot1 and rot2. Check rot3 on a GISAXS ridge and the horizon in **Geometry ▸ Check rot3**. GIMaP reads flat-detector `.poni` orientations 1–4 (section 4.2). |
+| **Powder rings leave rot3 undetermined.** They constrain tilt weakly at SAXS distances (±0.2° on the public silver behenate frame). With seven or more matched rings in simulated frames, the 1σ estimates for beam x and rot1 covered the true values less often than expected. | See Physics and Methods 3.3 for measured coverage. Use a wide-angle standard for rot1 and rot2. Check rot3 on a GISAXS ridge and the horizon in **Geometry ▸ Check rot3**. GIMaP reads flat-detector `.poni` orientations 1–4 (section 4.2). |
 | **The automatic Yoneda search and horizontal cut average detector rows.** Analyze warns when the horizon varies by more than half a row across the frame. | Add a horizontal band in q for a constant exit angle. Mirror filling needs a measured partner on the other side. It cannot recover the missing wedge. |
 | **Run Automatic Analysis (GIWAXS) fits at most 12 candidate peaks**, the most prominent; the window has no setting for more. The others are left out of the peak table, the sector comparison, the rings and the series hints; *Decisions* says how many candidates there were (section 5.5). | Run `tools/gimap_agent.py auto … --max-peaks N` (section 10.7), or ask the AI to run `find_peaks` with `max_peaks`, when you need the full list. |
 | **Kinematic q omits film refraction.** Near the critical angle the shift in q_z can be of order k·sin αi. A transmitted-channel correction can leave a second ring from the reflected beam. | Check the q axis in the report. Apply the film critical angle when known and quote geometry uncertainty separately from peak-fit errors. |

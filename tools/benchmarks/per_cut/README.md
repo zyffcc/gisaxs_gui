@@ -44,3 +44,8 @@ the same ring points and whether the geometry was found). `--part summarize` mak
 (every parameter point of the 24 solutions, with the scales at the least-squares and at the joint optimum, both runs
 of the joint integral and the parts of the difference), written at 958aa9b with the fitting code of tree `d139e6f5`;
 `../evidence_integration_check.json` holds the same results with the posterior draws as rows.
+`main` and `three_ring_set` each contain `meta` (command, frame count, first seed and seconds) and `frames`.
+Each frame records the simulated geometry and the result from the shipped engine, including whether it found the
+geometry. Successful fits include the reported 1σ and the covariance standard errors on the final fit's points.
+Three-ring records also give the three two-ring refits with both tilts fixed. Run `--part summarize` to rebuild the
+coverage summaries in `../calibration_check.json`.

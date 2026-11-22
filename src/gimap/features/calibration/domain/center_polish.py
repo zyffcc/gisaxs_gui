@@ -1,12 +1,9 @@
 """A beam-centre proposal polished to the pixel before rings are looked for.
 
-Partial-arc voting (``center_estimator``) places a centre in a histogram cell some pixels wide. A ring a few pixels
-wide then spreads over several radii of the azimuthal profile and can vanish from it - in a grazing-incidence image,
-where only the arcs above the horizon are seen, a centre four pixels off lost two of four AgBH orders. The engine
-polishes the proposals of grazing-incidence images only (a transmission image shows whole rings, and its proposals
-are not changed). The sharpness of
-the radial profile of the brightest pixels peaks at the true centre: it is searched on a grid around each arc proposal,
-coarse to fine. The polished centres are added as proposals of their own; the original ones stay.
+Arc voting (``center_estimator``) places a centre in a histogram cell several pixels wide. With an offset centre, a
+narrow ring spreads over several radii and can disappear from the radial profile. For both transmission and
+grazing-incidence frames, a coarse-to-fine grid search around the leading arc proposals maximises the sharpness
+of the bright pixels' radial profile. The engine tests the polished centres alongside the original proposals.
 """
 
 from __future__ import annotations

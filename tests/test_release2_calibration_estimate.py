@@ -378,9 +378,9 @@ def test_applying_in_the_window_makes_its_distance_the_estimate_of_the_next_imag
 def test_the_reported_frame_is_solved_on_a_new_installation(window, tmp_path: Path) -> None:
     """The public pyFAI silver behenate frame, in the window: the standard chosen by hand, the field never touched.
 
-    With the 2000 mm the window used to fill in, a solution near 1830 mm came first (that part of the search
-    is pinned in ``tests/test_release2_docs_decisions.py``). The name of this test names no standard on
-    purpose: the folder pytest makes for it is part of the image's path, where the window looks for one.
+    The search with a user-supplied 2000 mm estimate is covered in ``tests/test_release2_docs_decisions.py``.
+    The name of this test names no standard on purpose: the folder pytest makes for it is part of the image's
+    path, where the window looks for one.
     """
     if not AGBH.is_file():
         pytest.skip("the public silver behenate image is not in this checkout")

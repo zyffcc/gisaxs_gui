@@ -1,6 +1,6 @@
 """Part 3 of ``calibration_check.py``: the coverage of GIMaP's calibration 1σ on simulated AgBh frames of known
 geometry, and the helpers both parts share (the leave-one-ring-out fits of ``optimizer.estimate_uncertainty``
-repeated to keep the replicates; the engine with every image's beam-centre proposals polished).
+repeated on the points used by the engine).
 
 Run through ``calibration_check.py --part coverage``; pyFAI is not needed for this part.
 """
@@ -25,14 +25,10 @@ if str(ROOT) not in sys.path:
 
 from src.gimap.features.calibration.application.headless import describe_calibration, with_line_checks  # noqa: E402
 from src.gimap.features.calibration.domain import engine as engine_module  # noqa: E402
-from src.gimap.features.calibration.domain.center_estimator import estimate_center_candidates  # noqa: E402
-from src.gimap.features.calibration.domain.center_polish import polished_centers  # noqa: E402
 from src.gimap.features.calibration.domain.engine import CalibrationEngine  # noqa: E402
-from src.gimap.features.calibration.domain.gisaxs_features import specular_rod_columns, without_columns  # noqa: E402
 from src.gimap.features.calibration.domain.models import DetectorImage  # noqa: E402
-from src.gimap.features.calibration.domain.preprocessing import preprocess_detector_image  # noqa: E402
 from src.gimap.features.calibration.domain.standards import AGBH_Q1  # noqa: E402
-from src.gimap.features.calibration.domain.tilt_fit import tilt_residual, tilted_ring_points  # noqa: E402
+from src.gimap.features.calibration.domain.tilt_fit import tilt_residual  # noqa: E402
 from src.gimap.shared.geometry import DetectorGeometry  # noqa: E402
 from src.gimap.shared.geometry.detector_tilt import tilted_rays  # noqa: E402
 from src.gimap.shared.geometry.poni import tilt_from_geometry  # noqa: E402
@@ -60,28 +56,46 @@ def named(keys, values, digits=6) -> dict:
             for key, value in zip(keys, values)}
 
 
-def gimap_spread(ring_image, candidate, wavelength):
+@contextlib.contextmanager
+def record_fit_points():
+    """Keep the final fit's points for each candidate, including when its extraction stopped at the pass limit."""
+    points_by_candidate = {}
+    estimate = engine_module.estimate_uncertainty
+
+    def record(points, candidate, *args):
+        points_by_candidate[id(candidate)] = points
+        return estimate(points, candidate, *args)
+
+    with patch.object(engine_module, "estimate_uncertainty", record):
+        yield points_by_candidate
+
+
+def gimap_spread(points, candidate, wavelength):
     """The ring points and the leave-one-ring-out fits of ``optimizer.estimate_uncertainty`` (tilted candidate),
     repeated here to have the replicates; and s²(JᵀJ)⁻¹ of the same points. Parameters in the engine's terms."""
     centre = np.array([candidate.center_x_px, candidate.center_y_px, candidate.distance_mm,
                        math.radians(candidate.rot1_deg), math.radians(candidate.rot2_deg)])
-    xs, ys, qs = tilted_ring_points(ring_image, candidate, centre, wavelength, PIXEL_M, PIXEL_M, 0.0)
+    xs, ys, qs = points
     scale = np.array([1.0, 1.0, max(1.0, 1e-3 * centre[2]), 1e-3, 1e-3])
+    rings = np.unique(qs)
+    fixed = centre[3:] if rings.size == 3 else None
+    start = centre[:3] if fixed is not None else centre
     replicates = []
-    for ring in np.unique(qs):
+    for ring in rings:
         keep = qs != ring
         if np.unique(qs[keep]).size < 2:
             continue
-        fit = least_squares(tilt_residual(xs[keep], ys[keep], qs[keep], wavelength, PIXEL_M, PIXEL_M), centre,
-                            loss="soft_l1", f_scale=2.0, max_nfev=80, x_scale=scale)
-        replicates.append(fit.x)
+        residual = tilt_residual(xs[keep], ys[keep], qs[keep], wavelength, PIXEL_M, PIXEL_M, fixed_tilt=fixed)
+        fit = least_squares(residual, start, loss="soft_l1", f_scale=2.0,
+                            max_nfev=40 if fixed is not None else 80, x_scale=scale[:start.size])
+        replicates.append(np.r_[fit.x, fixed] if fixed is not None else fit.x)
     residual = tilt_residual(xs, ys, qs, wavelength, PIXEL_M, PIXEL_M)
     steps = np.array([1e-3, 1e-3, max(1e-6, 1e-6 * centre[2]), 1e-7, 1e-7])
     values = residual(centre)
     jacobian = np.column_stack([(residual(centre + steps * axis) - values) / steps[i]
                                 for i, axis in enumerate(np.eye(5))])
     covariance = np.linalg.inv(jacobian.T @ jacobian) * float(values @ values) / max(1, values.size - 5)
-    return (xs, ys, qs), np.asarray(replicates), covariance
+    return np.asarray(replicates), covariance
 
 
 def engine_to_gimap(values) -> np.ndarray:
@@ -92,20 +106,6 @@ def engine_to_gimap(values) -> np.ndarray:
 def ls_sigma_gimap(covariance) -> np.ndarray:
     sigma = np.sqrt(np.clip(np.diag(covariance), 0.0, None))
     return np.array([sigma[0], sigma[1], sigma[2], math.degrees(sigma[3]), math.degrees(sigma[4])])
-
-
-def polished_proposals(analysis, metadata_center, source_data=None):
-    """The engine's beam-centre proposals with the polish it gives grazing-incidence images only
-    (``center_polish.polished_centers``) given to every image: the change this check proposes."""
-    centers = estimate_center_candidates(analysis, metadata_center, source_data=source_data)
-    return centers + polished_centers(analysis, centers)
-
-
-def engine(polish: bool):
-    """The engine as shipped, or with ``polished_proposals`` (patched in this process only)."""
-    if not polish:
-        return contextlib.nullcontext()
-    return patch.object(engine_module, "estimate_center_candidates", polished_proposals)
 
 
 def gap_mask() -> np.ndarray:
@@ -177,10 +177,10 @@ def simulate(seed: int, target: int, gaps: np.ndarray, max_order: int | None = N
                                 first_ring_counts=first, background_counts=level)
 
 
-def calibrated(image, truth, wavelength, estimate, polish: bool) -> dict:
+def calibrated(image, truth, wavelength, estimate) -> dict:
     start = time.perf_counter()
     try:
-        with engine(polish):
+        with record_fit_points() as fit_points:
             result = CalibrationEngine().calibrate(image, energy_kev=HC_KEV_A / wavelength, standard_key="agbh",
                                                    estimated_distance_mm=estimate, pixel_size_x_m=PIXEL_M,
                                                    pixel_size_y_m=PIXEL_M)
@@ -198,11 +198,11 @@ def calibrated(image, truth, wavelength, estimate, polish: bool) -> dict:
     if not candidate.tilt_refined or candidate.distance_sigma_mm is None:
         return {**record, "failed": "tilt not refined (fewer than 3 matched rings) or no uncertainty",
                 "identified": False}
+    if candidate.rot1_sigma_deg is None or candidate.rot2_sigma_deg is None:
+        return {**record, "failed": "no tilt uncertainty from the full fit", "identified": False}
     sigma = np.array([candidate.center_x_sigma_px, candidate.center_y_sigma_px, candidate.distance_sigma_mm,
                       candidate.rot1_sigma_deg, candidate.rot2_sigma_deg], float)
-    analysis = preprocess_detector_image(image)
-    _, replicates, covariance = gimap_spread(without_columns(analysis, specular_rod_columns(analysis)), candidate,
-                                             wavelength)
+    replicates, covariance = gimap_spread(fit_points[id(candidate)], candidate, wavelength)
     record.update(sigma=named(GIMAP_KEYS, sigma), sigma_ls=named(GIMAP_KEYS, ls_sigma_gimap(covariance)),
                   jackknife_fits=int(len(replicates)))
     if candidate.matched_ring_count == 3:
@@ -227,8 +227,7 @@ def run_case(job) -> dict:
         path = Path(folder) / "simulated_agbh.npy"
         path.write_bytes(b"simulated AgBh frame")
         image = DetectorImage(counts, None, path, pixel_size_x_m=PIXEL_M, pixel_size_y_m=PIXEL_M)
-        for name, polish in (("as_shipped", False), ("polished", True)):
-            record[name] = calibrated(image, truth, setup["wavelength_angstrom"], estimate, polish)
+        record["as_shipped"] = calibrated(image, truth, setup["wavelength_angstrom"], estimate)
     return record
 
 
@@ -244,7 +243,7 @@ def coverage_table(records, name: str, sigma_key: str) -> dict:
             row[key] = {"within_1sigma": round(float(np.mean(ratio <= 1)), 3),
                         "within_2sigma": round(float(np.mean(ratio <= 2)), 3),
                         "median_error_over_sigma": round(float(np.median(ratio)), 3)}
-        if sigma_key == "sigma":  # a jackknife over n rings is at best a t with n - 1 degrees of freedom
+        if sigma_key == "sigma" and low >= 4:  # reference for ring scatter; three-ring fits also use covariance
             dof = np.array([r[name]["jackknife_fits"] - 1 for r in chosen])
             row["student_t_expected"] = {"within_1sigma": round(float(np.mean(2 * student_t.cdf(1, dof) - 1)), 3),
                                          "within_2sigma": round(float(np.mean(2 * student_t.cdf(2, dof) - 1)), 3),
@@ -270,6 +269,7 @@ def not_identified(records, name: str) -> dict:
 def engine_summary(records, name: str) -> dict:
     good = [r for r in records if r[name]["identified"]]
     three = [r for r in good if r[name]["matched_rings"] == 3]
+    many = [r for r in good if r[name]["matched_rings"] >= 7]
     targets = (("3", 3, 3), ("4-6", 4, 6), ("7-9", 7, 9))
     tilts = (("<1", 0, 1), ("1-2", 1, 2), ("2-3", 2, 3), (">=3", 3, 99))
     return {
@@ -283,6 +283,11 @@ def engine_summary(records, name: str) -> dict:
                                              for r in records),
         "coverage_reported_sigma": coverage_table(good, name, "sigma"),
         "coverage_least_squares_sigma": coverage_table(good, name, "sigma_ls"),
+        "within_1sigma_with_covariance_floor_7plus": {
+            key: round(sum(abs(r[name]["fit"][key] - r["truth"][key]) <=
+                           max(r[name]["sigma"][key], r[name]["sigma_ls"][key]) for r in many) / len(many), 3)
+            for key in GIMAP_KEYS
+        } if many else {},
         "three_rings_cases": len(three),
     }
 
@@ -301,18 +306,18 @@ def three_ring_set(cases: int, workers: int, seed0: int) -> tuple[dict, list[dic
 
 def three_ring_summary(meta: dict, records: list[dict]) -> dict:
     summary = {**meta, "set_up": "as the main set with about 3 rings on the detector, but orders above 3 not drawn"}
-    for name in ("as_shipped", "polished"):
-        good = [r for r in records if r[name]["identified"] and r[name]["matched_rings"] == 3]
-        example = good[0] if good else None
-        summary[name] = {
-            "identified": identified_share(records, name), "identified_with_3_rings": len(good),
-            "not_identified": not_identified(records, name),
-            "coverage_reported_sigma": coverage_table(good, name, "sigma").get("3"),
-            "coverage_least_squares_sigma": coverage_table(good, name, "sigma_ls").get("3"),
-            "example": None if example is None else {
-                "truth": example["truth"], "fit": example[name]["fit"], "sigma": example[name]["sigma"],
-                "jackknife_two_ring_fits": example[name].get("jackknife_two_ring_fits")},
-        }
+    name = "as_shipped"
+    good = [r for r in records if r[name]["identified"] and r[name]["matched_rings"] == 3]
+    example = good[0] if good else None
+    summary[name] = {
+        "identified": identified_share(records, name), "identified_with_3_rings": len(good),
+        "not_identified": not_identified(records, name),
+        "coverage_reported_sigma": coverage_table(good, name, "sigma").get("3"),
+        "coverage_least_squares_sigma": coverage_table(good, name, "sigma_ls").get("3"),
+        "example": None if example is None else {
+            "truth": example["truth"], "fit": example[name]["fit"], "sigma": example[name]["sigma"],
+            "jackknife_two_ring_fits": example[name].get("jackknife_two_ring_fits")},
+    }
     return summary
 
 
@@ -328,12 +333,9 @@ def coverage_summary(meta: dict, records: list[dict]) -> dict:
     return {
         **meta, "set_up": SIMULATION,
         "identified_means": "tilt refined with a 1 sigma, |L - L_true| < 5 % and the beam within 5 px of the truth",
-        "engines": {"as_shipped": "CalibrationEngine as in this checkout",
-                    "polished": "the same with the beam-centre proposals of every image polished to the pixel "
-                                "(polished_proposals; the engine does it for grazing-incidence images only)"},
-        "three_rings_jackknife": "each of the 3 fits leaves one ring out and fits all 5 parameters (beam x, y, L, "
-                                 "rot1, rot2) to the points of the other 2 rings, unbounded, from the full fit; "
-                                 "sigma^2 = 2/3 sum_k (theta_k - mean)^2",
+        "engines": {"as_shipped": "CalibrationEngine as in this checkout, with pixel-polished centre proposals"},
+        "three_rings_jackknife": "Each of the three fits uses two rings with the tilts fixed at the full fit. "
+                                 "For beam x, y and L take the larger of the ring jackknife and full-fit covariance "
+                                 "standard errors. For rot1 and rot2 use the full-fit covariance.",
         "as_shipped": engine_summary(records, "as_shipped"),
-        "polished": engine_summary(records, "polished"),
     }

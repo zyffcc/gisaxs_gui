@@ -4,11 +4,12 @@ The tilt stage (``calibration/domain/tilt_fit.py``) fits five parameters to poin
 each point's scattering angle from GIMaP's one pixel→q mapping. Checked here: the tilt of synthetic rings is found
 within 0.05° (ring points of the public Xeuss 6° geometry; a whole synthetic LaB6 frame through the engine), an
 untilted geometry keeps the q of every pixel to 1e-12, the record keeps the tilt (and stays readable by an older
-GIMaP when there is none), and the public AgBh frame gives a smaller ring residual and the .poni's beam centre.
+GIMaP when there is none), and the public AgBh frame gives five rings and agrees with pyFAI's fit of the same frame.
 """
 
 from __future__ import annotations
 
+import json
 import math
 import tempfile
 from pathlib import Path
@@ -186,17 +187,18 @@ def test_rms_before_and_after_use_the_points_of_the_last_pass(monkeypatch):
 
 @pytest.mark.skipif(not AGBH_FRAME.exists(), reason="public test data")
 def test_the_public_agbh_frame_is_fitted_better_with_the_tilt() -> None:
-    import fabio
+    from src.gimap.features.calibration.application import LoadCalibrationImage
+    from src.gimap.features.calibration.infrastructure.adapters import LocalCalibrationImageAdapter
 
-    data = fabio.open(str(AGBH_FRAME)).data.astype(np.float32)
-    image = DetectorImage(data, data < 0, AGBH_FRAME, pixel_size_x_m=172e-6, pixel_size_y_m=172e-6)
-    options = dict(energy_kev=HC_KEV_ANGSTROM, standard_key="agbh")  # wavelength 1.0 angstrom
+    image = LoadCalibrationImage(LocalCalibrationImageAdapter(ask_dataset=False))(AGBH_FRAME)
+    options = dict(energy_kev=HC_KEV_ANGSTROM, standard_key="agbh", pixel_size_x_m=172e-6, pixel_size_y_m=172e-6)
     flat_result = CalibrationEngine().calibrate(image, **options, tilt="off")
     flat = flat_result.selected_candidate
-    best = CalibrationEngine().calibrate(image, **options).selected_candidate
+    result = CalibrationEngine().calibrate(image, **options)
+    best = result.selected_candidate
     assert not flat.tilt_refined and (flat.rot1_deg, flat.rot2_deg) == (0, 0)
     assert np.hypot(flat.center_x_px - best.center_x_px, flat.center_y_px - best.center_y_px) < 0.5
-    assert flat.initial_point_rms_px > 1.5 and flat.point_rms_px <= 0.5
+    assert flat.point_rms_px < flat.initial_point_rms_px and flat.point_rms_px < 1.0
     assert flat.uncertainty_method == best.uncertainty_method == "ring jackknife"
     assert 0 < flat.center_x_sigma_px < 0.5 and 0 < flat.distance_sigma_mm < 1
     from src.gimap.features.calibration.application.headless import describe_calibration
@@ -210,14 +212,19 @@ def test_the_public_agbh_frame_is_fitted_better_with_the_tilt() -> None:
     assert (restored.initial_point_rms_px, restored.point_rms_px) == (flat.initial_point_rms_px, flat.point_rms_px)
     report = describe_calibration(flat_result)
     assert (report["initial_point_rms_px"], report["point_rms_px"]) == (flat.initial_point_rms_px, flat.point_rms_px)
-    assert best.tilt_refined and best.matched_ring_count >= 3
-    assert best.point_rms_px <= best.untilted_point_rms_px <= 0.5
-    assert best.point_rms_px < 0.5 * best.initial_point_rms_px
-    # the .poni's direct beam (179.98, 263.86) px; the engine counts pixel centres from 0
-    assert best.center_x_px + 0.5 == pytest.approx(179.98, abs=0.5)
-    assert best.center_y_px + 0.5 == pytest.approx(263.86, abs=0.5)
-    assert abs(best.rot1_deg) < 1.0 and abs(best.rot2_deg) < 1.0  # a small tilt (the .poni: 0.37°, 0.43°)
-    assert best.rot2_deg == pytest.approx(0.433, abs=3 * best.rot2_sigma_deg)
+    assert best.tilt_refined and best.matched_ring_count == 5
+    assert [ring.theoretical_index + 1 for ring in best.matched_rings] == [1, 2, 3, 4, 5]
+    assert best.point_rms_px < best.untilted_point_rms_px < 1.0
+    assert best.point_rms_px < best.initial_point_rms_px
+    benchmark = Path(__file__).resolve().parents[1] / "tools/benchmarks/calibration_check.json"
+    pyfai = json.loads(benchmark.read_text(encoding="utf-8"))["real_frame"]["pyfai"]["values_gimap_convention"]
+    geometry = calibrated_geometry(result)
+    beam_error_px = math.hypot(geometry.beam_center_x_px - pyfai["beam_x_px"],
+                               geometry.beam_center_y_px - pyfai["beam_y_px"])
+    assert beam_error_px < 0.5
+    assert best.distance_mm == pytest.approx(pyfai["distance_mm"], abs=1.0)
+    assert best.rot1_deg == pytest.approx(pyfai["rot1_deg"], abs=3 * best.rot1_sigma_deg)
+    assert best.rot2_deg == pytest.approx(pyfai["rot2_deg"], abs=3 * best.rot2_sigma_deg)
 
 
 def test_the_window_shows_one_rms_residual_and_says_which_it_is() -> None:

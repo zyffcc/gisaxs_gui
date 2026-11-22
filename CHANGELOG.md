@@ -17,6 +17,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   The comparison reports bitwise agreement and the maximum relative difference per column (User Manual §12).
   Maps built while watching a folder can also be replayed after reopening a project that kept their row records.
 
+- **Geometry Calibration** refines arc-derived beam centres before ring detection on transmission frames as well as grazing-incidence frames. It matches five rings on the public silver behenate frame, including with a 2000 mm distance estimate. With three rings, the two-ring uncertainty refits hold the tilts fixed. The full fit supplies their uncertainties and a lower bound for the centre and distance errors. Simulations with seven or more matched rings still show low 1σ coverage for beam x and rot1 (Physics and Methods 3.3).
 - **Geometry Calibration and GIWAXS orientation.** Calibration now refines the beam centre and distance with tilt fixed and reports ring-point RMS before and after refinement. Orientation reports identify weak bins excluded next to the exit-angle cut, vary that threshold in the Hermans f range, and omit model fills from undetermined pole fits. Sparse bins with measured scatter retain an uncertainty when the pooled variance fit crosses zero.
 - **Analyze ▸ Mask & corrections.** Raw background and flat-field frames can use an exposure-scaled dark.
   Set the flat-field threshold, save detector gain, offset and error model in an instrument profile, and choose
@@ -164,8 +165,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 - **Geometry: the detector tilt is calibrated, no energy is assumed, `.poni` in and out, transmission frames.**
   Geometry Calibration fits pyFAI's rot1 and rot2 with the beam centre and the distance on points of the standard's
-  rings (**Detector tilt: Refine rot1, rot2**, on; with three or more rings), each with its 1σ (ring jackknife, or the
-  covariance for two rings), and the profile it saves is tilted; on synthetic rings the tilt is found within 0.002°,
+  rings (**Detector tilt: Refine rot1, rot2**, on with three or more rings) and saves their 1σ estimates in the
+  instrument profile. On synthetic rings the tilt is found within 0.002°,
   and an untilted geometry keeps every q to 10⁻¹² (*Physics and Methods* 3.8). The calibration energy is no longer
   12 keV when the file states none: the field reads *Required*, Auto Calibration waits, and the record and profile say
   where the energy came from. Analyze's **Detector geometry** dialog has **Energy** beside the wavelength, a line saying
@@ -484,8 +485,8 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 - **Fitting, results:** each particle's radius by number (microscopy counts particles; Fitting's spheres
   and random cylinders are weighted by intensity) and σ_nn/D, also in the exported record (`derived`). For a broad
   sphere distribution (σ_R/R above about 0.2) the radius by number is *not defined* (Physics and Methods 9.3).
-- **Geometry Calibration:** the beam centre and the distance have a 1σ, the scatter between the rings (leave one
-  ring out); it is in the calibration record, the tooltips of the result and the instrument profile's source.
+- **Geometry Calibration:** the beam centre and distance have 1σ estimates in the calibration record,
+  the result tooltips and the instrument profile's source. Physics and Methods 3.3 gives the estimator for each ring count.
 - **Analyze, a tilted detector:** the rotations of a `.poni` (pyFAI's rot1, rot2, rot3) are part of the
   geometry. Every pixel is placed where pyFAI places it, so q, χ, the exit angle of a row, the solid angle and the
   polarisation factor are those of the tilted detector (on the Xeuss example |q| changes by up to 6.3 %; it now
@@ -603,7 +604,7 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   between the matched ones must all be there, so the Yoneda band is no longer taken for the first ring of a solution
   at half the distance; the best solution near a stated estimated distance is always refined. **Auto Detect**
   without an estimated distance now ranks silver behenate first on the public silver behenate image (before, a LaB₆
-  solution at a much shorter distance). A wrong estimated distance still misleads (User Manual, section 4.3).
+  solution at a much shorter distance).
   A matched ring counts in the ranking by how clearly it stands out: four orders paired with peaks of a few percent
   contrast no longer outweigh three clear rings (with NumPy 1.26 / SciPy 1.15 such a chance sequence gave 1683 mm for
   a 2200 mm grazing image); the real test frames give the same solutions as before.
@@ -1529,19 +1530,9 @@ These were found while 0.1.0 was checked; they matter to those who ran a develop
 - **Fitting did not read `.csv` curves** (0.2.0 reads them), although Analyze exports its curves as CSV. Use
   **Send to Fitting**, or open the `<name>_fit_input.dat` that Analyze writes; `.dat` and `.txt`
   files with columns `q I [σ]` open too.
-- **Geometry Calibration can put a wrong solution first.** Seen on a silver behenate image whose
-  path does not name the standard. With the standard left on “Auto Detect” and no estimated
-  distance, a LaB₆ solution at a much shorter distance came first, and the silver behenate
-  solution was last in the list of candidates. A wrong value in **Estimated distance** misleads
-  too, also with the right standard: with silver behenate chosen and 2000 mm typed in, a
-  solution near 1830 mm came first for a real distance of about 1630 mm. The field is no longer
-  filled with a built-in value, but a number can stand in it without your typing: each time an
-  image is opened it takes the distance the image file states, or else the distance of the
-  calibration applied last, which may belong to another set-up. Choose the standard yourself
-  when you know it. Leave **Estimated distance** on *Optional* (0) when you do not know the
-  distance, enter the approximate distance of your set-up when you do, and set a number you did
-  not type back to 0 unless it is that distance. Before you press **Apply**, check that the
-  distance is the one of your set-up. This will be corrected in a later version.
+- **Geometry Calibration** ranked a wrong solution first on the public silver behenate frame. This affected
+  **Auto Detect** with an empty distance field and a run with the standard selected and a 2000 mm estimate.
+  Version 0.2.0 resolves both cases on this frame (User Manual 4.3).
 - **Trainset Build (Labs) is not fully translated**: in the Chinese interface many texts of its
   steps are still English. 2D Prediction has a few such texts too.
 - After the interface language is switched in the middle of a session, a few texts keep the old

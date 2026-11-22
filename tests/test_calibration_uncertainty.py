@@ -10,12 +10,14 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+from scipy.optimize import least_squares
 
 from src.gimap.features.calibration.domain.engine import CalibrationEngine
 from src.gimap.features.calibration.domain.geometry_model import q_to_ring_radius_px
 from src.gimap.features.calibration.domain.models import CalibrationCandidate, DetectorImage
 from src.gimap.features.calibration.domain.optimizer import estimate_uncertainty
 from src.gimap.features.calibration.domain.standards import STANDARDS
+from src.gimap.features.calibration.domain.tilt_fit import tilt_residual
 from tests.test_calibration import synthetic_rings
 
 ENERGY, DISTANCE, PIXEL, CENTRE = 12.0, 1000.0, 172e-6, (442.3, 467.8)
@@ -41,6 +43,38 @@ def test_five_rings_give_a_jackknife_error_that_covers_the_true_centre() -> None
     assert abs(best.center_y_px - CENTRE[1]) < 3 * best.center_y_sigma_px + 0.02
     record = _calibrate(5).to_dict()["selected_candidate"]
     assert record["uncertainty_method"] == "ring jackknife" and record["distance_sigma_mm"] > 0
+
+
+def test_three_ring_errors_hold_tilt_fixed_in_refits_and_use_the_joint_covariance() -> None:
+    angles = np.linspace(0, 2 * np.pi, 100, endpoint=False)
+    qs = np.repeat([0.14, 0.28, 0.42], angles.size)
+    radius = np.tan(2 * np.arcsin(qs / (4 * np.pi))) / PIXEL
+    # A coherent offset on each ring and sector-to-sector noise exercise both sources of error.
+    radius += np.repeat([-0.4, 0.7, 0.3], angles.size) + np.random.default_rng(17).normal(0, 0.3, qs.size)
+    xs = CENTRE[0] + radius * np.tile(np.cos(angles), 3)
+    ys = CENTRE[1] + radius * np.tile(np.sin(angles), 3)
+    residual = tilt_residual(xs, ys, qs, 1.0, PIXEL, PIXEL)
+    params = least_squares(residual, [*CENTRE, DISTANCE, 0.01, -0.02], loss="soft_l1", f_scale=2).x
+    candidate = CalibrationCandidate("agbh", *params[:3], matched_ring_count=3, tilt_refined=True,
+                                     rot1_deg=np.degrees(params[3]), rot2_deg=np.degrees(params[4]))
+    estimate_uncertainty((xs, ys, qs), candidate, 1.0, PIXEL, PIXEL)
+
+    replicates = []
+    for ring in np.unique(qs):
+        keep = qs != ring
+        fixed = tilt_residual(xs[keep], ys[keep], qs[keep], 1.0, PIXEL, PIXEL, fixed_tilt=params[3:])
+        replicates.append(least_squares(fixed, params[:3], loss="soft_l1", f_scale=2).x)
+    jackknife = np.sqrt(2 / 3 * np.sum((replicates - np.mean(replicates, axis=0)) ** 2, axis=0))
+    steps = np.diag([1e-4, 1e-4, 1e-4, 1e-6, 1e-6])
+    jac = np.column_stack([(residual(params + step) - residual(params - step)) / (2 * step.sum())
+                           for step in steps])
+    variance = np.sum(residual(params) ** 2) / (qs.size - 5)
+    ls = np.sqrt(variance * np.diag(np.linalg.inv(jac.T @ jac)))
+    assert np.any(jackknife < ls[:3]) and np.any(jackknife > ls[:3])
+    assert candidate.uncertainty_method == "ring jackknife and least squares"
+    np.testing.assert_allclose([candidate.center_x_sigma_px, candidate.center_y_sigma_px, candidate.distance_sigma_mm],
+                               np.maximum(jackknife, ls[:3]), rtol=1e-4)
+    np.testing.assert_allclose([candidate.rot1_sigma_deg, candidate.rot2_sigma_deg], np.degrees(ls[3:]), rtol=1e-4)
 
 
 def test_one_ring_gives_no_error_and_an_older_record_reads_without_one() -> None:

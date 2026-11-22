@@ -9,7 +9,7 @@ same frame with the same calibrant, wavelength and pixel size, made without a pe
 along every ring (``extract_cpt``, massif, 1 point per degree of azimuth, numpy seed fixed) from the shipped
 ``Pilatus1M.poni`` (rot3 set to 0), and ``GeometryRefinement.curve_fit`` refines dist, poni1, poni2, rot1, rot2 with
 rot3 = 0 and λ fixed; points and refinement are repeated from the newest geometry until it stops moving. pyFAI's own
-uncertainty is that of ``curve_fit`` (s²(JᵀJ)⁻¹ of the 2θ residuals); a jackknife over rings done as GIMaP's is
+uncertainty is that of ``curve_fit`` (s²(JᵀJ)⁻¹ of the 2θ residuals); a jackknife over its six rings is
 reported as well. Both geometries are given in both conventions (GIMaP: direct beam in pixels with pixel corners on
 integers, distance from the sample to the direct beam; pyFAI: PONI), with their differences in units of the combined σ
 and the RMS ring-point residuals of each geometry on both point sets. The shipped ``.poni`` is reported for reference.
@@ -23,10 +23,8 @@ the order and varying with azimuth) on a falling background with Poisson noise, 
 2θ come from pyFAI's formula (``shared.geometry.detector_tilt.tilted_rays``), not from the ``lab_rays`` path GIMaP
 fits with. GIMaP's engine calibrates each frame (standard and energy given, a distance estimate within ±15 %); the
 coverage of its reported 1σ (and of s²(JᵀJ)⁻¹ on the same ring points, for comparison) is counted by the number of
-matched rings. Each frame is calibrated twice: by the engine as shipped, and with the beam-centre proposals of every
-image polished to the pixel as the engine does for grazing-incidence images only (``polished_proposals``, patched in
-this process): the coarse voted centre loses rings a few pixels wide from the azimuthal profile of a transmission
-image too.
+matched rings. Each frame is calibrated by the shipped engine, which polishes beam-centre proposals for both
+transmission and grazing-incidence images.
 
 usage: python tools/benchmarks/calibration_check.py [--part real|coverage|all] [--cases 300] [--workers 4]
        [--seed 20261122] [--json tools/benchmarks/calibration_check.json]
@@ -57,12 +55,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from calibration_coverage import (  # noqa: E402
-    AGBH_Q1, FRAME, GIMAP_KEYS, HC_KEV_A, PIXEL_M, coverage, engine, engine_to_gimap, gimap_spread,
-    coverage_summary, ls_sigma_gimap, named, three_ring_set, three_ring_summary)
+    AGBH_Q1, FRAME, GIMAP_KEYS, HC_KEV_A, PIXEL_M, coverage, engine_to_gimap, gimap_spread,
+    coverage_summary, ls_sigma_gimap, named, record_fit_points, three_ring_set, three_ring_summary)
 from src.gimap.features.calibration.application import LoadCalibrationImage, RunCalibration  # noqa: E402
 from src.gimap.features.calibration.application.headless import describe_calibration, with_line_checks  # noqa: E402
-from src.gimap.features.calibration.domain.gisaxs_features import specular_rod_columns, without_columns  # noqa: E402
-from src.gimap.features.calibration.domain.preprocessing import preprocess_detector_image  # noqa: E402
 from src.gimap.features.calibration.domain.requests import CalibrationRequest  # noqa: E402
 from src.gimap.features.calibration.domain.tilt_fit import tilt_residual  # noqa: E402
 from src.gimap.features.calibration.infrastructure.adapters import (  # noqa: E402
@@ -93,11 +89,13 @@ RESIDUAL_DEFINITION = {
                     "at most (tilt_fit.tilted_ring_points, refine_tilt)",
     "gimap_bounds": "beam centre within 4 % of the larger image side (12-60 px) of the start, L within +-25 % (and "
                     "the user's range), |rot1|, |rot2| <= 30 deg",
-    "gimap_sigma_reported": "3 or more matched rings: jackknife over rings, sigma^2 = (n-1)/n sum_k (theta_(k) - "
+    "gimap_sigma_reported": "4 or more contributing rings: jackknife over rings, sigma^2 = (n-1)/n sum_k (theta_(k) - "
                             "mean)^2, theta_(k) the same robust fit with ring k left out (unbounded, from the full fit, "
                             "same points); 2 rings: s^2 (J^T J)^-1, s^2 = sum r_i^2 / (N - p), forward-difference J "
-                            "(optimizer.estimate_uncertainty). With 3 rings each jackknife fit uses the remaining 2 rings "
-                            "with all 5 parameters free. The tilt is refined automatically with 3 or more rings only.",
+                            "(optimizer.estimate_uncertainty). With 3 rings the two-ring refits hold both tilts at "
+                            "the full fit. When the full fit refined the tilts, their variance comes from its "
+                            "five-parameter covariance, and x, y and L take the larger of the jackknife and covariance "
+                            "standard errors. With fixed tilt use the jackknife for x, y and L.",
     "pyfai_minimises": "sum_i (2theta_i - 2theta_ring(i))^2 in radians, plain least squares "
                        "(GeometryRefinement.residu2; curve_fit = Levenberg-Marquardt); its sigma is curve_fit's "
                        "s^2 (J^T J)^-1",
@@ -142,19 +140,18 @@ def point_rms(points, values, wavelength=WAVELENGTH_A) -> float:
 
 # ---------------------------------------------------------------- part 1: the public frame, GIMaP and pyFAI
 
-def gimap_real(polish: bool = False) -> dict:
+def gimap_real() -> dict:
     image = LoadCalibrationImage(LocalCalibrationImageAdapter(ask_dataset=False))(FRAME)
     request = CalibrationRequest(image=image, energy_kev=HC_KEV_A / WAVELENGTH_A, standard_key="agbh",
                                  pixel_size_x_m=PIXEL_M, pixel_size_y_m=PIXEL_M)
     start = time.perf_counter()
-    with engine(polish):
+    with record_fit_points() as fit_points:
         result = RunCalibration(LegacyCalibrationRunnerAdapter())(request, None, None)
     seconds = time.perf_counter() - start
     summary = with_line_checks(describe_calibration(result), image)
     candidate = result.selected_candidate
-    analysis = preprocess_detector_image(image)
-    ring_image = without_columns(analysis, specular_rod_columns(analysis))
-    points, replicates, covariance = gimap_spread(ring_image, candidate, WAVELENGTH_A)
+    points = fit_points[id(candidate)]
+    replicates, covariance = gimap_spread(points, candidate, WAVELENGTH_A)
     values = np.array([candidate.center_x_px + 0.5, candidate.center_y_px + 0.5, candidate.distance_mm,
                        candidate.rot1_deg, candidate.rot2_deg])
     reported = np.array([candidate.center_x_sigma_px, candidate.center_y_sigma_px, candidate.distance_sigma_mm,
@@ -263,7 +260,6 @@ def real_frame() -> dict:
     import importlib
     pyFAI = importlib.import_module("pyFAI")
     gimap = gimap_real()
-    polished = gimap_real(polish=True)
     run = PyFAIRun()
     data, values, error, history = run.calibrate(run.shipped())
     shipped = run.shipped()
@@ -314,13 +310,6 @@ def real_frame() -> dict:
                   "values_poni": named(PONI_KEYS, to_poni(gimap["values"])),
                   "sigma_poni_jackknife": named(PONI_KEYS, gimap["sigma_poni"]),
                   "sigma_least_squares_same_points": named(GIMAP_KEYS, gimap["sigma_ls"])},
-        "gimap_polished_for_reference": {
-            "note": "the engine with the beam-centre proposals polished as at grazing incidence (polished_proposals)",
-            "matched_rings": polished["record"]["matched_rings"], "orders": polished["record"]["orders"],
-            "values": named(GIMAP_KEYS, polished["values"]), "sigma": named(GIMAP_KEYS, polished["sigma"]),
-            "difference_from_pyfai_over_combined_sigma_curve_fit": named(
-                GIMAP_KEYS, (polished["values"] - pyfai["gimap"]) / np.hypot(polished["sigma"], pyfai["sigma_gimap"]), 3),
-            "point_rms_px": polished["record"]["point_rms_px"]},
         "pyfai": {"route": "Recalibration.extract_cpt('massif', 1.0) from the shipped .poni (rot3 = 0), then "
                            "GeometryRefinement.curve_fit(with_rot=True), repeated until the geometry stops moving",
                   "cycles": int(len(history)), "control_points": int(len(data)),
