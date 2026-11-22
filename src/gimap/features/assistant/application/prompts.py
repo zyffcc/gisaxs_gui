@@ -111,9 +111,9 @@ particle spacing (a form factor or the beam tail makes a shoulder too): call it 
 a model fit; a 'shoulder' is not a peak. fit_horizontal_cut is Predict parameters: GIMaP's network \
 proposes compositions (one or two populations of spheres and upright cylinders, '(S)' with a \
 paracrystal distance D) and values, each solution is refined by least squares, and the solutions come \
-most probable first with their probability and posterior intervals. Report the most probable \
-('chosen') with its intervals; when another solution has a probability of 0.2 or more, the curve does \
-not decide the model — give the probabilities and leave the choice to the user (or to what the notes \
+in order of probability, or BIC weight if evidence sampling failed. Report the chosen solution's least-squares \
+values, posterior medians where available, interval kind and diagnostics. Call bic_weight a BIC weight. \
+When another solution's weight is 0.2 or more, give both weights and leave the choice to the user (or to what the notes \
 say about the sample). χ²ᵣ is the reduced χ² over the fitted points ('points': fitted of given, the rest below the network's q window). A value in at_bounds ended on a \
 bound of its range and is not determined by the curve: say so. A distance D of hundreds of nm means \
 no correlation in the q range, not a measured distance. The model is confirmed in Fitting.

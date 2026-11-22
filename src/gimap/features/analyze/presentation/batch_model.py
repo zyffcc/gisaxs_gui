@@ -18,6 +18,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
+from src.gimap.app.presentation.i18n import tr
+
 from ..application import (
     FIT_MODEL,
     FIT_NONE,
@@ -78,8 +80,9 @@ def _trend_panels(table: FitTable, kind: str) -> list:
 def _latest_model(rows) -> str:
     """The most probable solution of a frame in a few words (the panel's latest fit)."""
     best = rows[0]
-    chance = best.get("probability")
-    return (f"{model_name(best)}" + ("" if chance is None else f", p {float(chance):.2f}")
+    label = tr("BIC weight") if "bic_weight" in best else "p"
+    chance = best.get("bic_weight", best.get("probability"))
+    return (f"{model_name(best)}" + ("" if chance is None else f", {label} {float(chance):.2f}")
             + f", χ²ᵣ {float(best.get('best_chi2_weighted', float('nan'))):.3g}")
 
 

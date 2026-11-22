@@ -104,13 +104,16 @@ def test_predict_gives_the_same_values_with_and_without_the_flag() -> None:
     flagged = fit(q / 10.0, counts, sigma, components=(1,), cut_qz=QZ)
 
     def rest(row: dict) -> str:
-        return json.dumps({k: v for k, v in row.items() if k not in ("flags", "warnings", "seconds")}, sort_keys=True)
+        diagnostic = {k: v for k, v in row.get("diagnostics", {}).items() if k not in ("measured_qz", "reflected_beam")}
+        return json.dumps({k: v for k, v in row.items() if k not in ("flags", "warnings", "seconds", "diagnostics")}
+                          | {"diagnostics": diagnostic}, sort_keys=True)
 
     assert [rest(row) for row in plain] == [rest(row) for row in flagged]
     assert not any(flag.startswith("qzR") for row in plain for flag in row["flags"])
     best = flagged[0]
     assert best["components"][0]["params"]["R"] == pytest.approx(5.0, rel=0.1) and "qzR:R_1" in best["flags"]
-    assert [flag for flag in best["flags"] if flag != "qzR:R_1"] == plain[0]["flags"]
+    assert "qzR_cov:R_1" in best["flags"]
+    assert [flag for flag in best["flags"] if flag not in ("qzR:R_1", "qzR_cov:R_1")] == plain[0]["flags"]
     assert fit_names.SENTENCES["qzR"].format(name="R") in best["warnings"]
 
 
@@ -130,6 +133,44 @@ def test_the_cut_q_z_is_taken_from_the_geometry_and_the_yoneda_band_or_not_at_al
                     {"geometry": {"incidence_deg": 0.4}}):  # no λ
         assert cut_qz({**status, **changed}) is None, changed
     assert cut_qz(None) is None
+
+
+def test_bic_gisaxs_report_preserves_weights_and_flags_and_names_their_kind():
+    from types import SimpleNamespace
+
+    from src.gimap.features.assistant.application.gisaxs_export import fit_solutions_csv
+    from src.gimap.features.assistant.application.gisaxs_procedure import GisaxsProcedureMixin
+    from src.gimap.features.assistant.application.gisaxs_report import gisaxs_sections
+    from src.gimap.features.assistant.application.gisaxs_tools import _solution
+    from src.gimap.features.assistant.presentation.guided_gisaxs import outcome_summary
+
+    flags = ["bic", "qzR_cov:R_1", "qzR_fail:R_1", "cyl_sphere:R_1"]
+    base = dict(rank=1, composition="cylinder", flags=flags, compared_by="bic", bic_weight=0.7, best_chi2_weighted=1.,
+                components=[{"type": "cylinder", "params": {"R": 6.}}],
+                posterior_summary={"R_1": {"median": 5.8, "low68": 5.5, "high68": 5.9}},
+                least_squares_values={"R_1": 6.}, ess=24., diagnostics={"compared_by": "bic", "posterior_kind": "tempered"})
+    solution = _solution(base)
+    legacy = {**base, "rank": 2, "probability": 0.3}
+    del legacy["bic_weight"]
+    fit = {"solutions": [solution, _solution(legacy)], "chosen": 0}
+    report = {"gisaxs": {"fit": fit}}
+    assert fit["solutions"][1]["bic_weight"] == 0.3 and "probability" not in solution
+    assert "BIC weight 0.70" in outcome_summary(report)
+    table = fit_solutions_csv(fit)
+    assert "rank,model,chi2,bic_weight," in table and "R_posterior_median" in table and "ess," in table
+    text = "\n".join(gisaxs_sections(report))
+    assert "| BIC weight |" in text and "Effective sample size 24" in text and "| R_1 | 6 | 5.8 |" in text
+
+    procedure = GisaxsProcedureMixin()
+    attention = []
+    procedure._attention = lambda item, why, option, hint: attention.append(why)
+    procedure._decide = lambda *args: None
+    procedure.progress = lambda message: None
+    procedure._call = lambda name: fit
+    procedure.catalog = SimpleNamespace(results=SimpleNamespace(gisaxs=report["gisaxs"]))
+    procedure._fit()
+    assert any("BIC weight of at least 0.2" in item for item in attention)
+    assert all(fit_names.SENTENCES[flag.split(":")[0]].format(name="R") in attention for flag in flags[1:])
 
 
 def test_the_caveat_names_each_flagged_population_with_its_q_z_r() -> None:

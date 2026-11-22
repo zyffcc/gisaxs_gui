@@ -21,8 +21,8 @@ from src.gimap.shared.version import SOFTWARE
 from ..domain import mcmc
 from ..domain.fit_engine import FitData
 from ..domain.fit_model import FitModel
-from ..domain.posterior.refine import model_values
-from ..domain.posterior_check import CheckResult, FitTarget, PredictTarget, run_check
+from ..domain.posterior.refine import MODEL_ERROR_FLOOR, model_values
+from ..domain.posterior_check import ENSEMBLES, CheckResult, FitTarget, PredictTarget, run_check
 from .single_predict import compositions, cut_geometry, cut_qz_minus
 
 NOTHING = ("Nothing to check: put a solution of Predict parameters in Model, or fit with Refine or Search first.")
@@ -32,6 +32,9 @@ CONVERGED = ("Converged: {kept} steps kept (the first half discarded) ≥ {facto
 NOT_CONVERGED = ("Not converged: {kept} steps kept, the longest autocorrelation time {tau} steps (needs ≥ {factor} "
                  "× of it), R̂ up to {rhat} (needs < {limit}). Run longer before reading the intervals.")
 CHECK_ONLY = "A check only: the values and intervals in Results are not changed."
+PREDICT_CHECK = ("a second sampler of the same posterior (same likelihood, model error and prior); "
+                 "checks the Monte Carlo accuracy of this mode")
+BIC_REFERENCE = "The reference intervals are least-squares intervals from the BIC fallback."
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,7 @@ class Checked:
     target: object
     kind: str
     reference: dict
+    reference_kind: str = "least_squares"
 
 
 def target_for(model: FitModel, data: Optional[FitData], solutions=(), result=None) -> Checked:
@@ -54,12 +58,22 @@ def target_for(model: FitModel, data: Optional[FitData], solutions=(), result=No
         if centre is None:
             raise ValueError(NOTHING)
         qz, _grazing = cut_geometry(model)
+        diagnostics = getattr(solution, "diagnostics", None) or {}
         law = model.components[0].law
         coupling = model.components[0].coupling
-        target = PredictTarget(data.q, data.intensity, data.sigma, composition=composition, centre=centre, qz=qz,
-                               qz_minus=cut_qz_minus(model), law=law, coupling=coupling)
-        reference = {name: (v[1], v[2], v[3], v[4], v[5]) for name, v in dict(solution.intervals).items()}
-        return Checked(target, "predict", reference)
+        target = PredictTarget(data.q, data.intensity, data.sigma, composition=composition, centre=centre,
+                               qz=diagnostics.get("cut_qz", qz),
+                               qz_minus=diagnostics.get("cut_qz_minus", cut_qz_minus(model)), law=law, coupling=coupling,
+                               model_error_floor=diagnostics.get("model_error_floor", MODEL_ERROR_FLOOR),
+                               importance_starts=getattr(solution, "importance_starts", ()))
+        summary = getattr(solution, "posterior_summary", {})
+        if summary:
+            keys = ("median", "low68", "high68", "low95", "high95")
+            return Checked(target, "predict", {name: tuple(row[k] for k in keys) for name, row in summary.items()},
+                           diagnostics.get("posterior_kind", "posterior"))
+        reference = {name: tuple(v[1:6]) for name, v in dict(solution.intervals).items()}
+        kind = "least_squares" if "bic" in getattr(solution, "flags", ()) else "reported_intervals"
+        return Checked(target, "predict", reference, kind)
     if result is None:
         raise ValueError(NOTHING)
     target = FitTarget(result.model, data)
@@ -86,7 +100,7 @@ def rows(result: CheckResult, reference: dict) -> list[dict]:
         q = result.quantiles[:, index]
         ref = reference.get(name)
         overlap = None
-        if ref is not None and all(math.isfinite(v) for v in ref[1:3]):
+        if ref is not None and all(v is not None and math.isfinite(v) for v in ref[1:3]):
             overlap = bool(q[1] <= ref[2] and ref[1] <= q[2])
         out.append({"name": name, "checked": float(result.best[index]), "reference": ref,
                     "median": float(q[0]), "low68": float(q[1]), "high68": float(q[2]), "low95": float(q[3]),
@@ -99,7 +113,7 @@ def verdict(result: CheckResult) -> tuple[str, dict]:
     """(template, values as text) of whether the run is long enough: ``CONVERGED`` or ``NOT_CONVERGED``."""
     d = result.diagnostics
     taus = [t for t in d.tau if math.isfinite(t)]
-    rhats = [r for r in d.rhat if math.isfinite(r)]
+    rhats = [r for r in d.rhat if not math.isnan(r)]
     values = {"kept": str(d.kept_steps), "factor": f"{mcmc.TAU_FACTOR:g}",
               "tau": f"{max(taus):.0f}" if taus else "—", "rhat": f"{max(rhats):.3f}" if rhats else "—"}
     if d.converged:
@@ -119,15 +133,36 @@ def record(result: CheckResult, checked: Checked) -> dict:
                        if checked.kind == "predict" else
                        "the fit's: -sum r^2 / (2 s^2), s^2 = chi2_red of the fit, scales solved; uniform in the fit's "
                        "coordinates"),
-        "steps": result.steps, "walkers": result.walkers, "burn_in": mcmc.BURN, "seed": result.seed,
+        "steps": result.steps, "walkers": result.walkers, "ensembles": result.diagnostics.ensembles,
+        "walkers_per_ensemble": result.walkers, "burn_in": mcmc.BURN, "seed": result.seed,
+        "starts": result.starts_from,
+        "rhat_method": "split R-hat across independent ensembles' mean traces",
+        "reference_kind": checked.reference_kind,
         "stopped": result.stopped, "seconds": result.seconds, "converged": result.diagnostics.converged,
         "acceptance": number(result.diagnostics.acceptance),
         "values": [{key: (number(value) if isinstance(value, float) else value) for key, value in row.items()
                     if key != "reference"} | {"reference": None if row["reference"] is None else
                                               [number(v) for v in row["reference"]]}
                    for row in rows(result, checked.reference)],
-        "note": CHECK_ONLY,
+        "note": PREDICT_CHECK if checked.kind == "predict" else CHECK_ONLY,
     }
+
+
+def report_blocks(result: CheckResult, checked: Checked) -> list:
+    """The completed check on the current data and model, in the fit report's block format."""
+    template, values = verdict(result)
+    parts = [("h2", "Posterior check (MCMC)"),
+             ("p", PREDICT_CHECK if checked.kind == "predict" else CHECK_ONLY),
+             ("p", f"{result.diagnostics.ensembles} independent ensembles, {result.walkers} walkers per ensemble, "
+                   f"{result.steps} steps each. " + template.format(**values))]
+    if checked.kind == "predict" and checked.reference_kind == "least_squares":
+        parts.append(("p", BIC_REFERENCE))
+    if result.stopped:
+        parts.append(("p", "Stopped before the requested number of steps."))
+    parts.append(("table", ["Parameter", "MCMC median", "MCMC 68 %", "τ (steps)", "split R̂"],
+                  [[r["name"], f"{r['median']:.6g}", f"{r['low68']:.6g} – {r['high68']:.6g}", f"{r['tau']:.1f}",
+                    f"{r['rhat']:.3f}"] for r in rows(result, checked.reference)]))
+    return parts
 
 
 def trace(result: CheckResult, name: str) -> tuple[np.ndarray, np.ndarray]:
@@ -136,4 +171,5 @@ def trace(result: CheckResult, name: str) -> tuple[np.ndarray, np.ndarray]:
     return result.trace_steps, result.trace[:, :, index]
 
 
-__all__ = ["CHECK_ONLY", "CHANGED", "CONVERGED", "NOT_CONVERGED", "Checked", "NOTHING", "record", "rows", "run", "target_for", "trace", "verdict"]
+__all__ = ["BIC_REFERENCE", "CHECK_ONLY", "CHANGED", "CONVERGED", "ENSEMBLES", "NOT_CONVERGED", "PREDICT_CHECK",
+           "Checked", "NOTHING", "record", "report_blocks", "rows", "run", "target_for", "trace", "verdict"]

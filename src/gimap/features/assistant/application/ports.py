@@ -180,8 +180,8 @@ class GeometryCalibrator(Protocol):
 
 
 class CurveFitter(Protocol):
-    """Predict parameters on one curve (|q| > 0, q in Å⁻¹): the distinct solutions, most probable first
-    (Fitting's ``create_curve_fit``: rows with ``probability``, values, ``posterior`` intervals, curves)."""
+    """Predict parameters on one curve (|q| > 0, q in Å⁻¹), yielding solutions in descending comparison weight.
+    Fitting's ``create_curve_fit`` supplies probability or BIC weight, parameter summaries, diagnostics and curves."""
 
     def __call__(self, q_inv_angstrom, intensity, sigma, *, components=(), report=None, cancelled=None,
                  cut_qz=None) -> list[dict]:

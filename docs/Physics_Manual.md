@@ -3003,11 +3003,10 @@ The benchmarks still run with a copy of the kit: `tools/benchmarks/fit1d_recover
 
 ### 9.13 Predict parameters
 
-*Predict parameters* finds the particles of a cut and their values from the curve, says how probable each solution
-is and how well the curve fixes every value. A network trained on simulated cuts proposes compositions and values;
-the proposals are weighted against Fitting's own model on the measured points; every solution is refined by least
-squares and its posterior is sampled around it. The network only decides where the model is looked at: the values,
-their intervals and the probabilities come from the model and the curve.
+*Predict parameters* compares particle compositions on a measured cut. A network trained on simulated cuts proposes
+compositions and starting values. Bounded least squares refines them. Importance sampling around each mode estimates
+parameter intervals and the evidence used to compare compositions. When local sampling fails, the comparison uses
+BIC weights.
 
 **Compositions and values.** A composition is one to three populations, listed by increasing mean radius, each a
 sphere, an upright cylinder or a random cylinder, with or without the paracrystal of section 9.5 — 258 compositions.
@@ -3077,8 +3076,8 @@ cylinders (1–2)* or *Any particles (1–3)*.
    modes of the weights tempered to 50 effective samples (w^β, the largest β ≤ 1 that gives them) whose heaviest sample
    is another: on a bright curve the weights sit on one or two samples, and a mode the network proposed with a
    slightly lower likelihood would otherwise never be refined. On a cut with two paths, r is free in least squares
-   (|r| ≤ 1, its phase within ±π of the start's) and goes with the solution's model into Model; it is not one of the
-   reported values. For the two best compositions (by BIC) of two or three
+   (|r| ≤ 1, its phase within ±π of the start's) and goes with the solution's model into Model; the sampled |r| and phase are summarized for sphere fits with two paths. Phase quantiles
+   use the 2π branch centred on the refined phase. For the two best compositions (by BIC) of two or three
    populations, two more starts come from each of their two best solutions (`posterior/moves.py`): a population's paracrystal
    peak fixes its D to a fraction of a per cent while its form factor fixes R only loosely, so another R at the same
    D, or the paracrystals of two populations exchanged, often describe the curve as well, and the network seldom
@@ -3107,7 +3106,7 @@ cylinders (1–2)* or *Any particles (1–3)*.
 5. A composition's evidence is the sum of those of its distinct solutions; the probabilities of the compositions are
    ∝ Z (equally likely beforehand), a solution's is its composition's times its share. When the sampling of any
    solution did not converge (fewer than 10 effective samples, or a refined solution whose radii left the
-   composition's order and has no local posterior), all are compared by BIC instead, Z ∝ exp(−BIC/2), and their
+   composition's order and has no local posterior), all receive BIC weights proportional to exp(−BIC/2), and their
    intervals are the least-squares errors of section 9.8 with σ_m (scaled by χ²_m/N when it is above 1; on a log
    scale for the lengths; never beyond the value's range); the
    solutions carry the flag *bic* (*compared by χ² and the number of values (BIC): the posterior's sampling did not
@@ -3115,7 +3114,28 @@ cylinders (1–2)* or *Any particles (1–3)*.
    posterior lies away from the least-squares optimum, and the evidences cannot be estimated (on BornAgain's GALAXI
    model they ranked a solution with χ²/N = 11.5 above one with 4.4).
 
-Every solution holding at least 1 % of the posterior is returned, most probable first. Each carries the refined
+**What the reported numbers measure.** The solution weight refers to one mode. The composition probability sums
+the weights of all its modes, including modes below the display cutoff. If sampling fails for any retained mode,
+the comparison uses normalized BIC weights for every mode and composition. The record identifies the comparison
+and the interval source separately. Evidence always uses the original weights. With effective sample size
+ESS = (Σw)²/Σw² below 50, sampled quantiles use tempered weights. BIC fallback intervals use least-squares errors.
+Beside the least-squares value and its reported interval, **posterior median** gives the weighted 50th percentile
+with the original 16th and 84th percentiles, before the interval is extended to the optimum. Where sampling produced
+no local posterior, these entries are empty. Scales and background are solved for each sample and have no sampled marginal.
+
+For each mode, draw N of its N final importance weights with replacement and calculate log Z* = log(mean(w*)).
+Repeat 200 times with a separate fixed seed (7529). The sample standard deviation of log Z* estimates its Monte
+Carlo error conditional on the sampled proposals. For each replicate, sum Z* over modes of each composition and
+divide by the sum over all compared modes. The 16th and 84th percentiles give the composition probability's
+Monte Carlo range. If a mode has no local sampler, the record identifies the network-proposal evidence (using the counting uncertainty before the 5 % floor), its effective sample size and bootstrap error. BIC weights have no evidence-based probability range.
+
+The validation grid in `tools/benchmarks/recovery_cases.py` has 397 points from 0.02 to 2.0 nm⁻¹.
+Its density ρ₀ = 397/log₁₀(2/0.02) = 198.5 points per decade was used to calibrate the 5 % model-error floor.
+The record gives N and ρ = N/log₁₀(q_max/q_min) on the fitted window. When ρ/ρ₀ exceeds 1.5 or falls below 1/1.5,
+a notice explains that, for independent points of comparable precision and the same q range, interval widths
+scale approximately as √(ρ₀/ρ). Rebinning correlated points need not follow this scaling.
+
+Every solution with normalized weight at least 1 % is returned in descending order. Each carries the refined
 values with their least-squares errors (9.8), the posterior median and intervals, χ²ᵣ, its probability and flags. An
 interval always holds the refined value. The refined value is the least-squares optimum with the counts' σ, and the
 posterior has the model error and the prior's ranges, so on a curve the model does not describe within σ, or for a
@@ -3138,7 +3158,7 @@ among the choice, and with both angles (two paths) about 2.4 times as long.
 
 Model's coupling (DA) and legacy size law (mean-parameterized log-normal) are used in steps 2–4. For the new
 manual number distributions, Predict uses its original Gaussian. The network, trained on the LMA and Gaussian
-sizes, is then only a proposal, which the weights correct. Fitting has no four-term DWBA: with both angles Predict
+sizes, is then only a proposal, which the weights correct. Predict uses three substrate levels. With both angles it
 uses the two paths of spheres with a free r (the terms that matter at the Yoneda angle, section 9.10), with q_z alone
 the Born term at it, else the effective interface.
 
@@ -3161,7 +3181,7 @@ no such approximation, so GIMaP says when it matters:
   numbered as for *large*) gets the flag *qzR* (`refine.interface_flags`, `refine.QZR_LIMIT`): *R (n): q_z·R is
   above 1.7 at the cut's q_z, where the form factor at q_z = 0 (the default effective interface) biases the radius,
   usually too small; give both angles of the cut (αi, αf) so that spheres are fitted with the exit-reflected path
-  (random cylinders stay at q_z = 0)*. A solution fitted at level 2 or 3 gets none.
+  (random cylinders stay at q_z = 0)*. This flag applies only at level 1.
 - The flag needs the cut's q₊, so only a fit at level 1 that knows the angles sets it. The automatic analysis (Run
   Automatic Analysis, `tools/gimap_agent.py auto`, Process with AI) fits at level 1 and takes α_i and λ of the
   geometry and α_f of the Yoneda band the cut is at; its report lists the flag among the *Decisions* (fit caveat)
@@ -3169,8 +3189,15 @@ no such approximation, so GIMaP says when it matters:
   angles (`gisaxs.fit.cut_qz`, section 14.10). For a cut elsewhere or without α_i, `cut_qz` is `null` and nothing
   is flagged: no angle is guessed.
 - The Fit page and the 1D Predict window take the level from the angles they are given. A curve file does not carry
-  the angles of its cut (Send to Fitting passes the file), so a fit there at level 1 knows no q₊ and has no flag;
-  they show the flag, in the words above, on a solution that has it.
+  the angles of its cut. At level 1, users can enter the measured q₊ separately for flags on reflected-beam data. The fit still evaluates the effective interface at q_z = 0.
+- For a sphere or random cylinder on a reflected-beam cut fitted at level 1 or 2, `qzR_cov:R_n` warns above
+  q₊R = 1.2. In the sphere coverage table below (`posterior_dwba_pairs.json`), nominal 68 % intervals cover the
+  true radius on only 33 % (level 1) and 18 % (level 2) of DWBA cuts in the 1.2–1.7 bin. Level 2 adds
+  `qzR_fail:R_n` above 2, the approximate onset of strong model error in that comparison. Use level 3 or a
+  four-term DWBA fit. These are sphere validation results, applied conservatively to random cylinders.
+- `cyl_sphere:R_n` marks a random or upright cylinder with known height, 0.8 ≤ h/(2R) ≤ 1.25 and q₊R > 1.2.
+  This aspect-ratio check flags a possible alternative interpretation of the DWBA recovery results. A horizontal
+  upright-cylinder cut alone does not determine h. It can use a height supplied with the selected population in Model.
 - For random cylinders the limit is the spheres', applied to the radius, which is a lower bound of their size; no
   level evaluates them at the cut's q_z in Fitting's model, so the flag only warns.
 - The flag changes no value, interval or probability of a solution: it is added after the fit
@@ -3707,9 +3734,10 @@ Implementation: `src/gimap/features/fitting/domain/joint_fit.py`, `domain/vertic
 
 ### 9.19 Posterior check by MCMC
 
-**Results ▸ Uncertainty and Report… ▸ Posterior check (MCMC)** runs a short Markov chain Monte Carlo on the posterior
-of the solution in Model and sets its intervals beside those it checks. It is a check: it changes no value, interval
-or probability of Results or of Predict parameters.
+**Results ▸ Uncertainty and Report… ▸ Posterior check (MCMC)** compares intervals for the solution in Model.
+For Predict parameters it uses a second sampler of the same posterior (same likelihood, model error and prior);
+checks the Monte Carlo accuracy of this mode. Agreement measures sampling accuracy conditional on the assumed
+model. The held-out DWBA coverage in section 9.13 tests how often an interval contains the true radius.
 
 **What is sampled.**
 
@@ -3723,7 +3751,8 @@ or probability of Results or of Predict parameters.
   ```
 
   over every value of the composition (the beam tail, σ_q and τ included; r only with both angles). The reference is
-  Predict's median and 68 % / 95 % intervals.
+  Predict's sampled median and 68 % / 95 % intervals, with the same tempering as in section 9.13. If no sampled
+  summary is available and the comparison used BIC, the reference is the reported least-squares interval.
 - A manual fit (the last Refine or Search): its free non-linear values, uniform in the fit's coordinates t ∈ [0, 1]
   of (9.18)–(9.19) (the contact D ≥ 2R and the inequalities as in the fit), sampled in u = logit(t), the scales solved
   at every point as the fit solves them (a profile):
@@ -3735,22 +3764,27 @@ or probability of Results or of Predict parameters.
   the likelihood whose curvature the errors (9.25) linearise, so a curve the model describes only to χ²_red > 1 widens
   the intervals as it widens the errors. The reference is the fit's value ± 1σ (± 1.96σ for 95 %).
 
-**The sampler** is an affine-invariant ensemble of W walkers (W even, at least 16 and four per value; Foreman-Mackey et
-al., 2013): each half moves against the other, at every step by the differential-evolution move of DE-MC (ter Braak,
+**The sampler** runs two independent affine-invariant ensembles of W walkers each (Foreman-Mackey et al., 2013).
+W is even. The automatic setting uses at least 16 walkers and at least four per value. Each half of an ensemble
+moves against its other half, at every step by the differential-evolution move of DE-MC (ter Braak,
 2006; DREAM's proposal, Vrugt et al., 2009) with probability 0.8, y = x_k + γ (x_a − x_b), γ = 2.38/√(2d), or else by
 the stretch move of Goodman & Weare (2010), y = x_j + Z (x_k − x_j), Z ~ 1/√z on [1/2, 2], accepted with
-min(1, Z^(d−1) p(y)/p(x_k)). The walkers start around the values checked, each coordinate spread by half the target's
-own width there, 1/√(−∂² ln p/∂z²) (central differences). By default 3000 steps (**Steps**), the first half discarded;
-**Seed** makes a run reproducible.
+min(1, Z^(d−1) p(y)/p(x_k)). Predict supplies representative importance samples of the selected mode. The starting
+points are divided along the first principal component of their standardised logit coordinates. Each ensemble draws
+from a different half. Missing starts are drawn from the uniform prior box, also split this way. A manual fit starts
+from the prior box. By default each ensemble runs for 3000 steps (**Steps**) and discards the first half.
+**Seed** reproduces the starts and moves.
 
 **Is it long enough?** For every value: the integrated autocorrelation time τ (the walkers' normalised autocorrelation
-functions averaged, summed to Sokal's window M ≥ 5τ) and the split R̂ (every walker's kept half split in two, 2W chains;
-Gelman & Rubin, 1992; Vehtari et al., 2021). The verdict is *converged* when the kept steps are at least 50 τ for
-every value and every R̂ is below 1.05; the run then holds about W·n/τ independent samples. Otherwise it says to run
-longer. A ⚠ marks a value whose 68 % interval does not overlap the one checked. The run starts at the solution: a
-posterior with several modes is sampled around this one (Predict lists the others as solutions of their own).
+functions averaged, summed to Sokal's window M ≥ 5τ) and split R̂ across the independent ensembles (Gelman & Rubin,
+1992). At each step the walkers' mean gives one trace value per ensemble. Splitting both kept traces in time gives
+four series of length m. With V the mean within-series variance and B = m times the variance of the four series'
+means, R̂ = √[((m−1)V + B)/(mV)]. Ensembles trapped in different modes can each look stationary while disagreeing in
+R̂. The verdict is *converged* when the kept steps n per ensemble are at least 50 τ for every value and every R̂ is
+below 1.05. The estimated effective sample count is 2Wn/τ. A ⚠ marks a value whose 68 % interval does not overlap
+the reference. Agreement between ensembles can still miss a mode that neither visited.
 
-**Checked** (`tools/benchmarks/mcmc_check.py`): on a correlated Gaussian in four dimensions (16 walkers, 4000 steps)
+**Checks of the earlier single-ensemble sampler** (`tools/benchmarks/mcmc_check.json`): on a correlated Gaussian in four dimensions (16 walkers, 4000 steps)
 every quantile within 0.11 σ of the exact one; on a synthetic sphere cut (R = 4 nm, σR/R = 0.2, Poisson noise, 120
 points), the check of a Refine fit of R and σR/R against the same posterior integrated on a 241 × 241 grid: the 2.5,
 16, 50, 84 and 97.5 % quantiles within 0.05 σ (R: 68 % interval 3.952–4.000 nm against 3.952–3.999 nm; the fit's

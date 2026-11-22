@@ -42,13 +42,14 @@ def gaussian(seed: int = 0) -> dict:
     rng = np.random.default_rng(seed)
     cov = np.array([[1.0, 0.9, 0.0, 0.2], [0.9, 1.0, 0.1, 0.0], [0.0, 0.1, 4.0, -1.0], [0.2, 0.0, -1.0, 0.5]])
     precision = np.linalg.inv(cov)
-    chain = mcmc.sample(lambda x: -0.5 * np.einsum("bi,ij,bj->b", x, precision, x), 0.1 * rng.normal(size=(16, 4)),
-                        4000, rng)
+    start = rng.normal(size=(2, 16, 4)) + np.array([-2, 2])[:, None, None]
+    chain = mcmc.sample(lambda x: -0.5 * np.einsum("bi,ij,bj->b", x, precision, x), start, 4000, rng)
     kept = chain.kept().reshape(-1, 4)
     exact = np.array([[0.0, -1.0, 1.0, -1.959964, 1.959964]]).T * np.sqrt(np.diag(cov))[None, :]
     found = mcmc.quantiles(kept, LEVELS)
     diagnostics = mcmc.diagnose(chain)
-    return dict(steps=4000, walkers=16, max_quantile_error_sigma=float(np.max(np.abs(found - exact) / np.sqrt(np.diag(cov)))),
+    return dict(steps=4000, ensembles=diagnostics.ensembles, walkers=16,
+                max_quantile_error_sigma=float(np.max(np.abs(found - exact) / np.sqrt(np.diag(cov)))),
                 tau=list(diagnostics.tau), rhat=list(diagnostics.rhat), acceptance=diagnostics.acceptance,
                 converged=diagnostics.converged)
 
@@ -110,7 +111,7 @@ def main():
     rows["fit_target"] = dict(
         names=check.names, fit=list(check.best), fit_errors=[fit.errors[(0, "R")], fit.errors[(0, "sigma_R")]],
         grid_quantiles=grid.tolist(), mcmc_quantiles=check.quantiles.tolist(), steps=check.steps,
-        walkers=check.walkers, seconds=check.seconds,
+        ensembles=check.diagnostics.ensembles, walkers=check.walkers, seconds=check.seconds,
         max_quantile_error_sigma=float(np.max(np.abs(check.quantiles - grid) / sd)),
         tau=list(check.diagnostics.tau), rhat=list(check.diagnostics.rhat), converged=check.diagnostics.converged)
     print("FitTarget:", rows["fit_target"], flush=True)
@@ -128,7 +129,7 @@ def main():
     rows["predict_target"] = dict(
         names=names, reported=predict.reported, mcmc_quantiles=check.quantiles.tolist(),
         importance_quantiles=sampled.tolist(), importance_ess=local.ess, steps=check.steps, walkers=check.walkers,
-        seconds=check.seconds,
+        ensembles=check.diagnostics.ensembles, seconds=check.seconds,
         max_quantile_difference_sigma=float(np.max(np.abs(check.quantiles[:, reported] - sampled[:, reported])
                                                    / half[reported])),
         max_quantile_difference_sigma_populations=float(np.max(

@@ -41,6 +41,10 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
   The Normalisation, Corrections and intensity-correction sections head the Mask & corrections step, and the step
   says when the intensities are scaled. Geometry Calibration shows one RMS residual and names it (ring points with the
   tilt, ring radii without). Manual 5.2, 5.9, 4.3; *Physics and Methods* 3.4, 7.10, 7.11.
+- **Predict parameters** reports least-squares values, sampled medians, interval sources, BIC weights and Monte
+  Carlo errors. It flags high-q_z·R limits and departures from the validation point density. The MCMC check
+  compares independently initialized ensembles and reports autocorrelation time and split R̂.
+
 - **GIWAXS indexing and pole figures (Analyze ▸ Phases).** Give phases as a CIF (cell, symmetry operations, atom
   sites; |F|² from Cromer–Mann scattering factors) or a cell with its centring, at random or as a fibre texture
   ((hkl) parallel to the substrate or [uvw] along the normal): their reflections are drawn with hkl labels on the

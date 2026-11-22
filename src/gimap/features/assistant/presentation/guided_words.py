@@ -64,6 +64,9 @@ SENTENCES = (
     # The points a GISAXS run asks a person to look at (application/gisaxs_procedure.py).
     "cut of the series (rows {rows})",
     "{n} solutions have a probability of at least {limit} ({solutions}): the curve alone does not decide the model.",
+    "{n} solutions have a BIC weight of at least {limit} ({solutions}).",
+    "Predict parameters on {curve} compared the solutions by BIC weight after evidence sampling failed.",
+    fit_names.MC_ERROR, fit_names.ESS_TEXT, fit_names.DENSITY_NOTICE, fit_names.COMPOSITION_RANGE,
     "The reported solution ({model}) has χ²ᵣ = {chi2}, above {limit}: it misses the curve by far more than the σ of "
     "its points, so none of the compositions Predict parameters tried describes this cut, and its R and D are not "
     "measurements.",  # gisaxs_procedure.POOR_FIT, character for character

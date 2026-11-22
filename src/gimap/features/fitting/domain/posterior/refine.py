@@ -43,6 +43,7 @@ from .. import fit_model as fm
 from . import encoding as E
 from .infer import PHYSICAL_NAMES, TAIL_WIDTH_MAX, Cut, infer
 from .laplace import local_posterior
+from . import reporting
 from .moves import starts as moved_starts
 
 UNCONSTRAINED = 0.7
@@ -305,6 +306,16 @@ def _solution(result, entry, data, fit_data, lo, hi, method, probability, extra,
     widen = 1.0 / math.sqrt(min(1.0, lsq_chi2)) if lsq_chi2 > 0 else 1.0
     quantiles = (local.quantiles([0.5, 0.16, 0.84, 0.025, 0.975], ESS_MIN) if local is not None
                  else np.stack([mode.median, mode.low68, mode.high68, mode.low95, mode.high95]))
+    extra["posterior_summary"] = {
+        name: dict(zip(("median", "low68", "high68", "low95", "high95"), map(float, quantiles[:, dim])))
+        for dim, name in _names(result.index)
+    } if local is not None else {}
+    if local is not None and data.reflected and any(c.family == "sphere" for c in model.components):
+        extra["posterior_summary"].update(reporting.reflection_quantiles(local, model.globals["refl_phase"].value, ESS_MIN))
+    extra["importance_starts"] = reporting.check_starts(local, ESS_MIN)
+    extra["diagnostics"]["posterior_kind"] = (
+        None if local is None else "tempered" if local.ess < ESS_MIN else "evidence")
+    extra["diagnostics"]["interval_kind"] = "bic" if from_errors else extra["diagnostics"]["posterior_kind"]
     values, flags = {}, []
     for dim, name in _names(result.index):
         path = _path(result.index, dim)
@@ -351,7 +362,7 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
             law: str = "number_gauss", coupling: str = "lma", min_probability: float = 0.01,
             grazing: Optional[dict] = None, local_samples: int = LOCAL_SAMPLES,
             refine_modes: int = REFINED, explored: int = EXPLORED, model_error_floor: float = MODEL_ERROR_FLOOR,
-            cancelled=None, progress=None, partial=None) -> list[PosteriorSolution]:
+            cancelled=None, progress=None, partial=None, reflected_beam=None, known_heights=None, measured_qz=None) -> list[PosteriorSolution]:
     """Solutions of a cut (q in nm⁻¹, qz the vacuum q₊ = k_i + k_f of the Born term in nm⁻¹, 0: the effective
     interface; ``qz_minus`` k_i − k_f when both angles are known: spheres get the exit-reflected path with a free
     effective reflection coefficient, ``Cut.reflected``), most probable first: every distinct refined solution of every composition holding at least ``min_probability`` of
@@ -478,6 +489,9 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
         if final:
             for result in results:
                 result.probability = composition_weight.get(result.index, 0.0)
+        diagnostics = reporting.comparison_diagnostics(entries, by_bic, composition_weight)
+        level = 3 if counts.reflected else 2 if counts.qz > 0 else 1
+        warning_qz = counts.qz if level > 1 else measured_qz
         out = []
         for place, ((result, mode, model, refined, local), w, z) in enumerate(zip(entries, weights, log_z)):
             if w < min_probability:
@@ -489,10 +503,18 @@ def predict(network, q, intensity, sigma=None, *, qz: float = 0.0, qz_minus: Opt
                 lsq_of[place] = (lsq_errors, lsq_chi2)
             solution = _solution(result, (mode, model, refined, local), data, fit_data, lo, hi, "lm", float(w),
                                  {"head_log_prob": result.head_log_prob, "mode_weight": share,
+                                  "diagnostics": {**diagnostics[place], **reporting.density_record(counts.q),
+                                                  "cut_qz": counts.qz, "cut_qz_minus": counts.qz_minus,
+                                                  "model_error_floor": model_error_floor, "substrate_level": level,
+                                                  "reflected_beam": reflected_beam, "measured_qz": warning_qz,
+                                                  "supplied_heights_nm": known_heights or {}},
                                   "reflection": _reflection_extra(model) if counts.reflected else None,
                                   "composition_log_evidence": float(z), "network_ess": result.ess,
                                   "dropped_points": data.dropped, "compared_by": "bic" if by_bic else "evidence"},
                                  lsq=lsq_of[place], from_errors=by_bic)
+            if level == 1 and measured_qz:
+                solution.flags += tuple(interface_flags(model, measured_qz))
+            solution.flags += tuple(reporting.grazing_flags(model, warning_qz, level, reflected_beam, known_heights))
             if by_bic:
                 solution.flags = solution.flags + ("bic",)
             out.append(solution)

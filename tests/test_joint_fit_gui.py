@@ -165,6 +165,12 @@ def test_posterior_check_of_a_refine_fit(tmp_path):
         assert page.save_check_dialog(tmp_path / "check.json")
         record = json.loads((tmp_path / "check.json").read_text(encoding="utf-8"))
         assert record["checked"] == "fit" and record["steps"] == 400 and len(record["values"]) == 2
+        assert "split R̂" in page._report_text("text")
+        page.session.set_range((0.2, 1.0))
+        page.render_check()
+        assert not page.check_run.isEnabled() and "data selection changed" in page.check_verdict.text()
+        assert page.check_report_blocks() == []
+        page.session.set_range(None)
         page.set_model(page.session.model.with_values({(0, "R"): 4.2}))
         page.render_check()
         assert "model changed" in page.check_verdict.text()

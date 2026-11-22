@@ -47,6 +47,9 @@ class Predicted:
     """The points χ² is of: ``fitted``, ``given``, ``below_window`` (below the network's q window), ``unusable``."""
     tried: Optional[int] = None
     """How many compositions were given to try (1: the particles in Model); None: the network chose among several."""
+    diagnostics: dict = field(default_factory=dict)
+    posterior_summary: dict = field(default_factory=dict)
+    importance_starts: tuple = ()
 
 
 MANUAL_ONLY = ("Predict parameters knows spheres, random and vertical cylinders with the 1D paracrystal: Model has a "
@@ -95,7 +98,9 @@ def predict_request(data, model: fm.FitModel, particles: str, *, seed: int = 0) 
     if law not in ("number_gauss", "lognormal", "intensity_gauss"):
         law = "number_gauss"
     coupling = model.components[0].coupling if model.components else "lma"
-    return JobRequest(handler=HANDLER, payload=dict(
+    heights = {str(slot): c.value("h") for slot, c in enumerate(sorted(model.components, key=lambda c: c.value("R")), 1)
+               if particles == "model" and c.family == "vertical_cylinder" and "h" in c.keys()}
+    return JobRequest(handler=HANDLER, payload=dict(known_heights=heights,
         q=data.q.tolist(), intensity=data.intensity.tolist(), sigma=None if data.sigma is None else data.sigma.tolist(),
         qz=qz, qz_minus=cut_qz_minus(model), grazing=grazing or None, seed=int(seed), law=law,
         coupling=coupling, **compositions(model, particles)), timeout_seconds=None)
@@ -107,10 +112,11 @@ def predicted(value: dict) -> list[Predicted]:
     for row in value.get("solutions") or ():
         chi2 = row.get("chi2")
         out.append(Predicted(fm.model_from_dict(row["model"]), float("nan") if chi2 is None else float(chi2),
-                             str(row.get("name", "")), float(row.get("probability") or 0.0),
+                             str(row.get("name", "")), float(row.get("bic_weight", row.get("probability")) or 0.0),
                              {k: tuple(v) for k, v in (row.get("values") or {}).items()}, tuple(row.get("flags") or ()),
                              float(row.get("ess") or 0.0), row.get("points") or value.get("points"),
-                             value.get("tried")))
+                             value.get("tried"), row.get("diagnostics") or {}, row.get("posterior_summary") or {},
+                             tuple(row.get("importance_starts") or ())))
     return out
 
 

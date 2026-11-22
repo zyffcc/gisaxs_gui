@@ -230,7 +230,8 @@ class UncertaintyMixin:
             return ""
         return report(self.session.model, data, self.session.curve, side=self.session.side, q_range=self.session.q_range,
                       result=self._current_result(), excluded=self.session.excluded,
-                      fmt=fmt or self.report_format.currentData() or "markdown")
+                      solutions=self.session.solutions if self.session.solutions_are_current() else (),
+                      check_blocks=self.check_report_blocks(), fmt=fmt or self.report_format.currentData() or "markdown")
 
     def _render_report(self) -> None:
         fmt = self.report_format.currentData() or "markdown"

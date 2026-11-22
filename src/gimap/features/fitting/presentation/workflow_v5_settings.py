@@ -94,6 +94,17 @@ class WorkflowV5SettingsMixin:
         for widget in (self.use_qz, self.cut_qz):
             widget.setToolTip(QZ_TIP)
         right.addRow(self.use_qz, self.cut_qz)
+        self.reflected_beam = QCheckBox("Reflected beam present in the data")
+        self.reflected_beam.setChecked(self._options["reflected_beam"])
+        right.addRow(self.reflected_beam)
+        self.measured_qz = _spin(0, 10, self._options["measured_qz"] or 0., 5)
+        self.measured_qz.setSpecialValueText("Unknown")
+        right.addRow("Measured q_z for level-1 flags (nm⁻¹)", self.measured_qz)
+        def enable_measured_qz():
+            self.measured_qz.setEnabled(self.reflected_beam.isChecked() and not self.use_qz.isChecked())
+        self.reflected_beam.toggled.connect(enable_measured_qz)
+        self.use_qz.toggled.connect(enable_measured_qz)
+        enable_measured_qz()
         self.relative_noise = _spin(0, 10, self._options["relative_noise"], 4)
         self.noise_floor = _spin(0, 1e12, self._options["absolute_noise"], 6)
         self.noise_floor.setSpecialValueText("None")
@@ -119,6 +130,8 @@ class WorkflowV5SettingsMixin:
                 "side": self.side.currentData(),
                 "relative_noise": self.relative_noise.value(),
                 "absolute_noise": self.noise_floor.value(),
+                "reflected_beam": self.reflected_beam.isChecked(),
+                "measured_qz": (self.measured_qz.value() or None) if self.measured_qz.isEnabled() else None,
                 "cut_qz": self.cut_qz.value() if self.use_qz.isChecked() else None,
             }
         )
