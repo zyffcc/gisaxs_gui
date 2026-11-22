@@ -78,7 +78,7 @@ N_ALPHA, ALPHA_RANGE = 300, (0.02, 1.2)
 PAD = 50
 """Pixels simulated beyond each end of a cut (the detector resolution needs them; the fit does not see them)."""
 PEAK, BACKGROUND = 1e4, 2.0
-WINDOWS = {"full": ALPHA_RANGE[0], "from_2ac": round(2.0 * ALPHA_C, 4)}
+WINDOWS = {"full": ALPHA_RANGE[0], "from_2ac": 2.0 * ALPHA_C}
 """The lowest α_f (°) of the vertical cut fitted: all of it, or from twice α_c(Si) (above the Yoneda peak, where the
 effective layer and the resolution change the cut most)."""
 START = {"R": 4.3, "sigma_R": 0.2, "h": 6.6, "sigma_h": 0.2, "D": 1.07, "sigma_nn": 0.25}
@@ -327,15 +327,15 @@ def fit(task) -> dict:
     case, cuts, seed, window = task
     y_h, s_h = counts(cuts["horizontal"], seed)
     y_v, s_v = counts(cuts["vertical"], None if seed is None else seed + 1000)
-    keep = cuts["alpha"] >= WINDOWS[window] - 1e-9
     specs = [
         japp.CurveSpec("horizontal", cuts["q"], y_h, s_h, kind="horizontal", alpha_i=ALPHA_I, alpha_f=ALPHA_C,
                        wavelength=WAVELENGTH),
-        japp.CurveSpec("vertical", cuts["qz"][keep], y_v[keep], s_v[keep], kind="vertical", alpha_i=ALPHA_I,
+        japp.CurveSpec("vertical", cuts["qz"], y_v, s_v, kind="vertical", alpha_i=ALPHA_I,
                        wavelength=WAVELENGTH, q_parallel=Q_Y),
     ]
     model = page_model(case)
-    result = japp.run_joint_fit(specs, model, SUBSTRATE, default_shared(model), method="local")
+    result = japp.run_joint_fit(specs, model, SUBSTRATE, default_shared(model), method="local",
+                                min_exit_angle_ac=0.0 if window == "full" else 2.0)
     fitted = result.models[0]
     row = dict(case=case.name, window=window, seed=seed, chi2_reduced=result.chi2_reduced,
                chi2_per_point={"horizontal": result.curve_chi2[0], "vertical": result.curve_chi2[1]},
@@ -446,6 +446,7 @@ def main(argv=None):
         counts=dict(peak=PEAK, background=BACKGROUND, seeds=args.seeds),
         fit=dict(call="application.joint_fit.run_joint_fit, method local (Refine)", substrate="Si known",
                  shared="R, sigma_R, h, sigma_h, D, sigma_nn", coupling="da", law="gaussian (by number)",
+                 upright_height_coherence="squared number-average of the complex axial amplitude / mean axial intensity",
                  beam_tail="off", vertical_q_parallel=Q_Y, start=START),
         fit_seconds=time.perf_counter() - tick, table=table, cases=out_cases)
     args.out.write_text(json.dumps(out, indent=1, ensure_ascii=False), encoding="utf-8")

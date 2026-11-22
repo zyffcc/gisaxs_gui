@@ -30,7 +30,7 @@ import numpy as np
 
 from .cut_model import sizes
 from .cut_model.model import size_averages
-from .cut_model.shapes import sphere_amplitude
+from .cut_model.shapes import sphere_amplitude, upright_height_coherence
 from .cut_model.structure import paracrystal
 
 CHUNK = 1_000_000
@@ -183,6 +183,10 @@ def component_term(family: str, law: str, kind: str, coupling: str, structure: b
         form, average = cached(key, lambda: size_averages(
             family, q, radius=values["R"], radius_spread=values["sigma_R"], law=law, height=height,
             height_spread=height_spread, coherent=coherent, geometry=geometry))
+        if coherent and family == "vertical_cylinder" and values.get("sigma_h", 0.0) > 0:
+            height_key = ("upright height coherence", law, values["h"], values["sigma_h"], geometry)
+            fraction = cached(height_key, lambda: upright_height_coherence(law, values["h"], values["sigma_h"], geometry))
+            average = average * fraction
     if not structured:
         return np.asarray(form[0], dtype=float)
     if kind == "hard_sphere":

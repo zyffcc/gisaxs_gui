@@ -2373,6 +2373,8 @@ Analysis** to inspect its contributions here.
   cylinders, t and ρc/ρs for core–shell spheres, and those of the interference function. Spreads are relative
   everywhere (as in Analyze's results and in 1D Predict). The scale is the intensity of the particles at q = 0: every
   form factor is 1 there.
+  For upright cylinders with a height distribution, DA averages the scattering amplitude over heights as well as
+  radii. This affects the contrast of the structure peak in the horizontal cut.
 - Each value is one line: its name (the tooltip gives its name in links, such as `R_1`), the value, ± its error after a
   fit, **min** and **max** (with **Ranges**), **fit** and **=** (link). Two populations fit on one screen.
 - For **Refine** and **Search**, choose **Sizes** on each population. **Gaussian, by number** uses centre R and
@@ -2414,7 +2416,8 @@ Analysis** to inspect its contributions here.
 - **Spheres in grazing incidence**: αi, αf, λ and the effective reflection coefficient |r|, arg r. With αi = αf = 0
   (the default) spheres are evaluated at q_z = 0, the effective interface approximation, which needs nothing about the
   substrate. Enter αi, αf (the row of the cut) and λ to evaluate spheres as the direct plus the exit-reflected path,
-  and free |r| and arg r to fit the reflection; cylinders are not affected. After a fit with the angles entered, the
+  and free |r| and arg r to fit the reflection. The manual DA uses the same paths for upright cylinders with a
+  height distribution. After a fit with the angles entered, the
   results show q₊R of every sphere. **Substrate** (under the values): *Unknown* (the default, the levels above), a
   material of the table (**Si**, **SiO₂**, **Glass (plate)**, **Au**: δ and β at the cut's λ, 4.9–30 keV) or **Typed δ,
   β**. With a substrate and both angles the spheres are in the four-term DWBA with the substrate's Fresnel coefficients
@@ -2879,11 +2882,11 @@ indices and names in result records; indices in JSON are zero-based, while the p
 
 ![Fit Several Curves Together](manual_images/en/26_fitting_joint.png)
 
-*Two cuts of one frame fitted together: the vertical cut (right, its Yoneda peak and the height's minimum) holds the cylinders' height h, shared with the horizontal cut; every curve its own scale and background.*
+*The minimum in the vertical cut (right) constrains the cylinder height h. Both curves share h and have their own intensity scales and backgrounds.*
 
 **Fitting ▸ Fit Several Curves Together…** fits a list of curves with one χ²: typically the horizontal and the vertical
-cut of one GISAXS frame, whose vertical cut sees what the horizontal cut does not — the height of upright cylinders and
-the vertical extent of the particles. The model is the one in Model of Single analysis when the fit starts.
+cut of one GISAXS frame. The vertical cut constrains the height of upright cylinders and the vertical extent of the
+particles. The fit starts from the model in Single analysis.
 
 - **Curves**: **Add Files…** (curve files), **Add Curve of the Page** (the curve in Single analysis, with the angles of
   its Model) and **Remove**; **Analyze ▸ Send Both Cuts to Fitting** writes the frame's horizontal cut
@@ -2893,15 +2896,25 @@ the vertical extent of the particles. The model is the one in Model of Single an
   Analyze refracted its q_z, **αc of q_z**) or *Other curve (q_z = 0)* — and its values.
 - **Substrate** (all curves): a vertical cut is computed in the four-term DWBA and needs it (Si, SiO₂, Glass (plate),
   Au or **Typed δ, β**); a horizontal cut with both angles is then in the four-term DWBA as well.
+- **Lowest exit angle of the vertical cut** defaults to 2 αc, where αc is the critical angle of the selected
+  substrate at that cut’s wavelength. Set it to 0 to keep all valid exit angles. The plot, point count in the
+  summary and fit use the same range.
 - **Parameters**: every free value of Model with **Shared** (fitted once; by default every particle value) or not (each
   curve its own value). The scales — every population's Int, the background, Tail A — are always each curve's own, so
   every curve has its own scale and background. When a vertical cut is listed, upright cylinders get their height h and
-  σh/h, shared.
+  σh/h, shared. If the model has no starting height and the exit-angle limit is positive, Refine tries 10, 5 and
+  20 nm and starts at the value with the smallest residual sum of squares.
 - **Fit Together** with *Refine* (from the values in Model) or *Search the ranges, then refine*; a progress bar and
   **Stop** (the best values so far are kept). The summary gives χ²ᵣ over all points and each curve's Σr²/N; **Show**
   picks the curve drawn with its model. **Use in Model** puts the values of the first horizontal cut (shared values
   included; a height fixed at the joint value) into Model; **Save Record…** writes every curve with its model, errors,
   the shared values, χ² and the covariance (JSON).
+- **Save Report…** writes the fit summary and parameter values as Markdown. Both the record and report give the
+  exit-angle limit in substrate critical angles and degrees. With supplied or Poisson uncertainties, **Needs attention**
+  flags a vertical reduced χ² above 3. The model omits the particle layer’s effective refractive index, so the
+  fitted height is likely too low for a dense or high-Z layer. In the BornAgain benchmark, heights for Au-like
+  layers at 10–40% coverage were 13–60% low on the full cut and 6–20% low from 2 αc. Heights and radii are
+  assumed independent. Simulated cylinders with H = 1.5 R gave a height about 14% too high even with a good fit.
 
 **Fit Several Curves Together** warns when the exported vertical band crosses qy = 0 or its centre has |qy| below 0.02 nm⁻¹. The particle model excludes the specular reflection. If the band includes it, move the cut beside the ridge and send both curves again. The vertical-cut model and its check against BornAgain are described in
 [Physics and Methods, section 9.18](Physics_Manual.md#918-several-curves-fitted-together-the-vertical-cut).
@@ -4235,6 +4248,7 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 | **The models for manual fitting are not proposed by Predict parameters.** Core–shell spheres, the 2D hexagonal paracrystal (infinite domains) and Percus–Yevick hard spheres (a 3D liquid) are fitted by Refine and Search only; core–shell spheres at q_z = 0. | Start them from values you know, or from a Predict solution with spheres, then change the family or the interference in Model and Refine ([Physics and Methods, section 9.14](Physics_Manual.md#914-models-for-manual-fitting)). |
 | **Fitting is slower with sizes by intensity and with random cylinders.** With a sphere or vertical cylinder and sizes by number or log-normal, **Search the ranges** takes a few seconds as before; with *Gaussian, by intensity* (models of earlier versions) tens of seconds, and with a random cylinder (15–800 ms per evaluation) up to minutes. | Set **Sizes** to *Gaussian, by number*, narrow the ranges of R, h and σR/R before a search, or start **Refine** from values close to the curve. |
 | **A vertical cut is modelled for spheres and upright cylinders only**, at one in-plane q (q∥ of its columns), without a q resolution or the specular rod, and only in Fitting ▸ Fit Several Curves Together. Its scales are its own: with several populations their ratio is not tied to the horizontal cut's (section 6.6). | Take the vertical cut beside the specular rod; fit random cylinders and core–shell spheres on horizontal cuts. |
+| **Cylinder height in a joint fit.** The model omits the particle layer’s effective index and assumes independent heights and radii. | Check the vertical reduced χ² and the fitted range. Height can be too low in dense or high-Z layers, or too high when height increases with radius (section 6.6). |
 | **The substrate table holds bare Si, SiO₂, plate glass and Au from 4.9 to 30 keV.** An oxide, a polymer film, roughness and the particle layer's own index are not part of it (section 6.2). | Type δ and β of an effective substrate, or use the two paths with a free r. |
 | **The posterior check (MCMC) is slow for random cylinders.** A random cylinder takes 15–200 ms per evaluation. A check takes hours. Independent ensembles can both miss a distant mode (section 6.2). | Compare other modes through Predict's other solutions. |
 | **Predict parameters knows Fitting's model only** (sizes Gaussian by number, the LMA; spheres with two paths and a free reflection coefficient r when Model has both angles, else at the Born term of the cut's q_z or the effective interface). It was checked on simulated curves of an independent model and on BornAgain simulations, not on measured curves of known particles; physics outside the model (roughness, other shapes) can give a composition a high probability that it does not deserve. The waves the surface reflects (the four-term DWBA) matter for spheres beyond q₊R ≈ 1.7 (R ≈ 3 nm at α_i = 0.4°, 12 keV): with both angles R is off by about 6 % (median; P90 19–40 %) and the composition right in about 60 % of such curves; with the q_z alone R is off by about 10 % (q₊R 2.3–3.5) to 40 % (above) and a sphere is usually taken for upright cylinders; upright cylinders are not affected. With both angles on a curve whose reflected wave is weak (far above the critical angle), a smaller sphere with a large \|r\| can fit as well, and on BornAgain's model of the GALAXI frame (broad log-normal sizes, αf at the critical angle) the free r let wrong sizes fit within the errors (with one sphere population R 16–500 nm, once at the 500 nm bound, on the three simulated draws; with the composition chosen one 16 nm sphere without a paracrystal on two); and on two-sphere curves without reflection this network misses the true sizes somewhat more often than the previous one ([Physics and Methods, section 9.13](Physics_Manual.md#913-predict-parameters)). | Judge every solution by its residuals and by what you know of the sample; give both angles for spheres beyond q₊R 1.7; far above the critical angle check the fitted \|r\| (`refl_amp` in Model) against the substrate's and fix it if it is far off, then refine. |

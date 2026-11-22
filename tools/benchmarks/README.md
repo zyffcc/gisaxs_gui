@@ -135,7 +135,8 @@ substrate Si known, R, σR/R, h, σh/h, D, σnn/D shared, the DA as BornAgain's 
 into 24 slices. BornAgain's average layer was checked first against the four-term DWBA in a uniform layer of the
 average index (one size, one slice): the shapes agree within 1.5·10⁻³. Biases below are of the noise-free fit; the
 mean of 10 Poisson draws lies within 0.1 % of it, and their scatter (0.03–0.3 % of h) matches the 1σ the fit reports
-where the model holds. χ²_r is the mean over the draws.
+where the model holds. The table records the original sweep, before the horizontal DA included height averaging.
+χ²_r is the joint reduced χ² averaged over the draws. Per-cut Σr²/N is recorded separately in the JSON.
 
 | Case | Coverage | h bias, whole cut | R bias | D bias | χ²_r | h bias, from 2α_c | χ²_r |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -159,9 +160,17 @@ where the model holds. χ²_r is the mean over the draws.
 The roughness is BornAgain's (K-correlation, Hurst 0.7, lateral correlation 25 nm): *r only* subtracts the bare rough
 substrate's cut, which leaves the reduced reflection coefficients; *r and diffuse* keeps the substrate's own diffuse
 scattering, which raises χ²_r through the horizontal cut. The resolution is a Gaussian detector resolution in α_f and
-φ_f, with a Gaussian beam divergence in α_i in the second case. In every case σR/R comes out 0.16–0.19 instead of
-0.15: BornAgain's DA lowers the coherent term of the Yoneda row by the spread of heights, which Fitting's horizontal
-model of upright cylinders leaves out (with one height in BornAgain the fit gives 0.150).
+φ_f, with a Gaussian beam divergence in α_i in the second case. The original horizontal DA used only the radial
+coherent term. It fitted σR/R of 0.16–0.19 for distributed heights and 0.150 for one height.
+
+**Baseline with the height average.** For each height H, the four axial paths give a complex amplitude G(H),
+including the factor H from the cylinder volume. The horizontal DA now multiplies its radial coherent term
+by |⟨G⟩|²/⟨|G|²⟩. In the D = 14 nm baseline, with the average layer off, the noise-free whole-cut fit recovered
+σR/R = 0.150006 and h = 5.99987 nm. From 2α_c it recovered 0.150005 and 5.99967 nm. Inputs were 0.15 and 6 nm.
+Both fits retained all 471 horizontal points and respectively 300 and 228 vertical points.
+The mean joint χ²_r over three Poisson draws was 1.01 in each window.
+Run `python tools/benchmarks/vertical_height_bias.py --cases a_off_D14 --seeds 3 --workers 1 --out baseline.json`.
+The output is stored under `height_averaged_da_baseline` in `vertical_height_bias.json`.
 
 ## Online GISAXS series
 

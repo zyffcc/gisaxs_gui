@@ -111,6 +111,7 @@ def test_joint_window_fits_a_horizontal_and_a_vertical_cut(tmp_path):
         assert [s.kind for s in dialog.specs] == ["horizontal", "vertical"]
         assert dialog.specs[1].q_parallel == 0.3 and dialog.specs[1].alpha_i == ALPHA_I
         dialog.set_substrate("Si")
+        assert dialog.joint_min_exit.value() == 2
         dialog._render()
         names = [dialog.joint_parameters.item(i, 0).text() for i in range(dialog.joint_parameters.rowCount())]
         assert any(" h" in name for name in names)  # the vertical cut makes the cylinders' height a parameter
@@ -120,6 +121,8 @@ def test_joint_window_fits_a_horizontal_and_a_vertical_cut(tmp_path):
         assert dialog.result is not None, dialog.joint_status.text()
         assert abs(dialog.result.models[0].get((0, "h")).value - 6.0) < 0.5
         assert "χ²ᵣ" in dialog.joint_summary.text()
+        dialog.joint_min_exit.setValue(0)  # the completed fit retains its own range
+        assert "2 αc" in dialog.joint_summary.text()
         assert dialog.joint_shown.count() == 2
         dialog.joint_shown.setCurrentIndex(1)
         dialog.use_in_model()
@@ -130,6 +133,20 @@ def test_joint_window_fits_a_horizontal_and_a_vertical_cut(tmp_path):
         record = json.loads((tmp_path / "joint.json").read_text(encoding="utf-8"))
         assert saved and record["kind"] == "gimap_joint_fit_v1" and len(record["curves"]) == 2
         assert record["substrate"] == {"material": "Si"} and "h_1" in record["shared"]
+        vertical = record["curves"][1]
+        assert vertical["vertical_range"]["min_exit_angle_ac"] == 2 and vertical["points"] < len(dialog.specs[1].q)
+        assert dialog.save_report_dialog(tmp_path / "joint.md")
+        report = (tmp_path / "joint.md").read_text(encoding="utf-8")
+        assert "2 αc" in report and "correlations between height and radius" in report
+        dialog.result = replace(dialog.result, curve_chi2=(0.1, 10.0))
+        dialog._summary()
+        assert "Needs attention" in dialog.joint_summary.text() and "likely underestimated" in dialog.joint_summary.text()
+        assert dialog.save_report_dialog(tmp_path / "poor-fit.md")
+        assert "6–20%" in (tmp_path / "poor-fit.md").read_text(encoding="utf-8")
+        dialog.run()  # use the chosen zero limit and the cylinder height now set in Model
+        _settle(page, dialog.tasks)
+        assert dialog.result.points[1] == len(dialog.specs[1].q)
+        assert dialog.result.start_curves[1].model.get((0, "h")).value == page.session.model.get((0, "h")).value
         dialog.dispose()
     finally:
         page.dispose()

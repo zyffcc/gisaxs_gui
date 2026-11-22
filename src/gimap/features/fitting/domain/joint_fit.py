@@ -63,6 +63,15 @@ class JointResult:
     start_curves: tuple = field(default=(), compare=False, repr=False)
     evaluation_budget: Optional[int] = None
     seed: int = 1729
+    curve_dof: tuple = ()
+    """Residual degrees of freedom per curve, N_c minus its share of the fitted Jacobian's leverage."""
+
+    def reduced_chi2_for(self, index: int) -> float:
+        """The cut's reduced χ² with supplied or Poisson σ. Relative and log residuals have no calibrated σ."""
+        if self.weightings[index] != "sigma" or self.models[index].weighting == "relative":
+            return math.nan
+        dof = self.curve_dof[index]
+        return self.curve_chi2[index] * self.points[index] / dof if dof > 1e-8 else math.nan
 
 
 def default_shared(model: FitModel) -> frozenset:
@@ -210,7 +219,7 @@ def fit_curves(curves: Sequence[JointCurve], shared=None, *, method: str = "loca
         stopped, converged, message = True, False, "Stopped: the best values so far are kept."
     models = problem.best[1]
     residual = joint_residuals(models, curves)
-    errors, covariance, keys = _covariance(models, curves, problem)
+    errors, covariance, keys, curve_dof = _covariance(models, curves, problem)
     edges = []
     for number, (model, sub) in enumerate(zip(models, problem.problems)):
         for path in fit_engine._at_bounds(model, sub):
@@ -229,18 +238,19 @@ def fit_curves(curves: Sequence[JointCurve], shared=None, *, method: str = "loca
         evaluations=problem.evaluations, seconds=time.perf_counter() - tick, converged=converged and not stopped,
         stopped=stopped, message=message, errors=errors, at_bounds=tuple(edges),
         covariance=() if covariance is None else tuple(tuple(float(v) for v in row) for row in covariance),
-        covariance_keys=tuple(keys), start_curves=start_curves, evaluation_budget=budget, seed=seed)
+        covariance_keys=tuple(keys), start_curves=start_curves, evaluation_budget=budget, seed=seed,
+        curve_dof=curve_dof)
 
 
 def _covariance(models, curves, problem: _JointProblem):
-    """1σ errors of every free value of the joint fit, the covariance (None when it could not be computed) and its
-    keys (``("shared", path)`` or ``(curve, path)``)."""
+    """Return the 1σ errors, covariance, parameter keys and residual degrees of freedom per curve."""
     keys = list(problem.keys)
     for number, sub in enumerate(problem.problems):
         keys += [(number, path) for path in sub.linear]
     residual = joint_residuals(models, curves)
-    if not keys or residual.size <= len(keys):
-        return {key: math.nan for key in keys}, None, keys
+    points = [curve.data.q.size for curve in curves]
+    if not keys:
+        return {}, None, keys, tuple(points)
 
     def value_of(key) -> tuple[float, object]:
         owner, path = key
@@ -271,19 +281,24 @@ def _covariance(models, curves, problem: _JointProblem):
             lower = joint_residuals(moved(key, values[column] - step), curves)
         jacobian[:, column] = (upper - lower) / (2.0 * step)
     if not np.all(np.isfinite(jacobian)):
-        return {key: math.nan for key in keys}, None, keys
+        return {key: math.nan for key in keys}, None, keys, (math.nan,) * len(curves)
     variance = float(residual @ residual) / (residual.size - len(keys))
     scaled = jacobian * scale
     normal = scaled.T @ scaled
     covariance = np.linalg.pinv(normal) * variance * np.outer(scale, scale)
     diagonal = np.array(np.diag(covariance))
     size, vectors = np.linalg.eigh(normal)
-    unseen = vectors[:, size <= fit_engine.UNSEEN * max(float(size[-1]), 1e-300)]
+    seen = size > fit_engine.UNSEEN * max(float(size[-1]), 1e-300)
+    unseen = vectors[:, ~seen]
     diagonal[np.sum(unseen * unseen, axis=1) > 1e-6] = math.nan
     blind = ~(diagonal > 0)
     covariance[blind, :] = math.nan
     covariance[:, blind] = math.nan
-    return {key: float(np.sqrt(d)) if d > 0 else math.nan for key, d in zip(keys, diagonal)}, covariance, keys
+    # Diagonal of the linearised hat matrix J J⁺, without forming an N × N matrix.
+    basis = (scaled @ vectors[:, seen]) / np.sqrt(size[seen])
+    leverage = np.sum(basis**2, axis=1)
+    curve_dof = tuple(float(len(part) - part.sum()) for part in np.split(leverage, np.cumsum(points)[:-1]))
+    return {key: float(np.sqrt(d)) if d > 0 else math.nan for key, d in zip(keys, diagonal)}, covariance, keys, curve_dof
 
 
 def curve_errors(result: JointResult, number: int) -> dict:

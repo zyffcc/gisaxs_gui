@@ -36,7 +36,7 @@ import numpy as np
 
 from . import model_library
 from .cut_model import sizes
-from .cut_model.shapes import disc_amplitude, sinc_half, sphere_amplitude
+from .cut_model.shapes import disc_amplitude, sphere_amplitude, upright_axial_amplitude
 from .cut_model.structure import paracrystal
 
 FAMILIES = ("sphere", "vertical_cylinder")
@@ -55,6 +55,7 @@ class VerticalCut:
     delta: float
     beta: float
     critical_angle_deg: float = 0.0
+    min_exit_angle_ac: float = 0.0  # fit selection, in substrate critical angles (older records used the whole cut)
 
     def __post_init__(self):
         if not (self.wavelength_nm > 0 and self.alpha_i_deg > 0):
@@ -63,6 +64,12 @@ class VerticalCut:
             raise ValueError("A vertical cut needs the substrate (δ > 0, β ≥ 0)")
         if not self.q_parallel >= 0:
             raise ValueError("The in-plane q of a vertical cut must be ≥ 0")
+        if not math.isfinite(self.min_exit_angle_ac) or self.min_exit_angle_ac < 0:
+            raise ValueError("The lowest exit angle must be a finite, non-negative multiple of αc.")
+
+    @property
+    def min_exit_angle_deg(self) -> float:
+        return self.min_exit_angle_ac * math.degrees(math.sqrt(2.0 * self.delta))
 
     @property
     def k(self) -> float:
@@ -154,10 +161,7 @@ def cylinder_averages(q_parallel: float, coefficients, wave, law: str, radius: f
     form = np.empty(points)
     coh = np.empty(points) if coherent else None
     for cols in _blocks(heights.size, points):
-        amplitude = 0j
-        for c, q_z in zip(coefficients[:, cols], wave[:, cols]):
-            x = q_z[None, :] * heights[:, None]
-            amplitude = amplitude + c[None, :] * sinc_half(x) * np.exp(-0.5j * x)
+        amplitude = upright_axial_amplitude(heights, coefficients[:, cols], wave[:, cols])
         form[cols] = radial_sq * (h2 @ (np.abs(amplitude) ** 2)) / h2.sum()
         if coherent:
             coh[cols] = radial**2 * np.abs((h_weights * heights) @ amplitude) ** 2 / h2.sum()

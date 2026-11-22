@@ -3,7 +3,7 @@
 The substrate is unknown (the default: the effective interface, the Born term or the two paths with a free r, as the
 angles and |r| say), a material of the table (Si, SiO₂, plate glass, Au: δ and β at the cut's λ from Henke's f₁, f₂)
 or δ and β typed. With a substrate and both angles the spheres are in the four-term DWBA with its Fresnel
-coefficients (random cylinders at the Born term of the cut's q_z; upright cylinders are the same at every level).
+coefficients. The manual DA also uses these paths for upright cylinders with a height distribution.
 The line under the row says which level is in use and, for the DWBA, δ and β.
 """
 

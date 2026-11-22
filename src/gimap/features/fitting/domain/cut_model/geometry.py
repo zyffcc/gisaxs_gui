@@ -11,8 +11,8 @@ Four modes (Physics and Methods, section 9.10):
   fit1d's DWBA, ``tools/benchmarks/yoneda_truth``):  A = F(q, k_f+k_i) + r_i F(q, k_f−k_i) + r_f F(q, k_i−k_f)
   + r_i r_f F(q, −(k_f+k_i)), F(q, Q) = f(√(q²+Q²)R) e^{−iQR} for a sphere whose base is on the substrate.
 
-k_{i,f} = (2π/λ) sin α_{i,f}. Upright cylinders are the same in every mode (the Q-dependent factor of a cylinder of
-fixed height is common to all its radii, so a cut has the in-plane shape exactly). Random cylinders are
+k_{i,f} = (2π/λ) sin α_{i,f}. At a fixed height, an upright cylinder's axial factor is common to all its radii
+and is absorbed in the scale. For distributed heights the manual DA averages that factor on these paths. Random cylinders are
 orientation-averaged at |q| = √(q² + Q²) with Q = 0 in ``eia`` and ``two_path`` (as Fitting before 0.3) and
 Q = k_i + k_f in ``born`` and ``dwba`` (the Born term, as fit1d).
 """
@@ -77,7 +77,7 @@ class Geometry:
         return (kz0 - ks) / (kz0 + ks)
 
     def sphere_terms(self) -> tuple[tuple[complex, float], ...]:
-        """(coefficient, Q) of every path of a sphere's amplitude."""
+        """(coefficient, Q) of each scattering path for a particle standing on the substrate."""
         if self.mode == "eia":
             return ((1.0 + 0.0j, 0.0),)
         k_i, k_f = self.k_i, self.k_f

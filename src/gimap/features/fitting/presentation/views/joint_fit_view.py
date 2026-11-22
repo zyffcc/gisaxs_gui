@@ -121,14 +121,19 @@ def build_joint_dialog(owner, parent: QWidget) -> QDialog:
     for widget in (owner.joint_delta_label, owner.joint_delta, owner.joint_beta_label, owner.joint_beta):
         substrate.addWidget(widget)
     form.addRow("Substrate", substrate)
+    owner.joint_min_exit = _spin(left, "fitJointMinExit", 0.0, 1000.0, 2, 0.25,
+                                 "Multiple of the substrate critical angle at each cut’s wavelength. "
+                                 "Set to 0 to keep all valid exit angles.")
+    owner.joint_min_exit.setSuffix(" αc")
+    form.addRow("Lowest exit angle of the vertical cut", owner.joint_min_exit)
     column.addLayout(form)
 
     column.addWidget(_strong("Parameters", left))
     owner.joint_parameters = read_only_table(("Parameter", "Shared", "Value", "± 1σ"), left, "fitJointParameters")
     owner.joint_parameters.setEditTriggers(QAbstractItemView.NoEditTriggers)
     column.addWidget(owner.joint_parameters, 3)
-    owner.joint_scales_note = QLabel("Scales (Int, background, tail A) are each curve's own, solved for each curve. "
-                                     "A height of upright cylinders is shared: only a vertical cut sees it.", left)
+    owner.joint_scales_note = QLabel("Each curve has its own intensity scale, background and beam tail. "
+                                     "Upright cylinders share their height and height spread.", left)
     owner.joint_scales_note.setObjectName("fitJointScalesNote")
     owner.joint_scales_note.setWordWrap(True)
     owner.joint_scales_note.setProperty("gimapRole", "muted")
@@ -175,11 +180,13 @@ def build_joint_dialog(owner, parent: QWidget) -> QDialog:
     owner.joint_save = QPushButton("Save Record…", right)
     owner.joint_save.setObjectName("fitJointSave")
     owner.joint_save.setToolTip("Every curve, its model and errors, the shared values, χ² and the covariance (JSON)")
+    owner.joint_report = QPushButton("Save Report…", right)
     owner.joint_close = QPushButton("Close", right)
     owner.joint_close.setObjectName("fitJointClose")
     owner.joint_close.clicked.connect(dialog.close)
     actions.addWidget(owner.joint_use)
     actions.addWidget(owner.joint_save)
+    actions.addWidget(owner.joint_report)
     actions.addStretch(1)
     actions.addWidget(owner.joint_close)
     column.addLayout(actions)
