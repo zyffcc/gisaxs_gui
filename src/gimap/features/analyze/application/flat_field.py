@@ -63,7 +63,7 @@ def read_flat_field(frames, path: str | Path) -> FlatField:
     """The normalised flat field of a file: ``.npy`` with ``numpy.load`` (no pickle), anything else through the
     frame reader ``frames`` (its first frame; the pixels its reader masks are left out). ``ValueError`` or
     ``OSError`` says why it cannot be used."""
-    reference = read_reference(frames, file_version(path), "flat")
+    reference = read_reference(frames, file_version(path, 0, frames), "flat")
     return normalise_flat_field(reference.data, reference.valid, name=Path(path).name)
 
 
@@ -75,7 +75,7 @@ class FlatFieldMixin:
         self._references: dict[str, ReferenceFrame] = {}
 
     def _reference(self, kind: str, path: str, index: int = 0) -> ReferenceFrame:
-        version = file_version(path, index)
+        version = file_version(path, index, self.frames)
         cached = self._references.get(kind)
         if cached is None or cached.version != version:
             cached = read_reference(self.frames, version, kind)

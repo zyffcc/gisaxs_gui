@@ -37,7 +37,8 @@ from ..domain.fit_limits import manual_chain_start
 from ..domain.fit_model import FitModel
 from ..domain.series_continuity import solution_distance
 from .series_fit import FrameFit, SeriesSettings, fit_frame, poor_fit, prepare_frame
-from .series_selection import PredictAttempt, closest_index, mode_choice, ranked
+from .fit_reproduction import with_prediction
+from .series_selection import PredictAttempt, closest_index, mode_choice, predicted_start, ranked
 
 CHAIN = "chain"
 """The start choice of a chained fit (``SeriesSettings.start``)."""
@@ -135,14 +136,16 @@ def chained_fit(index: int, path: str, curve, start: FitModel, single: FitModel,
     if not why or (predict is None and solutions is None) or (stop is not None and stop()) or not frame.points:
         return replace(frame, chain=why)
     called, choice, rule = False, None, ""
+    prediction = None
 
     def try_predict(data, start_model):
-        nonlocal called, choice, rule
+        nonlocal called, choice, rule, prediction
         called = True
         if solutions is None:
             return predict(data, start_model)
         solution, rule, choice = _restart(solutions(data, start_model), previous)
-        return solution.model
+        prediction = getattr(solution, "reproduction", None)
+        return predicted_start(solution)
 
     again = fit_frame(index, path, curve, single, replace(settings, method="predict"), stop, try_predict)
     if stop and stop():
@@ -155,6 +158,7 @@ def chained_fit(index: int, path: str, curve, start: FitModel, single: FitModel,
             # Compare χ² on the same points, with the chosen weights and smearing. Predict remains a separate fit.
             again = fit_frame(index, path, curve, manual_chain_start(proposal, single),
                               replace(settings, method="local"), stop)
+            with_prediction({"reproduction": again.reproduction}, {"reproduction": prediction}, None)
     again = replace(again, start_from="predict", fit_pass=fit_pass, start_frame=0, predict_choice=rule, selection=choice)
     kept = better(frame, again)
     attempts = (PredictAttempt(fit_pass, why, choice, kept is again, again.error),) if called else ()

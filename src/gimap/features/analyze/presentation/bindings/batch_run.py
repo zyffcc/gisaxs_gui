@@ -260,6 +260,8 @@ class BatchRunMixin(BatchPanelMixin, BatchLiveMixin, BatchFinishMixin):
 
     def shutdown_batch(self) -> None:
         """The page closes: no new frames, worker processes ended."""
+        if not self._batch_inflight and not self.tasks.is_busy():
+            self.view_model.release_series_spool()
         self._batch = []
         self._batch_timer.stop()
         if self._batch_workers is not None:

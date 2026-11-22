@@ -42,7 +42,6 @@ from ..application import (
     fit_halves,
     fit_model,
     fit_model_curve,
-    fit_peak_inputs,
     fit_peaks,
     is_gisaxs,
     model_fit_curve,
@@ -59,6 +58,7 @@ from ..application import (
     run_frame_job,
     written_kinds,
 )
+from ..application.peak_reproduction import fit_recorded_peaks
 
 BATCH_SECTION = "analyze_batch"
 MISSING_NAMED = 6
@@ -166,7 +166,7 @@ class BatchModelMixin:
         return FrameJob(
             index=int(index), request=request, choices=run.choices, destination=run.destination,
             series=run.series, series_factor=run.series_state.get("factor"), live_key=run.live_key,
-            display=run.display, number=number,
+            display=run.display, number=number, series_spool=self.series_spool if run.live_key else None,
         )
 
     def needs_first_frame_alone(self, run: "BatchRun") -> bool:
@@ -214,6 +214,10 @@ class BatchModelMixin:
             run.tables.add(label, outcome.curves)
             for curve in outcome.curves:
                 run.curve_titles.setdefault(curve.key, curve.title)
+                if outcome.metadata.get("reproduction"):
+                    run.table_frames.setdefault(curve.key, []).append(len(run.replay_records))
+        if outcome.metadata.get("reproduction"):
+            run.replay_records.append(outcome.metadata)
         if run.fit_table is not None:
             written.extend(self._fit_outcome(outcome, run))
         run.frames.append(label)
@@ -231,7 +235,7 @@ class BatchModelMixin:
         choices, written, label = run.choices, [], outcome.label
         stem, text = outcome.stem, choices.text_format
         if choices.fit == FIT_PEAKS:
-            fits = fit_peak_inputs(outcome.peak_inputs, choices.fit_profile, run.starts)
+            fits = fit_recorded_peaks(outcome, choices.fit_profile, run.starts)
             values = peak_row(label, fits)
             run.fit_table.add(values, outcome.number)
             self._remember_batch_preview(run, peak_preview(outcome, fits, values))
@@ -260,6 +264,8 @@ class BatchModelMixin:
         run.fit_table.add(values, outcome.number)
         self._remember_batch_preview(run, model_preview(outcome, rows, values, error=error))
         run.fit_frames.append(model_fit_frame(label, rows, error=error, halves=halves))  # a failed fit is counted
+        if rows and rows[0].get("reproduction"):
+            run.replay_records.append({"frame": label, "reproduction": rows[0]["reproduction"]})
         run.last_fit = _latest_model(rows) if rows else error
         if rows and choices.fit_curves:  # the points that were fitted (the mean or the one half) and the model
             path = run.destination / FOLDERS["fit_curves"] / f"{stem}_model_fit.{text}"

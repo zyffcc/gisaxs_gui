@@ -10,6 +10,7 @@ from src.gimap.shared.detector_io.output_values import floating
 from ..domain import valid_pixels
 from ..domain.normalisation import EXPOSURE_KEY, header_values
 from ..domain.flat_field import NOT_2D
+from .reduction_inputs import image_stamp
 
 
 @dataclass(frozen=True)
@@ -20,9 +21,8 @@ class ReferenceFrame:
     version: tuple
 
 
-def file_version(path, index=0) -> tuple:
-    stat = Path(path).stat()
-    return str(path), int(index), stat.st_mtime_ns, stat.st_size
+def file_version(path, index, frames) -> tuple:
+    return str(path), int(index), image_stamp(path, frames)
 
 
 def read_reference(frames, version, kind) -> ReferenceFrame:

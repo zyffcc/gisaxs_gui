@@ -125,7 +125,7 @@ class JointFitDialog:
             self._say(tr("Single analysis has no curve open."), "warning")
             return False
         self.add_spec(CurveSpec(curve.name, curve.q, curve.intensity, curve.sigma, "horizontal", path=curve.path,
-                                dq=curve.dq, **self._page_globals()))
+                                dq=curve.dq, source=curve.source, **self._page_globals()))
         return True
 
     def add_file(self, path, geometry=None) -> bool:
@@ -146,7 +146,7 @@ class JointFitDialog:
             found["alpha_f"] = alpha_f
         allowed = {"alpha_i", "alpha_f", "wavelength", "q_parallel", "critical_angle", "band_crosses_specular"}
         self.add_spec(CurveSpec(path.name, curve.q, curve.intensity, curve.sigma, kind, path=str(path),
-                                dq=curve.dq, **{k: v for k, v in found.items() if k in allowed}))
+                                dq=curve.dq, source=curve.source, **{k: v for k, v in found.items() if k in allowed}))
         return True
 
     def add_files_dialog(self) -> None:

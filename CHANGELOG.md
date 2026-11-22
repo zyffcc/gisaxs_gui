@@ -12,6 +12,11 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Reproduce from Record…** in Analyze ▸ Tools and `gimap reproduce RECORD.json` rerun recorded reductions and fits.
+  Records preserve mask bitmaps, input digests, geometry, fit settings and full-precision comparison values.
+  The comparison reports bitwise agreement and the maximum relative difference per column (User Manual §12).
+  Maps built while watching a folder can also be replayed after reopening a project that kept their row records.
+
 - **Geometry Calibration and GIWAXS orientation.** Calibration now refines the beam centre and distance with tilt fixed and reports ring-point RMS before and after refinement. Orientation reports identify weak bins excluded next to the exit-angle cut, vary that threshold in the Hermans f range, and omit model fills from undetermined pole fits. Sparse bins with measured scatter retain an uncertainty when the pooled variance fit crosses zero.
 - **Analyze ▸ Mask & corrections.** Raw background and flat-field frames can use an exposure-scaled dark.
   Set the flat-field threshold, save detector gain, offset and error model in an instrument profile, and choose
@@ -1246,7 +1251,7 @@ hold.
   it in Fitting.
 - Cancel/Stop records a request immediately but cannot forcibly interrupt a directory scan or single-file read.
   Unfinished Compare imports are discarded, or a Fitting frame is not fitted, when the active read returns.
-- Run records do not hold everything needed to repeat a run (masks are counted, not stored as pixel lists).
+- Older Analyze and Fitting records may lack a reproduction recipe.
   Sputter, 1D Predict, AI and CLI records now identify the software version; Predict parameters uses a fixed seed.
 
 - **API keys saved without an OS credential store** are kept in plain text in the user data folder

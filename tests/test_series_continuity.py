@@ -133,20 +133,25 @@ def test_series_page_applies_joint_choice_after_predicting_each_frame_once(tmp_p
         def predict(_data, _model):
             jump = (7.0, 2.0, 8.0, 2.0)[len(called)]
             called.append(jump)
-            return [mode(jump, 0.55), mode(4.0, 0.45)]
+            recipe = {"operation": "predict", "reference": {}, "frame": len(called)}
+            return [replace(mode(4.0, 0.45), reproduction=recipe, solution_index=0),
+                    replace(mode(jump, 0.55), reproduction=recipe, solution_index=1)]
         monkeypatch.setattr(series, "predict_solutions", lambda: predict)
         series.start()
         _wait(series, 40)
         assert not series.running and len(called) == 4 and len(series.fits) == 4
         for frame in series.fits.values():
             assert frame.fitted and frame.selection.rank == 2 and frame.selection.rule == "HMM"
+            assert frame.reproduction["start_solution_index"] == 0
+            assert frame.reproduction["prediction"]["frame"] == frame.index + 1
             assert sum(frame.selection.smoothed_probabilities) == pytest.approx(1.0)
             assert frame.selection.interval((0, "R"))[1] == 4.2
             jump, continuous = frame.selection.ranked_modes
             assert jump["populations"][0]["R_nm"] == called[frame.index]
             assert continuous["populations"] == [{"family": "sphere", "structure": True, "R_nm": 4.0,
                                                   "D_nm": 40.0, "sigma_R_over_R": 0.15}]
-            assert frame_from_dict(json.loads(json.dumps(frame_to_dict(frame)))).selection == frame.selection
+            restored = frame_from_dict(json.loads(json.dumps(frame_to_dict(frame))))
+            assert restored.selection == frame.selection and restored.reproduction == frame.reproduction
     finally:
         series.dispose()
         single.dispose()

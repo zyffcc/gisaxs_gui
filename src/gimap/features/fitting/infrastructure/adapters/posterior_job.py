@@ -30,6 +30,8 @@ from src.gimap.shared import fit_names
 from ...domain import fit_model as fm
 from ...domain.posterior import network as posterior_network
 from ...domain.posterior import refine
+from ...application.fit_reproduction import prediction_record
+from ..reproduce_fit import predict_options, prediction_plan
 
 
 def _number(value):
@@ -102,6 +104,7 @@ class StageReport:
     def __init__(self, report, points: dict, tick: float):
         self.report, self.points, self.tick = report, points, tick
         self.stage, self.started, self.last = "", tick, (0, 0)
+        self.plan = None
 
     def progress(self, stage: str, done: int, total: int, **extra) -> None:
         """``done`` of ``total`` items of ``stage`` finished (the item after them is under way)."""
@@ -127,7 +130,8 @@ class StageReport:
         except Exception:  # noqa: BLE001 - nothing to keep from this report; the run goes on
             return
         done, total = self.last
-        self.progress("sampling", done + 1, total, partial=encoded)
+        self.progress("sampling", done + 1, total, partial=encoded,
+                      **({"prediction_plan": self.plan} if self.plan and encoded else {}))
 
 
 def run_predict(payload: dict, report, cancelled) -> dict:
@@ -137,21 +141,22 @@ def run_predict(payload: dict, report, cancelled) -> dict:
     stages = StageReport(report, points, tick)
     stages.progress("loading", 0, 1)
     network = posterior_network.load()
+    options = predict_options(payload)
+    if network.meta.get("sha256"):
+        stages.plan = prediction_plan({key: payload.get(key) for key in ("q", "intensity", "sigma")},
+                                      options, posterior_network.path(), network.meta)
     if cancelled():
         raise RuntimeError("Fitting cancelled")
     solutions = refine.predict(
-        network, payload["q"], payload["intensity"], payload.get("sigma"), qz=float(payload.get("qz") or 0.0),
-        qz_minus=None if payload.get("qz_minus") is None else float(payload["qz_minus"]),
-        compositions=payload.get("compositions"), allowed=payload.get("allowed"),
-        seed=int(payload.get("seed", 0)),
-        law=payload.get("law", "number_gauss"), coupling=payload.get("coupling", "lma"),
-        grazing=payload.get("grazing"), reflected_beam=payload.get("reflected_beam"),
-        known_heights=payload.get("known_heights"), measured_qz=payload.get("measured_qz"), progress=stages.progress, partial=stages.partial)
+        network, payload["q"], payload["intensity"], payload.get("sigma"), **options,
+        progress=stages.progress, partial=stages.partial)
     if cancelled():
         raise RuntimeError("Fitting cancelled")
     report(1, 1, "Done")
     tried = payload.get("compositions")
-    return {"solutions": [encode(s, points) for s in solutions], "points": points,
+    encoded = [encode(s, points) for s in solutions]
+    return {"solutions": encoded, "points": points,
+            **({"reproduction": prediction_record(stages.plan, encoded)} if stages.plan and encoded else {}),
             "tried": None if tried is None else len(tried),
             "network": {"name": posterior_network.path().stem, "sha256": network.meta.get("sha256")},
             "seconds": time.perf_counter() - tick}
@@ -289,9 +294,9 @@ def fit_and_write(output, item, options, report, cancelled) -> list:
 
     network = posterior_network.load()
     report(0, 1, f"{item['side']}: weighting the network's samples", {})
-    solutions = refine.predict(network, item["q"], item["observed"], item["sigma"],
-                               qz=float(options.get("cut_qz") or 0.0), reflected_beam=options.get("reflected_beam"),
-                               measured_qz=options.get("measured_qz"), **batch_compositions(options["components"]))
+    settings = predict_options(dict(qz=options.get("cut_qz"), reflected_beam=options.get("reflected_beam"),
+                                    measured_qz=options.get("measured_qz"), **batch_compositions(options["components"])))
+    solutions = refine.predict(network, item["q"], item["observed"], item["sigma"], **settings)
     if cancelled():
         raise RuntimeError("Prediction cancelled")
     q = np.asarray(item["q"], float)
@@ -302,7 +307,11 @@ def fit_and_write(output, item, options, report, cancelled) -> list:
     for rank, row in enumerate(rows, start=1):
         row["rank"] = rank
     output.mkdir(parents=True, exist_ok=True)
-    (output / "solutions.json").write_text(json.dumps(dict(method="posterior", options=options, network={
+    plan = prediction_plan({"q": q.tolist(), "intensity": item["observed"].tolist(), "sigma": item["sigma"].tolist()},
+                           settings, posterior_network.path(), network.meta, display_q=render_q, sign=item["sign"],
+                           limit=options["max_solutions"], source=item.get("source_reference"))
+    reproduction = prediction_record(plan, [encode(s) for s in solutions[:options["max_solutions"]]])
+    (output / "solutions.json").write_text(json.dumps(dict(method="posterior", options=options, reproduction=reproduction, network={
         "name": posterior_network.path().stem, "sha256": network.meta.get("sha256")}, solutions=rows),
         indent=2, allow_nan=False), encoding="utf-8")
     np.savez_compressed(output / "display.npz", reference_q=item["q"], observed=item["observed"], sigma=item["sigma"],

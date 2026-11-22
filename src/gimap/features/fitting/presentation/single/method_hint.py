@@ -33,6 +33,9 @@ def fit_error_text(message: str) -> str:
     found = _TOO_FEW.fullmatch(str(message))
     if found:
         return trf(TOO_FEW_FOR_FREE, **found.groupdict())
+    prefix = "The network record changed after loading: "
+    if message.startswith(prefix):
+        return trf("The network record changed after loading: {path}", path=message[len(prefix):])
     return tr(message)
 
 

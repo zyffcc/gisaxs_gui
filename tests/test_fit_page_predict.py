@@ -167,6 +167,15 @@ def test_the_series_predicts_every_frame(tmp_path, monkeypatch):
         path = series.save_table(str(tmp_path / "series.csv"))
         record = json.loads(open(path.replace(".csv", ".json"), encoding="utf-8").read())
         assert record["settings"]["method"] == "predict" and record["settings"]["follow"] is True
+        for frame, saved in zip(frames, record["reproduction"]["records"], strict=True):
+            recipe = saved["reproduction"]
+            assert recipe["start_solution_index"] == frame.selection.rank - 1
+            assert recipe["prediction"]["options"]["seed"] == 0
+        from src.gimap.app.reproduce import reproduce_record
+        frame_record = tmp_path / "first_frame.json"
+        frame_record.write_text(json.dumps(record["reproduction"]["records"][0]), encoding="utf-8")
+        compared = reproduce_record(frame_record, tmp_path / "repeated_frame")
+        assert compared["status"] == "identical", compared
     finally:
         series.dispose()
         single.dispose()

@@ -105,10 +105,17 @@ def test_predict_gives_the_same_values_with_and_without_the_flag() -> None:
 
     def rest(row: dict) -> str:
         diagnostic = {k: v for k, v in row.get("diagnostics", {}).items() if k not in ("measured_qz", "reflected_beam")}
-        return json.dumps({k: v for k, v in row.items() if k not in ("flags", "warnings", "seconds", "diagnostics")}
+        return json.dumps({k: v for k, v in row.items() if k not in ("flags", "warnings", "seconds", "diagnostics", "reproduction")}
                           | {"diagnostics": diagnostic}, sort_keys=True)
 
     assert [rest(row) for row in plain] == [rest(row) for row in flagged]
+    plans = [rows[0]["reproduction"] for rows in (plain, flagged)]
+    assert [plan["options"]["measured_qz"] for plan in plans] == [None, QZ]
+    assert [plan["options"]["reflected_beam"] for plan in plans] == [None, True]
+    def numerical_tables(plan):
+        return {name: {key: column for key, column in columns.items() if key not in ("measured_qz", "reflected_beam")}
+                for name, columns in plan["reference"].items()}
+    assert numerical_tables(plans[0]) == numerical_tables(plans[1])
     assert not any(flag.startswith("qzR") for row in plain for flag in row["flags"])
     best = flagged[0]
     assert best["components"][0]["params"]["R"] == pytest.approx(5.0, rel=0.1) and "qzR:R_1" in best["flags"]

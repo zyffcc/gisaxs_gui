@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field, replace
 import math
 from typing import Optional
 
+from ..domain.fit_model import FitModel
 from ..domain.series_continuity import COMPOSITION_PENALTY, DEFAULT_SCALE, composition_penalty, smooth_modes, solution_distance
 
 CLOSE_ENOUGH = 0.2
@@ -99,6 +100,19 @@ def closest_index(ordered, previous, threshold):
                key=lambda i: solution_distance(ordered[i].model, previous))
 
 
+@dataclass(frozen=True)
+class PredictedStart:
+    model: FitModel
+    index: int
+    reproduction: dict
+
+
+def predicted_start(solution):
+    """The model to refine, with its original job index when its Predict run can be replayed."""
+    recipe = getattr(solution, "reproduction", None)
+    return PredictedStart(solution.model, solution.solution_index, recipe) if recipe else solution.model
+
+
 class FramePredictor:
     """Adapts a job yielding modes to fit_frame's callback, keeping its selection and candidates."""
 
@@ -114,7 +128,7 @@ class FramePredictor:
         index = closest_index(self.ordered, model, CLOSE_ENOUGH)
         self.choice = mode_choice(self.ordered, index, "closest" if model is not None else "most probable",
                                   reference_frame=self.previous.index + 1 if model is not None else None)
-        return self.ordered[index].model
+        return predicted_start(self.ordered[index])
 
 
 def smoothed_fits(frames, candidates, curves, settings, boundaries, stop):
@@ -136,8 +150,9 @@ def smoothed_fits(frames, candidates, curves, settings, boundaries, stop):
                 return
             frame = frames[i]
             if frame.selection is None or frame.selection.rank != index + 1:
-                model = ordered[index].model
-                frame = fit_frame(i, frame.path, curves[i], model, settings, stop, lambda _data, _start: model)
+                selected = ordered[index]
+                frame = fit_frame(i, frame.path, curves[i], selected.model, settings, stop,
+                                  lambda _data, _start: predicted_start(selected))
             choice = mode_choice(ordered, index, "HMM", marginals=weights)
             updates[i] = replace(frame, start_from="predict", fit_pass="forward", selection=choice, predict_choice="HMM")
         segment.clear()

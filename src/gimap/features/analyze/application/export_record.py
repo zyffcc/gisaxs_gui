@@ -24,6 +24,7 @@ from typing import Any, Mapping, Optional
 import numpy as np
 
 from src.gimap.shared.file_digest import input_digests
+from src.gimap.shared.geometry.q_inverse import q_of_positions
 from src.gimap.shared.signed_cut import FIT_HALVES
 from src.gimap.shared.version import SOFTWARE as RELEASE
 
@@ -40,6 +41,7 @@ from .flat_detector import flat_detector_record
 from .frame_preprocessing import photon_counts
 from .models import FrameAnalysis
 from .ports import frame_label, source_name, source_stem
+from .reduction_inputs import source_files
 
 SOFTWARE = "GIMaP Analyze 1"
 """``software`` of Analyze's records: the name of the record format, not the release (``software_version``)."""
@@ -71,20 +73,11 @@ def _plain(value: Any) -> Any:
         return [_plain(item) for item in value]
     if isinstance(value, np.generic):
         return value.item()
+    if isinstance(value, Path):
+        return str(value)
     if isinstance(value, float) and not math.isfinite(value):
         return None
     return value
-
-
-def source_files(path: str | Path, metadata: Optional[Mapping[str, Any]]) -> list[str]:
-    """Every file a frame was read from when it is not ``path`` alone: the module files of a set, or a master
-    and its data files (as the reader lists them in the frame's metadata). Empty for a frame of one file."""
-    metadata = metadata or {}
-    modules = [str(item) for item in metadata.get("module_files") or ()]
-    if modules:
-        return modules
-    data = [str(item) for item in metadata.get("data_files") or ()]
-    return [str(path), *data] if data else []
 
 
 def frame_stem(path: str | Path, source: Any = None, *, frame_index: int = 0, frame_count: int = 1,
@@ -142,7 +135,18 @@ def frame_cuts(metadata: Optional[Mapping[str, Any]]) -> dict[str, Any]:
     return cuts
 
 
-def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
+def recorded_region(analysis, curve):
+    region = dict(curve.region or {})
+    if analysis.kind == GISAXS and curve.key in ("horizontal", "vertical") and "rows" in region and "columns" in region:
+        top, bottom = region["rows"]
+        left, right = region["columns"]
+        corners = ("top_left", "top_right", "bottom_right", "bottom_left")
+        qy, qz = q_of_positions(analysis.geometry, [left, right, right, left], [top, top, bottom, bottom])
+        region["detector_corners_qy_qz_A_inv"] = dict(zip(corners, np.column_stack((qy, qz)).tolist()))
+    return _plain(region)
+
+
+def analysis_metadata(analysis: FrameAnalysis, *, curve_keys=None, with_reproduction=True) -> dict[str, Any]:
     """Provenance written next to exported curves."""
     reduction = analysis.reduction
     profile = analysis.resolution.profile
@@ -165,8 +169,12 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
             if analysis.geometry is not None else None
         ),
         "geometry_convention": GEOMETRY_CONVENTION,
+        "geometry_resolution": {
+            "method": analysis.resolution.how, "beam_center_source": analysis.resolution.center_source,
+            "header_beam_center_px": _plain(analysis.resolution.header_center),
+        },
         "instrument_profile": (
-            {"name": profile.name, "source": profile.source, "updated_at": profile.updated_at}
+            profile.to_dict()
             if profile is not None
             else None
         ),
@@ -186,7 +194,7 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
         "markers": _plain(reduction.markers) if reduction is not None else {},
         "curves": [
             {"key": curve.key, "title": curve.title, "x_label": curve.x_label, "y_label": curve.y_label,
-             "region": _plain(curve.region)}
+             "region": recorded_region(analysis, curve)}
             for curve in (reduction.curves if reduction is not None else ())
         ],
         "messages": list(analysis.messages),
@@ -196,8 +204,8 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
     }
     if getattr(analysis, "calibrated_curve_unit", None) is not None:
         record["output_intensity_unit"] = analysis.calibrated_curve_unit
-        if analysis.reference_peak_scale is not None:
-            record["reference_peak_scale"] = analysis.reference_peak_scale
+    if getattr(analysis, "reference_peak_scale", None) is not None:
+        record["reference_peak_scale"] = analysis.reference_peak_scale
     files = source_files(analysis.path, loaded)
     corrections = analysis.corrections
     mask_sources = [corrections.mask_path] if corrections.mask_path else []
@@ -209,20 +217,26 @@ def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
     record["corrections"]["mask_sources"] = list(dict.fromkeys(mask_sources))
     if files:  # a set of module files, a master with its data files: every file the frame was read from
         record["source_files"] = files
-    # Every input by file name and SHA-256: the paths above are where the files were on this computer.
-    references = [corrections.dark_path, corrections.background_path, corrections.flat_field_path]
-    if getattr(analysis, "error_model_used", None) == "sigma" or any(
-        curve["region"].get("error_model") == "sigma_frame" for curve in record["curves"]
-    ):
-        references.append(corrections.sigma_path)
-    record["input_sha256"] = input_digests(
-        [*(files or [analysis.path]), *(path for path, _ in analysis.summed_frames or ()), *mask_sources,
-         *(path for path in references if path)])
     if loaded.get("layout"):  # NeXus / HDF5: what the source is, which dataset, how the image was turned
         record["source_layout"] = {
             "kind": loaded.get("layout"), "summary": loaded.get("layout_summary"),
             "dataset": loaded.get("dataset_path"), "transformations": _plain(loaded.get("transformations") or []),
         }
+    if getattr(analysis, "request", None) is not None and reduction is not None:
+        inputs = {**analysis.frame_files, **analysis.correction_files, **analysis.geometry_files}
+        if with_reproduction:
+            from .reduction_record import reduction_record
+            record["reproduction"] = reduction_record(analysis, inputs, curve_keys)
+        record["input_sha256"] = [{"file": Path(ref["path"]).name, "sha256": ref["sha256"]} for ref in inputs.values()]
+    else:
+        references = [corrections.dark_path, corrections.background_path, corrections.flat_field_path]
+        if getattr(analysis, "error_model_used", None) == "sigma" or any(
+            curve["region"].get("error_model") == "sigma_frame" for curve in record["curves"]
+        ):
+            references.append(corrections.sigma_path)
+        record["input_sha256"] = input_digests(
+            [*(files or [analysis.path]), *(path for path, _ in analysis.summed_frames or ()), *mask_sources,
+             *(path for path in references if path)])
     return record
 
 

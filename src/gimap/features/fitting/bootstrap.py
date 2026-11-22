@@ -126,9 +126,11 @@ def create_curve_fit():
     from src.gimap.shared.signed_cut import PreparedCut, fit_halves, merge_points, prepare_cut
 
     from .application.single_fit import CURVE_FIT_MIN_POINTS, TOO_FEW_FOR_CURVE_FIT
+    from .application.fit_reproduction import prediction_record
     from .application.workflow_v5 import default_options
-    from .domain.posterior import encoding, network, refine, reporting
-    from .infrastructure.adapters.posterior_job import batch_compositions, curve_rows
+    from .domain.posterior import encoding, network, refine
+    from .infrastructure.adapters.posterior_job import batch_compositions, curve_rows, encode
+    from .infrastructure.reproduce_fit import predict_options, prediction_plan
     from .infrastructure.adapters.workflow_v5 import prepare_sides, side_notes
 
     def prepared(q, intensity, sigma, halves) -> PreparedCut:
@@ -159,16 +161,12 @@ def create_curve_fit():
         chosen = (batch_compositions(list(components)) if components else
                   {"allowed": encoding.select(("sphere", "vertical_cylinder"), 2)})
         proposals = network.load()
-        solutions = refine.predict(proposals, item["q"], item["observed"], item["sigma"], cancelled=cancelled,
-                                   seed=CURVE_FIT_SEED, **chosen)
+        settings = predict_options(dict(seed=CURVE_FIT_SEED, measured_qz=cut_qz or None,
+                                        reflected_beam=True if cut_qz else None, **chosen))
+        solutions = refine.predict(proposals, item["q"], item["observed"], item["sigma"],
+                                   cancelled=cancelled, **settings)
         if not solutions:
             raise ValueError("Predict parameters found no solution for this curve")
-        if cut_qz:  # a flag only, added after the fit: no value, interval or probability changes
-            for solution in solutions:
-                solution.flags = tuple(solution.flags) + tuple(refine.interface_flags(solution.model, cut_qz))
-                solution.flags += tuple(reporting.grazing_flags(solution.model, cut_qz, 1, reflected_beam=True))
-                if "diagnostics" in solution.extras:
-                    solution.extras["diagnostics"].update(measured_qz=cut_qz, reflected_beam=True)
         q = np.asarray(item["q"], float)
         rows = curve_rows(item, solutions[:5], np.linspace(q.min(), q.max(), options["render_points"]),
                           chosen_by="user_composition" if components else "network_choice")
@@ -176,6 +174,11 @@ def create_curve_fit():
                    "one_half": cut.single, "merged": cut.merged}
         # As the 1D Predict record names it: the network and the SHA-256 of its weights (checked when it is loaded).
         used = {"name": network.path().stem, "sha256": (getattr(proposals, "meta", None) or {}).get("sha256")}
+        if used["sha256"]:
+            plan = prediction_plan(dict(q=q.tolist(), intensity=item["observed"].tolist(), sigma=item["sigma"].tolist()),
+                                   settings, network.path(), proposals.meta,
+                                   display_q=np.linspace(q.min(), q.max(), options["render_points"]), limit=5)
+            rows[0]["reproduction"] = prediction_record(plan, [encode(s) for s in solutions[:5]])
         for row in rows:
             row.update(prepared=cut.note, preparation=dict(made_of), network=dict(used), seed=CURVE_FIT_SEED,
                        curve_notes=side_notes(item, {}))  # an estimated σ, negative and zero intensities

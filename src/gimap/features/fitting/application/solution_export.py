@@ -227,7 +227,7 @@ def table_text(names: Sequence[str], rows: Sequence[Sequence]) -> str:
     writer = csv.writer(stream, lineterminator="\n")
     writer.writerow(names)
     for row in rows:
-        writer.writerow(["" if value is None else f"{value:.8g}" if isinstance(value, float) else value for value in row])
+        writer.writerow(["" if value is None else value for value in row])
     return stream.getvalue()
 
 

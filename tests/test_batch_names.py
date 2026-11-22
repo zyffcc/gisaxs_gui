@@ -174,6 +174,34 @@ def test_a_frame_of_one_file_and_a_master_say_their_files(tmp_path: Path) -> Non
     assert record["input_sha256"] == [{"file": "scan_m01.nxs", "sha256": hashlib.sha256(stack.read_bytes()).hexdigest()}]
 
 
+def test_summed_modules_and_changed_dark_member_are_identified_at_reduction(tmp_path):
+    import h5py
+
+    from src.gimap.features.analyze.domain import Corrections
+    from src.gimap.features.analyze.infrastructure.reproduce import replay_reduction
+    from tests.test_analyze_nexus_sources import DET
+
+    first, profile = _module_set(tmp_path / "first")
+    second, _ = _module_set(tmp_path / "second")
+    dark, _ = _module_set(tmp_path / "dark")
+    member = dark.with_name(dark.name.replace("m01", "m02"))
+    analyze = _tools(profile).analyze_frame
+    request = AnalysisRequest(first, mode="giwaxs", summed_frames=((second, 1),), with_map=False,
+                              corrections=Corrections(dark_path=str(dark), dark_scale=0.25))
+    old = analyze(request)
+    with h5py.File(member, "r+") as handle:
+        handle[f"{DET}/data"][0] = 32
+    # Exporting a displayed result still identifies the version that produced it.
+    with pytest.raises(ValueError, match="SHA-256 mismatch.*m02"):
+        replay_reduction(analysis_metadata(old), tmp_path)
+    current = analyze(request, loaded=old)
+    record = analysis_metadata(current)
+    assert len(record["reproduction"]["inputs"]) == 9
+    assert np.any(current.data[current.valid] != old.data[current.valid])
+    radial = replay_reduction(record, tmp_path)["radial"]
+    np.testing.assert_array_equal(radial["intensity"], current.reduction.curve("radial").intensity)
+
+
 def test_the_readme_says_how_frames_are_named_and_counted() -> None:
     text = readme_text(BatchChoices(per_frame=True), batch="run", frame="f", frames=3, curves=[])
     assert '"_frameNNNN" is the index of the frame in a source that holds several, counted from 0' in text
@@ -201,11 +229,13 @@ def test_a_fit_input_is_q_in_inverse_angstrom_also_when_analyze_shows_two_theta(
     written = tools.export.fit_input(in_angle, tmp_path / "out")
     lines = written.read_text(encoding="utf-8").splitlines()
     assert lines[0] == "# GIMaP Analyze fit input (q in 1/A)" and "# columns: q (1/A)  I  sigma  pixels" in lines
-    np.testing.assert_allclose(np.loadtxt(written)[:, 0], wanted.x, rtol=1e-7)  # 8 digits in the file
+    np.testing.assert_array_equal(np.loadtxt(written)[:, 0], curve.x)
+    sidecar = json.loads(written.with_suffix(".json").read_text(encoding="utf-8"))
+    assert list(sidecar["reproduction"]["reference"]) == ["fit_input"]
     # the whole export of the frame (Export, the folder watch) writes the same curve
     exported = tools.export(in_angle, tmp_path / "all")
     fit_input = next(path for path in exported if path.name.endswith("_fit_input.dat"))
-    np.testing.assert_allclose(np.loadtxt(fit_input)[:, 0], wanted.x, rtol=1e-7)
+    np.testing.assert_array_equal(np.loadtxt(fit_input)[:, 0], curve.x)
 
 
 def test_a_fit_input_is_complete_or_not_there(tmp_path: Path, monkeypatch) -> None:

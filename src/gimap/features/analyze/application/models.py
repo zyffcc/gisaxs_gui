@@ -58,6 +58,8 @@ class AnalysisRequest:
     series_cut: Optional[dict] = field(default=None, hash=False)
     """The cut of a series this frame is cut at (the view model's ``series_cut()``: the automatic cut of one frame,
     held for every frame of a series run); the reduction's record then says so (``held_cut``). ``None``: its own."""
+    with_record: bool = True
+    """A display-only Series map discards each reduced frame, so it needs no export record or file digests."""
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -146,6 +148,14 @@ class FrameAnalysis:
     """Variance from the measured reference frames, in the same units."""
     reference_dark: Optional[dict] = None
     """Dark scales used for the reference frames, with their sources."""
+    request: Optional[AnalysisRequest] = None
+    """Cut settings actually used, including any per-frame overrides in a series."""
+    frame_files: dict = field(default_factory=dict)
+    """Paths and digests of the detector files at read time, including all members of every summed frame."""
+    correction_files: dict = field(default_factory=dict)
+    """Paths and digests of the inputs to the pixel corrections."""
+    geometry_files: dict = field(default_factory=dict)
+    """Calibration file read for this frame, when its geometry came from a sibling .poni."""
 
     @property
     def calibrated_curve_unit(self) -> Optional[str]:

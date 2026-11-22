@@ -13,6 +13,7 @@ from .fit_model import (
     LEGACY_SCHEMA, SCHEMA, SIZE_LAWS, Component, FitModel, Parameter, _legacy_scale, new_component, with_interference,
 )
 from .substrates import Substrate
+from .vertical_cut import VerticalCut
 
 MANUAL_SCHEMA = "gimap_fit_model_v3"
 
@@ -58,6 +59,8 @@ def model_to_dict(model: FitModel) -> dict:
         out["constraints"] = [inequality.to_dict() for inequality in model.inequalities]
     if model.substrate is not None:
         out["substrate"] = model.substrate.to_dict()
+    if model.cut is not None:
+        out["vertical_cut"] = vars(model.cut).copy()
     return out
 
 
@@ -120,6 +123,7 @@ def model_from_dict(data: Mapping) -> FitModel:
                         for item in data.get("constraints") or ())
     model = FitModel(tuple(components), globals_, contact=bool(data.get("contact", True)), inequalities=constraints,
                      substrate=Substrate.from_dict(data.get("substrate")),
+                     cut=VerticalCut(**data["vertical_cut"]) if data.get("vertical_cut") else None,
                      resolution_mode=data.get("resolution_mode", "constant"), weighting=data.get("weighting", "file"))
     return fit_links.apply_links(fit_links.with_inequalities(model, constraints)) if constraints or any(
         p.tie for _path, p in model.parameters()) else model

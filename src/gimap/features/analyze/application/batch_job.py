@@ -34,6 +34,7 @@ from .ports import FigureWriter
 from .series import CorrectSeriesFrame
 from .export_record import frame_cuts, frame_name
 from .series_map import row_label, series_row
+from .series_reproduction import spool_row
 from .use_cases import analysis_metadata, export_stem, fit_input_curve
 
 BYTES_PER_PIXEL = 100
@@ -123,6 +124,7 @@ class FrameJob:
     for each frame's own (``write_frame_images``)."""
     number: Optional[int] = None
     """The place of the frame among the listed frames, counted from 1 (every n-th frame: 1, n + 1, …)."""
+    series_spool: Optional[str] = None
 
 
 @dataclass
@@ -191,7 +193,7 @@ def run_frame_job(tools: FrameTools, job: FrameJob) -> FrameOutcome:
     """Reduce the frame, write what the choices ask for, and return the outcome (thread- and process-safe)."""
     started = time.perf_counter()
     choices = job.choices
-    request = replace(job.request, with_map=choices.needs_map)
+    request = replace(job.request, with_map=choices.needs_map, with_record=choices.writes_anything or bool(job.series_spool))
     info: dict = {}
     if job.series is None or job.series.is_identity:
         analysis = tools.analyze_frame(request)
@@ -211,14 +213,18 @@ def run_frame_job(tools: FrameTools, job: FrameJob) -> FrameOutcome:
             detector=choices.detector_image, q_map=choices.q_map_image, suffix=choices.image_format,
             display=job.display,
         ))
-    metadata = analysis_metadata(analysis)
+    selected = chosen_curves(analysis, choices.curves)
+    keys = [curve.key for curve in selected]
+    if choices.fit_input and fit_input_curve(analysis) is not None:
+        keys.append("fit_input")
+    metadata = analysis_metadata(analysis, curve_keys=keys) if choices.writes_anything else {}
     outcome = FrameOutcome(
         index=job.index, label=frame_name(analysis), stem=export_stem(analysis), written=written,
         metadata=metadata, series_info=info, number=job.number, cuts=frame_cuts(metadata),
         summed=analysis.frame_total,
     )
     if choices.tables:
-        outcome.curves = chosen_curves(analysis, choices.curves)
+        outcome.curves = selected
     if choices.fit == FIT_PEAKS and giwaxs and analysis.geometry is not None:
         outcome.peak_inputs = peak_inputs(analysis, maps=tools.analyze_frame.maps_of(analysis))
     elif choices.fit == FIT_MODEL:
@@ -230,7 +236,8 @@ def run_frame_job(tools: FrameTools, job: FrameJob) -> FrameOutcome:
             pass  # this frame lacks the live curve: the map skips it, the files are written
         else:
             # the row's name as the Series map names its rows (``series_map.row_label``)
-            outcome.live_row = (x, intensity, x_label, row_label(analysis), (Path(analysis.path), int(analysis.frame_index)))
+            label = spool_row(job.series_spool, analysis, job.live_key, row_label(analysis), metadata or None)
+            outcome.live_row = (x, intensity, x_label, label, (Path(analysis.path), int(analysis.frame_index)))
     outcome.seconds = time.perf_counter() - started
     return outcome
 

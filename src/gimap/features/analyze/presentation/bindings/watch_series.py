@@ -43,7 +43,8 @@ class WatchSeriesMixin(WatchOnlineMixin):
 
     def _watch_series_start(self) -> None:
         self._stop_watch_series()
-        self._watch_series_origin = self._watch_series_shown()
+        if self._series_map is None:
+            self._watch_series_origin = self._watch_series_shown()
         if not hasattr(self, "_watch_series_timer"):
             self._watch_series_timer = QTimer(self)
             self._watch_series_timer.setSingleShot(True)
@@ -66,6 +67,7 @@ class WatchSeriesMixin(WatchOnlineMixin):
             return None
         key = self.series_curve_combo.currentData() or ("horizontal" if analysis.kind == "gisaxs" else "radial")
         try:
+            self.view_model.begin_series_spool(replace_existing=False)
             return key, self.view_model.series_row_of(analysis, key)
         except (ValueError, AttributeError):
             return None
@@ -147,6 +149,7 @@ class WatchSeriesMixin(WatchOnlineMixin):
         key = stored_key if has_map else self.series_curve_combo.currentData()
         if live and not has_map:
             key = key or ("horizontal" if analysis.kind == "gisaxs" else "radial")
+            self.view_model.begin_series_spool(replace_existing=False)  # includes the row captured at watch start
             self._series_keep_curve(key)
             self._series_run = None
             self._series_built["every"] = max(1, self.series_step_spin.value())

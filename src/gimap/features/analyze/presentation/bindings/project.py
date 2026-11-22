@@ -23,11 +23,14 @@ import numpy as np
 from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import RowLabel, settings_from_record, settings_record
+from ...application.series_reproduction import spool_recipe
 
 MOST_KEPT = 4_000_000
 """Values (the x and intensity of every row) a project keeps of a Series map; a larger one is built again."""
 MAP_NOT_KEPT = "The Series map ({rows} frames) was too large to keep in the project: Build Map again."
 MAP_UNREADABLE = "The Series map of the project could not be read: Build Map again."
+RECIPES_NOT_KEPT = ("The Series map was restored. Its reduction records exceeded the project size limit. "
+                    "Build Map again to reproduce it.")
 _FACTS = ("name", "source", "frame_index", "frame_count", "summed", "timestamp", "exposure_s", "frame_time_s")
 
 
@@ -41,11 +44,14 @@ def _decoded(data: dict) -> np.ndarray:
     return np.frombuffer(raw, dtype="<f8").reshape([int(size) for size in data["shape"]]).astype(float)
 
 
-def _row_record(row) -> dict:
+def _row_record(row, keep_recipes: bool) -> dict:
     x, intensity, x_label, label, ref = row
     facts = {key: getattr(label, key) for key in _FACTS if isinstance(label, RowLabel)}
-    return {"x": _encoded(x), "y": _encoded(intensity), "x_label": str(x_label), "label": str(label), "facts": facts,
-            "ref": [str(ref[0]), int(ref[1])]}
+    record = {"x": _encoded(x), "y": _encoded(intensity), "x_label": str(x_label), "label": str(label), "facts": facts,
+              "ref": [str(ref[0]), int(ref[1])]}
+    if keep_recipes and getattr(label, "recipe_path", None):
+        record["reduction_record"] = Path(label.recipe_path).read_text(encoding="utf-8")
+    return record
 
 
 def _row_from(record: dict) -> tuple:
@@ -78,14 +84,18 @@ class ProjectMixin:
         rows = list(getattr(self, "_series_rows", ()) or ()) if getattr(self, "_series_map", None) is not None else []
         if len(rows) < 2:
             return None
-        if sum(np.size(row[0]) + np.size(row[1]) for row in rows) > MOST_KEPT:
+        values = sum(np.size(row[0]) + np.size(row[1]) for row in rows)
+        if values > MOST_KEPT:
             return {"kept": False, "frames": len(rows)}
+        # Prioritise the plotted values within the existing float64 storage budget.
+        recipe_bytes = sum(getattr(row[3], "recipe_size", 0) for row in rows)
+        keep_recipes = recipe_bytes <= 8 * (MOST_KEPT - values)
         cache, kept = getattr(self, "_series_memory", {}), {}
         records = []
         for row in rows:
             entry = cache.get(id(row))
-            if entry is None or entry[0] is not row:
-                entry = (row, _row_record(row))
+            if entry is None or entry[0] is not row or entry[2] != keep_recipes:
+                entry = (row, _row_record(row, keep_recipes), keep_recipes)
             kept[id(row)] = entry
             records.append(entry[1])
         self._series_memory = kept  # (each row encoded once: the work is digested every second or two)
@@ -93,7 +103,8 @@ class ProjectMixin:
         return {"key": str(self._series_key), "title": str(getattr(self, "_series_curve_title", "") or ""),
                 "view": str(getattr(self, "_series_view", "both")), "row": int(getattr(self, "_series_row", 0)),
                 "first": int(built.get("first") or 1), "last": int(built.get("last") or 0),
-                "every": int(built.get("every") or 1), "kind": built.get("kind"), "rows": records}
+                "every": int(built.get("every") or 1), "kind": built.get("kind"), "rows": records,
+                "reduction_records_too_large": not keep_recipes or bool(built.get("reduction_records_too_large"))}
 
     def restore_series_map(self, data) -> list[str]:
         """The Series map of a project (``series_map_state``) shown again; returns notes (too large, unreadable)."""
@@ -108,18 +119,23 @@ class ProjectMixin:
             return [tr(MAP_UNREADABLE)]
         if len(rows) < 2:
             return []
+        for row, record in zip(rows, data["rows"]):
+            if isinstance(recipe := record.get("reduction_record"), str):
+                self.view_model.begin_series_spool(replace_existing=False)
+                spool_recipe(self.view_model.series_spool, recipe.encode("utf-8"), row[3])
         self._series_rows, self._series_key = rows, key
         self._series_curve_title = str(data.get("title") or "")
         self._series_run = None
         self._series_view = str(data.get("view") or "both")
         self._series_built = dict(self.view_model.series_built_with(), kind=data.get("kind"),
                                   every=int(data.get("every") or 1), first=int(data.get("first") or 1),
-                                  last=int(data.get("last") or 0), watch_tail=())
+                                  last=int(data.get("last") or 0), watch_tail=(),
+                                  reduction_records_too_large=bool(data.get("reduction_records_too_large")))
         self._series_row = min(max(0, int(data.get("row") or 0)), len(rows) - 1)
         self._clear_stages()
         self._show_series_map(keep_view=False)
         self._find_stages()
-        return []
+        return [tr(RECIPES_NOT_KEPT)] if data.get("reduction_records_too_large") else []
 
     def apply_project_state(self, data: dict) -> list[str]:
         """The frames and set-up of a project; returns notes (files or masks no longer there)."""

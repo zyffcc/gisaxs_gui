@@ -59,7 +59,9 @@ def _sha256(curve) -> str | None:
     from ...application.curve_sources import source_record
 
     try:
-        return source_record(curve.path).get("sha256") if curve is not None and curve.path else None
+        if curve is not None and curve.path:
+            return (curve.source or source_record(curve.path)).get("sha256")
+        return None
     except (OSError, ValueError):
         return None
 

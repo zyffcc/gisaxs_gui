@@ -60,6 +60,9 @@ class JointResult:
     at_bounds: tuple = ()
     covariance: tuple = ()
     covariance_keys: tuple = ()
+    start_curves: tuple = field(default=(), compare=False, repr=False)
+    evaluation_budget: Optional[int] = None
+    seed: int = 1729
 
 
 def default_shared(model: FitModel) -> frozenset:
@@ -165,6 +168,7 @@ def fit_curves(curves: Sequence[JointCurve], shared=None, *, method: str = "loca
         raise ValueError(f"Unknown fitting method {method!r}")
     tick = time.perf_counter()
     shared = default_shared(curves[0].model) if shared is None else frozenset(tuple(p) for p in shared)
+    start_curves = tuple(curves)
     curves = shared_curves(curves, shared)
     for curve in curves:
         if curve.data.q.size < 3:
@@ -225,7 +229,7 @@ def fit_curves(curves: Sequence[JointCurve], shared=None, *, method: str = "loca
         evaluations=problem.evaluations, seconds=time.perf_counter() - tick, converged=converged and not stopped,
         stopped=stopped, message=message, errors=errors, at_bounds=tuple(edges),
         covariance=() if covariance is None else tuple(tuple(float(v) for v in row) for row in covariance),
-        covariance_keys=tuple(keys))
+        covariance_keys=tuple(keys), start_curves=start_curves, evaluation_budget=budget, seed=seed)
 
 
 def _covariance(models, curves, problem: _JointProblem):

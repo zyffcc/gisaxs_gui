@@ -27,6 +27,7 @@ from .zh_orientation_report import ORIENTATION_REPORT_ZH
 from .zh_posterior_mcmc import POSTERIOR_MCMC_ZH
 from .zh_predict_report import PREDICT_REPORT_ZH
 from .zh_reduction_errors import REDUCTION_ERRORS_ZH
+from .zh_reproduction import REPRODUCTION_ZH
 from .zh_review_phases import REVIEW_PHASES_ZH
 from .zh_ring_assignment import RING_ASSIGNMENT_ZH
 from .zh_roll_check import ROLL_CHECK_ZH
@@ -41,7 +42,7 @@ FEATURES_ZH = {
     **INSITU_ZH, **JOINT_FIT_ZH, **ABSOLUTE_SCALE_ZH, **MASK_TOOLS_ZH, **MANUAL_FIT_ZH, **ROLL_CHECK_ZH,
     **ZH_GEOMETRY_CUTS, **GEOMETRY_ORIENTATION_ZH, **ZH_GEOMETRY_TILT, **SERIES_CHAIN_ZH, **REVIEW_PHASES_ZH,
     **RING_ASSIGNMENT_ZH, **ORIENTATION_REDUCTION_ZH, **ORIENTATION_REPORT_ZH, **SERIES_SELECTION_ZH,
-    **REDUCTION_ERRORS_ZH, **HORIZON_SELECTION_ZH,
+    **REDUCTION_ERRORS_ZH, **HORIZON_SELECTION_ZH, **REPRODUCTION_ZH,
 }
 
 __all__ = ["FEATURES_ZH"]

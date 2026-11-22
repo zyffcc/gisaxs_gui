@@ -26,6 +26,7 @@ from typing import Any, Collection, Mapping, Optional, Sequence
 
 from src.gimap.shared.export_text import export_text
 from src.gimap.shared.signed_cut import fit_halves
+from src.gimap.shared.reproduction import replay_header
 from src.gimap.shared.version import SOFTWARE as RELEASE
 
 from ..domain import GISAXS
@@ -105,6 +106,8 @@ class BatchRun:
     write_error: str = ""
     """Why the folder stopped taking files (the batch was ended for it)."""
     seconds: float = 0.0
+    replay_records: list[dict] = field(default_factory=list)
+    table_frames: dict[str, list[int]] = field(default_factory=dict)
 
     def fail(self, frame: str, why: str, file: str = "") -> None:
         """A frame that gave nothing: its name, the reason in English, and the file it was to be read from."""
@@ -140,7 +143,8 @@ _MEANING = {
     "nxcansas": "per frame: its curves against q (not I(chi), not 2theta) as NXcanSAS (HDF5, for SasView and other "
                 "NeXus programs), one SASentry per curve: Q in 1/angstrom, I, Idev = sigma, the wavelength, distance "
                 "and alpha_i, and the frame's record as a note of SASprocess",
-    "fit_input": "per frame: q (1/A), I, sigma, pixels — the curve Fitting reads (Fitting > In-situ series)",
+    "fit_input": "per frame: q (1/A), I, sigma, pixels for Fitting (Fitting > In-situ series), with a JSON "
+                 "reduction record beside the curve",
     "q_map": "per frame: the intensity on a regular q_par-qz grid (qy-qz for GISAXS); first row = x axis, "
              "first column = qz",
     "cake": "per frame: the intensity unwrapped onto chi (rows) and q (columns)",
@@ -375,6 +379,10 @@ def batch_record(run: BatchRun, files: Sequence[Path]) -> dict[str, Any]:
     if run.fit_frames:  # what every frame's model fit was made of, and the frames it failed on with the reason
         record["model_fit"] = model_fit_record(choices.fit_halves, run.fit_frames)
         record["fit_failed"] = [{"frame": frame["frame"], "why": frame["reason"]} for frame in unfitted]
+    if run.replay_records:
+        tables = {key: run.tables.reference_columns(key) for key in run.table_frames}
+        record["reproduction"] = {**replay_header("batch", tables), "records": run.replay_records,
+                                  "table_frames": run.table_frames}
     if run.series is not None and not run.series.is_identity:
         record["series_correction"] = asdict(run.series)
     if run.display is not None and (choices.detector_image or choices.q_map_image):

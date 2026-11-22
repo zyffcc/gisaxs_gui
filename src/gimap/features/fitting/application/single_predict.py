@@ -50,6 +50,8 @@ class Predicted:
     diagnostics: dict = field(default_factory=dict)
     posterior_summary: dict = field(default_factory=dict)
     importance_starts: tuple = ()
+    reproduction: Optional[dict] = None
+    solution_index: int = 0
 
 
 MANUAL_ONLY = ("Predict parameters knows spheres, random and vertical cylinders with the 1D paracrystal: Model has a "
@@ -109,14 +111,14 @@ def predict_request(data, model: fm.FitModel, particles: str, *, seed: int = 0) 
 def predicted(value: dict) -> list[Predicted]:
     """The solutions of a finished job, most probable first."""
     out = []
-    for row in value.get("solutions") or ():
+    for index, row in enumerate(value.get("solutions") or ()):
         chi2 = row.get("chi2")
         out.append(Predicted(fm.model_from_dict(row["model"]), float("nan") if chi2 is None else float(chi2),
                              str(row.get("name", "")), float(row.get("bic_weight", row.get("probability")) or 0.0),
                              {k: tuple(v) for k, v in (row.get("values") or {}).items()}, tuple(row.get("flags") or ()),
                              float(row.get("ess") or 0.0), row.get("points") or value.get("points"),
                              value.get("tried"), row.get("diagnostics") or {}, row.get("posterior_summary") or {},
-                             tuple(row.get("importance_starts") or ())))
+                             tuple(row.get("importance_starts") or ()), value.get("reproduction"), index))
     return out
 
 

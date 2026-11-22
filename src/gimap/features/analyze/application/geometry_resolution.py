@@ -9,9 +9,10 @@ profile centre and a message saying so.
 
 from __future__ import annotations
 
+import math
 from dataclasses import replace
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Mapping, Optional
 
 from .models import CENTER_HEADER, CENTER_PROFILE, CENTER_SESSION, GeometryResolution
 from .ports import InstrumentProfileStore
@@ -22,6 +23,26 @@ CENTER_NOT_USED = (
 CENTER_NOT_USED_HEADER = (
     "The beam centre you set for {set_shape} frames is not used for this {shape} frame (file header centre used)."
 )
+
+
+def header_beam_center(
+    metadata: Mapping[str, Any], shape: tuple[int, int]
+) -> Optional[tuple[float, float]]:
+    """Canonical beam centre from the file header, if the loader found a usable one."""
+    center = metadata.get("header_beam_center") if metadata else None
+    if center is None:
+        return None
+    try:
+        x, y = (float(value) for value in center)
+    except (TypeError, ValueError):
+        return None
+    rows, columns = shape
+    # A header centre far outside the frame is a placeholder, not a position.
+    if not (math.isfinite(x) and math.isfinite(y)):
+        return None
+    if not (-columns <= x <= 2 * columns and -rows <= y <= 2 * rows):
+        return None
+    return x, y
 
 
 def shape_text(shape) -> str:
@@ -155,5 +176,6 @@ __all__ = [
     "CENTER_NOT_USED_HEADER",
     "ResolveGeometry",
     "center_not_used_message",
+    "header_beam_center",
     "shape_text",
 ]

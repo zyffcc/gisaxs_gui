@@ -62,6 +62,7 @@ class CurveSpec:
     path: str = ""
     dq: Optional[np.ndarray] = None
     band_crosses_specular: Optional[bool] = None
+    source: Optional[dict] = None
 
     def with_geometry(self, **changes) -> "CurveSpec":
         return replace(self, **changes)
@@ -245,8 +246,11 @@ def joint_record(result: JointResult, specs: Sequence[CurveSpec], substrate: Opt
             "errors": {fit_links.parameter_name(path): number(error)
                        for path, error in curve_errors(result, index).items()},
         })
+    from .fit_reproduction import joint_recipe
+
     return {
         "software": SOFTWARE, "kind": "gimap_joint_fit_v1", "q_unit": "nm^-1",
+        **({"reproduction": joint_recipe(result, specs)} if result.start_curves else {}),
         "objective": "sum over the curves of sum r^2, r = (I - m)/sigma (ln(I/m) without sigma)",
         "method": result.method, "converged": result.converged, "stopped": result.stopped, "message": result.message,
         "chi2_reduced": number(result.chi2_reduced), "free_values": result.free, "evaluations": result.evaluations,

@@ -300,6 +300,9 @@ class SeriesMixin(SeriesDisplayMixin, SeriesPickMixin, SeriesExportsMixin, Serie
         self._batch_live = False
         self._series_map, self._series_name = None, None
         self._series_rows = []
+        self._series_memory = {}
+        if not self.batch_running() and not self.tasks.is_busy():
+            self.view_model.release_series_spool()
         self._forget_records()
         self._series_row = 0
         self._series_done_text = None

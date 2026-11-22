@@ -21,6 +21,7 @@ import numpy as np
 
 from src.gimap.shared.series_stages import SeriesStages, find_stages
 from src.gimap.shared.signed_cut import FIT_HALVES, fit_halves
+from src.gimap.shared.reproduction import replay_header
 from src.gimap.shared.version import SOFTWARE
 
 from ..domain import beam_tail
@@ -28,7 +29,8 @@ from ..domain.fit_engine import FitResult
 from ..domain.fit_model import FAMILIES, INFO, FitModel, model_to_dict
 from .single_fit import Curve, PreparedCurve, fit_resolving, prepare_points, tail_for_curve
 from .models import InSituSourceFrame
-from .series_selection import DEFAULT_SCALE, PredictAttempt, SolutionChoice
+from .fit_reproduction import fit_recipe, with_prediction
+from .series_selection import DEFAULT_SCALE, PredictedStart, PredictAttempt, SolutionChoice
 
 STARTS = (("previous", "Each frame starts from the previous frame's result"),
           ("same", "Every frame starts from the model in Single analysis"),
@@ -122,6 +124,7 @@ class FrameFit:
     """Mode selected by Predict, with its probabilities and conditional intervals."""
     predict_attempts: tuple[PredictAttempt, ...] = ()
     """Every Predict restart of this frame, including the ones superseded by another fit."""
+    reproduction: Optional[dict] = None
 
     @property
     def ok(self) -> bool:
@@ -204,19 +207,25 @@ def _fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: S
     if prepared.points < 3:
         return FrameFit(index, path, error=TOO_FEW_POINTS, **made_of)
     try:
+        prediction = None
         if settings.method == "predict":  # the network's solution, then least squares for its errors and χ²
-            predicted_model = predict(prepared.data, start)
+            proposed = predict(prepared.data, start)
+            if isinstance(proposed, PredictedStart):
+                prediction, proposed = proposed, proposed.model
             choice = getattr(predict, "choice", None)
             if choice is not None:
                 rule = f"closest to frame {choice.reference_frame}" if choice.reference_frame else choice.rule
                 made_of.update(selection=choice, predict_choice=rule)
-            result, actions, _remaining = fit_resolving(predicted_model, prepared.data, method="local",
+            result, actions, _remaining = fit_resolving(proposed, prepared.data, method="local",
                                                         stop=stop, resolve=False, restarts=0)
-            return FrameFit(index, path, result, **made_of)
-        # a start whose beam tail still has the generic ranges gets this frame's (``single_fit.tail_for_curve``)
-        result, actions, _remaining = fit_resolving(tail_for_curve(start, prepared.data), prepared.data,
-                                                    method=settings.method, stop=stop, resolve=settings.resolve_edges)
-        return FrameFit(index, path, result, resolved=tuple(note.text for note in actions), **made_of)
+        else:
+            result, actions, _remaining = fit_resolving(tail_for_curve(start, prepared.data), prepared.data,
+                                                        method=settings.method, stop=stop, resolve=settings.resolve_edges)
+        recipe = fit_recipe(result.model, prepared.data, result, curve.source)
+        if recipe is not None and prediction is not None and prediction.reproduction:
+            with_prediction({"reproduction": recipe}, {"reproduction": prediction.reproduction}, None)
+            recipe["start_solution_index"] = prediction.index
+        return FrameFit(index, path, result, resolved=tuple(note.text for note in actions), reproduction=recipe, **made_of)
     except (ValueError, FloatingPointError, np.linalg.LinAlgError, KeyError, RuntimeError) as exc:
         return FrameFit(index, path, error=str(exc) or type(exc).__name__, **made_of)
 
@@ -464,6 +473,10 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
         record["settings"]["side_from"] = side_from
     if listing is not None:
         record["listing"] = dict(listing)
+    successful = [frame for frame in ordered if frame.ok]
+    if successful and all(frame.reproduction is not None for frame in successful):
+        record["reproduction"] = {**replay_header("batch", {}), "records": [
+            {"frame": frame.index + 1, "reproduction": frame.reproduction} for frame in successful]}
     return record
 
 

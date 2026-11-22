@@ -479,14 +479,14 @@ class FitResultsMixin:
         record = fit_record(self.session.model, data, self.session.curve, side=self.session.side,
                             q_range=self.session.q_range,
                             result=self.session.result if self.session.result_is_current() else None,
-                            excluded=self.session.excluded)
-        record.update(self.solutions_record())  # every solution of Predict (solutions_export.py)
+                            excluded=self.session.excluded, curve_table=(names, table))
+        record.update(self.solutions_record(record))
         if Path(path).suffix.lower() == ".h5":  # NXcanSAS: the points fitted and the model, q in 1/nm
             curves = fit_curves(self.session.model, data, record, self._stem())
             write = lambda target: write_curves(target, curves)  # noqa: E731
         else:
             write = lambda target: np.savetxt(  # noqa: E731
-                target, table, delimiter=",", header=",".join(names), comments="", fmt="%.8g")
+                target, table, delimiter=",", header=",".join(names), comments="", fmt="%.17g")
         try:
             record_path = write_pair(path, write, record)
         except OSError as exc:

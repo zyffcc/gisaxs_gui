@@ -124,6 +124,7 @@ class Curve:
     by the person); ``None``: a file read by place or an NXcanSAS curve."""
     dq: Optional[np.ndarray] = None
     """Measured Gaussian resolution widths, in nm⁻¹ and aligned with the signed q."""
+    source: Optional[dict] = None
 
     def without_missing_text_sigma(self) -> "Curve":
         """For file weighting, form the halves from the same observations the text reader historically supplied.
@@ -158,8 +159,11 @@ class Curve:
             if dq.shape != q.shape:
                 raise ValueError("dQ and q must have the same length")
             dq = dq[keep] * factor
+        from .curve_sources import source_record
+
         return cls(q[keep], intensity[keep], None if sigma is None else sigma[keep], name, path, unit, unit_from,
-                   int(rows_left_out) + int(q.size - np.count_nonzero(keep)), columns, dq)
+                   int(rows_left_out) + int(q.size - np.count_nonzero(keep)), columns, dq,
+                   source=source_record(path) if path else None)
 
 
 def _half(curve: Curve, positive: bool):
@@ -382,7 +386,10 @@ def converged_again(result, data: FitData, *, restarts: int = REFINE_RESTARTS, m
         done += 1
         result = replace(again, method=first.method, evaluations=result.evaluations + again.evaluations,
                          seconds=result.seconds + again.seconds)
-    return replace(result, restarts=done) if done else first
+    if not done:
+        return first
+    return replace(result, restarts=done, start_model=first.start_model, restart_budget=result.evaluation_budget,
+                   evaluation_budget=first.evaluation_budget, seed=first.seed, population_seeds=first.population_seeds)
 
 
 def fit_resolving(model: FitModel, data: FitData, *, method: str = "local", max_evaluations=None, progress=None,
@@ -457,9 +464,11 @@ def derived_values(component: Component) -> dict:
 
 
 def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: str, q_range, result: Optional[FitResult],
-               excluded=()) -> dict:
+               excluded=(), curve_table=None, include_recipe=True) -> dict:
     """What the export writes next to the table: the model, the fit and how it was made."""
     from .curve_sources import source_record
+    from .fit_reproduction import fit_recipe
+    from .fit_state import number
     from .fit_uncertainty import describe_links, uncertainty_record
 
     made_of = None if curve is None else prepare_points(curve, side, q_range, excluded, weighting=data.weight_mode,
@@ -482,7 +491,7 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
                    "left_out_q_nm^-1": sorted(float(value) for value in excluded)},
         "resolution": ({"mode": "file", "dq_nm^-1": data.dq.tolist()} if model.resolution_mode == "file" else
                        {"mode": "constant", "sigma_q_nm^-1": model.globals["q_resolution"].value}),
-        "log_rmse": log_rmse(model, data),
+        "log_rmse": number(log_rmse(model, data)),
         # spheres of a horizontal cut: q_z = 0 (effective interface) or the two-path model with the cut's angles
         "sphere_model": "effective interface (q_z = 0)" if grazing(model) is None else "two paths (direct + exit-reflected)",
         "qz_plus_R": {f"{index}": round(value, 4) for index, value in qz_plus_r(model)},
@@ -490,14 +499,18 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
         "derived": [derived_values(component) for component in model.components],
         "links": describe_links(model),
     }
+    source = None
     if curve is not None and curve.path:
-        record["curve"]["source"] = source_record(curve.path)
+        record["curve"]["source"] = source = curve.source or source_record(curve.path)
+    recipe = fit_recipe(model, data, result, source, curve_table) if include_recipe else None
+    if recipe is not None:
+        record["reproduction"] = recipe
     if result is not None:
         record["fit"] = {
-            "method": result.method, "chi2_reduced": result.chi2_reduced, "converged": result.converged,
+            "method": result.method, "chi2_reduced": number(result.chi2_reduced), "converged": result.converged,
             "evaluations": result.evaluations, "seconds": round(result.seconds, 3), "message": result.message,
             "restarts": int(getattr(result, "restarts", 0)),
-            "errors": {f"{owner}:{key}": value for (owner, key), value in result.errors.items()},
+            "errors": {f"{owner}:{key}": number(value) for (owner, key), value in result.errors.items()},
             "at_bounds": [f"{owner}:{key}" for owner, key in result.at_bounds],
             "correlated": [[f"{a[0]}:{a[1]}", f"{b[0]}:{b[1]}", rho] for a, b, rho in result.correlated],
             **uncertainty_record(result),  # correlation matrix and covariance (names as in links), flags
