@@ -358,7 +358,7 @@ def test_recalibration_updates_the_profile_and_keeps_its_incidence(tmp_path: Pat
     view_model.result.metadata["image_shape"] = [1679, 1475]
     view_model.apply_result()
     first = profiles.find("Detector 1679×1475")
-    profiles.save(replace(first, geometry=first.geometry.with_incidence(0.4)))
+    profiles.save(replace(first, geometry=first.geometry.with_incidence(0.4).with_sample_roll(-1.2)))
 
     moved = replace(view_model.result.selected_candidate, center_x_px=130.0, distance_mm=2000.0)
     view_model.result = replace(view_model.result, selected_candidate=moved)
@@ -369,6 +369,7 @@ def test_recalibration_updates_the_profile_and_keeps_its_incidence(tmp_path: Pat
     assert updated.geometry.beam_center_x_px == 130.5
     assert updated.geometry.distance_m == pytest.approx(2.0)
     assert updated.geometry.incidence_deg == 0.4
+    assert updated.geometry.sample_roll_deg == -1.2
 
 
 def test_calibration_without_frame_size_names_the_profile_by_detector_only(tmp_path: Path) -> None:

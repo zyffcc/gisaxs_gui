@@ -38,6 +38,7 @@ from .pipeline_geometry import GeometryStepsMixin
 from .pipeline_phases import PhaseStepsMixin
 from .pipeline_progress import FrameChanged, PipelineStopped, frame_changed, same_file
 from .pipeline_report import calibration_quality, compact_report
+from .pipeline_roll import choose_frame_angles
 from .pipeline_rows import peak_rows as _peak_rows
 from .pipeline_rows import peak_search as _peak_search
 from .pipeline_rows import ring_row as _ring_row
@@ -160,6 +161,14 @@ class PipelineOptions:
     replace those of Analyze's Phases window, whose phases are used otherwise."""
     orientation_min_exit_deg: Optional[float] = None
     """Override the minimum pixel exit angle for GIWAXS orientation. None keeps the Analyze setting."""
+    sample_roll_deg: Optional[float] = None
+    """An explicit rotation about the incident beam. None allows measurement on this frame."""
+    keep_incidence: bool = False
+    """Keep the nominal αi even when the frame measurement differs by more than 3σ."""
+    yoneda_critical_deg: Optional[float] = None
+    """Known film or substrate critical angle for identifying a GISAXS band, independent of q refraction."""
+    yoneda_material: Optional[str] = None
+    """Material assigned to the GISAXS band when no explicit numeric αc is given."""
 
 
 @dataclass
@@ -197,6 +206,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         self._run = _Run()
         self._energy: Optional[float] = None
         self._incidence: Optional[float] = None
+        self._incidence_source = None
         self._incidence_kept = False  # αi is Analyze's command-bar value: never written into a profile
         self._incidence_suggestion: Optional[float] = None  # the last session's αi, set with another profile
         self._pixel: Optional[float] = None
@@ -347,12 +357,15 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
             self._decide("measurement", f"switched from {kind or 'no reduction'} to {technique.upper()}",
                          SWITCHED if why == DEFAULT else why)
         self._procedure = technique
-        rings = transmission_rings(self.catalog.workbench, status, self._incidence is not None) if (
+        known_incidence = self._incidence is not None or (status.get("header") or {}).get("incidence_deg") is not None
+        rings = transmission_rings(self.catalog.workbench, status, known_incidence) if (
             technique == "gisaxs" and why == DETECTED) else None
         if rings:  # a calibrant in transmission: the cuts are written, no particle model is fitted
             self._transmission_frame = rings
             self._decide(TRANSMISSION_ITEM, TRANSMISSION_DECISION.format(rings=rings), TRANSMISSION_WHY.format(rings=rings))
             self._attention(TRANSMISSION_ITEM, TRANSMISSION_ATTENTION.format(rings=rings), "technique", TRANSMISSION_HINT)
+        elif technique == "giwaxs":
+            choose_frame_angles(self)
         self._analyse_gisaxs() if technique == "gisaxs" else self._analyse()
         self._run.ok = True
         return self._report()
@@ -399,6 +412,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         ):
             if value is not None:
                 self._incidence, self._incidence_kept = float(value), source is None
+                self._incidence_source = source or "Analyze command bar"
                 why = FROM_COMMAND_BAR if source is None else f"from {source}"
                 if source is not None and override is not None and abs(float(override) - self._incidence) > 1e-9:
                     why = REPLACES_COMMAND_BAR[source].format(value=f"{float(override):g}")
@@ -455,9 +469,12 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         if search is None or not search.peaks:
             reason = search.reason if search is not None else "the radial curve could not be searched"
             self._decide("peaks", "none", reason)
+            if search is not None:
+                self._assign(search)
+                self._fit_crystal_orientation()
             return
         self._run.decisions.append(uncertainty_decision(status.get("error_model"), corrections=status.get("corrections")))
-        self._assign(search.peaks)
+        self._assign(search)
         self._call("compare_sectors")
         reliable = [peak for peak in search.peaks if is_reliable(peak)]  # no caveat, not cut off at the end of the data
         chosen = sorted(reliable, key=lambda peak: -peak.area)[: max(0, int(self.options.rings))]
@@ -483,6 +500,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
         for decision in (texture_rule_decision(rings), horizon_decision(rings)):
             if decision is not None:
                 self._run.decisions.append(decision)
+        self._fit_crystal_orientation()
 
     # -- report ----------------------------------------------------------------------
 
@@ -506,6 +524,8 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin, PhaseStepsMixin
             "measurement": status.get("measurement"),
             "frames": {"total": status.get("frames"), "first": status.get("frame"), "summed": status.get("summed_frames")},
             "geometry": {"source": run.geometry_source, **geometry},
+            "sample_roll_measurement": status.get("sample_roll_measurement"),
+            "incidence_measurement": status.get("incidence_measurement"),
             "calibration_quality": calibration_quality(run.calibration),
             "peaks": _peak_rows(results),
             "peak_search": _peak_search(results),

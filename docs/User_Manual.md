@@ -57,7 +57,7 @@ folder `tests/data/external/` of the program folder:
 
 | Folder | Files | What it is |
 |---|---|---|
-| `giwaxs_p08_mapi/` | `S121_MAI_A2_00841.tif`, `LaB6_2021_12_DESY_P08.poni` | GIWAXS of a MAPbI₃ perovskite film, DESY P08, PerkinElmer 2048 × 2048 detector, αi = 0.075° |
+| `giwaxs_p08_mapi/` | `S121_MAI_A2_00841.tif`, `LaB6_2021_12_DESY_P08.poni` | GIWAXS of a MAPbI₃ perovskite film, DESY P08, PerkinElmer 2048 × 2048 detector, notebook αi = 0.075° |
 | `gisaxs_galaxi/` | `galaxi_data.tif`, `galaxi_bornagain.poni` | GISAXS of Ag nanoparticles, GALAXI (Jülich), Pilatus 1M, λ = 1.34 Å, αi = 0.463° |
 
 `tests/data/external/README.md` gives their sources, licences and documented geometry.
@@ -96,11 +96,12 @@ Open Folder… and Open Files… links), or ask the AI. Files opened before are 
 `LaB6_2021_12_DESY_P08.poni`, with a distance of 811.8 mm and a wavelength of 0.6888 Å.
 Analyze reads the matching PONI beside the frame when it opens. If the file is elsewhere,
 choose **Load .poni…** and select it. Enter `0.075` in the **αi** field in the command bar
-and press Enter. The incidence angle comes from the experiment (section 1.1).
+and press Enter. This is the value in the public example notebook.
 
 **3. Run the automatic analysis.** Press **Run Automatic Analysis**. The **Results** tab
-shows the peaks and ring orientations. The run uses the angle in the command bar.
-This angle also applies to subsequent frames until you change it or choose **Back to Profile αi**.
+shows the peaks and ring orientations. The run compares the entered 0.075° with the frame estimate
+of 0.501 ± 0.012° and uses the latter. To reproduce results at the notebook angle, select
+**Geometry ▸ Keep entered αi** before running. The typed reference stays in the setup for subsequent frames.
 
 **4. Read the results.** The Results tab begins with a line such as
 *GIWAXS — 12 peaks (12 reliable), 3 rings analysed*. Below it:
@@ -140,8 +141,7 @@ distance 53.6 nm (BornAgain's example *experiment_at_galaxi*).
 
 **1. Open the frame.** First clear what section 1.2 left in Analyze: press **Clear** in the step Data
 (this also forgets the answers given there), then right-click the αi field in the command bar ▸
-**Back to Profile αi**. Otherwise the αi of the perovskite film, 0.075°, would be used for this frame too, and the run
-would not ask for αi. Then take the GISAXS example (**Help ▸ Example Data ▸ GISAXS — Ag Nanoparticles
+**Back to Profile αi**. This clears the previous sample's typed reference. Then take the GISAXS example (**Help ▸ Example Data ▸ GISAXS — Ag Nanoparticles
 (GALAXI)…**, section 1.1), or **File ▸ Open Data…** (`Ctrl+O`) and choose `galaxi_data.tif`. Analyze
 shows `1043×981 px` (rows × columns). **Mask & corrections** leaves out `1.4 %` of the pixels: the gaps
 between the Pilatus modules and excluded bad pixels.
@@ -153,7 +153,7 @@ enter the documented `0.463` in **αi** and press Enter. **Cuts** shows *Yoneda 
 Check the horizontal band on the image. The incidence angle changes the exit angle assigned
 to this band from 0.639° at zero incidence to 0.176°.
 
-**3. Run the automatic analysis.** Press **Run Automatic Analysis**. Allow half a minute to a few
+**3. Run the automatic analysis.** Press **Run Automatic Analysis**. The specular spot gives αi = 0.462 ± 0.004°, consistent with the entered 0.463°, so the run retains 0.463°. Allow half a minute to a few
 minutes for the model fit. If you only want to fit the existing horizontal cut yourself, go
 straight to **Send to Fitting** (step 5).
 
@@ -754,14 +754,13 @@ The step **Geometry** shows the geometry in use (`811.8 mm · λ 0.6888 Å · α
 **Instrument profile** is set to **Automatic (match detector)**; choose a profile there to use it
 instead.
 
-**αi** is part of the profile, but the command bar has its own field. It shows the profile's αi
-(*αi from profile* while no frame is shown). A value you type is shown in orange and is used for
+**αi** in the command bar shows the angle used by the current frame. A unit-labelled incidence in a mini-CBF or NeXus sample header supplies the reference ahead of the profile value. For a sum, all member headers must agree. Right-click **Use frame-header αi** to restore that reference when present. A value you type is shown in orange and is used as the reference for
 every frame; it is also remembered for the next session, and a note at the first frame then says
 so. Right-click the field ▸ **Back to Profile αi** to drop it; **Clear** in the step Data does not.
 The remembered value belongs to the instrument profile it was set with. When the first frame of the
 next session has another profile, or its detector has none yet, the value is not used: the field
 shows the profile's αi, a note says so and offers the old value in one step (**Use 0.075°**), and
-Run Automatic Analysis asks for αi and names the old value as a suggestion. A value from the command
+Run Automatic Analysis asks for αi if the frame cannot supply it and names the old value as a suggestion. A value from the command
 bar is never written into an instrument profile, so **Back to Profile αi** always returns the
 profile's own value.
 
@@ -772,6 +771,16 @@ profile's own value.
 
 How a profile is chosen and what each override replaces is in
 [Physics and Methods, section 1.4](Physics_Manual.md#14-where-the-geometry-of-a-frame-comes-from).
+
+**Sample roll ψ.** Click ψ beside αi in the command bar to open **Geometry**. Enter the roll in degrees, or click **Measure from frame**. A positive angle tilts the sample normal toward lab right. The panel shows the horizon estimate and its uncertainty alongside the ring-symmetry estimate (the specular rod for GISAXS). It applies the combined estimate when the two agree, or the single available estimate. Disagreement leaves the current setting in place. Right-click the angle and choose **Use profile roll** to restore the profile value. On narrow screens, open the Geometry step directly. Check the detector calibration, particularly rot3, before interpreting ψ as a sample alignment.
+
+The angle you enter or accept is saved with the Analyze setup. **Run Automatic Analysis** uses a roll entered in Analyze or on the command line, including zero. It also keeps a nonzero roll from the resolved instrument profile or PONI. Otherwise it measures the selected frame or frame sum and applies the estimate when |ψ| reaches three standard errors. The analysis JSON records ψ and the available estimates. **Export .poni…** includes them as GIMaP comments alongside the standard pyFAI detector geometry. On the command line, `--sample-roll-deg 0` reproduces the zero-roll reduction.
+
+**Incidence angle from the frame.** The same **Measure from frame** button measures αi on the selected exposure or frame sum. Check the calibrated direct-beam position first. The panel shows which features were visible, the angle from each one and its uncertainty. A narrow specular spot gives half its angular separation from the direct beam. In GISAXS, use **Yoneda critical angle** to identify the film or substrate giving the band. Choose Si, SiO₂, plate glass or Au to calculate αc at the frame wavelength, or select **Enter angle** and supply a known αc. **From film** uses the film critical angle set for refraction when available. The material choice and manual entry leave the q-refraction setting unchanged.
+
+**Run Automatic Analysis** compares the result with the nominal αi. If no positive angle was supplied, it uses the resolved frame measurement. If the difference exceeds three standard errors of the frame measurement, it reports both values and uses the measured one. Otherwise it retains the nominal value. Select **Keep entered αi** to use the nominal value even when the two disagree. On the command line, use `--keep-incidence` to retain the nominal angle. Specify the band material with `--yoneda-material Si` or its critical angle with `--yoneda-critical-deg`. The analysis record and saved setup retain the component estimates, calibration, frame or sum, reference and selection. A measurement belongs to the frame and calibration used to obtain it.
+
+![Incidence and roll measured on the public P08 frame](manual_images/en/04a_sample_roll.png)
 
 **The beam centre in file headers** is not used by default: the calibrated profile centre is kept,
 because many beamlines never update the header. **Tools ▸ Settings… ▸ Analyze ▸ Use the beam centre
@@ -1623,9 +1632,9 @@ instrument profiles are not undone this way.
 works for GIWAXS and GISAXS.
 
 Before running, you can type **Beamtime notes** in the **Results** step: αi, the energy, the
-pixel size, where the calibration is — whatever you know. An αi you set in the command bar is the αi the run
-uses: it is not asked for again, and the report's *Decisions* say it came from the command bar. A value from the
-notes or an answer that differs from it replaces it there, so the αi reported is always the one used.
+pixel size, where the calibration is — whatever you know. An angle in the notes or in your answer takes
+precedence over the command-bar reference. *Decisions* records the reference, the comparison with the
+frame and the angle used. **Geometry ▸ Keep entered αi** fixes the nominal value for this comparison.
 
 **GIWAXS.** The run:
 
@@ -1766,7 +1775,7 @@ indexing alternatives and flags. An empty phase and hkl identify an unassigned p
 geometry, corrections and phase information. For the ring marked **Strongest reliable ring by
 fitted area**, read the measured orientation factor together with its isotropic reference and
 systematic range. A completed run with only orientation caveats lists them under **Orientation
-checks**. If an input such as αi is missing, the report still asks for it.
+checks**. When αi is missing from both the setup and the frame measurement, the report asks for it.
 
 **Whose results.** The results belong to the frame they were run on. While a run lasts, the file
 list is locked. When you show another frame, the Results step says which frame the results are
@@ -2148,6 +2157,37 @@ The report also shows any weak |χ| interval excluded next to the exit-angle cut
 **Export…** writes the pole figure as CSV (`<frame>_pole_figure.csv`, in
 `gimap_analysis/` next to the data by default) and `<frame>_indexing.json` beside it: the phases (with the CIF and its
 SHA-256), the reflection table, the settings and the fit. The CSV header and JSON record include measured f, f_iso and the scenarios at the systematic limits.
+
+**Crystal orientation (from phase).** Show the phases to be tested in **Phases**. In **Pole Figure**, select
+**Crystal orientation (from phase)** under **Model**, then choose **Fit Crystal Orientation**. GIMaP searches I(q)
+for peaks and jointly fits the usable rings assigned to each phase. Each ring has its own local background and
+intensity scale. The rings constrain one distribution for the phase. It can contain randomly oriented crystallites
+and up to two oriented populations. Each population has its own plane parallel to the substrate and its own mosaic
+FWHM. A sharp and a broad population can align with the same plane. With only one independent reflection pole
+direction, the fit can test a single fibre axis at one or two widths.
+To set the window for one ring, move the purple band over its peak before fitting. If the band spans several
+detected peaks, each keeps its own window. Automatic analysis calculates its ring windows from the radial peaks.
+When the CIF composition and scattering factors give the film's optical constants at the measurement wavelength,
+the model includes exit transmission |T|² and uses measured bins down to the horizon. A minimum exit angle set by
+the user and **Fit up to χ** still apply. When the optical constants are unavailable, the usual exit-angle limit
+applies. A window containing reflections from different phases is excluded. Reflections of the same phase in one
+window contribute to the same curve.
+
+Select a phase and q value under **Show ring**. Points are the measured N(χ), the solid line is the joint fit
+and the dashed lines show the individual reflection families, including their shares of the isotropic population.
+The legend gives each family's share of the ring intensity.
+Read **Orientation determined** or **Orientation not determined** first. For each oriented population the panel
+gives the fitted substrate-parallel plane (h k l), mosaic FWHM in degrees, and percentage of all crystallites of
+that phase. The ± values are statistical standard errors. The component percentages sum to **Total oriented**.
+Check the runner-up axes, ΔBIC, and reduced χ² for the joint fit and the displayed ring.
+When the orientation is undetermined, the listed planes, widths and fractions describe the trial fit.
+The crystal Hermans factor describes the fitted distribution of fibre axes. The measured ring f describes that
+ring over its measured angles. With exit transmission enabled, the panel also gives the film's δ and β.
+**Export…** writes the selected ring and its component curves to `<frame>_crystal_orientation.csv`
+and the phase results, settings and sources to `<frame>_crystal_orientation.json`. Automatic analysis with phases also
+includes a **Crystal orientation** section and a `crystal_orientation` record in the report JSON.
+
+![Phase-aware joint fit and reflection contributions to a MAPbI₃ ring in the public P08 frame](manual_images/en/07c_crystal_orientation.png)
 
 **In the automatic analysis.** With phases shown (or `--phase FILE.cif` on the command line, repeated for several),
 **Run Automatic Analysis** assigns each peak to the nearest reflection within max(3σ, FWHM/2): the **Peaks** table of
@@ -4268,13 +4308,15 @@ Version 0.2.0 is a pre-release. These limitations are known; each comes with wha
 
 | Limitation | What to do |
 |---|---|
+| A frame can lack a clear shadow edge, specular spot or identifiable Yoneda band. On P08 the shadow alone is consistent with both the published and the spot-derived angles. | Check the direct-beam calibration and the individual angle estimates. Use a known reference and **Keep entered αi** when a feature has another plausible assignment. |
+| **A film transmission model cannot reproduce a shadow that differs on the two sides of a ring.** The public P08 MAPbI₃ example shows this near the horizon (§5.9). | Measure incidence and roll before comparing signed sectors and checking the q window on the frame. Read the reported χ and size of the largest residual for a poorly fitted ring. Report a quantitative oriented fraction only when the model describes the measured profiles. |
 | **The rows of a Series map carry no σ.** The timeline's χ² takes the noise of each x column from the series itself, and a Series map recorded in the results database holds x and I only (section 5.6). | Read the timeline as a distance in units of the frame-to-frame noise, not as a goodness of fit; for σ of every point, use Batch Export ▸ Each frame: its curves, with error bars. |
 | **Cancellation does not forcibly interrupt low-level file reading.** A Compare directory scan or single-table read, or the current Fitting read, may still be returning. | Press Cancel or Stop once; the request is registered, and the unfinished import is discarded or the frame fit skipped when reading returns. Completed series and results stay (sections 6.5, 7.2). |
 | **Curve import supports `q I [sigma]` and `q I1 I2 …`, not interleaved `q I1 sigma1 I2 sigma2`.** A headerless three-column table cannot identify its meaning by numbers alone. | Choose the layout explicitly in **Import Curves…** (section 6.1). For separate errors per curve, provide one `q I sigma` file per curve. Fixed imported selections cannot watch for new columns/files. |
 | **Geometry Calibration fits silver behenate, LaB₆, CeO₂ and a LaB₆ + CeO₂ mixture only.** The AI's geometry search recognises images of Si, Al₂O₃ and Cr₂O₃ by their names but cannot fit them (section 10.5). | Calibrate such an image with pyFAI and give GIMaP the `.poni`: name it in the notes, or put it beside the frames (section 4.2). |
 | **An instrument profile is matched by detector name and frame size only. A calibration found by the automatic search may belong to another experiment.** Even matching detector dimensions cannot establish which run produced a calibration (section 4.2). | Check the file named in the report and the distance in **Geometry**. Supply the calibration or name it in the notes. Remove a wrong profile with **Geometry…** ▸ **Delete profile**. |
 | **Powder rings leave rot3 undetermined.** They constrain tilt weakly at SAXS distances (±0.2° on the public silver behenate frame). With seven or more matched rings in simulated frames, the 1σ estimates for beam x and rot1 covered the true values less often than expected. | See Physics and Methods 3.3 for measured coverage. Use a wide-angle standard for rot1 and rot2. Check rot3 on a GISAXS ridge and the horizon in **Geometry ▸ Check rot3**. GIMaP reads flat-detector `.poni` orientations 1–4 (section 4.2). |
-| **The automatic Yoneda search and horizontal cut average detector rows.** Analyze warns when the horizon varies by more than half a row across the frame. | Add a horizontal band in q for a constant exit angle. Mirror filling needs a measured partner on the other side. It cannot recover the missing wedge. |
+| **At ψ = 0 the automatic Yoneda search and horizontal cut average detector rows.** Analyze warns when the horizon varies by more than half a row across the frame. | Add a horizontal band in q for a constant exit angle. Mirror filling needs a measured partner on the other side. It cannot recover the missing wedge. |
 | **Run Automatic Analysis (GIWAXS) fits at most 12 candidate peaks**, the most prominent; the window has no setting for more. The others are left out of the peak table, the sector comparison, the rings and the series hints; *Decisions* says how many candidates there were (section 5.5). | Run `tools/gimap_agent.py auto … --max-peaks N` (section 10.7), or ask the AI to run `find_peaks` with `max_peaks`, when you need the full list. |
 | **Kinematic q omits film refraction.** Near the critical angle the shift in q_z can be of order k·sin αi. A transmitted-channel correction can leave a second ring from the reflected beam. | Check the q axis in the report. Apply the film critical angle when known and quote geometry uncertainty separately from peak-fit errors. |
 | **Missing-wedge intensities require extrapolation.** An unseen peak stronger than the edge band can put f outside the reported range. | Check f_iso, the scenarios at the systematic limits and the pole fit's quality (section 5.9). |

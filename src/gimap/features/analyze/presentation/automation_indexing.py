@@ -71,6 +71,17 @@ class IndexingAutomationMixin:
         return partial(pole_figure, self._page.view_model.state.analysis, model=model, chi0_deg=chi0_deg,
                        background=background, chi_max=chi_max)
 
+    def prepare_crystal_orientation(self, assignment, check_cancel):
+        """Capture the displayed frame and its phases before the fit runs on the worker."""
+        from ..application.crystal_orientation import frame_crystal_orientation
+
+        model = self._page.view_model
+        specs = tuple(spec for spec in self._page.indexing.phases if spec.visible)
+        if [spec.record() for spec in specs] != assignment["phases"]:
+            raise ValueError("The visible phases changed after peak assignment.")
+        return partial(frame_crystal_orientation, model.state.analysis, specs,
+                       frame_source=model.frames, assignment=assignment, check_cancel=check_cancel)
+
     def store_pole(self, result) -> dict:
         self._page.indexing.last_pole = result
         return result.record()

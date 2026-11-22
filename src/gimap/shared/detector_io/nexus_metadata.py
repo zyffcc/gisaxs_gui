@@ -17,6 +17,7 @@ from typing import Any, Optional
 import h5py
 import numpy as np
 
+from .header_incidence import nexus_incidence
 from .nexus_datasets import _text
 from .radiation import energy_to_wavelength
 
@@ -235,6 +236,7 @@ def extract_nexus_metadata(
         stamp = str(_plain(np.asarray(handle.attrs["file_time"]).reshape(-1)[0]))
     monitor, monitor_source = _monitor(handle, entries, frame)
     return {
+        **nexus_incidence(handle, entry, frame),
         "energy_kev": energy,
         "wavelength_angstrom": wavelength,
         "detector_name": _text_value(handle, _places(detector, ("description", "local_name", "type"))),

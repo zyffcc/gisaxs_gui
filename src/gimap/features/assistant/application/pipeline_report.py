@@ -17,6 +17,9 @@ from .calibration_report import calibration_quality, calibration_rms
 from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
 from .giwaxs_summary import result_lines
 from .pipeline_geometry import ROTATION_WHY, SEARCHED
+from .pipeline_roll import incidence_lines
+from .pipeline_crystal import crystal_lines, compact_crystal
+from .report_numbers import _number, _fixed, _pm
 from .pipeline_phases import assignment_lines, orientation_checks_only, pole_line
 from .report_language import ENGLISH, heading as section
 from .run_record import mask_lines, record_lines
@@ -45,29 +48,9 @@ def compact_report(report: dict) -> dict:
             {**peak, "fit": {key: value for key, value in peak["fit"].items() if key not in ("x", "y", "sigma")}}
             if peak.get("fit") else peak for peak in compact["peaks"]
         ]
+    if report.get("crystal_orientation"):
+        compact["crystal_orientation"] = [compact_crystal(phase) for phase in report["crystal_orientation"]]
     return compact
-
-
-def _number(value, digits: int = 4) -> str:
-    if value is None:
-        return "—"
-    if isinstance(value, float):
-        return f"{value:.{digits}g}"
-    return str(value)
-
-
-def _fixed(value, decimals: int) -> str:
-    """A number with a fixed number of decimals ("—" when there is none): one precision per table column."""
-    return "—" if value is None else f"{float(value):.{decimals}f}"
-
-
-def _pm(value, error, decimals: int) -> str:
-    """``value ± error`` with the column's decimals; an error smaller than they show keeps one significant digit."""
-    text = _fixed(value, decimals)
-    if value is None or not isinstance(error, (int, float)) or not error > 0:
-        return text
-    shown = f"{float(error):.{decimals}f}"
-    return f"{text} ± {shown if float(shown) > 0 else f'{float(error):.1g}'}"
 
 
 PIXEL_DECIMALS = 2
@@ -119,6 +102,20 @@ def _geometry_lines(report: dict) -> list[str]:
         f"αi {_number(geometry.get('incidence_deg'))}°",
     ]
     pixel, wavelength = geometry.get("pixel_size_um") or (), geometry.get("wavelength_A")
+    lines.extend(incidence_lines(report))
+    if "sample_roll_deg" in geometry:
+        lines.append(f"- sample roll ψ applied: {_number(geometry['sample_roll_deg'])}°")
+    roll = report.get("sample_roll_measurement")
+    if roll:
+        second = roll.get("symmetry_feature") or ("specular rod" if report.get("procedure") == "gisaxs" else "ring symmetry")
+        for label, estimate in (("horizon", roll.get("horizon")), (second, roll.get("symmetry"))):
+            value = (_pm(estimate["deg"], estimate["error_deg"], 2) + "°"
+                     if estimate and estimate.get("deg") is not None else "unresolved")
+            lines.append(f"  - {label}: {value}")
+        if roll.get("deg") is not None:
+            lines.append(f"  - selected estimate ({roll['method']}): {_pm(roll['deg'], roll['error_deg'], 2)}°")
+        else:
+            lines.append(f"  - estimate: {roll['method']}")
     if len(pixel) == 2 and pixel[0] and wavelength:
         size = _number(pixel[0]) if pixel[0] == pixel[1] else f"{_number(pixel[0])} × {_number(pixel[1])}"
         lines.append(f"- pixel size {size} µm, energy {_number(HC_KEV_ANGSTROM / float(wavelength))} keV "
@@ -287,6 +284,8 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None, language: st
             lines += [_hints_title(report) + ": " + "; ".join(hints), ""]
         if assignment_lines(report):
             lines += [section("Phase assignment", language), "", *assignment_lines(report), ""]
+        if report.get("crystal_orientation"):
+            lines += [section("Crystal orientation", language), "", *crystal_lines(report["crystal_orientation"])]
         lines += [section("Ring orientation", language), "", *_ring_lines(report.get("rings") or []), ""]
     lines += [section("Decisions", language), ""]
     lines += [f"- **{item['what']}**: {item['decision']} — {item['why']}" for item in report.get("decisions") or []]

@@ -31,17 +31,17 @@ def _spacing(q: float) -> Optional[float]:
 
 
 def rod_rotation_deg(geometry: DetectorGeometry, first, second) -> float:
-    """Rotation nearest the current rot3 that puts the picked ridge parallel to the lab vertical.
+    """Rotation nearest the current rot3 that puts the picked ridge in the sample incidence plane.
 
     Turning rot3 by δ rotates (right, up) about the beam. The horizontal component of the
-    difference must vanish. A ridge has no arrow, hence the correction is modulo 180°.
+    difference in the rolled basis must vanish. A ridge has no arrow, hence the correction is modulo 180°.
     The two q_y readouts separately test that the line also passes through the direct beam.
     """
     dx = (second[0] - first[0]) * geometry.pixel_size_x_m
     dy = (first[1] - second[1]) * geometry.pixel_size_y_m
     _, right, up = lab_rays(geometry, dx, dy)
     # Δright after an additional roll δ is right·cos δ − up·sin δ.
-    correction = (math.degrees(math.atan2(right, up)) + 90.0) % 180.0 - 90.0
+    correction = (math.degrees(math.atan2(right, up)) - geometry.sample_roll_deg + 90.0) % 180.0 - 90.0
     return (math.degrees(geometry.rot3_rad) + correction + 180.0) % 360.0 - 180.0
 
 
@@ -60,7 +60,7 @@ def detector_point(geometry: DetectorGeometry, x_px: float, y_px: float, kind: O
         return {"q": q, "qy": qy, "qz": qz, "q_parallel": None, "two_theta_deg": two_theta,
                 "chi_deg": math.degrees(math.atan2(qz, qy)), "alpha_f_deg": None, "d_angstrom": _spacing(q)}
     vectors = scattering_vectors(right, up, along, geometry.incidence_rad, geometry.wavevector_inv_angstrom,
-                                 critical_rad=geometry.critical_rad)
+                                 critical_rad=geometry.critical_rad, sample_roll_rad=geometry.sample_roll_rad)
     q = float(vectors.q[0])
     q_parallel, qz = float(vectors.q_parallel[0]), float(vectors.qz[0])
     sin_exit = float(vectors.sin_exit[0])

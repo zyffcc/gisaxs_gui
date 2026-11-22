@@ -48,7 +48,7 @@ from ..domain import (
 )
 from .calibration_report import fitted_rings
 from .models import PERMISSION_CONFIRM, ToolInputError, ToolOutcome
-from .run_record import profile_source
+from .run_record import file_geometry, profile_source
 
 
 def file_key(path: str) -> str:
@@ -376,6 +376,8 @@ class CalibrationToolsMixin:
                 "wavelength_angstrom": geometry.wavelength_angstrom,
                 "pixel_size_x_m": geometry.pixel_size_x_m,
                 "pixel_size_y_m": geometry.pixel_size_y_m,
+                "sample_roll_deg": geometry.sample_roll_deg,
+                "sample_roll_measurement": geometry.sample_roll_measurement,
             }
             if geometry.tilt is not None:  # dropped by the flat geometry: Analyze says what that costs in |q|
                 values["detector_tilt"] = geometry.tilt.to_dict()
@@ -510,6 +512,8 @@ class CalibrationToolsMixin:
                 "wavelength_angstrom": result["wavelength_angstrom"],
                 "pixel_size_x_m": result["pixel_size_um"][0] * 1e-6,
                 "pixel_size_y_m": result["pixel_size_um"][1] * 1e-6,
+                "sample_roll_deg": result.get("sample_roll_deg", 0.0),
+                "sample_roll_measurement": result.get("sample_roll_measurement"),
             }
             if result.get("detector_tilt"):  # a .poni reused for the next frame of a batch (``file_geometry``)
                 values["detector_tilt"] = dict(result["detector_tilt"])
@@ -539,6 +543,9 @@ class CalibrationToolsMixin:
                 "wavelength_angstrom": float(wavelength),
             }
             known = self._file_geometries.get(file_key(arguments["path"])) if arguments.get("path") else None
+            if known:
+                values["sample_roll_deg"] = known.get("sample_roll_deg", 0.0)
+                values["sample_roll_measurement"] = known.get("sample_roll_measurement")
             if known and known.get("detector_tilt"):  # a .poni's distance and centre at another energy: same tilt
                 values["detector_tilt"] = dict(known["detector_tilt"])
             origin = arguments.get("note") or "values given to the assistant"
@@ -576,24 +583,6 @@ class CalibrationToolsMixin:
             f"distance {values['distance_mm']:.1f} mm, beam centre ({values['beam_center_x_px']:.2f}, "
             f"{values['beam_center_y_px']:.2f}) px, λ {values['wavelength_angstrom']:.4f} Å."
         )
-
-
-def file_geometry(path: str, info: dict, pixel_um: Optional[float]) -> dict:
-    """A saved calibration (.poni or GIMaP, as ``inspect_file`` read it) in the shape of a calibration result,
-    for reuse in a batch."""
-    if info.get("kind") == "GIMaP calibration":
-        return {key: value for key, value in info.items() if key != "kind"}
-    return {
-        "distance_mm": info["distance_mm"],
-        "beam_center_px": [info["beam_center_x_px"], info["beam_center_y_px"]],
-        "wavelength_angstrom": info.get("wavelength_angstrom"),
-        "energy_kev": info.get("energy_kev"),
-        "pixel_size_um": [pixel_um, pixel_um] if pixel_um else None,
-        "source_image": path,
-        "shape": None,
-        "from_file": True,
-        "detector_tilt": info.get("detector_tilt"),
-    }
 
 
 __all__ = ["CalibrationToolsMixin", "OPEN_LEVELS", "file_geometry", "file_key"]

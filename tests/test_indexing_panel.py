@@ -164,7 +164,9 @@ def test_the_automatic_analysis_assigns_the_rings_and_fits_their_pole_figures(tm
     session = open_headless_session(data / FRAME, saved_profiles=False, out_dir=tmp_path / "out")
     try:
         report = session.run_pipeline(PipelineOptions(
-            calibration=str(data / PONI), incidence_deg=0.075, follow_detection=True,
+            # Reproduce the notebook-angle pole-figure reference. The measured-angle
+            # reduction has a different exit-angle cut and different Hermans coverage.
+            calibration=str(data / PONI), incidence_deg=0.075, keep_incidence=True, follow_detection=True,
             phases=(str(tmp_path / "mapi.cif"), str(tmp_path / "pbi2.cif")),
         ))
         decision = next(item for item in report["decisions"] if item["what"] == "phase assignment")
@@ -187,6 +189,12 @@ def test_the_automatic_analysis_assigns_the_rings_and_fits_their_pole_figures(tm
             assert 0.0 <= pole["oriented_fraction"] <= 1.0 and pole["oriented_fraction_err"] >= 0.0
         markdown = pipeline_markdown(report)
         assert "## Phase assignment" in markdown and "pole figure (Gaussian + isotropic)" in markdown
+        assert "## Crystal orientation" in markdown and "measured ring f" in markdown
+        from src.gimap.features.assistant.application.pipeline_report import compact_report
+
+        ring = compact_report(report)["crystal_orientation"][0]["rings"][0]
+        assert "fitted" not in ring and "values" not in ring["components"][0]
+        assert ring["components"][0]["hkl"] and ring["effective_dof"] > 0
         assert "Phases: the nearest reflection of the phases given" in markdown
         assert "ambiguous" in markdown and "Δd/d =" in markdown and "Å⁻¹ unassigned" in markdown
         assert session.page.reflection_count() > 0  # the phases given are drawn in Analyze too

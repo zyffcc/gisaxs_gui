@@ -163,6 +163,7 @@ class FrameChecksMixin:
             self._show_results_elsewhere()  # results kept are another file's, and named so
         self.fit_button.setEnabled(False)
         self._update_center_control()
+        self._sync_sample_roll_widgets()
         self._forget_incidence()  # the field showed the αi of the frame before
         return True
 

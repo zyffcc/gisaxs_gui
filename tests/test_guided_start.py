@@ -226,7 +226,8 @@ def test_only_questions_with_a_field_are_called_questions() -> None:
     assert guided.status_label.text() == "Done — see the Results tab. 1 question(s) below."
     texts = [item.text() for item in guided.results.findChildren(QLabel)]
     assert texts[0].startswith("GIWAXS — 0 peaks (0 reliable), 0 rings analysed. 1 question(s) in the Results step.")
-    assert "1 point(s) to check — see below" in texts and "Beam centre: The axis is 25 px off." in texts
+    assert "Result summary" in texts and "Checks" in texts
+    assert "Beam centre: The axis is 25 px off." in texts
     # Advice alone (no field to fill in) is a point to check, not a question.
     advice = dict(report, needs_attention=report["needs_attention"][1:])
     assert automatic_outcome(advice) == ("ok", "GIWAXS — 0 peaks (0 reliable), 0 rings analysed; 1 point(s) to check.")

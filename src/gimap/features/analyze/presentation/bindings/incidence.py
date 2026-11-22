@@ -66,7 +66,7 @@ class IncidenceMixin:
 
     def _update_incidence(self, analysis) -> None:
         """A frame is shown: the field shows the αi in use (the profile's, unless one is set)."""
-        if self.view_model.state.incidence_deg is None and analysis.geometry is not None:
+        if analysis.geometry is not None:
             with QSignalBlocker(self.incidence_spin):
                 self.incidence_spin.setValue(analysis.geometry.incidence_deg)
         self._show_incidence_state()
@@ -76,9 +76,9 @@ class IncidenceMixin:
     def _forget_incidence(self) -> None:
         """No frame is shown (Clear, a frame that could not be read): the field no longer shows the αi of the
         frame before. A value set by hand stays: it is the person's, for every frame."""
-        if self.view_model.state.incidence_deg is None:
-            with QSignalBlocker(self.incidence_spin):
-                self.incidence_spin.setValue(INCIDENCE_FROM_PROFILE)
+        value = self.view_model.state.incidence_deg
+        with QSignalBlocker(self.incidence_spin):
+            self.incidence_spin.setValue(INCIDENCE_FROM_PROFILE if value is None else value)
         self._show_incidence_state()
 
     def _adopt_incidence(self, degrees: Optional[float]) -> None:
@@ -135,7 +135,14 @@ class IncidenceMixin:
         self._incidence_changed(value)
 
     def _incidence_changed(self, value: float) -> None:
-        self._adopt_incidence(None if value <= INCIDENCE_FROM_PROFILE + 1e-9 else value)
+        degrees = None if value <= INCIDENCE_FROM_PROFILE + 1e-9 else value
+        request = self.view_model.request()
+        record = request.incidence_measurement if request else None
+        self._adopt_incidence(degrees)
+        if record and degrees is not None:
+            self.view_model.state.incidence_locked = True
+            self.view_model.set_incidence_measurement(dict(
+                record, applied_deg=None, decision="user_override", override_deg=degrees, override_source="entered"))
         self._show_incidence_state()
         self._remember()
         self.run_analysis()
@@ -143,7 +150,10 @@ class IncidenceMixin:
     def reset_incidence(self) -> None:
         """Back to the instrument profile's αi (for this and every following frame)."""
         self._adopt_incidence(None)
-        profile = self._profile_incidence()
+        self.view_model.state.incidence_locked = False
+        analysis = self.view_model.state.analysis
+        header = (analysis.metadata or {}).get("incidence_deg") if analysis else None
+        profile = self._profile_incidence() if header is None else header
         with QSignalBlocker(self.incidence_spin):
             self.incidence_spin.setValue(INCIDENCE_FROM_PROFILE if profile is None else profile)
         self._show_incidence_state()
@@ -154,8 +164,24 @@ class IncidenceMixin:
 
     def _show_incidence_state(self) -> None:
         value = self.view_model.state.incidence_deg
-        set_state(self.incidence_spin, "override", value is not None)
-        self.incidence_reset_action.setEnabled(value is not None)
+        analysis = self.view_model.state.analysis
+        measured = analysis.incidence_measurement if analysis else None
+        header = (analysis.metadata or {}).get("incidence_deg") if analysis else None
+        self.incidence_reset_action.setText(tr("Use frame-header αi" if header is not None else "Back to Profile αi"))
+        self.incidence_reset_action.setToolTip(
+            tr("Use frame-header αi" if header is not None else "Use the grazing angle of the instrument profile again"))
+        active = bool(measured and measured.get("applied_deg") is not None)
+        set_state(self.incidence_spin, "override", value is not None or active)
+        self.incidence_reset_action.setEnabled(value is not None or bool(measured))
+        if active:
+            self.incidence_spin.setToolTip(trf("Measured αi  {value} ± {error}°", value=f"{measured['deg']:.3f}",
+                                               error=f"{measured['error_deg']:.3f}"))
+            return
+        if header is not None:
+            self.incidence_spin.setToolTip(
+                trf("Frame header αi  {value}°", value=_degrees(header)) if value is None
+                else trf("Entered αi  {value}° · frame header  {header}°", value=_degrees(value), header=_degrees(header)))
+            return
         if value is None:
             self.incidence_spin.setToolTip(tr(INCIDENCE_TIP))
             return

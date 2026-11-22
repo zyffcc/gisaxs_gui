@@ -129,22 +129,34 @@ def fit_rows(fit: dict) -> list[str]:
     return lines
 
 
+def cut_locations(cuts, status):
+    rows, columns = cut_spans(cuts, status)
+    horizontal, vertical = f"rows {rows}", f"columns {columns}"
+    if cuts.get("horizontal_qz_edges_A_inv"):
+        low, high = cuts["horizontal_qz_edges_A_inv"]
+        horizontal = f"qz {low:.5g}–{high:.5g} Å⁻¹ (pixels spanning rows {rows})"
+    if cuts.get("vertical_qy_edges_A_inv"):
+        low, high = cuts["vertical_qy_edges_A_inv"]
+        vertical = f"qy {low:.5g}–{high:.5g} Å⁻¹ (pixels spanning columns {columns})"
+    return horizontal, vertical
+
+
 def gisaxs_sections(report: dict, language: str = ENGLISH) -> list[str]:
     gisaxs = report.get("gisaxs") or {}
     cuts = gisaxs.get("cuts") or {}
     lines = [heading("Cuts", language), ""]
     # The pixels each cut uses, both ends included (as Analyze's Cuts card and the Results tab say them).
-    rows, columns = cut_spans(cuts, (report.get("tables") or {}).get("status"))
+    horizontal, vertical = cut_locations(cuts, (report.get("tables") or {}).get("status"))
     source = {"yoneda": "at the Yoneda band", "horizon": "just above the horizon (no Yoneda band found)",
               "series": "at the cut of the series"}.get(
         cuts.get("horizontal_source"), "set by hand"
     )
     alpha = cuts.get("yoneda_alpha_f_deg")
     lines.append(
-        f"- horizontal cut I(qy) {source}: rows {rows}"
+        f"- horizontal cut I(qy) {source}: {horizontal}"
         + (f", αf = {_number(alpha, 3)}°" if alpha is not None else "")
     )
-    lines.append(f"- vertical cut I(qz): columns {columns}")
+    lines.append(f"- vertical cut I(qz): {vertical}")
     symmetry = gisaxs.get("symmetry")
     if symmetry:
         lines.append(

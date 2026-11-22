@@ -208,16 +208,21 @@ def cut_lines(run: BatchRun, record_name: str) -> list[str]:
     and, where the frames were not all cut at the same place, between which rows or q — every frame's own cut
     is in the record."""
     lines = [f"Cuts: {export_text(run.series_cut_text)}."] if run.series_cut_text else []
-    rows = [cut["horizontal_rows"] for cut in run.cuts if cut.get("horizontal_rows")]
+    rows = [cut["horizontal_rows"] for cut in run.cuts if cut.get("horizontal_rows") and not cut.get("horizontal_qz_edges_A_inv")]
+    qz = [cut["horizontal_qz_edges_A_inv"] for cut in run.cuts if cut.get("horizontal_qz_edges_A_inv")]
+    qy = [cut["vertical_qy_edges_A_inv"] for cut in run.cuts if cut.get("vertical_qy_edges_A_inv")]
     windows = [cut["chi_q_window"] for cut in run.cuts if cut.get("chi_q_window")]
     where = f'every frame\'s is under "cuts" in {record_name}'
-    for found, name, digits, unit in ((rows, "Horizontal cut: detector rows", None, ""), (windows, "I(chi) ring: q", 3, " 1/A")):
+    for found, name, digits, unit in ((rows, "Horizontal cut: detector rows", None, ""),
+                                      (qz, "Horizontal cut: qz", 5, " 1/A"), (qy, "Vertical cut: qy", 5, " 1/A"),
+                                      (windows, "I(chi) ring: q", 3, " 1/A")):
         if not found:
             continue
         if len({tuple(pair) for pair in found}) > 1:
             lines.append(f"{name} {_span(found, digits)}{unit}, not the same in every frame ({where}).")
         elif not run.series_cut_text:
-            lines.append(f"{name} {_span(found, digits)}{unit} in every frame.")
+            scope = "every frame" if len(found) == len(run.cuts) else f"{len(found)} frames"
+            lines.append(f"{name} {_span(found, digits)}{unit} in {scope}.")
     return lines
 
 

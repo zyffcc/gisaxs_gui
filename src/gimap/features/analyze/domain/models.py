@@ -59,6 +59,8 @@ class YonedaEstimate:
     alpha_f_deg: float
     search_rows: tuple[int, int]
     side_columns: tuple[tuple[int, int], tuple[int, int]]
+    error_rows: float | None = None
+    """Location uncertainty when an isolated peak was required for metrology."""
 
 
 @dataclass(frozen=True)

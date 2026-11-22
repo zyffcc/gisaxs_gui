@@ -378,6 +378,8 @@ class BatchExportMixin:
             parts.append(self._geometry_source_text(analysis))
         else:
             parts.append(tr("no geometry"))
+        if state.sample_roll_deg is not None:
+            parts.append(f"ψ {state.sample_roll_deg:g}°")
         if state.incidence_deg is not None:
             parts.append(f"αi {state.incidence_deg:g}°")
         regions = len(state.giwaxs.regions)
@@ -464,6 +466,7 @@ class BatchExportMixin:
     def _sync_settings_widgets(self) -> None:
         """Every control shows the state again (after a settings file, a project or Undo/Redo was applied)."""
         state = self.view_model.state
+        self._sync_sample_roll_widgets()
         corrections, giwaxs = state.corrections, state.giwaxs
         self._refresh_profiles()
         values = [

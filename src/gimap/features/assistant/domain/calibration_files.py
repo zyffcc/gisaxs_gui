@@ -206,6 +206,8 @@ class PoniGeometry:
     tilt: Optional[DetectorTilt] = None
     """What the flat geometry above leaves out (the ``.poni``'s own distance, PONI, rotations and pixel sizes);
     ``None`` when the file has no rotation. Analyze estimates from it how far |q| is off (``detector_tilt``)."""
+    sample_roll_deg: float = 0.0
+    sample_roll_measurement: Optional[dict] = None
 
 
 def parse_poni(text: str, *, frame_shape=None) -> PoniGeometry:
@@ -236,6 +238,8 @@ def parse_poni(text: str, *, frame_shape=None) -> PoniGeometry:
         detector=stated.detector,
         notes=tuple(notes),
         tilt=poni if stated.tilted or poni.orientation != 3 else None,
+        sample_roll_deg=stated.sample_roll_deg or 0.0,
+        sample_roll_measurement=stated.sample_roll_measurement,
     )
 
 

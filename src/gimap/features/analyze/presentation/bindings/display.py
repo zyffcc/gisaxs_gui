@@ -13,6 +13,7 @@ from ...application import (
     GISAXS,
     X_AXIS_TWO_THETA,
     FrameAnalysis,
+    gisaxs_cut_tools,
     q_at_position,
     cake_point,
     detector_point,
@@ -81,10 +82,16 @@ def cut_lines(analysis: FrameAnalysis) -> list[str]:
         return []
     lines = []
     horizontal, vertical = reduction.curve("horizontal"), reduction.curve("vertical")
-    if horizontal is not None:
+    if horizontal is not None and "gisaxs_cut" in horizontal.region:
+        low, high = horizontal.region["qz_edges"]
+        lines.append(f"I(qy) · qz {low:.5g}–{high:.5g} Å⁻¹ · {_horizontal_where(reduction, short=True)}")
+    elif horizontal is not None:
         lines.append(tr("Horizontal cut I(qy) over rows {rows}, {where}.").format(
             rows=pixel_range(*horizontal.region["rows"]), where=_horizontal_where(reduction, short=False)))
-    if vertical is not None:
+    if vertical is not None and "gisaxs_cut" in vertical.region:
+        low, high = vertical.region["qy_edges"]
+        lines.append(f"I(qz) · qy {low:.5g}–{high:.5g} Å⁻¹")
+    elif vertical is not None:
         geometry = analysis.geometry
         centre = vertical.region.get("center_column")
         on_beam = geometry is not None and centre is not None and abs(float(centre) - geometry.beam_center_x_px) < 0.01
@@ -101,6 +108,38 @@ def cut_lines(analysis: FrameAnalysis) -> list[str]:
 
 class DisplayMixin:
     """Own the image view, its overlays and both curve plots."""
+
+    def _view_chosen(self, _index: int) -> None:
+        self.detector_view.set_pick_mode(False)
+        self._show_image(keep_view=False)
+        self._update_center_control()
+        self._refresh_overlay()
+
+    def _horizontal_band_moved(self, low: float, high: float) -> None:
+        self.view_model.set_horizontal_band(low, high)
+        self.run_analysis()
+
+    def _vertical_band_moved(self, low: float, high: float) -> None:
+        self.view_model.set_vertical_band(low, high)
+        self.run_analysis()
+
+    def _position_clicked(self, x: float, y: float) -> None:
+        analysis = self.view_model.state.analysis
+        if analysis is None or analysis.kind != GISAXS or self.view_combo.currentIndex() != 0:
+            return
+        geometry = analysis.geometry
+        if geometry is not None and geometry.sample_roll_deg:
+            qy, _ = gisaxs_cut_tools.q_at(geometry, x, y)
+            x = gisaxs_cut_tools.axis_to_unit(geometry, gisaxs_cut_tools.UNIT_PIXEL, "qy", qy)[0]
+            if not np.isfinite(x):
+                return
+        half = self.view_model.state.gisaxs.vertical_half_width_px
+        self.view_model.set_vertical_band(x - half, x + half)
+        self.run_analysis()
+
+    def _auto_cuts(self) -> None:
+        self.view_model.reset_cuts()
+        self.run_analysis()
 
     def _empty_views(self, sentence: str) -> None:
         """No frame is shown: no image, no mask or region outlines, no curves (forgotten too: a theme or Log
@@ -244,13 +283,18 @@ class DisplayMixin:
         if reduction is None:
             return
         markers = reduction.markers
-        view.show_beam_center(*markers["beam_center"])
-        if "horizon_row" in markers and analysis.geometry is not None:
-            line = analysis.geometry.horizon_line()
+        geometry = analysis.geometry
+        centre = markers.get("beam_center")
+        if centre is None and geometry is not None:
+            centre = geometry.beam_center_x_px, geometry.beam_center_y_px
+        if centre is not None:
+            view.show_beam_center(*centre)
+        if reduction.kind != TRANSMISSION and geometry is not None:
+            line = geometry.horizon_line()
             if line is not None:
                 (x, y), angle = line
                 view.show_horizon(y, x=x, angle=angle)
-        if reduction.kind == GISAXS:
+        if reduction.kind == GISAXS and geometry is not None and not geometry.sample_roll_deg:
             view.show_horizontal_band(*markers["horizontal_band"])
             view.show_vertical_band(*markers["vertical_band"])
             self._hide_unticked_bands()

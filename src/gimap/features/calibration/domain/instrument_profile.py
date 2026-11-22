@@ -95,7 +95,7 @@ def profile_from_calibration(
     source = calibration_source(result)
     if existing is not None:
         geometry = calibrated_geometry(result, incidence_deg=existing.geometry.incidence_deg)
-        updated = existing.updated(geometry, source=source)
+        updated = existing.updated(geometry.with_sample_roll(existing.geometry.sample_roll_deg), source=source)
         shape = calibrated_shape(result)
         if shape is not None and updated.detector_shape is None:
             updated = replace(updated, detector_shape=shape)

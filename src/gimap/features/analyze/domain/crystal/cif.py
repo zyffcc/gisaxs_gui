@@ -9,7 +9,9 @@ Read from the first data block that gives a cell:
   group;
 * the atom sites: ``_atom_site_label``, ``_atom_site_type_symbol``, ``_atom_site_fract_x/y/z``,
   ``_atom_site_occupancy`` (default 1), ``_atom_site_U_iso_or_equiv`` or ``_atom_site_B_iso_or_equiv``
-  (B = 8π² U; default 0).
+  (B = 8π² U; default 0);
+* the stoichiometric formula ``_chemical_formula_sum`` and formula units per cell ``_cell_formula_units_Z``
+  for the film optical constants, separately from the sites used to calculate reflection intensities.
 
 Without operations they are generated from the Hall symbol, the Hermann–Mauguin symbol or the number
 (``space_groups.py``; ``symmetry`` is then ``symbol`` and ``notes`` says so). When that is not possible (a symbol
@@ -74,6 +76,8 @@ class CifStructure:
     """What was derived and how (``FROM_SYMBOL``, ``space_groups.ORIGIN_TAKEN``)."""
     formula: str = ""
     space_group_number: int = 0
+    formula_sum: str = ""
+    formula_units_z: Optional[float] = None
 
 
 def _tokens(text: str) -> list[str]:
@@ -227,7 +231,8 @@ def parse_cif(text: str) -> CifStructure:
         formula = " ".join(_first(items, FORMULA_TAGS).split())
         name = _first(items, NAME_TAGS) or _block_name(block_name) or formula or "phase"
         return CifStructure(" ".join(name.split()), cell, operations, symbol, atoms, tuple(warnings), symmetry,
-                            tuple(notes), formula, number_)
+                            tuple(notes), formula, number_, _first(items, ("_chemical_formula_sum",)),
+                            number(_first(items, ("_cell_formula_units_z",))))
     raise ValueError("No data block with a unit cell (_cell_length_a, _b, _c) in this file.")
 
 

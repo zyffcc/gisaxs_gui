@@ -294,20 +294,18 @@ def galaxi():
     session.close()
 
 
-def test_a_gisaxs_run_asks_for_alpha_i_with_what_it_changes_for_the_cut(galaxi) -> None:
+def test_a_gisaxs_run_with_no_nominal_angle_uses_the_resolved_frame_measurement(galaxi) -> None:
     from tests.test_guided_gisaxs import _geometry
 
     report = galaxi.run_pipeline(PipelineOptions(technique="gisaxs", geometry=_geometry(), fit=False))
     assert report["ok"] and report["procedure"] == "gisaxs"
-    asked = [item for item in report["needs_attention"] if item["option"] == "incidence_deg"]
-    alpha = next(item for item in asked if item["item"] == "incidence angle αi")
-    assert alpha["why"] == INCIDENCE_MISSING["gisaxs"]
-    for word in ("Ring positions", "missing wedge"):  # GIWAXS words mean nothing here
-        assert word not in alpha["why"]
-    assert "0° is used" in alpha["why"] and "exit angle αf" in alpha["why"] and "too large by αi" in alpha["why"]
+    assert all(item["item"] != "incidence angle αi" for item in report["needs_attention"])
+    estimate = report["incidence_measurement"]
+    assert estimate["reference_deg"] is None and estimate["decision"] == "measured"
+    assert abs(estimate["deg"] - .463) < 3 * estimate["error_deg"]
+    assert report["geometry"]["incidence_deg"] == pytest.approx(estimate["deg"])
     text = pipeline_markdown(report)
-    assert text.startswith("# GISAXS") and "too large by αi" in text.split("## Geometry")[0]
-    assert "→ `--incidence-deg A`" in text and "missing wedge" not in text
+    assert text.startswith("# GISAXS") and "measured angle supplies the missing incidence" in text
 
 
 def test_find_geometry_words_the_question_for_what_auto_reads_the_frame_as(galaxi) -> None:

@@ -60,10 +60,19 @@ def film_absorption_on(corrections) -> bool:
     return bool(thickness and length and thickness > 0 and length > 0)
 
 
-def _film(sin_exit: np.ndarray, sin_in: float, thickness_over_length: float) -> np.ndarray:
-    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):  # below the horizon: masked after
-        path = 1.0 / sin_in + 1.0 / sin_exit
-        return -np.expm1(-thickness_over_length * path) / path
+def film_absorption_factor(sin_exit, sin_in: float, optical_depth: float) -> np.ndarray:
+    """Integrated incident and exit path attenuation, relative to the specular direction."""
+    if sin_in <= 0. or optical_depth < 0. or np.isnan(optical_depth):
+        raise ValueError("Film absorption needs positive incidence and nonnegative optical depth.")
+    sin_exit = np.asarray(sin_exit, dtype=float)
+    valid = (sin_exit > 0.) & (sin_exit <= 1.)
+    path = 1. / sin_in + 1. / np.where(valid, sin_exit, 1.)
+    reference = 2. / sin_in
+    if optical_depth == 0.:
+        factor = np.ones_like(path)
+    else:
+        factor = (reference / path) * np.expm1(-optical_depth * path) / np.expm1(-optical_depth * reference)
+    return np.where(valid, factor, np.nan)
 
 
 def polarization_factor(along, x, y, polarization: float) -> np.ndarray:
@@ -92,7 +101,6 @@ def intensity_factor(
     if film and sin_in <= 0:
         raise ValueError("The film absorption needs a grazing angle αi above 0.")
     ratio = float(film_thickness_nm or 0.0) * 1e-9 / (float(attenuation_length_um or 1.0) * 1e-6)
-    reference = _film(np.array(sin_in), sin_in, ratio) if film else None
     for start in range(0, rows, BLOCK_ROWS):
         stop = min(rows, start + BLOCK_ROWS)
         along, x, y = geometry_rays(geometry, (start, stop), (0, columns))
@@ -105,10 +113,9 @@ def intensity_factor(
         if polarization is not None:
             block *= polarization_factor(along, x, y, float(polarization))
         if film or lorentz:
-            _along, across, sin_exit = exit_directions(x, y, along, geometry.incidence_rad)
+            _along, across, sin_exit = exit_directions(x, y, along, geometry.incidence_rad, sample_roll_rad=geometry.sample_roll_rad)
         if film:
-            relative = _film(sin_exit, sin_in, ratio) / reference
-            block *= np.where(sin_exit > 0, relative, np.nan)
+            block *= film_absorption_factor(sin_exit, sin_in, ratio)
         if lorentz:
             # across = q_y/k. One horizontal pixel at the direct beam subtends p_x/D radians.
             minimum = float(lorentz_band_px) * geometry.pixel_size_x_m / beam
