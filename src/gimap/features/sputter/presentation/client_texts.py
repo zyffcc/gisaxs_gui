@@ -16,6 +16,8 @@ from .views.sputter_main_view import RATE_UNIT_TIP, RATE_UNITS
 ENTRY_CANDIDATE = "Candidate {rank}"
 ENTRY_REFINED = "Refined"
 ENTRY_JOINT = "Joint fit (whole scan)"
+ENTRY_INTERPOLATED = "Interpolated (joint fit)"
+ON_DEMAND = " · on demand"
 """The solution of the joint refinement of the whole scan (the package labels it ``joint``): one per window, refined
 together over the scan and smooth in time."""
 ENTRY_MODEL = "Model solution"
@@ -87,7 +89,7 @@ UNUSUAL_RATE_TITLE = "Check the Deposition Rate"
 UNUSUAL_RATE = "This rate is unusual for sputtering ({nm} nm/s = {angstrom} Å/s at the sample). Is the unit right?"
 ANALYZE_ANYWAY = "Analyze Anyway"
 NOMINAL_AT_END = "≈ {thickness} nm deposited at the last frame ({rate} nm/s at the sample)"
-TEMPLATES = (ENTRY_CANDIDATE, ENTRY_REFINED, ENTRY_JOINT, ENTRY_MODEL, ENTRY_TIP, ENTRY_TIP_WEIGHT, WINDOW_TEXT,
+TEMPLATES = (ENTRY_CANDIDATE, ENTRY_REFINED, ENTRY_JOINT, ENTRY_INTERPOLATED, ON_DEMAND, ENTRY_MODEL, ENTRY_TIP, ENTRY_TIP_WEIGHT, WINDOW_TEXT,
              WINDOW_TIP, WINDOW_TIP_ONSET, WINDOW_ERROR, *WINDOW_CONTROLS, *SAMPLE_CONTROLS, SAMPLE_TEXT, SAMPLE_TIP,
              SAMPLE_TIP_FRAMES, SAMPLE_TIP_SUBSTRATE, SAMPLE_ERROR, TILE_RANGE, RELATIVE_RADIUS_TIP,
              EMPTY_TITLE, EMPTY_MESSAGE, EMPTY_ACTION, PACKAGE_TITLE, PACKAGE_ACTION,
@@ -137,7 +139,8 @@ def entry_name(label: str) -> str:
     found = _CANDIDATE.fullmatch(label.strip())
     if found is not None:
         return text(ENTRY_CANDIDATE, rank=found.group(1))
-    known = {"refined": ENTRY_REFINED, "joint": ENTRY_JOINT, "model": ENTRY_MODEL}.get(label.strip().lower())
+    known = {"refined": ENTRY_REFINED, "joint": ENTRY_JOINT, "model": ENTRY_MODEL,
+             "interpolated": ENTRY_INTERPOLATED}.get(label.strip().lower())
     return tr(known) if known else label
 
 
@@ -165,8 +168,10 @@ def window_text(window, static: bool = False) -> str:
         return text(SAMPLE_TEXT, label=label, thickness=shown_number(window.nominal_nm))
     time = shown_number(window.time_s, 4)
     if window.nominal_nm is None:
-        return text(WINDOW_TEXT_PLAIN, time=time)
-    return text(WINDOW_TEXT, time=time, deposit=shown_number(window.nominal_nm))
+        words = text(WINDOW_TEXT_PLAIN, time=time)
+    else:
+        words = text(WINDOW_TEXT, time=time, deposit=shown_number(window.nominal_nm))
+    return words + tr(ON_DEMAND) if getattr(window, "on_demand", False) else words
 
 
 def window_tip(window, index: int, count: int, static: bool = False) -> str:

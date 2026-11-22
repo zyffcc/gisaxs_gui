@@ -28,8 +28,9 @@ Open Folder and Export… (of the result shown), and the messages of the run (th
 from __future__ import annotations
 
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import (QCheckBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
-                             QPushButton, QSizePolicy, QSlider, QStackedWidget, QToolButton, QVBoxLayout, QWidget)
+from PyQt5.QtWidgets import (QCheckBox, QDoubleSpinBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit,
+                             QPlainTextEdit, QPushButton, QSizePolicy, QSlider, QStackedWidget, QToolButton, QVBoxLayout,
+                             QWidget)
 
 from src.gimap.app.presentation.components import (CurvePlot, EmptyState, FilePicker, JobStatus, ParameterSection,
                                                    SafeWheelComboBox, SegmentedControl)
@@ -112,6 +113,10 @@ ENTRY_HINT = "The number beside each solution is its fit deviation: lower is bet
 LINE_HINT = "Drag on either image to draw a line: the measured and the model count rate along it appear below."
 LINE_TITLE = "Along the line"
 CLEAR_LINE = "Clear Line"
+AT_TIME_CAPTION = "Structure at any time:"
+AT_TIME_BUTTON = "Analyze This Time"
+AT_TIME_TIP = ("A time of the scan that is not one of the analysed windows: the joint fit interpolated there at once, "
+               "then refined to the frames of that time (about a minute or more)")
 FILM_TIP = "Thickness of the polymer film on the wafer. Empty: the analysis uses its own value for this polymer."
 ONSET_TIP = "Time of the scan (s) at which the deposition started. Empty: found in the data."
 DURATION_TIP = ("How long the deposition lasted after its start (s): the metal amount stays constant afterwards. "
@@ -384,6 +389,25 @@ class SputterMainView:
         selector.addSpacing(8)
         selector.addWidget(self.image_switch)
         layout.addLayout(selector)
+        self.at_time_row = QWidget(view)  # a time between the windows, analysed on demand (at_time_panel.py)
+        at_time = QHBoxLayout(self.at_time_row)
+        at_time.setContentsMargins(0, 0, 0, 0)
+        at_time.setSpacing(6)
+        self.at_time_caption = QLabel(AT_TIME_CAPTION, self.at_time_row)
+        self.at_time_caption.setProperty("gimapRole", "caption")
+        self.at_time_value = QDoubleSpinBox(self.at_time_row)
+        self.at_time_value.setDecimals(2)
+        self.at_time_value.setSuffix(" s")
+        self.at_time_value.setToolTip(AT_TIME_TIP)
+        self.at_time_button = QPushButton(AT_TIME_BUTTON, self.at_time_row)
+        self.at_time_button.setToolTip(AT_TIME_TIP)
+        self.at_time_note = ElidedLabel(self.at_time_row)
+        self.at_time_note.setProperty("gimapRole", "muted")
+        for widget in (self.at_time_caption, self.at_time_value, self.at_time_button):
+            at_time.addWidget(widget)
+        at_time.addWidget(self.at_time_note, 1)
+        self.at_time_row.setVisible(False)
+        layout.addWidget(self.at_time_row)
         self.run_note = ElidedLabel(view)  # while Analyze goes on after its preliminary result: what it does now
         self.run_note.setObjectName("sputterRunNote")
         self.run_note.setProperty("gimapRole", "info")

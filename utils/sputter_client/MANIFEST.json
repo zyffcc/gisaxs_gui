@@ -1,7 +1,7 @@
 {
- "created_utc": "2026-11-22T16:14:52.552758+00:00",
+ "created_utc": "2026-11-22T23:02:26.186996+00:00",
  "release": true,
- "git_head": "f8ad4fdd3130076d853ea67904723c65a32354c7",
+ "git_head": "d7c658ce293f6933699ab4d42320300543260ebe",
  "families": [
   "si_p3h",
   "si_v6",
@@ -34,7 +34,7 @@
   "static_nn_v1/static_analytic": false,
   "static_nn_v1/static_ref": false
  },
- "n_files": 199,
+ "n_files": 200,
  "files": {
   "LICENSE": "db1bbee832b729cc6a08c381c8e00d915d37ca657990fe016ca2d6992238f395",
   "README_CLIENT.md": "9479ab7a0543db36f6943f736ba5a0e6452bb9a4f167b806c8a3d616cfb52227",
@@ -59,6 +59,7 @@
   "code/iam/iampred/__init__.py": "624c9becf764926027594ff4a55334112395268cc2d4e079bb982071357a6fac",
   "code/iam/iampred/adapter.py": "d213e07fcda0726b0575f409aadd4193497f9ca230061a2592a0b1a717918f31",
   "code/iam/iampred/analyze.py": "906ce7baeb5420b421b41d06a600484f31d4a46683bb439d4ac0ea8d9a624064",
+  "code/iam/iampred/at_time.py": "9856a395691b71df2f23e83867fbff9ea34b5890d191ba86eed9a936c97e7292",
   "code/iam/iampred/automask.py": "da5fa96fc6db0e5112ec505e43e3a2a57c72ad52c31de02371ad83ede0b21be5",
   "code/iam/iampred/batch_scans.json": "40dbebf7137b04160a80d48ddb7cbb9cb96f3b06952de8b7b2c7a1a5ff0b480d",
   "code/iam/iampred/components.py": "5893ccb26cefe0f1e38088b11641966bf2206ef7bd8fc6e4259fe80aacc155a1",

@@ -61,6 +61,7 @@ CLIENT_MISSING = ("The analysis package was not found. Choose its folder (it hol
 CLIENT_INCOMPLETE = "{folder} is not an analysis package: {missing} is missing."
 CLIENT_FALLBACK = "{folder} is not an analysis package ({missing} is missing): the one that comes with GIMaP is used."
 CLIENT_FAILED = "The analysis stopped with an error ({status}); its last lines are under Details."
+AT_TIME_FAILED = "The analysis of {time} s stopped with an error; its last lines are under Details."
 CLIENT_STOPPED = "Stopped. Frames that were read completely are kept and reused by the next run of the same request."
 CLIENT_NO_MAIN = ("The analysis finished, but this package does not write the data of the main screen "
                   "(main/main.json): a newer package is needed. Its report is in {folder}.")
@@ -71,7 +72,7 @@ EXPORT_FAILED = "The export stopped with an error; its last lines are under Deta
 EXPORT_NOTHING = "The result shown has no window with a solution to export."
 EXPORT_FOLDER = "{scan}_export"
 """The folder the export writes into, under the folder the user picks."""
-CLIENT_TEMPLATES = (EXPORT_OLD, EXPORT_FAILED, EXPORT_NOTHING, *CLIENT_PROBLEMS, CLIENT_MISSING, CLIENT_INCOMPLETE, CLIENT_FALLBACK, CLIENT_FAILED, CLIENT_STOPPED, CLIENT_NO_MAIN,
+CLIENT_TEMPLATES = (EXPORT_OLD, EXPORT_FAILED, EXPORT_NOTHING, *CLIENT_PROBLEMS, CLIENT_MISSING, CLIENT_INCOMPLETE, CLIENT_FALLBACK, CLIENT_FAILED, AT_TIME_FAILED, CLIENT_STOPPED, CLIENT_NO_MAIN,
                     MASK_UNREADABLE, *CLIENT_RESULT_TEMPLATES, *DETAIL_TEMPLATES)
 """Messages of the engine the page says in its language (the package's own lines stay as they are)."""
 
@@ -414,6 +415,23 @@ class ClientService:
         name = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(result.scan or Path(result.folder).name)).strip("_") or "result"
         return self.runner.export(Path(result.folder), Path(folder) / EXPORT_FOLDER.format(scan=name), shown)
 
+    # -- one time between the windows -----------------------------------------------------------------------------
+    def can_analyse_time(self, result: Optional[ClientResult]) -> bool:
+        """The package can analyse a time of ``result`` that is not one of its windows (a scan, not static samples)."""
+        found = getattr(self.runner, "can_analyse_time", None)
+        return result is not None and not result.static and callable(found) and bool(found(Path(result.folder)))
+
+    def analyse_time(self, result: ClientResult, time_s: float, refine: int, on_event: Callable[[object], None],
+                     should_stop: Callable[[], object] = lambda: False) -> ClientResult:
+        """The structure at ``time_s`` (``iampred.at_time``): the joint path interpolated there and, with ``refine``
+        > 0, refined to the frames of that time. Returns the result read again, that window among its windows."""
+        run = self.runner.analyse_time(Path(result.folder), float(time_s), int(refine), on_event, should_stop)
+        if run.stopped or should_stop():
+            raise Stopped(CLIENT_STOPPED)
+        if run.code != 0:
+            raise ClientFailed(AT_TIME_FAILED.format(time=f"{float(time_s):g}"), "\n".join(run.tail[-15:]))
+        return self.reader.read(Path(result.folder))
+
     # -- analysing --------------------------------------------------------------------------------------------
     def analyze(self, request: ClientRequest, scan_results: Path, on_event: Callable[[object], None],
                 should_stop: Callable[[], object] = lambda: False) -> ClientResult:
@@ -446,7 +464,7 @@ class ClientService:
         return self.reader.read(out)
 
 
-__all__ = ["CLIENT_FAILED", "EXPORT_FAILED", "EXPORT_FOLDER", "EXPORT_NOTHING", "EXPORT_OLD", "CLIENT_FALLBACK", "CLIENT_INCOMPLETE", "CLIENT_MISSING", "CLIENT_NO_MAIN", "CLIENT_PROBLEMS",
+__all__ = ["AT_TIME_FAILED", "CLIENT_FAILED", "EXPORT_FAILED", "EXPORT_FOLDER", "EXPORT_NOTHING", "EXPORT_OLD", "CLIENT_FALLBACK", "CLIENT_INCOMPLETE", "CLIENT_MISSING", "CLIENT_NO_MAIN", "CLIENT_PROBLEMS",
            "CLIENT_STOPPED", "CLIENT_TEMPLATES", "ClientFailed", "ClientMissing", "ClientPackage", "ClientReader",
            "ClientRequest", "ClientRun", "ClientRunner", "ClientService", "ClientStarted", "ENGINE_FOLDER",
            "FILM_SUBSTRATES", "LABEL_PREFIX", "MASK_UNREADABLE", "MODES", "QCM_FACTOR", "RATE_HIGH_NM_S",

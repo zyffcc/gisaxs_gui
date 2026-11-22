@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from PyQt5.QtCore import QTimer
+
 from src.gimap.app.presentation.components import SegmentedControl
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.theme import set_role
@@ -77,6 +79,10 @@ def _joined(entry, series=None, index: int = 0) -> bool:
     return arrangement(space, visible(space, top_grains(space))) == "network"
 
 
+PICTURE_DELAY = 90
+"""ms the slider rests before the pictures of its window are drawn while it is dragged."""
+
+
 class ClientPanelMixin:
     """Needs the widgets of ``views/sputter_main_view.py``, ``service`` and ``_notify``."""
 
@@ -96,6 +102,14 @@ class ClientPanelMixin:
         self.image_switch.currentIndexChanged.connect(self._show_image_kind)
         self.evolution = EvolutionPlot(self.evolution_layout, self.select_window)
         self.window_slider.valueChanged.connect(self.select_window)
+        # 2026-11-22 (the result view was slow to browse): while the slider is dragged only the window line, the tiles
+        # and the mark follow at once; the pictures are drawn once it rests (PICTURE_DELAY ms) or is released
+        self._picture_timer = QTimer(self)
+        self._picture_timer.setSingleShot(True)
+        self._picture_timer.setInterval(PICTURE_DELAY)
+        self._picture_timer.timeout.connect(self._show_pictures)
+        self.window_slider.sliderReleased.connect(self._pictures_now)
+        self._patterns_stale = False
         self.window_previous.clicked.connect(lambda: self.select_window(self.client_window_index - 1))
         self.window_next.clicked.connect(lambda: self.select_window(self.client_window_index + 1))
         self.default_button.clicked.connect(self._back_to_default)
@@ -110,6 +124,7 @@ class ClientPanelMixin:
         live view stays (it shows this again when the run ends)."""
         if self.live_running():
             return
+        self.at_time_row.setVisible(False)
         if self.client_result is not None:
             self.result_stack.setCurrentIndex(1)
             return
@@ -170,6 +185,7 @@ class ClientPanelMixin:
         self._draw_evolution()
         self._show_window()
         self.show_result_details()  # Details ▸ Windows, Report and Log
+        self._at_time_result_shown()  # a time between the windows, on demand
 
     def _show_result_kind(self) -> None:
         """What depends on the kind of result: the words of the selector and the caption of the radius."""
@@ -222,7 +238,13 @@ class ClientPanelMixin:
         self.window_previous.setEnabled(self.client_window_index > 0)
         self.window_next.setEnabled(self.client_window_index < count - 1)
         self._fill_entries(window)
-        self._show_entry()
+        self._show_entry(pictures=not self.window_slider.isSliderDown())
+
+    def _pictures_now(self) -> None:
+        """The slider is released: the pictures of the window it shows, now."""
+        if self._picture_timer.isActive():
+            self._picture_timer.stop()
+            self._show_pictures()
 
     # -- which solution ------------------------------------------------------------------------------------------
     def _fill_entries(self, window: ClientWindow) -> None:
@@ -276,8 +298,9 @@ class ClientPanelMixin:
         if window is not None:
             self.select_entry(window.default_label())
 
-    def _show_entry(self) -> None:
-        """The images (or the real-space picture), the tiles and the fit deviation of the solution shown."""
+    def _show_entry(self, pictures: bool = True) -> None:
+        """The images (or the real-space picture), the tiles and the fit deviation of the solution shown; the pictures
+        a moment later when ``pictures`` is False (the slider is being dragged)."""
         window, result = self.client_window(), self.client_result
         entry = window.chosen(self.client_choices) if window is not None else None
         porous = result is not None and result.porous
@@ -301,8 +324,26 @@ class ClientPanelMixin:
         self.deviation_value.setText(shown_number(deviation))
         self.deviation_caption.setVisible(deviation is not None)
         self.deviation_value.setVisible(deviation is not None)
+        if pictures:
+            self._show_pictures()
+        else:
+            self._picture_timer.start()
+
+    def _show_pictures(self) -> None:
+        """The picture shown (patterns, real space or the model's terms) of the solution shown; the patterns only while
+        they are in view (else they are drawn when they come back: ``_show_image_kind``)."""
+        self._picture_timer.stop()
         self._draw_space()
         self._draw_components()
+        if self.pattern_host.currentIndex() != 0:
+            self._patterns_stale = True
+            return
+        self._draw_patterns()
+
+    def _draw_patterns(self) -> None:
+        self._patterns_stale = False
+        window, result = self.client_window(), self.client_result
+        entry = window.chosen(self.client_choices) if window is not None else None
         if entry is None:
             reason = message_text(window.error) if window is not None and window.error else ""
             static = result is not None and result.static
@@ -340,7 +381,9 @@ class ClientPanelMixin:
         """The patterns, the solution in real space or the model's terms, as the switch says."""
         page = {"space": 1, "components": 2}.get(self.image_switch.currentData(), 0)
         self.pattern_host.setCurrentIndex(page)
-        if page == 1:
+        if page == 0 and self._patterns_stale:
+            self._draw_patterns()
+        elif page == 1:
             self._draw_space()
         elif page == 2:
             self._draw_components()

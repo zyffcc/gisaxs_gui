@@ -325,4 +325,20 @@ SPUTTER_CLIENT_ZH = {
         "在任一张图上拖动画一条线：下方显示实测与模型沿这条线的计数率。",
     "Along the line": "沿线剖面",
     "Clear Line": "清除线",
+    # -- a time between the windows, on demand (at_time_panel.py, 2026-11-22) ----------------------------------------
+    "Structure at any time:": "任意时刻的结构：",
+    "Analyze This Time": "分析这个时刻",
+    "A time of the scan that is not one of the analysed windows: the joint fit interpolated there at once, then refined "
+    "to the frames of that time (about a minute or more)":
+        "扫描中不在已分析时间窗上的某个时刻：先立即给出联合精修在这里的插值，再用这个时刻的帧精修（约一分钟或更久）",
+    "{time} s: interpolating the joint fit …": "{time} s：正在插值联合精修解……",
+    "{time} s: interpolated; refining to the frames of this time …": "{time} s：已插值；正在用这个时刻的帧精修……",
+    "{time} s: refined to the frames of this time (fit deviation {deviation}).": "{time} s：已用这个时刻的帧精修（拟合偏差 {deviation}）。",
+    "Choose a time between the first and the last window ({first}–{last} s).": "请选择第一个和最后一个时间窗之间的时刻（{first}–{last} s）。",
+    "Interpolated (joint fit)": "插值（联合精修）",
+    " · on demand": " · 按需分析",
+    "The analysis of {time} s stopped with an error; its last lines are under Details.": "{time} s 的分析因错误停止；最后几行输出见详情。",
+    "This analysis package cannot analyse a time between its windows, or the result does not say where the scan was "
+    "imported: analyse the scan again with the package that comes with this GIMaP.":
+        "这个分析包不能分析时间窗之间的时刻，或者结果里没有记录扫描导入在哪里：请用随本 GIMaP 提供的分析包重新分析这条扫描。",
 }

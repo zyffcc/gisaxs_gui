@@ -115,6 +115,9 @@ class EvolutionPlot:
         self.canvas.setCursor(Qt.PointingHandCursor)
         self.canvas.mpl_connect("button_press_event", self._clicked)
         self.canvas.mpl_connect("resize_event", lambda _event: self._place())
+        # 2026-11-22 (slow browsing): the window's mark is blitted over the plots drawn once, not drawn with them
+        self._background = None
+        self.canvas.mpl_connect("draw_event", self._background_drawn)
         layout.addWidget(self.canvas, 1)
 
     def draw(self, result, choices: Optional[dict], current: Optional[int]) -> None:
@@ -132,12 +135,29 @@ class EvolutionPlot:
             self._draw()
 
     def mark(self, current: Optional[int]) -> None:
-        """Move the mark to window ``current`` (the lines stay)."""
+        """Move the mark to window ``current`` (the lines stay: only the mark is drawn again, over the plots as drawn)."""
         if self._last is None or self.canvas is None:
             return
         self._last = (*self._last[:2], current)
         self._show_mark(current)
-        self.canvas.draw_idle()
+        if self._background is None:
+            self.canvas.draw_idle()
+            return
+        self.canvas.restore_region(self._background)
+        self._blit_marks()
+
+    def _background_drawn(self, _event) -> None:
+        """After every full drawing: the plots without the mark kept, the mark drawn over them."""
+        if not self._marks:
+            self._background = None
+            return
+        self._background = self.canvas.copy_from_bbox(self.figure.bbox)
+        self._blit_marks()
+
+    def _blit_marks(self) -> None:
+        for artist in self._marks + self._rings:
+            artist.axes.draw_artist(artist)
+        self.canvas.blit(self.figure.bbox)
 
     def redraw(self) -> None:
         """Again, in the colours of the theme and the language of the interface."""
@@ -180,6 +200,7 @@ class EvolutionPlot:
         result, choices, current = self._last
         figure = self.figure
         figure.clear()
+        self._background = None
         self._marks, self._rings, self._axes, self.series, self.overlay_series = [], [], None, {}, {}
         self._drawn, self._positions, self._stage_texts = ([], []), [], []
         if result is not None and result.windows:
@@ -286,9 +307,9 @@ class EvolutionPlot:
         for axes in (sizes, shares):
             axes.set_xlabel(label)
             axes.grid(True, alpha=0.25)
-            self._marks.append(axes.axvline(math.nan, color=MARK_COLOUR, linewidth=1.2, linestyle="--"))
-            self._rings.append(axes.plot([], [], "o", markersize=9, markerfacecolor="none",
-                                         markeredgecolor=MARK_COLOUR, markeredgewidth=1.3, zorder=5)[0])
+            self._marks.append(axes.axvline(math.nan, color=MARK_COLOUR, linewidth=1.2, linestyle="--", animated=True))
+            self._rings.append(axes.plot([], [], "o", markersize=9, markerfacecolor="none", markeredgecolor=MARK_COLOUR,
+                                         markeredgewidth=1.3, zorder=5, animated=True)[0])
         self._stages(result)
         self._place()
 

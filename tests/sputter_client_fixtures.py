@@ -226,8 +226,38 @@ PROGRESS_LINES = ("[1/4] intake ...", "      done in 3 s", "a plain line of the 
                   "      done in 2 s")
 
 
+def write_at_time(folder: Path, time_s: float, refine: int) -> None:
+    """A time analysed on demand, as ``iampred.at_time`` writes it into ``main/at_time.json`` (the interpolated entry,
+    and the refined one with ``refine``)."""
+    import hashlib
+
+    main = Path(folder) / "main"
+    entries = [entry("interpolated", 30.0, 2.5, kind="interpolated")]
+    if refine:
+        entries.append(entry("refined", 20.0, 2.6, kind="refined"))
+    record = dict(window(time_s, entries, pick=entries[-1]["label"], smooth=entries[-1]["label"]), on_demand=True,
+                  at_time={"before": 0.0, "after": 0.0, "weight": 0.5})
+    np.savez(main / record["arrays"], **patterns([e["label"] for e in entries], seed=7))
+    target = main / "at_time.json"
+    sha = hashlib.sha256((main / "main.json").read_bytes()).hexdigest()
+    doc = json.loads(target.read_text(encoding="utf-8")) if target.is_file() else {}
+    kept = [w for w in doc.get("windows", []) if doc.get("main_sha256") == sha and abs(w["t"] - time_s) > 1e-9]
+    target.write_text(json.dumps({"main_sha256": sha, "windows": kept + [record]}), encoding="utf-8")
+
+
 class FakeClientRunner:
     """The package's process: says its steps and writes an invented result (or fails, or waits to be stopped)."""
+
+    at_time = True
+    """It can analyse a time between the windows (``iampred.at_time``)."""
+
+    def can_analyse_time(self, folder) -> bool:
+        return bool(self.at_time)
+
+    def analyse_time(self, folder, time_s, refine, on_line, should_stop) -> ClientRun:
+        self.time_requests = getattr(self, "time_requests", []) + [(Path(folder), float(time_s), int(refine))]
+        write_at_time(folder, time_s, refine)
+        return ClientRun(0, False, ())
 
     def __init__(self, *, missing: str = "", status: str = "ok", with_main: bool = True, wait_for_stop: bool = False,
                  code=None, windows=None):

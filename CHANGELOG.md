@@ -24,6 +24,12 @@ chosen once more: read *Updating from 0.1.0* at the end of this version before y
 
 ### Release preparation — Windows and macOS
 
+- **Sputter ▸ Analyze: the structure at any time.** Under the window line, **Analyze This Time** analyses a time that
+  is not one of the analysed windows: within seconds the joint fit interpolated there (along the logarithm of the time
+  since the onset), then refined to the frames of that time. It becomes a window marked *on demand* among the others
+  and stays with the result until the scan is analysed again (*Physics and Methods* 12.1). Browsing a result is
+  faster: while the slider is dragged only the time, the values and the mark follow and the pictures are drawn when it
+  rests; the mark of the evolution moves without drawing the plots again; a picture that is not shown is not drawn.
 - **Sputter ▸ Analyze, main screen.** Drag on the measured or the model image to draw a line: below the images
   **Along the line** plots the measured and the model count rate of the cells it crosses, against q_y or the exit
   angle; the line stays from window to window and **Clear Line** removes it. The side view of **Real Space** keeps

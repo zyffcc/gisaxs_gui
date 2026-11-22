@@ -243,6 +243,8 @@ class SputterStaticMixin:
         static = self._static_service()
         can_static = static is not None and not static.defaults().problem
         self.analyze_button.setEnabled(not busy and (self.analysis_kind() != "static" or can_static))
+        if hasattr(self, "_at_time_busy"):  # a time on demand waits for the analysis (at_time_panel.py)
+            self._at_time_sync()
 
     def _static_should_stop(self):
         return self._static_stop

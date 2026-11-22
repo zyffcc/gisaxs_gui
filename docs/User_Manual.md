@@ -3354,7 +3354,14 @@ Analysing the same request again shows the result it has. **Details ▸ Analyze 
 **Reading the result.** The main screen shows one time window:
 
 - **The window.** The slider, the arrows beside it or a click on the evolution plots choose it; beside the slider
-  are its time in the scan and the nominal deposit at that time.
+  are its time in the scan and the nominal deposit at that time. While you drag the slider the time, the values and the
+  mark follow at once and the pictures are drawn when it rests.
+- **Structure at any time** (under the window line): a time of the scan that is not one of the analysed windows.
+  **Analyze This Time** gives within seconds the joint fit interpolated there (**Interpolated (joint fit)**: between the
+  two neighbouring windows, along the logarithm of the time since the onset, as the joint fit is smooth), then refines
+  it to the frames of that time (**Refined**, about a minute or more), which is shown. The time becomes a window of its
+  own, marked *on demand*, among the windows in time order: images, values, evolution and Export treat it as any
+  window. The times you analysed stay with the result until the scan is analysed again.
 - **Measured image** and **Model image**: the count rate over q_y and the exit angle, on the same axes and with
   one logarithmic colour scale. The scale is set by the measured image, so it does not change with the solution;
   cells without data are empty in both. Drag on either image to draw a line: it is drawn on both, and below them

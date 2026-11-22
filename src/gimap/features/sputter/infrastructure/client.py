@@ -62,6 +62,11 @@ LOCAL_PACKAGE = Path(__file__).resolve().parents[5] / "utils" / "sputter_client"
 IAM = Path("code") / "iam"
 PACKAGE_PARTS = (IAM / "iampred" / "analyze.py", Path("code") / "gimap", Path("code") / "toolkit", Path("models"))
 CLIENT_REQUEST_FILE = "gimap_request.json"
+AT_TIME_FILE = "at_time.json"
+"""``main/at_time.json``: the windows analysed on demand (``iampred.at_time``)."""
+AT_TIME_MODULE = "at_time.py"
+NO_AT_TIME = ("This analysis package cannot analyse a time between its windows, or the result does not say where the "
+              "scan was imported: analyse the scan again with the package that comes with this GIMaP.")
 CHOICES_FILE = "choices.json"
 EXPORT_SHOWN = "shown.json"
 CACHES_REMOVED = "Import caches over the limit of {limit}: removed {count} not used for the longest time ({size})"
@@ -259,6 +264,33 @@ class ClientPackageRunner:
         kept = tail or [line for line in outcome.tail if parse_live(line) is None]
         return ClientRun(outcome.code, bool(outcome.stopped), tuple(kept))
 
+    # -- one time between the windows (iampred.at_time) -------------------------------------------------------
+    @staticmethod
+    def _imported_at(folder: Path) -> Optional[Path]:
+        """The data root the analysis of ``folder`` imported its scan into (from GIMaP's record of its command)."""
+        command = _json(Path(folder) / CLIENT_REQUEST_FILE).get("command") or []
+        if "--data" in command and command.index("--data") + 1 < len(command):
+            root = Path(str(command[command.index("--data") + 1]))
+            return root if root.is_dir() else None
+        return None
+
+    def can_analyse_time(self, folder: Path) -> bool:
+        package = self.package()
+        return not package.problem and (Path(package.home) / IAM / "iampred" / AT_TIME_MODULE).is_file() \
+            and self._imported_at(folder) is not None
+
+    def analyse_time(self, folder: Path, time_s: float, refine: int, on_line: Callable[[object], None],
+                     should_stop: Callable[[], object]) -> ClientRun:
+        """``iampred.at_time`` for ``time_s`` of the result in ``folder``, on the import the analysis used."""
+        package, data_root = self.package(), self._imported_at(folder)
+        if package.problem or data_root is None or not (Path(package.home) / IAM / "iampred" / AT_TIME_MODULE).is_file():
+            raise FileNotFoundError(NO_AT_TIME)
+        work = Path(self.storage_root()) / STORAGE_FOLDER / package.identity[:12] / "work"
+        work.mkdir(parents=True, exist_ok=True)
+        command = [self.python, "-u", "-m", "iampred.at_time", "--result", str(folder), "--t", _number(time_s),
+                   "--data", str(data_root), "--refine", str(int(refine))]
+        return self.launch(command, package, data_root, work, on_line, should_stop)
+
     def export(self, result_folder: Path, out_folder: Path, shown: list) -> list:
         """``python -m iampred.export RESULT OUT --shown <the solutions shown>`` (a package without ``iampred.export``
         says it is too old). The list of the solutions shown is written into OUT for the run and removed after it."""
@@ -443,7 +475,19 @@ class ClientFolderReader:
             main = json.loads(main_file.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             raise ValueError(BAD_MAIN.format(folder=folder, reason=f"{type(exc).__name__}: {exc}")) from exc
-        return client_result(folder, main, self.analysis(folder))
+        return client_result(folder, main, self.analysis(folder), self._on_demand(folder, main_file))
+
+    @staticmethod
+    def _on_demand(folder: Path, main_file: Path) -> list:
+        """The windows analysed on demand for this very ``main.json`` (none when the scan was analysed again since)."""
+        doc = _json(Path(folder) / MAIN_FOLDER / AT_TIME_FILE)
+        if not doc:
+            return []
+        try:
+            same = doc.get("main_sha256") == hashlib.sha256(main_file.read_bytes()).hexdigest()
+        except OSError:
+            return []
+        return [record for record in doc.get("windows") or () if isinstance(record, dict)] if same else []
 
     def patterns(self, result: ClientResult, window: ClientWindow) -> WindowPatterns:
         if not window.arrays:

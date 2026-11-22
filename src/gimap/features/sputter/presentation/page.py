@@ -34,6 +34,7 @@ from src.gimap.app.presentation.task_runner import TaskRunner
 from src.gimap.app.presentation.theme.engine import theme_manager
 
 from ..application import SputterService
+from .at_time_panel import AtTimePanelMixin
 from .client_flow import CLIENT_KEY, SputterClientMixin
 from .client_panel import ClientPanelMixin
 from .export_flow import EXPORT_KEY, ExportMixin
@@ -53,7 +54,7 @@ from .workers_flow import WorkersMixin
 
 
 class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, ExportMixin, ResultTabsMixin, ProcessTabMixin,
-                  LivePanelMixin,
+                  LivePanelMixin, AtTimePanelMixin,
                   SputterStaticMixin, StaticListMixin, StaticQueueMixin, StaticExportMixin, RateMixin, WorkersMixin,
                   StoragePanelMixin, SputterGeometryMixin, QWidget, SputterPageView):
     clientEvent = pyqtSignal(object)
@@ -80,6 +81,7 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Exp
         self._init_client()
         self._init_static()
         self._init_client_panel()
+        self._init_at_time()
         self._init_export()
         self._init_result_tabs()
         self._init_live()
@@ -137,6 +139,7 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Exp
         self.refresh_steps_language()
         self.refresh_storage()
         self._fill_workers()  # Automatic (N) in the new language
+        self._at_time_sync()  # the note of a time analysed on demand
 
     def running(self) -> bool:
         """Analyze or Analyze Sample is at work (the window asks before it closes)."""
@@ -144,6 +147,7 @@ class SputterPage(SputterProjectMixin, SputterClientMixin, ClientPanelMixin, Exp
 
     def dispose(self) -> None:
         self._dispose_client()
+        self._dispose_at_time()
         self._dispose_static()
         self.tasks.cancel(INSPECT_KEY)
         self.tasks.cancel(STORAGE_KEY)

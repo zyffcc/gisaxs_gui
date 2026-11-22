@@ -301,11 +301,8 @@ def grown(spaces, index: int, seed: int = SEED):
     return space, visible(space, grains)
 
 
-def series_ceiling(spaces, seed: int = SEED) -> float:
-    """The highest metal of a series drawn as one growing film (``grown``): over every window with a picture, its top
-    (``RealSpace.height``), its radius and the base plus the tallest of its grown grains, nm (0 without any picture).
-    The side view keeps it as its height in every window, so the picture keeps its size while the film grows."""
-    spaces = tuple(spaces)
+@lru_cache(maxsize=16)
+def _ceiling(spaces: tuple, seed: int) -> float:
     top = 0.0
     for index, space in enumerate(spaces):
         drawn = grown(spaces, index, seed) if space is not None else None
@@ -314,6 +311,13 @@ def series_ceiling(spaces, seed: int = SEED) -> float:
         space, grains = drawn
         top = max(top, space.height, space.radius, *(space.base + grain.height for grain in grains))
     return top
+
+
+def series_ceiling(spaces, seed: int = SEED) -> float:
+    """The highest metal of a series drawn as one growing film (``grown``): over every window with a picture, its top
+    (``RealSpace.height``), its radius and the base plus the tallest of its grown grains, nm (0 without any picture).
+    The side view keeps it as its height in every window, so the picture keeps its size while the film grows."""
+    return _ceiling(tuple(spaces), seed)
 
 
 def cut(grains: list, y: float) -> list:

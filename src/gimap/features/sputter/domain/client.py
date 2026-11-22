@@ -139,6 +139,9 @@ class ClientWindow:
     """How many frames of the sample were used (static frames)."""
     stage: str = ""
     """The stage of the growth at this window (``process.STAGES``; "" when the package does not say)."""
+    on_demand: bool = False
+    """A time the user asked for after the analysis (``iampred.at_time``: the joint path interpolated there and
+    refined to that time's frames), not a window of the analysis itself."""
 
     @property
     def key(self) -> str:
@@ -347,19 +350,22 @@ def _window(record, keys) -> Optional[ClientWindow]:
                         str(record.get("pick") or ""), str(record.get("smooth") or ""), str(record.get("path") or ""),
                         "" if unique else NO_SOLUTION, label, str(record.get("sample") or ""),
                         str(record.get("substrate") or ""), str(record.get("reference") or ""),
-                        None if frames is None else int(frames), str(record.get("stage") or ""))
+                        None if frames is None else int(frames), str(record.get("stage") or ""),
+                        bool(record.get("on_demand")))
 
 
-def client_result(folder: Path, main: dict, analysis: Optional[dict] = None) -> ClientResult:
-    """The result described by ``main/main.json`` (and ``analysis.json`` when it is there). Raises ``ValueError``
-    when ``main`` is not such a description."""
+def client_result(folder: Path, main: dict, analysis: Optional[dict] = None, on_demand=()) -> ClientResult:
+    """The result described by ``main/main.json`` (and ``analysis.json`` when it is there), with the windows asked
+    for after the analysis (``on_demand``: records of ``main/at_time.json``) among its windows in time order — a time
+    the analysis has a window for keeps that window. Raises ``ValueError`` when ``main`` is not such a description."""
     if not isinstance(main, dict) or not isinstance(main.get("windows"), list):
         raise ValueError(BAD_MAIN.format(folder=folder, reason="no list of windows"))
     analysis = analysis if isinstance(analysis, dict) else {}
     wanted = _quantities(main.get("wanted"))
     keys = [quantity.key for quantity in wanted]
     keys += [key for key in SKETCH_KEYS if key not in keys]  # not shown on a tile: for the real-space picture
-    windows = sorted((window for window in (_window(record, keys) for record in main["windows"])
+    asked = [dict(record, on_demand=True) for record in on_demand if isinstance(record, dict)]
+    windows = sorted((window for window in (_window(record, keys) for record in list(main["windows"]) + asked)
                       if window is not None), key=lambda window: window.time_s)
     files = analysis.get("files") if isinstance(analysis.get("files"), dict) else {}
     steps = analysis.get("steps") if isinstance(analysis.get("steps"), list) else []
